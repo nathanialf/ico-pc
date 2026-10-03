@@ -9,11 +9,9 @@
 #      the base ELF and ROM SHA-1s, write build.ninja); otherwise
 #      tools/build.sh verify, the SHA-1s alone. build.ninja rewrites itself
 #      when gen_ninja.py or its config inputs change.
-#   4. ninja: compile, assemble, link, and run tools/check_elf.py --gate.
-#      On a tree that is already built this does nothing but the gate.
+#   4. ninja: compile, assemble and link build/ico.elf.
 #      ninja does not track header or .c.inc dependencies: after editing one,
 #      run tools/build.sh clean (or setup) before ./build.sh.
-#   5. Print check_elf's gate table once more, as the last thing on screen.
 #
 # Exits non-zero when any step fails. tools/build.sh keeps the individual
 # subcommands (setup, regen, clean, distclean).
@@ -73,7 +71,3 @@ else
     tools/build.sh setup
 fi
 "$NINJA"
-
-echo
-echo "==> build.sh: gate"
-.venv/bin/python tools/check_elf.py --gate --require-elf-sha

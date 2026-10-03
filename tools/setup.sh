@@ -89,7 +89,7 @@ if [[ -f "$EEGCC_BIN" ]] && ! "$EEGCC_BIN" --version >/dev/null 2>&1; then
 EOF
 fi
 
-# --- 2b. MIPS objcopy (build/ico.rom, the ROM view of the linked ELF) -------
+# --- 2b. MIPS objcopy (baserom/pal/baseelf.rom, the ROM view of the base ELF)
 
 if [[ "${SKIP_TOOLCHAIN:-0}" == "1" ]]; then
     :
@@ -104,8 +104,8 @@ Quickest fix on Debian/Ubuntu:
 
     sudo apt-get install binutils-mips-linux-gnu
 
-That gives you mips-linux-gnu-objcopy, which writes build/ico.rom from the
-linked ELF. Assembly and linking are not its job: every object is assembled by
+That gives you mips-linux-gnu-objcopy, which writes the ROM view of the
+extracted base ELF. Assembly and linking are not its job: every object is assembled by
 the period assemblers under tools/cc/, fetched above, and the link is GNU ld
 2.10, built below.
 

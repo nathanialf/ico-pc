@@ -42,10 +42,10 @@ cp "/path/to/Ico (Europe).iso" baserom/Ico_PAL.iso
 stops with a non-zero exit at the first failure. On a four-core host with
 the toolchain already installed and `baserom/pal/` already extracted,
 `rm -rf build build.ninja && tools/build.sh setup && .venv/bin/ninja` took
-22 s and 39 s in two runs and ended with
-`check_elf: gate PASS`; a fresh clone of the public repository, with the
-toolchain downloads of section 1, took 92 s on the same host. A second `./build.sh` on the built tree rebuilds
-nothing (`ninja: no work to do.`) and prints the gate again. The sections
+22 s and 39 s in two runs; a fresh clone, with the toolchain downloads of
+section 1, took 92 s on the same host (both measured on the decompilation
+before the fork). A second `./build.sh` on the built tree rebuilds nothing
+(`ninja: no work to do.`). The sections
 below describe each step; each can also be run on its own.
 
 ## 1. Host setup: `tools/setup.sh`
@@ -68,7 +68,7 @@ skips it.
    section). On a four-core host the dvp-as source fetch takes about 20 s,
    the dvp-as build about 30 s and ld 2.10 about 17 s (`tools/setup.sh`
    comments).
-5. Installs the git hooks (`tools/install_hooks.sh`, below).
+5. Installs the git hook (`tools/install_hooks.sh`, below).
 
 `SKIP_TOOLCHAIN=1` skips steps 2 to 4.
 
@@ -181,17 +181,10 @@ ELF and ROM (`tools/verify_elf.py`), and writes `build.ninja` with
   its offset by `build/data/<member>.alias.ld`;
 - links with ld 2.10 and `config/link.pal.ld`, once to `build/ico.syms.elf`
   (symbols kept, with the map `build/ico.pal.map`) and once stripped to
-  `build/ico.elf`, as the base is;
-- writes `build/ico.rom` with `objcopy -O binary`;
-- runs `tools/check_elf.py --gate`: every allocated section of
-  `build/ico.elf` must hold the base ELF's bytes at the base's addresses,
-  `.sbss` and `.bss` must be allocated over the base's ranges, and
-  `build/ico.rom` and `build/ico.elf` must have the recorded SHA-1s
-  (`--require-elf-sha`). A second, informational table compares `.reginfo`,
-  the `.DVP.*` sections, `e_flags`, `e_entry` and the program and section
-  headers. The build fails when a gated check fails.
+  `build/ico.elf`, as the base is.
 
-`./build.sh` prints the gate table once more after ninja. ninja does not
+Nothing checks `build/ico.elf` against the disc's ELF: this repository does
+not require a byte-identical build. ninja does not
 track header or `.c.inc` dependencies (the VU includes under `ico2/vusrc/`
 are listed on the cpp step): after editing one, run
 `tools/build.sh clean` before `ninja`.
@@ -207,23 +200,13 @@ ASCII patch and `git apply`.
 
 ## Hooks
 
-`tools/install_hooks.sh` (run by `tools/setup.sh`) installs two git hooks.
-
-- **pre-commit**: `tools/check_no_rom.sh` (refuses disc images, executables,
-  extracted assets and large binaries), `tools/check_dev_native.py` (refuses
-  constructs that only steer the compiler, with the ROM-proven exceptions in
-  `tools/dev_native_allow.txt`), and `tools/format.sh --check` on the staged
-  C. When a staged path is under `ico2/`, `sce/`, `config/`, `tools/` or
-  `baserom/`, it then runs `tools/build.sh setup` and `ninja`.
-- **pre-push**: for each pushed ref whose commits touch the build, requires
-  the working tree to be at that ref's tip with no uncommitted changes under
-  `ico2/`, `sce/`, `config/` or `tools/`, and runs `tools/build.sh setup` and
-  `ninja` on it.
+`tools/install_hooks.sh` (run by `tools/setup.sh`) installs a pre-commit
+hook that runs `tools/check_no_rom.sh` (refuses disc images, executables,
+extracted assets and large binaries) and `tools/format.sh --check` on the
+staged C.
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
-then `tools/format_layout.py`'s top-level blank-line layout. The game
-compiles with `-g`, where a moved line break can change the code, so run the
-gate after formatting.
+then `tools/format_layout.py`'s top-level blank-line layout.
 
 ## Running the rebuilt ELF (optional)
 

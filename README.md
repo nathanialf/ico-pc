@@ -11,10 +11,11 @@ the C source of the [ICO decompilation](https://github.com/nathanialf/ico).
 
 ## Status
 
-Early. The tree is the decompilation as it was when this port was forked:
-it rebuilds the PAL boot ELF (`SCES_507.60`) byte for byte with the period
-PS2 toolchain, and nothing runs natively yet. That matching build stays as
-the reference the port is checked against.
+Early. The tree is the decompilation as it was when this port was forked,
+and nothing runs natively yet. It still builds a PS2 ELF with the period
+toolchain, which runs in an emulator as a reference for the game's
+behaviour. The build does not require it to match the disc byte for byte:
+the game code is free to change.
 
 ## Goal
 
@@ -44,7 +45,7 @@ the same logic, timing and output, with improvements kept optional.
 - [ ] **PC features:** resolution, aspect ratio, frame rate and controller
       remapping, behind options that default to the original behaviour.
 
-## Building the PS2 reference
+## Building the PS2 ELF
 
 ```sh
 git clone https://github.com/nathanialf/ico-pc.git
@@ -55,8 +56,9 @@ cp "/path/to/Ico (Europe).iso" baserom/Ico_PAL.iso
 ```
 
 `./build.sh` installs the period toolchain under `tools/cc/` on the first
-run, extracts the boot ELF from the disc image, builds `build/ico.elf` and
-checks it against the disc's with `tools/check_elf.py --gate`. The host
+run, extracts the boot ELF from the disc image and builds `build/ico.elf`.
+The build reads the game's data tables from the extracted ELF, so it
+accepts only the PAL retail disc (SHA-1s below). The host
 needs a 64-bit Linux with 32-bit libraries, a host gcc,
 `mips-linux-gnu-objcopy` and network access for the first run.
 [`docs/BUILDING.md`](docs/BUILDING.md) lists the packages and each step.
@@ -64,7 +66,7 @@ needs a 64-bit Linux with 32-bit libraries, a host gcc,
 | file | SHA-1 |
 | --- | --- |
 | `baserom/pal/baseelf.elf` (the disc's `SCES_507.60`) | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` |
-| `baserom/pal/baseelf.rom` and `build/ico.rom` (`objcopy -O binary`) | `a401d1e5a20b1659189a8b1026a8eb35811dc9ca` |
+| `baserom/pal/baseelf.rom` (`objcopy -O binary`) | `a401d1e5a20b1659189a8b1026a8eb35811dc9ca` |
 
 ## Layout
 
@@ -75,7 +77,7 @@ ico2/vusrc/    the five VU1 microprograms and their shared includes
 sce/           Sony's runtime libraries, newlib libc and libm, libgcc and
                crt0.s, as the game linked them
 config/        link order, linker script, data-member lists, SHA-1s
-tools/         setup, extraction, build and gate scripts (tools/README.md)
+tools/         setup, extraction and build scripts (tools/README.md)
 docs/          documentation (docs/README.md)
 baserom/       local only, gitignored: your disc image and extracted ELF
 build/         local only, gitignored: build output

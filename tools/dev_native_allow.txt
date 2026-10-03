@@ -1,5 +1,0 @@
-# check_dev_native.py allowlist: one `path:function | reason` per line.
-# A line here says the ROM or the listing proves the construct is what the
-# developers wrote, and names the evidence. Nothing goes here for convenience.
-sce/libgraph/graph003.c:asm:sceGsSetDefDispEnv | sce archive asm exception: in both f0 == 1 arms the empty asm stands in for Sony's text. The object reads dy + 50 (dy + 72) once between the add and the 0xFFF mask, which places the divide-by-zero trap ahead of the shift, and no C spelling of the expression keeps that read.
-sce/libsndn2/sound.c:asm:SgStAdpcmOpen | sce archive asm exception: the empty asm with the parameter record as its memory output stands in for Sony's text. The object loads the 0xC word first, then both `lui 0xff` mask constants, then the other five words in source order, an order this compiler gives only when the record is written between the first read and the rest.

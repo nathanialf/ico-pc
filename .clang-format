@@ -1,6 +1,6 @@
 # Repo C style, matched to the existing sources (4-space indent, K&R braces,
-# pointer stars on the name). Whitespace and line breaks only: the byte gate
-# proves formatting never changes the ROM. Run tools/format.sh.
+# pointer stars on the name). Whitespace and line breaks only. Run
+# tools/format.sh.
 BasedOnStyle: LLVM
 Language: Cpp
 IndentWidth: 4

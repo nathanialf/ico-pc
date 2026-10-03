@@ -3,8 +3,7 @@
 #   tools/format.sh            # rewrite every tracked .c under the source roots
 #   tools/format.sh --check    # exit 1 if any tracked .c is not formatted (pre-commit)
 #   tools/format.sh FILE...    # format just these files
-# Whitespace and line breaks only. The game compiles with -g, where a moved
-# line break can change the code, so run the byte gate after formatting. The
+# Whitespace and line breaks only. The
 # binary is the `clang-format` wheel in the venv (tools/setup.sh installs it);
 # without it the script fails.
 set -euo pipefail

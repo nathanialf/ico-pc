@@ -1,6 +1,6 @@
 # Python packages the build and its tools use, installed into .venv by
 # tools/setup.sh.
-pyelftools          # tools/check_elf.py, tools/gen_data_c.py, tools/extract_elf.py
+pyelftools          # tools/gen_data_c.py, tools/extract_elf.py
 pycdlib             # tools/extract_elf.py reads the disc's ISO9660 filesystem
 ninja               # .venv/bin/ninja runs build.ninja (the hooks call it there)
 clang-format>=19    # tools/format.sh

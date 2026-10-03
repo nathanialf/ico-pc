@@ -9,7 +9,7 @@ non-zero on mismatch or missing target.
 config/sha1sums.txt is keyed by BASENAME (baseelf.elf / baseelf.rom) on every
 branch, each branch recording only its own target's hashes, so the same
 lookup works whether the file lives at baserom/ (us) or baserom/<ver>/
-(pal, aug6). (The built ROM's SHA-1 is checked by tools/check_elf.py --gate.)
+(pal, aug6).
 
     verify_elf.py --target baserom/pal/baseelf.elf
     verify_elf.py --target baserom/pal/baseelf.rom
@@ -79,8 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         f"  target:   {target}\n"
         f"  expected: {recorded}\n"
         f"  actual:   {actual}\n"
-        f"  localize: tools/check_elf.py --gate names the section that "
-        f"differs, and build/ico.pal.map names the object at that address.",
+        f"  the build accepts only the PAL retail disc, SCES-50760.",
         file=sys.stderr,
     )
     return 1
