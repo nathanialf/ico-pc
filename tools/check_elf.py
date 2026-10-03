@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""check_elf.py: compare the built ELF with the base ELF by address, and
-derive progress from that comparison and the link map.
+"""check_elf.py: compare the built ELF with the base ELF by address.
 
   --gate      For every allocated PROGBITS section of the base ELF (.text
               .vutext .data .rodata .lit4 .sdata; a zero-sized one such as
@@ -15,21 +14,6 @@ derive progress from that comparison and the link map.
               .reginfo, the .DVP.* sections, e_flags, e_entry, program and
               section headers. Exit 0 only when every gated check passes.
 
-  --progress  Rewrite README.md's badge block, docs/PROGRESS.md's table and
-              docs/progress.json (schema 2) from the same comparison, in two
-              shares. From source: a byte counts for its section when the
-              map row that places it belongs to an object under build/ico2/
-              or build/sce/ AND the byte equals the base's (NOBITS: ownership
-              only, there is nothing to compare). From the disc (`extracted`):
-              the same count for the objects under build/data/, the data-only
-              members generated at build time from the user's own base ELF (as
-              C for the members config/data_schema.pal.txt lists, as assembly
-              for the rest), whose content is not in the repository.
-              Fill belongs to the object it follows, in every section: a
-              `*fill*` row counts with the input section that ends where it
-              starts, so an object's trailing pad, a data-only member's
-              included, is the object's.
-
   --full-diff The whole file, built vs base, for the ELF-identity work: ELF
               header fields side by side, program headers, section headers
               in file order (name type flags addr offset size align entsize),
@@ -39,9 +23,7 @@ derive progress from that comparison and the link map.
               reports; it gates nothing and needs no map.
 
 Inputs: build/ico.elf, build/ico.<ver>.map (written by the link, see
-tools/gen_ninja.py), the base ELF and config/sha1sums.txt. --progress also
-reads the function symbols from build/ico.syms.elf, the same link with its
-symbol table kept (build/ico.elf is stripped, as the base is).
+tools/gen_ninja.py), the base ELF and config/sha1sums.txt.
 """
 
 from __future__ import annotations
@@ -49,7 +31,6 @@ from __future__ import annotations
 import argparse
 import bisect
 import hashlib
-import json
 import re
 import sys
 from pathlib import Path
@@ -68,12 +49,8 @@ VERSION = detect_version(REPO_ROOT)
 BASE_ELF = baseelf_path(REPO_ROOT, VERSION)
 BUILT_ELF = REPO_ROOT / "build" / "ico.elf"
 BUILT_ROM = REPO_ROOT / "build" / "ico.rom"
-BUILT_SYMS = REPO_ROOT / "build" / "ico.syms.elf"
 LINK_MAP = REPO_ROOT / "build" / f"ico.{VERSION}.map"
 SHA1SUMS = REPO_ROOT / "config" / "sha1sums.txt"
-README = REPO_ROOT / "README.md"
-PROGRESS_DOC = REPO_ROOT / "docs" / "PROGRESS.md"
-PROGRESS_JSON = REPO_ROOT / "docs" / "progress.json"
 
 NOBITS = (".sbss", ".bss")
 # Badge / table order: ELF link order.
@@ -81,12 +58,6 @@ REPORT_ORDER = [".text", ".vutext", ".data", ".vudata", ".rodata",
                 ".lit4", ".sdata", ".sbss", ".bss"]
 OWNED_ROOTS = ("build/ico2/", "build/sce/")
 EXTRACTED_ROOT = "build/data/"
-VUTEXT_GROUP = ".vutext"
-VUTEXT_NOTE = (
-    "VU1 microprograms in the .vutext ELF section: ico2/vusrc/*.dsm, "
-    "assembled by dvp-as. Counted separately from .text so the "
-    "headline .text figure is not inflated."
-)
 
 
 # ----- inputs ----------------------------------------------------------
@@ -661,302 +632,30 @@ def run_full_diff(args) -> int:
     return 0
 
 
-# ----- --progress ------------------------------------------------------
-
-def _strip_suffix(name: str) -> str:
-    return re.sub(r"\.\d+$", "", name)
-
-
-def _tu_of(obj: str) -> str:
-    p = obj[len("build/"):] if obj.startswith("build/") else obj
-    return p[:-2] if p.endswith(".o") else p
-
-
-def _group_of(tu: str, in_vutext: bool) -> str:
-    if in_vutext:
-        return VUTEXT_GROUP
-    parts = tu.split("/")
-    if parts[0] == "ico2" and len(parts) > 2:
-        return parts[1]
-    return parts[0]
-
-
-def compute(cmp_: Comparison) -> dict:
-    sections: dict[str, list[int]] = {}
-    extracted: dict[str, int] = {}
-    for name in REPORT_ORDER:
-        s = cmp_.section(name)
-        if s is None:
-            continue
-        cr = cmp_.credit(s)
-        if s["nobits"]:
-            sections[name] = [cr["owned"], s["size"]]
-            extracted[name] = cr["extracted"]
-        else:
-            sections[name] = [cr["identical_owned"], s["size"]]
-            extracted[name] = cr["identical_extracted"]
-    return {"sections": sections, "extracted": extracted}
-
-
-def build_tree(cmp_: Comparison, secs: dict) -> dict:
-    text_like = [s for s in cmp_.sections if s["name"] in (".text", ".vutext")]
-    vut = cmp_.section(".vutext")
-    funcs = cmp_.built.funcs
-    func_addrs = [f[0] for f in funcs]
-
-    # TU .text spans from the map rows (fill excluded; a TU is the object).
-    spans: dict[str, list[tuple[int, int]]] = {}
-    for s in text_like:
-        for r, a, b in cmp_.rows_in(s):
-            if r["obj"] is None or owner_class(r["obj"]) not in ("owned", "extracted"):
-                continue
-            spans.setdefault(r["obj"], []).append((a, b))
-
-    # Non-text bytes each TU's object places, for `section_bytes`.
-    sec_bytes: dict[str, dict[str, int]] = {}
-    for s in cmp_.sections:
-        if s["name"] in (".text", ".vutext") or not s["size"]:
-            continue
-        for r, a, b in cmp_.rows_in(s):
-            if r["obj"] is None or owner_class(r["obj"]) != "owned":
-                continue
-            d = sec_bytes.setdefault(_tu_of(r["obj"]), {})
-            d[s["name"]] = d.get(s["name"], 0) + (b - a)
-
-    programmers: dict[str, dict] = {}
-    sym_sections: dict[str, list[int]] = {}
-    for obj, sp in spans.items():
-        tu = _tu_of(obj)
-        in_vu = vut is not None and all(vut["addr"] <= a < vut["addr"] + vut["size"] for a, _ in sp)
-        prog = _group_of(tu, in_vu)
-        tu_name = tu.split("/", 2)[-1] if tu.startswith("ico2/") else tu.split("/", 1)[-1]
-        node = {"name": tu_name, "path": tu, "funcs": []}
-        if prog == "sce" and "/" in tu:
-            node["archive"] = tu.split("/")[1]
-        for lo, hi in sp:
-            sect = cmp_.section_at(lo)["name"]
-            i = bisect.bisect_left(func_addrs, lo)
-            inside = []
-            while i < len(funcs) and funcs[i][0] < hi:
-                inside.append(funcs[i])
-                i += 1
-            for k, (addr, size, name) in enumerate(inside):
-                if size == 0:
-                    nxt = inside[k + 1][0] if k + 1 < len(inside) else hi
-                    size = nxt - addr
-                size = min(size, hi - addr)
-                matched = cmp_.range_equal(addr, addr + size)
-                node["funcs"].append({
-                    "name": _strip_suffix(name), "addr": f"0x{addr:08X}",
-                    "size": size, "section": sect, "matched": matched,
-                })
-                ss = sym_sections.setdefault(sect, [0, 0])
-                ss[1] += size
-                if matched:
-                    ss[0] += size
-        p = programmers.setdefault(prog, {"name": prog, "tus": {}})
-        p["tus"][tu] = node
-
-    prog_list = []
-    tot_mf = tot_f = 0
-    for prog in sorted(programmers.values(), key=lambda p: p["name"]):
-        tus = []
-        pmf = pf = pmb = pb = 0
-        for t in sorted(prog["tus"].values(), key=lambda t: t["path"]):
-            fs = sorted(t["funcs"], key=lambda f: f["addr"])
-            mf = sum(1 for f in fs if f["matched"])
-            mb = sum(f["size"] for f in fs if f["matched"])
-            b = sum(f["size"] for f in fs)
-            node = {"name": t["name"], "path": t["path"],
-                    **({"archive": t["archive"]} if "archive" in t else {}),
-                    "matched_funcs": mf, "total_funcs": len(fs),
-                    "matched_bytes": mb, "total_bytes": b, "funcs": fs}
-            sb = sec_bytes.get(t["path"])
-            if sb:
-                node["section_bytes"] = {k: sb[k] for k in sorted(sb)}
-            tus.append(node)
-            pmf += mf; pf += len(fs); pmb += mb; pb += b
-        entry = {"name": prog["name"], "matched_funcs": pmf, "total_funcs": pf,
-                 "matched_bytes": pmb, "total_bytes": pb, "tus": tus}
-        if prog["name"] == VUTEXT_GROUP:
-            entry["note"] = VUTEXT_NOTE
-        prog_list.append(entry)
-        tot_mf += pmf; tot_f += pf
-
-    sections = {k: v for k, v in secs["sections"].items() if v[1]}
-    text = sections.get(".text", [0, 0])
-    return {
-        "schema": 2,
-        "version": VERSION,
-        "totals": {
-            "matched_funcs": tot_mf, "total_funcs": tot_f,
-            "matched_bytes": text[0], "total_bytes": text[1],
-            "sections": sections,
-            "extracted": {k: secs["extracted"].get(k, 0) for k in sections},
-            "nobits_sections": [s for s in NOBITS if s in sections],
-            "sections_from_symbols": {k: v for k, v in sorted(sym_sections.items())},
-        },
-        "programmers": prog_list,
-    }
-
-
-def _fmt_pct(m: int, t: int) -> str:
-    return "-" if t == 0 else f"{100.0 * m / t:.2f} %"
-
-
-def _badge_color(m: int, t: int) -> str:
-    if t == 0:
-        return "lightgrey"
-    pct = 100.0 * m / t
-    for floor, color in ((100.0, "brightgreen"), (75.0, "green"),
-                         (50.0, "yellowgreen"), (25.0, "yellow")):
-        if pct >= floor:
-            return color
-    return "orange" if pct > 0.0 else "red"
-
-
-def _badge_text(m: int, x: int, t: int) -> str:
-    """The identical share first, then where its bytes come from:
-    `100.00 %` for a section built wholly from the tracked sources,
-    `100.00 % (72.54 % source + 27.46 % disc)` when part of it is generated
-    at build time from the user's disc."""
-    text = _fmt_pct(m + x, t)
-    if x:
-        text += f" ({_fmt_pct(m, t)} source + {_fmt_pct(x, t)} disc)"
-    return text
-
-
-def _badges(sections: dict, extracted: dict) -> str:
-    """One badge per section: the share built from the tracked sources and
-    the share generated from the user's disc; the colour is their sum, the
-    share of the section that is identical to the base."""
-    from urllib.parse import quote
-    lines = []
-    for sec in REPORT_ORDER:
-        m, t = sections.get(sec, (0, 0))
-        if not t:
-            continue
-        x = extracted.get(sec, 0)
-        msg = quote(_badge_text(m, x, t), safe="").replace("-", "%2D")
-        url = f"https://img.shields.io/badge/{sec.lstrip('.')}-{msg}-{_badge_color(m + x, t)}.svg"
-        lines.append(f"![{sec} progress]({url})")
-    return "\n".join(lines)
-
-
-def _table(sections: dict, extracted: dict) -> str:
-    lines = ["| Section | From source | From the disc | Total bytes | Source % | Identical % |",
-             "| --- | ---: | ---: | ---: | ---: | ---: |"]
-    for sec in REPORT_ORDER:
-        m, t = sections.get(sec, (0, 0))
-        if not t:
-            continue
-        x = extracted.get(sec, 0)
-        metric = " (owned)" if sec in NOBITS else ""
-        lines.append(f"| `{sec}`{metric} | {m} | {x} | {t} | {_fmt_pct(m, t)} "
-                     f"| {_fmt_pct(m + x, t)} |")
-    lines.append("")
-    lines.append(
-        "**From source** counts the bytes placed by an object compiled or "
-        "assembled from a tracked source under `ico2/` or `sce/`. **From the "
-        "disc** counts the bytes of the data-only archive members "
-        "(`config/data_members.pal.txt`), which the build generates from the "
-        "user's own base ELF as C from the record types and names in "
-        "`config/data_schema.pal.txt` (`tools/gen_data_c.py`); none of their "
-        "content is in the repository. "
-        "Linker fill counts with the object it follows. "
-        "**Identical** is their sum, the share of the section equal to the base, "
-        "which the gate requires to be 100 % for every section with file bytes.")
-    lines.append("")
-    lines.append(
-        "`.sbss` and `.bss` are NOBITS: they hold no ROM bytes, so their "
-        "figure is **ownership**, how much of the section an object defines "
-        "and the link places at the base's addresses. A section the ELF sizes at zero (`.vudata` on "
-        "this target) is omitted.")
-    return "\n".join(lines)
-
-
-BEGIN, END = "<!-- progress:begin -->", "<!-- progress:end -->"
-
-
-def _splice(path: Path, body: str) -> bool:
-    text = path.read_text()
-    if BEGIN not in text or END not in text:
-        sys.exit(f"check_elf: {path} has no {BEGIN} / {END} markers")
-    pat = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
-    new = pat.sub(lambda _: BEGIN + "\n" + body + "\n" + END, text)
-    if new == text:
-        return False
-    path.write_text(new)
-    return True
-
-
-def run_progress(args) -> int:
-    base, built = Elf(BASE_ELF), Elf(BUILT_ELF)
-    if not built.funcs and BUILT_SYMS.exists():
-        # build/ico.elf is stripped; the function symbols are in the
-        # unstripped image of the same link.
-        built.funcs = Elf(BUILT_SYMS).funcs
-    cmp_ = Comparison(base, built, parse_map(LINK_MAP))
-    secs = compute(cmp_)
-    tree = build_tree(cmp_, secs)
-    sections = tree["totals"]["sections"]
-    print("progress (from source or owned / total):")
-    for sec in REPORT_ORDER:
-        if sec in sections:
-            m, t = sections[sec]
-            print(f"  {sec:<10} {m:>10} / {t:<10} {_fmt_pct(m, t):>8}"
-                  f"  from the disc {tree['totals']['extracted'].get(sec, 0)}")
-    t = tree["totals"]
-    print(f"  functions  {t['matched_funcs']}/{t['total_funcs']}, "
-          f"{len(tree['programmers'])} groups")
-    out = Path(args.out_dir) if args.out_dir else None
-    readme = (out / "README.md") if out else README
-    doc = (out / "PROGRESS.md") if out else PROGRESS_DOC
-    js = (out / "progress.json") if out else PROGRESS_JSON
-    if out:
-        out.mkdir(parents=True, exist_ok=True)
-        readme.write_text(README.read_text())
-        doc.write_text(PROGRESS_DOC.read_text())
-    extracted = tree["totals"]["extracted"]
-    for path, body in ((readme, _badges(sections, extracted)),
-                       (doc, _table(sections, extracted))):
-        print(f"check_elf: {'rewrote' if _splice(path, body) else 'unchanged'} {path}")
-    js.write_text(json.dumps(tree, separators=(",", ":")) + "\n")
-    print(f"check_elf: wrote {js}")
-    return 0
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--gate", action="store_true")
-    mode.add_argument("--progress", action="store_true")
     mode.add_argument("--full-diff", action="store_true")
     ap.add_argument("--require-elf-sha", action="store_true",
                     help="--gate: also require the built ELF's SHA-1 to equal baseelf.elf's")
-    ap.add_argument("--out-dir", help="--progress: write the three files here "
-                    "instead of README.md, docs/PROGRESS.md, docs/progress.json")
     ap.add_argument("--elf", help="built ELF (default build/ico.elf)")
     ap.add_argument("--map", help="link map (default build/ico.<ver>.map)")
     ap.add_argument("--rom", help="built ROM (default build/ico.rom)")
-    ap.add_argument("--syms", help="--progress: built ELF with symbols "
-                    "(default build/ico.syms.elf)")
     args = ap.parse_args()
-    global BUILT_ELF, LINK_MAP, BUILT_ROM, BUILT_SYMS
+    global BUILT_ELF, LINK_MAP, BUILT_ROM
     if args.elf:
         BUILT_ELF = Path(args.elf).resolve()
     if args.map:
         LINK_MAP = Path(args.map).resolve()
     if args.rom:
         BUILT_ROM = Path(args.rom).resolve()
-    if args.syms:
-        BUILT_SYMS = Path(args.syms).resolve()
     for p in (BASE_ELF, BUILT_ELF) + (() if args.full_diff else (LINK_MAP,)):
         if not p.exists():
             sys.exit(f"check_elf: {p} not found")
     if args.full_diff:
         return run_full_diff(args)
-    return run_gate(args) if args.gate else run_progress(args)
+    return run_gate(args)
 
 
 if __name__ == "__main__":

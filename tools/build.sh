@@ -15,7 +15,6 @@
 #   regen       Just rewrite build.ninja.
 #   clean       rm -rf build/.
 #   distclean   clean + remove build.ninja and ninja's state.
-#   progress    Regenerate progress tables (README, docs/PROGRESS.md, docs/progress.json).
 
 set -eu
 
@@ -59,12 +58,6 @@ do_distclean() {
     rm -f build.ninja .ninja_log .ninja_deps
 }
 
-do_progress() {
-    # README badges + table, docs/PROGRESS.md and the dashboard's
-    # docs/progress.json (docs/index.html), from the built ELF and its link map.
-    "${VENV_PY}" tools/check_elf.py --progress
-}
-
 cmd="${1:-help}"
 case "$cmd" in
     setup)      setup ;;
@@ -72,7 +65,6 @@ case "$cmd" in
     regen)      regen_ninja ;;
     clean)      do_clean ;;
     distclean)  do_distclean ;;
-    progress)   do_progress ;;
     help|*)
         cat <<EOF
 usage: $0 <subcommand>
@@ -82,7 +74,6 @@ usage: $0 <subcommand>
   regen       rewrite build.ninja from config/link_order.${VERSION}.txt
   clean       rm -rf build/
   distclean   clean + delete build.ninja and ninja's state
-  progress    regenerate README, docs/PROGRESS.md and docs/progress.json
 
 Build with: ninja
 EOF

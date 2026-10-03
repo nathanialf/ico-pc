@@ -16,7 +16,7 @@
 #   5. Print check_elf's gate table once more, as the last thing on screen.
 #
 # Exits non-zero when any step fails. tools/build.sh keeps the individual
-# subcommands (setup, regen, clean, distclean, progress).
+# subcommands (setup, regen, clean, distclean).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"

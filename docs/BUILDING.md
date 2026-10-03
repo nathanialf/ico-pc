@@ -1,7 +1,7 @@
 # Building
 
 The long form of the README's quickstart: what the host needs, what each step
-does, and how the hooks and the dashboard use the build.
+does, and how the hooks use the build.
 
 ## Host
 
@@ -138,7 +138,7 @@ ELF and ROM (`tools/verify_elf.py`), and writes `build.ninja` with
 
 `tools/build.sh` also has `verify` (the SHA-1s only), `regen` (rewrite
 `build.ninja` only), `clean` (delete `build/`), `distclean` (also
-`build.ninja` and ninja's state) and `progress` (below).
+`build.ninja` and ninja's state).
 
 ## 4. `ninja`
 
@@ -205,26 +205,6 @@ out as EUC-JP, which is what the compiler reads. An editor or a pipe that
 rewrites one of these files as UTF-8 changes its bytes; change them with an
 ASCII patch and `git apply`.
 
-## Progress and the dashboard
-
-`tools/build.sh progress` runs `tools/check_elf.py --progress`, which
-rewrites the README's badge block, the table in `docs/PROGRESS.md` and
-`docs/progress.json` from the built ELF, its link map and the function
-symbols of `build/ico.syms.elf`. A byte counts for its section when the map
-row that places it belongs to an object built from `ico2/` or `sce/` and the
-byte equals the base's; bytes from `build/data/` are counted separately as
-extracted tables. The count is by object, so `staffroll_dat`'s count word
-(4 bytes of `.sdata`) counts as from the disc although the generator
-computes it from the table's element count.
-
-The dashboard is `docs/index.html`, which reads `progress.json`. On a push
-that changes `docs/index.html`, `docs/progress.json`, `docs/PROGRESS.md`,
-the workflow or its script, `.github/workflows/pages.yml` runs
-`.github/scripts/build_pages_site.sh`, which assembles one site and deploys
-it to GitHub Pages. The page is `main`'s `docs/index.html` (read from
-`origin/main` on the other branches); each of the three branches supplies
-only its `progress.json` and `PROGRESS.md`.
-
 ## Hooks
 
 `tools/install_hooks.sh` (run by `tools/setup.sh`) installs two git hooks.
@@ -234,9 +214,7 @@ only its `progress.json` and `PROGRESS.md`.
   constructs that only steer the compiler, with the ROM-proven exceptions in
   `tools/dev_native_allow.txt`), and `tools/format.sh --check` on the staged
   C. When a staged path is under `ico2/`, `sce/`, `config/`, `tools/` or
-  `baserom/`, it then runs `tools/build.sh setup`, `ninja` and
-  `tools/check_elf.py --progress`, and adds the refreshed progress files to
-  the commit.
+  `baserom/`, it then runs `tools/build.sh setup` and `ninja`.
 - **pre-push**: for each pushed ref whose commits touch the build, requires
   the working tree to be at that ref's tip with no uncommitted changes under
   `ico2/`, `sce/`, `config/` or `tools/`, and runs `tools/build.sh setup` and

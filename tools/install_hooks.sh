@@ -29,12 +29,8 @@ cat > "$HOOK" <<'EOF'
 #   5. ninja                        build every object from source, link, and run
 #                                   tools/check_elf.py --gate --require-elf-sha
 #                                   (the byte gate and the whole ELF's SHA-1)
-#   6. tools/check_elf.py --progress
-#                                   refresh README.md, docs/PROGRESS.md and
-#                                   docs/progress.json from the built ELF and its
-#                                   link map, then `git add` them into this commit
 #
-# Steps 4 to 6 run only when a staged path can affect the build (ico2/, sce/,
+# Steps 4 and 5 run only when a staged path can affect the build (ico2/, sce/,
 # config/, tools/, baserom/). `build.sh setup` deletes build/ first, so the gate
 # is always a from-scratch build of the staged tree.
 #
@@ -94,18 +90,6 @@ if ! "$NINJA" -C "$ROOT"; then
     echo "  Bypass with \`git commit --no-verify\` only if you understand why" >&2
     echo "  ninja is failing and have a follow-up commit ready that fixes it." >&2
     exit 1
-fi
-
-# Build is green: refresh the progress tables and the dashboard's JSON and
-# stage them into THIS commit. They are derived files, so a failure here warns
-# and never blocks the commit (the byte gate above already passed). For a
-# path-scoped `git commit <file>` the re-staged files do not ride along.
-echo "pre-commit: tools/check_elf.py --progress (refresh + stage progress) ..."
-if "$ROOT/.venv/bin/python" "$ROOT/tools/check_elf.py" --progress >/dev/null 2>&1; then
-    git add "$ROOT/README.md" "$ROOT/docs/PROGRESS.md" "$ROOT/docs/progress.json" 2>/dev/null || true
-else
-    echo "pre-commit: progress regen failed (non-fatal): commit proceeds" >&2
-    echo "  without refreshed progress; run \`tools/check_elf.py --progress\` manually." >&2
 fi
 EOF
 chmod +x "$HOOK"

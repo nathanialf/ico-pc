@@ -108,9 +108,6 @@ docs/ARCHIVE_retired_notes.md
 docs/MATCH_VU.md
 docs/MATCHING_NOTES.md
 
-# Assembled GitHub Pages site (regenerable: .github/scripts/build_pages_site.sh).
-_site/
-
 # PAL listing-derived source-structure census (docs/pal_source_tree.*): local-only,
 # derived from the disc's listing in baserom/pal/; bulk metadata stays out of git.
 docs/pal_source_tree.md
