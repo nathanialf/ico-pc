@@ -2445,14 +2445,20 @@ ordinal). Per command:
 | `RDC_PARTICLES` | the VU block; each particle's (x, y, z, size) | header, UV, grey, alpha |
 | `RDC_SCREEN` | XY, Z, RGBA of every vertex | STQ, prim, space |
 | `RDC_SHADOW_STRIP` | XY and Z of every vertex | the triangle split |
-| frame camera, VU common block | `RdCamera` view, proj43, zoom, near, far; `RdVuCommon` matrices | `cut` |
+| frame camera, VU common block | `RdCamera` view (S6: the rigid blend), proj43, zoom, near, far; `RdVuCommon` matrices (S6: world to screen and inverse view from the rigid blend) | `cut` |
 
 Blends are element-wise, `(1 - t) p + t c` (exact at both ends); a float
 pair that is bit-identical, or not both finite, keeps the current value;
 integers round to nearest. Matrices blended element by element shorten a
 rotation's axes by cos(theta/2) half way (0.4 % at 10 degrees in a tick);
 since package S2 the normal programs' model matrices and the skinned
-draws' bones blend as rotations instead ("Package S2" below).
+draws' bones blend as rotations instead ("Package S2" below). Since
+package S6 the camera is one rigid blend for the whole frame (the inverse
+view's rotation slerped, its eye lerped; the projection lerped), and every
+VU draw through the frame's camera is drawn through it, including the draws
+that are the current frame's (unmatched, mismatched, jumped, unkeyed):
+`RdCamera.view` and the VU blocks' qw 4..7, 12..15 and model matrices are
+rebuilt from it ("Package S6" below).
 
 Keyed today: `RegistPacket.c`'s meshes (since R7d the object, the part and
 the packet's place in the part's chain with the pass; below), the grids
@@ -2886,6 +2892,133 @@ Open items:
    dims the lighting half way (no shape change).
 4. Pivots are recomputed from the mesh stream every present (a few
    thousand vertices a frame in stage 3; not measured on the GPU host).
+
+
+### Package S6: the environment wobble
+
+`port/render/rd_interp.c` (the blended camera: `camSetup`, `camOf`,
+`camRebase`, `camCurDraw`), `rd_internal.h` (`RdInterpStats.rebased`,
+`rebasedCur`), `rd_core.c` (the previous frame dumped with
+`dump_interp`). Test: `rd_interp`.
+
+**The report.** After S2 the user's stage-3 wobble is the environment
+(static stage geometry), not limbs. Hypotheses: (A) the camera blended
+element by element (the view, the world to screen product and the inverse
+view lerped as matrices) shearing the whole world between ticks; (B) static
+draws unmatched between ticks, which were the current tick's while their
+neighbours blended; (C) stage node transforms (BGA) blended element-wise.
+
+**Replaying the session.** As S2 (window build, lavapipe, offscreen, 1x,
+Enhanced, 16:9, full height, uncapped, 60hz, `stick_fix`, `yorda_safe`,
+`ticks=4700`, `dump_every=20`, `dump_from=4000`, `dump_interp=1`), with
+the dump now also writing the previous frame (`rd-NNNNN-prev.rddump`), so
+a half-way dump is checked against both its ticks. Run 1 (HEAD plus the
+prev dump): exit 0 in 763 s; run 2 (this package): exit 0 in 608 s. Both
+traces are identical (4702 lines, md5 dfec701c6be906c1da35f85f6b8035d1);
+they differ from S2's (e9d8c9f1...) from tick 184 (a vsync later), so the
+stage changes at 3882 and 3917 and stage 3 begins at tick 4063 instead of
+3917: the dumps 4080 to 4680 are stage 3, with the recording's inputs
+landing earlier in the stage than on the user's machine.
+
+**The measure** (scratch tool `build-host/s6/s6_measure.c`). For every
+normal-program `RDC_MESH` draw of a half-way frame, 8 of its mesh's
+vertices through qw 16..19 in prev (its matched draw; an unmatched one:
+cur's object through prev's camera), half way and cur, those on screen in
+cur: (1) the half-way point's distance from the segment prev..cur; (2) its
+distance from the reference, the object at its blended place through the
+rigid half-way camera (inverse views blended: rotation slerped, eye
+lerped) and the lerped projection. Frames 4000 to 4680, every 20th (35
+pairs; 4000 to 4060 are stage 40).
+
+| draws | run 1: over 1 px from the reference | worst | run 2 | worst |
+|---|---|---|---|---|
+| matched, static (1868) | 0 of 5177 vertices | 0.24 px | 0 | 0.00 px |
+| matched, moving (319) | 24 of 2253 | 1.29 px | 16 | 1.16 px |
+| unmatched (69) | 83 of 105 (19 draws) | 119.8 px | 0 | 0.05 px |
+
+No vertex is off its segment in either run: a homogeneous lerp of a point
+projects onto the segment between its two projections, so the element-wise
+camera does not leave it; (1) cannot see an unmatched draw either (it sits
+at the segment's end), so (2) is the figure. The moving residue is the
+reference's pivot (the tool turns about the origin, the blend about the
+vertex centroid).
+
+**What held.** (A) did not: with the projection in the reference, the
+element-wise camera puts matched static geometry within 0.24 px of the
+rigid camera (for a pure turn the element-wise view is a uniform scale of
+view space about the eye, which projects the same; the difference grows
+with the eye's move, small per tick here). Before the zoom
+was taken into account the same comparison showed 3.9 % of static vertices
+up to 5.2 px off: GsBase.c's zoom eases (`zoomCurrent`, the focus
+distance), about 2 % a tick in stage 3 (proj43 x scale 1050.96 to 1027.40
+at frame 4460), so the projection is part of the camera that blends. (B)
+held: an unmatched draw was drawn wholly at the tick, 79 % of their
+vertices more than 1 px (up to 120 px in stage 40's list 5, 13.3 px for a
+stage packet in stage 3) from where its neighbours' camera puts it. The
+stage-3 cases are packets entering the screen: frame 4220 has the stage
+object's part 0 packet 0 (22 vertices; key ordinal 0) in cur and not in
+prev (`reg_clipPacketBoundingBox` culled it the tick before); frame 4460 a
+character's three parts (lists 0 and 4) entering at the left edge
+(`build-host/s6/png/compare-04460.png`: prev, half way before, half way
+after, cur). (C) is covered: the stage node transform is W in qw 16..27
+(qw 16 = S W, W = S^-1 qw 16 affine), and a matched normal program blends
+W as a rotation since S2; no static draw was off by more than 0.24 px.
+
+**The fix.** One camera for the frame, rigid: `camSetup` blends the two
+ticks' inverse views (`RdCamera.view` inverted) with `rd__BlendAffine`
+about the eye (rotation slerped, eye lerped), Vt its inverse; E = V^-1 Vt
+per tick. A VU block is through the frame's camera when its inverse view
+(qw 12..15) times the tick's view is the identity to 2e-3 (GsBase.c's
+`_InversMatrix` is the transpose of a view that is a rotation to about
+1e-4: a product of 0.99989 in stage 3), and its projection is the frame's
+when qw 4..7 is proj43 times the view (`camOf`). `camRebase` puts such a
+block through Vt: qw 4..7 S E, qw 12..15 Vt^-1, and the model matrices
+(a normal program's qw 16..27, the grid's and particles' qw 16..19; a
+skinned draw's bones are in the world) M W^-1 E W, W = S^-1 qw 16. A
+matched draw blends its two re-based blocks (the camera parts then agree
+but for the projection, which the lerp blends exactly: the parts are linear
+in it), then S2's rotation blend as before. A draw that is the tick's
+(unmatched, mismatched, jumped, unkeyed) is re-based too and, with the
+zoom changing, its qw 4..7 and 16..19 take Pt Pc^-1 (Pt the lerped
+projection): cur's object through the half-way camera. `RdCamera.view`
+(FrameCB `g_view`, `g_viewProj`) is Vt and the frame's `RdVuCommon` world
+to screen and inverse view follow. With the same view in both ticks and
+the same projection nothing is touched (bit for bit). Draws through
+another camera (a reflection's scope) keep the element-wise blend.
+CPU-projected draws (`RDC_SCREEN`, including the world prims, and
+`RDC_SHADOW_STRIP`) hold GS positions and cannot be re-projected: matched
+ones blend in screen space as before, unmatched ones stay at the tick.
+`ICO_RD_S2_LEGACY=1` turns this off with S2's changes.
+
+**Instrumentation.** The 250-frame `interp:` second line ends with the VU
+draws drawn through the blended camera and how many of them were the
+tick's (stage 3, run 2: 23258 and 16, 26816 and 15, 5264 and 323, 15088
+and 61); the half-way dump's line gives the same per frame.
+
+**Tests.** `rd_interp`: an orbiting camera (28 degrees about the target,
+eye radius 500: the turn and move thresholds are 30 degrees and 300) puts
+a static point at the 14 degree projection with the eye half way (within
+0.01 px; the element-wise mean is 24 px away); two static meshes, one
+unmatched, share qw 4..15 and land at the half-way projection; the same
+with the focal length easing from 500 to 520 (both at 510); a still
+camera leaves the block bit for bit.
+
+**Original unchanged.** The preset does not interpolate; the 151 R7d
+golden dumps rendered by this build's `rd_replay_tool`: 453 PNGs, 0 differ
+from `build-host/r7d-golden/png`. `ctest` 70 of 70 (window build of HEAD
+plus this package in a worktree).
+
+Open items:
+
+1. The user's Windows run will say whether the environment still wobbles;
+   the stage-3 `interp:` lines' re-based counts are the figures to read.
+2. A packet culled in cur but drawn in prev disappears half way (nothing to
+   draw it from); one drawn in cur only now appears through the half-way
+   camera at once.
+3. Unmatched screen prims and shadow volumes still stand at the tick.
+4. The per-present cost is a few 4 x 4 products and inversions per VU draw
+   (the frame-camera test is cached per common block); not measured on the
+   GPU host.
 
 ## 21. Mirror mode (wave 7, R7c)
 

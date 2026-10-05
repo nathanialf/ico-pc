@@ -560,6 +560,11 @@ typedef struct RdInterpStats {
     uint32_t turned;  /* of them, turning more than 10 degrees in the tick */
     float maxTurn;    /* the largest turn of a model or bone in the tick, degrees */
     uint32_t shifted; /* shadow volumes whose topology changed, moved by the volume's shift */
+    /* S6: VU draws drawn through the rigidly blended camera (matched and
+     * not), and of the not-blended ones (unmatched, mismatched, jumped,
+     * unkeyed) those re-based */
+    uint32_t rebased;
+    uint32_t rebasedCur;
 } RdInterpStats;
 
 /* S2: what made a matched keyed draw snap as mismatched */

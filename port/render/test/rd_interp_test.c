@@ -1139,6 +1139,314 @@ static void testRotationDraws(void)
           "a 150 degree turn in a tick keeps the tick's bone");
 }
 
+/* ------------------------------------------- S6: the blended camera */
+
+static void mul4(const double *a, const double *b, double *o)
+{
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            double v = 0.0;
+            for (int k = 0; k < 4; k++) {
+                v += a[k * 4 + r] * b[c * 4 + k];
+            }
+            o[c * 4 + r] = v;
+        }
+    }
+}
+
+#define S6_RADIUS 500.0
+
+/* The view of a camera that has turned deg (yaw) with its eye on a circle
+ * of S6_RADIUS about the origin, looking at it, the eye at eye; written
+ * from the rotation and the eye: x_v = R (x - eye). */
+static void s6View(double deg, const double eye[3], double *v)
+{
+    const double a = deg * 3.14159265358979323846 / 180.0;
+    memset(v, 0, 16 * sizeof(double));
+    v[0] = cos(a);
+    v[2] = -sin(a);
+    v[5] = 1.0;
+    v[8] = sin(a);
+    v[10] = cos(a);
+    v[15] = 1.0;
+    for (int r = 0; r < 3; r++) {
+        v[12 + r] = -(v[r] * eye[0] + v[4 + r] * eye[1] + v[8 + r] * eye[2]);
+    }
+}
+
+static void s6OrbitEye(double deg, double eye[3])
+{
+    const double a = deg * 3.14159265358979323846 / 180.0;
+    eye[0] = S6_RADIUS * sin(a);
+    eye[1] = 0.0;
+    eye[2] = -S6_RADIUS * cos(a);
+}
+
+/* the focal length of the tick's projection (GsBase.c's zoom eases) */
+static double s6Focal = 500.0;
+
+/* a GS screen matrix: x = 2048 + f x_v / z_v, w = z_v (invertible) */
+static void s6Proj(double *p)
+{
+    memset(p, 0, 16 * sizeof(double));
+    p[0] = s6Focal;
+    p[5] = s6Focal;
+    p[8] = 2048.0;
+    p[9] = 2048.0;
+    p[10] = 1.0;
+    p[11] = 1.0;
+    p[14] = 1.0;
+}
+
+static void s6Translate(double *w, double x, double y, double z)
+{
+    memset(w, 0, 16 * sizeof(double));
+    w[0] = w[5] = w[10] = w[15] = 1.0;
+    w[12] = x;
+    w[13] = y;
+    w[14] = z;
+}
+
+/* the GS X and Y of the model point x through a model to screen matrix */
+static void s6Project(const double *m, const double x[3], double out[2])
+{
+    double h[4];
+    for (int r = 0; r < 4; r++) {
+        h[r] = m[r] * x[0] + m[4 + r] * x[1] + m[8 + r] * x[2] + m[12 + r];
+    }
+    out[0] = h[0] / h[3];
+    out[1] = h[1] / h[3];
+}
+
+static void s6ProjectF(const float (*m)[4], const double x[3], double out[2])
+{
+    double d[16];
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            d[c * 4 + r] = m[16 + c][r];
+        }
+    }
+    s6Project(d, x, out);
+}
+
+static const char kObjS6;
+
+static const double kS6PointA[3] = {300.0, 0.0, 0.0}; /* in A's model space (W = I) */
+static const double kS6PointB[3] = {0.0, 0.0, 0.0};   /* B's origin: W = (-200, 0, 150) */
+
+/* a prelit static mesh with model to world w through the camera v */
+static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
+{
+    double p[16], s[16], m[16], vw[16];
+    s6Proj(p);
+    mul4(p, v, s);
+    mul4(s, w, m);
+    mul4(v, w, vw);
+    /* the inverse view: R^T and the eye */
+    double iv[16];
+    memset(iv, 0, sizeof(iv));
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            iv[c * 4 + r] = v[r * 4 + c];
+        }
+    }
+    for (int r = 0; r < 3; r++) {
+        iv[12 + r] = -(iv[r] * v[12] + iv[4 + r] * v[13] + iv[8 + r] * v[14]);
+    }
+    iv[15] = 1.0;
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
+            d.vu.mem[12 + c][r] = (float)iv[c * 4 + r];
+            d.vu.mem[16 + c][r] = (float)m[c * 4 + r];
+            d.vu.mem[20 + c][r] = (float)m[c * 4 + r];
+            d.vu.mem[24 + c][r] = (float)vw[c * 4 + r];
+        }
+    }
+    rd_SelectList(0);
+    rd_DrawVuMesh(mesh, &d, key);
+}
+
+/* one frame: the camera turned deg about the origin; mesh A (key part 0)
+ * and, keyed by part bPart (0: not drawn), mesh B */
+static void s6Frame(RdMesh mesh, double deg, int bPart)
+{
+    rd_BeginFrame();
+    frameHead();
+    double eye[3], v[16], p[16], wa[16], wb[16];
+    s6OrbitEye(deg, eye);
+    s6View(deg, eye, v);
+    s6Proj(p);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int k = 0; k < 16; k++) {
+        cam.view[k] = (float)v[k];
+        cam.proj43[k] = (float)p[k];
+    }
+    cam.zoom = 500.0f;
+    rd_SetCamera(&cam);
+    s6Translate(wa, 0.0, 0.0, 0.0);
+    s6Translate(wb, -200.0, 0.0, 150.0);
+    s6Draw(mesh, v, wa, RD_KEY(&kObjS6, 0, 32));
+    if (bPart) {
+        s6Draw(mesh, v, wb, RD_KEY(&kObjS6, bPart, 32));
+    }
+    rd_EndFrame(0);
+}
+
+/* where a static point lands half way: the camera turned 14 degrees, its
+ * eye half way along the line between the two ticks' eyes, the focal
+ * length focal */
+static void s6Expected(const double *w, const double x[3], double focal, double out[2])
+{
+    double e0[3], e1[3], eye[3], v[16], p[16], s[16], m[16];
+    s6OrbitEye(0.0, e0);
+    s6OrbitEye(28.0, e1);
+    for (int k = 0; k < 3; k++) {
+        eye[k] = 0.5 * (e0[k] + e1[k]);
+    }
+    s6View(14.0, eye, v);
+    const double keep = s6Focal;
+    s6Focal = focal;
+    s6Proj(p);
+    s6Focal = keep;
+    mul4(p, v, s);
+    mul4(s, w, m);
+    s6Project(m, x, out);
+}
+
+static void testCameraBlend(void)
+{
+    RdMesh mesh = makeMesh();
+    double wa[16], wb[16], want[2], got[2], mean[2];
+    s6Translate(wa, 0.0, 0.0, 0.0);
+    s6Translate(wb, -200.0, 0.0, 150.0);
+
+    /* the camera turns 28 degrees about the target in the tick (30 is the
+     * cut threshold, RD_INTERP_CAMERA_TURN; the eye moves 242 of 300) */
+    s6Frame(mesh, 0.0, 0);
+    s6Frame(mesh, 28.0, 0);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->lerped == 1 && st->rebased == 1,
+          "camera turn: the static mesh blends through the blended camera (snap %u, lerped %u, "
+          "rebased %u)",
+          st->snap, st->lerped, st->rebased);
+    const RdFrame *f = built(0.5f);
+    const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 32), 0));
+    if (m) {
+        s6Expected(wa, kS6PointA, 500.0, want);
+        s6ProjectF(m, kS6PointA, got);
+        /* the element-wise mean of the two ticks' model to screen */
+        const RdFrame *pf = rd__PrevFrame(), *cf = rd__LastFrame();
+        const float (*mp)[4] = vuBlock(pf, findKey(pf, 0, RD_KEY(&kObjS6, 0, 32), 0));
+        const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 0, 32), 0));
+        double mm[16];
+        for (int c = 0; c < 4; c++) {
+            for (int r = 0; r < 4; r++) {
+                mm[c * 4 + r] = 0.5 * ((double)mp[16 + c][r] + (double)mc[16 + c][r]);
+            }
+        }
+        s6Project(mm, kS6PointA, mean);
+        const double err = hypot(got[0] - want[0], got[1] - want[1]);
+        const double off = hypot(mean[0] - want[0], mean[1] - want[1]);
+        CHECK(err < 0.01 && off > 2.0,
+              "camera turn: the point at the 14 degree projection (%.3f, want %.3f: off by %.4f; "
+              "the element-wise mean %.3f is %.2f away)",
+              got[0], want[0], err, mean[0], off);
+        /* the inverse view is the blended camera's (rigid: the eye half way) */
+        double e0[3], e1[3];
+        s6OrbitEye(0.0, e0);
+        s6OrbitEye(28.0, e1);
+        CHECK(fabs(m[15][0] - 0.5 * (e0[0] + e1[0])) < 1e-3 &&
+                  fabs(m[15][2] - 0.5 * (e0[2] + e1[2])) < 1e-3,
+              "camera turn: the inverse view's eye half way (%.3f, %.3f)", m[15][0], m[15][2]);
+        const float yaw = atan2f(-f->camera.view[2], f->camera.view[0]) * 180.0f / 3.14159265f;
+        CHECK(fabsf(yaw - 14.0f) < 1e-3f, "camera turn: RdCamera.view half way (%.4f)", yaw);
+    } else {
+        CHECK(0, "camera turn: the mesh");
+    }
+
+    /* two static meshes, B new in cur (unmatched): both through the same
+     * camera, each where the blended camera puts it */
+    s6Frame(mesh, 0.0, 0);
+    s6Frame(mesh, 28.0, 1);
+    st = build(0.5f, 1.0f, 1);
+    CHECK(st->lerped == 1 && st->missing == 1 && st->rebased == 2 && st->rebasedCur == 1,
+          "unmatched neighbour: one blended, one unmatched, both re-based (%u, %u, %u, %u)",
+          st->lerped, st->missing, st->rebased, st->rebasedCur);
+    f = built(0.5f);
+    const float (*ma)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 32), 0));
+    const float (*mb)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
+    if (ma && mb) {
+        double ga[2], gb[2], wa2[2], wb2[2];
+        s6ProjectF(ma, kS6PointA, ga);
+        s6ProjectF(mb, kS6PointB, gb);
+        s6Expected(wa, kS6PointA, 500.0, wa2);
+        s6Expected(wb, kS6PointB, 500.0, wb2);
+        float d = 0.0f;
+        for (int q = 4; q < 16; q++) {
+            for (int r = 0; r < 4; r++) {
+                d = fmaxf(d, fabsf(ma[q][r] - mb[q][r]) / (1.0f + fabsf(ma[q][r])));
+            }
+        }
+        CHECK(d < 1e-5f, "unmatched neighbour: the same camera block (qw 4..15) (%g)", (double)d);
+        CHECK(hypot(ga[0] - wa2[0], ga[1] - wa2[1]) < 0.01 &&
+                  hypot(gb[0] - wb2[0], gb[1] - wb2[1]) < 0.01,
+              "unmatched neighbour: A at %.3f (want %.3f), B at %.3f (want %.3f)", ga[0], wa2[0],
+              gb[0], wb2[0]);
+        /* without S6, B was cur's: at the 28 degree camera */
+        const RdFrame *cf = rd__LastFrame();
+        const float (*mbc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
+        double gc[2];
+        s6ProjectF(mbc, kS6PointB, gc);
+        CHECK(hypot(gc[0] - wb2[0], gc[1] - wb2[1]) > 2.0,
+              "unmatched neighbour: the tick's B (%.3f) is away from the half-way one", gc[0]);
+    } else {
+        CHECK(0, "unmatched neighbour: the meshes");
+    }
+
+    /* the same while the zoom eases (focal length 500 to 520): the
+     * unmatched mesh takes the half-way projection (510) with its
+     * neighbour */
+    s6Frame(mesh, 0.0, 0);
+    s6Focal = 520.0;
+    s6Frame(mesh, 28.0, 1);
+    s6Focal = 500.0;
+    st = build(0.5f, 1.0f, 1);
+    f = built(0.5f);
+    ma = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 32), 0));
+    mb = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
+    if (ma && mb) {
+        double ga[2], gb[2], wa2[2], wb2[2];
+        s6ProjectF(ma, kS6PointA, ga);
+        s6ProjectF(mb, kS6PointB, gb);
+        s6Expected(wa, kS6PointA, 510.0, wa2);
+        s6Expected(wb, kS6PointB, 510.0, wb2);
+        CHECK(st->rebasedCur == 1 && hypot(ga[0] - wa2[0], ga[1] - wa2[1]) < 0.01 &&
+                  hypot(gb[0] - wb2[0], gb[1] - wb2[1]) < 0.01,
+              "zoom: A at %.3f (want %.3f), unmatched B at %.3f (want %.3f)", ga[0], wa2[0], gb[0],
+              wb2[0]);
+    } else {
+        CHECK(0, "zoom: the meshes");
+    }
+
+    /* a still camera: nothing is re-based, the blocks are the element-wise
+     * blend as before (bit for bit) */
+    s6Frame(mesh, 10.0, 0);
+    s6Frame(mesh, 10.0, 1);
+    st = build(0.5f, 1.0f, 1);
+    f = built(0.5f);
+    const RdFrame *cf = rd__LastFrame();
+    const float (*mo)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
+    const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
+    CHECK(st->rebased == 0 && mo && mc && memcmp(mo, mc, 36 * 16) == 0,
+          "still camera: nothing re-based, the unmatched mesh is the tick's (%u)", st->rebased);
+}
+
 /* ------------------------------------------------- S2: the present clock */
 
 static void testPresentClock(void)
@@ -1197,6 +1505,7 @@ static void runCpu(void)
 {
     testRotationBlend();
     testRotationDraws();
+    testCameraBlend();
     testPresentClock();
     testSprites();
     testSpriteSnaps();

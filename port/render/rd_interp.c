@@ -37,7 +37,12 @@
  * slerped rotation and a lerped stretch about a pivot (rotateModel,
  * rotateBone): element by element a turn of 77 degrees in a tick, which
  * stage 3 has, drew a bone 22 % short half way.  A float pair with
- * different bits that is not both finite keeps cur's.
+ * different bits that is not both finite keeps cur's.  Since package S6 the
+ * camera is one rigid blend for the frame (camSetup: the inverse views'
+ * rotation slerped, the eye lerped, the projection lerped) and every VU
+ * draw through the frame's camera is re-based on it, the draws that are
+ * cur's included (camRebase, camCurDraw): an unmatched draw stood a tick
+ * ahead of its neighbours.
  *
  * A keyed draw snaps (is cur's) when prev has no match, when the payload's
  * shape differs (mesh, program, batch range, bone, vertex or particle
@@ -696,6 +701,261 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
     return true;
 }
 
+/* ----------------------------------------------- the camera (package S6) */
+
+/* The half-way frame's camera, a rigid transform: the inverse views (view to
+ * world: the rotation and the eye) blended by rd__BlendAffine about the eye
+ * (rotation slerped, eye lerped), not the camera's matrices element by
+ * element.  Every VU draw seen through the frame's camera (its inverse view,
+ * qw 12..15, inverts RdCamera.view) is re-based on it, matched or not: a
+ * tick's camera part C = Q V (Q the projection: qw 4..7 S = P V, the model
+ * matrices M = Q V W) becomes Q Vt = C E with E = V^-1 Vt, which on a model
+ * matrix is M W^-1 E W (W = S^-1 M, the model to world).  A matched draw
+ * blends its two ticks' re-based blocks (both then through Vt: the camera
+ * parts agree and only the object moves); an unmatched, mismatched, jumped
+ * or unkeyed one is cur's object through Vt, so it stays with its neighbours
+ * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
+ * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space;
+ * draws under another camera (a reflection's) keep the element-wise blend. */
+static bool isNormalProg(uint8_t prog);
+static uint8_t *outPayload(const RdCmd *c);
+
+typedef struct CamBlend {
+    int on;
+    int still;             /* the two views are the same: E is the identity */
+    double vp[16], vc[16]; /* the two ticks' views */
+    double ep[16], ec[16]; /* Vp^-1 Vt, Vc^-1 Vt */
+    double vt[16], it[16]; /* the blended view and its inverse */
+    double pc[16];         /* cur's projection (RdCamera.proj43) */
+    double lc[16];         /* Pt Pc^-1: cur's projection to the blended one */
+    int zoom;              /* the projections differ (the zoom eases) */
+    float itf[16];
+} CamBlend;
+
+static CamBlend s_cam;
+
+static uint32_t s_camGen, s_camGenSeen[2]; /* camSetup calls: camOf's cache */
+
+static void loadF16(const float *f, double *o)
+{
+    for (int i = 0; i < 16; i++) {
+        o[i] = f[i];
+    }
+}
+
+/* s_cam for prev, cur at t; off without both cameras, in the legacy mode,
+ * or when the blend fails (not affine, a mirror) */
+static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
+{
+    memset(&s_cam, 0, sizeof(s_cam));
+    s_camGen++;
+    if (rd__S2Legacy() || !prev->hasCamera || !cur->hasCamera || !(t > 0.0f) || !(t < 1.0f)) {
+        return;
+    }
+    double ip[16], ic[16];
+    loadF16(prev->camera.view, s_cam.vp);
+    loadF16(cur->camera.view, s_cam.vc);
+    if (!invert4d(s_cam.vp, ip) || !invert4d(s_cam.vc, ic) ||
+        !rd__BlendAffine(ip, ic, t, NULL, s_cam.it) || !invert4d(s_cam.it, s_cam.vt)) {
+        return;
+    }
+    mul4d(ip, s_cam.vt, s_cam.ep);
+    mul4d(ic, s_cam.vt, s_cam.ec);
+    s_cam.still = memcmp(prev->camera.view, cur->camera.view, sizeof(prev->camera.view)) == 0;
+    /* the projection: GsBase.c's zoom eases towards its target (zoomCurrent,
+     * the focus distance), a few per cent a tick in stage 3; a matched draw
+     * blends it with the rest of its block, a draw that is cur's takes
+     * Pt = lerp(Pp, Pc) through Pt Pc^-1 */
+    double pp[16], pt[16], ipc[16];
+    loadF16(prev->camera.proj43, pp);
+    loadF16(cur->camera.proj43, s_cam.pc);
+    if (memcmp(prev->camera.proj43, cur->camera.proj43, sizeof(prev->camera.proj43)) != 0 &&
+        invert4d(s_cam.pc, ipc)) {
+        for (int i = 0; i < 16; i++) {
+            pt[i] = (1.0 - t) * pp[i] + t * s_cam.pc[i];
+        }
+        mul4d(pt, ipc, s_cam.lc);
+        s_cam.zoom = 1;
+        s_cam.still = 0;
+    }
+    for (int i = 0; i < 16; i++) {
+        s_cam.itf[i] = (float)s_cam.it[i];
+    }
+    s_cam.on = 1;
+}
+
+/* How a block relates to the view v: CAM_NONE; CAM_VIEW, its inverse view
+ * (qw 12..15) times v is the identity to 2e-3 (relative to the eye's
+ * distance for the translation); CAM_FULL, and its world to screen (qw
+ * 4..7) is the projection proj times v: the frame's camera, whose
+ * projection blends too */
+enum { CAM_NONE = 0, CAM_VIEW, CAM_FULL };
+
+static int camOfUncached(const float (*m)[4], const double *v, const double *proj);
+
+static int camOf(const float (*m)[4], const double *v, const double *proj)
+{
+    /* most blocks of a frame carry the same common block: the last answer
+     * per view (prev's, cur's) */
+    static float last[2][12][4];
+    static const double *lastV[2];
+    static int lastR[2];
+    const int slot = v == s_cam.vp ? 0 : 1;
+    if (lastV[slot] == v && s_camGen == s_camGenSeen[slot] &&
+        memcmp(last[slot], m[4], sizeof(last[slot])) == 0) {
+        return lastR[slot];
+    }
+    memcpy(last[slot], m[4], sizeof(last[slot]));
+    lastV[slot] = v;
+    s_camGenSeen[slot] = s_camGen;
+    lastR[slot] = camOfUncached(m, v, proj);
+    return lastR[slot];
+}
+
+static int camOfUncached(const float (*m)[4], const double *v, const double *proj)
+{
+    double iv[16], p[16], s[16];
+    loadQw4(m, 12, iv);
+    mul4d(iv, v, p);
+    /* GsBase.c's inverse view (_InversMatrix) is the transpose of a view
+     * that is a rotation to about 1e-4 (stage 3: a product of 0.99989) */
+    const double tol = 2e-3 * (1.0 + fabs(v[12]) + fabs(v[13]) + fabs(v[14]));
+    for (int i = 0; i < 16; i++) {
+        const double want = (i % 5) == 0 ? 1.0 : 0.0;
+        if (!(fabs(p[i] - want) <= (i >= 12 ? tol : 2e-3))) {
+            return CAM_NONE;
+        }
+    }
+    if (!proj) {
+        return CAM_VIEW;
+    }
+    mul4d(proj, v, p);
+    loadQw4(m, 4, s);
+    for (int i = 0; i < 16; i++) {
+        if (!(fabs(s[i] - p[i]) <= 1e-4 * (1.0 + fabs(p[i])))) {
+            return CAM_VIEW;
+        }
+    }
+    return CAM_FULL;
+}
+
+static void storeQw4(float (*m)[4], int at, const double *d)
+{
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            m[at + c][r] = (float)d[c * 4 + r];
+        }
+    }
+}
+
+/* The model matrices a program draws with, the camera on their left: a
+ * normal program's qw 16..27; the grid's and the particles' qw 16..19 (the
+ * particles' qw 20..23 is the screen matrix alone); a skinned draw's bones
+ * are in the world, its camera is qw 4..7 only. */
+static int camModelMats(uint8_t type, uint8_t prog)
+{
+    if (type == RDC_MESH && isNormalProg(prog)) {
+        return 3;
+    }
+    return type == RDC_GRID || type == RDC_PARTICLES ? 1 : 0;
+}
+
+/* m (a VU block, 36 qw) re-based from its tick's view onto Vt by e (Vp^-1 Vt
+ * or Vc^-1 Vt); false (m untouched) when a matrix is singular or the result
+ * is not finite */
+static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
+{
+    double s[16], is[16], se[16], w[16], iw[16], k[16], tmp[16], x[16];
+    float out[16][4];
+    loadQw4(m, 4, s);
+    mul4d(s, e, se);
+    if (l) {
+        mul4d(l, se, tmp);
+        memcpy(se, tmp, sizeof(se));
+    }
+    storeQw4(out, 0, se);
+    storeQw4(out, 4, s_cam.it);
+    if (mats > 0) {
+        double m16[16];
+        loadQw4(m, 16, m16);
+        if (!invert4d(s, is)) {
+            return false;
+        }
+        mul4d(is, m16, w);
+        if (!invert4d(w, iw)) {
+            return false;
+        }
+        mul4d(iw, e, tmp);
+        mul4d(tmp, w, k); /* W^-1 E W */
+    }
+    float model[12][4];
+    for (int a = 0; a < mats; a++) {
+        double mm[16];
+        loadQw4(m, 16 + 4 * a, mm);
+        mul4d(mm, k, x);
+        if (l && a == 0) { /* qw 16..19, model to screen: the projection's */
+            mul4d(l, x, tmp);
+            memcpy(x, tmp, sizeof(x));
+        }
+        storeQw4(model, 4 * a, x);
+    }
+    for (int q = 0; q < 8; q++) {
+        for (int r = 0; r < 4; r++) {
+            if (!isfinite(out[q][r]) || fabsf(out[q][r]) > 3.0e38f) {
+                return false;
+            }
+        }
+    }
+    for (int q = 0; q < 4 * mats; q++) {
+        for (int r = 0; r < 4; r++) {
+            if (!isfinite(model[q][r]) || fabsf(model[q][r]) > 3.0e38f) {
+                return false;
+            }
+        }
+    }
+    memcpy(m[4], out[0], 4 * sizeof(m[0]));
+    memcpy(m[12], out[4], 4 * sizeof(m[0]));
+    if (mats > 0) {
+        memcpy(m[16], model, (size_t)mats * 4 * sizeof(m[0]));
+    }
+    return true;
+}
+
+static int s_rebased;    /* S6: VU draws re-based on the blended camera, this frame */
+static int s_rebasedCur; /* of them, draws that are cur's */
+
+/* A draw that is cur's (unmatched, mismatched, jumped, unkeyed): cur's
+ * object through the blended camera */
+static void camCurDraw(RdCmd *c)
+{
+    if (!s_cam.on || s_cam.still) {
+        return;
+    }
+    switch (c->type) {
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES:
+        break;
+    default:
+        return;
+    }
+    if (c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return;
+    }
+    uint8_t *op = outPayload(c);
+    if (!op) {
+        return;
+    }
+    float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
+    const int how = camOf((const float (*)[4])vo, s_cam.vc, s_cam.pc);
+    if (how != CAM_NONE && camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
+                                     how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL)) {
+        s_rebased++;
+        s_rebasedCur++;
+    }
+}
+
 /* A draw's model origin in the world: the common block's world to GS
  * screen (qw 4..7) inverted, applied to the model to screen translation
  * (qw 19: normal programs' +0x140 x node, the grid's and the particles'
@@ -1010,6 +1270,23 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         break;
     }
 
+    /* S6: both ticks' blocks through the blended camera (the camera parts
+     * then agree; only the object's own motion is left to blend) */
+    float vpr[36][4];
+    if (s_cam.on && !s_cam.still && camOf(vp, s_cam.vp, NULL) != CAM_NONE &&
+        camOf((const float (*)[4])vc, s_cam.vc, s_cam.pc) != CAM_NONE) {
+        const int mats = camModelMats(cc->type, cc->b[0]);
+        float vcr[36][4];
+        memcpy(vpr, vp, sizeof(vpr));
+        memcpy(vcr, vc, sizeof(vcr));
+        /* the projections blend with the block (linear in them) */
+        if (camRebase(vpr, s_cam.ep, mats, NULL) && camRebase(vcr, s_cam.ec, mats, NULL)) {
+            memcpy(vc, vcr, sizeof(vc));
+            memcpy(vo[4], vc[4], 24 * sizeof(vo[0])); /* qw 4..27 */
+            vp = (const float (*)[4])vpr;
+            s_rebased++;
+        }
+    }
     lerpVuBlock(vo, vp, (const float (*)[4])vc, t);
     /* S2: a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__S2Legacy();
@@ -1676,25 +1953,49 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
         memset(s_ord, 0, sizeof(s_ord));
     }
     const bool blend = st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev);
+    s_cam.on = 0;
+    s_rebased = s_rebasedCur = 0;
     if (blend) {
+        camSetup(prev, cur, t); /* S6 */
         if (prev->hasCamera && cur->hasCamera) {
             lerpCamera(&s_out.camera, &prev->camera, &cur->camera, t);
+            if (s_cam.on) {
+                for (int k = 0; k < 16; k++) {
+                    s_out.camera.view[k] = (float)s_cam.vt[k];
+                }
+            }
         }
         if (prev->hasVu && cur->hasVu) {
             lerpFloats(s_out.vu.screenView, prev->vu.screenView, cur->vu.screenView, 16, t);
             lerpFloats(s_out.vu.viewport, prev->vu.viewport, cur->vu.viewport, 16, t);
             lerpFloats(s_out.vu.invView, prev->vu.invView, cur->vu.invView, 16, t);
+            if (s_cam.on && !s_cam.still) {
+                double sv[16], se[16];
+                loadF16(cur->vu.screenView, sv);
+                mul4d(sv, s_cam.ec, se);
+                if (s_cam.zoom) {
+                    double lse[16];
+                    mul4d(s_cam.lc, se, lse);
+                    memcpy(se, lse, sizeof(se));
+                }
+                for (int k = 0; k < 16; k++) {
+                    s_out.vu.screenView[k] = (float)se[k];
+                }
+                memcpy(s_out.vu.invView, s_cam.itf, sizeof(s_cam.itf));
+            }
         }
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
                 RdCmd *c = &s_out.lists[l].cmds[i];
                 if (!isKeyedDraw(c)) {
+                    camCurDraw(c); /* S6: unkeyed, cur's through the blended camera */
                     continue;
                 }
                 const RdCmd *pc = matchOf(prev, c, l);
                 uint8_t *op = outPayload(c);
                 if (!pc || !op) {
                     st.missing++;
+                    camCurDraw(c);
                     if (s_track) {
                         flapNote(c, l, O_UNMATCHED, NULL, cur->number);
                     }
@@ -1713,6 +2014,9 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                 default:
                     r = blendVu(op, prev, pc, c, t);
                     break;
+                }
+                if (r != R_LERP) {
+                    camCurDraw(c); /* S6: the tick's draw, through the blended camera */
                 }
                 st.lerped += r == R_LERP;
                 st.mismatch += r == R_MISMATCH;
@@ -1753,6 +2057,8 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
             st.morph += morphDraw(c, NULL, NULL, cur, 1.0f);
         }
     }
+    st.rebased = (uint32_t)s_rebased;
+    st.rebasedCur = (uint32_t)s_rebasedCur;
     feedback(dt, firstOfTick);
     if (stats) {
         *stats = st;
@@ -1774,6 +2080,7 @@ static struct {
     uint64_t why[5], rotated, turned, shifted;
     float maxTurn;
     uint32_t snapFlips, lastSnap;
+    uint64_t rebased, rebasedCur; /* S6 */
 } s_pres;
 
 #define RD_INTERP_LOG_FRAMES 250
@@ -1795,6 +2102,8 @@ static void presentLog(void)
     s_pres.rotated += st->rotated;
     s_pres.turned += st->turned;
     s_pres.shifted += st->shifted;
+    s_pres.rebased += st->rebased;
+    s_pres.rebasedCur += st->rebasedCur;
     s_pres.maxTurn = fmaxf(s_pres.maxTurn, st->maxTurn);
     s_pres.snapFlips +=
         s_pres.frames > 1 && (st->snap == RD_SNAP_NONE) != (s_pres.lastSnap == RD_SNAP_NONE);
@@ -1818,12 +2127,14 @@ static void presentLog(void)
         "interp: mismatched by size %llu, mesh %llu, state %llu, header %llu, topology %llu; "
         "%llu mesh draws blended as rotations (%llu turning over 10 degrees a tick, the largest "
         "%.1f degrees); %llu shadow volumes moved across a topology change; %u draws flapping "
-        "(%u or more outcome changes); %u frames changed between blended and snapped",
+        "(%u or more outcome changes); %u frames changed between blended and snapped; %llu VU "
+        "draws through the blended camera (%llu of them the tick's: unmatched, snapped or unkeyed)",
         (unsigned long long)s_pres.why[0], (unsigned long long)s_pres.why[1],
         (unsigned long long)s_pres.why[2], (unsigned long long)s_pres.why[3],
         (unsigned long long)s_pres.why[4], (unsigned long long)s_pres.rotated,
         (unsigned long long)s_pres.turned, (double)s_pres.maxTurn,
-        (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN, s_pres.snapFlips);
+        (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN, s_pres.snapFlips,
+        (unsigned long long)s_pres.rebased, (unsigned long long)s_pres.rebasedCur);
     const uint32_t number = s_pres.number;
     const float alpha = s_pres.alpha;
     memset(&s_pres, 0, sizeof(s_pres));

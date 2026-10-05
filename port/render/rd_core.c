@@ -1222,14 +1222,22 @@ void rd_EndFrame(int keep)
         }
         if (s_dumpInterp) {
             RdInterpStats st;
-            const RdFrame *i = rd__InterpFrame(rd__PrevFrame(), f, 0.5f, 1.0f, 1, &st);
+            /* S6: the previous frame too (rd-NNNNN-prev.rddump), so a
+             * half-way dump can be checked against both its ticks */
+            const RdFrame *pv = rd__PrevFrame();
+            snprintf(path, sizeof(path), "%s/rd-%05u-prev.rddump", s_dumpDir, f->number);
+            if (pv && pv->closed && pv->number + 1 == f->number) {
+                (void)rd__DumpFrame(pv, path);
+            }
+            const RdFrame *i = rd__InterpFrame(pv, f, 0.5f, 1.0f, 1, &st);
             snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
             if (i && rd__DumpFrame(i, path)) {
                 rd__Log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
                         "%u unmatched, %u mismatched, %u jumped; %u mesh streams kept or "
-                        "blended; %u blended as rotations) dumped to %s",
+                        "blended; %u blended as rotations; %u VU draws through the blended "
+                        "camera, %u of them the tick's) dumped to %s",
                         f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
-                        st.morph, st.rotated, path);
+                        st.morph, st.rotated, st.rebased, st.rebasedCur, path);
             }
         }
     }
