@@ -120,6 +120,10 @@ void ico_host_main_tick(void);
    this file's static thread functions */
 void ico_host_milestone(const char *what);
 void ico_host_name_func(void *func, const char *name);
+/* port/game/options.h: developer mode (renderer wave 6, R6a) */
+int ico_opt_developer_mode(void);
+/* common/src/debug.c; debug.h declares only debug_Menu_off */
+void debug_Menu(void);
 
 #endif
 
@@ -206,6 +210,16 @@ void Main(void)
         MakeCollisionDependGObjList();
         MakeCharGObjList();
         ExecKeyInput();
+#ifdef ICO_HOST
+        /* PC port (R6a): developer mode (docs/port/DEVELOPER_MODE.md)
+           restores the development build's debug menu call, here after the
+           pad is read and before ExecIcoMisc's layout code can clear
+           pad[0].flags.  SELECT opens the menu; until then debug_Menu only
+           reads the pad.  Off: not called, as in retail. */
+        if (ico_opt_developer_mode()) {
+            debug_Menu();
+        }
+#endif
         ExecIcoMisc();
         if (graphics_ready == 0) {
             stage_ResetAnimation();

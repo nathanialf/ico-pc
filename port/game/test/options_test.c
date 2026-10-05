@@ -10,7 +10,6 @@
 #include <string.h>
 #include "config.h"
 #include "options.h"
-
 /* the enemy brain, as the game's own source; stubs below satisfy it */
 #include "../../../ico2/omori/src/ebrain.c"
 
@@ -26,7 +25,9 @@ static int failures;
 
 /* --- what ebrain.c needs ------------------------------------------------- */
 static GObj s_boy, s_girl, s_enemy;
+
 GObj *boyGObj, *girlGObj;
+
 static int s_sees_boy, s_sees_girl;
 
 int ACTCheckViewCl(struct GObj *self, void *target, void *targetPos, int range, float f)
@@ -41,6 +42,7 @@ void GetRootPosition(void *out, struct GObj *g)
 
 /* the rest are reached only from eBrainProcess and the generator lookups */
 const StgPre stageData[1];
+
 GenGeo objLayout[1];
 
 void debug_StdPrintfDummy(const char *fmt, ...) {}
@@ -97,6 +99,10 @@ static void test_defaults(void)
     CHECK(ico_opt_stick_fix() == 0);
     CHECK(ico_opt_yorda_safe() == 0);
     CHECK(ico_opt_mirror() == 0);
+    CHECK(ico_opt_developer_mode() == 0);
+    CHECK(ico_opt_debug_option() == 0);
+    ico_opt_set_developer_mode(3);
+    CHECK(ico_opt_developer_mode() == 1);
     ico_opt_set_yorda_safe(5);
     CHECK(ico_opt_yorda_safe() == 1);
     ico_opt_set_yorda_safe(0);
@@ -106,6 +112,7 @@ static void test_defaults(void)
     CHECK(ico_opt_stick_fix() == 1 && ico_opt_mirror() == 1);
     ico_opt_reload();
     CHECK(ico_opt_stick_fix() == 0 && ico_opt_mirror() == 0);
+    CHECK(ico_opt_developer_mode() == 0);
 }
 
 static void test_config(const char *dir)
@@ -120,16 +127,41 @@ static void test_config(const char *dir)
         failures++;
         return;
     }
-    fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\nmirror = true\n", f);
+    fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\nmirror = true\n"
+          "developer_mode = true\n[dev]\ndebug_option = 1\n",
+          f);
     fclose(f);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_opt_reload();
     CHECK(ico_opt_stick_fix() == 1);
     CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_mirror() == 1);
+    /* renderer wave 6 (R6a): developer mode and the debug option file switch */
+    CHECK(ico_opt_developer_mode() == 1);
+    CHECK(ico_opt_debug_option() == 1);
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
+    /* debug_option is an int; a non-number or an absent key reads 0 */
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[dev]\ndebug_option = 7\n", f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_debug_option() == 7);
+        CHECK(ico_opt_developer_mode() == 0);
+        remove(path);
+    }
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[dev]\ndebug_option = \"yes\"\n", f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_debug_option() == 0);
+        remove(path);
+    }
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
 }

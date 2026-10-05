@@ -13,11 +13,15 @@ recheck, and delete entries from `cmake/IcoExclusions.cmake` as they compile.
 ## Counts
 
 `config/link_order.pal.txt` lists 223 C sources under `ico2/`. The host
-build takes 212 of them: since package 1D the headless build compiles the
-renderer layer too (docs/port/HEADLESS_STUBS.md) and leaves out only 11
-(`common/src/debug.c`, `debug_exception.c`, the 9 `ito/mpeg` files). All 73
-data tables compile on every preset. The table below is the pre-1D count of
-non-renderer sources.
+build takes 214 of them and leaves out only the 9 `ito/mpeg` files
+(`ICO_EE_ONLY_SOURCES`: the PS2's FMV player, replaced by `port/fmv`). Since
+package 1D the headless build compiles the renderer layer too
+(docs/port/HEADLESS_STUBS.md); since renderer wave 6 (package R6a)
+`common/src/debug.c` and `debug_exception.c` are compiled as well and
+`tools/gen_sources.py` writes one host source list per programmer directory
+(no `ICO_RENDERER_SOURCES`, no `HEADLESS_SIM`). All 73 data tables compile
+on every preset. The table below is the pre-1D count of non-renderer
+sources.
 
 Since package 5B the data tables are not generated from the ELF at build
 time: the host binary defines them empty (`port/data/gen/table_defs.c`, in
@@ -94,18 +98,38 @@ a host TU (`VU0_*`, `QCOPY16`) is now a compile error (`typedef.h`).
 None: the 13 clang-only sugiCommon.h TUs compile, and `motionManager2.c`'s
 nested function has an `ICO_HOST` file-scope version.
 
-### Renderer-owned, not compiled while `ICO_HEADLESS` (11)
+### Renderer-owned sources (none left out since R6a)
 
-`common/src/debug.c`, `common/src/debug_exception.c` (VU0 asm in the debug
-font, bar and exception screen; `port/null/debug_null.c` stands in) and
-`ito/mpeg/*.c` (9; the FMV player, `movie_*` stubbed in
-`port/null/gfx_null.c`). The other 24 renderer-owned files (all of
-`seki/src`, `sugipon/src/{staticBlur,darkVolume,particleEffect,matrixDrive,
-quaternion,clothAnimation,lineManager}.c`, `ito/src/{lightning,
-queen_barrier_disp}.c`) are compiled by the headless build as well
-(`HEADLESS_SIM` in `tools/gen_sources.py`); the renderer waves still own
-them. Package 1D gave the VU0 asm left in `GsBase.c`, `GifPacket.c`,
-`darkVolume.c` and `lightning.c` `ICO_HOST` bodies.
+Renderer wave 6 (package R6a) swept the 35 files `tools/gen_sources.py`
+listed as renderer-owned: every one compiles into both host builds.
+
+| files | status |
+| --- | --- |
+| `seki/src/*` (15: GsBase, GifPacket, DmaPacket, DisplayList, DisplayFont, RegistPacket, Packet, MicroCode, Texture, Shadow, ZFog, Primitive, Light, DisplayP2O, Matrix) | on rd in the window build (waves 2 to 5, docs/port/RENDER_API.md sections 9 to 18); the headless build compiles the original packet code since 1D |
+| `sugipon/src/{staticBlur,darkVolume,particleEffect,clothAnimation,lineManager}.c` | on rd (R5a, R5c; cloth and lines through the decoder) |
+| `sugipon/src/{matrixDrive,quaternion}.c` | plain C (1D) |
+| `ito/src/{lightning,queen_barrier_disp}.c` | on rd (R5c, R3ab) |
+| `common/src/debug.c`, `debug_exception.c` | compiled since R6a (docs/port/DEVELOPER_MODE.md); `port/null/debug_null.c` is gone |
+| `ito/mpeg/*.c` (9) | PS2 only (`ICO_EE_ONLY_SOURCES`; `port/fmv` since 4E) |
+
+`HEADLESS_SIM` and `ICO_RENDERER_SOURCES` are gone from
+`tools/gen_sources.py` and `cmake/IcoSources.cmake`. Package 1D gave the VU0
+asm left in `GsBase.c`, `GifPacket.c`, `darkVolume.c` and `lightning.c`
+`ICO_HOST` bodies; R6a the VU1 register dumps of `debug.c`.
+
+### The GS register decoder is permanent
+
+The plan's `rd_gs_shim.c` was to decode `gif_SetGsReg` state and vertex
+writes into `rd_*` calls only until the raw-register files were converted
+(gate: zero `gif_SetGsReg` uses). The decoder lives in `GifPacket.c`'s host
+path instead and stays: it is a function-level decoder of the game's own
+register writes (the `gif_*` helpers, `gif_SetGsReg`, the A+D pairs the
+game writes into its packets, and the GIF packets `mc_HostDma` reads from
+the VU1 chains), not a GS emulator. `darkVolume.c`'s spheres,
+`lineManager.c` and the debug font (R6a) reach rd through it; no file is
+converted away from `gif_SetGsReg`. Its undecoded-register counters
+(`gif_HostUndecodedCount`, `gif_HostUndecodedTotal`) stayed at zero over
+the R6a 4000-tick window run (docs/port/RENDER_API.md section 9).
 
 ## Warnings
 
@@ -144,11 +168,12 @@ tests) on a host with a Vulkan device, and with `VK_ICD_FILENAMES=/nonexistent`
 and clang builds exit 0 with no device. A skipped test (exit 77,
 `SKIP_RETURN_CODE`) is a pass for ctest.
 
-The game links against `ico_game` (212 game objects and the 73 tables),
-`ico_platform`, `ico_math`, `ico_port_data`, `ico_port_null` and the
-headless floor in the program itself (`port/null/gfx_null.c`: 13 hardware
-and FMV stubs; `port/null/debug_null.c`: 27 functions and 59 variables of
-`debug.c`). docs/port/HEADLESS_STUBS.md lists each and why. Nobody has run
+The game links against `ico_game` (214 game objects since R6a, and the 73
+tables), `ico_platform`, `ico_math`, `ico_port_data`, `ico_port_null` and
+the headless floor in the program itself (`port/null/gfx_null.c`: the
+libgraph and libdma stubs; `port/null/libgcc_null.c`: `fptodp`; until R6a
+`port/null/debug_null.c` stood in for `debug.c`). docs/port/HEADLESS_STUBS.md
+lists each and why. Nobody has run
 it in the container (plan rule); the first run is the user's Phase 1
 checkpoint (docs/port/TESTING.md).
 

@@ -19,21 +19,21 @@ blend mode is mapped to mode 0 only in what reaches rd), so the headless
 build and its traces are unchanged. The headless
 build stays a CMake option (`-DICO_HEADLESS=ON`; the Linux presets set it,
 the Windows presets build the window) for the trace and test runs, with the
-original packet code. Both builds link `port/null/gfx_null.c` and
-`debug_null.c`: the window build still has no libgraph (the vsync busy-wait
-and the path syncs are the same stubs), the DMA kick is not called by
-`dl_Swap` there (rd replays the lists instead; `p2o_TransMicroProgram`
-still calls the no-op `sceDmaSend`), and `debug.c` is a later package's.
-`ICO_RENDERER_SOURCES` (`debug.c`, `debug_exception.c`) are compiled in
-neither build until their packages port them. The FMV player is
-`port/fmv/movie.c` in both builds since Phase 4E (`docs/port/FMV.md`):
-`ito/mpeg` is PS2-only (`ICO_EE_ONLY_SOURCES`), and the headless build
-decodes the pictures and drops them.
+original packet code. Both builds link `port/null/gfx_null.c`: the window
+build still has no libgraph (the vsync busy-wait and the path syncs are the
+same stubs), the DMA kick is not called by `dl_Swap` there (rd replays the
+lists instead; `p2o_TransMicroProgram` still calls the no-op
+`sceDmaSend`). Since renderer wave 6 (package R6a) `common/src/debug.c` and
+`debug_exception.c` are compiled in both builds (docs/port/DEVELOPER_MODE.md)
+and `port/null/debug_null.c`, which stood in for them, is gone; libgcc's
+`fptodp` moved to `port/null/libgcc_null.c`. There is one host source list:
+every game source but `ICO_EE_ONLY_SOURCES` (`ito/mpeg`, the PS2's FMV
+player; the host's is `port/fmv/movie.c` since Phase 4E, docs/port/FMV.md,
+and the headless build decodes the pictures and drops them).
 
-What the headless `ico_pc` (package 1D) links in place of hardware and of the
-two renderer-owned sources it still leaves out. The renderer waves delete
-these as they land. `docs/port/BUILD_STATUS.md` has the per-preset link
-status.
+What the headless `ico_pc` (package 1D) links in place of hardware. The
+renderer waves delete these as they land. `docs/port/BUILD_STATUS.md` has
+the per-preset link status.
 
 ## Design: stub the hardware, not the renderer layer
 
@@ -64,10 +64,9 @@ state headless is the state the renderer build will have, as far as the
 renderer layer is unchanged; the renderer waves keep it so by changing what
 the packets are turned into, not what the layer computes.
 
-`tools/gen_sources.py` keeps these files renderer-owned (`HEADLESS_SIM`):
-the renderer waves still own and rewrite them; the headless build compiles
-them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`
-and `common/src/debug_exception.c`; `ito/mpeg/*` moved to
+`tools/gen_sources.py` has no renderer list since R6a: these files, and
+`common/src/debug.c` and `debug_exception.c`, are ordinary game sources of
+their programmer's list in both builds; `ito/mpeg/*` is
 `ICO_EE_ONLY_SOURCES` (Phase 4E: replaced by `port/fmv`, never compiled on
 the host).
 
@@ -92,45 +91,36 @@ a function address does not fit its `int` slots on 64-bit hosts. Since wave
 pointer (the values are the same as before). In the window build the VU1
 programs are the `vu_*.hlsl` shaders (`docs/port/VU1_PROGRAMS.md`).
 
-## Stubs: `port/null/debug_null.c` (27 functions, 59 variables)
+## debug.c on the host (`port/null/debug_null.c` is gone, package R6a)
 
-`common/src/debug.c` and `debug_exception.c` stay out (24 VU0 asm blocks of
-font, bar and exception-screen drawing; renderer wave 6, then the plan's
-developer mode).
+Until R6a `common/src/debug.c` and `debug_exception.c` were left out (VU0
+asm in the VU1 register dumps, the debug font's VU1 packets, the exception
+screen) and `port/null/debug_null.c` stood in: 59 option variables with
+debug.c's initialisers, a copy of `debug_VariableInit`, 27 no-op or
+fixed-value functions. Both files are compiled now, with `ICO_HOST` bodies
+where the EE code cannot run (docs/port/DEVELOPER_MODE.md has the detail):
 
-- **Variables (59):** the 54 `debug_*` option variables simulation or
-  renderer-layer code reads, `debug_bar_flag`, `LoadFileType` (1), and
-  `Texture.c`'s statistics `texregs`, `textures`, `texturetranssize`, all
-  with `debug.c`'s initialisers.
-- **`debug_VariableInit`:** a copy of `debug.c:953` for those variables, in
-  its order, plus `game_pause = 0` and `ChangeFieldCollisionDebugMode(0)`.
-  This matters: it sets the retail values of `debug_zoom_per` (100, the
-  projection scale), `debug_chain_cycle_speed`/`slow_speed` (4),
-  `debug_hair_tight_level` (20), `debug_hair_bend_angle` (256),
-  `debug_enemy_battle_type` (3), `debug_girl_detour_flag`,
-  `debug_hand_camera`, `debug_enemy_kidnap_timer`,
-  `debug_use_new_queen_battle`, `debug_stick_simulate`, `debug_mot_slope_interp`
-  (5), `debug_snapshot_num` (100) and others. Assignments to variables only
-  `debug.c` reads are left out. If `debug.c` changes, this copy must follow.
-- **No-ops (drawing, profiling):** `debug_Init`, `debug_SetDmaCallback`,
-  `debug_openLog`, `debug_closeLog`, `debug_BeginTimer`, `debug_ResetBar`,
-  `debug_Printf`, `debug_PrintfDummy`, `debug_StdPrintfDummy`,
-  `debug_PrintFontWindow`, `debug_FlushFont`, `debug_SESlotDisp`,
-  `debug_DispQW`, `debugCdvdLoadInfoSegInit`, `debugCdvdLoadInfoSegAdd`.
-- **Values:** `debug_GetTimerSec` -1.0 (as `debug.c`'s host branch; the EE
-  timer registers behind it advance since Phase 4F, docs/port/CONFIG.md),
-  `debug_TryToGetStartStage` -1 (retail) unless the developer key
-  `[dev] start_stage` (1..105) is set, which host_config.c hands over as
-  `ICO_START_STAGE` (renderer wave 5, R5b; docs/port/CONFIG.md), `debugSceOpen`/`debugSceClose`
-  through the host `sceOpen`/`sceClose` (no host files: -1),
-  `gsResetFunc` calls `gsb_Init(&db)` and returns 1 as `debug.c:2364`,
-  `debug_SelectCsvWindow`/`Val` -1 (cancel: only the compiled-out debug
-  menu's tools call them).
-- **Failures:** `debug_assert`, `debug_assertMessage`, `debug_Assert` hang
-  on the PS2 (exception screen); headless they print the location to the
-  log, keep it as the last failure message and `abort()`, which the crash
-  handler reports (`docs/port/BOOT_DIAG.md`).
-- **`fptodp`** (libgcc soft-float): 0; only passed to debug printfs.
+| what | host |
+| --- | --- |
+| `debug_VariableInit` | debug.c's own (the copy is gone); the same retail values; in developer mode with `[dev] debug_option` it then loads the saved option table |
+| `debug_Init` | debug.c's: clears the font window and the counters, starts EE timers 0 and 1 (`port/platform/clock.c` advances them), builds the glyph packets in a host buffer (not the stage partition) |
+| `debug_SetDmaCallback` | no handler (no DMA interrupts) |
+| `debug_TryToGetStartStage` | `[dev] start_stage` as before (`ICO_START_STAGE`) |
+| `debug_GetTimerSec`, the bar time stamps | -1.0 and 0, as before (debug.c's `ICO_HOST` branches) |
+| `debug_Printf`, `debug_PrintFontWindow`, `debug_FlushFont` | draw through the debug font (window build: `gif_HostWriteRegs`; headless: the packets are built and not consumed), as on the PS2; the retail values of the option table keep them silent |
+| `debug_PrintfDummy` | empty, as retail; draws in developer mode |
+| `debugSceOpen` | `cdrom0:` (nothing found), as before; `host0:` = `<pref>/dev/` in developer mode (`port/data/sifdev_host.c`) |
+| `debug_SnapShot` | a PNG of rd's DISPLAY target (window build), nothing headless |
+| `debug_DispVu1*Reg` | return at once (no VU1) |
+| `gsResetFunc` | `gsb_Init(&db)`, 1, as the stub had it |
+| `debug_assert`, `debug_assertMessage`, `debug_Assert` | `debug_exception.c`'s host bodies: print the location to the log, keep it as the last failure message and `abort()`, which the crash handler reports (docs/port/BOOT_DIAG.md), as the stub did; the PS2 hung on the exception screen |
+| the exception screen, `debugExceptionInit` | not compiled; nothing installed (the host crash handler covers faults) |
+
+`port/null/libgcc_null.c` keeps libgcc's `fptodp` (0; its callers hand it
+only to debug printfs).
+
+Measured: the headless 4000-tick boot run gives the same trace lines as
+the build with the stub (docs/port/DEVELOPER_MODE.md, "Runs").
 
 ## Memory card (the null card is gone, package 4D)
 

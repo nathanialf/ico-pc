@@ -24,6 +24,7 @@ add_library(ico_port_data STATIC
     iop_ram.c
     iso9660.c
     sif_host.c
+    sifdev_host.c
     vfs.c)
 # port/platform is searched for package 1B's host_loop.h (the vsync
 # callback list cdvd_host.c registers with when it exists).

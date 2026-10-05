@@ -12,6 +12,8 @@ reads an option only under `#ifdef ICO_HOST` (the EE build is unchanged).
 | `[gameplay] stick_fix` | `false` | `ico_opt_stick_fix` / `ico_opt_set_stick_fix` | `ico_input_frame` (`port/input/pad_host.c`); `ico_input_set_stick_fix` and `ico_input_stick_fix_enabled` forward to the module; `ico_input_apply_toml` still sets it from the file it was given |
 | `[gameplay] yorda_safe` | `false` | `ico_opt_yorda_safe` / `ico_opt_set_yorda_safe` | the hook sites below |
 | `[gameplay] mirror` | `false` | `ico_opt_mirror` / `ico_opt_set_mirror` | `ico_input_frame` (negates stick X, via `ico_input_vpad_to_frame`); `ico_audio_mirror()` for the pan swap |
+| `[gameplay] developer_mode` | `false` | `ico_opt_developer_mode` / `ico_opt_set_developer_mode` | renderer wave 6 (R6a), docs/port/DEVELOPER_MODE.md: `Main` (`common/src/main.c`) calls `debug_Menu`; `debug.c`'s `debug_PrintfDummy` draws, `debugSceOpen` uses `host0:` (`<pref>/dev/`), `debug_VariableInit` may load the saved option table; the trace's first line records it (`port/platform/trace_host.c`); the achievements package suspends achievements while it is on |
+| `[dev] debug_option` (int) | `0` | `ico_opt_debug_option` (read each call, no setter) | `debug_VariableInit` in developer mode: not 0 loads `<pref>/dev/thisIsYourDebugOption` |
 
 `stick_fix` is documented in INPUT.md. Mirror is plumbing only: the renderer
 flip, the UI pre-flip and the choice at new game belong to the mirror package.
@@ -91,8 +93,9 @@ scenes still show the capture.
 ## Tests
 
 `options_test` (`port/game/test/options_test.c`, ctest `options`, CPU): the
-defaults are false; the setters and `ico_opt_reload`; the config values read
-from a `config.toml`; and `ebrain.c`, compiled into the test, driven with
+defaults are false (and `debug_option` 0); the setters and `ico_opt_reload`;
+the config values read from a `config.toml`, `developer_mode` and the int
+`debug_option` among them (a non-number reads 0); and `ebrain.c`, compiled into the test, driven with
 a synthetic slot set: both in view with the girl nearer, only the boy, only the
 girl, the 181-frame switch, messages 1, 2 and 6, and a 9 then 7 carry. Off:
 status 2 / 3 are reached; on: status 2 never, status 1 for the boy, a carry

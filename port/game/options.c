@@ -8,8 +8,12 @@
 
 /* -1: not read yet; 0 or 1 */
 static int s_stick_fix = -1;
+
 static int s_yorda_safe = -1;
+
 static int s_mirror = -1;
+
+static int s_developer_mode = -1;
 
 static int get(int *v, const char *path)
 {
@@ -49,7 +53,24 @@ void ico_opt_set_mirror(int on)
     s_mirror = on != 0;
 }
 
+int ico_opt_developer_mode(void)
+{
+    return get(&s_developer_mode, "gameplay.developer_mode");
+}
+
+void ico_opt_set_developer_mode(int on)
+{
+    s_developer_mode = on != 0;
+}
+
+int ico_opt_debug_option(void)
+{
+    long long v = ico_config_get_int("dev.debug_option", 0);
+
+    return v < -0x7FFFFFFF || v > 0x7FFFFFFF ? 0 : (int)v;
+}
+
 void ico_opt_reload(void)
 {
-    s_stick_fix = s_yorda_safe = s_mirror = -1;
+    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = -1;
 }

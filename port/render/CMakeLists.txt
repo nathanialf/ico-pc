@@ -275,9 +275,30 @@ target_compile_options(rd_raw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_raw_test PRIVATE ico_render ico_vu1_ref ico_math)
 
+# rd_debug_test (wave 6, R6a): common/src/debug.c on the host, with the 2D
+# layer as the window build has them and port/data/sifdev_host.c for host0:,
+# the rest of the game stubbed: the debug font's points (the VU1 routine
+# debug.c runs on the host), the debug menu and option page drawn in
+# developer mode, the font window, the option file round trip; on a device
+# a glyph's pixels and a snapshot PNG (77 without one).
+add_executable(rd_debug_test test/rd_debug_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/debug.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/data/sifdev_host.c")
+ico_include_dirs(common _ico_common_incs)
+target_include_directories(rd_debug_test PRIVATE ${_ico_common_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(rd_debug_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_debug_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_debug_test PRIVATE ico_render ico_math)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test)
+              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -313,6 +334,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_water PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_raw COMMAND rd_raw_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_raw PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_debug COMMAND rd_debug_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_debug PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")

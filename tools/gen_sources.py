@@ -9,11 +9,12 @@ microprograms (ico2/vusrc/, replaced by shaders).
 
 Each C source lands in one list per programmer directory (the directory
 decides its include path, as tools/compile_c.sh has it), or in
-ICO_RENDERER_SOURCES when it is one of the files the renderer packages
-rewrite (docs/port/BUILD_STATUS.md), or ICO_EE_ONLY_SOURCES when port/
-replaces it for good (the ito/mpeg movie player: port/fmv). The renderer files are not compiled
-until their packages port them, except HEADLESS_SIM: renderer-owned files whose
-plain C the simulation needs, compiled in both modes.
+ICO_EE_ONLY_SOURCES when port/ replaces it for good (the ito/mpeg movie
+player: port/fmv). Since renderer wave 6 (package R6a) there is one host
+source list: the renderer-owned files the renderer waves rewrote (all of
+seki/src, the sugipon and ito effect files, common/src/debug.c and
+debug_exception.c) compile like every other game source, in both the
+headless and the window build (docs/port/BUILD_STATUS.md).
 
     tools/gen_sources.py           rewrite cmake/IcoSources.cmake
     tools/gen_sources.py --check   exit 1 if it is out of date
@@ -29,57 +30,15 @@ OUT = ROOT / "cmake" / "IcoSources.cmake"
 
 PROGRAMMERS = ["common", "fumi", "ito", "omori", "script", "seki", "sugipon"]
 
-# The renderer-owned files: they build GS/VIF packets or run VU0 inline
-# assembly that the renderer packages replace (the plan's Phase 3).
-RENDERER = {
-    *(f"ico2/seki/src/{n}.c" for n in (
-        "GsBase", "GifPacket", "DmaPacket", "DisplayList", "DisplayFont",
-        "RegistPacket", "Packet", "MicroCode", "Texture", "Shadow", "ZFog",
-        "Primitive", "Light", "DisplayP2O", "Matrix")),
-    *(f"ico2/sugipon/src/{n}.c" for n in (
-        "staticBlur", "darkVolume", "particleEffect", "matrixDrive",
-        "quaternion", "clothAnimation", "lineManager")),
-    "ico2/ito/src/lightning.c",
-    "ico2/ito/src/queen_barrier_disp.c",
-    "ico2/common/src/debug.c",
-}
-RENDERER_DIRS = ()
-
 # Sources the host build never compiles because port/ replaces them for good
 # (they stay in the PS2 build): the ito/mpeg movie player, replaced by
 # port/fmv (Phase 4E, docs/port/FMV.md). Listed in ICO_EE_ONLY_SOURCES so the
 # inventory stays complete.
 EE_ONLY_DIRS = ("ico2/ito/mpeg/",)
 
-# Renderer-owned files the headless build compiles anyway, because the
-# simulation needs their plain C (the matrix and quaternion stacks, cloth and
-# chain physics, lights, shadow model data, particle state, the game-over
-# dark volume, the R-register reseed in DrawLightningN). Their drawing runs
-# into port/null/gfx_null.c's stubs and packet sink; the renderer waves still
-# own them (docs/port/HEADLESS_STUBS.md).
-HEADLESS_SIM = {
-    *(f"ico2/seki/src/{n}.c" for n in (
-        "GsBase", "GifPacket", "DmaPacket", "DisplayList", "DisplayFont",
-        "RegistPacket", "Packet", "MicroCode", "Texture", "Shadow", "ZFog",
-        "Primitive", "Light", "DisplayP2O", "Matrix")),
-    *(f"ico2/sugipon/src/{n}.c" for n in (
-        "matrixDrive", "quaternion", "clothAnimation", "lineManager",
-        "particleEffect", "darkVolume", "staticBlur")),
-    "ico2/ito/src/lightning.c",
-    "ico2/ito/src/queen_barrier_disp.c",
-}
-RENDERER_PREFIXES = ("ico2/common/src/debug_exception",)
-
 
 def is_ee_only(path):
     return path.startswith(EE_ONLY_DIRS)
-
-
-def is_renderer(path):
-    if path in HEADLESS_SIM:
-        return False
-    return (path in RENDERER or path.startswith(RENDERER_DIRS)
-            or path.startswith(RENDERER_PREFIXES))
 
 
 def read_link_order():
@@ -106,14 +65,10 @@ def cmake_list(name, items, comment):
 def render():
     sources, members = read_link_order()
     by_prog = {p: [] for p in PROGRAMMERS}
-    renderer = []
     ee_only = []
     for s in sources:
         if is_ee_only(s):
             ee_only.append(s)
-            continue
-        if is_renderer(s):
-            renderer.append(s)
             continue
         prog = s.split("/")[1]
         if prog not in by_prog:
@@ -128,8 +83,6 @@ def render():
     for p in PROGRAMMERS:
         parts.append(cmake_list(f"ICO_SOURCES_{p}", by_prog[p],
                                 f"ico2/{p}: {len(by_prog[p])} non-renderer sources"))
-    parts.append(cmake_list("ICO_RENDERER_SOURCES", renderer,
-                            f"{len(renderer)} renderer-owned sources (not compiled until their packages port them)"))
     parts.append(cmake_list("ICO_EE_ONLY_SOURCES", ee_only,
                             f"{len(ee_only)} PS2-only sources (replaced on the host by port/; never "
                             "compiled here)"))

@@ -4,13 +4,15 @@
 
 set(ICO_PROGRAMMERS common fumi ito omori script seki sugipon)
 
-# ico2/common: 17 non-renderer sources
+# ico2/common: 19 non-renderer sources
 set(ICO_SOURCES_common
     ico2/common/src/main.c
     ico2/common/src/DObj.c
     ico2/common/src/StageManager.c
     ico2/common/src/backStage.c
     ico2/common/src/charFileManager.c
+    ico2/common/src/debug.c
+    ico2/common/src/debug_exception.c
     ico2/common/src/debug_menu.c
     ico2/common/src/gamesys.c
     ico2/common/src/haveParentSimpleObj.c
@@ -242,12 +244,6 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/windmill.c
     ico2/sugipon/src/wireLetter.c
     ico2/sugipon/src/worm.c
-)
-
-# 2 renderer-owned sources (not compiled until their packages port them)
-set(ICO_RENDERER_SOURCES
-    ico2/common/src/debug.c
-    ico2/common/src/debug_exception.c
 )
 
 # 9 PS2-only sources (replaced on the host by port/; never compiled here)

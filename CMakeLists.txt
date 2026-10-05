@@ -74,9 +74,9 @@ set(ICO_GAME_OBJECT_LIBS "")
 set(ICO_COMPILED_COUNT 0)
 foreach(prog ${ICO_PROGRAMMERS})
     set(srcs ${ICO_SOURCES_${prog}})
-    # ICO_RENDERER_SOURCES (debug.c, debug_exception.c, ito/mpeg) are not
-    # compiled in either mode until their packages port them: the window
-    # build links the same port/null floor for them as the headless one.
+    # One host source list since renderer wave 6 (R6a): every game source
+    # but ICO_EE_ONLY_SOURCES (ito/mpeg, replaced by port/fmv) is compiled
+    # in both the headless and the window build.
     if(NOT ICO_BUILD_BLOCKED)
         list(REMOVE_ITEM srcs ${ICO_BLOCKED_SOURCES})
     endif()
@@ -167,12 +167,12 @@ if(ICO_LINK_EXE)
     add_executable(ico_pc port/platform/main_host.c port/platform/trace_host.c
                           port/platform/host_config.c)
     # The hardware floor (docs/port/HEADLESS_STUBS.md): libgraph's vsync
-    # wait, libdma, the FMV player, and what the simulation needs from
-    # debug.c. Both builds: the window build draws through rd above it. In
-    # the program itself rather than a library, since they call back into
-    # the game.
-    target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/debug_null.c)
-    set_source_files_properties(port/null/gfx_null.c port/null/debug_null.c TARGET_DIRECTORY
+    # wait, libdma, and libgcc's fptodp. Both builds: the window build draws
+    # through rd above it. In the program itself rather than a library, since
+    # they call back into the game. debug.c and debug_exception.c are game
+    # sources since renderer wave 6 (R6a).
+    target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/libgcc_null.c)
+    set_source_files_properties(port/null/gfx_null.c port/null/libgcc_null.c TARGET_DIRECTORY
                                 ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
     if(ICO_HEADLESS)
         target_compile_definitions(ico_pc PRIVATE ICO_HEADLESS=1)

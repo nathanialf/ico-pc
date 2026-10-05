@@ -294,8 +294,8 @@ writers still do), so heap use and the bookkeeping other code reads are
 unchanged.
 
 **GS register decoding** (the plan's `rd_gs_shim.c`, folded into
-`GifPacket.c`). Every register write of the 2D layer reaches one decoder in
-packet order: the `gif_*` helpers (their bodies are unchanged; `setGsReg`
+`GifPacket.c`; permanent since renderer wave 6, below). Every register
+write of the 2D layer reaches one decoder in packet order: the `gif_*` helpers (their bodies are unchanged; `setGsReg`
 feeds the decoder), `gif_SetGsReg`, and the A+D pairs other files write
 straight into the open packet (`Texture.c`'s TEX0 packet, `GsBase.c`'s
 macros), which are decoded at the next `gif_*` entry or at the end of the
@@ -389,6 +389,43 @@ Open questions for R2b and R2c (R2c's, 3 to 6, are answered in section 12):
 6. R2c: `gsb_MakeCommonMatrix`, `gsb_SetGsDefault`'s list heads and the
    other DMA chains that are not GIF packets (VU1 data, microprogram
    uploads) are bookkeeping only on the host.
+**The decoder is the permanent register-level route** (renderer wave 6,
+package R6a). The plan made `rd_gs_shim.c` temporary: deleted once the
+raw-register files were hand-converted, with zero `gif_SetGsReg` uses as
+the gate. That gate is dropped. The decoder decodes the game's own register
+writes at the level of its functions (the `gif_*` helpers, `gif_SetGsReg`,
+the A+D pairs written into the open packet, and the GIF packets
+`mc_HostDma` and `gif_HostWriteRegs` hand it from the VU1 chains); it is not
+a GS emulator (no GS memory, no image transfers, no context 2). Converting
+its users to direct `rd_*` calls would duplicate it file by file:
+`darkVolume.c`'s spheres and `lineManager.c` (section 18, open item 4) keep
+`gif_SetGsReg`, and the debug font joined it in R6a (`debug.c`'s
+`debugHostFontGlyph` runs the font's VU1 routine on the glyph packets and
+writes the points it would kick; docs/port/DEVELOPER_MODE.md). A file that
+needs what the decoder cannot know supplies it with an explicit host call
+(darkVolume.c's three, section 18). What still logs: a register the decoder
+does not decode, once per register by name, then counted
+(`gif_HostUndecodedCount`, `gif_HostUndecodedTotal`); the FBP of an unknown
+block, ALPHA outside the twelve modes, TEXA, TFX, PRIM.CTXT, FGE, PRMODE,
+CLAMP, PRIM 7 and DTHE oddities once each (`gsOnce`); and `mc_HostDma`'s
+VIF/GIF forms it does not read (`mc:` lines, section 18).
+
+R6a game run (window build `build-host/r6a-linux-x64-win` on lavapipe,
+`SDL_VIDEODRIVER=offscreen`, `pad-boot.txt`, `ticks=4000`,
+`dump_every=500`, `[gameplay] developer_mode = true`, a private pref folder,
+`timeout 600`): exit 0 after 435 s at 4000 Main ticks, 8007 vsyncs,
+stage 3; every process gone. No `gif:` and no `mc:` line in the log or on
+stderr: the undecoded-register counters stayed at zero (the first undecoded
+write of a register logs its name). The trace lines equal the headless
+4000-tick runs' (the build before R6a, and R6a with developer mode off and
+on; docs/port/DEVELOPER_MODE.md): developer mode changes nothing until the
+menu is opened, and the boot script never presses SELECT, which opens it.
+The menu was therefore not drawn in this run; `rd_debug_test` covers its
+drawing. All 7 dumps replay through `rd_replay_tool` with no command
+skipped; frame 500 is the title fading in (the castle and the copyright
+line), frame 2500 the boy in stage 3's courtyard, frame 1000 black
+(stage 1, between the title and the switch to stage 41 at tick 623).
+
 
 ## 10. What the first pixels need
 
@@ -2035,8 +2072,9 @@ Open items:
    the GS's scope.
 4. The plan's wave-6 gate ("zero `gif_SetGsReg` uses") and this package's
    route disagree: darkVolume.c's spheres and lineManager.c still write
-   `gif_SetGsReg`, which the decoder in GifPacket.c decodes; wave 6 either
-   keeps `gif_SetGsReg` as the decoder's entry or converts these two.
+   `gif_SetGsReg`, which the decoder in GifPacket.c decodes. Settled in
+   wave 6 (R6a): `gif_SetGsReg` and the decoder are the permanent
+   register-level entry (section 9).
 5. PRIM.AA1 on lineManager's 0x189/0x18A lines (and the particles') is not
    reproduced.
 6. The texture resolver is asked first for darkVolume's TEX0 at 0x2800: a

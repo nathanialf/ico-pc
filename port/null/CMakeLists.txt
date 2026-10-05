@@ -1,5 +1,6 @@
 # port/null: the devices the headless build runs without. Package 1B's
-# gfx_null.c and debug_null.c are built from the top-level list. The system
+# gfx_null.c and libgcc_null.c (fptodp; debug_null.c until renderer wave 6,
+# when debug.c joined the build) are built from the top-level list. The system
 # configuration (scf_null.c, until Phase 4F) is port/config's sysconf.c, the
 # memory card port/save's mc_host.c (4D), the sound driver port/audio's
 # ico_sndn2 (4B) and the pad port/input's (4C); this target gathers them for

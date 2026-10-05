@@ -8,10 +8,9 @@
  * server synchronously, which is complete by the time sceSifCallRpc returns:
  * sceSifCheckStatRpc always reports the call finished.
  *
- * The sifdev file calls (sceOpen and the rest) served the development
- * kit's host0: device, which the retail game only touches from its compiled
- * out tools (way_tool.c, camera-editor.c, effectTool.c, debug_exception.c);
- * on the host they fail, as host0: did on a retail console.
+ * The sifdev file calls (sceOpen and the rest) are sifdev_host.c's since
+ * renderer wave 6 (R6a): host0: paths map to <pref>/dev/ for developer
+ * mode (docs/port/DEVELOPER_MODE.md).
  */
 #include "sif_host.h"
 #include "iop_ram.h"
@@ -239,43 +238,4 @@ int sceSifCheckStatRpc(struct sceSifRpcClientData *cd)
 {
     (void)cd;
     return 0;
-}
-
-/* --- sifdev: host0: -------------------------------------------------------- */
-
-int sceOpen(unsigned char *name, int flags, ...)
-{
-    (void)name;
-    (void)flags;
-    return -1;
-}
-
-int sceClose(unsigned int fd)
-{
-    (void)fd;
-    return -1;
-}
-
-int sceRead(int fd, void *buf, int nbyte)
-{
-    (void)fd;
-    (void)buf;
-    (void)nbyte;
-    return -1;
-}
-
-int sceWrite(int fd, void *buf, int nbyte)
-{
-    (void)fd;
-    (void)buf;
-    (void)nbyte;
-    return -1;
-}
-
-int sceLseek(unsigned int fd, int offset, int whence)
-{
-    (void)fd;
-    (void)offset;
-    (void)whence;
-    return -1;
 }

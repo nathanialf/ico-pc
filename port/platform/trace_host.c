@@ -19,6 +19,8 @@ extern int systemStatus[];         /* common/src/main.c:37, int[12] */
 extern int gameover_flag;          /* common/src/main.c:493 */
 extern char gameSysMainSaveBuff[]; /* common/src/gamesys.c:79 */
 int gflagChk(int bit_idx);         /* script/src/gflag.c:58 */
+/* port/game/options.h: developer mode (renderer wave 6, R6a) */
+int ico_opt_developer_mode(void);
 /* read by the heartbeat (ico_host_status) */
 extern int fadeStatus;                   /* seki/src/Basic.c:124 */
 extern int mpegPlay;                     /* common/src/StageManager.c:73 */
@@ -98,6 +100,10 @@ int ico_trace_open(const char *path)
         fprintf(stderr, "trace: cannot create %s\n", path);
         return -1;
     }
+    /* developer mode (docs/port/DEVELOPER_MODE.md) as the run starts: the
+       menu and option table it opens can change the simulation, so a trace
+       says which kind of run it is.  Comparisons skip '#' lines. */
+    fprintf(trace, "# developer_mode %d\n", ico_opt_developer_mode() ? 1 : 0);
     fprintf(trace, "# tick vsync stage sys0 sys1 gameover");
     for (i = 0; i < GFLAG_WORDS; i++) {
         fprintf(trace, " gf%d", i);
