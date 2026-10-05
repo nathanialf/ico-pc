@@ -40,6 +40,12 @@
  *   pad script               ini pad_script= ([dev] pad_script); the
  *                            headless build also takes pad-script.txt beside
  *                            the executable if present; else the live pad
+ *   logs/input-<time>.txt    the pad recording (port/input/input_record.h):
+ *                            what the game read from the pad, as a pad
+ *                            script the headless build replays; on by
+ *                            default in the window build, off headless; ini
+ *                            input_record= ([dev] input_record) false, true
+ *                            or a path
  *   ticks                    ini ticks=N exits after N Main ticks
  *   watchdog                 ini watchdog=S (default 30): the run is stopped
  *                            and reported when no Main tick came S seconds
@@ -65,11 +71,15 @@
 #include <time.h>
 #include "archive.h"
 #include "cdvd_host.h"
+#include "config.h"
 #include "diag_host.h"
 #include "extract.h"
 #include "fpenv.h"
 #include "host_config.h"
+#include "host_fs.h"
 #include "host_loop.h"
+#include "ico_build_commit.h" /* ICO_BUILD_COMMIT, generated (port/platform/CMakeLists.txt) */
+#include "input_record.h"
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
@@ -296,6 +306,137 @@ static void timestamp(char *out, size_t size, const char *fmt)
 
     if (tm == NULL || strftime(out, size, fmt, tm) == 0) {
         snprintf(out, size, "unknown");
+    }
+}
+
+/* --- the pad recording (package Q1, port/input/input_record.h) ---------- */
+
+/* The config values the simulation depends on, written into the recording's
+   header and compared when a recording is replayed as the pad script. */
+static const char *const record_keys[] = {
+    "video.video_mode",    "game.language",           "gameplay.mirror", "gameplay.stick_fix",
+    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage",
+};
+
+#define RECORD_MAGIC "# ico-pc input recording"
+
+static const char *fixed_clock_now(void)
+{
+    const char *v = getenv("ICO_FIXED_CLOCK");
+
+    return v != NULL && v[0] != '\0' ? v : "1";
+}
+
+static void record_header(char *out, size_t size, const char *stamp)
+{
+    size_t n = 0;
+    size_t i;
+
+#define PUT(...)                                                                                   \
+    do {                                                                                           \
+        int w_ = snprintf(out + n, size - n, __VA_ARGS__);                                         \
+        if (w_ > 0) {                                                                              \
+            n += (size_t)w_ < size - n ? (size_t)w_ : size - n - 1;                                \
+        }                                                                                          \
+    } while (0)
+    PUT("%s: a pad script (port/input/pad_script.h); replay it with pad_script=<this file>\n",
+        RECORD_MAGIC);
+    PUT("# build %s\n", ICO_BUILD_COMMIT);
+    PUT("# started %s\n", stamp);
+    for (i = 0; i < sizeof(record_keys) / sizeof(record_keys[0]); i++) {
+        PUT("# config %s = %s\n", record_keys[i], ico_config_get_string(record_keys[i], "(unset)"));
+    }
+    PUT("# effective fixed_clock = %s\n", fixed_clock_now());
+    PUT("# the game's memory card folder at the start also decides the run (a Continue loads "
+        "from it)\n");
+    PUT("# <tick> <buttons-hex> lx ly rx ry: one line for each Main tick whose read differs "
+        "from the one before\n");
+#undef PUT
+}
+
+/* ini input_record= / [dev] input_record: off ("0", "false", "none"), on
+   ("1", "true": logs/input-<time>.txt) or a path (the exe's folder's when
+   relative). Default: on in the window build, off headless. */
+static void record_open(const IcoIni *ini, const char *exe_dir, const char *logs_dir)
+{
+    const char *v = ico_ini_get(ini, "input_record");
+    char path[ICO_PATH_MAX];
+    char stamp[32];
+    char header[2048];
+#ifdef ICO_HEADLESS
+    int on = 0;
+#else
+    int on = 1;
+#endif
+
+    if (v != NULL && v[0] != '\0') {
+        on = !(strcmp(v, "0") == 0 || strcmp(v, "false") == 0 || strcmp(v, "none") == 0);
+    }
+    if (!on) {
+        return;
+    }
+    if (v != NULL && v[0] != '\0' && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
+        ico_path_join(path, sizeof(path), exe_dir, v);
+    } else {
+        char name[64];
+
+        timestamp(stamp, sizeof(stamp), "%Y%m%d-%H%M%S");
+        snprintf(name, sizeof(name), "input-%s.txt", stamp);
+        ico_path_join(path, sizeof(path), logs_dir, name);
+    }
+    timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
+    record_header(header, sizeof(header), stamp);
+    if (ico_input_record_open(path, header) == 0) {
+        fprintf(stderr, "ico_pc: pad recording %s\n", path);
+        atexit(ico_input_record_close);
+    }
+}
+
+/* A pad script that is a recording: its header against this run's
+   settings, each difference logged (the replay then may not follow the
+   recorded session). */
+static void record_check(const char *path)
+{
+    FILE *f = ico_fopen(path, "rb");
+    char line[512];
+    int first = 1;
+    int recording = 0;
+    int diffs = 0;
+
+    if (f == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof(line), f) != NULL && line[0] == '#') {
+        char key[128], value[256];
+        const char *now = NULL;
+
+        line[strcspn(line, "\r\n")] = '\0';
+        if (first) {
+            first = 0;
+            if (strncmp(line, RECORD_MAGIC, strlen(RECORD_MAGIC)) != 0) {
+                break;
+            }
+            recording = 1;
+            continue;
+        }
+        if (sscanf(line, "# config %127s = %255[^\n]", key, value) == 2) {
+            now = ico_config_get_string(key, "(unset)");
+        } else if (sscanf(line, "# effective %127s = %255[^\n]", key, value) == 2 &&
+                   strcmp(key, "fixed_clock") == 0) {
+            now = fixed_clock_now();
+        } else if (sscanf(line, "# build %255s", value) == 1) {
+            strcpy(key, "build");
+            now = ICO_BUILD_COMMIT;
+        }
+        if (now != NULL && strcmp(now, value) != 0) {
+            fprintf(stderr, "ico_pc: pad script recorded with %s = %s; this run has %s\n", key,
+                    value, now);
+            diffs++;
+        }
+    }
+    fclose(f);
+    if (recording && diffs == 0) {
+        fprintf(stderr, "ico_pc: pad script is a recording made with this build and settings\n");
     }
 }
 
@@ -818,6 +959,7 @@ int main(int argc, char **argv)
         }
         fprintf(stderr, "ico_pc: pad script %s, %d entries: a DualShock in port 1\n", path,
                 ico_pad_script_count());
+        record_check(path);
     } else {
         fprintf(stderr, "ico_pc: no pad script: no controller\n");
     }
@@ -854,6 +996,9 @@ int main(int argc, char **argv)
             fprintf(stderr, "ico_pc: running without a trace\n");
         }
     }
+
+    /* the pad recording (package Q1) */
+    record_open(&ini, exe_dir, logs_dir);
 
     /* when to stop */
     v = a.ticks != NULL ? a.ticks : ico_ini_get(&ini, "ticks");
@@ -909,6 +1054,11 @@ int main(int argc, char **argv)
             ico_diag_milestone("first vsync done");
         }
         ico_trace_poll();
+        /* package Q1: the pad recording's lines, then the log: on Windows
+           stdout and stderr are fully buffered (host_config.h), so this is
+           one write a vsync at most */
+        ico_input_record_poll(ico_host_main_ticks());
+        ico_host_log_flush();
 #ifndef ICO_HEADLESS
         /* the window, SDL and the renderer in the host FP mode; the next
            ico_host_step puts the simulation's back (A8, PLATFORM.md) */

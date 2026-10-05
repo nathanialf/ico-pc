@@ -7,6 +7,7 @@ target_sources(ico_platform PRIVATE
     arena.c
     diag_host.c
     fiber.c
+    hotkeys.c
     kernel_host.c
     sched.c
     vsync_hooks.c)
@@ -23,6 +24,22 @@ endif()
 # link line, rather than into ico_platform, which the game itself needs.
 if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE host_loop.c)
+endif()
+# Package Q1: the commit the program was built from (ICO_BUILD_COMMIT in the
+# generated ico_build_commit.h, "git describe --always --dirty"), for the pad
+# recording's header (main_host.c). Checked at every build; the header only
+# changes when the commit does.
+if(TARGET ico_pc)
+    set(_ico_commit_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_custom_target(ico_build_commit
+        COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_SOURCE_DIR}
+                -DOUT=${_ico_commit_dir}/ico_build_commit.h
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/build_commit.cmake"
+        BYPRODUCTS "${_ico_commit_dir}/ico_build_commit.h"
+        COMMENT "Build commit"
+        VERBATIM)
+    add_dependencies(ico_pc ico_build_commit)
+    target_include_directories(ico_pc PRIVATE "${_ico_commit_dir}")
 endif()
 # port/null/gfx_null.c (the headless graphics floor) is linked into ico_pc
 # by the top-level CMakeLists.txt.
@@ -41,7 +58,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set(_ico_run_tests ON)
 endif()
 
-foreach(t sched fiber arena diag)
+foreach(t sched fiber arena diag hotkeys)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

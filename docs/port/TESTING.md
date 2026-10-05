@@ -88,6 +88,7 @@ key has a `config.toml` name; a true/false toml value reads as 1/0.
 | `use_iso=0/1` | `[dev] use_iso` | 1: mount the ISO directly (dev mode); 0: the extracted `ico.o2r`, extracting it on the first run. Default 1 in the headless build (trace runs and tests read the ISO as before), 0 in the window build |
 | `pad_script=PATH` | `[dev] pad_script` | the scripted pad |
 | `dump_every=N`, `dump_dir=PATH` | `[dev] dump_every`, `dump_dir` | rd frame dumps (window build) |
+| `input_record=0/1/PATH` | `[dev] input_record` | the pad recording: `logs/input-<time>.txt` (1) or PATH; default on in the window build, off headless ("Reporting a visual bug" below) |
 | `audio=0` | `[audio] enabled` | no audio device |
 | `audio_dump=PATH` | `[dev] audio_dump` | WAV of the mixed audio (`1`: `logs/audio.wav`) |
 | `headless=1` | `[dev] headless` | a run for traces and tests: fixes the clock (the headless build always is) |
@@ -97,6 +98,44 @@ key has a `config.toml` name; a true/false toml value reads as 1/0.
 A trace run that must be reproducible sets `headless=1` or a `trace=` path (or
 runs the headless build); the Windows user package leaves them out, so the
 clock it reports is real.
+
+## Reporting a visual bug
+
+Press **F12** when you see it, then send the two files it names and the
+pad recording of the session:
+
+- `window: F12 at vsync V, Main tick T, frame F: wrote <pref>/dumps/frame-<time>-vV.rddump and ...png`
+  in `logs/ico-pc.log` (`<pref>` is `%APPDATA%\ico-pc\ico-pc` on Windows,
+  `~/.local/share/ico-pc/ico-pc` on Linux). The `.rddump` is the frame the
+  game recorded last (an rd frame dump, RENDER_API.md: it holds the game's
+  textures, so it is for the developers only and never committed), the
+  `.png` the picture as the window last presented it (the DISPLAY target,
+  read back once). `rd_replay_tool` renders the dump on any backend.
+- `logs/input-<time>.txt`, written by the window build in every session
+  (`[dev] input_record = false` turns it off): what the game read from the
+  pad at every Main tick where it changed, in the pad script format
+  (`port/input/pad_script.h`, `port/input/input_record.h`), after a header
+  with the build (`git describe`), the start time and the config values
+  the simulation depends on (`video_mode`, `language`, `mirror`,
+  `stick_fix`, `yorda_safe`, `developer_mode`, `start_stage`, and whether
+  the clock was fixed). F12 also flushes it, so it is complete up to the
+  dump; the Main tick in the F12 line is where to look. A session started
+  with Continue needs the memory card folder as it was at the start as well.
+
+The developer replays the session in the headless build with
+`pad_script=<that file>` (and `ticks=` past the F12 tick): the log says
+`pad script is a recording made with this build and settings`, or names
+each header value that differs from the run's. Measured (package Q1): a
+window-build run on lavapipe (`pad-boot.txt`, 1500 ticks, `trace=` a path)
+recorded 224 lines; the headless build replaying that recording wrote a
+trace byte-identical to the window run's (1500 ticks, 3007 vsyncs, stage 3;
+SHA-1 247476b41be51a482b3afc49999e9ee9791dc8d0), and its own recording of
+the replay had the same lines.
+
+**F11** switches the `window:` stats lines (RENDER_API.md section 22) to
+every second for 30 s, for a stutter that comes and goes; F11 again goes
+back to every 10 s. Steps over `[dev] slow_step_ms` (8 ms) are logged as
+`window: slow step` lines either way.
 
 ## Reading `ico-pc.log`
 

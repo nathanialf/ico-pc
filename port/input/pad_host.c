@@ -44,6 +44,7 @@
 #include <libpad.h>
 #include <string.h>
 #include "input.h"
+#include "input_record.h"
 #include "options.h"
 
 #define PAD_STATE_DISCONNECTED 0 /* scePadStateDiscon */
@@ -217,6 +218,8 @@ int scePadRead(int port, int slot, void *data)
         return 0;
     }
     ico_input_frame(&f);
+    /* package Q1: what this tick read, for the pad recording */
+    ico_input_record_sample(ico_pad_script_tick(), &f);
     if (d != NULL) {
         unsigned int raw = ~f.buttons & 0xFFFFu;
 

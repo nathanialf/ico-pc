@@ -404,3 +404,33 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     out->closed = 1;
     return true;
 }
+
+/* ------------------------------------------------------ dump on demand */
+
+/* Package Q1: the window build's F12 (port/platform/window_host.c): the
+ * last closed frame as a dump (rd_DumpFrame) and the DISPLAY target as it
+ * was last presented as a PNG (rd_ReadDisplay: a synchronous readback, so
+ * for a key press, not for every frame).  Either path may be NULL.  True
+ * when everything asked for was written. */
+bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
+
+bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath)
+{
+    bool ok = true;
+    if (dumpPath) {
+        ok = rd_DumpFrame(dumpPath);
+    }
+    if (pngPath) {
+        const RdTargetRec *t = rd__TargetRec(RD_TARGET_DISPLAY + 1);
+        uint32_t w = 0, h = 0;
+        uint8_t *px = t ? malloc((size_t)t->tw * t->th * 4) : NULL;
+        const bool shot =
+            px && rd_ReadDisplay(px, &w, &h) && rd_WritePng(pngPath, px, w, h, w * 4, 0);
+        if (!shot) {
+            rd__Log("dump: no screenshot %s", pngPath);
+        }
+        free(px);
+        ok = ok && shot;
+    }
+    return ok;
+}

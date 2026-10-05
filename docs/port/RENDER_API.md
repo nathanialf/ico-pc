@@ -3105,3 +3105,99 @@ Open items:
 5. `vkr_OrderWrites` puts a global barrier before every render pass and
    copy (about 100 a stage-3 frame): cheap on lavapipe, a GPU drain each on
    a real GPU; tracking per-target hazards would remove most.
+
+### 22.1 The 10 s stall and the step spikes (package Q1)
+
+`port/platform/host_config.c` (the log streams), `main_host.c` (the
+flush, the pad recording), `diag_host.c` (the fatal paths' flush, a ns
+clock), `host_loop.c` (the step's phases), `window_host.c` (the slow-step
+lines, F11, F12), `hotkeys.c`; `port/input/input_record.c`; `port/render/
+rd_dump.c` (`rd_DumpOnDemand`). Tests: `hotkeys`, `input_record`.
+
+**The report.** The user's second Windows run (RTX 3090, Enhanced 4x,
+uncapped, mailbox) after P1: CPU 1.1 to 1.9 ms and GPU 4.8 to 5.3 ms a
+replay, 58 presents a second, but every 10 s block after the first logged
+exactly one resync of 223 to 236 ms (301 once), "some animations lock up
+for a second", and a simulation step maximum of 10 to 15 ms a block at the
+title (35 to 44 ms around stage loads):
+
+    window: 580 presents and 293 game frames (293 frame numbers) in 10.0 s: 58.0 presented fps, 29.3 game fps; 586 vsyncs (58.6 Hz simulated), 1 resyncs dropping 225 ms; longest replay 4.6 ms of 580
+
+**Cause: the log lines themselves.** The executable runs from a network
+drive (`Z:\dev\ico-pc\dist\...`) and `ico_host_redirect_output` made
+stdout and stderr unbuffered. msvcrt (the mingw build imports
+`msvcrt.dll`) has no line buffering, and its temporary buffering of an
+unbuffered stream applies to a console only: `fprintf` to an unbuffered
+file writes each character with its own `_write`, which in append mode
+first seeks to the end. The block's three `window:` lines are about 870
+characters: 225 ms is 0.26 ms a character. They are written by
+`pace_log` inside `pace`, after the block's last present and after the
+resync check of that call (which uses the time taken before `pace_log`),
+so the next vsync finds itself 225 ms behind and drops it: one resync in
+every block but the first, and 13 vsyncs short of 599 (586). The
+evidence in the log: heartbeat lines, which `diag_host.c` writes with one
+`WriteFile` from its own thread, land in the middle of the third
+`window:` line in 4 of the first 10 blocks, which only a write spread over
+a long time allows. The same cost hit `rd: interp: 250 frames ...` (about
+240 characters, about 60 ms) inside `rd_Present` every 250 frames: a
+hitch below the 100 ms resync limit, so not counted. Not the cause:
+`rhi_ReadTimestamps` reads results `vkr_RecycleFrame` collected without
+waiting (`vk_cmd.c`), the 10 s lines call neither `rhi_GetStats` nor any
+wait, and the first block's one wait-idle is start-up (no later block has
+one); the heartbeat thread takes only its own lock; the achievements file
+is written on the step every 750 ticks only while its stats change.
+
+**Fix.** On Windows stdout and stderr are fully buffered (16 and 64 KB)
+and the host loop calls `ico_host_log_flush` once per vsync, after the
+step and before the window's pump: the block's lines become one
+`WriteFile` (about 1 KB), and any vsync's lines likewise. POSIX keeps them
+unbuffered (glibc formats a whole call before its one `write`). The log
+keeps its guarantees: a milestone on the main thread flushes stdio before
+its own line (order), and the crash, abort and watchdog reports first
+flush stdio from a helper thread they wait on for at most 500 ms (the
+stopped thread may hold a stream's lock; a fault in the flush only stops
+the helper). The fatal error paths and `exit` already flushed. Expected
+after: the per-block line reads `0 resyncs dropping 0 ms` once the GPU
+keeps up, as the first block did.
+
+**Measured here.** No Windows host or network drive is available, so the
+before/after on the user's machine is the next run's log. The window
+build cross-compiles with mingw-w64 without warnings in the changed files.
+The window run on lavapipe (`SDL_VIDEODRIVER=offscreen`, Original 1x,
+uncapped, vsync on, `pad-boot.txt`, `ticks=1500`, `build-host/q1-run1`,
+150 s): lavapipe renders a stage frame in 100 to 160 ms, so every block
+after the title drops 4.5 to 7.9 s in 18 to 67 resyncs (the GPU, as in
+P1's runs); the title block (55.8 presents a second) dropped 1585 ms in 11
+resyncs during boot and the first pipelines. Linux never had the
+per-character cost, so the run cannot show the stall going away; what it
+shows is that the slow-step instrumentation attributes the steps.
+
+**Step instrumentation.** `ico_host_step` times its phases
+(`ico_host_step_profile`, host_loop.h: vsync callbacks, where the disc's
+reads complete; audio, the SPU2 mix and the SDL push; the game's threads
+with their fiber switches; the achievements' poll) and counts the disc
+reads and sectors, the memory card's pending command, the stage and
+`data_loading`. A step (pace to pace) over `[dev] slow_step_ms` (8 ms,
+CONFIG.md) logs
+
+    window: slow step 27.2 ms at vsync 1438 (Main tick 715, stage 42): step 27.2 (vsync callbacks 0.0, audio 1.8, game threads 25.4 in 65 switches, achievements 0.0), pump 0.0, other 0.0; 1 disc reads (16 sectors), 84 texture decodes, 0 pipelines created, memory card idle
+
+("other": the trace line, the pad recording and the log flush; texture
+decodes and pipelines from `rdtex_Stats` and `rd_GetStats` since the last
+pace), at most 5 a block; the block's first line ends `N steps over 8 ms`.
+In the lavapipe run the title's steps stayed under 4.4 ms a block except
+two boot steps (game threads 10 and 12.7 ms) and four at tick 141 to 146
+(audio 7.6 to 8.1 ms: the SPU2 mix as the title music starts); the
+spikes of 13 to 27 ms are stage loads (65 to 75 switches and 83 to 84
+texture decodes on the game threads at stages 42 and 43), as expected. So
+the user's 10 to 15 ms title maxima do not come from the simulation on
+this host; candidates are on the Windows side (the pump's `SDL_PollEvent`
+with a DualSense, the WASAPI push), which the next run's slow-step lines
+will name.
+
+**F11, F12.** F11 switches the stats lines to every second for 30 s
+(`ico_stats_period_ns`); F12 writes `rd_DumpOnDemand`: the last closed
+frame as `<pref>/dumps/frame-<time>-v<vsync>.rddump` and the DISPLAY
+target as a PNG beside it (one synchronous readback), flushes the pad
+recording and logs the paths with the vsync, Main tick and frame number
+(docs/port/TESTING.md "Reporting a visual bug").

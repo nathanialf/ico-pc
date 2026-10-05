@@ -29,6 +29,24 @@ int ico_host_vsync_hz(void);
 /* Simulated time in microseconds (the sum of each vsync's period). */
 unsigned long long ico_host_time_us(void);
 
+/* Package Q1: where the last ico_host_step's real time went, for the window
+   build's slow-step lines (window_host.c), in ms: the vsync callbacks (the
+   disc's reads complete there), the audio block (the SPU2 mix and the SDL
+   push), the game's threads, the achievements' poll (and its stats file
+   write every 750 ticks while its stats change); with the fiber switches,
+   the disc reads and sectors started in the step, whether a memory card
+   command is pending (a save or load in progress), the stage and the
+   game's data_loading flag. */
+typedef struct IcoStepProfile {
+    double totalMs, hooksMs, audioMs, threadsMs, achMs;
+    unsigned long switches;
+    unsigned int cdReads, cdSectors;
+    int mcPending;
+    int stage, loading;
+} IcoStepProfile;
+
+void ico_host_step_profile(IcoStepProfile *out);
+
 /* Callbacks run at every simulated vsync, on the host context as interrupt
    code (wake threads with the i-calls: iWakeupThread, iSignalSema), after
    the vblank interrupt's handlers and before the threads run. Disc I/O

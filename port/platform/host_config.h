@@ -147,10 +147,14 @@ void ico_sha1_final(IcoSha1 *s, unsigned char digest[20]);
 /* The file's SHA-1 as 40 lowercase hex digits; *bytes gets its size. 0, or
    -1 if it cannot be read. */
 int ico_sha1_file(const char *path, char hex[41], unsigned long long *bytes);
-/* Sends stdout and stderr (unbuffered) to log_path, created afresh. Fatal
-   errors still reach the original stderr on POSIX. 0, or -1 (the streams
-   are unchanged when the file cannot be created). */
+/* Sends stdout and stderr to log_path, created afresh: unbuffered on POSIX,
+   fully buffered on Windows (package Q1: msvcrt writes an unbuffered stream
+   one character per OS call), where the host loop calls ico_host_log_flush
+   once per vsync. Fatal errors still reach the original stderr on POSIX. 0,
+   or -1 (the streams are unchanged when the file cannot be created). */
 int ico_host_redirect_output(const char *log_path);
+/* Writes out what stdout and stderr hold (the host loop, once per vsync). */
+void ico_host_log_flush(void);
 /* Windows: the file-open dialog for the disc image; 0 and the path, or -1
    if cancelled. Elsewhere: -1. */
 int ico_host_pick_iso(char *out, size_t size);

@@ -7,10 +7,15 @@
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "config.h"
 #include "host_config.h"
+#include "host_loop.h"
+#include "hotkeys.h"
+#include "input_record.h"
 #include "input_sdl.h"
 #include "rd.h"
+#include "rd_tex.h"
 #include "rhi.h"
 #include "sched.h"
 #include "trace_host.h"
@@ -23,6 +28,16 @@
 #define WINDOW_H 720
 /* A host this far behind the vsync deadlines stops trying to catch up. */
 #define RESYNC_NS 100000000ull
+/* Package Q1: slow-step lines a stats block logs at most (the rest are
+   counted in its first line) */
+#define SLOW_STEP_LINES 5
+
+_Static_assert(SDLK_F11 == ICO_HOTKEY_KEY_F11, "hotkeys.h: SDL3's SDLK_F11");
+_Static_assert(SDLK_F12 == ICO_HOTKEY_KEY_F12, "hotkeys.h: SDL3's SDLK_F12");
+
+/* Package Q1: F12's dump (port/render/rd_dump.c; rd.h is outside this
+   package, so it is declared here) */
+bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
 
 /* The game's state the mouse capture follows (common/include/main.h): the
    boy exists in a stage, and the game is neither paused nor loading. */
@@ -68,6 +83,14 @@ static struct {
     double stepSumMs, stepMaxMs;
     unsigned stepCount;
     int mailbox; /* rhi_PreferMailbox as last applied: vsync on and presenting between ticks */
+    /* Q1: the slow-step lines ([dev] slow_step_ms, 0 off): the threshold,
+       the block's count and lines, ico_window_pump's time, the renderer's
+       texture decodes and pipeline creations at the last pace's end */
+    double slowMs, pumpMs;
+    unsigned slowSteps, slowLogged;
+    uint32_t decodes, pipeCreates;
+    /* Q1: F11, the stats line every second until this time (0: off) */
+    Uint64 fastUntil;
 } s_pres;
 
 /* P1: the renderer's per-replay records (rd.h RdPerfRecord): summed over
@@ -230,6 +253,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         }
     }
     s_pres.cutSerial = ico_video_cut_serial();
+    /* Q1: [dev] slow_step_ms (default 8; 0 off), docs/port/CONFIG.md */
+    s_pres.slowMs = ico_config_get_float("dev.slow_step_ms", 8.0);
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
     /* Phase 6 (6B): the port's runtime text and popups (port/ui) */
@@ -287,10 +312,43 @@ static int device_lost_quit(void)
     return 1;
 }
 
+/* Q1: F12, the frame on the screen as an rd dump and a PNG in
+   <pref>/dumps, for a bug report (docs/port/TESTING.md) */
+static void frame_dump(void)
+{
+    char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX];
+    char stamp[32];
+    const time_t now = time(NULL);
+    const struct tm *tm = localtime(&now);
+
+    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
+        snprintf(stamp, sizeof(stamp), "unknown");
+    }
+    ico_host_pref_dir(pref, sizeof(pref));
+    ico_path_join(dir, sizeof(dir), pref, "dumps");
+    ico_make_dir(dir);
+    ico_frame_dump_paths(dir, stamp, ico_host_vsync_count(), dump, sizeof(dump), png, sizeof(png));
+    const int ok = rd_DumpOnDemand(dump, png);
+    /* the recording up to this moment, for the same report */
+    ico_input_record_flush();
+    fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s and %s\n",
+            ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_FrameNumber(),
+            ok ? "wrote" : "could not write all of", dump, png);
+}
+
+/* Q1: F11, the stats lines every second for 30 s */
+static void stats_fast_toggle(void)
+{
+    s_pres.fastUntil = ico_stats_fast_toggle(SDL_GetTicksNS(), s_pres.fastUntil);
+    fprintf(stderr, "window: F11: the stats lines every %s\n",
+            s_pres.fastUntil ? "second for 30 s" : "10 s again");
+}
+
 int ico_window_pump(void)
 {
     SDL_Event e;
     int quit = 0;
+    const Uint64 t0 = SDL_GetTicksNS();
 
     if (device_lost_quit()) {
         return 0;
@@ -303,7 +361,13 @@ int ico_window_pump(void)
             quit = 1;
             break;
         case SDL_EVENT_KEY_DOWN:
-            if (e.key.key == SDLK_ESCAPE) {
+            if (ico_hotkey_for(e.key.key, e.key.repeat) == ICO_HOTKEY_FRAME_DUMP) {
+                frame_dump();
+            } else if (ico_hotkey_for(e.key.key, e.key.repeat) == ICO_HOTKEY_STATS_FAST) {
+                stats_fast_toggle();
+            } else if (e.key.key == SDLK_F11 || e.key.key == SDLK_F12) {
+                /* a held key's repeats: nothing */
+            } else if (e.key.key == SDLK_ESCAPE) {
                 quit = 1;
             } else if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) &&
                        (e.key.mod & SDL_KMOD_ALT) != 0) {
@@ -344,6 +408,7 @@ int ico_window_pump(void)
        and has no post-present overlay hook yet, so the popup is drawn into
        the frame's list 12 (port/ui/popup.h, docs/port/UI.md) */
     ui_HostVsync(ico_host_main_ticks());
+    s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
     return !quit;
 }
 
@@ -545,7 +610,7 @@ static void pace_log(Uint64 now)
         perf_reset();
         return;
     }
-    if (now - s_pres.statAt < 10000000000ull) {
+    if (now - s_pres.statAt < ico_stats_period_ns(now, s_pres.fastUntil)) {
         return;
     }
     const double sec = (double)(now - s_pres.statAt) / 1e9;
@@ -559,17 +624,18 @@ static void pace_log(Uint64 now)
     fprintf(stderr,
             "window: %u presents and %u game frames (%u frame numbers) in %.1f s: %.1f "
             "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-            "%.0f ms; longest replay %.1f ms of %u\n",
+            "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms\n",
             s_pres.statPresents, s_pres.statFrames, fn - s_pres.statFrameNo, sec,
             s_pres.statPresents / sec, s_pres.statFrames / sec, s_pres.statVsyncs,
             s_pres.statVsyncs / sec, s_pres.statResyncs, (double)s_pres.statDropped / 1e6, maxMs,
-            replays);
+            replays, s_pres.slowSteps, s_pres.slowMs);
     perf_drain();
     perf_log();
     s_pres.statAt = now;
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
     s_pres.statDropped = 0;
     s_pres.statFrameNo = fn;
+    s_pres.slowSteps = s_pres.slowLogged = 0;
 }
 
 /* The pacer more than RESYNC_NS behind: the lag is dropped (counted) */
@@ -581,6 +647,35 @@ static void resync(Uint64 now)
 }
 
 static void pace(int hz);
+
+/* Q1: a step (ico_host_step to this pace) over [dev] slow_step_ms: what ran
+   in it.  "other" is the host loop's work between the step and the pump:
+   the trace line, the pad recording and the log flush. */
+static void slow_step(double ms)
+{
+    IcoStepProfile p;
+    const RdTexCacheStats *tc = rdtex_Stats();
+    const RdStats *rs = rd_GetStats();
+
+    s_pres.slowSteps++;
+    if (s_pres.slowLogged >= SLOW_STEP_LINES) {
+        return;
+    }
+    s_pres.slowLogged++;
+    ico_host_step_profile(&p);
+    const double other = ms - p.totalMs - s_pres.pumpMs;
+    fprintf(stderr,
+            "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
+            "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, achievements "
+            "%.1f), pump %.1f, other %.1f; %u disc reads (%u sectors), %u texture decodes, %u "
+            "pipelines created, memory card %s\n",
+            ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage,
+            p.loading ? ", loading" : "", p.totalMs, p.hooksMs, p.audioMs, p.threadsMs, p.switches,
+            p.achMs, s_pres.pumpMs, other > 0.0 ? other : 0.0, p.cdReads, p.cdSectors,
+            tc != NULL ? tc->decodes - s_pres.decodes : 0u,
+            rs != NULL ? rs->pipelineCreates - s_pres.pipeCreates : 0u,
+            p.mcPending ? "busy" : "idle");
+}
 
 void ico_window_pace(int hz)
 {
@@ -594,9 +689,19 @@ void ico_window_pace(int hz)
         s_pres.stepSumMs += ms;
         s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
         s_pres.stepCount++;
+        if (s_pres.slowMs > 0.0 && ms > s_pres.slowMs) {
+            slow_step(ms);
+        }
     }
     pace(hz);
     perf_drain(); /* P1: every vsync, so the record queue never overflows */
+    {
+        const RdTexCacheStats *tc = rdtex_Stats();
+        const RdStats *rs = rd_GetStats();
+
+        s_pres.decodes = tc != NULL ? tc->decodes : 0;
+        s_pres.pipeCreates = rs != NULL ? rs->pipelineCreates : 0;
+    }
     s_pres.paceEnd = SDL_GetTicksNS();
 }
 

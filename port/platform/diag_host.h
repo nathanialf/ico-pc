@@ -28,6 +28,14 @@
  *
  * Every line goes straight to the log file with an unbuffered OS write, so
  * a crash or a kill leaves everything written before it.
+ *
+ * The C library's stdout and stderr are fully buffered on Windows (package
+ * Q1, host_config.h ico_host_redirect_output) and the host loop flushes
+ * them once per vsync; a crash, abort or watchdog report first writes out
+ * what they hold (from a helper thread it waits on for at most half a
+ * second, since the stopped thread may hold a stream lock), and a milestone
+ * on the main thread flushes them before its own line, so the log keeps
+ * its order.
  */
 #ifndef ICO_PLATFORM_DIAG_HOST_H
 #define ICO_PLATFORM_DIAG_HOST_H
@@ -76,6 +84,9 @@ void ico_diag_set_failure(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
 void ico_diag_name_func(void *func, const char *name);
 /* Seconds since ico_diag_init. */
 double ico_diag_uptime(void);
+/* A monotonic clock in nanoseconds (QueryPerformanceCounter, CLOCK_MONOTONIC)
+   for timing the host's work; its zero is arbitrary. */
+unsigned long long ico_diag_now_ns(void);
 
 /* --- The game's hooks (#ifdef ICO_HOST calls in ico2/, listed in
    docs/port/BOOT_DIAG.md) ------------------------------------------------ */

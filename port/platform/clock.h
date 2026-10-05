@@ -48,6 +48,11 @@ void ico_clock_set_fixed(int fixed);
    its registrations. */
 void ico_clock_timers_attach(void);
 void ico_clock_set_vsync_hz(int hz); /* 50 (the default, PAL) or 60 (59.94) */
+/* The game's video mode word (&systemStatus[0]): from then on the vsync hook
+   sets the rate from it before each step, 60 when it is 0 (NTSC), else 50.
+   NULL (the default) leaves the rate to ico_clock_set_vsync_hz. A change of
+   rate drops the fractions of a tick carried over. */
+void ico_clock_set_mode_word(const volatile int *word);
 /* Advances the timers by frac/65536 of a vsync (65536: a whole one): the
    hook's step, and the way for a caller inside a frame to give a sub-vsync
    estimate. */

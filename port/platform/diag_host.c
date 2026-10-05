@@ -154,6 +154,8 @@ static ULONGLONG t0;
 
 static HANDLE main_thread;
 
+static DWORD main_tid;
+
 static HANDLE crash_event;
 
 static HANDLE crash_done;
@@ -176,6 +178,18 @@ double ico_diag_uptime(void)
     return (double)(GetTickCount64() - t0) / 1000.0;
 }
 
+unsigned long long ico_diag_now_ns(void)
+{
+    static LARGE_INTEGER freq;
+    LARGE_INTEGER c;
+
+    if (freq.QuadPart == 0) {
+        QueryPerformanceFrequency(&freq);
+    }
+    QueryPerformanceCounter(&c);
+    return (unsigned long long)((double)c.QuadPart * 1e9 / (double)freq.QuadPart);
+}
+
 static void lock_take(void)
 {
     EnterCriticalSection(&lock);
@@ -184,6 +198,45 @@ static void lock_take(void)
 static void lock_give(void)
 {
     LeaveCriticalSection(&lock);
+}
+
+/* Package Q1: stdout and stderr are fully buffered on Windows
+   (host_config.c ico_host_redirect_output; msvcrt writes an unbuffered
+   stream one character per OS call). Before a fatal report their content
+   is written out by a helper thread, waited on for at most STDIO_FLUSH_MS:
+   the stopped thread may hold a stream's lock, and a flush that faults
+   only stops the helper (crash_from_exception parks a second faulting
+   thread). */
+#define STDIO_FLUSH_MS 500
+
+ICO_ENTRY static DWORD WINAPI stdio_flush_main(LPVOID arg)
+{
+    (void)arg;
+    fflush(stdout);
+    fflush(stderr);
+    return 0;
+}
+
+static void flush_stdio_bounded(void)
+{
+    DWORD tid;
+    HANDLE h = w32_create_thread != NULL
+                   ? w32_create_thread(NULL, 64 * 1024, stdio_flush_main, NULL, 0, &tid)
+                   : NULL;
+
+    if (h != NULL) {
+        WaitForSingleObject(h, STDIO_FLUSH_MS);
+        CloseHandle(h);
+    }
+}
+
+/* a milestone on the main thread: what stderr holds goes first */
+static void flush_stdio_if_main(void)
+{
+    if (GetCurrentThreadId() == main_tid) {
+        fflush(stdout);
+        fflush(stderr);
+    }
 }
 
 #else
@@ -220,6 +273,13 @@ double ico_diag_uptime(void)
     return (double)(t.tv_sec - t0.tv_sec) + (double)(t.tv_nsec - t0.tv_nsec) / 1e9;
 }
 
+unsigned long long ico_diag_now_ns(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (unsigned long long)t.tv_sec * 1000000000ull + (unsigned long long)t.tv_nsec;
+}
+
 static void lock_take(void)
 {
     pthread_mutex_lock(&lock);
@@ -229,6 +289,12 @@ static void lock_give(void)
 {
     pthread_mutex_unlock(&lock);
 }
+
+/* POSIX keeps stdout and stderr unbuffered (glibc formats a whole printf
+   call before its one write): nothing waits in them */
+static void flush_stdio_bounded(void) {}
+
+static void flush_stdio_if_main(void) {}
 
 #endif
 
@@ -554,6 +620,7 @@ void ico_diag_milestone(const char *fmt, ...)
     vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
     prefix(p, sizeof p);
+    flush_stdio_if_main();
     ico_diag_log("ico_pc: %s %s", p, msg);
 }
 
@@ -711,6 +778,7 @@ static void report_crash(void)
     char tmp[80];
     char box[256];
     char line[LINE_MAX_BYTES];
+    flush_stdio_bounded();
     describe(crash.pc, where, sizeof where);
     flog("ico_pc: ======================================================================");
     flog("ico_pc: CRASH: %s (0x%lx) at %s", crash.what, crash.code, where);
@@ -842,6 +910,7 @@ static void watchdog_fire(const char *reason)
     if (fatal_once++) {
         return;
     }
+    flush_stdio_bounded();
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
     if (sample_main() == 0) {
@@ -1273,6 +1342,7 @@ void ico_diag_init(const char *log_path)
     InitializeCriticalSection(&lock);
     DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &main_thread, 0,
                     FALSE, DUPLICATE_SAME_ACCESS);
+    main_tid = GetCurrentThreadId();
     crash_event = CreateEventA(NULL, FALSE, FALSE, NULL);
     crash_done = CreateEventA(NULL, TRUE, FALSE, NULL);
     if (log_path != NULL) {

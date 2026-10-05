@@ -381,6 +381,9 @@ static const struct {
     {"dev.dump_interp", "dump_interp"},
     {"dev.audio_dump", "audio_dump"},
     {"dev.pad_script", "pad_script"},
+    /* the pad recording, logs/input-<time>.txt (package Q1; main_host.c:
+       default on in the window build, off headless; a path writes there) */
+    {"dev.input_record", "input_record"},
     {"dev.verify", "verify"},
     {"dev.headless", "headless"},
     {"dev.fixed_clock", "fixed_clock"},
@@ -742,9 +745,27 @@ int ico_host_redirect_output(const char *log_path)
         return -1;
     }
 #endif
+#ifdef _WIN32
+    /* Package Q1: fully buffered, flushed by the host loop once a vsync
+       (ico_host_log_flush) and by the fatal paths (diag_host.c).  msvcrt
+       has no line buffering and writes an unbuffered stream one character
+       per OS call, each after a seek to the end (append mode): a player's
+       10 s window lines (about 1 KB) took 225 ms on a network drive and
+       stalled the pacer every block. */
+    setvbuf(stdout, NULL, _IOFBF, 16 * 1024);
+    setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
+#else
+    /* glibc formats each call before its one write */
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+#endif
     return 0;
+}
+
+void ico_host_log_flush(void)
+{
+    fflush(stdout);
+    fflush(stderr);
 }
 
 /* --- the dialog and the error box --------------------------------------- */
