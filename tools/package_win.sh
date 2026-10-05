@@ -118,10 +118,13 @@ iso=${iso[$a]}
 # report of where it is stuck to logs\\ico-pc.log and stops. 0 turns it off.
 watchdog=30
 
-# trace=1 writes a developer trace to logs/trace-<date>-<time>.txt (off by
-# default in this build). Port settings (display,
-# input bindings, gameplay options) live in config.toml in the pref folder;
-# the in-game Settings menu edits them.
+# trace=1 writes a developer trace to logs\\trace-<date>-<time>.txt: one
+# line a game tick (about 150 bytes), which lets a session be compared tick
+# by tick with a replay of its input recording. It also fixes the game's
+# clock (saves are dated 2002-01-01). Set trace=0 to turn it off. Port
+# settings (display, input bindings, gameplay options) live in config.toml
+# in the pref folder; the in-game Settings menu edits them.
+trace=1
 INI
 done
 {
@@ -191,7 +194,7 @@ not a texture yet; each listed once). Then, as before:
 | `tools\rd_replay_tool.exe`, `tools\compare_backends.cmd`, `tools\compare_png.ps1` | optional: render frame dumps on Vulkan and D3D12 and compare them (below) |
 | `tools\SDL3.dll` | a copy for the two `.exe` files in `tools\` |
 | `logs\ico-pc.log` | written by each run (replaced on the next run) |
-| `logs\trace-*.txt` | only with `trace=1` in `ico-pc.ini`: one line per game tick (a developer record) |
+| `logs\trace-*.txt` | one line per game tick (`trace=1` in `ico-pc.ini`, on in this build): send it with the recording |
 
 ## Backend checks (optional, `x64\tools\`)
 

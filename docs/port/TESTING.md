@@ -57,7 +57,11 @@ packages now carry one `x64/` folder. The checkpoint records below that name
      diagnostics (`port/platform/diag_host.h`) write there too. The trace
      goes to `logs/trace-<yyyymmdd-hhmmss>.txt`, flushed line by line: by
      default in the headless build (`trace=0` turns it off); the window
-     build writes it only with `trace=1` or `trace=PATH` (package F2).
+     build writes it only with `trace=1` or `trace=PATH` (package F2); the
+     Windows test package's ini sets `trace=1` (since v0.6, after the
+     W2 replay of a Windows session drifted from it after Main tick 14982
+     with no per-tick record to diff), so a session's trace can be
+     compared line by line with the headless replay of its recording.
    - **Exit:** after `ticks=` Main ticks; with no `ticks=`, it runs until
      closed.
    - **Watchdog:** `watchdog=S` (default 30, 0 off): no Main tick S
