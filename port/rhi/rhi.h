@@ -1,6 +1,8 @@
 /* rhi.h: the thin render hardware interface the backends implement.
  *
- * One backend is linked per build (port/rhi/vk, port/rhi/d3d12; Metal later).
+ * Backends: port/rhi/vk, port/rhi/d3d12 (Metal later).  A build may link
+ * more than one (Windows: Vulkan and D3D12); rhi_CreateBackend at the end
+ * picks the one the calls below go to (port/rhi/rhi_backend.h).
  * The surface is deliberately small: the game needs about a dozen shader
  * programs, under a hundred pipelines, about fifteen render targets, ring
  * buffers for per-frame vertex and uniform data, and no compute.
@@ -22,7 +24,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef RHI_BACKEND_PREFIX
+
+/* compiling a backend: its rhi_* definitions get the backend's prefix */
+#include "rhi_backend_names.h"
+
+#endif
 #ifdef __cplusplus
+
 extern "C" {
 #endif
 
@@ -403,6 +412,16 @@ typedef struct RhiLimits {
      * rounds the pitch up to copyRowPitchAlign from width * texel size. */
     uint32_t copyRowPitchAlign;
     uint32_t copyOffsetAlign;
+    /* Renderer wave 7 (R7a), the Enhanced texture filter.  textureMips:
+     * rhi_CreateTexture honours mipLevels > 1 for sampled RGBA8 textures,
+     * rhi_CmdCopyBufferToTexture's mip selects the level (each level is
+     * uploaded by the caller; no GPU mip generation), and samplers apply
+     * RhiSamplerDesc.mip, minLod/maxLod and maxAnisotropy.  maxAnisotropy:
+     * the largest RhiSamplerDesc.maxAnisotropy that takes effect (1 = none).
+     * Both backends set them (D3D12 since R6c); a backend that leaves
+     * textureMips false gets one level per texture from rd. */
+    bool textureMips;
+    float maxAnisotropy;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {
@@ -522,8 +541,20 @@ void rhi_CmdEndLabel(RhiCommandList cl);
 bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
                          uint32_t *outRowPitch);
 
+/* --------------------------------------------------- backend selection
+ * (renderer wave 6, R6c.)  rhi_CreateBackend selects the backend every call
+ * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the
+ * default.  The default is the ICO_RHI_BACKEND environment variable when it
+ * names a linked backend, else the first linked one (Vulkan when it is
+ * linked).  Call it before rhi_Init; without a call the default is used.
+ * Returns false, selection unchanged, for a name that is not linked into
+ * this build or while a device is up (between rhi_Init and rhi_Shutdown).
+ * rhi_BackendName lists the linked backends: index 0, 1, ... until NULL. */
+bool rhi_CreateBackend(const char *name);
+const char *rhi_BackendName(uint32_t index);
+
 #ifdef __cplusplus
 }
-#endif
 
+#endif
 #endif /* PORT_RHI_RHI_H */

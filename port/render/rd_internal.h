@@ -216,7 +216,14 @@ void rd__Walk(const RdFrame *f, int keep, RdStateBlock *state, RdWalkFn fn, void
 typedef struct RdTargetRec {
     uint32_t gen;
     uint8_t live, named, withDepth, keepAcross;
-    uint32_t w, h; /* GS pixels; the texture size is w*scale, h*scale */
+    uint32_t w, h; /* GS pixels */
+    /* Wave 7 (R7a): the texture's size and its texels per GS pixel
+     * (tw = w * sx rounded, th = h * sy); tw == w, th == h, sx == sy == 1
+     * in Original and for every target the Enhanced resolution does not
+     * scale (rd__TargetScaleOf, RENDER_API.md section 19) */
+    uint32_t tw, th;
+    float sx, sy;
+    uint8_t wide; /* scene-class: draws other than full-screen ones take the wide x scale */
     RhiFormat format;
     RhiTexture color, depth;
     RhiState colorState, depthState;
@@ -257,8 +264,9 @@ typedef struct RdTexRec {
     RhiTexture rhi;
     RhiState state;
     uint8_t dirty;
-    uint8_t view;    /* RdTexView, RD_TEXKIND_TARGET */
-    uint32_t target; /* RdTarget id, RD_TEXKIND_TARGET */
+    uint8_t view;      /* RdTexView, RD_TEXKIND_TARGET */
+    uint8_t mipLevels; /* R7a: levels of rhi (1 unless the Enhanced filter generated mips) */
+    uint32_t target;   /* RdTarget id, RD_TEXKIND_TARGET */
 } RdTexRec;
 
 RdTexRec *rd__TexRec(uint32_t id);
@@ -473,6 +481,9 @@ enum {
 
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
+/* Wave 7 (R7a): the Enhanced filter's samplers, the same 16 with linear mips
+ * (trilinear) and again with the device's anisotropy */
+#define RD_SAMPLER_SETS 3
 #define RD_SCRATCH_COUNT 6
 
 typedef struct RdScratch {
@@ -504,7 +515,7 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
     RhiBindGroupLayout layoutVu; /* wave 3: t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
-    RhiSampler samplers[RD_SAMPLER_COUNT];
+    RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;
     RhiBuffer ring[RHI_FRAMES_IN_FLIGHT];
@@ -516,6 +527,15 @@ typedef struct RdContext {
     RhiTexture presentLines, presentOut;
     RhiState presentLinesState, presentOutState;
     uint32_t presentLinesW, presentLinesH, presentOutW, presentOutH;
+    /* wave 7 (R7a): the Enhanced display options as applied (rd_present.c
+     * rd__ApplyDisplay from settings): the scene-class targets' scale, the
+     * fixed work buffers' scale, the wide x factor (4/3) / aspect for draws
+     * into scene-class targets (1 in Original), the output aspect, and the
+     * texture filter upgrade in force */
+    float sceneSx, sceneSy, workScale, wideX, outAspect;
+    uint8_t filterUpgrade, fullHeight;
+    int spaceOverride; /* rd_SetSpaceOverride + 1; 0 = none */
+    uint32_t vsyncApplied;
 } RdContext;
 
 extern RdContext g_rd;
@@ -550,7 +570,9 @@ enum {
     /* wave 5 (R5a) */
     RD_ONCE_BLUR, /* a staticBlur sprite without a colour target, or AFAIL with Z write */
     /* wave 5 (R5c) */
-    RD_ONCE_WRAP /* a COLCLAMP 0 draw the wrap path does not model (DATE, PABE, AFAIL split) */
+    RD_ONCE_WRAP, /* a COLCLAMP 0 draw the wrap path does not model (DATE, PABE, AFAIL split) */
+    /* wave 7 (R7a) */
+    RD_ONCE_COPY_SCALE /* a copy between targets of different resolution scales */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -577,6 +599,16 @@ void rd__GpuShutdown(void);
 bool rd__ReplayFrame(const RdFrame *f, int keep, bool present);
 /* Present pass inside the replay's command list (rd_present.c). */
 void rd__PresentRecord(RhiCommandList cl);
+/* Wave 7 (R7a): the presentation box of aspect (4:3: the Original integer
+ * box) centred in outW x outH; rd_video.c's movie box is the 4:3 one. */
+void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box);
+/* Wave 7 (R7a): g_rd.settings -> g_rd.sceneSx/Sy, workScale, wideX,
+ * outAspect, filterUpgrade, fullHeight (and the swapchain's vsync).  True
+ * when a target scale changed (the caller recreates the named targets). */
+bool rd__ApplyDisplay(void);
+/* Wave 7 (R7a): tw, th, sx, sy, wide of a target record from its GS size;
+ * named = its RdTargetId, -1 for a temporary target (rd_core.c). */
+void rd__TargetScaleOf(RdTargetRec *t, int named);
 bool rd__PresentAcquire(void);
 void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
@@ -590,6 +622,10 @@ RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, f
  * uses 2^-24 (no depth bound). */
 RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
                              float zScale);
+/* Wave 7 (R7a): FrameCB with the wide x scale spaceX in both g_space slots
+ * and the target's texels per GS pixel in g_z.yz. */
+RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                              float zScale, float spaceX, float scaleX, float scaleY);
 
 /* ------------------------------------------------- frame head and camera
  * rd_frame.c (wave 2, R2c). */

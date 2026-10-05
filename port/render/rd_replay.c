@@ -41,9 +41,11 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_tex.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
@@ -131,15 +133,26 @@ bool rd__GpuInit(void *sdlWindow)
         g_rd.fs[i] = makeShader(s_fsNames[i]);
         ok = ok && g_rd.fs[i].id;
     }
-    for (int i = 0; i < RD_SAMPLER_COUNT; i++) {
+    /* set 0: the Original samplers (one level); wave 7 (R7a) sets 1 and 2:
+     * the Enhanced filter's trilinear and anisotropic ones over the
+     * generated mips (uploadTextures) */
+    for (int i = 0; i < RD_SAMPLER_COUNT * RD_SAMPLER_SETS; i++) {
+        const int set = i / RD_SAMPLER_COUNT, k = i % RD_SAMPLER_COUNT;
         RhiSamplerDesc sd;
         memset(&sd, 0, sizeof(sd));
-        sd.mag = (i & 1) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
-        sd.min = (i & 2) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
-        sd.mip = RHI_FILTER_NEAREST;
-        sd.s = (i & 4) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
-        sd.t = (i & 8) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
+        sd.mag = (k & 1) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.min = (k & 2) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.mip = set ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.s = (k & 4) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
+        sd.t = (k & 8) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
         sd.maxAnisotropy = 1.0f;
+        if (set) {
+            sd.maxLod = 16.0f;
+        }
+        if (set == 2) {
+            const float a = lim->maxAnisotropy;
+            sd.maxAnisotropy = a > 16.0f ? 16.0f : (a < 1.0f ? 1.0f : a);
+        }
         g_rd.samplers[i] = rhi_CreateSampler(&sd);
         ok = ok && g_rd.samplers[i].id;
     }
@@ -171,7 +184,7 @@ void rd__GpuShutdown(void)
     if (g_rd.dummy.id) {
         rhi_DestroyTexture(g_rd.dummy);
     }
-    for (int i = 0; i < RD_SAMPLER_COUNT; i++) {
+    for (int i = 0; i < RD_SAMPLER_COUNT * RD_SAMPLER_SETS; i++) {
         if (g_rd.samplers[i].id) {
             rhi_DestroySampler(g_rd.samplers[i]);
         }
@@ -274,6 +287,12 @@ RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, f
 RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
                              float zScale)
 {
+    return rd__FrameGroupEx(targetW, targetH, originX, originY, zScale, 1.0f, 1.0f, 1.0f);
+}
+
+RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                              float zScale, float spaceX, float scaleX, float scaleY)
+{
     IcoFrameCB cb;
     memset(&cb, 0, sizeof(cb));
     rd__FillCameraCB(&cb, s_hasReplayCam ? &s_replayCam : NULL);
@@ -283,15 +302,22 @@ RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, 
     cb.target[3] = 1.0f / (float)targetH;
     cb.origin[0] = originX;
     cb.origin[1] = originY;
-    cb.origin[2] = 0.5f; /* GS integer coordinates on GPU pixel centres */
-    cb.origin[3] = 0.5f;
-    /* Original: both spaces identity.  Mirror, widescreen anchoring and the
-     * wide projection fill these in the Enhanced presets (wave 6). */
-    cb.space[0][0] = cb.space[0][1] = 1.0f;
-    cb.space[1][0] = cb.space[1][1] = 1.0f;
+    /* GS integer coordinates on GPU pixel centres; R7a: on a scaled target,
+     * on the centre of the block's first texel (0.5 texel = 0.5 / s GS
+     * pixels), so integer edges are block edges (rd_replay.c expand) */
+    cb.origin[2] = scaleX > 1.0f ? 0.5f / scaleX : 0.5f;
+    cb.origin[3] = scaleY > 1.0f ? 0.5f / scaleY : 0.5f;
+    /* Original: both spaces identity.  Wave 7 (R7a): the wide projection's
+     * x scale about the target's centre (spaceX = (4/3) / aspect) for draws
+     * into a scene-class target other than full-screen ones (bindDraw);
+     * the mirror would also go here. */
+    cb.space[0][0] = cb.space[1][0] = spaceX;
+    cb.space[0][1] = cb.space[1][1] = 1.0f;
     /* the GS Z scale of the bound depth buffer: 2^-32 for the game's PSMZ32
      * (R2c), so UI Z values above 2^24 keep their order */
     cb.z[0] = zScale;
+    cb.z[1] = scaleX; /* R7a: the bound target's texels per GS pixel */
+    cb.z[2] = scaleY;
     cb.misc[0] = (float)g_rd.replayCounter;
     cb.misc[1] = (float)g_rd.settings.preset;
     return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
@@ -329,6 +355,19 @@ RhiSampler rd__Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
     return g_rd.samplers[i];
 }
 
+/* Wave 7 (R7a): the sampler of a game texture.  With the Enhanced filter
+ * on and the texture mipmapped, a linearly minified texture is sampled
+ * trilinear (or anisotropic); textures authored nearest stay nearest, and
+ * everything is the Original sampler otherwise. */
+static RhiSampler texSampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t, int mipmapped)
+{
+    int i = (mag ? 1 : 0) | (min ? 2 : 0) | (s ? 4 : 0) | (t ? 8 : 0);
+    if (mipmapped && min == RD_FILTER_LINEAR && g_rd.filterUpgrade) {
+        i += RD_SAMPLER_COUNT * (g_rd.filterUpgrade >= RD_FILTER_UPGRADE_ANISOTROPIC ? 2 : 1);
+    }
+    return g_rd.samplers[i];
+}
+
 /* ---------------------------------------------------------------- passes */
 
 typedef struct Replay {
@@ -336,7 +375,8 @@ typedef struct Replay {
     int passOpen;
     uint32_t passColor, passDepth;
     RhiBindGroup frameBG;
-    uint32_t frameKey[5]; /* colour, gsW, gsH, useOffset, pass serial */
+    uint32_t frameKey[6]; /* colour, gsW, gsH, useOffset, pass serial, full-screen (R7a) */
+    int stretch;          /* R7a: the draw being bound is full-screen (no wide x scale) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
@@ -375,10 +415,10 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
         p.depth.clearDepth = clearDepth;
         p.depth.clearStencil = 0;
     }
-    p.width = c->w;
-    p.height = c->h;
+    p.width = c->tw;
+    p.height = c->th;
     rhi_CmdBeginRenderPass(s_cl, &p);
-    RhiViewport vp = {0.0f, 0.0f, (float)c->w, (float)c->h, 0.0f, 1.0f};
+    RhiViewport vp = {0.0f, 0.0f, (float)c->tw, (float)c->th, 0.0f, 1.0f};
     rhi_CmdSetViewport(s_cl, &vp);
     r->passOpen = 1;
     r->passColor = cid;
@@ -432,6 +472,51 @@ static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const
 
 /* Expands a screen-prim command into a triangle or line list.  Returns the
  * vertex count; *topo is RD_PRIM_TRIANGLES or RD_PRIM_LINES. */
+/* Wave 7 (R7a): sprites on a scaled target.  The rasteriser puts GS
+ * integer coordinates on the left/top edge of their s x s texel block
+ * (FrameCB g_origin.zw = 0.5 / s).  A sprite's corners are snapped up to
+ * whole GS pixels first (the letterbox's bars sit a quarter pixel off), so
+ * it covers exactly the blocks of the pixels the GS covers, and the UVs are
+ * moved by k = (s - 1) / (2s) GS pixels so that a texel's sample is taken
+ * where its own centre lies in the GS pixel (the block's centre is the GS
+ * pixel centre): nearest-sampled sprites then fill whole blocks with the
+ * texel the GS samples, and bilinear ones interpolate between them.
+ * Neither happens at scale 1 (Original). */
+static float s_uvShiftX, s_uvShiftY;
+
+/* one axis: the corners snapped up to whole GS pixels (the GS covers the
+ * pixels whose integer coordinates lie in [min, max), so ceil keeps exactly
+ * those), the UVs moved along, then the sample shift */
+static void snapAxis(uint16_t *pa, uint16_t *pb, float *ua, float *ub, float shift)
+{
+    const int32_t a = *pa, b = *pb;
+    if (a == b) {
+        return;
+    }
+    const float dudp = (*ub - *ua) / ((float)(b - a) * (1.0f / 16.0f));
+    const int32_t ca = (a + 15) & ~15, cb = (b + 15) & ~15;
+    *ua += (float)(ca - a) * (1.0f / 16.0f) * dudp - shift * dudp;
+    *ub += (float)(cb - b) * (1.0f / 16.0f) * dudp - shift * dudp;
+    *pa = (uint16_t)(ca > 0xFFFF ? 0xFFF0 : ca);
+    *pb = (uint16_t)(cb > 0xFFFF ? 0xFFF0 : cb);
+}
+
+static void spriteUvShift(IcoSpriteVertex *a, IcoSpriteVertex *b)
+{
+    if (s_uvShiftX != 0.0f) {
+        snapAxis(&a->x, &b->x, &a->u, &b->u, s_uvShiftX);
+    }
+    if (s_uvShiftY != 0.0f) {
+        snapAxis(&a->y, &b->y, &a->v, &b->v, s_uvShiftY);
+    }
+}
+
+static void setUvShift(float sx, float sy)
+{
+    s_uvShiftX = sx > 1.0f ? (sx - 1.0f) / (2.0f * sx) : 0.0f;
+    s_uvShiftY = sy > 1.0f ? (sy - 1.0f) / (2.0f * sy) : 0.0f;
+}
+
 static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFixed, float tw,
                        float th, const float uvOff[2], IcoSpriteVertex *o, uint8_t *topo,
                        int gouraud)
@@ -493,6 +578,9 @@ static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFix
             IcoSpriteVertex a, b;
             convVtx(&v[i], uvFixed, tw, th, uvOff, &a);
             convVtx(&v[i + 1], uvFixed, tw, th, uvOff, &b);
+            if (s_uvShiftX != 0.0f || s_uvShiftY != 0.0f) {
+                spriteUvShift(&a, &b); /* R7a: a scaled target */
+            }
             IcoSpriteVertex q[4] = {b, b, b, b};
             q[0].x = q[2].x = a.x;
             q[0].u = q[2].u = a.u;
@@ -557,9 +645,11 @@ static RdScratch *scratchGet(uint32_t w, uint32_t h, int which)
 /* The texture a draw samples, after any state change it needs.  Returns the
  * RhiTexture and its size and TEXFMT; dummy when untextured. */
 static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t drawTargetId,
-                                 uint32_t *w, uint32_t *h, uint32_t *fmt, int *textured)
+                                 uint32_t *w, uint32_t *h, uint32_t *fmt, int *textured,
+                                 int *mipmapped)
 {
     *textured = 0;
+    *mipmapped = 0;
     *w = *h = 1;
     *fmt = 0;
     if (!r->st.ds.texEnabled) {
@@ -578,6 +668,7 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         *w = t->w;
         *h = t->h;
         *textured = 1;
+        *mipmapped = t->mipLevels > 1;
         return t->rhi;
     }
     RdTargetRec *src = rd__TargetRec(t->target);
@@ -599,12 +690,12 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         endPass(r);
         if (!src->snap.id) {
             src->snap = rhi_CreateTexture(&(RhiTextureDesc){
-                src->w, src->h, 1, src->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+                src->tw, src->th, 1, src->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
             src->snapState = RHI_STATE_UNDEFINED;
         }
         rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
         rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_COPY_DST);
-        rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){0, 0, src->w, src->h}, src->snap, 0, 0);
+        rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){0, 0, src->tw, src->th}, src->snap, 0, 0);
         rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_SHADER_READ);
         return src->snap;
     }
@@ -630,11 +721,13 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
         sn->colorState == RHI_STATE_SHADER_READ) {
         return sn->color;
     }
-    uint32_t w = tc->w, h = tc->h;
-    if (w > sn->w || h > sn->h) {
+    /* in texels: the snapshot has the scene's scale (R7a) and sprite_ps
+     * reads it at the fragment's texel */
+    uint32_t w = tc->tw, h = tc->th;
+    if (w > sn->tw || h > sn->th) {
         rd__LogOnce(RD_ONCE_DATE_SIZE, "DATE on a target larger than the snapshot: clipped");
-        w = w > sn->w ? sn->w : w;
-        h = h > sn->h ? sn->h : h;
+        w = w > sn->tw ? sn->tw : w;
+        h = h > sn->th ? sn->th : h;
     }
     endPass(r);
     rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
@@ -644,8 +737,8 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
     p.color[0].texture = sn->color;
     p.color[0].load = RHI_LOAD_LOAD;
     p.colorCount = 1;
-    p.width = sn->w;
-    p.height = sn->h;
+    p.width = sn->tw;
+    p.height = sn->th;
     rhi_CmdBeginRenderPass(s_cl, &p);
     RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
     rhi_CmdSetViewport(s_cl, &vp);
@@ -658,10 +751,10 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
         memset(&cb, 0, sizeof(cb));
         cb.uvRect[2] = (float)w;
         cb.uvRect[3] = (float)h;
-        cb.tex[0] = (float)tc->w;
-        cb.tex[1] = (float)tc->h;
-        cb.tex[2] = 1.0f / (float)tc->w;
-        cb.tex[3] = 1.0f / (float)tc->h;
+        cb.tex[0] = (float)tc->tw;
+        cb.tex[1] = (float)tc->th;
+        cb.tex[2] = 1.0f / (float)tc->tw;
+        cb.tex[3] = 1.0f / (float)tc->th;
         rhi_CmdSetPipeline(s_cl, pipe);
         rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
         rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
@@ -678,6 +771,85 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
     return sn->color;
 }
 
+/* ------------------------------------------- scale and wide (wave 7, R7a)
+ * A target's texture is tw x th texels for its w x h GS pixels (sx, sy
+ * texels per pixel; 1 in Original).  FrameCB keeps the GS size (g_target),
+ * so every vertex lands where it did and the viewport, the scissor and the
+ * copies are what scale; g_z.yz carries the scale for the shaders that
+ * address a target by texel (fx_sprite_ps, fog_lut_ps).
+ *
+ * The wide x scale (4/3) / aspect applies, about the target's centre, to
+ * draws into the scene-class targets (SCENE, WORK2, AURA_WORK, the shadow
+ * count: RdTargetRec.wide), the meshes (vu_ndc) and the screen prims
+ * alike, so CPU-projected and UI prims follow the wider projection and the
+ * UI stays a centred 4:3 box.  Full-screen draws stretch instead: the
+ * RD_SPACE_FULLSCREEN ones (rd_post.c's passes, the fog, layout_texture.c's
+ * primary sprite) and any sprite that spans the target's whole width (the
+ * clears, Shadow.c's resolve, the game's own full-screen fills). */
+
+static int32_t floorDiv16(int32_t v)
+{
+    return v >= 0 ? v / 16 : -((-v + 15) / 16);
+}
+
+/* the scissor in texels: GS pixels x0..x1 (inclusive) cover texels
+ * floor(x0 * sx) .. ceil((x1 + 1) * sx) - 1 */
+static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
+{
+    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
+    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
+    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
+    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
+    if (x1 < x0 || y1 < y0) {
+        return false;
+    }
+    if (tc->sx != 1.0f || tc->sy != 1.0f) {
+        int32_t a = (int32_t)((float)x0 * tc->sx), b = (int32_t)((float)y0 * tc->sy);
+        int32_t c = (int32_t)((float)(x1 + 1) * tc->sx + 0.999f) - 1;
+        int32_t d = (int32_t)((float)(y1 + 1) * tc->sy + 0.999f) - 1;
+        x0 = a;
+        y0 = b;
+        x1 = c >= (int32_t)tc->tw ? (int32_t)tc->tw - 1 : c;
+        y1 = d >= (int32_t)tc->th ? (int32_t)tc->th - 1 : d;
+    }
+    *sc = (RhiRect){x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
+    return true;
+}
+
+static float wideFor(const RdTargetRec *tc, int stretch)
+{
+    return tc->wide && !stretch ? g_rd.wideX : 1.0f;
+}
+
+/* Whether a screen-prim command is full-screen: tagged so, or sprites that
+ * cover the target's whole width (in GS pixels, after XYOFFSET). */
+static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t n,
+                         uint8_t prim, uint8_t space)
+{
+    if (g_rd.wideX == 1.0f || !tc->wide) {
+        return 0;
+    }
+    if (space == RD_SPACE_FULLSCREEN) {
+        return 1;
+    }
+    if (prim != RD_PRIM_SPRITES || n < 2) {
+        return 0;
+    }
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    for (uint32_t i = 0; i + 1 < n; i += 2) {
+        int32_t a = floorDiv16(v[i].x) - ox, b = floorDiv16(v[i + 1].x) - ox;
+        if (a > b) {
+            const int32_t t = a;
+            a = b;
+            b = t;
+        }
+        if (a <= 0 && b >= (int32_t)tc->w) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* What a draw binds besides its geometry: doScreen and the VU draws. */
 typedef struct DrawSetup {
     RdTargetRec *tc;
@@ -686,6 +858,7 @@ typedef struct DrawSetup {
     RhiTexture tex, dateTex;
     uint32_t tw, th, tfmt;
     int textured;
+    int mipmapped; /* R7a: the image texture has generated mips */
 } DrawSetup;
 
 /* The target, the DATE snapshot and the texture (each may end the open
@@ -693,6 +866,7 @@ typedef struct DrawSetup {
 static bool prepareDraw(Replay *r, DrawSetup *ds)
 {
     memset(ds, 0, sizeof(*ds));
+    r->stretch = 0; /* R7a: doScreen decides for screen prims after this */
     ds->tc = rd__TargetRec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
@@ -707,7 +881,8 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
     }
     ds->tdId = td ? r->st.depth : 0;
     ds->depthFmt = td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
-    ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured);
+    ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
+                             &ds->mipmapped);
     return true;
 }
 
@@ -716,23 +891,21 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
 static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
 {
     RdTargetRec *tc = ds->tc;
-    /* scissor (SCISSOR_1, inclusive) clipped to the target */
-    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
-    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
-    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
-    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
-    if (x1 < x0 || y1 < y0) {
+    /* scissor (SCISSOR_1, inclusive) clipped to the target, in texels */
+    RhiRect sc;
+    if (!scissorRect(r, tc, &sc)) {
         return (RhiBindGroup){0};
     }
-    RhiSampler smp = rd__Sampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                 (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t);
+    RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds->mipmapped);
     RhiBindGroup g2 = rd__TexGroupDate(ds->tex, smp, ds->dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId) {
         beginPass(r, tc, ds->tdId ? rd__TargetRec(ds->tdId) : NULL, r->st.color, ds->tdId,
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
     }
-    const uint32_t fk[5] = {r->st.color, r->st.gsW, r->st.gsH, r->st.useOffset, r->passSerial};
+    const uint32_t fk[6] = {r->st.color,     r->st.gsW,     r->st.gsH,
+                            r->st.useOffset, r->passSerial, (uint32_t)r->stretch};
     if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
         /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
          * when useOffset; zero in Original, RENDER_API.md open item 4) */
@@ -741,10 +914,10 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
         if (r->st.useOffset & RD_TARGET_HALF_Y) {
             oy += 0.5f; /* the flip's sceGsSetHalfOffset (R2c) */
         }
-        r->frameBG = rd__FrameGroupZ(tc->w, tc->h, ox, oy, rd__TargetZScale(ds->tdId));
+        r->frameBG = rd__FrameGroupEx(tc->w, tc->h, ox, oy, rd__TargetZScale(ds->tdId),
+                                      wideFor(tc, r->stretch), tc->sx, tc->sy);
         memcpy(r->frameKey, fk, sizeof(fk));
     }
-    RhiRect sc = {x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
     rhi_CmdSetScissor(s_cl, &sc);
     return g2;
 }
@@ -791,6 +964,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     /* geometry */
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
+    setUvShift(ds.tc->sx * wideFor(ds.tc, r->stretch), ds.tc->sy);
     const uint64_t maxBytes = (uint64_t)n * 6 * sizeof(IcoSpriteVertex);
     const uint64_t vOff = rd__RingAlloc(maxBytes, 16);
     if (vOff == ~0ull) {
@@ -1005,7 +1180,10 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     RdTargetRec *tc = ds.tc;
     RdTargetRec *td = ds.tdId ? rd__TargetRec(ds.tdId) : NULL;
-    if (tc->format != RHI_FMT_RGBA8_UNORM || (td && (td->w != tc->w || td->h != tc->h))) {
+    r->stretch = screenStretch(r, tc, (const RdScreenVtx *)(f->payload + c->u[0]), c->u[1], c->b[0],
+                               c->b[1]);
+    setUvShift(tc->sx * wideFor(tc, r->stretch), tc->sy);
+    if (tc->format != RHI_FMT_RGBA8_UNORM || (td && (td->tw != tc->tw || td->th != tc->th))) {
         rd__LogOnce(RD_ONCE_WRAP, "COLCLAMP 0 draw on a non-RGBA8 target or a depth of another "
                                   "size: not drawn");
         return;
@@ -1032,31 +1210,27 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (rd__PlanScreenDraw(&st, topo, c->b[1], tc->format, ds.depthFmt, dp) != 1) {
         return;
     }
-    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
-    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
-    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
-    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
-    if (x1 < x0 || y1 < y0) {
+    RhiRect sc;
+    if (!scissorRect(r, tc, &sc)) {
         return;
     }
-    const RhiRect sc = {x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
     RhiPipeline pa = wrapPipeline(0, dp[0].key.vs, topo, ds.depthFmt, dp[0].key.gs.ztst,
                                   dp[0].key.gs.zwrite, 0xF);
     RhiPipeline pr = wrapPipeline(1, 0, 0, tc->format, 0, 0, dp[0].key.gs.colorMask);
     if (!pa.id || !pr.id) {
         return;
     }
-    if (!s_wrapAcc.id || s_wrapW != tc->w || s_wrapH != tc->h) {
+    if (!s_wrapAcc.id || s_wrapW != tc->tw || s_wrapH != tc->th) {
         if (s_wrapAcc.id) {
             endPass(r);
             rhi_DestroyTexture(s_wrapAcc);
         }
-        s_wrapAcc = rhi_CreateTexture(&(RhiTextureDesc){tc->w, tc->h, 1, RHI_FMT_RGBA16F,
+        s_wrapAcc = rhi_CreateTexture(&(RhiTextureDesc){tc->tw, tc->th, 1, RHI_FMT_RGBA16F,
                                                         RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
                                                         "rd wrap accumulator"});
         s_wrapAccState = RHI_STATE_UNDEFINED;
-        s_wrapW = tc->w;
-        s_wrapH = tc->h;
+        s_wrapW = tc->tw;
+        s_wrapH = tc->th;
         if (!s_wrapAcc.id) {
             return;
         }
@@ -1065,12 +1239,12 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     endPass(r);
     if (!tc->snap.id) {
         tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
-            tc->w, tc->h, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+            tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
         tc->snapState = RHI_STATE_UNDEFINED;
     }
     rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
     rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->w, tc->h}, tc->snap, 0, 0);
+    rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->tw, tc->th}, tc->snap, 0, 0);
     rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
     if (ds.textured && ds.tex.id == tc->color.id) {
         ds.tex = tc->snap; /* the GS reads the buffer it draws into */
@@ -1091,10 +1265,10 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         p.depth.depthLoad = RHI_LOAD_LOAD;
         p.depth.stencilLoad = RHI_LOAD_LOAD;
     }
-    p.width = tc->w;
-    p.height = tc->h;
+    p.width = tc->tw;
+    p.height = tc->th;
     rhi_CmdBeginRenderPass(s_cl, &p);
-    const RhiViewport vp = {0.0f, 0.0f, (float)tc->w, (float)tc->h, 0.0f, 1.0f};
+    const RhiViewport vp = {0.0f, 0.0f, (float)tc->tw, (float)tc->th, 0.0f, 1.0f};
     rhi_CmdSetViewport(s_cl, &vp);
     rhi_CmdSetScissor(s_cl, &sc);
     float ox = 2048.0f - (float)(r->st.gsW >> 1);
@@ -1106,10 +1280,12 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     fillDrawCB(r, &dp[0], &ds, &cb);
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
-    RhiSampler smp = rd__Sampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                 (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t);
+    RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped);
     rhi_CmdSetPipeline(s_cl, pa);
-    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroupZ(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId)));
+    rhi_CmdSetBindGroup(s_cl, 0,
+                        rd__FrameGroupEx(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId),
+                                         wideFor(tc, r->stretch), tc->sx, tc->sy));
     rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
     rhi_CmdSetBindGroup(s_cl, 2, rd__TexGroup(ds.tex, smp));
     rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
@@ -1123,7 +1299,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     IcoDrawCB rb;
     memset(&rb, 0, sizeof(rb));
     rhi_CmdSetPipeline(s_cl, pr);
-    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f));
+    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f));
     rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&rb));
     rhi_CmdSetBindGroup(s_cl, 2,
                         rd__TexGroupDate(s_wrapAcc,
@@ -1405,12 +1581,12 @@ static void doExact(Replay *r, const RdCmd *c)
     }
     endPass(r);
     r->writeSerial++;
-    uint32_t w = dst->w, h = dst->h;
-    if (src->w != w || src->h != h) {
+    uint32_t w = dst->tw, h = dst->th;
+    if (src->tw != w || src->th != h) {
         rd__LogOnce(RD_ONCE_EXACT_SIZE, "exact blend between targets of different sizes: the "
                                         "common top-left rectangle is blended");
-        w = src->w < w ? src->w : w;
-        h = src->h < h ? src->h : h;
+        w = src->tw < w ? src->tw : w;
+        h = src->th < h ? src->th : h;
     }
     const RhiRect all = {0, 0, w, h};
     if (!r->st.ds.abe) {
@@ -1486,18 +1662,33 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
     if (cr.srcX < 0 || cr.srcY < 0 || cr.dstX < 0 || cr.dstY < 0) {
         return;
     }
-    uint32_t w = cr.w, h = cr.h;
-    if ((uint32_t)cr.srcX + w > src->w) {
-        w = src->w - (uint32_t)cr.srcX;
+    /* R7a: the rectangle in each texture's texels; between targets of
+     * different scales the copy cannot resample (logged once) and copies the
+     * source's texels */
+    if (src->sx != dst->sx || src->sy != dst->sy) {
+        rd__LogOnce(RD_ONCE_COPY_SCALE, "copy between targets of different resolution scales: "
+                                        "not resampled");
     }
-    if ((uint32_t)cr.dstX + w > dst->w) {
-        w = dst->w - (uint32_t)cr.dstX;
+    const uint32_t sx0 = (uint32_t)((float)cr.srcX * src->sx);
+    const uint32_t sy0 = (uint32_t)((float)cr.srcY * src->sy);
+    const uint32_t dx0 = (uint32_t)((float)cr.dstX * dst->sx);
+    const uint32_t dy0 = (uint32_t)((float)cr.dstY * dst->sy);
+    uint32_t w = src->sx == 1.0f ? cr.w : (uint32_t)((float)cr.w * src->sx + 0.5f);
+    uint32_t h = src->sy == 1.0f ? cr.h : (uint32_t)((float)cr.h * src->sy + 0.5f);
+    if (sx0 >= src->tw || sy0 >= src->th || dx0 >= dst->tw || dy0 >= dst->th) {
+        return;
     }
-    if ((uint32_t)cr.srcY + h > src->h) {
-        h = src->h - (uint32_t)cr.srcY;
+    if (sx0 + w > src->tw) {
+        w = src->tw - sx0;
     }
-    if ((uint32_t)cr.dstY + h > dst->h) {
-        h = dst->h - (uint32_t)cr.dstY;
+    if (dx0 + w > dst->tw) {
+        w = dst->tw - dx0;
+    }
+    if (sy0 + h > src->th) {
+        h = src->th - sy0;
+    }
+    if (dy0 + h > dst->th) {
+        h = dst->th - dy0;
     }
     if ((int32_t)w <= 0 || (int32_t)h <= 0) {
         return;
@@ -1506,8 +1697,8 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
     r->writeSerial++;
     rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){cr.srcX, cr.srcY, w, h}, dst->color, cr.dstX,
-                       cr.dstY);
+    rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){(int32_t)sx0, (int32_t)sy0, w, h}, dst->color,
+                       (int32_t)dx0, (int32_t)dy0);
 }
 
 /* ------------------------------------------------- shadows (wave 4, R4b)
@@ -1522,8 +1713,8 @@ static RdTargetRec *shadowTargets(Replay *r, RdTargetRec **depth)
 {
     RdTargetRec *tc = rd__TargetRec(r->st.color);
     RdTargetRec *td = rd__TargetRec(r->st.depth);
-    if (!tc || !tc->color.id || !td || !td->withDepth || !td->depth.id || tc->w != td->w ||
-        tc->h != td->h) {
+    if (!tc || !tc->color.id || !td || !td->withDepth || !td->depth.id || tc->tw != td->tw ||
+        tc->th != td->th) {
         rd__LogOnce(RD_ONCE_SHADOW, "shadow command without a depth-stencil target of the colour "
                                     "target's size: skipped");
         return NULL;
@@ -1551,8 +1742,8 @@ static void doShadowReset(Replay *r)
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
-    p.width = tc->w;
-    p.height = tc->h;
+    p.width = tc->tw;
+    p.height = tc->th;
     rhi_CmdBeginRenderPass(s_cl, &p);
     rhi_CmdEndRenderPass(s_cl);
 }
@@ -1646,9 +1837,9 @@ static void doShadowResolve(Replay *r)
     static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     r->writeSerial++;
     beginPass(r, tc, td, r->st.color, r->st.depth, RHI_LOAD_CLEAR, zero, RHI_LOAD_LOAD, 0.0f);
-    const RhiRect all = {0, 0, tc->w, tc->h};
+    const RhiRect all = {0, 0, tc->tw, tc->th};
     rhi_CmdSetScissor(s_cl, &all);
-    RhiBindGroup g0 = rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f);
+    RhiBindGroup g0 = rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f);
     RhiBindGroup g2 = rd__TexGroup(g_rd.dummy, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                            RD_WRAP_CLAMP, RD_WRAP_CLAMP));
     for (int pass = 0; pass < RD_SHADOW_RESOLVE_PASSES; pass++) {
@@ -1750,24 +1941,25 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     uint8_t topo;
     IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    setUvShift(tc->sx, tc->sy); /* R7a: the fog sprite on a scaled target */
     const uint32_t nv = expand(v, 2, RD_PRIM_SPRITES, 1, (float)tz->w, (float)tz->h, noOff, out,
                                &topo, r->st.gouraud != 0);
     memcpy(g_rd.ringMap[s_slot] + lOff, f->payload + p.lutOffset, 256 * 4);
 
     endPass(r);
     /* the Z copy (the GS's BITBLT of the Z buffer to 0x2800) */
-    if (!s_fogDepth.id || s_fogDepthW != tz->w || s_fogDepthH != tz->h) {
+    if (!s_fogDepth.id || s_fogDepthW != tz->tw || s_fogDepthH != tz->th) {
         if (s_fogDepth.id) {
             rhi_DestroyTexture(s_fogDepth);
         }
         s_fogDepth = rhi_CreateTexture(&(RhiTextureDesc){
-            tz->w, tz->h, 1, RHI_FMT_D32F_S8,
+            tz->tw, tz->th, 1, RHI_FMT_D32F_S8,
             /* the depth-stencil usage: Vulkan's sampled depth layout
              * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it */
             RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, "rd fog depth"});
         s_fogDepthState = RHI_STATE_UNDEFINED;
-        s_fogDepthW = tz->w;
-        s_fogDepthH = tz->h;
+        s_fogDepthW = tz->tw;
+        s_fogDepthH = tz->th;
     }
     if (!s_fogLut.id) {
         s_fogLut = rhi_CreateTexture(&(RhiTextureDesc){
@@ -1779,7 +1971,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     rd__Transition(s_cl, tz->depth, &tz->depthState, RHI_STATE_COPY_SRC);
     rd__Transition(s_cl, s_fogDepth, &s_fogDepthState, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(s_cl, tz->depth, (RhiRect){0, 0, tz->w, tz->h}, s_fogDepth, 0, 0);
+    rhi_CmdCopyTexture(s_cl, tz->depth, (RhiRect){0, 0, tz->tw, tz->th}, s_fogDepth, 0, 0);
     rd__Transition(s_cl, s_fogDepth, &s_fogDepthState, RHI_STATE_SHADER_READ);
     rd__Transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
     rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
@@ -1795,6 +1987,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tz->w;
     ds.th = tz->h;
     ds.textured = 1;
+    r->stretch = 1; /* R7a: the fog sprite covers the screen */
     if (!bindDraw(r, &ds).id) {
         return;
     }
@@ -1826,6 +2019,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         cb.col[0] = p.z;
         cb.col[1] = r->st.ds.test.zte ? r->st.ds.test.ztst : RD_ZTST_ALWAYS;
         cb.param[0] = rd__TargetZScale(zid);
+        cb.scale[0] = tz->sx; /* R7a: the depth copy's texels per GS pixel */
+        cb.scale[1] = tz->sy;
         rhi_CmdSetPipeline(s_cl, pipe);
         rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
         rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
@@ -1860,7 +2055,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const RdDrawState *d = &r->st.ds;
     RdTargetRec *td = rd__TargetRec(r->st.depth);
-    if (td && (!td->withDepth || !td->depth.id || td->w != tc->w || td->h != tc->h)) {
+    if (td && (!td->withDepth || !td->depth.id || td->tw != tc->tw || td->th != tc->th)) {
         td = NULL;
     }
     int useDepth = 0;
@@ -1876,6 +2071,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     RdTargetRec *src = NULL;
     RhiTexture srcTex = g_rd.dummy;
     uint32_t tw = 1, th = 1, tfmt = 0;
+    float ssx = 1.0f, ssy = 1.0f; /* R7a: t1 texels per GS texel */
     int textured = 0;
     if (d->texEnabled) {
         RdTexRec *t = rd__TexRec(r->st.tex);
@@ -1888,8 +2084,10 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         } else if (t && t->kind == RD_TEXKIND_TARGET && t->view != RD_VIEW_DEPTH) {
             src = rd__TargetRec(t->target);
             if (src && src->color.id && src->format == RHI_FMT_RGBA8_UNORM) {
-                tw = src->w;
-                th = src->h;
+                tw = src->tw;
+                th = src->th;
+                ssx = src->sx;
+                ssy = src->sy;
                 tfmt = t->src;
                 textured = 1;
             } else {
@@ -1905,7 +2103,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         endPass(r);
         if (!tc->snap.id) {
             tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
-                tc->w, tc->h, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+                tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
             tc->snapState = RHI_STATE_UNDEFINED;
         }
         if (!tc->snap.id) {
@@ -1913,7 +2111,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         }
         rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
         rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
-        rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->w, tc->h}, tc->snap, 0, 0);
+        rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->tw, tc->th}, tc->snap, 0, 0);
         rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
     }
     if (src) {
@@ -1938,6 +2136,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tw;
     ds.th = th;
     ds.textured = textured;
+    r->stretch = 1; /* R7a: fx_rect_vs covers the target; no wide x scale */
     const RhiBindGroup g2 = bindDraw(r, &ds);
     if (!g2.id) {
         return;
@@ -1998,6 +2197,8 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.tex[1] = p.scalar[1];
     cb.tex[2] = (float)tw;
     cb.tex[3] = (float)th;
+    cb.scale[0] = ssx;
+    cb.scale[1] = ssy;
     memcpy(cb.param, p.rect, sizeof(cb.param));
     rhi_CmdSetPipeline(s_cl, pipe);
     rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
@@ -2011,6 +2212,24 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 }
 
 /* ----------------------------------------------------------------- frame */
+
+/* Wave 7 (R7a): the levels a game texture gets: the full chain with the
+ * Enhanced filter on and power-of-two sides, else 1 (Original). */
+static uint8_t texLevels(const RdTexRec *t)
+{
+    if (!g_rd.filterUpgrade || t->w < 2 || t->h < 2 || (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
+        return 1;
+    }
+    uint8_t n = 1;
+    for (uint32_t m = t->w > t->h ? t->w : t->h; m > 1; m >>= 1) {
+        n++;
+    }
+    return n;
+}
+
+/* The alpha the coverage of the Enhanced mips keeps: the semi-transparent
+ * lists' default test, alpha > 64 (GS alpha, 0x80 = 1.0; rd.h RdListDefault) */
+#define RD_MIP_COVERAGE_REF 64
 
 static uint64_t estimateRing(const RdFrame *f, int keep)
 {
@@ -2052,9 +2271,13 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
     }
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         const RdTexRec *t = &g_rd.textures[i];
-        if (t->live && t->kind == RD_TEXKIND_IMAGE && t->dirty) {
+        if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
             uint64_t pitch = ((uint64_t)t->w * 4 + pitchA - 1) / pitchA * pitchA;
-            total += pitch * t->h + rhi_Limits()->copyOffsetAlign;
+            uint64_t one = pitch * t->h + rhi_Limits()->copyOffsetAlign;
+            /* R7a: a mip chain adds at most the base again (with the
+             * padding of every level) */
+            total +=
+                texLevels(t) > 1 ? 2 * one + 16 * (pitchA + rhi_Limits()->copyOffsetAlign) : one;
         }
     }
     return total;
@@ -2081,6 +2304,40 @@ static bool ensureRing(uint64_t need)
     return g_rd.ringMap[s_slot] != NULL;
 }
 
+/* R7a: levels 1.. of a game texture: 2x2 box filtered from the base
+ * (rdtex_BuildMipChain), alpha coverage kept (rdtex_KeepAlphaCoverage),
+ * each level copied into the ring and onto its subresource. */
+static void uploadMips(RdTexRec *t, uint8_t levels)
+{
+    const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
+    const uint32_t offA = rhi_Limits()->copyOffsetAlign;
+    uint8_t *chain = malloc((size_t)t->w * t->h * 4 / 3 + 64);
+    if (!chain) {
+        return;
+    }
+    const uint32_t n = rdtex_BuildMipChain(t->pixels, t->w, t->h, chain);
+    rdtex_KeepAlphaCoverage(t->pixels, t->w, t->h, chain, n, RD_MIP_COVERAGE_REF);
+    const uint8_t *src = chain;
+    uint32_t w = t->w, h = t->h;
+    for (uint32_t l = 1; l < levels && l <= n; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        const uint32_t pitch = (w * 4 + pitchA - 1) / pitchA * pitchA;
+        const uint64_t off = rd__RingAlloc((uint64_t)pitch * h, offA);
+        if (off == ~0ull) {
+            break;
+        }
+        for (uint32_t y = 0; y < h; y++) {
+            memcpy(g_rd.ringMap[s_slot] + off + (uint64_t)y * pitch, src + (size_t)y * w * 4,
+                   (size_t)w * 4);
+        }
+        rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], off, pitch, t->rhi, l,
+                                   (RhiRect){0, 0, w, h});
+        src += (size_t)w * h * 4;
+    }
+    free(chain);
+}
+
 static void uploadTextures(void)
 {
     const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
@@ -2096,14 +2353,27 @@ static void uploadTextures(void)
     }
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
-        if (!t->live || t->kind != RD_TEXKIND_IMAGE || !t->dirty) {
+        if (!t->live || t->kind != RD_TEXKIND_IMAGE) {
+            continue;
+        }
+        const uint8_t levels = texLevels(t);
+        if (t->rhi.id && t->mipLevels != levels) {
+            /* R7a: the filter option changed: a new texture with the new
+             * level count (the old one is destroyed after the frames in
+             * flight, rhi_DestroyTexture) */
+            rhi_DestroyTexture(t->rhi);
+            t->rhi = (RhiTexture){0};
+            t->dirty = 1;
+        }
+        if (!t->dirty) {
             continue;
         }
         if (!t->rhi.id) {
-            t->rhi = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, 1, RHI_FMT_RGBA8_UNORM,
+            t->rhi = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, levels, RHI_FMT_RGBA8_UNORM,
                                                          RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
                                                          "rd texture"});
             t->state = RHI_STATE_UNDEFINED;
+            t->mipLevels = levels;
             if (!t->rhi.id) {
                 continue;
             }
@@ -2120,6 +2390,9 @@ static void uploadTextures(void)
         rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_COPY_DST);
         rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], off, pitch, t->rhi, 0,
                                    (RhiRect){0, 0, t->w, t->h});
+        if (levels > 1) {
+            uploadMips(t, levels);
+        }
         rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
         t->dirty = 0;
         g_rd.stats.textureUploads++;
@@ -2270,12 +2543,12 @@ bool rd__ReadTarget(RdTarget target, void *dst, size_t dstSize, uint32_t *w, uin
         return false;
     }
     if (w) {
-        *w = t->w;
+        *w = t->tw;
     }
     if (h) {
-        *h = t->h;
+        *h = t->th;
     }
-    return readTexture(t->color, &t->colorState, t->w, t->h, dst, dstSize);
+    return readTexture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
 }
 
 /* ---------------------------------------------------------- camera probe */

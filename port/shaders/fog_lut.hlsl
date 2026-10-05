@@ -68,9 +68,12 @@ uint fog_gs_z(float d, float scale)
 
 DualOut fog_lut_ps(FogPSIn i)
 {
-    // the texel the sprite's UV addresses, nearest (ZFog.c writes TEX1 0)
-    int2 size = int2(g_tex.xy);
-    int2 tc = clamp(int2(floor(i.uv * g_tex.xy)), int2(0, 0), size - 1);
+    // the texel the sprite's UV addresses, nearest (ZFog.c writes TEX1 0);
+    // R7a: in the depth copy's own texels (g_scale, 1 in Original)
+    float2 sc = float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
+    float2 fsize = g_tex.xy * sc;
+    int2 size = int2(round(fsize));
+    int2 tc = clamp(int2(floor(i.uv * fsize)), int2(0, 0), size - 1);
     float d = g_fogDepth.Load(int3(tc, 0));
     uint ztst = g_col.y;
     uint z = fog_gs_z(d, g_param.x);

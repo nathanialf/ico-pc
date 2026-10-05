@@ -214,14 +214,27 @@ void rd__FillCameraCB(void *cbv, const RdCamera *cam)
     }
     memcpy(cb->view, cam->view, sizeof(cb->view));
     memcpy(cb->proj, cam->proj43, sizeof(cb->proj));
-    mul44(cb->viewProj, cam->proj43, cam->view);
+    /* wave 7 (R7a), widescreen: the renderer's projection is proj43 with its
+     * GS X compressed about the screen centre (2048) by (4/3) / aspect,
+     * X' = f X + (1 - f) 2048 W: the visible screen then shows aspect /
+     * (4/3) times as much horizontally (the cull side is GsBase.c
+     * gsbHostWidenCull).  The mesh and screen-prim shaders apply the same
+     * compression after their projection (g_space, rd_replay.c), so g_proj
+     * and g_viewProj agree with what is drawn.  Original: f = 1, untouched. */
+    const float f = g_rd.wideX > 0.0f ? g_rd.wideX : 1.0f;
+    if (f != 1.0f) {
+        for (int c = 0; c < 4; c++) {
+            cb->proj[c * 4 + 0] =
+                f * cam->proj43[c * 4 + 0] + (1.0f - f) * 2048.0f * cam->proj43[c * 4 + 3];
+        }
+    }
+    mul44(cb->viewProj, cb->proj, cam->view);
     eyeOf(cam->view, cb->cameraPos);
     cb->cameraPos[3] = cam->cut ? 1.0f : 0.0f;
     cb->clip[0] = cam->nearZ;
     cb->clip[1] = cam->farZ;
     cb->clip[2] = cam->zoom;
-    /* Original: 4:3.  The Enhanced aspect (widescreen) will rebuild proj
-     * here from zoom and the wider aspect (plan "Widescreen"); the gameplay
-     * matrices (matrixptr+0x80/+0xC0) never change. */
-    cb->clip[3] = cam->aspect43;
+    /* Original: 4:3; Enhanced: the aspect option (proj above).  The
+     * gameplay matrices (matrixptr+0x80/+0xC0) never change. */
+    cb->clip[3] = cam->aspect43 / f;
 }

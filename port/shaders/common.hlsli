@@ -42,12 +42,13 @@ cbuffer FrameCB : register(b0, space0)
                         // (XYOFFSET / 16), zw added to the result (GS pixel-centre
                         // convention; 0 puts GS integer coordinates on pixel edges)
     float4 g_space[2];  // [0] WORLD, [1] UI: ndc = ndc * xy + zw (scale xy, offset zw)
-    float4 g_z;         // x scale (1 / 2^24), yzw reserved
+    float4 g_z;         // x scale (1 / 2^24), yz the bound target's texels per GS
+                        // pixel (R7a; 1 in Original), w reserved
     float4 g_misc;      // x frame counter, y preset (0 Original, 1 Enhanced), zw reserved
 };
 
 // ---------------------------------------------------------------- DrawCB
-// Group 1, slot 1. 96 bytes.
+// Group 1, slot 1. 112 bytes (96 before R7a).
 //   g_col    constant colour RGBA 0..255 (blit tint, fade colour)
 //   g_mode   x = DF_* flags
 //            y = TEXA mode | TEXFMT << 8
@@ -60,6 +61,8 @@ cbuffer FrameCB : register(b0, space0)
 //   g_tex    xy = size of the t1 texture in texels, zw = 1 / size
 //   g_param  kind-specific: blend_int source offset in pixels (xy);
 //            fog_lut strength (x)
+//   g_scale  xy t1 texels per GS texel: 1 for images and unscaled targets,
+//            the target's scale for a scaled one (R7a); zw reserved
 cbuffer DrawCB : register(b1, space1)
 {
     uint4 g_col;
@@ -68,6 +71,7 @@ cbuffer DrawCB : register(b1, space1)
     float4 g_uvRect;
     float4 g_tex;
     float4 g_param;
+    float4 g_scale;
 };
 
 #define DF_TEXTURED 1u   // PRIM.TME

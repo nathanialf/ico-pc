@@ -2,7 +2,8 @@
 # One module holds stick_fix, yorda_safe and mirror; ico_input, ico_sndn2 and
 # the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
 # port/config's; host_config.c is compiled by ico_pc and the tests.
-add_library(ico_options STATIC options.c)
+# video_options.c: the display options (renderer wave 7, R7a; docs/port/DISPLAY.md)
+add_library(ico_options STATIC options.c video_options.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_options PUBLIC ico_config)

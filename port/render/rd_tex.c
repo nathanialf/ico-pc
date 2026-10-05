@@ -2,6 +2,7 @@
  * describes the decoding and the cache; docs/port/RENDER_API.md
  * "Textures (wave 2, R2b)" the choices. */
 #include "rd_tex.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
@@ -247,6 +248,55 @@ uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_
         levels++;
     }
     return levels;
+}
+
+/* Wave 7 (R7a): the share of texels whose alpha passes "a > ref". */
+static double coverage(const uint8_t *px, size_t n, uint8_t ref, double scale)
+{
+    size_t pass = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        if ((double)px[i * 4 + 3] * scale > (double)ref) {
+            pass++;
+        }
+    }
+    return n ? (double)pass / (double)n : 0.0;
+}
+
+void rdtex_KeepAlphaCoverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
+                             uint32_t levels, uint8_t ref)
+{
+    const double c0 = coverage(base, (size_t)w * h, ref, 1.0);
+    uint8_t amax = 0;
+
+    if (c0 <= 0.0 || c0 >= 1.0) {
+        return; /* nothing alpha-tested away, or nothing kept */
+    }
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        amax = base[i * 4 + 3] > amax ? base[i * 4 + 3] : amax;
+    }
+    for (uint32_t l = 0; l < levels; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        const size_t n = (size_t)w * h;
+        if (coverage(chain, n, ref, 1.0) < c0) {
+            /* the smallest alpha scale in [1, 4] that keeps the coverage */
+            double lo = 1.0, hi = 4.0;
+            for (int it = 0; it < 12; it++) {
+                const double mid = (lo + hi) * 0.5;
+                if (coverage(chain, n, ref, mid) >= c0) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            for (size_t i = 0; i < n; i++) {
+                double a = ceil((double)chain[i * 4 + 3] * hi);
+                chain[i * 4 + 3] = (uint8_t)(a > (double)amax ? amax : a);
+            }
+        }
+        chain += n * 4;
+    }
 }
 
 /* --------------------------------------------------------------- cache */

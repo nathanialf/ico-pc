@@ -314,9 +314,10 @@ static void setKey(RdCmd *c, RdKey key)
 
 /* ---------------------------------------------------------------- targets */
 
-/* wave 5 (R5a): 0 until the replay sizes the GS window apart from the
- * target's texture size (Enhanced, wave 6) */
-#define RD_WORK_SCALE_APPLY 0
+/* wave 5 (R5a): the work buffers' resolution scale; applied since wave 7
+ * (R7a), when the replay sizes the GS window apart from the target's
+ * texture (RdTargetRec.tw/th/sx/sy, rd__TargetScaleOf) */
+#define RD_WORK_SCALE_APPLY 1
 
 static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uint32_t *h,
                             RhiFormat *fmt, uint8_t *depth)
@@ -375,16 +376,49 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         break;
     }
     /* wave 5 (R5a): the work buffers' resolution scale (rd.h
-     * rd_WorkTargetScale).  1 in Original; Enhanced would scale the
-     * fixed-size buffers, which the replay does not support yet (it sizes
-     * the GS window by the target), so the rule is not applied until it
-     * does: RD_WORK_SCALE_APPLY */
-    if (RD_WORK_SCALE_APPLY && id != RD_TARGET_SCENE && id != RD_TARGET_DISPLAY &&
-        id != RD_TARGET_DATE_SNAPSHOT && id != RD_TARGET_WORK2 && id != RD_TARGET_AURA_WORK) {
-        const float k = rd_WorkTargetScale(g_rd.settings.preset, g_rd.settings.outputHeight);
-        *w = (uint32_t)((float)*w * k + 0.5f);
-        *h = (uint32_t)((float)*h * k + 0.5f);
+     * rd_WorkTargetScale) is the texture's, not the GS size's, since wave 7
+     * (R7a): rd__TargetScaleOf */
+}
+
+/* Wave 7 (R7a): the scene-class targets, which take the Enhanced scene
+ * resolution and (SCENE, WORK2, AURA_WORK) the wide projection: the
+ * scene-sized buffers and DISPLAY.  The other named targets are the fixed
+ * work buffers, scaled by rd_WorkTargetScale. */
+static int sceneClass(int id)
+{
+    return id == RD_TARGET_SCENE || id == RD_TARGET_DISPLAY || id == RD_TARGET_WORK2 ||
+           id == RD_TARGET_AURA_WORK || id == RD_TARGET_DATE_SNAPSHOT;
+}
+
+static uint32_t scaled(uint32_t n, float k)
+{
+    uint32_t v = (uint32_t)((float)n * k + 0.5f);
+    return v ? v : 1;
+}
+
+/* The texture size and scale of a target of GS size t->w x t->h: named is
+ * the RdTargetId of a named target, -1 for a temporary one (scene-class when
+ * it has the scene's GS size: the shadow count, rd_shadow.c).  At scale 1
+ * (Original, and every Enhanced target the options leave alone) tw == w,
+ * th == h. */
+void rd__TargetScaleOf(RdTargetRec *t, int named)
+{
+    float sx = 1.0f, sy = 1.0f;
+    int scene = named >= 0 ? sceneClass(named) : (t->w == g_rd.gsW && t->h == g_rd.gsH);
+    if (scene) {
+        sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
+        sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
+        if (named == RD_TARGET_DISPLAY && g_rd.fullHeight) {
+            sy *= 2.0f; /* the full-height scene: no vertical halving */
+        }
+    } else if (named >= 0 && g_rd.workScale > 1.0f) {
+        sx = sy = g_rd.workScale;
     }
+    t->sx = sx;
+    t->sy = sy;
+    t->tw = sx == 1.0f ? t->w : scaled(t->w, sx);
+    t->th = sy == 1.0f ? t->h : scaled(t->h, sy);
+    t->wide = scene && named != RD_TARGET_DISPLAY && named != RD_TARGET_DATE_SNAPSHOT;
 }
 
 float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight)
@@ -420,11 +454,11 @@ bool rd__TargetCreateGpu(RdTargetRec *t, const char *name)
         return true;
     }
     uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST;
-    t->color = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, 1, t->format, usage, name});
+    t->color = rhi_CreateTexture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {
         t->depth = rhi_CreateTexture(&(RhiTextureDesc){
-            t->w, t->h, 1, RHI_FMT_D32F_S8, RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC, name});
+            t->tw, t->th, 1, RHI_FMT_D32F_S8, RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC, name});
         t->depthState = RHI_STATE_UNDEFINED;
     }
     return t->color.id != 0 && (!t->withDepth || t->depth.id != 0);
@@ -461,6 +495,7 @@ static void createNamedTargets(void)
         t->live = 1;
         t->named = 1;
         namedTargetDesc(i, g_rd.gsW, g_rd.gsH, &t->w, &t->h, &t->format, &t->withDepth);
+        rd__TargetScaleOf(t, i);
         if (!rd__TargetCreateGpu(t, s_targetNames[i])) {
             rd__Log("could not create target %s", s_targetNames[i]);
         }
@@ -483,6 +518,7 @@ uint32_t rd__TempTargetAlloc(uint32_t w, uint32_t h, int withDepth, int keepAcro
         t->format = RHI_FMT_RGBA8_UNORM;
         t->withDepth = withDepth ? 1 : 0;
         t->keepAcross = keepAcross ? 1 : 0;
+        rd__TargetScaleOf(t, -1);
         rd__TargetCreateGpu(t, "temp target");
         g_rd.stats.tempTargets++;
         return (t->gen << 16) | (uint32_t)(i + 1);
@@ -766,6 +802,7 @@ bool rd__InitRecordOnly(uint32_t gsW, uint32_t gsH)
     if (!g_rd.textures || !g_rd.meshes) {
         return false;
     }
+    rd__ApplyDisplay();
     createNamedTargets();
     return true;
 }
@@ -805,6 +842,7 @@ bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
+    rd__ApplyDisplay(); /* wave 7 (R7a): the scales the named targets take */
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -857,6 +895,7 @@ void rd_ResetScene(uint32_t gsWidth, uint32_t gsHeight)
     }
     g_rd.gsW = gsWidth;
     g_rd.gsH = gsHeight;
+    rd__ApplyDisplay();
     createNamedTargets();
     for (int v = 0; v < 3; v++) {
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
@@ -929,6 +968,13 @@ void rd_BeginFrame(void)
     if (g_rd.settingsPending) {
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
+        /* wave 7 (R7a): the Settings menu applies here; a change of the
+         * targets' scales recreates them (their content is lost: the next
+         * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
+        if (rd__ApplyDisplay() && g_rd.hasDevice) {
+            rhi_WaitIdle();
+            createNamedTargets();
+        }
     }
     int idx = g_rd.lastIndex < 0 ? 0 : g_rd.lastIndex ^ 1;
     RdFrame *f = &g_rd.frames[idx];
@@ -1222,12 +1268,19 @@ void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace s
     uint32_t off = rd__FramePayload(f, v, count * (uint32_t)sizeof(RdScreenVtx));
     RdCmd *c = rd__Push(RDC_SCREEN);
     c->b[0] = (uint8_t)type;
-    c->b[1] = (uint8_t)space;
+    c->b[1] = (uint8_t)(g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space);
     c->b[2] = uvFixed ? 1 : 0;
     c->u[0] = off;
     c->u[1] = count;
     setKey(c, key);
     g_rd.stats.draws++;
+}
+
+int rd_SetSpaceOverride(int space)
+{
+    const int prev = g_rd.spaceOverride - 1;
+    g_rd.spaceOverride = space < 0 || space > RD_SPACE_FULLSCREEN ? 0 : space + 1;
+    return prev;
 }
 
 /* Records a stubbed draw: the payload holds the parts concatenated. */
@@ -1332,7 +1385,7 @@ bool rd_ReadDisplay(void *dst, uint32_t *w, uint32_t *h)
     if (!t || !dst) {
         return false;
     }
-    return rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), dst, (size_t)t->w * t->h * 4, w, h);
+    return rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), dst, (size_t)t->tw * t->th * 4, w, h);
 }
 
 const RdStats *rd_GetStats(void)

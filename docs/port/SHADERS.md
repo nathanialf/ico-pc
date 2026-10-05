@@ -102,7 +102,7 @@ Uniform ranges are aligned by the caller to `RhiLimits.uniformAlign`.
 | 224 | `float4 g_target` | bound target size in GS pixels (xy), 1/size (zw) |
 | 240 | `float4 g_origin` | xy = XYOFFSET/16, the GS window coordinate of the target's top-left pixel; zw = added after (pixel-centre convention; 0 puts GS integers on pixel edges) |
 | 256 | `float4 g_space[2]` | [0] WORLD, [1] UI: `ndc = ndc * xy + zw` (mirror flip, 4:3 anchoring, wide projection) |
-| 288 | `float4 g_z` | x = the GS Z scale of the bound depth buffer: 2^-32 for PSMZ32 (SCENE and every depth target the game uses; wave 2, R2c), 2^-24 for PSMZ24 and with no depth bound, 2^-16 for PSMZ16 |
+| 288 | `float4 g_z` | x = the GS Z scale of the bound depth buffer: 2^-32 for PSMZ32 (SCENE and every depth target the game uses; wave 2, R2c), 2^-24 for PSMZ24 and with no depth bound, 2^-16 for PSMZ16; yz (R7a) the bound target's texels per GS pixel (1 in Original) |
 | 304 | `float4 g_misc` | frame counter, preset (0 Original, 1 Enhanced), reserved |
 
 Matrices are column-major `float[16]` (element `[column * 4 + row]`), used
@@ -114,7 +114,7 @@ and `mul(g_viewProj, p)` on the GPU, which agree with the C products to
 1e-5 relative and with `sceVu0RotTransPers` through `matrixptr+0x100` to
 1/16 pixel in GS X/Y. No mesh entry reads them before wave 3.
 
-### DrawCB (group 1, slot 1, 96 bytes)
+### DrawCB (group 1, slot 1, 112 bytes; 96 before R7a)
 
 | offset | field | meaning |
 | --- | --- | --- |
@@ -124,6 +124,7 @@ and `mul(g_viewProj, p)` on the GPU, which agree with the C products to
 | 48 | `float4 g_uvRect` | blit source rectangle in texels (u0, v0, u1, v1) |
 | 64 | `float4 g_tex` | t1 size in texels (xy), 1/size (zw) |
 | 80 | `float4 g_param` | kind specific: `blend_int` pixel offset (xy); `fog_lut_ps`: x = the GS Z scale of the depth it reads (2^-32 for SCENE) |
+| 96 | `float4 g_scale` | R7a: t1 texels per GS texel (xy; 1 for images and in Original, a scaled target's scale in Enhanced, RENDER_API.md section 19); `fx_sprite_ps` and `fog_lut_ps` address t1 with it |
 
 Flags: `DF_TEXTURED` 1 (TME), `DF_DECAL` 2 (else MODULATE), `DF_TCC_RGBA` 4,
 `DF_FBA` 8, `DF_PABE` 16, `DF_FIX_FACTOR` 32 (blend factor from FIX, not As),

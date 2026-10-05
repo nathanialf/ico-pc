@@ -3,13 +3,29 @@
  * backend, before against after).
  *
  *   rd_replay_tool <dump> <out.png> [--target NAME] [--present WxH]
+ *                  [--backend vulkan|d3d12]
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
  * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD).  --present renders the Original presenter into a
  * W x H output and writes that instead.  Commands of later waves (meshes,
  * fog, ...) are skipped with a message instead of stopping.
  *
- * Exit: 0 written, 1 error, 77 no Vulkan device or no dump file. */
+ * --backend picks the RHI backend (renderer wave 6, R6c; default: the
+ * build's default, port/rhi/rhi.h rhi_CreateBackend), so the same dump can
+ * be rendered on Vulkan and D3D12 and the PNGs compared
+ * (docs/port/TESTING.md).
+ *
+ * The display options (renderer wave 7, R7a; RENDER_API.md section 19): a
+ * dump does not carry them, so the replay takes them here, the Original
+ * preset by default:
+ *   --enhanced            the Enhanced preset (needed by the four below)
+ *   --aspect A            4:3 (default), 16:10, 16:9 or a number (w / h)
+ *   --resolution R        the scene's resolution: WxH or Nx (default: the
+ *                         --present box, else the GS size)
+ *   --full-height         the full-height scene
+ *   --filter F            original, trilinear or anisotropic
+ *
+ * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,12 +56,21 @@ static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <dump> <out.png> [--target NAME] [--present WxH]\n", argv[0]);
+        fprintf(stderr,
+                "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
+                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
+                "[--backend vulkan|d3d12]\n",
+                argv[0]);
         return 1;
     }
     const char *dump = argv[1], *png = argv[2];
     int target = RD_TARGET_DISPLAY;
     uint32_t pw = 0, ph = 0;
+    /* R7a: the display options */
+    RdSettings s;
+    memset(&s, 0, sizeof(s));
+    s.preset = RD_PRESET_ORIGINAL;
+    s.aspect = 4.0f / 3.0f;
     for (int i = 3; i < argc; i++) {
         if (strcmp(argv[i], "--target") == 0 && i + 1 < argc) {
             const char *n = argv[++i];
@@ -59,6 +84,41 @@ int main(int argc, char **argv)
                 fprintf(stderr, "unknown target %s\n", n);
                 return 1;
             }
+        } else if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
+            if (!rhi_CreateBackend(argv[++i])) {
+                fprintf(stderr, "backend %s is not in this build\n", argv[i]);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--enhanced") == 0) {
+            s.preset = RD_PRESET_ENHANCED;
+        } else if (strcmp(argv[i], "--full-height") == 0) {
+            s.fullHeightScene = 1;
+        } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
+            unsigned a = 0, b = 0;
+            const char *v = argv[++i];
+            if (sscanf(v, "%u:%u", &a, &b) == 2 && a && b) {
+                s.aspect = (float)a / (float)b;
+            } else if ((s.aspect = (float)atof(v)) <= 0.0f) {
+                fprintf(stderr, "bad --aspect\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--resolution") == 0 && i + 1 < argc) {
+            unsigned a = 0, b = 0;
+            const char *v = argv[++i];
+            if (sscanf(v, "%ux%u", &a, &b) == 2 && a && b) {
+                s.sceneWidth = a;
+                s.sceneHeight = b;
+            } else if (sscanf(v, "%ux", &a) == 1 && a) {
+                s.sceneScale = (float)a;
+            } else {
+                fprintf(stderr, "bad --resolution\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--filter") == 0 && i + 1 < argc) {
+            const char *v = argv[++i];
+            s.filterUpgrade = strcmp(v, "anisotropic") == 0 ? RD_FILTER_UPGRADE_ANISOTROPIC
+                              : strcmp(v, "trilinear") == 0 ? RD_FILTER_UPGRADE_TRILINEAR
+                                                            : RD_FILTER_UPGRADE_OFF;
         } else if (strcmp(argv[i], "--present") == 0 && i + 1 < argc) {
             if (sscanf(argv[++i], "%ux%u", &pw, &ph) != 2 || !pw || !ph) {
                 fprintf(stderr, "bad --present size\n");
@@ -81,14 +141,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "%s: not an rd dump\n", dump);
         return 1;
     }
-    RdSettings s;
-    memset(&s, 0, sizeof(s));
-    s.preset = RD_PRESET_ORIGINAL;
     s.outputWidth = pw;
     s.outputHeight = ph;
-    s.aspect = 4.0f / 3.0f;
     if (!rd_Init(gw, gh, &s, NULL)) {
-        fprintf(stderr, "no usable Vulkan device\n");
+        fprintf(stderr, "no usable %s device\n",
+                rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
         return 77;
     }
     rd__SetNotImplementedFatal(false);

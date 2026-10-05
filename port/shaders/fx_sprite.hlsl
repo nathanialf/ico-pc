@@ -20,8 +20,17 @@
 //   g_uvRect u0 v0 u1 v1, 12.4 texels (integers held as floats)
 //   g_tex    xy the TEX0 size (2^TW, 2^TH), zw the size of t1
 //   g_param  x0 y0 x1 y1, 12.4 window coordinates (integers held as floats)
+//   g_scale  xy t1 texels per GS texel (R7a: a scaled target's scale; 1
+//            for images and in Original)
 // FrameCB: g_origin.xy the XYOFFSET of the bound target (GS pixels, + 0.5 y
-// with the half-line offset), g_z.x the GS Z scale of its depth.
+// with the half-line offset), g_z.x the GS Z scale of its depth, g_z.yz the
+// bound target's texels per GS pixel (R7a; 1 in Original).
+//
+// Scaled targets (renderer wave 7, R7a; RENDER_API.md section 19): a texel
+// stands for the GS pixel coordinate its centre falls on, (pos / s - 0.5)
+// in 12.4, and the texture coordinates address t1 at its own scale (UV
+// times g_scale), so every sum below is the GS's at scale 1 (bit-exact) and
+// the same picture at finer sampling elsewhere.
 #include "common.hlsli"
 
 #define FXF_TEXTURED 1u
@@ -62,12 +71,24 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
 
 // One texel at integer texel coordinates: CLAMP or REPEAT on the TEX0 size,
 // then clamped to the texture that backs it, then TEXA.
+float2 fx_src_scale()
+{
+    return float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
+}
+
+// REPEAT on a size that is a power of two at scale 1 (c & (n - 1) there);
+// the modulo keeps it for a scaled size that is not
+int fx_wrap(int c, int n)
+{
+    return ((c % n) + n) % n;
+}
+
 uint4 fx_texel(int2 c, uint flags)
 {
-    int2 lsz = int2(g_tex.xy);
+    int2 lsz = max(int2(round(g_tex.xy * fx_src_scale())), int2(1, 1));
     int2 asz = int2(g_tex.zw);
-    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : (c.x & (lsz.x - 1));
-    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : (c.y & (lsz.y - 1));
+    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : fx_wrap(c.x, lsz.x);
+    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : fx_wrap(c.y, lsz.y);
     c = min(c, asz - 1);
     uint4 t = fx_load(g_texture, c);
     return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
@@ -77,11 +98,17 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 {
     const uint flags = g_mode.x;
     const int2 px = int2(pos.xy);
-    // the pixel's GS window coordinate, 12.4
-    const int X = int(round(g_origin.x * 16.0)) + px.x * 16;
-    const int Y = int(round(g_origin.y * 16.0)) + px.y * 16;
+    // the pixel's GS window coordinate, 12.4: px * 16 at scale 1.  R7a: on a
+    // scaled target the texel's GS pixel (its s x s block) for the coverage,
+    // and the GS position of its own centre for the UV
+    const float2 ts = float2(g_z.y > 0.0 ? g_z.y : 1.0, g_z.z > 0.0 ? g_z.z : 1.0);
+    const int2 gb = int2(floor((pos.xy - 0.5) / ts)) * 16;
+    const int2 gp = int2(floor((pos.xy / ts - 0.5) * 16.0 + 0.5));
+    const int ox = int(round(g_origin.x * 16.0)), oy = int(round(g_origin.y * 16.0));
+    const int X = ox + gp.x;
+    const int Y = oy + gp.y;
     const int x0 = int(g_param.x), y0 = int(g_param.y), x1 = int(g_param.z), y1 = int(g_param.w);
-    if (X < x0 || X >= x1 || Y < y0 || Y >= y1) {
+    if (ox + gb.x < x0 || ox + gb.x >= x1 || oy + gb.y < y0 || oy + gb.y >= y1) {
         discard;
     }
 
@@ -92,8 +119,11 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
         const int u = u0 + ((X - x0) * (u1 - u0)) / (x1 - x0);
         const int v = v0 + ((Y - y0) * (v1 - v0)) / (y1 - y0);
         uint4 t;
+        // the UV in t1's own texels, 12.4 (u, v at scale 1)
+        const float2 ss = fx_src_scale();
+        const int su = int(round(float(u) * ss.x)), sv = int(round(float(v) * ss.y));
         if ((flags & FXF_LINEAR) != 0u) {
-            const int uu = u - 8, vv = v - 8;
+            const int uu = su - 8, vv = sv - 8;
             const int2 i0 = int2(uu >> 4, vv >> 4);
             const uint fu = uint(uu & 15), fv = uint(vv & 15);
             const uint4 a = fx_texel(i0, flags);
@@ -103,7 +133,7 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
             t = (a * ((16u - fu) * (16u - fv)) + b * (fu * (16u - fv)) + c * ((16u - fu) * fv) +
                  d * (fu * fv)) >> 8;
         } else {
-            t = fx_texel(int2(u >> 4, v >> 4), flags);
+            t = fx_texel(int2(su >> 4, sv >> 4), flags);
         }
         const uint tfx = (flags >> FXF_TFX_SHIFT) & 3u;
         const bool tcc = (flags & FXF_TCC) != 0u;

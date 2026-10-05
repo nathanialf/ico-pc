@@ -237,6 +237,85 @@ The window build has not run a first-run extraction yet (the game never
 runs in the container): the Windows checkpoint should check the progress
 window, the time on the user's disk and the `ico.o2r` in `%APPDATA%`.
 
+## Renderer wave 6: D3D12 (package R6c)
+
+The D3D12 backend (`port/rhi/d3d12/README.md`) is built by `win-x64` and
+`win-x64-clang` (`ICO_RHI_D3D12`, default ON for 64-bit Windows) next to the
+Vulkan one. Nothing of it has run yet: the container has no Windows and no
+Wine. Three checks, in order.
+
+**1. `rhi_d3d12_test.exe` (double-click).** From
+`build-host/<pkg>-win-x64/port/rhi/`: `rhi_d3d12_test.exe` and `SDL3.dll`,
+copied together into any folder. Double-clicked it shows no console, takes
+no flags, writes `rhi_d3d12_test.log` beside itself and ends with a message
+box:
+
+- *1. D3D12 on WARP*: the exact-texel cells of
+  `port/rhi/test/rhi_test_common.c` (dual-source blend, stencil wrap,
+  reversed-Z depth with exact readback, colour masks, an RGBA8_UINT target
+  with an integer clear, texture upload and sampling, R8 copies, a copied
+  vertex buffer; three frames) on Windows' software rasteriser. This is the
+  reference: it does not depend on the GPU driver.
+- *2. D3D12 on hardware*: the same cells on the default (discrete first)
+  adapter; "skipped" when the machine has none.
+- *3. swapchain*: a hidden window, six frames of clear, readback (BGRA) and
+  present, with a resize.
+- *4. Vulkan (comparison)*: the same cells on Vulkan; "skipped" without a
+  Vulkan driver, which is not a failure.
+
+Expected: PASSED, every line "pass" (or "skipped" for 2 or 4). The D3D12
+debug layer is used when installed (Settings > System > Optional features >
+add "Graphics Tools"); then every debug-layer error fails the run and is in
+the log. Send back `rhi_d3d12_test.log` either way: it names the adapters,
+whether the debug layer was on, and each mismatch with the texel's value.
+Exit code 0 pass, 1 fail, 77 nothing ran. `--console` (developer switch)
+prints to the console instead and shows no message box.
+
+**2. The window build on D3D12.** In `config.toml` (per-user folder):
+
+    [video]
+    backend = "d3d12"
+
+or `backend=d3d12` in `ico-pc.ini` beside the exe (the ini wins). Default
+and fallback: `vulkan`. `logs/ico-pc.log` then reads `window: ... D3D12 on
+<adapter>` and lists the adapters (`rhi_d3d12: adapter 0: ...`).
+
+**3. Vulkan vs D3D12 on the same frame dumps (plan: within 1 LSB).**
+
+1. Run the game on either backend with `dump_every=N` (and optionally
+   `dump_dir=`) in `ico-pc.ini`: every Nth frame goes to
+   `dumps\rd-NNNNN.rddump` beside the exe (local only: dumps hold disc
+   assets, never share or commit one).
+2. Beside the `dumps\` folder put `rd_replay_tool.exe` and `SDL3.dll`
+   (`build-host/<pkg>-win-x64/port/render/`), and `compare_backends.cmd` and
+   `compare_png.ps1` (`port/rhi/test/`). Double-click
+   `compare_backends.cmd`. For every dump it renders DISPLAY and the
+   Original presenter's 640x480 output on both backends into
+   `compare_out\` and writes `compare_backends.log`, opened in Notepad at
+   the end: per pair "max difference N LSB: within 1 LSB", or the count of
+   texels over 1 LSB and the first one's position.
+3. By hand, for one dump:
+
+        rd_replay_tool.exe dumps\rd-00100.rddump vk.png --backend vulkan
+        rd_replay_tool.exe dumps\rd-00100.rddump dx.png --backend d3d12
+        powershell -NoProfile -ExecutionPolicy Bypass -File compare_png.ps1 vk.png dx.png
+
+   (`--target NAME` picks another target, `--present WxH` the presenter.)
+
+Developer path, also by hand: every `rd_*` GPU test runs on D3D12 with
+`set ICO_RHI_BACKEND=d3d12` (and `set ICO_D3D12_ADAPTER=warp` for the
+software rasteriser) before starting the test exe from `cmd`; they count
+Vulkan validation errors only, so read the D3D12 debug lines in their
+output.
+
+**Container checks for this package:** `rhi_d3d12_plan` (CPU: the barrier
+plan, buffer tracking, copy ordering, descriptor rings, layouts, the DXBC
+reader, every game vertex shader's DXIL inputs against its SPIR-V
+locations), `rhi_vk` through the backend dispatcher, the full `linux-x64`
+ctest; `win-x64` (mingw-w64 GCC 14, `-DICO_LINK_EXE=ON`) and
+`win-x64-clang` builds of `ico_rhi_d3d12`, `rhi_d3d12_test.exe`,
+`rd_replay_tool.exe` and `ico_pc.exe`, warning-free.
+
 ## Repeatable packaging: `tools/package_win.sh <label>`
 
 One command builds and zips the Windows test package for the current HEAD

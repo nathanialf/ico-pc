@@ -144,6 +144,15 @@ void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
  * (both powers of two) written one after the other to out, which holds
  * w*h*4*4/3 bytes.  Returns the number of levels written after the base. */
 uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out);
+/* Wave 7 (R7a): alpha-coverage preservation for the Enhanced filter's mips.
+ * base is level 0 (w x h), chain the levels rdtex_BuildMipChain wrote
+ * (levels of them); each level whose share of texels with alpha > ref fell
+ * below level 0's has its alpha scaled up (at most 4x, never past level 0's
+ * largest alpha) until it is back, so alpha-tested foliage and fences do
+ * not thin out in the distance.  Textures without such texels or without
+ * any are left alone. */
+void rdtex_KeepAlphaCoverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
+                             uint32_t levels, uint8_t ref);
 
 /* --------------------------------------------------------------- cache */
 

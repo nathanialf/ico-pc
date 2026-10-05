@@ -90,7 +90,17 @@ int currentFocusDistance = 1;
    after gsb_PostEffect */
 static void gsbHostResetHalf(void);
 static void gsbHostCommon(void);
+
+#endif
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 7, R7a): the widescreen cull hook, in every port
+   build (the headless one too, so a headless run proves the widened cull
+   leaves the game's logic alone); defined after gsb_SetVSMatrix */
 static void gsbHostWidenCull(float *projHalf);
+/* port/game/video_options.c: the presentation's aspect / (4/3), 1 in the
+   Original preset */
+extern float ico_video_wide_x(void);
 
 #endif
 
@@ -1491,25 +1501,31 @@ void gsb_SetVSMatrix(int w, int h, float d)
         (float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f) * (float)h / (float)ScreenHeight;
     gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
-#ifdef ICO_RD
+#ifdef ICO_HOST
     gsbHostWidenCull((float *)(matrixptr + 0x240));
 #endif
 }
 
-#ifdef ICO_RD
+#ifdef ICO_HOST
 
-/* PC port (R2c), the widescreen hook (plan "Widescreen"): how much wider
-   than 4:3 the output is, (aspect) / (4/3).  projHalf (matrixptr+0x240) is
-   the projection of the visible screen that +0x280 (gsb_MakeCommonMatrix)
-   and RegistPacket.c's per-object +0x300 are built from, and gsb_ClipBox
-   culls against the current matrix made from them; a wide output divides
-   its x scale so objects at the sides are not culled.  The renderer's own
-   projection widens in rd (rd__FillCameraCB); the gameplay matrices +0x80
-   and +0xC0 (IsPointIsInScreen and the screen tests) never change.  The
-   Original preset is 1: the matrix is left exactly as computed. */
+/* PC port (R2c; wave 7, R7a), the widescreen hook (plan "Widescreen"): how
+   much wider than 4:3 the output is, (aspect) / (4/3), from the display
+   options (port/game/video_options.c: 1 in the Original preset, 4/3 at
+   16:9, 1.2 at 16:10).  projHalf (matrixptr+0x240) is the projection of the
+   visible screen that +0x280 (gsb_MakeCommonMatrix) and RegistPacket.c's
+   per-object +0x300 are built from, and gsb_ClipBox culls against the
+   current matrix made from them; a wide output divides its x scale so
+   objects at the sides are not culled.  The renderer's own projection
+   widens in rd (rd__FillCameraCB, the replay's g_space); the gameplay
+   matrices +0x80 and +0xC0 (IsPointIsInScreen and the screen tests) never
+   change.  puddle.c and pool.c call gsb_SetVSMatrix for their reflection
+   views too, so the reflections' cull widens by the same factor: it only
+   ever adds objects to a reflection, whose own projection (+0xC0, the
+   render-to-texture target) stays 4:3.  At 1 the matrix is left exactly as
+   computed. */
 static float gsbHostWideX(void)
 {
-    return 1.0f;
+    return ico_video_wide_x();
 }
 
 static void gsbHostWidenCull(float *projHalf)
@@ -1520,6 +1536,9 @@ static void gsbHostWidenCull(float *projHalf)
         projHalf[0] = projHalf[0] / k;
     }
 }
+
+#endif
+#ifdef ICO_RD
 
 /* PC port (R2c): gsb_MakeCommonMatrix's VU1 parameter block (the 16
    quadwords its packet unpacks to VU1 memory 0..15) and the frame's camera,

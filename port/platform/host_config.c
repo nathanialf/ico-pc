@@ -377,6 +377,9 @@ static const struct {
     {"dev.start_stage", "start_stage"},
     /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
+    /* the renderer backend of the window build, "vulkan" (default) or "d3d12"
+       (renderer wave 6, R6c; window_host.c, port/rhi/rhi.h rhi_CreateBackend) */
+    {"video.backend", "backend"},
 };
 
 const char *ico_config_ini_key(const char *toml_path)

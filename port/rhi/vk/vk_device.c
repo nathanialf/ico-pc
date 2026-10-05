@@ -2,6 +2,7 @@
  * validation layers and the handle pools of the Vulkan backend. */
 #include "vk_internal.h"
 #include "rhi_vk.h"
+#include "../rhi_backend.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -499,6 +500,10 @@ static void vkr_FillLimits(void)
     o->depthReadback = true;
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
+    /* R7a: images carry mipLevels, views and barriers span every level, and
+     * vkCmdCopyBufferToImage takes the level (vk_resource.c, vk_cmd.c) */
+    o->textureMips = true;
+    o->maxAnisotropy = g_vkr.anisotropy ? l->maxSamplerAnisotropy : 1.0f;
 }
 
 /* ------------------------------------------------------------- lifecycle */
@@ -629,3 +634,6 @@ const char *rhi_AdapterName(void)
 {
     return g_vkr.adapterName;
 }
+
+/* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
+RHI_BACKEND_DEFINE(rhi_backend_vk, "vulkan");

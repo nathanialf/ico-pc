@@ -58,9 +58,14 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `version` | | `1` | file format version; a file with a larger one is read, its unknown keys kept |
 | `[paths] iso` | `iso` | `""` | disc image |
 | `[paths] saves` | `saves` | `<pref>/memcard` | memory card folder |
-| `[video] preset` | | `"original"` | Phase 6 placeholder |
-| `[video] vsync` | | `true` | Phase 6 placeholder (the window build always vsyncs today) |
-| `[video] fullscreen` | | `false` | Phase 6 placeholder (F11 toggles at run time) |
+| `[video] preset` | | `"original"` | `"original"` or `"enhanced"`: docs/port/DISPLAY.md (renderer wave 7, R7a) |
+| `[video] resolution` | | `"window"` | Enhanced: the scene's resolution, `"window"`, `"WxH"` or `"Nx"` (1..8) |
+| `[video] aspect` | | `"4:3"` | Enhanced: `"4:3"`, `"16:10"`, `"16:9"`, `"auto"` (the window's, clamped to 4:3..16:9) |
+| `[video] fullscreen` | | `false` | borderless fullscreen at the desktop resolution; Alt+Enter toggles at run time (not saved) |
+| `[video] vsync` | | `true` | the swapchain's present mode (Vulkan FIFO, else MAILBOX or IMMEDIATE; D3D12 sync interval 1 or 0 with tearing) |
+| `[video] texture_filter` | | `"original"` | Enhanced: `"original"`, `"trilinear"`, `"anisotropic"` (generated mips) |
+| `[video] full_height` | | `false` | Enhanced: skip the reduction's vertical halving |
+| `[video] framerate` | | | the interpolation package's (R7b) |
 | `[audio] enabled` | `audio` | `true` | `false`/`audio=0`: no audio device (the driver still runs) |
 | `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output does not apply it yet (open item) |
 | `[input]` | | | docs/port/INPUT.md (4C), untouched |
@@ -184,7 +189,7 @@ Nothing gameplay-visible depends on the timers. The readers:
 | site | what | host build |
 | --- | --- | --- |
 | `common/src/main.c:139` | `*T0_COUNT = 0` once at the start of `Main` | a store; nothing reads the value back in a host build |
-| `common/src/debug.c` `debug_Init` (`T0_MODE = T1_MODE = 0x82`), `debug_BeginTimer`, `debug_GetTimerSec/Count`, `debug_CallbackGsFinish` (`drawTimerCount`), `debug_SetBar/SetBar2` (`debugBars[].count`), `debug_ResetBar` | the profiler bars and the on-screen timers | `debug.c` is not compiled; `port/null/debug_null.c` stubs the functions it needs |
+| `common/src/debug.c` `debug_Init` (`T0_MODE = T1_MODE = 0x82`), `debug_BeginTimer`, `debug_GetTimerSec/Count`, `debug_CallbackGsFinish` (`drawTimerCount`), `debug_SetBar/SetBar2` (`debugBars[].count`), `debug_ResetBar` | the profiler bars and the on-screen timers | compiled since R6a (docs/port/DEVELOPER_MODE.md): `debug_Init` and `debug_BeginTimer` start timers 0 and 1, `debug_ResetBar` clears timer 0 every Main tick; the `ICO_HOST` branches of `debug_GetTimerSec/Count`, `debug_CallbackGsFinish` and `debug_SetBar/SetBar2` still return -1 or store 0, and no DMA handler latches `drawTimerCount` (until R6a `port/null/debug_null.c` stubbed them) |
 | `fumi/src/fieldCollision.c` `ResetCollisionPC`, `DispCollisionPC` | `pcTime`, printed in the collision counters shown while the game is paused with the debug font on | `#ifdef ICO_HOST` branches read 0 |
 
 `drawTimerCount` and `pcTime` are written and shown only; no branch of game

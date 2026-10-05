@@ -19,7 +19,8 @@ typedef struct IcoFrameCB {
     float target[4];    /* w, h of the bound target in GS pixels, 1/w, 1/h */
     float origin[4];    /* xy GS window coordinate of the target's top-left, zw added after */
     float space[2][4];  /* [0] WORLD, [1] UI: ndc = ndc * xy + zw */
-    float z[4];         /* x = 1 / 2^24 (PSMZ24 scale) */
+    float z[4];         /* x = 1 / 2^24 (PSMZ24 scale); R7a: yz the bound target's
+                         * texels per GS pixel (1 in Original), w reserved */
     float misc[4];      /* x frame counter, y preset */
 } IcoFrameCB;
 
@@ -31,6 +32,8 @@ typedef struct IcoDrawCB {
     float uvRect[4];   /* u0, v0, u1, v1 in texels */
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
     float param[4];    /* kind specific */
+    float scale[4];    /* R7a: xy t1 texels per GS texel (1, or a scaled target's
+                        * scale), zw reserved */
 } IcoDrawCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */
@@ -63,25 +66,47 @@ typedef struct IcoSpriteVertex {
 } IcoSpriteVertex;
 
 _Static_assert(offsetof(IcoFrameCB, view) == 0, "view");
+
 _Static_assert(offsetof(IcoFrameCB, proj) == 64, "proj");
+
 _Static_assert(offsetof(IcoFrameCB, viewProj) == 128, "viewProj");
+
 _Static_assert(offsetof(IcoFrameCB, cameraPos) == 192, "cameraPos");
+
 _Static_assert(offsetof(IcoFrameCB, clip) == 208, "clip");
+
 _Static_assert(offsetof(IcoFrameCB, target) == 224, "target");
+
 _Static_assert(offsetof(IcoFrameCB, origin) == 240, "origin");
+
 _Static_assert(offsetof(IcoFrameCB, space) == 256, "space");
+
 _Static_assert(offsetof(IcoFrameCB, z) == 288, "z");
+
 _Static_assert(offsetof(IcoFrameCB, misc) == 304, "misc");
+
 _Static_assert(sizeof(IcoFrameCB) == 320, "FrameCB size");
+
 _Static_assert(offsetof(IcoDrawCB, mode) == 16, "mode");
+
 _Static_assert(offsetof(IcoDrawCB, blend) == 32, "blend");
+
 _Static_assert(offsetof(IcoDrawCB, uvRect) == 48, "uvRect");
+
 _Static_assert(offsetof(IcoDrawCB, tex) == 64, "tex");
+
 _Static_assert(offsetof(IcoDrawCB, param) == 80, "param");
-_Static_assert(sizeof(IcoDrawCB) == 96, "DrawCB size");
+
+_Static_assert(offsetof(IcoDrawCB, scale) == 96, "scale");
+
+_Static_assert(sizeof(IcoDrawCB) == 112, "DrawCB size");
+
 _Static_assert(offsetof(IcoSpriteVertex, z) == 4, "vertex z");
+
 _Static_assert(offsetof(IcoSpriteVertex, rgba) == 8, "vertex rgba");
+
 _Static_assert(offsetof(IcoSpriteVertex, u) == 12, "vertex uv");
+
 _Static_assert(sizeof(IcoSpriteVertex) == 20, "vertex size");
 
 /* ---------------------------------------------------------------- VU1
@@ -129,9 +154,13 @@ enum {
 #define ICO_VU_PROBE_FIELDS 16
 
 _Static_assert(offsetof(IcoVuCB, mem) == 0, "vu mem");
+
 _Static_assert(offsetof(IcoVuCB, draw) == 576, "vu draw");
+
 _Static_assert(offsetof(IcoVuCB, batch) == 592, "vu batch");
+
 _Static_assert(sizeof(IcoVuCB) == 608, "VuCB size");
+
 _Static_assert(sizeof(IcoVuBoneCB) == 3840, "VuBoneCB size");
 
 #endif

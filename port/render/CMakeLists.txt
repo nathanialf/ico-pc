@@ -118,14 +118,44 @@ add_executable(rd_gsbase_test test/rd_gsbase_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
-    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(rd_gsbase_test PRIVATE ${_ico_seki_incs}
                            "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
                            "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_definitions(rd_gsbase_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_gsbase_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math)
+# ico_options: GsBase.c's widescreen hook reads the display options (R7a),
+# whose config store needs host_config.c (above)
+target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math ico_options)
+if(WIN32)
+    target_link_libraries(rd_gsbase_test PRIVATE comdlg32 user32)
+endif()
+
+# rd_present_test (wave 7, R7a): the display options.  GsBase.c as
+# rd_gsbase_test has it (the widened cull, +0x80/+0xC0 untouched) and the
+# options module with its config (port/platform/host_config.c): the Original
+# preset bit-exact against recorded frames, the Enhanced scene resolution,
+# the wide projection, the UI box, the letterbox bars, the presenter's boxes
+# and the filter upgrade's mips.
+add_executable(rd_present_test test/rd_present_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(rd_present_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(rd_present_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
+if(WIN32)
+    target_link_libraries(rd_present_test PRIVATE comdlg32 user32)
+endif()
 
 # rd_mesh_test (wave 3, R3ab): the mesh path.  Packet.c, RegistPacket.c,
 # MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
@@ -298,7 +328,8 @@ target_link_libraries(rd_debug_test PRIVATE ico_render ico_math)
 
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test)
+              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
+              rd_present_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -336,6 +367,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_raw PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_debug COMMAND rd_debug_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_debug PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_present COMMAND rd_present_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_present PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
@@ -348,6 +381,6 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog rd_blur rd_raw PROPERTIES ENVIRONMENT "${_env}")
+                             rd_fog rd_blur rd_raw rd_present PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

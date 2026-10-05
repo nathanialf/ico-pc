@@ -176,6 +176,33 @@ reversed-Z), render passes with load ops, copies, barriers, readback for
 verification. It has no compute, no input attachments, no framebuffer
 feedback loops, no push constants (per-draw uniforms live in the ring).
 
+**Backend selection and D3D12 (wave 6, R6c).** A Windows build links both
+backends; `rhi_CreateBackend("vulkan" | "d3d12")` (`rhi.h`, before
+`rhi_Init`) picks the one the `rhi_*` calls go to (`port/rhi/rhi_backend.c`;
+default: `ICO_RHI_BACKEND` in the environment, else Vulkan). The window
+build takes it from `[video] backend` (`config.toml`) or `backend=`
+(`ico-pc.ini`), `rd_replay_tool` from `--backend`. The D3D12 backend is
+`port/rhi/d3d12` (design: its `README.md`). R1b's D3D12 questions, answered
+there in full:
+
+- *CopyTextureRegion between R8G8B8A8_UNORM and _UINT* (the exact-blend
+  ping-pong): answered. Every RGBA8 texture is created `R8G8B8A8_TYPELESS`
+  and viewed typed, so the copy is between identical resource formats, a bit
+  copy.
+- *A pipeline writing SV_Target1 with blending disabled and one RT*:
+  answered. The second output has no target and is discarded; the debug
+  layer is expected to call it a warning, not an error (to be confirmed by
+  the first Windows run, `rhi_d3d12_test.log`).
+- *Integer clears*: answered. The clear value is rounded to an integer the
+  way the Vulkan backend rounds it before `ClearRenderTargetView`, so the
+  float-to-integer conversion is exact; `rhi_test_common.c` checks 1, 2, 3, 4
+  on an RGBA8_UINT target on both backends.
+- *Replicate rd_pixel's coverage cells*: answered by not replicating them.
+  The RHI test is backend-neutral (`port/rhi/test/rhi_test_common.c`, the
+  same eight cells and expected values on both), and every `rd_*` GPU test,
+  `rd_pixel` included, runs on D3D12 with `ICO_RHI_BACKEND=d3d12`
+  (`docs/port/TESTING.md`). Not yet run on Windows.
+
 ## 5. Targets and buffers
 
 | RdTargetId | GS location | GS size | notes |
@@ -194,7 +221,8 @@ barrier render-to-texture.
 
 Buffer sizes in the Original preset are literal. In Enhanced the scene
 target is output-sized; blur and work targets scale by `outH/448` capped
-at 2× so blur radii stay a constant fraction of the screen.
+at 2× so blur radii stay a constant fraction of the screen. Wave 7 (R7a):
+the GS sizes stay literal and the textures scale (section 19).
 
 ## 6. "Original" preset
 
@@ -223,7 +251,8 @@ Enhanced settings, each independent: output resolution up to 4K, aspect
 4:3 to 16:9/16:10 (projection and cull frustum widen; gameplay screen
 tests stay 4:3), full-height scene (skip the vertical halving),
 trilinear/anisotropic with generated mips, interpolation between
-simulation ticks, mirror flip at present.
+simulation ticks, mirror flip at present. Section 19 (wave 7, R7a) has
+the first four.
 
 ## 7. Blend exactness under feedback
 
@@ -362,33 +391,6 @@ sleep-until with resynchronisation past 100 ms behind, presentation inside
 `rd_EndFrame` after each `gsb_UpdateGSSystem`. Escape or closing the window
 exits. ini key: none new; the headless build is the CMake option.
 
-Open questions for R2b and R2c (R2c's, 3 to 6, are answered in section 12):
-
-1. R2b: the resolver receives TEX0 and the list; Texture.c allocates VRAM
-   per list (`tex_AllocVramAuto`), so the TBP alone is ambiguous across
-   lists. Calling `rd_Texture` directly from `tex_TransTexture` would also
-   do, with the decoder's TEX0 binding left for the work-buffer reads.
-2. R2b: `t->pkt` sets TEX1 (per-texture filter) and TEST (ATE GREATER, AREF
-   96 or the TIM2 value, AFAIL FB_ONLY) for the material; on rd these need
-   `rd_SamplerFilter` and `rd_Test` from `tex_TransTexture` when the
-   register packet would be chained (`vramPri[].lastTex != id`).
-3. R2c: the SCENE clear at the frame head records the BG colour at the
-   frame's start; the PS2 cleared with the colour current at the flip,
-   one tick later. The difference shows only on the tick the stage changes
-   it.
-4. R2c: GS Z of the UI sprites (0xFFFFFF9B, 0xFFFFFFFF) is above 2^24, so
-   with `g_z.x = 1/2^24` they all clamp to depth 0. Harmless for Z ALWAYS;
-   the scene's ZBUF is PSMZ32, so depth-tested screen prims need the 2^32
-   scale (FrameCB `g_z`) decided per target.
-5. R2c: `gsb_KeepFrameBuffer`, `gsb_fade`, `gsb_scissorOnDemo`,
-   `gsb_controlBrightness`, `gsb_antiAlias` and `gsb_filmNoise` go through
-   the decoder today (their packets decode to the sprites they draw);
-   moving them to `rd_Post` should keep the state they leak. Only
-   `gsb_Reduction` (a stack packet kicked on DMA channel 2) is replaced, by
-   the R2a hook.
-6. R2c: `gsb_MakeCommonMatrix`, `gsb_SetGsDefault`'s list heads and the
-   other DMA chains that are not GIF packets (VU1 data, microprogram
-   uploads) are bookkeeping only on the host.
 **The decoder is the permanent register-level route** (renderer wave 6,
 package R6a). The plan made `rd_gs_shim.c` temporary: deleted once the
 raw-register files were hand-converted, with zero `gif_SetGsReg` uses as
@@ -426,6 +428,33 @@ skipped; frame 500 is the title fading in (the castle and the copyright
 line), frame 2500 the boy in stage 3's courtyard, frame 1000 black
 (stage 1, between the title and the switch to stage 41 at tick 623).
 
+Open questions for R2b and R2c (R2c's, 3 to 6, are answered in section 12):
+
+1. R2b: the resolver receives TEX0 and the list; Texture.c allocates VRAM
+   per list (`tex_AllocVramAuto`), so the TBP alone is ambiguous across
+   lists. Calling `rd_Texture` directly from `tex_TransTexture` would also
+   do, with the decoder's TEX0 binding left for the work-buffer reads.
+2. R2b: `t->pkt` sets TEX1 (per-texture filter) and TEST (ATE GREATER, AREF
+   96 or the TIM2 value, AFAIL FB_ONLY) for the material; on rd these need
+   `rd_SamplerFilter` and `rd_Test` from `tex_TransTexture` when the
+   register packet would be chained (`vramPri[].lastTex != id`).
+3. R2c: the SCENE clear at the frame head records the BG colour at the
+   frame's start; the PS2 cleared with the colour current at the flip,
+   one tick later. The difference shows only on the tick the stage changes
+   it.
+4. R2c: GS Z of the UI sprites (0xFFFFFF9B, 0xFFFFFFFF) is above 2^24, so
+   with `g_z.x = 1/2^24` they all clamp to depth 0. Harmless for Z ALWAYS;
+   the scene's ZBUF is PSMZ32, so depth-tested screen prims need the 2^32
+   scale (FrameCB `g_z`) decided per target.
+5. R2c: `gsb_KeepFrameBuffer`, `gsb_fade`, `gsb_scissorOnDemo`,
+   `gsb_controlBrightness`, `gsb_antiAlias` and `gsb_filmNoise` go through
+   the decoder today (their packets decode to the sprites they draw);
+   moving them to `rd_Post` should keep the state they leak. Only
+   `gsb_Reduction` (a stack packet kicked on DMA channel 2) is replaced, by
+   the R2a hook.
+6. R2c: `gsb_MakeCommonMatrix`, `gsb_SetGsDefault`'s list heads and the
+   other DMA chains that are not GIF packets (VU1 data, microprogram
+   uploads) are bookkeeping only on the host.
 
 ## 10. What the first pixels need
 
@@ -489,7 +518,8 @@ texture tool changes it), decoded at its own size; `tex_UpdateMipMapLevel`
 only rewrites TEX1. MIPTBP1/2 are not written on rd. Enhanced hook:
 `rdtex_SetEnhancedMips(1)` keeps a CPU box-filtered chain per entry
 (`rdtex_BuildMipChain`) for the RHI to upload once it has mipmapped
-textures; not in the settings yet.
+textures; not in the settings yet. Wave 7 (R7a): the upload builds the
+chain from the rd texture instead (section 19).
 
 **Binding.** `tex_TransTexture(id, pri)` keeps its PS2 logic (the per-list
 `transDone` and `lastTex` checks, the VRAM bump allocator as bookkeeping,
@@ -665,7 +695,8 @@ gameplay matrices are untouched. Test: `vu` (recording) and `camera`
 bits; within 1e-5 relative of the C products, and GS X/Y within 1/16 pixel
 of `sceVu0RotTransPers` through `+0x100`).
 
-**Widescreen hook.** `gsbHostWideX()` (1 in Original) and
+**Widescreen hook.** (Implemented in wave 7, R7a: section 19.)
+`gsbHostWideX()` (1 in Original) and
 `gsbHostWidenCull` divide `projHalf[0]` (`+0x240`, the projection of the
 visible screen that `+0x280` and `RegistPacket.c`'s per-object `+0x300`
 are built from and `gsb_ClipBox` culls against) by the output's widening;
@@ -755,7 +786,8 @@ fails, the reverse passes, on SCENE).
 carries the Enhanced fields `interpolate`, `aspectFromSettings`, `mirror`,
 `fullHeight`, all at their Original values in both entries and read by
 nothing yet, and `presentAlpha()` (1: each frame presented once, whole) is
-where wave 7 blends the retained frames.
+where wave 7 blends the retained frames. Since R7a the Enhanced entry has
+`aspectFromSettings` and `fullHeight` (section 19).
 
 **rd.h additions (R2c).** `RdFrameHead`, `rd_FrameHead`, `rd_FrameFlip`;
 `RD_TARGET_OFFSET`, `RD_TARGET_HALF_Y` (bit 1 of `rd_SetTarget`'s
@@ -1387,6 +1419,7 @@ Open items:
    copy of the integer Z, would make it exact.
 3. Enhanced presets: `doFog` reads the depth at GS texel coordinates and
    sizes the copy by the GS size; a resolution scale needs both scaled.
+   Done in wave 7 (R7a, section 19).
 4. The fog's TEX0 leak is not reproduced (above).
 5. The title's strong haze (game run above) should be compared with a PS2
    capture of the title screen.
@@ -1579,6 +1612,7 @@ Open items:
    Enhanced projection of the reflection needs it or a widened +0xC0.
    `gsbHostWidenCull` also widens the reflection's cull frustum when the
    output is wide, which the reflection's 230/204 viewport may not want.
+   Wave 7 (R7a, section 19): kept; it only adds objects to the reflection.
 3. A texture Texture.c places at 0x2800 in list 4 or 10 with exactly the
    block's TEX0 (TBW 4, PSMCT32, 256 x 256, or the barrier's) would win over
    the block in the resolver (section 11); none was seen.
@@ -1801,7 +1835,8 @@ Original (the literal sizes); in Enhanced outputHeight / 448 clamped to
 `namedTargetDesc` (rd_core.c) applies it to the fixed-size work buffers
 behind `RD_WORK_SCALE_APPLY`, which is 0: the replay sizes the GS window by
 the target's texture, so scaled buffers need the replay's GS-to-pixel
-scale first (wave 6). No setting selects it.
+scale first (wave 6). No setting selects it. Wave 7 (R7a): applied, to
+the textures (section 19).
 
 **Pipelines.** `rd__BlurKey`: program POST, `fx_rect_vs`/`fx_sprite_ps`,
 no blending, the colour mask (FBMSK), and with a depth target the Z test
@@ -1878,7 +1913,8 @@ Open items:
    with post mode 2..7 (or the debug menu's "Post Effect") would show them
    in the game.
 6. `rd_WorkTargetScale` is defined and called, but its scaling is off
-   until the replay supports scaled work buffers.
+   until the replay supports scaled work buffers. Done in wave 7 (R7a,
+   section 19).
 
 ## 18. Raw packet builders outside seki (wave 5, R5c)
 
@@ -2085,3 +2121,209 @@ Open items:
 8. The game run reached neither the dark volume nor a dumped lightning
    frame (above): a run into the queen's stage (`[dev] start_stage` 37) or
    a game over, and one dumping every frame of stage 45, would show both.
+
+## 19. Presets and display options (wave 7, R7a)
+
+`port/game/video_options.{c,h}` (new: the `[video]` keys, docs/port/DISPLAY.md
+for players, CONFIG.md), `port/platform/window_host.c` (applies them),
+`port/render/rd_present.c` (`rd__ApplyDisplay`, `rd__PresentBox`, the
+presenter), `rd_core.c` (target scales), `rd_replay.c` (scaled replay, the
+wide x scale, the Enhanced samplers and mips), `rd_frame.c` (the wide
+`g_proj`), `rd_tex.c` (`rdtex_KeepAlphaCoverage`), `fx_sprite.hlsl`,
+`fog_lut.hlsl`, `common.hlsli` / `shader_consts.h` (`DrawCB.g_scale`,
+`FrameCB.g_z.yz`), `ico2/seki/src/GsBase.c` (the wide hook),
+`ico2/common/src/layout_texture.c` (the primary sprite's full-screen tag),
+`rd_video.c` (the movie box), `tools/rd_replay_tool.c` (the options as
+flags). Test: `rd_present` (`port/render/test/rd_present_test.c`).
+
+**Settings.** `[video] preset` `"original"` (default) or `"enhanced"`;
+`resolution` `"window"` (default), `"WxH"` or `"Nx"`; `aspect` `"4:3"`
+(default), `"16:10"`, `"16:9"`, `"auto"` (the window's, clamped to
+[4:3, 16:9]); `fullscreen` (false), `vsync` (true), `texture_filter`
+`"original"` (default), `"trilinear"`, `"anisotropic"`; `full_height`
+(false); `framerate` is R7b's. Original ignores everything but fullscreen
+and vsync. `ico_video_get/set/save` (`ico_config_get_*` / `set_*` /
+`ico_config_save`); `ico_video_set` bumps a serial that `window_host.c`'s
+pump compares, so the Settings menu applies without a restart:
+`rd_SetSettings` takes effect at the next `rd_BeginFrame`, where
+`rd__ApplyDisplay` turns `RdSettings` into the scales below and recreates
+the named targets when a scale changed (`rhi_WaitIdle` first; SCENE is
+redrawn by the next frame, DISPLAY's motion-blur history restarts), and
+the swapchain when vsync changed. A window resize does the same (aspect
+`auto`, resolution `window`). Fullscreen is SDL's borderless desktop
+fullscreen (`SDL_SetWindowFullscreen`, no mode change); Alt+Enter flips the
+option in memory. `RdSettings` gained `sceneWidth`, `sceneHeight`,
+`sceneScale`; `filterUpgrade` takes `RdFilterUpgrade`.
+
+**The Original preset** is section 6, unchanged: every path below is
+guarded so that at scale 1 and aspect 4:3 it executes the pre-R7a
+arithmetic (`tw == w`, `g_origin.zw = 0.5`, `g_space` identity, no UV
+shift, the integer 4:3 box, `fx_sprite_ps` and `fog_lut_ps` multiplying by
+1.0). Proof: every frame dump the render tests write (151 dumps: rd_pixel's,
+rd_gsbase's 55, rd_blur (61 of 1207), rd_fog, rd_shadow, rd_mesh, rd_raw,
+rd_water, rd_layout, rd_tex) rendered by `rd_replay_tool` before and after
+this package to DISPLAY, SCENE and a 960 x 720 present: 453 PNGs,
+byte-identical on llvmpipe; `rd_present`'s `original` case checks
+rd_pixel's frame against the pre-R7a hashes, and that the Enhanced preset
+with every option neutral (1x, 4:3, no filter, half height) gives the same
+bytes.
+
+**Resolution.** A target record keeps its GS size (`w`, `h`) and gains its
+texture's (`tw`, `th`) and scale (`sx`, `sy`, texels per GS pixel):
+`rd__TargetScaleOf`. FrameCB keeps the GS size in `g_target`, so every
+vertex lands where it did and only the viewport, the scissor (GS pixels x0
+.. x1 cover texels floor(x0 s) .. ceil((x1 + 1) s) - 1), copies, snapshots
+and readbacks change; `rd__ReadTarget` returns the texture's size. The
+scales (`rd__ApplyDisplay`):
+
+| targets | scale |
+|---|---|
+| SCENE, WORK2, AURA_WORK, DATE_SNAPSHOT, temporary targets of the scene's GS size (the shadow count) | the scene's: `resolution` `Nx`: sy = N, sx = N x aspect / (4/3); `WxH`: W / gsW, H / gsH; `window`: the presentation box in the window; at least 1, at most 3840 x 2160 |
+| DISPLAY | the scene's, sy doubled with `full_height` |
+| SHADOW0..2, WORK0, WORK1, WORK3, AA0, AA1, FEED128, AURA_TAP, WORK2_PAD | `rd_WorkTargetScale(Enhanced, sy x 448)`: sy clamped to [1, 2] (`RD_WORK_SCALE_APPLY` is 1 now), so blur radii, which are GS distances, stay the same fraction of the screen at finer sampling |
+| other temporary targets (puddle and pool reflections, render-to-texture blocks) | 1 |
+
+Sampling a target through `rd_TargetTexture` is normalised, so it needs
+nothing. The texel-addressed paths:
+
+- Rasterisation: on a scaled target `g_origin.zw = 0.5 / s`, which puts a
+  GS integer coordinate on the left/top edge of its s x s block (at 1 it is
+  the pixel centre, as before). Sprites (`expand`) have their corners
+  snapped up to whole GS pixels, which is exactly the set of pixels the GS
+  covers (letterbox bars sit a quarter pixel off), and their UVs moved by
+  (s - 1) / (2s) GS pixels so a texel samples at its own position in the GS
+  pixel: a nearest-sampled sprite fills each block with the texel the GS
+  samples. Triangles and the meshes rasterise continuously.
+- `fx_sprite_ps` (blur, flare, aura, eye blur): the coverage test on the
+  texel's GS pixel (its block), the UV from the GS position of the texel's
+  centre, t1 addressed in its own texels (`DrawCB.g_scale`: a scaled
+  target's scale, 1 for images), REPEAT by modulo (equal to the mask at a
+  power-of-two size). At 1: `px * 16`, `u >> 4`, the same sums.
+- `fog_lut_ps` (R4c open item 3): the Z copy is the depth target's texture
+  size, the texel `floor(uv x size x g_scale)`.
+- DATE snapshot, `blend_int`, the COLCLAMP-0 wrap accumulator, the shadow
+  count and resolve: the texture's size (they address target texels 1:1).
+- `doCopy`: the rectangle in each texture's texels; between targets of
+  different scales the copy cannot resample (`RD_ONCE_COPY_SCALE`; no
+  game path does it).
+
+`rd_present`'s `scale2` case: rd_pixel's frame (smooth scene) at 2x: every
+2 x 2 block of SCENE uniform and equal to the 1x pixel (0 LSB), DISPLAY's
+block averages within 1 LSB of 1x (checked at 2).
+
+**Widescreen.** `aspect` = A gives the wide factor f = (4/3) / A (0.75 at
+16:9). The game: `gsbHostWideX()` = `ico_video_wide_x()` = A / (4/3), and
+`gsbHostWidenCull` divides `projHalf[0]` (+0x240) by it after
+`gsb_SetVSMatrixSub`, so +0x280 and every per-object +0x300 cull a wider
+frustum; this is now under `ICO_HOST` (the headless build too) so a
+headless run exercises it. +0x80, +0xC0 and +0x100 are untouched
+(`IsPointIsInScreen` and every screen test read them). puddle.c and
+pool.c call `gsb_SetVSMatrix` for the reflection views, so their cull
+widens by the same factor: it only adds objects to a reflection, whose own
+projection stays 4:3 (R5b open item 2: consistent, a superset). The
+renderer: f multiplies NDC x about the target's centre (`g_space[0]` and
+`[1]` = (f, 1, 0, 0)) for draws into the wide targets (SCENE, WORK2,
+AURA_WORK, the shadow count: `RdTargetRec.wide`): the meshes (`vu_ndc`,
+`vu_homogeneous_position`), the shadow volumes and the screen prims, so
+CPU-projected prims (sun fans, lightning) follow the 3D and the 2D layer is
+a centred 4:3 box. Full-screen draws stretch (f = 1): `RD_SPACE_FULLSCREEN`
+prims (`rd_post.c`'s fade, letterbox, brightness, keep, film noise,
+anti-alias, the reduction; ZFog.c's sprite; `layout_texture.c`'s primary
+sprite through `rd_SetSpaceOverride`), every sprite that spans the
+target's whole GS width (clears, Shadow.c's resolve, the game's own fills;
+`screenStretch`), and the fullscreen-triangle passes (`fx_rect_vs`, the
+fog, the shadow resolve). `gsb_scissorOnDemo`'s bars are letterbox posts:
+58 of 512 lines, full width, at any aspect and resolution. `rd__FillCameraCB`
+gives `g_proj` / `g_viewProj` the same compression (X' = f X + (1 - f)
+2048 W) and `g_clip.w` the aspect. The presenter boxes DISPLAY at A
+(`rd__PresentBox`: pillarboxed or letterboxed in the window); the movies
+keep the 4:3 box (`rd_video.c`). `rd_present`'s `wide` case checks the
+matrices (+0x80, +0xC0, +0x100 byte-identical, +0x240 x scale / (4/3),
++0x280 following, the frame camera unchanged, `g_proj`'s x row) and
+`wide169` the pixels (a UI sprite at GS 128..384 in texels 214..468 of the
+683-wide SCENE, a full-width fill and the bars over the whole width, the
+present filling a 16:9 output).
+
+**Logic unaffected.** Headless `linux-x64`, `pad-boot.txt`, `ticks=3000`:
+the default config and `preset = "enhanced"`, `aspect = "16:9"` (the log
+shows the options read, which in the headless build happens only through
+the cull hook) wrote byte-identical traces (430837 bytes, 3000 ticks, to
+stage 3). The trace is the per-tick game state hash of `trace_host.c`
+(stage, system status, game flags, save hash), not every object's state.
+
+**Presentation.** Original: section 6 (DISPLAY into the 4:3 box, each line
+doubled, bilinear horizontally). Enhanced: the box of the aspect option;
+with `full_height` DISPLAY's texture already has every line
+(`rd__TargetScaleOf` doubles its sy, the reduction rasterises at that
+density) and step 1 is skipped; without it the line doubling runs at the
+scaled size. The window's output is the swapchain at the window's pixel
+size; fullscreen is the desktop's. Vsync: `rhi_ResizeSwapchain(.., vsync)`
+(Vulkan FIFO, else MAILBOX, else IMMEDIATE; D3D12 sync interval 1, or 0
+with tearing where DXGI allows it).
+
+**Texture filter.** `texture_filter` trilinear/anisotropic (Enhanced, and
+`RhiLimits.textureMips`, new, true on Vulkan and on D3D12 since R6c):
+`uploadTextures` creates each power-of-two game texture with its full
+chain (`RdTexRec.mipLevels`), level 0 as before, levels 1.. 2 x 2 box
+filtered (`rdtex_BuildMipChain`) with alpha coverage kept
+(`rdtex_KeepAlphaCoverage`: per level, the alpha scale in [1, 4], never
+past level 0's largest alpha, that restores level 0's share of texels with
+alpha > 64, the semi-transparent lists' test), uploaded per level
+(`rhi_CmdCopyBufferToTexture`'s mip). A change of the option recreates the
+textures. Draws whose TEX1 minifies linearly sample with the sampler sets
+1 (mip linear) or 2 (plus `min(16, RhiLimits.maxAnisotropy)`); textures
+authored nearest stay nearest. The RHI needed no new entry points
+(mipLevels, per-level copies and the sampler's mip/LOD/anisotropy fields
+were there); `RhiLimits.textureMips` and `maxAnisotropy` are the additions.
+`rdtex_SetEnhancedMips`'s per-entry CPU chain (R2b) is not used by the
+upload. `rd_present`'s `mips` case: a 64 x 64 one-texel checker minified
+8:1 samples mid grey (0 LSB off on llvmpipe).
+
+**Game run** (window build, lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`pad-boot.txt`, `ticks=700`, `dump_every=100`, `timeout 600`, 960 x 720
+window; `preset = "enhanced"`, `resolution = "2x"`, `aspect = "16:9"`,
+`full_height = true`, through a config.toml in `XDG_DATA_HOME`'s pref
+folder), exit 0 in about 5 minutes, dumps 100..600 (the run ends at tick
+700 before dump 700). The log names the options (`window: 960x720 pixels,
+.. Enhanced preset (resolution 2x, aspect 16:9, texture filter original,
+full height)`) and has no rd notice (no `RD_ONCE_*` line: no copy across
+scales, no DATE or exact-blend size mismatch). Dumps 100..400 are the boot
+(black in Original too). Dump 600, `rd_replay_tool --enhanced --aspect
+16:9 --resolution 2x --full-height`: SCENE and DISPLAY 1365 x 1024; the
+title at 16:9 shows the castle wider (the radio mast on the left and the
+far tower on the right, both outside the 4:3 frame), the ICO logo and the
+Vibration menu in the centred 4:3 box at the size and place they have in
+Original's 960 x 720 present of the same dump, the fog's haze over the
+whole width, the sea and bridges sharper at 2x; the reduction's 8-line
+crop shows as the thin top and bottom bands, as in Original. The flare
+adds nothing to this frame (the sun is above the screen, as in R5a's run).
+In the 960 x 720 window the 16:9 picture is letterboxed.
+
+**rd.h changes (R7a).** `RdSettings.sceneWidth/sceneHeight/sceneScale`,
+`RdFilterUpgrade`, `rd_SetSpaceOverride`; `rd_WorkTargetScale` applied.
+Internal: `RdTargetRec.tw/th/sx/sy/wide`, `RdTexRec.mipLevels`,
+`RdContext` scales (`sceneSx/Sy`, `workScale`, `wideX`, `outAspect`,
+`filterUpgrade`, `fullHeight`, `spaceOverride`, `vsyncApplied`),
+`RD_SAMPLER_SETS`, `rd__ApplyDisplay`, `rd__PresentBox`,
+`rd__TargetScaleOf`, `rd__FrameGroupEx`, `RD_ONCE_COPY_SCALE`. Shader
+constants: `DrawCB.g_scale` (DrawCB is 112 bytes), `FrameCB.g_z.yz`. The
+dump format is unchanged (a dump carries no display options:
+`rd_replay_tool --enhanced --aspect --resolution --full-height --filter`).
+
+Open items:
+
+1. The screen-space scissor is not widened: a UI draw clipped by a
+   scissor narrower than the screen keeps the 4:3 clip rectangle while its
+   geometry is compressed (it clips less, never more). None was seen.
+2. A world-projected prim that spans the whole screen width as a sprite is
+   taken for a full-screen fill and stretched (`screenStretch`).
+3. The reflections' render-to-texture targets keep 4:3 and scale 1; the
+   water surface samples them with the game's 4:3 UVs, so at the sides of
+   a 16:9 frame a puddle shows the reflection's clamped edge.
+4. Popups and the port's own text (port/ui) draw in list 12 in UI space,
+   so they sit in the 4:3 box at the scene's resolution; an overlay at the
+   output's size is 6C's (no post-present hook yet).
+5. Interpolation (R7b): `RdPresentPreset.interpolate` and
+   `presentAlpha()` are still the hook; the scaled DISPLAY is what it
+   blends.
+6. Mirror: `RdPresentPreset.mirror` is still unimplemented.

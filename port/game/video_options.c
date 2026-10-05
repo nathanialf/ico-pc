@@ -1,0 +1,259 @@
+/*
+ * port/game/video_options.c
+ *
+ * The display options (video_options.h, docs/port/DISPLAY.md).
+ */
+#include "video_options.h"
+#include <stdio.h>
+#include <string.h>
+#include "config.h"
+
+#define ASPECT_4_3 (4.0f / 3.0f)
+#define ASPECT_16_9 (16.0f / 9.0f)
+
+static IcoVideoOptions s_opt;
+
+static int s_read;
+
+static unsigned s_serial;
+
+static int s_winW, s_winH;
+
+void ico_video_defaults(IcoVideoOptions *o)
+{
+    memset(o, 0, sizeof(*o));
+    o->preset = ICO_VIDEO_ORIGINAL;
+    o->aspect = ICO_ASPECT_4_3;
+    o->vsync = 1;
+    o->filter = ICO_FILTER_ORIGINAL;
+}
+
+static int lower_eq(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++) {
+        char c = *a >= 'A' && *a <= 'Z' ? (char)(*a - 'A' + 'a') : *a;
+
+        if (c != *b) {
+            return 0;
+        }
+    }
+    return *a == 0 && *b == 0;
+}
+
+int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
+{
+    unsigned w = 0, h = 0, n = 0;
+    char tail = 0;
+
+    if (s == NULL) {
+        return -1;
+    }
+    if (lower_eq(s, "window")) {
+        o->resW = o->resH = o->resScale = 0;
+        return 0;
+    }
+    if (sscanf(s, "%ux%u%c", &w, &h, &tail) == 2 && w >= 64 && h >= 64 && w <= 7680 && h <= 4320) {
+        o->resW = (int)w;
+        o->resH = (int)h;
+        o->resScale = 0;
+        return 0;
+    }
+    if (sscanf(s, "%u%c%c", &n, &tail, &tail) == 2 && (tail == 'x' || tail == 'X') && n >= 1 &&
+        n <= 8) {
+        o->resW = o->resH = 0;
+        o->resScale = (int)n;
+        return 0;
+    }
+    return -1;
+}
+
+static const char *const kAspect[] = {"4:3", "16:10", "16:9", "auto"};
+
+static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
+
+int ico_video_parse_aspect(const char *s, int *aspect)
+{
+    for (int i = 0; s && i < 4; i++) {
+        if (lower_eq(s, kAspect[i])) {
+            *aspect = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int ico_video_parse_filter(const char *s, int *filter)
+{
+    for (int i = 0; s && i < 3; i++) {
+        if (lower_eq(s, kFilter[i])) {
+            *filter = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *ico_video_aspect_name(int aspect)
+{
+    return aspect >= 0 && aspect < 4 ? kAspect[aspect] : kAspect[0];
+}
+
+const char *ico_video_filter_name(int filter)
+{
+    return filter >= 0 && filter < 3 ? kFilter[filter] : kFilter[0];
+}
+
+const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size)
+{
+    if (o->resScale > 0) {
+        snprintf(buf, size, "%dx", o->resScale);
+    } else if (o->resW > 0 && o->resH > 0) {
+        snprintf(buf, size, "%dx%d", o->resW, o->resH);
+    } else {
+        snprintf(buf, size, "window");
+    }
+    return buf;
+}
+
+static void sanitize(IcoVideoOptions *o)
+{
+    IcoVideoOptions d;
+
+    ico_video_defaults(&d);
+    if (o->preset != ICO_VIDEO_ORIGINAL && o->preset != ICO_VIDEO_ENHANCED) {
+        o->preset = d.preset;
+    }
+    if (o->aspect < 0 || o->aspect > ICO_ASPECT_AUTO) {
+        o->aspect = d.aspect;
+    }
+    if (o->filter < 0 || o->filter > ICO_FILTER_ANISOTROPIC) {
+        o->filter = d.filter;
+    }
+    if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
+        o->resScale = o->resW = o->resH = 0;
+    }
+    o->fullscreen = o->fullscreen != 0;
+    o->vsync = o->vsync != 0;
+    o->fullHeight = o->fullHeight != 0;
+}
+
+static void read_config(void)
+{
+    IcoVideoOptions o;
+    const char *s;
+
+    ico_video_defaults(&o);
+    s = ico_config_get_string("video.preset", "original");
+    o.preset = s && lower_eq(s, "enhanced") ? ICO_VIDEO_ENHANCED : ICO_VIDEO_ORIGINAL;
+    if (ico_video_parse_resolution(ico_config_get_string("video.resolution", "window"), &o) != 0) {
+        fprintf(stderr, "video: resolution not understood; \"window\" used\n");
+    }
+    if (ico_video_parse_aspect(ico_config_get_string("video.aspect", "4:3"), &o.aspect) != 0) {
+        fprintf(stderr, "video: aspect not understood; \"4:3\" used\n");
+    }
+    if (ico_video_parse_filter(ico_config_get_string("video.texture_filter", "original"),
+                               &o.filter) != 0) {
+        fprintf(stderr, "video: texture_filter not understood; \"original\" used\n");
+    }
+    o.fullscreen = ico_config_get_bool("video.fullscreen", 0) != 0;
+    o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
+    o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
+    sanitize(&o);
+    s_opt = o;
+    s_read = 1;
+    s_serial++;
+    if (o.preset == ICO_VIDEO_ENHANCED) {
+        char res[32];
+
+        fprintf(stderr,
+                "video: Enhanced preset: resolution %s, aspect %s, texture filter %s, %s "
+                "height\n",
+                ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
+                ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half");
+    }
+}
+
+void ico_video_get(IcoVideoOptions *o)
+{
+    if (!s_read) {
+        read_config();
+    }
+    *o = s_opt;
+}
+
+void ico_video_set(const IcoVideoOptions *o)
+{
+    s_opt = *o;
+    sanitize(&s_opt);
+    s_read = 1;
+    s_serial++;
+}
+
+unsigned ico_video_serial(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_serial;
+}
+
+int ico_video_save(void)
+{
+    IcoVideoOptions o;
+    char res[32];
+    int r = 0;
+
+    ico_video_get(&o);
+    r |= ico_config_set_string("video.preset",
+                               o.preset == ICO_VIDEO_ENHANCED ? "enhanced" : "original");
+    r |= ico_config_set_string("video.resolution", ico_video_resolution_name(&o, res, sizeof(res)));
+    r |= ico_config_set_string("video.aspect", ico_video_aspect_name(o.aspect));
+    r |= ico_config_set_bool("video.fullscreen", o.fullscreen);
+    r |= ico_config_set_bool("video.vsync", o.vsync);
+    r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
+    r |= ico_config_set_bool("video.full_height", o.fullHeight);
+    return r != 0 ? -1 : ico_config_save();
+}
+
+void ico_video_reload(void)
+{
+    s_read = 0;
+}
+
+void ico_video_set_window(int w, int h)
+{
+    s_winW = w > 0 ? w : 0;
+    s_winH = h > 0 ? h : 0;
+}
+
+float ico_video_aspect(void)
+{
+    IcoVideoOptions o;
+    float a;
+
+    ico_video_get(&o);
+    if (o.preset != ICO_VIDEO_ENHANCED) {
+        return ASPECT_4_3;
+    }
+    switch (o.aspect) {
+    case ICO_ASPECT_16_10:
+        return 16.0f / 10.0f;
+    case ICO_ASPECT_16_9:
+        return ASPECT_16_9;
+    case ICO_ASPECT_AUTO:
+        if (s_winW <= 0 || s_winH <= 0) {
+            return ASPECT_4_3;
+        }
+        a = (float)s_winW / (float)s_winH;
+        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ASPECT_16_9 ? ASPECT_16_9 : a);
+    default:
+        return ASPECT_4_3;
+    }
+}
+
+float ico_video_wide_x(void)
+{
+    float k = ico_video_aspect() / ASPECT_4_3;
+
+    return k > 1.0f + 1e-5f ? k : 1.0f;
+}

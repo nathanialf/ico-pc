@@ -71,10 +71,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
 #include "rd_state.h"
 
 #ifdef __cplusplus
+
 extern "C" {
 #endif
 
@@ -334,11 +334,27 @@ typedef struct RdSettings {
     float aspect;                       /* 4/3 .. 16/9; Original forces 4/3 */
     uint8_t interpolate;                /* uncapped presentation; Original forces 0 */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
-    uint8_t filterUpgrade;              /* trilinear/anisotropic with generated mips (Enhanced) */
+    uint8_t
+        filterUpgrade; /* RdFilterUpgrade: trilinear/anisotropic with generated mips (Enhanced) */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass (Enhanced) */
     uint8_t vsync;
     uint8_t _pad[3];
+    /* Wave 7 (R7a): the internal scene resolution in Enhanced, in texels:
+     * the scene's texture is sceneWidth x sceneHeight (GS coordinates
+     * unchanged, RENDER_API.md section 19); 0 x 0 = the output's: the
+     * presentation box in the window. */
+    uint32_t sceneWidth, sceneHeight;
+    /* > 0: the scene's texture is this factor of the GS size instead
+     * (vertically; horizontally times aspect / (4/3)), e.g. 2 */
+    float sceneScale;
 } RdSettings;
+
+/* RdSettings.filterUpgrade (wave 7, R7a) */
+typedef enum RdFilterUpgrade {
+    RD_FILTER_UPGRADE_OFF = 0, /* per texture as authored (Original) */
+    RD_FILTER_UPGRADE_TRILINEAR = 1,
+    RD_FILTER_UPGRADE_ANISOTROPIC = 2
+} RdFilterUpgrade;
 
 /* ------------------------------------------------------------ lifecycle */
 
@@ -519,6 +535,11 @@ void rd_DrawParticles(const RdParticleBatch *batch, RdKey key);
  * 12.4 texels (UV register) rather than STQ. */
 void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
                     RdKey key);
+/* Wave 7 (R7a): while space >= 0, rd_ScreenPrims records that space instead
+ * of its argument (the game marks its full-screen 2D items RD_SPACE_FULLSCREEN
+ * around the gif helpers that draw them: layout_texture.c's primary sprite).
+ * -1 ends it.  Returns the previous value. */
+int rd_SetSpaceOverride(int space);
 /* darkVolume.c, lightning.c, lineManager.c, sun flare: world-space
  * vertices with the matrix the call site used, transformed on the GPU. */
 void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key);
@@ -748,6 +769,6 @@ const RdStats *rd_GetStats(void);
 
 #ifdef __cplusplus
 }
-#endif
 
+#endif
 #endif /* PORT_RENDER_RD_H */

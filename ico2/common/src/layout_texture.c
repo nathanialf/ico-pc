@@ -112,6 +112,18 @@ typedef struct { /* field names derived */
    pixels centred on the origin */
 static const SprRect primarySpriteRect = {-5120, -1808, 10240, 3616}; /* derived name */
 
+#ifdef ICO_RD
+
+/* PC port (renderer wave 7, R7a): the primary sprite is a full-screen
+   backdrop, so a widescreen presentation stretches it across the width
+   instead of keeping it in the centred 4:3 box with the rest of the layout
+   (rd.h rd_SetSpaceOverride, RD_SPACE_FULLSCREEN = 2; GifHost.h
+   gif_HostFlush emits what the decoder holds on either side). */
+extern int rd_SetSpaceOverride(int space);
+extern void gif_HostFlush(void);
+
+#endif
+
 static void display_texture_fade_cancel_chk(int from, int to)
 {
     short list1[256];
@@ -610,13 +622,24 @@ static void display_texture(int no, LtProperty *e)
 static inline void lt_draw_primary_sprite(SprCol *col) /* derived name */
 {
     SprRect r;
+#ifdef ICO_RD
+    int space;
+#endif
 
     gif_StartPacketPri(11);
     gif_SetZTest(0);
     gif_SetZWrite(0);
     gif_SetAlpha(1, 7, 0);
     r = primarySpriteRect;
+#ifdef ICO_RD
+    gif_HostFlush();
+    space = rd_SetSpaceOverride(2);
+#endif
     gif_SpriteSensitive(&r, 0xFFFFFFFF, (void *)0, col, 1);
+#ifdef ICO_RD
+    gif_HostFlush();
+    rd_SetSpaceOverride(space);
+#endif
     gif_SetZWrite(1);
     gif_SetZTest(1);
     gif_EndPacket();
