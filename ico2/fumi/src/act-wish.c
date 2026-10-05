@@ -13,7 +13,7 @@
 
 static inline unsigned char chkOrient(char *s, float *dir, float *w, float deg) /* derived name */
 {
-    float *q = (float *)(s + 0x4B0);
+    float *q = ICO_RAWP(float *, s, 0x4B0, ((Act *)s)->env.wallOrient);
 
     if (q[0] == 0.0f && q[1] == 0.0f && q[2] == 0.0f && q[3] == 0.0f) {
         debug_StdPrintfDummy("orient null");

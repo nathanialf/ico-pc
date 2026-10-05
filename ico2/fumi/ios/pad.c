@@ -332,7 +332,12 @@ static int iosPadDevReadFunc(void)
                 }
             } else {
                 IosPadBuf *b = &dev->buf[dev->idx];
+#ifdef ICO_HOST
+                /* bits 12-15 of the buffer's first word: termId's high nibble */
+                unsigned int t = b->termId >> 4;
+#else
                 unsigned int t = (*(unsigned int *)b >> 12) & 0xF;
+#endif
 
                 if (t != 7 && t != 5) {
                     b->rx = b->ry = b->lx = b->ly = 127;

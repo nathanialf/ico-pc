@@ -8,11 +8,15 @@
  *      on a card with no save, the first save to slot 1, reload, re-save
  *      (the file is byte-identical), delete; and the result codes the game
  *      compares (libmc.h sceMcRes*).
- *   B. fumi/ios/mcard.c itself, compiled unchanged with the game's options,
- *      on the fiber scheduler: its manager thread, driven through the
- *      iosMc* entry points the way kanbanBoot.c and layout_action.c drive
- *      them, with the bytes it leaves in the card folder checked against a
- *      hand-laid-out expectation.
+ *   B. fumi/ios/mcard.c and fumi/ios/mcdata.c themselves, compiled unchanged
+ *      with the game's options, on the fiber scheduler: the card manager
+ *      thread, driven through the iosMc* entry points the way kanbanBoot.c
+ *      and layout_action.c drive them, with the bytes it leaves in the card
+ *      folder checked against a hand-laid-out expectation. The icon files
+ *      come through mcdata.c's background read (iosMcSaveIconBlock ->
+ *      iosMcIconWriteIconsys -> iosCdvdBackGroundRead into its 64-byte
+ *      aligned stack buffer); a stand-in of cdvd.c's background manager
+ *      below runs the read on its own thread and fills a known pattern.
  *
  * Both run on simulated vsyncs, as host_loop.c drives the hooks. No game
  * data is needed.
@@ -43,6 +47,7 @@
 #include "debug.h"
 #include "ios.h"
 #include "main.h"
+#include "cdvd.h"
 #include "mc_host.h"
 #include "mcard.h"
 #include "mcdata.h"
@@ -124,21 +129,111 @@ void soundOutputModeSet(int mode)
    port gets from the data tables */
 const IconFile iconFile[] = {{"", 0}, {"icon.sys", 964}, {"boy_blk.ico", 3000}};
 
-/* mcdata.c writes the icon files from the disc; this writes a pattern of
-   the same size through the same handler */
-int iosMcIconWriteIconsys(struct McMgr *self, const IconFile *p)
-{
-    unsigned char buf[3000];
+/* --- cdvd.c's background manager, as mcdata.c uses it ---------------------------
+ *
+ * The game runs each request's read function on the cdvd manager thread,
+ * which Main wakes once a vsync while IosCdvdMgrSleep is set (main.c). Here
+ * the thread is bgTh, the driver's poll wakes it, and the "disc" is a pattern:
+ * byte k of file f is icon_byte(f, k). */
+int IosCdvdMgrSleep;
 
-    memset(buf, p->name[0], sizeof(buf));
-    iosMcHandlerWrite(self, buf, p->size);
-    return 0;
+static CdvdBgReq bgReq[2];
+
+static IOSThread bgTh;
+
+static char bgStack[0x8000] __attribute__((aligned(16)));
+
+static int bgReads;
+
+static int bgMisaligned;
+
+static unsigned char icon_byte(const char *name, long k)
+{
+    return (unsigned char)(k * 7 + (unsigned char)name[0] * 13 + (k >> 8));
 }
 
-int iosMcIconWriteIcon(struct McMgr *self, const IconFile *p)
+CdvdBgReq *iosCdvdBackGroundMgrAdd(const char *name, void *readFunc, void *readArg, void *readyFunc,
+                                   void *resumeFunc, void *cbArg, void *closeFunc, void *closeArg)
 {
-    return iosMcIconWriteIconsys(self, p);
+    int i;
+
+    (void)readyFunc;
+    (void)resumeFunc;
+    (void)cbArg;
+    for (i = 0; i < 2; i++) {
+        CdvdBgReq *bg = &bgReq[i];
+
+        if (bg->name[0] == 0) {
+            memset(bg, 0, sizeof(*bg));
+            strcpy(bg->name, name);
+            bg->readFunc = (int (*)(CdvdBgReq *, void *))readFunc;
+            bg->readArg = readArg;
+            bg->closeFunc = (int (*)(CdvdBgReq *, void *))closeFunc;
+            bg->closeArg = closeArg;
+            bg->size = 1 << 20;
+            return bg;
+        }
+    }
+    printf("FAIL no free background request\n");
+    fails++;
+    return &bgReq[0];
 }
+
+int iosCdvdBackGroundRead(CdvdBgReq *self, void *buf, int size)
+{
+    unsigned char *p = buf;
+    int i;
+
+    /* mcdata.c rounds its stack buffer up to 64 bytes for the DMA */
+    if (((uintptr_t)buf & 63) != 0) {
+        bgMisaligned++;
+    }
+    for (i = 0; i < size; i++) {
+        p[i] = icon_byte(self->name, self->pos + i);
+    }
+    self->pos += size;
+    bgReads++;
+    return !(self->pos < self->size);
+}
+
+void iosCdvdBackGroundMgrDelete(CdvdBgReq *self)
+{
+    self->flags.del = 1;
+}
+
+/* iosCdvdBackGroundMgr's loop: each request's read function until it says
+   it is done, then the close when its deletion is asked for */
+static void bg_manager(void)
+{
+    int i;
+
+    for (;;) {
+        for (i = 0; i < 2; i++) {
+            CdvdBgReq *bg = &bgReq[i];
+
+            if (bg->name[0] == 0) {
+                continue;
+            }
+            if (bg->flags.del == 0) {
+                if (bg->readFunc != 0 && bg->readFunc(bg, bg->readArg) > 0) {
+                    bg->readFunc = 0;
+                }
+            } else {
+                if (bg->closeFunc != 0) {
+                    bg->closeFunc(bg, bg->closeArg);
+                }
+                bg->name[0] = 0;
+            }
+        }
+        IosCdvdMgrSleep = 1;
+        iosThreadSleep();
+        IosCdvdMgrSleep = 0;
+    }
+}
+
+/* the game's mcdata.c, unchanged (the test's own unit, so the port's build
+   lists need no entry for it) */
+#include "../../../ico2/fumi/ios/mcdata.c"
 
 /* --- files --------------------------------------------------------------------- */
 
@@ -487,6 +582,10 @@ static void wait_request(void)
     int guard = 0;
 
     while (iosMcSync(&req) == 0) {
+        /* Main's per-vsync wake of the sleeping cdvd thread (main.c) */
+        if (IosCdvdMgrSleep != 0) {
+            iosThreadWakeup(&bgTh);
+        }
         ico_sched_spin_vsync();
         if (++guard > 2000) {
             printf("FAIL the card request never finished (command %d)\n", req.flags.w.command);
@@ -585,10 +684,30 @@ static void driver(void *arg)
     n = slurp(CARD_B "/" PRODUCT "/game.001", file, sizeof(file));
     CHECK(n == 25588 + 4 + 4 + 4); /* the block, the two option words, the sum */
     CHECK(n == 25600 && memcmp(file, want, 25600) == 0);
-    /* the icon files are the disc's bytes as the handler gets them, and have
-       no sum */
+    /* the icon files are the disc's bytes as mcdata.c's background read
+       hands them to the handler (a 2048-byte rounded read, the file's size
+       written), and have no sum */
     n = slurp(CARD_B "/" PRODUCT "/icon.sys", file, sizeof(file));
-    CHECK(n == 964 && file[0] == 'i' && file[963] == 'i');
+    CHECK(n == 964);
+    for (i = 0; i < n; i++) {
+        if (file[i] != icon_byte("icon.sys", i)) {
+            printf("FAIL icon.sys byte %d is %u, not %u\n", i, file[i], icon_byte("icon.sys", i));
+            fails++;
+            break;
+        }
+    }
+    n = slurp(CARD_B "/" PRODUCT "/boy_blk.ico", file, sizeof(file));
+    CHECK(n == 3000);
+    for (i = 0; i < n; i++) {
+        if (file[i] != icon_byte("boy_blk.ico", i)) {
+            printf("FAIL boy_blk.ico byte %d is %u, not %u\n", i, file[i],
+                   icon_byte("boy_blk.ico", i));
+            fails++;
+            break;
+        }
+    }
+    CHECK(bgReads >= 2 && bgMisaligned == 0);
+    CHECK(bgReq[0].name[0] == 0 && bgReq[1].name[0] == 0); /* closed */
 
     /* the card now has the save: the load menu sees slot 1 */
     strcpy(req.path, "game.");
@@ -753,6 +872,10 @@ static void boot(void *arg)
     iosMsgInit();
     iosThreadCreate(&idleTh, 1, idle, 0, idleStack, sizeof idleStack, 0x1B);
     iosThreadStart(&idleTh);
+    /* above the driver, which busy-waits (spins) between its polls as Main
+       does, so the woken reader runs within the vsync */
+    iosThreadCreate(&bgTh, 1, bg_manager, 0, bgStack, sizeof bgStack, 0x1A);
+    iosThreadStart(&bgTh);
     /* the game's priorities: the manager 27, the callers lower */
     iosThreadCreate(&mcTh, 1, iosMcManager, 0, mcStack, sizeof mcStack, 27);
     iosThreadStart(&mcTh);

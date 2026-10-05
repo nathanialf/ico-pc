@@ -423,7 +423,7 @@ void *InitWormGeo(GObj *act, WormInit *ini)
 
 void GetWormCaptureVector(void *out, GObj *act, void *node, float scale)
 {
-    sceVu0SubVector(out, ICO_RAWP(void *, GOBJ_SUB(act), 0x50, GOBJ_SUB(act)->matrix[2]), node);
+    sceVu0SubVector(out, ICO_RAWP(void *, GOBJ_SUB(act), 0x50, GOBJ_SUB(act)->matrix[3]), node);
     sceVu0Normalize(out, out);
     sceVu0ScaleVector(out, out, scale);
 }

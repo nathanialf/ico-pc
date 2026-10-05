@@ -191,7 +191,12 @@ static __inline__ int getKind(void *cur) /* derived name */
     } else if (ICO_RAW(int, cur, 0xC, ((GObj *)cur)->kind) == 16) {
         return 1;
     } else if (GOBJ_ACT(boyGObj)->actMode == 49 &&
+#ifdef ICO_HOST
+               /* the sub record's first word is parent.obj, 8 bytes here */
+               (void *)GOBJ_SUB(girlGObj)->parent.obj == (void *)GOBJ_ACT(boyGObj)->box) {
+#else
                *(int *)GOBJ_SUB(girlGObj) == (int)GOBJ_ACT(boyGObj)->box) {
+#endif
         return 2;
     }
     return 3;
@@ -202,29 +207,45 @@ static __inline__ int getKind(void *cur) /* derived name */
 void subGirlBrain_Attract(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
+
     float mypos[4];
+
     float last[4];
+
     GirlAttractParam tgt;
+
     int cnt;
+
     void *cur = brain_val.lastTarget;
+
     int type = 0;
+
     int kind;
+
     GObj *param = 0;
+
     int dbg = 0; /* local debug switch, see the rate block below */
+
     int fr = (60 - systemStatus[0] * 10) / systemStatus[1];
+
     int fr3 = fr + (60 - systemStatus[0] * 10) / systemStatus[1] * 2;
+
     int turnCnt = 0;
+
     int hintCnt = 0;
 
     float root[4];
 
 restart:
     setMode(&cnt, sub, 0);
+
     if (cur == 0) {
         debug_assert(__FILE__, 279);
         __assert(__FILE__, 279, "0");
     }
+
     kind = getKind(cur);
+
     switch (kind) {
     case 0:
         type = 1;
@@ -243,6 +264,7 @@ restart:
         param = 0;
         break;
     }
+
     switch (type) {
     case 0:
         tgt = attractObjParam;
@@ -256,6 +278,24 @@ restart:
         tgt.pos[0] = sub->env.sofaPos[0];
         tgt.pos[1] = sub->env.sofaPos[1];
         tgt.pos[2] = sub->env.sofaPos[2];
+#ifdef ICO_HOST
+        /* GirlSofaWork's 0x230 and 0x240 are readyPos and readyDir, which
+           actGirlReadyMove reads; the enemy work's pointers move them here */
+        {
+            float dir[4];
+
+            GOBJ_ACT(self)->enemy->readyPosX = sub->env.sofaPos[0];
+            GOBJ_ACT(self)->enemy->readyPosY = sub->env.sofaPos[1];
+            GOBJ_ACT(self)->enemy->readyPosZ = sub->env.sofaPos[2];
+            _GetRootObjectOrient(dir, param);
+            GOBJ_ACT(self)->enemy->readyDirX = dir[0];
+            GOBJ_ACT(self)->enemy->readyDirY = dir[1];
+            GOBJ_ACT(self)->enemy->readyDirZ = dir[2];
+        }
+        tgt.dir[0] = GOBJ_ACT(self)->enemy->readyDirX;
+        tgt.dir[1] = GOBJ_ACT(self)->enemy->readyDirY;
+        tgt.dir[2] = GOBJ_ACT(self)->enemy->readyDirZ;
+#else
         ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->pos[0] = sub->env.sofaPos[0];
         ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->pos[1] = sub->env.sofaPos[1];
         ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->pos[2] = sub->env.sofaPos[2];
@@ -263,6 +303,7 @@ restart:
         tgt.dir[0] = ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->dir[0];
         tgt.dir[1] = ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->dir[1];
         tgt.dir[2] = ((GirlSofaWork *)GOBJ_ACT(self)->enemy)->dir[2];
+#endif
         tgt.goalTurn = 1;
         break;
     case 2:
@@ -271,6 +312,7 @@ restart:
         GetRootProjectionPosOfGObj(tgt.pos, boyGObj);
         break;
     }
+
     for (;;) {
         int noTurn = 1;
         int waterHit = 0;
@@ -294,7 +336,11 @@ restart:
         if (type == 0 && tgt.obj == (void *)boyGObj && GOBJ_WORK(self)->brainTimer != 0) {
             noTurn = 0;
         }
+#ifdef ICO_HOST
+        if (GOBJ_SUB(self)->parent.obj != 0 && GOBJ_SUB(self)->parent.obj->kind == 17 &&
+#else
         if (*(int *)GOBJ_SUB(self) != 0 && *(int *)(*(int *)GOBJ_SUB(self) + 0xC) == 17 &&
+#endif
             boyGObj != 0 && type == 0 && tgt.obj == (void *)boyGObj &&
             root[1] < test_CURRENTROOT(boyGObj)[1] &&
             _DistSqGV(test_CURRENTROOT((void *)self), test_CURRENTROOT(boyGObj)) <

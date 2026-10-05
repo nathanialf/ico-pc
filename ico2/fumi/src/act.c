@@ -75,7 +75,7 @@ void actCreateMotionThread(void (*func)(), int pri, GProc **proc)
     GProc *ret = isysGObjProcAdd(isysCurrentGObj, func, 0, pri);
     *proc = ret;
     if (old != 0) {
-        debug_StdPrintfDummy("--t-- %p:act mot del %p\n", *(int *)((char *)old + 4), ret);
+        debug_StdPrintfDummy("--t-- %p:act mot del %p\n", ICO_RAW(int, old, 4, old->owner), ret);
         isysGObjProcRemove(old);
     } else {
         debug_StdPrintfDummy("--t-- %p:act mot NULL %p\n", ret, ret);
@@ -513,8 +513,12 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
                     w->intrMot = mot;
                     w->intrArg = k->ent[i].f4;
                     ICO_RAW(char *, w, 0x30, w->intrData) = (char *)GetMailAdditionalData(self, i);
+#ifdef ICO_HOST
+                    GOBJ_WORK(self)->intrReq = buf;
+#else
                     ICO_RAW(MotOriReq, *(char **)((int)GOBJ_ACT(self) + 0x688), 0x8B0,
                             GOBJ_WORK(self)->intrReq) = buf;
+#endif
                     *out = &k->ent[i];
                     return m;
                 }

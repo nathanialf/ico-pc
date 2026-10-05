@@ -1241,7 +1241,12 @@ static inline void putRoot(GObj *gobj, float *pos, float *lo, float *hi,
     pos[1] = test_CURRENTROOT(gobj)[1];
     pos[2] = test_CURRENTROOT(gobj)[2];
     low = lo[1] + lim;
+#ifdef ICO_HOST
+    /* float 81 of the sub record, EE 0x144: root.step[1] */
+    d = GOBJ_SUB(gobj)->root.step[1];
+#else
     d = ((CagePtr *)&((struct GObj *)gobj)->dobj)->f[81];
+#endif
     pos[1] = pos[1] + d;
     if (clamp) {
         pos[1] = pos[1] < low ? low : (hi[1] < pos[1] ? hi[1] : pos[1]);
@@ -1795,7 +1800,8 @@ void actCommonStone(GObj *volatile self)
             ACTSendMailCorrect(self, 0xC7);
             GOBJ_ACT(self)->enemy->stoneLevel = 0;
         }
-        if (s->f4C >= 0x3D && GOBJ_ACT(self)->enemy->stoneLevel >= 3) {
+        if (ICO_RAW(int, s, 0x4C, GOBJ_ACT(self)->modeFrame) >= 0x3D &&
+            GOBJ_ACT(self)->enemy->stoneLevel >= 3) {
             ACT_LAYOUT_GAMEOVER();
             _ACTWait(0);
         }
@@ -2436,13 +2442,21 @@ typedef struct { /* field names derived */
 /* raises the flag that ResetFlyLimit clears */
 static inline void SetFlyLimit(GObj *self) /* derived name */
 {
+#ifdef ICO_HOST
+    GOBJ_SUB(self)->ctrl.noFieldClip = 1; /* FlyLimitSub's 0x654 */
+#else
     ((FlyLimitSub *)FALL_SUB(self))->limit = 1;
+#endif
 }
 
 /* used by flyCoreLoop and actAfterFly */
 static inline void ResetFlyLimit(GObj *self) /* derived name */
 {
+#ifdef ICO_HOST
+    GOBJ_SUB(self)->ctrl.noFieldClip = 0; /* FlyLimitSub's 0x654 */
+#else
     ((FlyLimitSub *)FALL_SUB(self))->limit = 0;
+#endif
 }
 
 /* clamp to -1..1 */
@@ -2520,7 +2534,7 @@ static void debugDispSphere(void *pos, void *col, float r)
 }
 
 /* the fly has run for more than 180 seconds */
-static inline unsigned char IsFlyTimeOver(int self) /* derived name */
+static inline unsigned char IsFlyTimeOver(GObj *self) /* derived name */
 {
     if ((60 - systemStatus[0] * 10) / systemStatus[1] * 180 < GOBJ_WORK(self)->carryGirlFrames) {
         return 1;
@@ -2737,7 +2751,7 @@ static int emergencyCheck(GObj *self, int *wait, float ring[5][4], int *ringidx,
             *flags |= 2;
             return 1;
         }
-        if (debug_fly_limit_test == 0 && IsFlyTimeOver((ICO_WORD)self)) {
+        if (debug_fly_limit_test == 0 && IsFlyTimeOver(self)) {
             debug_StdPrintfDummy("\x1b[36mEMERGENCY WITH TIME OUT\x1b[m\n");
             *flags |= 4;
             return 1;
@@ -2901,7 +2915,11 @@ void actCommonFly(GObj *volatile self)
     s->flags18.ll &= ~(1ULL << 57);
     ACT_AFTER_PROC(s) = actAfterFly;
 
+#ifdef ICO_HOST
+    GOBJ_SUB(self)->ctrl.floorAttr = 0; /* FlyCtlJ's 0x5F8 */
+#else
     ((FlyCtlJ *)(char *)GOBJ_SUB(self))->f5F8 = 0;
+#endif
 
     if (IsEnemyBrainToGenerator(self, &gen)) {
         target = gen;
@@ -2927,13 +2945,13 @@ typedef struct { /* field names derived */
 #ifndef ICO_HOST
     char pad0[656];
 #endif
-    int upEnd;   /* 0x290, 1 or 2 when the field above ends by node 22 or 6 */
-    int downEnd; /* 0x294, 1 or 2 when the field below ends by node 52 or 48 */
+    int upEnd;   /* 1 or 2 when the field above ends by node 22 or 6 (EnemyBattleWork 0x290) */
+    int downEnd; /* 1 or 2 when the field below ends by node 52 or 48 (EnemyBattleWork 0x294) */
 
     union {
         unsigned long long ll;
         int i[2];
-    } moveFlags; /* 0x298 */
+    } moveFlags; /* EnemyBattleWork 0x298: word298 and stoneLevel, one doubleword */
 } LadderWork;    /* derived name */
 
 #ifdef ICO_HOST
@@ -4376,7 +4394,11 @@ inline void motCommonLadderUp(GObj *volatile self)
     LadderMotWork *s = (LadderMotWork *)(char *)GOBJ_ACT(self);
 
     while (1) {
+#ifdef ICO_HOST
+        GOBJ_ACT(self)->pushDir = 1; /* LadderMotWork's 0x38 */
+#else
         s->f38 = 1;
+#endif
         switch (GOBJ_ACT(self)->enemy->ladderUpStep) {
         case 1:
             ACTSendMailCorrect(self, 0x89);
@@ -4398,7 +4420,11 @@ inline void motCommonLadderDown(GObj *volatile self)
     LadderDownMotWork *s = (LadderDownMotWork *)(char *)GOBJ_ACT(self);
 
     while (1) {
+#ifdef ICO_HOST
+        GOBJ_ACT(self)->pushDir = -1; /* LadderMotWork's 0x38 */
+#else
         s->f38 = -1;
+#endif
         switch (GOBJ_ACT(self)->enemy->ladderDownStep) {
         case 1:
             ACTSendMailCorrect(self, 0x89);
@@ -4623,7 +4649,7 @@ inline float *test_CURRENTROOT(GObj *self)
 #ifdef ICO_HOST
         /* PC port: the EE spelling is Act + 0x100 through GObj's mail box
            offset (0x54 + 172); on a 64-bit host neither offset holds. */
-        p = (float *)GOBJ_ACT(self)->pad100;
+        p = GOBJ_ACT(self)->curRoot;
 #else
         p = (float *)((char *)&((struct GObj *)p)->mailBox + 172);
 #endif

@@ -216,8 +216,8 @@ typedef struct PObjModel { /* field names derived */
     char name[32];         /* 0x00 */
     int serial;            /* 0x20, the load serial charFileManager stamps on the model */
     int pad24;
-    Sub15C *dobj; /* 0x28 */
-    short pad2C;
+    Sub15C *dobj;          /* 0x28 */
+    short spare;           /* 0x2C, PObj's spare (cleared at set-up, never read) */
     signed char partCount; /* 0x2E */
     signed char disp;      /* 0x2F */
 

@@ -256,11 +256,18 @@ void HoldRope(GObj *rope, GObj *holder)
     CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 4, v);
     CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + ROPE_EX_OFS)) + 8, v);
     CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 8, v);
+#ifdef ICO_HOST
+    /* floats 9 and 13 from node + w1 * 0x50 are ex[w1].v0.y and .v1.y (ex
+       starts at 0x10 on the EE, after the node's three pointers here) */
+    ((ChainNode *)sys[2])->ex[w1].v0.y -= 100.0f;
+    ((ChainNode *)sys[2])->ex[w1].v1.y -= 100.0f;
+#else
     {
         float *q = (float *)((char *)sys[2] + w1 * 0x50);
         q[9] -= 100.0f;
         q[13] -= 100.0f;
     }
+#endif
     /* read through the SubHandle union: GOBJ_SUB's int read is hoisted
        above the float stores (measured) */
     CopyVector(((SubHandle *)&holder->dobj)->sub->root.move, ropeZeroVector);

@@ -72,7 +72,7 @@ typedef struct PObj { /* field names derived */
     char pad0[36];
     int image;    /* 0x24, the model file image (ObjHdr); an EE word on the host */
     PObjPkt *pkt; /* 0x28 */
-    short pad2C;  /* 0x2C */
+    short spare;  /* 0x2C, cleared when the model is set up; nothing reads it */
     /* 0x2E and 0x2F, the part count and the cluster count (the file's objnum
        and clstnum), as one short's two bitfields */
     short partCount : 8;        /* 0x2E */
@@ -105,7 +105,7 @@ typedef struct PObj { /* field names derived */
 #ifdef ICO_HOST
 #define POBJ_SAME(a, b) (__builtin_offsetof(PObj, a) == __builtin_offsetof(PObjModel, b))
 
-_Static_assert(POBJ_SAME(image, pad24) && POBJ_SAME(pkt, dobj) && POBJ_SAME(pad2C, pad2C) &&
+_Static_assert(POBJ_SAME(image, pad24) && POBJ_SAME(pkt, dobj) && POBJ_SAME(spare, spare) &&
                    POBJ_SAME(tag, mode) && POBJ_SAME(ambientScale, ambientScale) &&
                    POBJ_SAME(shadowLength, shadowLength) && POBJ_SAME(sub, parts) &&
                    POBJ_SAME(boxes, boxes) && POBJ_SAME(groups, groups) && POBJ_SAME(bb, box) &&
@@ -403,7 +403,7 @@ static void InitPObjHeader(PObj *p, ObjHdr *h, int n)
 {
     p->image = ICO_EEW(h);
     p->pkt = 0;
-    p->pad2C = 0;
+    p->spare = 0;
     p->partCount = h->objNum;
     p->clstNum = h->clstNum;
     p->tag.ll &= ~0x30000LL;
@@ -508,7 +508,7 @@ static __inline__ void InitPObjHeader(PObj *p, ObjHdr *h, int n) /* derived name
 {
     p->image = (int)h;
     p->pkt = 0;
-    p->pad2C = 0;
+    p->spare = 0;
     p->partCount = h->objNum;
     p->clstNum = h->clstNum;
     p->tag.ll &= ~0x30000LL;

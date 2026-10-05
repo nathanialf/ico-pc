@@ -46,7 +46,7 @@ static void finishCallBackFunc(struct GObj *obj);
 
 /* on the host the shared records are used: Act and GObj are runtime layout (the
    private pad views below are the EE's), and the torch's three words go in
-   fields this actor does not otherwise use: torchAnim in Act.pad470, torchObj
+   fields this actor does not otherwise use: torchAnim in Act.torchAnim, torchObj
    in doorCamera (a door-script field; the EE's 0x474 pointer has no room in
    4 bytes here) and torchFlag in the low word of wish0 (0x478, where the EE
    keeps it) */
@@ -54,7 +54,7 @@ typedef Act ActSt04A;
 
 typedef GObj PObjGObjSt04A;
 
-#define TORCH_ANIM(a) (*(int *)(a)->pad470)
+#define TORCH_ANIM(a) ((a)->torchAnim)
 #define TORCH_OBJ(a) ((a)->doorCamera)
 #define TORCH_FLAG(a) ((a)->wish0.w[0])
 #else

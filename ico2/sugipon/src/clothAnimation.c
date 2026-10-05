@@ -61,11 +61,22 @@ void TestDispChainAnimation(ChainSet *sys)
             DrawLine(p, q, col, 0);
         }
         for (j = 0; j < 5; j++) {
+#ifdef ICO_HOST
+            /* the EE offsets 0x10 + j * 0x50, 0x30 and 0x80 of the node are
+               ex[j].w, ex[0].v1 and ex[1].v1 (ChainNode's three pointers
+               move ex on the host) */
+            ChainNode *nd = &sys->nodes[i];
+
+            if (0.0f <= nd->ex[j].w) {
+                DrawLine(&nd->ex[0].v1, &nd->ex[1].v1, &c0, 0);
+            }
+#else
             char *base = (char *)&sys->nodes[i];
             char *w = base + j * 0x50;
             if (0.0f <= *(float *)(w + 0x10)) {
                 DrawLine(base + 0x30, base + 0x80, &c0, 0);
             }
+#endif
         }
     }
     gif_EndPacket();

@@ -196,7 +196,11 @@ retry:
     w->scale = sc;
     obj = enemyKind[kind].model;
     if (obj != 0x610) {
+#ifdef ICO_HOST
+        GOBJ_SUB(self)->model = GetPObjAddress(obj);
+#else
         *(int *)&GOBJ_SUB(self)->model = GetPObjAddress(obj);
+#endif
         GOBJ_SUB(self)->modelId = obj;
         debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
         w->loaded = 1;

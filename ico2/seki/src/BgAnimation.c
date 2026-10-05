@@ -516,6 +516,9 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
     BgaPtKey *k1;
+#ifdef ICO_HOST
+    BgaPtKey lastKey;
+#endif
     float f;
     float u;
     float s0;
@@ -551,10 +554,31 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
+#ifdef ICO_HOST
+    /* At the last key (f reaches its time once the PAL frame is scaled by
+       1.2075409) the EE takes k1 from the record after the keys. With
+       u = 0 its values drop out (times 0); they are finite on the EE but
+       can be NaN bits on the host (the stage 45 lightning: a NaN node, then
+       DrawLightning2's segment index from (int)NaN). The host uses a copy of
+       the last key for k1, past the motion's end, and u = 0. */
+    k1 = k + 1;
+    f -= (float)k->time;
+    if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
+#else
     k1 = k + 1;
     f -= (float)k->time;
     d = k1->time - k->time;
     u = f / (float)d;
+#endif
 
     if (k1->linear == 0) {
         float h00;
@@ -651,6 +675,9 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
 {
     BgaPtKey *k;
     BgaPtKey *k1;
+#ifdef ICO_HOST
+    BgaPtKey lastKey;
+#endif
     float f;
     float u;
     float s0;
@@ -687,10 +714,31 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
+#ifdef ICO_HOST
+    /* At the last key (f reaches its time once the PAL frame is scaled by
+       1.2075409) the EE takes k1 from the record after the keys. With
+       u = 0 its values drop out (times 0); they are finite on the EE but
+       can be NaN bits on the host (the stage 45 lightning: a NaN node, then
+       DrawLightning2's segment index from (int)NaN). The host uses a copy of
+       the last key for k1, past the motion's end, and u = 0. */
+    k1 = k + 1;
+    f -= (float)k->time;
+    if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
+#else
     k1 = k + 1;
     f -= (float)k->time;
     d = k1->time - k->time;
     u = f / (float)d;
+#endif
 
     {
         float *q = &w[0][0];
@@ -800,6 +848,9 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
 {
     BgaPtKey *k;
     BgaPtKey *k1;
+#ifdef ICO_HOST
+    BgaPtKey lastKey;
+#endif
     float f;
     float u;
     float s0;
@@ -835,10 +886,31 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
+#ifdef ICO_HOST
+    /* At the last key (f reaches its time once the PAL frame is scaled by
+       1.2075409) the EE takes k1 from the record after the keys. With
+       u = 0 its values drop out (times 0); they are finite on the EE but
+       can be NaN bits on the host (the stage 45 lightning: a NaN node, then
+       DrawLightning2's segment index from (int)NaN). The host uses a copy of
+       the last key for k1, past the motion's end, and u = 0. */
+    k1 = k + 1;
+    f -= (float)k->time;
+    if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
+#else
     k1 = k + 1;
     f -= (float)k->time;
     d = k1->time - k->time;
     u = f / (float)d;
+#endif
 
     if (k1->linear == 0) {
         float h00;
@@ -963,6 +1035,9 @@ static float bga_GetExtMotion(BgaExtMotion *m)
 {
     BgaExtKey *k;
     BgaExtKey *k1;
+#ifdef ICO_HOST
+    BgaExtKey lastKey;
+#endif
     float f;
     float s0;
     float s1;
@@ -984,10 +1059,31 @@ static float bga_GetExtMotion(BgaExtMotion *m)
     k = ICO_EEPTR(BgaExtKey *, m->key);
     i = bga_findExtKey(k, m->n, f);
     k = &k[i];
+#ifdef ICO_HOST
+    /* At the last key (f reaches its time once the PAL frame is scaled by
+       1.2075409) the EE takes k1 from the record after the keys. With
+       u = 0 its values drop out (times 0); they are finite on the EE but
+       can be NaN bits on the host (the stage 45 lightning: a NaN node, then
+       DrawLightning2's segment index from (int)NaN). The host uses a copy of
+       the last key for k1, past the motion's end, and u = 0. */
+    k1 = k + 1;
+    f -= (float)k->time;
+    if (k1 == ICO_EEPTR(BgaExtKey *, m->key) + m->n) {
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
+#else
     k1 = k + 1;
     f -= (float)k->time;
     d = k1->time - k->time;
     u = f / (float)d;
+#endif
     dv = k1->value - k->value;
 
     if (k1->linear == 0) {
@@ -1033,6 +1129,9 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
 {
     BgaKey *k;
     BgaKey *k1;
+#ifdef ICO_HOST
+    BgaKey lastKey;
+#endif
     float f;
     float u;
     float s0;
@@ -1062,10 +1161,31 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
     s1 = 0.0f;
     i = bga_findKey(k, m->n, f);
     k = &k[i];
+#ifdef ICO_HOST
+    /* At the last key (f reaches its time once the PAL frame is scaled by
+       1.2075409) the EE takes k1 from the record after the keys. With
+       u = 0 its values drop out (times 0); they are finite on the EE but
+       can be NaN bits on the host (the stage 45 lightning: a NaN node, then
+       DrawLightning2's segment index from (int)NaN). The host uses a copy of
+       the last key for k1, past the motion's end, and u = 0. */
+    k1 = k + 1;
+    f -= (float)k->time;
+    if (k1 == ICO_EEPTR(BgaKey *, m->key) + m->n) {
+        lastKey = *k;
+        lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
+        k1 = &lastKey;
+        d = k1->time - k->time;
+        u = 0.0f;
+    } else {
+        d = k1->time - k->time;
+        u = f / (float)d;
+    }
+#else
     k1 = k + 1;
     f -= (float)k->time;
     d = k1->time - k->time;
     u = f / (float)d;
+#endif
 
     if (k1->linear == 0) {
         float h00;

@@ -765,7 +765,18 @@ void InitIco2Camera(void)
 
 /* the target offset the smoothing test measures the new one against, reset
    whenever the actor asks for no offset */
+#ifdef ICO_HOST
+
+/* sceVu0AddVector below stores all four lanes (the EE's sqc2 writes the 4
+   bytes after the array, whatever the linker put there); the host gives the
+   fourth lane its own room */
+static float lastTargetOffset[4] = {0.0f, 0.0f, 0.0f}; /* derived name */
+
+#else
+
 static float lastTargetOffset[3] = {0.0f, 0.0f, 0.0f}; /* derived name */
+
+#endif
 
 static void GetTargetOffset(GObj *gobj, float *v, unsigned char flag)
 {

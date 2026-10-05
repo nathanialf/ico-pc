@@ -40,6 +40,11 @@ with the host gcc 14 on `linux-x64` and `ref-m32`
   an `#ifdef ICO_HOST` with the original in `#else` (`actInitialize`,
   `actInitialize_only_charcter`, `GetSaveSofaLayoutID`, the after-proc
   stores, the `RopeJump`/`Bar` Sub15C views, `DrawGObjWallCollision`).
+- With `ICO_OFFSET_AUDIT` defined (only `tools/offset_audit.py` defines it,
+  when it preprocesses the game) `ICO_RAW`/`ICO_RAWP` keep their EE offset
+  in the text next to the field, and the audit checks that the field is the
+  one at that offset (docs/port/OFFSET_AUDIT.md, package F1). F1 fixed the
+  sites the boot never reached that the sweep's warnings could not show.
 - `ICO_MAX_SIZE(T, lit)` (also in `ee_view.h`): `max(sizeof(T), lit)`, the
   literal on the EE, `sizeof` where a host record is wider.
 - Words that hold an object but are `int` on the EE became

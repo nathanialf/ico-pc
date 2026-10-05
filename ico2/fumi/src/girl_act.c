@@ -354,9 +354,10 @@ typedef struct GirlBrainWork { /* field names derived */
     float boyPos[4];      /* 0x5850 the boy's GetRootProjectionPosOfGObj */
     WayPoint *lastWay;    /* 0x5860, the way point GetWay_next last returned */
     char pad5864[12];
-    WVTObj hideWay;            /* 0x5870, the way the girl tries to the hide point */
-    unsigned char warn;        /* 0x58F0 a brain state asks the main loop to checkWarning */
-    unsigned char pad58F1;     /* 0x58F1 cleared each frame, never read */
+    WVTObj hideWay;     /* 0x5870, the way the girl tries to the hide point */
+    unsigned char warn; /* 0x58F0 a brain state asks the main loop to checkWarning */
+    unsigned char
+        inWarningCheck; /* 0x58F1 set by girlBrainMain_CheckWarningMode, cleared each frame, never read */
     unsigned char modeChanged; /* 0x58F2 set on the frame the mode changes */
     unsigned char lookHold;    /* 0x58F3 3 s after flags18 bit 62 while she faced the boy */
     int markerPulse;           /* 0x58F4 the runaway goal marker's pulse */
@@ -902,7 +903,7 @@ static int girlBrainMain_CheckWarningMode(unsigned char check)
     float hit[4];
     int mode;
 
-    brain_val.pad58F1 = 1;
+    brain_val.inWarningCheck = 1;
     if (brain_val.listBNear != 0) {
         mode = 2;
     } else {
@@ -1301,7 +1302,7 @@ void subGirlBrainMain(GObj *volatile self)
         }
         ((ActStatus *)&act->flags18.ll)->ll &= ~(1LL << 54);
         ACTGameView_Loop((void *)self);
-        brain_val.pad58F1 = 0;
+        brain_val.inWarningCheck = 0;
         brain_val.modeChanged = 0;
         girlBrainMain_PositionUpdate();
         girlBrainMain_MakeOthersList();
@@ -4068,7 +4069,8 @@ void actGirlPulledGo(GObj *volatile self)
     s->after = (void *)afterGirlHand;
     ACTGame_ConnectHand();
     *(MotOriReq *)&GOBJ_SUB(self)->root.wall = s->env.motOriReq;
-    ICO_RAW(int, *(char **)((char *)self + 0x15C), 0x634, GOBJ_SUB(self)->ctrl.keepWall) = 1;
+    ICO_RAW(int, ICO_RAW(char *, self, 0x15C, *(char **)&self->dobj), 0x634,
+            GOBJ_SUB(self)->ctrl.keepWall) = 1;
 #ifdef ICO_HOST
     ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlPulledGo;
 #else
@@ -4700,9 +4702,16 @@ void actGirlHintPoint(GObj *volatile self)
             _OrientXZGV(o2, u, q);
             if (_AbsRotyGV(o1, o2) >= 121) {
                 _ACTCharStatus_Set((void *)self, 13, -1.0f, 0);
+#ifdef ICO_HOST
+                /* ActPara is the EE layout of the girl's ActWork */
+                GOBJ_WORK(self)->hintPosX = u[0];
+                GOBJ_WORK(self)->hintPosY = u[1];
+                GOBJ_WORK(self)->hintPosZ = u[2];
+#else
                 ((ActPara *)((char *)GOBJ_ACT(self)->work))->hintPosX = u[0];
                 ((ActPara *)((char *)GOBJ_ACT(self)->work))->hintPosY = u[1];
                 ((ActPara *)((char *)GOBJ_ACT(self)->work))->hintPosZ = u[2];
+#endif
             }
         }
         _ACTCharStatus_Set((void *)self, 14, -1.0f, 0);
@@ -4723,8 +4732,12 @@ inline void actGirlHintVoice(GObj *volatile self)
 inline void actGirlCannotReach(GObj *volatile self)
 {
     for (;;) {
+#ifdef ICO_HOST
+        GOBJ_WORK(self)->turnMailWait = (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
+#else
         ((ActPara *)((char *)GOBJ_ACT(self)->work))->turnMailWait =
             (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
+#endif
         ACTSendMailCorrect((void *)self, 199);
         _ACTWait(1);
     }

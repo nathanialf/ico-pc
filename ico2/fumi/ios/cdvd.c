@@ -158,7 +158,7 @@ static IosMsgWord cdvdLoadEndRing[2]; /* derived name */
 
 static int stPreLoadCnt; /* derived name */
 
-static int bgRunning; /* derived name */
+static ICO_WORD bgRunning; /* derived name: the request iosCdvdBackGroundMgr runs, a pointer */
 
 static IosMsgWord stReqRing[2]; /* derived name */
 
@@ -1311,7 +1311,7 @@ static void iosCdvdBackGroundMgr(void)
     for (i = 6; i >= 0; i--, bg++) {
         if (bg->name[0] == 0 || bg->flags.busy)
             continue;
-        bgRunning = (int)bg;
+        bgRunning = (ICO_WORD)bg;
         if (bg->flags.del == 0) {
             if ((func = bg->readFunc) != 0) {
                 if (func(bg, bg->readArg) > 0)

@@ -3,6 +3,7 @@
 #include "camera-root.h"
 #include "Basic.h"
 #include "Light.h"
+#include "ee_view.h"
 #include "DisplayP2O.h"
 #include "geometryManager.h"
 #include "lineManager.h"
@@ -328,7 +329,7 @@ static void light_getNearLight(Sub15C *self, int idx)
             }
         }
     }
-    _NormalizeVector((char *)self + 0x860, dir);
+    _NormalizeVector(ICO_RAWP(char *, self, 0x860, (char *)self->shadowDir), dir);
     for (i = 0; i < 3; i++) {
         if (near[i] != 0) {
             if (near[i]->kind == 0) {

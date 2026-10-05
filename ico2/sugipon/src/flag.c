@@ -64,8 +64,8 @@ void SetFlag4PointFixID(GObj *self, int turns, int id)
     _UnitMatrix(MatrixDrive_GetMatrix());
     ang = -turns * 0x4000;
     MatrixDrive_RotMatrixZ(ang);
-    _ApplyMatrix((char *)GOBJ_SUB(self) + 0xA0, MatrixDrive_GetMatrix(),
-                 (char *)GOBJ_SUB(self) + 0xA0);
+    /* the root position, Sub15C + 0xA0 (flag.h) */
+    _ApplyMatrix(FLAG_ROOT_POS(self), MatrixDrive_GetMatrix(), FLAG_ROOT_POS(self));
     RotQuaternionZ(GOBJ_SUB(self)->root.quat, ang);
     /* the clothes' one cloth: its mesh, and the config's rows and columns */
     setFlag4PointMesh(w->clothes->rec->mesh, w->cfg, turns * 0.25f, id);

@@ -7,23 +7,33 @@
 
 #ifndef CHARFILEMANAGER_H
 #define CHARFILEMANAGER_H
-
 /* charFileManager.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 #ifdef ICO_HOST
+
 /* the loaders' name argument is the member's name, a char * (cdvd.c's
    PackKind.func), held as a pointer-wide word on the host (ICO_WORD) */
-void ReadSoundSqFile(void *h, __INTPTR_TYPE__ name, int size, int id, int kind, int word08, int seg);
+void ReadSoundSqFile(void *h, __INTPTR_TYPE__ name, int size, int id, int kind, int word08,
+                     int seg);
+
 void ReadSoundAdpcmFile(void *h, __INTPTR_TYPE__ name, int size, int id, int kind, int word08,
                         int seg);
+
 #else
+
 void ReadSoundSqFile(void *h, int name, int size, int id, int kind, int word08, int seg);
 void ReadSoundAdpcmFile(void *h, int name, int size, int id, int kind, int word08, int seg);
+
 #endif
+
 void InitCharFileManager(void);
 void ResetCharFileManager(void);
+
 struct Sub15C;
+
 void CSVSYSTEM_ReadCharFiles(struct Sub15C *rec, int id);
+/* the loaded model of a character file id (enemy.c's setup) */
+struct PObjModel *GetPObjAddress(int id);
 
 /* texture-path: one texture file, 0x34 bytes. Readers:
  * ico2/common/src/charFileManager.c (TexRec), kanban.c, layout_texture.c.

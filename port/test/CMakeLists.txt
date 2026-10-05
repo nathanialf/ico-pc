@@ -27,3 +27,16 @@ if(Python3_FOUND)
     add_test(NAME layout_asserts_fresh
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/gen_layout_asserts.py" --check)
 endif()
+
+# offset_audit (docs/port/OFFSET_AUDIT.md): every raw EE-offset access the host
+# compiles (ICO_RAW/ICO_RAWP, (char *)x + 0xNN, ((int *)x)[N], scalar and record
+# views of a record, pad<HEX> members) checked against the named field at that
+# EE offset, through host offsetof probes. It preprocesses and probes the game
+# units of this build's compile_commands.json with the build's own compiler, so
+# it runs on native builds only.
+if(Python3_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME offset_audit
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/offset_audit.py"
+                     --build "${CMAKE_BINARY_DIR}")
+    set_tests_properties(offset_audit PROPERTIES TIMEOUT 900)
+endif()

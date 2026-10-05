@@ -48,7 +48,6 @@ typedef union { /* field names derived */
 #define FLAG_SET_ANCHORS(cl, mesh) (((FlagNodeWord *)&(cl)->anchors)->i = (int)(mesh))
 #define FLAG_SET_POSW(self) (((FlagNodeWord *)((char *)GOBJ_SUB(self) + 0xAC))->f = 1.0f)
 #endif
-
 /* The sub record's display-list buffers (0xC the matrices, 0x10 the
    vectors, 0x870 the 80-byte nodes) freed and reallocated for n nodes, and
    the nodes reset; worm.c and boy.c carry the same block.  The block has its
@@ -61,10 +60,10 @@ typedef union { /* field names derived */
     {                                                                                              \
         int n;                                                                                     \
         if ((o)->nodeMtx != 0) {                                                                   \
-            iosFree((void *)ICO_PHYS((o)->nodeMtx));                                          \
+            iosFree((void *)ICO_PHYS((o)->nodeMtx));                                               \
         }                                                                                          \
         if ((o)->nodeQuat != 0) {                                                                  \
-            iosFree((void *)ICO_PHYS((o)->nodeQuat));                                         \
+            iosFree((void *)ICO_PHYS((o)->nodeQuat));                                              \
         }                                                                                          \
         FLAG_NODE_WORD(o, 0xC, nodeMtx) = 0;                                                       \
         FLAG_NODE_WORD(o, 0x10, nodeQuat) = 0;                                                     \
@@ -95,4 +94,7 @@ typedef union { /* field names derived */
         }                                                                                          \
         (o)->dispType = 2;                                                                         \
     }
+/* the flag's root position, Sub15C + 0xA0 (SetFlag4PointFixID); a raw view on
+   the EE, the field on the host (ee_view.h) */
+#define FLAG_ROOT_POS(o) ICO_RAWP(char *, GOBJ_SUB(o), 0xA0, (char *)GOBJ_SUB(o)->root.pos)
 #endif /* FLAG_H */

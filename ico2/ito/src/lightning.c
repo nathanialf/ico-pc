@@ -291,6 +291,37 @@ static LightningMtx catmullRom = {
     {0.0f, 1.0f, 0.0f, 0.0f},
 };
 
+#ifdef ICO_HOST
+
+#include <stdio.h>
+
+/* The segment the bolt position s is on: (int)s, as the EE's cvt.w.s
+   (saturating), kept to 0..num-2 so m[seg] and v[seg + 1] stay inside the
+   arrays. s at or past the last node is the bolt's end (no segment is read
+   then) and passes. Anything else outside the range is a non-finite or
+   runaway s (the EE has no NaN; the stage 45 one came from BgAnimation.c's
+   last-key read, fixed there); reported once. */
+static int lightningSeg(float s, int num) /* derived name */
+{
+    static int reported;
+    int seg = ps2_ftoi(s);
+
+    if (s >= (float)(num - 1)) {
+        return seg;
+    }
+    if (seg < 0 || seg > num - 2) {
+        if (!reported) {
+            reported = 1;
+            fprintf(stderr, "lightning: segment %d of %d (s %g) clamped; reported once\n", seg,
+                    num - 1, (double)s);
+        }
+        seg = seg < 0 ? 0 : num - 2;
+    }
+    return seg;
+}
+
+#endif
+
 void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin, float stepMax,
                     float swayStepMin, float swayStepMax, float turnMin, float turnMax,
                     float swayLimit, float width, float texLen, float seed, int c)
@@ -438,7 +469,11 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
     sway = 0.0f;
     ang = random_range(0.0f, 6.2831855f);
     for (;;) {
+#ifdef ICO_HOST
+        seg = lightningSeg(s, num);
+#else
         seg = (int)s;
+#endif
         f = s - (float)seg;
         if (dpk_CheckBufferSize() < 64) {
             goto end;
@@ -454,8 +489,15 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         sceVu0SubVector(&a, &a, &tmp);
         sceVu0Normalize(&a, &a);
         sceVu0OuterProduct(&b, &dir, &a);
+#ifdef ICO_HOST
+        /* div.s: a zero-length segment (two nodes at one place) gives Fmax on
+           the EE, not Inf (DIVERGENCES.md F5) */
+        s += ps2_div(random_range(stepMin, stepMax), _GetLength(&v[seg + 1], &v[seg]));
+        seg = lightningSeg(s, num);
+#else
         s += random_range(stepMin, stepMax) / _GetLength(&v[seg + 1], &v[seg]);
         seg = (int)s;
+#endif
         f = s - (float)seg;
         lim = (float)(num - 1) - half;
         if (s < half) {

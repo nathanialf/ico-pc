@@ -809,7 +809,7 @@ typedef struct MotOriSpin { /* field names derived */
 
 char *SetMotionRequest(void *self, int mot, MotOriReq req)
 {
-    char *w = (char *)GOBJ_SUB(self) + 0x470;
+    char *w = ICO_RAWP(char *, GOBJ_SUB(self), 0x470, (char *)&GOBJ_SUB(self)->ctrl);
 #ifdef ICO_HOST
     struct MotCtrl *c = &GOBJ_SUB(self)->ctrl;
 #endif

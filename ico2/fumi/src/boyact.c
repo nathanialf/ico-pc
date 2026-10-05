@@ -1191,7 +1191,9 @@ void subBoyControl(GObj *volatile self)
             break;
         case 26:
             if (0.1f < s->stick.mag && !((unsigned int)(s->stick.angle + 134) < 269)) {
-                sceVu0ScaleVector(GOBJ_WORK(self)->fallDir, (char *)GOBJ_ACT(self)->work + 0x8D0,
+                sceVu0ScaleVector(GOBJ_WORK(self)->fallDir,
+                                  ICO_RAWP(char *, GOBJ_ACT(self)->work, 0x8D0,
+                                           (char *)GOBJ_WORK(self)->cliffOrient),
                                   -1.0f);
                 ACTSendMailCorrect(self, 0x139);
             }
@@ -2607,7 +2609,7 @@ void actBoyCliffHesitate(GObj *volatile self)
     int hit = 0;
 
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.b.wall);
-    GetOrientOfWall(ICO_RAWP(char *, BOY_WALL(self), 0x8D0, (char *)GOBJ_WORK(self)->pad8D0),
+    GetOrientOfWall(ICO_RAWP(char *, BOY_WALL(self), 0x8D0, (char *)GOBJ_WORK(self)->cliffOrient),
                     GOBJ_WORK(self)->intrReq.b.wall.elem, &GOBJ_WORK(self)->intrReq.b.wall.o);
     if (CompareAttribute(((FcWallEnt *)GOBJ_WORK(self)->intrReq.b.wall.elem)->attr, 0x400)) {
         hit = 1;

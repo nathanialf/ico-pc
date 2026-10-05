@@ -1289,7 +1289,7 @@ inline void _ACTCharStatus_Init(int **self)
     Act *a = GOBJ_ACT(self);
 
     a->bits58 = 0;
-    *(long long *)a->pad60 = 0;
+    a->bits60 = 0;
 #else
     long long *p = (long long *)self[0x59];
     p[0xB] = 0;
@@ -2434,6 +2434,32 @@ static int hand_able_connect(void)
     if (boyGObj == 0 || ((char *)girlGObj) == 0) {
         return 0;
     }
+#ifdef ICO_HOST
+    /* the girl's work + 0x540..0x561 is ActWork.handCl (wider records before
+       it on the host) */
+    if (debug_font_flag & 1) {
+        HandClInfo *d = &GOBJ_WORK(girlGObj)->handCl;
+
+        debug_Printf(10, 120, 0x0FFFFFFF, "[%d] [%d] [%d] [%d] [%d]\n", d->on, d->hit, d->attr,
+                     d->hit2, d->attr2);
+    }
+    {
+        HandClInfo *hc = &GOBJ_WORK(girlGObj)->handCl;
+
+        if (hc->on != 0) {
+            if (hc->hit != 0 || hc->hit2 != 0) {
+                if (hc->attr != 0) {
+                    return 1;
+                }
+                if (hc->attr2 == 0) {
+                    return 0;
+                }
+            }
+            return 1;
+        }
+    }
+    (void)h;
+#else
     if (debug_font_flag & 1) {
         unsigned char *d = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
 
@@ -2452,6 +2478,7 @@ static int hand_able_connect(void)
         }
         return 1;
     }
+#endif
     boy[0] = test_CURRENTROOT(boyGObj)[0];
     boy[1] = test_CURRENTROOT(boyGObj)[1];
     boy[2] = test_CURRENTROOT(boyGObj)[2];
@@ -2756,7 +2783,7 @@ static int GetTarget(GObj *self, char *s, int kind, float *pos, int *pmode)
         }
         break;
     case 11:
-        GetRootPosition(pos, *(GObj **)&((Act *)s)->statusVal18);
+        GetRootPosition(pos, ICO_RAW(GObj *, s, 0x74, (GObj *)((Act *)s)->statusVal18));
         pos[1] = *(float *)&test_CURRENTROOT(self)[1];
         *pmode = 2;
         rv = 1;

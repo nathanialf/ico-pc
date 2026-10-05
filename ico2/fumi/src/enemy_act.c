@@ -1346,8 +1346,10 @@ static void MoveChestForCatchBoy(GObj *self)
     _ApplyRyGV(ori, (float)ang2 * 3.1415927f / 180.0f);
     sceVu0ScaleVector(sc, ori, a);
     sc[1] = b;
-    sceVu0AddVector((float *)((char *)&GOBJ_SUB(self)->root + 752), p0, sc);
-    debug_NMarker((float *)((char *)&GOBJ_SUB(self)->root + 752), 255, 0, 0, 200.0f);
+    sceVu0AddVector(ICO_RAWP(float *, &GOBJ_SUB(self)->root, 752, GOBJ_SUB(self)->root.lookPos), p0,
+                    sc);
+    debug_NMarker(ICO_RAWP(float *, &GOBJ_SUB(self)->root, 752, GOBJ_SUB(self)->root.lookPos), 255,
+                  0, 0, 200.0f);
 }
 
 inline void afterEnemyBodylift(GObj *volatile self)
@@ -2811,17 +2813,13 @@ void actEnemyStart(GObj *self)
         act->flags18.ll = (act->flags18.ll & ~(1ULL << 51)) | ((bit & 1) << 51);
     }
     if (GOBJ_ACT(self)->enemy->liftKind == 3) {
-        ICO_RAW(float,
-                (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)((char *)self + 0x15C)))->p,
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
                 0x45C, GOBJ_SUB(self)->root.ikRate0) = 0.05f;
-        ICO_RAW(float,
-                (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)((char *)self + 0x15C)))->p,
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
                 0x460, GOBJ_SUB(self)->root.handRate) = 0.05f;
-        ICO_RAW(float,
-                (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)((char *)self + 0x15C)))->p,
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
                 0x464, GOBJ_SUB(self)->root.ikRate1) = 0.05f;
-        ICO_RAW(float,
-                (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)((char *)self + 0x15C)))->p,
+        ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
                 0x468, GOBJ_SUB(self)->root.ikRate2) = 0.05f;
     }
     GOBJ_ACT(self)->enemy->battleType = debug_enemy_battle_type;
@@ -2866,7 +2864,13 @@ inline void subEnemyBrain_Irregular(GObj *volatile self)
 {
     EnemyBrainWork *sub = (EnemyBrainWork *)self->act;
 
+#ifdef ICO_HOST
+    /* EnemyBrainWork's flags at 0x20 is Act.flags20 */
+    (void)sub;
+    GOBJ_ACT(self)->flags20.ll &= ~(1LL << 34);
+#else
     sub->flags &= ~(1LL << 34);
+#endif
     eBrainSendMes(self, 4);
     if (isEnemyCarriedByGirl(self)) {
         afterCommonCarry(self);

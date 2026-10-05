@@ -398,8 +398,8 @@ static inline void alignPosition(GObj *self, float *dst, float *src, float grid)
 {
     float npos[4];
     char *n = (char *)(ICO_WORD)GOBJ_SUB(self);
-    float cx = ICO_RAW(float, n, 0x50, GOBJ_SUB(self)->matrix[2][0]);
-    float cz = ICO_RAW(float, n, 0x58, GOBJ_SUB(self)->matrix[2][2]);
+    float cx = ICO_RAW(float, n, 0x50, GOBJ_SUB(self)->matrix[3][0]);
+    float cz = ICO_RAW(float, n, 0x58, GOBJ_SUB(self)->matrix[3][2]);
 
     CopyVector(npos, src);
     npos[0] = getAlign(src[0] - cx, grid) + cx;

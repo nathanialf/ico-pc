@@ -15,6 +15,7 @@
 #include "GifPacket.h"
 #include "Matrix.h"
 #include "DmaPacket.h"
+#include "ee_view.h"
 #include <assert.h>
 
 #ifdef ICO_HOST
@@ -1758,7 +1759,8 @@ static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
     reg_setNMatrixPacketNoLightCalc_setMatrix();
     if (mode != 0 && mode != 3) {
         o->model->shadowLength = src->model->shadowLength;
-        _CopyVector((char *)o + 0x860, (char *)src + 0x860);
+        _CopyVector(ICO_RAWP(char *, o, 0x860, (char *)o->shadowDir),
+                    ICO_RAWP(char *, src, 0x860, (char *)src->shadowDir));
         _CopyMatrix((char *)o->lightMtx, (char *)src->lightMtx);
         _CopyMatrix((char *)o->lightMtx + 64, (char *)src->lightMtx + 64);
         _SetCurrentMatrix(matrixptr + 0x40);
