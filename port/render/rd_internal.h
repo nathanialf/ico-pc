@@ -59,7 +59,9 @@ typedef enum RdCmdType {
     RDC_TARGET,      /* u[0] colour target id, u[1] depth target id, u[2] gsW | gsH << 16,
                       * b[0] useOffset; also resets the scissor to gsW x gsH */
     RDC_SCISSOR,     /* u[0..3] x0 y0 x1 y1, GS pixels, inclusive (SCISSOR_1) */
-    RDC_STATE_LAST = RDC_SCISSOR,
+    RDC_ALPHA,       /* b[0] RdBlend, b[1] FIX; ABE untouched (wave 2: raw ALPHA writes) */
+    RDC_SHADE,       /* b[0] PRIM.IIP: 1 Gouraud, 0 flat (wave 2) */
+    RDC_STATE_LAST = RDC_SHADE,
     /* actions */
     RDC_CLEAR,       /* u[0] target, b[0..3] rgba, b[4] clearDepth, u[1] GS z */
     RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed; u[0] payload offset of
@@ -121,10 +123,11 @@ typedef struct RdStateBlock {
     uint32_t gsW, gsH;  /* the size the caller set with the target */
     uint32_t useOffset; /* add the preset's field offset to XYOFFSET */
     int32_t scissor[4]; /* x0, y0, x1, y1 inclusive */
+    uint32_t gouraud;   /* PRIM.IIP (rd_Gouraud), 1 = Gouraud */
 } RdStateBlock;
 
 _Static_assert(sizeof(RdDrawState) == 28, "RdDrawState layout");
-_Static_assert(sizeof(RdStateBlock) == 76, "RdStateBlock is dumped as raw bytes");
+_Static_assert(sizeof(RdStateBlock) == 80, "RdStateBlock is dumped as raw bytes");
 
 /* Applies a state command to s.  Returns false (s untouched) for actions. */
 bool rd__ApplyState(RdStateBlock *s, const RdCmd *c);
@@ -239,7 +242,13 @@ typedef enum RdVsId {
     RD_VS_COUNT
 } RdVsId;
 
-typedef enum RdFsId { RD_FS_SPRITE = 0, RD_FS_BLIT, RD_FS_BLEND_INT, RD_FS_COUNT } RdFsId;
+typedef enum RdFsId {
+    RD_FS_SPRITE = 0,
+    RD_FS_BLIT,
+    RD_FS_BLEND_INT,
+    RD_FS_DATE_SNAP, /* wave 2: destination alpha MSB into the R8 DATE snapshot */
+    RD_FS_COUNT
+} RdFsId;
 
 /* How an RdBlend equation reaches the hardware (RENDER_API.md section 3). */
 typedef enum RdBlendPath {
@@ -352,7 +361,8 @@ enum {
     RD_ONCE_EXACT_SIZE,
     RD_ONCE_STQ,
     RD_ONCE_LIST_RANGE,
-    RD_ONCE_TEMP_FULL
+    RD_ONCE_TEMP_FULL,
+    RD_ONCE_DATE_SIZE
 };
 
 void rd__Log(const char *fmt, ...);
@@ -390,6 +400,9 @@ uint64_t rd__RingAlloc(uint64_t size, uint64_t align);
 RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY);
 RhiBindGroup rd__DrawGroup(const void *drawCB);
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s);
+/* The same with t2 (sprite_ps's DATE snapshot) bound to date; rd__TexGroup binds
+ * the 1x1 dummy there (sprite_ps reads t2 only under DF_DATE). */
+RhiBindGroup rd__TexGroupDate(RhiTexture t, RhiSampler s, RhiTexture date);
 RhiSampler rd__Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t);
 
 /* ------------------------------------------------------ tests and tools */
@@ -406,7 +419,7 @@ bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Dumps (rd_dump.c).  Loading creates the frame's textures and temporary
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
-#define RD_DUMP_VERSION 1u
+#define RD_DUMP_VERSION 2u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2) */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

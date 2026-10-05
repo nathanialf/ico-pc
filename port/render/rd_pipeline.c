@@ -9,9 +9,9 @@
  * fba are 0, afailSplit is 0, the effect of an AFAIL split pass on the
  * pipeline is carried by zwrite and colorMask, and blend holds one
  * representative mode per blend path (4 for the LERPs, 5 for the premultiplied
- * adds, 6 for the premultiplied subtracts).  DATE is recorded but 0 in
- * the key until the shaders read the DATE snapshot (requested in the R1b
- * report); a DATE draw is drawn without the test and reported once.
+ * adds, 6 for the premultiplied subtracts).  DATE is a uniform too (wave 2:
+ * DF_DATE/DF_DATM, sprite_ps tests the R8 snapshot rd_replay.c binds at t2),
+ * so date stays 0 in the key.
  *
  * Blend paths (RENDER_API.md section 3, SHADERS.md "Dual-source factor
  * above 1.0"): on UNORM targets fixed-point blend factors clamp to 1.0, so
@@ -143,9 +143,6 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
     } else if (bp >= RD_BP_AD_ADD) {
         rd__LogOnce(RD_ONCE_AD, "Ad blend modes 8-10 use DST_ALPHA (Ad/255, not Ad/128)");
     }
-    if (d->test.date != RD_DATE_OFF) {
-        rd__LogOnce(RD_ONCE_DATE, "DATE is not applied yet (needs the DATE snapshot in sprite_ps)");
-    }
     if (!d->colclamp && bp != RD_BP_NONE) {
         rd__LogOnce(RD_ONCE_COLCLAMP, "COLCLAMP 0 on a hardware-blended draw clamps instead");
     }
@@ -172,6 +169,13 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
     }
     if (d->pabe) {
         base.flags |= ICO_DF_PABE;
+    }
+    /* DATE (wave 2): a shader test against the R8 snapshot rd_replay.c binds
+     * at t2; a uniform, so the key keeps date normalised to off */
+    if (d->test.date == RD_DATE_DEST_ALPHA_0) {
+        base.flags |= ICO_DF_DATE;
+    } else if (d->test.date == RD_DATE_DEST_ALPHA_1) {
+        base.flags |= ICO_DF_DATE | ICO_DF_DATM;
     }
     base.fix = d->blendFix;
     if (blend < RD_BLEND_COUNT) {
@@ -412,6 +416,7 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   glows): the same plus the depth-tested literals 0x50000, 0x5000D, the
  *   list 1/2 default 0x5140D (AFAIL split) and the list 4 default 0x5C000
  *   (DATE, normalised out).
+ *   The DATE snapshot (wave 2): blit_vs/date_snap_ps into R8.
  *   Blits: blit_vs/blit_ps into RGBA8 (presenter line doubling, headless
  *   output) and into the swapchain format (BGRA8 or RGBA8); blend_int into
  *   RGBA8_UINT (exact feedback blends).
@@ -475,6 +480,8 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
     const RdPipeKeyInt blitA = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
     const RdPipeKeyInt blitB = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_BGRA8_UNORM);
     const RdPipeKeyInt exact = rd__PostKey(RD_VS_BLEND_INT, RD_FS_BLEND_INT, RHI_FMT_RGBA8_UINT);
+    const RdPipeKeyInt dateSnap = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
+    n = addKey(out, max, n, &dateSnap);
     n = addKey(out, max, n, &blitA);
     n = addKey(out, max, n, &blitB);
     n = addKey(out, max, n, &exact);

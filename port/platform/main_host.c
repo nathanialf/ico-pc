@@ -3,8 +3,13 @@
  *
  * The host program's entry point. The game's own main (common/src/main.c)
  * is compiled as ico_game_main (CMakeLists.txt renames it with a definition
- * on that one source) and runs on the boot fiber (host_loop.c). This loop
- * simulates vsyncs as fast as it can; pacing and presentation come later.
+ * on that one source) and runs on the boot fiber (host_loop.c).
+ *
+ * The default build opens a window titled "ICO" (window_host.h): the game
+ * draws through rd into it, one simulated vsync per real 20 ms (PAL; 16.7 ms
+ * at 60 Hz), presented with vsync on, and Escape or closing the window ends
+ * the run. The headless build (CMake ICO_HEADLESS=ON: the trace and test
+ * runs) has no window and simulates vsyncs as fast as it can.
  *
  * Run with no arguments (a double-click), everything comes from the
  * executable's folder (host_config.h describes ico-pc.ini):
@@ -48,6 +53,9 @@
 #include "host_loop.h"
 #include "pad_script.h"
 #include "trace_host.h"
+#ifndef ICO_HEADLESS
+#include "window_host.h"
+#endif
 
 /* The PAL disc image's SHA-1 (docs/port/DATA.md, "Facts about the PAL disc
    relied on"). */
@@ -446,6 +454,16 @@ int main(int argc, char **argv)
 #ifdef _WIN32
     ico_diag_arm_vectored();
 #endif
+#ifndef ICO_HEADLESS
+    /* the window and the renderer before boot: gsb_InitGSSystem's first
+       frame already records into rd.  512 x 512 is the PAL frame; gsb_Init
+       resizes the scene targets if the game switches to 60 Hz. */
+    if (ico_window_open(512, 512) != 0) {
+        ico_host_fatal(log_path, "Could not open the game window or start Vulkan.\n"
+                                 "The log names the reason; a Vulkan 1.2 driver is needed.");
+    }
+    atexit(ico_window_close);
+#endif
     ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
@@ -456,6 +474,13 @@ int main(int argc, char **argv)
             ico_diag_milestone("first vsync done");
         }
         ico_trace_poll();
+#ifndef ICO_HEADLESS
+        if (!ico_window_pump()) {
+            exit_reason = "the window was closed";
+            return 0;
+        }
+        ico_window_pace(ico_host_vsync_hz());
+#endif
         if (have_ticks && ico_host_main_ticks() >= ticks) {
             exit_reason = "ticks= reached";
             return 0;

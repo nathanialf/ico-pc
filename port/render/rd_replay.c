@@ -41,7 +41,8 @@
 static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs", "sprite_world_vs", "blit_vs",
                                                    "blend_int_vs"};
 
-static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps", "blit_ps", "blend_int_ps"};
+static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps", "blit_ps", "blend_int_ps",
+                                                   "date_snap_ps"};
 
 /* ------------------------------------------------------------------ init */
 
@@ -67,6 +68,10 @@ static RhiShader makeShader(const char *name)
     return rhi_CreateShader(&d);
 }
 
+/* rhi_Init succeeded: rd__GpuShutdown has a device to tear down (without a
+ * Vulkan loader rhi_Init fails and there is nothing to wait on or destroy). */
+static bool s_rhiUp;
+
 bool rd__GpuInit(void *sdlWindow)
 {
     RhiDeviceDesc dd;
@@ -77,6 +82,7 @@ bool rd__GpuInit(void *sdlWindow)
     if (!rhi_Init(&dd)) {
         return false;
     }
+    s_rhiUp = true;
     const RhiLimits *lim = rhi_Limits();
     if (!lim->dualSourceBlend || !lim->stencilWrap) {
         rd__Log("device lacks dual-source blend or stencil wrap");
@@ -85,12 +91,15 @@ bool rd__GpuInit(void *sdlWindow)
     const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
     const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
     const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
-    const RhiBindSlot s2[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS}, {1, RHI_BIND_SAMPLER, FS}};
+    /* t2: sprite_ps's DATE snapshot (wave 2) */
+    const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
+                               {1, RHI_BIND_SAMPLER, FS},
+                               {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     const RhiBindSlot s3[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     g_rd.layoutFrame = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s0, 1, "rd frame"});
     g_rd.layoutDraw = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 1, "rd draw"});
-    g_rd.layoutTex = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2, 2, "rd tex"});
+    g_rd.layoutTex = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2, 3, "rd tex"});
     g_rd.layoutInt = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s3, 2, "rd int"});
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id;
     for (int i = 0; i < RD_VS_COUNT; i++) {
@@ -121,6 +130,9 @@ bool rd__GpuInit(void *sdlWindow)
 
 void rd__GpuShutdown(void)
 {
+    if (!s_rhiUp) {
+        return;
+    }
     rhi_WaitIdle();
     for (int i = 0; i < RD_SCRATCH_COUNT; i++) {
         if (g_rd.scratch[i].tex.id) {
@@ -157,7 +169,14 @@ void rd__GpuShutdown(void)
             rhi_DestroyBindGroupLayout(ls[i]);
         }
     }
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        g_rd.ring[i] = (RhiBuffer){0};
+        g_rd.ringMap[i] = NULL;
+        g_rd.ringCap[i] = 0;
+    }
+    memset(g_rd.scratch, 0, sizeof(g_rd.scratch));
     rhi_Shutdown();
+    s_rhiUp = false;
 }
 
 /* ------------------------------------------------------------- helpers */
@@ -238,9 +257,9 @@ RhiBindGroup rd__DrawGroup(const void *drawCB)
     return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
 }
 
-RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s)
+RhiBindGroup rd__TexGroupDate(RhiTexture t, RhiSampler s, RhiTexture date)
 {
-    RhiBinding b[2];
+    RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
     b[0].type = RHI_BIND_SAMPLED_TEXTURE;
@@ -248,7 +267,15 @@ RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s)
     b[1].slot = 1;
     b[1].type = RHI_BIND_SAMPLER;
     b[1].sampler = s;
-    return rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 2});
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = date;
+    return rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+}
+
+RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s)
+{
+    return rd__TexGroupDate(t, s, g_rd.dummy);
 }
 
 RhiSampler rd__Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
@@ -266,6 +293,9 @@ typedef struct Replay {
     RhiBindGroup frameBG;
     uint32_t frameKey[5]; /* colour, gsW, gsH, useOffset, pass serial */
     uint32_t passSerial;
+    uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
+    uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
+    uint32_t dateSerial;  /* writeSerial when it was taken */
 } Replay;
 
 static void endPass(Replay *r)
@@ -330,6 +360,7 @@ static void doClear(Replay *r, const RdCmd *c)
         col[i] = t->format == RHI_FMT_RGBA8_UINT ? (float)c->b[i] : (float)c->b[i] / 255.0f;
     }
     const int depth = c->b[4] && t->withDepth;
+    r->writeSerial++;
     beginPass(r, t, depth ? t : NULL, c->u[0], depth ? c->u[0] : 0, RHI_LOAD_CLEAR, col,
               RHI_LOAD_CLEAR, gsDepth(c->u[1]));
     endPass(r);
@@ -363,7 +394,8 @@ static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const
 /* Expands a screen-prim command into a triangle or line list.  Returns the
  * vertex count; *topo is RD_PRIM_TRIANGLES or RD_PRIM_LINES. */
 static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFixed, float tw,
-                       float th, const float uvOff[2], IcoSpriteVertex *o, uint8_t *topo)
+                       float th, const float uvOff[2], IcoSpriteVertex *o, uint8_t *topo,
+                       int gouraud)
 {
     uint32_t k = 0;
     *topo = RD_PRIM_TRIANGLES;
@@ -437,6 +469,19 @@ static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFix
         break;
     default:
         break;
+    }
+    if (!gouraud && *topo != RD_PRIM_TRIANGLES) {
+        /* flat lines (PRIM.IIP 0): the second vertex's colour */
+        for (uint32_t i = 0; i + 1 < k; i += 2) {
+            memcpy(o[i].rgba, o[i + 1].rgba, 4);
+        }
+    } else if (!gouraud && prim != RD_PRIM_SPRITES && prim != RD_PRIM_POINTS) {
+        /* flat triangles: the last vertex's colour (sprites and points are
+         * one colour already) */
+        for (uint32_t i = 0; i + 2 < k; i += 3) {
+            memcpy(o[i].rgba, o[i + 2].rgba, 4);
+            memcpy(o[i + 1].rgba, o[i + 2].rgba, 4);
+        }
     }
     return k;
 }
@@ -528,11 +573,78 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
     return src->color;
 }
 
+/* TEST.DATE (wave 2): the bound target's alpha MSB into the R8 snapshot
+ * (RD_TARGET_DATE_SNAPSHOT), pixel for pixel, for sprite_ps to test at t2.
+ * Retaken when the target changed or anything may have written alpha since
+ * the last one, so consecutive DATE draws see each other's writes as on the
+ * GS (within one draw, overlapping primitives see the snapshot: accepted). */
+static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
+{
+    RdTargetRec *sn = rd__TargetRec(RD_TARGET_DATE_SNAPSHOT + 1);
+    if (!sn || !sn->color.id || tc == sn) {
+        return g_rd.dummy;
+    }
+    if (r->dateFor == tcId && r->dateSerial == r->writeSerial &&
+        sn->colorState == RHI_STATE_SHADER_READ) {
+        return sn->color;
+    }
+    uint32_t w = tc->w, h = tc->h;
+    if (w > sn->w || h > sn->h) {
+        rd__LogOnce(RD_ONCE_DATE_SIZE, "DATE on a target larger than the snapshot: clipped");
+        w = w > sn->w ? sn->w : w;
+        h = h > sn->h ? sn->h : h;
+    }
+    endPass(r);
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
+    rd__Transition(s_cl, sn->color, &sn->colorState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = sn->color;
+    p.color[0].load = RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.width = sn->w;
+    p.height = sn->h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(s_cl, &vp);
+    const RhiRect sc = {0, 0, w, h};
+    rhi_CmdSetScissor(s_cl, &sc);
+    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
+    RhiPipeline pipe = rd__GetPipeline(&k);
+    if (pipe.id) {
+        IcoDrawCB cb;
+        memset(&cb, 0, sizeof(cb));
+        cb.uvRect[2] = (float)w;
+        cb.uvRect[3] = (float)h;
+        cb.tex[0] = (float)tc->w;
+        cb.tex[1] = (float)tc->h;
+        cb.tex[2] = 1.0f / (float)tc->w;
+        cb.tex[3] = 1.0f / (float)tc->h;
+        rhi_CmdSetPipeline(s_cl, pipe);
+        rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
+        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(
+            s_cl, 2,
+            rd__TexGroup(tc->color, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP,
+                                                RD_WRAP_CLAMP)));
+        rhi_CmdDraw(s_cl, 3, 0, 1);
+    }
+    rhi_CmdEndRenderPass(s_cl);
+    rd__Transition(s_cl, sn->color, &sn->colorState, RHI_STATE_SHADER_READ);
+    r->dateFor = tcId;
+    r->dateSerial = r->writeSerial;
+    return sn->color;
+}
+
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdTargetRec *tc = rd__TargetRec(r->st.color);
     if (!tc || !tc->color.id) {
         return;
+    }
+    RhiTexture dateTex = g_rd.dummy;
+    if (r->st.ds.test.date != RD_DATE_OFF) {
+        dateTex = dateSnapshot(r, tc, r->st.color);
     }
     RdTargetRec *td = rd__TargetRec(r->st.depth);
     if (td && !td->withDepth) {
@@ -553,8 +665,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     uint8_t topo;
     IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
-    const uint32_t nv =
-        expand(v, n, c->b[0], c->b[2], (float)tw, (float)th, r->st.uvOffset, out, &topo);
+    const uint32_t nv = expand(v, n, c->b[0], c->b[2], (float)tw, (float)th, r->st.uvOffset, out,
+                               &topo, r->st.gouraud != 0);
     if (nv == 0) {
         return;
     }
@@ -576,7 +688,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     RhiSampler smp = rd__Sampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
                                  (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t);
-    RhiBindGroup g2 = rd__TexGroup(tex, smp);
+    RhiBindGroup g2 = rd__TexGroupDate(tex, smp, dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != tdId) {
         beginPass(r, tc, td, r->st.color, tdId, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
@@ -625,6 +737,9 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         rhi_CmdDraw(s_cl, nv, 0, 1);
+        if (dp[i].key.gs.colorMask & 8) {
+            r->writeSerial++;
+        }
     }
 }
 
@@ -636,6 +751,7 @@ static void doExact(Replay *r, const RdCmd *c)
         return;
     }
     endPass(r);
+    r->writeSerial++;
     uint32_t w = dst->w, h = dst->h;
     if (src->w != w || src->h != h) {
         rd__LogOnce(RD_ONCE_EXACT_SIZE, "exact blend between targets of different sizes: the "
@@ -734,6 +850,7 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     endPass(r);
+    r->writeSerial++;
     rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
     rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){cr.srcX, cr.srcY, w, h}, dst->color, cr.dstX,

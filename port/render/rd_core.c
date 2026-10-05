@@ -92,6 +92,7 @@ void rd__ResetStateBlock(RdStateBlock *s)
     s->useOffset = 1;
     s->scissor[2] = (int32_t)s->gsW - 1;
     s->scissor[3] = (int32_t)s->gsH - 1;
+    s->gouraud = 1;
 }
 
 static uint8_t maskFromFbmsk(uint32_t fbmsk)
@@ -187,6 +188,13 @@ bool rd__ApplyState(RdStateBlock *s, const RdCmd *c)
         for (int i = 0; i < 4; i++) {
             s->scissor[i] = (int32_t)c->u[i];
         }
+        return true;
+    case RDC_ALPHA:
+        d->blend = c->b[0];
+        d->blendFix = c->b[1];
+        return true;
+    case RDC_SHADE:
+        s->gouraud = c->b[0];
         return true;
     default:
         return false;
@@ -887,6 +895,23 @@ void rd_EndFrame(int keep)
     }
 }
 
+void rd_DiscardFrame(void)
+{
+    RdFrame *f = rd__RecFrame();
+    if (!f) {
+        return;
+    }
+    /* the state the dropped lists would have left is not applied: nothing
+     * of them reached the GS */
+    rd__FrameReset(f);
+    g_rd.recIndex = -1;
+}
+
+bool rd_FrameOpen(void)
+{
+    return rd__RecFrame() != NULL;
+}
+
 void rd_SetCamera(const RdCamera *cam)
 {
     RdFrame *f = rd__RecFrame();
@@ -1007,12 +1032,8 @@ void rd__RecFilter(RdFilter mag, RdFilter min)
 
 void rd_Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
 {
-    rd__RecFilter(mag, min);
-    RdCmd *c = rd__Push(RDC_WRAP);
-    if (c) {
-        c->b[0] = (uint8_t)s;
-        c->b[1] = (uint8_t)t;
-    }
+    rd_SamplerFilter(mag, min);
+    rd_SamplerWrap(s, t);
 }
 
 void rd_Texture(RdTex tex, RdTexFn fn, RdTcc tcc)
@@ -1061,6 +1082,48 @@ void rd__RecScissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 void rd__RecABE(int abe)
 {
     push1(RDC_ABE, abe ? 1 : 0);
+}
+
+void rd_ABE(int abe)
+{
+    rd__RecABE(abe);
+}
+
+void rd_BlendFunc(RdBlend eq, uint8_t fix)
+{
+    if ((unsigned)eq >= RD_BLEND_COUNT) {
+        rd__LogOnce(RD_ONCE_BLEND_RANGE, "rd_BlendFunc(%d) out of range: ignored", (int)eq);
+        return;
+    }
+    RdCmd *c = rd__Push(RDC_ALPHA);
+    if (c) {
+        c->b[0] = (uint8_t)eq;
+        c->b[1] = fix;
+    }
+}
+
+void rd_Scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
+{
+    rd__RecScissor(x0, y0, x1, y1);
+}
+
+void rd_SamplerFilter(RdFilter mag, RdFilter min)
+{
+    rd__RecFilter(mag, min);
+}
+
+void rd_SamplerWrap(RdWrap s, RdWrap t)
+{
+    RdCmd *c = rd__Push(RDC_WRAP);
+    if (c) {
+        c->b[0] = (uint8_t)s;
+        c->b[1] = (uint8_t)t;
+    }
+}
+
+void rd_Gouraud(int iip)
+{
+    push1(RDC_SHADE, iip ? 1 : 0);
 }
 
 /* ------------------------------------------------------------------ draws */

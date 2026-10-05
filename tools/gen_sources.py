@@ -10,8 +10,8 @@ microprograms (ico2/vusrc/, replaced by shaders).
 Each C source lands in one list per programmer directory (the directory
 decides its include path, as tools/compile_c.sh has it), or in
 ICO_RENDERER_SOURCES when it is one of the files the renderer packages
-rewrite (docs/port/BUILD_STATUS.md). The renderer files are compiled only
-when ICO_HEADLESS is off, except HEADLESS_SIM: renderer-owned files whose
+rewrite (docs/port/BUILD_STATUS.md). The renderer files are not compiled
+until their packages port them, except HEADLESS_SIM: renderer-owned files whose
 plain C the simulation needs, compiled in both modes.
 
     tools/gen_sources.py           rewrite cmake/IcoSources.cmake
@@ -114,7 +114,7 @@ def render():
         parts.append(cmake_list(f"ICO_SOURCES_{p}", by_prog[p],
                                 f"ico2/{p}: {len(by_prog[p])} non-renderer sources"))
     parts.append(cmake_list("ICO_RENDERER_SOURCES", renderer,
-                            f"{len(renderer)} renderer-owned sources (compiled when ICO_HEADLESS is off)"))
+                            f"{len(renderer)} renderer-owned sources (not compiled until their packages port them)"))
     parts.append(cmake_list("ICO_DATA_MEMBERS", members,
                             f"{len(members)} data-only members, build/data/<member>.c "
                             "(tools/gen_data_c.py)"))

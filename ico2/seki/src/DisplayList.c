@@ -13,20 +13,27 @@
 #include "Basic.h"
 #include <assert.h>
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+#endif
 #define DL_DEBUG 0 /* derived name */
 
 /* One priority's display list: whether a DMA tag is open, where the open tag
    is, the address and quadword count it refers to and its tag id, the start
    of the list's buffer and the write pointer. */
+/* ICO_WORD (typedef.h): the buffer addresses are ints on the EE and
+   pointer-wide on the host; the offsets are the EE's. */
 typedef struct {           /* field names derived */
     int open;              /* 0x00 */
-    int tag;               /* 0x04 */
+    ICO_WORD tag;          /* 0x04 */
     long long addr;        /* 0x08 */
     unsigned int qwc;      /* 0x10 */
     int pad14;             /* 0x14 */
     unsigned long long id; /* 0x18 */
-    int start;             /* 0x20 */
-    int cur;               /* 0x24 */
+    ICO_WORD start;        /* 0x20 */
+    ICO_WORD cur;          /* 0x24 */
 } DlEntry;                 /* derived name */
 
 /* The bank the list is built into and the priority it is building at, then the 13
@@ -38,7 +45,7 @@ static int dlPriority; /* derived name */
 
 static DlEntry dlEntries[13]; /* derived name */
 
-static int dlBufferHead[2][13]; /* derived name */
+static ICO_WORD dlBufferHead[2][13]; /* derived name */
 
 /* The depth of the priority stack below. */
 static int dlStackDepth = 0; /* derived name */
@@ -59,7 +66,7 @@ void dl_Init(void)
     dlStackDepth = 0;
     for (i = 0; i < 2; i++) {
         for (j = 0; j < 13; j++) {
-            dlBufferHead[i][j] = ICO_UNCACHED_ACCEL(
+            dlBufferHead[i][j] = (ICO_WORD)ICO_UNCACHED_ACCEL(
                 ICO_ADDR(iosMallocDebug(ios_partition_common, dlBufferSize[j], __FILE__, 393)));
         }
     }
@@ -76,7 +83,7 @@ inline void dl_Out(void)
 {
     int i;
     for (i = 0; i < 2; i++) {
-        int *p = dlBufferHead[i];
+        ICO_WORD *p = dlBufferHead[i];
         int j;
         for (j = 12; j >= 0; j--) {
             iosFree((void *)*p);
@@ -88,13 +95,13 @@ inline void dl_Out(void)
 void dl_Clear(void)
 {
     int flag = dlBank ^ 1;
-    int *src = dlBufferHead[flag];
+    ICO_WORD *src = dlBufferHead[flag];
     DlEntry *dst = dlEntries;
     int i;
     dlBank = flag;
     dlPriority = 0;
     for (i = 12; i >= 0; i--) {
-        int v = *src;
+        ICO_WORD v = *src;
         dst->open = 0;
         src++;
         dst->cur = v;
@@ -104,13 +111,26 @@ void dl_Clear(void)
     dpk_SwapBuffer();
     gif_Init();
     mc_Reset();
+#ifdef ICO_RD
+    /* R2a: the frame boundary on rd.  A frame still open was never kicked
+       (dl_Clear without dl_Swap): it is dropped. */
+    rd_DiscardFrame();
+    rd_BeginFrame();
+#endif
 }
 
 void dl_Swap(void)
 {
     int i;
     int j;
-    int stride = 0x28;
+    int stride = sizeof(DlEntry);
+
+#ifdef ICO_RD
+    /* R2a: the kick.  rd replays lists 0..12 (11..12 with fbKeep, which
+       starts the DMA at list 11) and presents; nothing is DMA'd. */
+    gif_HostFlush();
+    rd_EndFrame(fbKeep);
+#endif
     dl_SetDLPriority(0xC);
     dl_OpenDma(7, 0, 0);
     dl_CloseDma();
@@ -125,16 +145,22 @@ void dl_Swap(void)
         i = j;
     } while (j < 0xC);
     FlushCache(0);
+#ifndef ICO_RD
     if (fbKeep) {
-        sceDmaSend(dmaVif, ICO_PHYS(dlEntries[11].start));
+        sceDmaSend(dmaVif, (void *)ICO_PHYS(dlEntries[11].start));
     } else {
-        sceDmaSend(dmaVif, ICO_PHYS(dlEntries[0].start));
+        sceDmaSend(dmaVif, (void *)ICO_PHYS(dlEntries[0].start));
     }
+#endif
     dl_Clear();
 }
 
 inline void dl_SetDLPriority(int pri)
 {
+#ifdef ICO_RD
+    /* R2a: what the decoder holds belongs to the list being left */
+    gif_HostFlush();
+#endif
     if (pri < 0) {
         dlPriority = 0;
     } else if (pri >= 0xD) {
@@ -142,6 +168,9 @@ inline void dl_SetDLPriority(int pri)
     } else {
         dlPriority = pri;
     }
+#ifdef ICO_RD
+    rd_SelectList(dlPriority);
+#endif
 }
 
 void dl_PushPriority(void)
@@ -159,8 +188,14 @@ void dl_PushPriority(void)
 void dl_PopPriority(void)
 {
     if (dlStackDepth > 0) {
+#ifdef ICO_RD
+        gif_HostFlush();
+#endif
         dlPriority = dlPriorityStack[dlStackDepth - 1];
         dlStackDepth--;
+#ifdef ICO_RD
+        rd_SelectList(dlPriority);
+#endif
     } else {
         debug_StdPrintfDummy("dl_PopPriority:Stack Underflow.\n");
         debug_assert(__FILE__, 552);
@@ -176,8 +211,8 @@ inline int dl_GetPri(void)
 void dl_Debug(void)
 {
     DlEntry *entry = &dlEntries[dlPriority];
-    unsigned int end = entry->cur;
-    unsigned int start = entry->tag;
+    unsigned int end = (unsigned int)entry->cur;
+    unsigned int start = (unsigned int)entry->tag;
     unsigned int count = (end - start) >> 4;
     debug_StdPrintfDummy("dldma %d\n", count - 1);
 }
@@ -185,7 +220,7 @@ void dl_Debug(void)
 inline void dl_OpenDma(int id, void *addr, int qwc)
 {
     DlEntry *entry = &dlEntries[dlPriority];
-    int old;
+    ICO_WORD old;
 
     /* the buffer overflow check, compiled out (DL_DEBUG is 0); the
        message-assert form this programmer writes in Packet.c and
@@ -201,7 +236,7 @@ inline void dl_OpenDma(int id, void *addr, int qwc)
     entry->id = id;
     entry->qwc = qwc;
     entry->open = 1;
-    entry->addr = ICO_PHYS(ICO_ADDR(addr));
+    entry->addr = (long long)ICO_PHYS((ICO_WORD)ICO_ADDR(addr));
     entry->tag = old;
     entry->cur = old + 0x10;
 }

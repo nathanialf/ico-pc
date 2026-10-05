@@ -27,6 +27,12 @@
 #include <libgraph.h>
 #include <libcdvd.h>
 
+#ifdef ICO_RD
+
+#include "rd.h"
+
+#endif
+
 /* declared here with an int count, not through string.h, as in
    layout_action.c and puddle.c */
 extern void *memset(void *p, int c, int n);
@@ -135,6 +141,19 @@ void gsb_Init(void *db)
     zoomTarget = 1.0f;
     zoomSpeed = 1000.0f;
     zoomCurrent = 1.0f;
+#ifdef ICO_RD
+    /* R2a hook (R2c takes it over): the 50/60 Hz switch changes the frame
+       size; rd's scene-sized targets follow */
+    {
+        static int rdW, rdH; /* port */
+
+        if (rdW != ScreenWidth || rdH != ScreenHeight) {
+            rdW = ScreenWidth;
+            rdH = ScreenHeight;
+            rd_ResetScene((unsigned int)ScreenWidth, (unsigned int)ScreenHeight);
+        }
+    }
+#endif
 }
 
 /* A frame buffer clear packet for the whole screen, 48 doublewords: a GIF tag
@@ -927,6 +946,58 @@ static int gsb_PostEffect(void)
     return fbKeep;
 }
 
+#ifdef ICO_RD
+
+/* R2a hook (R2c takes it over): what sceGsSwapDBuff sends at each flip on
+   the PS2, ahead of the frame's lists: the draw environment of the scene
+   buffer (FRAME 0x800 with its Z buffer, the centred XYOFFSET and full
+   SCISSOR) and the clear of it to the BG colour (gsb_SetBGColor, alpha
+   0x80) with Z 0.  It undoes the reduction's DISPLAY target, which would
+   otherwise leak into the next frame's list 0. */
+static void gsbR2aFrameHead(void)
+{
+    unsigned char bg[4];
+
+    if (!rd_FrameOpen()) {
+        return;
+    }
+    gsb_GetBGColor(bg);
+    dl_SetDLPriority(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), (unsigned int)ScreenWidth,
+                 (unsigned int)ScreenHeight, 1);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    /* a keep frame (fbKeep) replays lists 11 and 12 only, where the PS2
+       still had the flip's draw environment; in a full frame lists 7 to 10
+       end on gif_SetDrawEnviroment(0x800, ...) anyway */
+    dl_SetDLPriority(11);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), (unsigned int)ScreenWidth,
+                 (unsigned int)ScreenHeight, 1);
+    dl_SetDLPriority(0);
+}
+
+/* R2a hook (R2c takes it over): gsb_Reduction's packet (SCENE into the
+   half-height DISPLAY, tinted, border-cropped) as rd's reduction pass at the
+   end of list 12 of the frame dl_Swap is about to close; the tint is the one
+   gsb_Reduction computed this call, which on the PS2 is the tint of the
+   reduction of the frame this dl_Swap kicks. */
+static void gsbR2aReduction(void)
+{
+    RdPostParams pp;
+
+    if (!rd_FrameOpen()) {
+        return;
+    }
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = (unsigned char)reductionRed;
+    pp.rgba[1] = (unsigned char)reductionGreen;
+    pp.rgba[2] = (unsigned char)reductionBlue;
+    pp.rgba[3] = 0x80;
+    dl_SetDLPriority(12);
+    rd_Post(RD_POST_REDUCTION, &pp);
+}
+
+#endif
+
 /* gsb_InitGSSystem's first call brings every module up */
 static int firstGsInit = 1; /* derived name */
 
@@ -948,6 +1019,9 @@ void gsb_InitGSSystem(void)
         gsb_Init(&db);
         sceGsSyncV(0);
         dl_Init();
+#ifdef ICO_RD
+        gsbR2aFrameHead();
+#endif
         firstGsInit = 0;
     } else {
         debug_StdPrintfDummy("dma init\n");
@@ -1030,11 +1104,19 @@ void gsb_UpdateGSSystem(int keep)
     sceGsSetHalfOffset(draw, (short)((float)screen_offset_x + 2048.0f),
                        (short)((float)screen_offset_y + 2048.0f), odd_even == 0);
     tex_ResetVram();
+#ifdef ICO_RD
+    if (keep == 0) {
+        gsbR2aReduction();
+    }
+#endif
     if (keep == 0) {
         dl_Swap();
     } else {
         dl_Clear();
     }
+#ifdef ICO_RD
+    gsbR2aFrameHead();
+#endif
     gsb_SetGsDefault();
     postEffectReady = 0;
     shadow_Reset();
@@ -1073,6 +1155,9 @@ void gsb_ResetGSSystem(void)
                        (short)((float)screen_offset_y + 2048.0f), odd_even == 0);
     tex_ResetVram();
     dl_Swap();
+#ifdef ICO_RD
+    gsbR2aFrameHead();
+#endif
     gsb_SetGsDefault();
 }
 
@@ -1223,8 +1308,8 @@ void gsb_SetVSMatrix(int w, int h, float d)
     vsParam[8] = 262144.0f;
     vsParam[2] =
         (float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f) * (float)h / (float)ScreenHeight;
-    gsb_SetVSMatrixSub(matrixptr + 0xC0, matrixptr + 0x1C0, matrixptr + 0x240, matrixptr + 0x340,
-                       vsParam);
+    gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
+                       (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
 }
 
 /* Clip a box against the current matrix: transform its eight corners with the

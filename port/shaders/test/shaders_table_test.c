@@ -8,8 +8,9 @@
 #include <string.h>
 
 static const char *const expected[] = {
-    "sprite_ui_vs", "sprite_world_vs", "sprite_ps",  "blit_vs",    "blit_ps", "blit_fix_ps",
-    "blend_int_vs", "blend_int_ps",    "fog_lut_vs", "fog_lut_ps", "font_vs", "font_ps",
+    "sprite_ui_vs", "sprite_world_vs", "sprite_ps",    "blit_vs",    "blit_ps",
+    "blit_fix_ps",  "blend_int_vs",    "blend_int_ps", "fog_lut_vs", "fog_lut_ps",
+    "font_vs",      "font_ps",         "date_snap_ps",
 };
 
 int main(void)

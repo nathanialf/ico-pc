@@ -9,7 +9,7 @@
  * W x H output and writes that instead.  Commands of later waves (meshes,
  * fog, ...) are skipped with a message instead of stopping.
  *
- * Exit: 0 written, 1 error, 77 no Vulkan device. */
+ * Exit: 0 written, 1 error, 77 no Vulkan device or no dump file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +70,13 @@ int main(int argc, char **argv)
         }
     }
     uint32_t gw = 0, gh = 0;
+    FILE *probe = fopen(dump, "rb");
+    if (!probe) {
+        /* rd_pixel writes the dump; without a Vulkan device it skipped */
+        fprintf(stderr, "%s: no such dump (skipped)\n", dump);
+        return 77;
+    }
+    fclose(probe);
     if (!peekSize(dump, &gw, &gh) || !gw || !gh || gw > 4096 || gh > 4096) {
         fprintf(stderr, "%s: not an rd dump\n", dump);
         return 1;

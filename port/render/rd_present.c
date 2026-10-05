@@ -198,3 +198,17 @@ void rd__PresentShutdown(void)
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
 }
+
+void rd_ResizeOutput(uint32_t width, uint32_t height)
+{
+    if (!g_rd.inited || width == 0 || height == 0) {
+        return;
+    }
+    g_rd.settings.outputWidth = width;
+    g_rd.settings.outputHeight = height;
+    g_rd.pendingSettings.outputWidth = width;
+    g_rd.pendingSettings.outputHeight = height;
+    if (g_rd.hasDevice && rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
+        rhi_ResizeSwapchain(width, height, g_rd.settings.vsync != 0);
+    }
+}

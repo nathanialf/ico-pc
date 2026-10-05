@@ -47,9 +47,18 @@ SpriteVSOut sprite_world_vs(SpriteVSIn i)
 
 Texture2D<float4> g_texture : register(t1, space2);
 SamplerState g_sampler : register(s1, space2);
+// The DATE snapshot (wave 2): R8, 1.0 where the bound target's alpha MSB
+// was set, addressed in target pixels. Read only under DF_DATE; otherwise a
+// 1x1 dummy is bound and never fetched.
+Texture2D<float> g_dateSnap : register(t2, space2);
 
 DualOut sprite_ps(SpriteVSOut i)
 {
+    if ((g_mode.x & DF_DATE) != 0u) {
+        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+            discard;
+        }
+    }
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
         uint4 t = uint4(floor(g_texture.Sample(g_sampler, i.uv) * 255.0 + 0.5));
@@ -60,4 +69,18 @@ DualOut sprite_ps(SpriteVSOut i)
         discard;
     }
     return gs_dual_out(col, g_mode.x, g_blend.y);
+}
+
+// date_snap_ps (wave 2): the bound target's alpha MSB into the R8 DATE
+// snapshot, pixel for pixel (t1 is the target, read with Load; viewport =
+// the target's size). Drawn with blit_vs.
+struct DateSnapIn
+{
+    float4 pos : SV_Position;
+};
+
+float date_snap_ps(DateSnapIn i) : SV_Target0
+{
+    float a = g_texture.Load(int3(int2(i.pos.xy), 0)).a;
+    return a * 255.0 >= 127.5 ? 1.0 : 0.0;
 }

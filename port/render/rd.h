@@ -335,6 +335,17 @@ void rd_BeginFrame(void);
 /* dl_Swap: closes the frame.  keep != 0 replays lists 11..12 only (fbKeep).
  * Hands the RdFrame to the presenter; returns immediately. */
 void rd_EndFrame(int keep);
+/* Added in wave 2 (R2a).  dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
+ * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
+ * recorded since rd_BeginFrame are dropped unreplayed, as the PS2 drops a
+ * display list it never kicks.  No-op when no frame is open. */
+void rd_DiscardFrame(void);
+/* True between rd_BeginFrame and rd_EndFrame / rd_DiscardFrame. */
+bool rd_FrameOpen(void);
+/* The window's drawable size changed (SDL pixel-size event): resizes the
+ * swapchain and the presenter's output box at once.  Host loop only, never
+ * from inside a frame's replay. */
+void rd_ResizeOutput(uint32_t width, uint32_t height);
 /* gsb_SetVSMatrix: the camera for this frame (used by Enhanced projection,
  * interpolation and the WORLD-space 2D conversion). */
 void rd_SetCamera(const RdCamera *cam);
@@ -373,6 +384,25 @@ void rd_TextureOff(void);
 void rd_UVOffset(float u, float v);
 void rd_ColorMask(uint32_t fbmsk);
 
+/* Added in wave 2 (R2a), for GifPacket.c's GS register decoding (raw
+ * gif_SetGsReg writes set one register, never a group):
+ *   rd_ABE           PRIM.ABE alone (rd_Blend sets the equation and ABE together)
+ *   rd_BlendFunc     the ALPHA register alone: equation and FIX, ABE untouched
+ *   rd_Scissor       SCISSOR_1, GS pixels of the bound target, inclusive
+ *                    (rd_SetTarget resets it to the target's size)
+ *   rd_SamplerFilter TEX1 alone (MMAG, MMIN base filter); wrap untouched
+ *   rd_SamplerWrap   CLAMP alone; filters untouched
+ *   rd_Gouraud       PRIM.IIP: 1 = Gouraud (the default), 0 = flat, where the
+ *                    GS takes the colour of a primitive's last vertex
+ *                    (triangles, strips, fans, lines; sprites always use the
+ *                    second vertex) */
+void rd_ABE(int abe);
+void rd_BlendFunc(RdBlend eq, uint8_t fix);
+void rd_Scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+void rd_SamplerFilter(RdFilter mag, RdFilter min);
+void rd_SamplerWrap(RdWrap s, RdWrap t);
+void rd_Gouraud(int iip);
+
 /* ------------------------------------------------------------ targets */
 
 /* Named target handle; gsb_SetFrame, gif_SetDrawEnviroment with the fixed
@@ -408,6 +438,7 @@ RdTex rd_TargetTexture(RdTarget t, RdTexView view);
  * meaningful for PSMCT16/24 sources). */
 RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMode,
                        const char *debugName);
+
 /* Added in wave 1 (R1b): a texture whose alpha byte is still the source
  * format's, expanded by the shader under the TEXA state in force at replay
  * (so TEXA leaks between lists exactly as on the GS) instead of being baked
@@ -415,6 +446,7 @@ RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMod
  * alpha byte holds the 1-bit A (0 or 1; TA1 when set, else TA0).  The values
  * equal TEXFMT_* in port/shaders/gs_math.hlsli. */
 typedef enum RdTexSrc { RD_TEXSRC_RGBA32 = 0, RD_TEXSRC_RGB24 = 1, RD_TEXSRC_RGBA16 = 2 } RdTexSrc;
+
 RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
                           const char *debugName);
 /* tex_scrollClut: the CLUT changed, re-expanded pixels follow. */

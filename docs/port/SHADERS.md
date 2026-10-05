@@ -73,7 +73,7 @@ Group = register space, slot = register number (`port/rhi/vk/README.md`).
 | 0 | 0 | `b0, space0` | `FrameCB`, per frame |
 | 1 | 1 | `b1, space1` | `DrawCB`, per draw or post pass |
 | 1 | 0 | `t0, space1` | storage buffer (bones, particles; later waves) |
-| 2 | 1..4 | `t1..t4, space2` | textures |
+| 2 | 1..4 | `t1..t4, space2` | textures (`sprite_ps`: t1 the texture, t2 the DATE snapshot) |
 | 2 | 1..4 | `s1..s4, space2` | samplers |
 
 Vulkan bindings: slot + 0 (b), + 16 (t), + 32 (s). Clip space is D3D:
@@ -123,7 +123,10 @@ waves.
 
 Flags: `DF_TEXTURED` 1 (TME), `DF_DECAL` 2 (else MODULATE), `DF_TCC_RGBA` 4,
 `DF_FBA` 8, `DF_PABE` 16, `DF_FIX_FACTOR` 32 (blend factor from FIX, not As),
-`DF_PREMUL` 64 (see below).
+`DF_PREMUL` 64 (see below), `DF_DATE` 128 and `DF_DATM` 256 (wave 2: TEST.DATE
+and DATM; `sprite_ps` loads the R8 snapshot at t2 in target pixels and
+discards where its MSB differs from DATM; t2 is fetched only under
+`DF_DATE`, so a 1x1 dummy is bound otherwise).
 
 ### Vertex (sprite.hlsl, font.hlsl; `IcoSpriteVertex`, 20 bytes)
 
@@ -147,6 +150,7 @@ vertex shader with `g_tex.zw`.
 | `gs_tfx_mod`, `gs_texture_function` | `min((tex * col) >> 7, 255)`; DECAL; TCC |
 | `gs_texa_alpha`, `gs_texa_expand` | the three `RdTexA` modes for PSMCT24/16 texels (`TEXFMT_*`) |
 | `gs_alpha_pass`, `gs_alpha_discard` | the eight `RdAlphaTest` compares; AFAIL split passes |
+| `gs_date_discard` | TEST.DATE against the snapshot texel (`DF_DATE`, `DF_DATM`) |
 | `DualOut`, `gs_dual_out` | `SV_Target0` colour/255 with the stored GS alpha (0x80 stays 0x80), `SV_Target1` factor As/128 or FIX/128; FBA, PABE |
 | `gs_blend_ch`, `gs_blend_reg_ch`, `gs_blend_int` | `((A - B) * C >> 7) + D`, arithmetic shift, clamp or wrap; the ALPHA-register form for feedback passes on RGBA8_UINT |
 | `fullscreen_triangle` | 3 vertices from `SV_VertexID`, no vertex buffer |
@@ -171,7 +175,8 @@ exceed 0x80.
 | name | file | stage | notes |
 | --- | --- | --- | --- |
 | `sprite_ui_vs`, `sprite_world_vs` | sprite.hlsl | vertex | 12.4 GS coordinates; UI and WORLD apply different `g_space` entries; any topology |
-| `sprite_ps` | sprite.hlsl | fragment | untextured or textured, texture function, TEXA, alpha test, dual-source output |
+| `sprite_ps` | sprite.hlsl | fragment | untextured or textured, texture function, TEXA, alpha test, DATE (t2), dual-source output |
+| `date_snap_ps` | sprite.hlsl | fragment | wave 2: the bound target (t1, `Load`) alpha MSB into the R8 DATE snapshot, 1.0 where set; drawn with `blit_vs`, viewport = the target |
 | `blit_vs` | blit.hlsl | vertex | fullscreen triangle, source rectangle from `g_uvRect` |
 | `blit_ps` | blit.hlsl | fragment | one output; texture function with the tint, or the tint alone without `DF_TEXTURED` |
 | `blit_fix_ps` | blit.hlsl | fragment | same, dual-source with the FIX factor |
@@ -185,4 +190,4 @@ exceed 0x80.
 | --- | --- |
 | `shaders_table` | every entry present, SPIR-V magic, DXIL signed, stages and lookups (the compile itself is the build: a wrong shader stops ninja with DXC's text) |
 | `gs_math` | `gs_math.hlsli` compiled as C against the formulas of `port/test/gs_blend_test.c`: texture function over all 65,536 pairs, blend over a dense grid for both COLCLAMP modes and the twelve ALPHA registers, the eight alpha tests, the three TEXA modes, the Z mapping |
-| `shaders_pixel` | through the Vulkan RHI (exit 77 without a device): sprite cells (untextured, textured modulate, alpha test fail and pass, LERP_AS at 0x80 exact and 0x40 within 1 LSB, PREMUL additive exact, PABE), `blit_ps` identity copy (exact) and tint, `blend_int_ps` for LERP_AS, LERP_FIX 0x70 and a wrapping add on RGBA8_UINT (exact); validation errors fail it |
+| `shaders_pixel` | through the Vulkan RHI (exit 77 without a device): sprite cells (untextured, textured modulate, alpha test fail and pass, LERP_AS at 0x80 exact and 0x40 within 1 LSB, PREMUL additive exact, PABE), `blit_ps` identity copy (exact) and tint, `blend_int_ps` for LERP_AS, LERP_FIX 0x70 and a wrapping add on RGBA8_UINT (exact); validation errors fail it. Its sprite layout declares t2 (the DATE snapshot) since wave 2; the DATE test itself is in `rd_pixel` |

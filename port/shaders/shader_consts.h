@@ -41,7 +41,9 @@ enum {
     ICO_DF_FBA = 8,
     ICO_DF_PABE = 16,
     ICO_DF_FIX_FACTOR = 32,
-    ICO_DF_PREMUL = 64
+    ICO_DF_PREMUL = 64,
+    ICO_DF_DATE = 128, /* destination alpha test against t2 (the DATE snapshot) */
+    ICO_DF_DATM = 256  /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */

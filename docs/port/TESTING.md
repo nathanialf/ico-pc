@@ -11,7 +11,10 @@ logs, and the next packages read them.
    into `build-host/<pkg>-<preset>`, then build. Check the import table with
    `tools/toolchain/mingw-gcc/usr/bin/{i686,x86_64}-w64-mingw32-objdump -p`.
    It must list only system DLLs (`KERNEL32`, `msvcrt`, `USER32`,
-   `COMDLG32`) and the GUI subsystem. The Windows link uses `-mwindows
+   `COMDLG32`) and the GUI subsystem; since renderer wave 2 the window build
+   also imports `SDL3.dll`, which the build copies beside the exe and the
+   package ships (Vulkan's `vulkan-1.dll` is loaded at run time, from the
+   driver). The Windows link uses `-mwindows
    -static-libgcc -static` (`CMakeLists.txt`).
 2. **Package.** Stage the files under `dist/` (gitignored), one folder per
    architecture with its exe, its link map (`ico_pc.map`, written beside the
@@ -122,3 +125,27 @@ A Main tick is one pass of Main's loop. `common/src/main.c` calls
   `linux-x64`: `seki/src/Light.c:131`, a pointer held in an `int`, Phase 2;
   where Windows puts its heap decides whether that truncates); its log
   should now end in a crash report naming the location.
+
+## Renderer wave 2 checkpoint (package R2a)
+
+- **Package:** `dist/ico-pc-wave2-win.zip`, root folder `ico-pc-wave2/`,
+  with `TEST.md` and `x86/`, `x64/` (each: the window exe, its `.map`,
+  `SDL3.dll`, `ico-pc.ini` with `iso=` and `watchdog=30` and no `ticks=`,
+  and `pad-script.txt` = `port/input/pad-boot.txt`). Built from a clean
+  worktree of `43bb792c` plus package R2a's changes (presets `win-x86-ref`
+  and `win-x64`, which build the window since R2a; `-DICO_LINK_EXE=ON`).
+- **What it is:** the first window. The seki 2D layer draws through `rd`
+  (`docs/port/RENDER_API.md` section 9) in real time at 50 Hz with vsync;
+  game textures are placeholders (a checker per texture) until the texture
+  package; the 3D world is not drawn (wave 3).
+- **Expected:** the boot signs and the title as groups of checker
+  rectangles that fade in and out, in a 4:3 box; `exit: the window was
+  closed` at the end of the log. `gif:` lines list the GS registers the
+  decoder does not handle (expected so far: none on the boot signs and the
+  title; the texture uploads' BITBLTBUF/TRX* do not pass through the
+  decoder). The script's New Game set flag 382 at tick 661 on the headless
+  `ref-m32` run (Phase 1b above), so the title is up for a few seconds
+  before it.
+- **Container checks for this package:** `rd_layout` (the layout frame
+  through the host `GifPacket.c`, recording and pixels), `rd_pixel` (adds
+  DATE and flat shading), headless `linux-x64` and `ref-m32` ctest.

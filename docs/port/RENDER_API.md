@@ -111,7 +111,7 @@ data; the `enemyParts.c` mode is fixed at 5.
 | `Cd·As + Cd` (mode 11, disc data only) | Needs a factor above 1.0 on Cd; not representable with the current shaders. The draw leaves Cd unchanged and is reported once. |
 | AFAIL FB_ONLY (0x5140D) | Two draws: alpha > ref with depth write, then alpha ≤ ref with depth write off (the split pass is a DrawCB uniform; the pipelines differ by Z write). Self-overlap order within a strip can differ; accepted, see DIVERGENCES.md when observed. |
 | AFAIL RGB_ONLY with ATST NEVER (0x3F001, 0x33001) | Colour mask RGB, depth write off, no alpha test. |
-| DATE | Not applied yet (R1b): `sprite_ps` has no snapshot input, so DATE draws are drawn untested and reported once. Plan: R8 snapshot of the scene alpha MSB (`RD_TARGET_DATE_SNAPSHOT`) taken when a DATE-consuming list starts (list 4 head, shadow composite, aura); fragment shader discards on the test. D3D12 cannot read the bound target and stencil export is not universal, so no feedback loops. Fullscreen consumers ping-pong. |
+| DATE | Applied since wave 2 (R2a). A screen draw with TEST.DATE first takes an R8 snapshot of its target's alpha MSB into `RD_TARGET_DATE_SNAPSHOT` (`date_snap_ps`, pixel for pixel, `rd_replay.c dateSnapshot`), then `sprite_ps` loads it at t2 and discards where the MSB differs from DATM (`DF_DATE`, `DF_DATM`, uniforms: the pipeline key keeps date 0). The snapshot is retaken when the target changes or anything since may have written alpha (a clear, a copy, an exact blend, a draw whose colour mask includes A), so consecutive DATE draws see each other's writes as on the GS; overlapping primitives inside one draw see the snapshot (accepted). D3D12 cannot read the bound target and stencil export is not universal, so no feedback loops. |
 | COLCLAMP 0 (shadow count) | Stencil increment/decrement wrap on the scene depth-stencil; `RD_POST_SHADOW_RESOLVE` writes stencil ≠ 0 into SHADOW0, then the original 256/128/64 blur chain runs. |
 | FBA | Fragment shader forces alpha MSB; per material. |
 | PABE | Fragment shader: blend factor 0 when As MSB clear (dual-source output 1 = 0 and output 0 alpha path unchanged). |
@@ -141,6 +141,19 @@ so TEXA leaks between lists as on the GS), and a note on `rd_SetTarget`
 (XYOFFSET is always centred; `useOffset` adds the field offset; the call
 resets the scissor; `depth` names the target whose depth buffer is bound).
 No caller exists yet.
+
+Wave 2 additions to `rd.h` (R2a), for the seki layer's register decoding
+(each raw GS write sets one register, never a group): `rd_ABE` (PRIM.ABE
+alone), `rd_BlendFunc` (ALPHA alone, ABE untouched; new command
+`RDC_ALPHA`), `rd_Scissor`, `rd_SamplerFilter` (TEX1 alone),
+`rd_SamplerWrap` (CLAMP alone), `rd_Gouraud` (PRIM.IIP; new command
+`RDC_SHADE` and `RdStateBlock.gouraud`, default 1; flat triangles take the
+last vertex's colour, flat lines the second's), `rd_DiscardFrame` and
+`rd_FrameOpen` (dl_Clear without dl_Swap drops the open frame unreplayed),
+`rd_ResizeOutput` (window resize). The dump format is version 2
+(`RdStateBlock` is 80 bytes). Callers: `ico2/seki/src/GifPacket.c`,
+`DisplayFont.c`, `DisplayList.c`, `GsBase.c` (R2a hooks),
+`port/platform/window_host.c`.
 
 ## 4. Backend
 
@@ -255,7 +268,120 @@ count with stencil.
    registers directly; wave 2 routes them through `rd_Post(RD_POST_REDUCTION)`
    and the FMV blit at the same point in the frame.
 
-## 9. What the first pixels need
+## 9. The seki layer on rd (wave 2, R2a)
+
+The window build (`ICO_HEADLESS=OFF`, the default; compile definition
+`ICO_RD`) compiles `GifPacket.c`, `DisplayList.c`, `DmaPacket.c`,
+`DisplayFont.c` and five hooks in `GsBase.c` onto `rd`; the headless build
+keeps the original packet code byte for byte, so traces are unchanged.
+
+**Lists and frames.** `dl_SetDLPriority` and `dl_PopPriority` select the rd
+list (after flushing the decoder into the list being left).
+`dl_Swap` closes the frame with `rd_EndFrame(fbKeep)` (replay and present;
+nothing is DMA'd, `sceDmaSend` is not called), then `dl_Clear` discards a
+frame still open (the `gsb_UpdateGSSystem(1)` path) and begins the next.
+`PacketBufferStruct`, the 13 DMA lists and their tags are still built (the
+`gif_*` helpers no longer write their A+D pairs into the packet; raw
+writers still do), so heap use and the bookkeeping other code reads are
+unchanged.
+
+**GS register decoding** (the plan's `rd_gs_shim.c`, folded into
+`GifPacket.c`). Every register write of the 2D layer reaches one decoder in
+packet order: the `gif_*` helpers (their bodies are unchanged; `setGsReg`
+feeds the decoder), `gif_SetGsReg`, and the A+D pairs other files write
+straight into the open packet (`Texture.c`'s TEX0 packet, `GsBase.c`'s
+macros), which are decoded at the next `gif_*` entry or at the end of the
+packet, so the two stay in order. Decoded: PRIM (ABE, TME, IIP, FST, the
+vertex queue), RGBAQ, ST, UV, XYZ2/XYZF2 (kick), XYZ3/XYZF3 (queue only,
+as the strip helpers use it), TEX0 (texture seam), TEX1, CLAMP, ALPHA,
+TEST, ZBUF (mask), FBA, PABE, TEXA (three modes), COLCLAMP, FRAME (FBP to a
+named target, FBMSK to `rd_ColorMask`), XYOFFSET (gives the target size),
+SCISSOR, TEXFLUSH and PRMODECONT 1 (nothing to do), DTHE 0. Any other
+register is counted per register and logged once by name
+(`gif_HostUndecodedCount`). PRIM, TEX0, FRAME, XYOFFSET and SCISSOR are
+kept per list, since lists are recorded in any order but replayed 0..12.
+Primitives of one kind, space and UV mode are batched into one
+`rd_ScreenPrims`; strips and fans become triangle lists.
+
+| FBP / TBP | rd target |
+|---|---|
+| 0 / 0 | DISPLAY (TEX0 PSMCT24: the RGB24 view) |
+| 0x40 / 0x800 | SCENE (with its depth) |
+| 0x140 / 0x2800 | AA0, or WORK0 when 128 lines high |
+| 0x142 / 0x2840 | SHADOW0 |
+| 0x160 / 0x2C00 | AA1, or WORK1 when 256 wide |
+| 0x180 / 0x3000 | WORK2 |
+| 0x1F8 / 0x3F00 | FEED128 |
+| other FBP | SCENE, logged once |
+
+**Space tags.** The 640 x 224 layout helpers (`gif_Sprite`,
+`gif_SpriteSensitive`, `gif_SpriteOffset`, `gif_SpriteSensitiveOffset`,
+`gif_Point*`, `gif_Line*`) draw `RD_SPACE_UI`; the CPU-projected strips
+(`gif_DrawStrip*`, `gif_DrawPolyF4`) `RD_SPACE_WORLD`; raw writes and the
+raw-coordinate helpers UI in lists 11 and 12, WORLD elsewhere. Layout,
+subtitles (`jimaku.c`) and the font are therefore UI.
+
+**Texture seam.** A TEX0 write binds, when PRIM.TME is on: the RdTex a
+registered resolver returns (`gif_HostSetTex0Resolver`, `GifHost.h`; for
+package R2b), else the named target of the table above, else a placeholder:
+a 16 x 16 checker, one magenta-leaning colour per TBP, every other 4-texel
+cell transparent. Until R2b lands every game texture, the font's included,
+draws as its placeholder. The texture packets `Texture.c` chains by DMA
+reference (`t->pkt`: TEX1 and an alpha-test TEST; `t->uv`: the VU1 UV
+scroll; the image transfers) are not decoded: they reach the GS only
+through DMA, which the host does not interpret.
+
+**Font.** `font_Print` sets its state on rd directly (Z write on, TEST
+0x30000, ALPHA 0x44, TEX1 0x60), lets the decoder bind the "font" TEX0 with
+one PRIM write, and draws all glyphs as one `rd_ScreenPrims` of sprites in
+UI space (`gif_HostScreenPrims`).
+
+**GsBase hooks** (marked `R2a`, for package R2c to take over): the
+reduction as `rd_Post(RD_POST_REDUCTION)` at the end of list 12 of the frame
+`dl_Swap` closes, with the tint `gsb_Reduction` just computed (on the PS2
+that is the tint of the reduction of the frame that `dl_Swap` kicks); the
+flip's draw environment at the head of each frame (`rd_SetTarget(SCENE)`
+and a clear to the `gsb_SetBGColor` colour, alpha 0x80, Z 0, in list 0;
+`rd_SetTarget(SCENE)` again at the head of list 11 for keep frames, which
+replay 11 and 12 only); `rd_ResetScene` when `gsb_Init` changes the frame
+size (50/60 Hz).
+
+**Window and pacing** (`port/platform/window_host.c`): an SDL3 window
+"ICO" (960 x 720, resizable), `rd_Init` with the Original preset and vsync
+on, `ico_host_step` once per real 20 ms (16.683 ms at 60 Hz) by
+sleep-until with resynchronisation past 100 ms behind, presentation inside
+`rd_EndFrame` after each `gsb_UpdateGSSystem`. Escape or closing the window
+exits. ini key: none new; the headless build is the CMake option.
+
+Open questions for R2b and R2c:
+
+1. R2b: the resolver receives TEX0 and the list; Texture.c allocates VRAM
+   per list (`tex_AllocVramAuto`), so the TBP alone is ambiguous across
+   lists. Calling `rd_Texture` directly from `tex_TransTexture` would also
+   do, with the decoder's TEX0 binding left for the work-buffer reads.
+2. R2b: `t->pkt` sets TEX1 (per-texture filter) and TEST (ATE GREATER, AREF
+   96 or the TIM2 value, AFAIL FB_ONLY) for the material; on rd these need
+   `rd_SamplerFilter` and `rd_Test` from `tex_TransTexture` when the
+   register packet would be chained (`vramPri[].lastTex != id`).
+3. R2c: the SCENE clear at the frame head records the BG colour at the
+   frame's start; the PS2 cleared with the colour current at the flip,
+   one tick later. The difference shows only on the tick the stage changes
+   it.
+4. R2c: GS Z of the UI sprites (0xFFFFFF9B, 0xFFFFFFFF) is above 2^24, so
+   with `g_z.x = 1/2^24` they all clamp to depth 0. Harmless for Z ALWAYS;
+   the scene's ZBUF is PSMZ32, so depth-tested screen prims need the 2^32
+   scale (FrameCB `g_z`) decided per target.
+5. R2c: `gsb_KeepFrameBuffer`, `gsb_fade`, `gsb_scissorOnDemo`,
+   `gsb_controlBrightness`, `gsb_antiAlias` and `gsb_filmNoise` go through
+   the decoder today (their packets decode to the sprites they draw);
+   moving them to `rd_Post` should keep the state they leak. Only
+   `gsb_Reduction` (a stack packet kicked on DMA channel 2) is replaced, by
+   the R2a hook.
+6. R2c: `gsb_MakeCommonMatrix`, `gsb_SetGsDefault`'s list heads and the
+   other DMA chains that are not GIF packets (VU1 data, microprogram
+   uploads) are bookkeeping only on the host.
+
+## 10. What the first pixels need
 
 RHI (Vulkan), `rd_core` lists and state, `RD_PROG_SCREEN` and `RD_PROG_POST`
 shaders, `GifPacket.c` reimplemented on `rd_*`, TIM2 decode to

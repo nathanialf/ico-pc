@@ -32,7 +32,7 @@ void dpk_SwapBuffer(void)
 unsigned int dpk_CheckBufferSize(void)
 {
     int idx = PacketBufferStruct.cur;
-    int adj_cur = (int)PacketBufferStruct.ptr.c - 0x80000;
-    int end_off = (int)PacketBufferStruct.buf[idx];
-    return (end_off - adj_cur) >> 4;
+    ICO_WORD adj_cur = (ICO_WORD)PacketBufferStruct.ptr.c - 0x80000;
+    ICO_WORD end_off = (ICO_WORD)PacketBufferStruct.buf[idx];
+    return (unsigned int)((end_off - adj_cur) >> 4);
 }

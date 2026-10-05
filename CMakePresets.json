@@ -29,7 +29,10 @@
             "name": "win-x86-ref",
             "inherits": "base",
             "displayName": "Windows 32-bit reference, mingw-w64 GCC",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-w64-mingw32-gcc.cmake"
+            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-w64-mingw32-gcc.cmake",
+            "cacheVariables": {
+                "ICO_HEADLESS": "OFF"
+            }
         },
         {
             "name": "linux-x64",
@@ -43,7 +46,10 @@
             "name": "win-x64",
             "inherits": "base",
             "displayName": "Windows x64, mingw-w64 GCC",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32-gcc.cmake"
+            "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32-gcc.cmake",
+            "cacheVariables": {
+                "ICO_HEADLESS": "OFF"
+            }
         },
         {
             "name": "asan",

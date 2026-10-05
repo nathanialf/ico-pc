@@ -53,6 +53,10 @@ endif()
 find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-shared)
 if(SDL3_FOUND)
     message(STATUS "ico: SDL3 ${SDL3_VERSION} from ${SDL3_DIR}")
+    # the windowed ico_pc (top-level CMakeLists.txt) links and copies it too
+    if(TARGET SDL3::SDL3-shared)
+        set_target_properties(SDL3::SDL3-shared PROPERTIES IMPORTED_GLOBAL TRUE)
+    endif()
 else()
     message(STATUS "ico: SDL3 not found for this target (run tools/fetch_deps.sh); the Vulkan "
                    "RHI is built headless-only")

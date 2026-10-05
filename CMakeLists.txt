@@ -8,7 +8,12 @@ include(cmake/IcoFlags.cmake)
 include(cmake/IcoSources.cmake)
 include(cmake/IcoExclusions.cmake)
 
-option(ICO_HEADLESS "Build without the renderer-owned sources" ON)
+# ICO_HEADLESS=OFF (the default) is the windowed ico_pc: the seki layer
+# draws through port/render (ICO_RD) into an SDL3 window. ON is the headless
+# build of the trace and test runs: the original packet code, no window, no
+# Vulkan (docs/port/HEADLESS_STUBS.md). CMakePresets.json keeps the Linux
+# presets headless and builds the Windows presets windowed.
+option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
 option(ICO_BUILD_BLOCKED "Also compile the sources cmake/IcoExclusions.cmake blocks" OFF)
 option(ICO_LINK_EXE "Link the ico_pc executable (fails while symbols are unresolved)" OFF)
@@ -43,6 +48,9 @@ set(ICO_COMPAT_DIR "${CMAKE_SOURCE_DIR}/port/compat")
 set(ICO_GAME_DEFINITIONS ICO_HOST=1)
 if(ICO_HEADLESS)
     list(APPEND ICO_GAME_DEFINITIONS ICO_HEADLESS=1)
+else()
+    # the seki layer's host path onto rd.h (renderer wave 2)
+    list(APPEND ICO_GAME_DEFINITIONS ICO_RD=1)
 endif()
 if(ICO_FPTRAP)
     set(ICO_FPTRAP_DEFINITION ICO_FPTRAP=1)
@@ -68,13 +76,9 @@ set(ICO_GAME_OBJECT_LIBS "")
 set(ICO_COMPILED_COUNT 0)
 foreach(prog ${ICO_PROGRAMMERS})
     set(srcs ${ICO_SOURCES_${prog}})
-    if(NOT ICO_HEADLESS)
-        foreach(s ${ICO_RENDERER_SOURCES})
-            if(s MATCHES "^ico2/${prog}/")
-                list(APPEND srcs "${s}")
-            endif()
-        endforeach()
-    endif()
+    # ICO_RENDERER_SOURCES (debug.c, debug_exception.c, ito/mpeg) are not
+    # compiled in either mode until their packages port them: the window
+    # build links the same port/null floor for them as the headless one.
     if(NOT ICO_BUILD_BLOCKED)
         list(REMOVE_ITEM srcs ${ICO_BLOCKED_SOURCES})
     endif()
@@ -87,6 +91,9 @@ foreach(prog ${ICO_PROGRAMMERS})
     add_library(ico_${prog} OBJECT ${srcs})
     ico_include_dirs(${prog} incs)
     target_include_directories(ico_${prog} PRIVATE ${incs})
+    if(NOT ICO_HEADLESS)
+        target_include_directories(ico_${prog} PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+    endif()
     target_compile_definitions(ico_${prog} PRIVATE ${ICO_GAME_DEFINITIONS})
     # __FILE__ reads as the period build spelled it (src/main.c, ios/pad.c):
     # tools/compile_c.sh compiled from inside the programmer's directory.
@@ -239,14 +246,16 @@ if(ICO_LINK_EXE)
     # directory, ico-pc.ini, the ISO check, the log and the Windows dialogs.
     add_executable(ico_pc port/platform/main_host.c port/platform/trace_host.c
                           port/platform/host_config.c)
-    # The headless floor (docs/port/HEADLESS_STUBS.md): the hardware under
-    # the game's renderer layer, and what the simulation needs from debug.c.
-    # In the program itself rather than a library, since they call back into
+    # The hardware floor (docs/port/HEADLESS_STUBS.md): libgraph's vsync
+    # wait, libdma, the FMV player, and what the simulation needs from
+    # debug.c. Both builds: the window build draws through rd above it. In
+    # the program itself rather than a library, since they call back into
     # the game.
+    target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/debug_null.c)
+    set_source_files_properties(port/null/gfx_null.c port/null/debug_null.c TARGET_DIRECTORY
+                                ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
     if(ICO_HEADLESS)
-        target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/debug_null.c)
-        set_source_files_properties(port/null/gfx_null.c port/null/debug_null.c TARGET_DIRECTORY
-                                    ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
+        target_compile_definitions(ico_pc PRIVATE ICO_HEADLESS=1)
     endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_pc PRIVATE ico_game ico_platform)
@@ -289,3 +298,21 @@ add_subdirectory(port/test)
 add_subdirectory(port/rhi)
 add_subdirectory(port/shaders)
 add_subdirectory(port/render)
+
+# --- The window build: ico_pc on port/render (renderer wave 2) ---------------
+if(TARGET ico_pc AND NOT ICO_HEADLESS)
+    if(NOT TARGET ico_render OR NOT TARGET SDL3::SDL3-shared)
+        message(FATAL_ERROR "The window build of ico_pc needs port/render (DXC, Vulkan-Headers, "
+                            "volk) and SDL3 for this target: run tools/fetch_deps.sh, or "
+                            "configure with -DICO_HEADLESS=ON")
+    endif()
+    target_sources(ico_pc PRIVATE port/platform/window_host.c)
+    target_link_libraries(ico_pc PRIVATE ico_render SDL3::SDL3-shared)
+    if(WIN32)
+        # SDL3.dll beside the program
+        add_custom_command(TARGET ico_pc POST_BUILD
+                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                                   "$<TARGET_FILE:SDL3::SDL3-shared>" "$<TARGET_FILE_DIR:ico_pc>"
+                           VERBATIM)
+    endif()
+endif()

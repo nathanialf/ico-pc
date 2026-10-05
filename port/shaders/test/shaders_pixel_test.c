@@ -171,13 +171,15 @@ int main(void)
 
     static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
     static const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
-    static const RhiBindSlot s2a[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
-                                       {1, RHI_BIND_SAMPLER, FS}};
+    /* t2: sprite_ps's DATE snapshot (wave 2), read only under DF_DATE */
+    static const RhiBindSlot s2a[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
+                                       {1, RHI_BIND_SAMPLER, FS},
+                                       {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     static const RhiBindSlot s2b[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                        {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     RhiBindGroupLayout l0 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s0, 1, "frame"});
     RhiBindGroupLayout l1 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 1, "draw"});
-    RhiBindGroupLayout l2a = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2a, 2, "texsmp"});
+    RhiBindGroupLayout l2a = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2a, 3, "texsmp"});
     RhiBindGroupLayout l2b = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2b, 2, "tex2"});
     const RhiBindGroupLayout layA[3] = {l0, l1, l2a}, layB[3] = {l0, l1, l2b};
 
@@ -363,17 +365,20 @@ int main(void)
         fb.size = sizeof(IcoFrameCB);
         RhiBindGroup g0 = rhi_CreateBindGroup(&(RhiBindGroupDesc){l0, &fb, 1});
 
-        RhiBinding t2x2[2] = {{0}, {0}};
+        RhiBinding t2x2[3] = {{0}, {0}, {0}};
         t2x2[0].slot = 1;
         t2x2[0].type = RHI_BIND_SAMPLED_TEXTURE;
         t2x2[0].texture = tex;
         t2x2[1].slot = 1;
         t2x2[1].type = RHI_BIND_SAMPLER;
         t2x2[1].sampler = smp;
-        RhiBindGroup g2tex = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, t2x2, 2});
-        RhiBinding tA[2] = {t2x2[0], t2x2[1]};
+        t2x2[2].slot = 2;
+        t2x2[2].type = RHI_BIND_SAMPLED_TEXTURE;
+        t2x2[2].texture = tex;
+        RhiBindGroup g2tex = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, t2x2, 3});
+        RhiBinding tA[3] = {t2x2[0], t2x2[1], t2x2[2]};
         tA[0].texture = A;
-        RhiBindGroup g2A = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, tA, 2});
+        RhiBindGroup g2A = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, tA, 3});
         RhiBinding tI[2] = {{0}, {0}};
         tI[0].slot = 1;
         tI[0].type = RHI_BIND_SAMPLED_TEXTURE;

@@ -132,6 +132,55 @@ static void testOrder(void)
     }
 }
 
+/* ------------------------------------------------------------ DATE, flat */
+
+/* Wave 2: TEST.DATE against the R8 snapshot, and PRIM.IIP 0.  WORK0 gets
+ * alpha 0 on its left half and 0x80 on its right; a DATM=1 sprite over all
+ * of it lands on the right half only, a DATM=0 one on the left only.  A flat
+ * triangle takes its last vertex's colour. */
+static void testDateFlat(void)
+{
+    static const uint8_t a0[4] = {10, 10, 10, 0}, a1[4] = {20, 20, 20, 0x80};
+    static const uint8_t red[4] = {200, 0, 0, 0x80}, green[4] = {0, 200, 0, 0x80};
+    static const uint8_t blue[4] = {0, 0, 200, 0x80};
+    rd_BeginFrame();
+    rd_SelectList(5);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    opaque2D();
+    rd_TextureOff();
+    sprite(256, 128, 0, 0, 128 * 16, 64 * 16, a0, 0, 0, 0, 0);
+    sprite(256, 128, 128 * 16, 0, 256 * 16, 64 * 16, a1, 0, 0, 0, 0);
+    rd_TestGs(RD_TEST_RGBONLY_DATE1); /* DATE DATM 1, RGB-only AFAIL with ATE off */
+    sprite(256, 128, 0, 0, 256 * 16, 32 * 16, red, 0, 0, 0, 0);
+    rd_TestGs(RD_TEST_DATE0); /* DATE DATM 0 */
+    sprite(256, 128, 0, 32 * 16, 256 * 16, 64 * 16, green, 0, 0, 0, 0);
+    /* a flat triangle below: last vertex blue */
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_Gouraud(0);
+    {
+        const int32_t ox = (2048 - 128) * 16, oy = (2048 - 64) * 16;
+        RdScreenVtx t[3] = {vtx(ox + 0, oy + 64 * 16, 0, red, 0, 0),
+                            vtx(ox + 256 * 16, oy + 64 * 16, 0, green, 0, 0),
+                            vtx(ox + 0, oy + 128 * 16, 0, blue, 0, 0)};
+        rd_ScreenPrims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_UI, 1, 0);
+    }
+    rd_Gouraud(1);
+    rd_EndFrame(0);
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_WORK0, &w, &h);
+    if (!img) {
+        return;
+    }
+    const uint8_t *l0 = &img[(10 * w + 40) * 4], *r0 = &img[(10 * w + 200) * 4];
+    const uint8_t *l1 = &img[(40 * w + 40) * 4], *r1 = &img[(40 * w + 200) * 4];
+    const uint8_t *tri = &img[(70 * w + 20) * 4];
+    CHECK(l0[0] == 10 && r0[0] == 200, "DATM 1 draws where the alpha MSB is set (%u, %u)", l0[0],
+          r0[0]);
+    CHECK(l1[1] == 200 && r1[1] == 20, "DATM 0 draws where it is clear (%u, %u)", l1[1], r1[1]);
+    CHECK(tri[0] == 0 && tri[1] == 0 && tri[2] == 200, "flat triangle %u,%u,%u", tri[0], tri[1],
+          tri[2]);
+}
+
 /* ----------------------------------------------------------------- sprite */
 
 typedef struct SpriteCase {
@@ -630,6 +679,7 @@ int main(int argc, char **argv)
     }
     printf("rd_pixel_test: adapter %s\n", rhi_AdapterName());
     testOrder();
+    testDateFlat();
     testSprites();
     testReduction(dir);
     testPresent();

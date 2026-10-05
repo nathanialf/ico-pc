@@ -244,7 +244,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/worm.c
 )
 
-# 11 renderer-owned sources (compiled when ICO_HEADLESS is off)
+# 11 renderer-owned sources (not compiled until their packages port them)
 set(ICO_RENDERER_SOURCES
     ico2/ito/mpeg/mv_main.c
     ico2/ito/mpeg/mv_readbuf.c

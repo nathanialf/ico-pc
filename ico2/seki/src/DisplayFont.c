@@ -6,6 +6,13 @@
 #include "GifPacket.h"
 #include "Texture.h"
 
+#ifdef ICO_RD
+
+#include <string.h>
+#include "GifHost.h"
+
+#endif
+
 /* each character's first and last column in its 20-pixel cell of the "font"
    texture, {0, 0} where the font has no glyph */
 static signed char fontKerning[128][2] = {
@@ -114,6 +121,31 @@ int font_CheckAlign(SprCol *col, unsigned char *str)
     return fontAlign;
 }
 
+#ifdef ICO_RD
+/* PC port (R2a; the names here are the port's): the glyph sprites of one font_Print, collected and drawn
+   with one gif_HostScreenPrims (rd_ScreenPrims) call.  The corners are the
+   XYZ2 words drawOne packs, unpacked the way the GS reads them. */
+#define FONT_MAX_SPRITES 256 /* port */
+
+static RdScreenVtx fontVerts[FONT_MAX_SPRITES * 2];
+
+static int fontVertCount;
+
+static unsigned char fontRgba[4];
+
+static void fontCorner(RdScreenVtx *o, long long xyz, int u, int v) /* port */
+{
+    o->x = (int32_t)(xyz & 0xFFFF);
+    o->y = (int32_t)((xyz >> 16) & 0xFFFF);
+    o->z = (uint32_t)((unsigned long long)xyz >> 32);
+    o->s = (float)u;
+    o->t = (float)v;
+    o->q = 1.0f;
+    memcpy(o->rgba, fontRgba, 4);
+}
+
+#endif
+
 static inline float drawOne(float px, float py, int u, int v, int cw, int dp1,
                             int fontw) /* derived name */
 {
@@ -124,6 +156,19 @@ static inline float drawOne(float px, float py, int u, int v, int cw, int dp1,
     int ofs[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 4 * 16, 0, 0};
 
     _FTOI4Vector(iv, pos);
+#ifdef ICO_RD
+    if (fontVertCount + 2 <= FONT_MAX_SPRITES * 2) {
+        long long xy0 = (ofs[0] + (iv[0] + gsofs)) | ((long long)(ofs[1] + (iv[1] + gsofs)) << 16) |
+                        ((long long)-1 << 32);
+        long long xy1 = (ofs[0] + (iv[0] + gsofs) + iv[2]) |
+                        ((long long)(ofs[1] + (iv[1] + gsofs) + iv[3]) << 16) |
+                        ((long long)-1 << 32);
+
+        fontCorner(&fontVerts[fontVertCount++], xy0, uv[0], uv[1]);
+        fontCorner(&fontVerts[fontVertCount++], xy1, uv[2], uv[3]);
+    }
+    return px + fcw + 1.0f;
+#endif
     gif_SetGsReg(0, 0x156);
     gif_SetGsReg(3, uv[0] | ((long long)uv[1] << 16));
     /* clang-format off */
@@ -188,12 +233,30 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
     g = ((color >> 16) & 0xFF) * col.f[1] / 255;
     b = ((color >> 8) & 0xFF) * col.f[2] / 255;
     a = ((color & 0xFF) * col.f[3]) >> 7;
+#ifdef ICO_RD
+    /* R2a: the same state on rd: Z write on, TEST 0x30000, ALPHA 0x44,
+       TEX1 0x60; the PRIM write (0x156: sprite, TME, ABE, FST) goes through
+       the decoder once so it binds the "font" TEX0 tex_TransTexture wrote
+       (the texture seam: a placeholder until Texture.c is on rd) */
+    gif_HostFlush();
+    rd_ZWrite(1);
+    rd_TestGs(0x30000);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    gif_SetGsReg(0, 0x156);
+    fontRgba[0] = (unsigned char)r;
+    fontRgba[1] = (unsigned char)g;
+    fontRgba[2] = (unsigned char)b;
+    fontRgba[3] = (unsigned char)a;
+    fontVertCount = 0;
+#else
     gif_SetGsReg(0x4E, 0x300000C0);
     gif_SetGsReg(0x47, 0x30000);
     gif_SetGsReg(0x42, 0x44);
     gif_SetGsReg(0x14, 0x60);
     gif_SetGsReg(1, r | ((long long)g << 8) | ((long long)b << 16) | ((long long)a << 24) |
                         ((long long)0xFE00 << 46));
+#endif
 
     fw = (float)measure(str, buf);
     p = buf;
@@ -250,5 +313,11 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
         }
     }
 
+#ifdef ICO_RD
+    if (fontVertCount != 0) {
+        gif_HostScreenPrims(RD_PRIM_SPRITES, fontVerts, (unsigned int)fontVertCount, RD_SPACE_UI,
+                            1);
+    }
+#endif
     gif_EndPacketPath1();
 }

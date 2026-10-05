@@ -1,5 +1,19 @@
 # Headless stubs (`ICO_HEADLESS`)
 
+Since renderer wave 2 (package R2a) the default `ico_pc` is the window build
+(`ICO_HEADLESS=OFF`, compile definition `ICO_RD`): `GifPacket.c`,
+`DisplayList.c`, `DmaPacket.c`, `DisplayFont.c` and hooks in `GsBase.c` draw
+through `port/render` (`docs/port/RENDER_API.md` section 9). The headless
+build stays a CMake option (`-DICO_HEADLESS=ON`; the Linux presets set it,
+the Windows presets build the window) for the trace and test runs, with the
+original packet code. Both builds link `port/null/gfx_null.c` and
+`debug_null.c`: the window build still has no libgraph (the vsync busy-wait
+and the path syncs are the same stubs), the DMA kick is not called by
+`dl_Swap` there (rd replays the lists instead; `p2o_TransMicroProgram`
+still calls the no-op `sceDmaSend`), and FMV and `debug.c` are later
+packages'. `ICO_RENDERER_SOURCES` (`debug.c`, `debug_exception.c`,
+`ito/mpeg`) are compiled in neither build until their packages port them.
+
 What the headless `ico_pc` (package 1D) links in place of hardware and of the
 two renderer-owned sources it still leaves out. The renderer waves delete
 these as they land. `docs/port/BUILD_STATUS.md` has the per-preset link
