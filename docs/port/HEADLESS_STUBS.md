@@ -15,9 +15,12 @@ original packet code. Both builds link `port/null/gfx_null.c` and
 `debug_null.c`: the window build still has no libgraph (the vsync busy-wait
 and the path syncs are the same stubs), the DMA kick is not called by
 `dl_Swap` there (rd replays the lists instead; `p2o_TransMicroProgram`
-still calls the no-op `sceDmaSend`), and FMV and `debug.c` are later
-packages'. `ICO_RENDERER_SOURCES` (`debug.c`, `debug_exception.c`,
-`ito/mpeg`) are compiled in neither build until their packages port them.
+still calls the no-op `sceDmaSend`), and `debug.c` is a later package's.
+`ICO_RENDERER_SOURCES` (`debug.c`, `debug_exception.c`) are compiled in
+neither build until their packages port them. The FMV player is
+`port/fmv/movie.c` in both builds since Phase 4E (`docs/port/FMV.md`):
+`ito/mpeg` is PS2-only (`ICO_EE_ONLY_SOURCES`), and the headless build
+decodes the pictures and drops them.
 
 What the headless `ico_pc` (package 1D) links in place of hardware and of the
 two renderer-owned sources it still leaves out. The renderer waves delete
@@ -55,10 +58,12 @@ the packets are turned into, not what the layer computes.
 
 `tools/gen_sources.py` keeps these files renderer-owned (`HEADLESS_SIM`):
 the renderer waves still own and rewrite them; the headless build compiles
-them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`,
-`common/src/debug_exception.c` and `ito/mpeg/*`.
+them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`
+and `common/src/debug_exception.c`; `ito/mpeg/*` moved to
+`ICO_EE_ONLY_SOURCES` (Phase 4E: replaced by `port/fmv`, never compiled on
+the host).
 
-## Stubs: `port/null/gfx_null.c` (13)
+## Stubs: `port/null/gfx_null.c` (11)
 
 | symbol | returns | why |
 | --- | --- | --- |
@@ -70,8 +75,6 @@ them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`,
 | `sceDmaGetChan` | static channel block | `Basic.c` `dma_init` ORs CHCR.TIE into it |
 | `sceDmaReset` | 0 | clears the channel blocks |
 | `sceDmaSend` | - | `dl_Swap` and `p2o_TransMicroProgram` kick chains nobody consumes |
-| `movie_init` | 0 | the FMV player (`ito/mpeg`, Phase 4) |
-| `movie_proc` | 0 | the film "plays to the end" at once (1 would mean skipped); on the PS2 Main is held for the film's length, headless it is not |
 
 `seki/src/MicroCode.c`'s VU1 microprogram address table is all zero on the
 host (`#ifdef ICO_HOST`): `ico2/vusrc` is assembled only by the PS2 build and
@@ -147,7 +150,13 @@ run is a function of the vsync count only, so it stays deterministic. The
 
 ## Known differences from a renderer build
 
-- **FMV time:** films take no simulated time (above).
+- **FMV pictures:** since Phase 4E the headless build plays a film like the
+  window build, for the same number of vsyncs (two per picture; the length
+  depends only on the stream, `docs/port/FMV.md`, "Timing"), with its
+  audio through the PCM path; the pictures are decoded
+  (`ICO_FMV_DECODE=0` skips the decoding) and not shown. Until 4E the
+  stubs returned at once and a film took no simulated time, so traces
+  through a film differ from earlier packages' from that tick on.
 - **Clip flag history:** `lightning.c`'s `clip_flags` keeps its own VU0
   clip-flag history; on the PS2 `gsb_ClipBox` shares the register. Only
   lightning's strip packets depend on it.

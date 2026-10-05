@@ -9,7 +9,8 @@
  * matrices, the R register lightning reseeds, the game-over ring's mail,
  * heap allocations made by the packet builders) is the same as with a
  * renderer.  What is stubbed is the hardware underneath, here: Sony's
- * libgraph and libdma entry points, and the FMV player.  Nothing is sent
+ * libgraph and libdma entry points (the FMV player is port/fmv/movie.c
+ * since Phase 4E).  Nothing is sent
  * anywhere: a DMA kick is a no-op, the GS is always idle.  (MicroCode.c's
  * VU1 microprogram table is empty on the host: ico2/vusrc is assembled only
  * by the PS2 build.)
@@ -120,28 +121,4 @@ void sceDmaSend(DmaChan *ch, void *addr)
 {
     (void)ch;
     (void)addr;
-}
-
-/* --- FMV (ito/mpeg, Phase 4's port/fmv) -------------------------------------- */
-
-/* Main (common/src/main.c) plays a movie by movie_init then movie_proc,
-   which on the PS2 holds Main for the length of the film.  Headless, the
-   film ends at once: movie_proc returns 0 ("played to the end"; 1 is "the
-   player skipped it", which makes Main mark the demo skipped). */
-int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, int clearCol)
-{
-    (void)name;
-    (void)imageW;
-    (void)imageH;
-    (void)dbx;
-    (void)dby;
-    (void)mono;
-    (void)clearCol;
-    return 0;
-}
-
-int movie_proc(int (*poll)(void))
-{
-    (void)poll;
-    return 0;
 }

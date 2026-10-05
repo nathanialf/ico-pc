@@ -10,7 +10,8 @@ microprograms (ico2/vusrc/, replaced by shaders).
 Each C source lands in one list per programmer directory (the directory
 decides its include path, as tools/compile_c.sh has it), or in
 ICO_RENDERER_SOURCES when it is one of the files the renderer packages
-rewrite (docs/port/BUILD_STATUS.md). The renderer files are not compiled
+rewrite (docs/port/BUILD_STATUS.md), or ICO_EE_ONLY_SOURCES when port/
+replaces it for good (the ito/mpeg movie player: port/fmv). The renderer files are not compiled
 until their packages port them, except HEADLESS_SIM: renderer-owned files whose
 plain C the simulation needs, compiled in both modes.
 
@@ -42,7 +43,13 @@ RENDERER = {
     "ico2/ito/src/queen_barrier_disp.c",
     "ico2/common/src/debug.c",
 }
-RENDERER_DIRS = ("ico2/ito/mpeg/",)
+RENDERER_DIRS = ()
+
+# Sources the host build never compiles because port/ replaces them for good
+# (they stay in the PS2 build): the ito/mpeg movie player, replaced by
+# port/fmv (Phase 4E, docs/port/FMV.md). Listed in ICO_EE_ONLY_SOURCES so the
+# inventory stays complete.
+EE_ONLY_DIRS = ("ico2/ito/mpeg/",)
 
 # Renderer-owned files the headless build compiles anyway, because the
 # simulation needs their plain C (the matrix and quaternion stacks, cloth and
@@ -62,6 +69,10 @@ HEADLESS_SIM = {
     "ico2/ito/src/queen_barrier_disp.c",
 }
 RENDERER_PREFIXES = ("ico2/common/src/debug_exception",)
+
+
+def is_ee_only(path):
+    return path.startswith(EE_ONLY_DIRS)
 
 
 def is_renderer(path):
@@ -96,7 +107,11 @@ def render():
     sources, members = read_link_order()
     by_prog = {p: [] for p in PROGRAMMERS}
     renderer = []
+    ee_only = []
     for s in sources:
+        if is_ee_only(s):
+            ee_only.append(s)
+            continue
         if is_renderer(s):
             renderer.append(s)
             continue
@@ -115,6 +130,9 @@ def render():
                                 f"ico2/{p}: {len(by_prog[p])} non-renderer sources"))
     parts.append(cmake_list("ICO_RENDERER_SOURCES", renderer,
                             f"{len(renderer)} renderer-owned sources (not compiled until their packages port them)"))
+    parts.append(cmake_list("ICO_EE_ONLY_SOURCES", ee_only,
+                            f"{len(ee_only)} PS2-only sources (replaced on the host by port/; never "
+                            "compiled here)"))
     parts.append(cmake_list("ICO_DATA_MEMBERS", members,
                             f"{len(members)} data-only members, build/data/<member>.c "
                             "(tools/gen_data_c.py)"))

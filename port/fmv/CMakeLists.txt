@@ -1,0 +1,125 @@
+# port/fmv: the FMV player (Phase 4E, docs/port/FMV.md). The ito/mpeg player
+# stays in the PS2 build; on the host movie_init/movie_proc/movie_end are
+# movie.c's, on a PSS demuxer (pss.c) and Ittiam libmpeg2 (m2v.c).
+#
+# libmpeg2 comes from tools/fetch_deps.sh as a source tree
+# (tools/toolchain/deps/libmpeg2, Apache-2.0) and is compiled here with each
+# preset's own compiler into a static library: the generic C decoder (the
+# library's riscv function selectors, which pick the generic C routines and
+# nothing else), no SIMD, its pthread layer replaced by ithread_single.c.
+if(NOT DEFINED ICO_DEPS_DIR)
+    set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps")
+endif()
+set(ICO_LIBMPEG2_DIR "${ICO_DEPS_DIR}/libmpeg2" CACHE PATH
+    "Ittiam libmpeg2 source tree (tools/fetch_deps.sh)")
+
+if(NOT EXISTS "${ICO_LIBMPEG2_DIR}/decoder/impeg2d.h")
+    message(STATUS "ico: no libmpeg2 at ${ICO_LIBMPEG2_DIR} (tools/fetch_deps.sh): FMV not built")
+    if(TARGET ico_pc)
+        message(FATAL_ERROR "ico_pc needs port/fmv: run tools/fetch_deps.sh")
+    endif()
+    return()
+endif()
+
+set(_m2 "${ICO_LIBMPEG2_DIR}")
+add_library(ico_libmpeg2 STATIC
+    ${_m2}/common/impeg2_buf_mgr.c
+    ${_m2}/common/impeg2_disp_mgr.c
+    ${_m2}/common/impeg2_format_conv.c
+    ${_m2}/common/impeg2_globals.c
+    ${_m2}/common/impeg2_idct.c
+    ${_m2}/common/impeg2_inter_pred.c
+    ${_m2}/common/impeg2_job_queue.c
+    ${_m2}/common/impeg2_mem_func.c
+    ${_m2}/decoder/impeg2d_api_main.c
+    ${_m2}/decoder/impeg2d_bitstream.c
+    ${_m2}/decoder/impeg2d_debug.c
+    ${_m2}/decoder/impeg2d_dec_hdr.c
+    ${_m2}/decoder/impeg2d_decoder.c
+    ${_m2}/decoder/impeg2d_d_pic.c
+    ${_m2}/decoder/impeg2d_function_selector_generic.c
+    ${_m2}/decoder/impeg2d_globals.c
+    ${_m2}/decoder/impeg2d_i_pic.c
+    ${_m2}/decoder/impeg2d_mc.c
+    ${_m2}/decoder/impeg2d_mv_dec.c
+    ${_m2}/decoder/impeg2d_pic_proc.c
+    ${_m2}/decoder/impeg2d_pnb_pic.c
+    ${_m2}/decoder/impeg2d_vld.c
+    ${_m2}/decoder/impeg2d_vld_tables.c
+    ${_m2}/decoder/impeg2d_deinterlace.c
+    ${_m2}/decoder/riscv/impeg2d_function_selector.c
+    ${_m2}/common/icv_sad.c
+    ${_m2}/common/icv_variance.c
+    ${_m2}/common/ideint.c
+    ${_m2}/common/ideint_cac.c
+    ${_m2}/common/ideint_debug.c
+    ${_m2}/common/ideint_function_selector_generic.c
+    ${_m2}/common/ideint_utils.c
+    ${_m2}/common/riscv/ideint_function_selector.c
+    ithread_single.c)
+target_include_directories(ico_libmpeg2 PUBLIC "${_m2}/common" "${_m2}/decoder"
+                                              "${_m2}/common/riscv")
+# third-party code: its own warnings are not ours to fix
+target_compile_options(ico_libmpeg2 PRIVATE -w -fwrapv)
+# The decoder left-shifts negative coefficients (impeg2d_vld.c), defined by
+# GCC and Clang but undefined in ISO C; UBSan's shift check would stop the
+# sanitizer builds inside the library.
+if(ICO_SANITIZE)
+    target_compile_options(ico_libmpeg2 PRIVATE -fno-sanitize=shift)
+endif()
+set_target_properties(ico_libmpeg2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The demuxer and the decoder wrapper: no game symbols, so a library.
+add_library(ico_fmv STATIC pss.c m2v.c)
+target_include_directories(ico_fmv PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_fmv PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_fmv PUBLIC ico_libmpeg2)
+
+# movie.c calls back into the game (cdvd.c's directory cache, the libcdvd
+# stream, the sequencer's SgStPcm*, sceGsSyncV) and the game calls it, so it
+# is part of the program itself, like port/null/gfx_null.c.
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/movie.c"
+                                  "${CMAKE_CURRENT_SOURCE_DIR}/movie_pace.c")
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/movie.c"
+                                "${CMAKE_CURRENT_SOURCE_DIR}/movie_pace.c"
+                                TARGET_DIRECTORY ico_pc PROPERTIES INCLUDE_DIRECTORIES
+                                "${ICO_COMPAT_DIR};${CMAKE_SOURCE_DIR}/port/platform;${CMAKE_SOURCE_DIR}/port/data;${CMAKE_SOURCE_DIR}/port/audio/sg;${CMAKE_SOURCE_DIR}/port/render")
+    target_link_libraries(ico_pc PRIVATE ico_fmv)
+endif()
+
+# --- tests --------------------------------------------------------------------
+add_executable(fmv_test test/fmv_test.c movie_pace.c)
+target_include_directories(fmv_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(fmv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(fmv_test PRIVATE ico_fmv)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+        "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    add_test(NAME fmv COMMAND fmv_test "${ICO_DISC_IMAGE}")
+endif()
+
+# The YUV blit on the GPU (port/render/rd_video.c): rd's headless device
+# (lavapipe in the container), as port/render's own tests run.
+if(TARGET ico_render)
+    add_executable(rd_video_test test/rd_video_test.c)
+    target_include_directories(rd_video_test PRIVATE "${CMAKE_SOURCE_DIR}/port/render"
+                               "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/rhi")
+    target_compile_options(rd_video_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(rd_video_test PRIVATE ico_render)
+    if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+        add_test(NAME rd_video COMMAND rd_video_test)
+        set(_env "")
+        if(NOT WIN32 AND EXISTS "${ICO_DEPS_DIR}/vulkan-validation/VkLayer_khronos_validation.json")
+            set(_env "VK_ADD_LAYER_PATH=${ICO_DEPS_DIR}/vulkan-validation"
+                     "VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true" "ICO_VK_VALIDATION=1")
+        endif()
+        if(ICO_SANITIZE MATCHES "address")
+            list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
+        endif()
+        set_tests_properties(rd_video PROPERTIES SKIP_RETURN_CODE 77)
+        if(_env)
+            set_tests_properties(rd_video PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+    endif()
+endif()

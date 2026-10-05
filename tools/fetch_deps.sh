@@ -24,6 +24,8 @@
 #   deps/dxc/              DirectX Shader Compiler (Linux x86-64 release, NCSA):
 #                          the shader toolchain's build tool (cmake/IcoShaders.cmake);
 #                          never linked or shipped
+#   deps/libmpeg2/         Ittiam libmpeg2 (Apache-2.0) source tree, the FMV
+#                          decoder; compiled by port/fmv/CMakeLists.txt
 #
 # docs/port/THIRD_PARTY.md records the versions and licences.
 #
@@ -31,7 +33,9 @@
 #   VULKAN_SDK_TAG, VULKAN_HEADERS_SHA256, VOLK_SHA256
 #   SDL3_VERSION, SDL3_SRC_SHA256, SDL3_MINGW_SHA256
 #   DXC_VERSION, DXC_LINUX_FILE, DXC_LINUX_SHA256
-#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1
+#   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
+#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
+#   SKIP_LIBMPEG2=1
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -315,5 +319,50 @@ else
     chmod +x "$DXC_DIR/bin/dxc"
     echo "$DXC_VERSION-$DXC_LINUX_FILE" > "$DXC_DIR/.ico-release"
     echo "==> DXC ${DXC_VERSION} at $DXC_DIR"
+fi
+# --- 5. Ittiam libmpeg2 (the FMV decoder, Phase 4E) ------------------------------
+#
+# AOSP platform/external/libmpeg2 (Apache-2.0), tag android-16.0.0_r4 =
+# commit a97c2a1f0a796dc32bed80d3353c69c5fc07c750. googlesource's +archive
+# tarballs are regenerated per request (two downloads on 2026-10-05 had
+# different SHA-256s) and the GitHub mirror (ittiam-systems/libmpeg2) does
+# not carry the commit, so the tag is fetched with git and checked twice:
+# the commit id, and the SHA-256 of `git archive --format=tar` of it (the
+# tree with fixed mtimes; taken 2026-10-05). The source tree is installed;
+# port/fmv/CMakeLists.txt compiles it as a static library with each
+# preset's own compiler (linux-x64, win-x64 mingw, asan), generic C only.
+# docs/port/THIRD_PARTY.md and docs/port/FMV.md.
+LIBMPEG2_TAG="${LIBMPEG2_TAG:-android-16.0.0_r4}"
+LIBMPEG2_COMMIT="${LIBMPEG2_COMMIT:-a97c2a1f0a796dc32bed80d3353c69c5fc07c750}"
+LIBMPEG2_TAR_SHA256="${LIBMPEG2_TAR_SHA256:-3a8a3028cc5e0c8177d9c81e687318c3eb81c2a9fd3219d50c94eabf1a8f3ea1}"
+LIBMPEG2_DIR="$DEST/libmpeg2"
+if [[ "${SKIP_LIBMPEG2:-0}" == "1" ]]; then
+    echo "==> SKIP_LIBMPEG2=1; not fetching libmpeg2"
+elif stamped "$LIBMPEG2_DIR" "$LIBMPEG2_COMMIT"; then
+    echo "==> libmpeg2 ${LIBMPEG2_TAG} already at $LIBMPEG2_DIR"
+else
+    command -v git >/dev/null 2>&1 || {
+        echo "fetch_deps: git not found; cannot fetch libmpeg2" >&2
+        exit 1
+    }
+    echo "==> fetching libmpeg2 ${LIBMPEG2_TAG}"
+    git init -q "$TMP/libmpeg2.git"
+    git -C "$TMP/libmpeg2.git" fetch -q --depth 1 \
+        https://android.googlesource.com/platform/external/libmpeg2 "refs/tags/${LIBMPEG2_TAG}"
+    got="$(git -C "$TMP/libmpeg2.git" rev-parse 'FETCH_HEAD^{commit}')"
+    if [[ "$got" != "$LIBMPEG2_COMMIT" ]]; then
+        echo "fetch_deps: libmpeg2 ${LIBMPEG2_TAG} is $got, expected $LIBMPEG2_COMMIT" >&2
+        exit 1
+    fi
+    git -C "$TMP/libmpeg2.git" archive --format=tar -o "$TMP/libmpeg2.tar" "$LIBMPEG2_COMMIT"
+    echo "${LIBMPEG2_TAR_SHA256}  $TMP/libmpeg2.tar" | sha256sum -c -
+    rm -rf "$LIBMPEG2_DIR"
+    mkdir -p "$LIBMPEG2_DIR"
+    # the decoder's C sources and headers plus the licence files; not the
+    # fuzzer, the test program or the build files
+    tar -C "$LIBMPEG2_DIR" -xf "$TMP/libmpeg2.tar" common decoder LICENSE NOTICE \
+        MODULE_LICENSE_APACHE2 METADATA
+    echo "$LIBMPEG2_COMMIT" > "$LIBMPEG2_DIR/.ico-release"
+    echo "==> libmpeg2 ${LIBMPEG2_TAG} at $LIBMPEG2_DIR"
 fi
 echo "==> deps done: $DEST"

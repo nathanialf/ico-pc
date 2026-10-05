@@ -223,6 +223,7 @@ if(ICO_DATA_SOURCES)
     list(APPEND ICO_GAME_OBJECT_LIBS ico_data)
 endif()
 
+add_subdirectory(port/fmv)
 # --- The platform layer -----------------------------------------------------
 add_library(ico_platform STATIC
     port/platform/assert_host.c

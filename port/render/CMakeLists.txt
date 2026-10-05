@@ -37,7 +37,8 @@ add_library(ico_render STATIC
     rd_present.c
     rd_replay.c
     rd_shadow.c
-    rd_tex.c)
+    rd_tex.c
+    rd_video.c) # Phase 4E: the FMV picture (port/fmv/rd_video.h)
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")

@@ -13,7 +13,7 @@ static const char *const expected[] = {
     "font_vs",         "font_ps",          "date_snap_ps",   "camera_probe_ps", "vu_prelit_vs",
     "vu_ps",           "vu_lit_vs",        "vu_lit_spec_vs", "vu_reflect_vs",   "vu_skin_vs",
     "vu_skin_spec_vs", "vu_skin_debug_vs", "vu_grid_vs",     "vu_grid_lit_vs",  "vu_grid_spec_vs",
-    "vu_particle_vs",  "vu_probe_ps",
+    "vu_particle_vs",  "vu_probe_ps",      "yuv_vs",         "yuv_ps",
 };
 
 int main(void)

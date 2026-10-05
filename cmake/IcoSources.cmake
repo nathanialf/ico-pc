@@ -244,15 +244,19 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/worm.c
 )
 
-# 11 renderer-owned sources (not compiled until their packages port them)
+# 2 renderer-owned sources (not compiled until their packages port them)
 set(ICO_RENDERER_SOURCES
+    ico2/common/src/debug.c
+    ico2/common/src/debug_exception.c
+)
+
+# 9 PS2-only sources (replaced on the host by port/; never compiled here)
+set(ICO_EE_ONLY_SOURCES
     ico2/ito/mpeg/mv_main.c
     ico2/ito/mpeg/mv_readbuf.c
     ico2/ito/mpeg/mv_strfile.c
     ico2/ito/mpeg/mv_videodec.c
     ico2/ito/mpeg/mv_vobuf.c
-    ico2/common/src/debug.c
-    ico2/common/src/debug_exception.c
     ico2/ito/mpeg/mv_audiodec.c
     ico2/ito/mpeg/mv_disp.c
     ico2/ito/mpeg/mv_sub.c
