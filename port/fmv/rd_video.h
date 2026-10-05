@@ -12,7 +12,9 @@
  * converted from the decoder's 4:2:0 planes by yuv.hlsl with the IPU's
  * integer CSC (docs/port/FMV.md, "Colour").  The picture sits in the PS2
  * display area as mv_videodec.c placed it: centred, (dispW - w) / 2 and
- * (dispH - h) / 2, the display area filling the 4:3 box.
+ * (dispH - h) / 2, the display area filling the 4:3 box.  The box stays
+ * 4:3 whatever the display options (renderer wave 7, docs/port/DISPLAY.md):
+ * a widescreen presentation pillarboxes the movies.
  *
  * Mirror: drawn unmirrored unless the renderer's mirror mode is on and the
  * FMV toggle (rd_VideoSetMirror, port config "mirror_fmv", default on) is
