@@ -7,6 +7,7 @@ An index of this directory: what each file is for.
 | [`BUILDING.md`](BUILDING.md) | the host build: quickstart, presets and options, the hooks, CI, packages, and the maintainers' appendix on the optional EE identity check |
 | [`LEGAL.md`](LEGAL.md) | what the repository may and may not contain, why the data tables are loaded from the user's disc at run time and never committed, and which references were used. Read it before contributing |
 | [`HEADERS.md`](HEADERS.md) | which headers the disc attests, the code includes, where the other declarations live, and the derived-name tokens |
+| [`TODO.md`](TODO.md) | work wanted but not started, with where it would go |
 
 ## Port notes
 
