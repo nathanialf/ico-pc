@@ -1,9 +1,8 @@
 # port/null: the devices the headless build runs without. This package's
-# files are the memory card and system configuration (the sound driver
-# is the real one since Phase 4B: port/audio's ico_sndn2); package 1B's
-# gfx_null.c is built from its own list.
+# file is the system configuration (the memory card is port/save's mc_host.c
+# since Phase 4D; the sound driver is the real one since Phase 4B:
+# port/audio's ico_sndn2); package 1B's gfx_null.c is built from its own list.
 add_library(ico_port_null STATIC
-    mc_null.c
     scf_null.c)
 target_include_directories(ico_port_null
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/input"

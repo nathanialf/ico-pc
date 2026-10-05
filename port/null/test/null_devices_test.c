@@ -42,24 +42,6 @@ static void test_pad(void)
     CHECK(scePadSetActDirect(0, 0, data) == 0);
 }
 
-static void test_mc(void)
-{
-    int type = 99, free = 99, format = 99;
-    int cmd = 0, result = 0;
-
-    CHECK(sceMcInit() == 0);
-    CHECK(sceMcSync(1, &cmd, &result) == -1); /* nothing pending */
-    CHECK(sceMcGetInfo(0, 0, &type, &free, &format) == 0);
-    CHECK(type == 0 && free == 0 && format == 0);
-    CHECK(sceMcSync(1, &cmd, &result) == 1);
-    CHECK(cmd == 1 && result == ICO_MC_NULL_RESULT);
-    CHECK(sceMcSync(1, &cmd, &result) == -1);
-    CHECK(sceMcOpen(0, 0, "/BESCES-50760ico/game.0", 1) == 0);
-    CHECK(sceMcSync(0, &cmd, &result) == 1 && cmd == 2 && result < 0);
-    CHECK(sceMcChdir(0, 0, "/BESCES-50760ico", NULL) == 0);
-    CHECK(sceMcSync(1, &cmd, &result) == 1 && cmd == 0x0C && result == ICO_MC_NULL_RESULT);
-}
-
 static void test_scf(void)
 {
     CHECK(sceScfGetLanguage() == ICO_SCF_LANGUAGE_ENGLISH);
@@ -71,7 +53,6 @@ static void test_scf(void)
 int main(void)
 {
     test_pad();
-    test_mc();
     test_scf();
     printf("null_devices_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

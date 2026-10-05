@@ -208,7 +208,7 @@ id, `sceSifCallRpc` runs the server synchronously and copies its reply, and
 | file | stands in for | answers |
 |---|---|---|
 | `pad_null.c` | libpad | init and port open succeed; `scePadGetState` 0 (disconnected), so `pad.c` keeps both ports in their error state and hands the game zero buttons |
-| `mc_null.c` | libmc | requests accepted; `sceMcSync` result -10 ("no card"), `sceMcGetInfo` type 0, so `_la_memory_card_check` takes its no-card exit (step 3, type 0) and `iosMcMgrChdirProduct` reports -9 |
+| `mc_null.c` | libmc | removed in Phase 4D: the memory card is `port/save/mc_host.c`, libmc over a host folder (`docs/port/SAVES.md`); port 1 there still answers as the null card did (-10, type 0) |
 | `snd_null.c` | the Sg API and SNDN2DRV's RPC server | IOP half: server 0x736E646E, takes the init and tick calls, replies with a zeroed 0x200 page except the transfer counter at +0x1C0, echoed from the last 0x20/0x21 packet. EE half (until the sequencer moves to `port/audio/sg/`): `_SgSndn2Remote`, `SgSndn2RemoteInit/Sync` bind and call the IOP half through the host SIF; the rest accept requests and report nothing playing |
 | `scf_null.c` | libscf | `sceScfGetLanguage` returns `ico_scf_language`, default 1 (English in libscf's numbering) |
 

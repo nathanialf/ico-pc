@@ -118,6 +118,16 @@ developer mode).
   handler reports (`docs/port/BOOT_DIAG.md`).
 - **`fptodp`** (libgcc soft-float): 0; only passed to debug printfs.
 
+## Memory card (the null card is gone, package 4D)
+
+`port/null/mc_null.c` (both slots empty: every request finished with -10) was
+removed in 4D. Headless builds run `port/save/mc_host.c` like the window
+build: a formatted card in a host folder (`saves=` in `ico-pc.ini`, else
+`<exe dir>/memcard`), empty until the game saves (docs/port/SAVES.md). The
+boot card check therefore finds a card with no save instead of no card, and
+skips the "no memory card" sign; the language and 50/60 Hz screens still
+show.
+
 ## Sound (the null driver is gone, package 4B)
 
 `port/null/snd_null.c` (package 1E: a silent Sg API and an ADPCM read
@@ -142,6 +152,11 @@ run is a function of the vsync count only, so it stays deterministic. The
 - **Stale vector words:** the host forms of `GifPacket.c`'s `rotTransPers`
   leave the output's 4th word unwritten (the PS2 stored a stale register
   word no caller reads).
+- **Shadows (wave 4, R4b):** `Shadow.c`'s rd recording (`shadowHost*`) is
+  `ICO_RD` only. The headless build compiles the file's packet code as
+  before. The window build still builds the same packets, and its
+  triangle buffer is a file static, not heap, so the heap and the
+  simulation are the same in both builds.
 - **Packets are never consumed**, so anything the game would read back from
   the GS (`Texture.c`'s store-image path) reads zeros. No simulation path
   found reads GS memory.
