@@ -169,7 +169,10 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
         w->spin = 0;
     }
     span = (float)pkg->life * (pkg->lifeRand * sugiSignedRandom() + 1.0f);
-    w->alphaStep = w->alpha / span;
+    /* span is 0 when a package's life and lifeRand make it so (stage 5's
+       torches): the EE's div gives Fmax; the host's Inf times the zero
+       below would be NaN (docs/port/DIVERGENCES.md) */
+    w->alphaStep = ps2_div(w->alpha, span);
     if ((float)w->life < span) {
         w->alpha = w->alpha - (span - (float)w->life) * w->alphaStep;
     }

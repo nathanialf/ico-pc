@@ -35,9 +35,9 @@ typedef union { /* field names derived */
 /* The pending hand-mode command record (act-game.c's RequestChangeHandMode):
    one for connecting and one for disconnecting, in the enemy work. */
 typedef struct HandModeCmd { /* field names derived */
-    int flag;    /* the hand mode set, 0 for none */
-    int pri;     /* the priority it was set at */
-} HandModeCmd;   /* derived name */
+    int flag;                /* the hand mode set, 0 for none */
+    int pri;                 /* the priority it was set at */
+} HandModeCmd;               /* derived name */
 
 /* One part of a boss's gathering effect (enemy_act.c's boss_effect_*), 0x20 bytes. */
 typedef struct BossPart {
@@ -81,14 +81,14 @@ typedef struct EnemyBattleWork { /* field names derived */
     int corrMode; /* 0xB8, 1 while the direction is corrected too; its doubleword with corrFlags clears bit 32 (ContinueCorrectPosition) */
     unsigned int corrFlags; /* 0xBC */
     int jumpOrient;         /* 0xC0 */
-    int liftToggle; /* 0xC4, flips while the boy is lifted (ACTGame lift counter) */
-    int liftPhase;  /* 0xC8, -1 none, 0 or 1 */
-    int liftLevel;    /* 0xCC */
-    int floorAttrOff; /* 0xD0 */
-    int liftTimer; /* 0xD4, frames left of the lift step */
+    int liftToggle;         /* 0xC4, flips while the boy is lifted (ACTGame lift counter) */
+    int liftPhase;          /* 0xC8, -1 none, 0 or 1 */
+    int liftLevel;          /* 0xCC */
+    int floorAttrOff;       /* 0xD0 */
+    int liftTimer;          /* 0xD4, frames left of the lift step */
     char padD8[8];
-    float hitDir[4];      /* 0xE0, the direction of the last attack that hit (AttackGenerate) */
-    short hitNodes[100];  /* 0xF0, the nodes that attack hit, -1 terminated (AttackCheckHit) */
+    float hitDir[4];     /* 0xE0, the direction of the last attack that hit (AttackGenerate) */
+    short hitNodes[100]; /* 0xF0, the nodes that attack hit, -1 terminated (AttackCheckHit) */
     struct BgaDisp *lwsEffect; /* 0x1B8, the guard effect's multi-BGA slots */
     char pad1BC[4];
     float ropeCliffX; /* 0x1C0 */
@@ -112,15 +112,16 @@ typedef struct EnemyBattleWork { /* field names derived */
     int reqMode;
     int bossLife; /* 0x20C */
     EnemyStatusFlags flags;
-    ICO_WORD_PTR(GObj *) target; /* 0x218, held as a word: the EE code's int-typed reads of it move (measured) */
+    ICO_WORD_PTR(GObj *)
+    target; /* 0x218, held as a word: the EE code's int-typed reads of it move (measured) */
     ICO_WORD_PTR(GObj *) clingReq;    /* 0x21C */
     ICO_WORD_PTR(GObj *) clingTarget; /* 0x220 */
     int waitCount;
     int slowTimer;
     ICO_WORD_PTR(GObj *) liftedObj; /* 0x22C */
-    float readyPosX; /* 0x230 */
-    float readyPosY; /* 0x234 */
-    float readyPosZ; /* 0x238 */
+    float readyPosX;                /* 0x230 */
+    float readyPosY;                /* 0x234 */
+    float readyPosZ;                /* 0x238 */
     char pad23C[4];
     float readyDirX; /* 0x240 */
     float readyDirY; /* 0x244 */
@@ -136,36 +137,45 @@ typedef struct EnemyBattleWork { /* field names derived */
     float slipDirY; /* 0x274 */
     float slipDirZ; /* 0x278 */
     char pad27C[4];
-    char slipFront; /* 0x280, 1 when the slope runs toward the way the enemy faces (ACTGetEnvironment) */
+    char
+        slipFront; /* 0x280, 1 when the slope runs toward the way the enemy faces (ACTGetEnvironment) */
     char pad281[15];
     int ladderUpStep;   /* 0x290 */
     int ladderDownStep; /* 0x294 */
     int word298; /* 0x298, the low word of a doubleword with stoneLevel (boyact.c reads it whole) */
-    int stoneLevel; /* 0x29C */
-    int stonePair;  /* 0x2A0 */
-    int word2A4;    /* 0x2A4 */
+    int stoneLevel;       /* 0x29C */
+    int stonePair;        /* 0x2A0 */
+    int word2A4;          /* 0x2A4 */
     int stoneHitNoWeapon; /* 0x2A8, queen-battle stone hits taken with no weapon */
     int stoneHitWeapon;   /* 0x2AC, the same hits taken with a weapon */
-    int word2B0;    /* 0x2B0 */
+    int word2B0;          /* 0x2B0 */
     char pad2B4[12];
-    int word2C0; /* 0x2C0, set while the actor reaches (act-wish.c) */
+    int word2C0;                  /* 0x2C0, set while the actor reaches (act-wish.c) */
     ICO_WORD_PTR(GObj *) holdObj; /* 0x2C4, the box or weapon the enemy holds (ACTGetEnvironment) */
     char pad2C8[8];
-    float holdPoint[4]; /* 0x2D0, its hold point (GetBoxHoldPoint) */
+    float holdPoint[4];     /* 0x2D0, its hold point (GetBoxHoldPoint) */
     struct GObj *rescueObj; /* 0x2E0 */
     char pad2E4[12];
     float rescueBoyPos[4];  /* 0x2F0, where the boy stands to pull the girl up, 60 short of her */
     float rescueGirlPos[4]; /* 0x300, the girl's position, 50 up: [1] is the height she is set to */
-    int boxBarSound; /* 0x310 */
+    int boxBarSound;        /* 0x310 */
     HandModeCmd handConnect;    /* 0x314 */
     HandModeCmd handDisconnect; /* 0x31C */
     char pad324[12];
+#ifdef ICO_HOST
+    /* on a quadword as on the EE: the climb mail hands &climbOrient to
+       actCommonRopeClimbEnd1, which reads the four climb members as a
+       ClimbEndRec; at a host offset of 4 mod 8 climbCol took 4 bytes of
+       padding and climbObj was read 4 bytes early (commonact.c) */
+    float climbOrient[4] __attribute__((aligned(16))); /* 0x330 */
+#else
     float climbOrient[4]; /* 0x330 the orient of the chain or wall climbed */
-    float climbPos[4];    /* 0x340 the climb's position */
-    ClimbCol climbCol;    /* 0x350 the wall the climb holds, as GetChainClimbCollision fills it */
+#endif
+    float climbPos[4];     /* 0x340 the climb's position */
+    ClimbCol climbCol;     /* 0x350 the wall the climb holds, as GetChainClimbCollision fills it */
     struct GObj *climbObj; /* 0x35C the chain or cage climbed */
     BossPart boss[5];      /* 0x360 the boss's gathering effect parts; the work is 0x400 bytes */
-} EnemyBattleWork;   /* derived name */
+} EnemyBattleWork;         /* derived name */
 
 /* enemy_act.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
@@ -188,7 +198,9 @@ int EnemyBrainStatus_Girl(struct GObj *self);
 inline int actEnemyFlagCheckDead(GObj *self);
 inline int actEnemyFlagCheckActive(GObj *self);
 int ACTEnemyForceSwitchToCarry(GObj *self);
+
 ICO_WORD_PTR(struct GObj *) actEnemy_GetClingTarget(struct GObj *self);
+
 int actEnemy_isNormalEnemy(struct GObj *self);
 int actEnemy_isLargeEnemy(struct GObj *self);
 int actEnemy_isSmallEnemy(struct GObj *self);
@@ -223,7 +235,6 @@ inline int _ApproachTarget(GObj *self, void *tgt, void *pos, void *fn, float ran
                            unsigned char flag);
 
 void afterEnemyBodylift(GObj *volatile self);
-
 void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother);
 /* enemy_act.o's last .sdata global (act.c sets it) */
 extern int entesty;

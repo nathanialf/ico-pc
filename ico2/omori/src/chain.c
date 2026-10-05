@@ -233,6 +233,12 @@ static inline void ChainPendulumSwing(float *dst, ChainRecord *cw, float *orient
     v[0] = 0.0f;
     v[1] = len;
     v[2] = 0.0f;
+#ifdef ICO_HOST
+    /* the EE left v[3] as the stack word it found: the matrix's translation
+       row is zero, so the product is 0 whatever the word; a host NaN or Inf
+       pattern there would poison the nodes (docs/port/DIVERGENCES.md) */
+    v[3] = 0.0f;
+#endif
 
     sceVu0UnitMatrix(m1);
     sceVu0RotMatrixX(m2, m1, ang * 3.1415927f / 180.0f);
@@ -1138,7 +1144,9 @@ static inline void ChainNodeSpan(ChainRecord *cw, float *pos, int *i0, int *i1) 
 {
     ChainNode *nd = cw->node;
 
-    *i0 = (int)((pos[1] - nd[0].y) / 50.0f);
+    /* the EE's cvt.w.s saturates an out-of-range position; the host's
+       cvttss2si gives INT_MIN instead (docs/port/DIVERGENCES.md) */
+    *i0 = ps2_ftoi((pos[1] - nd[0].y) / 50.0f);
     *i1 = *i0 + 1;
     *i0 = *i0 < 2 ? 2 : (cw->nodes - 1 < *i0 ? cw->nodes - 1 : *i0);
     *i1 = *i1 < 2 ? 2 : (cw->nodes - 1 < *i1 ? cw->nodes - 1 : *i1);

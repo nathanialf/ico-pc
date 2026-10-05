@@ -1062,6 +1062,22 @@ typedef struct { /* field names derived */
     GObj *obj;         /* the chain or cage climbed */
 } ClimbEndRec;         /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: the climb mail's data is &enemy->climbOrient, read here whole as
+   a ClimbEndRec; the host layouts must agree from there, and the vectors are
+   copied as quadwords (tools/template_audit.py) */
+ICO_LAYOUT_AT_FROM(ClimbEndRec, v1, EnemyBattleWork, climbOrient, climbPos);
+
+ICO_LAYOUT_AT_FROM(ClimbEndRec, climbCol, EnemyBattleWork, climbOrient, climbCol);
+
+ICO_LAYOUT_AT_FROM(ClimbEndRec, obj, EnemyBattleWork, climbOrient, climbObj);
+
+_Static_assert(__builtin_offsetof(EnemyBattleWork, climbOrient) % 16 == 0,
+               "EnemyBattleWork.climbOrient is not on a quadword on the host");
+
+#endif
+
 void actCommonRopeClimbEnd1(GObj *volatile self)
 {
     ClimbEndRec c;

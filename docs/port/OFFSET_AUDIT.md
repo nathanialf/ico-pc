@@ -266,6 +266,18 @@ Copies the audit cannot see, checked by reading and asserted in place:
   kept in `long long boyInfo[24]`; asserted that the template covers the
   whole host record (96 bytes) and that the pointers start at 0x20, and that
   `BoyKidnapWork` is the character packet's size.
+- `fumi/src/commonact.c`: `actCommonRopeClimbEnd1` reads the climb mail's
+  data, `&enemy->climbOrient` (sent by the chain and cage climbs,
+  `commonact.c` `ActSendMail_WithAdditionalData(self, 0x98 / 0xB0, ...)`),
+  whole as a `ClimbEndRec` through the `void *` `Act.intrData`, so the audit
+  sees no record type on the source side. On x64 `EnemyBattleWork.climbOrient`
+  fell at 860 (4 mod 8): `climbCol` took 4 bytes of padding and `climbObj`
+  sat at +60 where the view reads `obj` at +56, so the climb's end read half
+  of `climbCol.wall` and half of `climbObj` as the chain pointer (package V4:
+  SIGSEGV at Main tick 6193, stage 4, `c.obj` = 0x67c14e4000007369). Fixed:
+  `climbOrient` is `aligned(16)` on the host (`enemy_act.h`), as on the EE
+  (0x330); asserted in `commonact.c` (`v1`, `climbCol`, `obj` from
+  `climbOrient`, and the quadword offset).
 
 Not a layout fault, noted: `sugipon/src/clothAnimation.c` copies a
 texture's `TexData` into the cloth through `TexBlob` (89 doublewords, the EE
