@@ -298,6 +298,7 @@ add_subdirectory(port/test)
 add_subdirectory(port/rhi)
 add_subdirectory(port/shaders)
 add_subdirectory(port/render)
+add_subdirectory(port/audio)
 
 # --- The window build: ico_pc on port/render (renderer wave 2) ---------------
 if(TARGET ico_pc AND NOT ICO_HEADLESS)
