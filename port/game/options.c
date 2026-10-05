@@ -4,6 +4,9 @@
  * The port's gameplay options (options.h, docs/port/OPTIONS.md).
  */
 #include "options.h"
+
+#include <stdio.h>
+
 #include "config.h"
 
 /* -1: not read yet; 0 or 1 */
@@ -48,9 +51,75 @@ int ico_opt_mirror(void)
     return get(&s_mirror, "gameplay.mirror");
 }
 
+static void (*s_mirror_listener)(int on);
+
 void ico_opt_set_mirror(int on)
 {
     s_mirror = on != 0;
+    if (s_mirror_listener != NULL) {
+        s_mirror_listener(s_mirror);
+    }
+}
+
+void ico_opt_mirror_reset(void)
+{
+    ico_opt_set_mirror(ico_config_get_bool("gameplay.mirror", 0) != 0);
+}
+
+void ico_opt_set_mirror_listener(void (*fn)(int on))
+{
+    s_mirror_listener = fn;
+    if (fn != NULL) {
+        fn(ico_opt_mirror());
+    }
+}
+
+/* [mirror] slot_N, slot_N_sum (options.h) */
+#define MIRROR_NO_SUM (-1LL - 0xFFFFFFFFLL) /* outside the uint32 range */
+
+static int slot_keys(int slot, char *flag, char *sum, size_t size)
+{
+    if (slot < 0 || slot > 99) {
+        return -1;
+    }
+    snprintf(flag, size, "mirror.slot_%d", slot);
+    snprintf(sum, size, "mirror.slot_%d_sum", slot);
+    return 0;
+}
+
+int ico_mirror_slot_get(int slot, unsigned int sum)
+{
+    char flag[32], key[32];
+
+    if (slot_keys(slot, flag, key, sizeof(flag)) != 0) {
+        return -1;
+    }
+    if (ico_config_get_int(key, MIRROR_NO_SUM) != (long long)sum) {
+        return -1;
+    }
+    return ico_config_get_bool(flag, 0) != 0;
+}
+
+int ico_mirror_slot_saved(int slot, unsigned int sum)
+{
+    char flag[32], key[32];
+
+    if (slot_keys(slot, flag, key, sizeof(flag)) != 0) {
+        return -1;
+    }
+    if (ico_config_set_bool(flag, ico_opt_mirror()) != 0 ||
+        ico_config_set_int(key, (long long)sum) != 0) {
+        return -1;
+    }
+    return ico_config_save() == 0 ? 0 : -1;
+}
+
+int ico_mirror_slot_loaded(int slot, unsigned int sum)
+{
+    int v = ico_mirror_slot_get(slot, sum);
+
+    ico_opt_set_mirror(v > 0);
+    return v > 0;
 }
 
 int ico_opt_developer_mode(void)

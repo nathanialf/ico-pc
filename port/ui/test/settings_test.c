@@ -128,6 +128,14 @@ void la_host_leave(void)
     s_leaves++;
 }
 
+static int s_newGames;
+
+/* layout_action.c (R7c): the mirror screen's confirm starts the game */
+void la_host_new_game_go(void)
+{
+    s_newGames++;
+}
+
 void tex_TransTexture(int no, int pri)
 {
     (void)no;
@@ -341,6 +349,9 @@ static void fakeTables(void)
     setLayout(11, 48, 49, -1, -1);
     setLayout(12, 49, 51, 49, 11);
     setLayout(13, 51, 52, 51, 11);
+    setLayout(9, 44, 46, 44, -1); /* the vibration screen (R7c's Triangle) */
+    setRow(44, -1, -1, 45, -1, -1, -1, 100);
+    setRow(45, -1, -1, -1, 44, -1, -1, 120);
     /* Options: 300 screen mode and 325 girl control are shown only after
        the game is cleared (layout_texture.c lt_property_visible) */
     setRow(300, -1, -1, 308, 325, 57, -1, 45);
@@ -467,8 +478,10 @@ static void testBuild(void)
     static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
                                   UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
+                                   UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -483,7 +496,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9), "display rows (no framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 3), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 4), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
 
@@ -504,8 +517,32 @@ static void testBuild(void)
     /* the gameplay option's explanation and the mirror line */
     int yorda = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_YORDA);
     CHECK(yorda >= 0, "the Yorda row");
-    CHECK(strstr(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "New Game") != NULL,
-          "mirror: chosen at New Game");
+    /* R7c: the run's mirror mode, read-only, and the FMV switch */
+    ico_opt_set_mirror(0);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "Off") == 0, "mirror: Off (%s)",
+          ui_SettingsValueText(UI_OPT_MIRROR_INFO));
+    ico_opt_set_mirror(1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "On (this game)") == 0,
+          "mirror: On (this game) (%s)", ui_SettingsValueText(UI_OPT_MIRROR_INFO));
+    ico_opt_set_mirror(0);
+    CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_MIRROR_FMV) >= 0, "the FMV row");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_FMV), "On") == 0, "mirror_fmv: On");
+    ui_SettingsStep(UI_OPT_MIRROR_FMV, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_FMV), "Off") == 0 &&
+              ico_config_get_bool("game.mirror_fmv", 1) == 0,
+          "mirror_fmv: Off");
+    ui_SettingsStep(UI_OPT_MIRROR_FMV, -1);
+    CHECK(ico_config_get_bool("game.mirror_fmv", 0) == 1, "mirror_fmv: On again");
+    /* the New Game screen */
+    int ml = ui_MirrorScreenLayout();
+    CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "mirror screen layout");
+    CHECK(ui_MirrorScreenRow(0) >= 0 && ui_MirrorScreenRow(1) >= 0 &&
+              strcmp(lt_ext_RowText(ui_MirrorScreenRow(0)), "Off") == 0 &&
+              strcmp(lt_ext_RowText(ui_MirrorScreenRow(1)), "On") == 0,
+          "mirror screen rows Off / On");
+    CHECK(lt_ext_Prop(ui_MirrorScreenRow(0))->rightItem == ui_MirrorScreenRow(1) &&
+              lt_ext_Prop(ui_MirrorScreenRow(1))->leftItem == ui_MirrorScreenRow(0),
+          "Off and On side by side");
 
     /* a framerate key (R7b) shows its row */
     useConfig("[video]\nframerate = \"interpolated\"\n");
@@ -654,6 +691,68 @@ static void testNavigation(void)
     CHECK(ico_config_get_string("input.kb.circle", NULL) == NULL, "unchanged rows not written");
     ico_input_reload_bindings(b);
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
+}
+
+/* R7c: the New Game "Mirror mode" screen, run by the real layout code: the
+ * cursor starts on Off, Right moves to On, Cross sets the run's value and
+ * starts the game once; a second Enter starts on Off again and Cross picks
+ * Off; Triangle goes back to the vibration screen (layout 9). */
+static void testMirrorScreen(void)
+{
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    init_layout_texture(2);
+    settle(54, 4);
+    int ml = ui_MirrorScreenEnter();
+    int off = ui_MirrorScreenRow(0), on = ui_MirrorScreenRow(1);
+    CHECK(ml >= 0, "the screen is there once installed");
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the mirror screen (%d)", current_layout_id);
+    CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off");
+    press(0x2000); /* right */
+    CHECK(lt_ext_Layout(ml)->curItem == on, "right: On");
+    int games = s_newGames;
+    ico_opt_set_mirror(0);
+    press(0x40); /* Cross */
+    CHECK(ico_opt_mirror() == 1, "Cross on On: the run is mirrored");
+    CHECK(s_newGames == games + 1, "the game starts (gflagOn(382))");
+    press(0x40);
+    press(0x800);
+    CHECK(s_newGames == games + 1, "once");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "On (this game)") == 0,
+          "the Gameplay row shows it");
+
+    /* again: the cursor back on Off, START picks it */
+    lt_switch_layout(54);
+    settle(54, 60);
+    ml = ui_MirrorScreenEnter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the mirror screen again");
+    CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off again");
+    press(0x2000);
+    press(0x8000); /* left: back to Off */
+    CHECK(lt_ext_Layout(ml)->curItem == off, "left: Off");
+    press(0x800); /* START */
+    CHECK(ico_opt_mirror() == 0 && s_newGames == games + 2, "START on Off: not mirrored");
+
+    /* Triangle: the vibration screen */
+    lt_switch_layout(54);
+    settle(54, 60);
+    ml = ui_MirrorScreenEnter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the mirror screen a third time");
+    press(0x10);
+    CHECK(settle(9, 60), "Triangle: the vibration screen (%d)", current_layout_id);
+    CHECK(s_newGames == games + 2, "no game started");
+
+    /* not built: -1 (la_vibe_select then starts the game itself) */
+    ui_SettingsReset();
+    CHECK(ui_MirrorScreenEnter() == -1 && ui_MirrorScreenLayout() == -1, "not built: -1");
 }
 
 static void testValues(void)
@@ -939,6 +1038,13 @@ static int render(void)
     press(0x40);
     frame(0);
     snap("settings_remap_capture.png");
+    /* R7c: the New Game mirror screen, the cursor on On */
+    int ml = ui_MirrorScreenEnter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the mirror screen");
+    press(0x2000);
+    frame(0);
+    snap("settings_mirror_screen.png");
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     ui_FontShutdown();
@@ -964,6 +1070,7 @@ int main(int argc, char **argv)
     testBuild();
     testRepoint();
     testNavigation();
+    testMirrorScreen();
     testValues();
     testCapture();
     testBootSkip();

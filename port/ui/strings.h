@@ -176,6 +176,11 @@ typedef enum UiStrId {
     UI_STR_DIR_RIGHT,
     UI_STR_ACH_LOCKED,
     UI_STR_ACH_STATE_UNLOCKED,
+    /* mirror mode (renderer wave 7, R7c) */
+    UI_STR_MIRROR_ON_RUN,  /* the Gameplay row's value while the run is mirrored */
+    UI_STR_MIRROR_SCREEN,  /* the New Game screen's explanation */
+    UI_STR_OPT_MIRROR_FMV, /* [game] mirror_fmv */
+    UI_STR_MIRROR_FMV_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

@@ -43,6 +43,20 @@ int ui_SettingsEntryItem(int item);
 /* The title procs: masked while their own rows are (the card check). */
 void ui_SettingsTitleMask(int masked);
 
+/* The New Game "Mirror mode" screen (renderer wave 7, R7c; docs/port/
+   SETTINGS.md "Mirror mode"): la_vibe_select (common/src/layout_action.c,
+   ICO_HOST) switches to it after the vibration choice; Cross or START on
+   "Off" or "On" sets the run's mirror mode (ico_opt_set_mirror) and calls
+   la_host_new_game_go (gflagOn(382), what the vibration screen did);
+   Triangle goes back to the vibration screen (layout 9).  Enter returns the
+   screen's layout with the cursor on "Off" and the run's value reset
+   (ico_opt_mirror_reset), -1 when the menu is not built (the caller then
+   starts the game as the original did). */
+int ui_MirrorScreenEnter(void);
+int ui_MirrorScreenLayout(void);
+/* the "Off" (on = 0) and "On" (on = 1) rows */
+int ui_MirrorScreenRow(int on);
+
 /* --- for tests and docs -------------------------------------------------- */
 
 typedef enum UiSettingsPage {
@@ -78,7 +92,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_MOUSE_SENS,
     /* Gameplay */
     UI_OPT_YORDA,
-    UI_OPT_MIRROR_INFO,
+    UI_OPT_MIRROR_INFO, /* the run's mirror mode, read-only (R7c) */
+    UI_OPT_MIRROR_FMV,  /* [game] mirror_fmv (R7c) */
     /* Main */
     UI_OPT_LANGUAGE,
     UI_OPT_DEVELOPER,

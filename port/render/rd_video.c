@@ -42,9 +42,11 @@ static struct {
     uint64_t uploadCap[RHI_FRAMES_IN_FLIGHT];
     uint32_t counter;
     uint32_t dispW, dispH;
-    int mirror;
+    int mirror;    /* movie.c's per-movie switch (developer: ICO_MIRROR_FMV=0) */
+    int mirrorOpt; /* R7c: [game] mirror_fmv, the player's switch */
     float clear[4];
-} s_v = {.dispW = 720, .dispH = 576, .mirror = 1, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
+} s_v = {
+    .dispW = 720, .dispH = 576, .mirror = 1, .mirrorOpt = 1, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
 
 void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH)
 {
@@ -55,6 +57,16 @@ void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH)
 void rd_VideoSetMirror(int on)
 {
     s_v.mirror = on != 0;
+}
+
+void rd_VideoSetMirrorOption(int on)
+{
+    s_v.mirrorOpt = on != 0;
+}
+
+int rd_VideoMirrorOption(void)
+{
+    return s_v.mirrorOpt;
 }
 
 static RhiShader makeShader(const char *name)
@@ -279,7 +291,9 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     dcb.tex[1] = (float)h;
     dcb.mode[0] = cw;
     dcb.mode[1] = h;
-    dcb.param[0] = (g_rd.settings.mirror && s_v.mirror) ? 1.0f : 0.0f;
+    /* R7c: the mirror mode (rd_SetMirror or RdSettings.mirror) with both
+       FMV switches on */
+    dcb.param[0] = (rd__MirrorOn() && s_v.mirror && s_v.mirrorOpt) ? 1.0f : 0.0f;
     memcpy(map + dcOff, &dcb, sizeof(dcb));
 
     RhiCommandList cl = rhi_BeginCommands();

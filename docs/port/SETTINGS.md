@@ -71,7 +71,8 @@ with the values in use the next time you save.
 | line | what it does |
 | --- | --- |
 | Shadows never take Yorda | On: the shadows fight Ico and never carry Yorda off. For a less stressful game; a few scripted scenes still show the capture (docs/port/OPTIONS.md) |
-| Mirror mode | chosen when you start a New Game, not here |
+| Mirror mode | shows the current game's choice, "On (this game)" or "Off"; it is chosen when you start a New Game (below), not here |
+| Mirror the movies | On (the default): in mirror mode the films are flipped too. Off: the films play as on the PS2. Only matters in mirror mode; saved as `[game] mirror_fmv` |
 
 **Language**: English, Français, Deutsch, Italiano, Español. The Settings
 menu changes at once; the game's own subtitles and menu pictures follow the
@@ -84,7 +85,37 @@ unlocked. "Assisted" means it was unlocked in a run where developer mode,
 without them makes it a normal unlock (docs/port/ACHIEVEMENTS.md).
 
 **Developer mode**: On restores the development build's debug menu (SELECT
-opens it) and pauses achievements while it is on (docs/port/DEVELOPER_MODE.md).
+opens it) and marks achievements unlocked while it is on as assisted (docs/port/DEVELOPER_MODE.md).
+
+## Mirror mode
+
+Mirror mode plays the whole game flipped left to right: the castle, Ico and
+Yorda, the camera's turns. The stick's left and right are swapped with it,
+so pushing the stick left still moves Ico left on the screen, and the sound
+is swapped between the left and right speakers. Subtitles, menus and the
+other text are not flipped: they read normally. The game itself is the same
+game; only what you see and hear is flipped.
+
+It is chosen when you start a New Game: after "Vibration", the "Mirror
+mode" screen offers Off (selected) and On. Left and right move between
+them, Cross or START confirms, Triangle goes back to the vibration screen.
+
+The choice belongs to that game and goes with its saves:
+
+- Saving the game in a slot remembers the choice for that slot (in
+  `config.toml`, not on the memory card: the card files stay exactly as the
+  PS2 writes them).
+- Loading a slot puts the game back in the mode it was saved in.
+- Saving over a slot that held a game in the other mode: the new game's
+  choice wins.
+- A save made on a PS2 (or copied in from another card) has no entry and
+  loads in normal mode, as does a slot whose save was replaced outside
+  the port.
+- The title screen is always in normal mode. A cleared game's "New Game"
+  (loading a cleared save starts a new game) asks again.
+
+The Gameplay page shows the current game's choice; it cannot be changed
+there. "Mirror the movies" decides whether the films are flipped too.
 
 ## Remapping the controls
 

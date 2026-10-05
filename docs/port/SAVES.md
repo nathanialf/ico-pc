@@ -135,6 +135,55 @@ The save UI's order of calls (`layout_action.c`): `GetBlockSaveInfo`,
 `SaveIconBlock` (`icon.sys` and one `boy_blk.ico`, with the directory made),
 `SaveProductBlock`, `SaveGameBlock`.
 
+## Mirror mode
+
+Mirror mode (renderer wave 7, R7c; docs/port/SETTINGS.md "Mirror mode",
+docs/port/OPTIONS.md) is chosen at New Game and belongs to the run. It is
+kept per save slot in the port config, never in the card files (which stay
+the bytes the game writes):
+
+```
+[mirror]
+slot_3 = true
+slot_3_sum = 1834213
+```
+
+- The run's value is a session value (`ico_opt_mirror`) until a save
+  happens. On New Game it is what the player picked; at the title it is
+  `[gameplay] mirror` (normally Off).
+- Save to slot N (`la_save_processing` step 10, after the game block was
+  written and checked: `common/src/layout_action.c`, `ICO_HOST`, one line):
+  `ico_mirror_slot_saved(mc.fileNo, mc.sum)` writes `slot_N` = the run's
+  value and `slot_N_sum` = the checksum `mcard.c` computed over the block it
+  wrote (the 4 bytes after it in `game.00N`), and saves `config.toml`.
+- Load from slot N (`la_load_processing` step 10, after the block was read
+  and its checksum matched, next to `loadSerial`; one line):
+  `ico_mirror_slot_loaded(mc.fileNo, mc.sum)` sets the run's value from
+  `slot_N` when `slot_N_sum` equals the loaded block's checksum, Off
+  otherwise.
+- N is the save file's number (`mc.fileNo`, 0..9, `game.000` .. `game.009`);
+  the port has one card, so the port number is not part of the key.
+
+Edge cases:
+
+- Saving over a slot that held another run's save: the new run's value and
+  sum replace the entry (the new flag wins).
+- A save made on a PS2, copied in from a PCSX2 folder card, or written by
+  the card's initialisation (`la_system_save_processing` fills empty
+  slots): no entry, or an entry with another sum: Off.
+- A slot deleted in the game's menu keeps its stale entry; the next save
+  there rewrites it, and a load could only match it if the same block came
+  back.
+- Another `saves=` folder shares the entries; the checksum makes a mismatch
+  read Off.
+- A cleared save's "New Game" (`la_load_processing` returns to the
+  vibration screen when gflag 395 is set): the load sets the slot's value,
+  then the Mirror mode screen resets it and asks again.
+
+`port/game/test/options_test.c` (`options`): the round trip through the
+file, a missing entry and a wrong sum read Off, saving over with another
+flag, the listener.
+
 ## Tests
 
 `port/save/test/save_test.c` (ctest `save`, `linux-x64`; builds for

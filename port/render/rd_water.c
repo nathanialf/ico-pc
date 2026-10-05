@@ -275,8 +275,8 @@ uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes)
  *   puddle.c leveldown, copy, drawRipples (WORLD, list 4): TEST 0x3F001
  *   and 0x3F000 (DATE DATM 1, Z ALWAYS; AFAIL RGB_ONLY), Z write off,
  *   ALPHA modes 0 (ADD FIX), 2 (LERP FIX), 4 (LERP As, stage 34);
- *   waterDot.c (list 11 raw writes, so UI space): TEST 0x50000, Z write
- *   off, mode 5 (ADD As). */
+ *   waterDot.c (list 11 raw writes: WORLD space since R7c, UI before):
+ *   TEST 0x50000, Z write off, mode 5 (ADD As). */
 uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const struct {
@@ -289,7 +289,7 @@ uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n
         {RD_TEST_NEVER_RGBONLY_DATE1, RD_SPACE_WORLD, 4},
         {RD_TEST_RGBONLY_DATE1, RD_SPACE_WORLD, 0},
         {RD_TEST_RGBONLY_DATE1, RD_SPACE_WORLD, 4},
-        {RD_TEST_Z_GEQUAL, RD_SPACE_UI, 5},
+        {RD_TEST_Z_GEQUAL, RD_SPACE_WORLD, 5},
     };
 
     for (size_t i = 0; i < sizeof(kStates) / sizeof(kStates[0]); i++) {

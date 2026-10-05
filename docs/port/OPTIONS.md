@@ -11,15 +11,43 @@ reads an option only under `#ifdef ICO_HOST` (the EE build is unchanged).
 |---|---|---|---|
 | `[gameplay] stick_fix` | `false` | `ico_opt_stick_fix` / `ico_opt_set_stick_fix` | `ico_input_frame` (`port/input/pad_host.c`); `ico_input_set_stick_fix` and `ico_input_stick_fix_enabled` forward to the module; `ico_input_apply_toml` still sets it from the file it was given |
 | `[gameplay] yorda_safe` | `false` | `ico_opt_yorda_safe` / `ico_opt_set_yorda_safe` | the hook sites below |
-| `[gameplay] mirror` | `false` | `ico_opt_mirror` / `ico_opt_set_mirror` | `ico_input_frame` (negates stick X, via `ico_input_vpad_to_frame`); `ico_audio_mirror()` for the pan swap |
+| `[gameplay] mirror` | `false` | `ico_opt_mirror` / `ico_opt_set_mirror` (`ico_opt_set_mirror_listener`, `ico_opt_mirror_reset`, `ico_mirror_slot_*`) | the run's value, chosen at New Game (R7c, below): `ico_input_frame` (negates stick X, via `ico_input_vpad_to_frame`); `ico_audio_host_vsync` (swaps left and right); the renderer through the listener (`rd_SetMirror`) |
 | `[gameplay] developer_mode` | `false` | `ico_opt_developer_mode` / `ico_opt_set_developer_mode` | renderer wave 6 (R6a), docs/port/DEVELOPER_MODE.md: `Main` (`common/src/main.c`) calls `debug_Menu`; `debug.c`'s `debug_PrintfDummy` draws, `debugSceOpen` uses `host0:` (`<pref>/dev/`), `debug_VariableInit` may load the saved option table; the trace's first line records it (`port/platform/trace_host.c`); the achievements package records unlocks made while it is on as "assisted" (docs/port/ACHIEVEMENTS.md) |
 | `[dev] debug_option` (int) | `0` | `ico_opt_debug_option` (read each call, no setter) | `debug_VariableInit` in developer mode: not 0 loads `<pref>/dev/thisIsYourDebugOption` |
 
-`stick_fix` is documented in INPUT.md. Mirror is plumbing only: the renderer
-flip, the UI pre-flip and the choice at new game belong to the mirror package.
-`ico_audio_set_mirror` / `ico_audio_mirror` (`port/audio/audio_host.c`) are the
-audio stub: they set and read the module's value; nothing in the mixer swaps
-the pan yet.
+`stick_fix` is documented in INPUT.md.
+
+## Mirror mode (renderer wave 7, R7c)
+
+The whole game flipped left to right: the picture (the renderer's present,
+with the UI flipped back so it reads normally: docs/port/RENDER_API.md
+section 21), the stick's X axis (`ico_input_vpad_to_frame`, 4C) and the
+stereo channels (`ico_audio_pan_mirror` on every rendered block in
+`port/audio/audio_host.c`, so the device and a WAV dump hear it; the SPU2
+and the driver are untouched). The game's logic is not touched: no state,
+flag or save byte depends on it.
+
+The value is the run's, not a setting:
+
+- `[gameplay] mirror` (default `false`) is only the value before a run
+  starts (a testing key; the Settings menu does not write it), and what the
+  title goes back to: `la_title_continue_or_new` and
+  `la_title_new_game_only` call `ico_opt_mirror_reset()` when they start
+  (`common/src/layout_action.c`, `ICO_HOST`): the title belongs to no run.
+- New Game: the port's "Mirror mode" screen after the vibration screen
+  (docs/port/SETTINGS.md "Mirror mode") sets it with
+  `ico_opt_set_mirror`. Entering the screen resets the value first.
+- A save to slot N writes the run's value into the port config (`[mirror]
+  slot_N`, with the save's checksum); a load from slot N sets the run's
+  value from it, Off when there is no matching entry
+  (docs/port/SAVES.md "Mirror mode").
+
+`ico_opt_set_mirror` calls the listener registered with
+`ico_opt_set_mirror_listener` (one; the Settings module registers
+`rd_SetMirror` in the window build when it installs, and the listener hears
+the current value at once). `ico_audio_set_mirror` / `ico_audio_mirror` and
+`ico_input_set_mirror` / `ico_input_mirror` forward to the module.
+
 
 ## yorda_safe: the shadows never take Yorda
 

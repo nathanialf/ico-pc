@@ -933,6 +933,19 @@ const RdSettings *rd_GetSettings(void)
     return &g_rd.settings;
 }
 
+void rd_SetMirror(int on)
+{
+    if (g_rd.mirrorRun != (on != 0)) {
+        rd__Log("mirror mode %s (frame %u)", on ? "on" : "off", g_rd.frameCounter);
+    }
+    g_rd.mirrorRun = on != 0;
+}
+
+bool rd_MirrorActive(void)
+{
+    return rd__MirrorOn();
+}
+
 /* The per-list defaults of gsb_SetGsDefault (GsBase.c:638-688, rd.h). */
 typedef struct RdListDefault {
     uint64_t test;

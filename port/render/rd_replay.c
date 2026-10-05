@@ -377,6 +377,7 @@ typedef struct Replay {
     RhiBindGroup frameBG;
     uint32_t frameKey[6]; /* colour, gsW, gsH, useOffset, pass serial, full-screen (R7a) */
     int stretch;          /* R7a: the draw being bound is full-screen (no wide x scale) */
+    int mirror;           /* R7c: the draw being bound is a flipped UI draw (scissor too) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
@@ -515,6 +516,83 @@ static void setUvShift(float sx, float sy)
 {
     s_uvShiftX = sx > 1.0f ? (sx - 1.0f) / (2.0f * sx) : 0.0f;
     s_uvShiftY = sy > 1.0f ? (sy - 1.0f) / (2.0f * sy) : 0.0f;
+}
+
+/* Wave 7 (R7c): the mirror mode's UI flip (RENDER_API.md section 21).  The
+ * presenter flips the whole picture (rd_present.c step 2), so an
+ * RD_SPACE_UI prim drawn into SCENE or DISPLAY (the targets the present
+ * shows) is flipped here about the target's centre and reads normally
+ * after it.  Everything else (WORLD and FULLSCREEN prims, the meshes, the
+ * posts) is drawn as recorded and flips with the present.
+ *
+ * Exact at scale 1: a pixel p of a target w pixels wide is shown at
+ * w - 1 - p.  The GS covers pixel p when x0 <= p < x1 and samples it at p;
+ * reflected, pixel q = w - 1 - p would need w - 1 - x1 < q <= w - 1 - x0,
+ * the open and closed ends swapped.  On the GS's 1/16 grid that is
+ * w - 1 - x1 + 1/16 <= q < w - 1 - x0 + 1/16, so a triangle's x is
+ * reflected as X' = C - 1 + 1/16 - X about C = 2 (ox + w / 2), which covers
+ * exactly the mirrored pixels for any 12.4 edge, and the attributes taken
+ * at q are then the original's at p + 1/16: each triangle's UVs are moved
+ * back by a sixteenth of a pixel's worth of their x gradient (sprites and
+ * quads of the layout and the font: exact UVs).  Colours and Z are not
+ * moved (1/16 of a pixel's step of a gradient).  Points are drawn as
+ * one-pixel quads, so they follow the triangles.  Lines are reflected about
+ * the pixel centre, X' = C - 1 - X.  On a scaled target "1" is one texel,
+ * 1 / (sx wide) GS pixels.  The scissor is mirrored with them
+ * (scissorRect). */
+static float wideFor(const RdTargetRec *tc, int stretch);
+
+static int mirrorUi(const Replay *r, uint8_t space)
+{
+    return space == RD_SPACE_UI && rd__MirrorOn() &&
+           (r->st.color == (uint32_t)RD_TARGET_SCENE + 1u ||
+            r->st.color == (uint32_t)RD_TARGET_DISPLAY + 1u);
+}
+
+static uint16_t mirrorX(int32_t c16, float x)
+{
+    const float m = (float)c16 - x;
+    const int32_t i = (int32_t)(m < 0.0f ? m - 0.5f : m + 0.5f);
+    return (uint16_t)(i < 0 ? 0 : (i > 0xFFFF ? 0xFFFF : i));
+}
+
+static void mirrorVerts(IcoSpriteVertex *o, uint32_t n, uint8_t topo, int32_t c16, float texel16)
+{
+    if (topo == RD_PRIM_LINES) {
+        for (uint32_t i = 0; i < n; i++) {
+            o[i].x = mirrorX(c16, (float)o[i].x + texel16);
+        }
+        return;
+    }
+    for (uint32_t i = 0; i + 2 < n; i += 3) {
+        IcoSpriteVertex *t = &o[i];
+        const float x0 = (float)t[0].x, y0 = (float)t[0].y;
+        const float ax = (float)t[1].x - x0, ay = (float)t[1].y - y0;
+        const float bx = (float)t[2].x - x0, by = (float)t[2].y - y0;
+        const float det = ax * by - bx * ay;
+        float dudx = 0.0f, dvdx = 0.0f; /* per 1/16 GS pixel */
+        if (det != 0.0f) {
+            dudx = ((t[1].u - t[0].u) * by - (t[2].u - t[0].u) * ay) / det;
+            dvdx = ((t[1].v - t[0].v) * by - (t[2].v - t[0].v) * ay) / det;
+        }
+        for (int k = 0; k < 3; k++) {
+            t[k].u -= dudx;
+            t[k].v -= dvdx;
+            t[k].x = mirrorX(c16, (float)t[k].x + texel16 - 1.0f);
+        }
+    }
+}
+
+/* the reflection's C (12.4) for the bound target: 2 (ox + w / 2) GS pixels,
+ * ox = 2048 - gsW / 2 as bindDraw puts the origin */
+static void mirrorDraw(Replay *r, const RdTargetRec *tc, IcoSpriteVertex *o, uint32_t n,
+                       uint8_t topo)
+{
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    const int32_t c16 = 32 * ox + 16 * (int32_t)tc->w;
+    const float texels = tc->sx * wideFor(tc, r->stretch);
+    mirrorVerts(o, n, topo, c16, 16.0f / (texels > 0.0f ? texels : 1.0f));
+    r->mirror = 1;
 }
 
 static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFixed, float tw,
@@ -803,6 +881,13 @@ static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
     if (x1 < x0 || y1 < y0) {
         return false;
     }
+    if (r->mirror) {
+        /* R7c: a flipped UI draw clips where its scissor lands after the
+         * flip (GS pixel p is target pixel w - 1 - p) */
+        const int32_t a = (int32_t)tc->w - 1 - x1, b = (int32_t)tc->w - 1 - x0;
+        x0 = a;
+        x1 = b;
+    }
     if (tc->sx != 1.0f || tc->sy != 1.0f) {
         int32_t a = (int32_t)((float)x0 * tc->sx), b = (int32_t)((float)y0 * tc->sy);
         int32_t c = (int32_t)((float)(x1 + 1) * tc->sx + 0.999f) - 1;
@@ -867,6 +952,7 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
 {
     memset(ds, 0, sizeof(*ds));
     r->stretch = 0; /* R7a: doScreen decides for screen prims after this */
+    r->mirror = 0;  /* R7c: likewise */
     ds->tc = rd__TargetRec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
@@ -977,6 +1063,9 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
                                out, &topo, r->st.gouraud != 0);
     if (nv == 0) {
         return;
+    }
+    if (mirrorUi(r, c->b[1])) {
+        mirrorDraw(r, ds.tc, out, nv, topo); /* R7c */
     }
     RdDrawPass dp[2];
     const int np = rd__PlanScreenDraw(&r->st, topo, c->b[1], ds.tc->format, ds.depthFmt, dp);
@@ -1200,6 +1289,9 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
                                out, &topo, r->st.gouraud != 0);
     if (nv == 0) {
         return;
+    }
+    if (mirrorUi(r, c->b[1])) {
+        mirrorDraw(r, tc, out, nv, topo); /* R7c */
     }
     /* the planner's flags, FIX and alpha test for this state (COLCLAMP set on
      * the copy: the planner logs COLCLAMP 0 as clamped, which this path is

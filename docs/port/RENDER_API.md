@@ -2331,7 +2331,8 @@ Open items:
    blends. Done in R7b (section 20), differently: the presenter does not
    blend two DISPLAY pictures; it replays the current frame with the
    keyed draws' data blended, so DISPLAY is drawn once per present.
-6. Mirror: `RdPresentPreset.mirror` is still unimplemented.
+6. Mirror: `RdPresentPreset.mirror` is still unimplemented. Done in R7c
+   (section 21).
 
 ## 20. Frame rate and interpolation (wave 7, R7b)
 
@@ -2590,4 +2591,170 @@ interpolated present as well; UI-tagged prims are pre-flipped at record
 time, which leaves the interpolation unaffected (it blends XY, and both
 frames are flipped alike); the camera-jump and world-origin tests read
 matrices, not the flipped picture, so they need nothing; `rd_video.c`'s
-own mirror flag is separate (FMV).
+own mirror flag is separate (FMV). Done in R7c (section 21), with the UI
+flip at replay instead of record time.
+
+## 21. Mirror mode (wave 7, R7c)
+
+`port/render/rd_present.c` (step 2 flips), `rd_replay.c` (the UI flip,
+`mirrorUi` / `mirrorDraw`, the scissor), `rd_core.c` (`rd_SetMirror`,
+`rd_MirrorActive`), `rd_internal.h` (`RdContext.mirrorRun`,
+`rd__MirrorOn`), `rd_video.c` / `port/fmv/rd_video.h` (the FMV switches),
+`rd_water.c` (waterDot's pipeline in WORLD space), `ico2/seki/src/GifPacket.c`
+(raw list-11 writes tagged WORLD), `tools/rd_replay_tool.c` (`--mirror`).
+The game side: `port/game/options.c` (the run's value, its listener, the
+per-slot flag), `port/ui/settings.c` (the New Game screen, the Gameplay
+rows, the listener that calls `rd_SetMirror`),
+`ico2/common/src/layout_action.c` (the hooks), `port/audio/audio_host.c`
+(the pan). Tests: `rd_mirror` (`port/render/test/rd_mirror_test.c`),
+`settings`, `options`, `audio_pan`; players: docs/port/SETTINGS.md
+"Mirror mode"; the slot flag: docs/port/SAVES.md "Mirror mode".
+
+**The flag.** `rd_SetMirror(on)` is the run's value (port/ui/settings.c
+registers it as `ico_opt_set_mirror`'s listener, so the New Game choice, a
+load and the title's reset reach it at once). The window rebuilds
+`RdSettings` from the display options and leaves `mirror` 0; tests and the
+replay tool set `RdSettings.mirror`. The mirror is on when either is
+(`rd__MirrorOn`); it is read at replay and at present, so it applies from
+the next frame replayed. `rd_SetMirror` logs each change ("rd: mirror mode
+on (frame N)").
+
+**The present.** Step 2 of the presenter (lines target, or DISPLAY with the
+full-height scene, into the output box) samples its source right to left
+when the mirror is on: `blit`'s `uvRect` x runs from `sw` to 0, so `blit_vs`
+gives u = 1 - t. Both presets have `RdPresentPreset.mirror` set: mirror mode
+is a gameplay option, not a display one. Every present goes through step 2,
+so the Original present inside `rd_EndFrame`, the Enhanced one and every
+interpolated `rd_Present(alpha)` (section 20) are flipped alike. With the
+mirror off the blit is the same call as before (Original byte-identical:
+R7a's golden set, 453 PNGs, rendered from R7b's dumps and from dumps the
+R7c build's tests recorded, 0 differ). With it on the output is the exact
+horizontal flip of the output with it off when the box's horizontal scale
+is a power of two (the sample positions are dyadic and mirror exactly; a
+1024 x 768 output in `rd_mirror_test`); at other scales the bilinear
+weights of mirrored positions may round differently by 1 LSB.
+
+**The UI flip.** The present flips everything, so the 2D that must read
+normally is flipped back where it is drawn: a screen-prim command tagged
+`RD_SPACE_UI` replayed into SCENE or DISPLAY (the targets the present
+shows) has its vertices reflected about the target's horizontal centre,
+after `expand` and before the draw (`mirrorDraw`); the scissor of that draw
+is mirrored too (`scissorRect`: GS pixel p becomes w - 1 - p). Draws into
+any other target (WORK*, AA*, the shadow and water targets) are never
+flipped: what they hold is sampled by later passes in GS coordinates.
+WORLD and FULLSCREEN prims, the meshes, the shadow volumes and resolve,
+`rd_WorldPrims` (darkVolume, lightning, lineManager), the posts (fade,
+letterbox, reduction, keep, film noise, the fog, the flare and the eye
+blur's sun ghosts in `staticBlur.c`) are drawn as recorded and flip with
+the present: they are the world. Nothing else changes: no winding,
+culling (none is ever set: `RhiPipelineDesc.cullNone`), VU program,
+shadow sign, DATE or feedback path is touched.
+
+The brief put the pre-flip at record time; it is at replay instead, for
+the same result: the interpolation blends the recorded XY of both frames
+and the reflection is affine, so flipping after the blend equals blending
+flipped frames; the reflection needs the bound target's width and scale,
+which the replay knows; and a frame dump stays a record of what the game
+drew, so `rd_replay_tool --mirror` shows any dump mirrored (as R7a's
+display options are flags of the tool, not part of the dump).
+
+Exactness. A pixel p of a target w pixels wide is shown at w - 1 - p. The
+GS covers pixel p when x0 <= p < x1 and takes its attributes at p (the
+replay puts GS integer coordinates on pixel centres, R2a). Reflected, pixel
+q = w - 1 - p would need w - 1 - x1 < q <= w - 1 - x0: the open and the
+closed end swap. On the GS's 1/16-pixel grid that is the same as
+w - 1 - x1 + 1/16 <= q < w - 1 - x0 + 1/16, so triangles (sprites and
+points are expanded to triangles) are reflected as
+X' = C - 1 + 1/16 - X with C = 2 (ox + w / 2) (ox = 2048 - gsW / 2, as
+`bindDraw` sets the origin; C = 4096 for the 512-wide SCENE and DISPLAY):
+exactly the mirrored pixels for any 12.4 edge. The attributes taken at q
+are then the original's at p + 1/16, so each triangle's UVs are moved back
+by one sixteenth of a pixel of their x gradient (computed per triangle from
+its three vertices): textured sprites and quads sample the same texel at
+the mirrored pixel. Colours and Z are not moved (a sixteenth of a pixel's
+step of a gradient; the layout's and the font's colours are flat). Lines
+are reflected about the pixel centre (X' = C - 1 - X); the GPU's line rule
+is not the GS's anyway (R2a). On a scaled target (Enhanced, R7a) "1" is
+one texel, 1 / (sx * wide) GS pixels; the snapped sprite corners (R7a's
+`snapAxis`) are whole GS pixels, which reflect onto whole blocks.
+
+`rd_mirror_test` checks, on lavapipe: a WORLD-only frame in DISPLAY
+presents as the exact flip of itself with the mirror off (Original and
+Enhanced 1x, 86356 asymmetric pixels); UI prims in DISPLAY (1:1 and 2x
+nearest textured sprites with the +8 nudge, an untextured sprite with
+quarter-pixel edges, a textured two-triangle quad, three points, a sprite
+under a scissor that cuts it) land on the same output pixels with the
+mirror on and off, while WORLD content in the same frame flips; the same
+UI drawn into SCENE is SCENE's exact flip; a UI sprite into WORK1 is not
+moved; `rd_Present(0.5)` of a keyed sprite moving between two Enhanced
+frames is flipped exactly. Validation clean.
+
+Through the reduction. The UI is drawn into SCENE and reaches DISPLAY
+through `gsb_Reduction`'s sprite (`rd_post.c` `postReduction`), which
+samples SCENE at u = x + 0.75 (UV 0.5 .. W + 0.5 over corners at -0.25):
+DISPLAY x = 0.75 SCENE x + 0.25 SCENE x+1 (with the vertical halving). That
+bias is not mirror-symmetric: with the mirror on a UI edge pixel takes its
+quarter from the neighbour on the other side. So in the game the UI's
+pixels are where they were, and a glyph edge's 25 % blend sits on its
+other side; the world, which is not pre-flipped, is the exact flip.
+
+**Space tags (GifPacket.c).** Until R7c the decoder tagged raw register
+writes (and the raw-coordinate helpers, `GIF_SP_AUTO`) UI in lists 11 and
+12, WORLD elsewhere. UI and WORLD replayed alike (both `g_space` slots
+carry the same wide x scale), so the tag only mattered for the mirror.
+Since R7c list 11's raw writes are WORLD: what draws raw there is
+world-projected (`waterDot.c`'s drops, `weapon.c`'s insect net,
+`Light.c`'s light volumes, the debug lines of `fieldCollision.c`,
+`camera-editor.c`, `motionManager2.c`, `spider.c`, `icoMisc.c`'s wind
+lines) and would have been flipped away from their objects; list 12's raw
+writers are 2D (`debug.c`'s font and bars, `icoMisc.c`'s memory bar) and
+stay UI. The UI sources come through the UI helpers
+(`gif_Sprite*`, `gif_Point*`, `gif_Line*`: `layout_texture.c`,
+`layout_action.c`'s progress bar, `jimaku.c`'s subtitles, `kanban.c`'s
+signs, `debug.c`) or `rd_ScreenPrims` with `RD_SPACE_UI` (`DisplayFont.c`,
+which `staffroll.c` draws through, and the port's text and popups,
+`port/ui/font.c`): no change there. `layout_texture.c`'s primary sprite is
+FULLSCREEN (R7a) and untextured: flip-invariant. `rd_water.c`'s prewarm
+lists waterDot's state in WORLD space.
+
+**FMV.** `rd_video.c` draws the film's rectangle mirrored when the mirror
+is on (`rd__MirrorOn`) and both switches are: the player's `[game]
+mirror_fmv` (default true; `rd_VideoSetMirrorOption`, set from the config
+when the Settings menu installs and by its Gameplay row) and `movie.c`'s
+per-movie `rd_VideoSetMirror` (on unless the developer environment
+variable `ICO_MIRROR_FMV` is `0`; `movie.c` is not this package's file, so
+the variable stays as a developer override).
+
+**Game run** (window build on lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`port/input/pad-boot-mirror.txt`, `ticks=1000`, `dump_every=50`,
+`build-host/r7c-run-window`): the trace has gflag 382 at tick 621 and the
+log "rd: mirror mode on (frame 622)"; the stages follow at 622 (41), 715,
+795, 851, 915 (40) and 995 (3), the run ending at 1000 before a stage 3
+dump. The dumps, replayed with `rd_replay_tool --present 960x720` (and
+`--mirror` from 650 on): the boot signs and the title (50 to 550) are
+unmirrored (the flag is off until the choice); 600 is the Mirror mode
+screen over the title stage, the cursor on Off before the RIGHT at 608;
+650 to 950 are the opening's fades and black frames (the letterbox bars
+symmetric). The mirrored world was looked at on earlier dumps instead:
+R7b's title frames (500, 600) and stage 3 (1200), 6C's stage 3 (1400):
+the castle, the cell and Ico flipped, the copyright line and the
+vibration screen's text reading normally, the ICO logo (a stage
+animation, part of the world) flipped.
+
+Open items:
+
+1. The reduction's quarter-pixel bias (above): UI glyph edges blend with
+   the neighbour on the other side with the mirror on.
+2. Gouraud colours and Z of flipped UI triangles are not moved by the
+   sixteenth of a pixel (above).
+3. `debug.c`'s font drawn in list 11 (`debug_PrintFont`,
+   `debug_FlushFontWindow`, `debug_brainBar`) and `Texture.c`'s CLUT and
+   texture viewers are now WORLD: in developer mode with the mirror on
+   they read mirrored. The list 12 debug font stays UI.
+4. A subtitle and the staff roll were not seen mirrored in a game run (no
+   dump has them); they are UI helpers and `DisplayFont.c` sprites, the
+   kinds `rd_mirror_test` covers.
+5. During a film the audio pan follows the mirror mode, not
+   `mirror_fmv`: with the mirror on and `mirror_fmv` off the picture is
+   unmirrored and its stereo swapped (the film's PCM goes through the
+   SPU2 like the rest; `port/audio` has no view of the movie state).

@@ -427,6 +427,21 @@ bool rd_Present(float alpha);
 uint32_t rd_FrameNumber(void);
 void rd_CameraCut(void);
 
+/* ------------------------------------------- mirror mode (wave 7, R7c)
+ * docs/port/RENDER_API.md section 21.  The game's mirror mode (chosen at New
+ * Game, port/game/options.h ico_opt_mirror) flips the presented picture
+ * horizontally: the presenter's step 2 samples DISPLAY right to left, so
+ * every present (Original, Enhanced, interpolated) is mirrored; RD_SPACE_UI
+ * screen prims drawn into SCENE or DISPLAY are flipped about the target's
+ * centre at replay, so they read normally after the present flip.  Nothing
+ * else changes (winding, culling, shadows, DATE, feedback).  rd_SetMirror is
+ * the run's value, independent of RdSettings (the window rebuilds those from
+ * the display options); the mirror is on when either RdSettings.mirror
+ * (tests, the replay tool) or rd_SetMirror's flag is set.  It applies from
+ * the next replay or present. */
+void rd_SetMirror(int on);
+bool rd_MirrorActive(void);
+
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */

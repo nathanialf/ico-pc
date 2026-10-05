@@ -22,7 +22,12 @@
  *                 instead of 4:3; the projection side is rd_frame.c
  *                 rd__FillCameraCB, the replay's wide x scale and GsBase.c
  *                 gsbHostWideX
- *   mirror        mirror mode: step 2 flips x (not implemented)
+ *   mirror        R7c: step 2 may flip x (both presets: the mirror mode
+ *                 is a gameplay option, not a display one); flipped when
+ *                 rd__MirrorOn (rd.h rd_SetMirror, RdSettings.mirror).  Every
+ *                 present goes through here, the interpolated ones (R7b
+ *                 rd_Present) included; UI prims were flipped at replay
+ *                 (rd_replay.c mirrorUi) so they read normally
  *   fullHeight    R7a: with the full-height option DISPLAY's texture has the
  *                 scene's height (rd__TargetScaleOf) and step 1 is skipped
  * The scene resolution needs nothing here: DISPLAY's texture is whatever
@@ -44,7 +49,7 @@ typedef struct RdPresentPreset {
     /* Enhanced fields */
     int interpolate; /* R7b */
     int aspectFromSettings;
-    int mirror; /* not implemented */
+    int mirror; /* R7c: step 2 flips x when the mirror mode is on */
     int fullHeight;
 } RdPresentPreset;
 
@@ -82,10 +87,10 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 
 static const RdPresentPreset s_presets[2] = {
     /* RD_PRESET_ORIGINAL */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 0, 0},
+    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 1, 0},
     /* RD_PRESET_ENHANCED: interpolation (R7b), the aspect and full-height
-     * options (R7a) */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 0, 1},
+     * options (R7a), the mirror (R7c) */
+    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 1, 1},
 };
 
 static float clampAspect(float a)
@@ -213,7 +218,7 @@ bool rd__PresentAcquire(void)
 
 static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                  RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
-                 RdFilter filter)
+                 RdFilter filter, int mirror)
 {
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -235,7 +240,11 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
             cb.col[i] = 0x80; /* modulate by 1.0: identity */
         }
         cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
-        cb.uvRect[2] = (float)sw;
+        /* R7c: the source rectangle right to left (blit_vs interpolates
+         * u0 + t (u1 - u0)): u = sw (1 - t), exact at the box's pixel
+         * centres when the scale is a power of two */
+        cb.uvRect[0] = mirror ? (float)sw : 0.0f;
+        cb.uvRect[2] = mirror ? 0.0f : (float)sw;
         cb.uvRect[3] = (float)sh;
         cb.tex[0] = (float)sw;
         cb.tex[1] = (float)sh;
@@ -281,7 +290,7 @@ void rd__PresentRecord(RhiCommandList cl)
         rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
         blit(cl, disp->color, disp->tw, disp->th, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh,
-             RHI_LOAD_DONT_CARE, &full, pr->doubleFilter);
+             RHI_LOAD_DONT_CARE, &full, pr->doubleFilter, 0);
         rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
@@ -290,7 +299,8 @@ void rd__PresentRecord(RhiCommandList cl)
     RhiRect box;
     rd__PresentBox(s_outW, s_outH, pr->aspectFromSettings ? g_rd.outAspect : RD_ASPECT_43, &box);
     rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-    blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, pr->scaleFilter);
+    blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, pr->scaleFilter,
+         pr->mirror && rd__MirrorOn());
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
     }

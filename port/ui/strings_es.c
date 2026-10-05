@@ -145,4 +145,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "derecha",
     [UI_STR_ACH_LOCKED] = "Bloqueado",
     [UI_STR_ACH_STATE_UNLOCKED] = "Desbloqueado",
+    [UI_STR_MIRROR_ON_RUN] = "Activado (esta partida)",
+    [UI_STR_MIRROR_SCREEN] =
+        "Toda la partida se juega invertida de izquierda a derecha. Cada partida guardada conserva la elección.",
+    [UI_STR_OPT_MIRROR_FMV] = "Invertir los vídeos",
+    [UI_STR_MIRROR_FMV_NOTE] =
+        "El modo espejo se elige en Nueva partida; esto invierte también los vídeos.",
 };

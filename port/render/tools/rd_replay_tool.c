@@ -24,6 +24,8 @@
  *                         --present box, else the GS size)
  *   --full-height         the full-height scene
  *   --filter F            original, trilinear or anisotropic
+ *   --mirror              the mirror mode (R7c, section 21): UI prims
+ *                         flipped at replay, the present flipped (any preset)
  *
  * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
@@ -59,7 +61,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
-                "[--backend vulkan|d3d12]\n",
+                "[--mirror] [--backend vulkan|d3d12]\n",
                 argv[0]);
         return 1;
     }
@@ -93,6 +95,8 @@ int main(int argc, char **argv)
             s.preset = RD_PRESET_ENHANCED;
         } else if (strcmp(argv[i], "--full-height") == 0) {
             s.fullHeightScene = 1;
+        } else if (strcmp(argv[i], "--mirror") == 0) {
+            s.mirror = 1; /* R7c */
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             const char *v = argv[++i];

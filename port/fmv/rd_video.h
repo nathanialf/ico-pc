@@ -16,9 +16,12 @@
  * 4:3 whatever the display options (renderer wave 7, docs/port/DISPLAY.md):
  * a widescreen presentation pillarboxes the movies.
  *
- * Mirror: drawn unmirrored unless the renderer's mirror mode is on and the
- * FMV toggle (rd_VideoSetMirror, port config "mirror_fmv", default on) is
- * set.
+ * Mirror: drawn unmirrored unless the renderer's mirror mode is on
+ * (rd.h rd_SetMirror, renderer wave 7 R7c) and both FMV switches are on:
+ * the player's ([game] mirror_fmv in config.toml, default on; the Settings
+ * menu's Gameplay page sets it through rd_VideoSetMirrorOption) and
+ * movie.c's per-movie one (rd_VideoSetMirror; on unless the developer
+ * environment variable ICO_MIRROR_FMV is "0").
  */
 #ifndef ICO_PORT_FMV_RD_VIDEO_H
 #define ICO_PORT_FMV_RD_VIDEO_H
@@ -33,8 +36,11 @@ extern "C" {
 /* The PS2 display area the pictures are placed in (movie_init's imageW x
    imageH: 720 x 576 PAL, 720 x 480 NTSC). */
 void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH);
-/* The FMV mirror toggle (applies only while the mirror mode is on). */
+/* The FMV mirror toggles (apply only while the mirror mode is on): movie.c's
+   per-movie switch, and the player's [game] mirror_fmv (default on). */
 void rd_VideoSetMirror(int on);
+void rd_VideoSetMirrorOption(int on);
+int rd_VideoMirrorOption(void);
 /* Shows one decoded picture: 8-bit Y (w x h), Cb and Cr ((w+1)/2 x (h+1)/2),
    pitch[0..2] bytes per row.  Uploads, converts and presents at once.
    Returns 0, or -1 without a device. */

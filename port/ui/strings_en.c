@@ -144,4 +144,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "right",
     [UI_STR_ACH_LOCKED] = "Locked",
     [UI_STR_ACH_STATE_UNLOCKED] = "Unlocked",
+    [UI_STR_MIRROR_ON_RUN] = "On (this game)",
+    [UI_STR_MIRROR_SCREEN] = "Plays the game flipped left to right. Saves keep the choice.",
+    [UI_STR_OPT_MIRROR_FMV] = "Mirror the movies",
+    [UI_STR_MIRROR_FMV_NOTE] = "Mirror mode is chosen at New Game; this flips the movies with it.",
 };

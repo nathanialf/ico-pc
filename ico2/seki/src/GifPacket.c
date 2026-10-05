@@ -1346,8 +1346,16 @@ static int gsSpace(void)
     case GIF_SP_WORLD:
         return RD_SPACE_WORLD;
     default:
-        /* raw writes: the layout, subtitle, font and post lists are UI */
-        return rd_CurrentList() >= 11 ? RD_SPACE_UI : RD_SPACE_WORLD;
+        /* raw writes and the raw-coordinate helpers: UI in list 12, WORLD
+           elsewhere.  PC port (renderer wave 7, R7c): list 11 was UI too
+           until R7c, but what draws raw there is world-projected
+           (waterDot.c's drops, the insect net, the debug lines and
+           volumes); list 12's raw writers are 2D (debug.c's font and bars,
+           icoMisc.c's memory bar).  The layout, subtitles, staff roll and
+           font come through the UI helpers above and gif_HostScreenPrims.
+           UI and WORLD replay alike except under the mirror mode, which
+           flips UI prims (RENDER_API.md section 21) */
+        return rd_CurrentList() >= 12 ? RD_SPACE_UI : RD_SPACE_WORLD;
     }
 }
 

@@ -32,10 +32,15 @@ void ico_audio_host_vsync(int hz);
 /* Frames the vsync after `vsync_index` vsyncs at `hz` renders (pure). */
 int ico_audio_host_frames(int hz, unsigned int vsync_index);
 
-/* Mirror mode hook: the option is port/game/options.c's (ico_opt_mirror); the
-   pan swap itself is not implemented yet (a stub for the mirror package). */
+/* Mirror mode: the option is port/game/options.c's (ico_opt_mirror).  While
+   it is on ico_audio_host_vsync swaps left and right in each rendered block
+   (renderer wave 7, R7c): the device and the WAV dump hear the mirrored
+   pan; the SPU2 and the driver are untouched. */
 void ico_audio_set_mirror(int on);
 int ico_audio_mirror(void);
+/* frames: `count` interleaved stereo S16 frames, swapped in place when
+   mirror is non-zero (pure; the unit test's entry) */
+void ico_audio_pan_mirror(int16_t *frames, int count, int mirror);
 
 /* Output volume (volume.c; the SDL device only, a WAV dump stays unscaled).
    `volume` is 0.0 .. 1.0 (the ini's [audio] volume, exported as

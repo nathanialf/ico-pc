@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "achievements.h"
+#include "audio_host.h"
 #include "config.h"
 #include "font.h"
 #include "input.h"
@@ -22,6 +23,12 @@
 #include "strings.h"
 #include "sysconf.h"
 #include "video_options.h"
+
+#ifdef ICO_RD
+#include "rd.h" /* rd_SetMirror (R7c) */
+/* port/fmv/rd_video.h (port/render/rd_video.c): the player's FMV switch */
+void rd_VideoSetMirrorOption(int on);
+#endif
 
 /* --- the game's side (common/; layout_texture.h declares the lt_* calls) -- */
 
@@ -34,10 +41,14 @@ extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
+/* layout_action.c (ICO_HOST, R7c): what la_vibe_select's confirm did after
+   the vibration choice, gflagOn(382): the new game starts */
+extern void la_host_new_game_go(void);
 
 /* the pad's trigger bits (keyInput.c's logical word) */
 #define PAD_TRIANGLE 0x0010
 #define PAD_CROSS 0x0040
+#define PAD_START 0x0800
 #define PAD_SQUARE 0x0080
 #define PAD_UP 0x1000
 #define PAD_RIGHT 0x2000
@@ -263,7 +274,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
     case UI_OPT_MIRROR_INFO:
-        return ui_Str(UI_STR_MIRROR_INFO);
+        /* R7c: the run's value (chosen at New Game or by the loaded save) */
+        return ui_Str(ico_opt_mirror() ? UI_STR_MIRROR_ON_RUN : UI_STR_OFF);
+    case UI_OPT_MIRROR_FMV:
+        return onOff(ico_config_get_bool("game.mirror_fmv", 1));
     case UI_OPT_LANGUAGE:
         return languageName(NonLinearCameraMove);
     case UI_OPT_DEVELOPER:
@@ -335,8 +349,8 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         int v = (int)(ico_config_get_float("audio.volume", 1.0) * 10.0 + 0.5) + dir;
         v = v < 0 ? 0 : v > 10 ? 10 : v;
         ico_config_set_float("audio.volume", v / 10.0);
-        s_dirtyConfig = 1;
         ico_audio_set_volume(v / 10.0); /* live; the SDL output reads it per block */
+        s_dirtyConfig = 1;
         break;
     }
     case UI_OPT_STICK_FIX:
@@ -371,6 +385,15 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         NonLinearCameraMove = ICO_GAME_LANGUAGE_ENGLISH + i;
         ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
         ico_sysconf_set_language(ico_game_to_scf_language(NonLinearCameraMove));
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_MIRROR_FMV: {
+        int on = !ico_config_get_bool("game.mirror_fmv", 1);
+        ico_config_set_bool("game.mirror_fmv", on);
+#ifdef ICO_RD
+        rd_VideoSetMirrorOption(on);
+#endif
         s_dirtyConfig = 1;
         break;
     }
@@ -590,6 +613,7 @@ static void setNote(int row, int strId)
 
 static int settingsProc(int first, int item);
 static int entryProc(int first, int item);
+static void buildMirrorScreen(void);
 
 static int rowY(int page, int i)
 {
@@ -692,6 +716,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
+        addNote(pg, UI_OPT_MIRROR_FMV, UI_STR_MIRROR_FMV_NOTE);
         break;
     default:
         break;
@@ -819,8 +844,10 @@ static void build(void)
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
                                   UI_STR_BACK};
     static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
+                                   UI_STR_BACK};
 
     ui_FontInit(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
@@ -833,7 +860,7 @@ static void build(void)
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
                     UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 3,
+    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 4,
                     UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, ico_ach_count() + 1,
                   UI_PAGE_MAIN);
@@ -848,6 +875,90 @@ static void build(void)
         }
     }
     buildEntries();
+    buildMirrorScreen();
+}
+
+/* ------------------------------------------------- the mirror screen (R7c)
+ * The New Game "Mirror mode" screen, between the vibration choice and the
+ * start (settings.h ui_MirrorScreenEnter): the header, "Off" and "On" side
+ * by side (left/right through their item links, the cursor on "Off"), and
+ * a line of explanation, in the lower half where the vibration screen has
+ * its rows (the title stage's logo is above). */
+
+static int s_mirrorLayout = -1;
+static int s_mirrorRow[2] = {-1, -1};
+static int s_mirrorChosen;
+
+#define LAYOUT_VIBE_SELECT 9 /* la_vibe_select's screen */
+
+static int mirrorScreenProc(int first, int item);
+
+static void buildMirrorScreen(void)
+{
+    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    int h = addRow(20, 112, 600, 40, 0, -1, UI_STR_OPT_MIRROR, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    P(h)->centerX = 1;
+    s_mirrorRow[0] = addRow(200, 146, 110, 40, 1, -1, UI_STR_OFF, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_mirrorRow[1] = addRow(330, 146, 110, 40, 1, -1, UI_STR_ON, NULL, 0.0f, UI_ALIGN_CENTER);
+    P(s_mirrorRow[0])->rightItem = s_mirrorRow[1];
+    P(s_mirrorRow[1])->leftItem = s_mirrorRow[0];
+    int n = addRow(20, 182, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+    P(n)->centerX = 1;
+    setNote(n, UI_STR_MIRROR_SCREEN);
+    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    s_mirrorLayout = addLayout(first, last + 1, 0.6f, mirrorScreenProc, s_mirrorRow[0]);
+}
+
+int ui_MirrorScreenEnter(void)
+{
+    if (!s_built || s_mirrorLayout < 0) {
+        return -1;
+    }
+    LtProp *l = lt_ext_Layout(s_mirrorLayout);
+    l->defaultItem = l->curItem = s_mirrorRow[0];
+    s_mirrorChosen = 0;
+    /* no run until the choice: a cleared save's new game (la_load_processing
+       returns to the vibration screen) does not keep the loaded slot's flag
+       on the title stage behind this screen */
+    ico_opt_mirror_reset();
+    return s_mirrorLayout;
+}
+
+int ui_MirrorScreenLayout(void)
+{
+    return s_mirrorLayout;
+}
+
+int ui_MirrorScreenRow(int on)
+{
+    return s_mirrorRow[on ? 1 : 0];
+}
+
+static int mirrorScreenProc(int first, int item)
+{
+    (void)item;
+    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    if (first) {
+        s_mirrorChosen = 0;
+    }
+    /* as la_vibe_select: input only once faded in, and the choice once (the
+       stage change stops the layout procs in the same tick) */
+    if (s_mirrorChosen || lt_fade_status() != 2) {
+        return -1;
+    }
+    int flags = pad[0].flags;
+    if (flags & (PAD_CROSS | PAD_START)) {
+        s_mirrorChosen = 1;
+        POSITIVE_SE();
+        ico_opt_set_mirror(lt_ext_Layout(s_mirrorLayout)->curItem == s_mirrorRow[1]);
+        la_host_new_game_go();
+        return -1;
+    }
+    if (flags & PAD_TRIANGLE) {
+        NEGATIVE_SE();
+        return LAYOUT_VIBE_SELECT;
+    }
+    return -1;
 }
 
 /* The game's rows, pointed at the entry rows.  Checked against the loaded
@@ -886,11 +997,23 @@ static void repoint(void)
     }
 }
 
+#ifdef ICO_RD
+/* R7c: the renderer follows the run's mirror mode (options.h listener) */
+static void mirrorChanged(int on)
+{
+    rd_SetMirror(on);
+}
+#endif
+
 void ui_SettingsInstall(void)
 {
     if (!s_built) {
         build();
         s_built = 1;
+#ifdef ICO_RD
+        ico_opt_set_mirror_listener(mirrorChanged);
+        rd_VideoSetMirrorOption(ico_config_get_bool("game.mirror_fmv", 1));
+#endif
     }
     repoint();
 }
@@ -907,6 +1030,8 @@ void ui_SettingsReset(void)
         s_entryRow[e] = s_entryLayout[e] = -1;
     }
     memset(s_pages, 0, sizeof(s_pages));
+    s_mirrorLayout = s_mirrorRow[0] = s_mirrorRow[1] = -1;
+    s_mirrorChosen = 0;
 }
 
 int ui_SettingsEntryItem(int item)

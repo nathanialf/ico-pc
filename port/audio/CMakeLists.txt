@@ -76,3 +76,17 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
         "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME sndn2 COMMAND sndn2_test "${ICO_DISC_IMAGE}")
 endif()
+
+# pan_test (renderer wave 7, R7c): the mirror mode's left/right swap of the
+# rendered blocks (ico_audio_pan_mirror) and the option it reads
+# (host_config.c: the toml writer behind ico_config, as options_test has it)
+add_executable(pan_test test/pan_test.c "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(pan_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(pan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(pan_test PRIVATE ico_sndn2)
+if(WIN32)
+    target_link_libraries(pan_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME audio_pan COMMAND pan_test)
+endif()

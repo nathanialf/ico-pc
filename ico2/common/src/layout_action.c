@@ -311,6 +311,27 @@ int ui_SettingsEntryItem(int item);
 void ui_SettingsTitleMask(int masked);
 
 #define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
+
+/* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
+   the vibration choice (port/ui/settings.h ui_MirrorScreen*) and kept per
+   save slot in the port config (port/game/options.h ico_mirror_slot_*;
+   docs/port/SAVES.md, "Mirror mode"). */
+int ui_MirrorScreenEnter(void);
+int ui_MirrorScreenLayout(void);
+int ico_mirror_slot_saved(int slot, unsigned int sum);
+int ico_mirror_slot_loaded(int slot, unsigned int sum);
+void ico_opt_mirror_reset(void);
+void la_host_new_game_go(void);
+
+/* la_vibe_select's confirm: the mirror screen in place of the start, which
+   its confirm runs (la_host_new_game_go, after la_vibe_select) */
+static int la_host_mirror_screen(void)
+{
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+    return ui_MirrorScreenEnter();
+}
+
 #else
 #define LA_HOST_NOT_SETTINGS_ROW
 #endif
@@ -743,6 +764,11 @@ int la_vibe_select(void)
             iosPadActRequestEnable = 0;
             break;
         }
+#ifdef ICO_HOST
+        if (ui_MirrorScreenLayout() >= 0) {
+            return la_host_mirror_screen(); /* R7c: the mirror screen, then the start */
+        }
+#endif
         if (titleAdpcm != 0) {
             titleAdpcm->stream->fadeStep = 0x80;
         }
@@ -764,6 +790,27 @@ int la_vibe_select(void)
     actionStarted = 0;
     return 0xC;
 }
+
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 7, R7c): the start la_vibe_select's confirm made,
+   run by the mirror screen's confirm (port/ui/settings.c) once the player
+   has picked: the title music fades, the game flags and the key config are
+   reset and gflag 382 starts the new game, at the same moment as each
+   other, as on the PS2 */
+void la_host_new_game_go(void)
+{
+    if (titleAdpcm != 0) {
+        titleAdpcm->stream->fadeStep = 0x80;
+    }
+    titleAdpcm = 0;
+    gflagInit();
+    keyconfig_reset();
+    systemStatus[4] = 0;
+    gflagOn(382);
+}
+
+#endif
 
 inline int la_scei_logo(int first)
 {
@@ -799,6 +846,9 @@ int la_title_continue_or_new(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
+#ifdef ICO_HOST
+        ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
+#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -867,6 +917,9 @@ int la_title_new_game_only(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
+#ifdef ICO_HOST
+        ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
+#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -1534,6 +1587,9 @@ int la_load_processing(int first)
             *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         loadSerial = mcSetFileNo(mc.port, mc.fileNo);
+#ifdef ICO_HOST
+        ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* R7c: the slot's flag */
+#endif
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         if (titleAdpcm != 0) {
@@ -2389,6 +2445,9 @@ int la_save_processing(int first)
         saveStep++;
         break;
     case 10:
+#ifdef ICO_HOST
+        ico_mirror_slot_saved(mc.fileNo, (unsigned int)mc.sum); /* R7c: the run's flag */
+#endif
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;

@@ -595,9 +595,18 @@ typedef struct RdContext {
      * (rd_video.c), so rd_Present leaves the output alone */
     uint32_t interpFloor;
     uint8_t cutPending, videoShown;
+    /* wave 7 (R7c): rd_SetMirror's flag (the run's mirror mode); the
+     * effective mirror is this or settings.mirror (rd__MirrorOn) */
+    uint8_t mirrorRun;
 } RdContext;
 
 extern RdContext g_rd;
+
+/* Wave 7 (R7c): the mirror mode in force (rd.h rd_SetMirror). */
+static inline bool rd__MirrorOn(void)
+{
+    return g_rd.settings.mirror != 0 || g_rd.mirrorRun != 0;
+}
 
 /* Once-only diagnostics, by bit. */
 enum {

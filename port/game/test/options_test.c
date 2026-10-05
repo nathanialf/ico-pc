@@ -229,10 +229,89 @@ static void test_brain(void)
     ico_opt_set_yorda_safe(0);
 }
 
+/* --- mirror mode per save slot (renderer wave 7, R7c) -------------------- */
+static int s_heard = -1, s_heard_count;
+
+static void listener(int on)
+{
+    s_heard = on;
+    s_heard_count++;
+}
+
+static void test_mirror_slots(const char *dir)
+{
+    char path[512];
+    FILE *f;
+
+    snprintf(path, sizeof(path), "%s/options_mirror_test.toml", dir);
+    remove(path);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    /* the listener hears the current value at once, then every change */
+    ico_opt_set_mirror_listener(listener);
+    CHECK(s_heard == 0 && s_heard_count == 1);
+    /* New Game with Mirror On, saved to slot 3 (game.003) with sum 0x1234 */
+    ico_opt_set_mirror(1);
+    CHECK(s_heard == 1 && s_heard_count == 2);
+    CHECK(ico_mirror_slot_saved(3, 0x1234u) == 0);
+    /* a New Game with Off saved to slot 5 */
+    ico_opt_set_mirror(0);
+    CHECK(ico_mirror_slot_saved(5, 0xFFFFFFF0u) == 0);
+    /* the next run: the file is read again */
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_mirror() == 0);
+    CHECK(ico_mirror_slot_get(3, 0x1234u) == 1);
+    CHECK(ico_mirror_slot_get(5, 0xFFFFFFF0u) == 0);
+    CHECK(ico_mirror_slot_get(4, 0x1234u) == -1);  /* no entry */
+    CHECK(ico_mirror_slot_get(3, 0x1235u) == -1);  /* another save in slot 3 */
+    CHECK(ico_mirror_slot_get(-1, 0x1234u) == -1); /* not a slot */
+    /* loading slot 3 sets the run's value On (the listener hears it) */
+    CHECK(ico_mirror_slot_loaded(3, 0x1234u) == 1);
+    CHECK(ico_opt_mirror() == 1 && s_heard == 1);
+    /* loading slot 5: Off */
+    CHECK(ico_mirror_slot_loaded(5, 0xFFFFFFF0u) == 0);
+    CHECK(ico_opt_mirror() == 0 && s_heard == 0);
+    /* a slot without an entry (a PS2 save) and a slot whose save was
+       replaced elsewhere (another sum) load Off */
+    ico_opt_set_mirror(1);
+    CHECK(ico_mirror_slot_loaded(7, 42u) == 0 && ico_opt_mirror() == 0);
+    ico_opt_set_mirror(1);
+    CHECK(ico_mirror_slot_loaded(3, 0x9999u) == 0 && ico_opt_mirror() == 0);
+    /* saving over slot 3 with another flag: the new flag wins */
+    ico_opt_set_mirror(0);
+    CHECK(ico_mirror_slot_saved(3, 0x5678u) == 0);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_mirror_slot_get(3, 0x5678u) == 0);
+    CHECK(ico_mirror_slot_get(3, 0x1234u) == -1);
+    /* the file holds the [mirror] table */
+    f = fopen(path, "rb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        char buf[2048];
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        buf[n] = '\0';
+        fclose(f);
+        CHECK(strstr(buf, "[mirror]") != NULL);
+        CHECK(strstr(buf, "slot_3 = false") != NULL);
+        CHECK(strstr(buf, "slot_3_sum = 22136") != NULL);
+        CHECK(strstr(buf, "slot_5_sum = 4294967280") != NULL);
+    }
+    /* the title: back to [gameplay] mirror (absent: Off) */
+    ico_opt_set_mirror(1);
+    ico_opt_mirror_reset();
+    CHECK(ico_opt_mirror() == 0 && s_heard == 0);
+    ico_opt_set_mirror_listener(NULL);
+    remove(path);
+    ico_opt_reload();
+}
+
 int main(int argc, char **argv)
 {
     test_defaults();
     test_config(argc > 1 ? argv[1] : ".");
+    test_mirror_slots(argc > 1 ? argv[1] : ".");
     test_brain();
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
