@@ -14,16 +14,16 @@ build takes 188 of them: 35 are renderer-owned (below) and left out while
 
 | preset | compiler | game TUs compiled | blocked | data tables |
 | --- | --- | --- | --- | --- |
-| `ref-m32` | host gcc 14 `-m32` | 167 / 188 | 21 | 73 |
-| `win-x86-ref` | mingw-w64 gcc 14 (i686) | 167 / 188 | 21 | 73 |
-| `linux-x64` | host gcc 14 | 167 / 188 | 21 | 73 |
-| `win-x64` | mingw-w64 gcc 14 (x86-64) | 167 / 188 | 21 | 73 |
-| `asan` | host gcc 14 | 167 / 188 | 21 | 73 |
-| `fptrap` | host gcc 14 | 167 / 188 | 21 | 73 |
-| `ref-m32-clang` | llvm-mingw clang 23 | 140 / 188 | 48 | 73 |
-| `win-x86-ref-clang` | llvm-mingw clang 23 | 140 / 188 | 48 | 73 |
-| `linux-x64-clang` | llvm-mingw clang 23 | 140 / 188 | 48 | 73 |
-| `win-x64-clang` | llvm-mingw clang 23 | 140 / 188 | 48 | 73 |
+| `ref-m32` | host gcc 14 `-m32` | 169 / 188 | 19 | 73 |
+| `win-x86-ref` | mingw-w64 gcc 14 (i686) | 169 / 188 | 19 | 73 |
+| `linux-x64` | host gcc 14 | 169 / 188 | 19 | 73 |
+| `win-x64` | mingw-w64 gcc 14 (x86-64) | 169 / 188 | 19 | 73 |
+| `asan` | host gcc 14 | 169 / 188 | 19 | 73 |
+| `fptrap` | host gcc 14 | 169 / 188 | 19 | 73 |
+| `ref-m32-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
+| `win-x86-ref-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
+| `linux-x64-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
+| `win-x64-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
 
 Every preset configures and builds with exit status 0 (blocked sources
 excluded). `fpenv_test` passes on the Linux presets; the Windows `.exe`s are
@@ -31,18 +31,16 @@ built but not run here.
 
 ## Compiler choice: GCC primary, clang later
 
-The game has GNU C nested functions (package 0C counts 158 in 32 files,
-renderer files included), which gcc compiles and clang does not implement.
-GCC compiles 27 more of the 188 sources today, so the four main presets use
+The game had GNU C nested functions (package 0C counted 158 in 32 files),
+which gcc compiles and clang does not implement. Package 0E rewrote them
+(`docs/port/SWEEP_0E.md`); the remaining clang gap is sugiCommon.h's VU0
+asm (13 more TUs than gcc). Until that lands, the four main presets use
 gcc 14 and the clang family stays as `*-clang` presets.
 
 Trade-off: the plan wanted clang everywhere (one compiler for Linux and
 Windows, and later macOS, iOS and Android, where Apple's clang is the only
-choice). Nested functions block that until they are rewritten as file-scope
-functions with their captured variables passed explicitly (package 0B
-follow-up). None of the nested functions in the 167 compiled TUs needs a
-trampoline (`-Wtrampolines` on `win-x86-ref`, 0 warnings), so none needs an
-executable stack. The clang presets also have no Linux sanitizer runtimes
+choice). Nested functions no longer block that in the 0E files; the
+remaining blocker is the VU0 asm in sugiCommon.h and the 1A files. The clang presets also have no Linux sanitizer runtimes
 (llvm-mingw ships none), so `asan` is gcc either way.
 
 Argument evaluation order (package 0C): ee-gcc, gcc and clang on GNU and
@@ -52,13 +50,11 @@ must stay mingw (gcc or llvm-mingw), never MSVC-targeted.
 
 ## Blocked sources (`cmake/IcoExclusions.cmake`)
 
-### Every compiler (21)
+### Every compiler (19)
 
 | source | reason | owner |
 | --- | --- | --- |
 | `fumi/ios/memory.c` | `__asm__("break")` x4 (EE debug trap) | 0B |
-| `fumi/sound/s_init.c` | `__asm__("break")` | 0B |
-| `script/src/warpGirl.c` | `__asm__("break")` | 0B |
 | `ito/src/itou_sub.c` | VU0 macro inline asm (`.set noreorder`, VU0 registers) | 1A |
 | `seki/src/BgAnimation.c` | VU0 inline asm (`$2` clobber) | 1A |
 | `sugipon/src/stormTest.c` | VU0 inline asm (`lqc2`) | 1A |
@@ -74,23 +70,21 @@ header. Converting these four functions to C (1A's transpiler, or by hand
 over `port/math`) unblocks 14 of the 21 under gcc and the 10 clang-only
 sugiCommon.h TUs listed below.
 
-`motionManager.c` also declares `gif_StartPacketPri`, `gif_SetAlpha` and
-`gif_EndPacket` implicitly before `GifPacket.h` declares them; clang makes
-the conflict an error (0B).
+`s_init.c` and `warpGirl.c` now use `ICO_BREAK()` (`typedef.h`) and compile;
+`motionManager.c` includes `GifPacket.h` before first use (package 0E). Both
+no longer appear in the blocked list.
 
-### Clang only (27 more)
+### Clang only (13 more)
 
-Nested functions (0B follow-up, or stay on gcc): `fumi/src/{act-env,
-act-game,act-parallel-control,act-way,boyact,enemy_act,girl_act,way_sys}.c`,
-`omori/src/{camera-editor,chain}.c`, `script/src/{op,st22a}.c`,
-`seki/src/FileManager.c`, `sugipon/src/{boy,handManager,
-motionOrientManager,motionViewer}.c` (and `commonact`, `box`, `item`,
-`motionManager`, `motionManager2` above).
+The GNU nested functions are gone from every game source except
+`sugipon/{clothAnimation,lineManager,quaternion,motionManager2}.c` (package
+1A, `motionManager2.c` is still listed above); package 0E turned them into
+file-scope statics.
 
 sugiCommon.h's asm in a TU that never calls it (fixed with sugiCommon.h,
-1A): `ito/src/{act_bird,itou_boss}.c`, `omori/src/enemy-control.c`,
-`script/src/script.c`, `sugipon/src/{enemyParts,frameDependSequence,pool,
-rope,waterDot,windManager}.c`.
+1A): `fumi/src/enemy_act.c`, `ito/src/{act_bird,itou_boss}.c`,
+`omori/src/enemy-control.c`, `script/src/script.c`, `sugipon/src/{boy,
+enemyParts,frameDependSequence,motionViewer,pool,rope,waterDot,windManager}.c`.
 
 ### Renderer-owned, not compiled while `ICO_HEADLESS` (35)
 

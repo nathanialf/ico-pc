@@ -1607,30 +1607,30 @@ static ObjNode rootUpdateDirectPlay(int mode)
     return InitialObjPointer;
 }
 
+/* a nested function in rootUpdateNodeFix, called once */
+static void keepVerticalZWithQ(void *q)
+{
+    float mtx[16];
+    Vec16 v;
+
+    GetMatrixFromQuaternion(mtx, q);
+    sceVu0ApplyMatrix(&v, mtx, ZUnitVector);
+    v.f[1] = 0.0f;
+    sceVu0Normalize(&v, &v);
+    SetIdentityQuaternion(skelRoot->quat);
+    RotQuaternionY(skelRoot->quat, -GetTableArcTan2(v.f[0], -v.f[2]));
+    MultiQuaternion(skelRoot->quat, skelRoot->quat, skelRoot->fixQuat);
+    CopyMatrix((void *)MatrixDrive_GetMatrix(),
+               (char *)GOBJ_SUB(skelRoot->fixObj)->nodeMtx + skelRoot->fixNode * 64);
+    MatrixDrive_TransMatrixV(skelRoot->fixPos);
+    UnitRotation(MatrixDrive_GetMatrix());
+    MultiMatrixByQuaternion(skelRoot->quat);
+    MatrixDrive_TransMatrix(rootMove[0], rootMove[1], rootMove[2]);
+    CopyVector(skelRoot->pos, MatrixDrive_GetMatrix()[3]);
+}
+
 static ObjNode rootUpdateNodeFix(void)
 {
-    /* a nested function, called once with the parent's static chain */
-    void keepVerticalZWithQ(void *q)
-    {
-        float mtx[16];
-        Vec16 v;
-
-        GetMatrixFromQuaternion(mtx, q);
-        sceVu0ApplyMatrix(&v, mtx, ZUnitVector);
-        v.f[1] = 0.0f;
-        sceVu0Normalize(&v, &v);
-        SetIdentityQuaternion(skelRoot->quat);
-        RotQuaternionY(skelRoot->quat, -GetTableArcTan2(v.f[0], -v.f[2]));
-        MultiQuaternion(skelRoot->quat, skelRoot->quat, skelRoot->fixQuat);
-        CopyMatrix((void *)MatrixDrive_GetMatrix(),
-                   (char *)GOBJ_SUB(skelRoot->fixObj)->nodeMtx + skelRoot->fixNode * 64);
-        MatrixDrive_TransMatrixV(skelRoot->fixPos);
-        UnitRotation(MatrixDrive_GetMatrix());
-        MultiMatrixByQuaternion(skelRoot->quat);
-        MatrixDrive_TransMatrix(rootMove[0], rootMove[1], rootMove[2]);
-        CopyVector(skelRoot->pos, MatrixDrive_GetMatrix()[3]);
-    }
-
     Vec16 rq;
     Vec16 va;
     Vec16 vb;

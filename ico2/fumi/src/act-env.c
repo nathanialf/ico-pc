@@ -452,13 +452,27 @@ static __inline__ void envDebugPrint(void) /* derived name */
         break;                                                                                   \
     }
 
+static float PosOrFar(float hgt) /* derived name */
+{
+    if (hgt < 0.0f)
+        return 3.40282347e+38f /* FLT_MAX */;
+    return hgt;
+}
+
+static int CheckWallAttributeNotYorda(void *self, int attr, int notYorda) /* derived name */
+{
+    GObj *o = self;
+
+    if (notYorda && o == girlGObj)
+        return 0;
+    return CheckWallAttribute(o, attr);
+}
+
 void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
 {
     float prj[4];
     float pos[4];
     float ori[4];
-    /* the two GNU nested functions below read the actor parameter and hgt
-       through the static chain */
     Act *sub = GOBJ_ACT(self);
     GObj *obj = GOBJ_SUB(self)->root.wall.o.obj;
     GObj *parent = GOBJ_SUB(self)->parent.obj;
@@ -479,22 +493,6 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
     float kk;
     float kd;
     int g;
-
-    inline int CheckWallAttributeNotYorda(int attr, int notYorda) /* derived name */
-    {
-        GObj *o = self;
-
-        if (notYorda && o == girlGObj)
-            return 0;
-        return CheckWallAttribute(o, attr);
-    }
-
-    inline float PosOrFar(void) /* derived name */
-    {
-        if (hgt < 0.0f)
-            return 3.40282347e+38f /* FLT_MAX */;
-        return hgt;
-    }
 
     GObj *o;
 
@@ -623,17 +621,17 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
         flags[0].w |= 1;
         if (hgt < wallh && hgt != -3.40282347e+38f /* -FLT_MAX */)
             hgt = wallh;
-        if (dist < k && 40.0f <= PosOrFar())
+        if (dist < k && 40.0f <= PosOrFar(hgt))
             sub->flags18.ll |= (1ULL << 60);
-        if (dist < 300.0f && PosOrFar() <= 250.0f)
+        if (dist < 300.0f && PosOrFar(hgt) <= 250.0f)
             flags[0].w |= 4;
         if (self == girlGObj && dist < 300.0f && obj->kind == 17 &&
             IsThisBoxTruck(obj) == 7 && absRotyFromBack(dir, env->wallOrient) < 45 &&
             absRotyFromBack(orient, env->wallOrient) < 45 && _AbsRotyGV(dir, orient) < 45)
             sub->flags20.ll |= (1ULL << 38);
-        if (CheckWallAttributeNotYorda(0xB000, 1) || CheckWallAttributeNotYorda(0xE000, 1) ||
-            CheckWallAttributeNotYorda(0xC000, 0) || CheckWallAttributeNotYorda(0xD000, 1) ||
-            CheckWallAttributeEdegWall(self) || CheckWallAttributeNotYorda(0x3000, 0))
+        if (CheckWallAttributeNotYorda(self, 0xB000, 1) || CheckWallAttributeNotYorda(self, 0xE000, 1) ||
+            CheckWallAttributeNotYorda(self, 0xC000, 0) || CheckWallAttributeNotYorda(self, 0xD000, 1) ||
+            CheckWallAttributeEdegWall(self) || CheckWallAttributeNotYorda(self, 0x3000, 0))
             hgt = wallh;
         if (self == girlGObj && CheckPureWallAttribute(self, 0x7000)) {
             wallh = 3.40282347e+38f /* FLT_MAX */;
@@ -879,7 +877,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
     if (dist < 50.0f && absRotyFromBack(orient, env->wallOrient) < 40 &&
         (self == boyGObj || self == girlGObj || (130.0f < hgt && obj->kind != 16)))
         *(unsigned long long *)((char *)sub + 0x488) |= 8;
-    if (((int)(*(unsigned long long *)((char *)sub + 0x488) >> 3) & 1) && 65.0f < PosOrFar() &&
+    if (((int)(*(unsigned long long *)((char *)sub + 0x488) >> 3) & 1) && 65.0f < PosOrFar(hgt) &&
         (float)wallDeg < 30.0f)
         *(unsigned long long *)((char *)sub + 0x478) |= (1ULL << 42);
     if (dist < 60.0f) {
@@ -890,7 +888,7 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
                 *(unsigned long long *)((char *)sub + 0x478) |= (1ULL << 63);
         } else
             *(unsigned long long *)((char *)sub + 0x478) |= (1ULL << 62);
-        if (230.0f < PosOrFar() && !CheckWallAttribute(self, 0x400) &&
+        if (230.0f < PosOrFar(hgt) && !CheckWallAttribute(self, 0x400) &&
             !CheckWallAttribute(self, 0x8000) && obj->kind != 44 &&
             obj->kind != 54) {
             if (e) {

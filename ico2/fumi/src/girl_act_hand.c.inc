@@ -1,4 +1,4 @@
-/* the hand manager, included inside actGirlHand's body */ /* clang-format off */
+/* the hand manager, included at file scope before actGirlHand */ /* clang-format off */
 void HandMgr_GetDistHand(float *dist, float *height)
 {
     union GAIF g[4], b[4];
@@ -83,7 +83,7 @@ void HandMgr_Print(void)
     }
 }
 
-void HandMgr_Speed(float f)
+void HandMgr_Speed(GObj *self, float f)
 {
     float lim = 1.5f;
     int m;

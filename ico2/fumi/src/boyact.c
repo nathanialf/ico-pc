@@ -688,33 +688,32 @@ float test_rope_velo[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
 float add_rope_vec[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
+static void UpdateGeo(void *self, BgaEntry *p)
+{
+    float dir[4];
+    float tmp[4];
+    void *obj;
+
+    if (p->b0F != 0) {
+        dir[0] = test_CURRENTORIENT(self)[0];
+        dir[1] = test_CURRENTORIENT(self)[1];
+        dir[2] = test_CURRENTORIENT(self)[2];
+    } else {
+        obj = isysGObjSearchFromObjKindID_begin(47);
+        _OrientXZGV(dir, test_CURRENTROOT(obj), test_CURRENTROOT(self));
+    }
+    sceVu0ScaleVector(dir, dir, p->f10);
+    ActGame_GetOrientQ(p->f30, dir, 0);
+    sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f08);
+    sceVu0AddVector(p->f20, test_CURRENTROOT(self), tmp);
+    sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f04);
+    _ApplyRyGV(tmp, 1.5707964f);
+    sceVu0AddVector(p->f20, p->f20, tmp);
+    p->f20[1] += (float)p->b0D;
+}
+
 static void BoyBgaManager(void *self, int id, void *dst)
 {
-    /* UpdateGeo is a GNU nested function: it reads `self` out of
-       BoyBgaManager's frame through the static chain. */
-    void UpdateGeo(BgaEntry * p)
-    {
-        float dir[4];
-        float tmp[4];
-        void *obj;
-
-        if (p->b0F != 0) {
-            dir[0] = test_CURRENTORIENT(self)[0];
-            dir[1] = test_CURRENTORIENT(self)[1];
-            dir[2] = test_CURRENTORIENT(self)[2];
-        } else {
-            obj = isysGObjSearchFromObjKindID_begin(47);
-            _OrientXZGV(dir, test_CURRENTROOT(obj), test_CURRENTROOT(self));
-        }
-        sceVu0ScaleVector(dir, dir, p->f10);
-        ActGame_GetOrientQ(p->f30, dir, 0);
-        sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f08);
-        sceVu0AddVector(p->f20, test_CURRENTROOT(self), tmp);
-        sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f04);
-        _ApplyRyGV(tmp, 1.5707964f);
-        sceVu0AddVector(p->f20, p->f20, tmp);
-        p->f20[1] += (float)p->b0D;
-    }
     BgaEntry *p;
     int i;
     int v;
@@ -735,11 +734,11 @@ found:
         return;
     }
     if (p->b0C != 0) {
-        UpdateGeo(p);
+        UpdateGeo(self, p);
         goto reload;
     }
     if (v == 0) {
-        UpdateGeo(p);
+        UpdateGeo(self, p);
     reload:
         v = *(int *)dst;
     }
@@ -1833,6 +1832,19 @@ static __inline__ void boyCamDebugDisp(int camOn, int looking) /* derived name *
 #endif
 }
 
+static void *searchWeapon(void) /* derived name */
+{
+    void *g;
+
+    for (g = isysGObjSearchFromObjKindID_begin(0xE); g != 0;
+         g = isysGObjSearchFromObjKindID_next(g)) {
+        if (CheckWeaponKind(g) == 5) {
+            return g;
+        }
+    }
+    return 0;
+}
+
 void subBoyCollision(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
@@ -2149,20 +2161,6 @@ void subBoyCollision(GObj *volatile self)
             }
             ACTParaStatus_Exec((void *)self);
             {
-                /* the weapon search, defined here and inlined into the test
-                   below */
-                inline void *searchWeapon(void) /* derived name */
-                {
-                    void *g;
-
-                    for (g = isysGObjSearchFromObjKindID_begin(0xE); g != 0;
-                         g = isysGObjSearchFromObjKindID_next(g)) {
-                        if (CheckWeaponKind(g) == 5) {
-                            return g;
-                        }
-                    }
-                    return 0;
-                }
                 void *w;
 
                 if (girlGObj == 0 && (w = searchWeapon()) != 0) {
@@ -2694,24 +2692,24 @@ static int ditch_check_heroin_position(void)
     return 0;
 }
 
+static unsigned char isGirlWithinPullupHeight(void) /* derived name */
+{
+    float boy[4];
+    float girl[4];
+
+    GetRootProjectionPosOfGObj(boy, boyGObj);
+    GetRootProjectionPosOfGObj(girl, girlGObj);
+    if (GOBJ_ACT(girlGObj)->actMode == 0x26 ||
+        (boy[1] - girl[1] < 0.0f ? -(boy[1] - girl[1]) : boy[1] - girl[1]) < 50.0f) {
+        return 1;
+    }
+    return 0;
+}
+
 void actBoyPullupReady(GObj *volatile self)
 {
     float mv[4];
 
-    /* the helper is defined here and inlined at the pull-up test */
-    inline unsigned char isGirlWithinPullupHeight(void) /* derived name */
-    {
-        float boy[4];
-        float girl[4];
-
-        GetRootProjectionPosOfGObj(boy, boyGObj);
-        GetRootProjectionPosOfGObj(girl, girlGObj);
-        if (GOBJ_ACT(girlGObj)->actMode == 0x26 ||
-            (boy[1] - girl[1] < 0.0f ? -(boy[1] - girl[1]) : boy[1] - girl[1]) < 50.0f) {
-            return 1;
-        }
-        return 0;
-    }
     Act *sub = GOBJ_ACT(self);
 
     ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);

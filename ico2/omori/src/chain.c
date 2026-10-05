@@ -1247,32 +1247,33 @@ static inline float *PushChainClimbRoot(GObj *obj, float *pos, float *out, float
  * file scope.  This region keeps its line layout and is fenced from
  * clang-format.
  */
+/* GetChainClimbMode was nested in TestChainUpDown; the captured boy is a parameter. */
+static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
+{
+    int mode = -1;
+    switch (motion) {
+    case 119:
+        mode = 4; if (GOBJ_ACT(boy)->actMode != 63) {
+            mode = 0;
+        }
+
+        break;
+    case 120:
+        mode = 1;
+        break;
+
+    case 121:
+        mode = 2;
+        break;
+    case 122:
+        mode = 3;
+        break;
+    }
+    return mode;
+}
+
 static void TestChainUpDown(GObj *gobj, GObj *boy)
 {
-    inline int GetChainClimbMode(int motion) /* derived name */
-    {
-        int mode = -1;
-        switch (motion) {
-        case 119:
-            mode = 4; if (GOBJ_ACT(boy)->actMode != 63) {
-                mode = 0;
-            }
-
-            break;
-        case 120:
-            mode = 1;
-            break;
-
-        case 121:
-            mode = 2;
-            break;
-        case 122:
-            mode = 3;
-            break;
-        }
-        return mode;
-    }
-
     float v[4], org[4], w[4], d[4], hw[4], hd[4];
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     /* the boy's action record, whose chain field names the chain the boy hangs on */
@@ -1283,7 +1284,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
      * ChainExtPtr union as in the node-point helper.
      */
 
-    int mode = GetChainClimbMode(GOBJ_SUB(boy)->ctrl.motion);
+    int mode = GetChainClimbMode(boy, GOBJ_SUB(boy)->ctrl.motion);
 
     switch (mode) {
     case 4: {

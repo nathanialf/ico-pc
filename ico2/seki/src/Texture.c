@@ -1592,6 +1592,22 @@ typedef struct TexToolRow { /* field names derived */
     int _18;
 } TexToolRow; /* derived name */
 
+/* One print per row type (was a nested function; m and col are passed in) */
+static inline void printInt(int i, TexToolRow *m, unsigned int *col) /* derived name */
+{
+    debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label, *(int *)m[i].var);
+}
+
+static inline void printShort(int i, TexToolRow *m, unsigned int *col) /* derived name */
+{
+    debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label, *(short *)m[i].var);
+}
+
+static inline void printFloat(int i, TexToolRow *m, unsigned int *col) /* derived name */
+{
+    debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%f", m[i].label, *(float *)m[i].var);
+}
+
 static int tex_Tool(int *tno)
 {
     TexToolRow m[17] = {
@@ -1616,25 +1632,6 @@ static int tex_Tool(int *tno)
     /* the step multiplier the shoulder button scales by ten at a time */
     static int stepScale = 1; /* derived name */
     unsigned int col[2] = {0xFFFFFF00, 0xFFC0C000};
-
-    /* One print per row type, int, short and float, as nested inline
-     * functions. */
-    inline void printInt(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label, *(int *)m[i].var);
-    }
-
-    inline void printShort(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label,
-                          *(short *)m[i].var);
-    }
-
-    inline void printFloat(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%f", m[i].label,
-                          *(float *)m[i].var);
-    }
 
     int cnt = 0;
     int chg = 0;
@@ -1751,13 +1748,13 @@ static int tex_Tool(int *tno)
         for (i = 0; i < 17; i++) {
             switch (m[i].type) {
             case 0:
-                printInt(i);
+                printInt(i, m, col);
                 break;
             case 1:
-                printFloat(i);
+                printFloat(i, m, col);
                 break;
             case 2:
-                printShort(i);
+                printShort(i, m, col);
                 break;
             }
         }

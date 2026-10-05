@@ -509,11 +509,103 @@ void prim_UpdateMesh3D(Mesh3D *m, int flags, int idx)
     }
 }
 
-/* setMatrix, setLight and clearUVOffset are GNU nested functions of
-   prim_DispMesh3D; setLight reads the parent's two light arguments.  A matrix
+/* setMatrix, setLight and clearUVOffset were GNU nested functions of
+   prim_DispMesh3D; setLight took the parent's two light arguments as parameters.  A matrix
    or vector copied into the packet takes the cursor post-incremented as its
    destination, `_CopyMatrix(((float (*)[16])dd->ptr.c)++, m)`, and every
    packet copy here is spelled the same way. */
+
+static void setMatrix(void)
+{
+    float mtx[16];
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    _GetCurrentMatrix(mtx);
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000005;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C048000;
+    dd->ptr.c = q + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), mtx);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000010;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
+
+static void setLight(void *la, void *lb)
+{
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000009;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C088000;
+    dd->ptr.c = q + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), lb);
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), la);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000012;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
+
+static void clearUVOffset(void)
+{
+    float v[4];
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    memset(v, 0, 16);
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000002;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C018000;
+    dd->ptr.c = q + 0x10;
+    _CopyVector(ICO_POSTINC(float (*)[4], dd->ptr.c), v);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000002;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
 
 void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
 {
@@ -522,98 +614,6 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     char *q;
     TexExt *ext;
     int pri;
-
-    void setMatrix(void)
-    {
-        float mtx[16];
-        DpkCtl *dd;
-        char *q;
-        char *r;
-
-        _GetCurrentMatrix(mtx);
-        dd = &PacketBufferStruct;
-        q = dd->ptr.c;
-        dd->tail.c = q;
-        ((GifPkWord *)q)->d = 0x10000005;
-        dd->ptr.c = q + 8;
-        ((GifPkWord *)(q + 8))->w[0] = 0;
-        dd->ptr.c = q + 0xC;
-        dd->gif.c = q + 0xC;
-        ((GifPkWord *)(q + 0xC))->w[0] = 0x6C048000;
-        dd->ptr.c = q + 0x10;
-        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), mtx);
-        r = dd->ptr.c;
-        ((GifPkWord *)r)->w[0] = 0x15000010;
-        r += 4;
-        dd->ptr.c = r;
-        ((GifPkWord *)r)->w[0] = 0;
-        dd->ptr.c = r + 4;
-        ((GifPkWord *)(r + 4))->w[0] = 0;
-        dd->ptr.c = r + 8;
-        ((GifPkWord *)(r + 8))->w[0] = 0;
-        dd->ptr.c = r + 0xC;
-    }
-
-    void setLight(void)
-    {
-        DpkCtl *dd;
-        char *q;
-        char *r;
-
-        dd = &PacketBufferStruct;
-        q = dd->ptr.c;
-        dd->tail.c = q;
-        ((GifPkWord *)q)->d = 0x10000009;
-        dd->ptr.c = q + 8;
-        ((GifPkWord *)(q + 8))->w[0] = 0;
-        dd->ptr.c = q + 0xC;
-        dd->gif.c = q + 0xC;
-        ((GifPkWord *)(q + 0xC))->w[0] = 0x6C088000;
-        dd->ptr.c = q + 0x10;
-        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), lb);
-        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), la);
-        r = dd->ptr.c;
-        ((GifPkWord *)r)->w[0] = 0x15000012;
-        r += 4;
-        dd->ptr.c = r;
-        ((GifPkWord *)r)->w[0] = 0;
-        dd->ptr.c = r + 4;
-        ((GifPkWord *)(r + 4))->w[0] = 0;
-        dd->ptr.c = r + 8;
-        ((GifPkWord *)(r + 8))->w[0] = 0;
-        dd->ptr.c = r + 0xC;
-    }
-
-    void clearUVOffset(void)
-    {
-        float v[4];
-        DpkCtl *dd;
-        char *q;
-        char *r;
-
-        memset(v, 0, 16);
-        dd = &PacketBufferStruct;
-        q = dd->ptr.c;
-        dd->tail.c = q;
-        ((GifPkWord *)q)->d = 0x10000002;
-        dd->ptr.c = q + 8;
-        ((GifPkWord *)(q + 8))->w[0] = 0;
-        dd->ptr.c = q + 0xC;
-        dd->gif.c = q + 0xC;
-        ((GifPkWord *)(q + 0xC))->w[0] = 0x6C018000;
-        dd->ptr.c = q + 0x10;
-        _CopyVector(ICO_POSTINC(float (*)[4], dd->ptr.c), v);
-        r = dd->ptr.c;
-        ((GifPkWord *)r)->w[0] = 0x15000002;
-        r += 4;
-        dd->ptr.c = r;
-        ((GifPkWord *)r)->w[0] = 0;
-        dd->ptr.c = r + 4;
-        ((GifPkWord *)(r + 4))->w[0] = 0;
-        dd->ptr.c = r + 8;
-        ((GifPkWord *)(r + 8))->w[0] = 0;
-        dd->ptr.c = r + 0xC;
-    }
 
     pri = dl_GetPri();
     if (debug_disp_mesh == 0) {
@@ -637,7 +637,7 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     d->end.c = 0;
     setMatrix();
     if (m->lit != 0) {
-        setLight();
+        setLight(la, lb);
     }
     if (tex == -1) {
         clearUVOffset();
@@ -796,38 +796,41 @@ void prim_DeleteParticle(PrimParticle *p)
     EntryDelayFree(p);
 }
 
-void prim_DispWireYCylinder(void *col, int n, int flag, float r, float y0, float y1)
+static void drawDisc(float rr, float yy, float st, void *col, int flag)
 {
     float a;
+    Prim3DVec c = {0.0f, yy, 0.0f, 1.0f};
+
+    for (a = 0.0f; a < 65536.0f; a += st) {
+        Prim3DVec q0 = {rr * GetTableSin((short)a), yy, rr * GetTableCos((short)a), 1.0f};
+        Prim3DVec q1 = {rr * GetTableSin((short)(a + st)), yy, rr * GetTableCos((short)(a + st)),
+                        1.0f};
+
+        DrawLineG(&q0, col, &q1, col, flag);
+        DrawLineG(&q0, col, &c, col, flag);
+    }
+}
+
+static inline void drawSide(float rr, float ya, float yb, float st, void *col,
+                            int flag) /* derived name */
+{
+    float a;
+
+    for (a = 0.0f; a < 65536.0f; a += st) {
+        Prim3DVec p0 = {rr * GetTableSin((short)a), ya, rr * GetTableCos((short)a), 1.0f};
+        Prim3DVec p1 = {p0.x, yb, p0.z, 1.0f};
+
+        DrawLineG(&p0, col, &p1, col, flag);
+    }
+}
+
+void prim_DispWireYCylinder(void *col, int n, int flag, float r, float y0, float y1)
+{
     float st = 65536.0f / (float)n;
 
-    void drawDisc(float rr, float yy)
-    {
-        Prim3DVec c = {0.0f, yy, 0.0f, 1.0f};
-
-        for (a = 0.0f; a < 65536.0f; a += st) {
-            Prim3DVec q0 = {rr * GetTableSin((short)a), yy, rr * GetTableCos((short)a), 1.0f};
-            Prim3DVec q1 = {rr * GetTableSin((short)(a + st)), yy,
-                            rr * GetTableCos((short)(a + st)), 1.0f};
-
-            DrawLineG(&q0, col, &q1, col, flag);
-            DrawLineG(&q0, col, &c, col, flag);
-        }
-    }
-
-    inline void drawSide(float rr, float ya, float yb) /* derived name */
-    {
-        for (a = 0.0f; a < 65536.0f; a += st) {
-            Prim3DVec p0 = {rr * GetTableSin((short)a), ya, rr * GetTableCos((short)a), 1.0f};
-            Prim3DVec p1 = {p0.x, yb, p0.z, 1.0f};
-
-            DrawLineG(&p0, col, &p1, col, flag);
-        }
-    }
-
-    drawDisc(r, y0);
-    drawDisc(r, y1);
-    drawSide(r, y0, y1);
+    drawDisc(r, y0, st, col, flag);
+    drawDisc(r, y1, st, col, flag);
+    drawSide(r, y0, y1, st, col, flag);
 }
 
 void prim_DispWireSphere(float r, void *col, int nu, int nv)

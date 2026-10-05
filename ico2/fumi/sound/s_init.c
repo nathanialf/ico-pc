@@ -1500,5 +1500,5 @@ inline int debug_req(void)
         e += 0x40;
         i--;
     } while (i >= 0);
-    __asm__ __volatile__("break");
+    ICO_BREAK();
 }

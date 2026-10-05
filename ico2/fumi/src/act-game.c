@@ -2410,6 +2410,45 @@ draw:
     }
 }
 
+static int hand_able_connect(void)
+{
+    unsigned char *h;
+    float boy[4];
+    float girl[4];
+
+    if (boyGObj == 0 || ((char *)girlGObj) == 0) {
+        return 0;
+    }
+    if (debug_font_flag & 1) {
+        unsigned char *d = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
+
+        debug_Printf(10, 120, 0x0FFFFFFF, "[%d] [%d] [%d] [%d] [%d]\n", d[0x540], d[0x541],
+                     d[0x542], d[0x560], d[0x561]);
+    }
+    h = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
+    if (h[0x540] != 0) {
+        if (h[0x541] != 0 || h[0x560] != 0) {
+            if (h[0x542] != 0) {
+                return 1;
+            }
+            if (h[0x561] == 0) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    boy[0] = test_CURRENTROOT(boyGObj)[0];
+    boy[1] = test_CURRENTROOT(boyGObj)[1];
+    boy[2] = test_CURRENTROOT(boyGObj)[2];
+    girl[0] = test_CURRENTROOT(girlGObj)[0];
+    girl[1] = test_CURRENTROOT(girlGObj)[1];
+    girl[2] = test_CURRENTROOT(girlGObj)[2];
+    if (GOBJ_ACT(((char *)girlGObj))->actMode != 29 || _DistSqGV((int *)boy, girl) < 10000.0f) {
+        return 0;
+    }
+    return 0;
+}
+
 void ACTGame_CommonLoop(GObj *self)
 {
     Act *s = GOBJ_ACT(self);
@@ -2418,45 +2457,6 @@ void ACTGame_CommonLoop(GObj *self)
     unsigned char handR;
     float third;
     float half;
-
-    int hand_able_connect(void)
-    {
-        unsigned char *h;
-        float boy[4];
-        float girl[4];
-
-        if (boyGObj == 0 || ((char *)girlGObj) == 0) {
-            return 0;
-        }
-        if (debug_font_flag & 1) {
-            unsigned char *d = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-
-            debug_Printf(10, 120, 0x0FFFFFFF, "[%d] [%d] [%d] [%d] [%d]\n", d[0x540], d[0x541],
-                         d[0x542], d[0x560], d[0x561]);
-        }
-        h = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-        if (h[0x540] != 0) {
-            if (h[0x541] != 0 || h[0x560] != 0) {
-                if (h[0x542] != 0) {
-                    return 1;
-                }
-                if (h[0x561] == 0) {
-                    return 0;
-                }
-            }
-            return 1;
-        }
-        boy[0] = test_CURRENTROOT(boyGObj)[0];
-        boy[1] = test_CURRENTROOT(boyGObj)[1];
-        boy[2] = test_CURRENTROOT(boyGObj)[2];
-        girl[0] = test_CURRENTROOT(girlGObj)[0];
-        girl[1] = test_CURRENTROOT(girlGObj)[1];
-        girl[2] = test_CURRENTROOT(girlGObj)[2];
-        if (GOBJ_ACT(((char *)girlGObj))->actMode != 29 || _DistSqGV((int *)boy, girl) < 10000.0f) {
-            return 0;
-        }
-        return 0;
-    }
 
     if (self == (girlGObj)) {
         GetGirlHandlinkClInfo();
@@ -2713,128 +2713,126 @@ inline void GetOtherStageGirlOrient(float *orient, float *root)
     _OrientGV(orient, pos, root);
 }
 
-void ACTLookTargetSystem_Exec(GObj *self)
+static int GetTarget(GObj *self, char *s, int kind, float *pos, int *pmode)
 {
-    char *s = (char *)((int *)self)[89];
+    float dir[4];
+    float p[4];
+    GObj *target = 0;
+    int rv = 0;
 
-    /* GNU nested function GetTarget: it reads `self` and `s` from
-       ACTLookTargetSystem_Exec's frame through the static chain. */
-    int GetTarget(int kind, float *pos, int *pmode)
-    {
-        float dir[4];
-        float p[4];
-        GObj *target = 0;
-        int rv = 0;
-
-        switch (kind) {
-        case 13:
-            GetSkeltonPosition(p, self, 0x23);
-            sceVu0ScaleVector(dir, (char *)GOBJ_ACT(self)->work + 0x4A0, 300.0f);
-            sceVu0AddVector(pos, p, dir);
-            GOBJ_SUB(self)->root.ikRate0 = 0.3f;
-            GOBJ_SUB(self)->root.ikRate1 = 0.3f;
-            GOBJ_SUB(self)->root.ikRate2 = 0.3f;
+    switch (kind) {
+    case 13:
+        GetSkeltonPosition(p, self, 0x23);
+        sceVu0ScaleVector(dir, (char *)GOBJ_ACT(self)->work + 0x4A0, 300.0f);
+        sceVu0AddVector(pos, p, dir);
+        GOBJ_SUB(self)->root.ikRate0 = 0.3f;
+        GOBJ_SUB(self)->root.ikRate1 = 0.3f;
+        GOBJ_SUB(self)->root.ikRate2 = 0.3f;
+        rv = 1;
+        break;
+    case 12:
+        target = *(GObj **)(s + 0x88);
+        break;
+    case 10:
+        target = *(GObj **)(s + 0x78);
+        break;
+    case 5:
+        target = *(GObj **)(s + 0x7C);
+        break;
+    case 4:
+        target = girlGObj;
+        if (target == 0 && (*(unsigned long long *)(s + 0x20) & 0x3800000) == 0x800000) {
+            GetGirlPositionAtThisStage(pos);
             rv = 1;
-            break;
-        case 12:
-            target = *(GObj **)(s + 0x88);
-            break;
-        case 10:
-            target = *(GObj **)(s + 0x78);
-            break;
-        case 5:
-            target = *(GObj **)(s + 0x7C);
-            break;
-        case 4:
+        }
+        if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
+            ScpCallCameraGetTarget(pos);
+            target = 0;
+            rv = 1;
+        }
+        break;
+    case 11:
+        GetRootPosition(pos, *(GObj **)(s + 0x74));
+        pos[1] = *(float *)&test_CURRENTROOT(self)[1];
+        *pmode = 2;
+        rv = 1;
+        break;
+    case 6:
+        if ((int)(*(unsigned long long *)(s + 0x20) >> 23) & 1) {
             target = girlGObj;
-            if (target == 0 && (*(unsigned long long *)(s + 0x20) & 0x3800000) == 0x800000) {
+            *pmode = 2;
+            if (target == 0) {
                 GetGirlPositionAtThisStage(pos);
                 rv = 1;
             }
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
-                ScpCallCameraGetTarget(pos);
-                target = 0;
-                rv = 1;
-            }
-            break;
-        case 11:
-            GetRootPosition(pos, *(GObj **)(s + 0x74));
-            pos[1] = *(float *)&test_CURRENTROOT(self)[1];
-            *pmode = 2;
-            rv = 1;
-            break;
-        case 6:
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 23) & 1) {
-                target = girlGObj;
-                *pmode = 2;
-                if (target == 0) {
-                    GetGirlPositionAtThisStage(pos);
-                    rv = 1;
-                }
-            }
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
-                ScpCallCameraGetTarget(pos);
-                target = 0;
-                rv = 1;
-            }
-            break;
-        case 8:
-            if (*(int *)(s + 0x10) % 15 / 10 != 0) {
-                target = *(GObj **)(s + 0x80);
-            } else {
-                target = boyGObj;
-            }
-            break;
-        case 9:
-            target = *(GObj **)(s + 0x84);
-            break;
-        case 7:
-            target = boyGObj;
-            if (*(int *)(s + 0x10) % 15 / 10 != 0) {
-                target = *(GObj **)(s + 0x80);
-            }
-            break;
-        case 3:
-            target = boyGObj;
-            break;
-        case 1:
-            sceVu0ScaleVector(pos, test_CURRENTORIENT(self), 200.0f);
-            pos[1] = 0.0f;
-            sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
-            rv = 1;
-            break;
-        case 2:
-            sceVu0ScaleVector(pos, test_CURRENTORIENT(self), *(float *)(s + 0x5E8));
-            pos[1] = 150.0f;
-            sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
-            rv = 1;
-            break;
-        case 14:
-            pos[0] = GOBJ_WORK(self)->hintPosX;
-            pos[1] = GOBJ_WORK(self)->hintPosY;
-            pos[2] = GOBJ_WORK(self)->hintPosZ;
-            rv = 1;
-            break;
         }
-        if (target != 0) {
-            if (target == boyGObj) {
-                /* these two statements written out instead of calling
-                   GetSkeltonPosition: the node comes off `target` and the
-                   skeleton off the global */
-                int idx = GetSkeltonFocusNode(target, 35) << 6;
-                ((IntFloat *)pos)[0].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x30);
-                ((IntFloat *)pos)[1].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x34);
-                ((IntFloat *)pos)[2].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x38);
-            } else {
-                GetRootPosition(pos, target);
-            }
+        if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
+            ScpCallCameraGetTarget(pos);
+            target = 0;
             rv = 1;
         }
-        return rv;
+        break;
+    case 8:
+        if (*(int *)(s + 0x10) % 15 / 10 != 0) {
+            target = *(GObj **)(s + 0x80);
+        } else {
+            target = boyGObj;
+        }
+        break;
+    case 9:
+        target = *(GObj **)(s + 0x84);
+        break;
+    case 7:
+        target = boyGObj;
+        if (*(int *)(s + 0x10) % 15 / 10 != 0) {
+            target = *(GObj **)(s + 0x80);
+        }
+        break;
+    case 3:
+        target = boyGObj;
+        break;
+    case 1:
+        sceVu0ScaleVector(pos, test_CURRENTORIENT(self), 200.0f);
+        pos[1] = 0.0f;
+        sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
+        rv = 1;
+        break;
+    case 2:
+        sceVu0ScaleVector(pos, test_CURRENTORIENT(self), *(float *)(s + 0x5E8));
+        pos[1] = 150.0f;
+        sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
+        rv = 1;
+        break;
+    case 14:
+        pos[0] = GOBJ_WORK(self)->hintPosX;
+        pos[1] = GOBJ_WORK(self)->hintPosY;
+        pos[2] = GOBJ_WORK(self)->hintPosZ;
+        rv = 1;
+        break;
     }
+    if (target != 0) {
+        if (target == boyGObj) {
+            /* these two statements written out instead of calling
+               GetSkeltonPosition: the node comes off `target` and the
+               skeleton off the global */
+            int idx = GetSkeltonFocusNode(target, 35) << 6;
+            ((IntFloat *)pos)[0].f =
+                *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x30);
+            ((IntFloat *)pos)[1].f =
+                *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x34);
+            ((IntFloat *)pos)[2].f =
+                *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x38);
+        } else {
+            GetRootPosition(pos, target);
+        }
+        rv = 1;
+    }
+    return rv;
+}
+
+void ACTLookTargetSystem_Exec(GObj *self)
+{
+    char *s = (char *)((int *)self)[89];
 
     float pos[4];
     int mode = 1;
@@ -2937,7 +2935,7 @@ void ACTLookTargetSystem_Exec(GObj *self)
     for (i = 0; i < 27; i++) {
         int kind = lookTargetData[i].kind[col];
         if ((flags >> i) & 1) {
-            if (GetTarget(kind, pos, &mode) != 0) {
+            if (GetTarget(self, s, kind, pos, &mode) != 0) {
                 found = 1;
                 break;
             }
@@ -2990,60 +2988,52 @@ inline void ACTGame_SendSoundMail(GObj *self, int mail, GObj *from, int mot, int
     }
 }
 
+static void ItemHold(Act *sub, GObj *self) /* derived name */
+{
+    if (sub->heldItem.i != 0) {
+        return;
+    }
+    if ((sub->heldItem.i = sub->nextItem.i) == 0) {
+        return;
+    }
+    HoldItem(sub->heldItem.p, self);
+}
+
+static void ItemRelease(Act *sub) /* derived name */
+{
+    if (sub->heldItem.p == 0) {
+        return;
+    }
+    ReleaseItem(sub->heldItem.p);
+    sub->nextItem.p = sub->heldItem.p = 0;
+}
+
+static void ACTItemThrow(Act *sub, GObj *self)
+{
+    float v[4];
+    int kind;
+
+    if (sub->heldItem.i == 0) {
+        return;
+    }
+    sceVu0ScaleVector(v, test_CURRENTORIENT(self), _ACTGame_GetParamF(9) + _ACTGame_GetParamF(9));
+    kind = GetItemKind(sub->heldItem.p);
+    if (kind == 1 || kind == 6) {
+        debug_StdPrintfDummy("BOMB!!\n");
+        v[0] *= 0.5f;
+        v[1] -= 25.0f;
+        v[2] *= 0.5f;
+    }
+    ThrowItem(sub->heldItem.p, v);
+    sub->nextItem.i = sub->heldItem.i = 0;
+}
+
 static void ACTItemWatchMotion(GObj *self)
 {
     MotionRec *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
     Act *sub = GOBJ_ACT(self);
     int mode = rec->modeBits.w >> 19;
     int frame = rec->modeBits.b;
-
-    /* nested inline: the "take the pending item" request, expanded at the four
-       motion arms below */
-    inline void ItemHold(void) /* derived name */
-    {
-        if (sub->heldItem.i != 0) {
-            return;
-        }
-        if ((sub->heldItem.i = sub->nextItem.i) == 0) {
-            return;
-        }
-        HoldItem(sub->heldItem.p, self);
-    }
-
-    /* nested inline: drop whatever is held, read through the slots' pointer
-       member, as the head block below compares them against the other
-       actor's pair */
-    inline void ItemRelease(void) /* derived name */
-    {
-        if (sub->heldItem.p == 0) {
-            return;
-        }
-        ReleaseItem(sub->heldItem.p);
-        sub->nextItem.p = sub->heldItem.p = 0;
-    }
-
-    /* a GNU nested function, reading `sub` and `self` through the static
-       chain */
-    void ACTItemThrow(void)
-    {
-        float v[4];
-        int kind;
-
-        if (sub->heldItem.i == 0) {
-            return;
-        }
-        sceVu0ScaleVector(v, test_CURRENTORIENT(self),
-                          _ACTGame_GetParamF(9) + _ACTGame_GetParamF(9));
-        kind = GetItemKind(sub->heldItem.p);
-        if (kind == 1 || kind == 6) {
-            debug_StdPrintfDummy("BOMB!!\n");
-            v[0] *= 0.5f;
-            v[1] -= 25.0f;
-            v[2] *= 0.5f;
-        }
-        ThrowItem(sub->heldItem.p, v);
-        sub->nextItem.i = sub->heldItem.i = 0;
-    }
 
     mode &= 7;
 
@@ -3065,7 +3055,7 @@ static void ACTItemWatchMotion(GObj *self)
     switch (mode) {
     case 2:
         if ((float)frame < GOBJ_SUB(self)->ctrl.animFrame) {
-            ItemHold();
+            ItemHold(sub, self);
         } else if (sub->heldItem.i != 0) {
             float pos[4];
             GetRootPosition(pos, sub->heldItem.p);
@@ -3076,26 +3066,26 @@ static void ACTItemWatchMotion(GObj *self)
 
     case 4:
         if (GOBJ_SUB(self)->ctrl.animFrame < (float)frame) {
-            ItemHold();
+            ItemHold(sub, self);
         } else {
-            ItemRelease();
+            ItemRelease(sub);
         }
         break;
 
     case 3:
         if (GOBJ_SUB(self)->ctrl.animFrame < (float)frame) {
-            ItemHold();
+            ItemHold(sub, self);
         } else {
-            ACTItemThrow();
+            ACTItemThrow(sub, self);
         }
         break;
 
     case 1:
-        ItemHold();
+        ItemHold(sub, self);
         break;
 
     case 0:
-        ItemRelease();
+        ItemRelease(sub);
         break;
     }
 
@@ -3159,40 +3149,38 @@ void ACTGame_InsertCamera_GirlIsPinch(void)
                   (60 - systemStatus[0] * 10) / systemStatus[1] * 45 / 60, 0.05f, 0.25f, 1);
 }
 
+static void updateHMC(HandModeCmd *hmc, GObj *self, int mode, int pri, int flag, GObj *p5, int p6,
+                      float *p7)
+{
+    hmc->flag = flag;
+    hmc->pri = pri;
+    switch (mode) {
+    case 0:
+        GOBJ_SUB(self)->root.hand0.mode = hmc->flag;
+        GOBJ_SUB(self)->root.hand0.obj = p5;
+        GOBJ_SUB(self)->root.hand0.node = p6;
+        if (p7 != 0) {
+            GOBJ_SUB(self)->root.hand0.pos[0] = p7[0];
+            GOBJ_SUB(self)->root.hand0.pos[1] = p7[1];
+            GOBJ_SUB(self)->root.hand0.pos[2] = p7[2];
+        }
+        break;
+    case 1:
+        GOBJ_SUB(self)->root.hand1.mode = hmc->flag;
+        GOBJ_SUB(self)->root.hand1.obj = p5;
+        GOBJ_SUB(self)->root.hand1.node = p6;
+        if (p7 != 0) {
+            GOBJ_SUB(self)->root.hand1.pos[0] = p7[0];
+            GOBJ_SUB(self)->root.hand1.pos[1] = p7[1];
+            GOBJ_SUB(self)->root.hand1.pos[2] = p7[2];
+        }
+        break;
+    }
+}
+
 void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, int p6, float *p7)
 {
     HandModeCmd *hmc = 0;
-
-    /* updateHMC is a GNU nested function: it reads self, mode, pri, flag, p5,
-       p6, p7 and hmc out of RequestChangeHandMode's frame through the
-       static chain. */
-    void updateHMC(void)
-    {
-        hmc->flag = flag;
-        hmc->pri = pri;
-        switch (mode) {
-        case 0:
-            GOBJ_SUB(self)->root.hand0.mode = hmc->flag;
-            GOBJ_SUB(self)->root.hand0.obj = p5;
-            GOBJ_SUB(self)->root.hand0.node = p6;
-            if (p7 != 0) {
-                GOBJ_SUB(self)->root.hand0.pos[0] = p7[0];
-                GOBJ_SUB(self)->root.hand0.pos[1] = p7[1];
-                GOBJ_SUB(self)->root.hand0.pos[2] = p7[2];
-            }
-            break;
-        case 1:
-            GOBJ_SUB(self)->root.hand1.mode = hmc->flag;
-            GOBJ_SUB(self)->root.hand1.obj = p5;
-            GOBJ_SUB(self)->root.hand1.node = p6;
-            if (p7 != 0) {
-                GOBJ_SUB(self)->root.hand1.pos[0] = p7[0];
-                GOBJ_SUB(self)->root.hand1.pos[1] = p7[1];
-                GOBJ_SUB(self)->root.hand1.pos[2] = p7[2];
-            }
-            break;
-        }
-    }
 
     switch (mode) {
     case 0:
@@ -3216,9 +3204,9 @@ void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, in
         }
     }
     if (hmc->pri == 0 || hmc->flag == 0) {
-        updateHMC();
+        updateHMC(hmc, self, mode, pri, flag, p5, p6, p7);
     } else if (pri >= hmc->pri) {
-        updateHMC();
+        updateHMC(hmc, self, mode, pri, flag, p5, p6, p7);
     }
 }
 

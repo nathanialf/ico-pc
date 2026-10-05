@@ -699,37 +699,39 @@ int ACTGetOrientFromIntrK(GObj *self, int k, MotOriReq *out, int arg)
     return ret;
 }
 
-void ACTRunIntrCorrect(GObj *self, IntrMail *intr, IntrMail *corr)
+static inline void setIntrFlags(IntrMail *intr) /* derived name */
 {
-    char *rec;
-    Act *s = GOBJ_ACT(self);
-    inline void setIntrFlags(void) /* derived name */
-    {
-        IntrMail *p;
+    IntrMail *p;
 
-        for (p = intr; p != 0 && (short)p->kind != 429; p++) {
-            p->flags |= 0x40000;
-        }
+    for (p = intr; p != 0 && (short)p->kind != 429; p++) {
+        p->flags |= 0x40000;
     }
-    inline void correctIntrList(void) /* derived name */
-    {
-        IntrMail *ip;
-        IntrMail *q;
+}
 
-        for (q = corr; q != 0 && (short)q->kind != 429; q++) {
-            if (q->mode == -1) {
-                for (ip = intr; ip != 0 && (short)ip->kind != 429; ip++) {
-                    if (ip->kind == q->kind) {
-                        ip->flags &= ~0x40000;
-                        debug_StdPrintfDummy("off!!\n");
-                    }
+static inline void correctIntrList(IntrMail *intr, IntrMail *corr) /* derived name */
+{
+    IntrMail *ip;
+    IntrMail *q;
+
+    for (q = corr; q != 0 && (short)q->kind != 429; q++) {
+        if (q->mode == -1) {
+            for (ip = intr; ip != 0 && (short)ip->kind != 429; ip++) {
+                if (ip->kind == q->kind) {
+                    ip->flags &= ~0x40000;
+                    debug_StdPrintfDummy("off!!\n");
                 }
             }
         }
     }
+}
 
-    setIntrFlags();
-    correctIntrList();
+void ACTRunIntrCorrect(GObj *self, IntrMail *intr, IntrMail *corr)
+{
+    char *rec;
+    Act *s = GOBJ_ACT(self);
+
+    setIntrFlags(intr);
+    correctIntrList(intr, corr);
     rec = (char *)&motionKind[GOBJ_SUB(self)->ctrl.motion];
     if (rec[399] & 1) {
         actIntrList[10].flags |= 0x40000;
@@ -807,17 +809,17 @@ void GetCorrectOrientOfChain(void *buf, void *obj)
     }
 }
 
+/* whether p is a box (kind 0x11), as a char */
+static inline char ropeWallIsBox(char *p) /* derived name */
+{
+    if (p != 0 && *(int *)(p + 0xC) == 0x11) {
+        return 1;
+    }
+    return 0;
+}
+
 static int CollisCheckInRope(void *self, GObj *chain)
 {
-    /* whether p is a box (kind 0x11), as a char */
-    inline char ropeWallIsBox(char *p) /* derived name */
-    {
-        if (p != 0 && *(int *)(p + 0xC) == 0x11) {
-            return 1;
-        }
-        return 0;
-    }
-
     ClipWork work;
     float mid[4];
     float p[4];
@@ -1180,65 +1182,67 @@ typedef struct { /* field names derived */
 static CageUD cageUpDown = {
     {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, 0, 0, -1}; /* derived name */
 
+static inline void initCage(GObj *o) /* derived name */
+{
+    int n;
+
+    cageUpDown.cnt = 0;
+    cageUpDown.lim = (float)*motionTable[*(int *)(((CagePtr *)&o->dobj)->p + 0x4A0)];
+    n = GetSkeltonFocusNode(o, 35);
+    cageUpDown.a[0] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x30);
+    cageUpDown.a[1] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x34);
+    cageUpDown.a[2] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x38);
+    cageUpDown.b[0] = cageUpDown.a[0];
+    cageUpDown.b[2] = cageUpDown.a[2];
+    cageUpDown.b[1] = cageUpDown.a[1] + 200.0f;
+}
+
+static inline void cageMove(GObj *cage, GObj *o, float *dst, float *lo, float *hi, float *res,
+                            float x, float y, float z) /* derived name */
+{
+    dst[0] = x;
+    dst[1] = y;
+    dst[2] = z;
+    GetCageChainPoint(lo, hi, cage);
+    _InterGV(dst, lo, hi, dst[1] - lo[1], hi[1] - dst[1]);
+    sceVu0ScaleVector(res, test_CURRENTORIENT(o), -20.0f);
+    sceVu0AddVector(res, dst, res);
+    ACTSetPositionNodeWithFitting(o, 0x23, res, 1.0f);
+}
+
+static inline void putRoot(GObj *gobj, float *pos, float *lo, float *hi,
+                           int clamp) /* derived name */
+{
+    float lim;
+    float low;
+    float d;
+
+    lim = 50.0f;
+    if (stage_no == 8) {
+        lim = 80.0f;
+    }
+    pos[0] = test_CURRENTROOT(gobj)[0];
+    pos[1] = test_CURRENTROOT(gobj)[1];
+    pos[2] = test_CURRENTROOT(gobj)[2];
+    low = lo[1] + lim;
+    d = ((CagePtr *)((char *)gobj + 0x15C))->f[81];
+    pos[1] = pos[1] + d;
+    if (clamp) {
+        pos[1] = pos[1] < low ? low : (hi[1] < pos[1] ? hi[1] : pos[1]);
+    }
+    SetDirectRootPositionNoFitting(boyGObj, pos);
+}
+
+static inline void chainUpdate(GObj *gobj, float *sk, float *out, float *lo,
+                               float *hi) /* derived name */
+{
+    GetSkeltonPosition(sk, gobj, 22);
+    _InterGV(out, lo, hi, sk[1] - lo[1], hi[1] - sk[1]);
+    SetChainRootUpdateMode(gobj, 2, out);
+}
+
 static void TestCageUpDown(GObj *cage, GObj *gobj)
 {
-    inline void initCage(GObj * o) /* derived name */
-    {
-        int n;
-
-        cageUpDown.cnt = 0;
-        cageUpDown.lim = (float)*motionTable[*(int *)(((CagePtr *)&o->dobj)->p + 0x4A0)];
-        n = GetSkeltonFocusNode(o, 35);
-        cageUpDown.a[0] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x30);
-        cageUpDown.a[1] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x34);
-        cageUpDown.a[2] = *(float *)(*(char **)(((CagePtr *)&o->dobj)->p + 0xC) + n * 0x40 + 0x38);
-        cageUpDown.b[0] = cageUpDown.a[0];
-        cageUpDown.b[2] = cageUpDown.a[2];
-        cageUpDown.b[1] = cageUpDown.a[1] + 200.0f;
-    }
-
-    inline void cageMove(GObj * o, float *dst, float *lo, float *hi, float *res, float x, float y,
-                         float z) /* derived name */
-    {
-        dst[0] = x;
-        dst[1] = y;
-        dst[2] = z;
-        GetCageChainPoint(lo, hi, cage);
-        _InterGV(dst, lo, hi, dst[1] - lo[1], hi[1] - dst[1]);
-        sceVu0ScaleVector(res, test_CURRENTORIENT(o), -20.0f);
-        sceVu0AddVector(res, dst, res);
-        ACTSetPositionNodeWithFitting(o, 0x23, res, 1.0f);
-    }
-
-    inline void putRoot(float *pos, float *lo, float *hi, int clamp) /* derived name */
-    {
-        float lim;
-        float low;
-        float d;
-
-        lim = 50.0f;
-        if (stage_no == 8) {
-            lim = 80.0f;
-        }
-        pos[0] = test_CURRENTROOT(gobj)[0];
-        pos[1] = test_CURRENTROOT(gobj)[1];
-        pos[2] = test_CURRENTROOT(gobj)[2];
-        low = lo[1] + lim;
-        d = ((CagePtr *)((char *)gobj + 0x15C))->f[81];
-        pos[1] = pos[1] + d;
-        if (clamp) {
-            pos[1] = pos[1] < low ? low : (hi[1] < pos[1] ? hi[1] : pos[1]);
-        }
-        SetDirectRootPositionNoFitting(boyGObj, pos);
-    }
-
-    inline void chainUpdate(float *sk, float *out, float *lo, float *hi) /* derived name */
-    {
-        GetSkeltonPosition(sk, gobj, 22);
-        _InterGV(out, lo, hi, sk[1] - lo[1], hi[1] - sk[1]);
-        SetChainRootUpdateMode(gobj, 2, out);
-    }
-
     float vA[4];
     float vB[4];
     float vC[4];
@@ -1253,16 +1257,16 @@ static void TestCageUpDown(GObj *cage, GObj *gobj)
     *(int *)(((CagePtr *)((char *)boyGObj + 0x15C))->p + 0x420) = 0;
     switch (mot) {
     case 0x78:
-        putRoot(vE, vB, vC, 1);
-        chainUpdate(vG, vH, vB, vC);
+        putRoot(gobj, vE, vB, vC, 1);
+        chainUpdate(gobj, vG, vH, vB, vC);
         break;
     case 0x77:
         if (GOBJ_ACT(gobj)->actMode == 63) {
-            putRoot(vE, vB, vC, 0);
-            chainUpdate(vE, vF, vB, vC);
+            putRoot(gobj, vE, vB, vC, 0);
+            chainUpdate(gobj, vE, vF, vB, vC);
         } else {
-            putRoot(vE, vB, vC, 1);
-            chainUpdate(vE, vF, vB, vC);
+            putRoot(gobj, vE, vB, vC, 1);
+            chainUpdate(gobj, vE, vF, vB, vC);
         }
         break;
     case 0x79:
@@ -1273,9 +1277,9 @@ static void TestCageUpDown(GObj *cage, GObj *gobj)
         _InterGV(vA, cageUpDown.a, cageUpDown.b, (float)cageUpDown.cnt,
                  (float)(cageUpDown.lim - cageUpDown.cnt));
         vA[1] = vA[1] < vB[1] ? vB[1] : (vC[1] < vA[1] ? vC[1] : vA[1]);
-        cageMove(gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
+        cageMove(cage, gobj, vF, vG, vH, vE, vA[0], vA[1], vA[2]);
         cageUpDown.cnt = cageUpDown.cnt + 1;
-        chainUpdate(vE, vF, vB, vC);
+        chainUpdate(gobj, vE, vF, vB, vC);
         break;
     default:
         if (cageUpDown.last != mot) {
@@ -1528,25 +1532,25 @@ void actCommonDown(GObj *volatile self)
     }
 }
 
+static inline void dieNotifyObjects(GObj *self) /* derived name */
+{
+    void *g;
+
+    if (self->labelId == 3757) {
+        gamesysObjInfoCls(4, 0xEAD);
+        gamesysObjInfoCls(0x21, 0xEAE);
+    }
+    g = isysGObjSearchFromObjKindID_begin(0x2F);
+    if (g == 0) {
+        g = isysGObjSearchFromObjKindID_begin(0x41);
+    }
+    if (self->kind == 4 && g != 0) {
+        iosOmSendMail(g, 0x12, self);
+    }
+}
+
 void actCommonDie(GObj *volatile self)
 {
-    /* a helper defined at the head of this body */
-    inline void dieNotifyObjects(void) /* derived name */
-    {
-        void *g;
-
-        if (self->labelId == 3757) {
-            gamesysObjInfoCls(4, 0xEAD);
-            gamesysObjInfoCls(0x21, 0xEAE);
-        }
-        g = isysGObjSearchFromObjKindID_begin(0x2F);
-        if (g == 0) {
-            g = isysGObjSearchFromObjKindID_begin(0x41);
-        }
-        if (self->kind == 4 && g != 0) {
-            iosOmSendMail(g, 0x12, self);
-        }
-    }
     Act *s = GOBJ_ACT(self);
     int cnt = 0;
     float t;
@@ -1561,7 +1565,7 @@ void actCommonDie(GObj *volatile self)
     SetMotionDirection(self, GOBJ_ACT(self)->attackDir);
     DownFunc(self);
     GOBJ_ACT(self)->hit = 1;
-    dieNotifyObjects();
+    dieNotifyObjects(self);
     if (self->labelId == 3757) {
         ResetReviveCountEnemy(self);
     }
@@ -1602,53 +1606,53 @@ void actCommonDie(GObj *volatile self)
     }
 }
 
+static int Cling(GObj *self, int idx, int target)
+{
+    float q[4];
+    ClingRec *r;
+    int i;
+    int v;
+
+    r = &clingData[idx];
+    memset(q, 0, 16);
+    q[3] = 1.0f;
+    if (!((unsigned int)idx < 15)) {
+        debug_assert("src/commonact.c", 2733);
+        __assert("src/commonact.c", 2733,
+                 "index>=ClingDataID_cling_start && index<ClingDataID_cling_end");
+    }
+    for (i = 0; i < 3; i++) {
+        v = (r->rot[i] << 15) / 180;
+        if (v != 0) {
+            switch (i) {
+            case 0:
+                RotQuaternionX(q, v);
+                break;
+            case 1:
+                RotQuaternionY(q, v);
+                break;
+            case 2:
+                RotQuaternionZ(q, v);
+                break;
+            }
+        }
+    }
+    SetMotionNodeFixModeParameter((void *)self, (void *)target, r->mode, r->node, q, r->pos[0],
+                                  r->pos[1], r->pos[2], 1.0f);
+    return r->motion;
+}
+
 void actCommonCling(GObj *volatile self)
 {
     int no;
     int tgt;
-
-    int Cling(int idx, int target)
-    {
-        float q[4];
-        ClingRec *r;
-        int i;
-        int v;
-
-        r = &clingData[idx];
-        memset(q, 0, 16);
-        q[3] = 1.0f;
-        if (!((unsigned int)idx < 15)) {
-            debug_assert("src/commonact.c", 2733);
-            __assert("src/commonact.c", 2733,
-                     "index>=ClingDataID_cling_start && index<ClingDataID_cling_end");
-        }
-        for (i = 0; i < 3; i++) {
-            v = (r->rot[i] << 15) / 180;
-            if (v != 0) {
-                switch (i) {
-                case 0:
-                    RotQuaternionX(q, v);
-                    break;
-                case 1:
-                    RotQuaternionY(q, v);
-                    break;
-                case 2:
-                    RotQuaternionZ(q, v);
-                    break;
-                }
-            }
-        }
-        SetMotionNodeFixModeParameter((void *)self, (void *)target, r->mode, r->node, q, r->pos[0],
-                                      r->pos[1], r->pos[2], 1.0f);
-        return r->motion;
-    }
 
     no = (int)(_GetRandom() * 10.0f) % 15;
     tgt = GOBJ_ACT(self)->enemy->clingReq;
 
     GOBJ_ACT(self)->enemy->clingTarget = tgt;
     ACTGameCollisionOff(self);
-    Cling(no, tgt);
+    Cling(self, no, tgt);
     _ACTWait(0);
 }
 
@@ -1862,16 +1866,16 @@ static inline int boxWallCheck(GObj *self, GObj *box, float dist, int h) /* deri
     return 1;
 }
 
+static inline void addGirlLevelForBox(GObj *b) /* derived name */
+{
+    if (girlGObj != 0 && GOBJ_SUB(girlGObj)->parent.obj == b) {
+        brainAddLevelGirl(1000.0f);
+    }
+}
+
 void actCommonBox(GObj *volatile self)
 {
     GObj *box;
-    /* a helper defined at the head of this body */
-    inline void addGirlLevelForBox(GObj * b) /* derived name */
-    {
-        if (girlGObj != 0 && GOBJ_SUB(girlGObj)->parent.obj == b) {
-            brainAddLevelGirl(1000.0f);
-        }
-    }
     Act *s = GOBJ_ACT(self);
     GObj *sub;
     float hold[4];
@@ -2468,6 +2472,228 @@ static inline unsigned char IsFlyTimeOver(int self) /* derived name */
     return 0;
 }
 
+static int getLandOffset(float *out, float *pos, short ang, float h)
+{
+    ClipWork w;
+
+    memset(&w, 0, 0xC0);
+    _UnitMatrix(MatrixDrive_GetMatrix());
+    MatrixDrive_TransMatrixV((char *)pos);
+    MatrixDrive_RotMatrixY(ang);
+    MatrixDrive_TransMatrix(0.0f, 0.0f, h);
+    CopyVector(w.pt[1], (char *)MatrixDrive_GetMatrix() + 0x30);
+    CopyVector(w.pt[0], pos);
+    w.pt[0][3] = w.pt[1][3] = 1.0f;
+    w.pt[0][1] -= 50.0f;
+    w.pt[1][1] -= 50.0f;
+    ClipWall(&w);
+    if (w.wall.elem) {
+        return 0;
+    }
+    CopyVector(w.pt[0], w.pt[1]);
+    w.pt[1][1] += 100.0f;
+    ClipFloor(&w);
+    if (w.floor.elem) {
+        _SubVectorXYZ(out, w.pt[2], pos);
+        return 1;
+    }
+    return 0;
+}
+
+static inline void RequestFlyClip(ClipColReq *req, void (*func)(ClipWork *), float mat[4][4],
+                                  float root[4]) /* derived name */
+{
+    req->func = func;
+    req->clip.radius = 50.0f;
+    CopyVector(req->clip.pt[0], mat[3]);
+    CopyVector(req->clip.pt[1], root);
+    req->obj = 0;
+    RequestClipCollision(req);
+}
+
+static inline void FlyStep(GObj *self, Act *act, int checkStuck, float lenSq, float root[4],
+                           float mat[4][4], float dir[4], float vC0[4], int *needInit, float *acc,
+                           int *mode, float *fc) /* derived name */
+{
+    if (*needInit) {
+        RequestFlyClip((ClipColReq *)((char *)act + 0x690),
+                       checkStuck ? ClipCollisionWithField : ClipCollision, mat, root);
+        *needInit = 0;
+    } else if (((ClipColReq *)((char *)act + 0x690))->done) {
+        if (((ClipColReq *)((char *)act + 0x690))->clip.wall.elem ||
+            ((ClipColReq *)((char *)act + 0x690))->clip.floor.elem) {
+            if (10000.0f < VectorLengthSquare(dir)) {
+                *acc = -1.0f;
+            } else if (0.0f < vC0[1]) {
+                *acc = 1.0f;
+            } else {
+                *acc = -1.0f;
+            }
+        } else {
+            *acc = calcFlyAccel(root, mat[3]);
+        }
+        RequestFlyClip((ClipColReq *)((char *)act + 0x690),
+                       checkStuck ? ClipCollisionWithField : ClipCollision, mat, root);
+    }
+    {
+        FlyLimitInfo info;
+
+        if (GetFlyLimitHeight(&info, mat[3])) {
+            if (debug_fly_limit_test) {
+                int save = debug_font_flag;
+
+                debugDispFlyLimit(mat[3], info.limitY, info.floorY);
+                debug_font_flag = 1;
+                debug_Printf(10, 160, 0xFFFFFF00, "[%s] %4d %4d %4d", "limit", (int)info.floorY,
+                             (int)info.limitY, (int)info.limitOfs);
+                debug_font_flag = save;
+            }
+            if (lenSq < 90000.0f && (info.floorY < root[1] || root[1] < info.limitY)) {
+                ClipWork w = {{{0.0f}}, {{0.0f}}, 50.0f};
+
+                CopyVector(w.pt[0], mat[3]);
+                w.pt[0][1] += 100.0f;
+                _ApplyMatrix(w.pt[1], mat, ZUnitVector);
+                w.pt[1][1] = 0.0f;
+                _NormalizeVector(w.pt[1], w.pt[1]);
+                _ScaleVectorXYZ(w.pt[1], w.pt[1], 200.0f);
+                _AddVectorXYZ(w.pt[1], w.pt[0], w.pt[1]);
+                ClipWall(&w);
+                if (w.wall.elem) {
+                    MatrixDrive_PushMatrix();
+                    CopyMatrix(MatrixDrive_GetMatrix(), mat);
+                    if (stage_no == 19 || stage_no == 28) {
+                        MatrixDrive_RotMatrixY(-24576);
+                    } else {
+                        MatrixDrive_RotMatrixY(4096);
+                    }
+                    _ApplyMatrix(dir, MatrixDrive_GetMatrix(), ZUnitVector);
+                    dir[1] = 0.0f;
+                    _NormalizeVector(dir, dir);
+                    MatrixDrive_PopMatrix();
+                    SetMotionDirection(self, dir);
+                    *acc = -1.0f;
+                } else if (info.floorY < root[1]) {
+                    *acc = 1.0f;
+                    *mode = 1;
+                    *fc = info.floorY;
+                } else {
+                    *acc = -1.0f;
+                    *mode = 2;
+                    *fc = info.limitY;
+                }
+                if (debug_fly_limit_test) {
+                    static int col[4] = {0, 255, 128, 128};
+                    debugDispSphere(mat[3], col, 100.0f);
+                }
+            } else {
+                _ACTMotDirSmzDirect(self, dir);
+            }
+            if (info.limitY > mat[3][1]) {
+                *acc = clampUnit((info.limitY - mat[3][1]) * 0.05f);
+            }
+        } else if (*mode == 0) {
+            _NormalizeVector(dir, dir);
+            _ACTMotDirSmzDirect(self, dir);
+        } else {
+            *acc = clampUnit((root[1] - mat[3][1]) * 0.005f);
+            if (360000.0f < lenSq) {
+                *mode = 0;
+            }
+            if (*mode == 1) {
+                *acc = 1.0f;
+                if (*fc < mat[3][1]) {
+                    *mode = 0;
+                }
+            } else {
+                *acc = -1.0f;
+                if (mat[3][1] < *fc) {
+                    *mode = 0;
+                }
+            }
+            if (debug_fly_limit_test) {
+                static int col[4] = {0, 0, 128, 128};
+                debugDispSphere(mat[3], col, 100.0f);
+            }
+        }
+    }
+}
+
+static int completeEmergency(GObj *self, float spd, int *cnt104)
+{
+    if (debug_fly_limit_test) {
+        debug_StdPrintfDummy("EMERGENCY COMPLETE CHECK : SPEEDSQ:%f LENSQ:%f\n",
+                             VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130), spd);
+    }
+    if (stage_no != 86 && stage_no != 3 && stage_no != 46) {
+        if (VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130) < 50.0f && spd < 1000.0f) {
+            return 1;
+        }
+    } else {
+        if (VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130) < 300.0f && spd < 7000.0f) {
+            *cnt104 = 0;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int emergencyCheck(GObj *self, int *wait, float ring[5][4], int *ringidx, int *ringcnt,
+                          float mat[4][4], int cnt114, int *flags)
+{
+    float prev[4];
+    float mx;
+    float d;
+    int i;
+
+    if (*wait == 0) {
+        mx = 0.0f;
+        CopyVector(prev, ring[*ringidx]);
+        CopyVector(ring[*ringidx], mat[3]);
+        if (*ringcnt < 5) {
+            for (i = 0; i < *ringcnt; i++) {
+                d = distance_squared(ring[0], ring[i]);
+                if (mx < d) {
+                    mx = d;
+                }
+            }
+        } else {
+            for (i = 0; i < 5; i++) {
+                d = distance_squared(prev, ring[i]);
+                if (debug_fly_limit_test) {
+                    debug_StdPrintfDummy("%1.1f ", d);
+                }
+                if (mx < d) {
+                    mx = d;
+                }
+            }
+        }
+        *ringcnt = *ringcnt + 1;
+        *ringidx = *ringidx + 1;
+        if (*ringidx == 5) {
+            *ringidx = 0;
+        }
+        if (debug_fly_limit_test) {
+            debug_StdPrintfDummy("EMERGENCY CHECK %d(%d): MAX: %f\n", cnt114, *ringcnt, mx);
+        }
+        if (*ringcnt >= 5 && mx < 10000.0f) {
+            debug_StdPrintfDummy("\x1b[36mEMERGENCY WITH NO MOVE\x1b[m\n");
+            *flags |= 2;
+            return 1;
+        }
+        if (debug_fly_limit_test == 0 && IsFlyTimeOver((int)self)) {
+            debug_StdPrintfDummy("\x1b[36mEMERGENCY WITH TIME OUT\x1b[m\n");
+            *flags |= 4;
+            return 1;
+        }
+    }
+    *wait = *wait + 1;
+    if (*wait == 30) {
+        *wait = 0;
+    }
+    return 0;
+}
+
 static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
 {
     Act *act = GOBJ_ACT(self);
@@ -2511,150 +2737,6 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
         emgpos[2] = GOBJ_WORK(self)->emgPosZ;
     }
     while (1) {
-        int getLandOffset(float *out, float *pos, short ang, float h)
-        {
-            ClipWork w;
-
-            memset(&w, 0, 0xC0);
-            _UnitMatrix(MatrixDrive_GetMatrix());
-            MatrixDrive_TransMatrixV((char *)pos);
-            MatrixDrive_RotMatrixY(ang);
-            MatrixDrive_TransMatrix(0.0f, 0.0f, h);
-            CopyVector(w.pt[1], (char *)MatrixDrive_GetMatrix() + 0x30);
-            CopyVector(w.pt[0], pos);
-            w.pt[0][3] = w.pt[1][3] = 1.0f;
-            w.pt[0][1] -= 50.0f;
-            w.pt[1][1] -= 50.0f;
-            ClipWall(&w);
-            if (w.wall.elem) {
-                return 0;
-            }
-            CopyVector(w.pt[0], w.pt[1]);
-            w.pt[1][1] += 100.0f;
-            ClipFloor(&w);
-            if (w.floor.elem) {
-                _SubVectorXYZ(out, w.pt[2], pos);
-                return 1;
-            }
-            return 0;
-        }
-
-        inline void RequestFlyClip(ClipColReq * req, void (*func)(ClipWork *)) /* derived name */
-        {
-            req->func = func;
-            req->clip.radius = 50.0f;
-            CopyVector(req->clip.pt[0], mat[3]);
-            CopyVector(req->clip.pt[1], root);
-            req->obj = 0;
-            RequestClipCollision(req);
-        }
-
-        inline void FlyStep(void) /* derived name */
-        {
-            if (needInit) {
-                RequestFlyClip((ClipColReq *)((char *)act + 0x690),
-                               checkStuck ? ClipCollisionWithField : ClipCollision);
-                needInit = 0;
-            } else if (((ClipColReq *)((char *)act + 0x690))->done) {
-                if (((ClipColReq *)((char *)act + 0x690))->clip.wall.elem ||
-                    ((ClipColReq *)((char *)act + 0x690))->clip.floor.elem) {
-                    if (10000.0f < VectorLengthSquare(dir)) {
-                        acc = -1.0f;
-                    } else if (0.0f < vC0[1]) {
-                        acc = 1.0f;
-                    } else {
-                        acc = -1.0f;
-                    }
-                } else {
-                    acc = calcFlyAccel(root, mat[3]);
-                }
-                RequestFlyClip((ClipColReq *)((char *)act + 0x690),
-                               checkStuck ? ClipCollisionWithField : ClipCollision);
-            }
-            {
-                FlyLimitInfo info;
-
-                if (GetFlyLimitHeight(&info, mat[3])) {
-                    if (debug_fly_limit_test) {
-                        int save = debug_font_flag;
-
-                        debugDispFlyLimit(mat[3], info.limitY, info.floorY);
-                        debug_font_flag = 1;
-                        debug_Printf(10, 160, 0xFFFFFF00, "[%s] %4d %4d %4d", "limit",
-                                     (int)info.floorY, (int)info.limitY, (int)info.limitOfs);
-                        debug_font_flag = save;
-                    }
-                    if (lenSq < 90000.0f && (info.floorY < root[1] || root[1] < info.limitY)) {
-                        ClipWork w = {{{0.0f}}, {{0.0f}}, 50.0f};
-
-                        CopyVector(w.pt[0], mat[3]);
-                        w.pt[0][1] += 100.0f;
-                        _ApplyMatrix(w.pt[1], mat, ZUnitVector);
-                        w.pt[1][1] = 0.0f;
-                        _NormalizeVector(w.pt[1], w.pt[1]);
-                        _ScaleVectorXYZ(w.pt[1], w.pt[1], 200.0f);
-                        _AddVectorXYZ(w.pt[1], w.pt[0], w.pt[1]);
-                        ClipWall(&w);
-                        if (w.wall.elem) {
-                            MatrixDrive_PushMatrix();
-                            CopyMatrix(MatrixDrive_GetMatrix(), mat);
-                            if (stage_no == 19 || stage_no == 28) {
-                                MatrixDrive_RotMatrixY(-24576);
-                            } else {
-                                MatrixDrive_RotMatrixY(4096);
-                            }
-                            _ApplyMatrix(dir, MatrixDrive_GetMatrix(), ZUnitVector);
-                            dir[1] = 0.0f;
-                            _NormalizeVector(dir, dir);
-                            MatrixDrive_PopMatrix();
-                            SetMotionDirection(self, dir);
-                            acc = -1.0f;
-                        } else if (info.floorY < root[1]) {
-                            acc = 1.0f;
-                            mode = 1;
-                            fc = info.floorY;
-                        } else {
-                            acc = -1.0f;
-                            mode = 2;
-                            fc = info.limitY;
-                        }
-                        if (debug_fly_limit_test) {
-                            static int col[4] = {0, 255, 128, 128};
-                            debugDispSphere(mat[3], col, 100.0f);
-                        }
-                    } else {
-                        _ACTMotDirSmzDirect(self, dir);
-                    }
-                    if (info.limitY > mat[3][1]) {
-                        acc = clampUnit((info.limitY - mat[3][1]) * 0.05f);
-                    }
-                } else if (mode == 0) {
-                    _NormalizeVector(dir, dir);
-                    _ACTMotDirSmzDirect(self, dir);
-                } else {
-                    acc = clampUnit((root[1] - mat[3][1]) * 0.005f);
-                    if (360000.0f < lenSq) {
-                        mode = 0;
-                    }
-                    if (mode == 1) {
-                        acc = 1.0f;
-                        if (fc < mat[3][1]) {
-                            mode = 0;
-                        }
-                    } else {
-                        acc = -1.0f;
-                        if (mat[3][1] < fc) {
-                            mode = 0;
-                        }
-                    }
-                    if (debug_fly_limit_test) {
-                        static int col[4] = {0, 0, 128, 128};
-                        debugDispSphere(mat[3], col, 100.0f);
-                    }
-                }
-            }
-        }
-
         GOBJ_SUB(self)->root.fieldWall = checkStuck;
         GetRootMotionMatrix(mat, self);
         if (target) {
@@ -2697,27 +2779,6 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
             debug_StdPrintfDummy("%1.1f ", lenSq);
         }
         if (stuck) {
-            int completeEmergency(void)
-            {
-                if (debug_fly_limit_test) {
-                    debug_StdPrintfDummy("EMERGENCY COMPLETE CHECK : SPEEDSQ:%f LENSQ:%f\n",
-                                         VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130), spd);
-                }
-                if (stage_no != 86 && stage_no != 3 && stage_no != 46) {
-                    if (VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130) < 50.0f &&
-                        spd < 1000.0f) {
-                        return 1;
-                    }
-                } else {
-                    if (VectorLengthSquare((char *)GOBJ_SUB(self) + 0x130) < 300.0f &&
-                        spd < 7000.0f) {
-                        cnt104 = 0;
-                        return 1;
-                    }
-                }
-                return 0;
-            }
-
             int y = 30;
 
             if (flags & 2)
@@ -2731,70 +2792,15 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
             if (stage_no != 86 && stage_no != 3 && stage_no != 46) {
                 SetDarkVolumeEffect(mat[3], 100.0f);
             }
-            if (completeEmergency()) {
+            if (completeEmergency(self, spd, &cnt104)) {
                 ResetFlyLimit(self);
                 debug_StdPrintfDummy("%p complete.\n", self);
                 stuck = 0;
             }
         } else {
-            int emergencyCheck(void)
-            {
-                float prev[4];
-                float mx;
-                float d;
-                int i;
-
-                if (wait == 0) {
-                    mx = 0.0f;
-                    CopyVector(prev, ring[ringidx]);
-                    CopyVector(ring[ringidx], mat[3]);
-                    if (ringcnt < 5) {
-                        for (i = 0; i < ringcnt; i++) {
-                            d = distance_squared(ring[0], ring[i]);
-                            if (mx < d) {
-                                mx = d;
-                            }
-                        }
-                    } else {
-                        for (i = 0; i < 5; i++) {
-                            d = distance_squared(prev, ring[i]);
-                            if (debug_fly_limit_test) {
-                                debug_StdPrintfDummy("%1.1f ", d);
-                            }
-                            if (mx < d) {
-                                mx = d;
-                            }
-                        }
-                    }
-                    ringcnt = ringcnt + 1;
-                    ringidx = ringidx + 1;
-                    if (ringidx == 5) {
-                        ringidx = 0;
-                    }
-                    if (debug_fly_limit_test) {
-                        debug_StdPrintfDummy("EMERGENCY CHECK %d(%d): MAX: %f\n", cnt114, ringcnt,
-                                             mx);
-                    }
-                    if (ringcnt >= 5 && mx < 10000.0f) {
-                        debug_StdPrintfDummy("\x1b[36mEMERGENCY WITH NO MOVE\x1b[m\n");
-                        flags |= 2;
-                        return 1;
-                    }
-                    if (debug_fly_limit_test == 0 && IsFlyTimeOver((int)self)) {
-                        debug_StdPrintfDummy("\x1b[36mEMERGENCY WITH TIME OUT\x1b[m\n");
-                        flags |= 4;
-                        return 1;
-                    }
-                }
-                wait = wait + 1;
-                if (wait == 30) {
-                    wait = 0;
-                }
-                return 0;
-            }
-
-            FlyStep();
-            if (checkStuck && ((int)(act->flags20.ll >> 21) & 1) == 0 && emergencyCheck()) {
+            FlyStep(self, act, checkStuck, lenSq, root, mat, dir, vC0, &needInit, &acc, &mode, &fc);
+            if (checkStuck && ((int)(act->flags20.ll >> 21) & 1) == 0 &&
+                emergencyCheck(self, &wait, ring, &ringidx, &ringcnt, mat, cnt114, &flags)) {
                 SetFlyLimit(self);
                 stuck = 1;
             }

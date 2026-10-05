@@ -1084,6 +1084,13 @@ inline float debug_GetTimerCount(void)
 #endif
 }
 
+static void loadReport(char **dst, char *name, int size)
+{
+    debug_StdPrintfDummy(
+        "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)", name,
+        *dst, size);
+}
+
 int debug_Load(char **dst, char *name, int kind)
 {
     char buf[256];
@@ -1101,74 +1108,66 @@ int debug_Load(char **dst, char *name, int kind)
     sceLseek(fd, 0, 0);
     sz = (size / 16 + 1) * 16;
     {
-        /* the line every arm prints once it has the file's address, a nested
-           function that reads dst, name and size from the enclosing frame;
-           the iosMallocDebug calls pass the source's own line numbers */
-        inline void loadReport(void)
-        {
-            debug_StdPrintfDummy(
-                "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)",
-                name, *dst, size);
-        }
+        /* the iosMallocDebug calls pass the source's own line numbers */
         switch (kind) {
         case 0:
         default:
             *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", 1958);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
             *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", 1965);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
             *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", 1973);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
             *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", 1982);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
             *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", 1991);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
             *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", 2000);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
             *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", 2007);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
             *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", 2014);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
             *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", 2019);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
             *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 2024);
-            loadReport();
+            loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
         }
@@ -1460,28 +1459,30 @@ static DbgCol brainColHigh[1] = {{0xFF, 0x40, 0x40, 0xFF}}; /* derived name */
 
 static DbgCol brainColMax[1] = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
 
+static void draw_batsu(DbgPos *p)
+{
+    DbgCol col = markCol[0];
+    DbgVtx v[4];
+
+    make_mark_points(v, p, 3);
+    gif_Line(&v[0].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[1].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+}
+
+static void draw_shikaku(DbgPos *p)
+{
+    DbgCol col = markCol[0];
+    DbgVtx v[4];
+
+    make_mark_points(v, p, 3);
+    gif_Line(&v[0].x, &v[1].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[1].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+}
+
 static void debug_brainBar(void)
 {
-    void draw_batsu(DbgPos * p)
-    {
-        DbgCol col = markCol[0];
-        DbgVtx v[4];
-
-        make_mark_points(v, p, 3);
-        gif_Line(&v[0].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[1].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-    }
-    void draw_shikaku(DbgPos * p)
-    {
-        DbgCol col = markCol[0];
-        DbgVtx v[4];
-
-        make_mark_points(v, p, 3);
-        gif_Line(&v[0].x, &v[1].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[1].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-    }
     DbgCol c0 = brainColLow[0];
     DbgCol c1 = brainColMid[0];
     DbgCol c2 = brainColHigh[0];
@@ -1604,6 +1605,9 @@ static DbgCol barScaleCol[1] = {{0xA0, 0xA0, 0xA0, 0xA0}}; /* derived name */
 static DbgCol barLabelCol[1] = {{0x80, 0x80, 0x80, 0x60}}; /* derived name */
 
 /* clang-format off */
+/* the time stamp of bar i, read by both bar loops */
+static int barTime(int i) { return debugBars[i].count; } /* derived name */
+
 static void debug_DrawBar(void)
 {
     long long sh;
@@ -1619,7 +1623,6 @@ static void debug_DrawBar(void)
     int i;
     int w;
     int len;
-    inline int barTime(void) { return debugBars[i].count; } /* derived name */ /* the time stamp of bar i, read by both bar loops */
 
 
     flip = 0;
@@ -1668,7 +1671,7 @@ static void debug_DrawBar(void)
 
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
 
-        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+        int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
 
         long long alpha;
 
@@ -1760,7 +1763,7 @@ static void debug_DrawBar(void)
 
     flip = 0;
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
-        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+        int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
 
         int dpct;
         int pct;
@@ -1894,27 +1897,28 @@ inline void debug_ResetBar(void)
     debugBarCount = 0;
 }
 
-/* Halves a 32-bit snapshot with a 2x2 box filter; the clamp and the
-   destination helper are nested functions. */
+static unsigned int *spix(int src, int px)
+{
+    return (unsigned int *)(px * 4 + src);
+}
+
+static int clip(int v)
+{
+    return v < 256 ? (v > -1 ? v : 0) : 255;
+}
+
+static unsigned int *dpix(int dst, int px, int py)
+{
+    return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
+}
+
+/* Halves a 32-bit snapshot with a 2x2 box filter. */
 static void debug_ResizeSnapShot(int dst, int src, int w, int h)
 {
     int r, g, b, a;
     int x, y, i, j;
     int row;
     unsigned char *p;
-
-    inline unsigned int *spix(int px)
-    {
-        return (unsigned int *)(px * 4 + src);
-    }
-    inline int clip(int v)
-    {
-        return v < 256 ? (v > -1 ? v : 0) : 255;
-    }
-    inline unsigned int *dpix(int px, int py)
-    {
-        return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
-    }
 
     for (y = 0; y < h; y += 2) {
         for (x = 0; x < w; x += 2) {
@@ -1923,7 +1927,7 @@ static void debug_ResizeSnapShot(int dst, int src, int w, int h)
             /* clang-format on */
             for (i = 0; i < 2; i++) {
                 /* clang-format off */
-                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(x) + row); j < 2; j++) {
+                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(src, x) + row); j < 2; j++) {
                     /* clang-format on */
                     r = r + p[0] * 0.25f;
                     g = g + p[1] * 0.25f;
@@ -1936,7 +1940,7 @@ static void debug_ResizeSnapShot(int dst, int src, int w, int h)
             g = clip(g);
             b = clip(b);
             a = clip(a);
-            *dpix(x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
+            *dpix(dst, x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
         }
     }
     FlushCache(0);

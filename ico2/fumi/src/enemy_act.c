@@ -925,34 +925,33 @@ void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
     _BrainMode_SetDirect(self, 0, 0);
 }
 
-/* PairSetGeometry is a GNU nested function, reading its parent's frame
-   through the static chain. */
+static void PairSetGeometry(void *me, void *pair, float dist)
+{
+    float p0[4];
+    float p1[4];
+    float dir[4];
+    float ofs[4];
+
+    p0[0] = test_CURRENTROOT(me)[0];
+    p0[1] = test_CURRENTROOT(me)[1];
+    p0[2] = test_CURRENTROOT(me)[2];
+    p1[0] = test_CURRENTROOT(pair)[0];
+    p1[1] = test_CURRENTROOT(pair)[1];
+    p1[2] = test_CURRENTROOT(pair)[2];
+    _OrientXZGV(dir, p1, p0);
+    sceVu0ScaleVector(ofs, dir, dist);
+    sceVu0AddVector(p1, p0, ofs);
+    SetDirectRootPositionNoFitting(pair, (char *)p1);
+    GOBJ_ACT(me)->dir[0] = dir[0];
+    GOBJ_ACT(me)->dir[1] = dir[1];
+    GOBJ_ACT(me)->dir[2] = dir[2];
+    sceVu0ScaleVector((float *)((char *)GOBJ_ACT(pair) + 0x120), dir, -1.0f);
+    SetMotionDirection(me, (float *)((char *)GOBJ_ACT(me) + 0x120));
+    SetMotionDirection(pair, (float *)((char *)GOBJ_ACT(pair) + 0x120));
+}
+
 static int actEnemyForceSwitchToCarry(void *self)
 {
-    void PairSetGeometry(void *me, void *pair, float dist)
-    {
-        float p0[4];
-        float p1[4];
-        float dir[4];
-        float ofs[4];
-
-        p0[0] = test_CURRENTROOT(me)[0];
-        p0[1] = test_CURRENTROOT(me)[1];
-        p0[2] = test_CURRENTROOT(me)[2];
-        p1[0] = test_CURRENTROOT(pair)[0];
-        p1[1] = test_CURRENTROOT(pair)[1];
-        p1[2] = test_CURRENTROOT(pair)[2];
-        _OrientXZGV(dir, p1, p0);
-        sceVu0ScaleVector(ofs, dir, dist);
-        sceVu0AddVector(p1, p0, ofs);
-        SetDirectRootPositionNoFitting(pair, (char *)p1);
-        GOBJ_ACT(me)->dir[0] = dir[0];
-        GOBJ_ACT(me)->dir[1] = dir[1];
-        GOBJ_ACT(me)->dir[2] = dir[2];
-        sceVu0ScaleVector((float *)((char *)GOBJ_ACT(pair) + 0x120), dir, -1.0f);
-        SetMotionDirection(me, (float *)((char *)GOBJ_ACT(me) + 0x120));
-        SetMotionDirection(pair, (float *)((char *)GOBJ_ACT(pair) + 0x120));
-    }
     float q[4];
     Act *sub = GOBJ_ACT(self);
 
@@ -1549,55 +1548,53 @@ static inline void _BrainMode_Set(GObj *self, int mode, int *tgt) /* derived nam
     _BrainMode_SetDirect(self, mode, tgt);
 }
 
+static void BrainMode_Requset(void *self, int req, int arg)
+{
+    switch (req) {
+    case 0:
+        _BrainMode_Set(self, 1, 0);
+        break;
+    case -2:
+        _BrainMode_Set(self, 1, 0);
+        break;
+    case 1:
+        _BrainMode_Set(self, 3, 0);
+        break;
+    case 2:
+        _BrainMode_Set(self, 4, 0);
+        break;
+    case 3:
+        _BrainMode_Set(self, 6, 0);
+        break;
+    case -3:
+    case -1:
+    case 7:
+        _BrainMode_Set(self, 13, 0);
+        break;
+    case 5:
+        _BrainMode_Set(self, 7, &arg);
+        break;
+    case 4:
+    case 6:
+        _BrainMode_Set(self, 5, &arg);
+        break;
+    case 8:
+        _BrainMode_SetDirect(self, 2, &arg);
+        break;
+    default:
+        debug_StdPrintfDummy("undefined mode [%d]\n", req);
+        debug_assert("src/enemy_act.c", 3102);
+        __assert("src/enemy_act.c", 3102, "0");
+        break;
+    }
+}
+
 void subEnemyBrainMain(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     int mode;
     int data;
     int i;
-
-    /* BrainMode_Requset is a GNU nested function: it reads self out of
-       subEnemyBrainMain's frame through the static chain. */
-    void BrainMode_Requset(int req, int arg)
-    {
-        switch (req) {
-        case 0:
-            _BrainMode_Set(self, 1, 0);
-            break;
-        case -2:
-            _BrainMode_Set(self, 1, 0);
-            break;
-        case 1:
-            _BrainMode_Set(self, 3, 0);
-            break;
-        case 2:
-            _BrainMode_Set(self, 4, 0);
-            break;
-        case 3:
-            _BrainMode_Set(self, 6, 0);
-            break;
-        case -3:
-        case -1:
-        case 7:
-            _BrainMode_Set(self, 13, 0);
-            break;
-        case 5:
-            _BrainMode_Set(self, 7, &arg);
-            break;
-        case 4:
-        case 6:
-            _BrainMode_Set(self, 5, &arg);
-            break;
-        case 8:
-            _BrainMode_SetDirect(self, 2, &arg);
-            break;
-        default:
-            debug_StdPrintfDummy("undefined mode [%d]\n", req);
-            debug_assert("src/enemy_act.c", 3102);
-            __assert("src/enemy_act.c", 3102, "0");
-            break;
-        }
-    }
 
     GOBJ_ACT(self)->enemy->reqMode = GOBJ_ACT(self)->enemy->mode = 0;
     GOBJ_ACT(self)->enemy->waitCount = 2;
@@ -1655,7 +1652,7 @@ void subEnemyBrainMain(GObj *volatile self)
             ACTSendMailCorrect((void *)self, 0x1D);
         }
         CheckEnemyBrainMode((char *)self, &mode, &data);
-        BrainMode_Requset(mode, data);
+        BrainMode_Requset(self, mode, data);
         if (GOBJ_ACT(self)->enemy->reqMode != GOBJ_ACT(self)->enemy->mode ||
             (((int)(sub->flags20.ll >> 9)) & 1) != 0) {
             sub->flags20.ll &= ~0x200LL;
@@ -2214,6 +2211,30 @@ static inline int isNearestEnemyToBoy(GObj *self, GObj *boy, float *pos) /* deri
     return self == found;
 }
 
+static void ChangeBrain_ToAttack(GObj *self)
+{
+    if (isLiftBoyEnable() != 0) {
+        if (GOBJ_ACT(self)->enemy->sizeClass == 2) {
+            BrainModeTarget *tgt = &brainTarget;
+
+            /* the default target, then the boy; the same shape sits in
+               the other four arms (here and in ChangeBrain_ToKidnap) */
+            brainTarget = brainTargetNone;
+            brainTarget.gobj = boyGObj;
+            if ((int)(random_unit() * 10.0f) % 100 < GOBJ_ACT(self)->enemy->attackChance2) {
+                _BrainMode_SetDirect(self, 12, tgt);
+            } else {
+                _BrainMode_SetDirect(self, 9, tgt);
+            }
+        } else {
+            /* the default target first, see the kind == 2 arm above */
+            brainTarget = brainTargetNone;
+            brainTarget.gobj = boyGObj;
+            _BrainMode_SetDirect(self, 9, &brainTarget);
+        }
+    }
+}
+
 void subEnemyBrain_ToBoy(GObj *volatile self)
 {
     float v[4];
@@ -2225,30 +2246,6 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
     int mode;
     int r;
     unsigned char ret;
-
-    void ChangeBrain_ToAttack(void)
-    {
-        if (isLiftBoyEnable() != 0) {
-            if (GOBJ_ACT(self)->enemy->sizeClass == 2) {
-                BrainModeTarget *tgt = &brainTarget;
-
-                /* the default target, then the boy; the same shape sits in
-                   the other four arms (here and in ChangeBrain_ToKidnap) */
-                brainTarget = brainTargetNone;
-                brainTarget.gobj = boyGObj;
-                if ((int)(random_unit() * 10.0f) % 100 < GOBJ_ACT(self)->enemy->attackChance2) {
-                    _BrainMode_SetDirect(self, 12, tgt);
-                } else {
-                    _BrainMode_SetDirect(self, 9, tgt);
-                }
-            } else {
-                /* the default target first, see the kind == 2 arm above */
-                brainTarget = brainTargetNone;
-                brainTarget.gobj = boyGObj;
-                _BrainMode_SetDirect(self, 9, &brainTarget);
-            }
-        }
-    }
 
     while (1) {
         mode = 0;
@@ -2346,12 +2343,12 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
             break;
         case 3:
             if (isNearestEnemyToBoy(self, boyGObj, w) && EnemyUtil_isOtherStatus(self, 0) == 0) {
-                ChangeBrain_ToAttack();
+                ChangeBrain_ToAttack(self);
             }
             break;
         case 4:
             if (EnemyUtil_isOtherStatus(self, 0) == 0) {
-                ChangeBrain_ToAttack();
+                ChangeBrain_ToAttack(self);
             }
         }
         sub->stick.mag = 0.0f;
@@ -2361,7 +2358,7 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
         for (j = 0; j < (60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60; j++) {
             if (mode == 5) {
                 if (EnemyUtil_isOtherStatus(self, 0) == 0) {
-                    ChangeBrain_ToAttack();
+                    ChangeBrain_ToAttack(self);
                 }
             }
             _DoAwait(self);
@@ -2397,6 +2394,28 @@ inline void subEnemyBrain_BodyGuard(GObj *volatile self)
     }
 }
 
+static void ChangeBrain_ToKidnap(GObj *self)
+{
+    switch (GOBJ_ACT(self)->enemy->sizeClass) {
+    case 0:
+        /* the default target first, see ChangeBrain_ToAttack */
+        brainTarget = brainTargetNone;
+        brainTarget.gobj = girlGObj;
+        _BrainMode_SetDirect(self, 8, &brainTarget);
+        break;
+    case 2:
+        brainTarget = brainTargetNone;
+        brainTarget.gobj = girlGObj;
+        _BrainMode_SetDirect(self, 11, &brainTarget);
+        break;
+    default:
+        brainTarget = brainTargetNone;
+        brainTarget.gobj = girlGObj;
+        _BrainMode_SetDirect(self, 10, &brainTarget);
+        break;
+    }
+}
+
 void subEnemyBrain_ToGirl(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
@@ -2404,28 +2423,6 @@ void subEnemyBrain_ToGirl(GObj *volatile self)
     float p1[4];
     int i;
     int found;
-
-    void ChangeBrain_ToKidnap(void)
-    {
-        switch (GOBJ_ACT(self)->enemy->sizeClass) {
-        case 0:
-            /* the default target first, see ChangeBrain_ToAttack */
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 8, &brainTarget);
-            break;
-        case 2:
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 11, &brainTarget);
-            break;
-        default:
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 10, &brainTarget);
-            break;
-        }
-    }
 
     GObj *girl = girlGObj;
 
@@ -2456,7 +2453,7 @@ void subEnemyBrain_ToGirl(GObj *volatile self)
     }
     while (1) {
         debug_StdPrintfDummy("change to kidnap");
-        ChangeBrain_ToKidnap();
+        ChangeBrain_ToKidnap(self);
         _ACTWait(1);
     }
 }

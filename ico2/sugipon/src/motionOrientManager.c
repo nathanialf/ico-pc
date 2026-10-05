@@ -976,6 +976,17 @@ static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* d
     }
 }
 
+/* a nested function of getMotionGeometry, inlined into the arm that uses it */
+static inline void rotateNodes(char *m, SkelNode *s, void *q) /* derived name */
+{
+    int i = 0;
+
+    do {
+        MultiQuaternion(m + i * 32 + 16, q, m + i * 32 + 16);
+        i = s[i].sibling;
+    } while (i != -1);
+}
+
 static void getMotionGeometry(void *self)
 {
     SkelNode *skel = MOWORK(self)->skel;
@@ -1031,17 +1042,6 @@ static void getMotionGeometry(void *self)
             float r;
             int flag;
             int k;
-
-            /* a nested function, inlined into the arm that uses it */
-            inline void rotateNodes(char *m, SkelNode *s, void *q) /* derived name */
-            {
-                int i = 0;
-
-                do {
-                    MultiQuaternion(m + i * 32 + 16, q, m + i * 32 + 16);
-                    i = s[i].sibling;
-                } while (i != -1);
-            }
 
             len = VectorLength(mo->move) *
                   ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f);

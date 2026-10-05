@@ -6,6 +6,30 @@
 /* the parallel-action ids copied out of the layout table */
 static int parallelIds[86]; /* derived name */
 
+static int resolve(int v, int n) /* derived name */
+{
+    if (v > 0xFFFF) {
+        int idx = v - 0x10000;
+        int m = idx;
+        int k = 0;
+
+        if (randomMotionKind[m] != 0x47B) {
+            do {
+                m++;
+                k++;
+            } while (randomMotionKind[m] != 0x47B);
+        }
+        if (k == 0) {
+            v = 0x47B;
+        } else {
+            int e = idx + n % k;
+
+            v = randomMotionKind[e];
+        }
+    }
+    return v;
+}
+
 /* Fill tbl from the parallel-motion table: for each bit set in mask, each
    row's motion for that bit, resolved by the nested helper (an id above
    0xFFFF picks one entry of a random-motion run, by n), replaces the row's
@@ -16,35 +40,11 @@ void ActPara_MakeTbl(int *tbl, unsigned long long mask, int n)
     int j;
     int val;
 
-    inline int resolve(int v) /* derived name */
-    {
-        if (v > 0xFFFF) {
-            int idx = v - 0x10000;
-            int m = idx;
-            int k = 0;
-
-            if (randomMotionKind[m] != 0x47B) {
-                do {
-                    m++;
-                    k++;
-                } while (randomMotionKind[m] != 0x47B);
-            }
-            if (k == 0) {
-                v = 0x47B;
-            } else {
-                int e = idx + n % k;
-
-                v = randomMotionKind[e];
-            }
-        }
-        return v;
-    }
-
     for (i = 0; i < 44; i++) {
         if (((mask >> i) & 1) == 1) {
             for (j = 0; j < 86; j++) {
                 val = parallelMotionTbl[j].motion[i];
-                val = resolve(val);
+                val = resolve(val, n);
                 if (val != 0x47B) {
                     tbl[j] = val;
                 }

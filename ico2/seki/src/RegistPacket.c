@@ -289,63 +289,65 @@ typedef ICO_QW Qw128; /* derived name */
 /* PacketBufferStruct (DmaPacket.h): every packet address (dma, ptr, tail,
  * gif, end) is one pointer union, read and written through its members. */
 
+static void reg_setNMatrixPacket_setMatrix(void)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setNMatrixPacket_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
 static char *reg_setNMatrixPacket(Sub15C *o, int idx)
 {
-    void setMatrix(void)
-    {
-        char *c;
-        char *m;
-
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        ((GifPkWord *)c)->d = 0x1000000D;
-        PacketBufferStruct.ptr.c = c + 8;
-        ((GifPkWord *)(c + 8))->w[0] = 0;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
-        PacketBufferStruct.ptr.c = c + 0x50;
-        _CopyMatrix(c + 0x10, matrixptr + 0x140);
-        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
-        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
-        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
-        m = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.ptr.c = m + 0x40;
-        ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
-        PacketBufferStruct.ptr.c = m + 0x44;
-        ((GifPkWord *)(m + 0x40))->w[1] = 0;
-        PacketBufferStruct.ptr.c = m + 0x48;
-        ((GifPkWord *)(m + 0x48))->d = 0;
-        PacketBufferStruct.ptr.c = m + 0x50;
-    }
-    void setLight(void)
-    {
-        char *c;
-        char *m;
-        char *n;
-
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        ((GifPkWord *)c)->d = 0x10000009;
-        PacketBufferStruct.ptr.c = c + 8;
-        ((GifPkWord *)(c + 8))->w[0] = 0;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
-        PacketBufferStruct.ptr.c = c + 0x10;
-        _GetCurrentMatrix(c + 0x10);
-        m = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.ptr.c = m + 0x80;
-        _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
-        n = PacketBufferStruct.ptr.c;
-        ((GifPkWord *)n)->w[0] = 0x15000012;
-        n += 4;
-        PacketBufferStruct.ptr.c = n;
-        ((GifPkWord *)n)->w[0] = 0;
-        PacketBufferStruct.ptr.c = n + 4;
-        ((GifPkWord *)(n + 4))->d = 0;
-        PacketBufferStruct.ptr.c = n + 0xC;
-    }
     char *pkt;
     float *box;
     struct DObjNode *scl;
@@ -376,13 +378,13 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
-    setMatrix();
+    reg_setNMatrixPacket_setMatrix();
     if (mode != 0 && mode != 3) {
         light_MakeLightMatrix(o, idx);
         _SetCurrentMatrix(matrixptr + 0x40);
         _ClearTransCurrentMatrix();
         _MulCurrentMatrixL((char *)o->lightMtx);
-        setLight();
+        reg_setNMatrixPacket_setLight(o);
     }
     {
         char *c = PacketBufferStruct.ptr.c;
@@ -409,6 +411,68 @@ typedef struct { /* field names derived */
     RegVec r[4];
 } RegMtx; /* derived name */
 
+static void reg_setMMatrixPacket_setMatrix(Sub15C *o, int idx)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    if ((o->nodes[idx].flags.ll & 6) != 0) {
+        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x1C0, matrixptr + 0x180);
+    } else {
+        _MulMatrix(matrixptr + 0x180, matrixptr + 0x80, matrixptr + 0x40);
+        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    }
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setMMatrixPacket_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
 static char *reg_setMMatrixPacket(Sub15C *o, int idx)
 {
     RegVec s;
@@ -418,66 +482,6 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
     struct DObjNode *w;
     int mode;
 
-    void setMatrix(void)
-    {
-        char *c;
-        char *m;
-
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        ((GifPkWord *)c)->d = 0x1000000D;
-        PacketBufferStruct.ptr.c = c + 8;
-        ((GifPkWord *)(c + 8))->w[0] = 0;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
-        PacketBufferStruct.ptr.c = c + 0x50;
-        _CopyMatrix(c + 0x10, matrixptr + 0x140);
-        if ((o->nodes[idx].flags.ll & 6) != 0) {
-            _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x1C0, matrixptr + 0x180);
-        } else {
-            _MulMatrix(matrixptr + 0x180, matrixptr + 0x80, matrixptr + 0x40);
-            _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
-        }
-        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
-        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
-        m = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.ptr.c = m + 0x40;
-        ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
-        PacketBufferStruct.ptr.c = m + 0x44;
-        ((GifPkWord *)(m + 0x40))->w[1] = 0;
-        PacketBufferStruct.ptr.c = m + 0x48;
-        ((GifPkWord *)(m + 0x48))->d = 0;
-        PacketBufferStruct.ptr.c = m + 0x50;
-    }
-    void setLight(void)
-    {
-        char *c;
-        char *m;
-        char *n;
-
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        ((GifPkWord *)c)->d = 0x10000009;
-        PacketBufferStruct.ptr.c = c + 8;
-        ((GifPkWord *)(c + 8))->w[0] = 0;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
-        PacketBufferStruct.ptr.c = c + 0x10;
-        _GetCurrentMatrix(c + 0x10);
-        m = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.ptr.c = m + 0x80;
-        _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
-        n = PacketBufferStruct.ptr.c;
-        ((GifPkWord *)n)->w[0] = 0x15000012;
-        n += 4;
-        PacketBufferStruct.ptr.c = n;
-        ((GifPkWord *)n)->w[0] = 0;
-        PacketBufferStruct.ptr.c = n + 4;
-        ((GifPkWord *)(n + 4))->d = 0;
-        PacketBufferStruct.ptr.c = n + 0xC;
-    }
     w = (struct DObjNode *)(idx * 80 + (int)o->nodes);
     mode = o->lightMtx->mode;
     if ((w->flags.ll & 2) != 0) {
@@ -552,13 +556,13 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
-    setMatrix();
+    reg_setMMatrixPacket_setMatrix(o, idx);
     if (mode != 0 && mode != 3) {
         light_MakeLightMatrix(o, idx);
         _SetCurrentMatrix(matrixptr + 0x40);
         _ClearTransCurrentMatrix();
         _MulCurrentMatrixL((char *)o->lightMtx);
-        setLight();
+        reg_setMMatrixPacket_setLight(o);
     }
     {
         char *c = PacketBufferStruct.ptr.c;
@@ -586,77 +590,78 @@ typedef struct { /* field names derived */
     float alpha;
 } RegClusterHead; /* derived name */
 
+static inline void reg_setCMatrixPacket_pack(Sub15C *o, float alpha)
+{
+    char *c;
+    char *m;
+    int n;
+    int i;
+
+    n = o->nodeNum * 4;
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    ((RegClusterHead *)c)->qwc = n + 1;
+    PacketBufferStruct.ptr.c = c + 0x14;
+    *(int *)(c + 0x14) = 0;
+    PacketBufferStruct.ptr.c = c + 0x18;
+    *(int *)(c + 0x18) = 0;
+    PacketBufferStruct.ptr.c = c + 0x1C;
+    ((RegClusterHead *)c)->alpha = alpha;
+    PacketBufferStruct.ptr.c = c + 0x20;
+    for (i = 0; i < o->nodeNum; i++) {
+        _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64, o->clusterMtx + i * 64);
+        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    }
+    m = PacketBufferStruct.ptr.c;
+    *(int *)m = 0x15000010;
+    m += 4;
+    PacketBufferStruct.ptr.c = m;
+    *(int *)m = 0;
+    PacketBufferStruct.ptr.c = m + 4;
+    *(long long *)(m + 4) = 0;
+    PacketBufferStruct.ptr.c = m + 0xC;
+}
+
+static inline void reg_setCMatrixPacket_light(Sub15C *o)
+{
+    char *c;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    *(long long *)c = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    *(int *)PacketBufferStruct.ptr.c = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    *(int *)PacketBufferStruct.gif.c = 0x6C088000;
+    /* the two light matrices go in through the cursor post-increment
+     * src/Primitive.c's setLight uses; the c + 0x10 store is overwritten
+     * by the first increment's store */
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx);
+    _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    *(int *)n = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    *(int *)n = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    *(long long *)(n + 4) = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
 static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
 {
     int i;
     int haslight;
-
-    inline void pack(void)
-    {
-        char *c;
-        char *m;
-        int n;
-
-        n = o->nodeNum * 4;
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
-        PacketBufferStruct.ptr.c = c + 8;
-        ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
-        PacketBufferStruct.ptr.c = c + 0x10;
-        ((RegClusterHead *)c)->qwc = n + 1;
-        PacketBufferStruct.ptr.c = c + 0x14;
-        *(int *)(c + 0x14) = 0;
-        PacketBufferStruct.ptr.c = c + 0x18;
-        *(int *)(c + 0x18) = 0;
-        PacketBufferStruct.ptr.c = c + 0x1C;
-        ((RegClusterHead *)c)->alpha = alpha;
-        PacketBufferStruct.ptr.c = c + 0x20;
-        for (i = 0; i < o->nodeNum; i++) {
-            _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64,
-                       o->clusterMtx + i * 64);
-            PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
-        }
-        m = PacketBufferStruct.ptr.c;
-        *(int *)m = 0x15000010;
-        m += 4;
-        PacketBufferStruct.ptr.c = m;
-        *(int *)m = 0;
-        PacketBufferStruct.ptr.c = m + 4;
-        *(long long *)(m + 4) = 0;
-        PacketBufferStruct.ptr.c = m + 0xC;
-    }
-    inline void light(void)
-    {
-        char *c;
-        char *n;
-
-        c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = c;
-        *(long long *)c = 0x10000009;
-        PacketBufferStruct.ptr.c = c + 8;
-        *(int *)PacketBufferStruct.ptr.c = 0;
-        PacketBufferStruct.ptr.c = c + 0xC;
-        PacketBufferStruct.gif.c = c + 0xC;
-        *(int *)PacketBufferStruct.gif.c = 0x6C088000;
-        /* the two light matrices go in through the cursor post-increment
-         * src/Primitive.c's setLight uses; the c + 0x10 store is overwritten
-         * by the first increment's store */
-        PacketBufferStruct.ptr.c = c + 0x10;
-        _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx);
-        _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx + 64);
-        n = PacketBufferStruct.ptr.c;
-        *(int *)n = 0x15000012;
-        n += 4;
-        PacketBufferStruct.ptr.c = n;
-        *(int *)n = 0;
-        PacketBufferStruct.ptr.c = n + 4;
-        *(long long *)(n + 4) = 0;
-        PacketBufferStruct.ptr.c = n + 0xC;
-    }
 
     haslight = o->lightMtx->mode != 0;
     light_MakeLightMatrix(o, 0);
@@ -664,9 +669,9 @@ static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
-    pack();
+    reg_setCMatrixPacket_pack(o, alpha);
     if (haslight) {
-        light();
+        reg_setCMatrixPacket_light(o);
     } else {
         debug_StdPrintfDummy("no light calc cluster model %s\n", o->model);
         debug_assert("src/RegistPacket.c", 1238);
@@ -1496,117 +1501,119 @@ static void reg_dispPointLineObj(Sub15C *o)
     }
 }
 
+static void reg_setNMatrixPacketNoLightCalc_setMatrix(void)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setNMatrixPacketNoLightCalc_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
+static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
+{
+    char *pkt;
+    float *box;
+    struct DObjNode *scl;
+    int mode;
+
+    scl = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+    mode = o->lightMtx->mode;
+    if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
+        _InitCurrentMatrix();
+        _SetCurrentMatrix((char *)o->nodeMtx + idx * 64);
+        _ScaleCurrentMatrix(o->nodes[idx].scale[0], o->nodes[idx].scale[1], o->nodes[idx].scale[2]);
+        _GetCurrentMatrix(matrixptr + 0x40);
+    } else {
+        _CopyMatrix(matrixptr + 0x40, (char *)o->nodeMtx + idx * 64);
+    }
+    _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
+    _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    box = o->model->box[0];
+    _SetCurrentMatrix(matrixptr + 0x300);
+    if (gsb_ClipBox(box) == 0) {
+        return 0;
+    }
+    pkt = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.dma.c = pkt;
+    PacketBufferStruct.tail.c = 0;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.end.c = 0;
+    reg_setNMatrixPacketNoLightCalc_setMatrix();
+    if (mode != 0 && mode != 3) {
+        o->model->shadowLength = src->model->shadowLength;
+        _CopyVector((char *)o + 0x860, (char *)src + 0x860);
+        _CopyMatrix((char *)o->lightMtx, (char *)src->lightMtx);
+        _CopyMatrix((char *)o->lightMtx + 64, (char *)src->lightMtx + 64);
+        _SetCurrentMatrix(matrixptr + 0x40);
+        _ClearTransCurrentMatrix();
+        _MulCurrentMatrixL((char *)o->lightMtx);
+        reg_setNMatrixPacketNoLightCalc_setLight(o);
+    }
+    {
+        char *c = PacketBufferStruct.ptr.c;
+
+        PacketBufferStruct.tail.c = c;
+        ((GifPkWord *)c)->d = 0x60000000;
+        PacketBufferStruct.ptr.c = c + 8;
+        ((GifPkWord *)(c + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = c + 0xC;
+        ((GifPkWord *)(c + 8))->w[1] = 0;
+        PacketBufferStruct.ptr.c = c + 0x10;
+    }
+    return pkt;
+}
+
 void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
 {
-    char *reg_setNMatrixPacketNoLightCalc(Sub15C * o, Sub15C * src, int idx)
-    {
-        void setMatrix(void)
-        {
-            char *c;
-            char *m;
-
-            c = PacketBufferStruct.ptr.c;
-            PacketBufferStruct.tail.c = c;
-            ((GifPkWord *)c)->d = 0x1000000D;
-            PacketBufferStruct.ptr.c = c + 8;
-            ((GifPkWord *)(c + 8))->w[0] = 0;
-            PacketBufferStruct.ptr.c = c + 0xC;
-            PacketBufferStruct.gif.c = c + 0xC;
-            ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
-            PacketBufferStruct.ptr.c = c + 0x50;
-            _CopyMatrix(c + 0x10, matrixptr + 0x140);
-            _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
-            PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
-            _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
-            m = PacketBufferStruct.ptr.c;
-            PacketBufferStruct.ptr.c = m + 0x40;
-            ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
-            PacketBufferStruct.ptr.c = m + 0x44;
-            ((GifPkWord *)(m + 0x40))->w[1] = 0;
-            PacketBufferStruct.ptr.c = m + 0x48;
-            ((GifPkWord *)(m + 0x48))->d = 0;
-            PacketBufferStruct.ptr.c = m + 0x50;
-        }
-        void setLight(void)
-        {
-            char *c;
-            char *m;
-            char *n;
-
-            c = PacketBufferStruct.ptr.c;
-            PacketBufferStruct.tail.c = c;
-            ((GifPkWord *)c)->d = 0x10000009;
-            PacketBufferStruct.ptr.c = c + 8;
-            ((GifPkWord *)(c + 8))->w[0] = 0;
-            PacketBufferStruct.ptr.c = c + 0xC;
-            PacketBufferStruct.gif.c = c + 0xC;
-            ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
-            PacketBufferStruct.ptr.c = c + 0x10;
-            _GetCurrentMatrix(c + 0x10);
-            m = PacketBufferStruct.ptr.c;
-            PacketBufferStruct.ptr.c = m + 0x80;
-            _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
-            n = PacketBufferStruct.ptr.c;
-            ((GifPkWord *)n)->w[0] = 0x15000012;
-            n += 4;
-            PacketBufferStruct.ptr.c = n;
-            ((GifPkWord *)n)->w[0] = 0;
-            PacketBufferStruct.ptr.c = n + 4;
-            ((GifPkWord *)(n + 4))->d = 0;
-            PacketBufferStruct.ptr.c = n + 0xC;
-        }
-        char *pkt;
-        float *box;
-        struct DObjNode *scl;
-        int mode;
-
-        scl = (struct DObjNode *)(idx * 80 + (int)o->nodes);
-        mode = o->lightMtx->mode;
-        if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
-            _InitCurrentMatrix();
-            _SetCurrentMatrix((char *)o->nodeMtx + idx * 64);
-            _ScaleCurrentMatrix(o->nodes[idx].scale[0], o->nodes[idx].scale[1],
-                                o->nodes[idx].scale[2]);
-            _GetCurrentMatrix(matrixptr + 0x40);
-        } else {
-            _CopyMatrix(matrixptr + 0x40, (char *)o->nodeMtx + idx * 64);
-        }
-        _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
-        _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
-        box = o->model->box[0];
-        _SetCurrentMatrix(matrixptr + 0x300);
-        if (gsb_ClipBox(box) == 0) {
-            return 0;
-        }
-        pkt = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.dma.c = pkt;
-        PacketBufferStruct.tail.c = 0;
-        PacketBufferStruct.gif.c = 0;
-        PacketBufferStruct.end.c = 0;
-        setMatrix();
-        if (mode != 0 && mode != 3) {
-            o->model->shadowLength = src->model->shadowLength;
-            _CopyVector((char *)o + 0x860, (char *)src + 0x860);
-            _CopyMatrix((char *)o->lightMtx, (char *)src->lightMtx);
-            _CopyMatrix((char *)o->lightMtx + 64, (char *)src->lightMtx + 64);
-            _SetCurrentMatrix(matrixptr + 0x40);
-            _ClearTransCurrentMatrix();
-            _MulCurrentMatrixL((char *)o->lightMtx);
-            setLight();
-        }
-        {
-            char *c = PacketBufferStruct.ptr.c;
-
-            PacketBufferStruct.tail.c = c;
-            ((GifPkWord *)c)->d = 0x60000000;
-            PacketBufferStruct.ptr.c = c + 8;
-            ((GifPkWord *)(c + 8))->w[0] = 0;
-            PacketBufferStruct.ptr.c = c + 0xC;
-            ((GifPkWord *)(c + 8))->w[1] = 0;
-            PacketBufferStruct.ptr.c = c + 0x10;
-        }
-        return pkt;
-    }
     PObjModel *mdl;
     PObjGroup *grp;
     char *pk;
@@ -1720,6 +1727,72 @@ void reg_RenderReflection(Sub15C *o, int pri)
    code and three zero words, copied as one quadword. */
 static const sceVu0IVECTOR regEnemyEndTag = {0x15000010, 0, 0, 0}; /* derived name */
 
+static inline void reg_setEMatrixPacket_pack(Sub15C *o, float alpha)
+{
+    char *c;
+    char *m;
+    int n;
+    int i;
+
+    /* the object's matrix count through the object record, the view
+     * reg_setMMatrixPacket takes of o */
+    n = o->nodeNum * 4;
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    ((RegClusterHead *)c)->qwc = n + 1;
+    PacketBufferStruct.ptr.c = c + 0x14;
+    *(int *)(c + 0x14) = 0;
+    PacketBufferStruct.ptr.c = c + 0x18;
+    *(int *)(c + 0x18) = 0;
+    PacketBufferStruct.ptr.c = c + 0x1C;
+    ((RegClusterHead *)c)->alpha = alpha;
+    PacketBufferStruct.ptr.c = c + 0x20;
+    for (i = 0; i < o->nodeNum; i++) {
+        _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64, o->clusterMtx + i * 64);
+        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    }
+    m = PacketBufferStruct.ptr.c;
+    *(Qw128 *)m = *(Qw128 *)&regEnemyEndTag;
+    m += 0x10;
+    PacketBufferStruct.ptr.c = m;
+}
+
+static void reg_setEMatrixPacket(Sub15C *o, int prilist, float alpha)
+{
+    int i;
+
+    PacketBufferStruct.dma.c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = 0;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.end.c = 0;
+    reg_setEMatrixPacket_pack(o, alpha);
+    {
+        char *c = PacketBufferStruct.ptr.c;
+
+        PacketBufferStruct.tail.c = c;
+        ((DpkTag *)c)->tag = 0x60000000;
+        PacketBufferStruct.ptr.c = c + 8;
+        ((DpkTag *)c)->vif[0] = 0;
+        PacketBufferStruct.ptr.c = c + 0xC;
+        ((DpkTag *)c)->vif[1] = 0;
+        PacketBufferStruct.ptr.c = c + 0x10;
+    }
+    for (i = 0; i < 13; i++) {
+        if ((prilist >> i) & 1) {
+            dl_SetDLPriority(i);
+            dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+            dl_CloseDma();
+        }
+    }
+}
+
 void reg_DispEnemy(void *sub)
 {
     Sub15C *o = sub;
@@ -1729,72 +1802,6 @@ void reg_DispEnemy(void *sub)
     float alpha;
     int i;
     int pri;
-
-    void reg_setEMatrixPacket(Sub15C * o, int prilist, float alpha)
-    {
-        int i;
-
-        inline void pack(void)
-        {
-            char *c;
-            char *m;
-            int n;
-
-            /* the object's matrix count through the object record, the view
-             * reg_setMMatrixPacket takes of o */
-            n = o->nodeNum * 4;
-            c = PacketBufferStruct.ptr.c;
-            PacketBufferStruct.tail.c = c;
-            ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
-            PacketBufferStruct.ptr.c = c + 8;
-            ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
-            PacketBufferStruct.ptr.c = c + 0xC;
-            PacketBufferStruct.gif.c = c + 0xC;
-            ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
-            PacketBufferStruct.ptr.c = c + 0x10;
-            ((RegClusterHead *)c)->qwc = n + 1;
-            PacketBufferStruct.ptr.c = c + 0x14;
-            *(int *)(c + 0x14) = 0;
-            PacketBufferStruct.ptr.c = c + 0x18;
-            *(int *)(c + 0x18) = 0;
-            PacketBufferStruct.ptr.c = c + 0x1C;
-            ((RegClusterHead *)c)->alpha = alpha;
-            PacketBufferStruct.ptr.c = c + 0x20;
-            for (i = 0; i < o->nodeNum; i++) {
-                _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64,
-                           o->clusterMtx + i * 64);
-                PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
-            }
-            m = PacketBufferStruct.ptr.c;
-            *(Qw128 *)m = *(Qw128 *)&regEnemyEndTag;
-            m += 0x10;
-            PacketBufferStruct.ptr.c = m;
-        }
-
-        PacketBufferStruct.dma.c = PacketBufferStruct.ptr.c;
-        PacketBufferStruct.tail.c = 0;
-        PacketBufferStruct.gif.c = 0;
-        PacketBufferStruct.end.c = 0;
-        pack();
-        {
-            char *c = PacketBufferStruct.ptr.c;
-
-            PacketBufferStruct.tail.c = c;
-            ((DpkTag *)c)->tag = 0x60000000;
-            PacketBufferStruct.ptr.c = c + 8;
-            ((DpkTag *)c)->vif[0] = 0;
-            PacketBufferStruct.ptr.c = c + 0xC;
-            ((DpkTag *)c)->vif[1] = 0;
-            PacketBufferStruct.ptr.c = c + 0x10;
-        }
-        for (i = 0; i < 13; i++) {
-            if ((prilist >> i) & 1) {
-                dl_SetDLPriority(i);
-                dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
-                dl_CloseDma();
-            }
-        }
-    }
 
     mdl = o->model;
     grp = mdl->groups;

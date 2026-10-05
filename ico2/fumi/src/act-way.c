@@ -503,17 +503,16 @@ done:
     return 1;
 }
 
+static unsigned char way_flag(int flags, int mask) /* derived name */
+{
+    if (flags & mask) {
+        return 1;
+    }
+    return 0;
+}
+
 int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
 {
-    /* an inline function nested in the body: whether flags has the mask's bits */
-    inline unsigned char way_flag(int mask) /* derived name */
-    {
-        if (flags & mask) {
-            return 1;
-        }
-        return 0;
-    }
-
     Act *w = GOBJ_ACT(self);
     char *node;
     float d2[4];
@@ -522,14 +521,14 @@ int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
     float pos[4];
     float f;
 
-    if (way_flag(1)) {
+    if (way_flag(flags, 1)) {
         sceVu0ScaleVector(v, dir, -1.0f);
     } else {
         v[0] = dir[0];
         v[1] = dir[1];
         v[2] = dir[2];
     }
-    if (way_flag(4)) {
+    if (way_flag(flags, 4)) {
         GetRootProjectionPosOfGObj(pos, tgt);
         if (WayMove_CheckCollis(pos, v, 0, 0)) {
             v[0] = pos[0];
@@ -562,7 +561,7 @@ int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
                 return 1;
             }
         }
-        if (f < 200.0f || way_flag(2)) {
+        if (f < 200.0f || way_flag(flags, 2)) {
             w->stick.mag = 0.5f;
         } else {
             w->stick.mag = 1.0f;

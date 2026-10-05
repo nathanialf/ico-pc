@@ -70,6 +70,15 @@ void file_Init(void)
     debug_StdPrintfDummy("done.\n");
 }
 
+/* the load report every switch arm calls (was nested; fname, adr and size are
+   passed in) */
+static inline void PrintLoad(char *fname, void **adr, int size) /* derived name */
+{
+    debug_StdPrintfDummy(
+        "loading:\"\033[33m%s\033[m\" (address:\033[35m%p\033[m/size:\033[35m%d\033[m)", fname,
+        *adr, size);
+}
+
 static int file_LoadCDFile(void **adr, char *fname, int area)
 {
     char path[256];
@@ -83,15 +92,6 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     int asize;
     int sec;
     int err;
-
-    /* the load report, a nested function every switch arm calls; it reads
-       fname, adr and size from the enclosing frame */
-    inline void PrintLoad(void) /* derived name */
-    {
-        debug_StdPrintfDummy(
-            "loading:\"\033[33m%s\033[m\" (address:\033[35m%p\033[m/size:\033[35m%d\033[m)", fname,
-            *adr, size);
-    }
 
     path[0] = '\\';
     d = &path[1];
@@ -128,58 +128,58 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     case 2:
     case 4:
         *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c", 349);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_seki->start) * 100.0f /
                                  10059776.0f);
         break;
     case 1:
         *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c", 357);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
                              ((int)*adr + asize - (int)ios_partition_sugipon->start) * 100.0f /
                                  524288.0f);
         break;
     case 3:
         *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c", 366);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(
             " to static motion area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 1179648.0f,
             ((int)*adr + asize - (int)ios_partition_smotion->start) * 100.0f / 1179648.0f);
         break;
     case 5:
         *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c", 375);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(
             " to dynamic motion area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 3670016.0f,
             ((int)*adr + asize - (int)ios_partition_dmotion->start) * 100.0f / 3670016.0f);
         break;
     case 6:
         *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c", 384);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_hara->start) * 100.0f);
         break;
     case 7:
         *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c", 392);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_oomori->start) * 100.0f /
                                  327680.0f);
         break;
     case 8:
         *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c", 400);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to horagai-area.\n");
         break;
     case 9:
         *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c", 405);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound-area.\n");
         break;
     case 10:
         *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c", 410);
-        PrintLoad();
+        PrintLoad(fname, adr, size);
         debug_StdPrintfDummy(" to sound_semi-area.\n");
         break;
     }

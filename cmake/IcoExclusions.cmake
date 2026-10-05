@@ -10,8 +10,8 @@
 #               distance_squared_b and distance_squared_xz are static inline
 #               functions in a header: clang rejects their asm in every TU
 #               that includes it, gcc only in TUs that call them.
-#   break-asm   `__asm__("break")`, the EE debug trap: package 0B (a host
-#               trap macro).
+#   break-asm   fumi/ios/memory.c only: `__asm__("break")`, the EE debug trap
+#               (the others use ICO_BREAK() from typedef.h): package 1B.
 #   nested-fn   GNU C nested functions, which clang does not implement (gcc
 #               does): package 0B, or the toolchain decision (BUILD_STATUS.md).
 #   decl        a declaration conflicting with an earlier implicit one
@@ -20,20 +20,18 @@
 # Fail with every compiler.
 set(ICO_BLOCKED_SOURCES
     ico2/fumi/ios/memory.c                  # break-asm
-    ico2/fumi/sound/s_init.c                # break-asm
-    ico2/fumi/src/commonact.c               # vu0-asm (sugiCommon.h); nested-fn
+    ico2/fumi/src/commonact.c               # vu0-asm (sugiCommon.h)
     ico2/fumi/src/fieldCollision.c          # vu0-asm (sugiCommon.h)
     ico2/ito/src/itou_sub.c                 # vu0-asm
-    ico2/script/src/warpGirl.c              # break-asm
     ico2/seki/src/BgAnimation.c             # vu0-asm
     ico2/sugipon/src/a_p_1.c                # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/act_a_p_1.c            # vu0-asm (sugiCommon.h)
-    ico2/sugipon/src/box.c                  # vu0-asm (sugiCommon.h); nested-fn
+    ico2/sugipon/src/box.c                  # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/enemy.c                # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/geometryManager.c      # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/girlForceField.c       # vu0-asm (sugiCommon.h)
-    ico2/sugipon/src/item.c                 # vu0-asm (sugiCommon.h); nested-fn
-    ico2/sugipon/src/motionManager.c        # vu0-asm (sugiCommon.h); nested-fn; decl
+    ico2/sugipon/src/item.c                 # vu0-asm (sugiCommon.h)
+    ico2/sugipon/src/motionManager.c        # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/motionManager2.c       # vu0-asm (sugiCommon.h and its own); nested-fn
     ico2/sugipon/src/spider.c               # vu0-asm (sugiCommon.h)
     ico2/sugipon/src/stormTest.c            # vu0-asm
@@ -44,29 +42,15 @@ set(ICO_BLOCKED_SOURCES
 
 # Fail with clang only (the default presets); the *-gcc presets compile them.
 set(ICO_BLOCKED_SOURCES_CLANG
-    ico2/fumi/src/act-env.c                 # nested-fn
-    ico2/fumi/src/act-game.c                # nested-fn
-    ico2/fumi/src/act-parallel-control.c    # nested-fn
-    ico2/fumi/src/act-way.c                 # nested-fn
-    ico2/fumi/src/boyact.c                  # nested-fn
-    ico2/fumi/src/enemy_act.c               # nested-fn; vu0-asm (sugiCommon.h, unused)
-    ico2/fumi/src/girl_act.c                # nested-fn
-    ico2/fumi/src/way_sys.c                 # nested-fn
+    ico2/fumi/src/enemy_act.c               # vu0-asm (sugiCommon.h, unused)
     ico2/ito/src/act_bird.c                 # vu0-asm (sugiCommon.h, unused)
     ico2/ito/src/itou_boss.c                # vu0-asm (sugiCommon.h, unused)
-    ico2/omori/src/camera-editor.c          # nested-fn
-    ico2/omori/src/chain.c                  # nested-fn
     ico2/omori/src/enemy-control.c          # vu0-asm (sugiCommon.h, unused)
-    ico2/script/src/op.c                    # nested-fn
     ico2/script/src/script.c                # vu0-asm (sugiCommon.h, unused)
-    ico2/script/src/st22a.c                 # nested-fn
-    ico2/seki/src/FileManager.c             # nested-fn
-    ico2/sugipon/src/boy.c                  # nested-fn; vu0-asm (sugiCommon.h, unused)
+    ico2/sugipon/src/boy.c                  # vu0-asm (sugiCommon.h, unused)
     ico2/sugipon/src/enemyParts.c           # vu0-asm (sugiCommon.h, unused)
     ico2/sugipon/src/frameDependSequence.c  # vu0-asm (sugiCommon.h, unused)
-    ico2/sugipon/src/handManager.c          # nested-fn
-    ico2/sugipon/src/motionOrientManager.c  # nested-fn
-    ico2/sugipon/src/motionViewer.c         # nested-fn; vu0-asm (sugiCommon.h, unused)
+    ico2/sugipon/src/motionViewer.c         # vu0-asm (sugiCommon.h, unused)
     ico2/sugipon/src/pool.c                 # vu0-asm (sugiCommon.h, unused)
     ico2/sugipon/src/rope.c                 # vu0-asm (sugiCommon.h, unused)
     ico2/sugipon/src/waterDot.c             # vu0-asm (sugiCommon.h, unused)

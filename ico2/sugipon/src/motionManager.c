@@ -19,6 +19,7 @@
 #include "fieldCollision.h"
 #include "motionManager.h"
 #include "DisplayP2O.h"
+#include "GifPacket.h"
 #include <libvu0.h>
 #include <assert.h>
 
@@ -736,9 +737,6 @@ static void dispLastNode(void)
 }
 
 #include "motMan_rootUpdate.c.inc"
-/* GifPacket.h is read here, after dispActNode, which calls the gif packet
-   functions undeclared */
-#include "GifPacket.h"
 #include "DObj.h"
 
 static SkelNode *skelNode = 0; /* derived name */

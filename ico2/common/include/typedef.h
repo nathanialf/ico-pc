@@ -95,6 +95,7 @@ static inline float absf(float x)
  *                    operand; pass pointers through ICO_ADDR.
  * ICO_INVALID_PTR    the all-ones pointer the scripts use as "none".
  * ICO_POSTINC(T, p)  `((T)(p))++`, the cast-as-lvalue post-increment.
+ * ICO_BREAK()       the EE debug trap (`break`); __builtin_trap() on the host.
  * ICO_SPR_ADDR(off)  the address `off` bytes into the 16 KB scratchpad
  *                    (0x70000000 on the EE); the host points it at
  *                    ico_scratchpad, defined in seki/src/Basic.c.
@@ -111,6 +112,7 @@ typedef ICO_QW ICO_UQW;
 #define ICO_INVALID_PTR ((void *)(__UINTPTR_TYPE__)-1)
 extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
 #define ICO_SPR_ADDR(off) ((__UINTPTR_TYPE__)ico_scratchpad + (off))
+#define ICO_BREAK() __builtin_trap()
 /* ICO_POSTINC(T, p): `((T)(p))++`, a cast used as an lvalue that ee-gcc 2.9
  * allows and the host compiler does not.  Yields (T)p and advances the byte
  * pointer p by sizeof(*(T)p). */
@@ -129,6 +131,7 @@ typedef unsigned int ICO_UQW __attribute__((mode(TI)));
 #define ICO_UNCACHED_ACCEL(p) ((p) | 0x30000000)
 #define ICO_INVALID_PTR ((void *)0xFFFFFFFF)
 #define ICO_SPR_ADDR(off) (0x70000000 | (off))
+#define ICO_BREAK() __asm__ __volatile__("break")
 #define ICO_POSTINC(T, p) ((T)(p))++
 #endif
 

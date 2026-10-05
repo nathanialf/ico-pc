@@ -402,6 +402,11 @@ static void dispClothes(GObj *gobj)
 /* A file static; girl.c has its own of the same name.  The five else-arm
  * calls go through one nested inline helper, as clothAnimation.c's
  * interHalf does. */
+static __inline__ void setClothDetail(void *cloth, float x, float wt) /* derived name */
+{
+    GetCloth4DWithDetail(cloth, x, 0.98f, 1.0f, wt);
+}
+
 static void execClothes(GObj *gobj)
 {
     BoyWork *w = GOBJ_SUB(gobj)->work;
@@ -417,16 +422,11 @@ static void execClothes(GObj *gobj)
         float f = w->detail;
         float x = f * 5.0f + 3.0f;
         float wt = 1.0f - f;
-        __inline__ void setClothDetail(void *cloth) /* derived name */
-        {
-            GetCloth4DWithDetail(cloth, x, 0.98f, 1.0f, wt);
-        }
-
-        setClothDetail(w->mantle);
-        setClothDetail(w->tape);
-        setClothDetail(w->tapeB);
-        setClothDetail(w->tapeBoro1);
-        setClothDetail(w->tapeBoro2);
+        setClothDetail(w->mantle, x, wt);
+        setClothDetail(w->tape, x, wt);
+        setClothDetail(w->tapeB, x, wt);
+        setClothDetail(w->tapeBoro1, x, wt);
+        setClothDetail(w->tapeBoro2, x, wt);
         w->detail *= 0.999f;
     }
 }
@@ -484,22 +484,22 @@ inline void LightLineGeo(void)
     }
 }
 
+/* reads the caller's loop index i (passed in); inlined at both call sites */
+static inline int LightLineVtx(int i, LLVec *dst, float ph) /* derived name */
+{
+    float f = ph * 18.99998f;
+    LLVec *p = llExtGeo->line[i];
+
+    sceVu0InterVector(dst, &p[(int)f + 1], &p[(int)f], f - (int)f);
+
+    dst->w = 1.0f;
+
+    return (int)f;
+}
+
 void LightLineDL(void)
 {
     int i;
-    /* this helper reads the enclosing loop's index i rather than taking it
-       as an argument; it is inlined at both call sites */
-    inline int LightLineVtx(LLVec * dst, float ph) /* derived name */
-    {
-        float f = ph * 18.99998f;
-        LLVec *p = llExtGeo->line[i];
-
-        sceVu0InterVector(dst, &p[(int)f + 1], &p[(int)f], f - (int)f);
-
-        dst->w = 1.0f;
-
-        return (int)f;
-    }
     LLColor c0;
     LLColor c1;
     LLVec p0;
@@ -525,8 +525,8 @@ void LightLineDL(void)
     for (i = 0; i < 100; i++) {
         for (t = 0.0f; t + 0.05f < llExtGeo->phase[i] && t + 0.05f < 0.4f; t += 0.05f) {
             d = 0.4f - t;
-            n0 = LightLineVtx(&p0, llExtGeo->phase[i] - t);
-            n1 = LightLineVtx(&p1, llExtGeo->phase[i] - t - 0.05f);
+            n0 = LightLineVtx(i, &p0, llExtGeo->phase[i] - t);
+            n1 = LightLineVtx(i, &p1, llExtGeo->phase[i] - t - 0.05f);
 
             r0 = d * 32.0f * bright;
             g0 = d * 128.0f * bright;

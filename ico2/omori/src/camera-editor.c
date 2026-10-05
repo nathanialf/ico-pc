@@ -743,6 +743,38 @@ static unsigned char planeFaceColor[4] = {32, 32, 32, 64}; /* derived name */
 
 static unsigned char planeHiddenFaceColor[4] = {2, 2, 2, 64}; /* derived name */
 
+/* dispBox was nested in CameraEdit_DispBoxType2_Plane; v, m and sel are passed in. */
+static void dispBox(unsigned char *ca, unsigned char *cb, CamVtx *v, float m[4][4], int sel)
+{
+    int n;
+    float e0[4], e1[4], e2[4], e3[4];
+    float g0[4], g1[4], g2[4], g3[4];
+    unsigned char *col;
+    int j;
+    int k;
+
+    for (n = 0; n < 6; n++) {
+        col = (n != sel) ? cb : ca;
+        for (j = 0; j < 3; j++) {
+            _InterGV(e0, &v[planeFaceCorner[n][0]].x, &v[planeFaceCorner[n][1]].x, (float)j,
+                     (float)(3 - j));
+            _InterGV(e1, &v[planeFaceCorner[n][0]].x, &v[planeFaceCorner[n][1]].x, (float)(j + 1),
+                     (float)(2 - j));
+            _InterGV(e2, &v[planeFaceCorner[n][2]].x, &v[planeFaceCorner[n][3]].x, (float)j,
+                     (float)(3 - j));
+            _InterGV(e3, &v[planeFaceCorner[n][2]].x, &v[planeFaceCorner[n][3]].x, (float)(j + 1),
+                     (float)(2 - j));
+            for (k = 0; k < 3; k++) {
+                _InterGV(g0, e0, e2, (float)k, (float)(3 - k));
+                _InterGV(g1, e0, e2, (float)(k + 1), (float)(2 - k));
+                _InterGV(g2, e1, e3, (float)k, (float)(3 - k));
+                _InterGV(g3, e1, e3, (float)(k + 1), (float)(2 - k));
+                DrawPolygon(g0, g1, g2, g3, col, m);
+            }
+        }
+    }
+}
+
 void CameraEdit_DispBoxType2_Plane(int box, int sel)
 {
     int n;
@@ -762,38 +794,6 @@ void CameraEdit_DispBoxType2_Plane(int box, int sel)
         unsigned int *c1;
         int i;
 
-        /* dispBox is nested: it reaches the parent's v[], m[][], n and sel
-         * directly. */
-        void dispBox(unsigned char *ca, unsigned char *cb)
-        {
-            float e0[4], e1[4], e2[4], e3[4];
-            float g0[4], g1[4], g2[4], g3[4];
-            unsigned char *col;
-            int j;
-            int k;
-
-            for (n = 0; n < 6; n++) {
-                col = (n != sel) ? cb : ca;
-                for (j = 0; j < 3; j++) {
-                    _InterGV(e0, &v[planeFaceCorner[n][0]].x, &v[planeFaceCorner[n][1]].x, (float)j,
-                             (float)(3 - j));
-                    _InterGV(e1, &v[planeFaceCorner[n][0]].x, &v[planeFaceCorner[n][1]].x,
-                             (float)(j + 1), (float)(2 - j));
-                    _InterGV(e2, &v[planeFaceCorner[n][2]].x, &v[planeFaceCorner[n][3]].x, (float)j,
-                             (float)(3 - j));
-                    _InterGV(e3, &v[planeFaceCorner[n][2]].x, &v[planeFaceCorner[n][3]].x,
-                             (float)(j + 1), (float)(2 - j));
-                    for (k = 0; k < 3; k++) {
-                        _InterGV(g0, e0, e2, (float)k, (float)(3 - k));
-                        _InterGV(g1, e0, e2, (float)(k + 1), (float)(2 - k));
-                        _InterGV(g2, e1, e3, (float)k, (float)(3 - k));
-                        _InterGV(g3, e1, e3, (float)(k + 1), (float)(2 - k));
-                        DrawPolygon(g0, g1, g2, g3, col, m);
-                    }
-                }
-            }
-        }
-
         sceVu0UnitMatrix(m);
         m[0][0] = m[1][1] = m[2][2] = -1.0f;
         sceVu0MulMatrix(m, matrixptr + 0x80, m);
@@ -802,9 +802,9 @@ void CameraEdit_DispBoxType2_Plane(int box, int sel)
         gif_SetAlpha(1, 5, 0);
         gif_SetZWrite(0);
         gif_SetZTest(1);
-        dispBox(planeFaceColorSel, planeFaceColor);
+        dispBox(planeFaceColorSel, planeFaceColor, v, m, sel);
         gif_SetZTest(0);
-        dispBox(planeHiddenFaceColorSel, planeHiddenFaceColor);
+        dispBox(planeHiddenFaceColorSel, planeHiddenFaceColor, v, m, sel);
         after_DrawPolygon();
         c0 = planeEdgeColorSel;
         c1 = planeHiddenEdgeColorSel;
