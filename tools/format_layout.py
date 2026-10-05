@@ -22,6 +22,7 @@ import re, sys
 
 INCLUDE = re.compile(r"^#\s*include\b")
 PP = re.compile(r"^#")
+COND = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b")
 DECL_START = re.compile(r"^(extern\b|static\s+inline\b[^{]*\)\s*;|inline\b[^{]*\)\s*;|[A-Za-z_][\w \*]*\b[A-Za-z_]\w*\s*\([^;{]*\)\s*;)")
 
 
@@ -78,11 +79,29 @@ def items(lines):
             result.append((cur_kind, cur))
         cur, cur_kind = [], None
 
+    # brace depth through #if arms: each arm starts at the depth of its #if,
+    # and #endif leaves the first arm's depth (an #ifdef ICO_HOST arm and its
+    # #else may each open the same function)
+    conds = []
+
     i = 0
     while i < len(lines):
         raw = lines[i]
         code = strip_code(raw, state)
         stripped = raw.strip()
+        cond = COND.match(code)
+        if cond:
+            word = cond.group(1)
+            if word in ("if", "ifdef", "ifndef"):
+                conds.append([depth, None])
+            elif conds and word in ("elif", "else"):
+                if conds[-1][1] is None:
+                    conds[-1][1] = depth
+                depth = conds[-1][0]
+            elif conds and word == "endif":
+                at_if, first = conds.pop()
+                if first is not None:
+                    depth = first
         if depth == 0 and not cur:
             if stripped == "":
                 # a blank line ends a standalone comment
