@@ -118,47 +118,20 @@ developer mode).
   handler reports (`docs/port/BOOT_DIAG.md`).
 - **`fptodp`** (libgcc soft-float): 0; only passed to debug printfs.
 
-## The null sound driver's ADPCM streams (`port/null/snd_null.c`, package 1E)
+## Sound (the null driver is gone, package 4B)
 
-The Sg API is otherwise silent: requests are accepted and nothing ever
-sounds. ADPCM streams are the exception, because the game reads their
-progress back.
-
-- **Open.** A stream opens through the cdvd background reader
-  (`fumi/sound/adpcm_init.c` `AdpcmOpen` → `adpcmOpenProc` reads the first
-  368 KB into IOP RAM; `AdpcmOpenSync` returns -1 until it has). The
-  opening demo's skip waits on that open (`script/src/op.c:161`,
-  `titleSubAdpcm`), not on the driver. It completes headless: the 1E
-  `ref-m32` run reached the title and set flag 382 at tick 661.
-- **Progress.** `adpcmTickProc` refills the IOP ring behind
-  `SgStAdpcmIopReadAddr`. `adpcmTickProc2` counts loops from it and closes a
-  stream once it has played `loopNum` times. Scripts wait for that close
-  (`op.c:516` `while (adpcm_conte01_sea != 0)` after a play-once
-  `scpAdpcmPlayRequestFunc`; the `scpAdpcmPlayRequestNum() != 0` checks in
-  `st01b.c`, `st02a.c`, `st07a.c`, `st17a.c`, `st18a.c`, `st24a.c`). A read
-  offset that never moved would hold them forever. So `snd_null.c` advances
-  each playing stream as SNDN2DRV does (`docs/research/sndn2drv.md`, "ADPCM
-  streams"):
-  - `SgStAdpcmOpen` records the slot's channel count (`attr >> 16`), IOP
-    ring size and SPU ring size (the request's last field, 0x4000);
-  - `SgStAdpcmChannelPitch` sets its sample rate in Hz;
-  - `SgStAdpcmPlay` counts the first half fill (read offset += SPU ring/2 ×
-    channels);
-  - every `SgCalledTickProc` (the sound thread runs once per vsync; PAL,
-    50 Hz assumed) adds the samples played. Each time half the SPU ring
-    (8 KB, 14336 samples) has played, the offset moves on by another half
-    fill, modulo the IOP ring;
-  - a rate of 0 (`adpcmTickProc2` while paused or the disc is not ready)
-    holds the stream; `SgStAdpcmStop` and `SgStAdpcmClose` clear the
-    offset.
-
-  So a stream lasts its real length in simulated time, and the background
-  reader refills its ring from the disc as on the PS2. Phase 4's
-  `sndn2_host.c` replaces this with the real mixer. The model is tested in
-  `port/null/test/null_devices_test.c` (`test_adpcm_stream`).
-- **Not modelled.** The one-DMA-per-tick queue, so key-on comes at once, not
-  on the third tick; NAX-based half tracking; PCM streams (FMV audio, Phase
-  4).
+`port/null/snd_null.c` (package 1E: a silent Sg API and an ADPCM read
+offset advanced in simulated time) was removed in 4B. Headless builds run
+the real sequencer (`port/audio/sg/sound.c`), the SNDN2DRV host and the
+software SPU2 (docs/port/AUDIO.md); only the output is dropped, unless ini
+`audio_dump=` writes it to a WAV. The game therefore sees what it would on
+a PS2 with sound: voices report their envelopes (slots are released when
+they finish), ADPCM streams advance by NAX through the one-DMA-per-tick
+queue (key on in the third tick, read offsets one tick behind the DMA), and
+the scripts that wait for a stream's close (`script/src/op.c:516` and the
+`scpAdpcmPlayRequestNum` checks) are released by the real loop count. The
+run is a function of the vsync count only, so it stays deterministic. The
+1E model's tests moved to `port/audio/test/sndn2_test.c`.
 
 ## Known differences from a renderer build
 

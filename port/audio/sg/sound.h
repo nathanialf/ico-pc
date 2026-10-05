@@ -1,5 +1,6 @@
 /*
- * sce/libsndn2/sound.h  (derived name: named after the member, sound.o)
+ * port/audio/sg/sound.h  (was sce/libsndn2/sound.h; derived name: named
+ * after the member, sound.o)
  *
  * The declarations sound.c needs ahead of their definitions: the Sg reverb
  * entry points the parameter controller calls, the _Sg DMA helper, the
@@ -9,6 +10,15 @@
  * code calls; and the stream PCM calls the movie player's audio decoder makes.
  * Each prototype is the signature of its definition in sound.c, which
  * includes this header.
+ *
+ * Phase 4B moved it here from sce/libsndn2/ (which keeps a forwarding
+ * header for the PS2 build) and made it the host build's header too
+ * (port/compat/sound.h includes it with ICO_SG_HOST_HEADER, so port code
+ * built without ICO_HOST gets the host view too).  Under ICO_HOST the one
+ * EE-sized type
+ * becomes host-correct (the EE's `long` is 64 bits) and SgSetSePitchDirect,
+ * which the EE header leaves out (s_init.c declares it itself), is
+ * declared.
  */
 #ifndef SCE_LIBSNDN2_SOUND_H
 #define SCE_LIBSNDN2_SOUND_H
@@ -104,6 +114,15 @@ int SgStPcmStop(unsigned long long mask);
 int SgStPcmLseek(unsigned int ch, unsigned int offset);
 void SgStPcmVolume(unsigned long long mask, unsigned int left, int right);
 int SgStPcmIopReadAddr(unsigned int ch);
+
+#if defined(ICO_HOST) || defined(ICO_SG_HOST_HEADER)
+
+void SgSetSePitchDirect(unsigned int id, int pitch);
+int SgStPcmBufMode(int mode, long long mask, int addr); /* EE long: 64 bits */
+
+#else
+
 int SgStPcmBufMode(int mode, long mask, int addr);
 
+#endif
 #endif /* SCE_LIBSNDN2_SOUND_H */

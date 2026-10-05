@@ -14,7 +14,9 @@
 #                          time through it, so no import library is needed
 #   deps/sdl3/linux-x64/   SDL3 (zlib) built from the release source tarball
 #                          with the pinned CMake and the host gcc, installed
-#                          as a CMake package (lib/cmake/SDL3)
+#                          as a CMake package (lib/cmake/SDL3); X11 video and
+#                          ALSA (and PulseAudio when the host has libpulse)
+#                          audio backends, loaded with dlopen
 #   deps/sdl3/mingw/       SDL's own mingw development release: the
 #                          x86_64-w64-mingw32 and i686-w64-mingw32 prefixes
 #   deps/vulkan-validation/ the Khronos validation layer (Apache-2.0) from
@@ -52,6 +54,41 @@ fetch() {
 # stamped <dir> <id>: true when <dir> already holds release <id>.
 stamped() {
     [[ -f "$1/.ico-release" && "$(cat "$1/.ico-release")" == "$2" ]]
+}
+
+# unpack_debs <dest> "<pool path> <sha256>"...: fetch pinned Debian packages
+# (deb.debian.org, else DEB_SNAPSHOT), check them and unpack them into
+# <dest>. Their lib*.so development links, relative to their own lib dir,
+# are pointed at the host's runtime libraries (dangling when the host has
+# none, so CMake does not find them).
+unpack_debs() {
+    local dest="$1" entry path sum deb so tgt
+    shift
+    command -v dpkg-deb >/dev/null 2>&1 || {
+        echo "fetch_deps: dpkg-deb not found; cannot unpack the Debian header packages" >&2
+        exit 1
+    }
+    DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
+    for entry in "$@"; do
+        path="${entry% *}"
+        sum="${entry#* }"
+        deb="$TMP/$(basename "$path")"
+        echo "==> fetching $(basename "$path")"
+        if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
+            curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
+        fi
+        echo "${sum}  ${deb}" | sha256sum -c -
+        dpkg-deb -x "$deb" "$dest"
+    done
+    for so in "$dest"/usr/lib/x86_64-linux-gnu/lib*.so; do
+        [[ -L "$so" ]] || continue
+        tgt="$(readlink "$so")"
+        tgt="${tgt##*/}"
+        rm -f "$so"
+        if [[ -e "/usr/lib/x86_64-linux-gnu/$tgt" ]]; then
+            ln -s "/usr/lib/x86_64-linux-gnu/$tgt" "$so"
+        fi
+    done
 }
 
 # --- 1. Vulkan-Headers and volk ----------------------------------------------
@@ -105,7 +142,10 @@ SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VE
 # missing. SDL loads its video and audio backends with dlopen, so the
 # library runs on hosts with more or fewer of them.
 SDL3_LINUX="$DEST/sdl3/linux-x64"
-SDL3_LINUX_ID="SDL3-${SDL3_VERSION}"
+# "+audio": the build with the ALSA/PulseAudio headers (Phase 4B); a tree
+# stamped by an older run of this script (X11 only, no audio backend) is
+# rebuilt.
+SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio"
 CMAKE_BIN="${ICO_CMAKE:-}"
 if [[ -z "$CMAKE_BIN" ]]; then
     if [[ -x "$ROOT/tools/toolchain/cmake/bin/cmake" ]]; then
@@ -129,10 +169,6 @@ else
     X11DEV="$TMP/x11dev"
     mkdir -p "$X11DEV"
     if ! [[ -f /usr/include/X11/extensions/Xext.h ]]; then
-        command -v dpkg-deb >/dev/null 2>&1 || {
-            echo "fetch_deps: dpkg-deb not found and the X11 extension headers are missing" >&2
-            exit 1
-        }
         X11_DEBS=(
             "pool/main/libx/libxext/libxext-dev_1.3.4-1+b3_amd64.deb e6bd898976d762a6955ec465870e7f12a3b149f4c5b231b0687e293ed5726532"
             "pool/main/libx/libxrandr/libxrandr-dev_1.5.4-1+b3_amd64.deb e408e4f8c77135725e9055d445635587225839a929d348c04b85adfa84bdefb1"
@@ -141,28 +177,22 @@ else
             "pool/main/libx/libxfixes/libxfixes-dev_6.0.0-2+b4_amd64.deb 1070e0721765992c5355a9585f6eae9e0d11437a7d2b4a2c28123e6e5b0c0b2f"
             "pool/main/libx/libxrender/libxrender-dev_0.9.12-1_amd64.deb 55121741c44e03cbeb03dabb5721ded1341c987f055d7cae991de7431c9edfa6"
         )
-        DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
-        for entry in "${X11_DEBS[@]}"; do
-            path="${entry% *}"
-            sum="${entry#* }"
-            deb="$TMP/$(basename "$path")"
-            echo "==> fetching $(basename "$path")"
-            if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
-                curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
-            fi
-            echo "${sum}  ${deb}" | sha256sum -c -
-            dpkg-deb -x "$deb" "$X11DEV"
-        done
-        # The packages' lib*.so links are relative to their own lib dir;
-        # point them at the host's runtime libraries instead.
-        for so in "$X11DEV"/usr/lib/x86_64-linux-gnu/lib*.so; do
-            [[ -L "$so" ]] || continue
-            tgt="$(readlink "$so")"
-            rm -f "$so"
-            if [[ -e "/usr/lib/x86_64-linux-gnu/$tgt" ]]; then
-                ln -s "/usr/lib/x86_64-linux-gnu/$tgt" "$so"
-            fi
-        done
+        unpack_debs "$X11DEV" "${X11_DEBS[@]}"
+    fi
+    # Audio backend headers (Phase 4B, docs/port/AUDIO.md "Output"): SDL
+    # builds a backend only when its headers are found and dlopens the
+    # library by soname at run time. ALSA is the one this port needs (it
+    # also reaches PulseAudio and PipeWire through their ALSA plugins);
+    # PulseAudio's headers come along and SDL enables that backend when the
+    # build host has libpulse.so.0. Pinned Debian 13 packages; the SHA-256s
+    # are the trixie main/binary-amd64 Packages index's (its InRelease
+    # signature checked with the Debian archive keyring, 2026-10-05).
+    if ! [[ -f /usr/include/alsa/asoundlib.h ]]; then
+        AUDIO_DEBS=(
+            "pool/main/a/alsa-lib/libasound2-dev_1.2.14-1+deb13u1_amd64.deb dfa8e8a133ef8704093d03464d86a3e86d26232baf1e3827aa030cb68c437e1c"
+            "pool/main/p/pulseaudio/libpulse-dev_17.0+dfsg1-2+b1_amd64.deb bcbd91aae55d1794f8fe8b1e766ec810173a6415b2165642bf756858e20ab7c4"
+        )
+        unpack_debs "$X11DEV" "${AUDIO_DEBS[@]}"
     fi
     mkdir -p "$X11DEV/usr/include" "$X11DEV/usr/lib/x86_64-linux-gnu"
     gen=()
@@ -182,7 +212,14 @@ else
         -DSDL_SHARED=ON -DSDL_STATIC=OFF \
         -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_TEST_LIBRARY=OFF \
         -DSDL_INSTALL_DOCS=OFF \
-        -DSDL_X11_XSCRNSAVER=OFF -DSDL_X11_XTEST=OFF
+        -DSDL_X11_XSCRNSAVER=OFF -DSDL_X11_XTEST=OFF \
+        -DSDL_ALSA=ON -DSDL_ALSA_SHARED=ON | tee "$TMP/sdl3-configure.log"
+    # the audio backends this build has (the configure summary)
+    grep -E "SDL_(ALSA|PULSEAUDIO|PIPEWIRE|JACK|SNDIO|OSS)\b.*: *(ON|OFF)" "$TMP/sdl3-configure.log" || true
+    if ! grep -qE "SDL_ALSA\b.*: *ON *$" "$TMP/sdl3-configure.log"; then
+        echo "fetch_deps: SDL3 configured without ALSA: no audio on Linux" >&2
+        exit 1
+    fi
     "$CMAKE_BIN" --build "$TMP/sdl3-build" --parallel
     "$CMAKE_BIN" --install "$TMP/sdl3-build"
     cp "$TMP/SDL3-${SDL3_VERSION}/LICENSE.txt" "$SDL3_LINUX/"

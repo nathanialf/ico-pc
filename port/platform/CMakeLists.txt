@@ -60,8 +60,8 @@ if(_ico_run_tests AND NOT WIN32)
 endif()
 
 # The game's allocator (fumi/ios/memory.c) over the arena, compiled as the
-# game compiles it. Its records hold 32-bit addresses (EE layout), so the
-# test only runs on 32-bit hosts and reports "skipped" elsewhere.
+# game compiles it; the test checks the partition layout for the host's
+# record sizes.
 add_executable(memory_test test/memory_test.c "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
 ico_include_dirs(fumi _ico_fumi_incs)
 target_include_directories(memory_test PRIVATE ${_ico_fumi_incs})
@@ -71,11 +71,10 @@ target_compile_options(memory_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
 target_link_libraries(memory_test PRIVATE ico_platform)
 if(_ico_run_tests)
     add_test(NAME memory COMMAND memory_test)
-    set_tests_properties(memory PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # The game's thread, message and memory layers on the scheduler, driven by
-# simulated vsyncs (32-bit hosts only, as memory_test).
+# simulated vsyncs.
 add_executable(ios_chain_test test/ios_chain_test.c
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/thread.c"
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/message.c"
@@ -87,5 +86,4 @@ target_compile_options(ios_chain_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
 target_link_libraries(ios_chain_test PRIVATE ico_platform)
 if(_ico_run_tests)
     add_test(NAME ios_chain COMMAND ios_chain_test)
-    set_tests_properties(ios_chain PROPERTIES SKIP_RETURN_CODE 77)
 endif()

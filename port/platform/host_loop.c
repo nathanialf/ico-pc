@@ -5,6 +5,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include "../audio/audio_host.h"
 #include "arena.h"
 #include "diag_host.h"
 #include "fpenv.h"
@@ -43,6 +44,8 @@ void ico_host_init(void)
         exit(1);
     }
     ico_diag_name_func((void *)boot_main, "boot (the game's main)");
+    /* the SPU2 and the SNDN2DRV host, before the game binds to it */
+    ico_audio_host_init();
     ico_sched_reset();
     ico_sched_set_fiber_start_hook(ico_fpenv_sim_enter);
     ico_sched_boot(boot_main, NULL, BOOT_PRIORITY);
@@ -57,6 +60,10 @@ void ico_host_step(void)
     ico_vsync(field);
     field ^= 1;
     ico_host_run_vsync_hooks();
+    /* this vsync's audio from the SPU2 state the last sound tick left; the
+       sound thread the vsync woke ticks in ico_sched_run below, and its
+       writes take effect from the next block (docs/port/AUDIO.md) */
+    ico_audio_host_vsync(ico_host_vsync_hz());
     ico_sched_run();
 }
 

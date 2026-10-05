@@ -1,4 +1,7 @@
-/* libsndn2.a(sound.o).  The _Sg family (the first 44 functions) and the 61
+/* port/audio/sg/sound.c (moved from sce/libsndn2/sound.c in Phase 4B; the
+ * old path keeps a one-line include of this file for the PS2 build).
+ *
+ * libsndn2.a(sound.o).  The _Sg family (the first 44 functions) and the 61
  * Sg entry points that follow are one member: sound.o's sections are .text
  * (0x56B0 in this revision), .rodata 0x1E0 (exactly the _Sg tick's and
  * _SgContParam's jump tables), .data 0x40 (the _Sg voice code's pan table)
@@ -7,9 +10,53 @@
  * own. */
 #include <eekernel.h>
 #include <sifrpc.h>
+
+#ifndef ICO_HOST /* port/compat has no sifcmd.h; nothing here needs it */
+
 #include <sifcmd.h>
+
+#endif
+
 #include <string.h>
 #include "sound.h"
+
+#ifdef ICO_HOST
+
+/* Host seams (Phase 4B, docs/port/AUDIO.md "The sequencer on the host").
+ * Every host change is an #ifdef ICO_HOST arm whose #else is the EE text
+ * as it was, or SG_HEAD_T, which spells the EE's own `int` there; the PS2
+ * build compiles the same tokens as before.
+ *
+ * The EE keeps addresses in 32-bit words of its context blocks and of the
+ * .hd header the game loaded.  A 64-bit host cannot, so:
+ *   - the head context (the five pointers the event decoder shares: the
+ *     program record table, the tone record, the channel table, the .hd
+ *     header and the event cursor) is an array of pointers;
+ *   - vab context word 0 (the .hd header) and sequence context word 2 (the
+ *     .sq body or SE table) hold a nonzero token, and the address lives in
+ *     sgVabHd / sgSeqBody at the same index.  Every memset of a context
+ *     clears the token, so a reader sees NULL exactly where the EE saw 0;
+ *   - the five header slots SgVabOpenFakeBody relocates (0x30, 0x38, 0x3C,
+ *     0x40, 0x44: header + the offsets at 0x10, 0x18-0x24) are kept in
+ *     sgHdRel, a record per open vab keyed by the header's address, and
+ *     the host never writes them into the header (docs/port/LOADERS.md,
+ *     "hd and sq").
+ * The IOP to EE page is cached memory read through its uncached alias on
+ * the EE; on the host ICO_UNCACHED is the identity.  The DMA-status wait
+ * yields the fiber a vsync at a time (the reply that ends it arrives with
+ * the sound thread's next tick), and SgSndn2RemoteInit registers the host
+ * IOP server (sndn2_host.c) before binding to it. */
+#include <stdint.h>
+#include "sched.h"
+#include "sndn2_host.h"
+
+#ifndef ICO_UNCACHED
+#define ICO_UNCACHED(p) (p) /* as ico2/common/include/typedef.h on the host */
+#endif
+#define SG_HEAD_T unsigned char *
+#else
+#define SG_HEAD_T int
+#endif
 
 /* one 0x58-byte voice slot as SgSeStop walks them: the sequence or SE that
    keyed it and its state (0 free, 1 keyed off, 2 sounding) */
@@ -41,9 +88,84 @@ static char *sgIop2EeContext; /* derived name */
 
 static int sgSeContext[128] __attribute__((aligned(64))); /* derived name */
 
+#ifdef ICO_HOST
+
+static unsigned char *sgHeadContext[16]; /* derived name */
+
+#else
+
 static int sgHeadContext[16]; /* derived name */
 
+#endif
+
 static sceSifRpcClientData sgClient; /* derived name */
+
+#ifdef ICO_HOST
+
+/* the addresses behind the context tokens and the header records (above) */
+static void *sgVabHd[128];
+
+static unsigned char *sgSeqBody[48];
+
+static struct {
+    const void *hd;
+    unsigned char *slot[5]; /* header + the words at 0x10, 0x18, 0x1C, 0x20, 0x24 */
+} sgHdRel[128];
+
+static unsigned char *sg_seq_body(const void *seq)
+{
+    int i = (int)(((const unsigned char *)seq - &sgSeqContext[0][0]) / 0x54);
+
+    return *(const int *)((const char *)seq + 8) != 0 ? sgSeqBody[i] : NULL;
+}
+
+static void sg_seq_set_body(void *seq, void *body)
+{
+    int i = (int)(((unsigned char *)seq - &sgSeqContext[0][0]) / 0x54);
+
+    sgSeqBody[i] = body;
+    *(int *)((char *)seq + 8) = body != NULL;
+}
+
+static void *sg_vab_hd(const void *vab)
+{
+    int i = (int)(((const unsigned char *)vab - &sgVabContext[0][0]) / 0xC);
+
+    return *(const int *)vab != 0 ? sgVabHd[i] : NULL;
+}
+
+/* The relocated header slot at `off` (0x30, 0x38, 0x3C, 0x40 or 0x44) of an
+   open vab's header; NULL for a NULL header. */
+static unsigned char *sg_hd_slot(const void *hd, int off)
+{
+    int k = off == 0x30 ? 0 : (off - 0x34) / 4;
+    int i;
+
+    if (hd == NULL) {
+        return NULL;
+    }
+    for (i = 1; i < 0x80; i++) {
+        if (sgHdRel[i].hd == hd && *(int *)sgVabContext[i] != 0) {
+            return sgHdRel[i].slot[k];
+        }
+    }
+    /* not opened through SgVabOpenFakeBody: what the slot would hold */
+    return (unsigned char *)hd + *(const int *)((const char *)hd + off - 0x20);
+}
+
+static void sg_hd_relocate(int vab, int *hd)
+{
+    static const int from[5] = {0x10, 0x18, 0x1C, 0x20, 0x24};
+    int k;
+
+    sgVabHd[vab] = hd;
+    sgHdRel[vab].hd = hd;
+    for (k = 0; k < 5; k++) {
+        sgHdRel[vab].slot[k] = (unsigned char *)hd + hd[from[k] / 4];
+    }
+}
+
+#endif
 
 void *_SgGetSlotContext(int slot)
 {
@@ -93,7 +215,11 @@ void *_SgGetIop2EeContext(void)
 void *_SgGetPacketCntext(int page, int index)
 {
     unsigned char *p = &sgPacketContext[index * 0x10];
+#ifdef ICO_HOST
+    return p + page * 0x1000;
+#else
     return (void *)(page * 0x1000 + (int)p);
+#endif
 }
 
 /* The driver's tick: run every sequence context's event stream up to the next
@@ -584,11 +710,24 @@ void _SgSetRealtimeTickProc(void)
 
                 /* t holds the header word, then the tag, then the table id */
                 if (t != 0 && vab[2] != 0) {
+#ifdef ICO_HOST
+                    hd = sg_vab_hd(vab);
+#else
                     hd = (int *)t;
+#endif
                     t = hd[3];
                     if (t == 0x64685353) {
                         t = hd[6];
                         if (t != 0xFFFFFFFF) {
+#ifdef ICO_HOST
+                            if (sg_hd_slot(hd, 0x38) == 0) {
+                                *(volatile int *)s = *(volatile int *)s & 0xFFFFFFEF;
+                            } else {
+                                curve = sg_hd_slot(hd, 0x38);
+                                curve_ofs = (unsigned short *)sg_hd_slot(hd, 0x38);
+                                ok = 1;
+                            }
+#else
                             if (hd[0xE] == 0) {
                                 *(volatile int *)s = *(volatile int *)s & 0xFFFFFFEF;
                             } else {
@@ -596,6 +735,7 @@ void _SgSetRealtimeTickProc(void)
                                 curve_ofs = (unsigned short *)hd[0xE];
                                 ok = 1;
                             }
+#endif
                         }
                     }
                 }
@@ -743,10 +883,18 @@ void _SgSetRealtimeTickProc(void)
 
         if (v & 0x80) {
             int *vab = _SgGetVabContext(i);
+#ifdef ICO_HOST
+            int *hd = sg_vab_hd(vab);
+#else
             int *hd = (int *)vab[0];
+#endif
 
             if (hd != 0 && vab[2] != 0) {
+#ifdef ICO_HOST
+                unsigned char *p = sg_hd_slot(hd, 0x40);
+#else
                 unsigned char *p = (unsigned char *)hd[0x10];
+#endif
 
                 /* The level goes back to the volume table as the byte just
                  * stored. */
@@ -789,12 +937,21 @@ int _SgSetRealtimeVolume(int *seq)
     }
     switch (mode) {
     case 1:
+#ifdef ICO_HOST
+        base =
+            sg_hd_slot(sg_vab_hd(_SgGetVabContext(*(unsigned short *)((char *)seq + 0x18))), 0x40);
+#else
         base = (unsigned char *)*(
             int *)(*(int *)_SgGetVabContext(*(unsigned short *)((char *)seq + 0x18)) + 0x40);
+#endif
         *base = *((unsigned char *)seq + 0x34);
         break;
     case 2:
+#ifdef ICO_HOST
+        base = sg_seq_body(seq);
+#else
         base = (unsigned char *)seq[2];
+#endif
         if (*(int *)((char *)seq + 0x30) == 0xFFFF) {
             *base = *((unsigned char *)seq + 0x34);
         }
@@ -829,7 +986,7 @@ int _SgSetRealtimeVolume(int *seq)
  * one data pointer (p, reloaded from the header in the flag-4 arm). */
 int _SgTableEnvAdd(int *seq)
 {
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int *vab;
     char *hdr;
     char *p;
@@ -846,22 +1003,38 @@ int _SgTableEnvAdd(int *seq)
         return -1;
     }
     vab = _SgGetVabContext(*(unsigned short *)((char *)seq + 0x18));
+#ifdef ICO_HOST
+    hdr = sg_vab_hd(vab);
+#else
     hdr = (char *)vab[0];
+#endif
     if (hdr == 0) {
         return -1;
     }
+#ifdef ICO_HOST
+    p = (char *)sg_seq_body(seq);
+#else
     p = (char *)seq[2];
+#endif
     if (p == 0) {
         return -1;
     }
     magic = *(int *)(hdr + 0xC);
+#ifdef ICO_HOST
+    head[3] = (unsigned char *)hdr;
+#else
     head[3] = (int)hdr;
+#endif
     if (magic != 0x64685353) {
         return -1;
     }
     cur = seq[1];
     e = (unsigned char *)(p + cur);
+#ifdef ICO_HOST
+    head[4] = e;
+#else
     head[4] = (int)e;
+#endif
     b = *e;
     if (b & 0x80) {
         *((char *)seq + 0x50) = b;
@@ -869,24 +1042,44 @@ int _SgTableEnvAdd(int *seq)
     } else {
         seq[1] = cur - 1;
         *((char *)seq + 0x50) = *((unsigned char *)seq + 0x51);
+#ifdef ICO_HOST
+        head[4] = (unsigned char *)(p + (cur - 1));
+#else
         head[4] = (int)(p + (cur - 1));
+#endif
     }
     ret = 1;
     if (seq[0] & 4) {
         *(short *)((char *)seq + 0x4E) = *(unsigned short *)((char *)seq + 0x4C);
+#ifdef ICO_HOST
+        tb = sg_hd_slot(head[3], 0x44);
+        p = (char *)sg_hd_slot(head[3], 0x40);
+        head[0] = tb + *(unsigned short *)(tb + *(unsigned char *)(head[4] + 3) * 2 + 2);
+        head[2] = (unsigned char *)p;
+#else
         tb = *(unsigned char **)(head[3] + 0x44);
         p = *(char **)(head[3] + 0x40);
         head[0] = (int)tb + *(unsigned short *)(tb + *(unsigned char *)(head[4] + 3) * 2 + 2);
         head[2] = (int)p;
+#endif
         head[1] = head[0] + 8;
     } else {
         int n;
 
+#ifdef ICO_HOST
+        head[2] = (unsigned char *)p;
+        tb = sg_hd_slot(head[3], 0x30);
+#else
         head[2] = (int)p;
         tb = (unsigned char *)*(int *)(head[3] + 0x30);
+#endif
         *(short *)((char *)seq + 0x4E) = *((unsigned char *)seq + 0x50) & 0xF;
         n = *(unsigned char *)(p + (*(unsigned short *)((char *)seq + 0x4E) << 4) + 0x12);
+#ifdef ICO_HOST
+        head[0] = tb + *(unsigned short *)(tb + n * 2 + 2);
+#else
         head[0] = (int)tb + *(unsigned short *)(tb + n * 2 + 2);
+#endif
         head[1] = head[0] + 8;
         if (*((unsigned char *)seq + 0x50) < 0xA0) {
             if (*(unsigned short *)(tb + n * 2 + 2) == 0xFFFF || *(unsigned short *)tb < n ||
@@ -1029,7 +1222,11 @@ int _SgSeKeyOff(char *seq)
         if (!(*(int *)elem & 4)) {
             continue;
         }
+#ifdef ICO_HOST
+        q = (char *)((unsigned char **)head)[4];
+#else
         q = *(char **)(head + 0x10);
+#endif
         if (*(unsigned short *)(elem + 0x2C) != *(unsigned char *)(q + 3)) {
             continue;
         }
@@ -1067,7 +1264,7 @@ int _SgSeqKeyOff(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
     char *com = _SgGetComContext();
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     unsigned char *e = (unsigned char *)head[4];
     int i;
 
@@ -1096,12 +1293,12 @@ int _SgSeqKeyOff(int *seq)
 
 int _SgIntoKeyOn(int count, int note, int key)
 {
-    int *r = (int *)_SgGetHeadContext();
+    SG_HEAD_T *r = (SG_HEAD_T *)_SgGetHeadContext();
     if (count == 0xFF) {
         count = 1;
     } else {
         int off = note << 4;
-        int base = r[1] + off;
+        SG_HEAD_T base = r[1] + off;
         unsigned char *b = (unsigned char *)base;
         r[1] = base;
         if (key < b[0]) {
@@ -1164,7 +1361,7 @@ int _SgSeqSeVolume(int voice, int *seq)
  * pointer is advanced over the record for the read and put back afterwards. */
 int _SgPan(int tone, int ch)
 {
-    int *h = _SgGetHeadContext();
+    SG_HEAD_T *h = _SgGetHeadContext();
     unsigned char *seq = (unsigned char *)(h[2] + ch * 16);
     int v;
 
@@ -1212,7 +1409,11 @@ void _SgEndSeq(int *seq)
 
 void _SgTempoChange(int *seq)
 {
+#ifdef ICO_HOST
+    unsigned char *p = sg_seq_body(seq) + seq[1];
+#else
     unsigned char *p = (unsigned char *)(seq[2] + seq[1]);
+#endif
     void *q = _SgGetComContext();
     *(unsigned short *)((char *)seq + 0x1E) = p[2] | (p[3] << 8);
     *(int *)((char *)seq + 0x10) =
@@ -1230,6 +1431,17 @@ void _SgProgChange(int *seq)
     char *base;
     char *v2;
     if ((*(seq + 0)) & 2) {
+#ifdef ICO_HOST
+        unsigned char **h = _SgGetHeadContext();
+
+        (void)p;
+        idx = *((unsigned short *)(((char *)seq) + 0x4E));
+        v2 = (char *)h[4];
+        *(((char *)h[2] + (idx << 4)) + 0x12) = *((unsigned char *)(v2 + 1));
+        base = (char *)h[2] + (idx << 4);
+        *(base + 0x1A) = 0x40;
+        *(base + 0x1B) = 0x40;
+#else
         p = (int *)_SgGetHeadContext();
         idx = *((unsigned short *)(((char *)seq) + 0x4E));
         v2 = (char *)(*((int *)(((char *)p) + 0x10)));
@@ -1242,6 +1454,7 @@ void _SgProgChange(int *seq)
         idx = *((unsigned short *)(((char *)seq) + 0x4E));
         base = ((char *)(*((int *)(((char *)p) + 8)))) + (idx << 4);
         *(base + 0x1B) = 0x40;
+#endif
     }
     *(seq + 1) += 2;
 }
@@ -1254,7 +1467,7 @@ void _SgProgChange(int *seq)
 void _SgContMod(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int i;
 
     if (seq[0] & 8) {
@@ -1298,7 +1511,7 @@ void _SgContMod(int *seq)
 void _SgContModLoop(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int v = 240 / (60 - *(unsigned char *)(head[4] + 2) * 58 / 127);
     int i;
 
@@ -1351,7 +1564,11 @@ void _SgContPolta(char *seq)
     do {
         if (*(unsigned char *)(p + 0x51) == two &&
             *(unsigned char *)(p + 0x54) == *(unsigned short *)(seq + 0x18)) {
+#ifdef ICO_HOST
+            s = (char *)((unsigned char **)ctx)[4];
+#else
             s = *(char **)(ctx + 0x10);
+#endif
             if (*(unsigned short *)(p + 0x2C) == *(unsigned char *)(s + 0x4) &&
                 *(unsigned char *)(p + 0x4E) == *(unsigned char *)(s + 0x5) &&
                 *(unsigned char *)(p + 0x50) == *(unsigned short *)(seq + 0x4C)) {
@@ -1380,7 +1597,7 @@ void _SgContVol(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
     char *com = _SgGetComContext();
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int i;
 
     if (seq[0] & 8) {
@@ -1428,7 +1645,7 @@ void _SgContPan(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
     char *com = _SgGetComContext();
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int i;
 
     if (seq[0] & 8) {
@@ -1484,7 +1701,7 @@ void _SgContDump(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
     char *com = _SgGetComContext();
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int i;
 
     *(char *)(head[2] + (*(unsigned short *)((char *)seq + 0x4E) << 4) + 0x1B) =
@@ -1515,9 +1732,15 @@ void _SgContDump(int *seq)
  * proc that runs the voice updates it. */
 void _SgContSeLoop(int *seq)
 {
+#ifdef ICO_HOST
+    unsigned char **p = _SgGetHeadContext();
+    unsigned char *e = p[4];
+    char *tbl = (char *)sg_seq_body(seq);
+#else
     int *p = _SgGetHeadContext();
     unsigned char *e = (unsigned char *)*(int *)((char *)p + 0x10);
     char *tbl = (char *)seq[2];
+#endif
 
     *(volatile int *)seq |= 0x80;
     if (e[4] != 0) {
@@ -1551,7 +1774,7 @@ void _SgContSeLoop(int *seq)
  * the masked halfword back before the new bits are ORed in. */
 void _SgContParam(int *seq)
 {
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     unsigned char *s = _SgGetSlotContext(0);
     int i;
 
@@ -1692,8 +1915,13 @@ ge2:
     goto done;
 case0:
     {
+#ifdef ICO_HOST
+        unsigned char *q0 = ((unsigned char **)p)[4];
+        int b0 = q0[2];
+#else
         int q0 = *(int *)((char *)p + 0x10);
         int b0 = *(unsigned char *)((char *)q0 + 0x2);
+#endif
         *(short *)((char *)s0 + 0x2A) = 0;
         *(short *)((char *)s0 + 0x26) = b0;
         goto done;
@@ -1701,8 +1929,13 @@ case0:
 case1:
 case12:
     {
+#ifdef ICO_HOST
+        unsigned char *q12 = ((unsigned char **)p)[4];
+        int b12 = q12[2];
+#else
         int q12 = *(int *)((char *)p + 0x10);
         int b12 = *(unsigned char *)((char *)q12 + 0x2);
+#endif
         *(short *)((char *)s0 + 0x2A) = b12;
     }
 done:
@@ -1717,7 +1950,7 @@ done:
  * this file. */
 void _SgContLoop(int *seq)
 {
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     unsigned char *e = (unsigned char *)head[4];
 
     switch (e[2]) {
@@ -1762,7 +1995,7 @@ void _SgContLoop(int *seq)
 void _SgBendForm(int *seq)
 {
     unsigned char *s = _SgGetSlotContext(0);
-    int *head = _SgGetHeadContext();
+    SG_HEAD_T *head = _SgGetHeadContext();
     int i;
 
     *(char *)(head[2] + (*(unsigned short *)((char *)seq + 0x4E) << 4) + 0x1A) =
@@ -1783,7 +2016,11 @@ void _SgBendForm(int *seq)
 
 void _SgDeltaTime(char *s)
 {
+#ifdef ICO_HOST
+    unsigned char *base = sg_seq_body(s);
+#else
     unsigned char *base = *(unsigned char **)(s + 0x8);
+#endif
     int acc = 0;
     unsigned char b;
     do {
@@ -1865,7 +2102,11 @@ void _SgInit(int hot)
     void *seq = _SgGetSeqContext(0);
     int i;
 
+#ifdef ICO_HOST
+    sgIop2EeContext = (char *)ICO_UNCACHED(sgIop2EeBuf);
+#else
     sgIop2EeContext = (char *)((int)sgIop2EeBuf | 0x20000000);
+#endif
     buf[0] = 0x1E;
     buf[1] = hot;
     buf[4] = 0;
@@ -1877,6 +2118,11 @@ void _SgInit(int hot)
     memset(pk, 0, 0x1000);
     memset(sgIop2EeContext, 0, 0x200);
     memset(se, 0, 0x200);
+#ifdef ICO_HOST
+    memset(sgVabHd, 0, sizeof(sgVabHd));
+    memset(sgSeqBody, 0, sizeof(sgSeqBody));
+    memset(sgHdRel, 0, sizeof(sgHdRel));
+#endif
     for (i = 0; i < 48; i++, slot += 0x58) {
         slot[0x50] = 0xFF;
         slot[0x56] = 0xFF;
@@ -1904,6 +2150,9 @@ int SgSndn2RemoteInit(void)
     int i;
 
     FlushCache(0);
+#ifdef ICO_HOST
+    ico_sndn2_host_register();
+#endif
     sceSifInitRpc(0);
     do {
         if (sceSifBindRpc(&sgClient, 0x736E646E, 0) < 0) {
@@ -2001,6 +2250,12 @@ int SgGetDmaTransferStatus(int mode)
     if (mode != 0) {
         if (mode == 1) {
             while (i2e[0x1C0 / 4] != com[0x48 / 4]) {
+#ifdef ICO_HOST
+                if (!ico_sched_in_thread()) {
+                    return 0; /* no sound thread to tick on the host context */
+                }
+                ico_sched_spin_vsync();
+#endif
                 ;
             }
             ret = 1;
@@ -2040,6 +2295,11 @@ int SgVabOpenFakeBody(int *hd, int spu)
                 *(int *)(v + 8) = 4;
                 *(int *)(v + 4) = (unsigned int)spu >> 4;
             }
+#ifdef ICO_HOST
+            *(int *)v = 1;
+            ret = i;
+            sg_hd_relocate(i, hd);
+#else
             *(int *)v = (int)hd;
             ret = i;
             hd[0x30 / 4] = hd[0x10 / 4] + (int)hd;
@@ -2047,6 +2307,7 @@ int SgVabOpenFakeBody(int *hd, int spu)
             hd[0x3C / 4] = hd[0x1C / 4] + (int)hd;
             hd[0x40 / 4] = hd[0x20 / 4] + (int)hd;
             hd[0x44 / 4] = hd[0x24 / 4] + (int)hd;
+#endif
             break;
         }
     }
@@ -2085,6 +2346,9 @@ int SgVabClose(int vab)
             }
         }
         memset(t, 0, 0xC);
+#ifdef ICO_HOST
+        sgHdRel[vab].hd = NULL;
+#endif
         rv = 0;
     }
     return rv;
@@ -2109,7 +2373,11 @@ int SgBgmOpen(int vab, void *sq)
                     *(short *)(obj + 0x4C) = (short)i;
                     rv = i;
                     *(short *)(obj + 0x18) = (short)vab;
+#ifdef ICO_HOST
+                    sg_seq_set_body(obj, sq);
+#else
                     *(int *)(obj + 8) = (int)sq;
+#endif
                     *(short *)(obj + 0x20) = *(unsigned short *)((char *)sq + 2);
                     *(volatile int *)obj |= 1;
                     *(short *)(obj + 0x1E) = *(unsigned short *)((char *)sq + 4);
@@ -2351,7 +2619,11 @@ void SgBgmStop(unsigned int id, int mode)
             }
         }
     }
+#ifdef ICO_HOST
+    body = (char *)sg_seq_body((void *)seq);
+#else
     body = *(char **)((char *)seq + 8);
+#endif
     if (*(int *)(body + 0xC) == 0x71735353) {
         q = body + 0x109;
         for (i = 0xF; i >= 0; i--, q -= 0x10) {
@@ -2417,7 +2689,11 @@ int SgGetBgmChStatus(unsigned int id, int channel, int kind)
         p = (volatile int *)_SgGetSeqContext(id);
         p[0] |= 0x2000;
         if (p[0] & 1) {
+#ifdef ICO_HOST
+            ch = (char *)sg_seq_body((void *)p);
+#else
             ch = *(char **)((char *)p + 8);
+#endif
             if (kind == 0) {
                 v = *(unsigned char *)(ch + (channel << 4) + 0x12);
                 if (v != 0xFF) {
@@ -2442,7 +2718,11 @@ int SgSetBgmPanpot(unsigned int id, int pan)
         p = (volatile int *)_SgGetSeqContext(id);
         p[0] |= 0x2000;
         if ((p[0] & 5) == 1) {
+#ifdef ICO_HOST
+            body = sg_vab_hd(_SgGetVabContext(*(unsigned short *)((char *)p + 0x18)));
+#else
             body = *(char **)_SgGetVabContext(*(unsigned short *)((char *)p + 0x18));
+#endif
             tone = body + *(int *)(body + 0x10);
             for (i = 0; i < *(unsigned short *)tone + 1; i++) {
                 *(char *)(tone + *(unsigned short *)(tone + i * 2 + 2) + 2) = pan;
@@ -2473,18 +2753,30 @@ int SgSePlay(int vabflags, int prog, int tone)
             if ((p[0] & 0xF) == 0) {
                 com = (char *)_SgGetComContext();
                 vab = (char *)_SgGetVabContext(vabid);
+#ifdef ICO_HOST
+                body = sg_vab_hd(vab);
+                tbl = (unsigned short *)sg_hd_slot(body, 0x3C);
+                if (*(int *)(vab + 8) == 0 || *(int *)(body + 0xC) != 0x64685353 ||
+                    *(unsigned int *)(body + 0x20) == 0xFFFFFFFF || (uintptr_t)tbl == 0xFFFFFFFFu ||
+                    tbl[0] < prog || tbl[prog + 1] == 0xFFFF || tbl[h = tbl[prog + 1] / 2] < tone) {
+#else
                 body = *(char **)vab;
                 tbl = *(unsigned short **)(body + 0x3C);
                 if (*(int *)(vab + 8) == 0 || *(int *)(body + 0xC) != 0x64685353 ||
                     *(unsigned int *)(body + 0x20) == 0xFFFFFFFF ||
                     (unsigned int)tbl == 0xFFFFFFFF || tbl[0] < prog || tbl[prog + 1] == 0xFFFF ||
                     tbl[h = tbl[prog + 1] / 2] < tone) {
+#endif
                     p[0] &= 0xFFFFDFFF;
                     return ret;
                 }
                 {
                     p[0] |= 0xC;
+#ifdef ICO_HOST
+                    sg_seq_set_body((void *)p, (char *)tbl + tbl[tone + h + 1]);
+#else
                     *(int *)((char *)p + 8) = (int)((char *)tbl + tbl[tone + h + 1]);
+#endif
                     *(short *)((char *)p + 0x1E) = 0x78;
                     *(short *)((char *)p + 0x18) = vabid;
                     *(short *)((char *)p + 0x1A) = prog;
@@ -2861,7 +3153,11 @@ int SgStPcmIopReadAddr(unsigned int ch)
     return ret;
 }
 
+#ifdef ICO_HOST
+int SgStPcmBufMode(int mode, long long mask, int addr) /* EE long: 64 bits */
+#else
 int SgStPcmBufMode(int mode, long mask, int addr)
+#endif
 {
     int ret;
     ret = -1;

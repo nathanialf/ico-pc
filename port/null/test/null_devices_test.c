@@ -1,16 +1,15 @@
 /*
  * port/null/test/null_devices_test.c
  *
- * The null pad, memory card, sound driver and system configuration
- * (port/null/{pad,mc,snd,scf}_null.c) answer as an empty console would.
+ * The null pad, memory card and system configuration
+ * (port/null/{pad,mc,scf}_null.c) answer as an empty console would.  The
+ * sound driver's tests moved to port/audio/test/sndn2_test.c with the real
+ * driver (Phase 4B).
  */
 #include "null_devices.h"
-#include "sif_host.h"
 #include <libmc.h>
 #include <libpad.h>
 #include <libscf.h>
-#include <sifrpc.h>
-#include <sound.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -24,19 +23,6 @@ static int failures;
             failures++;                                                                            \
         }                                                                                          \
     } while (0)
-
-static uint32_t rd32(const unsigned char *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
-static void put32(unsigned char *p, uint32_t v)
-{
-    p[0] = (unsigned char)v;
-    p[1] = (unsigned char)(v >> 8);
-    p[2] = (unsigned char)(v >> 16);
-    p[3] = (unsigned char)(v >> 24);
-}
 
 static void test_pad(void)
 {
@@ -82,101 +68,11 @@ static void test_scf(void)
     ico_scf_language = ICO_SCF_LANGUAGE_ENGLISH;
 }
 
-/* An ADPCM stream's IOP read offset moves on as it plays (snd_null.c):
-   stereo at 48 kHz with a 16 KB SPU ring refills half the ring (8 KB per
-   channel, 14336 samples) every 14336 / 960 = 14.9 vsyncs. */
-static void test_adpcm_stream(void)
-{
-    int req[6] = {5, 0x20002, 0x10000, 0x5C000, 0x1E0000, 0x4000};
-    int i;
-    SgStAdpcmInit();
-    CHECK(SgStAdpcmOpen(req) == 0);
-    SgStAdpcmChannelPitch(1ull << 5, 48000);
-    CHECK(SgStAdpcmIopReadAddr(5) == 0);
-    SgStAdpcmPlay(1ull << 5);
-    CHECK(SgStAdpcmIopReadAddr(5) == 0x4000); /* the first fill: 8 KB x 2 */
-    for (i = 0; i < 14; i++) {
-        SgCalledTickProc();
-    }
-    CHECK(SgStAdpcmIopReadAddr(5) == 0x4000);
-    SgCalledTickProc();
-    CHECK(SgStAdpcmIopReadAddr(5) == 0x8000);
-    /* paused (rate 0): held */
-    SgStAdpcmChannelPitch(1ull << 5, 0);
-    for (i = 0; i < 100; i++) {
-        SgCalledTickProc();
-    }
-    CHECK(SgStAdpcmIopReadAddr(5) == 0x8000);
-    /* the offset wraps in the IOP ring */
-    SgStAdpcmChannelPitch(1ull << 5, 48000);
-    for (i = 0; i < 15 * 30; i++) {
-        SgCalledTickProc();
-    }
-    CHECK(SgStAdpcmIopReadAddr(5) < 0x5C000);
-    SgStAdpcmStop(1ull << 5);
-    CHECK(SgStAdpcmIopReadAddr(5) == 0);
-    SgStAdpcmClose(5);
-}
-
-static void test_snd(void)
-{
-    static unsigned char page[ICO_SND_REPLY_SIZE];
-    static unsigned char pk[3 * 16];
-    sceSifRpcClientData cd;
-    int i;
-    int nonzero;
-
-    ico_sif_host_reset();
-    /* the EE side: bind, init, tick */
-    CHECK(SgSndn2RemoteInit() == 0);
-    CHECK(SgSndn2RemoteSync() == 0);
-    SgInit();
-    SgCalledTickProc();
-    CHECK(ico_snd_null_last_reply() != NULL);
-    CHECK(SgGetDmaTransferStatus(1) == 1);
-    CHECK(SgGetSlotStatus(1, 0) == 0);
-    CHECK(SgSePlay(0, 0, 0) >= 0);
-
-    /* the IOP side through a client of its own: a tick page with a key-on,
-       an upload (counter 5) and a download (counter 6) */
-    memset(&cd, 0, sizeof(cd));
-    CHECK(sceSifBindRpc(&cd, ICO_SND_SERVER_ID, 0) == 0 && cd.serve != 0);
-    memset(pk, 0, sizeof(pk));
-    put32(pk + 0, 0x01);
-    put32(pk + 16, 0x20);
-    put32(pk + 20, 5u << 8 | 0x12);
-    put32(pk + 32, 0x21);
-    put32(pk + 36, 6u << 8 | 0x34);
-    memset(page, 0xAA, sizeof(page));
-    CHECK(sceSifCallRpc(&cd, 0x64, 1, pk, (int)sizeof(pk), page, ICO_SND_REPLY_SIZE, 0, 0) == 0);
-    CHECK(sceSifCheckStatRpc(&cd) == 0);
-    CHECK(rd32(page + 0x1C0) == 6);
-    nonzero = 0;
-    for (i = 0; i < ICO_SND_REPLY_SIZE; i++) {
-        if (i < 0x1C0 || i >= 0x1C4) {
-            nonzero |= page[i];
-        }
-    }
-    CHECK(nonzero == 0);
-    /* the next page (the other half of the double buffer) keeps the counter */
-    memset(page, 0xAA, sizeof(page));
-    CHECK(sceSifCallRpc(&cd, 0x64, 1, pk, 0, page, ICO_SND_REPLY_SIZE, 0, 0) == 0);
-    CHECK(rd32(page + 0x1C0) == 6 && page[0] == 0);
-
-    /* an unregistered server never answers the bind */
-    memset(&cd, 0, sizeof(cd));
-    CHECK(sceSifBindRpc(&cd, 0x12345678u, 0) == 0 && cd.serve == 0);
-    CHECK(sceSifCallRpc(&cd, 0, 0, NULL, 0, NULL, 0, 0, 0) < 0);
-    ico_sif_host_reset();
-}
-
 int main(void)
 {
     test_pad();
     test_mc();
     test_scf();
-    test_snd();
-    test_adpcm_stream();
     printf("null_devices_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

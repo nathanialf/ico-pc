@@ -20,6 +20,13 @@
  *   trace=0          no trace file; trace=PATH writes it there instead of
  *                    logs/trace-<yyyymmdd-hhmmss>.txt
  *   verify=0         skip the disc image's SHA-1 check
+ *   dump_every=N     window build: write every Nth rendered frame as an rd
+ *                    dump (rd_replay_tool) into dump_dir=PATH (default
+ *                    dumps beside the ini), named rd-NNNNN.rddump by the
+ *                    renderer's frame number (one per Main tick)
+ *   audio_dump=PATH  write the mixed 48 kHz audio to PATH (beside the ini)
+ *                    as a WAV; audio_dump=1 is logs/audio.wav
+ *   audio=0          window build: no audio device (the driver still runs)
  */
 #ifndef ICO_PLATFORM_HOST_CONFIG_H
 #define ICO_PLATFORM_HOST_CONFIG_H
@@ -54,6 +61,31 @@ const char *ico_ini_get(const IcoIni *ini, const char *key);
    line with that key is replaced, else one is appended; the file is
    created if missing). 0, or -1. */
 int ico_ini_store(const char *path, const char *key, const char *value);
+
+/* The folder per-user settings live in (config.toml): the executable's
+   folder, like ico-pc.ini (one place to change when packaging moves it).
+   0, or -1 (then out is "."). */
+int ico_host_pref_dir(char *out, size_t size);
+
+/* config.toml: a small TOML subset, enough for [sections] and key = value
+   lines. Section headers are `[name]` or `[a.b]`; a key's path is
+   "section.key" ("input.kb.cross"), so `[input] kb.cross = ..` and
+   `[input.kb] cross = ..` are the same entry. Values: "basic" and 'literal'
+   strings (quotes dropped), true/false, numbers, and one-line arrays, which
+   are kept as written (brackets included) for the caller to split. A `#`
+   outside quotes starts a comment; a repeated key keeps its last line.
+   Not supported (ignored): multi-line values, inline tables, dates,
+   [[arrays of tables]], escapes beyond \\ and \". */
+typedef struct IcoToml IcoToml;
+/* NULL only on out of memory (ico_toml_load: or an unreadable file). */
+IcoToml *ico_toml_parse(const char *text);
+IcoToml *ico_toml_load(const char *path);
+void ico_toml_free(IcoToml *t);
+/* The value text of path, or NULL (t may be NULL). */
+const char *ico_toml_get(const IcoToml *t, const char *path);
+/* A bool (true/false/1/0), or def if absent or malformed. */
+int ico_toml_get_bool(const IcoToml *t, const char *path, int def);
+double ico_toml_get_float(const IcoToml *t, const char *path, double def);
 
 /* SHA-1. */
 typedef struct IcoSha1 {

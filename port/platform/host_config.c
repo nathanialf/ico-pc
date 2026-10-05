@@ -236,6 +236,94 @@ static char *read_text(const char *path)
     return text;
 }
 
+/* dump_every=N (renderer wave 3): the renderer (port/render, which does not
+   link this file) writes every Nth frame it replays as an rd dump into the
+   folder dump_dir= names (default: dumps beside the ini; created), for
+   rd_replay_tool.  Handed over in the environment, ICO_RD_DUMP_EVERY and
+   ICO_RD_DUMP_DIR, which rd_Init reads. */
+static void export_dump_keys(const IcoIni *ini, const char *path)
+{
+    const char *every = ico_ini_get(ini, "dump_every");
+    const char *dir = ico_ini_get(ini, "dump_dir");
+    char base[ICO_PATH_MAX], full[ICO_PATH_MAX];
+    const char *slash;
+    size_t n;
+
+    if (every == NULL || atoi(every) <= 0) {
+        return;
+    }
+    slash = strrchr(path, '/');
+#ifdef _WIN32
+    if (strrchr(path, '\\') > slash) {
+        slash = strrchr(path, '\\');
+    }
+#endif
+    n = slash != NULL ? (size_t)(slash - path) : 1;
+    if (n >= sizeof(base)) {
+        n = sizeof(base) - 1;
+    }
+    memcpy(base, slash != NULL ? path : ".", n);
+    base[n] = '\0';
+    ico_path_join(full, sizeof(full), base, dir != NULL ? dir : "dumps");
+    ico_make_dir(full);
+#ifdef _WIN32
+    _putenv_s("ICO_RD_DUMP_EVERY", every);
+    _putenv_s("ICO_RD_DUMP_DIR", full);
+#else
+    setenv("ICO_RD_DUMP_EVERY", every, 1);
+    setenv("ICO_RD_DUMP_DIR", full, 1);
+#endif
+}
+
+/* audio_dump=PATH and audio=0 (Phase 4B): handed to port/audio/audio_host.c
+   (which ico_platform does not link to here) in the environment, as
+   ICO_AUDIO_DUMP (PATH joined to the ini's folder; audio_dump=1 means
+   logs/audio.wav there) and ICO_AUDIO. */
+static void export_audio_keys(const IcoIni *ini, const char *path)
+{
+    const char *dump = ico_ini_get(ini, "audio_dump");
+    const char *enable = ico_ini_get(ini, "audio");
+    char base[ICO_PATH_MAX], full[ICO_PATH_MAX];
+    const char *slash = strrchr(path, '/');
+    size_t n;
+
+#ifdef _WIN32
+    if (strrchr(path, '\\') > slash) {
+        slash = strrchr(path, '\\');
+    }
+#endif
+    if (enable != NULL) {
+#ifdef _WIN32
+        _putenv_s("ICO_AUDIO", enable);
+#else
+        setenv("ICO_AUDIO", enable, 1);
+#endif
+    }
+    if (dump == NULL || dump[0] == '\0' || strcmp(dump, "0") == 0) {
+        return;
+    }
+    n = slash != NULL ? (size_t)(slash - path) : 1;
+    if (n >= sizeof(base)) {
+        n = sizeof(base) - 1;
+    }
+    memcpy(base, slash != NULL ? path : ".", n);
+    base[n] = '\0';
+    if (strcmp(dump, "1") == 0) {
+        char logs[ICO_PATH_MAX];
+
+        ico_path_join(logs, sizeof(logs), base, "logs");
+        ico_make_dir(logs);
+        ico_path_join(full, sizeof(full), logs, "audio.wav");
+    } else {
+        ico_path_join(full, sizeof(full), base, dump);
+    }
+#ifdef _WIN32
+    _putenv_s("ICO_AUDIO_DUMP", full);
+#else
+    setenv("ICO_AUDIO_DUMP", full, 1);
+#endif
+}
+
 int ico_ini_load(IcoIni *ini, const char *path)
 {
     char *text = read_text(path);
@@ -246,6 +334,8 @@ int ico_ini_load(IcoIni *ini, const char *path)
     }
     ico_ini_parse(ini, text);
     free(text);
+    export_dump_keys(ini, path);
+    export_audio_keys(ini, path);
     return 0;
 }
 
@@ -543,4 +633,273 @@ void ico_host_fatal(const char *log_path, const char *fmt, ...)
     }
 #endif
     exit(1);
+}
+
+/* --- config.toml: a small TOML subset ------------------------------------ */
+
+typedef struct IcoTomlEntry {
+    char *path; /* "section.key", or "key" before any section */
+    char *value;
+} IcoTomlEntry;
+
+struct IcoToml {
+    IcoTomlEntry *entry;
+    int count;
+    int cap;
+};
+
+static char *dup_range(const char *s, size_t n)
+{
+    char *p = malloc(n + 1);
+
+    if (p != NULL) {
+        memcpy(p, s, n);
+        p[n] = '\0';
+    }
+    return p;
+}
+
+static int toml_set(IcoToml *t, char *path, char *value)
+{
+    int i;
+
+    for (i = 0; i < t->count; i++) {
+        if (strcmp(t->entry[i].path, path) == 0) { /* the later line wins */
+            free(t->entry[i].value);
+            free(path);
+            t->entry[i].value = value;
+            return 0;
+        }
+    }
+    if (t->count == t->cap) {
+        int cap = t->cap != 0 ? t->cap * 2 : 32;
+        IcoTomlEntry *grown = realloc(t->entry, (size_t)cap * sizeof(*grown));
+
+        if (grown == NULL) {
+            free(path);
+            free(value);
+            return -1;
+        }
+        t->entry = grown;
+        t->cap = cap;
+    }
+    t->entry[t->count].path = path;
+    t->entry[t->count].value = value;
+    t->count++;
+    return 0;
+}
+
+/* A value's text: a "..." or '...' string loses its quotes (and "\\" and
+   "\"" are unescaped), else a trailing # comment and blanks are dropped; an
+   array (one line, [a, "b"]) stays as written, brackets included. */
+static char *toml_value(const char *s)
+{
+    size_t n = strlen(s);
+    char *out;
+    size_t i, o = 0;
+    char q;
+
+    while (*s == ' ' || *s == '\t') {
+        s++;
+        n--;
+    }
+    out = malloc(n + 1);
+    if (out == NULL) {
+        return NULL;
+    }
+    if (*s == '"' || *s == '\'') {
+        q = *s++;
+        for (i = 0; s[i] != '\0' && s[i] != q; i++) {
+            if (q == '"' && s[i] == '\\' && (s[i + 1] == '\\' || s[i + 1] == '"')) {
+                i++;
+            }
+            out[o++] = s[i];
+        }
+        out[o] = '\0';
+        return out;
+    }
+    q = 0;
+    for (i = 0; s[i] != '\0'; i++) {
+        if (q != 0) {
+            if (s[i] == q) {
+                q = 0;
+            }
+        } else if (s[i] == '"' || s[i] == '\'') {
+            q = s[i];
+        } else if (s[i] == '#') {
+            break;
+        }
+        out[o++] = s[i];
+    }
+    while (o > 0 && (out[o - 1] == ' ' || out[o - 1] == '\t' || out[o - 1] == '\r')) {
+        o--;
+    }
+    out[o] = '\0';
+    return out;
+}
+
+IcoToml *ico_toml_parse(const char *text)
+{
+    IcoToml *t = calloc(1, sizeof(*t));
+    char section[128] = "";
+    const char *p = text;
+
+    if (t == NULL) {
+        return NULL;
+    }
+    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF) {
+        p += 3;
+    }
+    while (*p != '\0') {
+        const char *eol = p;
+        const char *line = p;
+        const char *eq;
+        size_t n;
+
+        while (*eol != '\0' && *eol != '\n') {
+            eol++;
+        }
+        p = *eol != '\0' ? eol + 1 : eol;
+        while (line < eol && (*line == ' ' || *line == '\t')) {
+            line++;
+        }
+        if (line == eol || *line == '#' || *line == '\r') {
+            continue;
+        }
+        if (*line == '[') {
+            const char *end = memchr(line, ']', (size_t)(eol - line));
+            const char *a = line + 1;
+
+            if (end == NULL) {
+                continue;
+            }
+            while (a < end && (*a == ' ' || *a == '\t')) {
+                a++;
+            }
+            n = (size_t)(end - a);
+            while (n > 0 && (a[n - 1] == ' ' || a[n - 1] == '\t')) {
+                n--;
+            }
+            if (n >= sizeof(section)) {
+                n = sizeof(section) - 1;
+            }
+            memcpy(section, a, n);
+            section[n] = '\0';
+            continue;
+        }
+        eq = memchr(line, '=', (size_t)(eol - line));
+        if (eq != NULL) {
+            const char *k1 = eq;
+            char *path, *value, *lineval;
+            size_t sl = strlen(section);
+
+            while (k1 > line && (k1[-1] == ' ' || k1[-1] == '\t')) {
+                k1--;
+            }
+            n = (size_t)(k1 - line);
+            if (n == 0 || n > 120) {
+                continue;
+            }
+            path = malloc(sl + 1 + n + 1);
+            lineval = dup_range(eq + 1, (size_t)(eol - eq - 1));
+            if (path == NULL || lineval == NULL) {
+                free(path);
+                free(lineval);
+                break;
+            }
+            if (sl != 0) {
+                memcpy(path, section, sl);
+                path[sl] = '.';
+                memcpy(path + sl + 1, line, n);
+                path[sl + 1 + n] = '\0';
+            } else {
+                memcpy(path, line, n);
+                path[n] = '\0';
+            }
+            value = toml_value(lineval);
+            free(lineval);
+            if (value == NULL || toml_set(t, path, value) != 0) {
+                free(value);
+                break;
+            }
+        }
+    }
+    return t;
+}
+
+IcoToml *ico_toml_load(const char *path)
+{
+    char *text = read_text(path);
+    IcoToml *t;
+
+    if (text == NULL) {
+        return NULL;
+    }
+    t = ico_toml_parse(text);
+    free(text);
+    return t;
+}
+
+void ico_toml_free(IcoToml *t)
+{
+    int i;
+
+    if (t == NULL) {
+        return;
+    }
+    for (i = 0; i < t->count; i++) {
+        free(t->entry[i].path);
+        free(t->entry[i].value);
+    }
+    free(t->entry);
+    free(t);
+}
+
+const char *ico_toml_get(const IcoToml *t, const char *path)
+{
+    int i;
+
+    if (t == NULL) {
+        return NULL;
+    }
+    for (i = 0; i < t->count; i++) {
+        if (strcmp(t->entry[i].path, path) == 0) {
+            return t->entry[i].value;
+        }
+    }
+    return NULL;
+}
+
+int ico_toml_get_bool(const IcoToml *t, const char *path, int def)
+{
+    const char *v = ico_toml_get(t, path);
+
+    if (v == NULL) {
+        return def;
+    }
+    if (strcmp(v, "true") == 0 || strcmp(v, "1") == 0) {
+        return 1;
+    }
+    if (strcmp(v, "false") == 0 || strcmp(v, "0") == 0) {
+        return 0;
+    }
+    return def;
+}
+
+double ico_toml_get_float(const IcoToml *t, const char *path, double def)
+{
+    const char *v = ico_toml_get(t, path);
+    char *end;
+    double d;
+
+    if (v == NULL || v[0] == '\0') {
+        return def;
+    }
+    d = strtod(v, &end);
+    return *end == '\0' ? d : def;
+}
+
+int ico_host_pref_dir(char *out, size_t size)
+{
+    return ico_host_exe_dir(out, size);
 }
