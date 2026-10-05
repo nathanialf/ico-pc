@@ -83,7 +83,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_VSYNC,
     UI_OPT_FILTER,
     UI_OPT_FULL_HEIGHT,
-    UI_OPT_FRAMERATE, /* [video] framerate (R7b), shown read-only when present */
+    UI_OPT_FRAMERATE, /* [video] framerate (R7b; stepped since R7d) */
     UI_OPT_VIDEO_MODE,
     /* Audio */
     UI_OPT_VOLUME,

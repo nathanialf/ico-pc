@@ -15,7 +15,10 @@
  *   - the untextured sprite has the texture off, the textured one the
  *     texture-seam placeholder bound, TEX1 96 (linear/linear), FST UVs;
  *   - the glow sprite's gif_SetAlpha(1, 5, 0) is ALPHA 0x48;
- *   - nothing was written to a register the decoder does not decode.
+ *   - nothing was written to a register the decoder does not decode;
+ *   - (R7d) a row sprite under gif_HostDrawKey carries the key, blends half
+ *     way between two frames (rd__InterpFrame), and the sprite after the
+ *     key ends is unkeyed and the current frame's.
  * Then on a Vulkan device (exit 77 without one; lavapipe in the container),
  * the same frame replayed: a pixel inside the untextured sprite has its
  * colour, a pixel outside it the clear colour.
@@ -320,6 +323,81 @@ static void checkPixels(void)
     free(px);
 }
 
+/* ------------------------------------------- R7d: keyed layout rows */
+
+/* display_texture's row sprite under gif_HostDrawKey (layout_texture.c's
+   LT_HOST_KEY: the row's texProperty entry), sliding 32 px and fading out,
+   and the sparkle-like sprite after it unkeyed; frame k = 0, 1 */
+static const char kRow;
+
+static void recordKeyedRow(int k)
+{
+    static const uint8_t black[4] = {0, 0, 0, 0x80};
+    GifRect box = {(-100 + k * 32) * 16, -20 * 16, 64 * 16, 16 * 16};
+    GifRect dot = {(k ? 80 : 40) * 16, 40 * 16, 4 * 16, 4 * 16};
+    GifColor col = {128, 128, 128, k ? 0 : 0x80};
+    GifColor grey = {90, 90, 90, 0x80};
+
+    dl_SetDLPriority(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    gif_StartPacketPri(11);
+    gif_SetZTest(0);
+    gif_SetZWrite(0);
+    gif_SetAlpha(1, 7, 0);
+    gif_HostDrawKey(&kRow, 0, 0);
+    gif_SpriteSensitive(&box, 0xFFFFFFFF, (void *)0, &col, 1);
+    gif_HostDrawKey(0, 0, 0);
+    gif_SpriteSensitive(&dot, 0xFFFFFFFF, (void *)0, &grey, 1);
+    gif_SetZWrite(1);
+    gif_EndPacket();
+    dl_Swap();
+}
+
+static const RdCmd *screenCmd(const RdFrame *f, int nth)
+{
+    for (uint32_t i = 0; f && i < f->lists[11].count; i++) {
+        const RdCmd *c = &f->lists[11].cmds[i];
+        if (c->type == RDC_SCREEN && nth-- == 0) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+static void checkKeyedRow(void)
+{
+    recordKeyedRow(0);
+    recordKeyedRow(1);
+    const RdFrame *prev = rd__PrevFrame(), *cur = rd__LastFrame();
+    CHECK(prev && cur, "two layout frames retained");
+    if (!prev || !cur) {
+        return;
+    }
+    RdInterpStats st;
+    const RdFrame *f = rd__InterpFrame(prev, cur, 0.5f, 1.0f, 1, &st);
+    CHECK(f && st.snap == RD_SNAP_NONE && st.keyed == 1 && st.lerped == 1,
+          "the keyed row blends (snap %u keyed %u lerped %u)", st.snap, st.keyed, st.lerped);
+    const RdCmd *r = screenCmd(f, 0), *rp = screenCmd(prev, 0), *rc = screenCmd(cur, 0);
+    const RdCmd *d = screenCmd(f, 1), *dc = screenCmd(cur, 1);
+    CHECK(r && rp && rc && d && dc && r->u[1] == 2 && d->u[1] == 2,
+          "the row and the dot are separate draws");
+    if (!r || !rp || !rc || !d || !dc) {
+        return;
+    }
+    CHECK(r->keyLo != 0 || r->keyHi != 0, "the row carries the key");
+    CHECK(d->keyLo == 0 && d->keyHi == 0, "the dot after the key ends is unkeyed");
+    const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + r->u[0]);
+    const RdScreenVtx *vp = (const RdScreenVtx *)(const void *)(prev->payload + rp->u[0]);
+    const RdScreenVtx *vc = (const RdScreenVtx *)(const void *)(cur->payload + rc->u[0]);
+    CHECK(v[0].x == (vp[0].x + vc[0].x) / 2 && v[1].x == (vp[1].x + vc[1].x) / 2 &&
+              vc[0].x != vp[0].x && v[0].rgba[3] == 0x40,
+          "the row half way (x %d between %d and %d, alpha 0x%02x)", v[0].x, vp[0].x, vc[0].x,
+          v[0].rgba[3]);
+    CHECK(memcmp(f->payload + d->u[0], cur->payload + dc->u[0], 2 * sizeof(RdScreenVtx)) == 0,
+          "the unkeyed dot is the current frame's");
+}
+
 int main(void)
 {
     /* recording */
@@ -334,6 +412,7 @@ int main(void)
     if (f) {
         checkRecording(f);
     }
+    checkKeyedRow();
     rd_Shutdown();
     if (failures) {
         printf("rd_layout_test: %d failures\n", failures);

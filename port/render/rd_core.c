@@ -817,9 +817,11 @@ static uint32_t s_dumpEvery;
 
 static char s_dumpDir[512];
 
-/* Wave 7 (R7b): ICO_RD_DUMP_INTERP=1 also dumps, next to each frame dump,
- * the frame interpolated half way from the one before (rd-NNNNN-i50.rddump;
- * rd__InterpFrame at alpha 0.5, the feedback passes as a first present) */
+/* Wave 7 (R7b): ICO_RD_DUMP_INTERP=1 (since R7d the hand-over of the config
+ * key [dev] dump_interp, port/platform/host_config.c) also dumps, next to
+ * each frame dump, the frame interpolated half way from the one before
+ * (rd-NNNNN-i50.rddump; rd__InterpFrame at alpha 0.5, the feedback passes as
+ * a first present) */
 static int s_dumpInterp;
 
 static void readDumpConfig(void)
@@ -1058,9 +1060,10 @@ void rd_EndFrame(int keep)
             snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
             if (i && rd__DumpFrame(i, path)) {
                 rd__Log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
-                        "%u unmatched, %u mismatched, %u jumped) dumped to %s",
+                        "%u unmatched, %u mismatched, %u jumped; %u mesh streams kept or "
+                        "blended) dumped to %s",
                         f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
-                        path);
+                        st.morph, path);
             }
         }
     }

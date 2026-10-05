@@ -195,12 +195,19 @@ vsync loop, as `rd_EndFrame` does for game frames.
   16:9 content would be shown as the PS2 showed it, in the 4:3 area
   (anamorphic, squeezed), since the PS2 player ignored the aspect code; no
   stream on the disc needs more.
-- **Mirror:** UI-space-like: unmirrored by default. With the renderer's
-  mirror mode on (`RdSettings.mirror`) the film is flipped when the FMV
-  toggle is on (`rd_VideoSetMirror`, default on per the plan's "FMVs
-  mirrored with a toggle"). The hook is the environment variable
-  `ICO_MIRROR_FMV` (`0` = off), read by `movie_init`; the ini key
-  (`mirror_fmv`) and the Settings row belong to the mirror-mode package.
+- **Mirror:** UI-space-like: unmirrored by default. With mirror mode on
+  (`rd__MirrorOn`: the run's `rd_SetMirror` or `RdSettings.mirror`) the
+  film's rectangle is drawn flipped when both switches in
+  `port/render/rd_video.c` are on (R7c, RENDER_API.md section 21 "FMV"):
+  the player's `[game] mirror_fmv` (default `true`; docs/port/CONFIG.md),
+  which `port/ui/settings.c` hands to `rd_VideoSetMirrorOption` when the
+  Settings menu installs and again from the Gameplay page's "Mirror the
+  movies" row (docs/port/SETTINGS.md), and `movie.c`'s per-movie
+  `rd_VideoSetMirror`, on unless the developer environment variable
+  `ICO_MIRROR_FMV` is `0` (read in `movie_init`, `port/fmv/movie.c`), a
+  developer override kept beside the key. The film's sound goes through
+  the SPU2 and is swapped with mirror mode whatever `mirror_fmv` says
+  (docs/port/AUDIO.md "Mirror mode").
 - **Headless:** no renderer; pictures are decoded and dropped
   (`ICO_FMV_DECODE=0` skips the decoding; the timing is the same).
 
@@ -295,9 +302,10 @@ nothing, letting the title sequence run out.
 - The CSC constants come from PCSX2's model, not from hardware.
 - `advertise.pss` (NTSC, 29.97 fps) and `pal_advertise576.pss` were
   inspected, not played.
-- The `mirror_fmv` ini key and Settings row (mirror-mode package); the
-  audio pan swap in mirror mode for the film's PCM (the plan's "swap audio
-  pan") is not done here.
+- The `mirror_fmv` key and Settings row and the audio pan swap came with
+  R7c (above; docs/port/AUDIO.md "Mirror mode"). Left: with mirror mode on
+  and `mirror_fmv` off, the film's stereo is still swapped while its
+  picture is not.
 - `docs/port/AUDIO.md` ("PCM streams") still says the movie player is not
   in the build, and the top-level `CMakeLists.txt` comments still name
   `ito/mpeg` among `ICO_RENDERER_SOURCES` and the FMV among the null floor:

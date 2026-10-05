@@ -299,6 +299,24 @@ host's (`port/fmv/movie.c`, Phase 4E) makes the same `SgStPcm*` calls
 (docs/port/FMV.md, "Audio"), so a movie's sound runs through this engine and
 `sndn2_test` drives it as well.
 
+### Mirror mode (R7c)
+
+With mirror mode on, `ico_audio_host_vsync` (`port/audio/audio_host.c`)
+swaps the left and right samples of each rendered block
+(`ico_audio_pan_mirror`) right after `spu2_render`, before the WAV dump,
+the volume scaling and the SDL queue, so the device and the dump agree.
+The SPU2, the driver and the game's pan values are untouched. The switch is
+the run's mirror mode (`ico_opt_mirror()`, `port/game/options.c`: chosen
+at New Game or by the loaded slot; docs/port/SETTINGS.md "Mirror mode"),
+read per block, so it follows a change from the next vsync. Test:
+`audio_pan` (`pan_test`, `port/audio/CMakeLists.txt`).
+
+A film's sound is mixed by the same SPU2 (above), so it is swapped with
+mirror mode as well. It follows mirror mode, not `[game] mirror_fmv`:
+with mirror mode on and `mirror_fmv` off the picture plays unflipped and
+its stereo is swapped (`port/audio` has no view of the movie state;
+RENDER_API.md section 21, open item 5; docs/port/FMV.md "Mirror").
+
 ## Output (4B)
 
 `audio_host.c`: once per vsync the SPU2 renders 960 frames (50 Hz) or

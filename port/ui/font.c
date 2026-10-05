@@ -689,6 +689,45 @@ static void setState(unsigned flags)
 static void drawHalo(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                      unsigned flags, const UiXform *xf);
 
+/* R7d: the draws' keys (font.h ui_SetDrawKey) */
+static uint64_t s_keyOwner;
+
+uint64_t ui_SetDrawKey(uint64_t owner)
+{
+    const uint64_t prev = s_keyOwner;
+    s_keyOwner = owner;
+    return prev;
+}
+
+#ifdef ICO_RD
+static uint64_t keyMix(uint64_t h, uint64_t v)
+{
+    h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+    return h;
+}
+
+static uint64_t textKey(const char *utf8, unsigned flags, int page)
+{
+    uint64_t h = 0xCBF29CE484222325ull; /* FNV-1a */
+    for (const char *s = utf8; *s; s++) {
+        h = (h ^ (uint8_t)*s) * 0x100000001B3ull;
+    }
+    h = keyMix(h, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK));
+    h = keyMix(h, (uint64_t)page);
+    h = keyMix(h, s_keyOwner);
+    return h ? h : 1;
+}
+
+static uint64_t rectKey(void)
+{
+    if (!s_keyOwner) {
+        return 0;
+    }
+    const uint64_t h = keyMix(s_keyOwner, 0x52454354u); /* "RECT" */
+    return h ? h : 1;
+}
+#endif
+
 void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                    unsigned flags, const UiXform *xf)
 {
@@ -796,7 +835,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                     continue;
                 }
                 rd_Texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-                rd_ScreenPrims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, 1, 0);
+                rd_ScreenPrims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, 1, textKey(utf8, flags, page));
             }
             free(v);
         }
@@ -846,7 +885,7 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
     memcpy(v[1].rgba, rgba, 4);
     setState(0);
     rd_TextureOff();
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, 0);
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, rectKey());
 #else
     (void)x0;
     (void)y0;

@@ -50,12 +50,56 @@ static inline void regHostDma(int id, void *addr, int qwc)
 
 #define dl_OpenDma(id, addr, qwc) regHostDma((id), (void *)(addr), (qwc))
 
-static void regHostMesh(PacHeader *pk)
+/* R7d (docs/port/RENDER_API.md section 20, "Keys"): a mesh draw's RdKey is
+ * the object, the part and the packet's place in the part's chain with the
+ * pass (0 the material, 1 the specular, 2 the reflection pass), so the same
+ * draw has the same key in every frame.  The packet pointer alone is not:
+ * a morphing part draws grp->packets and grp->morph in alternate frames
+ * (buffer_ID), and objects that share a model share its packets.  The
+ * functions that walk a part's chain name it (regKeyPart) before the walk;
+ * a packet in neither of that group's chains keeps R7b's key (packet, list,
+ * MSCAL code). */
+static Sub15C *regKeyObj;
+
+static PObjGroup *regKeyGrp;
+
+static int regKeyIdx;
+
+static void regKeyPart(Sub15C *o, PObjGroup *grp, int part)
+{
+    regKeyObj = o;
+    regKeyGrp = grp;
+    regKeyIdx = part;
+}
+
+static int regKeyOrdinal(PacHeader *pk)
+{
+    PacHeader *q;
+    int n;
+
+    if (regKeyGrp == 0) {
+        return -1;
+    }
+    for (n = 0, q = regKeyGrp->packets; q != 0; q = q->next, n++) {
+        if (q == pk) {
+            return n;
+        }
+    }
+    for (n = 0, q = regKeyGrp->morph; q != 0; q = q->next, n++) {
+        if (q == pk) {
+            return n;
+        }
+    }
+    return -1;
+}
+
+static void regHostMesh(PacHeader *pk, int pass)
 {
     unsigned long long prim[2];
     unsigned long long tag;
     RdVuDraw d;
     RdMesh m;
+    int n;
 
     (dl_OpenDma)(2, pk->data, pk->size >> 4); /* the chain as the PS2 has it */
     m.id = pac_HostMesh(pk);
@@ -68,7 +112,10 @@ static void regHostMesh(PacHeader *pk)
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
     if (rd_VuDrawFromState(&d)) {
-        rd_DrawVuMesh(m, &d, RD_KEY(pk, rd_CurrentList(), d.code));
+        n = regKeyOrdinal(pk);
+        rd_DrawVuMesh(m, &d,
+                      n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
+                             : RD_KEY(pk, rd_CurrentList(), d.code));
     }
 }
 
@@ -796,7 +843,7 @@ static void reg_dispSpecular(PacHeader *pkt, int clip, int mode) /* derived name
     dl_CloseDma();
     reg_chooseSpecularMicroCode(mode, clip, 4);
 #ifdef ICO_RD
-    regHostMesh(pkt);
+    regHostMesh(pkt, 1);
 #else
     dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -985,6 +1032,9 @@ static void reg_dispNObj(Sub15C *o)
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
+#ifdef ICO_RD
+                regKeyPart(o, grp, j); /* R7d: the draws' keys */
+#endif
                 while (pkt != 0) {
                     r = reg_clipPacketBoundingBox(pkt);
                     if (r != 0) {
@@ -993,7 +1043,7 @@ static void reg_dispNObj(Sub15C *o)
                         reg_transMaterialPacket(pkt, grp);
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                        regHostMesh(pkt);
+                        regHostMesh(pkt, 0);
 #else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1015,7 +1065,7 @@ static void reg_dispNObj(Sub15C *o)
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
 #ifdef ICO_RD
-                            regHostMesh(pkt);
+                            regHostMesh(pkt, 2);
 #else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1094,6 +1144,9 @@ static void reg_dispMObj(Sub15C *o)
             } else {
                 pkt = grp->packets;
             }
+#ifdef ICO_RD
+            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
             while (pkt != 0) {
                 r = reg_clipPacketBoundingBox(pkt);
                 if (r != 0) {
@@ -1113,7 +1166,7 @@ static void reg_dispMObj(Sub15C *o)
                     if (dis != -1) {
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                        regHostMesh(pkt);
+                        regHostMesh(pkt, 0);
 #else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1135,7 +1188,7 @@ static void reg_dispMObj(Sub15C *o)
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
 #ifdef ICO_RD
-                            regHostMesh(pkt);
+                            regHostMesh(pkt, 2);
 #else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1182,6 +1235,9 @@ static void reg_dispSObj(Sub15C *o, int idx)
                 dl_CloseDma();
             }
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, idx); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
@@ -1190,7 +1246,7 @@ static void reg_dispSObj(Sub15C *o, int idx)
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                regHostMesh(pkt);
+                regHostMesh(pkt, 0);
 #else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1212,7 +1268,7 @@ static void reg_dispSObj(Sub15C *o, int idx)
                     dl_CloseDma();
                     reg_chooseReflectionMicroCode(0, r, 4);
 #ifdef ICO_RD
-                    regHostMesh(pkt);
+                    regHostMesh(pkt, 2);
 #else
                     dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1258,13 +1314,16 @@ static void reg_dispCObj(Sub15C *o)
         } else {
             pkt = grp->packets;
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             pri = regMaterialDLPri(grp, pkt->mat, tex_GetTexExtData(pkt->tex), 0.0f);
             regTransTexturePacket(pkt->tex, pri);
             reg_transMaterialPacket(pkt, grp);
             reg_chooseMicroCode(&grp->materials[pkt->mat], 0, pri);
 #ifdef ICO_RD
-            regHostMesh(pkt);
+            regHostMesh(pkt, 0);
 #else
             dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1753,6 +1812,9 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
+#ifdef ICO_RD
+                regKeyPart(o, grp, j); /* R7d: the draws' keys */
+#endif
                 while (pkt != 0) {
                     r = reg_clipPacketBoundingBox(pkt);
                     if (r != 0) {
@@ -1761,7 +1823,7 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
                         reg_transMaterialPacket(pkt, grp);
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                        regHostMesh(pkt);
+                        regHostMesh(pkt, 0);
 #else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1783,7 +1845,7 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
 #ifdef ICO_RD
-                            regHostMesh(pkt);
+                            regHostMesh(pkt, 2);
 #else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1825,6 +1887,9 @@ void reg_RenderReflection(Sub15C *o, int pri)
     dl_CloseDma();
     for (i = 0; i < mdl->partCount; i++) {
         pkt = grp->packets;
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
@@ -1832,7 +1897,7 @@ void reg_RenderReflection(Sub15C *o, int pri)
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                regHostMesh(pkt);
+                regHostMesh(pkt, 0);
 #else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -1948,13 +2013,16 @@ void reg_DispEnemy(void *sub)
             } else {
                 pkt = grp->packets;
             }
+#ifdef ICO_RD
+            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
             while (pkt != 0) {
                 pri = regMaterialDLPri(grp, pkt->mat, tex_GetTexExtData(pkt->tex), 0.0f);
                 regTransTexturePacket(pkt->tex, pri);
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], 0, pri);
 #ifdef ICO_RD
-                regHostMesh(pkt);
+                regHostMesh(pkt, 0);
 #else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -2016,6 +2084,9 @@ void reg_DispMultiPri(Sub15C *o, int pri)
         } else {
             pkt = grp->packets;
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
@@ -2034,7 +2105,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
                 if (dis != -1) {
                     reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
 #ifdef ICO_RD
-                    regHostMesh(pkt);
+                    regHostMesh(pkt, 0);
 #else
                     dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif
@@ -2056,7 +2127,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
                         dl_CloseDma();
                         reg_chooseReflectionMicroCode(0, r, 4);
 #ifdef ICO_RD
-                        regHostMesh(pkt);
+                        regHostMesh(pkt, 2);
 #else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
 #endif

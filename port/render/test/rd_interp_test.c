@@ -21,6 +21,19 @@
  *             keeps the current position
  *   shadow    a shadow volume's vertices blend; a triangle count change snaps
  *   fade      the fade sprite's level blends (the post sprite is keyed)
+ *   text      (R7d) a string's glyph quads keyed as port/ui/font.c keys them
+ *             (the string's hash): moved and faded, every glyph blends half
+ *             way (the alpha 0x80 -> 0 text at 0x40); another string is
+ *             another key and is the current; the same string twice matches
+ *             in order
+ *   morph     (R7d) a morphing part as RegistPacket.c draws it: two meshes
+ *             of one layout drawn in alternate frames under one key, the
+ *             older rewritten (rd_UpdateVuMesh) while the next frame
+ *             records: the half-way frame draws a scratch mesh whose
+ *             positions are half way between the two ticks' shapes (the
+ *             older from the kept version), alpha 1 the current tick's
+ *             shape, not the newer one; a mesh rewritten every frame the
+ *             same; the replays use the kept streams
  *   feedback  rd__BlurFeedbackFix at dt 0.5: the LERP retention is a^0.5 (to
  *             the FIX's rounding), additive FIX x 0.5; the motion blur
  *             sprite of an interpolated frame carries dt; the aura's FEED128
@@ -696,6 +709,211 @@ static void testPresent(void)
     recordSprites(0);
 }
 
+/* ------------------------------------------------------ keyed text (R7d) */
+
+static RdKey textKeyOf(const char *s)
+{
+    uint64_t h = 0xCBF29CE484222325ull;
+    while (*s) {
+        h = (h ^ (uint8_t)*s++) * 0x100000001B3ull;
+    }
+    return h ? h : 1;
+}
+
+/* n glyph sprites of 6 x 10 px from x, one rd_ScreenPrims call as font.c
+ * makes it */
+static void glyphs(int x, int y, int n, uint8_t alpha, RdKey key)
+{
+    RdScreenVtx v[16];
+    memset(v, 0, sizeof(v));
+    for (int i = 0; i < n && i < 8; i++) {
+        RdScreenVtx *a = &v[2 * i], *c = &v[2 * i + 1];
+        a->x = OX + (x + i * 8) * 16;
+        a->y = OY + y * 16;
+        c->x = a->x + 6 * 16;
+        c->y = a->y + 10 * 16;
+        a->s = (float)(i * 96);
+        c->s = a->s + 96.0f;
+        a->q = c->q = 1.0f;
+        a->rgba[0] = c->rgba[0] = 128;
+        a->rgba[1] = c->rgba[1] = 128;
+        a->rgba[2] = c->rgba[2] = 128;
+        a->rgba[3] = c->rgba[3] = alpha;
+    }
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, (uint32_t)(2 * n), RD_SPACE_UI, 1, key);
+}
+
+/* "NEW GAME" fading out while it slides 16 px; "OPTIONS" twice (the halo
+ * copies' ordinal); "LOAD" only in the first frame, "CONTINUE" only in the
+ * second (a changed label) */
+static void recordText(int second)
+{
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(11);
+    glyphs(10 + (second ? 16 : 0), 20, 8, second ? 0x00 : 0x80, textKeyOf("NEW GAME"));
+    glyphs(10, 40, 7, 0x40, textKeyOf("OPTIONS"));
+    glyphs(12 + (second ? 4 : 0), 40, 7, 0x40, textKeyOf("OPTIONS"));
+    if (second) {
+        glyphs(10, 60, 8, 0x80, textKeyOf("CONTINUE"));
+    } else {
+        glyphs(10, 60, 4, 0x80, textKeyOf("LOAD"));
+    }
+    rd_EndFrame(0);
+}
+
+static void testText(void)
+{
+    recordText(0);
+    recordText(1);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->keyed == 4 && st->lerped == 3 && st->missing == 1,
+          "text: three strings blend, the changed label is unmatched (keyed %u lerped %u "
+          "missing %u)",
+          st->keyed, st->lerped, st->missing);
+    const RdFrame *f = built(0.5f), *cur = rd__LastFrame();
+    const RdScreenVtx *a = screenVtx(f, findKey(f, 11, textKeyOf("NEW GAME"), 0));
+    int ok = a != NULL;
+    for (int i = 0; ok && i < 8; i++) {
+        ok &= a[2 * i].x == OX + (18 + i * 8) * 16 && a[2 * i + 1].x == a[2 * i].x + 6 * 16;
+        ok &= a[2 * i].rgba[3] == 0x40 && a[2 * i + 1].rgba[3] == 0x40;
+        ok &= a[2 * i].s == (float)(i * 96);
+    }
+    CHECK(ok, "text: every glyph 8 px over, alpha 0x80 -> 0 at 0x40, STs the current");
+    const RdScreenVtx *o1 = screenVtx(f, findKey(f, 11, textKeyOf("OPTIONS"), 1));
+    CHECK(o1 && o1[0].x == OX + 14 * 16, "text: the second copy matches the second (x %d)",
+          o1 ? (o1[0].x - OX) / 16 : -1);
+    const RdCmd *nc = findKey(f, 11, textKeyOf("CONTINUE"), 0);
+    const RdCmd *ncc = findKey(cur, 11, textKeyOf("CONTINUE"), 0);
+    CHECK(nc && ncc &&
+              memcmp(f->payload + nc->u[0], cur->payload + ncc->u[0], 16 * sizeof(RdScreenVtx)) ==
+                  0,
+          "text: a new label is the current frame's");
+}
+
+/* ------------------------------------------------- morphing meshes (R7d) */
+
+/* the creation stream of a 3-vertex prelit batch with vertex 1 at x */
+static void morphStream(float (*qw)[4], float x)
+{
+    memset(qw, 0, 10 * 16);
+    const uint32_t tag = 0x8003u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 3; k++) {
+        qw[1 + k * 3][0] = (float)(k * 10);
+        qw[1 + k * 3][3] = 1.0f;
+        qw[1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        qw[1 + k * 3 + 2][0] = 128.0f;               /* the colour */
+    }
+    qw[1 + 3][0] = x;
+}
+
+static RdMesh morphMesh(float x)
+{
+    static float qw[10][4];
+    morphStream(qw, x);
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 10;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    return rd_CreateVuMesh(&md);
+}
+
+static void morphUpdate(RdMesh m, float x)
+{
+    static float qw[10][4];
+    morphStream(qw, x);
+    rd_UpdateVuMesh(m, (const float (*)[4])qw);
+}
+
+static void morphDrawAt(RdMesh m, RdKey key)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 16);
+    d.vu.mem[19][0] = 2048.0f;
+    d.vu.mem[19][1] = 2048.0f;
+    rd_SelectList(0);
+    rd_DrawVuMesh(m, &d, key);
+}
+
+/* vertex 1's x in the stream the n-th draw of key in f replays */
+static float morphX(const RdFrame *f, RdKey key, int nth)
+{
+    const RdCmd *c = findKey(f, 0, key, nth);
+    const RdMeshRec *m = c ? rd__MeshRec(c->u[0]) : NULL;
+    return m ? m->stream[RD_VU_QW_PRELIT][0] : -1.0f;
+}
+
+static void testMorph(void)
+{
+    RdSettings s = *rd_GetSettings(), keep = s;
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 1.0f;
+    s.interpolate = 1;
+    rd_SetSettings(&s);
+    const RdKey kTwin = RD_KEY(&kObjD, 5, 0), kOne = RD_KEY(&kObjD, 6, 0);
+    /* the twins: A in odd frames, B in even ones, rewritten before the
+     * draw (reg_setShape); "one": a single mesh rewritten every frame */
+    RdMesh a = morphMesh(0.0f), b = morphMesh(0.0f), one = morphMesh(0.0f);
+    CHECK(a.id && b.id && one.id, "the morph meshes");
+    rd_BeginFrame();
+    frameHead();
+    morphUpdate(a, 100.0f);
+    morphDrawAt(a, kTwin);
+    morphUpdate(one, 100.0f);
+    morphDrawAt(one, kOne);
+    rd_EndFrame(0);
+    rd_BeginFrame();
+    frameHead();
+    morphUpdate(b, 120.0f);
+    morphDrawAt(b, kTwin);
+    morphUpdate(one, 120.0f);
+    morphDrawAt(one, kOne);
+    rd_EndFrame(0);
+    /* the next tick records: A and "one" take the third shape */
+    rd_BeginFrame();
+    frameHead();
+    morphUpdate(a, 200.0f);
+    morphDrawAt(a, kTwin);
+    morphUpdate(one, 200.0f);
+    morphDrawAt(one, kOne);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->mismatch == 0 && st->morph == 2,
+          "morph: the twins match across their two meshes, both streams blended (lerped %u "
+          "mismatch %u morph %u)",
+          st->lerped, st->mismatch, st->morph);
+    const RdFrame *f = built(0.5f);
+    CHECK(morphX(f, kTwin, 0) == 110.0f && morphX(f, kOne, 0) == 110.0f,
+          "morph: half way between the ticks' shapes (%g, %g)", morphX(f, kTwin, 0),
+          morphX(f, kOne, 0));
+    f = built(1.0f);
+    CHECK(morphX(f, kTwin, 0) == 120.0f && morphX(f, kOne, 0) == 120.0f,
+          "morph: alpha 1 is the current tick's shape, not the newer (%g, %g)", morphX(f, kTwin, 0),
+          morphX(f, kOne, 0));
+    f = built(0.0f);
+    CHECK(morphX(f, kTwin, 0) == 100.0f && morphX(f, kOne, 0) == 100.0f,
+          "morph: alpha 0 is the previous tick's shape (%g, %g)", morphX(f, kTwin, 0),
+          morphX(f, kOne, 0));
+    if (g_rd.hasDevice) {
+        CHECK(rd__ReplayFrame(built(0.5f), 0, false), "morph: the half-way frame replays");
+    }
+    rd_EndFrame(0);
+    rd_SetSettings(&keep);
+    rd_BeginFrame();
+    rd_EndFrame(0);
+    rd_DestroyVuMesh(a);
+    rd_DestroyVuMesh(b);
+    rd_DestroyVuMesh(one);
+}
+
 static void runCpu(void)
 {
     testSprites();
@@ -704,6 +922,8 @@ static void runCpu(void)
     testVu();
     testFade();
     testFeedback();
+    testText();
+    testMorph();
 }
 
 int main(void)

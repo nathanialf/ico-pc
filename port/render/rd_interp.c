@@ -143,10 +143,13 @@ static bool copyFrame(const RdFrame *cur)
 
 static void presentReset(void);
 
+static void scratchReset(void);
+
 void rd__InterpShutdown(void)
 {
     outFree();
     presentReset();
+    scratchReset();
 }
 
 /* ---------------------------------------------------------------- blends */
@@ -504,9 +507,23 @@ static const void *payloadAt(const RdFrame *f, uint32_t off, uint32_t size)
     return off <= f->payloadSize && size <= f->payloadSize - off ? f->payload + off : NULL;
 }
 
+/* R7d: two mesh ids a draw may blend across: the same mesh, or meshes of
+ * one layout (a morphing part's two packets, which the game draws in
+ * alternate frames; a mesh rebuilt after an eviction) */
+static bool sameMesh(uint32_t a, uint32_t b)
+{
+    if (a == b) {
+        return true;
+    }
+    const RdMeshRec *x = rd__MeshRec(a), *y = rd__MeshRec(b);
+    return x && y && x->vu && y->vu && x->vertexCount == y->vertexCount &&
+           x->qwPerVertex == y->qwPerVertex && x->batchCount == y->batchCount &&
+           x->indexCount == y->indexCount;
+}
+
 static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
 {
-    if (pc->u[2] != cc->u[2] || pc->u[0] != cc->u[0] || pc->b[0] != cc->b[0] ||
+    if (pc->u[2] != cc->u[2] || !sameMesh(pc->u[0], cc->u[0]) || pc->b[0] != cc->b[0] ||
         pc->b[1] != cc->b[1] || pc->b[2] != cc->b[2]) {
         return R_MISMATCH;
     }
@@ -690,6 +707,136 @@ static uint8_t *outPayload(const RdCmd *c)
     return (uint8_t *)payloadAt(&s_out, off, size);
 }
 
+/* ---------------------------------------------------- morphing meshes */
+
+/* R7d.  A mesh draw names its mesh by id and the replay reads the mesh's
+ * live stream, which rd_UpdateVuMesh (the morph path) may have rewritten
+ * for a frame recorded after cur.  A draw whose stream in cur (or, matched
+ * and blended, in prev) differs from the live one is given a scratch mesh
+ * of the same layout holding cur's stream, its vertex positions (qw 0) and
+ * normals (qw 1, the lit and skinned layouts) blended from prev's
+ * (rd__MeshStreamAt: rd_mesh.c keeps what the retained frames drew).  At
+ * most RD_INTERP_SCRATCH draws a present; more keep the live stream. */
+#define RD_INTERP_SCRATCH 64
+
+static uint32_t s_scratch[RD_INTERP_SCRATCH];
+
+static uint32_t s_scratchUsed;
+
+/* the mesh draws morphDraw saw blended, in list order */
+static struct {
+    uint32_t list, index;
+} *s_done;
+
+static uint32_t s_doneCount, s_doneCap;
+
+static void blendedMesh(uint32_t list, uint32_t index)
+{
+    if (s_doneCount == s_doneCap) {
+        const uint32_t cap = s_doneCap ? s_doneCap * 2 : 256;
+        void *p = realloc(s_done, (size_t)cap * sizeof(*s_done));
+        if (!p) {
+            return; /* the later pass sees it again: cur's stream, unblended */
+        }
+        s_done = p;
+        s_doneCap = cap;
+    }
+    s_done[s_doneCount].list = list;
+    s_done[s_doneCount].index = index;
+    s_doneCount++;
+}
+
+/* rd_Shutdown frees the meshes (rd__MeshShutdown); the ids are forgotten */
+static void scratchReset(void)
+{
+    memset(s_scratch, 0, sizeof(s_scratch));
+    s_scratchUsed = 0;
+    free(s_done);
+    s_done = NULL;
+    s_doneCount = s_doneCap = 0;
+}
+
+static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
+{
+    if (s_scratchUsed >= RD_INTERP_SCRATCH) {
+        return NULL;
+    }
+    uint32_t *id = &s_scratch[s_scratchUsed];
+    RdMeshRec *m = rd__MeshRec(*id);
+    const size_t size = (size_t)c->vertexCount * c->qwPerVertex * 16;
+    if (m && m->vertexCount == c->vertexCount && m->qwPerVertex == c->qwPerVertex &&
+        m->batchCount == c->batchCount && m->indexCount == c->indexCount) {
+        if (size) {
+            memcpy(m->stream, stream, size);
+        }
+        if (c->indexCount) {
+            memcpy(m->index, c->index, (size_t)c->indexCount * 4);
+        }
+        if (c->batchCount) {
+            memcpy(m->batches, c->batches, (size_t)c->batchCount * sizeof(RdVuBatchRec));
+        }
+    } else {
+        if (m) {
+            rd_DestroyVuMesh((RdMesh){*id});
+        }
+        *id = rd__VuMeshCreateRaw(stream, c->vertexCount, c->qwPerVertex, c->index, c->indexCount,
+                                  c->batches, c->batchCount, "interp");
+        m = rd__MeshRec(*id);
+        if (!m) {
+            *id = 0;
+            return NULL;
+        }
+    }
+    m->materialCount = c->materialCount;
+    m->srcQw = c->srcQw;
+    m->lastUsed = g_rd.frameCounter;
+    m->replaySeen = 0; /* upload again */
+    s_scratchUsed++;
+    return m;
+}
+
+/* the draw o (s_out's copy of a cur mesh draw) and its blended match pc in
+ * prev (NULL: none, or not blended); true when its stream was replaced */
+static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFrame *cur, float t)
+{
+    const RdMeshRec *mc = rd__MeshRec(o->u[0]);
+    if (!mc || !mc->vu) {
+        return false;
+    }
+    const float (*cs)[4] = rd__MeshStreamAt(mc, cur->number);
+    if (!cs) {
+        cs = (const float (*)[4])mc->stream; /* no kept version: as before */
+    }
+    const size_t size = (size_t)mc->vertexCount * mc->qwPerVertex * 16;
+    const float (*ps)[4] = NULL;
+    if (pc && prev && t < 1.0f) {
+        const RdMeshRec *mp = rd__MeshRec(pc->u[0]);
+        ps = mp ? rd__MeshStreamAt(mp, prev->number) : NULL;
+        if (ps == cs || (ps && memcmp(ps, cs, size) == 0)) {
+            ps = NULL; /* the same shape: nothing to blend */
+        }
+    }
+    if (!ps && cs == (const float (*)[4])mc->stream) {
+        return false;
+    }
+    RdMeshRec *s = scratchFor(mc, cs);
+    if (!s) {
+        return false;
+    }
+    if (ps) {
+        const uint32_t qpv = mc->qwPerVertex;
+        const uint32_t n = qpv >= 4 ? 2u : 1u; /* pos (, normal) */
+        for (uint32_t v = 0; v < mc->vertexCount; v++) {
+            for (uint32_t q = 0; q < n; q++) {
+                const size_t at = (size_t)v * qpv + q;
+                lerpFloats(s->stream[at], ps[at], cs[at], 3, t);
+            }
+        }
+    }
+    o->u[0] = s->gen << 16 | (uint32_t)(s - g_rd.meshes + 1);
+    return true;
+}
+
 /* ------------------------------------------------------------ the frame */
 
 static float frob(const float *a, const float *b)
@@ -809,7 +956,10 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
             st.keyed += isKeyedDraw(&s_out.lists[l].cmds[i]);
         }
     }
-    if (st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev)) {
+    s_scratchUsed = 0;
+    s_doneCount = 0;
+    const bool blend = st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev);
+    if (blend) {
         if (prev->hasCamera && cur->hasCamera) {
             lerpCamera(&s_out.camera, &prev->camera, &cur->camera, t);
         }
@@ -820,7 +970,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
         }
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
-                const RdCmd *c = &s_out.lists[l].cmds[i];
+                RdCmd *c = &s_out.lists[l].cmds[i];
                 if (!isKeyedDraw(c)) {
                     continue;
                 }
@@ -845,7 +995,27 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                 st.lerped += r == R_LERP;
                 st.mismatch += r == R_MISMATCH;
                 st.jump += r == R_JUMP;
+                if (r == R_LERP && (c->type == RDC_MESH || c->type == RDC_SKINNED)) {
+                    st.morph += morphDraw(c, prev, pc, cur, t);
+                    blendedMesh((uint32_t)l, i);
+                }
             }
+        }
+    }
+    /* R7d: the other mesh draws (unkeyed, unmatched, snapped) take cur's
+     * stream when the live one has moved on */
+    uint32_t next = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
+            RdCmd *c = &s_out.lists[l].cmds[i];
+            if (c->type != RDC_MESH && c->type != RDC_SKINNED) {
+                continue;
+            }
+            if (next < s_doneCount && s_done[next].list == (uint32_t)l && s_done[next].index == i) {
+                next++;
+                continue;
+            }
+            st.morph += morphDraw(c, NULL, NULL, cur, 1.0f);
         }
     }
     feedback(dt, firstOfTick);
@@ -863,7 +1033,7 @@ static struct {
     RdInterpStats stats;
     /* the log: per frame, at its first present */
     uint32_t frames, presents, snaps[RD_SNAP_COUNT];
-    uint64_t keyed, lerped, missing, mismatch, jump;
+    uint64_t keyed, lerped, missing, mismatch, jump, morph;
 } s_pres;
 
 #define RD_INTERP_LOG_FRAMES 250
@@ -878,18 +1048,20 @@ static void presentLog(void)
     s_pres.missing += st->missing;
     s_pres.mismatch += st->mismatch;
     s_pres.jump += st->jump;
+    s_pres.morph += st->morph;
     if (s_pres.frames < RD_INTERP_LOG_FRAMES) {
         return;
     }
     const uint32_t *n = s_pres.snaps;
     rd__Log("interp: %u frames, %u presents: %u blended; snapped: %u no previous, %u gap, "
             "%u keep, %u cut, %u camera, %u fade, %u history, %u size; keyed draws %llu: "
-            "%llu blended, %llu unmatched, %llu mismatched, %llu jumped",
+            "%llu blended, %llu unmatched, %llu mismatched, %llu jumped; %llu mesh streams kept or "
+            "blended",
             s_pres.frames, s_pres.presents, n[RD_SNAP_NONE], n[RD_SNAP_NO_PREV], n[RD_SNAP_GAP],
             n[RD_SNAP_KEEP], n[RD_SNAP_CUT], n[RD_SNAP_CAMERA], n[RD_SNAP_FADE], n[RD_SNAP_HISTORY],
             n[RD_SNAP_SIZE], (unsigned long long)s_pres.keyed, (unsigned long long)s_pres.lerped,
             (unsigned long long)s_pres.missing, (unsigned long long)s_pres.mismatch,
-            (unsigned long long)s_pres.jump);
+            (unsigned long long)s_pres.jump, (unsigned long long)s_pres.morph);
     const uint32_t number = s_pres.number;
     const float alpha = s_pres.alpha;
     memset(&s_pres, 0, sizeof(s_pres));

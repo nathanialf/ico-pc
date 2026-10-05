@@ -921,6 +921,9 @@ typedef struct GsShim { /* port */
     RdScreenVtx batch[GS_BATCH_MAX];
     unsigned int nb;
     int bType, bSpace, bFixed;
+    /* renderer R7d: the RdKey the batch's primitives carry
+       (gif_HostDrawKey) */
+    RdKey key;
     /* GIF_ENTER scopes */
     int depth, space;
     /* raw A+D bytes callers put in the open packet: decoded from here */
@@ -1064,7 +1067,7 @@ void gif_HostSetTex0Resolver(GifTex0Resolver fn)
 static void gsFlushBatch(void)
 {
     if (gs.nb != 0) {
-        rd_ScreenPrims((RdPrim)gs.bType, gs.batch, gs.nb, (RdSpace)gs.bSpace, gs.bFixed, 0);
+        rd_ScreenPrims((RdPrim)gs.bType, gs.batch, gs.nb, (RdSpace)gs.bSpace, gs.bFixed, gs.key);
         gs.nb = 0;
     }
 }
@@ -1712,7 +1715,31 @@ void gif_HostScreenPrims(RdPrim type, const RdScreenVtx *v, unsigned int n, RdSp
     gsRawFlush();
     gsSyncEnv();
     gsFlushBatch();
-    rd_ScreenPrims(type, v, n, space, uvFixed, 0);
+    rd_ScreenPrims(type, v, n, space, uvFixed, gs.key);
+}
+
+void gif_HostDrawKey(const void *obj, int part, int ordinal)
+{
+    RdKey k = RD_KEY(obj, part, ordinal);
+
+    if (k == gs.key) {
+        return;
+    }
+    gsRawFlush();
+    gsFlushBatch();
+    gs.key = k;
+}
+
+void gif_HostDrawKeyText(const char *s, int part)
+{
+    unsigned long long h = 0xCBF29CE484222325ull; /* FNV-1a, 64 bits */
+
+    while (s != 0 && *s != 0) {
+        h = (h ^ (unsigned char)*s++) * 0x100000001B3ull;
+    }
+    /* RD_KEY shifts the object left by 16: the hash's high bits are lost,
+       its low 48 kept */
+    gif_HostDrawKey((const void *)(uintptr_t)(h ^ (h >> 48)), part, 0);
 }
 
 void gif_HostForgetTextures(void)
@@ -1745,6 +1772,7 @@ void gif_HostFrameReset(void)
     gs.rawFrom = 0;
     gs.depth = 0;
     gs.space = GIF_SP_AUTO;
+    gs.key = 0;
 }
 
 #endif /* ICO_RD */

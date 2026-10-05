@@ -20,6 +20,9 @@
  *                            dl_Swap call it before the list changes.
  *   gif_HostScreenPrims      rd_ScreenPrims in order with the decoder's own
  *                            output (DisplayFont.c's glyph sprites).
+ *   gif_HostDrawKey          the RdKey the decoder's primitives carry
+ *                            from here (renderer R7d): a change emits the
+ *                            batch first, so a batch has one key.
  *   gif_HostUndecoded*       the GS registers written through the packet
  *                            layer that the decoder does not turn into rd
  *                            state (each is also logged once).
@@ -56,6 +59,14 @@ void gif_HostFrameReset(void);
    (since R3ab) draws into a temporary target for the rest of the frame,
    and a TEX0 with that block's TBP samples it. */
 void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n);
+/* Renderer R7d (docs/port/RENDER_API.md section 20, "Keys"): the RdKey of
+   the 2D primitives decoded from here, RD_KEY(obj, part, ordinal), so the
+   presenter can blend a layout row, a subtitle or a font string between
+   two ticks; (0, 0, 0) ends it (unkeyed, as before).  A different key emits
+   what the decoder batches first.  gif_HostDrawKeyText keys by a hash of
+   the string s (DisplayFont.c's font_Print). */
+void gif_HostDrawKey(const void *obj, int part, int ordinal);
+void gif_HostDrawKeyText(const char *s, int part);
 
 #endif /* ICO_RD */
 

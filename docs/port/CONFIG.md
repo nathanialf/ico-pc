@@ -78,7 +78,8 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
 | `[dev] trace` | `trace` | on | `false`/`0`/`none`: no trace; a path writes there |
-| `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build); with `ICO_RD_DUMP_INTERP=1` in the environment (R7b) each dump also gets the frame interpolated half way from the one before, `rd-NNNNN-i50.rddump` |
+| `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build) |
+| `[dev] dump_interp` | `dump_interp` | `false` | renderer wave 7 (R7b, a key since R7d): with `dump_every`, each dump also gets the frame interpolated half way from the one before, `rd-NNNNN-i50.rddump` (RENDER_API.md section 20). `port/platform/host_config.c` `export_dump_keys` hands it to the renderer as `ICO_RD_DUMP_INTERP` (`1` for `1`, `true`, `on`, `yes`; else `0`), set whenever `dump_every` is, so this key decides and a value of that variable in the shell no longer does; the variable is only the internal hand-over, like `ICO_RD_DUMP_EVERY` and `ICO_RD_DUMP_DIR` |
 | `[dev] audio_dump` | `audio_dump` | none | WAV of the mixed audio; `1` is `logs/audio.wav` |
 | `[dev] pad_script` | `pad_script` | `pad-script.txt` if present | scripted pad |
 | `[dev] verify` | `verify` | `true` | `false`/`0`: skip the disc image SHA-1 when `use_iso` is on; the first-run extraction always verifies |

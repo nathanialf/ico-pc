@@ -245,11 +245,16 @@ static char *read_text(const char *path)
    link this file) writes every Nth frame it replays as an rd dump into the
    folder dump_dir= names (default: dumps beside the ini; created), for
    rd_replay_tool.  Handed over in the environment, ICO_RD_DUMP_EVERY and
-   ICO_RD_DUMP_DIR, which rd_Init reads. */
+   ICO_RD_DUMP_DIR, which rd_Init reads.  dump_interp=1 (renderer wave 7,
+   R7d) also writes each dumped frame interpolated half way from the one
+   before (rd-NNNNN-i50.rddump), handed over as ICO_RD_DUMP_INTERP, which is
+   always set with the other two so the ini or config.toml decides. */
 static void export_dump_keys(const IcoIni *ini, const char *path)
 {
     const char *every = ico_ini_get(ini, "dump_every");
     const char *dir = ico_ini_get(ini, "dump_dir");
+    const char *interp = ico_ini_get(ini, "dump_interp");
+    const char *interpOn = "0";
     char base[ICO_PATH_MAX], full[ICO_PATH_MAX];
     const char *slash;
     size_t n;
@@ -271,12 +276,18 @@ static void export_dump_keys(const IcoIni *ini, const char *path)
     base[n] = '\0';
     ico_path_join(full, sizeof(full), base, dir != NULL ? dir : "dumps");
     ico_make_dir(full);
+    if (interp != NULL && (strcmp(interp, "1") == 0 || strcmp(interp, "true") == 0 ||
+                           strcmp(interp, "on") == 0 || strcmp(interp, "yes") == 0)) {
+        interpOn = "1";
+    }
 #ifdef _WIN32
     _putenv_s("ICO_RD_DUMP_EVERY", every);
     _putenv_s("ICO_RD_DUMP_DIR", full);
+    _putenv_s("ICO_RD_DUMP_INTERP", interpOn);
 #else
     setenv("ICO_RD_DUMP_EVERY", every, 1);
     setenv("ICO_RD_DUMP_DIR", full, 1);
+    setenv("ICO_RD_DUMP_INTERP", interpOn, 1);
 #endif
 }
 
@@ -365,6 +376,8 @@ static const struct {
     {"dev.trace", "trace"},
     {"dev.dump_every", "dump_every"},
     {"dev.dump_dir", "dump_dir"},
+    /* 1: each dump also half way interpolated (renderer wave 7, R7d) */
+    {"dev.dump_interp", "dump_interp"},
     {"dev.audio_dump", "audio_dump"},
     {"dev.pad_script", "pad_script"},
     {"dev.verify", "verify"},

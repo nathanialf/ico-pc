@@ -312,7 +312,23 @@ typedef struct RdMeshRec {
     uint32_t replaySeen; /* g_rd.replayCounter of the replay that uploaded it */
     uint64_t ringStream, ringIndex;
     char name[24];
+    /* R7d: the stream's versions for the presenter (rd_UpdateVuMesh).
+     * verFrame is the frame that was recording when the stream was last
+     * written (0: as created); frames from it on draw the live stream.
+     * While interpolating, a rewrite of a stream that a retained frame drew
+     * keeps the old one in hist (the older entry replaced): what frames
+     * from .. to - 1 drew. */
+    uint32_t verFrame;
+
+    struct {
+        float (*stream)[4];
+        uint32_t from, to;
+    } hist[2];
 } RdMeshRec;
+
+/* R7d: the stream mesh m had when frame `frame` was recorded, NULL when no
+ * kept version covers it */
+const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4];
 
 #define RD_MAX_MESHES 16384
 
@@ -502,6 +518,7 @@ typedef struct RdInterpStats {
     uint32_t missing;  /* no match in prev (snapped) */
     uint32_t mismatch; /* count, topology or mesh differs (snapped) */
     uint32_t jump;     /* moved further than the teleport threshold (snapped) */
+    uint32_t morph;    /* R7d: mesh draws given a kept or blended vertex stream */
 } RdInterpStats;
 
 int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);

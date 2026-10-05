@@ -373,6 +373,27 @@ static void test_ini_layer(void)
     }
 }
 
+/* dump_interp (R7d): handed to the renderer as ICO_RD_DUMP_INTERP with
+   dump_every, so the ini or config.toml decides, 0 when absent */
+static void test_dump_interp(void)
+{
+    char ini_path[ICO_PATH_MAX];
+    IcoIni ini;
+    const char *v;
+
+    CHECK_STR(ico_config_ini_key("dev.dump_interp"), "dump_interp");
+    path_in(ini_path, "dumpi.ini");
+    write_file(ini_path, "dump_every=7\ndump_dir=dumpi-dumps\ndump_interp=true\n");
+    CHECK(ico_ini_load(&ini, ini_path) == 0);
+    v = getenv("ICO_RD_DUMP_INTERP");
+    CHECK(v != NULL && strcmp(v, "1") == 0);
+    write_file(ini_path, "dump_every=7\ndump_dir=dumpi-dumps\n");
+    CHECK(ico_ini_load(&ini, ini_path) == 0);
+    v = getenv("ICO_RD_DUMP_INTERP");
+    CHECK(v != NULL && strcmp(v, "0") == 0);
+    remove(ini_path);
+}
+
 static void test_fixed_clock_rule(void)
 {
     IcoIni ini;
@@ -592,6 +613,7 @@ int main(int argc, char **argv)
     test_save();
     test_precedence();
     test_ini_layer();
+    test_dump_interp();
     test_fixed_clock_rule();
     test_language();
     test_clock();

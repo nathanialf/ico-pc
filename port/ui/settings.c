@@ -198,6 +198,40 @@ static int stepIndex(int i, int n, int dir)
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 #define MOUSE_SENS_N ((int)(sizeof(kMouseSens) / sizeof(kMouseSens[0])))
 
+/* R7d: the Frame rate row's values, in the order Right steps them
+   (ico_video_parse_framerate / ico_video_framerate_name: "original",
+   "uncapped" or N presents a second) */
+static const int kFramerates[] = {
+    ICO_FRAMERATE_ORIGINAL, ICO_FRAMERATE_UNCAPPED, 60, 120, 144, 240};
+#define FRAMERATE_N ((int)(sizeof(kFramerates) / sizeof(kFramerates[0])))
+
+/* The next value from fr: a listed value steps (and wraps) in the list; a
+   cap the list does not hold (framerate = 100 in the file) steps to the
+   listed cap above it (Right) or below it (Left), past the ends to
+   "original" (Right) or "uncapped" (Left) */
+static int stepFramerate(int fr, int dir)
+{
+    for (int i = 0; i < FRAMERATE_N; i++) {
+        if (kFramerates[i] == fr) {
+            return kFramerates[stepIndex(i, FRAMERATE_N, dir)];
+        }
+    }
+    if (dir > 0) {
+        for (int i = 2; i < FRAMERATE_N; i++) {
+            if (kFramerates[i] > fr) {
+                return kFramerates[i];
+            }
+        }
+        return ICO_FRAMERATE_ORIGINAL;
+    }
+    for (int i = FRAMERATE_N - 1; i >= 2; i--) {
+        if (kFramerates[i] < fr) {
+            return kFramerates[i];
+        }
+    }
+    return ICO_FRAMERATE_UNCAPPED;
+}
+
 static IcoBindings *liveBindings(void)
 {
     IcoBindings *b = ico_input_live_bindings();
@@ -258,7 +292,17 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_FULL_HEIGHT:
         return onOff(o.fullHeight);
     case UI_OPT_FRAMERATE:
-        return ico_config_get_string("video.framerate", "");
+        /* the option as set; the Original preset presents at the tick
+           whatever it says (ico_video_framerate), as the other Enhanced
+           rows show their values under Original */
+        if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
+            return ui_Str(UI_STR_VAL_ORIGINAL);
+        }
+        if (o.framerate == ICO_FRAMERATE_UNCAPPED) {
+            return "Uncapped"; /* no UI_STR_ id yet (strings_*.c) */
+        }
+        snprintf(buf, size, "%d fps", o.framerate);
+        return buf;
     case UI_OPT_VIDEO_MODE:
         return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
     case UI_OPT_VOLUME: {
@@ -289,8 +333,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
 
 static int steppable(int opt)
 {
-    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER && opt != UI_OPT_FRAMERATE &&
-           opt != UI_OPT_MIRROR_INFO;
+    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER && opt != UI_OPT_MIRROR_INFO;
 }
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
@@ -336,6 +379,10 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_FULL_HEIGHT:
         o.fullHeight = !o.fullHeight;
+        video = 1;
+        break;
+    case UI_OPT_FRAMERATE:
+        o.framerate = stepFramerate(o.framerate, dir);
         video = 1;
         break;
     case UI_OPT_VIDEO_MODE:
@@ -829,12 +876,8 @@ static void build(void)
                                      {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
                                      {UI_OPT_BACK, UI_STR_BACK}};
     for (unsigned i = 0; i < sizeof(dispAll) / sizeof(dispAll[0]); i++) {
-        /* [video] framerate is the interpolation package's (R7b): shown,
-           read-only, when the config has it */
-        if (dispAll[i][0] == UI_OPT_FRAMERATE &&
-            ico_config_get_string("video.framerate", NULL) == NULL) {
-            continue;
-        }
+        /* R7d: every row always shown, Frame rate included (stepped by
+           ui_SettingsStep since R7d; read-only from the config in R7b) */
         dispOpts[nd] = dispAll[i][0];
         dispStrs[nd++] = dispAll[i][1];
     }

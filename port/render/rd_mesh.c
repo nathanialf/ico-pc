@@ -50,6 +50,10 @@ RdMeshRec *rd__MeshRec(uint32_t id)
 
 static void meshFree(RdMeshRec *m)
 {
+    for (int i = 0; i < 2; i++) {
+        free(m->hist[i].stream);
+        m->hist[i].stream = NULL;
+    }
     free(m->stream);
     free(m->index);
     free(m->batches);
@@ -223,12 +227,57 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
     return (RdMesh){id};
 }
 
+/* R7d: a rewrite while frame `rec` records.  The presenter draws the two
+ * frames closed last (rd_interp.c) after the game has recorded the next
+ * one, so a stream either of them drew is kept before it is overwritten:
+ * a morphing part (reg_setShape) then shows the shape of the tick it
+ * belongs to, blended, instead of the newer tick's.  The game's own double
+ * buffer (grp->packets and grp->morph in alternate frames) gives each frame
+ * its own mesh; a mesh rewritten every frame keeps two versions. */
+static void keepVersion(RdMeshRec *m)
+{
+    const uint32_t rec = rd__RecFrame() ? g_rd.frameCounter : g_rd.frameCounter + 1;
+    if (rd_InterpolationActive() && m->lastUsed >= m->verFrame && m->lastUsed < rec &&
+        m->lastUsed + 2 >= rec) {
+        const int k = m->hist[0].to <= m->hist[1].to ? 0 : 1;
+        const size_t size = (size_t)m->vertexCount * m->qwPerVertex * 16;
+        if (!m->hist[k].stream) {
+            m->hist[k].stream = malloc(size ? size : 16);
+        }
+        if (m->hist[k].stream) {
+            if (size) {
+                memcpy(m->hist[k].stream, m->stream, size);
+            }
+            m->hist[k].from = m->verFrame;
+            m->hist[k].to = rec;
+        }
+    }
+    m->verFrame = rec;
+}
+
+const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4]
+{
+    if (!m) {
+        return NULL;
+    }
+    if (frame >= m->verFrame) {
+        return (const float (*)[4])m->stream;
+    }
+    for (int k = 0; k < 2; k++) {
+        if (m->hist[k].stream && m->hist[k].from <= frame && frame < m->hist[k].to) {
+            return (const float (*)[4])m->hist[k].stream;
+        }
+    }
+    return NULL;
+}
+
 void rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
 {
     RdMeshRec *m = rd__MeshRec(mesh.id);
     if (!m || !m->vu || !qw) {
         return;
     }
+    keepVersion(m);
     for (uint32_t b = 0; b < m->batchCount; b++) {
         const RdVuBatchRec *br = &m->batches[b];
         memcpy(m->stream[(size_t)br->firstVertex * m->qwPerVertex], qw[br->srcQw + 1],

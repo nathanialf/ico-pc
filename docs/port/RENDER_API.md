@@ -2346,6 +2346,14 @@ holds the output), `rd_present.c` (`presentAlpha()` removed),
 `port/game/video_options.{c,h}` (`[video] framerate`, the cut signal),
 `ico2/omori/src/camera-root.c` and `ico2/common/src/StageManager.c` (the
 cut hooks). Test: `rd_interp` (`port/render/test/rd_interp_test.c`).
+R7d (the follow-ups, "Keys and morphs" below): `ico2/seki/src/RegistPacket.c`
+(stable mesh keys), `GifPacket.c` / `GifHost.h` (`gif_HostDrawKey`),
+`DisplayFont.c`, `ico2/common/src/layout_texture.c`, `ico2/fumi/src/jimaku.c`,
+`port/ui/{font.c,layout_ext.c,popup.c}` (2D keys),
+`ico2/omori/src/camera-ico2.c` (the group cut), `rd_mesh.c` (kept mesh
+versions), `rd_interp.c` (morph streams), `port/platform/host_config.c`
+(`[dev] dump_interp`), `port/ui/settings.c` (the Frame rate row); tests
+`rd_interp`, `rd_layout`, `settings`, `config`.
 
 **Setting.** `[video] framerate`: `"original"`, `"uncapped"` (the default)
 or a number 30..1000 (`ico_video_parse_framerate`; docs/port/DISPLAY.md,
@@ -2405,14 +2413,14 @@ pair that is bit-identical, or not both finite, keeps the current value;
 integers round to nearest. Matrices blended element by element shorten a
 rotation's axes by cos(theta/2) half way (0.4 % at 10 degrees in a tick).
 
-Keyed today: `RegistPacket.c`'s meshes (packet, list, MSCAL code), the
-grids (`Primitive.c`: the Mesh3D, list), the shadow volumes (`Shadow.c`:
-the object), the fade and letterbox sprites (`rd_post.c`), and the
-particle batches (`rd_mesh.c`, list and code 18: MicroCode.c draws them
-from the VU scratch with key 0). No 2D call site passes a key yet
-(GifPacket.c, layout_texture.c, DisplayFont.c, port/ui): their quads are
-the current frame's, which is also what keeps text and menus from sliding
-between unrelated glyphs.
+Keyed today: `RegistPacket.c`'s meshes (since R7d the object, the part and
+the packet's place in the part's chain with the pass; below), the grids
+(`Primitive.c`: the Mesh3D, list), the shadow volumes (`Shadow.c`: the
+object), the fade and letterbox sprites (`rd_post.c`), the particle batches
+(`rd_mesh.c`, list and code 18: MicroCode.c draws them from the VU scratch
+with key 0), and since R7d the 2D items (below). A 2D primitive drawn
+without a key (the menu sparkle, the debug font, anything outside the sites
+below) is the current frame's.
 
 **What snaps.** A keyed draw is the current frame's when the previous frame
 has no match; when the shape differs (mesh, program, code, clip, payload
@@ -2444,20 +2452,19 @@ camera mode change at the end of `SetCameraMatrix` (path camera in or out,
 camera (`gamecamCutBack` before `SetCameraMatrix_Ico2`), and
 `InsertCamera_Exec` with cutType 0 (camera-ico2.c then calls
 `initMonitorCamera(1)`); StageManager.c `start_stage_Load_thread` (a stage
-change). The window compares the counter once per vsync after the step and
+change); since R7d camera-ico2.c's own re-initialisation when the camera
+group's kind changes (or the group changed with the reset flag:
+`initMonitorCamera(1)` before `CameraMove`). The window compares the counter once per vsync after the step and
 calls `rd_CameraCut()`, which marks the frame being recorded: the step
 closes the previous frame in the scheduler before the game's threads run
-the tick that cuts. Not hooked (camera-ico2.c is not this package's): the
-cut camera-ico2.c makes itself when the camera group's kind changes
-(`initMonitorCamera(1)` with `flag == 0`); the camera-jump test covers a
-cut that moves the eye 3 m or turns 30 degrees.
+the tick that cuts. The camera-jump test still covers a cut no hook names
+(the eye moved 3 m or turned 30 degrees).
 
 **Held at the tick.** Everything unkeyed or carried by state: CLUT
 animation (textures are updated in place, `rd_UpdateTexture`), the
 rand-driven draws (the menu sparkle and lightning are screen and world
 prims with key 0), the dissolve FIX (an ALPHA state command), film noise
-(an unkeyed post sprite), the morph path (`rd_UpdateVuMesh` rewrites the
-mesh, not the frame: see open item 2), shadow topology changes (above),
+(an unkeyed post sprite), shadow topology changes (above),
 and the aura's feedback: its sprites whose target is FEED128 are dropped
 from every present but a tick's first (`firstOfTick`), so FEED128 advances
 once per tick as on the PS2 and the other presents paste the held buffer.
@@ -2472,6 +2479,50 @@ is the alpha advanced since the previous present plus whole ticks when
 frames closed in between, clamped to [1/256, 4]; dt = 1 returns FIX
 unchanged. The FIX is an integer, so a short dt rounds: FIX 32 (a = 0.75)
 at dt 1/6 wants 5.99 and gets 6.
+
+**Keys and morphs (R7d).** The keys the call sites build, so that the same
+draw has the same key in consecutive frames:
+
+| path | key | file |
+|---|---|---|
+| VU meshes | `RD_KEY(object, part, packet * 4 + pass)`: the `Sub15C` drawn, the part (node) index, the packet's place in the part's chain (`grp->packets` or `grp->morph`, the same place in both), the pass (0 the material, 1 the specular, 2 the reflection); a packet in neither chain of the named group keeps R7b's (packet, list, code) | `RegistPacket.c` `regKeyPart`, `regKeyOrdinal`, `regHostMesh` |
+| the decoder's 2D | `gif_HostDrawKey(obj, part, ordinal)` sets the key of every primitive decoded after it (a change emits the batch first, so a batch has one key); `(0, 0, 0)` ends it | `GifPacket.c`, `GifHost.h` |
+| layout rows | the row's `texProperty` entry: part 0 the row's sprite (or port row label), part 1 its glow sprites; the primary sprite `&primarySpriteRect` | `layout_texture.c` `LT_HOST_KEY` |
+| subtitles | the subtitle's block (`&jimakuRing[n]`), part 0 and 1 for its two rows | `jimaku.c` `JIM_HOST_KEY` |
+| `font_Print` | FNV-1a of the string, part 0xDF (`gif_HostDrawKeyText`) | `DisplayFont.c` |
+| the port's text | per draw (one per atlas page): FNV-1a of the string mixed with the alignment flags, the page and the owner (`ui_SetDrawKey`); the eight halo copies share the key and match in order | `port/ui/font.c` |
+| the port's rects | only under an owner: the owner mixed with "RECT" | `port/ui/font.c` |
+| owners | a port layout row: the row's entry and the pass (label, glow); the popup: its push's sequence number (`Popup.id`) | `layout_ext.c`, `popup.c` |
+
+Glyphs are matched within a draw by their order (the n-th quad of the
+string in the previous frame), so a string that moves or fades blends glyph
+for glyph, and a changed string is another key and is the current frame's.
+The rand-driven sprites (the menu sparkle) and anything drawn outside these
+sites stay unkeyed.
+
+Mesh draws may blend across two meshes of one layout (`sameMesh`: the same
+vertex, index and batch counts and vertex size): a morphing part draws
+`grp->packets` in odd frames and `grp->morph` in even ones (`buffer_ID`),
+each its own `RdMesh`. The morph itself: `reg_setShape` rewrites a packet's
+vertices and `rd_UpdateVuMesh` the mesh's stream while the next frame
+records, after the frame that drew it closed. `rd_mesh.c` now keeps
+versions (`RdMeshRec.verFrame`, the frame recording when the stream was
+written; `hist[2]`, the two last replaced streams with the frames that drew
+them): while interpolating, a rewrite of a stream that one of the two last
+closed frames drew copies it first. `rd__MeshStreamAt(m, frame)` gives the
+stream a frame drew. In `rd__InterpFrame`, a mesh draw whose stream in cur
+is not the live one, or whose blended match's stream in prev differs from
+cur's, is given a scratch mesh (`RD_INTERP_SCRATCH`, 64 a present, named
+`interp`, reused across presents) holding cur's stream with each vertex's
+position (qw 0) and, for the lit and skinned layouts, normal (qw 1) blended
+from prev's. Draws not blended (unkeyed, unmatched, snapped, a snapped
+frame) still get cur's stream. So a morph is presented with its own tick's
+shape, half way between the two ticks, and no longer one tick early; the
+game's own double buffer means the scratch copy is needed only for the
+blend. `RdInterpStats.morph` counts these draws (logged since this package
+as "mesh streams kept or blended").
+
+The game run's figures (R7d, below) are against R7b's.
 
 **Determinism.** `rd_interp.c` reads the retained frames and writes only
 its own copy; the game's only addition is the cut counter, which no game
@@ -2553,37 +2604,78 @@ Internal: `RD_FRAME_RING`, `RdFrame.cut` / `.fade`, `RdContext.interpFloor`
 `RD_INTERP_JUMP_WORLD` / `_SCREEN`, `RD_INTERP_CAMERA_MOVE` / `_TURN`;
 `rd__PrevFrame` follows the ring. The dump format is unchanged (the keys
 were always dumped; `cut` and `fade` are not). `ICO_RD_DUMP_INTERP=1`
-writes `rd-NNNNN-i50.rddump` next to each frame dump.
+writes `rd-NNNNN-i50.rddump` next to each frame dump; since R7d that is
+the config key `[dev] dump_interp` (docs/port/CONFIG.md), which
+`host_config.c` hands over as that variable.
+
+**Game run (R7d)**, the same setup as R7b's above (window build, lavapipe,
+`SDL_VIDEODRIVER=offscreen`, `port/input/pad-boot.txt`, `ticks=1300`,
+`timeout 600`, Enhanced, `resolution = "1x"`, `framerate = "100"`, vsync on,
+`dump_every=100`) with `dump_interp=1` in the ini,
+`build-host/r7d-run-window`: exit 0 in 139 s. The `interp:` summaries per
+250 frames, R7b's in brackets (the runs are not frame-aligned: R7c's mirror
+screen changed the boot's timing):
+
+| block | frames blended | keyed draws | blended | unmatched | mismatched | jumped |
+|---|---|---|---|---|---|---|
+| 1 | 219 (231) | 30777 (28798) | 26762, 87 % (25613, 89 %) | 5 (1394) | 4 (0) | 0 (0) |
+| 2 | 222 (210) | 52630 (48701) | 45541, 87 % (36723, 75 %) | 129 (1312) | 10 (0) | 1952 (3510) |
+| 3 | 186 (186) | 25034 (24787) | 18604, 74 % (17300, 70 %) | 203 (1358) | 101 (62) | 19 (21) |
+
+The rest of the keyed draws are in frames snapped whole (fade 26 / 22 / 53,
+cut 2 / 4 / 7, keep 3 / 2 / 4). The half-way dumps: frame 300 (R7b: 112
+blended, 6 unmatched) 119 blended, 0 unmatched; 500 194 blended, 0
+unmatched, 16 jumped (R7b 191, 6, 0); 600 228 blended, 0 unmatched, 16
+jumped (R7b 160, 6, 43); 700 246 blended (R7b 239, 6 unmatched); 1200 100
+blended, 0 unmatched, 1 mismatched (R7b 93, 6, 1). The six skinned draws
+of list 1 and the ten of list 0 that R7b found unmatched or jumping are one
+object's (key `0x707cfdca1c...`, parts 0 to 4, the packets' places as
+above): all sixteen now match, and in frames 500 and 600 they are counted
+jumped because the object really moves: its first bone's y is 18939 at
+frame 500 and 59197 at 600, about 400 units a tick (dumps, read with a
+scratch loader), above `RD_INTERP_JUMP_WORLD`. Those sixteen a frame over
+the title are the 1952 jumps of block 2 (R7b's 3510 also had list 5's
+stale qw 27, fixed after R7b's run). In frame 1200 (stage 3, the boy close
+up) six skinned draws of one object's part 3 got scratch streams (`interp`
+meshes in the half-way dump), 2 to 404 of their vertices half way between
+the two ticks' morphs (up to 0.004 units: a slow morph). The title's menu
+text (the port's rows, `layout_ext.c`, with their halo copies) fading out
+at frame 500: alpha 10 in the frame and 16 in the half-way dump (22 the
+tick before), the halo copies 2 and 4, every copy keyed and blended, at the
+same positions; frame 400's keyed layout sprite fading in, alpha 48 in the
+frame and 44 half way. Presents: one per game frame while the driver
+is slower than a vsync (title: 69 presents and 69 game frames in 10.1 s)
+and 2.3 to 3.7 a frame elsewhere (e.g. 739 presents, 200 frames), the
+slow-driver rule of R7b's open item 6 confirmed. The "mesh streams kept
+or blended" count was added to the logs after this run.
 
 Open items:
 
-1. 2D call sites pass no key (GifPacket.c's decoder, layout_texture.c,
-   DisplayFont.c, port/ui): menus that slide, subtitles that move and the
-   popup stay at the tick. Keying them needs a stable object per item
-   (layout row, popup); glyph quads should stay unkeyed.
-2. The morph path rewrites a mesh's stream in place (`rd_UpdateVuMesh`),
-   and the frame keeps only the mesh id: while the next frame records, its
-   morphs are already in the mesh, so a morphing face is presented with
-   the newer tick's shape (one tick early, not blended). Blending morphs
-   needs the stream in the frame (or a per-frame copy for morphing meshes).
+1. Closed in R7d: the 2D call sites are keyed ("Keys and morphs").
+   Remaining: `kanban.c`'s signs, `staffroll.c` (through `font_Print`,
+   keyed by its strings) and `debug.c` are not keyed by an object; the
+   popup's panel slides with its owner key; a subtitle was not seen in a
+   game run (no dump has one).
+2. Closed in R7d: a morphing mesh is presented with its own tick's shape,
+   blended (kept versions, scratch meshes). A mesh rewritten more than
+   once between two closes keeps only the last version; more than 64 morph
+   draws in a frame keep the live stream past the 64th.
 3. Particles are matched by list and order; an emitter that adds a batch
    ahead of another in the same list shifts the order and snaps both (the
    count differs) rather than mismatching.
-4. The cut camera-ico2.c makes on a camera group change is not hooked
-   (outside this package's files); the camera-jump test catches large ones.
+4. Closed in R7d: camera-ico2.c's group cut calls `ico_video_camera_cut()`.
 5. Rotations blend element-wise; a fast spin (a turn of tens of degrees in
    one tick on a bone or object) would shrink half way. None seen; a
    quaternion blend of the model matrices would fix it.
-6. The run's figures above were measured before two post-run fixes (the
-   slow-driver present rule and the world origin from the common block);
-   the next run with the window should confirm the jump counts drop and
-   that a software driver presents once per frame.
-7. `RegistPacket.c` keys a mesh by its PacHeader pointer, list and code. A
-   pass that builds its packet each frame in a double-buffered packet area
-   would get a new key every frame (the six list 1 skinned draws above are
-   never matched, consistent with that, unverified); such a site needs a
-   key from the object and part instead (RegistPacket.c is not this
-   package's file).
+6. Closed in R7d: the run above confirms one present per frame on the
+   slow driver and the jump counts down (list 5's meshes no longer jump;
+   the sixteen skinned draws that do move about 4 m a tick).
+7. Closed in R7d: the meshes are keyed by object, part, packet and pass.
+   The cause was the morph double buffer (`grp->packets` / `grp->morph` by
+   `buffer_ID`), as suspected, and models shared by objects.
+8. (R7d) 129 and 203 keyed draws a block are still unmatched and up to 101
+   mismatched in the stage 3 block; not examined draw by draw (no previous
+   frame is dumped). Rotations still blend element-wise (item 5).
 
 Open items for mirror mode (R7c), which follows: the mirror flip belongs in
 the presenter's step 2 (`RdPresentPreset.mirror`), so it applies to every
@@ -2758,3 +2850,8 @@ Open items:
    `mirror_fmv`: with the mirror on and `mirror_fmv` off the picture is
    unmirrored and its stereo swapped (the film's PCM goes through the
    SPU2 like the rest; `port/audio` has no view of the movie state).
+   Documented for players and porters in R7d (docs/port/AUDIO.md "Mirror
+   mode", docs/port/FMV.md); the behaviour is unchanged.
+6. (R7d) The interpolation follow-ups of section 20 do not touch the
+   mirror: the 2D keys blend the recorded (unflipped) XY, which the replay
+   flips afterwards, as R7c's analysis says for any keyed UI prim.

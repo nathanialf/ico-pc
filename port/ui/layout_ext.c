@@ -214,8 +214,13 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
             size *= k < 0.6f ? 0.6f : k;
         }
     }
+    /* R7d: the row's draws are keyed by the row and the pass (the label,
+       the glow), so a row that moves or fades blends between ticks */
+    const uint64_t owner =
+        ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
     if (!glow) {
         ui_DrawText(x, by + bh * 0.5f, size, rgba, text, flags | UI_HALO);
+        ui_SetDrawKey(owner);
         return;
     }
     /* the glow sprite stretches the row's box: the same map for the text */
@@ -227,4 +232,5 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
     ui_DrawTextXf(x, by + bh * 0.5f, size, rgba, text, flags, &xf);
+    ui_SetDrawKey(owner);
 }

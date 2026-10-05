@@ -96,6 +96,17 @@ extern void gif_SpriteSensitiveOffset(int *r, unsigned int z, int *uv, JimCol *c
 /* as in GifPacket.h, which this TU does not include (gif_SpriteSensitiveOffset differs) */
 extern void gif_EndPacket(void);
 
+#ifdef ICO_RD
+
+/* PC port (renderer R7d): GifHost.h's key of the decoder's primitives, so
+   the presenter matches a subtitle's two rows between ticks by its block */
+extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
+
+#define JIM_HOST_KEY(obj, part) gif_HostDrawKey((obj), (part), 0)
+#else
+#define JIM_HOST_KEY(obj, part) ((void)0)
+#endif
+
 static void display_texture(LtProperty *t)
 {
     JimCol col = {128, 128, 128, 128};
@@ -425,8 +436,11 @@ void jimakuDisp(JimakuArg *msg)
             return;
         }
         if (jimakuOn != 0) {
+            JIM_HOST_KEY(g, 0);
             display_texture(&texProperty[434]);
+            JIM_HOST_KEY(g, 1);
             display_texture(&texProperty[435]);
+            JIM_HOST_KEY(0, 0);
         }
     }
 }

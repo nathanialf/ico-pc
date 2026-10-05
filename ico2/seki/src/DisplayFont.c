@@ -315,8 +315,13 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
 
 #ifdef ICO_RD
     if (fontVertCount != 0) {
+        /* R7d: keyed by the string, so a line that moves or fades blends
+           between two ticks glyph for glyph (a changed string is another
+           key and snaps) */
+        gif_HostDrawKeyText((const char *)str, 0xDF);
         gif_HostScreenPrims(RD_PRIM_SPRITES, fontVerts, (unsigned int)fontVertCount, RD_SPACE_UI,
                             1);
+        gif_HostDrawKey(0, 0, 0);
     }
 #endif
     gif_EndPacketPath1();

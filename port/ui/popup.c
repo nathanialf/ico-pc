@@ -31,7 +31,10 @@
 typedef struct Popup {
     char title[UI_POPUP_TEXT];
     char body[UI_POPUP_TEXT];
+    uint32_t id; /* R7d: the push's sequence number, the draws' key */
 } Popup;
+
+static uint32_t s_nextId;
 
 static Popup s_queue[UI_POPUP_QUEUE];
 static int s_head, s_count;
@@ -62,6 +65,7 @@ int ui_PopupPush(const char *title, const char *body)
     Popup *p = &s_queue[(s_head + s_count) % UI_POPUP_QUEUE];
     copyText(p->title, title);
     copyText(p->body, body);
+    p->id = ++s_nextId;
     if (s_count == 0) {
         s_age = 0;
     }
@@ -212,6 +216,10 @@ void ui_PopupRecord(void)
     ui__SuppressRecordHook(1);
     const int list = rd_CurrentList();
     rd_SelectList(12);
+    /* R7d: the panel, its rects and its text keyed by the popup, so its
+       slide and fade blend between ticks */
+    static const char kPopupKeyTag;
+    const uint64_t owner = ui_SetDrawKey(((uint64_t)(uintptr_t)&kPopupKeyTag << 20) ^ p->id);
     uint8_t c[4];
     /* the panel: dark, translucent, a hairline in the menu's warm grey on top */
     scaled(c, 6, 6, 9, 0x5C, pn.alpha);
@@ -226,6 +234,7 @@ void ui_PopupRecord(void)
     }
     /* list 12's defaults (normal: TEST 0x50000, Z write on) for whatever
        the game records there after this */
+    ui_SetDrawKey(owner);
     rd_TestGs(0x50000);
     rd_ZWrite(1);
     rd_SelectList(list);

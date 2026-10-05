@@ -20,6 +20,16 @@
 #include "gv.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* PC port (renderer R7d, docs/port/RENDER_API.md section 20): a camera
+   group whose kind differs from the current one re-initialises the monitor
+   camera, a hard cut for the presenter's interpolation
+   (port/game/video_options.c; a counter no game state reads) */
+extern void ico_video_camera_cut(void);
+
+#endif
+
 static void *ReadCameraSet(struct CamSetFile *f, int stage);
 
 /* a loaded camera set: the file header, then the group records */
@@ -887,6 +897,9 @@ void SetCameraMatrix_Ico2(int flag)
                           ((CamGroup *)cameraSetGroups)[group].kind !=
                               ((CamGroup *)cameraSetGroups)[cameraGroupCurrent].kind)) {
             initMonitorCamera(1);
+#ifdef ICO_HOST
+            ico_video_camera_cut();
+#endif
             f8 = 1;
         }
         memset(vA, 0, 16);

@@ -466,13 +466,14 @@ static void testBuild(void)
                                    UI_STR_SECTION_CONTROLS,   UI_STR_SECTION_GAMEPLAY,
                                    UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
                                    UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
-    static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
-                                   UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,      UI_OPT_FILTER,
-                                   UI_OPT_FULL_HEIGHT, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
-    static const int dispStrs[] = {
-        UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
-        UI_STR_OPT_FULLSCREEN,  UI_STR_OPT_VSYNC,      UI_STR_OPT_FILTERING,
-        UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
+    static const int dispOpts[] = {
+        UI_OPT_PRESET, UI_OPT_RESOLUTION,  UI_OPT_ASPECT,    UI_OPT_FULLSCREEN, UI_OPT_VSYNC,
+        UI_OPT_FILTER, UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
+    static const int dispStrs[] = {UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION,
+                                   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_VSYNC,       UI_STR_OPT_FILTERING,
+                                   UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
+                                   UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
     static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
@@ -493,7 +494,8 @@ static void testBuild(void)
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 8), "main page rows");
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9), "display rows (no framerate key)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 10),
+          "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 4), "gameplay rows");
@@ -544,14 +546,87 @@ static void testBuild(void)
               lt_ext_Prop(ui_MirrorScreenRow(1))->leftItem == ui_MirrorScreenRow(0),
           "Off and On side by side");
 
-    /* a framerate key (R7b) shows its row */
-    useConfig("[video]\nframerate = \"interpolated\"\n");
+    /* R7d: the Frame rate row in either preset, its value from the file */
+    useConfig("[video]\npreset = \"enhanced\"\nframerate = \"144\"\n");
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_FRAMERATE) >= 0 &&
-              strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "interpolated") == 0,
-          "framerate row read-only from the config");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 10), "display rows (Enhanced)");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
+          ui_SettingsValueText(UI_OPT_FRAMERATE));
+}
+
+/* R7d: the Frame rate row steps original, uncapped, 60, 120, 144, 240 */
+static void testFramerate(void)
+{
+    static const int want[] = {ICO_FRAMERATE_UNCAPPED, 60, 120, 144, 240, ICO_FRAMERATE_ORIGINAL};
+    static const char *const text[] = {"Uncapped", "60 fps",  "120 fps",
+                                       "144 fps",  "240 fps", "Original"};
+    char p[1100];
+    IcoVideoOptions o;
+
+    useConfig("[video]\nframerate = \"original\"\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_SetLanguage(UI_LANG_EN);
+    ui_SettingsInstall();
+    CHECK(ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_FRAMERATE) >= 0, "the row (Original preset)");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "Original") == 0, "framerate Original");
+    for (int i = 0; i < 6; i++) {
+        ui_SettingsStep(UI_OPT_FRAMERATE, 1);
+        ico_video_get(&o);
+        CHECK(o.framerate == want[i] &&
+                  strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), text[i]) == 0,
+              "Right %d: %d \"%s\"", i + 1, o.framerate, ui_SettingsValueText(UI_OPT_FRAMERATE));
+    }
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1);
+    ico_video_get(&o);
+    CHECK(o.framerate == 240, "Left from original wraps to 240");
+    /* the preset is not changed by the row; Original presents at the tick */
+    CHECK(o.preset == ICO_VIDEO_ORIGINAL && ico_video_framerate() == ICO_FRAMERATE_ORIGINAL,
+          "Original preset: in force original");
+
+    /* a cap the list does not hold steps to its neighbours */
+    useConfig("[video]\nframerate = \"100\"\n");
+    ui_SettingsStep(UI_OPT_FRAMERATE, 1);
+    ico_video_get(&o);
+    CHECK(o.framerate == 120, "100 Right: 120 (%d)", o.framerate);
+    useConfig("[video]\nframerate = \"100\"\n");
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1);
+    ico_video_get(&o);
+    CHECK(o.framerate == 60, "100 Left: 60 (%d)", o.framerate);
+    useConfig("[video]\nframerate = \"30\"\n");
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1);
+    ico_video_get(&o);
+    CHECK(o.framerate == ICO_FRAMERATE_UNCAPPED, "30 Left: uncapped (%d)", o.framerate);
+    useConfig("[video]\nframerate = \"500\"\n");
+    ui_SettingsStep(UI_OPT_FRAMERATE, 1);
+    ico_video_get(&o);
+    CHECK(o.framerate == ICO_FRAMERATE_ORIGINAL, "500 Right: original (%d)", o.framerate);
+    useConfig("[video]\nframerate = \"500\"\n");
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1);
+    ico_video_get(&o);
+    CHECK(o.framerate == 240, "500 Left: 240 (%d)", o.framerate);
+
+    /* persisted as [video] framerate, the string ico_video_parse_framerate reads */
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1); /* 240 -> 144 */
+    CHECK(ui_SettingsSave() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.framerate") != NULL &&
+              strcmp(ico_toml_get(t, "video.framerate"), "144") == 0,
+          "[video] framerate = \"144\"");
+    ico_toml_free(t);
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1); /* 120 */
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1); /* 60 */
+    ui_SettingsStep(UI_OPT_FRAMERATE, -1); /* uncapped */
+    CHECK(ui_SettingsSave() == 0, "save");
+    t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.framerate") != NULL &&
+              strcmp(ico_toml_get(t, "video.framerate"), "uncapped") == 0,
+          "[video] framerate = \"uncapped\"");
+    ico_toml_free(t);
 }
 
 static void testRepoint(void)
@@ -1072,6 +1147,7 @@ int main(int argc, char **argv)
     testNavigation();
     testMirrorScreen();
     testValues();
+    testFramerate();
     testCapture();
     testBootSkip();
     if (failures) {

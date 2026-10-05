@@ -49,7 +49,7 @@ with the values in use the next time you save.
 | Vertical sync | On, Off | waits for the screen's refresh |
 | Texture filtering | Original, Trilinear, Anisotropic | (Enhanced) |
 | Full-height picture | On, Off | keeps all 512 lines (Enhanced) |
-| Frame rate | shown when `[video] framerate` is in `config.toml` | read-only in this version |
+| Frame rate | Original, Uncapped, 60 fps, 120 fps, 144 fps, 240 fps | (Enhanced) how often the picture is redrawn, smoothing motion between the game's updates (docs/port/DISPLAY.md, "Smooth motion"); saved as `[video] framerate` (`"original"`, `"uncapped"` or the number). Always shown; under the Original preset the picture is drawn once per update whatever it says. Right steps in the order listed and wraps; a number from `config.toml` that is not listed (`"100"`) steps to the listed rate above it (Right) or below it (Left), past the ends to Original (Right) or Uncapped (Left) |
 | Video mode | PAL 50 Hz, 60 Hz | the boot screen's choice. The game runs at 25 updates a second in PAL 50 Hz and 30 in 60 Hz, as on the console; switching resets the picture the way the boot screen did |
 
 **Audio**

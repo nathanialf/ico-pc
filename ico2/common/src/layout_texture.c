@@ -125,7 +125,14 @@ static const SprRect primarySpriteRect = {-5120, -1808, 10240, 3616}; /* derived
    gif_HostFlush emits what the decoder holds on either side). */
 extern int rd_SetSpaceOverride(int space);
 extern void gif_HostFlush(void);
+/* renderer R7d: GifHost.h's key of the decoder's primitives, so the
+   presenter matches a row's sprites between ticks by the row (its
+   texProperty entry) and blends their moves and fades */
+extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
 
+#define LT_HOST_KEY(obj, part) gif_HostDrawKey((obj), (part), 0)
+#else
+#define LT_HOST_KEY(obj, part) ((void)0)
 #endif
 
 static void display_texture_fade_cancel_chk(int from, int to)
@@ -610,12 +617,14 @@ static void display_texture(int no, LtProperty *e)
                 u.col.b = u.col.b * 0.5f;
             }
         }
+        LT_HOST_KEY(e, 0);
 #ifdef ICO_HOST
         if (ltHostTextRow != 0) {
             lt_ext_DrawRow(e, (const int *)&box, (const unsigned char *)&u.col, 0);
         } else
 #endif
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
+        LT_HOST_KEY(e, 1); /* the glow sprites */
 
 #undef LT_CUR_NO
         if (e->selectable != 0 && sel != 0 && fadeState == 8) {
@@ -629,6 +638,7 @@ static void display_texture(int no, LtProperty *e)
 #ifdef ICO_HOST
         ltHostTextRow = 0;
 #endif
+        LT_HOST_KEY(0, 0);
         gif_SetZWrite(1);
         gif_EndPacket();
     }
@@ -650,7 +660,9 @@ static inline void lt_draw_primary_sprite(SprCol *col) /* derived name */
     gif_HostFlush();
     space = rd_SetSpaceOverride(2);
 #endif
+    LT_HOST_KEY(&primarySpriteRect, 0);
     gif_SpriteSensitive(&r, 0xFFFFFFFF, (void *)0, col, 1);
+    LT_HOST_KEY(0, 0);
 #ifdef ICO_RD
     gif_HostFlush();
     rd_SetSpaceOverride(space);
