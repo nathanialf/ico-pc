@@ -789,6 +789,9 @@ static __inline__ void getCrossPoint_i(void *out, void *seg, void *plane) /* der
 /* the squared XZ length, getXZLengthSquare's sequence */
 static __inline__ float xzLengthSquare(const void *p) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_xz_length_square(p);
+#else
     float d;
     /* one asm block in plane_distance's style, without a memory clobber */
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
@@ -800,6 +803,7 @@ static __inline__ float xzLengthSquare(const void *p) /* derived name */
                          : "r"(p)
                          : "$2");
     return d;
+#endif
 }
 
 /* bothOverThePlane, nested before `d`, tests both ends of the segment p
@@ -1228,6 +1232,9 @@ static float *procSinZX = &procMatrix[2][0]; /* derived name */
 
 static __inline__ float fSqrtInv_i(float x) /* derived name */
 {
+#ifdef ICO_HOST
+    return ps2_rsqrt(1.0f, x);
+#else
     float r;
 
     __asm__ __volatile__("mfc1 $8, %1\n\t"
@@ -1240,10 +1247,14 @@ static __inline__ float fSqrtInv_i(float x) /* derived name */
                          : "f"(x)
                          : "$2", "$8");
     return r;
+#endif
 }
 
 static __inline__ float xzInvLength_i(const void *v) /* derived name */
 {
+#ifdef ICO_HOST
+    return ps2_rsqrt(1.0f, ico_xz_length_square(v));
+#else
     float r;
 
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
@@ -1257,10 +1268,14 @@ static __inline__ float xzInvLength_i(const void *v) /* derived name */
                          : "r"(v)
                          : "$2");
     return r;
+#endif
 }
 
 static __inline__ void scaleVectorXZ_i(void *d, const void *s, float k) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_xz(d, s, k);
+#else
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
                          "mfc1 $8, %2\n\t"
                          "qmtc2.ni $8, $vf5\n\t"
@@ -1269,11 +1284,15 @@ static __inline__ void scaleVectorXZ_i(void *d, const void *s, float k) /* deriv
                          :
                          : "r"(d), "r"(s), "f"(k)
                          : "$8");
+#endif
 }
 
 static __inline__ float subAndGetInvLength_i(void *d, const void *a,
                                              const void *b) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_sub_inv_length(d, a, b);
+#else
     float inv;
 
     __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
@@ -1291,11 +1310,15 @@ static __inline__ float subAndGetInvLength_i(void *d, const void *a,
                          : "r"(a), "r"(b), "r"(d)
                          : "$2");
     return inv;
+#endif
 }
 
 static __inline__ void scaleAndAddVectorXYZ_i(void *d, const void *a, const void *b,
                                               float k) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_add_xyz(d, a, b, k);
+#else
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
                          "lqc2 $vf5, 0x0(%2)\n\t"
                          "mfc1 $8, %3\n\t"
@@ -1306,6 +1329,7 @@ static __inline__ void scaleAndAddVectorXYZ_i(void *d, const void *a, const void
                          :
                          : "r"(d), "r"(a), "r"(b), "f"(k)
                          : "$8");
+#endif
 }
 
 static __inline__ void tensionMove_i(void *out, const void *a, const void *b, float k,
@@ -1936,6 +1960,8 @@ float GetChainCollision(ChainSet *sys, void *pos, float r)
     return -1.0f;
 }
 
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 void FSqrtInv(void)
 {
     VU0_NOREORDER_BEGIN();
@@ -2100,6 +2126,8 @@ void tensionMove(void *out, void *a, void *b, float k, float lim)
         VU0_LSV(sqc2, 4, 0x0, 4);
     }
 }
+
+#endif /* ICO_HOST: port/math */
 
 void getCrossPoint(void *out, void *seg, void *plane)
 {

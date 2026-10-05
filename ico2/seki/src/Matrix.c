@@ -25,6 +25,8 @@ static float scaleWorkMatrix[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
 
 #include "Matrix.h"
 
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 inline void _InitCurrentMatrix(void)
 {
     VU0_V2OP(vmove.xyzw, 7, 0);
@@ -408,6 +410,8 @@ inline void _InverseCurrentMatrix(void)
     VU0_V3OP_BC(vmaddw.xyzw, 7, 0, 17, w);
 }
 
+#endif /* ICO_HOST: port/math */
+
 /* 32 quadwords, the size of the VU0 register file the push and pop save;
    nothing addresses it (the saves go to VU0 memory through vi15). */
 static float vu0RegisterSave[32][4] = {{0.0f}}; /* derived name */
@@ -421,6 +425,9 @@ static int vu0PushDepth = 0; /* derived name */
 
 void _PushVu0Registers(void)
 {
+#ifdef ICO_HOST /* vf1-vf31 hold only the current matrix on the host (docs/port/MATH.md) */
+    ico_vu0_registers_push();
+#else
     DI();
     VU0_REG("vsqi.xyzw $vf1, ($vi15++)");
     VU0_REG("vsqi.xyzw $vf2, ($vi15++)");
@@ -454,6 +461,7 @@ void _PushVu0Registers(void)
     VU0_REG("vsqi.xyzw $vf30, ($vi15++)");
     VU0_REG("vsqi.xyzw $vf31, ($vi15++)");
     EI();
+#endif
 
     if (++vu0PushDepth >= 6) {
         debug_assert("src/Matrix.c", 1063);
@@ -463,6 +471,9 @@ void _PushVu0Registers(void)
 
 void _PopVu0Registers(void)
 {
+#ifdef ICO_HOST
+    ico_vu0_registers_pop();
+#else
     DI();
     VU0_REG("vlqd.xyzw $vf31, (--$vi15)");
     VU0_REG("vlqd.xyzw $vf30, (--$vi15)");
@@ -496,12 +507,15 @@ void _PopVu0Registers(void)
     VU0_REG("vlqd.xyzw $vf2, (--$vi15)");
     VU0_REG("vlqd.xyzw $vf1, (--$vi15)");
     EI();
+#endif
 
     if (--vu0PushDepth < 0) {
         debug_assert("src/Matrix.c", 1119);
         __assert("src/Matrix.c", 1119, "0");
     }
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 inline void _NormalizeVector(void *dst, void *src)
 {
@@ -819,6 +833,8 @@ inline void _UnitRotation(void *dst)
     VU0_LSV(sqc2, 16, 0x20, 4);
 }
 
+#endif /* ICO_HOST: port/math */
+
 inline void _ScaleMatrixV(void *dst, void *src, void *v)
 {
     float *m = &scaleWorkMatrix[0][0];
@@ -828,6 +844,8 @@ inline void _ScaleMatrixV(void *dst, void *src, void *v)
     m[10] = ((float *)v)[2];
     _MulMatrix(dst, src, m);
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 inline void _TransposeMatrix(void *dst, void *src)
 {
@@ -884,6 +902,8 @@ inline void _InversMatrix(void *dst, void *src)
                          : "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "memory");
 }
 
+#endif /* ICO_HOST: port/math */
+
 inline void _SetCameraMatrix(void *dst, void *pos, void *dir, void *up)
 {
     float m[4][4];
@@ -897,6 +917,8 @@ inline void _SetCameraMatrix(void *dst, void *pos, void *dir, void *up)
     _CopyVector(m[3], pos);
     _InversMatrix(dst, m);
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 inline float _Sqrt(float x)
 {
@@ -1199,3 +1221,5 @@ void _RemakeNormal(void *dst, void *verts, int *idx)
         break;
     }
 }
+
+#endif /* ICO_HOST: port/math */

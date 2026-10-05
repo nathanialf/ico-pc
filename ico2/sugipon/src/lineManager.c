@@ -108,6 +108,32 @@ int _getLine(float *o1, float *o2, float *from, float *to)
 
     inline void perspLine(float *o1, float *o2, float *a, float *b) /* derived name */
     {
+#ifdef ICO_HOST
+        /* a behind the near plane z = 1: slide it along the line to z = 1 */
+        if (a[2] < 1.0f) {
+            float q = ps2_div(1.0f - a[2], b[2] - a[2]);
+            a[0] = a[0] + (b[0] - a[0]) * q;
+            a[1] = a[1] + (b[1] - a[1]) * q;
+            a[2] = 1.0f;
+        }
+        /* both ends through the current matrix, all four fields times 1/w */
+        {
+            float qa;
+            float qb;
+            int k;
+
+            ico_apply_matrix(o1, (const float (*)[4])ico_current_matrix, a);
+            ico_apply_matrix(o2, (const float (*)[4])ico_current_matrix, b);
+            qa = ps2_div(1.0f, o1[3]);
+            for (k = 0; k < 4; k++) {
+                o1[k] = o1[k] * qa;
+            }
+            qb = ps2_div(1.0f, o2[3]);
+            for (k = 0; k < 4; k++) {
+                o2[k] = o2[k] * qb;
+            }
+        }
+#else
         if (a[2] < 1.0f) {
             __asm__ __volatile__(".set noreorder\n\t"
                                  "lqc2 $vf8, 0x0(%0)\n\t"
@@ -147,10 +173,22 @@ int _getLine(float *o1, float *o2, float *from, float *to)
                              "\n\t.set reorder"
                              :
                              : "r"(a), "r"(b), "r"(o1), "r"(o2));
+#endif
     }
 
     inline void clipAtX(float *d, float *a, float *b, float x) /* derived name */
     {
+#ifdef ICO_HOST
+        /* the point of a-b at x; d[3] is not written (the PS2 stored a stale
+           register word there, which the callers do not use) */
+        float q = ps2_div(x - a[0], b[0] - a[0]);
+        float y = (b[1] - a[1]) * q + a[1];
+        float z = (b[2] - a[2]) * q + a[2];
+
+        d[0] = x;
+        d[1] = y;
+        d[2] = z;
+#else
         __asm__ __volatile__(".set noreorder\n\t"
                              "lqc2 $vf8, 0x0(%1)\n\t"
                              "lqc2 $vf9, 0x0(%2)\n\t"
@@ -168,10 +206,21 @@ int _getLine(float *o1, float *o2, float *from, float *to)
                              "\n\t.set reorder"
                              :
                              : "r"(d), "r"(a), "r"(b), "f"(x));
+#endif
     }
 
     inline void clipAtY(float *d, float *a, float *b, float y) /* derived name */
     {
+#ifdef ICO_HOST
+        /* the point of a-b at y; d[3] as in clipAtX */
+        float q = ps2_div(y - a[1], b[1] - a[1]);
+        float x = (b[0] - a[0]) * q + a[0];
+        float z = (b[2] - a[2]) * q + a[2];
+
+        d[0] = x;
+        d[1] = y;
+        d[2] = z;
+#else
         __asm__ __volatile__(".set noreorder\n\t"
                              "lqc2 $vf8, 0x0(%1)\n\t"
                              "lqc2 $vf9, 0x0(%2)\n\t"
@@ -189,6 +238,7 @@ int _getLine(float *o1, float *o2, float *from, float *to)
                              "\n\t.set reorder"
                              :
                              : "r"(d), "r"(a), "r"(b), "f"(y));
+#endif
     }
 
     float r0[4];

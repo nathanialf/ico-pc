@@ -1344,6 +1344,29 @@ static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
     sy = SIGNF(rot[1]) * _Sqrt(1.0f - cy * cy);
     sz = SIGNF(rot[2]) * _Sqrt(1.0f - cz * cz);
 
+#ifdef ICO_HOST
+    /* translate by t, then rotate about Y, X and Z: each rotation is built
+       in full and multiplied on the right (docs/port/MATH.md) */
+    {
+        float ry[4][4] = {{cy, 0.0f, 0.0f - sy, 0.0f},
+                          {0.0f, 1.0f, 0.0f, 0.0f},
+                          {sy, 0.0f, cy, 0.0f},
+                          {0.0f, 0.0f, 0.0f, 1.0f}};
+        float rx[4][4] = {{1.0f, 0.0f, 0.0f, 0.0f},
+                          {0.0f, cx, sx, 0.0f},
+                          {0.0f, 0.0f - sx, cx, 0.0f},
+                          {0.0f, 0.0f, 0.0f, 1.0f}};
+        float rz[4][4] = {{cz, sz, 0.0f, 0.0f},
+                          {0.0f - sz, cz, 0.0f, 0.0f},
+                          {0.0f, 0.0f, 1.0f, 0.0f},
+                          {0.0f, 0.0f, 0.0f, 1.0f}};
+
+        _TransCurrentMatrix(t);
+        _MulCurrentMatrixR(ry);
+        _MulCurrentMatrixR(rx);
+        _MulCurrentMatrixR(rz);
+    }
+#else
     /* The rotation pairs go into $vf21..$vf26 while the vmr32 chain builds
        the identity rows in $vf14..$vf17.  The sequence is one asm block
        because it is ordered by hand: every mfc1 is separated from the qmtc2
@@ -1447,6 +1470,7 @@ static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
     VU0_V2OP(vmove.xyzw, 5, 11);
     VU0_V2OP(vmove.xyzw, 6, 12);
     VU0_V2OP(vmove.xyzw, 7, 13);
+#endif
 }
 
 /* Externs and record views bga_CalcObject uses.  BgaNodeBits is typedef.h's

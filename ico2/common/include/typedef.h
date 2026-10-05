@@ -674,6 +674,45 @@ typedef struct { /* field names derived */
  */
 typedef int sceVu0IVECTOR[4] __attribute__((aligned(16)));
 
+#ifdef ICO_HOST
+/* The host build: the VU0 and R5900 wrappers below have no host meaning.
+ * The VU0 maths is C in port/math (docs/port/MATH.md); the game sources that
+ * used these wrappers keep the assembly under `#ifndef ICO_HOST` and call
+ * port/math instead. ico_math.h is included here so every game TU sees the
+ * current matrix, the PS2 float helpers (ps2float.h) and the small vector
+ * routines (vector_inline.h). */
+#include "../../../port/math/ico_math.h"
+/* Memory barrier: a full fence. */
+#define SYNC() __atomic_thread_fence(__ATOMIC_SEQ_CST)
+/* No interrupts to mask: the game's threads are cooperative on the host. */
+#define DI() ((void)0)
+#define EI() ((void)0)
+/* Any other use is a compile error: assembly that reached the host build
+ * has not been rewritten in C yet. */
+#define ICO_ASM_NOT_PORTED()                                                                      \
+    _Static_assert(0, "R5900/VU0 inline assembly in the host build: rewrite it in C over "       \
+                      "port/math (docs/port/MATH.md)")
+#define QCOPY16(scratch) ICO_ASM_NOT_PORTED()
+#define VU0_MEM(insn) ICO_ASM_NOT_PORTED()
+#define VU0_REG(insn) ICO_ASM_NOT_PORTED()
+#define VU0_LSV(mnem, vf, off, base) ICO_ASM_NOT_PORTED()
+#define VU0_LSGP(mnem, gp, off, base) ICO_ASM_NOT_PORTED()
+#define VU0_LSV_R(mnem, vf, off, base) ICO_ASM_NOT_PORTED()
+#define VU0_V2OP(mnem, d, a) ICO_ASM_NOT_PORTED()
+#define VU0_V3OP(mnem, d, a, b) ICO_ASM_NOT_PORTED()
+#define VU0_V3OP_BC(mnem, d, a, b, bc) ICO_ASM_NOT_PORTED()
+#define VU0_V3OP_ACC(mnem, a, b) ICO_ASM_NOT_PORTED()
+#define VU0_V3OP_ACC_BC(mnem, a, b, bc) ICO_ASM_NOT_PORTED()
+#define VU0_MFC1(gp, fp) ICO_ASM_NOT_PORTED()
+#define VU0_MTC1(gp, fp) ICO_ASM_NOT_PORTED()
+#define VU0_QMFC2_NI(gp, vf) ICO_ASM_NOT_PORTED()
+#define VU0_QMTC2_NI(gp, vf) ICO_ASM_NOT_PORTED()
+#define VU0_CFC2_NI(gp, vi) ICO_ASM_NOT_PORTED()
+#define VU0_WAIT() ICO_ASM_NOT_PORTED()
+#define VU0_WORD(w) ICO_ASM_NOT_PORTED()
+#define VU0_NOREORDER_BEGIN() ICO_ASM_NOT_PORTED()
+#define VU0_NOREORDER_END() ICO_ASM_NOT_PORTED()
+#else /* !ICO_HOST */
 /* ------------------------------------------------------------------ *
  * (c) R5900 opcodes with no C spelling.
  *
@@ -843,6 +882,7 @@ typedef int sceVu0IVECTOR[4] __attribute__((aligned(16)));
  */
 #define VU0_NOREORDER_BEGIN() __asm__ __volatile__(".set noreorder")
 #define VU0_NOREORDER_END() __asm__ __volatile__(".set reorder")
+#endif /* !ICO_HOST */
 
 /* the stage's display setting: the lights, fog, shadow, post effects and camera limits */
 typedef struct StageSetting { /* field names derived */

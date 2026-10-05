@@ -16,6 +16,12 @@ inline void lw_pos_to_ico_pos(float *dst, float *src)
    from their registers ($4 out, $5 m, $6 in) */
 inline void apply_matrix_w1(void *out, void *m, void *in)
 {
+#ifdef ICO_HOST
+    float mm[4][4];
+
+    __builtin_memcpy(mm, m, sizeof mm);
+    ico_apply_matrix_w1((float *)out, (const float (*)[4])mm, (const float *)in);
+#else
     VU0_LSV(lqc2, 4, 0x0, 5);
     VU0_LSV(lqc2, 5, 0x10, 5);
     VU0_LSV(lqc2, 6, 0x20, 5);
@@ -26,6 +32,7 @@ inline void apply_matrix_w1(void *out, void *m, void *in)
     VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 8, z);
     VU0_V3OP_BC(vmaddw.xyzw, 9, 7, 0, w);
     VU0_LSV(sqc2, 9, 0x0, 4);
+#endif
 }
 
 static void m33_to_quat(float *q, float (*m)[4])

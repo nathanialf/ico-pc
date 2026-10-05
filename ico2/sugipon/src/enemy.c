@@ -243,6 +243,19 @@ static void dispEnemyObject(void *self)
         ptr[i] = &buf[i];
         _SetCurrentMatrix((char *)GOBJ_SUB(self)->nodeMtx + i * 0x40);
         _MulCurrentMatrixL(matrixptr + 0x100);
+#ifdef ICO_HOST
+        {
+            /* the part origin through the current matrix, divided by w
+               (x, y, z times 1/w), z to an integer; the PS2 also stored a
+               stale vf13 into the entry's other words, which nothing reads */
+            float v[4];
+            float q;
+
+            ico_apply_matrix(v, (const float (*)[4])ico_current_matrix, ZeroPoint);
+            q = ps2_div(1.0f, v[3]);
+            buf[i].z = ps2_ftoi(v[2] * q);
+        }
+#else
         __asm__ __volatile__("lqc2 $vf8, 0x0(%0)\n\t"
                              "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
                              "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
@@ -256,6 +269,7 @@ static void dispEnemyObject(void *self)
                              :
                              : "r"(ZeroPoint), "r"(&buf[i])
                              : "memory");
+#endif
         buf[i].idx = i;
     }
 

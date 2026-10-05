@@ -1284,10 +1284,20 @@ static inline float motDecodeS16(int h) /* derived name */
     return m * s;
 }
 
+#ifdef ICO_HOST
+
+/* VU0's Q register, which carries the root from motSqrtStart to motSqrtEnd */
+static float motSqrtQ; /* derived name */
+
+#endif
+
 /* the VU0 square root split in two so the Q-pipeline latency is covered by
    the vector copy in between */
 static inline void motSqrtStart(float d) /* derived name */
 {
+#ifdef ICO_HOST
+    motSqrtQ = ps2_sqrt(1.0f - d);
+#else
     float t = 1.0f - d;
 
     __asm__ __volatile__(".set noreorder\n"
@@ -1297,10 +1307,14 @@ static inline void motSqrtStart(float d) /* derived name */
                          :
                          : "f"(t));
     VU0_WORD(0x4A0103BD);
+#endif
 }
 
 static inline float motSqrtEnd(void) /* derived name */
 {
+#ifdef ICO_HOST
+    return motSqrtQ;
+#else
     float r;
 
     VU0_WAIT();
@@ -1310,6 +1324,7 @@ static inline float motSqrtEnd(void) /* derived name */
                          ".set reorder\n"
                          : "=f"(r));
     return r;
+#endif
 }
 
 void _getS16MotRotElem(void *dst, void *src)
@@ -1467,6 +1482,38 @@ int GetStreamMotion(StreamElem *dst, float *out, char *node, SkelNode *skel)
 /* copyMotionWithNodeHrc is a nested function inside CopyMotionWithNodeHrc:
  * the parent passes it a static chain, through which it reaches
  * dst/src/flag/hrc. */
+#ifdef ICO_HOST
+
+/* The nested copyMotionWithNodeHrc as a file-scope function (clang has no
+   nested functions); the parent's dst, src, hrc and flag are parameters. */
+static void copyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int flag,
+                                  int n) /* derived name */
+{
+    dst[n] = src[n];
+    if (flag == 0) {
+        *(int *)&dst[n] = 250;
+    }
+    if (hrc[n].child != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[n].child);
+    }
+    if (hrc[n].sibling != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[n].sibling);
+    }
+}
+
+void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int node, int flag)
+{
+    dst[node] = src[node];
+    if (flag == 0) {
+        *(int *)&dst[node] = 250;
+    }
+    if (hrc[node].child != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[node].child);
+    }
+}
+
+#else
+
 void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int node, int flag)
 {
     inline void copyMotionWithNodeHrc(int n)
@@ -1491,6 +1538,8 @@ void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int 
         copyMotionWithNodeHrc(hrc[node].child);
     }
 }
+
+#endif
 
 /* the bodies of GetMotionRootPos and GetBlendedMotionRootPos, which their
    callers inline and the two exported functions call */

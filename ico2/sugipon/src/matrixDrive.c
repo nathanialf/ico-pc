@@ -443,6 +443,8 @@ void MatrixDrive_SetTransposeMatrix(void *dstMtx, void *srcMtx)
     dst[15] = 1.0f;
 }
 
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 void CopyVector(void *dst, void *src)
 {
     QCOPY16("$6");
@@ -548,3 +550,5 @@ float GetPointDistance(void *a, void *b)
                          : "r"(v));
     return r;
 }
+
+#endif /* ICO_HOST: port/math */
