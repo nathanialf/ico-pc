@@ -62,6 +62,7 @@ target_link_libraries(rd_replay_tool PRIVATE ico_render)
 #             pipeline count (Vulkan; exit 77 without a device)
 #   rd_replay_tool  rd_pixel's dump rendered to a PNG through the presenter
 #   rd_shadow  Shadow.c's host path and the stencil count (wave 4, below)
+#   rd_fog     ZFog.c's host path and the depth fog (wave 4, below)
 add_executable(rd_state_test test/rd_state_test.c)
 target_compile_options(rd_state_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_state_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
@@ -168,9 +169,27 @@ target_compile_options(rd_shadow_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_shadow_test PRIVATE ico_render ico_math)
 
+# rd_fog_test (wave 4, R4c): the depth fog.  ZFog.c with the 2D layer, as
+# the window build has it, the rest of the game stubbed: the Z byte the
+# PSMT8H read of the Z copy selects (a CPU model of the GS swizzle), the
+# CLUT order, the recording, and on a device quads at known Z fogged
+# against a CPU reference (77 without one, after the CPU checks).
+add_executable(rd_fog_test test/rd_fog_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/ZFog.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_fog_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(rd_fog_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_fog_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_fog_test PRIVATE ico_render ico_math)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test rd_shadow_test)
+              rd_mesh_test rd_shadow_test rd_fog_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -192,6 +211,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_shadow COMMAND rd_shadow_test)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_fog PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
@@ -209,6 +230,6 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     endif()
     if(_env)
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             PROPERTIES ENVIRONMENT "${_env}")
+                             rd_fog PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

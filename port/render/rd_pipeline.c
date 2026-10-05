@@ -482,8 +482,40 @@ static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipe
 
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
 {
-    const uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
-    return rd__EnumerateReachableShadow(out, max, n); /* wave 4 (R4b) */
+    uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
+    n = rd__EnumerateReachableShadow(out, max, n); /* wave 4 (R4b) */
+    return rd__EnumerateReachableFog(out, max, n); /* wave 4 (R4c) */
+}
+
+/* ----------------------------------------------------- fog (wave 4, R4c) */
+
+int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
+{
+    const int np = rd__PlanScreenDraw(s, RD_PRIM_TRIANGLES, RD_SPACE_FULLSCREEN, colorFmt,
+                                      RHI_FMT_UNKNOWN, out);
+    for (int i = 0; i < np; i++) {
+        out[i].key.gs.program = RD_PROG_POST;
+        out[i].key.fs = RD_FS_FOG;
+    }
+    return np;
+}
+
+uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    /* fog_DrawFog: TEST 0x50000, ZBUF with ZMSK, ALPHA 0x44, PRIM 0x156 (ABE)
+     * into SCENE (RGBA8) */
+    RdStateBlock s;
+    rd__ResetStateBlock(&s);
+    s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
+    s.ds.zwrite = RD_ZWRITE_OFF;
+    s.ds.abe = 1;
+    s.ds.blend = RD_BLEND_LERP_AS;
+    RdDrawPass dp[2];
+    const int np = rd__FogPlan(&s, RHI_FMT_RGBA8_UNORM, dp);
+    for (int i = 0; i < np; i++) {
+        n = addKey(out, max, n, &dp[i].key);
+    }
+    return n;
 }
 
 /* ------------------------------------------------- shadows (wave 4, R4b) */

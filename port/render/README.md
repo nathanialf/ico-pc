@@ -9,9 +9,11 @@ implementation.
 | `rd_state.h` | spec (wave 0) | the finite GS state the game uses, enumerated from call sites, and the pipeline key |
 | `rd_internal.h` | wave 1 | command records, frame, state block, registries, the hooks tests and tools use |
 | `rd_core.c` | wave 1 | recording: lists, payload arena, state deltas, list defaults, named and temporary targets, texture registry, frame retention, the state walk |
-| `rd_post.c` | waves 1, 2 (R2c) | `rd_Post`: reduction, keep, fade, letterbox, brightness, anti-alias (downsample, composite), film noise as the GS writes and sprites of `GsBase.c`, in order, so they leak the same state; composite (hardware or exact), copy; fog, shadow resolve and blur recorded as stubs |
+| `rd_post.c` | waves 1, 2 (R2c), 4 (R4c) | `rd_Post`: reduction, keep, fade, letterbox, brightness, anti-alias (downsample, composite), film noise as the GS writes and sprites of `GsBase.c`, in order, so they leak the same state; composite (hardware or exact), copy; the fog sprite (`RD_POST_FOG`, wave 4: the sprite and the CLUT, with ZFog.c's register writes recorded around it by ZFog.c); shadow resolve and blur recorded as stubs |
 | `rd_pipeline.c` | wave 1 | pipeline key derivation from the state block (blend paths, AFAIL split, Z), the cache, the reachable-pipeline enumeration |
-| `rd_replay.c` | wave 1 | an `RdFrame` onto the RHI: passes, state tracking, GS sampling rules, the exact `blend_int` path |
+| `rd_replay.c` | wave 1, 3, 4 | an `RdFrame` onto the RHI: passes, state tracking, GS sampling rules, the exact `blend_int` path; the VU draws (wave 3); the shadow count's reset, volumes and resolve (`doShadow*`, R4b); the depth fog (`doFog`, R4c: a sampleable copy of the depth, the LUT, `fog_lut_ps`) |
+| `rd_shadow.c` | wave 4 (R4b) | the shadow count's recording: `rd_ShadowCountTarget`, `rd_ShadowReset`, `rd_ShadowTris`, `rd_ShadowResolve`, and `rd_ShadowStrip` (replayed since R4b, no longer a stub) (`docs/port/RENDER_API.md` section 14) |
+| (fog) | wave 4 (R4c) | no file of its own: `RD_POST_FOG` in `rd_post.c`, `doFog` in `rd_replay.c`, `rd__FogPlan` in `rd_pipeline.c`, `port/shaders/fog_lut.hlsl`; the game side is `ico2/seki/src/ZFog.c`'s host path (`docs/port/RENDER_API.md` section 15) |
 | `rd_present.c` | wave 1, hooks in wave 2 (R2c) | DISPLAY to the output, Original preset (4:3 box, line doubling, bilinear horizontal); the Enhanced fields (interpolation, aspect, mirror, full height) present and unused |
 | `rd_frame.c` | wave 2 (R2c) | the flip's draw environment and clear (`rd_FrameHead`, `rd_FrameFlip`), per-target Z scale, `gsb_MakeCommonMatrix`'s VU block, `RdCamera` into FrameCB (`docs/port/RENDER_API.md` section 12) |
 | `rd_mesh.h`, `rd_mesh.c` | wave 3 (R3c interface, R3ab implementation) | the mesh path: VU meshes built from Packet.c's packets (stream without GIF tags, the strip-rule index list), the per-list VU state at record time (common block, SET_* uploads, UV offset, resident program, BEGIN code), the (program, code) table, recording of `RDC_MESH`/`RDC_SKINNED`/`RDC_GRID`/`RDC_PARTICLES`, the VU pipeline families (`docs/port/RENDER_API.md` section 13) |
@@ -31,12 +33,16 @@ and `port/rhi/d3d12`. Design, state inventory and open items:
 
 Replayed: clears, screen prims (`rd_ScreenPrims`: sprites, triangles,
 strips, fans, lines, line strips, points), the post kinds listed above,
-texture copies, and since wave 3 (R3ab) the VU program draws of `rd_mesh.h`
+texture copies, since wave 3 (R3ab) the VU program draws of `rd_mesh.h`
 (`rd_DrawVuMesh`, `rd_DrawVuGrid`, `rd_DrawVuParticles`: static, skinned,
-specular, reflection and dissolve passes, grids, particles). Recorded with
-their payload and key but stopped at replay by `rd__NotImplemented`
-(prints, then asserts): `rd_ShadowStrip` (wave 4), `rd_WorldPrims` (wave
-5), and the post kinds fog, shadow resolve, blur, present blit. The wave-0
+specular, reflection and dissolve passes, grids, particles), since wave 4
+the shadow count (`rd_ShadowReset`, `rd_ShadowTris`, `rd_ShadowStrip`,
+`rd_ShadowResolve`, R4b) and the depth fog (`RD_POST_FOG`, R4c). Recorded
+with their payload and key but stopped at replay by `rd__NotImplemented`
+(prints, then asserts): `rd_WorldPrims` (wave 5) and the post kinds shadow
+resolve, blur, present blit (`RD_POST_SHADOW_RESOLVE` is unused since R4b:
+Shadow.c calls `rd_ShadowResolve`). A draw that samples a depth view
+outside the fog (the fog's TEX0 leaking) logs once and draws untextured. The wave-0
 semantic mesh calls (`rd_DrawMesh`, `rd_DrawSkinned`, `rd_DrawGrid`,
 `rd_DrawParticles`) record nothing since wave 3 (kept for an Enhanced
 path). An ico-pc.ini `dump_every=N` makes `rd_EndFrame` dump every Nth
@@ -57,6 +63,9 @@ camera and the bound depth target's Z scale since R2c.
 
 | `rd_mesh` | wave 3 (R3ab): `Packet.c`, `RegistPacket.c`, `MicroCode.c`, `DisplayP2O.c`, `Primitive.c` with the 2D layer and `Matrix.c` (`ICO_RD`), the rest stubbed, fed synthetic p2o-decoded models (prelit, two VU batches; the scissor clip type; a two-bone cluster), a Mesh3D grid and a particle batch: the mesh against the packet (stream, `vu1ref_StaticKicks` indices), the recorded program/code/clip, VuCB against the uploads the EE code makes (common block, UV offset, +0x140/+0x200/+0x80 x node, bones, lights), the decoded material state; on a device each case against `vu1_ref`'s triangles drawn as screen prims in the same state (measured: 0 difference), every created pipeline enumerated (77 without a device) |
 | `rd_gsbase` | wave 2 (R2c): `GsBase.c` with the three files above (`ICO_RD`), the rest of the game stubbed, driven through `gsb_InitGSSystem`, `gsb_SyncGSSystem` and `gsb_UpdateGSSystem`: the head clear takes the flip's BG colour, keep frames keep the head in list 11, the half offset follows `GS_CSR.FIELD` two flips late, post-pass state leaks, the VU block and camera, the Z formula; on a device: the camera packing through `camera_probe_ps` against the C products and `sceVu0RotTransPers` (1/16 px), PSMZ32 depth order of UI Z above 2^24, the half-offset rows, the clear, and keep, fade, brightness, anti-alias (each level, both), film noise and letterbox against CPU references within 1 LSB (2 for both anti-alias levels) |
+
+| `rd_shadow` | wave 4 (R4b): `Shadow.c` with the 2D layer and `Matrix.c` (`ICO_RD`): the recording of shadow_Reset/RenderVolume/Draw; on a device the stencil count against the wrapped colour sum (exact), the blur chain and composites against CPU references, the DATE receiver mask, Shadow.c's own volume (77 without a device) |
+| `rd_fog` | wave 4 (R4c): `ZFog.c` with the 2D layer (`ICO_RD`): a CPU model of the GS swizzle (PSMCT32, PSMZ32, PSMT4 page/block/column tables) running fog_DrawFog's transfers, the PSMT8H index = Z bits 16..23 at every pixel; the CLUT order (CSM1); the recording in list 4; on a device a grid of quads at known Z fogged against a CPU reference (1 LSB; 2 with fogOffsetA), dump -> load -> replay (exact), every created pipeline enumerated (77 without a device) |
 
 `port/test/gs_blend_test.c` is the single-file CPU program behind
 `docs/port/RENDER_API.md` section 7:

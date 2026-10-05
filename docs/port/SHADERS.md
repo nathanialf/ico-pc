@@ -118,12 +118,12 @@ and `mul(g_viewProj, p)` on the GPU, which agree with the C products to
 
 | offset | field | meaning |
 | --- | --- | --- |
-| 0 | `uint4 g_col` | constant colour RGBA 0..255 (blit tint, fade colour) |
+| 0 | `uint4 g_col` | constant colour RGBA 0..255 (blit tint, fade colour); `fog_lut_ps`: x = the fog sprite's GS Z, y = its Z test (`RdZTest`) |
 | 16 | `uint4 g_mode` | x flags `DF_*`; y = TEXA mode (`RdTexA`) \| TEXFMT << 8; z = ATST \| ate << 8 \| split << 16 (split 0 none, 1 keep passing fragments, 2 keep failing: the AFAIL FB_ONLY passes); w = AREF |
 | 32 | `uint4 g_blend` | x ALPHA register (A \| B << 2 \| C << 4 \| D << 6); y FIX; z COLCLAMP |
 | 48 | `float4 g_uvRect` | blit source rectangle in texels (u0, v0, u1, v1) |
 | 64 | `float4 g_tex` | t1 size in texels (xy), 1/size (zw) |
-| 80 | `float4 g_param` | kind specific: `blend_int` pixel offset (xy); `fog_lut` unused |
+| 80 | `float4 g_param` | kind specific: `blend_int` pixel offset (xy); `fog_lut_ps`: x = the GS Z scale of the depth it reads (2^-32 for SCENE) |
 
 Flags: `DF_TEXTURED` 1 (TME), `DF_DECAL` 2 (else MODULATE), `DF_TCC_RGBA` 4,
 `DF_FBA` 8, `DF_PABE` 16, `DF_FIX_FACTOR` 32 (blend factor from FIX, not As),
@@ -186,7 +186,8 @@ exceed 0x80.
 | `blit_fix_ps` | blit.hlsl | fragment | same, dual-source with the FIX factor |
 | `camera_probe_ps` | blit.hlsl | fragment | wave 2 (R2c), tests only: FrameCB's matrices applied to `g_param`, written as float bytes into a 4 x 3 RGBA8 target (`rd__CameraProbe`); not in the reachable pipeline set |
 | `blend_int_vs`, `blend_int_ps` | blend_int.hlsl | vertex, fragment | t1 = Cs, t2 = Cd (RGBA8_UINT), ALPHA register in `g_blend`, writes RGBA8_UINT; no sampler |
-| `fog_lut_vs`, `fog_lut_ps` | fog_lut.hlsl | vertex, fragment | wave 4 placeholder: depth to a 256x1 LUT, index = top byte of the 24-bit Z (which byte the game reads is open item 3 of RENDER_API.md) |
+| `fog_lut_ps` | fog_lut.hlsl | fragment | wave 4 (R4c): `fog_DrawFog`'s sprite (`RD_POST_FOG`, `RENDER_API.md` section 15) behind `sprite_ui_vs`: t1 a copy of the depth (D32F, sampled as depth, `Load` at the texel the UV addresses, nearest), t2 the 256x1 RGBA8 LUT in index order; reconstructs the GS Z (`(zmax + 1) - d / scale`, the inverse of `gs_z_to_depth`), does the Z test in the shader (GEQUAL against `g_col.x`; Z of a passing pixel capped at the sprite's), index = Z bits 16..23, MODULATE with the vertex colour, alpha test, dual-source output with the state's blend |
+| `fog_lut_vs` | fog_lut.hlsl | vertex | a fullscreen triangle with `fog_lut_ps`'s inputs; unused by rd (kept in the shader table) |
 | `font_vs`, `font_ps` | font.hlsl | vertex, fragment | R8 atlas coverage times vertex alpha, UI space |
 
 Shadows (wave 4, R4b; `RENDER_API.md` section 14) add no shader. The
@@ -198,6 +199,16 @@ stencil EQUAL test on one bit add 4 << k to RGB (ONE + ONE), a seventh
 writes A 0x80 where the count is not 0. The blur chain and the composites
 are ordinary screen sprites (`sprite_*`). The RHI cannot sample stencil, so
 the count is read through stencil tests, not in a shader.
+
+The fog (wave 4, R4c; `RENDER_API.md` section 15) replaces the R1c
+placeholder of `fog_lut.hlsl`, which took the top byte of a 24-bit Z at
+2^-24: the game's Z is PSMZ32 (2^-32) and the PSMT8H read of ZFog.c's Z copy
+selects bits 16..23. Precision: SCENE's depth is D32F holding
+`(zmax - z + 1) * 2^-32`; for the fogged range (Z up to 0xFFFFFF) the depth
+lies in [1 - 2^-8, 1], where a float steps by 2^-24, so the reconstructed Z
+is Z rounded to a multiple of 256. Bits 16..23 change only within 128 of a
+multiple of 65536 (0.4 % of Z values), where the index can be one off; the
+cap at the sprite's Z keeps 0xFFFFFF (stored as 2^24) at index 0xFF.
 
 ## Tests
 

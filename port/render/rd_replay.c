@@ -16,6 +16,7 @@
  *   RDC_MESH, RDC_SKINNED, RDC_GRID, RDC_PARTICLES
  *                    the VU1 program shaders (wave 3, R3ab; doVu below)
  *   RDC_SHADOW_RESET, RDC_SHADOW_STRIP, RDC_SHADOW_RESOLVE
+ *   RDC_POST_STUB    of kind RD_POST_FOG (wave 4, R4c): doFog
  *                    the shadow count on the stencil (wave 4, R4b;
  *                    rd_shadow.c, doShadow* below)
  *   later waves      rd__NotImplemented
@@ -50,7 +51,8 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "vu_skin_debug_vs", "vu_grid_vs",      "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs"};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {
-    "sprite_ps", "blit_ps", "blend_int_ps", "date_snap_ps", "camera_probe_ps", "vu_ps"};
+    "sprite_ps",       "blit_ps", "blend_int_ps", "date_snap_ps",
+    "camera_probe_ps", "vu_ps",   "fog_lut_ps"};
 
 /* ------------------------------------------------------------------ init */
 
@@ -160,6 +162,7 @@ void rd__GpuShutdown(void)
         }
     }
     rd__PipelineCacheClear();
+    rd__FogShutdown(); /* wave 4 (R4c) */
     if (g_rd.dummy.id) {
         rhi_DestroyTexture(g_rd.dummy);
     }
@@ -577,7 +580,10 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         return g_rd.dummy;
     }
     if (t->view == RD_VIEW_DEPTH) {
-        rd__NotImplemented("sampling a depth view (fog, depth of field: wave 4)");
+        /* wave 4 (R4c): only RD_POST_FOG reads a depth view (doFog, through
+         * its LUT); a draw that finds the view still bound (the fog's TEX0
+         * leaking, as on the GS) samples nothing */
+        rd__LogOnce(RD_ONCE_DEPTH_VIEW, "a draw samples a depth view outside the fog: untextured");
         return g_rd.dummy;
     }
     *w = src->w;
@@ -1355,6 +1361,169 @@ static void doShadowResolve(Replay *r)
     endPass(r);
 }
 
+/* --------------------------------------------------- fog (wave 4, R4c)
+ * RD_POST_FOG (fog_DrawFog, ZFog.c; RENDER_API.md section 15).  The GS
+ * copies the Z buffer to 0x2800, copies byte 2 of every word into byte 3
+ * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
+ * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:
+ * the Z source's depth (the target of the bound depth view, else the state's
+ * depth target) is copied into s_fogDepth, a D32F_S8 texture that can be
+ * sampled (the scene's depth is an attachment, not sampled), the LUT is
+ * uploaded into s_fogLut, and the sprite is drawn through the sprite vertex
+ * shader and fog_lut_ps, which reconstructs the GS Z, takes bits 16..23 as
+ * the index, applies the texture function and the Z test, and blends with
+ * the state block's ALPHA.  No depth attachment is bound (ZMSK: nothing to
+ * write; the test reads the copy, which holds the same values). */
+static RhiTexture s_fogDepth, s_fogLut;
+
+static RhiState s_fogDepthState, s_fogLutState;
+
+static uint32_t s_fogDepthW, s_fogDepthH;
+
+void rd__FogShutdown(void)
+{
+    if (s_fogDepth.id) {
+        rhi_DestroyTexture(s_fogDepth);
+    }
+    if (s_fogLut.id) {
+        rhi_DestroyTexture(s_fogLut);
+    }
+    s_fogDepth = s_fogLut = (RhiTexture){0};
+    s_fogDepthW = s_fogDepthH = 0;
+}
+
+static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdPostRec p;
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    uint32_t zid = r->st.depth;
+    const RdTexRec *tv = r->st.ds.texEnabled ? rd__TexRec(r->st.tex) : NULL;
+    if (tv && tv->kind == RD_TEXKIND_TARGET && tv->view == RD_VIEW_DEPTH) {
+        zid = tv->target;
+    }
+    RdTargetRec *tz = rd__TargetRec(zid);
+    RdTargetRec *tc = rd__TargetRec(r->st.color);
+    if (p.lutOffset == ~0u || !tz || !tz->withDepth || !tz->depth.id || !tc || !tc->color.id) {
+        rd__LogOnce(RD_ONCE_FOG, "fog without a LUT, a depth source or a colour target: skipped");
+        return;
+    }
+    RdDrawPass dp[2];
+    const int np = rd__FogPlan(&r->st, tc->format, dp);
+    if (np == 0) {
+        return;
+    }
+
+    /* the sprite as the GS gets it: corners (12.4), UVs (12.4), RGBAQ, Z */
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    for (int i = 0; i < 2; i++) {
+        v[i].x = (int32_t)p.rect[i * 2];
+        v[i].y = (int32_t)p.rect[i * 2 + 1];
+        v[i].s = p.uv[i * 2];
+        v[i].t = p.uv[i * 2 + 1];
+        v[i].z = p.z;
+        v[i].q = 1.0f;
+        memcpy(v[i].rgba, p.rgba, 4);
+    }
+    static const float noOff[2] = {0.0f, 0.0f};
+    const uint64_t vOff = rd__RingAlloc(6 * sizeof(IcoSpriteVertex), 16);
+    const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
+    const uint32_t lutPitch = (256 * 4 + pitchA - 1) / pitchA * pitchA;
+    const uint64_t lOff = rd__RingAlloc(lutPitch, rhi_Limits()->copyOffsetAlign);
+    if (vOff == ~0ull || lOff == ~0ull) {
+        return;
+    }
+    uint8_t topo;
+    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    const uint32_t nv = expand(v, 2, RD_PRIM_SPRITES, 1, (float)tz->w, (float)tz->h, noOff, out,
+                               &topo, r->st.gouraud != 0);
+    memcpy(g_rd.ringMap[s_slot] + lOff, f->payload + p.lutOffset, 256 * 4);
+
+    endPass(r);
+    /* the Z copy (the GS's BITBLT of the Z buffer to 0x2800) */
+    if (!s_fogDepth.id || s_fogDepthW != tz->w || s_fogDepthH != tz->h) {
+        if (s_fogDepth.id) {
+            rhi_DestroyTexture(s_fogDepth);
+        }
+        s_fogDepth = rhi_CreateTexture(&(RhiTextureDesc){
+            tz->w, tz->h, 1, RHI_FMT_D32F_S8,
+            /* the depth-stencil usage: Vulkan's sampled depth layout
+             * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it */
+            RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, "rd fog depth"});
+        s_fogDepthState = RHI_STATE_UNDEFINED;
+        s_fogDepthW = tz->w;
+        s_fogDepthH = tz->h;
+    }
+    if (!s_fogLut.id) {
+        s_fogLut = rhi_CreateTexture(&(RhiTextureDesc){
+            256, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd fog lut"});
+        s_fogLutState = RHI_STATE_UNDEFINED;
+    }
+    if (!s_fogDepth.id || !s_fogLut.id) {
+        return;
+    }
+    rd__Transition(s_cl, tz->depth, &tz->depthState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, s_fogDepth, &s_fogDepthState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, tz->depth, (RhiRect){0, 0, tz->w, tz->h}, s_fogDepth, 0, 0);
+    rd__Transition(s_cl, s_fogDepth, &s_fogDepthState, RHI_STATE_SHADER_READ);
+    rd__Transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
+                               (RhiRect){0, 0, 256, 1});
+    rd__Transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_SHADER_READ);
+
+    /* the pass on the colour target alone, FrameCB and the scissor */
+    DrawSetup ds;
+    memset(&ds, 0, sizeof(ds));
+    ds.tc = tc;
+    ds.tex = g_rd.dummy;
+    ds.dateTex = g_rd.dummy;
+    ds.tw = tz->w;
+    ds.th = tz->h;
+    ds.textured = 1;
+    if (!bindDraw(r, &ds).id) {
+        return;
+    }
+    RhiBinding b[3];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = s_fogDepth;
+    b[0].aspect = RHI_ASPECT_DEPTH;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = s_fogLut;
+    const RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+    if (!g2.id) {
+        return;
+    }
+    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    for (int i = 0; i < np; i++) {
+        RhiPipeline pipe = rd__GetPipeline(&dp[i].key);
+        if (!pipe.id) {
+            continue;
+        }
+        IcoDrawCB cb;
+        fillDrawCB(r, &dp[i], &ds, &cb);
+        cb.mode[1] = 0; /* the LUT is PSMCT32: no TEXA */
+        cb.col[0] = p.z;
+        cb.col[1] = r->st.ds.test.zte ? r->st.ds.test.ztst : RD_ZTST_ALWAYS;
+        cb.param[0] = rd__TargetZScale(zid);
+        rhi_CmdSetPipeline(s_cl, pipe);
+        rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
+        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(s_cl, 2, g2);
+        rhi_CmdDraw(s_cl, nv, 0, 1);
+        g_rd.stats.draws++;
+        if (dp[i].key.gs.colorMask & 8) {
+            r->writeSerial++;
+        }
+    }
+    (void)topo;
+}
+
 /* ----------------------------------------------------------------- frame */
 
 static uint64_t estimateRing(const RdFrame *f, int keep)
@@ -1374,6 +1543,10 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
                 total += ((uint64_t)c->u[0] * 3 + c->u[3]) * sizeof(IcoSpriteVertex) + 64;
             } else if (c->type == RDC_SHADOW_RESOLVE) {
                 total += (RD_SHADOW_RESOLVE_PASSES + 1) * (sizeof(IcoDrawCB) + align);
+            } else if (c->type == RDC_POST_STUB && c->b[0] == RD_POST_FOG) {
+                /* wave 4 (R4c): the sprite, the LUT upload, two DrawCBs */
+                total += 6 * sizeof(IcoSpriteVertex) + 16 + 256 * 4 + pitchA +
+                         rhi_Limits()->copyOffsetAlign + 2 * (sizeof(IcoDrawCB) + align);
             } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
                 /* wave 3: per pass DrawCB + VuCB, the bones, the stream and
                  * the indices (a mesh drawn twice is counted twice) */
@@ -1473,7 +1646,7 @@ static const char *stubName(uint8_t type)
     case RDC_WORLD_PRIMS:
         return "rd_WorldPrims (wave 5)";
     case RDC_POST_STUB:
-        return "rd_Post (fog, shadow resolve, blur: waves 4-5)";
+        return "rd_Post (shadow resolve, blur: wave 5)";
     default:
         return "unknown command";
     }
@@ -1541,6 +1714,14 @@ bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
                 break;
             case RDC_SHADOW_RESOLVE:
                 doShadowResolve(&r);
+                break;
+            case RDC_POST_STUB:
+                if (c->b[0] == RD_POST_FOG) {
+                    doFog(&r, f, c); /* wave 4 (R4c) */
+                    break;
+                }
+                endPass(&r);
+                rd__NotImplemented(stubName(c->type));
                 break;
             default:
                 endPass(&r);

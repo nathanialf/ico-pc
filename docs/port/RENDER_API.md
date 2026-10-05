@@ -264,6 +264,7 @@ count with stencil.
 3. ZFog Z byte: which byte of the PSMZ32 depth the PSMT8H reinterpretation
    plus the PSMT4 block shuffles at `ZFog.c:236` selects. Derive with a
    small host test over the GS swizzle tables before writing the fog shader.
+   Resolved in wave 4 (R4c, section 15): bits 16..23 of the 32-bit Z.
 4. Field parity: settled in wave 2 (R2c), section 12.
 5. DTHE: settled in wave 2 (R2c): the flip writes DTHE 0 every frame
    (section 12), so the image was not dithered.
@@ -745,6 +746,8 @@ Open questions for wave 3:
    SCENE).
 4. `fog_lut.hlsl` derives Z as `(1 - d) * 2^24`; with SCENE at 2^-32 the
    fog package must use the target's scale (open item 3, the Z byte).
+   Resolved in wave 4 (R4c, section 15): `fog_lut_ps` inverts
+   `gs_z_to_depth` with the depth target's scale.
 5. `cut` is never set: the interpolation package needs a camera-cut signal
    (camera-root.c's mode changes) before it trusts `RdCamera`.
 6. Brightness: whether the GS rasterises a sprite whose second vertex lies
@@ -1106,7 +1109,17 @@ Open items:
    and every texel or vertex alpha of 0x80 and above do not receive.
    Surfaces drawn with TEXA 7F (lists 1 and 2) or alpha below 0x80 do; FBA
    only ever excludes. Whether the floor of stage 3 receives is for the run
-   to show.
+   to show. R4c's run (section 15, "Game run") replayed the shadow commands
+   without error but still does not show it: in the stage-3 dumps (ticks
+   1150 to 1250, the opening cutscene) the volumes are recorded (8,280 and
+   8,712 vertices at 1200 and 1250) and the resolve runs, but the count
+   target is empty (1 non-zero pixel at 1150, the boy lying on the floor,
+   faded; 0 at 1200 and 1250, close-ups of the standing boy with no floor
+   in view), so SHADOW0..2 are black and the composites change nothing.
+   That fits volumes that end in front of the visible walls (the depth-pass
+   count nets to 0); it neither shows nor rules out a shadow on the floor.
+   A run that reaches free play on a lit floor (later than tick 1300 with
+   `pad-boot.txt`) is still needed.
 2. RGB24 and RGBA16 textures are TEXA-expanded after bilinear filtering in
    `sprite_ps` and `vu_ps` (above); with AEM or two TA values, edges between
    texels of different alpha differ from the GS. The shadow chain avoids it;
@@ -1124,3 +1137,215 @@ Open items:
 6. A SCENE depth clear inside list 3 between `shadow_Reset` and
    `shadow_Draw` would clear the stencil count, where the GS keeps the
    colour; no such clear exists today (list 3 holds only Shadow.c's work).
+
+## 15. Depth fog (wave 4, R4c)
+
+`ico2/seki/src/ZFog.c` under `ICO_RD` (the window build; the headless build
+compiles the original code), `port/render/rd_post.c` (`RD_POST_FOG`),
+`rd_replay.c` (`doFog`), `rd_pipeline.c` (`rd__FogPlan`, the fog key),
+`port/shaders/fog_lut.hlsl` (`fog_lut_ps`). Test: `rd_fog`
+(`port/render/test/rd_fog_test.c`), which compiles ZFog.c with the 2D layer
+as the window build does.
+
+**What the PS2 does.** `gsb_PostEffect` calls `fog_DrawFog` right after
+`shadow_Draw` (`GsBase.c:1047`). It returns unless `debug_fullscreen_effect`
+and `GlobalStageSetting.fogOn` are set, takes a CLUT block with
+`tex_AllocVramAuto(1, 4)` (in the list current then, 3 after `shadow_Draw`)
+and calls `tex_ResetVramPri(4)`, whose `resetVramPri` selects list 4
+(`dl_SetDLPriority(pri)`, `Texture.c:1804`) before resetting its VRAM
+bookkeeping: the fog's packets go into list 4, as the planner had it, and
+list 4 stays current for `MotionBlur` and what follows until they select
+their own. Then, in packet order (`ZFog.c:212-267`):
+
+1. BITBLTBUF DBP = the CLUT block, DBW 1, PSMCT32; TRXREG 16 x 16; TRXDIR 0;
+   then `fogClutPacket` by DMA: the 256 CLUT words as a 16 x 16 PSMCT32 image.
+2. TEXFLUSH; BITBLTBUF SBP 0x1800 (ZBP 0xC0), SBW W/64, PSMZ32 to DBP 0x2800,
+   DBW W/64, PSMCT32; TRXREG W x H; TRXDIR 2: the Z buffer copied pixel for
+   pixel into a colour-format buffer (which drops PSMZ32's block order).
+3. For each 32-line band i < H/32 and j < 4: BITBLTBUF SBP = DBP =
+   0x2800 + i W/2, BW 2, PSM 0x14 (PSMT4); TRXPOS (16 + 32 j, 0) to
+   (24 + 32 j, 0); TRXREG 8 x 2W; TRXDIR 2.
+4. FRAME 0x40 (SCENE) with SCISSOR/XYOFFSET centred, FBA 0, ALPHA 0x44 FIX
+   0x80, TEX0 (TBP 0x2800, TBW W/64, PSMT8H, TW = TH = 9, TCC 1, MODULATE,
+   CBP the CLUT block, CPSM PSMCT32, CSM1, CLD 1), ZBUF 0xC0 with ZMSK, TEST
+   0x50000, TEX1 0 (nearest), the sprite: PRIM 0x156 (sprite, TME, ABE,
+   FST, flat), RGBAQ (0x80, 0x80, 0x80, fogStrength), UV 0.5 .. W + 0.5 and
+   0.5 .. H + 0.5 over the whole scene at Z 0xFFFFFF; TEX1 0x60.
+5. With `fogOffsetA` > 0: TEST 0x30000, an untextured sprite (PRIM 0x446)
+   of (fogColR, fogColG, fogColB, fogOffsetA) over the scene at Z
+   0xFFFFFFFF, TEST 0x50000.
+6. ZBUF write on; FRAME 0x40 with screenOffsetX/Y.
+
+**The Z byte (section 8, open item 3).** The PSMT8H texel at (x, y) is the
+top byte (bits 24..31) of the 32-bit word the PSMCT32 layout puts at
+(x, y): PSMT8H, PSMT4HH and PSMT4HL share PSMCT32's page, block and column
+structure and keep their index in the high bits (GS User's Manual, "Pixel
+storage formats" and the memory arrangement figures). Step 2 is a
+pixel-for-pixel copy, so before step 3 that word is Z(x, y) and the index
+would be Z bits 24..31. Step 3 works in a PSMT4 view of the copy:
+
+- a page is 8 KB in every format: 64 x 32 PSMCT32 pixels or 128 x 128
+  PSMT4 pixels. BW 2 makes the PSMT4 buffer one page (128 pixels) wide, so
+  a band (base 0x2800 + i W/2 blocks; W/2 = 256 blocks = the 8 PSMCT32
+  pages of 32 lines at W = 512) is 8 PSMT4 pages stacked, 1024 = 2W rows:
+  exactly the transfer height;
+- a PSMT4 block is 32 x 16 pixels, four across a page, so x = 16 + 32 j ..
+  +7 (j = 0..3) is pixels 16..23 of every block column, in every block row;
+- a PSMT4 column is 32 x 4 pixels, 128 nibbles, the same 64 bytes (16
+  words) as a PSMCT32 column. In the documented arrangement, in every row
+  of both the even and the odd column, pixels 0..7 hold the low or high
+  nibble of byte 0 of eight of the column's words, 8..15 byte 1, 16..23
+  byte 2 and 24..31 byte 3 of the same eight words (row 0 of an even
+  column: pixel x of 0..7 is nibble 0 of word {0,1,4,5,8,9,12,13}[x],
+  pixel 8 + x nibble 2, 16 + x nibble 4, 24 + x nibble 6; rows 2 and 3
+  carry the high nibbles, the odd column swaps the row pairs). Moving
+  pixels 16..23 to 24..31 therefore copies byte 2 into byte 3 of every
+  word of every block of every band.
+
+So the PSMT8H index is **bits 16..23 of the 32-bit Z**, for every pixel.
+The sprite passes Z GEQUAL against 0xFFFFFF under ZMSK, so only pixels with
+Z <= 0xFFFFFF are fogged, and for them Z >> 16 spans 0..255 without
+wrapping; nearer pixels (Z above 2^24) are left alone. With the scene's
+screen matrix (section 12: GS Z 536870880 at view depth 2, 1 at 262144),
+GS Z is about 2^30 / w - 4095, so fog starts at w = 64 (index 255) and the
+index falls as about 16384 / w with distance. `fog_MakeFogClut` stores
+f(i) at entry 255 - i, so i = 255 - index grows with distance: f = 0 up to
+`fogNear`, linear to `fogColA` / 2 at `fogFar`, `fogColA` / 2 beyond. The
+same family of tricks (a Z buffer reinterpreted in another format, channels
+moved in 8-pixel strips by local transfers, an 8-bit CLUT for the fog
+curve) is described in SCEE's "Using the Z Buffer for Visual and Special
+Effects" (lukasz.dk/files/SpecialEffects.pdf), whose 16-bit variant takes
+bits 8..15; ICO's PSMT4 variant takes bits 16..23.
+
+`rd_fog` (s) checks this with a CPU model of the GS memory (the PSMCT32,
+PSMZ32 and PSMT4 page, block and column tables, written in the test from
+the manual's figures and cross-checked against T. Krinkle's public GS
+swizzle visualiser): steps 2 and 3 over a 512 x 512 Z buffer of arbitrary
+32-bit values, then the PSMT8H read: the index is Z bits 16..23 at all
+262,144 pixels (and Z bits 24..31 before step 3); bytes 0..2 are untouched.
+
+**CLUT order.** `fog_MakeFogClut` writes the table in CSM1 storage order
+(entries 8..15 and 16..23 of every 32 traded). The GS's CSM1 lookup of an
+8-bit index n reads the 16 x 16 CLUT image at x = n bits 0..2 and 4, y = n
+bit 3 and bits 5..7, i.e. storage entry n with bits 3 and 4 swapped, which
+undoes the trade: index n sees `clut[n]`, the logical table. The host path
+passes that table (`lut[n]` = stored entry n with bits 3, 4 swapped; RGBA
+from the word's low byte up). `rd_fog` (c) checks it against the formula and
+against a CSM1 lookup of an independently swizzled copy.
+
+**On rd.** ZFog.c's host path (`fogHostDraw`) replaces the two packets with
+their effect, in packet order: `rd_SetTarget(SCENE, SCENE)` for FRAME 0x40,
+`rd_FBA(0)`, `rd_BlendFunc(LERP_AS, 128)`, `rd_Texture` of
+`rd_TargetTexture(SCENE, RD_VIEW_DEPTH)` (MODULATE, TCC RGBA) for TEX0,
+`rd_ZWrite(0)`, `rd_TestGs(0x50000)`, TEX1 nearest, ABE on and flat for
+PRIM 0x156, then `rd_Post(RD_POST_FOG)` with the sprite as the GS gets it
+(corners, UVs, RGBAQ, Z) and the LUT; TEX1 linear; the fogOffsetA sprite as
+`rd_ScreenPrims` between TEST 0x30000 and 0x50000 (TME off, flat, ABE);
+`rd_ZWrite(1)`; FRAME 0x40 again. The transfers are not recorded: steps 1
+to 3 are what the LUT and the index rule stand for. `tex_AllocVramAuto` and
+`tex_ResetVramPri(4)` still run (the texture cache's per-list bookkeeping
+reads them). The GS register decoder never sees these writes (as for
+`rd_Post` and Shadow.c, section 12).
+
+Replay (`doFog`, for an `RDC_POST_STUB` of kind `RD_POST_FOG`; the other
+stub kinds still stop): the Z source is the target of the bound depth view
+(SCENE), else the state's depth target. Its D32F_S8 is copied into a
+sampleable texture of the same format (SCENE's depth is an attachment, and
+the GS copies too), the LUT is uploaded into a 256 x 1 RGBA8 texture, and
+the sprite is drawn through `sprite_ui_vs` and `fog_lut_ps` on the colour
+target with no depth attachment. The pipeline comes from the state block
+(`rd__FogPlan`: `rd__PlanScreenDraw` without depth, fragment shader
+`RD_FS_FOG`), so ALPHA, ABE, PABE, FBA, the colour mask and an alpha test
+are the state's; the Z test is done in the shader against the copy (the
+same values the attachment holds; ZMSK means nothing is written).
+`fog_lut_ps` loads the depth at the texel the UV addresses (TEX1 0:
+nearest, texel = floor(UV)), reconstructs the GS Z as `(zmax + 1) - d /
+scale` with the target's scale, discards unless the GEQUAL holds, caps a
+passing pixel's Z at the sprite's, takes bits 16..23, and applies the LUT
+texel with MODULATE (RGB x 0x80 >> 7, A = LUT.a x fogStrength >> 7). One
+pipeline (`rd__EnumerateReachableFog`): 166 reachable in all (165 before).
+
+**Precision.** For Z up to 0xFFFFFF the depth `(zmax - z + 1) * 2^-32`
+lies in [1 - 2^-8, 1], where D32F steps by 2^-24: the stored depth carries
+Z rounded to a multiple of 256 (section 12, open question 3). The index
+uses only bits 16..23, so it can be one off only for Z within 128 of a
+multiple of 65536 (0.4 % of Z values; a one-step change of the fog alpha,
+at most `fogColA` / 2 / (fogFar - fogNear) per step), and the Z test can
+pass Z up to 0xFFFFFF + 128. 0xFFFFFF itself stores as 2^24 and would read
+index 0 (full fog) without the cap.
+
+**State left behind.** As the GS: ZBUF write on, TEST 0x50000, ALPHA 0x44
+FIX 0x80, FBA 0, TEX1 linear, FRAME 0x40; without fogOffsetA PRIM 0x156
+(TME on, ABE, flat) and with it PRIM 0x446 (TME off). TEX0 stays the depth
+view of SCENE: a later draw that relied on that leak would read the Z copy
+as PSMT8H through the fog CLUT on the GS; on rd it logs once
+(`RD_ONCE_DEPTH_VIEW`) and draws untextured. Every game path after the fog
+writes its own TEX0.
+
+**Measured** (`rd_fog` on lavapipe, validation and synchronisation
+validation on, no errors):
+
+| check | result |
+|---|---|
+| (s) PSMT8H index of the modelled Z copy vs Z bits 16..23 | 262,144 of 262,144 pixels |
+| (c) the LUT ZFog.c passes vs the formula and a CSM1 lookup | equal, both cases |
+| (r) recorded state, sprite, LUT, fogOffsetA sprite, restores, in list 4 from list 3 (the test's `tex_ResetVramPri` selects the list as Texture.c's does); fogOn 0 records nothing | as listed above |
+| (p) 16 x 16 cells at known Z (indices 0..255, Z above 2^24, the 0xFFFFFF tie, the clear at Z 0), strength 0x80, vs the CPU reference (index, LUT, MODULATE, GS LERP, alpha As) | max 1 LSB |
+| (p) strength 0xFF with fogOffsetA 0x30 (two LERPs) | max 2 LSB |
+| (d) the fog frame dumped, loaded and replayed | 0 bytes differ |
+
+**rd.h changes (R4c).** The `rd_Post` comment for `RD_POST_FOG` (fields:
+`lut`, `rgba`, `z`, `rect` = the two corners in 12.4 window coordinates,
+`uv` = the two UVs in 12.4 texels). Internal: `RD_FS_FOG`, `rd__FogPlan`,
+`rd__EnumerateReachableFog`, `rd__FogShutdown`, `RD_ONCE_FOG`,
+`RD_ONCE_DEPTH_VIEW`; `RDC_POST_STUB` of kind `RD_POST_FOG` is replayed;
+a draw sampling a depth view logs once instead of `rd__NotImplemented`. The
+dump format is unchanged (the LUT is in the payload, the depth view is an
+ordinary target view).
+
+**Game run** (R4c: the window build on lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`pad-boot.txt`, 1300 ticks, `dump_every=50`, `timeout 420`, exit 0; the
+dumps replayed with `rd_replay_tool --target SCENE`, no command skipped,
+and inspected with a throwaway reader of the dumps' fog records and
+SCENE's depth). Every dumped frame from the title on records one
+`RD_POST_FOG` in list 4 (RGBAQ 0x80 grey, strength 0x80, no fogOffsetA).
+
+- Title (ticks 550, 600): fog colour (223, 219, 205), LUT alpha 110 at
+  index 0 falling to 0 at index 216. Every pixel has Z <= 0xFFFFFF (the
+  castle is far) with indices 0..47, so the whole scene is blended about
+  78 % (mean As 99.7) toward the pale grey: a strong, even, pale haze over
+  castle, cliffs and sea, the title text and logo unfogged (list 11).
+  550 and 600 agree; no flicker. Compared with R3ab's unfogged frame 600
+  the image is much flatter; this is what the registers ask for, but
+  whether the PS2 title looks this washed out is unverified (the result
+  hardly depends on the Z byte: indices 0..47 all sit near the LUT's
+  maximum).
+- Stage 3 (ticks 1200, 1250; 1000 and 1100 are black, 1150 the faded
+  first shot): fog colour (57, 68, 74), LUT alpha 121 at index 0 to 0 at
+  255; 55 % and 66 % of the pixels are fogged, with indices spread over
+  64..239 (As about 91 down to 7), so the far walls and stairs fade
+  toward a dark blue grey with depth while the boy in the foreground (Z
+  above 2^24) is untouched. That spread across the LUT's ramp is what the
+  stage's fogNear/fogFar were set for, which supports bits 16..23 (bits
+  24..31 would give index 0, full fog, at every fogged pixel; bits 8..15
+  would band every 256 Z units).
+- Nothing missing or miscoloured beyond that in the frames looked at
+  (550, 600, 650 black, 1000, 1100, 1150, 1200, 1250). `logs/ico-pc.log`
+  has no `rd` warning (in particular no `RD_ONCE_FOG` or depth-view
+  notice); its `gif:` HIGHLIGHT and `tex:` placeholder notices (TBP 0x3400,
+  0x2A00, 0x2E00 in lists 7 and 8) belong to the effects of wave 5.
+
+Open items:
+
+1. The PSMT8H bit position and the PSMT4 column arrangement are taken from
+   the documented layouts (manual figures, cross-checked against a public
+   visualiser), not from a hardware capture; a PS2 frame of a fogged stage
+   would settle it.
+2. The index can be one off within 128 Z units of a multiple of 65536
+   (D32F, above); a mapping with scale 2^-24 for the fog's range, or an R32
+   copy of the integer Z, would make it exact.
+3. Enhanced presets: `doFog` reads the depth at GS texel coordinates and
+   sizes the copy by the GS size; a resolution scale needs both scaled.
+4. The fog's TEX0 leak is not reproduced (above).
+5. The title's strong haze (game run above) should be compared with a PS2
+   capture of the title screen.

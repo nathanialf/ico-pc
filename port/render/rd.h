@@ -273,7 +273,7 @@ typedef enum RdPostKind {
     RD_POST_FILM_NOISE,    /* gsb_filmNoise */
     RD_POST_AA_DOWNSAMPLE, /* gsb_antiAlias chain step */
     RD_POST_AA_COMPOSITE,
-    RD_POST_FOG,            /* fog_DrawFog: depth-indexed LUT */
+    RD_POST_FOG,            /* fog_DrawFog: depth-indexed LUT (wave 4, R4c: see rd_Post) */
     RD_POST_SHADOW_RESOLVE, /* stencil != 0 -> SHADOW0 */
     RD_POST_BLUR,           /* staticBlur.c / Shadow.c downsample-blur step between two targets */
     RD_POST_COMPOSITE_FIX,  /* textured quad with LERP_FIX blend (motion blur, DoF planes, flare) */
@@ -549,6 +549,21 @@ void rd_ShadowResolve(void);
  * gif_MoveImage: fullscreen or rectangle passes between targets.  Recorded
  * into the current list like any draw. */
 void rd_Post(RdPostKind kind, const RdPostParams *params);
+/* Wave 4 (R4c), RD_POST_FOG (fog_DrawFog, docs/port/RENDER_API.md section
+ * 15): the fog sprite alone, drawn with the state in force (the caller
+ * records ZFog.c's register writes as rd state first: the colour target,
+ * TEX0 as rd_TargetTexture(SCENE, RD_VIEW_DEPTH) with MODULATE and TCC RGBA,
+ * TEX1, ALPHA, TEST, ZBUF mask, ABE).  The texel the sprite reads at UV
+ * (u, v) is LUT[(Z >> 16) & 0xFF], Z the 32-bit GS Z of the depth view's
+ * target at that texel (the PSMT8H read of the Z copy after ZFog.c's PSMT4
+ * byte copy); the Z test compares params->z with that target's depth.
+ * Fields:
+ *   lut      256 x RGBA in index order (the CLUT as the GS looks it up)
+ *   rgba     RGBAQ of the sprite (0x80, 0x80, 0x80, fogStrength)
+ *   z        the sprite's GS Z (0xFFFFFF)
+ *   rect     the two XYZ2 corners as the GS gets them, 12.4 window
+ *            coordinates: x0, y0, x1, y1
+ *   uv       the two UVs, 12.4 texels: u0, v0, u1, v1 */
 
 /* ------------------------------------- frame lifecycle and camera (R2c) */
 

@@ -55,8 +55,15 @@
  * COPY is gif_MoveImage: params->uv (x, y) in src to params->rect (x, y,
  * w, h) in dst, a texture copy.
  *
- * The remaining kinds (fog, shadow resolve, blur) are recorded with their
- * parameters and stop at replay (waves 4-5).
+ * FOG (wave 4, R4c) is fog_DrawFog's textured sprite alone: ZFog.c's host
+ * path records the packet's register writes as rd state around it (TEST,
+ * ZBUF, ALPHA, FBA, TEX0 as SCENE's depth view, TEX1, PRIM), so they leak
+ * as on the GS; this records the sprite and the CLUT (an RdPostRec in an
+ * RDC_POST_STUB), and rd_replay.c's doFog draws it through fog_lut_ps with
+ * the state in force (rd.h, RENDER_API.md section 15).
+ *
+ * The remaining kinds (shadow resolve, blur) are recorded with their
+ * parameters and stop at replay (wave 5).
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -430,6 +437,15 @@ static void postStub(RdPostKind kind, const RdPostParams *p)
     }
 }
 
+static void postFog(const RdPostParams *p)
+{
+    if (!p->lut) {
+        rd__Log("RD_POST_FOG needs the 256-entry LUT");
+        return;
+    }
+    postStub(RD_POST_FOG, p);
+}
+
 void rd_Post(RdPostKind kind, const RdPostParams *params)
 {
     RdPostParams zero;
@@ -467,6 +483,9 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
         break;
     case RD_POST_COPY:
         postCopy(params);
+        break;
+    case RD_POST_FOG:
+        postFog(params);
         break;
     default:
         postStub(kind, params);

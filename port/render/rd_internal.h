@@ -16,6 +16,9 @@
  *                  into FrameCB (wave 2, R2c)
  *   rd_shadow.c    the shadow count's recording (wave 4, R4b); replayed by
  *                  rd_replay.c (doShadow*)
+ *   (fog)          RD_POST_FOG (wave 4, R4c): recorded by rd_post.c as an
+ *                  RDC_POST_STUB, replayed by rd_replay.c (doFog) through
+ *                  fog_lut_ps
  *   rd_dump.c      frame dump and load
  *   rd_png.c       a minimal PNG writer for the replay tool and tests
  *
@@ -83,7 +86,8 @@ typedef enum RdCmdType {
                        * x count, f[0] sign; b[0] RD_SHADOW_TRIS (wave 4, R4b): rd_ShadowTris,
                        * u[1] payload offset of RdScreenVtx[u[0] + u[3]], the triangles that
                        * increment (u[0] vertices) then those that decrement (u[3]) */
-    RDC_POST_STUB,    /* b[0] RdPostKind, u[1] payload offset of RdPostRec */
+    RDC_POST_STUB,    /* b[0] RdPostKind, u[1] payload offset of RdPostRec; since wave 4
+                       * (R4c) RD_POST_FOG is replayed (doFog), the other kinds are not */
     /* wave 4 (R4b), rd_shadow.c: on the state block's colour and depth targets */
     RDC_SHADOW_RESET,   /* the depth target's stencil to 0 */
     RDC_SHADOW_RESOLVE, /* the stencil count into the colour target (rd.h rd_ShadowResolve) */
@@ -333,6 +337,7 @@ typedef enum RdFsId {
     RD_FS_DATE_SNAP,    /* wave 2: destination alpha MSB into the R8 DATE snapshot */
     RD_FS_CAMERA_PROBE, /* wave 2 (R2c): FrameCB matrices applied to a point, as bytes (tests) */
     RD_FS_VU,           /* wave 3 (R3ab): vu_ps, the pixel side of every VU program */
+    RD_FS_FOG,          /* wave 4 (R4c): fog_lut_ps, RD_POST_FOG behind the sprite vertex shaders */
     RD_FS_COUNT
 } RdFsId;
 
@@ -406,6 +411,16 @@ RdPipeKeyInt rd__ShadowResolveKey(int pass);
 /* The shadow families above under the states the game draws them with
  * (Shadow.c: TEST 0x50000); appends to out[0..n). */
 uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* Wave 4 (R4c), the depth fog (RENDER_API.md section 15): the draws of an
+ * RD_POST_FOG under state s, as rd__PlanScreenDraw plans a fullscreen
+ * sprite without a depth attachment (fog_lut_ps does the Z test against the
+ * depth it reads), with fog_lut_ps as the fragment shader. */
+int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
+/* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE);
+ * appends to out[0..n). */
+uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* rd_replay.c: frees the fog's depth copy and LUT textures (rd__GpuShutdown). */
+void rd__FogShutdown(void);
 
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
@@ -479,7 +494,10 @@ enum {
     RD_ONCE_VU_CODE,       /* an MSCAL code rd_VuCall does not model (debug font) */
     RD_ONCE_SEMANTIC_MESH, /* the wave-0 semantic mesh calls: not recorded */
     /* wave 4 (R4b) */
-    RD_ONCE_SHADOW /* a shadow command without a depth-stencil target of the colour's size */
+    RD_ONCE_SHADOW, /* a shadow command without a depth-stencil target of the colour's size */
+    /* wave 4 (R4c) */
+    RD_ONCE_FOG,       /* an RD_POST_FOG without a LUT or a depth source */
+    RD_ONCE_DEPTH_VIEW /* an ordinary draw sampling a depth view (only the fog reads one) */
 };
 
 void rd__Log(const char *fmt, ...);
