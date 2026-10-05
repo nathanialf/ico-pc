@@ -55,6 +55,18 @@ extern void iosMcChdirProduct(McMgr *mp);
 extern int iosMcSync(McMgr *mp);
 extern void iosMcLoadProductBlock(McMgr *mp);
 
+#ifdef ICO_HOST
+
+/* PC port (Phase 6, 6C): the language and 50/60 Hz screens are skipped; the
+   values they stored come from the port's config (port/config/sysconf.h,
+   docs/port/SETTINGS.md), and the Settings menu changes them later */
+int ico_boot_language(void);
+int ico_boot_video_mode(int current);
+int ico_boot_card_language(int card);
+int ico_boot_card_video_mode(int card);
+
+#endif
+
 static int kanbanBootMcCheck(void)
 {
     McMgr *mc = &bootMcReq;
@@ -131,6 +143,11 @@ static int kanbanBootMcCheck(void)
         r = &IosMcProductFile[mc->port];
         NonLinearCameraMove = r->cameraMove;
         systemStatus[0] = r->palMode;
+#ifdef ICO_HOST
+        /* an explicit config value (the Settings menu's) wins over the card */
+        NonLinearCameraMove = ico_boot_card_language(NonLinearCameraMove);
+        systemStatus[0] = ico_boot_card_video_mode(systemStatus[0]);
+#endif
         gsResetFunc(0);
         break;
     case 97:
@@ -151,6 +168,15 @@ static int kanbanBootMcCheck(void)
             break;
         }
         mcKanbanId = -1;
+#ifdef ICO_HOST
+        /* no language screen: what step 102 would have stored, from the
+           config or the host's locale (sceScfGetLanguage, as the screen's
+           cursor) */
+        NonLinearCameraMove = ico_boot_language();
+        mcCheckStep = 190;
+        bootKanbanDone = 1;
+        break;
+#endif
         lang = sceScfGetLanguage();
         lp = &texLayout[0].defaultItem;
         switch (lang) {
@@ -221,6 +247,19 @@ static int kanbanBootMcCheck(void)
         isysGObjActiveLink(0, 1);
         break;
     case 200:
+#ifdef ICO_HOST
+        /* no 50/60 Hz screen: [video] video_mode, else the screen's default
+           item (50 Hz, the value in force), with step 201's reset on a
+           change */
+        bootVideoMode = systemStatus[0];
+        systemStatus[0] = ico_boot_video_mode(systemStatus[0]);
+        if (bootVideoMode != systemStatus[0]) {
+            bootVideoMode = systemStatus[0];
+            gsResetFunc(0);
+        }
+        mcCheckStep = 202;
+        break;
+#endif
         bootKanban = kanbanReqAdd(1, 2);
         bootVideoMode = systemStatus[0];
         mcCheckStep++;

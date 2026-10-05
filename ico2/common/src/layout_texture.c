@@ -91,6 +91,10 @@ extern void *memset(void *dst, int c, int n);
 
 #include "layout_ext.h"
 
+/* Phase 6, 6C: the Settings menu's port layouts and the game rows that lead
+   to them (port/ui/settings.h), built once the tables are loaded */
+void ui_SettingsInstall(void);
+
 #define LT_LAYOUT(i) (*lt_ext_Layout(i))
 #define LT_PROP(i) (*lt_ext_Prop(i))
 #else
@@ -503,6 +507,16 @@ static void display_texture(int no, LtProperty *e)
 
     int sel;
     int i;
+#ifdef ICO_HOST
+    /* PC port (6C): a port row in a layout chained after the current one
+       with no cursor of its own (the Settings entry rows after the Options
+       and title rows) is selected and dimmed by the current layout's
+       cursor, which the item links move onto it */
+    int curNo = lt_ext_IsPortProp(e) && LT_LAYOUT(no).curItem < 0 ? current_layout_id : no;
+#define LT_CUR_NO curNo
+#else
+#define LT_CUR_NO no
+#endif
 
     ofs.x = (e->texU << 4) + 8;
     ofs.y = (e->texV << 4) + 8;
@@ -524,7 +538,7 @@ static void display_texture(int no, LtProperty *e)
     }
     box.y = (e->dispY - 113) * 16;
 
-    sel = (e == &LT_PROP(LT_LAYOUT(no).curItem));
+    sel = (e == &LT_PROP(LT_LAYOUT(LT_CUR_NO).curItem));
     if (sel && lt_item_select_disable == 0 && fadeState == 2 && e->selectable == 0) {
         SprCol pcol;
 
@@ -589,7 +603,7 @@ static void display_texture(int no, LtProperty *e)
                 u.col.b = 0;
             }
         }
-        if (LT_LAYOUT(no).curItem != e->ownerItem) {
+        if (LT_LAYOUT(LT_CUR_NO).curItem != e->ownerItem) {
             if (e->selectable != 0 && sel == 0 && (flag != 0 || e->ownerItem >= 0)) {
                 u.col.r = u.col.r * 0.5f;
                 u.col.g = u.col.g * 0.5f;
@@ -603,6 +617,7 @@ static void display_texture(int no, LtProperty *e)
 #endif
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
 
+#undef LT_CUR_NO
         if (e->selectable != 0 && sel != 0 && fadeState == 8) {
             float t = (float)fadeCount / (float)fadeLength;
 
@@ -842,6 +857,9 @@ static inline void lt_init_stage_textures(int stage) /* derived name */
 
 void init_layout_texture(int stage)
 {
+#ifdef ICO_HOST
+    ui_SettingsInstall();
+#endif
     fadeCallback = 0;
     if (stage == 1) {
         gflagInit();

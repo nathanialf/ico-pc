@@ -9,7 +9,7 @@ for `sceCdReadClock` and the EE timers are answered from it and from the host.
 | --- | --- |
 | `port/platform/host_config.c`, `.h` | the ini reader, the TOML-subset reader and writer (`ico_toml_*`), the pref folder, the ini-over-toml layering at load |
 | `port/config/config.c`, `config.h` | `ico_config_get_*`, `ico_config_set_*`, `ico_config_save` |
-| `port/config/sysconf.c`, `sysconf.h` | `sceScfGetLanguage`, `sceScfGetTimeZone`, `sceScfGetSummerTime` (replaces `port/null/scf_null.c`) |
+| `port/config/sysconf.c`, `sysconf.h` | `sceScfGetLanguage`, `sceScfGetTimeZone`, `sceScfGetSummerTime` (replaces `port/null/scf_null.c`); since 6C the boot screens' choices (`ico_boot_*`, `[video] video_mode`, the language setter) |
 | `port/platform/clock.c`, `clock.h` | the wall clock for `sceCdReadClock`, the EE timer counters |
 | `port/config/test/config_test.c` | the tests (`config` in ctest) |
 
@@ -66,11 +66,12 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[video] texture_filter` | | `"original"` | Enhanced: `"original"`, `"trilinear"`, `"anisotropic"` (generated mips) |
 | `[video] full_height` | | `false` | Enhanced: skip the reduction's vertical halving |
 | `[video] framerate` | | | the interpolation package's (R7b) |
+| `[video] video_mode` | | `"pal50"` | Phase 6, 6C: the boot 50/60 Hz screen's choice, which ico-pc skips: `"pal50"` (`systemStatus[0]` = 1, the PAL game's default) or `"60hz"` (0). Absent: the game's own value (50 Hz, or the card's). An explicit value wins over the memory card's system file. The Settings menu sets it (docs/port/SETTINGS.md) |
 | `[audio] enabled` | `audio` | `true` | `false`/`audio=0`: no audio device (the driver still runs) |
 | `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output does not apply it yet (open item) |
-| `[input]` | | | docs/port/INPUT.md (4C), untouched |
+| `[input]` | | | docs/port/INPUT.md (4C); since 6C the Settings menu's remap screen writes `[input.kb]`, `[input.mouse]`, `[input.pad]` and `mouse_sensitivity` |
 | `[gameplay]` | | `false` | `stick_fix`, `yorda_safe`, `mirror`: docs/port/OPTIONS.md (6A); `developer_mode`: the debug menu and option table (R6a, docs/port/DEVELOPER_MODE.md); read through `ico_config_get_bool` on first use |
-| `[game] language` | | `"auto"` | `"auto"`, `"en"`, `"fr"`, `"de"`, `"it"`, `"es"` |
+| `[game] language` | | `"auto"` | `"auto"`, `"en"`, `"fr"`, `"de"`, `"it"`, `"es"`: the game's language since 6C (the boot language screen is skipped; "Language" below); the Settings menu sets it |
 | `[game] achievements` | | `true` | Phase 6, 6E: `false` turns the achievement popups off; unlocks are still recorded in `<pref>/achievements.toml` (docs/port/ACHIEVEMENTS.md) |
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
@@ -89,7 +90,8 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 `ico_config_save()` writes `version`, `[paths] iso`, `[video]`, `[audio]`
 and `[game] language` when they are absent; the `[dev]` and `[input]` keys only
 when set. Nothing calls it yet at startup (open item), so a first run does not
-create the file.
+create the file; the Settings menu (6C) calls it (or `ico_video_save`) when a
+screen is left after a change.
 
 ## The writer
 
@@ -124,9 +126,30 @@ The PS2 console language only preselects the cursor of the boot language
 screen (`common/src/kanbanBoot.c` step 101: item 26 for English, 27 French, 28
 German, 29 Italian, 30 Spanish); the player still confirms the sign, and the
 game then stores the choice in the global `NonLinearCameraMove` (misnamed:
-2 EN, 3 FR, 4 DE, 5 IT, 6 ES, `kanbanBoot.c` step 102). Phase 6 skips that
-screen and uses this value directly. Until then a value in the config only
-moves the cursor.
+2 EN, 3 FR, 4 DE, 5 IT, 6 ES, `kanbanBoot.c` step 102).
+
+Since Phase 6 (6C) ico-pc skips that screen and the 50/60 Hz one
+(`kanbanBoot.c` under `ICO_HOST`):
+
+- step 101 stores what step 102 would have: `sceScfGetLanguage()` mapped
+  as the screen maps its cursor (libscf 1 EN -> 2, 2 FR -> 3, 4 DE -> 4,
+  5 IT -> 5, 3 ES -> 6, anything else the default item, English, 2;
+  `ico_scf_to_game_language`), marks the sign done and goes on to step 190
+  as step 102 did;
+- step 200 stores what step 201 would have: `[video] video_mode`
+  (`ico_sysconf_video_mode`), else the value in force (the screen's
+  default item, 50 Hz), with step 201's `gsResetFunc` when it changes, and
+  goes on to step 202;
+- step 96 (the card's system file was read): the card's `cameraMove` and
+  `palMode` are used as before unless `[game] language` names a language
+  or `[video] video_mode` is set: then the config's value wins (the
+  Settings menu writes both). The card file is written with the in-memory
+  values by `product_write` at the game's next system save, as before (the
+  screens never wrote it themselves).
+
+The memory card check, its retries and the "no memory card" sign are
+unchanged. The boot is 40 Main ticks shorter with `pad-boot.txt`
+(docs/port/UI.md, "Runs").
 
 `sceScfGetTimeZone` and `sceScfGetSummerTime` return 0.
 

@@ -1,0 +1,1304 @@
+/*
+ * port/ui/settings.c
+ *
+ * The Settings menu (settings.h; docs/port/SETTINGS.md, docs/port/UI.md).
+ * Port layouts in the layout extension, run by the game's layout code; this
+ * file builds them, repoints the game's rows at the entry rows, and holds
+ * the screens' procs: the value texts, left/right on a value, Cross on an
+ * action, Triangle back, the scrolling lists, the remap capture, and the
+ * saves when a screen is left.
+ */
+#include "settings.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "achievements.h"
+#include "config.h"
+#include "font.h"
+#include "input.h"
+#include "layout_ext.h"
+#include "options.h"
+#include "strings.h"
+#include "sysconf.h"
+#include "video_options.h"
+
+/* --- the game's side (common/; layout_texture.h declares the lt_* calls) -- */
+
+extern PadState pad[16];
+extern int NonLinearCameraMove; /* the language, 2..6 */
+extern int systemStatus[12];    /* [0]: 1 PAL 50 Hz, 0 60 Hz */
+extern int gFlagGameClear;
+extern int gsResetFunc(int val); /* debug.c: gsb_Init, the boot screen's reset */
+extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
+extern void POSITIVE_SE(void);
+extern void NEGATIVE_SE(void);
+extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
+
+/* the pad's trigger bits (keyInput.c's logical word) */
+#define PAD_TRIANGLE 0x0010
+#define PAD_CROSS 0x0040
+#define PAD_SQUARE 0x0080
+#define PAD_UP 0x1000
+#define PAD_RIGHT 0x2000
+#define PAD_DOWN 0x4000
+#define PAD_LEFT 0x8000
+
+/* the game layouts the menu is entered from */
+#define LAYOUT_PAUSE_OPTIONS 58
+#define LAYOUT_TITLE_CONTINUE 12
+#define LAYOUT_TITLE_NEW 13
+
+enum { ENTRY_OPTIONS, ENTRY_TITLE12, ENTRY_TITLE13, ENTRY_COUNT };
+
+static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_CONTINUE,
+                                            LAYOUT_TITLE_NEW};
+
+/* geometry, in the layout grid (dispX pixels of 640, dispY field lines of 226) */
+#define HEADER_Y 12
+#define LABEL_X 44
+#define LABEL_W 300 /* right-aligned, ending at x 344 as the Options labels end at 364 */
+#define VALUE_X 364
+#define VALUE_W 256 /* a value that is not stepped (the mirror line) */
+/* a stepped value: centred between its two arrows, as the Options screen's
+   values sit between rows 309 and 310 */
+#define ARROW_L_X 362
+#define ARROW_R_X 556
+#define ARROW_W 14
+#define STEP_X 378
+#define STEP_W 176
+#define NOTE_Y 196
+#define HEADER_SIZE 30.0f
+#define NOTE_SIZE 19.0f
+#define LIST_SLOTS 8
+#define REMAP_ITEMS (ICO_T_COUNT + 2) /* the targets, Reset, Back */
+
+/* where the Options screen's Settings row goes: the girl-control row (325)
+   is hidden until the game is cleared, so the row takes its place, and moves
+   below it once 325 shows */
+#define OPTIONS_ROW_Y 165
+#define OPTIONS_ROW_Y_CLEARED 185
+/* the title's: under "New Game" (rows 50 and 51 at 165), above the
+   copyright line (row 48 at 195, its letters from about line 205) */
+#define TITLE_ROW_Y 181
+#define TITLE_ROW_SIZE 24.0f
+
+#define MAX_ROWS 16
+
+typedef struct Row {
+    int opt;   /* UiSettingsOpt */
+    int label; /* the navigable row */
+    int value; /* the value row (ownerItem = label), -1 */
+    int note;  /* shown while label is selected, -1 */
+    int noteStr;
+    int link; /* UiSettingsPage the row opens (UI_OPT_LINK), -1 */
+} Row;
+
+typedef struct Page {
+    int layout;
+    int header;
+    int parent; /* UiSettingsPage, -1: where the menu was entered from */
+    int count;
+    Row rows[MAX_ROWS];
+    /* the scrolling lists (achievements, remap) */
+    int isList;
+    int items; /* data items, the last ones are the actions */
+    int offset;
+    int colA[LIST_SLOTS], colB[LIST_SLOTS];
+    int status; /* the description / hint line */
+} Page;
+
+static Page s_pages[UI_PAGE_COUNT];
+static int s_built;
+static int s_warned;
+static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1};
+static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
+static int s_origin = LAYOUT_PAUSE_OPTIONS; /* the game layout the menu returns to */
+static int s_restoreTitle = -1;             /* a title layout whose defaultItem to restore */
+static int s_restoreDefault;
+static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
+static UiRemapCapture s_capture;
+static char s_text[128];
+
+/* the remap screen's order: the face buttons first, as a pad is read */
+static const int kRemapOrder[ICO_T_COUNT] = {
+    ICO_T_CROSS,     ICO_T_CIRCLE,      ICO_T_SQUARE,      ICO_T_TRIANGLE,    ICO_T_L1,
+    ICO_T_R1,        ICO_T_L2,          ICO_T_R2,          ICO_T_L3,          ICO_T_R3,
+    ICO_T_START,     ICO_T_SELECT,      ICO_T_UP,          ICO_T_DOWN,        ICO_T_LEFT,
+    ICO_T_RIGHT,     ICO_T_LSTICK_UP,   ICO_T_LSTICK_DOWN, ICO_T_LSTICK_LEFT, ICO_T_LSTICK_RIGHT,
+    ICO_T_RSTICK_UP, ICO_T_RSTICK_DOWN, ICO_T_RSTICK_LEFT, ICO_T_RSTICK_RIGHT};
+
+/* --------------------------------------------------------------- rows */
+
+static int s_uid;
+
+static int addRow(int x, int y, int w, int h, int selectable, int owner, int strId,
+                  const char *text, float size, int align)
+{
+    LtProperty r;
+    memset(&r, 0, sizeof(r));
+    r.word0 = r.word4 = r.word8 = r.wordC = -1;
+    r.ownerItem = owner;
+    r.up = r.down = r.left = r.right = -1;
+    r.rightItem = r.leftItem = r.downItem = r.upItem = -1;
+    r.word40 = 1;
+    r.dispX = x;
+    r.dispY = y;
+    r.dispW = w;
+    r.dispH = h;
+    /* a texel rectangle of its own, so the layout's fade-cancel check
+       (rows that look the same in the old and new layout skip the fade)
+       never pairs two port rows, or a port row with a game row */
+    r.texV = 1000 + s_uid++;
+    r.selectable = selectable ? 1 : 0;
+    LtExtText t = {strId, text, size, align};
+    return lt_ext_AddProperty(&r, &t);
+}
+
+static LtProperty *P(int index)
+{
+    return lt_ext_Prop(index);
+}
+
+static int addLayout(int first, int last, float colA, int (*proc)(int, int), int def)
+{
+    LtProp l;
+    memset(&l, 0, sizeof(l));
+    l.first = first;
+    l.last = last;
+    l.fadeInTime = 0.3f;
+    l.fadeOutTime = 0.1f;
+    l.colA = colA;
+    l.proc = proc;
+    l.procFirst = 1;
+    l.defaultItem = def;
+    l.curItem = def;
+    l.link = -1;
+    return lt_ext_AddLayout(&l);
+}
+
+/* ------------------------------------------------------------- values */
+
+static int stepIndex(int i, int n, int dir)
+{
+    return ((i + dir) % n + n) % n;
+}
+
+static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
+#define MOUSE_SENS_N ((int)(sizeof(kMouseSens) / sizeof(kMouseSens[0])))
+
+static IcoBindings *liveBindings(void)
+{
+    IcoBindings *b = ico_input_live_bindings();
+    if (b->mouse_sens == 0.0f) {
+        /* not filled by the device layer (headless, tests): the config's */
+        ico_input_reload_bindings(b);
+    }
+    return b;
+}
+
+static const char *onOff(int v)
+{
+    return ui_Str(v ? UI_STR_ON : UI_STR_OFF);
+}
+
+static const char *languageName(int game)
+{
+    static const int ids[5] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE, UI_STR_LANG_IT,
+                               UI_STR_LANG_ES};
+    int i = game - ICO_GAME_LANGUAGE_ENGLISH;
+    return ui_Str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
+}
+
+static int resolutionIndex(const IcoVideoOptions *o)
+{
+    if (o->resScale >= 1 && o->resScale <= 4) {
+        return o->resScale;
+    }
+    if (o->resW == 0 && o->resScale == 0) {
+        return 0;
+    }
+    return -1; /* a WxH or a larger N from the file */
+}
+
+static const char *rawValue(int opt, char *buf, unsigned size)
+{
+    IcoVideoOptions o;
+    ico_video_get(&o);
+    switch (opt) {
+    case UI_OPT_PRESET:
+        return ui_Str(o.preset == ICO_VIDEO_ENHANCED ? UI_STR_VAL_ENHANCED : UI_STR_VAL_ORIGINAL);
+    case UI_OPT_RESOLUTION:
+        if (resolutionIndex(&o) == 0) {
+            return ui_Str(UI_STR_VAL_WINDOW);
+        }
+        return ico_video_resolution_name(&o, buf, size);
+    case UI_OPT_ASPECT:
+        return o.aspect == ICO_ASPECT_AUTO ? ui_Str(UI_STR_VAL_AUTO)
+                                           : ico_video_aspect_name(o.aspect);
+    case UI_OPT_FULLSCREEN:
+        return onOff(o.fullscreen);
+    case UI_OPT_VSYNC:
+        return onOff(o.vsync);
+    case UI_OPT_FILTER:
+        return ui_Str(o.filter == ICO_FILTER_TRILINEAR     ? UI_STR_VAL_TRILINEAR
+                      : o.filter == ICO_FILTER_ANISOTROPIC ? UI_STR_VAL_ANISOTROPIC
+                                                           : UI_STR_VAL_ORIGINAL);
+    case UI_OPT_FULL_HEIGHT:
+        return onOff(o.fullHeight);
+    case UI_OPT_FRAMERATE:
+        return ico_config_get_string("video.framerate", "");
+    case UI_OPT_VIDEO_MODE:
+        return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
+    case UI_OPT_VOLUME: {
+        double v = ico_config_get_float("audio.volume", 1.0);
+        snprintf(buf, size, "%d %%", (int)(v * 100.0 + 0.5));
+        return buf;
+    }
+    case UI_OPT_STICK_FIX:
+        return onOff(ico_opt_stick_fix());
+    case UI_OPT_MOUSE_SENS:
+        snprintf(buf, size, "%.2f", (double)liveBindings()->mouse_sens);
+        return buf;
+    case UI_OPT_YORDA:
+        return onOff(ico_opt_yorda_safe());
+    case UI_OPT_MIRROR_INFO:
+        return ui_Str(UI_STR_MIRROR_INFO);
+    case UI_OPT_LANGUAGE:
+        return languageName(NonLinearCameraMove);
+    case UI_OPT_DEVELOPER:
+        return onOff(ico_opt_developer_mode());
+    default:
+        return "";
+    }
+}
+
+static int steppable(int opt)
+{
+    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER && opt != UI_OPT_FRAMERATE &&
+           opt != UI_OPT_MIRROR_INFO;
+}
+
+const char *ui_SettingsValueText(UiSettingsOpt opt)
+{
+    char raw[64];
+    snprintf(s_text, sizeof(s_text), "%s", rawValue(opt, raw, sizeof(raw)));
+    return s_text;
+}
+
+void ui_SettingsStep(UiSettingsOpt opt, int dir)
+{
+    IcoVideoOptions o;
+    ico_video_get(&o);
+    int video = 0;
+    switch (opt) {
+    case UI_OPT_PRESET:
+        o.preset = o.preset == ICO_VIDEO_ENHANCED ? ICO_VIDEO_ORIGINAL : ICO_VIDEO_ENHANCED;
+        video = 1;
+        break;
+    case UI_OPT_RESOLUTION: {
+        int i = resolutionIndex(&o);
+        i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 5, dir);
+        o.resW = o.resH = 0;
+        o.resScale = i;
+        video = 1;
+        break;
+    }
+    case UI_OPT_ASPECT:
+        o.aspect = stepIndex(o.aspect, 4, dir);
+        video = 1;
+        break;
+    case UI_OPT_FULLSCREEN:
+        o.fullscreen = !o.fullscreen;
+        video = 1;
+        break;
+    case UI_OPT_VSYNC:
+        o.vsync = !o.vsync;
+        video = 1;
+        break;
+    case UI_OPT_FILTER:
+        o.filter = stepIndex(o.filter, 3, dir);
+        video = 1;
+        break;
+    case UI_OPT_FULL_HEIGHT:
+        o.fullHeight = !o.fullHeight;
+        video = 1;
+        break;
+    case UI_OPT_VIDEO_MODE:
+        /* as kanbanBoot.c step 201: the value, then gsb_Init on a change */
+        systemStatus[0] = systemStatus[0] != 0 ? 0 : 1;
+        gsResetFunc(0);
+        ico_sysconf_set_video_mode(systemStatus[0]);
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_VOLUME: {
+        int v = (int)(ico_config_get_float("audio.volume", 1.0) * 10.0 + 0.5) + dir;
+        v = v < 0 ? 0 : v > 10 ? 10 : v;
+        ico_config_set_float("audio.volume", v / 10.0);
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_STICK_FIX:
+        ico_opt_set_stick_fix(!ico_opt_stick_fix());
+        ico_config_set_bool("gameplay.stick_fix", ico_opt_stick_fix());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_MOUSE_SENS: {
+        IcoBindings *b = liveBindings();
+        int i, best = 3;
+        for (i = 0; i < MOUSE_SENS_N; i++) {
+            if (kMouseSens[i] <= b->mouse_sens + 0.001f) {
+                best = i;
+            }
+        }
+        best += dir;
+        best = best < 0 ? 0 : best >= MOUSE_SENS_N ? MOUSE_SENS_N - 1 : best;
+        b->mouse_sens = kMouseSens[best];
+        s_dirtyBindings = 1;
+        break;
+    }
+    case UI_OPT_YORDA:
+        ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
+        ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_LANGUAGE: {
+        /* as kanbanBoot.c step 102 stores it; the game's text and subtitles
+           follow at their next load, the port's strings at once */
+        int i = NonLinearCameraMove - ICO_GAME_LANGUAGE_ENGLISH;
+        i = i < 0 || i > 4 ? 0 : stepIndex(i, 5, dir);
+        NonLinearCameraMove = ICO_GAME_LANGUAGE_ENGLISH + i;
+        ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+        ico_sysconf_set_language(ico_game_to_scf_language(NonLinearCameraMove));
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_DEVELOPER:
+        ico_opt_set_developer_mode(!ico_opt_developer_mode());
+        ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
+        s_dirtyConfig = 1;
+        break;
+    default:
+        break;
+    }
+    if (video) {
+        ico_video_set(&o);
+        s_dirtyVideo = 1;
+    }
+}
+
+int ui_SettingsSave(void)
+{
+    int r = 0;
+    if (s_dirtyBindings) {
+        IcoBindings *b = ico_input_live_bindings();
+        if (ico_input_write_bindings(b) < 0) {
+            r = -1;
+        }
+        s_dirtyConfig = 1;
+    }
+    if (s_dirtyVideo) {
+        /* writes [video] and saves the whole file */
+        if (ico_video_save() != 0) {
+            r = -1;
+        }
+    } else if (s_dirtyConfig) {
+        if (ico_config_save() != 0) {
+            r = -1;
+        }
+    }
+    if (s_dirtyBindings) {
+        /* the table again from what was written: what the next run loads */
+        ico_input_reload_bindings(ico_input_live_bindings());
+    }
+    if (r != 0) {
+        fprintf(stderr, "settings: could not write %s\n", ico_config_toml_path());
+    }
+    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
+    return r;
+}
+
+/* ------------------------------------------------------------ capture */
+
+void ui_RemapCaptureStart(UiRemapCapture *c, int target)
+{
+    memset(c, 0, sizeof(*c));
+    c->active = 1;
+    c->target = target;
+    c->seq0 = ico_input_last_press(NULL, NULL);
+}
+
+int ui_RemapCaptureStep(UiRemapCapture *c, void *bindings)
+{
+    int kind, code;
+    if (!c->active) {
+        return UI_CAPTURE_IDLE;
+    }
+    unsigned int seq = ico_input_last_press(&kind, &code);
+    if (seq != c->seq0 &&
+        ico_bindings_assign((IcoBindings *)bindings, c->target, kind, code) == 0) {
+        c->active = 0;
+        c->cooldown = UI_REMAP_COOLDOWN_TICKS;
+        return UI_CAPTURE_BOUND;
+    }
+    c->seq0 = seq; /* a press that cannot be bound is skipped */
+    if (++c->ticks >= UI_REMAP_TIMEOUT_TICKS) {
+        c->active = 0;
+        c->cooldown = UI_REMAP_COOLDOWN_TICKS;
+        return UI_CAPTURE_TIMEOUT;
+    }
+    return UI_CAPTURE_WAITING;
+}
+
+/* -------------------------------------------------------------- texts */
+
+static void targetName(int t, char *buf, unsigned size)
+{
+    static const char *const shoulder[] = {"L2", "R2", "L1", "R1"};
+    int dir;
+    switch (t) {
+    case ICO_T_L2:
+    case ICO_T_R2:
+    case ICO_T_L1:
+    case ICO_T_R1:
+        snprintf(buf, size, "%s", shoulder[t]);
+        return;
+    case ICO_T_L3:
+        snprintf(buf, size, "L3");
+        return;
+    case ICO_T_R3:
+        snprintf(buf, size, "R3");
+        return;
+    case ICO_T_TRIANGLE:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_TRIANGLE));
+        return;
+    case ICO_T_CIRCLE:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_CIRCLE));
+        return;
+    case ICO_T_CROSS:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_CROSS));
+        return;
+    case ICO_T_SQUARE:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_SQUARE));
+        return;
+    case ICO_T_START:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_START));
+        return;
+    case ICO_T_SELECT:
+        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_SELECT));
+        return;
+    default:
+        break;
+    }
+    static const int dirs[4] = {UI_STR_DIR_UP, UI_STR_DIR_DOWN, UI_STR_DIR_LEFT, UI_STR_DIR_RIGHT};
+    int what;
+    if (t >= ICO_T_UP && t <= ICO_T_LEFT) {
+        /* UP RIGHT DOWN LEFT */
+        static const int d[4] = {0, 3, 1, 2};
+        dir = d[t - ICO_T_UP];
+        what = UI_STR_BTN_DPAD;
+    } else if (t >= ICO_T_LSTICK_UP && t <= ICO_T_LSTICK_RIGHT) {
+        dir = t - ICO_T_LSTICK_UP;
+        what = UI_STR_STICK_LEFT;
+    } else {
+        dir = t - ICO_T_RSTICK_UP;
+        what = UI_STR_STICK_RIGHT;
+    }
+    snprintf(buf, size, "%s %s", ui_Str((UiStrId)what), ui_Str((UiStrId)dirs[dir & 3]));
+}
+
+/* gamepad sources by position (SDL's layout names) */
+static const char *const kPadNames[ICO_GP_COUNT] = {
+    "",        "South",    "East",      "West",      "North", "Back",   "Start",
+    "LStick",  "RStick",   "LShoulder", "RShoulder", "D-Up",  "D-Down", "D-Left",
+    "D-Right", "LTrigger", "RTrigger",  "LX-",       "LX+",   "LY-",    "LY+",
+    "RX-",     "RX+",      "RY-",       "RY+"};
+static const char *const kMouseNames[ICO_MOUSE_BUTTONS] = {"",        "Mouse L",  "Mouse R",
+                                                           "Mouse M", "Mouse X1", "Mouse X2"};
+
+/* One column of the remap screen: the keyboard's keys and mouse buttons,
+   or the gamepad's sources, of target t. */
+static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, size_t size)
+{
+    size_t n = 0;
+    buf[0] = '\0';
+    for (int i = 0; i < ICO_BIND_MAX * 2; i++) {
+        const char *name = NULL;
+        if (gamepad) {
+            if (i < ICO_BIND_MAX && b->gp[t][i]) {
+                name = kPadNames[b->gp[t][i]];
+            }
+        } else if (i < ICO_BIND_MAX) {
+            if (b->kb[t][i]) {
+                name = ico_key_name(b->kb[t][i]);
+            }
+        } else if (b->mouse[t][i - ICO_BIND_MAX]) {
+            name = kMouseNames[b->mouse[t][i - ICO_BIND_MAX]];
+        }
+        if (name) {
+            snprintf(buf + n, size - n, "%s%s", n ? ", " : "", name);
+            n = strlen(buf);
+        }
+    }
+    if (n == 0) {
+        snprintf(buf, size, "-");
+    }
+}
+
+/* Breaks text into lines of at most width x units at size (a note). */
+static void wrapText(const char *text, float size, float width, char *out, unsigned outSize)
+{
+    unsigned n = 0, lineStart = 0, lastSpace = 0;
+    for (const char *p = text; *p && n + 1 < outSize; p++) {
+        out[n] = *p;
+        out[n + 1] = '\0';
+        if (*p == ' ') {
+            lastSpace = n;
+        }
+        n++;
+        if (lastSpace > lineStart && ui_MeasureText(size, out + lineStart) > width) {
+            out[lastSpace] = '\n';
+            lineStart = lastSpace + 1;
+        }
+    }
+    out[n] = '\0';
+}
+
+/* A note row's text, wrapped; redone only when the string or the language
+   changes (the wrap measures the text). */
+static int s_noteStr[LT_EXT_MAX_PROPERTIES];
+static int s_noteLang[LT_EXT_MAX_PROPERTIES];
+
+static void setNote(int row, int strId)
+{
+    char buf[256];
+    int i = row - LT_GAME_PROPERTY_COUNT;
+    if (i >= 0 && i < LT_EXT_MAX_PROPERTIES && s_noteStr[i] == strId &&
+        s_noteLang[i] == (int)ui_GetLanguage() + 1) {
+        return;
+    }
+    wrapText(ui_Str((UiStrId)strId), NOTE_SIZE, 580.0f, buf, sizeof(buf));
+    lt_ext_SetText(row, buf);
+    if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
+        s_noteStr[i] = strId;
+        s_noteLang[i] = (int)ui_GetLanguage() + 1;
+    }
+}
+
+/* ------------------------------------------------------------ building */
+
+static int settingsProc(int first, int item);
+static int entryProc(int first, int item);
+
+static int rowY(int page, int i)
+{
+    return page == UI_PAGE_MAIN ? 40 + 19 * i : 40 + 18 * i;
+}
+
+static void addHeader(Page *pg, int strId)
+{
+    pg->header = addRow(20, HEADER_Y, 600, 40, 0, -1, strId, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    P(pg->header)->centerX = 1;
+}
+
+/* label (+ value) rows of one option */
+static void addOption(Page *pg, int pageId, int opt, int strId, int link)
+{
+    Row *r = &pg->rows[pg->count];
+    int y = rowY(pageId, pg->count);
+    int h = pageId == UI_PAGE_MAIN ? 40 : 36;
+    r->opt = opt;
+    r->link = link;
+    r->note = -1;
+    r->value = -1;
+    int nav = opt != UI_OPT_MIRROR_INFO;
+    r->label = addRow(LABEL_X, y, LABEL_W, h, 1, nav ? -1 : 0, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
+    if (steppable(opt)) {
+        r->value = addRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
+        addRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9", 0.0f, UI_ALIGN_LEFT);
+        addRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA", 0.0f, UI_ALIGN_LEFT);
+    } else if (opt != UI_OPT_LINK && opt != UI_OPT_BACK) {
+        r->value =
+            addRow(VALUE_X, y, VALUE_W, h, 1, nav ? r->label : 0, 0, " ", 0.0f, UI_ALIGN_LEFT);
+    }
+    pg->count++;
+}
+
+static void addNote(Page *pg, int opt, int strId)
+{
+    for (int i = 0; i < pg->count; i++) {
+        if (pg->rows[i].opt == opt) {
+            int n = addRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+            P(n)->centerX = 1;
+            P(n)->defaultMask = 1;
+            pg->rows[i].note = n;
+            pg->rows[i].noteStr = strId;
+            setNote(n, strId);
+            return;
+        }
+    }
+}
+
+/* the navigable rows in a loop, as the Options screen's */
+static void linkRows(Page *pg)
+{
+    int idx[MAX_ROWS], n = 0;
+    for (int i = 0; i < pg->count; i++) {
+        if (pg->rows[i].opt != UI_OPT_MIRROR_INFO) {
+            idx[n++] = pg->rows[i].label;
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        P(idx[i])->downItem = idx[(i + 1) % n];
+        P(idx[i])->upItem = idx[(i + n - 1) % n];
+    }
+}
+
+static int pageFirstNav(Page *pg)
+{
+    for (int i = 0; i < pg->count; i++) {
+        if (pg->rows[i].opt != UI_OPT_MIRROR_INFO) {
+            return pg->rows[i].label;
+        }
+    }
+    return -1;
+}
+
+static void finishPage(Page *pg, int first, int last)
+{
+    pg->layout = addLayout(first, last + 1, 0.6f, settingsProc, pageFirstNav(pg));
+}
+
+static void buildOptionPage(int id, int header, const int *opts, const int *strs, const int *links,
+                            int n, int parent)
+{
+    Page *pg = &s_pages[id];
+    memset(pg, 0, sizeof(*pg));
+    pg->parent = parent;
+    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    addHeader(pg, header);
+    for (int i = 0; i < n; i++) {
+        addOption(pg, id, opts[i], strs[i], links ? links[i] : -1);
+    }
+    switch (id) {
+    case UI_PAGE_MAIN:
+        addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
+        addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
+        break;
+    case UI_PAGE_DISPLAY:
+        break;
+    case UI_PAGE_AUDIO:
+        addNote(pg, UI_OPT_VOLUME, UI_STR_VOLUME_NOTE);
+        break;
+    case UI_PAGE_GAMEPLAY:
+        addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
+        break;
+    default:
+        break;
+    }
+    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    linkRows(pg);
+    finishPage(pg, first, last);
+}
+
+static void buildListPage(int id, int header, int items, int parent)
+{
+    Page *pg = &s_pages[id];
+    memset(pg, 0, sizeof(*pg));
+    pg->parent = parent;
+    pg->isList = 1;
+    pg->items = items;
+    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    addHeader(pg, header);
+    int remap = id == UI_PAGE_REMAP;
+    int y0 = remap ? 50 : 40;
+    if (remap) {
+        /* the column heads */
+        addRow(230, 32, 180, 30, 0, -1, UI_STR_REMAP_KEYBOARD, NULL, NOTE_SIZE, UI_ALIGN_LEFT);
+        addRow(420, 32, 190, 30, 0, -1, UI_STR_REMAP_GAMEPAD, NULL, NOTE_SIZE, UI_ALIGN_LEFT);
+    }
+    for (int i = 0; i < LIST_SLOTS; i++) {
+        Row *r = &pg->rows[i];
+        int y = y0 + 18 * i;
+        r->opt = UI_OPT_LIST;
+        r->note = -1;
+        r->link = -1;
+        if (remap) {
+            r->label = addRow(40, y, 180, 36, 1, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
+            pg->colA[i] = addRow(230, y, 180, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_LEFT);
+            pg->colB[i] = addRow(420, y, 190, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_LEFT);
+        } else {
+            r->label = addRow(40, y, 400, 36, 1, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
+            pg->colA[i] = addRow(440, y, 160, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_RIGHT);
+            pg->colB[i] = -1;
+        }
+        r->value = pg->colA[i];
+        pg->count++;
+    }
+    for (int i = 0; i < LIST_SLOTS; i++) {
+        P(pg->rows[i].label)->downItem = i + 1 < LIST_SLOTS ? pg->rows[i + 1].label : -1;
+        P(pg->rows[i].label)->upItem = i > 0 ? pg->rows[i - 1].label : -1;
+    }
+    pg->status =
+        addRow(20, remap ? 198 : NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+    P(pg->status)->centerX = 1;
+    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    finishPage(pg, first, last);
+}
+
+static void buildEntries(void)
+{
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        int title = e != ENTRY_OPTIONS;
+        int row = title ? addRow(170, TITLE_ROW_Y, 300, 40, 1, -1, UI_STR_SETTINGS, NULL,
+                                 TITLE_ROW_SIZE, UI_ALIGN_CENTER)
+                        : addRow(64, OPTIONS_ROW_Y, 300, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f,
+                                 UI_ALIGN_RIGHT);
+        if (title) {
+            P(row)->centerX = 1;
+        }
+        P(row)->right = s_pages[UI_PAGE_MAIN].layout;
+        if (!title) {
+            /* Triangle goes back to the pause menu, as on every Options row */
+            P(row)->left = 57;
+        }
+        s_entryRow[e] = row;
+        LtProp l;
+        memset(&l, 0, sizeof(l));
+        l.first = row;
+        l.last = row + 1;
+        l.proc = entryProc;
+        l.procFirst = 1;
+        l.defaultItem = -1;
+        l.curItem = -1;
+        l.link = -1;
+        s_entryLayout[e] = lt_ext_AddLayout(&l);
+    }
+}
+
+static void build(void)
+{
+    static const int mainOpts[] = {UI_OPT_LINK,     UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_LANGUAGE, UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,    UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,   UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
+                                   UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
+    static const int mainLinks[] = {UI_PAGE_DISPLAY,
+                                    UI_PAGE_AUDIO,
+                                    UI_PAGE_CONTROLS,
+                                    UI_PAGE_GAMEPLAY,
+                                    -1,
+                                    UI_PAGE_ACHIEVEMENTS,
+                                    -1,
+                                    -1};
+    int dispOpts[12], dispStrs[12], nd = 0;
+    static const int dispAll[][2] = {{UI_OPT_PRESET, UI_STR_OPT_PRESET},
+                                     {UI_OPT_RESOLUTION, UI_STR_OPT_RESOLUTION},
+                                     {UI_OPT_ASPECT, UI_STR_OPT_ASPECT},
+                                     {UI_OPT_FULLSCREEN, UI_STR_OPT_FULLSCREEN},
+                                     {UI_OPT_VSYNC, UI_STR_OPT_VSYNC},
+                                     {UI_OPT_FILTER, UI_STR_OPT_FILTERING},
+                                     {UI_OPT_FULL_HEIGHT, UI_STR_OPT_FULL_HEIGHT},
+                                     {UI_OPT_FRAMERATE, UI_STR_OPT_FRAMERATE},
+                                     {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
+                                     {UI_OPT_BACK, UI_STR_BACK}};
+    for (unsigned i = 0; i < sizeof(dispAll) / sizeof(dispAll[0]); i++) {
+        /* [video] framerate is the interpolation package's (R7b): shown,
+           read-only, when the config has it */
+        if (dispAll[i][0] == UI_OPT_FRAMERATE &&
+            ico_config_get_string("video.framerate", NULL) == NULL) {
+            continue;
+        }
+        dispOpts[nd] = dispAll[i][0];
+        dispStrs[nd++] = dispAll[i][1];
+    }
+    static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
+    static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
+                                  UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_BACK};
+
+    ui_FontInit(); /* the notes are wrapped by measuring */
+    memset(s_pages, 0, sizeof(s_pages));
+    /* the pages first (their layouts are the links' targets), then the
+       entry rows */
+    buildOptionPage(UI_PAGE_MAIN, UI_STR_SETTINGS, mainOpts, mainStrs, mainLinks, 8, -1);
+    buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL, nd,
+                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 2,
+                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
+                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 3,
+                    UI_PAGE_MAIN);
+    buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, ico_ach_count() + 1,
+                  UI_PAGE_MAIN);
+    buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, REMAP_ITEMS, UI_PAGE_CONTROLS);
+    /* the section rows open their pages */
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        for (int i = 0; i < s_pages[p].count; i++) {
+            Row *r = &s_pages[p].rows[i];
+            if (r->opt == UI_OPT_LINK && r->link >= 0) {
+                P(r->label)->right = s_pages[r->link].layout;
+            }
+        }
+    }
+    buildEntries();
+}
+
+/* The game's rows, pointed at the entry rows.  Checked against the loaded
+   tables first: a table that does not look like the PAL data is left
+   alone (logged once). */
+static void repoint(void)
+{
+    LtProperty *r325 = &texProperty[325], *r300 = &texProperty[300];
+    int s58 = s_entryRow[ENTRY_OPTIONS];
+    if (texLayout[58].first != 297 || texLayout[58].last != 333 || r325->upItem != 324 ||
+        (r325->downItem != 300 && r325->downItem != s58) || texLayout[12].first != 49 ||
+        texLayout[13].first != 51) {
+        if (!s_warned) {
+            fprintf(stderr, "settings: the layout tables are not the expected ones; no entry\n");
+            s_warned = 1;
+        }
+        return;
+    }
+    r325->downItem = s58;
+    r300->upItem = s58;
+    P(s58)->upItem = 325;
+    P(s58)->downItem = 300;
+    if (texLayout[58].link != s_entryLayout[ENTRY_OPTIONS]) {
+        lt_ext_Layout(s_entryLayout[ENTRY_OPTIONS])->link = texLayout[58].link;
+        texLayout[58].link = s_entryLayout[ENTRY_OPTIONS];
+    }
+    static const int gameRow[3] = {0, 50, 51};
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+        int g = kEntryGame[e];
+        texProperty[gameRow[e]].downItem = s_entryRow[e];
+        P(s_entryRow[e])->upItem = gameRow[e];
+        if (texLayout[g].link != s_entryLayout[e]) {
+            lt_ext_Layout(s_entryLayout[e])->link = texLayout[g].link;
+            texLayout[g].link = s_entryLayout[e];
+        }
+    }
+}
+
+void ui_SettingsInstall(void)
+{
+    if (!s_built) {
+        build();
+        s_built = 1;
+    }
+    repoint();
+}
+
+void ui_SettingsReset(void)
+{
+    s_built = 0;
+    s_warned = 0;
+    s_origin = LAYOUT_PAUSE_OPTIONS;
+    s_restoreTitle = -1;
+    s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
+    memset(&s_capture, 0, sizeof(s_capture));
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        s_entryRow[e] = s_entryLayout[e] = -1;
+    }
+    memset(s_pages, 0, sizeof(s_pages));
+}
+
+int ui_SettingsEntryItem(int item)
+{
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        if (item >= 0 && item == s_entryRow[e]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void ui_SettingsTitleMask(int masked)
+{
+    if (s_entryRow[ENTRY_TITLE12] >= 0) {
+        lt_mask_property(s_entryRow[ENTRY_TITLE12], masked);
+        lt_mask_property(s_entryRow[ENTRY_TITLE13], masked);
+    }
+}
+
+int ui_SettingsEntryRow(int gameLayout)
+{
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        if (kEntryGame[e] == gameLayout) {
+            return s_entryRow[e];
+        }
+    }
+    return -1;
+}
+
+int ui_SettingsEntryLayout(int gameLayout)
+{
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        if (kEntryGame[e] == gameLayout) {
+            return s_entryLayout[e];
+        }
+    }
+    return -1;
+}
+
+int ui_SettingsPageLayout(UiSettingsPage page)
+{
+    return s_built && page >= 0 && page < UI_PAGE_COUNT ? s_pages[page].layout : -1;
+}
+
+int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values, int max)
+{
+    int n = 0;
+    if (page < 0 || page >= UI_PAGE_COUNT) {
+        return 0;
+    }
+    for (int i = 0; i < s_pages[page].count && n < max; i++, n++) {
+        const Row *r = &s_pages[page].rows[i];
+        if (labels) {
+            labels[n] = r->label;
+        }
+        if (opts) {
+            opts[n] = r->opt;
+        }
+        if (values) {
+            values[n] = r->value;
+        }
+    }
+    return n;
+}
+
+int ui_SettingsRowOf(UiSettingsPage page, UiSettingsOpt opt)
+{
+    if (page < 0 || page >= UI_PAGE_COUNT) {
+        return -1;
+    }
+    for (int i = 0; i < s_pages[page].count; i++) {
+        if (s_pages[page].rows[i].opt == (int)opt) {
+            return s_pages[page].rows[i].label;
+        }
+    }
+    return -1;
+}
+
+/* --------------------------------------------------------------- procs */
+
+static Page *pageOfLayout(int layout, int *id)
+{
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        if (s_pages[p].layout == layout && layout >= 0) {
+            if (id) {
+                *id = p;
+            }
+            return &s_pages[p];
+        }
+    }
+    return NULL;
+}
+
+static int entryProc(int first, int item)
+{
+    (void)first;
+    (void)item;
+    int cur = current_layout_id;
+    if (cur == LAYOUT_PAUSE_OPTIONS || cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
+        s_origin = cur;
+        /* the menu opens on its first row each time, as Options does */
+        if (s_pages[UI_PAGE_MAIN].layout >= 0) {
+            LtProp *m = lt_ext_Layout(s_pages[UI_PAGE_MAIN].layout);
+            m->defaultItem = pageFirstNav(&s_pages[UI_PAGE_MAIN]);
+        }
+    }
+    if (cur == LAYOUT_PAUSE_OPTIONS && s_entryRow[ENTRY_OPTIONS] >= 0) {
+        P(s_entryRow[ENTRY_OPTIONS])->dispY =
+            gFlagGameClear ? OPTIONS_ROW_Y_CLEARED : OPTIONS_ROW_Y;
+    }
+    if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
+        /* the cursor came back to the Settings row; the title's own
+           default is the game's again for its next showing */
+        lt_ext_Layout(s_restoreTitle)->defaultItem = s_restoreDefault;
+        s_restoreTitle = -1;
+    }
+    return -1;
+}
+
+/* Leaves page pg for layout `to` (a page's or the game's), the cursor of the
+   layout returned to on the row that led here; saves what changed. */
+static int leaveTo(int pageId, int to)
+{
+    NEGATIVE_SE();
+    ui_SettingsSave();
+    la_host_leave();
+    int toPage;
+    if (pageOfLayout(to, &toPage)) {
+        for (int i = 0; i < s_pages[toPage].count; i++) {
+            if (s_pages[toPage].rows[i].link == pageId) {
+                lt_ext_Layout(to)->defaultItem = s_pages[toPage].rows[i].label;
+            }
+        }
+    } else if (to == LAYOUT_PAUSE_OPTIONS) {
+        /* as la_key_config and la_adjust_screen put it on their rows */
+        texLayout[58].defaultItem = s_entryRow[ENTRY_OPTIONS];
+    } else if (to == LAYOUT_TITLE_CONTINUE || to == LAYOUT_TITLE_NEW) {
+        s_restoreTitle = to;
+        s_restoreDefault = texLayout[to].defaultItem;
+        texLayout[to].defaultItem =
+            s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12];
+    }
+    return to;
+}
+
+static int parentLayout(const Page *pg)
+{
+    return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
+}
+
+static int slotOf(const Page *pg, int item)
+{
+    for (int i = 0; i < LIST_SLOTS; i++) {
+        if (pg->rows[i].label == item) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void refreshAchievements(Page *pg, int cur)
+{
+    int n = ico_ach_count(), got = 0;
+    for (int i = 0; i < n; i++) {
+        got += ico_ach_state(i) != ICO_ACH_LOCKED;
+    }
+    snprintf(s_text, sizeof(s_text), "%s   %d / %d", ui_Str(UI_STR_SECTION_ACHIEVEMENTS), got, n);
+    lt_ext_SetText(pg->header, s_text);
+    for (int s = 0; s < LIST_SLOTS; s++) {
+        int d = pg->offset + s;
+        int lab = pg->rows[s].label, val = pg->colA[s];
+        if (d >= pg->items) {
+            lt_ext_SetText(lab, "");
+            lt_ext_SetText(val, "");
+            continue;
+        }
+        if (d == n) {
+            lt_ext_SetStr(lab, UI_STR_BACK);
+            lt_ext_SetText(val, "");
+            continue;
+        }
+        IcoAchState st = ico_ach_state(d);
+        int hidden = ico_ach_hidden(d) && st == ICO_ACH_LOCKED;
+        lt_ext_SetText(lab, hidden ? "???" : ui_Str((UiStrId)ico_ach_title_str(d)));
+        lt_ext_SetStr(val, st == ICO_ACH_NORMAL     ? UI_STR_ACH_STATE_UNLOCKED
+                           : st == ICO_ACH_ASSISTED ? UI_STR_ACH_ASSISTED
+                                                    : UI_STR_ACH_LOCKED);
+    }
+    int s = slotOf(pg, cur);
+    int d = s >= 0 ? pg->offset + s : -1;
+    char buf[256];
+    if (d >= 0 && d < n) {
+        int hidden = ico_ach_hidden(d) && ico_ach_state(d) == ICO_ACH_LOCKED;
+        wrapText(hidden ? "???" : ui_Str((UiStrId)ico_ach_desc_str(d)), NOTE_SIZE, 580.0f, buf,
+                 sizeof(buf));
+        lt_ext_SetText(pg->status, buf);
+    } else {
+        lt_ext_SetText(pg->status, "");
+    }
+}
+
+static void refreshRemap(Page *pg)
+{
+    IcoBindings *b = liveBindings();
+    char buf[96];
+    for (int s = 0; s < LIST_SLOTS; s++) {
+        int d = pg->offset + s;
+        int lab = pg->rows[s].label;
+        if (d < ICO_T_COUNT) {
+            int t = kRemapOrder[d];
+            targetName(t, buf, sizeof(buf));
+            lt_ext_SetText(lab, buf);
+            if (s_capture.active && s_capture.target == t) {
+                lt_ext_SetText(pg->colA[s], "\xE2\x80\xA6"); /* ... */
+                lt_ext_SetText(pg->colB[s], "\xE2\x80\xA6");
+            } else {
+                sourcesText(b, t, 0, buf, sizeof(buf));
+                lt_ext_SetText(pg->colA[s], buf);
+                sourcesText(b, t, 1, buf, sizeof(buf));
+                lt_ext_SetText(pg->colB[s], buf);
+            }
+        } else {
+            lt_ext_SetStr(lab, d == ICO_T_COUNT ? UI_STR_REMAP_RESET : UI_STR_BACK);
+            lt_ext_SetText(pg->colA[s], "");
+            lt_ext_SetText(pg->colB[s], "");
+        }
+    }
+    setNote(pg->status, s_capture.active ? UI_STR_REMAP_PRESS : UI_STR_REMAP_HINT);
+}
+
+static void refreshPage(Page *pg, int id, int cur)
+{
+    if (id == UI_PAGE_ACHIEVEMENTS) {
+        refreshAchievements(pg, cur);
+        return;
+    }
+    if (id == UI_PAGE_REMAP) {
+        refreshRemap(pg);
+        return;
+    }
+    for (int i = 0; i < pg->count; i++) {
+        Row *r = &pg->rows[i];
+        if (r->value >= 0) {
+            lt_ext_SetText(r->value, ui_SettingsValueText((UiSettingsOpt)r->opt));
+        }
+        if (r->note >= 0) {
+            setNote(r->note, r->noteStr);
+            if (cur == r->label) {
+                lt_mask_property(r->note, 0);
+            }
+        }
+    }
+}
+
+/* The scrolling lists: the cursor moves on the slots through their item
+   links; at the first or last slot the list scrolls (wrapping at the ends,
+   as the Options screen's rows do). */
+static void scrollList(Page *pg, LtProp *lay, int flags)
+{
+    int s = slotOf(pg, lay->curItem);
+    int shown = pg->items < LIST_SLOTS ? pg->items : LIST_SLOTS;
+    if (s < 0 || (flags & (PAD_CROSS | PAD_TRIANGLE))) {
+        return;
+    }
+    if ((flags & PAD_DOWN) && s == shown - 1) {
+        if (pg->offset + shown < pg->items) {
+            pg->offset++;
+        } else {
+            pg->offset = 0;
+            lay->curItem = pg->rows[0].label;
+        }
+        CUR_SE();
+    } else if ((flags & PAD_UP) && s == 0) {
+        if (pg->offset > 0) {
+            pg->offset--;
+        } else {
+            pg->offset = pg->items - shown;
+            lay->curItem = pg->rows[shown - 1].label;
+        }
+        CUR_SE();
+    }
+}
+
+static int listProc(Page *pg, int id, LtProp *lay, int flags)
+{
+    int s = slotOf(pg, lay->curItem);
+    int d = s >= 0 ? pg->offset + s : -1;
+    if (id == UI_PAGE_REMAP) {
+        if (s_capture.active) {
+            lt_item_select_disable = 1;
+            int r = ui_RemapCaptureStep(&s_capture, liveBindings());
+            if (r == UI_CAPTURE_BOUND) {
+                s_dirtyBindings = 1;
+                POSITIVE_SE();
+            } else if (r == UI_CAPTURE_TIMEOUT) {
+                NEGATIVE_SE();
+            }
+            return -1;
+        }
+        if (s_capture.cooldown > 0) {
+            /* the captured press must not also move or confirm */
+            s_capture.cooldown--;
+            lt_item_select_disable = 1;
+            return -1;
+        }
+        if (flags & PAD_TRIANGLE) {
+            return leaveTo(id, parentLayout(pg));
+        }
+        if (d >= 0 && d < ICO_T_COUNT) {
+            if (flags & PAD_CROSS) {
+                POSITIVE_SE();
+                ui_RemapCaptureStart(&s_capture, kRemapOrder[d]);
+                lt_item_select_disable = 1;
+                return -1;
+            }
+            if (flags & PAD_SQUARE) {
+                CUR_SE();
+                ico_bindings_clear(liveBindings(), kRemapOrder[d]);
+                s_dirtyBindings = 1;
+                return -1;
+            }
+        } else if (d == ICO_T_COUNT && (flags & PAD_CROSS)) {
+            /* the bindings only; sensitivity and the other [input] values stay */
+            IcoBindings def, *b = liveBindings();
+            ico_bindings_defaults(&def);
+            memcpy(b->kb, def.kb, sizeof(b->kb));
+            memcpy(b->mouse, def.mouse, sizeof(b->mouse));
+            memcpy(b->gp, def.gp, sizeof(b->gp));
+            memcpy(b->walk, def.walk, sizeof(b->walk));
+            s_dirtyBindings = 1;
+            POSITIVE_SE();
+            return -1;
+        } else if (d == ICO_T_COUNT + 1 && (flags & PAD_CROSS)) {
+            return leaveTo(id, parentLayout(pg));
+        }
+        scrollList(pg, lay, flags);
+        return -1;
+    }
+    /* achievements */
+    if ((flags & PAD_TRIANGLE) || ((flags & PAD_CROSS) && d == pg->items - 1)) {
+        return leaveTo(id, parentLayout(pg));
+    }
+    scrollList(pg, lay, flags);
+    return -1;
+}
+
+static int settingsProc(int first, int item)
+{
+    int id;
+    Page *pg = pageOfLayout(current_layout_id, &id);
+    LtProp *lay = lt_ext_Layout(current_layout_id);
+    (void)item;
+    if (pg == NULL) {
+        return -1;
+    }
+    /* the port's strings follow the game's language (ui_host.c does too) */
+    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    if (first) {
+        if (pg->isList) {
+            pg->offset = 0;
+        }
+        memset(&s_capture, 0, sizeof(s_capture));
+    }
+    refreshPage(pg, id, lay->curItem);
+    if (lt_fade_status() != 2) {
+        return -1;
+    }
+    lt_analog2Pad();
+    int flags = pad[0].flags;
+    if (pg->isList) {
+        int r = listProc(pg, id, lay, flags);
+        refreshPage(pg, id, lay->curItem);
+        return r;
+    }
+    if (flags & PAD_TRIANGLE) {
+        return leaveTo(id, parentLayout(pg));
+    }
+    for (int i = 0; i < pg->count; i++) {
+        Row *r = &pg->rows[i];
+        if (r->label != lay->curItem) {
+            continue;
+        }
+        if ((flags & (PAD_LEFT | PAD_RIGHT)) && steppable(r->opt)) {
+            ui_SettingsStep((UiSettingsOpt)r->opt, (flags & PAD_LEFT) ? -1 : 1);
+            CUR_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_CROSS) && r->opt == UI_OPT_BACK) {
+            return leaveTo(id, parentLayout(pg));
+        }
+        break;
+    }
+    return -1;
+}

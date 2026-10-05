@@ -159,6 +159,9 @@ void __assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
+/* init_layout_texture's Settings hook (6C; settings_test covers it) */
+void ui_SettingsInstall(void) {}
+
 /* lt_glow_sprite's pulse: sin(pi t) as the game's table gives it */
 float GetTableSin(short angle)
 {
@@ -188,9 +191,9 @@ static void testGlyphs(void)
     CHECK(ui_FontInit(), "the embedded font parses");
     UiGlyph g;
     CHECK(ui_FontGlyph('H', 40, &g), "glyph H at 40 px");
-    /* EB Garamond: units per em 1000, capital height 650 */
-    CHECK(g.h >= 25 && g.h <= 28, "H at 40 px is %d px tall (cap height 0.65 em)", g.h);
-    CHECK(g.yoff <= -25.0f && g.yoff >= -28.0f, "H sits on the baseline (top %g)", g.yoff);
+    /* Arimo: units per em 2048, capital height 1409 (0.688 em, 27.5 px) */
+    CHECK(g.h >= 27 && g.h <= 29, "H at 40 px is %d px tall (cap height 0.688 em)", g.h);
+    CHECK(g.yoff <= -27.0f && g.yoff >= -29.0f, "H sits on the baseline (top %g)", g.yoff);
     CHECK(g.advance > 20.0f && g.advance < 40.0f, "H advance %g", g.advance);
     int w, h;
     const uint8_t *cov = ui_FontPage(40, g.page, &w, &h);

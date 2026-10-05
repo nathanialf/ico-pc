@@ -300,6 +300,21 @@ static int fileMask = 0; /* derived name */
 
 static int actionStarted = 0; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port (Phase 6, 6C): the Settings menu (port/ui/settings.h,
+   docs/port/SETTINGS.md).  Its entry rows are chained after the title's
+   rows; the title procs leave Cross/START on them to default_item_select,
+   which opens the menu through the row's right link, and mask them with
+   their own rows while the memory card check runs. */
+int ui_SettingsEntryItem(int item);
+void ui_SettingsTitleMask(int masked);
+
+#define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
+#else
+#define LA_HOST_NOT_SETTINGS_ROW
+#endif
+
 static int fightSoundStopped = 0; /* derived name */
 
 static SqEntry *layoutVoice = 0; /* derived name */
@@ -799,7 +814,13 @@ int la_title_continue_or_new(int first)
         lt_mask_property(0x31, 1);
         lt_mask_property(0x32, 1);
     }
-    if (continueDecided != 0 && (pad[0].flags & 0x840) && lt_fade_status() == 2) {
+#ifdef ICO_HOST
+    ui_SettingsTitleMask(continueDecided == 0);
+#endif
+    /* PC port (6C): not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (continueDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
         lt_continue_selected = 1;
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         switch (lt_current_property_item()) {
@@ -860,7 +881,13 @@ int la_title_new_game_only(int first)
         lt_item_select_disable = 1;
         lt_mask_property(51, 1);
     }
-    if (newGameDecided != 0 && (pad[0].flags & 0x840) && lt_fade_status() == 2) {
+#ifdef ICO_HOST
+    ui_SettingsTitleMask(newGameDecided == 0);
+#endif
+    /* PC port (6C): not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (newGameDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         lt_continue_selected = 1;
         opTitleLogoMode = 2;
@@ -3030,6 +3057,18 @@ int la_adjust_screen(void)
     }
     return -1;
 }
+
+#ifdef ICO_HOST
+
+/* PC port (6C): what every proc does before it returns the layout it
+   switches to, for the port's Settings procs (actionStarted is this file's) */
+void la_host_leave(void)
+{
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+}
+
+#endif
 
 unsigned int stage_after_skipping_demo = 0;
 

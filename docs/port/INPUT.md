@@ -203,12 +203,48 @@ DualShock 2 frames (digital, analog, pressure), script priority, mirror, and
 rumble mapping. CPU only. `pad_script_test` (port/input/test) still drives
 the scripted pad through `pad.c`'s state machine.
 
+## Remap screen (Phase 6, 6C)
+
+The Settings menu's "Remap controls" screen (docs/port/SETTINGS.md for the
+player, docs/port/UI.md "Settings menu" for the layout) edits the binding
+tables live:
+
+- **The live table.** `input_sdl.c` steps `ico_input_live_bindings()`
+  (`input_config.c`) instead of a private copy, so the screen changes the
+  table the next vsync uses.
+- **The last press.** `input_sdl.c` reports each new press to
+  `ico_input_note_press(kind, code)`: a key down (not a repeat; the keys of
+  `keys.def`, so Escape and the Alt+Enter toggle never arrive), a mouse
+  button down, and, per snapshot, a gamepad source crossing half (buttons,
+  triggers, and each stick axis direction as `leftx-` .. `righty+`; it
+  re-arms below a quarter). `ico_input_last_press(&kind, &code)` returns a
+  sequence number that changes with every press. The screen's capture binds
+  the first press after the one that started it.
+- **Assigning.** `ico_bindings_assign(b, target, kind, code)`: that
+  device's row for the target becomes the source alone (the other devices'
+  rows stay), and the source is taken off the device's other targets, so a
+  key does one thing. `ico_bindings_clear(b, target)` empties all three rows
+  (Square). "Reset to defaults" copies the default rows and keeps the
+  scalar settings.
+- **Writing.** `ico_input_write_bindings(b)` puts, through port/config
+  (`ico_config_set_string`), every `[input.kb]`, `[input.mouse]` and
+  `[input.pad]` target whose row differs from the default or is already in
+  the file, as a string: `"K"`, `"Tab, Backquote"` (the reader's
+  `split_list` takes a comma list like an array; the writer has no raw
+  array setter), `"none"`; and `mouse_sensitivity`. The Settings menu then
+  saves (`ico_config_save`) and reloads the live table with
+  `ico_input_reload_bindings`: the defaults, then every `[input]` key as
+  port/config reads it, the same walk over the `[input]` keys as
+  `ico_input_apply_toml` (without its `[gameplay] stick_fix`, which
+  port/game/options.c owns).
+
+Tests: `settings_test` (port/ui) covers assign, clear, the row text, the
+capture's state machine and the write / reload round trip; `input_test` is
+unchanged.
+
 ## Open items for the Phase 6 remap UI
 
-- The UI edits the binding tables (`IcoBindings`) and writes `config.toml`;
-  there is no writer yet (only `ico_ini_store` for the ini). Capture mode
-  ("press the key for Cross") needs a raw "last pressed source" query from
-  `input_sdl.c`.
+- Done in 6C: the writer and the capture query (above).
 - Gamepad stick bindings are fixed (left/right stick -> left/right stick);
   only digital sources are remappable onto sticks.
 - No per-gamepad profiles, no multi-controller split (the game has one
@@ -217,7 +253,9 @@ the scripted pad through `pad.c`'s state machine.
   `window_host.c`) was derived from the sources, not observed; check it
   against the title and pause screens.
 - Mirror mode and stick fix have config/hook only; the UI toggles call
-  `ico_input_set_mirror` / `ico_input_set_stick_fix`.
+  `ico_input_set_mirror` / `ico_input_set_stick_fix`. (6C: the Settings
+  menu's stick fix calls `ico_opt_set_stick_fix`, which those forward to;
+  mirror is chosen at New Game, not in Settings.)
 - The pref folder is the executable's folder; packaging (Phase 5) may move
   it to SDL's pref path in `ico_host_pref_dir`.
 - Escape-to-quit is still hardcoded.

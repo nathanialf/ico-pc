@@ -207,4 +207,50 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
 struct IcoToml;
 int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t);
 
+/* --- the remap screen (Phase 6, 6C; input_config.c) ------------------------ */
+
+/* The bindings the live sources use: input_sdl.c steps this table, the
+   Settings menu's remap screen edits it in place, so a change applies on the
+   next vsync. Zeroed until ico_input_sdl_init (or a test) fills it. */
+IcoBindings *ico_input_live_bindings(void);
+
+/* Source kinds of one binding. */
+enum { ICO_SRC_NONE = 0, ICO_SRC_KEY = 1, ICO_SRC_MOUSE = 2, ICO_SRC_PAD = 3 };
+
+/* The device layer reports every new press here (input_sdl.c: a key down, a
+   mouse button down, a gamepad button or trigger crossing half, a stick
+   axis crossing half: ICO_GP_*_NEG/POS); code is an ICO_KEY_*, a mouse
+   button 1..5 or an ICO_GP_*. */
+void ico_input_note_press(int kind, int code);
+/* The last press: returns a sequence number that changes with every press
+   (0 before the first), kind and code when not NULL. The remap screen's
+   capture compares the sequence with the one it saw when it started. */
+unsigned int ico_input_last_press(int *kind, int *code);
+
+/* Bind target to one source of its kind: that device's row for target is
+   replaced by the source alone, and the source is taken off every other
+   target of the same device (one key, one action). The other devices' rows
+   are kept. 0, or -1 for a bad target, kind or code. */
+int ico_bindings_assign(IcoBindings *b, int target, int kind, int code);
+/* Clear every device's sources of target. */
+void ico_bindings_clear(IcoBindings *b, int target);
+/* A device's row of target as config text: "Space", "Tab, Backquote",
+   "none". kind ICO_SRC_KEY/MOUSE/PAD. */
+const char *ico_bindings_row_text(const IcoBindings *b, int kind, int target, char *buf,
+                                  unsigned size);
+/* A mouse button's config name ("left", "right", "middle", "x1", "x2"). */
+const char *ico_mouse_name(int button);
+
+/* The binding tables into config.toml through port/config (ico_config_set_*;
+   the caller saves with ico_config_save): [input.kb], [input.mouse] and
+   [input.pad] for each target whose row differs from the default or is
+   already in the file, as a string ("Space", "Tab, Backquote", "none";
+   bindings.c splits a comma list like an array), and mouse_sensitivity.
+   Returns the number of keys set, or -1. */
+int ico_input_write_bindings(const IcoBindings *b);
+/* Rebuild *b from the defaults and the config's [input] and [gameplay]
+   keys as port/config reads them (ico_config_get_string): the reload after
+   a write, or ico_input_apply_toml over the config in use. */
+void ico_input_reload_bindings(IcoBindings *b);
+
 #endif /* ICO_PORT_INPUT_INPUT_H */

@@ -13,8 +13,13 @@
 #define RUMBLE_MS 250
 #define RUMBLE_REFRESH 8 /* vsyncs between re-issues of a running rumble */
 
-static IcoBindings s_bind;
+/* the live table (input_config.c), which the Settings menu's remap screen
+   edits in place (Phase 6, 6C) */
+#define s_bind (*ico_input_live_bindings())
 static IcoInputRaw s_raw;
+/* the last snapshot's gamepad sources, for the press edges the remap
+   screen's capture reads (ico_input_note_press) */
+static unsigned char s_gp_down[ICO_GP_COUNT];
 static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
 static unsigned char s_sdl_to_key[SDL_SCANCODE_COUNT];
@@ -107,6 +112,9 @@ void ico_input_sdl_event(const SDL_Event *e)
     case SDL_EVENT_KEY_UP:
         if ((unsigned)e->key.scancode < SDL_SCANCODE_COUNT && s_sdl_to_key[e->key.scancode] != 0) {
             s_raw.key[s_sdl_to_key[e->key.scancode]] = e->type == SDL_EVENT_KEY_DOWN;
+            if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
+                ico_input_note_press(ICO_SRC_KEY, s_sdl_to_key[e->key.scancode]);
+            }
         }
         break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -116,6 +124,9 @@ void ico_input_sdl_event(const SDL_Event *e)
 
         if (e->button.button >= 1 && e->button.button <= 5) {
             s_raw.mouse[map[e->button.button]] = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+            if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                ico_input_note_press(ICO_SRC_MOUSE, map[e->button.button]);
+            }
         }
         break;
     }
@@ -228,6 +239,33 @@ static void send_rumble(void)
     }
 }
 
+/* Phase 6 (6C): the gamepad's new presses for the remap screen's capture:
+   a button, a trigger past half, a stick axis past half (as a direction
+   source); release below a quarter re-arms it. */
+static void note_pad_presses(void)
+{
+    int j;
+
+    for (j = 1; j < ICO_GP_COUNT; j++) {
+        float v;
+        int down;
+
+        if (j < ICO_GP_BUTTONS) {
+            v = s_raw.gp[j];
+        } else {
+            int a = (j - ICO_GP_LX_NEG) / 2; /* lx ly rx ry */
+            float x = s_raw.axis[a];
+
+            v = (j - ICO_GP_LX_NEG) % 2 == 0 ? -x : x;
+        }
+        down = s_gp_down[j] ? v > 0.25f : v >= 0.5f;
+        if (down && !s_gp_down[j]) {
+            ico_input_note_press(ICO_SRC_PAD, j);
+        }
+        s_gp_down[j] = (unsigned char)down;
+    }
+}
+
 void ico_input_sdl_update(void)
 {
     IcoVirtualPad v;
@@ -236,6 +274,7 @@ void ico_input_sdl_update(void)
         return;
     }
     sample_pads();
+    note_pad_presses();
     s_raw.mouse_dx = s_acc_dx;
     s_raw.mouse_dy = s_acc_dy;
     s_acc_dx = s_acc_dy = 0.0f;

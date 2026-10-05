@@ -4,9 +4,14 @@
  * config.toml's [input] and [gameplay] sections onto the bindings and the
  * pad host (input.h). Kept apart from bindings.c so that the headless build,
  * which has no config.toml, does not pull host_config.c's TOML reader in.
+ *
+ * Phase 6 (6C): the live binding table, the last-press record the remap
+ * screen's capture reads, and the writer that puts the tables back into
+ * config.toml through port/config.
  */
 #include <stdio.h>
 #include <string.h>
+#include "config.h"
 #include "host_config.h"
 #include "input.h"
 
@@ -14,20 +19,21 @@ static const char *const scalar_keys[] = {
     "keyboard",          "mouse",       "gamepad",       "rumble", "deadzone", "walk_scale",
     "mouse_sensitivity", "mouse_decay", "mouse_invert_y"};
 
-int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t)
+static const char *const dev_prefix[3] = {"kb.", "mouse.", "pad."};
+
+/* Every [input] key through get(path): the scalars, then each device's
+   targets (and the keyboard's walk keys). */
+static int apply_keys(IcoBindings *b, const char *(*get)(const void *, const char *),
+                      const void *src)
 {
-    static const char *const dev[3] = {"kb.", "mouse.", "pad."};
     char path[96], key[80];
     const char *v;
     size_t i;
     int d, k, bad = 0;
 
-    if (t == NULL) {
-        return 0;
-    }
     for (i = 0; i < sizeof(scalar_keys) / sizeof(scalar_keys[0]); i++) {
         snprintf(path, sizeof(path), "input.%s", scalar_keys[i]);
-        v = ico_toml_get(t, path);
+        v = get(src, path);
         if (v != NULL && ico_bindings_set(b, scalar_keys[i], v) != 0) {
             bad = -1;
         }
@@ -37,14 +43,212 @@ int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t)
             if (k < 0 && d != 0) {
                 continue;
             }
-            snprintf(key, sizeof(key), "%s%s", dev[d], k < 0 ? "walk" : ico_target_name(k));
+            snprintf(key, sizeof(key), "%s%s", dev_prefix[d], k < 0 ? "walk" : ico_target_name(k));
             snprintf(path, sizeof(path), "input.%s", key);
-            v = ico_toml_get(t, path);
+            v = get(src, path);
             if (v != NULL && ico_bindings_set(b, key, v) != 0) {
                 bad = -1;
             }
         }
     }
+    return bad;
+}
+
+static const char *toml_get(const void *t, const char *path)
+{
+    return ico_toml_get((const IcoToml *)t, path);
+}
+
+int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t)
+{
+    int bad;
+
+    if (t == NULL) {
+        return 0;
+    }
+    bad = apply_keys(b, toml_get, t);
     ico_input_set_stick_fix(ico_toml_get_bool(t, "gameplay.stick_fix", 0));
     return bad;
+}
+
+/* --- Phase 6 (6C): the remap screen's side ---------------------------------- */
+
+static IcoBindings s_live;
+
+IcoBindings *ico_input_live_bindings(void)
+{
+    return &s_live;
+}
+
+static unsigned int s_press_seq;
+static int s_press_kind, s_press_code;
+
+void ico_input_note_press(int kind, int code)
+{
+    s_press_kind = kind;
+    s_press_code = code;
+    s_press_seq++;
+    if (s_press_seq == 0) {
+        s_press_seq = 1;
+    }
+}
+
+unsigned int ico_input_last_press(int *kind, int *code)
+{
+    if (kind != NULL) {
+        *kind = s_press_kind;
+    }
+    if (code != NULL) {
+        *code = s_press_code;
+    }
+    return s_press_seq;
+}
+
+static const char *const mouse_names[ICO_MOUSE_BUTTONS] = {"none",   "left", "right",
+                                                           "middle", "x1",   "x2"};
+
+const char *ico_mouse_name(int button)
+{
+    return button > 0 && button < ICO_MOUSE_BUTTONS ? mouse_names[button] : "none";
+}
+
+static unsigned char *row_of(IcoBindings *b, int kind, int target)
+{
+    switch (kind) {
+    case ICO_SRC_KEY:
+        return b->kb[target];
+    case ICO_SRC_MOUSE:
+        return b->mouse[target];
+    case ICO_SRC_PAD:
+        return b->gp[target];
+    default:
+        return NULL;
+    }
+}
+
+int ico_bindings_assign(IcoBindings *b, int target, int kind, int code)
+{
+    int t, i, o;
+    int limit = kind == ICO_SRC_KEY     ? ICO_KEY_COUNT
+                : kind == ICO_SRC_MOUSE ? ICO_MOUSE_BUTTONS
+                : kind == ICO_SRC_PAD   ? ICO_GP_COUNT
+                                        : 0;
+
+    if (target < 0 || target >= ICO_T_COUNT || code <= 0 || code >= limit) {
+        return -1;
+    }
+    /* one source, one action: take it off the device's other targets */
+    for (t = 0; t < ICO_T_COUNT; t++) {
+        unsigned char *row = row_of(b, kind, t);
+
+        for (i = o = 0; i < ICO_BIND_MAX; i++) {
+            if (row[i] != code) {
+                row[o++] = row[i];
+            }
+        }
+        while (o < ICO_BIND_MAX) {
+            row[o++] = 0;
+        }
+    }
+    {
+        unsigned char *row = row_of(b, kind, target);
+
+        memset(row, 0, ICO_BIND_MAX);
+        row[0] = (unsigned char)code;
+    }
+    return 0;
+}
+
+void ico_bindings_clear(IcoBindings *b, int target)
+{
+    if (target < 0 || target >= ICO_T_COUNT) {
+        return;
+    }
+    memset(b->kb[target], 0, ICO_BIND_MAX);
+    memset(b->mouse[target], 0, ICO_BIND_MAX);
+    memset(b->gp[target], 0, ICO_BIND_MAX);
+}
+
+const char *ico_bindings_row_text(const IcoBindings *b, int kind, int target, char *buf,
+                                  unsigned size)
+{
+    const unsigned char *row;
+    size_t n = 0;
+    int i;
+
+    if (size == 0) {
+        return buf;
+    }
+    buf[0] = '\0';
+    if (target < 0 || target >= ICO_T_COUNT) {
+        return buf;
+    }
+    row = row_of((IcoBindings *)b, kind, target);
+    if (row == NULL) {
+        return buf;
+    }
+    for (i = 0; i < ICO_BIND_MAX; i++) {
+        const char *name;
+        int w;
+
+        if (row[i] == 0) {
+            continue;
+        }
+        name = kind == ICO_SRC_KEY     ? ico_key_name(row[i])
+               : kind == ICO_SRC_MOUSE ? ico_mouse_name(row[i])
+                                       : ico_gp_name(row[i]);
+        w = snprintf(buf + n, size - n, "%s%s", n > 0 ? ", " : "", name);
+        if (w < 0 || (size_t)w >= size - n) {
+            break;
+        }
+        n += (size_t)w;
+    }
+    if (n == 0) {
+        snprintf(buf, size, "none");
+    }
+    return buf;
+}
+
+int ico_input_write_bindings(const IcoBindings *b)
+{
+    static const int kinds[3] = {ICO_SRC_KEY, ICO_SRC_MOUSE, ICO_SRC_PAD};
+    IcoBindings def;
+    char path[96], now[160], was[160];
+    int d, t, n = 0;
+
+    ico_bindings_defaults(&def);
+    for (d = 0; d < 3; d++) {
+        for (t = 0; t < ICO_T_COUNT; t++) {
+            snprintf(path, sizeof(path), "input.%s%s", dev_prefix[d], ico_target_name(t));
+            ico_bindings_row_text(b, kinds[d], t, now, sizeof(now));
+            ico_bindings_row_text(&def, kinds[d], t, was, sizeof(was));
+            if (strcmp(now, was) == 0 && ico_config_get_string(path, NULL) == NULL) {
+                continue; /* the default, and the file does not name it */
+            }
+            if (ico_config_set_string(path, now) != 0) {
+                return -1;
+            }
+            n++;
+        }
+    }
+    if (b->mouse_sens != def.mouse_sens ||
+        ico_config_get_string("input.mouse_sensitivity", NULL) != NULL) {
+        if (ico_config_set_float("input.mouse_sensitivity", b->mouse_sens) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    return n;
+}
+
+static const char *config_get(const void *unused, const char *path)
+{
+    (void)unused;
+    return ico_config_get_string(path, NULL);
+}
+
+void ico_input_reload_bindings(IcoBindings *b)
+{
+    ico_bindings_defaults(b);
+    apply_keys(b, config_get, NULL);
 }

@@ -203,7 +203,17 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
         x = bx;
         break;
     }
-    const float size = r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
+    float size = r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
+    /* 6C: a label wider than its box (a long option, another language) is
+       set smaller to fit, down to 60 % (docs/port/UI.md, open item 7);
+       the widest line of a multi-line label counts */
+    if (bw > 0.0f) {
+        float w = ui_MeasureText(size, text);
+        if (w > bw) {
+            float k = bw / w;
+            size *= k < 0.6f ? 0.6f : k;
+        }
+    }
     if (!glow) {
         ui_DrawText(x, by + bh * 0.5f, size, rgba, text, flags | UI_HALO);
         return;

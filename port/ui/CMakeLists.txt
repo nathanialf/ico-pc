@@ -6,11 +6,14 @@
 #                ui_host.c (the game's globals, the decoder flush) in the
 #                window build only
 #   ico_ui_rd    the same sources with ICO_RD for ui_test (needs ico_render)
+#   settings.c   the Settings menu (6C), in ico_ui and settings_test: it
+#                reads the port's option modules (port/game, port/input,
+#                port/config) and the game's layout globals
 #
 # The font file is embedded as a C array generated at build time
 # (embed_font.cmake), so the program needs no file beside it.
 
-set(_ui_font "${CMAKE_SOURCE_DIR}/port/assets/fonts/EBGaramond-Regular.ttf")
+set(_ui_font "${CMAKE_SOURCE_DIR}/port/assets/fonts/Arimo-Regular.ttf")
 set(_ui_font_c "${CMAKE_CURRENT_BINARY_DIR}/ui_font_data.c")
 add_custom_command(
     OUTPUT "${_ui_font_c}"
@@ -35,7 +38,8 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c PROPERTIES COMPILE_OPTIONS "-Wno-strict-prototypes")
+set_source_files_properties(layout_ext.c settings.c PROPERTIES COMPILE_OPTIONS
+                            "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
     add_library(${name} OBJECT ${_ui_sources} ${ARGN})
@@ -56,14 +60,58 @@ endfunction()
 # the game's layout_texture.c reads its tables through layout_ext.h
 target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
+# the Settings menu's view of the port's option modules (includes only; the
+# programs link the libraries)
+set(_ui_settings_deps ico_achievements ico_input ico_options ico_config)
+function(ico_ui_settings name)
+    target_sources(${name} PRIVATE settings.c)
+    foreach(_lib ${_ui_settings_deps})
+        target_include_directories(${name} PRIVATE
+                                   $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
+    endforeach()
+endfunction()
+
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
         ico_ui_library(ico_ui ON ui_host.c)
     else()
         ico_ui_library(ico_ui OFF)
     endif()
+    ico_ui_settings(ico_ui)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_ui>)
     target_include_directories(ico_pc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(ico_pc PRIVATE ${_ui_settings_deps})
+endif()
+
+# --- settings_test (CPU) ------------------------------------------------------
+# The Settings menu built over fake game tables shaped like the PAL ones and
+# run by the real layout_texture.c (measure-only text, the gif calls
+# stubbed): the rows of each page, value cycling into the setters and the
+# texts, the remap capture, the boot-skip mapping over a synthetic config,
+# and the navigation repoint. docs/port/UI.md, "Settings menu".
+ico_ui_library(ico_ui_cpu OFF)
+ico_ui_settings(ico_ui_cpu)
+ico_include_dirs(common _ico_ui_settings_incs)
+add_executable(settings_test test/settings_test.c $<TARGET_OBJECTS:ico_ui_cpu>
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
+    "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(settings_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           ${_ico_ui_settings_incs} "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(settings_test PRIVATE ICO_HOST=1)
+target_compile_options(settings_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(settings_test PRIVATE ${_ui_settings_deps} ico_platform ico_math)
+if(NOT WIN32)
+    target_link_libraries(settings_test PRIVATE m)
+endif()
+if(WIN32)
+    target_link_libraries(settings_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME settings COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 if(NOT TARGET ico_render)
@@ -92,6 +140,28 @@ target_compile_definitions(ui_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(ui_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(ui_test PRIVATE ico_render ico_math)
+
+# settings_render: settings_test.c with SETTINGS_RENDER, the Settings screens
+# through the real layout code and rd on a Vulkan device, each screen's SCENE
+# written as settings_<screen>.png beside it (exit 77 without a device)
+ico_ui_library(ico_ui_settings_rd ON)
+ico_ui_settings(ico_ui_settings_rd)
+add_executable(settings_render test/settings_test.c $<TARGET_OBJECTS:ico_ui_settings_rd>
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(settings_render PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_ui_game_incs}
+                           ${_ico_ui_seki_incs} "${CMAKE_SOURCE_DIR}/port/shaders"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
+                           "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(settings_render PRIVATE ICO_HOST=1 ICO_RD=1 SETTINGS_RENDER=1)
+target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
+                      ico_platform)
 if(WIN32 AND SDL3_FOUND)
     add_custom_command(TARGET ui_test POST_BUILD
                        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -102,6 +172,9 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME ui COMMAND ui_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
         set_tests_properties(ui PROPERTIES ENVIRONMENT

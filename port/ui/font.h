@@ -1,8 +1,8 @@
 /*
  * port/ui/font.h
  *
- * The port's own text (Phase 6, package 6B; docs/port/UI.md): EB Garamond
- * Regular (SIL OFL 1.1, port/assets/fonts/), embedded in the program,
+ * The port's own text (Phase 6, package 6B; docs/port/UI.md): Arimo
+ * Regular (SIL OFL 1.1, port/assets/fonts/; 6C replaced EB Garamond), embedded in the program,
  * rasterised at run time by stb_truetype into glyph atlases and drawn
  * through rd as GS sprites in UI space.
  *
@@ -51,12 +51,12 @@ extern "C" {
 /* x units per y unit: 640 x 448 shown at 4:3 */
 #define UI_X_PER_Y (15.0f / 14.0f)
 
-/* The default size of a Settings row, in y units: the em that puts EB
-   Garamond's capitals (0.65 em) at the height of the menu lettering of the
-   Options and vibration screens (texFile 21, 20-texel rows shown 20 field
-   lines tall): about 18.7 y units, measured on the title frame of a run
-   (docs/port/UI.md, "Metrics"). */
-#define UI_MENU_TEXT_SIZE 29.0f
+/* The default size of a Settings row, in y units: the em that puts Arimo's
+   capitals (1409 / 2048 = 0.688 em) at the height of the menu lettering of
+   the Options and vibration screens (texFile 21, 20-texel rows shown 20
+   field lines tall): about 18.7 y units, measured on the title frame of a
+   run (docs/port/UI.md, "Metrics"). 27 gives 18.6. */
+#define UI_MENU_TEXT_SIZE 27.0f
 
 /* the Z the layout draws its rows at (layout_texture.c) */
 #define UI_LAYOUT_Z 0xFFFFFF9Bu

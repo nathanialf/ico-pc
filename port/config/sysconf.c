@@ -141,6 +141,106 @@ int sceScfGetLanguage(void)
     return cached;
 }
 
+/* --- Phase 6 (6C): the boot screens' choices --------------------------- */
+
+int ico_scf_to_game_language(int scf)
+{
+    switch (scf) {
+    case ICO_SCF_LANGUAGE_FRENCH:
+        return ICO_GAME_LANGUAGE_FRENCH;
+    case ICO_SCF_LANGUAGE_SPANISH:
+        return ICO_GAME_LANGUAGE_SPANISH;
+    case ICO_SCF_LANGUAGE_GERMAN:
+        return ICO_GAME_LANGUAGE_GERMAN;
+    case ICO_SCF_LANGUAGE_ITALIAN:
+        return ICO_GAME_LANGUAGE_ITALIAN;
+    default:
+        return ICO_GAME_LANGUAGE_ENGLISH;
+    }
+}
+
+int ico_game_to_scf_language(int game)
+{
+    switch (game) {
+    case ICO_GAME_LANGUAGE_FRENCH:
+        return ICO_SCF_LANGUAGE_FRENCH;
+    case ICO_GAME_LANGUAGE_GERMAN:
+        return ICO_SCF_LANGUAGE_GERMAN;
+    case ICO_GAME_LANGUAGE_ITALIAN:
+        return ICO_SCF_LANGUAGE_ITALIAN;
+    case ICO_GAME_LANGUAGE_SPANISH:
+        return ICO_SCF_LANGUAGE_SPANISH;
+    default:
+        return ICO_SCF_LANGUAGE_ENGLISH;
+    }
+}
+
+int ico_sysconf_language_explicit(void)
+{
+    return ico_scf_language_from_name(ico_config_get_string("game.language", "auto"));
+}
+
+void ico_sysconf_set_language(int scf)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(languages) / sizeof(languages[0]); i++) {
+        if (languages[i].code == scf) {
+            ico_config_set_string("game.language", languages[i].name);
+            cached = scf;
+            return;
+        }
+    }
+}
+
+int ico_sysconf_video_mode(void)
+{
+    const char *v = ico_config_get_string("video.video_mode", NULL);
+
+    if (v == NULL) {
+        return -1;
+    }
+    if (strcmp(v, "pal50") == 0) {
+        return 1;
+    }
+    if (strcmp(v, "60hz") == 0) {
+        return 0;
+    }
+    fprintf(stderr, "scf: [video] video_mode = \"%s\" is not \"pal50\" or \"60hz\"\n", v);
+    return -1;
+}
+
+void ico_sysconf_set_video_mode(int pal)
+{
+    ico_config_set_string("video.video_mode", pal ? "pal50" : "60hz");
+}
+
+int ico_boot_language(void)
+{
+    return ico_scf_to_game_language(sceScfGetLanguage());
+}
+
+int ico_boot_video_mode(int current)
+{
+    int v = ico_sysconf_video_mode();
+
+    return v >= 0 ? v : current;
+}
+
+int ico_boot_card_language(int card)
+{
+    int v = ico_sysconf_language_explicit();
+
+    return v >= 0 ? ico_scf_to_game_language(v) : card;
+}
+
+int ico_boot_card_video_mode(int card)
+{
+    int v = ico_sysconf_video_mode();
+
+    return v >= 0 ? v : card;
+}
+
 /* minutes east of GMT; the clock sceCdReadClock reports is already local */
 int sceScfGetTimeZone(void)
 {

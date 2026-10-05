@@ -1,7 +1,7 @@
 /*
  * port/ui/font.c
  *
- * Runtime text on rd (font.h; docs/port/UI.md): the embedded EB Garamond
+ * Runtime text on rd (font.h; docs/port/UI.md): the embedded Arimo Regular
  * through stb_truetype into per-size R8 atlases, drawn as GS sprites.
  */
 #include "font.h"
