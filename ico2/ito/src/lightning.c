@@ -13,6 +13,38 @@
 #include "DisplayList.h"
 #include "DmaPacket.h"
 
+#ifdef ICO_RD
+
+#include <stdio.h>
+#include "MicroCode.h"
+
+/* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18).  The
+   strip packet below is a VIF DIRECT block (path 2) of GIF REGLIST packets:
+   mc_HostDma reads it as the GIF would and the GS register decoder draws it,
+   in order after the gif_* state packet.  The blend mode c comes from the
+   stage's BGA lightning record (BgAnimation.c's BgaLightningDef, the short at +0x2E):
+   gif_SetAlpha indexes its twelve-entry table with it, which the PS2 reads
+   past the end for c outside 0..11; the host uses mode 0 there (as the
+   decoder's gif_SetAlpha does) and reports the value once. */
+static int lightningHostMode(int c) /* derived name */
+{
+    static int reported;
+
+    if ((unsigned int)c < 12) {
+        return c;
+    }
+    if (!reported) {
+        reported = 1;
+        fprintf(stderr,
+                "lightning: blend mode %d outside the twelve ALPHA modes: mode 0 used "
+                "(reported once)\n",
+                c);
+    }
+    return 0;
+}
+
+#endif
+
 /* the four control points lightning_test draws through */
 typedef struct { /* field names derived */
     LightningVtx v[4];
@@ -322,7 +354,11 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
     }
     gif_StartPacketPri(6);
     if (dpk_CheckBufferSize() >= 64) {
+#ifdef ICO_RD
+        gif_SetAlpha(1, lightningHostMode(c), 128);
+#else
         gif_SetAlpha(1, c, 128);
+#endif
         gif_SetGsReg(78, 0x1300000C0LL);
         gif_SetGsReg(8, 1);
         gif_SetGsReg(0, 84);
@@ -501,6 +537,17 @@ end:
         dl_SetDLPriority(dl_GetPri());
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+#ifdef ICO_RD
+        mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+        {
+            static int reported;
+
+            if (!reported) {
+                reported = 1;
+                fprintf(stderr, "lightning: first bolt drawn (mode %d; reported once)\n", c);
+            }
+        }
+#endif
     }
 }
 

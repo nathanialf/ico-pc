@@ -8,7 +8,15 @@ through `port/render` (`docs/port/RENDER_API.md` section 9). Since wave 3
 `MicroCode.c`, `Primitive.c` and `Texture.c`'s UV offset packet read their
 VU1 chains on the host (`mc_HostDma`) and draw the mesh packets, grids and
 particle batches through `rd_mesh.h` (section 13); the window build no
-longer depends on the microprogram address table. The headless
+longer depends on the microprogram address table. Since wave 5 (package
+R5c) the raw packet builders outside seki join them in the window build:
+`darkVolume.c`, `particleEffect.c` and `lightning.c` hand their finished
+chains to `mc_HostDma` (VIF DIRECT and GIF PACKED/REGLIST packets read on
+the host, section 18); `enemy.c`'s and `lineManager.c`'s packets went
+through the decoder already. These host paths are `ICO_RD` only, add no
+heap use and change nothing the simulation reads (lightning's out-of-range
+blend mode is mapped to mode 0 only in what reaches rd), so the headless
+build and its traces are unchanged. The headless
 build stays a CMake option (`-DICO_HEADLESS=ON`; the Linux presets set it,
 the Windows presets build the window) for the trace and test runs, with the
 original packet code. Both builds link `port/null/gfx_null.c` and
@@ -111,7 +119,9 @@ developer mode).
   `debug_DispQW`, `debugCdvdLoadInfoSegInit`, `debugCdvdLoadInfoSegAdd`.
 - **Values:** `debug_GetTimerSec` -1.0 (as `debug.c`'s host branch; the EE
   timer registers behind it advance since Phase 4F, docs/port/CONFIG.md),
-  `debug_TryToGetStartStage` -1 (retail), `debugSceOpen`/`debugSceClose`
+  `debug_TryToGetStartStage` -1 (retail) unless the developer key
+  `[dev] start_stage` (1..105) is set, which host_config.c hands over as
+  `ICO_START_STAGE` (renderer wave 5, R5b; docs/port/CONFIG.md), `debugSceOpen`/`debugSceClose`
   through the host `sceOpen`/`sceClose` (no host files: -1),
   `gsResetFunc` calls `gsb_Init(&db)` and returns 1 as `debug.c:2364`,
   `debug_SelectCsvWindow`/`Val` -1 (cancel: only the compiled-out debug

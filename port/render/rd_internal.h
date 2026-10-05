@@ -19,6 +19,10 @@
  *   (fog)          RD_POST_FOG (wave 4, R4c): recorded by rd_post.c as an
  *                  RDC_POST_STUB, replayed by rd_replay.c (doFog) through
  *                  fog_lut_ps
+ *   rd_blur.c      staticBlur.c's sprites, RD_POST_MOTION_BLUR ..
+ *                  RD_POST_EYE_BLUR (wave 5, R5a): recorded as RDC_POST_STUBs,
+ *                  replayed by rd_replay.c (doBlurSprite) through fx_sprite_ps;
+ *                  the work-buffer scale rule
  *   rd_dump.c      frame dump and load
  *   rd_png.c       a minimal PNG writer for the replay tool and tests
  *
@@ -324,6 +328,7 @@ typedef enum RdVsId {
     RD_VS_VU_GRID_LIT,
     RD_VS_VU_GRID_SPEC,
     RD_VS_VU_PARTICLE,
+    RD_VS_FX_RECT, /* wave 5 (R5a): fx_rect_vs, the fullscreen triangle at the sprite's Z */
     RD_VS_COUNT
 } RdVsId;
 
@@ -338,6 +343,10 @@ typedef enum RdFsId {
     RD_FS_CAMERA_PROBE, /* wave 2 (R2c): FrameCB matrices applied to a point, as bytes (tests) */
     RD_FS_VU,           /* wave 3 (R3ab): vu_ps, the pixel side of every VU program */
     RD_FS_FOG,          /* wave 4 (R4c): fog_lut_ps, RD_POST_FOG behind the sprite vertex shaders */
+    RD_FS_FX_SPRITE,    /* wave 5 (R5a): fx_sprite_ps, staticBlur.c's sprites in GS integers */
+    /* wave 5 (R5c): COLCLAMP 0 screen prims (rd_replay.c doScreenWrap, raw_wrap.hlsl) */
+    RD_FS_WRAP_ACC,     /* wrap_acc_ps: the blend terms into an RGBA16F accumulator */
+    RD_FS_WRAP_RESOLVE, /* wrap_resolve_ps: (Cd + acc) mod 256 into the target */
     RD_FS_COUNT
 } RdFsId;
 
@@ -421,6 +430,46 @@ int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
 uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* rd_replay.c: frees the fog's depth copy and LUT textures (rd__GpuShutdown). */
 void rd__FogShutdown(void);
+/* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c, RENDER_API.md section
+ * 16): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
+ * under state s (fx_rect_vs / fx_sprite_ps, no hardware blending, the
+ * state's colour mask; with a depth format the state's Z test and Z write,
+ * else none), whether it binds the depth target (*useDepth), and the
+ * enumeration of the keys staticBlur.c's states reach. */
+RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
+                         int *useDepth);
+uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* rd_blur.c: records the sprite (rd_Post's wave-5 kinds). */
+void rd__PostBlur(RdPostKind kind, const RdPostParams *p);
+
+/* True for the wave-5 kinds. */
+static inline bool rd__IsBlurKind(uint32_t kind)
+{
+    return kind >= RD_POST_MOTION_BLUR && kind <= RD_POST_EYE_BLUR;
+}
+
+/* The interpolation hook of the feedback passes (motion blur, aura): the
+ * FIX that gives over dt frames the retention FIX gives over one, for a
+ * LERP_FIX (retention (128 - FIX) / 128 per frame) or an additive or
+ * subtractive FIX (scaled by dt).  dt = 1 returns fix unchanged, which is
+ * all the Original preset ever passes. */
+uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
+
+/* fx_sprite_ps's DrawCB.mode[0] flags (FXF_* in port/shaders/fx_sprite.hlsl) */
+enum {
+    RD_FXF_TEXTURED = 1,
+    RD_FXF_TFX_SHIFT = 1, /* bits 1..2: TEX0.TFX */
+    RD_FXF_TCC = 8,
+    RD_FXF_LINEAR = 16, /* TEX1.MMAG (the sprites' LOD is K = 0) */
+    RD_FXF_CLAMP_S = 32,
+    RD_FXF_CLAMP_T = 64,
+    RD_FXF_ABE = 128,
+    RD_FXF_PABE = 256,
+    RD_FXF_FBA = 512,
+    RD_FXF_DATE = 1024,
+    RD_FXF_DATM = 2048,
+    RD_FXF_DST = 4096 /* t2 holds the destination as it was before the sprite */
+};
 
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
@@ -496,8 +545,12 @@ enum {
     /* wave 4 (R4b) */
     RD_ONCE_SHADOW, /* a shadow command without a depth-stencil target of the colour's size */
     /* wave 4 (R4c) */
-    RD_ONCE_FOG,       /* an RD_POST_FOG without a LUT or a depth source */
-    RD_ONCE_DEPTH_VIEW /* an ordinary draw sampling a depth view (only the fog reads one) */
+    RD_ONCE_FOG,        /* an RD_POST_FOG without a LUT or a depth source */
+    RD_ONCE_DEPTH_VIEW, /* an ordinary draw sampling a depth view (only the fog reads one) */
+    /* wave 5 (R5a) */
+    RD_ONCE_BLUR, /* a staticBlur sprite without a colour target, or AFAIL with Z write */
+    /* wave 5 (R5c) */
+    RD_ONCE_WRAP /* a COLCLAMP 0 draw the wrap path does not model (DATE, PABE, AFAIL split) */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -578,6 +631,43 @@ bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
     3u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3) */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
+
+/* rd_water.c (wave 5, R5b): render-to-texture surfaces (rd.h rd_AliasTarget,
+ * rd_BlockTarget, rd_PushCamera).  The per-frame records live in rd_water.c,
+ * one per frame slot, and are cleared by rd__FrameReset.
+ *   rd__AliasOf        the target rd_AliasTarget put in place of target id in
+ *                      the current list of the open frame, 0 for none
+ *   rd__CameraAt       the camera of command index in list of f: the innermost
+ *                      rd_PushCamera scope that holds it, else the frame camera
+ *                      (NULL when the frame has none)
+ *   rd__CameraScopes   the number of scopes recorded in f */
+typedef struct RdCameraScope {
+    int32_t list;
+    uint32_t start, end; /* command indices [start, end) of the list; end is
+                            UINT32_MAX while open */
+    RdCamera cam;
+} RdCameraScope;
+
+void rd__WaterFrameReset(const RdFrame *f);
+uint32_t rd__AliasOf(uint32_t id);
+const RdCamera *rd__CameraAt(const RdFrame *f, int list, uint32_t index);
+uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes);
+/* the pipelines of these files' screen-prim states that the screen families
+ * leave out (rd__EnumerateReachable adds them) */
+uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+
+/* rd_replay.c (wave 5, R5c; RENDER_API.md section 18): a screen-prim command
+ * under COLCLAMP 0 with an additive or subtractive equation (ALPHA modes 0,
+ * 1, 5, 6, ABE on) wraps modulo 256 per channel as on the GS instead of
+ * clamping (doScreenWrap: wrap_acc_ps into an RGBA16F accumulator, then
+ * wrap_resolve_ps).  True when state s takes that path.  rd__WrapShutdown
+ * frees the accumulator and the path's pipelines (rd__GpuShutdown); the
+ * pipelines are a private cache outside rd__GetPipeline's, at most
+ * RD_WRAP_PIPES. */
+bool rd__WrapApplies(const RdStateBlock *s);
+void rd__WrapShutdown(void);
+uint32_t rd__WrapPipelineCount(void);
+#define RD_WRAP_PIPES 16
 
 /* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate. */
 bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,

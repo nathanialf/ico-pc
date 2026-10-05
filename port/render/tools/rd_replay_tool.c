@@ -5,7 +5,7 @@
  *   rd_replay_tool <dump> <out.png> [--target NAME] [--present WxH]
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
- * AA0, AA1, FEED128).  --present renders the Original presenter into a
+ * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD).  --present renders the Original presenter into a
  * W x H output and writes that instead.  Commands of later waves (meshes,
  * fog, ...) are skipped with a message instead of stopping.
  *
@@ -15,9 +15,9 @@
 #include <string.h>
 #include "rd_internal.h"
 
-static const char *const kNames[] = {"SCENE",   "DISPLAY", "SHADOW0", "SHADOW1",
-                                     "SHADOW2", "WORK0",   "WORK1",   "WORK2",
-                                     "WORK3",   "AA0",     "AA1",     "FEED128"};
+static const char *const kNames[] = {
+    "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2", "WORK0",     "WORK1",    "WORK2",
+    "WORK3", "AA0",     "AA1",     "FEED128", "",        "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
 
 static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
 {

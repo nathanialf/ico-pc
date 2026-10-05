@@ -51,7 +51,7 @@ grep skips them). Register encodings are the raw values written.
 | 0 | 0x68 | Cs·FIX + Cd | shadow accumulate, dissolve in, flare |
 | 1 | 0x62 | Cd − Cs·FIX | dissolve out, aura decay |
 | 2 | 0x64 | (Cs−Cd)·FIX + Cd | letterbox, motion blur, anti-alias, debug bars |
-| 3 | 0x61 | Cd·FIX + Cs | disc data only |
+| 3 | 0x29 | Cd·FIX + Cs | disc data only (0x61 until wave 5, a slip: that register is (Cd−Cs)·FIX + Cd; section 18) |
 | 4, 7 | 0x44 | (Cs−Cd)·As + Cd | default material, 2D |
 | 5 | 0x48 | Cs·As + Cd | additive, specular/reflection with PABE |
 | 6 | 0x42 | Cd − Cs·As | subtractive material |
@@ -183,7 +183,8 @@ feedback loops, no push constants (per-draw uniforms live in the ring).
 | SCENE | FBP 0x40 (TBP 0x800) | 512×512 PAL, 512×448 NTSC | RGBA8 + D32F_S8 |
 | DISPLAY | FBP 0 | 512×256 / 512×224 | the only displayed buffer; retained (motion blur history, keep) |
 | SHADOW0..2 | FBP 0x1C2, 0x1E2, 0x1EA (TBP 0x3840, 0x3C40, 0x3D40): blur levels 1..3 | 256², 128², 64² | wave 4 (R4b); the count at FBP 0x142 is scene-sized and lives in a per-frame target (`rd_ShadowCountTarget`, section 14) |
-| WORK0..3 | TBP 0x2800..0x3000 | 256×128, 256×256 | depth of field, flare, aura |
+| WORK0..3 | TBP 0x2800..0x3000 | 256×128, 256×256 | depth of field, flare, aura (wave 5: WORK0 0x2800 256×128, WORK1 0x2A00 256×256, WORK2 0x2E00 scene-sized, WORK3 0x3000 256×128; section 17) |
+| AURA_WORK, AURA_TAP, WORK2_PAD | TBP 0x2A00 TBW 8, 0x2800 TBW 2, 0x2E00 + W·H/64 | scene, 128², 256×64 | wave 5 (R5a), section 17 |
 | AA0, AA1 | TBP 0x2800/0x2C00 | 256², 128² | anti-alias chain (aliases WORK in VRAM; separate here) |
 | FEED128 | TBP 0x3F00 | 128² | aura feedback, persistent |
 | DATE_SNAPSHOT | n/a | scene size | R8 |
@@ -947,7 +948,10 @@ Open items for waves 4 and 5:
    rd calls itself and `mc_HostDma` is unchanged.
 2. `particleEffect.c`, `enemy.c`'s own particle packets and other VU users
    outside seki (`lightning.c`, `darkVolume.c`) chain their packets without
-   the host reader; only `prim_DispParticle` batches draw today.
+   the host reader; only `prim_DispParticle` batches draw today. Resolved in
+   wave 5 (R5c, section 18): they chain through `mc_HostDma` (DIRECT
+   added); enemy.c's own code is `gif_SetAlpha` and `prim_DispParticle`,
+   already routed.
 3. The reflection and other render-to-texture blocks are temporary targets
    per frame and per FBP; the surfaces that read them (`puddle.c`,
    `pool.c`, `queen_barrier_disp.c`, `staticBlur.c` work buffers) are wave
@@ -1349,3 +1353,697 @@ Open items:
 4. The fog's TEX0 leak is not reproduced (above).
 5. The title's strong haze (game run above) should be compared with a PS2
    capture of the title screen.
+
+## 16. Render-to-texture surfaces (wave 5, R5b)
+
+`ico2/sugipon/src/puddle.c`, `pool.c`, `ito/src/queen_barrier_disp.c` under
+`ICO_RD` (the window build; the headless build compiles the original code),
+`port/render/rd_water.c` (new: block targets, target aliases, camera scopes,
+the pipeline enumeration of these states), additive hooks in `rd_core.c`
+(`rd_SetTarget`, `rd_ClearTarget`, `rd_Texture`, `rd__FrameReset`) and one
+line in `rd_pipeline.c` (`rd__EnumerateReachable` calls
+`rd__EnumerateReachableWater`). `waterDot.c` and `clothAnimation.c` needed
+no change. Test: `rd_water` (`port/render/test/rd_water_test.c`), which
+compiles the five files with the mesh path, the 2D layer and
+`matrixDrive.c` as the window build does.
+
+**What the PS2 does.**
+
+- `PuddleDL` (`puddle.c:430`): `baseSetup` (list 4) clears SCENE's alpha
+  with a black ALPHA 0x48 sprite (As 0 written, RGB unchanged) and draws the
+  puddle object itself, which sets alpha 0x80 where the puddle is.
+  `drawAreaSetup` takes two 0x400-block VRAM areas after
+  `tex_ResetVramPri(4)` (`workVram` 0x2800, `work1Vram` 0x2C00), saves +0xC0,
+  +0x1C0, +0x100, +0x200, +0x340, calls `gsb_SetVSMatrix(0xE6, 0xE6, ...)`
+  (a 230 x 230 screen matrix on the same view) and rebuilds +0x100/+0x200,
+  draws into the 256 x 256 frame at `workVram` with ZBUF `0x30000000 |
+  work1Vram / 32` (PSMZ32, Z write on, the Z buffer at the second block), a
+  grey (128, 128, 128, 128) sprite at Z 0 under TEST 0x30000 (clears colour
+  and Z), then `reg_RenderReflection` of the reflected object (a mirrored
+  model; its matrices come from the rebuilt +0x100). `drawAreaRestore` copies
+  the matrices back and writes TEX0 `workVram | 0x20010000 | 0x600000000`
+  (TBW 4, PSMCT32, 256 x 256, TCC RGBA, MODULATE), FRAME SCENE, TEX1 0x60.
+  `leveldown` darkens the puddle (TEST 0x3F001: DATE DATM 1, ATST NEVER,
+  AFAIL RGB_ONLY; ALPHA 0x64 FIX 0x10, black), `drawRipples` draws the
+  ripple rings as STQ strips (PRIM 0xD4: strip, TME, ABE, AA1; TEST 0x3F000)
+  whose STs are the screen position scaled by 0.9 / 512 plus 1.5 (the 230 of
+  256 texels, with REPEAT), and `copy` lays the work over the screen (UV
+  13.25 .. 243.625, ALPHA 0x48 FIX 0x60, or 0x44 in stage 34) where the
+  alpha MSB is set.
+- `PoolDL` (`pool.c:770`): `copyToWork` copies SCENE (TEX0
+  `0x664000800 | W/64 << 14`: TBP 0x800, 512 x 512) into the 256 x 256 block
+  at 0x2800 (UV 0.5 .. 512.5: every second texel); the refracting grid
+  (`prim_DispMesh3D`, PRIM 0x1C, lit) samples it with STs from
+  `updatePoolGeo` (`pool.c:553`: screen position / 512 + 0.5 + 30 h / w);
+  `flushWork` takes the block again (and 0x2C00 as Z), clears it white with
+  A 0x80 and Z 0, `gsb_SetVSMatrix(0xCC, ...)` (204 x 204), and renders the
+  pool object (and `w->dobj`) as reflections; after the restore the
+  reflecting grid (PRIM 0x5C) adds the block at ALPHA 0x68 FIX 0x40 with
+  STs offset along the reflected eye ray (`pool.c:601`).
+  `DispLimitedPoolReflactionMesh` (stage 22's script) is the copy and one
+  refracting grid.
+- `queen_barrier_disp_proc` (`queen_barrier_disp.c:185`, list 10): the
+  block at 0x2800 (2048 blocks) as a 512 x 256 frame (FRAME FBW 8, SCISSOR
+  511 x 255, XYOFFSET 1792/1920; TEST 0x30000, ZBUF 0x1300000C0 masked), a
+  sprite from SCENE (PRIM 0x116, UV 0.5 .. 512.5 both ways: every second
+  row), FRAME SCENE again, ZBUF write on, TEST 0x50000, TEX0
+  `vram | 0x24020000 | 0x600000000` (TBW 8, 512 x 256), TEX1 0x60, PABE 1,
+  ALPHA 0x44, then the barrier grid (PRIM 0x1C, unlit) with the STs
+  `makeRefractST` computes: the vertex pushed along its normal, projected,
+  `(X - 2048 + W/2) / W`.
+- `DispWaterDot` (`waterDot.c:149`, list 11): raw PRIM 0x1C0 (point, ABE,
+  AA1, FST), TEST 0x50000, Z write off, ALPHA 0x48; per dot RGBAQ (128,
+  128, 128, life) and XYZ2 = `_FTOI4Vector` of the projected position, so
+  the Z is 16 times the GS Z (saturating at 2^31 near the camera): the
+  dots pass the Z test almost everywhere.
+- `DispClothMesh`, `DispCloth4D` (`clothAnimation.c:1034`, `:1095`): a lit
+  Mesh3D through `prim_DispMesh3D` in list 2 or 1, ALPHA 0x44 (mode 7) or
+  0x48 with ABE, CLAMP 0: the mesh path of section 13.
+
+**Where the generic decoder was not exact.** `tex_ResetVramPri` puts the
+list's VRAM cursor at 0x2800 when no head TBP is locked, and only lists 3, 7
+and 8 lock one (`Shadow.c`, `staticBlur.c`), so all three files draw into
+FBP 0x140 and read TBP 0x2800. The decoder maps that block to the named AA0
+target (section 9): a 256 x 256 target **without a depth buffer**, so the
+puddle and pool reflections drew with no Z test and no Z write (their
+models' faces in submission order), and the barrier's 512 x 256 copy was
+squeezed into a 256-wide target. R3ab's alias path (a temporary target per
+FBP) is never reached by these files. The `rd_water` case `decoder` records
+the same register writes without the host binding: the block is drawn as
+AA0 with no depth and sampled as AA0. Everything else was already exact
+through the decoder and the mesh path: the DATE/AFAIL literals, the ZBUF
+literals (PSM nibble 0, PSMZ32, the default Z format of temporary targets;
+ZMSK to Z write), TEX1 0x60 (bilinear) and the CLAMP the list leaves (the
+files do not write CLAMP except the cloth's 0), the sprite UVs, the STQ
+grids (perspective-correct STQ interpolation in `vu_common.hlsli`, as the
+GS does), the point positions.
+
+**On rd.** The game files bind the block themselves, keeping every register
+write:
+
+- `rd_BlockTarget(tbp, w, h, depth)`: one per-frame target per VRAM block
+  and size (256 x 256 with depth for puddle and pool; 512 x 256 without for
+  the barrier). The same (tbp, size) gives the same target for the rest of
+  the frame, as the VRAM is one block: puddle and pool in one frame share
+  it in order, as on the GS.
+- `rd_AliasTarget(rd_GsNamedBlock(tbp, w, h), block)`: from the allocation
+  (`drawAreaSetup`, `copyToWork`, `flushWork`, after `tex_AllocVramAuto`) to
+  the last draw that samples the block (`copy`, the end of `dispPool` and
+  `DispLimitedPoolReflactionMesh`, after the barrier's `prim_DispMesh3D`),
+  in that list only, the decoder's `rd_SetTarget(AA0, none)` records the
+  block with its own depth and its `rd_Texture` of AA0 records the block's
+  view. Recording only: the commands name the block target, so replay and
+  dumps see an ordinary temporary target. `rd_GsNamedBlock` mirrors
+  GifPacket.c's FRAME table (its TEX0 table agrees for TH 8 and 9 at
+  0x2800); a block the decoder does not name is left to its alias path.
+  `gif_HostFlush` runs first, so the decoder's pending writes land on the
+  right side of the scope.
+- `rd_PushCamera` / `rd_PopCamera` around the reflection draws (after the
+  `gsb_SetVSMatrix` and `_MulMatrix` calls, after the matrices are copied
+  back): view +0x80, proj43 the 230 or 204 screen matrix +0xC0, near 2, far
+  262144, zoom 0 (not known to the game file; vsParam is GsBase.c's).
+  `rd__CameraAt(frame, list, index)` gives a draw's camera. The frame camera
+  stays `gsb_MakeCommonMatrix`'s (R2c). In Original nothing reads either:
+  the reflection's VU draws take the matrices the per-object packets carry
+  (+0x100 x node, built from the rebuilt +0x100), which is where the PS2's
+  reflection camera lives; the scope is for the Enhanced projection and
+  interpolation. Not dumped. Note that the reflection's VU common block
+  (viewport +0x340 at qw 8..11) stays the frame's, on the PS2 too (only
+  `gsb_MakeCommonMatrix` uploads it), which matters to the scissor programs
+  only.
+
+**Pipelines.** Five screen states of `puddle.c` (TEST 0x3F001 with ALPHA
+modes 0, 2, 4; 0x3F000 with 0 and 4) and `waterDot.c`'s UI points with
+TEST 0x50000 and mode 5 were outside the enumerated screen families;
+`rd__EnumerateReachableWater` adds them: 175 reachable (the count includes
+R5a's families; the screen-only count is unchanged).
+
+**Measured** (`rd_water` on lavapipe, validation and synchronisation
+validation on, no errors; every created pipeline enumerated):
+
+| check | result |
+|---|---|
+| decoder alone: block 0x2800 | drawn as AA0 without depth, sampled as AA0 (the finding) |
+| puddle: the reflection draw's VuCB +0x100 vs the 230 x 230 camera in double precision | 5.5e-8 relative |
+| puddle: the block (clear, then the reflected quad) vs a CPU raster of the VU reference | 1,500 interior pixels, 0 LSB |
+| puddle: reflected vertices vs the double-precision projection | 0.044 px (within 1/16) |
+| puddle: the block vs the projected quad itself (1 px from the edges) | 1,502 inside, 62,002 outside, 0 differ |
+| puddle: SCENE after baseSetup, leveldown and copy vs a CPU model (DATE mask, LERP FIX 0x10, GS bilinear of the block at the copy UVs, ADD FIX 0x60) | 255,686 pixels, 0 LSB |
+| pool: refraction STs vs a double recomputation; barrier: makeRefractST likewise | 5.2e-7, 7.1e-7 |
+| pool: the scene copy; barrier: the 512 x 256 copy | exact (65,536; 131,072 pixels) |
+| pool: refracting grid over the copy vs a CPU raster (STQ, bilinear, MODULATE, top-left fill) | 53,357 pixels: 1 LSB from the centre sample, 0 outside the GS precision range |
+| pool: block after the reflection pass | 0 LSB |
+| pool: SCENE after refraction and the additive reflection | 52,752 pixels: 2 LSB from the centre sample on 185 blue values, 0 outside the range |
+| barrier: refracted grid (Z GEQUAL with write, as recorded) vs a CPU raster | 98,094 pixels: 1 LSB from the centre, 0 outside the range |
+| water dots: one pixel each, Cd + life | exact |
+| cloth: the lit grid vs the VU reference as screen prims | 0 LSB |
+
+The "GS precision range" is, per pixel, the results over texel
+coordinates moved by -1/16, 0, +1/16 on each axis and the filtered texel
+moved by -1, 0, +1 (the GS addresses texels in 1/16 and filters with 4-bit
+weights, the GPU with 8-bit weights); MODULATE by a vertex colour above
+0x80 scales that rounding, which is the 2 LSB of the pool's blue channel.
+The STQ maths itself is exact: no pixel leaves the range.
+
+**Game run** (window build on lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`[dev] start_stage=34` (st13a ELEVATOR, the stage `puddle.c` special-cases),
+`use_iso=1`, a pad script walking with the left stick, `ticks=4000`,
+`dump_every=50`, `timeout 600`, exit 0 after 4000 ticks in about 6 min).
+The stage loads at tick 1; the walk crosses into stage 35 (st24a JETTY) and
+back four times between ticks 748 and 1047. In every dumped frame of stage
+34 from tick 150 on, list 4 holds one bind of the 256 x 256 block, 13 to
+22 VU draws (the reflection model's parts drawn into the block, plus the
+specular passes) and 5 screen draws (6 from tick 1950, when the boy's steps
+start ripples); stage 35 frames have none. Every dump replays with no
+command skipped; `logs/ico-pc.log` has no `rd`, `gif` or `tex` notice.
+Replaying a dump with lists 5 to 12 cut (motion blur reads DISPLAY history)
+and again with the puddle's leveldown, ripple and copy draws removed, the
+difference is confined to the puddle surfaces: 2,607 pixels at tick 400
+(the puddle on the stone floor in front of the doorway; SCENE alpha 0x80 on
+2,660 pixels after the puddle object's draw, 0 elsewhere after baseSetup),
+13,592 at 2200 and 46,303 at 3000 (the wet lower floor where the boy
+walks), at most 19 to 48 levels. The block at those ticks shows the grey
+clear and the reflected rock and wall parts, faint, as the reflection
+model's materials draw them. Whether the strength of the effect matches
+the PS2 needs a capture.
+
+**rd.h changes (R5b).** `rd_GsNamedBlock`, `rd_BlockTarget`,
+`rd_AliasTarget`, `rd_PushCamera`, `rd_PopCamera`. Internal:
+`RdCameraScope`, `rd__WaterFrameReset`, `rd__AliasOf`, `rd__CameraAt`,
+`rd__CameraScopes`, `rd__EnumerateReachableWater`. Dump format unchanged.
+Developer key `[dev] start_stage` (docs/port/CONFIG.md).
+
+Open items:
+
+1. PRIM.AA1 (the ripple strips' 0xD4, the water dots' 0x1C0) is not
+   decoded: no edge antialiasing (GS coverage as alpha) on the ripple rings;
+   on points it has no documented effect.
+2. The camera scope's `zoom` is 0 (GsBase.c's vsParam is file-local); an
+   Enhanced projection of the reflection needs it or a widened +0xC0.
+   `gsbHostWidenCull` also widens the reflection's cull frustum when the
+   output is wide, which the reflection's 230/204 viewport may not want.
+3. A texture Texture.c places at 0x2800 in list 4 or 10 with exactly the
+   block's TEX0 (TBW 4, PSMCT32, 256 x 256, or the barrier's) would win over
+   the block in the resolver (section 11); none was seen.
+4. `stage_no == 34` puddles and stage 15/101 pools were found from the code
+   (`puddle.c`, `pool.c`); which other stages place POOL/PUDDLE objects is
+   in the disc layouts and was not surveyed. The pool, the barrier (stage
+   37) and the waterfall's limited pool meshes (stage 22, `st02a.c`) are
+   not yet seen in a game run.
+5. The block target is a per-frame temporary target (created and freed per
+   frame), like the shadow count.
+
+## 17. Full-screen effects (wave 5, R5a)
+
+`ico2/sugipon/src/staticBlur.c` under `ICO_RD` (the window build; the
+headless build compiles the original code), `port/render/rd_blur.c`
+(recording, the feedback hook, the work-buffer scale rule),
+`rd_replay.c` (`doBlurSprite`), `rd_pipeline.c` (`rd__BlurKey`, six
+keys), `rd_post.c` (the six kinds dispatched to `rd__PostBlur`),
+`port/shaders/fx_sprite.hlsl` (`fx_rect_vs`, `fx_sprite_ps`). Test:
+`rd_blur` (`port/render/test/rd_blur_test.c`), which compiles staticBlur.c
+with the 2D layer and Matrix.c as the window build does. (Section 16 is
+R5b's, written at the same time.)
+
+**What the PS2 does.** `gsb_UpdateGSSystem` calls `FullScreenEffectBefore`
+at the head of each frame, after `gsb_SetGsDefault` and `shadow_Reset`
+(`GsBase.c:1290`); `gsb_PostEffect` calls `FullScreenEffectAfter` first,
+then `shadow_Draw`, `fog_DrawFog` and `MotionBlur` (`GsBase.c:1043-1048`).
+Before sets the work buffers (`workBase` = 0x2800, 0x2A00, 0x2E00, 0x3000;
+the static initial values 0x2800, 0x2C00, 0x3000, 0x3400 are in force for
+the first After of a run, which comes before any Before) and locks list
+8's texture head at 0x3A00 (PAL) or 0x3800 (NTSC) with `tex_LockHeadTBP(...,
+8)`: 0x2A00 + W·H/64, the end of the scene-sized aura buffer. That call
+also selects list 8 (`resetVramPri`, `Texture.c:1804`). Placement,
+checked against the code: the flare head, the flare tail, the depth of
+field and the motion blur are in list 7 (`gif_StartPacketPri(7)`; the
+planner had depth of field and motion blur there, confirmed), the aura
+head and tail in list 8. The flare head leaves FRAME on the flare mask
+(`makeMaskPatternToWork2`) with Z test and write on, so the "shine level
+1" objects of list 7 draw into the mask, and the aura head leaves the aura
+buffer bound for list 8's objects; both buffers are scene-sized and use
+ZBUF 0xC0, the scene's Z buffer. The effects, with the stage's
+`postEffect` (0 none, 1/3 flare "SBLUR" (+ depth of field), 2 depth of
+field, 4/5 "GLOW", 6/7 "BLSBLUR"; 8 nothing) and `feedbackEffect` (1
+"AURA", 2 "MIRAGE", the default in `sceneManager.c:229`, 3 "AURA V2"):
+
+- **Motion blur** (`MotionBlur`, when `motionBlurAlpha` is non-zero and
+  `currentScreenWidth`, which `gsb_UpdateGSSystem` sets to `GlobalTimer`,
+  is 0): SCENE, TEX0 = DISPLAY as PSMCT24 (TBW W/64, 512²), TEXA
+  0x8000000080, TEST 0x3000C, ZMSK, ALPHA LERP FIX = `motionBlurAlpha`,
+  one sprite at Z 0xFFFFFFFF from (-W/2·16 - 4) over W x H with UV 0.25 ..
+  W + 0.25, 0.25 .. H/2 + 0.25: DISPLAY's H/2 lines stretched over H, with
+  the TEX1 in force (the flare's 0x60 when the flare runs). DISPLAY is the
+  reduction of the previous frame's SCENE, so this is a feedback loop.
+- **Depth of field** (`depthField`): `copyToWork` SCENE into WORK1 as
+  256²  (2:1 both ways, TEST 0, TEX1 0x60), `copyToWork2` WORK1 into WORK0
+  256x128 (TFX HIGHLIGHT), six passes WORK0 ↔ WORK1 (the 256x128 top half
+  of the 256² buffer) shrinking the rectangle by `cur`/16 and the UV by
+  `pre`/16 pixels, TFX HIGHLIGHT with alpha 0, TEX1 0x40 (MMAG nearest) on
+  the growing first pass and 0x20 (MMAG linear) after; then four WORK0
+  planes into SCENE at GS Z = the screen matrix applied to `depth + width
+  i/4`, TEST 0x50000 (Z GEQUAL), ZMSK, LERP FIX 32, 64, 96 with ABE and the
+  last at FIX 128 without ABE (an opaque copy behind `depth + width`).
+- **Flare** (`makeFullScreenFlareBefore/After`, `pasteFullScreenFlare`):
+  SCENE's alpha cleared, then 192 where the scene Z is at most 1 (the sky,
+  a sprite at Z 1 under GEQUAL); the 256x64 band above WORK2 and WORK2 filled
+  with (0 or, in GLOW, 128 grey, alpha 192); the sun's two fans into WORK2;
+  SCENE copied into WORK2 as black with the scene's alpha where that alpha
+  is below 0x81 (TEST 0x30815, AFAIL KEEP): the mask is the sky, the sun
+  and list 7's shine objects. After: WORK2 reduced into WORK0 (2:1), ten
+  `blur` steps WORK0 → WORK1 → WORK0 with TFX HIGHLIGHT (the second pass's
+  colour 139/136/132 with alpha 0, or 4 in GLOW: HIGHLIGHT adds Af to RGB,
+  40 over the chain, which is the glow), the eye blur, WORK0's alpha set
+  to 128, and WORK3 added into SCENE (Cs·FIX + Cd, FIX 128).
+- **Eye blur** (`eyeBlur`): WORK0 x 150/128 into WORK3; with the sun on
+  screen four ghosts added at FIX alpha/(i + 1), WORK3 shrunk 0.9 toward
+  the sun into WORK1, the tint added into WORK3 (Cs·As + Cd), and in
+  BLSBLUR WORK1 subtracted from SCENE at FIX 96 where SCENE's alpha MSB is
+  0 (TEST 0x34003: DATE, DATM 0; the backlight shadow).
+- **Aura** (`auraInspireBefore/After`, list 8): AURA_WORK cleared at the
+  head. AURA (1): AURA_TAP (128²) cleared and four taps of FEED128 at ±0.625
+  px added at FIX 32, stretched over AURA_WORK at FIX blurCol.a (additive),
+  AURA_WORK added into SCENE, and (not paused) AURA_WORK reduced into
+  FEED128. MIRAGE (2): AURA_WORK's alpha reduced into WORK0, WORK0's alpha
+  copied into FEED128 (Cs·As + Cd with RGB 0), FEED128 pasted into SCENE
+  with LERP As (blurCol), then (not paused) SCENE reduced into FEED128 (the
+  bottom 16 lines cleared first on NTSC). AURA V2 (3): AURA_WORK's alpha
+  written into SCENE's (Cs·As + Cd with RGB 0), then as AURA with the add
+  into SCENE only where that alpha's MSB is 0 (TEST 0x34000: DATE, DATM
+  0).
+  `GlobalTimer` non-zero clears FEED128 to (0, 0, 0, 128) afterwards.
+  FEED128 is the only buffer that must survive between frames.
+
+**The generic path (audit).** `rd_blur` started as a dump of what
+GifPacket.c's decoder made of these packets (the R4c state). Wrong for
+staticBlur.c:
+
+1. TBP 0x2A00 is a 256x128 buffer (flare), the 256² buffer (depth of
+   field) and the scene-sized aura buffer by turns. The decoder made a
+   temporary target per (FBP, size) for FRAME but resolved TEX0 0x2A00 to
+   the first one made in the frame, the aura's (recorded first, at the
+   frame head): every flare and depth-of-field blur pass read the aura
+   buffer instead of what the pass before had written.
+2. 0x2E00 (the flare mask) and the aura buffer became temporary targets
+   with their own depth buffers, never cleared, where the GS tests list 7's
+   and list 8's objects against the scene's Z.
+3. 0x3000 mapped to WORK2 (256²) and the 0x2800 aura taps into WORK0's top
+   left (256x128): CLAMP clamped at the wrong edge.
+4. TFX HIGHLIGHT was drawn as MODULATE (logged once): GLOW lost its +4 per
+   blur pass and every blur pass wrote alpha 0 instead of At.
+5. Sampling went through the hardware sampler, which picks the minifying
+   filter where the GS's sprites use MMAG (TEX1.K = 0, LCM 0: LOD 0), so
+   the depth of field's TEX1 0x40 (MMAG nearest) shrink passes were drawn
+   linear; and bilinear weights and the blend rounded as the GPU does (the
+   motion blur's feedback drift of section 7).
+6. The first After of a run uses the initial `workBase` (0x2C00, 0x3000,
+   0x3400 for W1..W3), blocks the decoder has no work buffer for.
+
+The motion blur's DISPLAY read was right (RGB24 view, the stretch); with
+TEXA 0x80 and no AEM the alpha is constant, so R4b's TEXA-after-filtering
+caveat does not change it.
+
+**On rd.** staticBlur.c's host path renames the eight `gif_*` calls it
+makes (`gif_StartPacketPri`, `gif_EndPacket`, `gif_SetGsReg`,
+`gif_SetAlpha`, `gif_SetDrawEnviroment`, `gif_SetZTest`, `gif_SetZWrite`,
+`gif_SpriteSensitiveOrg`) to `sbHost*` functions in the same file; the game
+code is unchanged (`SB_KIND(...)` lines name the effect at each entry
+point). They record the same register writes, in the same order, as rd
+state: FRAME/SCISSOR/XYOFFSET as `rd_SetTarget` with the target below,
+FBMSK 0, PABE and ALPHA, TEST, ZBUF, CLAMP, TEX1, TEXA, FBA; TEX0 is kept
+and bound with the next sprite's PRIM (`rd_Texture` of the target view,
+or `rd_TextureOff`), ABE and IIP 0 from the PRIM the helper writes; every
+sprite is `rd_Post` of the effect's kind with the vertices as the GS gets
+them. Packets are still opened and closed through GifPacket.c (list
+selection and the packet bookkeeping); the sun fans still go through the
+decoder and draw into whatever target is bound (the flare mask).
+
+| VRAM (FRAME / TEX0) | rd target | depth bound |
+|---|---|---|
+| `workBase[0]`, 256 wide / TBW 4 | WORK0 256x128 | none |
+| `workBase[0]`, 128 wide / TBW 2 | AURA_TAP 128² | none |
+| `workBase[1]`, 256 wide / TBW 4 | WORK1 256² (256x128 = its top half) | none |
+| `workBase[1]`, W wide / TBW W/64 | AURA_WORK W x H | SCENE |
+| `workBase[2]` | WORK2 W x H | SCENE |
+| `workBase[3]` | WORK3 256x128 | none |
+| `workBase[2]` + W·H/64 | WORK2_PAD 256x64 (written, never read) | none |
+| 0x3F00 | FEED128 128² | none |
+| 0x800, 0 | SCENE, DISPLAY (PSMCT24: the RGB24 view) | SCENE, none |
+
+Buffers are matched by `workBase`, so the first After (initial values)
+uses the same targets. The flare's 256x128 and the aura's 128² views of
+0x2800, and the flare's 256x128 and the aura's scene-sized views of
+0x2A00, are separate targets: each is written whole before it is read in
+the frame, and the aura (list 8) replays after everything of list 7, so
+their sharing VRAM changes nothing. WORK3 lies inside the PS2's WORK2 and
+AURA_WORK regions; WORK2 is consumed before WORK3 is written and AURA_WORK
+is written after `pasteFullScreenFlare` reads WORK3, so separate targets
+are equivalent here too.
+
+**The sprite** (rd_blur.c, fx_sprite.hlsl). Each record is drawn by
+`doBlurSprite` in the GS integer arithmetic with the state block in force,
+the destination read from a copy of the target taken just before (so a
+sprite sampling its own target reads it as the GS does):
+
+| step | model |
+|---|---|
+| coverage | pixels whose window coordinate X (12.4, XYOFFSET + pixel) has x0 <= X < x1, y likewise, inside SCISSOR |
+| UV | U(X) = u0 + (X - x0)(u1 - u0) / (x1 - x0) in 12.4 integers, truncated |
+| filter | TEX1.MMAG (the sprites' LOD is K = 0): nearest = texel (U >> 4, V >> 4); linear = the four texels at (U - 8) >> 4, (V - 8) >> 4 weighted by the 4-bit fractions, sum >> 8 |
+| texel | CLAMP or REPEAT on the TEX0 size (2^TW x 2^TH), clamped to the backing target, then TEXA (RGB24, RGBA16) before filtering |
+| TFX | MODULATE `(T·C) >> 7`, DECAL, HIGHLIGHT `(T·C) >> 7 + Af`, A = At + Af with TCC, HIGHLIGHT2 (A = At); clamped at 255 |
+| tests | alpha test (KEEP discards, RGB_ONLY keeps the destination alpha, FB_ONLY writes colour, ZB_ONLY discards); DATE against the copy; the Z test in hardware against the bound depth (D32F, section 12) |
+| blend | `gs_blend_int` (`((A - B)·C >> 7) + D`), PABE, COLCLAMP, FBA; written as k / 255 into the UNORM8 target, which stores k exactly |
+
+The UV step and the bilinear rounding are a model: the GS manual does not
+give the sprite DDA or the filter's rounding, no hardware capture was
+available, and no emulator source was consulted. They are the form the
+4-bit sub-texel precision of the TEX1 filter implies; `rd_blur`'s CPU
+reference implements the same rules independently of the shader, so the 0
+LSB below says the GPU computes this model exactly, not that the model is
+the GS bit for bit.
+
+**Per effect.**
+
+| effect | kind | passes | exactness (`rd_blur` on lavapipe vs the CPU model) |
+|---|---|---|---|
+| motion blur | `RD_POST_MOTION_BLUR` | 1 sprite DISPLAY (RGB24) → SCENE | 0 LSB, 600 feedback frames (FIX 0x40 static, 0x40 noise, 0x70 cuts) |
+| depth of field | `RD_POST_DOF` | 2 downsamples, 6 blur passes, 4 Z-tested planes | 0 LSB (post modes 2, 3, 5, 7) |
+| flare | `RD_POST_FLARE` | head 4 sprites + mask, 1 reduce, 20 blur, paste | 0 LSB (post modes 1, 3, 6, 7) |
+| glow | `RD_POST_BLOOM` | the same in mode 2 (grey fill, HIGHLIGHT +4) | 0 LSB (post modes 4, 5) |
+| eye blur | `RD_POST_EYE_BLUR` | base, 4 ghosts, shrink, tint, BLSBLUR subtract with DATE | 0 LSB (sun on screen, modes 1, 3..7) |
+| aura | `RD_POST_AURA` | head clear; mode 1: 5 tap sprites, stretch, add, feed; 2: 4; 3: 6 | 0 LSB, 600 feedback frames through FEED128 (modes 1, 2, 3; blurCol.a 0x20, 0x40) |
+
+The feedback passes run the GS integer formula against the destination as
+the GS has it, which is section 7's requirement: `blend_int`'s RGBA8_UINT
+ping-pong is not needed, since UNORM8 stores k / 255 exactly and `Load`
+returns k. The motion blur's loop also goes through the reduction
+(`RD_POST_REDUCTION`, R2c), which is still a hardware-filtered sprite (1
+LSB against its CPU reference); the motion blur pass itself is exact, the
+loop is exact only once the reduction is (open item 1). The time-corrected
+factor hook is `RdPostRec.scalar[2]` (frames this sprite stands for, 1 in
+Original) through `rd__BlurFeedbackFix` at replay: for LERP_FIX the FIX
+whose retention over dt frames equals FIX's over one, for the additive and
+subtractive forms FIX·dt; dt = 1 returns FIX unchanged.
+
+**State left behind.** As the GS's, register by register, with two
+differences: TEX0 is recorded at each sprite's PRIM (the GS holds the last
+TEX0 written, which only differs if a later draw relied on a TEX0 written
+after staticBlur's last sprite, as none does), and HIGHLIGHT is recorded
+in the state block as MODULATE (the record carries TFX; a later draw that
+relied on the leaked TFX would modulate). GifPacket.c's per-list FRAME,
+PRIM and TEX0 shadow does not see these writes (as for `rd_Post`,
+Shadow.c and ZFog.c): a later decoder packet in list 7 or 8 that writes
+XYOFFSET without FRAME would re-emit the decoder's older FRAME. The sun
+fans are the only decoder draws between staticBlur's packets and they
+write neither.
+
+**Work-buffer scale.** `rd_WorkTargetScale(preset, outputHeight)`: 1 in
+Original (the literal sizes); in Enhanced outputHeight / 448 clamped to
+[1, 2], so blur radii stay a constant fraction of the screen.
+`namedTargetDesc` (rd_core.c) applies it to the fixed-size work buffers
+behind `RD_WORK_SCALE_APPLY`, which is 0: the replay sizes the GS window by
+the target's texture, so scaled buffers need the replay's GS-to-pixel
+scale first (wave 6). No setting selects it.
+
+**Pipelines.** `rd__BlurKey`: program POST, `fx_rect_vs`/`fx_sprite_ps`,
+no blending, the colour mask (FBMSK), and with a depth target the Z test
+and Z write; `rd__EnumerateReachableBlur` adds six keys (172 reachable in
+all; 166 before).
+
+**Game run** (the window build on lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`pad-boot.txt`, `ticks=1300`, `dump_every=50`, `timeout 420`, exit 0; the
+host path logs the effects whenever they change). The stages' settings
+(disc data) select:
+
+| frames (Before calls; the stage changes at ticks 623, 716, 996) | stage | postEffect | feedbackEffect | motion blur | sun |
+|---|---|---|---|---|---|
+| 1..24, 145..206, 622..677 | boot, 1, the change to 41 | 0 | 2 (mirage) | 32, drawn | off |
+| 25..144, 207..621, 678..714 | 1 (title), 41 | 1 (flare) | 0 | 32 (skipped on `GlobalTimer` frames) | on from 117 |
+| 715..995 | 42..45, 40 | 0 | 2 | 32, 36 | off |
+| 996..1300 | 3 | 0 | 2 | 32 | off |
+
+So neither the title nor stage 3's opening uses the depth of field or the
+glow in this run: depthField's parameters change (1000/500 on the title,
+100/500 elsewhere) but no stage selects post mode 2, 3, 4, 5 or 7. Dumps
+1000..1250 and 600 replayed with `rd_replay_tool` (no command skipped):
+
+- 600 (title): castle, bridges, sea, logo and menu under the fog's haze,
+  as in R4c's frame. The sun's fans are drawn into WORK2 but centred at
+  (-278, -465) from the screen centre, above the screen, so the mask is
+  black apart from the sky's alpha and WORK3 is 0: the flare adds nothing
+  to this frame. The motion blur runs.
+- 1000, 1050, 1100: black (the stage load). 1150, 1200, 1250: the boy in
+  the dark hall under the letterbox, fogged; AURA_WORK is empty (no list-8
+  object), so the mirage pastes FEED128 with As = 0 and changes nothing;
+  FEED128 holds the frame's SCENE reduced to 128².
+- A dump holds one frame: DISPLAY and FEED128 do not carry the previous
+  frame's content when a dump is replayed alone, so the motion blur blends
+  32/128 of whatever the replay context's DISPLAY holds; the PNGs are not
+  the live frames' exact colours.
+- Log: no `gif:` or `tex:` notice from lists 7 and 8 any more (R4c's run
+  logged HIGHLIGHT and placeholders at 0x3400, 0x2A00, 0x2E00). One defect:
+  `staticBlur: FRAME at a block with no work buffer (0x2c00)` on the first
+  frame, the first After before any Before (audit item 6), which the host
+  path then drew into SCENE. Fixed after the run (buffers matched by
+  `workBase`) and checked by `rd_blur`; the run was not repeated.
+
+**rd.h changes (R5a).** `RD_POST_MOTION_BLUR`, `RD_POST_DOF`,
+`RD_POST_FLARE`, `RD_POST_BLOOM`, `RD_POST_AURA`, `RD_POST_EYE_BLUR`
+(appended after `RD_POST_PRESENT_BLIT`), their `rd_Post` comment;
+`RD_TARGET_AURA_WORK`, `RD_TARGET_AURA_TAP`, `RD_TARGET_WORK2_PAD`
+(appended after `RD_TARGET_DATE_SNAPSHOT`); the WORK0..3 comments (WORK2
+is now scene-sized, WORK3 256x128); `rd_WorkTargetScale`. Internal:
+`RD_VS_FX_RECT`, `RD_FS_FX_SPRITE`, `rd__BlurKey`,
+`rd__EnumerateReachableBlur`, `rd__PostBlur`, `rd__IsBlurKind`,
+`rd__BlurFeedbackFix`, `RD_FXF_*`, `RD_ONCE_BLUR`. The dump format is
+unchanged (the sprites are `RdPostRec`s in `RDC_POST_STUB`s); a dump
+recorded before R5a names temporary targets with ids that now collide
+with the three new named targets (`rd_dump.c` tells them apart by
+`RD_TARGET_COUNT`). `rd_replay_tool` knows the three new target names.
+GifPacket.c is unchanged: staticBlur.c no longer goes through it; its
+0x2C00 → WORK1 and 0x3000 → WORK2 mappings (wave 2) now point at
+differently sized targets and have no user.
+
+Open items:
+
+1. The motion blur loop includes `gsb_Reduction` (`RD_POST_REDUCTION`,
+   hardware bilinear, section 12): routing the reduction through the same
+   exact sprite would make the loop exact end to end.
+2. The sprite UV step and bilinear rounding are a model (above); a PS2
+   capture of a flare or depth-of-field frame would settle them.
+3. List 7's textures are not head-locked on the PS2 (only list 8 is): a
+   shine object whose texture lands at 0x2800 .. 0x3C00 overwrites the
+   flare mask between head and tail there. rd keeps the mask intact.
+4. AFAIL FB_ONLY with Z write is drawn in one pass (failing fragments
+   write Z); no staticBlur state has it (logged once if seen).
+5. The depth of field and the glow were not exercised by the run; a stage
+   with post mode 2..7 (or the debug menu's "Post Effect") would show them
+   in the game.
+6. `rd_WorkTargetScale` is defined and called, but its scaling is off
+   until the replay supports scaled work buffers.
+
+## 18. Raw packet builders outside seki (wave 5, R5c)
+
+`ico2/sugipon/src/darkVolume.c`, `particleEffect.c`, `ico2/ito/src/lightning.c`
+under `ICO_RD` (the headless build compiles the original code, unchanged),
+`ico2/seki/src/MicroCode.c` (`mc_HostDma`), `port/render/rd_replay.c` (the
+COLCLAMP 0 wrap path), `port/shaders/raw_wrap.hlsl`. Test: `rd_raw`
+(`port/render/test/rd_raw_test.c`), which compiles the four game files with
+`MicroCode.c`, `Primitive.c`, `matrixDrive.c`, `Matrix.c` and the 2D layer as
+the window build does.
+
+**Route.** The packets stay as the game builds them; the host reads the
+finished chain at the point the game chains it (`mc_HostDma` right after
+`dl_OpenDma`/`dl_CloseDma`), so the GS register decoder (`GifPacket.c`,
+section 9) receives the PS2's register and vertex stream in packet order.
+No file needed an explicit `rd_*` replacement for its packets; darkVolume.c
+supplies three facts the decoder cannot know (below).
+
+| file | what it builds (raw sites) | route |
+|---|---|---|
+| `darkVolume.c` | five VU1 SET_GSREGISTER packets (`dvOpenPacket`: DMA cnt, VIF FLUSH, UNPACK V4-32 of a PACKED A+D GIF tag and its pairs to TOP, MSCALF 0, ret), the spheres as raw `gif_SetGsReg` (PRIM 0x144, RGBAQ, XYZ2/XYZ3) | `mc_HostDma` after each packet (generic); the spheres already reached the decoder; three host calls (below) |
+| `particleEffect.c` | one SET_GSREGISTER packet: PABE 0, ALPHA 0x44/0x48/0x42 by `alphaMode` 0/1/2 | `mc_HostDma` (generic); the batch is `prim_DispParticle`'s, read since R3ab |
+| `lightning.c` | a `gif_*` state packet (ALPHA mode `c`, ZBUF mask, CLAMP, PRIM 0x54), then a VIF DIRECT block (path 2) of GIF REGLIST packets: PRIM, then strips of RGBAQ/ST/XYZ2 | `mc_HostDma`'s new DIRECT reader (generic) |
+| `enemy.c` (its own packet code, `:312-322`) | `gif_SetAlpha(1, 4, 128)` and `prim_DispParticle` | unchanged: both were routed (decoder, R3ab) |
+| `lineManager.c` | raw `gif_SetGsReg` PRIM/RGBAQ/XYZ2 into the caller's open packet | unchanged: the decoder decodes them (section 9) |
+
+**`mc_HostDma` (MicroCode.c).** New: VIF DIRECT and DIRECTHL (the GIF
+packets of the next IMM quadwords) and a GIF reader (`mcHostGif`) behind it
+and behind SET_GSREGISTER (R3ab read PACKED A+D tags only):
+
+- PACKED: per register descriptor the 128-bit forms of the GS manual's
+  PACKED table: PRIM, RGBAQ (the Q of the last PACKED ST), ST, UV, XYZF2 and
+  XYZ2 (ADC selects XYZF3/XYZ3), FOG, A+D, NOP, TEX0/CLAMP (the low
+  doubleword); PRE writes the tag's PRIM first.
+- REGLIST: NLOOP x NREG raw doublewords, padded to a quadword; A+D and NOP
+  descriptors write nothing.
+- IMAGE: skipped, logged once.
+- FRAME_1 with PSM PSMCT24 (`FRAME` bits 24..29 = 1) reaches the decoder
+  with FBMSK's top byte set: the GS does not write a PSMCT24 frame's top
+  byte, and the decoder reads only FBP, FBW and FBMSK. PSMCT16 frames are
+  logged once (no game file writes one).
+
+Not added: `ref`/`next`/`call` tags (none of these files chains them, and a
+host DMA tag cannot hold a 64-bit address) and UNPACK formats other than
+V4-32 (the particle data is V4-32, Primitive.c's).
+
+**What darkVolume.c draws on the GS** (list 10, `DispGameOverEffect`,
+`SetupDarkVolume` from `queen.c`'s ball and `DarkVolumeGeo`). Packet 1:
+FRAME FBP 0x140 (TBP 0x2800) at the scene's size, ZBUF ZBP 0xC0 (the
+scene's Z) with ZMSK, a clear of that block to (0, 0, 0, 0) under TEST
+0x30000, then TEST 0x50000, ALPHA 0x68 FIX 0x80 (Cs + Cd) and COLCLAMP 0.
+The spheres (`renderViewCoordZSphere`, eight bands of 34 vertices, split
+at the near plane) are strips whose triangles `drawHT` sorts by their
+screen winding: one side drawn with the colour, the other with its two's
+complement (`-col`, alpha 0x80). Z-tested (GEQUAL) against the scene and
+never writing Z, a face in front of the scene adds its colour and a face
+behind it adds nothing, so each pixel of the block ends at (front - back)
+x colour per sphere, modulo 256: 0 where a sphere lies wholly in front of
+the scene, the colour where the scene cuts it. `darkVolume` nests three
+spheres, the outer one positive (255, 255, 255), the middle one (127, 0,
+98) and the inner one (127, 254, 156) negative, so a pixel inside all three
+ends at (1, 1, 1), between the outer two at (128, 255, 157) and inside only
+the outer at (255, 255, 255); the modular sum is what makes these exact
+(255 + 1 wraps to 0 where a back face also passes). Packet 2 composites
+the block into the scene: FRAME 0x1000040 (SCENE as PSMCT24: alpha kept),
+TEX0 0x664122800 (TBP 0x2800, TBW 8, PSMCT24, 512 x 512, TCC, MODULATE)
+with TEXA 0x80/AEM (A = 0x80 where the count is not 0), TEX1 linear, RGBAQ
+(128, 128, 128, 80), ALPHA 0x44: SCENE moves 80/128 of the way to the count
+colour inside the volume. Then ZBUF write on, TEST 0x50000. `sonic` (the
+game-over shock ring) does the same with two spheres, then adds the count
+times (0, 0, 0) with ALPHA 0x68, which leaves SCENE's RGB and writes its
+alpha (0x80 inside the ring, 0 elsewhere in the inset rectangle), then
+draws SCENE onto itself zoomed (UV 31.5 + 0.939 x) times (245, 255, 245)
+under TEST 0x33001 (alpha test NEVER, AFAIL RGB_ONLY: RGB written, alpha
+and Z not) with LERP As: the lens inside the ring.
+
+**darkVolume.c's host facts** (`dvHostBlockBegin`, `dvHostSceneZ`,
+`dvHostBlockEnd`):
+
+1. FBP 0x140 at the scene's size is a scene-sized VRAM block, not the
+   decoder's AA0 (256 x 256): `rd_BlockTarget(0x2800, W, H, 0)` (R5b,
+   section 16) aliased over `rd_GsNamedBlock(0x2800, W, H)` for the
+   effect's packets, so the clear, the spheres and the TEX0 read of 0x2800
+   all use one per-frame target.
+2. ZBUF ZBP 0xC0 is SCENE's Z buffer: after packet 1 the block is bound
+   with SCENE's depth (`rd_SetTarget(block, SCENE)`); the decoder binds
+   depth only with SCENE.
+3. The PSMCT24 FBMSK ends with the composite (`rd_ColorMask(0)`), open
+   item 3.
+
+**COLCLAMP 0 (rd_replay.c `doScreenWrap`, `raw_wrap.hlsl`).** A screen-prim
+command under COLCLAMP 0 with ABE and an equation that adds or subtracts a
+term of the source alone (ALPHA modes 0, 5: Cs F + Cd; 1, 6: Cd - Cs F)
+ends at Cd plus the sum of its fragments' terms modulo 256, in any order.
+rd draws it in two passes instead of the clamping hardware blend:
+`wrap_acc_ps` into an RGBA16F accumulator of the target's size (cleared to
+0, the bound depth target and the state's Z test and Z write, blend ONE +
+ONE on colour, ONE/ZERO on alpha), each fragment adding its GS term
+(Cs F) >> 7 reduced to -128..127 and writing alpha As + 1; then
+`wrap_resolve_ps` over the target: (Cd + acc) mod 256 per channel, A from
+the accumulator where a fragment landed, Cd from a copy of the target taken
+before the command, under the state's colour mask and scissor. Exact while
+no pixel takes more than 16 fragments of one command (|sum| <= 2048, where
+half floats hold every integer); darkVolume's take at most 9. DATE, PABE
+and an AFAIL split are not modelled (logged once, drawn by the clamping
+path; no game state has them with COLCLAMP 0). The pipelines are a private
+cache in rd_replay.c (`RD_WRAP_PIPES` 16, `rd__WrapPipelineCount`), outside
+`rd__GetPipeline`'s cache and the enumeration; darkVolume reaches two.
+Shadow.c, the other COLCLAMP 0 user, keeps its stencil path (section 14).
+
+**ALPHA mode 3.** `gif_SetAlpha`'s table entry 3 is {1, 2, 2, 0}: A Cd, B
+0, C FIX, D Cs, Cd FIX + Cs, register **0x29**. Sections 2 and 3, the
+decoder (`GifPacket.c` `gsAlphaRegs`) and `rd__AlphaRegister`
+(`rd_pipeline.c`) had 0x61, which is (Cd - Cs) FIX + Cd; the decoder
+therefore ignored mode 3 ("ALPHA_1 equation outside the twelve modes"),
+and blend_int/fx_sprite would have evaluated the wrong equation for it.
+Fixed in all three (a constant each). The other eleven registers match
+the table. Mode 3 is reachable only through lightning's `c`.
+
+**lightning.c's blend mode.** `c` is the BGA lightning record's short at
++0x2E (`BgAnimation.c` `BgaLightningDef`). `gif_SetAlpha` indexes its
+twelve-entry table with it, past the end on the PS2 for c outside 0..11;
+the host path passes mode 0 there and reports the value once
+(`lightningHostMode`). Every mode in range reaches its pipeline through the
+decoder (section 3's paths; `rd_raw` records all twelve registers); modes 8
+to 11 keep section 3's limits (Ad at half strength, mode 11 leaves Cd).
+
+**Measured** (`rd_raw` on lavapipe, validation and synchronisation
+validation on, no errors):
+
+| check | result |
+|---|---|
+| packets hand-decoded (particle SET_GSREGISTER, lightning DIRECT REGLIST, dark packet 1's 16 A+D pairs) | as in the test's header comment |
+| lightning's recorded triangles vs the packet's strips | every vertex (X, Y, Z, S, T, Q, RGBA) identical |
+| c = -1..12 | the table's register for 0..11, mode 0 for -1 and 12 |
+| dark count (the block) vs a CPU raster of the recorded spheres (12.4 edge functions, flat colour, Z GEQUAL against the known scene depth, sum mod 256; 816 pixels on an edge or a depth tie masked) | 0 of 58,833 written pixels differ; 4,617 at (255, 255, 255), 7,913 at (128, 255, 157), 14,021 at (1, 1, 1) |
+| dark composite vs the GS LERP of the bilinear count with TEXA after filtering (as rd samples RGB24) | max 1 LSB; SCENE alpha untouched everywhere (PSMCT24) |
+| the same vs the GS order (TEXA before filtering) | max 52 on 504 edge pixels (open item 1) |
+| sonic: SCENE alpha after the frame vs what packet 2 wrote | 0 of 258,708 differ (the RGB_ONLY pass and the PSMCT24 composite keep it) |
+| sonic: the RGB_ONLY zoom pass where the sampled texels are uniform | 0 LSB on 255,819 pixels (3,997 inside the ring) |
+| lightning c = 4 (LERP As), c = 5 (Cs As + Cd) vs a CPU raster with the GS blend | 0 LSB on 10,360 pixels each |
+| particles (alphaMode 1, 2; enemy.c's mode 4) vs vu1_ref's sprites rasterised with the GS blend | 0, 0, 2 LSB (the 2 on a pixel of two layers; tolerance 1 a layer) |
+| lines: flat 0x142, Gouraud 0x18A, the segment pair | every pixel drawn exact; one pixel per unit of the major axis |
+
+**Game run** (R5c: the window build `build-host/r5c-linux-x64-win` on
+lavapipe, `SDL_VIDEODRIVER=offscreen`, `pad-boot.txt`, `ticks=4000`,
+`dump_every=50`, `timeout 600`: exit 0 after 418 s, every process gone).
+The stages ran 1 (boot, title), 41 at tick 623, 42, 43, 45 at tick 852, 40,
+3 at tick 996 to the end. `logs/ico-pc.log` shows the first particle effect
+drawn at the title (`alphaMode` 1) and the first lightning bolt in stage 45
+(the opening, mode 0); no `mc:`, `gif:` or `rd:` warning, nothing
+undecoded, no dark volume (no `darkVolume:` line: the game-over effect and
+the queen's ball are not reached by tick 4000). All 79 dumps replay through
+`rd_replay_tool` with no command skipped. Frames 450 to 600 (the title)
+hold three to six `prim_DispParticle` batches in list 6 under the effect's
+own ALPHA (mode 5, Cs As + Cd, from the SET_GSREGISTER packet now read);
+the title shows them as three soft white additive clouds in front of the
+castle's arches, the same image R4c's frame 550 gives (its dump, recorded
+before R5c, drew the batches in the ALPHA that leaked from earlier draws,
+which was also additive there). Whether the PS2 title shows these clouds
+this bright is not settled without a capture. Stage 45 lasted 64 ticks and
+no dump fell on a frame with a bolt (no list-6 screen prims in any dump),
+so the lightning has no PNG; the bolt path is covered by `rd_raw` only.
+Stage 3 (frames 1150 onwards; frame 2000: the boy standing in the capsule room, textured and lit) draws no raw-builder effect.
+
+**rd.h changes (R5c).** None. Internal (`rd_internal.h`): `RD_FS_WRAP_ACC`,
+`RD_FS_WRAP_RESOLVE`, `RD_ONCE_WRAP`, `rd__WrapApplies`,
+`rd__WrapShutdown`, `rd__WrapPipelineCount`, `RD_WRAP_PIPES`. Shaders:
+`wrap_acc_ps`, `wrap_resolve_ps`. The dump format is unchanged (the wrap is
+a replay decision from the state block).
+
+Open items:
+
+1. The composite samples the count's RGB24 view bilinearly and expands
+   TEXA after filtering (section 14, open item 2): at the volume's edges
+   the alpha, so the LERP weight, differs from the GS's (up to 52 LSB on a
+   one-pixel rim). The decoder's sprites have no exact path; R5a's
+   `fx_sprite_ps` model would make it exact if the decoder routed such
+   sprites there.
+2. Lightning's strips carry STQ with Q = 1/w; screen prims divide per
+   vertex (`RD_ONCE_STQ`), so a bolt receding in depth maps its texture
+   affinely where the GS is perspective-correct. The test's bolt is flat in
+   depth. Fix: pass Q to `sprite_vs` and divide per pixel.
+3. The PSMCT24 frame mask ends at darkVolume's composite: rd's FRAME
+   equivalents (`rd_FrameHead`, `rd_Post`) record no FBMSK, so a mask left
+   in the state would leak into the anti-alias pass, lists 11 and 12 and
+   the next frame. On the PS2 it holds until the next FRAME write (the
+   anti-alias pass's), so list-10 draws between the dark volume and the
+   anti-alias pass write SCENE's alpha on rd and not on the PS2. Recording
+   FBMSK 0 in `rd_FrameHead` and the post kinds would let the decoder keep
+   the GS's scope.
+4. The plan's wave-6 gate ("zero `gif_SetGsReg` uses") and this package's
+   route disagree: darkVolume.c's spheres and lineManager.c still write
+   `gif_SetGsReg`, which the decoder in GifPacket.c decodes; wave 6 either
+   keeps `gif_SetGsReg` as the decoder's entry or converts these two.
+5. PRIM.AA1 on lineManager's 0x189/0x18A lines (and the particles') is not
+   reproduced.
+6. The texture resolver is asked first for darkVolume's TEX0 at 0x2800: a
+   game texture noted in list 10 with the identical TEX0 (TBW 8, PSMCT24,
+   512 x 512 at 0x2800) would be bound instead of the block; none is known.
+7. The wrap path's limits (above): more than 16 fragments of one command on
+   a pixel, DATE, PABE, AFAIL splits.
+8. The game run reached neither the dark volume nor a dumped lightning
+   frame (above): a run into the queen's stage (`[dev] start_stage` 37) or
+   a game over, and one dumping every frame of stage 45, would show both.

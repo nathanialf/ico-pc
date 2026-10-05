@@ -16,7 +16,9 @@
  *   RDC_MESH, RDC_SKINNED, RDC_GRID, RDC_PARTICLES
  *                    the VU1 program shaders (wave 3, R3ab; doVu below)
  *   RDC_SHADOW_RESET, RDC_SHADOW_STRIP, RDC_SHADOW_RESOLVE
- *   RDC_POST_STUB    of kind RD_POST_FOG (wave 4, R4c): doFog
+ *   RDC_POST_STUB    of kind RD_POST_FOG (wave 4, R4c): doFog; of kinds
+ *                    RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR (wave 5, R5a):
+ *                    doBlurSprite, staticBlur.c's sprites through fx_sprite_ps
  *                    the shadow count on the stencil (wave 4, R4b;
  *                    rd_shadow.c, doShadow* below)
  *   later waves      rd__NotImplemented
@@ -46,13 +48,15 @@
 #include "shaders_gen.h"
 
 static const char *const s_vsNames[RD_VS_COUNT] = {
-    "sprite_ui_vs",     "sprite_world_vs", "blit_vs",        "blend_int_vs",    "vu_prelit_vs",
-    "vu_lit_vs",        "vu_lit_spec_vs",  "vu_reflect_vs",  "vu_skin_vs",      "vu_skin_spec_vs",
-    "vu_skin_debug_vs", "vu_grid_vs",      "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs"};
+    "sprite_ui_vs",   "sprite_world_vs", "blit_vs",          "blend_int_vs",
+    "vu_prelit_vs",   "vu_lit_vs",       "vu_lit_spec_vs",   "vu_reflect_vs",
+    "vu_skin_vs",     "vu_skin_spec_vs", "vu_skin_debug_vs", "vu_grid_vs",
+    "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {
-    "sprite_ps",       "blit_ps", "blend_int_ps", "date_snap_ps",
-    "camera_probe_ps", "vu_ps",   "fog_lut_ps"};
+    "sprite_ps",       "blit_ps",        "blend_int_ps", "date_snap_ps",
+    "camera_probe_ps", "vu_ps",          "fog_lut_ps",   "fx_sprite_ps" /* wave 5 (R5a) */,
+    "wrap_acc_ps",     "wrap_resolve_ps" /* wave 5 (R5c) */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -162,7 +166,8 @@ void rd__GpuShutdown(void)
         }
     }
     rd__PipelineCacheClear();
-    rd__FogShutdown(); /* wave 4 (R4c) */
+    rd__FogShutdown();  /* wave 4 (R4c) */
+    rd__WrapShutdown(); /* wave 5 (R5c) */
     if (g_rd.dummy.id) {
         rhi_DestroyTexture(g_rd.dummy);
     }
@@ -770,9 +775,15 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     cb->tex[3] = 1.0f / (float)ds->th;
 }
 
+static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
+
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
+    if (rd__WrapApplies(&r->st)) {
+        doScreenWrap(r, f, c); /* wave 5 (R5c): COLCLAMP 0 */
+        return;
+    }
     if (!prepareDraw(r, &ds)) {
         return;
     }
@@ -818,6 +829,310 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
             r->writeSerial++;
         }
     }
+}
+
+/* ------------------------------------- COLCLAMP 0 wrap (wave 5, R5c)
+ * A screen-prim command whose blend result the GS masks to 8 bits instead of
+ * clamping it (COLCLAMP 0) under an equation that adds or subtracts a term of
+ * the source alone, Cs * F + Cd or Cd - Cs * F (ALPHA modes 0, 5 and 1, 6):
+ * the result is Cd plus the sum of the fragments' terms, modulo 256, whatever
+ * their order.  darkVolume.c's count buffer is the user (RENDER_API.md
+ * section 18; Shadow.c's count has its own stencil path).  Two passes:
+ *
+ *   1. the prims through the state's vertex shader and wrap_acc_ps into an
+ *      RGBA16F accumulator of the target's size, cleared to 0, with the bound
+ *      depth target (Z test and Z write as the state has them): colour
+ *      ONE + ONE of each term reduced to -128..127, alpha ONE / ZERO of
+ *      As + 1 (the last fragment's As, as the GS stores it);
+ *   2. wrap_resolve_ps over the target: (Cd + acc) mod 256, A from the
+ *      accumulator where written, Cd read from a copy taken before pass 1,
+ *      under the state's colour mask and scissor.
+ *
+ * Exact while no pixel takes more than 16 fragments of one command (|sum| <=
+ * 2048, where half floats hold every integer).  Not modelled (logged once,
+ * drawn by the clamping path): DATE, PABE, an alpha test with an AFAIL
+ * other than KEEP, a non-RGBA8 target. */
+
+static RhiTexture s_wrapAcc;
+
+static RhiState s_wrapAccState;
+
+static uint32_t s_wrapW, s_wrapH;
+
+typedef struct WrapPipe {
+    uint32_t key;
+    RhiPipeline pipe;
+} WrapPipe;
+
+static WrapPipe s_wrapPipes[RD_WRAP_PIPES];
+
+static uint32_t s_wrapPipeCount;
+
+static int wrapEquation(const RdStateBlock *s)
+{
+    /* +1 add, -1 subtract, 0 none */
+    if (!s->ds.abe || s->ds.colclamp) {
+        return 0;
+    }
+    switch (s->ds.blend) {
+    case RD_BLEND_CS_FIX_ADD_CD:
+    case RD_BLEND_CS_AS_ADD_CD:
+        return 1;
+    case RD_BLEND_CD_SUB_CS_FIX:
+    case RD_BLEND_CD_SUB_CS_AS:
+        return -1;
+    default:
+        return 0;
+    }
+}
+
+bool rd__WrapApplies(const RdStateBlock *s)
+{
+    if (wrapEquation(s) == 0) {
+        return false;
+    }
+    const int ate = s->ds.test.ate && s->ds.test.atst != RD_ATST_ALWAYS;
+    if (s->ds.test.date != RD_DATE_OFF || s->ds.pabe ||
+        (ate && s->ds.test.afail != RD_AFAIL_KEEP)) {
+        rd__LogOnce(RD_ONCE_WRAP, "COLCLAMP 0 draw with DATE, PABE or an AFAIL split: clamped");
+        return false;
+    }
+    return true;
+}
+
+uint32_t rd__WrapPipelineCount(void)
+{
+    return s_wrapPipeCount;
+}
+
+void rd__WrapShutdown(void)
+{
+    for (uint32_t i = 0; i < s_wrapPipeCount; i++) {
+        rhi_DestroyPipeline(s_wrapPipes[i].pipe);
+    }
+    s_wrapPipeCount = 0;
+    if (s_wrapAcc.id) {
+        rhi_DestroyTexture(s_wrapAcc);
+    }
+    s_wrapAcc = (RhiTexture){0};
+    s_wrapW = s_wrapH = 0;
+}
+
+/* The accumulation pipeline (resolve = 0: vs, prim, depth format, Z test, Z
+ * write) or the resolve pipeline (resolve = 1: colour format, colour mask). */
+static RhiPipeline wrapPipeline(int resolve, uint8_t vs, uint8_t prim, RhiFormat fmt, uint8_t ztst,
+                                uint8_t zwrite, uint8_t mask)
+{
+    const uint32_t key = (uint32_t)resolve | (uint32_t)vs << 1 | (uint32_t)prim << 6 |
+                         (uint32_t)fmt << 10 | (uint32_t)ztst << 16 | (uint32_t)zwrite << 20 |
+                         (uint32_t)mask << 24;
+    for (uint32_t i = 0; i < s_wrapPipeCount; i++) {
+        if (s_wrapPipes[i].key == key) {
+            return s_wrapPipes[i].pipe;
+        }
+    }
+    if (s_wrapPipeCount == RD_WRAP_PIPES) {
+        rd__LogOnce(RD_ONCE_WRAP, "COLCLAMP 0 pipelines past RD_WRAP_PIPES: clamped");
+        return (RhiPipeline){0};
+    }
+    static const RhiVertexBinding vb = {0, sizeof(IcoSpriteVertex), false};
+    static const RhiVertexAttr va[4] = {
+        {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
+        {1, 0, RHI_VTX_U32x1, offsetof(IcoSpriteVertex, z)},
+        {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
+        {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
+    };
+    RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex};
+    RhiPipelineDesc d;
+    memset(&d, 0, sizeof(d));
+    d.layouts = layouts;
+    d.layoutCount = 3;
+    d.cullNone = true;
+    d.colorCount = 1;
+    d.blend[0].srcColor = RHI_BF_ONE;
+    d.blend[0].dstColor = RHI_BF_ZERO;
+    d.blend[0].colorOp = RHI_BO_ADD;
+    d.blend[0].srcAlpha = RHI_BF_ONE;
+    d.blend[0].dstAlpha = RHI_BF_ZERO;
+    d.blend[0].alphaOp = RHI_BO_ADD;
+    d.topology = RHI_TOPO_TRIANGLE_LIST;
+    if (resolve) {
+        d.vertex = g_rd.vs[RD_VS_BLIT];
+        d.fragment = g_rd.fs[RD_FS_WRAP_RESOLVE];
+        d.blend[0].writeMask = mask;
+        d.colorFormats[0] = fmt;
+        d.debugName = "rd wrap resolve";
+    } else {
+        d.vertex = g_rd.vs[vs];
+        d.fragment = g_rd.fs[RD_FS_WRAP_ACC];
+        d.vertexBindings = &vb;
+        d.vertexBindingCount = 1;
+        d.vertexAttrs = va;
+        d.vertexAttrCount = 4;
+        d.topology = prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
+        d.blend[0].enable = true;
+        d.blend[0].dstColor = RHI_BF_ONE;
+        d.blend[0].writeMask = 0xF;
+        d.colorFormats[0] = RHI_FMT_RGBA16F;
+        d.depthFormat = fmt;
+        if (fmt != RHI_FMT_UNKNOWN) {
+            d.depthStencil.depthTest = true;
+            d.depthStencil.depthWrite = zwrite == RD_ZWRITE_ON;
+            d.depthStencil.depthCompare = ztst == RD_ZTST_NEVER     ? RHI_CMP_NEVER
+                                          : ztst == RD_ZTST_GEQUAL  ? RHI_CMP_LEQUAL
+                                          : ztst == RD_ZTST_GREATER ? RHI_CMP_LESS
+                                                                    : RHI_CMP_ALWAYS;
+        }
+        d.debugName = "rd wrap accumulate";
+    }
+    RhiPipeline p = rhi_CreatePipeline(&d);
+    if (!p.id) {
+        rd__Log("COLCLAMP 0 pipeline creation failed (resolve %d)", resolve);
+        return p;
+    }
+    s_wrapPipes[s_wrapPipeCount].key = key;
+    s_wrapPipes[s_wrapPipeCount].pipe = p;
+    s_wrapPipeCount++;
+    g_rd.stats.pipelineCreates++;
+    return p;
+}
+
+static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    DrawSetup ds;
+    if (!prepareDraw(r, &ds)) {
+        return;
+    }
+    RdTargetRec *tc = ds.tc;
+    RdTargetRec *td = ds.tdId ? rd__TargetRec(ds.tdId) : NULL;
+    if (tc->format != RHI_FMT_RGBA8_UNORM || (td && (td->w != tc->w || td->h != tc->h))) {
+        rd__LogOnce(RD_ONCE_WRAP, "COLCLAMP 0 draw on a non-RGBA8 target or a depth of another "
+                                  "size: not drawn");
+        return;
+    }
+    const uint32_t n = c->u[1];
+    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    const uint64_t vOff = rd__RingAlloc((uint64_t)n * 6 * sizeof(IcoSpriteVertex), 16);
+    if (vOff == ~0ull) {
+        return;
+    }
+    uint8_t topo;
+    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    const uint32_t nv = expand(v, n, c->b[0], c->b[2], (float)ds.tw, (float)ds.th, r->st.uvOffset,
+                               out, &topo, r->st.gouraud != 0);
+    if (nv == 0) {
+        return;
+    }
+    /* the planner's flags, FIX and alpha test for this state (COLCLAMP set on
+     * the copy: the planner logs COLCLAMP 0 as clamped, which this path is
+     * not) */
+    RdStateBlock st = r->st;
+    st.ds.colclamp = 1;
+    RdDrawPass dp[2];
+    if (rd__PlanScreenDraw(&st, topo, c->b[1], tc->format, ds.depthFmt, dp) != 1) {
+        return;
+    }
+    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
+    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
+    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
+    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
+    if (x1 < x0 || y1 < y0) {
+        return;
+    }
+    const RhiRect sc = {x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
+    RhiPipeline pa = wrapPipeline(0, dp[0].key.vs, topo, ds.depthFmt, dp[0].key.gs.ztst,
+                                  dp[0].key.gs.zwrite, 0xF);
+    RhiPipeline pr = wrapPipeline(1, 0, 0, tc->format, 0, 0, dp[0].key.gs.colorMask);
+    if (!pa.id || !pr.id) {
+        return;
+    }
+    if (!s_wrapAcc.id || s_wrapW != tc->w || s_wrapH != tc->h) {
+        if (s_wrapAcc.id) {
+            endPass(r);
+            rhi_DestroyTexture(s_wrapAcc);
+        }
+        s_wrapAcc = rhi_CreateTexture(&(RhiTextureDesc){tc->w, tc->h, 1, RHI_FMT_RGBA16F,
+                                                        RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                        "rd wrap accumulator"});
+        s_wrapAccState = RHI_STATE_UNDEFINED;
+        s_wrapW = tc->w;
+        s_wrapH = tc->h;
+        if (!s_wrapAcc.id) {
+            return;
+        }
+    }
+    /* the destination before the command */
+    endPass(r);
+    if (!tc->snap.id) {
+        tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
+            tc->w, tc->h, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+        tc->snapState = RHI_STATE_UNDEFINED;
+    }
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->w, tc->h}, tc->snap, 0, 0);
+    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
+    if (ds.textured && ds.tex.id == tc->color.id) {
+        ds.tex = tc->snap; /* the GS reads the buffer it draws into */
+    }
+
+    /* 1. the terms into the accumulator */
+    rd__Transition(s_cl, s_wrapAcc, &s_wrapAccState, RHI_STATE_RENDER_TARGET);
+    if (td) {
+        rd__Transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
+    }
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = s_wrapAcc;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.colorCount = 1;
+    if (td) {
+        p.depth.texture = td->depth;
+        p.depth.depthLoad = RHI_LOAD_LOAD;
+        p.depth.stencilLoad = RHI_LOAD_LOAD;
+    }
+    p.width = tc->w;
+    p.height = tc->h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    const RhiViewport vp = {0.0f, 0.0f, (float)tc->w, (float)tc->h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(s_cl, &vp);
+    rhi_CmdSetScissor(s_cl, &sc);
+    float ox = 2048.0f - (float)(r->st.gsW >> 1);
+    float oy = 2048.0f - (float)(r->st.gsH >> 1);
+    if (r->st.useOffset & RD_TARGET_HALF_Y) {
+        oy += 0.5f;
+    }
+    IcoDrawCB cb;
+    fillDrawCB(r, &dp[0], &ds, &cb);
+    cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
+    cb.param[0] = (float)wrapEquation(&r->st);
+    RhiSampler smp = rd__Sampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                 (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t);
+    rhi_CmdSetPipeline(s_cl, pa);
+    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroupZ(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId)));
+    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rhi_CmdSetBindGroup(s_cl, 2, rd__TexGroup(ds.tex, smp));
+    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    rhi_CmdDraw(s_cl, nv, 0, 1);
+    rhi_CmdEndRenderPass(s_cl);
+    rd__Transition(s_cl, s_wrapAcc, &s_wrapAccState, RHI_STATE_SHADER_READ);
+
+    /* 2. (Cd + acc) mod 256 into the target */
+    beginPass(r, tc, NULL, r->st.color, 0, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
+    rhi_CmdSetScissor(s_cl, &sc);
+    IcoDrawCB rb;
+    memset(&rb, 0, sizeof(rb));
+    rhi_CmdSetPipeline(s_cl, pr);
+    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f));
+    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&rb));
+    rhi_CmdSetBindGroup(s_cl, 2,
+                        rd__TexGroupDate(s_wrapAcc,
+                                         rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                     RD_WRAP_CLAMP, RD_WRAP_CLAMP),
+                                         tc->snap));
+    rhi_CmdDraw(s_cl, 3, 0, 1);
+    endPass(r);
+    r->writeSerial++;
 }
 
 /* --------------------------------------------------- VU draws (wave 3)
@@ -1524,6 +1839,177 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     (void)topo;
 }
 
+/* ------------------------------------------- staticBlur (wave 5, R5a)
+ * RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR: one GS sprite through fx_rect_vs
+ * and fx_sprite_ps (rd_blur.c says what is modelled).  The state block's
+ * colour target is drawn into; its depth target is bound when the Z test or
+ * Z write needs it and has the colour target's size; the texture is the
+ * state's (a target view or an image), read with Load.  When the sprite
+ * blends, tests DATE or keeps the destination alpha, or samples the target
+ * it draws into, the target is first copied into its snapshot, which the
+ * shader reads as the destination (t2) and, sampling itself, as the
+ * texture: the GS reads both before it writes. */
+static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdPostRec p;
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    RdTargetRec *tc = rd__TargetRec(r->st.color);
+    if (!tc || !tc->color.id || tc->format != RHI_FMT_RGBA8_UNORM) {
+        rd__LogOnce(RD_ONCE_BLUR, "staticBlur sprite without an RGBA8 colour target: skipped");
+        return;
+    }
+    const RdDrawState *d = &r->st.ds;
+    RdTargetRec *td = rd__TargetRec(r->st.depth);
+    if (td && (!td->withDepth || !td->depth.id || td->w != tc->w || td->h != tc->h)) {
+        td = NULL;
+    }
+    int useDepth = 0;
+    const RdPipeKeyInt key =
+        rd__BlurKey(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth);
+    if (d->test.ate && d->test.atst != RD_ATST_ALWAYS && d->test.afail == RD_AFAIL_FB_ONLY &&
+        useDepth && d->zwrite == RD_ZWRITE_ON) {
+        rd__LogOnce(RD_ONCE_BLUR, "staticBlur sprite with AFAIL FB_ONLY and Z write: failing "
+                                  "fragments write Z");
+    }
+
+    /* the texture */
+    RdTargetRec *src = NULL;
+    RhiTexture srcTex = g_rd.dummy;
+    uint32_t tw = 1, th = 1, tfmt = 0;
+    int textured = 0;
+    if (d->texEnabled) {
+        RdTexRec *t = rd__TexRec(r->st.tex);
+        if (t && t->kind == RD_TEXKIND_IMAGE && t->rhi.id && t->state == RHI_STATE_SHADER_READ) {
+            srcTex = t->rhi;
+            tw = t->w;
+            th = t->h;
+            tfmt = t->src;
+            textured = 1;
+        } else if (t && t->kind == RD_TEXKIND_TARGET && t->view != RD_VIEW_DEPTH) {
+            src = rd__TargetRec(t->target);
+            if (src && src->color.id && src->format == RHI_FMT_RGBA8_UNORM) {
+                tw = src->w;
+                th = src->h;
+                tfmt = t->src;
+                textured = 1;
+            } else {
+                src = NULL;
+            }
+        }
+    }
+    const int dstRead = (d->abe && !(r->st.ds.blend == RD_BLEND_COUNT)) ||
+                        d->test.date != RD_DATE_OFF ||
+                        (d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY);
+    const int selfSample = src == tc;
+    if (dstRead || selfSample) {
+        endPass(r);
+        if (!tc->snap.id) {
+            tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
+                tc->w, tc->h, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+            tc->snapState = RHI_STATE_UNDEFINED;
+        }
+        if (!tc->snap.id) {
+            return;
+        }
+        rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
+        rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
+        rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->w, tc->h}, tc->snap, 0, 0);
+        rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
+    }
+    if (src) {
+        if (selfSample) {
+            srcTex = tc->snap;
+        } else {
+            if (src->colorState != RHI_STATE_SHADER_READ) {
+                endPass(r);
+                rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_SHADER_READ);
+            }
+            srcTex = src->color;
+        }
+    }
+
+    DrawSetup ds;
+    memset(&ds, 0, sizeof(ds));
+    ds.tc = tc;
+    ds.tdId = useDepth ? r->st.depth : 0;
+    ds.depthFmt = useDepth ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
+    ds.tex = srcTex;
+    ds.dateTex = dstRead ? tc->snap : g_rd.dummy;
+    ds.tw = tw;
+    ds.th = th;
+    ds.textured = textured;
+    const RhiBindGroup g2 = bindDraw(r, &ds);
+    if (!g2.id) {
+        return;
+    }
+    RhiPipeline pipe = rd__GetPipeline(&key);
+    if (!pipe.id) {
+        return;
+    }
+
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    uint32_t fl = 0;
+    if (textured) {
+        fl |= RD_FXF_TEXTURED | ((p.lines & 3u) << RD_FXF_TFX_SHIFT);
+        if (d->texFn == RD_TEXFN_DECAL && (p.lines & 3u) == 0) {
+            fl |= 1u << RD_FXF_TFX_SHIFT; /* a DECAL bound through rd_Texture */
+        }
+        if (d->tcc == RD_TCC_RGBA) {
+            fl |= RD_FXF_TCC;
+        }
+        if (d->magFilter == RD_FILTER_LINEAR) {
+            fl |= RD_FXF_LINEAR;
+        }
+        if (d->wrap.s == RD_WRAP_CLAMP) {
+            fl |= RD_FXF_CLAMP_S;
+        }
+        if (d->wrap.t == RD_WRAP_CLAMP) {
+            fl |= RD_FXF_CLAMP_T;
+        }
+    }
+    if (d->abe) {
+        fl |= RD_FXF_ABE;
+    }
+    if (d->pabe) {
+        fl |= RD_FXF_PABE;
+    }
+    if (d->fba) {
+        fl |= RD_FXF_FBA;
+    }
+    if (d->test.date != RD_DATE_OFF) {
+        fl |= RD_FXF_DATE | (d->test.date == RD_DATE_DEST_ALPHA_1 ? RD_FXF_DATM : 0u);
+    }
+    if (dstRead) {
+        fl |= RD_FXF_DST;
+    }
+    memcpy(cb.col, (const uint32_t[4]){p.rgba[0], p.rgba[1], p.rgba[2], p.rgba[3]}, sizeof(cb.col));
+    cb.mode[0] = fl;
+    cb.mode[1] = d->texa | (tfmt << 8);
+    cb.mode[2] =
+        d->test.atst | ((uint32_t)(d->test.ate != 0) << 8) | ((uint32_t)d->test.afail << 16);
+    cb.mode[3] = d->test.aref;
+    cb.blend[0] = rd__AlphaRegister(d->blend < RD_BLEND_COUNT ? d->blend : RD_BLEND_LERP_AS);
+    cb.blend[1] = rd__BlurFeedbackFix(d->blend, d->blendFix, p.scalar[2]);
+    cb.blend[2] = d->colclamp;
+    cb.blend[3] = p.z;
+    memcpy(cb.uvRect, p.uv, sizeof(cb.uvRect));
+    cb.tex[0] = p.scalar[0];
+    cb.tex[1] = p.scalar[1];
+    cb.tex[2] = (float)tw;
+    cb.tex[3] = (float)th;
+    memcpy(cb.param, p.rect, sizeof(cb.param));
+    rhi_CmdSetPipeline(s_cl, pipe);
+    rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
+    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rhi_CmdSetBindGroup(s_cl, 2, g2);
+    rhi_CmdDraw(s_cl, 3, 0, 1);
+    g_rd.stats.draws++;
+    if (key.gs.colorMask & 8) {
+        r->writeSerial++;
+    }
+}
+
 /* ----------------------------------------------------------------- frame */
 
 static uint64_t estimateRing(const RdFrame *f, int keep)
@@ -1718,6 +2204,10 @@ bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
             case RDC_POST_STUB:
                 if (c->b[0] == RD_POST_FOG) {
                     doFog(&r, f, c); /* wave 4 (R4c) */
+                    break;
+                }
+                if (rd__IsBlurKind(c->b[0])) {
+                    doBlurSprite(&r, f, c); /* wave 5 (R5a) */
                     break;
                 }
                 endPass(&r);

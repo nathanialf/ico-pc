@@ -15,6 +15,13 @@
 #include "windField.h"
 #include "particleEffect.h"
 
+#ifdef ICO_RD
+
+#include <stdio.h>
+#include "MicroCode.h"
+
+#endif
+
 static ICO_WORD setParticleEffect(struct PEGeo *self, struct PEPackage *pkg,
                                   struct IosMemPart *part);
 
@@ -450,6 +457,23 @@ static void dispParticleEffect(PEGeo *geo)
     PacketBufferStruct.ptr.c = q + 0x10;
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    /* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18): the
+       packet is a VU1 SET_GSREGISTER packet (PABE 0 and the effect's ALPHA,
+       mode 5, 6 or 4 by alphaMode); mc_HostDma hands its A+D pairs to the GS
+       register decoder ahead of the batch prim_DispParticle chains (already
+       read by Primitive.c's host path, R3ab) */
+    mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+    {
+        static int reported;
+
+        if (!reported) {
+            reported = 1;
+            fprintf(stderr, "particleEffect: first effect drawn (alphaMode %u; reported once)\n",
+                    geo->pkg->alphaMode);
+        }
+    }
+#endif
     prim_DispParticle(geo->prim, matrixptr + 0x100);
 }
 

@@ -171,14 +171,23 @@ typedef enum RdTargetId {
     RD_TARGET_SHADOW0, /* FBP 0x1C2 / TBP 0x3840: blur level 1, 256 x 256 */
     RD_TARGET_SHADOW1, /* FBP 0x1E2 / TBP 0x3C40: blur level 2, 128 x 128 */
     RD_TARGET_SHADOW2, /* FBP 0x1EA / TBP 0x3D40: blur level 3, 64 x 64 */
-    RD_TARGET_WORK0,   /* TBP 0x2800: 256 x 128 */
-    RD_TARGET_WORK1,   /* TBP 0x2C00: 256 x 256 */
-    RD_TARGET_WORK2,   /* TBP 0x3000 */
-    RD_TARGET_WORK3,
+    /* Wave 5 (R5a): staticBlur.c's work buffers after FullScreenEffectBefore
+     * (workBase 0x2800, 0x2A00, 0x2E00, 0x3000; RENDER_API.md section 17).
+     * GifPacket.c's decoder still maps FBP 0x160 / TBP 0x2C00 to WORK1 and
+     * FBP 0x180 / TBP 0x3000 to WORK2, from wave 2; staticBlur.c no longer
+     * goes through it. */
+    RD_TARGET_WORK0,         /* TBP 0x2800 TBW 4: 256 x 128 */
+    RD_TARGET_WORK1,         /* TBP 0x2A00 TBW 4: 256 x 256 (256 x 128 is its top half) */
+    RD_TARGET_WORK2,         /* TBP 0x2E00 TBW 8: scene-sized flare mask, drawn with SCENE's Z */
+    RD_TARGET_WORK3,         /* TBP 0x3000 TBW 4: 256 x 128 eye blur / flare result */
     RD_TARGET_AA0,           /* 256 x 256 anti-alias downsample */
     RD_TARGET_AA1,           /* 128 x 128 */
     RD_TARGET_FEED128,       /* TBP 0x3F00: 128 x 128 aura feedback, persistent across frames */
     RD_TARGET_DATE_SNAPSHOT, /* R8 copy of SCENE alpha MSB, taken when a DATE consumer begins */
+    /* wave 5 (R5a), appended so the older ids stay */
+    RD_TARGET_AURA_WORK, /* TBP 0x2A00 TBW 8: scene-sized aura buffer (list 8), SCENE's Z */
+    RD_TARGET_AURA_TAP,  /* TBP 0x2800 TBW 2: 128 x 128 aura tap buffer */
+    RD_TARGET_WORK2_PAD, /* TBP 0x2E00 + W H / 64: fillWork2's 256 x 64 band (never read) */
     RD_TARGET_COUNT
 } RdTargetId;
 
@@ -279,6 +288,15 @@ typedef enum RdPostKind {
     RD_POST_COMPOSITE_FIX,  /* textured quad with LERP_FIX blend (motion blur, DoF planes, flare) */
     RD_POST_COPY,           /* texture-to-texture copy standing in for gif_MoveImage / VRAM grabs */
     RD_POST_PRESENT_BLIT,   /* internal: DISPLAY -> backbuffer with aspect, scale, mirror */
+    /* Wave 5 (R5a): one GS sprite of staticBlur.c, drawn in the GS integer
+     * arithmetic (see rd_Post below); the kind names the effect it belongs
+     * to, all six replay alike */
+    RD_POST_MOTION_BLUR, /* MotionBlur: DISPLAY as RGB24, H/2 stretched to H, LERP FIX */
+    RD_POST_DOF,         /* depthField: SCENE -> WORK1 -> WORK0, six blur passes, four planes */
+    RD_POST_FLARE,       /* makeFullScreenFlare* / pasteFullScreenFlare, modes 0 and 1 */
+    RD_POST_BLOOM,       /* the same in mode 2 (postEffect 4/5, GLOW: HIGHLIGHT adds Af) */
+    RD_POST_AURA,        /* auraInspireBefore/After: AURA_WORK, AURA_TAP, FEED128 feedback */
+    RD_POST_EYE_BLUR,    /* eyeBlur: WORK0 -> WORK3, the sun ghosts and tint */
     RD_POST_COUNT
 } RdPostKind;
 
@@ -543,6 +561,49 @@ void rd_ShadowReset(void);
 void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key);
 void rd_ShadowResolve(void);
 
+/* ------------------------- render-to-texture surfaces (wave 5, R5b; rd_water.c)
+ * puddle.c, pool.c and queen_barrier_disp.c draw into a VRAM block from
+ * tex_AllocVramAuto right after tex_ResetVramPri, which is always TBP 0x2800
+ * in their lists (4 and 10), and sample it with TEX0 at that block.  The
+ * register decoder (GifPacket.c) maps that block to the named AA0 target,
+ * which has no depth buffer and is 256 x 256 (the queen barrier's block is
+ * 512 x 256).  These calls let the game files bind a per-frame target of the
+ * block's own size in its place (docs/port/RENDER_API.md section 16):
+ *
+ * rd_GsNamedBlock  the named target GifPacket.c's decoder maps a FRAME at
+ *                  block tbp (FBP = tbp / 32) of gsW x gsH to (its
+ *                  gsTargetOfFbp table: 0, 0x800, 0x2800, 0x2840, 0x2C00,
+ *                  0x3000, 0x3F00); {0} when the decoder makes its own
+ *                  temporary target for the block (R3ab)
+ * rd_BlockTarget   the target standing for VRAM block tbp of gsW x gsH in
+ *                  the open frame: created by the first call (rd_TempTarget,
+ *                  with a depth buffer when withDepth), the same target for
+ *                  the same (tbp, gsW, gsH) for the rest of the frame, as
+ *                  the VRAM block is one block whoever draws into it; {0}
+ *                  outside a frame
+ * rd_AliasTarget   from here on, in the current list and the open frame,
+ *                  rd_SetTarget and rd_ClearTarget of `from` and rd_Texture
+ *                  of a view of `from` (rd_TargetTexture) record `to`
+ *                  instead; rd_SetTarget binds `to`'s depth buffer when it
+ *                  was given none or `from`.  to = {0} ends it.  Recording
+ *                  only: the commands name `to`, so replay and dumps see an
+ *                  ordinary target.  At most 4 aliases a list
+ * rd_PushCamera    the camera of the draws recorded from here until the
+ *  rd_PopCamera    matching rd_PopCamera in the current list (puddle.c and
+ *                  pool.c call gsb_SetVSMatrix mid-frame for their
+ *                  reflection views and restore the matrices by copying).
+ *                  The frame camera (rd_SetCamera, gsb_MakeCommonMatrix) is
+ *                  untouched; the scope is kept with the open frame for the
+ *                  Enhanced projection and interpolation (not dumped).  The
+ *                  Original preset draws from the matrices the VU packets
+ *                  carry and does not read it.  Nesting depth 4, 8 scopes a
+ *                  frame */
+RdTarget rd_GsNamedBlock(uint32_t tbp, uint32_t gsW, uint32_t gsH);
+RdTarget rd_BlockTarget(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth);
+void rd_AliasTarget(RdTarget from, RdTarget to);
+void rd_PushCamera(const RdCamera *cam);
+void rd_PopCamera(void);
+
 /* --------------------------------------------------------------- post */
 
 /* gsb_PostEffect family, staticBlur.c, ZFog.c, Shadow.c composites, and
@@ -564,6 +625,34 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  *   rect     the two XYZ2 corners as the GS gets them, 12.4 window
  *            coordinates: x0, y0, x1, y1
  *   uv       the two UVs, 12.4 texels: u0, v0, u1, v1 */
+/* Wave 5 (R5a), RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR (staticBlur.c,
+ * docs/port/RENDER_API.md section 17): one GS sprite, PRIM 0x116 or 0x406
+ * with ABE as gif_SpriteSensitiveOrg sends it, drawn with the state in force
+ * (target, depth, texture, TEX1, CLAMP, TEXA, ALPHA, ABE, PABE, FBA, TEST,
+ * COLCLAMP, ZBUF, scissor: the caller records staticBlur.c's register
+ * writes as rd state first) in the GS integer arithmetic: GS coverage, the
+ * sprite's UV stepped in 12.4, nearest or the GS bilinear on 4-bit
+ * fractions with TEXA applied to each texel before filtering, the texture
+ * function (MODULATE, DECAL, HIGHLIGHT, HIGHLIGHT2), the alpha test, DATE
+ * and the blend on integers against the destination as it was before the
+ * sprite.  Fields:
+ *   rect     the two XYZ2 corners as the GS gets them (12.4): x0, y0, x1, y1
+ *   uv       the two UVs (12.4 texels): u0, v0, u1, v1
+ *   rgba     RGBAQ
+ *   z        the GS Z of the second vertex
+ *   scalar   [0], [1] the TEX0 size 2^TW, 2^TH (CLAMP/REPEAT wrap there);
+ *            [2] the frame-time factor of a feedback FIX (1 in Original,
+ *            the interpolation hook: rd__BlurFeedbackFix)
+ *   lines    TEX0.TFX: 0 MODULATE, 1 DECAL, 2 HIGHLIGHT, 3 HIGHLIGHT2
+ *   exactInt 1 */
+
+/* Wave 5 (R5a): the resolution scale of the work buffers (WORK0..3,
+ * AURA_*, AA0/1, FEED128, SHADOW0..2): 1 in the Original preset (the
+ * literal PS2 sizes); in Enhanced outputHeight / 448, at least 1 and at
+ * most 2, so blur radii stay a constant fraction of the screen.  Target
+ * allocation reads it; no setting selects Enhanced yet, and the replay of
+ * scaled work buffers is not implemented (RENDER_API.md section 17). */
+float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight);
 
 /* ------------------------------------- frame lifecycle and camera (R2c) */
 

@@ -27,6 +27,7 @@ if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
 endif()
 
 add_library(ico_render STATIC
+    rd_blur.c # wave 5 (R5a): staticBlur.c's sprites
     rd_core.c
     rd_dump.c
     rd_frame.c
@@ -38,6 +39,7 @@ add_library(ico_render STATIC
     rd_replay.c
     rd_shadow.c
     rd_tex.c
+    rd_water.c # wave 5 (R5b): block targets, aliases, camera scopes
     rd_video.c) # Phase 4E: the FMV picture (port/fmv/rd_video.h)
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -187,9 +189,95 @@ target_compile_options(rd_fog_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_fog_test PRIVATE ico_render ico_math)
 
+# rd_blur_test (wave 5, R5a): the full-screen effects of staticBlur.c.
+# staticBlur.c with the 2D layer and Matrix.c, as the window build has
+# them, the rest of the game stubbed: the commands each entry point records,
+# then on a device every effect against a CPU model of the same GS
+# arithmetic, and 600 frames of the motion blur and aura feedback (77
+# without a device, after the recording checks).
+ico_include_dirs(sugipon _ico_sugipon_incs)
+add_executable(rd_blur_test test/rd_blur_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/staticBlur.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_blur_test PRIVATE ${_ico_sugipon_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(rd_blur_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_blur_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_blur_test PRIVATE ico_render ico_math)
+
+# rd_water_test (wave 5, R5b): the render-to-texture surfaces.  puddle.c,
+# pool.c, queen_barrier_disp.c, waterDot.c and clothAnimation.c with the
+# mesh path, the 2D layer and matrixDrive.c, as the window build has them,
+# the rest of the game stubbed: the block targets, aliases and camera scopes
+# they record, the refraction STs against double-precision references, then
+# on a device each surface against a CPU raster of the VU reference (77
+# without a device, after the recording checks).
+add_executable(rd_water_test test/rd_water_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/puddle.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/pool.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/waterDot.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/clothAnimation.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/ito/src/queen_barrier_disp.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Packet.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/RegistPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/MicroCode.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayP2O.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Primitive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_water_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/render/vu1_ref")
+target_compile_definitions(rd_water_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_water_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_water_test PRIVATE ico_render ico_vu1_ref ico_math)
+if(WIN32 AND SDL3_FOUND)
+    add_custom_command(TARGET rd_water_test POST_BUILD
+                       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                               "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:rd_water_test>"
+                       VERBATIM)
+endif()
+
+# rd_raw_test (wave 5, R5c): the raw packet builders outside seki.
+# darkVolume.c, particleEffect.c, lineManager.c and lightning.c with the
+# VU1 chain reader (MicroCode.c), Primitive.c, the 2D layer and Matrix.c, as
+# the window build has them, the rest of the game stubbed: the packets
+# hand-decoded against the recorded commands, then on a device the dark
+# volume's count and composite, two lightning blend modes, a particle batch
+# (vu1_ref) and a line set against CPU references (77 without a device,
+# after the recording checks).
+add_executable(rd_raw_test test/rd_raw_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/darkVolume.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/particleEffect.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/lineManager.c"
+    "${CMAKE_SOURCE_DIR}/ico2/ito/src/lightning.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/MicroCode.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Primitive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_raw_test PRIVATE ${_ico_sugipon_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/render/vu1_ref")
+target_compile_definitions(rd_raw_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_raw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_raw_test PRIVATE ico_render ico_vu1_ref ico_math)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test rd_shadow_test rd_fog_test)
+              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -213,12 +301,18 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_fog PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_blur COMMAND rd_blur_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_blur PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool.png" --present 640x480)
     set_tests_properties(rd_replay_tool PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    add_test(NAME rd_water COMMAND rd_water_test)
+    set_tests_properties(rd_water PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_raw COMMAND rd_raw_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_raw PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
@@ -229,7 +323,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
     endif()
     if(_env)
+        set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog PROPERTIES ENVIRONMENT "${_env}")
+                             rd_fog rd_blur rd_raw PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

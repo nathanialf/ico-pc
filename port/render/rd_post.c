@@ -64,6 +64,10 @@
  *
  * The remaining kinds (shadow resolve, blur) are recorded with their
  * parameters and stop at replay (wave 5).
+ *
+ * MOTION_BLUR, DOF, FLARE, BLOOM, AURA, EYE_BLUR (wave 5, R5a) are one
+ * staticBlur.c sprite each, recorded by rd_blur.c (rd__PostBlur) with the
+ * register writes around it recorded by staticBlur.c's host path.
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -486,6 +490,16 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
         break;
     case RD_POST_FOG:
         postFog(params);
+        break;
+    /* wave 5 (R5a): staticBlur.c's sprites, recorded by rd_blur.c and
+     * replayed by rd_replay.c's doBlurSprite (RENDER_API.md section 17) */
+    case RD_POST_MOTION_BLUR:
+    case RD_POST_DOF:
+    case RD_POST_FLARE:
+    case RD_POST_BLOOM:
+    case RD_POST_AURA:
+    case RD_POST_EYE_BLUR:
+        rd__PostBlur(kind, params);
         break;
     default:
         postStub(kind, params);

@@ -102,6 +102,257 @@ extern void gif_SpriteSensitiveOrg(void *r, unsigned int z, void *uv, void *col,
 /* as in GifPacket.h, which this file does not include */
 extern void gif_StartPacketPri(int pri);
 
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5a; docs/port/RENDER_API.md section 17): the
+ * window build records this file's packets on rd itself instead of through
+ * GifPacket.c's register decoder, whose generic mapping of the work buffers
+ * cannot be right here (the same TBP is a 256 x 128, a 256 x 256 and a
+ * scene-sized buffer by turns; the scene-sized ones share the scene's Z
+ * buffer; TFX HIGHLIGHT; the motion blur and aura feedback need the GS
+ * integer blend).  The gif_* calls below are renamed to sbHost*, which
+ * write the same registers in the same order as rd state (so the state the
+ * passes leave behind is the GS's) and send every sprite as rd_Post of the
+ * kind of the effect it belongs to (SB_KIND), drawn by rd in the GS
+ * integer arithmetic.  The game code below is unchanged; the packets are
+ * still opened and closed through GifPacket.c, so the list selection and
+ * the packet bookkeeping stay. */
+#include "rd.h"
+
+static RdPostKind sbKind = RD_POST_FLARE; /* the effect the next sprites belong to */
+
+static int sbMotionDrawn; /* MotionBlur drew since the last FullScreenEffectBefore */
+
+static unsigned long long sbTex0; /* TEX0_1 as last written */
+
+static unsigned int sbOnce;
+
+static void sbHostOnce(int bit, const char *msg, unsigned long long v)
+{
+    if ((sbOnce & (1u << bit)) == 0) {
+        sbOnce |= 1u << bit;
+        fprintf(stderr, "staticBlur: %s (0x%llx; reported once)\n", msg, v);
+    }
+}
+
+/* FRAME (the block address gif_SetDrawEnviroment takes) and the frame
+ * size to the target standing for that VRAM, and the depth buffer bound
+ * with it: the scene-sized buffers are drawn with ZBUF 0xC0, the scene's
+ * Z buffer, as everything is; the small ones only with Z ALWAYS and ZMSK */
+static RdTarget sbHostFrame(unsigned int tbp, unsigned int w, RdTarget *depth)
+{
+    RdTargetId id;
+
+    /* the work buffers by workBase, not by address: the first
+       FullScreenEffectAfter of a run comes before any
+       FullScreenEffectBefore, with workBase's initial 0x2C00 and 0x3400 */
+    *depth = (RdTarget){0};
+    if (tbp == 0x800) {
+        id = RD_TARGET_SCENE;
+        *depth = rd_Target(RD_TARGET_SCENE);
+    } else if (tbp == 0) {
+        id = RD_TARGET_DISPLAY;
+    } else if (tbp == (unsigned int)workBase[0]) {
+        id = w <= 128 ? RD_TARGET_AURA_TAP : RD_TARGET_WORK0;
+    } else if (tbp == (unsigned int)workBase[1]) {
+        id = w >= (unsigned int)ScreenWidth ? RD_TARGET_AURA_WORK : RD_TARGET_WORK1;
+        if (id == RD_TARGET_AURA_WORK) {
+            *depth = rd_Target(RD_TARGET_SCENE);
+        }
+    } else if (tbp == (unsigned int)workBase[2]) {
+        id = RD_TARGET_WORK2;
+        *depth = rd_Target(RD_TARGET_SCENE);
+    } else if (tbp == (unsigned int)workBase[3]) {
+        id = RD_TARGET_WORK3;
+    } else if (tbp == 0x3F00) {
+        id = RD_TARGET_FEED128;
+    } else if (tbp == (unsigned int)(workBase[2] + ScreenWidth * ScreenHeight / 64)) {
+        id = RD_TARGET_WORK2_PAD;
+    } else {
+        sbHostOnce(0, "FRAME at a block with no work buffer: drawn into SCENE", tbp);
+        id = RD_TARGET_SCENE;
+        *depth = rd_Target(RD_TARGET_SCENE);
+    }
+    return rd_Target(id);
+}
+
+/* TEX0 to the target view it reads: TBP and TBW pick the buffer as FRAME
+ * does, PSMCT24 reads the RGB24 view (TEXA applied) */
+static RdTex sbHostTexture(unsigned long long tex0)
+{
+    unsigned int tbp = (unsigned int)(tex0 & 0x3FFF);
+    unsigned int tbw = (unsigned int)((tex0 >> 14) & 0x3F);
+    unsigned int psm = (unsigned int)((tex0 >> 20) & 0x3F);
+    RdTargetId id;
+
+    if (tbp == 0) {
+        id = RD_TARGET_DISPLAY;
+    } else if (tbp == 0x800) {
+        id = RD_TARGET_SCENE;
+    } else if (tbp == (unsigned int)workBase[0]) {
+        id = tbw <= 2 ? RD_TARGET_AURA_TAP : RD_TARGET_WORK0;
+    } else if (tbp == (unsigned int)workBase[1]) {
+        id = tbw * 64 >= (unsigned int)ScreenWidth ? RD_TARGET_AURA_WORK : RD_TARGET_WORK1;
+    } else if (tbp == (unsigned int)workBase[2]) {
+        id = RD_TARGET_WORK2;
+    } else if (tbp == (unsigned int)workBase[3]) {
+        id = RD_TARGET_WORK3;
+    } else if (tbp == 0x3F00) {
+        id = RD_TARGET_FEED128;
+    } else {
+        sbHostOnce(1, "TEX0 at a block with no work buffer: untextured", tex0);
+        return (RdTex){0};
+    }
+    return rd_TargetTexture(rd_Target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
+}
+
+static void sbHostStartPacketPri(int pri)
+{
+    gif_StartPacketPri(pri);
+}
+
+static void sbHostEndPacket(void)
+{
+    gif_EndPacket();
+}
+
+static void sbHostSetGsReg(long long reg, long long data)
+{
+    unsigned long long d = (unsigned long long)data;
+
+    switch ((unsigned int)reg & 0xFF) {
+    case 0x06: /* TEX0_1: bound with the next sprite's PRIM */
+        sbTex0 = d;
+        break;
+    case 0x08: /* CLAMP_1 */
+    {
+        RdSamplerWrap w = rd_WrapFromGs(d);
+
+        rd_SamplerWrap((RdWrap)w.s, (RdWrap)w.t);
+        break;
+    }
+    case 0x14: /* TEX1_1 */
+    {
+        unsigned int mmin = (unsigned int)((d >> 6) & 7);
+
+        rd_SamplerFilter((d >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
+                         mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
+                                                             : RD_FILTER_NEAREST);
+        break;
+    }
+    case 0x3B: /* TEXA: 0x8000000080, the one value this file writes */
+        rd_TexA(((d >> 15) & 1) ? RD_TEXA_80_80_AEM : RD_TEXA_80_80);
+        if ((d & 0xFF) != 0x80 || ((d >> 32) & 0xFF) != 0x80) {
+            sbHostOnce(2, "TEXA other than 0x80/0x80", d);
+        }
+        break;
+    case 0x47: /* TEST_1 */
+        rd_TestGs(d);
+        break;
+    case 0x4A: /* FBA_1 */
+        rd_FBA((int)(d & 1));
+        break;
+    default:
+        sbHostOnce(3, "register write not recorded", (unsigned long long)reg);
+        break;
+    }
+}
+
+static void sbHostSetAlpha(long long alpha, long long mode, long long fix)
+{
+    /* PABE, then ALPHA_1 from alphaTable (GifPacket.c): the RdBlend values
+       are the table's modes */
+    rd_PABE(alpha == 0);
+    rd_BlendFunc((RdBlend)((unsigned long long)mode < 12 ? mode : 0), (uint8_t)fix);
+}
+
+static void sbHostSetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
+                                    unsigned int h, int useoffset, int clear)
+{
+    RdTarget depth;
+    RdTarget t = sbHostFrame((unsigned int)fbp, w, &depth);
+
+    (void)psm; /* always 0: PSMCT32 */
+    if (clear) {
+        sbHostOnce(4, "gif_SetDrawEnviroment with clear: not recorded", fbp);
+    }
+    rd_ColorMask(0); /* FRAME.FBMSK 0 */
+    rd_SetTarget(t, depth, w, h, useoffset ? RD_TARGET_OFFSET : 0);
+}
+
+static void sbHostSetZTest(int on)
+{
+    rd_TestGs(on ? 0x50000 : 0x30000);
+}
+
+static void sbHostSetZWrite(int on)
+{
+    rd_ZWrite(on);
+}
+
+/* gif_SpriteSensitiveOrg: PRIM (prim << 6) | 0x116 with a UV rectangle (TME,
+   FST, flat) or | 0x406 without, RGBAQ, then the two vertices as
+   gif_MakeSprite and makeSpriteNoTexture pack them */
+static void sbHostSprite(void *rect, long long z, void *uvRect, void *colour, int prim)
+{
+    const int *r = rect;
+    const int *uv = uvRect;
+    const unsigned char *col = colour;
+    long long a = (long long)(r[0] + 0x8000) | ((long long)(r[1] + 0x8000) << 16) | (z << 32);
+    long long b =
+        (long long)(r[0] + r[2] + 0x8000) | ((long long)(r[1] + r[3] + 0x8000) << 16) | (z << 32);
+    RdPostParams p;
+
+    memset(&p, 0, sizeof(p));
+    if (uv) {
+        RdTex t = sbHostTexture(sbTex0);
+        unsigned int tfx = (unsigned int)((sbTex0 >> 35) & 3);
+
+        if (t.id) {
+            rd_Texture(t, tfx == 1 ? RD_TEXFN_DECAL : RD_TEXFN_MODULATE,
+                       ((sbTex0 >> 34) & 1) ? RD_TCC_RGBA : RD_TCC_RGB);
+        } else {
+            rd_TextureOff();
+        }
+        p.uv[0] = (float)(uv[0] & 0x3FFF);
+        p.uv[1] = (float)(uv[1] & 0x3FFF);
+        p.uv[2] = (float)((uv[0] + uv[2]) & 0x3FFF);
+        p.uv[3] = (float)((uv[1] + uv[3]) & 0x3FFF);
+        p.scalar[0] = (float)(1 << ((sbTex0 >> 26) & 0xF));
+        p.scalar[1] = (float)(1 << ((sbTex0 >> 30) & 0xF));
+        p.lines = tfx;
+    } else {
+        rd_TextureOff();
+    }
+    rd_ABE(prim & 1);
+    rd_Gouraud(0);
+    p.rect[0] = (float)(a & 0xFFFF);
+    p.rect[1] = (float)((a >> 16) & 0xFFFF);
+    p.rect[2] = (float)(b & 0xFFFF);
+    p.rect[3] = (float)((b >> 16) & 0xFFFF);
+    p.z = (uint32_t)((unsigned long long)b >> 32);
+    memcpy(p.rgba, col, 4);
+    p.scalar[2] = 1.0f; /* the frame-time factor: one frame (Original) */
+    p.exactInt = 1;
+    sbMotionDrawn |= sbKind == RD_POST_MOTION_BLUR;
+    rd_Post(sbKind, &p);
+}
+
+#define gif_StartPacketPri sbHostStartPacketPri
+#define gif_EndPacket sbHostEndPacket
+#define gif_SetGsReg sbHostSetGsReg
+#define gif_SetAlpha sbHostSetAlpha
+#define gif_SetDrawEnviroment sbHostSetDrawEnviroment
+#define gif_SetZTest sbHostSetZTest
+#define gif_SetZWrite sbHostSetZWrite
+#define gif_SpriteSensitiveOrg sbHostSprite
+/* the effect the sprites that follow belong to (rd_Post's kind) */
+#define SB_KIND(k) (sbKind = (k))
+#define SB_FLARE_KIND(mode) ((mode) & 2 ? RD_POST_BLOOM : RD_POST_FLARE)
+#else
+#define SB_KIND(k)
+#endif
+
 typedef struct { /* field names derived */
     int x, y, w, h;
 } SprUV; /* derived name */
@@ -186,6 +437,7 @@ static void auraInspireBefore(void)
     int rect[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 2 * 16, ScreenWidth * 16,
                    ScreenHeight * 16};
 
+    SB_KIND(RD_POST_AURA);
     gif_StartPacketPri(8);
     gif_SetGsReg(8, 5);
 
@@ -428,6 +680,7 @@ static void auraInspireAfter(int mode)
                    ScreenHeight * 16};
     int halfUv[4] = {8, 28, ScreenWidth * 16, ScreenHeight / 2 * 16};
 
+    SB_KIND(RD_POST_AURA);
     gif_StartPacketPri(8);
     gif_SetGsReg(0x4A, 0);
     gif_SetGsReg(8, 5);
@@ -589,6 +842,7 @@ void makeFullScreenFlareBefore(int mode)
 
     int uv[4] = {0, 0, ScreenWidth * 16, ScreenHeight * 16};
 
+    SB_KIND(SB_FLARE_KIND(mode));
     gif_StartPacketPri(7);
 
     gif_SetGsReg(8, 5);
@@ -635,6 +889,7 @@ static void eyeBlur(int alpha, SprCol *col, int mode)
     int rect[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 2 * 16, ScreenWidth * 16,
                    ScreenHeight * 16};
 
+    SB_KIND(RD_POST_EYE_BLUR);
     gif_SetGsReg(0x14, 0x60);
 
     gif_SetDrawEnviroment(workBase[3], 0, 256, 128, 0, 0);
@@ -756,6 +1011,7 @@ static void eyeBlur(int alpha, SprCol *col, int mode)
 
 static void pasteWork0ToFB(void) /* derived name */
 {
+    SB_KIND(postMode == 4 || postMode == 5 ? RD_POST_BLOOM : RD_POST_FLARE);
     gif_SetDrawEnviroment(workBase[0], 0, 256, 128, 0, 0);
 
     gif_SetZTest(0);
@@ -772,6 +1028,7 @@ static void pasteWork0ToFB(void) /* derived name */
 
 void makeFullScreenFlareAfter(int mode)
 {
+    SB_KIND(SB_FLARE_KIND(mode));
     gif_StartPacketPri(7);
 
     reduceWork2ToWork0();
@@ -813,6 +1070,7 @@ static void pasteFullScreenFlare(void)
     SprUV uv;
     SprCol col;
 
+    SB_KIND(postMode == 4 || postMode == 5 ? RD_POST_BLOOM : RD_POST_FLARE);
     gif_StartPacketPri(7);
 
     gif_SetGsReg(6, workBase[3] | 0x20010000 | 0x5C0000000LL);
@@ -943,6 +1201,7 @@ void depthField(float depth, float width, float rate)
     int pre;
     int i;
 
+    SB_KIND(RD_POST_DOF);
     gif_StartPacketPri(7);
     gif_SetGsReg(8, 5);
 
@@ -1000,6 +1259,7 @@ void MotionBlur(void)
         debug_Printf(300, 40, 0xFFFFFF00, "MBLUR %d", motionBlurAlpha);
     }
 
+    SB_KIND(RD_POST_MOTION_BLUR);
     gif_StartPacketPri(7);
 
     gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 0, 0);
@@ -1214,6 +1474,28 @@ void FullScreenEffectBefore(void)
 
     dispPostInfo();
     dispFeedInfo();
+#ifdef ICO_RD
+    /* PC port (R5a): which effects run, logged when that changes (the
+       count is FullScreenEffectBefore's calls, one per frame; "drawn" says
+       whether MotionBlur drew in the frame before, which GlobalTimer
+       frames skip, and is not a change of its own) */
+    {
+        static int seen[5] = {-1, -1, -1, -1, -1};
+        static unsigned int calls;
+        int now[5] = {postMode, feedMode, flareOn, sunOn, motionBlurAlpha};
+
+        calls++;
+        if (memcmp(now, seen, sizeof(now)) != 0) {
+            fprintf(stderr,
+                    "staticBlur: frame %u: postEffect %d feedbackEffect %d flare %d sun %d "
+                    "motionBlur %d (drawn %d) depthField %d/%d\n",
+                    calls, postMode, feedMode, flareOn, sunOn, motionBlurAlpha, sbMotionDrawn,
+                    GlobalStageSetting.depthFieldStart, GlobalStageSetting.depthFieldWidth);
+            memcpy(seen, now, sizeof(now));
+        }
+        sbMotionDrawn = 0;
+    }
+#endif
 
     if (sunOn)
         if (debug_font_flag & 1)

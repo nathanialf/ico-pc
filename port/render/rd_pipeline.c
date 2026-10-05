@@ -84,7 +84,9 @@ RdBlendPath rd__BlendPath(uint8_t b)
 /* The raw ALPHA register of each mode (GifPacket.c alphaTable, rd_state.h). */
 uint32_t rd__AlphaRegister(uint8_t blend)
 {
-    static const uint8_t kReg[RD_BLEND_COUNT] = {0x68, 0x62, 0x64, 0x61, 0x44, 0x48,
+    /* mode 3 is 0x29 (alphaTable {1, 2, 2, 0}: A Cd, B 0, C FIX, D Cs); 0x61
+     * until R5c, which is (Cd - Cs) FIX + Cd */
+    static const uint8_t kReg[RD_BLEND_COUNT] = {0x68, 0x62, 0x64, 0x29, 0x44, 0x48,
                                                  0x42, 0x44, 0x58, 0x52, 0x54, 0x49};
     return blend < RD_BLEND_COUNT ? kReg[blend] : 0x44;
 }
@@ -483,8 +485,10 @@ static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipe
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
 {
     uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
-    n = rd__EnumerateReachableShadow(out, max, n); /* wave 4 (R4b) */
-    return rd__EnumerateReachableFog(out, max, n); /* wave 4 (R4c) */
+    n = rd__EnumerateReachableShadow(out, max, n);  /* wave 4 (R4b) */
+    n = rd__EnumerateReachableFog(out, max, n);     /* wave 4 (R4c) */
+    n = rd__EnumerateReachableWater(out, max, n);   /* wave 5 (R5b) */
+    return rd__EnumerateReachableBlur(out, max, n); /* wave 5 (R5a) */
 }
 
 /* ----------------------------------------------------- fog (wave 4, R4c) */
@@ -620,5 +624,51 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     n = addKey(out, max, n, &blitA);
     n = addKey(out, max, n, &blitB);
     n = addKey(out, max, n, &exact);
+    return n;
+}
+
+/* ------------------------------------------------ staticBlur (wave 5, R5a)
+ * fx_sprite_ps does the alpha test, DATE, the blend, PABE, FBA and COLCLAMP
+ * itself on integers, so the key keeps only what the hardware does: the
+ * colour mask (FRAME.FBMSK) and, with a depth target, the Z test and Z
+ * write.  A Z test of ALWAYS without Z write needs no depth target and
+ * binds none. */
+RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
+                         int *useDepth)
+{
+    RdPipeKeyInt k = rd__PostKey(RD_VS_FX_RECT, RD_FS_FX_SPRITE, colorFmt);
+    k.gs.colorMask = s->ds.colorMask;
+    const uint8_t ztst = s->ds.test.zte ? s->ds.test.ztst : RD_ZTST_ALWAYS;
+    const int depth =
+        depthFmt != RHI_FMT_UNKNOWN && (ztst != RD_ZTST_ALWAYS || s->ds.zwrite == RD_ZWRITE_ON);
+    if (depth) {
+        k.gs.ztst = ztst;
+        k.gs.zwrite = s->ds.zwrite;
+        k.depthFmt = (uint8_t)depthFmt;
+    }
+    if (useDepth) {
+        *useDepth = depth;
+    }
+    return k;
+}
+
+uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    /* staticBlur.c draws with Z ALWAYS or GEQUAL (TEST 0x30000, 0x50000,
+     * 0x5000D, 0x30815, 0x34003, 0x34000, 0x3000C, 0) and ZMSK; the list-7
+     * and list-8 defaults it can inherit add Z write on; colour mask full */
+    static const uint8_t kZ[3] = {RD_ZTST_ALWAYS, RD_ZTST_GEQUAL, RD_ZTST_GREATER};
+    RdStateBlock s;
+    rd__ResetStateBlock(&s);
+    s.ds.colorMask = 0xF;
+    for (int zw = 0; zw < 2; zw++) {
+        for (int z = 0; z < 3; z++) {
+            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+            s.ds.test.ztst = kZ[z];
+            s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+            const RdPipeKeyInt k = rd__BlurKey(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
+            n = addKey(out, max, n, &k);
+        }
+    }
     return n;
 }

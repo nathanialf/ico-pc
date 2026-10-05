@@ -26,7 +26,66 @@
 #include "ios.h"
 #include "Texture.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd.h"
+
+#endif
+
 static void copyToWork(int pri);
+
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).  The
+   work block copyToWork and flushWork allocate right after tex_ResetVramPri
+   is TBP 0x2800, which the GS register decoder takes for the named AA0
+   target (no depth buffer); on the GS the scene copy, the refracting
+   surface's texture, the reflection pass (with work1Vram as its Z buffer)
+   and the reflecting surface's texture all use that one block.  The host
+   binds a per-frame 256 x 256 target with its own depth in AA0's place in
+   the list from the allocation to the last draw that samples it, and
+   records the reflection camera of dispPool's gsb_SetVSMatrix(0xCC, ...)
+   for the reflection draws.  The register writes are unchanged. */
+static RdTarget poolHostAlias; /* the named target the block is bound over */
+
+static void poolHostBlockBegin(int tbp)
+{
+    gif_HostFlush();
+    poolHostAlias = rd_GsNamedBlock((unsigned int)tbp, 0x100, 0x100);
+    if (poolHostAlias.id != 0) {
+        rd_AliasTarget(poolHostAlias, rd_BlockTarget((unsigned int)tbp, 0x100, 0x100, 1));
+    }
+}
+
+static void poolHostBlockEnd(void)
+{
+    gif_HostFlush();
+    if (poolHostAlias.id != 0) {
+        rd_AliasTarget(poolHostAlias, (RdTarget){0});
+        poolHostAlias.id = 0;
+    }
+}
+
+static void poolHostCamera(int push)
+{
+    gif_HostFlush();
+    if (push) {
+        RdCamera cam;
+
+        memset(&cam, 0, sizeof(cam));
+        CopyMatrix(cam.view, (char *)(matrixptr + 0x80));
+        CopyMatrix(cam.proj43, (char *)(matrixptr + 0xC0));
+        cam.aspect43 = 4.0f / 3.0f;
+        cam.nearZ = 2.0f;
+        cam.farZ = 262144.0f;
+        rd_PushCamera(&cam);
+    } else {
+        rd_PopCamera();
+    }
+}
+
+#endif
 
 static void falldownSE(GObj *self)
 {
@@ -48,6 +107,9 @@ static void copyToWork(int pri)
 
     tex_ResetVramPri(pri);
     workVram = tex_AllocVramAuto(0, 0x400);
+#ifdef ICO_RD
+    poolHostBlockBegin(workVram);
+#endif
     gif_SetGsReg(6, ((long long)(ScreenWidth / 64) << 14) | 0x664000800LL);
     gif_SetDrawEnviroment(workVram, 0, 0x100, 0x100, 0, 0);
     gif_SetZTest(0);
@@ -76,6 +138,9 @@ static void flushWork(int pri)
     tex_ResetVramPri(pri);
     workVram = tex_AllocVramAuto(0, 0x400);
     work1Vram = tex_AllocVramAuto(0, 0x400);
+#ifdef ICO_RD
+    poolHostBlockBegin(workVram);
+#endif
     gif_SetDrawEnviroment(workVram, 0, 0x100, 0x100, 0, 0);
     gif_SetZTest(0);
     gif_SetGsReg(0x4E, 0x30000000 | (work1Vram / 32));
@@ -620,6 +685,9 @@ static void dispPool(GObj *self)
     _MulMatrix((char *)(matrixptr + 0x100), (char *)(matrixptr + 0xC0), (char *)(matrixptr + 0x80));
     _MulMatrix((char *)(matrixptr + 0x200), (char *)(matrixptr + 0x1C0),
                (char *)(matrixptr + 0x80));
+#ifdef ICO_RD
+    poolHostCamera(1);
+#endif
 
     gif_SetZTest(1);
     gif_SetAlpha(0, 4, 0x80);
@@ -660,6 +728,9 @@ static void dispPool(GObj *self)
     CopyMatrix((char *)(matrixptr + 0x340), m4);
     CopyMatrix((char *)(matrixptr + 0x100), m2);
     CopyMatrix((char *)(matrixptr + 0x200), m3);
+#ifdef ICO_RD
+    poolHostCamera(0);
+#endif
     vsWidth = ScreenWidth;
     vsHeight = ScreenHeight;
 
@@ -688,6 +759,9 @@ static void dispPool(GObj *self)
 
     gif_EndPacket();
 
+#ifdef ICO_RD
+    poolHostBlockEnd();
+#endif
     if (debug_skel_flag != 0) {
         DispMeshWire(w->wire, w->nx, w->ny);
     }
@@ -885,6 +959,9 @@ void DispLimitedPoolReflactionMesh(PoolMesh *refl)
     gif_EndPacket();
     _SetCurrentMatrix(matrixptr + 0x100);
     prim_DispMesh3D(refl->mesh, dispLightColor, dispLightNormal, -1);
+#ifdef ICO_RD
+    poolHostBlockEnd();
+#endif
     if (debug_skel_flag != 0) {
         DispMeshWire(refl->row, refl->nrow, refl->ncol);
     }

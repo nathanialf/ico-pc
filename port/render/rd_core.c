@@ -214,6 +214,7 @@ void rd__FrameReset(RdFrame *f)
         rd__TempTargetFree(f->tempTargets[i]);
     }
     f->tempCount = 0;
+    rd__WaterFrameReset(f); /* R5b: block targets, aliases, camera scopes */
     f->hasCamera = 0;
     f->hasVu = 0;     /* R2c */
     f->headValid = 0; /* R2c */
@@ -313,6 +314,10 @@ static void setKey(RdCmd *c, RdKey key)
 
 /* ---------------------------------------------------------------- targets */
 
+/* wave 5 (R5a): 0 until the replay sizes the GS window apart from the
+ * target's texture size (Enhanced, wave 6) */
+#define RD_WORK_SCALE_APPLY 0
+
 static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uint32_t *h,
                             RhiFormat *fmt, uint8_t *depth)
 {
@@ -338,18 +343,27 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *w = *h = 64;
         break;
     case RD_TARGET_WORK0:
+    case RD_TARGET_WORK3: /* wave 5 (R5a): TBP 0x3000, 256 x 128 */
         *w = 256;
         *h = 128;
         break;
+    case RD_TARGET_WORK2: /* wave 5 (R5a): TBP 0x2E00, the scene-sized flare mask */
+    case RD_TARGET_AURA_WORK:
+        *w = gsW;
+        *h = gsH;
+        break;
     case RD_TARGET_WORK1:
-    case RD_TARGET_WORK2: /* provisional: TBP 0x3000 users are waves 4-5 */
-    case RD_TARGET_WORK3:
     case RD_TARGET_AA0:
         *w = *h = 256;
         break;
     case RD_TARGET_AA1:
     case RD_TARGET_FEED128:
+    case RD_TARGET_AURA_TAP:
         *w = *h = 128;
+        break;
+    case RD_TARGET_WORK2_PAD:
+        *w = 256;
+        *h = 64;
         break;
     case RD_TARGET_DATE_SNAPSHOT:
         *w = gsW;
@@ -360,11 +374,32 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *w = *h = 1;
         break;
     }
+    /* wave 5 (R5a): the work buffers' resolution scale (rd.h
+     * rd_WorkTargetScale).  1 in Original; Enhanced would scale the
+     * fixed-size buffers, which the replay does not support yet (it sizes
+     * the GS window by the target), so the rule is not applied until it
+     * does: RD_WORK_SCALE_APPLY */
+    if (RD_WORK_SCALE_APPLY && id != RD_TARGET_SCENE && id != RD_TARGET_DISPLAY &&
+        id != RD_TARGET_DATE_SNAPSHOT && id != RD_TARGET_WORK2 && id != RD_TARGET_AURA_WORK) {
+        const float k = rd_WorkTargetScale(g_rd.settings.preset, g_rd.settings.outputHeight);
+        *w = (uint32_t)((float)*w * k + 0.5f);
+        *h = (uint32_t)((float)*h * k + 0.5f);
+    }
+}
+
+float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight)
+{
+    if (preset != RD_PRESET_ENHANCED || outputHeight == 0) {
+        return 1.0f; /* Original: the literal PS2 sizes */
+    }
+    float k = (float)outputHeight / 448.0f;
+    return k < 1.0f ? 1.0f : (k > 2.0f ? 2.0f : k);
 }
 
 static const char *const s_targetNames[RD_TARGET_COUNT] = {
-    "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2", "WORK0",        "WORK1",
-    "WORK2", "WORK3",   "AA0",     "AA1",     "FEED128", "DATE_SNAPSHOT"};
+    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",  "SHADOW2", "WORK0",
+    "WORK1",         "WORK2",     "WORK3",    "AA0",      "AA1",     "FEED128",
+    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
 
 RdTargetRec *rd__TargetRec(uint32_t id)
 {
@@ -502,6 +537,15 @@ RdTarget rd_TempTarget(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcross
 
 void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset)
 {
+    /* R5b: a target rd_AliasTarget stands in for, with its own depth buffer */
+    uint32_t alias = rd__AliasOf(color.id);
+    if (alias != 0) {
+        const RdTargetRec *a = rd__TargetRec(alias);
+        if (depth.id == 0 || depth.id == color.id) {
+            depth.id = a != NULL && a->withDepth ? alias : 0;
+        }
+        color.id = alias;
+    }
     RdCmd *c = rd__Push(RDC_TARGET);
     if (!c) {
         return;
@@ -515,6 +559,9 @@ void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, in
 
 void rd_ClearTarget(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z)
 {
+    if (rd__AliasOf(t.id) != 0) { /* R5b */
+        t.id = rd__AliasOf(t.id);
+    }
     RdCmd *c = rd__Push(RDC_CLEAR);
     if (!c) {
         return;
@@ -1066,6 +1113,11 @@ void rd_Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
 
 void rd_Texture(RdTex tex, RdTexFn fn, RdTcc tcc)
 {
+    /* R5b: a view of a target rd_AliasTarget stands in for */
+    const RdTexRec *tr = rd__TexRec(tex.id);
+    if (tr != NULL && tr->kind == RD_TEXKIND_TARGET && rd__AliasOf(tr->target) != 0) {
+        tex = rd_TargetTexture((RdTarget){rd__AliasOf(tr->target)}, (RdTexView)tr->view);
+    }
     RdCmd *c = rd__Push(RDC_TEXTURE);
     if (c) {
         c->u[0] = tex.id;

@@ -342,10 +342,18 @@ inline void mc_Reset(void)
  *                          (rd_DrawVuParticles); the mesh packets do not come
  *                          here (static meshes: RegistPacket.c; grids:
  *                          Primitive.c)
+ *   DIRECT / DIRECTHL      (wave 5, R5c) path 2: the GIF packets of the block
+ *                          to the decoder (mcHostGif below; lightning.c)
+ *
+ * Since wave 5 (R5c) SET_GSREGISTER reads any GIF tag (mcHostGif), and the
+ * raw packet builders outside seki chain theirs here too: darkVolume.c and
+ * particleEffect.c (SET_GSREGISTER register packets), lightning.c (DIRECT).
  *
  * The DMA chain forms: id 5 is a call into a chain of cnt tags whose upper
  * doubleword carries two VIF words (TTE), ending in ret; id 2 references
- * qwc quadwords of VIF codes. */
+ * qwc quadwords of VIF codes.  These are the only forms the seki layer and
+ * the four raw builders chain (no ref/next/call: the host's DMA tags cannot
+ * hold a 64-bit address, and nothing chained here needs one). */
 
 #define MC_HOST_WORDS 8192
 
@@ -363,25 +371,195 @@ static void mcHostOnceLog(int bit, const char *msg, unsigned int v)
     }
 }
 
-/* SET_GSREGISTER (vu1_common.h:20-48): the GIF tag at TOP, then NLOOP
-   quadwords to the GS. */
+/* ---------------------------------------------------------------------- *
+ * Renderer wave 5 (R5c): GIF packets.  The register writes of a GIF packet
+ * (a SET_GSREGISTER kick, a VIF DIRECT/DIRECTHL block on path 2) as the GIF
+ * unpacks them, gathered as A+D pairs (data, register) and handed to the GS
+ * register decoder (gif_HostWriteRegs) in packet order:
+ *
+ *   PACKED   per register descriptor, the 128-bit form of the GS manual's
+ *            PACKED table: PRIM (bits 0..10), RGBAQ (R G B A in the low byte
+ *            of each word, Q from the last PACKED ST), ST (S, T; Q kept for
+ *            RGBAQ), UV (14 bits each in words 0 and 1), XYZF2 / XYZ2 (X, Y
+ *            in words 0 and 1, Z in word 2 (bits 4..27 for XYZF2), F in word
+ *            3 bits 4..11, ADC (word 3 bit 15) selects XYZF3 / XYZ3), FOG
+ *            (F in word 3 bits 4..11), A+D (data in the low doubleword,
+ *            register in bits 64..71), NOP; TEX0, CLAMP: the low doubleword.
+ *            PRE writes the tag's PRIM field first.
+ *   REGLIST  NLOOP x NREG doublewords, each the register's 64-bit value; a
+ *            descriptor of A+D or NOP writes nothing; the block is padded to
+ *            a whole quadword.
+ *   IMAGE    NLOOP quadwords of HWREG data (an image transfer): skipped,
+ *            logged once.
+ *
+ * FRAME_1 with PSM PSMCT24 (FRAME bits 24..29 = 1): the GS keeps the top byte
+ * of every pixel (no alpha writes), which is FBMSK with the top byte set; the
+ * decoder only reads FBP, FBW and FBMSK, so the pair passes on with
+ * FBMSK |= 0xFF000000 (darkVolume.c's composite into the scene, FRAME
+ * 0x1000040).  PSMCT16 frames would need more: logged once. */
+
+#define MC_HOST_PAIRS 2048
+
+static unsigned long long mcHostAd[2 * MC_HOST_PAIRS];
+
+static unsigned int mcHostAdN;
+
+/* the GIF's Q register: a PACKED ST sets it, a PACKED RGBAQ sends it */
+static unsigned int mcHostPackedQ = 0x3F800000u;
+
+static void mcHostAdFlush(void)
+{
+    if (mcHostAdN != 0) {
+        gif_HostWriteRegs(mcHostAd, mcHostAdN);
+        mcHostAdN = 0;
+    }
+}
+
+static void mcHostAdPush(unsigned int reg, unsigned long long data)
+{
+    if (reg == 0x4C) {
+        unsigned int psm = (unsigned int)((data >> 24) & 0x3F);
+
+        if (psm == 1) {
+            data |= 0xFF000000ULL << 32; /* PSMCT24: the alpha byte stays */
+        } else if (psm != 0) {
+            mcHostOnceLog(5, "FRAME_1 with a 16-bit PSM: drawn as PSMCT32", psm);
+        }
+    }
+    if (mcHostAdN == MC_HOST_PAIRS) {
+        mcHostAdFlush();
+    }
+    mcHostAd[2 * mcHostAdN] = data;
+    mcHostAd[2 * mcHostAdN + 1] = reg;
+    mcHostAdN++;
+}
+
+/* One PACKED quadword q[0..3] for register descriptor desc. */
+static void mcHostPacked(unsigned int desc, const unsigned int *q)
+{
+    unsigned long long x = q[0] & 0xFFFF, y = q[1] & 0xFFFF;
+    int adc = (q[3] >> 15) & 1;
+
+    switch (desc) {
+    case 0x0: /* PRIM */
+        mcHostAdPush(0x00, q[0] & 0x7FF);
+        break;
+    case 0x1: /* RGBAQ */
+        mcHostAdPush(0x01, (unsigned long long)(q[0] & 0xFF) |
+                               ((unsigned long long)(q[1] & 0xFF) << 8) |
+                               ((unsigned long long)(q[2] & 0xFF) << 16) |
+                               ((unsigned long long)(q[3] & 0xFF) << 24) |
+                               ((unsigned long long)mcHostPackedQ << 32));
+        break;
+    case 0x2: /* ST */
+        mcHostAdPush(0x02, (unsigned long long)q[0] | ((unsigned long long)q[1] << 32));
+        mcHostPackedQ = q[2];
+        break;
+    case 0x3: /* UV */
+        mcHostAdPush(0x03, (unsigned long long)(q[0] & 0x3FFF) |
+                               ((unsigned long long)(q[1] & 0x3FFF) << 16));
+        break;
+    case 0x4: /* XYZF2 */
+    case 0xC: /* XYZF3 */
+        mcHostAdPush(desc == 0x4 && !adc ? 0x04 : 0x0C,
+                     x | (y << 16) | ((unsigned long long)((q[2] >> 4) & 0xFFFFFF) << 32) |
+                         ((unsigned long long)((q[3] >> 4) & 0xFF) << 56));
+        break;
+    case 0x5: /* XYZ2 */
+    case 0xD: /* XYZ3 */
+        mcHostAdPush(desc == 0x5 && !adc ? 0x05 : 0x0D,
+                     x | (y << 16) | ((unsigned long long)q[2] << 32));
+        break;
+    case 0xA: /* FOG */
+        mcHostAdPush(0x0A, (unsigned long long)((q[3] >> 4) & 0xFF) << 56);
+        break;
+    case 0xE: /* A+D */
+        mcHostAdPush(q[2] & 0xFF, (unsigned long long)q[0] | ((unsigned long long)q[1] << 32));
+        break;
+    case 0xF: /* NOP */
+        break;
+    default: /* TEX0_1/2, CLAMP_1/2 (and the reserved 0xB): the low doubleword */
+        mcHostAdPush(desc, (unsigned long long)q[0] | ((unsigned long long)q[1] << 32));
+        break;
+    }
+}
+
+/* The GIF packets in w[0 .. 4 qwc).  oneTag: a SET_GSREGISTER kick sends
+   one tag and its data (the EOP tag the VU code builds); a DIRECT block runs
+   to its size.  Returns the quadwords read. */
+static unsigned int mcHostGif(const unsigned int *w, unsigned int qwc, int oneTag)
+{
+    unsigned int at = 0;
+
+    while (at < qwc) {
+        const unsigned int *t = w + 4 * at;
+        unsigned long long lo = t[0] | ((unsigned long long)t[1] << 32);
+        unsigned long long hi = t[2] | ((unsigned long long)t[3] << 32);
+        unsigned int nloop = (unsigned int)(lo & 0x7FFF);
+        unsigned int eop = (unsigned int)((lo >> 15) & 1);
+        unsigned int pre = (unsigned int)((lo >> 46) & 1);
+        unsigned int flg = (unsigned int)((lo >> 58) & 3);
+        unsigned int nreg = (unsigned int)((lo >> 60) & 0xF);
+        unsigned int k, r;
+
+        if (nreg == 0) {
+            nreg = 16;
+        }
+        at++;
+        if (flg == 0) { /* PACKED */
+            if (pre) {
+                mcHostAdPush(0x00, (lo >> 47) & 0x7FF);
+            }
+            for (k = 0; k < nloop; k++) {
+                for (r = 0; r < nreg; r++) {
+                    if (at >= qwc) {
+                        goto out;
+                    }
+                    mcHostPacked((unsigned int)((hi >> (4 * r)) & 0xF), w + 4 * at);
+                    at++;
+                }
+            }
+        } else if (flg == 1) { /* REGLIST */
+            unsigned int total = nloop * nreg, i;
+
+            if (pre) {
+                mcHostOnceLog(6, "GIF REGLIST tag with PRE: PRIM field not written",
+                              (unsigned int)lo);
+            }
+            for (i = 0; i < total; i++) {
+                const unsigned int *d = w + 4 * at + 2 * i;
+                unsigned int desc = (unsigned int)((hi >> (4 * (i % nreg))) & 0xF);
+
+                if (at + i / 2 >= qwc) {
+                    goto out;
+                }
+                if (desc != 0xE && desc != 0xF) {
+                    mcHostAdPush(desc, (unsigned long long)d[0] | ((unsigned long long)d[1] << 32));
+                }
+            }
+            at += (total + 1) / 2;
+        } else { /* IMAGE */
+            mcHostOnceLog(7, "GIF IMAGE data (HWREG transfer) on path 2: skipped", nloop);
+            at += nloop;
+        }
+        if (oneTag) {
+            if (!eop) {
+                mcHostOnceLog(8, "SET_GSREGISTER GIF tag without EOP: the first tag only",
+                              (unsigned int)lo);
+            }
+            break;
+        }
+    }
+out:
+    mcHostAdFlush();
+    return at < qwc ? at : qwc;
+}
+
+/* SET_GSREGISTER (vu1_common.h:20-48): XGKICK of the GIF packet at TOP (R3ab
+   read PACKED A+D tags only; since R5c any GIF tag, mcHostGif). */
 static void mcHostSetGsRegister(void)
 {
-    unsigned long long tag[2];
-    unsigned int nloop, nreg;
-
-    memcpy(tag, mcHostTop[0], 16);
-    nloop = (unsigned int)(tag[0] & 0x7FFF);
-    nreg = (unsigned int)((tag[0] >> 60) & 0xF);
-    if (((tag[0] >> 58) & 3) != 0 || nreg != 1 || (tag[1] & 0xF) != 0xE) {
-        mcHostOnceLog(0, "SET_GSREGISTER with a GIF tag that is not PACKED A+D: skipped",
-                      (unsigned int)tag[1]);
-        return;
-    }
-    if (nloop > 1023) {
-        nloop = 1023;
-    }
-    gif_HostWriteRegs((const unsigned long long *)(const void *)mcHostTop[1], nloop);
+    mcHostGif((const unsigned int *)(const void *)mcHostTop, 1024, 1);
 }
 
 /* MSCNT: a batch at TOP for the resident program. */
@@ -471,9 +649,19 @@ static void mcHostVif(const unsigned int *w, unsigned int n)
             break;
         case 0x50: /* DIRECT */
         case 0x51: /* DIRECTHL */
-            mcHostOnceLog(3, "VIF DIRECT in a VU1 chain: skipped", code);
-            i += 4 * (imm ? imm : 65536);
+        {
+            /* R5c: path 2, the GIF packets of the next imm quadwords
+               (lightning.c's strips) */
+            unsigned int qn = imm ? imm : 65536;
+
+            if (i + 4 * qn > n) {
+                mcHostOnceLog(3, "VIF DIRECT past the end of its chain: cut", code);
+                qn = (n - i) / 4;
+            }
+            mcHostGif(&w[i], qn, 0);
+            i += 4 * qn;
             break;
+        }
         default: /* NOP, STCYCL, OFFSET, BASE, ITOP, STMOD, MSKPATH3, MARK, FLUSH* */
             break;
         }

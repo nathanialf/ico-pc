@@ -13,6 +13,8 @@ target_include_directories(ico_input
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(ico_input PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# stick fix and mirror are port/game/options.c's
+target_link_libraries(ico_input PUBLIC ico_options)
 if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3-shared)
     target_sources(ico_input PRIVATE input_sdl.c)
     target_link_libraries(ico_input PUBLIC SDL3::SDL3-shared)

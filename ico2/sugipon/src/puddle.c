@@ -14,6 +14,13 @@
 #include "ios.h"
 #include "sceneManager.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd.h"
+
+#endif
+
 /* 16-byte aligned: the template copy in InitPuddleGeo is ld/sd, not ldl/ldr. */
 typedef struct { /* field names derived */
     float pos[4];
@@ -104,6 +111,59 @@ PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
     return w;
 }
 
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).  The
+   work block drawAreaSetup allocates right after tex_ResetVramPri(4) is TBP
+   0x2800, which the GS register decoder takes for the named AA0 target (no
+   depth buffer); on the GS the reflection draws there with work1Vram as its
+   Z buffer.  The host binds a per-frame 256 x 256 target with its own depth
+   in AA0's place in list 4 from the allocation to the last packet that
+   samples it (copy), and records the reflection camera gsb_SetVSMatrix
+   leaves in the scratchpad for the reflection draws.  The register writes
+   are unchanged. */
+static RdTarget puddleHostAlias; /* the named target the block is bound over */
+
+static void puddleHostBlockBegin(int tbp)
+{
+    gif_HostFlush();
+    puddleHostAlias = rd_GsNamedBlock((unsigned int)tbp, 0x100, 0x100);
+    if (puddleHostAlias.id != 0) {
+        rd_AliasTarget(puddleHostAlias, rd_BlockTarget((unsigned int)tbp, 0x100, 0x100, 1));
+    }
+}
+
+static void puddleHostBlockEnd(void)
+{
+    gif_HostFlush();
+    if (puddleHostAlias.id != 0) {
+        rd_AliasTarget(puddleHostAlias, (RdTarget){0});
+        puddleHostAlias.id = 0;
+    }
+}
+
+/* the reflection view: +0x80 is the frame's view, +0xC0 the 230 x 230
+   screen matrix gsb_SetVSMatrix(0xE6, ...) just built */
+static void puddleHostCamera(int push)
+{
+    gif_HostFlush();
+    if (push) {
+        RdCamera cam;
+
+        memset(&cam, 0, sizeof(cam));
+        CopyMatrix(cam.view, matrixptr + 0x80);
+        CopyMatrix(cam.proj43, matrixptr + 0xC0);
+        cam.aspect43 = 4.0f / 3.0f;
+        cam.nearZ = 2.0f;
+        cam.farZ = 262144.0f;
+        rd_PushCamera(&cam);
+    } else {
+        rd_PopCamera();
+    }
+}
+
+#endif
+
 void baseSetup(GObj *self)
 {
     gif_StartPacketPri(4);
@@ -141,6 +201,9 @@ void drawAreaSetup(void)
     tex_ResetVramPri(4);
     workVram = tex_AllocVramAuto(0, 0x400);
     work1Vram = tex_AllocVramAuto(0, 0x400);
+#ifdef ICO_RD
+    puddleHostBlockBegin(workVram);
+#endif
 
     gif_StartPacketPri(4);
 
@@ -154,6 +217,9 @@ void drawAreaSetup(void)
 
     _MulMatrix(matrixptr + 0x100, matrixptr + 0xC0, matrixptr + 0x80);
     _MulMatrix(matrixptr + 0x200, matrixptr + 0x1C0, matrixptr + 0x80);
+#ifdef ICO_RD
+    puddleHostCamera(1);
+#endif
 
     gif_SetGsReg(0x14, 0x60);
     gif_SetZTest(1);
@@ -185,6 +251,9 @@ void drawAreaRestore(void)
     CopyMatrix(matrixptr + 0x340, savedMatrix340);
     CopyMatrix(matrixptr + 0x100, savedMatrix100);
     CopyMatrix(matrixptr + 0x200, savedMatrix200);
+#ifdef ICO_RD
+    puddleHostCamera(0);
+#endif
 
     vsWidth = ScreenWidth;
     vsHeight = ScreenHeight;
@@ -371,6 +440,9 @@ void PuddleDL(GObj *self)
     leveldown(4);
     drawRipples(self, 4);
     copy(4);
+#ifdef ICO_RD
+    puddleHostBlockEnd();
+#endif
 }
 
 inline void PuddleGeo(GObj *self)

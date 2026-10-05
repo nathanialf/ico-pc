@@ -36,6 +36,13 @@ ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 # Phase 4E: the FMV picture (port/render/rd_video.c, docs/port/FMV.md)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
+# wave 5 (R5a): staticBlur.c's sprites in the GS integer arithmetic
+# (port/render/rd_blur.c, docs/port/RENDER_API.md section 16)
+ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)
+ico_add_shader(fx_sprite_ps fx_sprite.hlsl fx_sprite_ps fragment)
+# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c), RENDER_API.md section 18
+ico_add_shader(wrap_acc_ps raw_wrap.hlsl wrap_acc_ps fragment)
+ico_add_shader(wrap_resolve_ps raw_wrap.hlsl wrap_resolve_ps fragment)
 # tests only: the probe output of vu1_test (VU_F_PROBE)
 ico_add_shader(vu_probe_ps vu_prelit.hlsl vu_probe_ps fragment)
 

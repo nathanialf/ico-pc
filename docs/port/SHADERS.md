@@ -189,6 +189,8 @@ exceed 0x80.
 | `fog_lut_ps` | fog_lut.hlsl | fragment | wave 4 (R4c): `fog_DrawFog`'s sprite (`RD_POST_FOG`, `RENDER_API.md` section 15) behind `sprite_ui_vs`: t1 a copy of the depth (D32F, sampled as depth, `Load` at the texel the UV addresses, nearest), t2 the 256x1 RGBA8 LUT in index order; reconstructs the GS Z (`(zmax + 1) - d / scale`, the inverse of `gs_z_to_depth`), does the Z test in the shader (GEQUAL against `g_col.x`; Z of a passing pixel capped at the sprite's), index = Z bits 16..23, MODULATE with the vertex colour, alpha test, dual-source output with the state's blend |
 | `fog_lut_vs` | fog_lut.hlsl | vertex | a fullscreen triangle with `fog_lut_ps`'s inputs; unused by rd (kept in the shader table) |
 | `font_vs`, `font_ps` | font.hlsl | vertex, fragment | R8 atlas coverage times vertex alpha, UI space |
+| `fx_rect_vs` | fx_sprite.hlsl | vertex | wave 5 (R5a): a fullscreen triangle at the sprite's depth (`gs_z_to_depth(g_blend.w, g_z.x)`), no vertex input; the scissor and `fx_sprite_ps`'s coverage test bound it |
+| `fx_sprite_ps` | fx_sprite.hlsl | fragment | wave 5 (R5a): one staticBlur.c sprite (`RD_POST_MOTION_BLUR` .. `RD_POST_EYE_BLUR`, `RENDER_API.md` section 17) in the GS integer arithmetic: coverage from the 12.4 corners in `g_param` and the pixel's window coordinate (`g_origin`), the UV stepped in 12.4 integers from `g_uvRect`, nearest or the 4-bit bilinear of `Load`ed texels with CLAMP/REPEAT on the TEX0 size (`g_tex.xy`) and TEXA applied to each texel before filtering, TFX MODULATE/DECAL/HIGHLIGHT/HIGHLIGHT2, the alpha test with AFAIL, DATE and `gs_blend_int` against t2 (a copy of the target taken before the sprite), PABE, FBA, COLCLAMP; writes k / 255 with no hardware blending. Flags `FXF_*` in `g_mode.x` (`RD_FXF_*` in `rd_internal.h`) |
 
 Shadows (wave 4, R4b; `RENDER_API.md` section 14) add no shader. The
 volumes are `sprite_world_vs` on the CPU-projected GS window coordinates
@@ -209,6 +211,21 @@ lies in [1 - 2^-8, 1], where a float steps by 2^-24, so the reconstructed Z
 is Z rounded to a multiple of 256. Bits 16..23 change only within 128 of a
 multiple of 65536 (0.4 % of Z values), where the index can be one off; the
 cap at the sprite's Z keeps 0xFFFFFF (stored as 2^24) at index 0xFF.
+
+staticBlur.c's effects (wave 5, R5a; `RENDER_API.md` section 17) add
+`fx_sprite.hlsl`. It does in the shader what `sprite_ps` leaves to the
+sampler and the blender, so every pass is the GS integer formula: the
+texels are `Load`ed from the UNORM8 target (k / 255 reads back as k) and
+filtered with the GS's 4-bit weights, and the destination comes from a copy
+of the bound target (`RdTargetRec.snap`), so the blend is `gs_blend_int`
+with no hardware blending, for every factor including FIX and As above
+0x80 and the Ad modes. The result is stored as k / 255, which UNORM8 holds
+exactly; that is why the feedback passes do not need `blend_int`'s
+RGBA8_UINT copies. The bindings are `sprite_ps`'s group 2 (t1, s1 unused,
+t2), the pipeline key keeps only the colour mask and the Z test and write
+(`rd__BlurKey`, six keys). The model of the GS's sprite UV step and
+bilinear rounding is documented with the section; `rd_blur` checks the
+shader against the same model on the CPU (0 LSB).
 
 ## Tests
 

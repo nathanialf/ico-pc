@@ -14,6 +14,14 @@
 #include "DmaPacket.h"
 #include "DisplayList.h"
 
+#ifdef ICO_RD
+
+#include <stdio.h>
+#include "MicroCode.h"
+#include "rd.h"
+
+#endif
+
 /* the centre the game-over dark volume and its shock ring spread from, and
    the position of the ordinary dark volume, both homogeneous points */
 static sceVu0FVECTOR gameOverCenter = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
@@ -342,6 +350,74 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
         dvSetGsReg(0x18, (((long long)(2048 - (w) / 2) << 4) + (ox)) |                             \
                              ((((long long)(2048 - (h) / 2) << 4) + (oy)) << 32));                 \
     }
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18).  The
+   packets below are VU1 SET_GSREGISTER packets (VIF UNPACK V4-32 of the GIF
+   tag and its A+D pairs to TOP, MSCALF 0) and the spheres are raw GIF writes
+   (gif_SetGsReg); both reach the GS register decoder as on the PS2, the
+   packets through mc_HostDma once chained.  Three things the decoder cannot
+   know, supplied here:
+     - FRAME FBP 0x140 (TBP 0x2800) at the scene's size is a scene-sized
+       VRAM block, not the anti-alias buffer the decoder names for that FBP
+       (AA0, 256 x 256): rd_BlockTarget stands for it, aliased in for the
+       effect's packets (R5b's rd_GsNamedBlock / rd_AliasTarget), so the
+       clear, the spheres and the TEX0 read of 0x2800 all use it;
+     - ZBUF ZBP 0xC0 is the scene's Z buffer: the spheres are Z-tested
+       against SCENE's depth (the decoder binds depth only with SCENE);
+     - where the composite's PSMCT24 frame mask ends (dvHostBlockEnd).
+   The COLCLAMP 0 wrap of the additive spheres and the PSMCT24 frame itself
+   are generic (rd_replay.c's wrap path, mc_HostDma's FRAME rule). */
+static RdTarget dvHostBlock; /* derived name */
+
+#define DV_HOST_DMA() mc_HostDma(5, PacketBufferStruct.dma.c, 0)
+
+static void dvHostBlockBegin(void) /* derived name */
+{
+    static int reported;
+    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+
+    if (!reported) {
+        reported = 1;
+        fprintf(stderr, "darkVolume: first dark volume drawn (list 10; reported once)\n");
+    }
+
+    dvHostBlock = rd_BlockTarget(0x2800, ScreenWidth, ScreenHeight, 0);
+    if (named.id != 0 && dvHostBlock.id != 0) {
+        rd_AliasTarget(named, dvHostBlock);
+    }
+}
+
+static void dvHostSceneZ(void) /* derived name */
+{
+    if (dvHostBlock.id != 0) {
+        rd_SetTarget(dvHostBlock, rd_Target(RD_TARGET_SCENE), ScreenWidth, ScreenHeight, 0);
+    }
+}
+
+static void dvHostBlockEnd(void) /* derived name */
+{
+    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+
+    if (named.id != 0) {
+        rd_AliasTarget(named, (RdTarget){0});
+    }
+    dvHostBlock = (RdTarget){0};
+    /* The composite's FRAME is PSMCT24 (mc_HostDma: FBMSK 0xFF000000).  On
+       the GS that holds until the next FRAME write, the anti-alias pass's or
+       the flip's; rd records those (rd_Post, rd_FrameHead) without FBMSK, so
+       the mask ends here: list-10 draws between the dark volume and the
+       anti-alias pass write SCENE's alpha on rd and not on the PS2
+       (RENDER_API.md section 18, open item). */
+    rd_ColorMask(0);
+}
+
+#else
+#define DV_HOST_DMA() ((void)0)
+#define dvHostBlockBegin() ((void)0)
+#define dvHostSceneZ() ((void)0)
+#define dvHostBlockEnd() ((void)0)
+#endif
 /* the packet open: every insn carries the row of its call (311, 347, 392) */
 #define dvOpenPacket() /* derived name */                                                          \
     {                                                                                              \
@@ -386,6 +462,7 @@ static void sonic(void *pos, float t)
     int rect2[4] = {4, 4, ScreenWidth * 16, ScreenHeight * 16};
 
     dl_SetDLPriority(10);
+    dvHostBlockBegin();
     dvOpenPacket();
     dvSetFrame(0x140, ScreenWidth, ScreenHeight, 0, 0);
     dvSetGsReg(0x4E, 0x1300000C0LL);
@@ -443,7 +520,9 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostSceneZ();
     gif_StartPacketPri(10);
     renderViewCoordZSphere(pos, sonicSphereColor, 1, (t + 50.0f) * 3.0f);
     renderViewCoordZSphere(pos, sonicSphereColor, 0, t * 2.5f);
@@ -518,6 +597,7 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
     dl_SetDLPriority(10);
     dvOpenPacket();
@@ -593,7 +673,9 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostBlockEnd();
 }
 
 static void darkVolume(void *pos, float radius, float ratio, float edge)
@@ -603,6 +685,7 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     int rect2[4] = {4, 4, ScreenWidth * 16, ScreenHeight * 16};
 
     dl_SetDLPriority(10);
+    dvHostBlockBegin();
     dvOpenPacket();
     dvSetFrame(0x140, ScreenWidth, ScreenHeight, 0, 0);
     dvSetGsReg(0x4A, 0);
@@ -660,7 +743,9 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostSceneZ();
     gif_StartPacketPri(10);
     {
         DVColor c = {volumeOuterColor.r - volumeInnerColor.r - 1,
@@ -734,7 +819,9 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostBlockEnd();
 }
 
 /* the game-over effect's state and the ordinary dark volume's radius and

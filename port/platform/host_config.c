@@ -373,6 +373,8 @@ static const struct {
     /* 1: mount the disc image directly instead of the extracted ico.o2r
        (main_host.c; default 1 headless, 0 in the window build) */
     {"dev.use_iso", "use_iso"},
+    /* the stage Main starts in (developer key, renderer wave 5, R5b) */
+    {"dev.start_stage", "start_stage"},
 };
 
 const char *ico_config_ini_key(const char *toml_path)
@@ -450,6 +452,12 @@ int ico_ini_load(IcoIni *ini, const char *path)
     if (r == 0 || ini->count > 0) {
         export_dump_keys(ini, path);
         export_audio_keys(ini, path);
+        /* start_stage=N (developer key, renderer wave 5): the stage Main
+           starts in instead of stage 1, through debug_TryToGetStartStage
+           (port/null/debug_null.c), which reads ICO_START_STAGE */
+        if (ico_ini_get(ini, "start_stage") != NULL) {
+            put_env("ICO_START_STAGE", ico_ini_get(ini, "start_stage"));
+        }
     }
     return r;
 }

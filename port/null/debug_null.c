@@ -232,10 +232,26 @@ void debug_Init(void) {}
    interrupt; no DMA interrupts on the host. */
 void debug_SetDmaCallback(void) {}
 
-/* debug.c:847: no start-stage file in retail. */
+/* debug.c:847: no start-stage file in retail (-1).  PC port (renderer wave
+   5, R5b): the developer key [dev] start_stage (docs/port/CONFIG.md), which
+   host_config.c hands over as ICO_START_STAGE, takes the place of the
+   development build's start-stage file: Main (common/src/main.c:147) clamps
+   the value to 1..105 and switches to that stage instead of stage 1 (boot,
+   language and title).  Unset or not a number: -1, the retail path. */
 int debug_TryToGetStartStage(void)
 {
-    return -1;
+    const char *v = getenv("ICO_START_STAGE");
+    char *end;
+    long n;
+
+    if (v == NULL || v[0] == '\0') {
+        return -1;
+    }
+    n = strtol(v, &end, 10);
+    if (*end != '\0' || n <= 0 || n > 105) {
+        return -1;
+    }
+    return (int)n;
 }
 
 void debug_openLog(void) {}

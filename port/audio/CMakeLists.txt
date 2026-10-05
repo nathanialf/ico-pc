@@ -47,7 +47,7 @@ target_compile_options(ico_sndn2 PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARN
 set_source_files_properties(sg/sound.c PROPERTIES
     COMPILE_DEFINITIONS "ICO_HOST=1"
     COMPILE_OPTIONS "${ICO_GAME_WARNINGS};-Wno-sign-compare;-Wno-unused-parameter;-Wno-unused-variable;-Wno-unused-but-set-variable;-Wno-pointer-sign")
-target_link_libraries(ico_sndn2 PUBLIC ico_audio ico_port_data ico_platform)
+target_link_libraries(ico_sndn2 PUBLIC ico_audio ico_port_data ico_platform ico_options)
 if(NOT WIN32)
     target_link_libraries(ico_sndn2 PUBLIC m) # exp2 for the pitch table fallback
 endif()
