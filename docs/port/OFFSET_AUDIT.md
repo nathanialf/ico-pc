@@ -122,6 +122,25 @@ under ee-gcc 2.9 (`tools/ee_identity.sh --all`).
 | `fumi/ios/pad.c` | IosPadBuf 0..3 | `*(unsigned int *)b >> 12` over `pad0` | `termId >> 4` |
 | `fumi/ios/cdvd.c` | | `bgRunning` held the running request in an `int` | `ICO_WORD` |
 
+Package W2: an index spelled as a byte offset over the element size
+(`q[0x500 / 4]`, `((float *)x)[0x10 / 4]`) was not seen: `view_index` and
+`index` took only a literal between the brackets. They now also take
+`N / M` and `N * M` (`bracket_const`), which found 12 MISMATCH, all in
+`fumi/src/act-game.c`: `PAIR_GetPosition_BOY` read the boy's Act at EE
+0x500 and 0x4C0 (`env.cliffStepPos`, `env.cliffOrient`; host 0x5D8, 0x598)
+and `PAIR_GetPosition_BOY_DITCH` at 0x510 and 0x520 (`env.ditchPos`,
+`env.ditchDir`; host 0x5E8, 0x5F8). On the host those offsets are the boy's
+way-walk fields (`wayDetailFlag`, `wayGoalY`, `wayState`, `wayGoalDist`,
+`wayGoalHeight`, `wayLast`), all 0 in play (a probe every 500 ticks of the
+stage 4 recording `input-20261005-124408.txt`), so `actGirlPulledReady`
+(`girl_act.c`) sent the girl to the world origin at her own height instead
+of under the boy's ledge before a pull-up (the user's report: she was taken
+back to a ledge she had climbed before), and `actGirlDitch3mReady` likewise
+for a ditch. Both now read the fields under `ICO_HOST`, the EE spelling in
+`#else` (EE disassembly: `PAIR_GetPosition_BOY` at 0x14CFB8 loads
+`lwc1 1280(v0)` .. `1224(v0)` from the Act at GObj + 0x164). The run after
+the fix: 18051 sites, OK 866, no finding.
+
 Fields added or renamed (headers; `port/test/layout_asserts.c` regenerated):
 `Act.bits60` (0x60, was `pad60`), `Act.curRoot` (0x100, `test_CURRENTROOT`'s
 buffer, was `pad100`), `Act.torchAnim` (0x470, was `pad470`),

@@ -1035,10 +1035,24 @@ static void getMotionGeometry(void *self)
             v.f[0] = v.f[0] + 1.0f;
         }
         sceVu0ScaleVector(&v, &v, scale);
+#ifdef ICO_HOST
+        /* PC port: a root position blended between two frames
+           (GetBlendedMotionRootPos) gets x, y and z only, so w is the stack
+           word an earlier call left in v (and in rv). VU0 scales an
+           exponent-255 word as a number, saturating at +-Fmax, and the root
+           update's sceVu0ApplyMatrix multiplies it by the zero translation
+           row, so rootMove's x, y and z are the rotation alone; a host NaN
+           there gave NaN in all three (a shadow carrying the girl, stage 4).
+           Read it as the PS2 does (DIVERGENCES.md F14). */
+        v.f[3] = ps2_operand(v.f[3]);
+#endif
         if (w->animFrame < w->lastFrame) {
             CopyVector(mo->step, ZeroVector);
         } else {
             sceVu0ScaleVector(&rv, &rv, scale);
+#ifdef ICO_HOST
+            rv.f[3] = ps2_operand(rv.f[3]);
+#endif
             sceVu0SubVector(mo->step, &v, &rv);
         }
         if (w->noAlt != 0) {

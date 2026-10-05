@@ -377,6 +377,23 @@ def const_terms(u, j):
     return (total, end) if seen else (None, j)
 
 
+def bracket_const(toks, k):
+    """`[ N ]`, `[ N / M ]` or `[ N * M ]` from the `[` at token k: (value, index
+    of the `]`), or (None, k). The quotient form spells a byte offset as an
+    element index (`q[0x500 / 4]`)."""
+    n = len(toks)
+    if k + 2 < n and toks[k + 1].k == "num" and toks[k + 2].s == "]":
+        return num_value(toks[k + 1].s), k + 2
+    if k + 4 < n and toks[k + 1].k == "num" and toks[k + 2].s in ("/", "*") and \
+            toks[k + 3].k == "num" and toks[k + 4].s == "]":
+        a = num_value(toks[k + 1].s)
+        b = num_value(toks[k + 3].s)
+        if a is None or b is None or (toks[k + 2].s == "/" and (b == 0 or a % b)):
+            return None, k
+        return (a // b if toks[k + 2].s == "/" else a * b), k + 4
+    return None, k
+
+
 BAD_PREV = {"*", "/", "%", "-", "+", "&", "!", "~", ".", "->", "sizeof", "<<", ">>", "++", "--", ")",
             "]"}
 
@@ -1035,10 +1052,9 @@ def find_sites(u):
             if t.k == "id" and t.s in views and toks[i - 1].s not in (".", "->"):
                 nxt = toks[i + 1].s
                 v = None
-                if nxt == "[" and toks[i + 2].k == "num" and toks[i + 3].s == "]":
-                    v = num_value(toks[i + 2].s)
+                if nxt == "[" and bracket_const(toks, i + 1)[0] is not None:
+                    v, end = bracket_const(toks, i + 1)
                     kind = "view_index"
-                    end = i + 3
                 elif nxt in ("+", "-") and i + 2 < n and toks[i + 2].k == "num" and \
                         toks[i - 1].s not in BAD_PREV:
                     v, end = const_terms(u, i)
@@ -1125,11 +1141,11 @@ def find_sites(u):
                 continue
             scale = 1 if (not ptr or base in CHARLIKE) else SCALAR.get(base, 1)
             # ((T *)x)[N]
-            if ptr and grouped and oe + 4 < n and toks[oe + 2].s == "[" and \
-                    toks[oe + 3].k == "num" and toks[oe + 4].s == "]":
-                v = num_value(toks[oe + 3].s)
+            if ptr and grouped and oe + 2 < n and toks[oe + 2].s == "[" and \
+                    bracket_const(toks, oe + 2)[0] is not None:
+                v, be = bracket_const(toks, oe + 2)
                 if v is not None:
-                    s = mk("index", i, i - 1, oe + 4, func)
+                    s = mk("index", i, i - 1, be, func)
                     s.operand = (ce + 1, oe)
                     s.const = v * scale
                     s.cast = ctype

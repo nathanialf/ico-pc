@@ -443,8 +443,23 @@ inline int ACTGame_GetCurrentCallStatus(GObj *self)
     return 0;
 }
 
+/* The boy's Act + 0x510 and + 0x520 are env.ditchPos and env.ditchDir;
+   + 0x500 and + 0x4C0 (PAIR_GetPosition_BOY) are env.cliffStepPos and
+   env.cliffOrient. On the host env sits further in (8-byte pointers before
+   it), so the EE offsets read the boy's way-walk fields, and the girl's
+   approach to a pull-up or a ditch (girl_act.c actGirlPulledReady,
+   actGirlDitch3mReady) walked to a point made of them. */
 inline void PAIR_GetPosition_BOY_DITCH(float *pos, float *dir)
 {
+#ifdef ICO_HOST
+    ActEnv *e = &GOBJ_ACT(boyGObj)->env;
+    pos[0] = e->ditchPos[0];
+    pos[1] = e->ditchPos[1];
+    pos[2] = e->ditchPos[2];
+    dir[0] = e->ditchDir[0];
+    dir[1] = e->ditchDir[1];
+    dir[2] = e->ditchDir[2];
+#else
     float *q = (float *)(char *)GOBJ_ACT(boyGObj);
     pos[0] = q[0x510 / 4];
     pos[1] = q[0x514 / 4];
@@ -452,6 +467,7 @@ inline void PAIR_GetPosition_BOY_DITCH(float *pos, float *dir)
     dir[0] = q[0x520 / 4];
     dir[1] = q[0x524 / 4];
     dir[2] = q[0x528 / 4];
+#endif
 }
 
 inline int PAIR_IsStatus_BOY_DITCH(void)
@@ -481,6 +497,15 @@ inline int PAIR_IsStatus_BOY_DITCH(void)
 
 inline void PAIR_GetPosition_BOY(float *pos, float *dir)
 {
+#ifdef ICO_HOST
+    ActEnv *e = &GOBJ_ACT(boyGObj)->env;
+    pos[0] = e->cliffStepPos[0];
+    pos[1] = e->cliffStepPos[1];
+    pos[2] = e->cliffStepPos[2];
+    dir[0] = e->cliffOrient[0];
+    dir[1] = e->cliffOrient[1];
+    dir[2] = e->cliffOrient[2];
+#else
     float *q = (float *)(char *)GOBJ_ACT(boyGObj);
     pos[0] = q[0x500 / 4];
     pos[1] = q[0x504 / 4];
@@ -488,6 +513,7 @@ inline void PAIR_GetPosition_BOY(float *pos, float *dir)
     dir[0] = q[0x4C0 / 4];
     dir[1] = q[0x4C4 / 4];
     dir[2] = q[0x4C8 / 4];
+#endif
 }
 
 inline int PAIR_IsStatus_BOY_PULL(void)

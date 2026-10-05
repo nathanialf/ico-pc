@@ -167,6 +167,9 @@ static void test_helpers(void)
     check(ps2_ftoi(1.9f) == 1 && ps2_ftoi(-1.9f) == -1, "ftoi truncates");
     check(ps2_ftoi4(1.5f) == 24 && ps2_ftoi4(-0.03125f) == 0, "ftoi4");
     check(ps2_ftoi4(2e8f) == INT32_MAX, "ftoi4 saturates");
+    check(ps2_ftoi(ps2_bits_float(0xFFFFFFFFu)) == INT32_MIN,
+          "ftoi -NaN pattern saturates by sign");
+    check(ps2_ftoi(ps2_bits_float(0x7F800000u)) == INT32_MAX, "ftoi +Inf pattern saturates");
     check(ps2_max(-2.0f, -3.0f) == -2.0f && ps2_min(-2.0f, -3.0f) == -3.0f, "max/min negatives");
     check_bits(ps2_operand(ps2_bits_float(0xFFFFFFFFu)), 0xFF7FFFFFu, "operand 0xFFFFFFFF = -Fmax");
     check_bits(ps2_operand(ps2_bits_float(0x7F800000u)), 0x7F7FFFFFu, "operand +Inf = +Fmax");

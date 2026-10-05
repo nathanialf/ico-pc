@@ -90,13 +90,20 @@ float ps2_rsqrt(float a, float b);
    VU0 `vftoi0`). */
 static inline int32_t ps2_ftoi(float x)
 {
-    if (x >= 2147483648.0f) {
-        return INT32_MAX;
-    }
-    if (x <= -2147483648.0f) {
-        return INT32_MIN;
-    }
-    return (int32_t)x;
+    const uint32_t u = ps2_float_bits(x);
+    /* an exponent-255 pattern is a huge number to the EE: it saturates by
+       its sign (the host's conversion gives INT32_MIN and raises invalid) */
+    const int huge = (u & 0x7F800000u) == 0x7F800000u;
+    const int sat = huge || x >= 2147483648.0f;
+    /* every lane is brought in range before the one conversion: a
+       vectorised convert (Shadow.c's 24 lanes) raises invalid on the lanes a
+       branch would have skipped, which the fptrap build reports */
+    float c = sat ? 0.0f : x;
+    int32_t r;
+
+    c = c < -2147483648.0f ? -2147483648.0f : c;
+    r = (int32_t)c;
+    return sat ? ((u & 0x80000000u) != 0 ? INT32_MIN : INT32_MAX) : r;
 }
 
 /* VU0 `vftoi4`: 28.4 fixed point. The scaling by 16 is exact (an overflow
