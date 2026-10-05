@@ -47,10 +47,12 @@ that includes every header when the unit only declares the record), and:
 - **TRUNC**: a pointer goes through `(int)`;
 - **UNRESOLVED**: a view the audit could not resolve (a view of a record with
   no EE layout, an `ICO_RAW` field it cannot parse);
+- **NARROW**: a pointer-wide value converted to 32 bits or fewer (the
+  `narrow` pass, X4; below);
 - **OK** / **SKIP**: the access is the named field on the host / not a view
   of a record (a vector's lanes, a matrix row, an EE word table).
 
-Any of the first four fails the run (exit 1).
+Any of the first five fails the run (exit 1).
 
 ```sh
 cmake --preset linux-x64 -B build-host/<dir>      # compile_commands.json
@@ -62,7 +64,7 @@ tools/offset_audit.py --build build-host/<dir> --dump Sub15C  # a record's EE fi
 ```
 
 ctest runs it as `offset_audit` on native builds (`port/test/CMakeLists.txt`;
-about 30 s). Its work files go to `<build>/offset_audit/`.
+about 30 s, the `narrow` pass included). Its work files go to `<build>/offset_audit/`.
 
 ## Result
 
@@ -122,6 +124,9 @@ under ee-gcc 2.9 (`tools/ee_identity.sh --all`).
 | `fumi/ios/pad.c` | IosPadBuf 0..3 | `*(unsigned int *)b >> 12` over `pad0` | `termId >> 4` |
 | `fumi/ios/cdvd.c` | | `bgRunning` held the running request in an `int` | `ICO_WORD` |
 | `sugipon/src/box.c` `InitBoxGeo`, `ReInitBoxGeo` | BoxWork 0x2C | `colData`, an `int`, held `Sub15C.colData` (a pointer) and gave it back truncated (DIVERGENCES.md D10, X1) | `ICO_WORD`, width asserted on the host |
+| `fumi/ios/cdvd.c` `iosCdvdBackGroundMgrDeleteRequestGet`, `iosCdvdBackGroundMgrEntryNum` (`StageManager.c:283`, `:452`) | | walked `bgReqTable` while `(int)p < (int)limit`: the low 32 bits of two host addresses, wrong if the table straddles a 2^31 boundary of the low word (X4) | `(ICO_WORD)p < (ICO_WORD)limit` (`int` on the EE, the same tokens) |
+| `fumi/ios/cdvd.c` `iosCdvdBackGroundMgrGetRunning`, `iosCdvdDiskReady`, `iosCdvdLoad` (no callers) | | returned `bgRunning` (a request address) as `int`; took the request record's address as `int req` (X4) | `ICO_WORD` return and parameters |
+| `fumi/ios/shockdriver.c` `ShockDriver_GetShockVoiceMax` (no callers) | ShockVoiceSet 0 | `(int)arr[idx]`, then `*(int *)p`: the set's and its image's addresses in an `int` (X4) | `ICO_HOST`: `arr[idx]->top.half[4]` |
 
 Package W2: an index spelled as a byte offset over the element size
 (`q[0x500 / 4]`, `((float *)x)[0x10 / 4]`) was not seen: `view_index` and
@@ -168,6 +173,51 @@ buffer, was `pad100`), `Act.torchAnim` (0x470, was `pad470`),
   __attribute__((aligned(16)));`) was taken for a typedef of
   `__attribute__`, so casts to it were not seen; fixed in package S4 (one
   more OK site: 18031 sites, OK 866, no finding).
+
+## Pointer-wide values in 32 bits (the `narrow` pass, package X4)
+
+The offset checks above see a pointer through `int` only when it is cast
+next to a constant. `BoxWork.colData` (DIVERGENCES.md D10) held a pointer in
+an `int` member with no cast at all, and an explicit `(int)` of an
+`ICO_WORD` warns under no flag. So `offset_audit.py` also compiles each unit
+at `-O1 -fdump-tree-ssa-lineno` (its own flags, in `<build>/offset_audit/`)
+and reads gcc's early SSA dump, which spells every conversion, implicit or
+cast, with its operand's declared type. On an LP64 host `ICO_WORD` is
+`long int` and the EE's doublewords `long long int`, so the two do not mix;
+the pass runs only there (`__SIZEOF_LONG__` 8 and `__INTPTR_TYPE__` `long
+int`, else it says it did not run; `--no-narrow` skips it).
+
+A site is **NARROW** when a value is converted to `int`, `unsigned int` or a
+narrower integer and it is a pointer, or a `long` that a load, a call (not a
+`size_t` one) or a pointer cast produced. Differences, shifts, masks and
+divisions of addresses (sizes, quadword counts) are not reported. Reviewed
+32-bit quantities are listed in `NARROW_OK` with the reason (the scene
+object word `SceneObj.obj` read as a kind or a table row, a debug quadword
+count, the start-stage number) and count as OK. A NARROW site fails the run
+like the others.
+
+Checked by putting the two X4 and D10 sites back: with `box.c` at
+`d20be3fe^` and `cdvd.c`'s old `(int)p < (int)limit` the pass reports
+`box.c:2071` (`InitBoxGeo`'s store into `BoxWork.colData`) and
+`cdvd.c:1229`, `:1245`. The tree now: 16 narrow sites, all reviewed (OK),
+NARROW 0. The run takes about 25 s on 4 cores with the narrowing pass.
+
+The sweep behind it (X4) also built the game with `-Wconversion
+-Wpointer-to-int-cast` for Windows x64 (32-bit `long`) and read the same SSA
+dumps of that build: no `long` holds a pointer (the only `long` in `ico2/` is
+`debug.c`'s `strtol` result), and every narrowing it found from a 64-bit
+value is a doubleword flag or register field (`flags18.ll >> 34`, GS
+registers, `attr.bits`), an address difference, a `strlen`, or one of the
+sites above. Limits: a pointer read through a 4-byte view (`*(int *)&p`,
+the offset checks' MISMATCH) is not a conversion; a call through an
+unprototyped declaration (`-Wstrict-prototypes`: 1451 such declarations)
+passes the full pointer to a callee that may read an `int`, which neither
+pass sees (an `-flto -Wlto-type-mismatch` link of the Linux build listed 32
+mismatches outside the generated symbol registry: table element types,
+`short`/`int` angles, `debug.c`'s `long long` colour for `gif_Sprite` and
+`gif_Line`, whose definitions read the low word; none passes a pointer
+where an `int` is read; `rope.c`'s declaration of `GetChainAnimation` took
+its `GObj *` as `int` for a literal 0, now `ICO_WORD`).
 
 ## Whole-record copies (`tools/template_audit.py`, package S4)
 

@@ -709,7 +709,20 @@ int ShockDriver_GetShockVoiceMax(int idx)
     p = 0;
     goto check;
 body:
+#ifdef ICO_HOST
+    /* PC port: the set and its image are pointers, which an int truncates on
+       x64; the same reads, typed (no caller in the game) */
+    {
+        ShockVoiceSet *s = System_shock_driver->arr[idx];
+
+        if (s != 0) {
+            return s->top.half[4];
+        }
+        return 0;
+    }
+#else
     p = (int)System_shock_driver->arr[idx];
+#endif
 check:
     if (p != 0) {
         p = *(int *)p;

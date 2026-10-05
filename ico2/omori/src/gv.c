@@ -5,12 +5,6 @@
 #include "matrixDrive.h"
 #include <libvu0.h>
 
-#ifdef ICO_HOST
-
-#include "typedef.h" /* ps2_operand */
-
-#endif
-
 void _InterGV(float *dst, float *a, float *b, float ta, float tb)
 {
     if (dst == 0 || a == 0 || b == 0) {
@@ -147,26 +141,12 @@ void _ApplyRyGV(float *vec, float ang)
     float m0[16];
     float m1[16];
     float v[4];
-#ifdef ICO_HOST
-    float in[4];
-#endif
     sceVu0UnitMatrix(m0);
     sceVu0RotMatrixY(m1, m0, ang);
-#ifdef ICO_HOST
-    /* Callers such as chain.c's climb sway (chain_simulate_term_moveup,
-       chain_simulate_term_down) set only x, y and z, so w is the stack word
-       an earlier frame left there. VU0 multiplies it by the matrix's zero
-       translation row and reads an exponent-255 word as a number, so x, y
-       and z are the rotation alone; a host NaN or Inf there gives NaN in
-       all three. Read it as the PS2 does (DIVERGENCES.md F5). */
-    in[0] = vec[0];
-    in[1] = vec[1];
-    in[2] = vec[2];
-    in[3] = ps2_operand(vec[3]);
-    sceVu0ApplyMatrix(v, m1, in);
-#else
+    /* PC port: callers such as chain.c's climb sway set only x, y and z, so
+       w is a stale stack word; the host's sceVu0ApplyMatrix reads it as VU0
+       does (port/math/matrix_stack.c ico_apply_matrix, DIVERGENCES.md F13) */
     sceVu0ApplyMatrix(v, m1, vec);
-#endif
     vec[0] = v[0];
     vec[1] = v[1];
     vec[2] = v[2];

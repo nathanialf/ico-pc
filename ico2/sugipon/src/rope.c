@@ -20,6 +20,7 @@
 #undef TestDispChainAnimation
 
 #include <stddef.h>
+#include <string.h> /* memset (InitRopeGeo's ClipWork) */
 
 #define ROPE_EX_OFS offsetof(ChainNode, ex)
 #else
@@ -130,6 +131,12 @@ void *InitRopeGeo(GObj *o, const float *p)
         sceVu0FVECTOR v1 = {0.0f, 0.0f, 10.0f, 1.0f};
         ClipWork cw;
 
+#ifdef ICO_HOST
+        /* PC port (X4, DIVERGENCES.md F16): the original sets only the two
+           points, so ClipWall's radius was a stale stack word; the host
+           starts from radius 0 (a segment test) and no filter */
+        memset(&cw, 0, sizeof(cw));
+#endif
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(p[0], p[1] + 10.0f, p[2]);
         MatrixDrive_RotMatrixY(p[5] * 10430.378f);
@@ -291,7 +298,9 @@ void HoldRope(GObj *rope, GObj *holder)
 
 inline void ReleaseRope(void) {}
 
-extern void GetChainAnimation(void *sys, int obj, void *mtx);
+/* obj is a GObj * in the definition (clothAnimation.c): a word, pointer-wide
+   on the host (X4) */
+extern void GetChainAnimation(void *sys, ICO_WORD obj, void *mtx);
 
 static void ropeGeo(GObj *rope)
 {

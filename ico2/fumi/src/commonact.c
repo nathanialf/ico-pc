@@ -1358,6 +1358,11 @@ static inline unsigned char ropeSpecialWallHit(RsVec4 *p1, ClimbCol *hit) /* der
     ClipWork work;
     int i;
 
+#ifdef ICO_HOST
+    /* the original sets only the two points; ClipWall reads the radius
+       from the stack word (DIVERGENCES.md F16): zero here */
+    memset(&work, 0, sizeof(work));
+#endif
     for (i = 0; i < 4; i++) {
         sceVu0UnitMatrix((void *)MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(p1->f[0], p1->f[1] + 0.0f, p1->f[2]);

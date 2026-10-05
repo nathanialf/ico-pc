@@ -186,6 +186,13 @@ static inline int clipFieldWallAndReset(struct MotRoot *cur, float *last) /* der
     }
     CopyVector(w.pt[1], cur->pos);
     w.filter = InitialColInfo;
+#ifdef ICO_HOST
+    /* PC port (X4, DIVERGENCES.md F16): the original never sets the radius
+       here; inlined into rootUpdateStepSolution, its record shares the stack
+       slot clipFuchiWallAndReact just stored rad * skelScale in (sp+0x250,
+       0x1EA808), so the EE clips with the fuchi probe's radius. */
+    w.radius = cur->radius * skelScale;
+#endif
     ClipWallField(&w);
     if (w.wall.elem != 0 && CompareAttribute(w.attr, 0x10000) != 0) {
         _wallHitReaction(&w, cur->pos, last, 0);

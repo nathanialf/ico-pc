@@ -32,7 +32,12 @@ void ico_apply_matrix(float *out, const float (*m)[4], const float *v)
     float x = v[0];
     float y = v[1];
     float z = v[2];
-    float w = v[3];
+    /* VU0 reads an exponent-255 word as a number (+-Fmax; no Inf or NaN).
+       Callers often write only x, y and z, leaving w a stale word (the
+       chain sway, the blended motion root): times a zero translation row
+       the PS2 gets 0, the host would get NaN. Read w as VU0 does
+       (docs/port/DIVERGENCES.md F13, F14). */
+    float w = ps2_operand(v[3]);
     int i;
 
     for (i = 0; i < 4; i++) {

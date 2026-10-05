@@ -107,7 +107,7 @@ void iosCdvdManager(void);
 void iosMcManager(void);
 void jimakuManager(void);
 void sndManager(void);
-void InitIcoMisc(void);
+void InitIcoMisc(int *arg); /* common/src/icoMisc.c */
 
 #ifdef _WIN32
 

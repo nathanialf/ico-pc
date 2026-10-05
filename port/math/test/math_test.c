@@ -181,6 +181,51 @@ static void test_helpers(void)
     check_bits(denorm + 0.0f, 0x00000000u, "a denormal input reads as zero");
 }
 
+/* A stale w lane (X4, DIVERGENCES.md F13/F14): callers that write only x,
+   y and z leave w a leftover word, 0xFFFFFFFF in the rope climb's case.
+   VU0 reads it as -Fmax, so with a zero translation row the product is the
+   rotation alone; with a translation the result saturates but stays a
+   number. */
+static void test_stale_w(void)
+{
+    float unit[4][4], rot[4][4], tr[4][4];
+    float v[4], v0[4], out[4], want[4];
+    float t[4] = {10.0f, -20.0f, 30.0f, 0.0f};
+    int i;
+
+    sceVu0UnitMatrix(unit);
+    sceVu0RotMatrixY(rot, unit, 0.7f);
+    v[0] = 3.0f;
+    v[1] = -4.0f;
+    v[2] = 5.0f;
+    v[3] = ps2_bits_float(0xFFFFFFFFu);
+    memcpy(v0, v, sizeof v0);
+    v0[3] = 0.0f;
+    sceVu0ApplyMatrix(want, rot, v0);
+    sceVu0ApplyMatrix(out, rot, v);
+    check(memcmp(out, want, 3 * sizeof(float)) == 0,
+          "sceVu0ApplyMatrix: w 0xFFFFFFFF, zero translation row: the rotation alone");
+    _ApplyMatrix(out, rot, v);
+    check(memcmp(out, want, 3 * sizeof(float)) == 0,
+          "_ApplyMatrix: w 0xFFFFFFFF, zero translation row: the rotation alone");
+    memcpy(out, v, sizeof out);
+    sceVu0ApplyMatrix(out, rot, out);
+    check(memcmp(out, want, 3 * sizeof(float)) == 0, "sceVu0ApplyMatrix in place, stale w");
+    v[3] = ps2_bits_float(0x7FC00000u);
+    sceVu0ApplyMatrix(out, rot, v);
+    check(memcmp(out, want, 3 * sizeof(float)) == 0, "sceVu0ApplyMatrix: NaN-pattern w, zero row");
+    memcpy(tr, rot, sizeof tr);
+    tr[3][0] = t[0];
+    tr[3][1] = t[1];
+    tr[3][2] = t[2];
+    v[3] = ps2_bits_float(0xFFFFFFFFu);
+    sceVu0ApplyMatrix(out, tr, v);
+    for (i = 0; i < 4; i++) {
+        check(!isnan(out[i]) && !isinf(out[i]),
+              "sceVu0ApplyMatrix: stale w with a translation is a number");
+    }
+}
+
 /* The multiply-add is not fused: (1 + 2^-12)^2 rounds to 1 + 2^-11 first. */
 static void test_madd_not_fused(void)
 {
@@ -569,6 +614,7 @@ int main(void)
     test_madd_not_fused();
     test_random();
     test_matrices();
+    test_stale_w();
     test_rotations();
     test_vectors();
     test_inverse_and_projection();

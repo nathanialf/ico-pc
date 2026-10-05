@@ -884,14 +884,16 @@ void iosCdvdManager(void)
     }
 }
 
-void iosCdvdDiskReady(int req)
+/* req is the request record's address: a word, pointer-wide on the host
+   (no caller in the game) */
+void iosCdvdDiskReady(ICO_WORD req)
 {
     union IosCdvdCtl *p = (union IosCdvdCtl *)req;
     p->i[1] = 0;
     iosMsgSend(&CdvdMsgQ, req, 0);
 }
 
-void iosCdvdLoad(int req, int inflate)
+void iosCdvdLoad(ICO_WORD req, int inflate)
 {
     union IosCdvdCtl *p = (union IosCdvdCtl *)req;
     p->i[1] = 1;
@@ -1224,7 +1226,7 @@ int iosCdvdBackGroundMgrDeleteRequestGet(void)
             count += p->flags.del;
         }
         p++;
-    } while ((int)p < (int)limit);
+    } while ((ICO_WORD)p < (ICO_WORD)limit); /* (int) on the EE: pointer-wide on the host */
     return count;
 }
 
@@ -1240,7 +1242,7 @@ int iosCdvdBackGroundMgrEntryNum(void)
         if (b != 0) {
             count = new_count;
         }
-    } while ((int)p < (int)limit);
+    } while ((ICO_WORD)p < (ICO_WORD)limit); /* (int) on the EE: pointer-wide on the host */
     return count;
 }
 
@@ -1249,7 +1251,8 @@ void iosCdvdBackGroundMgrSeek(CdvdBgReq *self, int val)
     self->pos = val;
 }
 
-int iosCdvdBackGroundMgrGetRunning(void)
+/* bgRunning is the running request's address (no caller in the game) */
+ICO_WORD iosCdvdBackGroundMgrGetRunning(void)
 {
     return bgRunning;
 }

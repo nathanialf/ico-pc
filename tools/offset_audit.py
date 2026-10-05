@@ -2234,6 +2234,135 @@ def audit_unit(src, fl, db, workdir):
 
 
 
+
+# --- Pointer-wide values held in 32 bits (package X4) ----------------------
+# A pointer, an ICO_WORD (intptr_t) or a pointer-wide integer converted to
+# int, unsigned int or narrower loses its upper 32 bits on x64; on the EE
+# both are 32 bits wide, so nothing in the source marks it (BoxWork.colData,
+# DIVERGENCES.md D10). gcc's early SSA dump (-fdump-tree-ssa-lineno) spells
+# every conversion, implicit or cast, with its operand's type; on an LP64
+# host ICO_WORD is `long int`, the EE's doublewords `long long int`, so the
+# two do not mix. Reported: a conversion to a 32-bit-or-narrower integer of
+# a pointer, or of a `long` that a load, a call or a pointer cast produced.
+# Differences, shifts, masks and divisions of addresses are quantities
+# (a size, a quadword count) and are not reported.
+
+NARROW_DST = ("int", "unsigned int", "short int", "short unsigned int", "char",
+              "unsigned char", "signed char")
+NARROW_WIDE = re.compile(r"^(long (unsigned )?int|.*\*)$")
+NARROW_DECL = re.compile(r"^  (.+?) ([A-Za-z_.][A-Za-z0-9_.]*)(\[.*\])?;$")
+NARROW_DEF = re.compile(r"^\s*(?:\[[^\]]+\] )+([A-Za-z_.][A-Za-z0-9_.]*) = (.*);$")
+NARROW_CONV = re.compile(r"^\s*\[([^\]]+?)(?: discrim \d+)?\] (?:\[[^\]]+\] )*[^=]+ = \(([^()]+)\) "
+                         r"([A-Za-z_.][A-Za-z0-9_.]*)(?:\(D\))?;$")
+NARROW_LOC = re.compile(r"\[[^\]]*\] ")
+# reviewed: (file, the source line stripped) -> why it is a 32-bit quantity
+NARROW_OK = {
+    ("ico2/common/src/debug.c", "return (int)n;"): "strtol of the start-stage number, 1..105",
+    ("ico2/fumi/ios/thread.c", "return buf[0];"): "the join message, an int iosThreadMessage sent",
+    ("ico2/seki/src/DisplayList.c", "unsigned int end = (unsigned int)entry->cur;"):
+        "debug quadword count: only the difference of the two words is used",
+    ("ico2/seki/src/DisplayList.c", "unsigned int start = (unsigned int)entry->tag;"):
+        "debug quadword count: only the difference of the two words is used",
+    ("ico2/sugipon/src/a_p_1.c", "p->layout = arg->obj;"): "SceneObj.obj holds a spiderDef row here",
+    ("ico2/sugipon/src/box.c", None): "SceneObj.obj holds a layout kind here",
+    ("ico2/sugipon/src/enemy.c", "int kind = param->obj;"): "SceneObj.obj holds an enemy kind here",
+    ("ico2/sugipon/src/girl.c", "kind = csv->obj;"): "SceneObj.obj holds a kind here",
+    ("ico2/sugipon/src/rotObject.c", "p->kind = src->obj;"): "SceneObj.obj holds a kind here",
+    ("ico2/sugipon/src/spider.c", "k = lay->obj;"): "SceneObj.obj holds a spiderDef row here",
+    ("ico2/sugipon/src/stormTest.c", "int v = lay->obj;"): "SceneObj.obj holds a number here",
+    ("ico2/sugipon/src/torch.c", "p->flags = lay->obj & ~1;"): "SceneObj.obj holds flags here",
+    ("ico2/sugipon/src/weapon.c", None): "SceneObj.obj holds a weapon kind here",
+    ("ico2/seki/src/Packet.c", None):
+        "a packet address minus a tag address, a quadword count (PacAddr is pointer-wide)",
+}
+
+
+def narrow_ok(rel, srcline):
+    for (f, text), why in NARROW_OK.items():
+        if f == rel and (text is None or text == srcline):
+            if text is None and "->obj" not in srcline and "cursor.addr" not in srcline:
+                continue
+            return why
+    return None
+
+
+
+def lp64(tus):
+    """True when the build's compiler has a 64-bit long (ICO_WORD is `long`)."""
+    for fl in tus.values():
+        r = run([fl["cc"], "-dM", "-E", "-x", "c", "/dev/null"])
+        return "#define __SIZEOF_LONG__ 8" in r.stdout and \
+            "#define __INTPTR_TYPE__ long int" in r.stdout
+    return False
+
+
+def narrow_unit(src, fl, workdir):
+    """The NARROW sites of one unit (see above)."""
+    sub = tempfile.mkdtemp(prefix="narrow.", dir=workdir)
+    r = run([fl["cc"], "-O1", "-fdump-tree-ssa-lineno", "-c", "-o", os.path.join(sub, "u.o"),
+             "-dumpdir", sub + os.sep] + fl["pp"] + fl["opts"] + [src], cwd=fl["dir"])
+    if r.returncode != 0:
+        raise RuntimeError("%s: the narrowing pass did not compile:\n%s" % (src, r.stderr[-2000:]))
+    sites = []
+    lines_of = {}
+    for name in os.listdir(sub):
+        if not name.endswith(".ssa"):
+            continue
+        types, defs = {}, {}
+        with open(os.path.join(sub, name), encoding="latin-1") as f:
+            for line in f:
+                if line and not line.startswith(" ") and "(" in line:
+                    types, defs = {}, {}
+                    continue
+                m = NARROW_DECL.match(line)
+                if m and "=" not in line:
+                    types[m.group(2)] = m.group(1).strip()
+                    continue
+                m = NARROW_DEF.match(line)
+                if m:
+                    defs[m.group(1)] = NARROW_LOC.sub("", m.group(2))
+                m = NARROW_CONV.match(line)
+                if not m:
+                    continue
+                loc, dst, opnd = m.group(1), m.group(2).strip(), m.group(3)
+                if dst not in NARROW_DST:
+                    continue
+                st = types.get(opnd) or types.get(re.sub(r"_\d+$", "", opnd))
+                if st is None or not NARROW_WIDE.match(st):
+                    continue
+                if not st.endswith("*"):
+                    d = defs.get(opnd, "")
+                    ptrcast = re.match(r"^\((long (unsigned )?int)\) ([A-Za-z_.][A-Za-z0-9_.]*)$", d)
+                    if ptrcast:
+                        t2 = types.get(ptrcast.group(3)) or types.get(
+                            re.sub(r"_\d+$", "", ptrcast.group(3)))
+                        if not (t2 or "").endswith("*"):
+                            continue
+                    elif not re.match(r"^([A-Za-z_][\w.]*(\(D\))?(->|\.)[\w.\[\]>-]+|\*[\w.]+|"
+                                      r"[A-Za-z_][\w.]*|[A-Za-z_]\w* \(.*\))$", d) or \
+                            re.match(r"^\d+$", d):
+                        continue
+                    if st == "long unsigned int" and re.match(r"^[A-Za-z_]\w* \(", d):
+                        continue  # a size_t result (strlen): a count
+                fm = re.match(r"(.+):(\d+):\d+$", loc)
+                if not fm:
+                    continue
+                path, ln = os.path.realpath(os.path.join(fl["dir"], fm.group(1))), int(fm.group(2))
+                if not path.startswith(ICO2):
+                    continue
+                rel = os.path.relpath(path, ROOT)
+                if path not in lines_of:
+                    with open(path, encoding="latin-1") as g:
+                        lines_of[path] = g.read().split("\n")
+                text = lines_of[path][ln - 1].strip() if ln <= len(lines_of[path]) else ""
+                s = Site(None, "narrow", 0, path, ln, text)
+                why = narrow_ok(rel, text)
+                s.verdict = "OK" if why else "NARROW"
+                s.detail = "(%s) of %s %s%s" % (dst, st, opnd, ("; " + why) if why else "")
+                sites.append(s)
+    return sites
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--build", required=True, help="a configured build folder (compile_commands.json)")
@@ -2242,6 +2371,8 @@ def main():
     ap.add_argument("-j", type=int, default=os.cpu_count() or 4)
     ap.add_argument("files", nargs="*")
     ap.add_argument("--dump", help="print a record's EE fields as the audit reads them")
+    ap.add_argument("--no-narrow", action="store_true",
+                    help="skip the pointer-to-32-bit conversion pass (X4)")
     args = ap.parse_args()
     if args.dump:
         db = LayoutDB()
@@ -2259,11 +2390,17 @@ def main():
         tus = {k: v for k, v in tus.items() if k in want}
     db = LayoutDB()
     results = []
+    # the narrowing pass needs an LP64 host: there ICO_WORD is `long`
+    # (port/test/CMakeLists.txt runs it on the native Linux build)
+    narrow = not args.no_narrow and lp64(tus)
     os.makedirs(os.path.join(args.build, "offset_audit"), exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="work.", dir=os.path.join(args.build, "offset_audit")) as work:
         _GLOBAL.clear()
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.j) as ex:
             futs = {ex.submit(audit_unit, src, fl, db, work): src for src, fl in sorted(tus.items())}
+            if narrow:
+                futs.update({ex.submit(narrow_unit, src, fl, work): src
+                             for src, fl in sorted(tus.items())})
             for f in concurrent.futures.as_completed(futs):
                 results.extend(f.result())
     seen = {}
@@ -2276,7 +2413,7 @@ def main():
     counts = {}
     for s in sites:
         counts[s.verdict] = counts.get(s.verdict, 0) + 1
-    bad = ("MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED")
+    bad = ("MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "NARROW")
     for s in sites:
         if s.verdict in bad or args.all or (args.skipped and s.verdict == "SKIP"):
             print("%-10s %s:%d [%s] %s\n           %s" % (s.verdict, os.path.relpath(s.file, ROOT)
@@ -2288,7 +2425,10 @@ def main():
     print("offset_audit: %d units, %d sites (%s)" % (
         len(tus), len(sites), ", ".join("%s %d" % kv for kv in sorted(kinds.items()))))
     print("offset_audit: " + ", ".join("%s %d" % (k, counts.get(k, 0)) for k in
-                                       ("OK", "MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "SKIP")))
+                                       ("OK", "MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "NARROW",
+                                        "SKIP")))
+    if not narrow:
+        print("offset_audit: the narrowing pass did not run (not an LP64 host, or --no-narrow)")
     return 1 if any(counts.get(k, 0) for k in bad) else 0
 
 

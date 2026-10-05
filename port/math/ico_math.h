@@ -28,7 +28,8 @@ void ico_vu0_registers_pop(void);
 
 /* out = m applied to v: m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3],
    summed left to right, all four fields (VU0's vmulax/vmadday/vmaddaz/
-   vmaddw sequence). out may alias v. */
+   vmaddw sequence). out may alias v. v[3] is read through ps2_operand: an
+   exponent-255 w (a stale lane) is +-Fmax as on VU0, not Inf or NaN. */
 void ico_apply_matrix(float *out, const float (*m)[4], const float *v);
 
 /* As ico_apply_matrix with v[3] taken as 1 (the assembly multiplies row 3
