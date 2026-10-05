@@ -189,6 +189,16 @@ exceed 0x80.
 | `fog_lut_vs`, `fog_lut_ps` | fog_lut.hlsl | vertex, fragment | wave 4 placeholder: depth to a 256x1 LUT, index = top byte of the 24-bit Z (which byte the game reads is open item 3 of RENDER_API.md) |
 | `font_vs`, `font_ps` | font.hlsl | vertex, fragment | R8 atlas coverage times vertex alpha, UI space |
 
+Shadows (wave 4, R4b; `RENDER_API.md` section 14) add no shader. The
+volumes are `sprite_world_vs` on the CPU-projected GS window coordinates
+with `sprite_ps` under colour mask 0, depth-tested, stencil INCR_WRAP or
+DECR_WRAP (write mask 0x3F), no depth write (`RD_PROG_SHADOW_VOLUME`). The
+resolve is `blit_vs`/`blit_ps` with the tint alone: six passes with a
+stencil EQUAL test on one bit add 4 << k to RGB (ONE + ONE), a seventh
+writes A 0x80 where the count is not 0. The blur chain and the composites
+are ordinary screen sprites (`sprite_*`). The RHI cannot sample stencil, so
+the count is read through stencil tests, not in a shader.
+
 ## Tests
 
 | ctest | what |

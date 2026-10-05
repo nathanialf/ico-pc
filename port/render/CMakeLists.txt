@@ -36,6 +36,7 @@ add_library(ico_render STATIC
     rd_post.c
     rd_present.c
     rd_replay.c
+    rd_shadow.c
     rd_tex.c)
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -59,6 +60,7 @@ target_link_libraries(rd_replay_tool PRIVATE ico_render)
 #             blend_int feedback over 100 frames, dump -> load -> replay,
 #             pipeline count (Vulkan; exit 77 without a device)
 #   rd_replay_tool  rd_pixel's dump rendered to a PNG through the presenter
+#   rd_shadow  Shadow.c's host path and the stencil count (wave 4, below)
 add_executable(rd_state_test test/rd_state_test.c)
 target_compile_options(rd_state_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_state_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
@@ -145,9 +147,29 @@ target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math)
 
+# rd_shadow_test (wave 4, R4b): the shadow count on the stencil.  Shadow.c
+# with the 2D layer and Matrix.c, as the window build has them, the rest of
+# the game stubbed: the count against the wrapped colour sum, the blur chain
+# and the composites against CPU references, the DATE receiver mask, and
+# the commands Shadow.c's host path records (77 without a device, after the
+# recording checks).
+add_executable(rd_shadow_test test/rd_shadow_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Shadow.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_shadow_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(rd_shadow_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_shadow_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_shadow_test PRIVATE ico_render ico_math)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test)
+              rd_mesh_test rd_shadow_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -167,6 +189,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mesh COMMAND rd_mesh_test)
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_shadow COMMAND rd_shadow_test)
+    set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
@@ -183,7 +207,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
     endif()
     if(_env)
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
                              PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

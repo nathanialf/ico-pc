@@ -15,6 +15,9 @@
  *   RDC_COPY         texture copy (gif_MoveImage)
  *   RDC_MESH, RDC_SKINNED, RDC_GRID, RDC_PARTICLES
  *                    the VU1 program shaders (wave 3, R3ab; doVu below)
+ *   RDC_SHADOW_RESET, RDC_SHADOW_STRIP, RDC_SHADOW_RESOLVE
+ *                    the shadow count on the stencil (wave 4, R4b;
+ *                    rd_shadow.c, doShadow* below)
  *   later waves      rd__NotImplemented
  *
  * GS sampling rules.  The GS samples a pixel at its integer coordinate and
@@ -1186,6 +1189,172 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
                        cr.dstY);
 }
 
+/* ------------------------------------------------- shadows (wave 4, R4b)
+ * rd_shadow.c says what the three commands stand for (RENDER_API.md
+ * section 14).  All three work on the state block's colour target and the
+ * depth-stencil of its depth target, which must have the colour's size
+ * (shadow_Reset binds the per-frame count target with SCENE's). */
+
+/* The colour and depth-stencil the state block names, of one size; NULL
+ * (reported once) otherwise. */
+static RdTargetRec *shadowTargets(Replay *r, RdTargetRec **depth)
+{
+    RdTargetRec *tc = rd__TargetRec(r->st.color);
+    RdTargetRec *td = rd__TargetRec(r->st.depth);
+    if (!tc || !tc->color.id || !td || !td->withDepth || !td->depth.id || tc->w != td->w ||
+        tc->h != td->h) {
+        rd__LogOnce(RD_ONCE_SHADOW, "shadow command without a depth-stencil target of the colour "
+                                    "target's size: skipped");
+        return NULL;
+    }
+    *depth = td;
+    return tc;
+}
+
+static void doShadowReset(Replay *r)
+{
+    RdTargetRec *td;
+    RdTargetRec *tc = shadowTargets(r, &td);
+    if (!tc) {
+        return;
+    }
+    endPass(r);
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    rd__Transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = tc->color;
+    p.color[0].load = RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.depth.texture = td->depth;
+    p.depth.depthLoad = RHI_LOAD_LOAD;
+    p.depth.stencilLoad = RHI_LOAD_CLEAR;
+    p.depth.clearStencil = 0;
+    p.width = tc->w;
+    p.height = tc->h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    rhi_CmdEndRenderPass(s_cl);
+}
+
+/* RDC_SHADOW_STRIP: rd_ShadowTris's two triangle lists, or rd_ShadowStrip's
+ * float strip with one sign. */
+static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdTargetRec *td;
+    if (!shadowTargets(r, &td)) {
+        return;
+    }
+    DrawSetup ds;
+    if (!prepareDraw(r, &ds) || !ds.tdId) {
+        return;
+    }
+    uint32_t count[2];
+    uint64_t vOff;
+    static const float noOff[2] = {0.0f, 0.0f};
+    if (c->b[0] == RD_SHADOW_TRIS) {
+        count[0] = c->u[0];
+        count[1] = c->u[3];
+        const uint32_t n = count[0] + count[1];
+        vOff = rd__RingAlloc((uint64_t)(n ? n : 1) * sizeof(IcoSpriteVertex), 16);
+        if (vOff == ~0ull) {
+            return;
+        }
+        const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[1]);
+        IcoSpriteVertex *o = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+        for (uint32_t i = 0; i < n; i++) {
+            convVtx(&v[i], 1, 1.0f, 1.0f, noOff, &o[i]);
+        }
+    } else {
+        const uint32_t n = c->u[0];
+        const uint32_t nt = n >= 3 ? n - 2 : 0;
+        vOff = rd__RingAlloc((uint64_t)(nt ? nt : 1) * 3 * sizeof(IcoSpriteVertex), 16);
+        if (vOff == ~0ull) {
+            return;
+        }
+        const float (*fv)[4] = (const float (*)[4])(f->payload + c->u[1]);
+        IcoSpriteVertex *o = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+        for (uint32_t t = 0; t < nt; t++) {
+            for (uint32_t j = 0; j < 3; j++) {
+                RdScreenVtx sv;
+                memset(&sv, 0, sizeof(sv));
+                sv.x = (int32_t)fv[t + j][0];
+                sv.y = (int32_t)fv[t + j][1];
+                sv.z = fv[t + j][2] <= 0.0f ? 0u : (uint32_t)fv[t + j][2];
+                convVtx(&sv, 1, 1.0f, 1.0f, noOff, &o[t * 3 + j]);
+            }
+        }
+        count[0] = c->f[0] > 0.0f ? nt * 3 : 0;
+        count[1] = c->f[0] > 0.0f ? 0 : nt * 3;
+    }
+    RhiBindGroup g2 = bindDraw(r, &ds);
+    if (!g2.id) {
+        return;
+    }
+    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
+    RhiBindGroup g1 = rd__DrawGroup(&cb);
+    uint32_t first = 0;
+    for (int decr = 0; decr < 2; decr++) {
+        if (count[decr] == 0) {
+            continue;
+        }
+        const RdPipeKeyInt k = rd__ShadowVolumeKey(&r->st, ds.tc->format, decr);
+        RhiPipeline p = rd__GetPipeline(&k);
+        if (p.id) {
+            rhi_CmdSetPipeline(s_cl, p);
+            rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
+            rhi_CmdSetBindGroup(s_cl, 1, g1);
+            rhi_CmdSetBindGroup(s_cl, 2, g2);
+            rhi_CmdSetStencilRef(s_cl, 0);
+            rhi_CmdDraw(s_cl, count[decr], first, 1);
+            g_rd.stats.draws++;
+        }
+        first += count[decr];
+    }
+}
+
+static void doShadowResolve(Replay *r)
+{
+    RdTargetRec *td;
+    RdTargetRec *tc = shadowTargets(r, &td);
+    if (!tc) {
+        return;
+    }
+    static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    r->writeSerial++;
+    beginPass(r, tc, td, r->st.color, r->st.depth, RHI_LOAD_CLEAR, zero, RHI_LOAD_LOAD, 0.0f);
+    const RhiRect all = {0, 0, tc->w, tc->h};
+    rhi_CmdSetScissor(s_cl, &all);
+    RhiBindGroup g0 = rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f);
+    RhiBindGroup g2 = rd__TexGroup(g_rd.dummy, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                           RD_WRAP_CLAMP, RD_WRAP_CLAMP));
+    for (int pass = 0; pass < RD_SHADOW_RESOLVE_PASSES; pass++) {
+        const RdPipeKeyInt k = rd__ShadowResolveKey(pass);
+        RhiPipeline p = rd__GetPipeline(&k);
+        if (!p.id) {
+            continue;
+        }
+        IcoDrawCB cb;
+        memset(&cb, 0, sizeof(cb));
+        if (pass < 6) {
+            cb.col[0] = cb.col[1] = cb.col[2] = 4u << pass;
+        } else {
+            cb.col[3] = 0x80;
+        }
+        cb.uvRect[2] = cb.uvRect[3] = 1.0f;
+        cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
+        rhi_CmdSetPipeline(s_cl, p);
+        rhi_CmdSetBindGroup(s_cl, 0, g0);
+        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(s_cl, 2, g2);
+        rhi_CmdSetStencilRef(s_cl, pass < 6 ? (uint8_t)(1u << pass) : 0);
+        rhi_CmdDraw(s_cl, 3, 0, 1);
+    }
+    endPass(r);
+}
+
 /* ----------------------------------------------------------------- frame */
 
 static uint64_t estimateRing(const RdFrame *f, int keep)
@@ -1200,6 +1369,11 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
             total += 4 * align;
             if (c->type == RDC_SCREEN) {
                 total += (uint64_t)c->u[1] * 6 * sizeof(IcoSpriteVertex) + 16;
+            } else if (c->type == RDC_SHADOW_STRIP) {
+                /* wave 4 (R4b): the triangles, or a strip's 3 (n - 2) */
+                total += ((uint64_t)c->u[0] * 3 + c->u[3]) * sizeof(IcoSpriteVertex) + 64;
+            } else if (c->type == RDC_SHADOW_RESOLVE) {
+                total += (RD_SHADOW_RESOLVE_PASSES + 1) * (sizeof(IcoDrawCB) + align);
             } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
                 /* wave 3: per pass DrawCB + VuCB, the bones, the stream and
                  * the indices (a mesh drawn twice is counted twice) */
@@ -1298,8 +1472,6 @@ static const char *stubName(uint8_t type)
     switch (type) {
     case RDC_WORLD_PRIMS:
         return "rd_WorldPrims (wave 5)";
-    case RDC_SHADOW_STRIP:
-        return "rd_ShadowStrip (wave 4)";
     case RDC_POST_STUB:
         return "rd_Post (fog, shadow resolve, blur: waves 4-5)";
     default:
@@ -1360,6 +1532,15 @@ bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
             case RDC_GRID:
             case RDC_PARTICLES:
                 doVu(&r, f, c); /* wave 3 (R3ab) */
+                break;
+            case RDC_SHADOW_RESET: /* wave 4 (R4b) */
+                doShadowReset(&r);
+                break;
+            case RDC_SHADOW_STRIP:
+                doShadowStrip(&r, f, c);
+                break;
+            case RDC_SHADOW_RESOLVE:
+                doShadowResolve(&r);
                 break;
             default:
                 endPass(&r);

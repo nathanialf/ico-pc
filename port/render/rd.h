@@ -144,9 +144,13 @@ typedef enum RdSpace { RD_SPACE_WORLD = 0, RD_SPACE_UI = 1, RD_SPACE_FULLSCREEN 
 
 typedef enum RdStencilMode {
     RD_STENCIL_OFF = 0,
-    RD_STENCIL_INCR,        /* shadow strip, sign > 0 */
-    RD_STENCIL_DECR,        /* shadow strip, sign < 0 */
-    RD_STENCIL_TEST_NONZERO /* shadow resolve */
+    RD_STENCIL_INCR,         /* shadow strip, sign > 0 */
+    RD_STENCIL_DECR,         /* shadow strip, sign < 0 */
+    RD_STENCIL_TEST_NONZERO, /* shadow resolve */
+    /* Wave 4 (R4b): the resolve's bit passes, RD_STENCIL_RESOLVE_BIT0 + k
+     * for count bit k (0..5): stencil EQUAL with read mask 1 << k
+     * (RENDER_API.md section 14) */
+    RD_STENCIL_RESOLVE_BIT0
 } RdStencilMode;
 
 typedef enum RdTargetFormat {
@@ -162,9 +166,11 @@ typedef enum RdTargetId {
     RD_TARGET_SCENE =
         0, /* FBP 0x40 / TBP 0x800: 512 x 512 (PAL) or 512 x 448 (NTSC), with depth+stencil */
     RD_TARGET_DISPLAY, /* FBP 0: 512 x H/2 reduced frame; the only displayed buffer; retained across frames */
-    RD_TARGET_SHADOW0, /* FBP 0x142: shadow count/resolve, 256 x 256 */
-    RD_TARGET_SHADOW1, /* 128 x 128 blur level */
-    RD_TARGET_SHADOW2, /* 64 x 64 blur level */
+    /* Wave 4 (R4b): the three blur levels of shadow_Draw.  The count itself
+     * (FBP 0x142, scene-sized) is a per-frame target, rd_ShadowCountTarget. */
+    RD_TARGET_SHADOW0, /* FBP 0x1C2 / TBP 0x3840: blur level 1, 256 x 256 */
+    RD_TARGET_SHADOW1, /* FBP 0x1E2 / TBP 0x3C40: blur level 2, 128 x 128 */
+    RD_TARGET_SHADOW2, /* FBP 0x1EA / TBP 0x3D40: blur level 3, 64 x 64 */
     RD_TARGET_WORK0,   /* TBP 0x2800: 256 x 128 */
     RD_TARGET_WORK1,   /* TBP 0x2C00: 256 x 256 */
     RD_TARGET_WORK2,   /* TBP 0x3000 */
@@ -502,6 +508,40 @@ void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float
  * stencil increment or decrement.  Depth-tested against SCENE, no writes
  * to colour or depth. */
 void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
+/* Wave 4 (R4b): v[i] = (GS 12.4 window X, Y, GS Z, unused) as floats, one
+ * triangle strip, every triangle counted with sign; replayed since R4b.
+ * Shadow.c uses the exact form below. */
+
+/* ------------------------------------------------- shadows (wave 4, R4b)
+ * Shadow.c's count (docs/port/RENDER_API.md section 14).  The PS2 adds each
+ * volume face into FBP 0x142 with ALPHA 0x68 FIX 0x80 and COLCLAMP 0, the
+ * face colour 0x04 or 0xFC by its facing, so a pixel ends at 4 n mod 256
+ * for n the net count of the faces in front of the scene.  rd keeps n mod
+ * 64 in the stencil of the bound depth target (INCR_WRAP / DECR_WRAP under
+ * write mask 0x3F) and writes the same colour at the resolve.
+ *
+ * rd_ShadowCountTarget  the per-frame stand-in for FBP 0x142: an RGBA8
+ *                       target of the scene size gsW x gsH, created by the
+ *                       first call in the open frame (rd_TempTarget); {0}
+ *                       outside a frame
+ * rd_ShadowReset        shadow_Reset's clear of FBP 0x142: the stencil of
+ *                       the bound depth target to 0 (the colour target is
+ *                       written whole by the resolve)
+ * rd_ShadowTris         shadow_RenderVolume's strips as triangles: v holds
+ *                       3 x triCount XYZ2 (x, y, z; the rest unused), sign[t]
+ *                       > 0 for a triangle whose last vertex had the colour
+ *                       0x04 (flat shading), < 0 for 0xFC.  Depth-tested
+ *                       with the state's TEST against the bound depth
+ *                       target, no colour or depth writes
+ * rd_ShadowResolve      the count into the bound colour target: RGB =
+ *                       4 n mod 256, A = 0x80 where that is not 0, else 0
+ *                       (the TEXA expansion shadow_Draw's PSMCT24 read of
+ *                       FBP 0x142 applies, TA0 0x80 AEM, baked so the chain
+ *                       filters expanded texels as the GS does) */
+RdTarget rd_ShadowCountTarget(uint32_t gsW, uint32_t gsH);
+void rd_ShadowReset(void);
+void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key);
+void rd_ShadowResolve(void);
 
 /* --------------------------------------------------------------- post */
 

@@ -315,6 +315,40 @@ static RhiCompare depthCompare(uint8_t ztst)
     }
 }
 
+/* Wave 4 (R4b): the stencil of the shadow count (RENDER_API.md section 14).
+ * Volumes: both faces INCR_WRAP or DECR_WRAP where the depth test passes,
+ * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
+ * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
+ * read mask 1 << k; resolve A: NOTEQUAL 0 under the count's mask.  The
+ * resolve passes write no stencil. */
+static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
+{
+    RhiStencilFace f = {RHI_CMP_ALWAYS, RHI_SO_KEEP, RHI_SO_KEEP, RHI_SO_KEEP};
+    switch (mode) {
+    case RD_STENCIL_OFF:
+        return;
+    case RD_STENCIL_INCR:
+    case RD_STENCIL_DECR:
+        f.pass = mode == RD_STENCIL_INCR ? RHI_SO_INCR_WRAP : RHI_SO_DECR_WRAP;
+        ds->stencilReadMask = 0xFF;
+        ds->stencilWriteMask = RD_SHADOW_STENCIL_MASK;
+        break;
+    case RD_STENCIL_TEST_NONZERO:
+        f.compare = RHI_CMP_NOTEQUAL;
+        ds->stencilReadMask = RD_SHADOW_STENCIL_MASK;
+        ds->stencilWriteMask = 0;
+        break;
+    default:
+        f.compare = RHI_CMP_EQUAL;
+        ds->stencilReadMask = (uint8_t)(1u << ((mode - RD_STENCIL_RESOLVE_BIT0) & 7));
+        ds->stencilWriteMask = 0;
+        break;
+    }
+    ds->stencilTest = true;
+    ds->front = f;
+    ds->back = f;
+}
+
 static RhiPipeline createPipeline(const RdPipeKeyInt *k)
 {
     static const RhiVertexBinding vb = {0, sizeof(IcoSpriteVertex), false};
@@ -349,6 +383,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         d.depthStencil.depthTest = true;
         d.depthStencil.depthWrite = k->gs.zwrite == RD_ZWRITE_ON;
         d.depthStencil.depthCompare = depthCompare(k->gs.ztst);
+        shadowStencil(k->gs.stencil, &d.depthStencil); /* wave 4 (R4b) */
     }
     d.colorFormats[0] = (RhiFormat)k->colorFmt;
     d.colorCount = 1;
@@ -447,7 +482,63 @@ static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipe
 
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
 {
-    return rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
+    const uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
+    return rd__EnumerateReachableShadow(out, max, n); /* wave 4 (R4b) */
+}
+
+/* ------------------------------------------------- shadows (wave 4, R4b) */
+
+RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int decr)
+{
+    RdPipeKeyInt k;
+    memset(&k, 0, sizeof(k));
+    k.gs.program = RD_PROG_SHADOW_VOLUME;
+    k.gs.blend = RD_BLEND_COUNT;
+    k.gs.atst = RD_ATST_ALWAYS;
+    k.gs.date = RD_DATE_OFF;
+    k.gs.ztst = s->ds.test.zte ? s->ds.test.ztst : RD_ZTST_ALWAYS;
+    k.gs.zwrite = RD_ZWRITE_OFF; /* the count never writes Z (ZBUF.ZMSK in shadow_Reset) */
+    k.gs.colorMask = 0;
+    k.gs.stencil = decr ? RD_STENCIL_DECR : RD_STENCIL_INCR;
+    k.gs.targetFmt = tfmtOf(colorFmt);
+    k.gs.prim = RD_PRIM_TRIANGLES;
+    k.vs = RD_VS_SPRITE_WORLD;
+    k.fs = RD_FS_SPRITE;
+    k.colorFmt = (uint8_t)colorFmt;
+    k.depthFmt = RHI_FMT_D32F_S8;
+    return k;
+}
+
+RdPipeKeyInt rd__ShadowResolveKey(int pass)
+{
+    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
+    k.depthFmt = RHI_FMT_D32F_S8;
+    if (pass < 6) {
+        /* additive (ONE, ONE): the six bits' 4 << k sum to 4 n, at most 252 */
+        k.gs.blend = RD_BLEND_CS_AS_ADD_CD;
+        k.gs.colorMask = 0x7;
+        k.gs.stencil = (uint8_t)(RD_STENCIL_RESOLVE_BIT0 + pass);
+    } else {
+        k.gs.colorMask = 0x8;
+        k.gs.stencil = RD_STENCIL_TEST_NONZERO;
+    }
+    return k;
+}
+
+uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    RdStateBlock s;
+    rd__ResetStateBlock(&s);
+    s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL); /* shadow_Reset's TEST 0x50000 */
+    for (int decr = 0; decr < 2; decr++) {
+        const RdPipeKeyInt k = rd__ShadowVolumeKey(&s, RHI_FMT_RGBA8_UNORM, decr);
+        n = addKey(out, max, n, &k);
+    }
+    for (int p = 0; p < RD_SHADOW_RESOLVE_PASSES; p++) {
+        const RdPipeKeyInt k = rd__ShadowResolveKey(p);
+        n = addKey(out, max, n, &k);
+    }
+    return n;
 }
 
 uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)

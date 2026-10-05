@@ -14,6 +14,8 @@
  *   rd_present.c   DISPLAY to the output (Original preset)
  *   rd_frame.c     the flip's frame head, per-target Z scale, VU block, camera
  *                  into FrameCB (wave 2, R2c)
+ *   rd_shadow.c    the shadow count's recording (wave 4, R4b); replayed by
+ *                  rd_replay.c (doShadow*)
  *   rd_dump.c      frame dump and load
  *   rd_png.c       a minimal PNG writer for the replay tool and tests
  *
@@ -77,8 +79,14 @@ typedef enum RdCmdType {
     RDC_GRID,         /* u[1] payload offset, u[2] size */
     RDC_PARTICLES,    /* u[1] payload offset, u[2] size */
     RDC_WORLD_PRIMS,  /* b[0] RdPrim, u[0] count, u[1] payload offset, u[2] size */
-    RDC_SHADOW_STRIP, /* u[0] count, u[1] payload offset, f[0] sign */
+    RDC_SHADOW_STRIP, /* b[0] 0: rd_ShadowStrip, u[0] count, u[1] payload offset of float[4]
+                       * x count, f[0] sign; b[0] RD_SHADOW_TRIS (wave 4, R4b): rd_ShadowTris,
+                       * u[1] payload offset of RdScreenVtx[u[0] + u[3]], the triangles that
+                       * increment (u[0] vertices) then those that decrement (u[3]) */
     RDC_POST_STUB,    /* b[0] RdPostKind, u[1] payload offset of RdPostRec */
+    /* wave 4 (R4b), rd_shadow.c: on the state block's colour and depth targets */
+    RDC_SHADOW_RESET,   /* the depth target's stencil to 0 */
+    RDC_SHADOW_RESOLVE, /* the stencil count into the colour target (rd.h rd_ShadowResolve) */
     RDC_COUNT
 } RdCmdType;
 
@@ -91,6 +99,12 @@ typedef struct RdCmd {
 } RdCmd;
 
 _Static_assert(sizeof(RdCmd) == 40, "RdCmd is dumped as raw bytes");
+
+/* RDC_SHADOW_STRIP's b[0] (wave 4, R4b). */
+#define RD_SHADOW_TRIS 1
+/* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps
+ * (RENDER_API.md section 14). */
+#define RD_SHADOW_STENCIL_MASK 0x3Fu
 
 /* RD_POST_COPY's rectangle. */
 typedef struct RdCopyRec {
@@ -379,6 +393,19 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
  * shader and the clip mode; false without a row. */
 bool rd__VuRow(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);
 bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
+/* Wave 4 (R4b), the shadow count (rd_shadow.c, RENDER_API.md section 14):
+ * the volume pipeline under state s (sprite_world_vs / sprite_ps, colour
+ * mask 0, the state's Z test without Z write, stencil INCR_WRAP or, with
+ * decr, DECR_WRAP under write mask RD_SHADOW_STENCIL_MASK, on a D32F_S8
+ * depth target), and the resolve's passes (blit_vs / blit_ps): pass k in
+ * 0..5 adds 4 << k to RGB where stencil bit k is set, pass 6 writes A where
+ * the count is not 0. */
+RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int decr);
+RdPipeKeyInt rd__ShadowResolveKey(int pass);
+#define RD_SHADOW_RESOLVE_PASSES 7
+/* The shadow families above under the states the game draws them with
+ * (Shadow.c: TEST 0x50000); appends to out[0..n). */
+uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
@@ -445,12 +472,14 @@ enum {
     RD_ONCE_TEMP_FULL,
     RD_ONCE_DATE_SIZE,
     /* wave 3 (R3ab) */
-    RD_ONCE_VU_ROW,       /* a (program, code) pair without a table row */
-    RD_ONCE_VU_ENDTAG,    /* the particle end-tag quirk would have hidden a skinned draw */
-    RD_ONCE_VU_MATERIALS, /* RdVuDraw.materials given: recorded, not applied */
-    RD_ONCE_VU_MESHES,    /* the mesh registry evicted meshes */
-    RD_ONCE_VU_CODE,      /* an MSCAL code rd_VuCall does not model (debug font) */
-    RD_ONCE_SEMANTIC_MESH /* the wave-0 semantic mesh calls: not recorded */
+    RD_ONCE_VU_ROW,        /* a (program, code) pair without a table row */
+    RD_ONCE_VU_ENDTAG,     /* the particle end-tag quirk would have hidden a skinned draw */
+    RD_ONCE_VU_MATERIALS,  /* RdVuDraw.materials given: recorded, not applied */
+    RD_ONCE_VU_MESHES,     /* the mesh registry evicted meshes */
+    RD_ONCE_VU_CODE,       /* an MSCAL code rd_VuCall does not model (debug font) */
+    RD_ONCE_SEMANTIC_MESH, /* the wave-0 semantic mesh calls: not recorded */
+    /* wave 4 (R4b) */
+    RD_ONCE_SHADOW /* a shadow command without a depth-stencil target of the colour's size */
 };
 
 void rd__Log(const char *fmt, ...);

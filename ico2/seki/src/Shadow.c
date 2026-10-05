@@ -12,6 +12,218 @@
 #include "Basic.h"
 #include "gobj.h"
 
+#ifdef ICO_RD
+
+#include <string.h>
+#include "rd.h"
+
+/* ===================================================================== *
+ * PC port (renderer wave 4, R4b; docs/port/RENDER_API.md section 14).
+ *
+ * The packets below are still built (the DMA bookkeeping and the heap use
+ * stay as they are), but nothing on the host reads them: shadow_Reset's is
+ * an UNPACK to VU1 memory and MSCAL 0 (SET_GSREGISTER), the volumes' and
+ * shadow_Draw's are DIRECT (PATH2) GIF packets.  Each function records what
+ * its packet does on rd instead, where it chains the packet:
+ *   shadow_Reset   its register writes as rd state; the clear of FBP 0x142
+ *                  is rd_ShadowReset on the frame's count target
+ *                  (rd_ShadowCountTarget) with SCENE's depth-stencil; the
+ *                  band it clears at FBP 0x140 first (16 lines of the pages
+ *                  in front of 0x142, which no shadow pass reads) is not
+ *                  drawn, and its register writes are the ones the 0x142
+ *                  clear repeats
+ *   shadow_RenderVolume, shadow_RenderVolumeMulti
+ *                  every strip emitVolumeStrip writes, as the eight flat
+ *                  triangles its ten positions kick, each counted +1
+ *                  (RGBAQ 0x04) or -1 (0xFC) by its last position, with the
+ *                  strips' PRIM 0x144; one rd_ShadowTris per object, as the
+ *                  PS2 chains one packet per object
+ *   shadow_Draw    rd_ShadowResolve (the count into the count target), then
+ *                  the packet's register writes and sprites in order: the
+ *                  256/128/64 chain into SHADOW0..2 and the three
+ *                  composites into SCENE, so the state they leave leaks
+ *                  into the rest of list 3 and the next lists as on the GS
+ * The level-0 texture is the count target's RGBA view where the GS reads
+ * PSMCT24 under TEXA 0x80 AEM: the resolve writes that expansion as alpha
+ * (rd.h, rd_ShadowResolve).  The GS register decoder (GifPacket.c) never
+ * sees these writes: like rd_Post's passes, they leave its per-list FRAME,
+ * PRIM and TEX0 shadow behind (section 12). */
+
+/* the triangles of one object's strips, recorded at the end of the object
+   or when full */
+#define SHADOW_HOST_TRIS 2048 /* port name */
+
+static struct {
+    RdScreenVtx v[SHADOW_HOST_TRIS * 3];
+    signed char sign[SHADOW_HOST_TRIS];
+    unsigned int n;
+    RdScreenVtx last[2]; /* the strip's two positions before the current one */
+    void *obj;
+} shadowHost; /* port name */
+
+static void shadowHostFlush(void)
+{
+    if (shadowHost.n == 0) {
+        return;
+    }
+    rd_ABE(1); /* PRIM 0x144: strip, flat, ABE, no texture */
+    rd_Gouraud(0);
+    rd_TextureOff();
+    rd_ShadowTris(shadowHost.v, (const int8_t *)shadowHost.sign, shadowHost.n,
+                  RD_KEY(shadowHost.obj, 0, 0));
+    shadowHost.n = 0;
+}
+
+static void shadowHostBegin(void *obj)
+{
+    shadowHost.n = 0;
+    shadowHost.obj = obj;
+}
+
+/* position i (0..9) of a strip at XYZ2 v, its RGBAQ 0x04 (plus) or 0xFC */
+static void shadowHostStripPos(int i, const int *v, int plus)
+{
+    RdScreenVtx c;
+
+    memset(&c, 0, sizeof(c));
+    c.x = v[0];
+    c.y = v[1];
+    c.z = (unsigned int)v[2];
+    c.q = 1.0f;
+    if (i >= 2) {
+        unsigned int t;
+
+        if (shadowHost.n == SHADOW_HOST_TRIS) {
+            shadowHostFlush();
+        }
+        t = shadowHost.n++;
+        shadowHost.v[t * 3 + 0] = shadowHost.last[0];
+        shadowHost.v[t * 3 + 1] = shadowHost.last[1];
+        shadowHost.v[t * 3 + 2] = c;
+        shadowHost.sign[t] = plus ? 1 : -1;
+    }
+    shadowHost.last[0] = shadowHost.last[1];
+    shadowHost.last[1] = c;
+}
+
+static void shadowHostReset(void)
+{
+    RdTarget cnt = rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+
+    /* setFrame(0x142), ZBUF 0xC0 with ZMSK, TEST 0x30000, the clear sprite
+       (PRIM 0x406) */
+    rd_SetTarget(cnt, rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, 0);
+    rd_ZWrite(0);
+    rd_TestGs(0x30000);
+    rd_ABE(0);
+    rd_Gouraud(0);
+    rd_TextureOff();
+    rd_ShadowReset();
+    /* FBA, TEXA, TEST, ALPHA, COLCLAMP */
+    rd_FBA(0);
+    rd_TexA(RD_TEXA_80_80);
+    rd_TestGs(0x50000);
+    rd_BlendFunc(RD_BLEND_CS_FIX_ADD_CD, 0x80);
+    rd_ColClamp(0);
+}
+
+/* the target of blur level i: the count (FBP 0x142), then SHADOW0..2 */
+static RdTarget shadowHostLevel(int i)
+{
+    if (i == 0) {
+        return rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+    }
+    return rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + i - 1));
+}
+
+/* TEX0 of level i (TCC RGBA, MODULATE), as the packet writes it */
+static void shadowHostTex0(int i)
+{
+    rd_Texture(rd_TargetTexture(shadowHostLevel(i), RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+}
+
+/* spriteUV: PRIM, RGBAQ, UV and XYZ2 of each corner, Z 0xFFFFFFFF */
+static void shadowHostSprite(const int *r, const int *uv, const unsigned char *col, int abe)
+{
+    RdScreenVtx v[2];
+    int i;
+
+    rd_ABE(abe); /* PRIM 0x116 or 0x156: sprite, flat, TME, FST */
+    rd_Gouraud(0);
+    memset(v, 0, sizeof(v));
+    v[0].x = (r[0] + 0x8000) & 0xFFFF;
+    v[0].y = (r[1] + 0x8000) & 0xFFFF;
+    v[0].s = (float)uv[0];
+    v[0].t = (float)uv[1];
+    v[1].x = (r[0] + r[2] + 0x8000) & 0xFFFF;
+    v[1].y = (r[1] + r[3] + 0x8000) & 0xFFFF;
+    v[1].s = (float)(uv[0] + uv[2]);
+    v[1].t = (float)(uv[1] + uv[3]);
+    for (i = 0; i < 2; i++) {
+        v[i].z = 0xFFFFFFFFu;
+        v[i].q = 1.0f;
+        memcpy(v[i].rgba, col, 4);
+    }
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+}
+
+/* shadow_Draw up to its first FRAME: the count resolved where the GS has
+   it in FBP 0x142, then TEST, ZBUF, COLCLAMP, FBA, TEXA and TEX1 */
+static void shadowHostDrawBegin(void)
+{
+    rd_SetTarget(shadowHostLevel(0), rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth,
+                 (uint32_t)ScreenHeight, 0);
+    rd_ShadowResolve();
+    rd_TestGs(0x30000);
+    rd_ZWrite(0);
+    rd_ColClamp(1);
+    rd_FBA(0);
+    rd_TexA(RD_TEXA_80_80_AEM);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+}
+
+/* one chain step: level i into level i + 1 */
+static void shadowHostChain(int i, const int *r, const int *uv, const unsigned char *col)
+{
+    uint32_t w = 512u >> (i + 1);
+
+    rd_SetTarget(shadowHostLevel(i + 1), (RdTarget){0}, w, w, 0);
+    shadowHostTex0(i);
+    shadowHostSprite(r, uv, col, 0);
+}
+
+/* setFrame(0x40), ALPHA 0x44, TEST 0x3400D; SCENE takes RD_TARGET_OFFSET
+   as GifPacket.c's FRAME decoding gives it (the field offset, zero on the
+   host: both setFrame calls of shadow_Draw are centred) */
+static void shadowHostCompositeBegin(void)
+{
+    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+
+    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0);
+    rd_TestGs(0x3400D);
+}
+
+/* one composite: level i into SCENE */
+static void shadowHostComposite(int i, const int *r, const int *uv, const unsigned char *col)
+{
+    shadowHostTex0(i);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    shadowHostSprite(r, uv, col, 1);
+}
+
+/* ZBUF write on, TEST 0x50000, setFrame(0x40) with screenOffsetX/Y */
+static void shadowHostDrawEnd(void)
+{
+    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+
+    rd_ZWrite(1);
+    rd_TestGs(0x50000);
+    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+}
+
+#endif /* ICO_RD */
+
 /* One skinning matrix per cluster, 64 of 64 bytes, built by
  * shadow_EntryClusterShadow. */
 static char clusterMatrix[4096]; /* derived name */
@@ -148,6 +360,9 @@ void shadow_Reset(void)
     PacketBufferStruct.ptr.c = (q + 0xC);
     ((GifPkWord *)(q + 8))->w[1] = 0;
     PacketBufferStruct.ptr.c = (q + 0x10);
+#ifdef ICO_RD
+    shadowHostReset();
+#endif
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
 }
@@ -214,6 +429,9 @@ void shadow_Draw(void)
         setGsReg(0x4A, 0);
         setGsReg(0x3B, 0x8080 | ((long long)0x80 << 32));
         setGsReg(0x14, 0x60);
+#ifdef ICO_RD
+        shadowHostDrawBegin();
+#endif
 
         for (i = 0; i < 3; i++) {
             setFrame(levelFbp[i + 1], 512 >> (i + 1), 512 >> (i + 1), 0, 0);
@@ -230,11 +448,17 @@ void shadow_Draw(void)
                 *PacketBufferStruct.ptr.d++ = 0x06;
             }
             spriteUV(levelRect[i + 1], levelUV[i], col, 0x116);
+#ifdef ICO_RD
+            shadowHostChain(i, levelRect[i + 1], levelUV[i], col);
+#endif
         }
 
         setFrame(0x40, ScreenWidth, ScreenHeight, 0, 0);
         setGsReg(0x42, 0x44);
         setGsReg(0x47, 0x3400D);
+#ifdef ICO_RD
+        shadowHostCompositeBegin();
+#endif
 
         for (i = 3; i > 0; i--) {
             unsigned char col2[4] = {GlobalStageSetting.shadowColR, GlobalStageSetting.shadowColG,
@@ -251,11 +475,17 @@ void shadow_Draw(void)
             *PacketBufferStruct.ptr.d++ = 0x06;
             setGsReg(0x14, 0x60);
             spriteUV(off, rect[i], col2, 0x156);
+#ifdef ICO_RD
+            shadowHostComposite(i, off, rect[i], col2);
+#endif
         }
 
         setGsReg(0x4E, 0x300000C0);
         setGsReg(0x47, 0x50000);
         setFrame(0x40, ScreenWidth, ScreenHeight, screenOffsetX, screenOffsetY);
+#ifdef ICO_RD
+        shadowHostDrawEnd();
+#endif
 
         ((GifPkWord *)PacketBufferStruct.end.c)->d =
             (unsigned int)(((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.end.c) >>
@@ -1045,6 +1275,9 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
         }
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
+#ifdef ICO_RD
+        shadowHostStripPos(i, v, (unsigned char)p[-1] == 0x04);
+#endif
     }
     return p;
 }
@@ -1110,6 +1343,9 @@ void shadow_RenderVolume(Sub15C *o)
         shadow_EntryNormalShadow(o, 0, len);
     }
     dl_SetDLPriority(3);
+#ifdef ICO_RD
+    shadowHostBegin(o);
+#endif
     shadow_getShadowVectorAverage(&pos, o);
     loadVolumeMatrix(&pos);
     c = PacketBufferStruct.ptr.c;
@@ -1170,6 +1406,9 @@ void shadow_RenderVolume(Sub15C *o)
     PacketBufferStruct.ptr.c = (q + 0x10);
     if (p - start > 0) {
         dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
     }
@@ -1209,6 +1448,9 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
     _GetLength(&pos, &cam);
     shadow_EntryNormalShadow(o, idx, len);
     dl_SetDLPriority(3);
+#ifdef ICO_RD
+    shadowHostBegin(o);
+#endif
     shadow_getShadowVectorAverage(&pos, o);
     loadVolumeMatrix(&pos);
     c = PacketBufferStruct.ptr.c;
@@ -1269,6 +1511,9 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
     PacketBufferStruct.ptr.c = (q + 0x10);
     if (p - start > 0) {
         dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
     }

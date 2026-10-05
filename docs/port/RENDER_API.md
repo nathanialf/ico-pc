@@ -112,7 +112,7 @@ data; the `enemyParts.c` mode is fixed at 5.
 | AFAIL FB_ONLY (0x5140D) | Two draws: alpha > ref with depth write, then alpha ≤ ref with depth write off (the split pass is a DrawCB uniform; the pipelines differ by Z write). Self-overlap order within a strip can differ; accepted, see DIVERGENCES.md when observed. |
 | AFAIL RGB_ONLY with ATST NEVER (0x3F001, 0x33001) | Colour mask RGB, depth write off, no alpha test. |
 | DATE | Applied since wave 2 (R2a). A screen draw with TEST.DATE first takes an R8 snapshot of its target's alpha MSB into `RD_TARGET_DATE_SNAPSHOT` (`date_snap_ps`, pixel for pixel, `rd_replay.c dateSnapshot`), then `sprite_ps` loads it at t2 and discards where the MSB differs from DATM (`DF_DATE`, `DF_DATM`, uniforms: the pipeline key keeps date 0). The snapshot is retaken when the target changes or anything since may have written alpha (a clear, a copy, an exact blend, a draw whose colour mask includes A), so consecutive DATE draws see each other's writes as on the GS; overlapping primitives inside one draw see the snapshot (accepted). D3D12 cannot read the bound target and stencil export is not universal, so no feedback loops. |
-| COLCLAMP 0 (shadow count) | Stencil increment/decrement wrap on the scene depth-stencil; `RD_POST_SHADOW_RESOLVE` writes stencil ≠ 0 into SHADOW0, then the original 256/128/64 blur chain runs. |
+| COLCLAMP 0 (shadow count) | Stencil INCR_WRAP/DECR_WRAP on the scene depth-stencil under write mask 0x3F (the count mod 64); `rd_ShadowResolve` writes the colour the wrapped sum would have left, 4 n mod 256, into a scene-sized count target, then the original 256/128/64 blur chain runs into SHADOW0..2 (wave 4, R4b: section 14; the wave-0 plan said "stencil ≠ 0", but the chain reads the count's value). |
 | FBA | Fragment shader forces alpha MSB; per material. |
 | PABE | Fragment shader: blend factor 0 when As MSB clear (dual-source output 1 = 0 and output 0 alpha path unchanged). |
 | Z | D32F (D32F_S8 on SCENE). The shaders map GS Z to depth `1 − gsZ / 2^24` (`gs_z_to_depth`), so a larger GS Z is a smaller depth: GS ZTST GEQUAL becomes `RHI_CMP_LEQUAL` and GREATER becomes `LESS`; a clear to GS Z `z` clears depth to `1 − z / 2^24` (`rd_pipeline.c`, `rd_replay.c`). GS Z integers below 2^24 are exact in float. (Wave 0 wrote this row as "reversed-Z with GEQUAL", which contradicts the shader mapping; the `rhi.h` comment on `depthCompare` has the same slip.) Wave 2 (R2c): the scale is per depth target, 2^-32 for the game's PSMZ32 (section 12). |
@@ -182,7 +182,7 @@ feedback loops, no push constants (per-draw uniforms live in the ring).
 |---|---|---|---|
 | SCENE | FBP 0x40 (TBP 0x800) | 512×512 PAL, 512×448 NTSC | RGBA8 + D32F_S8 |
 | DISPLAY | FBP 0 | 512×256 / 512×224 | the only displayed buffer; retained (motion blur history, keep) |
-| SHADOW0..2 | FBP 0x142 and blur levels | 256², 128², 64² | |
+| SHADOW0..2 | FBP 0x1C2, 0x1E2, 0x1EA (TBP 0x3840, 0x3C40, 0x3D40): blur levels 1..3 | 256², 128², 64² | wave 4 (R4b); the count at FBP 0x142 is scene-sized and lives in a per-frame target (`rd_ShadowCountTarget`, section 14) |
 | WORK0..3 | TBP 0x2800..0x3000 | 256×128, 256×256 | depth of field, flare, aura |
 | AA0, AA1 | TBP 0x2800/0x2C00 | 256², 128² | anti-alias chain (aliases WORK in VRAM; separate here) |
 | FEED128 | TBP 0x3F00 | 128² | aura feedback, persistent |
@@ -938,7 +938,10 @@ Open items for waves 4 and 5:
 
 1. `Shadow.c` sends its register packets through SET_GSREGISTER
    (`Shadow.c:129`) and its volumes as VU batches; they are not yet read by
-   `mc_HostDma` (wave 4 routes them).
+   `mc_HostDma` (wave 4 routes them). Resolved in wave 4 (R4b, section 14):
+   only shadow_Reset's packet goes through SET_GSREGISTER; the volumes and
+   shadow_Draw are DIRECT (PATH2) GIF packets. Shadow.c's host path records
+   rd calls itself and `mc_HostDma` is unchanged.
 2. `particleEffect.c`, `enemy.c`'s own particle packets and other VU users
    outside seki (`lightning.c`, `darkVolume.c`) chain their packets without
    the host reader; only `prim_DispParticle` batches draw today.
@@ -950,3 +953,174 @@ Open items for waves 4 and 5:
    dirty tracking is an optimisation for later.
 5. Near-plane scissor cases colour-interpolate over the original triangle
    (`VU1_PROGRAMS.md` section 8); not seen as an issue in the run.
+
+## 14. Shadows (wave 4, R4b)
+
+`ico2/seki/src/Shadow.c` under `ICO_RD` (the window build; the headless
+build compiles the original code, and the host path adds no heap use),
+`port/render/rd_shadow.c` (recording), `rd_replay.c` (`doShadowReset`,
+`doShadowStrip`, `doShadowResolve`), `rd_pipeline.c` (keys, stencil state).
+Test: `rd_shadow` (`port/render/test/rd_shadow_test.c`), which compiles
+Shadow.c with the 2D layer and Matrix.c as the window build does.
+
+**What the PS2 does.** `shadow_Reset` (frame head, list 3) clears FBP 0x142,
+a scene-sized PSMCT32 buffer, and leaves ZBUF 0xC0 with ZMSK, TEST 0x50000,
+ALPHA 0x68 with FIX 0x80 and COLCLAMP 0. Each `shadow_RenderVolume`
+(`RegistPacket.c`'s display paths, in Main) sends one DIRECT packet per
+object: per silhouette triple a strip of ten positions over the six
+projected prism vertices, PRIM 0x144 (strip, flat, ABE), each position's
+RGBAQ 0x04 or 0xFC by its facing (`emitVolumeStrip`). With flat shading a
+triangle adds its last vertex's colour; FIX 0x80 is a factor of 1 and
+COLCLAMP 0 keeps the low 8 bits, so every channel of a pixel ends at
+4 n mod 256, n = (0x04 faces) - (0xFC faces) that pass Z GEQUAL against the
+scene. `shadow_Draw` (`gsb_PostEffect`, end of list 3) reads FBP 0x142 as
+PSMCT24 with TEXA 0x80 AEM (A = 0 where RGB is 0, else 0x80), modulates it
+by (128, 128, 128, shadowDepth) into 256², 128² and 64² levels (sprites,
+TEX1 0x60 bilinear, no blending), then composites levels 3, 2, 1 into SCENE
+with ALPHA 0x44, TEST 0x3400D (alpha GREATER 0, DATE with DATM 0, Z
+ALWAYS) and the colour (shadowColR/G/B, shadowBlend[i]), and ends with ZBUF
+write on, TEST 0x50000 and FRAME 0x40. The brief for this package described
+each face as adding 0x80; the packet words say 0x04 / 0xFC, so the count
+wraps at 64 net faces, not 2.
+
+**On rd.** The volumes change the stencil of SCENE's D32F_S8 instead of
+colour: `rd_ShadowTris` records the triangles with a sign each, replayed as
+two triangle lists (increments, then decrements) through
+`sprite_world_vs`/`sprite_ps` with colour mask 0, the state's Z test, no Z
+write and stencil INCR_WRAP or DECR_WRAP on both faces under write mask
+0x3F. `rd_ShadowReset` clears that stencil (a pass with stencil load CLEAR,
+depth LOAD) where the GS clears FBP 0x142. `rd_ShadowResolve`, recorded at
+the head of `shadow_Draw`, clears the count target and draws seven
+fullscreen `blit_vs`/`blit_ps` passes with the SCENE depth-stencil bound:
+pass k (0..5) tests stencil bit k (EQUAL, read mask 1 << k) and adds
+4 << k to RGB (ONE + ONE, at most 252 in total, exact in UNORM8); pass 6
+writes A = 0x80 where the count is not 0. The count target
+(`rd_ShadowCountTarget`) is a per-frame `rd_TempTarget` of the scene size,
+since the stencil it is resolved from is SCENE's.
+
+**Equivalence.** The stencil holds n mod 64 exactly: with write mask 0x3F an
+increment from 63 writes the low six bits of 64 (0) and a decrement from 0
+those of 255 (63). The GS colour is 4 n mod 256 = 4 (n mod 64), and the
+resolve writes 4 (s & 63). Both sums commute (addition mod 256 and mod 64)
+and the Z test writes nothing, so the face order, and the split into
+increment and decrement lists, change nothing. The one case where an 8-bit
+stencil wrapping at 256 would differ is n a non-zero multiple of 64 with
+|n| < 256 (64, 128, 192): the GS colour is 0 (no shadow there) and such a
+stencil is not; the write mask removes it. `rd_shadow` checks n = 0..127,
+-1..-127, 2, 64, 128, 256 and faces behind the receiver: all 262,144
+pixels equal the wrapped colour sum. What stays different: the alpha the GS
+stores in FBP 0x142 (As = 0x80 wherever a face was drawn, net count or
+not) is not reproduced; nothing reads it, since the chain reads PSMCT24.
+Coverage of the volume edges follows the GPU's rasteriser, not the GS's
+(both use a top-left rule on the same 1/16-pixel coordinates).
+
+**The PSMCT24 read.** The resolve writes the AEM expansion as alpha and the
+chain's first step reads the count target's RGBA view. The shader expands
+TEXA after the sampler filtered (`gs_texa_expand` on the filtered texel),
+the GS before, so an RGB24 view would give alpha 0x80 to every filtered
+texel next to a non-zero one; baking the expansion is exact because
+`shadow_Draw` writes the TEXA it reads with (0x80, AEM) itself. The same
+order applies to every RGB24 or RGBA16 texture sampled bilinearly through
+rd (open item 2).
+
+**State.** Every register write of the three packets is recorded as rd
+state in packet order (`shadowHostReset`, `shadowHostDrawBegin`,
+`shadowHostChain`, `shadowHostCompositeBegin`, `shadowHostComposite`,
+`shadowHostDrawEnd` in Shadow.c), so what list 3 leaves (TEST 0x50000, Z
+write on, ALPHA 0x44 FIX 0, COLCLAMP 1, TEXA 0x80 AEM, TEX1 linear, PRIM
+0x156, the last level's TEX0, FRAME 0x40 without the half-line offset)
+leaks into lists 4 onwards as on the GS. Not recorded: the band
+`shadow_Reset` clears at FBP 0x140 (16 lines of the two pages in front of
+0x142, which no shadow pass reads; its register writes are repeated by the
+0x142 clear) and FRAME 0x142 itself, which becomes the count target. The
+blur levels have no depth target on rd (the decoder's convention for
+non-SCENE targets); ZBUF never changes ZBP on the GS, and the Z test is
+ALWAYS with ZMSK there. CLAMP is never written by Shadow.c; the chain and
+composites sample with the CLAMP in force, as the GS does (the composites'
+last column and row reach one texel past the level).
+
+**mc_HostDma (deliverable 2).** Left alone. shadow_Reset's packet is an
+UNPACK to VU1 memory and MSCAL 0 (SET_GSREGISTER), which `mc_HostDma` could
+decode, but through the decoder it would clear SHADOW0 as FBP 0x142 at the
+wrong size; the volumes and shadow_Draw are DIRECT packets the reader does
+not interpret. Shadow.c's host path records rd calls where it chains each
+packet (one `rd_ShadowTris` per object, as one DMA per object); the packets
+are still built, for the bookkeeping. The GS register decoder never sees
+these writes, so its per-list FRAME/PRIM/TEX0 shadow lags behind list 3
+(section 12, as for `rd_Post`).
+
+**Shaders.** None added: `sprite_world_vs` takes the CPU-projected GS
+window coordinates as they are, `sprite_ps` with colour mask 0 serves the
+stencil-only draw, `blit_vs`/`blit_ps` with the tint is the resolve, and
+the chain and composites are screen sprites (`sprite_*`). Pipelines: two
+volume keys (`RD_PROG_SHADOW_VOLUME`, INCR/DECR) and seven resolve keys
+(`RD_STENCIL_RESOLVE_BIT0 + k`, `RD_STENCIL_TEST_NONZERO`) in
+`rd__EnumerateReachableShadow`: 165 reachable in all (156 before).
+
+**Measured** (`rd_shadow` on lavapipe, validation layers on, no errors):
+
+| check | result |
+|---|---|
+| (a) count vs 4 n mod 256, A 0x80 where non-zero | exact, 0 of 262,144 pixels differ |
+| (b) levels 1, 2, 3 vs GS bilinear of the level before (as read back) | 0 LSB each |
+| (c) one composite alone vs the GS LERP of the bilinear texel | level 1: 1 LSB; levels 2 and 3: 2 LSB |
+| (c) the same vs the float LERP of the same operands | level 1: 1; levels 2, 3: 2 on 16 and 10 channels, else 1 |
+| (c) levels 3, 2, 1 together | 3 LSB from the GS LERP, 2 from the float LERP |
+| (d) receiver half with the alpha MSB set (FBA) | untouched by all three composites; the other half shadowed |
+| (e) Shadow.c's volume (one caster triangle) | one strip, 3 triangles +1 and 5 -1, the packet's kicks exactly; count +1 (colour 4) where the caster projects along the shadow direction, 0 elsewhere |
+
+The composites miss the brief's 1 LSB at levels 2 and 3. The GPU sits up
+to 1 above the float LERP over most of the image, depending on Cd (the
+same residual with every shadow colour channel set to 64), so it comes
+from lavapipe's UNORM8 blender rounding the dual-source LERP. The GS
+floors where a float blender rounds, which adds up to 1 more. The 26
+channels at 2 from the float LERP sit on band edges. Exact composites would
+need the integer blend (`blend_int`), which handles neither a textured
+sprite with an alpha test nor DATE. A count of +1 gives RGB 4, so the
+shadow colour is 4 x shadowCol / 128 (near black), faded by the levels'
+alpha.
+
+**Game run.** Not done. The one permitted run (`timeout 300`,
+`ticks=1300`, `pad-boot.txt`) used an exe configured with
+`ICO_LINK_EXE=ON`, whose cache defaulted to `ICO_HEADLESS=ON` (R3ab's had
+it OFF). It reached stage 3 at tick 996 and ended at 1300 with no renderer,
+so there is no dump and no PNG. `build-host/r4b-linux-x64-win` has since
+been rebuilt with `-DICO_HEADLESS=OFF` and is ready for the run
+(`dump_every=100`, the tick 1200 dump through `rd_replay_tool`).
+
+**rd.h changes (R4b).** `rd_ShadowCountTarget`, `rd_ShadowReset`,
+`rd_ShadowTris`, `rd_ShadowResolve`; `RD_STENCIL_RESOLVE_BIT0`; the SHADOW0..2
+comments (levels 1..3, not FBP 0x142); `rd_ShadowStrip` is now replayed (its
+float form: one strip, one sign). Internal: `RDC_SHADOW_RESET`,
+`RDC_SHADOW_RESOLVE` (appended; the dump version is unchanged, an older
+replay tool reports them as unknown), `RDC_SHADOW_STRIP` b[0]
+`RD_SHADOW_TRIS` with u[3], `RD_SHADOW_STENCIL_MASK`,
+`RD_SHADOW_RESOLVE_PASSES`, `rd__ShadowVolumeKey`, `rd__ShadowResolveKey`,
+`rd__EnumerateReachableShadow`, `RD_ONCE_SHADOW`.
+
+Open items:
+
+1. The game run and its PNG (above): the boy's shadow on the stage-3 floor
+   is unverified in the game. The shadow's receivers are pixels whose alpha
+   MSB is 0 when the composites run (DATM 0): the scene clear (alpha 0x80)
+   and every texel or vertex alpha of 0x80 and above do not receive.
+   Surfaces drawn with TEXA 7F (lists 1 and 2) or alpha below 0x80 do; FBA
+   only ever excludes. Whether the floor of stage 3 receives is for the run
+   to show.
+2. RGB24 and RGBA16 textures are TEXA-expanded after bilinear filtering in
+   `sprite_ps` and `vu_ps` (above); with AEM or two TA values, edges between
+   texels of different alpha differ from the GS. The shadow chain avoids it;
+   other bilinear RGB24 reads (motion blur reading DISPLAY) may not.
+3. `GifPacket.c` still maps FBP/TBP 0x142 to SHADOW0, which since R4b is
+   level 1 (256²); nothing but Shadow.c wrote 0x142, and Shadow.c no longer
+   goes through the decoder. The mapping should go (or point at the count
+   target) when GifPacket.c is next edited.
+4. NTSC (448 lines): the chain's first step samples 512 rows of the
+   count (TH 9); rows 448..511 are other VRAM on the PS2 (pages
+   0x1B2..0x1C1) and the clamped or repeated count target on rd.
+5. The count target is a per-frame temporary target (a 1 MB texture
+   created and freed per frame); a kept target resized with the scene would
+   avoid the churn.
+6. A SCENE depth clear inside list 3 between `shadow_Reset` and
+   `shadow_Draw` would clear the stencil count, where the GS keeps the
+   colour; no such clear exists today (list 3 holds only Shadow.c's work).
