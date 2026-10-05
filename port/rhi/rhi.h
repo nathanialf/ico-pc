@@ -1,0 +1,488 @@
+/* rhi.h: the thin render hardware interface the backends implement.
+ *
+ * One backend is linked per build (port/rhi/vk, port/rhi/d3d12; Metal later).
+ * The surface is deliberately small: the game needs about a dozen shader
+ * programs, under a hundred pipelines, about fifteen render targets, ring
+ * buffers for per-frame vertex and uniform data, and no compute.
+ *
+ * Rules for additions:
+ *  - Nothing Vulkan-only: no input attachments, no framebuffer feedback
+ *    loops, no push descriptors.  Anything added must be expressible in
+ *    D3D12 and Metal.
+ *  - Resource state transitions are explicit (rhi_Barrier).  The caller
+ *    (rd_core) knows the frame graph; backends do not track state.
+ *  - All handles are opaque 32-bit ids with a generation; 0 is null.
+ *  - Byte layouts (vertex formats, uniform blocks) are fixed by rd_core
+ *    and shared with the shaders through port/shaders/common.hlsli.
+ */
+#ifndef PORT_RHI_RHI_H
+#define PORT_RHI_RHI_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ------------------------------------------------------------- handles */
+typedef struct {
+    uint32_t id;
+} RhiBuffer;
+
+typedef struct {
+    uint32_t id;
+} RhiTexture;
+
+typedef struct {
+    uint32_t id;
+} RhiSampler;
+
+typedef struct {
+    uint32_t id;
+} RhiShader;
+
+typedef struct {
+    uint32_t id;
+} RhiPipeline;
+
+typedef struct {
+    uint32_t id;
+} RhiBindGroupLayout;
+
+typedef struct {
+    uint32_t id;
+} RhiBindGroup;
+
+typedef struct {
+    uint32_t id;
+} RhiCommandList;
+
+typedef struct {
+    uint32_t id;
+} RhiFence;
+
+#define RHI_NULL_ID 0u
+#define RHI_MAX_COLOR_TARGETS                                                                      \
+    2 /* colour + dual-source helper never needs more than one target; 2 for puddle/pool copies */
+#define RHI_MAX_BIND_SLOTS 8
+#define RHI_MAX_VERTEX_ATTRS 8
+#define RHI_FRAMES_IN_FLIGHT 2
+
+/* ------------------------------------------------------------- formats */
+typedef enum RhiFormat {
+    RHI_FMT_UNKNOWN = 0,
+    RHI_FMT_RGBA8_UNORM, /* colour targets, textures; alpha holds raw GS alpha (0x80 = 1.0) */
+    RHI_FMT_RGBA8_UINT,  /* colour targets for the exact integer blend path (ping-pong passes) */
+    RHI_FMT_R8_UNORM,    /* DATE snapshot, font atlas, fog LUT index textures */
+    RHI_FMT_R8_UINT,
+    RHI_FMT_R16_UINT,
+    RHI_FMT_RGBA16F,
+    RHI_FMT_D32F,        /* reversed-Z depth */
+    RHI_FMT_D32F_S8,     /* reversed-Z depth + stencil (scene target) */
+    RHI_FMT_BGRA8_UNORM, /* swapchain */
+    RHI_FMT_COUNT
+} RhiFormat;
+
+typedef enum RhiVertexFormat {
+    RHI_VTX_F32x1,
+    RHI_VTX_F32x2,
+    RHI_VTX_F32x3,
+    RHI_VTX_F32x4,
+    RHI_VTX_U8x4_UNORM,
+    RHI_VTX_U8x4_UINT,
+    RHI_VTX_U16x2_UINT,
+    RHI_VTX_U32x1
+} RhiVertexFormat;
+
+/* ------------------------------------------------------------ resources */
+typedef enum RhiBufferUsage {
+    RHI_BUF_VERTEX = 1 << 0,
+    RHI_BUF_INDEX = 1 << 1,
+    RHI_BUF_UNIFORM = 1 << 2,
+    RHI_BUF_STORAGE_READ = 1 << 3, /* bone matrices, particle arrays */
+    RHI_BUF_COPY_SRC = 1 << 4,
+    RHI_BUF_COPY_DST = 1 << 5,
+    RHI_BUF_READBACK = 1 << 6 /* host-visible, for frame dumps */
+} RhiBufferUsage;
+
+typedef enum RhiMemory {
+    RHI_MEM_DEVICE = 0, /* static: meshes built once at load */
+    RHI_MEM_UPLOAD = 1, /* per-frame ring: mapped persistently, written by the CPU */
+    RHI_MEM_READBACK = 2
+} RhiMemory;
+
+typedef struct RhiBufferDesc {
+    uint64_t size;
+    uint32_t usage; /* RhiBufferUsage bits */
+    RhiMemory memory;
+    const char *debugName;
+} RhiBufferDesc;
+
+typedef enum RhiTextureUsage {
+    RHI_TEX_SAMPLED = 1 << 0,
+    RHI_TEX_RENDER_TARGET = 1 << 1,
+    RHI_TEX_DEPTH_STENCIL = 1 << 2,
+    RHI_TEX_COPY_SRC = 1 << 3,
+    RHI_TEX_COPY_DST = 1 << 4
+} RhiTextureUsage;
+
+typedef struct RhiTextureDesc {
+    uint32_t width, height;
+    uint32_t mipLevels; /* 1 for the Original preset; generated mips only in Enhanced */
+    RhiFormat format;
+    uint32_t usage; /* RhiTextureUsage bits */
+    const char *debugName;
+} RhiTextureDesc;
+
+/* Views: a depth-stencil texture is sampled either as depth (fog, DoF) or
+ * never as stencil; an RGBA8 target can be viewed as RGB24-with-TA0 by the
+ * shader, which is a shader concern, not a view.  So one view kind is enough
+ * beyond the default: the depth aspect. */
+typedef enum RhiViewAspect { RHI_ASPECT_COLOR = 0, RHI_ASPECT_DEPTH = 1 } RhiViewAspect;
+
+typedef enum RhiFilter { RHI_FILTER_NEAREST = 0, RHI_FILTER_LINEAR = 1 } RhiFilter;
+
+typedef enum RhiWrap { RHI_WRAP_REPEAT = 0, RHI_WRAP_CLAMP = 1 } RhiWrap;
+
+typedef struct RhiSamplerDesc {
+    RhiFilter mag, min, mip;
+    RhiWrap s, t;
+    float maxAnisotropy; /* 1.0 in Original */
+    float lodBias;       /* Enhanced trilinear only; Original fixes the mip per texture */
+    float minLod, maxLod;
+} RhiSamplerDesc;
+
+/* ---------------------------------------------------- resource states */
+typedef enum RhiState {
+    RHI_STATE_UNDEFINED = 0,
+    RHI_STATE_RENDER_TARGET,
+    RHI_STATE_DEPTH_WRITE,
+    RHI_STATE_DEPTH_READ, /* depth test on, no write, also sampleable as depth */
+    RHI_STATE_SHADER_READ,
+    RHI_STATE_COPY_SRC,
+    RHI_STATE_COPY_DST,
+    RHI_STATE_PRESENT
+} RhiState;
+
+typedef struct RhiTextureBarrier {
+    RhiTexture texture;
+    RhiState before, after;
+} RhiTextureBarrier;
+
+/* ------------------------------------------------------------- shaders */
+typedef enum RhiShaderStage { RHI_STAGE_VERTEX = 0, RHI_STAGE_FRAGMENT = 1 } RhiShaderStage;
+
+/* Shaders are precompiled at build time by DXC from one HLSL source to
+ * SPIR-V (Vulkan) and DXIL (D3D12) and embedded as byte arrays; the
+ * backend receives whichever blob it understands. */
+typedef struct RhiShaderDesc {
+    RhiShaderStage stage;
+    const void *bytecode;
+    size_t bytecodeSize;
+    const char *entryPoint; /* "main" */
+    const char *debugName;
+} RhiShaderDesc;
+
+/* --------------------------------------------------------- bind groups
+ * Fixed slot model shared by all programs (see port/shaders/common.hlsli):
+ *  group 0: per-frame uniforms   (b0)
+ *  group 1: per-draw uniforms    (b1), bone/particle storage (t0)
+ *  group 2: textures t1..t4 and samplers s1..s4
+ * Backends map these onto descriptor sets / root parameters / argument
+ * buffers; rd_core never sees the mapping. */
+typedef enum RhiBindType {
+    RHI_BIND_UNIFORM_BUFFER = 0,
+    RHI_BIND_STORAGE_BUFFER,
+    RHI_BIND_SAMPLED_TEXTURE,
+    RHI_BIND_SAMPLER
+} RhiBindType;
+
+typedef struct RhiBindSlot {
+    uint32_t slot;
+    RhiBindType type;
+    uint32_t stages; /* bitmask of (1 << RhiShaderStage) */
+} RhiBindSlot;
+
+typedef struct RhiBindGroupLayoutDesc {
+    const RhiBindSlot *slots;
+    uint32_t slotCount;
+    const char *debugName;
+} RhiBindGroupLayoutDesc;
+
+typedef struct RhiBinding {
+    uint32_t slot;
+    RhiBindType type;
+    RhiBuffer buffer;      /* for buffer types */
+    uint64_t offset, size; /* buffer range; uniform ranges respect rhi_Limits().uniformAlign */
+    RhiTexture texture;    /* for sampled textures */
+    RhiViewAspect aspect;
+    RhiSampler sampler; /* for samplers */
+} RhiBinding;
+
+typedef struct RhiBindGroupDesc {
+    RhiBindGroupLayout layout;
+    const RhiBinding *bindings;
+    uint32_t bindingCount;
+} RhiBindGroupDesc;
+
+/* ------------------------------------------------------------ pipelines */
+typedef enum RhiTopology {
+    RHI_TOPO_TRIANGLE_LIST = 0,
+    RHI_TOPO_TRIANGLE_STRIP, /* GS strips; rd_core emits restart-free strips per GIF packet */
+    RHI_TOPO_LINE_LIST,
+    RHI_TOPO_POINT_LIST
+} RhiTopology;
+
+typedef enum RhiCompare {
+    RHI_CMP_NEVER = 0,
+    RHI_CMP_LESS,
+    RHI_CMP_EQUAL,
+    RHI_CMP_LEQUAL,
+    RHI_CMP_GREATER,
+    RHI_CMP_NOTEQUAL,
+    RHI_CMP_GEQUAL,
+    RHI_CMP_ALWAYS
+} RhiCompare;
+
+typedef enum RhiBlendFactor {
+    RHI_BF_ZERO = 0,
+    RHI_BF_ONE,
+    RHI_BF_SRC_COLOR,
+    RHI_BF_ONE_MINUS_SRC_COLOR,
+    RHI_BF_DST_COLOR,
+    RHI_BF_ONE_MINUS_DST_COLOR,
+    RHI_BF_SRC_ALPHA,
+    RHI_BF_ONE_MINUS_SRC_ALPHA,
+    RHI_BF_DST_ALPHA,
+    RHI_BF_ONE_MINUS_DST_ALPHA,
+    RHI_BF_CONSTANT,
+    RHI_BF_ONE_MINUS_CONSTANT,
+    /* dual-source: the fragment shader's second output carries the GS blend
+     * factor (As/128 or FIX/128), so alpha above 1.0 and the 0x80 scale are
+     * exact.  Required on all backends (Vulkan dualSrcBlend, D3D12 always,
+     * Metal always). */
+    RHI_BF_SRC1_COLOR,
+    RHI_BF_ONE_MINUS_SRC1_COLOR,
+    RHI_BF_SRC1_ALPHA,
+    RHI_BF_ONE_MINUS_SRC1_ALPHA
+} RhiBlendFactor;
+
+typedef enum RhiBlendOp { RHI_BO_ADD = 0, RHI_BO_SUBTRACT, RHI_BO_REVERSE_SUBTRACT } RhiBlendOp;
+
+typedef struct RhiBlendState {
+    bool enable;
+    RhiBlendFactor srcColor, dstColor;
+    RhiBlendOp colorOp;
+    RhiBlendFactor srcAlpha, dstAlpha;
+    RhiBlendOp alphaOp;
+    uint8_t writeMask; /* bits 0..3 = R G B A */
+} RhiBlendState;
+
+typedef enum RhiStencilOp {
+    RHI_SO_KEEP = 0,
+    RHI_SO_ZERO,
+    RHI_SO_REPLACE,
+    RHI_SO_INCR_WRAP,
+    RHI_SO_DECR_WRAP, /* shadow volume count: sign picks one */
+    RHI_SO_INCR_CLAMP,
+    RHI_SO_DECR_CLAMP,
+    RHI_SO_INVERT
+} RhiStencilOp;
+
+typedef struct RhiStencilFace {
+    RhiCompare compare;
+    RhiStencilOp pass, fail, depthFail;
+} RhiStencilFace;
+
+typedef struct RhiDepthStencilState {
+    bool depthTest;
+    bool depthWrite;
+    RhiCompare
+        depthCompare; /* reversed-Z: GS GEQUAL becomes RHI_CMP_GEQUAL on 1-z, see RENDER_API.md */
+    bool stencilTest;
+    uint8_t stencilReadMask, stencilWriteMask;
+    RhiStencilFace front,
+        back; /* both faces identical for the game; two-sided kept for the shadow pass */
+} RhiDepthStencilState;
+
+typedef struct RhiVertexAttr {
+    uint32_t location;
+    uint32_t binding;
+    RhiVertexFormat format;
+    uint32_t offset;
+} RhiVertexAttr;
+
+typedef struct RhiVertexBinding {
+    uint32_t binding;
+    uint32_t stride;
+    bool perInstance;
+} RhiVertexBinding;
+
+typedef struct RhiPipelineDesc {
+    RhiShader vertex, fragment;
+    const RhiBindGroupLayout *layouts;
+    uint32_t layoutCount;
+    const RhiVertexBinding *vertexBindings;
+    uint32_t vertexBindingCount;
+    const RhiVertexAttr *vertexAttrs;
+    uint32_t vertexAttrCount;
+    RhiTopology topology;
+    bool cullNone; /* the game never culls: GS has no culling; always true */
+    RhiBlendState blend[RHI_MAX_COLOR_TARGETS];
+    RhiDepthStencilState depthStencil;
+    RhiFormat colorFormats[RHI_MAX_COLOR_TARGETS];
+    uint32_t colorCount;
+    RhiFormat depthFormat; /* RHI_FMT_UNKNOWN for none */
+    const char *debugName;
+} RhiPipelineDesc;
+
+/* ------------------------------------------------------------- passes */
+typedef enum RhiLoadOp { RHI_LOAD_LOAD = 0, RHI_LOAD_CLEAR, RHI_LOAD_DONT_CARE } RhiLoadOp;
+
+typedef struct RhiColorAttachment {
+    RhiTexture texture;
+    RhiLoadOp load;
+    float clear[4];
+} RhiColorAttachment;
+
+typedef struct RhiDepthAttachment {
+    RhiTexture texture; /* id 0 = no depth */
+    RhiLoadOp depthLoad, stencilLoad;
+    float clearDepth;
+    uint8_t clearStencil;
+    bool
+        readOnlyDepth; /* depth test without write and the same texture bound for sampling is NOT allowed; use a copy */
+} RhiDepthAttachment;
+
+typedef struct RhiRenderPassDesc {
+    RhiColorAttachment color[RHI_MAX_COLOR_TARGETS];
+    uint32_t colorCount;
+    RhiDepthAttachment depth;
+    uint32_t width, height;
+} RhiRenderPassDesc;
+
+typedef struct RhiViewport {
+    float x, y, w, h, minDepth, maxDepth;
+} RhiViewport;
+
+typedef struct RhiRect {
+    int32_t x, y;
+    uint32_t w, h;
+} RhiRect;
+
+/* ------------------------------------------------------------- device */
+typedef struct RhiLimits {
+    uint32_t uniformAlign; /* 256 on D3D12, usually 64..256 on Vulkan: rd_core aligns to this */
+    uint32_t maxTextureSize;
+    bool dualSourceBlend; /* must be true; rd_Init fails otherwise */
+    bool stencilWrap;     /* must be true */
+    bool depthReadback;   /* frame dumps include depth when true */
+} RhiLimits;
+
+typedef struct RhiDeviceDesc {
+    void *sdlWindow; /* SDL_Window*: the backend creates its surface/swapchain from it */
+    bool vsync;
+    bool debugLayers;
+    const char *appName;
+} RhiDeviceDesc;
+
+typedef enum RhiBackendKind {
+    RHI_BACKEND_VULKAN = 0,
+    RHI_BACKEND_D3D12 = 1,
+    RHI_BACKEND_METAL = 2
+} RhiBackendKind;
+
+bool rhi_Init(const RhiDeviceDesc *desc);
+void rhi_Shutdown(void);
+RhiBackendKind rhi_Backend(void);
+const RhiLimits *rhi_Limits(void);
+const char *rhi_AdapterName(void);
+
+/* Swapchain.  Resize is driven by rd_present from SDL window events. */
+bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync);
+RhiFormat rhi_SwapchainFormat(void);
+/* Acquire the next backbuffer image for this frame; returns id 0 when the
+ * swapchain must be recreated. */
+RhiTexture rhi_AcquireBackbuffer(void);
+void rhi_Present(void);
+
+/* Resources.  Create/destroy are not frame-safe: destroy defers internally
+ * until the frames in flight that may reference the handle have retired. */
+RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc);
+void rhi_DestroyBuffer(RhiBuffer b);
+void *rhi_MapBuffer(
+    RhiBuffer
+        b); /* UPLOAD and READBACK only; persistently mapped, returns the same pointer each time */
+void rhi_UnmapBuffer(RhiBuffer b);
+
+RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc);
+void rhi_DestroyTexture(RhiTexture t);
+RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc);
+void rhi_DestroySampler(RhiSampler s);
+
+RhiShader rhi_CreateShader(const RhiShaderDesc *desc);
+void rhi_DestroyShader(RhiShader s);
+RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc);
+void rhi_DestroyBindGroupLayout(RhiBindGroupLayout l);
+RhiBindGroup
+rhi_CreateBindGroup(const RhiBindGroupDesc *desc); /* transient: valid for the current frame only */
+RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *desc);
+void rhi_DestroyPipeline(RhiPipeline p);
+
+/* ------------------------------------------------------------ commands
+ * One command list per frame is enough for the game; rd_core may open a
+ * second for texture uploads.  Lists are submitted in order. */
+RhiCommandList rhi_BeginCommands(void);
+void rhi_EndCommands(RhiCommandList cl);
+void rhi_Submit(RhiCommandList cl);
+/* Block until the GPU has finished the frame submitted RHI_FRAMES_IN_FLIGHT
+ * frames ago; rd_core calls it before reusing a ring region. */
+void rhi_WaitFrame(void);
+/* Full GPU idle, for shutdown, resize and verification readbacks. */
+void rhi_WaitIdle(void);
+
+void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count);
+void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass);
+void rhi_CmdEndRenderPass(RhiCommandList cl);
+void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *vp);
+void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *rect);
+void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p);
+void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
+void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
+void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
+void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref);
+void rhi_CmdSetBlendConstant(RhiCommandList cl, const float rgba[4]);
+void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
+                 uint32_t instanceCount);
+void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
+                        int32_t vertexOffset, uint32_t instanceCount);
+
+/* Copies, outside render passes.  Texture<->texture copies replace the
+ * game's VRAM-to-VRAM moves (gif_MoveImage, ZFog's Z copy, queen barrier's
+ * framebuffer grab). */
+void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
+                                uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region);
+void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
+                        int32_t dstX, int32_t dstY);
+void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
+                                RhiRect region, RhiBuffer dst, uint64_t dstOffset,
+                                uint32_t rowPitch);
+
+/* Debug markers: no-ops without debug layers. */
+void rhi_CmdBeginLabel(RhiCommandList cl, const char *name);
+void rhi_CmdEndLabel(RhiCommandList cl);
+
+/* -------------------------------------------------- verification helpers
+ * Synchronous readback of a whole texture into caller memory as tightly
+ * packed rows (RGBA8 or R32F for depth).  Slow; only used by the frame-dump
+ * path and the headless replayer (tools/verify). */
+bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
+                         uint32_t *outRowPitch);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PORT_RHI_RHI_H */
