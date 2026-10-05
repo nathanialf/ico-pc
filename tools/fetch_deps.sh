@@ -19,13 +19,17 @@
 #                          x86_64-w64-mingw32 and i686-w64-mingw32 prefixes
 #   deps/vulkan-validation/ the Khronos validation layer (Apache-2.0) from
 #                          Debian 13, for the RHI tests only; never shipped
+#   deps/dxc/              DirectX Shader Compiler (Linux x86-64 release, NCSA):
+#                          the shader toolchain's build tool (cmake/IcoShaders.cmake);
+#                          never linked or shipped
 #
 # docs/port/THIRD_PARTY.md records the versions and licences.
 #
 # Overrides:
 #   VULKAN_SDK_TAG, VULKAN_HEADERS_SHA256, VOLK_SHA256
 #   SDL3_VERSION, SDL3_SRC_SHA256, SDL3_MINGW_SHA256
-#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1
+#   DXC_VERSION, DXC_LINUX_FILE, DXC_LINUX_SHA256
+#   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -245,5 +249,34 @@ else
         > "$VVL/VkLayer_khronos_validation.json"
     echo "$VVL_ID" > "$VVL/.ico-release"
     echo "==> validation layer at $VVL"
+fi
+
+# --- 4. DXC (build tool) ---------------------------------------------------------
+#
+# The shader compiler cmake/IcoShaders.cmake runs on the build host: HLSL to
+# SPIR-V and DXIL. Microsoft's Linux x86-64 release; the SHA-256 is the digest
+# GitHub lists for the asset. Installed at deps/dxc/{bin,lib}.
+DXC_VERSION="${DXC_VERSION:-v1.9.2609}"
+DXC_LINUX_FILE="${DXC_LINUX_FILE:-linux_dxc_2026_09_28.x86_x64.tar.gz}"
+DXC_LINUX_SHA256="${DXC_LINUX_SHA256:-96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1}"
+DXC_DIR="$DEST/dxc"
+if [[ "${SKIP_DXC:-0}" == "1" ]]; then
+    echo "==> SKIP_DXC=1; not fetching DXC"
+elif stamped "$DXC_DIR" "$DXC_VERSION-$DXC_LINUX_FILE"; then
+    echo "==> DXC ${DXC_VERSION} already at $DXC_DIR"
+else
+    fetch "https://github.com/microsoft/DirectXShaderCompiler/releases/download/${DXC_VERSION}/${DXC_LINUX_FILE}" \
+        "$DXC_LINUX_SHA256" "$TMP/dxc.tar.gz"
+    mkdir -p "$TMP/dxc"
+    tar -C "$TMP/dxc" -xzf "$TMP/dxc.tar.gz"
+    rm -rf "$DXC_DIR"
+    mkdir -p "$DXC_DIR"
+    mv "$TMP/dxc/bin" "$TMP/dxc/lib" "$DXC_DIR/"
+    for f in LICENSE-LLVM.txt LICENSE-MIT.txt LICENSE-MS.txt ThirdPartyNotices.txt; do
+        [[ -f "$TMP/dxc/$f" ]] && cp "$TMP/dxc/$f" "$DXC_DIR/"
+    done
+    chmod +x "$DXC_DIR/bin/dxc"
+    echo "$DXC_VERSION-$DXC_LINUX_FILE" > "$DXC_DIR/.ico-release"
+    echo "==> DXC ${DXC_VERSION} at $DXC_DIR"
 fi
 echo "==> deps done: $DEST"
