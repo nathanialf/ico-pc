@@ -174,7 +174,10 @@ The branches are separate trees and are never merged into each other.
 
 [ico-pc](https://github.com/nathanialf/ico-pc) is a fork of this repository
 that is being turned into a native PC port. This tree remains the
-byte-matched reference. Reconstruction bugs the port finds are fixed here
+byte-matched reference and is the one source of the game code for both
+builds: the port's host changes to `ico2/` and `sce/` live here, under
+`#ifdef ICO_HOST` or in spellings that compile to the same EE code, and pass
+the same byte-match gate. Reconstruction bugs the port finds are fixed here
 first, under this repository's rules, and then merged into the port. See
 [`docs/PORT.md`](docs/PORT.md).
 
