@@ -29,6 +29,12 @@
 #include "libgraph.h"
 #include <stdlib.h>
 
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0)
    at a frame step of 2 (word 1). db is the GS double buffer (libgraph's
    sceGsDBuff, 0x230 B), stageMgrMsg the stage manager's message (main.h's
@@ -192,6 +198,9 @@ void Main(void)
             movie_init(&movieFile[mpegPlay * 0x20], 720, systemStatus[0] ? 576 : 480, 36, 12,
                        soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
+#ifdef ICO_HOST
+            ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
+#endif
             sceGsSyncV(0);
             soundAllocIopHeap();
             AdpcmStreamHeap();

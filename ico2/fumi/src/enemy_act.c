@@ -34,6 +34,9 @@
 /* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
 extern int ico_opt_yorda_safe(void);
 
+/* port/game/gamestate.c: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h"
+
 #endif
 
 #include "GifPacket.h"
@@ -1023,6 +1026,9 @@ static int actEnemyForceSwitchToCarry(void *self)
                                   0.0f, 0.0f, 1.0f);
     sub->carried = girlGObj;
     GOBJ_ACT(girlGObj)->carrier = self;
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, ((GObj *)self)->labelId);
+#endif
     eBrainSendMes(self, 9);
     eBrainSendMes(self, 7);
     if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < sub->frame &&

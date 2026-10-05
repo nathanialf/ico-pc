@@ -71,6 +71,7 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[input]` | | | docs/port/INPUT.md (4C), untouched |
 | `[gameplay]` | | `false` | `stick_fix`, `yorda_safe`, `mirror`: docs/port/OPTIONS.md (6A); `developer_mode`: the debug menu and option table (R6a, docs/port/DEVELOPER_MODE.md); read through `ico_config_get_bool` on first use |
 | `[game] language` | | `"auto"` | `"auto"`, `"en"`, `"fr"`, `"de"`, `"it"`, `"es"` |
+| `[game] achievements` | | `true` | Phase 6, 6E: `false` turns the achievement popups off; unlocks are still recorded in `<pref>/achievements.toml` (docs/port/ACHIEVEMENTS.md) |
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
 | `[dev] trace` | `trace` | on | `false`/`0`/`none`: no trace; a path writes there |

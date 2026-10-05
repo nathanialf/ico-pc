@@ -17,6 +17,12 @@
 #include "main.h"
 #include "script.h"
 
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 /* .sbss: titleSubEnd and demoSubEnd are the flags a title or demo sub-thread
    raises when it is done and its parent waits on, titleSubAdpcm and demoAdpcm
    the stream handles scpAdpcmPlayRequestFunc fills. */
@@ -527,6 +533,9 @@ void actOpDemo01_2(GObj *volatile self)
         }
         _ACTWait(1);
     }
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_DEMO_END, 2 + (demoSubEnd == 0));
+#endif
 
     if (adpcm_conte01_sea != 0) {
         scpAdpcmFadeCloseFunc(&adpcm_conte01_sea, 128);
@@ -657,6 +666,9 @@ inline void actOpDemo02Chk(GObj *volatile self)
         }
         _ACTWait(1);
     }
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_DEMO_END, 4 + (demoSubEnd == 0));
+#endif
 
     if (demoSubEnd == 0) {
         if (demoAdpcm != 0) {
@@ -831,6 +843,9 @@ void actOpDemo03Chk(GObj *volatile self)
         }
         _ACTWait(1);
     }
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_DEMO_END, 6 + (demoSubEnd == 0));
+#endif
 
     if (demoSubEnd == 0) {
         if (op2 != 0) {

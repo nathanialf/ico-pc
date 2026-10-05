@@ -250,7 +250,9 @@ options (remap, mouse camera, invert X/Y, vibration), the gameplay options of
 docs/port/OPTIONS.md (stick fix; "Shadows never take Yorda" and the
 explanation OPTIONS.md asks for), the five language names, skip boot
 screens, developer mode and its note, the test popup and "Achievement
-unlocked". The translations are the author's, not reviewed by native
+unlocked"; since 6E the achievements' 30 titles and 30 descriptions
+(`UI_STR_ACH_<NAME>`, `UI_STR_ACH_<NAME>_DESC`) and the popup's "Assisted"
+line (`UI_STR_ACH_ASSISTED`), listed in docs/port/ACHIEVEMENTS.md. The translations are the author's, not reviewed by native
 speakers (open item 4).
 
 ## Popups

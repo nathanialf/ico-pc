@@ -6,11 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../audio/audio_host.h"
+#include "../game/achievements.h"
 #include "arena.h"
 #include "diag_host.h"
 #include "fpenv.h"
 #include "host_loop.h"
 #include "sched.h"
+#include "trace_host.h"
 
 /* The game's main (common/src/main.c, renamed by CMakeLists.txt) and its
    video mode word: systemStatus[0] is 0 for NTSC (60 Hz), 1 for PAL. */
@@ -65,6 +67,9 @@ void ico_host_step(void)
        writes take effect from the next block (docs/port/AUDIO.md) */
     ico_audio_host_vsync(ico_host_vsync_hz());
     ico_sched_run();
+    /* the port's achievements (docs/port/ACHIEVEMENTS.md): once per new Main
+       tick, after the threads have run; reads game state, writes none */
+    ico_ach_host_poll(ico_host_main_ticks());
 }
 
 unsigned int ico_host_vsync_count(void)

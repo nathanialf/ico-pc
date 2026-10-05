@@ -28,6 +28,12 @@
 #include "sceneManager.h"
 #include "DObj.h"
 
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 static void calcDynamicGeometry(struct GObj *g);
 
 /* The work record InitWeaponGeo and InitDemoQueensSword allocate and the
@@ -940,6 +946,9 @@ void PickupWeapon(GObj *self, GObj *holder, int focus)
     p->holder = holder;
     p->holderId = GetSkeltonFocusNode(holder, focus);
     GOBJ_SUB(holder)->ctrl.pickedWeapon = self;
+#ifdef ICO_HOST
+    ico_gs_signal(holder == boyGObj ? ICO_GS_EV_WEAPON : ICO_GS_EV_NONE, p->kind);
+#endif
 }
 
 GObj *CheckSwapableWeapon(GObj *self, float dist)

@@ -139,6 +139,13 @@ inline void afterCommonTruckLever(GObj *volatile self);
 #include "st25a.h"
 #include <string.h>
 #include "gamesys.h"
+
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 #include "generator.h"
 #include "debug_exception.h"
 #include "gv.h"
@@ -1592,6 +1599,9 @@ void actCommonDie(GObj *volatile self)
             enemySetParticleDie(test_CURRENTROOT((void *)self), GOBJ_ACT(self)->attackDir);
             EnemySetfDisappearAll(self);
             actEnemyFlagOnDead(self);
+#ifdef ICO_HOST
+            ico_gs_signal(ICO_GS_EV_ENEMY_KILLED, self->labelId);
+#endif
             ACTGame_DeleteActorInformation(self);
             for (t = 0.0f; t < (float)(((60 - systemStatus[0] * 10) / systemStatus[1]) * 6);
                  t += GOBJ_WORK(self)->disappearSpeed) {
@@ -3791,6 +3801,9 @@ void ACT_LAYOUT_GAMEOVER(void)
 {
     if (gameover_layout_flag == 0) {
         gameover_layout_flag = 1;
+#ifdef ICO_HOST
+        ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+#endif
         lt_switch_layout(62);
     }
 }

@@ -77,6 +77,13 @@ static unsigned int initIcoMiscThread[28]; /* derived name */
 #include <eekernel.h>
 #include <libdma.h>
 #include <string.h>
+
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 #include "typedef.h"
 
 /* .sdata: the movie switches main.c's loop reads, defined before
@@ -182,6 +189,9 @@ static void start_stage_Load_thread(int stage)
 {
     before_stage_no = stage_no;
     stage_no = stage;
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_STAGE_ENTER, stage);
+#endif
     gsb_SetBGColor(&db, 1, 1, 1);
     sceGsSyncPath(0, 0);
     stageManagerFreeResourceFlag = 1;
@@ -483,6 +493,9 @@ inline void CheckPoint(void)
     if (systemStatus[2]) {
         gamesysMemorySave(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
         systemStatus[3] = 1;
+#ifdef ICO_HOST
+        ico_gs_signal(ICO_GS_EV_CHECKPOINT, stage_no);
+#endif
     }
 }
 
