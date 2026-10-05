@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "DmaPacket.h"
 #include "ios.h"
 #include "memory.h"
@@ -11,12 +12,10 @@ int used_dma_memory = 0;
 void dpk_Init(void)
 {
     PacketBufferStruct.cur = 0;
-    PacketBufferStruct.buf[0] =
-        (int *)((int)iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 134) |
-                0x30000000);
-    PacketBufferStruct.buf[1] =
-        (int *)((int)iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 135) |
-                0x30000000);
+    PacketBufferStruct.buf[0] = (int *)ICO_UNCACHED_ACCEL(
+        ICO_ADDR(iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 134)));
+    PacketBufferStruct.buf[1] = (int *)ICO_UNCACHED_ACCEL(
+        ICO_ADDR(iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 135)));
     PacketBufferStruct.ptr.i = PacketBufferStruct.buf[PacketBufferStruct.cur];
 }
 
@@ -33,7 +32,7 @@ void dpk_SwapBuffer(void)
 unsigned int dpk_CheckBufferSize(void)
 {
     int idx = PacketBufferStruct.cur;
-    int adj_cur = (int)PacketBufferStruct.ptr.c - 0x80000;
-    int end_off = (int)PacketBufferStruct.buf[idx];
-    return (end_off - adj_cur) >> 4;
+    ICO_WORD adj_cur = (ICO_WORD)PacketBufferStruct.ptr.c - 0x80000;
+    ICO_WORD end_off = (ICO_WORD)PacketBufferStruct.buf[idx];
+    return (unsigned int)((end_off - adj_cur) >> 4);
 }

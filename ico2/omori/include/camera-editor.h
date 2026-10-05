@@ -8,6 +8,9 @@
 #ifndef CAMERA_EDITOR_H
 #define CAMERA_EDITOR_H
 
+#include "eeword.h"
+#include "typedef.h"
+
 /* A camera pin, one item record of a camera set (0x5C bytes, copied whole):
  * the camera position and the point it looks at, two offsets of the look-at
  * point, the on flag, the field of view, the radius inside which the pin damps
@@ -46,18 +49,44 @@ typedef struct CamGroup { /* field names derived */
     int end;         /* 0x3C, one past its last pin */
     int mode;        /* 0x40, 2: ChaseCamera instead of the pins */
     int kind;        /* 0x44, a change of kind restarts the monitor camera */
-    PinRec *items;   /* 0x48, the group's pin records */
+    ICO_EEWORD(PinRec *) items; /* 0x48, the group's pin records (an EE address word, eeword.h) */
 } CamGroup; /* derived name */
+
+/* CamGroup.items as a pointer, and its store (eeword.h): the field is a
+ * 32-bit word on the host, so the record keeps its 76-byte stride. */
+#ifdef ICO_HOST
+#define CAMGROUP_ITEMS(g) ICO_EEPTR(PinRec *, (g)->items)
+#define CAMGROUP_SET_ITEMS(g, p) ((g)->items = (IcoEEWord)ICO_EEW(p))
+#else
+#define CAMGROUP_ITEMS(g) ((g)->items)
+#define CAMGROUP_SET_ITEMS(g, p) ((g)->items = (p))
+#endif
+
+/* The head of a camera-set file (.gcm), 16 bytes: the magic, the file
+ * version (0 to 3; ReadCameraSet converts the older three), the group count
+ * and the total pin count.  The groups (CamGroup, 76 bytes each) follow,
+ * then the pins, whose stride is the version's (92 bytes in version 3). */
+typedef struct CamSetFile { /* field names derived */
+    int magic;              /* 0x00 */
+    int ver;                /* 0x04 */
+    int count;              /* 0x08 */
+    int total;              /* 0x0C */
+} CamSetFile;               /* derived name */
 
 extern PinRec cameraPinDefault;
 extern CamGroup cameraGroupDefault;
-extern int curmenu;
+extern ICO_WORD curmenu;
 extern int print_y;
 extern unsigned char exit_f;
 /* A menu of the camera editor: its thread record, then the menu that opened
    it, which it wakes and hands back to on exit, and the menu's argument. */
 typedef struct MenuThread { /* field names derived */
+#ifdef ICO_HOST
+    /* an IOSThread is 152 bytes on the host, 112 on the EE */
+    char thread[160] __attribute__((aligned(8)));
+#else
     char thread[112];
+#endif
     char *parent; /* 0x70 */
     int arg;      /* 0x74 */
 } MenuThread; /* derived name */

@@ -10,6 +10,12 @@
 #include <stdlib.h>
 #include "typedef.h"
 #include "Matrix.h"
+#include "ee_view.h"
+
+/* a display object's node-matrix and node-quaternion buffer words (Sub15C
+   +0xC and +0x10 on the EE), as the buffer pointers the loaders store */
+#define DOBJ_NODEMTX_PTR(d) ICO_RAW(void *, d, 0xC, *(void **)&(d)->nodeMtx)
+#define DOBJ_NODEQUAT_PTR(d) ICO_RAW(void *, d, 0x10, *(void **)&(d)->nodeQuat)
 
 /* the engine RNG, 0..1 */
 static __inline__ float random_unit(void) /* derived name */
@@ -40,6 +46,9 @@ static __inline__ float random_signed_b(void) /* derived name */
    evaluated on VU0 in macro mode.  vf1 <- pos (first argument), vf2 <- plane. */
 static __inline__ float plane_distance(const void *pos, const void *plane) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_plane_distance(pos, plane);
+#else
     float d;
     /* one asm block: the result goes from vf3 through $v0 to the float register */
     __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
@@ -54,11 +63,15 @@ static __inline__ float plane_distance(const void *pos, const void *plane) /* de
                          : "r"(pos), "r"(plane)
                          : "$2");
     return d;
+#endif
 }
 
 /* squared distance between two points (xyz) */
 static __inline__ float distance_squared(const void *a, const void *b) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_distance_squared(a, b);
+#else
     float d;
     /* one asm block in plane_distance's style, with no memory clobber */
     __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
@@ -73,6 +86,7 @@ static __inline__ float distance_squared(const void *a, const void *b) /* derive
                          : "r"(a), "r"(b)
                          : "$2");
     return d;
+#endif
 }
 
 /* a second squared-distance helper, written as separate VU0 macro
@@ -81,6 +95,9 @@ static __inline__ float distance_squared(const void *a, const void *b) /* derive
    torch.c's and spider.c's distance_squared rows cite. */
 static __inline__ float distance_squared_b(const void *a, const void *b) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_distance_squared(a, b);
+#else
     float d;
     int t;
     VU0_LSV_R(lqc2, 1, 0x0, a);
@@ -92,11 +109,15 @@ static __inline__ float distance_squared_b(const void *a, const void *b) /* deri
     __asm__ __volatile__("qmfc2.ni %0, $vf3" : "=r"(t));
     __asm__ __volatile__("mtc1 %1, %0" : "=f"(d) : "r"(t));
     return d;
+#endif
 }
 
 /* squared distance in the XZ plane, in distance_squared's form */
 static __inline__ float distance_squared_xz(const void *a, const void *b) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_distance_squared_xz(a, b);
+#else
     float d;
     __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
                          "lqc2 $vf2, 0x0(%2)\n\t"
@@ -109,6 +130,7 @@ static __inline__ float distance_squared_xz(const void *a, const void *b) /* der
                          : "r"(a), "r"(b)
                          : "$2");
     return d;
+#endif
 }
 
 /* byte-sum checksum over a buffer, for ReadSkeltonFile and

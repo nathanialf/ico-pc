@@ -14,6 +14,14 @@
 #include "DmaPacket.h"
 #include "DisplayList.h"
 
+#ifdef ICO_RD
+
+#include <stdio.h>
+#include "MicroCode.h"
+#include "rd.h"
+
+#endif
+
 /* the centre the game-over dark volume and its shock ring spread from, and
    the position of the ordinary dark volume, both homogeneous points */
 static sceVu0FVECTOR gameOverCenter = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
@@ -50,13 +58,41 @@ static int stripHalfDone[2] = {0, 0}; /* derived name */
 
 static int stripHalf = 0; /* derived name */
 
-static long stripPrim = 0x144; /* derived name */
+static long long stripPrim = 0x144; /* derived name */
 
 /* project one object-space vertex through the VU0 matrix in vf4 to vf7,
    clamp it to the screen limits vf12 and vf13 carry and store the 12.4 fixed
    point result */
+#ifdef ICO_HOST
+
+/* vf12.x and vf13.x on the host: setScreenClamp's limits */
+static float screenClampHi; /* derived name */
+
+static float screenClampLo; /* derived name */
+
+#endif
+
 static __inline__ void projectVertex(void *dst, const void *src) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the current matrix applied to src, xyz times 1/w (w kept), x and y
+       clamped to [lo, hi] (vmaxx then vminix), then all four to 12.4 */
+    float v[4];
+    int *d = dst;
+    float q;
+
+    ico_apply_matrix(v, (const float (*)[4])ico_current_matrix, src);
+    q = ps2_div(1.0f, v[3]);
+    v[0] = v[0] * q;
+    v[1] = v[1] * q;
+    v[2] = v[2] * q;
+    v[0] = ps2_min(ps2_max(v[0], screenClampLo), screenClampHi);
+    v[1] = ps2_min(ps2_max(v[1], screenClampLo), screenClampHi);
+    d[0] = ps2_ftoi4(v[0]);
+    d[1] = ps2_ftoi4(v[1]);
+    d[2] = ps2_ftoi4(v[2]);
+    d[3] = ps2_ftoi4(v[3]);
+#else
     __asm__ __volatile__("lqc2 $vf8, 0x0(%1)\n\t"
                          "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
                          "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
@@ -71,6 +107,7 @@ static __inline__ void projectVertex(void *dst, const void *src) /* derived name
                          "sqc2 $vf11, 0x0(%0)"
                          :
                          : "r"(dst), "r"(src));
+#endif
 }
 
 /* emit one triangle strip of n projected vertices */
@@ -80,17 +117,18 @@ static __inline__ void drawStrip(int *v, int n, DVColor col) /* derived name */
     int idx;
 
     gif_SetGsReg(0, stripPrim);
-    gif_SetGsReg(1, (long)col.r | ((long)col.g << 8) | ((long)col.b << 16) | ((long)col.a << 24) |
-                        ((long)0xFE00 << 46));
+    gif_SetGsReg(1, (long long)col.r | ((long long)col.g << 8) | ((long long)col.b << 16) |
+                        ((long long)col.a << 24) | ((long long)0xFE00 << 46));
     stripHalfDone[1] = 0;
     stripHalfDone[0] = 0;
     stripHalf = 0;
     while (n-- != 0) {
         projectVertex(xy, v);
         if (stripHalfDone[0] != 0 && stripHalfDone[1] != 0) {
-            gif_SetGsReg(5, (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32));
+            gif_SetGsReg(5, (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32));
         } else {
-            gif_SetGsReg(13, (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32));
+            gif_SetGsReg(13,
+                         (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32));
         }
         idx = stripHalf;
         stripHalfDone[idx] = 1;
@@ -123,8 +161,8 @@ static __inline__ void drawHalfStrip(DVSeg *b, unsigned int n, DVColor col,
                                      int side) /* derived name */
 {
     gif_SetGsReg(0, stripPrim);
-    gif_SetGsReg(1, (long)col.r | ((long)col.g << 8) | ((long)col.b << 16) | ((long)col.a << 24) |
-                        ((long)0xFE00 << 46));
+    gif_SetGsReg(1, (long long)col.r | ((long long)col.g << 8) | ((long long)col.b << 16) |
+                        ((long long)col.a << 24) | ((long long)0xFE00 << 46));
     while (n-- > 0) {
         if (b->on != 0 && b->side != side) {
             gif_SetGsReg(5, b->xy);
@@ -168,7 +206,7 @@ static void drawHT(float *v, int n, DVColor col, int neg)
         prevX = (float)xy[0];
         prevY = (float)xy[1];
         stripCount = stripCount + 1;
-        p->xy = (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32);
+        p->xy = (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32);
     }
     {
         DVColor c = {-col.r, -col.g, -col.b, 128};
@@ -201,6 +239,10 @@ static float sinA[8]; /* derived name */
    vf12 in projectVertex */
 static __inline__ void setScreenClamp(float hi, float lo) /* derived name */
 {
+#ifdef ICO_HOST
+    screenClampHi = hi;
+    screenClampLo = lo;
+#else
     __asm__ __volatile__("mfc1 $8, %0\n\t"
                          "qmtc2.ni $8, $vf12\n\t"
                          "mfc1 $8, %1\n\t"
@@ -208,12 +250,16 @@ static __inline__ void setScreenClamp(float hi, float lo) /* derived name */
                          :
                          : "f"(hi), "f"(lo)
                          : "$8");
+#endif
 }
 
 /* dst = base + v * s over xyz, keeping base's w */
 static __inline__ void addScaledVectorXYZ(void *dst, const void *base, const void *v,
                                           float s) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_add_xyz(dst, base, v, s);
+#else
     __asm__ __volatile__("lqc2 $vf14, 0x0(%1)\n\t"
                          "lqc2 $vf15, 0x0(%2)\n\t"
                          "mfc1 $8, %3\n\t"
@@ -224,6 +270,7 @@ static __inline__ void addScaledVectorXYZ(void *dst, const void *base, const voi
                          :
                          : "r"(dst), "r"(base), "r"(v), "f"(s)
                          : "$8");
+#endif
 }
 
 /* project the view-space sphere around pos, splitting each of the 8 rings
@@ -303,6 +350,74 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
         dvSetGsReg(0x18, (((long long)(2048 - (w) / 2) << 4) + (ox)) |                             \
                              ((((long long)(2048 - (h) / 2) << 4) + (oy)) << 32));                 \
     }
+#ifdef ICO_RD
+
+/* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders").  The
+   packets below are VU1 SET_GSREGISTER packets (VIF UNPACK V4-32 of the GIF
+   tag and its A+D pairs to TOP, MSCALF 0) and the spheres are raw GIF writes
+   (gif_SetGsReg); both reach the GS register decoder as on the PS2, the
+   packets through mc_HostDma once chained.  Three things the decoder cannot
+   know, supplied here:
+     - FRAME FBP 0x140 (TBP 0x2800) at the scene's size is a scene-sized
+       VRAM block, not the anti-alias buffer the decoder names for that FBP
+       (AA0, 256 x 256): rd_BlockTarget stands for it, aliased in for the
+       effect's packets (R5b's rd_GsNamedBlock / rd_AliasTarget), so the
+       clear, the spheres and the TEX0 read of 0x2800 all use it;
+     - ZBUF ZBP 0xC0 is the scene's Z buffer: the spheres are Z-tested
+       against SCENE's depth (the decoder binds depth only with SCENE);
+     - where the composite's PSMCT24 frame mask ends (dvHostBlockEnd).
+   The COLCLAMP 0 wrap of the additive spheres and the PSMCT24 frame itself
+   are generic (rd_replay.c's wrap path, mc_HostDma's FRAME rule). */
+static RdTarget dvHostBlock; /* derived name */
+
+#define DV_HOST_DMA() mc_HostDma(5, PacketBufferStruct.dma.c, 0)
+
+static void dvHostBlockBegin(void) /* derived name */
+{
+    static int reported;
+    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+
+    if (!reported) {
+        reported = 1;
+        fprintf(stderr, "darkVolume: first dark volume drawn (list 10; reported once)\n");
+    }
+
+    dvHostBlock = rd_BlockTarget(0x2800, ScreenWidth, ScreenHeight, 0);
+    if (named.id != 0 && dvHostBlock.id != 0) {
+        rd_AliasTarget(named, dvHostBlock);
+    }
+}
+
+static void dvHostSceneZ(void) /* derived name */
+{
+    if (dvHostBlock.id != 0) {
+        rd_SetTarget(dvHostBlock, rd_Target(RD_TARGET_SCENE), ScreenWidth, ScreenHeight, 0);
+    }
+}
+
+static void dvHostBlockEnd(void) /* derived name */
+{
+    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+
+    if (named.id != 0) {
+        rd_AliasTarget(named, (RdTarget){0});
+    }
+    dvHostBlock = (RdTarget){0};
+    /* The composite's FRAME is PSMCT24 (mc_HostDma: FBMSK 0xFF000000).  On
+       the GS that holds until the next FRAME write, the anti-alias pass's or
+       the flip's; rd records those (rd_Post, rd_FrameHead) without FBMSK, so
+       the mask ends here: list-10 draws between the dark volume and the
+       anti-alias pass write SCENE's alpha on rd and not on the PS2
+       (RENDER_API.md "Full-screen effects and the raw packet builders", open item). */
+    rd_ColorMask(0);
+}
+
+#else
+#define DV_HOST_DMA() ((void)0)
+#define dvHostBlockBegin() ((void)0)
+#define dvHostSceneZ() ((void)0)
+#define dvHostBlockEnd() ((void)0)
+#endif
 /* the packet open: every insn carries the row of its call (311, 347, 392) */
 #define dvOpenPacket() /* derived name */                                                          \
     {                                                                                              \
@@ -347,6 +462,7 @@ static void sonic(void *pos, float t)
     int rect2[4] = {4, 4, ScreenWidth * 16, ScreenHeight * 16};
 
     dl_SetDLPriority(10);
+    dvHostBlockBegin();
     dvOpenPacket();
     dvSetFrame(0x140, ScreenWidth, ScreenHeight, 0, 0);
     dvSetGsReg(0x4E, 0x1300000C0LL);
@@ -354,12 +470,13 @@ static void sonic(void *pos, float t)
     dvSetGsReg(0x49, 0);
     dvSetGsReg(0x42, 0x8000000044LL);
     dvSetGsReg(0x00, 0x406);
-    dvSetGsReg(0x01, (long)sonicPacketColor.r | ((long)sonicPacketColor.g << 8) |
-                         ((long)sonicPacketColor.b << 16) | ((long)sonicPacketColor.a << 24));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)sonicPacketColor.r | ((long long)sonicPacketColor.g << 8) |
+                         ((long long)sonicPacketColor.b << 16) |
+                         ((long long)sonicPacketColor.a << 24));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x4A, 0);
     dvSetGsReg(0x3B, 0x8000000080LL);
     dvSetGsReg(0x47, 0x50000);
@@ -403,7 +520,9 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostSceneZ();
     gif_StartPacketPri(10);
     renderViewCoordZSphere(pos, sonicSphereColor, 1, (t + 50.0f) * 3.0f);
     renderViewCoordZSphere(pos, sonicSphereColor, 0, t * 2.5f);
@@ -426,14 +545,17 @@ static void sonic(void *pos, float t)
 
         dvSetGsReg(0x42, 0x8000000068LL);
         dvSetGsReg(0x00, 0x156);
-        dvSetGsReg(0x01, (long)sonicRingColor.r | ((long)sonicRingColor.g << 8) |
-                             ((long)sonicRingColor.b << 16) | ((long)sonicRingColor.a << 24));
-        dvSetGsReg(0x03, (long)rect2[0] | ((long)rect2[1] << 16));
-        dvSetGsReg(0x05, (long)(rect3[0] + 0x8000) | ((long)(rect3[1] + 0x8000) << 16) |
+        dvSetGsReg(0x01, (long long)sonicRingColor.r | ((long long)sonicRingColor.g << 8) |
+                             ((long long)sonicRingColor.b << 16) |
+                             ((long long)sonicRingColor.a << 24));
+        dvSetGsReg(0x03, (long long)rect2[0] | ((long long)rect2[1] << 16));
+        dvSetGsReg(0x05, (long long)(rect3[0] + 0x8000) | ((long long)(rect3[1] + 0x8000) << 16) |
                              0xFFFFFFFF00000000LL);
-        dvSetGsReg(0x03, (long)(rect2[0] + rect2[2]) | ((long)(rect2[1] + rect2[3]) << 16));
-        dvSetGsReg(0x05, (long)(rect3[0] + 0x8000 + rect3[2]) |
-                             ((long)(rect3[1] + 0x8000 + rect3[3]) << 16) | 0xFFFFFFFF00000000LL);
+        dvSetGsReg(0x03,
+                   (long long)(rect2[0] + rect2[2]) | ((long long)(rect2[1] + rect2[3]) << 16));
+        dvSetGsReg(0x05, (long long)(rect3[0] + 0x8000 + rect3[2]) |
+                             ((long long)(rect3[1] + 0x8000 + rect3[3]) << 16) |
+                             0xFFFFFFFF00000000LL);
         dvSetGsReg(0x4E, 0x300000C0);
         dvSetGsReg(0x47, 0x50000);
     }
@@ -475,6 +597,7 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
     dl_SetDLPriority(10);
     dvOpenPacket();
@@ -500,13 +623,16 @@ static void sonic(void *pos, float t)
             dvSetGsReg(0x4E, 0x1300000C0LL);
             dvSetGsReg(0x42, 0x44);
             dvSetGsReg(0x00, 0x156);
-            dvSetGsReg(0x01, (long)c.r | ((long)c.g << 8) | ((long)c.b << 16) | ((long)c.a << 24));
-            dvSetGsReg(0x03, (long)rect4[0] | ((long)rect4[1] << 16));
-            dvSetGsReg(0x05, (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) |
+            dvSetGsReg(0x01, (long long)c.r | ((long long)c.g << 8) | ((long long)c.b << 16) |
+                                 ((long long)c.a << 24));
+            dvSetGsReg(0x03, (long long)rect4[0] | ((long long)rect4[1] << 16));
+            dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
                                  0xFFFFFFFF00000000LL);
-            dvSetGsReg(0x03, (long)(rect4[0] + rect4[2]) | ((long)(rect4[1] + rect4[3]) << 16));
-            dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                                 ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+            dvSetGsReg(0x03,
+                       (long long)(rect4[0] + rect4[2]) | ((long long)(rect4[1] + rect4[3]) << 16));
+            dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                                 ((long long)(rect[1] + 0x8000 + rect[3]) << 16) |
+                                 0xFFFFFFFF00000000LL);
         }
     }
     {
@@ -547,7 +673,9 @@ static void sonic(void *pos, float t)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostBlockEnd();
 }
 
 static void darkVolume(void *pos, float radius, float ratio, float edge)
@@ -557,6 +685,7 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     int rect2[4] = {4, 4, ScreenWidth * 16, ScreenHeight * 16};
 
     dl_SetDLPriority(10);
+    dvHostBlockBegin();
     dvOpenPacket();
     dvSetFrame(0x140, ScreenWidth, ScreenHeight, 0, 0);
     dvSetGsReg(0x4A, 0);
@@ -566,12 +695,13 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     dvSetGsReg(0x49, 0);
     dvSetGsReg(0x42, 0x8000000044LL);
     dvSetGsReg(0x00, 0x406);
-    dvSetGsReg(0x01, (long)volumePacketColor.r | ((long)volumePacketColor.g << 8) |
-                         ((long)volumePacketColor.b << 16) | ((long)volumePacketColor.a << 24));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)volumePacketColor.r | ((long long)volumePacketColor.g << 8) |
+                         ((long long)volumePacketColor.b << 16) |
+                         ((long long)volumePacketColor.a << 24));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x47, 0x50000);
     dvSetGsReg(0x42, 0x8000000068LL);
     dvSetGsReg(0x46, 0);
@@ -613,7 +743,9 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostSceneZ();
     gif_StartPacketPri(10);
     {
         DVColor c = {volumeOuterColor.r - volumeInnerColor.r - 1,
@@ -638,14 +770,15 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     dvSetGsReg(0x47, 0x30000);
     dvSetGsReg(0x06, 0x664122800LL);
     dvSetGsReg(0x00, 0x156);
-    dvSetGsReg(0x01, (long)volumeEdgeColor.r | ((long)volumeEdgeColor.g << 8) |
-                         ((long)volumeEdgeColor.b << 16) | ((long)volumeEdgeColor.a << 24));
-    dvSetGsReg(0x03, (long)rect2[0] | ((long)rect2[1] << 16));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x03, (long)(rect2[0] + rect2[2]) | ((long)(rect2[1] + rect2[3]) << 16));
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)volumeEdgeColor.r | ((long long)volumeEdgeColor.g << 8) |
+                         ((long long)volumeEdgeColor.b << 16) |
+                         ((long long)volumeEdgeColor.a << 24));
+    dvSetGsReg(0x03, (long long)rect2[0] | ((long long)rect2[1] << 16));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x03, (long long)(rect2[0] + rect2[2]) | ((long long)(rect2[1] + rect2[3]) << 16));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x4E, 0x300000C0);
     dvSetGsReg(0x47, 0x50000);
     {
@@ -686,7 +819,9 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
         PacketBufferStruct.ptr.c = q + 0x10;
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
+        DV_HOST_DMA();
     }
+    dvHostBlockEnd();
 }
 
 /* the game-over effect's state and the ordinary dark volume's radius and

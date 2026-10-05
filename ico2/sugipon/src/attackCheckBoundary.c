@@ -35,15 +35,16 @@ typedef struct { /* field names derived */
     int attr;    /* 0x8 */
 } AcbWork;       /* derived name */
 
-inline int InitAttackCheckBoundaryGeo(int unused, void *obj)
+inline ICO_WORD InitAttackCheckBoundaryGeo(int unused, void *obj)
 {
-    AcbWork *w = (AcbWork *)iosMallocDebug(ios_partition_sugipon, 12, __FILE__, 27);
+    AcbWork *w =
+        (AcbWork *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(AcbWork, 12), __FILE__, 27);
 
     w->handle = (int *)((SObjSimpleSetting *)obj)->obj;
     w->hit = 0;
     *w->handle = 0;
     w->attr = 0;
-    return (int)w;
+    return (ICO_WORD)w;
 }
 
 inline void AttackCheckBoundaryGeo(GObj *self)
@@ -98,7 +99,7 @@ inline GObj *CreateAttackCheckBoundary(int *obj, float x, float y, float z, floa
     lay.pos[1] = y;
     lay.pos[2] = z;
     lay.scale[0] = r;
-    lay.obj = (int)obj;
+    lay.obj = (ICO_WORD)obj;
     *obj = 0;
     return createAttackCheckBoundaryGObj(&lay);
 }
@@ -160,10 +161,10 @@ void AttackCheckBoundaryBeforeFunc(GObj *self)
 }
 
 /* the manager's 8-byte roster entries and its work block at sub+0x830 */
-typedef struct AcbEntry { /* field names derived */
-    int obj;              /* 0x00, the boundary object, kept as a word */
-    int hit;              /* 0x04 */
-} AcbEntry;               /* derived name */
+typedef struct AcbEntry {     /* field names derived */
+    ICO_WORD_PTR(GObj *) obj; /* 0x00, the boundary object, kept as a word */
+    int hit;                  /* 0x04 */
+} AcbEntry;                   /* derived name */
 
 typedef struct AcbMgr { /* field names derived */
     int count;          /* 0x00 */
@@ -188,11 +189,12 @@ AcbMgr *InitAttackCheckBoundaryManagerGeo(GObj *self, SObjSimpleSetting *lay)
     GObj *g;
 
     rec = &layoutClothDef[lay->obj];
-    mgr = (AcbMgr *)iosMallocDebug(ios_partition_sugipon, 16, __FILE__, 180);
+    mgr = (AcbMgr *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(AcbMgr, 16), __FILE__, 180);
     mgr->prev = mgr->cur;
     mgr->cur = 0;
     mgr->count = rec->count;
-    mgr->list = (AcbEntry *)iosMallocDebug(ios_partition_sugipon, mgr->count * 8, __FILE__, 189);
+    mgr->list = (AcbEntry *)iosMallocDebug(ios_partition_sugipon,
+                                           mgr->count * ICO_MAX_SIZE(AcbEntry, 8), __FILE__, 189);
     v0[0] = rec->pt[0][0];
     v0[1] = -rec->pt[0][1];
     v0[2] = rec->pt[0][2];
@@ -210,7 +212,7 @@ AcbMgr *InitAttackCheckBoundaryManagerGeo(GObj *self, SObjSimpleSetting *lay)
         _InterVector(p, v1, v0, (float)i / (float)(mgr->count - 1));
         mgr->list[i] = acbBlankEntry;
         g = CreateAttackCheckBoundary(&mgr->cur, p[0], p[1], p[2], len);
-        mgr->list[i].obj = (int)g;
+        mgr->list[i].obj = (ICO_WORD_PTR(GObj *))g;
         SetAttackCheckBoundaryAttribute(g, rec->attr);
         /* the boundary hangs from the manager: AttackCheckBoundaryGeo
            deactivates it with its owner */

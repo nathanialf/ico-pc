@@ -15,6 +15,7 @@
 #include "gv.h"
 #include <libvu0.h>
 #include "camera-editor.h"
+#include "ee_view.h"
 #include <assert.h>
 
 typedef struct GenBga { /* field names derived */
@@ -451,7 +452,7 @@ inline void UnlockEnemyGenerate(GObj *gobj)
     Act *p = GOBJ_ACT(gobj);
     GenGeo *g = &objLayout[gobj->labelId];
     debug_StdPrintfDummy("unlock! = %d\n", gobj->labelId);
-    p->flags18.ll &= ~((unsigned long)0x8000 << 19);
+    p->flags18.ll &= ~((unsigned long long)0x8000 << 19);
     g->flags = (g->flags | 0x200000) & 0xFFFBFFFF;
 }
 
@@ -774,7 +775,7 @@ void generatorBeforeFunc(GObj *gobj)
 
 inline GenWork *InitGeneratorGeo(GObj *gobj, GenGeo *src)
 {
-    GenWork *p = iosMallocDebug(ios_partition_sugipon, 112, __FILE__, 1230);
+    GenWork *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(GenWork, 112), __FILE__, 1230);
     int i;
 
     p->count = 0;
@@ -878,7 +879,11 @@ void GeneratorGeo(GObj *gobj)
     const StgPre *sd = &stageData[stage_no];
     int noBoy = sd->flag1 && girlGObj == 0;
 
+#ifdef ICO_HOST
+    w->hard = IsNeedGeneratorHard(gobj) != 0; /* only ever tested against 0 */
+#else
     w->hard = (int)IsNeedGeneratorHard(gobj);
+#endif
     if (w->hard != 0) {
         if (w->timer < 30) {
             w->timer = 30;

@@ -229,18 +229,18 @@ AP1Work *InitAP1(GObj *self, SObjSimpleSetting *arg)
         d = CSVSYSTEM_InitDObj(7, arg);
         p->arm[0] = d;
         if (d->nodeMtx != 0) {
-            iosFree(d->nodeMtx & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(d->nodeMtx));
         }
         if (p->arm[0]->nodeQuat != 0) {
-            iosFree(p->arm[0]->nodeQuat & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(p->arm[0]->nodeQuat));
         }
         p->arm[0]->nodeMtx = 0;
         p->arm[0]->nodeQuat = 0;
-        p->arm[0]->nodeMtx = (int)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 261);
-        p->arm[0]->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 261);
+        p->arm[0]->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 261);
+        p->arm[0]->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 261);
         p->arm[0]->nodeNum = 4;
         if (p->arm[0]->nodes != 0) {
-            iosFree((int)p->arm[0]->nodes & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(ICO_ADDR(p->arm[0]->nodes)));
         }
         p->arm[0]->nodes = iosMallocDebug(ios_partition_seki, 320, a_p_1File, 261);
         {
@@ -266,18 +266,18 @@ AP1Work *InitAP1(GObj *self, SObjSimpleSetting *arg)
         d = CSVSYSTEM_InitDObj(8, arg);
         p->arm[1] = d;
         if (d->nodeMtx != 0) {
-            iosFree(d->nodeMtx & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(d->nodeMtx));
         }
         if (p->arm[1]->nodeQuat != 0) {
-            iosFree(p->arm[1]->nodeQuat & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(p->arm[1]->nodeQuat));
         }
         p->arm[1]->nodeMtx = 0;
         p->arm[1]->nodeQuat = 0;
-        p->arm[1]->nodeMtx = (int)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 264);
-        p->arm[1]->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 264);
+        p->arm[1]->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 264);
+        p->arm[1]->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 264);
         p->arm[1]->nodeNum = 4;
         if (p->arm[1]->nodes != 0) {
-            iosFree((int)p->arm[1]->nodes & 0xFFFFFFF);
+            iosFree((void *)ICO_PHYS(ICO_ADDR(p->arm[1]->nodes)));
         }
         p->arm[1]->nodes = iosMallocDebug(ios_partition_seki, 320, a_p_1File, 264);
         {
@@ -593,9 +593,15 @@ static int rolling(GObj *self)
     if (GOBJ_SUB(self)->parent.obj != 0) {
         UnlinkParentOfDObj(self);
     }
+#ifdef ICO_HOST
+    GOBJ_SUB(self)->root.move[1] +=
+        60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+        (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+#else
     ((AP1Val *)((char *)GOBJ_SUB(self) + 0x134))->f +=
         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+#endif
     _AddVectorXYZ(GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.move);
     {
         ClipWork *col = &ap1RollClip;
@@ -1001,9 +1007,9 @@ GObj *MakeAP1GObj(SObjSimpleSetting *setting)
     return CreateLayoutedGObj(62, spiderDef[setting->obj].layout, -1, 0, setting, 0, 7, 1);
 }
 
-int GetAP1Mode(GObj *self)
+ICO_WORD_PTR(char *) GetAP1Mode(GObj *self)
 {
-    return (int)ap1ModeName[((AP1Work *)GOBJ_SUB(self)->work)->mode];
+    return (ICO_WORD_PTR(char *))ap1ModeName[((AP1Work *)GOBJ_SUB(self)->work)->mode];
 }
 
 static int standMot(GObj *self)

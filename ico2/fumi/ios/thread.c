@@ -51,11 +51,25 @@ static int n_thread = 0; /* derived name: the number of live IOS threads */
 static inline void
 iosThreadDestroyMgr(void); /* deferred-tail member; see the emission-order note */
 
+#ifdef ICO_HOST
+
+/* port/platform/diag_host.h */
+void ico_host_thread_func(int id, void *func, int priority);
+
+/* iosThreadMessage's and iosThreadJoin's queue: the record and its 8-message
+   ring in one allocation */
+#define THREAD_JOIN_QUEUE_SIZE ((int)(sizeof(IosMsgQueue) + 8 * sizeof(IosMsgWord)))
+
+_Static_assert(sizeof(void *) != 4 || THREAD_JOIN_QUEUE_SIZE == 80,
+               "the EE's 80-byte join queue on 32-bit hosts");
+
+#endif
+
 /* iosThreadCreate, a public function that iosThreadCreateS and iosThreadInit
  * also expand: a plain `inline`, so its out-of-line copy goes to the end of
  * the object. */
 inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, void *stack,
-                            long stackSize, int pri)
+                            long long stackSize, int pri)
 {
     th->param.entry = iosThreadMain;
     th->func = func;
@@ -84,6 +98,10 @@ inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, vo
     } else {
         iosThreadTable[th->id] = th;
     }
+#ifdef ICO_HOST
+    /* port/platform/diag_host.c: the thread lines name it by func */
+    ico_host_thread_func(th->id, (void *)func, pri);
+#endif
 
     n_thread++;
     debug_StdPrintfDummy("n_thread %d\n", n_thread);
@@ -95,8 +113,8 @@ inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, vo
 /* iosThreadCreateS: iosThreadCreate over a malloc'd stack.  flags bit 0 marks
  * "this stack came from the heap"; iosThreadDestroyMgr reads it back and
  * frees the stack. */
-void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap, long stackSize,
-                      int pri)
+void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap,
+                      long long stackSize, int pri)
 {
     void *stack;
 
@@ -138,7 +156,7 @@ inline int iosThreadWakeup(IOSThread *th)
  * this loop does the actual teardown.  Never returns. */
 /* .sbss, owned by thread.o and reached only from this file: the manager
    queue's 2-slot message ring. */
-static int iosThreadDestroyRing[2]; /* derived name */
+static IosMsgWord iosThreadDestroyRing[2]; /* derived name */
 
 static inline void iosThreadDestroyMgr(void)
 {
@@ -149,7 +167,15 @@ static inline void iosThreadDestroyMgr(void)
 
     iosMsgQueueCreate(&iosThreadDestroyQueue, iosThreadDestroyRing, 2);
     while (1) {
+#ifdef ICO_HOST
+        {
+            IosMsgWord msg;
+            iosMsgRecv(&iosThreadDestroyQueue, &msg, 1);
+            th = (IOSThread *)msg;
+        }
+#else
         iosMsgRecv(&iosThreadDestroyQueue, (int *)&th, 1);
+#endif
 
         id = th->id;
         n_thread--;
@@ -173,7 +199,7 @@ void iosThreadDestroy(IOSThread *th)
     if (th == 0) {
         target = iosThreadTable[GetThreadId()];
     }
-    iosMsgSend(&iosThreadDestroyQueue, (int)target, 0);
+    iosMsgSend(&iosThreadDestroyQueue, (IosMsgWord)target, 0);
 }
 
 inline int iosThreadGetPri(IOSThread *th)
@@ -222,9 +248,17 @@ void iosThreadMessage(int msg)
     if (obj->hasQueue == 0) {
         void *r;
         obj->hasQueue = 1;
+#ifdef ICO_HOST
+        /* the queue record and its 8-message ring behind it: 48 + 8 * 4 = 80
+           bytes on the EE (pointer-wide records make it larger here) */
+        r = iosMallocDebug(ios_partition_root, THREAD_JOIN_QUEUE_SIZE, __FILE__, 478);
+        obj->queue = r;
+        iosMsgQueueCreate(r, (IosMsgWord *)((IosMsgQueue *)r + 1), 8);
+#else
         r = iosMallocDebug(ios_partition_root, 80, __FILE__, 478);
         obj->queue = r;
         iosMsgQueueCreate(r, (int *)((char *)r + 48), 8);
+#endif
     }
     q = iosMsgSend(obj->queue, msg, 0);
     debug_StdPrintfDummy("th:msg %d\n", q);
@@ -232,13 +266,19 @@ void iosThreadMessage(int msg)
 
 inline int iosThreadJoin(IOSThread *th)
 {
-    int buf[4];
+    IosMsgWord buf[4];
     if (th->hasQueue == 0) {
         void *r;
         th->hasQueue = 1;
+#ifdef ICO_HOST
+        r = iosMallocDebug(ios_partition_root, THREAD_JOIN_QUEUE_SIZE, __FILE__, 506);
+        th->queue = r;
+        iosMsgQueueCreate(r, (IosMsgWord *)((IosMsgQueue *)r + 1), 8);
+#else
         r = iosMallocDebug(ios_partition_root, 80, __FILE__, 506);
         th->queue = r;
         iosMsgQueueCreate(r, (int *)((char *)r + 48), 8);
+#endif
     }
     iosMsgRecv(th->queue, buf, 1);
     debug_StdPrintfDummy("th:thread joined\n");

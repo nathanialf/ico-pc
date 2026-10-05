@@ -50,14 +50,26 @@ StgSlot stageExitData[15] = {0};
 
 /* .sbss: the one-entry buffer of the stage manager's message queue, and the
    stage stgmgrNextStagePreLoadForceStageSet asks the preloader for. */
-static int stageMgrMsgBuf; /* derived name */
+static IosMsgWord stageMgrMsgBuf; /* derived name */
 
 static int stagePreLoadForceStageNo; /* derived name */
 
 /* .bss: the thread descriptor InitIcoMisc is started through, an IOSThread's
    28 words; InitIcoMisc's flag word at 0x3C is read here as an unsigned word,
    where IOSThread's flags is the int ios/thread.c tests */
+#ifdef ICO_HOST
+
+static IOSThread initIcoMiscThread; /* derived name; wider than 28 words here (pointers) */
+
+#define INITICOMISC_THREAD (&initIcoMiscThread)
+#define INITICOMISC_FLAGS ((unsigned int)initIcoMiscThread.flags)
+#else
+
 static unsigned int initIcoMiscThread[28]; /* derived name */
+
+#define INITICOMISC_THREAD initIcoMiscThread
+#define INITICOMISC_FLAGS initIcoMiscThread[15]
+#endif
 
 #include "main.h"
 #include <libgraph.h>
@@ -65,6 +77,15 @@ static unsigned int initIcoMiscThread[28]; /* derived name */
 #include <eekernel.h>
 #include <libdma.h>
 #include <string.h>
+
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+extern void ico_video_camera_cut(void); /* port (renderer R7b): port/game/video_options.c */
+
+#endif
+
 #include "typedef.h"
 
 /* .sdata: the movie switches main.c's loop reads, defined before
@@ -170,22 +191,26 @@ static void start_stage_Load_thread(int stage)
 {
     before_stage_no = stage_no;
     stage_no = stage;
+#ifdef ICO_HOST
+    ico_gs_signal(ICO_GS_EV_STAGE_ENTER, stage);
+    ico_video_camera_cut(); /* port (R7b): a stage change is a cut for the presenter */
+#endif
     gsb_SetBGColor(&db, 1, 1, 1);
     sceGsSyncPath(0, 0);
     stageManagerFreeResourceFlag = 1;
     stop_free_resources();
     if (mpegPlay == 0) {
-        long flags;
+        long long flags;
 
         stage_initialize();
         stageManagerFreeResourceFlag = 0;
         iosThreadCancelWakeup(0);
         gsb_SetMotionBlur();
         current_stage_no = stage;
-        iosThreadCreateS(initIcoMiscThread, 1, InitIcoMisc, &stage_no, ios_partition_root, 0x18000,
+        iosThreadCreateS(INITICOMISC_THREAD, 1, InitIcoMisc, &stage_no, ios_partition_root, 0x18000,
                          27);
-        iosThreadStart(initIcoMiscThread);
-        flags = initIcoMiscThread[15];
+        iosThreadStart(INITICOMISC_THREAD);
+        flags = INITICOMISC_FLAGS;
         debug_StdPrintfDummy("auto stack %d\n", (int)flags & 1);
         game_pause = 1;
         debug_StdPrintfDummy("-----------------Enable VSync\n");
@@ -383,7 +408,7 @@ void StageManager(void)
     SignalSema(IosStgMgrLock);
     debug_StdPrintfDummy("STAGE MANAGER START\n");
     while (1) {
-        iosMsgRecv(&stageMgrMsgQ, &msg, 1);
+        iosMsgRecv(&stageMgrMsgQ, (IosMsgWord *)&msg, 1);
         mpegPlayFadeInSpeed = 128.0f;
         fadeSpeed = 0;
         switch (msg->cmd) {
@@ -471,6 +496,9 @@ inline void CheckPoint(void)
     if (systemStatus[2]) {
         gamesysMemorySave(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
         systemStatus[3] = 1;
+#ifdef ICO_HOST
+        ico_gs_signal(ICO_GS_EV_CHECKPOINT, stage_no);
+#endif
     }
 }
 
@@ -480,7 +508,7 @@ void stgmgrForceSwitch(int stage)
     stageMgrMsg.stage = stage;
     graphics_ready = 1;
     stageMgrMsg.fadeOut = 0;
-    iosMsgSend(&stageMgrMsgQ, &stageMgrMsg, 1);
+    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 1);
 }
 
 void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
@@ -500,5 +528,5 @@ void stgmgrForceSwitchWithFadeColor(int stage, float fadeIn, float fadeOut, unsi
     stageMgrMsg.b = b;
     mpegPlayInitColor = 0x80000000 | (b << 16) | (g << 8) | r;
     graphics_ready = 1;
-    iosMsgSend(&stageMgrMsgQ, &stageMgrMsg, 1);
+    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 1);
 }

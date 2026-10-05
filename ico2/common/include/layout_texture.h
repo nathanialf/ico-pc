@@ -8,6 +8,11 @@
 #ifndef LAYOUT_TEXTURE_H
 #define LAYOUT_TEXTURE_H
 
+#include "typedef.h"
+
+/* the item-select callback the menu keeps as a word (an int on the EE) */
+typedef int (*LtSelectFn)(int);
+
 /* layout_texture.o's .sdata globals: current_layout_id,
    lt_item_select_disable and the continue screen's decided flag */
 extern int lt_continue_selected;
@@ -23,7 +28,7 @@ int lt_next_layout(int stage);
 void lt_mask_property(int idx, int flag);
 void lt_default_mask_property(int idx, int flag);
 int lt_fade_status(void);
-void lt_set_item_select_func(int val);
+void lt_set_item_select_func(ICO_WORD_PTR(LtSelectFn) val);
 void lt_set_fade_mode(int val);
 void lt_analog2Pad(void);
 void exec_layout_texture(void);

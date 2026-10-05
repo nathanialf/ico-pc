@@ -40,7 +40,8 @@ static ClothCfg clothTestCfg[2] = {{20, 20.0f, 15, 1, clothTestAnchors, 0, 3.0f}
 
 ClothSet **InitClothTestGeo(void)
 {
-    ClothSet **p = iosMallocDebug(ios_partition_sugipon, 0x290, "src/clothTest.c", 65);
+    ClothSet **p =
+        iosMallocDebug(ios_partition_sugipon, 164 * sizeof(ClothSet *), "src/clothTest.c", 65);
     *p = InitClothes(clothTestCfg);
     return p;
 }

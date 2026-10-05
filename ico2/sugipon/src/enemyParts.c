@@ -43,7 +43,7 @@ static inline void resetPointBlurTrail(PointBlur *p) /* derived name */
         _CopyVector(&((IVec *)p->screenPos)[i], p->screenPos);
         _CopyIVector(&((IVec *)p->strip)[i * 2], p->strip);
         _CopyIVector(&((IVec *)p->strip)[i * 2 + 1], &((IVec *)p->strip)[1]);
-        q = (GifColor *)(i * 8 + (int)p->stripCol);
+        q = (GifColor *)(i * 8 + (ICO_WORD)p->stripCol);
         q[1] = p->stripCol[0];
         q[0] = q[1];
     }
@@ -69,7 +69,28 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     a[0] = a[0] + f;
     _RotTransPersCurrentMatrix(b, a);
     scale = b[0] - *(float *)p->screenPos;
+#ifdef ICO_HOST
+    {
+        /* On the first update after InitPointBlur (dirty) the trail's
+           second entry has not been written: it holds whatever the stage
+           partition held there (0xFFFFFFFF in the boot script's stage 40).
+           VU0 reads an exponent-255 pattern as a number (about -2^128 for
+           that one), so c, the normal and the strip saturate; on the host
+           it is a NaN. Read it as the PS2 does (+-Fmax), which saturates
+           the same way; the trail is reset to the first point below, so
+           the strip is degenerate either way. DIVERGENCES.md F5. */
+        const float *s1 = (const float *)p->screenPos + 4;
+        float t[4];
+        int k;
+
+        for (k = 0; k < 4; k++) {
+            t[k] = ps2_operand(s1[k]);
+        }
+        _SubVector(c, t, p->screenPos);
+    }
+#else
     _SubVector(c, (char *)p->screenPos + 0x10, p->screenPos);
+#endif
     c[2] = 0.0f;
     _OuterProduct(c, c, ZUnitVector);
     _NormalizeVector(c, c);
@@ -116,7 +137,8 @@ static EnemyFootPrint footPrintVtxTemplate = {-1, 1.0f}; /* derived name */
    calls */
 static inline PointBlur *initPointBlurAt(int num, int pri, int *col, float *rate) /* derived name */
 {
-    PointBlur *p = (PointBlur *)iosMallocDebug(ios_partition_sugipon, 64, "src/enemyParts.c", 16);
+    PointBlur *p = (PointBlur *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(PointBlur, 64),
+                                               "src/enemyParts.c", 16);
     *p = pointBlurTemplate;
 
     p->pri = pri;
@@ -137,7 +159,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
 {
     EnemyEye *p;
 
-    p = iosMallocDebug(ios_partition_sugipon, 96, "src/enemyParts.c", 137);
+    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyEye, 96), "src/enemyParts.c", 137);
     *p = enemyEyeTemplate;
 
     p->dobj[0] = CSVSYSTEM_InitDObj(1322, &InitialSObjSimpleSetting);
@@ -175,25 +197,28 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     int i;
     int j;
 
-    p = iosMallocDebug(ios_partition_sugipon, 0x10, "src/enemyParts.c", 226);
+    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyFootPrintHead, 0x10),
+                       "src/enemyParts.c", 226);
     *p = footPrintHeadTemplate;
     p->num = num;
     p->buf = iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c", 229);
     d = CSVSYSTEM_InitDObj(1295, &InitialSObjSimpleSetting);
     p->dobj = d;
     if (d->nodeMtx != 0) {
-        iosFree(d->nodeMtx & 0xFFFFFFF);
+        iosFree((void *)ICO_PHYS(d->nodeMtx));
     }
     if (p->dobj->nodeQuat != 0) {
-        iosFree(p->dobj->nodeQuat & 0xFFFFFFF);
+        iosFree((void *)ICO_PHYS(p->dobj->nodeQuat));
     }
     p->dobj->nodeMtx = 0;
     p->dobj->nodeQuat = 0;
-    p->dobj->nodeMtx = (int)iosMallocDebug(ios_partition_seki, num << 6, "src/enemyParts.c", 232);
-    p->dobj->nodeQuat = (int)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c", 232);
+    p->dobj->nodeMtx =
+        (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 6, "src/enemyParts.c", 232);
+    p->dobj->nodeQuat =
+        (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c", 232);
     p->dobj->nodeNum = num;
-    if ((int)p->dobj->nodes != 0) {
-        iosFree((int)p->dobj->nodes & 0xFFFFFFF);
+    if ((ICO_WORD)p->dobj->nodes != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
     }
     p->dobj->nodes = iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", 232);
     for (i = 0; i < num; i++) {
@@ -206,7 +231,11 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
         p->dobj->nodes[i].flags.ll &= ~4;
         p->dobj->nodes[i].fade = 0;
         p->dobj->nodes[i].alpha = 1.0f;
+#ifdef ICO_HOST
+        *(short *)((char *)&p->dobj->nodes[i].flags + 2) = 0;
+#else
         *(short *)(i * 0x50 + (int)*(char **)((char *)p->dobj + 0x870) + 0x3A) = 0;
+#endif
         p->dobj->nodes[i].scale[0] = 1.0f;
         p->dobj->nodes[i].scale[1] = 1.0f;
         p->dobj->nodes[i].scale[2] = 1.0f;
@@ -239,7 +268,7 @@ int ExecEnemyFootPrints(EnemyFootPrintHead *self)
         if (fp->life < 0) {
             continue;
         }
-        dl = (struct DObjNode *)(i * 80 + (int)self->dobj->nodes);
+        dl = (struct DObjNode *)(i * 80 + (ICO_WORD)self->dobj->nodes);
         dl->fade = -(float)(fp->life + 1) / 30.0f;
         dl->scale[0] = dl->scale[0] + fp->speed;
         fp->speed = fp->speed * 0.9f;
@@ -261,7 +290,7 @@ int EntryEnemyFootPrint(EnemyFootPrintHead *self, void *pos)
 {
     int i = self->idx;
     /* the slot address as an int sum */
-    EnemyFootPrint *fp = (EnemyFootPrint *)(i * 32 + (int)self->buf);
+    EnemyFootPrint *fp = (EnemyFootPrint *)(i * 32 + (ICO_WORD)self->buf);
     struct DObjNode *vt;
 
     fp->speed = 0.05f;
@@ -269,7 +298,7 @@ int EntryEnemyFootPrint(EnemyFootPrintHead *self, void *pos)
     _CopyVector(fp->pos, pos);
 
     self->buf[i].pos[1] += -5.0f;
-    vt = (struct DObjNode *)(i * 80 + (int)self->dobj->nodes);
+    vt = (struct DObjNode *)(i * 80 + (ICO_WORD)self->dobj->nodes);
     vt->scale[0] = vt->scale[1] = vt->scale[2] = 0.0f;
 
     self->idx = self->idx + 1;
@@ -310,7 +339,7 @@ int UpdateEnemyEye(EnemyEye *self, void *m, float rate)
 
 int DispEnemyEye(EnemyEye *self)
 {
-    _CopyMatrix(self->dobj[0]->nodeMtx, self->mtx);
+    _CopyMatrix((void *)self->dobj[0]->nodeMtx, self->mtx);
     reg_DispMultiPri(self->dobj[0], 10);
     if (self->blurOn != 0) {
         PointBlur *fobj = self->blur;
@@ -346,13 +375,13 @@ static void moveDataElements(PointBlur *p)
         _CopyIVector(&((IVec *)p->strip)[i * 2 + 2], &((IVec *)p->strip)[i * 2]);
         _CopyIVector(&((IVec *)p->strip)[i * 2 + 3], &((IVec *)p->strip)[i * 2 + 1]);
 
-        n = (unsigned char *)((unsigned int *)(i * 8 + (int)p->stripCol) + 2);
-        ((unsigned int *)(i * 8 + (int)p->stripCol))[2] =
-            ((unsigned int *)(i * 8 + (int)p->stripCol))[0];
-        a = (float)((unsigned char *)(i * 8 + (int)p->stripCol))[3] - step;
+        n = (unsigned char *)((unsigned int *)(i * 8 + (ICO_WORD)p->stripCol) + 2);
+        ((unsigned int *)(i * 8 + (ICO_WORD)p->stripCol))[2] =
+            ((unsigned int *)(i * 8 + (ICO_WORD)p->stripCol))[0];
+        a = (float)((unsigned char *)(i * 8 + (ICO_WORD)p->stripCol))[3] - step;
         n[3] = (a < 0.0f) ? 0 : (int)a;
-        ((unsigned int *)(i * 8 + (int)p->stripCol))[3] =
-            ((unsigned int *)(i * 8 + (int)p->stripCol))[2];
+        ((unsigned int *)(i * 8 + (ICO_WORD)p->stripCol))[3] =
+            ((unsigned int *)(i * 8 + (ICO_WORD)p->stripCol))[2];
     }
     _CopyVector((char *)p->screenPos + 0x10, p->screenPos);
 }

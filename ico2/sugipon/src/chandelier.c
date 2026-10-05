@@ -14,7 +14,7 @@ void ChandelierGeo(GObj *self)
 {
     GObj *obj = isysGObjSearchFromObjKindID_begin(20);
     if (obj != 0) {
-        CopyMatrix(MatrixDrive_GetMatrix(), GOBJ_SUB(self)->nodeMtx);
+        CopyMatrix(MatrixDrive_GetMatrix(), (float *)GOBJ_SUB(self)->nodeMtx);
         MatrixDrive_TransMatrix(0.0f, 50.0f, 250.0f);
         SetRopeFixPoint(obj, MatrixDrive_GetMatrix()[3], 0);
     }

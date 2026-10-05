@@ -8,12 +8,15 @@
 #ifndef ATTACKCHECKBOUNDARY_H
 #define ATTACKCHECKBOUNDARY_H
 
+#include "typedef.h"
+#include "ee_view.h"
+
 struct GObj;
 
 /* The declarations below lead this header because their order is load-bearing:
  * gcc 2.9 emits the deferred out-of-line copy of a plain-inline function in
  * first-declaration order, so this is the order attackCheckBoundary.c's inline tail has. */
-int InitAttackCheckBoundaryGeo(int unused, void *obj);
+ICO_WORD InitAttackCheckBoundaryGeo(int unused, void *obj);
 void AttackCheckBoundaryGeo(struct GObj *self);
 void AttackCheckBoundaryDL(struct GObj *obj);
 void actAttackCheckBoundaryStart(struct GObj *self);

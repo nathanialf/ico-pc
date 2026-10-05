@@ -13,6 +13,7 @@
 void p2o_SetDefaultEnviroment(void);
 
 #include "typedef.h"
+#include "eeword.h"
 
 /* one morph target entry, 32 bytes, the list ending at an index of -1: the
  * offset to add (weighted), whether it moves a vertex (1.0) or a normal (0.0),
@@ -88,6 +89,74 @@ typedef struct PObjPart { /* field names derived */
     char pad17C[4];
 } PObjPart; /* derived name */
 
+/* The .p2o model file (also .p2c, .p2g, .plo, .p2v and .p2s) as it is read
+ * into memory: a header, the object table (one word a part, the offset of the
+ * part's record), the texture table and the 0x180-byte part records.
+ * ico2/common/src/PObj.c's AllocPObj relocates the offsets in place, adding
+ * the image's address; the host keeps each relocated word an EE word
+ * (eeword.h).  The file is freed once the model is built. */
+typedef struct ObjHdr {   /* field names derived */
+    char pad0[4];         /* 0x00 */
+    int objTbl;           /* 0x04, the object table, a file offset, then an address */
+    unsigned int objNum;  /* 0x08, the part count */
+    unsigned int clstNum; /* 0x0C, the cluster count */
+    int texTbl;           /* 0x10, the texture table, likewise; 0 for none */
+    unsigned int texNum;  /* 0x14, the texture table's count */
+} ObjHdr;                 /* derived name */
+
+/* one entry of a part's polygon table (ObjRec.polys), 0x10 bytes: the
+ * address of a vertex-weight list, relocated like the others, and the
+ * cluster number at 0x04 (Packet.c's pac_getWeight reads both) */
+typedef struct ObjEnt {   /* field names derived */
+    ICO_EEWORD(void *) p; /* 0x00 */
+    char pad4[12];
+} ObjEnt; /* derived name */
+
+/* The part record in the file, 0x180 bytes: PObjPart's layout on the EE,
+ * with each address a word.  AllocPObj copies it into the model's part table
+ * (the EE copies it whole; the host decodes it field by field into the
+ * PObjPart, ico2/common/src/PObj.c).  The strip table holds stripCount words
+ * and the morph table morphCount words (0 for none), each an address
+ * after relocation. */
+typedef struct ObjRec { /* field names derived */
+    char pad0[128];
+    int magic; /* 0x80, "OBJH" */
+    char pad84[12];
+    ICO_EEWORD(char *) vtx; /* 0x90 */
+    unsigned int vtxCount;  /* 0x94 */
+    char pad98[8];
+    ICO_EEWORD(char *) nrm; /* 0xA0 */
+    unsigned int nrmCount;  /* 0xA4 */
+    char padA8[8];
+    ICO_EEWORD(char *) uv; /* 0xB0 */
+    char padB4[12];
+    ICO_EEWORD(char *) col; /* 0xC0 */
+    char padC4[12];
+    ICO_EEWORD(char *) mats; /* 0xD0 */
+    unsigned int matCount;   /* 0xD4 */
+    char padD8[8];
+    ICO_EEWORD(char *) texDefs; /* 0xE0 */
+    int texCount;               /* 0xE4 */
+    char padE8[8];
+    ICO_EEWORD(char *) polys; /* 0xF0 */
+    unsigned int polyCount;   /* 0xF4 */
+    char padF8[8];
+    ICO_EEWORD(char *) strips; /* 0x100 */
+    unsigned int stripCount;   /* 0x104 */
+    char pad108[8];
+    ICO_EEWORD(char *) lines; /* 0x110 */
+    unsigned int lineCount;   /* 0x114 */
+    char pad118[8];
+    ICO_EEWORD(char *) morphs; /* 0x120 */
+    unsigned int morphCount;   /* 0x124 */
+    char pad128[8];
+    float mtx[4][4]; /* 0x130 */
+    char pad170[4];
+    ICO_EEWORD(char *) vtxSave; /* 0x174 */
+    ICO_EEWORD(char *) nrmSave; /* 0x178 */
+    char pad17C[4];
+} ObjRec; /* derived name */
+
 /* one material, 0x70 bytes: the six-quadword GS packet reg_transMaterialPacket
  * sends, then the attribute word: bit 0 the microprogram mode, bits 1 and 2
  * the blend (nonzero draws the material at priority 1 or 2), bits 3 and 4
@@ -147,8 +216,8 @@ typedef struct PObjModel { /* field names derived */
     char name[32];         /* 0x00 */
     int serial;            /* 0x20, the load serial charFileManager stamps on the model */
     int pad24;
-    Sub15C *dobj; /* 0x28 */
-    short pad2C;
+    Sub15C *dobj;          /* 0x28 */
+    short spare;           /* 0x2C, PObj's spare (cleared at set-up, never read) */
     signed char partCount; /* 0x2E */
     signed char disp;      /* 0x2F */
 
@@ -170,8 +239,13 @@ typedef struct PObjModel { /* field names derived */
     char *boxes;        /* 0x44, eight vectors a part */
     PObjGroup *groups;  /* 0x48 */
     char pad4C[4];
+#ifdef ICO_HOST
+    /* a quadword boundary on every host, as on the EE (0x50) */
+    float box[8][4] __attribute__((aligned(16))); /* 0x50 */
+#else
     float box[8][4]; /* 0x50 */
-} PObjModel;         /* derived name */
+#endif
+} PObjModel; /* derived name */
 
 void p2o_DispVU1(GObj *self);
 void p2o_DispVU1DObj(void *req);

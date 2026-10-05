@@ -216,7 +216,11 @@ inline void scpDispOnAllWithKind(int x)
 {
     GObj *p = isysGObjSearchFromObjKindID_begin(x);
     while (p != 0) {
+#ifdef ICO_HOST
+        p->drawMask = 0xFFFFFFFF;
+#else
         ((unsigned int *)p)[80 / 4] = 0xFFFFFFFF;
+#endif
         p = isysGObjSearchFromObjKindID_next(p);
     }
 }
@@ -513,9 +517,17 @@ void scpPlayEnd(GObj *self)
 inline void scpPlayWaitMotEnd(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
+#ifdef ICO_HOST
+    /* PC port: motReq is the struct MotCtrl SetMotionRequest returns; 0x5C
+       (frameEnd) is the EE offset */
+    while ((((struct MotCtrl *)p->motReq)->frameEnd & 1) == 0) {
+        _ACTWait(1);
+    }
+#else
     while ((*(int *)((char *)p->motReq + 0x5C) & 1) == 0) {
         _ACTWait(1);
     }
+#endif
 }
 
 void scpTrans(void *self, float *rot)
@@ -1482,7 +1494,7 @@ void _SCPBoySupportGirl(float x0, float y0, float z0, float x1, float y1, float 
     }
 }
 
-inline int _SCPMoveCharactorByWay(GObj *self, int tgt, float *dir, float speed, int flags)
+inline int _SCPMoveCharactorByWay(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
 {
     Act *act = GOBJ_ACT(self);
 
@@ -1523,7 +1535,7 @@ inline int _SCPMoveByWay_ToChar(GObj *self, GObj *target, int deg, int flags, fl
     _ApplyRyGV(v, (float)deg * 3.1415927f / 180.0f);
     sceVu0ScaleVector(v, v, scale);
     sceVu0AddVector(w, test_CURRENTROOT(target), v);
-    return _SCPMoveCharactorByWay(self, (int)target, w, speed, flags);
+    return _SCPMoveCharactorByWay(self, (ICO_WORD)target, w, speed, flags);
 }
 
 inline int scpGameStat_BoyWeaponkind(void)

@@ -66,6 +66,27 @@ struct McPreview { /* field names derived */
     int word10;    /* 0x10, no C reader */
 }; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the menus copy a save's preview whole out of and into the card's
+   product file (McFileInfo); the host layouts must agree
+   (tools/template_audit.py) */
+ICO_LAYOUT_AT(struct McPreview, stage, McFileInfo, stage);
+
+ICO_LAYOUT_AT(struct McPreview, cleared, McFileInfo, cleared);
+
+ICO_LAYOUT_AT(struct McPreview, playTime, McFileInfo, playTime);
+
+ICO_LAYOUT_AT(struct McPreview, sofa, McFileInfo, sofa);
+
+ICO_LAYOUT_AT(struct McPreview, word10, McFileInfo, word10);
+
+ICO_LAYOUT_SIZE(struct McPreview, McFileInfo);
+
+#endif
+
 /* .sbss, thirteen words: the port-0 lock state _la_set_current_port_2 records and the one
    _la_set_current_port_lock_2 records, the lock results for port 0 and port 1
    of _la_set_current_port_new, the icoMisc lock saved by the logo, the title
@@ -146,6 +167,21 @@ void la_TESTFUNCTION(void)
 /* .data: the game-flag ids the load carries across gflagInit.  The list
    holds five ids and the key-config tables follow it; the keep/restore loops
    below walk twenty words. */
+#ifdef ICO_HOST
+
+/* The keep/restore loops read twenty words from keepFlagNo: the five ids, then
+   keyConfigCode and the first seven keyConfigSlot, which follow it in the EE's
+   .data (so a load also keeps those game flag ids and the key-config slots;
+   docs/research/compiler-semantics.md s.6).  The host holds the three as one
+   array so the walk is in bounds and reads the same words. */
+static int keepWords[21] = {388, 384, 383, 385, 382, 16, 128, 32, 64, 8, 2,
+                            1,   4,   1,   2,   3,   4,  5,   0,  0,  0};
+
+#define keepFlagNo keepWords
+#define keyConfigCode (keepWords + 5)
+#define keyConfigSlot (keepWords + 13)
+#else
+
 static int keepFlagNo[5] = {388, 384, 383, 385, 382}; /* derived name */
 
 /* the eight pad button
@@ -154,6 +190,8 @@ static int keepFlagNo[5] = {388, 384, 383, 385, 382}; /* derived name */
 static int keyConfigCode[8] = {16, 128, 32, 64, 8, 2, 1, 4}; /* derived name */
 
 static int keyConfigSlot[8] = {1, 2, 3, 4, 5, 0, 0, 0}; /* derived name */
+
+#endif
 
 /* the memory-card request block the layout actions drive */
 McMgr mc = {{0}};
@@ -173,6 +211,54 @@ extern void iosMcSaveGameBlock(McMgr *mp, void *arg);
 extern void iosMcDelete(McMgr *mp);
 /* mcard.c's preview record */
 extern int IosMcPreviewInfo[];
+
+/* McMgr is a runtime record: its fields are not at the EE's byte offsets once
+   segArg is 8 bytes wide, so the host names them */
+#ifdef ICO_HOST
+#define MC_PORT(p) (((McMgr *)(p))->port)
+#define MC_PATH(p) (((McMgr *)(p))->path)
+
+static int _la_mcard_error_check(void *req)
+{
+    McMgr *w = (McMgr *)req;
+
+    if (w->result >= 0) {
+        return 1;
+    }
+    switch (w->result) {
+    case 0:
+        return 1;
+    case -2:
+        debug_StdPrintfDummy("unformatted %d\n", w->result);
+        return -1;
+    case -9:
+        debug_StdPrintfDummy("not insert memory card %d\n", w->result);
+        return -1;
+    case -4:
+        debug_StdPrintfDummy("%s file not found\n", w->path);
+        return -1;
+    case -14:
+        debug_StdPrintfDummy("%s Directory not found\n", w->dirName);
+        return -1;
+    case -16:
+        debug_StdPrintfDummy("segID %d check sum err rom:%d != load:%d\n", w->segment, w->readSum,
+                             w->sum);
+        return -1;
+    case -15:
+        debug_StdPrintfDummy("%s handler func ret err code\n", w->path);
+        return -1;
+    case -10:
+        debug_StdPrintfDummy("memory over\n");
+        return -1;
+    default:
+        debug_StdPrintfDummy("memory card another err %d\n", w->result);
+        return -2;
+    }
+}
+
+#else
+#define MC_PORT(p) (*(int *)((char *)(p) + 8))
+#define MC_PATH(p) ((char *)(p) + 0x47C)
 
 static int _la_mcard_error_check(void *req)
 {
@@ -212,6 +298,8 @@ static int _la_mcard_error_check(void *req)
     }
 }
 
+#endif
+
 /* file-local: nothing outside this TU calls it */
 static int _la_memory_card_check(McMgr *p, int step);
 
@@ -232,6 +320,53 @@ static int nextStage = 1; /* derived name */
 static int fileMask = 0; /* derived name */
 
 static int actionStarted = 0; /* derived name */
+
+#ifdef ICO_HOST
+
+/* PC port (Phase 6, 6C): the Settings menu (port/ui/settings.h,
+   docs/port/SETTINGS.md).  Its entry rows are chained after the title's
+   rows; the title procs leave Cross/START on them to default_item_select,
+   which opens the menu through the row's right link, and mask them with
+   their own rows while the memory card check runs. */
+int ui_SettingsEntryItem(int item);
+void ui_SettingsTitleMask(int masked);
+
+#define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
+
+/* PC port (Q2, docs/port/SETTINGS.md "Circle goes back"): the bits of the
+   procs' Triangle cancels.  With [game] circle_back on (the default) Circle
+   is an alias of Triangle there (port/ui/layout_ext.h lt_ext_BackButtons);
+   off, 0x10 alone, the PS2's checks.  Not used where Triangle is not a
+   cancel (la_adjust_screen: it resets the brightness) or where Circle has
+   a meaning of its own (la_key_config: it is one of the buttons assigned). */
+int lt_ext_BackButtons(void);
+
+#define LA_BACK lt_ext_BackButtons()
+
+/* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
+   the vibration choice (port/ui/settings.h ui_MirrorScreen*) and kept per
+   save slot in the port config (port/game/options.h ico_mirror_slot_*;
+   docs/port/SAVES.md, "Mirror mode"). */
+int ui_MirrorScreenEnter(void);
+int ui_MirrorScreenLayout(void);
+int ico_mirror_slot_saved(int slot, unsigned int sum);
+int ico_mirror_slot_loaded(int slot, unsigned int sum);
+void ico_opt_mirror_reset(void);
+void la_host_new_game_go(void);
+
+/* la_vibe_select's confirm: the mirror screen in place of the start, which
+   its confirm runs (la_host_new_game_go, after la_vibe_select) */
+static int la_host_mirror_screen(void)
+{
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+    return ui_MirrorScreenEnter();
+}
+
+#else
+#define LA_HOST_NOT_SETTINGS_ROW
+#define LA_BACK 0x10
+#endif
 
 static int fightSoundStopped = 0; /* derived name */
 
@@ -266,7 +401,7 @@ static int _la_memory_card_check(McMgr *p, int step)
         step++;
         break;
     case 20:
-        strcpy((char *)p + 0x47C, "game.");
+        strcpy(MC_PATH(p), "game.");
         iosMcGetBlockSaveInfo(p);
         step++;
         break;
@@ -387,16 +522,16 @@ static int _la_set_current_port_2(void *p, int first)
     int q = 0;
 
     if (first != 0) {
-        *(int *)((char *)p + 8) = 0;
+        MC_PORT(p) = 0;
         port2Step = 0;
         port2SubStep = 0;
         fileMask = 0;
         return 0;
     }
-    curPortInfo = &mcPortInfo[*(int *)((char *)p + 8)];
+    curPortInfo = &mcPortInfo[MC_PORT(p)];
     port2Step = _la_memory_card_check(p, port2Step);
     if (port2Step == 99) {
-        switch (*(int *)((char *)p + 8)) {
+        switch (MC_PORT(p)) {
         case 0:
             portLockState = currentPortLockState();
             port2Changed = (curPortInfo->flags.w >> 5) & 1;
@@ -404,7 +539,7 @@ static int _la_set_current_port_2(void *p, int first)
             /* the whole 8-byte record is copied to a local and never read
                again */
             tmp = *curPortInfo;
-            *(int *)((char *)p + 8) = 1;
+            MC_PORT(p) = 1;
             port2Step = 0;
             break;
         case 1:
@@ -497,14 +632,14 @@ static int _la_set_current_port_lock_2(void *p, int first)
     int q;
 
     if (first != 0 || lock2Restart != 0) {
-        *(int *)((char *)p + 8) = curPort;
+        MC_PORT(p) = curPort;
         lock2Step = 0;
         lock2Restart = 0;
         lock2SubStep = 0;
         fileMask = 0;
         return 0;
     }
-    curPortInfo = &mcPortInfo[*(int *)((char *)p + 8)];
+    curPortInfo = &mcPortInfo[MC_PORT(p)];
     lock2Step = _la_memory_card_check(p, lock2Step);
     if (lock2Step != 99) {
         return 0;
@@ -525,10 +660,10 @@ static int _la_set_current_port_lock_2(void *p, int first)
             }
         }
         if (lock2Locked != 0 && q != 0) {
-            mcPortInfo[*(int *)((char *)p + 8)].flags.w |= 4;
+            mcPortInfo[MC_PORT(p)].flags.w |= 4;
         }
         if (lock2Changed != 0 && a != 0) {
-            mcPortInfo[*(int *)((char *)p + 8)].flags.w |= 0x40;
+            mcPortInfo[MC_PORT(p)].flags.w |= 0x40;
         }
         _la_set_current_port_lock_2(p, 1);
         return 1;
@@ -661,6 +796,11 @@ int la_vibe_select(void)
             iosPadActRequestEnable = 0;
             break;
         }
+#ifdef ICO_HOST
+        if (ui_MirrorScreenLayout() >= 0) {
+            return la_host_mirror_screen(); /* R7c: the mirror screen, then the start */
+        }
+#endif
         if (titleAdpcm != 0) {
             titleAdpcm->stream->fadeStep = 0x80;
         }
@@ -674,7 +814,7 @@ int la_vibe_select(void)
     if (lt_fade_status() != 2) {
         return -1;
     }
-    if ((pad[0].flags & 0x10) == 0) {
+    if ((pad[0].flags & LA_BACK) == 0) {
         return -1;
     }
     NEGATIVE_SE();
@@ -682,6 +822,27 @@ int la_vibe_select(void)
     actionStarted = 0;
     return 0xC;
 }
+
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 7, R7c): the start la_vibe_select's confirm made,
+   run by the mirror screen's confirm (port/ui/settings.c) once the player
+   has picked: the title music fades, the game flags and the key config are
+   reset and gflag 382 starts the new game, at the same moment as each
+   other, as on the PS2 */
+void la_host_new_game_go(void)
+{
+    if (titleAdpcm != 0) {
+        titleAdpcm->stream->fadeStep = 0x80;
+    }
+    titleAdpcm = 0;
+    gflagInit();
+    keyconfig_reset();
+    systemStatus[4] = 0;
+    gflagOn(382);
+}
+
+#endif
 
 inline int la_scei_logo(int first)
 {
@@ -717,6 +878,9 @@ int la_title_continue_or_new(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
+#ifdef ICO_HOST
+        ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
+#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -732,7 +896,13 @@ int la_title_continue_or_new(int first)
         lt_mask_property(0x31, 1);
         lt_mask_property(0x32, 1);
     }
-    if (continueDecided != 0 && (pad[0].flags & 0x840) && lt_fade_status() == 2) {
+#ifdef ICO_HOST
+    ui_SettingsTitleMask(continueDecided == 0);
+#endif
+    /* PC port (6C): not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (continueDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
         lt_continue_selected = 1;
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         switch (lt_current_property_item()) {
@@ -779,6 +949,9 @@ int la_title_new_game_only(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
+#ifdef ICO_HOST
+        ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
+#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -793,7 +966,13 @@ int la_title_new_game_only(int first)
         lt_item_select_disable = 1;
         lt_mask_property(51, 1);
     }
-    if (newGameDecided != 0 && (pad[0].flags & 0x840) && lt_fade_status() == 2) {
+#ifdef ICO_HOST
+    ui_SettingsTitleMask(newGameDecided == 0);
+#endif
+    /* PC port (6C): not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (newGameDecided != 0 && (pad[0].flags & 0x840) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         lt_continue_selected = 1;
         opTitleLogoMode = 2;
@@ -925,7 +1104,7 @@ int la_mc_file_select(int first)
 
     previewInfo = *(struct McPreview *)&IosMcProductFile[filePort].file[curFile];
 
-    return (pad[0].flags & 0x50) ? curFile : -1;
+    return (pad[0].flags & (0x40 | LA_BACK)) ? curFile : -1;
 }
 
 static void _la_mask_preview_info(void)
@@ -1100,7 +1279,7 @@ inline int la_mc_load_current_slot_select(void)
         actionStarted = 0;
         return 0x13;
     }
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1136,9 +1315,9 @@ int la_mc_load_file_select(int first, int item)
         lt_mask_property(195, 1);
         lt_mask_property(196, 1);
     }
-    lt_set_item_select_func((int)la_mc_saved_file_select);
+    lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1440,6 +1619,9 @@ int la_load_processing(int first)
             *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         loadSerial = mcSetFileNo(mc.port, mc.fileNo);
+#ifdef ICO_HOST
+        ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* R7c: the slot's flag */
+#endif
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         if (titleAdpcm != 0) {
@@ -1530,7 +1712,7 @@ int la_mc_confirm_save_file(int first, int item)
         }
         if (saveVoice != 0) {
             layoutVoice = soundDataOpenSync(&voiceOpenReq);
-            if (layoutVoice != (SqEntry *)0xFFFFFFFF) {
+            if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
                 saveVoice = 0;
                 if (layoutVoice != 0) {
                     AdpcmPlay(layoutVoice->stream);
@@ -1558,7 +1740,7 @@ int la_mc_confirm_save_file(int first, int item)
             if (lt_fade_status() != 2) {
                 return -1;
             }
-            if ((pad[0].flags & 0x10) == 0) {
+            if ((pad[0].flags & LA_BACK) == 0) {
                 return -1;
             }
             if (stage_no == 0x3F) {
@@ -1644,7 +1826,7 @@ inline int la_mc_save_current_slot_select(void)
         actionStarted = 0;
         return 0x21;
     }
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1675,7 +1857,20 @@ extern void gif_StartPacketPri(int pri);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
+
+/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
+   definition reads them on hosts that pass them on the stack
+   (layout_texture.c says more) */
+#ifdef ICO_HOST
+
+extern void gif_Sprite(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
+
+#else
+
 extern void gif_Sprite(SprRect *r, unsigned int z, SprRect *uv, SprCol *col, int prim);
+
+#endif
+
 extern void gif_EndPacket(void);
 
 static int barStep = 0; /* derived name */
@@ -1754,7 +1949,7 @@ int la_mc_save_file_select(int first, int item)
     }
 
     if (actionStarted != 0) {
-        if (pad[0].flags & 0x10) {
+        if (pad[0].flags & LA_BACK) {
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -1936,7 +2131,7 @@ int la_save_confirm_overwrite(int first, int item)
     }
     fileMask = 0x3FF;
     _la_set_preview_info();
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1991,7 +2186,7 @@ int la_format_confirm(int first, int item)
     if (first) {
         filePort = curPort;
     }
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -2282,6 +2477,9 @@ int la_save_processing(int first)
         saveStep++;
         break;
     case 10:
+#ifdef ICO_HOST
+        ico_mirror_slot_saved(mc.fileNo, (unsigned int)mc.sum); /* R7c: the run's flag */
+#endif
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -2320,7 +2518,7 @@ int la_end_confirm(void)
 {
     int item;
 
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         item = lt_current_property_item();
         if (item >= 270) {
@@ -2458,7 +2656,7 @@ int la_delete_processing(int first)
 inline int la_delete_confirm_complete(void)
 {
     int ret;
-    if ((pad[0].flags & 0x10) == 0)
+    if ((pad[0].flags & LA_BACK) == 0)
         goto fail;
     lt_set_item_select_func(0);
     actionStarted = 0;
@@ -2585,7 +2783,8 @@ inline int la_game_pause(int first)
     if (lt_fade_status() != 2) {
         return -1;
     }
-    if (((pad[0].flags & 0x40) && lt_current_property_item() == 0x127) || (pad[0].flags & 0x810)) {
+    if (((pad[0].flags & 0x40) && lt_current_property_item() == 0x127) ||
+        (pad[0].flags & (0x800 | LA_BACK))) {
         NEGATIVE_SE(0);
         adpcmPauseRequest(0);
         lt_set_item_select_func(0);
@@ -2622,7 +2821,7 @@ int la_game_over_continue(int first)
         }
     } else if (gameOverVoice != 0) {
         layoutVoice = soundDataOpenSync(&voiceOpenReq);
-        if (layoutVoice != (SqEntry *)0xFFFFFFFF) {
+        if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
             gameOverVoice = 0;
             if (layoutVoice != 0) {
                 AdpcmPlay(layoutVoice->stream);
@@ -2950,6 +3149,18 @@ int la_adjust_screen(void)
     }
     return -1;
 }
+
+#ifdef ICO_HOST
+
+/* PC port (6C): what every proc does before it returns the layout it
+   switches to, for the port's Settings procs (actionStarted is this file's) */
+void la_host_leave(void)
+{
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+}
+
+#endif
 
 unsigned int stage_after_skipping_demo = 0;
 

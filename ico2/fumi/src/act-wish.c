@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "typedef.h"
 #include "debug.h"
 #include "commonact.h"
@@ -5,13 +6,14 @@
 #include "item.h"
 #include <libvu0.h>
 #include "act-wish.h"
+#include "enemy_act.h"
 #include "act-game.h"
 #include "boyact.h"
 #include "main.h"
 
 static inline unsigned char chkOrient(char *s, float *dir, float *w, float deg) /* derived name */
 {
-    float *q = (float *)(s + 0x4B0);
+    float *q = ICO_RAWP(float *, s, 0x4B0, ((Act *)s)->env.wallOrient);
 
     if (q[0] == 0.0f && q[1] == 0.0f && q[2] == 0.0f && q[3] == 0.0f) {
         debug_StdPrintfDummy("orient null");
@@ -274,7 +276,7 @@ void ACTGetWish_FromPad(GObj *self, float *dir)
     }
 
     if (s->pad.now & 0x20) {
-        ACTSearchGObj(self, 0x13, 0x2D, &o, u, 100.0f);
+        ACTSearchGObj(self, 0x13, 0x2D, (ICO_WORD *)&o, u, 100.0f);
 
         if (o != 0 && CheckCarryableItem(o)) {
             deg = self == boyGObj ? 60.0f : 80.0f;
@@ -282,7 +284,7 @@ void ACTGetWish_FromPad(GObj *self, float *dir)
             p[1] = test_CURRENTROOT(o)[1];
             p[2] = test_CURRENTROOT(o)[2];
             if (p[1] > v[1] && (float)(p[1] - v[1] < 0.0f ? -(p[1] - v[1]) : (p[1] - v[1])) < deg) {
-                s->nextItem.i = (int)o;
+                s->nextItem.i = (ICO_WORD)o;
                 s->wish3.ll |= 1ULL << 43;
             }
         }
@@ -318,9 +320,9 @@ void ACTGetWish_FromPad(GObj *self, float *dir)
 
     if ((int)(s->wish3.ll >> 37) & 1) {
         if ((int)(s->wish1.ll >> 37) & 1) {
-            *(int *)((char *)GOBJ_ACT(self)->enemy + 0x2C0) = 1;
+            ICO_RAW(int, GOBJ_ACT(self)->enemy, 0x2C0, GOBJ_ACT(self)->enemy->word2C0) = 1;
         }
     } else {
-        *(int *)((char *)GOBJ_ACT(self)->enemy + 0x2C0) = 0;
+        ICO_RAW(int, GOBJ_ACT(self)->enemy, 0x2C0, GOBJ_ACT(self)->enemy->word2C0) = 0;
     }
 }

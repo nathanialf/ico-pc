@@ -30,7 +30,7 @@
 
 /* a matrix as UnitRotation keeps it: its translation row moved as one
    128-bit quadword around the unit fill */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 typedef struct { /* field names derived */
     char pad[48];
@@ -443,6 +443,8 @@ void MatrixDrive_SetTransposeMatrix(void *dstMtx, void *srcMtx)
     dst[15] = 1.0f;
 }
 
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 void CopyVector(void *dst, void *src)
 {
     QCOPY16("$6");
@@ -548,3 +550,5 @@ float GetPointDistance(void *a, void *b)
                          : "r"(v));
     return r;
 }
+
+#endif /* ICO_HOST: port/math */

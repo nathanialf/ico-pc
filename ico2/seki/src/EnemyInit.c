@@ -1,6 +1,7 @@
 #include "EnemyInit.h"
 #include "ios.h"
 #include "memory.h"
+#include "typedef.h"
 
 /* the number of enemy sets enemy_Initialize sets up, the rows of
    enemyPositionTable */
@@ -10,7 +11,7 @@ int EnemyKindNum = 0;
    position table enemy_Initialize allocates for that kind, or 0. */
 static float (*enemyPositionTable[1][27])[4]; /* derived name */
 
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* the stage table's record: a pointer and a count */
 typedef struct EnemySet {        /* field names derived */
@@ -23,6 +24,19 @@ typedef struct EnemyKindRec { /* field names derived */
     int *list;                /* 0x0 */
     int kind;                 /* 0x4 */
 } EnemyKindRec;               /* derived name */
+
+/* the set's j-th EnemyKindRec: on the EE its two words are read by hand
+   (indexing the typed array moves the bytes); the host record is two words
+   wider (a 64-bit pointer) and is addressed as the typed array */
+#ifdef ICO_HOST
+#define ENEMY_REC_DECL(rec, set, j) EnemyKindRec *rec = &(set)->kinds[j]
+#define ENEMY_REC_KIND(rec) ((rec)->kind)
+#define ENEMY_REC_LIST(rec) ((rec)->list)
+#else
+#define ENEMY_REC_DECL(rec, set, j) int *rec = (int *)(j * 8 + *(int *)(set))
+#define ENEMY_REC_KIND(rec) ((rec)[1])
+#define ENEMY_REC_LIST(rec) ((int *)(rec)[0])
+#endif
 
 /* a model file's placement set: its kind lists and its position table */
 typedef struct EnemyModelSet { /* field names derived */
@@ -866,10 +880,10 @@ void enemy_Initialize(void)
             for (i = 0; i < enemySetTable[e].n; i++) {
                 for (j = 0; j < tbl[i]->kindNum; j++) {
                     /* the set's j-th EnemyKindRec, as {list, kind} words */
-                    int *rec = (int *)(j * 8 + *(int *)tbl[i]);
+                    ENEMY_REC_DECL(rec, tbl[i], j);
 
-                    if (rec[1] == k) {
-                        q = (int *)rec[0];
+                    if (ENEMY_REC_KIND(rec) == k) {
+                        q = ENEMY_REC_LIST(rec);
                         do {
                             cnt[k]++;
                         } while (*++q != -1);
@@ -888,10 +902,10 @@ void enemy_Initialize(void)
             dst = enemyPositionTable[e][k];
             for (i = 0; i < enemySetTable[e].n; i++) {
                 for (j = 0; j < tbl[i]->kindNum; j++) {
-                    int *rec = (int *)(j * 8 + *(int *)tbl[i]);
+                    ENEMY_REC_DECL(rec, tbl[i], j);
 
-                    if (rec[1] == k) {
-                        q = (int *)rec[0];
+                    if (ENEMY_REC_KIND(rec) == k) {
+                        q = ENEMY_REC_LIST(rec);
                         for (;;) {
                             *(Qw128 *)dst++ = *(Qw128 *)tbl[i]->pos[*q];
                             /* the break shares the if's line */

@@ -49,7 +49,19 @@ static const Blk16 se10lBoxCenter = {{141.0f, 1328.0f, -122.0f, 0.0f}}; /* deriv
 static const Blk16 se10lBoxSize = {{600.0f, 700.0f, 1000.0f, 0.0f}}; /* derived name */
 
 /* declared int * here; camera-root.h returns void * */
+#ifdef ICO_HOST
+
+/* the host calls camera-root.h's GetCameraPos(void) as declared: the
+   argument some routines pass (an a0 the EE loads and the callee ignores)
+   is dropped */
+extern void *GetCameraPos(void);
+
+#define GetCameraPos(...) GetCameraPos()
+#else
+
 extern int *GetCameraPos();
+
+#endif
 
 /* the two box tests are each their own routine, inlined at every site, and
    each names its own pair */
@@ -74,7 +86,38 @@ typedef union { /* field names derived */
     float f;
 } SEVal; /* derived name */
 
-/* the stage sound object each stageSE routine is handed */
+/* the stage sound object each stageSE routine is handed: the sound slot
+   (fumi/sound/s_init.c's SeSlot, 0x40 bytes on the EE) */
+#ifdef ICO_HOST
+
+/* SeSlot is a runtime record with pointers, so on the host its fields are not at
+   the EE's offsets; this is its natural layout, field for field.  It must follow
+   SeSlot; the slot should be exported from s_init.h and this copy dropped
+   (docs/TODO.md; docs/port/OFFSET_AUDIT.md, "Conventions in ico2/"). */
+typedef struct { /* field names derived */
+    unsigned short num;
+    short vol0;
+    SEVal flags;        /* 0x04 */
+    unsigned int owner; /* 0x08 */
+    int padAct;         /* 0x0C */
+    short handle;       /* 0x10 */
+    short level0;       /* 0x12 */
+    short level1;       /* 0x14 */
+    char pad16[2];
+    SEVal vol;            /* 0x18, the volume */
+    SEVal pitch;          /* 0x1C */
+    float attenuator;     /* 0x20 */
+    float maxVolumeRange; /* 0x24 */
+    float volumeLength;   /* 0x28 */
+    int (*proc)();        /* 0x2C */
+    void *req;            /* 0x30 */
+    float *pos;           /* 0x34, where the sound plays from */
+    void *src;            /* 0x38 */
+    int *mail;            /* 0x3C, the environment row (SeEnvDef): its first word is read */
+} SEObj;                  /* derived name */
+
+#else
+
 typedef struct { /* field names derived */
     char pad0[4];
     SEVal flags; /* 0x04 */
@@ -86,6 +129,8 @@ typedef struct { /* field names derived */
     char pad38[4];
     int *mail; /* 0x3C */
 } SEObj;       /* derived name */
+
+#endif
 
 /* The wind-speed cache the strong-wind routines share: the last value of
    GetRegularizedWindSpeed and the frame_count it was read on, both in .sdata
@@ -505,7 +550,7 @@ int stageSE06astrong(SEObj *self)
 
 int stageSE06abirdIn(int *self)
 {
-    float *p = (float *)GetCameraPos((int)self);
+    float *p = (float *)GetCameraPos((ICO_WORD)self);
     if (p[0] < 300.0f && 848.0f < p[2]) {
         return -1;
     }
@@ -514,7 +559,7 @@ int stageSE06abirdIn(int *self)
 
 int stageSE06abirdOut(int *self)
 {
-    float *p = (float *)GetCameraPos((int)self);
+    float *p = (float *)GetCameraPos((ICO_WORD)self);
     if (p[0] < 300.0f && 848.0f < p[2]) {
         return 0;
     }
@@ -523,7 +568,7 @@ int stageSE06abirdOut(int *self)
 
 int stageSE06ataimatsu(int *self)
 {
-    float *p = (float *)GetCameraPos((int)self);
+    float *p = (float *)GetCameraPos((ICO_WORD)self);
     if (p[0] < 300.0f) {
         if (848.0f < p[2]) {
             return stageSEtaimatsu((SEObj *)self);
@@ -586,7 +631,7 @@ int stageSE08anoise3(SEObj *self)
     return -1;
 }
 
-int stageSE08ataimatsu(int self)
+int stageSE08ataimatsu(ICO_WORD self)
 {
     if (se08aInStrongBox() == 0) {
         return 0;

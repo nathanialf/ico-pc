@@ -486,7 +486,7 @@ static inline void AP1ClrHold(GObj *self) /* derived name */
 
 void AP1BeforeFunc(GObj *self)
 {
-    AP1MailQueue *q = (AP1MailQueue *)(((char *)self) + 0x54);
+    AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);
     AP1MailEntry *e = q->e;
     int i;
 

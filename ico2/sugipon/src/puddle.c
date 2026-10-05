@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "puddle.h"
 #include "box.h"
 #include "DObj.h"
@@ -12,6 +13,13 @@
 #include "main.h"
 #include "ios.h"
 #include "sceneManager.h"
+
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd.h"
+
+#endif
 
 /* 16-byte aligned: the template copy in InitPuddleGeo is ld/sd, not ldl/ldr. */
 typedef struct { /* field names derived */
@@ -67,15 +75,27 @@ static float savedMatrix200[16]; /* derived name */
 
 static float savedMatrix340[16]; /* derived name */
 
+#ifdef ICO_HOST
+
+/* the C library's memset: the EE's declaration (#else) passes the size as
+   an int where the host's definition reads a size_t */
+#include <string.h>
+
+#else
+
 /* declared here with a void return; string.h is not included */
 extern void memset(void *p, int c, int n);
+
+#endif
+
 void PuddleGeo(GObj *self);
 void EntryRippleToPuddle(GObj *self, void *vec);
 int puddleRideFunc(ObjNode *on, GObj *rider);
 
 PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
 {
-    PuddleWork *w = (PuddleWork *)iosMallocDebug(ios_partition_sugipon, 208, __FILE__, 69);
+    PuddleWork *w = (PuddleWork *)iosMallocDebug(ios_partition_sugipon,
+                                                 ICO_MAX_SIZE(PuddleWork, 208), __FILE__, 69);
     float *v;
     int i;
 
@@ -101,6 +121,59 @@ PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
     GOBJ_SUB(self)->rideFunc = puddleRideFunc;
     return w;
 }
+
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
+   work block drawAreaSetup allocates right after tex_ResetVramPri(4) is TBP
+   0x2800, which the GS register decoder takes for the named AA0 target (no
+   depth buffer); on the GS the reflection draws there with work1Vram as its
+   Z buffer.  The host binds a per-frame 256 x 256 target with its own depth
+   in AA0's place in list 4 from the allocation to the last packet that
+   samples it (copy), and records the reflection camera gsb_SetVSMatrix
+   leaves in the scratchpad for the reflection draws.  The register writes
+   are unchanged. */
+static RdTarget puddleHostAlias; /* the named target the block is bound over */
+
+static void puddleHostBlockBegin(int tbp)
+{
+    gif_HostFlush();
+    puddleHostAlias = rd_GsNamedBlock((unsigned int)tbp, 0x100, 0x100);
+    if (puddleHostAlias.id != 0) {
+        rd_AliasTarget(puddleHostAlias, rd_BlockTarget((unsigned int)tbp, 0x100, 0x100, 1));
+    }
+}
+
+static void puddleHostBlockEnd(void)
+{
+    gif_HostFlush();
+    if (puddleHostAlias.id != 0) {
+        rd_AliasTarget(puddleHostAlias, (RdTarget){0});
+        puddleHostAlias.id = 0;
+    }
+}
+
+/* the reflection view: +0x80 is the frame's view, +0xC0 the 230 x 230
+   screen matrix gsb_SetVSMatrix(0xE6, ...) just built */
+static void puddleHostCamera(int push)
+{
+    gif_HostFlush();
+    if (push) {
+        RdCamera cam;
+
+        memset(&cam, 0, sizeof(cam));
+        CopyMatrix(cam.view, matrixptr + 0x80);
+        CopyMatrix(cam.proj43, matrixptr + 0xC0);
+        cam.aspect43 = 4.0f / 3.0f;
+        cam.nearZ = 2.0f;
+        cam.farZ = 262144.0f;
+        rd_PushCamera(&cam);
+    } else {
+        rd_PopCamera();
+    }
+}
+
+#endif
 
 void baseSetup(GObj *self)
 {
@@ -139,6 +212,9 @@ void drawAreaSetup(void)
     tex_ResetVramPri(4);
     workVram = tex_AllocVramAuto(0, 0x400);
     work1Vram = tex_AllocVramAuto(0, 0x400);
+#ifdef ICO_RD
+    puddleHostBlockBegin(workVram);
+#endif
 
     gif_StartPacketPri(4);
 
@@ -152,6 +228,9 @@ void drawAreaSetup(void)
 
     _MulMatrix(matrixptr + 0x100, matrixptr + 0xC0, matrixptr + 0x80);
     _MulMatrix(matrixptr + 0x200, matrixptr + 0x1C0, matrixptr + 0x80);
+#ifdef ICO_RD
+    puddleHostCamera(1);
+#endif
 
     gif_SetGsReg(0x14, 0x60);
     gif_SetZTest(1);
@@ -183,6 +262,9 @@ void drawAreaRestore(void)
     CopyMatrix(matrixptr + 0x340, savedMatrix340);
     CopyMatrix(matrixptr + 0x100, savedMatrix100);
     CopyMatrix(matrixptr + 0x200, savedMatrix200);
+#ifdef ICO_RD
+    puddleHostCamera(0);
+#endif
 
     vsWidth = ScreenWidth;
     vsHeight = ScreenHeight;
@@ -369,6 +451,9 @@ void PuddleDL(GObj *self)
     leveldown(4);
     drawRipples(self, 4);
     copy(4);
+#ifdef ICO_RD
+    puddleHostBlockEnd();
+#endif
 }
 
 inline void PuddleGeo(GObj *self)
@@ -377,6 +462,14 @@ inline void PuddleGeo(GObj *self)
     int i;
 
     p = GOBJ_SUB(self)->work;
+#ifdef ICO_HOST
+    for (i = 0; i < 6; i++) {
+        if (((PuddleWork *)p)->rip[i].t < 200.0f) {
+            ((PuddleWork *)p)->rip[i].t +=
+                60.0f / (float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) * 2.0f;
+        }
+    }
+#else
     for (i = 0; i < 6; i++) {
         if (*(float *)(p + 0x20) < 200.0f) {
             *(float *)(p + 0x20) +=
@@ -384,6 +477,7 @@ inline void PuddleGeo(GObj *self)
         }
         p += 0x20;
     }
+#endif
 }
 
 inline void EntryRippleToPuddle(GObj *self, void *vec)

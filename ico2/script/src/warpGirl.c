@@ -108,7 +108,7 @@ void warpGirlOutStage(int stage, int noSet)
             warpGirlOutSet(i, noSet);
             break;
         default:
-            __asm__ __volatile__("break");
+            ICO_BREAK();
             break;
         }
     }

@@ -64,7 +64,7 @@ void scpWakeupEnemyAll(void);
 inline void scpKillEnemyAll(void);
 inline void scpMaskGeneratorAll(void);
 void scpKillEnemyOne(int id);
-int _SCPMoveCharactorByWay(struct GObj *self, int tgt, float *dir, float speed, int flags);
+int _SCPMoveCharactorByWay(struct GObj *self, ICO_WORD tgt, float *dir, float speed, int flags);
 
 int _SCPMoveByWay_ToChar(struct GObj *self, struct GObj *target, int deg, int flags, float scale,
                          float speed);

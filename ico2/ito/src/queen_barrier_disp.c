@@ -13,6 +13,13 @@
 #include "Matrix.h"
 #include "DmaPacket.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd.h"
+
+#endif
+
 /* The barrier mesh, the damage flash timer queen_barrier_set_damage starts
    at 60, and the ripple phase the animation advances each frame. */
 static Mesh3D *barrierMesh; /* derived name */
@@ -63,6 +70,34 @@ static void MakeRefractTexture(int frame)
     setGsReg(0x03, GIF_UV(uv.x + uv.w, uv.y + uv.h));
     setGsReg(0x05, GIF_XY0(r.x + fx, r.y + fy));
 }
+
+#ifdef ICO_RD
+
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
+   block queen_barrier_disp_proc allocates right after tex_ResetVramPri(10)
+   is TBP 0x2800; MakeRefractTexture draws the scene into it as a 512 x 256
+   frame (FBW 8, XYOFFSET 1792/1920) and the barrier mesh samples it with
+   TEX0 TW 9, TH 8.  The GS register decoder takes the block for the named
+   AA0 target, 256 x 256; the host binds a per-frame 512 x 256 target in its
+   place in list 10 from the allocation to the mesh draw.  The register
+   writes are unchanged. */
+static RdTarget barrierHostAlias; /* the named target the block is bound over */
+
+static void barrierHostBlock(int tbp, int begin)
+{
+    gif_HostFlush();
+    if (begin) {
+        barrierHostAlias = rd_GsNamedBlock((unsigned int)tbp, 512, 256);
+        if (barrierHostAlias.id != 0) {
+            rd_AliasTarget(barrierHostAlias, rd_BlockTarget((unsigned int)tbp, 512, 256, 0));
+        }
+    } else if (barrierHostAlias.id != 0) {
+        rd_AliasTarget(barrierHostAlias, (RdTarget){0});
+        barrierHostAlias.id = 0;
+    }
+}
+
+#endif
 
 void queen_barrier_set_damage(void)
 {
@@ -154,6 +189,9 @@ void queen_barrier_disp_proc(GObj *g, float k)
     gif_StartPacketPriPath1(10);
     tex_ResetVramPri(10);
     vram = tex_AllocVramAuto(0, 2048);
+#ifdef ICO_RD
+    barrierHostBlock(vram, 1);
+#endif
     MakeRefractTexture(vram >> 5);
 
     setGsReg(0x4C, ((long long)((ScreenWidth >> 6) & 0x3F) << 16) | 64);
@@ -189,6 +227,9 @@ void queen_barrier_disp_proc(GObj *g, float k)
 
     prim_UpdateMesh3D(barrierMesh, 24, buffer_ID);
     prim_DispMesh3D(barrierMesh, 0, 0, -1);
+#ifdef ICO_RD
+    barrierHostBlock(vram, 0);
+#endif
 }
 
 void queen_barrier_disp_init(void)

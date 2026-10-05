@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "typedef.h"
 #include "debug.h"
 #include "memory.h"
@@ -15,15 +16,15 @@ typedef struct CandleFlame { /* field names derived */
 #include "candle.h"
 #include "ios.h"
 
-int InitCandleGeo(void *self, void *mtx)
+ICO_WORD InitCandleGeo(void *self, void *mtx)
 {
     Sub15C *w = GOBJ_SUB(self);
     CandleFlame *flame;
     int i;
 
     if (w->nodeNum >= 2) {
-        flame = (CandleFlame *)iosMallocDebug(ios_partition_sugipon, w->nodeNum * 8, "src/candle.c",
-                                              24);
+        flame = (CandleFlame *)iosMallocDebug(
+            ios_partition_sugipon, w->nodeNum * ICO_MAX_SIZE(CandleFlame, 8), "src/candle.c", 24);
         for (i = 0; i < w->nodeNum; i++) {
             CopyMatrix(MatrixDrive_GetMatrix(), (char *)w->nodeMtx + i * 64);
             MatrixDrive_TransMatrix(0.0f, -40.0f, 0.0f);
@@ -31,12 +32,13 @@ int InitCandleGeo(void *self, void *mtx)
             flame[i].off = 0;
         }
     } else {
-        flame = (CandleFlame *)iosMallocDebug(ios_partition_sugipon, 8, "src/candle.c", 35);
+        flame = (CandleFlame *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(CandleFlame, 8),
+                                              "src/candle.c", 35);
         flame->effect = SetParticleEffect(4, mtx, IdentityQuaternion);
         flame->off = 0;
     }
     debug_StdPrintfDummy("\x1b[33mInitialize candle geometries.\x1b[m\n");
-    return (int)flame;
+    return (ICO_WORD)flame;
 }
 
 void CandleGeo(void *self)

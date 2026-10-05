@@ -3,6 +3,7 @@
 #include "camera-root.h"
 #include "Basic.h"
 #include "Light.h"
+#include "ee_view.h"
 #include "DisplayP2O.h"
 #include "geometryManager.h"
 #include "lineManager.h"
@@ -63,7 +64,7 @@ static int cursorRotY; /* derived name */
 static int cursorRotX; /* derived name */
 
 /* the newest light, kept as a word */
-static int lastLight; /* derived name */
+static ICO_WORD lastLight; /* derived name */
 
 static AmbientVolume *lastAmbient; /* derived name */
 
@@ -84,7 +85,7 @@ static void light_killLinkLight(Light *p)
     if (p->next != 0) {
         p->next->prev = p->prev;
     } else {
-        lastLight = (int)p->prev;
+        lastLight = (ICO_WORD)p->prev;
     }
     if (p->prev != 0) {
         p->prev->next = p->next;
@@ -119,7 +120,7 @@ static void light_killLinkAmbient(AmbientVolume *p)
 
 /* The three flat lights light_AddLight registers, kept so
    light_resetFlatLight can reload them from the stage setting. */
-static int flatLightSlot[3] = {0, 0, 0}; /* derived name */
+static ICO_WORD flatLightSlot[3] = {0, 0, 0}; /* derived name */
 
 /* The three flat lights the stage setting is reloaded into. */
 static Light flatLight[3]; /* derived name */
@@ -132,7 +133,7 @@ static inline void light_setLinkLight(Light *p) /* derived name */
     }
     p->next = 0;
     p->prev = (Light *)lastLight;
-    lastLight = (int)p;
+    lastLight = (ICO_WORD)p;
 }
 
 Light *light_AddLight(GObj *self, int b, int kind)
@@ -163,7 +164,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
             }
             l->strength = d;
             light_setLinkLight(l);
-            flatLightSlot[(flatLightNum)++] = (int)l;
+            flatLightSlot[(flatLightNum)++] = (ICO_WORD)l;
         }
         return 0;
     }
@@ -176,7 +177,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
         if (self->dobj == 0) {
             return 0;
         }
-        q = (Light *)iosMallocDebug(ios_partition_seki, 80, "src/Light.c", 620);
+        q = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 620);
         self->dobj->lightId = b;
         q->owner = self;
         q->kind = kind;
@@ -200,7 +202,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
     case 3: {
         Light *r;
 
-        r = (Light *)iosMallocDebug(ios_partition_seki, 80, "src/Light.c", 685);
+        r = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 685);
         r->kind = kind;
         r->scale = 1.0f;
         r->range = 32768.0f;
@@ -326,7 +329,7 @@ static void light_getNearLight(Sub15C *self, int idx)
             }
         }
     }
-    _NormalizeVector((char *)self + 0x860, dir);
+    _NormalizeVector(ICO_RAWP(char *, self, 0x860, (char *)self->shadowDir), dir);
     for (i = 0; i < 3; i++) {
         if (near[i] != 0) {
             if (near[i]->kind == 0) {
@@ -1070,7 +1073,9 @@ AmbientVolume *light_AddAmbientObject(int obj)
 {
     AmbientVolume *p;
 
-    p = (AmbientVolume *)iosMallocDebug(ios_partition_seki, 160, "src/Light.c", 723);
+    p = (AmbientVolume *)iosMallocDebug(ios_partition_seki,
+                                        sizeof(AmbientVolume) > 160 ? sizeof(AmbientVolume) : 160,
+                                        "src/Light.c", 723);
     p->shape = obj;
     p->lightScale = 1.0f;
     light_setLinkAmbient(p);

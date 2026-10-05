@@ -20,6 +20,16 @@
 #include "gv.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* PC port (renderer R7d, docs/port/RENDER_API.md "Frame rate and interpolation"): a camera
+   group whose kind differs from the current one re-initialises the monitor
+   camera, a hard cut for the presenter's interpolation
+   (port/game/video_options.c; a counter no game state reads) */
+extern void ico_video_camera_cut(void);
+
+#endif
+
 static void *ReadCameraSet(struct CamSetFile *f, int stage);
 
 /* a loaded camera set: the file header, then the group records */
@@ -73,9 +83,19 @@ static float targetBSmooth[3]; /* derived name */
 
 static float groupProbePos[36]; /* derived name */
 
-static float targetAPrev[3]; /* derived name */
+/* SetCameraTargetPosition stores both with a 16-byte vector store; on the
+   EE each lies in its own 16-byte slot of .bss and the fourth word lands in
+   the slot's padding.  The host gives them that fourth word (package 2I,
+   ASan global-buffer-overflow). */
+#ifdef ICO_HOST
+#define CAM_PREV_WORDS 4
+#else
+#define CAM_PREV_WORDS 3
+#endif
 
-static float targetBPrev[3]; /* derived name */
+static float targetAPrev[CAM_PREV_WORDS]; /* derived name */
+
+static float targetBPrev[CAM_PREV_WORDS]; /* derived name */
 
 /* ten sets, the AddPluralCameraSet limit */
 static PluralCameraSet pluralCameraSet[10]; /* derived name */
@@ -106,14 +126,9 @@ static int pluralCameraSetNum; /* derived name */
 
 static float zoomOffsetRatio = 1.0f; /* derived name */
 
-/* the camera-set binary: a sixteen byte header, `count` group records of 0x4C
-   and `total` item records whose stride is the file version's */
-typedef struct CamSetFile { /* field names derived */
-    int magic;              /* 0x00 */
-    int ver;                /* 0x04 */
-    int count;              /* 0x08 */
-    int total;              /* 0x0C */
-} CamSetFile;               /* derived name */
+/* the camera-set binary (camera-editor.h's CamSetFile): a sixteen byte header,
+   `count` group records of 0x4C and `total` item records whose stride is the
+   file version's */
 
 typedef struct CamItemV0 { /* 0x38 */ /* field names derived */
     unsigned char pin[56];            /* a version-0 pin record */
@@ -126,6 +141,21 @@ typedef struct CamItemV1 { /* 0x40 */ /* field names derived */
 typedef struct CamItemV2 { /* 0x50 */ /* field names derived */
     unsigned char pin[80];            /* a version-2 pin record */
 } CamItemV2;                          /* derived name */
+
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: an old camera set's pin records are copied whole over the head of
+   PinRec, so each version's record must end at the PinRec member the next
+   version adds (tools/template_audit.py) */
+_Static_assert(sizeof(CamItemV0) == __builtin_offsetof(PinRec, eyeRate), "CamItemV0 over PinRec");
+
+_Static_assert(sizeof(CamItemV1) == __builtin_offsetof(PinRec, limitP), "CamItemV1 over PinRec");
+
+_Static_assert(sizeof(CamItemV2) == __builtin_offsetof(PinRec, ofsB), "CamItemV2 over PinRec");
+
+#endif
 
 inline void SetCameraZoomOffsetRatio(float val)
 {
@@ -144,7 +174,7 @@ void CameraSetCameraSet(int id)
     p = ((CamSetHdr *)TopCameraSetDataOfCurrentStage)->groups;
     end = &p[n];
     for (i = 0; i < n; i++) {
-        p[i].items = (PinRec *)end;
+        CAMGROUP_SET_ITEMS(&p[i], (PinRec *)end);
     }
     ReflectCameraSetBinary(p, n);
 }
@@ -555,8 +585,8 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
     ofsA[2] = 0.0f;
     sum = ofsA[2];
     i = 0;
-    for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-         p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+    for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+         p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
         if (p->on != 0) {
             {
                 Mat4 tv;
@@ -576,8 +606,8 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
         cameraWeight[0] = 1.0f;
     } else if (i < 5) {
         i = 0;
-        for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-             p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+        for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+             p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
             if (p->on != 0) {
                 cameraWeight[i] = (sum - cameraWeight[i]) * (sum - cameraWeight[i]);
                 i++;
@@ -586,8 +616,8 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
     } else {
         cameraWeightStat(cameraWeight, i, &sd, &mean);
         i = 0;
-        for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-             p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+        for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+             p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
             if (p->on != 0) {
                 cameraWeight[i] = (cameraWeight[i] - mean) * 10.0f / sd + 50.0f;
                 if (cameraWeight[i] < 0.0f || 100.0f < cameraWeight[i]) {
@@ -606,15 +636,15 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
         }
     }
     i = 0;
-    for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-         p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+    for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+         p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
         if (p->on != 0) {
             if (p->range != 0.0f && cameraDist[i] < p->range) {
                 u = (cameraDist[i] - 100.0f) / p->range;
                 rate = u < 0.0001f ? 0.0001f : (1.0f < u ? 1.0f : u);
                 j = 0;
-                for (r = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-                     r != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; r++) {
+                for (r = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+                     r != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; r++) {
                     if (r->on != 0) {
                         if (j != i) {
                             cameraWeight[j] = cameraWeight[j] * rate;
@@ -628,8 +658,8 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
     }
     total = 0.0f;
     i = 0;
-    for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-         p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+    for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+         p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
         if (p->on != 0) {
             total = total + cameraWeight[i];
             i++;
@@ -648,8 +678,8 @@ static void CameraMove(int group, float *pos, float *out, float *ofsA, float *of
     e3 = 0.0f;
     e4 = 0.0f;
     i = 0;
-    for (p = &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->first];
-         p != &CAMSET_GROUP(group)->items[CAMSET_GROUP(group)->end]; p++) {
+    for (p = &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->first];
+         p != &CAMGROUP_ITEMS(CAMSET_GROUP(group))[CAMSET_GROUP(group)->end]; p++) {
         if (p->on != 0) {
             w = cameraWeight[i] / total;
             acc[0] = acc[0] + p->pos[0] * w;
@@ -709,9 +739,9 @@ inline void MakeCameraSetBinary(CamGroup *src, int count, CamGroup *dst)
         PinRec *is;
         *dst = *s;
         dst->first = total;
-        dst->items = outBase;
-        is = s->items + s->first;
-        while (is != s->items + s->end) {
+        CAMGROUP_SET_ITEMS(dst, outBase);
+        is = CAMGROUP_ITEMS(s) + s->first;
+        while (is != CAMGROUP_ITEMS(s) + s->end) {
             *out = *is;
             out++;
             total++;
@@ -750,7 +780,18 @@ void InitIco2Camera(void)
 
 /* the target offset the smoothing test measures the new one against, reset
    whenever the actor asks for no offset */
+#ifdef ICO_HOST
+
+/* sceVu0AddVector below stores all four lanes (the EE's sqc2 writes the 4
+   bytes after the array, whatever the linker put there); the host gives the
+   fourth lane its own room */
+static float lastTargetOffset[4] = {0.0f, 0.0f, 0.0f}; /* derived name */
+
+#else
+
 static float lastTargetOffset[3] = {0.0f, 0.0f, 0.0f}; /* derived name */
+
+#endif
 
 static void GetTargetOffset(GObj *gobj, float *v, unsigned char flag)
 {
@@ -882,6 +923,9 @@ void SetCameraMatrix_Ico2(int flag)
                           ((CamGroup *)cameraSetGroups)[group].kind !=
                               ((CamGroup *)cameraSetGroups)[cameraGroupCurrent].kind)) {
             initMonitorCamera(1);
+#ifdef ICO_HOST
+            ico_video_camera_cut();
+#endif
             f8 = 1;
         }
         memset(vA, 0, 16);
@@ -965,6 +1009,19 @@ inline void InitPluralCameraSet(void)
 {
     pluralCameraSetNum = 0;
 }
+
+#ifdef ICO_HOST
+
+/* the sizes allocCameraSet, GetSizeOfCameraSetBinary and the group walks
+   spell as 16, 76 and 92: the frozen disc records (eeword.h keeps
+   CamGroup.items a 32-bit word) */
+_Static_assert(sizeof(CamSetFile) == 16, "CamSetFile is the 16-byte .gcm head");
+
+_Static_assert(sizeof(CamGroup) == 76, "CamGroup is the 76-byte .gcm group");
+
+_Static_assert(sizeof(PinRec) == 92, "PinRec is the 92-byte .gcm pin");
+
+#endif
 
 /* the camera-set reallocator: a block sized for the set's groups and items,
    for ReadCameraSet's four call sites */

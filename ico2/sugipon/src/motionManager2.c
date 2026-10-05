@@ -1,4 +1,6 @@
 #include "typedef.h"
+#include "eeword.h"
+#include "ee_view.h"
 #include "sugiCommon.h"
 #include "debug.h"
 #include "debug_exception.h"
@@ -433,11 +435,27 @@ typedef struct {     /* field names derived */
     int cliffWallCount; /* 0xFC */
     WallCfg aheadWall;  /* 0x100 */
     int word10C;
+#ifdef ICO_HOST
+    /* PC port: InitMotionGeoInfo copies this record over a MotRoot, so the
+       host layout must be MotRoot's.  MotRoot has 20 unread bytes at 0x10C
+       (not a WallCfg, which is 24 bytes on a 64-bit host) and a 16-byte
+       aligned plane; with the EE types every field from filter on landed 8
+       or 16 bytes off on x64 (armTwist read as 0: package 2I). */
+    struct {
+        int o[2];
+        int elem;
+    } wall110;
+#else
     WallCfg wall110;
+#endif
     int word11C;
     WallCfg filter; /* 0x120 */
     char pad12C[4];
-    Vec4 plane;       /* 0x130, the field plane under the actor */
+#ifdef ICO_HOST
+    Vec16 plane; /* 0x130, the field plane under the actor */
+#else
+    Vec4 plane; /* 0x130, the field plane under the actor */
+#endif
     int lastField;    /* 0x140 */
     void *cliffFloor; /* 0x144 */
     char pad148[8];
@@ -489,8 +507,12 @@ typedef struct {     /* field names derived */
     char pad368[8];
     Vec4 holdPoint; /* 0x370 */
     int ropeState;  /* 0x380 */
-    int fixObj;     /* 0x384 */
-    int fixNode;    /* 0x388 */
+#ifdef ICO_HOST
+    ICO_WORD fixObj; /* 0x384, MotRoot's type: a word wide enough for a host pointer */
+#else
+    int fixObj; /* 0x384 */
+#endif
+    int fixNode; /* 0x388 */
     char pad38C[4];
     Vec4 fixQuat;         /* 0x390 */
     Vec4 fixPos;          /* 0x3A0 */
@@ -503,6 +525,53 @@ typedef struct {     /* field names derived */
     float ikRate2;        /* 0x3C8 */
     char pad3CC[4];
 } MotionGeoInfo; /* derived name */
+
+#ifdef ICO_HOST
+/* InitMotionGeoInfo's copy is only right if the two layouts agree: every
+   member at MotRoot's member of the same name (or the one at its EE offset:
+   rot is quat, nextPos move, fieldPos footPos), the words MotRoot keeps as
+   pads (0x10C to 0x11F, 0x1E0 to 0x1FF) inside those pads, and the same size
+   (tools/template_audit.py, docs/port/OFFSET_AUDIT.md). */
+/* clang-format off */
+#define MGI_FIELDS(X) /* derived name */ \
+    X(pos) X(trans) X(baseQuat) X(motionQuat) X(twist) X(twistRate) X(up) X(savePos) X(hitObj) \
+    X(step) X(itemQuat) X(height) X(delta) X(wall) X(wallCount) X(cliffWall) X(cliffWallCount) \
+    X(aheadWall) X(filter) X(plane) X(lastField) X(cliffFloor) X(last) X(clipFrom) X(stepMove) \
+    X(standNode) X(focusPos) X(focusLocal) X(reservePos) X(projHeight) X(liftOn) X(lifting) \
+    X(lift) X(hand1) X(hand0) X(armTwist) X(lookMode) X(lookPos) X(h) X(p) X(b) X(noStepSearch) \
+    X(gravity) X(slopeIK) X(stairStep) X(lookIK) X(handTurnIK) X(fieldWall) X(fuchiMode) \
+    X(cylinder) X(avgWallPlane) X(flag330) X(flag334) X(radius) X(radiusTo) X(radiusFrom) \
+    X(cliffPlane) X(handIK) X(stepNode) X(holdPoint) X(ropeState) X(fixObj) X(fixNode) X(fixQuat) \
+    X(fixPos) X(fixWeight) X(fixMode) X(footIKRate) X(ikRate0) X(handRate) X(ikRate1) X(ikRate2)
+/* clang-format on */
+#define MGI_SAME(f) ICO_LAYOUT_AT(MotionGeoInfo, f, struct MotRoot, f);
+
+MGI_FIELDS(MGI_SAME)
+ICO_LAYOUT_AT(MotionGeoInfo, rot, struct MotRoot, quat);
+
+ICO_LAYOUT_AT(MotionGeoInfo, nextPos, struct MotRoot, move);
+
+ICO_LAYOUT_AT(MotionGeoInfo, fieldPos, struct MotRoot, footPos);
+
+_Static_assert(__builtin_offsetof(MotionGeoInfo, word10C) >=
+                       __builtin_offsetof(struct MotRoot, _pad10C) &&
+                   __builtin_offsetof(MotionGeoInfo, wall110) >=
+                       __builtin_offsetof(struct MotRoot, _pad10C) &&
+                   __builtin_offsetof(MotionGeoInfo, word11C) + 4 <=
+                       __builtin_offsetof(struct MotRoot, filter),
+               "MotionGeoInfo's words at 0x10C are not inside MotRoot's pad");
+
+_Static_assert(__builtin_offsetof(MotionGeoInfo, vec1E0) >=
+                       __builtin_offsetof(struct MotRoot, _pad1D4) &&
+                   __builtin_offsetof(MotionGeoInfo, vec1F0) + 16 <=
+                       __builtin_offsetof(struct MotRoot, liftOn),
+               "MotionGeoInfo's vectors at 0x1E0 are not inside MotRoot's pad");
+
+ICO_LAYOUT_SIZE(MotionGeoInfo, struct MotRoot);
+
+#undef MGI_SAME
+#undef MGI_FIELDS
+#endif
 
 /* the record InitMotionGeoInfo copies over every new actor's geometry
    state */
@@ -636,7 +705,28 @@ static MotionGeoInfo motionGeoInfoTemplate = {
    attributes at 0x17C to 0x188, GetRopeHangablePos the height at 0x1A8, and
    InitMotionStateInfo itself writes the two sound groups at 0x1AC.  Its
    vectors are Vec4, so the default is 8-byte aligned; with MotCtrl's float
-   arrays the template copy is a word copy with an alignment test (measured). */
+   arrays the template copy is a word copy with an alignment test (measured).
+   PC port: the record is copied whole over a MotCtrl, so on the host it
+   must have MotCtrl's host layout.  Vec4's long long view aligns it to 8
+   bytes where MotCtrl's float[4] has 4, and MotCtrl's pickedWeapon is a
+   pointer: with the EE spelling every field from dir on landed 4 bytes
+   late (floorFit took orientKind's 0, so no actor fitted the root to the
+   floor in a direct-move motion; docs/port/DIVERGENCES.md).  The host
+   spells those members with MotCtrl's alignment and width; the asserts
+   after InitMotionStateInfo check every offset. */
+#ifdef ICO_HOST
+
+typedef union { /* derived name */
+    float f[4];
+} MsiVec4; /* derived name */
+
+#define MSI_VEC4 MsiVec4  /* derived name */
+#define MSI_WORD ICO_WORD /* derived name */
+#else
+#define MSI_VEC4 Vec4
+#define MSI_WORD int
+#endif
+
 typedef struct MotionStateInfo { /* field names derived */
     int stream;                  /* 0x0 */
     int oriFrom;                 /* 0x4 */
@@ -681,8 +771,8 @@ typedef struct MotionStateInfo { /* field names derived */
     int blendCount;              /* 0xA0 */
     int blendFrames;             /* 0xA4 */
     char padA8[8];
-    Vec4 dir;           /* 0xB0 */
-    Vec4 lastDir;       /* 0xC0 */
+    MSI_VEC4 dir;       /* 0xB0 */
+    MSI_VEC4 lastDir;   /* 0xC0 */
     int orientKind;     /* 0xD0 */
     int floorFit;       /* 0xD4 */
     int wallReact;      /* 0xD8 */
@@ -702,44 +792,44 @@ typedef struct MotionStateInfo { /* field names derived */
     float cliffHeight;  /* 0x110 */
     float cliffDist;    /* 0x114 */
     char pad118[8];
-    Vec4 cliffNormal;      /* 0x120 */
+    MSI_VEC4 cliffNormal;  /* 0x120 */
     float wallFloorHeight; /* 0x130 */
     float wallTopHeight;   /* 0x134 */
     float wallDist;        /* 0x138 */
     char pad13C[4];
-    Vec4 wallDir;        /* 0x140 */
-    Vec4 wallNormal;     /* 0x150 */
-    Vec4 sideWallNormal; /* 0x160 */
-    float upperWallDist; /* 0x170 */
-    float sideWallDist;  /* 0x174 */
-    float cliffDepth;    /* 0x178 */
-    int pureWallAttr;    /* 0x17C */
-    int pureCliffAttr;   /* 0x180 */
-    int wallAttr;        /* 0x184 */
-    int floorAttr;       /* 0x188 */
+    MSI_VEC4 wallDir;        /* 0x140 */
+    MSI_VEC4 wallNormal;     /* 0x150 */
+    MSI_VEC4 sideWallNormal; /* 0x160 */
+    float upperWallDist;     /* 0x170 */
+    float sideWallDist;      /* 0x174 */
+    float cliffDepth;        /* 0x178 */
+    int pureWallAttr;        /* 0x17C */
+    int pureCliffAttr;       /* 0x180 */
+    int wallAttr;            /* 0x184 */
+    int floorAttr;           /* 0x188 */
     char pad18C[4];
-    int frameFlag1;    /* 0x190 */
-    int frameFlag2;    /* 0x194 */
-    int trigger1;      /* 0x198 */
-    int trigger1Done;  /* 0x19C */
-    int trigger2;      /* 0x1A0 */
-    int trigger2Done;  /* 0x1A4 */
-    float ropeHangPos; /* 0x1A8 */
-    int seGroup[2];    /* 0x1AC */
-    int slipFlags;     /* 0x1B4 */
-    int lastSlipFlags; /* 0x1B8 */
-    int slipOn;        /* 0x1BC */
-    int pickedWeapon;  /* 0x1C0 */
-    int keepWall;      /* 0x1C4 */
-    int keepStand;     /* 0x1C8 */
-    int landed;        /* 0x1CC */
-    float waterY;      /* 0x1D0 */
-    float waterDepth;  /* 0x1D4 */
-    GObj *pool;        /* 0x1D8 */
-    int contactFlags;  /* 0x1DC */
-    int mailDelay;     /* 0x1E0 */
-    int noFieldClip;   /* 0x1E4 */
-    int seMute;        /* 0x1E8 */
+    int frameFlag1;        /* 0x190 */
+    int frameFlag2;        /* 0x194 */
+    int trigger1;          /* 0x198 */
+    int trigger1Done;      /* 0x19C */
+    int trigger2;          /* 0x1A0 */
+    int trigger2Done;      /* 0x1A4 */
+    float ropeHangPos;     /* 0x1A8 */
+    int seGroup[2];        /* 0x1AC */
+    int slipFlags;         /* 0x1B4 */
+    int lastSlipFlags;     /* 0x1B8 */
+    int slipOn;            /* 0x1BC */
+    MSI_WORD pickedWeapon; /* 0x1C0 */
+    int keepWall;          /* 0x1C4 */
+    int keepStand;         /* 0x1C8 */
+    int landed;            /* 0x1CC */
+    float waterY;          /* 0x1D0 */
+    float waterDepth;      /* 0x1D4 */
+    GObj *pool;            /* 0x1D8 */
+    int contactFlags;      /* 0x1DC */
+    int mailDelay;         /* 0x1E0 */
+    int noFieldClip;       /* 0x1E4 */
+    int seMute;            /* 0x1E8 */
     char pad1EC[4];
 } MotionStateInfo; /* derived name */
 
@@ -875,7 +965,7 @@ void InitMotionGeoInfo(struct MotRoot *self, float x, float y, float z, float rx
    stores in DispSkelton reorder (measured). */
 static void *skelGObj; /* derived name */
 
-static int skelMotion; /* derived name */
+static ICO_WORD skelMotion; /* derived name */
 
 static SkelNode *skelNodes; /* derived name */
 
@@ -920,11 +1010,11 @@ static void dispSkeltonHierarchy(int node)
 /* SetSkeltonDispSwitch's switch for DispSkelton's debug draw */
 static int skeltonDispSwitch = 0; /* derived name */
 
-void DispSkelton(GObj *self, int motion)
+void DispSkelton(GObj *self, ICO_WORD_PTR(void *) motion)
 {
     /* the skeleton, read as a void * word */
-    skelNodes = *(void **)((char *)GOBJ_SUB(self) + 0x8C);
-    skelMotion = motion;
+    skelNodes = ICO_RAW(void *, GOBJ_SUB(self), 0x8C, GOBJ_SUB(self)->skel);
+    skelMotion = (ICO_WORD)motion;
     skelGObj = self;
 
     if (skeltonDispSwitch) {
@@ -1071,7 +1161,7 @@ int GetPureVerticalPlaneOfCurrentPosition(void *plane0, void *plane1, float *pts
     GObj *obj;
     int sh;
     Sub15C *p15c;
-    int v_c;
+    ICO_WORD v_c;
 
     tbl = wallEdgeCorner;
     pts = (ptsIn != 0) ? ptsIn : (float *)local;
@@ -1083,7 +1173,7 @@ int GetPureVerticalPlaneOfCurrentPosition(void *plane0, void *plane1, float *pts
     sh = cfg->o.node << 6;
     p15c = obj->dobj;
     v_c = p15c->nodeMtx;
-    GetWallGlobalInfo(pts, nrm, cfg->elem, v_c + sh);
+    GetWallGlobalInfo(pts, nrm, cfg->elem, (void *)(v_c + sh));
     nrm[1] = 0;
     sceVu0Normalize((int *)nrm, (int *)nrm);
     t = tbl;
@@ -1129,9 +1219,9 @@ static void getVerticalElementOfWallNormal(int *self, int *p, WallCfg *cfg)
     GObj *obj = cfg->o.obj;
     int sh = cfg->o.node << 6;
     Sub15C *p15c = obj->dobj;
-    int v_c = p15c->nodeMtx;
+    ICO_WORD v_c = p15c->nodeMtx;
 
-    GetWallGlobalInfo(self, p, cfg->elem, v_c + sh);
+    GetWallGlobalInfo(self, p, cfg->elem, (void *)(v_c + sh));
     p[1] = 0;
     _NormalizeVector(p, p);
 }
@@ -1284,10 +1374,20 @@ static inline float motDecodeS16(int h) /* derived name */
     return m * s;
 }
 
+#ifdef ICO_HOST
+
+/* VU0's Q register, which carries the root from motSqrtStart to motSqrtEnd */
+static float motSqrtQ; /* derived name */
+
+#endif
+
 /* the VU0 square root split in two so the Q-pipeline latency is covered by
    the vector copy in between */
 static inline void motSqrtStart(float d) /* derived name */
 {
+#ifdef ICO_HOST
+    motSqrtQ = ps2_sqrt(1.0f - d);
+#else
     float t = 1.0f - d;
 
     __asm__ __volatile__(".set noreorder\n"
@@ -1297,10 +1397,14 @@ static inline void motSqrtStart(float d) /* derived name */
                          :
                          : "f"(t));
     VU0_WORD(0x4A0103BD);
+#endif
 }
 
 static inline float motSqrtEnd(void) /* derived name */
 {
+#ifdef ICO_HOST
+    return motSqrtQ;
+#else
     float r;
 
     VU0_WAIT();
@@ -1310,6 +1414,7 @@ static inline float motSqrtEnd(void) /* derived name */
                          ".set reorder\n"
                          : "=f"(r));
     return r;
+#endif
 }
 
 void _getS16MotRotElem(void *dst, void *src)
@@ -1370,7 +1475,7 @@ void _getMotion(void *dst, void *m, int node, int frame)
 
     char *mm = (char *)m;
 
-    type = ((unsigned char *)*(int *)(mm + 8))[node];
+    type = ICO_EEPTR(unsigned char *, *(int *)(mm + 8))[node];
     switch (type) {
     default:
         debug_StdPrintfDummy(illegalCompressMsg, type);
@@ -1378,41 +1483,43 @@ void _getMotion(void *dst, void *m, int node, int frame)
         break;
     case 1: {
         int off = frame * 0x10;
-        getMotRotElem((char *)dst, (char *)((int *)*(int *)(mm + 0xC))[node] + off);
+        getMotRotElem((char *)dst,
+                      ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]) + off);
         break;
     }
     case 2: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemF e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 4),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemF e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 4),
                       *(float *)(p + 8), *(float *)(p + 0xC), *(float *)(p + 0x10)};
         getMotRotElem((char *)dst, (char *)&e);
         break;
     }
     case 3: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemF e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 8),
-                      *(float *)(p + 0xC), *(float *)(p + 0x10), ((float *)*(int *)(p + 4))[frame]};
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemF e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 8),
+                      *(float *)(p + 0xC), *(float *)(p + 0x10),
+                      ICO_EEPTR(float *, *(int *)(p + 4))[frame]};
         getMotRotElem((char *)dst, (char *)&e);
         break;
     }
     case 4: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
         _getS16MotRotElem(dst, &((MotElemS *)p)[frame]);
         break;
     }
     case 5: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemS e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 4),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemS e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 4),
                       *(unsigned short *)(p + 6), *(unsigned short *)(p + 8),
                       *(unsigned short *)(p + 0xA)};
         _getS16MotRotElem(dst, &e);
         break;
     }
     case 6: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemS e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 8),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemS e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 8),
                       *(unsigned short *)(p + 0xA), *(unsigned short *)(p + 0xC),
-                      ((unsigned short *)*(int *)(p + 4))[frame]};
+                      ICO_EEPTR(unsigned short *, *(int *)(p + 4))[frame]};
         _getS16MotRotElem(dst, &e);
         break;
     }
@@ -1467,6 +1574,38 @@ int GetStreamMotion(StreamElem *dst, float *out, char *node, SkelNode *skel)
 /* copyMotionWithNodeHrc is a nested function inside CopyMotionWithNodeHrc:
  * the parent passes it a static chain, through which it reaches
  * dst/src/flag/hrc. */
+#ifdef ICO_HOST
+
+/* The nested copyMotionWithNodeHrc as a file-scope function (clang has no
+   nested functions); the parent's dst, src, hrc and flag are parameters. */
+static void copyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int flag,
+                                  int n) /* derived name */
+{
+    dst[n] = src[n];
+    if (flag == 0) {
+        *(int *)&dst[n] = 250;
+    }
+    if (hrc[n].child != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[n].child);
+    }
+    if (hrc[n].sibling != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[n].sibling);
+    }
+}
+
+void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int node, int flag)
+{
+    dst[node] = src[node];
+    if (flag == 0) {
+        *(int *)&dst[node] = 250;
+    }
+    if (hrc[node].child != -1) {
+        copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[node].child);
+    }
+}
+
+#else
+
 void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int node, int flag)
 {
     inline void copyMotionWithNodeHrc(int n)
@@ -1492,11 +1631,13 @@ void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int 
     }
 }
 
+#endif
+
 /* the bodies of GetMotionRootPos and GetBlendedMotionRootPos, which their
    callers inline and the two exported functions call */
 static inline void getMotionRootPos(float *dst, void *motion, int idx) /* derived name */
 {
-    float *src = (float *)(*(int *)((char *)motion + 4) + idx * 0xC);
+    float *src = ICO_EEPTR(float *, *(int *)((char *)motion + 4) + idx * 0xC);
     getRootPos(dst, src);
 }
 
@@ -1641,8 +1782,8 @@ static inline void getShapeMotion(float *dst, char *motion, int idx, int count) 
     int m = *(int *)motion - 1;
     idx = idx - m * (idx / m);
     for (; i < count; i++) {
-        char *t = *(char **)(motion + 0x10);
-        int *elem = *(int **)(*(char **)(t + 4) + i * 4);
+        char *t = ICO_EEPTR(char *, *(int *)(motion + 0x10));
+        int *elem = ICO_EEPTR(int *, *(int *)(ICO_EEPTR(char *, *(int *)(t + 4)) + i * 4));
         if (elem != 0) {
             dst[i] = ((float *)elem)[idx];
         } else {
@@ -1681,8 +1822,13 @@ void FeedbackWallWorkInfoToBrainSystem(GObj *self)
 {
     Sub15C *p = self->dobj;
     char *d = (char *)self->act;
+#ifdef ICO_HOST
+    p->root.wall = p->root.aheadWall;
+    GOBJ_ACT(self)->env.motOriReq.a.wall = p->root.aheadWall;
+#else
     *(WallWork *)((char *)p + 0x180) = *(WallWork *)((char *)p + 0x1A0);
     *(WallWork *)(d + 0x620) = *(WallWork *)((char *)p + 0x1A0);
+#endif
 }
 
 void *GetMotionPointer(GObj *self)
@@ -1745,10 +1891,14 @@ static inline void debugDisp1CollisionWithColor(WallCfg *cfg, void *color) /* de
     int i;
     GObj *obj = cfg->o.obj;
     int sh = cfg->o.node << 6;
+#ifdef ICO_HOST
+    ICO_WORD v_c = obj->dobj->nodeMtx;
+#else
     int *p15c = (int *)obj->dobj;
     int v_c = p15c[0xC / 4];
+#endif
 
-    GetWallGlobalInfo(pts, pts[4], cfg->elem, v_c + sh);
+    GetWallGlobalInfo(pts, pts[4], cfg->elem, (void *)(v_c + sh));
     gif_StartPacketPri(11);
     gif_SetAlpha(1, 5, 0x80);
     MatrixDrive_PushMatrix();
@@ -1809,6 +1959,41 @@ void InitMotionStateInfo(struct MotCtrl *self)
     self->seGroup[0] = soundSeGroupGet();
     self->seGroup[1] = soundSeGroupGet();
 }
+
+#ifdef ICO_HOST
+/* PC port: the template copy above is only right while the record has
+   MotCtrl's host layout (the comment at MotionStateInfo): every member at
+   MotCtrl's offset, and the same size. */
+/* clang-format off */
+#define MSI_FIELDS(X) /* derived name */ \
+    X(stream) X(oriFrom) X(oriTo) X(shifted) X(ctrlFlags) X(flags) X(shiftStop) X(shiftReq) \
+    X(shiftNext) X(shiftFrom) X(shiftMode) X(request) X(motion) X(noAlt) X(shiftReady) \
+    X(animFrame) X(lastFrame) X(playTime) X(speedRatio) X(playRate) X(frameRatio) X(waterDrag) \
+    X(justShifted) X(frameEnd) X(keepUpdateMode) X(updateModeChanged) X(rootUpdateMode) \
+    X(parallelEnded) X(parallel) X(orientUpdateOff) X(noStand) X(posReserve) X(loopFlag) \
+    X(reserveBlend) X(reserveMoved) X(step) X(orientReq) X(lastMotion) X(lastNoAlt) \
+    X(shiftFrame) X(blendCount) X(blendFrames) X(dir) X(lastDir) X(orientKind) X(floorFit) \
+    X(wallReact) X(cliffWallCheck) X(catchBoy) X(sideWallCheck) X(variation) X(fallHeight) \
+    X(groundHeight) X(wallHit) X(cliffEdge) X(cliffWallHit) X(cliffBack) X(fieldWallHit) \
+    X(upperWall) X(sideWall) X(cliffHeight) X(cliffDist) X(cliffNormal) X(wallFloorHeight) \
+    X(wallTopHeight) X(wallDist) X(wallDir) X(wallNormal) X(sideWallNormal) X(upperWallDist) \
+    X(sideWallDist) X(cliffDepth) X(pureWallAttr) X(pureCliffAttr) X(wallAttr) X(floorAttr) \
+    X(frameFlag1) X(frameFlag2) X(trigger1) X(trigger1Done) X(trigger2) X(trigger2Done) \
+    X(ropeHangPos) X(seGroup) X(slipFlags) X(lastSlipFlags) X(slipOn) X(pickedWeapon) \
+    X(keepWall) X(keepStand) X(landed) X(waterY) X(waterDepth) X(pool) X(contactFlags) \
+    X(mailDelay) X(noFieldClip) X(seMute)
+/* clang-format on */
+#define MSI_SAME(f) /* derived name */                                                             \
+    _Static_assert(__builtin_offsetof(MotionStateInfo, f) ==                                       \
+                       __builtin_offsetof(struct MotCtrl, f),                                      \
+                   "MotionStateInfo." #f " is not at MotCtrl." #f);
+
+MSI_FIELDS(MSI_SAME)
+_Static_assert(sizeof(MotionStateInfo) == sizeof(struct MotCtrl), "MotionStateInfo size");
+
+#undef MSI_SAME
+#undef MSI_FIELDS
+#endif
 
 int GetSkeltonFocusNode(GObj *self, int focus)
 {
@@ -1879,8 +2064,8 @@ int GetStreamShapeMotion(float *dst, StreamShapeHdr *hdr)
     float *src, *p;
     if (hdr->shapeMode == 0 && (skip = hdr->skipNum, (n = hdr->shapeNum)) != 0) {
         int o = skip * 8 + 0x10;
-        src = (float *)o;
-        p = (float *)((char *)hdr + (int)src);
+        src = (float *)(ICO_WORD)o;
+        p = (float *)((char *)hdr + (ICO_WORD)src);
         src = p;
         for (i = 0; i < n; i++)
             *dst++ = *src++;
@@ -1893,14 +2078,16 @@ float GetDifferenceFromWallUpperField(GObj *self, int node)
 {
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
-    return GetYDistanceFromPlane(e->root.cliffPlane, (char *)e->nodeMtx + idx * 0x40 + 0x30);
+    return GetYDistanceFromPlane(e->root.cliffPlane,
+                                 (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
 float GetDifferenceFromLastField(GObj *self, int node)
 {
     Sub15C *e = self->dobj;
     int idx = (e->focusNodes)[node];
-    return GetYDistanceFromPlane(e->root.plane.f, (char *)e->nodeMtx + idx * 0x40 + 0x30);
+    return GetYDistanceFromPlane(e->root.plane.f,
+                                 (float *)((char *)e->nodeMtx + idx * 0x40 + 0x30));
 }
 
 float GetDifferenceFromLowerField(GObj *self, int node)
@@ -1910,7 +2097,7 @@ float GetDifferenceFromLowerField(GObj *self, int node)
     int idx;
     ctrl = self->dobj;
     idx = ((signed char *)ctrl->focusNodes)[node];
-    GetLowerPlaneCollision(&buf, ctrl->nodeMtx + (idx << 6) + 0x30);
+    GetLowerPlaneCollision(&buf, (float *)(ctrl->nodeMtx + (idx << 6) + 0x30));
     if (buf.floor.elem == 0) {
         return 3.40282347e+38f;
     }
@@ -1925,7 +2112,8 @@ float GetDifferenceFromWallLowerPlane(GObj *self, int node)
 
     idx = getSkeltonFocusNode(self, node);
     GetPureVerticalPlane(pos, 0, pts[0], &self->dobj->root.wall, 1);
-    return GetYDistanceFromPlane(pos, (char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30);
+    return GetYDistanceFromPlane(pos,
+                                 (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
 }
 
 float GetDifferenceFromWallUpperPlane(GObj *self, int node)
@@ -1936,7 +2124,8 @@ float GetDifferenceFromWallUpperPlane(GObj *self, int node)
 
     idx = getSkeltonFocusNode(self, node);
     GetPureVerticalPlane(pos, 0, pts[0], &self->dobj->root.wall, 0);
-    return GetYDistanceFromPlane(pos, (char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30);
+    return GetYDistanceFromPlane(pos,
+                                 (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
 }
 
 void DisableChangeRootUpdateMode(GObj *self)
@@ -1954,7 +2143,7 @@ void EnableChangeRootUpdateMode(GObj *self)
 float GetRopeHangablePos(GObj *self)
 {
     Sub15C *sub = self->dobj;
-    return *(float *)((char *)sub + 0x618);
+    return ICO_RAW(float, sub, 0x618, sub->ctrl.ropeHangPos);
 }
 
 int GetMotionFrameFlag1(GObj *self)
@@ -2019,7 +2208,7 @@ void SetMotionNodeFixModeParameter(GObj *self, GObj *obj, int mode, int node, vo
 {
     float vec[4] = {x, y, z, 1.0f};
 
-    GOBJ_SUB(self)->root.fixObj = (int)obj;
+    GOBJ_SUB(self)->root.fixObj = (ICO_WORD)obj;
     GOBJ_SUB(self)->root.fixNode = getSkeltonFocusNode(obj, node);
     GOBJ_SUB(self)->root.fixMode = mode;
     CopyVector(GOBJ_SUB(self)->root.fixPos, vec);

@@ -16,7 +16,7 @@
    queue's 16-slot message ring */
 static struct SemaParam mcLockSemaParam;
 
-static int mcMsgRing[16]; /* derived name */
+static IosMsgWord mcMsgRing[16]; /* derived name */
 
 /* .data: the three icon file names, the save segment names, then after the
    block handlers the segment table, the two product records, the preview
@@ -54,9 +54,9 @@ inline void iosMcTest(void) {}
 
 inline int iosMcSync(McMgr *mp)
 {
-    unsigned long x = mp->flags.ll;
+    unsigned long long x = mp->flags.ll;
     char y = x;
-    unsigned long z = y & 1ul;
+    unsigned long long z = y & 1ull;
     y = z;
     return -((int)y);
 }
@@ -774,7 +774,7 @@ void iosMcManager(void)
     pp = &mp;
 
     for (;;) {
-        iosMsgRecv(&McMsgQ, pp, 1);
+        iosMsgRecv(&McMsgQ, (IosMsgWord *)pp, 1);
         debug_StdPrintfDummy("done 0 %p\n", mp);
 
         mp->flags.ll = mp->flags.ll & -2;

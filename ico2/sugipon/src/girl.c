@@ -35,17 +35,17 @@ static void setGirlClothSetting(int lv);
 typedef struct GirlWork { /* field names derived */
     int kind;             /* 0x00, the layout's 0x30 word */
     int cloth0Disp;       /* 0x04 */
-    int cloth0;           /* 0x08, a Cloth4D */
+    ICO_WORD cloth0;      /* 0x08, a Cloth4D */
     int cloth12Disp;      /* 0x0C */
-    int cloth1;           /* 0x10, a Cloth4D */
-    int cloth2;           /* 0x14, a Cloth4D */
-    int hair;             /* 0x18, the Cloth4D the debug hair settings drive */
+    ICO_WORD cloth1;      /* 0x10, a Cloth4D */
+    ICO_WORD cloth2;      /* 0x14, a Cloth4D */
+    ICO_WORD hair;        /* 0x18, the Cloth4D the debug hair settings drive */
     int cloth3Disp;       /* 0x1C */
-    int cloth3;           /* 0x20, a Cloth4D */
-    int crown;            /* 0x24, a display object */
+    ICO_WORD cloth3;      /* 0x20, a Cloth4D */
+    ICO_WORD crown;       /* 0x24, a display object */
     int ornamentDisp;     /* 0x28 */
-    int ornament0;        /* 0x2C, a display object */
-    int ornament1;        /* 0x30, a display object */
+    ICO_WORD ornament0;   /* 0x2C, a display object */
+    ICO_WORD ornament1;   /* 0x30, a display object */
     int hint1Ready;       /* 0x34 */
     int hint2Ready;       /* 0x38 */
     int hint1Played;      /* 0x3C */
@@ -119,8 +119,10 @@ static void dispCrown(GObj *gobj, Sub15C *acc)
     CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + n * 64);
     MatrixDrive_ScaleMatrix(1.1111112f, 1.1111112f, 1.1111112f);
     if (w->ornamentDisp != 0) {
-        CopyMatrix(*(char **)((char *)w->ornament0 + 0xC), MatrixDrive_GetMatrix());
-        CopyMatrix(*(char **)((char *)w->ornament1 + 0xC), MatrixDrive_GetMatrix());
+        CopyMatrix(ICO_RAW(char *, w->ornament0, 0xC, (char *)((Sub15C *)w->ornament0)->nodeMtx),
+                   MatrixDrive_GetMatrix());
+        CopyMatrix(ICO_RAW(char *, w->ornament1, 0xC, (char *)((Sub15C *)w->ornament1)->nodeMtx),
+                   MatrixDrive_GetMatrix());
         reg_DispAccessoryWithShadow((Sub15C *)w->ornament1, GOBJ_SUB(gobj));
         reg_DispAccessoryWithShadow((Sub15C *)w->ornament0, GOBJ_SUB(gobj));
     } else {
@@ -1764,11 +1766,11 @@ static inline void setGirlClothSetting(int lv)
 void *InitGirlGeo(GObj *gobj, SObjSimpleSetting *csv)
 {
     GirlWork *w;
-    int p;
+    ICO_WORD p;
     int kind;
 
     w = iosMallocDebug(ios_partition_sugipon, sizeof(GirlWork), __FILE__, 892);
-    p = (int)GOBJ_SUB(gobj);
+    p = (ICO_WORD)GOBJ_SUB(gobj);
     w->hint2Ready = 0;
     w->hint1Ready = 0;
     w->hint2Played = 0;
@@ -1786,24 +1788,24 @@ void *InitGirlGeo(GObj *gobj, SObjSimpleSetting *csv)
     w->cloth1 = 0;
     w->kind = kind;
     /* the work pointer, stored as a word */
-    *(int *)&GOBJ_SUB(gobj)->work = (int)w;
+    *(ICO_WORD *)&GOBJ_SUB(gobj)->work = (ICO_WORD)w;
     switch (kind) {
     case 1:
-        w->cloth1 = (int)InitCloth4D(gobj, &demoClothMeshF10, 0);
-        w->cloth2 = (int)InitCloth4D(gobj, &demoClothMeshF14, 0);
-        w->cloth3 = (int)InitCloth4D(gobj, &demoClothMeshF20, 0);
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF10, 0);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF14, 0);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF20, 0);
         break;
     case 2:
         break;
     default:
-        w->cloth1 = (int)InitCloth4D(gobj, &clothMeshF10, clothHangF10);
-        w->cloth0 = (int)InitCloth4D(gobj, &clothMeshF8, clothHangF8);
-        w->cloth2 = (int)InitCloth4D(gobj, &clothMeshF14, clothHangF10);
-        w->hair = (int)InitCloth4D(gobj, &clothMeshF18, clothHangF18);
-        w->cloth3 = (int)InitCloth4D(gobj, &clothMeshF20, clothHangF20);
-        w->crown = (int)CSVSYSTEM_InitDObj(12, csv);
-        w->ornament0 = (int)CSVSYSTEM_InitDObj(13, csv);
-        w->ornament1 = (int)CSVSYSTEM_InitDObj(14, csv);
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF10, clothHangF10);
+        w->cloth0 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF8, clothHangF8);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF14, clothHangF10);
+        w->hair = (ICO_WORD)InitCloth4D(gobj, &clothMeshF18, clothHangF18);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF20, clothHangF20);
+        w->crown = (ICO_WORD)CSVSYSTEM_InitDObj(12, csv);
+        w->ornament0 = (ICO_WORD)CSVSYSTEM_InitDObj(13, csv);
+        w->ornament1 = (ICO_WORD)CSVSYSTEM_InitDObj(14, csv);
         break;
     }
     ((GirlWork *)GOBJ_SUB(gobj)->work)->cloth0Disp = 1;

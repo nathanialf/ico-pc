@@ -29,6 +29,12 @@
 #include "libgraph.h"
 #include <stdlib.h>
 
+#ifdef ICO_HOST
+
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+
+#endif
+
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0)
    at a frame step of 2 (word 1). db is the GS double buffer (libgraph's
    sceGsDBuff, 0x230 B), stageMgrMsg the stage manager's message (main.h's
@@ -93,7 +99,7 @@ static IOSThread soundThread; /* derived name */
 
 static char soundThreadStack[8192] __attribute__((aligned(16))); /* derived name */
 
-static int schedulerMsgBuff[8]; /* derived name */
+static IosMsgWord schedulerMsgBuff[8]; /* derived name */
 
 /* the six threads Emergency_DestroyAllThread tears down, every thread boot
    starts except idle; first in this object's .rodata, ahead of Main's
@@ -106,6 +112,28 @@ static void scheduler(void);
 /* motionOrientManager.h carries MotOriName and declares no movieFile */
 extern char movieFile[];
 int movie_abort_check(void);
+
+#ifdef ICO_HOST
+
+/* port/platform: the vsync busy-wait (sched.h) and the INTC raise
+   (kernel_host.h) */
+void ico_sched_spin_vsync(void);
+int ico_kernel_raise_intc(int cause);
+void ico_vsync(int field_parity);
+/* port/platform/trace_host.c: one Main tick done (trace, --ticks, pad script) */
+void ico_host_main_tick(void);
+/* port/platform/diag_host.c: boot milestones in the log, and the names of
+   this file's static thread functions */
+void ico_host_milestone(const char *what);
+void ico_host_name_func(void *func, const char *name);
+/* port/game/options.h: developer mode (renderer wave 6, R6a) */
+int ico_opt_developer_mode(void);
+/* port/config/sysconf.c: [video] video_mode, else current */
+int ico_boot_video_mode(int current);
+/* common/src/debug.c; debug.h declares only debug_Menu_off */
+void debug_Menu(void);
+
+#endif
 
 /* the development build's Main also called debug_Menu, debug_SetBar and
    debug_SetBar2 and carried a frame-step block; the retail build compiled
@@ -133,6 +161,17 @@ void Main(void)
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
+#ifdef ICO_HOST
+    /* PC port: a start stage ([dev] start_stage) skips kanbanBoot, whose
+       step 200 applies [video] video_mode (kanbanBoot.c), so systemStatus[0]
+       would stay the PAL default whatever the setting: apply it here the
+       same way. This runs before gsb_InitGSSystem below, so the GS starts in
+       that mode and step 200's gsResetFunc is not needed. Stage 1 runs the
+       boot, which applies it again. */
+    if (n > 0) {
+        systemStatus[0] = ico_boot_video_mode(systemStatus[0]);
+    }
+#endif
     debug_VariableInit();
     InitDelayFree();
     debug_StdPrintfDummy("Main() in\n");
@@ -143,12 +182,18 @@ void Main(void)
     debug_StdPrintfDummy("IosstgMgrLock %d\n", IosStgMgrLock);
     WaitSema(IosStgMgrLock);
     DeleteSema(IosStgMgrLock);
+#ifdef ICO_HOST
+    ico_host_milestone("Main: past IosPadLock and IosStgMgrLock");
+#endif
     stgmgrForceSwitchWithFade(thisIsYourStartStage < 0 ? 1 : thisIsYourStartStage, 255.0f, 0.0f);
     iosThreadCancelWakeup(0);
     systemStatus[5] = 0;
     _InitRandom(1.2345678f);
     gsb_InitGSSystem();
     debug_StdPrintfDummy("main start\n");
+#ifdef ICO_HOST
+    ico_host_milestone("Main: gsb_InitGSSystem done, entering the loop");
+#endif
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
@@ -166,6 +211,9 @@ void Main(void)
             movie_init(&movieFile[mpegPlay * 0x20], 720, systemStatus[0] ? 576 : 480, 36, 12,
                        soundOutputModeGet() == 1, mpegPlayInitColor);
             ret = movie_proc(movie_abort_check);
+#ifdef ICO_HOST
+            ico_gs_signal(ICO_GS_EV_FMV_END, ret == 1);
+#endif
             sceGsSyncV(0);
             soundAllocIopHeap();
             AdpcmStreamHeap();
@@ -184,6 +232,16 @@ void Main(void)
         MakeCollisionDependGObjList();
         MakeCharGObjList();
         ExecKeyInput();
+#ifdef ICO_HOST
+        /* PC port (R6a): developer mode (docs/port/DEVELOPER_MODE.md)
+           restores the development build's debug menu call, here after the
+           pad is read and before ExecIcoMisc's layout code can clear
+           pad[0].flags.  SELECT opens the menu; until then debug_Menu only
+           reads the pad.  Off: not called, as in retail. */
+        if (ico_opt_developer_mode()) {
+            debug_Menu();
+        }
+#endif
         ExecIcoMisc();
         if (graphics_ready == 0) {
             stage_ResetAnimation();
@@ -197,6 +255,9 @@ void Main(void)
         ExecDelayFree();
         gsb_TakeSnap();
         frameReady = 1;
+#ifdef ICO_HOST
+        ico_host_main_tick();
+#endif
         if (systemFault != 0) {
             break;
         }
@@ -232,7 +293,16 @@ static void idle(void)
     iosThreadStart(&mainThread);
     debug_StdPrintfDummy("--- loop continues infinitely ... ---\n");
     iosThreadSetPri(0, 0x20);
+#ifdef ICO_HOST
+    ico_host_milestone("idle: every thread started, idle loop");
+#endif
     while (1) {
+#ifdef ICO_HOST
+        /* The busy loop holds the CPU until the next vsync: lower priorities
+           (the finished processes parked at 0x21 and 0x22) never run, and
+           the host gets control back once per vsync. */
+        ico_sched_spin_vsync();
+#endif
         idleCount++;
         if (idleCount < 10000000) {
             continue;
@@ -248,12 +318,15 @@ static int frameStepCount = 0; /* derived name */
 
 static void scheduler(void)
 {
-    int msg[4];
+    IosMsgWord msg[4];
 
     debug_StdPrintfDummy("scheduler() in\n");
     sceGsSyncV(0);
     iosMsgQueueCreate(&SchedulerMsgQ, schedulerMsgBuff, 8);
     iosMsgSetEvent(2, &SchedulerMsgQ, 2);
+#ifdef ICO_HOST
+    ico_host_milestone("scheduler: vsync event set");
+#endif
     while (1) {
         iosMsgRecv(&SchedulerMsgQ, msg, 1);
         if (msg[0] == 2) {
@@ -310,13 +383,43 @@ static void scheduler(void)
     debug_StdPrintfDummy("scheduler() out\n");
 }
 
+#ifdef ICO_HOST
+
+/* The host's vsync (port/platform/host_loop.c): the vblank-start interrupt.
+   The GS's current field goes into GS_CSR.FIELD (bit 13), which the vblank
+   handler (fumi/ios/message.c, signal_handler) reads into odd_even. The
+   handler wakes the event thread iosMsgSetEvent made, whose message wakes
+   scheduler() above, as on the PS2. */
+void ico_vsync(int field_parity)
+{
+    if (field_parity) {
+        *GS_CSR |= 1ull << 13;
+    } else {
+        *GS_CSR &= ~(1ull << 13);
+    }
+    ico_kernel_raise_intc(2);
+}
+
+#endif
+
 static void boot(void)
 {
     debug_StdPrintfDummy("boot()\n");
     debug_StdPrintfDummy("file init\n");
+#ifdef ICO_HOST
+    ico_host_name_func((void *)idle, "idle");
+    ico_host_name_func((void *)scheduler, "scheduler");
+    ico_host_milestone("boot: file_Init");
+#endif
     file_Init();
     debug_StdPrintfDummy("iosInit\n");
+#ifdef ICO_HOST
+    ico_host_milestone("boot: iosInitialize");
+#endif
     iosInitialize();
+#ifdef ICO_HOST
+    ico_host_milestone("boot: iosInitialize done");
+#endif
     gflagInit();
     systemStatus[2] = 1;
     stage_no = 1;
@@ -326,6 +429,9 @@ static void boot(void)
     iosThreadCreate(&schedulerThread, 1, scheduler, 0, schedulerThreadStack,
                     sizeof(schedulerThreadStack), 0xF);
     iosThreadStart(&schedulerThread);
+#ifdef ICO_HOST
+    ico_host_milestone("boot: idle and scheduler started, boot thread sleeps");
+#endif
     iosThreadSleep();
 }
 

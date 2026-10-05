@@ -283,7 +283,7 @@ static void actSt04lBallTurnCommon(GObj *volatile self)
     h = actCreateSubThread(actSt04lBallTurnCommonSub, 21);
 
     demoEnd = 0;
-    ball1_4l = (SqEntry *)0xFFFFFFFF;
+    ball1_4l = (SqEntry *)ICO_INVALID_PTR;
 
     while (demoEnd == 0 && ((pad[0].flags & 0x800) == 0 || scpAdpcmPlayRequestNum() != 0)) {
         _ACTWait(1);
@@ -298,7 +298,7 @@ static void actSt04lBallTurnCommon(GObj *volatile self)
             _ACTWait(1);
         }
 
-        if (ball1_4l != (SqEntry *)0xFFFFFFFF) {
+        if (ball1_4l != (SqEntry *)ICO_INVALID_PTR) {
             scpAdpcmFadeCloseFunc(&ball1_4l, 512);
         }
 

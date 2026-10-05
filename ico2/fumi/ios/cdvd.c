@@ -140,7 +140,17 @@ static CdvdBgReq bgReqTable[7]; /* derived name */
 
 static unsigned char skipBuf[1024]; /* derived name */
 
+#ifdef ICO_HOST
+
+/* a 64-bit host's IOSThread is wider than the EE's 120 bytes */
+static char stThread[sizeof(IOSThread) > 120 ? sizeof(IOSThread) : 120]
+    __attribute__((aligned(16))); /* derived name */
+
+#else
+
 static char stThread[120]; /* derived name */
+
+#endif
 
 static char stStack[16384]; /* derived name */
 
@@ -152,17 +162,17 @@ static IosMsgQueue stReqQ; /* derived name */
    iosCdvdBackGroundMgr is running, stReqRing and stAckRing the rings of the
    stream manager's request and acknowledge queues.  stReqRing's queue is
    created with one slot; no code reads its second word. */
-static int cdvdMsgRing[2]; /* derived name */
+static IosMsgWord cdvdMsgRing[2]; /* derived name */
 
-static int cdvdLoadEndRing[2]; /* derived name */
+static IosMsgWord cdvdLoadEndRing[2]; /* derived name */
 
 static int stPreLoadCnt; /* derived name */
 
-static int bgRunning; /* derived name */
+static ICO_WORD bgRunning; /* derived name: the request iosCdvdBackGroundMgr runs, a pointer */
 
-static int stReqRing[2]; /* derived name */
+static IosMsgWord stReqRing[2]; /* derived name */
 
-static int stAckRing[1]; /* derived name */
+static IosMsgWord stAckRing[1]; /* derived name */
 
 /* The stream's TTY traces of a drive recovery, built only when DEBUG is
    defined; the retail build leaves each helper without a body.  The traces
@@ -210,7 +220,7 @@ static void iosCdvdStManager(void)
         if (req->state != 1) {
             mode = 1;
         }
-        if (iosMsgRecv(&stReqQ, (int *)&req, mode) == -1) {
+        if (iosMsgRecv(&stReqQ, (IosMsgWord *)&req, mode) == -1) {
             if (req->state != 1) {
                 sprintf(buf, "stream mode error %d\n", req->state);
                 debug_assertMessage(__FILE__, 518, buf);
@@ -401,7 +411,7 @@ static void iosCdvdMgrStStart(IosCdvdHandle *self)
 static void iosCdvdMgrStStop(IosCdvdHandle *self)
 {
     char buf[128];
-    int msg;
+    IosMsgWord msg;
     int pri;
 
     pri = iosThreadGetPri(0);
@@ -624,7 +634,7 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
 static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *self)
 {
     char msgbuf[128];
-    int msg;
+    IosMsgWord msg;
     CdStReq *req = &stReq;
     int pri = iosThreadGetPri(0);
     int total = 0;
@@ -653,7 +663,12 @@ static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *se
         }
         if (size != 0) {
             bytes = size << 11;
+#ifdef ICO_HOST
+            /* pointer-wide: the ring may sit above 4 GB on a 64-bit host */
+            memcpy((char *)buf, (char *)req->buf + (req->readPos << 11), bytes);
+#else
             memcpy((char *)buf, (char *)((req->readPos << 11) + (int)req->buf), bytes);
+#endif
             if (req->readPos + size >= req->size) {
                 req->readPos = 0;
             } else {
@@ -843,7 +858,7 @@ void iosCdvdManager(void)
     SignalSema(IosCdLock);
 
     while (1) {
-        while (iosMsgRecv(&CdvdMsgQ, &msg, 0) == -1) {
+        while (iosMsgRecv(&CdvdMsgQ, (IosMsgWord *)&msg, 0) == -1) {
             iosCdvdBackGroundMgrRunning = 1;
             iosCdvdBackGroundMgr();
             iosCdvdBackGroundMgrRunning = 0;
@@ -879,14 +894,16 @@ void iosCdvdManager(void)
     }
 }
 
-void iosCdvdDiskReady(int req)
+/* req is the request record's address: a word, pointer-wide on the host
+   (no caller in the game) */
+void iosCdvdDiskReady(ICO_WORD req)
 {
     union IosCdvdCtl *p = (union IosCdvdCtl *)req;
     p->i[1] = 0;
     iosMsgSend(&CdvdMsgQ, req, 0);
 }
 
-void iosCdvdLoad(int req, int inflate)
+void iosCdvdLoad(ICO_WORD req, int inflate)
 {
     union IosCdvdCtl *p = (union IosCdvdCtl *)req;
     p->i[1] = 1;
@@ -1175,21 +1192,21 @@ int iosCdvdGetFileLsn(char *name, int *size)
 
 int iosCdvdSync(int msg)
 {
-    int local = msg;
+    IosMsgWord local = msg;
     iosMsgRecv(&CdvdMsgQ_LoadEnd, &local, 1);
     return 1;
 }
 
 void iosCdvdLoadPackFile(int inflate, char *name, int seg)
 {
-    int buf[4];
+    IosMsgWord buf[4];
     iosCdvd.ctl.ll = (iosCdvd.ctl.ll & ~1LL) | (inflate & 1);
     strcpy(iosCdvd.name, name);
     iosCdvd.seg = seg;
     iosCdvd.handler = 0;
     iosCdvd.handlerArg = 0;
     iosCdvdPackLoad(&iosCdvd);
-    buf[0] = (int)&iosCdvd;
+    buf[0] = (IosMsgWord)&iosCdvd;
     iosMsgRecv(&CdvdMsgQ_LoadEnd, buf, 1);
 }
 
@@ -1219,7 +1236,7 @@ int iosCdvdBackGroundMgrDeleteRequestGet(void)
             count += p->flags.del;
         }
         p++;
-    } while ((int)p < (int)limit);
+    } while ((ICO_WORD)p < (ICO_WORD)limit); /* (int) on the EE: pointer-wide on the host */
     return count;
 }
 
@@ -1235,7 +1252,7 @@ int iosCdvdBackGroundMgrEntryNum(void)
         if (b != 0) {
             count = new_count;
         }
-    } while ((int)p < (int)limit);
+    } while ((ICO_WORD)p < (ICO_WORD)limit); /* (int) on the EE: pointer-wide on the host */
     return count;
 }
 
@@ -1244,7 +1261,8 @@ void iosCdvdBackGroundMgrSeek(CdvdBgReq *self, int val)
     self->pos = val;
 }
 
-int iosCdvdBackGroundMgrGetRunning(void)
+/* bgRunning is the running request's address (no caller in the game) */
+ICO_WORD iosCdvdBackGroundMgrGetRunning(void)
 {
     return bgRunning;
 }
@@ -1306,7 +1324,7 @@ static void iosCdvdBackGroundMgr(void)
     for (i = 6; i >= 0; i--, bg++) {
         if (bg->name[0] == 0 || bg->flags.busy)
             continue;
-        bgRunning = (int)bg;
+        bgRunning = (ICO_WORD)bg;
         if (bg->flags.del == 0) {
             if ((func = bg->readFunc) != 0) {
                 if (func(bg, bg->readArg) > 0)

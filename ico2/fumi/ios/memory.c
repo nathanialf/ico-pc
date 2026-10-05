@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "debug.h"
 #include "debug_exception.h"
 #include "memory.h"
@@ -7,6 +8,86 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef ICO_HEAP_STATS
+
+/* port/platform/arena.c: per-partition bytes in use and high-water mark */
+void ico_heap_stats_alloc(const void *part, const char *name, unsigned int bytes);
+void ico_heap_stats_free(const void *part, unsigned int bytes);
+
+#endif
+#ifdef ICO_HEAP_ASAN
+/* A diagnostic build (docs/port/BOOT_DIAG.md, "ICO_HEAP_ASAN"): with
+ * AddressSanitizer, every block header, the slack after each block's
+ * requested size and every free area are poisoned while the game runs, so
+ * the first write past a block's end reports the writer. The allocator works
+ * as before (same partitions, offsets and bookkeeping); its public functions
+ * are the wrappers at the end of this file, which unpoison the heap around
+ * the original code and poison it again from the node lists afterwards. */
+#ifndef __SANITIZE_ADDRESS__
+#error "ICO_HEAP_ASAN needs -fsanitize=address"
+#endif
+#define iosMallocInitPartition heapAsan_iosMallocInitPartition
+#define iosMallocSetPartition heapAsan_iosMallocSetPartition
+#define iosMallocResetPartition heapAsan_iosMallocResetPartition
+#define iosMallocClearPartition heapAsan_iosMallocClearPartition
+#define iosMallocDebug heapAsan_iosMallocDebug
+#define iosMallocDebugNoAssert heapAsan_iosMallocDebugNoAssert
+#define iosMallocAlignDebug heapAsan_iosMallocAlignDebug
+#define _iosFreeWithFill heapAsan__iosFreeWithFill
+#define iosFree heapAsan_iosFree
+#define iosMallocCheckLeak heapAsan_iosMallocCheckLeak
+#define iosMallocCheckLeak2 heapAsan_iosMallocCheckLeak2
+#define iosReallocDebug heapAsan_iosReallocDebug
+
+IosMemPart *iosMallocInitPartition(IosMemAddr start, IosMemAddr end);
+IosMemPart *iosMallocSetPartition(IosMemPart *part, int size, int align);
+IosMemPart *iosMallocResetPartition(IosMemPart *part);
+void iosMallocClearPartition(IosMemPart *part);
+void *iosMallocDebug(IosMemPart *part, int size, const char *file, int line);
+void *iosMallocDebugNoAssert(IosMemPart *part, int size, const char *file, int line);
+void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *file, int line);
+void _iosFreeWithFill(int *ptr, char *file, int line);
+void *iosFree(void *ptr);
+void iosMallocCheckLeak(IosMemPart *part);
+void iosMallocCheckLeak2(__INTPTR_TYPE__ part, int offset);
+void *iosReallocDebug(void *ptr, unsigned int size);
+/* records the bytes a block's caller asked for (its node, its size) */
+static void heapAsanReq(void *node, unsigned int bytes);
+
+#endif
+/* The allocator's record sizes, in bytes and in quadwords. The EE build
+ * spells them as the literals it was written with; the host derives them
+ * from the records, which gives pointer-wide headers on the host
+ * (docs/port/LAYOUT.md) and the EE's values where pointers are 4 bytes
+ * (checked below):
+ *   NODE_SIZE   the block header in front of every allocation (IosMemNode)
+ *   PART_SIZE   the partition record at the head of a partition, rounded to
+ *               a quadword (IosMemPart)
+ *   PART_NEED   what carving a partition costs besides its size
+ *   PART_MIN    the smallest partition iosMallocInitPartition accepts
+ *   ADDR_MASK   rounds an address down to a quadword */
+#ifdef ICO_HOST
+#define NODE_SIZE ((int)sizeof(IosMemNode))
+#define NODE_QW (NODE_SIZE >> 4)
+#define PART_SIZE ((int)((sizeof(IosMemPart) + 15) & ~(__SIZE_TYPE__)15))
+#define PART_NEED (PART_SIZE + NODE_SIZE)
+#define PART_MIN (PART_SIZE + NODE_SIZE + 16)
+#define PART_AVAIL_QW (NODE_QW + 1)
+#define ADDR_MASK (~(IosMemAddr)0xF)
+
+_Static_assert(sizeof(void *) != 4 || (NODE_SIZE == 64 && PART_SIZE == 80),
+               "the EE's allocator records on 32-bit hosts");
+
+#else
+#define NODE_SIZE 64
+#define NODE_QW 4
+#define PART_SIZE 80
+#define PART_NEED 144
+#define PART_MIN 160
+#define PART_AVAIL_QW 5
+#define ADDR_MASK 0xFFFFFFF0
+#endif
+
 typedef struct IosMemTag { /* field names derived */
     char c[16];
 } IosMemTag; /* derived name */
@@ -15,16 +96,16 @@ typedef struct IosMemTag { /* field names derived */
 /* */
 static char nodeName[32]; /* derived name */
 
-inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
+inline IosMemPart *iosMallocInitPartition(IosMemAddr start, IosMemAddr end)
 {
     IosMemPart *part;
     IosMemNode *node;
-    unsigned int top;
+    IosMemAddr top;
 
-    part = (IosMemPart *)((start + 0xF) & 0xFFFFFFF0);
-    top = (end + 1) & 0xFFFFFFF0;
+    part = (IosMemPart *)((start + 0xF) & ADDR_MASK);
+    top = (end + 1) & ADDR_MASK;
 
-    if (top - (unsigned int)part < 160) {
+    if (top - (IosMemAddr)part < PART_MIN) {
         debug_StdPrintfDummy("mem:partition size too small\n");
         return 0;
     }
@@ -35,13 +116,13 @@ inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
     part->next = 0;
     part->child = 0;
 
-    part->start = (char *)(node = (IosMemNode *)((char *)part + 80));
+    part->start = (char *)(node = (IosMemNode *)((char *)part + PART_SIZE));
     part->end = (char *)top;
-    part->total = (top - (unsigned int)node) >> 4;
+    part->total = (top - (IosMemAddr)node) >> 4;
 
     part->nused = 0;
     part->top = (char *)top;
-    part->free = (top - (unsigned int)node) >> 4;
+    part->free = (top - (IosMemAddr)node) >> 4;
 
     part->head = node;
 
@@ -50,7 +131,7 @@ inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
     node->next = 0;
     node->free_prev = 0;
     node->free_next = 0;
-    node->size = part->free - 4;
+    node->size = part->free - NODE_QW;
 
     debug_StdPrintfDummy("mem:init partition 0x%08x - 0x%08x\n", part->start, part->end - 1);
     return part;
@@ -70,15 +151,15 @@ IosMemPart *iosMallocSetPartition(IosMemPart *part, int size, int align)
         debug_StdPrintfDummy("mem:illegal partition pointer\n");
         return 0;
     }
-    avail = part->free - 5;
-    need = (((size + 0xF) & 0xFFFFFFF0) + 144) >> 4;
+    avail = part->free - PART_AVAIL_QW;
+    need = (((size + 0xF) & 0xFFFFFFF0) + PART_NEED) >> 4;
     if (avail < need) {
         debug_StdPrintfDummy("mem: memory lack %dqw > parent:%dqw\n", need, avail);
         return 0;
     }
     base = (IosMemPart *)(part->top - (need << 4));
     debug_StdPrintfDummy("mem:set partition 0x%08x\n", base);
-    if (iosMallocInitPartition((unsigned int)base, (unsigned int)part->top - 1) == 0) {
+    if (iosMallocInitPartition((IosMemAddr)base, (IosMemAddr)part->top - 1) == 0) {
         debug_StdPrintfDummy("mem:fail init partition\n");
         return 0;
     }
@@ -119,7 +200,7 @@ IosMemPart *iosMallocResetPartition(IosMemPart *part)
     parent = part->parent;
     next = part->next;
     child = part->child;
-    iosMallocInitPartition((unsigned int)part, (unsigned int)part->end);
+    iosMallocInitPartition((IosMemAddr)part, (IosMemAddr)part->end);
     part->parent = parent;
     part->next = next;
     part->child = child;
@@ -227,7 +308,7 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
         mallocBusy = 0;
         return 0;
     }
-    need = (((size + 0xF) & 0xFFFFFFF0) + 64) >> 4;
+    need = (((size + 0xF) & 0xFFFFFFF0) + NODE_SIZE) >> 4;
     for (node = part->head; node != 0; node = node->free_next) {
         if (strcmp(node->tag, "<FREE AREA>____") != 0) {
             debug_StdPrintfDummy("mem:illegal free area pointer\n");
@@ -300,12 +381,18 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
             best->part = part;
             best->line = line;
             best->next = newnode;
-            best->size = need - 4;
+            best->size = need - NODE_QW;
             best->name[15] = 0;
             debug_StdPrintfDummy("cur: %8p %s\n", best, best->tag);
             debug_StdPrintfDummy("next:%8p %s\n", best->next, best->next->tag);
+#ifdef ICO_HEAP_STATS
+            ico_heap_stats_alloc(part, part->name, (unsigned int)need << 4);
+#endif
+#ifdef ICO_HEAP_ASAN
+            heapAsanReq(best, (unsigned int)size);
+#endif
             mallocBusy = 0;
-            return (char *)best + 64;
+            return (char *)best + NODE_SIZE;
         }
 #ifdef DEBUG
         tag = *(IosMemTag *)node;
@@ -329,7 +416,7 @@ inline void *iosMallocDebug(IosMemPart *part, int size, const char *file, int li
         sprintf(buf, "MALLOC: NO EMEMORY FOR PARTITION \"%s\"\nSIZE %d BYTES (%1.1fM)\n",
                 part->name, size, (float)size / 1024.0f / 1024.0f);
         debug_assertMessage(file, line, buf);
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         debug_assert(__FILE__, 716);
         __assert(__FILE__, 716, "0");
     }
@@ -343,7 +430,7 @@ inline void *iosMallocDebugNoAssert(IosMemPart *part, int size, const char *file
 
 void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *file, int line)
 {
-    unsigned int ptr;
+    IosMemAddr ptr;
     int ofs;
 
     if (align <= 16) {
@@ -351,7 +438,7 @@ void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *fil
     }
     align = (align + 15) / 16 * 16;
     size += align - 16;
-    ptr = (unsigned int)iosMallocDebug(part, size, file, line);
+    ptr = (IosMemAddr)iosMallocDebug(part, size, file, line);
     if (ptr % align != 0) {
         ofs = align - ptr % align;
         ptr = ptr + ofs;
@@ -362,17 +449,22 @@ void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *fil
 
 void _iosFreeWithFill(int *ptr, char *file, int line)
 {
+#ifdef ICO_HOST
+    /* the block's header's next pointer: where the block ends */
+    int *end = (int *)((IosMemNode *)((char *)ptr - NODE_SIZE))->next;
+#else
     int *end = *(int **)((char *)ptr - 0x1C);
+#endif
     FlushCache(0);
     iosFree(ptr);
     debug_StdPrintfDummy("IOSFILLFREE %s(%d) %p - %p\n", file, line, ptr, end);
     {
-        register int g = (unsigned int)ptr < (unsigned int)end;
+        register int g = (IosMemAddr)ptr < (IosMemAddr)end;
         if (g) {
             do {
                 *(unsigned int *)ptr = 0xFFFFFFFFu;
                 ptr++;
-            } while ((unsigned int)ptr < (unsigned int)end);
+            } while ((IosMemAddr)ptr < (IosMemAddr)end);
         }
     }
     FlushCache(0);
@@ -390,7 +482,7 @@ void *iosFree(void *ptr)
     debug_StdPrintfDummy("mem:free ");
     if (ptr == 0) {
         debug_StdPrintfDummy("null memory pointer\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         debug_assertMessage(__FILE__, 820, "IOSFREE(): NULL MEMORY POINTER\n");
         __assert(__FILE__, 820, "e");
         return 0;
@@ -402,7 +494,7 @@ void *iosFree(void *ptr)
         *((char *)ptr - 16) = 0;
         next = (IosMemNode *)((char *)prev - (n - 16));
     }
-    node = (IosMemNode *)((char *)next - 64);
+    node = (IosMemNode *)((char *)next - NODE_SIZE);
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
@@ -410,6 +502,9 @@ void *iosFree(void *ptr)
         __assert(__FILE__, 836, "e");
         return 0;
     }
+#ifdef ICO_HEAP_STATS
+    ico_heap_stats_free(node->part, (unsigned int)(node->size + NODE_QW) << 4);
+#endif
     next = node->next;
     prev = node->prev;
     if (prev != 0) {
@@ -442,7 +537,7 @@ void *iosFree(void *ptr)
                         }
                     }
                     {
-                        int t = prev->size + 4;
+                        int t = prev->size + NODE_QW;
                         t += next->size;
                         prev->next = next->next;
                         prev->size = t;
@@ -464,7 +559,7 @@ void *iosFree(void *ptr)
             }
             {
                 int t = prev->size;
-                t += 4;
+                t += NODE_QW;
                 t += node->size;
                 prev->size = t;
             }
@@ -500,7 +595,7 @@ void *iosFree(void *ptr)
     node->free_next = next->free_next;
     {
         int t = node->size;
-        t += 4;
+        t += NODE_QW;
         t += next->size;
         node->size = t;
     }
@@ -582,9 +677,17 @@ void iosMallocCheckLeak(IosMemPart *part)
     }
 }
 
+#ifdef ICO_HOST
+
+/* the partition's start pointer and a node's next pointer, by offset */
+void iosMallocCheckLeak2(__INTPTR_TYPE__ part, int offset)
+{
+    char *node = *(char **)(part + offset + __builtin_offsetof(IosMemPart, start));
+#else
 void iosMallocCheckLeak2(int part, int offset)
 {
     char *node = *(char **)(part + offset + 0x38);
+#endif
     int i;
 
     debug_StdPrintfDummy("<<< check leak2 >>> %p\n", part);
@@ -606,7 +709,11 @@ void iosMallocCheckLeak2(int part, int offset)
             return;
         }
         for (i = 0; i < 12; i++) {}
+#ifdef ICO_HOST
+        node = *(char *volatile *)(node + __builtin_offsetof(IosMemNode, next));
+#else
         node = *(char *volatile *)(node + 0x24);
+#endif
     } while (node != 0);
 }
 
@@ -622,6 +729,44 @@ typedef struct IosMemNodeRec {    /* field names derived */
     int size;                     /* 0x34 */
     int line;                     /* 0x38 */
 } IosMemNodeRec;                  /* derived name */
+
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the allocator stamps a 16-character tag over a partition's or a
+   node's tag and moves a node's record whole; the host layouts must agree
+   (tools/template_audit.py) */
+_Static_assert(sizeof(IosMemTag) == sizeof(((IosMemPart *)0)->tag) &&
+                   __builtin_offsetof(IosMemPart, tag) == 0,
+               "IosMemTag is not IosMemPart's tag");
+
+_Static_assert(sizeof(IosMemTag) == sizeof(((IosMemNode *)0)->tag) &&
+                   __builtin_offsetof(IosMemNode, tag) == 0,
+               "IosMemTag is not IosMemNode's tag");
+
+ICO_LAYOUT_AT(IosMemNodeRec, tag, IosMemNode, tag);
+
+ICO_LAYOUT_AT(IosMemNodeRec, name, IosMemNode, name);
+
+ICO_LAYOUT_AT(IosMemNodeRec, prev, IosMemNode, prev);
+
+ICO_LAYOUT_AT(IosMemNodeRec, next, IosMemNode, next);
+
+ICO_LAYOUT_AT(IosMemNodeRec, free_prev, IosMemNode, free_prev);
+
+ICO_LAYOUT_AT(IosMemNodeRec, free_next, IosMemNode, free_next);
+
+ICO_LAYOUT_AT(IosMemNodeRec, part, IosMemNode, part);
+
+ICO_LAYOUT_AT(IosMemNodeRec, size, IosMemNode, size);
+
+ICO_LAYOUT_AT(IosMemNodeRec, line, IosMemNode, line);
+
+_Static_assert(sizeof(IosMemNodeRec) <= sizeof(IosMemNode),
+               "IosMemNodeRec is wider than IosMemNode");
+
+#endif
 
 void *iosReallocDebug(void *ptr, unsigned int size)
 {
@@ -646,7 +791,7 @@ void *iosReallocDebug(void *ptr, unsigned int size)
         next = (IosMemNode *)((char *)prev - (n - 16));
         *((char *)ptr - 16) = 0;
     }
-    node = (IosMemNode *)((char *)next - 64);
+    node = (IosMemNode *)((char *)next - NODE_SIZE);
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
@@ -657,19 +802,25 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     nd = node->next;
     if (strcmp(nd->tag, "<FREE AREA>____") != 0) {
         debug_StdPrintfDummy("mem:realloc; not support yet\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         return 0;
     }
     n = (size + 0xF) >> 4;
     if (node->size - 0x40 < n) {
         debug_StdPrintfDummy("mem:realloc; not enough memory\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         return 0;
     }
     d = node->size - n;
     p = (IosMemNode *)((char *)ptr + (n << 4));
     *(IosMemNodeRec *)p = *(IosMemNodeRec *)nd;
     node->size = node->size - d;
+#ifdef ICO_HEAP_STATS
+    ico_heap_stats_free(node->part, (unsigned int)d << 4);
+#endif
+#ifdef ICO_HEAP_ASAN
+    heapAsanReq(node, (unsigned int)((char *)ptr - ((char *)node + NODE_SIZE)) + size);
+#endif
     p->size = p->size + d;
     *(IosMemTag *)nd = *(IosMemTag *)" free memory   ";
     node->next = p;
@@ -686,3 +837,231 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     }
     return ptr;
 }
+
+#ifdef ICO_HEAP_ASAN
+
+#include <sanitizer/asan_interface.h>
+
+#undef iosMallocInitPartition
+#undef iosMallocSetPartition
+#undef iosMallocResetPartition
+#undef iosMallocClearPartition
+#undef iosMallocDebug
+#undef iosMallocDebugNoAssert
+#undef iosMallocAlignDebug
+#undef _iosFreeWithFill
+#undef iosFree
+#undef iosMallocCheckLeak
+#undef iosMallocCheckLeak2
+#undef iosReallocDebug
+/* the root partitions (ranges not inside another), which hold all others */
+#define HEAP_ASAN_ROOTS 8
+
+static IosMemPart *heapAsanRoot[HEAP_ASAN_ROOTS];
+
+static char *heapAsanRootEnd[HEAP_ASAN_ROOTS];
+
+static int heapAsanRoots;
+
+static int heapAsanDepth;
+
+/* ICO_HEAP_ASAN_FREE=1 in the environment also poisons free areas' bodies;
+   off by default, since the EE code writes into free memory on purpose in
+   places (seki/src/Packet.c's line list end mark, BOOT_DIAG.md) */
+static int heapAsanFree = -1;
+
+/* each block's requested bytes + 1, by (node - root) / 16; 0 = unknown */
+static unsigned int *heapAsanReqTab[HEAP_ASAN_ROOTS];
+
+static int heapAsanRootOf(const void *p)
+{
+    int i;
+    for (i = 0; i < heapAsanRoots; i++) {
+        if ((const char *)p >= (const char *)heapAsanRoot[i] &&
+            (const char *)p < heapAsanRootEnd[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void heapAsanReq(void *node, unsigned int bytes)
+{
+    int r = heapAsanRootOf(node);
+    if (r >= 0) {
+        heapAsanReqTab[r][((char *)node - (char *)heapAsanRoot[r]) >> 4] = bytes + 1;
+    }
+}
+
+static void heapAsanOpen(void)
+{
+    int i;
+    if (heapAsanDepth++ != 0) {
+        return;
+    }
+    if (heapAsanFree < 0) {
+        heapAsanFree = getenv("ICO_HEAP_ASAN_FREE") != 0 && atoi(getenv("ICO_HEAP_ASAN_FREE")) != 0;
+    }
+    for (i = 0; i < heapAsanRoots; i++) {
+        ASAN_UNPOISON_MEMORY_REGION(heapAsanRoot[i],
+                                    (size_t)(heapAsanRootEnd[i] - (char *)heapAsanRoot[i]));
+    }
+}
+
+static void heapAsanPoisonPart(IosMemPart *part, int r)
+{
+    IosMemNode *node;
+    IosMemNode *next;
+    IosMemPart *c;
+    char *body;
+    int alloc;
+    unsigned int len;
+    unsigned int req;
+
+    if (strcmp(part->tag, "<PARTITION>____") != 0) {
+        return;
+    }
+    for (node = (IosMemNode *)part->start; node != 0; node = next) {
+        if ((char *)node < (char *)heapAsanRoot[r] || (char *)node >= heapAsanRootEnd[r]) {
+            break;
+        }
+        /* everything read from the header before it is poisoned */
+        next = node->next;
+        body = (char *)node + NODE_SIZE;
+        len = (unsigned int)node->size << 4;
+        alloc = strcmp(node->tag, "<ALLOC>________") == 0;
+        ASAN_POISON_MEMORY_REGION(node, NODE_SIZE);
+        if (alloc) {
+            req = heapAsanReqTab[r][((char *)node - (char *)heapAsanRoot[r]) >> 4];
+            if (req != 0 && req - 1 < len) {
+                ASAN_POISON_MEMORY_REGION(body + (req - 1), len - (req - 1));
+            }
+        } else if (heapAsanFree && body + len <= heapAsanRootEnd[r]) {
+            ASAN_POISON_MEMORY_REGION(body, len);
+        }
+    }
+    for (c = part->child; c != 0; c = c->next) {
+        heapAsanPoisonPart(c, r);
+    }
+}
+
+static void heapAsanClose(void)
+{
+    int i;
+    if (--heapAsanDepth != 0) {
+        return;
+    }
+    for (i = 0; i < heapAsanRoots; i++) {
+        heapAsanPoisonPart(heapAsanRoot[i], i);
+    }
+}
+
+IosMemPart *iosMallocInitPartition(IosMemAddr start, IosMemAddr end)
+{
+    IosMemPart *part;
+    int r;
+
+    heapAsanOpen();
+    part = heapAsan_iosMallocInitPartition(start, end);
+    if (part != 0 && heapAsanRootOf(part) < 0 && heapAsanRoots < HEAP_ASAN_ROOTS) {
+        r = heapAsanRoots++;
+        heapAsanRoot[r] = part;
+        heapAsanRootEnd[r] = part->end;
+        heapAsanReqTab[r] = calloc((size_t)(part->end - (char *)part) >> 4, sizeof(unsigned int));
+    }
+    heapAsanClose();
+    return part;
+}
+
+IosMemPart *iosMallocSetPartition(IosMemPart *part, int size, int align)
+{
+    IosMemPart *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosMallocSetPartition(part, size, align);
+    heapAsanClose();
+    return ret;
+}
+
+IosMemPart *iosMallocResetPartition(IosMemPart *part)
+{
+    IosMemPart *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosMallocResetPartition(part);
+    heapAsanClose();
+    return ret;
+}
+
+void iosMallocClearPartition(IosMemPart *part)
+{
+    heapAsanOpen();
+    heapAsan_iosMallocClearPartition(part);
+    heapAsanClose();
+}
+
+void *iosMallocDebug(IosMemPart *part, int size, const char *file, int line)
+{
+    void *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosMallocDebug(part, size, file, line);
+    heapAsanClose();
+    return ret;
+}
+
+void *iosMallocDebugNoAssert(IosMemPart *part, int size, const char *file, int line)
+{
+    void *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosMallocDebugNoAssert(part, size, file, line);
+    heapAsanClose();
+    return ret;
+}
+
+void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *file, int line)
+{
+    void *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosMallocAlignDebug(part, size, align, file, line);
+    heapAsanClose();
+    return ret;
+}
+
+void _iosFreeWithFill(int *ptr, char *file, int line)
+{
+    heapAsanOpen();
+    heapAsan__iosFreeWithFill(ptr, file, line);
+    heapAsanClose();
+}
+
+void *iosFree(void *ptr)
+{
+    void *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosFree(ptr);
+    heapAsanClose();
+    return ret;
+}
+
+void iosMallocCheckLeak(IosMemPart *part)
+{
+    heapAsanOpen();
+    heapAsan_iosMallocCheckLeak(part);
+    heapAsanClose();
+}
+
+void iosMallocCheckLeak2(__INTPTR_TYPE__ part, int offset)
+{
+    heapAsanOpen();
+    heapAsan_iosMallocCheckLeak2(part, offset);
+    heapAsanClose();
+}
+
+void *iosReallocDebug(void *ptr, unsigned int size)
+{
+    void *ret;
+    heapAsanOpen();
+    ret = heapAsan_iosReallocDebug(ptr, size);
+    heapAsanClose();
+    return ret;
+}
+
+#endif

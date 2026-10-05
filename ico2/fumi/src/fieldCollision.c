@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "typedef.h"
 #include "fieldCollision.h"
 #include "gobj.h"
@@ -18,6 +19,20 @@
 #include "GifPacket.h"
 #include <assert.h>
 
+/* The collision file's head (fieldCollision.h's FcColl).  The EE reads its
+   relocated words through this typed view; the host keeps them as EE
+   address words (eeword.h) and reads them through the FUZIO_ accessors. */
+#ifdef ICO_HOST
+
+typedef FcColl FuzioCtx; /* derived name */
+
+#define FUZIO_WALLS(c) ICO_EEPTR(FcWallEnt *, (c)->wcl)
+#define FUZIO_FLOORS(c) ICO_EEPTR(FcFloorEnt *, (c)->fcl)
+#define FUZIO_WBLK(c, i) ICO_EEPTR(short *, ICO_EEPTR(int *, (c)->wblk)[i])
+#define FUZIO_FBLK(c, i) ICO_EEPTR(short *, ICO_EEPTR(int *, (c)->fblk)[i])
+#define FUZIO_OFS(c) ICO_EEPTR(float *, (c)->ofs)
+#else
+
 typedef struct { /* field names derived */
     char pad0[16];
     FcWallEnt *walls; /* 0x10 */
@@ -27,12 +42,31 @@ typedef struct { /* field names derived */
     float *ofs;       /* 0x20, the origin the blocks are counted from */
 } FuzioCtx;           /* derived name */
 
+#define FUZIO_WALLS(c) ((c)->walls)
+#define FUZIO_FLOORS(c) ((c)->fcl)
+#define FUZIO_WBLK(c, i) ((c)->wblk[i])
+#define FUZIO_FBLK(c, i) ((c)->fblk[i])
+#define FUZIO_OFS(c) ((c)->ofs)
+#endif
+
 /* One line colour of the collision display: red, green, blue, alpha. */
 typedef struct { /* field names derived */
     int rgba[4];
 } FcColor; /* derived name */
 
 typedef int (*FcFunc)(void *work, int mode);
+
+/* The EE's div.s gives +-Fmax for a zero (or denormal) divisor, 0/0
+   included, and cvt.w.s saturates; plain C on the host gives Inf/NaN and
+   0x80000000 (docs/port/MATH.md, DIVERGENCES.md F5). The EE build keeps the
+   plain operators. */
+#ifdef ICO_HOST
+#define FC_DIV(a, b) ps2_div((a), (b)) /* derived name */
+#define FC_FTOI(x) ps2_ftoi(x)         /* derived name */
+#else
+#define FC_DIV(a, b) ((a) / (b))
+#define FC_FTOI(x) ((int)(x))
+#endif
 
 /* fieldCollision.o's .sbss and .bss.  .sbss: the number of objects in the
    collision list, the nine collision statistics DispCollisionPC prints (a
@@ -145,7 +179,8 @@ void GetReflectionElement(ClipWork *work, float arg0, float arg1)
     {
         float *p20 = L20;
         z = GetPointDistance(work->pt[2], work->pt[1]);
-        sceVu0ScaleVector(p20, work->reflect.dir, z / GetPointDistance(work->pt[0], work->pt[1]));
+        sceVu0ScaleVector(p20, work->reflect.dir,
+                          FC_DIV(z, GetPointDistance(work->pt[0], work->pt[1])));
         sceVu0AddVector(work->reflect.pos, work->pt[2], p20);
     }
 }
@@ -197,7 +232,7 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     }
     lo = -h;
     hi = wall->height + h;
-    n = wall->normal;
+    n = FC_WALL_NORMAL(wall);
     nx = n[0];
     nz = n[1];
     mx = -nx;
@@ -302,10 +337,10 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     if (e->pt[2][1] < pb[1] && e->pt[3][1] < pb[1]) {
         return 0;
     }
-    if (pb[1] < (e->pt[1][1] - e->pt[0][1]) * pb[0] / e->height + e->pt[0][1]) {
+    if (pb[1] < FC_DIV((e->pt[1][1] - e->pt[0][1]) * pb[0], e->height) + e->pt[0][1]) {
         return 0;
     }
-    if ((e->pt[3][1] - e->pt[2][1]) * pb[0] / e->height + e->pt[2][1] < pb[1]) {
+    if (FC_DIV((e->pt[3][1] - e->pt[2][1]) * pb[0], e->height) + e->pt[2][1] < pb[1]) {
         return 0;
     }
     if (flip) {
@@ -339,7 +374,7 @@ static __inline__ int FloorPointInside(FcFloorEnt *e, float *pt) /* derived name
         vx = v->x;
         if ((vx < pt[0] && pt[0] <= p2->x) || (p2->x < pt[0] && pt[0] <= vx)) {
             cp[0] = pt[0];
-            cp[2] = (v->z - p2->z) * (pt[0] - p2->x) / (vx - p2->x) + p2->z;
+            cp[2] = FC_DIV((v->z - p2->z) * (pt[0] - p2->x), vx - p2->x) + p2->z;
             if (pt[2] < cp[2]) {
                 cross++;
             } else if (cp[0] == pt[0] && cp[2] == pt[2]) {
@@ -392,7 +427,7 @@ static int clip_floor_1(ClipWork *ray, FcFloorEnt *e, int backFace)
             return 0;
         }
     }
-    t = 1.0f / (ds - de);
+    t = FC_DIV(1.0f, ds - de);
     hit[0] = (ex * ds - sx * de) * t;
     hit[1] = (ey * ds - sy * de) * t;
     hit[2] = (ez * ds - sz * de) * t;
@@ -407,7 +442,11 @@ inline void ResetCollisionPC(void)
 {
     int tmp;
     pcWall0 = 0;
+#ifdef ICO_HOST
+    tmp = 0; /* no EE timer 0 on the host */
+#else
     tmp = *T0_COUNT;
+#endif
     pcWallR0 = 0;
     pcTime = tmp;
 
@@ -424,7 +463,11 @@ void DispCollisionPC(void)
     if (game_pause == 0) {
         return;
     }
+#ifdef ICO_HOST
+    pcTime = 0 - pcTime; /* no EE timer 0 on the host */
+#else
     pcTime = *T0_COUNT - pcTime;
+#endif
     sprintf(pcLine, "W :%4d %2d", pcWall0, pcWall1);
     if (debug_font_flag & 1) {
         debug_Printf(ScreenWidth / 2, ScreenHeight / 2, 0xFFFFFF00, pcLine);
@@ -468,10 +511,10 @@ static void makeCollisionBlockTable(float *ray)
     int pz;
 
     blockNum = 0;
-    x0 = (int)(ray[0] - curFuzio->ofs[0]);
-    x1 = (int)(ray[8] - curFuzio->ofs[0]);
-    z0 = (int)(ray[2] - curFuzio->ofs[2]);
-    z1 = (int)(ray[10] - curFuzio->ofs[2]);
+    x0 = FC_FTOI(ray[0] - FUZIO_OFS(curFuzio)[0]);
+    x1 = FC_FTOI(ray[8] - FUZIO_OFS(curFuzio)[0]);
+    z0 = FC_FTOI(ray[2] - FUZIO_OFS(curFuzio)[2]);
+    z1 = FC_FTOI(ray[10] - FUZIO_OFS(curFuzio)[2]);
     bx = x0 >> 9;
     bz = z0 >> 9;
     dx = x1 - x0;
@@ -539,10 +582,10 @@ static inline int _clipWDebug(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if (clip_wall_1(work, e, 0, 1) != 0) {
                     work->wall.elem = e;
                     ret = 1;
@@ -562,10 +605,10 @@ static inline int _clipW(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 int val = e->attr;
                 if ((val & 0xF0000000) == 0) {
                     if ((val & 0xF0000) != 0x10000) {
@@ -590,10 +633,10 @@ static inline int _clipWE(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 int val = e->attr;
                 if ((val & 0xF0000000) == 0) {
                     if ((val & 0xF0000) != 0x10000) {
@@ -621,10 +664,10 @@ static inline int _clipWEField(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if ((e->attr & 0xF0000000) == 0) {
                     if (obj != work->filter.o.obj || node != work->filter.o.node ||
                         e != work->filter.elem) {
@@ -649,10 +692,10 @@ static inline int _clipWR(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 int val = e->attr;
                 if ((val & 0xF0000000) == 0) {
                     if ((val & 0xF0000) != 0x10000) {
@@ -677,10 +720,10 @@ static inline int _clipWField(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if ((e->attr & 0xF0000000) == 0) {
                     if (clip_wall_1(work, e, 0, 1) != 0) {
                         work->wall.elem = e;
@@ -702,10 +745,10 @@ static inline int _clipWDitchHangWalkStop(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if ((e->attr & 0x30000000) != 0) {
                     if (clip_wall_1(work, e, 0, 1) != 0) {
                         work->wall.elem = e;
@@ -727,10 +770,10 @@ static inline int _clipWWaveForce(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if ((e->attr & 0xC0000000) == 0x40000000) {
                     if (clip_wall_1(work, e, 0, 1) != 0) {
                         work->wall.elem = e;
@@ -752,10 +795,10 @@ static inline int _clipWBoxStop(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 int val = e->attr;
                 if ((val & 0x70000000) == 0) {
                     if ((val & 0xF0000) != 0x10000 || (val & 0xC0000000) == 0x80000000) {
@@ -780,10 +823,10 @@ static inline int _clipWAdjustPos(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->wblk[blockTable[i]];
+        short *p = FUZIO_WBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcWallEnt *e = &curFuzio->walls[*p];
+                FcWallEnt *e = &FUZIO_WALLS(curFuzio)[*p];
                 if ((e->attr & 0xC0000000) == 0xC0000000) {
                     if (clip_wall_1(work, e, 0, 1) != 0) {
                         work->wall.elem = e;
@@ -805,10 +848,10 @@ static inline int _clipF(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->fblk[blockTable[i]];
+        short *p = FUZIO_FBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcFloorEnt *e = &curFuzio->fcl[*p];
+                FcFloorEnt *e = &FUZIO_FLOORS(curFuzio)[*p];
                 if (clip_floor_1(work, e, 0) != 0) {
                     work->floor.elem = e;
                     ret = 1;
@@ -829,10 +872,10 @@ static inline int _clipFE(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->fblk[blockTable[i]];
+        short *p = FUZIO_FBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcFloorEnt *e = &curFuzio->fcl[*p];
+                FcFloorEnt *e = &FUZIO_FLOORS(curFuzio)[*p];
                 if (obj != work->filter.o.obj || node != work->filter.o.node ||
                     e != work->filter.elem) {
                     if (clip_floor_1(work, e, 0) != 0) {
@@ -856,10 +899,10 @@ static inline int _clipFIH(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->fblk[blockTable[i]];
+        short *p = FUZIO_FBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcFloorEnt *e = &curFuzio->fcl[*p];
+                FcFloorEnt *e = &FUZIO_FLOORS(curFuzio)[*p];
                 if ((e->attr & 0xF0000) != 0x20000) {
                     if (clip_floor_1(work, e, 0) != 0) {
                         work->floor.elem = e;
@@ -882,10 +925,10 @@ static inline int _clipFR(ClipWork *work, GObj *obj, int node)
     int i;
 
     for (i = 0; i < blockNum; i++) {
-        short *p = curFuzio->fblk[blockTable[i]];
+        short *p = FUZIO_FBLK(curFuzio, blockTable[i]);
         if (p != 0) {
             while (*p >= 0) {
-                FcFloorEnt *e = &curFuzio->fcl[*p];
+                FcFloorEnt *e = &FUZIO_FLOORS(curFuzio)[*p];
                 if (clip_floor_1(work, e, 1) != 0) {
                     work->floor.elem = e;
                     ret = 1;
@@ -982,7 +1025,19 @@ static void _Clip(ClipWork *self, int mode)
             do {
                 m = (char *)clipMatrix;
                 sub = obj->dobj;
+#ifdef ICO_HOST
+                /* PC port: the list is the previous Main tick's
+                   (MakeCollisionDependGObjList), so during a stage's
+                   InitIcoMisc it still names the last stage's objects, and a
+                   slot may already hold a new object whose dobj is not set yet
+                   (stage 49 -> 56, the first InitMotionGeoInfo floor clip).
+                   The EE reads disp at address 0x74, below the game's memory;
+                   the host reads the slot as one that does not display
+                   (DIVERGENCES.md D11) */
+                if (sub != 0 && sub->disp != 0) {
+#else
                 if (sub->disp != 0) {
+#endif
                     if (x != 0) {
                         if (obj == self->filter.o.obj) {
                             if (self->filter.o.node < 0) {
@@ -1036,8 +1091,8 @@ static void _Clip(ClipWork *self, int mode)
         }
         if (clipMode[mode].wall != 0) {
             if (self->wall.elem != 0) {
-                clipPlanePos[0] = ((FcWallEnt *)self->wall.elem)->normal[0];
-                clipPlanePos[2] = ((FcWallEnt *)self->wall.elem)->normal[1];
+                clipPlanePos[0] = FC_WALL_NORMAL((FcWallEnt *)self->wall.elem)[0];
+                clipPlanePos[2] = FC_WALL_NORMAL((FcWallEnt *)self->wall.elem)[1];
                 CopyMatrix(m1, (char *)((FcSubSlot *)&self->wall.o.obj->dobj)->dobj->nodeMtx +
                                    (self->wall.o.node << 6));
                 if (self->wall.o.obj->dobj->colRotate == 0) {
@@ -1194,13 +1249,13 @@ inline void ClipWallE(ClipWork *work)
     clipWallFunc(work, 0x4);
 }
 
-inline void ClipWallCheckCB(ClipWork *work, int filter)
+inline void ClipWallCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipWallFunc(work, 8);
 }
 
-inline void ClipWallFieldCheckCB(ClipWork *work, int filter)
+inline void ClipWallFieldCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipWallFunc(work, 9);
@@ -1226,7 +1281,7 @@ inline void ClipFloorIH(ClipWork *work)
     clipFloorFunc(work, 0xF);
 }
 
-inline void ClipFloorCheckCB(ClipWork *work, int filter)
+inline void ClipFloorCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipFloorFunc(work, 0x10);
@@ -1244,7 +1299,7 @@ inline void *ClipWallVector(float *start, float *end)
 
 inline float GetYProjectionOfPlane(float *plane, float *pos)
 {
-    return -(plane[0] * pos[0] + plane[2] * pos[2] + plane[3]) / plane[1];
+    return FC_DIV(-(plane[0] * pos[0] + plane[2] * pos[2] + plane[3]), plane[1]);
 }
 
 inline float GetDistanceFromPlane(void *plane, void *pos)
@@ -1289,27 +1344,27 @@ inline void GetGlobalWallPlane(float *plane, WallCfg *wall)
     plane[3] = -sceVu0InnerProduct(plane, pts);
 }
 
-inline int ClipPlane(int work)
+inline int ClipPlane(ClipWork *work)
 {
     float *p = (float *)work;
-    char *q = (char *)(work + 0xA0);
+    char *q = (char *)&work->normal;
     float t0, t1, d;
 
-    sceVu0CopyVector((int *)(work + 0x20), (int *)(work + 0x10));
-    t0 = GetDistanceFromPlane(q, (void *)(work + 0x10));
+    sceVu0CopyVector((int *)work->pt[2], (int *)work->pt[1]);
+    t0 = GetDistanceFromPlane(q, (void *)work->pt[1]);
     if (t0 >= 0.0f) {
         return 0;
     }
-    t1 = GetDistanceFromPlane(q, (void *)work);
+    t1 = GetDistanceFromPlane(q, (void *)work->pt[0]);
     if (t1 < 0.0f) {
         if (t0 < 0.0f) {
             return 0;
         }
     }
     d = t1 - t0;
-    p[8] = (p[4] * t1 - p[0] * t0) / d;
-    p[9] = (p[5] * t1 - p[1] * t0) / d;
-    p[10] = (p[6] * t1 - p[2] * t0) / d;
+    p[8] = FC_DIV(p[4] * t1 - p[0] * t0, d);
+    p[9] = FC_DIV(p[5] * t1 - p[1] * t0, d);
+    p[10] = FC_DIV(p[6] * t1 - p[2] * t0, d);
     return 1;
 }
 
@@ -1326,8 +1381,8 @@ inline void ClipCollision(ClipWork *self)
 inline void MapCollisionData(void *data)
 {
     int *p = (int *)data;
-    p[4] = (int)data + p[4];
-    p[5] = (int)data + p[5];
+    p[4] = ICO_EEW((char *)data + p[4]);
+    p[5] = ICO_EEW((char *)data + p[5]);
 }
 
 inline void LoadCollision(void **self, char *fname)
@@ -1335,8 +1390,8 @@ inline void LoadCollision(void **self, char *fname)
     int *p;
     file_LoadFile(self, fname, 0);
     p = *self;
-    p[4] = (int)p + p[4];
-    p[5] = (int)p + p[5];
+    p[4] = ICO_EEW((char *)p + p[4]);
+    p[5] = ICO_EEW((char *)p + p[5]);
 }
 
 static int wallDrawCnt = 0; /* derived name */
@@ -1378,12 +1433,25 @@ typedef struct { /* field names derived */
     FcWallSub *sub; /* 0x15C */
 } FcWallObj;        /* derived name */
 
+/* the collision file's head again (fieldCollision.h's FcColl) */
+#ifdef ICO_HOST
+
+typedef FcColl FcWallSet; /* derived name */
+
+#define FCWS_NWALL(c) ((c)->count)
+#define FCWS_WALLS(c) ICO_EEPTR(char *, (c)->wcl)
+#else
+
 typedef struct { /* field names derived */
     char pad0[8];
     int nwall; /* 0x8  */
     char padC[4];
     char *walls; /* 0x10 */
 } FcWallSet;     /* derived name */
+
+#define FCWS_NWALL(c) ((c)->nwall)
+#define FCWS_WALLS(c) ((c)->walls)
+#endif
 
 void DrawGObjWallCollision(GObj *gobj, int col)
 {
@@ -1399,21 +1467,41 @@ void DrawGObjWallCollision(GObj *gobj, int col)
 
     wallDrawCnt = wallDrawCnt + 1;
     n = 1;
+#ifdef ICO_HOST
+    if (GOBJ_SUB(gobj)->colPerNode != 0) {
+        n = GOBJ_SUB(gobj)->nodeNum;
+    }
+#else
     if (g->sub->multi != 0) {
         n = g->sub->nobj;
     }
+#endif
+#ifdef ICO_HOST
+    cd = (FcWallSet *)GOBJ_SUB(gobj)->colData;
+#else
     cd = (FcWallSet *)g->sub->coll;
+#endif
     gif_StartPacketPri(11);
     MatrixDrive_PushMatrix();
     gif_SetAlpha(1, 5, 0);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
     for (i = 0; i < n; i++) {
+#ifdef ICO_HOST
+        CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + (i << 6));
+#else
         CopyMatrix(MatrixDrive_GetMatrix(), g->sub->mtx + (i << 6));
+#endif
+#ifdef ICO_HOST
+        if (GOBJ_SUB(gobj)->colRotate == 0) {
+            UnitRotation(MatrixDrive_GetMatrix());
+        }
+#else
         if (g->sub->norot == 0) {
             UnitRotation(MatrixDrive_GetMatrix());
         }
-        for (j = 0; j < cd->nwall; j++) {
-            e = cd->walls + j * 0x50;
+#endif
+        for (j = 0; j < FCWS_NWALL(cd); j++) {
+            e = FCWS_WALLS(cd) + j * 0x50;
             c0 = &wallEdgeColor;
             c1 = &wallRimColor;
             attr = *(int *)(e + 0x48);
@@ -1464,7 +1552,7 @@ void DrawGObjFloorCollision(GObj *gobj, int col)
             UnitRotation(MatrixDrive_GetMatrix());
         }
         for (j = 0; j < *(int *)(cd + 0xC); j++) {
-            char *e = *(char **)(cd + 0x14) + j * 0x70;
+            char *e = ICO_EEPTR(char *, *(int *)(cd + 0x14)) + j * 0x70;
             sceVu0IVECTOR c = {56, 0, 8, 128};
 
             DrawLineG(e, c, e + 0x10, c, col);
@@ -1631,13 +1719,13 @@ inline void GetOrientOfWall(void *out, void *wallEnt, ObjNode *src)
     }
     *(int *)&buf[3] = 0;
     {
-        int *sub = (int *)(int)GOBJ_SUB(obj);
-        if (sub != 0 && *(int *)((char *)sub + 0xC) != 0) {
-            if (*(int *)((char *)sub + 0x78) != 0) {
-                int *p5 = (int *)src->obj;
+        Sub15C *sub = GOBJ_SUB(obj);
+        if (sub != 0 && sub->nodeMtx != 0) {
+            if (sub->colRotate != 0) {
+                GObj *p5 = src->obj;
                 int idx = src->node;
-                int *o3 = (int *)(int)GOBJ_SUB(p5);
-                sceVu0ApplyMatrix(out, (void *)(*(int *)((char *)o3 + 0xC) + (idx << 6)), buf);
+                Sub15C *o3 = GOBJ_SUB(p5);
+                sceVu0ApplyMatrix(out, (void *)(o3->nodeMtx + (idx << 6)), buf);
                 return;
             }
             CopyVector((void *)out, (void *)buf);
@@ -1738,7 +1826,7 @@ void MakeExitAttributeIndex(void)
         do {
             p70 = (int *)GOBJ_SUB(obj)->colData;
             for (j = 0; j < p70[0xC / 4]; j++) {
-                entry = (char *)p70[0x14 / 4] + j * 0x70;
+                entry = ICO_EEPTR(char *, p70[0x14 / 4]) + j * 0x70;
                 slot = *(int *)(entry + 0x60) & 0xF;
                 if (slot != 0) {
                     if (exitAttr[slot] == 0) {

@@ -35,7 +35,7 @@ static __inline__ void setIpuInChcr(int chcr) /* derived name */
 
 /* one quadword of the DMA tag list, as two doublewords or four words */
 typedef union { /* field names derived */
-    unsigned long ul[2];
+    unsigned long long ul[2];
     int w[4];
 } QWord; /* derived name */
 
@@ -43,7 +43,8 @@ typedef union { /* field names derived */
    tag id and quadword count below. */
 static __inline__ void setDmaTag(char *tag, int i, int addr, int qwc, int id) /* derived name */
 {
-    ((QWord *)tag)[i].ul[0] = ((unsigned long)addr << 32) | ((unsigned long)id << 28) | qwc;
+    ((QWord *)tag)[i].ul[0] =
+        ((unsigned long long)addr << 32) | ((unsigned long long)id << 28) | qwc;
 }
 
 /* The ring sector a DMA address points into, or 0 once the chain has run

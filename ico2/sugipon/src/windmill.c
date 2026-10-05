@@ -29,7 +29,7 @@ typedef struct { /* field names derived */
     int node;    /* 0x04, parent.node */
 } WmWork;        /* derived name */
 
-int InitWindMillGeo(int owner, WmLayout *src)
+int InitWindMillGeo(ICO_WORD owner, WmLayout *src)
 {
     WmLayout lay;
     GObj *gobj;
@@ -44,8 +44,14 @@ int InitWindMillGeo(int owner, WmLayout *src)
             lay.id = 18;
         }
         gobj = CreateLayoutedGObj(46, 656, -1, 0, &lay, -1, 7, 0);
+#ifdef ICO_HOST
+        /* WmWork is the EE layout of parent: obj is 8 bytes here */
+        GOBJ_SUB(gobj)->parent.obj = (GObj *)owner;
+        GOBJ_SUB(gobj)->parent.node = 0;
+#else
         ((WmWork *)GOBJ_SUB(gobj))->owner = owner;
         ((WmWork *)GOBJ_SUB(gobj))->node = 0;
+#endif
         SetFlag4PointFixID(gobj, i, 0);
 
         if (stage_no == 101) {
@@ -54,8 +60,14 @@ int InitWindMillGeo(int owner, WmLayout *src)
             lay.id = 19;
         }
         gobj2 = CreateLayoutedGObj(46, 656, -1, 0, &lay, -1, 7, 0);
+#ifdef ICO_HOST
+        /* WmWork is the EE layout of parent: obj is 8 bytes here */
+        GOBJ_SUB(gobj2)->parent.obj = (GObj *)owner;
+        GOBJ_SUB(gobj2)->parent.node = 0;
+#else
         ((WmWork *)GOBJ_SUB(gobj2))->owner = owner;
         ((WmWork *)GOBJ_SUB(gobj2))->node = 0;
+#endif
         SetFlag4PointFixID(gobj2, i, 1);
     }
     return 0;

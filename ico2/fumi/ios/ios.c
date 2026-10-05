@@ -41,6 +41,34 @@ static struct SemaParam cdLockSemaParam; /* derived name */
 
 static struct SemaParam sndLockSemaParam; /* derived name */
 
+#ifdef ICO_HOST
+
+/* port/platform/arena.c: the host address of an EE physical address in the
+   simulated 32 MB of EE RAM */
+__UINTPTR_TYPE__ ico_arena_ee_addr(unsigned int ee);
+
+/* PC port: bytes the host adds to four partitions (and to the root's end,
+   in the arena's headroom, port/platform/arena.h). Every block header is
+   0x50 bytes here (0x40 on the EE, memory.h) and records with pointers are
+   larger, so a partition holds less than the EE's does: the plaza (stage
+   16) ran out of the stage partition in InitIcoMisc, about 5300 blocks in,
+   idle boots of stages 12, 17, 23 and 42 came within 300 KB of its end, and
+   "stat mot" peaked at 94% and "common" at 98% (DIVERGENCES.md D12). The
+   stage partition gets 4 MB and the others the same share of their size
+   (4 MB / 15,826,944 bytes, rounded up to 64 KB). */
+#define ICO_HOST_STAGE_EXTRA 0x400000
+#define ICO_HOST_COMMON_EXTRA 0x120000  /* of 4,227,072 */
+#define ICO_HOST_SMOTION_EXTRA 0x50000  /* of 1,179,648 */
+#define ICO_HOST_S2MOTION_EXTRA 0xD0000 /* of 3,145,728 */
+#define ICO_HOST_HEAP_EXTRA                                                                        \
+    (ICO_HOST_STAGE_EXTRA + ICO_HOST_COMMON_EXTRA + ICO_HOST_SMOTION_EXTRA +                       \
+     ICO_HOST_S2MOTION_EXTRA)
+/* a partition's size: the EE's, plus the host's extra */
+#define ICO_PART_SIZE(ee, extra) ((ee) + (extra))
+#else
+#define ICO_PART_SIZE(ee, extra) (ee)
+#endif
+
 /* keyInput.h is not included */
 extern void InitKeyInput(int unused);
 
@@ -78,10 +106,24 @@ void iosInitialize(void)
 {
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
+#ifdef ICO_HOST
+    /* the same range, inside the host's EE RAM arena, ending
+       ICO_HOST_HEAP_EXTRA further for the partitions' extra; the root keeps
+       the EE's start, and its addresses are pointer-wide (IosMemAddr), so
+       the arena may sit anywhere on a 64-bit host. The partitions are carved
+       from the root's end down, so the stage partition, the last, keeps the
+       EE's start and the others move up. */
+    ios_partition_root = iosMallocInitPartition(ico_arena_ee_addr(0x760000),
+                                                ico_arena_ee_addr(0x1FEFFF0 + ICO_HOST_HEAP_EXTRA));
+#else
     ios_partition_root = iosMallocInitPartition(0x760000, 0x1FEFFF0);
-    ios_partition_common = iosMallocSetPartition(ios_partition_root, 4227072, 16);
-    ios_partition_smotion = iosMallocSetPartition(ios_partition_root, 1179648, 16);
-    ios_partition_s2motion = iosMallocSetPartition(ios_partition_root, 3145728, 16);
+#endif
+    ios_partition_common = iosMallocSetPartition(ios_partition_root,
+                                                 ICO_PART_SIZE(4227072, ICO_HOST_COMMON_EXTRA), 16);
+    ios_partition_smotion = iosMallocSetPartition(
+        ios_partition_root, ICO_PART_SIZE(1179648, ICO_HOST_SMOTION_EXTRA), 16);
+    ios_partition_s2motion = iosMallocSetPartition(
+        ios_partition_root, ICO_PART_SIZE(3145728, ICO_HOST_S2MOTION_EXTRA), 16);
     ios_partition_event = iosMallocSetPartition(ios_partition_root, 262144, 16);
     ios_partition_oomori = iosMallocSetPartition(ios_partition_root, 327680, 16);
     ios_partition_horagai = iosMallocSetPartition(ios_partition_root, 1, 16);
@@ -90,7 +132,8 @@ void iosInitialize(void)
     ios_partition_shock = iosMallocSetPartition(ios_partition_root, 10240, 16);
     ios_partition_hara = iosMallocSetPartition(ios_partition_root, 1, 16);
     ios_partition_isys = ios_partition_seki = ios_partition_sugipon = ios_partition_dmotion =
-        iosMallocSetPartition(ios_partition_root, 15826944, 16);
+        iosMallocSetPartition(ios_partition_root, ICO_PART_SIZE(15826944, ICO_HOST_STAGE_EXTRA),
+                              16);
     iosMallocSetPartitionName(ios_partition_isys, "stage");
     iosMallocSetPartitionName(ios_partition_smotion, "stat mot");
     iosMallocSetPartitionName(ios_partition_s2motion, "demo mot");

@@ -2,8 +2,18 @@
 #include "Matrix.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* string.h's memcpy: through the unprototyped declaration below the int
+   size would be passed where the definition reads a size_t */
+#include <string.h>
+
+#else
+
 /* declared here unprototyped, not through string.h */
 extern void memcpy();
+
+#endif
 
 /* The allocator's partition (none selected yet) and the running total of
    what partition 0 has handed out. */
@@ -16,10 +26,20 @@ static int mallocTotal = 0; /* derived name */
 struct IosMemPart;
 
 extern void *iosMallocDebug(struct IosMemPart *part, int size, const char *file, int line);
+
 /* int () here, void * (void *) in memory.h */
+#ifdef ICO_HOST
+
+extern void *iosFree(void *ptr);
+extern void *iosReallocDebug(void *ptr, unsigned int size);
+
+#else
+
 extern int iosFree();
 /* int (int, int, const char *, int) here, void * (void *, unsigned int) in memory.h */
 extern int iosReallocDebug(int size, int align, const char *file, int line);
+
+#endif
 
 #include "Basic.h"
 #include "ios.h"
@@ -48,7 +68,7 @@ void dma_init(void)
 
 void matrix_init(void)
 {
-    matrixptr = (char *)0x70000000;
+    matrixptr = (char *)ICO_SPR_ADDR(0);
     _UnitMatrix(matrixptr);
 }
 
@@ -97,6 +117,26 @@ inline void *mallocsekistage(int size)
     return r;
 }
 
+#ifdef ICO_HOST
+
+/* iosReallocDebug is (void *ptr, unsigned int size) in memory.h; the EE
+   call below passes (ptr, size) in the two parameters it names size and
+   align, and the other two arguments go unread */
+void *reallocseki(void *ptr, int size)
+{
+    return iosReallocDebug(ptr, size);
+}
+
+inline int freeseki(void *ptr)
+{
+    if (ptr != 0) {
+        iosFree(ptr);
+    }
+    return 0;
+}
+
+#else
+
 inline int reallocseki(int size, int align)
 {
     return iosReallocDebug(size, align, "src/Basic.c", 424);
@@ -108,6 +148,8 @@ inline int freeseki(void *ptr)
         return iosFree(ptr);
     }
 }
+
+#endif
 
 void malloc_MemCpy(void *dst, void *src, int size)
 {
@@ -128,3 +170,10 @@ float fadeSpeed = 0.0f;
 int fadeContinue = 0;
 
 unsigned char fadeColor[4] = {0};
+
+#ifdef ICO_HOST
+
+/* the EE scratchpad (0x70000000, 16 KB) as plain memory; see ICO_SPR_ADDR */
+char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
+
+#endif

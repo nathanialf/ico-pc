@@ -8,6 +8,8 @@
 #ifndef QUEEN_H
 #define QUEEN_H
 
+#include "typedef.h"
+
 float GetQueenBallThickness(void);
 int InqQueenBarrierExist(void);
 float QueenBallRadius(struct GObj *gobj);
@@ -15,8 +17,8 @@ int QueenBarrierInqBreakable(void);
 float QueenBarrierRadius(struct GObj *gobj);
 int QueenInqDead(void);
 void QueenStartAttack(void);
-void gene_enemy(volatile int g);
-void subQueenBrainMain(volatile int g);
-void subQueenControl(volatile int g);
+void gene_enemy(volatile ICO_WORD g);
+void subQueenBrainMain(volatile ICO_WORD g);
+void subQueenControl(volatile ICO_WORD g);
 
 #endif /* QUEEN_H */

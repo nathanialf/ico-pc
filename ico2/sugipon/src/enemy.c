@@ -99,7 +99,8 @@ static void setEnemyParticleObject(GObj *self, int pid)
     EnemyPosEntry *q;
 
     size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f * 10.0f;
-    parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 130);
+    parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
+                                            "src/enemy.c", 130);
     w->particle = parts;
     fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 132);
     w->flag = fl;
@@ -195,7 +196,11 @@ retry:
     w->scale = sc;
     obj = enemyKind[kind].model;
     if (obj != 0x610) {
+#ifdef ICO_HOST
+        GOBJ_SUB(self)->model = GetPObjAddress(obj);
+#else
         *(int *)&GOBJ_SUB(self)->model = GetPObjAddress(obj);
+#endif
         GOBJ_SUB(self)->modelId = obj;
         debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
         w->loaded = 1;
@@ -238,11 +243,28 @@ static void dispEnemyObject(void *self)
     _InitCurrentMatrix();
 
     /* clang-format off */
+#ifdef ICO_HOST
+    for (i = 0; i < GOBJ_SUB(self)->skelNodeNum; i++) {
+#else
     for (i = 0; i < *(int *)(*(volatile int *)(self + 0x15C) + 0x88); i++) {
+#endif
         /* project each part's origin: z goes into buf[i].z for the sort */
         ptr[i] = &buf[i];
         _SetCurrentMatrix((char *)GOBJ_SUB(self)->nodeMtx + i * 0x40);
         _MulCurrentMatrixL(matrixptr + 0x100);
+#ifdef ICO_HOST
+        {
+            /* the part origin through the current matrix, divided by w
+               (x, y, z times 1/w), z to an integer; the PS2 also stored a
+               stale vf13 into the entry's other words, which nothing reads */
+            float v[4];
+            float q;
+
+            ico_apply_matrix(v, (const float (*)[4])ico_current_matrix, ZeroPoint);
+            q = ps2_div(1.0f, v[3]);
+            buf[i].z = ps2_ftoi(v[2] * q);
+        }
+#else
         __asm__ __volatile__("lqc2 $vf8, 0x0(%0)\n\t"
                              "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
                              "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
@@ -256,6 +278,7 @@ static void dispEnemyObject(void *self)
                              :
                              : "r"(ZeroPoint), "r"(&buf[i])
                              : "memory");
+#endif
         buf[i].idx = i;
     }
 
@@ -437,7 +460,11 @@ static inline int enemyInitPartsList(GObj *self, SObjSimpleSetting *param) /* de
 
     n = SUBOF(self)->skelNodeNum;
     /* the work-record entry is read as an int and cast */
+#ifdef ICO_HOST
+    w = (EnemyWork *)SUBOF(self)->work;
+#else
     w = (EnemyWork *)*(int *)&SUBOF(self)->work;
+#endif
 
     parts = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 285);
     w->broken = parts;
@@ -453,7 +480,7 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     int kind;
     int no;
 
-    w = iosMallocDebug(ios_partition_sugipon, 0x54, "src/enemy.c", 641);
+    w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyWork, 0x54), "src/enemy.c", 641);
     SUBOF(self)->work = w;
     w->word1C = 0;
     w->eye0 = InitEnemyEye(10, 0, 10);
@@ -649,7 +676,7 @@ void EnemySetfDisappear(GObj *self, float *dir)
     for (i = 0; i < n; i++) {
         if ((w->broken)[i] == 0) {
             (w->broken)[i] = 1;
-            enemySetParticle(8, *(char **)((char *)sub + 12) + i * 64 + 48, dir);
+            enemySetParticle(8, ICO_RAW(char *, sub, 12, (char *)sub->nodeMtx) + i * 64 + 48, dir);
             return;
         }
     }

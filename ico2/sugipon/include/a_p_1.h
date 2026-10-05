@@ -16,7 +16,7 @@ int AP1JumpReq(struct GObj *self, int mode, void *vel);
 int AP1MotReq(struct GObj *self, int mode);
 int AP1MotReqForce(struct GObj *self, int mode);
 int AP1Turn(struct GObj *self, short angle);
-int GetAP1Mode(struct GObj *self);
+ICO_WORD_PTR(char *) GetAP1Mode(struct GObj *self);
 int GetAP1SpecType(struct GObj *self);
 struct GObj *MakeAP1GObj(SObjSimpleSetting *setting);
 void SetAP1VisualState(struct GObj *self, int visible);

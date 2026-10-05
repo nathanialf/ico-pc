@@ -8,6 +8,8 @@
 #ifndef ADPCM_INIT_H
 #define ADPCM_INIT_H
 
+#include "typedef.h"
+
 /* adpcm_init.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 void adpcmPauseRequest(int val);
@@ -48,8 +50,10 @@ typedef struct AdpcmStreamTag { /* field names derived */
     int ringSize;               /* 0x1C */
     int loopStart;              /* 0x20 */
     int dataSize;               /* 0x24 */
-    struct CdvdBgReq *bg;       /* 0x28 */
+    struct CdvdBgReq *bg;       /* 0x28, 8 bytes on a 64-bit host, which then has no pad2C */
+#ifndef ICO_HOST
     char pad2C[4];
+#endif
     long long mask;  /* 0x30 */
     int chAttr;      /* 0x38 */
     short volL[2];   /* 0x3C */
@@ -80,7 +84,7 @@ void AdpcmOpen(AdpcmOpenReq *self, int no, int ch, int loopNum);
 void AdpcmClose(struct SqEntry *obj);
 void AdpcmPlay(AdpcmStream *self);
 void AdpcmVolumeSet(struct SqEntry *self, int vol);
-struct SqEntry *adpcmDataSet(int src, int no, int bank, int ch, int size, int iopBuf, int loopNum);
+struct SqEntry *adpcmDataSet(ICO_WORD_PTR(void *) src, int no, int bank, int ch, int size, int iopBuf, int loopNum);
 void adpcmTickProc2(struct SqEntry *obj);
 /* adpcm_init.o's .sdata global */
 extern int debugAdpcmOn;

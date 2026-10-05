@@ -12,6 +12,218 @@
 #include "Basic.h"
 #include "gobj.h"
 
+#ifdef ICO_RD
+
+#include <string.h>
+#include "rd.h"
+
+/* ===================================================================== *
+ * PC port (renderer wave 4, R4b; docs/port/RENDER_API.md "Shadows").
+ *
+ * The packets below are still built (the DMA bookkeeping and the heap use
+ * stay as they are), but nothing on the host reads them: shadow_Reset's is
+ * an UNPACK to VU1 memory and MSCAL 0 (SET_GSREGISTER), the volumes' and
+ * shadow_Draw's are DIRECT (PATH2) GIF packets.  Each function records what
+ * its packet does on rd instead, where it chains the packet:
+ *   shadow_Reset   its register writes as rd state; the clear of FBP 0x142
+ *                  is rd_ShadowReset on the frame's count target
+ *                  (rd_ShadowCountTarget) with SCENE's depth-stencil; the
+ *                  band it clears at FBP 0x140 first (16 lines of the pages
+ *                  in front of 0x142, which no shadow pass reads) is not
+ *                  drawn, and its register writes are the ones the 0x142
+ *                  clear repeats
+ *   shadow_RenderVolume, shadow_RenderVolumeMulti
+ *                  every strip emitVolumeStrip writes, as the eight flat
+ *                  triangles its ten positions kick, each counted +1
+ *                  (RGBAQ 0x04) or -1 (0xFC) by its last position, with the
+ *                  strips' PRIM 0x144; one rd_ShadowTris per object, as the
+ *                  PS2 chains one packet per object
+ *   shadow_Draw    rd_ShadowResolve (the count into the count target), then
+ *                  the packet's register writes and sprites in order: the
+ *                  256/128/64 chain into SHADOW0..2 and the three
+ *                  composites into SCENE, so the state they leave leaks
+ *                  into the rest of list 3 and the next lists as on the GS
+ * The level-0 texture is the count target's RGBA view where the GS reads
+ * PSMCT24 under TEXA 0x80 AEM: the resolve writes that expansion as alpha
+ * (rd.h, rd_ShadowResolve).  The GS register decoder (GifPacket.c) never
+ * sees these writes: like rd_Post's passes, they leave its per-list FRAME,
+ * PRIM and TEX0 shadow behind (section 12). */
+
+/* the triangles of one object's strips, recorded at the end of the object
+   or when full */
+#define SHADOW_HOST_TRIS 2048 /* port name */
+
+static struct {
+    RdScreenVtx v[SHADOW_HOST_TRIS * 3];
+    signed char sign[SHADOW_HOST_TRIS];
+    unsigned int n;
+    RdScreenVtx last[2]; /* the strip's two positions before the current one */
+    void *obj;
+} shadowHost; /* port name */
+
+static void shadowHostFlush(void)
+{
+    if (shadowHost.n == 0) {
+        return;
+    }
+    rd_ABE(1); /* PRIM 0x144: strip, flat, ABE, no texture */
+    rd_Gouraud(0);
+    rd_TextureOff();
+    rd_ShadowTris(shadowHost.v, (const int8_t *)shadowHost.sign, shadowHost.n,
+                  RD_KEY(shadowHost.obj, 0, 0));
+    shadowHost.n = 0;
+}
+
+static void shadowHostBegin(void *obj)
+{
+    shadowHost.n = 0;
+    shadowHost.obj = obj;
+}
+
+/* position i (0..9) of a strip at XYZ2 v, its RGBAQ 0x04 (plus) or 0xFC */
+static void shadowHostStripPos(int i, const int *v, int plus)
+{
+    RdScreenVtx c;
+
+    memset(&c, 0, sizeof(c));
+    c.x = v[0];
+    c.y = v[1];
+    c.z = (unsigned int)v[2];
+    c.q = 1.0f;
+    if (i >= 2) {
+        unsigned int t;
+
+        if (shadowHost.n == SHADOW_HOST_TRIS) {
+            shadowHostFlush();
+        }
+        t = shadowHost.n++;
+        shadowHost.v[t * 3 + 0] = shadowHost.last[0];
+        shadowHost.v[t * 3 + 1] = shadowHost.last[1];
+        shadowHost.v[t * 3 + 2] = c;
+        shadowHost.sign[t] = plus ? 1 : -1;
+    }
+    shadowHost.last[0] = shadowHost.last[1];
+    shadowHost.last[1] = c;
+}
+
+static void shadowHostReset(void)
+{
+    RdTarget cnt = rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+
+    /* setFrame(0x142), ZBUF 0xC0 with ZMSK, TEST 0x30000, the clear sprite
+       (PRIM 0x406) */
+    rd_SetTarget(cnt, rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, 0);
+    rd_ZWrite(0);
+    rd_TestGs(0x30000);
+    rd_ABE(0);
+    rd_Gouraud(0);
+    rd_TextureOff();
+    rd_ShadowReset();
+    /* FBA, TEXA, TEST, ALPHA, COLCLAMP */
+    rd_FBA(0);
+    rd_TexA(RD_TEXA_80_80);
+    rd_TestGs(0x50000);
+    rd_BlendFunc(RD_BLEND_CS_FIX_ADD_CD, 0x80);
+    rd_ColClamp(0);
+}
+
+/* the target of blur level i: the count (FBP 0x142), then SHADOW0..2 */
+static RdTarget shadowHostLevel(int i)
+{
+    if (i == 0) {
+        return rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+    }
+    return rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + i - 1));
+}
+
+/* TEX0 of level i (TCC RGBA, MODULATE), as the packet writes it */
+static void shadowHostTex0(int i)
+{
+    rd_Texture(rd_TargetTexture(shadowHostLevel(i), RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+}
+
+/* spriteUV: PRIM, RGBAQ, UV and XYZ2 of each corner, Z 0xFFFFFFFF */
+static void shadowHostSprite(const int *r, const int *uv, const unsigned char *col, int abe)
+{
+    RdScreenVtx v[2];
+    int i;
+
+    rd_ABE(abe); /* PRIM 0x116 or 0x156: sprite, flat, TME, FST */
+    rd_Gouraud(0);
+    memset(v, 0, sizeof(v));
+    v[0].x = (r[0] + 0x8000) & 0xFFFF;
+    v[0].y = (r[1] + 0x8000) & 0xFFFF;
+    v[0].s = (float)uv[0];
+    v[0].t = (float)uv[1];
+    v[1].x = (r[0] + r[2] + 0x8000) & 0xFFFF;
+    v[1].y = (r[1] + r[3] + 0x8000) & 0xFFFF;
+    v[1].s = (float)(uv[0] + uv[2]);
+    v[1].t = (float)(uv[1] + uv[3]);
+    for (i = 0; i < 2; i++) {
+        v[i].z = 0xFFFFFFFFu;
+        v[i].q = 1.0f;
+        memcpy(v[i].rgba, col, 4);
+    }
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+}
+
+/* shadow_Draw up to its first FRAME: the count resolved where the GS has
+   it in FBP 0x142, then TEST, ZBUF, COLCLAMP, FBA, TEXA and TEX1 */
+static void shadowHostDrawBegin(void)
+{
+    rd_SetTarget(shadowHostLevel(0), rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth,
+                 (uint32_t)ScreenHeight, 0);
+    rd_ShadowResolve();
+    rd_TestGs(0x30000);
+    rd_ZWrite(0);
+    rd_ColClamp(1);
+    rd_FBA(0);
+    rd_TexA(RD_TEXA_80_80_AEM);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+}
+
+/* one chain step: level i into level i + 1 */
+static void shadowHostChain(int i, const int *r, const int *uv, const unsigned char *col)
+{
+    uint32_t w = 512u >> (i + 1);
+
+    rd_SetTarget(shadowHostLevel(i + 1), (RdTarget){0}, w, w, 0);
+    shadowHostTex0(i);
+    shadowHostSprite(r, uv, col, 0);
+}
+
+/* setFrame(0x40), ALPHA 0x44, TEST 0x3400D; SCENE takes RD_TARGET_OFFSET
+   as GifPacket.c's FRAME decoding gives it (the field offset, zero on the
+   host: both setFrame calls of shadow_Draw are centred) */
+static void shadowHostCompositeBegin(void)
+{
+    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+
+    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0);
+    rd_TestGs(0x3400D);
+}
+
+/* one composite: level i into SCENE */
+static void shadowHostComposite(int i, const int *r, const int *uv, const unsigned char *col)
+{
+    shadowHostTex0(i);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    shadowHostSprite(r, uv, col, 1);
+}
+
+/* ZBUF write on, TEST 0x50000, setFrame(0x40) with screenOffsetX/Y */
+static void shadowHostDrawEnd(void)
+{
+    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+
+    rd_ZWrite(1);
+    rd_TestGs(0x50000);
+    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+}
+
+#endif /* ICO_RD */
+
 /* One skinning matrix per cluster, 64 of 64 bytes, built by
  * shadow_EntryClusterShadow. */
 static char clusterMatrix[4096]; /* derived name */
@@ -148,6 +360,9 @@ void shadow_Reset(void)
     PacketBufferStruct.ptr.c = (q + 0xC);
     ((GifPkWord *)(q + 8))->w[1] = 0;
     PacketBufferStruct.ptr.c = (q + 0x10);
+#ifdef ICO_RD
+    shadowHostReset();
+#endif
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
 }
@@ -214,6 +429,9 @@ void shadow_Draw(void)
         setGsReg(0x4A, 0);
         setGsReg(0x3B, 0x8080 | ((long long)0x80 << 32));
         setGsReg(0x14, 0x60);
+#ifdef ICO_RD
+        shadowHostDrawBegin();
+#endif
 
         for (i = 0; i < 3; i++) {
             setFrame(levelFbp[i + 1], 512 >> (i + 1), 512 >> (i + 1), 0, 0);
@@ -230,11 +448,17 @@ void shadow_Draw(void)
                 *PacketBufferStruct.ptr.d++ = 0x06;
             }
             spriteUV(levelRect[i + 1], levelUV[i], col, 0x116);
+#ifdef ICO_RD
+            shadowHostChain(i, levelRect[i + 1], levelUV[i], col);
+#endif
         }
 
         setFrame(0x40, ScreenWidth, ScreenHeight, 0, 0);
         setGsReg(0x42, 0x44);
         setGsReg(0x47, 0x3400D);
+#ifdef ICO_RD
+        shadowHostCompositeBegin();
+#endif
 
         for (i = 3; i > 0; i--) {
             unsigned char col2[4] = {GlobalStageSetting.shadowColR, GlobalStageSetting.shadowColG,
@@ -251,11 +475,17 @@ void shadow_Draw(void)
             *PacketBufferStruct.ptr.d++ = 0x06;
             setGsReg(0x14, 0x60);
             spriteUV(off, rect[i], col2, 0x156);
+#ifdef ICO_RD
+            shadowHostComposite(i, off, rect[i], col2);
+#endif
         }
 
         setGsReg(0x4E, 0x300000C0);
         setGsReg(0x47, 0x50000);
         setFrame(0x40, ScreenWidth, ScreenHeight, screenOffsetX, screenOffsetY);
+#ifdef ICO_RD
+        shadowHostDrawEnd();
+#endif
 
         ((GifPkWord *)PacketBufferStruct.end.c)->d =
             (unsigned int)(((unsigned int)(PacketBufferStruct.ptr.c - PacketBufferStruct.end.c) >>
@@ -314,7 +544,17 @@ static void shadow_getShadowVectorAverage(void *dir, Sub15C *o)
 
 /* the same quadword copy type src/Primitive.c uses: the accumulator reset is
  * one lq/sq pair per vertex */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
+
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the accumulator reset copies a zero VECTOR into each Qw128 slot;
+   the sizes must agree (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(VECTOR, Qw128);
+
+#endif
 
 /* one weighted vertex of a cluster run: the vertex it moves and the weight it
  * moves it by */
@@ -327,8 +567,8 @@ typedef struct ClusterWeight { /* field names derived */
 
 /* one cluster of a shadow volume: the -1 terminated run of weighted vertices
  * and the matrix slot it is skinned through */
-typedef struct ClusterPoly { /* field names derived */
-    ClusterWeight *run;
+typedef struct ClusterPoly {         /* field names derived */
+    ICO_EEWORD(ClusterWeight *) run; /* an EE word on the host (eeword.h) */
     int matrix;
     int _8;
     int _C;
@@ -339,6 +579,16 @@ typedef struct ClusterPoly { /* field names derived */
  * the vnop runs placed around the multiply and the accumulate. */
 static inline void applyWeightedVtx(void *dst, void *src, float w) /* derived name */
 {
+#ifdef ICO_HOST
+    /* dst.xyz += (current matrix applied to (src.xyz, 1)).xyz * w; dst.w kept */
+    float v[4];
+    float *d = dst;
+
+    ico_apply_matrix_w1(v, (const float (*)[4])ico_current_matrix, (const float *)src);
+    d[0] = d[0] + v[0] * w;
+    d[1] = d[1] + v[1] * w;
+    d[2] = d[2] + v[2] * w;
+#else
     __asm__ __volatile__("lqc2 $vf8, 0(%1)\n\t"
                          "lqc2 $vf9, 0(%0)\n\t"
                          "mfc1 $8, %2\n\t"
@@ -362,6 +612,7 @@ static inline void applyWeightedVtx(void *dst, void *src, float w) /* derived na
                          :
                          : "r"(dst), "r"(src), "f"(w)
                          : "$8");
+#endif
 }
 
 static void shadow_EntryClusterShadow(Sub15C *o, float len)
@@ -387,10 +638,17 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
         _GetCurrentMatrix(clusterMatrix + i * 0x40);
     }
 
+#ifdef ICO_HOST
+#else
     __asm__ __volatile__("lq $8, 0(%0)" : : "r"(&zero) : "$8");
+#endif
     for (i = 0, p = x->parts; i < x->partCount; i++, p++) {
         for (k = 0; k < p->vtxCount; k++) {
+#ifdef ICO_HOST
+            __builtin_memcpy((Qw128 *)p->vtxSave + k, &zero, 16);
+#else
             __asm__ __volatile__("sq $8, 0(%0)" : : "r"((Qw128 *)p->vtxSave + k) : "$8");
+#endif
         }
     }
 
@@ -401,7 +659,7 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
             VECTOR *src;
 
             _SetCurrentMatrix(clusterMatrix + ((ClusterPoly *)p->polys)[k].matrix * 0x40);
-            e = ((ClusterPoly *)p->polys)[k].run;
+            e = ICO_EEPTR(ClusterWeight *, ((ClusterPoly *)p->polys)[k].run);
             /* both bases are read once here, ahead of the loop */
             dst = (VECTOR *)p->vtxSave;
             src = (VECTOR *)p->vtx;
@@ -440,6 +698,9 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
  * operands. */
 static inline void applyCurrentMatrixV(void *dst, void *src) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_apply_matrix_w1((float *)dst, (const float (*)[4])ico_current_matrix, (const float *)src);
+#else
     __asm__ __volatile__("lqc2 $vf8, 0(%1)\n\t"
                          "vnop\n\t"
                          "vnop\n\t"
@@ -454,6 +715,7 @@ static inline void applyCurrentMatrixV(void *dst, void *src) /* derived name */
                          "sqc2 $vf9, 0(%0)"
                          :
                          : "r"(dst), "r"(src));
+#endif
 }
 
 static void shadow_EntryNormalShadow(Sub15C *o, int idx, float len)
@@ -515,11 +777,31 @@ static VECTOR screenOrigin = {2048.0f, 2048.0f, 0.0f, 0.0f}; /* derived name */
  * shares the face with the one that computed it */
 static float stripFaceZ[10]; /* derived name */
 
+#ifdef ICO_HOST
+
+/* The VU0 registers the shadow volume helpers below share on the PS2,
+ * kept as data: vf1 (the shadow direction), vf10-vf15 (the strip's last
+ * three top and bottom vertices) and vf20-vf25 (their projections). The
+ * PS2 values left over from before the first strip are unspecified; the
+ * host starts from zero. */
+static struct {
+    float dir[4];
+    float src[6][4];
+    float proj[6][4];
+} shadowVolumeRegs; /* derived name */
+
+#endif
+
 /* the projection matrix and the shadow direction into the VU0
  * register file, where the edge projector below leaves them for the whole
  * mesh walk */
 static inline void loadVolumeMatrix(void *dir) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the projection matrix becomes the current matrix, as on the PS2 */
+    _SetCurrentMatrix(matrixptr + 0xC0);
+    __builtin_memcpy(shadowVolumeRegs.dir, dir, 16);
+#else
     char *m = matrixptr + 0xC0;
 
     __asm__ __volatile__("lqc2 $vf4, 0x0(%0)\n\t"
@@ -529,12 +811,25 @@ static inline void loadVolumeMatrix(void *dir) /* derived name */
                          "lqc2 $vf1, 0x0(%1)"
                          :
                          : "r"(m), "r"(dir));
+#endif
 }
 
 /* the six strip vertices out of the VU register file as integer
  * screen coordinates */
 static inline void storeVolumeVerts(void *dst) /* derived name */
 {
+#ifdef ICO_HOST
+    int v[6][4];
+    int n;
+    int k;
+
+    for (n = 0; n < 6; n++) {
+        for (k = 0; k < 4; k++) {
+            v[n][k] = ps2_ftoi4(shadowVolumeRegs.proj[n][k]);
+        }
+    }
+    __builtin_memcpy(dst, v, sizeof v);
+#else
     __asm__ __volatile__("vftoi4.xyzw $vf26, $vf20\n\t"
                          "vftoi4.xyzw $vf27, $vf21\n\t"
                          "vftoi4.xyzw $vf28, $vf22\n\t"
@@ -549,6 +844,7 @@ static inline void storeVolumeVerts(void *dst) /* derived name */
                          "sqc2 $vf31, 0x50(%0)"
                          :
                          : "r"(dst));
+#endif
 }
 
 /* Project one silhouette edge and clip the projected segment
@@ -570,6 +866,57 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
     float dot;
     float fw, fh, t0, t1, t;
 
+#ifdef ICO_HOST
+    {
+        /* roll the strip down one place, load the new edge, project both
+           ends (w taken as 1, then all four fields times 1/w), take the
+           facing of the new top triangle against the shadow direction, and
+           make the ends relative to the screen origin */
+        float (*v)[4] = shadowVolumeRegs.src;
+        float (*pr)[4] = shadowVolumeRegs.proj;
+        float e8[3];
+        float e9[3];
+        float n[3];
+        float q;
+        int k;
+
+        __builtin_memcpy(v[0], v[1], 16);
+        __builtin_memcpy(v[3], v[4], 16);
+        __builtin_memcpy(pr[0], pr[1], 16);
+        __builtin_memcpy(pr[3], pr[4], 16);
+        __builtin_memcpy(v[1], v[2], 16);
+        __builtin_memcpy(v[4], v[5], 16);
+        __builtin_memcpy(pr[1], pr[2], 16);
+        __builtin_memcpy(pr[4], pr[5], 16);
+        __builtin_memcpy(v[2], pa, 16);
+        __builtin_memcpy(v[5], pb, 16);
+        for (k = 0; k < 3; k++) {
+            e8[k] = v[0][k] - v[1][k];
+            e9[k] = v[2][k] - v[1][k];
+        }
+        ico_apply_matrix_w1(pr[2], (const float (*)[4])ico_current_matrix, v[2]);
+        q = ps2_div(1.0f, pr[2][3]);
+        for (k = 0; k < 4; k++) {
+            pr[2][k] = pr[2][k] * q;
+        }
+        n[0] = e8[1] * e9[2] - e9[1] * e8[2];
+        n[1] = e8[2] * e9[0] - e9[2] * e8[0];
+        n[2] = e8[0] * e9[1] - e9[0] * e8[1];
+        ico_apply_matrix_w1(pr[5], (const float (*)[4])ico_current_matrix, v[5]);
+        q = ps2_div(1.0f, pr[5][3]);
+        for (k = 0; k < 4; k++) {
+            pr[5][k] = pr[5][k] * q;
+        }
+        v[2][3] = 1.0f;
+        v[5][3] = 1.0f;
+        dot = shadowVolumeRegs.dir[0] * n[0] + shadowVolumeRegs.dir[1] * n[1] +
+              shadowVolumeRegs.dir[2] * n[2];
+        for (k = 0; k < 4; k++) {
+            ((float *)&oa)[k] = pr[2][k] - ((float *)&screenOrigin)[k];
+            ((float *)&ob)[k] = pr[5][k] - ((float *)&screenOrigin)[k];
+        }
+    }
+#else
     __asm__ __volatile__("vmove.xyzw $vf10, $vf11\n\t"
                          "vmove.xyzw $vf13, $vf14\n\t"
                          "vmove.xyzw $vf20, $vf21\n\t"
@@ -625,6 +972,7 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
                          : "=f"(dot)
                          : "r"(pa), "r"(pb), "r"(&oa), "r"(&ob), "r"(&screenOrigin)
                          : "$7");
+#endif
 
     rate[0] = rate[1] = 1.0f;
     /* a wholly visible edge returns at once */
@@ -700,6 +1048,24 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
     /* slide each end of the projected edge to the clip parameter found for
      * it */
     if (0.0f < rate[0] && rate[0] < 1.0f) {
+#ifdef ICO_HOST
+        {
+            /* the projected end moved to rate 0 along the edge, back in
+               screen coordinates; w gains the origin's w */
+            float r = rate[0];
+            float u = 1.0f - r;
+            float *o = shadowVolumeRegs.proj[2];
+            const float *org = (const float *)&screenOrigin;
+            int k;
+
+            for (k = 0; k < 3; k++) {
+                o[k] = ((float *)&ob)[k] * u + ((float *)&oa)[k] * r;
+            }
+            for (k = 0; k < 4; k++) {
+                o[k] = o[k] + org[k];
+            }
+        }
+#else
         __asm__ __volatile__("mfc1 $8, %0\n\t"
                              "qmtc2.ni $8, $vf8\n\t"
                              "vsubx.w $vf8, $vf0, $vf8x\n\t"
@@ -716,8 +1082,27 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
                              :
                              : "f"(rate[0]), "r"(&screenOrigin)
                              : "$8");
+#endif
     }
     if (0.0f < rate[1] && rate[1] < 1.0f) {
+#ifdef ICO_HOST
+        {
+            /* the projected end moved to rate 1 along the edge, back in
+               screen coordinates; w gains the origin's w */
+            float r = rate[1];
+            float u = 1.0f - r;
+            float *o = shadowVolumeRegs.proj[5];
+            const float *org = (const float *)&screenOrigin;
+            int k;
+
+            for (k = 0; k < 3; k++) {
+                o[k] = ((float *)&oa)[k] * u + ((float *)&ob)[k] * r;
+            }
+            for (k = 0; k < 4; k++) {
+                o[k] = o[k] + org[k];
+            }
+        }
+#else
         __asm__ __volatile__("mfc1 $8, %0\n\t"
                              "qmtc2.ni $8, $vf8\n\t"
                              "vsubx.w $vf8, $vf0, $vf8x\n\t"
@@ -734,6 +1119,7 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
                              :
                              : "f"(rate[1]), "r"(&screenOrigin)
                              : "$8");
+#endif
     }
     return dot * sgn;
 }
@@ -766,6 +1152,48 @@ static inline int clipVolumeHead(VECTOR *ta, VECTOR *ba, VECTOR *tb, VECTOR *bb,
  * table. */
 static inline float volumeStripFaceZ(int i) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the z of (A - B) x (C - B) over x and y, with A, B and C the projected
+       strip vertices VOLUME_EDGE names (vf20-vf25 = proj[0..5]) */
+    const float (*p)[4] = shadowVolumeRegs.proj;
+    const float *a = p[0];
+    const float *b = p[0];
+    const float *c = p[0];
+    float e8x, e8y, e9x, e9y;
+
+    switch (i) {
+    case 0:
+    case 1:
+        return 1.0f;
+    case 2:
+        a = p[0], b = p[1], c = p[3];
+        break;
+    case 3:
+        return -stripFaceZ[2];
+    case 4:
+        a = p[3], b = p[4], c = p[5];
+        break;
+    case 5:
+        a = p[4], b = p[5], c = p[1];
+        break;
+    case 6:
+        return -stripFaceZ[5];
+    case 7:
+        a = p[1], b = p[2], c = p[0];
+        break;
+    case 8:
+        a = p[2], b = p[0], c = p[5];
+        break;
+    case 9:
+        return -stripFaceZ[8];
+    }
+    e8x = a[0] - b[0];
+    e8y = a[1] - b[1];
+    e9x = c[0] - b[0];
+    e9y = c[1] - b[1];
+    stripFaceZ[i] = e8x * e9y - e9x * e8y;
+    return stripFaceZ[i];
+#else
     switch (i) {
     case 0:
     case 1:
@@ -801,6 +1229,7 @@ static inline float volumeStripFaceZ(int i) /* derived name */
                          :
                          : "$7");
     return stripFaceZ[i];
+#endif
 }
 
 /* the strip is dropped whole if any of its six vertices left
@@ -856,6 +1285,9 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
         }
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
+#ifdef ICO_RD
+        shadowHostStripPos(i, v, (unsigned char)p[-1] == 0x04);
+#endif
     }
     return p;
 }
@@ -921,6 +1353,9 @@ void shadow_RenderVolume(Sub15C *o)
         shadow_EntryNormalShadow(o, 0, len);
     }
     dl_SetDLPriority(3);
+#ifdef ICO_RD
+    shadowHostBegin(o);
+#endif
     shadow_getShadowVectorAverage(&pos, o);
     loadVolumeMatrix(&pos);
     c = PacketBufferStruct.ptr.c;
@@ -981,6 +1416,9 @@ void shadow_RenderVolume(Sub15C *o)
     PacketBufferStruct.ptr.c = (q + 0x10);
     if (p - start > 0) {
         dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
     }
@@ -1020,6 +1458,9 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
     _GetLength(&pos, &cam);
     shadow_EntryNormalShadow(o, idx, len);
     dl_SetDLPriority(3);
+#ifdef ICO_RD
+    shadowHostBegin(o);
+#endif
     shadow_getShadowVectorAverage(&pos, o);
     loadVolumeMatrix(&pos);
     c = PacketBufferStruct.ptr.c;
@@ -1080,6 +1521,9 @@ void shadow_RenderVolumeMulti(Sub15C *o, int idx)
     PacketBufferStruct.ptr.c = (q + 0x10);
     if (p - start > 0) {
         dl_SetDLPriority(dl_GetPri());
+#ifdef ICO_RD
+        shadowHostFlush();
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
     }
@@ -1096,12 +1540,20 @@ typedef struct ShadowVtx { /* field names derived */
     int _C;
 } __attribute__((aligned(16))) ShadowVtx; /* derived name */
 
-typedef struct ShadowPoly { /* field names derived */
-    ShadowVtx *pts;
+typedef struct ShadowPoly {      /* field names derived */
+    ICO_EEWORD(ShadowVtx *) pts; /* an EE word on the host (eeword.h) */
     int _4;
     int _8;
     int _C;
 } __attribute__((aligned(16))) ShadowPoly; /* derived name */
+
+#ifdef ICO_HOST
+
+_Static_assert(sizeof(ShadowPoly) == 16, "ShadowPoly is the file's 0x10-byte entry");
+
+_Static_assert(sizeof(ClusterPoly) == 16, "ClusterPoly is the file's 0x10-byte entry");
+
+#endif
 
 void shadow_MakeObjectData(PObjModel *mdl)
 {
@@ -1134,12 +1586,17 @@ void shadow_MakeObjectData(PObjModel *mdl)
             r = (ShadowPoly *)mallocseki(p->polyCount * 16);
             for (j = 0; j < p->polyCount; j++) {
                 r[j] = ((ShadowPoly *)p->polys)[j];
-                while (r[j].pts[m]._0 != -1) {
+                while (ICO_EEPTR(ShadowVtx *, r[j].pts)[m]._0 != -1) {
                     m++;
                 }
+#ifdef ICO_HOST
+                t = (ShadowVtx *)mallocseki((m + 1) * 16);
+                r[j].pts = ICO_EEW(t);
+#else
                 t = r[j].pts = (ShadowVtx *)mallocseki((m + 1) * 16);
+#endif
                 for (l = 0; l < m + 1; l++) {
-                    *t++ = ((ShadowPoly *)p->polys)[j].pts[l];
+                    *t++ = ICO_EEPTR(ShadowVtx *, ((ShadowPoly *)p->polys)[j].pts)[l];
                 }
                 m = 0;
             }
@@ -1154,7 +1611,7 @@ void shadow_MakeObjectData(PObjModel *mdl)
             p->vtx = (char *)q;
         }
 
-        s = (ShadowRun **)mallocseki(p->stripCount * 4);
+        s = (ShadowRun **)mallocseki(p->stripCount * sizeof(ShadowRun *));
         /* the strip pass reuses the outer loop's own index, so the outer
          * loop steps on from where this one ended */
         for (i = 0; i < p->stripCount; i++) {

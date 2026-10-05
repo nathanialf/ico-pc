@@ -20,6 +20,18 @@
 #include "camera-ico2.h"
 #include "poly-flat.h"
 
+#ifdef ICO_HOST
+
+/* PC port (renderer R7b, docs/port/RENDER_API.md "Frame rate and interpolation"): the hard
+   camera cuts, for the presenter's interpolation (port/game/video_options.c;
+   a counter no game state reads) */
+extern void ico_video_camera_cut(void);
+
+#define CAM_HOST_CUT_IF(c) ((c) ? ico_video_camera_cut() : (void)0)
+#else
+#define CAM_HOST_CUT_IF(c) ((void)0)
+#endif
+
 static int InsertCamera_isEnable(void);
 
 union PendCopy { /* field names derived */
@@ -90,9 +102,36 @@ typedef struct InsertCameraWork { /* field names derived */
    insert-camera request. */
 static union CameraSetIn prevCameraSet; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: InitCamera and CameraSetTargetGObj copy a CamTgt (pos over pos and
+   the pad, tgt over rotX..rotZ) whole over these two, and CamTgt is 16-byte
+   aligned: the host compiler moves it with aligned SSE loads and stores, so
+   the two sets carry that alignment (the EE's quadword copy did not fault on
+   a 4-byte aligned set; a host one would).  The layouts must agree
+   (tools/template_audit.py). */
+static CameraSet2 cameraSet __attribute__((aligned(16)));       /* derived name */
+static CameraSet2 targetCameraSet __attribute__((aligned(16))); /* derived name */
+
+ICO_LAYOUT_AT(CamTgt, pos, CameraSet2, pos);
+
+ICO_LAYOUT_AT(CamTgt, tgt, CameraSet2, rotX);
+
+ICO_LAYOUT_SIZE(CamTgt, CameraSet2);
+
+_Static_assert(__alignof__(cameraSet) >= __alignof__(CamTgt) &&
+                   __alignof__(targetCameraSet) >= __alignof__(CamTgt),
+               "the camera sets are not aligned for CamTgt's copy");
+
+#else
+
 static CameraSet2 cameraSet; /* derived name */
 
 static CameraSet2 targetCameraSet; /* derived name */
+
+#endif
 
 static CamCtrl camctrl; /* derived name */
 
@@ -416,6 +455,7 @@ void InitCamera(void)
 {
     GObj *gobj = getCameraDefaultTargetGObj();
     InsertCamera_Clear();
+    CAM_HOST_CUT_IF(1); /* port (R7b): a stage's first camera */
     default_cameratarget_gobj = gobj;
     cameraMode = 3;
     *(CamTgt *)&targetCameraSet = *(CamTgt *)&cameraSet = cameraTargetDefault;
@@ -564,6 +604,7 @@ void SetCameraMatrix(GObj *self)
         if (debug_ignore_demo_camera != 0) {
             goto handCamera;
         }
+        CAM_HOST_CUT_IF(gamecamCutBack != 0); /* port (R7b): the cut back to the game camera */
         SetCameraMatrix_Ico2(gamecamCutBack);
         gamecamCutBack = 0;
         if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
@@ -724,8 +765,15 @@ void SetCameraMatrix(GObj *self)
         } else {
             debug_zoom_per = (float)debug_zoom_per * (1.0f - zoomBlend) + (float)target * zoomBlend;
         }
+#ifdef ICO_HOST
+        /* PC port: the range is empty (max == min) on some stages; the EE's
+           div.s gives +-Fmax there, IEEE gives Inf or NaN (DIVERGENCES.md F5) */
+        SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
+                                                (float)(zoomRangeMax - zoomRangeMin)));
+#else
         SetCameraZoomOffsetRatio(1.0f - (float)(debug_zoom_per - zoomRangeMin) /
                                             (float)(zoomRangeMax - zoomRangeMin));
+#endif
     }
     /* the mode the last frame ran in */
     {
@@ -734,6 +782,7 @@ void SetCameraMatrix(GObj *self)
         GlobalTimer = 0;
         if (lastCameraMode != cameraMode || monitorCameraInit != 0) {
             GlobalTimer = 1;
+            CAM_HOST_CUT_IF(1); /* port (R7b): a camera mode change (path camera in or out) */
         }
         lastCameraMode = cameraMode;
         monitorCameraInit = 0;
@@ -899,6 +948,7 @@ void InsertCamera_Exec(float *cam, int *cut, int *cutType, int *enable)
     *enable = 0;
     if (insertCamera.enable) {
         if (insertCamera.cut) {
+            CAM_HOST_CUT_IF(insertCamera.cutType == 0); /* port (R7b): initMonitorCamera(1) */
             *cut = 1;
             *cutType = insertCamera.cutType;
             insertCamera.cut = 0;

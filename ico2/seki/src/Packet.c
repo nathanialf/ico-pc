@@ -12,6 +12,150 @@
 #include "memory.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* memset (pac_makeBoundingBox) and strcmp (pac_hostStripEntry) in every
+   host build, the headless one too */
+#include <string.h>
+
+#endif
+#ifdef ICO_RD
+
+#include <stdlib.h>
+#include "rd_mesh.h"
+
+#endif
+#ifdef ICO_RD
+
+/* ===================================================================== *
+ * PC port (renderer wave 3, R3ab): one rd mesh per packet (rd_mesh.h).
+ *
+ * A packet is a VIF code stream: per batch NOP NOP NOP UNPACK(n) (the DMA
+ * tag pac_closeDmaTag zeroes reads as two NOPs), n quadwords at TOP (the GIF
+ * tag, then the vertices, counts.w[0] quadwords each), MSCNT, and so on
+ * (pac_continueTag, pac_setVifEndCode).  The UNPACK payloads, back to back,
+ * are the mesh's creation stream; RegistPacket.c draws the mesh where the
+ * PS2 chains the packet (dl_OpenDma(2, pk->data, ...)).  The mesh id lives
+ * in the header's pad word (PacHeader.pad9C: four bytes of padding on the
+ * EE, unused).
+ * ===================================================================== */
+
+#define PAC_HOST_BATCHES 512
+
+/* The UNPACK payloads of a packet into qw (at most cap quadwords) and their
+   batches; returns the quadword count, 0 when the packet has none. */
+static unsigned int pac_hostStream(const PacHeader *pk, float (*qw)[4], unsigned int cap,
+                                   RdVuBatchDesc *b, unsigned int *nb, unsigned int *qpv)
+{
+    const unsigned char *p = (const unsigned char *)pk->data;
+    unsigned int nw = pk->size / 4, i = 0, n = 0;
+
+    *nb = 0;
+    *qpv = 0;
+    while (i < nw) {
+        unsigned int code;
+        unsigned int cmd;
+
+        memcpy(&code, p + (size_t)i * 4, 4);
+        i++;
+        cmd = (code >> 24) & 0x7F;
+        if (cmd == 0x6C) { /* UNPACK V4-32 */
+            unsigned int num = (code >> 16) & 0xFF;
+            unsigned int nloop;
+
+            if (num == 0) {
+                num = 256;
+            }
+            if (i + num * 4 > nw || n + num > cap || *nb == PAC_HOST_BATCHES) {
+                break;
+            }
+            memcpy(qw[n], p + (size_t)i * 4, (size_t)num * 16);
+            memcpy(&nloop, qw[n], 4);
+            nloop &= 0x7FFF;
+            if (nloop != 0 && *qpv == 0) {
+                *qpv = (num - 1) / nloop;
+            }
+            b[*nb].firstQw = n;
+            b[*nb].material = (unsigned short)pk->mat;
+            b[*nb].group = 0;
+            (*nb)++;
+            n += num;
+            i += num * 4;
+        }
+    }
+    return n;
+}
+
+static float (*pacHostQw)[4];
+
+static unsigned int pacHostQwCap;
+
+static RdVuBatchDesc pacHostBatch[PAC_HOST_BATCHES];
+
+static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsigned int *qpv)
+{
+    unsigned int need = pk->size / 16 + 1;
+
+    if (need > pacHostQwCap) {
+        free(pacHostQw);
+        pacHostQw = malloc((size_t)need * 16);
+        pacHostQwCap = pacHostQw ? need : 0;
+    }
+    if (pacHostQw == 0) {
+        return 0;
+    }
+    return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv);
+}
+
+static void pac_hostBuild(PacHeader *pk, const char *name)
+{
+    RdVuMeshDesc d;
+    RdMesh m = {0};
+    unsigned int nb, qpv, n;
+
+    memset(pk->pad9C, 0, sizeof(pk->pad9C));
+    if (pk->data == 0 || pk->size == 0) {
+        return;
+    }
+    n = pac_hostCollect(pk, &nb, &qpv);
+    if (n != 0 && nb != 0 && qpv != 0) {
+        memset(&d, 0, sizeof(d));
+        d.qw = (const float (*)[4])pacHostQw;
+        d.qwCount = n;
+        d.qwPerVertex = qpv;
+        d.batchCount = nb;
+        d.batches = pacHostBatch;
+        d.materialCount = 1;
+        d.debugName = name;
+        m = rd_CreateVuMesh(&d);
+    }
+    memcpy(pk->pad9C, &m.id, sizeof(m.id));
+}
+
+unsigned int pac_HostMesh(PacHeader *pk)
+{
+    RdMesh m;
+
+    memcpy(&m.id, pk->pad9C, sizeof(m.id));
+    if (m.id == 0 || !rd_VuMeshValid(m)) {
+        pac_hostBuild(pk, "pac");
+        memcpy(&m.id, pk->pad9C, sizeof(m.id));
+    }
+    return m.id;
+}
+
+void pac_HostRefresh(PacHeader *pk)
+{
+    RdMesh m = {pac_HostMesh(pk)};
+    unsigned int nb, qpv;
+
+    if (m.id != 0 && pac_hostCollect(pk, &nb, &qpv) != 0) {
+        rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw);
+    }
+}
+
+#endif /* ICO_RD */
+
 /* the largest packet pac_MakePacket has built so far */
 static int maxPacketSize = 0; /* derived name */
 
@@ -36,20 +180,33 @@ typedef union { /* field names derived */
     int w[2];
 } PacState; /* derived name */
 
+/* A packet address held as a word: unsigned int on the EE, and pointer-wide
+   on the host, where the packet builder's addresses are host pointers. */
+#ifdef ICO_HOST
+
+typedef __UINTPTR_TYPE__ PacAddr;
+
+#else
+
+typedef unsigned int PacAddr;
+
+#endif
+#define PAC_PTR(T, a) ((T)(ICO_WORD)(a))
+
 /* The work area's layout.  The cursor is a union of packet pointers, and
    each word is one post-increment statement. */
 typedef union { /* field names derived */
     int *i;
     float *f;
-    unsigned int addr;
+    PacAddr addr;
     PacBoxVec *v;
 } PacCursor; /* derived name */
 
 typedef struct { /* field names derived */
     char name[32];
-    unsigned int dmaTag;
-    unsigned int vifCode;
-    unsigned int gifTag;
+    PacAddr dmaTag;
+    PacAddr vifCode;
+    PacAddr gifTag;
     PacCursor cursor;
     PacState counts;
     PacState state;
@@ -94,8 +251,7 @@ static void pac_DispQW(void *p, int size)
             debug_StdPrintfDummy("%12f ", ((float *)p)[i]);
         }
     }
-    debug_StdPrintfDummy("
-");
+    debug_StdPrintfDummy("\n");
 }
 
 inline void pac_Dump(int *data, int size)
@@ -147,13 +303,15 @@ void pac_DumpPac(PacHeader *pac)
             cnt--;
         }
         pac = pac->next;
-        debug_StdPrintfDummy("
-");
+        debug_StdPrintfDummy("\n");
     }
 }
 
 inline void pac_DispVu1Memory(int idx, int n, int size)
 {
+#ifdef ICO_HOST
+    /* 0x1100C000 is VU1 data memory, which has no host address */
+#else
     char *p = (char *)0x1100C000 + (idx << 4);
     int i;
     for (i = 0; i < n; i++) {
@@ -161,6 +319,7 @@ inline void pac_DispVu1Memory(int idx, int n, int size)
         p += 0x10;
         pac_DispQW(q, size);
     }
+#endif
 }
 
 /* grows the context's bounding box by one vertex (the strip builders inline
@@ -236,6 +395,35 @@ static void pac_error(char *name, int type)
     __assert("src/Packet.c", 684, "0");
 }
 
+#ifdef ICO_HOST
+
+/* PC port: the title logo's "M" of the TM (model "O": one 12-vertex strip
+   around the letter's outline, position indices 163..174) is stored in an
+   order that zig-zags across the concave outline, so four of its ten
+   triangles fill the notch above the V and the gap below it; the PS2 draws
+   the disc data the same way. The same twelve entries taken in tmGood's
+   order make ten triangles that all lie inside the letter. Returns the
+   entry pac_makeNormalStrip reads as vertex i. */
+static short *pac_hostStripEntry(short *strip, int num, int i)
+{
+    static const short tmBad[12] = {165, 164, 166, 163, 167, 174, 168, 173, 169, 172, 170, 171};
+    static const short tmGood[12] = {163, 164, 174, 165, 173, 166, 172, 167, 171, 168, 170, 169};
+    int k;
+
+    if (num != 12 || strcmp(pacWork.name, "O") != 0) {
+        return strip + i * 8;
+    }
+    for (k = 0; k < 12; k++) {
+        if (strip[k * 8 + 2] != tmBad[k]) {
+            return strip + i * 8;
+        }
+    }
+    for (k = 0; k < 12 && tmBad[k] != tmGood[i]; k++) {}
+    return strip + k * 8;
+}
+
+#endif
+
 static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
 {
     char buf[256];
@@ -255,8 +443,11 @@ static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
     ary = obj->texDefs;
     col = obj->col;
     ctx = &pacWork;
-    *(int *)(strip - 6) = (ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag;
+    *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
+#ifdef ICO_HOST
+        v = pac_hostStripEntry(strip, num, i);
+#endif
         PacWork *ctx = &pacWork;
 
         pac_growBounds(ctx, vtx, v[2]);
@@ -311,12 +502,17 @@ static int pac_getWeight(PacWeight *w, PObjPart *obj, char *shp, int num)
     for (j = 0; j < 4; j++) { w[j].weight = 0.0f; w[j].no = 0; }
 
     for (j = 0; j < obj->polyCount; j++) {
+#ifdef ICO_HOST
+        /* ObjEnt.p is an EE word; the entries are walked as bytes */
+        bone = ICO_EEPTR(char *, ((ObjEnt *)((char *)obj->polys + j * 16))->p);
+#else
         bone = *(char **)(j * 16 + (int)obj->polys);
+#endif
 
-        for (; *(int *)(i * 16 + (int)bone) >= 0;) {
-            if ((id = *(int *)(i * 16 + (int)bone)) == *(short *)(shp + 4)) {
-                w[n].no = *(int *)(j * 16 + (int)obj->polys + 4);
-                w[n].weight = *(float *)(i * 16 + (int)bone + 4);
+        for (; *(int *)(i * 16 + (ICO_WORD)bone) >= 0;) {
+            if ((id = *(int *)(i * 16 + (ICO_WORD)bone)) == *(short *)(shp + 4)) {
+                w[n].no = *(int *)(j * 16 + (ICO_WORD)obj->polys + 4);
+                w[n].weight = *(float *)(i * 16 + (ICO_WORD)bone + 4);
                 if (n == 0) {
                     ret = id;
                     if ((unsigned int)ret >= obj->vtxCount)
@@ -375,7 +571,7 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
     uv = obj->uv;
     col = obj->col;
     ctx = &pacWork;
-    *(int *)(strip - 6) = (ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag;
+    *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
         PacWork *ctx;
         int idx;
@@ -431,15 +627,21 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
     return num - 2;
 }
 
-static void pac_openDmaTag(int buf)
+static void pac_openDmaTag(ICO_WORD buf)
 {
     register int mask = 0x0FFFFFFF;
     PacWork *ctx = &pacWork;
     float f0 = 16777215.0f;
     float f1 = -16777215.0f;
+#ifdef ICO_HOST
+    ctx->dmaTag = ICO_PHYS(buf);
+    ctx->vifCode = ICO_PHYS(buf + 0x8);
+    ctx->gifTag = ICO_PHYS(buf + 0x10);
+#else
     ctx->dmaTag = buf & mask;
     ctx->vifCode = (buf + 0x8) & mask;
     ctx->gifTag = (buf + 0x10) & mask;
+#endif
     ctx->cursor.addr = buf + 0x20;
     ctx->boxMin[2].f = f0;
     ctx->boxMin[1].f = f0;
@@ -447,16 +649,20 @@ static void pac_openDmaTag(int buf)
     ctx->boxMax[2].f = f1;
     ctx->boxMax[1].f = f1;
     ctx->boxMax[0].f = f1;
+#ifdef ICO_HOST
+    debug_StdPrintfDummy("DMAOPEN   :%p\n", ICO_PHYS(buf));
+#else
     debug_StdPrintfDummy("DMAOPEN   :%p\n", buf & mask);
+#endif
 }
 
 static void pac_setVifCode(int num)
 {
     PacWork *ctx = &pacWork;
-    ((int *)ctx->vifCode)[0] = 0;
-    ((int *)ctx->vifCode)[1] = (num << 16) | 0x6C008000;
-    debug_StdPrintfDummy("VIFUNPACK :%08x %08x (%p:%d)\n", ((int *)ctx->vifCode)[0],
-                         ((int *)ctx->vifCode)[1], ctx->vifCode, num);
+    PAC_PTR(int *, ctx->vifCode)[0] = 0;
+    PAC_PTR(int *, ctx->vifCode)[1] = (num << 16) | 0x6C008000;
+    debug_StdPrintfDummy("VIFUNPACK :%08x %08x (%p:%d)\n", PAC_PTR(int *, ctx->vifCode)[0],
+                         PAC_PTR(int *, ctx->vifCode)[1], PAC_PTR(void *, ctx->vifCode), num);
 }
 
 static void pac_setVifEndCode(void)
@@ -471,7 +677,7 @@ static void pac_setVifEndCode(void)
     ctx->cursor.i = p + 2;
     p[2] = 0;
     ctx->cursor.i = p + 3;
-    debug_StdPrintfDummy(p + 3);
+    debug_StdPrintfDummy((char *)(p + 3));
 }
 
 /* GIF tag template for the two texture-mapping modes: per mode the tag's
@@ -509,14 +715,14 @@ static void pac_setGifTag(PObjMaterial *mat, PObjTexInfo *tex, unsigned long lon
         abe = 1;
     tme = tex->found & 1;
     ctx = &pacWork;
-    ((PacketWord *)ctx->gifTag)[0].ul =
-        gifTagTmpl[tme].tag |
-        ((0xCULL | ((unsigned long long)tme << 4) | ((unsigned long long)abe << 6)) << 47) | nloop;
-    ((PacketWord *)ctx->gifTag)[1].ul = gifTagTmpl[tme].regs;
+    PAC_PTR(PacketWord *, ctx->gifTag)
+    [0].ul = gifTagTmpl[tme].tag |
+             ((0xCULL | ((unsigned long long)tme << 4) | ((unsigned long long)abe << 6)) << 47) |
+             nloop;
+    PAC_PTR(PacketWord *, ctx->gifTag)[1].ul = gifTagTmpl[tme].regs;
     debug_StdPrintfDummy("GIFTAG    :");
-    debug_StdPrintfDummy(ctx->gifTag);
-    debug_StdPrintfDummy(" (%d)
-", nloop);
+    debug_StdPrintfDummy(PAC_PTR(char *, ctx->gifTag));
+    debug_StdPrintfDummy(" (%d)\n", nloop);
 }
 
 /* the packet bytes pac_closeTag adds up, the polygons pac_makeStrip counts, the tags
@@ -537,8 +743,8 @@ static int pacUnusedWord; /* derived name */
    the second word: the first store may alias it. */
 static inline void pac_closeDmaTag(void) /* derived name */
 {
-    ((unsigned int *)pacWork.dmaTag)[0] = 0;
-    ((unsigned int *)pacWork.dmaTag)[1] = 0;
+    PAC_PTR(unsigned int *, pacWork.dmaTag)[0] = 0;
+    PAC_PTR(unsigned int *, pacWork.dmaTag)[1] = 0;
 }
 
 static int pac_closeTag(PObjMaterial *mat, PObjTexInfo *tex)
@@ -548,7 +754,7 @@ static int pac_closeTag(PObjMaterial *mat, PObjTexInfo *tex)
     unsigned int qwc;
 
     ctx = &pacWork;
-    n = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4;
+    n = ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4;
     if (n == 1) {
         ctx->dmaTag = 0;
         ctx->vifCode = 0;
@@ -557,10 +763,10 @@ static int pac_closeTag(PObjMaterial *mat, PObjTexInfo *tex)
     }
     pac_setVifCode(n);
     pac_setGifTag(mat, tex,
-                  (((((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4) - 1) /
+                  (((((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4) - 1) /
                    (unsigned int)ctx->counts.w[0]));
     pac_setVifEndCode();
-    qwc = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag) >> 4;
+    qwc = ((ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag) >> 4;
     pac_closeDmaTag();
     pacPacketBytes += qwc * 16;
     pacTagCount += 1;
@@ -575,8 +781,8 @@ static inline void pac_continueDmaTag(void) /* derived name */
     *p++ = 0x17000000;
     ctx->cursor.i = p;
     p[0] = 0;
-    ctx->vifCode = (int)(p + 1) & 0x0FFFFFFF;
-    ctx->gifTag = (int)(p + 3) & 0x0FFFFFFF;
+    ctx->vifCode = (PacAddr)ICO_PHYS(ICO_ADDR(p + 1));
+    ctx->gifTag = (PacAddr)ICO_PHYS(ICO_ADDR(p + 3));
     ctx->cursor.i = p + 7;
 }
 
@@ -585,14 +791,14 @@ static void pac_continueTag(PObjMaterial *mat, PObjTexInfo *tex)
     PacWork *ctx;
 
     ctx = &pacWork;
-    if (((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4 == 1) {
+    if (((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4 == 1) {
         debug_StdPrintfDummy("pac_continueTag:Packet too small. %d\n", 0);
         debug_assert("src/Packet.c", 1147);
         __assert("src/Packet.c", 1147, "0");
     }
-    pac_setVifCode(((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4);
+    pac_setVifCode(((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4);
     pac_setGifTag(mat, tex,
-                  (((((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4) - 1) /
+                  (((((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4) - 1) /
                    (unsigned int)ctx->counts.w[0]));
     pac_continueDmaTag();
     pacTagCount += 1;
@@ -613,11 +819,11 @@ static void pac_checkDivide(int num, PObjMaterial *mat, PObjTexInfo *tex)
         debug_assert("src/Packet.c", 1172);
         __assert("src/Packet.c", 1172, "0");
     }
-    qwc = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4;
+    qwc = ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4;
     if (qwc + ctx->counts.w[0] * num > limit) {
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     } else if ((qwc - 1) / (unsigned int)ctx->counts.w[0] * ctx->counts.w[1] + 1 +
@@ -629,14 +835,14 @@ static void pac_checkDivide(int num, PObjMaterial *mat, PObjTexInfo *tex)
             qwc + ((qwc - 1) / (unsigned int)ctx->counts.w[0] * ctx->counts.w[1] + 1));
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     } else if (ctx->counts.w[0] * num >= 256) {
         debug_StdPrintfDummy("chain too long! cut!\n");
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     }
@@ -651,16 +857,16 @@ typedef struct { /* field names derived */
    builder holds its packet addresses as words (pacWork's tags and cursor,
    pac_makeStrip's pkt and dst) and masks the segment bits off them, so the
    heap's pointers are kept as ints here and there. */
-static inline int pac_moveToSeki(int src, int size) /* derived name */
+static inline ICO_WORD pac_moveToSeki(ICO_WORD src, int size) /* derived name */
 {
-    int p;
+    ICO_WORD p;
 
-    p = mallocseki(size);
+    p = (ICO_WORD)mallocseki(size);
     if (p == 0)
         debug_Assert("pac_copyStrip:No Enough Memory for Packet.\n");
     debug_StdPrintfDummy("ALL:src:%p => dst:%p (size:%x)\n", src, p, size);
     if (src != p)
-        malloc_MemCpy(p, src, size);
+        malloc_MemCpy((void *)p, (void *)src, size);
     return p;
 }
 
@@ -715,10 +921,10 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
 {
     char buf[1024];
     int num;
-    int dst;
+    ICO_WORD dst;
     PObjTexInfo *tex;
     PObjMaterial *mat;
-    int pkt;
+    ICO_WORD pkt;
     short *p;
     int n;
     int i;
@@ -739,7 +945,7 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
         tex = &tbl->texs[texno];
     }
     pac_countOneVertexPacketSize(mat, tex);
-    pkt = mallocsekistage(1048576);
+    pkt = (ICO_WORD)mallocsekistage(1048576);
     if (pkt == 0)
         debug_Assert("pac_makeStrip:No Memory To Convert.\n");
     pac_openDmaTag(pkt);
@@ -791,13 +997,17 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
     }
     if (size > 0) {
         if (malloc_GetPartition() == 0) {
-            dst = pac_moveToSeki(pkt & 0x0FFFFFFF, size);
-            iosFree(pkt & 0x0FFFFFFF);
+            dst = pac_moveToSeki(ICO_PHYS(pkt), size);
+            iosFree((void *)ICO_PHYS(pkt));
         } else {
-            dst = reallocseki(pkt & 0x0FFFFFFF, size);
+#ifdef ICO_HOST
+            dst = (ICO_WORD)reallocseki((void *)ICO_PHYS(pkt), size);
+#else
+            dst = reallocseki(ICO_PHYS(pkt), size);
+#endif
         }
     } else {
-        iosFree(pkt & 0x0FFFFFFF);
+        iosFree((void *)ICO_PHYS(pkt));
     }
     *out = (char *)dst;
     return size;
@@ -888,7 +1098,7 @@ static void pac_makeMaterialTable(PObjGroup *out, PObjPart *obj, int variant, in
         ent = &tbl[i];
         /* the entry address is formed by hand: &obj->mats[i] moves the bytes
            (measured) */
-        src = (PObjMatDef *)(i * 0x10 + (int)obj->mats);
+        src = (PObjMatDef *)(i * 0x10 + (ICO_WORD)obj->mats);
         flag = src->alpha >= 0.501960814f;
         a = src->wrap;
         x = src->fbaOff == 0;
@@ -917,6 +1127,16 @@ typedef struct MatLine {        /* field names derived */
     short texCount;             /* 0x0E */
 } MatLine;                      /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: RegistPacket.c's reg_dispPointLineObj reads a line part's
+   record through PObjGroup (grp->packets), so the line set must sit where
+   the packets do, as both sit at 0x08 on the EE */
+_Static_assert(__builtin_offsetof(MatLine, lineSet) == __builtin_offsetof(PObjGroup, packets),
+               "MatLine.lineSet is not at PObjGroup.packets");
+
+#endif
+
 static void pac_makeMaterialTableLine(MatLine *out, PObjPart *obj, int variant, int blend,
                                       unsigned int mode)
 {
@@ -931,7 +1151,7 @@ static void pac_makeMaterialTableLine(MatLine *out, PObjPart *obj, int variant, 
     tbl = mallocseki(obj->matCount * 112);
     for (i = 0; i < obj->matCount; i++) {
         ent = &tbl[i];
-        src = (PObjMatDef *)(i * 0x10 + (int)obj->mats);
+        src = (PObjMatDef *)(i * 0x10 + (ICO_WORD)obj->mats);
         flag = src->alpha >= 0.501960814f;
         a = src->wrap;
         x = src->fbaOff == 0;
@@ -1028,7 +1248,7 @@ static void pac_makeShapeTable(PObjGroup *grp, PObjPart *obj)
     obj->nrm = mallocseki(obj->nrmCount * 16);
     for (i = 0; i < obj->nrmCount; i++)
         _CopyVector(obj->nrm + i * 16, obj->nrmSave + i * 16);
-    tbl = (PacQw **)mallocseki(obj->stripCount * 4);
+    tbl = (PacQw **)mallocseki(obj->stripCount * sizeof(void *));
     for (i = 0; i < obj->stripCount; i++) {
         p = ((short **)obj->strips)[i];
         cnt = 0;
@@ -1044,7 +1264,7 @@ static void pac_makeShapeTable(PObjGroup *grp, PObjPart *obj)
             tbl[i][k] = ((PacQw **)obj->strips)[i][k];
     }
     obj->strips = tbl;
-    ntbl = (PacNode **)mallocseki(obj->morphCount * 4);
+    ntbl = (PacNode **)mallocseki(obj->morphCount * sizeof(void *));
     for (i = 0; i < obj->morphCount; i++) {
         ntbl[i] = 0;
         q = ((PacNode **)obj->morphs)[i];
@@ -1149,10 +1369,10 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
         obj->mode.s.type = 2;
     /* the display type, bits 16 and 17 of the mode word */
     if (((unsigned short)(obj->mode.bits >> 16) & 3) == 2) {
-        mtbl = mallocseki(obj->partCount * 16);
+        mtbl = mallocseki(obj->partCount * sizeof(MatLine));
         obj->groups = (PObjGroup *)mtbl;
     } else {
-        tbl = mallocseki(obj->partCount * 48);
+        tbl = mallocseki(obj->partCount * sizeof(PObjGroup));
         obj->groups = tbl;
         sprintf(tbl->name, "%s", obj->name);
     }
@@ -1180,7 +1400,7 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                     pacPolyCount = 0;
                     sz = pac_makeStrip(&out, src, tbl, j, m, obj);
                     if (sz > 0) {
-                        node = mallocseki(160);
+                        node = mallocseki(sizeof(PacHeader));
                         node->mat = j;
                         node->texSlot = m;
                         node->tex = tbl->texs[m].tex;
@@ -1192,6 +1412,9 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                         node->size = sz;
                         node->clip = obj->mode.s.shade;
                         node->next = prev;
+#ifdef ICO_RD
+                        pac_hostBuild(node, obj->name);
+#endif
                         pac_makeBoundingBox(node->box, obj->mode.s.type == 1);
                         prev = node;
                     } else if (sz < 0) {
@@ -1203,19 +1426,23 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
             }
             tbl->packets = prev;
             if (src->morphCount != 0) {
-                p = mallocseki(160);
+                p = mallocseki(sizeof(PacHeader));
                 p->next = 0;
                 prev = tbl->packets;
                 tbl->morph = p;
                 do {
-                    malloc_MemCpy(p, prev, 160);
+                    malloc_MemCpy(p, prev, sizeof(PacHeader));
                     p->data = mallocseki(prev->size);
                     p->size = prev->size;
                     malloc_MemCpy(p->data, prev->data, prev->size);
+#ifdef ICO_RD
+                    /* the copy has its own data: its own mesh */
+                    pac_hostBuild(p, obj->name);
+#endif
                     prev = prev->next;
                     if (prev != 0) {
                         last = p;
-                        p = mallocseki(160);
+                        p = mallocseki(sizeof(PacHeader));
                         p->next = 0;
                         last->next = p;
                     }
@@ -1275,7 +1502,7 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                 p++;
             }
             p[src->lineCount].attr.b.type = 0;
-            mtbl->lineSet = mallocseki(144);
+            mtbl->lineSet = mallocseki(sizeof(PacLineSet));
             mtbl->lineSet->lines = top;
             mtbl++;
         }

@@ -19,7 +19,7 @@ typedef struct {     /* field names derived */
     float pivot[3];  /* 0x0C, pool.c places the model at its negation */
     float subPos[3]; /* 0x18, the sub-box's offset */
     float subRotY;   /* 0x24, the sub-box's facing in degrees */
-} AccessaryRec; /* derived name */
+} AccessaryRec;      /* derived name */
 
 extern AccessaryRec accessary[];
 
@@ -41,12 +41,14 @@ int BoxMemoryFunc(void);
 /* box.c includes switch.c, so switch.h's declarations follow box.c's own */
 #include "switch.h"
 
-int CheckReadyAllSwitches();
+int CheckReadyAllSwitches(void);
 int GetBoxMode(struct GObj *self);
 int AlignBox(struct GObj *self, float grid);
 int GetBoxHoldPoint(float *out, struct GObj *self, struct GObj *chara);
+
 int MoveBoxWithHoldPoint(struct GObj *self, float *holdPoint, struct GObj *holder, int focus,
                          float *dir);
+
 void GetFloorLeverGlobalHoldPoint(void *dst, struct GObj *lev);
 void GetWallLeverGlobalHoldPoint(void *dst, struct GObj *lev);
 int MoveFloatingBox(struct GObj *self, struct GObj *other, float *dst, void *src, float lim);

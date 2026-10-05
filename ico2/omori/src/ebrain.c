@@ -13,6 +13,13 @@
 #include "main.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+extern int ico_opt_yorda_safe(void);
+
+#endif
+
 int eBrainBoyChaseCount;
 
 int eBrainGirlChaseCount;
@@ -81,7 +88,7 @@ inline void eBrainInit(void)
     }
 }
 
-inline int eBrainStatusSet(GObj *gop, int status)
+inline ICO_WORD eBrainStatusSet(GObj *gop, int status)
 {
     EBSlot *slot;
     int i;
@@ -102,7 +109,7 @@ inline int eBrainStatusSet(GObj *gop, int status)
     slot->owner = gop;
     slot->status = 0;
     slot->message = 0;
-    return (int)slot;
+    return (ICO_WORD)slot;
 }
 
 static EBSlot *boyTargets[32]; /* derived name */
@@ -302,6 +309,13 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 1);
         break;
     case 2:
+#ifdef ICO_HOST
+        /* yorda_safe: no enemy takes the girl as its target */
+        if (ico_opt_yorda_safe()) {
+            eBrainSetStatus(p, 1);
+            break;
+        }
+#endif
         eBrainSetStatus(p, 2);
         break;
     case 3:
@@ -311,6 +325,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 0);
         break;
     case 6:
+#ifdef ICO_HOST
+        if (ico_opt_yorda_safe()) {
+            break;
+        }
+#endif
         if (girlGObj != 0) {
             eBrainSetStatus(p, 3);
         }
@@ -391,6 +410,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
                             break;
                         }
                     } else {
+#ifdef ICO_HOST
+                        if (ico_opt_yorda_safe()) {
+                            continue;
+                        }
+#endif
                         if (eBrainCanSeeTarget(gop, girlGObj)) {
                             eBrainSetStatus(p, 2);
                             break;
@@ -399,7 +423,27 @@ EBSlot *eBrainGetTarget(GObj *gop)
                 }
             }
             if (p->status != 0) {
+#ifdef ICO_HOST
+                /* PC port: one of the two indices is -1 here (the enemy chases
+                   the one it found). The EE stores to the word before the
+                   array (ebrain.o 0x9fc and 0xa08, .bss girlTargets at 0x400
+                   and boyTargets at 0x380 after ebrainSlots[32]):
+                   girlTargets[-1] is boyTargets[31] and boyTargets[-1] is
+                   ebrainSlots[31].owner. The host's statics are not laid out
+                   so; it clears those two (DIVERGENCES.md D13) */
+                if (girlIdx >= 0) {
+                    girlTargets[girlIdx] = 0;
+                } else {
+                    boyTargets[31] = 0;
+                }
+                if (boyIdx >= 0) {
+                    boyTargets[boyIdx] = 0;
+                } else {
+                    ebrainSlots[31].owner = 0;
+                }
+#else
                 boyTargets[boyIdx] = girlTargets[girlIdx] = 0;
+#endif
                 changed = 1;
             }
             break;
@@ -407,6 +451,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
         case 1:
             p->target = boyGObj;
             if (p->chaseFrames >= 181) {
+#ifdef ICO_HOST
+                if (ico_opt_yorda_safe()) {
+                    break;
+                }
+#endif
                 if (p->dist[1] < p->dist[0] + 250000.0f) {
                     if (eBrainCanSeeTarget(gop, girlGObj)) {
                         eBrainSetStatus(p, 2);

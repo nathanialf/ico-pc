@@ -64,8 +64,8 @@ void SetFlag4PointFixID(GObj *self, int turns, int id)
     _UnitMatrix(MatrixDrive_GetMatrix());
     ang = -turns * 0x4000;
     MatrixDrive_RotMatrixZ(ang);
-    _ApplyMatrix((char *)GOBJ_SUB(self) + 0xA0, MatrixDrive_GetMatrix(),
-                 (char *)GOBJ_SUB(self) + 0xA0);
+    /* the root position, Sub15C + 0xA0 (flag.h) */
+    _ApplyMatrix(FLAG_ROOT_POS(self), MatrixDrive_GetMatrix(), FLAG_ROOT_POS(self));
     RotQuaternionZ(GOBJ_SUB(self)->root.quat, ang);
     /* the clothes' one cloth: its mesh, and the config's rows and columns */
     setFlag4PointMesh(w->clothes->rec->mesh, w->cfg, turns * 0.25f, id);
@@ -84,7 +84,7 @@ static ClothCfg flagCfg = {8, 50.0f, 10, 0, 0, 0, 5.0f}; /* derived name */
 /* clang-format off */
 char *InitFlagGeo(char *self, char *arg)
 {
-    char *p = iosMallocDebug(ios_partition_sugipon, 20, __FILE__, __LINE__);
+    char *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(FlagWork, 20), __FILE__, __LINE__);
     Vec4Flag v[4];
     char *mesh;
     Vec4Flag *q;
@@ -92,7 +92,7 @@ char *InitFlagGeo(char *self, char *arg)
     float k = ent->length / (float)ent->count;
     float d;
     int type, i, j;
-    ClothCfg *cl = iosMallocDebug(ios_partition_sugipon, 56, __FILE__, __LINE__);
+    ClothCfg *cl = iosMallocDebug(ios_partition_sugipon, 2 * sizeof(ClothCfg), __FILE__, __LINE__); /* the config and its -1 row */
     *cl = flagCfg;
     cl->weight = ent->weight;
     cl[1].num = -1;
@@ -100,7 +100,7 @@ char *InitFlagGeo(char *self, char *arg)
     cl->div = ent->count;
 
     mesh = iosMallocDebug(ios_partition_sugipon, cl->num * 48, __FILE__, __LINE__);
-    ((FlagNodeWord *)&cl->anchors)->i = (int)mesh;
+    FLAG_SET_ANCHORS(cl, mesh);
     /* the four corners of the layout entry, with y negated and w set
        to 1 */
     v[0].m[0] = ent->pt[0][0];
@@ -123,19 +123,19 @@ char *InitFlagGeo(char *self, char *arg)
     v[3].m[2] = ent->pt[3][2];
     v[3].m[3] = 1.0f;
 
-    *(int *)(p + 0x10) = 0;
+    ICO_RAW(int, p, 0x10, ((FlagWork *)p)->turns) = 0;
     type = ent->kind & 0xF;
-    *(int *)(p + 0x0) = type;
+    ICO_RAW(int, p, 0x0, ((FlagWork *)p)->type) = type;
     switch (type) {
     case 1:
     case 2:
-        FLAG_ALLOC_NODES(((SubHandle *)(self + 0x15C))->sub, cl->div - 1);
-        CopyVector(((SubHandle *)(self + 0x15C))->p + 0xA0, ZeroPoint);
+        FLAG_ALLOC_NODES(SUBHANDLE_OF(self)->sub, cl->div - 1);
+        CopyVector(ICO_RAWP(char *, SUBHANDLE_OF(self)->p, 0xA0, (char *)SUBHANDLE_OF(self)->sub->root.pos), ZeroPoint);
         CopyVector(mesh + 0x10, &v[0]);
         CopyVector(mesh + 0x20, &v[1]);
         *(int *)mesh = -1;
         *(float *)(mesh + 4) = k;
-        *(ClothSet **)(p + 4) = InitClothes(cl);
+        ICO_RAW(ClothSet *, p, 4, ((FlagWork *)p)->clothes) = InitClothes(cl);
         break;
         /* types 1 and 2 above reach the 0x15C slot through SubHandle, as
            cage.c and girlForceField.c do; the other slot reads here are
@@ -162,7 +162,7 @@ char *InitFlagGeo(char *self, char *arg)
             *(float *)(mesh + i * 48 + 4) = k;
         }
 
-        *(ClothSet **)(p + 4) = InitClothes(cl);
+        ICO_RAW(ClothSet *, p, 4, ((FlagWork *)p)->clothes) = InitClothes(cl);
         break;
 
 
@@ -179,7 +179,7 @@ char *InitFlagGeo(char *self, char *arg)
         for (i = 0; i < 4; i++)
             _AddVectorXYZ(GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.pos, &v[i]);
         _ScaleVectorXYZ(GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.pos, 0.25f);
-        ((FlagNodeWord *)((char *)GOBJ_SUB(self) + 0xAC))->f = 1.0f;
+        FLAG_SET_POSW(self);
         for (i = 0, q = v; i < 4; i++, q++)
             _SubVectorXYZ(q, q, GOBJ_SUB(self)->root.pos);
 
@@ -199,21 +199,21 @@ char *InitFlagGeo(char *self, char *arg)
         }
 
 
-        *(ClothSet **)(p + 4) = InitClothesNoShade(cl);
+        ICO_RAW(ClothSet *, p, 4, ((FlagWork *)p)->clothes) = InitClothesNoShade(cl);
         break;
     }
 
 
 
-    *(int *)(p + 8) = (int)cl;
+    ICO_RAW(int, p, 8, ((FlagWork *)p)->cfg) = (ICO_WORD_PTR(ClothCfg *))cl;
 
 
 
 
     if (GOBJ_SUB(self)->colData != 0) {
 
-        *(int *)(p + 0xC) = 1;
-    } else { *(int *)(p + 0xC) = 0; }
+        ICO_RAW(int, p, 0xC, ((FlagWork *)p)->collide) = 1;
+    } else { ICO_RAW(int, p, 0xC, ((FlagWork *)p)->collide) = 0; }
 
     GOBJ_SUB(self)->disp = 0;
 
@@ -235,7 +235,8 @@ void FlagGeo(GObj *self)
     gd = GOBJ_SUB(self)->work;
     o = gd->clothes;
     if (*(char **)((char *)GOBJ_SUB(self)) != 0 &&
-        *(int *)(*(char **)((char *)GOBJ_SUB(self)) + 0x16C) == 0) {
+        ICO_RAW(int, *(char **)((char *)GOBJ_SUB(self)), 0x16C,
+                GOBJ_SUB(self)->parent.obj->active) == 0) {
         return;
     }
     GetRootMatrix(MatrixDrive_GetMatrix(), self);
@@ -276,7 +277,8 @@ void FlagDL(GObj *self)
     gd = GOBJ_SUB(self)->work;
     o = gd->clothes;
     if (*(char **)((char *)GOBJ_SUB(self)) != 0 &&
-        *(int *)(*(char **)((char *)GOBJ_SUB(self)) + 0x16C) == 0) {
+        ICO_RAW(int, *(char **)((char *)GOBJ_SUB(self)), 0x16C,
+                GOBJ_SUB(self)->parent.obj->active) == 0) {
         return;
     }
     /* types 1 and 2 turn the cloth's first row into the object's node

@@ -80,10 +80,32 @@ extern void gif_SetGsReg(long long reg, long long data);
 extern void gif_SetZWrite(int on);
 /* as in GifPacket.h, which this TU does not include (gif_SpriteSensitiveOffset differs) */
 extern void gif_SetZTest(int on);
-/* z is unsigned int here, long long in GifPacket.h */
+
+/* z is unsigned int here, long long in GifPacket.h; the host uses the
+   definition's type (layout_texture.c says why) */
+#ifdef ICO_HOST
+
+extern void gif_SpriteSensitiveOffset(int *r, long long z, int *uv, JimCol *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitiveOffset(int *r, unsigned int z, int *uv, JimCol *col, int prim);
+
+#endif
+
 /* as in GifPacket.h, which this TU does not include (gif_SpriteSensitiveOffset differs) */
 extern void gif_EndPacket(void);
+
+#ifdef ICO_RD
+
+/* PC port (renderer R7d): GifHost.h's key of the decoder's primitives, so
+   the presenter matches a subtitle's two rows between ticks by its block */
+extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
+
+#define JIM_HOST_KEY(obj, part) gif_HostDrawKey((obj), (part), 0)
+#else
+#define JIM_HOST_KEY(obj, part) ((void)0)
+#endif
 
 static void display_texture(LtProperty *t)
 {
@@ -302,9 +324,9 @@ static void jimakuMgrJump(JimakuArg *p)
     jimakuMgrNext(p);
 }
 
-static void jimakuMgrEnd(int *p)
+static void jimakuMgrEnd(JimakuArg *p)
 {
-    int val = p[0x4C / 4];
+    CdvdBgReq *val = p->sub.bg;
     if (val != 0) {
         iosCdvdBackGroundMgrDelete(val);
     }
@@ -313,7 +335,7 @@ static void jimakuMgrEnd(int *p)
     iosSemaDelete(&jimakuReadSema);
 }
 
-int jimakuMsgBuf[2] = {0};
+IosMsgWord jimakuMsgBuf[2] = {0};
 
 inline void jimakuManager(void)
 {
@@ -321,7 +343,7 @@ inline void jimakuManager(void)
 
     iosMsgQueueCreate(&jimakuMsgQ, jimakuMsgBuf, 2);
     while (1) {
-        iosMsgRecv(&jimakuMsgQ, &msg, 1);
+        iosMsgRecv(&jimakuMsgQ, (IosMsgWord *)&msg, 1);
         msg->done = 0;
         switch (msg->cmd) {
         case 0:
@@ -334,7 +356,7 @@ inline void jimakuManager(void)
             jimakuMgrJump(msg);
             break;
         case 3:
-            jimakuMgrEnd((int *)msg);
+            jimakuMgrEnd(msg);
             break;
         default:
             debug_StdPrintfDummy("jimakuManager: recv command %d error.", msg->cmd);
@@ -347,14 +369,14 @@ inline void jimakuManager(void)
 void jimakuBegin(JimakuArg *msg)
 {
     msg->cmd = 0;
-    iosMsgSend(&jimakuMsgQ, msg, 1);
+    iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 1);
 }
 
 void jimakuNext(JimakuArg *msg)
 {
     if (systemStatus[10] != 0) {
         msg->cmd = 1;
-        iosMsgSend(&jimakuMsgQ, msg, 0);
+        iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 0);
     }
 }
 
@@ -373,13 +395,13 @@ void jimakuJump(JimakuArg *msg)
         }
     }
     msg->cmd = 2;
-    iosMsgSend(&jimakuMsgQ, msg, 0);
+    iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 0);
 }
 
 void jimakuEnd(JimakuArg *msg)
 {
     systemStatus[10] = 0;
-    jimakuMgrEnd((int *)msg);
+    jimakuMgrEnd(msg);
 }
 
 void jimakuDisp(JimakuArg *msg)
@@ -414,8 +436,11 @@ void jimakuDisp(JimakuArg *msg)
             return;
         }
         if (jimakuOn != 0) {
+            JIM_HOST_KEY(g, 0);
             display_texture(&texProperty[434]);
+            JIM_HOST_KEY(g, 1);
             display_texture(&texProperty[435]);
+            JIM_HOST_KEY(0, 0);
         }
     }
 }

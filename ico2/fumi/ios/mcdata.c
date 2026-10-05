@@ -22,7 +22,12 @@ static inline int _iosMcIconWriteIconsys(CdvdBgReq *self, struct McIconWork *p)
     int size;
     int loop = 1;
 
+#ifdef ICO_HOST
+    /* the buffer is on the stack, above 4 GB on a 64-bit host: no int */
+    ptr = (char *)(((__UINTPTR_TYPE__)buf + 63) & ~(__UINTPTR_TYPE__)63);
+#else
     ptr = (char *)(((int)buf + 63) / 64 * 64);
+#endif
     p->buf = ptr;
 
     do {

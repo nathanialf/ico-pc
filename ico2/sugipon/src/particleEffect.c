@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "debug.h"
 #include "DisplayList.h"
 #include "Primitive.h"
@@ -14,7 +15,15 @@
 #include "windField.h"
 #include "particleEffect.h"
 
-static int setParticleEffect(struct PEGeo *self, struct PEPackage *pkg, struct IosMemPart *part);
+#ifdef ICO_RD
+
+#include <stdio.h>
+#include "MicroCode.h"
+
+#endif
+
+static ICO_WORD setParticleEffect(struct PEGeo *self, struct PEPackage *pkg,
+                                  struct IosMemPart *part);
 
 /* one vertex of the particle primitive's buffers */
 typedef struct PEVtx { /* field names derived */
@@ -160,7 +169,14 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
         w->spin = 0;
     }
     span = (float)pkg->life * (pkg->lifeRand * sugiSignedRandom() + 1.0f);
+#ifdef ICO_HOST
+    /* span is 0 when a package's life and lifeRand make it so (stage 5's
+       torches): the EE's div gives Fmax; the host's Inf times the zero
+       below would be NaN (docs/port/DIVERGENCES.md) */
+    w->alphaStep = ps2_div(w->alpha, span);
+#else
     w->alphaStep = w->alpha / span;
+#endif
     if ((float)w->life < span) {
         w->alpha = w->alpha - (span - (float)w->life) * w->alphaStep;
     }
@@ -178,7 +194,13 @@ static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
 
     if (geo->clip != 0) {
         sceVu0ApplyMatrix(v, matrixptr + 0x100, geo->pos);
+#ifdef ICO_HOST
+        /* PC port: w is 0 for an origin on the camera plane (seen at
+           stage 7, Main tick 115 of a start_stage boot; DIVERGENCES.md F5) */
+        sceVu0ScaleVectorXYZ(v, v, ps2_div(1.0f, v[3]));
+#else
         sceVu0ScaleVectorXYZ(v, v, 1.0f / v[3]);
+#endif
         if (v[2] < 0.0f || v[0] < 0.0f || 4095.0f < v[0] || v[1] < 0.0f || 4095.0f < v[1]) {
             return 1;
         }
@@ -199,7 +221,7 @@ static inline void peSetVtx(PEVtx *dst, PEPartRec *pt) /* derived name */
 
 /* The statements follow the developer's line order (287 self->pkg, 289,
    291, 292, 293, 295, 296, 299, 300, 303). */
-static int setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
+static ICO_WORD setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
 {
     float m[16];
     PEPartRec *p;
@@ -251,11 +273,11 @@ static int setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *par
         }
         self->emitted = (float)self->n;
     }
-    return (int)self->parts;
+    return (ICO_WORD)self->parts;
 }
 
 /* the EE scratchpad holds the particle being updated */
-#define PEWORK (*(PEPartRec *)0x70000000) /* derived name */
+#define PEWORK (*(PEPartRec *)ICO_SPR_ADDR(0)) /* derived name */
 
 /* the per-particle integrator: 0 for a slot that is already dead, 1
    otherwise */
@@ -448,6 +470,23 @@ static void dispParticleEffect(PEGeo *geo)
     PacketBufferStruct.ptr.c = q + 0x10;
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    /* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders"): the
+       packet is a VU1 SET_GSREGISTER packet (PABE 0 and the effect's ALPHA,
+       mode 5, 6 or 4 by alphaMode); mc_HostDma hands its A+D pairs to the GS
+       register decoder ahead of the batch prim_DispParticle chains (already
+       read by Primitive.c's host path, R3ab) */
+    mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+    {
+        static int reported;
+
+        if (!reported) {
+            reported = 1;
+            fprintf(stderr, "particleEffect: first effect drawn (alphaMode %u; reported once)\n",
+                    geo->pkg->alphaMode);
+        }
+    }
+#endif
     prim_DispParticle(geo->prim, matrixptr + 0x100);
 }
 
@@ -486,7 +525,7 @@ int SetParticleEffectByPartition(int no, void *pos, void *quat, struct IosMemPar
 static inline void deleteParticleEffectGeo(int no) /* derived name */
 {
     prim_DeleteParticle(particleEffects[no].geo->prim);
-    *(int *)((char *)particleEffects[no].geo + 0x28) = 0;
+    ICO_RAW(int, particleEffects[no].geo, 0x28, particleEffects[no].geo->prim) = 0;
     iosFree(particleEffects[no].geo->parts);
     iosFree(particleEffects[no].geo);
     particleEffects[no].geo = 0;
@@ -643,6 +682,12 @@ void SetParticleEffectPackage(int no, int *data, int size)
         debug_StdPrintfDummy("\033[36mThis is old version(%d) file. May be an error occur.\033[m\n",
                              *data);
     }
+#ifdef ICO_HOST
+    /* a .pef longer than its 160-byte slot would run into the next package */
+    if (size > 160) {
+        size = 160;
+    }
+#endif
     memcpy(((unsigned char *)particleParams + no * 160), data, size);
 }
 
