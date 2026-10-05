@@ -3,4 +3,4 @@
 pyelftools          # tools/gen_data_c.py (imported by gen_data_desc.py), tools/extract_elf.py
 pycdlib             # tools/extract_elf.py reads the disc's ISO9660 filesystem
 ninja               # .venv/bin/ninja: the CMake presets' generator (CMakePresets.json puts .venv/bin on PATH)
-clang-format>=19    # tools/format.sh
+clang-format==23.1.2  # tools/format.sh; pinned: --check must not drift with a new release

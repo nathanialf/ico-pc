@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_mesh.h"
 
 #define MAX_REFS 4096
 
@@ -247,6 +248,90 @@ typedef struct TexHeader {
     uint32_t id, kind, src, bakedTexa, w, h, target, view;
 } TexHeader;
 
+/* size bytes at off lie inside a payload of psz bytes */
+static bool payloadRange(uint32_t psz, uint32_t off, uint64_t size)
+{
+    return off <= psz && size <= (uint64_t)(psz - off);
+}
+
+/* Every payload range a loaded command names lies inside the payload, and
+ * the parts of a VU payload inside its command's range, as rd_replay.c reads
+ * them: a corrupt dump is refused instead of read past at replay. */
+static bool cmdValid(const RdFrame *f, const RdCmd *c)
+{
+    const uint32_t psz = f->payloadSize;
+    switch (c->type) {
+    case RDC_SCREEN:
+        return payloadRange(psz, c->u[0], (uint64_t)c->u[1] * sizeof(RdScreenVtx));
+    case RDC_COPY:
+        return payloadRange(psz, c->u[2], sizeof(RdCopyRec));
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES: {
+        const uint64_t head = sizeof(RdVuPayload) + sizeof(RdVuBlock);
+        if (c->u[2] < head || !payloadRange(psz, c->u[1], c->u[2])) {
+            return false;
+        }
+        RdVuPayload p;
+        memcpy(&p, f->payload + c->u[1], sizeof(p));
+        if (head + ((uint64_t)p.boneQw + p.streamQw) * 16 > c->u[2]) {
+            return false;
+        }
+        if (c->type == RDC_GRID) {
+            /* rd_DrawVuGrid: per strip the vertices and 4 header/trailer qwords */
+            return p.vertsPerBatch >= 3 && p.qwPerVertex != 0 &&
+                   (uint64_t)p.batchCount * ((uint64_t)p.vertsPerBatch * p.qwPerVertex + 4) <=
+                       p.streamQw;
+        }
+        if (c->type == RDC_PARTICLES) {
+            return 6 + 2 * (uint64_t)p.vertsPerBatch <= p.streamQw;
+        }
+        return true;
+    }
+    case RDC_SHADOW_STRIP:
+        return c->b[0] == RD_SHADOW_TRIS
+                   ? payloadRange(psz, c->u[1], ((uint64_t)c->u[0] + c->u[3]) * sizeof(RdScreenVtx))
+                   : payloadRange(psz, c->u[1], (uint64_t)c->u[0] * 16);
+    case RDC_POST_STUB: {
+        if (!payloadRange(psz, c->u[1], sizeof(RdPostRec))) {
+            return false;
+        }
+        RdPostRec r;
+        memcpy(&r, f->payload + c->u[1], sizeof(r));
+        return r.lutOffset == ~0u || payloadRange(psz, r.lutOffset, 256 * 4);
+    }
+    case RDC_WORLD_PRIMS:
+        return payloadRange(psz, c->u[1], c->u[2]);
+    default:
+        return c->type < RDC_COUNT;
+    }
+}
+
+/* A dumped VU mesh as rd_CreateVuMesh builds them: every index a kick
+ * (ICO_VU_INDEX: kick * 4 + corner 0..2) whose triangle k-2, k-1, k lies in
+ * the stream, every batch inside the index list and the stream. */
+static bool meshValid(uint32_t nv, uint32_t qpv, const uint32_t *ix, uint32_t ni,
+                      const RdVuBatchRec *br, uint32_t nb)
+{
+    if (nv && qpv == 0) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ni; i++) {
+        const uint32_t kick = ix[i] / 4, corner = ix[i] % 4;
+        if (kick < 2 || kick >= nv || corner > 2) {
+            return false;
+        }
+    }
+    for (uint32_t b = 0; b < nb; b++) {
+        if ((uint64_t)br[b].firstIndex + br[b].indexCount > ni ||
+            (uint64_t)br[b].firstVertex + br[b].vertexCount > nv) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool rd__LoadFrame(const char *path, RdFrame *out)
 {
     if (!g_rd.inited || !path || !out) {
@@ -292,6 +377,11 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         out->payloadCap = out->payloadSize = psz;
         ok = out->payload && rraw(fp, out->payload, psz);
     }
+    for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; ok && i < out->lists[l].count; i++) {
+            ok = cmdValid(out, &out->lists[l].cmds[i]);
+        }
+    }
     /* textures: images now, target views after the temp targets exist */
     uint32_t nt = 0;
     ok = ok && r32(fp, &nt) && nt <= MAX_REFS;
@@ -326,7 +416,8 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     ok = ok && r32(fp, &nr) && nr <= RD_MAX_TEMP_PER_FRAME * 4;
     for (uint32_t i = 0; ok && i < nr; i++) {
         uint32_t id, w, h, d, k;
-        ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k);
+        ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k) && w && h &&
+             w <= 8192 && h <= 8192;
         if (ok) {
             uint32_t nid = rd__TempTargetAlloc(w, h, (int)d, (int)k);
             tgtMap.from[tgtMap.n] = id;
@@ -352,7 +443,8 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         uint32_t *ix = malloc((size_t)ni * 4 + 4);
         RdVuBatchRec *br = malloc((size_t)nb * sizeof(RdVuBatchRec) + 4);
         ok = st && ix && br && rraw(fp, st, (size_t)nv * qpv * 16) &&
-             rraw(fp, ix, (size_t)ni * 4) && rraw(fp, br, (size_t)nb * sizeof(RdVuBatchRec));
+             rraw(fp, ix, (size_t)ni * 4) && rraw(fp, br, (size_t)nb * sizeof(RdVuBatchRec)) &&
+             meshValid(nv, qpv, ix, ni, br, nb);
         if (ok) {
             meshMap.from[meshMap.n] = id;
             meshMap.to[meshMap.n++] =
@@ -371,6 +463,14 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     }
     if (!ok) {
         rd__Log("load: %s is truncated or corrupt", path);
+        /* what the load created in the context goes with it (the images and
+         * meshes here, the temporary targets with the frame) */
+        for (uint32_t i = 0; i < texMap.n; i++) {
+            rd_DestroyTexture((RdTex){texMap.to[i]});
+        }
+        for (uint32_t i = 0; i < meshMap.n; i++) {
+            rd_DestroyVuMesh((RdMesh){meshMap.to[i]});
+        }
         rd__FrameFree(out);
         return false;
     }

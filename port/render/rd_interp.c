@@ -1,5 +1,5 @@
 /* rd_interp.c: presentation between simulation ticks (renderer wave 7, R7b;
- * docs/port/RENDER_API.md section 20).
+ * docs/port/RENDER_API.md "Frame rate and interpolation").
  *
  * The game draws one frame per tick (25 Hz PAL, 30 Hz NTSC at the frame
  * step 2).  With RdSettings.interpolate in the Enhanced preset, rd_EndFrame

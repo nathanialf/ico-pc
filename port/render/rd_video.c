@@ -242,10 +242,6 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (!ensureUpload(slot, texOff + (picture ? (uint64_t)rowPitch * th : 0))) {
         return -1;
     }
-    VideoOut out;
-    if (!acquireOut(&out)) {
-        return -1;
-    }
     uint8_t *map = s_v.uploadMap[slot];
     RhiBuffer buf = s_v.upload[slot];
 
@@ -277,6 +273,12 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
             memcpy(row, u + (size_t)r * pitch[1], cw);
             memcpy(row + cw, v + (size_t)r * pitch[2], cw);
         }
+    }
+    /* the output last: a backbuffer acquired is presented below (a failure
+     * above would have left a swapchain image acquired and never presented) */
+    VideoOut out;
+    if (!acquireOut(&out)) {
+        return -1;
     }
 
     /* group 0: a FrameCB (unused by yuv.hlsl, bound for the layout) */

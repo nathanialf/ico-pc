@@ -279,7 +279,7 @@ static int parse_float(const char *v, float lo, float hi, float *out)
     char *end;
     double d = strtod(v, &end);
 
-    if (end == v || *end != '\0' || d < lo || d > hi) {
+    if (end == v || *end != '\0' || !(d >= lo && d <= hi)) { /* also NaN */
         return -1;
     }
     *out = (float)d;

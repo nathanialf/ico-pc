@@ -25,7 +25,7 @@
  *     load then ran start to end without a Main tick, and the stage-load
  *     thread clipped against a collision list (fumi/src/fieldCollision.c
  *     colObjList) that Main had built before StageManager removed every
- *     object (docs/port/BOOT_DIAG.md).  From the host context (tests) the
+ *     object (docs/port/DATA.md, "Timing").  From the host context (tests) the
  *     wait still completes at once.
  * The drive never reports a tray-open or not-ready state while a disc
  * image is mounted.

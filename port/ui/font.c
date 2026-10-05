@@ -156,8 +156,9 @@ bool ui_FontInit(void)
         return false;
     }
     const unsigned char *data = ui_font_ttf;
-    int off = stbtt_GetFontOffsetForIndex(data, 0);
-    if (ui_font_ttf_size < 12 || off < 0 || !stbtt_InitFont(&s_font.info, data, off)) {
+    /* the size first: stbtt_GetFontOffsetForIndex reads the header */
+    int off = ui_font_ttf_size < 12 ? -1 : stbtt_GetFontOffsetForIndex(data, 0);
+    if (off < 0 || !stbtt_InitFont(&s_font.info, data, off)) {
         fprintf(stderr, "ui: the embedded font does not parse; no runtime text\n");
         s_font.failed = 1;
         return false;

@@ -288,6 +288,9 @@ static bool vkr_SubmitBatch(const VkCommandBuffer *cbs, uint32_t count, bool for
         .pSignalSemaphores = sigSems,
     };
     if (!VKR_CHECK(vkQueueSubmit(g_vkr.queue, 1, &si, VK_NULL_HANDLE))) {
+        /* nothing will signal the value: a later wait on it (the present
+         * batch's, vkr_WaitValue) would never return */
+        g_vkr.timelineValue--;
         return false;
     }
     g_vkr.stats.submits++;
@@ -841,7 +844,13 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
         if (ok) {
             vkr_CurFrame()->waitValue = value;
             vkr_WaitValue(value);
-            memcpy(dst, rhi_MapBuffer(rb), size);
+            const void *mapped = rhi_MapBuffer(rb); /* NULL when vkMapMemory failed */
+            ok = mapped != NULL;
+            if (ok) {
+                memcpy(dst, mapped, size);
+            }
+        } else {
+            g_vkr.timelineValue--; /* not signalled (vkr_SubmitBatch) */
         }
         vkFreeCommandBuffers(g_vkr.device, g_vkr.oneShotPool, 1, &cb);
     }

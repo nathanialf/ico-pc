@@ -1,5 +1,5 @@
 /* rd_mirror_test.c: the mirror mode (renderer wave 7, R7c;
- * docs/port/RENDER_API.md section 21).
+ * docs/port/RENDER_API.md "Mirror mode").
  *
  * Without a device:
  *   flag      rd_SetMirror and RdSettings.mirror both turn rd_MirrorActive on

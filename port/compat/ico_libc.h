@@ -21,7 +21,7 @@
  *
  * Counts are call sites in ico2/ (grep, 2026-10-05). The host build's object
  * files reference the functions marked [obj]; the rest are only called from
- * sources still excluded from the build (docs/port/BUILD_STATUS.md).
+ * sources excluded from the build at the time (cmake/IcoExclusions.cmake).
  *
  * 1. Results differ between C libraries: must become newlib copies (1A).
  *    Done for rand, qsort, atan2f, acosf, asinf, sinf, fmodf (and cosf, sqrtf,

@@ -358,7 +358,7 @@ static inline unsigned char ditchProbe(GObj *o, float h) /* derived name */
 
     s = GOBJ_ACT(o);
     if (o == boyGObj && stageData[stage_no].flag2 && (s->actMode == 4 || s->actMode == 5)) {
-        memset(&work, 0, 0xC0);
+        memset(&work, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
         GetSkeltonPosition(work.pt[0], o, 0x2C);
         work.pt[1][0] = work.pt[0][0];
         work.pt[1][2] = work.pt[0][2];

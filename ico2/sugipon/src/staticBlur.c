@@ -104,7 +104,7 @@ extern void gif_StartPacketPri(int pri);
 
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5a; docs/port/RENDER_API.md section 17): the
+/* PC port (wave 5, R5a; RENDER_API.md "Full-screen effects and the raw packet builders"): the
  * window build records this file's packets on rd itself instead of through
  * GifPacket.c's register decoder, whose generic mapping of the work buffers
  * cannot be right here (the same TBP is a 256 x 128, a 256 x 256 and a

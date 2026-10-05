@@ -82,7 +82,7 @@ for a in x64; do
     cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
     cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
     cp "$b/SDL3.dll" "$d/SDL3.dll"
-    # the R6c backend checks (docs/port/TESTING.md, "Renderer wave 6: D3D12"),
+    # the R6c backend checks (docs/port/TESTING.md, "The renderer backends"),
     # in their own folder with the SDL3.dll they need beside them
     rm -rf "$d/tools"; mkdir -p "$d/tools"
     cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/SDL3.dll" "$d/tools/"
@@ -220,13 +220,23 @@ step is independent of the game and needs no disc image.
 TESTMD
 } > "$stage/TEST.md"
 
-# zip, root dir ico-pc-<label>/
+# zip, root dir ico-pc-<label>/. The files staged above and nothing else
+# (not linux/ or a retired x86/): the stage folder is also where the build
+# is tried, so it can hold Ico_PAL.iso (found beside the exe), dumps\
+# (frames from the disc) and logs\, none of which may be shipped.
 rm -f "$zip"
 pkgroot="$root/build-host/tmp/zip-$label"
-rm -rf "$pkgroot"; mkdir -p "$pkgroot"
+rm -rf "$pkgroot"
 mkdir -p "$pkgroot/ico-pc-$label"
-cp -a "$stage/x64" "$stage/TEST.md" "$pkgroot/ico-pc-$label/"   # not linux/ or a retired x86/
-rm -rf "$pkgroot"/ico-pc-"$label"/*/logs
+cp -a "$stage/TEST.md" "$pkgroot/ico-pc-$label/TEST.md"
+for a in x64; do
+    mkdir -p "$pkgroot/ico-pc-$label/$a/tools"
+    for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \
+        tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/SDL3.dll tools/compare_png.ps1 \
+        tools/compare_backends.cmd; do
+        cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
+    done
+done
 "$root/.venv/bin/python" - "$pkgroot" "ico-pc-$label" "$zip" >>"$log" 2>&1 <<'PY' || fail "zip"
 import os, sys, zipfile
 base, top, out = sys.argv[1:4]

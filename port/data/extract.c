@@ -19,6 +19,7 @@
 #include <time.h>
 #include "archive.h"
 #include "host_config.h"
+#include "host_fs.h"
 #include "miniz.h"
 
 #ifdef _WIN32
@@ -183,6 +184,23 @@ static double now_s(void)
     timespec_get(&ts, TIME_UTC);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 #endif
+}
+
+/* Flushes fp, syncs it to the disk and closes it, always: 0, or the errno
+   of the first step that failed. The archive is on the disk before it is
+   moved over the old one, so a power cut cannot leave a complete-looking
+   archive whose data never reached it. */
+static int close_synced(FILE *fp)
+{
+    int err = 0;
+
+    if (ico_fsync(fp) != 0) {
+        err = errno ? errno : EIO;
+    }
+    if (fclose(fp) != 0 && err == 0) {
+        err = errno ? errno : EIO;
+    }
+    return err;
 }
 
 static uint32_t le32(const unsigned char *p)
@@ -866,7 +884,12 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     memset(&x, 0, sizeof(x));
     memset(&meta, 0, sizeof(meta));
     memset(&zip, 0, sizeof(zip));
-    snprintf(tmp, sizeof(tmp), "%s.tmp", out_path);
+    /* a cut-off name would not end in ".tmp": the failure path below
+       removes `tmp`, which could then be another file */
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", out_path) >= (int)sizeof(tmp)) {
+        say(why, whysize, "the archive path is too long: %s", out_path);
+        return -1;
+    }
     x.progress = progress;
     x.ctx = ctx;
 
@@ -988,12 +1011,15 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     }
     mz_zip_writer_end(&zip);
     zip_open = 0;
-    if (fflush(x.out) != 0 || fclose(x.out) != 0) {
+    {
+        int err = close_synced(x.out);
+
         x.out = NULL;
-        say(why, whysize, "cannot write %s: %s", tmp, strerror(errno));
-        goto done;
+        if (err != 0) {
+            say(why, whysize, "cannot write %s: %s", tmp, strerror(err));
+            goto done;
+        }
     }
-    x.out = NULL;
     if (ico_archive_read_info(tmp, &info, why, whysize) != 0) {
         goto done;
     }

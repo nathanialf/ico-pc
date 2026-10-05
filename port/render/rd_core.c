@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "../fmv/rd_video.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 
@@ -283,6 +284,11 @@ uint32_t rd__FramePayload(RdFrame *f, const void *data, uint32_t size)
 {
     uint32_t off = (f->payloadSize + 7u) & ~7u;
     uint32_t end = off + size;
+    if (end < off || end > 0x80000000u) {
+        /* past 2 GiB the doubling below would wrap to 0 and never end */
+        rd__Log("payload arena: %u + %u bytes is past 2 GiB", off, size);
+        abort();
+    }
     if (end > f->payloadCap) {
         uint32_t cap = f->payloadCap ? f->payloadCap : 64 * 1024;
         while (cap < end) {
@@ -1046,6 +1052,7 @@ void rd_Shutdown(void)
         }
     }
     if (g_rd.hasDevice) {
+        rd_VideoShutdown(); /* the FMV path's objects (rd_video.c), before the device */
         rd__PresentShutdown();
         rd__GpuShutdown();
     }

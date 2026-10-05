@@ -33,10 +33,20 @@
 #include "rd.h"
 
 #endif
+#ifdef ICO_HOST
+
+/* string.h: memset's count is a size_t, and strlen and strcmp (the tool
+   lock and log files) have no declaration otherwise, so their results
+   would be read as int */
+#include <string.h>
+
+#else
 
 /* declared here with an int count, not through string.h, as in
    layout_action.c and puddle.c */
 extern void *memset(void *p, int c, int n);
+
+#endif
 
 /* GsBase.c's globals, tentative definitions: the frame buffer flags, the
    screen centre and size, then the XYOFFSET adjustment and the frame size

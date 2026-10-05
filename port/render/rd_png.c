@@ -59,7 +59,9 @@ static bool chunk(FILE *fp, const char *type, const uint8_t *data, uint32_t len)
 bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
                  int withAlpha)
 {
-    if (!path || !rgba || !w || !h) {
+    /* PNG caps the image's sides and a chunk's length at 2^31 - 1 */
+    if (!path || !rgba || !w || !h || w > 0x7FFFFFFFu || h > 0x7FFFFFFFu ||
+        pitch < (uint64_t)w * 4) {
         return false;
     }
     crcInit();
@@ -68,7 +70,7 @@ bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, 
     const size_t raw = rowLen * h;
     const size_t blocks = (raw + 65534) / 65535;
     const size_t zlen = 2 + blocks * 5 + raw + 4;
-    if (zlen > 0xFFFFFFFFu) {
+    if (zlen > 0x7FFFFFFFu) {
         return false;
     }
     uint8_t *scan = malloc(raw);

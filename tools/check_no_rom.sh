@@ -29,12 +29,15 @@ set -euo pipefail
 
 # Files to inspect: staged ones if running pre-commit, otherwise everything
 # tracked by git. Override with FILES env var for ad-hoc scans.
+# NUL-separated (-z): without it git C-quotes a path with a non-ASCII byte
+# ("d\303\244ta.bin" in quotes), and the quoted name then fails every rule
+# below (no extension match, no such file for the size and ELF checks).
 if [[ -n "${FILES:-}" ]]; then
     mapfile -t files < <(printf "%s\n" "$FILES" | tr ' ' '\n')
 elif git diff --cached --name-only --quiet 2>/dev/null; then
-    mapfile -t files < <(git ls-files)
+    mapfile -d '' -t files < <(git ls-files -z)
 else
-    mapfile -t files < <(git diff --cached --name-only --diff-filter=ACMR)
+    mapfile -d '' -t files < <(git diff --cached --name-only -z --diff-filter=ACMR)
 fi
 
 bad=0
@@ -178,8 +181,8 @@ fi
 # `git check-ignore` without --no-index answers "not ignored" for any path
 # that is in the index, so it can never flag a tracked file. --no-index
 # tests the path against the patterns alone. Batched through --stdin.
-mapfile -t ignored < <(printf "%s\n" "${files[@]}" | sed '/^$/d' |
-    git check-ignore --no-index --stdin 2>/dev/null || true)
+mapfile -d '' -t ignored < <(printf "%s\0" "${files[@]}" |
+    git check-ignore --no-index --stdin -z 2>/dev/null || true)
 for f in "${ignored[@]}"; do
     [[ -z "$f" ]] && continue
     note "tracked file matches .gitignore: $f"

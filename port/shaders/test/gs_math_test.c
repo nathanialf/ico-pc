@@ -89,7 +89,7 @@ int main(void)
             }
         }
     }
-    /* the twelve ALPHA registers of RENDER_API.md section 2
+    /* the twelve ALPHA registers of RENDER_API.md "GS state the game uses"
      * (A | B<<2 | C<<4 | D<<6): the register form against the formula with
      * the terms picked by hand */
     static const uint regs[12] = {0x68, 0x62, 0x64, 0x61, 0x44, 0x48,

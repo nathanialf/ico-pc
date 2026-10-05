@@ -43,13 +43,16 @@ extern int IosMcLock;
 #define MC_REL_MAX 256
 #define MC_ROOT_MAX 1024
 #define MC_PATH_MAX (MC_ROOT_MAX + MC_REL_MAX + 2)
+/* a card path plus '/' and one entry's name: never cut off */
+#define MC_SUB_MAX (MC_PATH_MAX + 1 + MC_NAME_MAX)
 #define MC_DIR_MAX 512
 #define MC_ATTR_FILE 0x8497
 #define MC_ATTR_DIR 0x8427
 
 /* A handle open for writing works on a copy, <dir>/.<name>.tmp (hidden from
-   the card's listing), moved over the file at sceMcClose: a crash or a full
-   disk during a save leaves the previous file whole (docs/port/SAVES.md). */
+   the card's listing), synced to the disk and moved over the file at
+   sceMcClose: a crash, a power cut or a full disk during a save leaves the
+   previous file whole (docs/port/SAVES.md). */
 typedef struct McHandle {
     FILE *fp;
     int canRead;
@@ -277,7 +280,7 @@ static long used_clusters(const char *path, int depth)
     }
     n = list_dir(path, names[depth], MC_DIR_MAX);
     for (i = 0; i < n; i++) {
-        char sub[MC_PATH_MAX];
+        char sub[MC_SUB_MAX];
         unsigned long size = 0;
         int k;
 
@@ -387,7 +390,9 @@ static int close_handle(McHandle *h)
         return 0;
     }
     if (h->tmp != NULL) {
-        ok = fflush(h->fp) == 0 && !ferror(h->fp);
+        /* synced before the move: without it a power cut can leave the
+           renamed file empty, the previous one already replaced */
+        ok = ico_fsync(h->fp) == 0 && !ferror(h->fp);
     }
     ok = fclose(h->fp) == 0 && ok;
     if (h->tmp != NULL && (!ok || ico_rename_replace(h->tmp, h->path) != 0)) {
@@ -671,7 +676,7 @@ int sceMcGetDir(int port, int slot, char *name, int flags, int nblk, struct sceM
     /* a subdirectory lists "." and ".." first, as a card does */
     for (i = -2; i < count && out < nblk; i++) {
         const char *entry = i == -2 ? "." : i == -1 ? ".." : names[i];
-        char sub[MC_PATH_MAX];
+        char sub[MC_SUB_MAX];
         int kind;
 
         if (i < 0 && rel[0] == '\0') {

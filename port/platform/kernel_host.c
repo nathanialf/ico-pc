@@ -58,7 +58,9 @@ static volatile unsigned int *vsync_flag;
 
 static volatile unsigned long long *vsync_csr;
 
-static unsigned long long gs_imr = 0x7F00; /* every GS interrupt masked */
+#define GS_IMR_ALL_MASKED 0x7F00ull /* every GS interrupt masked */
+
+static unsigned long long gs_imr = GS_IMR_ALL_MASKED;
 
 static short crt_interlace;
 
@@ -82,6 +84,10 @@ void ico_kernel_reset(void)
     next_handler_id = 1;
     vsync_flag = 0;
     vsync_csr = 0;
+    gs_imr = GS_IMR_ALL_MASKED;
+    crt_interlace = 0;
+    crt_omode = 0;
+    crt_ffmd = 0;
 }
 
 /* next == 0 puts the handler first, anything else last (the EE's -1). */

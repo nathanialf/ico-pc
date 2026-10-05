@@ -60,14 +60,14 @@
             "inherits": "base",
             "displayName": "Linux x86-64, llvm-mingw clang",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-linux-clang.cmake",
-            "description": "Clang family: the game's GNU nested functions do not compile with clang (docs/port/BUILD_STATUS.md)."
+            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\")."
         },
         {
             "name": "win-x64-clang",
             "inherits": "base",
             "displayName": "Windows x64, llvm-mingw clang",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32.cmake",
-            "description": "Clang family: the game's GNU nested functions do not compile with clang (docs/port/BUILD_STATUS.md)."
+            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\")."
         }
     ],
     "buildPresets": [

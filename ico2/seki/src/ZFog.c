@@ -195,13 +195,13 @@ void fog_MakeFogClut(void)
 #ifdef ICO_RD
 
 /* ===================================================================== *
- * PC port (renderer wave 4, R4c; docs/port/RENDER_API.md section 15).
+ * PC port (renderer wave 4, R4c; docs/port/RENDER_API.md "Depth fog").
  *
  * fog_DrawFog's two packets (the CLUT upload, then the Z copy, its PSMT4
  * byte copy and the fog sprite) are DIRECT GIF packets the host does not
  * interpret.  The host path records, where the second packet is sent, its
  * register writes as rd state in packet order, so what they leave behind
- * (ZBUF write on, TEST 0x50000, ALPHA 0x44 FIX 0x80, FBA 0, TEX0 on the Z
+ * (ZBUF write on, TEST 0x50000, ALPHA 0x44 FIX 0x80, PABE 0, TEX0 on the Z
  * copy, TEX1 0x60, PRIM 0x446's flat untextured ABE, FRAME 0x40 with the
  * field offset) leaks into the rest of the list as on the GS, and the fog
  * sprite as rd_Post(RD_POST_FOG):
@@ -215,7 +215,7 @@ void fog_MakeFogClut(void)
  *                  decodes FRAME 0x40 (RD_TARGET_OFFSET; the window is
  *                  centred, the field offset 0 here)
  *   TEXA (dbg)     rd_TexA(80/80); dbg is 0 in the game
- *   FBA 0, ALPHA 0x44 FIX 0x80, TEX0 (Z copy as PSMT8H, MODULATE, TCC 1, the
+ *   PABE 0, ALPHA 0x44 FIX 0x80, TEX0 (Z copy as PSMT8H, MODULATE, TCC 1, the
  *                  fog CLUT), ZBUF with ZMSK, TEST 0x50000, TEX1 0, the
  *                  sprite (PRIM 0x156: sprite, TME, ABE, FST, flat), TEX1
  *                  0x60, the fogOffsetA sprite (TEST 0x30000, PRIM 0x446,
@@ -266,7 +266,7 @@ static void fogHostDraw(const int *rc0, const int *rc1, const unsigned char *cl,
     }
     /* FOG_SET_FRAME(64, ScreenWidth, ScreenHeight, 0, 0) */
     rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
-    rd_FBA(0);                           /* FBA_1 0 */
+    rd_PABE(0);                          /* PABE 0 (register 73, 0x49) */
     rd_BlendFunc(RD_BLEND_LERP_AS, 128); /* ALPHA_1 0x44, FIX 128 */
     rd_Texture(rd_TargetTexture(scene, RD_VIEW_DEPTH), RD_TEXFN_MODULATE,
                RD_TCC_RGBA); /* TEX0_1: TBP 0x2800 PSMT8H, TCC 1, MODULATE */

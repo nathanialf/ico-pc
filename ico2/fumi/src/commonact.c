@@ -2584,7 +2584,7 @@ static int getLandOffset(float *out, float *pos, short ang, float h)
 {
     ClipWork w;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     _UnitMatrix(MatrixDrive_GetMatrix());
     MatrixDrive_TransMatrixV((char *)pos);
     MatrixDrive_RotMatrixY(ang);
@@ -3203,7 +3203,7 @@ void actCommonEdgeHang(GObj *volatile self)
             ACTSendMailCorrect(self, 0x18);
         }
         if (stageData[stage_no].flag2) {
-            memset(&work, 0, 0xC0);
+            memset(&work, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
             GetSkeltonPosition(work.pt[0], self, 0x2C);
             GetSkeltonPosition(p1, self, 0x33);
             GetSkeltonPosition(p2, self, 0x2F);

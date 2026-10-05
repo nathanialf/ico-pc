@@ -73,7 +73,7 @@ static void MakeRefractTexture(int frame)
 
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).  The
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
    block queen_barrier_disp_proc allocates right after tex_ResetVramPri(10)
    is TBP 0x2800; MakeRefractTexture draws the scene into it as a 512 x 256
    frame (FBW 8, XYOFFSET 1792/1920) and the barrier mesh samples it with

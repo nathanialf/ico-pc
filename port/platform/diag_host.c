@@ -60,6 +60,9 @@
 #define LINE_MAX_BYTES 1024
 #define HEARTBEAT_S 2.0
 #define NO_PROGRESS_BEATS 3
+/* the watchdog polls every 0.25 s; a longer gap between two polls means
+   the system or the process was suspended (watchdog_loop) */
+#define SUSPEND_GAP_S 5.0
 #define STACK_SCAN_BYTES (64 * 1024)
 #define STACK_HITS 24
 #define FUNC_NAMES 64
@@ -943,6 +946,7 @@ static void watchdog_loop(void)
     double start = ico_diag_uptime();
     double last_beat = start;
     double last_tick_time = start;
+    double last_poll = start;
     unsigned int last_ticks = 0;
     char reason[160];
     for (;;) {
@@ -962,6 +966,15 @@ static void watchdog_loop(void)
             continue;
         }
         now = ico_diag_uptime();
+        if (now - last_poll > SUSPEND_GAP_S) {
+            /* the clock jumped between two polls: the system slept (Windows'
+               GetTickCount64 counts sleep and hibernation) or the process was
+               stopped (a debugger, SIGSTOP). That time is not the game's, so
+               neither limit counts it. */
+            start += now - last_poll;
+            last_tick_time += now - last_poll;
+        }
+        last_poll = now;
         if (now - last_beat >= HEARTBEAT_S) {
             last_beat = now;
             heartbeat(0);

@@ -368,7 +368,9 @@ static RdTex texHostTexture(int id)
         return (RdTex){0};
     }
     t = &texTable[id].rec;
-    if (t->tim2 == 0 || t->pic.imageType < 1 || t->pic.imageType > 5) {
+    /* a freed slot (tex_FreeTexture) keeps its freed level addresses: a
+       stale bind of another list must not decode them */
+    if (t->tim2 == 0 || t->ext.used == 0 || t->pic.imageType < 1 || t->pic.imageType > 5) {
         return (RdTex){0};
     }
     if (texHost.serial[id] == 0) {

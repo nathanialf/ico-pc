@@ -144,7 +144,7 @@ static float ico_scalbnf(float x, int n)
         return x;
     }
     if (k <= -25) {
-        if (n > 50000)                                                  /* in case integer overflow in n+k */
+        if (n > 50000) /* in case integer overflow in n+k */
             return ico_scalbn_huge * ico_copysignf(ico_scalbn_huge, x); /*overflow*/
         else
             return ico_scalbn_tiny * ico_copysignf(ico_scalbn_tiny, x); /*underflow*/
@@ -313,7 +313,8 @@ static float ico___kernel_cosf(float x, float y)
     }
     z = x * x;
     r = z * (ico_kcos_C1 +
-             z * (ico_kcos_C2 + z * (ico_kcos_C3 + z * (ico_kcos_C4 + z * (ico_kcos_C5 + z * ico_kcos_C6)))));
+             z * (ico_kcos_C2 +
+                  z * (ico_kcos_C3 + z * (ico_kcos_C4 + z * (ico_kcos_C5 + z * ico_kcos_C6)))));
     if (ix < 0x3e99999a) {
         return ico_kcos_one - ((float)0.5 * z - (z * r - x * y));
     } else {
@@ -350,8 +351,9 @@ static const float ico_krem_PIo2[] = {
     6.333101564859118e-25f,
 };
 
-static const float ico_krem_zero = 0.0f, ico_krem_one = 1.0f, ico_krem_two8 = 2.5600000000e+02f, /* 0x43800000 */
-    ico_krem_twon8 = 3.9062500000e-03f;                                                          /* 0x3b800000 */
+static const float ico_krem_zero = 0.0f, ico_krem_one = 1.0f,
+                   ico_krem_two8 = 2.5600000000e+02f, /* 0x43800000 */
+    ico_krem_twon8 = 3.9062500000e-03f;               /* 0x3b800000 */
 
 /* gcc -m32 -O2 reports fq[0] (prec 1 and 2) as maybe uninitialised; the
    loop before the switch always fills fq[0..jz], and jz >= 0. */
@@ -834,9 +836,11 @@ static float ico_atanf(float x)
     w = z * z;
     s1 = z * (ico_atan_aT[0] +
               w * (ico_atan_aT[2] +
-                   w * (ico_atan_aT[4] + w * (ico_atan_aT[6] + w * (ico_atan_aT[8] + w * ico_atan_aT[10])))));
-    s2 = w * (ico_atan_aT[1] +
-              w * (ico_atan_aT[3] + w * (ico_atan_aT[5] + w * (ico_atan_aT[7] + w * ico_atan_aT[9]))));
+                   w * (ico_atan_aT[4] +
+                        w * (ico_atan_aT[6] + w * (ico_atan_aT[8] + w * ico_atan_aT[10])))));
+    s2 = w *
+         (ico_atan_aT[1] +
+          w * (ico_atan_aT[3] + w * (ico_atan_aT[5] + w * (ico_atan_aT[7] + w * ico_atan_aT[9]))));
     if (id < 0) {
         return x - x * (s1 + s2);
     }
@@ -855,13 +859,13 @@ static float ico_atanf(float x)
  * Those are the round-to-nearest values, written out below. */
 
 static const float ico_atan2_zero = 0.0f;
-static const float ico_atan2_pi = 3.1415925026e+00f;     /* 0x40490fda */
-static const float ico_atan2_pi_lo = 1.5099578832e-07f;  /* 0x34222168 */
-static const float ico_atan2_pio2_tiny = 0x1.921fb6p+0f; /* 0x3fc90fdb: pi_o_2 + tiny */
-static const float ico_atan2_pio4_tiny = 0x1.921fb6p-1f; /* 0x3f490fdb: pi_o_4 + tiny */
+static const float ico_atan2_pi = 3.1415925026e+00f;      /* 0x40490fda */
+static const float ico_atan2_pi_lo = 1.5099578832e-07f;   /* 0x34222168 */
+static const float ico_atan2_pio2_tiny = 0x1.921fb6p+0f;  /* 0x3fc90fdb: pi_o_2 + tiny */
+static const float ico_atan2_pio4_tiny = 0x1.921fb6p-1f;  /* 0x3f490fdb: pi_o_4 + tiny */
 static const float ico_atan2_3pio4_tiny = 0x1.2d97c8p+1f; /* 0x4016cbe4: 3.0 * pi_o_4 + tiny */
-static const float ico_atan2_pi_tiny = 0x1.921fb4p+1f;   /* 0x40490fda: pi + tiny */
-static const float ico_atan2_pio2_hlo = 0x1.921fb8p+0f;  /* 0x3fc90fdc: pi_o_2 + 0.5 * pi_lo */
+static const float ico_atan2_pi_tiny = 0x1.921fb4p+1f;    /* 0x40490fda: pi + tiny */
+static const float ico_atan2_pio2_hlo = 0x1.921fb8p+0f;   /* 0x3fc90fdc: pi_o_2 + 0.5 * pi_lo */
 
 static float ico___ieee754_atan2f(float y, float x)
 {
@@ -958,8 +962,8 @@ static const float ico_acos_one = 1.0000000000e+00f;
 static const float ico_acos_pi = 3.1415925026e+00f;
 static const float ico_acos_pio2_hi = 1.5707962513e+00f;
 static const float ico_acos_pio2_lo = 7.5497894159e-08f;
-static const float ico_acos_pi_2lo = 0x1.921fb6p+1f;   /* 0x40490fdb: pi + 2.0 * pio2_lo */
-static const float ico_acos_pio2_hl = 0x1.921fb6p+0f;  /* 0x3fc90fdb: pio2_hi + pio2_lo */
+static const float ico_acos_pi_2lo = 0x1.921fb6p+1f;  /* 0x40490fdb: pi + 2.0 * pio2_lo */
+static const float ico_acos_pio2_hl = 0x1.921fb6p+0f; /* 0x3fc90fdb: pio2_hi + pio2_lo */
 static const float ico_acos_pS0 = 1.6666667163e-01f;
 static const float ico_acos_pS1 = -3.2556581497e-01f;
 static const float ico_acos_pS2 = 2.0121252537e-01f;
@@ -974,9 +978,11 @@ static const float ico_acos_qS4 = 7.7038154006e-02f;
 #define ICO_ACOS_P(z)                                                                              \
     ((z) * (ico_acos_pS0 +                                                                         \
             (z) * (ico_acos_pS1 +                                                                  \
-                   (z) * (ico_acos_pS2 + (z) * (ico_acos_pS3 + (z) * (ico_acos_pS4 + (z) * ico_acos_pS5))))))
+                   (z) * (ico_acos_pS2 +                                                           \
+                          (z) * (ico_acos_pS3 + (z) * (ico_acos_pS4 + (z) * ico_acos_pS5))))))
 #define ICO_ACOS_Q(z)                                                                              \
-    (ico_acos_one + (z) * (ico_acos_qS1 + (z) * (ico_acos_qS2 + (z) * (ico_acos_qS3 + (z) * ico_acos_qS4))))
+    (ico_acos_one +                                                                                \
+     (z) * (ico_acos_qS1 + (z) * (ico_acos_qS2 + (z) * (ico_acos_qS3 + (z) * ico_acos_qS4))))
 
 /* The domain-error value of acosf's and asinf's cores, (x - x) / (x - x),
  * as the EE computes it: ef_acos.o 0x64 sub.s then 0x70 div.s, ef_asin.o
@@ -1076,18 +1082,21 @@ static float ico___ieee754_asinf(float x)
     if (ix == 0x3f800000) {
         /* asin(1) = +-pi/2 with inexact */
         return x * ico_asin_pio2_hi + x * ico_asin_pio2_lo;
-    } else if (ix > 0x3f800000) { /* |x| >= 1 */
+    } else if (ix > 0x3f800000) {   /* |x| >= 1 */
         return ico_domain_error(x); /* (x - x) / (x - x), asin(x) = NaN */
-    } else if (ix < 0x3f000000) { /* |x| < 0.5 */
-        if (ix < 0x32000000) {    /* if |x| < 2**-27 */
+    } else if (ix < 0x3f000000) {   /* |x| < 0.5 */
+        if (ix < 0x32000000) {      /* if |x| < 2**-27 */
             if (ico_asin_huge + x > ico_asin_one) {
                 return x; /* return x with inexact if x != 0 */
             }
         } else
             t = x * x;
-        p = t * (ico_asin_pS0 +
-                 t * (ico_asin_pS1 + t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
-        q = ico_asin_one + t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
+        p = t *
+            (ico_asin_pS0 +
+             t * (ico_asin_pS1 +
+                  t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
+        q = ico_asin_one +
+            t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
         w = p / q;
         return x + x * w;
     }
@@ -1095,8 +1104,10 @@ static float ico___ieee754_asinf(float x)
     w = ico_asin_one - ico_fabsf(x);
     t = w * (float)0.5;
     p = t * (ico_asin_pS0 +
-             t * (ico_asin_pS1 + t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
-    q = ico_asin_one + t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
+             t * (ico_asin_pS1 +
+                  t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
+    q = ico_asin_one +
+        t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
     s = ico___ieee754_sqrtf(t);
     if (ix >= 0x3F79999A) { /* if |x| > 0.975 */
         w = p / q;

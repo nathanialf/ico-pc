@@ -80,7 +80,8 @@ typedef enum RdCmdType {
     RDC_EXACT_BLEND, /* u[0] src target, u[1] dst target: the GS integer blend of the state
                       * block's ALPHA/FIX/COLCLAMP through blend_int (RdPostParams.exactInt) */
     RDC_COPY,        /* u[0] src target, u[1] dst target, u[2] payload offset of RdCopyRec */
-    /* recorded, not yet replayed (later waves): replay calls rd__NotImplemented */
+    /* the VU draws (wave 3), the world prims (recorded only: replay calls
+     * rd__NotImplemented), the shadow count (wave 4) and the post records */
     RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size */
     RDC_SKINNED,      /* same, plus bones in the payload */
     RDC_GRID,         /* u[1] payload offset, u[2] size */
@@ -111,7 +112,7 @@ _Static_assert(sizeof(RdCmd) == 40, "RdCmd is dumped as raw bytes");
 /* RDC_SHADOW_STRIP's b[0] (wave 4, R4b). */
 #define RD_SHADOW_TRIS 1
 /* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps
- * (RENDER_API.md section 14). */
+ * (RENDER_API.md "Shadows"). */
 #define RD_SHADOW_STENCIL_MASK 0x3Fu
 /* Package V3: rd_ShadowTris tags every vertex with the place (1-based) its
  * triangle had in the call, in RdScreenVtx.rgba (little-endian; the volume
@@ -251,7 +252,7 @@ typedef struct RdTargetRec {
     /* Wave 7 (R7a): the texture's size and its texels per GS pixel
      * (tw = w * sx rounded, th = h * sy); tw == w, th == h, sx == sy == 1
      * in Original and for every target the Enhanced resolution does not
-     * scale (rd__TargetScaleOf, RENDER_API.md section 19) */
+     * scale (rd__TargetScaleOf, RENDER_API.md "Presets and display options") */
     uint32_t tw, th;
     float sx, sy;
     uint8_t wide; /* scene-class: draws other than full-screen ones take the wide x scale */
@@ -439,7 +440,7 @@ typedef enum RdFsId {
     RD_FS_COUNT
 } RdFsId;
 
-/* How an RdBlend equation reaches the hardware (RENDER_API.md section 3). */
+/* How an RdBlend equation reaches the hardware (RENDER_API.md "GS to pipeline mapping"). */
 typedef enum RdBlendPath {
     RD_BP_NONE = 0,      /* ABE off */
     RD_BP_LERP,          /* modes 2, 4, 7: SRC1 / 1-SRC1, factor As/128 or FIX/128 (<= 1) */
@@ -496,7 +497,7 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
  * shader and the clip mode; false without a row. */
 bool rd__VuRow(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);
 bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
-/* Wave 4 (R4b), the shadow count (rd_shadow.c, RENDER_API.md section 14):
+/* Wave 4 (R4b), the shadow count (rd_shadow.c, RENDER_API.md "Shadows"):
  * the volume pipeline under state s (sprite_world_vs / sprite_ps, colour
  * mask 0, the state's Z test without Z write, stencil INCR_WRAP or, with
  * decr, DECR_WRAP under write mask RD_SHADOW_STENCIL_MASK, on a D32F_S8
@@ -509,7 +510,7 @@ RdPipeKeyInt rd__ShadowResolveKey(int pass);
 /* The shadow families above under the states the game draws them with
  * (Shadow.c: TEST 0x50000); appends to out[0..n). */
 uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* Wave 4 (R4c), the depth fog (RENDER_API.md section 15): the draws of an
+/* Wave 4 (R4c), the depth fog (RENDER_API.md "Depth fog"): the draws of an
  * RD_POST_FOG under state s, as rd__PlanScreenDraw plans a fullscreen
  * sprite without a depth attachment (fog_lut_ps does the Z test against the
  * depth it reads), with fog_lut_ps as the fragment shader. */
@@ -519,8 +520,8 @@ int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
 uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* rd_replay.c: frees the fog's depth copy and LUT textures (rd__GpuShutdown). */
 void rd__FogShutdown(void);
-/* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c, RENDER_API.md section
- * 16): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
+/* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c, RENDER_API.md "Full-screen effects and the
+ * raw packet builders"): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
  * under state s (fx_rect_vs / fx_sprite_ps, no hardware blending, the
  * state's colour mask; with a depth format the state's Z test and Z write,
  * else none), whether it binds the depth target (*useDepth), and the
@@ -545,7 +546,7 @@ static inline bool rd__IsBlurKind(uint32_t kind)
 uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
 
 /* ---------------------------------------------- interpolation (wave 7, R7b)
- * rd_interp.c (RENDER_API.md section 20).  rd__InterpFrame builds, into a
+ * rd_interp.c (RENDER_API.md "Frame rate and interpolation").  rd__InterpFrame builds, into a
  * frame it owns, the current frame cur with every keyed draw's data blended
  * from its match in prev by alpha (0 = prev's data, 1 = cur's), and the
  * feedback passes set up for a present that stands for dt ticks
@@ -914,7 +915,8 @@ uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes);
  * leave out (rd__EnumerateReachable adds them) */
 uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 
-/* rd_replay.c (wave 5, R5c; RENDER_API.md section 18): a screen-prim command
+/* rd_replay.c (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders"): a
+ * screen-prim command
  * under COLCLAMP 0 with an additive or subtractive equation (ALPHA modes 0,
  * 1, 5, 6, ABE on) wraps modulo 256 per channel as on the GS instead of
  * clamping (doScreenWrap: wrap_acc_ps into an RGBA16F accumulator, then
@@ -927,7 +929,8 @@ void rd__WrapShutdown(void);
 uint32_t rd__WrapPipelineCount(void);
 #define RD_WRAP_PIPES 16
 
-/* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate. */
+/* rd_png.c: 8-bit RGBA (or RGB with withAlpha = 0), stored deflate.  The
+ * source is RGBA8 either way, rows pitch (>= w * 4) bytes apart. */
 bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
                  int withAlpha);
 

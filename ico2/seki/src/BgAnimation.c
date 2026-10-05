@@ -1954,13 +1954,18 @@ typedef struct BgaAnimObj { /* field names derived */
 } BgaAnimObj; /* derived name */
 
 /* the parent object's node matrices and quaternions: by name on the host
-   (GObj.dobj, Sub15C.nodeMtx and nodeQuat), through the views on the EE */
+   (GObj.dobj, Sub15C.nodeMtx and nodeQuat), through the views on the EE.
+   BGA_AOBJ_GOBJ is the parent as the GObj geometryManager.c's root
+   accessors take: a cast on the host, the bare operand on the EE (whose
+   call passes the view pointer as it is) */
 #ifdef ICO_HOST
 #define BGA_AOBJ_MTX(o) ((float (*)[4][4])((GObj *)(o))->dobj->nodeMtx)
 #define BGA_AOBJ_QUAT(o) ((float (*)[4])((GObj *)(o))->dobj->nodeQuat)
+#define BGA_AOBJ_GOBJ(o) ((GObj *)(o))
 #else
 #define BGA_AOBJ_MTX(o) ((o)->geom->mtx)
 #define BGA_AOBJ_QUAT(o) ((o)->geom->quat)
+#define BGA_AOBJ_GOBJ(o) o
 #endif
 
 void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
@@ -1985,7 +1990,7 @@ void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
         if (BGA_ANIM(p)->root) {
             _SetCurrentMatrix(BGA_AOBJ_MTX(BGA_ANIM(p)->obj)[BGA_ANIM(p)->idx]);
         } else {
-            GetRootMatrix(rm, BGA_ANIM(p)->obj);
+            GetRootMatrix(rm, BGA_AOBJ_GOBJ(BGA_ANIM(p)->obj));
             CopyVector(rm[3], BGA_AOBJ_MTX(BGA_ANIM(p)->obj)[BGA_ANIM(p)->idx][3]);
             _SetCurrentMatrix(rm);
         }
@@ -1999,7 +2004,7 @@ void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
             CopyQuaternion(GetCurrentQuaternion(),
                            BGA_AOBJ_QUAT(BGA_ANIM(p)->obj)[BGA_ANIM(p)->idx]);
         } else {
-            GetRootQuaternion(GetCurrentQuaternion(), BGA_ANIM(p)->obj);
+            GetRootQuaternion(GetCurrentQuaternion(), BGA_AOBJ_GOBJ(BGA_ANIM(p)->obj));
         }
     } else {
         SetIdentityQuaternion(GetCurrentQuaternion());

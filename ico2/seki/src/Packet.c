@@ -12,10 +12,16 @@
 #include "memory.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* memset (pac_makeBoundingBox) and strcmp (pac_hostStripEntry) in every
+   host build, the headless one too */
+#include <string.h>
+
+#endif
 #ifdef ICO_RD
 
 #include <stdlib.h>
-#include <string.h>
 #include "rd_mesh.h"
 
 #endif
@@ -1120,6 +1126,16 @@ typedef struct MatLine {        /* field names derived */
     short matCount;             /* 0x0C */
     short texCount;             /* 0x0E */
 } MatLine;                      /* derived name */
+
+#ifdef ICO_HOST
+
+/* PC port: RegistPacket.c's reg_dispPointLineObj reads a line part's
+   record through PObjGroup (grp->packets), so the line set must sit where
+   the packets do, as both sit at 0x08 on the EE */
+_Static_assert(__builtin_offsetof(MatLine, lineSet) == __builtin_offsetof(PObjGroup, packets),
+               "MatLine.lineSet is not at PObjGroup.packets");
+
+#endif
 
 static void pac_makeMaterialTableLine(MatLine *out, PObjPart *obj, int variant, int blend,
                                       unsigned int mode)

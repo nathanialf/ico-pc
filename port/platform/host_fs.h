@@ -30,6 +30,11 @@ int ico_remove(const char *path);
    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH on Windows, rename(2)
    elsewhere, atomic on one volume): 0 or -1 */
 int ico_rename_replace(const char *from, const char *to);
+/* fflush, then the file's bytes onto the disk (_commit, i.e. FlushFileBuffers,
+   on Windows; fsync elsewhere), for a file about to be moved over another
+   with ico_rename_replace: without it a power cut can leave the new name on
+   a file whose data never reached the disk. 0, or -1 with errno */
+int ico_fsync(FILE *f);
 /* 1 a directory, 0 another file, -1 nothing there; *size and *mtime (Unix
    seconds) when not NULL */
 int ico_path_kind(const char *path, unsigned long long *size, long long *mtime);

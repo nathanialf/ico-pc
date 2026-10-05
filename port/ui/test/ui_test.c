@@ -853,8 +853,8 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
         }
         for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
             for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
-                /* rd's convention on a scaled target (RENDER_API.md section
-                   19): texel i of a GS pixel's block samples at GS
+                /* rd's convention on a scaled target (RENDER_API.md "Presets and display options"):
+                 * texel i of a GS pixel's block samples at GS
                    p + (i mod s) / s, as the GS samples pixel p at p */
                 const float cx = (float)x, cy = (float)y;
                 if (x < 0 || y < 0 || x >= W4 || y >= W4 || cx < g->x0 || cx >= g->x1 ||

@@ -1,7 +1,7 @@
 /* rd_state.h: the finite GS state the game actually uses.
  *
  * Everything here was enumerated from the sources (grep -a over ico2/, see
- * docs/port/RENDER_API.md section "GS state inventory" for the counts).  The
+ * docs/port/RENDER_API.md "GS state the game uses" for the counts).  The
  * renderer builds pipelines from these enumerations, not from the full GS
  * register space.  Where the game can only reach a state through disc data
  * (the BGA lightning blend mode) the whole table is kept and the value is

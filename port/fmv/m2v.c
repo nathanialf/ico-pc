@@ -197,10 +197,18 @@ void ico_m2v_destroy(IcoM2v *d)
     free(d);
 }
 
-/* The output planes for a w x h picture. */
+/* The output planes for a w x h picture.  The library writes rows at its
+   frame stride, the width rounded up to a macroblock (impeg2d_pic_proc.c
+   u2_frame_width), and checks the buffers against stride x h
+   (check_app_out_buf_size): a width that is not a multiple of 16 would
+   otherwise fail every picture. */
 static int alloc_planes(IcoM2v *d, uint32_t w, uint32_t h)
 {
-    uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;
+    uint32_t cw, ch;
+
+    w = (w + 15u) & ~15u;
+    cw = (w + 1) / 2;
+    ch = (h + 1) / 2;
     uint32_t sz[3] = {w * h, cw * ch, cw * ch};
     int i;
 

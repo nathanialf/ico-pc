@@ -63,6 +63,7 @@ void ico_audio_sdl_push(const int16_t *frames, int count)
 {
     int queued;
     int vsync_bytes = count * BYTES_PER_FRAME;
+    int q8 = ico_audio_volume_q8(); /* one read: the Settings menu may change it */
 
     if (stream == NULL || count <= 0) {
         return;
@@ -78,10 +79,10 @@ void ico_audio_sdl_push(const int16_t *frames, int count)
         }
         SDL_PutAudioStreamData(stream, silence, vsync_bytes);
     }
-    if (count <= 1024 && ico_audio_volume_q8() != 256) {
+    if (count <= 1024 && q8 != 256) {
         /* the volume (audio_host.h): scaled into a copy, the caller's block
            stays unscaled for the WAV dump */
-        ico_audio_scale(scaled, frames, count * CHANNELS, ico_audio_volume_q8());
+        ico_audio_scale(scaled, frames, count * CHANNELS, q8);
         frames = scaled;
     }
     SDL_PutAudioStreamData(stream, frames, vsync_bytes);

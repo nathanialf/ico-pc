@@ -155,12 +155,19 @@ third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype,
 the Arimo font, minicoro, newlib).
 TXT
 
-# archive, root dir ico-pc-<label>/, files owned by root, names sorted
+# archive, root dir ico-pc-<label>/, files owned by root, names sorted.
+# The files staged above and nothing else: the stage folder is also where
+# the build is tried, so it can hold Ico_PAL.iso (found beside ico_pc),
+# dumps/ (frames from the disc) and logs/, none of which may be shipped.
 rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
-rm -rf "$pkgroot"; mkdir -p "$pkgroot"
-cp -a "$stage" "$pkgroot/ico-pc-$label"
-rm -rf "$pkgroot/ico-pc-$label/logs"
+rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.txt; do
+    cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
+done
+if [[ -f "$stage/ico_pc.map" ]]; then
+    cp -a "$stage/ico_pc.map" "$pkgroot/ico-pc-$label/ico_pc.map"
+fi
 tar -C "$pkgroot" --sort=name --owner=0 --group=0 --numeric-owner \
     -czf "$tgz" "ico-pc-$label" >>"$log" 2>&1 || fail "tar"
 rm -rf "$pkgroot"

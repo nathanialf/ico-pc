@@ -25,7 +25,7 @@
 #include "GifHost.h"
 #include "rd_mesh.h"
 
-/* PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md section 13): the
+/* PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md "The mesh path"): the
    VU1 chains this file builds also go through the host's VIF reader
    (mc_HostDma): prim_DispFan2D's SET_GSREGISTER fan reaches the GS register
    decoder, prim_DispMesh3D's matrix, light and UV packets and

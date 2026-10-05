@@ -27,6 +27,12 @@
 #include "Matrix.h"
 #include "ee_view.h"
 
+#ifdef ICO_HOST
+
+#include <string.h> /* memset (shiftMotionOrientBeginFunc) */
+
+#endif
+
 static void getMotionGeometry(void *self);
 static void getStreamBlendShapeGeometry(void *self, void *m0, void *m1, float t);
 static void getStreamShapeGeometry(void *self, void *sm);

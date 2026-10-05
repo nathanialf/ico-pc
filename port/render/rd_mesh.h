@@ -2,7 +2,7 @@
  * interface). Implemented by package R3ab in rd_mesh.c (recording, the
  * mesh registry, the per-list VU state) and rd_replay.c (the draws), called
  * from Packet.c / RegistPacket.c / MicroCode.c (static and skinned objects)
- * and Primitive.c (grids and particles); docs/port/RENDER_API.md section 13.
+ * and Primitive.c (grids and particles); docs/port/RENDER_API.md "The mesh path".
  *
  * The VU1 programs and what each computes: docs/port/VU1_PROGRAMS.md. The
  * shaders: port/shaders/vu_*.hlsl, binding and constant layouts in
@@ -141,7 +141,8 @@ bool rd_VuMeshValid(RdMesh m);
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map
  * in vu_common.hlsli. Filled by the seki sites from the packets they build:
  *   0..15  the RdVuCommon block in force at the draw's list position
- *          (rd_GetVuCommon; RENDER_API.md section 12, open question 1)
+ *          (rd_GetVuCommon; RENDER_API.md "Frame lifecycle, camera and the post passes", open
+ *          question 1)
  *          with qw 2 as SET_UVOFFSET left it (xy: the bound texture's
  *          t->uv scroll or clearUVOffset's zero; it persists in VU memory
  *          until the next SET_UVOFFSET or common block, so a draw without
@@ -197,7 +198,8 @@ void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
  * current position of all 13 lists (and gsb_SetGsDefault at their heads),
  * and each object chains its own matrix and light packets into every list
  * it draws in. So rd keeps, at record time, one VU image per list, as the
- * chains recorded into that list so far leave it (RENDER_API.md section 12
+ * chains recorded into that list so far leave it (RENDER_API.md "Frame lifecycle, camera and the
+ * post passes"
  * open question 1): the common block (rd_SetVuCommon updates all 13), the
  * SET_* uploads, the UV offset (SET_UVOFFSET, which persists until the next
  * one or the next common block), the resident program (mc_TransMicroCode)
@@ -263,7 +265,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key);
  *
  * RDC_MESH / RDC_SKINNED / RDC_GRID / RDC_PARTICLES keep their rd_internal.h
  * meaning (u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size)
- * with this payload in the frame arena, 16-byte aligned:
+ * with this payload in the frame arena, 8-byte aligned (rd__FramePayload):
  *
  *   RdVuPayload                  the fixed part
  *   RdVuBlock                    VuCB.mem for the draw

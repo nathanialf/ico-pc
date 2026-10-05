@@ -60,7 +60,7 @@
  * ZBUF, ALPHA, FBA, TEX0 as SCENE's depth view, TEX1, PRIM), so they leak
  * as on the GS; this records the sprite and the CLUT (an RdPostRec in an
  * RDC_POST_STUB), and rd_replay.c's doFog draws it through fog_lut_ps with
- * the state in force (rd.h, RENDER_API.md section 15).
+ * the state in force (rd.h, RENDER_API.md "Depth fog").
  *
  * The remaining kinds (shadow resolve, blur) are recorded with their
  * parameters and stop at replay (wave 5).
@@ -247,7 +247,7 @@ static void postLetterbox(const RdPostParams *p)
  * Both corners are recorded as the GS gets them; the rectangle between them
  * covers the whole scene.  Whether the GS draws a sprite whose second corner
  * lies above and left of the first is not documented in the sources this
- * port uses; rd draws it (RENDER_API.md section 12). */
+ * port uses; rd draws it (RENDER_API.md "Frame lifecycle, camera and the post passes"). */
 static void postBrightness(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
@@ -511,7 +511,8 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
         postFog(params);
         break;
     /* wave 5 (R5a): staticBlur.c's sprites, recorded by rd_blur.c and
-     * replayed by rd_replay.c's doBlurSprite (RENDER_API.md section 17) */
+     * replayed by rd_replay.c's doBlurSprite (RENDER_API.md "Full-screen effects and the raw packet
+     * builders") */
     case RD_POST_MOTION_BLUR:
     case RD_POST_DOF:
     case RD_POST_FLARE:

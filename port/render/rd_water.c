@@ -1,6 +1,6 @@
 /* rd_water.c: the render-to-texture surfaces of renderer wave 5 (R5b):
  * puddle.c, pool.c and queen_barrier_disp.c (docs/port/RENDER_API.md
- * section 16).
+ * "Render-to-texture surfaces").
  *
  * Recording only.  Three things the GS register decoder cannot know:
  *
@@ -13,7 +13,7 @@
  *   - the camera of a mid-frame gsb_SetVSMatrix (rd_PushCamera).
  *
  * The records of the open frame live here, one per frame slot (RdContext
- * keeps two frames), and are cleared by rd__FrameReset when a slot is
+ * keeps RD_FRAME_RING frames), and are cleared by rd__FrameReset when a slot is
  * reused.  Nothing here is dumped: the commands name the block target, so a
  * dump replays as recorded. */
 #include <string.h>

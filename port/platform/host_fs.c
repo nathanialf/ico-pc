@@ -15,6 +15,7 @@
 
 #include <windows.h>
 #include <direct.h>
+#include <io.h>
 
 wchar_t *ico_widen(const char *s)
 {
@@ -90,6 +91,14 @@ int ico_remove(const char *path)
     return r;
 }
 
+int ico_fsync(FILE *f)
+{
+    if (fflush(f) != 0) {
+        return -1;
+    }
+    return _commit(_fileno(f)) == 0 ? 0 : -1;
+}
+
 int ico_rename_replace(const char *from, const char *to)
 {
     wchar_t *wf = ico_widen(from);
@@ -152,6 +161,14 @@ int ico_remove(const char *path)
 int ico_rename_replace(const char *from, const char *to)
 {
     return rename(from, to);
+}
+
+int ico_fsync(FILE *f)
+{
+    if (fflush(f) != 0) {
+        return -1;
+    }
+    return fsync(fileno(f)) == 0 ? 0 : -1;
 }
 
 int ico_path_kind(const char *path, unsigned long long *size, long long *mtime)

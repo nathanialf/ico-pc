@@ -7,7 +7,7 @@
 # REV (default HEAD), and compares the two objects' loaded sections
 # (.text .data .rodata .sdata .bss .sbss .lit4 .lit8 .rodata.str*) and their
 # relocations. Debug sections are left out (they carry the build paths).
-# The port's sweeps (docs/port/SWEEP_*.md) use it to show a change to
+# The port's sweeps (docs/port/OFFSET_AUDIT.md, "Conventions in ico2/") use it to show a change to
 # ico2/ left the code the PS2 compiler emits unchanged.
 #
 #   FILE.c   repo-relative sources, e.g. ico2/seki/src/Basic.c (ico2/ or sce/)

@@ -96,6 +96,8 @@ typedef struct VkrGarbage {
 
 #define VKR_MAX_CMD_LISTS 8
 #define VKR_DESC_POOLS_MAX 16
+/* swapchain images: the most a surface's swapchain may have (vk_swapchain.c) */
+#define VKR_MAX_SWAP_IMAGES 16u
 
 typedef struct VkrCmdList {
     VkCommandBuffer cb;
@@ -170,12 +172,12 @@ typedef struct VkrState {
     uint32_t swapWidth, swapHeight;
     bool vsync;
     uint32_t swapImageCount;
-    uint32_t swapTextures[8];  /* texture ids */
-    VkSemaphore renderDone[8]; /* per image */
-    uint32_t swapImage;        /* acquired index */
-    bool swapAcquired;         /* image acquired, not yet presented */
-    bool acquireWaitPending;   /* acquire semaphore not yet waited on by a submit */
-    VkSemaphore acquireSem;    /* the semaphore that acquire signals */
+    uint32_t swapTextures[VKR_MAX_SWAP_IMAGES];  /* texture ids */
+    VkSemaphore renderDone[VKR_MAX_SWAP_IMAGES]; /* per image */
+    uint32_t swapImage;                          /* acquired index */
+    bool swapAcquired;                           /* image acquired, not yet presented */
+    bool acquireWaitPending; /* acquire semaphore not yet waited on by a submit */
+    VkSemaphore acquireSem;  /* the semaphore that acquire signals */
 
     /* one-shot command pool for readback */
     VkCommandPool oneShotPool;

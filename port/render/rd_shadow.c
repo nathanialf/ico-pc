@@ -1,5 +1,5 @@
 /* rd_shadow.c: the shadow count of Shadow.c on the stencil (renderer wave 4,
- * package R4b; docs/port/RENDER_API.md section 14).
+ * package R4b; docs/port/RENDER_API.md "Shadows").
  *
  * What the PS2 does
  * -----------------

@@ -879,7 +879,7 @@ static void boot(void *arg)
     /* the game's priorities: the manager 27, the callers lower */
     iosThreadCreate(&mcTh, 1, iosMcManager, 0, mcStack, sizeof mcStack, 27);
     iosThreadStart(&mcTh);
-    iosThreadCreate(&driverTh, 1, (void (*)())driver, 0, driverStack, sizeof driverStack, 0x1C);
+    iosThreadCreate(&driverTh, 1, driver, 0, driverStack, sizeof driverStack, 0x1C);
     iosThreadStart(&driverTh);
     iosThreadSleep();
 }

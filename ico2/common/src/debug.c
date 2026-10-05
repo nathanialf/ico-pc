@@ -1424,7 +1424,7 @@ static void debug_makeBackImage(void)
      SPACE_DEBUG_FONT (12)  cursor.xy += advance.xy
    The host reads the same glyph packets (debug_MakeFont's) and hands the
    GIF packet the VU builds to the GS register decoder (gif_HostWriteRegs,
-   docs/port/RENDER_API.md section 9), in order with the list's other
+   docs/port/RENDER_API.md "The seki layer on rd"), in order with the list's other
    writes.  The packets and the display list chain are still built as on the
    PS2. */
 static struct { /* port */

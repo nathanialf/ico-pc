@@ -24,7 +24,7 @@
    iosThreadSleep call here while thread.c defines it (void), so the
    developer's own declarations disagreed, and these calls were compiled
    against a one-argument declaration like this one. */
-extern void iosThreadCreateS(void *th, int no, void (*func)(), void *arg, void *heap,
+extern void iosThreadCreateS(void *th, int no, void (*func)(void *), void *arg, void *heap,
                              long long stackSize, int pri);
 extern void iosThreadStart(void *th);
 extern void iosThreadSleep(void *th);
@@ -152,7 +152,7 @@ static void saveEditedDataBinary(char *name, ICO_WORD boxes, int count)
    then the groups' address) followed on the EE by the groups and the pin blocks
    (0xE27E0 bytes: 0x70 + 100 * 76 + 100 * 9200).  The addresses lie outside the
    32 MB the host simulates, so there the sets are static records and each box's
-   pin block is a heap block (see docs/port/SWEEP_2F.md); CS_COUNT and CS_ITEMS
+   pin block is a heap block (docs/port/LOADERS.md, "gcm (camera sets)"); CS_COUNT and CS_ITEMS
    read a set's two words. */
 #ifdef ICO_HOST
 #define CAMSET_T CamMgr
@@ -163,9 +163,11 @@ static CamMgr cameraSetOrgMgr; /* derived name */
 
 static CamMgr cameraSetEditMgr; /* derived name */
 
-static CamGroup cameraSetOrgGroups[100]; /* derived name */
+/* one group more than a set holds: _CameraEdit_del_box's shift reads the
+   group after the last (on the EE, the first bytes of the pin blocks) */
+static CamGroup cameraSetOrgGroups[101]; /* derived name */
 
-static CamGroup cameraSetEditGroups[100]; /* derived name */
+static CamGroup cameraSetEditGroups[101]; /* derived name */
 
 static CamMgr *cameraSetOrg = &cameraSetOrgMgr; /* derived name */
 

@@ -97,12 +97,14 @@ static inline void vu_xyz(VuGsVertex *o, const float *p, int32_t w)
 }
 
 /* The batch count: NLOOP, the low 15 bits of TOP + 0's first word (ilwr.x,
- * iand 0x7FFF). */
+ * iand 0x7FFF), at most VU_BATCH_MAX (VuBatchOut.v; a batch that large
+ * would not fit the VU1 input buffer). */
 static inline int vu_count(const float (*in)[4])
 {
     uint32_t w;
     memcpy(&w, &in[0][0], 4);
-    return (int)(w & 0x7FFFu);
+    w &= 0x7FFFu;
+    return (int)(w > VU_BATCH_MAX ? VU_BATCH_MAX : w);
 }
 
 static inline int32_t vu_int(float f)

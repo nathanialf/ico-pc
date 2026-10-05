@@ -32,7 +32,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 
 # Staged C must be clang-formatted. Fix with: tools/format.sh FILE
 STAGED_C=$(git diff --cached --name-only --diff-filter=ACMR -z | tr '\0' '\n' |
-    grep -E '^(ico2/[^/]+/[^/]+|sce(/[^/]+){0,3})/[^/]+\.c(\.inc)?$' || true)
+    grep -E '^(ico2/[^/]+/[^/]+|sce(/[^/]+){0,3})/[^/]+\.c(\.inc)?$|^port/.+\.[ch]$' |
+    grep -v -E '^port/(third_party|rhi/test/shaders)/' || true)
 if [[ -n "$STAGED_C" ]]; then
     # shellcheck disable=SC2086
     "$ROOT/tools/format.sh" --check $STAGED_C

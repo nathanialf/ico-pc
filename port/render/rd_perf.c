@@ -1,5 +1,5 @@
 /* rd_perf.c: the per-replay performance records of package P1 (rd.h
- * RdPerfRecord, docs/port/RENDER_API.md section 22).
+ * RdPerfRecord, docs/port/RENDER_API.md "Performance").
  *
  * A record is filled while a replay runs (rd_replay.c adds its CPU phases
  * and counts to g_rdPerf), closed by rd__PerfEnd with the RHI's counters

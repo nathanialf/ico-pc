@@ -145,8 +145,7 @@ loop:
     }
 
     pn = (char *)a + n * es;
-    r = (size_t)(pa - (char *)a) < (size_t)(pb - pa) ? (size_t)(pa - (char *)a)
-                                                       : (size_t)(pb - pa);
+    r = (size_t)(pa - (char *)a) < (size_t)(pb - pa) ? (size_t)(pa - (char *)a) : (size_t)(pb - pa);
     qvecswap((char *)a, pb - r, r);
     r = (size_t)(pd - pc) < (size_t)(pn - pd) - es ? (size_t)(pd - pc) : (size_t)(pn - pd) - es;
     qvecswap(pb, pn - r, r);

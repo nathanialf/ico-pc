@@ -4,7 +4,7 @@
  *
  * A 64x32 RGBA8 target with a D32F+S8 depth-stencil is split into eight
  * 16x16 cells, each exercising one feature the GS emulation needs
- * (docs/port/RENDER_API.md section 3):
+ * (docs/port/RENDER_API.md "GS to pipeline mapping"):
  *
  *   0  dual-source blend, SRC1_COLOR factors
  *   1  dual-source blend, SRC1_ALPHA factor with an RGB-only colour mask

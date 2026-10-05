@@ -1,4 +1,5 @@
-// raw_wrap.hlsl (renderer wave 5, R5c; docs/port/RENDER_API.md section 18):
+// raw_wrap.hlsl (renderer wave 5, R5c; docs/port/RENDER_API.md "Full-screen effects and the raw
+// packet builders"):
 // screen prims blended additively or subtractively under COLCLAMP 0, where
 // the GS keeps the low 8 bits of every blend result (the result wraps).
 // darkVolume.c's spheres add their colour on the faces in front of the scene

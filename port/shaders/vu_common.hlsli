@@ -25,7 +25,8 @@
 #include "common.hlsli"
 
 // VuCB.vu_mem: VU1 data memory 0..35 as the program reads it.
-//   0..15   the common block (RdVuCommon, RENDER_API.md section 12): 0 =
+//   0..15   the common block (RdVuCommon, RENDER_API.md "Frame lifecycle, camera and the post
+//   passes"): 0 =
 //           (0,0,0,1), 1 = (4095,4095,0,16777215), 2 = UV offset in xy
 //           (SET_UVOFFSET) and the cluster fade alpha in w, 3 = GIF tag,
 //           4..7 world to GS screen, 8..11 viewport, 12..15 inverse view

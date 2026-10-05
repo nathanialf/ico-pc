@@ -79,7 +79,7 @@ static int walk_total(IosMemPart *part, int *n_free)
     return total;
 }
 
-static const int sizes[11] = {4227072, 1179648, 3145728, 262144, 327680, 1,
+static const int sizes[11] = {4227072, 1179648, 3145728, 262144, 327680,  1,
                               32768,   20480,   10240,   1,      15826944};
 
 /* what the root partition and iosInitialize's eleven carved partitions look

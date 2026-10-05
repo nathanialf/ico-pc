@@ -427,7 +427,7 @@ static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived na
     float d = plane_distance(p, plane);
 
     if (d < 0.0f) {
-        _ScaleVector(&tv, plane, d);
+        _ScaleVector(&tv, (void *)plane, d);
         _SubVectorXYZ(p, p, &tv);
     }
 }
@@ -1171,7 +1171,7 @@ static __inline__ void clothAddPoint(void *dst, const void *src, float f) /* der
 {
     VECTOR tv;
 
-    _ApplyCurrentMatrix(&tv, src);
+    _ApplyCurrentMatrix(&tv, (void *)src);
     _ScaleVector(&tv, &tv, f);
     _AddVectorXYZ(dst, dst, &tv);
 }
@@ -1180,7 +1180,7 @@ static __inline__ void clothSetPoint(void *dst, const void *src, float f) /* der
 {
     VECTOR tv;
 
-    _ApplyCurrentMatrix(&tv, src);
+    _ApplyCurrentMatrix(&tv, (void *)src);
     _ScaleVectorXYZ(dst, &tv, f);
 }
 

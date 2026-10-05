@@ -20,7 +20,7 @@
 # headless build compiles the real GsBase.c (cmake/IcoSources.cmake), so it
 # does advance; a build that stubs gsb_UpdateGSSystem would eat every press.
 #
-# Pad: the null pad reports a DualShock that reaches pad.c's stable analog
+# Pad: the host pad reports a DualShock that reaches pad.c's stable analog
 # state on tick 6 and is first read on tick 7 (port/input/pad_host.c); the
 # first press is at tick 8.
 #
@@ -98,11 +98,13 @@
 #   CROSS in play is a game action. Once a trace shows the tick where
 #   gf11 bit 30 (0x40000000, flag 382) sets, delete every line after it.
 #
-# Null devices on the way: every disc read finishes at the next vsync
-# (docs/port/DATA.md, "Timing"); the null sound driver accepts everything,
-# reports nothing playing and advances ADPCM streams in simulated time
-# (docs/port/HEADLESS_STUBS.md); the memory card reports "no card" (-10)
-# for every request.
+# Host devices on the way: every disc read finishes at the next vsync
+# (docs/port/DATA.md, "Timing"); the sound driver is the SNDN2DRV host over
+# the emulated SPU2, so streams advance as the IOP's would (docs/port/AUDIO.md);
+# the memory card is port/save/mc_host.c: port 0 is the saves folder (a
+# formatted card, empty on a first run), port 1 has no card. Screens 4 and
+# 7 below were written when both ports reported no card (the earlier null
+# card) and describe that path, not the one a card in port 0 takes.
 #
 # Measured (package 1E, ref-m32 on Linux, the same code as win-x86-ref):
 # flag 382 sets at Main tick 661 (stage 1); the stages then run 41 (tick

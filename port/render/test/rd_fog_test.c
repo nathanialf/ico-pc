@@ -1,5 +1,5 @@
 /* rd_fog_test.c: the depth fog of fog_DrawFog (renderer wave 4, R4c;
- * docs/port/RENDER_API.md section 15).
+ * docs/port/RENDER_API.md "Depth fog").
  *
  * ZFog.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c),
  * compiled as the window build has them (ICO_HOST, ICO_RD); the rest of the
@@ -503,7 +503,7 @@ static void checkRecording(int k)
         i++;
     }
     expectScene(cl, &i, "FRAME 0x40");
-    expect1(cl, &i, RDC_FBA, 0, "FBA 0");
+    expect1(cl, &i, RDC_PABE, 0, "PABE 0");
     const RdCmd *c = nextCmd(cl, &i, RDC_ALPHA, "ALPHA");
     CHECK(c && c->b[0] == RD_BLEND_LERP_AS && c->b[1] == 128, "ALPHA 0x44 FIX 128");
     c = nextCmd(cl, &i, RDC_TEXTURE, "TEX0");

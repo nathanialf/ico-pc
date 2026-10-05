@@ -94,7 +94,8 @@ static int recurse(int depth)
         ico_fiber_yield();
         return frame[0] + frame[sizeof frame - 1];
     }
-    return recurse(depth - 1) + (frame[0] == (char)depth) + (frame[sizeof frame - 1] == (char)depth);
+    return recurse(depth - 1) + (frame[0] == (char)depth) +
+           (frame[sizeof frame - 1] == (char)depth);
 }
 
 static int deep_result;

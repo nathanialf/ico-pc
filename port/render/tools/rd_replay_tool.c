@@ -15,7 +15,7 @@
  * be rendered on Vulkan and D3D12 and the PNGs compared
  * (docs/port/TESTING.md).
  *
- * The display options (renderer wave 7, R7a; RENDER_API.md section 19): a
+ * The display options (renderer wave 7, R7a; RENDER_API.md "Presets and display options"): a
  * dump does not carry them, so the replay takes them here, the Original
  * preset by default:
  *   --enhanced            the Enhanced preset (needed by the four below)

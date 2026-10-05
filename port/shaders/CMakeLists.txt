@@ -37,10 +37,11 @@ ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
 # wave 5 (R5a): staticBlur.c's sprites in the GS integer arithmetic
-# (port/render/rd_blur.c, docs/port/RENDER_API.md section 16)
+# (port/render/rd_blur.c, docs/port/RENDER_API.md "Render-to-texture surfaces")
 ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)
 ico_add_shader(fx_sprite_ps fx_sprite.hlsl fx_sprite_ps fragment)
-# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c), RENDER_API.md section 18
+# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c), RENDER_API.md "Full-screen effects and the
+# raw packet builders"
 ico_add_shader(wrap_acc_ps raw_wrap.hlsl wrap_acc_ps fragment)
 ico_add_shader(wrap_resolve_ps raw_wrap.hlsl wrap_resolve_ps fragment)
 # tests only: the probe output of vu1_test (VU_F_PROBE)

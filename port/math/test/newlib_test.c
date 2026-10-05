@@ -12,10 +12,11 @@
  *   gcc -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing -fwrapv
  *       -Iport/platform port/math/test/newlib_test.c port/math/newlib/rand.c
  *       port/math/newlib/qsort.c port/math/newlib/ico_libm.c
- *       port/platform/fpenv.c -o newlib_test
+ *       port/platform/fpenv.c -lm -o newlib_test
  *
  * Returns 0 when every check passes.
  */
+#include <fenv.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -186,9 +187,24 @@ static void check_vals(const char *env, uint32_t tol)
         uint32_t d = ulp_dist(vals[i].got, ref);
         printf("  [%s] %-16s = %.9g (0x%08x), %u ulp\n", env, vals[i].name, (double)vals[i].got,
                (unsigned)fbits(vals[i].got), (unsigned)d);
-        CHECK(d <= tol, "[%s] %s: %.9g is %u ulp from %.9g", env, vals[i].name,
-              (double)vals[i].got, (unsigned)d, (double)ref);
+        CHECK(d <= tol, "[%s] %s: %.9g is %u ulp from %.9g", env, vals[i].name, (double)vals[i].got,
+              (unsigned)d, (double)ref);
     }
+}
+
+/* fmodf(1, 0), the X/Open domain case: the wrapper's 0/0 raises invalid,
+   which the fptrap preset's simulation environment traps on. Run it with
+   the exceptions held (the rounding and flush modes stay) and restore the
+   environment, flags included. */
+static float fmodf_domain(void)
+{
+    fenv_t held;
+    float r;
+
+    feholdexcept(&held);
+    r = ico_fmodf(1.0f, 0.0f);
+    fesetenv(&held);
+    return r;
 }
 
 /* Results that are bit patterns, not approximations: the constants ee-gcc
@@ -196,6 +212,7 @@ static void check_vals(const char *env, uint32_t tol)
 static void check_exact(const char *env)
 {
     static const float inf = __builtin_inff();
+
     struct {
         const char *name;
         float got;
@@ -218,7 +235,7 @@ static void check_exact(const char *env)
         {"acosf(2)", ico_acosf(2.0f), 0x00000000},
         {"asinf(-3)", ico_asinf(-3.0f), 0x00000000},
         {"asinf(1e-10)", ico_asinf(1e-10f), 0x2edbe6ff},
-        {"fmodf(1, 0)", ico_fmodf(1.0f, 0.0f), 0x7fb00000},
+        {"fmodf(1, 0)", fmodf_domain(), 0x7fb00000},
         {"fmodf(6, 2)", ico_fmodf(6.0f, 2.0f), 0x00000000},
         {"fmodf(-6, 2)", ico_fmodf(-6.0f, 2.0f), 0x80000000},
         {"sqrtf(4)", ico_sqrtf(4.0f), 0x40000000},
@@ -227,6 +244,7 @@ static void check_exact(const char *env)
         {"sinf(0)", ico_sinf(0.0f), 0x00000000},
         {"cosf(0)", ico_cosf(0.0f), 0x3f800000},
     };
+
     size_t i;
 
     for (i = 0; i < sizeof ex / sizeof ex[0]; i++) {
@@ -238,15 +256,30 @@ static void check_exact(const char *env)
 int main(void)
 {
     static const double want[NVALS] = {
-        0.78539816339744830962,  -2.35619449019234492885, 0.46364760900080611621,
-        1.04719755119659774615,  2.09439510239319549231,  1.31811607165281796574,
-        0.52359877559829887308,  0.25268025514207865349,  0.84147098480789650665,
-        0.47942553860420300027,  -0.50636564110975879061, -0.34999350217129295211,
-        0.54030230586813971740,  -0.98999249660044545727, 1.5,
-        -1.25,                   1.41421356237309504880,  0.70710678118654752440,
+        0.78539816339744830962,
+        -2.35619449019234492885,
+        0.46364760900080611621,
+        1.04719755119659774615,
+        2.09439510239319549231,
+        1.31811607165281796574,
+        0.52359877559829887308,
+        0.25268025514207865349,
+        0.84147098480789650665,
+        0.47942553860420300027,
+        -0.50636564110975879061,
+        -0.34999350217129295211,
+        0.54030230586813971740,
+        -0.98999249660044545727,
+        1.5,
+        -1.25,
+        1.41421356237309504880,
+        0.70710678118654752440,
     };
     size_t i;
 
+    /* Line-buffered, so a float trap (fptrap preset) leaves the lines
+       before it in the ctest log. */
+    setvbuf(stdout, NULL, _IOLBF, 0);
     ico_fpenv_host_enter();
     for (i = 0; i < NVALS; i++)
         refs[i] = (float)want[i];

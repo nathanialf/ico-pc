@@ -1,5 +1,5 @@
 /* rd_present_test.c: the display options (renderer wave 7, R7a;
- * docs/port/RENDER_API.md section 19, docs/port/DISPLAY.md).
+ * docs/port/RENDER_API.md "Presets and display options", docs/port/DISPLAY.md).
  *
  * GsBase.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
  * window build compiles them (as rd_gsbase_test does), the display options
@@ -579,7 +579,7 @@ static RdSettings originalSettings(void)
 
 /* What the renderer before R7a produced for the rich frame on llvmpipe:
  * rd_replay_tool (pre-R7a build) on rd_pixel_test's dump of this frame,
- * DISPLAY, SCENE and --present 960x720 (RENDER_API.md section 19). */
+ * DISPLAY, SCENE and --present 960x720 (RENDER_API.md "Presets and display options"). */
 #define GOLD_DISPLAY 0xde837c63a5e63c88ull
 #define GOLD_SCENE 0x8da6e2ca4577cdacull
 #define GOLD_PRESENT 0xbc970416f934e0c1ull

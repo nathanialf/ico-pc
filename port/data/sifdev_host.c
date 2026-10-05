@@ -26,12 +26,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
 #ifdef _WIN32
 
-#include <direct.h>
 #include <io.h>
 
 #else
@@ -41,6 +41,7 @@
 #endif
 
 #include "host_config.h"
+#include "host_fs.h"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -72,12 +73,19 @@ void ico_host0_set_root(const char *dir)
     }
 }
 
-static int makeDir(const char *path)
+/* open(2) on a UTF-8 path (the wide call on Windows, as host_fs.h's
+   helpers); the CRT there takes only _S_IREAD | _S_IWRITE as the mode */
+static int hostOpen(const char *path, int oflags)
 {
 #ifdef _WIN32
-    return _mkdir(path);
+    wchar_t *wp = ico_widen(path);
+    int fd = wp != NULL ? _wopen(wp, oflags, _S_IREAD | _S_IWRITE)
+                        : _open(path, oflags, _S_IREAD | _S_IWRITE);
+
+    free(wp);
+    return fd;
 #else
-    return mkdir(path, 0777);
+    return open(path, oflags, 0666);
 #endif
 }
 
@@ -89,7 +97,7 @@ static void makeParents(char *path)
     for (p = path + 1; *p != '\0'; p++) {
         if (*p == '/') {
             *p = '\0';
-            if (makeDir(path) != 0 && errno != EEXIST) {
+            if (ico_mkdir(path) != 0 && errno != EEXIST) {
                 *p = '/';
                 return;
             }
@@ -187,7 +195,7 @@ int sceOpen(unsigned char *name, int flags, ...)
     if (i == HOST0_FILES) {
         return -1;
     }
-    fd = open(path, oflags, 0666);
+    fd = hostOpen(path, oflags);
     if (fd < 0) {
         return -1;
     }

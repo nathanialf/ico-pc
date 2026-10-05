@@ -11,7 +11,7 @@
  *                       spu2_test checks it)
  *   spu2_reverb_fir     "Reverb Buffer Resampling", the 39-tap FIR
  *   spu2_reverb_presets "SPU Reverb Examples", in libsd's effect mode order
- *                       (AUDIO.md, "Reverb"): off, room, studio small /
+ *                       (AUDIO.md, "libsd front end"): off, room, studio small /
  *                       medium / large (libsd STUDIO_1-3), hall, space echo,
  *                       chaos echo (libsd ECHO), delay, half echo (PIPE).
  *                       The sizes are psx-spx's work area sizes in bytes.

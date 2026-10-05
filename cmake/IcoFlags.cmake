@@ -43,7 +43,7 @@ endif()
 
 # The three diagnostics the plan makes errors (plan "Verification: Static").
 # ICO_STRICT_WARNINGS=ON turns them into errors; it stays OFF until the tree
-# compiles clean with it (docs/port/BUILD_STATUS.md has the counts).
+# compiles clean with it (the build logs count the warnings).
 option(ICO_STRICT_WARNINGS "Treat -Wreturn-type, -Wimplicit-function-declaration and -Wstrict-prototypes as errors" OFF)
 
 set(ICO_GAME_WARNINGS -Wreturn-type -Wimplicit-function-declaration -Wstrict-prototypes)

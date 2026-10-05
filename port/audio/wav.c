@@ -9,6 +9,7 @@
 #include <stdlib.h>
 
 #include "audio_host.h"
+#include "host_fs.h"
 
 struct IcoWav {
     FILE *f;
@@ -36,7 +37,6 @@ static void header(IcoWav *w)
                      0,   0,   4,   0,   16, 0, 'd', 'a', 't', 'a', 0,   0,   0,   0};
     uint64_t bytes = w->frames * 4;
     uint32_t data = bytes > 0xFFFFFFFFu - 36 ? 0xFFFFFFFFu - 36 : (uint32_t)bytes;
-    long at = ftell(w->f);
 
     put32(h + 4, data + 36);
     put32(h + 24, (uint32_t)w->rate);
@@ -44,9 +44,9 @@ static void header(IcoWav *w)
     put32(h + 40, data);
     fseek(w->f, 0, SEEK_SET);
     fwrite(h, 1, sizeof(h), w->f);
-    if (at > 0) {
-        fseek(w->f, at, SEEK_SET);
-    }
+    /* back to the end for the next block (no ftell: a long is 32 bits on
+       Windows, so a position past 2 GB would not come back) */
+    fseek(w->f, 0, SEEK_END);
     fflush(w->f);
 }
 
@@ -57,7 +57,7 @@ IcoWav *ico_wav_open(const char *path, int rate)
     if (w == NULL) {
         return NULL;
     }
-    w->f = fopen(path, "wb");
+    w->f = ico_fopen(path, "wb"); /* UTF-8 path (ini audio_dump=) */
     if (w->f == NULL) {
         free(w);
         return NULL;

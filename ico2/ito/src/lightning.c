@@ -13,12 +13,12 @@
 #include "DisplayList.h"
 #include "DmaPacket.h"
 
-#ifdef ICO_RD
+#ifdef ICO_HOST
 
 #include <stdio.h>
 #include "MicroCode.h"
 
-/* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18).  The
+/* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders").  The
    strip packet below is a VIF DIRECT block (path 2) of GIF REGLIST packets:
    mc_HostDma reads it as the GIF would and the GS register decoder draws it,
    in order after the gif_* state packet.  The blend mode c comes from the
@@ -385,7 +385,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
     }
     gif_StartPacketPri(6);
     if (dpk_CheckBufferSize() >= 64) {
-#ifdef ICO_RD
+#ifdef ICO_HOST
         gif_SetAlpha(1, lightningHostMode(c), 128);
 #else
         gif_SetAlpha(1, c, 128);

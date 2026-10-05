@@ -1,5 +1,5 @@
 /* rd_blur.c: staticBlur.c's sprites (renderer wave 5, R5a;
- * docs/port/RENDER_API.md section 17).
+ * docs/port/RENDER_API.md "Full-screen effects and the raw packet builders").
  *
  * staticBlur.c's host path (ICO_RD) records every register write of its
  * packets as rd state, in packet order, and every gif_SpriteSensitiveOrg
@@ -33,7 +33,7 @@
  * target's snapshot), so overlapping sprites of one record cannot happen
  * (one sprite per record) and the result is the GS integer arithmetic of
  * every pass, feedback or not.  That is the exactness of RENDER_API.md
- * section 7 (blend_int's RGBA8_UINT ping-pong) without the UINT copies:
+ * "Blend exactness under feedback" (blend_int's RGBA8_UINT ping-pong) without the UINT copies:
  * UNORM8 holds k / 255 exactly and a Load of it gives k back.
  */
 #include <math.h>
@@ -88,6 +88,9 @@ uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt)
     }
     float f;
     if (blend == RD_BLEND_LERP_FIX) {
+        if (fix > 128) {
+            return fix; /* overshoots: no retention to spread (powf of a negative base is NaN) */
+        }
         /* the destination keeps (128 - FIX) / 128 per frame */
         const float keep = powf((128.0f - (float)fix) / 128.0f, dt);
         f = 128.0f - 128.0f * keep;

@@ -2,7 +2,7 @@
  * ico2/fumi/include/ee_view.h
  *
  * A raw EE-offset view of a record that has a named field at that offset
- * (package 2D, docs/port/SWEEP_2D.md).  Most of the decompiled actor code
+ * (docs/port/OFFSET_AUDIT.md, "Conventions in ico2/").  Most of the decompiled actor code
  * reached Act, ActWork and the other runtime records through
  * `*(T *)((char *)p + 0xNN)`: right on the EE, wrong on a 64-bit host where
  * the record's pointer fields are 8 bytes wide.  Where the named field

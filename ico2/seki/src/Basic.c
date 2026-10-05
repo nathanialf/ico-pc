@@ -2,8 +2,18 @@
 #include "Matrix.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* string.h's memcpy: through the unprototyped declaration below the int
+   size would be passed where the definition reads a size_t */
+#include <string.h>
+
+#else
+
 /* declared here unprototyped, not through string.h */
 extern void memcpy();
+
+#endif
 
 /* The allocator's partition (none selected yet) and the running total of
    what partition 0 has handed out. */

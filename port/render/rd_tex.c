@@ -1,6 +1,6 @@
 /* rd_tex.c: the texture cache (renderer wave 2, package R2b).  rd_tex.h
  * describes the decoding and the cache; docs/port/RENDER_API.md
- * "Textures (wave 2, R2b)" the choices. */
+ * "Textures" the choices. */
 #include "rd_tex.h"
 #include <math.h>
 #include <stdlib.h>

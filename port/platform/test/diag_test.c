@@ -168,6 +168,9 @@ int main(int argc, char **argv)
 #if defined(_WIN32)
     (void)argc;
     (void)argv;
+    /* the child modes compile here too; only the POSIX driver runs them */
+    (void)fails;
+    (void)run_child;
     printf("diag_test: skipped (POSIX only)\n");
     return 77;
 #else

@@ -1,5 +1,5 @@
 /* rd_shadow_test.c: the shadow count on the stencil (renderer wave 4, R4b;
- * docs/port/RENDER_API.md section 14).
+ * docs/port/RENDER_API.md "Shadows").
  *
  * Shadow.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c) and
  * Matrix.c, compiled as the window build has them (ICO_HOST, ICO_RD); the

@@ -111,7 +111,7 @@ typedef struct VuParticleOut {
 
 void vu1ref_Init(Vu1Ref *r);
 /* gsb_MakeCommonMatrix's UNPACK of 16 qwords to VU memory 0..15
- * (RdVuCommon, docs/port/RENDER_API.md section 12). */
+ * (RdVuCommon, docs/port/RENDER_API.md "Frame lifecycle, camera and the post passes"). */
 void vu1ref_LoadCommon(Vu1Ref *r, const float qw[16][4]);
 /* Code 2, SET_UVOFFSET (vu1_common.h:57): mem[2].xy = qw.xy. */
 void vu1ref_SetUVOffset(Vu1Ref *r, const float qw[4]);

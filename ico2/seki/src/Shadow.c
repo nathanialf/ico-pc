@@ -18,7 +18,7 @@
 #include "rd.h"
 
 /* ===================================================================== *
- * PC port (renderer wave 4, R4b; docs/port/RENDER_API.md section 14).
+ * PC port (renderer wave 4, R4b; docs/port/RENDER_API.md "Shadows").
  *
  * The packets below are still built (the DMA bookkeeping and the heap use
  * stay as they are), but nothing on the host reads them: shadow_Reset's is

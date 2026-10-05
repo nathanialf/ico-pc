@@ -446,7 +446,9 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
         }
         st_adpcm_tick();
         H.last_reply = fill_page();
-        return (void *)H.last_reply;
+        /* the host SIF copies `rsize` bytes from the reply: never past the
+           page (the EE asks for exactly 0x200) */
+        return rsize <= ICO_SNDN2_REPLY_SIZE ? (void *)H.last_reply : NULL;
     }
     /* any other number (the EE sends only 0x65): one packet, the return
        word; the host SIF copies `rsize` bytes from the reply */

@@ -55,7 +55,7 @@ extern "C" {
    capitals (1409 / 2048 = 0.688 em) at the height of the menu lettering of
    the Options and vibration screens (texFile 21, 20-texel rows shown 20
    field lines tall): about 18.7 y units, measured on the title frame of a
-   run (docs/port/UI.md, "Metrics"). 27 gives 18.6. */
+   run (docs/port/UI.md, "Coordinates and metrics"). 27 gives 18.6. */
 #define UI_MENU_TEXT_SIZE 27.0f
 
 /* the Z the layout draws its rows at (layout_texture.c) */
@@ -131,7 +131,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
 /* one untextured sprite (the popup panel), x0, y0, x1, y1 in the grid; the
    blend is 0x44 with the state set as ui_DrawText sets it */
 void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
-/* Renderer R7d (docs/port/RENDER_API.md section 20, "Keys"): the owner the
+/* Renderer R7d (docs/port/RENDER_API.md "Frame rate and interpolation", "Keys"): the owner the
    next draws are keyed by, so the presenter blends them between two ticks.
    A string's draw is keyed by a hash of the string, its alignment flags,
    its atlas page and the owner (0: the string alone); the n-th draw of one

@@ -71,7 +71,8 @@ bool rhi_CreateBackend(const char *name)
     }
     const RhiBackendTable *t = (name && *name) ? find(name) : defaultBackend();
     if (!t) {
-        fprintf(stderr, "rhi: backend \"%s\" is not linked into this build\n", name);
+        fprintf(stderr, "rhi: backend \"%s\" is not linked into this build\n",
+                name ? name : "(default)");
         return false;
     }
     s_sel = t;

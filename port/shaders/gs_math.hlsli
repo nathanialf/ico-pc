@@ -6,7 +6,7 @@
 // vector forms. Keep it to scalar int/uint/float, min/max/clamp, ?: and
 // constants so both compilers accept it.
 //
-// Conventions (docs/port/RENDER_API.md section 3):
+// Conventions (docs/port/RENDER_API.md "GS to pipeline mapping"):
 //   colour and alpha are 0..255 integers, alpha 0x80 = 1.0;
 //   texture function  min((tex * col) >> 7, 255);
 //   blend             ((A - B) * C >> 7) + D, arithmetic shift (toward -inf).

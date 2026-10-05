@@ -181,7 +181,7 @@ target_link_libraries(rd_mirror_test PRIVATE ico_render)
 # times and recorded 200 times: no resource is created or destroyed and no
 # texture or static mesh uploaded again in steady state, and the CPU time of
 # a replay stays under 20 ms on lavapipe; with --dump FILE it times a dump's
-# replay phase by phase (docs/port/RENDER_API.md section 22).
+# replay phase by phase (docs/port/RENDER_API.md "Performance").
 add_executable(rd_perf_test test/rd_perf_test.c)
 target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
@@ -354,7 +354,8 @@ target_include_directories(rd_debug_test PRIVATE ${_ico_common_incs}
 target_compile_definitions(rd_debug_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_debug_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(rd_debug_test PRIVATE ico_render ico_math)
+# sifdev_host.c opens host0: files through host_fs (ico_widen, ico_mkdir)
+target_link_libraries(rd_debug_test PRIVATE ico_render ico_math ico_host_fs)
 
 # rd_mip_test (F2 C1): rdtex_MipChainBytes against the level sum and
 # rdtex_BuildMipChain inside it for non-square textures (128x4, 512x2).

@@ -92,7 +92,7 @@ char *InitFlagGeo(char *self, char *arg)
     float k = ent->length / (float)ent->count;
     float d;
     int type, i, j;
-    ClothCfg *cl = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(ClothCfg, 56), __FILE__, __LINE__);
+    ClothCfg *cl = iosMallocDebug(ios_partition_sugipon, 2 * sizeof(ClothCfg), __FILE__, __LINE__); /* the config and its -1 row */
     *cl = flagCfg;
     cl->weight = ent->weight;
     cl[1].num = -1;

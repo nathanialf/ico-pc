@@ -85,7 +85,7 @@ int main(void)
         }
     }
 
-    /* what the GS emulation relies on (docs/port/RENDER_API.md section 3) */
+    /* what the GS emulation relies on (docs/port/RENDER_API.md "GS to pipeline mapping") */
     CHECK_EQ(vkr_compareMap[RHI_CMP_GEQUAL].vk, VK_COMPARE_OP_GREATER_OR_EQUAL);
     CHECK_EQ(vkr_compareMap[RHI_CMP_GREATER].vk, VK_COMPARE_OP_GREATER);
     CHECK_EQ(vkr_stencilOpMap[RHI_SO_INCR_WRAP].vk, VK_STENCIL_OP_INCREMENT_AND_WRAP);

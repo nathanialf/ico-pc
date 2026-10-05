@@ -1,5 +1,5 @@
 // fog_lut.hlsl: the depth fog of fog_DrawFog (ico2/seki/src/ZFog.c),
-// RD_POST_FOG (renderer wave 4, R4c; docs/port/RENDER_API.md section 15).
+// RD_POST_FOG (renderer wave 4, R4c; docs/port/RENDER_API.md "Depth fog").
 //
 // What the GS does: the Z buffer (PSMZ32) is copied pixel for pixel into a
 // PSMCT32 buffer, a PSMT4 view of that buffer copies the third byte of every

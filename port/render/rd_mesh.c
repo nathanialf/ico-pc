@@ -570,9 +570,18 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
         case 2:
             vu1ref_NormalSetMatrix(r, in);
             return;
-        case 3:
+        case 3: {
+            /* qw[0].x is the packet's copy count: at most the qwords after
+             * qw[0] that buf holds (vu1ref_ClusterSetMatrix reads qw[1..n]) */
+            int32_t n;
+            memcpy(&n, buf[0], sizeof n);
+            if (n > 255) {
+                n = 255;
+                memcpy(buf[0], &n, sizeof n);
+            }
             vu1ref_ClusterSetMatrix(r, in);
             return;
+        }
         case 4:
             vu1ref_MeshSetMatrix(r, in);
             return;

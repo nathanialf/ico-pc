@@ -391,16 +391,19 @@ static void pcm_mix(uint8_t *half)
         src = ico_iop_range_ok(c->buf + c->read_off, 0x200) ? ico_iop_ptr(c->buf + c->read_off)
                                                             : NULL;
         for (i = 0; src != NULL && i < 256; i++) {
-            uint32_t at = (((uint32_t)i * 2) >> shift) * 2;
+            /* srlv: the shift amount's low 5 bits */
+            uint32_t at = (((uint32_t)i * 2) >> (shift & 31)) * 2;
             int32_t x = (int16_t)(src[at] | src[at + 1] << 8);
             uint8_t *l = half + i * 2;
             uint8_t *r = half + 0x200 + i * 2;
             uint16_t lv = (uint16_t)(l[0] | l[1] << 8);
             uint16_t rv = (uint16_t)(r[0] | r[1] << 8);
 
-            /* mult, srl 15, add, sh: the low 16 bits, wrapping */
-            lv = (uint16_t)(lv + (uint32_t)(((int32_t)c->vol_l * x) >> 15));
-            rv = (uint16_t)(rv + (uint32_t)(((int32_t)c->vol_r * x) >> 15));
+            /* mult (its low word), srl 15, add, sh: the low 16 bits,
+               wrapping; unsigned, so a volume word the EE sent out of range
+               wraps as on the IOP instead of overflowing */
+            lv = (uint16_t)(lv + ((c->vol_l * (uint32_t)x) >> 15));
+            rv = (uint16_t)(rv + ((c->vol_r * (uint32_t)x) >> 15));
             l[0] = (uint8_t)lv;
             l[1] = (uint8_t)(lv >> 8);
             r[0] = (uint8_t)rv;

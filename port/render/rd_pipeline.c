@@ -13,7 +13,7 @@
  * DF_DATE/DF_DATM, sprite_ps tests the R8 snapshot rd_replay.c binds at t2),
  * so date stays 0 in the key.
  *
- * Blend paths (RENDER_API.md section 3, SHADERS.md "Dual-source factor
+ * Blend paths (RENDER_API.md "GS to pipeline mapping", SHADERS.md "Dual-source factor
  * above 1.0"): on UNORM targets fixed-point blend factors clamp to 1.0, so
  *   Cs*F + Cd and Cd - Cs*F (modes 0, 1, 5, 6) use DF_PREMUL: the shader
  *     writes min((Cs*F) >> 7, 255), the GS term, exact for F up to 255, and
@@ -24,7 +24,7 @@
  *   Cd*FIX + Cs (mode 3) uses SRC1 as the destination factor, FIX clamped to
  *     0x80;
  *   the Ad modes (8-10, disc data only) use DST_ALPHA, which reads Ad/255,
- *     not Ad/128: half strength, untested (RENDER_API.md open item 6);
+ *     not Ad/128: half strength, untested (RENDER_API.md "GS to pipeline mapping");
  *   Cd*As + Cd (mode 11, disc data only) needs a factor above 1.0 on Cd and
  *     is not representable: the draw leaves Cd unchanged (reported once).
  * The feedback passes do not use the hardware blender at all: RDC_EXACT_BLEND
@@ -325,7 +325,7 @@ static RhiCompare depthCompare(uint8_t ztst)
     }
 }
 
-/* Wave 4 (R4b): the stencil of the shadow count (RENDER_API.md section 14).
+/* Wave 4 (R4b): the stencil of the shadow count (RENDER_API.md "Shadows").
  * Volumes: both faces INCR_WRAP or DECR_WRAP where the depth test passes,
  * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
  * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
@@ -518,7 +518,7 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   jimaku.c, DisplayFont.c, the GsBase.c post sprites): TEST 0x30000 (20
  *   sites, "2D, post"), 0x3000C, 0x30815 (flare), 0 (one site); ZBUF on and
  *   off (the list defaults and gif_SetZWrite); ALPHA off or modes 0, 1, 2,
- *   4, 5, 6, 7 (the gif_SetAlpha literals, RENDER_API.md section 2); sprites
+ *   4, 5, 6, 7 (the gif_SetAlpha literals, RENDER_API.md "GS state the game uses"); sprites
  *   and strips (triangles) and lines; SCENE (with depth) or a target
  *   without depth (DISPLAY, WORK, AA, FEED128, temporaries).
  *   WORLD screen prims (CPU-projected 2D: points and lines of list 2,

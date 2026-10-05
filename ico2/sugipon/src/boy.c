@@ -20,6 +20,12 @@
 #include <libvu0.h>
 #include "Matrix.h"
 
+#ifdef ICO_HOST
+
+#include <string.h> /* memset (LightLineDL) */
+
+#endif
+
 typedef struct { /* field names derived */
     float x, y, z, w;
 } __attribute__((aligned(16))) LLVec; /* derived name */

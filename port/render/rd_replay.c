@@ -11,7 +11,7 @@
  *   RDC_EXACT_BLEND  blend_int on RGBA8_UINT copies of source and
  *                    destination, written to a third RGBA8_UINT texture and
  *                    copied back into the destination (the exact GS blend
- *                    for feedback passes, RENDER_API.md section 7)
+ *                    for feedback passes, RENDER_API.md "Blend exactness under feedback")
  *   RDC_COPY         texture copy (gif_MoveImage)
  *   RDC_MESH, RDC_SKINNED, RDC_GRID, RDC_PARTICLES
  *                    the VU1 program shaders (wave 3, R3ab; doVu below)
@@ -647,7 +647,7 @@ static void setUvShift(float sx, float sy)
     s_uvShiftY = sy > 1.0f ? (sy - 1.0f) / (2.0f * sy) : 0.0f;
 }
 
-/* Wave 7 (R7c): the mirror mode's UI flip (RENDER_API.md section 21).  The
+/* Wave 7 (R7c): the mirror mode's UI flip (RENDER_API.md "Mirror mode").  The
  * presenter flips the whole picture (rd_present.c step 2), so an
  * RD_SPACE_UI prim drawn into SCENE or DISPLAY (the targets the present
  * shows) is flipped here about the target's centre and reads normally
@@ -844,8 +844,18 @@ static RdScratch *scratchGet(uint32_t w, uint32_t h, int which)
             return s->tex.id ? s : NULL;
         }
     }
-    /* pool full of other sizes: recycle the first slot */
-    RdScratch *s = &g_rd.scratch[which];
+    /* pool full: recycle a slot of another size, never one of this size,
+     * which may hold this operation's lower `which` (not every slot is of
+     * this size, or the first loop would have found the which-th) */
+    RdScratch *s = NULL;
+    for (int i = RD_SCRATCH_COUNT - 1; i >= 0 && !s; i--) {
+        if (g_rd.scratch[i].w != w || g_rd.scratch[i].h != h) {
+            s = &g_rd.scratch[i];
+        }
+    }
+    if (!s) {
+        return NULL;
+    }
     rhi_DestroyTexture(s->tex);
     s->tex = (RhiTexture){0};
     return scratchGet(w, h, which);
@@ -1044,7 +1054,7 @@ static float wideFor(const RdTargetRec *tc, int stretch)
  * grid); "the whole width" allows one pixel short at either edge, as the
  * layout's screen bands are drawn: the pause and End Game menus' black bars
  * (layout_texture.c, gif_SpriteSensitiveOffset) run from 1792.25 to
- * 2303.44, pixels 1..511 of 512 (W3, RENDER_API.md section 19). */
+ * 2303.44, pixels 1..511 of 512 (W3, RENDER_API.md "Presets and display options"). */
 static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t n,
                          uint8_t prim, uint8_t space)
 {
@@ -1133,7 +1143,8 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
                             r->st.useOffset, r->passSerial, (uint32_t)r->stretch};
     if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
         /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
-         * when useOffset; zero in Original, RENDER_API.md open item 4) */
+         * when useOffset; zero in Original, RENDER_API.md "Frame lifecycle,
+         * camera and the post passes") */
         float ox = 2048.0f - (float)(r->st.gsW >> 1);
         float oy = 2048.0f - (float)(r->st.gsH >> 1);
         if (r->st.useOffset & RD_TARGET_HALF_Y) {
@@ -1244,7 +1255,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
  * the source alone, Cs * F + Cd or Cd - Cs * F (ALPHA modes 0, 5 and 1, 6):
  * the result is Cd plus the sum of the fragments' terms, modulo 256, whatever
  * their order.  darkVolume.c's count buffer is the user (RENDER_API.md
- * section 18; Shadow.c's count has its own stencil path).  Two passes:
+ * "Full-screen effects and the raw packet builders"; Shadow.c's count has its own stencil path).
+ * Two passes:
  *
  *   1. the prims through the state's vertex shader and wrap_acc_ps into an
  *      RGBA16F accumulator of the target's size, cleared to 0, with the bound
@@ -1929,19 +1941,20 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
     if (sx0 >= src->tw || sy0 >= src->th || dx0 >= dst->tw || dy0 >= dst->th) {
         return;
     }
-    if (sx0 + w > src->tw) {
+    /* clipped without forming x0 + w, which wraps for a w near 2^32 */
+    if (w > src->tw - sx0) {
         w = src->tw - sx0;
     }
-    if (dx0 + w > dst->tw) {
+    if (w > dst->tw - dx0) {
         w = dst->tw - dx0;
     }
-    if (sy0 + h > src->th) {
+    if (h > src->th - sy0) {
         h = src->th - sy0;
     }
-    if (dy0 + h > dst->th) {
+    if (h > dst->th - dy0) {
         h = dst->th - dy0;
     }
-    if ((int32_t)w <= 0 || (int32_t)h <= 0) {
+    if (w == 0 || h == 0) {
         return;
     }
     endPass(r);
@@ -1954,7 +1967,7 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
 
 /* ------------------------------------------------- shadows (wave 4, R4b)
  * rd_shadow.c says what the three commands stand for (RENDER_API.md
- * section 14).  All three work on the state block's colour target and the
+ * "Shadows").  All three work on the state block's colour target and the
  * depth-stencil of its depth target, which must have the colour's size
  * (shadow_Reset binds the per-frame count target with SCENE's). */
 
@@ -2119,7 +2132,7 @@ static void doShadowResolve(Replay *r)
 }
 
 /* --------------------------------------------------- fog (wave 4, R4c)
- * RD_POST_FOG (fog_DrawFog, ZFog.c; RENDER_API.md section 15).  The GS
+ * RD_POST_FOG (fog_DrawFog, ZFog.c; RENDER_API.md "Depth fog").  The GS
  * copies the Z buffer to 0x2800, copies byte 2 of every word into byte 3
  * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
  * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:
@@ -2704,7 +2717,10 @@ static void uploadMeshes(const RdFrame *f, int keep)
             const uint64_t span = m->gpuIndexOff - m->gpuOff + (ib ? ib : 4);
             const uint64_t off = rd__RingAlloc(span, 16);
             if (off == ~0ull) {
+                /* the range is reserved but not written: doVu must not draw
+                 * from it, and the next replay uploads it */
                 m->replaySeen = 0;
+                m->gpuDirty = 1;
                 continue;
             }
             if (sb) {

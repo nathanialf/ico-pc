@@ -1,5 +1,5 @@
 /* rd_blur_test.c: the full-screen effects of staticBlur.c on rd (renderer
- * wave 5, R5a; docs/port/RENDER_API.md section 17).
+ * wave 5, R5a; docs/port/RENDER_API.md "Full-screen effects and the raw packet builders").
  *
  * staticBlur.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c)
  * and Matrix.c, compiled as the window build has them (ICO_HOST, ICO_RD);
@@ -29,7 +29,7 @@
  *      DATE pass), and a dump -> load -> replay of one of them;
  *   m  600 frames of motion blur feedback (DISPLAY -> SCENE, then SCENE
  *      reduced into DISPLAY): FIX 0x40 on a static image, FIX 0x40 on
- *      noise, FIX 0x70 with cuts (RENDER_API.md section 7's cases);
+ *      noise, FIX 0x70 with cuts (RENDER_API.md "Blend exactness under feedback"'s cases);
  *   a  600 frames of the aura feedback through FEED128, 200 each of modes
  *      1 (aura), 2 (mirage) and 3 (aura v2), blurCol alpha 0x20 then 0x40.
  * Tolerance 0 everywhere.  Every pipeline created is enumerated; no

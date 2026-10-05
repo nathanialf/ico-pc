@@ -1205,6 +1205,12 @@ RdTex gif_HostPlaceholder(unsigned int tbp)
             return gs.ph[i].tex;
         }
     }
+    if (gs.phCount == GS_PLACEHOLDERS) {
+        /* every slot taken: share one.  Destroying a slot's texture here
+           would pull it from under the lists of this frame (and the frames
+           in flight) that already bind it. */
+        return gs.ph[h % GS_PLACEHOLDERS].tex;
+    }
     /* a magenta-leaning hue per TBP, so distinct textures look distinct;
        4-texel cells alternate with transparent ones */
     c[0] = (unsigned char)(160 + ((h >> 8) & 0x5F));
@@ -1221,12 +1227,7 @@ RdTex gif_HostPlaceholder(unsigned int tbp)
             p[3] = on ? 0x80 : 0x00;
         }
     }
-    if (gs.phCount < GS_PLACEHOLDERS) {
-        slot = gs.phCount++;
-    } else {
-        slot = (int)(h % GS_PLACEHOLDERS);
-        rd_DestroyTexture(gs.ph[slot].tex);
-    }
+    slot = gs.phCount++;
     gs.ph[slot].tbp = tbp;
     gs.ph[slot].tex = rd_CreateTexture(16, 16, px, RD_TEXA_80_80, "R2a placeholder");
     return gs.ph[slot].tex;
@@ -1357,7 +1358,7 @@ static int gsSpace(void)
            icoMisc.c's memory bar).  The layout, subtitles, staff roll and
            font come through the UI helpers above and gif_HostScreenPrims.
            UI and WORLD replay alike except under the mirror mode, which
-           flips UI prims (RENDER_API.md section 21) */
+           flips UI prims (RENDER_API.md "Mirror mode") */
         return rd_CurrentList() >= 12 ? RD_SPACE_UI : RD_SPACE_WORLD;
     }
 }

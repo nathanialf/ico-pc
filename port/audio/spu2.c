@@ -360,13 +360,29 @@ static inline void vol_tick(vol_state *vs)
 
 /* --- Voices ------------------------------------------------------------------ */
 
+/* The 16 bytes of the ADPCM block at halfword address a.  A voice address
+   is any halfword (SSA, LSAX and NAX are written whole), so a block can
+   start in the last 16 bytes of sound RAM: it then wraps to address 0, as
+   every other access does, through the copy in tmp. */
+static const uint8_t *ram_block(uint32_t a, uint8_t tmp[ADPCM_BLOCK_BYTES])
+{
+    uint32_t b = (a & SPU2_ADDR_MASK) * 2u;
+    int i;
+
+    if (b <= SPU2_RAM_SIZE - ADPCM_BLOCK_BYTES)
+        return &S.ram[b];
+    for (i = 0; i < ADPCM_BLOCK_BYTES; i++)
+        tmp[i] = S.ram[(b + (uint32_t)i) & (SPU2_RAM_SIZE - 1)];
+    return tmp;
+}
+
 static void voice_load_block(voice *v)
 {
-    uint32_t b = (v->cur & SPU2_ADDR_MASK) * 2u;
+    uint8_t tmp[ADPCM_BLOCK_BYTES];
 
     SPU2_LAP(SPU2_PROF_PITCH);
     irq_check(v->cur, 8);
-    v->flags = adpcm_decode_block(&S.ram[b], v->buf, &v->hist);
+    v->flags = adpcm_decode_block(ram_block(v->cur, tmp), v->buf, &v->hist);
     SPU2_LAP(SPU2_PROF_DECODE);
     if (v->flags & ADPCM_FLAG_LOOP_START)
         v->lsax = v->cur;
@@ -1021,16 +1037,20 @@ static void ev_push(const event *e)
 {
     int i;
 
-    if (S.ev_head + S.ev_count >= EV_CAP)
-        ev_compact();
-    if (S.ev_count >= EV_CAP) {
-        /* full: the oldest goes now (deterministic, never expected) */
-        event first = S.ev[S.ev_head];
+    /* a loop: the oldest event's IRQ callback can push again (a register
+       write), which may refill the queue or move its end */
+    for (;;) {
+        event first;
 
+        if (S.ev_head + S.ev_count >= EV_CAP)
+            ev_compact();
+        if (S.ev_count < EV_CAP)
+            break;
+        /* full: the oldest goes now (deterministic, never expected) */
+        first = S.ev[S.ev_head];
         S.ev_head++;
         S.ev_count--;
         ev_run(&first);
-        ev_compact();
     }
     /* insert after every event with time <= e->time */
     i = S.ev_head + S.ev_count;
@@ -1305,13 +1325,14 @@ static int chunk_allowed(void)
 static void chunk_load_block(voice *v)
 {
     uint32_t a = v->cur & SPU2_ADDR_MASK;
+    uint8_t tmp[ADPCM_BLOCK_BYTES];
     int i;
 
     for (i = 0; i < F.wr_count; i++)
         if (a <= F.wr_hi[i] && a + 7u >= F.wr_lo[i])
             F.hazard = 1;
     SPU2_LAP(SPU2_PROF_VOICE);
-    v->flags = adpcm_decode_block(&S.ram[a * 2u], v->buf, &v->hist);
+    v->flags = adpcm_decode_block(ram_block(a, tmp), v->buf, &v->hist);
     SPU2_LAP(SPU2_PROF_DECODE);
     if (v->flags & ADPCM_FLAG_LOOP_START)
         v->lsax = v->cur;

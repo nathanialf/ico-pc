@@ -11,6 +11,7 @@
 #include <time.h>
 #include "config.h"
 #include "host_config.h"
+#include "host_fs.h"
 #include "host_loop.h"
 #include "hotkeys.h"
 #include "input_record.h"
@@ -100,7 +101,7 @@ static struct {
 /* P1: the renderer's per-replay records (rd.h RdPerfRecord): summed over
    the 10 s block for the window's second line, and with [dev] perf_log =
    true written one line each into logs/ico-pc-perf.csv
-   (docs/port/RENDER_API.md section 22) */
+   (docs/port/RENDER_API.md "Performance") */
 static struct {
     int csvTried;
     FILE *csv;
@@ -434,7 +435,7 @@ static void perf_csv_open(void)
     ico_host_exe_dir(dir, sizeof(dir));
     ico_path_join(logs, sizeof(logs), dir, "logs");
     ico_path_join(path, sizeof(path), logs, "ico-pc-perf.csv");
-    s_perf.csv = fopen(path, "w");
+    s_perf.csv = ico_fopen(path, "w"); /* a UTF-8 path (host_fs.h) */
     if (s_perf.csv == NULL) {
         fprintf(stderr, "window: perf_log: cannot write %s\n", path);
         return;

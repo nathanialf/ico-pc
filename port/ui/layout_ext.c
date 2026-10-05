@@ -12,7 +12,10 @@
 #include "strings.h"
 #include "ui_internal.h"
 
-#define TEXT_MAX 96
+/* a label's bytes with its NUL: as long as the wrapped notes settings.c
+   builds (setNote's 256), which the longer translations need (the Spanish
+   mirror-screen note is 103 bytes) */
+#define TEXT_MAX 256
 
 /* The capitals' middle of a label, above its box's centre.  The game's menu
    rows (a 20-texel sheet rectangle in a 20-field-line box) have it at texel

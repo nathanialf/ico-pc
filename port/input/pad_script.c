@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "host_fs.h"
 
 typedef struct Entry {
     unsigned int tick;
@@ -218,7 +219,7 @@ int ico_pad_script_parse(const char *text, const char *name)
 
 int ico_pad_script_load(const char *path)
 {
-    FILE *f = fopen(path, "rb");
+    FILE *f = ico_fopen(path, "rb"); /* UTF-8 path (ini pad_script=) */
     char *text = NULL;
     size_t len = 0;
     size_t cap = 0;

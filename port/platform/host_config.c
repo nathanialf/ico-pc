@@ -552,7 +552,7 @@ int ico_ini_store(const char *path, const char *key, const char *value)
         fprintf(f, "%s=%s\r\n", key, value);
     }
     free(text);
-    ok = !ferror(f);
+    ok = ico_fsync(f) == 0 && !ferror(f); /* on the disk before the move */
     ok = fclose(f) == 0 && ok;
     if (!ok || ico_rename_replace(tmp, path) != 0) {
         ico_remove(tmp);
@@ -731,8 +731,9 @@ int ico_host_redirect_output(const char *log_path)
         console_fd = dup(2);
     }
 #endif
-    /* the probe emptied the file; both streams append, unbuffered, so their
-       lines interleave in order instead of overwriting each other */
+    /* the probe emptied the file; both streams append, so neither overwrites
+       the other's lines (unbuffered on POSIX, so they interleave in order;
+       on Windows each is flushed whole, below) */
 #ifdef _WIN32
     {
         wchar_t *wp = ico_widen(log_path);
@@ -1568,7 +1569,7 @@ int ico_toml_save(const IcoToml *t, const char *path)
     }
     n = strlen(text);
     ok = fwrite(text, 1, n, f) == n;
-    ok = fflush(f) == 0 && ok;
+    ok = ico_fsync(f) == 0 && ok; /* on the disk before the move */
     ok = fclose(f) == 0 && ok;
     free(text);
     if (ok) {

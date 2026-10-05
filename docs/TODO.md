@@ -315,6 +315,69 @@ pointer to this file.
   the texts quoted in `docs/research/licences.md`; diff them word for word
   against the upstream fdlibm, UCB and newlib texts.
 
+## From the final code review
+
+- **EE identity policy for `ico2/`.** Commit 4324315c lifted the GNU nested
+  functions to file-scope statics outside `ICO_HOST`, so the EE objects and
+  link change (LAYOUT.md "The EE objects must not change" and MATH.md's
+  gated pattern disagree with BUILDING.md's "The port changes `ico2/`
+  freely"). Either re-gate the lifts (`#ifdef ICO_HOST` lift, `#else` the
+  nested original, as `motionManager2.c`) or state that only `ICO_HOST`
+  edits after a named revision must be EE-neutral, and run
+  `tools/ee_identity.sh` with `tools/cc` over 83cb591a, d20be3fe, 718d1cc2,
+  6f50fa17 and the review's `ico2/` edits.
+- **A host-identifier gate for `ico2/`.** Fail CI when `ps2_*`, `ico_*`,
+  `rd_*`, `_Static_assert` or `ICO_LAYOUT_*` appear outside `ICO_HOST` /
+  `ICO_RD` in `ico2/` (two EE breaks, `particleEffect.c` `ps2_div` and
+  `chain.c` `ps2_ftoi`, got in without one).
+- **Partial clears in the audits.** Extend `tools/offset_audit.py` or
+  `template_audit.py` to flag `memset`/`memcpy` with a literal size over a
+  record, or over a span from a field, whose host size differs (the review
+  found `_ACTCharStatus_Clear`'s 0x38 and four `ClipWork` 0xC0 clears).
+- **Warnings as errors in `port/`.** Add `-Werror` to `ICO_PORT_WARNINGS`
+  (`cmake/IcoFlags.cmake`) once the game headers that port TUs include
+  (`typedef.h`, `thread.h`, `act.h`, `s_init.h`, `debug.h`) stop raising
+  `-Wstrict-prototypes`, or compile those TUs with `-Wno-strict-prototypes`.
+- **CI coverage.** Add the `asan` and `fptrap` presets (build and ctest) and
+  a `win-x64-clang` build to `.github/workflows/ci.yml`.
+- **`check_no_rom.sh` scope.** Rule 5b scans only `ico2/` and `sce/`; widen
+  it to `port/` (exempting `port/data/extract.c`'s DATA.DF manifest) and
+  read staged blobs (`git show :path`) in pre-commit mode.
+- **Vulkan swapchain: a pending acquire on recreate.** `vkr_SwapchainCreate`
+  drops `acquireWaitPending` while the frame's acquire semaphore may still
+  be signalled; submit an empty batch that waits on it first.
+- **Deferred destruction out of memory.** `vkr_Defer` / `dx_Defer` destroy or
+  drop objects still referenced by unsubmitted lists when the garbage list
+  cannot grow; keep a fixed overflow array.
+- **D3D12 buffer copy states.** `d3dp_BufferBeginCopyDst` assumes COMMON at
+  list start; settle with one debug-layer run over a stage load.
+- **Side-effect-free saves lookup.** `ico_host_saves_dir` re-runs
+  `ico_ini_load` (env exports, mkdir) on the game fiber from `sceMcInit`;
+  split a pure layered read from the one-time export in `main_host.c`.
+- **Checked path joins.** `ico_path_join` (`host_config.c`) truncates
+  silently; return an error and check it where files are created.
+- **Directory sync and Windows errno.** After `ico_rename_replace`, fsync the
+  directory on POSIX; on Windows map `GetLastError()` to errno there.
+- **Settings mid-run: video mode and language.** Both rows are reachable from
+  the pause menu and change discrete state mid-run (tick rate for armed
+  timers, language-selected objects); add DIVERGENCES rows or restrict them
+  to the title.
+- **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
+  reallocate the planes (`port/fmv/m2v.c`).
+- **`sg/sound.c` host UB.** Unsigned spellings for the `<< 24` packet words
+  and 8-byte alignment of `sgComContext` under `ICO_HOST` (needs an EE
+  identity check).
+- **`vu1ref_Particle` bounds.** Pass the input's qword count and clamp the
+  particle count to it (`rd_mesh.c` `rd_DrawVuParticles`).
+- **BGA last key (F12).** Log when the host's last-key path runs with
+  `f > k->time` or with `linear` differing from the next record, then amend
+  F12.
+- **Small cleanups.** `dl_OpenDma(int, const void *, int)`; clear
+  `texHost.bind` for a freed id in `tex_FreeTexture`; drop the dead `ICO_RD`
+  `tex_TransTextureDefocus`, `RdPresentPreset.interpolate`,
+  `UI_OPT_REMAP_RESET`; share `mouse_names[]` and `vsel()`; localise
+  "Uncapped"/"fps"; `rd_perf` GPU records keyed by RHI frame index.
+
 ## Checks that need a PS2 or a play-through
 
 These cannot be settled in code. Each needs a capture from a PS2 or a

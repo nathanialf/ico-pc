@@ -144,8 +144,8 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     if (caps.maxImageCount && count > caps.maxImageCount) {
         count = caps.maxImageCount;
     }
-    if (count > 8) {
-        count = 8;
+    if (count > VKR_MAX_SWAP_IMAGES) {
+        count = VKR_MAX_SWAP_IMAGES;
     }
     VkSwapchainKHR old = g_vkr.swapchain;
     VkSwapchainCreateInfoKHR ci = {
@@ -170,6 +170,17 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     }
     VkSwapchainKHR sc;
     if (!VKR_CHECK(vkCreateSwapchainKHR(g_vkr.device, &ci, NULL, &sc))) {
+        if (old) {
+            /* the old swapchain is retired even when the creation fails, and
+             * a retired one may not be passed as oldSwapchain again: drop it
+             * (the device is idle, rhi_ResizeSwapchain), so the next acquire
+             * returns id 0 and the caller's retry creates from scratch */
+            vkr_DestroySwapResources();
+            vkDestroySwapchainKHR(g_vkr.device, old, NULL);
+            g_vkr.swapchain = VK_NULL_HANDLE;
+            g_vkr.swapAcquired = false;
+            g_vkr.acquireWaitPending = false;
+        }
         return false;
     }
     vkr_DestroySwapResources();
@@ -182,8 +193,19 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     g_vkr.swapHeight = h;
     g_vkr.vsync = vsync;
 
-    VkImage images[8];
-    uint32_t n = 8;
+    /* the implementation may create more images than minImageCount asks
+       for, and an acquire can return any of them: every one needs a slot */
+    VkImage images[VKR_MAX_SWAP_IMAGES];
+    uint32_t n = 0;
+    vkGetSwapchainImagesKHR(g_vkr.device, sc, &n, NULL);
+    if (n > VKR_MAX_SWAP_IMAGES) {
+        VKR_LOG("swapchain has %u images, more than %u", n, (unsigned)VKR_MAX_SWAP_IMAGES);
+        vkDestroySwapchainKHR(g_vkr.device, sc, NULL);
+        g_vkr.swapchain = VK_NULL_HANDLE;
+        g_vkr.swapAcquired = false;
+        g_vkr.acquireWaitPending = false;
+        return false;
+    }
     vkGetSwapchainImagesKHR(g_vkr.device, sc, &n, images);
     VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (uint32_t i = 0; i < n; i++) {

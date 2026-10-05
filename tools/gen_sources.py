@@ -14,7 +14,7 @@ player: port/fmv). Since renderer wave 6 (package R6a) there is one host
 source list: the renderer-owned files the renderer waves rewrote (all of
 seki/src, the sugipon and ito effect files, common/src/debug.c and
 debug_exception.c) compile like every other game source, in both the
-headless and the window build (docs/port/BUILD_STATUS.md).
+headless and the window build (docs/BUILDING.md, "How the game is compiled").
 
     tools/gen_sources.py           rewrite cmake/IcoSources.cmake
     tools/gen_sources.py --check   exit 1 if it is out of date

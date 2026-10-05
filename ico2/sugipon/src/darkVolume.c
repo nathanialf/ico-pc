@@ -352,7 +352,7 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
     }
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18).  The
+/* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders").  The
    packets below are VU1 SET_GSREGISTER packets (VIF UNPACK V4-32 of the GIF
    tag and its A+D pairs to TOP, MSCALF 0) and the spheres are raw GIF writes
    (gif_SetGsReg); both reach the GS register decoder as on the PS2, the
@@ -408,7 +408,7 @@ static void dvHostBlockEnd(void) /* derived name */
        the flip's; rd records those (rd_Post, rd_FrameHead) without FBMSK, so
        the mask ends here: list-10 draws between the dark volume and the
        anti-alias pass write SCENE's alpha on rd and not on the PS2
-       (RENDER_API.md section 18, open item). */
+       (RENDER_API.md "Full-screen effects and the raw packet builders", open item). */
     rd_ColorMask(0);
 }
 

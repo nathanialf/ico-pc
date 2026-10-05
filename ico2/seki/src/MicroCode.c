@@ -12,15 +12,18 @@
 #include "rd_mesh.h"
 
 #endif
+#ifndef ICO_HOST
 
 /* The five VU1 microprograms this table hands to the DMA, from cluster.o,
-   mesh.o, normal_c.o, normal_l.o and particle.o. */
+   mesh.o, normal_c.o, normal_l.o and particle.o (the PS2 build only: the
+   host's table below holds none of them). */
 extern void ClusterMicroProgram();
 extern void MeshMicroProgram();
 extern void NormalCMicroProgram();
 extern void NormalLMicroProgram();
 extern void ParticleMicroProgram();
 
+#endif
 /* Indexed by the microprogram id the mesh and shadow paths pass around;
    slots 0 and 6 are unused. */
 #ifdef ICO_HOST
@@ -324,7 +327,7 @@ inline void mc_Reset(void)
 
 /* ===================================================================== *
  * PC port (renderer wave 3, R3ab): the VU1 side of the DMA chains the seki
- * layer builds for path 1 (docs/port/RENDER_API.md section 13).
+ * layer builds for path 1 (docs/port/RENDER_API.md "The mesh path").
  *
  * On the PS2 the VIF unpacks these chains into VU1 memory and starts the
  * resident microprogram at an MSCAL/MSCALF code.  The host reads the VIF
@@ -527,12 +530,13 @@ static unsigned int mcHostGif(const unsigned int *w, unsigned int qwc, int oneTa
                               (unsigned int)lo);
             }
             for (i = 0; i < total; i++) {
-                const unsigned int *d = w + 4 * at + 2 * i;
+                const unsigned int *d;
                 unsigned int desc = (unsigned int)((hi >> (4 * (i % nreg))) & 0xF);
 
                 if (at + i / 2 >= qwc) {
                     goto out;
                 }
+                d = w + 4 * at + 2 * i; /* formed once it is known to be in range */
                 if (desc != 0xE && desc != 0xF) {
                     mcHostAdPush(desc, (unsigned long long)d[0] | ((unsigned long long)d[1] << 32));
                 }

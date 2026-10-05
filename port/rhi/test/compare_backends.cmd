@@ -5,7 +5,7 @@ rem texel (compare_png.ps1). Double-click it; it needs no arguments.
 rem
 rem Put beside it: rd_replay_tool.exe, SDL3.dll, compare_png.ps1, and the
 rem dumps\ folder the game writes with dump_every=N in ico-pc.ini
-rem (docs/port/TESTING.md, "Renderer wave 6: D3D12"). Results go to
+rem (docs/port/TESTING.md, "The renderer backends"). Results go to
 rem compare_backends.log and the PNGs to compare_out\.
 rem
 rem For each dump: DISPLAY, the displayed buffer the GS arithmetic writes

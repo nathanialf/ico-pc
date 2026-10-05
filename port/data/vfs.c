@@ -147,10 +147,8 @@ int64_t ico_vfs_read(const IcoVfsFile *f, uint64_t offset, void *dst, size_t len
     if (offset >= f->entry.size) {
         return 0;
     }
-    end = offset + len;
-    if (end > f->entry.size) {
-        end = f->entry.size;
-    }
+    /* in this order: offset + len can wrap for a huge len */
+    end = len > f->entry.size - offset ? f->entry.size : offset + len;
     while (offset < end) {
         uint32_t lsn = f->entry.lsn + ico_vfs_offset_to_lsn(offset);
         uint32_t in = (uint32_t)(offset % ICO_VFS_SECTOR);

@@ -646,7 +646,7 @@ inline int ACTCheckCollis_W(float f, void *hand0, void *hand1, void *actor, void
 inline int ACTCheckCollis_CI(float *start, float *end, int *attr, WallCfg *wallHit)
 {
     ClipWork buf;
-    memset(&buf, 0, 0xC0);
+    memset(&buf, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     buf.radius = 0;
     sceVu0CopyVector(buf.pt[0], start);
     sceVu0CopyVector(buf.pt[1], end);
@@ -1332,7 +1332,14 @@ void _ACTCharStatus_Clear(void *self)
     float nearest;
     float d;
 
+#ifdef ICO_HOST
+    /* the EE clears 0x38 bytes, bits58 up to paraStatus; the host record
+       is wider there (pointer-wide words), so clear the same members */
+    memset((char *)&s->bits58, 0,
+           __builtin_offsetof(Act, paraStatus) - __builtin_offsetof(Act, bits58));
+#else
     memset((char *)&s->bits58, 0, 0x38);
+#endif
     if (self == (char *)boyGObj || self == ((char *)girlGObj)) {
         nearest = 3.40282347e+38f; /* FLT_MAX */
         sel = 0;

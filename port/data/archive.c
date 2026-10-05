@@ -12,6 +12,7 @@
 #include "archive.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -621,7 +622,7 @@ static int arch_open(const char *path, Arch **out, char *why, size_t whysize)
         goto done;
     }
     copy_str(a->info.format, sizeof(a->info.format), jget_str(&j, root, "format"));
-    if (jget_u64(&j, root, "version", &v) == 0) {
+    if (jget_u64(&j, root, "version", &v) == 0 && v <= INT_MAX) {
         a->info.version = (int)v;
     }
     copy_str(a->info.extractor, sizeof(a->info.extractor), jget_str(&j, root, "extractor"));

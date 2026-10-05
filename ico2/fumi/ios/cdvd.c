@@ -140,7 +140,17 @@ static CdvdBgReq bgReqTable[7]; /* derived name */
 
 static unsigned char skipBuf[1024]; /* derived name */
 
+#ifdef ICO_HOST
+
+/* a 64-bit host's IOSThread is wider than the EE's 120 bytes */
+static char stThread[sizeof(IOSThread) > 120 ? sizeof(IOSThread) : 120]
+    __attribute__((aligned(16))); /* derived name */
+
+#else
+
 static char stThread[120]; /* derived name */
+
+#endif
 
 static char stStack[16384]; /* derived name */
 

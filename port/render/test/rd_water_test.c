@@ -1,5 +1,5 @@
 /* rd_water_test.c: the surfaces that render to and sample from textures
- * (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).
+ * (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").
  *
  * puddle.c, pool.c, queen_barrier_disp.c, waterDot.c and clothAnimation.c
  * with the mesh path (Packet.c, RegistPacket.c, MicroCode.c, DisplayP2O.c,
@@ -992,7 +992,8 @@ static uint8_t s_lo[512 * 512 * 4], s_hi[512 * 512 * 4];
 /* the Z model: with s_zbuf set, rasterise tests GS Z GEQUAL against it (and
  * writes it with s_zwrite); a pixel where two fragments' Z lie within
  * 512 GS units of each other or of the buffer (D32F at 2^-32 resolves
- * about 256 units there, RENDER_API.md section 12) is left out of cover */
+ * about 256 units there, RENDER_API.md "Frame lifecycle, camera and the post passes") is left out
+ * of cover */
 static double *s_zbuf;
 
 static int s_zwrite;

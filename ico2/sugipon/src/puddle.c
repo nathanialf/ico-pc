@@ -75,8 +75,19 @@ static float savedMatrix200[16]; /* derived name */
 
 static float savedMatrix340[16]; /* derived name */
 
+#ifdef ICO_HOST
+
+/* the C library's memset: the EE's declaration (#else) passes the size as
+   an int where the host's definition reads a size_t */
+#include <string.h>
+
+#else
+
 /* declared here with a void return; string.h is not included */
 extern void memset(void *p, int c, int n);
+
+#endif
+
 void PuddleGeo(GObj *self);
 void EntryRippleToPuddle(GObj *self, void *vec);
 int puddleRideFunc(ObjNode *on, GObj *rider);
@@ -113,7 +124,7 @@ PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
 
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).  The
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
    work block drawAreaSetup allocates right after tex_ResetVramPri(4) is TBP
    0x2800, which the GS register decoder takes for the named AA0 target (no
    depth buffer); on the GS the reflection draws there with work1Vram as its

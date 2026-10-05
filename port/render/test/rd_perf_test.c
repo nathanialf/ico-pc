@@ -1,4 +1,4 @@
-/* rd_perf_test (package P1, docs/port/RENDER_API.md section 22): the
+/* rd_perf_test (package P1, docs/port/RENDER_API.md "Performance"): the
  * renderer's CPU cost per replay and its steady state.
  *
  * A synthetic frame shaped like a game frame: SCENE cleared with its depth,

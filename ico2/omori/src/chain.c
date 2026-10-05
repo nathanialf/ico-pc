@@ -1153,9 +1153,13 @@ static inline void ChainNodeSpan(ChainRecord *cw, float *pos, int *i0, int *i1) 
 {
     ChainNode *nd = cw->node;
 
+#ifdef ICO_HOST
     /* the EE's cvt.w.s saturates an out-of-range position; the host's
        cvttss2si gives INT_MIN instead (docs/port/DIVERGENCES.md) */
     *i0 = ps2_ftoi((pos[1] - nd[0].y) / 50.0f);
+#else
+    *i0 = (int)((pos[1] - nd[0].y) / 50.0f);
+#endif
     *i1 = *i0 + 1;
     *i0 = *i0 < 2 ? 2 : (cw->nodes - 1 < *i0 ? cw->nodes - 1 : *i0);
     *i1 = *i1 < 2 ? 2 : (cw->nodes - 1 < *i1 ? cw->nodes - 1 : *i1);

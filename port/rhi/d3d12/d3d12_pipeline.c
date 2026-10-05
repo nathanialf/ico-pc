@@ -233,8 +233,13 @@ static bool dx_WriteResource(const RhiBindSlot *s, const RhiBinding *b,
     case RHI_BIND_STORAGE_BUFFER: {
         /* StructuredBuffer<float4> (vu_common.hlsli): 16-byte elements */
         DxBuffer *buf = dx_GetBuffer(b->buffer);
-        uint64_t size = b->size ? b->size : (buf ? buf->size - b->offset : 0);
-        if (!buf || (b->offset & 15u) || b->offset + size > buf->size || size < 16) {
+        /* the offset is checked first: past the end, buf->size - b->offset
+           wraps and a huge offset + size would pass the bound */
+        uint64_t size = 0;
+        if (buf && b->offset < buf->size) {
+            size = b->size ? b->size : buf->size - b->offset;
+        }
+        if (!buf || (b->offset & 15u) || size < 16 || size > buf->size - b->offset) {
             DX_LOG("bind group: t%u: invalid storage buffer range", s->slot);
             return false;
         }

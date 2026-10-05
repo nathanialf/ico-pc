@@ -276,6 +276,18 @@ static IcoBindings *liveBindings(void)
     return b;
 }
 
+/* [audio] volume clamped to 0..1 as the output applies it (NaN as 0,
+   port/audio/volume.c): a value outside it in the file would overflow the
+   int conversions below */
+static double volume01(void)
+{
+    double v = ico_config_get_float("audio.volume", 1.0);
+    if (!(v > 0.0)) {
+        return 0.0;
+    }
+    return v < 1.0 ? v : 1.0;
+}
+
 static const char *onOff(int v)
 {
     return ui_Str(v ? UI_STR_ON : UI_STR_OFF);
@@ -340,8 +352,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_MENU_TEXT:
         return ui_Str(ico_opt_classic_menu_text() ? UI_STR_VAL_CLASSIC : UI_STR_VAL_PORT_FONT);
     case UI_OPT_VOLUME: {
-        double v = ico_config_get_float("audio.volume", 1.0);
-        snprintf(buf, size, "%d %%", (int)(v * 100.0 + 0.5));
+        snprintf(buf, size, "%d %%", (int)(volume01() * 100.0 + 0.5));
         return buf;
     }
     case UI_OPT_STICK_FIX:
@@ -437,7 +448,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         break;
     case UI_OPT_VOLUME: {
-        int v = (int)(ico_config_get_float("audio.volume", 1.0) * 10.0 + 0.5) + dir;
+        int v = (int)(volume01() * 10.0 + 0.5) + dir;
         v = v < 0 ? 0 : v > 10 ? 10 : v;
         ico_config_set_float("audio.volume", v / 10.0);
         ico_audio_set_volume(v / 10.0); /* live; the SDL output reads it per block */

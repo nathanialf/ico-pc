@@ -37,7 +37,7 @@ static void copyToWork(int pri);
 
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md section 16).  The
+/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
    work block copyToWork and flushWork allocate right after tex_ResetVramPri
    is TBP 0x2800, which the GS register decoder takes for the named AA0
    target (no depth buffer); on the GS the scene copy, the refracting

@@ -1,6 +1,6 @@
 /* rd_present.c: DISPLAY to the output.
  *
- * Original preset (RENDER_API.md section 6): the reduced DISPLAY frame
+ * Original preset (RENDER_API.md "Presets and display options"): the reduced DISPLAY frame
  * (512 x H/2) is shown in a centred 4:3 rectangle of the output, each line
  * doubled (field-line doubling, nearest vertically) and filtered bilinearly
  * horizontally.  Two blits:
@@ -33,7 +33,7 @@
  * The scene resolution needs nothing here: DISPLAY's texture is whatever
  * size rd__ApplyDisplay gave it, and both steps sample it normalised.
  * rd__ApplyDisplay (below) turns RdSettings into the scales and factors the
- * targets and the replay use (RENDER_API.md section 19).
+ * targets and the replay use (RENDER_API.md "Presets and display options").
  * Field parity is not a present-time effect: the PS2 shifts the scene's
  * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
  * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).

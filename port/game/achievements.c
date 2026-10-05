@@ -58,6 +58,7 @@ static int s_sofa[SOFA_MAX];
 static unsigned long long s_visited[STAGE_BITS / 64];
 static int s_stats_dirty;
 static unsigned int s_stats_written_tick;
+static unsigned int s_hand_rem; /* hand_ms's sub-millisecond carry, in 1/hz ms */
 
 static int visited(const unsigned long long *set, int stage)
 {
@@ -332,7 +333,12 @@ static long long parse_time(const char *s)
     int y, mo, d, h, mi, se;
     long long days;
 
-    if (s == NULL || sscanf(s, "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &se) != 6) {
+    /* the widths keep sscanf in range, the checks keep the arithmetic
+       below from overflowing on a hand-edited file: 0 (an unknown time)
+       for anything else, the unlock itself stays */
+    if (s == NULL || sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &se) != 6 ||
+        mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59 || se < 0 ||
+        se > 60) {
         return 0;
     }
     /* days from civil (proleptic Gregorian), UTC */
@@ -407,12 +413,17 @@ static void hex_parse(const char *s, unsigned long long *set)
 
 #define FILE_VERSION 2
 
-static long long get_counter(const IcoToml *t, const char *name, long long def)
+/* stats.<name>, def when absent or not a number; a negative or too large
+   value from a hand-edited file is not wrapped into a huge count (which
+   would unlock the counting achievements) but read as def */
+static long long get_counter(const IcoToml *t, const char *name, long long def, long long max)
 {
     char key[64];
+    long long v;
 
     snprintf(key, sizeof(key), "stats.%s", name);
-    return ico_toml_get_int(t, key, def);
+    v = ico_toml_get_int(t, key, def);
+    return v < 0 || v > max ? def : v;
 }
 
 static const char *get_counter_str(const IcoToml *t, const char *name)
@@ -435,6 +446,7 @@ static int write_file(void)
         t = ico_toml_parse("");
     }
     if (t == NULL) {
+        s_stats_dirty = 1; /* retried, as a failed write below */
         return -1;
     }
     ico_toml_set_int(t, "version", FILE_VERSION);
@@ -461,7 +473,10 @@ static int write_file(void)
     if (rc != 0) {
         ico_diag_log("achievements: cannot write %s", s_path);
     }
-    s_stats_dirty = 0;
+    /* a failed write stays pending: the flush retries it every
+       ICO_ACH_STATS_FLUSH_TICKS and at exit, so an unlock or a counter is
+       not lost to one failure (a locked file, a full disk) */
+    s_stats_dirty = rc != 0;
     s_stats_written_tick = ico_gs_ticks();
     return rc;
 }
@@ -475,10 +490,10 @@ static void read_file(void)
     if (t == NULL) {
         return;
     }
-    s_stats.enemies = (unsigned int)get_counter(t, "enemies", 0);
-    s_stats.hand_ms = (unsigned long long)get_counter(t, "hand_ms", 0);
-    s_stats.saves = (unsigned int)ico_toml_get_int(t, "stats.saves", 0);
-    s_stats.clears = (unsigned int)ico_toml_get_int(t, "stats.clears", 0);
+    s_stats.enemies = (unsigned int)get_counter(t, "enemies", 0, 0xFFFFFFFFLL);
+    s_stats.hand_ms = (unsigned long long)get_counter(t, "hand_ms", 0, 0x7FFFFFFFFFFFFFFFLL);
+    s_stats.saves = (unsigned int)get_counter(t, "saves", 0, 0xFFFFFFFFLL);
+    s_stats.clears = (unsigned int)get_counter(t, "clears", 0, 0xFFFFFFFFLL);
     s_stats.sofas = sofa_parse(get_counter_str(t, "couches"), s_sofa);
     hex_parse(get_counter_str(t, "stages"), s_visited);
     for (i = 0; i < ACH_COUNT; i++) {
@@ -504,6 +519,7 @@ static void clear_state(void)
     memset(s_visited, 0, sizeof(s_visited));
     s_stats_dirty = 0;
     s_stats_written_tick = 0;
+    s_hand_rem = 0;
     s_popq_n = 0;
     s_last_push_tick = 0;
     s_pushed_any = 0;
@@ -586,9 +602,13 @@ static void update_stats(void)
         s_stats_dirty = 1;
     }
     if (ico_gs_yorda_held() && !ico_gs_paused()) {
+        /* a tick's milliseconds, the remainder carried: 30 ticks a second
+           (60 Hz) count 33, 33, 34, not 33 every tick (1 % short) */
         int hz = ico_gs_tick_hz();
-        unsigned int ms = hz > 0 ? 1000u / (unsigned int)hz : 40u;
+        unsigned int n = hz > 0 ? (unsigned int)hz : 25u;
+        unsigned int ms = (1000u + s_hand_rem) / n;
 
+        s_hand_rem = (1000u + s_hand_rem) % n;
         s_stats.hand_ms += ms;
         s_stats_dirty = 1;
     }

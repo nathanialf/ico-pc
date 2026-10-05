@@ -169,10 +169,14 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
         w->spin = 0;
     }
     span = (float)pkg->life * (pkg->lifeRand * sugiSignedRandom() + 1.0f);
+#ifdef ICO_HOST
     /* span is 0 when a package's life and lifeRand make it so (stage 5's
        torches): the EE's div gives Fmax; the host's Inf times the zero
        below would be NaN (docs/port/DIVERGENCES.md) */
     w->alphaStep = ps2_div(w->alpha, span);
+#else
+    w->alphaStep = w->alpha / span;
+#endif
     if ((float)w->life < span) {
         w->alpha = w->alpha - (span - (float)w->life) * w->alphaStep;
     }
@@ -467,7 +471,7 @@ static void dispParticleEffect(PEGeo *geo)
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
 #ifdef ICO_RD
-    /* PC port (renderer wave 5, R5c; docs/port/RENDER_API.md section 18): the
+    /* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders"): the
        packet is a VU1 SET_GSREGISTER packet (PABE 0 and the effect's ALPHA,
        mode 5, 6 or 4 by alphaMode); mc_HostDma hands its A+D pairs to the GS
        register decoder ahead of the batch prim_DispParticle chains (already

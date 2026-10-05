@@ -322,8 +322,7 @@ typedef struct RhiStencilFace {
 typedef struct RhiDepthStencilState {
     bool depthTest;
     bool depthWrite;
-    RhiCompare
-        depthCompare; /* reversed-Z: GS GEQUAL becomes RHI_CMP_GEQUAL on 1-z, see RENDER_API.md */
+    RhiCompare depthCompare; /* depth = 1 - z: GS GEQUAL is RHI_CMP_LEQUAL (rd_pipeline.c) */
     bool stencilTest;
     uint8_t stencilReadMask, stencilWriteMask;
     RhiStencilFace front,
@@ -551,7 +550,7 @@ bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t d
 
 /* ------------------------------------------------- performance (package P1)
  * Counters since rhi_Init, cumulative: the caller takes differences
- * (rd_core's per-replay records, docs/port/RENDER_API.md section 22).  The
+ * (rd_core's per-replay records, docs/port/RENDER_API.md "Performance").  The
  * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
  * completion (rhi_WaitFrame, rhi_WaitIdle, readbacks), acquireNs in the
  * swapchain acquire, presentNs in the present call. */

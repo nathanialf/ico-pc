@@ -10,7 +10,7 @@
 # LLVM-exception for LLVM, mingw-w64 runtime under its own permissive
 # licences) provides clang, lld and the x86_64 mingw-w64 target
 # with the UCRT runtime. The same clang compiles the Linux presets against the
-# host's gcc sysroot (cmake/toolchain-linux-clang.cmake).
+# host's gcc sysroot (cmake/toolchains/x86_64-linux-clang.cmake).
 #
 # It also builds tools/toolchain/mingw-gcc from pinned Debian packages
 # (dpkg-deb -x, no root): Debian's x86_64 mingw-w64 gcc for the GCC-family
@@ -93,8 +93,8 @@ fetch_deb() {
 
 # --- 3. mingw-w64 gcc, the GCC-family Windows presets ------------------------
 #
-# The *-gcc presets compile with GCC, which accepts the game's GNU nested
-# functions (clang does not; docs/port/BUILD_STATUS.md). Debian's mingw-w64
+# The gcc Windows preset (win-x64) compiles with GCC, the primary compiler
+# (docs/BUILDING.md, "Compilers"). Debian's mingw-w64
 # cross gcc 14 and binutils for the x86_64 target, unpacked with fetch_deb;
 # gcc finds its own pieces relative to its executable, so the tree works
 # from any directory.

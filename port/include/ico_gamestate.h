@@ -30,7 +30,7 @@ extern "C" {
 /* --- signals ------------------------------------------------------------ */
 
 /* Raised by the game (one-line hooks under ICO_HOST, listed in
-   docs/port/ACHIEVEMENTS.md, "Hook sites") or derived by ico_gs_tick from
+   docs/port/ACHIEVEMENTS.md, "Signals") or derived by ico_gs_tick from
    the snapshot ("polled"). */
 typedef enum IcoGsEvent {
     ICO_GS_EV_NONE = 0,
@@ -51,8 +51,11 @@ typedef enum IcoGsEvent {
     ICO_GS_EV_COUNT
 } IcoGsEvent;
 
-/* Queues a signal for the next ico_gs_tick (any thread or fiber; a bounded
-   queue, a full one drops and counts).  The game's hooks call this. */
+/* Queues a signal for the next ico_gs_tick (a bounded queue, a full one
+   drops and counts).  The game's hooks call this from any EE thread: those
+   are fibers on the host thread (port/platform/sched.c), as is the
+   ico_gs_tick caller (host_loop.c, between scheduler runs), so the queue
+   takes no lock.  Not safe from another OS thread. */
 void ico_gs_signal(int event, int arg);
 /* This tick's signals: how many of event, and the last one's arg. */
 int ico_gs_signaled(IcoGsEvent event);

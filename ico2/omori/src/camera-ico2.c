@@ -22,7 +22,7 @@
 
 #ifdef ICO_HOST
 
-/* PC port (renderer R7d, docs/port/RENDER_API.md section 20): a camera
+/* PC port (renderer R7d, docs/port/RENDER_API.md "Frame rate and interpolation"): a camera
    group whose kind differs from the current one re-initialises the monitor
    camera, a hard cut for the presenter's interpolation
    (port/game/video_options.c; a counter no game state reads) */

@@ -49,7 +49,19 @@ static const Blk16 se10lBoxCenter = {{141.0f, 1328.0f, -122.0f, 0.0f}}; /* deriv
 static const Blk16 se10lBoxSize = {{600.0f, 700.0f, 1000.0f, 0.0f}}; /* derived name */
 
 /* declared int * here; camera-root.h returns void * */
+#ifdef ICO_HOST
+
+/* the host calls camera-root.h's GetCameraPos(void) as declared: the
+   argument some routines pass (an a0 the EE loads and the callee ignores)
+   is dropped */
+extern void *GetCameraPos(void);
+
+#define GetCameraPos(...) GetCameraPos()
+#else
+
 extern int *GetCameraPos();
+
+#endif
 
 /* the two box tests are each their own routine, inlined at every site, and
    each names its own pair */
@@ -81,7 +93,7 @@ typedef union { /* field names derived */
 /* SeSlot is a runtime record with pointers, so on the host its fields are not at
    the EE's offsets; this is its natural layout, field for field.  It must follow
    SeSlot; the slot should be exported from s_init.h and this copy dropped
-   (docs/port/SWEEP_2F.md). */
+   (docs/TODO.md; docs/port/OFFSET_AUDIT.md, "Conventions in ico2/"). */
 typedef struct { /* field names derived */
     unsigned short num;
     short vol0;
