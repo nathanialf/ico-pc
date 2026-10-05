@@ -121,11 +121,19 @@ signatures now accept a pointer-wide value.
 3. `fieldCollision.c:1158` `((void (*)(void))ClipWall)()` calls ClipWall with
    no argument through a cast (the EE leaves garbage in `a0`); the host passes
    garbage too. Needs a decision on what the game means (the caller
-   `ClipWallRD`).
+   `ClipWallRD`). Package Q3: `ClipWallRD` has no caller. The retail ELF
+   (`build/ico.elf`) holds no `jal` to it (0x16F140, `build/ico.pal.map`) and
+   no word with its address, and no source calls it, so the garbage `a0`
+   never happens on either machine. Left as it is (the same holds for
+   `GetEdgeOfFloor`, 0x16C7E0, whose `n[4]`/`out[4]` stores run one float
+   past their arrays).
 4. `boyact.c` ~1809 `_RotyGV` is called through an `int`-returning cast on the
    EE (float comes back in `$f0`, the int read is whatever `$v0` held). The
    host path calls `(int)_RotyGV(...)`, which is the evident intent but not a
-   measured behaviour.
+   measured behaviour. Package Q3: `_RotyGV` returns `int` (`omori/src/gv.c:119`,
+   declared so in `omori/include/gv.h:31`; `boyact.c` sees it only through an
+   implicit `int` declaration). The value comes back in `$v0` and the cast
+   changes nothing, so the host's `(int)_RotyGV(...)` is the EE behaviour.
 5. `girl_act.c` `GirlListEnt` (`void *obj` first) is natural layout on the
    host, so `GirlBrainWork`'s lists are 0x38 bytes an entry, not 0x30; every
    access in the file is typed now, but the struct is defined in the `.c` and

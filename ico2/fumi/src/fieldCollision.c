@@ -56,6 +56,18 @@ typedef struct { /* field names derived */
 
 typedef int (*FcFunc)(void *work, int mode);
 
+/* The EE's div.s gives +-Fmax for a zero (or denormal) divisor, 0/0
+   included, and cvt.w.s saturates; plain C on the host gives Inf/NaN and
+   0x80000000 (docs/port/MATH.md, DIVERGENCES.md F5). The EE build keeps the
+   plain operators. */
+#ifdef ICO_HOST
+#define FC_DIV(a, b) ps2_div((a), (b)) /* derived name */
+#define FC_FTOI(x) ps2_ftoi(x)         /* derived name */
+#else
+#define FC_DIV(a, b) ((a) / (b))
+#define FC_FTOI(x) ((int)(x))
+#endif
+
 /* fieldCollision.o's .sbss and .bss.  .sbss: the number of objects in the
    collision list, the nine collision statistics DispCollisionPC prints (a
    pair per format, wall, wall R, floor, floor R, with the timer between the
@@ -167,7 +179,8 @@ void GetReflectionElement(ClipWork *work, float arg0, float arg1)
     {
         float *p20 = L20;
         z = GetPointDistance(work->pt[2], work->pt[1]);
-        sceVu0ScaleVector(p20, work->reflect.dir, z / GetPointDistance(work->pt[0], work->pt[1]));
+        sceVu0ScaleVector(p20, work->reflect.dir,
+                          FC_DIV(z, GetPointDistance(work->pt[0], work->pt[1])));
         sceVu0AddVector(work->reflect.pos, work->pt[2], p20);
     }
 }
@@ -324,10 +337,10 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     if (e->pt[2][1] < pb[1] && e->pt[3][1] < pb[1]) {
         return 0;
     }
-    if (pb[1] < (e->pt[1][1] - e->pt[0][1]) * pb[0] / e->height + e->pt[0][1]) {
+    if (pb[1] < FC_DIV((e->pt[1][1] - e->pt[0][1]) * pb[0], e->height) + e->pt[0][1]) {
         return 0;
     }
-    if ((e->pt[3][1] - e->pt[2][1]) * pb[0] / e->height + e->pt[2][1] < pb[1]) {
+    if (FC_DIV((e->pt[3][1] - e->pt[2][1]) * pb[0], e->height) + e->pt[2][1] < pb[1]) {
         return 0;
     }
     if (flip) {
@@ -361,7 +374,7 @@ static __inline__ int FloorPointInside(FcFloorEnt *e, float *pt) /* derived name
         vx = v->x;
         if ((vx < pt[0] && pt[0] <= p2->x) || (p2->x < pt[0] && pt[0] <= vx)) {
             cp[0] = pt[0];
-            cp[2] = (v->z - p2->z) * (pt[0] - p2->x) / (vx - p2->x) + p2->z;
+            cp[2] = FC_DIV((v->z - p2->z) * (pt[0] - p2->x), vx - p2->x) + p2->z;
             if (pt[2] < cp[2]) {
                 cross++;
             } else if (cp[0] == pt[0] && cp[2] == pt[2]) {
@@ -414,7 +427,7 @@ static int clip_floor_1(ClipWork *ray, FcFloorEnt *e, int backFace)
             return 0;
         }
     }
-    t = 1.0f / (ds - de);
+    t = FC_DIV(1.0f, ds - de);
     hit[0] = (ex * ds - sx * de) * t;
     hit[1] = (ey * ds - sy * de) * t;
     hit[2] = (ez * ds - sz * de) * t;
@@ -498,10 +511,10 @@ static void makeCollisionBlockTable(float *ray)
     int pz;
 
     blockNum = 0;
-    x0 = (int)(ray[0] - FUZIO_OFS(curFuzio)[0]);
-    x1 = (int)(ray[8] - FUZIO_OFS(curFuzio)[0]);
-    z0 = (int)(ray[2] - FUZIO_OFS(curFuzio)[2]);
-    z1 = (int)(ray[10] - FUZIO_OFS(curFuzio)[2]);
+    x0 = FC_FTOI(ray[0] - FUZIO_OFS(curFuzio)[0]);
+    x1 = FC_FTOI(ray[8] - FUZIO_OFS(curFuzio)[0]);
+    z0 = FC_FTOI(ray[2] - FUZIO_OFS(curFuzio)[2]);
+    z1 = FC_FTOI(ray[10] - FUZIO_OFS(curFuzio)[2]);
     bx = x0 >> 9;
     bz = z0 >> 9;
     dx = x1 - x0;
@@ -1274,7 +1287,7 @@ inline void *ClipWallVector(float *start, float *end)
 
 inline float GetYProjectionOfPlane(float *plane, float *pos)
 {
-    return -(plane[0] * pos[0] + plane[2] * pos[2] + plane[3]) / plane[1];
+    return FC_DIV(-(plane[0] * pos[0] + plane[2] * pos[2] + plane[3]), plane[1]);
 }
 
 inline float GetDistanceFromPlane(void *plane, void *pos)
@@ -1337,9 +1350,9 @@ inline int ClipPlane(ClipWork *work)
         }
     }
     d = t1 - t0;
-    p[8] = (p[4] * t1 - p[0] * t0) / d;
-    p[9] = (p[5] * t1 - p[1] * t0) / d;
-    p[10] = (p[6] * t1 - p[2] * t0) / d;
+    p[8] = FC_DIV(p[4] * t1 - p[0] * t0, d);
+    p[9] = FC_DIV(p[5] * t1 - p[1] * t0, d);
+    p[10] = FC_DIV(p[6] * t1 - p[2] * t0, d);
     return 1;
 }
 

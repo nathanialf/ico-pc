@@ -416,7 +416,11 @@ int _ACTCorrectMsg(GObj *self, int msg, void *param)
         }
         break;
     case 10: {
+#ifdef ICO_HOST
+        int iv = ps2_ftoi(GOBJ_SUB(self)->ctrl.fallHeight); /* EE cvt.w.s saturates */
+#else
         int iv = (int)GOBJ_SUB(self)->ctrl.fallHeight;
+#endif
         int flagA = 0;
         int flagB = 0;
 
