@@ -152,17 +152,17 @@ static IosMsgQueue stReqQ; /* derived name */
    iosCdvdBackGroundMgr is running, stReqRing and stAckRing the rings of the
    stream manager's request and acknowledge queues.  stReqRing's queue is
    created with one slot; no code reads its second word. */
-static int cdvdMsgRing[2]; /* derived name */
+static IosMsgWord cdvdMsgRing[2]; /* derived name */
 
-static int cdvdLoadEndRing[2]; /* derived name */
+static IosMsgWord cdvdLoadEndRing[2]; /* derived name */
 
 static int stPreLoadCnt; /* derived name */
 
 static int bgRunning; /* derived name */
 
-static int stReqRing[2]; /* derived name */
+static IosMsgWord stReqRing[2]; /* derived name */
 
-static int stAckRing[1]; /* derived name */
+static IosMsgWord stAckRing[1]; /* derived name */
 
 /* The stream's TTY traces of a drive recovery, built only when DEBUG is
    defined; the retail build leaves each helper without a body.  The traces
@@ -210,7 +210,7 @@ static void iosCdvdStManager(void)
         if (req->state != 1) {
             mode = 1;
         }
-        if (iosMsgRecv(&stReqQ, (int *)&req, mode) == -1) {
+        if (iosMsgRecv(&stReqQ, (IosMsgWord *)&req, mode) == -1) {
             if (req->state != 1) {
                 sprintf(buf, "stream mode error %d\n", req->state);
                 debug_assertMessage(__FILE__, 518, buf);
@@ -401,7 +401,7 @@ static void iosCdvdMgrStStart(IosCdvdHandle *self)
 static void iosCdvdMgrStStop(IosCdvdHandle *self)
 {
     char buf[128];
-    int msg;
+    IosMsgWord msg;
     int pri;
 
     pri = iosThreadGetPri(0);
@@ -624,7 +624,7 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
 static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *self)
 {
     char msgbuf[128];
-    int msg;
+    IosMsgWord msg;
     CdStReq *req = &stReq;
     int pri = iosThreadGetPri(0);
     int total = 0;
@@ -848,7 +848,7 @@ void iosCdvdManager(void)
     SignalSema(IosCdLock);
 
     while (1) {
-        while (iosMsgRecv(&CdvdMsgQ, &msg, 0) == -1) {
+        while (iosMsgRecv(&CdvdMsgQ, (IosMsgWord *)&msg, 0) == -1) {
             iosCdvdBackGroundMgrRunning = 1;
             iosCdvdBackGroundMgr();
             iosCdvdBackGroundMgrRunning = 0;
@@ -1180,21 +1180,21 @@ int iosCdvdGetFileLsn(char *name, int *size)
 
 int iosCdvdSync(int msg)
 {
-    int local = msg;
+    IosMsgWord local = msg;
     iosMsgRecv(&CdvdMsgQ_LoadEnd, &local, 1);
     return 1;
 }
 
 void iosCdvdLoadPackFile(int inflate, char *name, int seg)
 {
-    int buf[4];
+    IosMsgWord buf[4];
     iosCdvd.ctl.ll = (iosCdvd.ctl.ll & ~1LL) | (inflate & 1);
     strcpy(iosCdvd.name, name);
     iosCdvd.seg = seg;
     iosCdvd.handler = 0;
     iosCdvd.handlerArg = 0;
     iosCdvdPackLoad(&iosCdvd);
-    buf[0] = (int)&iosCdvd;
+    buf[0] = (IosMsgWord)&iosCdvd;
     iosMsgRecv(&CdvdMsgQ_LoadEnd, buf, 1);
 }
 

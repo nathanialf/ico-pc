@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "typedef.h"
 #include "fieldCollision.h"
 #include "gobj.h"
@@ -1223,13 +1224,13 @@ inline void ClipWallE(ClipWork *work)
     clipWallFunc(work, 0x4);
 }
 
-inline void ClipWallCheckCB(ClipWork *work, int filter)
+inline void ClipWallCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipWallFunc(work, 8);
 }
 
-inline void ClipWallFieldCheckCB(ClipWork *work, int filter)
+inline void ClipWallFieldCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipWallFunc(work, 9);
@@ -1255,7 +1256,7 @@ inline void ClipFloorIH(ClipWork *work)
     clipFloorFunc(work, 0xF);
 }
 
-inline void ClipFloorCheckCB(ClipWork *work, int filter)
+inline void ClipFloorCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter)
 {
     colFilter = (int (*)(void *))filter;
     clipFloorFunc(work, 0x10);
@@ -1318,18 +1319,18 @@ inline void GetGlobalWallPlane(float *plane, WallCfg *wall)
     plane[3] = -sceVu0InnerProduct(plane, pts);
 }
 
-inline int ClipPlane(int work)
+inline int ClipPlane(ClipWork *work)
 {
     float *p = (float *)work;
-    char *q = (char *)(work + 0xA0);
+    char *q = (char *)&work->normal;
     float t0, t1, d;
 
-    sceVu0CopyVector((int *)(work + 0x20), (int *)(work + 0x10));
-    t0 = GetDistanceFromPlane(q, (void *)(work + 0x10));
+    sceVu0CopyVector((int *)work->pt[2], (int *)work->pt[1]);
+    t0 = GetDistanceFromPlane(q, (void *)work->pt[1]);
     if (t0 >= 0.0f) {
         return 0;
     }
-    t1 = GetDistanceFromPlane(q, (void *)work);
+    t1 = GetDistanceFromPlane(q, (void *)work->pt[0]);
     if (t1 < 0.0f) {
         if (t0 < 0.0f) {
             return 0;
@@ -1355,8 +1356,8 @@ inline void ClipCollision(ClipWork *self)
 inline void MapCollisionData(void *data)
 {
     int *p = (int *)data;
-    p[4] = (int)data + p[4];
-    p[5] = (int)data + p[5];
+    p[4] = ICO_EEW((char *)data + p[4]);
+    p[5] = ICO_EEW((char *)data + p[5]);
 }
 
 inline void LoadCollision(void **self, char *fname)
@@ -1364,8 +1365,8 @@ inline void LoadCollision(void **self, char *fname)
     int *p;
     file_LoadFile(self, fname, 0);
     p = *self;
-    p[4] = (int)p + p[4];
-    p[5] = (int)p + p[5];
+    p[4] = ICO_EEW((char *)p + p[4]);
+    p[5] = ICO_EEW((char *)p + p[5]);
 }
 
 static int wallDrawCnt = 0; /* derived name */
@@ -1441,19 +1442,39 @@ void DrawGObjWallCollision(GObj *gobj, int col)
 
     wallDrawCnt = wallDrawCnt + 1;
     n = 1;
+#ifdef ICO_HOST
+    if (GOBJ_SUB(gobj)->colPerNode != 0) {
+        n = GOBJ_SUB(gobj)->nodeNum;
+    }
+#else
     if (g->sub->multi != 0) {
         n = g->sub->nobj;
     }
+#endif
+#ifdef ICO_HOST
+    cd = (FcWallSet *)GOBJ_SUB(gobj)->colData;
+#else
     cd = (FcWallSet *)g->sub->coll;
+#endif
     gif_StartPacketPri(11);
     MatrixDrive_PushMatrix();
     gif_SetAlpha(1, 5, 0);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
     for (i = 0; i < n; i++) {
+#ifdef ICO_HOST
+        CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + (i << 6));
+#else
         CopyMatrix(MatrixDrive_GetMatrix(), g->sub->mtx + (i << 6));
+#endif
+#ifdef ICO_HOST
+        if (GOBJ_SUB(gobj)->colRotate == 0) {
+            UnitRotation(MatrixDrive_GetMatrix());
+        }
+#else
         if (g->sub->norot == 0) {
             UnitRotation(MatrixDrive_GetMatrix());
         }
+#endif
         for (j = 0; j < FCWS_NWALL(cd); j++) {
             e = FCWS_WALLS(cd) + j * 0x50;
             c0 = &wallEdgeColor;
@@ -1673,13 +1694,13 @@ inline void GetOrientOfWall(void *out, void *wallEnt, ObjNode *src)
     }
     *(int *)&buf[3] = 0;
     {
-        int *sub = (int *)(int)GOBJ_SUB(obj);
-        if (sub != 0 && *(int *)((char *)sub + 0xC) != 0) {
-            if (*(int *)((char *)sub + 0x78) != 0) {
-                int *p5 = (int *)src->obj;
+        Sub15C *sub = GOBJ_SUB(obj);
+        if (sub != 0 && sub->nodeMtx != 0) {
+            if (sub->colRotate != 0) {
+                GObj *p5 = src->obj;
                 int idx = src->node;
-                int *o3 = (int *)(int)GOBJ_SUB(p5);
-                sceVu0ApplyMatrix(out, (void *)(*(int *)((char *)o3 + 0xC) + (idx << 6)), buf);
+                Sub15C *o3 = GOBJ_SUB(p5);
+                sceVu0ApplyMatrix(out, (void *)(o3->nodeMtx + (idx << 6)), buf);
                 return;
             }
             CopyVector((void *)out, (void *)buf);

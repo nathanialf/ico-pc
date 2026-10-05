@@ -34,13 +34,13 @@ GProc *isysGObjProcAddS(GObj *g, void (*fn)(), int noThread, int pri, long long 
 GProc *isysGObjProcAddGOppArg(GObj *g, void (*fn)(), int noThread, int pri);
 void isysGObjProcPause(char *self);
 void isysGObjProcPauseAll(struct GObj *p);
-void isysGObjProcPausePtr(void *gobj, int func);
+void isysGObjProcPausePtr(void *gobj, void (*func)());
 void isysGObjProcActive(char *self);
 void isysGObjProcActiveAll(void *gobj);
 void isysGObjProcRemoveAll(void *gobj);
 void isysGObjProcThreadSleep(int frames);
 GProc *isysGObjProcAddSGOppArg(GObj *g, void (*fn)(), int noThread, int pri, int stack);
-void isysGObjProcActivePtr(void *gobj, int func);
+void isysGObjProcActivePtr(void *gobj, void (*func)());
 void free_gobj_process_resource(char *self);
 void isysGObjProcRemove(GProc *p);
 void isysGObjProcessInit(unsigned int max);

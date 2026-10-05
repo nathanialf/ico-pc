@@ -13,6 +13,31 @@
 
 struct GObj;
 
+/* The pair of hand-link wall probes the debug overlay draws, mirrored into
+   the actor work area at +0x540 (act-game.c). */
+typedef struct HandClInfo { /* field names derived */
+    unsigned char on;   /* 0x00 */
+    unsigned char hit;  /* 0x01 */
+    unsigned char attr; /* 0x02 */
+    char pad3[13];
+    long long orient[2]; /* 0x10 -- GetOrientOfWall's output */
+    unsigned char hit2;  /* 0x20 */
+    unsigned char attr2; /* 0x21 */
+    char pad22[14];
+    long long orient2[2]; /* 0x30 */
+} HandClInfo;             /* derived name */
+
+/* One of the three records ACTGetEnvironment keeps at ActWork + 0x810: a
+ * position and direction with a strength and a frame count. */
+typedef struct ActEffRec {
+    float pos[4]; /* 0x00 */
+    float dir[4]; /* 0x10 */
+    float power;  /* 0x20 */
+    int frames;   /* 0x24 */
+    int kind;     /* 0x28 */
+    char pad2C[4];
+} ActEffRec;
+
 /* The actor's character work, the record at Act+0x688 (held there as a
  * word, like the object's own actor slot): the boy's, the girl's and the
  * enemies' per-character state. */
@@ -33,7 +58,7 @@ typedef struct ActWork { /* field names derived */
     char pad34C[4];
     float padWish[4]; /* 0x350, the pad wish direction a jump turns to (funcCommonJumpDircorrect) */
     float fallDir[4]; /* 0x360, the direction a fall turns to (funcCommonFallDircorrect) */
-    char *hideObj;    /* 0x370 */
+    struct GObj *hideObj; /* 0x370 */
     void *floorObj;   /* 0x374 */
     void *bga;        /* 0x378 */
     int downTimer;    /* 0x37C */
@@ -66,9 +91,15 @@ typedef struct ActWork { /* field names derived */
     float hideDirZ; /* 0x3F8 */
     char pad3FC[4];
     void *ropeCage; /* 0x400 */
-    char pad404[16];
+    char pad404[12];
+    float handPosX; /* 0x410, the hand node's position (GetSkeltonPosition's target), x */
     float handPosY; /* 0x414 */
-    char pad418[24];
+    float handPosZ; /* 0x418 */
+    float handPosW; /* 0x41C */
+    float lastPosX; /* 0x420, the root position as last seen (ACTGame speed check) */
+    float lastPosY; /* 0x424 */
+    float lastPosZ; /* 0x428 */
+    char pad42C[4];
     float velX; /* 0x430 */
     float velY; /* 0x434 */
     float velZ; /* 0x438 */
@@ -108,12 +139,13 @@ typedef struct ActWork { /* field names derived */
     float hintPosZ;     /* 0x528 */
     char pad52C[4];
     float boxDir[4]; /* 0x530, the direction a box is pushed and pulled in (actCommonBox) */
-    char pad540[64];
+    HandClInfo handCl; /* 0x540, the hand-link wall probes the debug overlay draws */
     WayRequest wayReq; /* 0x580, the way search RequestWayBegin hands to the way system manager */
     char pad638[232];
     ClipColReq view; /* 0x720, the clip ACTGameView_Loop runs to the object it looks at */
     int viewState; /* 0x800 */
-    char pad804[156];
+    char pad804[12];
+    ActEffRec effRec[3]; /* 0x810, 0x840, 0x870 */
     float emgPosX; /* 0x8A0 */
     float emgPosY; /* 0x8A4 */
     float emgPosZ; /* 0x8A8 */
@@ -122,6 +154,16 @@ typedef struct ActWork { /* field names derived */
                           act_check_intr_list started; the hang and climb acts
                           lay the root against its walls, b's element the wall
                           under the cliff edge */
+    char pad8D0[16];
+    int wayHold; /* 0x8E0, cleared when a detailed way walk starts (ACTWayMove_Begin) */
+    char pad8E4[12];
+    float wayDirX; /* 0x8F0, the way walk's direction (ACTWayExec_Position) */
+    float wayDirY; /* 0x8F4 */
+    float wayDirZ; /* 0x8F8 */
+    char pad8FC[4];
+    int modeHist[10];  /* 0x900, the last ten action modes, newest first (BeforeFunc) */
+    int frameHist[10]; /* 0x928, the frame each of them lasted to */
+    int prevHist[10];  /* 0x950, the mode before each */
 } ActWork; /* derived name */
 
 #define GOBJ_WORK(o) ((ActWork *)GOBJ_ACT(o)->work) /* derived name */
@@ -155,7 +197,7 @@ int PAIR_IsStatus_BOY_WAIT(void);
 void PAIR_GetPosition_BOY_DITCH(float *pos, float *dir);
 int PAIR_IsStatus_BOY_DITCH(void);
 struct GObj *ACTGame_isHangChain(struct GObj *self);
-int ACTGame_isWeaponEnableCatchfire(struct GObj *self);
+ICO_WORD_PTR(struct GObj *) ACTGame_isWeaponEnableCatchfire(struct GObj *self);
 int ACTCheckCollis_WF(float f, void *p0, void *p1, void *actor, void *posout);
 
 int ACTCheckCollis_W(float f, void *hand0, void *hand1, void *actor, void *posout, void *magtarget,
@@ -183,7 +225,7 @@ void ACTParaStatus_Init(struct GObj *self);
 inline void _ACTParaStatus_Set(struct GObj *self, int bit);
 unsigned long long _ACTParaStatus_Check(struct GObj *self, int bit);
 void _ACTCharStatus_Init(int **self);
-void _ACTCharStatus_Set(struct GObj *self, int bit, float f, int val);
+void _ACTCharStatus_Set(struct GObj *self, int bit, float f, ICO_WORD val);
 unsigned char _ACTCharStatus_Check(struct GObj *self, int bit);
 void _ACTCharStatus_Exec(void);
 void _ACTSetEnemyDisappearSpeed(struct GObj *self, float f);

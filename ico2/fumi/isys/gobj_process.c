@@ -1,9 +1,10 @@
+#include "ee_view.h"
 #include "debug.h"
 #include "memory.h"
 #include "typedef.h"
 #include "gobj_process.h"
 
-/* the process pool and how many 0x94-byte entries it holds */
+/* the process pool and how many entries (sizeof(GProc), 0x94 bytes on the EE) it holds */
 static char *procPool; /* derived name */
 
 static int procMax; /* derived name */
@@ -18,12 +19,12 @@ void isysGObjProcessInit(unsigned int max)
 
 inline void isysGObjProcessAlloc(unsigned int max)
 {
-    void *ret = iosMallocDebug(ios_partition_isys, max * 0x94, "isys/gobj_process.c", 73);
+    void *ret = iosMallocDebug(ios_partition_isys, max * sizeof(GProc), "isys/gobj_process.c", 73);
     unsigned int i;
     procMax = max;
     procPool = (char *)ret;
     for (i = 0; i < max; i++) {
-        ((GProc *)(procPool + i * 0x94))->self = 0;
+        ((GProc *)(procPool + i * sizeof(GProc)))->self = 0;
     }
 }
 
@@ -33,7 +34,7 @@ static inline GProc *alloc_gobj_process(void) /* derived name */
     unsigned int j;
 
     for (i = 0; i < procMax; i++) {
-        if (((GProc *)(procPool + i * 0x94))->self == 0) {
+        if (((GProc *)(procPool + i * sizeof(GProc)))->self == 0) {
             break;
         }
     }
@@ -41,13 +42,14 @@ static inline GProc *alloc_gobj_process(void) /* derived name */
         debug_StdPrintfDummy("isys:not enough memory for GObj\n");
         debug_StdPrintfDummy("isys:not enough memory for GObj\n");
         for (j = 0; j < procMax; j++) {
-            debug_StdPrintfDummy("id %d %x %x \n", ((GProc *)(procPool + j * 0x94))->self,
-                                 ((GProc *)(procPool + j * 0x94))->func,
-                                 *(int *)(procPool + j * 0x94 + 0x5C));
+            debug_StdPrintfDummy("id %d %x %x \n", ((GProc *)(procPool + j * sizeof(GProc)))->self,
+                                 ((GProc *)(procPool + j * sizeof(GProc)))->func,
+                                 ICO_RAW(int, procPool + j * 0x94, 0x5C,
+                                         ((GProc *)(procPool + j * sizeof(GProc)))->thread.func));
         }
         return 0;
     }
-    return (GProc *)(procPool + i * 0x94);
+    return (GProc *)(procPool + i * sizeof(GProc));
 }
 
 static GProc *isysGObjProcAdd_(GObj *gobj, GObj *arg, void (*func)(), unsigned char noThread,
@@ -146,7 +148,7 @@ inline void isysGObjProcPauseAll(GObj *p)
     }
 }
 
-inline void isysGObjProcPausePtr(void *gobj, int func)
+inline void isysGObjProcPausePtr(void *gobj, void (*func)())
 {
     GProc *p = ((GObj *)gobj)->procHead;
     while (p != 0) {
@@ -171,7 +173,7 @@ inline void isysGObjProcActiveAll(void *gobj)
     }
 }
 
-inline void isysGObjProcActivePtr(void *gobj, int func)
+inline void isysGObjProcActivePtr(void *gobj, void (*func)())
 {
     GProc *p = ((GObj *)gobj)->procHead;
     while (p != 0) {

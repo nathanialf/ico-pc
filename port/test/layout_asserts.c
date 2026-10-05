@@ -56,6 +56,7 @@
 #include "Packet.h"
 #include "Primitive.h"
 #include "StageAnimation.h"
+#include "Tim2.h"
 #include "attackCheckBoundary.h"
 #include "box.h"
 #include "boy.h"
@@ -857,7 +858,8 @@ OFF(Act, actKind, 0x48);
 OFF(Act, modeFrame, 0x4C);
 OFF(Act, msgBlockTimer, 0x50);
 OFF(Act, mother, 0x54);
-OFF(Act, pad58, 0x58);
+OFF(Act, bits58, 0x58);
+OFF(Act, pad60, 0x60);
 OFF(Act, statusWait8, 0x68);
 OFF(Act, statusWait5, 0x6C);
 OFF(Act, statusVal17, 0x70);
@@ -894,7 +896,8 @@ OFF(Act, pad11C, 0x11C);
 OFF(Act, dir, 0x120);
 OFF(Act, motReq, 0x130);
 OFF(Act, soundMot, 0x134);
-OFF(Act, pad138, 0x138);
+OFF(Act, soundFlag, 0x138);
+OFF(Act, pad139, 0x139);
 OFF(Act, soundWait, 0x13A);
 OFF(Act, reserved, 0x13C);
 OFF(Act, reservedMail, 0x140);
@@ -904,7 +907,7 @@ OFF(Act, brainTarget, 0x14C);
 OFF(Act, weapon, 0x150);
 OFF(Act, curItem, 0x154);
 OFF(Act, box, 0x158);
-OFF(Act, pad15C, 0x15C);
+OFF(Act, barObj, 0x15C);
 OFF(Act, sofa, 0x160);
 OFF(Act, pad164, 0x164);
 OFF(Act, restartPosX, 0x170);
@@ -946,11 +949,18 @@ OFF(Act, wayFlags, 0x3F0);
 OFF(Act, wayGoalDist, 0x3F8);
 OFF(Act, wayGoalHeight, 0x3FC);
 OFF(Act, wayLast, 0x400);
-OFF(Act, pad404, 0x404);
+OFF(Act, wayTarget, 0x404);
+OFF(Act, pad408, 0x408);
+OFF(Act, wayFromX, 0x410);
+OFF(Act, wayFromY, 0x414);
+OFF(Act, wayFromZ, 0x418);
+OFF(Act, pad41C, 0x41C);
 OFF(Act, wayDetailX, 0x420);
 OFF(Act, wayDetailY, 0x424);
 OFF(Act, wayDetailZ, 0x428);
 OFF(Act, pad42C, 0x42C);
+OFF(Act, wayDetailFlag, 0x430);
+OFF(Act, wayGoalY, 0x434);
 OFF(Act, wayState, 0x438);
 OFF(Act, brainAim, 0x440);
 OFF(Act, infoPos, 0x444);
@@ -975,9 +985,11 @@ OFF(Act, env, 0x4B0);
 OFF(Act, enemy, 0x680);
 OFF(Act, mailAddData, 0x684);
 OFF(Act, work, 0x688);
+OFF(Act, addData, 0x68C);
+OFF(Act, flyClip, 0x690);
 #endif
 
-/* GenGeo: overlay, ico2/common/include/typedef.h:1649, 64-bit pending 5 */
+/* GenGeo: overlay, ico2/common/include/typedef.h:1662, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(GenGeo, scale, 0x0);
 OFF(GenGeo, rot, 0xC);
@@ -998,21 +1010,21 @@ OFF(GenGeo, flags, 0x48);
 SIZE(GenGeo, 0x4C); /* comment */
 #endif
 
-/* OaRecB: overlay, ico2/common/include/typedef.h:1671 */
+/* OaRecB: overlay, ico2/common/include/typedef.h:1684 */
 OFF(OaRecB, baseMode, 0x0);
 OFF(OaRecB, anim2, 0x4);
 OFF(OaRecB, word8, 0x8);
 OFF(OaRecB, mode, 0xC);
 OFF(OaRecB, flags, 0x10);
 
-/* McFileInfo: save, ico2/common/include/typedef.h:1689 */
+/* McFileInfo: save, ico2/common/include/typedef.h:1702 */
 OFF(McFileInfo, stage, 0x0);
 OFF(McFileInfo, cleared, 0x4);
 OFF(McFileInfo, playTime, 0x8);
 OFF(McFileInfo, sofa, 0xC);
 OFF(McFileInfo, word10, 0x10);
 
-/* McProductFile: save, ico2/common/include/typedef.h:1697 */
+/* McProductFile: save, ico2/common/include/typedef.h:1710 */
 OFF(McProductFile, file, 0x0);
 OFF(McProductFile, soundMode, 0x190);
 OFF(McProductFile, outputMode, 0x194);
@@ -1025,7 +1037,7 @@ OFF(McProductFile, cameraMove, 0x1E8);
 OFF(McProductFile, palMode, 0x1EC);
 SIZE(McProductFile, 0x1F0); /* config */
 
-/* McMgr: runtime, ico2/common/include/typedef.h:1730 */
+/* McMgr: runtime, ico2/common/include/typedef.h:1743 */
 #if ICO_LAYOUT_EE
 OFF(McMgr, flags, 0x0);
 OFF(McMgr, port, 0x8);
@@ -1056,7 +1068,30 @@ OFF(McMgr, mask, 0x9C0);
 SIZE(McMgr, 0xA00); /* comment */
 #endif
 
-/* ActWork: runtime, ico2/fumi/include/act-game.h:19 */
+/* HandClInfo: runtime, ico2/fumi/include/act-game.h:18 */
+#if ICO_LAYOUT_EE
+OFF(HandClInfo, on, 0x0);
+OFF(HandClInfo, hit, 0x1);
+OFF(HandClInfo, attr, 0x2);
+OFF(HandClInfo, pad3, 0x3);
+OFF(HandClInfo, orient, 0x10);
+OFF(HandClInfo, hit2, 0x20);
+OFF(HandClInfo, attr2, 0x21);
+OFF(HandClInfo, pad22, 0x22);
+OFF(HandClInfo, orient2, 0x30);
+#endif
+
+/* ActEffRec: runtime, ico2/fumi/include/act-game.h:32 */
+#if ICO_LAYOUT_EE
+OFF(ActEffRec, pos, 0x0);
+OFF(ActEffRec, dir, 0x10);
+OFF(ActEffRec, power, 0x20);
+OFF(ActEffRec, frames, 0x24);
+OFF(ActEffRec, kind, 0x28);
+OFF(ActEffRec, pad2C, 0x2C);
+#endif
+
+/* ActWork: runtime, ico2/fumi/include/act-game.h:44 */
 #if ICO_LAYOUT_EE
 OFF(ActWork, paraTbl, 0x0);
 OFF(ActWork, pad158, 0x158);
@@ -1107,8 +1142,14 @@ OFF(ActWork, hideDirZ, 0x3F8);
 OFF(ActWork, pad3FC, 0x3FC);
 OFF(ActWork, ropeCage, 0x400);
 OFF(ActWork, pad404, 0x404);
+OFF(ActWork, handPosX, 0x410);
 OFF(ActWork, handPosY, 0x414);
-OFF(ActWork, pad418, 0x418);
+OFF(ActWork, handPosZ, 0x418);
+OFF(ActWork, handPosW, 0x41C);
+OFF(ActWork, lastPosX, 0x420);
+OFF(ActWork, lastPosY, 0x424);
+OFF(ActWork, lastPosZ, 0x428);
+OFF(ActWork, pad42C, 0x42C);
 OFF(ActWork, velX, 0x430);
 OFF(ActWork, velY, 0x434);
 OFF(ActWork, velZ, 0x438);
@@ -1146,20 +1187,31 @@ OFF(ActWork, hintPosY, 0x524);
 OFF(ActWork, hintPosZ, 0x528);
 OFF(ActWork, pad52C, 0x52C);
 OFF(ActWork, boxDir, 0x530);
-OFF(ActWork, pad540, 0x540);
+OFF(ActWork, handCl, 0x540);
 OFF(ActWork, wayReq, 0x580);
 OFF(ActWork, pad638, 0x638);
 OFF(ActWork, view, 0x720);
 OFF(ActWork, viewState, 0x800);
 OFF(ActWork, pad804, 0x804);
+OFF(ActWork, effRec, 0x810);
 OFF(ActWork, emgPosX, 0x8A0);
 OFF(ActWork, emgPosY, 0x8A4);
 OFF(ActWork, emgPosZ, 0x8A8);
 OFF(ActWork, pad8AC, 0x8AC);
 OFF(ActWork, intrReq, 0x8B0);
+OFF(ActWork, pad8D0, 0x8D0);
+OFF(ActWork, wayHold, 0x8E0);
+OFF(ActWork, pad8E4, 0x8E4);
+OFF(ActWork, wayDirX, 0x8F0);
+OFF(ActWork, wayDirY, 0x8F4);
+OFF(ActWork, wayDirZ, 0x8F8);
+OFF(ActWork, pad8FC, 0x8FC);
+OFF(ActWork, modeHist, 0x900);
+OFF(ActWork, frameHist, 0x928);
+OFF(ActWork, prevHist, 0x950);
 #endif
 
-/* LookTarget: overlay, ico2/fumi/include/act-game.h:240 */
+/* LookTarget: overlay, ico2/fumi/include/act-game.h:282 */
 OFF(LookTarget, kind, 0x0);
 SIZE(LookTarget, 0xC); /* comment */
 
@@ -1265,11 +1317,11 @@ OFF(PackKind, func, 0x20);
 SIZE(PackKind, 0x24); /* comment */
 #endif
 
-/* IdlingDef: overlay, ico2/fumi/include/commonact.h:52 */
+/* IdlingDef: overlay, ico2/fumi/include/commonact.h:54 */
 OFF(IdlingDef, motion, 0x0);
 SIZE(IdlingDef, 0xC); /* comment */
 
-/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:60 */
+/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:62 */
 OFF(IdleRangeRec, idleMotion, 0x0);
 OFF(IdleRangeRec, orientRow, 0x4);
 OFF(IdleRangeRec, orientRow2, 0x8);
@@ -1277,7 +1329,7 @@ OFF(IdleRangeRec, orientFirst, 0xC);
 OFF(IdleRangeRec, orientEnd, 0x10);
 SIZE(IdleRangeRec, 0x14); /* comment */
 
-/* ClingRec: overlay, ico2/fumi/include/commonact.h:72 */
+/* ClingRec: overlay, ico2/fumi/include/commonact.h:74 */
 OFF(ClingRec, rot, 0x0);
 OFF(ClingRec, pos, 0xC);
 OFF(ClingRec, mode, 0x18);
@@ -1285,12 +1337,24 @@ OFF(ClingRec, motion, 0x1C);
 OFF(ClingRec, node, 0x20);
 SIZE(ClingRec, 0x24); /* comment */
 
-/* BecPair: overlay, ico2/fumi/include/commonact.h:83 */
+/* BecPair: overlay, ico2/fumi/include/commonact.h:85 */
 OFF(BecPair, mot, 0x0);
 OFF(BecPair, req, 0x4);
 SIZE(BecPair, 0x8); /* comment */
 
-/* EnemyBattleWork: runtime, ico2/fumi/include/enemy_act.h:38 */
+/* BossPart: runtime, ico2/fumi/include/enemy_act.h:43 */
+#if ICO_LAYOUT_EE
+OFF(BossPart, pos, 0x0);
+OFF(BossPart, effect, 0x10);
+OFF(BossPart, id, 0x14);
+OFF(BossPart, timer, 0x18);
+OFF(BossPart, busy, 0x1C);
+OFF(BossPart, alive, 0x1D);
+OFF(BossPart, pad1E, 0x1E);
+SIZE(BossPart, 0x20); /* comment */
+#endif
+
+/* EnemyBattleWork: runtime, ico2/fumi/include/enemy_act.h:56 */
 #if ICO_LAYOUT_EE
 OFF(EnemyBattleWork, pad0, 0x0);
 OFF(EnemyBattleWork, speedRatioPri, 0x54);
@@ -1316,13 +1380,15 @@ OFF(EnemyBattleWork, corrDstDirZ, 0xA8);
 OFF(EnemyBattleWork, padAC, 0xAC);
 OFF(EnemyBattleWork, corrFrames, 0xB0);
 OFF(EnemyBattleWork, corrCount, 0xB4);
-OFF(EnemyBattleWork, padB8, 0xB8);
+OFF(EnemyBattleWork, corrMode, 0xB8);
 OFF(EnemyBattleWork, corrFlags, 0xBC);
 OFF(EnemyBattleWork, jumpOrient, 0xC0);
-OFF(EnemyBattleWork, padC4, 0xC4);
+OFF(EnemyBattleWork, liftToggle, 0xC4);
+OFF(EnemyBattleWork, liftPhase, 0xC8);
 OFF(EnemyBattleWork, liftLevel, 0xCC);
 OFF(EnemyBattleWork, floorAttrOff, 0xD0);
-OFF(EnemyBattleWork, padD4, 0xD4);
+OFF(EnemyBattleWork, liftTimer, 0xD4);
+OFF(EnemyBattleWork, padD8, 0xD8);
 OFF(EnemyBattleWork, hitDir, 0xE0);
 OFF(EnemyBattleWork, hitNodes, 0xF0);
 OFF(EnemyBattleWork, lwsEffect, 0x1B8);
@@ -1331,6 +1397,10 @@ OFF(EnemyBattleWork, ropeCliffX, 0x1C0);
 OFF(EnemyBattleWork, ropeCliffY, 0x1C4);
 OFF(EnemyBattleWork, ropeCliffZ, 0x1C8);
 OFF(EnemyBattleWork, pad1CC, 0x1CC);
+OFF(EnemyBattleWork, frontPosX, 0x1D0);
+OFF(EnemyBattleWork, frontPosY, 0x1D4);
+OFF(EnemyBattleWork, frontPosZ, 0x1D8);
+OFF(EnemyBattleWork, pad1DC, 0x1DC);
 OFF(EnemyBattleWork, sizeClass, 0x1E8);
 OFF(EnemyBattleWork, paraStatus, 0x1F0);
 OFF(EnemyBattleWork, clingNode, 0x1F4);
@@ -1338,6 +1408,7 @@ OFF(EnemyBattleWork, attackChance, 0x1F8);
 OFF(EnemyBattleWork, attackChance2, 0x1FC);
 OFF(EnemyBattleWork, bodyslamMail, 0x200);
 OFF(EnemyBattleWork, bossLife, 0x20C);
+OFF(EnemyBattleWork, target, 0x218);
 OFF(EnemyBattleWork, clingReq, 0x21C);
 OFF(EnemyBattleWork, clingTarget, 0x220);
 OFF(EnemyBattleWork, liftedObj, 0x22C);
@@ -1359,9 +1430,11 @@ OFF(EnemyBattleWork, slipDirX, 0x270);
 OFF(EnemyBattleWork, slipDirY, 0x274);
 OFF(EnemyBattleWork, slipDirZ, 0x278);
 OFF(EnemyBattleWork, pad27C, 0x27C);
+OFF(EnemyBattleWork, slipFront, 0x280);
+OFF(EnemyBattleWork, pad281, 0x281);
 OFF(EnemyBattleWork, ladderUpStep, 0x290);
 OFF(EnemyBattleWork, ladderDownStep, 0x294);
-OFF(EnemyBattleWork, pad298, 0x298);
+OFF(EnemyBattleWork, word298, 0x298);
 OFF(EnemyBattleWork, stoneLevel, 0x29C);
 OFF(EnemyBattleWork, stonePair, 0x2A0);
 OFF(EnemyBattleWork, word2A4, 0x2A4);
@@ -1369,19 +1442,26 @@ OFF(EnemyBattleWork, stoneHitNoWeapon, 0x2A8);
 OFF(EnemyBattleWork, stoneHitWeapon, 0x2AC);
 OFF(EnemyBattleWork, word2B0, 0x2B0);
 OFF(EnemyBattleWork, pad2B4, 0x2B4);
+OFF(EnemyBattleWork, word2C0, 0x2C0);
+OFF(EnemyBattleWork, holdObj, 0x2C4);
+OFF(EnemyBattleWork, pad2C8, 0x2C8);
+OFF(EnemyBattleWork, holdPoint, 0x2D0);
 OFF(EnemyBattleWork, rescueObj, 0x2E0);
 OFF(EnemyBattleWork, pad2E4, 0x2E4);
 OFF(EnemyBattleWork, rescueBoyPos, 0x2F0);
 OFF(EnemyBattleWork, rescueGirlPos, 0x300);
 OFF(EnemyBattleWork, boxBarSound, 0x310);
-OFF(EnemyBattleWork, pad314, 0x314);
+OFF(EnemyBattleWork, handConnect, 0x314);
+OFF(EnemyBattleWork, handDisconnect, 0x31C);
+OFF(EnemyBattleWork, pad324, 0x324);
 OFF(EnemyBattleWork, climbOrient, 0x330);
 OFF(EnemyBattleWork, climbPos, 0x340);
 OFF(EnemyBattleWork, climbCol, 0x350);
 OFF(EnemyBattleWork, climbObj, 0x35C);
+OFF(EnemyBattleWork, boss, 0x360);
 #endif
 
-/* FcWallEnt: overlay, ico2/fumi/include/fieldCollision.h:32 */
+/* FcWallEnt: overlay, ico2/fumi/include/fieldCollision.h:35 */
 OFF(FcWallEnt, pt, 0x0);
 OFF(FcWallEnt, height, 0x40);
 OFF(FcWallEnt, angle, 0x44);
@@ -1390,7 +1470,7 @@ OFF(FcWallEnt, attr, 0x48);
 OFF(FcWallEnt, normal, 0x4C);
 SIZE(FcWallEnt, 0x50); /* config */
 
-/* FcColl: overlay, ico2/fumi/include/fieldCollision.h:51 */
+/* FcColl: overlay, ico2/fumi/include/fieldCollision.h:54 */
 OFF(FcColl, pad0, 0x0);
 OFF(FcColl, count, 0x8);
 OFF(FcColl, nfloor, 0xC);
@@ -1400,7 +1480,7 @@ OFF(FcColl, wblk, 0x18);
 OFF(FcColl, fblk, 0x1C);
 OFF(FcColl, ofs, 0x20);
 
-/* FcFloorEnt: overlay, ico2/fumi/include/fieldCollision.h:70 */
+/* FcFloorEnt: overlay, ico2/fumi/include/fieldCollision.h:73 */
 OFF(FcFloorEnt, v, 0x0);
 OFF(FcFloorEnt, nx, 0x40);
 OFF(FcFloorEnt, d, 0x50);
@@ -1438,7 +1518,7 @@ OFF(GProc, thread, 0x24);
 SIZE(GProc, 0x94); /* comment */
 #endif
 
-/* JimakuSub: runtime, ico2/fumi/include/jimaku.h:13 */
+/* JimakuSub: runtime, ico2/fumi/include/jimaku.h:15 */
 #if ICO_LAYOUT_EE
 OFF(JimakuSub, pad0, 0x0);
 OFF(JimakuSub, block, 0x2C);
@@ -1449,7 +1529,7 @@ OFF(JimakuSub, cur, 0x3C);
 OFF(JimakuSub, bg, 0x40);
 #endif
 
-/* JimakuArg: runtime, ico2/fumi/include/jimaku.h:24 */
+/* JimakuArg: runtime, ico2/fumi/include/jimaku.h:26 */
 #if ICO_LAYOUT_EE
 OFF(JimakuArg, cmd, 0x0);
 OFF(JimakuArg, pad4, 0x4);
@@ -1457,7 +1537,7 @@ OFF(JimakuArg, done, 0x8);
 OFF(JimakuArg, sub, 0xC);
 #endif
 
-/* JimakuFileName: overlay, ico2/fumi/include/jimaku.h:49 */
+/* JimakuFileName: overlay, ico2/fumi/include/jimaku.h:51 */
 OFF(JimakuFileName, path, 0x0);
 SIZE(JimakuFileName, 0x20); /* comment */
 
@@ -2471,6 +2551,30 @@ OFF(BgaPlayNode, pos, 0x20);
 OFF(BgaPlayNode, rot, 0x30);
 #endif
 
+/* Tim2Picture: overlay, ico2/seki/include/Tim2.h:25 */
+OFF(Tim2Picture, totalSize, 0x0);
+OFF(Tim2Picture, clutSize, 0x4);
+OFF(Tim2Picture, imageSize, 0x8);
+OFF(Tim2Picture, headerSize, 0xC);
+OFF(Tim2Picture, clutColors, 0xE);
+OFF(Tim2Picture, picFormat, 0x10);
+OFF(Tim2Picture, mipMapTextures, 0x11);
+OFF(Tim2Picture, clutType, 0x12);
+OFF(Tim2Picture, imageType, 0x13);
+OFF(Tim2Picture, imageWidth, 0x14);
+OFF(Tim2Picture, imageHeight, 0x16);
+OFF(Tim2Picture, GsTex0, 0x18);
+OFF(Tim2Picture, GsTex1, 0x20);
+OFF(Tim2Picture, GsRegs, 0x28);
+OFF(Tim2Picture, GsTexClut, 0x2C);
+SIZE(Tim2Picture, 0x30); /* config */
+
+/* Tim2Mipmap: overlay, ico2/seki/include/Tim2.h:49 */
+OFF(Tim2Mipmap, GsMiptbp1, 0x0);
+OFF(Tim2Mipmap, GsMiptbp2, 0x8);
+OFF(Tim2Mipmap, sizes, 0x10);
+SIZE(Tim2Mipmap, 0x30); /* config */
+
 /* LayoutClothDef: overlay, ico2/sugipon/include/attackCheckBoundary.h:33 */
 OFF(LayoutClothDef, name, 0x0);
 OFF(LayoutClothDef, pt, 0x20);
@@ -3007,6 +3111,11 @@ OFF(FumbleRow, rotY, 0xC);
 OFF(FumbleRow, rotX, 0x10);
 OFF(FumbleRow, rotZ, 0x14);
 SIZE(FumbleRow, 0x18); /* comment */
+
+/* HandModeCmd: runtime, ico2/fumi/include/enemy_act.h:37 */
+#if ICO_LAYOUT_EE
+SIZE(HandModeCmd, 0x8); /* config */
+#endif
 
 /* GamesysObjInfo: save, ico2/common/include/backStage.h:23 */
 SIZE(GamesysObjInfo, 0x40); /* config */

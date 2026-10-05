@@ -1479,7 +1479,7 @@ typedef struct Act { /* field names derived */
     ActStatus flags20;    /* 0x20 */
     int handFreeFrame;    /* 0x28, frames since the boy and girl let go of each other's hands */
     GObj *intrArg;        /* 0x2C, the argument of the mail that interrupted this frame */
-    int intrData;         /* 0x30, the mail additional data of that mail */
+    ICO_WORD_PTR(void *) intrData; /* 0x30, the mail additional data of that mail */
     int actMode;          /* 0x34, the current action mode; it indexes actModeTbl */
     unsigned int pushDir; /* 0x38, 1 while a box or bar is pushed, -1 while pulled, 0 otherwise */
     int intrMot;          /* 0x3C, the motion the interrupting mail chose */
@@ -1489,16 +1489,17 @@ typedef struct Act { /* field names derived */
     int modeFrame;        /* 0x4C, frames since the action mode changed */
     int msgBlockTimer;    /* 0x50, while nonzero, mail 205 is turned away */
     GObj *mother; /* 0x54, the generator the enemy was called from (actEnemyRestart), 0 for none */
-    char pad58[16];
+    long long bits58; /* 0x58, a 64-bit flag word (ACTParaStatus's bit set) */
+    char pad60[8];
     float statusWait8; /* 0x68, the value char status bit 8 carries (a wait) */
     float statusWait5; /* 0x6C, the value char status bit 5 carries (a wait) */
     float statusVal17; /* 0x70, the value char status bit 17 carries */
     int statusVal18;   /* 0x74, the value char status bit 18 carries */
-    int statusTarget;  /* 0x78, the target char status bit 10 carries */
-    int statusOther;   /* 0x7C, the object char status bit 2 carries (the nearest active enemy) */
+    ICO_WORD_PTR(GObj *) statusTarget; /* 0x78, the target char status bit 10 carries */
+    ICO_WORD_PTR(GObj *) statusOther; /* 0x7C, the object char status bit 2 carries (the nearest active enemy) */
     GObj *gobj80;      /* 0x80 */
     GObj *gobj84;      /* 0x84 */
-    int statusObj;     /* 0x88, the object char status bit 11 carries (bomb, gondola, box) */
+    ICO_WORD_PTR(GObj *) statusObj; /* 0x88, the object char status bit 11 carries (bomb, gondola, box) */
     char pad8C[4];
     long long paraStatus;              /* 0x90, the parallel status bits ACTParaStatus sets */
     unsigned long long lastParaStatus; /* 0x98, the parallel status bits as last seen */
@@ -1528,9 +1529,11 @@ typedef struct Act { /* field names derived */
                      components */
     void *motReq; /* 0x130: the motion record SetMotionRequest returns */
     int soundMot; /* 0x134, the motion a sound mail asks for (ACTGame_SendSoundMail) */
-    char pad138[2];
+    unsigned char soundFlag; /* 0x138, bit 0: the sound mail's wait-skip flag (the EE code reads and
+                                writes it as a whole word and doubleword over soundWait) */
+    char pad139[1];
     short soundWait;  /* 0x13A, frames before the next sound mail is taken */
-    int reserved;     /* 0x13C, the actor that reserved this one as a target (ACTReserveTarget) */
+    ICO_WORD_PTR(GObj *) reserved; /* 0x13C, the actor that reserved this one as a target (ACTReserveTarget) */
     int reservedMail; /* 0x140, the mail the reservation waits for */
     struct GObj *carrier; /* 0x144, the enemy carrying the girl */
     struct GObj *carried; /* 0x148, the object the actor holds (the carried girl) */
@@ -1540,7 +1543,7 @@ typedef struct Act { /* field names derived */
     void *box;            /* 0x158, the box/truck GObj the actor is holding: commonact.c
                   stores it here in actCommonBox and reads it back through
                   `*(void **)(s + 0x158)` in the boxbar helpers */
-    char pad15C[4];
+    ICO_WORD_PTR(GObj *) barObj; /* 0x15C, the bar the actor holds (actCommonBar) */
     char *sofa; /* 0x160, the sofa the actor sits on */
     char pad164[12];
     float restartPosX; /* 0x170, the enemy restart position, x */
@@ -1561,7 +1564,7 @@ typedef struct Act { /* field names derived */
         GObj *p;
     } nextItem;
 
-    int attackTurn; /* 0x188, nonzero while the attack turns toward the target */
+    ICO_WORD attackTurn; /* 0x188, the target the attack turns toward (ACTSearchEnemy stores the object here), 0 for none */
     char pad18C[4];
     GObj *chain;     /* 0x190, the chain the actor hangs on */
     GObj *lastChain; /* 0x194, the chain the actor last hung on */
@@ -1599,11 +1602,18 @@ typedef struct Act { /* field names derived */
     float wayGoalDist;   /* 0x3F8, the distance to the goal across the floor */
     float wayGoalHeight; /* 0x3FC, the goal's height over the actor */
     struct WayPoint *wayLast; /* 0x400, the way point GetWay_next last returned */
-    char pad404[28];
+    void *wayTarget; /* 0x404, the object the detailed way walk heads for (ACTWayMove_Begin) */
+    char pad408[8];
+    float wayFromX; /* 0x410, where that walk began, x */
+    float wayFromY; /* 0x414 */
+    float wayFromZ; /* 0x418 */
+    char pad41C[4];
     float wayDetailX; /* 0x420, the detailed way point, x */
     float wayDetailY; /* 0x424, the detailed way point, y */
     float wayDetailZ; /* 0x428, the detailed way point, z */
-    char pad42C[12];
+    char pad42C[4];
+    int wayDetailFlag; /* 0x430, cleared when the detailed walk starts */
+    float wayGoalY;    /* 0x434, the goal's height the walk was started with */
     WayState wayState; /* 0x438 */
     int brainAim;      /* 0x440, the enemy brain's aim: 1 the girl, 2 the boy */
     int infoPos;       /* 0x444, the object info position the enemy is saved at */
@@ -1628,6 +1638,9 @@ typedef struct Act { /* field names derived */
     struct EnemyBattleWork *enemy;          /* 0x680, the enemy work (enemy_act.c) */
     struct MailAdditionalData *mailAddData; /* 0x684, the mail additional data table */
     ICO_WORD_PTR(void *) work; /* 0x688, the actor's extended work block (act-game.h's ActWork) */
+    ICO_WORD_PTR(void *) addData; /* 0x68C, the flyer's mail additional data (act-game.c's mail 298) */
+    char flyClip[0x1C0] __attribute__((aligned(16))); /* 0x690, the flyer's ClipColReq (commonact.c); the
+                                  record is 0x850 bytes in all */
 #if defined(ICO_HOST) && __SIZEOF_POINTER__ > 4
     void (*afterProcHost)(GObj *); /* host only: flags18's after-proc (docs/port/LOADERS.md) */
 #endif

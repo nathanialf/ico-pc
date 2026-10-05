@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "debug.h"
 #include "memory.h"
 #include "pad.h"
@@ -78,7 +79,8 @@ static int group_create(void)
         createState = 1;
         current_select_gid = g;
         selectedWay = &way_group[g];
-        debug_StdPrintfDummy("search:%p %p\n", isysGObjSearchFromObjKindID_begin(0), (int)boyGObj);
+        debug_StdPrintfDummy("search:%p %p\n", isysGObjSearchFromObjKindID_begin(0),
+                             (void *)boyGObj);
         return 0;
     }
     if (createState != 1) {

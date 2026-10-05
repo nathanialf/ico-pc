@@ -64,7 +64,7 @@ static inline WayPoint *visible_waypoint_of_all_except_gid_sub(float *pos, int g
         }
     }
 
-    qsort(tbl, n, sizeof(WpSortEnt), wpsort_compfnc);
+    qsort(tbl, n, sizeof(WpSortEnt), (int (*)(const void *, const void *))wpsort_compfnc);
     if (thread) {
         _ACTWait(1);
     }
@@ -137,7 +137,7 @@ static inline WayPoint *visible_waypoint_of_all_except_temp_sub(float *pos, int 
         }
     }
 
-    qsort(tbl, n, sizeof(WpSortEnt), wpsort_compfnc);
+    qsort(tbl, n, sizeof(WpSortEnt), (int (*)(const void *, const void *))wpsort_compfnc);
     if (thread) {
         _ACTWait(1);
     }

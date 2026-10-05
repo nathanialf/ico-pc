@@ -313,9 +313,9 @@ static void jimakuMgrJump(JimakuArg *p)
     jimakuMgrNext(p);
 }
 
-static void jimakuMgrEnd(int *p)
+static void jimakuMgrEnd(JimakuArg *p)
 {
-    int val = p[0x4C / 4];
+    CdvdBgReq *val = p->sub.bg;
     if (val != 0) {
         iosCdvdBackGroundMgrDelete(val);
     }
@@ -324,7 +324,7 @@ static void jimakuMgrEnd(int *p)
     iosSemaDelete(&jimakuReadSema);
 }
 
-int jimakuMsgBuf[2] = {0};
+IosMsgWord jimakuMsgBuf[2] = {0};
 
 inline void jimakuManager(void)
 {
@@ -332,7 +332,7 @@ inline void jimakuManager(void)
 
     iosMsgQueueCreate(&jimakuMsgQ, jimakuMsgBuf, 2);
     while (1) {
-        iosMsgRecv(&jimakuMsgQ, &msg, 1);
+        iosMsgRecv(&jimakuMsgQ, (IosMsgWord *)&msg, 1);
         msg->done = 0;
         switch (msg->cmd) {
         case 0:
@@ -345,7 +345,7 @@ inline void jimakuManager(void)
             jimakuMgrJump(msg);
             break;
         case 3:
-            jimakuMgrEnd((int *)msg);
+            jimakuMgrEnd(msg);
             break;
         default:
             debug_StdPrintfDummy("jimakuManager: recv command %d error.", msg->cmd);
@@ -358,14 +358,14 @@ inline void jimakuManager(void)
 void jimakuBegin(JimakuArg *msg)
 {
     msg->cmd = 0;
-    iosMsgSend(&jimakuMsgQ, msg, 1);
+    iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 1);
 }
 
 void jimakuNext(JimakuArg *msg)
 {
     if (systemStatus[10] != 0) {
         msg->cmd = 1;
-        iosMsgSend(&jimakuMsgQ, msg, 0);
+        iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 0);
     }
 }
 
@@ -384,13 +384,13 @@ void jimakuJump(JimakuArg *msg)
         }
     }
     msg->cmd = 2;
-    iosMsgSend(&jimakuMsgQ, msg, 0);
+    iosMsgSend(&jimakuMsgQ, (IosMsgWord)msg, 0);
 }
 
 void jimakuEnd(JimakuArg *msg)
 {
     systemStatus[10] = 0;
-    jimakuMgrEnd((int *)msg);
+    jimakuMgrEnd(msg);
 }
 
 void jimakuDisp(JimakuArg *msg)

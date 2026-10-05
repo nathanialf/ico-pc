@@ -504,7 +504,7 @@ static int iosPadGetStick_func(IosPadCtx *ctx, IosPadStick *st, int mode, int a3
 
 /* the device manager's message queue buffer and the sixteen actuator
    requests iosPadActRequest hands out */
-static int padDevMgrMsgBuf[8]; /* derived name */
+static IosMsgWord padDevMgrMsgBuf[8]; /* derived name */
 
 static PadAct padActs[16]; /* derived name */
 
@@ -605,7 +605,7 @@ void iosPadStickCameraCoord(void *out, IosPadStick *stick)
 {
     Vec4 v = {{stick->dx, 0.0f, -stick->dz, 0.0f}};
     float m[16];
-    sceVu0TransposeMatrix(m, (void *)((int)matrixptr + 0x80));
+    sceVu0TransposeMatrix(m, (void *)(matrixptr + 0x80));
     sceVu0ApplyMatrix(out, m, &v);
 }
 
@@ -714,7 +714,7 @@ end:
 
 static void iosPadDevManager(void)
 {
-    int local_buf;
+    IosMsgWord local_buf;
     iosMsgQueueCreate(&padDevMgrMsgQ, padDevMgrMsgBuf, 8);
     while (1) {
         iosMsgRecv(&padDevMgrMsgQ, &local_buf, 1);

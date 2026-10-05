@@ -260,7 +260,7 @@ static __inline__ GObj *allocGObjEntry(void) /* derived name */
         return 0;
     }
     /* the entry's address from the table's address and the scaled index */
-    g = (GObj *)(i * sizeof(GObj) + (int)gobjTable);
+    g = (GObj *)(i * sizeof(GObj) + (ICO_WORD)gobjTable);
     g->act = 0;
     g->pauseExempt = 0;
     return g;

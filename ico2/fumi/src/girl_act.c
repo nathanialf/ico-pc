@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "girl_act.h"
 #include "debug.h"
 #include "pad.h"
@@ -107,9 +108,9 @@ inline void actGirlHand50(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
 
     debug_StdPrintfDummy("enter actGirlHand50\n");
-    sceVu0ScaleVector(dir, (float *)((char *)sub + 0x4B0), -1.0f);
+    sceVu0ScaleVector(dir, (float *)sub->env.wallOrient, -1.0f);
     SetMotionDirection((void *)self, dir);
-    SetDirectRootPositionNoFitting((void *)self, (float *)((char *)sub + 0x590));
+    SetDirectRootPositionNoFitting((void *)self, (float *)sub->env.wallPos);
     sub->readyFlags = 0;
     sub->after = (void *)afterGirlHand50;
     do {
@@ -150,7 +151,7 @@ void motGirlHand50(GObj *volatile self)
     }
     iosOmSendMail(boyGObj, 0x5E, isysCurrentGObj);
     sub->motReq = SetMotionRequest((void *)self, 0x5E, sub->env.motOriReq);
-    while ((*(int *)((char *)sub->motReq + 0x5C) & 1) == 0) {
+    while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     sub->after = 0;
@@ -287,7 +288,7 @@ held:
     }
     iosOmSendMail(boyGObj, 0x68, isysCurrentGObj);
     sub->motReq = SetMotionRequest((void *)self, 0x66, sub->env.motOriReq);
-    while ((*(int *)((char *)sub->motReq + 0x5C) & 1) == 0) {
+    while ((((struct MotCtrl *)sub->motReq)->frameEnd & 1) == 0) {
         _ACTWait(1);
     }
     while (1) {
@@ -609,7 +610,7 @@ static void SetTurnSpeedInEscape(GObj *self)
 
 static inline int girlListIsOnBoy(void *gobj) /* derived name */
 {
-    if (*(int *)((char *)gobj + 0xC) != 4) {
+    if (((GObj *)gobj)->kind != 4) {
         return 1;
     }
     return EnemyBrainStatus_Boy(gobj);
@@ -620,9 +621,9 @@ static inline int girlListIsAlive(void *gobj) /* derived name */
     return (int)(GOBJ_ACT(gobj)->flags18.ll >> 32) & 1;
 }
 
-static inline int enemy_list_compare(int p, int q)
+static inline int enemy_list_compare(const void *p, const void *q)
 {
-    float diff = *(float *)(p + 0x20) - *(float *)(q + 0x20);
+    float diff = ((GirlListEnt *)p)->dist - ((GirlListEnt *)q)->dist;
     return (int)diff;
 }
 
@@ -796,7 +797,7 @@ static void girlBrainMain_MakeOthersList(void)
 static char *groupRelationName[4] = {"FALSE", "OTHERGROUP", "SAMEGROUP",
                                      "DIRECT"}; /* derived name */
 
-static int girlBrainHideCheckIntercept(float *from, float *to, char *list, int n)
+static int girlBrainHideCheckIntercept(float *from, float *to, GirlListEnt *list, int n)
 {
     float d[4];
     float m[16];
@@ -811,10 +812,9 @@ static int girlBrainHideCheckIntercept(float *from, float *to, char *list, int n
     GetMatrixDirectionToZ(m, d);
     dist = FSqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     for (i = 0; i < n; i++) {
-        flag = *(int *)(*(char **)(*(char **)(list + i * 0x30) + 0x164) + 0x34) == 6 ? 1.0f : 0.0f;
-        dy = *(float *)(list + i * 0x30 + 0x14) - from[1] < 0.0f
-                 ? -(*(float *)(list + i * 0x30 + 0x14) - from[1])
-                 : *(float *)(list + i * 0x30 + 0x14) - from[1];
+        flag = GOBJ_ACT(list[i].obj)->actMode == 6 ? 1.0f : 0.0f;
+        dy = list[i].pos[1] - from[1] < 0.0f ? -(list[i].pos[1] - from[1])
+                                             : list[i].pos[1] - from[1];
 
         if (flag != 0.0f) {
             if (80.0f < dy) {
@@ -825,7 +825,7 @@ static int girlBrainHideCheckIntercept(float *from, float *to, char *list, int n
                 continue;
             }
         }
-        sceVu0SubVector(v, list + i * 0x30 + 0x10, to);
+        sceVu0SubVector(v, list[i].pos, to);
         v[1] = 0.0f;
         v[3] = 0.0f;
         sceVu0ApplyMatrix(v, m, v);
@@ -901,36 +901,31 @@ static int girlBrainMain_CheckWarningMode(unsigned char check)
 {
     float hit[4];
     int mode;
-    char *w = (char *)&brain_val;
 
-    w[0x58F1] = 1;
-    if (((unsigned char *)w)[0] != 0) {
+    brain_val.pad58F1 = 1;
+    if (brain_val.listBNear != 0) {
         mode = 2;
     } else {
-        mode = ((unsigned char *)w)[1] != 0 ? 4 : 0;
+        mode = brain_val.listDFound != 0 ? 4 : 0;
     }
     {
-        char *g = (char *)&brain_val;
-
-        if (*(int *)(g + 0x3230) == 0 ||
-            (check != 0 && ACTGameView_Check(girlGObj, boyGObj) == 0)) {
+        if (brain_val.hide.num == 0 || (check != 0 && ACTGameView_Check(girlGObj, boyGObj) == 0)) {
             goto out;
         }
-        _girlBrainHide_MakeHidePoint((float *)(g + 0x5800), 200.0f);
-        dispWayMarker((float *)(g + 0x5800));
-        if (girlBrainHide_TryWay((float *)(g + 0x5800), &brain_val.hideWay, (float *)(g + 0x5830),
-                                 hit) != 3) {
+        _girlBrainHide_MakeHidePoint(brain_val.hidePoint, 200.0f);
+        dispWayMarker(brain_val.hidePoint);
+        if (girlBrainHide_TryWay(brain_val.hidePoint, &brain_val.hideWay, brain_val.girlPos, hit) !=
+            3) {
             goto out;
         }
     }
     if (!isHidePointTooHigh(brain_val.hidePoint) &&
-        !girlBrainHideCheckIntercept(brain_val.girlPos, brain_val.hidePoint,
-                                     (char *)brain_val.hide.ent, brain_val.hide.num)) {
+        !girlBrainHideCheckIntercept(brain_val.girlPos, brain_val.hidePoint, brain_val.hide.ent,
+                                     brain_val.hide.num)) {
         mode = 3;
     } else {
-        char *v = (char *)&brain_val;
-
-        if (*(int *)(v + 0x1F60) != 0 && _DistSqGV(v + 0x5820, v + 0x1F80) < 90000.0f) {
+        if (brain_val.listB.num != 0 &&
+            _DistSqGV(brain_val.girlRoot, brain_val.listB.ent[0].pos) < 90000.0f) {
             goto out;
         }
         mode = 4;
@@ -1012,7 +1007,7 @@ static inline float girlBrainGetTypeRatio(int type) /* derived name */
 
 static __inline void setNext(int *next, int m)
 {
-    if ((void *)girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
+    if (girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
         return;
     }
     *next = m;
@@ -1064,7 +1059,7 @@ static int girlBrainMain_DecideMode(int mode, int *next)
         changed = 1;
     }
     if (brain_val.target != 0) {
-        _ACTCharStatus_Set(self, 10, -1.0f, (int)brain_val.target);
+        _ACTCharStatus_Set(self, 10, -1.0f, (ICO_WORD)brain_val.target);
     }
     switch (mode) {
     case 0:
@@ -1292,7 +1287,7 @@ void subGirlBrainMain(GObj *volatile self)
         }
         if (mark > 0) {
             mark -= 1;
-        } else if (((int)(((ActStatus *)((char *)act + 0x18))->ll >> 62)) & 1) {
+        } else if (((int)(((ActStatus *)&act->flags18.ll)->ll >> 62)) & 1) {
             mark = span;
             if (turned) {
                 hold = span;
@@ -1304,7 +1299,7 @@ void subGirlBrainMain(GObj *volatile self)
         } else {
             brain_val.lookHold = 0;
         }
-        ((ActStatus *)((char *)act + 0x18))->ll &= ~(1LL << 54);
+        ((ActStatus *)&act->flags18.ll)->ll &= ~(1LL << 54);
         ACTGameView_Loop((void *)self);
         brain_val.pad58F1 = 0;
         brain_val.modeChanged = 0;
@@ -1325,8 +1320,9 @@ void subGirlBrainMain(GObj *volatile self)
                 if (GOBJ_WORK(boy)->hideObj == 0) {
                     GOBJ_WORK(boy)->hideObj = brain_val.hide.ent[0].obj;
                 }
-                *(void **)((char *)bact + 0x80) = *(void **)((char *)GOBJ_ACT(boy)->work + 0x370);
-                *(void **)((char *)bact + 0x84) = *(void **)((char *)GOBJ_ACT(boy)->work + 0x370);
+                ICO_RAW(void *, bact, 0x80, bact->gobj80) =
+                    ICO_RAW(void *, GOBJ_ACT(boy)->work, 0x370, GOBJ_WORK(boy)->hideObj);
+                bact->gobj84 = ICO_RAW(void *, GOBJ_ACT(boy)->work, 0x370, GOBJ_WORK(boy)->hideObj);
             }
             if (brain_val.hide.num != 0 || SearchActiveGenerator() != 0) {
                 near = 1;
@@ -1377,7 +1373,7 @@ void subGirlBrainMain(GObj *volatile self)
             float ofs[4];
             float eye[4];
 
-            if (((int)(((ActStatus *)((char *)act + 0x18))->ll >> 49)) & 1) {
+            if (((int)(((ActStatus *)&act->flags18.ll)->ll >> 49)) & 1) {
                 if (girlBrainMain_DecideMode(prevMode, &mode)) {
                     prevMode = -1;
                 }
@@ -1470,14 +1466,14 @@ void subGirlBrainMain(GObj *volatile self)
         }
         {
             int tbl[5][2] = {{1633, 1634}, {1631, 1632}, {2024, 2025}, {2022, 2023}, {-1, 0}};
-            char *ent;
+            GObj *ent;
             void *g;
             int i;
 
-            ent = *(char **)GOBJ_SUB(self);
+            ent = GOBJ_SUB(self)->parent.obj;
             if (ent && ((int *)boyGObj) && GOBJ_ACT(((int *)boyGObj))->actMode == 51) {
                 for (i = 0; tbl[i][0] != -1; i++) {
-                    if (*(int *)(ent + 0x8) == tbl[i][0]) {
+                    if (ent->labelId == tbl[i][0]) {
                         g = isysGObjSearchFromObjLayoutID(tbl[i][1]);
                         if (g) {
                             mode = 8;
@@ -1528,7 +1524,7 @@ void subGirlBrainMain(GObj *volatile self)
             brainGirl.minThreshold = 0.0f;
             break;
         case 4:
-            if ((((int)(((ActStatus *)((char *)act + 0x18))->ll >> 63)) & 1) ||
+            if ((((int)(((ActStatus *)&act->flags18.ll)->ll >> 63)) & 1) ||
                 (act->flags20.i[0] & 1)) {
                 act->flags20.ll |= 4;
             }
@@ -1667,8 +1663,7 @@ void subGirlBrainMain(GObj *volatile self)
             } else {
                 send = 0;
             }
-            if (GOBJ_ACT(((int *)boyGObj))->actMode == 5 &&
-                *(int *)((char *)GOBJ_ACT(((int *)boyGObj))->work + 0x900) == 41 &&
+            if (GOBJ_ACT(((int *)boyGObj))->actMode == 5 && GOBJ_WORK(boyGObj)->modeHist[0] == 41 &&
                 GOBJ_ACT(((int *)boyGObj))->modeFrame <
                     (60 - systemStatus[0] * 10) / systemStatus[1] / 3) {
                 send = 1;
@@ -1704,7 +1699,7 @@ inline void subGirlBrain_Busy(GObj *volatile self)
     sub->stick.mag = 0;
     while (1) {
         if (w->others.num) {
-            _ACTCharStatus_Set((void *)self, 2, -1.0f, w->others.ent[0].obj);
+            _ACTCharStatus_Set((void *)self, 2, -1.0f, (ICO_WORD)w->others.ent[0].obj);
         }
         if (((60 - systemStatus[0] * 10) / systemStatus[1] < i &&
              ACTGameView_Check(self, boyGObj)) ||
@@ -1750,7 +1745,7 @@ void subGirlBrain_Pulledup(GObj *volatile self)
 
     GetRootProjectionPosOfGObj(self_pos, (void *)self);
     GetRootProjectionPosOfGObj(boy_pos, boyGObj);
-    *(int *)((char *)GOBJ_ACT(self)->work + 0x374) = 0;
+    GOBJ_WORK(self)->floorObj = 0;
     sceVu0ScaleVector(ofs, test_CURRENTORIENT((boyGObj)), 60.0f);
     sceVu0AddVector(base, boy_pos, ofs);
     base[1] = base[1] - 50.0f;
@@ -1762,7 +1757,7 @@ void subGirlBrain_Pulledup(GObj *volatile self)
         boy_pos[1] = well[1];
         boy_pos[2] = well[2];
         if (floorGObj_ACTCheckCollis_WELL != 0 &&
-            *(int *)((char *)floorGObj_ACTCheckCollis_WELL + 0xC) == 0x11) {
+            ((GObj *)floorGObj_ACTCheckCollis_WELL)->kind == 0x11) {
             GOBJ_WORK(self)->floorObj = floorGObj_ACTCheckCollis_WELL;
         }
         boy_pos[1] = boy_pos[1] - 10.0f;
@@ -1801,7 +1796,7 @@ void subGirlBrain_Pulledup(GObj *volatile self)
             _OrientXZGV(oz, test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
             ry = _RotyGV(sk, oz);
             if (0x15 <= ((ry < 0) ? -ry : ry)) {
-                if ((void *)girlControlMode == 0) {
+                if (girlControlMode == 0) {
                     if (0 < ry) {
                         ATGoalTurnSet((void *)self, 3, 2, oz);
                     } else {
@@ -1991,7 +1986,7 @@ void subGirlBrain_Hide(GObj *volatile self)
             cand[2] = hp[2];
         }
         if (isHidePointTooHigh(cand) ||
-            girlBrainHideCheckIntercept(brain_val.girlPos, cand, (char *)brain_val.hide.ent,
+            girlBrainHideCheckIntercept(brain_val.girlPos, cand, brain_val.hide.ent,
                                         brain_val.hide.num)) {
             brain_val.warn = 1;
         }
@@ -2352,7 +2347,7 @@ void subGirlBrain_Escape(GObj *volatile self)
             if (sub->stick.mag != 0.0f) {
                 sceVu0ScaleVector(v.f, (float *)&sub->dir[0], 300.0f);
                 sceVu0AddVector(v.f, brain_val.girlPos, v.f);
-                if (girlBrainHideCheckIntercept(brain_val.girlPos, v.f, (char *)brain_val.hide.ent,
+                if (girlBrainHideCheckIntercept(brain_val.girlPos, v.f, brain_val.hide.ent,
                                                 brain_val.hide.num)) {
                     sub->stick.mag = 0.0f;
                     brain_val.warn = 1;
@@ -2366,7 +2361,7 @@ void subGirlBrain_Escape(GObj *volatile self)
             sub->stick.mag = 0;
             ACTSendMailCorrect((void *)self, 0xE5);
             brainGirl.minThreshold = 9.0f;
-            if ((((int)(((ActStatus *)((char *)sub + 0x18))->ll >> 63)) & 1) ||
+            if ((((int)(((ActStatus *)&sub->flags18.ll)->ll >> 63)) & 1) ||
                 (sub->flags20.i[0] & 1)) {
                 sub->flags20.ll = sub->flags20.ll | 4;
             }
@@ -2495,7 +2490,8 @@ inline void subGirlBrain_DangerEnv(GObj *volatile self)
     _ACTWait(0);
 }
 
-static int Danger_Bomb_GetSafePosition(float rad, float *dst, float *center, float *cur, int ok)
+static int Danger_Bomb_GetSafePosition(float rad, float *dst, float *center, float *cur,
+                                       ICO_WORD ok)
 {
     float dir[4];
     float pos[4];
@@ -2564,7 +2560,7 @@ retry:
         GetRootProjectionPosOfGObj(base, bomb);
         _ACTWait(1);
         Danger_Bomb_GetSafePosition(500.0f, goal, test_CURRENTROOT(bomb), girl,
-                                    (int)test_CURRENTROOT((boyGObj)));
+                                    (ICO_WORD)test_CURRENTROOT((boyGObj)));
         _ACTWait(1);
         p = ACTWayMove_BeginDetail(self, girl, goal, 0, 0, 0);
         r = p;
@@ -2574,7 +2570,7 @@ retry:
         _ACTWait(1);
         turn = 0;
         while (1) {
-            _ACTCharStatus_Set(self, 11, -1.0f, (int)bomb);
+            _ACTCharStatus_Set(self, 11, -1.0f, (ICO_WORD)bomb);
             GetRootProjectionPosOfGObj(tmp, bomb);
             GetRootProjectionPosOfGObj(girl, self);
             GetRootProjectionPosOfGObj(now, bomb);
@@ -2609,7 +2605,8 @@ retry:
     }
 }
 
-static int Danger_Gondola_GetSafePosition(float rad, float *dst, float *center, float *cur, int ok)
+static int Danger_Gondola_GetSafePosition(float rad, float *dst, float *center, float *cur,
+                                          ICO_WORD ok)
 {
     float dir[4];
     float pos[4];
@@ -2681,7 +2678,7 @@ retry:
         GetRootProjectionPosOfGObj(base, gondola);
         _ACTWait(1);
         Danger_Gondola_GetSafePosition(300.0f, goal, test_CURRENTROOT(gondola), girl,
-                                       (int)test_CURRENTROOT((boyGObj)));
+                                       (ICO_WORD)test_CURRENTROOT((boyGObj)));
         _ACTWait(1);
         p = ACTWayMove_BeginDetail(self, girl, goal, 0, 0, 0);
         r = p;
@@ -2691,7 +2688,7 @@ retry:
         _ACTWait(1);
         turn = 0;
         while (1) {
-            _ACTCharStatus_Set(self, 11, -1.0f, (int)gondola);
+            _ACTCharStatus_Set(self, 11, -1.0f, (ICO_WORD)gondola);
             GetRootProjectionPosOfGObj(tmp, gondola);
             GetRootProjectionPosOfGObj(girl, self);
             GetRootProjectionPosOfGObj(now, gondola);
@@ -2733,7 +2730,7 @@ retry:
 /* the three escape angles Danger_Box's safe-position search tries */
 static int dangerEscapeAngle[3] = {0, -90, 90}; /* derived name */
 
-static int Danger_Box_GetSafePosition(float *dst, float *way, float *center, float rad, int ok,
+static int Danger_Box_GetSafePosition(float *dst, float *way, float *center, float rad, ICO_WORD ok,
                                       int mode, float *girl)
 {
     float dir[4];
@@ -2858,11 +2855,11 @@ static void Danger_Box(GObj *self)
         way[2] = sideB[2];
     }
     _ACTWait(1);
-    if (!Danger_Box_GetSafePosition(goal, way, girl, rad, (int)test_CURRENTROOT((boyGObj)), 0,
+    if (!Danger_Box_GetSafePosition(goal, way, girl, rad, (ICO_WORD)test_CURRENTROOT((boyGObj)), 0,
                                     girl)) {
         GetRootProjectionPosOfGObj(cur, box);
-        if (!Danger_Box_GetSafePosition(goal, way, cur, rad, (int)test_CURRENTROOT((boyGObj)), 1,
-                                        girl)) {
+        if (!Danger_Box_GetSafePosition(goal, way, cur, rad, (ICO_WORD)test_CURRENTROOT((boyGObj)),
+                                        1, girl)) {
             debug_StdPrintfDummy("box escape position not found");
             goal[0] = girl[0];
             goal[1] = girl[1];
@@ -2879,7 +2876,7 @@ static void Danger_Box(GObj *self)
     _ACTWait(1);
     turn = 0;
     while (1) {
-        _ACTCharStatus_Set(self, 11, -1.0f, (int)box);
+        _ACTCharStatus_Set(self, 11, -1.0f, (ICO_WORD)box);
         GetRootProjectionPosOfGObj(cur, box);
         GetRootProjectionPosOfGObj(girl, self);
         GetRootProjectionPosOfGObj(tmp, box);
@@ -2911,7 +2908,7 @@ static void Danger_Box(GObj *self)
 }
 
 static int Danger_Rotobject_GetSafePosition(float rad, float *dst, float *center, float *girl,
-                                            int ok)
+                                            ICO_WORD ok)
 {
     float boy[4];
     float dir[4];
@@ -2976,7 +2973,7 @@ static void Danger_Rotobject(GObj *self)
     GetRootProjectionPosOfGObj(base, obj);
     _ACTWait(1);
     if (!Danger_Rotobject_GetSafePosition(300.0f, goal, test_CURRENTROOT(obj), girl,
-                                          (int)test_CURRENTROOT((boyGObj)))) {
+                                          (ICO_WORD)test_CURRENTROOT((boyGObj)))) {
         while (1) {
             sub->stick.mag = 0.0f;
             _ACTWait(1);
@@ -2985,7 +2982,7 @@ static void Danger_Rotobject(GObj *self)
     turn = 0;
     _ACTWait(1);
     while (1) {
-        _ACTCharStatus_Set(self, 11, -1.0f, (int)obj);
+        _ACTCharStatus_Set(self, 11, -1.0f, (ICO_WORD)obj);
         GetRootProjectionPosOfGObj(tmp1, obj);
         GetRootProjectionPosOfGObj(girl, self);
         GetRootProjectionPosOfGObj(tmp2, obj);
@@ -3058,7 +3055,7 @@ static int isEnterHideadv_EnemyLocation(float *bpos, float *gpos)
     gpos[2] = test_CURRENTROOT((void *)girlGObj)[2];
     _OrientXZGV(o1, bpos, gpos);
     for (i = 0; i < brain_val.hide.num; i++) {
-        if (*(int *)((char *)brain_val.hide.ent[i].obj + 0xC) == 4) {
+        if (((GObj *)brain_val.hide.ent[i].obj)->kind == 4) {
             d = _DistGV(gpos, brain_val.hide.ent[i].pos);
             if (!(1500.0f < d)) {
                 if (_DistSqGV(bpos, brain_val.hide.ent[i].pos) < (d + 100.0f) * (d + 100.0f)) {
@@ -3154,7 +3151,7 @@ void WayTest(void)
         if (!ACTWayMove_NextDetail(g, s->dir, a, 0, 0)) {
             debug_StdPrintfDummy("next error");
         }
-        dispWayMarker((float *)((char *)s + 0x410));
+        dispWayMarker((float *)&s->wayFromX);
     }
     if (s->wayGoalDist < 100.0f) {
         s->stick.mag = 0.0f;
@@ -3235,10 +3232,10 @@ void subGirlControl(GObj *volatile self)
     for (;;) {
         if ((int)(w.p->flags18.ll >> 48) & 1) {
             if (scpBoyControlReadDisable == 0 &&
-                ((void *)self == (void *)CurrentTargetGObj || (void *)girlControlMode != 0))
+                ((void *)self == (void *)CurrentTargetGObj || girlControlMode != 0))
                 /* the pad read, once; the listing puts its exit branch on the while line */
                 do {
-                    iosPadConnect(&w.p->pad, 0, (void *)girlControlMode != 0, &w.p->padConf);
+                    iosPadConnect(&w.p->pad, 0, girlControlMode != 0, &w.p->padConf);
                     iosPadRead(&w.p->pad);
                     iosPadGetStick(&w.p->pad, &w.p->stick, 0, 2, 2, debug_stick_simulate);
                     _GetMotionDirection(mdir, (void *)self);
@@ -3267,8 +3264,8 @@ void subGirlControl(GObj *volatile self)
                 debug_StdPrintfDummy("STOP");
                 debug_StdPrintfDummy("target");
             }
-            if ((void *)girlControlMode == 0 && ((w.p->flags18.ll & 0x3000000000000000) != 0 ||
-                                                 ((int)(w.p->flags20.ll >> 7) & 1))) {
+            if (girlControlMode == 0 && ((w.p->flags18.ll & 0x3000000000000000) != 0 ||
+                                         ((int)(w.p->flags20.ll >> 7) & 1))) {
                 if (w.p->stick.mag != 0.0f) {
                     w.p->stick.mag = 0.5f;
                 }
@@ -3302,7 +3299,7 @@ void subGirlControl(GObj *volatile self)
             if (w.p->stick.mag > 0.1f && w.p->actMode != 0x73) {
                 SetMotionDirectionSmooze(
                     self, dir,
-                    (float)(((void *)self == (void *)girlGObj && (void *)girlControlMode != 0)
+                    (float)(((void *)self == (void *)girlGObj && girlControlMode != 0)
                                 ? MOTDIRROW(self)->girlDirFrames
                                 : MOTDIRROW(self)->dirFrames));
             }
@@ -3320,8 +3317,7 @@ void subGirlControl(GObj *volatile self)
             ACTSendMailCorrect(self, 0xBA);
             break;
         case 29:
-            if (!((void *)girlControlMode != 0 &&
-                  *(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 4 &&
+            if (!(girlControlMode != 0 && ((int *)GOBJ_WORK(self)->modeHist)[0] == 4 &&
                   ((int)(w.p->flags18.ll >> 56) & 1))) {
                 if ((w.p->stick.mag > 0.1f &&
                      (w.p->stick.angle < -134 || 134 < w.p->stick.angle)) ||
@@ -3349,14 +3345,13 @@ void subGirlControl(GObj *volatile self)
             }
             break;
         case 28:
-            if (!((void *)girlControlMode != 0 &&
-                  *(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 4 &&
+            if (!(girlControlMode != 0 && ((int *)GOBJ_WORK(self)->modeHist)[0] == 4 &&
                   ((int)(w.p->flags18.ll >> 56) & 1)) &&
                 ((w.p->stick.mag > 0.1f && (w.p->stick.angle < -134 || 134 < w.p->stick.angle)) ||
                  (w.p->pad.trg & 0x40))) {
                 ACTSendMailCorrect(self, 0xE2);
             } else {
-                if ((void *)girlControlMode != 0 ||
+                if (girlControlMode != 0 ||
                     (60 - systemStatus[0] * 10) / systemStatus[1] * 5 < w.p->modeFrame) {
                     if (w.p->stick.mag > 0.1f &&
                         (w.p->stick.angle >= -45 && w.p->stick.angle <= 45)) {
@@ -3373,11 +3368,11 @@ void subGirlControl(GObj *volatile self)
             break;
         case 38:
             if (((int *)boyGObj) != 0) {
-                if (((int *)((int *)((int *)boyGObj)[0x59])[0x1A2])[0xEE] >
+                if (GOBJ_WORK(boyGObj)->footIkFrames >
                     (60 - systemStatus[0] * 10) / systemStatus[1] / 3) {
                     ACTSendMailCorrect(self, 0x14A);
                 }
-                if (((int *)((int *)((int *)boyGObj)[0x59])[0x1A2])[0xEF] >
+                if (GOBJ_WORK(boyGObj)->bit37Frames >
                     (60 - systemStatus[0] * 10) / systemStatus[1] / 3) {
                     ACTSendMailCorrect(self, 0x14B);
                 }
@@ -3392,17 +3387,16 @@ void subGirlControl(GObj *volatile self)
             }
             break;
         case 45:
-            if (((void *)girlControlMode != 0
-                     ? (w.p->stick.mag > 0.1f &&
-                        (w.p->stick.angle >= -45 && w.p->stick.angle <= 45))
-                     : (w.p->stick.mag > 0.1f)) ||
+            if ((girlControlMode != 0 ? (w.p->stick.mag > 0.1f &&
+                                         (w.p->stick.angle >= -45 && w.p->stick.angle <= 45))
+                                      : (w.p->stick.mag > 0.1f)) ||
                 ((int)(w.p->flags20.ll >> 12) & 1)) {
                 ACTSendMailCorrect(self, 0x75);
                 ACTSendMailCorrect(self, 0x74);
             }
             hold = 0;
             push = 0;
-            if (((int *)boyGObj) != 0 && (void *)girlControlMode == 0) {
+            if (((int *)boyGObj) != 0 && girlControlMode == 0) {
                 if (GOBJ_ACT(((int *)boyGObj))->actMode == 0x2D) {
                     push = GOBJ_ACT(((int *)boyGObj))->intrMot != 0x45;
                 } else {
@@ -3431,7 +3425,7 @@ void subGirlControl(GObj *volatile self)
             break;
         }
         *(unsigned long long *)&w.p->flags20 &= ~0x4000000ULL;
-        if ((void *)girlControlMode != 0 && (w.p->pad.now & 8)) {
+        if (girlControlMode != 0 && (w.p->pad.now & 8)) {
             *(unsigned long long *)&w.p->flags20 |= 0x4000000ULL;
         }
         _ACTWait(1);
@@ -3485,7 +3479,7 @@ void subGirlCollision(GObj *volatile self)
                 break;
             case 2:
                 ang = _ACTGame_GetParamF(36);
-                if (*(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 10 &&
+                if (((int *)GOBJ_WORK(self)->modeHist)[0] == 10 &&
                     sub->modeFrame < (60 - systemStatus[0] * 10) / systemStatus[1] / 3) {
                     if (ang < 60.0f) {
                         ang = 60.0f;
@@ -3494,7 +3488,7 @@ void subGirlCollision(GObj *volatile self)
                 break;
             case 3:
                 ang = _ACTGame_GetParamF(37);
-                if (*(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 10 &&
+                if (((int *)GOBJ_WORK(self)->modeHist)[0] == 10 &&
                     sub->modeFrame < (60 - systemStatus[0] * 10) / systemStatus[1] / 3) {
                     if (ang < 60.0f) {
                         ang = 60.0f;
@@ -3532,10 +3526,9 @@ void subGirlCollision(GObj *volatile self)
             } else {
                 GetSkeltonOrient(sk, (void *)self, 1);
                 if (debug_font_flag & 1) {
-                    debug_Printf(10, 100, 0x0FFFFFFF, "[%d]\n",
-                                 _AbsRotyGV((char *)sub + 0x120, sk));
+                    debug_Printf(10, 100, 0x0FFFFFFF, "[%d]\n", _AbsRotyGV((char *)sub->dir, sk));
                 }
-                if (_AbsRotyGV((char *)sub + 0x120, sk) < 60) {
+                if (_AbsRotyGV((char *)sub->dir, sk) < 60) {
                     ACTSendMailCorrect((void *)self, 0xF0);
                 }
                 debug_Arrow(100.0f, test_CURRENTROOT((void *)self), sk, 0, 0xFF, 0);
@@ -3602,7 +3595,7 @@ void subGirlCollision(GObj *volatile self)
                 sub->dir[1] = 0.0f;
                 sub->dir[2] = -1.0f;
             }
-            SetMotionDirection((void *)self, (float *)((char *)sub + 0x120));
+            SetMotionDirection((void *)self, (float *)sub->dir);
             sub->stick.mag = 1.0f;
             ACTSendMailCorrect((void *)self, 0xDD);
             break;
@@ -3627,13 +3620,13 @@ void subGirlCollision(GObj *volatile self)
         } else {
             GOBJ_SUB(self)->root.ikRate0 = GOBJ_WORK(self)->defIkRate0;
         }
-        if ((void *)girlControlMode != 0 && stage_no == 23 && GOBJ_SUB(self)->ctrl.upperWall != 0 &&
+        if (girlControlMode != 0 && stage_no == 23 && GOBJ_SUB(self)->ctrl.upperWall != 0 &&
             GOBJ_SUB(self)->ctrl.upperWallDist < 50.0f) {
             if (sub->actMode == 36) {
                 ACTSendMailCorrect((void *)self, 0x1AC);
             }
-            if (sub->actMode == 1 && (*(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 28 ||
-                                      *(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 36)) {
+            if (sub->actMode == 1 && (((int *)GOBJ_WORK(self)->modeHist)[0] == 28 ||
+                                      ((int *)GOBJ_WORK(self)->modeHist)[0] == 36)) {
                 ACTSendMailCorrect((void *)self, 0x1AC);
             }
         }
@@ -3658,13 +3651,13 @@ inline int NotNeedBackHand(void)
     return 0;
 }
 
-inline void afterGirlHand(unsigned int self)
+inline void afterGirlHand(ICO_WORD_PTR(GObj *) self)
 {
-    volatile unsigned int local = self;
+    ICO_WORD_PTR(GObj *) volatile local = self;
     ACTGame_DisconnectHand();
     debug_StdPrintfDummy("after func\n");
     iosPadActStop(7);
-    ACTWay_SetBeginPositionIllegal(local);
+    ACTWay_SetBeginPositionIllegal((GObj *)local);
 }
 
 /* the hand manager's record, all zero and explicitly initialised so that it
@@ -3676,7 +3669,7 @@ GirlStand handmgr = {0};
 static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
 {
     MotionDef *rec;
-    *mode = ((int *)((int *)boyGObj)[0x59])[0xD];
+    *mode = GOBJ_ACT(boyGObj)->actMode;
     *p1 = 0;
     *p2 = 0;
     *p3 = 0;
@@ -3692,10 +3685,10 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
         break;
     case 2:
     case 3:
-        if (((int *)((int *)boyGObj)[0x59])[0x55] != 0) {
+        if (GOBJ_ACT(boyGObj)->curItem != 0) {
             *mode = 2;
         }
-        rec = motionKind + ((int *)((int *)boyGObj)[0x57])[0x128];
+        rec = motionKind + GOBJ_SUB(boyGObj)->ctrl.motion;
         switch ((rec->modeBits.word >> 22) & 3) {
         case 1:
             *mode = 2;
@@ -3705,8 +3698,7 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
             break;
         }
         if (*mode == 3) {
-            unsigned long long f =
-                *(unsigned long long *)((char *)((int *)((int *)boyGObj)[0x59])[0x1A2] + 0x448);
+            unsigned long long f = *(unsigned long long *)((char *)GOBJ_WORK(boyGObj) + 0x448);
             if ((int)(f >> 33) & 1) {
                 *mode = 1;
             } else if ((int)(f >> 32) & 1) {
@@ -3714,15 +3706,14 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
             }
         }
         if (*mode == 2) {
-            unsigned long long f =
-                *(unsigned long long *)((char *)((int *)((int *)boyGObj)[0x59])[0x1A2] + 0x448);
+            unsigned long long f = *(unsigned long long *)((char *)GOBJ_WORK(boyGObj) + 0x448);
             if ((int)(f >> 33) & 1) {
                 *mode = 1;
             }
         }
         break;
     case 36:
-        if (((int *)((int *)boyGObj)[0x59])[0xF] == 0x5E) {
+        if (GOBJ_ACT(boyGObj)->intrMot == 0x5E) {
             *p2 = 1;
         } else {
             *mode = 1;
@@ -3790,7 +3781,7 @@ void actGirlHand(GObj *volatile self)
     ACTGame_ConnectHand();
     HandMgr_Init();
     for (;;) {
-        *(long long *)((char *)sub + 0x20) &= ~0x100000;
+        sub->flags20.ll &= ~0x100000;
         GetBoyMode(&mode, &p1, &p2, &p3);
         sceVu0ScaleVector(look, test_CURRENTORIENT((void *)self), 200.0f);
         look[1] = 0.0f;
@@ -3828,7 +3819,7 @@ void actGirlHand(GObj *volatile self)
                 if (h < 150.0f) {
                     _OrientXZGV(d, test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
                     if (((int)(sub->flags18.ll >> 44) & 1) &&
-                        _AbsRotyGV(d, (char *)sub + 0x4B0) >= 0x88) {
+                        _AbsRotyGV(d, (char *)sub->env.wallOrient) >= 0x88) {
                         iosOmSendMail(boyGObj, 0xF7, isysCurrentGObj);
                     } else {
                         iosOmSendMail(boyGObj, 0xF8, isysCurrentGObj);
@@ -3840,7 +3831,7 @@ void actGirlHand(GObj *volatile self)
             static float pullLen = 0.0f;  /* derived name */
             static float pullTurn = 0.0f; /* derived name */
 
-            hand = (float)(((void *)self == (void *)girlGObj && (void *)girlControlMode != 0)
+            hand = (float)(((void *)self == (void *)girlGObj && girlControlMode != 0)
                                ? MOTDIRROW(self)->girlDirFrames
                                : MOTDIRROW(self)->dirFrames);
             t = 200.0f;
@@ -3982,7 +3973,7 @@ void actGirlHand(GObj *volatile self)
                         st = 0;
                     }
                 }
-                *(long long *)((char *)sub + 0x20) |= 8;
+                ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 8;
                 if (mode == 3) {
                     st = 2;
                 }
@@ -3991,7 +3982,7 @@ void actGirlHand(GObj *volatile self)
             case 2: {
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 0x10, sub->env.motOriReq);
-                *(long long *)((char *)sub + 0x20) |= 0x100000;
+                ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x100000;
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     st = 3;
@@ -4004,7 +3995,7 @@ void actGirlHand(GObj *volatile self)
                         st = 1;
                     }
                 }
-                *(long long *)((char *)sub + 0x20) |= 8;
+                sub->flags20.ll |= 8;
                 break;
             }
             case 3:
@@ -4013,8 +4004,8 @@ void actGirlHand(GObj *volatile self)
                 break;
             }
         }
-        flag = handmgr.far100 && (box = (unsigned char *)GOBJ_ACT(girlGObj)->work + 0x540)[1] &&
-               box[0x20];
+        flag =
+            handmgr.far100 && (box = (unsigned char *)&GOBJ_WORK(girlGObj)->handCl)[1] && box[0x20];
         if (flag) {
             cnt2++;
         } else {
@@ -4062,7 +4053,7 @@ inline void afterGirlPulledGo(void *self)
 {
     void *volatile q = self;
     int *p = (int *)GOBJ_SUB(q);
-    *(int *)((char *)p + 0x634) = 0;
+    ((struct Sub15C *)p)->ctrl.keepWall = 0;
 }
 
 void actGirlPulledGo(GObj *volatile self)
@@ -4075,7 +4066,7 @@ void actGirlPulledGo(GObj *volatile self)
     s->after = (void *)afterGirlHand;
     ACTGame_ConnectHand();
     *(MotOriReq *)&GOBJ_SUB(self)->root.wall = s->env.motOriReq;
-    *(int *)(*(char **)((char *)self + 0x15C) + 0x634) = 1;
+    ICO_RAW(int, *(char **)((char *)self + 0x15C), 0x634, GOBJ_SUB(self)->ctrl.keepWall) = 1;
 #ifdef ICO_HOST
     ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlPulledGo;
 #else
@@ -4221,13 +4212,13 @@ inline void actGirlHang(GObj *volatile self)
     /* rope-hang detected from the ACT parameter block */
     int hang = 0;
 
-    if (*(int *)((char *)GOBJ_ACT(self)->work + 0x904) == 0x5A) {
-        hang = *(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 4;
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 0x5A) {
+        hang = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     /* the debug/free camera forces the pull mail on regardless */
     rope = hang;
-    if ((void *)girlControlMode != 0) {
-        if (*(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 4) {
+    if (girlControlMode != 0) {
+        if (((int *)GOBJ_WORK(self)->modeHist)[0] == 4) {
             rope = 1;
             ACTAdjustPlane((void *)self, &GOBJ_WORK(self)->intrReq.a.wall);
         }
@@ -4245,8 +4236,8 @@ inline void actGirlBHang(GObj *volatile self)
     Act *s = GOBJ_ACT(self);
     int rope = 0;
 
-    if (*(int *)((char *)GOBJ_ACT(self)->work + 0x904) == 0x5A) {
-        rope = *(int *)((char *)GOBJ_ACT(self)->work + 0x900) == 4;
+    if (((int *)GOBJ_WORK(self)->modeHist)[1] == 0x5A) {
+        rope = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
     ACTAdjustPlane((void *)self, &GOBJ_WORK(self)->intrReq.a.wall);
     for (;;) {
@@ -4426,9 +4417,9 @@ inline void actGirlSupportGBEnd(GObj *volatile self)
     }
 }
 
-inline void afterGirlSupportBGBegin(unsigned int self)
+inline void afterGirlSupportBGBegin(ICO_WORD_PTR(GObj *) self)
 {
-    volatile unsigned int local = self;
+    ICO_WORD_PTR(GObj *) volatile local = self;
     ACTGame_DisconnectHand();
 }
 
@@ -4474,7 +4465,7 @@ void actGirlStart(void *self)
     GirlInfo[1] = 0;
     GirlInfo[0] = (60 - systemStatus[0] * 10) / systemStatus[1] * 30;
     debug_StdPrintfDummy("actGirlStart:%p\n", self);
-    p = actInitialize(self);
+    p = (char *)actInitialize(self);
     actInitialize_ext_charcter(self);
     actInitialize_only_charcter(self);
     actInitialize_geo(self);
@@ -4514,7 +4505,7 @@ void GirlAct_BoyAndMeCollisionMail(void *self)
 
     ACTSendMailCorrect(self, 0x10D);
 
-    if (((int *)((int *)boyGObj)[0x59])[0xD] == 1) {
+    if (GOBJ_ACT(boyGObj)->actMode == 1) {
         return;
     }
     GetRootPosition(boyPos, boyGObj);
@@ -4679,7 +4670,11 @@ void actGirlHintPoint(GObj *volatile self)
     void *tgt;
     Act *s;
 
+#ifdef ICO_HOST
+    tgt = (void *)GOBJ_ACT(self)->intrData;
+#else
     tgt = (void *)*(int *)(GOBJ_ACT(self)->intrData);
+#endif
     s = GOBJ_ACT(self);
 #ifdef ICO_HOST
     ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlHintPoint;

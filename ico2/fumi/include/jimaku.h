@@ -8,6 +8,8 @@
 #ifndef JIMAKU_H
 #define JIMAKU_H
 
+#include "message.h" /* IosMsgWord */
+
 /* the subtitle request's body, shared by jimaku.c and the script files that
    queue subtitles; the offsets are those within JimakuArg */
 typedef struct JimakuSub { /* field names derived */
@@ -40,7 +42,7 @@ extern struct IOSThread jimakuThread;
 extern char jimakuThreadStack[];
 extern struct IosMsgQueue jimakuMsgQ;
 extern int jimakuOn;
-extern int jimakuMsgBuf[2];
+extern IosMsgWord jimakuMsgBuf[2];
 extern JimakuArg jimaku_msg;
 void jimakuDisp(JimakuArg *msg);
 

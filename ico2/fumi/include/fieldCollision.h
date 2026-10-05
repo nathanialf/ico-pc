@@ -11,6 +11,9 @@
 #include "typedef.h"
 #include "eeword.h"
 
+/* a collision filter callback (ClipWorkCB's filter), passed as a word */
+typedef int (*ClipFilterFn)(void *);
+
 struct GObj;
 
 /* The empty wall-hit record (no object, node -1, no wall) a character's
@@ -90,18 +93,18 @@ void ClipWallEField(ClipWork *work);
 void ClipWallBoxStop(ClipWork *work);
 void ClipWallAdjustPos(ClipWork *work);
 void ClipWallE(ClipWork *work);
-void ClipWallCheckCB(ClipWork *work, int filter);
-void ClipWallFieldCheckCB(ClipWork *work, int filter);
+void ClipWallCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter);
+void ClipWallFieldCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter);
 void ClipFloor(ClipWork *work);
 void ClipFloorE(ClipWork *work);
 void ClipFloorR(ClipWork *work);
 void ClipFloorIH(ClipWork *work);
-void ClipFloorCheckCB(ClipWork *work, int filter);
+void ClipFloorCheckCB(ClipWork *work, ICO_WORD_PTR(ClipFilterFn) filter);
 void ClipCollision(ClipWork *self);
 int ChangeFieldCollisionDebugMode(int drawRay);
 void LoadCollision(void **self, char *fname);
 void DrawCollision(int mode);
-int ClipPlane(int work);
+int ClipPlane(ClipWork *work);
 void GetOrientOfWall(void *out, void *wallEnt, ObjNode *src);
 void SetSimplePlane(float *self, float a, float b, float c, float d);
 int GetWallAttribute(ClipWork *w);
