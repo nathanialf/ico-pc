@@ -44,15 +44,26 @@
 extern const unsigned char ui_font_ttf[];
 extern const unsigned int ui_font_ttf_size;
 
-#define PAGE_W 512
-#define PAGE_H 512
+/* T1: a size's pages are PAGE_MIN to PAGE_MAX texels wide, wider for big
+   pixel sizes (an Enhanced 4K output rasterises the menu's 27 units at
+   about 130 px, which four 512-texel pages could not hold), and PAGE_TRIM
+   texels less high: not a power of two, so the Enhanced texture filter
+   never gives a page a mip chain (rd_replay.c texLevels), whose 2 x 2 box
+   levels would average neighbouring glyphs across the gutter and scale
+   their alpha (rdtex_KeepAlphaCoverage). Glyph cells are GUTTER texels
+   apart and from the page's edges: bilinear sampling inside a quad reaches
+   at most one texel past the glyph's box, which is then zero coverage. */
+#define PAGE_MIN 512
+#define PAGE_MAX 2048
+#define PAGE_TRIM 8
+#define GUTTER 2
 #define MAX_PAGES 4
 #define MAX_SIZES 16
 #define GLYPH_SLOTS 1024 /* per size, open addressing; a power of two */
 #define MAX_QUADS 512    /* glyphs per draw call */
 
 typedef struct Page {
-    uint8_t *cov; /* PAGE_W x PAGE_H coverage */
+    uint8_t *cov; /* pageW x pageH coverage (SizeSet) */
     uint32_t tex; /* RdTex id, 0 before the first upload */
     int dirty;
     int shelfX, shelfY, shelfH;
@@ -67,6 +78,7 @@ typedef struct GlyphSlot {
 typedef struct SizeSet {
     int px;      /* 0: free */
     float scale; /* stb scale for px */
+    int pageW, pageH;
     int pageCount;
     Page pages[MAX_PAGES];
     GlyphSlot *slots;
@@ -79,7 +91,8 @@ static struct {
     UiGsFrame frame;
     float scale;
     SizeSet sizes[MAX_SIZES];
-    uint8_t *rgba; /* upload scratch, PAGE_W x PAGE_H x 4 */
+    uint8_t *rgba; /* upload scratch, rgbaBytes */
+    size_t rgbaBytes;
     void (*recordHook)(void);
     void (*syncHook)(void);
     int suppress;
@@ -187,6 +200,7 @@ void ui_FontShutdown(void)
     }
     free(s_font.rgba);
     s_font.rgba = NULL;
+    s_font.rgbaBytes = 0;
     s_font.inited = 0;
     s_font.failed = 0;
     s_font.warnedSizes = s_font.warnedPages = 0;
@@ -301,6 +315,12 @@ static SizeSet *sizeSet(int px)
     }
     freeSlot->px = px;
     freeSlot->scale = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)px);
+    /* T1: about 32 cells of a px-high glyph a page at least */
+    freeSlot->pageW = PAGE_MIN;
+    while (freeSlot->pageW < PAGE_MAX && freeSlot->pageW < px * 6) {
+        freeSlot->pageW *= 2;
+    }
+    freeSlot->pageH = freeSlot->pageW - PAGE_TRIM;
     freeSlot->pageCount = 0;
     return freeSlot;
 }
@@ -312,22 +332,23 @@ static Page *newPage(SizeSet *z)
     }
     Page *p = &z->pages[z->pageCount];
     memset(p, 0, sizeof(*p));
-    p->cov = calloc(PAGE_W * PAGE_H, 1);
+    p->cov = calloc((size_t)z->pageW * (size_t)z->pageH, 1);
     if (!p->cov) {
         return NULL;
     }
-    p->shelfX = 1;
-    p->shelfY = 1;
+    p->shelfX = GUTTER;
+    p->shelfY = GUTTER;
     p->shelfH = 0;
     p->dirty = 1;
     z->pageCount++;
     return p;
 }
 
-/* a w x h cell with a one-texel gutter, shelf packing */
+/* a w x h cell GUTTER texels from its neighbours and the page's edges,
+   shelf packing */
 static int allocCell(SizeSet *z, int w, int h, int *page, int *x, int *y)
 {
-    if (w + 2 > PAGE_W || h + 2 > PAGE_H) {
+    if (w + 2 * GUTTER > z->pageW || h + 2 * GUTTER > z->pageH) {
         return 0;
     }
     for (int attempt = 0; attempt < 2; attempt++) {
@@ -335,16 +356,16 @@ static int allocCell(SizeSet *z, int w, int h, int *page, int *x, int *y)
         if (!p) {
             return 0;
         }
-        if (p->shelfX + w + 1 > PAGE_W) {
-            p->shelfY += p->shelfH + 1;
-            p->shelfX = 1;
+        if (p->shelfX + w + GUTTER > z->pageW) {
+            p->shelfY += p->shelfH + GUTTER;
+            p->shelfX = GUTTER;
             p->shelfH = 0;
         }
-        if (p->shelfY + h + 1 <= PAGE_H) {
+        if (p->shelfY + h + GUTTER <= z->pageH) {
             *page = z->pageCount - 1;
             *x = p->shelfX;
             *y = p->shelfY;
-            p->shelfX += w + 1;
+            p->shelfX += w + GUTTER;
             if (h > p->shelfH) {
                 p->shelfH = h;
             }
@@ -404,8 +425,8 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
             return NULL;
         }
         Page *p = &z->pages[page];
-        stbtt_MakeGlyphBitmap(&s_font.info, p->cov + y * PAGE_W + x, w, hgt, PAGE_W, z->scale,
-                              z->scale, g);
+        stbtt_MakeGlyphBitmap(&s_font.info, p->cov + (size_t)y * (size_t)z->pageW + (size_t)x, w,
+                              hgt, z->pageW, z->scale, z->scale, g);
         p->dirty = 1;
         out.page = page;
         out.x = x;
@@ -452,8 +473,8 @@ const uint8_t *ui_FontPage(int px, int page, int *w, int *h)
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
         if (z->px == px && page >= 0 && page < z->pageCount) {
-            *w = PAGE_W;
-            *h = PAGE_H;
+            *w = z->pageW;
+            *h = z->pageH;
             return z->pages[page].cov;
         }
     }
@@ -480,13 +501,16 @@ static uint32_t pageTexture(SizeSet *z, int page)
     if (p->tex && !p->dirty) {
         return p->tex;
     }
-    if (!s_font.rgba) {
-        s_font.rgba = malloc((size_t)PAGE_W * PAGE_H * 4);
-        if (!s_font.rgba) {
+    const size_t texels = (size_t)z->pageW * (size_t)z->pageH;
+    if (s_font.rgbaBytes < texels * 4) {
+        uint8_t *buf = realloc(s_font.rgba, texels * 4);
+        if (!buf) {
             return 0;
         }
+        s_font.rgba = buf;
+        s_font.rgbaBytes = texels * 4;
     }
-    for (int i = 0; i < PAGE_W * PAGE_H; i++) {
+    for (size_t i = 0; i < texels; i++) {
         uint8_t *o = &s_font.rgba[i * 4];
         o[0] = o[1] = o[2] = 0xFF;
         o[3] = (uint8_t)((p->cov[i] * 128 + 127) / 255);
@@ -494,7 +518,9 @@ static uint32_t pageTexture(SizeSet *z, int page)
     if (!p->tex) {
         char name[32];
         snprintf(name, sizeof(name), "ui font %dpx p%d", z->px, page);
-        p->tex = rd_CreateTexture(PAGE_W, PAGE_H, s_font.rgba, RD_TEXA_80_80, name).id;
+        p->tex = rd_CreateTexture((uint32_t)z->pageW, (uint32_t)z->pageH, s_font.rgba,
+                                  RD_TEXA_80_80, name)
+                     .id;
     } else {
         rd_UpdateTexture((RdTex){p->tex}, s_font.rgba);
     }
@@ -835,7 +861,9 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                     continue;
                 }
                 rd_Texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-                rd_ScreenPrims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, 1, textKey(utf8, flags, page));
+                /* T1: continuous quads (no GS-pixel snap on a scaled target) */
+                rd_ScreenPrims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
+                               textKey(utf8, flags, page));
             }
             free(v);
         }

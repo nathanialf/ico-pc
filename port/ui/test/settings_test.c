@@ -1321,6 +1321,34 @@ static void snap(const char *name)
     free(out);
 }
 
+/* T1: SCENE at the Enhanced 4x scale (2048 x 2048) to a PNG at 4:3,
+   2731 x 2048: the port font's rows as a 4x output shows them */
+static void snap4(const char *name)
+{
+    char p[1100];
+    uint32_t w = 0, h = 0;
+    const size_t n = (size_t)2048 * 2048 * 4;
+    uint8_t *px = malloc(n), *out = malloc((size_t)2731 * 2048 * 4);
+    if (!px || !out || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, n, &w, &h) || w != 2048 ||
+        h != 2048) {
+        CHECK(0, "4x SCENE readback for %s (%ux%u)", name, w, h);
+        free(px);
+        free(out);
+        return;
+    }
+    for (int y = 0; y < 2048; y++) {
+        for (int x = 0; x < 2731; x++) {
+            memcpy(&out[((size_t)y * 2731 + (size_t)x) * 4],
+                   &px[((size_t)y * 2048 + (size_t)x * 2048 / 2731) * 4], 4);
+        }
+    }
+    path(p, sizeof(p), name);
+    rd_WritePng(p, out, 2731, 2048, 2731 * 4, 0);
+    printf("settings_render: %s\n", p);
+    free(px);
+    free(out);
+}
+
 static int render(void)
 {
     RdSettings st;
@@ -1409,6 +1437,31 @@ static int render(void)
     press(0x8000);
     frame(0);
     snap("settings_quit_screen.png");
+    /* T1: the Settings and Display screens at Enhanced 4x, full height, the
+       atlas at a 960-line output's scale (settings_main_4x.png,
+       settings_display_4x.png) */
+    {
+        RdSettings e = *rd_GetSettings();
+        e.preset = RD_PRESET_ENHANCED;
+        e.sceneScale = 4.0f;
+        e.aspect = 4.0f / 3.0f;
+        e.fullHeightScene = 1;
+        e.outputWidth = 1280;
+        e.outputHeight = 960;
+        rd_SetSettings(&e);
+        ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+        lt_switch_layout(mainL);
+        CHECK(settle(mainL, 60), "the menu at 4x");
+        lt_ext_Layout(mainL)->curItem = labels[4]; /* Language: its note */
+        frame(0);
+        frame(0);
+        snap4("settings_main_4x.png");
+        lt_ext_Layout(mainL)->curItem = labels[0];
+        press(0x40);
+        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_DISPLAY), 60), "Display at 4x");
+        frame(0);
+        snap4("settings_display_4x.png");
+    }
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     ui_FontShutdown();

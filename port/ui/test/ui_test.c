@@ -197,7 +197,9 @@ static void testGlyphs(void)
     CHECK(g.advance > 20.0f && g.advance < 40.0f, "H advance %g", g.advance);
     int w, h;
     const uint8_t *cov = ui_FontPage(40, g.page, &w, &h);
-    CHECK(cov != NULL && w == 512 && h == 512, "the 40 px atlas page");
+    /* T1: 512 wide, not a power of two high (no Enhanced mip chain) */
+    CHECK(cov != NULL && w == 512 && h > 256 && h < 512 && (h & (h - 1)) != 0,
+          "the 40 px atlas page (%d x %d)", w, h);
     if (cov) {
         int full = 0, sum = 0;
         for (int y = g.y; y < g.y + g.h; y++) {
@@ -207,8 +209,15 @@ static void testGlyphs(void)
             }
         }
         CHECK(full > 50 && sum > full, "H has solid stems (%d full, %d covered texels)", full, sum);
-        /* the gutter: the texel left of the cell is empty */
-        CHECK(g.x == 0 || cov[g.y * w + g.x - 1] == 0, "a clear gutter");
+        /* T1: the gutter, two texels on every side of the cell, is empty */
+        int gut = 0;
+        for (int y = g.y - 2; y < g.y + g.h + 2; y++) {
+            for (int x = g.x - 2; x < g.x + g.w + 2; x++) {
+                const int edge = y < g.y || y >= g.y + g.h || x < g.x || x >= g.x + g.w;
+                gut += edge && (x < 0 || y < 0 || cov[y * w + x] != 0);
+            }
+        }
+        CHECK(gut == 0, "a clear two-texel gutter (%d texels)", gut);
     }
     UiGlyph s;
     CHECK(ui_FontGlyph(' ', 40, &s) && s.w == 0 && s.advance > 0.0f, "space: no bitmap, advance");
@@ -444,8 +453,8 @@ static void testLayoutExtension(void)
         const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w.cmd[i]->u[0]);
         const RdStateBlock *st = &w.st[i];
         CHECK(w.cmd[i]->b[0] == RD_PRIM_SPRITES && w.cmd[i]->b[1] == RD_SPACE_UI &&
-                  w.cmd[i]->b[2] == 1,
-              "batch %d: UI sprites with texel UVs", i);
+                  w.cmd[i]->b[2] == RD_UV_FIXED_CONTINUOUS,
+              "batch %d: UI sprites with texel UVs, continuous (T1)", i);
         CHECK(st->ds.texEnabled && st->tex == atlas && st->ds.texFn == RD_TEXFN_MODULATE &&
                   st->ds.tcc == RD_TCC_RGBA,
               "batch %d: the atlas, MODULATE, TCC RGBA", i);
@@ -688,6 +697,252 @@ static void testPixels(void)
     free(px);
 }
 
+/* ------------------------------------------------- pixels at 4x (T1)
+ *
+ * The Enhanced preset at 4x (SCENE 2048 x 2048 for the 512 x 512 GS frame),
+ * full height, the atlas at an output's scale: the menu rows as the title
+ * and the vibration screen draw them (size 27 and 22, the halo). Checked
+ * against a CPU reference of the same quads: each SCENE texel whose centre
+ * lies in a glyph quad samples the atlas bilinearly at its own centre
+ * (the texel-centre convention) and blends as the GS does. A bleed line (a
+ * neighbouring glyph or the shelf above/below sampled through a too-thin
+ * gutter) and a clipped glyph edge (a quad moved or cut to whole GS pixels)
+ * both show as texels that differ from the reference; painted texels
+ * outside every quad are the bleed's lines past the glyph's rows. */
+
+#define S4 4
+#define W4 (512 * S4)
+
+typedef struct Q4 {
+    float x0, y0, x1, y1; /* SCENE texels */
+    float u0, v0, u1, v1; /* atlas texels */
+    uint32_t tex;
+    int a; /* vertex alpha, GS */
+} Q4;
+
+static void collectAll(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
+{
+    Walk *w = user;
+    (void)index;
+    if (list == 11 && c->type == RDC_SCREEN && w->n < 64) {
+        w->cmd[w->n] = c;
+        w->st[w->n] = *s;
+        w->n++;
+    }
+}
+
+static const char *const kRows4[] = {"New Game",  "Settings", "Quit to desktop",
+                                     "Vibration", "Activate", "Deactivate"};
+static const float kRowY4[] = {165.0f * 2.0f, 175.0f * 2.0f, 184.0f * 2.0f,
+                               60.0f * 2.0f,  80.0f * 2.0f,  100.0f * 2.0f};
+static const float kRowSize4[] = {27.0f, 22.0f, 22.0f, 27.0f, 27.0f, 27.0f};
+
+static void drawRows4(const uint8_t bg[4], const uint8_t col[4], unsigned flags)
+{
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_SelectList(11);
+    for (unsigned i = 0; i < sizeof(kRows4) / sizeof(kRows4[0]); i++) {
+        ui_DrawText(320.0f, kRowY4[i], kRowSize4[i], col, kRows4[i],
+                    flags | UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+    }
+    rd_EndFrame(0);
+}
+
+/* the frame's text quads in SCENE texels (XYOFFSET 2048 - 256) */
+static int textQuads4(Q4 *q, int max)
+{
+    const RdFrame *f = rd__LastFrame();
+    Walk w;
+    memset(&w, 0, sizeof(w));
+    RdStateBlock s = f->startState;
+    rd__Walk(f, 0, &s, collectAll, &w);
+    int n = 0;
+    for (int i = 0; i < w.n; i++) {
+        const RdCmd *c = w.cmd[i];
+        const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+        for (uint32_t k = 0; k + 1 < c->u[1] && n < max; k += 2) {
+            Q4 *o = &q[n++];
+            o->x0 = ((float)v[k].x / 16.0f - 1792.0f) * S4;
+            o->y0 = ((float)v[k].y / 16.0f - 1792.0f) * S4;
+            o->x1 = ((float)v[k + 1].x / 16.0f - 1792.0f) * S4;
+            o->y1 = ((float)v[k + 1].y / 16.0f - 1792.0f) * S4;
+            o->u0 = v[k].s / 16.0f;
+            o->v0 = v[k].t / 16.0f;
+            o->u1 = v[k + 1].s / 16.0f;
+            o->v1 = v[k + 1].t / 16.0f;
+            o->tex = w.st[i].tex;
+            o->a = v[k + 1].rgba[3];
+        }
+    }
+    return n;
+}
+
+/* the atlas texel's GS alpha (0..128), bilinear at (u, v) in texels with
+ * texel centres at +0.5, clamped at the page's edges */
+static float atlasAlpha(const RdTexRec *t, float u, float v)
+{
+    const float fu = u - 0.5f, fv = v - 0.5f;
+    const int iu = (int)floorf(fu), iv = (int)floorf(fv);
+    const float au = fu - (float)iu, av = fv - (float)iv;
+    float acc = 0.0f;
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+            int x = iu + i, y = iv + j;
+            x = x < 0 ? 0 : (x >= (int)t->w ? (int)t->w - 1 : x);
+            y = y < 0 ? 0 : (y >= (int)t->h ? (int)t->h - 1 : y);
+            const float wgt = (i ? au : 1.0f - au) * (j ? av : 1.0f - av);
+            acc += wgt * (float)t->pixels[((size_t)y * t->w + (size_t)x) * 4 + 3];
+        }
+    }
+    return acc;
+}
+
+/* the rows' part of SCENE as a PNG beside the test */
+static void writeCrop4(const char *name, const uint8_t *px)
+{
+    const int cx0 = 160 * S4, cy0 = 120 * S4, cw = 192 * S4, ch = 310 * S4;
+    uint8_t *crop = malloc((size_t)cw * ch * 4);
+    if (!crop) {
+        return;
+    }
+    for (int y = 0; y < ch; y++) {
+        memcpy(&crop[(size_t)y * cw * 4], &px[((size_t)(cy0 + y) * W4 + cx0) * 4], (size_t)cw * 4);
+    }
+    rd_WritePng(name, crop, (uint32_t)cw, (uint32_t)ch, (uint32_t)cw * 4, 0);
+    free(crop);
+}
+
+static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs)
+{
+    RdSettings e = *rd_GetSettings();
+    e.preset = RD_PRESET_ENHANCED;
+    e.sceneScale = (float)S4;
+    e.aspect = 4.0f / 3.0f;
+    e.fullHeightScene = 1;
+    e.filterUpgrade = (uint8_t)filter;
+    e.outputWidth = outputHeight * 4 / 3;
+    e.outputHeight = outputHeight;
+    rd_SetSettings(&e);
+    ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+
+    /* 1: white letters, no halo, over black, against the reference */
+    const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {0x80, 0x80, 0x80, 0x80};
+    drawRows4(black, white, 0);
+    uint8_t *px = malloc((size_t)W4 * W4 * 4);
+    float *ref = calloc((size_t)W4 * W4, sizeof(float));
+    uint8_t *in = calloc((size_t)W4 * W4, 1);
+    Q4 *q = malloc(sizeof(Q4) * 1024);
+    uint32_t w = 0, h = 0;
+    if (!px || !ref || !in || !q ||
+        !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h) || w != W4 ||
+        h != W4) {
+        CHECK(0, "4x SCENE readback (%ux%u)", w, h);
+        goto done;
+    }
+    const int nq = textQuads4(q, 1024);
+    CHECK(nq > 40, "4x: %d glyph quads", nq);
+    for (int i = 0; i < nq; i++) {
+        const Q4 *g = &q[i];
+        const RdTexRec *t = rd__TexRec(g->tex);
+        if (!t || !t->pixels) {
+            CHECK(0, "4x: quad %d's atlas page", i);
+            continue;
+        }
+        for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
+            for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
+                /* rd's convention on a scaled target (RENDER_API.md section
+                   19): texel i of a GS pixel's block samples at GS
+                   p + (i mod s) / s, as the GS samples pixel p at p */
+                const float cx = (float)x, cy = (float)y;
+                if (x < 0 || y < 0 || x >= W4 || y >= W4 || cx < g->x0 || cx >= g->x1 ||
+                    cy < g->y0 || cy >= g->y1) {
+                    continue;
+                }
+                const float u = g->u0 + (cx - g->x0) / (g->x1 - g->x0) * (g->u1 - g->u0);
+                const float v = g->v0 + (cy - g->y0) / (g->y1 - g->y0) * (g->v1 - g->v0);
+                const float as = floorf(atlasAlpha(t, u, v) + 0.5f) * (float)g->a / 128.0f;
+                float *d = &ref[(size_t)y * W4 + (size_t)x];
+                *d += (255.0f - *d) * as / 128.0f;
+                in[(size_t)y * W4 + (size_t)x] = 1;
+            }
+        }
+    }
+    int bad = 0, bleed = 0, worst = 0, inked = 0;
+    for (int y = 0; y < W4; y++) {
+        for (int x = 0; x < W4; x++) {
+            const int got = px[((size_t)y * W4 + (size_t)x) * 4];
+            const int want = (int)lrintf(ref[(size_t)y * W4 + (size_t)x]);
+            const int d = abs(got - want);
+            inked += want > 128;
+            if (!in[(size_t)y * W4 + (size_t)x]) {
+                bleed += got > 3;
+            } else if (d > 6) {
+                bad++;
+            }
+            if (d > worst) {
+                worst = d;
+            }
+        }
+    }
+    printf("ui_test: 4x (filter %d, output %u lines, atlas %g): %d quads, %d inked texels, %d off "
+           "the reference by more than 6 (worst %d), %d painted outside the quads\n",
+           (int)filter, outputHeight, (double)ui_GetScale(), nq, inked, bad, worst, bleed);
+    if (pngs) {
+        writeCrop4("ui_test_scene4x_plain.png", px);
+    }
+    CHECK(inked > 20000, "4x: %d inked texels", inked);
+    CHECK(bleed == 0, "4x: %d texels painted outside the glyph quads (bleed)", bleed);
+    CHECK(bad == 0, "4x: %d texels differ from the reference (clipped or shifted glyphs)", bad);
+
+    /* 2: the menu look (light letters, the halo) over a mid grey, for the eye:
+       a crop of the title rows, and nothing painted outside the rows' bounds
+       (the halo's margin included) */
+    const uint8_t mid[4] = {96, 88, 76, 0x80}, light[4] = {0x70, 0x70, 0x70, 0x80};
+    drawRows4(mid, light, UI_HALO);
+    if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
+        if (pngs) {
+            writeCrop4("ui_test_scene4x.png", px);
+        }
+        int outside = 0;
+        for (int y = 0; y < W4; y++) {
+            for (int x = 0; x < W4; x++) {
+                const uint8_t *p = &px[((size_t)y * W4 + x) * 4];
+                if (p[0] == mid[0] && p[1] == mid[1] && p[2] == mid[2]) {
+                    continue;
+                }
+                int inside = 0;
+                for (unsigned i = 0; i < sizeof(kRows4) / sizeof(kRows4[0]) && !inside; i++) {
+                    float asc, desc, cap;
+                    ui_FontMetrics(kRowSize4[i], &asc, &desc, &cap);
+                    const float hw = ui_MeasureText(kRowSize4[i], kRows4[i]) * 0.5f;
+                    const float m = 1.5f * kRowSize4[i] / UI_MENU_TEXT_SIZE;
+                    const float base = kRowY4[i] + cap * 0.5f;
+                    const float gx0 = 320.0f - hw - m * UI_X_PER_Y - 2.0f;
+                    const float gx1 = 320.0f + hw + m * UI_X_PER_Y + 2.0f;
+                    const float gy0 = base - asc - m - 1.0f, gy1 = base + desc + m + 1.0f;
+                    /* grid to SCENE texels: x 512 / 640, y 512 / 448 GS pixels a unit */
+                    inside = x >= (int)floorf((gx0 - 320.0f) * 0.8f * S4) + W4 / 2 &&
+                             x <= (int)ceilf((gx1 - 320.0f) * 0.8f * S4) + W4 / 2 &&
+                             y >= (int)floorf((gy0 - 226.0f) * 512.0f / 448.0f * S4) + W4 / 2 &&
+                             y <= (int)ceilf((gy1 - 226.0f) * 512.0f / 448.0f * S4) + W4 / 2;
+                }
+                outside += !inside;
+            }
+        }
+        CHECK(outside == 0, "4x halo: %d texels painted outside the rows' bounds", outside);
+    } else {
+        CHECK(0, "4x SCENE readback (halo)");
+    }
+done:
+    free(px);
+    free(ref);
+    free(in);
+    free(q);
+}
+
 int main(void)
 {
     testGlyphs();
@@ -713,6 +968,11 @@ int main(void)
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
     testPixels();
+    /* T1: 4x at a 960-line output (the atlas magnified into SCENE), and
+       trilinear at 2160 lines (the atlas minified: no mip chain may blur
+       neighbouring glyphs in) */
+    testPixels4x(RD_FILTER_UPGRADE_OFF, 960, 1);
+    testPixels4x(RD_FILTER_UPGRADE_TRILINEAR, 2160, 0);
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     ui_FontShutdown();

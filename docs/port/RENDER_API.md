@@ -2224,7 +2224,12 @@ nothing. The texel-addressed paths:
   covers (letterbox bars sit a quarter pixel off), and their UVs moved by
   (s - 1) / (2s) GS pixels so a texel samples at its own position in the GS
   pixel: a nearest-sampled sprite fills each block with the texel the GS
-  samples. Triangles and the meshes rasterise continuously.
+  samples. Triangles and the meshes rasterise continuously, and so (since
+  package T1) do sprites recorded with `uvFixed = RD_UV_FIXED_CONTINUOUS`
+  (rd.h): the port's own text (port/ui/font.c), whose glyph quads have
+  sub-pixel edges and are bilinear; snapped, they lost and gained up to a GS
+  pixel at their edges (docs/port/UI.md, "Text at Enhanced scales"). At
+  scale 1 the value draws as uvFixed 1.
 - `fx_sprite_ps` (blur, flare, aura, eye blur): the coverage test on the
   texel's GS pixel (its block), the UV from the GS position of the texel's
   centre, t1 addressed in its own texels (`DrawCB.g_scale`: a scaled

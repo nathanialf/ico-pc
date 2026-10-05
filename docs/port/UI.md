@@ -115,8 +115,17 @@ text API uses that grid with half field lines vertically, so both axes count
 size is `round(size * scale)`, the scale 1 in the Original preset (an atlas
 pixel per y unit, about 1.14 GS lines) and output height / 448 in Enhanced
 (`ui_ScaleFor`; `ui_host.c` sets it from `rd_GetSettings()` before each
-draw). Pages are 512 x 512 with a one-texel gutter, shelf-packed, up to 4 per
-size and 16 sizes (beyond that the nearest size stands in, logged once).
+draw). Pages are shelf-packed, up to 4 per size and 16 sizes (beyond that the
+nearest size stands in, logged once). Since T1 a page is 512 texels wide, or
+1024 / 2048 for pixel sizes above 85 / 170 (an Enhanced 4K output sets the
+menu's 27 units at about 130 px), and 8 texels less high, so not a power of
+two: the Enhanced texture filter gives power-of-two textures a box-filtered
+mip chain with its alpha scaled up (RENDER_API.md section 19), which merged
+neighbouring glyphs and thickened the letters wherever the atlas was
+minified (trilinear at a 2160-line output: up to 68 levels off). Cells are
+two texels apart and from the page's edges (one before T1); bilinear
+sampling inside a glyph quad reaches at most one texel past the cell, which
+is zero coverage.
 Glyphs are cached per (size, code point); kerning comes from GPOS pair
 adjustment (`stbtt_GetGlyphKernAdvance`; at 40 px: AV -5.6, To -4.2 px).
 
@@ -141,8 +150,10 @@ quarter of the row's alpha, under the label).
 
 `ui_DrawText(x, y, size, rgba, utf8, flags)` lays out UTF-8 (`\n` starts a
 new line), aligns left/centre/right and top/middle-of-capitals/baseline, and
-records one `rd_ScreenPrims(RD_PRIM_SPRITES, ..., RD_SPACE_UI, uvFixed 1)` per
-atlas page into the current list: TEX0 the atlas page, MODULATE with TCC
+records one `rd_ScreenPrims(RD_PRIM_SPRITES, ..., RD_SPACE_UI,
+RD_UV_FIXED_CONTINUOUS)` per atlas page into the current list (texel UVs as
+uvFixed 1; since T1 the quads are exempt from the GS-pixel snapping of a
+scaled target, below): TEX0 the atlas page, MODULATE with TCC
 RGBA, linear filtering, clamp, ABE on, ALPHA 0x44 ((Cs - Cd) As + Cd), Z test
 ALWAYS, no Z write. The colour is a GS colour (0x80 = 1.0): the atlas texels
 are white with the coverage as GS alpha (255 -> 0x80), so a label takes the
@@ -158,6 +169,41 @@ the current list and forgets the state it emitted, so its next primitive
 re-sends PRIM and TEX0 after the text's own `rd_Texture` (the pattern
 `DisplayFont.c`'s host path uses). Built headless (no `ICO_RD`), the draw
 calls measure and record nothing.
+
+### Text at Enhanced scales (T1)
+
+Reported on Windows at Enhanced 4x, 4:3, full height: lines and clipping in
+the menu text. Reproduced with `ui_test`'s 4x case and `settings_render`'s 4x
+screens (below) and with a window run's title dumps replayed by
+`rd_replay_tool --enhanced --resolution 4x --full-height`:
+
+- **GS-pixel snapping.** On a scaled target `rd_replay.c` snaps every
+  sprite's corners up to whole GS pixels and moves its UVs by (s - 1) / (2s)
+  GS pixels (RENDER_API.md section 19), right for the game's
+  nearest-sampled sprites. A glyph quad has sub-pixel edges, so each one lost
+  up to 15/16 of a GS pixel (3.75 texels at 4x) at its top and left and
+  gained as much at its bottom and right, where it sampled past the cell;
+  the halo's eight copies, each at its own sub-pixel offset, were cut
+  differently, so the rim showed straight horizontal and vertical edges
+  (descenders and bowls cut flat) and the letters stepped. Against a CPU
+  reference of the same quads (bilinear at rd's sample points, the GS
+  blend) 64367 of 2048 x 2048 texels were more than 6 levels off and 3642
+  were painted outside every quad. Fix: the font draws with
+  `RD_UV_FIXED_CONTINUOUS` (rd.h), which `rd_replay.c` exempts from the snap
+  and the shift (text is port content, not PS2 content); at scale 1 the snap
+  does nothing, so Original is unchanged. After: 0 texels off by more than 6
+  (worst 2), 0 outside.
+- **The mip chain** of the atlas pages under trilinear or anisotropic
+  filtering (Atlases, above): pages are no longer a power of two high.
+
+Not changed: the atlas scale (`ui_ScaleFor`, the output's height / 448: the
+atlas is built at the output's density and SCENE, at 4x denser than most
+outputs, samples it bilinearly; the presenter brings it back to the
+output), the halo (1.5 y units, which scale with the output like the game's
+baked rim), the shrink to fit (60 % floor; no label is clipped, port rows
+and table rows have no clip rectangle), and the sprite shader (`font_ps`
+and an R8 atlas are still the requested rd API below; RGBA8 through
+`sprite_ps` blends the same coverage, quantised to GS alpha).
 
 ### Requested rd API
 
@@ -554,7 +600,20 @@ the CPU checks):
   MODULATE result at alpha 0x80 (199, 99, 49) and within one step of the GS
   formula `((Cs - Cd) * As >> 7) + Cd` at alpha 0x40 (worst difference 1 over
   106 pixels: the hardware blender's rounding of the dual-source LERP, as in
-  RENDER_API.md section 7). It writes `ui_test_scene.png` beside itself.
+  RENDER_API.md section 7). It writes `ui_test_scene.png` beside itself;
+- T1, at Enhanced 4x (SCENE 2048 x 2048), full height: "New Game",
+  "Settings", "Quit to desktop", "Vibration", "Activate", "Deactivate" at the
+  title's sizes, white without the halo over black, compared texel by texel
+  with a CPU reference of the recorded quads (bilinear on the atlas page's
+  texels at rd's sample point, GS p + i / s, and the GS blend): none more
+  than 6 levels off, none painted outside every quad (a bleed line or a
+  clipped or moved edge fails it), once at a 960-line output (the atlas
+  magnified) and once with trilinear filtering at 2160 lines (minified, where
+  a mip chain would show); with the halo over grey, nothing outside the
+  rows' bounds plus the rim. `ui_test_scene4x.png` and
+  `ui_test_scene4x_plain.png` are the rows' part of SCENE. The atlas checks:
+  the 40 px page is 512 wide and not a power of two high, and the H cell
+  has a clear two-texel gutter.
 
 Results (2026-10-05, 6B): the window build on Linux (gcc, lavapipe,
 validation layer) 51 of 51 tests passed with `ui`; the headless Linux build
@@ -622,7 +681,10 @@ tables shaped like the PAL ones and run by the real `layout_texture.c`
 device): the same file with `SETTINGS_RENDER`, the menu run through rd with
 `GifPacket.c`, `DisplayList.c` and `DmaPacket.c` as the window build has
 them; each screen's SCENE (512 x 512, written at 4:3) as
-`settings_<screen>.png` beside the test; no undecoded register write.
+`settings_<screen>.png` beside the test; no undecoded register write. Since
+T1 also the Settings and Display screens at Enhanced 4x, full height, with
+the atlas at a 960-line output's scale (`settings_main_4x.png`,
+`settings_display_4x.png`, 2731 x 2048).
 
 Results (2026-10-05, 6C): the headless Linux build 58 of 58 and the window
 build on Linux (lavapipe) 58 of 58 with `settings`, `settings_render` and
