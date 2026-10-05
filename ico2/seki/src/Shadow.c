@@ -327,8 +327,8 @@ typedef struct ClusterWeight { /* field names derived */
 
 /* one cluster of a shadow volume: the -1 terminated run of weighted vertices
  * and the matrix slot it is skinned through */
-typedef struct ClusterPoly { /* field names derived */
-    ClusterWeight *run;
+typedef struct ClusterPoly {         /* field names derived */
+    ICO_EEWORD(ClusterWeight *) run; /* an EE word on the host (eeword.h) */
     int matrix;
     int _8;
     int _C;
@@ -419,7 +419,7 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
             VECTOR *src;
 
             _SetCurrentMatrix(clusterMatrix + ((ClusterPoly *)p->polys)[k].matrix * 0x40);
-            e = ((ClusterPoly *)p->polys)[k].run;
+            e = ICO_EEPTR(ClusterWeight *, ((ClusterPoly *)p->polys)[k].run);
             /* both bases are read once here, ahead of the loop */
             dst = (VECTOR *)p->vtxSave;
             src = (VECTOR *)p->vtx;
@@ -1285,12 +1285,20 @@ typedef struct ShadowVtx { /* field names derived */
     int _C;
 } __attribute__((aligned(16))) ShadowVtx; /* derived name */
 
-typedef struct ShadowPoly { /* field names derived */
-    ShadowVtx *pts;
+typedef struct ShadowPoly {      /* field names derived */
+    ICO_EEWORD(ShadowVtx *) pts; /* an EE word on the host (eeword.h) */
     int _4;
     int _8;
     int _C;
 } __attribute__((aligned(16))) ShadowPoly; /* derived name */
+
+#ifdef ICO_HOST
+
+_Static_assert(sizeof(ShadowPoly) == 16, "ShadowPoly is the file's 0x10-byte entry");
+
+_Static_assert(sizeof(ClusterPoly) == 16, "ClusterPoly is the file's 0x10-byte entry");
+
+#endif
 
 void shadow_MakeObjectData(PObjModel *mdl)
 {
@@ -1323,12 +1331,17 @@ void shadow_MakeObjectData(PObjModel *mdl)
             r = (ShadowPoly *)mallocseki(p->polyCount * 16);
             for (j = 0; j < p->polyCount; j++) {
                 r[j] = ((ShadowPoly *)p->polys)[j];
-                while (r[j].pts[m]._0 != -1) {
+                while (ICO_EEPTR(ShadowVtx *, r[j].pts)[m]._0 != -1) {
                     m++;
                 }
+#ifdef ICO_HOST
+                t = (ShadowVtx *)mallocseki((m + 1) * 16);
+                r[j].pts = ICO_EEW(t);
+#else
                 t = r[j].pts = (ShadowVtx *)mallocseki((m + 1) * 16);
+#endif
                 for (l = 0; l < m + 1; l++) {
-                    *t++ = ((ShadowPoly *)p->polys)[j].pts[l];
+                    *t++ = ICO_EEPTR(ShadowVtx *, ((ShadowPoly *)p->polys)[j].pts)[l];
                 }
                 m = 0;
             }
@@ -1343,7 +1356,7 @@ void shadow_MakeObjectData(PObjModel *mdl)
             p->vtx = (char *)q;
         }
 
-        s = (ShadowRun **)mallocseki(p->stripCount * 4);
+        s = (ShadowRun **)mallocseki(p->stripCount * sizeof(ShadowRun *));
         /* the strip pass reuses the outer loop's own index, so the outer
          * loop steps on from where this one ended */
         for (i = 0; i < p->stripCount; i++) {

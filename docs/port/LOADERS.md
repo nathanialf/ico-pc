@@ -74,8 +74,8 @@ Files: `ico2/common/src/PObj.c`, `ico2/seki/include/DisplayP2O.h`,
   question 1, which an ASan run of the host build answers.
 - The polygon table (`ObjEnt`, a 16-byte stride, the vertex-weight list
   address at 0x00 and the cluster number at 0x04) stays in the image as EE
-  words: `Packet.c`'s `pac_getWeight` must read `ObjEnt.p` with `ICO_EEPTR`
-  (renderer wave 3; today it reads `*(char **)(j * 16 + (int)obj->polys)`).
+  words: `Packet.c`'s `pac_getWeight` reads `ObjEnt.p` with `ICO_EEPTR`
+  (done, package 2G).
 - `PObj.c` describes the model and its display object with its own views.
   On the host they are pinned to the shared definitions: `PObjPkt` is
   `Sub15C`, `PObjSub` is a union over `PObjPart`, and `PObj` mirrors
@@ -359,14 +359,28 @@ For 2F (`omori`):
   (Phase 6 developer mode must move them onto the heap; `ICO_EEW` traps on
   them).
 
-For the renderer (Phase 3):
-- `Packet.c`'s `pac_getWeight` must read `ObjEnt.p` (the polygon table's
-  vertex-weight list) with `ICO_EEPTR` instead of
-  `*(char **)(j * 16 + (int)obj->polys)`.
-- `Packet.c`'s deformable-model copy sizes its pointer tables as
-  `stripCount * 4` and `morphCount * 4`; they hold pointers.
-- `Shadow.c`'s `shadow_MakeObjectData` sizes `ShadowPoly` and the strip
-  table by hand (R4 s.3).
+For the renderer (Phase 3), package 2G:
+- [x] `Packet.c`'s `pac_getWeight` reads `ObjEnt.p` (the polygon table's
+  vertex-weight list) with `ICO_EEPTR`; the other offsets it forms by hand
+  (`polys`, `mats`) use `ICO_WORD`.
+- [x] `Packet.c`'s deformable-model copy sizes its pointer tables as
+  `stripCount * sizeof(void *)` and `morphCount * sizeof(void *)`; the
+  decoded tables 2C builds hold host pointers. The packet builder's own
+  addresses (`pacWork` tags and cursor, `pac_makeStrip`'s `pkt` and `dst`,
+  `pac_moveToSeki`) are `PacAddr`/`ICO_WORD`, pointer-wide on the host.
+- [x] `Shadow.c`: `ShadowPoly.pts` and `ClusterPoly.run` are `ICO_EEWORD`
+  fields read with `ICO_EEPTR` (the 0x10-byte file entries keep their size,
+  with `_Static_assert`s); the strip table is sized `sizeof(ShadowRun *)`.
+- [x] `Light.c`: `lastLight` and `flatLightSlot[]` are `ICO_WORD`.
+- [x] Other seki casts: `Basic.c` `reallocseki`/`freeseki` (host
+  signatures), `EnemyInit.c` (the kind records are read as the typed
+  array on the host), `FileManager.c` and `RegistPacket.c` (`ICO_WORD`).
+  Left, in renderer wave 2's files or not pointer-to-int: `DisplayList.c`,
+  `DmaPacket.c`, `Texture.c`, `GsBase.c`, `MicroCode.c` (`MicroCodeAddress`
+  and `dl_OpenDma` take a word; `MicroCodeAddress` is zeros on the host),
+  `DisplayP2O.c:71` (`sceDmaSend` with that word), the `const` discards into
+  `dl_OpenDma` in `RegistPacket.c`, and `BgAnimation.c:1868,1882`
+  (`BgaAnim.obj` is a `BgaAnimObj *` passed as a `GObj *`; same pointer).
 - R4's open question 1 (does anything read a part's image pointers after
   the image is freed) is for an ASan run of a host boot; the decoded strip
   and morph tables are freed at the same point as the image.

@@ -63,7 +63,7 @@ static int cursorRotY; /* derived name */
 static int cursorRotX; /* derived name */
 
 /* the newest light, kept as a word */
-static int lastLight; /* derived name */
+static ICO_WORD lastLight; /* derived name */
 
 static AmbientVolume *lastAmbient; /* derived name */
 
@@ -84,7 +84,7 @@ static void light_killLinkLight(Light *p)
     if (p->next != 0) {
         p->next->prev = p->prev;
     } else {
-        lastLight = (int)p->prev;
+        lastLight = (ICO_WORD)p->prev;
     }
     if (p->prev != 0) {
         p->prev->next = p->next;
@@ -119,7 +119,7 @@ static void light_killLinkAmbient(AmbientVolume *p)
 
 /* The three flat lights light_AddLight registers, kept so
    light_resetFlatLight can reload them from the stage setting. */
-static int flatLightSlot[3] = {0, 0, 0}; /* derived name */
+static ICO_WORD flatLightSlot[3] = {0, 0, 0}; /* derived name */
 
 /* The three flat lights the stage setting is reloaded into. */
 static Light flatLight[3]; /* derived name */
@@ -132,7 +132,7 @@ static inline void light_setLinkLight(Light *p) /* derived name */
     }
     p->next = 0;
     p->prev = (Light *)lastLight;
-    lastLight = (int)p;
+    lastLight = (ICO_WORD)p;
 }
 
 Light *light_AddLight(GObj *self, int b, int kind)
@@ -163,7 +163,7 @@ Light *light_AddLight(GObj *self, int b, int kind)
             }
             l->strength = d;
             light_setLinkLight(l);
-            flatLightSlot[(flatLightNum)++] = (int)l;
+            flatLightSlot[(flatLightNum)++] = (ICO_WORD)l;
         }
         return 0;
     }

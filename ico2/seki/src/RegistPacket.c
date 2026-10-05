@@ -53,7 +53,7 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
     char *v;
     PacHeader *pk;
     char *t;
-    int base;
+    ICO_WORD base;
     int i;
     int n;
 
@@ -135,7 +135,7 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
             if (pk == 0) {
                 break;
             }
-            base = (int)pk->data;
+            base = (ICO_WORD)pk->data;
             p = (char *)(((RegStripHead *)(v - 0x10))->ofs + base);
             if (((RegStripHead *)(v - 0x10))->ofs != 0) {
                 if (n != 0) {
@@ -353,7 +353,7 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
     struct DObjNode *scl;
     int mode;
 
-    scl = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+    scl = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
     mode = o->lightMtx->mode;
     if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
         _InitCurrentMatrix();
@@ -482,7 +482,7 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
     struct DObjNode *w;
     int mode;
 
-    w = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+    w = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
     mode = o->lightMtx->mode;
     if ((w->flags.ll & 2) != 0) {
         RegMtx um;
@@ -900,7 +900,7 @@ static void reg_dispNObj(Sub15C *o)
             }
         }
         for (j = 0; j < mdl->partCount; j++, grp++) {
-            box = (float *)(j * 128 + (int)o->model->boxes);
+            box = (float *)(j * 128 + (ICO_WORD)o->model->boxes);
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
@@ -976,7 +976,7 @@ static void reg_dispMObj(Sub15C *o)
     grp = mdl->groups;
     reg_transMicroCode(o, 0x3B5);
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if ((alpha < 0.0f ? -alpha : alpha) == 1.0f) {
             continue;
@@ -1476,7 +1476,7 @@ static void reg_dispPointLineObj(Sub15C *o)
         flag = 1;
     }
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         set = grp->packets;
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if (!flag && (alpha < 0.0f ? -alpha : alpha) == 1.0f) {
@@ -1565,7 +1565,7 @@ static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
     struct DObjNode *scl;
     int mode;
 
-    scl = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+    scl = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
     mode = o->lightMtx->mode;
     if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
         _InitCurrentMatrix();
@@ -1640,7 +1640,7 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
             }
         }
         for (j = 0; j < mdl->partCount; j++, grp++) {
-            box = (float *)(j * 128 + (int)o->model->boxes);
+            box = (float *)(j * 128 + (ICO_WORD)o->model->boxes);
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
@@ -1865,7 +1865,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
     grp = mdl->groups;
     reg_transMicroCode(o, 1 << pri);
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if ((alpha < 0.0f ? -alpha : alpha) == 1.0f) {
             continue;
