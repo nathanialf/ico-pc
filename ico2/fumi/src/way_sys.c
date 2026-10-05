@@ -641,6 +641,28 @@ typedef struct NigeEnt { /* field names derived */
    GetNearNigePointN fills and sorts by path length. */
 static NigeEnt nigePointTbl[275]; /* derived name */
 
+#ifdef ICO_HOST
+
+static __inline__ void nige_swap(NigeEnt *tbl, int a, int b) /* derived name */
+{
+    NigeEnt t = tbl[a];
+
+    tbl[a] = tbl[b];
+    tbl[b] = t;
+}
+
+static __inline__ int nige_add(NigeEnt *tbl, int n, WayPoint *e, float d) /* derived name */
+{
+    if (e->escape != 0) {
+        tbl[n].id = e->index;
+        tbl[n].d = d;
+        n++;
+    }
+    return n;
+}
+
+#endif
+
 int GetNearNigePointN(void *out, int num, WVTObj *w, float *pos)
 {
     WayPoint *n;
@@ -657,6 +679,7 @@ int GetNearNigePointN(void *out, int num, WVTObj *w, float *pos)
 
     WayPoint *base = visible_waypoint_of_all_except_temp(pos, -1);
     WayGroup *ga = &way_group[base->group];
+#ifndef ICO_HOST
 
     __inline__ void nige_swap(NigeEnt * tbl, int a, int b) /* derived name */
     {
@@ -675,6 +698,7 @@ int GetNearNigePointN(void *out, int num, WVTObj *w, float *pos)
         }
         return n;
     }
+#endif
 
     w->escapeFound = 0;
 
