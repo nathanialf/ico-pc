@@ -44,6 +44,7 @@
 #include <libpad.h>
 #include <string.h>
 #include "input.h"
+#include "options.h"
 
 #define PAD_STATE_DISCONNECTED 0 /* scePadStateDiscon */
 #define PAD_STATE_STABLE 6       /* scePadStateStable (pad.c's "STABLE") */
@@ -60,8 +61,6 @@
 
 static int s_live;
 static IcoVirtualPad s_vpad;
-static int s_stick_fix;
-static int s_mirror;
 /* the pad's mode: digital until scePadSetMainMode(1) */
 static int s_analog;
 static int s_press;
@@ -87,24 +86,25 @@ void ico_input_set_vpad(const IcoVirtualPad *v)
     s_vpad = *v;
 }
 
+/* stick fix and mirror live in port/game/options.c (docs/port/OPTIONS.md) */
 void ico_input_set_stick_fix(int on)
 {
-    s_stick_fix = on != 0;
+    ico_opt_set_stick_fix(on);
 }
 
 int ico_input_stick_fix_enabled(void)
 {
-    return s_stick_fix;
+    return ico_opt_stick_fix();
 }
 
 void ico_input_set_mirror(int on)
 {
-    s_mirror = on != 0;
+    ico_opt_set_mirror(on);
 }
 
 int ico_input_mirror(void)
 {
-    return s_mirror;
+    return ico_opt_mirror();
 }
 
 void ico_input_frame(IcoPadFrame *out)
@@ -112,7 +112,7 @@ void ico_input_frame(IcoPadFrame *out)
     if (ico_pad_script_active()) {
         ico_pad_script_frame(out);
     } else if (s_live) {
-        ico_input_vpad_to_frame(&s_vpad, s_stick_fix, s_mirror, out);
+        ico_input_vpad_to_frame(&s_vpad, ico_opt_stick_fix(), ico_opt_mirror(), out);
     } else {
         memset(out, 0, sizeof(*out));
         out->lx = out->ly = out->rx = out->ry = ICO_PAD_STICK_CENTRE;

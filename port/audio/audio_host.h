@@ -32,6 +32,11 @@ void ico_audio_host_vsync(int hz);
 /* Frames the vsync after `vsync_index` vsyncs at `hz` renders (pure). */
 int ico_audio_host_frames(int hz, unsigned int vsync_index);
 
+/* Mirror mode hook: the option is port/game/options.c's (ico_opt_mirror); the
+   pan swap itself is not implemented yet (a stub for the mirror package). */
+void ico_audio_set_mirror(int on);
+int ico_audio_mirror(void);
+
 /* Close the WAV and the device (also an atexit handler). */
 void ico_audio_host_shutdown(void);
 

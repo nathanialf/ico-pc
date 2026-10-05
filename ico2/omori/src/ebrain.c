@@ -13,6 +13,13 @@
 #include "main.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+extern int ico_opt_yorda_safe(void);
+
+#endif
+
 int eBrainBoyChaseCount;
 
 int eBrainGirlChaseCount;
@@ -302,6 +309,13 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 1);
         break;
     case 2:
+#ifdef ICO_HOST
+        /* yorda_safe: no enemy takes the girl as its target */
+        if (ico_opt_yorda_safe()) {
+            eBrainSetStatus(p, 1);
+            break;
+        }
+#endif
         eBrainSetStatus(p, 2);
         break;
     case 3:
@@ -311,6 +325,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 0);
         break;
     case 6:
+#ifdef ICO_HOST
+        if (ico_opt_yorda_safe()) {
+            break;
+        }
+#endif
         if (girlGObj != 0) {
             eBrainSetStatus(p, 3);
         }
@@ -391,6 +410,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
                             break;
                         }
                     } else {
+#ifdef ICO_HOST
+                        if (ico_opt_yorda_safe()) {
+                            continue;
+                        }
+#endif
                         if (eBrainCanSeeTarget(gop, girlGObj)) {
                             eBrainSetStatus(p, 2);
                             break;
@@ -407,6 +431,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
         case 1:
             p->target = boyGObj;
             if (p->chaseFrames >= 181) {
+#ifdef ICO_HOST
+                if (ico_opt_yorda_safe()) {
+                    break;
+                }
+#endif
                 if (p->dist[1] < p->dist[0] + 250000.0f) {
                     if (eBrainCanSeeTarget(gop, girlGObj)) {
                         eBrainSetStatus(p, 2);

@@ -15,7 +15,8 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_port_null)
 endif()
 
-add_executable(null_devices_test test/null_devices_test.c)
+# ico_input reads port/game/options.c, which reads port/config: host_config.c
+add_executable(null_devices_test test/null_devices_test.c ../platform/host_config.c)
 target_include_directories(null_devices_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(null_devices_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(null_devices_test PRIVATE ico_port_null)
@@ -24,7 +25,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
 endif()
 
 # the pad script reader and the scripted pad as fumi/ios/pad.c sees it
-add_executable(pad_script_test ../input/test/pad_script_test.c)
+add_executable(pad_script_test ../input/test/pad_script_test.c ../platform/host_config.c)
 target_include_directories(pad_script_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(pad_script_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(pad_script_test PRIVATE ico_port_null)

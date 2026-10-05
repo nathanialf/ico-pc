@@ -63,7 +63,8 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[video] fullscreen` | | `false` | Phase 6 placeholder (F11 toggles at run time) |
 | `[audio] enabled` | `audio` | `true` | `false`/`audio=0`: no audio device (the driver still runs) |
 | `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output does not apply it yet (open item) |
-| `[input]`, `[gameplay]` | | | docs/port/INPUT.md (4C), untouched |
+| `[input]` | | | docs/port/INPUT.md (4C), untouched |
+| `[gameplay]` | | `false` | `stick_fix`, `yorda_safe`, `mirror`: docs/port/OPTIONS.md (6A); read through `ico_config_get_bool` on first use |
 | `[game] language` | | `"auto"` | `"auto"`, `"en"`, `"fr"`, `"de"`, `"it"`, `"es"` |
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
@@ -75,6 +76,7 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[dev] use_iso` | `use_iso` | `true` headless, `false` window build | `true`: mount the disc image directly (dev mode). `false`: mount the extracted `ico.o2r` (per-user folder, else beside the exe), extracting it from the image on the first run (docs/port/DATA.md, "Backend 2: the archive") |
 | `[dev] headless` | `headless` | `false` | a run for traces and tests: fixes the clock (below). The headless build is headless regardless |
 | `[dev] fixed_clock` | `fixed_clock` | see below | the disc clock is fixed or real |
+| `[dev] start_stage` | `start_stage` | none | developer key (renderer wave 5): the stage Main starts in instead of stage 1 (boot, language, title), 1..105 (`stageData` order, e.g. 34 st13a ELEVATOR, 15 st09a WINDMILL, 37 st25a QUEEN); handed over as `ICO_START_STAGE` to `debug_TryToGetStartStage` (`port/null/debug_null.c`), the hook the development build's start-stage file fed (`common/src/main.c:147`). Skips the boot and title flow, so game flags are those of a fresh boot |
 
 `ico_config_save()` writes `version`, `[paths] iso`, `[video]`, `[audio]`
 and `[game] language` when they are absent; the `[dev]` and `[input]` keys only

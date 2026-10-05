@@ -59,6 +59,9 @@ extern void SetInfoSpKidnapEnemy(int *work);
 
 #ifdef ICO_HOST
 
+/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+extern int ico_opt_yorda_safe(void);
+
 #include "eeword.h"
 #include "ios.h"
 #include "memory.h"
@@ -256,6 +259,13 @@ void backStageProcessMain(void)
     GamesysObjInfo *g2;
 
     gamesysAnotherStageTsuresari = 0;
+#ifdef ICO_HOST
+    /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
+       shadows never take her while the boy is in another room */
+    if (ico_opt_yorda_safe()) {
+        return;
+    }
+#endif
     if (gflagChk(390) != 0) {
         return;
     }

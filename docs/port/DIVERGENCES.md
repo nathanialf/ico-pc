@@ -69,3 +69,4 @@ was found (static audit, unit test, trace diff, user report) and the status
 
 | option | hook | what changes |
 |---|---|---|
+| `[gameplay] yorda_safe` (off) | `ico_opt_yorda_safe()` at `eBrainGetTarget` (`omori/src/ebrain.c`), `backStageProcessMain` (`common/src/backStage.c`), `enemyKidnapCheckGirl` and `enemyPickupCheckGirl` (`fumi/src/enemy_act.c`) | When on, the shadows fight Ico only and never take Yorda in free play; the off-screen kidnap timers do not run. Scripted captures (`ACTEnemyForceSwitchToCarry`, `st13c.c:631`) are untouched. docs/port/OPTIONS.md |

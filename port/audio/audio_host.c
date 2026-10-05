@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
 
@@ -117,4 +118,17 @@ void ico_audio_host_vsync(int hz)
     }
 #endif
     vsync_index++;
+}
+
+/* Mirror mode (Phase 6A, docs/port/OPTIONS.md): the option lives in
+   port/game/options.c. Nothing mixes with the pan swapped yet: the mixer will
+   read ico_audio_mirror() when the mirror package wires it in. */
+void ico_audio_set_mirror(int on)
+{
+    ico_opt_set_mirror(on);
+}
+
+int ico_audio_mirror(void)
+{
+    return ico_opt_mirror();
 }

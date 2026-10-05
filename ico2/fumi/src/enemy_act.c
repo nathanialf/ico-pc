@@ -28,6 +28,14 @@
 #include "act-way.h"
 #include "isys.h"
 #include "Matrix.h"
+
+#ifdef ICO_HOST
+
+/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+extern int ico_opt_yorda_safe(void);
+
+#endif
+
 #include "GifPacket.h"
 #include "debug_exception.h"
 #include "enemy-control.h"
@@ -1225,6 +1233,12 @@ static inline int enemyKidnapCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
+#ifdef ICO_HOST
+    /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
+    if (ico_opt_yorda_safe()) {
+        return 0;
+    }
+#endif
     if (_ACTGame_SearchGObj(self, girlGObj, 60.0f, 100.0f, 45, buf) != 0) {
         ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
         ang = (ang < 0) ? -ang : ang;
@@ -1447,6 +1461,12 @@ static inline int enemyPickupCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
+#ifdef ICO_HOST
+    /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
+    if (ico_opt_yorda_safe()) {
+        return 0;
+    }
+#endif
     if (_ACTGame_SearchGObj(self, girlGObj, 170.0f, 100.0f, 45, buf) != 0) {
         ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
         ang = (ang < 0) ? -ang : ang;
