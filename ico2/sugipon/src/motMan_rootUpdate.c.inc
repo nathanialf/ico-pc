@@ -78,7 +78,7 @@ static void _wallHitReaction(ClipWork *w, void *pos, void *last, int noSlide)
                     ClipWork cw2;
                     Vec16 push;
 
-                    memset(&cw2, 0, 0xC0);
+                    memset(&cw2, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
                     _NormalizeVector(&push, &slide);
                     _ScaleVectorXYZ(&push, &push, 100.0f);
                     CopyVector(&cw2, pos);
@@ -186,6 +186,13 @@ static inline int clipFieldWallAndReset(struct MotRoot *cur, float *last) /* der
     }
     CopyVector(w.pt[1], cur->pos);
     w.filter = InitialColInfo;
+#ifdef ICO_HOST
+    /* PC port (X4, DIVERGENCES.md F16): the original never sets the radius
+       here; inlined into rootUpdateStepSolution, its record shares the stack
+       slot clipFuchiWallAndReact just stored rad * skelScale in (sp+0x250,
+       0x1EA808), so the EE clips with the fuchi probe's radius. */
+    w.radius = cur->radius * skelScale;
+#endif
     ClipWallField(&w);
     if (w.wall.elem != 0 && CompareAttribute(w.attr, 0x10000) != 0) {
         _wallHitReaction(&w, cur->pos, last, 0);
@@ -643,7 +650,7 @@ static inline int getFloorAttributeUnderNode(void) /* derived name */
     ClipWork w;
     int node;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     node = GetSkeltonFocusNode((GObj *)skelGObj, 51);
     _AddVectorXYZ(&w, skelRoot->pos, nodePos2 + node * 16);
     CopyVector(w.pt[1], &w);
@@ -1041,13 +1048,13 @@ side_probe:
 
 static void forceFallDown(void)
 {
-    iosOmSendMail(skelGObj, 0x18, skelGObj);
+    iosOmSendMail((GObj *)skelGObj, 0x18, (void *)skelGObj);
     CopyVector(skelRoot->last, skelRoot->pos);
 }
 
 static void forceReset(void)
 {
-    iosOmSendMail(skelGObj, 0x103, skelGObj);
+    iosOmSendMail((GObj *)skelGObj, 0x103, (void *)skelGObj);
     CopyVector(skelRoot->last, (char *)skelRoot);
 }
 
@@ -1347,20 +1354,27 @@ static int avoidSideAdjustWall(void)
 {
     float mtx[16];
     /* a 0xD0-byte block, cleared to the clip request's 0xC0 */
+#ifdef ICO_HOST
+    ClipWork wk;
+    char *w = (char *)&wk;
+
+    memset(w, 0, sizeof(ClipWork));
+#else
     char w[208];
 
     memset(w, 0, 0xC0);
+#endif
     GetMatrixFromQuaternionPos(mtx, skelRoot->quat, skelRoot->pos);
     _ApplyMatrix(w, mtx, avoidLeft);
     _ApplyMatrix(w + 0x10, mtx, avoidRight);
-    if (clipSideWallAndHit(w) == 0) {
+    if (clipSideWallAndHit((ClipWork *)w) == 0) {
         _ApplyMatrix(w, mtx, avoidRight);
         _ApplyMatrix(w + 0x10, mtx, avoidLeft);
-        if (clipSideWallAndHit(w) == 0) {
+        if (clipSideWallAndHit((ClipWork *)w) == 0) {
             return 0;
         }
     }
-    pushRootAlongSideWall(w);
+    pushRootAlongSideWall((ClipWork *)w);
     return 1;
 }
 
@@ -1589,7 +1603,13 @@ static ObjNode rootUpdateDirectPlay(int mode)
     p[1] = p[1] - skelMotDef->rootOffset[1];
     p[2] = p[2] + skelMotDef->rootOffset[2];
     if (kind == 14) {
+#ifdef ICO_HOST
+        /* PC port: a zero skeleton scale from the motion data: +Fmax on
+           the EE, Inf under IEEE (DIVERGENCES.md F5) */
+        s = ps2_div(1.0f, skelScale);
+#else
         s = 1.0f / skelScale;
+#endif
         p[0] = p[0] * -s;
         p[1] = p[1] * s;
         p[2] = p[2] * -s;
@@ -1607,6 +1627,33 @@ static ObjNode rootUpdateDirectPlay(int mode)
     return InitialObjPointer;
 }
 
+#ifdef ICO_HOST
+
+/* a nested function in rootUpdateNodeFix, called once */
+static void keepVerticalZWithQ(void *q)
+{
+    float mtx[16];
+    Vec16 v;
+
+    GetMatrixFromQuaternion(mtx, q);
+    sceVu0ApplyMatrix(&v, mtx, ZUnitVector);
+    v.f[1] = 0.0f;
+    sceVu0Normalize(&v, &v);
+    SetIdentityQuaternion(skelRoot->quat);
+    RotQuaternionY(skelRoot->quat, -GetTableArcTan2(v.f[0], -v.f[2]));
+    MultiQuaternion(skelRoot->quat, skelRoot->quat, skelRoot->fixQuat);
+    CopyMatrix((void *)MatrixDrive_GetMatrix(),
+               (char *)GOBJ_SUB(skelRoot->fixObj)->nodeMtx + skelRoot->fixNode * 64);
+    MatrixDrive_TransMatrixV(skelRoot->fixPos);
+    UnitRotation(MatrixDrive_GetMatrix());
+    MultiMatrixByQuaternion(skelRoot->quat);
+    MatrixDrive_TransMatrix(rootMove[0], rootMove[1], rootMove[2]);
+    CopyVector(skelRoot->pos, MatrixDrive_GetMatrix()[3]);
+}
+
+static ObjNode rootUpdateNodeFix(void)
+{
+#else
 static ObjNode rootUpdateNodeFix(void)
 {
     /* a nested function, called once with the parent's static chain */
@@ -1631,6 +1678,7 @@ static ObjNode rootUpdateNodeFix(void)
         CopyVector(skelRoot->pos, MatrixDrive_GetMatrix()[3]);
     }
 
+#endif
     Vec16 rq;
     Vec16 va;
     Vec16 vb;
@@ -1650,7 +1698,7 @@ static ObjNode rootUpdateNodeFix(void)
     case 1:
         break;
     case 3:
-        GetRootQuaternion(&rq, skelRoot->fixObj);
+        GetRootQuaternion(&rq, (GObj *)skelRoot->fixObj);
         MultiQuaternion(&rq, &rq, GOBJ_SUB(skelRoot->fixObj)->root.motionQuat);
         /* fall through */
     case 2:

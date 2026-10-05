@@ -45,6 +45,32 @@
 #include "debug_exception.h"
 #include <assert.h>
 
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 6, R6a): debug.c is compiled on the host
+   (docs/port/DEVELOPER_MODE.md).  Its EE-only parts have ICO_HOST bodies:
+   varargs through va_list, the VU1 register dumps, the snapshot (an rd
+   readback to PNG), host0: files under <pref>/dev/, the csv windows' record
+   layouts, and the debug font's VU1 routine (debugHostFont*, ICO_RD). */
+#include <stdarg.h>
+#include <stdint.h>
+#include <stddef.h>
+
+/* port/game/options.h */
+int ico_opt_developer_mode(void);
+int ico_opt_debug_option(void);
+
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+/* port/render/rd_png.c (rd_internal.h): 8-bit RGBA, stored deflate */
+bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
+                 int withAlpha);
+
+#endif
+#endif
+
 static int debug_CollisionTest(int reset);
 static int debug_DispBall(int on);
 static int debug_DispBox(int on);
@@ -559,7 +585,18 @@ static char sceOpenPath[256]; /* derived name */
 static unsigned short fontOutline[256 * 16]; /* derived name */
 
 /* the glyph re-expanded to 8 shorts */
+#ifdef ICO_HOST
+
+/* debug_makeBackImage zeroes 16 shorts per glyph and reads two past the
+   eight, so the last glyph's pass runs 16 bytes beyond the array: on the
+   EE into the next .bss object. The host gives it slack instead. */
+static unsigned short fontGlyph[256 * 8 + 8]; /* derived name */
+
+#else
+
 static unsigned short fontGlyph[256 * 8]; /* derived name */
+
+#endif
 
 static DbgGlyphPacket fontPacket[256]; /* derived name */
 
@@ -578,7 +615,7 @@ typedef union { /* field names derived */
 } DbgPkWord; /* derived name */
 
 /* a whole quadword, for the vertex copies */
-typedef int Qw128 __attribute__((mode(TI)));
+typedef ICO_QW Qw128;
 
 /* clang-format on */
 
@@ -780,7 +817,15 @@ inline void ChangeGirlControlMode(int mode)
 void debug_Assert(char *fmt, ...)
 {
     char buf[256];
+#ifdef ICO_HOST
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+#else
     vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 56);
+#endif
     debug_assertMessage("src/debug.c", 1392, buf);
     __assert("src/debug.c", 1392, "e");
     debug_assert("src/debug.c", 1393);
@@ -823,7 +868,15 @@ void debug_LogPrintf(const char *fmt, ...)
 {
     char buf[256];
     int info;
+#ifdef ICO_HOST
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+#else
     vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 0x38);
+#endif
     info = strlen(buf);
     sceWrite(logFd, buf, info);
 }
@@ -846,7 +899,28 @@ inline void debug_SaveStartStageFile(int stage)
 
 inline int debug_TryToGetStartStage(void)
 {
+#ifdef ICO_HOST
+    /* PC port (renderer wave 5, R5b): the developer key [dev] start_stage
+       (docs/port/CONFIG.md), which host_config.c hands over as
+       ICO_START_STAGE, takes the place of the development build's
+       start-stage file: Main (common/src/main.c) clamps the value to 1..105
+       and switches to that stage instead of stage 1.  Unset or not a number:
+       -1, the retail path. */
+    const char *v = getenv("ICO_START_STAGE");
+    char *end;
+    long n;
+
+    if (v == NULL || v[0] == '\0') {
+        return -1;
+    }
+    n = strtol(v, &end, 10);
+    if (*end != '\0' || n <= 0 || n > 105) {
+        return -1;
+    }
+    return (int)n;
+#else
     return -1;
+#endif
 }
 
 static void debug_SaveDebugOptionFile(void)
@@ -943,6 +1017,12 @@ static int debug_GetDebugOption(void)
 
 void debug_SetDmaCallback(void)
 {
+#ifdef ICO_HOST
+    /* PC port: the GIF DMA end interrupt latched EE timer 0 for the
+       profiler bar (debug_CallbackGsFinish); the host has no DMA interrupts,
+       so no handler is installed and drawTimerCount keeps its value. */
+    return;
+#endif
     if ((int)dmaHandlerId != -1) {
         RemoveDmacHandler(1, dmaHandlerId);
     }
@@ -1031,6 +1111,15 @@ void debug_VariableInit(void)
     game_pause = 0;
     ChangeFieldCollisionDebugMode(0);
     ChangeGirlControlMode(debug_girl_pad_control);
+#ifdef ICO_HOST
+    /* PC port (R6a): in developer mode, [dev] debug_option non-zero loads
+       the option table the Debug Mode page saved (TRIANGLE), as the
+       development build's start-up check of its option file did.  Off: the
+       retail values above, as before. */
+    if (ico_opt_developer_mode() && ico_opt_debug_option() != 0) {
+        debug_GetDebugOption();
+    }
+#endif
 }
 
 void debug_Init(void)
@@ -1060,20 +1149,42 @@ inline float debug_GetTimerSec(void)
     int v;
     float f2;
 
+#ifdef ICO_HOST
+    return -1.0f; /* no EE timer 1 on the host */
+#else
     if (*T1_MODE & 0x800) {
         return -1.0f;
     }
     v = *T1_COUNT;
     f2 = (float)(unsigned int)v;
     return f2 / clock[*T1_MODE & 3] / 60.0f;
+#endif
 }
 
 inline float debug_GetTimerCount(void)
 {
+#ifdef ICO_HOST
+#ifdef ICO_HOST
+    return -1.0f; /* no EE timer 1 on the host */
+#else
     if ((*T1_MODE) & 0x800) {
         return -1.0f;
     }
     return (float)(*(volatile unsigned int *)T1_COUNT);
+#endif
+}
+
+static void loadReport(char **dst, char *name, int size)
+{
+    debug_StdPrintfDummy(
+        "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)", name,
+        *dst, size);
+#else
+    if ((*T1_MODE) & 0x800) {
+        return -1.0f;
+    }
+    return (float)(*(volatile unsigned int *)T1_COUNT);
+#endif
 }
 
 int debug_Load(char **dst, char *name, int kind)
@@ -1093,6 +1204,9 @@ int debug_Load(char **dst, char *name, int kind)
     sceLseek(fd, 0, 0);
     sz = (size / 16 + 1) * 16;
     {
+#ifdef ICO_HOST
+        /* the iosMallocDebug calls pass the source's own line numbers */
+#else
         /* the line every arm prints once it has the file's address, a nested
            function that reads dst, name and size from the enclosing frame;
            the iosMallocDebug calls pass the source's own line numbers */
@@ -1102,65 +1216,106 @@ int debug_Load(char **dst, char *name, int kind)
                 "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)",
                 name, *dst, size);
         }
+#endif
         switch (kind) {
         case 0:
         default:
             *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", 1958);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
             *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", 1965);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
             *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", 1973);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
             *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", 1982);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
             *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", 1991);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
             *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", 2000);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
             *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", 2007);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
             *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", 2014);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
             *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", 2019);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
             *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 2024);
+#ifdef ICO_HOST
+            loadReport(dst, name, size);
+#else
             loadReport();
+#endif
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
         }
@@ -1180,6 +1335,36 @@ typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived na
    debug_exception's fontTag */
 static GifTag debugFontTag = {0x2000400000008000LL, 0x51}; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 6, R6a): the glyph packets live in this buffer, not
+   in the stage partition.  On the PS2 debug_Init (every stage_initialize,
+   common/src/StageManager.c) allocated them from ios_partition_seki, the
+   "stage" partition; the host's partition holds pointer-wide block headers
+   and records (docs/port/LAYOUT.md) and is fuller than the EE's, and the
+   extra 256 blocks exhausted it in stage 42 of the boot run.  Until R6a the
+   host never allocated them (debug_Init was port/null's empty stub), so the
+   game heap stays as it was.  The packets are rebuilt identically on every
+   call, into the same buffer. */
+static unsigned char debugHostFontMem[16 + 256 * (90 + 3) * 16] __attribute__((aligned(16)));
+
+static unsigned int debugHostFontUsed;
+
+static void *debugHostFontAlloc(int size)
+{
+    unsigned int n = ((unsigned int)size + 15u) & ~15u;
+    void *p;
+
+    if (debugHostFontUsed + n > sizeof(debugHostFontMem)) {
+        debug_assertMessage("src/debug.c", 2090, "debug font buffer full");
+    }
+    p = &debugHostFontMem[debugHostFontUsed];
+    debugHostFontUsed += n;
+    return p;
+}
+
+#endif
+
 /* clang-format off */
 static void debug_MakeFont(void)
 {
@@ -1187,10 +1372,14 @@ static void debug_MakeFont(void)
     struct { /* field names derived */ float v[4]; char *volatile ptr; } w; /* the cursor is re-read from the frame at every push */
     char *base;
     unsigned short *a, *b; unsigned short m0, m1; int i, j, k, n;
+#ifdef ICO_HOST
+    debugHostFontUsed = 0; base = debugHostFontAlloc(16); w.ptr = base;
+#else
     base = iosMallocDebug(ios_partition_seki, 1, "src/debug.c", 2069); w.ptr = base;
-    *((int *)w.ptr)++ = 0x1400000C;
-    *((int *)w.ptr)++ = 0;
-    *((long long *)w.ptr)++ = 0;
+#endif
+    *ICO_POSTINC(int *, w.ptr) = 0x1400000C;
+    *ICO_POSTINC(int *, w.ptr) = 0;
+    *ICO_POSTINC(long long *, w.ptr) = 0;
 
     for (i = 0; i < 256; i++) {
         a = &fontOutline[i * 16]; b = &fontGlyph[i * 8];
@@ -1208,13 +1397,17 @@ static void debug_MakeFont(void)
 
 
             fontPacket[i].qwc = n + 3;
+#ifdef ICO_HOST
+            w.ptr = fontPacket[i].packet = debugHostFontAlloc((n + 3) * 16);
+#else
             w.ptr = fontPacket[i].packet = iosMallocDebug(ios_partition_seki, (n + 3) * 16, "src/debug.c", 2090);
-            *((long long *)w.ptr)++ = 0;
-            *((int *)w.ptr)++ = 0;
-            *((int *)w.ptr)++ = ((n + 1) << 16) | 0x6C008000;
+#endif
+            *ICO_POSTINC(long long *, w.ptr) = 0;
+            *ICO_POSTINC(int *, w.ptr) = 0;
+            *ICO_POSTINC(int *, w.ptr) = ((n + 1) << 16) | 0x6C008000;
 
-            *((long long *)w.ptr)++ = n | ((long long)0x8000 << 38) | debugFontTag[0];
-            *((long long *)w.ptr)++ = debugFontTag[1];
+            *ICO_POSTINC(long long *, w.ptr) = n | ((long long)0x8000 << 38) | debugFontTag[0];
+            *ICO_POSTINC(long long *, w.ptr) = debugFontTag[1];
             for (j = 0; j < 9; j++) {
                 m0 = b[j];
                 m1 = a[j];
@@ -1228,17 +1421,17 @@ static void debug_MakeFont(void)
                     if (m0 & 1) {
                         w.v[2] = 3.4028235e+38f;
                         w.v[3] = *(float *)&off;
-                        *((Qw128 *)w.ptr)++ = *(Qw128 *)w.v;
+                        *ICO_POSTINC(Qw128 *, w.ptr) = *(Qw128 *)w.v;
                     } else if (m1 & 1) {
                         w.v[2] = 1.7014117e+38f;
                         w.v[3] = *(float *)&on;
-                        *((Qw128 *)w.ptr)++ = *(Qw128 *)w.v;
+                        *ICO_POSTINC(Qw128 *, w.ptr) = *(Qw128 *)w.v;
                     }
                 }
             }
-            *((int *)w.ptr)++ = 0x1400000A;
-            *((int *)w.ptr)++ = 0;
-            *((long long *)w.ptr)++ = 0;
+            *ICO_POSTINC(int *, w.ptr) = 0x1400000A;
+            *ICO_POSTINC(int *, w.ptr) = 0;
+            *ICO_POSTINC(long long *, w.ptr) = 0;
         }
     }
 }
@@ -1273,6 +1466,109 @@ static void debug_makeBackImage(void)
     debug_MakeFont();
 }
 
+#ifdef ICO_RD
+
+/* PC port (renderer wave 6, R6a): the debug font's VU1 side.  On the PS2
+   debug_PrintCharacter's chain sets the font state with MSCAL 8 and each
+   glyph packet runs MSCAL 10 or 12 of the resident microprogram (every
+   program carries the same three routines, ico2/vusrc/vu1_common.h):
+     SET_FONT_OFFSET (8)    four quadwords from TOP: the two palette entries
+                            (vf18 -> mem[256], vf19 -> mem[257]), the cursor
+                            vf16 and the advance vf17
+     START_DEBUG_FONT (10)  the glyph's GIF tag (NLOOP points, PRE PRIM 0x40:
+                            points with ABE, REGS RGBAQ XYZ2), then per point
+                            the palette entry its .w bit selects as RGBAQ and
+                            ftoi4(point.xy + cursor.xy, z, 1) as XYZ2; xgkick;
+                            then SPACE_DEBUG_FONT
+     SPACE_DEBUG_FONT (12)  cursor.xy += advance.xy
+   The host reads the same glyph packets (debug_MakeFont's) and hands the
+   GIF packet the VU builds to the GS register decoder (gif_HostWriteRegs,
+   docs/port/RENDER_API.md "The seki layer on rd"), in order with the list's other
+   writes.  The packets and the display list chain are still built as on the
+   PS2. */
+static struct { /* port */
+    float cur[2], adv[2];
+    int pal[2][4];
+} debugHostFont;
+
+static unsigned long long debugHostFontAd[2 * 192];
+
+static int debugHostFtoi4(float v)
+{
+    float f = v * 16.0f;
+
+    if (f >= 2147483647.0f) {
+        return 0x7FFFFFFF;
+    }
+    if (f <= -2147483648.0f) {
+        return (int)0x80000000u;
+    }
+    return (int)f;
+}
+
+/* SET_FONT_OFFSET from the four quadwords debug_PrintCharacter unpacks */
+static void debugHostFontSet(const char *top)
+{
+    float f[4];
+
+    memcpy(debugHostFont.pal[0], top, 16);
+    memcpy(debugHostFont.pal[1], top + 16, 16);
+    memcpy(f, top + 32, 16);
+    debugHostFont.cur[0] = f[0];
+    debugHostFont.cur[1] = f[1];
+    memcpy(f, top + 48, 16);
+    debugHostFont.adv[0] = f[0];
+    debugHostFont.adv[1] = f[1];
+}
+
+/* START_DEBUG_FONT (a glyph packet of qwc > 1) and SPACE_DEBUG_FONT */
+static void debugHostFontGlyph(const DbgGlyphPacket *g)
+{
+    if (g->qwc > 1) {
+        const unsigned char *p = (const unsigned char *)g->packet + 16; /* the GIF tag */
+        unsigned long long lo;
+        unsigned int n, k, a = 0;
+
+        memcpy(&lo, p, 8);
+        n = (unsigned int)(lo & 0x7FFF);
+        if (n > 95) { /* a glyph has at most 9 x 10 points */
+            n = 95;
+        }
+        if ((lo >> 46) & 1) { /* PRE: the tag's PRIM */
+            debugHostFontAd[a++] = (lo >> 47) & 0x7FF;
+            debugHostFontAd[a++] = 0x00;
+        }
+        for (k = 0; k < n; k++) {
+            float v[4];
+            int w;
+            const int *c;
+            unsigned long long x, y, z;
+
+            memcpy(v, p + 16 + 16 * k, 16);
+            memcpy(&w, p + 16 + 16 * k + 12, 4);
+            c = debugHostFont.pal[w & 1];
+            /* PACKED RGBAQ, Q = 1.0 (no ST) */
+            debugHostFontAd[a++] = (unsigned long long)(c[0] & 0xFF) |
+                                   ((unsigned long long)(c[1] & 0xFF) << 8) |
+                                   ((unsigned long long)(c[2] & 0xFF) << 16) |
+                                   ((unsigned long long)(c[3] & 0xFF) << 24) |
+                                   (0x3F800000ULL << 32);
+            debugHostFontAd[a++] = 0x01;
+            /* PACKED XYZ2 (the ADC bit of ftoi4(1.0) is 0) */
+            x = (unsigned int)debugHostFtoi4(v[0] + debugHostFont.cur[0]) & 0xFFFF;
+            y = (unsigned int)debugHostFtoi4(v[1] + debugHostFont.cur[1]) & 0xFFFF;
+            z = (unsigned int)debugHostFtoi4(v[2]);
+            debugHostFontAd[a++] = x | (y << 16) | (z << 32);
+            debugHostFontAd[a++] = 0x05;
+        }
+        gif_HostWriteRegs(debugHostFontAd, a / 2);
+    }
+    debugHostFont.cur[0] += debugHostFont.adv[0];
+    debugHostFont.cur[1] += debugHostFont.adv[1];
+}
+
+#endif
+
 static void debug_PrintCharacter(char *str, int x, int y, int r, int g, int b, int sz)
 {
     char *p;
@@ -1294,8 +1590,8 @@ static void debug_PrintCharacter(char *str, int x, int y, int r, int g, int b, i
     ((DbgPkWord *)(p + 0x18))->w[0] = 0x200017E; PacketBufferStruct.ptr.c = p + 0x1C;
     ((DbgPkWord *)(p + 0x1C))->w[0] = 0x6C048000; PacketBufferStruct.ptr.c = p + 0x20;
 
-    _CopyIVector(((sceVu0IVECTOR *)PacketBufferStruct.ptr.c)++, col);
-    _CopyIVector(((sceVu0IVECTOR *)PacketBufferStruct.ptr.c)++, v);
+    _CopyIVector(ICO_POSTINC(sceVu0IVECTOR *, PacketBufferStruct.ptr.c), col);
+    _CopyIVector(ICO_POSTINC(sceVu0IVECTOR *, PacketBufferStruct.ptr.c), v);
 
     q = PacketBufferStruct.ptr.c; px = x * ScreenWidth / 640 + 2048; px -= ScreenWidth / 2; ((DbgPkWord *)q)->f[0] = (float)px; q += 4; PacketBufferStruct.ptr.c = q;
     py = y * ScreenHeight / 224 + 2048; py -= ScreenHeight / 2; py--; ((DbgPkWord *)q)->f[0] = (float)py; PacketBufferStruct.ptr.c = q + 4;
@@ -1311,6 +1607,12 @@ static void debug_PrintCharacter(char *str, int x, int y, int r, int g, int b, i
     PacketBufferStruct.tail.c = q + 0x2C; ((DbgPkWord *)(q + 0x2C))->d = 0x60000000; PacketBufferStruct.ptr.c = q + 0x34; ((DbgPkWord *)(q + 0x34))->w[0] = 0; PacketBufferStruct.ptr.c = q + 0x38; ((DbgPkWord *)(q + 0x38))->w[0] = 0; PacketBufferStruct.ptr.c = q + 0x3C;
 
     dl_SetDLPriority(12); dl_OpenDma(5, PacketBufferStruct.dma.c, 0); dl_CloseDma();
+#ifdef ICO_RD
+    /* clang-format on */
+    /* the four quadwords the UNPACK at +0x18 puts at TOP, then MSCAL 8 */
+    debugHostFontSet((const char *)PacketBufferStruct.dma.c + 0x20);
+    /* clang-format off */
+#endif
 
     dl_SetDLPriority(12);
     while ((c = (unsigned char)*str++) != 0) {
@@ -1318,6 +1620,9 @@ static void debug_PrintCharacter(char *str, int x, int y, int r, int g, int b, i
         if (fontPacket[c].packet != 0) {
             dl_OpenDma(2, fontPacket[c].packet, fontPacket[c].qwc);
             dl_CloseDma();
+#ifdef ICO_RD
+            debugHostFontGlyph(&fontPacket[c]);
+#endif
         }
     }
 }
@@ -1364,10 +1669,21 @@ inline void debug_ClearFontWindow(void)
     char *p = (char *)fontLines;
     int i;
     p += 0x5B4;
+#ifdef ICO_HOST
+    /* The EE loop starts at line 26, one past the 26-entry array, and writes
+       a byte into whatever follows fontLines in .bss (alignment slack on the
+       PS2). The host skips that out-of-range write; lines 0..25 clear as
+       before. */
+    for (i = 25; i >= 0; i--) {
+        p -= 0x38;
+        *p = 0;
+    }
+#else
     for (i = 26; i >= 0; i--) {
         *p = 0;
         p -= 0x38;
     }
+#endif
     fontWindowLine = 0;
 }
 
@@ -1410,7 +1726,11 @@ void debug_FlushFont(void)
 
 inline int debug_CallbackGsFinish(int channel)
 {
+#ifdef ICO_HOST
+    drawTimerCount = 0; /* no EE timer 0 on the host */
+#else
     drawTimerCount = *T0_COUNT;
+#endif
     return 0;
 }
 
@@ -1448,6 +1768,33 @@ static DbgCol brainColHigh[1] = {{0xFF, 0x40, 0x40, 0xFF}}; /* derived name */
 
 static DbgCol brainColMax[1] = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
 
+#ifdef ICO_HOST
+
+static void draw_batsu(DbgPos *p)
+{
+    DbgCol col = markCol[0];
+    DbgVtx v[4];
+
+    make_mark_points(v, p, 3);
+    gif_Line(&v[0].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[1].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+}
+
+static void draw_shikaku(DbgPos *p)
+{
+    DbgCol col = markCol[0];
+    DbgVtx v[4];
+
+    make_mark_points(v, p, 3);
+    gif_Line(&v[0].x, &v[1].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[1].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+}
+
+static void debug_brainBar(void)
+{
+#else
 static void debug_brainBar(void)
 {
     void draw_batsu(DbgPos * p)
@@ -1470,6 +1817,7 @@ static void debug_brainBar(void)
         gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
         gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
     }
+#endif
     DbgCol c0 = brainColLow[0];
     DbgCol c1 = brainColMid[0];
     DbgCol c2 = brainColHigh[0];
@@ -1592,6 +1940,13 @@ static DbgCol barScaleCol[1] = {{0xA0, 0xA0, 0xA0, 0xA0}}; /* derived name */
 static DbgCol barLabelCol[1] = {{0x80, 0x80, 0x80, 0x60}}; /* derived name */
 
 /* clang-format off */
+#ifdef ICO_HOST
+
+/* the time stamp of bar i, read by both bar loops */
+static int barTime(int i) { return debugBars[i].count; } /* derived name */
+
+#endif
+
 static void debug_DrawBar(void)
 {
     long long sh;
@@ -1607,7 +1962,9 @@ static void debug_DrawBar(void)
     int i;
     int w;
     int len;
+#ifndef ICO_HOST
     inline int barTime(void) { return debugBars[i].count; } /* derived name */ /* the time stamp of bar i, read by both bar loops */
+#endif
 
 
     flip = 0;
@@ -1656,7 +2013,11 @@ static void debug_DrawBar(void)
 
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
 
+#ifdef ICO_HOST
+        int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#else
         int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#endif
 
         long long alpha;
 
@@ -1748,7 +2109,11 @@ static void debug_DrawBar(void)
 
     flip = 0;
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
+#ifdef ICO_HOST
+        int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#else
         int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#endif
 
         int dpct;
         int pct;
@@ -1807,7 +2172,11 @@ inline void debug_SetBar(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type == 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
+#ifdef ICO_HOST
+        p->count = 0; /* no EE timer 0 on the host */
+#else
         p->count = *T0_COUNT;
+#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;
@@ -1825,7 +2194,11 @@ inline void debug_SetBar2(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type != 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
+#ifdef ICO_HOST
+        p->count = 0; /* no EE timer 0 on the host */
+#else
         p->count = *T0_COUNT;
+#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;
@@ -1874,6 +2247,61 @@ inline void debug_ResetBar(void)
     debugBarCount = 0;
 }
 
+#ifdef ICO_HOST
+#ifndef ICO_HOST /* EE addresses as int (the snapshot's EE path) */
+
+static unsigned int *spix(int src, int px)
+{
+    return (unsigned int *)(px * 4 + src);
+}
+
+static int clip(int v)
+{
+    return v < 256 ? (v > -1 ? v : 0) : 255;
+}
+
+static unsigned int *dpix(int dst, int px, int py)
+{
+    return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
+}
+
+/* Halves a 32-bit snapshot with a 2x2 box filter. */
+static void debug_ResizeSnapShot(int dst, int src, int w, int h)
+{
+    int r, g, b, a;
+    int x, y, i, j;
+    int row;
+    unsigned char *p;
+
+    for (y = 0; y < h; y += 2) {
+        for (x = 0; x < w; x += 2) {
+            /* clang-format off */
+            r = 0; g = 0; b = 0; a = 0;
+            /* clang-format on */
+            for (i = 0; i < 2; i++) {
+                /* clang-format off */
+                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(src, x) + row); j < 2; j++) {
+                    /* clang-format on */
+                    r = r + p[0] * 0.25f;
+                    g = g + p[1] * 0.25f;
+                    b = b + p[2] * 0.25f;
+                    a = a + p[3] * 0.25f;
+                    p += 4;
+                }
+            }
+            r = clip(r);
+            g = clip(g);
+            b = clip(b);
+            a = clip(a);
+            *dpix(dst, x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
+        }
+    }
+    FlushCache(0);
+}
+
+#endif /* !ICO_HOST */
+#else
+
 /* Halves a 32-bit snapshot with a 2x2 box filter; the clamp and the
    destination helper are nested functions. */
 static void debug_ResizeSnapShot(int dst, int src, int w, int h)
@@ -1921,6 +2349,8 @@ static void debug_ResizeSnapShot(int dst, int src, int w, int h)
     }
     FlushCache(0);
 }
+
+#endif
 
 static inline void debug_WriteTim2(int fd, int *img, int w, int h) /* derived name */
 {
@@ -2021,6 +2451,70 @@ int debug_SnapShot(int idx)
     if (debug_snapshot_size == 0) {
         return -1;
     }
+#ifdef ICO_HOST
+    /* PC port (renderer wave 6, R6a): the PS2 stored the scene buffer
+       (sceGsStoreImage of TBP 0x800) into EE memory at 0x2000000, tiled
+       SnapSize x SnapSize frames and wrote a TIM2 or BMP to
+       host0:snapshot/.  The host reads back rd's DISPLAY target (the frame
+       last presented) and writes it whole as a PNG to
+       <pref>/dev/screenshots/snapNNNNNNN.png, the first free number, on
+       every call; SnapSize only gates it (None: nothing) and SnapForm is
+       ignored.  The headless build has no frame: nothing is written. */
+    (void)name;
+    (void)mask;
+    (void)i;
+    (void)fd;
+    (void)src;
+    (void)dst;
+    (void)buf;
+    (void)w;
+    (void)h;
+    (void)y;
+    (void)idx;
+    debugBackGroundDisableFlag = 1;
+#ifdef ICO_RD
+    {
+        enum { SNAP_MAX = 4096 * 2304 };
+
+        char path[1100];
+        uint32_t sw = 0, sh = 0;
+        unsigned char *rgba = (unsigned char *)malloc((size_t)SNAP_MAX * 4);
+        FILE *fp;
+        int n;
+
+        if (rgba == NULL) {
+            return -1;
+        }
+        if (!rd_ReadDisplay(rgba, &sw, &sh) || sw == 0 || sh == 0) {
+            free(rgba);
+            fprintf(stderr, "debug: snapshot: no frame to read back\n");
+            return 1;
+        }
+        for (n = 0; n < 10000000; n++) {
+            snprintf(name, sizeof(name), "host0:screenshots/snap%07d.png", n);
+            if (ico_host0_path(name, path, sizeof(path), 1) != 0) {
+                break;
+            }
+            fp = fopen(path, "rb");
+            if (fp == NULL) {
+                break;
+            }
+            fclose(fp);
+        }
+        if (ico_host0_path(name, path, sizeof(path), 1) == 0 &&
+            rd_WritePng(path, rgba, sw, sh, sw * 4, 0)) {
+            fprintf(stderr, "debug: snapshot %ux%u written to %s\n", (unsigned)sw, (unsigned)sh,
+                    path);
+        } else {
+            fprintf(stderr, "debug: snapshot: cannot write %s\n", name);
+        }
+        free(rgba);
+    }
+#else
+    fprintf(stderr, "debug: snapshot: unavailable in the headless build\n");
+#endif
+    return 1;
+#else
     mask = 1 << (debug_snapshot_size - 1);
     debugBackGroundDisableFlag = 1;
     if (snapFirst != 0) {
@@ -2082,6 +2576,7 @@ int debug_SnapShot(int idx)
     }
     dma_init();
     return 1;
+#endif
 }
 
 void debug_DispQW(void *p, int size)
@@ -2129,6 +2624,32 @@ inline void debug_DispMatrix(int *m)
     }
 }
 
+#ifdef ICO_HOST
+
+void debug_Printf(int a, int b, unsigned int c, const char *fmt, ...)
+{
+    char buf[256];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    debug_PrintFont(a, b, c, buf);
+}
+
+void debug_Printf2(int a, int b, unsigned int c, const char *fmt, ...)
+{
+    char buf[256];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    debug_PrintFont(a, b, c, buf);
+}
+
+#else
+
 void debug_Printf(int a, int b, unsigned int c, const char *fmt, ...)
 {
     char buf[256];
@@ -2145,6 +2666,8 @@ void debug_Printf2(int a, int b, unsigned int c, const char *fmt, ...)
     debug_PrintFont(a, b, c, buf);
 }
 
+#endif
+
 void debug_PrintFontWindow(int col, const char *fmt, ...)
 {
     char buf[256];
@@ -2152,7 +2675,17 @@ void debug_PrintFontWindow(int col, const char *fmt, ...)
     int nl = 0;
     int i;
 
+#ifdef ICO_HOST
+    {
+        va_list ap;
+
+        va_start(ap, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+    }
+#else
     vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 0x30);
+#endif
     if (buf[0] == '\n') {
         fontWindowLine++;
         p = &buf[1];
@@ -2189,7 +2722,31 @@ inline void debug_ResizeFontWindowHeight(int val)
 
 inline void debug_SetBarDummy(void) {}
 
+#ifdef ICO_HOST
+
+/* PC port (R6a): the retail build compiled the development build's
+   debug_Printf calls (the debug menu, its tools and a few status lines) to
+   this empty function.  In developer mode it prints them through the debug
+   font, as the development build did; off, it does nothing, as retail. */
+void debug_PrintfDummy(int x, int y, unsigned int col, const char *fmt, ...)
+{
+    char buf[256];
+    va_list ap;
+
+    if (!ico_opt_developer_mode()) {
+        return;
+    }
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    debug_PrintFont(x, y, (int)col, buf);
+}
+
+#else
+
 void debug_PrintfDummy(int x, int y, unsigned int col, const char *fmt, ...) {}
+
+#endif
 
 void debug_PrintFontWindowDummy(int col, int fmt, ...) {}
 
@@ -2205,12 +2762,25 @@ void debug_PrintFontf(int x, int y, char *p, ...)
     char *f;
     char c;
     float v;
+#ifdef ICO_HOST
+    va_list ap;
+
+    va_start(ap, p);
+    (void)va;
+    d = fontfLine;
+    if (*p == 0) {
+        *d = 0;
+        va_end(ap);
+        return;
+    }
+#else
     d = fontfLine;
     va = (char *)__builtin_next_arg(p) - 0x28;
     if (*p == 0) {
         *d = 0;
         return;
     }
+#endif
     do {
         c = *p;
         if (c == '\n') {
@@ -2226,6 +2796,21 @@ void debug_PrintFontf(int x, int y, char *p, ...)
         } else {
             p++;
             switch (*p) {
+#ifdef ICO_HOST
+            case 'd':
+                f = "%d";
+                d += sprintf(d, f, va_arg(ap, int));
+                break;
+            case 'x':
+                f = "%x";
+                d += sprintf(d, f, va_arg(ap, int));
+                break;
+            case 'f':
+                v = (float)va_arg(ap, double);
+                f = "%f";
+                d += sprintf(d, f, v);
+                break;
+#else
             case 'd':
                 va += 8;
                 f = "%d";
@@ -2242,6 +2827,7 @@ void debug_PrintFontf(int x, int y, char *p, ...)
                 f = "%f";
                 d += sprintf(d, f, v);
                 break;
+#endif
             default:
                 f = "debug_PrintFontf error\n";
                 debug_StdPrintfDummy(f);
@@ -2251,6 +2837,9 @@ void debug_PrintFontf(int x, int y, char *p, ...)
         p++;
     } while (*p != 0);
     *d = 0;
+#ifdef ICO_HOST
+    va_end(ap);
+#endif
 }
 
 void debug_PrintMatrix(float *arg)
@@ -2268,6 +2857,15 @@ void debug_DispVu1FReg(int no, int mode)
     int i;
     float f[4];
     int buf[4];
+#ifdef ICO_HOST
+    /* PC port: there is no VU1 to read; the dump prints nothing (its
+       printf is the retail dummy) */
+    (void)i;
+    (void)f;
+    (void)buf;
+    (void)no;
+    (void)mode;
+#else
     if (mode != 0) {
         if (no >= 0) {
             __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x400));
@@ -2297,12 +2895,18 @@ void debug_DispVu1FReg(int no, int mode)
             }
         }
     }
+#endif
 }
 
 inline void debug_DispVu1IReg(int no)
 {
     int i;
     int buf[4];
+#ifdef ICO_HOST
+    (void)i;
+    (void)buf;
+    (void)no;
+#else
     if (no >= 0) {
         __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x420));
         __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
@@ -2316,12 +2920,18 @@ inline void debug_DispVu1IReg(int no)
             debug_StdPrintfDummy("VI%02d:%08x %08x %08x %08x\n", i, buf[0], buf[1], buf[2], buf[3]);
         }
     }
+#endif
 }
 
 inline void debug_DispVu1SReg(int no)
 {
     int i;
     int buf[4];
+#ifdef ICO_HOST
+    (void)i;
+    (void)buf;
+    (void)no;
+#else
     if (no >= 0) {
         __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x420));
         __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
@@ -2335,6 +2945,7 @@ inline void debug_DispVu1SReg(int no)
             debug_StdPrintfDummy("VS%02d:%08x %08x %08x %08x\n", i, buf[0], buf[1], buf[2], buf[3]);
         }
     }
+#endif
 }
 
 inline int gsResetFunc(int val)
@@ -2411,6 +3022,195 @@ static int debug_Mode(void)
 
     return ret;
 }
+
+#ifdef ICO_HOST
+
+/* PC port (renderer wave 6, R6a): the csv windows on a 64-bit host.
+
+   The callers pass each table's PS2 record layout: the stride in bytes, the
+   offset of the line's text and whether that field is a char * (deref 1)
+   or the text itself.  A char * is 8 bytes here, so a record holding one is
+   larger.  Every deref 1 table in the game holds its char * first and,
+   after it, 4-byte fields only or one more pointer (the debug menu's
+   DbgMenuItem, the memory card menu, the object lists, way_tool.c's two
+   menus, motionViewer.c's MvMenuEnt and OriRow): its host stride is the
+   PS2 stride plus 4 rounded up to 8, except the debug menu ({char *, fn,
+   int}: sizeof).  The deref 0 tables hold no pointer before their text and
+   keep their layout (stageData, the card directory, adpcmFile,
+   particleEffectFile, motionKind), except seDef, whose check pointer makes
+   the record 0x48 bytes (sizeof).
+
+   The value functions of debug_SelectCsvWindowVal return a char *, which
+   the PS2 build read through int; the host calls them as returning one. */
+static void csvGetLineHost(char *buf, int line, const char *str)
+{
+    sprintf(buf, "%02d:%s", line, str);
+}
+
+static void csvGetHost(char *buf, int line, const char *str)
+{
+    (void)line;
+    sprintf(buf, "%s", str);
+}
+
+static int csvScroll; /* below */
+
+static int csvWindowHost(char *title, int x, int y, int rows, const char *base, int stride,
+                         int off, int deref, int n, int *psel,
+                         void (*getline)(char *, int, const char *), int (*colfunc)(int))
+{
+    char buf[256];
+    int sel;
+    int i;
+    int half;
+    int k;
+    int top;
+    int yy;
+    int len;
+    int col;
+
+    if (base == (const char *)debugMenu) {
+        stride = (int)sizeof(DbgMenuItem);
+    } else if (base == (const char *)seDef) {
+        stride = (int)sizeof(SeDef);
+    } else if (deref == 1) {
+        stride = (stride + 4 + 7) & ~7;
+    }
+    sel = *psel;
+    debug_PrintfDummy(x, y, 0xFFFFFF00u, "%s", title);
+    if ((pad[0].now & 2) == 0) {
+        if (pad[0].flags & 0x80) {
+            debug_font_flag ^= 2;
+        }
+        if (sel >= n) {
+            sel = n - 1;
+        }
+        if (pad[0].rep & 0x4000) {
+            sel++;
+            if (sel >= n) {
+                sel = 0;
+            }
+        }
+        if (pad[0].rep & 0x1000) {
+            sel--;
+            if (sel < 0) {
+                sel = n - 1;
+            }
+        }
+        if (n < rows) {
+            rows = n;
+        }
+        half = (int)(((float)rows - 0.5f) * 0.5f);
+        if (sel < half) {
+            k = sel;
+        } else if (n - (rows - half) < sel) {
+            k = rows - (n - sel);
+        } else {
+            k = half;
+        }
+        top = sel - k;
+        yy = y + 8;
+        for (i = top; i < top + rows; i++) {
+            const char *v;
+
+            if (i - top == k) {
+                col = 0xFF404000;
+            } else if (colfunc == 0) {
+                col = 0xFFFFFF00;
+            } else {
+                col = colfunc(i);
+            }
+            v = base + (ptrdiff_t)stride * i + off;
+            if (deref == 1) {
+                memcpy(&v, v, sizeof(v));
+            }
+            len = csvScroll;
+            getline(buf, i, v != NULL ? v : "");
+            if (len >= 2) {
+                if (len >= 0x100) {
+                    len = 0xFF;
+                }
+                buf[len - 1] = -110;
+                buf[len] = 0;
+            } else {
+                buf[0] = 0;
+            }
+            debug_PrintfDummy(x, yy, col, "  %s", buf);
+            yy += 8;
+        }
+        if (csvScroll <= 0xFFFE) {
+            csvScroll += systemStatus[1];
+        }
+        *psel = sel;
+        if (pad[0].flags & 0x20) {
+            csvScroll = 0;
+            return 1;
+        } else if (pad[0].flags & 0x140) {
+            csvScroll = 0;
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int debug_SelectCsvWindowVal(char *title, int x, int y, int rows, int count, int *psel,
+                             int (*fn)(int, int), int arg)
+{
+    char buf[count > 0 ? count : 1][37];
+    char line[300];
+    int i;
+    for (i = 0; i < count; i++) {
+        if (fn != 0) {
+            const char *r = ((const char *(*)(int, int))fn)(i, arg);
+            snprintf(line, sizeof(line), "%3d %s", i, r != NULL ? r : "");
+        } else {
+            snprintf(line, sizeof(line), "%3d", i);
+        }
+        if ((unsigned int)strlen(line) >= 0x25) {
+            line[0x24] = 0;
+            debug_StdPrintfDummy("debug_SelectCsvWindowVal: func return string length over\n");
+        }
+        memcpy(buf[i], line, strlen(line) + 1);
+    }
+    return csvWindowHost(title, x, y, rows, &buf[0][0], 37, 0, 0, count, psel, csvGetHost, 0);
+}
+
+/* the csv window's scroll counter */
+static int csvScroll = 0; /* derived name */
+
+inline int _debug_SelectCsvWindow(char *title, int x, int y, int rows, int base, int stride, int off,
+                                  int deref, int n, int *psel, void (*getline)(),
+                                  int (*colfunc)(int))
+{
+    /* debug.h's int base cannot hold a host address: nothing outside this
+       file calls it, and the wrappers below call csvWindowHost directly */
+    (void)getline;
+    return csvWindowHost(title, x, y, rows, (const char *)(intptr_t)base, stride, off, deref, n,
+                         psel, csvGetHost, colfunc);
+}
+
+inline int debug_SelectCsvWindowWithLine(char *title, int x, int y, int rows, const void *base, int stride,
+                                  int off, int deref, int n, int *psel)
+{
+    return csvWindowHost(title, x, y, rows, (const char *)base, stride, off, deref, n, psel,
+                         csvGetLineHost, 0);
+}
+
+inline int debug_SelectCsvWindowWithLineColor(char *title, int x, int y, int rows, const void *base, int stride,
+                                       int off, int deref, int n, int *psel, int (*colfunc)(int))
+{
+    return csvWindowHost(title, x, y, rows, (const char *)base, stride, off, deref, n, psel,
+                         csvGetLineHost, colfunc);
+}
+
+int debug_SelectCsvWindow(char *title, int x, int y, int rows, const void *base, int stride, int off,
+                          int deref, int n, int *psel)
+{
+    return csvWindowHost(title, x, y, rows, (const char *)base, stride, off, deref, n, psel,
+                         csvGetHost, 0);
+}
+
+#else
 
 int debug_SelectCsvWindowVal(char *title, int x, int y, int rows, int count, int *psel,
                              int (*fn)(int, int), int arg)
@@ -2555,6 +3355,8 @@ int debug_SelectCsvWindow(char *title, int x, int y, int rows, const void *base,
                                       getBuffer, 0);
 }
 
+#endif
+
 static int debug_SelectStageMain(int ret, int stage)
 {
     if (systemStatus[6] != 0) {
@@ -2616,6 +3418,21 @@ static int formatState = 0; /* derived name */
 
 static int formatBlink = 0; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: debug_MemoryCard calls its entries with &mc (layout_action.h),
+   which an int parameter cannot hold on a 64-bit host: the format, unformat
+   and save-number entries use the global directly */
+static McMgr *debugHostMc(void)
+{
+    return &mc;
+}
+
+#define DEBUG_MC_PORT debugHostMc()
+#else
+#define DEBUG_MC_PORT port
+#endif
+
 inline int debug_mcFormat(int port)
 {
     int r;
@@ -2625,14 +3442,22 @@ inline int debug_mcFormat(int port)
         if (r != 1) {
             return r;
         }
+#ifdef ICO_HOST
+        iosMcFormat(DEBUG_MC_PORT);
+#else
         iosMcFormat(port);
+#endif
         formatState++;
         break;
     case 1:
         if (formatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now formatting");
         }
+#ifdef ICO_HOST
+        if (iosMcSync(DEBUG_MC_PORT) != 0) {
+#else
         if (iosMcSync(port) != 0) {
+#endif
             formatState++;
         }
         break;
@@ -2656,14 +3481,22 @@ inline int debug_mcUnformat(int port)
         if (r != 1) {
             return r;
         }
+#ifdef ICO_HOST
+        iosMcUnformat(DEBUG_MC_PORT);
+#else
         iosMcUnformat(port);
+#endif
         unformatState++;
         break;
     case 1:
         if (unformatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now unformatting");
         }
+#ifdef ICO_HOST
+        if (iosMcSync(DEBUG_MC_PORT) != 0) {
+#else
         if (iosMcSync(port) != 0) {
+#endif
             unformatState++;
         }
         break;
@@ -2673,6 +3506,8 @@ inline int debug_mcUnformat(int port)
     }
     return 0;
 }
+
+#undef DEBUG_MC_PORT
 
 static int debug_mcRetErrCheck(McMgr *mc)
 {
@@ -2778,6 +3613,9 @@ static int debug_selectFile(McMgr *mc)
 
 inline void *debug_saveNumFunc(int no, void *mc)
 {
+#ifdef ICO_HOST
+    mc = debugHostMc(); /* the int argument cannot carry the pointer */
+#endif
     if ((1 << no) & ((McMgr *)mc)->mask) {
         return "SAVED";
     }
@@ -2814,7 +3652,12 @@ static int debug_mcSaveMainBlock(McMgr *mc)
             debug_StdPrintfDummy("debug_mcSaveMainBlock:既に設定された数以上のデータを保存してる\n");
         }
         r = debug_SelectCsvWindowVal("SAVE NO.", 80, 70, 10, 10, &mc->fileNo,
-                                     (int (*)(int, int))debug_saveNumFunc, (int)mc);
+                                     (int (*)(int, int))debug_saveNumFunc,
+#ifdef ICO_HOST
+                                     0);
+#else
+                                     (int)mc);
+#endif
         if (r > 0) {
             r = 0;
             saveState++;
@@ -2884,7 +3727,12 @@ static int debug_mcLoadMainBlock(McMgr *mc)
             debug_StdPrintfDummy("debug_mcLoadMainBlock:既に設定された数以上のデータを保存してる\n");
         }
         r = debug_SelectCsvWindowVal("SAVE NO.", 80, 70, 10, 10, &mc->fileNo,
-                                     (int (*)(int, int))debug_saveNumFunc, (int)mc);
+                                     (int (*)(int, int))debug_saveNumFunc,
+#ifdef ICO_HOST
+                                     0);
+#else
+                                     (int)mc);
+#endif
         if (r > 0) {
             r = 0;
             loadState++;
@@ -3084,7 +3932,11 @@ int debug_SETest(int reset)
     r = debug_SelectCsvWindowWithLineColor("SE LIST", 0xA, 0x3C, 0xA, seDef, 0x3C, 0,
                                                0, 0x592, &seSelect, debug_SETest_color);
     if (r > 0) {
+#ifdef ICO_HOST
+        seHandle = soundSeDefPlay(seSelect, 0, (float *)(GOBJ_SUB(boyGObj)->nodeMtx + 0x30), 1);
+#else
         seHandle = soundSeDefPlay(seSelect, 0, GOBJ_SUB(boyGObj)->nodeMtx + 0x30, 1);
+#endif
         return 0;
     }
     if (r < 0) {
@@ -3404,6 +4256,16 @@ static int debug_DispBox(int on)
     }
     CameraSetMode(1);
     DebugDispBox(boxCentre, boxWidth);
+#ifdef ICO_HOST /* the strings as pointers */
+    if (debug_font_flag & 1) {
+        debug_Printf(10, 150, 0xFFFFFF00u, "[%s] %4d %4d %4d", "center", (int)boxCentre[0],
+                     (int)boxCentre[1], (int)boxCentre[2]);
+    }
+    if (debug_font_flag & 1) {
+        debug_Printf(10, 160, 0xFFFFFF00u, "[%s] %4d %4d %4d", " width", (int)boxWidth[0],
+                     (int)boxWidth[1], (int)boxWidth[2]);
+    }
+#else
     if (debug_font_flag & 1) {
         debug_Printf(10, 150, 0xFFFFFF00u, "[%s] %4d %4d %4d", (int)"center", (int)boxCentre[0],
                      (int)boxCentre[1], (int)boxCentre[2]);
@@ -3412,6 +4274,7 @@ static int debug_DispBox(int on)
         debug_Printf(10, 160, 0xFFFFFF00u, "[%s] %4d %4d %4d", (int)" width", (int)boxWidth[0],
                      (int)boxWidth[1], (int)boxWidth[2]);
     }
+#endif
     return (pad[0].flags & 0x40) ? -1 : 0;
 }
 
@@ -3469,6 +4332,12 @@ static int debug_DispBall(int on)
         break;
     }
     for (i = 0; i < num; i++) {
+#ifdef ICO_HOST /* the name as a pointer */
+        if (debug_font_flag & 1) {
+            debug_Printf(10, i * 10 + 80, 0xFFFFFF00u, i == dispBallRow ? ">>%8s = %d\n" : "  %8s = %d\n",
+                         list.v[i].name, (int)*list.v[i].val);
+        }
+#else
         if (i == dispBallRow) {
             if (debug_font_flag & 1) {
                 debug_Printf(10, i * 10 + 80, 0xFFFFFF00u, ">>%8s = %d\n", (int)list.v[i].name,
@@ -3480,6 +4349,7 @@ static int debug_DispBall(int on)
                              (int)*list.v[i].val);
             }
         }
+#endif
     }
     CameraSetMode(1);
     if (boyGObj != 0) {
@@ -3560,7 +4430,9 @@ static int debug_CollisionTest(int reset)
     if (collisionRay.wall.elem != 0) {
         wall.o = collisionRay.wall.o;
         wall.elem = collisionRay.wall.elem;
+#ifndef ICO_HOST /* a host WallCfg (two pointers) does not fit a VECTOR */
         *(WallCfg *)&mv = wall;
+#endif
         gif_StartPacketPri(11);
         gif_SetZWrite(0);
         gif_SetZTest(0);
@@ -3569,7 +4441,11 @@ static int debug_CollisionTest(int reset)
         MatrixDrive_TransMatrixV(collisionRay.pt[2]);
         prim_DispWireSphere(5.0f, (void *)&collisionWallCol, 8, 4);
         gif_EndPacket();
+#ifdef ICO_HOST
+        DebugDisp1Collision(&wall);
+#else
         DebugDisp1Collision(&mv);
+#endif
         debug_PrintfDummy(80, 180, 0xFFFFFF00u, "HIT: %p,%d", collisionRay.wall.o.obj,
                           collisionRay.wall.o.node);
         debug_PrintfDummy(80, 190, 0xFFFFFF00u, "ATTR: %x",
@@ -3747,6 +4623,17 @@ static int sceFd = -1; /* derived name */
 
 inline int debugSceOpen(const char *name, int mode)
 {
+#ifdef ICO_HOST
+    /* PC port (R6a): in developer mode the development kit's host0:, which
+       port/data/sifdev_host.c maps to <pref>/dev/ (the debug option file,
+       the start stage, snapshots, way_tool.c's and camera-editor.c's files,
+       GsBase.c's stage settings).  Off: the retail build's cdrom0: path,
+       which finds nothing, as before. */
+    if (ico_opt_developer_mode()) {
+        snprintf(sceOpenPath, sizeof(sceOpenPath), "host0:%s", name);
+        return sceFd = sceOpen((unsigned char *)sceOpenPath, mode);
+    }
+#endif
     sprintf(sceOpenPath, "%s%s;1", "cdrom0:\\", name);
     return sceFd = sceOpen(sceOpenPath, mode);
 }

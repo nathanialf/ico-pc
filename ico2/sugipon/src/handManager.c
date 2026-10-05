@@ -12,10 +12,49 @@
 
 static void connectToTarget(struct GObj *obj, HandRec *hw, int na, int nb, int nc);
 
+#ifdef ICO_HOST
+
+/* getBone was a nested function inside connectToTarget. */
+static void getBone(float *out, GObj *o)
+{
+    Sub15C *sub = GOBJ_SUB(o);
+    float scale = sub->nodes->scale[0];
+    SkelNode *nodes = sub->skel;
+    float a;
+    float b;
+    float c;
+
+    a = nodes[nodes[GetSkeltonFocusNode(o, 19)].child].pos[0];
+    if (a < 0.0f) {
+        a = -a;
+    }
+    a *= scale;
+    out[0] = a;
+
+    a = nodes[nodes[GetSkeltonFocusNode(o, 20)].child].pos[0];
+    if (a < 0.0f) {
+        a = -a;
+    }
+    out[1] = a;
+
+    a = nodes[nodes[GetSkeltonFocusNode(o, 22)].child].pos[0];
+    b = out[1];
+    if (a < 0.0f) {
+        c = b - a;
+    } else {
+        c = b + a;
+    }
+    c *= scale;
+    out[1] = c;
+}
+
+#else
 /* getBone is defined as a nested function inside connectToTarget below. */
+#endif
 
 static void connectToTarget(GObj *obj, HandRec *hw, int na, int nb, int nc)
 {
+#ifndef ICO_HOST
     /* getBone reads connectToTarget's frame through the static chain, which
      * its prologue saves at 0(sp). */
     void getBone(float *out, GObj *o)
@@ -50,6 +89,7 @@ static void connectToTarget(GObj *obj, HandRec *hw, int na, int nb, int nc)
         c *= scale;
         out[1] = c;
     }
+#endif
     float b0[4];
     float b1[4];
     float d[4];
@@ -215,10 +255,17 @@ extern char motionIKEffKind[];
    HandManager loses its reload (measured) */
 static inline void ResetHandTarget(GObj *obj, int off) /* derived name */
 {
-    char *h = (char *)(int)GOBJ_SUB(obj) + off;
+#ifdef ICO_HOST
+    HandRec *h = off == 0x310 ? &GOBJ_SUB(obj)->root.hand0 : &GOBJ_SUB(obj)->root.hand1;
+    h->ikMode = 0;
+    h->ikLock = 0;
+    h->ikRate = GOBJ_SUB(obj)->root.handRate;
+#else
+    char *h = (char *)(ICO_WORD)GOBJ_SUB(obj) + off;
     *(int *)(h + 0x20) = 0;
     *(int *)(h + 0x24) = 0;
     ((IntFloat *)(h + 0x50))->f = GOBJ_SUB(obj)->root.handRate;
+#endif
 }
 
 void HandManager(GObj *obj)

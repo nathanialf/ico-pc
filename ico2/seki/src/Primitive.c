@@ -20,6 +20,48 @@
 #include "ios.h"
 #include <assert.h>
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd_mesh.h"
+
+/* PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md "The mesh path"): the
+   VU1 chains this file builds also go through the host's VIF reader
+   (mc_HostDma): prim_DispFan2D's SET_GSREGISTER fan reaches the GS register
+   decoder, prim_DispMesh3D's matrix, light and UV packets and
+   prim_DispParticle's matrix packet the list's VU state, and a particle
+   batch's MSCNT draws it (rd_DrawVuParticles).  A Mesh3D packet buffer is
+   drawn whole (primHostGrid, rd_DrawVuGrid). */
+static void primHostGrid(Mesh3D *m)
+{
+    unsigned long long prim[2];
+    unsigned long long tag;
+    RdVuDraw d;
+    RdVuGridDraw g;
+
+    if (m->strips <= 0 || m->stripLen < 3) {
+        return;
+    }
+    /* every strip's GIF tag (PRE) writes this PRIM (prim_InitMesh3D's) */
+    memcpy(&tag, (char *)m->bufs[buffer_ID] + 0x10, 8);
+    prim[0] = (tag >> 47) & 0x7FF;
+    prim[1] = 0;
+    gif_HostWriteRegs(prim, 1);
+    if (!rd_VuDrawFromState(&d)) {
+        return;
+    }
+    memset(&g, 0, sizeof(g));
+    g.qw = (const float (*)[4])m->bufs[buffer_ID];
+    g.strips = (uint32_t)m->strips;
+    g.stripLen = (uint32_t)m->stripLen;
+    g.lit = m->lit != 0;
+    g.code = d.code;
+    g.vu = d.vu;
+    rd_DrawVuGrid(&g, RD_KEY(m, rd_CurrentList(), 0));
+}
+
+#endif
+
 Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int rc)
 {
     Fan2D *f;
@@ -27,7 +69,8 @@ Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int 
     Fan2DVtx *first;
     int i;
 
-    f = (Fan2D *)iosMallocDebug(ios_partition_seki, 12, "src/Primitive.c", 318);
+    f = (Fan2D *)iosMallocDebug(ios_partition_seki, sizeof(Fan2D) > 12 ? sizeof(Fan2D) : 12,
+                                "src/Primitive.c", 318);
     f->buf = (Fan2DVtx *)iosMallocDebug(ios_partition_seki, (n + 2) * 32, "src/Primitive.c", 319);
     q = f->buf;
 
@@ -232,9 +275,22 @@ void prim_DispFan2D(Fan2D *f, int mode)
 
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+#endif
 }
 
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
+
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the mesh code moves its vertices (Prim3DVec) as quadwords; the
+   sizes must agree (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(Qw128, Prim3DVec);
+
+#endif
 
 /* The mesh strip's GIF tag template: NLOOP and PRIM are ORed in per strip.
    prim_makePacketMesh3D reads it by pointer dereference. */
@@ -312,7 +368,8 @@ Mesh3D *prim_InitMesh3D(int nx, int ny, int rot, long long col, unsigned int col
     Mesh3D *m;
     int i;
 
-    m = (Mesh3D *)iosMallocDebug(ios_partition_seki, 144, "src/Primitive.c", 576);
+    m = (Mesh3D *)iosMallocDebug(ios_partition_seki, sizeof(Mesh3D) > 144 ? sizeof(Mesh3D) : 144,
+                                 "src/Primitive.c", 576);
     m->nx = nx;
     m->ny = ny;
     m->pos =
@@ -509,11 +566,113 @@ void prim_UpdateMesh3D(Mesh3D *m, int flags, int idx)
     }
 }
 
+#ifdef ICO_HOST
+
+/* setMatrix, setLight and clearUVOffset were GNU nested functions of
+   prim_DispMesh3D; setLight took the parent's two light arguments as parameters.  A matrix
+   or vector copied into the packet takes the cursor post-incremented as its
+   destination, `_CopyMatrix(((float (*)[16])dd->ptr.c)++, m)`, and every
+   packet copy here is spelled the same way. */
+
+static void setMatrix(void)
+{
+    float mtx[16];
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    _GetCurrentMatrix(mtx);
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000005;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C048000;
+    dd->ptr.c = q + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), mtx);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000010;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
+
+static void setLight(void *la, void *lb)
+{
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000009;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C088000;
+    dd->ptr.c = q + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), lb);
+    _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), la);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000012;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
+
+static void clearUVOffset(void)
+{
+    float v[4];
+    DpkCtl *dd;
+    char *q;
+    char *r;
+
+    memset(v, 0, 16);
+    dd = &PacketBufferStruct;
+    q = dd->ptr.c;
+    dd->tail.c = q;
+    ((GifPkWord *)q)->d = 0x10000002;
+    dd->ptr.c = q + 8;
+    ((GifPkWord *)(q + 8))->w[0] = 0;
+    dd->ptr.c = q + 0xC;
+    dd->gif.c = q + 0xC;
+    ((GifPkWord *)(q + 0xC))->w[0] = 0x6C018000;
+    dd->ptr.c = q + 0x10;
+    _CopyVector(ICO_POSTINC(float (*)[4], dd->ptr.c), v);
+    r = dd->ptr.c;
+    ((GifPkWord *)r)->w[0] = 0x15000002;
+    r += 4;
+    dd->ptr.c = r;
+    ((GifPkWord *)r)->w[0] = 0;
+    dd->ptr.c = r + 4;
+    ((GifPkWord *)(r + 4))->w[0] = 0;
+    dd->ptr.c = r + 8;
+    ((GifPkWord *)(r + 8))->w[0] = 0;
+    dd->ptr.c = r + 0xC;
+}
+
+#else
 /* setMatrix, setLight and clearUVOffset are GNU nested functions of
    prim_DispMesh3D; setLight reads the parent's two light arguments.  A matrix
    or vector copied into the packet takes the cursor post-incremented as its
    destination, `_CopyMatrix(((float (*)[16])dd->ptr.c)++, m)`, and every
    packet copy here is spelled the same way. */
+#endif
 
 void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
 {
@@ -522,6 +681,7 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     char *q;
     TexExt *ext;
     int pri;
+#ifndef ICO_HOST
 
     void setMatrix(void)
     {
@@ -614,6 +774,7 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
         ((GifPkWord *)(r + 8))->w[0] = 0;
         dd->ptr.c = r + 0xC;
     }
+#endif
 
     pri = dl_GetPri();
     if (debug_disp_mesh == 0) {
@@ -637,7 +798,11 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     d->end.c = 0;
     setMatrix();
     if (m->lit != 0) {
+#ifdef ICO_HOST
+        setLight(la, lb);
+#else
         setLight();
+#endif
     }
     if (tex == -1) {
         clearUVOffset();
@@ -652,12 +817,18 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     d->ptr.c = q + 0x10;
     dl_OpenDma(5, d->dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    mc_HostDma(5, d->dma.c, 0);
+#endif
     gif_StartPacketPri(pri);
     gif_SetGsReg(0x4A, 0);
     gif_EndPacket();
     mc_SetMicroCode(2, m->lit, 0, 1, pri);
     dl_OpenDma(2, m->bufs[buffer_ID], m->qwc);
     dl_CloseDma();
+#ifdef ICO_RD
+    primHostGrid(m);
+#endif
 }
 
 /* One 16-byte constant packet template, copied to the stack. */
@@ -682,7 +853,8 @@ PrimParticle *prim_InitParticleByPartition(int num, float x, float y, float z, i
             "Particle Object too big (%d particles). (must be under %d particles)\n", num, 80);
         return 0;
     }
-    p = (PrimParticle *)iosMallocDebugNoAssert(heap, 416, "src/Primitive.c", 911);
+    p = (PrimParticle *)iosMallocDebugNoAssert(
+        heap, sizeof(PrimParticle) > 416 ? sizeof(PrimParticle) : 416, "src/Primitive.c", 911);
     if (p == 0) {
         return 0;
     }
@@ -777,9 +949,15 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
             mc_TransMicroCode(5, 1 << pri);
             dl_OpenDma(2, &p->buf[p->cur], p->headQwc);
             dl_CloseDma();
+#ifdef ICO_RD
+            mc_HostDma(2, &p->buf[p->cur], p->headQwc);
+#endif
             mc_SetMicroCode(3, 0, 0, 0, pri);
             dl_OpenDma(2, p->objs[p->cur], p->objSize);
             dl_CloseDma();
+#ifdef ICO_RD
+            mc_HostDma(2, p->objs[p->cur], p->objSize);
+#endif
             if (systemStatus[5] == 0) {
                 p->cur ^= 1;
             }
@@ -796,6 +974,44 @@ void prim_DeleteParticle(PrimParticle *p)
     EntryDelayFree(p);
 }
 
+#ifdef ICO_HOST
+
+static void drawDisc(float rr, float yy, float st, void *col, int flag)
+{
+    float a;
+    Prim3DVec c = {0.0f, yy, 0.0f, 1.0f};
+
+    for (a = 0.0f; a < 65536.0f; a += st) {
+        Prim3DVec q0 = {rr * GetTableSin((short)a), yy, rr * GetTableCos((short)a), 1.0f};
+        Prim3DVec q1 = {rr * GetTableSin((short)(a + st)), yy, rr * GetTableCos((short)(a + st)),
+                        1.0f};
+
+        DrawLineG(&q0, col, &q1, col, flag);
+        DrawLineG(&q0, col, &c, col, flag);
+    }
+}
+
+static inline void drawSide(float rr, float ya, float yb, float st, void *col,
+                            int flag) /* derived name */
+{
+    float a;
+
+    for (a = 0.0f; a < 65536.0f; a += st) {
+        Prim3DVec p0 = {rr * GetTableSin((short)a), ya, rr * GetTableCos((short)a), 1.0f};
+        Prim3DVec p1 = {p0.x, yb, p0.z, 1.0f};
+
+        DrawLineG(&p0, col, &p1, col, flag);
+    }
+}
+
+void prim_DispWireYCylinder(void *col, int n, int flag, float r, float y0, float y1)
+{
+    float st = 65536.0f / (float)n;
+
+    drawDisc(r, y0, st, col, flag);
+    drawDisc(r, y1, st, col, flag);
+    drawSide(r, y0, y1, st, col, flag);
+#else
 void prim_DispWireYCylinder(void *col, int n, int flag, float r, float y0, float y1)
 {
     float a;
@@ -828,6 +1044,7 @@ void prim_DispWireYCylinder(void *col, int n, int flag, float r, float y0, float
     drawDisc(r, y0);
     drawDisc(r, y1);
     drawSide(r, y0, y1);
+#endif
 }
 
 void prim_DispWireSphere(float r, void *col, int nu, int nv)

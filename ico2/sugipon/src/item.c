@@ -57,7 +57,7 @@ typedef struct {                        /* field names derived */
     int released;                       /* 0x08 */
     int held;                           /* 0x0C */
     int thrown;                         /* 0x10 */
-    int holder;                         /* 0x14, the holding object */
+    ICO_WORD_PTR(GObj *) holder;        /* 0x14, the holding object */
     int pad18[2];                       /* 0x18 */
     float rot[4];                       /* 0x20 */
     float spin;                         /* 0x30 */
@@ -112,7 +112,7 @@ void HoldItem(GObj *gobj, GObj *holder)
     p = GOBJ_SUB(gobj)->work;
     p->released = 0;
     p->held = 1;
-    p->holder = (int)holder;
+    p->holder = (ICO_WORD_PTR(GObj *))holder;
     GOBJ_SUB(gobj)->disp = 0;
     SetIdentityQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
     if (IsItemKindBomb(gobj)) {
@@ -129,7 +129,7 @@ void HoldItem(GObj *gobj, GObj *holder)
 static inline void setItemDead(GObj *gobj) /* derived name */
 {
     Sub15C *w = GOBJ_SUB(gobj);
-    ItemWork *p = (ItemWork *)*(int *)&w->work;
+    ItemWork *p = (ItemWork *)*(ICO_WORD *)&w->work;
 
     w->disp = 0;
     p->dead = 1;
@@ -195,9 +195,10 @@ void ThrowItem(GObj *gobj, void *vel)
     p->released = 1;
     p->held = 0;
     p->thrown = 1;
-    _ScaleVectorXYZ(*(char **)&gobj->dobj + 0x130, vel,
-                    30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-    SetIdentityQuaternion(*(char **)&gobj->dobj + 0x150);
+    _ScaleVectorXYZ(ICO_RAWP(char *, *(char **)&gobj->dobj, 0x130, (char *)gobj->dobj->root.move),
+                    vel, 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    SetIdentityQuaternion(
+        ICO_RAWP(char *, *(char **)&gobj->dobj, 0x150, (char *)gobj->dobj->root.itemQuat));
 }
 
 typedef union { /* field names derived */
@@ -391,6 +392,36 @@ static inline int breakItemOnFloorHit(GObj *gobj, float len, float *pos,
     return 0;
 }
 
+#ifdef ICO_HOST
+
+static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
+{
+    ClipWork w;
+
+    _ScaleVector(vel, vel, t);
+    _AddVectorXYZ(vel, vel, p->drain);
+    GetSlerpQuaternion(GOBJ_SUB(gobj)->root.itemQuat, GOBJ_SUB(gobj)->root.itemQuat,
+                       IdentityQuaternion, t);
+    RegularizeQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
+    CopyVector(w.pt[0], pos);
+    CopyVector(w.pt[1], w.pt[0]);
+    w.radius = 200.0f;
+    ClipWallWaveForce(&w);
+    if (w.wall.elem != 0) {
+        float d = GetDistanceFromPlane(w.normal.f, w.pt[0]);
+
+        d += w.radius;
+        if (0.0f < d) {
+            float k = 1.0f / (d + 50.0f);
+
+            vel[0] += w.normal.f[0] * 100.0f * k;
+            vel[2] += w.normal.f[2] * 100.0f * k;
+        }
+    }
+}
+
+#endif
+
 static void uncarriedItemGeo(GObj *gobj)
 {
     ObjNode link;  /* 0x00 */
@@ -398,6 +429,7 @@ static void uncarriedItemGeo(GObj *gobj)
     float npos[4]; /* 0x20 */
     float vel[4];  /* 0x30 */
     ItemWork *p;   /* 0x40 */
+#ifndef ICO_HOST
 
     void floatGeo(float t)
     {
@@ -424,6 +456,7 @@ static void uncarriedItemGeo(GObj *gobj)
             }
         }
     }
+#endif
 
     float q[4];  /* 0x50 */
     ClipWork cw; /* 0x60 */
@@ -448,7 +481,11 @@ static void uncarriedItemGeo(GObj *gobj)
             float r = (d + 20.0f) / 40.0f;
 
             vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f * r;
+#ifdef ICO_HOST
+            floatGeo(1.0f - r * 0.08f, gobj, vel, p, pos);
+#else
             floatGeo(1.0f - r * 0.08f);
+#endif
             if (p->wave == 0) {
                 CopyVector(q, pos);
                 q[1] = GOBJ_SUB(gobj)->ctrl.waterY;
@@ -456,7 +493,11 @@ static void uncarriedItemGeo(GObj *gobj)
             }
         } else if (0.0f < d) {
             vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f;
+#ifdef ICO_HOST
+            floatGeo(0.92f, gobj, vel, p, pos);
+#else
             floatGeo(0.92f);
+#endif
         }
         vel[1] += GetTableSin(p->wave) * 0.1f;
         p->wave += 1024;
@@ -624,7 +665,11 @@ static void execBombGeo(GObj *gobj)
                                            60.0f * 300.0f)) +
                  1.0f) *
                 0.5f);
+#ifdef ICO_HOST
+        CopyVector(((SubHandle *)&q->torch->dobj)->sub->root.pos, v);
+#else
         CopyVector(((SubHandle *)&q->torch->dobj)->p + 0xA0, v);
+#endif
         q->time = q->time - 1;
         if (q->time == 0) {
             q->state = 2;

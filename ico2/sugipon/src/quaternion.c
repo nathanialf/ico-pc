@@ -82,6 +82,12 @@ static float quatToMatrixScale[4] = {1.0f, 1.0f, 1.0f, 1.41421356f}; /* derived 
 
 void GetMatrixFromQuaternion(void *mtx, void *q)
 {
+#ifdef ICO_HOST
+    float *m = mtx;
+
+    ico_quaternion_rotation_rows((float (*)[4])mtx, (const float *)q);
+    CopyVector(m + 12, ZeroPoint);
+#else
     float *m = mtx;
 
     __asm__ __volatile__(".set noreorder\n"
@@ -118,14 +124,60 @@ void GetMatrixFromQuaternion(void *mtx, void *q)
                          : "r"(quatToMatrixScale)
                          : "memory");
     CopyVector(m + 12, ZeroPoint);
+#endif
 }
 
 /* the file's `nxt` permutation table */
 static int nxt[3] = {1, 2, 0}; /* derived name */
 
+#ifdef ICO_HOST
+
+/* GetQuaternionFromMatrix's helper, a GNU nested function in the original
+   (it captured nothing), at file scope so clang compiles it */
+static void getQuaternionFromMatrix(float *q, float (*m)[4])
+{
+    float tr;
+    float s;
+    float t;
+    int i;
+    int j;
+    int k;
+
+    tr = m[0][0] + m[1][1] + m[2][2];
+    if (tr > 0.0f) {
+        s = _Sqrt(tr + 1.0f);
+        q[3] = s * 0.5f;
+        t = 0.5f / s;
+        q[0] = (m[1][2] - m[2][1]) * t;
+        q[1] = (m[2][0] - m[0][2]) * t;
+        q[2] = (m[0][1] - m[1][0]) * t;
+    } else {
+        i = 0;
+        if (m[1][1] > m[0][0]) {
+            i = 1;
+        }
+        if (m[2][2] > m[i][i]) {
+            i = 2;
+        }
+        j = nxt[i];
+        k = nxt[j];
+        s = _Sqrt(m[i][i] - (m[j][j] + m[k][k]) + 1.0f);
+        q[i] = s * 0.5f;
+        t = (s != 0.0f) ? 0.5f / s : 0.0f;
+        q[3] = (m[j][k] - m[k][j]) * t;
+        q[j] = (m[i][j] + m[j][i]) * t;
+        q[k] = (m[i][k] + m[k][i]) * t;
+    }
+}
+
+#endif
+
 /* no caller; void as sugipon's output-parameter getters */
 void GetQuaternionFromMatrix(void *q, void *mtx)
 {
+#ifdef ICO_HOST
+    char local[64];
+#else
     auto void getQuaternionFromMatrix(float *q, float (*m)[4]);
     char local[64];
 
@@ -164,6 +216,7 @@ void GetQuaternionFromMatrix(void *q, void *mtx)
             q[k] = (m[i][k] + m[k][i]) * t;
         }
     }
+#endif
 
     _TransposeMatrix(local, mtx);
     getQuaternionFromMatrix((float *)q, (float (*)[4])local);
@@ -182,6 +235,9 @@ void GetInverseQuaternion(void *dst, void *src)
 
 void RegularizeQuaternion(void *q)
 {
+#ifdef ICO_HOST
+    _ScaleVector(q, q, 1.0f / _Sqrt(ico_quaternion_norm2((const float *)q)));
+#else
     float d;
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf14, 0x0(%1)\n"
@@ -197,7 +253,10 @@ void RegularizeQuaternion(void *q)
                          : "r"(q)
                          : "$2");
     _ScaleVector(q, q, 1.0f / _Sqrt(d));
+#endif
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 inline float GetQuaternionCosRadian(void *qa, void *qb)
 {
@@ -217,6 +276,8 @@ inline float GetQuaternionCosRadian(void *qa, void *qb)
                          : "$2");
     return r;
 }
+
+#endif /* ICO_HOST: port/math */
 
 /* int (float) here, short (float) in tableSin.h */
 extern int GetTableArcCos(float c);
@@ -355,6 +416,8 @@ inline void SetQuaternionByAxisRotateEAngle(float *out, float *in, float x, floa
     SetQuaternionByAxisRotateVEAngle(out, in, v);
 }
 
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 inline void MultiQuaternion(void *out, void *qa, void *qb)
 {
     VU0_LSV(lqc2, 11, 0x0, 5);
@@ -372,13 +435,22 @@ inline void MultiQuaternion(void *out, void *qa, void *qb)
     VU0_LSV(sqc2, 13, 0x0, 4);
 }
 
+#endif /* ICO_HOST: port/math */
+
 inline void DivQuaternion(void *self, void *qa, void *qb)
 {
     float buf[4];
     GetInverseQuaternion(buf, qb);
-    /* the call goes through a cast of MultiQuaternion's declaration */
+    /* the call goes through a cast of MultiQuaternion's declaration, whose
+       int parameters would truncate 64-bit pointers on the host */
+#ifdef ICO_HOST
+    MultiQuaternion(self, buf, qa);
+#else
     ((void (*)(int, int, int))MultiQuaternion)(self, buf, qa);
+#endif
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 inline void GetMatrixFromQuaternionRotElem(void *mtx, void *q)
 {
@@ -417,8 +489,17 @@ inline void GetMatrixFromQuaternionRotElem(void *mtx, void *q)
                          : "memory");
 }
 
+#endif /* ICO_HOST: port/math */
+
 inline void GetMatrixFromQuaternionPos(void *mtx, void *q, void *pos)
 {
+#ifdef ICO_HOST
+    float *m = mtx;
+
+    ico_quaternion_rotation_rows((float (*)[4])mtx, (const float *)q);
+    CopyVector(m + 12, pos);
+    m[15] = 1.0f;
+#else
     float *m = mtx;
 
     __asm__ __volatile__(".set noreorder\n"
@@ -456,6 +537,7 @@ inline void GetMatrixFromQuaternionPos(void *mtx, void *q, void *pos)
                          : "memory");
     CopyVector(m + 12, pos);
     m[15] = 1.0f;
+#endif
 }
 
 inline void MultiMatrixByQuaternion(void *src)
@@ -511,6 +593,9 @@ inline void RotQuaternionX(void *self, short ang)
     f = GetTableSin(half);
     _ScaleVector((int *)buf, axis, f);
     *(float *)(buf + 0xC) = GetTableCos(half);
+#ifdef ICO_HOST
+    MultiQuaternion(self, self, buf);
+#else
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf11, 0x0(%0)\n"
                          "lqc2 $vf12, %1\n"
@@ -529,6 +614,7 @@ inline void RotQuaternionX(void *self, short ang)
                          :
                          : "r"(self), "m"(buf[0])
                          : "memory");
+#endif
 }
 
 inline void RotQuaternionY(void *self, short ang)
@@ -540,6 +626,9 @@ inline void RotQuaternionY(void *self, short ang)
     f = GetTableSin(half);
     _ScaleVector((int *)buf, axis, f);
     *(float *)(buf + 0xC) = GetTableCos(half);
+#ifdef ICO_HOST
+    MultiQuaternion(self, self, buf);
+#else
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf11, 0x0(%0)\n"
                          "lqc2 $vf12, %1\n"
@@ -558,6 +647,7 @@ inline void RotQuaternionY(void *self, short ang)
                          :
                          : "r"(self), "m"(buf[0])
                          : "memory");
+#endif
 }
 
 inline void RotQuaternionZ(void *self, short ang)
@@ -569,6 +659,9 @@ inline void RotQuaternionZ(void *self, short ang)
     f = GetTableSin(half);
     _ScaleVector((int *)buf, axis, f);
     *(float *)(buf + 0xC) = GetTableCos(half);
+#ifdef ICO_HOST
+    MultiQuaternion(self, self, buf);
+#else
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf11, 0x0(%0)\n"
                          "lqc2 $vf12, %1\n"
@@ -587,12 +680,16 @@ inline void RotQuaternionZ(void *self, short ang)
                          :
                          : "r"(self), "m"(buf[0])
                          : "memory");
+#endif
 }
 
 inline void RotQuaternionEAX(void *self, float *in)
 {
     float q[4];
     SetQuaternionByAxisRotateEAngle(q, in, 1.0f, 0.0f, 0.0f);
+#ifdef ICO_HOST
+    MultiQuaternion(self, self, q);
+#else
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf11, 0x0(%0)\n"
                          "lqc2 $vf12, %1\n"
@@ -611,12 +708,16 @@ inline void RotQuaternionEAX(void *self, float *in)
                          :
                          : "r"(self), "m"(q[0])
                          : "memory");
+#endif
 }
 
 inline void RotQuaternionEAZ(void *self, float *in)
 {
     float q[4];
     SetQuaternionByAxisRotateEAngle(q, in, 0.0f, 0.0f, 1.0f);
+#ifdef ICO_HOST
+    MultiQuaternion(self, self, q);
+#else
     __asm__ __volatile__(".set noreorder\n"
                          "lqc2 $vf11, 0x0(%0)\n"
                          "lqc2 $vf12, %1\n"
@@ -635,6 +736,7 @@ inline void RotQuaternionEAZ(void *self, float *in)
                          :
                          : "r"(self), "m"(q[0])
                          : "memory");
+#endif
 }
 
 inline void GetXUnitVectorOfQuaternion(float *out, float *q)
@@ -696,6 +798,8 @@ inline void GetDifferencialQuaternionWithNoRegularize(void *out, void *a, void *
 }
 
 /* no caller; float as sugipon's scalar getters */
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
+
 inline float GetQuaternionMagnitude(void *q)
 {
     float r;
@@ -712,3 +816,5 @@ inline float GetQuaternionMagnitude(void *q)
                          : "r"(q));
     return _Sqrt(r);
 }
+
+#endif /* ICO_HOST: port/math */

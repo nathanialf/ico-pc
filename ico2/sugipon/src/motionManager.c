@@ -19,6 +19,13 @@
 #include "fieldCollision.h"
 #include "motionManager.h"
 #include "DisplayP2O.h"
+
+#ifdef ICO_HOST
+
+#include "GifPacket.h"
+
+#endif
+
 #include <libvu0.h>
 #include <assert.h>
 
@@ -151,7 +158,7 @@ static SkelNode *skelNode; /* derived name */
 /* the object being skeletonised, held as a word: GetMatrixOfMotion's store
    of it keeps its place among the display-object reads only as an int store
    (a GObj pointer lets two of them pass it), so its uses convert it */
-static int skelGObj; /* derived name */
+static ICO_WORD skelGObj; /* derived name */
 
 /* the collision display switches SetHitCollisionDisplay sets (the second
    one draws the wall and cliff rays) and the skeleton's scale */
@@ -442,7 +449,14 @@ static void checkWallState(int flag)
 
                 SubVectorXYZ(v, p->pt[2], p);
                 skelMotCtrl->wallDist = FSqrt(sceVu0InnerProduct(v, v));
+#ifdef ICO_HOST
+                /* PC port: a ray that hits the wall at its own start point
+                   gives wallDist 0; the EE's div.s makes 1 / 0 +Fmax, IEEE
+                   makes Inf (DIVERGENCES.md F5) */
+                sceVu0ScaleVector(skelMotCtrl->wallDir, v, ps2_div(1.0f, skelMotCtrl->wallDist));
+#else
                 sceVu0ScaleVector(skelMotCtrl->wallDir, v, 1.0f / skelMotCtrl->wallDist);
+#endif
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x20;
                 skelMotCtrl->pureWallAttr = skelMotCtrl->wallAttr = GetWallAttribute(p);
                 /* The hit count reaches GetOrientOfWall as a pointer-typed
@@ -487,7 +501,7 @@ static void checkCliffState(int first)
 
     memset(&buf, 0, sizeof(buf));
     p = &buf;
-    k = (skelGObj == boyGObj) ? -20.0f : 0.0f;
+    k = ((GObj *)skelGObj == boyGObj) ? -20.0f : 0.0f;
     cliffCheckBase[2] = k;
     MatrixDrive_PushMatrix();
     MatrixDrive_TransMatrixV(cliffCheckBase);
@@ -642,7 +656,7 @@ static void _checkCliffAndWall(void)
                 skelMotCtrl->wallTopHeight += 30.0f;
             }
         }
-        if (skelGObj == boyGObj && GOBJ_SUB(skelGObj)->ctrl.cliffEdge == 0) {
+        if ((GObj *)skelGObj == boyGObj && GOBJ_SUB(skelGObj)->ctrl.cliffEdge == 0) {
             _SubVectorXYZ(v, skelRoot->pos, skelRoot->last);
             v[1] = 0.0f;
             d = VectorLengthSquare(v);
@@ -736,14 +750,11 @@ static void dispLastNode(void)
 }
 
 #include "motMan_rootUpdate.c.inc"
-/* GifPacket.h is read here, after dispActNode, which calls the gif packet
-   functions undeclared */
-#include "GifPacket.h"
 #include "DObj.h"
 
 static SkelNode *skelNode = 0; /* derived name */
 
-static int skelGObj = 0; /* derived name */
+static ICO_WORD skelGObj = 0; /* derived name */
 
 static inline void calcMaxNodeHeight(int n) /* derived name */
 {
@@ -935,7 +946,7 @@ static void execPositionReserver(GObj *self, ObjNode m)
         }
     }
     if (debug_skel_flag != 0) {
-        if (skelGObj == boyGObj) {
+        if ((GObj *)skelGObj == boyGObj) {
             CopyVector(buf2, skelRoot->savePos);
             _UnitMatrix(MatrixDrive_GetMatrix());
             if (m.obj != 0) {
@@ -970,7 +981,8 @@ void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, floa
         MOWORK(self)->localPos[3] = 1.0f;
         CopyVector(v2, MOWORK(self)->localPos);
         sceVu0ApplyMatrix(
-            (int *)v2, GOBJ_SUB(MOWORK(self)->local.obj)->nodeMtx + MOWORK(self)->local.node * 64,
+            (int *)v2,
+            (void *)(GOBJ_SUB(MOWORK(self)->local.obj)->nodeMtx + MOWORK(self)->local.node * 64),
             (char *)v2);
     } else {
         AddVectorXYZ(MOWORK(self)->localPos, MOWORK(self)->localPos, MOWORK(self)->localMove);
@@ -984,7 +996,7 @@ void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, floa
     {
         float wk0[skelNodeNum][4], wk1[skelNodeNum][4];
 
-        skelGObj = (int)self;
+        skelGObj = (ICO_WORD)self;
         nodePos = (char *)wk0;
         nodePos2 = (char *)wk1;
         skelMotion = m0;
@@ -1018,7 +1030,7 @@ void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, floa
         gif_SetAlpha(1, 5, 128);
         gif_SetZTest(0);
         gif_EndPacket();
-        dispPlane(MOWORK(self)->root.plane.f, MOWORK(self)->root.pos);
+        dispPlane((Vec4 *)MOWORK(self)->root.plane.f, MOWORK(self)->root.pos);
         gif_StartPacketPri(11);
         gif_SetZTest(1);
         gif_EndPacket();
@@ -1039,7 +1051,8 @@ void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, floa
     MOWORK(self)->motionPos[1] = MOWORK(self)->motionPos[1] - skelRoot->height;
     if (sh.obj != 0) {
         float m[16];
-        MatrixDrive_SetTransposeMatrix((void *)m, GOBJ_SUB(sh.obj)->nodeMtx + sh.node * 64);
+        MatrixDrive_SetTransposeMatrix((void *)m,
+                                       (void *)(GOBJ_SUB(sh.obj)->nodeMtx + sh.node * 64));
         sceVu0ApplyMatrix((MOWORK(self)->motionPos), m, MOWORK(self)->motionPos);
     }
     execPositionReserver(self, sh);
@@ -1066,8 +1079,15 @@ void GetMatrixOfMotion(GObj *self, char *tbl, void *ofs)
     skelRoot = &GOBJ_SUB(self)->root;
     skelMotCtrl = &GOBJ_SUB(self)->ctrl;
     skelNodeNum = GOBJ_SUB(self)->skelNodeNum;
+#ifdef ICO_HOST
+    /* PC port: GObj+8 is labelId and the row is a GenGeo (0x4C bytes and
+       kind at 0x46 on the EE only; a 64-bit host has wider pointers in
+       both records) */
+    skelGeoType = ((GenGeo *)objLayout)[self->labelId].kind;
+#else
     skelGeoType = objLayout[*(GenGeoKind *)(((char *)self) + 8) * 76 + 70];
-    skelGObj = (int)self;
+#endif
+    skelGObj = (ICO_WORD)self;
     MatrixDrive_PushMatrix();
     PushQuaternion();
 
@@ -1218,7 +1238,7 @@ void SkelTest(GObj *self)
 {
     Sub15C *sub = GOBJ_SUB(self);
     SkelNode *v;
-    skelGObj = (int)self;
+    skelGObj = (ICO_WORD)self;
     v = sub->skel;
     skelNode = v;
     if (v != 0) {
@@ -1234,7 +1254,7 @@ void SkelTestGeo(GObj *self)
     Sub15C *sub = GOBJ_SUB(self);
     SkelNode *v;
     int i;
-    skelGObj = (int)self;
+    skelGObj = (ICO_WORD)self;
     v = sub->skel;
     skelNode = v;
     if (v != 0) {
@@ -1244,8 +1264,8 @@ void SkelTestGeo(GObj *self)
         getInitialMatrix(GOBJ_SUB(self), 0);
         s2 = GOBJ_SUB(self);
         for (i = 0; i < s2->skelNodeNum; i++) {
-            int e = s2->nodeMtx + i * 64;
-            sceVu0MulMatrix(e, &s2->matrix, e);
+            ICO_WORD e = s2->nodeMtx + i * 64;
+            sceVu0MulMatrix((void *)e, &s2->matrix, (void *)e);
             s2 = GOBJ_SUB(self);
         }
         if (debug_skel_flag != 0) {

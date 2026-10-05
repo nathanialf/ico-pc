@@ -15,7 +15,112 @@
 #include "GifPacket.h"
 #include "Matrix.h"
 #include "DmaPacket.h"
+#include "ee_view.h"
 #include <assert.h>
+
+#ifdef ICO_HOST
+
+#include "MicroCode.h"
+
+#endif
+#ifdef ICO_RD
+
+#include <string.h>
+#include "GifHost.h"
+#include "rd_mesh.h"
+
+/* ===================================================================== *
+ * PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md "The mesh path").
+ *
+ * Every DMA this file chains for VU1 (matrix, light, material, texture,
+ * dissolve, specular and reflection packets, the point and line packets)
+ * also goes through the host's VIF reader (mc_HostDma, MicroCode.c), which
+ * updates the list's VU state (rd_mesh.h) and sends the SET_GSREGISTER
+ * payloads to the GS register decoder, in list order.  The packets of a
+ * model's vertex batches (pk->data) are drawn instead: regHostMesh records
+ * rd_DrawVuMesh of the packet's mesh (Packet.c) with the VU state of the
+ * list at that point, after the batches' GIF tag PRIM went to the decoder.
+ * Game logic, culling (reg_clipPacketBoundingBox, gsb_ClipBox), the list
+ * choices and the packets themselves are unchanged.
+ * ===================================================================== */
+static inline void regHostDma(int id, void *addr, int qwc)
+{
+    dl_OpenDma(id, addr, qwc);
+    mc_HostDma(id, addr, qwc);
+}
+
+#define dl_OpenDma(id, addr, qwc) regHostDma((id), (void *)(addr), (qwc))
+
+/* R7d (docs/port/RENDER_API.md "Frame rate and interpolation", "Keys"): a mesh draw's RdKey is
+ * the object, the part and the packet's place in the part's chain with the
+ * pass (0 the material, 1 the specular, 2 the reflection pass), so the same
+ * draw has the same key in every frame.  The packet pointer alone is not:
+ * a morphing part draws grp->packets and grp->morph in alternate frames
+ * (buffer_ID), and objects that share a model share its packets.  The
+ * functions that walk a part's chain name it (regKeyPart) before the walk;
+ * a packet in neither of that group's chains keeps R7b's key (packet, list,
+ * MSCAL code). */
+static Sub15C *regKeyObj;
+
+static PObjGroup *regKeyGrp;
+
+static int regKeyIdx;
+
+static void regKeyPart(Sub15C *o, PObjGroup *grp, int part)
+{
+    regKeyObj = o;
+    regKeyGrp = grp;
+    regKeyIdx = part;
+}
+
+static int regKeyOrdinal(PacHeader *pk)
+{
+    PacHeader *q;
+    int n;
+
+    if (regKeyGrp == 0) {
+        return -1;
+    }
+    for (n = 0, q = regKeyGrp->packets; q != 0; q = q->next, n++) {
+        if (q == pk) {
+            return n;
+        }
+    }
+    for (n = 0, q = regKeyGrp->morph; q != 0; q = q->next, n++) {
+        if (q == pk) {
+            return n;
+        }
+    }
+    return -1;
+}
+
+static void regHostMesh(PacHeader *pk, int pass)
+{
+    unsigned long long prim[2];
+    unsigned long long tag;
+    RdVuDraw d;
+    RdMesh m;
+    int n;
+
+    (dl_OpenDma)(2, pk->data, pk->size >> 4); /* the chain as the PS2 has it */
+    m.id = pac_HostMesh(pk);
+    if (m.id == 0) {
+        return;
+    }
+    /* the PRIM every batch's GIF tag (PRE) writes: strip, IIP, TME, ABE */
+    memcpy(&tag, pk->data + 0x10, 8);
+    prim[0] = (tag >> 47) & 0x7FF;
+    prim[1] = 0;
+    gif_HostWriteRegs(prim, 1);
+    if (rd_VuDrawFromState(&d)) {
+        n = regKeyOrdinal(pk);
+        rd_DrawVuMesh(m, &d,
+                      n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
+                             : RD_KEY(pk, rd_CurrentList(), d.code));
+    }
+}
+
+#endif
 
 /* the scissor switch reg_SetScissorSw sets and reg_Init clears */
 static int scissorSw = 0; /* derived name */
@@ -53,7 +158,7 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
     char *v;
     PacHeader *pk;
     char *t;
-    int base;
+    ICO_WORD base;
     int i;
     int n;
 
@@ -135,7 +240,7 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
             if (pk == 0) {
                 break;
             }
-            base = (int)pk->data;
+            base = (ICO_WORD)pk->data;
             p = (char *)(((RegStripHead *)(v - 0x10))->ofs + base);
             if (((RegStripHead *)(v - 0x10))->ofs != 0) {
                 if (n != 0) {
@@ -164,6 +269,12 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
             }
         }
     }
+#ifdef ICO_RD
+    /* R3ab: the vertices were rewritten in the packets: the meshes follow */
+    for (pk = pkt; pk != 0; pk = pk->next) {
+        pac_HostRefresh(pk);
+    }
+#endif
 }
 
 typedef union { /* field names derived */
@@ -246,25 +357,55 @@ static int reg_clipPacketBoundingBox(PacHeader *pk)
     return ret;
 }
 
+#ifdef ICO_HOST
+/* The PS2 calls below pass one argument and leave the second in the
+   register reg_transMicroCode received its mask in, so the program goes to
+   the lists of mask; on the host the mask is passed (MicroCode.h). */
+#define REG_MC_MASK(mask) , (mask)
+#else
+
 /* MicroCode.h is not included: its mc_TransMicroCode does not agree with this file */
 extern void
 mc_TransMicroCode(); /* K&R: called 1-ary here and 2-ary in reg_DispAccessoryWithShadow */
 
+#define REG_MC_MASK(mask)
+#endif
+
 static void reg_transMicroCode(Sub15C *o, int mask)
 {
     if (o->model->disp != 0) {
+#ifdef ICO_HOST
+        mc_TransMicroCode(3 REG_MC_MASK(mask));
+#else
         mc_TransMicroCode(3);
+#endif
         return;
     }
     if (o->lightMtx->mode == 0) {
+#ifdef ICO_HOST
+        mc_TransMicroCode(1 REG_MC_MASK(mask));
+        return;
+    }
+    mc_TransMicroCode(2 REG_MC_MASK(mask));
+}
+
+#ifndef ICO_HOST
+
+/* MicroCode.h is not included: its mc_TransMicroCode does not agree with this file */
+extern void mc_SetMicroCode();
+
+#endif
+
+#else
         mc_TransMicroCode(1);
         return;
     }
     mc_TransMicroCode(2);
 }
-
 /* MicroCode.h is not included: its mc_TransMicroCode does not agree with this file */
 extern void mc_SetMicroCode();
+
+#endif
 
 static void reg_chooseMicroCode(PObjMaterial *self, int clip, int pri)
 {
@@ -284,11 +425,73 @@ static void reg_chooseReflectionMicroCode(int mode, int clip, int pri)
 }
 
 /* the quadword copy type src/Primitive.c and src/Shadow.c use */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* PacketBufferStruct (DmaPacket.h): every packet address (dma, ptr, tail,
  * gif, end) is one pointer union, read and written through its members. */
 
+#ifdef ICO_HOST
+
+static void reg_setNMatrixPacket_setMatrix(void)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setNMatrixPacket_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
+static char *reg_setNMatrixPacket(Sub15C *o, int idx)
+{
+#else
 static char *reg_setNMatrixPacket(Sub15C *o, int idx)
 {
     void setMatrix(void)
@@ -346,12 +549,13 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
         ((GifPkWord *)(n + 4))->d = 0;
         PacketBufferStruct.ptr.c = n + 0xC;
     }
+#endif
     char *pkt;
     float *box;
     struct DObjNode *scl;
     int mode;
 
-    scl = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+    scl = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
     mode = o->lightMtx->mode;
     if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
         _InitCurrentMatrix();
@@ -376,13 +580,21 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
+#ifdef ICO_HOST
+    reg_setNMatrixPacket_setMatrix();
+#else
     setMatrix();
+#endif
     if (mode != 0 && mode != 3) {
         light_MakeLightMatrix(o, idx);
         _SetCurrentMatrix(matrixptr + 0x40);
         _ClearTransCurrentMatrix();
         _MulCurrentMatrixL((char *)o->lightMtx);
+#ifdef ICO_HOST
+        reg_setNMatrixPacket_setLight(o);
+#else
         setLight();
+#endif
     }
     {
         char *c = PacketBufferStruct.ptr.c;
@@ -409,6 +621,72 @@ typedef struct { /* field names derived */
     RegVec r[4];
 } RegMtx; /* derived name */
 
+#ifdef ICO_HOST
+
+static void reg_setMMatrixPacket_setMatrix(Sub15C *o, int idx)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    if ((o->nodes[idx].flags.ll & 6) != 0) {
+        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x1C0, matrixptr + 0x180);
+    } else {
+        _MulMatrix(matrixptr + 0x180, matrixptr + 0x80, matrixptr + 0x40);
+        _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    }
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setMMatrixPacket_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
+#endif
+
 static char *reg_setMMatrixPacket(Sub15C *o, int idx)
 {
     RegVec s;
@@ -418,6 +696,9 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
     struct DObjNode *w;
     int mode;
 
+#ifdef ICO_HOST
+    w = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
+#else
     void setMatrix(void)
     {
         char *c;
@@ -479,6 +760,7 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
         PacketBufferStruct.ptr.c = n + 0xC;
     }
     w = (struct DObjNode *)(idx * 80 + (int)o->nodes);
+#endif
     mode = o->lightMtx->mode;
     if ((w->flags.ll & 2) != 0) {
         RegMtx um;
@@ -552,13 +834,21 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
+#ifdef ICO_HOST
+    reg_setMMatrixPacket_setMatrix(o, idx);
+#else
     setMatrix();
+#endif
     if (mode != 0 && mode != 3) {
         light_MakeLightMatrix(o, idx);
         _SetCurrentMatrix(matrixptr + 0x40);
         _ClearTransCurrentMatrix();
         _MulCurrentMatrixL((char *)o->lightMtx);
+#ifdef ICO_HOST
+        reg_setMMatrixPacket_setLight(o);
+#else
         setLight();
+#endif
     }
     {
         char *c = PacketBufferStruct.ptr.c;
@@ -586,10 +876,83 @@ typedef struct { /* field names derived */
     float alpha;
 } RegClusterHead; /* derived name */
 
+#ifdef ICO_HOST
+
+static inline void reg_setCMatrixPacket_pack(Sub15C *o, float alpha)
+{
+    char *c;
+    char *m;
+    int n;
+    int i;
+
+    n = o->nodeNum * 4;
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    ((RegClusterHead *)c)->qwc = n + 1;
+    PacketBufferStruct.ptr.c = c + 0x14;
+    *(int *)(c + 0x14) = 0;
+    PacketBufferStruct.ptr.c = c + 0x18;
+    *(int *)(c + 0x18) = 0;
+    PacketBufferStruct.ptr.c = c + 0x1C;
+    ((RegClusterHead *)c)->alpha = alpha;
+    PacketBufferStruct.ptr.c = c + 0x20;
+    for (i = 0; i < o->nodeNum; i++) {
+        _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64, o->clusterMtx + i * 64);
+        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    }
+    m = PacketBufferStruct.ptr.c;
+    *(int *)m = 0x15000010;
+    m += 4;
+    PacketBufferStruct.ptr.c = m;
+    *(int *)m = 0;
+    PacketBufferStruct.ptr.c = m + 4;
+    *(long long *)(m + 4) = 0;
+    PacketBufferStruct.ptr.c = m + 0xC;
+}
+
+static inline void reg_setCMatrixPacket_light(Sub15C *o)
+{
+    char *c;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    *(long long *)c = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    *(int *)PacketBufferStruct.ptr.c = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    *(int *)PacketBufferStruct.gif.c = 0x6C088000;
+    /* the two light matrices go in through the cursor post-increment
+     * src/Primitive.c's setLight uses; the c + 0x10 store is overwritten
+     * by the first increment's store */
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx);
+    _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    *(int *)n = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    *(int *)n = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    *(long long *)(n + 4) = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
+#endif
+
 static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
 {
     int i;
     int haslight;
+#ifndef ICO_HOST
 
     inline void pack(void)
     {
@@ -657,6 +1020,7 @@ static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
         *(long long *)(n + 4) = 0;
         PacketBufferStruct.ptr.c = n + 0xC;
     }
+#endif
 
     haslight = o->lightMtx->mode != 0;
     light_MakeLightMatrix(o, 0);
@@ -664,9 +1028,15 @@ static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
     PacketBufferStruct.tail.c = 0;
     PacketBufferStruct.gif.c = 0;
     PacketBufferStruct.end.c = 0;
+#ifdef ICO_HOST
+    reg_setCMatrixPacket_pack(o, alpha);
+    if (haslight) {
+        reg_setCMatrixPacket_light(o);
+#else
     pack();
     if (haslight) {
         light();
+#endif
     } else {
         debug_StdPrintfDummy("no light calc cluster model %s\n", o->model);
         debug_assert("src/RegistPacket.c", 1238);
@@ -713,7 +1083,11 @@ static void reg_dispSpecular(PacHeader *pkt, int clip, int mode) /* derived name
     dl_OpenDma(2, regSpecularPacket, 5);
     dl_CloseDma();
     reg_chooseSpecularMicroCode(mode, clip, 4);
+#ifdef ICO_RD
+    regHostMesh(pkt, 1);
+#else
     dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
     dl_CloseDma();
 }
 
@@ -895,10 +1269,13 @@ static void reg_dispNObj(Sub15C *o)
             }
         }
         for (j = 0; j < mdl->partCount; j++, grp++) {
-            box = (float *)(j * 128 + (int)o->model->boxes);
+            box = (float *)(j * 128 + (ICO_WORD)o->model->boxes);
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
+#ifdef ICO_RD
+                regKeyPart(o, grp, j); /* R7d: the draws' keys */
+#endif
                 while (pkt != 0) {
                     r = reg_clipPacketBoundingBox(pkt);
                     if (r != 0) {
@@ -906,7 +1283,11 @@ static void reg_dispNObj(Sub15C *o)
                         regTransTexturePacket(pkt->tex, pri);
                         reg_transMaterialPacket(pkt, grp);
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                        regHostMesh(pkt, 0);
+#else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                         dl_CloseDma();
                         if (o->lightMtx->mode == 2) {
                             if (pkt->tex1 != -1) {
@@ -924,7 +1305,11 @@ static void reg_dispNObj(Sub15C *o)
                             dl_OpenDma(2, regReflectionPacket, 6);
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
+#ifdef ICO_RD
+                            regHostMesh(pkt, 2);
+#else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                             dl_CloseDma();
                             if (mode == 0) {
                                 mc_TransMicroCode(1, 0x10);
@@ -971,7 +1356,7 @@ static void reg_dispMObj(Sub15C *o)
     grp = mdl->groups;
     reg_transMicroCode(o, 0x3B5);
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if ((alpha < 0.0f ? -alpha : alpha) == 1.0f) {
             continue;
@@ -1000,6 +1385,9 @@ static void reg_dispMObj(Sub15C *o)
             } else {
                 pkt = grp->packets;
             }
+#ifdef ICO_RD
+            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
             while (pkt != 0) {
                 r = reg_clipPacketBoundingBox(pkt);
                 if (r != 0) {
@@ -1018,7 +1406,11 @@ static void reg_dispMObj(Sub15C *o)
                     }
                     if (dis != -1) {
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                        regHostMesh(pkt, 0);
+#else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                         dl_CloseDma();
                         if (o->lightMtx->mode == 2) {
                             if (pkt->tex1 != -1) {
@@ -1036,7 +1428,11 @@ static void reg_dispMObj(Sub15C *o)
                             dl_OpenDma(2, regReflectionPacket, 6);
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
+#ifdef ICO_RD
+                            regHostMesh(pkt, 2);
+#else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                             dl_CloseDma();
                             if (mode == 0) {
                                 mc_TransMicroCode(1, 0x10);
@@ -1080,6 +1476,9 @@ static void reg_dispSObj(Sub15C *o, int idx)
                 dl_CloseDma();
             }
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, idx); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
@@ -1087,7 +1486,11 @@ static void reg_dispSObj(Sub15C *o, int idx)
                 regTransTexturePacket(pkt->tex, pri);
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                regHostMesh(pkt, 0);
+#else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                 dl_CloseDma();
                 if (o->lightMtx->mode == 2) {
                     if (pkt->tex1 != -1) {
@@ -1105,7 +1508,11 @@ static void reg_dispSObj(Sub15C *o, int idx)
                     dl_OpenDma(2, regReflectionPacket, 6);
                     dl_CloseDma();
                     reg_chooseReflectionMicroCode(0, r, 4);
+#ifdef ICO_RD
+                    regHostMesh(pkt, 2);
+#else
                     dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                     dl_CloseDma();
                     if (mode == 0) {
                         mc_TransMicroCode(1, 0x10);
@@ -1148,12 +1555,19 @@ static void reg_dispCObj(Sub15C *o)
         } else {
             pkt = grp->packets;
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             pri = regMaterialDLPri(grp, pkt->mat, tex_GetTexExtData(pkt->tex), 0.0f);
             regTransTexturePacket(pkt->tex, pri);
             reg_transMaterialPacket(pkt, grp);
             reg_chooseMicroCode(&grp->materials[pkt->mat], 0, pri);
+#ifdef ICO_RD
+            regHostMesh(pkt, 0);
+#else
             dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
             dl_CloseDma();
             if (debug_specular_flag == 2 && o->lightMtx->mode == 2) {
                 if (pkt->tex1 != -1) {
@@ -1471,7 +1885,7 @@ static void reg_dispPointLineObj(Sub15C *o)
         flag = 1;
     }
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         set = grp->packets;
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if (!flag && (alpha < 0.0f ? -alpha : alpha) == 1.0f) {
@@ -1496,6 +1910,123 @@ static void reg_dispPointLineObj(Sub15C *o)
     }
 }
 
+#ifdef ICO_HOST
+
+static void reg_setNMatrixPacketNoLightCalc_setMatrix(void)
+{
+    char *c;
+    char *m;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x1000000D;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C0C8000;
+    PacketBufferStruct.ptr.c = c + 0x50;
+    _CopyMatrix(c + 0x10, matrixptr + 0x140);
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x200, matrixptr + 0x40);
+    PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    _MulMatrix(PacketBufferStruct.ptr.c, matrixptr + 0x80, matrixptr + 0x40);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x40;
+    ((GifPkWord *)(m + 0x40))->w[0] = 0x15000010;
+    PacketBufferStruct.ptr.c = m + 0x44;
+    ((GifPkWord *)(m + 0x40))->w[1] = 0;
+    PacketBufferStruct.ptr.c = m + 0x48;
+    ((GifPkWord *)(m + 0x48))->d = 0;
+    PacketBufferStruct.ptr.c = m + 0x50;
+}
+
+static void reg_setNMatrixPacketNoLightCalc_setLight(Sub15C *o)
+{
+    char *c;
+    char *m;
+    char *n;
+
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((GifPkWord *)c)->d = 0x10000009;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((GifPkWord *)(c + 8))->w[0] = 0;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((GifPkWord *)(c + 8))->w[1] = 0x6C088000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    _GetCurrentMatrix(c + 0x10);
+    m = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.ptr.c = m + 0x80;
+    _CopyMatrix(m + 0x40, (char *)o->lightMtx + 64);
+    n = PacketBufferStruct.ptr.c;
+    ((GifPkWord *)n)->w[0] = 0x15000012;
+    n += 4;
+    PacketBufferStruct.ptr.c = n;
+    ((GifPkWord *)n)->w[0] = 0;
+    PacketBufferStruct.ptr.c = n + 4;
+    ((GifPkWord *)(n + 4))->d = 0;
+    PacketBufferStruct.ptr.c = n + 0xC;
+}
+
+static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
+{
+    char *pkt;
+    float *box;
+    struct DObjNode *scl;
+    int mode;
+
+    scl = (struct DObjNode *)(idx * 80 + (ICO_WORD)o->nodes);
+    mode = o->lightMtx->mode;
+    if (scl->scale[0] != 1.0f || scl->scale[1] != 1.0f || scl->scale[2] != 1.0f) {
+        _InitCurrentMatrix();
+        _SetCurrentMatrix((char *)o->nodeMtx + idx * 64);
+        _ScaleCurrentMatrix(o->nodes[idx].scale[0], o->nodes[idx].scale[1], o->nodes[idx].scale[2]);
+        _GetCurrentMatrix(matrixptr + 0x40);
+    } else {
+        _CopyMatrix(matrixptr + 0x40, (char *)o->nodeMtx + idx * 64);
+    }
+    _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
+    _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    box = o->model->box[0];
+    _SetCurrentMatrix(matrixptr + 0x300);
+    if (gsb_ClipBox(box) == 0) {
+        return 0;
+    }
+    pkt = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.dma.c = pkt;
+    PacketBufferStruct.tail.c = 0;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.end.c = 0;
+    reg_setNMatrixPacketNoLightCalc_setMatrix();
+    if (mode != 0 && mode != 3) {
+        o->model->shadowLength = src->model->shadowLength;
+        _CopyVector(ICO_RAWP(char *, o, 0x860, (char *)o->shadowDir),
+                    ICO_RAWP(char *, src, 0x860, (char *)src->shadowDir));
+        _CopyMatrix((char *)o->lightMtx, (char *)src->lightMtx);
+        _CopyMatrix((char *)o->lightMtx + 64, (char *)src->lightMtx + 64);
+        _SetCurrentMatrix(matrixptr + 0x40);
+        _ClearTransCurrentMatrix();
+        _MulCurrentMatrixL((char *)o->lightMtx);
+        reg_setNMatrixPacketNoLightCalc_setLight(o);
+    }
+    {
+        char *c = PacketBufferStruct.ptr.c;
+
+        PacketBufferStruct.tail.c = c;
+        ((GifPkWord *)c)->d = 0x60000000;
+        PacketBufferStruct.ptr.c = c + 8;
+        ((GifPkWord *)(c + 8))->w[0] = 0;
+        PacketBufferStruct.ptr.c = c + 0xC;
+        ((GifPkWord *)(c + 8))->w[1] = 0;
+        PacketBufferStruct.ptr.c = c + 0x10;
+    }
+    return pkt;
+}
+
+void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
+{
+#else
 void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
 {
     char *reg_setNMatrixPacketNoLightCalc(Sub15C * o, Sub15C * src, int idx)
@@ -1607,6 +2138,7 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
         }
         return pkt;
     }
+#endif
     PObjModel *mdl;
     PObjGroup *grp;
     char *pk;
@@ -1633,10 +2165,13 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
             }
         }
         for (j = 0; j < mdl->partCount; j++, grp++) {
-            box = (float *)(j * 128 + (int)o->model->boxes);
+            box = (float *)(j * 128 + (ICO_WORD)o->model->boxes);
             _SetCurrentMatrix(matrixptr + 0x300);
             if (gsb_ClipBox(box) != 0) {
                 pkt = grp->packets;
+#ifdef ICO_RD
+                regKeyPart(o, grp, j); /* R7d: the draws' keys */
+#endif
                 while (pkt != 0) {
                     r = reg_clipPacketBoundingBox(pkt);
                     if (r != 0) {
@@ -1644,7 +2179,11 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
                         regTransTexturePacket(pkt->tex, pri);
                         reg_transMaterialPacket(pkt, grp);
                         reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                        regHostMesh(pkt, 0);
+#else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                         dl_CloseDma();
                         if (o->lightMtx->mode == 2) {
                             if (pkt->tex1 != -1) {
@@ -1662,7 +2201,11 @@ void reg_DispAccessoryWithShadow(Sub15C *o, Sub15C *src)
                             dl_OpenDma(2, regReflectionPacket, 6);
                             dl_CloseDma();
                             reg_chooseReflectionMicroCode(0, r, 4);
+#ifdef ICO_RD
+                            regHostMesh(pkt, 2);
+#else
                             dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                             dl_CloseDma();
                             if (mode == 0) {
                                 mc_TransMicroCode(1, 0x10);
@@ -1701,13 +2244,20 @@ void reg_RenderReflection(Sub15C *o, int pri)
     dl_CloseDma();
     for (i = 0; i < mdl->partCount; i++) {
         pkt = grp->packets;
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
                 regTransTexturePacket(pkt->tex, pri);
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                regHostMesh(pkt, 0);
+#else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                 dl_CloseDma();
             }
             pkt = pkt->next;
@@ -1720,6 +2270,76 @@ void reg_RenderReflection(Sub15C *o, int pri)
    code and three zero words, copied as one quadword. */
 static const sceVu0IVECTOR regEnemyEndTag = {0x15000010, 0, 0, 0}; /* derived name */
 
+#ifdef ICO_HOST
+
+static inline void reg_setEMatrixPacket_pack(Sub15C *o, float alpha)
+{
+    char *c;
+    char *m;
+    int n;
+    int i;
+
+    /* the object's matrix count through the object record, the view
+     * reg_setMMatrixPacket takes of o */
+    n = o->nodeNum * 4;
+    c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = c;
+    ((RegClusterHead *)c)->dma.tag = n | 0x10000002;
+    PacketBufferStruct.ptr.c = c + 8;
+    ((RegClusterHead *)c)->dma.vif[0] = 0x11000000;
+    PacketBufferStruct.ptr.c = c + 0xC;
+    PacketBufferStruct.gif.c = c + 0xC;
+    ((RegClusterHead *)c)->dma.vif[1] = ((n + 1) << 16) | 0x6C008000;
+    PacketBufferStruct.ptr.c = c + 0x10;
+    ((RegClusterHead *)c)->qwc = n + 1;
+    PacketBufferStruct.ptr.c = c + 0x14;
+    *(int *)(c + 0x14) = 0;
+    PacketBufferStruct.ptr.c = c + 0x18;
+    *(int *)(c + 0x18) = 0;
+    PacketBufferStruct.ptr.c = c + 0x1C;
+    ((RegClusterHead *)c)->alpha = alpha;
+    PacketBufferStruct.ptr.c = c + 0x20;
+    for (i = 0; i < o->nodeNum; i++) {
+        _MulMatrix(PacketBufferStruct.ptr.c, (char *)o->nodeMtx + i * 64, o->clusterMtx + i * 64);
+        PacketBufferStruct.ptr.c = PacketBufferStruct.ptr.c + 0x40;
+    }
+    m = PacketBufferStruct.ptr.c;
+    *(Qw128 *)m = *(Qw128 *)&regEnemyEndTag;
+    m += 0x10;
+    PacketBufferStruct.ptr.c = m;
+}
+
+static void reg_setEMatrixPacket(Sub15C *o, int prilist, float alpha)
+{
+    int i;
+
+    PacketBufferStruct.dma.c = PacketBufferStruct.ptr.c;
+    PacketBufferStruct.tail.c = 0;
+    PacketBufferStruct.gif.c = 0;
+    PacketBufferStruct.end.c = 0;
+    reg_setEMatrixPacket_pack(o, alpha);
+    {
+        char *c = PacketBufferStruct.ptr.c;
+
+        PacketBufferStruct.tail.c = c;
+        ((DpkTag *)c)->tag = 0x60000000;
+        PacketBufferStruct.ptr.c = c + 8;
+        ((DpkTag *)c)->vif[0] = 0;
+        PacketBufferStruct.ptr.c = c + 0xC;
+        ((DpkTag *)c)->vif[1] = 0;
+        PacketBufferStruct.ptr.c = c + 0x10;
+    }
+    for (i = 0; i < 13; i++) {
+        if ((prilist >> i) & 1) {
+            dl_SetDLPriority(i);
+            dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+            dl_CloseDma();
+        }
+    }
+}
+
+#endif
+
 void reg_DispEnemy(void *sub)
 {
     Sub15C *o = sub;
@@ -1729,6 +2349,7 @@ void reg_DispEnemy(void *sub)
     float alpha;
     int i;
     int pri;
+#ifndef ICO_HOST
 
     void reg_setEMatrixPacket(Sub15C * o, int prilist, float alpha)
     {
@@ -1795,6 +2416,7 @@ void reg_DispEnemy(void *sub)
             }
         }
     }
+#endif
 
     mdl = o->model;
     grp = mdl->groups;
@@ -1820,12 +2442,19 @@ void reg_DispEnemy(void *sub)
             } else {
                 pkt = grp->packets;
             }
+#ifdef ICO_RD
+            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
             while (pkt != 0) {
                 pri = regMaterialDLPri(grp, pkt->mat, tex_GetTexExtData(pkt->tex), 0.0f);
                 regTransTexturePacket(pkt->tex, pri);
                 reg_transMaterialPacket(pkt, grp);
                 reg_chooseMicroCode(&grp->materials[pkt->mat], 0, pri);
+#ifdef ICO_RD
+                regHostMesh(pkt, 0);
+#else
                 dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                 dl_CloseDma();
                 pkt = pkt->next;
             }
@@ -1858,7 +2487,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
     grp = mdl->groups;
     reg_transMicroCode(o, 1 << pri);
     for (i = 0; i < o->nodeNum; i++) {
-        w = (struct DObjNode *)(i * 80 + (int)o->nodes);
+        w = (struct DObjNode *)(i * 80 + (ICO_WORD)o->nodes);
         alpha = 1.0f - (1.0f - w->fade) * w->alpha;
         if ((alpha < 0.0f ? -alpha : alpha) == 1.0f) {
             continue;
@@ -1884,6 +2513,9 @@ void reg_DispMultiPri(Sub15C *o, int pri)
         } else {
             pkt = grp->packets;
         }
+#ifdef ICO_RD
+        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+#endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
             if (r != 0) {
@@ -1901,7 +2533,11 @@ void reg_DispMultiPri(Sub15C *o, int pri)
                 }
                 if (dis != -1) {
                     reg_chooseMicroCode(&grp->materials[pkt->mat], r, pri);
+#ifdef ICO_RD
+                    regHostMesh(pkt, 0);
+#else
                     dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                     dl_CloseDma();
                     if (o->lightMtx->mode == 2) {
                         if (pkt->tex1 != -1) {
@@ -1919,7 +2555,11 @@ void reg_DispMultiPri(Sub15C *o, int pri)
                         dl_OpenDma(2, regReflectionPacket, 6);
                         dl_CloseDma();
                         reg_chooseReflectionMicroCode(0, r, 4);
+#ifdef ICO_RD
+                        regHostMesh(pkt, 2);
+#else
                         dl_OpenDma(2, pkt->data, pkt->size >> 4);
+#endif
                         dl_CloseDma();
                         if (mode == 0) {
                             mc_TransMicroCode(1, 0x10);

@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "debug.h"
 #include "cdvd.h"
 #include "memory.h"
@@ -37,6 +38,57 @@ void file_Init(void)
     sceCdMmode(iosCdvdMediaType);
     debug_StdPrintfDummy("done.\n");
     debug_StdPrintfDummy("load default module.\n");
+#ifdef ICO_HOST
+#ifdef ICO_HOST
+    /* The host has no IOP: no IOPRP224.IMG reboot and no IRX modules
+       (port/data/sif_host.c).  The disc wait stays, so a missing disc image
+       stops boot here as an empty drive did. */
+    file_WaitDisc();
+    debug_StdPrintfDummy("done.\n");
+    debug_StdPrintfDummy("loading iop modules.\n");
+#else
+    do
+        file_WaitDisc();
+    while (sceSifRebootIop("cdrom0:\\IOPRP224.IMG;1") == 0);
+    while (sceSifSyncIop() == 0)
+        ;
+    sceSifInitRpc(0);
+    sceSifLoadFileReset();
+    sceFsReset();
+    sceCdInit(0);
+    sceCdMmode(iosCdvdMediaType);
+    debug_StdPrintfDummy("done.\n");
+    debug_StdPrintfDummy("loading iop modules.\n");
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\SIO2MAN.IRX;1", 0, 0) < 0);
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\PADMAN.IRX;1", 0, 0) < 0);
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\MCMAN.IRX;1", 0, 0) < 0);
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\MCSERV.IRX;1", 0, 0) < 0);
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\LIBSD.IRX;1", 0, 0) < 0);
+    do
+        file_WaitDisc();
+    while (sceSifLoadModule("cdrom0:\\SNDN2DRV.IRX;1", 0, 0) < 0);
+#endif
+    debug_StdPrintfDummy("done.\n");
+}
+
+/* the load report every switch arm calls (was nested; fname, adr and size are
+   passed in) */
+static inline void PrintLoad(char *fname, void **adr, int size) /* derived name */
+{
+    debug_StdPrintfDummy(
+        "loading:\"\033[33m%s\033[m\" (address:\033[35m%p\033[m/size:\033[35m%d\033[m)", fname,
+        *adr, size);
+#else
     do
         file_WaitDisc();
     while (sceSifRebootIop("cdrom0:\\IOPRP224.IMG;1") == 0);
@@ -68,6 +120,7 @@ void file_Init(void)
         file_WaitDisc();
     while (sceSifLoadModule("cdrom0:\\SNDN2DRV.IRX;1", 0, 0) < 0);
     debug_StdPrintfDummy("done.\n");
+#endif
 }
 
 static int file_LoadCDFile(void **adr, char *fname, int area)
@@ -83,6 +136,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     int asize;
     int sec;
     int err;
+#ifndef ICO_HOST
 
     /* the load report, a nested function every switch arm calls; it reads
        fname, adr and size from the enclosing frame */
@@ -92,6 +146,7 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
             "loading:\"\033[33m%s\033[m\" (address:\033[35m%p\033[m/size:\033[35m%d\033[m)", fname,
             *adr, size);
     }
+#endif
 
     path[0] = '\\';
     d = &path[1];
@@ -128,58 +183,114 @@ static int file_LoadCDFile(void **adr, char *fname, int area)
     case 2:
     case 4:
         *adr = iosMallocDebug(ios_partition_seki, asize, "src/FileManager.c", 349);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_seki->start) *
+                                 100.0f / 10059776.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_seki->start) * 100.0f /
                                  10059776.0f);
+#endif
         break;
     case 1:
         *adr = iosMallocDebug(ios_partition_sugipon, asize, "src/FileManager.c", 357);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_sugipon->start) *
+                                 100.0f / 524288.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 524288.0f,
                              ((int)*adr + asize - (int)ios_partition_sugipon->start) * 100.0f /
                                  524288.0f);
+#endif
         break;
     case 3:
         *adr = iosMallocDebug(ios_partition_smotion, asize, "src/FileManager.c", 366);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 1179648.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_smotion->start) *
+                                 100.0f / 1179648.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(
             " to static motion area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 1179648.0f,
             ((int)*adr + asize - (int)ios_partition_smotion->start) * 100.0f / 1179648.0f);
+#endif
         break;
     case 5:
         *adr = iosMallocDebug(ios_partition_dmotion, asize, "src/FileManager.c", 375);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
+                             asize * 100.0f / 3670016.0f,
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_dmotion->start) *
+                                 100.0f / 3670016.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(
             " to dynamic motion area.(%2.1f%%/%2.1f%%)\n", asize * 100.0f / 3670016.0f,
             ((int)*adr + asize - (int)ios_partition_dmotion->start) * 100.0f / 3670016.0f);
+#endif
         break;
     case 6:
         *adr = iosMallocDebug(ios_partition_hara, asize, "src/FileManager.c", 384);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_hara->start) *
+                                 100.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_hara->start) * 100.0f);
+#endif
         break;
     case 7:
         *adr = iosMallocDebug(ios_partition_oomori, asize, "src/FileManager.c", 392);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+        debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
+                             ((ICO_WORD)*adr + asize - (ICO_WORD)ios_partition_oomori->start) *
+                                 100.0f / 327680.0f);
+#else
         PrintLoad();
         debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                              ((int)*adr + asize - (int)ios_partition_oomori->start) * 100.0f /
                                  327680.0f);
+#endif
         break;
     case 8:
         *adr = iosMallocDebug(ios_partition_horagai, asize, "src/FileManager.c", 400);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+#else
         PrintLoad();
+#endif
         debug_StdPrintfDummy(" to horagai-area.\n");
         break;
     case 9:
         *adr = iosMallocDebug(ios_partition_sound, asize, "src/FileManager.c", 405);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+#else
         PrintLoad();
+#endif
         debug_StdPrintfDummy(" to sound-area.\n");
         break;
     case 10:
         *adr = iosMallocDebug(ios_partition_sound_semi, asize, "src/FileManager.c", 410);
+#ifdef ICO_HOST
+        PrintLoad(fname, adr, size);
+#else
         PrintLoad();
+#endif
         debug_StdPrintfDummy(" to sound_semi-area.\n");
         break;
     }

@@ -45,7 +45,9 @@ typedef struct BoxWork { /* field names derived */
     int mode;     /* 0x020, 0 still, 1 auto move, 2 falling, 3 to 5 the fall's phases, 6 aligning */
     float scaleX; /* 0x024, the layout's X scale */
     float scaleZ; /* 0x028, the layout's Z scale */
-    int colData;  /* 0x02C, the collision ReInitBoxGeo restores */
+    /* 0x02C, the collision ReInitBoxGeo restores: Sub15C.colData, a
+       pointer held as a word (an int on the EE truncated it on x64) */
+    ICO_WORD colData;
     int moveFrames; /* 0x030, the frames left of an auto move */
     char pad034[12];
     float vel[4];   /* 0x040, the move per frame */
@@ -82,11 +84,20 @@ typedef struct BoxWork { /* field names derived */
     Sub15C *effectDObj; /* 0x160, the effect DObj */
     int charHit;        /* 0x164, set when a character pushed the floating box this frame */
     char pad168[8];
-    float floatAnchor[4]; /* 0x170, the floating box's resting X and Z */
-    int subGObj;          /* 0x180, the layouted sub GObj, held as a word */
+    float floatAnchor[4];         /* 0x170, the floating box's resting X and Z */
+    ICO_WORD_PTR(GObj *) subGObj; /* 0x180, the layouted sub GObj, held as a word */
     char pad184[12];
     float moveDir[4];                  /* 0x190, the direction of the last push */
 } __attribute__((aligned(8))) BoxWork; /* derived name */
+
+#ifdef ICO_HOST
+
+/* colData holds Sub15C.colData across ReInitBoxGeo: it must keep the
+   pointer's width (DIVERGENCES.md D10) */
+_Static_assert(sizeof(((BoxWork *)0)->colData) == sizeof(((Sub15C *)0)->colData),
+               "BoxWork.colData is narrower than Sub15C.colData");
+
+#endif
 
 static void landingSE(GObj *self)
 {
@@ -244,7 +255,11 @@ static int execNormalMove(GObj *self, int stop)
     float pos[4];
     ClipWork work;
     float wn[4];
+#ifdef ICO_HOST
+    WallCfg wnCfg;
+#else
     BoxWallRec wn2;
+#endif
     float plTop[4];
     float plSide[4];
     float up[4];
@@ -280,15 +295,23 @@ static int execNormalMove(GObj *self, int stop)
         if (stop == 0) {
             checkBoxWallHit(self, &work, wn, pos, 0);
             if (work.wall.elem != 0) {
+#ifdef ICO_HOST
+                wnCfg = work.wall;
+#else
                 wn2.pt = *(BoxWallPt *)&work.wall.o;
                 wn2.hit = (int)work.wall.elem;
                 *(BoxWallRec *)wn = wn2;
+#endif
 
                 hw = (p->scaleX < p->scaleZ ? p->scaleX : p->scaleZ) * 50.0f;
 
                 CopyVector(up, pos);
                 up[1] += 50.0f;
+#ifdef ICO_HOST
+                GetPureVerticalPlane(plTop, plSide, 0, &wnCfg, 0);
+#else
                 GetPureVerticalPlane(plTop, plSide, 0, (WallCfg *)wn, 0);
+#endif
 
                 d = plane_distance(up, plSide);
 
@@ -326,7 +349,8 @@ static int execNormalMove(GObj *self, int stop)
             } else {
                 GetSlerpQuaternion(p->tiltQuat, IdentityQuaternion, p->tiltQuat, 0.5f);
             }
-            GetInverseQuaternion(axis, (char *)GOBJ_SUB(self) + 0x60);
+            GetInverseQuaternion(
+                axis, ICO_RAWP(char *, GOBJ_SUB(self), 0x60, (char *)GOBJ_SUB(self)->quat));
             MultiQuaternion(proj, axis, p->tiltQuat);
             SetRootQuaternion(self, proj);
         } else {
@@ -344,7 +368,7 @@ static inline void setBoxStopWallFlag(GObj *self, float *vel) /* derived name */
     float dir[4];
     BoxWork *p = GOBJ_SUB(self)->work;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     _NormalizeVector(dir, vel);
     _ScaleVector(dir, dir, (p->scaleX < p->scaleZ ? p->scaleX : p->scaleZ) * 50.0f + 25.0f);
     GetRootPosition(w.pt[0], self);
@@ -384,9 +408,9 @@ static inline float getAlign(float v, float g)
 static inline void alignPosition(GObj *self, float *dst, float *src, float grid) /* derived name */
 {
     float npos[4];
-    char *n = (char *)(int)GOBJ_SUB(self);
-    float cx = *(float *)(n + 0x50);
-    float cz = *(float *)(n + 0x58);
+    char *n = (char *)(ICO_WORD)GOBJ_SUB(self);
+    float cx = ICO_RAW(float, n, 0x50, GOBJ_SUB(self)->matrix[3][0]);
+    float cz = ICO_RAW(float, n, 0x58, GOBJ_SUB(self)->matrix[3][2]);
 
     CopyVector(npos, src);
     npos[0] = getAlign(src[0] - cx, grid) + cx;
@@ -402,7 +426,7 @@ int AlignBox(GObj *self, float grid)
     Sub15C *sub = GOBJ_SUB(self);
     BoxWork *q = sub->work;
 
-    GetInverseQuaternion(quat, (char *)sub + 0x60);
+    GetInverseQuaternion(quat, ICO_RAWP(char *, sub, 0x60, (char *)sub->quat));
     SetRootQuaternion(self, quat);
     GetRootPosition(pos, self);
     alignPosition(self, pos, pos, grid);
@@ -426,72 +450,72 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
     } else {
         w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
         if (w->wheelDObj->nodeMtx != 0) {
-            iosFree((void *)(w->wheelDObj->nodeMtx & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeMtx)));
         }
         if (w->wheelDObj->nodeQuat != 0) {
-            iosFree((void *)(w->wheelDObj->nodeQuat & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeQuat)));
         }
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
-        w->wheelDObj->nodeMtx = (int)iosMallocDebug(ios_partition_seki, 128, __FILE__, 560);
-        w->wheelDObj->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 32, __FILE__, 560);
+        w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, 560);
+        w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, 560);
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
-            iosFree((void *)((int)w->wheelDObj->nodes & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
         w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, 560);
 
         for (i = 0; i < 2; i++) {
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->flags.ll &= ~1;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->flags.ll &= ~2;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->pos[0] = 0.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->pos[1] = 0.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->pos[2] = 0.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->pos[3] = 1.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->flags.ll &= ~4;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->fade = 0;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->alpha = 1.0f;
             }
             {
-                char *e = (char *)(i * 80 + (int)w->wheelDObj->nodes);
+                char *e = (char *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 *(short *)(e + 0x3A) = 0;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->scale[0] = 1.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->scale[1] = 1.0f;
             }
             {
-                struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)w->wheelDObj->nodes);
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
                 e->scale[2] = 1.0f;
             }
         }
@@ -499,12 +523,18 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
 
         /* the sub-object handle at 0x15C read through the file's IntFloat
            union, as the wheel-float stores are */
+#ifdef ICO_HOST
+        ((IntFloat *)&w->wheelHeight)->f = accessary[self->dobj->accessary].pivot[0];
+        ((IntFloat *)&w->wheelFront)->f = accessary[self->dobj->accessary].pivot[1];
+        ((IntFloat *)&w->wheelRear)->f = accessary[self->dobj->accessary].pivot[2];
+#else
         ((IntFloat *)&w->wheelHeight)->f =
             accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[0];
         ((IntFloat *)&w->wheelFront)->f =
             accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[1];
         ((IntFloat *)&w->wheelRear)->f =
             accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[2];
+#endif
     }
 }
 
@@ -1014,9 +1044,15 @@ static inline void execBoxFall(GObj *self) /* derived name */
     float v[4];
 
     GetRootPosition(v, self);
+#ifdef ICO_HOST
+    GOBJ_SUB(self)->root.move[1] +=
+        60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+        (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+#else
     ((IntFloat *)(*(char **)(((char *)self) + 0x15C) + 0x134))->f +=
         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+#endif
     AddVectorXYZ(v, v, GOBJ_SUB(self)->root.move);
     SetRootPosition(self, v);
     if (LimitExistGeometry(v, GOBJ_SUB(self)->root.move) != 0) {
@@ -1300,11 +1336,27 @@ static void initFloating(GObj *self)
     execFloating(self);
 }
 
+#ifdef ICO_HOST
+
+/* the range test, the range an integer converted at each compare (a nested
+   inline in _checkItemBreak and _checkItemCollision) */
+static inline int isNearItem(float *v, int r) /* derived name */
+{
+    if ((v[0] < 0.0f ? -v[0] : v[0]) < r && (v[1] < 0.0f ? -v[1] : v[1]) < r &&
+        (v[2] < 0.0f ? -v[2] : v[2]) < r) {
+        return 1;
+    }
+    return 0;
+}
+
+#endif
+
 static int _checkItemBreak(void *pos)
 {
     float p[4];
     float d[4];
     GObj *o;
+#ifndef ICO_HOST
 
     /* a nested inline: the range test, the range an integer converted at
        each compare */
@@ -1316,6 +1368,7 @@ static int _checkItemBreak(void *pos)
         }
         return 0;
     }
+#endif
 
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
@@ -1359,7 +1412,7 @@ static void initLanding(GObj *self)
    outer one */
 static inline void resetBoxRootQuaternion(GObj *self, float *q) /* derived name */
 {
-    GetInverseQuaternion(q, (char *)GOBJ_SUB(self) + 0x60);
+    GetInverseQuaternion(q, ICO_RAWP(char *, GOBJ_SUB(self), 0x60, (char *)GOBJ_SUB(self)->quat));
     SetRootQuaternion(self, q);
     GOBJ_SUB(self)->colRotate = 1;
 }
@@ -1489,8 +1542,8 @@ static void action(GObj *self)
         break;
     }
     if (p->mode != 6) {
-        if (*(int *)(p->subGObj + 0x16C) != 0) {
-            *(int *)(p->subGObj + 0x16C) = 0;
+        if (ICO_RAW(int, p->subGObj, 0x16C, ((GObj *)p->subGObj)->active) != 0) {
+            ICO_RAW(int, p->subGObj, 0x16C, ((GObj *)p->subGObj)->active) = 0;
         }
     }
 }
@@ -1537,7 +1590,7 @@ int GetBoxHoldPoint(float *out, GObj *self, GObj *chara)
     {
         ClipWork w;
 
-        memset(&w, 0, 0xC0);
+        memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
         GetBoxGlobalHoldPoint(w.pt[1], self, ZeroPoint);
         GetBoxGlobalHoldPoint(w.pt[0], self, out);
         ClipWall(&w);
@@ -1574,7 +1627,7 @@ static inline int checkBoxStopWall(GObj *obj, float *dir) /* derived name */
     ClipWork w;
     int r = 1;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     setupClipWork(&w, obj, dir, 145.0f, 40.0f);
     ClipWallBoxStop(&w);
     if (w.wall.elem != 0) {
@@ -1588,7 +1641,7 @@ static inline int checkMoveWall(GObj *obj, float *dir) /* derived name */
     ClipWork w;
     int r = 1;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     setupClipWork(&w, obj, dir, 245.0f, 0.0f);
     ClipWall(&w);
     if (w.wall.elem != 0) {
@@ -1790,6 +1843,7 @@ static int _checkItemCollision(void *pos)
     float d[4];
     GObj *o;
 
+#ifndef ICO_HOST
     /* the same nested range test as _checkItemBreak's */
     inline int isNearItem(float *v, int r) /* derived name */
     {
@@ -1800,6 +1854,7 @@ static int _checkItemCollision(void *pos)
         return 0;
     }
 
+#endif
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
         if (CheckItemDead(o) != 0) {
@@ -1932,8 +1987,13 @@ int MoveBoxWithHoldPoint(GObj *self, float *holdPoint, GObj *holder, int focus, 
             alignPosition(self, npos, npos, 100.0f);
             npos[1] -= 1.0f;
             debug_StdPrintfDummy("near wall to %f, %f, %f\n", npos[0], npos[1], npos[2]);
-            CopyVector(*(char **)(*(char **)(q->subGObj + 0x15C) + 0xC) + 0x30, npos);
-            *(int *)(q->subGObj + 0x16C) = 1;
+            CopyVector((char *)ICO_RAW(
+                           int,
+                           ICO_RAW(int, q->subGObj, 0x15C, (ICO_WORD)((GObj *)q->subGObj)->dobj),
+                           0xC, (ICO_WORD)((GObj *)q->subGObj)->dobj->nodeMtx) +
+                           0x30,
+                       npos);
+            ICO_RAW(int, q->subGObj, 0x16C, ((GObj *)q->subGObj)->active) = 1;
         }
         if (GOBJ_SUB(holder)->ctrl.cliffWallHit != 0) {
             q->wall = GOBJ_SUB(holder)->root.cliffWall;
@@ -2030,7 +2090,7 @@ static unsigned char boxSerial = 0; /* derived name */
    and the sub-box model in its high half */
 BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
 {
-    BoxWork *w = iosMallocDebug(ios_partition_sugipon, 416, __FILE__, 2017);
+    BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__, 2017);
     GObj *o;
     GObj *g;
     int sub;
@@ -2056,7 +2116,7 @@ BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
     GOBJ_SUB(self)->rideFunc = BoxRideFunc;
 
     g = CreateLayoutedGObj(0, 64, -1, 0, lay, 0, 7, 0);
-    w->subGObj = (int)g;
+    w->subGObj = (ICO_WORD_PTR(GObj *))g;
 
     GOBJ_SUB(g)->disp = 1;
     g->active = 0;

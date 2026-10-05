@@ -61,11 +61,22 @@ void TestDispChainAnimation(ChainSet *sys)
             DrawLine(p, q, col, 0);
         }
         for (j = 0; j < 5; j++) {
+#ifdef ICO_HOST
+            /* the EE offsets 0x10 + j * 0x50, 0x30 and 0x80 of the node are
+               ex[j].w, ex[0].v1 and ex[1].v1 (ChainNode's three pointers
+               move ex on the host) */
+            ChainNode *nd = &sys->nodes[i];
+
+            if (0.0f <= nd->ex[j].w) {
+                DrawLine(&nd->ex[0].v1, &nd->ex[1].v1, &c0, 0);
+            }
+#else
             char *base = (char *)&sys->nodes[i];
             char *w = base + j * 0x50;
             if (0.0f <= *(float *)(w + 0x10)) {
                 DrawLine(base + 0x30, base + 0x80, &c0, 0);
             }
+#endif
         }
     }
     gif_EndPacket();
@@ -84,6 +95,203 @@ static __inline__ void chainDebugOld(VECTOR *old) /* derived name */
 #endif
 }
 
+#ifdef ICO_HOST
+
+/* GetChainAnimation's constraint passes.  In the original, bindExWeight,
+   bind2 and calc2 were GNU nested functions inside its node loop; they are
+   at file scope so clang compiles them, and what they captured (the loop's
+   node, its points and matrix, and the dv/tv work vectors they share with
+   the enclosing function) is passed in a ChainStepCtx. */
+typedef struct ChainStepCtx {
+    ChainSet *sys;
+    int i;
+    int n;
+    int no;
+    float (*pts)[4];
+    float (*mtx)[4];
+    ChainParam *cp;
+    VECTOR *ew;
+    VECTOR *old;
+    VECTOR *dv;
+    VECTOR *tv;
+} ChainStepCtx; /* derived name */
+
+static void bindExWeight(ChainStepCtx *c, char *ex, void *ev, float t)
+{
+    VECTOR va;
+    VECTOR vb;
+    int id;
+    int id1;
+    float ll;
+    float ka;
+    float kb;
+    float ka2;
+    float kb2;
+    float cl;
+    float wa;
+    float wb;
+    float l;
+
+    id = (int)*(float *)ex;
+    id1 = id + 1;
+    ll = *(float *)(ex + 0x40) * *(float *)(ex + 0x40);
+    ka = t * (*(float *)ex - (float)(int)*(float *)ex);
+    kb = t * (1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+    ka2 = ka * ka;
+    kb2 = kb * kb;
+    cl = c->sys->cfg[c->i].pm.weight;
+
+    wa = cl;
+    wb = *(float *)(ex + 0x44);
+
+    sceVu0InterVector(&vb, c->pts[id], c->pts[id1],
+                      1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+
+    sceVu0SubVector(c->dv, &vb, ex + 0x20);
+    l = VectorLengthSquare(c->dv);
+    if (ll < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, *(float *)(ex + 0x40) / _Sqrt(l));
+        AddVectorXYZ(ex + 0x10, ex + 0x20, c->dv);
+
+        SubVectorXYZ(c->dv, ex + 0x10, c->pts[id]);
+        l = VectorLengthSquare(c->dv);
+        if (ka2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+            AddVectorXYZ(c->dv, c->pts[id], c->dv);
+        } else {
+            CopyVector(c->dv, ex + 0x10);
+            wa = wb;
+        }
+
+        SubVectorXYZ(&va, ex + 0x10, c->pts[id1]);
+        l = VectorLengthSquare(&va);
+        if (kb2 < l) {
+            sceVu0ScaleVectorXYZ(&va, &va, kb / _Sqrt(l));
+            AddVectorXYZ(&va, c->pts[id1], &va);
+        } else {
+            CopyVector(&va, ex + 0x10);
+            cl = wb;
+        }
+
+        sceVu0ScaleVector(c->dv, c->dv, wa / (cl + wa));
+        sceVu0ScaleVector(&va, &va, cl / (cl + wa));
+        AddVectorXYZ(c->dv, c->dv, &va);
+
+        SubVectorXYZ(c->dv, c->dv, ex + 0x10);
+        sceVu0ScaleVector(c->dv, c->dv, 1.0f - wb / (cl + wa + wb));
+        AddVectorXYZ(ex + 0x10, ex + 0x10, c->dv);
+
+        SubVectorXYZ(c->dv, c->pts[id], ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (ka2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+            AddVectorXYZ(c->pts[id], ex + 0x10, c->dv);
+        }
+
+        SubVectorXYZ(c->dv, c->pts[id1], ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (kb2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, kb / _Sqrt(l));
+            AddVectorXYZ(c->pts[id1], ex + 0x10, c->dv);
+        }
+
+        sceVu0SubVector(c->dv, ex + 0x20, ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (ll < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, *(float *)(ex + 0x40) / _Sqrt(l));
+            sceVu0AddVector(ex + 0x20, ex + 0x10, c->dv);
+        }
+    }
+    sceVu0InterVector(ex + 0x10, c->pts[id], c->pts[id1],
+                      1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+}
+
+static void bind2(ChainStepCtx *c, float (*pp)[4], int id, int ip, int in, float t)
+{
+    float ka;
+    float kb;
+    float ka2;
+    float kb2;
+    float cl;
+    float wa;
+    float wb;
+    float l;
+
+    ka = (float)(id - ip < 0 ? -(id - ip) : id - ip) * t;
+    kb = (float)(id - in < 0 ? -(id - in) : id - in) * t;
+    ka2 = ka * ka;
+    kb2 = kb * kb;
+    cl = c->sys->cfg[c->i].pm.weight;
+
+    wa = cl;
+    wb = cl;
+
+    SubVectorXYZ(c->dv, pp[id], pp[ip]);
+    l = VectorLengthSquare(c->dv);
+    if (ka2 < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+        AddVectorXYZ(c->dv, pp[ip], c->dv);
+    } else {
+        CopyVector(c->dv, pp[id]);
+        cl = wb;
+    }
+
+    SubVectorXYZ(c->tv, pp[id], pp[in]);
+    l = VectorLengthSquare(c->tv);
+    if (kb2 < l) {
+        sceVu0ScaleVectorXYZ(c->tv, c->tv, kb / _Sqrt(l));
+        AddVectorXYZ(c->tv, pp[in], c->tv);
+    } else {
+        CopyVector(c->tv, pp[id]);
+        cl = wb;
+    }
+
+    sceVu0ScaleVector(c->dv, c->dv, wa / (cl + wa));
+    sceVu0ScaleVector(c->tv, c->tv, cl / (cl + wa));
+    AddVectorXYZ(c->dv, c->dv, c->tv);
+
+    SubVectorXYZ(c->dv, c->dv, pp[id]);
+    sceVu0ScaleVector(c->dv, c->dv, 1.0f - wb / (cl + wa + wb));
+    AddVectorXYZ(pp[id], pp[id], c->dv);
+
+    SubVectorXYZ(c->dv, pp[ip], pp[id]);
+    l = VectorLengthSquare(c->dv);
+    if (ka < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+    }
+    AddVectorXYZ(pp[ip], pp[id], c->dv);
+
+    SubVectorXYZ(c->dv, pp[in], pp[id]);
+    l = VectorLengthSquare(c->dv);
+    if (kb < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, kb / _Sqrt(l));
+    }
+    AddVectorXYZ(pp[in], pp[id], c->dv);
+}
+
+static void calc2(ChainStepCtx *c, float (*pp)[4], int lo, int hi)
+{
+    int m;
+    int q;
+
+    sceVu0ApplyMatrix(c->pts, c->mtx + c->no * 4, c->cp->root);
+    for (m = 0; m < 5; m++) {
+        if (0.0f <= (c->sys->nodes + c->i)->ex[m].w) {
+            bindExWeight(c, (char *)&(c->sys->nodes + c->i)->ex[m], &c->ew[m], c->cp->step);
+        }
+    }
+    for (m = 0; m < c->n; m++) {
+        int mp = m + 1;
+        q = c->n - mp;
+        bind2(c, pp, m, m - 1 < 0 ? 0 : m - 1, mp < c->n ? mp : c->n - 1, c->cp->step);
+        bind2(c, pp, q, q - 1 < 0 ? 0 : q - 1, q + 1 < c->n ? q + 1 : c->n - 1, c->cp->step);
+    }
+    chainDebugOld(c->old);
+    sceVu0ApplyMatrix(c->pts, c->mtx + c->no * 4, c->cp->root);
+}
+
+#endif
+
 void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
 {
     VECTOR dv;
@@ -96,7 +304,7 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
     pm = mm;
     sceVu0UnitMatrix(pm);
     for (i = 0; i < sys->num; i++) {
-        ChainCfg *cf = (ChainCfg *)(i * 0x50 + (int)sys->cfg);
+        ChainCfg *cf = (ChainCfg *)(i * 0x50 + (ICO_WORD)sys->cfg);
         int n = cf->num;
         float (*pts)[4] = (sys->nodes + i)->pos;
         float (*vel)[4] = (sys->nodes + i)->vel;
@@ -151,6 +359,25 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
         }
 
         {
+#ifdef ICO_HOST
+            ChainStepCtx ctx;
+
+            ctx.sys = sys;
+            ctx.i = i;
+            ctx.n = n;
+            ctx.no = no;
+            ctx.pts = pts;
+            ctx.mtx = mtx;
+            ctx.cp = cp;
+            ctx.ew = ew;
+            ctx.old = old;
+            ctx.dv = &dv;
+            ctx.tv = &tv;
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
+#else
             void bindExWeight(char *ex, void *ev, float t)
             {
                 VECTOR va;
@@ -329,6 +556,7 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
             calc2(pts, 0, n - 1);
             calc2(pts, 0, n - 1);
             calc2(pts, 0, n - 1);
+#endif
         }
 
         sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
@@ -384,9 +612,27 @@ static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived na
     float d = plane_distance(p, plane);
 
     if (d < 0.0f) {
+#ifdef ICO_HOST
+        _ScaleVector(&tv, (void *)plane, d);
+        _SubVectorXYZ(p, p, &tv);
+    }
+}
+
+/* the law of cosines on a triangle whose sides are a, b and c, handed
+   straight to the arc-cosine table (a GNU nested function of
+   GetClothAnimation in the original, capturing nothing) */
+static __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived name */
+{
+    float aa = a * a;
+    float bb = b * b;
+    float cc = c * c;
+
+    return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
+#else
         _ScaleVector(&tv, plane, d);
         _SubVectorXYZ(p, p, &tv);
     }
+#endif
 }
 
 /* The sixth parameter is the wall count, which the function recomputes from
@@ -394,7 +640,7 @@ static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived na
    wall owner is an object handle passed as an int, the form the wall-plane
    query GetGlobalWallPlane takes (fieldCollision.h). */
 void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg *cfg, int nwall,
-                       int wallOwner, int fixEnd)
+                       ICO_WORD_PTR(GObj *) wallOwner, int fixEnd)
 {
     VECTOR dv;
     float pw;
@@ -503,6 +749,7 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
             }
         }
     } else {
+#ifndef ICO_HOST
         /* the law of cosines on a triangle whose sides are a, b and c,
            handed straight to the arc-cosine table */
         __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived name */
@@ -513,6 +760,7 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
 
             return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
         }
+#endif
         for (i = 0; i < n0; i++) {
             float len = *(float *)(pts + i * 48 + 4);
             float lim = len * len;
@@ -589,18 +837,27 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
     for (n = 0; n < nwall; n++) {
         /* the wall owner's sub-record, then the query for its n-th wall
            plane */
+#ifdef ICO_HOST
+        FcColl *fc = (FcColl *)GOBJ_SUB(wallOwner)->colData;
+        WallCfg q = {{wallOwner, 0}, ICO_EEPTR(char *, fc->wcl) + n * 80};
+#else
         int sub = *(int *)(wallOwner + 0x15C),
             q[3] = {wallOwner, 0, *(int *)(*(int *)(sub + 0x70) + 0x10) + n * 80};
+#endif
         VECTOR pl;
 
-        GetGlobalWallPlane(&pl.x, q);
+#ifdef ICO_HOST
+        GetGlobalWallPlane(&pl.x, &q);
+#else
+        GetGlobalWallPlane(&pl.x, (WallCfg *)q);
+#endif
         for (i = 0; i < n0; i++) {
             for (j = 1; j < nx; j++) {
                 pushInsidePlane(((char **)pos)[i] + j * 16, &pl);
             }
         }
     }
-    wind = GetWindVector(&pw, ((char **)pos)[0]);
+    wind = GetWindVector(&pw, (float *)((char **)pos)[0]);
     pw = pw / 40960.0f;
     for (i = 0; i < n0; i++) {
         for (j = 1; j < nx; j++) {
@@ -631,6 +888,55 @@ static __inline__ void clothFixDebug(ClothFixPoint *fix) /* derived name */
 {
 #ifdef DEBUG
     DrawLine((char *)fix->v0, (char *)fix->v1, (LineColor *)&chainLineColor0, 0);
+#endif
+#ifdef ICO_HOST
+}
+
+/* GetClothAnimationFix4Points's row and column passes.  In the original they
+   were GNU nested functions (each with its own nested copy of interHalf)
+   capturing pa, q, nx and ny, which are now parameters. */
+static __inline__ void interHalf(VECTOR *d, VECTOR *a, VECTOR *b) /* derived name */
+{
+    _InterVectorXYZ(d, a, b, 0.5f);
+}
+
+static void yTension(VECTOR **pa, ClothFixPoint *q, int ny, int y)
+{
+    VECTOR *r;
+    int x;
+    int xp;
+    int m;
+    int mp;
+    int mm;
+
+    r = pa[y];
+    clothFixDebug(q);
+    for (x = 1; x < ny - 1; x++) {
+        xp = x + 1;
+        m = ny - xp;
+        mp = m + 1;
+        mm = m - 1;
+        interHalf(&r[x], &r[x + 1], &r[x - 1]);
+        interHalf(&r[m], &r[mp], &r[mm]);
+    }
+}
+
+static void xTension(VECTOR **pa, int nx, int x)
+{
+    int y;
+    int yp;
+    int m;
+    int mp;
+    int mm;
+
+    for (y = 1; y < nx - 1; y++) {
+        yp = y + 1;
+        m = nx - yp;
+        mp = m + 1;
+        mm = m - 1;
+        interHalf(&pa[y][x], &pa[y + 1][x], &pa[y - 1][x]);
+        interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
+    }
 #endif
 }
 
@@ -666,6 +972,7 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
     _ApplyMatrix(&pa[nx - 1][ny - 1], mtx, &q[3].v1);
 
     {
+#ifndef ICO_HOST
         void yTension(int y)
         {
             __inline__ void interHalf(VECTOR * d, VECTOR * a, VECTOR * b) /* derived name */
@@ -711,12 +1018,24 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
                 interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
             }
         }
+#endif
         VECTOR rv;
         VECTOR rt;
         VECTOR wp;
         VECTOR *wv;
         int n;
 
+#ifdef ICO_HOST
+        yTension(pa, q, ny, 0);
+        yTension(pa, q, ny, nx - 1);
+        xTension(pa, nx, 0);
+        xTension(pa, nx, ny - 1);
+        for (n = 1; n < nx - 1; n++) {
+            yTension(pa, q, ny, n);
+        }
+        for (n = 1; n < ny - 1; n++) {
+            xTension(pa, nx, n);
+#else
         yTension(0);
         yTension(nx - 1);
         xTension(0);
@@ -726,6 +1045,7 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
         }
         for (n = 1; n < ny - 1; n++) {
             xTension(n);
+#endif
         }
 
         wv = (VECTOR *)GetWindVector(&wp.x, &pa[0]->x);
@@ -789,6 +1109,42 @@ static __inline__ void getCrossPoint_i(void *out, void *seg, void *plane) /* der
 /* the squared XZ length, getXZLengthSquare's sequence */
 static __inline__ float xzLengthSquare(const void *p) /* derived name */
 {
+#ifdef ICO_HOST
+#ifdef ICO_HOST
+    return ico_xz_length_square(p);
+#else
+    float d;
+    /* one asm block in plane_distance's style, without a memory clobber */
+    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
+                         "vmul.xz $vf4, $vf4, $vf4\n\t"
+                         "vaddz.x $vf4, $vf4, $vf4z\n\t"
+                         "qmfc2.ni $2, $vf4\n\t"
+                         "mtc1 $2, %0"
+                         : "=f"(d)
+                         : "r"(p)
+                         : "$2");
+    return d;
+#endif
+}
+
+/* tests both ends of the segment p against one plane; nested in
+   clipCylinderCollision (before `d`) in the original, capturing p */
+static __inline__ int bothOverThePlane(char *p, const void *pl) /* derived name */
+{
+    if (checkOverThePlane_i(p, pl) && checkOverThePlane_i(p + 0x10, pl))
+        return 1;
+    return 0;
+}
+
+static int clipCylinderCollision(char *p, void *pt)
+{
+    float d[4];
+
+    if (bothOverThePlane(p, clipPlane[0])) {
+        return -1;
+    }
+    if (bothOverThePlane(p, clipPlane[1])) {
+#else
     float d;
     /* one asm block in plane_distance's style, without a memory clobber */
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
@@ -818,6 +1174,7 @@ static int clipCylinderCollision(char *p, void *pt)
         return -1;
     }
     if (bothOverThePlane(clipPlane[1])) {
+#endif
         return -1;
     }
     sceVu0SubVector(d, p, p + 0x10);
@@ -840,7 +1197,8 @@ ChainSet *InitChains(ChainCfg *cfg)
     int j;
     float step;
 
-    r = (ChainSet *)iosMallocDebug(ios_partition_sugipon, 0x10, "src/clothAnimation.c", 1192);
+    r = (ChainSet *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(ChainSet, 0x10),
+                                   "src/clothAnimation.c", 1192);
     r->cfg = cfg;
     while (cfg[i].num != -1) {
         i++;
@@ -903,12 +1261,12 @@ ClothSet *InitClothes(ClothCfg *cfg)
             r->rec[i].mesh = prim_InitMesh3D(cfg[i].div, cfg[i].num, 1, 0x4C, 0xFFFFFF80, 1);
             r->rec[i].textured = 0;
         }
-        r->rec[i].pos =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1268);
-        r->rec[i].vel =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1269);
-        r->rec[i].mark =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1270);
+        r->rec[i].pos = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1268);
+        r->rec[i].vel = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1269);
+        r->rec[i].mark = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                        "src/clothAnimation.c", 1270);
         for (m = 0; m < cfg[i].num; m++) {
             r->rec[i].pos[m] = (VECTOR *)(r->rec[i].mesh->pos + m * cfg[i].div);
             r->rec[i].vel[m] = iosMallocDebug(ios_partition_sugipon, cfg[i].div * 16,
@@ -955,12 +1313,12 @@ ClothSet *InitClothesNoShade(ClothCfg *cfg)
             r->rec[i].mesh = prim_InitMesh3D(cfg[i].div, cfg[i].num, 1, 0x4C, 0xFFFFFF80, 0);
             r->rec[i].textured = 0;
         }
-        r->rec[i].pos =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1329);
-        r->rec[i].vel =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1330);
-        r->rec[i].mark =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1331);
+        r->rec[i].pos = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1329);
+        r->rec[i].vel = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1330);
+        r->rec[i].mark = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                        "src/clothAnimation.c", 1331);
         for (m = 0; m < cfg[i].num; m++) {
             r->rec[i].pos[m] = (VECTOR *)(r->rec[i].mesh->pos + m * cfg[i].div);
             r->rec[i].vel[m] = iosMallocDebug(ios_partition_sugipon, cfg[i].div * 16,
@@ -1048,7 +1406,7 @@ void DispCloth4D(Cloth4D *c, void *la, void *lb)
     p2o_SetDefaultEnviroment();
     prim_UpdateMesh3D(c->mesh, 3, buffer_ID);
     if (c->cfg->tex != 0) {
-        t = tex_GetTextureNo(&c->tex);
+        t = tex_GetTextureNo((const char *)&c->tex);
     } else {
         t = -1;
     }
@@ -1070,7 +1428,7 @@ void DispCloth4DWithAdd(Cloth4D *c, void *la, void *lb)
     p2o_SetDefaultEnviroment();
     prim_UpdateMesh3D(c->mesh, 3, buffer_ID);
     if (c->cfg->tex != 0) {
-        t = tex_GetTextureNo(&c->tex);
+        t = tex_GetTextureNo((const char *)&c->tex);
     } else {
         t = -1;
     }
@@ -1109,7 +1467,7 @@ static __inline__ void clothAddPoint(void *dst, const void *src, float f) /* der
 {
     VECTOR tv;
 
-    _ApplyCurrentMatrix(&tv, src);
+    _ApplyCurrentMatrix(&tv, (void *)src);
     _ScaleVector(&tv, &tv, f);
     _AddVectorXYZ(dst, dst, &tv);
 }
@@ -1118,7 +1476,7 @@ static __inline__ void clothSetPoint(void *dst, const void *src, float f) /* der
 {
     VECTOR tv;
 
-    _ApplyCurrentMatrix(&tv, src);
+    _ApplyCurrentMatrix(&tv, (void *)src);
     _ScaleVectorXYZ(dst, &tv, f);
 }
 
@@ -1228,6 +1586,9 @@ static float *procSinZX = &procMatrix[2][0]; /* derived name */
 
 static __inline__ float fSqrtInv_i(float x) /* derived name */
 {
+#ifdef ICO_HOST
+    return ps2_rsqrt(1.0f, x);
+#else
     float r;
 
     __asm__ __volatile__("mfc1 $8, %1\n\t"
@@ -1240,10 +1601,14 @@ static __inline__ float fSqrtInv_i(float x) /* derived name */
                          : "f"(x)
                          : "$2", "$8");
     return r;
+#endif
 }
 
 static __inline__ float xzInvLength_i(const void *v) /* derived name */
 {
+#ifdef ICO_HOST
+    return ps2_rsqrt(1.0f, ico_xz_length_square(v));
+#else
     float r;
 
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
@@ -1257,10 +1622,14 @@ static __inline__ float xzInvLength_i(const void *v) /* derived name */
                          : "r"(v)
                          : "$2");
     return r;
+#endif
 }
 
 static __inline__ void scaleVectorXZ_i(void *d, const void *s, float k) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_xz(d, s, k);
+#else
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
                          "mfc1 $8, %2\n\t"
                          "qmtc2.ni $8, $vf5\n\t"
@@ -1269,11 +1638,15 @@ static __inline__ void scaleVectorXZ_i(void *d, const void *s, float k) /* deriv
                          :
                          : "r"(d), "r"(s), "f"(k)
                          : "$8");
+#endif
 }
 
 static __inline__ float subAndGetInvLength_i(void *d, const void *a,
                                              const void *b) /* derived name */
 {
+#ifdef ICO_HOST
+    return ico_sub_inv_length(d, a, b);
+#else
     float inv;
 
     __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
@@ -1291,11 +1664,15 @@ static __inline__ float subAndGetInvLength_i(void *d, const void *a,
                          : "r"(a), "r"(b), "r"(d)
                          : "$2");
     return inv;
+#endif
 }
 
 static __inline__ void scaleAndAddVectorXYZ_i(void *d, const void *a, const void *b,
                                               float k) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_add_xyz(d, a, b, k);
+#else
     __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
                          "lqc2 $vf5, 0x0(%2)\n\t"
                          "mfc1 $8, %3\n\t"
@@ -1306,6 +1683,7 @@ static __inline__ void scaleAndAddVectorXYZ_i(void *d, const void *a, const void
                          :
                          : "r"(d), "r"(a), "r"(b), "f"(k)
                          : "$8");
+#endif
 }
 
 static __inline__ void tensionMove_i(void *out, const void *a, const void *b, float k,
@@ -1326,6 +1704,106 @@ static __inline__ void setClipCylinder(ClothPoint *pt) /* derived name */
     clipPlane[0][0][3] = pt->bottom;
     clipPlane[1][0][3] = -pt->top;
     cylinderRadiusSq = pt->radius * pt->radius;
+#ifdef ICO_HOST
+}
+
+/* getCloth4D's collision step.  In the original, proc (and hit inside it)
+   were GNU nested functions in getCloth4D; they are at file scope so clang
+   compiles them, and what they captured (the collision cylinders' matrices
+   and cap planes, and the current tension step tk, t1 = tk * tk and
+   tlim = 1 / tk, which the sweep loops update between calls) is passed in a
+   Cloth4DProcCtx.  proc reads only p, q and k.  Each caller also passes
+   own, the owner of q's point that its test has just loaded. */
+typedef struct Cloth4DProcCtx {
+    int cnt;
+    ClothPoint *pts;
+    sceVu0FMATRIX *mD;
+    sceVu0FMATRIX *mF;
+    VECTOR *vG;
+    VECTOR *vH;
+    float *t1;
+    float *tk;
+    float *tlim;
+} Cloth4DProcCtx; /* derived name */
+
+static __inline__ int hit(Cloth4DProcCtx *c, Prim3DVec *p, Prim3DVec *q, float k,
+                          int i) /* derived name */
+{
+    VECTOR a;
+    VECTOR b;
+    float r2;
+    float r;
+
+    if (checkOverThePlane_i(p, &c->vG[i]))
+        return 0;
+    if (checkOverThePlane_i(p, &c->vH[i]))
+        return 0;
+    r = c->pts[i].radius;
+    r2 = r * r;
+    if (*c->t1 < distance_squared(p, q)) {
+        tensionMove_i(p, p, q, *c->tk, *c->tlim);
+        _ApplyMatrix(&a, c->mF[i], p);
+        if (xzLengthSquare(&a) < r2) {
+            float rr = (r + *c->tk) * (r + *c->tk);
+            float len;
+
+            _ApplyMatrix(&b, c->mF[i], q);
+            len = xzLengthSquare(&b);
+            if (len < rr) {
+                float d = r2 - *c->t1;
+                float inv;
+                float e;
+                float s;
+                float ir;
+                float sy;
+                float sn;
+
+                inv = fSqrtInv_i(len);
+                e = (len + d) * c->pts[i].invDiameter * inv;
+                s = FSqrt(1.0f - e * e);
+                ir = r * inv;
+                sy = a.y;
+                *procCosXX = *procCosZZ = e * ir;
+                sn = k * c->pts[i].turn * s * ir;
+                *procSinXZ = sn;
+                *procSinZX = -sn;
+                _ApplyMatrix(&a, procMatrix, &b);
+                a.y = sy;
+                _ApplyMatrix(p, c->mD[i], &a);
+                return 1;
+            }
+        }
+    } else {
+        float len;
+
+        _ApplyMatrix(&a, c->mF[i], p);
+        len = xzLengthSquare(&a);
+        if (len < r2) {
+            VECTOR v;
+
+            scaleVectorXZ_i(&v, &a, r * fSqrtInv_i(len));
+            _ApplyMatrix(p, c->mD[i], &v);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int proc(Cloth4DProcCtx *c, Prim3DVec *p, Prim3DVec *q, Prim3DVec *qa, Prim3DVec *qb,
+                float k, int own)
+{
+    int i;
+    int ret = -1;
+
+    for (i = 0; i < c->cnt; i++) {
+        if (hit(c, p, q, k, i))
+            ret = i;
+    }
+    if (ret != -1)
+        return ret;
+    tensionMove_i(p, p, q, *c->tk, *c->tlim);
+    return -1;
+#endif
 }
 
 static void getCloth4D(Cloth4D *c, int **rows)
@@ -1443,6 +1921,19 @@ static void getCloth4D(Cloth4D *c, int **rows)
     }
 #endif
     {
+#ifdef ICO_HOST
+        Cloth4DProcCtx pc;
+
+        pc.cnt = cnt;
+        pc.pts = pts;
+        pc.mD = mD;
+        pc.mF = mF;
+        pc.vG = vG;
+        pc.vH = vH;
+        pc.t1 = &t1;
+        pc.tk = &tk;
+        pc.tlim = &tlim;
+#else
         /* proc reads only p, q and k.  Each caller also passes own, the
            owner of q's point that its test has just loaded. */
         int proc(Prim3DVec * p, Prim3DVec * q, Prim3DVec * qa, Prim3DVec * qb, float k, int own)
@@ -1520,6 +2011,7 @@ static void getCloth4D(Cloth4D *c, int **rows)
             tensionMove_i(p, p, q, tk, tlim);
             return -1;
         }
+#endif
 
         if (wrap) {
             if (c->sweepRight) {
@@ -1541,14 +2033,22 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x % nx;
                         xp = (x + 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
+#else
                             rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+#endif
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = (y + 1) % nx;
                         x0 = y % nx;
                         xp = (y - 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
+#else
                             rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+#endif
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }
@@ -1572,14 +2072,22 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y % nx;
                         ym = (y - 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
+#else
                             rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+#endif
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = (x - 1) % nx;
                         y0 = x % nx;
                         ym = (x + 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
+#else
                             rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+#endif
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -1604,14 +2112,22 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y;
                         ym = y - 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
+#else
                             rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+#endif
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = x - 1;
                         y0 = x;
                         ym = x + 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
+#else
                             rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+#endif
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -1631,14 +2147,22 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x;
                         xp = x + 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
+#else
                             rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+#endif
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = y + 1;
                         x0 = y;
                         xp = y - 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
+#ifdef ICO_HOST
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
+#else
                             rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+#endif
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }
@@ -1722,7 +2246,7 @@ static void _getCloth4D(Cloth4D *c, float x, float y, float z, float w, int tigh
     int *rows[nx];
     Sub15C *obj;
     Cloth4DCfg *cfg;
-    int *rows2;
+    ICO_WORD *rows2;
     int nx2;
     int ny2;
     Vec16 *plane;
@@ -1739,7 +2263,7 @@ static void _getCloth4D(Cloth4D *c, float x, float y, float z, float w, int tigh
     if (motionKind[obj->ctrl.motion].flags.bits.clothPlane) {
         plane = &obj->root.plane;
         cfg = c->cfg;
-        rows2 = (int *)c->pos;
+        rows2 = (ICO_WORD *)c->pos;
         nx2 = cfg->nx - (cfg->wrap != 0);
         ny2 = cfg->ny;
         for (i2 = 0; i2 < nx2; i2++) {
@@ -1776,6 +2300,43 @@ typedef struct { /* field names derived */
     long long q[8];
 } Blob64; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: InitCloth4D copies each ClothHangCfg row whole over a ClothPoint
+   through Blob64: enable, bottom, top and radius onto the same names, node
+   into the pad at 0x10, posX/posY/posW onto pos[0], pos[1], pos[3], turn onto
+   turn.  The host layouts must agree (tools/template_audit.py). */
+ICO_LAYOUT_SIZE(Blob64, ClothPoint);
+
+ICO_LAYOUT_SIZE(Blob64, ClothHangCfg);
+
+ICO_LAYOUT_SIZE(ClothHangCfg, ClothPoint);
+
+ICO_LAYOUT_AT(ClothHangCfg, enable, ClothPoint, enable);
+
+ICO_LAYOUT_AT(ClothHangCfg, bottom, ClothPoint, bottom);
+
+ICO_LAYOUT_AT(ClothHangCfg, top, ClothPoint, top);
+
+ICO_LAYOUT_AT(ClothHangCfg, radius, ClothPoint, radius);
+
+_Static_assert(__builtin_offsetof(ClothHangCfg, node) >= __builtin_offsetof(ClothPoint, pad10) &&
+                   __builtin_offsetof(ClothHangCfg, node) + 4 <=
+                       __builtin_offsetof(ClothPoint, pos),
+               "ClothHangCfg.node is not in ClothPoint's pad");
+
+ICO_LAYOUT_AT(ClothHangCfg, posX, ClothPoint, pos[0]);
+
+ICO_LAYOUT_AT(ClothHangCfg, posY, ClothPoint, pos[1]);
+
+ICO_LAYOUT_AT(ClothHangCfg, posW, ClothPoint, pos[3]);
+
+ICO_LAYOUT_AT(ClothHangCfg, turn, ClothPoint, turn);
+
+#endif
+
 Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
 {
     Cloth4D *r;
@@ -1783,7 +2344,8 @@ Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
     int j;
     float sc;
 
-    r = (Cloth4D *)iosMallocDebug(ios_partition_sugipon, 0x300, "src/clothAnimation.c", 2183);
+    r = (Cloth4D *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(Cloth4D, 0x300),
+                                  "src/clothAnimation.c", 2183);
     r->gobj = gobj;
     r->cfg = cfg;
     r->sweepRight = 0;
@@ -1793,11 +2355,11 @@ Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
     } else {
         r->mesh = prim_InitMesh3D(cfg->ny, cfg->nx, 1, 0x4C, 0xFFFFFF80, 1);
     }
-    r->pos = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->pos = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2218);
-    r->vel = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->vel = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2219);
-    r->nrm = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->nrm = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2220);
     for (i = 0; i < cfg->nx; i++) {
         r->pos[i] = r->mesh->pos + i * cfg->ny;
@@ -1935,6 +2497,8 @@ float GetChainCollision(ChainSet *sys, void *pos, float r)
     }
     return -1.0f;
 }
+
+#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
 
 void FSqrtInv(void)
 {
@@ -2101,6 +2665,8 @@ void tensionMove(void *out, void *a, void *b, float k, float lim)
     }
 }
 
+#endif /* ICO_HOST: port/math */
+
 void getCrossPoint(void *out, void *seg, void *plane)
 {
     getCrossPoint_i(out, seg, plane);
@@ -2140,7 +2706,7 @@ void getCloth4D_planeClip(Cloth4D *c, void *plane)
     int i;
     int j;
     Cloth4DCfg *cfg = c->cfg;
-    int *rows = (int *)c->pos;
+    ICO_WORD *rows = (ICO_WORD *)c->pos;
     int nx = cfg->nx - (cfg->wrap != 0);
     int ny = cfg->ny;
 
