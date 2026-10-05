@@ -1599,10 +1599,21 @@ inline void debug_ClearFontWindow(void)
     char *p = (char *)fontLines;
     int i;
     p += 0x5B4;
+#ifdef ICO_HOST
+    /* The EE loop starts at line 26, one past the 26-entry array, and writes
+       a byte into whatever follows fontLines in .bss (alignment slack on the
+       PS2). The host skips that out-of-range write; lines 0..25 clear as
+       before. */
+    for (i = 25; i >= 0; i--) {
+        p -= 0x38;
+        *p = 0;
+    }
+#else
     for (i = 26; i >= 0; i--) {
         *p = 0;
         p -= 0x38;
     }
+#endif
     fontWindowLine = 0;
 }
 
