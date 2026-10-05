@@ -84,6 +84,199 @@ static __inline__ void chainDebugOld(VECTOR *old) /* derived name */
 #endif
 }
 
+/* GetChainAnimation's constraint passes.  In the original, bindExWeight,
+   bind2 and calc2 were GNU nested functions inside its node loop; they are
+   at file scope so clang compiles them, and what they captured (the loop's
+   node, its points and matrix, and the dv/tv work vectors they share with
+   the enclosing function) is passed in a ChainStepCtx. */
+typedef struct ChainStepCtx {
+    ChainSet *sys;
+    int i;
+    int n;
+    int no;
+    float (*pts)[4];
+    float (*mtx)[4];
+    ChainParam *cp;
+    VECTOR *ew;
+    VECTOR *old;
+    VECTOR *dv;
+    VECTOR *tv;
+} ChainStepCtx; /* derived name */
+
+static void bindExWeight(ChainStepCtx *c, char *ex, void *ev, float t)
+{
+    VECTOR va;
+    VECTOR vb;
+    int id;
+    int id1;
+    float ll;
+    float ka;
+    float kb;
+    float ka2;
+    float kb2;
+    float cl;
+    float wa;
+    float wb;
+    float l;
+
+    id = (int)*(float *)ex;
+    id1 = id + 1;
+    ll = *(float *)(ex + 0x40) * *(float *)(ex + 0x40);
+    ka = t * (*(float *)ex - (float)(int)*(float *)ex);
+    kb = t * (1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+    ka2 = ka * ka;
+    kb2 = kb * kb;
+    cl = c->sys->cfg[c->i].pm.weight;
+
+    wa = cl;
+    wb = *(float *)(ex + 0x44);
+
+    sceVu0InterVector(&vb, c->pts[id], c->pts[id1],
+                      1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+
+    sceVu0SubVector(c->dv, &vb, ex + 0x20);
+    l = VectorLengthSquare(c->dv);
+    if (ll < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, *(float *)(ex + 0x40) / _Sqrt(l));
+        AddVectorXYZ(ex + 0x10, ex + 0x20, c->dv);
+
+        SubVectorXYZ(c->dv, ex + 0x10, c->pts[id]);
+        l = VectorLengthSquare(c->dv);
+        if (ka2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+            AddVectorXYZ(c->dv, c->pts[id], c->dv);
+        } else {
+            CopyVector(c->dv, ex + 0x10);
+            wa = wb;
+        }
+
+        SubVectorXYZ(&va, ex + 0x10, c->pts[id1]);
+        l = VectorLengthSquare(&va);
+        if (kb2 < l) {
+            sceVu0ScaleVectorXYZ(&va, &va, kb / _Sqrt(l));
+            AddVectorXYZ(&va, c->pts[id1], &va);
+        } else {
+            CopyVector(&va, ex + 0x10);
+            cl = wb;
+        }
+
+        sceVu0ScaleVector(c->dv, c->dv, wa / (cl + wa));
+        sceVu0ScaleVector(&va, &va, cl / (cl + wa));
+        AddVectorXYZ(c->dv, c->dv, &va);
+
+        SubVectorXYZ(c->dv, c->dv, ex + 0x10);
+        sceVu0ScaleVector(c->dv, c->dv, 1.0f - wb / (cl + wa + wb));
+        AddVectorXYZ(ex + 0x10, ex + 0x10, c->dv);
+
+        SubVectorXYZ(c->dv, c->pts[id], ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (ka2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+            AddVectorXYZ(c->pts[id], ex + 0x10, c->dv);
+        }
+
+        SubVectorXYZ(c->dv, c->pts[id1], ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (kb2 < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, kb / _Sqrt(l));
+            AddVectorXYZ(c->pts[id1], ex + 0x10, c->dv);
+        }
+
+        sceVu0SubVector(c->dv, ex + 0x20, ex + 0x10);
+        l = VectorLengthSquare(c->dv);
+        if (ll < l) {
+            sceVu0ScaleVectorXYZ(c->dv, c->dv, *(float *)(ex + 0x40) / _Sqrt(l));
+            sceVu0AddVector(ex + 0x20, ex + 0x10, c->dv);
+        }
+    }
+    sceVu0InterVector(ex + 0x10, c->pts[id], c->pts[id1],
+                      1.0f - (*(float *)ex - (float)(int)*(float *)ex));
+}
+
+static void bind2(ChainStepCtx *c, float (*pp)[4], int id, int ip, int in, float t)
+{
+    float ka;
+    float kb;
+    float ka2;
+    float kb2;
+    float cl;
+    float wa;
+    float wb;
+    float l;
+
+    ka = (float)(id - ip < 0 ? -(id - ip) : id - ip) * t;
+    kb = (float)(id - in < 0 ? -(id - in) : id - in) * t;
+    ka2 = ka * ka;
+    kb2 = kb * kb;
+    cl = c->sys->cfg[c->i].pm.weight;
+
+    wa = cl;
+    wb = cl;
+
+    SubVectorXYZ(c->dv, pp[id], pp[ip]);
+    l = VectorLengthSquare(c->dv);
+    if (ka2 < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+        AddVectorXYZ(c->dv, pp[ip], c->dv);
+    } else {
+        CopyVector(c->dv, pp[id]);
+        cl = wb;
+    }
+
+    SubVectorXYZ(c->tv, pp[id], pp[in]);
+    l = VectorLengthSquare(c->tv);
+    if (kb2 < l) {
+        sceVu0ScaleVectorXYZ(c->tv, c->tv, kb / _Sqrt(l));
+        AddVectorXYZ(c->tv, pp[in], c->tv);
+    } else {
+        CopyVector(c->tv, pp[id]);
+        cl = wb;
+    }
+
+    sceVu0ScaleVector(c->dv, c->dv, wa / (cl + wa));
+    sceVu0ScaleVector(c->tv, c->tv, cl / (cl + wa));
+    AddVectorXYZ(c->dv, c->dv, c->tv);
+
+    SubVectorXYZ(c->dv, c->dv, pp[id]);
+    sceVu0ScaleVector(c->dv, c->dv, 1.0f - wb / (cl + wa + wb));
+    AddVectorXYZ(pp[id], pp[id], c->dv);
+
+    SubVectorXYZ(c->dv, pp[ip], pp[id]);
+    l = VectorLengthSquare(c->dv);
+    if (ka < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, ka / _Sqrt(l));
+    }
+    AddVectorXYZ(pp[ip], pp[id], c->dv);
+
+    SubVectorXYZ(c->dv, pp[in], pp[id]);
+    l = VectorLengthSquare(c->dv);
+    if (kb < l) {
+        sceVu0ScaleVectorXYZ(c->dv, c->dv, kb / _Sqrt(l));
+    }
+    AddVectorXYZ(pp[in], pp[id], c->dv);
+}
+
+static void calc2(ChainStepCtx *c, float (*pp)[4], int lo, int hi)
+{
+    int m;
+    int q;
+
+    sceVu0ApplyMatrix(c->pts, c->mtx + c->no * 4, c->cp->root);
+    for (m = 0; m < 5; m++) {
+        if (0.0f <= (c->sys->nodes + c->i)->ex[m].w) {
+            bindExWeight(c, (char *)&(c->sys->nodes + c->i)->ex[m], &c->ew[m], c->cp->step);
+        }
+    }
+    for (m = 0; m < c->n; m++) {
+        int mp = m + 1;
+        q = c->n - mp;
+        bind2(c, pp, m, m - 1 < 0 ? 0 : m - 1, mp < c->n ? mp : c->n - 1, c->cp->step);
+        bind2(c, pp, q, q - 1 < 0 ? 0 : q - 1, q + 1 < c->n ? q + 1 : c->n - 1, c->cp->step);
+    }
+    chainDebugOld(c->old);
+    sceVu0ApplyMatrix(c->pts, c->mtx + c->no * 4, c->cp->root);
+}
+
 void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
 {
     VECTOR dv;
@@ -151,184 +344,23 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
         }
 
         {
-            void bindExWeight(char *ex, void *ev, float t)
-            {
-                VECTOR va;
-                VECTOR vb;
-                int id;
-                int id1;
-                float ll;
-                float ka;
-                float kb;
-                float ka2;
-                float kb2;
-                float cl;
-                float wa;
-                float wb;
-                float l;
+            ChainStepCtx ctx;
 
-                id = (int)*(float *)ex;
-                id1 = id + 1;
-                ll = *(float *)(ex + 0x40) * *(float *)(ex + 0x40);
-                ka = t * (*(float *)ex - (float)(int)*(float *)ex);
-                kb = t * (1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-                ka2 = ka * ka;
-                kb2 = kb * kb;
-                cl = sys->cfg[i].pm.weight;
-
-                wa = cl;
-                wb = *(float *)(ex + 0x44);
-
-                sceVu0InterVector(&vb, pts[id], pts[id1],
-                                  1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-
-                sceVu0SubVector(&dv, &vb, ex + 0x20);
-                l = VectorLengthSquare(&dv);
-                if (ll < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, *(float *)(ex + 0x40) / _Sqrt(l));
-                    AddVectorXYZ(ex + 0x10, ex + 0x20, &dv);
-
-                    SubVectorXYZ(&dv, ex + 0x10, pts[id]);
-                    l = VectorLengthSquare(&dv);
-                    if (ka2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                        AddVectorXYZ(&dv, pts[id], &dv);
-                    } else {
-                        CopyVector(&dv, ex + 0x10);
-                        wa = wb;
-                    }
-
-                    SubVectorXYZ(&va, ex + 0x10, pts[id1]);
-                    l = VectorLengthSquare(&va);
-                    if (kb2 < l) {
-                        sceVu0ScaleVectorXYZ(&va, &va, kb / _Sqrt(l));
-                        AddVectorXYZ(&va, pts[id1], &va);
-                    } else {
-                        CopyVector(&va, ex + 0x10);
-                        cl = wb;
-                    }
-
-                    sceVu0ScaleVector(&dv, &dv, wa / (cl + wa));
-                    sceVu0ScaleVector(&va, &va, cl / (cl + wa));
-                    AddVectorXYZ(&dv, &dv, &va);
-
-                    SubVectorXYZ(&dv, &dv, ex + 0x10);
-                    sceVu0ScaleVector(&dv, &dv, 1.0f - wb / (cl + wa + wb));
-                    AddVectorXYZ(ex + 0x10, ex + 0x10, &dv);
-
-                    SubVectorXYZ(&dv, pts[id], ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (ka2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                        AddVectorXYZ(pts[id], ex + 0x10, &dv);
-                    }
-
-                    SubVectorXYZ(&dv, pts[id1], ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (kb2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, kb / _Sqrt(l));
-                        AddVectorXYZ(pts[id1], ex + 0x10, &dv);
-                    }
-
-                    sceVu0SubVector(&dv, ex + 0x20, ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (ll < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, *(float *)(ex + 0x40) / _Sqrt(l));
-                        sceVu0AddVector(ex + 0x20, ex + 0x10, &dv);
-                    }
-                }
-                sceVu0InterVector(ex + 0x10, pts[id], pts[id1],
-                                  1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-            }
-
-            void bind2(float (*pp)[4], int id, int ip, int in, float t)
-            {
-                float ka;
-                float kb;
-                float ka2;
-                float kb2;
-                float cl;
-                float wa;
-                float wb;
-                float l;
-
-                ka = (float)(id - ip < 0 ? -(id - ip) : id - ip) * t;
-                kb = (float)(id - in < 0 ? -(id - in) : id - in) * t;
-                ka2 = ka * ka;
-                kb2 = kb * kb;
-                cl = sys->cfg[i].pm.weight;
-
-                wa = cl;
-                wb = cl;
-
-                SubVectorXYZ(&dv, pp[id], pp[ip]);
-                l = VectorLengthSquare(&dv);
-                if (ka2 < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                    AddVectorXYZ(&dv, pp[ip], &dv);
-                } else {
-                    CopyVector(&dv, pp[id]);
-                    cl = wb;
-                }
-
-                SubVectorXYZ(&tv, pp[id], pp[in]);
-                l = VectorLengthSquare(&tv);
-                if (kb2 < l) {
-                    sceVu0ScaleVectorXYZ(&tv, &tv, kb / _Sqrt(l));
-                    AddVectorXYZ(&tv, pp[in], &tv);
-                } else {
-                    CopyVector(&tv, pp[id]);
-                    cl = wb;
-                }
-
-                sceVu0ScaleVector(&dv, &dv, wa / (cl + wa));
-                sceVu0ScaleVector(&tv, &tv, cl / (cl + wa));
-                AddVectorXYZ(&dv, &dv, &tv);
-
-                SubVectorXYZ(&dv, &dv, pp[id]);
-                sceVu0ScaleVector(&dv, &dv, 1.0f - wb / (cl + wa + wb));
-                AddVectorXYZ(pp[id], pp[id], &dv);
-
-                SubVectorXYZ(&dv, pp[ip], pp[id]);
-                l = VectorLengthSquare(&dv);
-                if (ka < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                }
-                AddVectorXYZ(pp[ip], pp[id], &dv);
-
-                SubVectorXYZ(&dv, pp[in], pp[id]);
-                l = VectorLengthSquare(&dv);
-                if (kb < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, kb / _Sqrt(l));
-                }
-                AddVectorXYZ(pp[in], pp[id], &dv);
-            }
-
-            void calc2(float (*pp)[4], int lo, int hi)
-            {
-                int m;
-                int q;
-
-                sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
-                for (m = 0; m < 5; m++) {
-                    if (0.0f <= (sys->nodes + i)->ex[m].w) {
-                        bindExWeight((char *)&(sys->nodes + i)->ex[m], &ew[m], cp->step);
-                    }
-                }
-                for (m = 0; m < n; m++) {
-                    int mp = m + 1;
-                    q = n - mp;
-                    bind2(pp, m, m - 1 < 0 ? 0 : m - 1, mp < n ? mp : n - 1, cp->step);
-                    bind2(pp, q, q - 1 < 0 ? 0 : q - 1, q + 1 < n ? q + 1 : n - 1, cp->step);
-                }
-                chainDebugOld(old);
-                sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
-            }
-
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
+            ctx.sys = sys;
+            ctx.i = i;
+            ctx.n = n;
+            ctx.no = no;
+            ctx.pts = pts;
+            ctx.mtx = mtx;
+            ctx.cp = cp;
+            ctx.ew = ew;
+            ctx.old = old;
+            ctx.dv = &dv;
+            ctx.tv = &tv;
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
+            calc2(&ctx, pts, 0, n - 1);
         }
 
         sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
@@ -387,6 +419,18 @@ static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived na
         _ScaleVector(&tv, plane, d);
         _SubVectorXYZ(p, p, &tv);
     }
+}
+
+/* the law of cosines on a triangle whose sides are a, b and c, handed
+   straight to the arc-cosine table (a GNU nested function of
+   GetClothAnimation in the original, capturing nothing) */
+static __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived name */
+{
+    float aa = a * a;
+    float bb = b * b;
+    float cc = c * c;
+
+    return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
 }
 
 /* The sixth parameter is the wall count, which the function recomputes from
@@ -503,16 +547,6 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
             }
         }
     } else {
-        /* the law of cosines on a triangle whose sides are a, b and c,
-           handed straight to the arc-cosine table */
-        __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived name */
-        {
-            float aa = a * a;
-            float bb = b * b;
-            float cc = c * c;
-
-            return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
-        }
         for (i = 0; i < n0; i++) {
             float len = *(float *)(pts + i * 48 + 4);
             float lim = len * len;
@@ -634,6 +668,53 @@ static __inline__ void clothFixDebug(ClothFixPoint *fix) /* derived name */
 #endif
 }
 
+/* GetClothAnimationFix4Points's row and column passes.  In the original they
+   were GNU nested functions (each with its own nested copy of interHalf)
+   capturing pa, q, nx and ny, which are now parameters. */
+static __inline__ void interHalf(VECTOR *d, VECTOR *a, VECTOR *b) /* derived name */
+{
+    _InterVectorXYZ(d, a, b, 0.5f);
+}
+
+static void yTension(VECTOR **pa, ClothFixPoint *q, int ny, int y)
+{
+    VECTOR *r;
+    int x;
+    int xp;
+    int m;
+    int mp;
+    int mm;
+
+    r = pa[y];
+    clothFixDebug(q);
+    for (x = 1; x < ny - 1; x++) {
+        xp = x + 1;
+        m = ny - xp;
+        mp = m + 1;
+        mm = m - 1;
+        interHalf(&r[x], &r[x + 1], &r[x - 1]);
+        interHalf(&r[m], &r[mp], &r[mm]);
+    }
+}
+
+static void xTension(VECTOR **pa, int nx, int x)
+{
+    int y;
+    int yp;
+    int m;
+    int mp;
+    int mm;
+
+    for (y = 1; y < nx - 1; y++) {
+        yp = y + 1;
+        m = nx - yp;
+        mp = m + 1;
+        mm = m - 1;
+        interHalf(&pa[y][x], &pa[y + 1][x], &pa[y - 1][x]);
+        interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
+    }
+}
+
 void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *mtx)
 {
     VECTOR dv;
@@ -666,66 +747,21 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
     _ApplyMatrix(&pa[nx - 1][ny - 1], mtx, &q[3].v1);
 
     {
-        void yTension(int y)
-        {
-            __inline__ void interHalf(VECTOR * d, VECTOR * a, VECTOR * b) /* derived name */
-            {
-                _InterVectorXYZ(d, a, b, 0.5f);
-            }
-            VECTOR *r;
-            int x;
-            int xp;
-            int m;
-            int mp;
-            int mm;
-
-            r = pa[y];
-            clothFixDebug(q);
-            for (x = 1; x < ny - 1; x++) {
-                xp = x + 1;
-                m = ny - xp;
-                mp = m + 1;
-                mm = m - 1;
-                interHalf(&r[x], &r[x + 1], &r[x - 1]);
-                interHalf(&r[m], &r[mp], &r[mm]);
-            }
-        }
-        void xTension(int x)
-        {
-            __inline__ void interHalf(VECTOR * d, VECTOR * a, VECTOR * b) /* derived name */
-            {
-                _InterVectorXYZ(d, a, b, 0.5f);
-            }
-            int y;
-            int yp;
-            int m;
-            int mp;
-            int mm;
-
-            for (y = 1; y < nx - 1; y++) {
-                yp = y + 1;
-                m = nx - yp;
-                mp = m + 1;
-                mm = m - 1;
-                interHalf(&pa[y][x], &pa[y + 1][x], &pa[y - 1][x]);
-                interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
-            }
-        }
         VECTOR rv;
         VECTOR rt;
         VECTOR wp;
         VECTOR *wv;
         int n;
 
-        yTension(0);
-        yTension(nx - 1);
-        xTension(0);
-        xTension(ny - 1);
+        yTension(pa, q, ny, 0);
+        yTension(pa, q, ny, nx - 1);
+        xTension(pa, nx, 0);
+        xTension(pa, nx, ny - 1);
         for (n = 1; n < nx - 1; n++) {
-            yTension(n);
+            yTension(pa, q, ny, n);
         }
         for (n = 1; n < ny - 1; n++) {
-            xTension(n);
+            xTension(pa, nx, n);
         }
 
         wv = (VECTOR *)GetWindVector(&wp.x, &pa[0]->x);
@@ -806,22 +842,23 @@ static __inline__ float xzLengthSquare(const void *p) /* derived name */
 #endif
 }
 
-/* bothOverThePlane, nested before `d`, tests both ends of the segment p
-   against one plane */
+/* tests both ends of the segment p against one plane; nested in
+   clipCylinderCollision (before `d`) in the original, capturing p */
+static __inline__ int bothOverThePlane(char *p, const void *pl) /* derived name */
+{
+    if (checkOverThePlane_i(p, pl) && checkOverThePlane_i(p + 0x10, pl))
+        return 1;
+    return 0;
+}
+
 static int clipCylinderCollision(char *p, void *pt)
 {
-    __inline__ int bothOverThePlane(const void *pl) /* derived name */
-    {
-        if (checkOverThePlane_i(p, pl) && checkOverThePlane_i(p + 0x10, pl))
-            return 1;
-        return 0;
-    }
     float d[4];
 
-    if (bothOverThePlane(clipPlane[0])) {
+    if (bothOverThePlane(p, clipPlane[0])) {
         return -1;
     }
-    if (bothOverThePlane(clipPlane[1])) {
+    if (bothOverThePlane(p, clipPlane[1])) {
         return -1;
     }
     sceVu0SubVector(d, p, p + 0x10);
@@ -1352,6 +1389,104 @@ static __inline__ void setClipCylinder(ClothPoint *pt) /* derived name */
     cylinderRadiusSq = pt->radius * pt->radius;
 }
 
+/* getCloth4D's collision step.  In the original, proc (and hit inside it)
+   were GNU nested functions in getCloth4D; they are at file scope so clang
+   compiles them, and what they captured (the collision cylinders' matrices
+   and cap planes, and the current tension step tk, t1 = tk * tk and
+   tlim = 1 / tk, which the sweep loops update between calls) is passed in a
+   Cloth4DProcCtx.  proc reads only p, q and k.  Each caller also passes
+   own, the owner of q's point that its test has just loaded. */
+typedef struct Cloth4DProcCtx {
+    int cnt;
+    ClothPoint *pts;
+    sceVu0FMATRIX *mD;
+    sceVu0FMATRIX *mF;
+    VECTOR *vG;
+    VECTOR *vH;
+    float *t1;
+    float *tk;
+    float *tlim;
+} Cloth4DProcCtx; /* derived name */
+
+static __inline__ int hit(Cloth4DProcCtx *c, Prim3DVec *p, Prim3DVec *q, float k,
+                          int i) /* derived name */
+{
+    VECTOR a;
+    VECTOR b;
+    float r2;
+    float r;
+
+    if (checkOverThePlane_i(p, &c->vG[i]))
+        return 0;
+    if (checkOverThePlane_i(p, &c->vH[i]))
+        return 0;
+    r = c->pts[i].radius;
+    r2 = r * r;
+    if (*c->t1 < distance_squared(p, q)) {
+        tensionMove_i(p, p, q, *c->tk, *c->tlim);
+        _ApplyMatrix(&a, c->mF[i], p);
+        if (xzLengthSquare(&a) < r2) {
+            float rr = (r + *c->tk) * (r + *c->tk);
+            float len;
+
+            _ApplyMatrix(&b, c->mF[i], q);
+            len = xzLengthSquare(&b);
+            if (len < rr) {
+                float d = r2 - *c->t1;
+                float inv;
+                float e;
+                float s;
+                float ir;
+                float sy;
+                float sn;
+
+                inv = fSqrtInv_i(len);
+                e = (len + d) * c->pts[i].invDiameter * inv;
+                s = FSqrt(1.0f - e * e);
+                ir = r * inv;
+                sy = a.y;
+                *procCosXX = *procCosZZ = e * ir;
+                sn = k * c->pts[i].turn * s * ir;
+                *procSinXZ = sn;
+                *procSinZX = -sn;
+                _ApplyMatrix(&a, procMatrix, &b);
+                a.y = sy;
+                _ApplyMatrix(p, c->mD[i], &a);
+                return 1;
+            }
+        }
+    } else {
+        float len;
+
+        _ApplyMatrix(&a, c->mF[i], p);
+        len = xzLengthSquare(&a);
+        if (len < r2) {
+            VECTOR v;
+
+            scaleVectorXZ_i(&v, &a, r * fSqrtInv_i(len));
+            _ApplyMatrix(p, c->mD[i], &v);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int proc(Cloth4DProcCtx *c, Prim3DVec *p, Prim3DVec *q, Prim3DVec *qa, Prim3DVec *qb,
+                float k, int own)
+{
+    int i;
+    int ret = -1;
+
+    for (i = 0; i < c->cnt; i++) {
+        if (hit(c, p, q, k, i))
+            ret = i;
+    }
+    if (ret != -1)
+        return ret;
+    tensionMove_i(p, p, q, *c->tk, *c->tlim);
+    return -1;
+}
+
 static void getCloth4D(Cloth4D *c, int **rows)
 {
     Prim3DVec **pos = c->pos;
@@ -1467,83 +1602,17 @@ static void getCloth4D(Cloth4D *c, int **rows)
     }
 #endif
     {
-        /* proc reads only p, q and k.  Each caller also passes own, the
-           owner of q's point that its test has just loaded. */
-        int proc(Prim3DVec * p, Prim3DVec * q, Prim3DVec * qa, Prim3DVec * qb, float k, int own)
-        {
-            __inline__ int hit(int i) /* derived name */
-            {
-                VECTOR a;
-                VECTOR b;
-                float r2;
-                float r;
+        Cloth4DProcCtx pc;
 
-                if (checkOverThePlane_i(p, &vG[i]))
-                    return 0;
-                if (checkOverThePlane_i(p, &vH[i]))
-                    return 0;
-                r = pts[i].radius;
-                r2 = r * r;
-                if (t1 < distance_squared(p, q)) {
-                    tensionMove_i(p, p, q, tk, tlim);
-                    _ApplyMatrix(&a, mF[i], p);
-                    if (xzLengthSquare(&a) < r2) {
-                        float rr = (r + tk) * (r + tk);
-                        float len;
-
-                        _ApplyMatrix(&b, mF[i], q);
-                        len = xzLengthSquare(&b);
-                        if (len < rr) {
-                            float d = r2 - t1;
-                            float inv;
-                            float e;
-                            float s;
-                            float ir;
-                            float sy;
-                            float sn;
-
-                            inv = fSqrtInv_i(len);
-                            e = (len + d) * pts[i].invDiameter * inv;
-                            s = FSqrt(1.0f - e * e);
-                            ir = r * inv;
-                            sy = a.y;
-                            *procCosXX = *procCosZZ = e * ir;
-                            sn = k * pts[i].turn * s * ir;
-                            *procSinXZ = sn;
-                            *procSinZX = -sn;
-                            _ApplyMatrix(&a, procMatrix, &b);
-                            a.y = sy;
-                            _ApplyMatrix(p, mD[i], &a);
-                            return 1;
-                        }
-                    }
-                } else {
-                    float len;
-
-                    _ApplyMatrix(&a, mF[i], p);
-                    len = xzLengthSquare(&a);
-                    if (len < r2) {
-                        VECTOR v;
-
-                        scaleVectorXZ_i(&v, &a, r * fSqrtInv_i(len));
-                        _ApplyMatrix(p, mD[i], &v);
-                        return 1;
-                    }
-                }
-                return 0;
-            }
-            int i;
-            int ret = -1;
-
-            for (i = 0; i < cnt; i++) {
-                if (hit(i))
-                    ret = i;
-            }
-            if (ret != -1)
-                return ret;
-            tensionMove_i(p, p, q, tk, tlim);
-            return -1;
-        }
+        pc.cnt = cnt;
+        pc.pts = pts;
+        pc.mD = mD;
+        pc.mF = mF;
+        pc.vG = vG;
+        pc.vH = vH;
+        pc.t1 = &t1;
+        pc.tk = &tk;
+        pc.tlim = &tlim;
 
         if (wrap) {
             if (c->sweepRight) {
@@ -1565,14 +1634,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x % nx;
                         xp = (x + 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = (y + 1) % nx;
                         x0 = y % nx;
                         xp = (y - 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }
@@ -1596,14 +1665,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y % nx;
                         ym = (y - 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = (x - 1) % nx;
                         y0 = x % nx;
                         ym = (x + 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -1628,14 +1697,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y;
                         ym = y - 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = x - 1;
                         y0 = x;
                         ym = x + 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
+                            rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -1655,14 +1724,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x;
                         xp = x + 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = y + 1;
                         x0 = y;
                         xp = y - 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
+                            rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }

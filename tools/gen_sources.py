@@ -11,7 +11,8 @@ Each C source lands in one list per programmer directory (the directory
 decides its include path, as tools/compile_c.sh has it), or in
 ICO_RENDERER_SOURCES when it is one of the files the renderer packages
 rewrite (docs/port/BUILD_STATUS.md). The renderer files are compiled only
-when ICO_HEADLESS is off.
+when ICO_HEADLESS is off, except HEADLESS_SIM: renderer-owned files whose
+plain C the simulation needs, compiled in both modes.
 
     tools/gen_sources.py           rewrite cmake/IcoSources.cmake
     tools/gen_sources.py --check   exit 1 if it is out of date
@@ -42,10 +43,30 @@ RENDERER = {
     "ico2/common/src/debug.c",
 }
 RENDERER_DIRS = ("ico2/ito/mpeg/",)
+
+# Renderer-owned files the headless build compiles anyway, because the
+# simulation needs their plain C (the matrix and quaternion stacks, cloth and
+# chain physics, lights, shadow model data, particle state, the game-over
+# dark volume, the R-register reseed in DrawLightningN). Their drawing runs
+# into port/null/gfx_null.c's stubs and packet sink; the renderer waves still
+# own them (docs/port/HEADLESS_STUBS.md).
+HEADLESS_SIM = {
+    *(f"ico2/seki/src/{n}.c" for n in (
+        "GsBase", "GifPacket", "DmaPacket", "DisplayList", "DisplayFont",
+        "RegistPacket", "Packet", "MicroCode", "Texture", "Shadow", "ZFog",
+        "Primitive", "Light", "DisplayP2O", "Matrix")),
+    *(f"ico2/sugipon/src/{n}.c" for n in (
+        "matrixDrive", "quaternion", "clothAnimation", "lineManager",
+        "particleEffect", "darkVolume", "staticBlur")),
+    "ico2/ito/src/lightning.c",
+    "ico2/ito/src/queen_barrier_disp.c",
+}
 RENDERER_PREFIXES = ("ico2/common/src/debug_exception",)
 
 
 def is_renderer(path):
+    if path in HEADLESS_SIM:
+        return False
     return (path in RENDERER or path.startswith(RENDERER_DIRS)
             or path.startswith(RENDERER_PREFIXES))
 

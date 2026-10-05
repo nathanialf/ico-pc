@@ -70,14 +70,16 @@ set(ICO_SOURCES_fumi
     ico2/fumi/src/vobj.c
 )
 
-# ico2/ito: 7 non-renderer sources
+# ico2/ito: 9 non-renderer sources
 set(ICO_SOURCES_ito
     ico2/ito/src/act_bird.c
     ico2/ito/src/gather_effect.c
     ico2/ito/src/itou_boss.c
     ico2/ito/src/itou_gflag.c
     ico2/ito/src/itou_sub.c
+    ico2/ito/src/lightning.c
     ico2/ito/src/queen.c
+    ico2/ito/src/queen_barrier_disp.c
     ico2/ito/src/stage_orient.c
 )
 
@@ -152,22 +154,39 @@ set(ICO_SOURCES_script
     ico2/script/src/stageSEProc.c
 )
 
-# ico2/seki: 5 non-renderer sources
+# ico2/seki: 20 non-renderer sources
 set(ICO_SOURCES_seki
+    ico2/seki/src/DisplayP2O.c
     ico2/seki/src/FileManager.c
+    ico2/seki/src/GifPacket.c
+    ico2/seki/src/GsBase.c
+    ico2/seki/src/Light.c
+    ico2/seki/src/Matrix.c
+    ico2/seki/src/MicroCode.c
+    ico2/seki/src/Packet.c
+    ico2/seki/src/Primitive.c
+    ico2/seki/src/RegistPacket.c
+    ico2/seki/src/Shadow.c
     ico2/seki/src/StageAnimation.c
+    ico2/seki/src/Texture.c
+    ico2/seki/src/ZFog.c
     ico2/seki/src/Basic.c
     ico2/seki/src/BgAnimation.c
+    ico2/seki/src/DisplayFont.c
+    ico2/seki/src/DisplayList.c
+    ico2/seki/src/DmaPacket.c
     ico2/seki/src/EnemyInit.c
 )
 
-# ico2/sugipon: 55 non-renderer sources
+# ico2/sugipon: 62 non-renderer sources
 set(ICO_SOURCES_sugipon
     ico2/sugipon/src/delayFreeManager.c
     ico2/sugipon/src/geometryManager.c
     ico2/sugipon/src/keyInput.c
+    ico2/sugipon/src/matrixDrive.c
     ico2/sugipon/src/motionManager2.c
     ico2/sugipon/src/pool.c
+    ico2/sugipon/src/quaternion.c
     ico2/sugipon/src/tableSin.c
     ico2/sugipon/src/a_p_1.c
     ico2/sugipon/src/act_a_p_1.c
@@ -180,7 +199,9 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/candle.c
     ico2/sugipon/src/chandelier.c
     ico2/sugipon/src/clipCollisionManager.c
+    ico2/sugipon/src/clothAnimation.c
     ico2/sugipon/src/clothTest.c
+    ico2/sugipon/src/darkVolume.c
     ico2/sugipon/src/effectTool.c
     ico2/sugipon/src/enemy.c
     ico2/sugipon/src/enemyParts.c
@@ -191,6 +212,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/girlForceField.c
     ico2/sugipon/src/handManager.c
     ico2/sugipon/src/item.c
+    ico2/sugipon/src/lineManager.c
     ico2/sugipon/src/lodManager.c
     ico2/sugipon/src/motionFileManager.c
     ico2/sugipon/src/motionManager.c
@@ -198,6 +220,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/motionViewer.c
     ico2/sugipon/src/moveColTest.c
     ico2/sugipon/src/multiBgaManager.c
+    ico2/sugipon/src/particleEffect.c
     ico2/sugipon/src/particleLayout.c
     ico2/sugipon/src/puddle.c
     ico2/sugipon/src/rope.c
@@ -206,6 +229,7 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/spider.c
     ico2/sugipon/src/spiderGroupManager.c
     ico2/sugipon/src/stageMultiBgaManager.c
+    ico2/sugipon/src/staticBlur.c
     ico2/sugipon/src/stormTest.c
     ico2/sugipon/src/streamMotionManager.c
     ico2/sugipon/src/sugiTree.c
@@ -220,24 +244,8 @@ set(ICO_SOURCES_sugipon
     ico2/sugipon/src/worm.c
 )
 
-# 35 renderer-owned sources (compiled when ICO_HEADLESS is off)
+# 11 renderer-owned sources (compiled when ICO_HEADLESS is off)
 set(ICO_RENDERER_SOURCES
-    ico2/sugipon/src/matrixDrive.c
-    ico2/sugipon/src/quaternion.c
-    ico2/seki/src/DisplayP2O.c
-    ico2/seki/src/GifPacket.c
-    ico2/seki/src/GsBase.c
-    ico2/seki/src/Light.c
-    ico2/seki/src/Matrix.c
-    ico2/seki/src/MicroCode.c
-    ico2/seki/src/Packet.c
-    ico2/seki/src/Primitive.c
-    ico2/seki/src/RegistPacket.c
-    ico2/seki/src/Shadow.c
-    ico2/seki/src/Texture.c
-    ico2/seki/src/ZFog.c
-    ico2/ito/src/lightning.c
-    ico2/ito/src/queen_barrier_disp.c
     ico2/ito/mpeg/mv_main.c
     ico2/ito/mpeg/mv_readbuf.c
     ico2/ito/mpeg/mv_strfile.c
@@ -245,14 +253,6 @@ set(ICO_RENDERER_SOURCES
     ico2/ito/mpeg/mv_vobuf.c
     ico2/common/src/debug.c
     ico2/common/src/debug_exception.c
-    ico2/sugipon/src/clothAnimation.c
-    ico2/sugipon/src/darkVolume.c
-    ico2/sugipon/src/lineManager.c
-    ico2/sugipon/src/particleEffect.c
-    ico2/sugipon/src/staticBlur.c
-    ico2/seki/src/DisplayFont.c
-    ico2/seki/src/DisplayList.c
-    ico2/seki/src/DmaPacket.c
     ico2/ito/mpeg/mv_audiodec.c
     ico2/ito/mpeg/mv_disp.c
     ico2/ito/mpeg/mv_sub.c

@@ -113,6 +113,17 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # The generated C includes its record headers as "../../ico2/<prog>/include/
 # <h>.h". port/compat is on the include path and sits two levels below the
 # tree root, so those spellings resolve from any output directory.
+#
+# Tables the game writes at run time. The generator defines a .rodata row
+# const, as the PS2 build must (its --check compares sections with the ROM);
+# the EE has no page protection, so these stores worked there and fault on a
+# host. Each is defined without const here (gen_data_c.py --writable):
+#   stageTable      stage-anim        StageAnimation.c:154,158,160 (obj->data)
+#   motionLimitDef  motion-limit-def  motionOrientManager.c:1436,1437,1446
+#   seDef           sedef             s_init.c:1031,1085 then :850 (procRan)
+# The other .rodata tables were checked and are only read
+# (docs/research/loader-census.md section 4).
+set(ICO_DATA_WRITABLE stageTable motionLimitDef seDef)
 set(ICO_BASE_ELF "${CMAKE_SOURCE_DIR}/baserom/pal/baseelf.elf" CACHE FILEPATH
     "The PAL base ELF the data tables are read from")
 set(ICO_DATA_PYTHON "${Python3_EXECUTABLE}")
@@ -132,12 +143,16 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         "${CMAKE_SOURCE_DIR}/config/data_members.pal.txt"
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.txt"
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.data.txt")
+    set(_writable "")
+    foreach(sym ${ICO_DATA_WRITABLE})
+        list(APPEND _writable --writable "${sym}")
+    endforeach()
     foreach(m ${ICO_DATA_MEMBERS})
         set(out "${CMAKE_BINARY_DIR}/data/${m}.c")
         add_custom_command(
             OUTPUT "${out}"
             COMMAND "${ICO_DATA_PYTHON}" "${_gen}" --c "${m}" --symbol-map
-                    --elf "${ICO_BASE_ELF}" --out "${out}"
+                    --elf "${ICO_BASE_ELF}" ${_writable} --out "${out}"
             DEPENDS ${_deps}
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             COMMENT "Generating data table ${m}"
@@ -149,10 +164,35 @@ else()
     set(ICO_DATA_MISSING "")
     # Each table is a configure dependency: when the PS2 build regenerates
     # or deletes build/data/, the next build re-runs this step.
+    # These tables are the PS2 build's, with ICO_DATA_WRITABLE const. A table
+    # defining one is copied into <build>/data/ with the edit --writable
+    # makes (no const; its name renamed around the #includes, whose headers
+    # may declare it extern const), so neither Python nor the ELF is needed.
     foreach(m ${ICO_DATA_MEMBERS})
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ICO_DATA_DIR}/${m}.c")
         if(EXISTS "${ICO_DATA_DIR}/${m}.c")
-            list(APPEND ICO_DATA_SOURCES "${ICO_DATA_DIR}/${m}.c")
+            file(READ "${ICO_DATA_DIR}/${m}.c" _text)
+            set(_edited "${_text}")
+            foreach(sym ${ICO_DATA_WRITABLE})
+                if(_edited MATCHES "\nconst [^\n=]*[ *]${sym}\\[")
+                    string(REGEX REPLACE "\nconst ([^\n=]*[ *]${sym}\\[)" "\n#undef ${sym}\n\\1"
+                           _edited "${_edited}")
+                    set(_edited "#define ${sym} ${sym}_header_decl\n${_edited}")
+                endif()
+            endforeach()
+            if(_edited STREQUAL _text)
+                list(APPEND ICO_DATA_SOURCES "${ICO_DATA_DIR}/${m}.c")
+            else()
+                set(_copy "${CMAKE_BINARY_DIR}/data/${m}.c")
+                set(_old "")
+                if(EXISTS "${_copy}")
+                    file(READ "${_copy}" _old)
+                endif()
+                if(NOT _old STREQUAL _edited)
+                    file(WRITE "${_copy}" "${_edited}")
+                endif()
+                list(APPEND ICO_DATA_SOURCES "${_copy}")
+            endif()
         else()
             list(APPEND ICO_DATA_MISSING "${m}")
         endif()
@@ -194,11 +234,33 @@ add_library(ico_game STATIC ${ICO_GAME_OBJECTS})
 set_target_properties(ico_game PROPERTIES LINKER_LANGUAGE C)
 
 if(ICO_LINK_EXE)
-    add_executable(ico_pc port/platform/main_host.c)
+    # main_host.c: the program's main and its options; trace_host.c: the
+    # per-Main-tick trace (package 2A replaces it); host_config.c: the exe
+    # directory, ico-pc.ini, the ISO check, the log and the Windows dialogs.
+    add_executable(ico_pc port/platform/main_host.c port/platform/trace_host.c
+                          port/platform/host_config.c)
+    # The headless floor (docs/port/HEADLESS_STUBS.md): the hardware under
+    # the game's renderer layer, and what the simulation needs from debug.c.
+    # In the program itself rather than a library, since they call back into
+    # the game.
+    if(ICO_HEADLESS)
+        target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/debug_null.c)
+        set_source_files_properties(port/null/gfx_null.c port/null/debug_null.c TARGET_DIRECTORY
+                                    ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
+    endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_pc PRIVATE ico_game ico_platform)
     if(NOT WIN32)
         target_link_libraries(ico_pc PRIVATE m)
+    else()
+        # A double-clicked program: GUI subsystem (no console window; output
+        # goes to logs/ico-pc.log), the file dialog and message box, and the
+        # GCC runtime linked in so the .exe needs only system DLLs.
+        target_link_options(ico_pc PRIVATE -mwindows)
+        target_link_libraries(ico_pc PRIVATE comdlg32 user32)
+        if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+            target_link_options(ico_pc PRIVATE -static-libgcc -static)
+        endif()
     endif()
 endif()
 
@@ -223,3 +285,5 @@ add_subdirectory(port/null)
 
 # --- Package 1B: scheduler, kernel calls, arena, host loop and their tests --
 add_subdirectory(port/platform)
+add_subdirectory(port/test)
+add_subdirectory(port/rhi)

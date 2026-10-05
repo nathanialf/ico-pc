@@ -41,6 +41,22 @@ config/symbol_addrs.pal.data.txt), the data members' own symbols
 period toolchain's layout link. Over the 73 members it writes the same C as
 --layout does (tools/README.md says how that was compared).
 
+--c also takes --writable NAME (repeatable; host build only). A symbol the
+member defines in .rodata is written `const`, as the developers compiled it,
+and the EE has no page protection, so the game's stores into a few of those
+tables worked on the PS2; on a host the same stores fault. --writable drops
+the `const` from NAME's definition, so the host compiler places it in .data.
+A NAME the member does not define is ignored (CMakeLists.txt passes one list
+to every member), but every NAME must be a symbol of
+config/data_members.pal.txt. When a writable symbol is defined, its name is
+#defined to NAME_header_decl around the member's #includes, so a header's
+`extern const` declaration of it (motionOrientManager.h declares
+motionLimitDef so) declares a different, unused name instead of conflicting
+with the non-const definition. The PS2 build never passes --writable: the
+object would put the table in .data, and --check, which compares sections
+with the ROM's, would fail. CMakeLists.txt holds the list and the evidence
+for each entry.
+
 The record type is read from the header the schema row names: a typedef of a
 struct, or a struct tag (`struct Name { ... };`, which the C then spells
 `struct Name`), whose fields are integers, enums, floats, pointers (object or
@@ -760,10 +776,11 @@ def c_type(ty, spelled):
     return getattr(ty, "name", None) or spelled, "", ""
 
 
-def write_c(member, rows, datas, layout):
+def write_c(member, rows, datas, layout, writable=frozenset()):
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
     defs, headers, funcs, objs = [], [], {}, {}
     arrays = {}
+    unconst = []  # the writable symbols this member defines in .rodata
     for s, row in rows:
         if s is None:
             continue
@@ -793,8 +810,10 @@ def write_c(member, rows, datas, layout):
         w = Writer(data[start:], row["lo"] + start, layout, s["hex"], pool)
         bounds = [i for _, i in s["syms"]] + [n]
         tname, star, dims = c_type(ty, s["type"])
-        const = "const " if row["section"] == "rodata" else ""
         for (name, first), last in zip(s["syms"], bounds[1:]):
+            const = "const " if row["section"] == "rodata" and name not in writable else ""
+            if row["section"] == "rodata" and name in writable:
+                unconst.append(name)
             if s["count"] is None:
                 defs.append(f"{const}{tname} {star}{name}{dims} = {w.value(ty, 0, '')};")
             else:
@@ -817,7 +836,9 @@ def write_c(member, rows, datas, layout):
         " * and config/data_schema.pal.txt. Generated: do not commit. */",
         "",
     ]
+    out += [f"#define {n} {n}_header_decl" for n in unconst]
     out += [f'#include "{(Path("../..") / h).as_posix()}"' for h in headers]
+    out += [f"#undef {n}" for n in unconst]
     out.append("")
     for f in sorted(funcs):
         out.append(f"extern {funcs[f]}{f}();")
@@ -950,11 +971,20 @@ def main():
                      help="name pointers from the committed symbol lists, not a layout link")
     ap.add_argument("--extra-symbols", type=Path, action="append", default=[],
                     help="with --symbol-map: another splat-format list (repeatable)")
+    ap.add_argument("--writable", action="append", default=[], metavar="NAME",
+                    help="with --c, host build only: define NAME without const, in .data "
+                         "(repeatable; ignored when the member does not define NAME)")
     ap.add_argument("--labels", type=Path)
     ap.add_argument("--obj", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     member = a.stub or a.alias or a.c or a.check
+    if a.writable and not a.c:
+        fail("--writable needs --c")
+    known = {n for r in parse_table(TABLE) for n, _ in r["syms"]} if a.writable else set()
+    unknown = sorted(set(a.writable) - known)
+    if unknown:
+        fail(f"--writable {', '.join(unknown)}: not a symbol of {TABLE.relative_to(ROOT)}")
     rows = member_rows(member)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     if a.stub:
@@ -976,7 +1006,7 @@ def main():
     else:
         fail("--c and --check need --layout ELF or --symbol-map")
     if a.c:
-        write_if_changed(a.out, write_c(member, rows, datas, layout))
+        write_if_changed(a.out, write_c(member, rows, datas, layout, frozenset(a.writable)))
         return 0
     a.out.write_text(f"{member}: {check(member, rows, datas, a.obj, layout)}\n")
     return 0

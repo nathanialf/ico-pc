@@ -14,6 +14,16 @@ extern void ParticleMicroProgram();
 
 /* Indexed by the microprogram id the mesh and shadow paths pass around;
    slots 0 and 6 are unused. */
+#ifdef ICO_HOST
+
+/* The host has no VU1 microprograms (ico2/vusrc is assembled only by the PS2
+   build) and a function address does not fit an int on 64-bit hosts; the
+   addresses only reach DMA tags, which nothing consumes headless
+   (port/null/gfx_null.c).  The renderer replaces the programs with shaders. */
+int MicroCodeAddress[7] = {0};
+
+#else
+
 int MicroCodeAddress[7] = {
     0,
     (int)NormalCMicroProgram,
@@ -23,6 +33,8 @@ int MicroCodeAddress[7] = {
     (int)ParticleMicroProgram,
     0,
 };
+
+#endif
 
 /* The count of microprogram uploads
    this frame, and the program currently resident in each of the 13 VU1

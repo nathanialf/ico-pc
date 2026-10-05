@@ -91,6 +91,8 @@ tools/ghidra/
 # setup deletes it).
 tools/toolchain/
 build-host/
+# test checkpoint packages (docs/port/TESTING.md)
+dist/
 
 # --- Agent guidance / local-only ---
 # CLAUDE.md is auto-loaded by Claude Code and is the agent's local preamble;

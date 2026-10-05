@@ -1192,6 +1192,32 @@ void gsb_SetVSMatrix(int w, int h, float d)
  * corners outside one plane gives 0, no corner clipped at all gives -1, and
  * the second pass re-clips against a 0.99 w so a corner that only just crosses
  * the near plane still counts as visible: 2 when it does, 1 when it does not. */
+#ifdef ICO_HOST
+
+/* gsb_ClipBox's VU0 step on the host: the corner through the current
+ * matrix with w taken as 1 (vmaddw by vf0w), then vclipw.xyz against |cw|
+ * (cw is the transformed w, or the constant 0.99 of the second pass):
+ * +x, -x, +y, -y, +z, -z in bits 0-5.  Only those bits are tested, so the
+ * older judgments VU0 keeps above them are left out. */
+static int gsb_clipCorner(const float *v, int useConst) /* derived name */
+{
+    float r[4];
+    float w;
+    int f = 0;
+
+    ico_apply_matrix_w1(r, (const float (*)[4])ico_current_matrix, v);
+    w = __builtin_fabsf(useConst ? 0.99f : r[3]);
+    f |= (r[0] > w) << 0;
+    f |= (r[0] < -w) << 1;
+    f |= (r[1] > w) << 2;
+    f |= (r[1] < -w) << 3;
+    f |= (r[2] > w) << 4;
+    f |= (r[2] < -w) << 5;
+    return f;
+}
+
+#endif
+
 int gsb_ClipBox(float *p)
 {
     int all = 0x3F;
@@ -1203,6 +1229,9 @@ int gsb_ClipBox(float *p)
     for (i = 0; i < 8; q += 4, i++) {
         int cf;
 
+#ifdef ICO_HOST
+        cf = gsb_clipCorner(q, 0);
+#else
         __asm__ __volatile__(".set noreorder\n\t"
                              "lqc2 $vf8, 0x0(%1)\n\t"
                              "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
@@ -1220,6 +1249,7 @@ int gsb_ClipBox(float *p)
                              : "=r"(cf)
                              : "r"(q)
                              : "memory");
+#endif
         all &= cf;
         any |= cf;
     }
@@ -1232,6 +1262,9 @@ int gsb_ClipBox(float *p)
     for (i = 0; i < 8; p += 4, i++) {
         int cf;
 
+#ifdef ICO_HOST
+        cf = gsb_clipCorner(p, 1);
+#else
         __asm__ __volatile__(".set noreorder\n\t"
                              "mfc1 $8, %1\n\t"
                              "lqc2 $vf8, 0x0(%2)\n\t"
@@ -1252,6 +1285,7 @@ int gsb_ClipBox(float *p)
                              : "=r"(cf)
                              : "f"(0.99f), "r"(p)
                              : "memory");
+#endif
         c |= cf;
     }
     return (c & 0x20) ? 2 : 1;

@@ -420,6 +420,19 @@ static inline int isInScreen(volatile int *p) /* derived name */
    fixed-point screen coordinates, stored to dst, in one asm statement. */
 static inline void rotTransPers(volatile int *dst, void *src) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the current matrix applied to src (all four fields), xyz times 1/w,
+       xyz to 12.4; dst[3] is left alone (the PS2 stored vf11's stale w,
+       which no caller reads) */
+    float v[4];
+    float q;
+
+    ico_apply_matrix(v, (const float (*)[4])ico_current_matrix, src);
+    q = ps2_div(1.0f, v[3]);
+    dst[0] = ps2_ftoi4(v[0] * q);
+    dst[1] = ps2_ftoi4(v[1] * q);
+    dst[2] = ps2_ftoi4(v[2] * q);
+#else
     __asm__ __volatile__(".set noreorder\n\t"
                          "lqc2 $vf8, 0x0(%1)\n\t"
                          "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
@@ -435,6 +448,7 @@ static inline void rotTransPers(volatile int *dst, void *src) /* derived name */
                          :
                          : "r"(dst), "r"(src)
                          : "memory");
+#endif
 }
 
 /* One vertex through the VU0 pipeline into a caller-supplied projected-vertex

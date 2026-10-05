@@ -15,9 +15,8 @@ target_sources(ico_platform PRIVATE
 if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE host_loop.c)
 endif()
-if(ICO_HEADLESS)
-    target_sources(ico_platform PRIVATE ../null/gfx_null.c)
-endif()
+# port/null/gfx_null.c (the headless graphics floor) is linked into ico_pc
+# by the top-level CMakeLists.txt.
 
 # ICO_HEAP_STATS: memory.c reports allocations to arena.c, which logs each
 # partition's high-water mark.

@@ -9,8 +9,11 @@ recheck, and delete entries from `cmake/IcoExclusions.cmake` as they compile.
 ## Counts
 
 `config/link_order.pal.txt` lists 223 C sources under `ico2/`. The host
-build takes 188 of them: 35 are renderer-owned (below) and left out while
-`ICO_HEADLESS` is on. All 73 data tables compile on every preset.
+build takes 212 of them: since package 1D the headless build compiles the
+renderer layer too (docs/port/HEADLESS_STUBS.md) and leaves out only 11
+(`common/src/debug.c`, `debug_exception.c`, the 9 `ito/mpeg` files). All 73
+data tables compile on every preset. The table below is the pre-1D count of
+non-renderer sources.
 
 | preset | compiler | game TUs compiled | blocked | data tables |
 | --- | --- | --- | --- | --- |
@@ -41,8 +44,8 @@ which gcc compiles and clang does not implement. Package 0E rewrote them
 function left in a non-renderer source (`motionManager2.c`), so clang and
 gcc now compile the same 188 sources. The four main presets still use gcc
 14 and the clang family stays as `*-clang` presets until that choice is
-revisited; the renderer-owned `clothAnimation.c`, `lineManager.c` and
-`quaternion.c` still have nested functions (gcc only).
+revisited; the renderer-owned package 1D rewrote the nested functions of `clothAnimation.c`, `lineManager.c`
+and `quaternion.c`, so no game source has one left.
 
 Trade-off: the plan wanted clang everywhere (one compiler for Linux and
 Windows, and later macOS, iOS and Android, where Apple's clang is the only
@@ -72,21 +75,18 @@ a host TU (`VU0_*`, `QCOPY16`) is now a compile error (`typedef.h`).
 None: the 13 clang-only sugiCommon.h TUs compile, and `motionManager2.c`'s
 nested function has an `ICO_HOST` file-scope version.
 
-### Renderer-owned, not compiled while `ICO_HEADLESS` (35)
+### Renderer-owned, not compiled while `ICO_HEADLESS` (11)
 
-`seki/src/{GsBase,GifPacket,DmaPacket,DisplayList,DisplayFont,RegistPacket,
-Packet,MicroCode,Texture,Shadow,ZFog,Primitive,Light,DisplayP2O,Matrix}.c`,
-`ito/mpeg/*.c` (9), `sugipon/src/{staticBlur,darkVolume,particleEffect,
-matrixDrive,quaternion,clothAnimation,lineManager}.c`,
-`ito/src/{lightning,queen_barrier_disp}.c`, `common/src/debug.c`,
-`common/src/debug_exception.c`. Their owners are the renderer waves and 1A
-(`Matrix.c`, `matrixDrive.c`, `quaternion.c`, `clothAnimation.c`). The VU0
-routines of `Matrix.c`, `matrixDrive.c`, `quaternion.c` and
-`clothAnimation.c` are in `port/math` (library `ico_math`, linked into
-`ico_pc`), so a headless build has them; the plain C functions of those
-files are not built until the files leave this list. All of 1A's
-renderer-owned files (also `Shadow.c` and `lineManager.c`) compile with gcc
-and the game flags.
+`common/src/debug.c`, `common/src/debug_exception.c` (VU0 asm in the debug
+font, bar and exception screen; `port/null/debug_null.c` stands in) and
+`ito/mpeg/*.c` (9; the FMV player, `movie_*` stubbed in
+`port/null/gfx_null.c`). The other 24 renderer-owned files (all of
+`seki/src`, `sugipon/src/{staticBlur,darkVolume,particleEffect,matrixDrive,
+quaternion,clothAnimation,lineManager}.c`, `ito/src/{lightning,
+queen_barrier_disp}.c`) are compiled by the headless build as well
+(`HEADLESS_SIM` in `tools/gen_sources.py`); the renderer waves still own
+them. Package 1D gave the VU0 asm left in `GsBase.c`, `GifPacket.c`,
+`darkVolume.c` and `lightning.c` `ICO_HOST` bodies.
 
 ## Warnings
 
@@ -102,31 +102,38 @@ become errors (`ICO_STRICT_WARNINGS=ON`) once those three counts reach zero.
 
 ## Linking
 
-`ico_game` (static library of the compiled objects plus the data tables) and
-`ico_platform` build; the `ico_pc` executable (`ICO_LINK_EXE=ON`) does not
-link yet. In an earlier clang x86-64 build (138 TUs), 992 symbols were undefined across the game
-objects: the SDK entry points (`sce*`, `Sg*`, the kernel calls), the
-renderer-owned and blocked sources' functions, `_gp`, and the C library
-functions `port/compat/ico_libc.h` lists. Phase 1 (1A, 1B, 1C) supplies them.
+`ico_pc` (`-DICO_LINK_EXE=ON`) links on every preset checked (package 1D,
+2026-10-05, gcc 14 / mingw-w64 gcc 14 / llvm-mingw clang 23), with no
+unresolved symbol:
+
+| preset | `ico_pc` | notes |
+| --- | --- | --- |
+| `win-x86-ref` | links | the user's test build: GUI subsystem (`-mwindows`), `-static`, imports only system DLLs |
+| `ref-m32` | links | |
+| `linux-x64` | links | |
+| `win-x64` | links | expected unreliable until Phase 2 (32-bit struct and pointer-in-int assumptions) |
+| `linux-x64-clang` | links | clang compiles every game source |
+| `asan` | builds | unit tests pass except another package's `rhi_vk` (a LeakSanitizer report inside llvmpipe) |
+
+The game links against `ico_game` (212 game objects and the 73 tables),
+`ico_platform`, `ico_math`, `ico_port_data`, `ico_port_null` and the
+headless floor in the program itself (`port/null/gfx_null.c`: 13 hardware
+and FMV stubs; `port/null/debug_null.c`: 27 functions and 59 variables of
+`debug.c`). docs/port/HEADLESS_STUBS.md lists each and why. Nobody has run
+it in the container (plan rule); the first run is the user's Phase 1
+checkpoint (docs/port/TESTING.md).
 
 Package 1C's libraries (`docs/port/DATA.md`): `ico_port_data`
 (`port/data/`: the disc VFS and ISO9660 reader, libcdvd over it, sifrpc and
 sifdev with no IOP, IOP RAM) and `ico_port_null` (`port/null/{pad,mc,snd,
-scf}_null.c`). Together they define every `sceCd*`, `sceSif*`, `scePad*`,
-`sceMc*`, `sceScf*`, `Sg*` and sifdev symbol `ico_game` references (checked
-with `nm` on `linux-x64`, 2026-10-05); `ico_pc` links both when
-`ICO_LINK_EXE` is on. No source left the blocked list for this: `cdvd.c`,
-`FileManager.c`, `pad.c` and `mcard.c` already compiled, and only
-`FileManager.c` changed (`ICO_HOST` skips the IOP reboot and IRX loads).
-Tests: `vfs_synthetic`, `vfs_disc` (the user's ISO, skipped when absent)
-and `null_devices`.
+scf}_null.c`, and package 1D's `port/input/pad_script.c`).
 
 ## Phase 1 prerequisites
 
-- `stageTable` and `motionLimitDef` are generated `const` by
-  `tools/gen_data_c.py` but the game writes them at run time; on the host
-  the writes would fault (read-only data). Package 0C found it; a Phase 1
-  package owns the fix.
+- Done (1D): `stageTable`, `motionLimitDef` and `seDef` are written at run
+  time; the host build defines them non-const (`gen_data_c.py --writable`,
+  `ICO_DATA_WRITABLE` in `CMakeLists.txt`). The other 43 `.rodata` tables
+  were checked and are only read.
 - `-malign-double` applies to game and data TUs only on the 32-bit presets,
   `-mno-ms-bitfields` to game and data TUs only on Windows. Any record that
   game code and `port/` code both read (SDK parameter blocks, the pad

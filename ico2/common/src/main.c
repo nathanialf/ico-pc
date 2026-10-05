@@ -109,12 +109,13 @@ int movie_abort_check(void);
 
 #ifdef ICO_HOST
 
-/* port/platform: the vsync busy-wait (sched.h), the INTC raise
-   (kernel_host.h) and the headless draw seam (port/null/gfx_null.c) */
+/* port/platform: the vsync busy-wait (sched.h) and the INTC raise
+   (kernel_host.h) */
 void ico_sched_spin_vsync(void);
 int ico_kernel_raise_intc(int cause);
-void ico_null_create_dl(void);
 void ico_vsync(int field_parity);
+/* port/platform/trace_host.c: one Main tick done (trace, --ticks, pad script) */
+void ico_host_main_tick(void);
 
 #endif
 
@@ -204,14 +205,13 @@ void Main(void)
         if (graphics_ready == 0) {
             stage_CalcAnimationParent();
         }
-#ifdef ICO_HEADLESS
-        ico_null_create_dl(); /* no display lists without a renderer */
-#else
         iosOmCreateDL();
-#endif
         ExecDelayFree();
         gsb_TakeSnap();
         frameReady = 1;
+#ifdef ICO_HOST
+        ico_host_main_tick();
+#endif
         if (systemFault != 0) {
             break;
         }

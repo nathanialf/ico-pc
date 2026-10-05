@@ -55,8 +55,36 @@ static long long stripPrim = 0x144; /* derived name */
 /* project one object-space vertex through the VU0 matrix in vf4 to vf7,
    clamp it to the screen limits vf12 and vf13 carry and store the 12.4 fixed
    point result */
+#ifdef ICO_HOST
+
+/* vf12.x and vf13.x on the host: setScreenClamp's limits */
+static float screenClampHi; /* derived name */
+
+static float screenClampLo; /* derived name */
+
+#endif
+
 static __inline__ void projectVertex(void *dst, const void *src) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the current matrix applied to src, xyz times 1/w (w kept), x and y
+       clamped to [lo, hi] (vmaxx then vminix), then all four to 12.4 */
+    float v[4];
+    int *d = dst;
+    float q;
+
+    ico_apply_matrix(v, (const float (*)[4])ico_current_matrix, src);
+    q = ps2_div(1.0f, v[3]);
+    v[0] = v[0] * q;
+    v[1] = v[1] * q;
+    v[2] = v[2] * q;
+    v[0] = ps2_min(ps2_max(v[0], screenClampLo), screenClampHi);
+    v[1] = ps2_min(ps2_max(v[1], screenClampLo), screenClampHi);
+    d[0] = ps2_ftoi4(v[0]);
+    d[1] = ps2_ftoi4(v[1]);
+    d[2] = ps2_ftoi4(v[2]);
+    d[3] = ps2_ftoi4(v[3]);
+#else
     __asm__ __volatile__("lqc2 $vf8, 0x0(%1)\n\t"
                          "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
                          "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
@@ -71,6 +99,7 @@ static __inline__ void projectVertex(void *dst, const void *src) /* derived name
                          "sqc2 $vf11, 0x0(%0)"
                          :
                          : "r"(dst), "r"(src));
+#endif
 }
 
 /* emit one triangle strip of n projected vertices */
@@ -202,6 +231,10 @@ static float sinA[8]; /* derived name */
    vf12 in projectVertex */
 static __inline__ void setScreenClamp(float hi, float lo) /* derived name */
 {
+#ifdef ICO_HOST
+    screenClampHi = hi;
+    screenClampLo = lo;
+#else
     __asm__ __volatile__("mfc1 $8, %0\n\t"
                          "qmtc2.ni $8, $vf12\n\t"
                          "mfc1 $8, %1\n\t"
@@ -209,12 +242,16 @@ static __inline__ void setScreenClamp(float hi, float lo) /* derived name */
                          :
                          : "f"(hi), "f"(lo)
                          : "$8");
+#endif
 }
 
 /* dst = base + v * s over xyz, keeping base's w */
 static __inline__ void addScaledVectorXYZ(void *dst, const void *base, const void *v,
                                           float s) /* derived name */
 {
+#ifdef ICO_HOST
+    ico_scale_add_xyz(dst, base, v, s);
+#else
     __asm__ __volatile__("lqc2 $vf14, 0x0(%1)\n\t"
                          "lqc2 $vf15, 0x0(%2)\n\t"
                          "mfc1 $8, %3\n\t"
@@ -225,6 +262,7 @@ static __inline__ void addScaledVectorXYZ(void *dst, const void *base, const voi
                          :
                          : "r"(dst), "r"(base), "r"(v), "f"(s)
                          : "$8");
+#endif
 }
 
 /* project the view-space sphere around pos, splitting each of the 8 rings

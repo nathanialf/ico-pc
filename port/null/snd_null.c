@@ -46,7 +46,11 @@
 static unsigned char replyPages[2][ICO_SND_REPLY_SIZE];
 static unsigned int pageCounter;
 static uint32_t transferCounter;
-static int32_t initReturn; /* the IRX's return word of a non-tick call */
+/* The reply of a non-tick call: the IRX's return word, then zeros.  The
+   host SIF copies the caller's receive size from it (sif_host.h: a reply
+   is at least that long), and the init call receives 0x40 bytes, so it is
+   a page long rather than one word. */
+static unsigned char initReply[ICO_SND_REPLY_SIZE];
 static const unsigned char *lastReply;
 
 static uint32_t rd32(const unsigned char *p)
@@ -73,13 +77,15 @@ static void *snd_server(unsigned int rpc_number, void *send, int ssize, int rsiz
     unsigned char *page;
     int p;
 
-    (void)rsize;
     if (rpc_number == SND_RPC_INIT) {
         if (send != NULL && ssize >= 16) {
             run_packets(send, 1);
         }
-        initReturn = 0;
-        return &initReturn;
+        if (rsize > ICO_SND_REPLY_SIZE) {
+            return NULL; /* larger than any reply the IRX sends: zeros */
+        }
+        memset(initReply, 0, sizeof(initReply)); /* return word 0 */
+        return initReply;
     }
     if (send != NULL && ssize > 0) {
         run_packets(send, ssize / 16);

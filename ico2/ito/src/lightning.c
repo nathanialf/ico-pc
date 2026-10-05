@@ -58,11 +58,37 @@ static __inline__ int fbits(float f) /* derived name */
     return *(int *)&f;
 }
 
+#ifdef ICO_HOST
+
+/* VU0's clip flag register on the host: each judgment shifts the older ones
+   up by 6 bits and the register keeps the last four (24 bits).  On the PS2
+   GsBase.c's vclipw shares it; here lightning keeps its own history, which
+   only changes the packets it builds. */
+static unsigned int clipFlagReg; /* derived name */
+
+#endif
+
 /* VU0's clipping flags for one w-homogeneous point */
 static __inline__ int clip_flags(LightningVtx *p) /* derived name */
 {
     int flags;
 
+#ifdef ICO_HOST
+    {
+        /* vclipw.xyzw: +x, -x, +y, -y, +z, -z against |w|, bits 0-5 */
+        float w = __builtin_fabsf(p->f[3]);
+        unsigned int j = 0;
+
+        j |= (p->f[0] > w) << 0;
+        j |= (p->f[0] < -w) << 1;
+        j |= (p->f[1] > w) << 2;
+        j |= (p->f[1] < -w) << 3;
+        j |= (p->f[2] > w) << 4;
+        j |= (p->f[2] < -w) << 5;
+        clipFlagReg = ((clipFlagReg << 6) | j) & 0xFFFFFFu;
+        flags = (int)clipFlagReg;
+    }
+#else
     __asm__ __volatile__(".set noreorder\n\t"
                          "lqc2 $vf1, 0(%1)\n\t"
                          "vclipw.xyzw $vf1, $vf1w\n\t"
@@ -76,6 +102,7 @@ static __inline__ int clip_flags(LightningVtx *p) /* derived name */
                          : "=r"(flags)
                          : "r"(p)
                          : "memory");
+#endif
     return flags;
 }
 
@@ -177,6 +204,20 @@ static void set_vertex(LightningVtx *dir, LightningVtx *pos, float u, int *col, 
 /* out = the 3x4 part of m applied to in */
 inline void apply_m34(void *out, void *m, void *in)
 {
+#ifdef ICO_HOST
+    /* m[0]*x + m[1]*y + m[2]*z, all four fields (vmulax, vmadday, vmaddz) */
+    const float (*a)[4] = (const float (*)[4])m;
+    const float *v = in;
+    float r[4];
+    int k;
+
+    for (k = 0; k < 4; k++) {
+        r[k] = a[0][k] * v[0];
+        r[k] = r[k] + a[1][k] * v[1];
+        r[k] = r[k] + a[2][k] * v[2];
+    }
+    __builtin_memcpy(out, r, sizeof r);
+#else
     __asm__ __volatile__(".set noreorder\n\t"
                          "lqc2 $vf8, 0x0(%2)\n\t"
                          "lqc2 $vf4, 0x0(%1)\n\t"
@@ -190,6 +231,7 @@ inline void apply_m34(void *out, void *m, void *in)
                          :
                          : "r"(out), "r"(m), "r"(in)
                          : "memory");
+#endif
 }
 
 /* a random value between lo and hi */
@@ -306,12 +348,22 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         if (seed == one) {
             seed = 1.5f;
         }
+#ifdef ICO_HOST
+        {
+            /* the float's bits into the R register ("r" moved them to a GPR) */
+            uint32_t bits;
+
+            __builtin_memcpy(&bits, &seed, sizeof bits);
+            ico_vu0_random_set(bits);
+        }
+#else
         __asm__ __volatile__("ctc2.ni %0, $vi20\n\t"
                              "vnop\n\t"
                              "vnop\n\t"
                              "vnop"
                              :
                              : "r"(seed));
+#endif
     }
     if (stepMin < 15.0f) {
         stepMin = 15.0f;
