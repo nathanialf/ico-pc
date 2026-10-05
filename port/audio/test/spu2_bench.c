@@ -15,6 +15,12 @@
  *                        `spu2_render_crc`.
  *   spu2_bench --print   prints the CRCs of all of them (to compare with
  *                        another build of the SPU2).
+ *   spu2_bench --trace-crc <scene | seed>
+ *                        prints, after every vsync of one scene (a name, or
+ *                        a random scene's seed), the harness PRNG state, the
+ *                        running CRC and a CRC per component (samples,
+ *                        registers, callbacks, RAM); diff two builds' output
+ *                        to find the first vsync and component that differ.
  *   spu2_bench           times spu2_render per vsync (960 frames) for an
  *                        idle SPU2 and 24 and 48 voices with reverb on both
  *                        cores, and (when built with SPU2_PROFILE, the
@@ -55,13 +61,28 @@ static void crc_init(void)
 
 static uint32_t crc;
 
-static void crc_bytes(const void *p, size_t n)
+/* --trace-crc: a CRC per component (what crc_bytes is fed at the time) as
+   well as the running one, printed after every vsync. */
+enum { PART_SAMPLES, PART_REGS, PART_CALLBACKS, PART_RAM, PARTS };
+
+static int trace;
+static int crc_part;
+static uint32_t part_crc[PARTS];
+
+static uint32_t crc_step(uint32_t c, const uint8_t *b, size_t n)
 {
-    const uint8_t *b = (const uint8_t *)p;
     size_t i;
 
     for (i = 0; i < n; i++)
-        crc = crc_table[(crc ^ b[i]) & 0xFF] ^ (crc >> 8);
+        c = crc_table[(c ^ b[i]) & 0xFF] ^ (c >> 8);
+    return c;
+}
+
+static void crc_bytes(const void *p, size_t n)
+{
+    crc = crc_step(crc, (const uint8_t *)p, n);
+    if (trace)
+        part_crc[crc_part] = crc_step(part_crc[crc_part], (const uint8_t *)p, n);
 }
 
 static void crc_u32(uint32_t v)
@@ -161,21 +182,70 @@ static void reverb_on(int core, int mode, uint32_t eea)
     spu2_sd_set_core_attr(SPU2_SD_CORE_EFFECT_ENABLE | core, 1);
 }
 
+/*
+ * The scenes draw rnd() one call per full expression: C leaves the order of
+ * function arguments and of the operands of | and + unspecified, and gcc and
+ * clang differ (gcc evaluated `f(rnd(a), rnd(b))` right to left, clang left
+ * to right), which gave the game and hazard scenes different CRCs under the
+ * two compilers.  The draws below are in the order gcc used when the golden
+ * CRCs were taken (operands left to right, arguments right to left).
+ */
 static void voice_start(int c, int v, int sound, int sustained)
 {
     uint16_t sel = (uint16_t)VSEL(c, v);
+    uint32_t attack_exp;
+    uint32_t attack;
+    uint32_t decay;
+    uint32_t sustain;
+    uint32_t sustain_mode;
+    uint32_t sustain_rate;
+    uint32_t release_exp;
+    uint32_t release;
 
     spu2_sd_set_param(SPU2_SD_VPARAM_VOLL | sel, (uint16_t)(0x0800 + rnd(0x3000)));
     spu2_sd_set_param(SPU2_SD_VPARAM_VOLR | sel, (uint16_t)(0x0800 + rnd(0x3000)));
     spu2_sd_set_param(SPU2_SD_VPARAM_PITCH | sel, (uint16_t)(0x0400 + rnd(0x3800)));
     /* attack linear/exp, decay, sustain level; sustain and release */
+    attack_exp = rnd(2);
+    attack = 0x10 + rnd(0x50);
+    decay = rnd(16);
+    sustain = sustained ? 0xC + rnd(4) : rnd(16);
     spu2_sd_set_param(SPU2_SD_VPARAM_ADSR1 | sel,
-                      (uint16_t)(rnd(2) << 15 | (0x10 + rnd(0x50)) << 8 | rnd(16) << 4 |
-                                 (sustained ? 0xC + rnd(4) : rnd(16))));
+                      (uint16_t)(attack_exp << 15 | attack << 8 | decay << 4 | sustain));
+    sustain_mode = rnd(4);
+    sustain_rate = sustained ? 0x7F : rnd(0x80);
+    release_exp = rnd(2);
+    release = rnd(0x20);
     spu2_sd_set_param(
         SPU2_SD_VPARAM_ADSR2 | sel,
-        (uint16_t)(rnd(4) << 14 | (sustained ? 0x7F : rnd(0x80)) << 6 | rnd(2) << 5 | rnd(0x20)));
+        (uint16_t)(sustain_mode << 14 | sustain_rate << 6 | release_exp << 5 | release));
     spu2_sd_set_addr(SPU2_SD_VADDR_SSA | sel, snd_addr[sound]);
+}
+
+/* voice_start with a random sound, sustained or not */
+static void voice_start_random(int c, int v)
+{
+    int sustained = (int)rnd(2);
+    int sound = (int)rnd(SOUNDS);
+
+    voice_start(c, v, sound, sustained);
+}
+
+/* A random ADPCM header byte (filter, shift 4..12) */
+static uint8_t random_header(void)
+{
+    uint32_t filter = rnd(5);
+    uint32_t shift = 4 + rnd(9);
+
+    return (uint8_t)(filter << 4 | shift);
+}
+
+/* A random address: a block in the first four of a random sound */
+static uint32_t random_block_addr(void)
+{
+    uint32_t sound = rnd(SOUNDS);
+
+    return snd_addr[sound] + 16 * rnd(4);
 }
 
 static void key(int c, uint32_t mask, int on)
@@ -232,9 +302,12 @@ static void trans_cb(int chan, void *user)
     crc_u32(0x54524E00u | (uint32_t)chan);
     crc_u32((uint32_t)spu2_time());
     crc_u32(spu2_read_reg(chan, SPU2_R_VA(2) + SPU2_VA_NAX + 2));
-    if (callbacks_write)
-        spu2_write_reg(chan, SPU2_R_VP(5) + SPU2_VP_PITCH, (uint16_t)(0x800 + rnd(0x2000)),
-                       spu2_time() + rnd(40));
+    if (callbacks_write) {
+        uint64_t when = spu2_time() + rnd(40);
+        uint16_t pitch = (uint16_t)(0x800 + rnd(0x2000));
+
+        spu2_write_reg(chan, SPU2_R_VP(5) + SPU2_VP_PITCH, pitch, when);
+    }
 }
 
 static void irq_cb(int core, void *user)
@@ -303,7 +376,7 @@ static void random_setup(uint32_t rseed)
             reverb_on(c, (int)rnd(10), c ? 0x1DFFFF : 0x1FFFFF);
         for (v = 0; v < 24; v++)
             if (rnd(3))
-                voice_start(c, v, (int)rnd(SOUNDS), (int)rnd(2));
+                voice_start_random(c, v);
         key(c, rnd(0x1000000), 1);
     }
     if (rnd(2))
@@ -311,7 +384,7 @@ static void random_setup(uint32_t rseed)
     random_irq = rnd(3) == 0;
     if (random_irq) {
         c = (int)rnd(2);
-        spu2_sd_set_addr(SPU2_SD_ADDR_IRQA | c, snd_addr[rnd(SOUNDS)] + 16 * rnd(4));
+        spu2_sd_set_addr(SPU2_SD_ADDR_IRQA | c, random_block_addr());
         spu2_sd_set_core_attr(SPU2_SD_CORE_IRQ_ENABLE | c, 1);
     }
 }
@@ -331,7 +404,7 @@ static void random_tick(unsigned vs, int frames)
         switch (rnd(14)) {
         case 0:
         case 1:
-            voice_start(c, v, (int)rnd(SOUNDS), (int)rnd(2));
+            voice_start_random(c, v);
             key(c, 1u << v, 1);
             break;
         case 2:
@@ -340,10 +413,12 @@ static void random_tick(unsigned vs, int frames)
         case 3:
             spu2_sd_set_param(SPU2_SD_VPARAM_PITCH | sel, (uint16_t)rnd(0x10000));
             break;
-        case 4:
-            spu2_sd_set_param((rnd(2) ? SPU2_SD_VPARAM_VOLL : SPU2_SD_VPARAM_VOLR) | sel,
-                              (uint16_t)rnd(0x10000));
+        case 4: {
+            uint16_t vol = (uint16_t)rnd(0x10000);
+
+            spu2_sd_set_param((rnd(2) ? SPU2_SD_VPARAM_VOLL : SPU2_SD_VPARAM_VOLR) | sel, vol);
             break;
+        }
         case 5:
             spu2_sd_set_param(SPU2_SD_VPARAM_ENVX | sel, (uint16_t)rnd(0x10000));
             break;
@@ -354,7 +429,7 @@ static void random_tick(unsigned vs, int frames)
             spu2_sd_set_switch(SPU2_SD_SWITCH_NON | c, rnd(0x1000000) & rnd(0x1000000));
             break;
         case 8:
-            spu2_sd_set_addr(SPU2_SD_VADDR_NAX | sel, snd_addr[rnd(SOUNDS)] + 16 * rnd(4));
+            spu2_sd_set_addr(SPU2_SD_VADDR_NAX | sel, random_block_addr());
             break;
         case 9:
             spu2_sd_set_addr(SPU2_SD_VADDR_LSAX | sel, snd_addr[rnd(SOUNDS)]);
@@ -376,7 +451,7 @@ static void random_tick(unsigned vs, int frames)
                 for (i = 0; i < 12 * 16; i++)
                     trans_buf[c][i] = (uint8_t)rnd(256);
                 for (i = 0; i < 12; i++) {
-                    trans_buf[c][i * 16] = (uint8_t)(rnd(5) << 4 | (4 + rnd(9)));
+                    trans_buf[c][i * 16] = random_header();
                     trans_buf[c][i * 16 + 1] = (uint8_t)(rnd(4) ? 0 : rnd(8));
                 }
                 spu2_sd_voice_trans(c, SPU2_SD_TRANS_WRITE, trans_buf[c], snd_addr[rnd(SOUNDS)],
@@ -506,7 +581,7 @@ static void scene_tick(int scene, unsigned vs, int frames)
     switch (rnd(6)) {
     case 0:
     case 1:
-        voice_start(c, v, (int)rnd(SOUNDS), (int)rnd(2));
+        voice_start_random(c, v);
         key(c, 1u << v, 1);
         break;
     case 2:
@@ -527,9 +602,12 @@ static void scene_tick(int scene, unsigned vs, int frames)
         break;
     }
     if (rnd(3) == 0) {
+        int on;
+
         /* a write inside the block */
         spu2_sd_set_time(now + rnd((uint32_t)frames));
-        key(c ^ 1, 1u << rnd(24), (int)rnd(2));
+        on = (int)rnd(2);
+        key(c ^ 1, 1u << rnd(24), on);
     }
     if ((vs % 25) == 3) {
         /* a sample upload over sound 2 (voices may be playing it) */
@@ -539,7 +617,7 @@ static void scene_tick(int scene, unsigned vs, int frames)
         for (i = 0; i < 12 * 16; i++)
             trans_buf[ch][i] = (uint8_t)rnd(256);
         for (i = 0; i < 12; i++) {
-            trans_buf[ch][i * 16] = (uint8_t)(rnd(5) << 4 | (4 + rnd(9)));
+            trans_buf[ch][i * 16] = random_header();
             trans_buf[ch][i * 16 + 1] = 0;
         }
         trans_buf[ch][11 * 16 + 1] = ADPCM_FLAG_LOOP_END | ADPCM_FLAG_LOOP_REPEAT;
@@ -604,6 +682,7 @@ static uint32_t scene_run(int scene, uint32_t rseed, double *mean_ms, double *ma
     double worst = 0;
 
     crc = 0xFFFFFFFFu;
+    memset(part_crc, 0xFF, sizeof part_crc);
     if (scene == SCENE_RANDOM)
         random_setup(rseed);
     else
@@ -614,20 +693,34 @@ static uint32_t scene_run(int scene, uint32_t rseed, double *mean_ms, double *ma
         double dt;
 
         scene_tick(scene, vs, frames);
+        crc_part = PART_CALLBACKS;
         t0 = now_ms();
         spu2_render(out, frames);
         dt = now_ms() - t0;
+        crc_part = PART_SAMPLES;
         sum += dt;
         if (vs < 2048)
             vsync_ms[vs] = dt;
         if (dt > worst)
             worst = dt;
         crc_samples(out, frames * 2);
+        crc_part = PART_REGS;
         crc_state();
+        crc_part = PART_SAMPLES;
+        if (trace) {
+            part_crc[PART_RAM] = crc_step(0xFFFFFFFFu, spu2_ram(), SPU2_RAM_SIZE);
+            printf("vs %4u frames %3d seed %08X crc %08X samples %08X regs %08X callbacks "
+                   "%08X ram %08X\n",
+                   vs, frames, (unsigned)seed, (unsigned)crc, (unsigned)part_crc[PART_SAMPLES],
+                   (unsigned)part_crc[PART_REGS], (unsigned)part_crc[PART_CALLBACKS],
+                   (unsigned)part_crc[PART_RAM]);
+        }
         total += (uint64_t)frames;
         vs++;
     }
+    crc_part = PART_RAM;
     crc_bytes(spu2_ram(), SPU2_RAM_SIZE);
+    crc_part = PART_SAMPLES;
     if (mean_ms)
         *mean_ms = sum / vs;
     if (max_ms)
@@ -673,6 +766,21 @@ int main(int argc, char **argv)
     int s;
 
     crc_init();
+    if (argc > 2 && strcmp(argv[1], "--trace-crc") == 0) {
+        /* --trace-crc <scene name | random seed>: the CRCs after every vsync
+           (diff two builds' output to find the first divergence) */
+        int scene = SCENE_RANDOM;
+        uint32_t rseed = 0;
+
+        for (s = 0; s < SCENES; s++)
+            if (strcmp(argv[2], scene_name[s]) == 0)
+                scene = s;
+        if (scene == SCENE_RANDOM)
+            rseed = (uint32_t)strtoul(argv[2], NULL, 0);
+        trace = 1;
+        printf("%s crc 0x%08X\n", argv[2], (unsigned)scene_run(scene, rseed, NULL, NULL, NULL));
+        return 0;
+    }
     if (check || print) {
         for (s = 0; s < SCENES; s++) {
             uint32_t got = scene_run(s, 0, NULL, NULL, NULL);

@@ -570,6 +570,40 @@ conditions exclude: `frame()`, `core_frame`, `voice_frame`, `voice_fetch`.
   `spu2_bench --check` clean. The changed files compile without warnings
   for `win-x64` (mingw gcc), and `spu2_bench.exe` links there.
 
+### Compiler independence (S5)
+
+CI's `linux-x64-clang` job failed `spu2_render_crc` on `game` (0x4BEA597E)
+and `hazard` (0xD124DD98). The SPU2 was not the cause: the gcc-built
+harness object linked against the clang-built `libico_audio.a` gave the
+golden values, and the clang-built harness against the gcc-built library
+gave the failing ones. `spu2_bench --trace-crc <scene | seed>` (the harness
+PRNG state, the running CRC and a CRC per component after every vsync)
+showed `game` diverging at vsync 0 in the registers with the PRNG state
+equal, and `hazard` at vsync 0 in the samples with the PRNG state already
+different. The harness drew several `rnd()` values in one expression whose
+order C leaves unspecified (C11 6.5p3, 6.5.2.2p10): arguments such as
+`voice_start(c, v, rnd(SOUNDS), rnd(2))`, `key(c ^ 1, 1u << rnd(24),
+rnd(2))` and the transfer callback's pitch and time, and the operands of
+`|` and `+` (ADSR words, ADPCM headers, `snd_addr[rnd(..)] + 16 * rnd(4)`).
+gcc 14 evaluated those argument lists right to left and clang left to right,
+so the voices got different sounds and sustain flags (and `sustained ?
+0x7F : rnd(0x80)` then drew a different number of values). This is
+unspecified behaviour, not UB, so neither UBSan nor `-Wsequence-point`/
+`-Wunsequenced` reports it (both checked on the old harness).
+
+Every draw is now one full expression, in the order gcc used (operands left
+to right, arguments right to left: `voice_start_random`, `random_header`,
+`random_block_addr`). The golden values are unchanged: the fixed harness
+gives the same 29 CRCs (`--print`) over the current renderer and over
+a0a98982's `spu2.c`, `spu2_sd.c`, `spu2_tables.c` and `adpcm.c`, each built
+with gcc 14.2 and with llvm-mingw clang, and `--check` passes under both.
+`spu2_test`'s checksum (0x77DB2B76) was never affected (its PRNG is one
+statement per draw). The audio tests pass with `-DICO_SANITIZE=undefined`
+under gcc (runtime diagnostics) and under clang (llvm-mingw ships no Linux
+UBSan runtime, so `-fsanitize-trap=undefined` in `CMAKE_C_FLAGS` and
+`CMAKE_EXE_LINKER_FLAGS`). The `win-x64` (mingw gcc) build compiles the
+harness; it was not run here (no Wine).
+
 `spu2_get_stats` counts chunked and frame-by-frame frames and hazards;
 `ico_audio_host_shutdown` logs them (`audio: SPU2 rendered N frames voice by
 voice in C chunks and M frame by frame (H hazards)`), so a game run shows
