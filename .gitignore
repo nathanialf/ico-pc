@@ -86,6 +86,11 @@ config/local.*
 # --- Local toolchain (tools/setup.sh: the period compilers and binutils) ---
 tools/cc/
 tools/ghidra/
+# The host build's toolchains (tools/fetch_toolchain.sh) and build trees
+# (CMakePresets.json; build/ belongs to the PS2 build and tools/build.sh
+# setup deletes it).
+tools/toolchain/
+build-host/
 
 # --- Agent guidance / local-only ---
 # CLAUDE.md is auto-loaded by Claude Code and is the agent's local preamble;

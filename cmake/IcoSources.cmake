@@ -1,0 +1,337 @@
+# cmake/IcoSources.cmake: written by tools/gen_sources.py from
+# config/link_order.pal.txt. Do not edit; rerun the script.
+# Order is the retail link's.
+
+set(ICO_PROGRAMMERS common fumi ito omori script seki sugipon)
+
+# ico2/common: 17 non-renderer sources
+set(ICO_SOURCES_common
+    ico2/common/src/main.c
+    ico2/common/src/DObj.c
+    ico2/common/src/StageManager.c
+    ico2/common/src/backStage.c
+    ico2/common/src/charFileManager.c
+    ico2/common/src/debug_menu.c
+    ico2/common/src/gamesys.c
+    ico2/common/src/haveParentSimpleObj.c
+    ico2/common/src/icoMisc.c
+    ico2/common/src/kanban.c
+    ico2/common/src/kanbanBoot.c
+    ico2/common/src/layout_action.c
+    ico2/common/src/layout_texture.c
+    ico2/common/src/sceneManager.c
+    ico2/common/src/staffroll.c
+    ico2/common/src/GobjProc.c
+    ico2/common/src/PObj.c
+)
+
+# ico2/fumi: 41 non-renderer sources
+set(ICO_SOURCES_fumi
+    ico2/fumi/ios/cdvd.c
+    ico2/fumi/ios/inflate.c
+    ico2/fumi/ios/ios.c
+    ico2/fumi/ios/mblock.c
+    ico2/fumi/ios/mcard.c
+    ico2/fumi/ios/mcdata.c
+    ico2/fumi/ios/memory.c
+    ico2/fumi/ios/message.c
+    ico2/fumi/ios/pad.c
+    ico2/fumi/ios/shockdriver.c
+    ico2/fumi/ios/thread.c
+    ico2/fumi/isys/gobj.c
+    ico2/fumi/isys/gobj_dl.c
+    ico2/fumi/isys/gobj_process.c
+    ico2/fumi/isys/isys.c
+    ico2/fumi/isys/obj_manager.c
+    ico2/fumi/sound/adpcm_init.c
+    ico2/fumi/sound/s_init.c
+    ico2/fumi/sound/soundManager.c
+    ico2/fumi/src/act-game.c
+    ico2/fumi/src/act-parallel-control.c
+    ico2/fumi/src/act-wish.c
+    ico2/fumi/src/boyact.c
+    ico2/fumi/src/commonact.c
+    ico2/fumi/src/enemy_act.c
+    ico2/fumi/src/fieldCollision.c
+    ico2/fumi/src/fuzio.c
+    ico2/fumi/src/girl_act.c
+    ico2/fumi/src/jimaku.c
+    ico2/fumi/src/way_sys.c
+    ico2/fumi/src/way_util.c
+    ico2/fumi/isys/gobj_cam_dl.c
+    ico2/fumi/src/act-env.c
+    ico2/fumi/src/act-way.c
+    ico2/fumi/src/act.c
+    ico2/fumi/src/act2.c
+    ico2/fumi/src/seMail.c
+    ico2/fumi/src/way_kidnap.c
+    ico2/fumi/src/way_llf.c
+    ico2/fumi/src/way_tool.c
+    ico2/fumi/src/vobj.c
+)
+
+# ico2/ito: 7 non-renderer sources
+set(ICO_SOURCES_ito
+    ico2/ito/src/act_bird.c
+    ico2/ito/src/gather_effect.c
+    ico2/ito/src/itou_boss.c
+    ico2/ito/src/itou_gflag.c
+    ico2/ito/src/itou_sub.c
+    ico2/ito/src/queen.c
+    ico2/ito/src/stage_orient.c
+)
+
+# ico2/omori: 18 non-renderer sources
+set(ICO_SOURCES_omori
+    ico2/omori/src/attackhit.c
+    ico2/omori/src/brain.c
+    ico2/omori/src/camera-editor.c
+    ico2/omori/src/camera-ico2.c
+    ico2/omori/src/camera-root.c
+    ico2/omori/src/camera-set-manager.c
+    ico2/omori/src/chain.c
+    ico2/omori/src/ebrain.c
+    ico2/omori/src/enemy-control.c
+    ico2/omori/src/fightSound.c
+    ico2/omori/src/generator.c
+    ico2/omori/src/gv.c
+    ico2/omori/src/hand-camera.c
+    ico2/omori/src/lws_kyomi.c
+    ico2/omori/src/mail-add-data.c
+    ico2/omori/src/poly-flat.c
+    ico2/omori/src/access.c
+    ico2/omori/src/objact.c
+)
+
+# ico2/script: 45 non-renderer sources
+set(ICO_SOURCES_script
+    ico2/script/src/gflag.c
+    ico2/script/src/script.c
+    ico2/script/src/st25a.c
+    ico2/script/src/warpGirl.c
+    ico2/script/src/deja.c
+    ico2/script/src/e3.c
+    ico2/script/src/end.c
+    ico2/script/src/op.c
+    ico2/script/src/st00a.c
+    ico2/script/src/st01b.c
+    ico2/script/src/st02a.c
+    ico2/script/src/st03t.c
+    ico2/script/src/st04a.c
+    ico2/script/src/st04b.c
+    ico2/script/src/st04c.c
+    ico2/script/src/st04d.c
+    ico2/script/src/st04e.c
+    ico2/script/src/st04l.c
+    ico2/script/src/st04r.c
+    ico2/script/src/st05b.c
+    ico2/script/src/st05c.c
+    ico2/script/src/st05d.c
+    ico2/script/src/st05e.c
+    ico2/script/src/st06a.c
+    ico2/script/src/st07a.c
+    ico2/script/src/st08a.c
+    ico2/script/src/st08b.c
+    ico2/script/src/st09a.c
+    ico2/script/src/st10l.c
+    ico2/script/src/st10r.c
+    ico2/script/src/st13a.c
+    ico2/script/src/st13b.c
+    ico2/script/src/st13b2.c
+    ico2/script/src/st13c.c
+    ico2/script/src/st13d.c
+    ico2/script/src/st17a.c
+    ico2/script/src/st17b.c
+    ico2/script/src/st18a.c
+    ico2/script/src/st19a.c
+    ico2/script/src/st20a.c
+    ico2/script/src/st22a.c
+    ico2/script/src/st24a.c
+    ico2/script/src/st47a.c
+    ico2/script/src/st99a.c
+    ico2/script/src/stageSEProc.c
+)
+
+# ico2/seki: 5 non-renderer sources
+set(ICO_SOURCES_seki
+    ico2/seki/src/FileManager.c
+    ico2/seki/src/StageAnimation.c
+    ico2/seki/src/Basic.c
+    ico2/seki/src/BgAnimation.c
+    ico2/seki/src/EnemyInit.c
+)
+
+# ico2/sugipon: 55 non-renderer sources
+set(ICO_SOURCES_sugipon
+    ico2/sugipon/src/delayFreeManager.c
+    ico2/sugipon/src/geometryManager.c
+    ico2/sugipon/src/keyInput.c
+    ico2/sugipon/src/motionManager2.c
+    ico2/sugipon/src/pool.c
+    ico2/sugipon/src/tableSin.c
+    ico2/sugipon/src/a_p_1.c
+    ico2/sugipon/src/act_a_p_1.c
+    ico2/sugipon/src/actressLight.c
+    ico2/sugipon/src/attackCheckBoundary.c
+    ico2/sugipon/src/box.c
+    ico2/sugipon/src/boy.c
+    ico2/sugipon/src/cage.c
+    ico2/sugipon/src/cageFix.c
+    ico2/sugipon/src/candle.c
+    ico2/sugipon/src/chandelier.c
+    ico2/sugipon/src/clipCollisionManager.c
+    ico2/sugipon/src/clothTest.c
+    ico2/sugipon/src/effectTool.c
+    ico2/sugipon/src/enemy.c
+    ico2/sugipon/src/enemyParts.c
+    ico2/sugipon/src/flag.c
+    ico2/sugipon/src/flyManager.c
+    ico2/sugipon/src/frameDependSequence.c
+    ico2/sugipon/src/girl.c
+    ico2/sugipon/src/girlForceField.c
+    ico2/sugipon/src/handManager.c
+    ico2/sugipon/src/item.c
+    ico2/sugipon/src/lodManager.c
+    ico2/sugipon/src/motionFileManager.c
+    ico2/sugipon/src/motionManager.c
+    ico2/sugipon/src/motionOrientManager.c
+    ico2/sugipon/src/motionViewer.c
+    ico2/sugipon/src/moveColTest.c
+    ico2/sugipon/src/multiBgaManager.c
+    ico2/sugipon/src/particleLayout.c
+    ico2/sugipon/src/puddle.c
+    ico2/sugipon/src/rope.c
+    ico2/sugipon/src/ropeFix.c
+    ico2/sugipon/src/rotObject.c
+    ico2/sugipon/src/spider.c
+    ico2/sugipon/src/spiderGroupManager.c
+    ico2/sugipon/src/stageMultiBgaManager.c
+    ico2/sugipon/src/stormTest.c
+    ico2/sugipon/src/streamMotionManager.c
+    ico2/sugipon/src/sugiTree.c
+    ico2/sugipon/src/torch.c
+    ico2/sugipon/src/waterDot.c
+    ico2/sugipon/src/waySystemManager.c
+    ico2/sugipon/src/weapon.c
+    ico2/sugipon/src/windField.c
+    ico2/sugipon/src/windManager.c
+    ico2/sugipon/src/windmill.c
+    ico2/sugipon/src/wireLetter.c
+    ico2/sugipon/src/worm.c
+)
+
+# 35 renderer-owned sources (compiled when ICO_HEADLESS is off)
+set(ICO_RENDERER_SOURCES
+    ico2/sugipon/src/matrixDrive.c
+    ico2/sugipon/src/quaternion.c
+    ico2/seki/src/DisplayP2O.c
+    ico2/seki/src/GifPacket.c
+    ico2/seki/src/GsBase.c
+    ico2/seki/src/Light.c
+    ico2/seki/src/Matrix.c
+    ico2/seki/src/MicroCode.c
+    ico2/seki/src/Packet.c
+    ico2/seki/src/Primitive.c
+    ico2/seki/src/RegistPacket.c
+    ico2/seki/src/Shadow.c
+    ico2/seki/src/Texture.c
+    ico2/seki/src/ZFog.c
+    ico2/ito/src/lightning.c
+    ico2/ito/src/queen_barrier_disp.c
+    ico2/ito/mpeg/mv_main.c
+    ico2/ito/mpeg/mv_readbuf.c
+    ico2/ito/mpeg/mv_strfile.c
+    ico2/ito/mpeg/mv_videodec.c
+    ico2/ito/mpeg/mv_vobuf.c
+    ico2/common/src/debug.c
+    ico2/common/src/debug_exception.c
+    ico2/sugipon/src/clothAnimation.c
+    ico2/sugipon/src/darkVolume.c
+    ico2/sugipon/src/lineManager.c
+    ico2/sugipon/src/particleEffect.c
+    ico2/sugipon/src/staticBlur.c
+    ico2/seki/src/DisplayFont.c
+    ico2/seki/src/DisplayList.c
+    ico2/seki/src/DmaPacket.c
+    ico2/ito/mpeg/mv_audiodec.c
+    ico2/ito/mpeg/mv_disp.c
+    ico2/ito/mpeg/mv_sub.c
+    ico2/ito/mpeg/mv_vibuf.c
+)
+
+# 73 data-only members, build/data/<member>.c (tools/gen_data_c.py)
+set(ICO_DATA_MEMBERS
+    accessary
+    act-data-tbl
+    act-intrlist
+    act-mode-def
+    adpcmfile
+    attack-def
+    auto-escort
+    camera-set
+    exit-data
+    game-param
+    unmapped_002ADBA0
+    generator-sub-position
+    girl-warp-list
+    iconfile
+    idle-mot-def
+    init-func
+    unmapped_0055FBD0
+    look-target-data
+    motion-def
+    motion-ik-eff-def
+    motion-orient
+    motion-orient-def
+    motion-random-def
+    moviefile
+    node-fix-ofs
+    obj-action
+    obj-kind-data
+    obj-layout
+    obj-light
+    pair-motion
+    parallel-motion-tbl
+    param-escape-run
+    se-env
+    sedef
+    sefile
+    sekind
+    selist
+    shocklist
+    stage-all
+    stage-anim-model
+    stage-anim
+    stream-motion-def
+    tex-property
+    weapon-def
+    staffroll_dat
+    blend-motion-def
+    enemy-def
+    enemy-model-grp
+    enemy-model-tbl
+    enemy-random-def
+    enemy-random-variation-def
+    layout-cloth-def
+    motion-eff-condition-def
+    motion-eff-def
+    motion-eff-random-def
+    motion-limit-def
+    motion-se-condition-def
+    motion-se-random-def
+    obj-trigger-def
+    obj-trigger
+    parallel-motion-orient
+    particle-effect
+    spider-def
+    way-group
+    item-kind-def
+    mirror-motion-def
+    model-path
+    prog-se-link
+    unmapped_00533FC0
+    texture-layout
+    texture-path
+    way-point
+    weapon-fumble-def
+)

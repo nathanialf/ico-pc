@@ -212,3 +212,118 @@ then `tools/format_layout.py`'s top-level blank-line layout.
 
 Any PS2 emulator can run `build/ico.elf` as a sanity check, with
 `baserom/Ico_PAL.iso` as the disc for the game's data files.
+
+## Host build
+
+The PC port's build is CMake with Ninja (`CMakeLists.txt`,
+`CMakePresets.json`, `cmake/`). It compiles the game's C under `ico2/` for
+the host, with `port/` standing in for Sony's libraries; it never compiles
+`sce/` or `ico2/vusrc/`. It is separate from the PS2 build above and writes
+only under `build-host/<preset>/` (`tools/build.sh setup` deletes `build/`).
+Nothing runs the game yet: the build produces the `ico_game` and
+`ico_platform` libraries and `fpenv_test`.
+[`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) lists what compiles on
+each preset and why the rest does not.
+
+### Toolchains: `tools/fetch_toolchain.sh`
+
+Run it once. It needs `curl`, `tar`, `sha256sum` and `dpkg-deb` and no root,
+and fills `tools/toolchain/` (gitignored, about 1.4 GB):
+
+| directory | what | from |
+| --- | --- | --- |
+| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for i686 and x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
+| `sysroot-i386/` | 32-bit glibc headers, crt files and libgcc, overlaid by symlinks on the host's `/usr/include` | Debian 13 packages `libc6-dev-i386`, `libc6-i386` (2.41-12+deb13u4), `lib32gcc-14-dev`, `lib32gcc-s1` (14.2.0-19), SHA-256 pinned |
+| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for i686 and x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+
+The Debian packages come from `deb.debian.org`, falling back to
+`snapshot.debian.org` once a version is superseded. `SKIP_SYSROOT=1` and
+`SKIP_MINGW_GCC=1` skip the last two. The toolchain files take
+`ICO_LLVM_MINGW`, `ICO_SYSROOT_I386` and `ICO_MINGW_GCC` from the environment
+to use copies elsewhere.
+
+The Linux presets also use the host's gcc 14 and glibc (Debian 13 in the
+container). Ninja comes from `.venv/bin` (`tools/setup.sh`) or the `PATH`.
+
+### Presets
+
+```sh
+cmake --preset win-x86-ref
+cmake --build --preset win-x86-ref
+ctest --preset linux-x64          # fpenv_test, on the Linux presets
+```
+
+| preset | target | compiler |
+| --- | --- | --- |
+| `ref-m32` | Linux i386, the 32-bit compile check | host gcc 14 `-m32`, `sysroot-i386` |
+| `win-x86-ref` | Windows 32-bit, the 32-bit oracle the user runs | `mingw-gcc` i686 |
+| `linux-x64` | Linux x86-64 | host gcc 14 |
+| `win-x64` | Windows x64 | `mingw-gcc` x86-64 |
+| `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
+| `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in simulation mode | host gcc 14 |
+| `ref-m32-clang`, `win-x86-ref-clang`, `linux-x64-clang`, `win-x64-clang` | the same four targets | llvm-mingw clang 23 (`sysroot-i386` for i386, the host glibc for x86-64) |
+
+GCC is the primary compiler because the game uses GNU C nested functions,
+which clang does not implement; the clang presets compile fewer files until
+those are rewritten ([`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) has
+the counts and the trade-off). llvm-mingw ships no Linux sanitizer runtimes.
+
+Windows builds must target mingw (gcc or llvm-mingw), never MSVC (clang-cl
+or a `*-windows-msvc` triple): clang on MSVC targets evaluates call
+arguments right to left, where ee-gcc and the mingw and Linux compilers go
+left to right (package 0C, `docs/research/`), and the game's results depend
+on that order at some call sites.
+
+### Options
+
+| cache variable | default | effect |
+| --- | --- | --- |
+| `ICO_HEADLESS` | `ON` | leaves out the renderer-owned sources (`ICO_RENDERER_SOURCES`) and defines `ICO_HEADLESS=1` |
+| `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings, so every file that can compile does |
+| `ICO_BUILD_BLOCKED` | `OFF` | also compiles `ICO_BLOCKED_SOURCES` (`cmake/IcoExclusions.cmake`), to recheck them |
+| `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), which fails while symbols are unresolved |
+| `ICO_FPTRAP` | `OFF` | `fptrap` preset |
+| `ICO_SANITIZE` | empty | `asan` preset: the `-fsanitize=` list |
+| `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data tables are generated from |
+| `ICO_DATA_DIR` | `build/data` | pre-generated data tables, used when the base ELF or pyelftools is missing |
+
+### Sources
+
+`cmake/IcoSources.cmake` is written by `tools/gen_sources.py` from
+`config/link_order.pal.txt`: the `ico2/` C sources, one list per programmer
+directory, the renderer-owned list, and the data-only members. Configure
+warns when it is stale; rerun the script after changing the link order.
+
+Each programmer directory is one object library with the include path
+`tools/compile_c.sh` gives it (its own `include/`, then the others, then
+`port/compat/` for the SDK header names), and `-fmacro-prefix-map` makes
+`__FILE__` the period spelling (`src/main.c`), which the assert messages
+print. The game's `main` is compiled as `ico_game_main`.
+
+The game options (`cmake/IcoFlags.cmake`) are `-std=gnu11
+-fno-strict-aliasing -fwrapv -ffp-contract=off -fno-fast-math
+-fsigned-char -fno-common -fgnu89-inline`, with `-msse2 -mfpmath=sse` on
+32-bit x86, and `ICO_HOST=1`. The game and data TUs alone also take the
+EE's record layout rules: `-mno-ms-bitfields` on Windows and
+`-malign-double` on 32-bit x86 (`port/` code keeps the platform ABI, which
+SDL's and Windows' structs need). No configuration defines `NDEBUG`: the
+retail game ran with its asserts.
+
+### Data tables
+
+The 73 data-only members are C that `tools/gen_data_c.py --c <member>
+--symbol-map` writes from your base ELF (`baserom/pal/baseelf.elf`,
+`ICO_BASE_ELF`) and the committed symbol lists, with no period link. The
+build runs it for each member into `build-host/<preset>/data/` and compiles
+the results as the `ico_data` object library. It needs pyelftools
+(`.venv`, `tools/setup.sh`). Without the base ELF or pyelftools it falls back
+to a complete `ICO_DATA_DIR` (default `build/data/`, the PS2 build's copies),
+and otherwise says so at configure time and leaves the library out. The
+tables are never committed.
+
+### Floating point
+
+`port/platform/fpenv.c`: `ico_fpenv_sim_enter()` sets round toward zero
+with flush-to-zero and denormals-are-zero (MXCSR; FPCR on arm64),
+`ico_fpenv_host_enter()` restores the defaults. `fpenv_test` checks both,
+and on `fptrap` that a division by zero raises SIGFPE.
