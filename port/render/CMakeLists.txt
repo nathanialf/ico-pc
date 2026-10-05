@@ -345,10 +345,17 @@ target_compile_options(rd_debug_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_debug_test PRIVATE ico_render ico_math)
 
+# rd_mip_test (F2 C1): rdtex_MipChainBytes against the level sum and
+# rdtex_BuildMipChain inside it for non-square textures (128x4, 512x2).
+# CPU only.
+add_executable(rd_mip_test test/rd_mip_test.c)
+target_compile_options(rd_mip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_mip_test PRIVATE ico_render)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test rd_interp_test rd_mirror_test)
+              rd_present_test rd_interp_test rd_mirror_test rd_mip_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -362,6 +369,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME rd_pixel COMMAND rd_pixel_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME rd_layout COMMAND rd_layout_test)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)

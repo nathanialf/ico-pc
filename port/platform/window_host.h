@@ -10,7 +10,9 @@
  *                               with the reason logged
  *   ico_window_pump()           drains SDL events once per vsync: window
  *                               resize reaches rd_ResizeOutput; Escape or
- *                               the close button returns 0 (quit), else 1
+ *                               the close button returns 0 (quit), else 1;
+ *                               a lost device (rhi_DeviceLost) shows one
+ *                               message box and returns 0
  *   ico_window_pace(hz)         sleeps until this vsync's deadline at hz
  *                               (50 PAL, 60 NTSC) in real time; a host that
  *                               falls more than 100 ms behind resynchronises

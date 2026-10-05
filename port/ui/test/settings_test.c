@@ -26,15 +26,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "typedef.h"
 #include "main.h"
 #include "layout_texture.h"
 #include "charFileManager.h"
 #include "StageManager.h"
-
 #include <libscf.h>
-
 #include "config.h"
 #include "host_config.h"
 #include "input.h"
@@ -46,21 +43,26 @@
 #include "video_options.h"
 
 #ifdef SETTINGS_RENDER
+
 #include "DisplayList.h"
 #include "GifHost.h"
 #include "font.h"
 #include "rd_internal.h"
 #include "ui_internal.h"
+
 #endif
 
 static int failures;
 
 #ifdef _WIN32
+
 static void setEnv(const char *k, const char *v)
 {
     _putenv_s(k, v ? v : "");
 }
+
 #else
+
 static void setEnv(const char *k, const char *v)
 {
     if (v) {
@@ -69,8 +71,8 @@ static void setEnv(const char *k, const char *v)
         unsetenv(k);
     }
 }
-#endif
 
+#endif
 #define CHECK(c, ...)                                                                              \
     do {                                                                                           \
         if (!(c)) {                                                                                \
@@ -83,20 +85,35 @@ static void setEnv(const char *k, const char *v)
 
 /* ------------------------------------- what the game files import (stubs) */
 int ScreenWidth = 512, ScreenHeight = 512;
+
 float center_X = 2048.0f, center_Y = 2048.0f;
+
 LtProp texLayout[LT_GAME_LAYOUT_COUNT];
+
 LtProperty texProperty[LT_GAME_PROPERTY_COUNT];
+
 TexRec texFile[1];
+
 const StgPre stageData[110];
+
 PadState pad[16];
+
 StageSetting GlobalStageSetting;
+
 int gFlagGameClear;
+
 int systemStatus[12] = {1, 2};
+
 int frame_count = 100;
+
 int layout_boot_flag;
+
 int title_demo_mode;
+
 unsigned int stage_after_skipping_demo;
+
 int mpegPlayReturnStage;
+
 int NonLinearCameraMove = 2;
 
 static int s_resets, s_sounds[3], s_leaves;
@@ -195,10 +212,14 @@ float GetTableSin(short angle)
 }
 
 #ifdef SETTINGS_RENDER
+
 /* what GifPacket.c, DisplayList.c and DmaPacket.c import (as ui_test) */
 int screenOffsetX, screenOffsetY;
+
 int fbKeep;
+
 void *ios_partition_common;
+
 void *dmaVif;
 
 void *iosMallocDebug(void *part, int size, const char *file, int line)
@@ -238,7 +259,9 @@ void sceDmaSend(void *ch, void *addr)
     (void)ch;
     (void)addr;
 }
+
 #else
+
 /* the layout's packets: nothing is recorded in this test */
 void gif_StartPacketPri(int pri)
 {
@@ -295,6 +318,7 @@ void gif_SetGsReg(long long reg, long long data)
     (void)reg;
     (void)data;
 }
+
 #endif
 
 /* ------------------------------------------------------- fake tables */
@@ -371,8 +395,10 @@ static void fakeTables(void)
 /* ------------------------------------------------------- frames */
 
 #ifdef SETTINGS_RENDER
+
 /* a mid-tone like the fogged title, under the layout's dark backdrop */
 static const uint8_t kBg[4] = {150, 140, 120, 0x80};
+
 #endif
 
 static void frame(int flags)
@@ -583,9 +609,10 @@ static void testFramerate(void)
     ui_SettingsStep(UI_OPT_FRAMERATE, -1);
     ico_video_get(&o);
     CHECK(o.framerate == 240, "Left from original wraps to 240");
-    /* the preset is not changed by the row; Original presents at the tick */
-    CHECK(o.preset == ICO_VIDEO_ORIGINAL && ico_video_framerate() == ICO_FRAMERATE_ORIGINAL,
-          "Original preset: in force original");
+    /* the preset is not changed by the row; the rate is in force in the
+       Original preset too (F2) */
+    CHECK(o.preset == ICO_VIDEO_ORIGINAL && ico_video_framerate() == 240,
+          "Original preset: the row's rate in force");
 
     /* a cap the list does not hold steps to its neighbours */
     useConfig("[video]\nframerate = \"100\"\n");

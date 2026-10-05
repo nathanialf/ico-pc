@@ -12,6 +12,7 @@
 #include <eekernel.h>
 
 #include "fiber.h"
+#include "fpenv.h"
 #include "kernel_host.h"
 #include "sched.h"
 
@@ -551,6 +552,50 @@ static void test_boot(void)
     ico_sched_set_fiber_start_hook(NULL);
 }
 
+/* --- 12. host calls: the host's stack and FP mode, the same thread after -------- */
+
+static int host_on_fiber = -1;
+static unsigned long long host_fp, host_fp_sim, after_fp;
+
+static void host_work(void *arg)
+{
+    host_on_fiber = ico_fiber_current() != NULL;
+    host_fp = ico_fpenv_raw();
+    logs((const char *)arg);
+}
+
+static void caller(void *arg)
+{
+    (void)arg;
+    logs("a");
+    ico_sched_call_on_host(host_work, "host");
+    after_fp = ico_fpenv_raw();
+    logs("b");
+    SleepThread();
+}
+
+static void test_call_on_host(void)
+{
+    begin("ico_sched_call_on_host");
+    ico_fpenv_sim_enter();
+    host_fp_sim = ico_fpenv_raw();
+    ico_sched_set_fiber_start_hook(ico_fpenv_sim_enter);
+    start(caller, 10, NULL);
+    start(sleeper, 10, "x"); /* same priority: must not run between a and b */
+    ico_sched_run();
+    CHECK_LOG("a host b x");
+    CHECK(host_on_fiber == 0);
+    CHECK(host_fp != host_fp_sim);
+    CHECK(after_fp == host_fp_sim);
+    /* from the host context: a direct call, the simulation's mode after */
+    log_buf[0] = 0;
+    ico_sched_call_on_host(host_work, "direct");
+    CHECK_LOG("direct");
+    CHECK(ico_fpenv_raw() == host_fp_sim);
+    ico_sched_set_fiber_start_hook(NULL);
+    ico_fpenv_host_enter();
+}
+
 int main(void)
 {
     printf("fiber backend: %s\n", ico_fiber_backend());
@@ -566,6 +611,7 @@ int main(void)
     test_interrupts();
     test_suspend();
     test_boot();
+    test_call_on_host();
     ico_sched_reset();
     if (fails != 0) {
         printf("%d failure(s)\n", fails);

@@ -18,6 +18,9 @@ concurrency:
 env:
   CMAKE: ${{ github.workspace }}/tools/toolchain/cmake/bin
   PYBIN: ${{ github.workspace }}/.venv/bin
+  # the developer compiler (Debian's gcc 14); the runner's default gcc is 13
+  # (cmake/IcoFlags.cmake drops the flags a compiler does not know anyway)
+  ICO_CC: gcc-14
 
 jobs:
   linux:
@@ -30,23 +33,36 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential curl xz-utils python3 python3-venv \
+            build-essential gcc-14 curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev
+            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libvulkan1 mesa-vulkan-drivers
+          # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
+          # Vulkan driver instead of skipping
 
       - name: Python tools (venv)
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
 
-      - name: Toolchain and dependency cache
-        uses: actions/cache@v4
+      # restore and save separately: actions/cache saves only when the whole
+      # job succeeds, so a failing build would leave every run cold
+      - name: Toolchain and dependency cache (restore)
+        id: toolchain-cache
+        uses: actions/cache/restore@v4
         with:
           path: tools/toolchain
           key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh') }}
 
       - name: Fetch toolchain and dependencies
         run: tools/fetch_toolchain.sh
+
+      - name: Toolchain and dependency cache (save)
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tools/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh') }}
 
       # ---- hygiene: fast, so they fail first ----
       - name: No disc data in the tree
@@ -64,13 +80,14 @@ jobs:
       # ---- builds and tests ----
       - name: linux-x64, headless
         run: |
-          $CMAKE/cmake --preset linux-x64 -DICO_LINK_EXE=ON
+          $CMAKE/cmake --preset linux-x64 -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC
           $CMAKE/cmake --build build-host/linux-x64 --parallel
           $CMAKE/ctest --test-dir build-host/linux-x64 --output-on-failure --parallel 4
 
       - name: linux-x64, window build
         run: |
           $CMAKE/cmake --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
+            -DCMAKE_C_COMPILER=$ICO_CC \
             -B build-host/linux-x64-window
           $CMAKE/cmake --build build-host/linux-x64-window --parallel
           $CMAKE/ctest --test-dir build-host/linux-x64-window --output-on-failure --parallel 4

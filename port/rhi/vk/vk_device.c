@@ -21,6 +21,10 @@ bool vkr_Check(VkResult r, const char *what, const char *file, int line)
         return true;
     }
     fprintf(stderr, "rhi_vk: %s failed (VkResult %d) at %s:%d\n", what, (int)r, file, line);
+    if (r == VK_ERROR_DEVICE_LOST && !g_vkr.deviceLost) {
+        g_vkr.deviceLost = true;
+        fprintf(stderr, "rhi_vk: device lost\n");
+    }
     return false;
 }
 
@@ -633,6 +637,11 @@ const RhiLimits *rhi_Limits(void)
 const char *rhi_AdapterName(void)
 {
     return g_vkr.adapterName;
+}
+
+bool rhi_DeviceLost(void)
+{
+    return g_vkr.deviceLost;
 }
 
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */

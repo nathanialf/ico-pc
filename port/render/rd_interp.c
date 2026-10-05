@@ -1076,8 +1076,9 @@ static void presentReset(void)
 
 bool rd_InterpolationActive(void)
 {
-    return g_rd.inited && g_rd.settings.preset == RD_PRESET_ENHANCED &&
-           g_rd.settings.interpolate != 0;
+    /* both presets (F2): the Original preset presents its PS2-exact tick
+     * pictures and the blended ones between them */
+    return g_rd.inited && g_rd.settings.interpolate != 0;
 }
 
 bool rd_Present(float alpha)

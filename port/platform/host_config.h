@@ -155,8 +155,20 @@ int ico_host_redirect_output(const char *log_path);
    if cancelled. Elsewhere: -1. */
 int ico_host_pick_iso(char *out, size_t size);
 
+/* Windows GUI program (-mwindows): stdout and stderr go nowhere until a
+   console is attached. Attaches the console of the program that started
+   this one (a command prompt), if there is one, and points stdout and
+   stderr at it unless they were already redirected; 1 when the streams
+   reach a console or a file, 0 when they go nowhere (started from
+   Explorer). Elsewhere: 1. */
+int ico_host_attach_console(void);
+/* A message box with a UTF-8 text (Windows; error != 0 for the error icon).
+   Elsewhere: the text on stderr. */
+void ico_host_message_box(const char *text, int error);
+
 /* Logs the message (stderr, the log when redirected), shows it in a message
-   box on Windows naming the log, and exits 1. */
+   box on Windows naming the log (log_path NULL: no log was opened), and
+   exits 1. */
 void ico_host_fatal(const char *log_path, const char *fmt, ...)
 #ifdef __GNUC__
     __attribute__((format(printf, 2, 3), noreturn))

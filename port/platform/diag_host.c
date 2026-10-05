@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fiber.h"
+#include "host_fs.h"
 #include "sched.h"
 
 #ifdef _WIN32
@@ -1275,9 +1276,19 @@ void ico_diag_init(const char *log_path)
     crash_event = CreateEventA(NULL, FALSE, FALSE, NULL);
     crash_done = CreateEventA(NULL, TRUE, FALSE, NULL);
     if (log_path != NULL) {
-        log_h = CreateFileA(log_path, FILE_APPEND_DATA,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-                            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        /* a UTF-8 path (host_fs.h) */
+        wchar_t *wp = ico_widen(log_path);
+
+        if (wp != NULL) {
+            log_h = CreateFileW(wp, FILE_APPEND_DATA,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            free(wp);
+        } else {
+            log_h = CreateFileA(log_path, FILE_APPEND_DATA,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        }
     }
 #else
     clock_gettime(CLOCK_MONOTONIC, &t0);

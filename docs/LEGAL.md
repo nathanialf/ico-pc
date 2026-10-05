@@ -41,7 +41,9 @@ respective owners.
   or any leaked development material. Using an individual fact (a name, an
   offset, a `__FILE__` path) as a reference is covered under "Identifiers as
   references" below; this item forbids copying a table of them into the
-  repository.
+  repository. (The loader's address registry is the one table of
+  identifiers the program compiles in; "Exemptions" below says why it is
+  allowed.)
 - Any code believed to derive from leaked source.
 
 `.gitignore` and `tools/check_no_rom.sh` (run by the pre-commit hook) make it
@@ -79,6 +81,86 @@ derived from a table is an ordinary fact about it, as its element count is:
 the staff roll's line count, `staffRollNameDataNum`, is the table's element
 count less its two null entries, recorded in the schema and written by the
 generator as `sizeof` over the table, not read from the disc.
+
+## Exemptions
+
+Two kinds of committed content look like what the list above forbids and
+are allowed, each for the reason given. Nothing else is exempt.
+
+### The loader's address registry, `port/data/gen/ee_symbols.c`
+
+The PC program compiles in a table of 914 entries (913 functions, one
+object), each `{EE address, host symbol, name string}`, sorted by address
+(docs/port/DATA.md, "The data tables"). The "no bulk symbol tables" rule
+above (and "Identifiers as references") does not apply to it, for these
+reasons:
+
+- **What it holds.** Only the addresses that the data tables' pointer words
+  hold: the generator (`tools/gen_data_desc.py`) walks the record types of
+  the 73 loaded tables, collects every field typed as a function or object
+  pointer, and keeps the addresses the tables' committed manifest
+  (`config/tables_manifest.txt`) says those words contain. Every name is a
+  function or object this repository defines in its own source (`ico2/`),
+  so each entry is also a link-time reference to code written here.
+- **Where the facts already are.** The 913 function addresses and names are
+  the same pairs committed in `config/symbol_addrs.pal.txt` (checked: all
+  913 match), which this file's "What is in this repository" describes as
+  the record of the rebuilt ELF (what `nm` prints over it); all 914,
+  the object `scpDummyGObj` at `0x0063AA20` included, are the `func` / `obj`
+  lines of `config/tables_manifest.txt`. The registry adds no fact the tree
+  does not already hold.
+- **What it does not hold.** No bytes of the binary or the disc (no code,
+  no data values), no address that no table points at (913 of the 5,766
+  functions `config/symbol_addrs.pal.txt` names), no name the tree does not itself
+  define, no line of `MAIN.MAP` or any other map or debug file, and nothing
+  from leaked material.
+- **Why the program needs it.** The data tables are filled at start-up from
+  the boot ELF on the user's disc (above), and their pointer words hold
+  32-bit EE addresses of the game's functions (state-machine handlers,
+  per-object callbacks). The host functions live at different addresses, so
+  the loader (`port/data/tables.c`) looks each word up in the registry and
+  stores the host function's address instead. Without the address-to-function
+  map the tables cannot be used; it must be in the program, because the user's
+  disc has no symbol table to rebuild it from.
+- **Why it is committed rather than generated at build time.** Generating
+  it in the build from the same committed inputs would put exactly the same
+  table into the same binary, so it would change nothing about what the
+  repository or the program holds. Committed, every change to it shows in
+  review, and `tools/gen_data_desc.py --check` shows the file is a function
+  of committed text only (that mode never opens an ELF).
+
+A change that adds entries for any other reason than a table's pointer word,
+or names something the tree does not define, is not covered by this
+exemption.
+
+### Exemptions from the IP-safety scan
+
+`tools/check_no_rom.sh` rule 5b fails on any array initializer of 64 or more
+integer literals in `ico2/` or `sce/`, whatever its name, since that is the
+shape of bytes copied out of the binary. The tables it finds that are
+allowed are listed one by one, by file and array name, with the reason, in
+`tools/check_int_arrays.py` (`EXEMPT`); a new table, or a renamed one, fails
+again until it is reviewed. They fall into three groups:
+
+- `sce/` (none of it is compiled into the PC program; it is the record of
+  the period library members the retired PS2 build linked):
+  `sce/libkernl/intr.c` `alarm_handler` (libkernl `intr.o`'s `.data`: the
+  kernel-mode alarm handler, R5900 code with its tables, that `InitAlarm`
+  copies to kernel memory, plus its entry stub and syscall table; the
+  library member's own data, with no C spelling); GCC's published
+  `__clz_tab` (four libgcc division members); fdlibm's published
+  `two_over_pi`; the MPEG-2 standard's default quantiser matrices in
+  `sce/libmpeg/var.c`.
+- Game code members under `ico2/` whose own `.data` is a list of numbers
+  (motion numbers per interrupt kind, part index lists per enemy kind, font
+  metrics): written as typed C in the decompiled source, as every code
+  member's data is; this is not one of the data-only members the section
+  above keeps out.
+- The two 8x8 debug fonts (`ico2/common/src/debug.c` `fontBitmap`,
+  `ico2/common/src/debug_exception.c` `dbgFont`): glyph bitmaps from code
+  members' `.rodata`. Listed so the scan passes, and marked in the
+  exemption list as under review: if they are judged asset content, the fix
+  is a port-owned replacement font, not a wider exemption.
 
 ## Public reverse-engineering material (allowed as references)
 

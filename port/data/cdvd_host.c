@@ -432,7 +432,11 @@ int sceCdReadIOPm(int lsn, int sectors, void *buf, CdRMode *mode)
     if (lsn < 0 || sectors < 0) {
         return 0;
     }
-    if (ico_iop_range_ok(iop, (uint32_t)sectors * ICO_VFS_SECTOR)) {
+    /* in 64 bits: sectors * 2048 can pass 4 GB and wrap into a length
+       ico_iop_range_ok would accept */
+    const uint64_t len = (uint64_t)(uint32_t)sectors * ICO_VFS_SECTOR;
+
+    if (len <= UINT32_MAX && ico_iop_range_ok(iop, (uint32_t)len)) {
         dst = ico_iop_ptr(iop);
     } else {
         fprintf(stderr, "cdvd: sceCdReadIOPm to 0x%08x (%d sectors) is outside IOP RAM\n",

@@ -65,7 +65,7 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[video] vsync` | | `true` | the swapchain's present mode (Vulkan FIFO, else MAILBOX or IMMEDIATE; D3D12 sync interval 1 or 0 with tearing) |
 | `[video] texture_filter` | | `"original"` | Enhanced: `"original"`, `"trilinear"`, `"anisotropic"` (generated mips) |
 | `[video] full_height` | | `false` | Enhanced: skip the reduction's vertical halving |
-| `[video] framerate` | | `"uncapped"` | Enhanced: `"original"` (present once per tick), `"uncapped"` (present at the display's rate, interpolating between the last two ticks), or a number 30..1000 (at most that many presents a second); Original is always `"original"` (renderer wave 7, R7b; RENDER_API.md section 20) |
+| `[video] framerate` | | `"uncapped"` | both presets: `"original"` (present once per tick), `"uncapped"` (present at the display's rate, interpolating between the last two ticks), or a number 30..1000 (at most that many presents a second). Until package F2 the Original preset forced `"original"`; now it keeps its PS2-exact tick pictures and presents the blended ones between them (renderer wave 7, R7b; RENDER_API.md section 20) |
 | `[video] video_mode` | | `"pal50"` | Phase 6, 6C: the boot 50/60 Hz screen's choice, which ico-pc skips: `"pal50"` (`systemStatus[0]` = 1, the PAL game's default) or `"60hz"` (0). Absent: the game's own value (50 Hz, or the card's). An explicit value wins over the memory card's system file. The Settings menu sets it (docs/port/SETTINGS.md) |
 | `[audio] enabled` | `audio` | `true` | `false`/`audio=0`: no audio device (the driver still runs) |
 | `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output scales its blocks by it, live (docs/port/AUDIO.md, "Output") |
@@ -77,11 +77,11 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[game] achievements` | | `true` | Phase 6, 6E: `false` turns the achievement popups off; unlocks are still recorded in `<pref>/achievements.toml` (docs/port/ACHIEVEMENTS.md) |
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
-| `[dev] trace` | `trace` | on | `false`/`0`/`none`: no trace; a path writes there |
+| `[dev] trace` | `trace` | on in the headless build, off in the window build | `true`/`1`: `logs/trace-<time>.txt`; a path writes there; `false`/`0`/`none`: no trace. The window build writes one only when asked (package F2: a player's `logs/` no longer grows by a trace per run); `logs/ico-pc.log` is always written |
 | `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build) |
 | `[dev] dump_interp` | `dump_interp` | `false` | renderer wave 7 (R7b, a key since R7d): with `dump_every`, each dump also gets the frame interpolated half way from the one before, `rd-NNNNN-i50.rddump` (RENDER_API.md section 20). `port/platform/host_config.c` `export_dump_keys` hands it to the renderer as `ICO_RD_DUMP_INTERP` (`1` for `1`, `true`, `on`, `yes`; else `0`), set whenever `dump_every` is, so this key decides and a value of that variable in the shell no longer does; the variable is only the internal hand-over, like `ICO_RD_DUMP_EVERY` and `ICO_RD_DUMP_DIR` |
 | `[dev] audio_dump` | `audio_dump` | none | WAV of the mixed audio; `1` is `logs/audio.wav` |
-| `[dev] pad_script` | `pad_script` | `pad-script.txt` if present | scripted pad |
+| `[dev] pad_script` | `pad_script` | none (headless build: `pad-script.txt` beside the exe if present) | scripted pad, replacing the live controller. The window build loads one only when this key names it (package F2: a stray `pad-script.txt` beside a player's exe is ignored) |
 | `[dev] verify` | `verify` | `true` | `false`/`0`: skip the disc image SHA-1 when `use_iso` is on; the first-run extraction always verifies |
 | `[dev] use_iso` | `use_iso` | `true` headless, `false` window build | `true`: mount the disc image directly (dev mode). `false`: mount the extracted `ico.o2r` (per-user folder, else beside the exe), extracting it from the image on the first run (docs/port/DATA.md, "Backend 2: the archive") |
 | `[dev] headless` | `headless` | `false` | a run for traces and tests: fixes the clock (below). The headless build is headless regardless |

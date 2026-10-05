@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "cdvd_host.h"
 #include "diag_host.h"
+#include "host_fs.h"
 #include "host_loop.h"
 #include "pad_script.h"
 #include "sif_host.h"
@@ -95,7 +96,7 @@ int ico_trace_open(const char *path)
 {
     int i;
 
-    trace = fopen(path, "w");
+    trace = ico_fopen(path, "w");
     if (trace == NULL) {
         fprintf(stderr, "trace: cannot create %s\n", path);
         return -1;

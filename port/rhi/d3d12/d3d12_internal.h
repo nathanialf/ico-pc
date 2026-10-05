@@ -7,7 +7,6 @@
  * mingw-w64's headers. */
 #ifndef PORT_RHI_D3D12_D3D12_INTERNAL_H
 #define PORT_RHI_D3D12_D3D12_INTERNAL_H
-
 #ifndef COBJMACROS
 #define COBJMACROS
 #endif
@@ -23,7 +22,6 @@
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
 #include <stdio.h>
-
 #include "../rhi.h"
 #include "d3d12_enums.h"
 #include "d3d12_plan.h"
@@ -110,7 +108,8 @@ typedef struct DxCmdList {
     ID3D12CommandAllocator *alloc;
     ID3D12GraphicsCommandList *cl;
     bool recording, submitted;
-    uint64_t serial; /* unique per recording, never 0 */
+    bool closeFailed; /* Close failed: the list is never executed (B2) */
+    uint64_t serial;  /* unique per recording, never 0 */
     /* draw-time state */
     DxPipeline *pipeline;
     ID3D12RootSignature *rootSet;
@@ -156,6 +155,10 @@ typedef struct DxState {
     ID3D12InfoQueue *info; /* debug layer present */
     uint32_t debugErrors;
     bool debugLayer;
+    /* the device was removed, reset or hung (dx_Check): reason logged once,
+     * submits and presents are skipped, rhi_DeviceLost reports it */
+    bool deviceLost;
+    uint32_t lostFailures; /* failures after the loss, not logged */
 
     ID3D12Fence *fence;
     uint64_t fenceValue; /* last value signalled */
@@ -247,8 +250,10 @@ void dx_FramesShutdown(void);
 DxCmdList *dx_GetCmd(RhiCommandList cl);
 void dx_WaitFence(uint64_t value);
 uint64_t dx_Signal(void);
+
 void dx_Transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t before,
                    uint32_t after);
+
 /* d3d12_swapchain.c */
 bool dx_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);
 void dx_SwapchainDestroy(void);

@@ -21,27 +21,17 @@
 #include <eekernel.h>
 #include <libmc.h>
 #include "host_config.h"
+#include "host_fs.h"
 #include "host_loop.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
 
-#ifdef _WIN32
-
-#include <direct.h>
-
-#define HOST_MKDIR(p) _mkdir(p)
-#define HOST_RMDIR(p) _rmdir(p)
-#else
-
-#include <unistd.h>
-
-#define HOST_MKDIR(p) mkdir((p), 0777)
-#define HOST_RMDIR(p) rmdir(p)
-#endif
+/* UTF-8 host paths through port/platform/host_fs.h (wide calls on Windows) */
+#define HOST_MKDIR(p) ico_mkdir(p)
+#define HOST_RMDIR(p) ico_rmdir(p)
 
 /* fumi/ios/mcard.c's lock: -1 while no iosMcMgrSync is running */
 extern int IosMcLock;
@@ -57,10 +47,15 @@ extern int IosMcLock;
 #define MC_ATTR_FILE 0x8497
 #define MC_ATTR_DIR 0x8427
 
+/* A handle open for writing works on a copy, <dir>/.<name>.tmp (hidden from
+   the card's listing), moved over the file at sceMcClose: a crash or a full
+   disk during a save leaves the previous file whole (docs/port/SAVES.md). */
 typedef struct McHandle {
     FILE *fp;
     int canRead;
     int canWrite;
+    char *path; /* the file, when fp is its temporary copy */
+    char *tmp;
 } McHandle;
 
 static struct {
@@ -171,18 +166,20 @@ static void host_path(char *out, size_t size, const char *rel)
 /* 1 a directory, 0 a file, -1 neither exists */
 static int kind_of(const char *path, unsigned long *size, time_t *mtime)
 {
-    struct stat st;
+    unsigned long long sz;
+    long long mt;
+    int k = ico_path_kind(path, &sz, &mt);
 
-    if (stat(path, &st) != 0) {
+    if (k < 0) {
         return -1;
     }
     if (size != NULL) {
-        *size = (unsigned long)st.st_size;
+        *size = (unsigned long)sz;
     }
     if (mtime != NULL) {
-        *mtime = st.st_mtime;
+        *mtime = (time_t)mt;
     }
-    return S_ISDIR(st.st_mode) ? 1 : 0;
+    return k;
 }
 
 /* Creates the card folder and any missing parent. */
@@ -219,23 +216,49 @@ static int name_cmp(const void *a, const void *b)
    (MC_NAME_MAX + 1 bytes each). The count, or -1 if it cannot be read. */
 static int list_dir(const char *path, char (*names)[MC_NAME_MAX + 1], int max)
 {
+#ifdef _WIN32
+    wchar_t *wp = ico_widen(path);
+    _WDIR *d = wp != NULL ? _wopendir(wp) : NULL;
+    struct _wdirent *e;
+#else
     DIR *d = opendir(path);
     struct dirent *e;
+#endif
     int n = 0;
 
+#ifdef _WIN32
+    free(wp);
+#endif
     if (d == NULL) {
         return -1;
     }
-    while ((e = readdir(d)) != NULL && n < max) {
-        size_t len = strlen(e->d_name);
-        /* hidden files (.DS_Store, ...) are the host's, not the card's */
-        if (e->d_name[0] == '.' || !valid_name(e->d_name, len)) {
+#ifdef _WIN32
+    while ((e = _wreaddir(d)) != NULL && n < max) {
+        char name[4 * MC_NAME_MAX + 4];
+        size_t len;
+
+        if (ico_narrow(e->d_name, name, sizeof(name)) != 0) {
             continue;
         }
-        memcpy(names[n], e->d_name, len + 1);
+        len = strlen(name);
+#else
+    while ((e = readdir(d)) != NULL && n < max) {
+        const char *name = e->d_name;
+        size_t len = strlen(name);
+#endif
+        /* hidden files (.DS_Store, a save's .<name>.tmp, ...) are the
+           host's, not the card's */
+        if (name[0] == '.' || !valid_name(name, len)) {
+            continue;
+        }
+        memcpy(names[n], name, len + 1);
         n++;
     }
+#ifdef _WIN32
+    _wclosedir(d);
+#else
     closedir(d);
+#endif
     qsort(names, (size_t)n, MC_NAME_MAX + 1, name_cmp);
     return n;
 }
@@ -354,15 +377,83 @@ int ico_mc_host_pending(void)
     return mc.active;
 }
 
+/* Closes a handle; one writing a temporary copy moves it over the file.
+   0, or -1 when the data did not reach the file (the file is unchanged). */
+static int close_handle(McHandle *h)
+{
+    int ok = 1;
+
+    if (h->fp == NULL) {
+        return 0;
+    }
+    if (h->tmp != NULL) {
+        ok = fflush(h->fp) == 0 && !ferror(h->fp);
+    }
+    ok = fclose(h->fp) == 0 && ok;
+    if (h->tmp != NULL && (!ok || ico_rename_replace(h->tmp, h->path) != 0)) {
+        ico_remove(h->tmp);
+        ok = 0;
+    }
+    free(h->path);
+    free(h->tmp);
+    memset(h, 0, sizeof(*h));
+    return ok ? 0 : -1;
+}
+
+/* <dir>/.<name>.tmp for <dir>/<name>; NULL when out of memory */
+static char *temp_name(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+    size_t dir = slash != NULL ? (size_t)(slash - path) + 1 : 0;
+    size_t n = strlen(path) + 6;
+    char *t = malloc(n);
+
+    if (t != NULL) {
+        snprintf(t, n, "%.*s.%s.tmp", (int)dir, path, path + dir);
+    }
+    return t;
+}
+
+/* The file's bytes into a new temporary copy, opened r+b; NULL on failure */
+static FILE *copy_to(const char *path, const char *tmp)
+{
+    FILE *in = ico_fopen(path, "rb");
+    FILE *out;
+    char buf[8192];
+    size_t got;
+    int ok = 1;
+
+    if (in == NULL) {
+        return NULL;
+    }
+    out = ico_fopen(tmp, "w+b");
+    if (out == NULL) {
+        fclose(in);
+        return NULL;
+    }
+    while ((got = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, got, out) != got) {
+            ok = 0;
+            break;
+        }
+    }
+    ok = ok && !ferror(in) && fflush(out) == 0;
+    fclose(in);
+    if (!ok) {
+        fclose(out);
+        ico_remove(tmp);
+        return NULL;
+    }
+    rewind(out);
+    return out;
+}
+
 int sceMcInit(void)
 {
     int i;
 
     for (i = 0; i < MC_HANDLES; i++) {
-        if (mc.handle[i].fp != NULL) {
-            fclose(mc.handle[i].fp);
-        }
-        memset(&mc.handle[i], 0, sizeof(mc.handle[i]));
+        close_handle(&mc.handle[i]);
     }
     for (i = 0; i < MC_PORTS; i++) {
         mc.changed[i] = 1;
@@ -632,7 +723,7 @@ int sceMcDelete(int port, int slot, char *name)
         }
         return begin(sceMcFuncNoDelete, HOST_RMDIR(path) == 0 ? 0 : sceMcResNotEmpty);
     }
-    return begin(sceMcFuncNoDelete, remove(path) == 0 ? 0 : sceMcResDeniedPermit);
+    return begin(sceMcFuncNoDelete, ico_remove(path) == 0 ? 0 : sceMcResDeniedPermit);
 }
 
 int sceMcOpen(int port, int slot, char *name, int flags)
@@ -645,6 +736,8 @@ int sceMcOpen(int port, int slot, char *name, int flags)
     int fd;
     const char *fmode;
     FILE *fp;
+    char *tmp = NULL;
+    char *fpath = NULL;
 
     if (r != 0) {
         return begin(sceMcFuncNoOpen, r);
@@ -692,11 +785,41 @@ int sceMcOpen(int port, int slot, char *name, int flags)
     } else {
         fmode = mode == SCE_RDONLY ? "rb" : "r+b";
     }
-    fp = fopen(path, fmode);
+    if ((mode & SCE_WRONLY) == 0) {
+        fp = ico_fopen(path, fmode);
+    } else {
+        /* writes go to a temporary copy, moved over the file at close */
+        tmp = temp_name(path);
+        fpath = malloc(strlen(path) + 1);
+        fp = NULL;
+        if (tmp != NULL && fpath != NULL) {
+            memcpy(fpath, path, strlen(path) + 1);
+            if (k < 0) {
+                /* the new file is on the card (and in sceMcGetDir) from the
+                   open, as on the PS2: empty until the close */
+                FILE *empty = ico_fopen(path, "wb");
+
+                if (empty != NULL && fclose(empty) == 0) {
+                    fp = ico_fopen(tmp, "w+b");
+                }
+            } else if (fmode[0] == 'w') {
+                fp = ico_fopen(tmp, "w+b");
+            } else {
+                fp = copy_to(path, tmp);
+            }
+        }
+        if (fp == NULL) {
+            free(tmp);
+            free(fpath);
+            tmp = fpath = NULL;
+        }
+    }
     if (fp == NULL) {
         return begin(sceMcFuncNoOpen, k < 0 ? sceMcResFullDevice : sceMcResDeniedPermit);
     }
     mc.handle[fd].fp = fp;
+    mc.handle[fd].path = fpath;
+    mc.handle[fd].tmp = tmp;
     mc.handle[fd].canRead = (mode & SCE_RDONLY) != 0;
     mc.handle[fd].canWrite = (mode & SCE_WRONLY) != 0;
     return begin(sceMcFuncNoOpen, fd);
@@ -714,8 +837,10 @@ int sceMcClose(int fd)
     if (h == NULL) {
         return begin(sceMcFuncNoClose, sceMcResDeniedPermit);
     }
-    fclose(h->fp);
-    memset(h, 0, sizeof(*h));
+    if (close_handle(h) != 0) {
+        fprintf(stderr, "mc: a save file could not be written; the previous one is kept\n");
+        return begin(sceMcFuncNoClose, sceMcResFullDevice);
+    }
     return begin(sceMcFuncNoClose, 0);
 }
 

@@ -241,6 +241,19 @@ The same-state ordering rhi.h promises, per kind of write:
   backend compares the window's pixel size and resizes
   (`ResizeBuffers`) when it changed, as the Vulkan backend does on
   `VK_ERROR_OUT_OF_DATE_KHR`.
+- A list whose `Close` fails is marked (`DxCmdList.closeFailed`) and
+  `rhi_Submit` does not execute it (its commands are dropped, logged once
+  per list); the fence is still signalled so the slot recycles.
+- Device loss: a failure of `DXGI_ERROR_DEVICE_REMOVED`, `_RESET`, `_HUNG`
+  or `DXGI_ERROR_DRIVER_INTERNAL_ERROR` (from `Present`, `Close`, `Signal`,
+  any checked call), or any failure while
+  `ID3D12Device::GetDeviceRemovedReason` is not `S_OK`, sets
+  `g_dx.deviceLost` in `dx_Check` and logs the code and the removed reason
+  once. After it, submits, presents and fence waits are skipped, further
+  failures are counted (`lostFailures`) instead of logged, and
+  `rhi_DeviceLost()` is true; the window loop (`ico_window_pump`) then
+  shows one message box and quits through the normal exit path. The Vulkan
+  backend reports `VK_ERROR_DEVICE_LOST` through the same entry point.
 - `rhi_ReadbackTexture`: `GetCopyableFootprints` of mip 0 (plane 0 for
   depth), a copy into a temporary readback buffer on a one-shot list after
   all earlier work, a fence wait, and the rows repacked tightly.
@@ -351,8 +364,8 @@ and llvm-mingw clang; `rhi_d3d12_plan` runs; the rest waits for
    dump cross-check will show it.
 3. Storage buffers are assumed to be `StructuredBuffer<float4>` (16-byte
    elements).
-4. No pipeline cache (`ID3D12PipelineLibrary`); `rd_core` keeps under a
-   hundred pipelines.
+4. No pipeline cache (`ID3D12PipelineLibrary`); `rd_core` keeps a few
+   hundred pipelines at most (`RD_PIPELINE_REACHABLE_MAX`).
 5. The `rd_*` GPU tests call `rhi_vk_ValidationErrorCount`, which stays 0
    on D3D12; run on D3D12 they count no debug-layer errors (the log shows
    them).

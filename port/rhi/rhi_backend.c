@@ -131,6 +131,11 @@ const char *rhi_AdapterName(void)
     return be()->AdapterName();
 }
 
+bool rhi_DeviceLost(void)
+{
+    return s_up && be()->DeviceLost();
+}
+
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
 {
     return be()->ResizeSwapchain(width, height, vsync);

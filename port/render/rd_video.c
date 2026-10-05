@@ -381,18 +381,42 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     return 0;
 }
 
+/* presentVideo through rd__OnHost: the driver work off the fiber's stack */
+typedef struct VideoCall {
+    const uint8_t *y, *u, *v;
+    const uint32_t *pitch;
+    uint32_t w, h;
+    const uint8_t *rgba;
+    int ret;
+} VideoCall;
+
+static void videoOnHost(void *arg)
+{
+    VideoCall *c = (VideoCall *)arg;
+    c->ret = presentVideo(c->y, c->u, c->v, c->pitch, c->w, c->h, c->rgba);
+}
+
+static int presentVideoOnHost(const uint8_t *y, const uint8_t *u, const uint8_t *v,
+                              const uint32_t pitch[3], uint32_t w, uint32_t h,
+                              const uint8_t rgba[4])
+{
+    VideoCall c = {y, u, v, pitch, w, h, rgba, -1};
+    rd__OnHost(videoOnHost, &c);
+    return c.ret;
+}
+
 int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
                   uint32_t w, uint32_t h)
 {
     if (!y || !u || !v || !pitch || w == 0 || h == 0) {
         return -1;
     }
-    return presentVideo(y, u, v, pitch, w, h, NULL);
+    return presentVideoOnHost(y, u, v, pitch, w, h, NULL);
 }
 
 int rd_VideoClear(const uint8_t rgba[4])
 {
-    return presentVideo(NULL, NULL, NULL, NULL, 0, 0, rgba);
+    return presentVideoOnHost(NULL, NULL, NULL, NULL, 0, 0, rgba);
 }
 
 void rd_VideoShutdown(void)

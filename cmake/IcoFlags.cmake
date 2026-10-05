@@ -56,8 +56,11 @@ else()
     # Modern compilers make several C89-era diagnostics errors by default.
     # Until package 0B's front-end pass lands, they stay warnings so every
     # file that can compile does, and the logs count them.
+    # Each flag only when this compiler knows it (CheckCCompilerFlag): gcc
+    # 13 (the ubuntu-24.04 runner's default) has no -Wreturn-mismatch or
+    # -Wdeclaration-missing-parameter-type and rejects -Wno-error= of them.
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-        list(APPEND ICO_GAME_WARNINGS
+        set(_ico_relaxed
             -Wno-error=implicit-function-declaration
             -Wno-error=implicit-int
             -Wno-error=int-conversion
@@ -66,14 +69,24 @@ else()
             -Wno-error=return-type
             -Wno-error=return-mismatch)
     elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        list(APPEND ICO_GAME_WARNINGS
+        set(_ico_relaxed
             -Wno-error=implicit-function-declaration
             -Wno-error=implicit-int
             -Wno-error=int-conversion
             -Wno-error=incompatible-pointer-types
             -Wno-error=return-mismatch
             -Wno-error=declaration-missing-parameter-type)
+    else()
+        set(_ico_relaxed "")
     endif()
+    include(CheckCCompilerFlag)
+    foreach(_f IN LISTS _ico_relaxed)
+        string(MAKE_C_IDENTIFIER "ICO_HAS${_f}" _var)
+        check_c_compiler_flag("${_f}" ${_var})
+        if(${_var})
+            list(APPEND ICO_GAME_WARNINGS ${_f})
+        endif()
+    endforeach()
 endif()
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # Older clangs do not know every name above. The EUC-JP string literals

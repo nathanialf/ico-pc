@@ -15,6 +15,7 @@
 #include <string.h>
 #include "diag_host.h"
 #include "fiber.h"
+#include "fpenv.h"
 #include "sched.h"
 
 typedef struct Thread {
@@ -72,7 +73,7 @@ static int rq_tail[ICO_SCHED_PRIORITIES];
 
 static int current_id; /* the thread on the CPU, 0 on the host context */
 
-static int last_id;    /* the thread that ran last (iGetThreadId) */
+static int last_id; /* the thread that ran last (iGetThreadId) */
 
 static int dispatching;
 
@@ -83,6 +84,10 @@ static unsigned int vsync_count;
 static unsigned long switch_count;
 
 static void (*fiber_start_hook)(void);
+/* ico_sched_call_on_host's request from a fiber, made by ico_sched_run */
+static void (*host_call_fn)(void *arg);
+
+static void *host_call_arg;
 
 static void fatal(const char *what)
 {
@@ -90,6 +95,16 @@ static void fatal(const char *what)
     fflush(stderr);
     ico_diag_set_failure("sched: %s", what);
     abort();
+}
+
+/* Host work in the host FP mode; the simulation's mode afterwards, whatever
+   the work (a driver, SDL) left in MXCSR or FPCR (fiber.h: the switch does
+   not save it). */
+static void run_host_call(void (*fn)(void *), void *arg)
+{
+    ico_fpenv_host_enter();
+    fn(arg);
+    ico_fpenv_sim_enter();
 }
 
 static Thread *thread_of(int id)
@@ -639,11 +654,23 @@ void ico_sched_reset(void)
     interrupt_depth = 0;
     vsync_count = 0;
     switch_count = 0;
+    host_call_fn = NULL;
 }
 
 void ico_sched_set_fiber_start_hook(void (*hook)(void))
 {
     fiber_start_hook = hook;
+}
+
+void ico_sched_call_on_host(void (*fn)(void *arg), void *arg)
+{
+    if (current_id == 0) {
+        run_host_call(fn, arg);
+        return;
+    }
+    host_call_fn = fn;
+    host_call_arg = arg;
+    ico_fiber_yield();
 }
 
 int ico_sched_boot(void (*entry)(void *), void *arg, int priority)
@@ -683,6 +710,18 @@ int ico_sched_run(void)
         switch_count++;
         if (ico_fiber_resume(t->fiber) != 0) {
             fatal("cannot resume a thread's fiber");
+        }
+        /* ico_sched_call_on_host: the call on this stack, then the same
+           thread again */
+        while (host_call_fn != NULL) {
+            void (*fn)(void *) = host_call_fn;
+            host_call_fn = NULL;
+            current_id = 0;
+            run_host_call(fn, host_call_arg);
+            current_id = id;
+            if (ico_fiber_resume(t->fiber) != 0) {
+                fatal("cannot resume a thread's fiber");
+            }
         }
         current_id = 0;
         if (t->reap) {

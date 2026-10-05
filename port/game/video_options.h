@@ -16,14 +16,16 @@
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *
- * The Original preset is the PS2 picture whatever the other keys say; the
- * Enhanced preset applies resolution, aspect, texture_filter, full_height
- * and framerate, each on its own.  fullscreen and vsync apply in both.
+ * The Original preset is the PS2 picture whatever resolution, aspect,
+ * texture_filter and full_height say; the Enhanced preset applies them,
+ * each on its own.  fullscreen, vsync and framerate apply in both.
  * framerate (renderer wave 7, R7b): "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
  * interpolates between the last two ticks; N does the same at most N times
- * a second.  The Original preset is always "original".
+ * a second.  In both presets (package F2; before it the Original preset
+ * was always "original"): each tick's picture is the preset's, the
+ * in-between ones are blended from the last two.
  *
  * Read from config.toml through ico_config_get_* the first time any value
  * is asked for; ico_video_set changes them at run time (the window applies
@@ -57,7 +59,7 @@ typedef struct IcoVideoOptions {
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
 /* The defaults: Original, window, 4:3, windowed, vsync on, original filter,
-   half height, framerate uncapped (in force only with Enhanced). */
+   half height, framerate uncapped (both presets). */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -82,8 +84,8 @@ float ico_video_aspect(void);
 /* How much wider than 4:3 the presentation is: ico_video_aspect() / (4/3),
    1 in Original (GsBase.c gsbHostWideX). */
 float ico_video_wide_x(void);
-/* The presentation rate in force (R7b): ICO_FRAMERATE_ORIGINAL in the
-   Original preset, else the framerate option. */
+/* The presentation rate in force (R7b): the framerate option, in both
+   presets. */
 int ico_video_framerate(void);
 /* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
    StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window

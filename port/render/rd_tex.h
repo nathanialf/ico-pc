@@ -142,8 +142,14 @@ void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
 
 /* The Enhanced mip chain: successive 2x2 box levels of a w x h RGBA8 image
  * (both powers of two) written one after the other to out, which holds
- * w*h*4*4/3 bytes.  Returns the number of levels written after the base. */
+ * rdtex_MipChainBytes(w, h) bytes.  Returns the number of levels written
+ * after the base. */
 uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out);
+/* The bytes rdtex_BuildMipChain writes for a w x h base: the sum of
+ * max(w>>k,1) * max(h>>k,1) * 4 over the levels k >= 1.  w*h*4/3 is only
+ * right for square images: a 128x4 chain is 764 bytes (its 1-high levels
+ * keep a full row each), 512x2 is 2044. */
+size_t rdtex_MipChainBytes(uint32_t w, uint32_t h);
 /* Wave 7 (R7a): alpha-coverage preservation for the Enhanced filter's mips.
  * base is level 0 (w x h), chain the levels rdtex_BuildMipChain wrote
  * (levels of them); each level whose share of texels with alpha > ref fell

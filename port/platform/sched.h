@@ -98,6 +98,15 @@ void ico_sched_reset(void);
 /* A function every fiber runs before its thread's entry (the simulation's
    FP mode; fiber.h says why). NULL for none. */
 void ico_sched_set_fiber_start_hook(void (*hook)(void));
+/* Runs fn(arg) on the host context's stack in the host FP mode
+   (ico_fpenv_host_enter), then puts the simulation's FP mode back and
+   returns. From a fiber the thread yields to ico_sched_run, which makes the
+   call and resumes the same thread at once (no other thread runs in
+   between); from the host context fn is called directly. For host work too
+   deep for a fiber's stack (the GPU driver: replay, pipeline creation,
+   present; docs/port/PLATFORM.md "Fiber stacks and host calls"). fn must
+   not make kernel calls. */
+void ico_sched_call_on_host(void (*fn)(void *arg), void *arg);
 /* Creates and starts the program's first thread (the EE's main thread, id
    1), which runs entry(arg) at the given priority. Returns its id. */
 int ico_sched_boot(void (*entry)(void *), void *arg, int priority);

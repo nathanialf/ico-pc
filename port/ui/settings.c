@@ -292,9 +292,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_FULL_HEIGHT:
         return onOff(o.fullHeight);
     case UI_OPT_FRAMERATE:
-        /* the option as set; the Original preset presents at the tick
-           whatever it says (ico_video_framerate), as the other Enhanced
-           rows show their values under Original */
+        /* the option as set, in force in both presets (F2) */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
             return ui_Str(UI_STR_VAL_ORIGINAL);
         }

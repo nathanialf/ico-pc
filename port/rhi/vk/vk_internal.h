@@ -143,6 +143,7 @@ typedef struct VkrState {
     PFN_vkCmdEndRendering cmdEndRendering;
     bool anisotropy;
     uint32_t validationErrors;
+    bool deviceLost; /* a call returned VK_ERROR_DEVICE_LOST (rhi_DeviceLost) */
 
     /* timeline semaphore: one value per submit */
     VkSemaphore timeline;

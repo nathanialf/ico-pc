@@ -222,9 +222,43 @@ Progress goes to the log in tenths ("first run: 40% (680 of 1698 MB)",
 the image hash and the copy counted together). The window build also opens
 a small SDL window (SDL's 2D renderer: a bar, the percentage in the title)
 for the extraction and closes it before the game's window opens; closing it
-cancels the extraction and exits 0. Paths: UTF-8 on Windows through
-`_wfopen` / `MoveFileExW`, falling back to the ANSI code page for a path
-that is not valid UTF-8 (the file dialog's).
+cancels the extraction and exits 0. Paths: UTF-8 throughout (see "Paths"
+below).
+
+### Paths
+
+Every path the port builds or reads is UTF-8: the per-user folder
+(`SDL_GetPrefPath`), the executable's folder (`ico_host_exe_dir`,
+`GetModuleFileNameW` on Windows), the file dialog's answer
+(`GetOpenFileNameW`) and the ini's values. Until package F2 only the
+archive's own calls were wide; `host_config.c` (`fopen` of the ini and the
+image, `_mkdir`, `MoveFileExA` of `config.toml`, `GetModuleFileNameA`,
+`GetOpenFileNameA`), `mc_host.c` (the card folder) and `iso9660.c` (the
+image) used the ANSI calls, so a user folder or an install folder with a
+character outside the ANSI code page (a Cyrillic or CJK user name on a
+Western Windows) could not be opened. Two fixes, either sufficient on its
+own:
+
+- `port/platform/host_fs.c` (`host_fs.h`, library `ico_host_fs`): `ico_fopen`,
+  `ico_mkdir`, `ico_rmdir`, `ico_remove`, `ico_rename_replace`
+  (`MoveFileExW` with `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`)
+  and `ico_path_kind` (`_wstat64`) convert to UTF-16 and call the wide
+  functions; a path that is not valid UTF-8 falls back to the narrow call.
+  `host_config.c`, `archive.c`, `iso9660.c`, `mc_host.c` (with `_wopendir`
+  for the card's listing), `trace_host.c` and `diag_host.c` (the crash log's
+  `CreateFileW`) go through them; the log redirect uses `_wfreopen`, the
+  error box `MessageBoxW`. Elsewhere they are the POSIX calls.
+- `ico_pc.exe` embeds an application manifest
+  (`port/platform/win/ico_pc.manifest`, compiled by the toolchain's
+  `windres` from `ico_pc.rc`) with `activeCodePage` UTF-8, so on Windows 10
+  1903 and later the remaining narrow calls (developer files such as the
+  pad script, the WAV dump, the host0 device) also read UTF-8. Check:
+  `llvm-readobj --coff-resources ico_pc.exe` lists one `MANIFEST (ID 24)`
+  resource, id 1.
+
+`host_fs_test` (ctest `host_fs`) makes a folder and files under a UTF-8 name
+with Latin, Greek and Japanese characters in the build tree, moves one over
+another and removes them.
 
 Measured on the container (linux-x64, the PAL image on local disk, warm
 page cache): 14.2 s in `ico_pc` (image SHA-1 6.1 s, copy 8.2 s); 11.0 s in

@@ -107,8 +107,13 @@ chmod 755 "$stage/ico_pc"
 sdl="$root/tools/toolchain/deps/sdl3/linux-x64/lib"
 cp -L "$sdl/libSDL3.so.0" "$stage/libSDL3.so.0"
 chmod 755 "$stage/libSDL3.so.0"
-for f in LICENSE; do cp "$wt/$f" "$stage/$f"; done
-[[ -f "$wt/docs/port/THIRD_PARTY.md" ]] && cp "$wt/docs/port/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
+# licences: the program's (LICENSE, MIT) and every third-party component's
+# notice (NOTICES.txt, tools/gen_notices.py from tools/notices/manifest.json);
+# THIRD_PARTY.md says where each comes from
+rm -f "$stage/NOTICES.txt"
+cp "$wt/LICENSE" "$stage/LICENSE"
+run python3 "$wt/tools/gen_notices.py" --platform linux --root "$wt" --out "$stage/NOTICES.txt"
+cp "$wt/docs/port/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
 cat > "$stage/ico-pc.ini" <<INI
 # ico-pc.ini: optional settings, key=value; lines starting with # or ; are
 # comments. Everything works without editing this file.
@@ -144,6 +149,10 @@ Keep ico_pc and libSDL3.so.0 together. Unpack where you can write (not
 /usr). See docs/port/STEAMDECK.md in the source tree for the details.
 
 ico_pc.map maps crash addresses to function names; send it with logs/.
+
+LICENSE is the port's licence (MIT); NOTICES.txt holds the licences of the
+third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype,
+the Arimo font, minicoro, newlib).
 TXT
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted

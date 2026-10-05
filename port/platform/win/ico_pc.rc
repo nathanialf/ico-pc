@@ -1,0 +1,4 @@
+/* port/platform/win/ico_pc.rc: ico_pc.exe's resources. The application
+   manifest (ico_pc.manifest: the UTF-8 active code page) as resource 1 of
+   type RT_MANIFEST (24), the id the loader reads for an executable. */
+1 24 "ico_pc.manifest"

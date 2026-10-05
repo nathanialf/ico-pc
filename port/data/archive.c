@@ -17,52 +17,14 @@
 #include <string.h>
 #include "miniz.h"
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
+#include "host_fs.h"
 
 /* --- host files ---------------------------------------------------------- */
 
-#ifdef _WIN32
-
-/* UTF-8 to UTF-16; NULL when the text is not valid UTF-8 */
-static wchar_t *widen(const char *s)
-{
-    int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, -1, NULL, 0);
-    wchar_t *w;
-
-    if (n <= 0) {
-        return NULL;
-    }
-    w = malloc((size_t)n * sizeof(*w));
-    if (w != NULL && MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, -1, w, n) != n) {
-        free(w);
-        w = NULL;
-    }
-    return w;
-}
-
-#endif
-
+/* UTF-8 paths through port/platform/host_fs.h's wide helpers on Windows */
 FILE *ico_archive_fopen(const char *path, const char *mode)
 {
-#ifdef _WIN32
-    wchar_t *wp = widen(path);
-    wchar_t *wm = widen(mode);
-    FILE *fp = NULL;
-
-    if (wp != NULL && wm != NULL) {
-        fp = _wfopen(wp, wm);
-    }
-    free(wp);
-    free(wm);
-    if (fp == NULL) {
-        fp = fopen(path, mode);
-    }
-    return fp;
-#else
-    return fopen(path, mode);
-#endif
+    return ico_fopen(path, mode);
 }
 
 int ico_archive_seek(FILE *fp, uint64_t offset)
@@ -85,35 +47,12 @@ int64_t ico_archive_tell(FILE *fp)
 
 int ico_archive_remove(const char *path)
 {
-#ifdef _WIN32
-    wchar_t *wp = widen(path);
-    int ok = wp != NULL && DeleteFileW(wp) != 0;
-
-    free(wp);
-    return ok || remove(path) == 0 ? 0 : -1;
-#else
-    return remove(path);
-#endif
+    return ico_remove(path);
 }
 
 int ico_archive_replace(const char *from, const char *to)
 {
-#ifdef _WIN32
-    wchar_t *wf = widen(from);
-    wchar_t *wt = widen(to);
-    int ok;
-
-    if (wf != NULL && wt != NULL) {
-        ok = MoveFileExW(wf, wt, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-    } else {
-        ok = MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-    }
-    free(wf);
-    free(wt);
-    return ok ? 0 : -1;
-#else
-    return rename(from, to);
-#endif
+    return ico_rename_replace(from, to);
 }
 
 static void say(char *why, size_t n, const char *fmt, ...)

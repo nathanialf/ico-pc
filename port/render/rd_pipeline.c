@@ -34,7 +34,6 @@
  * larger GS Z is a smaller depth: GS GEQUAL is RHI_CMP_LEQUAL, GREATER is
  * LESS.
  */
-#include <assert.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "shader_consts.h"
@@ -47,6 +46,15 @@ typedef struct RdPipeEntry {
 static RdPipeEntry s_cache[RD_PIPELINE_CACHE_MAX];
 
 static uint32_t s_count;
+
+/* F2 (C2): keys whose creation failed; looked up before a retry, so a
+ * failed pipeline costs one creation attempt and one log line per session
+ * (per cache clear), not two lines per draw. */
+static RdPipeKeyInt s_failed[RD_PIPELINE_FAIL_MAX];
+
+static uint32_t s_failedCount;
+
+static bool s_fullLogged;
 
 bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
 {
@@ -404,14 +412,31 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
     if (!g_rd.hasDevice) {
         return (RhiPipeline){0};
     }
-    assert(s_count < RD_PIPELINE_CACHE_MAX && "rd: pipeline cache past RD_PIPELINE_CACHE_MAX");
+    for (uint32_t i = 0; i < s_failedCount; i++) {
+        if (rd__PipeKeyEqual(&s_failed[i], k)) {
+            return (RhiPipeline){0};
+        }
+    }
+    /* no assert: NDEBUG is never defined (CMakeLists.txt), so an assert here
+     * would abort a release build; the tests hold the reachable set under
+     * RD_PIPELINE_REACHABLE_MAX instead */
     if (s_count >= RD_PIPELINE_CACHE_MAX) {
+        if (!s_fullLogged) {
+            s_fullLogged = true;
+            rd__Log("pipeline cache full (%d keys): new keys are not drawn (program %u blend %u "
+                    "vs %u fs %u)",
+                    RD_PIPELINE_CACHE_MAX, k->gs.program, k->gs.blend, k->vs, k->fs);
+        }
         return (RhiPipeline){0};
     }
     RhiPipeline p = createPipeline(k);
     if (!p.id) {
-        rd__Log("pipeline creation failed (program %u blend %u vs %u fs %u fmt %u/%u)",
-                k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt);
+        if (s_failedCount < RD_PIPELINE_FAIL_MAX) {
+            s_failed[s_failedCount++] = *k;
+            rd__Log("pipeline creation failed (program %u blend %u vs %u fs %u fmt %u/%u); "
+                    "draws with this key are skipped",
+                    k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt);
+        }
         return p;
     }
     s_cache[s_count].key = *k;
@@ -429,6 +454,29 @@ void rd__PipelineCacheClear(void)
         }
     }
     s_count = 0;
+    s_failedCount = 0;
+    s_fullLogged = false;
+}
+
+uint32_t rd_PrecreatePipelines(void)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    if (!g_rd.hasDevice) {
+        return 0;
+    }
+    const double t0 = rd__NowMs();
+    const uint32_t before = s_count;
+    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    uint32_t failed = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (!rd__GetPipeline(&keys[i]).id) {
+            failed++;
+        }
+    }
+    const double ms = rd__NowMs() - t0;
+    rd__Log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed)",
+            s_count - before, n, ms, failed);
+    return s_count - before;
 }
 
 uint32_t rd__PipelineCount(void)

@@ -313,7 +313,9 @@ int ico_video_framerate(void)
     IcoVideoOptions o;
 
     ico_video_get(&o);
-    return o.preset == ICO_VIDEO_ENHANCED ? o.framerate : ICO_FRAMERATE_ORIGINAL;
+    /* both presets (F2): the Original preset's picture is the PS2's per
+       tick, and "uncapped" presents it between ticks too */
+    return o.framerate;
 }
 
 /* R7b: the camera-cut signal (video_options.h) */

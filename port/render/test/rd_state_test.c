@@ -12,7 +12,7 @@
  *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw)
  *   dump       a frame with textures and a temp target survives dump/load
  *   pipelines  the reachable screen and post set is under 100 keys, with
- *              the VU program families (wave 3) under RD_PIPELINE_CACHE_MAX
+ *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -386,8 +386,8 @@ static void testEnumeration(void)
     n = rd__EnumerateReachable(keys, 512);
     printf("  reachable pipelines: %u (screen and post %u, VU programs %u)\n", n, ns, n - ns);
     CHECK(ns > 0 && ns < 100, "reachable screen and post pipelines %u must stay under 100", ns);
-    CHECK(n < RD_PIPELINE_CACHE_MAX, "reachable pipeline count %u must stay under %d", n,
-          RD_PIPELINE_CACHE_MAX);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipeline count %u must stay under %d", n,
+          RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < n && i < 512; i++) {
         for (uint32_t j = i + 1; j < n && j < 512; j++) {
             CHECK(!rd__PipeKeyEqual(&keys[i], &keys[j]), "duplicate key %u/%u", i, j);

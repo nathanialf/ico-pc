@@ -19,7 +19,9 @@ libraries) are fetched, not tracked.
 | `gen_sources.py` | writes `cmake/IcoSources.cmake` from `config/link_order.pal.txt`; `--check` for CI and the hook |
 | `gen_layout_asserts.py` | writes `port/test/layout_asserts.c` from the headers' offset comments; `--check` |
 | `gen_data_desc.py` | writes the data tables' field descriptors under `port/data/gen/` from the schema, headers and symbol lists; `--check` (never opens the ELF) and `--check-manifest --elf` (maintainers) |
-| `check_no_rom.sh` | IP guard: refuses disc images, PS2 executables, the disc's reference files (`MAIN.MAP`, `SRCFILE.TXT`, ...), extracted assets, large binaries and raw byte-array initializers in tracked C. CI runs it over the tree |
+| `check_no_rom.sh` | IP guard: refuses disc images, PS2 executables, the disc's reference files (`MAIN.MAP`, `SRCFILE.TXT`, ...), extracted assets and movie streams, large binaries, raw byte-array initializers in tracked C, any large integer-literal table in `ico2/`/`sce/` (`check_int_arrays.py`, with its reviewed per-table exemptions; docs/LEGAL.md "Exemptions") and tracked files that match `.gitignore`. CI runs it over the tree |
+| `check_int_arrays.py FILE...` | rule 5b of `check_no_rom.sh`: flags array initializers of 64+ integer literals, whatever their name, except the listed exemptions |
+| `gen_notices.py --platform {linux,windows} --out FILE` | writes a package's `NOTICES.txt` (every third-party component and its licence text) from `tools/notices/manifest.json`; both package scripts run it (docs/port/THIRD_PARTY.md) |
 | `format.sh` / `format_layout.py` | clang-format with the tracked `.clang-format`, then the top-level blank-line layout; `--check` for CI and the hook |
 | `install_hooks.sh` | writes the pre-commit hook: `check_no_rom.sh`, `format.sh --check` on the staged C, and the three `--check`s above |
 | `setup.sh` | idempotent: the venv from `requirements.txt`, the period compilers (skip with `SKIP_TOOLCHAIN=1`), the git hooks |

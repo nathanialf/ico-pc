@@ -221,6 +221,18 @@ void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode)
     }
 }
 
+size_t rdtex_MipChainBytes(uint32_t w, uint32_t h)
+{
+    size_t bytes = 0;
+
+    while (w > 1 || h > 1) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        bytes += (size_t)w * h * 4;
+    }
+    return bytes;
+}
+
 uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out)
 {
     const uint8_t *s = rgba;
@@ -456,7 +468,7 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
     free(e->mips);
     e->mips = NULL;
     if (s_tc.enhancedMips && (pw & (pw - 1)) == 0 && (ph & (ph - 1)) == 0) {
-        e->mips = malloc((size_t)pw * ph * 4 / 3 + 4);
+        e->mips = malloc(rdtex_MipChainBytes(pw, ph) + 4);
         if (e->mips) {
             rdtex_BuildMipChain(px, pw, ph, e->mips);
         }

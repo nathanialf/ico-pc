@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "host_fs.h"
 
 #define PVD_FIRST_LSN 16
 #define PVD_SCAN_MAX 64           /* descriptors examined before giving up */
@@ -75,7 +76,7 @@ static int iso_mount(void **state, const char *location)
     if (iso == NULL) {
         return -1;
     }
-    iso->fp = fopen(location, "rb");
+    iso->fp = ico_fopen(location, "rb"); /* UTF-8 path (host_fs.h) */
     if (iso->fp == NULL) {
         free(iso);
         return -1;

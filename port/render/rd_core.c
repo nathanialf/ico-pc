@@ -13,15 +13,52 @@
  * one before it) for the interpolation (rd_interp.c, wave 7 R7b); the frame
  * being recorded takes a third slot (RD_FRAME_RING).
  */
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
 
 RdContext g_rd;
+
+static RdHostCall s_hostCall;
+
+double rd__NowMs(void)
+{
+#ifdef _WIN32
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * 1e3 / (double)f.QuadPart;
+#else
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec * 1e3 + (double)t.tv_nsec / 1e6;
+#endif
+}
+
+void rd_SetHostCall(RdHostCall call)
+{
+    s_hostCall = call;
+}
+
+void rd__OnHost(void (*fn)(void *arg), void *arg)
+{
+    if (s_hostCall) {
+        s_hostCall(fn, arg);
+    } else {
+        fn(arg);
+    }
+}
 
 static bool s_notImplementedFatal = true;
 
@@ -984,6 +1021,24 @@ static void recordDefaults(void)
     rd_SelectList(0);
 }
 
+static void recreateTargets(void *arg)
+{
+    (void)arg;
+    rhi_WaitIdle();
+    createNamedTargets();
+}
+
+typedef struct ReplayCall {
+    const RdFrame *f;
+    int keep;
+} ReplayCall;
+
+static void replayOnHost(void *arg)
+{
+    const ReplayCall *c = (const ReplayCall *)arg;
+    rd__ReplayFrame(c->f, c->keep, true);
+}
+
 void rd_BeginFrame(void)
 {
     if (!g_rd.inited) {
@@ -999,8 +1054,7 @@ void rd_BeginFrame(void)
          * targets' scales recreates them (their content is lost: the next
          * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
         if (rd__ApplyDisplay() && g_rd.hasDevice) {
-            rhi_WaitIdle();
-            createNamedTargets();
+            rd__OnHost(recreateTargets, NULL);
             /* R7b: the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */
             g_rd.interpFloor = g_rd.frameCounter + 1;
@@ -1046,7 +1100,8 @@ void rd_EndFrame(int keep)
      * the Original preset always, the frame is replayed and presented once
      * here, as before */
     if (g_rd.hasDevice && !rd_InterpolationActive()) {
-        rd__ReplayFrame(f, f->keep, true);
+        ReplayCall c = {f, f->keep};
+        rd__OnHost(replayOnHost, &c);
     }
     if (s_dumpEvery && f->number % s_dumpEvery == 0) {
         char path[600];

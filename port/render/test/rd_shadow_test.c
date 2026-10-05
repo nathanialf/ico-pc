@@ -890,7 +890,7 @@ static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
     const uint32_t n = rd__EnumerateReachable(keys, 512);
-    CHECK(n < RD_PIPELINE_CACHE_MAX, "reachable pipelines %u", n);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
     for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
         const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
         int found = 0;

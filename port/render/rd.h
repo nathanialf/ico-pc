@@ -332,8 +332,8 @@ typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
     float aspect;                       /* 4/3 .. 16/9; Original forces 4/3 */
-    uint8_t interpolate; /* uncapped presentation (rd_Present, R7b); Original forces 0 */
-    uint8_t mirror;      /* mirror mode: final blit flips x, UI pre-flipped */
+    uint8_t interpolate;                /* uncapped presentation (rd_Present, R7b), both presets */
+    uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t
         filterUpgrade; /* RdFilterUpgrade: trilinear/anisotropic with generated mips (Enhanced) */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass (Enhanced) */
@@ -376,6 +376,26 @@ void rd_BeginFrame(void);
 /* dl_Swap: closes the frame.  keep != 0 replays lists 11..12 only (fbKeep).
  * Hands the RdFrame to the presenter; returns immediately. */
 void rd_EndFrame(int keep);
+/* Where the GPU work the game's calls cause runs (rd_EndFrame's replay and
+ * present in the Original preset, rd_BeginFrame's target re-creation, the
+ * FMV picture's present; docs/port/PLATFORM.md "Fiber stacks and host
+ * calls").  The game calls rd from a fiber with a 256 KB stack; the driver
+ * (pipeline creation, present) may need far more.  The window build sets
+ * call to ico_sched_call_on_host, which runs fn(arg) on the host stack in
+ * the host FP mode and returns; NULL (the default, tests and tools) calls
+ * fn directly. */
+typedef void (*RdHostCall)(void (*fn)(void *arg), void *arg);
+/* Creates every pipeline of the reachable set (rd__EnumerateReachable) now,
+ * so the first frames that use them do not stall on the driver's pipeline
+ * compile; logs the count and the time.  The window calls it after
+ * rd_Init; the tests do not.  Returns the number created. */
+uint32_t rd_PrecreatePipelines(void);
+/* The longest frame replay (CPU time of recording, pipeline creation,
+ * submit and present) in ms since the last reset, and *count the replays
+ * in that time; reset != 0 starts a new period.  For the window's 10 s
+ * statistics line. */
+double rd_ReplayTimeMax(int reset, uint32_t *count);
+void rd_SetHostCall(RdHostCall call);
 /* Added in wave 2 (R2a).  dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
  * recorded since rd_BeginFrame are dropped unreplayed, as the PS2 drops a
@@ -407,7 +427,7 @@ void rd_SetCamera(const RdCamera *cam);
  * picture is one tick late).  Unkeyed draws, CLUT animation, film noise,
  * dissolve and every other state stay at the tick's values.
  *
- * rd_InterpolationActive  Enhanced preset and RdSettings.interpolate (as
+ * rd_InterpolationActive  RdSettings.interpolate, either preset (as
  *                         applied at the last rd_BeginFrame)
  * rd_Present              replays and presents; false (nothing done) when
  *                         interpolation is off, before the first frame, or

@@ -24,6 +24,7 @@
     X(Backend)                                                                                     \
     X(Limits)                                                                                      \
     X(AdapterName)                                                                                 \
+    X(DeviceLost)                                                                                  \
     X(ResizeSwapchain)                                                                             \
     X(SwapchainFormat)                                                                             \
     X(AcquireBackbuffer)                                                                           \

@@ -682,6 +682,10 @@ void rd__GpuShutdown(void);
 /* Replays f (lists 0..12, or 11..12 with keep) from f->startState and, with
  * present, runs the presenter.  The replay state block ends as f->endState. */
 bool rd__ReplayFrame(const RdFrame *f, int keep, bool present);
+/* rd_SetHostCall's hook, or fn(arg) directly (rd_core.c) */
+void rd__OnHost(void (*fn)(void *arg), void *arg);
+/* a monotonic clock in ms (rd_core.c), for the replay and start-up timings */
+double rd__NowMs(void);
 /* Present pass inside the replay's command list (rd_present.c). */
 void rd__PresentRecord(RhiCommandList cl);
 /* Wave 7 (R7a): the presentation box of aspect (4:3: the Original integer

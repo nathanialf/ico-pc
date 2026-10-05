@@ -1282,7 +1282,7 @@ int main(void)
     rd__EnumerateReachable(keys, 512);
     printf("  pipelines: %u created, %u reachable (%u screen and post)\n", rd__PipelineCount(), n,
            ns);
-    CHECK(n < RD_PIPELINE_CACHE_MAX && ns < 100, "reachable pipelines %u (screen %u)", n, ns);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX && ns < 100, "reachable pipelines %u (screen %u)", n, ns);
     for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
         const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
         int found = 0;

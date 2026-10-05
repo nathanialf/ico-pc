@@ -149,6 +149,14 @@ add_library(ico_platform STATIC
     port/platform/fpenv.c
     port/platform/hwregs.c)
 target_include_directories(ico_platform PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
+# host_fs.c: file calls on UTF-8 paths (wide on Windows; docs/port/DATA.md,
+# "Paths"). Its own library because host_config.c, its main user, is
+# compiled into many tests that do not link ico_platform (linked to each of
+# them at the end of this file).
+add_library(ico_host_fs STATIC port/platform/host_fs.c)
+target_include_directories(ico_host_fs PUBLIC port/platform)
+target_compile_options(ico_host_fs PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_platform PUBLIC ico_host_fs)
 target_compile_definitions(ico_platform PRIVATE ${ICO_FPTRAP_DEFINITION})
 target_compile_options(ico_platform PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
@@ -187,6 +195,14 @@ if(ICO_LINK_EXE)
         # GCC runtime linked in so the .exe needs only system DLLs.
         target_link_options(ico_pc PRIVATE -mwindows)
         target_link_libraries(ico_pc PRIVATE comdlg32 user32)
+        # The application manifest (port/platform/win/ico_pc.manifest): the
+        # UTF-8 active code page for paths (docs/port/DATA.md, "Paths"),
+        # compiled by the toolchain's windres.
+        enable_language(RC)
+        target_sources(ico_pc PRIVATE port/platform/win/ico_pc.rc)
+        set_property(SOURCE port/platform/win/ico_pc.rc APPEND PROPERTY OBJECT_DEPENDS
+                     "${CMAKE_SOURCE_DIR}/port/platform/win/ico_pc.manifest")
+        target_include_directories(ico_pc PRIVATE port/platform/win)
         if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
             target_link_options(ico_pc PRIVATE -static-libgcc -static)
         endif()
@@ -244,3 +260,22 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                            VERBATIM)
     endif()
 endif()
+
+# --- host_fs for every target that compiles host_config.c -------------------
+function(ico_link_host_fs dir)
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(t IN LISTS targets)
+        get_target_property(type ${t} TYPE)
+        if(type STREQUAL "EXECUTABLE" OR type STREQUAL "STATIC_LIBRARY")
+            get_target_property(srcs ${t} SOURCES)
+            if(srcs MATCHES "host_config\\.c")
+                target_link_libraries(${t} PRIVATE ico_host_fs)
+            endif()
+        endif()
+    endforeach()
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(d IN LISTS subdirs)
+        ico_link_host_fs("${d}")
+    endforeach()
+endfunction()
+ico_link_host_fs("${CMAKE_SOURCE_DIR}")

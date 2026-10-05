@@ -257,6 +257,11 @@ static int read_chunk(void)
         return 0;
     }
     if (bb_reserve(&mv.in, READ_CHUNK) != 0) {
+        /* out of memory: the stream ends here (demux_until would otherwise
+           retry the read for ever) and the movie ends cleanly */
+        ico_diag_log("fmv: no memory for the stream at byte %u of %u: the movie ends", mv.read,
+                     mv.size);
+        mv.read = mv.size;
         return -1;
     }
     got = sceCdStRead(READ_CHUNK / ICO_VFS_SECTOR, mv.in.p + mv.in.len, 1, &err) * ICO_VFS_SECTOR;

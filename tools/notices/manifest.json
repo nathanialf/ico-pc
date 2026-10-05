@@ -1,0 +1,107 @@
+{
+  "comment": "Third-party components in the shipped program, one entry each, with where its licence text comes from. tools/gen_notices.py turns this into NOTICES.txt for a package (docs/port/THIRD_PARTY.md, 'Binary-release obligations'). A text is a file ('file'), the first existing of several ('any_of'), or the lines of a source comment from the line holding 'from' to the line holding 'to', with the comment's leading ' * ' removed ('extract'). A missing file is an error. 'platforms' limits an entry to linux or windows packages.",
+  "components": [
+    {
+      "name": "SDL3",
+      "version": "3.4.18",
+      "licence": "zlib",
+      "used_for": "window, input, audio output; shipped as libSDL3.so.0 / SDL3.dll beside the program",
+      "texts": [
+        {"any_of": ["tools/toolchain/deps/sdl3/linux-x64/LICENSE.txt", "tools/toolchain/deps/sdl3/mingw/LICENSE.txt"]}
+      ]
+    },
+    {
+      "name": "volk",
+      "version": "vulkan-sdk-1.4.363.0",
+      "licence": "MIT",
+      "used_for": "the Vulkan meta-loader, compiled into the program",
+      "texts": [{"file": "tools/toolchain/deps/volk/LICENSE.md"}]
+    },
+    {
+      "name": "Vulkan-Headers",
+      "version": "vulkan-sdk-1.4.363.0",
+      "licence": "Apache-2.0 OR MIT; MIT chosen",
+      "used_for": "the Vulkan API declarations the renderer compiles against",
+      "texts": [{"file": "tools/toolchain/deps/vulkan-headers/LICENSES/MIT.txt"}]
+    },
+    {
+      "name": "Ittiam libmpeg2 (AOSP platform/external/libmpeg2)",
+      "version": "android-16.0.0_r4 (a97c2a1f0a796dc32bed80d3353c69c5fc07c750), unmodified",
+      "licence": "Apache-2.0",
+      "used_for": "the movies' MPEG-2 video decoder, compiled into the program",
+      "texts": [
+        {"file": "tools/toolchain/deps/libmpeg2/NOTICE"},
+        {"file": "tools/toolchain/deps/libmpeg2/LICENSE"}
+      ]
+    },
+    {
+      "name": "miniz",
+      "version": "3.1.2, unmodified",
+      "licence": "MIT",
+      "used_for": "reading and writing the extracted game archive ico.o2r",
+      "texts": [{"file": "port/third_party/miniz/LICENSE"}]
+    },
+    {
+      "name": "stb_truetype",
+      "version": "v1.26, unmodified",
+      "licence": "MIT or Unlicense; MIT chosen",
+      "used_for": "rasterising the port's menu font",
+      "texts": [{"file": "port/third_party/stb/LICENSE"}]
+    },
+    {
+      "name": "Arimo Regular (font)",
+      "version": "1.341, wght 400 instance subset to Latin (a modified version, OFL 1.1 section 3)",
+      "licence": "SIL Open Font License 1.1",
+      "used_for": "the port's menu text, embedded in the program",
+      "texts": [{"file": "port/assets/fonts/OFL.txt"}]
+    },
+    {
+      "name": "minicoro",
+      "version": "v0.2.0, unmodified",
+      "licence": "Unlicense or MIT-0",
+      "used_for": "the game's fibers (context switch); neither licence asks for a notice, it is included anyway",
+      "texts": [{"file": "port/third_party/minicoro/LICENSE"}]
+    },
+    {
+      "name": "newlib libm (fdlibm single-precision functions)",
+      "version": "as linked by the PS2 game; port/math/newlib/ico_libm.c",
+      "licence": "SunPro fdlibm notice",
+      "used_for": "atan2f, acosf, asinf, sinf, cosf, fmodf, sqrtf with the PS2's results",
+      "texts": [
+        {"extract": {"file": "port/math/newlib/ico_libm.c", "from": "Copyright (C) 1993 by Sun Microsystems", "to": "is preserved."}},
+        {"extract": {"file": "port/math/newlib/ico_libm.c", "from": "Conversion to float by Ian Lance Taylor", "to": "Conversion to float by Ian Lance Taylor"}}
+      ]
+    },
+    {
+      "name": "newlib qsort (4.4BSD)",
+      "version": "as linked by the PS2 game; port/math/newlib/qsort.c",
+      "licence": "BSD-3-Clause (The Regents of the University of California)",
+      "used_for": "qsort with the PS2's order of equal elements",
+      "texts": [
+        {"extract": {"file": "port/math/newlib/qsort.c", "from": "Copyright (c) 1992, 1993", "to": "SUCH DAMAGE."}}
+      ]
+    },
+    {
+      "name": "newlib rand",
+      "version": "as linked by the PS2 game; port/math/newlib/rand.c",
+      "licence": "newlib COPYING.NEWLIB item (1), Red Hat, BSD",
+      "used_for": "rand and srand with the PS2's sequence",
+      "texts": [
+        {"extract": {"file": "port/math/newlib/rand.c", "from": "(1) Red Hat Incorporated", "to": "permission of Red Hat, Inc."}}
+      ]
+    },
+    {
+      "name": "MinGW-w64 runtime",
+      "version": "the win-x64 toolchain's (Debian mingw-w64 12.0.0), linked statically (-static, CMakeLists.txt)",
+      "licence": "ZPL-2.1 and the notices below",
+      "used_for": "the Windows C runtime startup, its support functions and libdxguid's interface IDs, linked into the .exe",
+      "platforms": ["windows"],
+      "texts": [
+        {"any_of": [
+          "tools/toolchain/llvm-mingw/x86_64-w64-mingw32/share/mingw32/COPYING.MinGW-w64-runtime.txt",
+          "tools/toolchain/mingw-gcc/usr/share/doc/mingw-w64-x86-64-dev/copyright"
+        ]}
+      ]
+    }
+  ]
+}

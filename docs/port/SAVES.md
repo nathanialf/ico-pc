@@ -47,6 +47,16 @@ Files are plain host files. `sceMcOpen` with `0x203` (read/write, create) does
 not truncate, as on the card, so re-saving the same data rewrites the same
 bytes; `SCE_TRUNC` is honoured.
 
+Writes are atomic per file (package F2): a handle opened for writing works
+on a copy, `<dir>/.<name>.tmp` (the file's bytes copied in unless
+`SCE_TRUNC`; hidden from `sceMcGetDir` like every dot file), and
+`sceMcClose` moves it over the file (`ico_rename_replace`: `rename(2)`, or
+`MoveFileExW` with `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`). A
+crash, a full disk or a failed write during a save leaves the previous file
+whole; `sceMcClose` then returns `sceMcResFullDevice` and logs it. A file
+created by the open exists (empty) from the open, as on the card. Host paths
+are UTF-8 through `port/platform/host_fs.h` (docs/port/DATA.md, "Paths").
+
 ### PCSX2 folder cards
 
 PCSX2's folder memory cards keep each save as a directory of plain files.

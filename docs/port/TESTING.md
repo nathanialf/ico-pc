@@ -49,12 +49,15 @@ packages now carry one `x64/` folder. The checkpoint records below that name
      `1017b53f...`, or by `SCES_507.60`'s SHA-1 plus DATA.DF's manifest (a
      re-dump), and logs which; a wrong image stops with a message box. With
      `use_iso=1` the SHA-1 check is the old one, skipped with `verify=0`.
-   - **Pad script:** `pad-script.txt`, used if present (format in
-     `port/input/pad_script.h`).
+   - **Pad script:** `pad_script=FILE` in the ini (format in
+     `port/input/pad_script.h`); the headless build also takes
+     `pad-script.txt` beside the exe if present. The window build ignores a
+     `pad-script.txt` the ini does not name (package F2).
    - **Logs:** stdout and stderr go to `logs/ico-pc.log`, unbuffered; the
      diagnostics (`port/platform/diag_host.h`) write there too. The trace
-     goes to `logs/trace-<yyyymmdd-hhmmss>.txt` (`trace=0` turns it off),
-     flushed line by line.
+     goes to `logs/trace-<yyyymmdd-hhmmss>.txt`, flushed line by line: by
+     default in the headless build (`trace=0` turns it off); the window
+     build writes it only with `trace=1` or `trace=PATH` (package F2).
    - **Exit:** after `ticks=` Main ticks; with no `ticks=`, it runs until
      closed.
    - **Watchdog:** `watchdog=S` (default 30, 0 off): no Main tick S
@@ -80,7 +83,7 @@ key has a `config.toml` name; a true/false toml value reads as 1/0.
 | `saves=PATH` | `[paths] saves` | memory card folder |
 | `ticks=N` | `[dev] ticks` | exit after N Main ticks |
 | `watchdog=S` | `[dev] watchdog` | default 30, 0 off |
-| `trace=0` / `trace=PATH` | `[dev] trace` | no trace / trace there; a path also fixes the clock |
+| `trace=0` / `trace=1` / `trace=PATH` | `[dev] trace` | no trace / `logs/trace-<time>.txt` / trace there; a path also fixes the clock. Default: on in the headless build, off in the window build |
 | `verify=0` | `[dev] verify` | skip the SHA-1 check (`use_iso=1` only; extraction always verifies) |
 | `use_iso=0/1` | `[dev] use_iso` | 1: mount the ISO directly (dev mode); 0: the extracted `ico.o2r`, extracting it on the first run. Default 1 in the headless build (trace runs and tests read the ISO as before), 0 in the window build |
 | `pad_script=PATH` | `[dev] pad_script` | the scripted pad |

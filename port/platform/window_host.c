@@ -12,6 +12,7 @@
 #include "input_sdl.h"
 #include "rd.h"
 #include "rhi.h"
+#include "sched.h"
 #include "trace_host.h"
 #include "ui_host.h"
 #include "video_options.h"
@@ -55,6 +56,12 @@ static struct {
     /* the rate log */
     Uint64 statAt;
     unsigned statPresents, statFrames;
+    /* F2: simulated vsyncs paced, and the lag the pacer dropped (each time
+       it was more than RESYNC_NS behind: the simulation ran slower than
+       real time by that much) */
+    unsigned statVsyncs, statResyncs;
+    Uint64 statDropped;
+    uint32_t statFrameNo; /* rd_FrameNumber() at the block's start */
 } s_pres;
 
 /* The renderer's settings from the display options and the window's pixel
@@ -76,7 +83,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
-    /* R7b: rd presents between ticks; rd forces it off in Original */
+    /* R7b: rd presents between ticks, in both presets (F2) */
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
 }
@@ -134,6 +141,13 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         SDL_Quit();
         return -1;
     }
+    /* the replay, the present and the FMV picture run on the host stack in
+       the host FP mode, not on the game's 256 KB fiber stacks
+       (docs/port/PLATFORM.md "Fiber stacks and host calls") */
+    rd_SetHostCall(ico_sched_call_on_host);
+    /* the whole reachable pipeline set before the first frame, so the
+       game never waits on a pipeline compile (F2; the time is logged) */
+    rd_PrecreatePipelines();
     {
         IcoVideoOptions o;
 
@@ -212,10 +226,33 @@ static void toggle_fullscreen(void)
     video_apply(0);
 }
 
+/* B3: the renderer's device was removed, reset or hung (the driver
+   crashed or was updated, the GPU was unplugged): nothing more can be drawn,
+   so instead of a frozen window the player gets one message and the session
+   ends through the normal quit path (atexit closes the window). The backend
+   logged the reason. */
+static int device_lost_quit(void)
+{
+    if (!rhi_DeviceLost()) {
+        return 0;
+    }
+    fprintf(stderr, "window: the graphics device was lost; quitting\n");
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC",
+                             "The graphics device stopped responding (the driver was reset or "
+                             "the GPU was removed).\n\nThe game has to close. Your last save on "
+                             "the memory card is kept; logs/ico-pc.log names the reason.",
+                             s_window);
+    return 1;
+}
+
 int ico_window_pump(void)
 {
     SDL_Event e;
     int quit = 0;
+
+    if (device_lost_quit()) {
+        return 0;
+    }
 
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
@@ -268,25 +305,57 @@ int ico_window_pump(void)
     return !quit;
 }
 
-/* R7b: presents and frames per second, every 10 s of real time */
+/* R7b: presents and frames per second, every 10 s of real time, in both
+   presentation modes. F2: "game frames" counts the frames shown (closed
+   frames the pace saw); "frame numbers" also counts the ones the game
+   dropped unshown (rd_DiscardFrame: fbKeep screens, gsb_UpdateGSSystem(1)),
+   so a gap between the two is not a slowdown. The simulation's own rate
+   is the vsyncs against the block's real time, and any lag the pacer had
+   to drop (resyncs) says the step plus the presents took longer than real
+   time; the longest replay names the frame that did. */
 static void pace_log(Uint64 now)
 {
     if (s_pres.statAt == 0) {
+        uint32_t n;
+
         s_pres.statAt = now;
-        s_pres.statPresents = s_pres.statFrames = 0;
+        s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
+        s_pres.statDropped = 0;
+        s_pres.statFrameNo = rd_FrameNumber();
+        rd_ReplayTimeMax(1, &n);
         return;
     }
     if (now - s_pres.statAt < 10000000000ull) {
         return;
     }
     const double sec = (double)(now - s_pres.statAt) / 1e9;
+    uint32_t replays = 0;
+    const double maxMs = rd_ReplayTimeMax(1, &replays);
+    const uint32_t fn = rd_FrameNumber();
+
+    if (!rd_InterpolationActive()) {
+        s_pres.statPresents = replays; /* one present per replay */
+    }
     fprintf(stderr,
-            "window: %u presents and %u game frames in %.1f s: %.1f presented fps, %.1f game "
-            "fps\n",
-            s_pres.statPresents, s_pres.statFrames, sec, s_pres.statPresents / sec,
-            s_pres.statFrames / sec);
+            "window: %u presents and %u game frames (%u frame numbers) in %.1f s: %.1f "
+            "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
+            "%.0f ms; longest replay %.1f ms of %u\n",
+            s_pres.statPresents, s_pres.statFrames, fn - s_pres.statFrameNo, sec,
+            s_pres.statPresents / sec, s_pres.statFrames / sec, s_pres.statVsyncs,
+            s_pres.statVsyncs / sec, s_pres.statResyncs, (double)s_pres.statDropped / 1e6, maxMs,
+            replays);
     s_pres.statAt = now;
-    s_pres.statPresents = s_pres.statFrames = 0;
+    s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
+    s_pres.statDropped = 0;
+    s_pres.statFrameNo = fn;
+}
+
+/* The pacer more than RESYNC_NS behind: the lag is dropped (counted) */
+static void resync(Uint64 now)
+{
+    s_pres.statResyncs++;
+    s_pres.statDropped += now - s_deadline;
+    s_deadline = now;
 }
 
 void ico_window_pace(int hz)
@@ -297,23 +366,7 @@ void ico_window_pace(int hz)
     Uint64 now;
 
     s_deadline += period;
-    if (!rd_InterpolationActive()) {
-        /* Original, framerate "original": rd_EndFrame presented the frame
-           once; the picture is held until the next */
-        now = SDL_GetTicksNS();
-        if (now < s_deadline) {
-            SDL_DelayPrecise(s_deadline - now);
-        } else if (now - s_deadline > RESYNC_NS) {
-            s_deadline = now;
-        }
-        return;
-    }
-    /* R7b: the simulation keeps its vsync cadence in simulated time; until
-       this vsync's deadline the window presents as often as vsync (and the
-       framerate cap) allow, each present at alpha = the real time since the
-       last frame closed over the tick, between the last two frames (one
-       tick of latency). A frame closes inside the step before this call:
-       its time is the start of this vsync period. */
+    s_pres.statVsyncs++;
     {
         const uint32_t fn = rd_FrameNumber();
 
@@ -324,6 +377,39 @@ void ico_window_pace(int hz)
             s_pres.statFrames++;
         }
     }
+    if (!rd_InterpolationActive()) {
+        /* framerate "original": rd_EndFrame presented the frame once; the
+           picture is held until the next */
+        now = SDL_GetTicksNS();
+        if (now < s_deadline) {
+            SDL_DelayPrecise(s_deadline - now);
+        } else if (now - s_deadline > RESYNC_NS) {
+            resync(now);
+        }
+        pace_log(SDL_GetTicksNS());
+        return;
+    }
+    /* R7b: the simulation keeps its vsync cadence in simulated time; until
+       this vsync's deadline the window presents as often as vsync (and the
+       framerate cap) allow, each present at alpha = the real time since the
+       last frame closed over the tick, between the last two frames (one
+       tick of latency). A frame closes inside the step before this call:
+       its time is the start of this vsync period. */
+    /* F2: a present with vsync on blocks up to one display refresh; that
+       wait is not the renderer being slow. The user's first Windows run
+       (60 Hz display, 59.94 Hz simulation: refresh 16.67 ms against the
+       16.68 ms period) sat on that edge and fell back to one present per
+       game frame. Slow means a present costing more than a display refresh
+       plus half a simulated period. */
+    Uint64 slow = period;
+    {
+        const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
+        const Uint64 refresh = dm != NULL && dm->refresh_rate > 1.0f
+                                   ? (Uint64)(1e9 / (double)dm->refresh_rate)
+                                   : period;
+
+        slow = (refresh > period ? refresh : period) + period / 2;
+    }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
     const Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
@@ -333,7 +419,7 @@ void ico_window_pace(int hz)
            per present (a software driver): one present per new frame, none
            more, so the presents never slow the simulation below the
            original's one replay per frame */
-        if (s_pres.presentedFrame == s_pres.frame && (now >= s_deadline || s_pres.cost > period)) {
+        if (s_pres.presentedFrame == s_pres.frame && (now >= s_deadline || s_pres.cost > slow)) {
             if (now < s_deadline) {
                 SDL_DelayPrecise(s_deadline - now);
             }
@@ -371,7 +457,7 @@ void ico_window_pace(int hz)
     now = SDL_GetTicksNS();
     pace_log(now);
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
-        s_deadline = now;
+        resync(now);
     }
 }
 
@@ -384,6 +470,7 @@ void ico_window_close(void)
     set_capture(0);
     ico_input_sdl_shutdown();
     ui_HostShutdown();
+    rd_SetHostCall(NULL);
     rd_Shutdown();
     if (s_window != NULL) {
         SDL_DestroyWindow(s_window);

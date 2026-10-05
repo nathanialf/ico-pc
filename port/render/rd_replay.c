@@ -2403,7 +2403,7 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
 {
     const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
     const uint32_t offA = rhi_Limits()->copyOffsetAlign;
-    uint8_t *chain = malloc((size_t)t->w * t->h * 4 / 3 + 64);
+    uint8_t *chain = malloc(rdtex_MipChainBytes(t->w, t->h) + 4);
     if (!chain) {
         return;
     }
@@ -2503,7 +2503,40 @@ static const char *stubName(uint8_t type)
     }
 }
 
+static bool replayFrame(const RdFrame *f, int keep, bool present);
+
+/* F2: the longest replay (CPU side: recording, pipeline creation, the
+ * submit and present) since rd_ReplayTimeMax last reset it, in ms */
+static double s_replayMaxMs;
+
+static uint32_t s_replayCount;
+
 bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
+{
+    const double t0 = rd__NowMs();
+    const bool ok = replayFrame(f, keep, present);
+    const double ms = rd__NowMs() - t0;
+    if (ms > s_replayMaxMs) {
+        s_replayMaxMs = ms;
+    }
+    s_replayCount++;
+    return ok;
+}
+
+double rd_ReplayTimeMax(int reset, uint32_t *count)
+{
+    const double m = s_replayMaxMs;
+    if (count) {
+        *count = s_replayCount;
+    }
+    if (reset) {
+        s_replayMaxMs = 0.0;
+        s_replayCount = 0;
+    }
+    return m;
+}
+
+static bool replayFrame(const RdFrame *f, int keep, bool present)
 {
     if (!g_rd.hasDevice || !f) {
         return false;

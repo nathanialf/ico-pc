@@ -61,8 +61,8 @@ job (`ubuntu-24.04`), with no secrets and no disc image:
 
 | step | what |
 | --- | --- |
-| host packages, venv | gcc, the X11 and ALSA headers SDL3 builds against, `tools/requirements.txt` |
-| cache + `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh` |
+| host packages, venv | gcc 14 (the developer compiler; the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags the compiler does not know), the X11, ALSA and PulseAudio headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
+| cache + `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh`; restored and saved as separate steps, so the cache is saved right after a cold fetch even when a later step fails |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |

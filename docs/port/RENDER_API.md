@@ -133,9 +133,15 @@ hardware path. DATE is 0 in the key until `sprite_ps` reads the DATE
 snapshot. With the normalisation the screen and post programs reach 68
 pipelines from the game's state set (`rd__EnumerateReachableScreen`,
 asserted under 100 by `rd_state` and `rd_pixel`; the text said 67 until wave
-3, the count was 68 already); `RD_PIPELINE_CACHE_MAX` is 256 and `rd_core`
-asserts above it. Wave 3 (R3ab) adds the VU program families (section 13):
-`rd__EnumerateReachable` is 156 keys, asserted under the cache maximum.
+3, the count was 68 already). Wave 3 (R3ab) adds the VU program families
+(section 13): `rd__EnumerateReachable` is 156 keys, held under
+`RD_PIPELINE_REACHABLE_MAX` (256) by the tests. F2 (C2): the runtime cache
+(`RD_PIPELINE_CACHE_MAX`, 1024) has no assert (the build never defines
+`NDEBUG`, so an assert would abort a release build): a key past it is
+logged once and its draws are skipped; a key whose `rhi_CreatePipeline`
+failed is remembered (`RD_PIPELINE_FAIL_MAX`, 64) and not retried, so it
+costs one attempt and one log line instead of two lines per draw. Both
+reset with the cache (`rd__PipelineCacheClear`).
 
 Wave 1 additions to `rd.h` (R1b): `RdTexSrc` and `rd_CreateTextureSrc` (a
 PSMCT24/16 texture expanded by the shader under the TEXA state at replay,
@@ -942,7 +948,7 @@ vertex shaders, TEST 0x50000, the split pair of 0x5140D (and Texture.c's
 per-texture TEST, the same keys) and 0x5C000, Z write on and off, ALPHA off
 and the material/dissolve/specular/particle equations (four hardware
 paths), on SCENE's D32F_S8: 88 keys, 156 with the screen and post set
-(asserted under `RD_PIPELINE_CACHE_MAX` by `rd_state`, `rd_pixel` and
+(asserted under `RD_PIPELINE_REACHABLE_MAX` by `rd_state`, `rd_pixel` and
 `rd_mesh`; `rd_mesh` checks every pipeline it creates is enumerated).
 
 **Render-to-texture (reflections).** `reg_RenderReflection` draws in list
@@ -2144,8 +2150,8 @@ flags). Test: `rd_present` (`port/render/test/rd_present_test.c`).
 (default), `"16:10"`, `"16:9"`, `"auto"` (the window's, clamped to
 [4:3, 16:9]); `fullscreen` (false), `vsync` (true), `texture_filter`
 `"original"` (default), `"trilinear"`, `"anisotropic"`; `full_height`
-(false); `framerate` is R7b's. Original ignores everything but fullscreen
-and vsync. `ico_video_get/set/save` (`ico_config_get_*` / `set_*` /
+(false); `framerate` is R7b's. Original ignores everything but fullscreen,
+vsync and (since F2) framerate. `ico_video_get/set/save` (`ico_config_get_*` / `set_*` /
 `ico_config_save`); `ico_video_set` bumps a serial that `window_host.c`'s
 pump compares, so the Settings menu applies without a restart:
 `rd_SetSettings` takes effect at the next `rd_BeginFrame`, where
@@ -2268,7 +2274,10 @@ with tearing where DXGI allows it).
 `RhiLimits.textureMips`, new, true on Vulkan and on D3D12 since R6c):
 `uploadTextures` creates each power-of-two game texture with its full
 chain (`RdTexRec.mipLevels`), level 0 as before, levels 1.. 2 x 2 box
-filtered (`rdtex_BuildMipChain`) with alpha coverage kept
+filtered (`rdtex_BuildMipChain`, into a buffer of
+`rdtex_MipChainBytes(w, h)` bytes, the sum of max(w>>k,1) x max(h>>k,1) x 4
+over the levels k >= 1; the earlier w x h x 4/3 was short for non-square
+textures, 746 of 764 bytes at 128x4, `rd_mip` test) with alpha coverage kept
 (`rdtex_KeepAlphaCoverage`: per level, the alpha scale in [1, 4], never
 past level 0's largest alpha, that restores level 0's share of texels with
 alpha > 64, the semi-transparent lists' test), uploaded per level
@@ -2357,10 +2366,13 @@ versions), `rd_interp.c` (morph streams), `port/platform/host_config.c`
 
 **Setting.** `[video] framerate`: `"original"`, `"uncapped"` (the default)
 or a number 30..1000 (`ico_video_parse_framerate`; docs/port/DISPLAY.md,
-CONFIG.md). The Original preset is always `"original"`
-(`ico_video_framerate()`); in Enhanced anything else sets
-`RdSettings.interpolate`, which rd honours only in Enhanced
-(`rd_InterpolationActive`). `"original"` is the R7a path unchanged:
+CONFIG.md). Since package F2 the setting applies in both presets
+(`ico_video_framerate()`); anything other than `"original"` sets
+`RdSettings.interpolate`, which `rd_InterpolationActive` honours in either
+preset (before F2: Enhanced only, and the Original preset was always
+`"original"`). In the Original preset each tick's picture is the
+PS2-exact one; the presents between ticks blend the keyed draws as in
+Enhanced. `"original"` is the R7a path unchanged:
 `rd_EndFrame` replays and presents the frame once and the window sleeps to
 the next vsync deadline, so the picture is held for the tick's two
 refreshes (PAL frame step 2).

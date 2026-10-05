@@ -16,9 +16,12 @@
 #   3. Any tracked file > 256 KiB (C sources under ico2/ and sce/: 8 MiB),
 #      except the named text files below.
 #   4. ELF magic (\x7fELF) sniff regardless of extension.
-#   5. Raw byte-array initializers in tracked C.
+#   5. Raw byte-array initializers in tracked C (D_<VMA> names), and any
+#      large all-integer-literal array initializer in ico2/ and sce/ whatever
+#      its name (tools/check_int_arrays.py, with a per-table reviewed
+#      exemption list).
 #   6. Any file whose path matches our gitignore patterns but is somehow
-#      tracked anyway.
+#      tracked anyway (checked against the patterns, not the index).
 #
 # Exit non-zero on any hit.
 # =============================================================================
@@ -38,7 +41,9 @@ bad=0
 note() { echo "check_no_rom: $*" >&2; bad=1; }
 
 # --- 1. extension blocklist ---
-ext_block_re='\.(bin|iso|cue|chd|mdf|mds|nrg|elf|irx|aifc|aiff|wav|adp|vag|vab|mid|seq|tm2|rgba16|rgba32|sym\.bak)$'
+# .pss/.ipu/.m2v: the disc's movie streams and their video elementary
+# streams; .img/.dat: generic disc and memory-card image dumps.
+ext_block_re='\.(bin|iso|cue|chd|mdf|mds|nrg|elf|irx|img|dat|pss|ipu|m2v|aifc|aiff|wav|adp|vag|vab|mid|seq|tm2|rgba16|rgba32|sym\.bak)$'
 for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
     if [[ "$f" =~ $ext_block_re ]]; then
@@ -141,13 +146,44 @@ for f in "${files[@]}"; do
     fi
 done
 
-# --- 6. gitignore-tracked anomalies ---
-while IFS= read -r f; do
+# --- 5b. large integer-array initializers, any name ---
+# The D_<VMA> rule above only sees byte arrays named after their address. A
+# table of 64 or more integer literals, of any integer type and any name, is
+# the same shape (bytes or words copied out of the binary); the C the
+# decompilation writes uses typed forms. tools/check_int_arrays.py finds them
+# and keeps the reviewed exemptions per (file, array), each with its reason
+# (docs/LEGAL.md, "Exemptions from the IP-safety scan").
+int_scan=()
+for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
-    if git check-ignore -q "$f" 2>/dev/null; then
-        note "tracked file matches .gitignore: $f"
+    [[ ! -f "$f" ]] && continue
+    case "$f" in
+        ico2/*.c|ico2/*.h|ico2/*.inc|sce/*.c|sce/*.h|sce/*.inc) int_scan+=("$f") ;;
+    esac
+done
+if (( ${#int_scan[@]} )); then
+    py="$(command -v python3 || true)"
+    if [[ -z "$py" ]]; then
+        note "rule 5b needs python3 (tools/check_int_arrays.py)"
+    elif ! hits="$("$py" "$(dirname "${BASH_SOURCE[0]}")/check_int_arrays.py" "${int_scan[@]}")"; then
+        note "large integer-array initializer in tracked source:"
+        printf "%s\n" "$hits" | head -20 >&2
+        note "  a table of integer literals is the shape of copied bytes; write it"
+        note "  typed, or review it and add an exemption with its reason to"
+        note "  tools/check_int_arrays.py. See docs/LEGAL.md."
     fi
-done < <(printf "%s\n" "${files[@]}")
+fi
+
+# --- 6. gitignore-tracked anomalies ---
+# `git check-ignore` without --no-index answers "not ignored" for any path
+# that is in the index, so it can never flag a tracked file. --no-index
+# tests the path against the patterns alone. Batched through --stdin.
+mapfile -t ignored < <(printf "%s\n" "${files[@]}" | sed '/^$/d' |
+    git check-ignore --no-index --stdin 2>/dev/null || true)
+for f in "${ignored[@]}"; do
+    [[ -z "$f" ]] && continue
+    note "tracked file matches .gitignore: $f"
+done
 
 if (( bad )); then
     echo "" >&2

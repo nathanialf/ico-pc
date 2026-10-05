@@ -8,7 +8,7 @@ by unit tests (`port/platform/test/`).
 
 | file | what |
 | --- | --- |
-| `port/platform/fiber.c`, `fiber.h` | context switch: minicoro, 256 KB stacks, guard page |
+| `port/platform/fiber.c`, `fiber.h` | context switch: minicoro, 256 KB stacks, guard page; driver work runs on the host stack (`ico_sched_call_on_host`, "Fiber stacks and host calls") |
 | `port/platform/sched.c`, `sched.h` | the EE thread and semaphore model |
 | `port/platform/kernel_host.c`, `kernel_host.h` | the `eekernel.h` calls, the INTC table |
 | `port/platform/host_loop.c`, `host_loop.h` | `ico_host_init`, `ico_host_step` |
@@ -209,6 +209,62 @@ The scheduler therefore runs a start hook at the top of every fiber;
 re-applies the mode already in force; on Windows fibers it establishes it.
 No fiber changes the mode afterwards.
 
+### FP mode across host calls (package F2)
+
+The mode set at boot and at each fiber's start is not enough on its own:
+the fiber switch does not save MXCSR or FPCR, and host code that runs on
+the same OS thread (SDL, the audio push, the GPU driver) may change it. So:
+
+- `ico_host_step` re-asserts `ico_fpenv_sim_enter()` at its top and again
+  after `ico_audio_host_vsync` (an SDL call) before the threads run.
+- `main_host.c` puts the host mode (`ico_fpenv_host_enter`: round to
+  nearest, denormals kept) around the window work after each step: event
+  pump, the Settings apply, `rd_Present` and the pacing. The trace poll
+  stays in the simulation's mode, as before, so the trace's printed floats
+  are unchanged.
+- `ico_sched_call_on_host` (below) runs its function in the host mode and
+  puts the simulation's mode back before the fiber resumes.
+
+Test: `sched` case 12 (`ico_sched_call_on_host`): inside the call the mode
+is the host's, after it the fiber reads the simulation's mode again.
+
+### Fiber stacks and host calls (package F2)
+
+Fiber stacks stay 256 KB (`ICO_FIBER_STACK_SIZE`, guard page below). The
+game's own code fits; the GPU driver may not: `rd_EndFrame` (called from
+`dl_Swap`, `ico2/seki/src/DisplayList.c`) replayed and presented the frame
+on the game thread's fiber in the Original presentation, and pipeline
+creation inside a driver can recurse deeply. Two options were weighed: an
+8 MB reserve for the threads that draw, or moving the driver work onto the
+host stack. The second is taken:
+
+- `ico_sched_call_on_host(fn, arg)` (sched.h): from a fiber, the thread
+  records the call and yields; `ico_sched_run`, on the host thread's own
+  stack, makes the call (host FP mode) and resumes the same thread at
+  once, so no other thread runs in between and the game sees a plain
+  synchronous call. From the host context it calls `fn` directly.
+- rd takes the hook (`rd_SetHostCall`, rd.h); the window build installs
+  `ico_sched_call_on_host` after `rd_Init`. Through it go `rd_EndFrame`'s
+  replay and present, `rd_BeginFrame`'s target re-creation after a Settings
+  change, and the FMV picture's present (`rd_video.c`). Tests and tools
+  leave the hook unset and call directly.
+- The replay is therefore not deferred: it still happens at `dl_Swap`, with
+  the game state of that moment, exactly as before; only the stack (and the
+  FP mode) changed. Deferring it to after `ico_sched_run` was rejected
+  because the frame's textures can change between `dl_Swap` and the end of
+  the step.
+- `rd_PrecreatePipelines` (window build, after `rd_Init`) creates the whole
+  reachable pipeline set at start-up and logs the count and the time, so no
+  frame waits on a pipeline compile.
+
+### Device loss
+
+A removed or reset GPU device (`DXGI_ERROR_DEVICE_REMOVED`/`RESET`/`HUNG`,
+`VK_ERROR_DEVICE_LOST`) is logged once with the removal reason and marks
+the device lost (`rhi_DeviceLost`); the next `ico_window_pump` shows one
+message box and returns 0, and the program exits through its normal path
+instead of leaving a frozen window (port/rhi/d3d12/README.md).
+
 ## Heap
 
 `ios.c` used to carve the heap from EE physical addresses:
@@ -287,7 +343,8 @@ not depend on that option.
 
 | test | checks | runs on |
 | --- | --- | --- |
-| `sched` | preemption on wakeup, FIFO within a priority, a preempted thread keeps its place, wakeup counts and `CancelWakeupThread`, semaphore FIFO release and counts, `DeleteSema`, exit / restart / terminate / delete, the 0x22 finished-process convention, `ChangeThreadPriority` and `RotateThreadReadyQueue`, `iWakeupThread` from the vblank handler, busy waits, suspend/resume, the boot thread | every Linux preset |
+| `sched` | preemption on wakeup, FIFO within a priority, a preempted thread keeps its place, wakeup counts and `CancelWakeupThread`, semaphore FIFO release and counts, `DeleteSema`, exit / restart / terminate / delete, the 0x22 finished-process convention, `ChangeThreadPriority` and `RotateThreadReadyQueue`, `iWakeupThread` from the vblank handler, busy waits, suspend/resume, the boot thread, `ico_sched_call_on_host` (host stack, FP mode, same thread after) | every Linux preset |
+| `host_fs` | `host_fs.h` on a UTF-8 path with Latin, Greek and Japanese characters: mkdir, write, rename over, kind and size, remove, rmdir | every Linux preset |
 | `fiber` | 64 fibers switched round-robin with stack contents checked, 200 KB of stack use, destroying suspended fibers, FP mode inside a fiber; under `asan`, the sanitizer's fiber annotations | every Linux preset |
 | `fiber_guard` | a stack overflow in a fiber faults on the guard page | Linux |
 | `arena` | allocated once, aligned, zero filled, EE address mapping, heap statistics | every Linux preset |

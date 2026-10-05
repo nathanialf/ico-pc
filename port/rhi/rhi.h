@@ -443,6 +443,11 @@ void rhi_Shutdown(void);
 RhiBackendKind rhi_Backend(void);
 const RhiLimits *rhi_Limits(void);
 const char *rhi_AdapterName(void);
+/* True once the device is gone (Vulkan VK_ERROR_DEVICE_LOST; D3D12
+ * DXGI_ERROR_DEVICE_REMOVED, _RESET or _HUNG).  The backend logged the
+ * reason once; every later call is a no-op or fails, and the caller ends
+ * the session (port/platform/window_host.c). */
+bool rhi_DeviceLost(void);
 
 /* Swapchain.  Resize is driven by rd_present from SDL window events. */
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync);

@@ -682,6 +682,11 @@ static void testPresent(void)
 {
     RdSettings s = *rd_GetSettings();
     CHECK(!rd_InterpolationActive() && !rd_Present(0.5f), "Original: rd_Present does nothing");
+    /* F2: the Original preset interpolates too when asked */
+    s.interpolate = 1;
+    rd_SetSettings(&s);
+    recordSprites(0);
+    CHECK(rd_InterpolationActive(), "Original with interpolate");
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f; /* the GS size: no target is recreated */
     s.interpolate = 0;

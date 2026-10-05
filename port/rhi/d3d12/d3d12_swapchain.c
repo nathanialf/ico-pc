@@ -152,10 +152,16 @@ void rhi_Present(void)
     if (!g_dx.swapchain || !g_dx.swapAcquired) {
         return;
     }
+    if (g_dx.deviceLost) {
+        g_dx.swapAcquired = false;
+        return;
+    }
     UINT flags = (!g_dx.vsync && g_dx.tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0u;
     HRESULT hr = IDXGISwapChain3_Present(g_dx.swapchain, g_dx.vsync ? 1u : 0u, flags);
     g_dx.swapAcquired = false;
     if (FAILED(hr)) {
+        /* DXGI_ERROR_DEVICE_REMOVED / _RESET / _HUNG mark the device lost
+         * here (dx_Check); the window loop ends the session */
         DX_CHECK(hr);
         return;
     }

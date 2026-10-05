@@ -18,7 +18,7 @@
  *            same DISPLAY bytes; the dump is left for rd_replay_tool
  *   pipes    every pipeline created is in the enumerated reachable set,
  *            whose screen and post part has fewer than 100 keys (all of it,
- *            with the VU programs of wave 3, fewer than RD_PIPELINE_CACHE_MAX)
+ *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
@@ -652,8 +652,9 @@ static void testPipelines(void)
     const uint32_t c = rd__PipelineCount();
     printf("  pipelines: %u created, %u reachable (%u screen and post)\n", c, n, ns);
     CHECK(ns < 100, "reachable screen and post pipelines %u >= 100", ns);
-    CHECK(n < RD_PIPELINE_CACHE_MAX, "reachable pipelines %u >= %d (wave 3: with the VU programs)",
-          n, RD_PIPELINE_CACHE_MAX);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX,
+          "reachable pipelines %u >= %d (wave 3: with the VU programs)", n,
+          RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < c; i++) {
         const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
         int found = 0;

@@ -56,6 +56,11 @@ void ico_host_init(void)
 
 void ico_host_step(void)
 {
+    /* the simulation's FP mode again: the host's work between steps (the
+       window, SDL, the GPU driver) runs in the host mode and may leave
+       anything in MXCSR or FPCR, and the fiber switch does not save it
+       (fiber.h; docs/port/PLATFORM.md "FP mode") */
+    ico_fpenv_sim_enter();
     ico_sched_vsync_advance();
     vsyncs++;
     time_us += ico_host_vsync_hz() == 50 ? 20000u : 16683u; /* NTSC: 59.94 Hz */
@@ -66,6 +71,8 @@ void ico_host_step(void)
        sound thread the vsync woke ticks in ico_sched_run below, and its
        writes take effect from the next block (docs/port/AUDIO.md) */
     ico_audio_host_vsync(ico_host_vsync_hz());
+    /* the audio push is an SDL call */
+    ico_fpenv_sim_enter();
     ico_sched_run();
     /* the port's achievements (docs/port/ACHIEVEMENTS.md): once per new Main
        tick, after the threads have run; reads game state, writes none */

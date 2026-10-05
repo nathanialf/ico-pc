@@ -15,7 +15,7 @@ uint64_t dx_Signal(void)
 
 void dx_WaitFence(uint64_t value)
 {
-    if (value == 0 || !g_dx.fence) {
+    if (value == 0 || !g_dx.fence || g_dx.deviceLost) {
         return;
     }
     if (ID3D12Fence_GetCompletedValue(g_dx.fence) >= value) {
@@ -194,7 +194,9 @@ void rhi_EndCommands(RhiCommandList cl)
         DX_LOG("rhi_EndCommands inside a render pass");
         c->inPass = false;
     }
-    DX_CHECK(ID3D12GraphicsCommandList_Close(c->cl));
+    /* a list whose Close failed is invalid: executing it is an error of
+     * its own (and removes the device on some drivers); rhi_Submit skips it */
+    c->closeFailed = !DX_CHECK(ID3D12GraphicsCommandList_Close(c->cl));
     c->recording = false;
 }
 
@@ -208,8 +210,14 @@ void rhi_Submit(RhiCommandList cl)
         rhi_EndCommands(cl);
     }
     c->submitted = true;
-    ID3D12CommandList *lists[1] = {(ID3D12CommandList *)c->cl};
-    ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
+    if (c->closeFailed || g_dx.deviceLost) {
+        if (c->closeFailed && !g_dx.deviceLost) {
+            DX_LOG("rhi_Submit: the list did not close; its commands are dropped");
+        }
+    } else {
+        ID3D12CommandList *lists[1] = {(ID3D12CommandList *)c->cl};
+        ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
+    }
     dx_CurFrame()->fenceValue = dx_Signal();
     dx_DrainMessages();
 }

@@ -13,16 +13,52 @@
 
 DxState g_dx;
 
+static bool dx_IsLossCode(HRESULT hr)
+{
+    return hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET ||
+           hr == DXGI_ERROR_DEVICE_HUNG || hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+}
+
+static const char *dx_LossName(HRESULT hr)
+{
+    switch (hr) {
+    case DXGI_ERROR_DEVICE_REMOVED:
+        return "DXGI_ERROR_DEVICE_REMOVED";
+    case DXGI_ERROR_DEVICE_RESET:
+        return "DXGI_ERROR_DEVICE_RESET";
+    case DXGI_ERROR_DEVICE_HUNG:
+        return "DXGI_ERROR_DEVICE_HUNG";
+    case DXGI_ERROR_DRIVER_INTERNAL_ERROR:
+        return "DXGI_ERROR_DRIVER_INTERNAL_ERROR";
+    case S_OK:
+        return "S_OK";
+    default:
+        return "another HRESULT";
+    }
+}
+
 bool dx_Check(HRESULT hr, const char *what, const char *file, int line)
 {
     if (SUCCEEDED(hr)) {
         return true;
     }
+    if (g_dx.deviceLost) {
+        /* the reason was logged once; the calls that keep failing after it
+         * are counted, not logged (one line per call per frame otherwise) */
+        g_dx.lostFailures++;
+        return false;
+    }
     fprintf(stderr, "rhi_d3d12: %s failed (HRESULT 0x%08lx) at %s:%d\n", what, (unsigned long)hr,
             file, line);
-    if (hr == DXGI_ERROR_DEVICE_REMOVED && g_dx.device) {
-        fprintf(stderr, "rhi_d3d12: device removed, reason 0x%08lx\n",
-                (unsigned long)ID3D12Device_GetDeviceRemovedReason(g_dx.device));
+    /* removal shows as the call's own code (Present, Close, Signal) or as
+     * another failure on a device whose removed reason is set */
+    HRESULT reason = g_dx.device ? ID3D12Device_GetDeviceRemovedReason(g_dx.device) : S_OK;
+    if (dx_IsLossCode(hr) || reason != S_OK) {
+        g_dx.deviceLost = true;
+        fprintf(stderr,
+                "rhi_d3d12: the device was lost (%s); removed reason 0x%08lx (%s). Rendering "
+                "stops; the session ends.\n",
+                dx_LossName(hr), (unsigned long)reason, dx_LossName(reason));
     }
     dx_DrainMessages();
     return false;
@@ -468,6 +504,11 @@ const RhiLimits *rhi_Limits(void)
 const char *rhi_AdapterName(void)
 {
     return g_dx.adapterName;
+}
+
+bool rhi_DeviceLost(void)
+{
+    return g_dx.deviceLost;
 }
 
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */

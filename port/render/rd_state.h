@@ -231,8 +231,11 @@ typedef struct RdDrawState {
 /* Pipeline key: what actually selects a GPU pipeline.  Everything in
  * RdDrawState that is not a pipeline-level property (aref, blendFix,
  * sampler settings) goes in a uniform or sampler object instead.  Fewer
- * than 100 distinct keys are expected; rd_core asserts if the cache grows
- * past RD_PIPELINE_CACHE_MAX. */
+ * than 100 distinct keys are expected.  The tests hold the enumerated
+ * reachable set under RD_PIPELINE_REACHABLE_MAX (rd__EnumerateReachable);
+ * the runtime cache has four times that room, and a key past it (or one
+ * whose creation failed) is logged once and drawn as nothing, never an
+ * abort (rd_pipeline.c, rd__GetPipeline). */
 typedef struct RdPipelineKey {
     uint8_t program; /* RdProg (rd.h) */
     uint8_t blend;   /* RdBlend, or RD_BLEND_COUNT when abe == 0 */
@@ -251,7 +254,11 @@ typedef struct RdPipelineKey {
     uint8_t _pad[3];
 } RdPipelineKey;
 
-#define RD_PIPELINE_CACHE_MAX 256
+#define RD_PIPELINE_REACHABLE_MAX 256
+#define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
+/* keys whose rhi_CreatePipeline failed, remembered so they are not retried
+ * (and logged) on every draw */
+#define RD_PIPELINE_FAIL_MAX 64
 
 /* GS register numbers the game writes through gif_SetGsReg, for the
  * transitional rd_gs_shim.c and for assertions. */

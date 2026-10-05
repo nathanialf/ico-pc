@@ -15,7 +15,9 @@
  * executable's folder (host_config.h describes ico-pc.ini):
  *
  *   logs/ico-pc.log          stdout and stderr, rewritten each run
- *   logs/trace-<time>.txt    the trace (trace_host.h); ini trace=0 or PATH
+ *   logs/trace-<time>.txt    the trace (trace_host.h): by default in the
+ *                            headless build only; ini trace=1 or PATH turns
+ *                            it on in the window build, trace=0 off
  *   game data                the extracted archive ico.o2r (port/data/
  *                            archive.h) in the per-user folder, else beside
  *                            the executable. Without one (the first run) the
@@ -35,8 +37,9 @@
  *                            checked against the SCES-50760 image's (ini
  *                            verify=0 skips it); the extractor always
  *                            verifies (docs/port/DATA.md)
- *   pad script               ini pad_script=, else pad-script.txt beside the
- *                            executable if present, else no controller
+ *   pad script               ini pad_script= ([dev] pad_script); the
+ *                            headless build also takes pad-script.txt beside
+ *                            the executable if present; else the live pad
  *   ticks                    ini ticks=N exits after N Main ticks
  *   watchdog                 ini watchdog=S (default 30): the run is stopped
  *                            and reported when no Main tick came S seconds
@@ -55,6 +58,7 @@
  * message box on Windows, and exits 1.
  */
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,16 +67,19 @@
 #include "cdvd_host.h"
 #include "diag_host.h"
 #include "extract.h"
+#include "fpenv.h"
 #include "host_config.h"
 #include "host_loop.h"
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
+
 #ifndef ICO_HEADLESS
+
 #include <SDL3/SDL.h>
 #include "window_host.h"
-#endif
 
+#endif
 /* The PAL disc image's SHA-1 (docs/port/DATA.md, "Facts about the PAL disc
    relied on"). */
 #define ICO_ISO_SHA1 ICO_DISC_ISO_SHA1
@@ -109,20 +116,56 @@ typedef struct Args {
 
 static char log_path[ICO_PATH_MAX];
 
+/* The NULL-or-path log_path for ico_host_fatal and ico_diag_init: NULL when
+   no log file was opened (--console, or logs/ not writable) */
+static const char *log_file(void)
+{
+    return log_path[0] != '\0' ? log_path : NULL;
+}
+
+/* parse_args' output. A Windows GUI program started from Explorer has no
+   console (ico_host_attach_console returns 0): the text is collected and
+   shown in a message box instead of going nowhere. */
+static int have_console = 1;
+
+static char args_text[2048];
+
+static void say(FILE *out, const char *fmt, ...)
+#ifdef __GNUC__
+    __attribute__((format(printf, 2, 3)))
+#endif
+    ;
+
+static void say(FILE *out, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    if (have_console) {
+        vfprintf(out, fmt, ap);
+    } else {
+        size_t n = strlen(args_text);
+
+        vsnprintf(args_text + n, sizeof(args_text) - n, fmt, ap);
+    }
+    va_end(ap);
+}
+
 static void usage(FILE *out, const char *prog)
 {
-    fprintf(out,
-            "usage: %s [options]   (none needed: see ico-pc.ini)\n"
-            "  --iso PATH         the SCES-50760 disc image\n"
-            "  --pad-script FILE  plug a scripted DualShock into controller port 1;\n"
-            "                     lines: <tick> <buttons-hex> [lx ly rx ry]\n"
-            "  --trace FILE|none  the per-Main-tick trace (default logs/trace-<time>.txt)\n"
-            "  --ticks N          exit after N Main ticks\n"
-            "  --vsync-rate X     accepted and ignored (pacing comes later)\n"
-            "  --no-verify        skip the disc image's SHA-1 check\n"
-            "  --console          log to the console, not logs/ico-pc.log\n"
-            "  --help             this text\n",
-            prog);
+    say(out,
+        "usage: %s [options]   (none needed: see ico-pc.ini)\n"
+        "  --iso PATH         the SCES-50760 disc image\n"
+        "  --pad-script FILE  plug a scripted DualShock into controller port 1;\n"
+        "                     lines: <tick> <buttons-hex> [lx ly rx ry]\n"
+        "  --trace FILE|none  the per-Main-tick trace (logs/trace-<time>.txt by\n"
+        "                     default in the headless build; FILE turns it on)\n"
+        "  --ticks N          exit after N Main ticks\n"
+        "  --vsync-rate X     accepted and ignored (pacing comes later)\n"
+        "  --no-verify        skip the disc image's SHA-1 check\n"
+        "  --console          log to the console, not logs/ico-pc.log\n"
+        "  --help             this text\n",
+        prog);
 }
 
 static int parse_count(const char *s, unsigned long *out)
@@ -221,24 +264,24 @@ static int parse_args(int argc, char **argv, Args *a)
             a->trace = v;
         } else if ((r = option(argc, argv, &i, "--ticks", &v)) != 0) {
             if (r > 0 && parse_count(v, &n) != 0) {
-                fprintf(stderr, "%s: --ticks wants a count, not '%s'\n", prog, v);
+                say(stderr, "%s: --ticks wants a count, not '%s'\n", prog, v);
                 usage(stderr, prog);
                 return 2;
             }
             a->ticks = v;
         } else if ((r = option(argc, argv, &i, "--vsync-rate", &v)) != 0) {
             if (r > 0 && parse_rate(v) != 0) {
-                fprintf(stderr, "%s: --vsync-rate wants a positive number, not '%s'\n", prog, v);
+                say(stderr, "%s: --vsync-rate wants a positive number, not '%s'\n", prog, v);
                 usage(stderr, prog);
                 return 2;
             }
         } else {
-            fprintf(stderr, "%s: unknown option '%s'\n", prog, name);
+            say(stderr, "%s: unknown option '%s'\n", prog, name);
             usage(stderr, prog);
             return 2;
         }
         if (r < 0) {
-            fprintf(stderr, "%s: %s needs a value\n", prog, name);
+            say(stderr, "%s: %s needs a value\n", prog, name);
             usage(stderr, prog);
             return 2;
         }
@@ -357,8 +400,8 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         *picked = 1;
         return;
     }
-    ico_host_fatal(log_path, "No ICO disc image was found or chosen. Put Ico_PAL.iso next to "
-                             "ico_pc, or set iso=<path> in ico-pc.ini.");
+    ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso next to "
+                               "ico_pc, or set iso=<path> in ico-pc.ini.");
 }
 
 static void verify_iso(const char *iso)
@@ -370,12 +413,12 @@ static void verify_iso(const char *iso)
 
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_sha1_file(iso, hex, &bytes) != 0) {
-        ico_host_fatal(log_path, "Cannot read the disc image %s.", iso);
+        ico_host_fatal(log_file(), "Cannot read the disc image %s.", iso);
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, bytes, secs);
     if (strcmp(hex, ICO_ISO_SHA1) != 0) {
-        ico_host_fatal(log_path,
+        ico_host_fatal(log_file(),
                        "%s is not the expected ICO disc image (PAL, SCES-50760).\n"
                        "SHA-1 %s, expected %s.",
                        iso, hex, ICO_ISO_SHA1);
@@ -605,7 +648,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
             ICO_ARCHIVE_NAME, pref);
     find_iso(a, ini, exe_dir, iso, &picked);
     if (ico_make_dir(pref) != 0) {
-        ico_host_fatal(log_path, "Cannot create the folder %s for the game data.", pref);
+        ico_host_fatal(log_file(), "Cannot create the folder %s for the game data.", pref);
     }
     memset(&prog, 0, sizeof(prog));
 #ifndef ICO_HEADLESS
@@ -621,7 +664,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         exit(0);
     }
     if (r != 0) {
-        ico_host_fatal(log_path, "Could not prepare the game data from %s into %s.\n%s", iso,
+        ico_host_fatal(log_file(), "Could not prepare the game data from %s into %s.\n%s", iso,
                        cand[0], why);
     }
     fprintf(stderr,
@@ -647,7 +690,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         }
     }
     if (mount_archive(cand[0], why, sizeof(why)) != 0) {
-        ico_host_fatal(log_path, "The game data just written to %s cannot be used: %s", cand[0],
+        ico_host_fatal(log_file(), "The game data just written to %s cannot be used: %s", cand[0],
                        why);
     }
     copy_path(source, source_size, cand[0]);
@@ -671,8 +714,12 @@ int main(int argc, char **argv)
     int warned = 0;
     int r;
 
+    have_console = ico_host_attach_console();
     r = parse_args(argc, argv, &a);
     if (r != 0) {
+        if (args_text[0] != '\0') {
+            ico_host_message_box(args_text, r != 1);
+        }
         return r == 1 ? 0 : 2;
     }
 
@@ -680,14 +727,21 @@ int main(int argc, char **argv)
     ico_host_exe_dir(exe_dir, sizeof(exe_dir));
     ico_path_join(logs_dir, sizeof(logs_dir), exe_dir, "logs");
     ico_path_join(log_path, sizeof(log_path), logs_dir, "ico-pc.log");
+    if (a.console && !have_console) {
+        ico_host_message_box("--console: there is no console to log to (start ico_pc from a "
+                             "command prompt); the log goes to logs\\ico-pc.log instead",
+                             0);
+        a.console = 0;
+    }
     if (a.console) {
-        snprintf(log_path, sizeof(log_path), "(the console)");
+        log_path[0] = '\0';
     } else if (ico_make_dir(logs_dir) != 0 || ico_host_redirect_output(log_path) != 0) {
         fprintf(stderr, "ico_pc: cannot write %s; logging to the console\n", log_path);
-        snprintf(log_path, sizeof(log_path), "(none: the logs folder is not writable)");
+        log_path[0] = '\0';
     }
-    /* crash handlers and the unbuffered diagnostics writer, first thing */
-    ico_diag_init(a.console ? NULL : log_path);
+    /* crash handlers and the unbuffered diagnostics writer, first thing;
+       no log file when none was opened */
+    ico_diag_init(log_file());
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
     for (r = 1; r < argc; r++) {
@@ -720,7 +774,7 @@ int main(int argc, char **argv)
             }
         }
         if (ico_cdvd_host_mount_iso(iso) != 0) {
-            ico_host_fatal(log_path, "Cannot open the disc image %s.", iso);
+            ico_host_fatal(log_file(), "Cannot open the disc image %s.", iso);
         }
     } else {
         mount_game_data(&a, &ini, exe_dir, ini_path, iso, sizeof(iso));
@@ -731,7 +785,7 @@ int main(int argc, char **argv)
         char why[512];
 
         if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
-            ico_host_fatal(log_path, "Cannot load the game's data tables from %s.\n%s", iso, why);
+            ico_host_fatal(log_file(), "Cannot load the game's data tables from %s.\n%s", iso, why);
         }
         fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
                 (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
@@ -744,17 +798,23 @@ int main(int argc, char **argv)
     v = ico_ini_get(&ini, "pad_script");
     if (a.pad_script != NULL) {
         snprintf(path, sizeof(path), "%s", a.pad_script);
-    } else if (v != NULL) {
+    } else if (v != NULL && v[0] != '\0') {
         ico_path_join(path, sizeof(path), exe_dir, v);
     } else {
+        path[0] = '\0';
+#ifdef ICO_HEADLESS
+        /* the headless build's default; a player's window build takes a
+           script only when [dev] pad_script names one, so a stray file
+           beside the exe never replaces the live controller */
         ico_path_join(path, sizeof(path), exe_dir, "pad-script.txt");
         if (!ico_file_exists(path)) {
             path[0] = '\0';
         }
+#endif
     }
     if (path[0] != '\0') {
         if (ico_pad_script_load(path) != 0) {
-            ico_host_fatal(log_path, "Cannot use the pad script %s (details in the log).", path);
+            ico_host_fatal(log_file(), "Cannot use the pad script %s (details in the log).", path);
         }
         fprintf(stderr, "ico_pc: pad script %s, %d entries: a DualShock in port 1\n", path,
                 ico_pad_script_count());
@@ -763,13 +823,23 @@ int main(int argc, char **argv)
     }
 
     /* the trace */
+    /* on by default in the headless build; the window build writes one only
+       when asked ([dev] trace = true or a path, or --trace), so a player's
+       logs folder does not fill with a trace per run */
     v = a.trace != NULL ? a.trace : ico_ini_get(&ini, "trace");
-    if (v != NULL && (strcmp(v, "0") == 0 || strcmp(v, "none") == 0)) {
+#ifdef ICO_HEADLESS
+    const int trace_on =
+        !(v != NULL && (strcmp(v, "0") == 0 || strcmp(v, "none") == 0 || strcmp(v, "false") == 0));
+#else
+    const int trace_on = v != NULL && v[0] != '\0' && strcmp(v, "0") != 0 &&
+                         strcmp(v, "none") != 0 && strcmp(v, "false") != 0;
+#endif
+    if (!trace_on) {
         fprintf(stderr, "ico_pc: no trace\n");
     } else {
         if (a.trace != NULL) {
             snprintf(path, sizeof(path), "%s", a.trace);
-        } else if (v != NULL && strcmp(v, "1") != 0) {
+        } else if (v != NULL && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
             ico_path_join(path, sizeof(path), exe_dir, v);
         } else {
             char name[64];
@@ -789,7 +859,7 @@ int main(int argc, char **argv)
     v = a.ticks != NULL ? a.ticks : ico_ini_get(&ini, "ticks");
     if (v != NULL && v[0] != '\0') {
         if (parse_count(v, &ticks) != 0) {
-            ico_host_fatal(log_path, "ticks=%s in %s is not a count.", v, ini_path);
+            ico_host_fatal(log_file(), "ticks=%s in %s is not a count.", v, ini_path);
         }
         have_ticks = 1;
         fprintf(stderr, "ico_pc: exit after %lu Main ticks\n", ticks);
@@ -799,7 +869,7 @@ int main(int argc, char **argv)
     v = ico_ini_get(&ini, "watchdog");
     watchdog = WATCHDOG_DEFAULT_S;
     if (v != NULL && v[0] != '\0' && parse_count(v, &watchdog) != 0) {
-        ico_host_fatal(log_path, "watchdog=%s in %s is not a number of seconds.", v, ini_path);
+        ico_host_fatal(log_file(), "watchdog=%s in %s is not a number of seconds.", v, ini_path);
     }
     atexit(summary);
 
@@ -824,8 +894,8 @@ int main(int argc, char **argv)
        frame already records into rd.  512 x 512 is the PAL frame; gsb_Init
        resizes the scene targets if the game switches to 60 Hz. */
     if (ico_window_open(512, 512) != 0) {
-        ico_host_fatal(log_path, "Could not open the game window or start Vulkan.\n"
-                                 "The log names the reason; a Vulkan 1.2 driver is needed.");
+        ico_host_fatal(log_file(), "Could not open the game window or start Vulkan.\n"
+                                   "The log names the reason; a Vulkan 1.2 driver is needed.");
     }
     atexit(ico_window_close);
 #endif
@@ -840,6 +910,9 @@ int main(int argc, char **argv)
         }
         ico_trace_poll();
 #ifndef ICO_HEADLESS
+        /* the window, SDL and the renderer in the host FP mode; the next
+           ico_host_step puts the simulation's back (A8, PLATFORM.md) */
+        ico_fpenv_host_enter();
         if (!ico_window_pump()) {
             exit_reason = "the window was closed";
             return 0;

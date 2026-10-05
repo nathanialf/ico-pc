@@ -21,6 +21,7 @@
 #define rhi_Backend             RHI__NAME(Backend)
 #define rhi_Limits              RHI__NAME(Limits)
 #define rhi_AdapterName         RHI__NAME(AdapterName)
+#define rhi_DeviceLost          RHI__NAME(DeviceLost)
 #define rhi_ResizeSwapchain     RHI__NAME(ResizeSwapchain)
 #define rhi_SwapchainFormat     RHI__NAME(SwapchainFormat)
 #define rhi_AcquireBackbuffer   RHI__NAME(AcquireBackbuffer)

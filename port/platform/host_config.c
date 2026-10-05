@@ -2,10 +2,12 @@
  * port/platform/host_config.c
  *
  * The executable's folder, ico-pc.ini, SHA-1, the file dialog and the error
- * box (host_config.h). Windows needs user32 (MessageBoxA) and comdlg32
- * (GetOpenFileNameA).
+ * box (host_config.h). Windows needs user32 (MessageBoxW) and comdlg32
+ * (GetOpenFileNameW). Paths are UTF-8 throughout and reach the file system
+ * through host_fs.h's wide helpers (docs/port/DATA.md, "Paths").
  */
 #include "host_config.h"
+#include "host_fs.h"
 #include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -14,10 +16,11 @@
 #include <string.h>
 
 #ifdef ICO_HOST_SDL_PREFPATH
+
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
-#endif
 
+#endif
 #ifdef _WIN32
 
 #include <windows.h>
@@ -53,21 +56,25 @@ int ico_host_exe_dir(char *out, size_t size)
 {
     char buf[ICO_PATH_MAX];
     char *slash;
-    long n;
 
 #ifdef _WIN32
-    n = (long)GetModuleFileNameA(NULL, buf, (DWORD)sizeof(buf));
-    if (n <= 0 || n >= (long)sizeof(buf)) {
-        copy(out, size, ".");
-        return -1;
+    {
+        wchar_t wbuf[ICO_PATH_MAX];
+        DWORD wn = GetModuleFileNameW(NULL, wbuf, (DWORD)(sizeof(wbuf) / sizeof(wbuf[0])));
+
+        if (wn == 0 || wn >= sizeof(wbuf) / sizeof(wbuf[0]) ||
+            ico_narrow(wbuf, buf, sizeof(buf)) != 0) {
+            copy(out, size, ".");
+            return -1;
+        }
     }
-    buf[n] = '\0';
     slash = strrchr(buf, '\\');
     if (strrchr(buf, '/') > slash) {
         slash = strrchr(buf, '/');
     }
 #else
-    n = (long)readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    long n = (long)readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+
     if (n <= 0) {
         copy(out, size, ".");
         return -1;
@@ -118,7 +125,7 @@ void ico_path_join(char *out, size_t size, const char *dir, const char *name)
 
 int ico_file_exists(const char *path)
 {
-    FILE *f = fopen(path, "rb");
+    FILE *f = ico_fopen(path, "rb");
 
     if (f == NULL) {
         return 0;
@@ -129,15 +136,9 @@ int ico_file_exists(const char *path)
 
 int ico_make_dir(const char *path)
 {
-#ifdef _WIN32
-    if (_mkdir(path) == 0 || errno == EEXIST) {
+    if (ico_mkdir(path) == 0 || errno == EEXIST) {
         return 0;
     }
-#else
-    if (mkdir(path, 0777) == 0 || errno == EEXIST) {
-        return 0;
-    }
-#endif
     return -1;
 }
 
@@ -212,7 +213,7 @@ void ico_ini_parse(IcoIni *ini, const char *text)
 
 static char *read_text(const char *path)
 {
-    FILE *f = fopen(path, "rb");
+    FILE *f = ico_fopen(path, "rb");
     char *text = NULL;
     size_t len = 0;
     size_t cap = 0;
@@ -498,14 +499,19 @@ const char *ico_ini_get(const IcoIni *ini, const char *key)
     return NULL;
 }
 
+/* The ini rewritten into <path>.tmp, then moved over it, so a failed or
+   interrupted write leaves the old file whole. */
 int ico_ini_store(const char *path, const char *key, const char *value)
 {
     char *text = read_text(path);
     const char *p = text ? text : "";
+    char tmp[ICO_PATH_MAX + 8];
     FILE *f;
     int done = 0;
+    int ok;
 
-    f = fopen(path, "wb");
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    f = ico_fopen(tmp, "wb");
     if (f == NULL) {
         free(text);
         return -1;
@@ -536,7 +542,13 @@ int ico_ini_store(const char *path, const char *key, const char *value)
         fprintf(f, "%s=%s\r\n", key, value);
     }
     free(text);
-    return fclose(f) == 0 ? 0 : -1;
+    ok = !ferror(f);
+    ok = fclose(f) == 0 && ok;
+    if (!ok || ico_rename_replace(tmp, path) != 0) {
+        ico_remove(tmp);
+        return -1;
+    }
+    return 0;
 }
 
 /* --- SHA-1 (FIPS 180-4) -------------------------------------------------- */
@@ -653,7 +665,7 @@ int ico_sha1_file(const char *path, char hex[41], unsigned long long *bytes)
 {
     enum { CHUNK = 1 << 20 };
 
-    FILE *f = fopen(path, "rb");
+    FILE *f = ico_fopen(path, "rb");
     unsigned char *buf;
     unsigned char digest[20];
     IcoSha1 s;
@@ -696,7 +708,7 @@ static int console_fd = -1; /* the original stderr, kept for fatal errors */
 
 int ico_host_redirect_output(const char *log_path)
 {
-    FILE *probe = fopen(log_path, "w");
+    FILE *probe = ico_fopen(log_path, "w");
 
     if (probe == NULL) {
         return -1;
@@ -711,12 +723,25 @@ int ico_host_redirect_output(const char *log_path)
 #endif
     /* the probe emptied the file; both streams append, unbuffered, so their
        lines interleave in order instead of overwriting each other */
+#ifdef _WIN32
+    {
+        wchar_t *wp = ico_widen(log_path);
+        int bad = wp == NULL || _wfreopen(wp, L"a", stdout) == NULL ||
+                  _wfreopen(wp, L"a", stderr) == NULL;
+
+        free(wp);
+        if (bad) {
+            return -1;
+        }
+    }
+#else
     if (freopen(log_path, "a", stdout) == NULL) {
         return -1;
     }
     if (freopen(log_path, "a", stderr) == NULL) {
         return -1;
     }
+#endif
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     return 0;
@@ -727,25 +752,65 @@ int ico_host_redirect_output(const char *log_path)
 int ico_host_pick_iso(char *out, size_t size)
 {
 #ifdef _WIN32
-    OPENFILENAMEA ofn;
-    char path[ICO_PATH_MAX] = "";
+    OPENFILENAMEW ofn;
+    wchar_t path[ICO_PATH_MAX] = L"";
+    char utf8[ICO_PATH_MAX];
 
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
-    ofn.lpstrFilter = "ICO disc image (*.iso)\0*.iso\0All files\0*.*\0";
+    ofn.lpstrFilter = L"ICO disc image (*.iso)\0*.iso\0All files\0*.*\0";
     ofn.lpstrFile = path;
-    ofn.nMaxFile = (DWORD)sizeof(path);
-    ofn.lpstrTitle = "Choose your ICO (PAL, SCES-50760) disc image";
+    ofn.nMaxFile = (DWORD)(sizeof(path) / sizeof(path[0]));
+    ofn.lpstrTitle = L"Choose your ICO (PAL, SCES-50760) disc image";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) {
+    if (!GetOpenFileNameW(&ofn) || ico_narrow(path, utf8, sizeof(utf8)) != 0) {
         return -1;
     }
-    copy(out, size, path);
+    copy(out, size, utf8);
     return 0;
 #else
     (void)out;
     (void)size;
     return -1;
+#endif
+}
+
+int ico_host_attach_console(void)
+{
+#ifdef _WIN32
+    HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+
+    if (err != NULL && err != INVALID_HANDLE_VALUE) {
+        return 1; /* a console program, or redirected by the parent */
+    }
+    if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+        return 0;
+    }
+    if (freopen("CONOUT$", "w", stdout) == NULL || freopen("CONOUT$", "w", stderr) == NULL) {
+        return 0;
+    }
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    return 1;
+#else
+    return 1;
+#endif
+}
+
+void ico_host_message_box(const char *text, int error)
+{
+#ifdef _WIN32
+    wchar_t *w = ico_widen(text);
+
+    if (w != NULL) {
+        MessageBoxW(NULL, w, L"ICO PC", MB_OK | (error ? MB_ICONERROR : MB_ICONINFORMATION));
+        free(w);
+    } else {
+        MessageBoxA(NULL, text, "ICO PC", MB_OK | (error ? MB_ICONERROR : MB_ICONINFORMATION));
+    }
+#else
+    (void)error;
+    fprintf(stderr, "%s\n", text);
 #endif
 }
 
@@ -765,7 +830,7 @@ void ico_host_fatal(const char *log_path, const char *fmt, ...)
         char box[3072];
 
         snprintf(box, sizeof(box), "%s\n\nLog: %s", msg, log_path ? log_path : "(none)");
-        MessageBoxA(NULL, box, "ICO PC", MB_OK | MB_ICONERROR);
+        ico_host_message_box(box, 1);
     }
 #else
     if (console_fd >= 0) {
@@ -1468,7 +1533,7 @@ int ico_toml_save(const IcoToml *t, const char *path)
         return -1;
     }
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    f = fopen(tmp, "wb");
+    f = ico_fopen(tmp, "wb");
     if (f == NULL) {
         free(text);
         return -1;
@@ -1479,14 +1544,10 @@ int ico_toml_save(const IcoToml *t, const char *path)
     ok = fclose(f) == 0 && ok;
     free(text);
     if (ok) {
-#ifdef _WIN32
-        ok = MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-        ok = rename(tmp, path) == 0;
-#endif
+        ok = ico_rename_replace(tmp, path) == 0;
     }
     if (!ok) {
-        remove(tmp);
+        ico_remove(tmp);
         return -1;
     }
     return 0;

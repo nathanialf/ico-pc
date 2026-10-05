@@ -9,13 +9,14 @@ the Settings menu changes the same values while the game runs.
 **Original** (the default) shows the game as the PlayStation 2 showed it:
 the 512-line picture, halved to 256 lines and shown with every line twice,
 in a 4:3 frame, textures filtered exactly as the game asked. Nothing below
-except `fullscreen` and `vsync` changes it. In a window that is not 4:3 the
+except `fullscreen`, `vsync` and `framerate` changes it (`framerate` only
+adds blended pictures between the game's updates; each update's picture
+stays the PS2's). In a window that is not 4:3 the
 picture gets black bars on the sides (or top and bottom).
 
 **Enhanced** turns on the options below. Each one is separate: Enhanced with
 `resolution = "1x"`, `aspect = "4:3"`, `texture_filter = "original"`,
-`full_height = false` and `framerate = "original"` looks exactly like
-Original.
+`full_height = false` looks exactly like Original.
 
 The game itself (what happens, where things are, when the shadows reach
 Yorda) is the same in both presets and with every option: the options only
@@ -44,7 +45,7 @@ framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
 | `texture_filter` | (Enhanced) `"trilinear"` gives textures smaller versions for distant surfaces, so the ground and walls do not shimmer; `"anisotropic"` also keeps them sharp at grazing angles. Textures the game draws unfiltered (pixel-sharp) stay that way. Fences and leaves with see-through parts keep their thickness in the distance. |
 | `full_height` | (Enhanced) Keep all 512 lines of the scene instead of halving them, so the picture is not line-doubled. |
-| `framerate` | (Enhanced) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
+| `framerate` | (Both presets) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
 
 ## Smooth motion (`framerate`)
 
@@ -61,6 +62,11 @@ menu sparkle, menus and subtitles, the glow effect's trails, and faces
 that change shape. After a camera cut, a stage change or a fade to black
 the next picture is shown as it is, not blended from the one before. The
 motion-blur trail keeps the same length at any frame rate.
+
+This applies to both presets: with Original, each of the game's updates is
+still drawn exactly as on the PS2 and only the pictures in between are
+blended. `framerate = "original"` keeps one picture per update, the PS2's
+cadence, for either preset.
 
 On a slow computer (or a software renderer) the game draws one picture per
 update, as with `"original"`, rather than slowing the game down.

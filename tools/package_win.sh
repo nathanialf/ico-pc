@@ -91,6 +91,12 @@ for a in x64; do
     # cmd.exe runs it either way); the package gets CRLF, what Notepad and
     # cmd.exe expect of a batch file
     sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
+    # licences: the program's (LICENSE, MIT) and every third-party
+    # component's notice (NOTICES.txt, tools/gen_notices.py from
+    # tools/notices/manifest.json; docs/port/THIRD_PARTY.md)
+    cp "$wt/LICENSE" "$d/LICENSE.txt"
+    run "$root/.venv/bin/python" "$wt/tools/gen_notices.py" --platform windows \
+        --root "$wt" --out "$d/NOTICES.txt"
     # no pad-script.txt: this is a playable build; the scripted pad is a
     # developer tool (port/input/pad-boot.txt) and would play the game by itself
     rm -f "$d/pad-script.txt"
@@ -112,7 +118,8 @@ iso=${iso[$a]}
 # report of where it is stuck to logs\\ico-pc.log and stops. 0 turns it off.
 watchdog=30
 
-# The trace goes to logs/trace-<date>-<time>.txt. Port settings (display,
+# trace=1 writes a developer trace to logs/trace-<date>-<time>.txt (off by
+# default in this build). Port settings (display,
 # input bindings, gameplay options) live in config.toml in the pref folder;
 # the in-game Settings menu edits them.
 INI
@@ -134,7 +141,7 @@ or Intel driver on Windows 10/11 has it).
 ## Run it
 
 1. Unzip anywhere. There is one folder, `x64`, with the exe, `.map`
-   file, `SDL3.dll` and `ico-pc.ini`. Keep its files together.
+   file, `SDL3.dll`, `ico-pc.ini` and the licence files. Keep its files together.
 2. Double-click `x64\ico_pc_x64.exe`. The first run opens a file dialog
    for the ISO (or set `iso=` in `ico-pc.ini`, or put `Ico_PAL.iso` next to
    the exe), shows a small progress window while it extracts, then opens
@@ -178,11 +185,13 @@ not a texture yet; each listed once). Then, as before:
 | `SDL3.dll` | the window and input library (SDL 3, zlib licence) |
 | `ico_pc_x64.map` | link maps for turning crash addresses into function names |
 | `ico-pc.ini` | `iso=` (disc image path), `watchdog=30`; no `ticks=`, so it runs until you close it |
+| `LICENSE.txt` | the port's licence (MIT) |
+| `NOTICES.txt` | the licences of the third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype, the Arimo font, minicoro, newlib, the MinGW-w64 runtime) |
 | `tools\rhi_d3d12_test.exe` | optional: the Direct3D 12 backend's own tests (below) |
 | `tools\rd_replay_tool.exe`, `tools\compare_backends.cmd`, `tools\compare_png.ps1` | optional: render frame dumps on Vulkan and D3D12 and compare them (below) |
 | `tools\SDL3.dll` | a copy for the two `.exe` files in `tools\` |
 | `logs\ico-pc.log` | written by each run (replaced on the next run) |
-| `logs\trace-*.txt` | one line per game tick (a developer record) |
+| `logs\trace-*.txt` | only with `trace=1` in `ico-pc.ini`: one line per game tick (a developer record) |
 
 ## Backend checks (optional, `x64\tools\`)
 
