@@ -334,8 +334,15 @@ static void _getFinalMatrix(int id)
     char *elem = skelMotion + id * 32;
     /* Sub15C nodeRotElem and nodeLimit, reached from the root block (the ROM adds 160 first) */
     char *geo = (char *)GOBJ_SUB(skelGObj) + 0xA0;
-    MotIk *ik = *(MotIk **)(geo + 0x76C) + id;
+    MotIk *ik = ICO_RAW(MotIk *, geo, 0x76C, GOBJ_SUB(skelGObj)->nodeRotElem) + id;
+#ifdef ICO_HOST
+    /* the host's nodeLimit holds the one-based row of motionLimitDef (motionOrientManager.c) */
+    MotLimAng *lim = GOBJ_SUB(skelGObj)->nodeLimit[id] == 0
+                         ? 0
+                         : (MotLimAng *)&motionLimitDef[GOBJ_SUB(skelGObj)->nodeLimit[id] - 1];
+#else
     MotLimAng *lim = ((MotLimAng **)*(char **)(geo + 0x770))[id];
+#endif
     float v[4];
     float dq[4];
     float q[4];

@@ -336,7 +336,8 @@ void *InitWormGeo(GObj *act, WormInit *ini)
     int num;
     int i;
 
-    w = (WormWork *)iosMallocDebug(ios_partition_sugipon, 16, __FILE__, 328);
+    w = (WormWork *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(WormWork, 16), __FILE__,
+                                   328);
     seg = iosMallocDebug(ios_partition_sugipon, 880, __FILE__, 329);
 
     nseg = (int)ini->nseg;
@@ -348,7 +349,8 @@ void *InitWormGeo(GObj *act, WormInit *ini)
         num = 20;
     }
 
-    w->src = (WormVec **)iosMallocDebug(ios_partition_sugipon, nseg * 4, __FILE__, 334);
+    w->src =
+        (WormVec **)iosMallocDebug(ios_partition_sugipon, nseg * sizeof(WormVec *), __FILE__, 334);
 
     for (i = 0; i < nseg; i++) {
         WormVec pos = {ini->pos[0] + (_GetRandom() * 2.0f - 1.0f) * 50.0f,
@@ -371,27 +373,27 @@ void *InitWormGeo(GObj *act, WormInit *ini)
 
     /* the first node's angle words cleared as floats; int stores through
        d->nodes->rot move InitWormGeo's schedule (measured) */
-    *(float *)(*(char **)((char *)d + 0x870) + 0x8) = 0.0f;
-    *(float *)(*(char **)((char *)d + 0x870) + 0x4) = 0.0f;
-    *(float *)(*(char **)((char *)d + 0x870) + 0x0) = 0.0f;
+    *(float *)(ICO_RAW(char *, d, 0x870, (char *)d->nodes) + 0x8) = 0.0f;
+    *(float *)(ICO_RAW(char *, d, 0x870, (char *)d->nodes) + 0x4) = 0.0f;
+    *(float *)(ICO_RAW(char *, d, 0x870, (char *)d->nodes) + 0x0) = 0.0f;
 
     d->nodes->scale[2] = 1.0f;
     d->nodes->scale[1] = 1.0f;
     d->nodes->scale[0] = 1.0f;
 
     if (d->nodeMtx != 0) {
-        iosFree(ICO_PHYS(d->nodeMtx));
+        iosFree((void *)ICO_PHYS(d->nodeMtx));
     }
     if (d->nodeQuat != 0) {
-        iosFree(ICO_PHYS(d->nodeQuat));
+        iosFree((void *)ICO_PHYS(d->nodeQuat));
     }
     d->nodeMtx = 0;
     d->nodeQuat = 0;
-    d->nodeMtx = (int)iosMallocDebug(ios_partition_seki, num * 64, __FILE__, 367);
-    d->nodeQuat = (int)iosMallocDebug(ios_partition_seki, num * 16, __FILE__, 367);
+    d->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, num * 64, __FILE__, 367);
+    d->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, num * 16, __FILE__, 367);
     d->nodeNum = num;
-    if ((int)d->nodes != 0) {
-        iosFree(ICO_PHYS(ICO_ADDR(d->nodes)));
+    if ((ICO_WORD)d->nodes != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(d->nodes)));
     }
     d->nodes = iosMallocDebug(ios_partition_seki, num * 80, __FILE__, 367);
     {
@@ -420,7 +422,7 @@ void *InitWormGeo(GObj *act, WormInit *ini)
 
 void GetWormCaptureVector(void *out, GObj *act, void *node, float scale)
 {
-    sceVu0SubVector(out, (void *)((int)GOBJ_SUB(act) + 0x50), node);
+    sceVu0SubVector(out, ICO_RAWP(void *, GOBJ_SUB(act), 0x50, GOBJ_SUB(act)->matrix[2]), node);
     sceVu0Normalize(out, out);
     sceVu0ScaleVector(out, out, scale);
 }

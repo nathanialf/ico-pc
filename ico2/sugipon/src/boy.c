@@ -412,11 +412,11 @@ static void execClothes(GObj *gobj)
     BoyWork *w = GOBJ_SUB(gobj)->work;
 
     if (w->wet != 0) {
-        GetCloth4DWithDetail(w->mantle, 0.0f, 0.5f, 1.0f, 0.0f);
-        GetCloth4DWithDetail(w->tape, 0.0f, 0.5f, 1.0f, 0.0f);
-        GetCloth4D(w->tapeB, 5.0f, 0.98f);
-        GetCloth4D(w->tapeBoro1, 5.0f, 0.98f);
-        GetCloth4D(w->tapeBoro2, 5.0f, 0.98f);
+        GetCloth4DWithDetail((Cloth4D *)w->mantle, 0.0f, 0.5f, 1.0f, 0.0f);
+        GetCloth4DWithDetail((Cloth4D *)w->tape, 0.0f, 0.5f, 1.0f, 0.0f);
+        GetCloth4D((Cloth4D *)w->tapeB, 5.0f, 0.98f);
+        GetCloth4D((Cloth4D *)w->tapeBoro1, 5.0f, 0.98f);
+        GetCloth4D((Cloth4D *)w->tapeBoro2, 5.0f, 0.98f);
         w->detail = 1.0f;
     } else {
         float f = w->detail;
@@ -445,7 +445,7 @@ LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
     llExtGeo = &lightLineExt;
     llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 161);
     llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 162);
-    llExtGeo->line = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 163);
+    llExtGeo->line = iosMallocDebug(ios_partition_sugipon, 100 * sizeof(LLVec *), "src/boy.c", 163);
     for (i = 0; i < 100; i++) {
         llExtGeo->phase[i] = 0.0f;
         llExtGeo->speed[i] = random_unit() * 0.1f + 0.01f;
@@ -586,29 +586,29 @@ BoyWork *InitBoyGeo(GObj *gobj, void *csv)
 
     w = iosMallocDebug(ios_partition_sugipon, sizeof(BoyWork), "src/boy.c", 280);
     /* the work word, stored and read back as char * */
-    *(char **)(*(char **)(((char *)gobj) + 0x15C) + 0x830) = (char *)w;
-    p = (BoyWork *)*(char **)(*(char **)(((char *)gobj) + 0x15C) + 0x830);
+    ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work) = (char *)w;
+    p = (BoyWork *)ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work);
     p->mantle = (char *)InitCloth4D(gobj, &mantleMesh, mantleHang);
     p->tape = (char *)InitCloth4D(gobj, &tapeMesh, tapeHang);
     p->tapeB = (char *)InitCloth4D(gobj, &tapeBMesh, 0);
     p->tapeBoro1 = (char *)InitCloth4D(gobj, &tapeBoro1Mesh, 0);
     p->tapeBoro2 = (char *)InitCloth4D(gobj, &tapeBoro2Mesh, 0);
-    *(int *)(*(char **)(((char *)gobj) + 0x15C) + 0x554) = 1;
+    ICO_RAW(int, *(char **)(((char *)gobj) + 0x15C), 0x554, GOBJ_SUB(gobj)->ctrl.sideWallCheck) = 1;
     w->head = (Sub15C *)CSVSYSTEM_InitDObj(2, csv);
     w->body = (Sub15C *)CSVSYSTEM_InitDObj(3, csv);
     if (w->body->nodeMtx != 0) {
-        iosFree(ICO_PHYS(w->body->nodeMtx));
+        iosFree((void *)ICO_PHYS(w->body->nodeMtx));
     }
     if (w->body->nodeQuat != 0) {
-        iosFree(ICO_PHYS(w->body->nodeQuat));
+        iosFree((void *)ICO_PHYS(w->body->nodeQuat));
     }
     w->body->nodeMtx = 0;
     w->body->nodeQuat = 0;
-    w->body->nodeMtx = (int)iosMallocDebug(ios_partition_seki, 128, "src/boy.c", 291);
-    w->body->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 32, "src/boy.c", 291);
+    w->body->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, "src/boy.c", 291);
+    w->body->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, "src/boy.c", 291);
     w->body->nodeNum = 2;
     if (w->body->nodes != 0) {
-        iosFree(ICO_PHYS(ICO_ADDR(w->body->nodes)));
+        iosFree((void *)ICO_PHYS(ICO_ADDR(w->body->nodes)));
     }
     w->body->nodes = iosMallocDebug(ios_partition_seki, 160, "src/boy.c", 291);
     for (i = 0; i < 2; i++) {
@@ -627,11 +627,12 @@ BoyWork *InitBoyGeo(GObj *gobj, void *csv)
         w->body->nodes[i].scale[2] = 1.0f;
     }
     w->body->dispType = 2;
-    w->crown0 = CSVSYSTEM_InitDObj(1, csv);
-    w->crown1 = CSVSYSTEM_InitDObj(15, csv);
-    w->crown2 = CSVSYSTEM_InitDObj(16, csv);
-    (*(BoyWork **)(*(char **)(((char *)gobj) + 0x15C) + 0x830))->crown = 0;
-    sceVu0UnitMatrix(w->crown0 + 0x20);
+    w->crown0 = (char *)CSVSYSTEM_InitDObj(1, csv);
+    w->crown1 = (char *)CSVSYSTEM_InitDObj(15, csv);
+    w->crown2 = (char *)CSVSYSTEM_InitDObj(16, csv);
+    (ICO_RAW(BoyWork *, *(char **)(((char *)gobj) + 0x15C), 0x830, (BoyWork *)GOBJ_SUB(gobj)->work))
+        ->crown = 0;
+    sceVu0UnitMatrix(ICO_RAWP(char *, w->crown0, 0x20, (char *)((Sub15C *)w->crown0)->matrix));
     InitMotionOrient(gobj, 0, 0x503, 0, 0xC, 0);
     InitLightLineGeo(gobj, csv);
     SetLodLevel(gobj, 2);
@@ -755,11 +756,13 @@ static void dispSubParts(GObj *gobj)
 
     a = (char *)w->head;
     node = GetSkeltonFocusNode(gobj, 35);
-    CopyMatrix(*(char **)(a + 0xC), (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
+    CopyMatrix(ICO_RAW(char *, a, 0xC, (char *)w->head->nodeMtx),
+               (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
     p2o_DispVU1DObj(w->head);
     a = (char *)w->body;
     node = GetSkeltonFocusNode(gobj, 0x14);
-    CopyMatrix(*(char **)(a + 0xC), (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
+    CopyMatrix(ICO_RAW(char *, a, 0xC, (char *)w->body->nodeMtx),
+               (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
     c = (char *)w->body->nodeMtx + 0x40;
     node = GetSkeltonFocusNode(gobj, 0x4);
     CopyMatrix(c, (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
@@ -785,7 +788,8 @@ static void dispCrown(GObj *gobj)
     }
     CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
     MatrixDrive_RotMatrixX(-0x8000);
-    CopyMatrix(*(char **)(obj + 0xC), MatrixDrive_GetMatrix());
+    CopyMatrix(ICO_RAW(char *, obj, 0xC, (char *)((Sub15C *)obj)->nodeMtx),
+               MatrixDrive_GetMatrix());
     reg_DispAccessoryWithShadow((Sub15C *)obj, GOBJ_SUB(gobj));
 }
 
@@ -826,7 +830,7 @@ void BoyDL(GObj *gobj)
     if (stage_no == 0x27 && 20.0f < GOBJ_SUB(gobj)->ctrl.waterDepth &&
         GOBJ_SUB(gobj)->ctrl.pool != 0 && CheckPoolHasGridMesh(GOBJ_SUB(gobj)->ctrl.pool) == 0) {
         sub = GOBJ_SUB(gobj);
-        m = (PoolMesh *)(sub->work + 0x34);
+        m = ICO_RAWP(PoolMesh *, sub->work, 0x34, &((BoyWork *)sub->work)->refl);
         SetLimitedPoolReflactionMesh(m, sub->ctrl.pool, gobj);
         DispLimitedPoolReflactionMesh(m);
     }

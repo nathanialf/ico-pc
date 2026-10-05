@@ -1,3 +1,31 @@
+#include "sugiCommon.h"
+
+#ifdef ICO_HOST
+/* clothAnimation.h for the ChainSet record only: the file's own prototypes of
+   the chain functions (below) stay */
+#define GetChainCollision hdr_GetChainCollision
+#define InitChains hdr_InitChains
+#define GetChainNodeID hdr_GetChainNodeID
+#define SetChainExtendedWeight hdr_SetChainExtendedWeight
+#define GetChainAnimation hdr_GetChainAnimation
+#define TestDispChainAnimation hdr_TestDispChainAnimation
+
+#include "clothAnimation.h"
+
+#undef GetChainCollision
+#undef InitChains
+#undef GetChainNodeID
+#undef SetChainExtendedWeight
+#undef GetChainAnimation
+#undef TestDispChainAnimation
+
+#include <stddef.h>
+
+#define ROPE_EX_OFS offsetof(ChainNode, ex)
+#else
+#define ROPE_EX_OFS 0x10
+#endif
+
 #include "rope.h"
 #include "debug.h"
 #include "geometryManager.h"
@@ -123,70 +151,68 @@ void *InitRopeGeo(GObj *o, const float *p)
     }
     /* the matrix and quaternion buffers stored as pointers: int stores
        through sub->nodeMtx and nodeQuat reload c->num after each (measured) */
-    *(void **)((char *)sub + 0xC) = 0;
-    *(void **)((char *)sub + 0x10) = 0;
-    *(void **)((char *)sub + 0xC) =
-        iosMallocDebug(ios_partition_seki, (c->num - 1) * 64, __FILE__, 82);
-    *(void **)((char *)sub + 0x10) =
-        iosMallocDebug(ios_partition_seki, (c->num - 1) * 16, __FILE__, 82);
+    DOBJ_NODEMTX_PTR(sub) = 0;
+    DOBJ_NODEQUAT_PTR(sub) = 0;
+    DOBJ_NODEMTX_PTR(sub) = iosMallocDebug(ios_partition_seki, (c->num - 1) * 64, __FILE__, 82);
+    DOBJ_NODEQUAT_PTR(sub) = iosMallocDebug(ios_partition_seki, (c->num - 1) * 16, __FILE__, 82);
     sub->nodeNum = c->num - 1;
-    if ((int)sub->nodes != 0) {
+    if ((ICO_WORD)sub->nodes != 0) {
         iosFree((void *)(ICO_PHYS(ICO_ADDR(sub->nodes))));
     }
     sub->nodes = iosMallocDebug(ios_partition_seki, (c->num - 1) * 80, __FILE__, 82);
     for (i = 0; i < c->num - 1; i++) {
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->flags.ll &= ~1;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->flags.ll &= ~2;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->pos[0] = 0.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->pos[1] = 0.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->pos[2] = 0.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->pos[3] = 1.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->flags.ll &= ~4;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             /* a float store, where the other expansions of this reset write
                an int */
             e->fade = 0.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->alpha = 1.0f;
         }
         {
-            char *e = (char *)(i * 80 + (int)sub->nodes);
+            char *e = (char *)(i * 80 + (ICO_WORD)sub->nodes);
             *(short *)(e + 0x3A) = 0;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->scale[0] = 1.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->scale[1] = 1.0f;
         }
         {
-            struct DObjNode *e = (struct DObjNode *)(i * 80 + (int)sub->nodes);
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)sub->nodes);
             e->scale[2] = 1.0f;
         }
     }
@@ -224,12 +250,12 @@ void HoldRope(GObj *rope, GObj *holder)
 
     GetRootPosition(v, holder);
     CopyVector(u, GOBJ_SUB(holder)->root.move);
-    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + 0x10)) + 12, u);
-    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + 0x10)) + 12, u);
-    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + 0x10)) + 4, v);
-    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + 0x10)) + 4, v);
-    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + 0x10)) + 8, v);
-    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + 0x10)) + 8, v);
+    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + ROPE_EX_OFS)) + 12, u);
+    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 12, u);
+    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + ROPE_EX_OFS)) + 4, v);
+    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 4, v);
+    CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + ROPE_EX_OFS)) + 8, v);
+    CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 8, v);
     {
         float *q = (float *)((char *)sys[2] + w1 * 0x50);
         q[9] -= 100.0f;
@@ -302,9 +328,15 @@ void RopeDL(GObj *rope)
     float (*v)[4];
 
     p2o_SetDefaultEnviroment();
+#ifdef ICO_HOST
+    for (i = 0; i < ((ChainSet *)set)->num; i++) {
+        n = ((ChainSet *)set)->cfg[i].num;
+        v = ((ChainSet *)set)->nodes[i].pos;
+#else
     for (i = 0; i < *(int *)(set + 4); i++) {
         n = *(int *)(*(char **)set + i * 0x50);
         v = (float (*)[4]) * (int *)(*(char **)(set + 8) + i * 0x1A0);
+#endif
         for (j = 1; j < n; j++) {
             sceVu0UnitMatrix(MatrixDrive_GetMatrix());
             MatrixDrive_TransMatrix(v[j][0], v[j][1], v[j][2]);

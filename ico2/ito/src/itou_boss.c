@@ -386,7 +386,7 @@ extern int geneDebugNoEffect; /* derived name */
 static inline void gene_eff_end_func(int id);
 
 /* this file's own gene_enemy; queen.c defines a global of the same name */
-static void gene_enemy(volatile int gobj)
+static void gene_enemy(volatile ICO_WORD gobj)
 {
     int no = geneCount;
     volatile int *flag = &geneDone[geneCount++];
@@ -539,9 +539,9 @@ inline void actBossCtrlStart(void *gobj)
     }
 }
 
-inline int InitBossCtrlGeo(void *gobj)
+inline ICO_WORD InitBossCtrlGeo(void *gobj)
 {
-    int ret;
+    ICO_WORD ret;
     unsigned int k;
     CapsuleRec *base;
     CapsuleRec *e;
@@ -550,7 +550,7 @@ inline int InitBossCtrlGeo(void *gobj)
     char *q;
     char *r;
 
-    ret = (int)iosMallocDebug(ios_partition_sugipon, 0, __FILE__, 350);
+    ret = (ICO_WORD)iosMallocDebug(ios_partition_sugipon, 0, __FILE__, 350);
     actInitialize(gobj);
     actInitialize_ext_charcter(gobj);
     debug_StdPrintfDummy("N_CAPSULE %d\n", 53);

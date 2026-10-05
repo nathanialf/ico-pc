@@ -21,7 +21,7 @@ typedef struct {     /* field names derived */
     short angle;     /* 0x02, the lever's Z angle */
     int state;       /* 0x04, 0 at rest, 1 or -1 once thrown */
     int timer;       /* 0x08, frames since the lever was thrown */
-    int base;        /* 0x0C, the base DObj, kept as a word */
+    ICO_WORD_PTR(struct Sub15C *) base; /* 0x0C, the base DObj, kept as a word */
     struct Sub15C *handle; /* 0x10, the handle DObj, drawn turned by the two angles */
     int linked;      /* 0x14, nonzero once the lever is parented to the floor under it */
     int linkWait;    /* 0x18, frames counted before the parenting probe */

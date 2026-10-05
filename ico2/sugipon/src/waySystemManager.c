@@ -1,3 +1,5 @@
+#include "ee_view.h"
+#include "gobj_process.h"
 #include "GobjProc.h"
 #include "way_sys.h"
 
@@ -11,12 +13,12 @@ extern void _ACTWait(int frames);
 
 #include "waySystemManager.h"
 
-static void actWaySystemCore(volatile unsigned int self);
+static void actWaySystemCore(volatile unsigned ICO_WORD self);
 static void thStart(void);
 
-static inline void actWaySystemCore(volatile unsigned int self)
+static inline void actWaySystemCore(volatile unsigned ICO_WORD self)
 {
-    WayRequest *s = (WayRequest *)((int *)self)[0x20 / 4];
+    WayRequest *s = ICO_RAW(WayRequest *, self, 0x20, (WayRequest *)((GProc *)self)->arg);
     s->result = _FUNC_GetWay_begin(s->from, &s->way, s->goal, 1);
     s->done = 1;
     s->proc = 0;
@@ -25,7 +27,7 @@ static inline void actWaySystemCore(volatile unsigned int self)
 inline struct GProc *RequestGetWayBegin(WayRequest *req)
 {
     struct GProc *t = actCreateSubThreadGOppArg(actWaySystemCore, 21);
-    *(WayRequest **)((char *)t + 0x20) = req;
+    ICO_RAW(WayRequest *, t, 0x20, ((GProc *)t)->arg) = req;
     req->done = 0;
     return t;
 }

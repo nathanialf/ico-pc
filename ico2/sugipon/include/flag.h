@@ -39,6 +39,16 @@ typedef union { /* field names derived */
     short h;
 } FlagNodeWord; /* derived name */
 
+/* InitFlagGeo's stores through a record viewed as words: the EE's 4-byte
+   offsets, the host's fields */
+#ifdef ICO_HOST
+#define FLAG_SET_ANCHORS(cl, mesh) ((cl)->anchors = (mesh))
+#define FLAG_SET_POSW(self) (GOBJ_SUB(self)->root.pos[3] = 1.0f)
+#else
+#define FLAG_SET_ANCHORS(cl, mesh) (((FlagNodeWord *)&(cl)->anchors)->i = (int)(mesh))
+#define FLAG_SET_POSW(self) (((FlagNodeWord *)((char *)GOBJ_SUB(self) + 0xAC))->f = 1.0f)
+#endif
+
 /* The sub record's display-list buffers (0xC the matrices, 0x10 the
    vectors, 0x870 the 80-byte nodes) freed and reallocated for n nodes, and
    the nodes reset; worm.c and boy.c carry the same block.  The block has its

@@ -874,8 +874,14 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
     GOBJ_SUB(gobj)->ctrl.catchBoy = 0;
     /* the animation frame at 0x4AC and the word after it start at the same
        random frame */
+#ifdef ICO_HOST
+    ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f = random_unit() * 100.0f;
+    ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.lastFrame)->f =
+        ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f;
+#else
     ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4AC))->f = random_unit() * 100.0f;
     ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4B0))->f = ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4AC))->f;
+#endif
     GOBJ_SUB(gobj)->ctrl.waterDrag = 0;
     SetLodLevel(gobj, 3);
     return w;

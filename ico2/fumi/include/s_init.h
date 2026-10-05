@@ -8,6 +8,8 @@
 #ifndef S_INIT_H
 #define S_INIT_H
 
+#include "typedef.h"
+
 struct GObj;
 
 struct AdpcmStreamTag;
@@ -25,7 +27,7 @@ typedef struct SqEntry { /* field names derived */
     unsigned short bank; /* 0x02, 10 BGM, 11 SE, 17 ADPCM */
     unsigned short mode; /* 0x04, 0 a VAB, 1 a sequence, 2 a stream */
     unsigned short seg;  /* 0x06, the SPU buffer segment */
-    int bd;              /* 0x08, the VAB body's EE address */
+    ICO_WORD_PTR(void *) bd; /* 0x08, the VAB body's EE address */
     void *hd;            /* 0x0C, the VAB header */
     void *sq;            /* 0x10, the sequence */
     char pad14[4];
@@ -48,7 +50,7 @@ typedef struct SqEntry { /* field names derived */
    out-of-line copies at the end of the object (first-declaration order), from
    Ee2Iop to soundSeSemiCommonLoadChk; the file statics soundSeEnvDefaultSet
    and debug_req, first declared in s_init.c, follow. */
-int Ee2Iop(int ee, int iop, int size);
+int Ee2Iop(ICO_WORD ee, int iop, int size);
 int soundOutputModeGet(void);
 int soundReverbDepthGet(void);
 int soundBufAdpcmChAlloc(SqEntry *self, int *chp);
@@ -70,7 +72,7 @@ void soundSeKindBuild(void);
 int soundSeSemiCommonLoadChk(void);
 void _soundSeDefStop(int id, int noRelease);
 void soundAllocIopHeap(void);
-SqEntry *soundBDDataSet(int bd, int no, int bank, int mode, int seg, int size);
+SqEntry *soundBDDataSet(ICO_WORD_PTR(void *) bd, int no, int bank, int mode, int seg, int size);
 void soundBufSegFree(int seg, int mode);
 void soundDataClose(SqEntry *self);
 void soundDataOpen(struct AdpcmOpenReq *work, int mode, int no, int ch, int loopNum);

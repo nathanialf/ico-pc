@@ -514,7 +514,7 @@ void DrawLightningN(int num, LightningNode *v, void *col, float stepMin, float s
     int i;
 
     if (num >= 3) {
-        qsort(&v[1], num - 1, sizeof(LightningNode), cmpr);
+        qsort(&v[1], num - 1, sizeof(LightningNode), (int (*)(const void *, const void *))cmpr);
     }
     for (i = 0; i < num; i++) {
         sceVu0CopyVector(&buf[i], &v[i]);

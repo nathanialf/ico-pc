@@ -9,6 +9,7 @@
 #define SCENEMANAGER_H
 
 #include <libvu0.h>
+#include "typedef.h"
 
 struct GObj;
 
@@ -22,7 +23,7 @@ typedef struct SObjSimpleSetting { /* field names derived */
     sceVu0FVECTOR pos;             /* 0x00 */
     sceVu0FVECTOR rot;             /* 0x10 */
     sceVu0FVECTOR scale;           /* 0x20 */
-    int obj;                       /* 0x30 */
+    ICO_WORD obj;                  /* 0x30, an index, or an object address (attackCheckBoundary.c) */
 } SObjSimpleSetting;               /* derived name */
 
 /* sceneManager.c's .data global */

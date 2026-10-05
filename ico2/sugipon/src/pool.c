@@ -150,7 +150,8 @@ static void setNodePursueParticleEffectWithUpperLimit(int id, GObj *obj, int foc
     int ret = GetSkeltonFocusNode(obj, focus);
     if (ret != -1) {
         Sub15C *p = GOBJ_SUB(obj);
-        int r = SetParticleEffectActiveSensing(id, p->nodeMtx + ret * 64 + 48, IdentityQuaternion);
+        int r = SetParticleEffectActiveSensing(id, (void *)(p->nodeMtx + ret * 64 + 48),
+                                               IdentityQuaternion);
         SetParticleEffectUpperLimit(r, limit);
     }
 }
@@ -208,7 +209,8 @@ static int poolRideFunc(ObjNode *on, GObj *rider);
 
 char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
 {
-    PoolWork *w = iosMallocDebug(ios_partition_sugipon, 224, "src/pool.c", 316);
+    PoolWork *w =
+        iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(PoolWork, 224), "src/pool.c", 316);
     int i;
     int j;
     int k;
@@ -225,7 +227,8 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
         w->ny = (int)lay->scale[2];
         w->step = lay->scale[1];
 
-        w->height = iosMallocDebug(ios_partition_sugipon, w->nx * 4, "src/pool.c", 330);
+        w->height =
+            iosMallocDebug(ios_partition_sugipon, w->nx * sizeof(float *), "src/pool.c", 330);
 
         for (i = 0; i < w->nx; i++) {
             w->height[i] = iosMallocDebug(ios_partition_sugipon, w->ny * 4, "src/pool.c", 334);
@@ -236,7 +239,8 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
         w->reflect = prim_InitMesh3D(w->ny, w->nx, 1, 0x5C, 0x80808080, 1);
 
         w->phase = 0;
-        w->wire = iosMallocDebug(ios_partition_sugipon, w->nx * 4, "src/pool.c", 357);
+        w->wire =
+            iosMallocDebug(ios_partition_sugipon, w->nx * sizeof(Prim3DVec *), "src/pool.c", 357);
 
         for (j = 0; j < w->nx; j++) {
             w->wire[j] = w->reflect->pos + j * w->ny;
@@ -289,7 +293,7 @@ char *InitPoolGeo(char *self, SObjSimpleSetting *lay)
     w->splashNo = 0;
     w->splash = InitMultiBgaManager(2);
 
-    ((SubHandle *)(self + 0x15C))->sub->rideFunc = poolRideFunc;
+    SUBHANDLE_OF(self)->sub->rideFunc = poolRideFunc;
 
     return (char *)w;
 }
@@ -714,8 +718,10 @@ void InitLimitedPoolReflactionMesh(PoolMesh *refl)
     int j;
 
     refl->mesh = prim_InitMesh3D(refl->ncol, refl->nrow, 1, 0x1C, refl->color, 1);
-    refl->height = iosMallocDebug(ios_partition_sugipon, refl->nrow * 4, "src/pool.c", 884);
-    refl->row = iosMallocDebug(ios_partition_sugipon, refl->nrow * 4, "src/pool.c", 885);
+    refl->height =
+        iosMallocDebug(ios_partition_sugipon, refl->nrow * sizeof(float *), "src/pool.c", 884);
+    refl->row =
+        iosMallocDebug(ios_partition_sugipon, refl->nrow * sizeof(float *), "src/pool.c", 885);
     for (i = 0; i < refl->nrow; i++) {
         refl->row[i] = refl->mesh->pos + i * refl->ncol;
         refl->height[i] = iosMallocDebug(ios_partition_sugipon, refl->ncol * 4, "src/pool.c", 890);

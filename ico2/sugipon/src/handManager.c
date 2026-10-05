@@ -213,10 +213,17 @@ extern char motionIKEffKind[];
    HandManager loses its reload (measured) */
 static inline void ResetHandTarget(GObj *obj, int off) /* derived name */
 {
-    char *h = (char *)(int)GOBJ_SUB(obj) + off;
+#ifdef ICO_HOST
+    HandRec *h = off == 0x310 ? &GOBJ_SUB(obj)->root.hand0 : &GOBJ_SUB(obj)->root.hand1;
+    h->ikMode = 0;
+    h->ikLock = 0;
+    h->ikRate = GOBJ_SUB(obj)->root.handRate;
+#else
+    char *h = (char *)(ICO_WORD)GOBJ_SUB(obj) + off;
     *(int *)(h + 0x20) = 0;
     *(int *)(h + 0x24) = 0;
     ((IntFloat *)(h + 0x50))->f = GOBJ_SUB(obj)->root.handRate;
+#endif
 }
 
 void HandManager(GObj *obj)

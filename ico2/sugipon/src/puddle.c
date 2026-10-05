@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "puddle.h"
 #include "box.h"
 #include "DObj.h"
@@ -75,7 +76,8 @@ int puddleRideFunc(ObjNode *on, GObj *rider);
 
 PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
 {
-    PuddleWork *w = (PuddleWork *)iosMallocDebug(ios_partition_sugipon, 208, __FILE__, 69);
+    PuddleWork *w = (PuddleWork *)iosMallocDebug(ios_partition_sugipon,
+                                                 ICO_MAX_SIZE(PuddleWork, 208), __FILE__, 69);
     float *v;
     int i;
 
@@ -377,6 +379,14 @@ inline void PuddleGeo(GObj *self)
     int i;
 
     p = GOBJ_SUB(self)->work;
+#ifdef ICO_HOST
+    for (i = 0; i < 6; i++) {
+        if (((PuddleWork *)p)->rip[i].t < 200.0f) {
+            ((PuddleWork *)p)->rip[i].t +=
+                60.0f / (float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) * 2.0f;
+        }
+    }
+#else
     for (i = 0; i < 6; i++) {
         if (*(float *)(p + 0x20) < 200.0f) {
             *(float *)(p + 0x20) +=
@@ -384,6 +394,7 @@ inline void PuddleGeo(GObj *self)
         }
         p += 0x20;
     }
+#endif
 }
 
 inline void EntryRippleToPuddle(GObj *self, void *vec)

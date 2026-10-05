@@ -118,7 +118,7 @@ OFF(Kanban, next, 0x18);
 OFF(Kanban, prev, 0x1C);
 #endif
 
-/* LtProperty: overlay, ico2/common/include/layout_texture.h:37, 64-bit pending 5 */
+/* LtProperty: overlay, ico2/common/include/layout_texture.h:42, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(LtProperty, word0, 0x0);
 OFF(LtProperty, word4, 0x4);
@@ -150,7 +150,7 @@ OFF(LtProperty, texV, 0x68);
 SIZE(LtProperty, 0x70); /* comment */
 #endif
 
-/* LtProp: overlay, ico2/common/include/layout_texture.h:82, 64-bit pending 5 */
+/* LtProp: overlay, ico2/common/include/layout_texture.h:87, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(LtProp, first, 0x0);
 OFF(LtProp, last, 0x4);
@@ -169,7 +169,7 @@ OFF(LtProp, word34, 0x34);
 SIZE(LtProp, 0x38); /* comment */
 #endif
 
-/* SObjSimpleSetting: runtime, ico2/common/include/sceneManager.h:21 */
+/* SObjSimpleSetting: runtime, ico2/common/include/sceneManager.h:22 */
 #if ICO_LAYOUT_EE
 OFF(SObjSimpleSetting, pos, 0x0);
 OFF(SObjSimpleSetting, rot, 0x10);
@@ -178,7 +178,7 @@ OFF(SObjSimpleSetting, obj, 0x30);
 SIZE(SObjSimpleSetting, 0x40); /* comment */
 #endif
 
-/* EnemyMdlRec: overlay, ico2/common/include/sceneManager.h:44 */
+/* EnemyMdlRec: overlay, ico2/common/include/sceneManager.h:45 */
 OFF(EnemyMdlRec, name, 0x0);
 OFF(EnemyMdlRec, first, 0x20);
 OFF(EnemyMdlRec, last, 0x24);
@@ -1240,7 +1240,7 @@ OFF(IntrMail, flags, 0x14);
 SIZE(IntrMail, 0x18); /* comment */
 #endif
 
-/* AdpcmOpenReq: runtime, ico2/fumi/include/adpcm_init.h:17 */
+/* AdpcmOpenReq: runtime, ico2/fumi/include/adpcm_init.h:19 */
 #if ICO_LAYOUT_EE
 OFF(AdpcmOpenReq, mode, 0x0);
 OFF(AdpcmOpenReq, id, 0x4);
@@ -1250,7 +1250,7 @@ OFF(AdpcmOpenReq, loopNum, 0x10);
 OFF(AdpcmOpenReq, bg, 0x14);
 #endif
 
-/* AdpcmChReq: runtime, ico2/fumi/include/adpcm_init.h:32 */
+/* AdpcmChReq: runtime, ico2/fumi/include/adpcm_init.h:34 */
 #if ICO_LAYOUT_EE
 OFF(AdpcmChReq, ch, 0x0);
 OFF(AdpcmChReq, attr, 0x4);
@@ -1260,7 +1260,7 @@ OFF(AdpcmChReq, spuAddr, 0x10);
 OFF(AdpcmChReq, vol, 0x14);
 #endif
 
-/* AdpcmStream: runtime, ico2/fumi/include/adpcm_init.h:41 */
+/* AdpcmStream: runtime, ico2/fumi/include/adpcm_init.h:43 */
 #if ICO_LAYOUT_EE
 OFF(AdpcmStream, used, 0x0);
 OFF(AdpcmStream, n, 0x4);
@@ -1286,7 +1286,7 @@ OFF(AdpcmStream, remain, 0x50);
 OFF(AdpcmStream, pad54, 0x54);
 #endif
 
-/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:91 */
+/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:97 */
 OFF(AdpcmDataRec, path, 0x0);
 OFF(AdpcmDataRec, loopStart, 0x30);
 OFF(AdpcmDataRec, sectors, 0x34);
@@ -1513,7 +1513,7 @@ OFF(GProc, noThread, 0x10);
 OFF(GProc, priority, 0x14);
 OFF(GProc, active, 0x18);
 OFF(GProc, func, 0x1C);
-OFF(GProc, pad20, 0x20);
+OFF(GProc, arg, 0x20);
 OFF(GProc, thread, 0x24);
 SIZE(GProc, 0x94); /* comment */
 #endif
@@ -1672,7 +1672,7 @@ OFF(PadActDef, voice, 0x4);
 OFF(PadActDef, life, 0x6);
 SIZE(PadActDef, 0x8); /* comment */
 
-/* SqEntry: runtime, ico2/fumi/include/s_init.h:23 */
+/* SqEntry: runtime, ico2/fumi/include/s_init.h:25 */
 #if ICO_LAYOUT_EE
 OFF(SqEntry, num, 0x0);
 OFF(SqEntry, bank, 0x2);
@@ -1691,7 +1691,7 @@ OFF(SqEntry, stream, 0x2C);
 SIZE(SqEntry, 0x30); /* comment */
 #endif
 
-/* SeDef: overlay, ico2/fumi/include/s_init.h:98, 64-bit pending 5 */
+/* SeDef: overlay, ico2/fumi/include/s_init.h:100, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(SeDef, name, 0x0);
 OFF(SeDef, kind, 0x20);
@@ -1704,7 +1704,7 @@ OFF(SeDef, shock, 0x36);
 SIZE(SeDef, 0x3C); /* comment */
 #endif
 
-/* SeEnvDef: overlay, ico2/fumi/include/s_init.h:121, 64-bit pending 5 */
+/* SeEnvDef: overlay, ico2/fumi/include/s_init.h:123, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(SeEnvDef, se, 0x0);
 OFF(SeEnvDef, proc, 0x4);
@@ -1715,12 +1715,12 @@ OFF(SeEnvDef, volumeLength, 0x14);
 SIZE(SeEnvDef, 0x1C); /* comment */
 #endif
 
-/* SeBank: overlay, ico2/fumi/include/s_init.h:142 */
+/* SeBank: overlay, ico2/fumi/include/s_init.h:144 */
 OFF(SeBank, hdPath, 0x0);
 OFF(SeBank, bdPath, 0x30);
 SIZE(SeBank, 0x64); /* comment */
 
-/* SeKind: overlay, ico2/fumi/include/s_init.h:153 */
+/* SeKind: overlay, ico2/fumi/include/s_init.h:155 */
 OFF(SeKind, num, 0x0);
 OFF(SeKind, prog, 0x2);
 OFF(SeKind, tone, 0x4);
@@ -2093,7 +2093,7 @@ OFF(MenuThread, parent, 0x70);
 OFF(MenuThread, arg, 0x74);
 #endif
 
-/* EBSlot: runtime, ico2/omori/include/ebrain.h:17 */
+/* EBSlot: runtime, ico2/omori/include/ebrain.h:19 */
 #if ICO_LAYOUT_EE
 OFF(EBSlot, status, 0x0);
 OFF(EBSlot, pad2, 0x2);
@@ -2551,7 +2551,7 @@ OFF(BgaPlayNode, pos, 0x20);
 OFF(BgaPlayNode, rot, 0x30);
 #endif
 
-/* Tim2Picture: overlay, ico2/seki/include/Tim2.h:25 */
+/* Tim2Picture: overlay, ico2/seki/include/Tim2.h:24 */
 OFF(Tim2Picture, totalSize, 0x0);
 OFF(Tim2Picture, clutSize, 0x4);
 OFF(Tim2Picture, imageSize, 0x8);
@@ -2569,13 +2569,13 @@ OFF(Tim2Picture, GsRegs, 0x28);
 OFF(Tim2Picture, GsTexClut, 0x2C);
 SIZE(Tim2Picture, 0x30); /* config */
 
-/* Tim2Mipmap: overlay, ico2/seki/include/Tim2.h:49 */
+/* Tim2Mipmap: overlay, ico2/seki/include/Tim2.h:48 */
 OFF(Tim2Mipmap, GsMiptbp1, 0x0);
 OFF(Tim2Mipmap, GsMiptbp2, 0x8);
 OFF(Tim2Mipmap, sizes, 0x10);
 SIZE(Tim2Mipmap, 0x30); /* config */
 
-/* LayoutClothDef: overlay, ico2/sugipon/include/attackCheckBoundary.h:33 */
+/* LayoutClothDef: overlay, ico2/sugipon/include/attackCheckBoundary.h:36 */
 OFF(LayoutClothDef, name, 0x0);
 OFF(LayoutClothDef, pt, 0x20);
 OFF(LayoutClothDef, kind, 0x50);

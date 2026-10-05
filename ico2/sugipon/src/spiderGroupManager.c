@@ -35,7 +35,8 @@ typedef struct { /* field names derived */
 
 typedef struct { /* field names derived */
     GObj *gobj;  /* 0x00 */
-    int rev; /* 0x04, the enemy layout object locked for the revive, held as a word: typed GObj *, the store order of EntrySpiderGroupManager moves (measured) */
+    ICO_WORD_PTR(GObj *)
+    rev; /* 0x04, the enemy layout object locked for the revive, held as a word: typed GObj *, the store order of EntrySpiderGroupManager moves (measured) */
 } SpiderGroupEnt; /* derived name */
 
 /* the spiders found inside a revive range, the pairs picked out of them,
@@ -47,7 +48,7 @@ static SpiderPair spiderPairs[5]; /* derived name */
 
 /* the registered groups' GObj handles, held as words: typed GObj *, the
    store order of EntrySpiderGroupManager moves (measured) */
-static int spiderGroupIds[64]; /* derived name */
+static ICO_WORD_PTR(GObj *) spiderGroupIds[64]; /* derived name */
 
 static SpiderGroupEnt spiderGroups[64]; /* derived name */
 
@@ -94,7 +95,7 @@ inline void EntryRevivedSpiderGroupManager(GObj *group)
 {
     int idx = spiderGroupIdCount;
     spiderGroupIdCount = idx + 1;
-    spiderGroupIds[idx] = (int)group;
+    spiderGroupIds[idx] = (ICO_WORD_PTR(GObj *))group;
 }
 
 void EntrySpiderGroupManager(GObj *gobj)
@@ -113,7 +114,7 @@ void EntrySpiderGroupManager(GObj *gobj)
             "No valid enemy layout data for spider.\n(Lack of enemy layout for spider revive.)\n");
         __assert("src/spiderGroupManager.c", 85, "e");
     }
-    spiderGroups[spiderGroupCount].rev = (int)p;
+    spiderGroups[spiderGroupCount].rev = (ICO_WORD_PTR(GObj *))p;
     spiderGroupCount = spiderGroupCount + 1;
     EntryRevivedSpiderGroupManager(gobj);
 }

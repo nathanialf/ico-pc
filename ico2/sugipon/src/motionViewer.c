@@ -617,7 +617,7 @@ int MotionViewer(void)
         q.v.z = 0.0f;
         q.v.w = pos.y + viewObj->dobj->skel->pos[1];
         p = q.v;
-        dispPlane(&p, &pos.x);
+        dispPlane((Vec4 *)&p, &pos.x);
 
         if (pad[1].flags & 0x8) {
             mode = testMode + 1;

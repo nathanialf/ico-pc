@@ -102,7 +102,8 @@ static const char adpcmFreeIopMsg[] =
 
 int debugAdpcmOn = 1;
 
-SqEntry *adpcmDataSet(int src, int no, int bank, int ch, int size, int iopBuf, int loopNum)
+SqEntry *adpcmDataSet(ICO_WORD_PTR(void *) src, int no, int bank, int ch, int size, int iopBuf,
+                      int loopNum)
 {
     AdpcmChReq req;
     SqEntry *obj;
@@ -180,7 +181,7 @@ found:
     p->loopNum = loopNum;
     p->loopCount = 0;
     if (size != 0) {
-        Ee2Iop(src, iopBuf, size);
+        Ee2Iop((ICO_WORD)src, iopBuf, size);
     }
     p->bg = iosCdvdBackGroundMgrAdd((char *)&adpcmFile[no], adpcmTickProc, obj, adpcmDiskNotReady,
                                     adpcmDiskReturnReady, obj, 0, 0);
@@ -380,7 +381,7 @@ inline int AdpcmNotUseIopAreaFree(void)
             }
         }
         p++;
-    } while ((int)p < (int)end);
+    } while ((ICO_WORD)p < (ICO_WORD)end);
 
     i = 0;
     do {
@@ -423,7 +424,7 @@ inline void AdpcmFadeCloseAll(short step)
             p->fadeStep = step;
         }
         p++;
-    } while ((int)p < (int)end);
+    } while ((ICO_WORD)p < (ICO_WORD)end);
 }
 
 inline int AdpcmUseAreaGet(void)
@@ -502,7 +503,7 @@ inline int adpcmTickProc(CdvdBgReq *self, SqEntry *obj)
             size = st->ringSize - st->seekSize;
         }
         if (size > 0x1EAAA || cur < st->seekSize) {
-            iosCdvdBackGroundReadIOPm(self, st->iopBuf + st->seekSize, size);
+            iosCdvdBackGroundReadIOPm(self, (void *)(ICO_WORD)(st->iopBuf + st->seekSize), size);
         } else {
             size = 0;
         }
@@ -523,7 +524,7 @@ static inline void adpcmDiskReturnReady(void) {}
 
 static inline int adpcmOpenProc(CdvdBgReq *bg, AdpcmOpenReq *open)
 {
-    iosCdvdBackGroundReadIOPm(bg, open->iopBuf, 376832);
+    iosCdvdBackGroundReadIOPm(bg, (void *)(ICO_WORD)open->iopBuf, 376832);
     return 1;
 }
 

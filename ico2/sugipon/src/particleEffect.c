@@ -1,3 +1,4 @@
+#include "ee_view.h"
 #include "debug.h"
 #include "DisplayList.h"
 #include "Primitive.h"
@@ -14,7 +15,8 @@
 #include "windField.h"
 #include "particleEffect.h"
 
-static int setParticleEffect(struct PEGeo *self, struct PEPackage *pkg, struct IosMemPart *part);
+static ICO_WORD setParticleEffect(struct PEGeo *self, struct PEPackage *pkg,
+                                  struct IosMemPart *part);
 
 /* one vertex of the particle primitive's buffers */
 typedef struct PEVtx { /* field names derived */
@@ -199,7 +201,7 @@ static inline void peSetVtx(PEVtx *dst, PEPartRec *pt) /* derived name */
 
 /* The statements follow the developer's line order (287 self->pkg, 289,
    291, 292, 293, 295, 296, 299, 300, 303). */
-static int setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
+static ICO_WORD setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *part)
 {
     float m[16];
     PEPartRec *p;
@@ -251,7 +253,7 @@ static int setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *par
         }
         self->emitted = (float)self->n;
     }
-    return (int)self->parts;
+    return (ICO_WORD)self->parts;
 }
 
 /* the EE scratchpad holds the particle being updated */
@@ -486,7 +488,7 @@ int SetParticleEffectByPartition(int no, void *pos, void *quat, struct IosMemPar
 static inline void deleteParticleEffectGeo(int no) /* derived name */
 {
     prim_DeleteParticle(particleEffects[no].geo->prim);
-    *(int *)((char *)particleEffects[no].geo + 0x28) = 0;
+    ICO_RAW(int, particleEffects[no].geo, 0x28, particleEffects[no].geo->prim) = 0;
     iosFree(particleEffects[no].geo->parts);
     iosFree(particleEffects[no].geo);
     particleEffects[no].geo = 0;
@@ -643,6 +645,12 @@ void SetParticleEffectPackage(int no, int *data, int size)
         debug_StdPrintfDummy("\033[36mThis is old version(%d) file. May be an error occur.\033[m\n",
                              *data);
     }
+#ifdef ICO_HOST
+    /* a .pef longer than its 160-byte slot would run into the next package */
+    if (size > 160) {
+        size = 160;
+    }
+#endif
     memcpy(((unsigned char *)particleParams + no * 160), data, size);
 }
 

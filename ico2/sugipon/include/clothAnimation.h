@@ -119,7 +119,7 @@ void GetCloth4DWithDetail(Cloth4D *c, float x, float y, float z, float w);
 void GetCloth4DWithTight(Cloth4D *c, float x, float y, float z, float w, void *qa, void *qb);
 
 void GetClothAnimation(VECTOR **pos, VECTOR **vel, struct GObj *obj, void *m, ClothCfg *cfg,
-                       int nwall, int wallOwner, int fixEnd);
+                       int nwall, ICO_WORD_PTR(struct GObj *) wallOwner, int fixEnd);
 
 void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *mtx);
 ChainSet *InitChains(ChainCfg *cfg);

@@ -289,7 +289,7 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
     pm = mm;
     sceVu0UnitMatrix(pm);
     for (i = 0; i < sys->num; i++) {
-        ChainCfg *cf = (ChainCfg *)(i * 0x50 + (int)sys->cfg);
+        ChainCfg *cf = (ChainCfg *)(i * 0x50 + (ICO_WORD)sys->cfg);
         int n = cf->num;
         float (*pts)[4] = (sys->nodes + i)->pos;
         float (*vel)[4] = (sys->nodes + i)->vel;
@@ -438,7 +438,7 @@ static __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived nam
    wall owner is an object handle passed as an int, the form the wall-plane
    query GetGlobalWallPlane takes (fieldCollision.h). */
 void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg *cfg, int nwall,
-                       int wallOwner, int fixEnd)
+                       ICO_WORD_PTR(GObj *) wallOwner, int fixEnd)
 {
     VECTOR dv;
     float pw;
@@ -623,18 +623,27 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
     for (n = 0; n < nwall; n++) {
         /* the wall owner's sub-record, then the query for its n-th wall
            plane */
+#ifdef ICO_HOST
+        FcColl *fc = (FcColl *)GOBJ_SUB(wallOwner)->colData;
+        WallCfg q = {{wallOwner, 0}, ICO_EEPTR(char *, fc->wcl) + n * 80};
+#else
         int sub = *(int *)(wallOwner + 0x15C),
             q[3] = {wallOwner, 0, *(int *)(*(int *)(sub + 0x70) + 0x10) + n * 80};
+#endif
         VECTOR pl;
 
-        GetGlobalWallPlane(&pl.x, q);
+#ifdef ICO_HOST
+        GetGlobalWallPlane(&pl.x, &q);
+#else
+        GetGlobalWallPlane(&pl.x, (WallCfg *)q);
+#endif
         for (i = 0; i < n0; i++) {
             for (j = 1; j < nx; j++) {
                 pushInsidePlane(((char **)pos)[i] + j * 16, &pl);
             }
         }
     }
-    wind = GetWindVector(&pw, ((char **)pos)[0]);
+    wind = GetWindVector(&pw, (float *)((char **)pos)[0]);
     pw = pw / 40960.0f;
     for (i = 0; i < n0; i++) {
         for (j = 1; j < nx; j++) {
@@ -881,7 +890,8 @@ ChainSet *InitChains(ChainCfg *cfg)
     int j;
     float step;
 
-    r = (ChainSet *)iosMallocDebug(ios_partition_sugipon, 0x10, "src/clothAnimation.c", 1192);
+    r = (ChainSet *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(ChainSet, 0x10),
+                                   "src/clothAnimation.c", 1192);
     r->cfg = cfg;
     while (cfg[i].num != -1) {
         i++;
@@ -944,12 +954,12 @@ ClothSet *InitClothes(ClothCfg *cfg)
             r->rec[i].mesh = prim_InitMesh3D(cfg[i].div, cfg[i].num, 1, 0x4C, 0xFFFFFF80, 1);
             r->rec[i].textured = 0;
         }
-        r->rec[i].pos =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1268);
-        r->rec[i].vel =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1269);
-        r->rec[i].mark =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1270);
+        r->rec[i].pos = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1268);
+        r->rec[i].vel = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1269);
+        r->rec[i].mark = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                        "src/clothAnimation.c", 1270);
         for (m = 0; m < cfg[i].num; m++) {
             r->rec[i].pos[m] = (VECTOR *)(r->rec[i].mesh->pos + m * cfg[i].div);
             r->rec[i].vel[m] = iosMallocDebug(ios_partition_sugipon, cfg[i].div * 16,
@@ -996,12 +1006,12 @@ ClothSet *InitClothesNoShade(ClothCfg *cfg)
             r->rec[i].mesh = prim_InitMesh3D(cfg[i].div, cfg[i].num, 1, 0x4C, 0xFFFFFF80, 0);
             r->rec[i].textured = 0;
         }
-        r->rec[i].pos =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1329);
-        r->rec[i].vel =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1330);
-        r->rec[i].mark =
-            iosMallocDebug(ios_partition_sugipon, cfg[i].num * 4, "src/clothAnimation.c", 1331);
+        r->rec[i].pos = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1329);
+        r->rec[i].vel = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                       "src/clothAnimation.c", 1330);
+        r->rec[i].mark = iosMallocDebug(ios_partition_sugipon, cfg[i].num * sizeof(void *),
+                                        "src/clothAnimation.c", 1331);
         for (m = 0; m < cfg[i].num; m++) {
             r->rec[i].pos[m] = (VECTOR *)(r->rec[i].mesh->pos + m * cfg[i].div);
             r->rec[i].vel[m] = iosMallocDebug(ios_partition_sugipon, cfg[i].div * 16,
@@ -1089,7 +1099,7 @@ void DispCloth4D(Cloth4D *c, void *la, void *lb)
     p2o_SetDefaultEnviroment();
     prim_UpdateMesh3D(c->mesh, 3, buffer_ID);
     if (c->cfg->tex != 0) {
-        t = tex_GetTextureNo(&c->tex);
+        t = tex_GetTextureNo((const char *)&c->tex);
     } else {
         t = -1;
     }
@@ -1111,7 +1121,7 @@ void DispCloth4DWithAdd(Cloth4D *c, void *la, void *lb)
     p2o_SetDefaultEnviroment();
     prim_UpdateMesh3D(c->mesh, 3, buffer_ID);
     if (c->cfg->tex != 0) {
-        t = tex_GetTextureNo(&c->tex);
+        t = tex_GetTextureNo((const char *)&c->tex);
     } else {
         t = -1;
     }
@@ -1815,7 +1825,7 @@ static void _getCloth4D(Cloth4D *c, float x, float y, float z, float w, int tigh
     int *rows[nx];
     Sub15C *obj;
     Cloth4DCfg *cfg;
-    int *rows2;
+    ICO_WORD *rows2;
     int nx2;
     int ny2;
     Vec16 *plane;
@@ -1832,7 +1842,7 @@ static void _getCloth4D(Cloth4D *c, float x, float y, float z, float w, int tigh
     if (motionKind[obj->ctrl.motion].flags.bits.clothPlane) {
         plane = &obj->root.plane;
         cfg = c->cfg;
-        rows2 = (int *)c->pos;
+        rows2 = (ICO_WORD *)c->pos;
         nx2 = cfg->nx - (cfg->wrap != 0);
         ny2 = cfg->ny;
         for (i2 = 0; i2 < nx2; i2++) {
@@ -1876,7 +1886,8 @@ Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
     int j;
     float sc;
 
-    r = (Cloth4D *)iosMallocDebug(ios_partition_sugipon, 0x300, "src/clothAnimation.c", 2183);
+    r = (Cloth4D *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(Cloth4D, 0x300),
+                                  "src/clothAnimation.c", 2183);
     r->gobj = gobj;
     r->cfg = cfg;
     r->sweepRight = 0;
@@ -1886,11 +1897,11 @@ Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
     } else {
         r->mesh = prim_InitMesh3D(cfg->ny, cfg->nx, 1, 0x4C, 0xFFFFFF80, 1);
     }
-    r->pos = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->pos = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2218);
-    r->vel = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->vel = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2219);
-    r->nrm = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * 4,
+    r->nrm = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
                                           "src/clothAnimation.c", 2220);
     for (i = 0; i < cfg->nx; i++) {
         r->pos[i] = r->mesh->pos + i * cfg->ny;
@@ -2237,7 +2248,7 @@ void getCloth4D_planeClip(Cloth4D *c, void *plane)
     int i;
     int j;
     Cloth4DCfg *cfg = c->cfg;
-    int *rows = (int *)c->pos;
+    ICO_WORD *rows = (ICO_WORD *)c->pos;
     int nx = cfg->nx - (cfg->wrap != 0);
     int ny = cfg->ny;
 

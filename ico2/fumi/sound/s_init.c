@@ -1,4 +1,5 @@
 #include "typedef.h"
+#include "ee_view.h"
 #include "s_init.h"
 #include "debug.h"
 #include "cdvd.h"
@@ -97,7 +98,7 @@ static int outputMode = 0; /* derived name */
 
 static int seSemiCommonLoaded = 0; /* derived name */
 
-inline int Ee2Iop(int ee, int iop, int size)
+inline int Ee2Iop(ICO_WORD ee, int iop, int size)
 {
     sceSifDmaData d;
     int x;
@@ -139,16 +140,26 @@ int soundInit(void)
     SgSetMasterVol(0, 0, 0);
     SgSetMasterVol(1, 0, 0);
     for (i = 15; i >= 0; i--) {
+#ifdef ICO_HOST
+        *(int *)&soundDataTbl[i] = 0;
+#else
         *(int *)&((char *)soundDataTbl)[i * 48] = 0;
+#endif
     }
     adpcmChMask = 0;
     seChMask = 0;
     /* the request slot of every SeSlot, walked through a base pointer: that is
        what keeps the +0x30 out of the symbol's %hi/%lo and in the loop start value */
+#ifdef ICO_HOST
+    for (i = 47; i >= 0; i--) {
+        seSlotTbl[i].req = 0;
+    }
+#else
     p = (char *)seSlotTbl;
     for (i = 47; i >= 0; i--) {
         *(int *)&p[i * 64 + 0x30] = 0;
     }
+#endif
     AdpcmStreamInit();
     seEnvForceClose = 0;
     return 0;
@@ -216,7 +227,11 @@ found:
     seChMask |= bit;
     req->seMask |= bit;
     /* the slot indexed by byte offset */
+#ifdef ICO_HOST
+    seSlotTbl[i].flag.all &= 0xFDFFFFFF;
+#else
     ((SeSlot *)&((char *)seSlotTbl)[i * 64])->flag.all &= 0xFDFFFFFF;
+#endif
     return i;
 }
 
@@ -271,7 +286,7 @@ inline SqEntry *soundDataAreaGet(int no, int bank, int mode, int seg)
             debug_assert(__FILE__, 334);
             __assert(__FILE__, 334, "0");
         }
-        memset(e, 0, 0x30);
+        memset(e, 0, ICO_MAX_SIZE(SqEntry, 0x30));
         e->num = no;
         e->bank = bank;
         e->seg = seg;
@@ -325,8 +340,12 @@ static void soundDataOpenChk(SqEntry *self)
         }
         off = ch * 64;
         hr = SgBgmOpen(self->vab, self->sq);
+#ifdef ICO_HOST
+        seSlotTbl[ch].handle = hr;
+#else
         slot = &((char *)seSlotTbl)[off];
         *(short *)(slot + 0x10) = hr;
+#endif
         h = hr;
         if (h < 0) {
             seReqRelease(ch);
@@ -335,8 +354,13 @@ static void soundDataOpenChk(SqEntry *self)
         }
         SgSetBgmVol(h, 64, 0xFFFF);
         SgBgmPlay(h);
+#ifdef ICO_HOST
+        seSlotTbl[ch].req = self;
+        seSlotTbl[ch].owner = 0;
+#else
         *(SqEntry **)&((char *)seSlotTbl)[off + 0x30] = self;
         *(int *)&((char *)seSlotTbl)[off + 8] = 0;
+#endif
         debug_StdPrintfDummy("bgm play\n");
         return;
     default:
@@ -462,7 +486,7 @@ inline void soundBufAdpcmFree(SqEntry *self)
     self->spu.chMask = 0;
 }
 
-SqEntry *soundBDDataSet(int bd, int no, int bank, int mode, int seg, int size)
+SqEntry *soundBDDataSet(ICO_WORD_PTR(void *) bd, int no, int bank, int mode, int seg, int size)
 {
     int off = 0;
     SqEntry *e;
@@ -475,7 +499,7 @@ SqEntry *soundBDDataSet(int bd, int no, int bank, int mode, int seg, int size)
     while (size > 0) {
         chunk = (size > 0x78000) ? 0x78000 : size;
         SgGetDmaTransferStatus(1);
-        Ee2Iop(bd + off, soundIopHeapAddrs, chunk);
+        Ee2Iop((ICO_WORD)bd + off, soundIopHeapAddrs, chunk);
         if (chunk >= 65) {
             SgDmaWrite(soundIopHeapAddrs, e->spu.buf.addr + off, chunk);
         } else {
@@ -652,12 +676,14 @@ static void soundSeVolSet(SeSlot *self)
 /* The debug SE-info page: one row per editable field of the slot the pad is
    parked on, walked with the D-pad and nudged by `step`.  The row is a label
    followed by a nested value record. */
-typedef struct DbgVal { /* field names derived */
-    int ptr;            /* 0x04 */
-    int type;           /* 0x08 : 0 = int cell, 1 = float cell */
-    int mode;           /* 0x0C : 1 = colour the row when the value is past `dist` */
-    float step;         /* 0x10 */
-} DbgVal;               /* derived name */
+typedef int (*SeProcFn)(); /* derived name */
+
+typedef struct DbgVal {       /* field names derived */
+    ICO_WORD_PTR(void *) ptr; /* 0x04 */
+    int type;                 /* 0x08 : 0 = int cell, 1 = float cell */
+    int mode;                 /* 0x0C : 1 = colour the row when the value is past `dist` */
+    float step;               /* 0x10 */
+} DbgVal;                     /* derived name */
 
 typedef struct DbgRow { /* field names derived */
     char *label;        /* 0x00 */
@@ -714,7 +740,11 @@ static void debug_DispSEInfo(void)
         solo = 1;
     }
     for (i = 0; i < 48; i++) {
+#ifdef ICO_HOST
+        if (seSlotTbl[i].req == 0) {
+#else
         if (*(int *)&((char *)seSlotTbl)[i * 64 + 0x30] == 0) {
+#endif
             continue;
         }
         p = &seSlotTbl[i];
@@ -742,15 +772,15 @@ static void debug_DispSEInfo(void)
         DbgRow *row;
         DbgRow *cur;
         DbgRow list[9] = {
-            {"center x", {(int)&center[0], 1, 0, 10.0f}},
-            {"center y", {(int)&center[1], 1, 0, 10.0f}},
-            {"center x", {(int)&center[2], 1, 0, 10.0f}},
-            {"volumeRate", {(int)&self->volumeRate, 1, 1, 0.1f}},
-            {"max volume range", {(int)&self->maxVolumeRange, 1, 1, 10.0f}},
-            {"attenuator", {(int)&self->attenuator, 1, 1, 10.0f}},
-            {"volume length", {(int)&self->volumeLength, 1, 1, 10.0f}},
-            {"max volume type", {(int)&sel, 0, 0, 1.0f}},
-            {"stereo rate", {(int)&self->stereoRate, 1, 0, 0.05f}},
+            {"center x", {(ICO_WORD_PTR(void *)) & center[0], 1, 0, 10.0f}},
+            {"center y", {(ICO_WORD_PTR(void *)) & center[1], 1, 0, 10.0f}},
+            {"center x", {(ICO_WORD_PTR(void *)) & center[2], 1, 0, 10.0f}},
+            {"volumeRate", {(ICO_WORD_PTR(void *)) & self->volumeRate, 1, 1, 0.1f}},
+            {"max volume range", {(ICO_WORD_PTR(void *)) & self->maxVolumeRange, 1, 1, 10.0f}},
+            {"attenuator", {(ICO_WORD_PTR(void *)) & self->attenuator, 1, 1, 10.0f}},
+            {"volume length", {(ICO_WORD_PTR(void *)) & self->volumeLength, 1, 1, 10.0f}},
+            {"max volume type", {(ICO_WORD_PTR(void *)) & sel, 0, 0, 1.0f}},
+            {"stereo rate", {(ICO_WORD_PTR(void *)) & self->stereoRate, 1, 0, 0.05f}},
         };
 
         num = 9;
@@ -1012,7 +1042,7 @@ static int _soundSeDefPlay(int kind, unsigned int owner, float *pos, int playMod
     SqEntry *e;
     SeSlot *slot;
     unsigned short *kp;
-    int cb;
+    ICO_WORD_PTR(SeProcFn) cb;
 
     /* the search key as a bank:num pair written field by field, bank first */
     union { /* field names derived */
@@ -1035,7 +1065,7 @@ static int _soundSeDefPlay(int kind, unsigned int owner, float *pos, int playMod
         *out = 0;
     }
     if (env != 0) {
-        cb = (int)env->proc;
+        cb = (ICO_WORD_PTR(SeProcFn))env->proc;
     }
     if (*kp == 0) {
         return -2;
@@ -1194,6 +1224,20 @@ void soundSeDefPitchSet(int id, int pitch)
 
 inline float soundSeDefVolumeRateGet(int id)
 {
+#ifdef ICO_HOST
+    SeSlot *e = &seSlotTbl[id & 0xFF];
+    if (e->handle >= 0) {
+        goto check;
+    }
+fail:
+    return 0.0f;
+check:
+    id = id >> 8;
+    if (id != e->num) {
+        goto fail;
+    }
+    return e->volumeRate;
+#else
     int off = (id & 0xFF) * 64;
     char *e = (char *)seSlotTbl + off;
     if (*(short *)(e + 0x10) >= 0) {
@@ -1207,10 +1251,20 @@ check:
         goto fail;
     }
     return *(float *)((char *)seSlotTbl + off + 0x18);
+#endif
 }
 
 inline void soundSeDefVolumeRateSet(int id, float rate)
 {
+#ifdef ICO_HOST
+    SeSlot *e = &seSlotTbl[id & 0xFF];
+    if (e->handle >= 0) {
+        id = id >> 8;
+        if (id == e->num) {
+            e->volumeRate = rate;
+        }
+    }
+#else
     int off = (id & 0xFF) * 64;
     char *e = (char *)seSlotTbl + off;
     if (*(short *)(e + 0x10) >= 0) {
@@ -1219,6 +1273,7 @@ inline void soundSeDefVolumeRateSet(int id, float rate)
             *(float *)((char *)seSlotTbl + off + 0x18) = rate;
         }
     }
+#endif
 }
 
 inline void soundReqTickProc(void)
@@ -1489,6 +1544,17 @@ void soundDataSegNextStageNotUseClose(int mode, int stage)
 
 inline int debug_req(void)
 {
+#ifdef ICO_HOST
+    SeSlot *e = seSlotTbl;
+    int i = 0x2F;
+    do {
+        if (e->req != 0) {
+            debug_StdPrintfDummy("num %d %d\n", e->handle, (unsigned int)(e->src - seDef));
+        }
+        e++;
+        i--;
+    } while (i >= 0);
+#else
     char *e = (char *)seSlotTbl;
     int sz = 0x3C;
     int i = 0x2F;
@@ -1500,5 +1566,6 @@ inline int debug_req(void)
         e += 0x40;
         i--;
     } while (i >= 0);
+#endif
     ICO_BREAK();
 }

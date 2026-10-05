@@ -20,7 +20,7 @@ static int execVib(int no, void *entry);
 static int execWeaponLightOff(void);
 extern GsysObjInfo seDef[];
 /* int (int, unsigned int, int, int) here, int (int, int, int, int) in s_init.h */
-extern int soundSeDefPlay(int se, unsigned int owner, int pos, int playMode);
+extern int soundSeDefPlay(int se, unsigned int owner, ICO_WORD_PTR(float *) pos, int playMode);
 
 typedef struct FDSFlags { /* field names derived */
     int vibDone[2];       /* 0x00 */
@@ -49,10 +49,10 @@ static float fdsVolume = 1.0f; /* derived name */
 static int fdsGroup = 0; /* derived name */
 
 /* int (int, unsigned int, int, int, float) here, int (int, int, int, int) in s_init.h */
-extern int soundSeDefPlayWithVolumeRate(int se, unsigned int owner, int pos, int playMode,
-                                        float rate);
+extern int soundSeDefPlayWithVolumeRate(int se, unsigned int owner, ICO_WORD_PTR(float *) pos,
+                                        int playMode, float rate);
 /* seMail has no header; declared as ico2/fumi/src/seMail.c defines it */
-extern void seMail(int self, int id);
+extern void seMail(GObj *self, int id);
 
 static int playSE(int no)
 {
@@ -67,13 +67,13 @@ static int playSE(int no)
             }
 
             if (fdsVolume > 0.95f) {
-                ret = soundSeDefPlay(no, fdsGroup, GOBJ_SUB(fdsGObj)->nodeMtx + 0x30, 1);
+                ret = soundSeDefPlay(no, fdsGroup, (float *)(GOBJ_SUB(fdsGObj)->nodeMtx + 0x30), 1);
             } else {
-                ret = soundSeDefPlayWithVolumeRate(no, fdsGroup, GOBJ_SUB(fdsGObj)->nodeMtx + 0x30,
-                                                   1, fdsVolume);
+                ret = soundSeDefPlayWithVolumeRate(
+                    no, fdsGroup, (float *)(GOBJ_SUB(fdsGObj)->nodeMtx + 0x30), 1, fdsVolume);
             }
 
-            seMail((int)fdsGObj, no);
+            seMail((GObj *)fdsGObj, no);
             if (ret == -2) {
                 if (debug_seslotdisp_flag != 0) {
                     /* EUC-JP: "SE \"%s\" is not loaded" */
@@ -378,6 +378,21 @@ static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
     int no;
 
     /* the display object, read as a char pointer like fdsGObj */
+#ifdef ICO_HOST
+    Sub15C *s = gobj->dobj;
+
+    w = (char *)s;
+    fdsGObj = (char *)gobj;
+    if (w != 0) {
+        no = s->modelId;
+        p = (char *)&s->ctrl;
+        fdsWork = &s->root;
+        fdsFlags = (FDSFlags *)s->fdsFlags;
+        fdsRecord = &motionKind[s->ctrl.motion];
+        fdsGroup = s->ctrl.seGroup[id];
+        fdsLayout = &s->ctrl;
+    } else {
+#else
     w = *(char **)((char *)gobj + 0x15C);
     fdsGObj = (char *)gobj;
     if (w != 0) {
@@ -389,6 +404,7 @@ static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
         fdsGroup = *(int *)(w + (id << 2) + 0x61C);
         fdsLayout = (struct MotCtrl *)p;
     } else {
+#endif
         no = -1;
         fdsLayout = 0;
         fdsWork = 0;

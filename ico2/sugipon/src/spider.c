@@ -68,7 +68,7 @@ SpiderWork *InitSpiderLayoutGeo(GObj *self, SObjSimpleSetting *lay)
     n = spiderDef[k].count;
     w->n = n;
     w->kind = k;
-    w->members = iosMallocDebug(ios_partition_sugipon, n * 4, spiderFile, 47);
+    w->members = iosMallocDebug(ios_partition_sugipon, n * sizeof(GObj *), spiderFile, 47);
     w->awake = 0;
     w->state = -1;
     w->entryWait = 0;

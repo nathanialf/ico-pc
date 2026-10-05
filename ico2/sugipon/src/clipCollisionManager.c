@@ -1,3 +1,5 @@
+#include "ee_view.h"
+#include "gobj_process.h"
 #include "clipCollisionManager.h"
 #include "GobjProc.h"
 #include "debug.h"
@@ -11,9 +13,9 @@ static GObj *clipCollisionManagerGObj = 0; /* derived name */
 
 /* `self` is volatile: the thread yields in _ACTWait below, and the entry
    argument is read back from its stack home after each resume. */
-static void actClipCollisionCore(volatile unsigned int self)
+static void actClipCollisionCore(volatile unsigned ICO_WORD self)
 {
-    ClipColReq *w = *(ClipColReq **)(self + 0x20);
+    ClipColReq *w = ICO_RAW(ClipColReq *, self, 0x20, (ClipColReq *)((GProc *)self)->arg);
     float a[4];
     float b[4];
     float step;
@@ -67,7 +69,7 @@ static void actClipCollisionCore(volatile unsigned int self)
 inline void *RequestClipCollision(ClipColReq *req)
 {
     void *t = actCreateSubThreadGOppArg(actClipCollisionCore, 21);
-    *(ClipColReq **)((char *)t + 0x20) = req;
+    ICO_RAW(ClipColReq *, t, 0x20, ((GProc *)t)->arg) = req;
     req->done = 0;
     return t;
 }

@@ -78,7 +78,7 @@ static void _wallHitReaction(ClipWork *w, void *pos, void *last, int noSlide)
                     ClipWork cw2;
                     Vec16 push;
 
-                    memset(&cw2, 0, 0xC0);
+                    memset(&cw2, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
                     _NormalizeVector(&push, &slide);
                     _ScaleVectorXYZ(&push, &push, 100.0f);
                     CopyVector(&cw2, pos);
@@ -643,7 +643,7 @@ static inline int getFloorAttributeUnderNode(void) /* derived name */
     ClipWork w;
     int node;
 
-    memset(&w, 0, 0xC0);
+    memset(&w, 0, ICO_MAX_SIZE(ClipWork, 0xC0));
     node = GetSkeltonFocusNode((GObj *)skelGObj, 51);
     _AddVectorXYZ(&w, skelRoot->pos, nodePos2 + node * 16);
     CopyVector(w.pt[1], &w);
@@ -1041,13 +1041,13 @@ side_probe:
 
 static void forceFallDown(void)
 {
-    iosOmSendMail(skelGObj, 0x18, skelGObj);
+    iosOmSendMail((GObj *)skelGObj, 0x18, (void *)skelGObj);
     CopyVector(skelRoot->last, skelRoot->pos);
 }
 
 static void forceReset(void)
 {
-    iosOmSendMail(skelGObj, 0x103, skelGObj);
+    iosOmSendMail((GObj *)skelGObj, 0x103, (void *)skelGObj);
     CopyVector(skelRoot->last, (char *)skelRoot);
 }
 
@@ -1347,20 +1347,27 @@ static int avoidSideAdjustWall(void)
 {
     float mtx[16];
     /* a 0xD0-byte block, cleared to the clip request's 0xC0 */
+#ifdef ICO_HOST
+    ClipWork wk;
+    char *w = (char *)&wk;
+
+    memset(w, 0, sizeof(ClipWork));
+#else
     char w[208];
 
     memset(w, 0, 0xC0);
+#endif
     GetMatrixFromQuaternionPos(mtx, skelRoot->quat, skelRoot->pos);
     _ApplyMatrix(w, mtx, avoidLeft);
     _ApplyMatrix(w + 0x10, mtx, avoidRight);
-    if (clipSideWallAndHit(w) == 0) {
+    if (clipSideWallAndHit((ClipWork *)w) == 0) {
         _ApplyMatrix(w, mtx, avoidRight);
         _ApplyMatrix(w + 0x10, mtx, avoidLeft);
-        if (clipSideWallAndHit(w) == 0) {
+        if (clipSideWallAndHit((ClipWork *)w) == 0) {
             return 0;
         }
     }
-    pushRootAlongSideWall(w);
+    pushRootAlongSideWall((ClipWork *)w);
     return 1;
 }
 
@@ -1650,7 +1657,7 @@ static ObjNode rootUpdateNodeFix(void)
     case 1:
         break;
     case 3:
-        GetRootQuaternion(&rq, skelRoot->fixObj);
+        GetRootQuaternion(&rq, (GObj *)skelRoot->fixObj);
         MultiQuaternion(&rq, &rq, GOBJ_SUB(skelRoot->fixObj)->root.motionQuat);
         /* fall through */
     case 2:

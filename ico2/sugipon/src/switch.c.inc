@@ -83,7 +83,8 @@ inline LeverGeoWork *InitFloorLeverGeo(GObj *self, SObjSimpleSetting *lay)
     } else {
         g->linked = 0;
     }
-    g->base = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
+    g->base = (ICO_WORD_PTR(struct Sub15C *))CSVSYSTEM_InitDObj(
+        accessary[GOBJ_SUB(self)->accessary].model, lay);
     g->handle = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model2, lay);
     return g;
 }
@@ -236,7 +237,8 @@ inline LeverGeoWork *InitWallLeverGeo(GObj *self, SObjSimpleSetting *lay)
     } else {
         g->linked = 0;
     }
-    g->base = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
+    g->base = (ICO_WORD_PTR(struct Sub15C *))CSVSYSTEM_InitDObj(
+        accessary[GOBJ_SUB(self)->accessary].model, lay);
     g->handle = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model2, lay);
     return g;
 }

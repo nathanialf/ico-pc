@@ -41,7 +41,7 @@ void DebugDisp1Collision(WallCfg *cfg);
 void DebugDisp1CollisionWithColor(WallCfg *cfg, void *color);
 void DisableChangeRootUpdateMode(GObj *self);
 void DisableMotionOrientUpdate(GObj *self);
-void DispSkelton(GObj *self, int motion);
+void DispSkelton(GObj *self, ICO_WORD_PTR(void *) motion);
 void EnableChangeRootUpdateMode(GObj *self);
 void EnableMotionOrientUpdate(GObj *self);
 void FeedbackWallWorkInfoToBrainSystem(GObj *self);

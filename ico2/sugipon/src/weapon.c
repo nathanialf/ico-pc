@@ -567,7 +567,7 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
     r.obj = (lay->obj & 0xFF00) ? 5 : 4;
 
     w->count = 1;
-    w->objs = iosMallocDebug(ios_partition_sugipon, 1 * 4, __FILE__, 759);
+    w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 759);
 
     for (i = 0; i < 1; i++) {
         queenSwordOfs[2] = weaponKind[w->kind].length * (float)i / 0.0f;
@@ -614,7 +614,7 @@ void *InitWeaponGeo(GObj *g, SObjSimpleSetting *lay)
             SetTorchLife(o, (60 - systemStatus[0] * 10) / systemStatus[1] * 15,
                          (60 - systemStatus[0] * 10) / systemStatus[1] * 3);
             w->count = 1;
-            w->objs = iosMallocDebug(ios_partition_sugipon, 1 * 4, __FILE__, 848);
+            w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 848);
             w->objs[0] = o;
             w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 856);
             break;
@@ -633,10 +633,8 @@ void *InitWeaponGeo(GObj *g, SObjSimpleSetting *lay)
         case 9:
             w->buf = iosMallocDebug(ios_partition_sugipon, 352, __FILE__, 870);
             w->net = iosMallocDebug(ios_partition_sugipon, 8, __FILE__, 871);
-            w->model0 = CSVSYSTEM_InitDObj(
-                accessary[((SubHandle *)(((char *)g) + 0x15C))->sub->accessary].model, lay);
-            w->model1 = CSVSYSTEM_InitDObj(
-                accessary[((SubHandle *)(((char *)g) + 0x15C))->sub->accessary].model2, lay);
+            w->model0 = CSVSYSTEM_InitDObj(accessary[SUBHANDLE_OF(g)->sub->accessary].model, lay);
+            w->model1 = CSVSYSTEM_InitDObj(accessary[SUBHANDLE_OF(g)->sub->accessary].model2, lay);
             CopyQuaternion(g->dobj->root.quat, g->dobj->quat);
             UpdateRootMatrix(g);
             setWeaponOffsetMode(g, 1);

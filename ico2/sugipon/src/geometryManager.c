@@ -144,7 +144,7 @@ static __inline__ void SetRootPosition_i(GObj *obj, void *pos) /* derived name *
     float buf[16];
     Vec4 *p = (Vec4 *)obj->dobj->root.pos;
     CopyVector(p, pos);
-    p->f[1] = p->f[1] - *(float *)((char *)p + 0xC0);
+    p->f[1] = p->f[1] - ICO_RAW(float, p, 0xC0, obj->dobj->root.height);
     p->f[3] = 1.0f;
     {
         Sub15C *sub = obj->dobj;
@@ -713,7 +713,7 @@ void GetRootMatrixTransOffsetByDObj(float *dst, Sub15C *src)
 {
     float tmp[4][4];
     MatrixDrive_SetTransposeMatrix(tmp, &src->matrix);
-    sceVu0MulMatrix(tmp, tmp, src->nodeMtx);
+    sceVu0MulMatrix(tmp, tmp, (void *)src->nodeMtx);
     CopyVector(dst, tmp[3]);
 }
 
@@ -722,7 +722,7 @@ void GetRootMatrixTransOffset(float *dst, GObj *src)
     float tmp[4][4];
     Sub15C *p = GOBJ_SUB(src);
     MatrixDrive_SetTransposeMatrix(tmp, &p->matrix);
-    sceVu0MulMatrix(tmp, tmp, p->nodeMtx);
+    sceVu0MulMatrix(tmp, tmp, (void *)p->nodeMtx);
     CopyVector(dst, tmp[3]);
 }
 

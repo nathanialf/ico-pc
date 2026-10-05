@@ -63,6 +63,11 @@ typedef union SubHandle { /* field names derived */
     struct Sub15C *sub;
 } SubHandle; /* derived name */
 
+/* the GObj's sub-object slot (+0x15C) as a SubHandle: the EE's byte offset, the
+   host's field */
+#include "ee_view.h"
+#define SUBHANDLE_OF(g) ICO_RAWP(SubHandle *, g, 0x15C, (SubHandle *)&((struct GObj *)(g))->dobj)
+
 int GetCylinderCollisionWithExceptOwnCollision(struct GObj *self, struct GObj *target, float r,
                                                float h, float s, float t, int ctrl);
 

@@ -57,7 +57,7 @@ typedef struct {                        /* field names derived */
     int released;                       /* 0x08 */
     int held;                           /* 0x0C */
     int thrown;                         /* 0x10 */
-    int holder;                         /* 0x14, the holding object */
+    ICO_WORD_PTR(GObj *) holder;        /* 0x14, the holding object */
     int pad18[2];                       /* 0x18 */
     float rot[4];                       /* 0x20 */
     float spin;                         /* 0x30 */
@@ -112,7 +112,7 @@ void HoldItem(GObj *gobj, GObj *holder)
     p = GOBJ_SUB(gobj)->work;
     p->released = 0;
     p->held = 1;
-    p->holder = (int)holder;
+    p->holder = (ICO_WORD_PTR(GObj *))holder;
     GOBJ_SUB(gobj)->disp = 0;
     SetIdentityQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
     if (IsItemKindBomb(gobj)) {
@@ -129,7 +129,7 @@ void HoldItem(GObj *gobj, GObj *holder)
 static inline void setItemDead(GObj *gobj) /* derived name */
 {
     Sub15C *w = GOBJ_SUB(gobj);
-    ItemWork *p = (ItemWork *)*(int *)&w->work;
+    ItemWork *p = (ItemWork *)*(ICO_WORD *)&w->work;
 
     w->disp = 0;
     p->dead = 1;
@@ -195,9 +195,10 @@ void ThrowItem(GObj *gobj, void *vel)
     p->released = 1;
     p->held = 0;
     p->thrown = 1;
-    _ScaleVectorXYZ(*(char **)&gobj->dobj + 0x130, vel,
-                    30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-    SetIdentityQuaternion(*(char **)&gobj->dobj + 0x150);
+    _ScaleVectorXYZ(ICO_RAWP(char *, *(char **)&gobj->dobj, 0x130, (char *)gobj->dobj->root.move),
+                    vel, 30.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    SetIdentityQuaternion(
+        ICO_RAWP(char *, *(char **)&gobj->dobj, 0x150, (char *)gobj->dobj->root.itemQuat));
 }
 
 typedef union { /* field names derived */
@@ -624,7 +625,11 @@ static void execBombGeo(GObj *gobj)
                                            60.0f * 300.0f)) +
                  1.0f) *
                 0.5f);
+#ifdef ICO_HOST
+        CopyVector(((SubHandle *)&q->torch->dobj)->sub->root.pos, v);
+#else
         CopyVector(((SubHandle *)&q->torch->dobj)->p + 0xA0, v);
+#endif
         q->time = q->time - 1;
         if (q->time == 0) {
             q->state = 2;

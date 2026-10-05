@@ -10,6 +10,12 @@
 #include <stdlib.h>
 #include "typedef.h"
 #include "Matrix.h"
+#include "ee_view.h"
+
+/* a display object's node-matrix and node-quaternion buffer words (Sub15C
+   +0xC and +0x10 on the EE), as the buffer pointers the loaders store */
+#define DOBJ_NODEMTX_PTR(d) ICO_RAW(void *, d, 0xC, *(void **)&(d)->nodeMtx)
+#define DOBJ_NODEQUAT_PTR(d) ICO_RAW(void *, d, 0x10, *(void **)&(d)->nodeQuat)
 
 /* the engine RNG, 0..1 */
 static __inline__ float random_unit(void) /* derived name */
