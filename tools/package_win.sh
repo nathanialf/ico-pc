@@ -93,6 +93,7 @@ for a in x64; do
     sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
     # no pad-script.txt: this is a playable build; the scripted pad is a
     # developer tool (port/input/pad-boot.txt) and would play the game by itself
+    rm -f "$d/pad-script.txt"
     cat > "$d/ico-pc.ini" <<INI
 # ico-pc.ini: settings for the $label test build (a window).
 # Lines are key=value; lines starting with # or ; are comments.
