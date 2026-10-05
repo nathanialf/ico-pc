@@ -40,6 +40,16 @@ int ico_audio_host_frames(int hz, unsigned int i)
 
 void ico_audio_host_shutdown(void)
 {
+    spu2_stats st;
+
+    spu2_get_stats(&st);
+    if (st.chunked_frames + st.exact_frames > 0) {
+        fprintf(stderr,
+                "audio: SPU2 rendered %llu frames voice by voice in %llu chunks and %llu frame "
+                "by frame (%llu hazards)\n",
+                (unsigned long long)st.chunked_frames, (unsigned long long)st.chunks,
+                (unsigned long long)st.exact_frames, (unsigned long long)st.hazards);
+    }
     if (wav != NULL) {
         uint64_t frames = ico_wav_close(wav);
 

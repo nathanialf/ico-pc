@@ -203,6 +203,21 @@ uint16_t spu2_read_reg(int core, unsigned reg);
 /* Render `frames` stereo frames into out (L, R interleaved). */
 void spu2_render(int16_t *out, int frames);
 
+/* How spu2_render has rendered since start-up (not reset by spu2_reset):
+   frames rendered voice by voice in chunks, frames rendered one at a time
+   (around timed writes, transfers and callbacks, with an IRQ armed, or
+   after a hazard), and hazards (a voice reading sound RAM that the chunk's
+   frames write: a write-back or reverb work area).  The output is the same
+   either way (docs/port/AUDIO.md, "Render cost"). */
+typedef struct spu2_stats {
+    uint64_t chunks;
+    uint64_t chunked_frames;
+    uint64_t exact_frames;
+    uint64_t hazards;
+} spu2_stats;
+
+void spu2_get_stats(spu2_stats *st);
+
 /* --- Sound RAM transfers ---------------------------------------------------- */
 
 /* Copy into / out of sound RAM at once (byte address; wraps at 2 MB).  The

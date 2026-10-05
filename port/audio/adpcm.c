@@ -32,6 +32,23 @@ int adpcm_decode_block(const uint8_t *block, int16_t *out, adpcm_hist *h)
         shift = 9;
     adpcm_filter((block[0] >> 4) & 0x07, &f0, &f1);
 
+    /* No data and no prediction (filter 0, or a zero history): every
+       sample is (0 >> shift) + (32 >> 6) = 0.  The idle block libsd's init
+       loops every voice over is one. */
+    if ((f0 == 0 && f1 == 0) || (old == 0 && older == 0)) {
+        uint32_t any = 0;
+
+        for (i = 2; i < ADPCM_BLOCK_BYTES; i++)
+            any |= block[i];
+        if (any == 0) {
+            for (i = 0; i < ADPCM_BLOCK_SAMPLES; i++)
+                out[i] = 0;
+            h->hist[0] = 0;
+            h->hist[1] = 0;
+            return block[1];
+        }
+    }
+
     for (i = 0; i < ADPCM_BLOCK_SAMPLES; i++) {
         int nib = (block[2 + (i >> 1)] >> ((i & 1) * 4)) & 0x0F;
         /* sign-extend the nibble and place it in bits 12-15 */

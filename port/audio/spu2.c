@@ -14,6 +14,10 @@
  *      master volume;
  *   3. store the write-back areas, output core 1's result.
  *
+ * That is the reference renderer.  spu2_render gets the same bits faster by
+ * running stretches of up to 256 frames voice by voice ("Chunked
+ * rendering" below; AUDIO.md, "Render cost").
+ *
  * Every behaviour is from psx-spx's SPU description unless a comment says
  * otherwise; docs/port/AUDIO.md lists the sources and the approximations
  * (DIVERGENCES.md rows A1..).
@@ -182,8 +186,8 @@ static void irq_check(uint32_t a, uint32_t n)
 
 /* --- Envelope generator --------------------------------------------------- */
 
-void spu2_env_tick(int32_t *level, uint32_t *counter, int rate, int exponential, int decrease,
-                   int negative, int never_step)
+static inline void env_tick(int32_t *level, uint32_t *counter, int rate, int exponential,
+                            int decrease, int negative, int never_step)
 {
     int shift = (rate >> 2) & 0x1F;
     int32_t step = 7 - (rate & 3);
@@ -233,44 +237,103 @@ void spu2_env_tick(int32_t *level, uint32_t *counter, int rate, int exponential,
     *level = l;
 }
 
-static void adsr_tick(voice *v, uint16_t adsr1, uint16_t adsr2)
+void spu2_env_tick(int32_t *level, uint32_t *counter, int rate, int exponential, int decrease,
+                   int negative, int never_step)
+{
+    env_tick(level, counter, rate, exponential, decrease, negative, never_step);
+}
+
+static inline void adsr_run(int *phase, int32_t *env, uint32_t *counter, uint16_t adsr1,
+                            uint16_t adsr2)
 {
     int rate;
 
-    switch (v->phase) {
+    switch (*phase) {
     case ENV_ATTACK:
         rate = (adsr1 >> 8) & 0x7F;
-        spu2_env_tick(&v->env, &v->env_counter, rate, adsr1 >> 15, 0, 0, rate == 0x7F);
-        if (v->env >= 0x7FFF) {
-            v->phase = ENV_DECAY;
-            v->env_counter = 0;
+        env_tick(env, counter, rate, adsr1 >> 15, 0, 0, rate == 0x7F);
+        if (*env >= 0x7FFF) {
+            *phase = ENV_DECAY;
+            *counter = 0;
         }
         break;
     case ENV_DECAY:
         /* decay runs while the level is above the sustain level, (SL + 1)
            * 0x800; at SL 15 (0x8000) it ends at once */
-        if (v->env > (((adsr1 & 0xF) + 1) << 11))
-            spu2_env_tick(&v->env, &v->env_counter, ((adsr1 >> 4) & 0xF) << 2, 1, 1, 0, 0);
-        if (v->env <= (((adsr1 & 0xF) + 1) << 11)) {
-            v->phase = ENV_SUSTAIN;
-            v->env_counter = 0;
+        if (*env > (((adsr1 & 0xF) + 1) << 11))
+            env_tick(env, counter, ((adsr1 >> 4) & 0xF) << 2, 1, 1, 0, 0);
+        if (*env <= (((adsr1 & 0xF) + 1) << 11)) {
+            *phase = ENV_SUSTAIN;
+            *counter = 0;
         }
         break;
     case ENV_SUSTAIN:
         rate = (adsr2 >> 6) & 0x7F;
-        spu2_env_tick(&v->env, &v->env_counter, rate, adsr2 >> 15, (adsr2 >> 14) & 1, 0,
-                      rate == 0x7F);
+        env_tick(env, counter, rate, adsr2 >> 15, (adsr2 >> 14) & 1, 0, rate == 0x7F);
         break;
     case ENV_RELEASE:
-        spu2_env_tick(&v->env, &v->env_counter, (adsr2 & 0x1F) << 2, (adsr2 >> 5) & 1, 1, 0,
-                      (adsr2 & 0x1F) == 0x1F);
-        if (v->env <= 0) {
-            v->env = 0;
-            v->phase = ENV_OFF;
+        env_tick(env, counter, (adsr2 & 0x1F) << 2, (adsr2 >> 5) & 1, 1, 0, (adsr2 & 0x1F) == 0x1F);
+        if (*env <= 0) {
+            *env = 0;
+            *phase = ENV_OFF;
         }
         break;
     default:
         break;
+    }
+}
+
+static inline void adsr_tick(voice *v, uint16_t adsr1, uint16_t adsr2)
+{
+    adsr_run(&v->phase, &v->env, &v->env_counter, adsr1, adsr2);
+}
+
+/* env_tick's counter increment for a rate (never_step: 0). */
+static inline uint32_t env_inc(int rate, int exponential, int decrease, int32_t level,
+                               int never_step)
+{
+    int shift = (rate >> 2) & 0x1F;
+    uint32_t inc = 0x8000u >> (shift > 11 ? shift - 11 : 0);
+
+    if (never_step)
+        return 0;
+    if (exponential && !decrease && level > 0x6000) {
+        if (shift >= 11)
+            inc >>= 2;
+        else if (shift == 10)
+            inc >>= 1;
+    }
+    return inc < 1 ? 1 : inc;
+}
+
+/* The envelope between steps: while counter + inc stays below 0x8000, an
+   adsr_run in the current phase and level only adds inc to the counter (no
+   step, no phase change).  Returns that inc, or 0x8000 (always "steps")
+   when the next adsr_run may do more: a phase about to end, or a level
+   about to move it. */
+static uint32_t adsr_quiet_inc(int phase, int32_t env, uint16_t adsr1, uint16_t adsr2)
+{
+    int rate;
+
+    switch (phase) {
+    case ENV_ATTACK:
+        rate = (adsr1 >> 8) & 0x7F;
+        if (env >= 0x7FFF)
+            return 0x8000;
+        return env_inc(rate, adsr1 >> 15, 0, env, rate == 0x7F);
+    case ENV_DECAY:
+        if (env <= (((adsr1 & 0xF) + 1) << 11))
+            return 0x8000;
+        return env_inc(((adsr1 >> 4) & 0xF) << 2, 1, 1, env, 0);
+    case ENV_SUSTAIN:
+        rate = (adsr2 >> 6) & 0x7F;
+        return env_inc(rate, adsr2 >> 15, (adsr2 >> 14) & 1, env, rate == 0x7F);
+    case ENV_RELEASE:
+        if (env <= 0)
+            return 0x8000;
+        return env_inc((adsr2 & 0x1F) << 2, (adsr2 >> 5) & 1, 1, env, (adsr2 & 0x1F) == 0x1F);
+    default:
+        return 0;
     }
 }
 
@@ -285,14 +348,14 @@ static void vol_write(vol_state *vs, uint16_t v)
         vs->level = (int16_t)(uint16_t)(v << 1);
 }
 
-static void vol_tick(vol_state *vs)
+static inline void vol_tick(vol_state *vs)
 {
     uint16_t v = vs->reg;
 
     if (!(v & 0x8000))
         return;
-    spu2_env_tick(&vs->level, &vs->counter, v & 0x7F, (v >> 14) & 1, (v >> 13) & 1, (v >> 12) & 1,
-                  (v & 0x7F) == 0x7F);
+    env_tick(&vs->level, &vs->counter, v & 0x7F, (v >> 14) & 1, (v >> 13) & 1, (v >> 12) & 1,
+             (v & 0x7F) == 0x7F);
 }
 
 /* --- Voices ------------------------------------------------------------------ */
@@ -301,8 +364,10 @@ static void voice_load_block(voice *v)
 {
     uint32_t b = (v->cur & SPU2_ADDR_MASK) * 2u;
 
+    SPU2_LAP(SPU2_PROF_PITCH);
     irq_check(v->cur, 8);
     v->flags = adpcm_decode_block(&S.ram[b], v->buf, &v->hist);
+    SPU2_LAP(SPU2_PROF_DECODE);
     if (v->flags & ADPCM_FLAG_LOOP_START)
         v->lsax = v->cur;
     v->pos = 0;
@@ -407,6 +472,7 @@ static void voice_frame(core *c, int vi, uint32_t non, uint32_t pmon, int32_t ac
     int n;
 
     s = (non & bit) ? (int16_t)c->noise : interpolate(v);
+    SPU2_LAP(SPU2_PROF_INTERP);
     s = (s * v->env) >> 15;
     v->out = s;
 
@@ -420,10 +486,12 @@ static void voice_frame(core *c, int vi, uint32_t non, uint32_t pmon, int32_t ac
         acc[2] += l;
     if (mix[3] & bit)
         acc[3] += r;
+    SPU2_LAP(SPU2_PROF_MIX);
 
     adsr_tick(v, c->regs[(vp + SPU2_VP_ADSR1) / 2], c->regs[(vp + SPU2_VP_ADSR2) / 2]);
     vol_tick(&v->vol[0]);
     vol_tick(&v->vol[1]);
+    SPU2_LAP(SPU2_PROF_ENVELOPE);
 
     /* pitch counter (psx-spx "Pitch Counter") */
     step = c->regs[(vp + SPU2_VP_PITCH) / 2];
@@ -441,6 +509,7 @@ static void voice_frame(core *c, int vi, uint32_t non, uint32_t pmon, int32_t ac
         v->interp[3] = voice_fetch(c, vi);
     }
     v->counter &= 0xFFFu;
+    SPU2_LAP(SPU2_PROF_PITCH);
 }
 
 /* --- Reverb ------------------------------------------------------------------ */
@@ -471,12 +540,34 @@ enum {
     RV_APF2_R_DST
 };
 
-typedef struct rv_ctx {
-    const core *c;
+/* A core's reverb set-up, read from its registers: every address offset
+   the formula uses, reduced modulo the work area size, so a step needs no
+   division.  Built once per chunk (render_chunk) or per step (frame by
+   frame); the registers cannot change in between. */
+enum {
+    RO_SAME_DST, /* [ch]: mSAME, mSAME - 1, dSAME */
+    RO_SAME_PREV = 2,
+    RO_SAME_SRC = 4,
+    RO_DIFF_DST = 6, /* mDIFF, mDIFF - 1, dDIFF (crossed) */
+    RO_DIFF_PREV = 8,
+    RO_DIFF_SRC = 10,
+    RO_COMB = 12,     /* [comb * 2 + ch] */
+    RO_APF1_DST = 20, /* [ch]: mAPF1, mAPF1 - dAPF1, mAPF2, mAPF2 - dAPF2 */
+    RO_APF1_SRC = 22,
+    RO_APF2_DST = 24,
+    RO_APF2_SRC = 26,
+    RO_COUNT = 28
+};
+
+typedef struct rv_plan {
+    int on;    /* ESA <= end */
+    int write; /* ATTR bit 7 */
     uint32_t esa;
+    uint32_t end;
     uint32_t size; /* halfwords in [esa, end] */
-    int write;
-} rv_ctx;
+    uint32_t off[RO_COUNT];
+    int32_t vIIR, vWALL, vAPF1, vAPF2, vC[4], vLIN, vRIN;
+} rv_plan;
 
 static uint32_t rv_reg(const core *c, int i)
 {
@@ -488,160 +579,196 @@ static int32_t rv_vol(const core *c, unsigned reg)
     return (int16_t)c->xregs[(reg - 0x760) / 2];
 }
 
-/* Address `off` halfwords from the buffer position, wrapped into the work
-   area. */
-static uint32_t rv_addr(const rv_ctx *x, int64_t off)
+static uint32_t rv_mod(int64_t off, uint32_t size)
 {
-    int64_t a = (int64_t)(x->c->rv_cur - x->esa) + off;
-    int64_t m = (int64_t)x->size;
+    int64_t m = (int64_t)size;
 
-    a %= m;
-    if (a < 0)
-        a += m;
-    return (x->esa + (uint32_t)a) & SPU2_ADDR_MASK;
+    off %= m;
+    if (off < 0)
+        off += m;
+    return (uint32_t)off;
 }
 
-static int32_t rv_rd(const rv_ctx *x, int64_t off)
+static void rv_plan_build(const core *c, rv_plan *p)
 {
-    return ram_rd(rv_addr(x, off));
+    int ch;
+
+    p->end = ((uint32_t)(c->regs[SPU2_R_EEA / 2] & 0xF) << 16) | 0xFFFFu;
+    p->esa = reg_pair(c, SPU2_R_ESA);
+    p->on = p->esa <= p->end;
+    p->write = (c->regs[SPU2_R_ATTR / 2] & SPU2_ATTR_EFFECT) != 0;
+    if (!p->on)
+        return;
+    p->size = p->end - p->esa + 1;
+    for (ch = 0; ch < 2; ch++) {
+        int64_t m = rv_reg(c, RV_SAME_L_DST + ch);
+
+        p->off[RO_SAME_DST + ch] = rv_mod(m, p->size);
+        p->off[RO_SAME_PREV + ch] = rv_mod(m - 1, p->size);
+        p->off[RO_SAME_SRC + ch] = rv_mod(rv_reg(c, RV_SAME_L_SRC + ch), p->size);
+        m = rv_reg(c, RV_DIFF_L_DST + ch);
+        p->off[RO_DIFF_DST + ch] = rv_mod(m, p->size);
+        p->off[RO_DIFF_PREV + ch] = rv_mod(m - 1, p->size);
+        p->off[RO_DIFF_SRC + ch] = rv_mod(rv_reg(c, ch ? RV_DIFF_L_SRC : RV_DIFF_R_SRC), p->size);
+        p->off[RO_COMB + 0 + ch] = rv_mod(rv_reg(c, RV_COMB1_L + ch), p->size);
+        p->off[RO_COMB + 2 + ch] = rv_mod(rv_reg(c, RV_COMB2_L + ch), p->size);
+        p->off[RO_COMB + 4 + ch] = rv_mod(rv_reg(c, RV_COMB3_L + ch), p->size);
+        p->off[RO_COMB + 6 + ch] = rv_mod(rv_reg(c, RV_COMB4_L + ch), p->size);
+        m = rv_reg(c, RV_APF1_L_DST + ch);
+        p->off[RO_APF1_DST + ch] = rv_mod(m, p->size);
+        p->off[RO_APF1_SRC + ch] = rv_mod(m - (int64_t)rv_reg(c, RV_APF1_SIZE), p->size);
+        m = rv_reg(c, RV_APF2_L_DST + ch);
+        p->off[RO_APF2_DST + ch] = rv_mod(m, p->size);
+        p->off[RO_APF2_SRC + ch] = rv_mod(m - (int64_t)rv_reg(c, RV_APF2_SIZE), p->size);
+    }
+    p->vIIR = rv_vol(c, SPU2_R_IIR_VOL);
+    p->vWALL = rv_vol(c, SPU2_R_WALL_VOL);
+    p->vAPF1 = rv_vol(c, SPU2_R_APF1_VOL);
+    p->vAPF2 = rv_vol(c, SPU2_R_APF2_VOL);
+    p->vC[0] = rv_vol(c, SPU2_R_COMB1_VOL);
+    p->vC[1] = rv_vol(c, SPU2_R_COMB2_VOL);
+    p->vC[2] = rv_vol(c, SPU2_R_COMB3_VOL);
+    p->vC[3] = rv_vol(c, SPU2_R_COMB4_VOL);
+    p->vLIN = rv_vol(c, SPU2_R_IN_COEF_L);
+    p->vRIN = rv_vol(c, SPU2_R_IN_COEF_R);
 }
 
-static void rv_wr(const rv_ctx *x, int64_t off, int32_t v)
+/* The halfword address `off` (reduced) from the buffer position `rel`
+   (both < size): the work area wraps. */
+static inline uint32_t rv_addr(const rv_plan *p, uint32_t rel, int i)
 {
-    if (x->write)
-        ram_wr(rv_addr(x, off), clamp16(v));
+    uint32_t a = rel + p->off[i];
+
+    if (a >= p->size)
+        a -= p->size;
+    return (p->esa + a) & SPU2_ADDR_MASK;
 }
 
-static int32_t mul15(int32_t a, int32_t b)
+static inline int32_t mul15(int32_t a, int32_t b)
 {
     return (a * b) >> 15;
 }
 
 /* One 24 kHz step of the reverb unit (psx-spx "Reverb Formula"):
    in[2] the resampled wet input, out[2] the result before EVOL. */
-static void reverb_step(core *c, const int32_t in[2], int32_t out[2])
+static void reverb_step(core *c, const rv_plan *p, const int32_t in[2], int32_t out[2])
 {
-    rv_ctx x;
-    uint32_t end = ((uint32_t)(c->regs[SPU2_R_EEA / 2] & 0xF) << 16) | 0xFFFFu;
-    int32_t vIIR = rv_vol(c, SPU2_R_IIR_VOL);
-    int32_t vWALL = rv_vol(c, SPU2_R_WALL_VOL);
-    int32_t vAPF1 = rv_vol(c, SPU2_R_APF1_VOL);
-    int32_t vAPF2 = rv_vol(c, SPU2_R_APF2_VOL);
-    int32_t vC[4];
+    uint32_t rel;
     int32_t Lin;
     int32_t Rin;
     int ch;
 
-    x.c = c;
-    x.esa = reg_pair(c, SPU2_R_ESA);
-    if (x.esa > end) {
+    if (!p->on) {
         out[0] = out[1] = 0;
         return;
     }
-    x.size = end - x.esa + 1;
-    x.write = (c->regs[SPU2_R_ATTR / 2] & SPU2_ATTR_EFFECT) != 0;
-    if (c->rv_cur < x.esa || c->rv_cur > end)
-        c->rv_cur = x.esa;
+    if (c->rv_cur < p->esa || c->rv_cur > p->end)
+        c->rv_cur = p->esa;
+    rel = c->rv_cur - p->esa;
 
-    vC[0] = rv_vol(c, SPU2_R_COMB1_VOL);
-    vC[1] = rv_vol(c, SPU2_R_COMB2_VOL);
-    vC[2] = rv_vol(c, SPU2_R_COMB3_VOL);
-    vC[3] = rv_vol(c, SPU2_R_COMB4_VOL);
-    Lin = mul15(rv_vol(c, SPU2_R_IN_COEF_L), in[0]);
-    Rin = mul15(rv_vol(c, SPU2_R_IN_COEF_R), in[1]);
+    Lin = mul15(p->vLIN, in[0]);
+    Rin = mul15(p->vRIN, in[1]);
 
-    if (x.write) {
+    if (p->write) {
         /* same side and different side reflections */
-        static const int same_dst[2] = {RV_SAME_L_DST, RV_SAME_R_DST};
-        static const int same_src[2] = {RV_SAME_L_SRC, RV_SAME_R_SRC};
-        static const int diff_dst[2] = {RV_DIFF_L_DST, RV_DIFF_R_DST};
-        static const int diff_src[2] = {RV_DIFF_R_SRC, RV_DIFF_L_SRC}; /* crossed */
-
         for (ch = 0; ch < 2; ch++) {
             int32_t inp = ch ? Rin : Lin;
-            int64_t m = rv_reg(c, same_dst[ch]);
-            int32_t prev = rv_rd(&x, m - 1);
-            int32_t t = clamp16(inp + mul15(rv_rd(&x, rv_reg(c, same_src[ch])), vWALL) - prev);
+            int32_t prev = ram_rd(rv_addr(p, rel, RO_SAME_PREV + ch));
+            int32_t t =
+                clamp16(inp + mul15(ram_rd(rv_addr(p, rel, RO_SAME_SRC + ch)), p->vWALL) - prev);
 
-            rv_wr(&x, m, mul15(t, vIIR) + prev);
+            ram_wr(rv_addr(p, rel, RO_SAME_DST + ch), clamp16(mul15(t, p->vIIR) + prev));
 
-            m = rv_reg(c, diff_dst[ch]);
-            prev = rv_rd(&x, m - 1);
-            t = clamp16(inp + mul15(rv_rd(&x, rv_reg(c, diff_src[ch])), vWALL) - prev);
-            rv_wr(&x, m, mul15(t, vIIR) + prev);
+            prev = ram_rd(rv_addr(p, rel, RO_DIFF_PREV + ch));
+            t = clamp16(inp + mul15(ram_rd(rv_addr(p, rel, RO_DIFF_SRC + ch)), p->vWALL) - prev);
+            ram_wr(rv_addr(p, rel, RO_DIFF_DST + ch), clamp16(mul15(t, p->vIIR) + prev));
         }
     }
 
     for (ch = 0; ch < 2; ch++) {
-        int base = ch ? 1 : 0;
         int32_t o;
-        int64_t m;
         int32_t a;
 
         /* early echo: the four combs */
-        o = mul15(vC[0], rv_rd(&x, rv_reg(c, RV_COMB1_L + base)));
-        o += mul15(vC[1], rv_rd(&x, rv_reg(c, RV_COMB2_L + base)));
-        o += mul15(vC[2], rv_rd(&x, rv_reg(c, RV_COMB3_L + base)));
-        o += mul15(vC[3], rv_rd(&x, rv_reg(c, RV_COMB4_L + base)));
+        o = mul15(p->vC[0], ram_rd(rv_addr(p, rel, RO_COMB + 0 + ch)));
+        o += mul15(p->vC[1], ram_rd(rv_addr(p, rel, RO_COMB + 2 + ch)));
+        o += mul15(p->vC[2], ram_rd(rv_addr(p, rel, RO_COMB + 4 + ch)));
+        o += mul15(p->vC[3], ram_rd(rv_addr(p, rel, RO_COMB + 6 + ch)));
         o = clamp16(o);
 
         /* late reverb: two all-pass filters */
-        m = rv_reg(c, RV_APF1_L_DST + base);
-        a = rv_rd(&x, m - (int64_t)rv_reg(c, RV_APF1_SIZE));
-        o = clamp16(o - mul15(vAPF1, a));
-        rv_wr(&x, m, o);
-        o = clamp16(mul15(o, vAPF1) + a);
+        a = ram_rd(rv_addr(p, rel, RO_APF1_SRC + ch));
+        o = clamp16(o - mul15(p->vAPF1, a));
+        if (p->write)
+            ram_wr(rv_addr(p, rel, RO_APF1_DST + ch), o);
+        o = clamp16(mul15(o, p->vAPF1) + a);
 
-        m = rv_reg(c, RV_APF2_L_DST + base);
-        a = rv_rd(&x, m - (int64_t)rv_reg(c, RV_APF2_SIZE));
-        o = clamp16(o - mul15(vAPF2, a));
-        rv_wr(&x, m, o);
-        o = clamp16(mul15(o, vAPF2) + a);
+        a = ram_rd(rv_addr(p, rel, RO_APF2_SRC + ch));
+        o = clamp16(o - mul15(p->vAPF2, a));
+        if (p->write)
+            ram_wr(rv_addr(p, rel, RO_APF2_DST + ch), o);
+        o = clamp16(mul15(o, p->vAPF2) + a);
 
         out[ch] = o;
     }
 
-    c->rv_cur = c->rv_cur + 1 > end ? x.esa : c->rv_cur + 1;
+    c->rv_cur = c->rv_cur + 1 > p->end ? p->esa : c->rv_cur + 1;
+}
+
+/* The 39-tap resampling filter is a half-band filter: the odd taps are
+   zero except the centre (0x4000 at 19), and it is symmetric.  Summing
+   only the non-zero products, in pairs, gives the same integer. */
+static inline int32_t fir_even(const int16_t *h, unsigned p)
+{
+    int32_t acc = 0;
+    int k;
+
+    for (k = 0; k < 19; k += 2)
+        acc += spu2_reverb_fir[k] * ((int32_t)h[(p - (unsigned)k) & (RV_HIST - 1)] +
+                                     h[(p - 38u + (unsigned)k) & (RV_HIST - 1)]);
+    return acc;
 }
 
 /* Feed this frame's wet input; return this frame's reverb output (before
-   EVOL) in out[2]. */
-static void reverb_frame(core *c, const int32_t wet[2], int32_t out[2])
+   EVOL) in out[2].  `p` is the core's plan, or NULL to build one. */
+static void reverb_frame(core *c, const rv_plan *p, const int32_t wet[2], int32_t out[2])
 {
-    unsigned p = (unsigned)(S.now & (RV_HIST - 1));
+    unsigned pos = (unsigned)(S.now & (RV_HIST - 1));
     int ch;
-    int k;
 
-    c->rv_in[0][p] = (int16_t)wet[0];
-    c->rv_in[1][p] = (int16_t)wet[1];
+    c->rv_in[0][pos] = (int16_t)wet[0];
+    c->rv_in[1][pos] = (int16_t)wet[1];
 
     if (S.now & 1) {
+        rv_plan local;
         int32_t in[2];
         int32_t o[2];
 
         /* downsample: the 39-tap filter over the last 39 inputs */
         for (ch = 0; ch < 2; ch++) {
-            int32_t acc = 0;
+            int32_t acc =
+                fir_even(c->rv_in[ch], pos) + 0x4000 * c->rv_in[ch][(pos - 19u) & (RV_HIST - 1)];
 
-            for (k = 0; k < 39; k++)
-                acc += spu2_reverb_fir[k] * c->rv_in[ch][(p - (unsigned)k) & (RV_HIST - 1)];
             in[ch] = clamp16(acc >> 15);
         }
-        reverb_step(c, in, o);
-        c->rv_out[0][p] = (int16_t)o[0];
-        c->rv_out[1][p] = (int16_t)o[1];
+        if (p == NULL) {
+            rv_plan_build(c, &local);
+            p = &local;
+        }
+        reverb_step(c, p, in, o);
+        c->rv_out[0][pos] = (int16_t)o[0];
+        c->rv_out[1][pos] = (int16_t)o[1];
+        /* upsample: the same filter over the zero-stuffed output, gain 2.
+           Every second rv_out entry is a stuffed zero (written on the even
+           frames), so this frame meets only the even taps... */
+        for (ch = 0; ch < 2; ch++)
+            out[ch] = clamp16(fir_even(c->rv_out[ch], pos) >> 14);
     } else {
-        c->rv_out[0][p] = 0;
-        c->rv_out[1][p] = 0;
-    }
-
-    /* upsample: the same filter over the zero-stuffed output, gain 2 */
-    for (ch = 0; ch < 2; ch++) {
-        int32_t acc = 0;
-
-        for (k = 0; k < 39; k++)
-            acc += spu2_reverb_fir[k] * c->rv_out[ch][(p - (unsigned)k) & (RV_HIST - 1)];
-        out[ch] = clamp16(acc >> 14);
+        c->rv_out[0][pos] = 0;
+        c->rv_out[1][pos] = 0;
+        /* ...and an even frame only the centre: (0x4000 * x) >> 14 = x */
+        for (ch = 0; ch < 2; ch++)
+            out[ch] = c->rv_out[ch][(pos - 19u) & (RV_HIST - 1)];
     }
 }
 
@@ -674,21 +801,25 @@ static void memin_advance(int ci)
     }
 }
 
-static void wb(uint32_t base, int32_t v)
+static void wb(uint32_t base, int32_t v, int irq)
 {
     uint32_t a = base + (uint32_t)(S.now & 0x1FF);
 
     ram_wr(a, clamp16(v));
-    irq_check(a, 1);
+    if (irq)
+        irq_check(a, 1);
 }
 
-static void core_frame(int ci)
+/* Steps 3-6 of a frame for core ci (AUDIO.md, "One frame"), after its
+   voices: `bus` the four voice buses (dry L, dry R, wet L, wet R) before
+   saturation, v1 and v3 voice 1's and 3's outputs for the write-back, `p`
+   the reverb plan (NULL: built here), `irq` whether a write-back can raise
+   an IRQ (render_chunk runs only when none can). */
+static void core_finish(int ci, const int32_t bus[4], int32_t v1, int32_t v3, const rv_plan *p,
+                        int irq)
 {
     core *c = &S.c[ci];
-    uint32_t non = voice_bits(c, SPU2_R_NON);
-    uint32_t pmon = voice_bits(c, SPU2_R_PMON);
-    uint32_t mix[4];
-    int32_t acc[4] = {0, 0, 0, 0}; /* dry L, dry R, wet L, wet R */
+    int32_t acc[4];
     uint16_t mmix = c->regs[SPU2_R_MMIX / 2];
     int32_t sin[2] = {0, 0};
     int32_t mem[2];
@@ -696,18 +827,9 @@ static void core_frame(int ci)
     int32_t wet[2];
     int32_t rv[2];
     int ch;
-    int vi;
 
-    mix[0] = voice_bits(c, SPU2_R_VMIXL);
-    mix[1] = voice_bits(c, SPU2_R_VMIXR);
-    mix[2] = voice_bits(c, SPU2_R_VMIXEL);
-    mix[3] = voice_bits(c, SPU2_R_VMIXER);
-
-    for (vi = 0; vi < SPU2_VOICES; vi++)
-        voice_frame(c, vi, non, pmon, acc, mix);
-    noise_tick(c);
     for (ch = 0; ch < 4; ch++)
-        acc[ch] = clamp16(acc[ch]);
+        acc[ch] = clamp16(bus[ch]);
 
     if (ci == 1) {
         sin[0] = mul15(S.c[0].out[0], (int16_t)c->xregs[(SPU2_R_AVOLL - 0x760) / 2]);
@@ -731,7 +853,9 @@ static void core_frame(int ci)
     wet[0] = clamp16(wet[0]);
     wet[1] = clamp16(wet[1]);
 
-    reverb_frame(c, wet, rv);
+    SPU2_LAP(SPU2_PROF_BUS);
+    reverb_frame(c, p, wet, rv);
+    SPU2_LAP(SPU2_PROF_REVERB);
     for (ch = 0; ch < 2; ch++) {
         int32_t o =
             clamp16(dry[ch]) + mul15(rv[ch], (int16_t)c->xregs[(SPU2_R_EVOLL - 0x760) / 2 + ch]);
@@ -746,17 +870,40 @@ static void core_frame(int ci)
         uint32_t vbase = ci ? 0xC00 : 0x400;
         uint32_t mbase = ci ? 0x1800 : 0x1000;
 
-        wb(vbase, c->v[1].out);
-        wb(vbase + 0x200, c->v[3].out);
+        wb(vbase, v1, irq);
+        wb(vbase + 0x200, v3, irq);
         if (ci == 0) {
-            wb(0x800, c->out[0]);
-            wb(0xA00, c->out[1]);
+            wb(0x800, c->out[0], irq);
+            wb(0xA00, c->out[1], irq);
         }
-        wb(mbase, acc[0]);
-        wb(mbase + 0x200, acc[1]);
-        wb(mbase + 0x400, acc[2]);
-        wb(mbase + 0x600, acc[3]);
+        wb(mbase, acc[0], irq);
+        wb(mbase + 0x200, acc[1], irq);
+        wb(mbase + 0x400, acc[2], irq);
+        wb(mbase + 0x600, acc[3], irq);
     }
+    SPU2_LAP(SPU2_PROF_OUTPUT);
+}
+
+/* The reference renderer's frame for core ci: every voice in turn, the
+   noise step, then core_finish. */
+static void core_frame(int ci)
+{
+    core *c = &S.c[ci];
+    uint32_t non = voice_bits(c, SPU2_R_NON);
+    uint32_t pmon = voice_bits(c, SPU2_R_PMON);
+    uint32_t mix[4];
+    int32_t acc[4] = {0, 0, 0, 0}; /* dry L, dry R, wet L, wet R */
+    int vi;
+
+    mix[0] = voice_bits(c, SPU2_R_VMIXL);
+    mix[1] = voice_bits(c, SPU2_R_VMIXR);
+    mix[2] = voice_bits(c, SPU2_R_VMIXEL);
+    mix[3] = voice_bits(c, SPU2_R_VMIXER);
+
+    for (vi = 0; vi < SPU2_VOICES; vi++)
+        voice_frame(c, vi, non, pmon, acc, mix);
+    noise_tick(c);
+    core_finish(ci, acc, c->v[1].out, c->v[3].out, NULL, 1);
 }
 
 /* --- Register writes ---------------------------------------------------------- */
@@ -1038,7 +1185,10 @@ uint16_t spu2_read_reg(int core_idx, unsigned reg)
     }
 }
 
-static void frame(int16_t *out)
+/* The start of the frame at S.now: the writes and transfers due, the
+   transfers that have finished (their callbacks), the writes those
+   queued. */
+static void frame_begin(void)
 {
     int ch;
 
@@ -1054,22 +1204,528 @@ static void frame(int16_t *out)
     }
     /* callbacks may have queued writes for this frame */
     ev_run_due(S.now);
+    SPU2_LAP(SPU2_PROF_EVENTS);
+}
 
-    core_frame(0);
-    core_frame(1);
+static void frame_end(int16_t *out)
+{
     out[0] = (int16_t)S.c[1].out[0];
     out[1] = (int16_t)S.c[1].out[1];
     memin_advance(0);
     memin_advance(1);
     S.now++;
+    SPU2_LAP(SPU2_PROF_OUTPUT);
+}
+
+/* The reference renderer: one frame, both cores, every voice. */
+static void frame(int16_t *out)
+{
+    frame_begin();
+    core_frame(0);
+    core_frame(1);
+    frame_end(out);
+}
+
+/* --- Chunked rendering ----------------------------------------------------------- */
+
+/*
+ * render_chunk renders the frames [S.now, S.now + n) voice by voice
+ * instead of frame by frame, with the same result bit for bit.  It runs
+ * only over a stretch where nothing outside the SPU2 can look or change
+ * anything (chunk_frames): no queued write or transfer falls due, no
+ * transfer finishes, the AutoDMA input's half-done callback can come only
+ * after the last frame, and no IRQ can be raised (each core's IRQ is
+ * disabled or already pending, so every IRQ check is a no-op).  Then the
+ * registers are constant, voices of one core interact only through PMON
+ * (voice v reads voice v - 1's output of the same frame, which is kept per
+ * frame), the noise level of each frame can be computed first, and the
+ * frame-by-frame order matters only where the voices read sound RAM that
+ * the frames write: the write-back areas and the reverb work areas.  A
+ * voice that loads a block from one of those flags a hazard; the voices
+ * are then put back as they were and the chunk renders frame by frame.
+ */
+
+#define CHUNK 256
+
+static struct {
+    int32_t bus[SPU2_CORES][4][CHUNK];
+    int32_t vout[2][CHUNK];            /* scratch outputs, alternating */
+    int32_t wbv[SPU2_CORES][2][CHUNK]; /* voice 1 and 3 outputs (write-back) */
+    int16_t noise[CHUNK];
+    rv_plan plan[SPU2_CORES];
+    /* halfword ranges [lo, hi] the frames write */
+    uint32_t wr_lo[1 + SPU2_CORES];
+    uint32_t wr_hi[1 + SPU2_CORES];
+    int wr_count;
+    int hazard;
+    /* the voices as they were, for a hazard */
+    voice snap[SPU2_CORES][SPU2_VOICES];
+    uint32_t snap_endx[SPU2_CORES];
+    uint16_t snap_noise[SPU2_CORES];
+    int32_t snap_noise_timer[SPU2_CORES];
+} F;
+
+static int exact_only;
+static spu2_stats stats;
+
+void spu2_set_exact(int on)
+{
+    exact_only = on;
+}
+
+/* The frames from S.now (after frame_begin) that render_chunk may take. */
+static int chunk_frames(int frames)
+{
+    uint64_t n = frames < CHUNK ? (uint64_t)frames : CHUNK;
+    int i;
+
+    if (S.ev_count > 0 && S.ev[S.ev_head].time - S.now < n)
+        n = S.ev[S.ev_head].time - S.now;
+    for (i = 0; i < 2; i++)
+        if (S.dma[i].active && S.dma[i].done_at - S.now < n)
+            n = S.dma[i].done_at - S.now;
+    for (i = 0; i < SPU2_CORES; i++)
+        if (S.c[i].memin && 256u - (unsigned)(S.c[i].memin_pos & 0xFF) < n)
+            n = 256u - (unsigned)(S.c[i].memin_pos & 0xFF);
+    return (int)n;
+}
+
+static int chunk_allowed(void)
+{
+    int ci;
+
+    if (exact_only)
+        return 0;
+    for (ci = 0; ci < SPU2_CORES; ci++)
+        if ((S.c[ci].regs[SPU2_R_ATTR / 2] & SPU2_ATTR_IRQ) && !S.c[ci].irq)
+            return 0;
+    return 1;
+}
+
+static void chunk_load_block(voice *v)
+{
+    uint32_t a = v->cur & SPU2_ADDR_MASK;
+    int i;
+
+    for (i = 0; i < F.wr_count; i++)
+        if (a <= F.wr_hi[i] && a + 7u >= F.wr_lo[i])
+            F.hazard = 1;
+    SPU2_LAP(SPU2_PROF_VOICE);
+    v->flags = adpcm_decode_block(&S.ram[a * 2u], v->buf, &v->hist);
+    SPU2_LAP(SPU2_PROF_DECODE);
+    if (v->flags & ADPCM_FLAG_LOOP_START)
+        v->lsax = v->cur;
+    v->pos = 0;
+}
+
+/* Shift `count` samples from buf[] into the interpolator. */
+static inline void interp_feed(voice *v, const int16_t *buf, int count)
+{
+    if (count >= 4) {
+        v->interp[0] = buf[count - 4];
+        v->interp[1] = buf[count - 3];
+        v->interp[2] = buf[count - 2];
+        v->interp[3] = buf[count - 1];
+        return;
+    }
+    while (count-- > 0) {
+        v->interp[0] = v->interp[1];
+        v->interp[1] = v->interp[2];
+        v->interp[2] = v->interp[3];
+        v->interp[3] = *buf++;
+    }
+}
+
+/* Fetch `count` samples as voice_fetch would (without the IRQ check), a
+   block at a time.  With stop_at_mute, return right after a fetch that
+   ended a sound with end + mute (the voice is no longer silent from the
+   next frame).  Returns the number of samples fetched. */
+static uint32_t chunk_skip(core *c, voice *v, uint32_t bit, uint32_t count, int stop_at_mute)
+{
+    uint32_t done = 0;
+
+    while (done < count) {
+        uint32_t take;
+
+        if (v->pos >= ADPCM_BLOCK_SAMPLES) {
+            int mute = 0;
+
+            if (v->flags & ADPCM_FLAG_LOOP_END) {
+                c->endx |= bit;
+                v->cur = v->lsax;
+                if (!(v->flags & ADPCM_FLAG_LOOP_REPEAT)) {
+                    v->phase = ENV_RELEASE;
+                    v->env = 0;
+                    v->env_counter = 0;
+                    mute = 1;
+                }
+            } else {
+                v->cur = (v->cur + 8) & SPU2_ADDR_MASK;
+            }
+            chunk_load_block(v);
+            if (mute && stop_at_mute) {
+                interp_feed(v, v->buf, 1);
+                v->pos = 1;
+                return done + 1;
+            }
+        }
+        take = (uint32_t)(ADPCM_BLOCK_SAMPLES - v->pos);
+        if (take > count - done)
+            take = count - done;
+        interp_feed(v, v->buf + v->pos, (int)take);
+        v->pos += (int)take;
+        done += take;
+    }
+    return done;
+}
+
+/* Frames [f, n) of a voice whose envelope is off at level 0 and whose
+   pitch is constant (no PMON): every output is 0 and the buses get
+   nothing, so only the pitch counter, the decoder and the volume sweeps
+   move.  The counter's total over m frames is counter + m * step, of which
+   the whole samples are fetched; if a fetch ends the sound with end + mute
+   the voice sounds (a release at level 0) from the next frame, so the skip
+   stops at the end of that frame.  Returns the next frame to render. */
+static int chunk_silent(core *c, voice *v, uint32_t bit, int f, int n, uint32_t step, int sweep0,
+                        int sweep1, int32_t *outs)
+{
+    uint32_t c0 = v->counter;
+    uint32_t m = (uint32_t)(n - f);
+    uint32_t fetched = chunk_skip(c, v, bit, (c0 + m * step) >> 12, 1);
+    uint32_t i;
+
+    if (v->phase != ENV_OFF) {
+        /* the mute came with fetch `fetched`, in frame r of the m: the
+           first r with c0 + (r + 1) * step >= fetched << 12; the rest of
+           that frame's fetches follow */
+        m = (((fetched << 12) - c0) + step - 1) / step;
+        chunk_skip(c, v, bit, ((c0 + m * step) >> 12) - fetched, 0);
+    }
+    v->counter = (c0 + m * step) & 0xFFFu;
+    for (i = 0; i < m; i++)
+        outs[f + (int)i] = 0;
+    if (sweep0)
+        for (i = 0; i < m; i++)
+            vol_tick(&v->vol[0]);
+    if (sweep1)
+        for (i = 0; i < m; i++)
+            vol_tick(&v->vol[1]);
+    return f + (int)m;
+}
+
+/* The chunked voice loop keeps the interpolator as a window over the
+   samples still to come: win[idx..idx + 3] are the four last fetched
+   (voice.interp), win[idx + 4..len - 1] the rest of the current block
+   (voice.buf[pos..27]); fetching k samples is idx += k while the block
+   lasts.  win_load builds it from the voice, win_store writes it back. */
+typedef struct win {
+    int16_t s[4 + ADPCM_BLOCK_SAMPLES];
+    int idx;
+    int len;
+} win;
+
+static inline void win_load(win *w, const voice *v)
+{
+    int i;
+
+    w->s[0] = v->interp[0];
+    w->s[1] = v->interp[1];
+    w->s[2] = v->interp[2];
+    w->s[3] = v->interp[3];
+    w->len = 4;
+    for (i = v->pos; i < ADPCM_BLOCK_SAMPLES; i++)
+        w->s[w->len++] = v->buf[i];
+    w->idx = 0;
+}
+
+static inline void win_store(const win *w, voice *v)
+{
+    v->interp[0] = w->s[w->idx];
+    v->interp[1] = w->s[w->idx + 1];
+    v->interp[2] = w->s[w->idx + 2];
+    v->interp[3] = w->s[w->idx + 3];
+    v->pos = ADPCM_BLOCK_SAMPLES - (w->len - 4 - w->idx);
+}
+
+/* The live state voice_chunk keeps in locals (the buses it stores to may
+   alias anything under -fno-strict-aliasing, so fields read through the
+   voice would be reloaded after every store). */
+typedef struct vlocal {
+    int32_t env;
+    uint32_t env_counter;
+    int phase;
+    vol_state vol[2];
+    uint32_t counter;
+} vlocal;
+
+static inline void vl_load(vlocal *l, const voice *v)
+{
+    l->env = v->env;
+    l->env_counter = v->env_counter;
+    l->phase = v->phase;
+    l->vol[0] = v->vol[0];
+    l->vol[1] = v->vol[1];
+    l->counter = v->counter;
+}
+
+static inline void vl_store(const vlocal *l, voice *v)
+{
+    v->env = l->env;
+    v->env_counter = l->env_counter;
+    v->phase = l->phase;
+    v->vol[0] = l->vol[0];
+    v->vol[1] = l->vol[1];
+    v->counter = l->counter;
+}
+
+/* voice_frame over n frames: the output of each frame into outs[], its
+   share into the buses; prev[] is voice vi - 1's outputs (PMON). */
+static void voice_chunk(core *c, int vi, int n, uint32_t non, uint32_t pmon, const uint32_t mix[4],
+                        int32_t (*bus)[CHUNK], const int32_t *prev, int32_t *outs)
+{
+    voice *v = &c->v[vi];
+    unsigned vp = SPU2_R_VP(vi);
+    uint32_t bit = 1u << vi;
+    uint16_t adsr1 = c->regs[(vp + SPU2_VP_ADSR1) / 2];
+    uint16_t adsr2 = c->regs[(vp + SPU2_VP_ADSR2) / 2];
+    uint32_t pitch = c->regs[(vp + SPU2_VP_PITCH) / 2];
+    int noise = (non & bit) != 0;
+    int pm = vi > 0 && (pmon & bit);
+    int sweep0 = (v->vol[0].reg & 0x8000) != 0;
+    int sweep1 = (v->vol[1].reg & 0x8000) != 0;
+    int32_t *b0 = (mix[0] & bit) ? bus[0] : NULL;
+    int32_t *b1 = (mix[1] & bit) ? bus[1] : NULL;
+    int32_t *b2 = (mix[2] & bit) ? bus[2] : NULL;
+    int32_t *b3 = (mix[3] & bit) ? bus[3] : NULL;
+    vlocal l;
+    win w;
+    uint32_t einc;
+    int f;
+
+    if (pitch > 0x3FFF && !pm)
+        pitch = 0x4000;
+    vl_load(&l, v);
+    win_load(&w, v);
+    einc = adsr_quiet_inc(l.phase, l.env, adsr1, adsr2);
+    for (f = 0; f < n; f++) {
+        int32_t s = 0;
+        uint32_t step = pitch;
+        int k;
+
+        if (l.env == 0 && l.phase == ENV_OFF && !pm) {
+            win_store(&w, v);
+            vl_store(&l, v);
+            f = chunk_silent(c, v, bit, f, n, step, sweep0, sweep1, outs) - 1;
+            vl_load(&l, v);
+            win_load(&w, v);
+            einc = adsr_quiet_inc(l.phase, l.env, adsr1, adsr2);
+            continue;
+        }
+
+        /* a zero envelope makes the sample 0 whatever the interpolator
+           holds, and 0 adds nothing to the buses */
+        if (l.env != 0) {
+            if (noise) {
+                s = F.noise[f];
+            } else {
+                const int16_t *x = &w.s[w.idx];
+                int i = (l.counter >> 4) & 0xFF;
+
+                s = (spu2_gauss[0x0FF - i] * x[0]) >> 15;
+                s += (spu2_gauss[0x1FF - i] * x[1]) >> 15;
+                s += (spu2_gauss[0x100 + i] * x[2]) >> 15;
+                s += (spu2_gauss[0x000 + i] * x[3]) >> 15;
+                s = clamp16(s);
+            }
+            s = (s * l.env) >> 15;
+            if (s != 0) {
+                int32_t sl = (s * l.vol[0].level) >> 15;
+                int32_t sr = (s * l.vol[1].level) >> 15;
+
+                if (b0)
+                    b0[f] += sl;
+                if (b1)
+                    b1[f] += sr;
+                if (b2)
+                    b2[f] += sl;
+                if (b3)
+                    b3[f] += sr;
+            }
+        }
+        outs[f] = s;
+        if (l.phase != ENV_OFF) {
+            if (l.env_counter + einc < 0x8000u) {
+                l.env_counter += einc;
+            } else {
+                adsr_run(&l.phase, &l.env, &l.env_counter, adsr1, adsr2);
+                einc = adsr_quiet_inc(l.phase, l.env, adsr1, adsr2);
+            }
+        }
+        if (sweep0)
+            vol_tick(&l.vol[0]);
+        if (sweep1)
+            vol_tick(&l.vol[1]);
+
+        if (pm) {
+            int32_t factor = prev[f] + 0x8000;
+
+            step = (uint32_t)(((int32_t)(int16_t)(uint16_t)step * factor) >> 15) & 0xFFFFu;
+            if (step > 0x3FFF)
+                step = 0x4000;
+        }
+        l.counter += step;
+        k = (int)(l.counter >> 12);
+        l.counter &= 0xFFFu;
+        if (w.idx + 4 + k <= w.len) {
+            w.idx += k;
+        } else {
+            /* the block ends within these k (k <= 4 < 28: one block end):
+               take what is left, then voice_fetch's block end, then the
+               rest from the new block */
+            int i;
+
+            k -= w.len - 4 - w.idx;
+            for (i = 0; i < 4; i++)
+                w.s[i] = w.s[w.len - 4 + i];
+            if (v->flags & ADPCM_FLAG_LOOP_END) {
+                c->endx |= bit;
+                v->cur = v->lsax;
+                if (!(v->flags & ADPCM_FLAG_LOOP_REPEAT)) {
+                    /* code 1: end + mute */
+                    l.phase = ENV_RELEASE;
+                    l.env = 0;
+                    l.env_counter = 0;
+                    einc = adsr_quiet_inc(l.phase, l.env, adsr1, adsr2);
+                }
+            } else {
+                v->cur = (v->cur + 8) & SPU2_ADDR_MASK;
+            }
+            chunk_load_block(v);
+            memcpy(&w.s[4], v->buf, sizeof v->buf);
+            w.len = 4 + ADPCM_BLOCK_SAMPLES;
+            w.idx = k;
+        }
+    }
+    win_store(&w, v);
+    vl_store(&l, v);
+    v->out = outs[n - 1];
+    SPU2_LAP(SPU2_PROF_VOICE);
+}
+
+/* Render n frames (1 < n <= CHUNK, from chunk_frames) voice by voice.
+   Returns 0, with nothing changed, on a hazard. */
+static int render_chunk(int16_t *out, int n)
+{
+    int32_t *outs[SPU2_VOICES];
+    int ci;
+    int vi;
+    int f;
+
+    F.wr_count = 0;
+    F.wr_lo[F.wr_count] = 0x400;
+    F.wr_hi[F.wr_count++] = 0x1FFF;
+    for (ci = 0; ci < SPU2_CORES; ci++) {
+        core *c = &S.c[ci];
+
+        rv_plan_build(c, &F.plan[ci]);
+        if (F.plan[ci].on && F.plan[ci].write) {
+            F.wr_lo[F.wr_count] = F.plan[ci].esa;
+            F.wr_hi[F.wr_count++] = F.plan[ci].end;
+        }
+        memcpy(F.snap[ci], c->v, sizeof c->v);
+        F.snap_endx[ci] = c->endx;
+        F.snap_noise[ci] = c->noise;
+        F.snap_noise_timer[ci] = c->noise_timer;
+    }
+    F.hazard = 0;
+    SPU2_LAP(SPU2_PROF_EVENTS);
+
+    for (ci = 0; ci < SPU2_CORES; ci++) {
+        core *c = &S.c[ci];
+        uint32_t non = voice_bits(c, SPU2_R_NON);
+        uint32_t pmon = voice_bits(c, SPU2_R_PMON);
+        uint32_t mix[4];
+        const int32_t *prev = NULL;
+        int k;
+
+        mix[0] = voice_bits(c, SPU2_R_VMIXL);
+        mix[1] = voice_bits(c, SPU2_R_VMIXR);
+        mix[2] = voice_bits(c, SPU2_R_VMIXEL);
+        mix[3] = voice_bits(c, SPU2_R_VMIXER);
+        for (k = 0; k < 4; k++)
+            memset(F.bus[ci][k], 0, (size_t)n * sizeof(int32_t));
+        /* the noise level each frame's voices see, then the step */
+        for (f = 0; f < n; f++) {
+            F.noise[f] = (int16_t)c->noise;
+            noise_tick(c);
+        }
+        SPU2_LAP(SPU2_PROF_INTERP);
+
+        for (vi = 0; vi < SPU2_VOICES; vi++) {
+            outs[vi] = vi == 1 ? F.wbv[ci][0] : vi == 3 ? F.wbv[ci][1] : F.vout[vi & 1];
+            voice_chunk(c, vi, n, non, pmon, mix, F.bus[ci], prev, outs[vi]);
+            if (F.hazard)
+                goto hazard;
+            prev = outs[vi];
+        }
+    }
+
+    for (f = 0; f < n; f++) {
+        for (ci = 0; ci < SPU2_CORES; ci++) {
+            int32_t bus[4];
+
+            bus[0] = F.bus[ci][0][f];
+            bus[1] = F.bus[ci][1][f];
+            bus[2] = F.bus[ci][2][f];
+            bus[3] = F.bus[ci][3][f];
+            core_finish(ci, bus, F.wbv[ci][0][f], F.wbv[ci][1][f], &F.plan[ci], 0);
+        }
+        frame_end(out + 2 * f);
+    }
+    return 1;
+
+hazard:
+    stats.hazards++;
+    for (ci = 0; ci < SPU2_CORES; ci++) {
+        core *c = &S.c[ci];
+
+        memcpy(c->v, F.snap[ci], sizeof c->v);
+        c->endx = F.snap_endx[ci];
+        c->noise = F.snap_noise[ci];
+        c->noise_timer = F.snap_noise_timer[ci];
+    }
+    return 0;
 }
 
 void spu2_render(int16_t *out, int frames)
 {
-    int i;
+#ifdef SPU2_PROFILE
+    spu2_prof.last = spu2_prof_clock();
+    spu2_prof.vsyncs++;
+#endif
+    while (frames > 0) {
+        int n;
+        int i;
 
-    for (i = 0; i < frames; i++)
-        frame(out + 2 * i);
+        frame_begin();
+        n = chunk_frames(frames);
+        if (n >= 2 && chunk_allowed() && render_chunk(out, n)) {
+            stats.chunks++;
+            stats.chunked_frames += (uint64_t)n;
+        } else {
+            /* frame by frame (frame_begin is idempotent) */
+            for (i = 0; i < n; i++)
+                frame(out + 2 * i);
+            stats.exact_frames += (uint64_t)n;
+        }
+        out += 2 * n;
+        frames -= n;
+    }
+}
+
+void spu2_get_stats(spu2_stats *st)
+{
+    *st = stats;
 }
 
 void spu2_dma_write(uint32_t addr, const void *src, uint32_t len)
@@ -1239,3 +1895,37 @@ void spu2_reverb_apply_preset(int ci, const spu2_reverb_preset *p, uint64_t time
     spu2_write_reg(ci, SPU2_R_IN_COEF_R, p->regs[31], time);
     write_pair(ci, SPU2_R_ESA, esa, time);
 }
+
+/* --- Stage profile (SPU2_PROFILE builds) ------------------------------------------ */
+
+#ifdef SPU2_PROFILE
+spu2_prof_t spu2_prof;
+
+void spu2_prof_reset(void)
+{
+    memset(&spu2_prof, 0, sizeof spu2_prof);
+}
+
+double spu2_prof_lap_cost(void)
+{
+    spu2_prof_t save = spu2_prof;
+    uint64_t t0 = spu2_prof_clock();
+    int i;
+
+    spu2_prof.last = t0;
+    for (i = 0; i < 1000000; i++)
+        SPU2_LAP(0);
+    t0 = spu2_prof.last - t0;
+    spu2_prof = save;
+    return (double)t0 / 1e6;
+}
+
+const char *spu2_prof_stage_name(int stage)
+{
+    static const char *const names[SPU2_PROF_STAGES] = {"events", "decode", "interp", "envelope",
+                                                        "mix",    "pitch",  "voices", "bus",
+                                                        "reverb", "output"};
+
+    return stage >= 0 && stage < SPU2_PROF_STAGES ? names[stage] : "?";
+}
+#endif

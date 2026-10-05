@@ -90,3 +90,18 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME audio_pan COMMAND pan_test)
 endif()
+
+# spu2_bench (package S3, AUDIO.md "Render cost"): `--check` is the 10 s
+# render CRC test of four scenes against the frame-by-frame renderer's
+# golden values; without arguments it times the render per vsync.
+# spu2_prof is the same harness over a copy of the SPU2 built with
+# SPU2_PROFILE (per-stage clock_gettime laps); it is not a test.
+add_executable(spu2_bench test/spu2_bench.c)
+target_compile_options(spu2_bench PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(spu2_bench PRIVATE ico_audio)
+add_executable(spu2_prof test/spu2_bench.c adpcm.c spu2.c spu2_sd.c spu2_tables.c)
+target_compile_definitions(spu2_prof PRIVATE SPU2_PROFILE=1)
+target_compile_options(spu2_prof PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME spu2_render_crc COMMAND spu2_bench --check)
+endif()
