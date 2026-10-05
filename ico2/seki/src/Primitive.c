@@ -27,7 +27,8 @@ Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int 
     Fan2DVtx *first;
     int i;
 
-    f = (Fan2D *)iosMallocDebug(ios_partition_seki, 12, "src/Primitive.c", 318);
+    f = (Fan2D *)iosMallocDebug(ios_partition_seki, sizeof(Fan2D) > 12 ? sizeof(Fan2D) : 12,
+                                "src/Primitive.c", 318);
     f->buf = (Fan2DVtx *)iosMallocDebug(ios_partition_seki, (n + 2) * 32, "src/Primitive.c", 319);
     q = f->buf;
 
@@ -312,7 +313,8 @@ Mesh3D *prim_InitMesh3D(int nx, int ny, int rot, long long col, unsigned int col
     Mesh3D *m;
     int i;
 
-    m = (Mesh3D *)iosMallocDebug(ios_partition_seki, 144, "src/Primitive.c", 576);
+    m = (Mesh3D *)iosMallocDebug(ios_partition_seki, sizeof(Mesh3D) > 144 ? sizeof(Mesh3D) : 144,
+                                 "src/Primitive.c", 576);
     m->nx = nx;
     m->ny = ny;
     m->pos =
@@ -682,7 +684,8 @@ PrimParticle *prim_InitParticleByPartition(int num, float x, float y, float z, i
             "Particle Object too big (%d particles). (must be under %d particles)\n", num, 80);
         return 0;
     }
-    p = (PrimParticle *)iosMallocDebugNoAssert(heap, 416, "src/Primitive.c", 911);
+    p = (PrimParticle *)iosMallocDebugNoAssert(
+        heap, sizeof(PrimParticle) > 416 ? sizeof(PrimParticle) : 416, "src/Primitive.c", 911);
     if (p == 0) {
         return 0;
     }

@@ -580,7 +580,14 @@ inline ICO_WORD InitBossCtrlGeo(void *gobj)
 
 void itou_boss_gflag_init(void)
 {
+#ifdef ICO_HOST
+    /* the EE's linker puts capsule right after gflag and one memset clears
+       both; a host compiler may order the two (or pad between them) freely */
+    memset(gflag, 0, sizeof(gflag));
+    memset(capsule, 0, sizeof(capsule));
+#else
     memset(gflag, 0, sizeof(gflag) + sizeof(capsule));
+#endif
 }
 
 void BossCtrlDL(void)

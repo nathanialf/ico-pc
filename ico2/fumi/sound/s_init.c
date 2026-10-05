@@ -866,7 +866,13 @@ static void sound3DParamSet(SeSlot *self)
     self->level1 = 0x1000;
     self->level0 = 0x1000;
     if (self->proc != 0) {
+#ifdef ICO_HOST
+        /* the EE call leaves the slot in $a0, which every stageSE proc reads
+           as its argument; the host passes it */
+        ret = self->proc(self);
+#else
         ret = self->proc();
+#endif
         if (ret > 0) {
             self->flag.bit.audible = 1;
             self->flag.bit.placed = 0;

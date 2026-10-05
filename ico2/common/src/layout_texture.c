@@ -694,7 +694,12 @@ extern char *strtok(char *s, const char *sep);
 
 static inline char *lt_texture_base_name(char *src) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the result points into it, so on the host it outlives the call */
+    static char buf[256];
+#else
     char buf[256];
+#endif
     char *p;
     char *t;
 
@@ -743,9 +748,16 @@ static void init_textures_of_specified_property(int first, int last)
 
     for (i = first; i < last; i++) {
         no = lt_texture_no_of_property(i);
+#ifdef ICO_HOST
+        /* the EE's stride and texData-before-texNo offset are 32-bit only */
+        texProperty[i].texNo = no;
+        texProperty[i].texData = tex_GetTextureData(no);
+        tex_SetSamplingType(texProperty[i].texData, 1, 1);
+#else
         *(int *)(D_0030D014 + i * 0x70) = no;
         *(void **)(D_0030D014 + i * 0x70 - 4) = tex_GetTextureData(no);
         tex_SetSamplingType(*(void **)(D_0030D014 + i * 0x70 - 4), 1, 1);
+#endif
     }
 }
 

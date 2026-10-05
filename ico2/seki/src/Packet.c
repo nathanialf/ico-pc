@@ -1183,10 +1183,10 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
         obj->mode.s.type = 2;
     /* the display type, bits 16 and 17 of the mode word */
     if (((unsigned short)(obj->mode.bits >> 16) & 3) == 2) {
-        mtbl = mallocseki(obj->partCount * 16);
+        mtbl = mallocseki(obj->partCount * sizeof(MatLine));
         obj->groups = (PObjGroup *)mtbl;
     } else {
-        tbl = mallocseki(obj->partCount * 48);
+        tbl = mallocseki(obj->partCount * sizeof(PObjGroup));
         obj->groups = tbl;
         sprintf(tbl->name, "%s", obj->name);
     }
@@ -1214,7 +1214,7 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                     pacPolyCount = 0;
                     sz = pac_makeStrip(&out, src, tbl, j, m, obj);
                     if (sz > 0) {
-                        node = mallocseki(160);
+                        node = mallocseki(sizeof(PacHeader));
                         node->mat = j;
                         node->texSlot = m;
                         node->tex = tbl->texs[m].tex;
@@ -1237,19 +1237,19 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
             }
             tbl->packets = prev;
             if (src->morphCount != 0) {
-                p = mallocseki(160);
+                p = mallocseki(sizeof(PacHeader));
                 p->next = 0;
                 prev = tbl->packets;
                 tbl->morph = p;
                 do {
-                    malloc_MemCpy(p, prev, 160);
+                    malloc_MemCpy(p, prev, sizeof(PacHeader));
                     p->data = mallocseki(prev->size);
                     p->size = prev->size;
                     malloc_MemCpy(p->data, prev->data, prev->size);
                     prev = prev->next;
                     if (prev != 0) {
                         last = p;
-                        p = mallocseki(160);
+                        p = mallocseki(sizeof(PacHeader));
                         p->next = 0;
                         last->next = p;
                     }
@@ -1309,7 +1309,7 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                 p++;
             }
             p[src->lineCount].attr.b.type = 0;
-            mtbl->lineSet = mallocseki(144);
+            mtbl->lineSet = mallocseki(sizeof(PacLineSet));
             mtbl->lineSet->lines = top;
             mtbl++;
         }

@@ -857,9 +857,20 @@ Lend:
     return level;
 }
 
+#ifdef ICO_HOST
+
+/* ShockDriver's four words hold a ShockMgr only with 4-byte pointers */
+static ShockMgr shockDriverHost; /* derived name */
+
+#endif
+
 void Init_Shock(void)
 {
+#ifdef ICO_HOST
+    initShockDriver(&shockDriverHost, ShockVoiceSetBuf, 2);
+#else
     initShockDriver((ShockMgr *)ShockDriver, ShockVoiceSetBuf, 2);
+#endif
     initShockRequestAlloc(&ShockRequestMemory, ShockRequest, 16);
 }
 

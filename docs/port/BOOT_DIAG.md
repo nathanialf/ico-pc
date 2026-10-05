@@ -321,3 +321,124 @@ manager), and the game's per-object threads.
   - `main_host.c`: wiring, `watchdog=`, the exit lines;
   - `host_loop.c`, `assert_host.c`;
   - `CMakeLists.txt`: `diag_host.c`, Threads, `-Map=ico_pc.map`.
+
+# Package 2H: the x64 heap check at Main tick 20
+
+The `win-x64` build of `712d7b62` (package 2G's zip) stopped at Main tick
+20, vsync 47, in thread `iosCdvdManager`, on the allocator's own check
+`ios/memory.c:598` ("mem:illegal free area pointer"): a free-list node's tag
+had been overwritten. The x86 build ran 2,000+ ticks. `linux-x64` headless
+reproduces it at the same tick and vsync.
+
+## Result
+
+- The overrun is `seki/src/Packet.c` `pac_makePacket`: it allocated each
+  strip header (`PacHeader`) with the EE's literal 160 bytes. On a 64-bit
+  host the record is 176 bytes (`next` and `data` are pointers), so
+  `node->data` and `node->next` went to bytes 0xA0..0xAF of a 160-byte
+  block: the first 16 bytes of the next node's header, which is its tag.
+  The same function sized `PObjGroup` (48 EE, 64 x64), `MatLine` (16, 32)
+  and `PacLineSet` (144, 152) by literal; all now use `sizeof`.
+- After the fix `linux-x64` runs to Main tick 117 and stops with a
+  SIGSEGV in `getParallelWindVector` (`sugipon/src/windField.c:249`): the
+  cloth's first point is NaN because the skeleton node matrix (node 33) the
+  cloth hangs from is NaN on x64 only. `(int)NaN` is `0x80000000` and
+  `windStrength[0x80000000]` faults on a 64-bit host. `ref-m32` has no NaN
+  there. This is not a heap overrun (the write-checking run below is clean up
+  to it). Package 2H did not fix it.
+- The per-tick traces of `linux-x64` and `ref-m32` (3000 ticks) are
+  identical for every line `linux-x64` wrote (header plus ticks 0..116).
+  `ref-m32` reaches stage 3 as before: stage 1 -> 41 at tick 663,
+  -> 42 (756), -> 43 (836), -> 45 (892), -> 40 (956), -> 3 (1036),
+  3000 ticks, 6007 vsyncs.
+
+## How it was found: `ICO_HEAP_ASAN`
+
+ASan alone does not see this kind of overrun: every game allocation comes
+out of the arena (`port/platform/arena.c`), one `mmap`. `fumi/ios/memory.c`
+now has a debug mode, off unless `ICO_HEAP_ASAN` is defined, that needs
+`-fsanitize=address` (it stops the build with `#error` otherwise). The
+allocator itself is unchanged (same partitions, offsets, free lists and
+`ICO_HEAP_STATS` accounting). Each public function (`iosMallocDebug`,
+`iosFree`, `iosMallocAlignDebug`, `iosReallocDebug`, the partition
+functions, the leak checks) becomes a wrapper that unpoisons the root
+partition, runs the original, and then walks every partition's node list
+and poisons:
+
+- every block header (0x50 bytes on x64);
+- the slack between a block's requested size and its 16-byte-rounded end
+  (the requested size is kept in a side table);
+- free areas' bodies, only with `ICO_HEAP_ASAN_FREE=1` in the environment.
+  The EE code writes into free memory in at least one place on purpose
+  (see below), so this is off by default.
+
+The first write into a header then stops with the writer's stack. To build
+and run it:
+
+```
+cmake --preset asan -B build-host/2h-asan -DICO_LINK_EXE=ON \
+  -DICO_DATA_DIR=$PWD/build/data -DICO_SANITIZE=address \
+  "-DCMAKE_C_FLAGS=-DICO_HEAP_ASAN=1 --param=asan-instrument-reads=0"
+cmake --build build-host/2h-asan --target ico_pc
+cd build-host/2h-asan    # ico-pc.ini, pad-script.txt as in TESTING.md
+printf 'interceptor_via_fun:sceSifSetDma\n' > asan.supp
+ASAN_OPTIONS=detect_leaks=0:fast_unwind_on_fatal=1:suppressions=$PWD/asan.supp ./ico_pc
+```
+
+The options matter:
+
+- `ICO_SANITIZE=address`: the preset's `undefined` stops at
+  `fumi/isys/gobj.c:518` (pointer arithmetic on a null table before the
+  first object exists, as on the EE). That is not this bug.
+- `--param=asan-instrument-reads=0`: only writes are checked. The EE code
+  reads past the end of records on purpose in many places (16-byte VU0
+  loads of 12-byte vectors, `omori/src/gv.c:91` on `camera-ico2.c`'s
+  `targetASmooth`). Corruption is always a write.
+- `fast_unwind_on_fatal=1`: the default slow unwinder faults on the fiber
+  stacks (minicoro); the fast one stops at `_mco_main`, which is enough.
+- the `sceSifSetDma` suppression: `soundBDDataSet` rounds a sound bank up
+  to 64 bytes and DMAs that many (`s_init.c:497`), reading up to 63 bytes
+  past the block, as the EE does.
+
+## Other host bugs the runs found and fixed
+
+All are under `#ifdef ICO_HOST` or written so the EE compile is unchanged
+(see "EE identity" below).
+
+| Where | What |
+| --- | --- |
+| `ito/src/itou_boss.c` `itou_boss_gflag_init` | one `memset` cleared `gflag[16]` and `capsule[53]` together, assuming the EE linker's order. GCC put `capsule` first, so the `memset` ran 3,392 bytes past `gflag` into other `.bss`. Two `memset`s on the host. |
+| `seki/src/Primitive.c` | `Fan2D` (12 EE, 16 x64), `Mesh3D` (144, 176) and `PrimParticle` (416, 424) allocated by literal; now `sizeof(T) > N ? sizeof(T) : N` (the `BgAnimation.c` idiom, so the 32-bit sizes are unchanged). |
+| `seki/src/Light.c` | `Light` (80, 96) and `AmbientVolume` (160, 168), same fix. |
+| `fumi/ios/shockdriver.c` `Init_Shock` | `ShockDriver` is `int[4]` used as a `ShockMgr` (24 bytes on x64); the host hands `Init_ShockDriver` a static `ShockMgr` instead. |
+| `fumi/src/act-game.c` `_ACTCharStatus_Init` | read the act pointer as `self[0x59]` of an `int **` (byte 0x2C8 on x64, a null there): it now clears `bits58` and `pad60` through `GOBJ_ACT`. This was the SIGSEGV at tick 117 before the windField one. |
+| `fumi/sound/s_init.c:869` | `self->proc()` with no argument; on the EE `$a0` still held the slot, which every `stageSE*` proc takes as `self`. The host passes `self` (reported by 2F). |
+| `common/src/kanban.c`, `common/src/layout_texture.c` | `init_textures_of_specified_property` stored `texNo` and `texData` by the EE's stride (0x70) and offset (`texData` = `texNo` - 4); on x64 `LtProperty` is 0x78 with `texData` 8 bytes, so every row after the first was written at the wrong place. The host writes the fields by name. The texture base-name helper returned a pointer into its own stack buffer (ASan: stack-use-after-scope); the buffer is `static` on the host. (2F-owned files.) |
+
+Not fixed, noted for later:
+
+- `seki/src/Packet.c` line-record end mark: `p[src->lineCount].attr.b.type
+  = 0` after `p` has already been advanced `lineCount` times, so it writes
+  `lineCount * 192 + 0xB8` bytes past the start of the list, past the
+  block's end, into what is free memory at that moment. On the EE the same.
+  The intended record is `p[0]`. Left as is (it changes the EE's behaviour).
+- About 50 other allocations in `ico2` still pass a literal size (for
+  example `sugipon/src/boy.c`, `box.c`, `a_p_1.c` node buffers,
+  `sugipon/src/worm.c`, `cage.c`, `weapon.c`, `seki/src/BgAnimation.c:384`,
+  `seki/src/StageAnimation.c:1045`, `fumi/ios/thread.c:258,278`,
+  `common/src/PObj.c:281,283,539`). The `ICO_HEAP_ASAN` run only checks
+  the ones on the boot path up to tick 117. A static pass (literal size
+  against `sizeof` of the pointer's type on x64) would find the rest.
+- The x64 NaN in node 33's matrix (above).
+- The `fptrap` preset traps at vsync 6 in `gsb_SetVSMatrixSub`
+  (`seki/src/GsBase.c:1361`), a divide by zero the EE takes as
+  saturating (DIVERGENCES.md F5). That stops it before the stage load, so
+  it could not locate the NaN.
+
+## EE identity
+
+The 10 changed game TUs (`kanban.c`, `layout_texture.c`, `memory.c`,
+`shockdriver.c`, `s_init.c`, `act-game.c`, `itou_boss.c`, `Light.c`, `Packet.c`,
+`Primitive.c`) compile with `tools/compile_c.sh` to the same `.text`,
+`.data`, `.rodata`, `.sdata`, `.bss`, `.sbss`, `.lit4`, `.lit8` and
+relocations as a `HEAD` (`5ddb5feb`) worktree.

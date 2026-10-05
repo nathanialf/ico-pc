@@ -1278,9 +1278,17 @@ void ACTParaStatus_Exec(GObj *self)
 
 inline void _ACTCharStatus_Init(int **self)
 {
+#ifdef ICO_HOST
+    /* self[0x59] is the act word at GObj + 0x164 only with 4-byte words */
+    Act *a = GOBJ_ACT(self);
+
+    a->bits58 = 0;
+    *(long long *)a->pad60 = 0;
+#else
     long long *p = (long long *)self[0x59];
     p[0xB] = 0;
     p[0xC] = 0;
+#endif
 }
 
 void _ACTCharStatus_Clear(void *self)

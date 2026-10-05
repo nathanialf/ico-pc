@@ -176,7 +176,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
         if (self->dobj == 0) {
             return 0;
         }
-        q = (Light *)iosMallocDebug(ios_partition_seki, 80, "src/Light.c", 620);
+        q = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 620);
         self->dobj->lightId = b;
         q->owner = self;
         q->kind = kind;
@@ -200,7 +201,8 @@ Light *light_AddLight(GObj *self, int b, int kind)
     case 3: {
         Light *r;
 
-        r = (Light *)iosMallocDebug(ios_partition_seki, 80, "src/Light.c", 685);
+        r = (Light *)iosMallocDebug(ios_partition_seki, sizeof(Light) > 80 ? sizeof(Light) : 80,
+                                    "src/Light.c", 685);
         r->kind = kind;
         r->scale = 1.0f;
         r->range = 32768.0f;
@@ -1070,7 +1072,9 @@ AmbientVolume *light_AddAmbientObject(int obj)
 {
     AmbientVolume *p;
 
-    p = (AmbientVolume *)iosMallocDebug(ios_partition_seki, 160, "src/Light.c", 723);
+    p = (AmbientVolume *)iosMallocDebug(ios_partition_seki,
+                                        sizeof(AmbientVolume) > 160 ? sizeof(AmbientVolume) : 160,
+                                        "src/Light.c", 723);
     p->shape = obj;
     p->lightScale = 1.0f;
     light_setLinkAmbient(p);
