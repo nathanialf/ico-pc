@@ -35,6 +35,17 @@ bool vkr_FramesInit(void)
         if (!VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &f->acquireSem))) {
             return false;
         }
+        if (g_vkr.timestamps) {
+            VkQueryPoolCreateInfo qci = {
+                .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                .queryType = VK_QUERY_TYPE_TIMESTAMP,
+                .queryCount = RHI_MAX_TIMESTAMPS,
+            };
+            if (!VKR_CHECK(vkCreateQueryPool(g_vkr.device, &qci, NULL, &f->queryPool))) {
+                f->queryPool = VK_NULL_HANDLE;
+                g_vkr.timestamps = false;
+            }
+        }
     }
     g_vkr.frameIndex = 0;
     return true;
@@ -56,6 +67,9 @@ void vkr_FramesShutdown(void)
         if (f->acquireSem) {
             vkDestroySemaphore(g_vkr.device, f->acquireSem, NULL);
         }
+        if (f->queryPool) {
+            vkDestroyQueryPool(g_vkr.device, f->queryPool, NULL);
+        }
         memset(f, 0, sizeof(*f));
     }
 }
@@ -65,19 +79,57 @@ static void vkr_WaitValue(uint64_t value)
     if (value == 0) {
         return;
     }
+    /* package P1: a wait that blocks is counted with its time */
+    uint64_t done = 0;
+    if (vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &done) == VK_SUCCESS &&
+        done >= value) {
+        return;
+    }
     VkSemaphoreWaitInfo wi = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
         .pSemaphores = &g_vkr.timeline,
         .pValues = &value,
     };
+    const uint64_t t0 = vkr_NowNs();
     VKR_CHECK(vkWaitSemaphores(g_vkr.device, &wi, UINT64_MAX));
+    g_vkr.stats.fenceWaits++;
+    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
+}
+
+/* package P1: the finished slot's timestamps into g_vkr.tsResult (the slot
+ * is complete: nothing waits) */
+static void vkr_CollectTimestamps(VkrFrame *f)
+{
+    g_vkr.tsCount = 0;
+    memset(g_vkr.tsResult, 0, sizeof(g_vkr.tsResult));
+    if (!f->queryPool || !f->tsWritten) {
+        f->tsWritten = 0;
+        return;
+    }
+    uint64_t data[RHI_MAX_TIMESTAMPS][2];
+    memset(data, 0, sizeof(data));
+    VkResult r = vkGetQueryPoolResults(
+        g_vkr.device, f->queryPool, 0, RHI_MAX_TIMESTAMPS, sizeof(data), data, sizeof(data[0]),
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+    if (r == VK_SUCCESS || r == VK_NOT_READY) {
+        for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
+            if ((f->tsWritten & (1u << i)) && data[i][1]) {
+                g_vkr.tsResult[i] =
+                    (uint64_t)((double)(data[i][0] & g_vkr.timestampMask) * g_vkr.timestampPeriod);
+                g_vkr.tsCount = i + 1;
+            }
+        }
+    }
+    f->tsWritten = 0;
 }
 
 /* Recycles a frame slot once the GPU is done with it. */
 static void vkr_RecycleFrame(VkrFrame *f)
 {
     vkr_WaitValue(f->waitValue);
+    vkr_CollectTimestamps(f);
+    f->tsReset = false;
     vkr_DestroyGarbage(f);
     vkResetCommandPool(g_vkr.device, f->cmdPool, 0);
     for (uint32_t j = 0; j < VKR_MAX_CMD_LISTS; j++) {
@@ -101,7 +153,10 @@ void rhi_WaitFrame(void)
 
 void rhi_WaitIdle(void)
 {
+    const uint64_t t0 = vkr_NowNs();
     vkDeviceWaitIdle(g_vkr.device);
+    g_vkr.stats.waitIdles++;
+    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
     /* The other slots' garbage is now safe to destroy.  The current frame's
      * is not: a command list recorded but not yet submitted may still use
      * an object destroyed this frame. */
@@ -143,6 +198,12 @@ RhiCommandList rhi_BeginCommands(void)
     }
     c->recording = true;
     f->listCount++;
+    if (f->queryPool && !f->tsReset) {
+        /* package P1: the slot's timestamps start unwritten (outside any
+         * render pass: the frame's first list) */
+        vkCmdResetQueryPool(c->cb, f->queryPool, 0, RHI_MAX_TIMESTAMPS);
+        f->tsReset = true;
+    }
     out.id = ((uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK) << VKR_GEN_SHIFT) | f->listCount;
     return out;
 }
@@ -229,6 +290,7 @@ static bool vkr_SubmitBatch(const VkCommandBuffer *cbs, uint32_t count, bool for
     if (!VKR_CHECK(vkQueueSubmit(g_vkr.queue, 1, &si, VK_NULL_HANDLE))) {
         return false;
     }
+    g_vkr.stats.submits++;
     vkr_CurFrame()->waitValue = value;
     return true;
 }
@@ -272,6 +334,7 @@ void vkr_ImageBarrier(VkCommandBuffer cb, VkrTexture *t, RhiState before, RhiSta
         dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     }
     vkCmdPipelineBarrier(cb, b->stages, dst, 0, 0, NULL, 0, NULL, 1, &ib);
+    g_vkr.stats.barriers++;
 }
 
 void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
@@ -315,6 +378,7 @@ static void vkr_OrderWrites(VkCommandBuffer cb, bool attachments)
         mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
     }
     vkCmdPipelineBarrier(cb, stages, stages, 0, 1, &mb, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
 }
 
 /* ------------------------------------------------------------ render passes */
@@ -399,6 +463,7 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     vkr_OrderWrites(c->cb, true);
     g_vkr.cmdBeginRendering(c->cb, &ri);
     c->inPass = true;
+    g_vkr.stats.renderPasses++;
 
     /* defaults: full-target viewport and scissor */
     RhiViewport vp = {0.0f, 0.0f, (float)pass->width, (float)pass->height, 0.0f, 1.0f};
@@ -452,6 +517,7 @@ void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
         }
         c->pipeline = pp;
         vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pp->pipeline);
+        g_vkr.stats.pipelineBinds++;
     }
 }
 
@@ -465,8 +531,11 @@ void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
     if (!s && bg.id) {
         VKR_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
     }
-    c->groups[group] = s;
-    c->groupDirty |= 1u << group;
+    if (c->groups[group] != s) {
+        /* package P1: the set already bound is not bound again */
+        c->groups[group] = s;
+        c->groupDirty |= 1u << group;
+    }
 }
 
 /* Binds the dirty groups against the current pipeline's layout. */
@@ -479,6 +548,7 @@ static void vkr_FlushBindGroups(VkrCmdList *c)
         if ((c->groupDirty & (1u << g)) && c->groups[g]) {
             vkCmdBindDescriptorSets(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipeline->layout, g,
                                     1, &c->groups[g], 0, NULL);
+            g_vkr.stats.bindGroupBinds++;
         }
     }
     c->groupDirty = 0;
@@ -531,6 +601,7 @@ void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
     }
     vkr_FlushBindGroups(c);
     vkCmdDraw(c->cb, vertexCount, instanceCount ? instanceCount : 1u, firstVertex, 0);
+    g_vkr.stats.draws++;
 }
 
 void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
@@ -543,6 +614,7 @@ void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIn
     vkr_FlushBindGroups(c);
     vkCmdDrawIndexed(c->cb, indexCount, instanceCount ? instanceCount : 1u, firstIndex,
                      vertexOffset, 0);
+    g_vkr.stats.draws++;
 }
 
 /* ------------------------------------------------------------------ copies */
@@ -556,8 +628,22 @@ void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, Rhi
         return;
     }
     VkBufferCopy r = {srcOffset, dstOffset, size};
-    vkr_OrderWrites(c->cb, false);
+    /* package P1: rhi.h: the copy waits for every earlier read of the
+     * destination (draws of earlier frames reading a range rewritten now)
+     * and write (an earlier copy) */
+    VkMemoryBarrier pre = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+    };
+    vkCmdPipelineBarrier(c->cb,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
     vkCmdCopyBuffer(c->cb, s->buffer, d->buffer, 1, &r);
+    g_vkr.stats.copies++;
     /* rhi.h: buffer copies are visible to every later read */
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
@@ -570,6 +656,7 @@ void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, Rhi
                          VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          0, 1, &mb, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
 }
 
 static VkImageAspectFlags vkr_CopyAspect(const VkrTexture *t, RhiViewAspect aspect)
@@ -601,6 +688,7 @@ void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOf
     };
     vkr_OrderWrites(c->cb, false);
     vkCmdCopyBufferToImage(c->cb, s->buffer, t->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+    g_vkr.stats.copies++;
 }
 
 void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
@@ -622,6 +710,7 @@ void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, Rh
     vkr_OrderWrites(c->cb, false);
     vkCmdCopyImage(c->cb, s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+    g_vkr.stats.copies++;
 }
 
 void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
@@ -644,6 +733,7 @@ void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect
     };
     vkr_OrderWrites(c->cb, false);
     vkCmdCopyImageToBuffer(c->cb, t->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->buffer, 1, &r);
+    g_vkr.stats.copies++;
 }
 
 /* ------------------------------------------------------------ debug labels */
@@ -686,6 +776,7 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
     if (dstSize < size) {
         return false;
     }
+    g_vkr.stats.readbacks++;
     RhiBufferDesc bd = {size, RHI_BUF_READBACK, RHI_MEM_READBACK, "readback"};
     RhiBuffer rb = rhi_CreateBuffer(&bd);
     VkrBuffer *b = vkr_GetBuffer(rb);
@@ -756,4 +847,27 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
     }
     rhi_DestroyBuffer(rb);
     return ok;
+}
+
+/* ------------------------------------------------------- timestamps (P1) */
+void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
+{
+    VkrCmdList *c = vkr_GetCmd(cl);
+    VkrFrame *f = vkr_CurFrame();
+    if (!c || !f->queryPool || !f->tsReset || index >= RHI_MAX_TIMESTAMPS ||
+        (f->tsWritten & (1u << index))) {
+        return;
+    }
+    vkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f->queryPool, index);
+    f->tsWritten |= 1u << index;
+}
+
+uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max)
+{
+    if (!ns || !g_vkr.timestamps) {
+        return 0;
+    }
+    const uint32_t n = g_vkr.tsCount < max ? g_vkr.tsCount : max;
+    memcpy(ns, g_vkr.tsResult, (size_t)n * sizeof(uint64_t));
+    return n;
 }

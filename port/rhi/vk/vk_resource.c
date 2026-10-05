@@ -218,6 +218,8 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
         }
     }
     vkr_SetName(VK_OBJECT_TYPE_BUFFER, VKR_H(b->buffer), desc->debugName);
+    g_vkr.stats.buffersCreated++;
+    g_vkr.stats.memoryAllocs++;
     out.id = id;
     return out;
 }
@@ -231,6 +233,8 @@ void rhi_DestroyBuffer(RhiBuffer h)
     vkr_Defer(VKR_GARBAGE_BUFFER, VKR_H(b->buffer));
     vkr_Defer(VKR_GARBAGE_MEMORY, VKR_H(b->memory)); /* freeing memory unmaps it */
     vkr_PoolRelease(&g_vkr.buffers, h.id);
+    g_vkr.stats.buffersDestroyed++;
+    g_vkr.stats.memoryFrees++;
 }
 
 void *rhi_MapBuffer(RhiBuffer h)
@@ -353,6 +357,8 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         t->depthView = VK_NULL_HANDLE;
     }
     vkr_SetName(VK_OBJECT_TYPE_IMAGE, VKR_H(t->image), desc->debugName);
+    g_vkr.stats.texturesCreated++;
+    g_vkr.stats.memoryAllocs++;
     out.id = id;
     return out;
 
@@ -379,6 +385,8 @@ void rhi_DestroyTexture(RhiTexture h)
     vkr_Defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
     vkr_Defer(VKR_GARBAGE_MEMORY, VKR_H(t->memory));
     vkr_PoolRelease(&g_vkr.textures, h.id);
+    g_vkr.stats.texturesDestroyed++;
+    g_vkr.stats.memoryFrees++;
 }
 
 uint32_t vkr_RegisterSwapchainImage(VkImage image, VkFormat fmt, RhiFormat rf, uint32_t w,

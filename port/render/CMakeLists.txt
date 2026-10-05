@@ -33,6 +33,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_interp.c # wave 7 (R7b): interpolation between the retained frames
     rd_mesh.c
+    rd_perf.c # package P1: per-replay performance records
     rd_pipeline.c
     rd_png.c
     rd_post.c
@@ -175,6 +176,16 @@ add_executable(rd_mirror_test test/rd_mirror_test.c)
 target_compile_options(rd_mirror_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_mirror_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_mirror_test PRIVATE ico_render)
+
+# rd_perf_test (package P1): a synthetic game-shaped frame replayed 200
+# times and recorded 200 times: no resource is created or destroyed and no
+# texture or static mesh uploaded again in steady state, and the CPU time of
+# a replay stays under 20 ms on lavapipe; with --dump FILE it times a dump's
+# replay phase by phase (docs/port/RENDER_API.md section 22).
+add_executable(rd_perf_test test/rd_perf_test.c)
+target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_perf_test PRIVATE ico_render)
 
 # rd_mesh_test (wave 3, R3ab): the mesh path.  Packet.c, RegistPacket.c,
 # MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
@@ -355,7 +366,7 @@ target_link_libraries(rd_mip_test PRIVATE ico_render)
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test rd_interp_test rd_mirror_test rd_mip_test)
+              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -399,6 +410,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME rd_interp COMMAND rd_interp_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_perf COMMAND rd_perf_test)
+    set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")

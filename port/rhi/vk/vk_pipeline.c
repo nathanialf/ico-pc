@@ -228,6 +228,7 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
         vkUpdateDescriptorSets(g_vkr.device, n, w, 0, NULL);
     }
     f->sets[f->setCount++] = set;
+    g_vkr.stats.bindGroups++;
     out.id = (vkr_FrameTag() << VKR_GEN_SHIFT) | f->setCount;
     return out;
 }

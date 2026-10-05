@@ -402,11 +402,28 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
     return rhi_CreatePipeline(&d);
 }
 
+/* Package P1: an open-addressed index over s_cache (slot + 1, 0 = empty),
+ * so a draw's lookup is a hash and a compare, not a walk of every pipeline */
+#define RD_PIPE_HASH (4 * RD_PIPELINE_CACHE_MAX)
+
+static uint16_t s_hash[RD_PIPE_HASH];
+
+static uint32_t keyHash(const RdPipeKeyInt *k)
+{
+    const uint8_t *b = (const uint8_t *)k;
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < sizeof(*k); i++) {
+        h = (h ^ b[i]) * 16777619u;
+    }
+    return h;
+}
+
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
 {
-    for (uint32_t i = 0; i < s_count; i++) {
-        if (rd__PipeKeyEqual(&s_cache[i].key, k)) {
-            return s_cache[i].pipe;
+    uint32_t at = keyHash(k) % RD_PIPE_HASH;
+    for (; s_hash[at] != 0; at = (at + 1) % RD_PIPE_HASH) {
+        if (rd__PipeKeyEqual(&s_cache[s_hash[at] - 1].key, k)) {
+            return s_cache[s_hash[at] - 1].pipe;
         }
     }
     if (!g_rd.hasDevice) {
@@ -442,6 +459,7 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
     s_cache[s_count].key = *k;
     s_cache[s_count].pipe = p;
     s_count++;
+    s_hash[at] = (uint16_t)s_count; /* at: the empty slot the probe ended on */
     g_rd.stats.pipelineCreates++;
     return p;
 }
@@ -456,12 +474,15 @@ void rd__PipelineCacheClear(void)
     s_count = 0;
     s_failedCount = 0;
     s_fullLogged = false;
+    memset(s_hash, 0, sizeof(s_hash));
 }
 
 uint32_t rd_PrecreatePipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     if (!g_rd.hasDevice) {
+        /* P1: said, so a call before rd_Init does not pass unnoticed */
+        rd__Log("rd_PrecreatePipelines without a device (before rd_Init?): nothing created");
         return 0;
     }
     const double t0 = rd__NowMs();

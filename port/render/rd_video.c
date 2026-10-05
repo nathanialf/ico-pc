@@ -224,7 +224,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (!ensureInit()) {
         return -1;
     }
-    rhi_WaitFrame();
+    rd__WaitFrame();
     const int slot = (int)(s_v.counter++ % RHI_FRAMES_IN_FLIGHT);
     const RhiLimits *lim = rhi_Limits();
     const uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;

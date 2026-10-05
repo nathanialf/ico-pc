@@ -791,6 +791,7 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
     m->srcQw = c->srcQw;
     m->lastUsed = g_rd.frameCounter;
     m->replaySeen = 0; /* upload again */
+    m->transient = 1;  /* P1: from the ring, not the device arena */
     s_scratchUsed++;
     return m;
 }
@@ -1118,7 +1119,9 @@ bool rd_Present(float alpha)
         static RdFrame empty;
         return rd__ReplayFrame(&empty, 1, true);
     }
+    const double t0 = rd__NowMs();
     const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, alpha, dt, first, &s_pres.stats);
+    rd__PerfInterpMs(rd__NowMs() - t0); /* P1: charged to the replay below */
     if (first) {
         presentLog();
     }

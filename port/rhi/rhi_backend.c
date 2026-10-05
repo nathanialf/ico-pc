@@ -363,3 +363,33 @@ bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t d
 {
     return be()->ReadbackTexture(t, aspect, dst, dstSize, outRowPitch);
 }
+
+void rhi_GetStats(RhiStats *out)
+{
+    be()->GetStats(out);
+}
+
+bool rhi_TimestampsSupported(void)
+{
+    return be()->TimestampsSupported();
+}
+
+void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
+{
+    be()->CmdWriteTimestamp(cl, index);
+}
+
+uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max)
+{
+    return be()->ReadTimestamps(ns, max);
+}
+
+void rhi_PreferMailbox(bool on)
+{
+    be()->PreferMailbox(on);
+}
+
+bool rhi_PresentMailbox(void)
+{
+    return be()->PresentMailbox();
+}

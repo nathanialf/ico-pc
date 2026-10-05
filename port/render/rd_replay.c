@@ -98,6 +98,7 @@ bool rd__GpuInit(void *sdlWindow)
     if (!rhi_Init(&dd)) {
         return false;
     }
+    rd__PerfReset(); /* P1: the new device's counters start at 0 */
     s_rhiUp = true;
     const RhiLimits *lim = rhi_Limits();
     if (!lim->dualSourceBlend || !lim->stencilWrap) {
@@ -179,8 +180,9 @@ void rd__GpuShutdown(void)
         }
     }
     rd__PipelineCacheClear();
-    rd__FogShutdown();  /* wave 4 (R4c) */
-    rd__WrapShutdown(); /* wave 5 (R5c) */
+    rd__MeshGpuShutdown(); /* P1: the mesh arena */
+    rd__FogShutdown();     /* wave 4 (R4c) */
+    rd__WrapShutdown();    /* wave 5 (R5c) */
     if (g_rd.dummy.id) {
         rhi_DestroyTexture(g_rd.dummy);
     }
@@ -234,6 +236,16 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
     *cur = want;
 }
 
+/* Package P1: every transient bind group of the replay goes through here,
+ * timed into the record's bind phase. */
+static RhiBindGroup bindGroup(RhiBindGroupLayout layout, const RhiBinding *b, uint32_t n)
+{
+    const double t0 = rd__NowMs();
+    const RhiBindGroup g = rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, b, n});
+    g_rdPerf.bindMs += rd__NowMs() - t0;
+    return g;
+}
+
 uint64_t rd__RingAlloc(uint64_t size, uint64_t align)
 {
     uint64_t off = (s_ringOff + align - 1) / align * align;
@@ -246,8 +258,70 @@ uint64_t rd__RingAlloc(uint64_t size, uint64_t align)
     return off;
 }
 
+/* Package P1: bind groups are transient (rhi.h: valid in the frame slot
+ * they were made in), so the caches below are tagged with the epoch, which
+ * every rhi_WaitFrame of the renderer starts anew (rd__WaitFrame). */
+static uint32_t s_bindEpoch = 1;
+
+void rd__WaitFrame(void)
+{
+    rhi_WaitFrame();
+    s_bindEpoch++;
+}
+
+/* FNV-1a over a uniform block's bytes */
+static uint32_t hashBytes(const void *p, uint32_t n, uint32_t h)
+{
+    const uint8_t *b = p;
+    for (uint32_t i = 0; i < n; i++) {
+        h = (h ^ b[i]) * 16777619u;
+    }
+    return h;
+}
+
+/* uniform groups by content: the same DrawCB or FrameCB in one replay is
+ * written once and bound by one group (and rhi_CmdSetBindGroup skips a
+ * group already bound) */
+#define RD_UNIFORM_CACHE 512
+#define RD_UNIFORM_CACHE_BYTES 256
+
+typedef struct UniformEntry {
+    uint32_t epoch, hash, layout, size;
+    RhiBindGroup group;
+    uint8_t data[RD_UNIFORM_CACHE_BYTES];
+} UniformEntry;
+
+static UniformEntry s_uniformCache[RD_UNIFORM_CACHE];
+
+static RhiBindGroup uniformGroupNew(RhiBindGroupLayout layout, uint32_t slot, const void *data,
+                                    uint32_t size);
+
 static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
                                  uint32_t size)
+{
+    if (size > RD_UNIFORM_CACHE_BYTES) {
+        return uniformGroupNew(layout, slot, data, size);
+    }
+    const uint32_t h = hashBytes(data, size, 2166136261u ^ layout.id);
+    UniformEntry *e = &s_uniformCache[h % RD_UNIFORM_CACHE];
+    if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
+        memcmp(e->data, data, size) == 0) {
+        return e->group;
+    }
+    const RhiBindGroup g = uniformGroupNew(layout, slot, data, size);
+    if (g.id) {
+        e->epoch = s_bindEpoch;
+        e->hash = h;
+        e->layout = layout.id;
+        e->size = size;
+        e->group = g;
+        memcpy(e->data, data, size);
+    }
+    return g;
+}
+
+static RhiBindGroup uniformGroupNew(RhiBindGroupLayout layout, uint32_t slot, const void *data,
+                                    uint32_t size)
 {
     uint64_t off = rd__RingAlloc(size, rhi_Limits()->uniformAlign);
     if (off == ~0ull) {
@@ -261,7 +335,7 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const
     b.buffer = g_rd.ring[s_slot];
     b.offset = off;
     b.size = size;
-    return rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, &b, 1});
+    return bindGroup(layout, &b, 1);
 }
 
 /* The camera of the frame being replayed (R2c): the frame's own, else the
@@ -328,8 +402,23 @@ RhiBindGroup rd__DrawGroup(const void *drawCB)
     return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
 }
 
+/* Package P1: texture groups by (texture, sampler, DATE snapshot) */
+#define RD_TEX_CACHE 512
+
+typedef struct TexEntry {
+    uint32_t epoch, tex, sampler, date;
+    RhiBindGroup group;
+} TexEntry;
+
+static TexEntry s_texCache[RD_TEX_CACHE];
+
 RhiBindGroup rd__TexGroupDate(RhiTexture t, RhiSampler s, RhiTexture date)
 {
+    const uint32_t h = (t.id * 2654435761u) ^ (s.id * 40503u) ^ (date.id * 2246822519u);
+    TexEntry *e = &s_texCache[(h >> 7) % RD_TEX_CACHE];
+    if (e->epoch == s_bindEpoch && e->tex == t.id && e->sampler == s.id && e->date == date.id) {
+        return e->group;
+    }
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
@@ -341,7 +430,15 @@ RhiBindGroup rd__TexGroupDate(RhiTexture t, RhiSampler s, RhiTexture date)
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
     b[2].texture = date;
-    return rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+    const RhiBindGroup g = bindGroup(g_rd.layoutTex, b, 3);
+    if (g.id) {
+        e->epoch = s_bindEpoch;
+        e->tex = t.id;
+        e->sampler = s.id;
+        e->date = date.id;
+        e->group = g;
+    }
+    return g;
 }
 
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s)
@@ -446,9 +543,13 @@ static void doClear(Replay *r, const RdCmd *c)
     endPass(r);
 }
 
+/* Package P1: built in a local and stored whole, so writing straight into
+ * the upload ring never reads it back (the ring may be write-combined
+ * device memory, where a read is an uncached bus transaction). */
 static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const float uvOff[2],
-                    IcoSpriteVertex *o)
+                    IcoSpriteVertex *out)
 {
+    IcoSpriteVertex v, *o = &v;
     int32_t x = s->x < 0 ? 0 : (s->x > 0xFFFF ? 0xFFFF : s->x);
     int32_t y = s->y < 0 ? 0 : (s->y > 0xFFFF ? 0xFFFF : s->y);
     o->x = (uint16_t)x;
@@ -469,6 +570,28 @@ static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const
     }
     o->u += uvOff[0] * tw;
     o->v += uvOff[1] * th;
+    *out = v;
+}
+
+/* Package P1: screen prims are expanded here, flipped for the mirror if
+ * need be, and then copied into the ring in one go (expand reads what it
+ * wrote: flat colours, the mirror's gradients) */
+static IcoSpriteVertex *s_vx;
+
+static uint32_t s_vxCap;
+
+static IcoSpriteVertex *vxScratch(uint64_t n)
+{
+    if (n > s_vxCap) {
+        const uint32_t cap = (uint32_t)(n < 4096 ? 4096 : n * 2);
+        IcoSpriteVertex *p = realloc(s_vx, (size_t)cap * sizeof(*p));
+        if (!p) {
+            return NULL;
+        }
+        s_vx = p;
+        s_vxCap = cap;
+    }
+    return s_vx;
 }
 
 /* Expands a screen-prim command into a triangle or line list.  Returns the
@@ -808,6 +931,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
         h = h > sn->th ? sn->th : h;
     }
     endPass(r);
+    g_rdPerf.dateSnapshots++;
     rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
     rd__Transition(s_cl, sn->color, &sn->colorState, RHI_STATE_RENDER_TARGET);
     RhiRenderPassDesc p;
@@ -1058,7 +1182,10 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     uint8_t topo;
-    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    IcoSpriteVertex *out = vxScratch((uint64_t)n * 6);
+    if (!out) {
+        return;
+    }
     const uint32_t nv = expand(v, n, c->b[0], c->b[2], (float)ds.tw, (float)ds.th, r->st.uvOffset,
                                out, &topo, r->st.gouraud != 0);
     if (nv == 0) {
@@ -1067,6 +1194,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, ds.tc, out, nv, topo); /* R7c */
     }
+    memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out)); /* P1 */
     RdDrawPass dp[2];
     const int np = rd__PlanScreenDraw(&r->st, topo, c->b[1], ds.tc->format, ds.depthFmt, dp);
     if (np == 0) {
@@ -1284,7 +1412,10 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     uint8_t topo;
-    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    IcoSpriteVertex *out = vxScratch((uint64_t)n * 6);
+    if (!out) {
+        return;
+    }
     const uint32_t nv = expand(v, n, c->b[0], c->b[2], (float)ds.tw, (float)ds.th, r->st.uvOffset,
                                out, &topo, r->st.gouraud != 0);
     if (nv == 0) {
@@ -1293,6 +1424,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, tc, out, nv, topo); /* R7c */
     }
+    memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out)); /* P1 */
     /* the planner's flags, FIX and alpha test for this state (COLCLAMP set on
      * the copy: the planner logs COLCLAMP 0 as clamped, which this path is
      * not) */
@@ -1428,8 +1560,8 @@ static uint64_t ringCopy(const void *data, uint64_t size, uint64_t align)
     return off;
 }
 
-static RhiBindGroup vuGroup(uint64_t streamOff, uint64_t streamSize, const IcoDrawCB *dcb,
-                            const IcoVuCB *vcb, uint64_t bonesOff)
+static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t streamOff, uint64_t streamSize,
+                            const IcoDrawCB *dcb, const IcoVuCB *vcb, uint64_t bonesOff)
 {
     const uint64_t ua = rhi_Limits()->uniformAlign;
     const uint64_t dOff = ringCopy(dcb, sizeof(*dcb), ua);
@@ -1441,7 +1573,7 @@ static RhiBindGroup vuGroup(uint64_t streamOff, uint64_t streamSize, const IcoDr
     memset(b, 0, sizeof(b));
     b[0].slot = 0;
     b[0].type = RHI_BIND_STORAGE_BUFFER;
-    b[0].buffer = g_rd.ring[s_slot];
+    b[0].buffer = streamBuf; /* P1: the mesh arena, or the ring */
     b[0].offset = streamOff;
     b[0].size = streamSize ? streamSize : 16;
     b[1].slot = 1;
@@ -1459,7 +1591,7 @@ static RhiBindGroup vuGroup(uint64_t streamOff, uint64_t streamSize, const IcoDr
     b[3].buffer = g_rd.ring[s_slot];
     b[3].offset = bonesOff;
     b[3].size = sizeof(IcoVuBoneCB);
-    return rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutVu, b, 4});
+    return bindGroup(g_rd.layoutVu, b, 4);
 }
 
 /* The VU vertex shader of a recorded (RdProg, code). */
@@ -1489,9 +1621,9 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
 
 /* One VU draw call under the planned passes of state s. */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
-                   uint8_t prog, uint8_t vs, uint64_t streamOff, uint64_t streamSize,
-                   const IcoVuCB *vcb, uint64_t bonesOff, int indexed, uint32_t first,
-                   uint32_t count)
+                   uint8_t prog, uint8_t vs, RhiBuffer streamBuf, uint64_t streamOff,
+                   uint64_t streamSize, const IcoVuCB *vcb, uint64_t bonesOff, int indexed,
+                   uint32_t first, uint32_t count)
 {
     if (count == 0) {
         return;
@@ -1511,7 +1643,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
         IcoDrawCB cb;
         fillDrawCB(r, &dp[i], ds, &cb);
-        RhiBindGroup g1 = vuGroup(streamOff, streamSize, &cb, vcb, bonesOff);
+        RhiBindGroup g1 = vuGroup(streamBuf, streamOff, streamSize, &cb, vcb, bonesOff);
         if (!g1.id) {
             continue;
         }
@@ -1574,11 +1706,22 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
         bonesOff = s_zeroBones;
     }
     uint64_t streamOff, streamSize, indexOff = 0;
-    if (m) {
+    RhiBuffer streamBuf = g_rd.ring[s_slot], indexBuf = g_rd.ring[s_slot];
+    if (m && m->gpuChunk && !m->gpuDirty && !m->transient) {
+        /* P1: the device copy uploadMeshes keeps */
+        streamBuf = indexBuf = rd__MeshGpuBuffer(m->gpuChunk);
+        streamOff = m->gpuOff;
+        streamSize = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+        indexOff = m->gpuIndexOff;
+        vcb.draw[1] = m->qwPerVertex;
+    } else if (m) {
         if (m->replaySeen != g_rd.replayCounter) {
             m->ringStream = ringCopy(m->stream, (uint64_t)m->vertexCount * m->qwPerVertex * 16, ua);
             m->ringIndex = ringCopy(m->index, (uint64_t)m->indexCount * 4, 16);
             m->replaySeen = g_rd.replayCounter;
+            g_rdPerf.meshUploads++;
+            g_rdPerf.meshUploadBytes +=
+                (uint64_t)m->vertexCount * m->qwPerVertex * 16 + (uint64_t)m->indexCount * 4;
         }
         streamOff = m->ringStream;
         streamSize = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
@@ -1622,7 +1765,8 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         rhi_CmdSetIndexBuffer(s_cl, g_rd.ring[s_slot], iOff, true);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamOff, streamSize, &vcb, bonesOff, 1, 0, ni);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 1,
+               0, ni);
         return;
     }
     if (c->type == RDC_PARTICLES) {
@@ -1630,8 +1774,8 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamOff, streamSize, &vcb, bonesOff, 0, 0,
-               6 * p.vertsPerBatch);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 0,
+               0, 6 * p.vertsPerBatch);
         return;
     }
     /* static and skinned meshes */
@@ -1639,14 +1783,14 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!g2.id) {
         return;
     }
-    rhi_CmdSetIndexBuffer(s_cl, g_rd.ring[s_slot], indexOff, true);
+    rhi_CmdSetIndexBuffer(s_cl, indexBuf, indexOff, true);
     uint32_t last = p.firstBatch + p.batchCount;
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
     }
     if (p.clip != RD_VU_CLIP_SCISSOR) {
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamOff, streamSize, &vcb, bonesOff, 1,
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 1,
                b0->firstIndex, b1->firstIndex + b1->indexCount - b0->firstIndex);
         return;
     }
@@ -1657,9 +1801,9 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     fan.ds.abe = 1; /* the fans' PRIM is the common block's 0x5D: ABE on */
     for (uint32_t b = p.firstBatch; b < last; b++) {
         const RdVuBatchRec *br = &m->batches[b];
-        vuDraw(r, &fan, &ds, g2, p.prog, vs, streamOff, streamSize, &cut, bonesOff, 1,
+        vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &cut, bonesOff, 1,
                br->firstIndex, br->indexCount);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamOff, streamSize, &kick, bonesOff, 1,
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &kick, bonesOff, 1,
                br->firstIndex, br->indexCount);
     }
 }
@@ -1692,6 +1836,7 @@ static void doExact(Replay *r, const RdCmd *c)
     if (!cs || !cd || !co) {
         return;
     }
+    g_rdPerf.exactBlends++;
     rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__Transition(s_cl, cs->tex, &cs->state, RHI_STATE_COPY_DST);
     rhi_CmdCopyTexture(s_cl, src->color, all, cs->tex, 0, 0);
@@ -1732,8 +1877,7 @@ static void doExact(Replay *r, const RdCmd *c)
         rhi_CmdSetPipeline(s_cl, pipe);
         rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
         rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
-        rhi_CmdSetBindGroup(s_cl, 2,
-                            rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutInt, b, 2}));
+        rhi_CmdSetBindGroup(s_cl, 2, bindGroup(g_rd.layoutInt, b, 2));
         rhi_CmdDraw(s_cl, 3, 0, 1);
     }
     rhi_CmdEndRenderPass(s_cl);
@@ -2032,10 +2176,11 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     uint8_t topo;
-    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    IcoSpriteVertex out[6];     /* P1: expanded here, copied into the ring */
     setUvShift(tc->sx, tc->sy); /* R7a: the fog sprite on a scaled target */
     const uint32_t nv = expand(v, 2, RD_PRIM_SPRITES, 1, (float)tz->w, (float)tz->h, noOff, out,
                                &topo, r->st.gouraud != 0);
+    memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(out[0]));
     memcpy(g_rd.ringMap[s_slot] + lOff, f->payload + p.lutOffset, 256 * 4);
 
     endPass(r);
@@ -2095,7 +2240,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
     b[2].texture = s_fogLut;
-    const RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+    const RhiBindGroup g2 = bindGroup(g_rd.layoutTex, b, 3);
     if (!g2.id) {
         return;
     }
@@ -2361,7 +2506,8 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
             }
         }
     }
-    for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+    const bool walk = g_rd.texDirtyCount != 0 || g_rd.texLevelsFilter != (int)g_rd.filterUpgrade;
+    for (uint32_t i = 0; walk && i < RD_MAX_TEXTURES; i++) {
         const RdTexRec *t = &g_rd.textures[i];
         if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
             uint64_t pitch = ((uint64_t)t->w * 4 + pitchA - 1) / pitchA * pitchA;
@@ -2443,6 +2589,13 @@ static void uploadTextures(void)
                                    g_rd.dummy, 0, (RhiRect){0, 0, 1, 1});
         rd__Transition(s_cl, g_rd.dummy, &g_rd.dummyState, RHI_STATE_SHADER_READ);
     }
+    /* P1: the table is walked only while a texture is dirty or the filter
+     * option changed since the last walk */
+    if (g_rd.texDirtyCount == 0 && g_rd.texLevelsFilter == (int)g_rd.filterUpgrade) {
+        return;
+    }
+    g_rd.texLevelsFilter = (int)g_rd.filterUpgrade;
+    uint32_t stillDirty = 0;
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
         if (!t->live || t->kind != RD_TEXKIND_IMAGE) {
@@ -2457,6 +2610,7 @@ static void uploadTextures(void)
             t->rhi = (RhiTexture){0};
             t->dirty = 1;
         }
+        stillDirty += t->dirty; /* less the ones uploaded below */
         if (!t->dirty) {
             continue;
         }
@@ -2487,7 +2641,102 @@ static void uploadTextures(void)
         }
         rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
         t->dirty = 0;
+        stillDirty--;
         g_rd.stats.textureUploads++;
+        g_rdPerf.textureUploads++;
+        /* P1: a texture uploaded on 60 replays in a row is named once */
+        t->uploadStreak = t->lastUpload + 2 >= g_rd.replayCounter ? t->uploadStreak + 1 : 0;
+        t->lastUpload = g_rd.replayCounter;
+        if (t->uploadStreak == 60 && !t->streakLogged) {
+            t->streakLogged = 1;
+            rd__Log("texture \"%s\" (%ux%u) uploaded on 60 replays in a row: its content "
+                    "changes every frame",
+                    t->name, t->w, t->h);
+        }
+    }
+    g_rd.texDirtyCount = stillDirty;
+}
+
+/* Package P1: the static meshes a frame draws live in the device arena
+ * (rd_mesh.c): uploaded the first time a replay draws them and again only
+ * after rd_UpdateVuMesh rewrote them (gpuDirty, the morphs), through the
+ * ring and one buffer copy each, all before the first pass.  The
+ * interpolation's scratch meshes (transient) and a mesh the arena has no
+ * room for stay on the ring path in doVu. */
+static void uploadMeshes(const RdFrame *f, int keep)
+{
+    const uint64_t ua = rhi_Limits()->uniformAlign;
+    for (int l = rd__FirstList(keep); l < RD_LIST_COUNT; l++) {
+        const RdCmdList *cl = &f->lists[l];
+        for (uint32_t i = 0; i < cl->count; i++) {
+            const RdCmd *c = &cl->cmds[i];
+            if (c->type != RDC_MESH && c->type != RDC_SKINNED) {
+                continue;
+            }
+            RdMeshRec *m = rd__MeshRec(c->u[0]);
+            if (!m || !m->vu || m->transient || (m->gpuChunk && !m->gpuDirty) ||
+                m->replaySeen == g_rd.replayCounter) {
+                continue;
+            }
+            m->replaySeen = g_rd.replayCounter;
+            const uint64_t sb = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+            const uint64_t ib = (uint64_t)m->indexCount * 4;
+            if (!rd__MeshGpuReserve(m, sb, ib, ua)) {
+                m->replaySeen = 0; /* doVu's ring path */
+                continue;
+            }
+            /* stream and indices in the ring as they lie in the arena */
+            const uint64_t span = m->gpuIndexOff - m->gpuOff + (ib ? ib : 4);
+            const uint64_t off = rd__RingAlloc(span, 16);
+            if (off == ~0ull) {
+                m->replaySeen = 0;
+                continue;
+            }
+            if (sb) {
+                memcpy(g_rd.ringMap[s_slot] + off, m->stream, sb);
+            }
+            if (ib) {
+                memcpy(g_rd.ringMap[s_slot] + off + (m->gpuIndexOff - m->gpuOff), m->index, ib);
+            }
+            rhi_CmdCopyBuffer(s_cl, g_rd.ring[s_slot], off, rd__MeshGpuBuffer(m->gpuChunk),
+                              m->gpuOff, span);
+            m->gpuDirty = 0;
+            g_rdPerf.meshUploads++;
+            g_rdPerf.meshUploadBytes += sb + ib;
+        }
+    }
+}
+
+/* Package P1: a temporary target that took a pooled texture (rd_core.c
+ * rd__TempTargetAlloc), or a new one, starts as a new texture does on the
+ * drivers the tests run on: zero colour, depth and stencil.  Every pending
+ * target is cleared, whichever frame it belongs to: none of them was drawn
+ * since it was taken. */
+static void clearNewTargets(void)
+{
+    for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
+        RdTargetRec *t = &g_rd.targets[i];
+        if (!t->live || !t->clearPending || !t->color.id) {
+            continue;
+        }
+        t->clearPending = 0;
+        rd__Transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
+        RhiRenderPassDesc p;
+        memset(&p, 0, sizeof(p));
+        p.color[0].texture = t->color;
+        p.color[0].load = RHI_LOAD_CLEAR;
+        p.colorCount = 1;
+        if (t->withDepth && t->depth.id) {
+            rd__Transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
+            p.depth.texture = t->depth;
+            p.depth.depthLoad = RHI_LOAD_CLEAR;
+            p.depth.stencilLoad = RHI_LOAD_CLEAR;
+        }
+        p.width = t->tw;
+        p.height = t->th;
+        rhi_CmdBeginRenderPass(s_cl, &p);
+        rhi_CmdEndRenderPass(s_cl);
+        g_rdPerf.tempClears++;
     }
 }
 
@@ -2514,7 +2763,10 @@ static uint32_t s_replayCount;
 bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
 {
     const double t0 = rd__NowMs();
+    rd__PerfBegin(f, keep, present);
     const bool ok = replayFrame(f, keep, present);
+    g_rdPerf.uploadBytes = s_ringOff;
+    rd__PerfEnd();
     const double ms = rd__NowMs() - t0;
     if (ms > s_replayMaxMs) {
         s_replayMaxMs = ms;
@@ -2541,7 +2793,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     if (!g_rd.hasDevice || !f) {
         return false;
     }
-    rhi_WaitFrame();
+    double t = rd__NowMs(), t1;
+    rd__WaitFrame();
+    rd__PerfCollectGpu(); /* P1: the timestamps of the slot just recycled */
+    g_rdPerf.waitMs = (t1 = rd__NowMs()) - t;
+    t = t1;
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     s_ringOff = 0;
@@ -2549,12 +2805,23 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rd__Log("could not allocate the upload ring");
         return false;
     }
+    g_rdPerf.uploadMs = (t1 = rd__NowMs()) - t;
+    t = t1;
     const bool doPresent = present && rd__PresentAcquire();
+    g_rdPerf.acquireMs = (t1 = rd__NowMs()) - t;
+    t = t1;
     s_cl = rhi_BeginCommands();
     if (!s_cl.id) {
         return false;
     }
+    rd__PerfStamp(s_cl, RD_PERF_TS_BEGIN);
     uploadTextures();
+    uploadMeshes(f, keep); /* P1 */
+    clearNewTargets();     /* P1 */
+    rd__PerfStamp(s_cl, RD_PERF_TS_LISTS);
+    g_rdPerf.uploadMs += (t1 = rd__NowMs()) - t;
+    t = t1;
+    const double bind0 = g_rdPerf.bindMs;
 
     if (f->hasCamera) {
         rd__SetReplayCamera(&f->camera);
@@ -2617,16 +2884,23 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 break;
             }
         }
+        rd__PerfStamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
     }
     endPass(&r);
     if (doPresent) {
         rd__PresentRecord(s_cl);
+        rd__PerfStamp(s_cl, RD_PERF_TS_PRESENT);
     }
+    g_rdPerf.walkMs = (t1 = rd__NowMs()) - t - (g_rdPerf.bindMs - bind0);
+    t = t1;
     rhi_EndCommands(s_cl);
     rhi_Submit(s_cl);
+    g_rdPerf.submitMs = (t1 = rd__NowMs()) - t;
+    t = t1;
     if (doPresent) {
         rd__PresentFinish();
     }
+    g_rdPerf.presentMs = rd__NowMs() - t;
     g_rd.stats.pipelines = rd__PipelineCount();
     return true;
 }
@@ -2649,7 +2923,10 @@ static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, v
         rhi_Submit(cl);
     }
     uint32_t pitch = 0;
-    if (!rhi_ReadbackTexture(t, RHI_ASPECT_COLOR, dst, dstSize, &pitch)) {
+    const double t0 = rd__NowMs();
+    const bool ok = rhi_ReadbackTexture(t, RHI_ASPECT_COLOR, dst, dstSize, &pitch);
+    rd__PerfReadbackMs(rd__NowMs() - t0); /* P1: dumps and screenshots only */
+    if (!ok) {
         return false;
     }
     if (pitch != w * 4) {
@@ -2695,7 +2972,7 @@ bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4])
     if (!t.id) {
         return false;
     }
-    rhi_WaitFrame();
+    rd__WaitFrame();
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     s_ringOff = 0;

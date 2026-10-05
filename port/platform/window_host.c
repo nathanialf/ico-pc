@@ -62,7 +62,30 @@ static struct {
     unsigned statVsyncs, statResyncs;
     Uint64 statDropped;
     uint32_t statFrameNo; /* rd_FrameNumber() at the block's start */
+    /* P1: the simulation step's real time (from the end of one pace to the
+       start of the next), for the 10 s line */
+    Uint64 paceEnd;
+    double stepSumMs, stepMaxMs;
+    unsigned stepCount;
+    int mailbox; /* rhi_PreferMailbox as last applied: vsync on and presenting between ticks */
 } s_pres;
+
+/* P1: the renderer's per-replay records (rd.h RdPerfRecord): summed over
+   the 10 s block for the window's second line, and with [dev] perf_log =
+   true written one line each into logs/ico-pc-perf.csv
+   (docs/port/RENDER_API.md section 22) */
+static struct {
+    int csvTried;
+    FILE *csv;
+    unsigned n, gpuN;
+    double total, maxTotal, interp, wait, acquire, upload, walk, bind, submit, present, readback,
+        fence;
+    double gpu, maxGpu, gpuList[13], gpuUpload, gpuPresent;
+    uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
+    uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
+    uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
+        readbacks;
+} s_perf;
 
 /* The renderer's settings from the display options and the window's pixel
    size. */
@@ -86,6 +109,11 @@ static void video_settings(RdSettings *rs, int w, int h)
     /* R7b: rd presents between ticks, in both presets (F2) */
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
+    /* P1: presenting between ticks with vsync on, the swapchain prefers the
+       mailbox mode: no tearing, and a present never waits for the display,
+       so it cannot hold the simulation back (DISPLAY.md) */
+    s_pres.mailbox = rs->vsync && rs->interpolate;
+    rhi_PreferMailbox(s_pres.mailbox != 0);
 }
 
 /* Applies the options changed since the last call (the Settings menu's
@@ -111,8 +139,14 @@ static void video_apply(int force)
         s_fullscreen = o.fullscreen;
     }
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
+    const int mailbox = s_pres.mailbox;
     video_settings(&rs, w, h);
     rd_SetSettings(&rs);
+    if (mailbox != s_pres.mailbox && w > 0 && h > 0) {
+        /* P1: the present mode follows the frame rate option (the swapchain
+           is recreated) */
+        rd_ResizeOutput((uint32_t)w, (uint32_t)h);
+    }
 }
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
@@ -145,9 +179,6 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        the host FP mode, not on the game's 256 KB fiber stacks
        (docs/port/PLATFORM.md "Fiber stacks and host calls") */
     rd_SetHostCall(ico_sched_call_on_host);
-    /* the whole reachable pipeline set before the first frame, so the
-       game never waits on a pipeline compile (F2; the time is logged) */
-    rd_PrecreatePipelines();
     {
         IcoVideoOptions o;
 
@@ -171,6 +202,12 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         SDL_Quit();
         return -1;
     }
+    /* the whole reachable pipeline set before the first frame, so the
+       game never waits on a pipeline compile (F2; the time is logged).  P1:
+       after rd_Init, which makes the device: F2 called it before, where it
+       created nothing, and every pipeline was compiled by the replay that
+       first drew with it (tens of ms each on a GPU driver) */
+    rd_PrecreatePipelines();
     {
         IcoVideoOptions o;
         char res[32], fr[16];
@@ -186,6 +223,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off");
+        if (o.vsync) {
+            fprintf(stderr, "window: present mode %s\n",
+                    rhi_PresentMailbox() ? "mailbox (vsync without waiting on the display)"
+                                         : "fifo");
+        }
     }
     s_pres.cutSerial = ico_video_cut_serial();
     s_deadline = SDL_GetTicksNS();
@@ -305,6 +347,182 @@ int ico_window_pump(void)
     return !quit;
 }
 
+/* P1: logs/ico-pc-perf.csv, opened on the first record when [dev] perf_log
+   is true */
+static void perf_csv_open(void)
+{
+    char dir[ICO_PATH_MAX], logs[ICO_PATH_MAX], path[ICO_PATH_MAX];
+
+    s_perf.csvTried = 1;
+    if (!ico_config_get_bool("dev.perf_log", 0)) {
+        return;
+    }
+    ico_host_exe_dir(dir, sizeof(dir));
+    ico_path_join(logs, sizeof(logs), dir, "logs");
+    ico_path_join(path, sizeof(path), logs, "ico-pc-perf.csv");
+    s_perf.csv = fopen(path, "w");
+    if (s_perf.csv == NULL) {
+        fprintf(stderr, "window: perf_log: cannot write %s\n", path);
+        return;
+    }
+    fprintf(stderr, "window: perf_log: one line per replay in %s\n", path);
+    fprintf(s_perf.csv,
+            "replay,frame,interpolated,keep,presented,total_ms,interp_ms,wait_ms,acquire_ms,"
+            "upload_ms,walk_ms,bind_ms,submit_ms,present_ms,readback_ms,fence_wait_ms,"
+            "buffers_created,buffers_destroyed,textures_created,textures_destroyed,mem_allocs,"
+            "mem_frees,bind_groups,pipeline_binds,bind_group_binds,draws,render_passes,barriers,"
+            "copies,fence_waits,wait_idles,readbacks,texture_uploads,mesh_uploads,temp_clears,"
+            "date_snapshots,exact_blends,pipeline_creates,upload_bytes,mesh_upload_bytes,gpu_valid,"
+            "gpu_ms,"
+            "gpu_upload_ms");
+    for (int l = 0; l < 13; l++) {
+        fprintf(s_perf.csv, ",gpu_list%d_ms", l);
+    }
+    fprintf(s_perf.csv, ",gpu_present_ms\n");
+}
+
+static void perf_csv_line(const RdPerfRecord *r)
+{
+    FILE *f = s_perf.csv;
+
+    fprintf(f,
+            "%u,%u,%u,%u,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%u,%u,%u,%u,%u,"
+            "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%llu,%u,%.3f,%.3f",
+            r->replay, r->frame, r->interpolated, r->keep, r->presented, r->totalMs, r->interpMs,
+            r->waitMs, r->acquireMs, r->uploadMs, r->walkMs, r->bindMs, r->submitMs, r->presentMs,
+            r->readbackMs, r->fenceWaitMs, r->buffersCreated, r->buffersDestroyed,
+            r->texturesCreated, r->texturesDestroyed, r->memoryAllocs, r->memoryFrees,
+            r->bindGroups, r->pipelineBinds, r->bindGroupBinds, r->draws, r->renderPasses,
+            r->barriers, r->copies, r->fenceWaits, r->waitIdles, r->readbacks, r->textureUploads,
+            r->meshUploads, r->tempClears, r->dateSnapshots, r->exactBlends, r->pipelineCreates,
+            (unsigned long long)r->uploadBytes, (unsigned long long)r->meshUploadBytes, r->gpuValid,
+            r->gpuMs, r->gpuUploadMs);
+    for (int l = 0; l < 13; l++) {
+        fprintf(f, ",%.3f", r->gpuListMs[l]);
+    }
+    fprintf(f, ",%.3f\n", r->gpuPresentMs);
+}
+
+/* P1: the finished records into the block's sums and the CSV */
+static void perf_drain(void)
+{
+    RdPerfRecord r;
+
+    while (rd_PerfPop(&r)) {
+        if (!s_perf.csvTried) {
+            perf_csv_open();
+        }
+        if (s_perf.csv != NULL) {
+            perf_csv_line(&r);
+        }
+        s_perf.n++;
+        s_perf.total += r.totalMs;
+        s_perf.maxTotal = r.totalMs > s_perf.maxTotal ? r.totalMs : s_perf.maxTotal;
+        s_perf.interp += r.interpMs;
+        s_perf.wait += r.waitMs;
+        s_perf.acquire += r.acquireMs;
+        s_perf.upload += r.uploadMs;
+        s_perf.walk += r.walkMs;
+        s_perf.bind += r.bindMs;
+        s_perf.submit += r.submitMs;
+        s_perf.present += r.presentMs;
+        s_perf.readback += r.readbackMs;
+        s_perf.fence += r.fenceWaitMs;
+        if (r.gpuValid) {
+            s_perf.gpuN++;
+            s_perf.gpu += r.gpuMs;
+            s_perf.maxGpu = r.gpuMs > s_perf.maxGpu ? r.gpuMs : s_perf.maxGpu;
+            s_perf.gpuUpload += r.gpuUploadMs;
+            s_perf.gpuPresent += r.gpuPresentMs;
+            for (int l = 0; l < 13; l++) {
+                s_perf.gpuList[l] += r.gpuListMs[l];
+            }
+        }
+        s_perf.draws += r.draws;
+        s_perf.passes += r.renderPasses;
+        s_perf.pipeBinds += r.pipelineBinds;
+        s_perf.groupBinds += r.bindGroupBinds;
+        s_perf.groups += r.bindGroups;
+        s_perf.barriers += r.barriers;
+        s_perf.copies += r.copies;
+        s_perf.bytes += r.uploadBytes;
+        s_perf.meshBytes += r.meshUploadBytes;
+        s_perf.texUploads += r.textureUploads;
+        s_perf.meshUploads += r.meshUploads;
+        s_perf.dateSnaps += r.dateSnapshots;
+        s_perf.exact += r.exactBlends;
+        s_perf.pipeCreates += r.pipelineCreates;
+        s_perf.bufCreated += r.buffersCreated;
+        s_perf.bufDestroyed += r.buffersDestroyed;
+        s_perf.texCreated += r.texturesCreated;
+        s_perf.texDestroyed += r.texturesDestroyed;
+        s_perf.allocs += r.memoryAllocs;
+        s_perf.fenceWaits += r.fenceWaits;
+        s_perf.waitIdles += r.waitIdles;
+        s_perf.readbacks += r.readbacks;
+    }
+    if (s_perf.csv != NULL) {
+        fflush(s_perf.csv);
+    }
+}
+
+/* P1: a new block's sums (the CSV stays open) */
+static void perf_reset(void)
+{
+    FILE *csv = s_perf.csv;
+    const int tried = s_perf.csvTried;
+
+    memset(&s_perf, 0, sizeof(s_perf));
+    s_perf.csv = csv;
+    s_perf.csvTried = tried;
+    s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
+    s_pres.stepCount = 0;
+}
+
+/* P1: the block's second line: where a replay's time went, on average */
+static void perf_log(void)
+{
+    const double n = s_perf.n ? (double)s_perf.n : 1.0;
+    const double g = s_perf.gpuN ? (double)s_perf.gpuN : 1.0;
+    char gpu[160] = "no GPU timestamps";
+
+    if (s_perf.gpuN) {
+        double scene = 0.0;
+
+        for (int l = 0; l < 11; l++) {
+            scene += s_perf.gpuList[l];
+        }
+        snprintf(gpu, sizeof(gpu),
+                 "GPU %.2f ms (max %.2f): uploads %.2f, lists 0-10 %.2f, 11-12 %.2f, present %.2f",
+                 s_perf.gpu / g, s_perf.maxGpu, s_perf.gpuUpload / g, scene / g,
+                 (s_perf.gpuList[11] + s_perf.gpuList[12]) / g, s_perf.gpuPresent / g);
+    }
+    fprintf(stderr,
+            "window: %u replays: CPU %.2f ms (max %.2f): interp %.2f, wait %.2f, acquire %.2f, "
+            "upload %.2f, walk %.2f, bind %.2f, submit %.2f, present %.2f, readback %.2f "
+            "(fence waits %.2f); %s; simulation step %.2f ms (max %.2f)\n",
+            s_perf.n, s_perf.total / n, s_perf.maxTotal, s_perf.interp / n, s_perf.wait / n,
+            s_perf.acquire / n, s_perf.upload / n, s_perf.walk / n, s_perf.bind / n,
+            s_perf.submit / n, s_perf.present / n, s_perf.readback / n, s_perf.fence / n, gpu,
+            s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs);
+    fprintf(stderr,
+            "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
+            "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
+            "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends; in "
+            "the block %llu buffers and %llu textures created, %llu and %llu destroyed, %llu "
+            "memory allocations, %llu pipelines created, %llu fence waits, %llu wait-idles, %llu "
+            "readbacks\n",
+            s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
+            s_perf.groups / n, s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
+            s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
+            s_perf.dateSnaps / n, s_perf.exact / n, (unsigned long long)s_perf.bufCreated,
+            (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
+            (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
+            (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
+            (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
+    perf_reset();
+}
+
 /* R7b: presents and frames per second, every 10 s of real time, in both
    presentation modes. F2: "game frames" counts the frames shown (closed
    frames the pace saw); "frame numbers" also counts the ones the game
@@ -323,6 +541,8 @@ static void pace_log(Uint64 now)
         s_pres.statDropped = 0;
         s_pres.statFrameNo = rd_FrameNumber();
         rd_ReplayTimeMax(1, &n);
+        perf_drain();
+        perf_reset();
         return;
     }
     if (now - s_pres.statAt < 10000000000ull) {
@@ -344,6 +564,8 @@ static void pace_log(Uint64 now)
             s_pres.statPresents / sec, s_pres.statFrames / sec, s_pres.statVsyncs,
             s_pres.statVsyncs / sec, s_pres.statResyncs, (double)s_pres.statDropped / 1e6, maxMs,
             replays);
+    perf_drain();
+    perf_log();
     s_pres.statAt = now;
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
     s_pres.statDropped = 0;
@@ -358,7 +580,27 @@ static void resync(Uint64 now)
     s_deadline = now;
 }
 
+static void pace(int hz);
+
 void ico_window_pace(int hz)
+{
+    /* P1: the simulation step that ran since the last pace (the host loop
+       calls ico_host_step, then this) */
+    const Uint64 now = SDL_GetTicksNS();
+
+    if (s_pres.paceEnd != 0 && now > s_pres.paceEnd) {
+        const double ms = (double)(now - s_pres.paceEnd) / 1e6;
+
+        s_pres.stepSumMs += ms;
+        s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
+        s_pres.stepCount++;
+    }
+    pace(hz);
+    perf_drain(); /* P1: every vsync, so the record queue never overflows */
+    s_pres.paceEnd = SDL_GetTicksNS();
+}
+
+static void pace(int hz)
 {
     /* PAL 50 Hz: 20 ms; NTSC 59.94 Hz: 16.683 ms (host_loop.c's simulated
        periods) */
@@ -402,6 +644,7 @@ void ico_window_pace(int hz)
        game frame. Slow means a present costing more than a display refresh
        plus half a simulated period. */
     Uint64 slow = period;
+    Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
     {
         const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
         const Uint64 refresh = dm != NULL && dm->refresh_rate > 1.0f
@@ -409,17 +652,29 @@ void ico_window_pace(int hz)
                                    : period;
 
         slow = (refresh > period ? refresh : period) + period / 2;
+        /* P1: "uncapped" with vsync on.  In mailbox mode (rhi_PreferMailbox)
+           a present never waits for the display; two presents a refresh keep
+           every refresh supplied with a fresh picture without drawing many
+           that are never shown.  Under FIFO (no mailbox) one a refresh: the
+           display's own rate, so a present rarely finds the queue full and
+           waits.  Without vsync "uncapped" is back to back. */
+        if (s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox) {
+            gap = rhi_PresentMailbox() ? refresh / 2 : refresh - refresh / 16;
+        }
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
-    const Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
     for (;;) {
         now = SDL_GetTicksNS();
         /* behind the deadline, or on a renderer slower than a vsync period
            per present (a software driver): one present per new frame, none
            more, so the presents never slow the simulation below the
            original's one replay per frame */
-        if (s_pres.presentedFrame == s_pres.frame && (now >= s_deadline || s_pres.cost > slow)) {
+        /* P1: nor a further present of a frame already shown that would
+           end past the deadline (its cost the last present's): the next
+           simulation step is never late for one */
+        if (s_pres.presentedFrame == s_pres.frame &&
+            (now >= s_deadline || s_pres.cost > slow || now + s_pres.cost > s_deadline)) {
             if (now < s_deadline) {
                 SDL_DelayPrecise(s_deadline - now);
             }

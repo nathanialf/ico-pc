@@ -71,6 +71,32 @@ cadence, for either preset.
 On a slow computer (or a software renderer) the game draws one picture per
 update, as with `"original"`, rather than slowing the game down.
 
+## Vsync and an uncapped frame rate
+
+With `vsync = true` and `framerate` other than `"original"`, ico-pc asks the
+graphics driver for its "mailbox" mode where it has one (Vulkan; most PC
+drivers do): the screen still shows only whole pictures (no tearing), but
+handing a picture to the screen never waits for the screen's refresh, and a
+picture the screen had no time to show is replaced by the newer one. The
+game's own updates therefore never wait on the display: they keep the PS2's
+25 (or 30) a second however the screen's refresh lines up with them. With
+`"uncapped"` the pictures are drawn about twice per screen refresh, so every
+refresh has a fresh one, without drawing hundreds that are never shown.
+
+Where mailbox is not offered (the D3D12 backend, some drivers), vsync uses
+the usual queue of pictures waiting for the refresh, and `"uncapped"` draws
+one picture per refresh. Either way, a picture between two updates is only
+drawn when there is time for it before the next update is due, so a slow
+picture costs smoothness, never game speed.
+
+`framerate = "original"` presents each update once, as before, and with
+`vsync` that present waits for the refresh, as it did on the PS2.
+`window:` lines in `logs/ico-pc.log` say which mode is in use (`present
+mode mailbox` or `fifo`) and, every 10 seconds, how many pictures and game
+updates there were and where the renderer's time went (docs/port/
+RENDER_API.md section 22; `[dev] perf_log = true` writes one line per
+picture into `logs/ico-pc-perf.csv`).
+
 ## What stays as on the PS2
 
 - What you can see and what the game considers "on screen" for its own
@@ -87,4 +113,4 @@ update, as with `"original"`, rather than slowing the game down.
 - On a renderer backend without mipmapped textures, `texture_filter` falls
   back to the original filtering.
 - Technical details: docs/port/RENDER_API.md sections 19 (presets, the
-  options) and 20 (frame rate).
+  options), 20 (frame rate) and 22 (performance).

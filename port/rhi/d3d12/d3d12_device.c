@@ -511,5 +511,45 @@ bool rhi_DeviceLost(void)
     return g_dx.deviceLost;
 }
 
+/* Package P1's performance entry points (rhi.h).  Not implemented on D3D12
+ * yet: the counters read zero, timestamps are unsupported (nothing is
+ * written, nothing read back) and there is no mailbox mode (DXGI's flip
+ * model with sync interval 1 is FIFO).  docs/port/RENDER_API.md section 22
+ * lists them. */
+void rhi_GetStats(RhiStats *out)
+{
+    if (out) {
+        memset(out, 0, sizeof(*out));
+    }
+}
+
+bool rhi_TimestampsSupported(void)
+{
+    return false;
+}
+
+void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
+{
+    (void)cl;
+    (void)index;
+}
+
+uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
+}
+
+void rhi_PreferMailbox(bool on)
+{
+    (void)on;
+}
+
+bool rhi_PresentMailbox(void)
+{
+    return false;
+}
+
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
 RHI_BACKEND_DEFINE(rhi_backend_d3d12, "d3d12");

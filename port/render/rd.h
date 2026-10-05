@@ -827,9 +827,47 @@ bool rd_ReadDisplay(void *dst, uint32_t *w, uint32_t *h);
 typedef struct RdStats {
     uint32_t draws, pipelines, pipelineCreates, textureUploads, tempTargets, bytesPayload;
     float gpuMs;
+    uint32_t tempReused; /* package P1: temporary targets that took a pooled texture */
 } RdStats;
 
 const RdStats *rd_GetStats(void);
+
+/* Package P1: one record per replay (rd_EndFrame's, rd_Present's, the
+ * replay tool's), docs/port/RENDER_API.md section 22.  CPU phases in ms:
+ * interp (rd__InterpFrame building the blended copy), wait (rhi_WaitFrame:
+ * the GPU finishing the frame RHI_FRAMES_IN_FLIGHT replays ago), acquire
+ * (the swapchain image), upload (textures, meshes, temporary target clears
+ * into the ring and their copies), walk (the command lists: state, geometry
+ * expansion, ring writes and command encoding), of which bind (bind group
+ * creation), submit, present (the present call), readback (synchronous
+ * readbacks: dumps and screenshots only).  The counts are RhiStats deltas
+ * since the previous record, so they include what the recording of the
+ * frame created (temporary targets, textures).  GPU times come from
+ * timestamps when the backend has them (gpuValid), RHI_FRAMES_IN_FLIGHT
+ * replays later; rd_PerfPop returns a record once they are in. */
+typedef struct RdPerfRecord {
+    uint32_t replay; /* 1, 2, ... */
+    uint32_t frame;  /* the replayed frame's number */
+    uint8_t interpolated, keep, presented, gpuValid;
+    double totalMs, interpMs, waitMs, acquireMs, uploadMs, walkMs, bindMs, submitMs, presentMs,
+        readbackMs;
+    double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
+    uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
+    uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
+    uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
+    uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
+    uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */
+    uint64_t uploadBytes;     /* everything written into the upload ring */
+    uint64_t meshUploadBytes; /* of which mesh streams and indices */
+    double gpuMs;             /* first timestamp to last */
+    double gpuUploadMs;       /* the upload copies at the head */
+    double gpuListMs[13];     /* per command list (0 for a list not replayed) */
+    double gpuPresentMs;      /* the present blits */
+} RdPerfRecord;
+
+/* The oldest finished record not yet popped (a queue of 64; the oldest are
+ * dropped when nobody pops); false when there is none. */
+bool rd_PerfPop(RdPerfRecord *out);
 
 #ifdef __cplusplus
 }

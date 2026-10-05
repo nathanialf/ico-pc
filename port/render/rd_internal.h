@@ -243,6 +243,10 @@ typedef struct RdTargetRec {
     uint32_t viewTex[3]; /* RdTex ids of rd_TargetTexture, per RdTexView */
     uint32_t ownerFrame;
     uint8_t zFormat; /* RdZFormat of the depth buffer (R2c); 0 = PSMZ32 */
+    /* package P1: a freed temporary target kept with its textures for the
+     * next of its size (rd__TempTargetAlloc); a taken one is cleared to 0
+     * at the next replay (clearPending) */
+    uint8_t parked, clearPending;
 } RdTargetRec;
 
 /* GS Z to depth scale of a target id's depth buffer (2^-32 for PSMZ32, the
@@ -258,6 +262,10 @@ void rd__TargetDestroyGpu(RdTargetRec *t);
 /* Allocates a temp target record (dump loading uses it too). */
 uint32_t rd__TempTargetAlloc(uint32_t w, uint32_t h, int withDepth, int keepAcross);
 void rd__TempTargetFree(uint32_t id);
+/* Package P1: destroys the parked temporary targets' textures (a scale
+ * change, shutdown). */
+void rd__TempTargetPoolClear(void);
+#define RD_TEMP_PARKED 24 /* parked temporary targets kept at most */
 
 /* ------------------------------------------------------------ textures */
 #define RD_MAX_TEXTURES 8192
@@ -277,6 +285,12 @@ typedef struct RdTexRec {
     uint8_t view;      /* RdTexView, RD_TEXKIND_TARGET */
     uint8_t mipLevels; /* R7a: levels of rhi (1 unless the Enhanced filter generated mips) */
     uint32_t target;   /* RdTarget id, RD_TEXKIND_TARGET */
+    /* package P1: the debug name, and the replays of the last uploads (a
+     * texture uploaded on many replays in a row is logged once) */
+    char name[24];
+    uint32_t lastUpload;
+    uint16_t uploadStreak;
+    uint8_t streakLogged;
 } RdTexRec;
 
 RdTexRec *rd__TexRec(uint32_t id);
@@ -311,6 +325,13 @@ typedef struct RdMeshRec {
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
     uint32_t replaySeen; /* g_rd.replayCounter of the replay that uploaded it */
     uint64_t ringStream, ringIndex;
+    /* package P1: the device copy (rd_mesh.c's arena, rd_replay.c
+     * uploadMeshes): stream at gpuOff, indices at gpuIndexOff of chunk
+     * gpuChunk - 1 (0: none), gpuSize bytes reserved; uploaded again when
+     * gpuDirty (rd_UpdateVuMesh).  transient: rewritten every present (the
+     * interpolation's scratch meshes), drawn from the ring instead */
+    uint64_t gpuOff, gpuIndexOff, gpuSize;
+    uint8_t gpuChunk, gpuDirty, transient;
     char name[24];
     /* R7d: the stream's versions for the presenter (rd_UpdateVuMesh).
      * verFrame is the frame that was recording when the stream was last
@@ -333,6 +354,19 @@ const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4];
 #define RD_MAX_MESHES 16384
 
 RdMeshRec *rd__MeshRec(uint32_t id);
+/* Package P1: the device arena of the meshes' copies (rd_mesh.c): device
+ * buffers of RD_MESH_CHUNK bytes (a larger mesh gets one of its own), first
+ * fit with coalescing.  rd__MeshGpuReserve gives m a range for its stream
+ * and indices (false: the arena is full, the mesh is drawn from the ring);
+ * meshFree returns it.  A range freed while the GPU may still read it is
+ * safe to reuse: every later write to it is a buffer copy recorded after,
+ * which waits for earlier reads (rhi.h rhi_CmdCopyBuffer). */
+#define RD_MESH_CHUNK (32u << 20)
+#define RD_MESH_CHUNKS 32
+bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes, uint64_t align);
+RhiBuffer rd__MeshGpuBuffer(uint32_t chunk);
+/* destroys the arena's buffers; every mesh loses its device copy */
+void rd__MeshGpuShutdown(void);
 /* Creates a VU mesh record from a stream and index list already in the
  * tagless layout (dump loading); returns the id, 0 on failure. */
 uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uint32_t qwPerVertex,
@@ -615,6 +649,10 @@ typedef struct RdContext {
     /* wave 7 (R7c): rd_SetMirror's flag (the run's mirror mode); the
      * effective mirror is this or settings.mirror (rd__MirrorOn) */
     uint8_t mirrorRun;
+    /* package P1: image textures with dirty set (uploadTextures skips its
+     * walk of the table while there are none and the filter is unchanged) */
+    uint32_t texDirtyCount;
+    int texLevelsFilter; /* filterUpgrade the table was last walked for, -1 = never */
 } RdContext;
 
 extern RdContext g_rd;
@@ -657,7 +695,9 @@ enum {
     /* wave 5 (R5c) */
     RD_ONCE_WRAP, /* a COLCLAMP 0 draw the wrap path does not model (DATE, PABE, AFAIL split) */
     /* wave 7 (R7a) */
-    RD_ONCE_COPY_SCALE /* a copy between targets of different resolution scales */
+    RD_ONCE_COPY_SCALE, /* a copy between targets of different resolution scales */
+    /* package P1 */
+    RD_ONCE_MESH_ARENA /* the mesh arena is full: meshes past it drawn from the ring */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -682,6 +722,31 @@ void rd__GpuShutdown(void);
 /* Replays f (lists 0..12, or 11..12 with keep) from f->startState and, with
  * present, runs the presenter.  The replay state block ends as f->endState. */
 bool rd__ReplayFrame(const RdFrame *f, int keep, bool present);
+
+/* Package P1 (rd_perf.c, rd.h RdPerfRecord): the record of the replay
+ * being made.  rd__PerfBegin starts it (the CPU phases are added to it by
+ * the replay), rd__PerfEnd closes it with the RhiStats deltas and queues it
+ * for its GPU times, which rd__PerfCollectGpu attaches right after the
+ * rhi_WaitFrame RHI_FRAMES_IN_FLIGHT replays later.  rd__PerfStamp writes
+ * timestamp i (RD_PERF_TS_*) into the replay's command list. */
+enum {
+    RD_PERF_TS_BEGIN = 0, /* after rhi_WaitFrame, before the uploads */
+    RD_PERF_TS_LISTS = 1, /* the uploads done, list 0 starts */
+    RD_PERF_TS_LIST0 = 2, /* + l: list l done */
+    RD_PERF_TS_PRESENT = RD_PERF_TS_LIST0 + RD_LIST_COUNT, /* the present blits done */
+    RD_PERF_TS_COUNT
+};
+
+extern RdPerfRecord g_rdPerf;
+void rd__PerfReset(void); /* a new device: its counters start at 0 */
+void rd__PerfBegin(const RdFrame *f, int keep, bool present);
+void rd__PerfCollectGpu(void);
+void rd__PerfEnd(void);
+void rd__PerfStamp(RhiCommandList cl, uint32_t index);
+/* rd_Present's interpolation time, charged to the replay that follows */
+void rd__PerfInterpMs(double ms);
+/* a synchronous readback's time (rd_replay.c readTexture), charged likewise */
+void rd__PerfReadbackMs(double ms);
 /* rd_SetHostCall's hook, or fn(arg) directly (rd_core.c) */
 void rd__OnHost(void (*fn)(void *arg), void *arg);
 /* a monotonic clock in ms (rd_core.c), for the replay and start-up timings */
@@ -703,6 +768,10 @@ void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
 /* Moves a texture to a state with a barrier when needed (outside passes). */
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
+/* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,
+ * the camera probe): also starts a new epoch of the bind group caches
+ * (rd_replay.c, package P1), since bind groups live one frame slot. */
+void rd__WaitFrame(void);
 /* Ring allocation for the frame being replayed. */
 uint64_t rd__RingAlloc(uint64_t size, uint64_t align);
 /* Per-frame uniform bind groups for the presenter and posts. */

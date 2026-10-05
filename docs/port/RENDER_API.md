@@ -1053,7 +1053,9 @@ Open items for waves 4 and 5:
    `pool.c`, `queen_barrier_disp.c`, `staticBlur.c` work buffers) are wave
    5's and may want named or kept targets.
 4. Mesh vertex data is re-uploaded every replayed frame; a device arena with
-   dirty tracking is an optimisation for later.
+   dirty tracking is an optimisation for later. Closed in package P1
+   (section 22): the device arena, uploaded once and after each
+   `rd_UpdateVuMesh`.
 5. Near-plane scissor cases colour-interpolate over the original triangle
    (`VU1_PROGRAMS.md` section 8); not seen as an issue in the run.
 
@@ -1233,7 +1235,8 @@ Open items:
    0x1B2..0x1C1) and the clamped or repeated count target on rd.
 5. The count target is a per-frame temporary target (a 1 MB texture
    created and freed per frame); a kept target resized with the scene would
-   avoid the churn.
+   avoid the churn. Closed in package P1 (section 22): temporary targets
+   come from a pool by size and are cleared when taken.
 6. A SCENE depth clear inside list 3 between `shadow_Reset` and
    `shadow_Draw` would clear the stencil count, where the GS keeps the
    colour; no such clear exists today (list 3 holds only Shadow.c's work).
@@ -1649,7 +1652,8 @@ Open items:
    37) and the waterfall's limited pool meshes (stage 22, `st02a.c`) are
    not yet seen in a game run.
 5. The block target is a per-frame temporary target (created and freed per
-   frame), like the shadow count.
+   frame), like the shadow count. Closed in package P1 (section 22): the
+   pool of temporary targets.
 
 ## 17. Full-screen effects (wave 5, R5a)
 
@@ -2885,3 +2889,219 @@ Open items:
 6. (R7d) The interpolation follow-ups of section 20 do not touch the
    mirror: the 2D keys blend the recorded (unflipped) XY, which the replay
    flips afterwards, as R7c's analysis says for any keyed UI prim.
+
+## 22. Performance (package P1)
+
+`port/render/rd_perf.c` (new: the per-replay records), `rd_replay.c` (the
+phases, the mesh uploads, the temporary target clears, the bind group
+caches, the ring writes), `rd_core.c` (the temporary target pool, the
+texture dirty count), `rd_mesh.c` (the device arena), `rd_pipeline.c` (the
+pipeline index), `rd_interp.c`, `rd_video.c`; `port/rhi/rhi.h` and both
+backends (counters, timestamps, the mailbox mode, the buffer copy's
+ordering); `port/platform/window_host.c` (the 10 s lines, the CSV, the
+pacer, pipeline precreation). Test: `rd_perf`
+(`port/render/test/rd_perf_test.c`).
+
+**The report.** The user's first Windows run (RTX 3090, Enhanced 4x, 4:3,
+full height, `framerate = "uncapped"`, vsync on) logged, in every 10 s
+block, a longest replay of 88 to 96 ms, 1 to 3 resyncs dropping 105 to 362
+ms, and 30 presents a second: one per game frame, the pacer's slow-renderer
+rule (a present costing more than a refresh plus half a period), with the
+simulation at times below real time (50.4 to 59.4 simulated Hz against
+59.94).
+
+**Instrumentation.** Every replay (rd_EndFrame's in the `"original"` frame
+rate, each `rd_Present`, the replay tool's, the tests') fills an
+`RdPerfRecord` (rd.h):
+
+| field | what it times or counts |
+|---|---|
+| `interpMs` | `rd__InterpFrame`: the blended copy of the frame (rd_Present only) |
+| `waitMs` | `rhi_WaitFrame`: the GPU finishing the frame `RHI_FRAMES_IN_FLIGHT` replays ago (on lavapipe, its rasterisation) |
+| `uploadMs` | the ring estimate, the textures, the meshes and the new temporary targets' clears |
+| `acquireMs` | the swapchain image |
+| `walkMs` | the command lists: state, geometry expansion, ring writes, command encoding, less `bindMs` |
+| `bindMs` | bind group creation (descriptor sets) |
+| `submitMs`, `presentMs` | end + submit; the present call (FIFO blocks here; lavapipe's WSI also waits for the rendering here) |
+| `readbackMs`, `fenceWaitMs` | synchronous readbacks since the previous replay (dumps and screenshots only); the backend's time blocked on GPU completion |
+| counts | the `RhiStats` deltas since the previous record (so the recording's creations count too): buffers, textures and device memory created and destroyed, bind groups, pipeline and bind group binds (a repeat of the bound one is not recorded), draws, render passes, barriers, copies, fence waits, wait-idles, readbacks; rd's own: texture and mesh uploads, temporary target clears, DATE snapshots, exact blends, pipelines created, bytes written into the ring (and of them mesh bytes) |
+| GPU | timestamps (`rhi_CmdWriteTimestamp`) at the replay's start, after the uploads, after each list and after the present blits, read `RHI_FRAMES_IN_FLIGHT` replays later without waiting (`rhi_ReadTimestamps`): total, uploads, each of the 13 lists, present |
+
+`rd_PerfPop` hands the finished records out. The window drains them every
+vsync; every 10 s it adds two `window:` lines to the presents line: the
+averages of the phases, the GPU times and the simulation step (the real
+time from one pace to the next, `ico_host_step`), then the per-replay counts
+and the block's creations. `[dev] perf_log = true` (config.toml,
+docs/port/CONFIG.md) writes every record as a line of
+`logs/ico-pc-perf.csv`. `rd_perf_test --dump FILE [--enhanced]
+[--resolution N] [--full-height] [--precreate] [--repeat N]` times a dump.
+
+RHI additions (rhi.h): `RhiStats` / `rhi_GetStats`, `RHI_MAX_TIMESTAMPS`
+(32 a frame slot), `rhi_TimestampsSupported`, `rhi_CmdWriteTimestamp`,
+`rhi_ReadTimestamps`, `rhi_PreferMailbox`, `rhi_PresentMailbox`; and
+`rhi_CmdCopyBuffer` now also waits for earlier reads of its destination.
+Vulkan implements them (a query pool per frame slot, reset in the slot's
+first command list; `vkGetSemaphoreCounterValue` before a fence wait so only
+a wait that blocks is counted). **D3D12: not implemented** (the counters
+read 0, `rhi_TimestampsSupported` is false and the timestamp calls do
+nothing, no mailbox): `d3d12_device.c`. The renderer copes: the records
+then carry the CPU phases and rd's own counts only.
+
+**Measured on lavapipe** (`SDL_VIDEODRIVER=offscreen`, `pad-boot.txt`,
+`ticks=1500`, `dump_every=300`, `[dev] perf_log = true`, `timeout 600`;
+runs `build-host/p1-run1` before the fixes, Enhanced 2x full height,
+uncapped, vsync on; `p1-run2` after, the same; `p1-run3` after, Original 1x
+uncapped). lavapipe's GPU time hides everything else (a stage-3 frame takes
+200 to 250 ms of rasterisation at 2x, which the WSI's present and
+`rhi_WaitFrame` wait for), so the CPU side is the phases without `wait` and
+`present`. Per replay, the CSV averaged over frames 595..605 (the title)
+and 1195..1205 (stage 3's opening):
+
+| | title, before | title, after | stage 3, before | stage 3, after |
+|---|---|---|---|---|
+| walk + bind + upload (ms) | 1.36 + 3.59 + 0.05 | 0.69 + 2.60 + 0.07 | 1.13 + 3.36 + 0.03 | 0.72 + 2.93 + 0.01 |
+| interp (ms) | 0.15 | 0.15 | 0.14 | 0.13 |
+| draws, bind groups | 727, 1071 | 727, 812 | 835, 987 | 835, 905 |
+| ring bytes (of them meshes) | 3479 KB (2716) | 814 KB (57) | 2858 KB (2131) | 784 KB (57) |
+| textures created and destroyed a frame | 1 | 0 | 1 | 0 |
+
+The same frames' dumps replayed 20 to 40 times each by `rd_perf_test`
+(the CPU phases without the GPU wait, steady state; the dump's first replay
+apart):
+
+| frame, preset | before (ms) | after (ms) |
+|---|---|---|
+| 600 (title), Original 1x | 4.57 (walk 1.06, bind 3.49) | 3.26 (walk 0.62, bind 2.61) |
+| 600, Enhanced 2x full height | 4.56 | 3.23 |
+| 1200 (stage 3), Original 1x | 4.10 (walk 0.91, bind 3.17) | 3.53 (walk 0.65, bind 2.87) |
+| 1200, Enhanced 2x full height | 4.07 | 3.59 |
+
+A dump's first replay without the start-up pipeline set: 263 ms (title,
+walk 254 ms: 174 pipelines compiled by the replay); with
+`rd_PrecreatePipelines` first (`--precreate`, 1.5 s for the 174 on
+lavapipe): 12 ms. Game runs: 1500 ticks in 435 s before (2x), 332 s after
+(2x), 145 s after at 1x Original; after, every steady 10 s block logs 0
+buffers, textures and memory allocations created and destroyed, and
+creations only in bursts at stage loads (the texture cache's loads and
+retirements, `rd_tex.c`). `rd_perf`: the synthetic frame's 200 replays
+create nothing after the first and upload no texture or static mesh; its
+200 recorded frames create nothing from the fifth on and upload only the
+morphing mesh; the CPU replay without the GPU wait is 0.67 ms (before:
+1.74 ms, of which bind 1.35; 597 textures created and destroyed over the
+200 recorded frames before, 0 after).
+
+**What cost what** (the Windows figures above, against the code):
+
+1. *Pipelines compiled inside replays.* `window_host.c` called
+   `rd_PrecreatePipelines` before `rd_Init`, without a device, so it created
+   nothing and said nothing (the user's log has no `rd: pipelines:` line),
+   and every pipeline was compiled by the first replay that drew with it.
+   On lavapipe that is 38 in the first 10 s block and more as stages
+   change; on a GPU driver each compile without a warm driver cache takes
+   tens of milliseconds: the 88 to 96 ms "longest replay" of every block
+   (new states keep appearing: the title, the stage, cutscenes). Fixed:
+   called after `rd_Init` (and `rd_PrecreatePipelines` without a device
+   now logs). `pipelineCreates` in the records says whether a key outside
+   the reachable set still compiles at run time.
+2. *A device allocation and free per frame.* The shadow count target
+   (`rd_ShadowCountTarget`) was a new scene-sized texture every frame, the
+   block targets of puddles, pools and the barrier and the decoder's
+   render-to-texture blocks likewise, created on the game fiber at
+   recording and freed two frames later. At 4x full height PAL that is a
+   2048 x 2048 RGBA8 (16 MB) `vkAllocateMemory` and `vkFreeMemory` a frame,
+   which on Windows goes through the video memory manager (residency on
+   first use). Fixed: temporary targets come from a pool (rd_core.c
+   `rd__TempTargetAlloc`): a freed one is parked with its textures, up to
+   `RD_TEMP_PARKED` (24), and the next of the same texture size, format and
+   depth takes them over; a taken one is cleared to zero at the next replay
+   (`clearNewTargets`: what a new texture holds on the drivers the tests
+   use, so pixels are unchanged), and the parked ones are dropped when the
+   scale or the scene size changes.
+3. *Mesh data copied into the ring every replay.* 1.7 to 2.7 MB a replay
+   (2 MB a frame of stage 3 at 1x), each present again: the open item of
+   section 13. On NVIDIA the ring is device-local host-visible memory
+   (`RHI_MEM_UPLOAD` prefers it), so this is a bus transfer per present.
+   Fixed: `rd_mesh.c`'s device arena (32 MB `RHI_MEM_DEVICE` chunks, at
+   most 32, first fit, a larger mesh gets its own chunk): a mesh is copied
+   once (`uploadMeshes`, before the first pass, ring + `rhi_CmdCopyBuffer`)
+   and again only after `rd_UpdateVuMesh` (`gpuDirty`: the morphs, about 6
+   a frame in stage 3); the interpolation's scratch meshes (`transient`)
+   and a mesh the arena cannot hold stay on the ring. A range freed while
+   the GPU may still read it can be reused at once: the copy that rewrites
+   it waits for earlier reads (rhi.h). The VU blocks and bones stay in the
+   ring (per draw uniforms).
+4. *Reads of the ring.* `convVtx` added the UV offset to the vertex in the
+   ring (`o->u += ...`), the flat-shading pass copied colours between ring
+   vertices and the mirror flip read them back: uncached reads where the
+   ring is write-combined device memory (NVIDIA, resizable BAR), invisible
+   on lavapipe. Fixed: vertices are built in a local or a CPU scratch and
+   copied into the ring whole.
+5. *Bind work.* A descriptor set per draw and per bind group, with the
+   same DrawCB, FrameCB or texture group made again for every draw.
+   Fixed in part: per-replay caches by content (uniform groups) and by
+   (texture, sampler, DATE snapshot), tagged with an epoch every
+   `rd__WaitFrame` starts (bind groups live one frame slot), and the Vulkan
+   backend no longer re-binds a set already bound. The VU draws keep one
+   set each (their VuCB is per object): most of the 905 groups of a
+   stage-3 frame. The pipeline lookup is a hash instead of a walk of up to 1024
+   keys per draw.
+6. *Textures.* The upload walk of the 8192-entry table ran every replay;
+   it now runs only while a texture is dirty or the filter option changed
+   (`RdContext.texDirtyCount`), and `rd_UpdateTexture` with unchanged
+   texels marks nothing (`rd_core.c`). A texture uploaded on 60 replays in
+   a row is named in the log: in the runs only `26aumi_spc` (128 x 128, the
+   title's sea, a CLUT animation: new texels every frame, 64 KB).
+7. *Vsync and the pacer.* With FIFO a present waits for a free image (up
+   to a refresh), and a replay costing more than a refresh plus half a
+   period (items 1 and 2) made the pacer fall back to one present per game
+   frame: the 30 presents a second. Now, with vsync on and a frame rate
+   other than `"original"`, the window asks for mailbox
+   (`rhi_PreferMailbox`, Vulkan `VK_PRESENT_MODE_MAILBOX_KHR` when the
+   surface offers it; `window: present mode` says which), `"uncapped"`
+   presents at most twice a refresh in mailbox and once a refresh under
+   FIFO, and a further present of a frame already shown is skipped when the
+   last present's cost would end it past the next step's deadline. The
+   presents stay on the host stack after `ico_host_step` (`ico_window_pace`).
+   The `"original"` frame rate keeps rd_EndFrame's replay and FIFO present
+   inside the step (moving it after the step would show a morph one tick
+   early: the mesh streams are rewritten while the next frame records).
+
+**Not changed, by design or measurement.** No `vkDeviceWaitIdle`,
+`vkQueueWaitIdle` or readback is in the frame path: `rhi_WaitIdle` runs at
+start-up, resize, option changes and shutdown, readbacks only for dumps
+(`dump_every`) and tests; DATE snapshots are a GPU pass into the R8 target
+(3 a frame in stage 3), the stencil resolve seven GPU passes; every 10 s
+block of the three runs logged 0 wait-idles and 0 readbacks (and 0 blocking
+fence waits: lavapipe's present had already waited for the frame). The UINT ping-pong
+(`RDC_EXACT_BLEND`, `doExact`) is used by `RD_POST_COMPOSITE_FIX` with
+`exactInt` only, which the game does not record (staticBlur.c's feedback
+sprites go through `fx_sprite_ps` with a destination snapshot); its
+scratch textures are sized to the target and kept. The descriptor pools
+stay per frame slot.
+
+**Golden set.** HEAD's 151 dumps (`build-host/r7d-golden/dumps`) rendered by
+`rd_replay_tool` before and after (DISPLAY, SCENE, a 960 x 720 present):
+453 PNGs, 0 differ; before against the R7d PNGs: 0 differ. The dumps
+regenerated by this package's render tests (`gen.sh`) and rendered by its
+tool against the R7d PNGs: 453, 0 differ. `rd_perf` compares DISPLAY after
+the 200th replay and the 200th recorded frame with the first replay's: 0
+bytes differ. ctest 65/65; `rd_perf` under the validation layer with
+synchronisation validation: 0 errors.
+
+Open items:
+
+1. The Windows numbers: the next run's 10 s lines and CSV will say what
+   items 1 to 7 left (fence waits, acquire and present time, GPU time per
+   list at 4x). D3D12 has no counters or timestamps yet.
+2. Bind groups per VU draw (most of the 905 of a stage-3 frame, about 3 ms
+   on lavapipe's descriptor writes): dynamic uniform offsets (Vulkan
+   `UNIFORM_BUFFER_DYNAMIC`, D3D12 root CBVs) would make it one set a
+   layout a frame; an RHI change on both backends.
+3. Consecutive screen-prim commands under the same state are still one
+   draw each (their vertices are adjacent in the ring); merging needs the
+   draw boundaries kept for the AFAIL split and DATE snapshots.
+4. Pipeline binds are about one a draw (the AFAIL split alternates two
+   pipelines); a sort is not allowed (submission order is draw order).
+5. `vkr_OrderWrites` puts a global barrier before every render pass and
+   copy (about 100 a stage-3 frame): cheap on lavapipe, a GPU drain each on
+   a real GPU; tracking per-target hazards would remove most.

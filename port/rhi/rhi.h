@@ -521,7 +521,10 @@ void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIn
  * framebuffer grab).  Textures must be in COPY_SRC / COPY_DST state. */
 /* Buffer copy: fills RHI_MEM_DEVICE buffers (meshes) from an UPLOAD buffer.
  * Buffers have no rhi_CmdBarrier; the backend makes the written range
- * visible to every later vertex, index, uniform, storage and copy read. */
+ * visible to every later vertex, index, uniform, storage and copy read, and
+ * (package P1) the copy waits for every earlier read or copy of the
+ * destination recorded or submitted before it, so a range the GPU may still
+ * be reading for an earlier frame can be rewritten by a copy. */
 void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
                        uint64_t dstOffset, uint64_t size);
 void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
@@ -545,6 +548,52 @@ void rhi_CmdEndLabel(RhiCommandList cl);
  * state); it stays there.  Work already submitted completes first. */
 bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
                          uint32_t *outRowPitch);
+
+/* ------------------------------------------------- performance (package P1)
+ * Counters since rhi_Init, cumulative: the caller takes differences
+ * (rd_core's per-replay records, docs/port/RENDER_API.md section 22).  The
+ * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
+ * completion (rhi_WaitFrame, rhi_WaitIdle, readbacks), acquireNs in the
+ * swapchain acquire, presentNs in the present call. */
+typedef struct RhiStats {
+    uint64_t buffersCreated, buffersDestroyed;
+    uint64_t texturesCreated, texturesDestroyed;
+    uint64_t memoryAllocs, memoryFrees; /* device memory allocations (VkDeviceMemory, heaps) */
+    uint64_t bindGroups;                /* transient bind groups created */
+    uint64_t pipelineBinds;  /* pipeline changes recorded (a repeat of the bound one is not) */
+    uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
+    uint64_t draws, renderPasses, barriers, copies;
+    uint64_t submits, presents;
+    uint64_t fenceWaits, fenceWaitNs;
+    uint64_t waitIdles, readbacks;
+    uint64_t acquireNs, presentNs;
+} RhiStats;
+
+void rhi_GetStats(RhiStats *out);
+
+/* GPU timestamps.  Each frame slot (rhi_WaitFrame) has RHI_MAX_TIMESTAMPS
+ * of them; rhi_CmdWriteTimestamp(cl, i) records slot i when the GPU has
+ * finished everything submitted or recorded before it (inside or outside a
+ * render pass).  rhi_ReadTimestamps hands back the slot rhi_WaitFrame last
+ * recycled, i.e. the frame RHI_FRAMES_IN_FLIGHT frames ago, which has
+ * completed, so reading never waits: ns[i] in nanoseconds from an arbitrary
+ * origin, 0 for an index that frame did not write; returns 1 + the highest
+ * index written (0 = none, or timestamps unsupported).
+ * Vulkan: query pools.  D3D12: not implemented yet (unsupported: the calls
+ * do nothing and read 0). */
+#define RHI_MAX_TIMESTAMPS 32
+bool rhi_TimestampsSupported(void);
+void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index);
+uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
+
+/* Swapchain present mode with vsync on (package P1): mailbox (the newest
+ * finished image is shown at each refresh, older ones are dropped; a present
+ * never waits for the display) instead of FIFO.  Applies from the next
+ * swapchain (re)creation; rhi_PresentMailbox says whether the current one
+ * uses it (false when the surface does not offer it: FIFO is kept).  D3D12:
+ * not offered (false). */
+void rhi_PreferMailbox(bool on);
+bool rhi_PresentMailbox(void);
 
 /* --------------------------------------------------- backend selection
  * (renderer wave 6, R6c.)  rhi_CreateBackend selects the backend every call

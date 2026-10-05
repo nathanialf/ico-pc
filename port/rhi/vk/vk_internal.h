@@ -121,6 +121,10 @@ typedef struct VkrFrame {
     VkrGarbage *garbage;
     uint32_t garbageCount, garbageCap;
     VkSemaphore acquireSem; /* swapchain image acquire */
+    /* package P1: the slot's GPU timestamps (rhi_CmdWriteTimestamp) */
+    VkQueryPool queryPool;
+    uint32_t tsWritten; /* bit per index written since the slot was recycled */
+    bool tsReset;       /* the pool's reset is recorded in this slot's first list */
 } VkrFrame;
 
 /* -------------------------------------------------------------- device */
@@ -175,6 +179,15 @@ typedef struct VkrState {
 
     /* one-shot command pool for readback */
     VkCommandPool oneShotPool;
+
+    /* package P1: counters (rhi_GetStats), timestamps, the mailbox option */
+    RhiStats stats;
+    bool timestamps;        /* the queue writes timestamps */
+    float timestampPeriod;  /* ns per tick */
+    uint64_t timestampMask; /* the valid bits */
+    uint64_t tsResult[RHI_MAX_TIMESTAMPS];
+    uint32_t tsCount; /* of the slot rhi_WaitFrame recycled last */
+    bool mailbox;     /* the swapchain presents in mailbox mode (rhi_PreferMailbox) */
 } VkrState;
 
 extern VkrState g_vkr;
@@ -187,6 +200,8 @@ extern VkrState g_vkr;
 #define VKR_CHECK(expr) vkr_Check((expr), #expr, __FILE__, __LINE__)
 
 bool vkr_Check(VkResult r, const char *what, const char *file, int line);
+/* A monotonic clock in ns, for the blocked-time counters (RhiStats). */
+uint64_t vkr_NowNs(void);
 
 static inline VkrFrame *vkr_CurFrame(void)
 {

@@ -6,6 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+
+#include <windows.h>
+
+#else
+
+#include <time.h>
+
+#endif
 #ifdef ICO_RHI_HAVE_SDL
 
 #include <SDL3/SDL.h>
@@ -14,6 +24,20 @@
 #endif
 
 VkrState g_vkr;
+
+uint64_t vkr_NowNs(void)
+{
+#ifdef _WIN32
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (uint64_t)((double)c.QuadPart * 1e9 / (double)f.QuadPart);
+#else
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
+#endif
+}
 
 bool vkr_Check(VkResult r, const char *what, const char *file, int line)
 {
@@ -461,6 +485,23 @@ static bool vkr_CreateDevice(void)
     }
     volkLoadDevice(g_vkr.device);
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
+    {
+        /* package P1: GPU timestamps when the queue writes them */
+        uint32_t qn = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, NULL);
+        VkQueueFamilyProperties *qp = calloc(qn ? qn : 1, sizeof(*qp));
+        uint32_t bits = 0;
+        if (qp) {
+            vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, qp);
+            if (g_vkr.queueFamily < qn) {
+                bits = qp[g_vkr.queueFamily].timestampValidBits;
+            }
+            free(qp);
+        }
+        g_vkr.timestamps = bits > 0 && g_vkr.props.limits.timestampPeriod > 0.0f;
+        g_vkr.timestampPeriod = g_vkr.props.limits.timestampPeriod;
+        g_vkr.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1ull);
+    }
     if (core13) {
         g_vkr.cmdBeginRendering = vkCmdBeginRendering;
         g_vkr.cmdEndRendering = vkCmdEndRendering;
@@ -642,6 +683,18 @@ const char *rhi_AdapterName(void)
 bool rhi_DeviceLost(void)
 {
     return g_vkr.deviceLost;
+}
+
+void rhi_GetStats(RhiStats *out)
+{
+    if (out) {
+        *out = g_vkr.stats;
+    }
+}
+
+bool rhi_TimestampsSupported(void)
+{
+    return g_vkr.timestamps;
 }
 
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */

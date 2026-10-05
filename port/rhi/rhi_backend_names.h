@@ -66,6 +66,12 @@
 #define rhi_CmdBeginLabel       RHI__NAME(CmdBeginLabel)
 #define rhi_CmdEndLabel         RHI__NAME(CmdEndLabel)
 #define rhi_ReadbackTexture     RHI__NAME(ReadbackTexture)
+#define rhi_GetStats            RHI__NAME(GetStats)
+#define rhi_TimestampsSupported RHI__NAME(TimestampsSupported)
+#define rhi_CmdWriteTimestamp   RHI__NAME(CmdWriteTimestamp)
+#define rhi_ReadTimestamps      RHI__NAME(ReadTimestamps)
+#define rhi_PreferMailbox       RHI__NAME(PreferMailbox)
+#define rhi_PresentMailbox      RHI__NAME(PresentMailbox)
 /* clang-format on */
 
 #endif /* RHI_BACKEND_PREFIX */

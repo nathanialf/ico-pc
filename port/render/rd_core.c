@@ -542,30 +542,80 @@ static void createNamedTargets(void)
     }
 }
 
+/* Package P1: temporary targets come from a pool.  A freed record keeps
+ * its GPU textures (parked: not live, so its id is dead) and the next
+ * allocation of the same texture size, format and depth takes them over:
+ * the per-frame targets (the shadow count, the block targets, the decoder's
+ * render-to-texture blocks) are created once, not every frame.  A taken
+ * texture is cleared to zero at the first replay after (clearPending, the
+ * content a new texture has on the drivers the tests run on), so a frame
+ * never sees an earlier frame's pixels.  The GPU work of the frame that
+ * freed it is ordered before by the queue and the transitions (the state
+ * goes with the textures). */
+static bool parkedFits(const RdTargetRec *t, const RdTargetRec *want)
+{
+    return !t->live && t->parked && t->tw == want->tw && t->th == want->th &&
+           t->format == want->format && t->withDepth == want->withDepth;
+}
+
 uint32_t rd__TempTargetAlloc(uint32_t w, uint32_t h, int withDepth, int keepAcross)
 {
+    RdTargetRec want;
+    memset(&want, 0, sizeof(want));
+    want.w = w ? w : 1;
+    want.h = h ? h : 1;
+    want.format = RHI_FMT_RGBA8_UNORM;
+    want.withDepth = withDepth ? 1 : 0;
+    rd__TargetScaleOf(&want, -1);
+    int pick = -1, empty = -1, other = -1;
     for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
-        RdTargetRec *t = &g_rd.targets[i];
+        const RdTargetRec *t = &g_rd.targets[i];
         if (t->live) {
             continue;
         }
-        uint32_t gen = (t->gen + 1) & 0xFFFF;
-        memset(t, 0, sizeof(*t));
-        t->gen = gen ? gen : 1;
-        t->live = 1;
-        t->w = w ? w : 1;
-        t->h = h ? h : 1;
-        t->format = RHI_FMT_RGBA8_UNORM;
-        t->withDepth = withDepth ? 1 : 0;
-        t->keepAcross = keepAcross ? 1 : 0;
-        rd__TargetScaleOf(t, -1);
-        rd__TargetCreateGpu(t, "temp target");
-        g_rd.stats.tempTargets++;
-        return (t->gen << 16) | (uint32_t)(i + 1);
+        if (parkedFits(t, &want)) {
+            pick = i;
+            break;
+        }
+        if (!t->parked && empty < 0) {
+            empty = i;
+        } else if (t->parked && other < 0) {
+            other = i;
+        }
     }
-    rd__LogOnce(RD_ONCE_TEMP_FULL, "out of temporary targets (%d)",
-                RD_MAX_TARGETS - RD_TARGET_COUNT);
-    return 0;
+    const bool reuse = pick >= 0;
+    if (!reuse) {
+        pick = empty >= 0 ? empty : other; /* a parked one of another size goes last */
+    }
+    if (pick < 0) {
+        rd__LogOnce(RD_ONCE_TEMP_FULL, "out of temporary targets (%d)",
+                    RD_MAX_TARGETS - RD_TARGET_COUNT);
+        return 0;
+    }
+    RdTargetRec *t = &g_rd.targets[pick];
+    RdTargetRec keep = *t;
+    if (!reuse && t->parked) {
+        rd__TargetDestroyGpu(t);
+    }
+    uint32_t gen = (t->gen + 1) & 0xFFFF;
+    *t = want;
+    t->gen = gen ? gen : 1;
+    t->live = 1;
+    t->keepAcross = keepAcross ? 1 : 0;
+    if (reuse) {
+        t->color = keep.color;
+        t->depth = keep.depth;
+        t->colorState = keep.colorState;
+        t->depthState = keep.depthState;
+        t->snap = keep.snap;
+        t->snapState = keep.snapState;
+        g_rd.stats.tempReused++;
+    } else {
+        rd__TargetCreateGpu(t, "temp target");
+    }
+    t->clearPending = 1;
+    g_rd.stats.tempTargets++;
+    return (t->gen << 16) | (uint32_t)(pick + 1);
 }
 
 void rd__TempTargetFree(uint32_t id)
@@ -574,17 +624,54 @@ void rd__TempTargetFree(uint32_t id)
     if (!t || t->named) {
         return;
     }
-    rd__TargetDestroyGpu(t);
     for (int v = 0; v < 3; v++) {
         if (t->viewTex[v]) {
             rd_DestroyTexture((RdTex){t->viewTex[v]});
         }
     }
-    uint32_t gen = t->gen;
+    /* P1: parked with its textures for the next allocation of its size,
+     * up to RD_TEMP_PARKED of them (more are sizes no frame asks for any
+     * more: destroyed) */
+    uint32_t parked = 0;
+    for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
+        parked += g_rd.targets[i].parked;
+    }
+    if (parked >= RD_TEMP_PARKED) {
+        rd__TargetDestroyGpu(t);
+    }
+    RdTargetRec keep = *t;
     memset(t, 0, sizeof(*t));
-    t->gen = gen;
+    t->gen = keep.gen;
+    t->parked = g_rd.hasDevice && keep.color.id != 0;
+    if (t->parked) {
+        t->w = keep.w;
+        t->h = keep.h;
+        t->tw = keep.tw;
+        t->th = keep.th;
+        t->format = keep.format;
+        t->withDepth = keep.withDepth;
+        t->color = keep.color;
+        t->depth = keep.depth;
+        t->colorState = keep.colorState;
+        t->depthState = keep.depthState;
+        t->snap = keep.snap;
+        t->snapState = keep.snapState;
+    }
     if (g_rd.stats.tempTargets) {
         g_rd.stats.tempTargets--;
+    }
+}
+
+void rd__TempTargetPoolClear(void)
+{
+    for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
+        RdTargetRec *t = &g_rd.targets[i];
+        if (!t->live && t->parked) {
+            rd__TargetDestroyGpu(t);
+            const uint32_t gen = t->gen;
+            memset(t, 0, sizeof(*t));
+            t->gen = gen;
+        }
     }
 }
 
@@ -707,7 +794,8 @@ RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc sr
         memset(t->pixels, 0, (size_t)w * h * 4);
     }
     t->dirty = 1;
-    (void)debugName;
+    g_rd.texDirtyCount++; /* P1 */
+    snprintf(t->name, sizeof(t->name), "%s", debugName ? debugName : "texture");
     return (RdTex){id};
 }
 
@@ -728,7 +816,15 @@ void rd_UpdateTexture(RdTex tex, const void *rgba8)
     if (!t || t->kind != RD_TEXKIND_IMAGE || !rgba8) {
         return;
     }
+    /* P1: an update that changes nothing (a page or CLUT re-expanded to the
+     * same texels) is not uploaded again */
+    if (memcmp(t->pixels, rgba8, (size_t)t->w * t->h * 4) == 0) {
+        return;
+    }
     memcpy(t->pixels, rgba8, (size_t)t->w * t->h * 4);
+    if (!t->dirty) {
+        g_rd.texDirtyCount++;
+    }
     t->dirty = 1;
 }
 
@@ -746,6 +842,9 @@ void rd_DestroyTexture(RdTex tex)
     }
     if (t->rhi.id && g_rd.hasDevice) {
         rhi_DestroyTexture(t->rhi);
+    }
+    if (t->dirty && g_rd.texDirtyCount) {
+        g_rd.texDirtyCount--; /* P1 */
     }
     free(t->pixels);
     uint32_t gen = t->gen;
@@ -828,6 +927,7 @@ static void initCommon(uint32_t gsW, uint32_t gsH, const RdSettings *settings)
     g_rd.meshes = calloc(RD_MAX_MESHES, sizeof(RdMeshRec));
     g_rd.recIndex = -1;
     g_rd.lastIndex = -1;
+    g_rd.texLevelsFilter = -1; /* P1 */
     rd__ResetStateBlock(&g_rd.persistent);
     rd__VuInit(); /* wave 3: the per-list VU images */
     g_rd.inited = true;
@@ -911,7 +1011,7 @@ void rd_Shutdown(void)
     }
     rd__InterpShutdown(); /* R7b */
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
-        if (g_rd.targets[i].live) {
+        if (g_rd.targets[i].live || g_rd.targets[i].parked) {
             rd__TargetDestroyGpu(&g_rd.targets[i]);
         }
     }
@@ -948,6 +1048,7 @@ void rd_ResetScene(uint32_t gsWidth, uint32_t gsHeight)
     g_rd.gsH = gsHeight;
     rd__ApplyDisplay();
     createNamedTargets();
+    rd__TempTargetPoolClear(); /* P1: the parked ones have the old scene size */
     for (int v = 0; v < 3; v++) {
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
             RdTexRec *t = rd__TexRec(g_rd.targets[i].viewTex[v]);
@@ -1026,6 +1127,7 @@ static void recreateTargets(void *arg)
     (void)arg;
     rhi_WaitIdle();
     createNamedTargets();
+    rd__TempTargetPoolClear(); /* P1: the parked textures have the old scale */
 }
 
 typedef struct ReplayCall {

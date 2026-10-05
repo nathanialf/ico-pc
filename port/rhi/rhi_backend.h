@@ -68,7 +68,13 @@
     X(CmdCopyTextureToBuffer)                                                                      \
     X(CmdBeginLabel)                                                                               \
     X(CmdEndLabel)                                                                                 \
-    X(ReadbackTexture)
+    X(ReadbackTexture)                                                                             \
+    X(GetStats)                                                                                    \
+    X(TimestampsSupported)                                                                         \
+    X(CmdWriteTimestamp)                                                                           \
+    X(ReadTimestamps)                                                                              \
+    X(PreferMailbox)                                                                               \
+    X(PresentMailbox)
 
 /* One function pointer per entry point, typed from rhi.h's declaration (in
  * a backend's sources rhi_##n pastes to the renamed function, which has the

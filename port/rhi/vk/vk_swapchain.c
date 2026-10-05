@@ -35,12 +35,30 @@ void vkr_SwapchainDestroy(void)
     }
 }
 
+/* package P1 (rhi_PreferMailbox): kept across rhi_Init, which clears g_vkr */
+static bool s_preferMailbox;
+
 static VkPresentModeKHR vkr_PickPresentMode(bool vsync)
 {
-    if (vsync) {
-        return VK_PRESENT_MODE_FIFO_KHR; /* always available */
-    }
     uint32_t n = 0;
+    if (vsync) {
+        /* FIFO is always available; mailbox when asked for and offered:
+         * still no tearing, but a present never waits for the display */
+        if (s_preferMailbox) {
+            VkPresentModeKHR modes[16];
+            vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, NULL);
+            if (n > 16) {
+                n = 16;
+            }
+            vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, modes);
+            for (uint32_t i = 0; i < n; i++) {
+                if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+                    return modes[i];
+                }
+            }
+        }
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
     vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, NULL);
     VkPresentModeKHR modes[16];
     if (n > 16) {
@@ -159,6 +177,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         vkDestroySwapchainKHR(g_vkr.device, old, NULL);
     }
     g_vkr.swapchain = sc;
+    g_vkr.mailbox = vsync && ci.presentMode == VK_PRESENT_MODE_MAILBOX_KHR;
     g_vkr.swapWidth = w;
     g_vkr.swapHeight = h;
     g_vkr.vsync = vsync;
@@ -183,8 +202,21 @@ bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
     if (!g_vkr.surface) {
         return false;
     }
+    const uint64_t t0 = vkr_NowNs();
     vkDeviceWaitIdle(g_vkr.device);
+    g_vkr.stats.waitIdles++;
+    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
     return vkr_SwapchainCreate(width, height, vsync);
+}
+
+void rhi_PreferMailbox(bool on)
+{
+    s_preferMailbox = on;
+}
+
+bool rhi_PresentMailbox(void)
+{
+    return g_vkr.swapchain && g_vkr.mailbox;
 }
 
 RhiFormat rhi_SwapchainFormat(void)
@@ -204,8 +236,10 @@ RhiTexture rhi_AcquireBackbuffer(void)
     }
     VkrFrame *f = vkr_CurFrame();
     uint32_t idx = 0;
+    const uint64_t t0 = vkr_NowNs();
     VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, UINT64_MAX, f->acquireSem,
                                        VK_NULL_HANDLE, &idx);
+    g_vkr.stats.acquireNs += vkr_NowNs() - t0;
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         return out; /* rd_present recreates via rhi_ResizeSwapchain */
     }
@@ -237,7 +271,10 @@ void rhi_Present(void)
         .pSwapchains = &g_vkr.swapchain,
         .pImageIndices = &g_vkr.swapImage,
     };
+    const uint64_t t0 = vkr_NowNs();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
+    g_vkr.stats.presentNs += vkr_NowNs() - t0;
+    g_vkr.stats.presents++;
     g_vkr.swapAcquired = false;
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
         int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;

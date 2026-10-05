@@ -48,8 +48,178 @@ RdMeshRec *rd__MeshRec(uint32_t id)
     return m->live && m->gen == (id >> 16) ? m : NULL;
 }
 
+/* ----------------------------------------------- the device arena (P1) */
+
+typedef struct ArenaSpan {
+    uint64_t off, size;
+} ArenaSpan;
+
+typedef struct ArenaChunk {
+    RhiBuffer buf;
+    uint64_t size;
+    ArenaSpan *free; /* sorted by offset, never adjacent */
+    uint32_t freeCount, freeCap;
+} ArenaChunk;
+
+static ArenaChunk s_arena[RD_MESH_CHUNKS];
+
+static bool spanInsert(ArenaChunk *c, uint32_t at, uint64_t off, uint64_t size)
+{
+    if (c->freeCount == c->freeCap) {
+        const uint32_t cap = c->freeCap ? c->freeCap * 2 : 64;
+        ArenaSpan *p = realloc(c->free, cap * sizeof(*p));
+        if (!p) {
+            return false;
+        }
+        c->free = p;
+        c->freeCap = cap;
+    }
+    memmove(&c->free[at + 1], &c->free[at], (c->freeCount - at) * sizeof(ArenaSpan));
+    c->free[at].off = off;
+    c->free[at].size = size;
+    c->freeCount++;
+    return true;
+}
+
+static void spanRemove(ArenaChunk *c, uint32_t at)
+{
+    memmove(&c->free[at], &c->free[at + 1], (c->freeCount - at - 1) * sizeof(ArenaSpan));
+    c->freeCount--;
+}
+
+/* first fit in c of size bytes at an offset aligned to align */
+static bool chunkAlloc(ArenaChunk *c, uint64_t size, uint64_t align, uint64_t *out)
+{
+    for (uint32_t i = 0; i < c->freeCount; i++) {
+        ArenaSpan *f = &c->free[i];
+        const uint64_t a = (f->off + align - 1) / align * align;
+        if (a + size > f->off + f->size) {
+            continue;
+        }
+        const uint64_t head = a - f->off, tail = f->off + f->size - (a + size);
+        if (head == 0 && tail == 0) {
+            spanRemove(c, i);
+        } else if (head == 0) {
+            f->off = a + size;
+            f->size = tail;
+        } else {
+            f->size = head;
+            if (tail && !spanInsert(c, i + 1, a + size, tail)) {
+                f->size = head + size + tail; /* undone: no memory for the span */
+                return false;
+            }
+        }
+        *out = a;
+        return true;
+    }
+    return false;
+}
+
+static void chunkFree(ArenaChunk *c, uint64_t off, uint64_t size)
+{
+    uint32_t i = 0;
+    while (i < c->freeCount && c->free[i].off < off) {
+        i++;
+    }
+    const bool joinPrev = i > 0 && c->free[i - 1].off + c->free[i - 1].size == off;
+    const bool joinNext = i < c->freeCount && off + size == c->free[i].off;
+    if (joinPrev && joinNext) {
+        c->free[i - 1].size += size + c->free[i].size;
+        spanRemove(c, i);
+    } else if (joinPrev) {
+        c->free[i - 1].size += size;
+    } else if (joinNext) {
+        c->free[i].off = off;
+        c->free[i].size += size;
+    } else {
+        spanInsert(c, i, off, size); /* lost on no memory: a leak of arena space only */
+    }
+}
+
+static void meshGpuRelease(RdMeshRec *m)
+{
+    if (m->gpuChunk && m->gpuChunk <= RD_MESH_CHUNKS && s_arena[m->gpuChunk - 1].buf.id) {
+        chunkFree(&s_arena[m->gpuChunk - 1], m->gpuOff, m->gpuSize);
+    }
+    m->gpuChunk = 0;
+    m->gpuOff = m->gpuIndexOff = m->gpuSize = 0;
+}
+
+bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes, uint64_t align)
+{
+    if (!g_rd.hasDevice) {
+        return false;
+    }
+    const uint64_t indexAt = (streamBytes + 15) / 16 * 16;
+    const uint64_t need = indexAt + (indexBytes ? indexBytes : 4);
+    if (m->gpuChunk && m->gpuSize >= need) {
+        m->gpuIndexOff = m->gpuOff + indexAt;
+        return true;
+    }
+    meshGpuRelease(m);
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t i = 0; i < RD_MESH_CHUNKS; i++) {
+            ArenaChunk *c = &s_arena[i];
+            if (!c->buf.id) {
+                if (pass == 0) {
+                    continue; /* existing chunks first */
+                }
+                const uint64_t size = need > RD_MESH_CHUNK ? need : RD_MESH_CHUNK;
+                c->buf = rhi_CreateBuffer(
+                    &(RhiBufferDesc){size, RHI_BUF_INDEX | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST,
+                                     RHI_MEM_DEVICE, "rd mesh arena"});
+                if (!c->buf.id) {
+                    return false;
+                }
+                c->size = size;
+                c->freeCount = 0;
+                if (!spanInsert(c, 0, 0, size)) {
+                    return false;
+                }
+            }
+            uint64_t off;
+            if (chunkAlloc(c, need, align, &off)) {
+                m->gpuChunk = (uint8_t)(i + 1);
+                m->gpuOff = off;
+                m->gpuSize = need;
+                m->gpuIndexOff = off + indexAt;
+                return true;
+            }
+        }
+    }
+    rd__LogOnce(RD_ONCE_MESH_ARENA,
+                "mesh arena full (%u chunks): meshes past it are drawn from "
+                "the upload ring",
+                RD_MESH_CHUNKS);
+    return false;
+}
+
+RhiBuffer rd__MeshGpuBuffer(uint32_t chunk)
+{
+    return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].buf : (RhiBuffer){0};
+}
+
+void rd__MeshGpuShutdown(void)
+{
+    for (uint32_t i = 0; i < RD_MESH_CHUNKS; i++) {
+        if (s_arena[i].buf.id && g_rd.hasDevice) {
+            rhi_DestroyBuffer(s_arena[i].buf);
+        }
+        free(s_arena[i].free);
+    }
+    memset(s_arena, 0, sizeof(s_arena));
+    if (g_rd.meshes) {
+        for (uint32_t i = 0; i < RD_MAX_MESHES; i++) {
+            RdMeshRec *m = &g_rd.meshes[i];
+            m->gpuChunk = 0;
+            m->gpuOff = m->gpuIndexOff = m->gpuSize = 0;
+        }
+    }
+}
+
 static void meshFree(RdMeshRec *m)
 {
+    meshGpuRelease(m); /* P1 */
     for (int i = 0; i < 2; i++) {
         free(m->hist[i].stream);
         m->hist[i].stream = NULL;
@@ -284,6 +454,7 @@ void rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
                (size_t)br->vertexCount * m->qwPerVertex * 16);
     }
     m->replaySeen = 0; /* upload again at the next replay */
+    m->gpuDirty = 1;   /* P1: the device copy too */
 }
 
 void rd_DestroyVuMesh(RdMesh mesh)
