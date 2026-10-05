@@ -98,4 +98,12 @@ void tex_UpdateMipMapLevel(float lv);
 int tex_GetTWTH(int size);
 short tex_GetVramFreeAddress(int pri);
 
+#ifdef ICO_RD
+
+/* PC port (renderer wave 2, R2b): the rd texture id (RdTex.id) of table
+ * entry idx at its current content, decoded into the texture cache on a
+ * miss; 0 when the entry has no texture.  For tests and tools. */
+unsigned int tex_HostTextureId(int idx);
+
+#endif
 #endif /* TEXTURE_H */

@@ -16,7 +16,7 @@ implementation.
 | `rd_dump.c` | wave 1 | frame dump and load (local only: dumps hold assets, never commit one) |
 | `rd_png.c` | wave 1 | a minimal stored-deflate PNG writer (own code, no dependency) |
 | `tools/rd_replay_tool.c` | wave 1 | a dump to a PNG, headless |
-| `rd_tex.c` | wave 2 | texture cache keyed on (texture id, generation, TEXA mode) |
+| `rd_tex.c`, `rd_tex.h` | wave 2 (R2b) | texture cache keyed on (texture id, content generation, TEXA mode): TIM2 decode, CLUT order, TEXA at replay, retire-after-two-frames; `Texture.c`'s host path uses it (`docs/port/RENDER_API.md` section 11) |
 | (`rd_gs_shim.c`) | wave 2: folded into `ico2/seki/src/GifPacket.c`'s host path (`GifHost.h`); deleted in wave 6 | decodes the 2D layer's GS register writes into `rd_*` calls (`docs/port/RENDER_API.md` section 9) |
 | `rd_interp.c` | wave 7 | interpolation between retained frames |
 
@@ -44,6 +44,7 @@ applied since wave 2 (an R8 snapshot of the target's alpha MSB read by
 | `rd_pixel` | Vulkan (exit 77 without a device, also without a Vulkan loader; lavapipe in the container, validation and synchronisation validation on): list order on the GPU, DATE (both DATM) and flat shading (wave 2), GS sprite coverage at integer, half-pixel and -4 edges, textured 1:1 with the +8 UV nudge, TEXA on an RGB24 source, `rd_UVOffset`, the reduction against a CPU reference (1 LSB), a keep frame, 100 frames of the exact feedback blend (bit-exact), dump -> load -> replay (bit-exact), the presenter, every created pipeline inside the enumerated set |
 | `rd_replay_tool` | the dump `rd_pixel` leaves, through the tool and the presenter, to a PNG (77 when `rd_pixel` skipped) |
 | `rd_layout` | wave 2: `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` built as the window build has them (`ICO_RD`), fed `layout_texture.c`'s call sequence for a synthetic layout item (after `Texture.c`'s raw TEX0 packet); checks the recorded state, sprites, UI tags, texture seam and that no register went undecoded, then one sprite's pixels on a device (77 without one) |
+| `rd_tex` | wave 2 (R2b): `Texture.c` with the three files above (`ICO_RD`), fed synthetic TIM2 files: every texel of PSMT4/PSMT8 (32- and 16-bit CLUTs, CSM1 and index order), PSMCT16/24/32, ICO block, padding, and the decoder's PSMT8H/4HL/4HH against independent references; TEXA on the CPU; sampler from the ICO block; a CLUT scroll re-expanding one texture in place; cache keys and retirement; the decoder binding the cached texture with the record's TEX1/TEST; then a PSMT8 and a PSMCT16 (TEXA 7F/81+AEM) sprite through `tex_TransTexture` give exact texels on a device (77 without one) |
 
 `port/test/gs_blend_test.c` is the single-file CPU program behind
 `docs/port/RENDER_API.md` section 7:

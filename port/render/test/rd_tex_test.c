@@ -1,0 +1,854 @@
+/* rd_tex_test.c: the texture cache and Texture.c on rd (renderer wave 2,
+ * R2b).
+ *
+ * Texture.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
+ * window build compiles them (ICO_HOST, ICO_RD), fed synthetic TIM2 files
+ * built here (no disc data):
+ *
+ *   decode   PSMT4 and PSMT8 with 32-bit and 16-bit CLUTs, each with the
+ *            CLUT in CSM1 order and in index order (TIM2 ClutType bit 7,
+ *            which tex_convertClutCSM2ToCSM1 rearranges), PSMCT16 (alpha
+ *            bit kept; the three TEXA modes applied on the CPU against a
+ *            reference), PSMCT24, PSMCT32 with and without the ICO block, a
+ *            size that is not a power of two (zero padding), and the rd_tex
+ *            decoder's PSMT8H/PSMT4HL/PSMT4HH directly: every texel equals
+ *            a reference written independently here;
+ *   sampler  the ICO block's SMPMAG/SMPMIN reach the entry, the defaults
+ *            (linear / GlobalStageSetting.texSampleMode) otherwise;
+ *   scroll   a CLUT scroll (tex_ResetVram -> tex_textureAnimation) bumps
+ *            the generation of that texture only and re-expands it into the
+ *            same rd texture;
+ *   cache    rd_tex keys: hit, generation miss, a baked TEXA variant as a
+ *            separate entry, in-place update, a new size retired and
+ *            destroyed two frame ticks later, drop;
+ *   resolve  tex_TransTexture's packet decodes to TEX1/TEST/TEX0 with the
+ *            cached texture bound, and no register is left undecoded;
+ *   pixels   (Vulkan, lavapipe in the container) one PSMT8 sprite and one
+ *            PSMCT16 sprite under TEXA 7F/81+AEM, drawn through
+ *            tex_TransTexture + gif_SpriteSensitiveOrg, give the exact
+ *            texels in SCENE.
+ *
+ * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
+ * checks passed).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "rd_internal.h"
+#include "rd_tex.h"
+#include "vk/rhi_vk.h"
+/* the game's side */
+#include "typedef.h"
+#include "DisplayList.h"
+#include "DmaPacket.h"
+#include "GifHost.h"
+#include "GifPacket.h"
+#include "Texture.h"
+#include "Tim2.h"
+
+static int failures;
+
+#define CHECK(c, ...)                                                                              \
+    do {                                                                                           \
+        if (!(c)) {                                                                                \
+            printf("FAIL %s:%d: ", __FILE__, __LINE__);                                            \
+            printf(__VA_ARGS__);                                                                   \
+            printf("\n");                                                                          \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+
+/* -------------------------------------------- what the four files import */
+int ScreenWidth = 512, ScreenHeight = 512;
+
+float center_X = 2048.0f, center_Y = 2048.0f;
+
+int screenOffsetX, screenOffsetY;
+
+int fbKeep;
+
+void *ios_partition_common;
+
+void *dmaVif;
+
+int systemStatus[12];
+
+StageSetting GlobalStageSetting;
+
+PadState pad[16];
+
+int textures, texregs;
+
+void *iosMallocDebug(void *part, int size, const char *file, int line)
+{
+    (void)part;
+    (void)file;
+    (void)line;
+    return calloc(1, (size_t)size);
+}
+
+void iosFree(void *p)
+{
+    free(p);
+}
+
+void *mallocseki(int size)
+{
+    return calloc(1, (size_t)size + 16);
+}
+
+void freeseki(void *p)
+{
+    free(p);
+}
+
+void malloc_MemCpy(void *dst, void *src, int size)
+{
+    memcpy(dst, src, (size_t)size);
+}
+
+int malloc_GetPartition(void)
+{
+    return 0;
+}
+
+int file_LoadFile(void **adr, char *name, int area)
+{
+    (void)adr;
+    (void)name;
+    (void)area;
+    return -1;
+}
+
+void debug_StdPrintfDummy(const char *fmt, ...)
+{
+    (void)fmt;
+}
+
+void debug_PrintfDummy(int x, int y, unsigned int col, const char *fmt, ...)
+{
+    (void)x;
+    (void)y;
+    (void)col;
+    (void)fmt;
+}
+
+void debug_Assert(char *fmt, ...)
+{
+    printf("debug_Assert %s\n", fmt);
+    abort();
+}
+
+void debug_DispQW(void *p, int size)
+{
+    (void)p;
+    (void)size;
+}
+
+void debug_assertMessage(const char *file, int line, const char *mes)
+{
+    printf("debug_assertMessage %s:%d %s\n", file, line, mes);
+    abort();
+}
+
+void debug_assert(const char *file, int line)
+{
+    printf("debug_assert %s:%d\n", file, line);
+    abort();
+}
+
+void ico_assert(const char *file, int line, const char *e)
+{
+    printf("assert %s:%d %s\n", file, line, e);
+    abort();
+}
+
+void mc_Reset(void) {}
+
+float GetTableSin(short angle)
+{
+    (void)angle;
+    return 0.0f;
+}
+
+float GetTableCos(short angle)
+{
+    (void)angle;
+    return 1.0f;
+}
+
+void FlushCache(int op)
+{
+    (void)op;
+}
+
+void sceDmaSend(void *ch, void *addr)
+{
+    (void)ch;
+    (void)addr;
+}
+
+/* --------------------------------------------------------------- helpers */
+
+static uint32_t hash(uint32_t x)
+{
+    x ^= x >> 16;
+    x *= 0x7FEB352Du;
+    x ^= x >> 15;
+    x *= 0x846CA68Bu;
+    x ^= x >> 16;
+    return x;
+}
+
+/* GS CSM1 position of CLUT index i (256 entries): bits 3 and 4 swapped,
+   written independently of rd_tex's helper */
+static uint32_t csm1(uint32_t i)
+{
+    return (i & ~0x18u) | ((i & 0x08u) << 1) | ((i & 0x10u) >> 1);
+}
+
+/* a 16-bit texel to the RGBA8 the cache holds (A bit as 0/1) */
+static void exp16(uint16_t v, uint8_t *o)
+{
+    o[0] = (uint8_t)((v & 31) << 3);
+    o[1] = (uint8_t)(((v >> 5) & 31) << 3);
+    o[2] = (uint8_t)(((v >> 10) & 31) << 3);
+    o[3] = (uint8_t)(v >> 15);
+}
+
+/* TIM2 image types (Texture.c psmTable) and CLUT types */
+enum { T2_CT16 = 1, T2_CT24 = 2, T2_CT32 = 3, T2_T4 = 4, T2_T8 = 5 };
+
+enum { C2_16 = 1, C2_32 = 3, C2_LINEAR = 0x80 };
+
+typedef struct Tim2Spec {
+    int imageType, clutType;
+    int w, h;
+    const void *image; /* w x h texels in the format */
+    size_t imageSize;
+    const void *clut; /* as stored in the file */
+    size_t clutSize;
+    int colors;
+    const Tim2Ext *ico; /* the ICO block, or null */
+} Tim2Spec;
+
+/* a TIM2 file in a new buffer: file header, picture header, [ICO block],
+   image, CLUT; the buffer has room behind it */
+static void *makeTim2(const Tim2Spec *s)
+{
+    size_t hdr = 0x30 + (s->ico ? 0x40 : 0);
+    size_t total = 16 + hdr + s->imageSize + s->clutSize;
+    unsigned char *f = calloc(1, total + 64);
+    Tim2Picture pic;
+
+    memcpy(f, "TIM2", 4);
+    f[4] = 4;
+    f[6] = 1;
+    memset(&pic, 0, sizeof(pic));
+    pic.totalSize = (unsigned int)(hdr + s->imageSize + s->clutSize);
+    pic.clutSize = (unsigned int)s->clutSize;
+    pic.imageSize = (unsigned int)s->imageSize;
+    pic.headerSize = (unsigned short)hdr;
+    pic.clutColors = (unsigned short)s->colors;
+    pic.mipMapTextures = 1;
+    pic.clutType = (unsigned char)s->clutType;
+    pic.imageType = (unsigned char)s->imageType;
+    pic.imageWidth = (unsigned short)s->w;
+    pic.imageHeight = (unsigned short)s->h;
+    memcpy(f + 16, &pic, sizeof(pic));
+    if (s->ico) {
+        memcpy(f + 16 + 0x30, s->ico, 0x40);
+    }
+    memcpy(f + 16 + hdr, s->image, s->imageSize);
+    if (s->clutSize) {
+        memcpy(f + 16 + hdr + s->imageSize, s->clut, s->clutSize);
+    }
+    return f;
+}
+
+static const RdTexRec *texRec(int id)
+{
+    return rd__TexRec(tex_HostTextureId(id));
+}
+
+/* every texel of texture id against ref (w x h RGBA8), the padding zero */
+static void checkTexels(const char *what, int id, const uint8_t *ref, int w, int h, int padW,
+                        int padH, RdTexSrc src)
+{
+    const RdTexRec *t = texRec(id);
+    int bad = 0;
+
+    CHECK(t != NULL, "%s: no rd texture", what);
+    if (!t) {
+        return;
+    }
+    CHECK((int)t->w == padW && (int)t->h == padH, "%s: size %ux%u, expected %dx%d", what, t->w,
+          t->h, padW, padH);
+    CHECK(t->src == src, "%s: source format %u, expected %d", what, t->src, src);
+    if ((int)t->w != padW || (int)t->h != padH) {
+        return;
+    }
+    for (int y = 0; y < padH; y++) {
+        for (int x = 0; x < padW; x++) {
+            const uint8_t *g = &t->pixels[(y * padW + x) * 4];
+            uint8_t z[4] = {0, 0, 0, 0};
+            const uint8_t *e = (x < w && y < h) ? &ref[(y * w + x) * 4] : z;
+
+            if (memcmp(g, e, 4) != 0) {
+                if (bad++ < 4) {
+                    printf("  %s texel %d,%d: %u,%u,%u,%u expected %u,%u,%u,%u\n", what, x, y, g[0],
+                           g[1], g[2], g[3], e[0], e[1], e[2], e[3]);
+                }
+            }
+        }
+    }
+    CHECK(bad == 0, "%s: %d texels differ", what, bad);
+}
+
+/* ---------------------------------------------------------- the textures */
+
+/* the logical 256-entry palette (RGBA, alpha 0..0x80 and a few above) */
+static uint8_t pal32[256][4];
+
+static uint16_t pal16[256];
+
+static void makePalettes(void)
+{
+    for (int i = 0; i < 256; i++) {
+        uint32_t h = hash((uint32_t)i * 3 + 1);
+        pal32[i][0] = (uint8_t)h;
+        pal32[i][1] = (uint8_t)(h >> 8);
+        pal32[i][2] = (uint8_t)(h >> 16);
+        pal32[i][3] = (uint8_t)((h >> 24) % 0x90);
+        pal16[i] = (uint16_t)(hash((uint32_t)i + 999) & 0xFFFF);
+    }
+}
+
+typedef struct Made {
+    int id;
+    int w, h, padW, padH;
+    uint8_t *ref;
+    RdTexSrc src;
+} Made;
+
+/* an indexed texture: bits 4 or 8, CLUT 32 or 16 bit, CSM1 or linear */
+static Made makeIndexed(const char *name, int bits, int clut16, int linear, int w, int h,
+                        const Tim2Ext *ico)
+{
+    Made m;
+    int colors = bits == 4 ? 16 : 256;
+    int esz = clut16 ? 2 : 4;
+    size_t isz = bits == 4 ? (size_t)w * h / 2 : (size_t)w * h;
+    uint8_t *img = calloc(1, isz);
+    uint8_t *clut = calloc((size_t)colors, (size_t)esz);
+    Tim2Spec s;
+
+    m.w = w;
+    m.h = h;
+    m.padW = w;
+    m.padH = h;
+    m.ref = malloc((size_t)w * h * 4);
+    m.src = clut16 ? RD_TEXSRC_RGBA16 : RD_TEXSRC_RGBA32;
+    for (int i = 0; i < colors; i++) {
+        /* the file position of logical entry i */
+        int pos = (colors == 256 && !linear) ? (int)csm1((uint32_t)i) : i;
+        if (clut16) {
+            memcpy(clut + pos * 2, &pal16[i], 2);
+        } else {
+            memcpy(clut + pos * 4, pal32[i], 4);
+        }
+    }
+    for (int n = 0; n < w * h; n++) {
+        int idx = (int)(hash((uint32_t)n * 7 + (uint32_t)bits + (uint32_t)w) % (uint32_t)colors);
+        if (bits == 4) {
+            img[n / 2] |= (uint8_t)(idx << ((n & 1) * 4));
+        } else {
+            img[n] = (uint8_t)idx;
+        }
+        if (clut16) {
+            exp16(pal16[idx], &m.ref[n * 4]);
+        } else {
+            memcpy(&m.ref[n * 4], pal32[idx], 4);
+        }
+    }
+    memset(&s, 0, sizeof(s));
+    s.imageType = bits == 4 ? T2_T4 : T2_T8;
+    s.clutType = (clut16 ? C2_16 : C2_32) | (linear ? C2_LINEAR : 0);
+    s.w = w;
+    s.h = h;
+    s.image = img;
+    s.imageSize = isz;
+    s.clut = clut;
+    s.clutSize = (size_t)colors * esz;
+    s.colors = colors;
+    s.ico = ico;
+    m.id = tex_InitTexture((char *)name, makeTim2(&s));
+    free(img);
+    free(clut);
+    return m;
+}
+
+/* a direct texture: 16, 24 or 32 bits a texel */
+static Made makeDirect(const char *name, int bpp, int w, int h, const Tim2Ext *ico)
+{
+    Made m;
+    int bytes = bpp / 8;
+    uint8_t *img = calloc((size_t)w * h, (size_t)bytes);
+    Tim2Spec s;
+    int tw = 1, th = 1;
+
+    while (tw < w) {
+        tw <<= 1;
+    }
+    while (th < h) {
+        th <<= 1;
+    }
+    m.w = w;
+    m.h = h;
+    m.padW = tw;
+    m.padH = th;
+    m.ref = malloc((size_t)w * h * 4);
+    m.src = bpp == 16 ? RD_TEXSRC_RGBA16 : bpp == 24 ? RD_TEXSRC_RGB24 : RD_TEXSRC_RGBA32;
+    for (int n = 0; n < w * h; n++) {
+        uint32_t v = hash((uint32_t)n * 13 + (uint32_t)bpp);
+        uint8_t *o = &m.ref[n * 4];
+
+        if ((n % 7) == 3) {
+            v &= 0xFF000000u; /* black texels, for AEM */
+            if (bpp == 16) {
+                v = (n & 8) ? 0x8000u : 0;
+            }
+        }
+        if (bpp == 16) {
+            uint16_t t = (uint16_t)v;
+            memcpy(img + n * 2, &t, 2);
+            exp16(t, o);
+        } else if (bpp == 24) {
+            memcpy(img + n * 3, &v, 3);
+            o[0] = (uint8_t)v;
+            o[1] = (uint8_t)(v >> 8);
+            o[2] = (uint8_t)(v >> 16);
+            o[3] = 0;
+        } else {
+            memcpy(img + n * 4, &v, 4);
+            memcpy(o, &v, 4);
+        }
+    }
+    memset(&s, 0, sizeof(s));
+    s.imageType = bpp == 16 ? T2_CT16 : bpp == 24 ? T2_CT24 : T2_CT32;
+    s.w = w;
+    s.h = h;
+    s.image = img;
+    s.imageSize = (size_t)w * h * bytes;
+    s.ico = ico;
+    m.id = tex_InitTexture((char *)name, makeTim2(&s));
+    free(img);
+    return m;
+}
+
+static Tim2Ext icoBlock(int smpMag, int smpMin)
+{
+    Tim2Ext e;
+
+    memset(&e, 0, sizeof(e));
+    memcpy(e.magic, "ICO", 4);
+    e.smpMag = smpMag;
+    e.smpMin = smpMin;
+    e.mipmapK = -165;
+    return e;
+}
+
+/* GS TEXA on one RGBA16/RGB24 texel, written from the GS manual's rule */
+static uint8_t texaRef(const uint8_t *t, RdTexSrc src, RdTexA mode)
+{
+    uint8_t ta0 = mode == RD_TEXA_7F_81_AEM ? 0x7F : 0x80;
+    uint8_t ta1 = mode == RD_TEXA_7F_81_AEM ? 0x81 : 0x80;
+    int aem = mode != RD_TEXA_80_80;
+
+    if (aem && t[0] == 0 && t[1] == 0 && t[2] == 0) {
+        return 0;
+    }
+    return (src == RD_TEXSRC_RGBA16 && t[3]) ? ta1 : ta0;
+}
+
+static Made s_t4, s_t4lin, s_t8, s_t8lin, s_t8c16, s_t8c16lin, s_t4c16, s_c16, s_c24, s_c32,
+    s_c32ico, s_npot, s_scroll;
+
+static void decodeChecks(void)
+{
+    Tim2Ext nearest = icoBlock(0, 0);
+    Tim2Ext scroll = icoBlock(0, 0);
+
+    s_t4 = makeIndexed("t4", 4, 0, 0, 16, 16, NULL);
+    s_t4lin = makeIndexed("t4lin", 4, 0, 1, 32, 8, NULL);
+    s_t4c16 = makeIndexed("t4c16", 4, 1, 1, 16, 8, NULL);
+    s_t8 = makeIndexed("t8", 8, 0, 0, 16, 16, &nearest);
+    s_t8lin = makeIndexed("t8lin", 8, 0, 1, 32, 16, NULL);
+    s_t8c16 = makeIndexed("t8c16", 8, 1, 0, 16, 16, NULL);
+    s_t8c16lin = makeIndexed("t8c16lin", 8, 1, 1, 16, 32, NULL);
+    s_c16 = makeDirect("c16", 16, 16, 16, NULL);
+    s_c24 = makeDirect("c24", 24, 16, 8, NULL);
+    s_c32 = makeDirect("c32", 32, 8, 8, NULL);
+    s_c32ico = makeDirect("c32ico", 32, 16, 16, &nearest);
+    s_npot = makeDirect("npot", 32, 24, 10, NULL);
+    scroll.csBgn = 0;
+    scroll.csEnd = 15;
+    scroll.csSpd = 1;
+    scroll.csStp = 1;
+    s_scroll = makeIndexed("scroll", 8, 0, 0, 16, 16, &scroll);
+
+    const Made *all[] = {&s_t4,  &s_t4lin, &s_t4c16, &s_t8,     &s_t8lin, &s_t8c16, &s_t8c16lin,
+                         &s_c16, &s_c24,   &s_c32,   &s_c32ico, &s_npot,  &s_scroll};
+    const char *names[] = {
+        "PSMT4 CSM1",        "PSMT4 index order", "PSMT4 16-bit CLUT",  "PSMT8 CSM1",
+        "PSMT8 index order", "PSMT8 16-bit CSM1", "PSMT8 16-bit index", "PSMCT16",
+        "PSMCT24",           "PSMCT32",           "PSMCT32 ICO",        "PSMCT32 24x10",
+        "PSMT8 scroll"};
+    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
+        CHECK(all[i]->id >= 0, "%s: tex_InitTexture", names[i]);
+        checkTexels(names[i], all[i]->id, all[i]->ref, all[i]->w, all[i]->h, all[i]->padW,
+                    all[i]->padH, all[i]->src);
+    }
+
+    /* PSMCT16 under the three TEXA modes, on the CPU */
+    {
+        const RdTexRec *t = texRec(s_c16.id);
+        for (int mode = 0; t && mode < RD_TEXA_COUNT; mode++) {
+            uint8_t *px = malloc((size_t)t->w * t->h * 4);
+            int bad = 0;
+
+            memcpy(px, t->pixels, (size_t)t->w * t->h * 4);
+            rdtex_ApplyTexa(px, (size_t)t->w * t->h, RD_TEXSRC_RGBA16, (RdTexA)mode);
+            for (int n = 0; n < s_c16.w * s_c16.h; n++) {
+                bad += px[n * 4 + 3] != texaRef(&s_c16.ref[n * 4], RD_TEXSRC_RGBA16, (RdTexA)mode);
+            }
+            CHECK(bad == 0, "PSMCT16 TEXA mode %d: %d alphas differ", mode, bad);
+            free(px);
+        }
+        t = texRec(s_c24.id);
+        for (int mode = 0; t && mode < RD_TEXA_COUNT; mode++) {
+            uint8_t *px = malloc((size_t)t->w * t->h * 4);
+            int bad = 0;
+
+            memcpy(px, t->pixels, (size_t)t->w * t->h * 4);
+            rdtex_ApplyTexa(px, (size_t)t->w * t->h, RD_TEXSRC_RGB24, (RdTexA)mode);
+            for (int n = 0; n < s_c24.w * s_c24.h; n++) {
+                bad += px[n * 4 + 3] != texaRef(&s_c24.ref[n * 4], RD_TEXSRC_RGB24, (RdTexA)mode);
+            }
+            CHECK(bad == 0, "PSMCT24 TEXA mode %d: %d alphas differ", mode, bad);
+            free(px);
+        }
+    }
+
+    /* the rd_tex decoder alone: PSMT8H, PSMT4HL, PSMT4HH read the index from
+       the top byte of a 32-bit texel */
+    {
+        static const uint32_t psms[3] = {RDTEX_PSMT8H, RDTEX_PSMT4HL, RDTEX_PSMT4HH};
+        uint8_t img[8 * 4 * 4], out[8 * 4 * 4], clut[256 * 4];
+
+        for (int i = 0; i < (int)sizeof(img); i++) {
+            img[i] = (uint8_t)hash((uint32_t)i + 5);
+        }
+        for (int k = 0; k < 3; k++) {
+            RdTexImage im;
+            RdTexSrc src;
+            int bad = 0;
+
+            /* 256 entries in CSM1 order; 16 entries straight */
+            for (int i = 0; i < 256; i++) {
+                memcpy(&clut[(k == 0 ? csm1((uint32_t)i) : (uint32_t)i) * 4], pal32[i], 4);
+            }
+            memset(&im, 0, sizeof(im));
+            im.w = 8;
+            im.h = 4;
+            im.psm = psms[k];
+            im.cpsm = RDTEX_PSMCT32;
+            im.clutColors = k == 0 ? 256 : 16;
+            im.pixels = img;
+            im.clut = clut;
+            CHECK(rdtex_Decode(&im, out, &src) == 0, "decode psm %u", psms[k]);
+            for (int n = 0; n < 32; n++) {
+                uint8_t b = img[n * 4 + 3];
+                int idx = k == 0 ? b : k == 1 ? (b & 15) : (b >> 4);
+                bad += memcmp(&out[n * 4], pal32[idx], 4) != 0;
+            }
+            CHECK(bad == 0, "psm %u: %d texels differ", psms[k], bad);
+        }
+    }
+}
+
+static void samplerChecks(void)
+{
+    const RdTexSampler *a = rdtex_Sampler((uint32_t)s_c32ico.id, RDTEX_TEXA_REPLAY);
+    const RdTexSampler *b = rdtex_Sampler((uint32_t)s_c32.id, RDTEX_TEXA_REPLAY);
+
+    CHECK(a && a->mag == RD_FILTER_NEAREST && a->min == RD_FILTER_NEAREST,
+          "ICO block SMPMAG 0 SMPMIN 0: nearest");
+    /* no ICO block: MMAG 1, MMIN GlobalStageSetting.texSampleMode (1) */
+    CHECK(b && b->mag == RD_FILTER_LINEAR && b->min == RD_FILTER_LINEAR, "defaults: linear");
+}
+
+static void scrollChecks(void)
+{
+    const RdTexCacheStats *st = rdtex_Stats();
+    uint32_t before = tex_HostTextureId(s_scroll.id);
+    uint32_t other = tex_HostTextureId(s_t8.id);
+    uint32_t decodes = st->decodes, creates = st->creates, updates = st->updates;
+    uint8_t *ref = malloc((size_t)16 * 16 * 4);
+
+    /* one frame: tex_ResetVram runs the animation (systemStatus[5] == 0) */
+    tex_ResetVram();
+    CHECK(tex_HostTextureId(s_scroll.id) == before, "scroll: the same rd texture");
+    CHECK(tex_HostTextureId(s_t8.id) == other, "scroll: the other texture is untouched");
+    CHECK(st->decodes == decodes + 1 && st->updates == updates + 1 && st->creates == creates,
+          "scroll: one re-expansion in place (decodes +%u, updates +%u, creates +%u)",
+          st->decodes - decodes, st->updates - updates, st->creates - creates);
+    /* CS-STP 1 over entries 0..15: entry i takes entry i+1's colour */
+    for (int n = 0; n < 16 * 16; n++) {
+        int idx = -1;
+        for (int i = 0; i < 256; i++) {
+            if (memcmp(&s_scroll.ref[n * 4], pal32[i], 4) == 0) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx >= 0 && idx < 16) {
+            idx = (idx + 1) & 15;
+        }
+        memcpy(&ref[n * 4], idx >= 0 ? pal32[idx] : &s_scroll.ref[n * 4], 4);
+    }
+    checkTexels("PSMT8 after one CLUT scroll", s_scroll.id, ref, 16, 16, 16, 16, RD_TEXSRC_RGBA32);
+    /* a frame with no change of content decodes nothing */
+    decodes = st->decodes;
+    tex_HostTextureId(s_t8.id);
+    tex_HostTextureId(s_c16.id);
+    CHECK(st->decodes == decodes, "hits decode nothing");
+    free(ref);
+}
+
+static void cacheChecks(void)
+{
+    uint8_t img[4 * 4 * 2], img2[8 * 8 * 2];
+    RdTexImage im;
+    RdTex a, b, c, d;
+
+    for (int i = 0; i < (int)sizeof(img); i++) {
+        img[i] = (uint8_t)hash((uint32_t)i);
+    }
+    for (int i = 0; i < (int)sizeof(img2); i++) {
+        img2[i] = (uint8_t)hash((uint32_t)i + 50);
+    }
+    memset(&im, 0, sizeof(im));
+    im.w = im.h = 4;
+    im.psm = RDTEX_PSMCT16;
+    im.pixels = img;
+
+    a = rdtex_Store(1000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    CHECK(a.id != 0, "store");
+    CHECK(rdtex_Find(1000, 1, RDTEX_TEXA_REPLAY).id == a.id, "hit on the same key");
+    CHECK(rdtex_Find(1000, 2, RDTEX_TEXA_REPLAY).id == 0, "miss on another generation");
+    CHECK(rdtex_Find(1000, 1, RD_TEXA_80_80_AEM).id == 0, "miss on another TEXA mode");
+    b = rdtex_Store(1000, 1, RD_TEXA_80_80_AEM, &im, NULL, "key baked");
+    CHECK(b.id != 0 && b.id != a.id, "a baked TEXA variant is its own entry");
+    {
+        const RdTexRec *rb = rd__TexRec(b.id), *ra = rd__TexRec(a.id);
+        int bad = 0;
+        for (int n = 0; ra && rb && n < 16; n++) {
+            bad += rb->pixels[n * 4 + 3] !=
+                   texaRef(&ra->pixels[n * 4], RD_TEXSRC_RGBA16, RD_TEXA_80_80_AEM);
+        }
+        CHECK(ra && rb && rb->src == RD_TEXSRC_RGBA32 && bad == 0, "baked TEXA alphas (%d)", bad);
+    }
+    img[0] ^= 0xFF;
+    c = rdtex_Store(1000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    CHECK(c.id == a.id, "a new generation of the same shape updates in place");
+    CHECK(rdtex_Find(1000, 1, RDTEX_TEXA_REPLAY).id == 0 &&
+              rdtex_Find(1000, 2, RDTEX_TEXA_REPLAY).id == a.id,
+          "the entry holds the new generation");
+    im.w = im.h = 8;
+    im.pixels = img2;
+    d = rdtex_Store(1000, 3, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    CHECK(d.id != 0 && d.id != a.id, "a new size is a new texture");
+    CHECK(rd__TexRec(a.id) != NULL, "the old texture lives until two frame ticks");
+    rdtex_FrameTick();
+    CHECK(rd__TexRec(a.id) != NULL, "still after one");
+    rdtex_FrameTick();
+    CHECK(rd__TexRec(a.id) == NULL, "destroyed after two");
+    rdtex_Drop(1000);
+    CHECK(rdtex_Find(1000, 3, RDTEX_TEXA_REPLAY).id == 0 &&
+              rdtex_Find(1000, 1, RD_TEXA_80_80_AEM).id == 0,
+          "dropped");
+    rdtex_FrameTick();
+    rdtex_FrameTick();
+    CHECK(rd__TexRec(d.id) == NULL && rd__TexRec(b.id) == NULL, "dropped textures destroyed");
+}
+
+/* --------------------------------------------- the decoder and the frame */
+
+typedef struct Walk {
+    int screens;
+    RdStateBlock st[8];
+} Walk;
+
+static void collect(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
+{
+    Walk *w = user;
+    (void)index;
+    if (list == 11 && c->type == RDC_SCREEN && w->screens < 8) {
+        w->st[w->screens++] = *s;
+    }
+}
+
+/* a sprite of w x h texels, 1:1 at pixel (256 + px, 256 + py) of SCENE */
+static void sprite(int px, int py, int w, int h)
+{
+    GifRect r = {px * 16, py * 16, w * 16, h * 16};
+    GifRect uv = {8, 8, w * 16, h * 16};
+    GifColor col = {128, 128, 128, 128};
+
+    gif_SpriteSensitiveOrg(&r, 0, &uv, &col, 0);
+}
+
+static void recordFrame(void)
+{
+    static const uint8_t black[4] = {0, 0, 0, 0};
+
+    dl_SetDLPriority(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    /* PSMT8, ICO block nearest */
+    tex_TransTexture(s_t8.id, 11);
+    gif_StartPacketPri(11);
+    sprite(0, 0, 16, 16);
+    gif_EndPacket();
+    /* PSMCT16, no ICO block (linear), TEXA 7F/81 + AEM */
+    tex_TransTexture(s_c16.id, 11);
+    gif_StartPacketPri(11);
+    gif_SetGsReg(0x3B, 0x810000807FLL);
+    sprite(32, 0, 16, 16);
+    gif_EndPacket();
+    dl_Swap();
+}
+
+static void checkRecording(const RdFrame *f)
+{
+    Walk w;
+    memset(&w, 0, sizeof(w));
+    RdStateBlock s = f->startState;
+    rd__Walk(f, 0, &s, collect, &w);
+    CHECK(w.screens == 2, "list 11 holds %d screen batches, expected 2", w.screens);
+    if (w.screens != 2) {
+        return;
+    }
+    CHECK(w.st[0].ds.texEnabled && w.st[0].tex == tex_HostTextureId(s_t8.id),
+          "sprite 1 binds the cached PSMT8 texture (%u, expected %u)", w.st[0].tex,
+          tex_HostTextureId(s_t8.id));
+    CHECK(w.st[0].ds.magFilter == RD_FILTER_NEAREST && w.st[0].ds.minFilter == RD_FILTER_NEAREST,
+          "sprite 1: TEX1 from the ICO block (nearest)");
+    /* TEST from the record: ATE GREATER AREF 96 AFAIL FB_ONLY, Z GEQUAL */
+    CHECK(w.st[0].ds.test.ate == 1 && w.st[0].ds.test.atst == 6 && w.st[0].ds.test.aref == 96 &&
+              w.st[0].ds.test.afail == 1 && w.st[0].ds.test.ztst == RD_ZTST_GEQUAL,
+          "sprite 1: the record's TEST (ate %d atst %d aref %d afail %d ztst %d)",
+          w.st[0].ds.test.ate, w.st[0].ds.test.atst, w.st[0].ds.test.aref, w.st[0].ds.test.afail,
+          w.st[0].ds.test.ztst);
+    CHECK(w.st[1].tex == tex_HostTextureId(s_c16.id), "sprite 2 binds the cached PSMCT16 texture");
+    CHECK(w.st[1].ds.magFilter == RD_FILTER_LINEAR, "sprite 2: TEX1 default (linear)");
+    CHECK(w.st[1].ds.texa == RD_TEXA_7F_81_AEM, "sprite 2: TEXA 7F/81 AEM");
+    CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded register writes", gif_HostUndecodedTotal());
+}
+
+static void checkPixels(void)
+{
+    uint32_t w = 0, h = 0;
+    uint8_t *px = malloc(512 * 512 * 4);
+    int bad = 0;
+
+    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+        CHECK(0, "SCENE readback");
+        free(px);
+        return;
+    }
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            const uint8_t *g = &px[((256 + y) * 512 + 256 + x) * 4];
+            const uint8_t *e = &s_t8.ref[(y * 16 + x) * 4];
+            if (memcmp(g, e, 4) != 0 && bad++ < 4) {
+                printf("  PSMT8 pixel %d,%d: %u,%u,%u,%u expected %u,%u,%u,%u\n", x, y, g[0], g[1],
+                       g[2], g[3], e[0], e[1], e[2], e[3]);
+            }
+        }
+    }
+    CHECK(bad == 0, "PSMT8 sprite: %d pixels differ", bad);
+    bad = 0;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            const uint8_t *g = &px[((256 + y) * 512 + 288 + x) * 4];
+            const uint8_t *t = &s_c16.ref[(y * 16 + x) * 4];
+            uint8_t e[4] = {t[0], t[1], t[2], texaRef(t, RD_TEXSRC_RGBA16, RD_TEXA_7F_81_AEM)};
+            if (memcmp(g, e, 4) != 0 && bad++ < 4) {
+                printf("  PSMCT16 pixel %d,%d: %u,%u,%u,%u expected %u,%u,%u,%u\n", x, y, g[0],
+                       g[1], g[2], g[3], e[0], e[1], e[2], e[3]);
+            }
+        }
+    }
+    CHECK(bad == 0, "PSMCT16 sprite under TEXA 7F/81+AEM: %d pixels differ", bad);
+    /* outside: the clear */
+    CHECK(px[(250 * 512 + 250) * 4] == 0, "outside the sprites");
+    free(px);
+}
+
+int main(void)
+{
+    systemStatus[1] = 1;
+    GlobalStageSetting.texSampleMode = 1;
+    makePalettes();
+    if (!rd__InitRecordOnly(512, 512)) {
+        printf("FAIL rd__InitRecordOnly\n");
+        return 1;
+    }
+    dl_Init();
+    tex_Init();
+    decodeChecks();
+    samplerChecks();
+    scrollChecks();
+    cacheChecks();
+    dl_Clear();
+    recordFrame();
+    {
+        const RdFrame *f = rd__LastFrame();
+        CHECK(f != NULL, "a closed frame");
+        if (f) {
+            checkRecording(f);
+        }
+    }
+    rd_Shutdown();
+    rdtex_Reset();
+    if (failures) {
+        printf("rd_tex_test: %d failures\n", failures);
+        return 1;
+    }
+
+    /* the same frame on a device */
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ORIGINAL;
+    if (!rd_Init(512, 512, &st, NULL)) {
+        printf("rd_tex_test: CPU checks ok; SKIP the pixel check: no usable Vulkan device\n");
+        return 77;
+    }
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    recordFrame();
+    checkPixels();
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    rdtex_Reset();
+    if (failures) {
+        printf("rd_tex_test: %d failures\n", failures);
+        return 1;
+    }
+    printf("rd_tex_test: ok\n");
+    return 0;
+}

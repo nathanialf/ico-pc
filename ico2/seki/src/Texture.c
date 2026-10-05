@@ -14,6 +14,14 @@
 #include "FileManager.h"
 #include <assert.h>
 #include <stdio.h>
+#include "Tim2.h"
+
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd_tex.h"
+
+#endif
 
 /* One mipmap level of a texture record, 0x24 bytes: the address, the buffer
  * width and the VRAM size, and a 13-entry short table indexed by the display
@@ -59,39 +67,8 @@ typedef struct TexLevelPkt { /* field names derived */
     DpkRegAD trxdir;
 } TexLevelPkt; /* derived name */
 
-/* the TIM2 picture header.  The fields this file reads off
- * it are clutColors at 0x0E, clutType at 0x12 (masked with 0x3F where the
- * compound bits have to go), imageType at 0x13 and the width and height at
- * 0x14 and 0x16. */
-typedef struct Tim2Picture { /* field names derived */
-    unsigned int totalSize;
-    unsigned int clutSize;
-    unsigned int imageSize;
-    unsigned short headerSize;
-    unsigned short clutColors;
-    unsigned char picFormat;
-    unsigned char mipMapTextures;
-    unsigned char clutType;
-    unsigned char imageType;
-    unsigned short imageWidth;
-    unsigned short imageHeight;
-    unsigned long long GsTex0;
-    unsigned long long GsTex1;
-    unsigned int GsRegs;
-    unsigned int GsTexClut;
-} Tim2Picture; /* derived name */
-
-/* the TIM2 mipmap header that follows the picture header when there is more
- * than one level, two MIPTBP registers and then one image size per level.
- * tex_makeTexturePacket copies 0x30 bytes of picture header into the record
- * and a second 0x30 bytes of mipmap header after it, and steps over a variable
- * number of size words through the mipmap_header_size table before it reaches
- * the ICO block. */
-typedef struct Tim2Mipmap { /* field names derived */
-    unsigned long long GsMiptbp1;
-    unsigned long long GsMiptbp2;
-    unsigned int sizes[8];
-} Tim2Mipmap; /* derived name */
+/* the TIM2 picture and mipmap headers (Tim2Picture, Tim2Mipmap) are in
+ * Tim2.h */
 
 struct TexData { /* field names derived */
     /* the trimmed name tex_GetTextureNo compares against, and behind it the
@@ -231,8 +208,20 @@ static const unsigned int texFlushPacket[3][4] __attribute__((aligned(16))) = {
     {1, 0, 0x3F, 0},
 };
 
+#ifdef ICO_RD
+
+static void texHostEnsure(TexData *t);
+
+#endif
+#ifdef ICO_HOST
+
+/* the image's address is held as a pointer-wide word on the host */
+static int tex_loadImage(ICO_WORD addr, TexData *tex, int idx, short dbp, short dbw, short dpsm,
+                         short dsax, short dsay, short w, short h)
+#else
 static int tex_loadImage(unsigned int addr, TexData *tex, int idx, short dbp, short dbw, short dpsm,
                          short dsax, short dsay, short w, short h)
+#endif
 {
     int size = 0;
 
@@ -272,15 +261,31 @@ static int tex_loadImage(unsigned int addr, TexData *tex, int idx, short dbp, sh
         debug_assert("src/Texture.c", 650);
         __assert("src/Texture.c", 650, "0");
     }
+#ifdef ICO_RD
+    /* PC port (R2b): no image transfer.  The texture cache decodes the
+       record's images once, here at the first upload (a hit afterwards),
+       and tex_setTexReg's TEX0 binds the cached texture through the
+       resolver; the size is returned as on the PS2. */
+    (void)addr;
+    (void)idx;
+    (void)dbp;
+    (void)dbw;
+    texHostEnsure(tex);
+#else
     gif_StartPacketPri(dl_GetPri());
     gif_SetGsReg(0x50, ((long long)dbp << 32) | ((long long)dbw << 48) | ((long long)dpsm << 56));
     gif_EndPacket();
     dl_OpenDma(2, &tex->levelPkt[idx], 5);
     dl_CloseDma();
+#ifdef ICO_HOST
+    dl_OpenDma(2, (void *)ICO_PHYS(addr), size + 3);
+#else
     dl_OpenDma(2, ICO_PHYS(addr), size + 3);
+#endif
     dl_CloseDma();
     dl_OpenDma(2, texFlushPacket, 3);
     dl_CloseDma();
+#endif
     return size << 4;
 }
 
@@ -299,6 +304,238 @@ static inline int getTWTH(int size) /* derived name */
     return ret;
 }
 
+#ifdef ICO_RD
+/* ===================================================================== *
+ * PC port (renderer wave 2, R2b): the textures on rd.
+ *
+ * The VRAM bump allocator keeps running as bookkeeping (tex_AllocVramAuto,
+ * the TBPs tex_setTexReg writes, tex_GetVramFreeAddress), but no texel
+ * reaches a VRAM: the record's images are decoded once into rd_tex's cache
+ * (port/render/rd_tex.h), keyed on (table index, content generation,
+ * RDTEX_TEXA_REPLAY).  The generation is a per-slot load serial times 8
+ * plus the level drawn (TexExt.level); a CLUT scroll that changes the CLUT
+ * bumps the serial, so only that texture is re-expanded.
+ *
+ * tex_setTexReg writes TEX1 and TEST (the record's own packet, a DMA
+ * reference on the PS2) and TEX0 into one packet for GifPacket.c's decoder,
+ * and notes (list, TEX0) -> texture here.  The decoder asks
+ * texHostResolve for the texture of a TEX0; TBPs are allocated per list, so
+ * the TEX0 is looked up in the list's own notes first.
+ *
+ * The UV scroll (t->uv) stays a VU1 packet: the PS2 applies it in the mesh
+ * microprograms only, never to GIF sprites, so it is not rd_UVOffset (which
+ * offsets screen primitives); the mesh path reads it from the record.
+ * ===================================================================== */
+#define TEX_HOST_BINDS 16
+/* TEX0 without TCC, TFX, CSM, CSA and CLD: the fields that say where and
+   what the texels are */
+#define TEX_HOST_KEY(tex0) ((tex0) & (((1ULL << 34) - 1) | (((1ULL << 18) - 1) << 37))) /* port */
+
+typedef struct TexHostBind { /* port */
+    unsigned long long key;
+    int id;    /* the table index, or -1 for tex */
+    RdTex tex; /* a render-target alias (tex_TransTextureDefocus) */
+    int used;
+} TexHostBind;
+
+static struct { /* port */
+    unsigned int serial[200];
+    unsigned int nextSerial;
+    TexHostBind bind[13][TEX_HOST_BINDS];
+    int bindNext[13];
+    unsigned int unknownTbp[16];
+    int unknownN;
+    int failOnce;
+    unsigned char clutSnap[1024];
+} texHost;
+
+/* the rd texture of table entry id at its current generation, decoded on
+   a miss */
+static RdTex texHostTexture(int id)
+{
+    TexData *t;
+    RdTexImage im;
+    RdTexSampler smp;
+    RdTex r;
+    unsigned int gen;
+    unsigned int mmin;
+    int lv;
+    int tw;
+    int th;
+
+    if (id < 0 || id >= texCount) {
+        return (RdTex){0};
+    }
+    t = &texTable[id].rec;
+    if (t->tim2 == 0 || t->pic.imageType < 1 || t->pic.imageType > 5) {
+        return (RdTex){0};
+    }
+    if (texHost.serial[id] == 0) {
+        texHost.serial[id] = ++texHost.nextSerial;
+    }
+    lv = t->ext.level;
+    if (lv >= t->levelNum || lv >= 7) {
+        lv = 0;
+    }
+    gen = texHost.serial[id] * 8 + (unsigned int)lv;
+    r = rdtex_Find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
+    if (r.id != 0) {
+        return r;
+    }
+    memset(&im, 0, sizeof(im));
+    im.w = t->pic.imageWidth >> lv;
+    im.h = t->pic.imageHeight >> lv;
+    tw = getTWTH(t->pic.imageWidth) - lv;
+    th = getTWTH(t->pic.imageHeight) - lv;
+    im.padW = tw >= 0 && (1u << tw) >= im.w ? 1u << tw : im.w;
+    im.padH = th >= 0 && (1u << th) >= im.h ? 1u << th : im.h;
+    im.psm = (unsigned int)psmTable[t->pic.imageType].psm;
+    im.pixels = t->lv[lv].addr != 0 ? (char *)t->lv[lv].addr + 32 : 0;
+    if (t->pic.imageType == 4 || t->pic.imageType == 5) {
+        /* tex_makeTexturePacket left the CLUT in CSM1 order */
+        im.cpsm = (unsigned int)psmTable[t->pic.clutType & 0x3F].psm;
+        im.clutColors = t->pic.imageType == 4 ? 16 : 256;
+        if (t->pic.clutColors != 0 && t->pic.clutColors < im.clutColors) {
+            im.clutColors = t->pic.clutColors;
+        }
+        im.clutLinear = 0;
+        im.clut = t->clut.addr != 0 ? (char *)t->clut.addr + 32 : 0;
+    }
+    /* TEX1 as the record's packet holds it; the ICO block has no wrap
+       mode, CLAMP stays with the material or the raw writes */
+    mmin = (unsigned int)((t->pkt.tex1.data >> 6) & 7);
+    smp.mag = (t->pkt.tex1.data >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST;
+    smp.min = mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST;
+    smp.wrapS = RD_WRAP_REPEAT;
+    smp.wrapT = RD_WRAP_REPEAT;
+    r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &im, &smp, t->name);
+    if (r.id == 0 && !texHost.failOnce) {
+        texHost.failOnce = 1;
+        fprintf(stderr,
+                "tex: texture %d '%s' (type %d, CLUT type 0x%x, %dx%d) could not be decoded; "
+                "its draws get the placeholder (reported once)\n",
+                id, t->name, t->pic.imageType, t->pic.clutType, t->pic.imageWidth,
+                t->pic.imageHeight);
+    }
+    return r;
+}
+
+/* tests and tools: the rd texture id of table entry idx (0 when it has
+   none) */
+unsigned int tex_HostTextureId(int idx)
+{
+    return texHostTexture(idx).id;
+}
+
+static void texHostEnsure(TexData *t)
+{
+    texHostTexture((int)((TexEntry *)((char *)t - __builtin_offsetof(TexEntry, rec)) - texTable));
+}
+
+/* tex_setTexReg wrote tex0 for the texture t (or, with t null, the alias
+   tex) into list pri */
+static void texHostBind(int pri, unsigned long long tex0, TexData *t, RdTex tex)
+{
+    unsigned long long key = TEX_HOST_KEY(tex0);
+    TexHostBind *b;
+    int i;
+
+    if (pri < 0 || pri >= 13) {
+        return;
+    }
+    b = texHost.bind[pri];
+    for (i = 0; i < TEX_HOST_BINDS; i++) {
+        if (b[i].used && b[i].key == key) {
+            break;
+        }
+    }
+    if (i == TEX_HOST_BINDS) {
+        i = texHost.bindNext[pri];
+        texHost.bindNext[pri] = (i + 1) % TEX_HOST_BINDS;
+    }
+    b[i].key = key;
+    b[i].used = 1;
+    b[i].id =
+        t != 0 ? (int)((TexEntry *)((char *)t - __builtin_offsetof(TexEntry, rec)) - texTable) : -1;
+    b[i].tex = tex;
+}
+
+static RdTex texHostLookup(const TexHostBind *b, unsigned long long key)
+{
+    int i;
+
+    for (i = 0; i < TEX_HOST_BINDS; i++) {
+        if (b[i].used && b[i].key == key) {
+            return b[i].id >= 0 ? texHostTexture(b[i].id) : b[i].tex;
+        }
+    }
+    return (RdTex){0};
+}
+
+/* GifPacket.c's decoder: the texture a TEX0 means in list `list` */
+static RdTex texHostResolve(unsigned long long tex0, int list)
+{
+    unsigned long long key = TEX_HOST_KEY(tex0);
+    unsigned int tbp = (unsigned int)(tex0 & 0x3FFF);
+    RdTex r = {0};
+    int l;
+    int i;
+
+    if (list >= 0 && list < 13) {
+        r = texHostLookup(texHost.bind[list], key);
+    }
+    /* a list that never wrote TEX0 inherits another list's */
+    for (l = 0; r.id == 0 && l < 13; l++) {
+        if (l != list) {
+            r = texHostLookup(texHost.bind[l], key);
+        }
+    }
+    if (r.id != 0) {
+        return r;
+    }
+    switch (tbp) {
+    case 0x0000:
+    case 0x0800:
+    case 0x2800:
+    case 0x2840:
+    case 0x2C00:
+    case 0x3000:
+    case 0x3F00:
+        return r; /* the named render targets (GifPacket.c) */
+    }
+    for (i = 0; i < texHost.unknownN; i++) {
+        if (texHost.unknownTbp[i] == tbp) {
+            return r;
+        }
+    }
+    if (texHost.unknownN < 16) {
+        texHost.unknownTbp[texHost.unknownN++] = tbp;
+        fprintf(stderr,
+                "tex: TEX0 0x%llx (TBP 0x%x, list %d) is no texture the cache bound: drawn with "
+                "the placeholder (reported once per TBP)\n",
+                tex0, tbp, list);
+    }
+    return r;
+}
+
+/* a CLUT scroll may have changed the CLUT: bump the texture's generation
+   when it did */
+static void texHostClutSnap(TexData *t)
+{
+    if (t->clut.addr != 0 && t->pic.clutSize <= sizeof(texHost.clutSnap)) {
+        memcpy(texHost.clutSnap, (char *)t->clut.addr + 0x20, t->pic.clutSize);
+    }
+}
+
+static void texHostClutCheck(int id, TexData *t)
+{
+    if (t->clut.addr != 0 && t->pic.clutSize <= sizeof(texHost.clutSnap) &&
+        memcmp(texHost.clutSnap, (char *)t->clut.addr + 0x20, t->pic.clutSize) != 0) {
+        texHost.serial[id] = ++texHost.nextSerial;
+    }
+}
+
+#endif /* ICO_RD */
 /* The GS A+D writer, a macro: the packet cursor is bumped before the
  * register value is computed. */
 #define setGsReg(reg, val) /* derived name */                                                      \
@@ -318,6 +555,12 @@ static void tex_setTexReg(Tim2Picture *pic, TexData *t, int levels, int lv, int 
         tfx = t->ext.file.texFnc;
     }
     gif_StartPacketPri(dl_GetPri());
+#ifdef ICO_RD
+    /* R2b: the record's TEX1 and TEST, which the PS2 chains just before
+       this packet by reference (tex_transRegister) */
+    setGsReg(t->pkt.tex1.addr, t->pkt.tex1.data);
+    setGsReg(t->pkt.test.addr, t->pkt.test.data);
+#endif
     switch (clut) {
     case 0:
         setGsReg(6, (long long)t->lv[TEXLV(lv)].tbp[dl_GetPri()] |
@@ -344,6 +587,11 @@ static void tex_setTexReg(Tim2Picture *pic, TexData *t, int levels, int lv, int 
         __assert("src/Texture.c", 788, "0");
         break;
     }
+#ifdef ICO_RD
+    /* the TEX0 just written; the cache samples one level, so MIPTBP1/2 are
+       not written */
+    texHostBind(dl_GetPri(), (unsigned long long)PacketBufferStruct.ptr.d[-2], t, (RdTex){0});
+#else
     if (2 <= levels) {
         setGsReg(0x34, (long long)t->lv[TEXLV(lv + 1)].tbp[dl_GetPri()] |
                            ((long long)t->lv[TEXLV(lv + 1)].dbw << 14) |
@@ -360,6 +608,7 @@ static void tex_setTexReg(Tim2Picture *pic, TexData *t, int levels, int lv, int 
                            ((long long)t->lv[TEXLV(lv + 6)].tbp[dl_GetPri()] << 40) |
                            ((long long)t->lv[TEXLV(lv + 6)].dbw << 54));
     }
+#endif
     gif_EndPacket();
 }
 
@@ -379,7 +628,11 @@ static inline void texAllocVram(TexData *t, int levels, int lv) /* derived name 
 static inline int texLoadLevel(void *addr, TexData *t, int n, int dbp, int dbw, int dpsm, int w,
                                int h) /* derived name */
 {
+#ifdef ICO_HOST
+    return tex_loadImage((ICO_WORD)addr, t, n, dbp, dbw, dpsm, 0, 0, w, h);
+#else
     return tex_loadImage((unsigned int)addr, t, n, dbp, dbw, dpsm, 0, 0, w, h);
+#endif
 }
 
 static int tex_transVramClutTex(Tim2Picture *pic, TexData *t, int levels, int lv)
@@ -431,8 +684,13 @@ static int tex_transVramDirectTex(Tim2Picture *pic, TexData *t, int levels, int 
 
 static void tex_transRegister(TexData *t)
 {
+#ifdef ICO_RD
+    /* R2b: written into tex_setTexReg's packet, which follows */
+    (void)t;
+#else
     dl_OpenDma(2, &t->pkt, 5);
     dl_CloseDma();
+#endif
 }
 
 /* "FALSE" */
@@ -725,6 +983,38 @@ static void tex_initTM2(Tim2Picture *pic, TexData *t)
     tex_setRegisters(pic, t);
 }
 
+#ifdef ICO_HOST
+
+/* PC port: the same rearrangement per CLUT entry, of the CLUT's own size.
+   The PS2 code below moves 256 words whatever the CLUT holds, which is the
+   right order only for 256 32-bit entries; for a 16-entry or 16-bit CLUT
+   it reads and writes past the CLUT (the end of the file image).  A
+   16-entry CLUT is the same in both orders. */
+static void tex_convertClutCSM2ToCSM1(Tim2Picture *pic)
+{
+    unsigned char tmp[256 * 4];
+    unsigned char *clut = (unsigned char *)pic + pic->headerSize + pic->imageSize;
+    int n = pic->clutColors;
+    int sz;
+    int i;
+    int j;
+
+    if ((pic->clutType >> 7) == 0 || n != 256) {
+        return;
+    }
+    sz = pic->clutSize / 256;
+    if (sz < 2 || sz > 4) {
+        return;
+    }
+    memcpy(tmp, clut, 256 * sz);
+    for (i = 0; i < 256; i++) {
+        j = (i & 0x18) == 0x08 ? i + 8 : (i & 0x18) == 0x10 ? i - 8 : i;
+        memcpy(clut + j * sz, tmp + i * sz, sz);
+    }
+}
+
+#else
+
 static void tex_convertClutCSM2ToCSM1(Tim2Picture *pic)
 {
     int buf[8][2][2][8];
@@ -749,6 +1039,8 @@ static void tex_convertClutCSM2ToCSM1(Tim2Picture *pic)
     }
 }
 
+#endif
+
 /* graph016 takes short parameters; declared that way, tex_convertImage's frame
  * grows by 16 bytes and its registers move, so this file declares int ones
  * and libgraph.h leaves the call out. */
@@ -756,6 +1048,26 @@ extern int sceGsSetDefStoreImage(sceGsStoreImage *img, int sbp, int sbw, int sps
                                  int ssay, int rrw, int rrh);
 
 /* "FALSE" */
+
+#ifdef ICO_HOST
+
+/* PC port: the GS load/store round trip (PSMT8/4 stored back as PSMCT32,
+   the VRAM order) has no host counterpart, and nothing reaches it:
+   tex_makeCopyImage is only called with convert 0.  The image is copied
+   in its file order, which is what the texture cache decodes. */
+static void tex_convertImage(void *dst, void *src, short fmt, short w, short h)
+{
+    static int once;
+
+    if (!once) {
+        once = 1;
+        fprintf(stderr, "tex: tex_convertImage (GS load/store image) is not emulated: the "
+                        "image is copied unconverted (reported once)\n");
+    }
+    malloc_MemCpy(dst, src, psmTable[fmt].psm == 20 ? w * h / 2 : w * h);
+}
+
+#else
 
 static void tex_convertImage(void *dst, void *src, short fmt, short w, short h)
 {
@@ -795,6 +1107,8 @@ static void tex_convertImage(void *dst, void *src, short fmt, short w, short h)
     }
     sceGsSyncPath(0, 0);
 }
+
+#endif
 
 static void tex_makeCopyImage(Tim2Picture *pic, TexData *t, char *src, int convert)
 {
@@ -1053,6 +1367,11 @@ static int tex_initTextureSub(char *name, void *pkt)
 
     texTable[texCount].rec.ext.partition = malloc_GetPartition();
     texCount++;
+#ifdef ICO_RD
+    /* R2b: a new content generation for the slot, decoded now */
+    texHost.serial[no] = ++texHost.nextSerial;
+    texHostTexture(no);
+#endif
     if (200 <= texCount) {
         /* EUC-JP "there are too many textures, make the texture list region bigger" */
         debug_StdPrintfDummy("テクスチャが多すぎます.テクスチャリスト領域を増やしてください\n");
@@ -1146,6 +1465,58 @@ extern void gif_SetDrawEnviroment(unsigned long long fbp, unsigned long long psm
  * GifRect *, GifColor *, int) in GifPacket.h */
 extern void gif_SpriteSensitiveOrg(int *r, unsigned int z, int *uv, TexColor *col, int prim);
 
+#ifdef ICO_RD
+
+/* R2b: no caller in the game.  The PS2 draws the texture at 1/2^lv into a
+   block of the bump allocator and binds that block; on rd the block is a
+   temporary render target, drawn and bound the same way, and noted as the
+   texture of that TEX0 for the decoder. */
+static void tex_TransTextureDefocus(int id, int lv)
+{
+    TexData *p;
+    int w;
+    int h;
+    int tbp;
+    int rect[4];
+    RdTarget tt;
+    unsigned long long tex0;
+
+    tex_TransTexture(id, dl_GetPri());
+
+    p = getTextureData(id);
+    w = p->pic.imageWidth >> lv;
+    h = p->pic.imageHeight >> lv;
+
+    tbp = tex_AllocVramAuto(0, w * h / 64);
+    tt = rd_TempTarget(w, h, 0, 0);
+
+    gif_StartPacketPri(dl_GetPri());
+    rect[0] = -w * 8 - 4;
+    rect[1] = -h * 8 - 4;
+    rect[2] = w * 16;
+    rect[3] = h * 16;
+    {
+        int uv[4] = {8, 8, p->pic.imageWidth * 16, p->pic.imageHeight * 16};
+        TexColor col = {128, 128, 128, 128};
+        gif_SetZTest(0);
+        gif_SetZWrite(0);
+        gif_HostFlush();
+        rd_SetTarget(tt, (RdTarget){0}, w, h, 0);
+        gif_SpriteSensitiveOrg(rect, 0xFFFFFFFF, uv, &col, 0);
+        gif_SetZWrite(1);
+        gif_SetZTest(1);
+
+        tex0 = tbp | ((long long)(w < 64 ? 1 : w / 64) << 14) | ((long long)getTWTH(w) << 26) |
+               ((long long)getTWTH(h) << 30) | ((long long)1 << 34);
+        texHostBind(dl_GetPri(), tex0, 0, rd_TargetTexture(tt, RD_VIEW_RGBA));
+        gif_SetGsReg(6, tex0);
+        gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, 1, 0);
+        gif_EndPacket();
+    }
+}
+
+#else
+
 static void tex_TransTextureDefocus(int id, int lv)
 {
     TexData *p;
@@ -1185,6 +1556,7 @@ static void tex_TransTextureDefocus(int id, int lv)
     }
 }
 
+#endif
 /* A 256-entry CLUT is held in CSM1 order, the two halves of every other
  * 16-entry block swapped, so an entry index is swizzled before the entry is
  * touched. A 16-entry CLUT is held straight. tex_dispClut walks the same
@@ -1345,8 +1717,14 @@ static void tex_textureAnimation(void)
                 int clut = psmTable[t->pic.clutType & 0x3F].sizeDiv;
                 unsigned int n = t->pic.clutSize >> 2;
 
+#ifdef ICO_RD
+                texHostClutSnap(t);
+#endif
                 tex_scrollClut((char *)t->clut.addr + 0x20, e->clutA, e->clutB, clut, n, e,
                                e->clutFrame, t);
+#ifdef ICO_RD
+                texHostClutCheck(i, t);
+#endif
             }
             e->clutFrame++;
         }
@@ -1365,8 +1743,14 @@ void tex_SetClutAnimation(int id, int frame)
         if (frame != -1) {
             c->clutFrame = frame;
         }
+#ifdef ICO_RD
+        texHostClutSnap(t);
+#endif
         tex_scrollClut((char *)t->clut.addr + 0x20, c->clutA, c->clutB, clut, n, c,
                        frame == -1 ? 0 : c->clutFrame, t);
+#ifdef ICO_RD
+        texHostClutCheck(id, t);
+#endif
     }
 }
 
@@ -1379,6 +1763,12 @@ int tex_FreeTexture(int id)
         return -1;
     }
     texTable[id].rec.ext.used = 0;
+#ifdef ICO_RD
+    /* R2b: the cache entry goes (its rd texture after the frames that may
+       still draw it) */
+    rdtex_Drop((unsigned int)id);
+    texHost.serial[id] = 0;
+#endif
 
     if (t->clut.addr != 0) {
         freeseki(t->clut.addr);
@@ -1435,6 +1825,11 @@ void tex_ResetVram(void)
     if (systemStatus[5] == 0) {
         tex_textureAnimation();
     }
+#ifdef ICO_RD
+    /* R2b: once per frame; destroys the rd textures retired two frames
+       ago */
+    rdtex_FrameTick();
+#endif
 }
 
 /* the GS register payloads, spelled as ico2/seki/src/GifPacket.c spells them */
@@ -1580,6 +1975,14 @@ static void tex_printTexture(int id)
     gif_EndPacket();
 }
 
+/* the record printed with %s: the record opens with its name, which the PS2
+   code passes as the record's address in an int */
+#ifdef ICO_HOST
+#define TEX_NAME_ARG(t) ((t)->name) /* port */
+#else
+#define TEX_NAME_ARG(t) ((int)(t)) /* port */
+#endif
+
 /* The texture tool's menu table, one row per tunable. `type` picks how `var`
  * is read back: 0 an int, 1 a float, 2 a short. */
 typedef struct TexToolRow { /* field names derived */
@@ -1659,7 +2062,7 @@ static int tex_Tool(int *tno)
     if (rec->clut.vramSize != 0) {
         tex_dispClut((unsigned char *)rec->clut.addr + 0x20, rec->clut.vramSize < 4);
     }
-    debug_PrintfDummy(0x90, 0x2E, col[0], "/%d Name:%s x:x%d", cnt, (int)rec, stepScale);
+    debug_PrintfDummy(0x90, 0x2E, col[0], "/%d Name:%s x:x%d", cnt, TEX_NAME_ARG(rec), stepScale);
     switch (m[toolRow].type) {
     case 0:
     case 2:
@@ -1723,6 +2126,9 @@ static int tex_Tool(int *tno)
             malloc_MemCpy(rec->ext.clutA, rec->ext.clutOrg, rec->pic.clutSize);
             malloc_MemCpy(rec->ext.clutB, rec->ext.clutOrg, rec->pic.clutSize);
             rec->ext.clutFrame = 0;
+#ifdef ICO_RD
+            texHost.serial[*tno] = ++texHost.nextSerial;
+#endif
         }
         toolMakeRegs(rec, texTable[*tno].rec.ext.level);
         break;
@@ -1870,12 +2276,13 @@ int tex_ListTool(void)
 
         if (i == listTexNo) {
             debug_PrintfDummy(10, row * 8 + 50, 0xFF808000, "%03d%18s%7d:%1d/%1d:%s:%s:%s",
-                              listTexNo, (int)t, sum, texTable[listTexNo].rec.ext.level + 1,
-                              t->levelNum, imageTypeName[t->pic.imageType],
-                              clutTypeName[t->pic.clutType & 0x3F], headerName[t->ext.animated]);
+                              listTexNo, TEX_NAME_ARG(t), sum,
+                              texTable[listTexNo].rec.ext.level + 1, t->levelNum,
+                              imageTypeName[t->pic.imageType], clutTypeName[t->pic.clutType & 0x3F],
+                              headerName[t->ext.animated]);
         } else {
             debug_PrintfDummy(10, row * 8 + 50, 0xFFFFFF00, "%03d%18s%7d:%1d/%1d:%s:%s:%s", i,
-                              (int)t, sum, texTable[i].rec.ext.level + 1, t->levelNum,
+                              TEX_NAME_ARG(t), sum, texTable[i].rec.ext.level + 1, t->levelNum,
                               imageTypeName[t->pic.imageType], clutTypeName[t->pic.clutType & 0x3F],
                               headerName[t->ext.animated]);
         }
@@ -2051,6 +2458,10 @@ void tex_Init(void)
 {
     int i;
 
+#ifdef ICO_RD
+    /* R2b: GifPacket.c's decoder binds TEX0 through the cache */
+    gif_HostSetTex0Resolver(texHostResolve);
+#endif
     tex_ResetVram();
     texCount = 0;
     if (texTableReady == 0) {

@@ -13,11 +13,13 @@ endif()
 add_library(ico_render STATIC
     rd_core.c
     rd_dump.c
+    rd_frame.c
     rd_pipeline.c
     rd_png.c
     rd_post.c
     rd_present.c
-    rd_replay.c)
+    rd_replay.c
+    rd_tex.c)
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
@@ -68,8 +70,25 @@ target_compile_options(rd_layout_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_layout_test PRIVATE ico_render ico_math)
 
+# rd_tex_test: the texture cache, and Texture.c's host path with the three
+# files above, fed synthetic TIM2 files; decode, CLUT scroll, cache keys and
+# the decoder's binding on the recording, one sprite per format's texels on
+# a device (77 without one).
+add_executable(rd_tex_test test/rd_tex_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Texture.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_tex_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(rd_tex_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_tex_test PRIVATE ico_render ico_math)
+
 if(WIN32 AND SDL3_FOUND)
-    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test)
+    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -83,6 +102,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME rd_pixel COMMAND rd_pixel_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME rd_layout COMMAND rd_layout_test)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_tex COMMAND rd_tex_test)
+    set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
@@ -99,6 +120,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
     endif()
     if(_env)
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout PROPERTIES ENVIRONMENT "${_env}")
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex PROPERTIES ENVIRONMENT
+                             "${_env}")
     endif()
 endif()
