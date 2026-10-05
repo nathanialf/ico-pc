@@ -2267,8 +2267,9 @@ a centred 4:3 box. Full-screen draws stretch (f = 1): `RD_SPACE_FULLSCREEN`
 prims (`rd_post.c`'s fade, letterbox, brightness, keep, film noise,
 anti-alias, the reduction; ZFog.c's sprite; `layout_texture.c`'s primary
 sprite through `rd_SetSpaceOverride`), every sprite that spans the
-target's whole GS width (clears, Shadow.c's resolve, the game's own fills;
-`screenStretch`), and the fullscreen-triangle passes (`fx_rect_vs`, the
+target's whole GS width to within one pixel at each edge (clears,
+Shadow.c's resolve, the game's own fills, the menus' black bands;
+`screenStretch`, "W3" below), and the fullscreen-triangle passes (`fx_rect_vs`, the
 fog, the shadow resolve). `gsb_scissorOnDemo`'s bars are letterbox posts:
 58 of 512 lines, full width, at any aspect and resolution. `rd__FillCameraCB`
 gives `g_proj` / `g_viewProj` the same compression (X' = f X + (1 - f)
@@ -2370,6 +2371,88 @@ Open items:
    keyed draws' data blended, so DISPLAY is drawn once per present.
 6. Mirror: `RdPresentPreset.mirror` is still unimplemented. Done in R7c
    (section 21).
+
+### W3: full-frame covers at 16:9
+
+**Report.** v0.5, Enhanced, 16:9: the pause menu's top and bottom black
+bands stopped at the 4:3 frame. **Cause.** Every menu layout with bands
+draws the same pair of tex-property rows (dispX 0, dispW 640, dispY 0 / h
+70 and dispY 200 / h 60, one texel at U 10, V 110 of texFile 11; read from
+the PAL ELF's `texProperty`, 0x0030CFF8, 52 rows) through
+`display_texture` (`ico2/common/src/layout_texture.c:513`,
+`gif_SpriteSensitiveOffset` at :637) in UI space. The GS gets them at x
+1792.25 .. 2303.44 (dump `--list`: `11:38`, `11:48`), pixels 1..511 of the
+512-wide target under the top-left rule, so the full-width test
+(`a <= 0 && b >= w` on floor(x / 16)) missed them by one pixel and they were
+compressed into the 4:3 box with the rest of the layout. **Fix.**
+`screenStretch` (`port/render/rd_replay.c:1048`) takes the pixels a sprite
+covers, ceil(x0) .. ceil(x1) - 1, and stretches it when they reach pixel 1
+or less and w - 2 or more (`:1070`); a superset of the earlier test. No
+game code changed. The layouts with the band pair (item ranges are
+first .. last - 1): 17, 18 (slot select), 19 (load), 22, 23, 25 to 27, 31 to
+33, 37 to 40, 42 to 47 (memory card messages, save, format, "Resume Game /
+End Game"), 56, 57 (pause), 58 (Options), 59 (button configuration), 60
+(Brightness), 61 (End Game question), 62, 64 (game over "Continue?").
+
+**Audit** (each full-frame draw; GS coordinates with the 512 x 512 scene,
+origin 1792):
+
+| draw | source | GS extent | mapping at 16:9 |
+| --- | --- | --- | --- |
+| demo letterbox | `gsb_scissorOnDemo` (`ico2/seki/src/GsBase.c:571`) -> `postLetterbox` (`rd_post.c:220`) | x 0..512, 58 lines each | FULLSCREEN (`rd_post.c:105`): stretched, unchanged |
+| fade | `gsb_fade` (`GsBase.c:465`) -> `postFade` (`rd_post.c:200`) | 0..512 x 0..512 | FULLSCREEN: stretched, unchanged |
+| reduction border and tint | `gsb_Reduction` (`GsBase.c:255`, `:1166`) -> `postReduction` (`rd_post.c:141`) | DISPLAY 0..512, scissor 2..509 x 8..247 | FULLSCREEN: stretched, unchanged |
+| keep (paused picture) | `gsb_KeepFrameBuffer` (`GsBase.c:415`) -> `postKeep` (`rd_post.c:169`) | -0.75..513.25 | FULLSCREEN: stretched, unchanged |
+| brightness | `gsb_controlBrightness` (`GsBase.c:660`) -> `postBrightness` (`rd_post.c:251`) | 256..3840 (wrapped corners) | FULLSCREEN: stretched, unchanged |
+| anti-alias | `gsb_antiAlias` (`GsBase.c:725`) -> `rd_post.c:286`, `:309` | AA0/AA1, then -0.25..511.75 into SCENE | FULLSCREEN: stretched, unchanged |
+| film noise | `gsb_filmNoise` (`GsBase.c:970`) -> `postFilmNoise` (`rd_post.c:339`) | 0x7000..0x9000 (0..512) | FULLSCREEN (`rd_post.c:363`): stretched, unchanged |
+| fog | `ZFog.c:321` | full scene | FULLSCREEN: stretched, unchanged |
+| menu dimming (pause, Options, game over red) | `lt_draw_primary_sprite` (`layout_texture.c:658`) | 640 x 226 field lines: 0..512 | `rd_SetSpaceOverride(2)` (`:672`): stretched, unchanged |
+| menu black bands | `display_texture` (`layout_texture.c:513`) | 0.25..511.44 | UI: boxed before, stretched now |
+| boot signs' black | `kanban.c:28`, `:471` | 0..512 | UI sprite over the whole width: stretched, unchanged |
+| boot and card-check black | the clears; layouts 0 to 4, 7, 8's opaque black backdrop | 0..512 | stretched, unchanged |
+| movies | `rd_video.c:175` (`box43`) | presenter's 4:3 box | boxed by design (DISPLAY.md) |
+| loading bar | `progressive_bar` (`layout_action.c:1880`) | 160 px | UI: boxed (positioned) |
+| debug text backgrounds, memory bars | `debug.c:1593`, `:1651`; `icoMisc.c:156` | text-sized; ScreenWidth - 200 | UI: boxed (positioned) |
+
+A sweep of every non-FULLSCREEN SCREEN command reaching 400 or more of the
+512 pixels in all dumps of the three runs below found only the band pair
+(new), the boot sign's black (`11:35`, 0..512, stretched before), list 3's
+full-scene sprite (0..512, stretched before) and text rows (48..464, boxed).
+
+**Runs** (window build, lavapipe, `SDL_VIDEODRIVER=offscreen`, ISO,
+Enhanced 1x 16:9 full height, `framerate = "original"`, a private
+`XDG_DATA_HOME`): `start_stage = 3` with START at tick 400 (pause, dumps
+every 5); the same with START, DOWN, CROSS (End Game question at 484..564,
+dumps every 4); `pad-boot.txt` to tick 1400 (boot, title, stage 3's
+opening, dumps every 10). Replayed with `rd_replay_tool --present 1280x720
+--enhanced --aspect 16:9 --full-height`; the coverage is the run of black
+(max channel <= 3) through column 640:
+
+| effect, dump | row | before | after |
+| --- | --- | --- | --- |
+| pause bands, 450 | 40, 60, 650, 680 | 161/162 .. 1118 | 0 .. 1279 |
+| End Game question bands, 500 | 40, 60, 650 | 161/162 .. 1118 | 0 .. 1279 |
+| demo letterbox, 1150 and 1200 | 40, 690 | 0 .. 1279 | 0 .. 1279 (identical PNG) |
+| boot black, 100; boot sign, 300 | 10..710 | 0 .. 1279 | identical PNG |
+
+The fade at 1150 (stage 3 fading in) against the same dump with the fade
+sprite removed (`--nop 11:59`), mean luma of columns 0..159 / 160..1119 /
+1120..1279 at row 360: 9.0 / 8.3 / 7.4 against 52.4 / 47.8 / 43.2 (0.17 of
+the picture in all three). The pause dimming (`--nop 11:25`), row 300:
+17.0 / 18.2 / 35.8 against 41.7 / 44.7 / 87.9 (0.41 in all three). In the
+changed dumps only rows 22..106 and 642..697 differ, all but 3 changed
+columns outside 160..1119. Original: the same seven dumps replayed without
+`--enhanced` by the tool before and after the change are byte-identical
+(`screenStretch` returns 0 when the wide factor is 1), as are the five
+16:9 replays without bands. `rd_present`'s `wide169` case adds a UI band at
+GS 0.25..511.44 (stretched over texels 2..681) and one at 2..512 (stays in
+texels 87..597); the first check fails without the fix.
+
+Open: the band pair at a 448-line (60 Hz) scene was not dumped; its x
+extent comes from the same rows and the width rule does not depend on the
+height. Film noise (second playthrough) and the game over screen were not
+reached in a run; they are covered by the table above from the code.
 
 ## 20. Frame rate and interpolation (wave 7, R7b)
 

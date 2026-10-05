@@ -29,7 +29,9 @@
  *             block averages within 2 LSB of 1x (bilinear reduction)
  *   wide169   16:9 at 1x: a UI sprite lands in the centred 4:3 box, the
  *             letterbox bars and a full-width fill stretch over the whole
- *             width (58 lines), the present fills a 16:9 output
+ *             width (58 lines), the present fills a 16:9 output; W3: a UI
+ *             band one pixel short at each side (the menus' bars) stretches,
+ *             one two pixels short stays boxed
  *   mips      the trilinear filter: a mipmapped game texture, minified,
  *             samples its average
  *
@@ -1132,6 +1134,12 @@ static void checkWide169(void)
     sprite(RD_SPACE_UI, 128 * 16, 100 * 16, 384 * 16, 200 * 16, white, 0, 0, 0, 0);
     /* a full-width fill the game tags WORLD: rows 300..310 */
     sprite(RD_SPACE_WORLD, 0, 300 * 16, 512 * 16, 310 * 16, red, 0, 0, 0, 0);
+    /* W3: the pause menu's band as the layout draws it, UI space, GS x
+     * 0.25 .. 511.44 (pixels 1..511): rows 320..330 */
+    sprite(RD_SPACE_UI, 4, 320 * 16, 511 * 16 + 7, 330 * 16, red, 0, 0, 0, 0);
+    /* a UI band two pixels short at the left (pixels 2..511): rows 340..350,
+     * stays in the 4:3 box */
+    sprite(RD_SPACE_UI, 2 * 16, 340 * 16, 512 * 16, 350 * 16, red, 0, 0, 0, 0);
     /* the letterbox at full strength */
     rd_SelectList(11);
     RdPostParams pp;
@@ -1164,6 +1172,17 @@ static void checkWide169(void)
             ok &= PX(x, 305)[0] == 255 && PX(x, 305)[1] == 0;
         }
         CHECK(ok, "wide169: the full-width WORLD fill stretches over the 16:9 width");
+        /* the band one pixel short at each side: stretched (GS pixels
+         * 1..511 at 683/512 texels each: texels 2..681 at least) */
+        ok = 1;
+        for (int x = 2; x < 682; x++) {
+            ok &= PX(x, 325)[0] == 255;
+        }
+        CHECK(ok, "wide169: the layout's screen band (pixels 1..511) spans the 16:9 width");
+        /* the band two pixels short: boxed, GS 2..511 -> texels 87..597 */
+        ok = PX(80, 345)[0] == 0 && PX(90, 345)[0] == 255 && PX(595, 345)[0] == 255 &&
+             PX(600, 345)[0] == 0;
+        CHECK(ok, "wide169: a UI band two pixels short stays in the 4:3 box");
         /* letterbox: 58 lines top and bottom over the whole width, black */
         ok = 1;
         for (int x = 0; x < 683; x += 1) {

@@ -40,12 +40,33 @@ framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 | --- | --- |
 | `preset` | `"original"`: the PS2 picture. `"enhanced"`: the options below apply. |
 | `resolution` | How sharp the 3D scene is (Enhanced). `"window"`: as many pixels as the frame has on screen. `"2x"`: twice the PS2's resolution in each direction (widened with the aspect). `"1920x1440"`: that many pixels. At least the PS2's resolution, at most 4K (3840 x 2160). Effects such as blur and glow keep their size on screen. |
-| `aspect` | The shape of the picture (Enhanced). `"16:9"` and `"16:10"` show more of the world to the left and right; the menus, subtitles and the title text stay in a 4:3 frame in the middle; full-screen fades, the cinema bars and the film grain stretch across. `"auto"` follows the window, between 4:3 and 16:9. The movies stay 4:3 with bars at the sides. |
+| `aspect` | The shape of the picture (Enhanced). `"16:9"` and `"16:10"` show more of the world to the left and right; the menus, subtitles and the title text stay in a 4:3 frame in the middle; full-screen fades, the cinema bars, the black bands of the pause and memory card menus and the film grain stretch across ("Wide pictures" below). `"auto"` follows the window, between 4:3 and 16:9. The movies stay 4:3 with bars at the sides. |
 | `fullscreen` | Borderless fullscreen at the desktop's resolution. Alt+Enter switches while playing. |
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
 | `texture_filter` | (Enhanced) `"trilinear"` gives textures smaller versions for distant surfaces, so the ground and walls do not shimmer; `"anisotropic"` also keeps them sharp at grazing angles. Textures the game draws unfiltered (pixel-sharp) stay that way. Fences and leaves with see-through parts keep their thickness in the distance. |
 | `full_height` | (Enhanced) Keep all 512 lines of the scene instead of halving them, so the picture is not line-doubled. |
 | `framerate` | (Both presets) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
+
+## Wide pictures: what stretches and what stays in the middle
+
+With `aspect` wider than 4:3, anything that covers the whole picture
+(bars, fades, dimming, backdrops, borders) reaches the left and right edges;
+anything placed on the screen (text, menu rows, button pictures, the logo)
+stays in the 4:3 frame in the middle, at the size it has at 4:3. Measured
+at 1280 x 720, 16:9 (columns 0 to 1279; the middle 4:3 frame is 160 to
+1119):
+
+| what | covers |
+| --- | --- |
+| The cinema bars of the story scenes | the whole width |
+| Fades to and from black (or white), stage changes | the whole width |
+| The black bands at the top and bottom of the pause menu, Options, button configuration, Brightness, the "The game will end" question, the memory card load, save and format screens and "Continue?" after a game over | the whole width (in version 0.5 they stopped at the middle frame, columns 161 to 1118) |
+| The dimming of the scene behind those menus (darker; red after a game over) | the whole width |
+| The black behind the boot signs and the memory card check | the whole width |
+| The picture's thin border (2 pixels at the sides, 8 lines top and bottom on the PS2), brightness, the "keep the last picture" of a paused game, the edge smoothing and the film grain | the whole width |
+| Menu text, the cursor's glow, the subtitles, the ICO logo, the copyright line, the loading bar, the port's own menus and popups | the middle 4:3 frame |
+| The movies | the middle 4:3 frame, black at the sides |
+| Developer overlays (debug text, memory bars) | the middle 4:3 frame |
 
 ## Smooth motion (`framerate`)
 

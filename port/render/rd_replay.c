@@ -1039,7 +1039,12 @@ static float wideFor(const RdTargetRec *tc, int stretch)
 }
 
 /* Whether a screen-prim command is full-screen: tagged so, or sprites that
- * cover the target's whole width (in GS pixels, after XYOFFSET). */
+ * cover the target's whole width (in GS pixels, after XYOFFSET).  A sprite
+ * covers the pixels p with x0 <= p < x1 (the GS's top-left rule on the 1/16
+ * grid); "the whole width" allows one pixel short at either edge, as the
+ * layout's screen bands are drawn: the pause and End Game menus' black bars
+ * (layout_texture.c, gif_SpriteSensitiveOffset) run from 1792.25 to
+ * 2303.44, pixels 1..511 of 512 (W3, RENDER_API.md section 19). */
 static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t n,
                          uint8_t prim, uint8_t space)
 {
@@ -1054,13 +1059,15 @@ static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenV
     }
     const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
     for (uint32_t i = 0; i + 1 < n; i += 2) {
-        int32_t a = floorDiv16(v[i].x) - ox, b = floorDiv16(v[i + 1].x) - ox;
+        int32_t a = v[i].x, b = v[i + 1].x;
         if (a > b) {
             const int32_t t = a;
             a = b;
             b = t;
         }
-        if (a <= 0 && b >= (int32_t)tc->w) {
+        /* the first and last pixel covered: ceil(x0), ceil(x1) - 1 */
+        const int32_t first = -floorDiv16(-a) - ox, last = -floorDiv16(-b) - 1 - ox;
+        if (first <= 1 && last >= (int32_t)tc->w - 2) {
             return 1;
         }
     }
