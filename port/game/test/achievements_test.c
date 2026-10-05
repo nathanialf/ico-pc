@@ -4,7 +4,7 @@
  * The achievements on the CPU (docs/port/ACHIEVEMENTS.md): the game-state
  * view over a synthetic snapshot, the signals, every achievement's
  * condition through crafted transitions (unlocked once, suspended in developer
- * mode, yorda_safe counting, a version 1 file), the achievements.toml round trip, the
+ * mode, yorda_safe counting), the achievements.toml round trip, the
  * popup rate limit and [game] achievements = false.  argv[1]: a writable
  * folder.
  */
@@ -619,49 +619,6 @@ static void test_yorda_safe_counts(void)
     CHECK(!ico_gs_run_suspended());
 }
 
-/* a version 1 file: both counters, a category on every unlock */
-static void test_old_file(void)
-{
-    FILE *f;
-
-    start("oldfile");
-    f = fopen(s_path, "wb");
-    CHECK(f != NULL);
-    if (f == NULL) {
-        return;
-    }
-    fputs("version = 1\n\n[stats]\nenemies_all = 9\nenemies_normal = 4\n"
-          "hand_ms_all = 800\nhand_ms_normal = 400\nsaves = 2\nclears = 0\n"
-          "couches_all = \"77,78\"\ncouches_normal = \"77\"\n\n"
-          "[unlocked.gate]\ntime = \"2025-10-05T12:00:00Z\"\ncategory = \"normal\"\n"
-          "play_time = 754\n\n"
-          "[unlocked.windmill]\ntime = \"2025-10-05T12:00:00Z\"\ncategory = \"assisted\"\n"
-          "play_time = 800\n",
-          f);
-    fclose(f);
-    ico_config_reset(s_no_config, s_no_config);
-    ico_ach_init(s_path);
-    CHECK(st("gate") == ICO_ACH_UNLOCKED && st("windmill") == ICO_ACH_UNLOCKED);
-    CHECK(st("cliff") == ICO_ACH_LOCKED);
-    CHECK(ico_ach_time(ico_ach_find("windmill")) == fixed_clock());
-    CHECK(ico_ach_play_time(ico_ach_find("windmill")) == 800);
-    CHECK(stats().enemies == 4 && stats().hand_ms == 400 && stats().sofas == 1);
-    CHECK(stats().saves == 2);
-    /* the next write is a version 2 file with the new keys and no popup
-       for the old unlocks */
-    ico_gs_set_sampler(sampler);
-    fresh_world();
-    s_pushes = 0;
-    stage(15);
-    ticks(1);
-    CHECK(pushed_body(ui_StrIn(UI_LANG_EN, UI_STR_ACH_WINDMILL)) == NULL);
-    kills(1);
-    ico_ach_flush();
-    CHECK(file_count("version = 2") == 1 && file_count("enemies = 5") == 1);
-    CHECK(file_count("[unlocked.gate]") == 1 && file_count("[unlocked.windmill]") == 1);
-    CHECK(file_count("category = \"assisted\"") == 1); /* an unknown key is kept */
-}
-
 /* --- the file -------------------------------------------------------------------- */
 
 static void test_persistence(void)
@@ -817,7 +774,6 @@ int main(int argc, char **argv)
     test_each();
     test_suspended();
     test_yorda_safe_counts();
-    test_old_file();
     test_persistence();
     test_popups();
     if (failures) {

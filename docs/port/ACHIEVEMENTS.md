@@ -237,14 +237,10 @@ time = "2025-10-05T12:00:00Z"   # UTC
 play_time = 754                 # the game's play time at the unlock, seconds
 ```
 
-**Migration from version 1.** Version 1 kept each counter twice
-(`enemies_all`, `enemies_normal`, `hand_ms_*`, `couches_*`, `stages_*`) and
-had `category = "normal"` or `"assisted"` in each unlock. Reading: an
-`[unlocked.<id>]` table with a `time` is an unlock whatever its `category`;
-a counter is read from its version 2 key, else from its `_normal` key (the
-progress made with an assist on is not carried over). Writing: version 2,
-no `category`. The old keys are left in the file as unknown keys (the TOML
-writer has no remove); they are ignored.
+**Unknown keys** (a version 1 file's `_all`/`_normal` counters and
+`category` entries, for instance) are ignored on reading and left in place
+by the writer, which has no remove; the counters start from the version 2
+keys only.
 
 ## Popups
 
@@ -306,9 +302,7 @@ interface:
   popup is pushed; still suspended after switching it off within the run;
   progress and unlocks resume in a new run, with one record; `start_stage`
   suspends the same way; `yorda_safe` counts normally (unlocks, 25 kills,
-  the visited-stage pair); a version 1 file with both counters and a
-  `category` on each unlock reads as unlocks and `_normal` counters, and
-  the next write is version 2;
+  the visited-stage pair);
 - the file: stats, states, times (a fixed clock: `2025-10-05T12:00:00Z`) and
   play times survive a write and `ico_ach_init`; an unlocked achievement
   gives no second record or popup; a missing file reads as empty;

@@ -353,9 +353,7 @@ static long long parse_time(const char *s)
  *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
  *            stages (128-bit hex)
  *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>
- * Version 1 kept every counter twice (<name>_all and <name>_normal) and an
- * unlock's category; read_file takes the _normal counters and any unlock
- * with a time as an unlock (docs/port/ACHIEVEMENTS.md, "The file").
+ * (docs/port/ACHIEVEMENTS.md, "The file"). Unknown keys are ignored.
  */
 
 static void sofa_list(const int *set, int n, char *out, size_t size)
@@ -409,16 +407,11 @@ static void hex_parse(const char *s, unsigned long long *set)
 
 #define FILE_VERSION 2
 
-/* a counter under its version 2 name, else under its version 1 "_normal"
-   name (progress made with an assist on is not carried over) */
 static long long get_counter(const IcoToml *t, const char *name, long long def)
 {
     char key[64];
 
     snprintf(key, sizeof(key), "stats.%s", name);
-    if (!ico_toml_has(t, key)) {
-        snprintf(key, sizeof(key), "stats.%s_normal", name);
-    }
     return ico_toml_get_int(t, key, def);
 }
 
@@ -427,9 +420,6 @@ static const char *get_counter_str(const IcoToml *t, const char *name)
     char key[64];
 
     snprintf(key, sizeof(key), "stats.%s", name);
-    if (!ico_toml_has(t, key)) {
-        snprintf(key, sizeof(key), "stats.%s_normal", name);
-    }
     return ico_toml_get(t, key);
 }
 
@@ -493,8 +483,7 @@ static void read_file(void)
     hex_parse(get_counter_str(t, "stages"), s_visited);
     for (i = 0; i < ACH_COUNT; i++) {
         snprintf(key, sizeof(key), "unlocked.%s.time", s_defs[i].id);
-        /* an unlock is a record with a time; a version 1 "category" key is
-           ignored whatever it says */
+        /* an unlock is a record with a time */
         if (!ico_toml_has(t, key)) {
             continue;
         }
