@@ -65,7 +65,6 @@ static int failures;
             failures++;                                                                            \
         }                                                                                          \
     } while (0)
-
 /* WORK0: 256 x 128, XYOFFSET (2048 - 128, 2048 - 64) */
 #define TW 256
 #define TH 128
@@ -460,11 +459,11 @@ static void testVu(void)
     recordVu(mesh, 0, 0, 0);
     recordVu(mesh, 1, 1, 1);
     const RdInterpStats *st = build(0.5f, 1.0f, 1);
-    CHECK(st->snap == RD_SNAP_NONE && st->keyed == 5 && st->lerped == 3 && st->jump == 1 &&
-              st->mismatch == 1,
-          "mesh, grid and particles blend, the teleported mesh jumps, the shadow's count "
-          "changed (keyed %u lerped %u jump %u mismatch %u)",
-          st->keyed, st->lerped, st->jump, st->mismatch);
+    CHECK(st->snap == RD_SNAP_NONE && st->keyed == 5 && st->lerped == 4 && st->jump == 1 &&
+              st->mismatch == 0 && st->shifted == 1,
+          "mesh, grid and particles blend, the teleported mesh jumps, the shadow whose count "
+          "changed is moved (S2) (keyed %u lerped %u jump %u mismatch %u shifted %u)",
+          st->keyed, st->lerped, st->jump, st->mismatch, st->shifted);
     const RdFrame *f = built(0.5f);
     const RdFrame *cur = rd__LastFrame();
     const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjE, 0, 32), 0));
@@ -512,9 +511,23 @@ static void testVu(void)
     }
     const RdCmd *sc = findKey(f, 3, RD_KEY(&kObjE, 3, 0), 0);
     const RdCmd *scc = findKey(cur, 3, RD_KEY(&kObjE, 3, 0), 0);
-    CHECK(sc && scc && sc->u[0] + sc->u[3] == 9 &&
-              memcmp(f->payload + sc->u[1], cur->payload + scc->u[1], 9 * sizeof(RdScreenVtx)) == 0,
-          "shadow: the triangle count changed, the current volume");
+    if (sc && scc && sc->u[0] + sc->u[3] == 9) {
+        /* S2: the medians move from x 12, z 1000 (2 triangles) to x 32, z
+         * 1100 (3), y 3 to 4: cur's 9 vertices half way back, 10 pixels, half a pixel
+         * and 50 */
+        const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + sc->u[1]);
+        const RdScreenVtx *w = (const RdScreenVtx *)(const void *)(cur->payload + scc->u[1]);
+        int ok = 1;
+        for (int i = 0; i < 9; i++) {
+            ok &= v[i].x == w[i].x - 10 * 16 && v[i].y == w[i].y - 8 && v[i].z == w[i].z - 50u;
+        }
+        CHECK(ok,
+              "shadow: the triangle count changed, the current volume moved half way back "
+              "by the shift of the medians (%d, %u)",
+              (v[0].x - w[0].x) / 16, w[0].z - v[0].z);
+    } else {
+        CHECK(0, "shadow: the current volume's triangles");
+    }
     /* the shadow blends when the topology is the same */
     recordVu(mesh, 0, 0, 0);
     recordVu(mesh, 1, 0, 0);
@@ -919,8 +932,272 @@ static void testMorph(void)
     rd_DestroyVuMesh(one);
 }
 
+/* ------------------------------------------- S2: rotation-aware blend */
+
+/* column-major 4 x 4 (double): a turn of deg about z, uniform scale sc,
+ * translation (tx, 0, 0) */
+static void turnZ(double *m, double deg, double sc, double tx)
+{
+    const double a = deg * 3.14159265358979323846 / 180.0;
+    memset(m, 0, 16 * sizeof(double));
+    m[0] = cos(a) * sc;
+    m[1] = sin(a) * sc;
+    m[4] = -sin(a) * sc;
+    m[5] = cos(a) * sc;
+    m[10] = sc;
+    m[12] = tx;
+    m[15] = 1.0;
+}
+
+static double colLen(const double *m, int c)
+{
+    return sqrt(m[c * 4] * m[c * 4] + m[c * 4 + 1] * m[c * 4 + 1] + m[c * 4 + 2] * m[c * 4 + 2]);
+}
+
+static void testRotationBlend(void)
+{
+    double p[16], c[16], o[16];
+    turnZ(p, 0.0, 1.0, 0.0);
+    turnZ(c, 90.0, 1.0, 100.0);
+    CHECK(rd__BlendAffine(p, c, 0.5, NULL, o), "a 90 degree turn blends");
+    const double ang = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
+    CHECK(fabs(ang - 45.0) < 1e-9 && fabs(colLen(o, 0) - 1.0) < 1e-12 &&
+              fabs(colLen(o, 1) - 1.0) < 1e-12 && fabs(colLen(o, 2) - 1.0) < 1e-12 &&
+              fabs(o[12] - 50.0) < 1e-12,
+          "90 degrees at alpha 0.5: %.9f degrees, axes %.12f %.12f, x %.3f (element-wise: "
+          "axes 0.707)",
+          ang, colLen(o, 0), colLen(o, 1), o[12]);
+    printf("rd_interp_test: 90 degrees at alpha 0.5: %.6f degrees, axes %.9f %.9f %.9f\n", ang,
+           colLen(o, 0), colLen(o, 1), colLen(o, 2));
+    turnZ(p, -30.0, 2.0, 0.0);
+    turnZ(c, 50.0, 3.0, 0.0);
+    CHECK(rd__BlendAffine(p, c, 0.25, NULL, o), "turn with scale blends");
+    const double ang2 = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
+    CHECK(fabs(ang2 - (-10.0)) < 1e-9 && fabs(colLen(o, 0) - 2.25) < 1e-12,
+          "scale lerped, rotation slerped (%.6f degrees, scale %.6f)", ang2, colLen(o, 0));
+    turnZ(p, 170.0, 1.0, 0.0);
+    turnZ(c, -170.0, 1.0, 0.0);
+    CHECK(rd__BlendAffine(p, c, 0.5, NULL, o) &&
+              fabs(fabs(atan2(o[1], o[0])) * 180.0 / 3.14159265358979323846 - 180.0) < 1e-9,
+          "the short way round (170 to -170 is 180 half way)");
+    /* about a pivot: a limb turning 90 degrees about its joint at (100, 0,
+     * 0) keeps the joint where it is half way (about the origin it would
+     * leave it by 29 units) */
+    {
+        const double x0[3] = {100.0, 0.0, 0.0};
+        turnZ(p, 0.0, 1.0, 0.0);
+        turnZ(c, 90.0, 1.0, 100.0); /* R x + (100, -100, 0): R (x - x0) + x0 */
+        c[13] = -100.0;
+        CHECK(rd__BlendAffine(p, c, 0.5, x0, o), "about a pivot");
+        const double jx = o[0] * 100.0 + o[12], jy = o[1] * 100.0 + o[13];
+        const double a2 = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
+        CHECK(fabs(jx - 100.0) < 1e-9 && fabs(jy) < 1e-9 && fabs(a2 - 45.0) < 1e-9,
+              "the joint stays at (100, 0) half way (%.6f, %.6f), turned %.6f degrees", jx, jy, a2);
+    }
+    turnZ(c, 10.0, 1.0, 0.0);
+    c[3] = 0.25; /* projective */
+    CHECK(!rd__BlendAffine(p, c, 0.5, NULL, o),
+          "a projective matrix is left to the element-wise blend");
+    turnZ(p, 0.0, 1.0, 0.0);
+    turnZ(c, 10.0, 1.0, 0.0);
+    c[10] = -1.0; /* a mirror */
+    CHECK(!rd__BlendAffine(p, c, 0.5, NULL, o),
+          "opposite handedness is left to the element-wise blend");
+}
+
+/* a prelit mesh whose model to world turns deg about z, seen through a
+ * world to screen S (a scale and a translation, w = 1); and a skinned draw
+ * with one bone turning the same way */
+static void recordTurn(RdMesh mesh, RdMesh skin, double deg)
+{
+    rd_BeginFrame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    double s[16], w[16], m[16];
+    memset(s, 0, sizeof(s));
+    s[0] = 2.0;
+    s[5] = 2.0;
+    s[10] = 1.0;
+    s[12] = 2048.0;
+    s[13] = 2048.0;
+    s[15] = 1.0;
+    turnZ(w, deg, 1.0, 10.0);
+    for (int cI = 0; cI < 4; cI++) {
+        for (int r = 0; r < 4; r++) {
+            double v = 0.0;
+            for (int k = 0; k < 4; k++) {
+                v += s[k * 4 + r] * w[cI * 4 + k];
+            }
+            m[cI * 4 + r] = v;
+        }
+    }
+    for (int cI = 0; cI < 4; cI++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[4 + cI][r] = (float)s[cI * 4 + r];
+            d.vu.mem[16 + cI][r] = (float)m[cI * 4 + r];
+            d.vu.mem[20 + cI][r] = (float)m[cI * 4 + r]; /* the clip matrix: the same here */
+            d.vu.mem[24 + cI][r] = (float)w[cI * 4 + r]; /* model to view: view identity */
+        }
+    }
+    identity(d.vu.mem, 12);
+    rd_SelectList(0);
+    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjD, 0, 32));
+    /* skinned: one bone */
+    static float bone[4][4];
+    for (int cI = 0; cI < 4; cI++) {
+        for (int r = 0; r < 4; r++) {
+            bone[cI][r] = (float)w[cI * 4 + r];
+        }
+    }
+    d.prog = RD_PROG_SKIN;
+    d.code = 20;
+    d.bones = (const float (*)[4])bone;
+    d.boneQw = 4;
+    rd_DrawVuMesh(skin, &d, RD_KEY(&kObjD, 1, 20));
+    rd_EndFrame(0);
+}
+
+/* a cluster (skinned) layout mesh of one strip of 3 vertices */
+static RdMesh makeSkinMesh(void)
+{
+    static float qw[1 + 3 * 5][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8003u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 3; k++) {
+        qw[1 + k * 5 + 3][3] = k == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        const uint32_t addr = 16u;                   /* bone 0, weight 1: its pivot is the origin */
+        memcpy(&qw[1 + k * 5 + 2][0], &addr, 4);
+        qw[1 + k * 5 + 2][1] = 1.0f;
+        memcpy(&qw[1 + k * 5 + 2][2], &addr, 4);
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 16;
+    md.qwPerVertex = RD_VU_QW_SKIN;
+    md.batchCount = 1;
+    md.batches = &bd;
+    return rd_CreateVuMesh(&md);
+}
+
+static void testRotationDraws(void)
+{
+    RdMesh mesh = makeMesh(), skin = makeSkinMesh();
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 90.0);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->lerped == 2 && st->rotated == 2, "mesh and skinned draw blend as rotations (%u, %u)",
+          st->lerped, st->rotated);
+    const RdFrame *f = built(0.5f);
+    const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    if (m) {
+        /* S (2, 2, 1) times a 45 degree turn: the x axis (sqrt 2, sqrt 2) */
+        const float ax = m[16][0], ay = m[16][1];
+        const float len = sqrtf(ax * ax + ay * ay);
+        CHECK(fabsf(len - 2.0f) < 1e-4f && fabsf(ax - ay) < 1e-4f &&
+                  fabsf(m[19][0] - 2068.0f) < 1e-3f,
+              "model to screen: 45 degrees, length %.5f (element-wise 1.414), origin x %.3f", len,
+              m[19][0]);
+        const float bx = m[24][0], by = m[24][1];
+        CHECK(fabsf(sqrtf(bx * bx + by * by) - 1.0f) < 1e-5f && fabsf(bx - by) < 1e-5f,
+              "model to view: 45 degrees, no scale change (%.5f, %.5f)", bx, by);
+    } else {
+        CHECK(0, "the turning mesh");
+    }
+    const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    if (sk) {
+        const RdVuPayload *h = (const RdVuPayload *)(const void *)(f->payload + sk->u[1]);
+        const float (*b)[4] = (const float (*)[4])(
+            const void *)(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+        CHECK(h->boneQw == 4 &&
+                  fabsf(sqrtf(b[0][0] * b[0][0] + b[0][1] * b[0][1]) - 1.0f) < 1e-5f &&
+                  fabsf(b[0][0] - b[0][1]) < 1e-5f && fabsf(b[3][0] - 10.0f) < 1e-5f,
+              "bone: 45 degrees, no scale change (%.5f, %.5f)", b[0][0], b[0][1]);
+    } else {
+        CHECK(0, "the skinned draw");
+    }
+    /* a turn of 150 degrees in a tick is a flip: the tick's matrices */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 150.0);
+    build(0.5f, 1.0f, 1);
+    f = built(0.5f);
+    const RdFrame *cur = rd__LastFrame();
+    const float (*mf)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    const float (*mc)[4] = vuBlock(cur, findKey(cur, 0, RD_KEY(&kObjD, 0, 32), 0));
+    CHECK(mf && mc && memcmp(mf[16], mc[16], 12 * 16) == 0,
+          "a 150 degree turn in a tick keeps the tick's model matrices");
+    sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    const RdCmd *skc = findKey(cur, 0, RD_KEY(&kObjD, 1, 20), 0);
+    CHECK(sk && skc &&
+              memcmp(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock),
+                     cur->payload + skc->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0,
+          "a 150 degree turn in a tick keeps the tick's bone");
+}
+
+/* ------------------------------------------------- S2: the present clock */
+
+static void testPresentClock(void)
+{
+    /* presents every 8.34 ms (two a 60 Hz refresh, mailbox), each measured
+     * with up to +-3 ms of jitter (the step and the sleeps before it);
+     * ticks every 33.37 ms.  The alpha steps between presents of one tick
+     * should be 0.25; the raw measured alpha's jitter passes straight on. */
+    RdPresentClock c;
+    memset(&c, 0, sizeof(c));
+    const double gap = 8.3417, tick = 33.3667;
+    uint32_t seed = 12345u;
+    double sumRaw = 0.0, sumClk = 0.0;
+    int n = 0, monotonic = 1;
+    float lastA = -1.0f;
+    double lastTick = -1.0;
+    double prevRaw = 0.0, prevClk = 0.0;
+    for (int i = 0; i < 2000; i++) {
+        const double truth = 1000.0 + i * gap;
+        seed = seed * 1664525u + 1013904223u;
+        const double jit = ((double)(seed >> 8) / 16777216.0 - 0.5) * 6.0;
+        const double now = truth + jit;
+        const double tickAt = floor((truth - 1000.0) / tick) * tick + 1000.0 - 0.5;
+        const float a = rd_PresentClockAlpha(&c, now, tickAt, tick, gap);
+        double raw = (now - tickAt) / tick;
+        raw = raw < 0.0 ? 0.0 : (raw > 0.999 ? 0.999 : raw);
+        if (tickAt == lastTick && i > 100) {
+            /* the step within a tick, against the ideal gap / tick */
+            const double ideal = gap / tick;
+            sumRaw += (raw - prevRaw - ideal) * (raw - prevRaw - ideal);
+            sumClk += (a - prevClk - ideal) * (a - prevClk - ideal);
+            n++;
+            monotonic &= a >= lastA;
+        }
+        prevRaw = raw;
+        prevClk = a;
+        lastA = a;
+        lastTick = tickAt;
+    }
+    const double rmsRaw = sqrt(sumRaw / n), rmsClk = sqrt(sumClk / n);
+    CHECK(rmsClk < rmsRaw / 3.0 && monotonic,
+          "present clock: alpha step error rms %.4f (measured time %.4f), monotonic within a tick",
+          rmsClk, rmsRaw);
+    printf("rd_interp_test: present clock: alpha step error rms %.4f, measured time %.4f\n", rmsClk,
+           rmsRaw);
+    CHECK(c.resets == 1, "present clock: no reset after the first present (%u)", c.resets);
+    /* a pause (the window dragged, a load): the clock restarts at the
+     * measured time */
+    const float a = rd_PresentClockAlpha(&c, 1000.0 + 2000 * gap + 500.0,
+                                         1000.0 + 2000 * gap + 490.0, tick, gap);
+    CHECK(c.resets == 2 && fabsf(a - (float)(10.0 / tick)) < 1e-5f,
+          "present clock: a 500 ms pause resets it (alpha %.4f)", a);
+}
+
 static void runCpu(void)
 {
+    testRotationBlend();
+    testRotationDraws();
+    testPresentClock();
     testSprites();
     testSpriteSnaps();
     testFrameSnaps();

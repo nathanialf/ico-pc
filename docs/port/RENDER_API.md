@@ -2445,7 +2445,9 @@ ordinal). Per command:
 Blends are element-wise, `(1 - t) p + t c` (exact at both ends); a float
 pair that is bit-identical, or not both finite, keeps the current value;
 integers round to nearest. Matrices blended element by element shorten a
-rotation's axes by cos(theta/2) half way (0.4 % at 10 degrees in a tick).
+rotation's axes by cos(theta/2) half way (0.4 % at 10 degrees in a tick);
+since package S2 the normal programs' model matrices and the skinned
+draws' bones blend as rotations instead ("Package S2" below).
 
 Keyed today: `RegistPacket.c`'s meshes (since R7d the object, the part and
 the packet's place in the part's chain with the pass; below), the grids
@@ -2459,7 +2461,9 @@ below) is the current frame's.
 **What snaps.** A keyed draw is the current frame's when the previous frame
 has no match; when the shape differs (mesh, program, code, clip, payload
 size, batch range, bone, stream, vertex or particle count, prim or space;
-for a shadow volume the triangle counts: a topology change); or when it
+for a shadow volume the triangle counts: a topology change; since S2 a
+mesh's code and clip mode and a shadow volume's topology no longer snap,
+"Package S2" below); or when it
 jumped: the model origin in the world moved more than
 `RD_INTERP_JUMP_WORLD` (300, the game's centimetres) in the tick (normal
 programs, grids, particles: the model to screen translation qw 19 through
@@ -2700,7 +2704,9 @@ Open items:
 4. Closed in R7d: camera-ico2.c's group cut calls `ico_video_camera_cut()`.
 5. Rotations blend element-wise; a fast spin (a turn of tens of degrees in
    one tick on a bone or object) would shrink half way. None seen; a
-   quaternion blend of the model matrices would fix it.
+   quaternion blend of the model matrices would fix it. Done in S2: seen
+   in stage 3 (a bone turning 77 degrees in a tick drawn 22 % short half
+   way), fixed ("Package S2").
 6. Closed in R7d: the run above confirms one present per frame on the
    slow driver and the jump counts down (list 5's meshes no longer jump;
    the sixteen skinned draws that do move about 4 m a tick).
@@ -2719,6 +2725,162 @@ frames are flipped alike); the camera-jump and world-origin tests read
 matrices, not the flipped picture, so they need nothing; `rd_video.c`'s
 own mirror flag is separate (FMV). Done in R7c (section 21), with the UI
 flip at replay instead of record time.
+
+### Package S2: the stage-3 wobble
+
+`port/render/rd_interp.c` (the rotation blend, the shadow shift, the flap
+detector, the present clock), `rd_internal.h`, `rd.h` (`RdPresentClock`,
+`rd_PresentClockAlpha`, `RdPerfRecord.startMs/alpha/firstOfTick`),
+`rd_perf.c`, `rd_core.c` (`[dev] dump_from`), `rd_replay.c` and
+`port/shaders/vu_common.hlsli`, `common.hlsli`, `shader_consts.h`
+(`FrameCB.g_z.w`), `port/platform/window_host.c` (alpha, the CSV columns),
+`host_config.c` (`dump_from`). Test: `rd_interp`.
+
+**The report.** "Geometry wobble-artifacting" in stage 3 on the user's
+Windows run (RTX 3090, Enhanced 4x, full height, `framerate =
+"uncapped"`, mailbox, 60 Hz, `stick_fix`; the session's log says aspect
+16:9), with its pad recording (`input-20261005-083059.txt`, 361 lines to
+tick 5090). The user suspected a level-of-detail switch.
+
+**Replaying the session.** Headless HEAD with `pad_script=` the
+recording, `video_mode = "60hz"`, `stick_fix`, `yorda_safe`, an empty
+memory card: the stage changes at ticks 2563 (1 to 41), 2686, 3285, 3792,
+3859, 3917 (40 to 3) and 4876 (3 to 1), the ticks the user's log has;
+stage 3 is ticks 3917 to 4876, its first input (the stick) at 4219. Window
+build, lavapipe, `SDL_VIDEODRIVER=offscreen`, Enhanced, 16:9, full height,
+uncapped, vsync on, `ticks=4700`, `dump_every=20`, `dump_from=4000`,
+`dump_interp=1`, `perf_log`; at 2x the run would not have finished in
+`timeout 900` (346 ticks in the first 71 s, stopped), so at 1x (the dumps
+carry no display options: the pictures below are rendered at 2x). Run 1
+with `ICO_RD_S2_LEGACY=1` (the behaviour before this package): exit 0 in
+774 s, 70 dumps; every 250-frame `interp:` line equals the user's log line
+for line (stage 3: 28970 keyed draws, 28164 blended, 116 unmatched, 541
+mismatched, 28 jumped; then 34330, 33599, 98, 633, 0), so the run draws
+what the user's machine drew. Run 2 with the changes as they stood then
+(before the pivots below): exit 0 in 739 s. Both window runs' traces
+(4702 lines, md5 e9d8c9f19ef5b57a5b03234a064a24b3) equal the headless HEAD
+trace of the same recording line for line.
+
+**Level of detail: not the cause.** No draw path selects a model, node or
+packet chain by distance (RegistPacket.c, Packet.c, DisplayP2O.c,
+StageAnimation.c, BgAnimation.c, Shadow.c and the game objects' display
+functions read; the camera distances that are computed choose sounds,
+stage preloads or nothing). `reg_setDissolve` is the per-node fade
+(`DObjNode.fade` and `.alpha`, list 5), driven by time (the shadows'
+death, BGA envelopes), never by distance. `SetLodLevel` (lodManager.c)
+switches which motion nodes are interpolated between key frames, always to
+a constant (2 at init, 0 and 2 around scripted sequences). The PObj `lod`
+bits are a build-time blend flag. `grp->packets` against `grp->morph` is
+the morph double buffer (`buffer_ID`), already blended (R7d). So there are
+no levels whose distance thresholds a setting could scale, and none was
+added.
+
+**What the logs and dumps show.** The flap detector (below) on run 1: in
+the stage-3 blocks 11, 20 and 59 keyed draws changed outcome four or more
+times; almost all mismatches were shadow volumes (`RDC_SHADOW_STRIP`, list
+3) whose triangle count changed (403, 430 and 432 a block), the worst
+volume alternating between blended and snapped in 78 and 83 of 250 frames.
+A snapped volume is the tick's while its caster is drawn at alpha, so the
+shadow jumps up to a tick ahead and back at 25 or 30 Hz. The rest (26, 111
+and 201 a block) were meshes whose MSCAL code or clip mode changed (a part
+crossing the screen edge: `reg_clipPacketBoundingBox` picks the SCISSOR or
+REGION code), snapped the same way. The half-way dumps against their
+frames (scratch analysis over frames 4040 to 4680, every 20th: 5779 moving
+model matrices and bones a draw uses): 245 were drawn more than 2 %
+shorter half way, 53 more than 5 %, 15 more than 10 %, the worst a skinned
+bone turning 77 degrees in a tick drawn at 0.778 of its length (Ico's arm
+on the stairs, frame 4600). Turns per tick: 4778 under 5 degrees, 397 5 to
+10, 305 10 to 20, 278 20 to 45, 21 45 to 90; the block logs of run 2 also
+record single turns of up to 179 degrees (flips).
+
+**Fixes.**
+
+1. *Rotations* (`rotateModel`, `rotateBone`, `rd__BlendAffine`). A normal
+   program's matrices qw 16..19, 20..23 and 24..27 are each a camera part
+   times the model to world W = S^-1 (qw 16..19), S the draw's world to
+   screen (qw 4..7). W is polar-decomposed (Higham's iteration) into a
+   rotation, slerped, and a stretch, lerped; each camera part M W^-1 is
+   lerped element-wise like the common block; the result is C(t) W(t). A
+   skinned draw's bones (affine, 4 qwords each) are blended the same way.
+   The pivot matters: a bone is the node times the cluster (bind) inverse,
+   so its translation is not the joint, and blended about it a turning limb
+   left its joint (run 2's dump of frame 4600 shows Ico's forearm drawn as
+   a bar across his waist half way, in neither tick). Each matrix now turns
+   about a pivot whose image follows the straight line between its two
+   ticks' images: for a bone the weighted centroid of the vertices bound to
+   it (the stream's weight qword: VU address bone x 4 + 16), for a rigid
+   mesh its vertices' centroid. A bone no vertex of the draw uses keeps the
+   element-wise blend (it is not seen). A turn over `RD_INTERP_TURN_SNAP`
+   (120 degrees, 3600 degrees a second at 30 Hz) is a flip: that matrix is
+   the tick's. Matrices that are not affine, are singular or change
+   handedness keep the element-wise blend. Measured on the same frames
+   (run 1's pairs, prev = 2 x half way - cur, which the legacy blend makes
+   exact, re-interpolated by this code): 0 of 5779 more than 2 % short, the
+   worst 0.982 (a bone whose own scale changes); frame 4600 half way shows
+   the arms between the two ticks.
+2. *Shadow volumes* (`shiftShadow`). When the triangle count changed, cur's
+   volume is moved by (1 - t) of the shift between the two volumes'
+   vertex medians in X, Y and Z instead of snapping; a shift over
+   `RD_INTERP_JUMP_SCREEN` still jumps. Run 2: 0 mismatched draws in every
+   block, 156 to 1135 volumes moved in the blocks with shadows (403, 430
+   and 432 in stage 3); flapping draws in the stage-3 blocks 3, 2 and 0
+   (remaining: a volume whose median moves more than 256 pixels in some
+   ticks, counted jumped).
+3. *Clip codes*. A mesh whose program is the same blends whatever its MSCAL
+   code and clip mode (the VU block means the same; only the clipping of
+   its triangles differs).
+4. *Alpha* (`rd_PresentClockAlpha`). The pace already took the frame's
+   close time from the simulated deadline; the present's own time was the
+   measured `now`, which carries the step (2 to 11 ms in the user's log)
+   and the sleeps before it. The present clock advances by the running mean
+   of the intervals between presents and moves its phase towards the
+   measured time by an eighth of the error per present (reset after a pause
+   of four intervals or an error over half a tick). The test (presents
+   every 8.34 ms measured with +-3 ms of jitter, ticks of 33.37 ms): the
+   error of each alpha step against 0.25 is 0.0099 rms against 0.0719 from
+   the measured time; alpha never goes backwards within a tick. lavapipe
+   cannot show it: it is a slow driver (one present per frame).
+5. *Vertex quantisation* (`vu_vtx_position`). With `FrameCB.g_z.w` set (rd:
+   the Enhanced preset on a target whose scale exceeds 1 on either axis)
+   the VU programs rasterise the divided position instead of its 12.4
+   value (the NONE clip mode, which wraps X and Y to 16 bits, keeps it;
+   particles keep it). At the user's 4x 16:9 a 12.4 step is 0.25 output
+   pixels vertically and 0.33 horizontally: sub-pixel stepping of edges,
+   not a visible wobble. Frame 4600 rendered both ways: 51 % of pixels
+   differ, 0.3 % by more than 8 of 255 (2x) and 0.3 % (4x).
+
+**Instrumentation.** The flap detector: at each frame's first present, every
+keyed draw's outcome (blended, mismatched, jumped, unmatched) by key,
+type, list and ordinal; every 250 frames a second `interp:` line gives the
+mismatches by reason (size, mesh, state, header, topology), the mesh draws
+blended as rotations (those turning over 10 degrees and the largest turn),
+the shadow volumes moved, the draws that changed outcome four or more
+times and the frames that changed between blended and snapped, and up to
+six `interp: flapping draw` lines name the worst (key, type, list, the
+last 16 outcomes, the mismatch reason, program, mesh ids). `[dev]
+dump_from` (CONFIG.md); the perf CSV's `start_ms`, `alpha` and
+`first_of_tick`; the half-way dump's log line counts the rotation blends.
+`ICO_RD_S2_LEGACY=1` in the environment (a developer A/B switch) turns the
+picture changes off (the rotation blend, the shadow shift, the clip-code
+rule, the unquantised positions, the present clock).
+
+**Original unchanged.** The preset never sets `g_z.w`; the interpolation
+changes act only between ticks. HEAD's 151 golden dumps
+(`build-host/r7d-golden/dumps`) rendered by this package's
+`rd_replay_tool` (DISPLAY, SCENE, a 960 x 720 present): 453 PNGs, 0 differ from the R7d PNGs (`build-host/r7d-golden/png`, `r7b-golden/{render,cmp}.sh`).
+`ctest` 68 of 68 on the window build (`linux-x64`, HEAD plus this package in a worktree: the shared tree had other packages' work in progress).
+
+Open items:
+
+1. The Windows run will say whether the wobble is gone; the stage-3 blocks'
+   second `interp:` line and the flapping lines are the figures to read.
+2. A shadow volume whose vertex median moves more than 256 GS pixels in a
+   tick still snaps (run 2's flapping lines show such volumes alternating
+   with blended frames a few times a block).
+3. The light matrices (qw 28..35) still blend element-wise: a fast turn
+   dims the lighting half way (no shape change).
+4. Pivots are recomputed from the mesh stream every present (a few
+   thousand vertices a frame in stage 3; not measured on the GPU host).
 
 ## 21. Mirror mode (wave 7, R7c)
 

@@ -392,6 +392,12 @@ RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX,
     cb.z[0] = zScale;
     cb.z[1] = scaleX; /* R7a: the bound target's texels per GS pixel */
     cb.z[2] = scaleY;
+    /* S2: the meshes' vertices off the 12.4 grid where the target is finer
+     * than it (Enhanced only; Original keeps the GS's quantisation) */
+    cb.z[3] = g_rd.settings.preset == RD_PRESET_ENHANCED && (scaleX > 1.0f || scaleY > 1.0f) &&
+                      !rd__S2Legacy()
+                  ? 1.0f
+                  : 0.0f;
     cb.misc[0] = (float)g_rd.replayCounter;
     cb.misc[1] = (float)g_rd.settings.preset;
     return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
@@ -779,7 +785,9 @@ static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFix
             IcoSpriteVertex a, b;
             convVtx(&v[i], uvFixed, tw, th, uvOff, &a);
             convVtx(&v[i + 1], uvFixed, tw, th, uvOff, &b);
-            if (s_uvShiftX != 0.0f || s_uvShiftY != 0.0f) {
+            /* T1: port UI text (RD_UV_FIXED_CONTINUOUS) is not GS content:
+             * its glyph quads keep their sub-pixel edges and UVs */
+            if ((s_uvShiftX != 0.0f || s_uvShiftY != 0.0f) && uvFixed != RD_UV_FIXED_CONTINUOUS) {
                 spriteUvShift(&a, &b); /* R7a: a scaled target */
             }
             IcoSpriteVertex q[4] = {b, b, b, b};

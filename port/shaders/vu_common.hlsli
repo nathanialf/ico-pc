@@ -246,6 +246,19 @@ float4 vu_homogeneous_position(float4 h)
     return float4(x, y, z, h.w);
 }
 
+// Package S2: the vertex the GS gets, from a loop's vertex. With g_z.w set
+// (rd: the Enhanced preset on a target finer than the GS grid) X and Y are
+// the divided position unquantised: the 12.4 grid is 1/16 GS pixel, a
+// quarter output pixel at 4x, which a slowly moving vertex steps across.
+// Original (g_z.w 0) is the ftoi4 value as before.
+float4 vu_vtx_position(VuVtx v)
+{
+    if (g_z.w != 0.0) {
+        return float4(vu_ndc(v.p.xy), gs_depth(asuint(v.gs.z)), 1.0);
+    }
+    return vu_gs_position(v.gs, false);
+}
+
 static const float4 VU_CULLED = float4(2.0, 2.0, 2.0, 1.0); // outside x <= w: clipped away
 
 VuVSOut vu_out_init()
@@ -274,7 +287,7 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         // any vertex outside sets ADC on itself and the next two: the
         // triangle is not drawn
         if (a.inside && b.inside && c.inside) {
-            o.pos = vu_gs_position(me.gs, false);
+            o.pos = vu_vtx_position(me);
         }
         return o;
     }
@@ -286,7 +299,7 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         return o; // drawn by the other pass
     }
     if (!cut) {
-        o.pos = vu_gs_position(me.gs, false); // kicked as it is
+        o.pos = vu_vtx_position(me); // kicked as it is
     } else if ((fa & fb & fc) != 0u) {
         return o; // trivially rejected (the six fcor tests)
     } else if (((fa | fb | fc) & 0x30u) != 0u || min(a.h.w, min(b.h.w, c.h.w)) <= 0.0) {
@@ -294,7 +307,7 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     } else {
         // only x/y flags: the VU clips to its guard band (the 1500 unit
         // clip window, wider than any target), the GS scissor does the rest
-        o.pos = vu_gs_position(me.gs, false);
+        o.pos = vu_vtx_position(me);
     }
     return o;
 }

@@ -447,6 +447,26 @@ bool rd_Present(float alpha);
 uint32_t rd_FrameNumber(void);
 void rd_CameraCut(void);
 
+/* Package S2: the present clock the host derives alpha from.  A present's
+ * measured time carries the jitter of the simulation step and the sleeps
+ * before it (a few ms: up to a fifth of a tick), which an alpha taken from it
+ * directly passes on to every blended draw.  The clock advances by the
+ * running mean of the intervals between presents (stepMs) and moves its
+ * phase towards the measured time by an eighth of the error per present; an
+ * error over half a tick, a pause of more than four steps or time going
+ * backwards resets it to the measured time.  alpha = (clock - tickAtMs) /
+ * tickMs in [0, 0.999], tickAtMs the simulated time the last frame closed
+ * (never a measured close time).  nominalMs: the intended interval (the
+ * frame rate cap, half a refresh in mailbox), 0 when unknown. */
+typedef struct RdPresentClock {
+    double clockMs, stepMs, lastMs;
+    uint32_t presents; /* since the last reset; 0 = reset on the next call */
+    uint32_t resets;
+} RdPresentClock;
+
+float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
+                           double nominalMs);
+
 /* ------------------------------------------- mirror mode (wave 7, R7c)
  * docs/port/RENDER_API.md section 21.  The game's mirror mode (chosen at New
  * Game, port/game/options.h ico_opt_mirror) flips the presented picture
@@ -597,6 +617,11 @@ void rd_DrawParticles(const RdParticleBatch *batch, RdKey key);
  * jimaku.c, DisplayFont.c, staticBlur.c quads: primitives in GS window
  * space.  space tags UI vs WORLD for mirror/widescreen. uvFixed: s,t are
  * 12.4 texels (UV register) rather than STQ. */
+/* T1 (port UI text): uvFixed = RD_UV_FIXED_CONTINUOUS is uvFixed 1 for
+ * sprites that are not PS2 content (port/ui's glyph quads): on a scaled
+ * target they rasterise continuously, without the GS-pixel snapping and the
+ * UV shift of RENDER_API.md section 19.  At scale 1 it is uvFixed 1. */
+#define RD_UV_FIXED_CONTINUOUS 2
 void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
                     RdKey key);
 /* Wave 7 (R7a): while space >= 0, rd_ScreenPrims records that space instead
@@ -863,6 +888,10 @@ typedef struct RdPerfRecord {
     double gpuUploadMs;       /* the upload copies at the head */
     double gpuListMs[13];     /* per command list (0 for a list not replayed) */
     double gpuPresentMs;      /* the present blits */
+    double startMs;           /* S2: the replay's start (rd's monotonic ms clock) */
+    float alpha;              /* S2: rd_Present's alpha; -1 for a replay that is not one */
+    uint8_t firstOfTick;      /* S2: the first present of its frame */
+    uint8_t _pad2[3];
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

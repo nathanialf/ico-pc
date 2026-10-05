@@ -17,8 +17,11 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+
 #include <windows.h>
+
 #endif
+
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -961,6 +964,10 @@ static char s_dumpDir[512];
  * a first present) */
 static int s_dumpInterp;
 
+/* S2: ICO_RD_DUMP_FROM (config key [dev] dump_from): no frame numbered
+ * below it is dumped */
+static uint32_t s_dumpFrom;
+
 static void readDumpConfig(void)
 {
     const char *every = getenv("ICO_RD_DUMP_EVERY");
@@ -969,9 +976,11 @@ static void readDumpConfig(void)
     snprintf(s_dumpDir, sizeof(s_dumpDir), "%s", dir ? dir : ".");
     const char *interp = getenv("ICO_RD_DUMP_INTERP");
     s_dumpInterp = interp != NULL && interp[0] != '\0' && interp[0] != '0';
+    const char *from = getenv("ICO_RD_DUMP_FROM");
+    s_dumpFrom = from ? (uint32_t)strtoul(from, NULL, 10) : 0;
     if (s_dumpEvery) {
-        rd__Log("dumping every %u frames into %s%s", s_dumpEvery, s_dumpDir,
-                s_dumpInterp ? ", with the frame interpolated half way" : "");
+        rd__Log("dumping every %u frames from frame %u into %s%s", s_dumpEvery, s_dumpFrom,
+                s_dumpDir, s_dumpInterp ? ", with the frame interpolated half way" : "");
     }
 }
 
@@ -1205,7 +1214,7 @@ void rd_EndFrame(int keep)
         ReplayCall c = {f, f->keep};
         rd__OnHost(replayOnHost, &c);
     }
-    if (s_dumpEvery && f->number % s_dumpEvery == 0) {
+    if (s_dumpEvery && f->number % s_dumpEvery == 0 && f->number >= s_dumpFrom) {
         char path[600];
         snprintf(path, sizeof(path), "%s/rd-%05u.rddump", s_dumpDir, f->number);
         if (rd__DumpFrame(f, path)) {
@@ -1218,9 +1227,9 @@ void rd_EndFrame(int keep)
             if (i && rd__DumpFrame(i, path)) {
                 rd__Log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
                         "%u unmatched, %u mismatched, %u jumped; %u mesh streams kept or "
-                        "blended) dumped to %s",
+                        "blended; %u blended as rotations) dumped to %s",
                         f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
-                        st.morph, path);
+                        st.morph, st.rotated, path);
             }
         }
     }
@@ -1497,7 +1506,8 @@ void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace s
     RdCmd *c = rd__Push(RDC_SCREEN);
     c->b[0] = (uint8_t)type;
     c->b[1] = (uint8_t)(g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space);
-    c->b[2] = uvFixed ? 1 : 0;
+    /* T1: RD_UV_FIXED_CONTINUOUS is kept (port UI text, no GS-pixel snap) */
+    c->b[2] = uvFixed == RD_UV_FIXED_CONTINUOUS ? RD_UV_FIXED_CONTINUOUS : (uvFixed ? 1 : 0);
     c->u[0] = off;
     c->u[1] = count;
     setKey(c, key);

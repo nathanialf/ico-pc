@@ -553,7 +553,35 @@ typedef struct RdInterpStats {
     uint32_t mismatch; /* count, topology or mesh differs (snapped) */
     uint32_t jump;     /* moved further than the teleport threshold (snapped) */
     uint32_t morph;    /* R7d: mesh draws given a kept or blended vertex stream */
+    /* S2: why the mismatched draws snapped (RD_MISMATCH_*), and the mesh
+     * draws whose model matrices or bones blended as rotations */
+    uint32_t why[5];
+    uint32_t rotated;
+    uint32_t turned;  /* of them, turning more than 10 degrees in the tick */
+    float maxTurn;    /* the largest turn of a model or bone in the tick, degrees */
+    uint32_t shifted; /* shadow volumes whose topology changed, moved by the volume's shift */
 } RdInterpStats;
+
+/* S2: what made a matched keyed draw snap as mismatched */
+enum {
+    RD_MISMATCH_SIZE = 0, /* payload size, vertex or primitive count */
+    RD_MISMATCH_MESH,     /* the mesh ids are of different layouts (sameMesh) */
+    RD_MISMATCH_STATE,    /* program, code or clip mode (b[0..2]) */
+    RD_MISMATCH_HEADER,   /* batch range, bones, stream, layout (RdVuPayload) */
+    RD_MISMATCH_TOPOLOGY  /* a shadow volume's triangle counts */
+};
+
+/* S2: rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
+ * 1): the 3 x 3 polar-decomposed into a rotation (slerped) and a stretch
+ * (lerped); the image of pivot (x, y, z; NULL: the origin) lerped, so the
+ * blended matrix turns about it.  False (o untouched) when either matrix
+ * is not affine, is singular, or the two have opposite handedness. */
+bool rd__BlendAffine(const double *p, const double *c, double t, const double *pivot, double *o);
+/* S2: ICO_RD_S2_LEGACY=1 in the environment (a developer A/B switch, read
+ * once) turns off the package's picture changes: rotation-aware blends and
+ * unquantised VU positions (the window also takes alpha from the measured
+ * present time) */
+bool rd__S2Legacy(void);
 
 int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);
 const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
@@ -564,6 +592,9 @@ void rd__InterpShutdown(void);
 #define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */
 #define RD_INTERP_CAMERA_MOVE 300.0f /* the eye, per tick */
 #define RD_INTERP_CAMERA_TURN 30.0f  /* degrees, per tick */
+/* S2: a model matrix or bone turning further than this in a tick (3600
+ * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's */
+#define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
 
 /* fx_sprite_ps's DrawCB.mode[0] flags (FXF_* in port/shaders/fx_sprite.hlsl) */
 enum {
@@ -745,6 +776,7 @@ void rd__PerfEnd(void);
 void rd__PerfStamp(RhiCommandList cl, uint32_t index);
 /* rd_Present's interpolation time, charged to the replay that follows */
 void rd__PerfInterpMs(double ms);
+void rd__PerfAlpha(float alpha, int firstOfTick); /* S2: the next replay is a present at alpha */
 /* a synchronous readback's time (rd_replay.c readTexture), charged likewise */
 void rd__PerfReadbackMs(double ms);
 /* rd_SetHostCall's hook, or fn(arg) directly (rd_core.c) */

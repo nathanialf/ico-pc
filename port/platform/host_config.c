@@ -249,12 +249,15 @@ static char *read_text(const char *path)
    ICO_RD_DUMP_DIR, which rd_Init reads.  dump_interp=1 (renderer wave 7,
    R7d) also writes each dumped frame interpolated half way from the one
    before (rd-NNNNN-i50.rddump), handed over as ICO_RD_DUMP_INTERP, which is
-   always set with the other two so the ini or config.toml decides. */
+   always set with the other two so the ini or config.toml decides.
+   dump_from=N (package S2) dumps no frame numbered below N, handed over as
+   ICO_RD_DUMP_FROM (0 when unset). */
 static void export_dump_keys(const IcoIni *ini, const char *path)
 {
     const char *every = ico_ini_get(ini, "dump_every");
     const char *dir = ico_ini_get(ini, "dump_dir");
     const char *interp = ico_ini_get(ini, "dump_interp");
+    const char *from = ico_ini_get(ini, "dump_from");
     const char *interpOn = "0";
     char base[ICO_PATH_MAX], full[ICO_PATH_MAX];
     const char *slash;
@@ -285,10 +288,12 @@ static void export_dump_keys(const IcoIni *ini, const char *path)
     _putenv_s("ICO_RD_DUMP_EVERY", every);
     _putenv_s("ICO_RD_DUMP_DIR", full);
     _putenv_s("ICO_RD_DUMP_INTERP", interpOn);
+    _putenv_s("ICO_RD_DUMP_FROM", from != NULL ? from : "0");
 #else
     setenv("ICO_RD_DUMP_EVERY", every, 1);
     setenv("ICO_RD_DUMP_DIR", full, 1);
     setenv("ICO_RD_DUMP_INTERP", interpOn, 1);
+    setenv("ICO_RD_DUMP_FROM", from != NULL ? from : "0", 1);
 #endif
 }
 
@@ -379,6 +384,8 @@ static const struct {
     {"dev.dump_dir", "dump_dir"},
     /* 1: each dump also half way interpolated (renderer wave 7, R7d) */
     {"dev.dump_interp", "dump_interp"},
+    /* the first frame number dump_every dumps (package S2) */
+    {"dev.dump_from", "dump_from"},
     {"dev.audio_dump", "audio_dump"},
     {"dev.pad_script", "pad_script"},
     /* the pad recording, logs/input-<time>.txt (package Q1; main_host.c:

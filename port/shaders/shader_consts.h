@@ -20,7 +20,8 @@ typedef struct IcoFrameCB {
     float origin[4];    /* xy GS window coordinate of the target's top-left, zw added after */
     float space[2][4];  /* [0] WORLD, [1] UI: ndc = ndc * xy + zw */
     float z[4];         /* x = 1 / 2^24 (PSMZ24 scale); R7a: yz the bound target's
-                         * texels per GS pixel (1 in Original), w reserved */
+                         * texels per GS pixel (1 in Original); S2: w = 1, the VU
+                         * programs output unquantised X, Y (Enhanced, a scaled target) */
     float misc[4];      /* x frame counter, y preset */
 } IcoFrameCB;
 

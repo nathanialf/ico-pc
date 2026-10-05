@@ -71,6 +71,13 @@ cadence, for either preset.
 On a slow computer (or a software renderer) the game draws one picture per
 update, as with `"original"`, rather than slowing the game down.
 
+Turning things turn in between pictures: a character or object that spins
+between two updates is drawn at the in-between angle at its full size (in v0.3
+version 0.3 a fast turn shrank it slightly half way, which looked like a
+wobble). How far between the two updates each picture is drawn follows a
+steady clock rather than the exact moment the picture was started, so
+movement advances by even steps.
+
 ## Vsync and an uncapped frame rate
 
 With `vsync = true` and `framerate` other than `"original"`, ico-pc asks the
@@ -105,6 +112,10 @@ picture into `logs/ico-pc-perf.csv`).
 - The colours of the effects that the PS2 computed in a particular way
   (motion blur, glows, fog) are computed the same way at any resolution.
 - The menus' layout, placed in the middle 4:3 frame.
+- With the Enhanced preset at a resolution above the PS2's, the corners of
+  3D models are placed exactly rather than on the PS2's grid of sixteenths
+  of a pixel (a quarter of a pixel at 4x), so slowly moving edges do not
+  step. The Original preset keeps the grid.
 
 ## Notes
 

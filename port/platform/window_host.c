@@ -6,6 +6,7 @@
  */
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "config.h"
@@ -65,7 +66,7 @@ static struct {
     unsigned cutSerial;      /* ico_video_cut_serial() last passed on */
     uint32_t frame;          /* rd_FrameNumber() last seen */
     uint32_t presentedFrame; /* the frame of the last present */
-    Uint64 tickAt, tickPrev; /* real time the last two frames closed */
+    Uint64 tickAt, tickPrev; /* the pace deadlines (simulated time) the last two frames closed at */
     Uint64 lastPresent;
     Uint64 cost; /* how long the last rd_Present took */
     /* the rate log */
@@ -89,6 +90,9 @@ static struct {
     double slowMs, pumpMs;
     unsigned slowSteps, slowLogged;
     uint32_t decodes, pipeCreates;
+    /* S2: the present clock alpha is taken from (rd.h RdPresentClock) */
+    RdPresentClock clock;
+    int legacyAlpha; /* ICO_RD_S2_LEGACY=1 (read in video_settings) */
     /* Q1: F11, the stats line every second until this time (0: off) */
     Uint64 fastUntil;
 } s_pres;
@@ -130,6 +134,11 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
     /* R7b: rd presents between ticks, in both presets (F2) */
+    {
+        const char *e = getenv("ICO_RD_S2_LEGACY");
+
+        s_pres.legacyAlpha = e != NULL && e[0] != '\0' && e[0] != '0';
+    }
     s_pres.framerate = ico_video_framerate();
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* P1: presenting between ticks with vsync on, the swapchain prefers the
@@ -443,7 +452,7 @@ static void perf_csv_open(void)
     for (int l = 0; l < 13; l++) {
         fprintf(s_perf.csv, ",gpu_list%d_ms", l);
     }
-    fprintf(s_perf.csv, ",gpu_present_ms\n");
+    fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -465,7 +474,8 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int l = 0; l < 13; l++) {
         fprintf(f, ",%.3f", r->gpuListMs[l]);
     }
-    fprintf(f, ",%.3f\n", r->gpuPresentMs);
+    fprintf(f, ",%.3f,%.3f,%.4f,%u\n", r->gpuPresentMs, r->startMs, (double)r->alpha,
+            r->firstOfTick);
 }
 
 /* P1: the finished records into the block's sums and the CSV */
@@ -797,10 +807,22 @@ static void pace(int hz)
             SDL_DelayPrecise(wake - now);
             continue;
         }
-        double a = now > s_pres.tickAt ? (double)(now - s_pres.tickAt) / (double)tick : 0.0;
-        a = a > 0.999 ? 0.999 : a;
+        /* S2: alpha from the present clock (the measured time smoothed
+           to the presents' steady cadence) against the simulated time the
+           frame closed; the raw measured time jittered with the step and
+           the sleeps before the present */
+        float a =
+            rd_PresentClockAlpha(&s_pres.clock, (double)now / 1e6, (double)s_pres.tickAt / 1e6,
+                                 (double)tick / 1e6, (double)gap / 1e6);
+
+        if (s_pres.legacyAlpha) {
+            /* ICO_RD_S2_LEGACY=1: the measured time, as before S2 */
+            const double r =
+                now > s_pres.tickAt ? (double)(now - s_pres.tickAt) / (double)tick : 0.0;
+            a = (float)(r > 0.999 ? 0.999 : r);
+        }
         const Uint64 t0 = now;
-        const int ok = rd_Present((float)a);
+        const int ok = rd_Present(a);
         now = SDL_GetTicksNS();
         s_pres.cost = now - t0;
         if (!ok) {

@@ -71,6 +71,17 @@ void rd__PerfInterpMs(double ms)
     s_interpMs += ms;
 }
 
+/* S2: the alpha of the present about to replay (rd_Present) */
+static float s_alpha = -1.0f;
+
+static uint8_t s_first;
+
+void rd__PerfAlpha(float alpha, int firstOfTick)
+{
+    s_alpha = alpha;
+    s_first = (uint8_t)(firstOfTick != 0);
+}
+
 void rd__PerfReadbackMs(double ms)
 {
     s_readbackMs += ms;
@@ -86,6 +97,10 @@ void rd__PerfBegin(const RdFrame *f, int keep, bool present)
     g_rdPerf.interpolated = (uint8_t)(s_interpMs > 0.0);
     g_rdPerf.interpMs = s_interpMs;
     g_rdPerf.readbackMs = s_readbackMs; /* since the previous replay */
+    g_rdPerf.alpha = s_alpha;
+    g_rdPerf.firstOfTick = s_first;
+    s_alpha = -1.0f;
+    s_first = 0;
     s_interpMs = s_readbackMs = 0.0;
     if (!s_haveLast && g_rd.hasDevice) {
         rhi_GetStats(&s_last);
@@ -93,6 +108,7 @@ void rd__PerfBegin(const RdFrame *f, int keep, bool present)
     }
     s_pipelineCreates = g_rd.stats.pipelineCreates;
     s_t0 = rd__NowMs();
+    g_rdPerf.startMs = s_t0;
 }
 
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
