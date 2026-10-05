@@ -221,37 +221,52 @@ the host, with `port/` standing in for Sony's libraries; it never compiles
 `sce/` or `ico2/vusrc/`. It is separate from the PS2 build above and writes
 only under `build-host/<preset>/` (`tools/build.sh setup` deletes `build/`).
 Nothing runs the game yet: the build produces the `ico_game` and
-`ico_platform` libraries and `fpenv_test`.
+`ico_platform` libraries and the unit tests.
 [`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) lists what compiles on
 each preset and why the rest does not.
 
 ### Toolchains: `tools/fetch_toolchain.sh`
 
 Run it once. It needs `curl`, `tar`, `sha256sum` and `dpkg-deb` and no root,
-and fills `tools/toolchain/` (gitignored, about 1.4 GB):
+and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 
 | directory | what | from |
 | --- | --- | --- |
 | `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for i686 and x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
 | `sysroot-i386/` | 32-bit glibc headers, crt files and libgcc, overlaid by symlinks on the host's `/usr/include` | Debian 13 packages `libc6-dev-i386`, `libc6-i386` (2.41-12+deb13u4), `lib32gcc-14-dev`, `lib32gcc-s1` (14.2.0-19), SHA-256 pinned |
 | `mingw-gcc/` | mingw-w64 gcc 14 and binutils for i686 and x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+| `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned from the release's `cmake-4.4.4-SHA-256.txt` |
 
 The Debian packages come from `deb.debian.org`, falling back to
-`snapshot.debian.org` once a version is superseded. `SKIP_SYSROOT=1` and
-`SKIP_MINGW_GCC=1` skip the last two. The toolchain files take
+`snapshot.debian.org` once a version is superseded. `SKIP_SYSROOT=1`,
+`SKIP_MINGW_GCC=1` and `SKIP_CMAKE=1` skip the Debian trees and CMake. The toolchain files take
 `ICO_LLVM_MINGW`, `ICO_SYSROOT_I386` and `ICO_MINGW_GCC` from the environment
 to use copies elsewhere.
 
 The Linux presets also use the host's gcc 14 and glibc (Debian 13 in the
 container). Ninja comes from `.venv/bin` (`tools/setup.sh`) or the `PATH`.
+The commands below use the pinned CMake; any CMake 3.25 or later on the
+`PATH` (the presets' minimum) works the same.
 
 ### Presets
 
 ```sh
-cmake --preset win-x86-ref
-cmake --build --preset win-x86-ref
-ctest --preset linux-x64          # fpenv_test, on the Linux presets
+CMAKE=tools/toolchain/cmake/bin
+$CMAKE/cmake --preset win-x86-ref
+$CMAKE/cmake --build --preset win-x86-ref
+$CMAKE/ctest --preset linux-x64   # the unit tests, on the Linux presets
 ```
+
+`-B <dir>` after `--preset` builds a preset into another directory (each
+work package uses its own under `build-host/`).
+
+The unit tests (`ctest`): `fpenv` (`fpenv_test`), `sched`, `fiber`,
+`fiber_guard`, `arena`, `memory` and `ios_chain` (`port/platform/test/`,
+[`docs/port/PLATFORM.md`](port/PLATFORM.md)), and the other packages'
+tests. `memory` and `ios_chain` compile the game's allocator and thread
+layer, whose records need the EE's 32-bit layout, so they run on `ref-m32`
+and report "skipped" on 64-bit presets. The Windows presets build the test
+`.exe`s without running them.
 
 | preset | target | compiler |
 | --- | --- | --- |
@@ -282,6 +297,7 @@ on that order at some call sites.
 | `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings, so every file that can compile does |
 | `ICO_BUILD_BLOCKED` | `OFF` | also compiles `ICO_BLOCKED_SOURCES` (`cmake/IcoExclusions.cmake`), to recheck them |
 | `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), which fails while symbols are unresolved |
+| `ICO_HEAP_STATS` | `OFF` | the game's allocator (`fumi/ios/memory.c`) reports to `port/platform/arena.c`, which logs each heap partition's high-water mark on stderr |
 | `ICO_FPTRAP` | `OFF` | `fptrap` preset |
 | `ICO_SANITIZE` | empty | `asan` preset: the `-fsanitize=` list |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data tables are generated from |

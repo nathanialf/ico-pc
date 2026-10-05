@@ -17,11 +17,18 @@
 # i386 Linux presets need, and tools/toolchain/mingw-gcc, Debian's mingw-w64
 # gcc for the GCC-family Windows presets (section 3 says why).
 #
+# Section 4 unpacks Kitware's CMake release (BSD-3-Clause) into
+# tools/toolchain/cmake, the CMake the presets' documented invocation uses
+# (tools/toolchain/cmake/bin/cmake); the system's CMake 3.25 or later works
+# too (CMakeLists.txt, cmake_minimum_required).
+#
 # Overrides:
 #   LLVM_MINGW_TAG, LLVM_MINGW_SHA256   pin another release
 #   LLVM_MINGW_URL                      fetch from elsewhere
 #   DEB_SNAPSHOT                        snapshot.debian.org fallback base
+#   CMAKE_VERSION, CMAKE_SHA256         pin another CMake release
 #   SKIP_SYSROOT=1, SKIP_MINGW_GCC=1    skip section 2 or 3
+#   SKIP_CMAKE=1                        skip section 4
 # =============================================================================
 set -euo pipefail
 
@@ -174,5 +181,31 @@ else
     echo "$MINGW_GCC_ID" > "$MINGW_GCC/.ico-release"
     "$MINGW_GCC/usr/bin/i686-w64-mingw32-gcc-14-win32" --version | head -n 1
     echo "==> mingw-w64 gcc at $MINGW_GCC"
+fi
+
+# --- 4. CMake ----------------------------------------------------------------
+#
+# Kitware's portable Linux x86-64 build, pinned by version and by the SHA-256
+# that release's cmake-<version>-SHA-256.txt lists. It runs from any
+# directory (its modules are found relative to the executable).
+CMAKE_VERSION="${CMAKE_VERSION:-4.4.4}"
+CMAKE_SHA256="${CMAKE_SHA256:-e5bb807f7728cb60cd8b27ebc97a2edb469b68655f21e844a600c3575b76f5bb}"
+CMAKE_NAME="cmake-${CMAKE_VERSION}-linux-x86_64"
+CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/${CMAKE_NAME}.tar.gz"
+CMAKE_DIR="$DEST/cmake"
+
+if [[ "${SKIP_CMAKE:-0}" == "1" ]]; then
+    echo "==> SKIP_CMAKE=1; not fetching CMake"
+elif [[ -f "$CMAKE_DIR/.ico-release" && "$(cat "$CMAKE_DIR/.ico-release")" == "$CMAKE_NAME" ]]; then
+    echo "==> CMake ${CMAKE_VERSION} already at $CMAKE_DIR"
+else
+    echo "==> fetching $CMAKE_URL"
+    curl -fL --retry 3 -o "$TMP/$CMAKE_NAME.tar.gz" "$CMAKE_URL"
+    echo "${CMAKE_SHA256}  $TMP/$CMAKE_NAME.tar.gz" | sha256sum -c -
+    tar -C "$TMP" -xzf "$TMP/$CMAKE_NAME.tar.gz"
+    rm -rf "$CMAKE_DIR"
+    mv "$TMP/$CMAKE_NAME" "$CMAKE_DIR"
+    echo "$CMAKE_NAME" > "$CMAKE_DIR/.ico-release"
+    "$CMAKE_DIR/bin/cmake" --version | head -n 1
 fi
 echo "==> done: $DEST"

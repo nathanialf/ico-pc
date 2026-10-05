@@ -41,6 +41,14 @@ static struct SemaParam cdLockSemaParam; /* derived name */
 
 static struct SemaParam sndLockSemaParam; /* derived name */
 
+#ifdef ICO_HOST
+
+/* port/platform/arena.c: the host address of an EE physical address in the
+   simulated 32 MB of EE RAM */
+__UINTPTR_TYPE__ ico_arena_ee_addr(unsigned int ee);
+
+#endif
+
 /* keyInput.h is not included */
 extern void InitKeyInput(int unused);
 
@@ -78,7 +86,15 @@ void iosInitialize(void)
 {
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
+#ifdef ICO_HOST
+    /* the same range, inside the host's EE RAM arena; the partition keeps
+       the EE's size and offsets (the allocator's integer address arithmetic
+       needs the 32-bit host until Phase 2) */
+    ios_partition_root =
+        iosMallocInitPartition(ico_arena_ee_addr(0x760000), ico_arena_ee_addr(0x1FEFFF0));
+#else
     ios_partition_root = iosMallocInitPartition(0x760000, 0x1FEFFF0);
+#endif
     ios_partition_common = iosMallocSetPartition(ios_partition_root, 4227072, 16);
     ios_partition_smotion = iosMallocSetPartition(ios_partition_root, 1179648, 16);
     ios_partition_s2motion = iosMallocSetPartition(ios_partition_root, 3145728, 16);

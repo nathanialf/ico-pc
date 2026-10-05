@@ -130,6 +130,8 @@ void iosMsgSetEvent(int intc, IosMsgQueue *q, int val)
     th->intc = intc;
     iosThreadStart(&th->th);
     debug_StdPrintfDummy("where is here\n");
+    /* On the host the INTC table is port/platform/kernel_host.c's, and the
+       vblank (cause 2) is raised by ico_vsync once per simulated vsync. */
     AddIntcHandler(intc, signal_handler, -1);
     ret = EnableIntc(intc);
     debug_StdPrintfDummy("evt:%d\n", ret);
@@ -199,12 +201,10 @@ void iosMsgQueueDestroyAll(void)
 static int signal_handler(int cause)
 {
     if (cause == 2) {
-#ifdef ICO_HOST
-        odd_even = 1; /* GS_CSR field bit read as 0: no GS on the host */
-#else
+        /* On the host, ico_vsync (common/src/main.c) sets GS_CSR.FIELD
+           before raising this interrupt, alternating per vsync. */
         volatile unsigned long long *reg = (volatile unsigned long long *)GS_CSR;
         odd_even = (int)(((*reg >> 13) & 1) ^ 1);
-#endif
         iWakeupThread(th_sig->id);
     }
     return 0;

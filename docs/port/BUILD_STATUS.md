@@ -14,33 +14,40 @@ build takes 188 of them: 35 are renderer-owned (below) and left out while
 
 | preset | compiler | game TUs compiled | blocked | data tables |
 | --- | --- | --- | --- | --- |
-| `ref-m32` | host gcc 14 `-m32` | 169 / 188 | 19 | 73 |
-| `win-x86-ref` | mingw-w64 gcc 14 (i686) | 169 / 188 | 19 | 73 |
-| `linux-x64` | host gcc 14 | 169 / 188 | 19 | 73 |
-| `win-x64` | mingw-w64 gcc 14 (x86-64) | 169 / 188 | 19 | 73 |
-| `asan` | host gcc 14 | 169 / 188 | 19 | 73 |
-| `fptrap` | host gcc 14 | 169 / 188 | 19 | 73 |
-| `ref-m32-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
-| `win-x86-ref-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
-| `linux-x64-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
-| `win-x64-clang` | llvm-mingw clang 23 | 156 / 188 | 32 | 73 |
+| `ref-m32` | host gcc 14 `-m32` | 188 / 188 | 0 | 73 |
+| `win-x86-ref` | mingw-w64 gcc 14 (i686) | 188 / 188 | 0 | 73 |
+| `linux-x64` | host gcc 14 | 188 / 188 | 0 | 73 |
+| `win-x64` | mingw-w64 gcc 14 (x86-64) | 188 / 188 | 0 | 73 |
+| `asan` | host gcc 14 | 188 / 188 | 0 | 73 |
+| `fptrap` | host gcc 14 | 188 / 188 | 0 | 73 |
+| `ref-m32-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
+| `win-x86-ref-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
+| `linux-x64-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
+| `win-x64-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
 
 Every preset configures and builds with exit status 0 (blocked sources
 excluded). `fpenv_test` passes on the Linux presets; the Windows `.exe`s are
-built but not run here.
+built but not run here. After package 1A (2026-10-05, measured on
+`linux-x64`, `ref-m32`, `win-x86-ref`, `win-x64`, `linux-x64-clang` and
+`win-x64-clang`; the other presets share those compilers and were not
+rebuilt): no game source is blocked on any compiler, and `math_test` and
+`newlib_test` pass on the Linux presets (docs/port/MATH.md).
 
 ## Compiler choice: GCC primary, clang later
 
 The game had GNU C nested functions (package 0C counted 158 in 32 files),
 which gcc compiles and clang does not implement. Package 0E rewrote them
-(`docs/port/SWEEP_0E.md`); the remaining clang gap is sugiCommon.h's VU0
-asm (13 more TUs than gcc). Until that lands, the four main presets use
-gcc 14 and the clang family stays as `*-clang` presets.
+(`docs/port/SWEEP_0E.md`), and package 1A the VU0 asm and the one nested
+function left in a non-renderer source (`motionManager2.c`), so clang and
+gcc now compile the same 188 sources. The four main presets still use gcc
+14 and the clang family stays as `*-clang` presets until that choice is
+revisited; the renderer-owned `clothAnimation.c`, `lineManager.c` and
+`quaternion.c` still have nested functions (gcc only).
 
 Trade-off: the plan wanted clang everywhere (one compiler for Linux and
 Windows, and later macOS, iOS and Android, where Apple's clang is the only
-choice). Nested functions no longer block that in the 0E files; the
-remaining blocker is the VU0 asm in sugiCommon.h and the 1A files. The clang presets also have no Linux sanitizer runtimes
+choice). Nested functions and VU0 asm no longer block that in the
+non-renderer sources. The clang presets also have no Linux sanitizer runtimes
 (llvm-mingw ships none), so `asan` is gcc either way.
 
 Argument evaluation order (package 0C): ee-gcc, gcc and clang on GNU and
@@ -50,41 +57,20 @@ must stay mingw (gcc or llvm-mingw), never MSVC-targeted.
 
 ## Blocked sources (`cmake/IcoExclusions.cmake`)
 
-### Every compiler (19)
+### Every compiler (0)
 
-| source | reason | owner |
-| --- | --- | --- |
-| `fumi/ios/memory.c` | `__asm__("break")` x4 (EE debug trap) | 0B |
-| `ito/src/itou_sub.c` | VU0 macro inline asm (`.set noreorder`, VU0 registers) | 1A |
-| `seki/src/BgAnimation.c` | VU0 inline asm (`$2` clobber) | 1A |
-| `sugipon/src/stormTest.c` | VU0 inline asm (`lqc2`) | 1A |
-| `sugipon/src/motionManager2.c` | VU0 inline asm of its own and sugiCommon.h's | 1A |
-| `fumi/src/commonact.c`, `fumi/src/fieldCollision.c`, `sugipon/src/{a_p_1,act_a_p_1,box,enemy,geometryManager,girlForceField,item,motionManager,spider,torch,weapon,windField}.c` | call sugiCommon.h's VU0 helpers | 1A |
+None. The VU0 entries (`itou_sub.c`, `BgAnimation.c`, `stormTest.c`,
+`motionManager2.c` and the 14 TUs that call `sugiCommon.h`'s helpers) left
+the list with package 1A: `sugiCommon.h`'s `plane_distance`,
+`distance_squared`, `distance_squared_b` and `distance_squared_xz` and every
+other VU0 asm site in 1A's files have `ICO_HOST` bodies in C over
+`port/math` (docs/port/MATH.md). Any VU0 or R5900 asm wrapper still used in
+a host TU (`VU0_*`, `QCOPY16`) is now a compile error (`typedef.h`).
 
-`sugipon/include/sugiCommon.h` defines `plane_distance`,
-`distance_squared`, `distance_squared_b` and `distance_squared_xz` as
-`static __inline__` functions whose bodies are VU0 macro-mode assembly
-(`lqc2`, `vmul`, `qmfc2`, `mtc1` into an `"=f"` output). gcc only rejects
-them where they are called; clang rejects them in every TU that includes the
-header. Converting these four functions to C (1A's transpiler, or by hand
-over `port/math`) unblocks 14 of the 21 under gcc and the 10 clang-only
-sugiCommon.h TUs listed below.
+### Clang only (0)
 
-`s_init.c` and `warpGirl.c` now use `ICO_BREAK()` (`typedef.h`) and compile;
-`motionManager.c` includes `GifPacket.h` before first use (package 0E). Both
-no longer appear in the blocked list.
-
-### Clang only (13 more)
-
-The GNU nested functions are gone from every game source except
-`sugipon/{clothAnimation,lineManager,quaternion,motionManager2}.c` (package
-1A, `motionManager2.c` is still listed above); package 0E turned them into
-file-scope statics.
-
-sugiCommon.h's asm in a TU that never calls it (fixed with sugiCommon.h,
-1A): `fumi/src/enemy_act.c`, `ito/src/{act_bird,itou_boss}.c`,
-`omori/src/enemy-control.c`, `script/src/script.c`, `sugipon/src/{boy,
-enemyParts,frameDependSequence,motionViewer,pool,rope,waterDot,windManager}.c`.
+None: the 13 clang-only sugiCommon.h TUs compile, and `motionManager2.c`'s
+nested function has an `ICO_HOST` file-scope version.
 
 ### Renderer-owned, not compiled while `ICO_HEADLESS` (35)
 
@@ -94,7 +80,13 @@ Packet,MicroCode,Texture,Shadow,ZFog,Primitive,Light,DisplayP2O,Matrix}.c`,
 matrixDrive,quaternion,clothAnimation,lineManager}.c`,
 `ito/src/{lightning,queen_barrier_disp}.c`, `common/src/debug.c`,
 `common/src/debug_exception.c`. Their owners are the renderer waves and 1A
-(`Matrix.c`, `matrixDrive.c`, `quaternion.c`, `clothAnimation.c`).
+(`Matrix.c`, `matrixDrive.c`, `quaternion.c`, `clothAnimation.c`). The VU0
+routines of `Matrix.c`, `matrixDrive.c`, `quaternion.c` and
+`clothAnimation.c` are in `port/math` (library `ico_math`, linked into
+`ico_pc`), so a headless build has them; the plain C functions of those
+files are not built until the files leave this list. All of 1A's
+renderer-owned files (also `Shadow.c` and `lineManager.c`) compile with gcc
+and the game flags.
 
 ## Warnings
 
@@ -116,6 +108,18 @@ link yet. In an earlier clang x86-64 build (138 TUs), 992 symbols were undefined
 objects: the SDK entry points (`sce*`, `Sg*`, the kernel calls), the
 renderer-owned and blocked sources' functions, `_gp`, and the C library
 functions `port/compat/ico_libc.h` lists. Phase 1 (1A, 1B, 1C) supplies them.
+
+Package 1C's libraries (`docs/port/DATA.md`): `ico_port_data`
+(`port/data/`: the disc VFS and ISO9660 reader, libcdvd over it, sifrpc and
+sifdev with no IOP, IOP RAM) and `ico_port_null` (`port/null/{pad,mc,snd,
+scf}_null.c`). Together they define every `sceCd*`, `sceSif*`, `scePad*`,
+`sceMc*`, `sceScf*`, `Sg*` and sifdev symbol `ico_game` references (checked
+with `nm` on `linux-x64`, 2026-10-05); `ico_pc` links both when
+`ICO_LINK_EXE` is on. No source left the blocked list for this: `cdvd.c`,
+`FileManager.c`, `pad.c` and `mcard.c` already compiled, and only
+`FileManager.c` changed (`ICO_HOST` skips the IOP reboot and IRX loads).
+Tests: `vfs_synthetic`, `vfs_disc` (the user's ISO, skipped when absent)
+and `null_devices`.
 
 ## Phase 1 prerequisites
 

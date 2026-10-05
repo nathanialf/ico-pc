@@ -107,6 +107,17 @@ static void scheduler(void);
 extern char movieFile[];
 int movie_abort_check(void);
 
+#ifdef ICO_HOST
+
+/* port/platform: the vsync busy-wait (sched.h), the INTC raise
+   (kernel_host.h) and the headless draw seam (port/null/gfx_null.c) */
+void ico_sched_spin_vsync(void);
+int ico_kernel_raise_intc(int cause);
+void ico_null_create_dl(void);
+void ico_vsync(int field_parity);
+
+#endif
+
 /* the development build's Main also called debug_Menu, debug_SetBar and
    debug_SetBar2 and carried a frame-step block; the retail build compiled
    them out. */
@@ -193,7 +204,11 @@ void Main(void)
         if (graphics_ready == 0) {
             stage_CalcAnimationParent();
         }
+#ifdef ICO_HEADLESS
+        ico_null_create_dl(); /* no display lists without a renderer */
+#else
         iosOmCreateDL();
+#endif
         ExecDelayFree();
         gsb_TakeSnap();
         frameReady = 1;
@@ -233,6 +248,12 @@ static void idle(void)
     debug_StdPrintfDummy("--- loop continues infinitely ... ---\n");
     iosThreadSetPri(0, 0x20);
     while (1) {
+#ifdef ICO_HOST
+        /* The busy loop holds the CPU until the next vsync: lower priorities
+           (the finished processes parked at 0x21 and 0x22) never run, and
+           the host gets control back once per vsync. */
+        ico_sched_spin_vsync();
+#endif
         idleCount++;
         if (idleCount < 10000000) {
             continue;
@@ -309,6 +330,25 @@ static void scheduler(void)
     /* unreachable: the loop above never exits */
     debug_StdPrintfDummy("scheduler() out\n");
 }
+
+#ifdef ICO_HOST
+
+/* The host's vsync (port/platform/host_loop.c): the vblank-start interrupt.
+   The GS's current field goes into GS_CSR.FIELD (bit 13), which the vblank
+   handler (fumi/ios/message.c, signal_handler) reads into odd_even. The
+   handler wakes the event thread iosMsgSetEvent made, whose message wakes
+   scheduler() above, as on the PS2. */
+void ico_vsync(int field_parity)
+{
+    if (field_parity) {
+        *GS_CSR |= 1ull << 13;
+    } else {
+        *GS_CSR &= ~(1ull << 13);
+    }
+    ico_kernel_raise_intc(2);
+}
+
+#endif
 
 static void boot(void)
 {

@@ -1,0 +1,80 @@
+# port/platform/CMakeLists.txt: package 1B's part of the platform layer (the
+# fiber scheduler, the EE kernel calls, the EE RAM arena, the host loop and
+# the headless graphics seam) and its tests. docs/port/PLATFORM.md describes
+# them.
+
+target_sources(ico_platform PRIVATE
+    arena.c
+    fiber.c
+    kernel_host.c
+    sched.c
+    vsync_hooks.c)
+# host_loop.c calls into the game (its main, ico_vsync, systemStatus), so it
+# goes into the program beside main_host.c, ahead of the game library on the
+# link line, rather than into ico_platform, which the game itself needs.
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE host_loop.c)
+endif()
+if(ICO_HEADLESS)
+    target_sources(ico_platform PRIVATE ../null/gfx_null.c)
+endif()
+
+# ICO_HEAP_STATS: memory.c reports allocations to arena.c, which logs each
+# partition's high-water mark.
+option(ICO_HEAP_STATS "Log the game heap's per-partition high-water marks" OFF)
+if(ICO_HEAP_STATS)
+    target_compile_definitions(ico_fumi PRIVATE ICO_HEAP_STATS=1)
+endif()
+
+# --- Tests ------------------------------------------------------------------
+set(_ico_run_tests OFF)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    set(_ico_run_tests ON)
+endif()
+
+foreach(t sched fiber arena)
+    add_executable(${t}_test test/${t}_test.c)
+    target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
+    target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(${t}_test PRIVATE ico_platform)
+    if(_ico_run_tests)
+        add_test(NAME ${t} COMMAND ${t}_test)
+    endif()
+endforeach()
+if(_ico_run_tests AND NOT WIN32)
+    # a stack overflow in a fiber must hit the guard page
+    add_test(NAME fiber_guard COMMAND fiber_test guard)
+    set_tests_properties(fiber_guard PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# The game's allocator (fumi/ios/memory.c) over the arena, compiled as the
+# game compiles it. Its records hold 32-bit addresses (EE layout), so the
+# test only runs on 32-bit hosts and reports "skipped" elsewhere.
+add_executable(memory_test test/memory_test.c "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
+ico_include_dirs(fumi _ico_fumi_incs)
+target_include_directories(memory_test PRIVATE ${_ico_fumi_incs})
+target_compile_definitions(memory_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_HEAP_STATS=1)
+target_compile_options(memory_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(memory_test PRIVATE ico_platform)
+if(_ico_run_tests)
+    add_test(NAME memory COMMAND memory_test)
+    set_tests_properties(memory PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# The game's thread, message and memory layers on the scheduler, driven by
+# simulated vsyncs (32-bit hosts only, as memory_test).
+add_executable(ios_chain_test test/ios_chain_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/thread.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/message.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
+target_include_directories(ios_chain_test PRIVATE ${_ico_fumi_incs})
+target_compile_definitions(ios_chain_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(ios_chain_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(ios_chain_test PRIVATE ico_platform)
+if(_ico_run_tests)
+    add_test(NAME ios_chain COMMAND ios_chain_test)
+    set_tests_properties(ios_chain PROPERTIES SKIP_RETURN_CODE 77)
+endif()

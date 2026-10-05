@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "debug.h"
 #include "debug_exception.h"
 #include "memory.h"
@@ -6,6 +7,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+
+#ifdef ICO_HEAP_STATS
+
+/* port/platform/arena.c: per-partition bytes in use and high-water mark */
+void ico_heap_stats_alloc(const void *part, const char *name, unsigned int bytes);
+void ico_heap_stats_free(const void *part, unsigned int bytes);
+
+#endif
 
 typedef struct IosMemTag { /* field names derived */
     char c[16];
@@ -304,6 +313,9 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
             best->name[15] = 0;
             debug_StdPrintfDummy("cur: %8p %s\n", best, best->tag);
             debug_StdPrintfDummy("next:%8p %s\n", best->next, best->next->tag);
+#ifdef ICO_HEAP_STATS
+            ico_heap_stats_alloc(part, part->name, (unsigned int)need << 4);
+#endif
             mallocBusy = 0;
             return (char *)best + 64;
         }
@@ -329,7 +341,7 @@ inline void *iosMallocDebug(IosMemPart *part, int size, const char *file, int li
         sprintf(buf, "MALLOC: NO EMEMORY FOR PARTITION \"%s\"\nSIZE %d BYTES (%1.1fM)\n",
                 part->name, size, (float)size / 1024.0f / 1024.0f);
         debug_assertMessage(file, line, buf);
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         debug_assert(__FILE__, 716);
         __assert(__FILE__, 716, "0");
     }
@@ -390,7 +402,7 @@ void *iosFree(void *ptr)
     debug_StdPrintfDummy("mem:free ");
     if (ptr == 0) {
         debug_StdPrintfDummy("null memory pointer\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         debug_assertMessage(__FILE__, 820, "IOSFREE(): NULL MEMORY POINTER\n");
         __assert(__FILE__, 820, "e");
         return 0;
@@ -410,6 +422,9 @@ void *iosFree(void *ptr)
         __assert(__FILE__, 836, "e");
         return 0;
     }
+#ifdef ICO_HEAP_STATS
+    ico_heap_stats_free(node->part, (unsigned int)(node->size + 4) << 4);
+#endif
     next = node->next;
     prev = node->prev;
     if (prev != 0) {
@@ -657,19 +672,22 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     nd = node->next;
     if (strcmp(nd->tag, "<FREE AREA>____") != 0) {
         debug_StdPrintfDummy("mem:realloc; not support yet\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         return 0;
     }
     n = (size + 0xF) >> 4;
     if (node->size - 0x40 < n) {
         debug_StdPrintfDummy("mem:realloc; not enough memory\n");
-        __asm__ __volatile__("break");
+        ICO_BREAK();
         return 0;
     }
     d = node->size - n;
     p = (IosMemNode *)((char *)ptr + (n << 4));
     *(IosMemNodeRec *)p = *(IosMemNodeRec *)nd;
     node->size = node->size - d;
+#ifdef ICO_HEAP_STATS
+    ico_heap_stats_free(node->part, (unsigned int)d << 4);
+#endif
     p->size = p->size + d;
     *(IosMemTag *)nd = *(IosMemTag *)" free memory   ";
     node->next = p;

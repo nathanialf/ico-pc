@@ -214,3 +214,12 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
         add_test(NAME fpenv_trap COMMAND fpenv_test trap)
     endif()
 endif()
+
+# --- port/math: the VU0 maths in C and the newlib copies ---------------------
+add_subdirectory(port/math)
+
+add_subdirectory(port/data)
+add_subdirectory(port/null)
+
+# --- Package 1B: scheduler, kernel calls, arena, host loop and their tests --
+add_subdirectory(port/platform)
