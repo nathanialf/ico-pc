@@ -99,6 +99,15 @@ static ActMail gate_open_mail[2] = {{430}, {429}}; /* derived name */
 static Mtx44 jointMtxInit = {{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
                               1.0f, 0.0f, 0.0f, 0.0f, 1.0f}}; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: finishCallBackFunc moves this matrix whole over every node's MotIk
+   (rate .. pitchSpeed, q, step, offset); the sizes must agree
+   (tools/template_audit.py) */
+_Static_assert(sizeof(Mtx44) == sizeof(MotIk), "Mtx44 and MotIk differ in size on the host");
+
+#endif
+
 static ActMail gate_open2_ready_mail[2] = {{430}, {429}}; /* derived name */
 
 static ActMail gate_open2_mail[2] = {{430}, {429}}; /* derived name */
@@ -2068,7 +2077,14 @@ static void finishCallBackFunc(GObj *obj)
     _NormalizeVector(GOBJ_SUB(obj)->ctrl.dir, &v);
 
     for (i = 0; i < GOBJ_SUB(obj)->skelNodeNum; i++) {
+#ifdef ICO_HOST
+        /* PC port: Mtx44 is 16-byte aligned and MotIk is not, so the host
+           compiler's aligned SSE copy would rely on the heap's alignment;
+           the same 64 bytes are moved without it (tools/template_audit.py) */
+        __builtin_memcpy(&GOBJ_SUB(obj)->nodeRotElem[i], &jointMtxInit, sizeof(Mtx44));
+#else
         *(Mtx44 *)&GOBJ_SUB(obj)->nodeRotElem[i] = jointMtxInit;
+#endif
     }
 }
 

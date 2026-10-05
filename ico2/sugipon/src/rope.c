@@ -64,6 +64,21 @@ typedef struct { /* field names derived */
     int pad44[3];
 } RopeTemplate; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: InitChains reads the copied list as clothAnimation.h's ChainCfg
+   through a void *, so the template must have ChainCfg's host layout, which
+   is its EE one (num, node at 0x10, step 0x14, root 0x20, weight 0x40, 0x50
+   bytes; port/test/layout_asserts.c checks ChainParam's).  The audit cannot
+   see a copy through a void * (docs/port/OFFSET_AUDIT.md). */
+_Static_assert(__builtin_offsetof(RopeTemplate, node) == 0x10 &&
+                   __builtin_offsetof(RopeTemplate, step) == 0x14 &&
+                   __builtin_offsetof(RopeTemplate, root) == 0x20 &&
+                   __builtin_offsetof(RopeTemplate, weight) == 0x40 && sizeof(RopeTemplate) == 0x50,
+               "RopeTemplate does not have ChainCfg's layout on the host");
+
+#endif
+
 /* the zero vector HoldRope clears the holder's offset with, then the
    template */
 static float ropeZeroVector[4] = {0.0f, 0.0f, 0.0f, 0.0f}; /* derived name */

@@ -273,6 +273,26 @@ static WVTObj wayWorkClear = {{0}, {0}, {0}, 0,   0,   0, 0,
 static WayStep wayStepClear = {
     {0.0f, 0.0f, 0.0f, 0.0f}, 0, 3.4028235e38f, 3.4028235e38f}; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: ACTWayMove_NextDetail clears the actor's way step by copying
+   wayStepClear over Act from wayNodeX: dir over wayNodeX..pad3EC, state over
+   wayFlags, dist over wayGoalDist, dy over wayGoalHeight; the host layouts
+   must agree (tools/template_audit.py) */
+ICO_LAYOUT_AT_FROM(WayStep, dir, Act, wayNodeX, wayNodeX);
+
+ICO_LAYOUT_AT_FROM(WayStep, state, Act, wayNodeX, wayFlags);
+
+ICO_LAYOUT_AT_FROM(WayStep, dist, Act, wayNodeX, wayGoalDist);
+
+ICO_LAYOUT_AT_FROM(WayStep, dy, Act, wayNodeX, wayGoalHeight);
+
+_Static_assert(sizeof(WayStep) ==
+                   __builtin_offsetof(Act, wayLast) - __builtin_offsetof(Act, wayNodeX),
+               "WayStep is not Act's wayNodeX to wayLast");
+
+#endif
+
 /* this TU's uses of the gv distance helpers do not fit the void returns gv.h
    carries, and its GetRootProjectionPosOfGObj / IsThisBoxTruck call forms do
    not fit motionManager2.h and box.h */

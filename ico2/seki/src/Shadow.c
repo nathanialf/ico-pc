@@ -546,6 +546,16 @@ static void shadow_getShadowVectorAverage(void *dir, Sub15C *o)
  * one lq/sq pair per vertex */
 typedef ICO_QW Qw128; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the accumulator reset copies a zero VECTOR into each Qw128 slot;
+   the sizes must agree (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(VECTOR, Qw128);
+
+#endif
+
 /* one weighted vertex of a cluster run: the vertex it moves and the weight it
  * moves it by */
 typedef struct ClusterWeight { /* field names derived */

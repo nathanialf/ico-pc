@@ -1809,4 +1809,35 @@ typedef struct McMgr {       /* field names derived */
     long long mask;          /* 0x9C0 */
 } __attribute__((aligned(64))) McMgr; /* derived name */
 
+#ifdef ICO_HOST
+
+/* PC port: the actors file an orient request over the root block from its
+   wall record, `*(MotOriReq *)&GOBJ_SUB(self)->root.wall = req` (act-env.c,
+   act-game.c, girl_act.c, act_bird.c, queen.c, motionManager.c,
+   motionOrientManager.c, motionViewer.c): a lands on wall, aw on wallCount,
+   b on cliffWall and bw on cliffWallCount, all before aheadWall.  The host
+   layouts must keep that (tools/template_audit.py, docs/port/OFFSET_AUDIT.md). */
+_Static_assert(__builtin_offsetof(MotOriReq, a) == __builtin_offsetof(struct MotRoot, wall) -
+                                                       __builtin_offsetof(struct MotRoot, wall),
+               "MotOriReq.a is not at MotRoot.wall");
+
+_Static_assert(__builtin_offsetof(MotOriReq, aw) == __builtin_offsetof(struct MotRoot, wallCount) -
+                                                        __builtin_offsetof(struct MotRoot, wall),
+               "MotOriReq.aw is not at MotRoot.wallCount");
+
+_Static_assert(__builtin_offsetof(MotOriReq, b) == __builtin_offsetof(struct MotRoot, cliffWall) -
+                                                       __builtin_offsetof(struct MotRoot, wall),
+               "MotOriReq.b is not at MotRoot.cliffWall");
+
+_Static_assert(__builtin_offsetof(MotOriReq, bw) ==
+                   __builtin_offsetof(struct MotRoot, cliffWallCount) -
+                       __builtin_offsetof(struct MotRoot, wall),
+               "MotOriReq.bw is not at MotRoot.cliffWallCount");
+
+_Static_assert(sizeof(MotOriReq) <= __builtin_offsetof(struct MotRoot, aheadWall) -
+                                        __builtin_offsetof(struct MotRoot, wall) &&
+                   sizeof(((MotOriReq *)0)->a) == sizeof(((struct MotRoot *)0)->wall),
+               "MotOriReq runs past MotRoot.cliffWallCount");
+
+#endif
 #endif /* TYPEDEF_H */

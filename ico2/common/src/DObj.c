@@ -123,6 +123,25 @@ static DObjBlk40 initialBlendRot = {{
     {0.0f, 0.0f, 0.0f, 1.0f},
 }}; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: CSVSYSTEM_InitDObj moves these blocks whole over each node's
+   MotIk, over each node's blend rotation (four quaternions) and over the 32
+   bytes from Sub15C.streamScale (streamScale, pad664, streamOfs, pad67C, up
+   to motion); the host layouts must agree (tools/template_audit.py). */
+ICO_LAYOUT_SIZE(DObjBlk40, MotIk);
+
+_Static_assert(sizeof(DObjBlk40) == sizeof(*((Sub15C *)0)->blendRot),
+               "DObjBlk40 is not one blend rotation");
+
+_Static_assert(sizeof(DObjBlk20) ==
+                   __builtin_offsetof(Sub15C, motion) - __builtin_offsetof(Sub15C, streamScale),
+               "DObjBlk20 is not Sub15C's streamScale to motion");
+
+#endif
+
 static inline void initGeometryScaleRatio(Sub15C *d) /* derived name */
 {
     float r;

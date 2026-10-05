@@ -144,3 +144,155 @@ buffer, was `pad100`), `Act.torchAnim` (0x470, was `pad470`),
 - Only function bodies are scanned; static initialisers are not.
 - The pointee table (`GObj.act`, `Act.work`) is the only type knowledge not
   read from the code.
+- A typedef whose name is followed by `__attribute__` (`} CamTgt
+  __attribute__((aligned(16)));`) was taken for a typedef of
+  `__attribute__`, so casts to it were not seen; fixed in package S4 (one
+  more OK site: 18031 sites, OK 866, no finding).
+
+## Whole-record copies (`tools/template_audit.py`, package S4)
+
+The offset audit checks member accesses. A record copied whole over storage
+of another record type has no member access to check, and two user-visible
+x64 bugs came from it: `InitMotionGeoInfo`'s `MotionGeoInfo` template over
+`MotRoot` (36a1d73e, node 1's quaternion zeroed) and `InitMotionStateInfo`'s
+`*(MotionStateInfo *)self = motionStateInfoTemplate` over `MotCtrl`
+(17741507, `floorFit` 0 for every actor: DIVERGENCES.md D7). On the EE both
+layouts coincide; on the host they differ when one side has a `Vec4` (8-byte
+aligned by its `long long` view) where the other has `float[4]`, an `int`
+where the other has a pointer, or other padding. The second audit finds
+every such copy and requires its layout to be asserted where it is made.
+
+### What it checks
+
+Each game unit is preprocessed with its host flags (the offset audit's unit
+handling). In every function body of an `ico2/` source:
+
+| kind | spelling |
+| --- | --- |
+| `deref`, `index` | `*(T *)E`, `((T *)E)[k]` used whole (assigned, read, returned; not under `&`, `sizeof` or a member access), T a struct or union |
+| `lview` | `*p`, `p[k]` used whole, p a local assigned `(T *)E` in the function |
+| `memcpy` | `memcpy`, `memmove`, `bcopy` (and the builtins) whose operands, with their `void *`/`char *` casts removed, point to records |
+| `pair` | `*(T *)a = *(T *)b`: b's storage over a's (a template moved through a third type, `Blob64`) |
+
+The compiler gives E's type. The storage U is E's pointee, or, for `&x.m`
+whose pointee is not a record (or is smaller than T), the record that has
+the member m: `*(MotOriReq *)&GOBJ_SUB(self)->root.wall` is `MotOriReq` over
+`MotRoot` from `wall`. Then:
+
+- **SAME**: U is T (a copy through its own type);
+- **RAW**: U is not a record (a `char` or `int` buffer that only ever holds
+  T: `*(BoyWork *)boyInfo`, `*(McName *)mp->path`), or E is pointer arithmetic
+  (storage carved from a file image or a buffer: `(PinRec *)(groups + n)`).
+  Listed with `--all`; such a buffer has no layout of its own to disagree;
+- otherwise the copy needs a **registration** in its unit: a
+  `_Static_assert` naming `sizeof(T)` and U, and, for every named member m of
+  T (pad members excepted), one naming `offsetof(T, m)` and U. A record that
+  only moves bytes (a union, a single member, 64-bit words only: `ICO_QW`,
+  `Blob64`, `DObjBlk40`) on either side needs the size only.
+  `ico2/fumi/include/ee_view.h` spells them: `ICO_LAYOUT_AT(T, tm, U, um)`,
+  `ICO_LAYOUT_AT_FROM(T, tm, U, base, um)`, `ICO_LAYOUT_SIZE(T, U)`; all
+  under `ICO_HOST`, so the EE objects do not change;
+- **UNREGISTERED**: a registration is missing (the members without one are
+  named);
+- **MISMATCH**: the audit's own host probe differs: a member T and U share
+  by name at different offsets, T longer than U (or than the room after U's
+  member), or a 16-byte aligned T (the host compiler copies it with aligned
+  SSE moves, `movaps`) over a variable or a type with less alignment.
+
+MISMATCH and UNREGISTERED fail the run (exit 1). ctest runs it as
+`template_audit` next to `offset_audit` on native builds (about 15 s).
+
+```sh
+tools/template_audit.py --build build-host/<dir>          # findings, exit 1 on any
+tools/template_audit.py --build build-host/<dir> --all    # every record copy
+tools/template_audit.py --build build-host/<dir> ico2/sugipon/src/motionManager2.c
+```
+
+Run on `motionManager2.c` as it was before 17741507, it reports
+`MotionStateInfo over struct MotCtrl (host view/storage): dir 192/188,
+lastDir 208/204, orientKind 224/220, floorFit 228/224, ...` (MISMATCH) and
+`MotionGeoInfo over struct MotRoot: no offsetof assertion for 76 of 80
+members` (UNREGISTERED).
+
+### Result
+
+`linux-x64`, gcc 14, this package's tree: 214 units, 202 record copies.
+
+| | before | after |
+| --- | --- | --- |
+| OK | 1 (`MotionStateInfo`) | 57 |
+| MISMATCH | 7 | 0 |
+| UNREGISTERED | 49 | 0 |
+| SAME | 7 | 7 |
+| RAW | 138 | 138 |
+
+Every registered pair's member offsets were compared on the host (probes
+of `offsetof`/`sizeof` of each member pair compiled with the game flags)
+before the assertions were written. No member offset differed: the two
+bugs above were the only layout mismatches. The 7 MISMATCH were alignment:
+
+| site | storage | was | now |
+| --- | --- | --- | --- |
+| `omori/src/camera-root.c` `InitCamera`, `CameraSetTargetGObj` (4 copies) | `cameraSet`, `targetCameraSet` (`CameraSet2`, 4-byte aligned) | `CamTgt` is `aligned(16)`; gcc copies it with `movdqa`/`movaps` on the two statics, which were 16-byte aligned only because the linker happened to place them so | the two statics are `aligned(16)` on the host |
+| `sugipon/src/multiBgaManager.c` `InitMultiBgaManager`, `stageMultiBgaManager.c` `InitStageMultiBgaManager` | `InitialBgaMultiAnimeState` (`BgaAnimeState`, 4-byte aligned) | read through `BgaDisp` (`aligned(16)`) with `movdqa` | declared `aligned(16)` in `multiBgaManager.h` on the host |
+| `script/src/st04a.c` `finishCallBackFunc` | each node's `MotIk` (4-byte aligned, heap) | an `Mtx44` (`aligned(16)`) store; right only because `iosMalloc` returns 16-byte aligned blocks with a 64-byte stride | `__builtin_memcpy` of the same 64 bytes on the host |
+
+The registrations (all `ICO_HOST`):
+
+| file | copy | registered |
+| --- | --- | --- |
+| `sugipon/src/motionManager2.c` | `MotionGeoInfo` template over `MotRoot` | all 80 members (was 4): 74 by name, `rot`/`nextPos`/`fieldPos` at `quat`/`move`/`footPos`, `word10C`/`wall110`/`word11C` and `vec1E0`/`vec1F0` inside MotRoot's pads; size |
+| `common/include/typedef.h` (end) | `MotOriReq` over `MotRoot` from `wall`, 9 copies in 8 files (`act-env.c`, `act-game.c`, `girl_act.c`, `act_bird.c`, `queen.c`, `motionManager.c`, `motionOrientManager.c`, `motionViewer.c`) | `a`/`aw`/`b`/`bw` at `wall`/`wallCount`/`cliffWall`/`cliffWallCount`, ending before `aheadWall` |
+| `common/src/DObj.c` | `DObjBlk40` over `MotIk` and a blend rotation, `DObjBlk20` over `Sub15C` from `streamScale` | sizes (to `motion`) |
+| `common/src/layout_action.c` | `struct McPreview` over `McFileInfo` (3) | 5 members, size |
+| `fumi/ios/memory.c` | `IosMemTag` over `IosMemPart`/`IosMemNode` tags (12), `IosMemNodeRec` over `IosMemNode` | tag size and offset; 9 members |
+| `fumi/src/act-way.c` | `WayStep` template over `Act` from `wayNodeX` | 4 members (`state` at `wayFlags`), size to `wayLast` |
+| `fumi/src/commonact.c` | `MotOriTarget` over `ClimbCol` | size, `wall.o`/`wall.elem` |
+| `omori/src/camera-ico2.c` | `CamItemV0/1/2` file records over `PinRec` | each ends at the member the next version adds |
+| `omori/src/camera-root.c` | `CamTgt` template over `CameraSet2` (4) | `pos`, `tgt` at `rotX`, size, alignment |
+| `omori/src/chain.c` | `ChainPendTemplate` over `ChainPendulum` | size |
+| `script/src/st04a.c` | `Mtx44` over `MotIk` | size |
+| `seki/src/Primitive.c`, `Shadow.c` | `Qw128` over `Prim3DVec` (8), a zero `VECTOR` into a `Qw128` slot | size |
+| `sugipon/src/clothAnimation.c` | `ClothHangCfg` rows over `ClothPoint` through `Blob64` | 9 members (`node` in the pad at 0x10, `posX/posY/posW` at `pos[0]/[1]/[3]`), sizes |
+| `sugipon/include/multiBgaManager.h` | `InitialBgaMultiAnimeState` over `BgaDisp` slots (2) | 6 members, size, alignment |
+
+Copies the audit cannot see, checked by reading and asserted in place:
+
+- `sugipon/src/rope.c`: `ropeChainInit` (`RopeTemplate`) goes to
+  `InitChains(void *)`, which reads it as `ChainCfg`. The host layouts agree
+  (node 0x10, step 0x14, root 0x20, weight 0x40, 0x50 bytes; `ChainCfg`'s
+  host layout is its EE one); asserted in `rope.c`.
+- `fumi/src/boyact.c`: `boyInfoDefault` (a `BoyWork`) resets the `BoyInfo`
+  kept in `long long boyInfo[24]`; asserted that the template covers the
+  whole host record (96 bytes) and that the pointers start at 0x20, and that
+  `BoyKidnapWork` is the character packet's size.
+
+Not a layout fault, noted: `sugipon/src/clothAnimation.c` copies a
+texture's `TexData` into the cloth through `TexBlob` (89 doublewords, the EE
+size); on the host `TexData` is wider, so the copy keeps only its head. The
+copy is only ever read for its name at offset 0 (`tex_GetTextureNo`), which
+the head holds.
+
+Copies from the runtime-loaded ELF tables: the loader writes each table in
+its own declared type's host layout (DATA.md), so a copy out of a table is
+a copy out of that type; copying one over another record type needs a
+cast, which makes it a site like any other. The only such view copies of a
+loaded table (config/data_members.pal.txt) are `motionOrientManager.c`'s
+`motionLimitDef` rows, SAME (the cloth's `ClothHangCfg` rows, the `pair`
+above, are compiled statics of `boy.c`). File data laid over records
+(`memcpy(&GlobalStageSetting, ...)`, `.pef` packages, camera sets, TIM2
+headers) is RAW: those records' host layouts must equal the file's EE
+layout, which `port/test/layout_asserts.c` checks per record.
+
+### Limits
+
+- A copy through a `void *` parameter or table (`InitChains`, a `void *`
+  work pointer) carries no record type; such storage is RAW or not seen.
+- An implicit conversion between record pointers at a call
+  (`-Wincompatible-pointer-types`) followed by a whole copy in the callee is
+  not seen: the callee's copy is of its own parameter type.
+- Static initialisers are not scanned (they cannot copy records).
+- The member list of T comes from its definition in the unit (anonymous
+  members flattened); a T with no definition there is UNREGISTERED.
+- A registration is recognised by what it names, not by what it compares;
+  the compiler checks the comparison.

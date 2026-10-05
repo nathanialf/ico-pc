@@ -142,6 +142,21 @@ typedef struct CamItemV2 { /* 0x50 */ /* field names derived */
     unsigned char pin[80];            /* a version-2 pin record */
 } CamItemV2;                          /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: an old camera set's pin records are copied whole over the head of
+   PinRec, so each version's record must end at the PinRec member the next
+   version adds (tools/template_audit.py) */
+_Static_assert(sizeof(CamItemV0) == __builtin_offsetof(PinRec, eyeRate), "CamItemV0 over PinRec");
+
+_Static_assert(sizeof(CamItemV1) == __builtin_offsetof(PinRec, limitP), "CamItemV1 over PinRec");
+
+_Static_assert(sizeof(CamItemV2) == __builtin_offsetof(PinRec, ofsB), "CamItemV2 over PinRec");
+
+#endif
+
 inline void SetCameraZoomOffsetRatio(float val)
 {
     zoomOffsetRatio = val;

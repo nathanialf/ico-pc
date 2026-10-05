@@ -1890,6 +1890,43 @@ typedef struct { /* field names derived */
     long long q[8];
 } Blob64; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: InitCloth4D copies each ClothHangCfg row whole over a ClothPoint
+   through Blob64: enable, bottom, top and radius onto the same names, node
+   into the pad at 0x10, posX/posY/posW onto pos[0], pos[1], pos[3], turn onto
+   turn.  The host layouts must agree (tools/template_audit.py). */
+ICO_LAYOUT_SIZE(Blob64, ClothPoint);
+
+ICO_LAYOUT_SIZE(Blob64, ClothHangCfg);
+
+ICO_LAYOUT_SIZE(ClothHangCfg, ClothPoint);
+
+ICO_LAYOUT_AT(ClothHangCfg, enable, ClothPoint, enable);
+
+ICO_LAYOUT_AT(ClothHangCfg, bottom, ClothPoint, bottom);
+
+ICO_LAYOUT_AT(ClothHangCfg, top, ClothPoint, top);
+
+ICO_LAYOUT_AT(ClothHangCfg, radius, ClothPoint, radius);
+
+_Static_assert(__builtin_offsetof(ClothHangCfg, node) >= __builtin_offsetof(ClothPoint, pad10) &&
+                   __builtin_offsetof(ClothHangCfg, node) + 4 <=
+                       __builtin_offsetof(ClothPoint, pos),
+               "ClothHangCfg.node is not in ClothPoint's pad");
+
+ICO_LAYOUT_AT(ClothHangCfg, posX, ClothPoint, pos[0]);
+
+ICO_LAYOUT_AT(ClothHangCfg, posY, ClothPoint, pos[1]);
+
+ICO_LAYOUT_AT(ClothHangCfg, posW, ClothPoint, pos[3]);
+
+ICO_LAYOUT_AT(ClothHangCfg, turn, ClothPoint, turn);
+
+#endif
+
 Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
 {
     Cloth4D *r;

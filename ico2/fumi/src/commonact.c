@@ -163,6 +163,19 @@ inline void afterCommonTruckLever(GObj *volatile self);
 #include "layout_texture.h"
 #include "flyManager.h"
 
+#ifdef ICO_HOST
+
+/* PC port: the climb mail hands the enemy's climb wall over as an orient
+   target, copying a MotOriTarget out of ClimbCol (wallSrc, wall: the
+   target's WallCfg); the host layouts must agree (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(MotOriTarget, ClimbCol);
+
+ICO_LAYOUT_AT(MotOriTarget, wall.o, ClimbCol, wallSrc);
+
+ICO_LAYOUT_AT(MotOriTarget, wall.elem, ClimbCol, wall);
+
+#endif
+
 static void DamageFunc(GObj *self);
 static void TestCageUpDown(GObj *cage, GObj *gobj);
 

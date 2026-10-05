@@ -650,6 +650,17 @@ typedef struct { /* field names derived */
     long long words[8];
 } ChainPendTemplate; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the pendulum is reset by moving chainPendulumDefault through this
+   block, which must cover the whole record on the host too
+   (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(ChainPendTemplate, ChainPendulum);
+
+#endif
+
 /* the gobj extension pointer */
 typedef union { /* field names derived */
     Sub15C *sub;

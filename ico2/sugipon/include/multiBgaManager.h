@@ -48,7 +48,36 @@ typedef struct {    /* field names derived */
     int pad48[2];   /* 0x48 */
 } BgaAnimeState;    /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: a slot is reset by copying this state through BgaDisp, which is
+   16-byte aligned: the host compiler moves it with aligned SSE loads, so the
+   state carries that alignment too (the EE's copy did not need it).  The
+   host layouts must agree (tools/template_audit.py). */
+extern BgaAnimeState InitialBgaMultiAnimeState __attribute__((aligned(16)));
+
+ICO_LAYOUT_AT(BgaDisp, frame, BgaAnimeState, frame);
+
+ICO_LAYOUT_AT(BgaDisp, pos, BgaAnimeState, pos);
+
+ICO_LAYOUT_AT(BgaDisp, vel, BgaAnimeState, vel);
+
+ICO_LAYOUT_AT(BgaDisp, rot, BgaAnimeState, rot);
+
+ICO_LAYOUT_AT(BgaDisp, kind, BgaAnimeState, kind);
+
+ICO_LAYOUT_AT(BgaDisp, stay, BgaAnimeState, stay);
+
+ICO_LAYOUT_SIZE(BgaDisp, BgaAnimeState);
+
+#else
+
 extern BgaAnimeState InitialBgaMultiAnimeState;
+
+#endif
+
 void DispMultiBgaManager(BgaDisp *base, int n);
 
 #endif /* MULTIBGAMANAGER_H */

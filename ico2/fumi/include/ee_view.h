@@ -41,4 +41,26 @@ int __ico_audit_raw();
  * the literal; a host record can be wider (8-byte pointers), and then it is
  * sizeof(T). */
 #define ICO_MAX_SIZE(T, lit) (sizeof(T) > (lit) ? sizeof(T) : (lit))
+#ifdef ICO_HOST
+/* A record copied whole over storage of another record type (a template
+ * moved through a view, `*(T *)&u = tmpl`) is only right while the two host
+ * layouts agree; on the EE they always did (docs/port/OFFSET_AUDIT.md,
+ * "Whole-record copies").  The registrations tools/template_audit.py asks
+ * for:
+ *
+ *   ICO_LAYOUT_AT(T, tm, U, um)             T's member tm is at U's um
+ *   ICO_LAYOUT_AT_FROM(T, tm, U, base, um)  the same for T laid over U from
+ *                                           U's member base
+ *   ICO_LAYOUT_SIZE(T, U)                   the two records' sizes agree
+ */
+#define ICO_LAYOUT_AT(T, tm, U, um)                                                                \
+    _Static_assert(__builtin_offsetof(T, tm) == __builtin_offsetof(U, um),                         \
+                   #T "." #tm " is not at " #U "." #um " on the host")
+#define ICO_LAYOUT_AT_FROM(T, tm, U, base, um)                                                     \
+    _Static_assert(__builtin_offsetof(T, tm) ==                                                    \
+                       __builtin_offsetof(U, um) - __builtin_offsetof(U, base),                    \
+                   #T "." #tm " is not at " #U "." #um " (from " #base ") on the host")
+#define ICO_LAYOUT_SIZE(T, U)                                                                      \
+    _Static_assert(sizeof(T) == sizeof(U), #T " and " #U " differ in size on the host")
+#endif
 #endif /* EE_VIEW_H */

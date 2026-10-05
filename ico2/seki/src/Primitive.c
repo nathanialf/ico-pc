@@ -282,6 +282,16 @@ void prim_DispFan2D(Fan2D *f, int mode)
 
 typedef ICO_QW Qw128; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the mesh code moves its vertices (Prim3DVec) as quadwords; the
+   sizes must agree (tools/template_audit.py) */
+ICO_LAYOUT_SIZE(Qw128, Prim3DVec);
+
+#endif
+
 /* The mesh strip's GIF tag template: NLOOP and PRIM are ORed in per strip.
    prim_makePacketMesh3D reads it by pointer dereference. */
 static const long long meshGifTag[2] = {0x3000400000008000LL, 0x512}; /* derived name */

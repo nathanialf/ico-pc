@@ -527,17 +527,50 @@ typedef struct {     /* field names derived */
 } MotionGeoInfo; /* derived name */
 
 #ifdef ICO_HOST
+/* InitMotionGeoInfo's copy is only right if the two layouts agree: every
+   member at MotRoot's member of the same name (or the one at its EE offset:
+   rot is quat, nextPos move, fieldPos footPos), the words MotRoot keeps as
+   pads (0x10C to 0x11F, 0x1E0 to 0x1FF) inside those pads, and the same size
+   (tools/template_audit.py, docs/port/OFFSET_AUDIT.md). */
+/* clang-format off */
+#define MGI_FIELDS(X) /* derived name */ \
+    X(pos) X(trans) X(baseQuat) X(motionQuat) X(twist) X(twistRate) X(up) X(savePos) X(hitObj) \
+    X(step) X(itemQuat) X(height) X(delta) X(wall) X(wallCount) X(cliffWall) X(cliffWallCount) \
+    X(aheadWall) X(filter) X(plane) X(lastField) X(cliffFloor) X(last) X(clipFrom) X(stepMove) \
+    X(standNode) X(focusPos) X(focusLocal) X(reservePos) X(projHeight) X(liftOn) X(lifting) \
+    X(lift) X(hand1) X(hand0) X(armTwist) X(lookMode) X(lookPos) X(h) X(p) X(b) X(noStepSearch) \
+    X(gravity) X(slopeIK) X(stairStep) X(lookIK) X(handTurnIK) X(fieldWall) X(fuchiMode) \
+    X(cylinder) X(avgWallPlane) X(flag330) X(flag334) X(radius) X(radiusTo) X(radiusFrom) \
+    X(cliffPlane) X(handIK) X(stepNode) X(holdPoint) X(ropeState) X(fixObj) X(fixNode) X(fixQuat) \
+    X(fixPos) X(fixWeight) X(fixMode) X(footIKRate) X(ikRate0) X(handRate) X(ikRate1) X(ikRate2)
+/* clang-format on */
+#define MGI_SAME(f) ICO_LAYOUT_AT(MotionGeoInfo, f, struct MotRoot, f);
 
-/* InitMotionGeoInfo's copy is only right if the two layouts agree */
-_Static_assert(
-    sizeof(MotionGeoInfo) == sizeof(struct MotRoot) &&
-        __builtin_offsetof(MotionGeoInfo, plane) == __builtin_offsetof(struct MotRoot, plane) &&
-        __builtin_offsetof(MotionGeoInfo, armTwist) ==
-            __builtin_offsetof(struct MotRoot, armTwist) &&
-        __builtin_offsetof(MotionGeoInfo, fixQuat) == __builtin_offsetof(struct MotRoot, fixQuat) &&
-        __builtin_offsetof(MotionGeoInfo, ikRate2) == __builtin_offsetof(struct MotRoot, ikRate2),
-    "MotionGeoInfo must have MotRoot's host layout");
+MGI_FIELDS(MGI_SAME)
+ICO_LAYOUT_AT(MotionGeoInfo, rot, struct MotRoot, quat);
 
+ICO_LAYOUT_AT(MotionGeoInfo, nextPos, struct MotRoot, move);
+
+ICO_LAYOUT_AT(MotionGeoInfo, fieldPos, struct MotRoot, footPos);
+
+_Static_assert(__builtin_offsetof(MotionGeoInfo, word10C) >=
+                       __builtin_offsetof(struct MotRoot, _pad10C) &&
+                   __builtin_offsetof(MotionGeoInfo, wall110) >=
+                       __builtin_offsetof(struct MotRoot, _pad10C) &&
+                   __builtin_offsetof(MotionGeoInfo, word11C) + 4 <=
+                       __builtin_offsetof(struct MotRoot, filter),
+               "MotionGeoInfo's words at 0x10C are not inside MotRoot's pad");
+
+_Static_assert(__builtin_offsetof(MotionGeoInfo, vec1E0) >=
+                       __builtin_offsetof(struct MotRoot, _pad1D4) &&
+                   __builtin_offsetof(MotionGeoInfo, vec1F0) + 16 <=
+                       __builtin_offsetof(struct MotRoot, liftOn),
+               "MotionGeoInfo's vectors at 0x1E0 are not inside MotRoot's pad");
+
+ICO_LAYOUT_SIZE(MotionGeoInfo, struct MotRoot);
+
+#undef MGI_SAME
+#undef MGI_FIELDS
 #endif
 
 /* the record InitMotionGeoInfo copies over every new actor's geometry

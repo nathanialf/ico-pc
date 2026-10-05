@@ -102,9 +102,36 @@ typedef struct InsertCameraWork { /* field names derived */
    insert-camera request. */
 static union CameraSetIn prevCameraSet; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: InitCamera and CameraSetTargetGObj copy a CamTgt (pos over pos and
+   the pad, tgt over rotX..rotZ) whole over these two, and CamTgt is 16-byte
+   aligned: the host compiler moves it with aligned SSE loads and stores, so
+   the two sets carry that alignment (the EE's quadword copy did not fault on
+   a 4-byte aligned set; a host one would).  The layouts must agree
+   (tools/template_audit.py). */
+static CameraSet2 cameraSet __attribute__((aligned(16)));       /* derived name */
+static CameraSet2 targetCameraSet __attribute__((aligned(16))); /* derived name */
+
+ICO_LAYOUT_AT(CamTgt, pos, CameraSet2, pos);
+
+ICO_LAYOUT_AT(CamTgt, tgt, CameraSet2, rotX);
+
+ICO_LAYOUT_SIZE(CamTgt, CameraSet2);
+
+_Static_assert(__alignof__(cameraSet) >= __alignof__(CamTgt) &&
+                   __alignof__(targetCameraSet) >= __alignof__(CamTgt),
+               "the camera sets are not aligned for CamTgt's copy");
+
+#else
+
 static CameraSet2 cameraSet; /* derived name */
 
 static CameraSet2 targetCameraSet; /* derived name */
+
+#endif
 
 static CamCtrl camctrl; /* derived name */
 

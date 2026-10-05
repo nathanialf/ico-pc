@@ -200,7 +200,8 @@ class Unit:
                         depth += 1
                     elif s in ")}]":
                         depth -= 1
-                    elif depth == 0 and toks[j].k == "id" and s not in TYPE_WORDS:
+                    elif depth == 0 and toks[j].k == "id" and s not in TYPE_WORDS and \
+                            s not in ("__attribute__", "__attribute"):
                         last = s
                     elif depth == 0 and s in (";", ","):
                         if last:

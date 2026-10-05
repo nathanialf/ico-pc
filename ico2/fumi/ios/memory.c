@@ -730,6 +730,31 @@ typedef struct IosMemNodeRec {    /* field names derived */
     int line;                     /* 0x38 */
 } IosMemNodeRec;                  /* derived name */
 
+#ifdef ICO_HOST
+#include "ee_view.h"
+
+/* PC port: the allocator stamps a 16-character tag over a partition's or a
+   node's tag and moves a node's record whole; the host layouts must agree
+   (tools/template_audit.py) */
+_Static_assert(sizeof(IosMemTag) == sizeof(((IosMemPart *)0)->tag) &&
+                   __builtin_offsetof(IosMemPart, tag) == 0,
+               "IosMemTag is not IosMemPart's tag");
+_Static_assert(sizeof(IosMemTag) == sizeof(((IosMemNode *)0)->tag) &&
+                   __builtin_offsetof(IosMemNode, tag) == 0,
+               "IosMemTag is not IosMemNode's tag");
+ICO_LAYOUT_AT(IosMemNodeRec, tag, IosMemNode, tag);
+ICO_LAYOUT_AT(IosMemNodeRec, name, IosMemNode, name);
+ICO_LAYOUT_AT(IosMemNodeRec, prev, IosMemNode, prev);
+ICO_LAYOUT_AT(IosMemNodeRec, next, IosMemNode, next);
+ICO_LAYOUT_AT(IosMemNodeRec, free_prev, IosMemNode, free_prev);
+ICO_LAYOUT_AT(IosMemNodeRec, free_next, IosMemNode, free_next);
+ICO_LAYOUT_AT(IosMemNodeRec, part, IosMemNode, part);
+ICO_LAYOUT_AT(IosMemNodeRec, size, IosMemNode, size);
+ICO_LAYOUT_AT(IosMemNodeRec, line, IosMemNode, line);
+_Static_assert(sizeof(IosMemNodeRec) <= sizeof(IosMemNode),
+               "IosMemNodeRec is wider than IosMemNode");
+#endif
+
 void *iosReallocDebug(void *ptr, unsigned int size)
 {
     char buf[1024];

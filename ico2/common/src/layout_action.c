@@ -66,6 +66,27 @@ struct McPreview { /* field names derived */
     int word10;    /* 0x10, no C reader */
 }; /* derived name */
 
+#ifdef ICO_HOST
+
+#include "ee_view.h"
+
+/* PC port: the menus copy a save's preview whole out of and into the card's
+   product file (McFileInfo); the host layouts must agree
+   (tools/template_audit.py) */
+ICO_LAYOUT_AT(struct McPreview, stage, McFileInfo, stage);
+
+ICO_LAYOUT_AT(struct McPreview, cleared, McFileInfo, cleared);
+
+ICO_LAYOUT_AT(struct McPreview, playTime, McFileInfo, playTime);
+
+ICO_LAYOUT_AT(struct McPreview, sofa, McFileInfo, sofa);
+
+ICO_LAYOUT_AT(struct McPreview, word10, McFileInfo, word10);
+
+ICO_LAYOUT_SIZE(struct McPreview, McFileInfo);
+
+#endif
+
 /* .sbss, thirteen words: the port-0 lock state _la_set_current_port_2 records and the one
    _la_set_current_port_lock_2 records, the lock results for port 0 and port 1
    of _la_set_current_port_new, the icoMisc lock saved by the logo, the title

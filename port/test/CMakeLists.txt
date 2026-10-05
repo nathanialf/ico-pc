@@ -39,4 +39,13 @@ if(Python3_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_CROSSCOMPILING)
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/offset_audit.py"
                      --build "${CMAKE_BINARY_DIR}")
     set_tests_properties(offset_audit PROPERTIES TIMEOUT 900)
+    # template_audit (docs/port/OFFSET_AUDIT.md, "Whole-record copies"): every
+    # record copied whole over storage of another record type (a template
+    # moved through a view, memcpy between two record types) must have its
+    # layout registered with static assertions in its unit; unregistered
+    # copies and host layout differences fail.
+    add_test(NAME template_audit
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/template_audit.py"
+                     --build "${CMAKE_BINARY_DIR}")
+    set_tests_properties(template_audit PROPERTIES TIMEOUT 900)
 endif()

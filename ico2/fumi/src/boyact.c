@@ -1612,6 +1612,16 @@ typedef struct {                      /* field names derived */
    camera target id at +4 (BoyInfoUpdate_StageChange copies it whole as f50). */
 #ifdef ICO_HOST
 #define BOYEFSTAGE ((unsigned char *)&BOYINFO.f50) /* derived name */
+
+/* PC port: Boy_Init resets the record by copying boyInfoDefault (a BoyWork)
+   over the buffer, and the raw word stores (((int *)boyInfo)[4] = -1, the
+   flag bits of boyInfo[1]) only keep their EE places while the pointers
+   start at 0x20; the template must cover the whole host record
+   (tools/template_audit.py) */
+_Static_assert(sizeof(BoyWork) == sizeof(BoyInfo) && sizeof(boyInfo) >= sizeof(BoyInfo) &&
+                   __builtin_offsetof(BoyInfo, weapon) == 0x20,
+               "BoyWork does not cover BoyInfo on the host");
+
 #else
 #define BOYEFSTAGE ((unsigned char *)boyInfo + 0x50) /* derived name */
 #endif
@@ -1740,6 +1750,14 @@ void ACTDispLwsBoyStonize_InQueenStage(void *self)
 }
 
 static int characterPacket[8]; /* derived name */
+
+#ifdef ICO_HOST
+
+/* PC port: MakeCharacterPacket and Boy_Init reset it from a BoyKidnapWork */
+_Static_assert(sizeof(BoyKidnapWork) == sizeof(characterPacket),
+               "BoyKidnapWork is not the character packet");
+
+#endif
 
 static PrivInsCam privInsCam; /* derived name */
 
