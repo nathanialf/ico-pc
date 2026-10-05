@@ -196,3 +196,77 @@ exceed 0x80.
 | `shaders_table` | every entry present, SPIR-V magic, DXIL signed, stages and lookups (the compile itself is the build: a wrong shader stops ninja with DXC's text) |
 | `gs_math` | `gs_math.hlsli` compiled as C against the formulas of `port/test/gs_blend_test.c`: texture function over all 65,536 pairs, blend over a dense grid for both COLCLAMP modes and the twelve ALPHA registers, the eight alpha tests, the three TEXA modes, the Z mapping |
 | `shaders_pixel` | through the Vulkan RHI (exit 77 without a device): sprite cells (untextured, textured modulate, alpha test fail and pass, LERP_AS at 0x80 exact and 0x40 within 1 LSB, PREMUL additive exact, PABE), `blit_ps` identity copy (exact) and tint, `blend_int_ps` for LERP_AS, LERP_FIX 0x70 and a wrapping add on RGBA8_UINT (exact); validation errors fail it. Its sprite layout declares t2 (the DATE snapshot) since wave 2; the DATE test itself is in `rd_pixel` |
+
+## VU1 programs (wave 3, R3c)
+
+The five VU1 microprograms as vertex shaders, one pixel shader for all of
+them. What the programs compute and where the shaders differ:
+`docs/port/VU1_PROGRAMS.md`; CPU references: `port/render/vu1_ref/`; the
+draw interface: `port/render/rd_mesh.h`.
+
+| name | file | stage | program, code | notes |
+| --- | --- | --- | --- | --- |
+| `vu_prelit_vs` | vu_prelit.hlsl | vertex | normal_c 32, 34, 36 | clip mode from `vu_draw.z` |
+| `vu_lit_vs` | vu_lit.hlsl | vertex | normal_l 32, 36 | clip mode from `vu_draw.z` |
+| `vu_lit_spec_vs` | vu_lit.hlsl | vertex | normal_l 34 | region test |
+| `vu_reflect_vs` | vu_lit.hlsl | vertex | normal_l 38 | region test |
+| `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` | vu_skin.hlsl | vertex | cluster 20, 22, 24 | bones in VuBoneCB |
+| `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` | vu_grid.hlsl | vertex | mesh 20, 22, 24 | batches with headers |
+| `vu_particle_vs` | vu_particle.hlsl | vertex | particle 18 | non-indexed, 6 vertices a particle |
+| `vu_ps` | vu_prelit.hlsl | fragment | all | `sprite_ps` on STQ: texture function, TEXA, alpha test, DATE, dual-source |
+| `vu_probe_ps` | vu_prelit.hlsl | fragment | tests only | writes `VU_F_PROBE` values to an RGBA8_UINT target; not in the reachable pipeline set |
+
+Shared code: `vu_common.hlsli` (the VU operations, the stream addressing,
+the per-triangle decision, the GS-to-clip conversion, the pixel side).
+
+### Bindings
+
+| group | slot | HLSL | content |
+| --- | --- | --- | --- |
+| 1 | 0 | `StructuredBuffer<float4> vu_stream : t0, space1` | the vertex quadwords as the VIF unpacked them (Vulkan binding 16) |
+| 1 | 1 | `DrawCB : b1, space1` | as for every program (material state for `vu_ps`) |
+| 1 | 2 | `VuCB : b2, space1` | the VU memory image (below), 608 bytes |
+| 1 | 3 | `VuBoneCB : b3, space1` | cluster only: `float4 vu_bone[240]` = VU memory 16..255, 3840 bytes |
+| 2 | 1, 2 | `t1`, `s1`, `t2` | texture, sampler, DATE snapshot, as `sprite_ps` |
+
+### VuCB (group 1, slot 2, 608 bytes; `IcoVuCB`)
+
+| offset | HLSL | meaning |
+| --- | --- | --- |
+| 0 | `float4 vu_mem[36]` | VU1 data memory 0..35 as the program reads it: 0..15 the common block (`RdVuCommon`, qw 2 = UV offset xy and cluster fade alpha w), 16..27 the object matrices (normal: +0x140, +0x200, +0x80 times the node; mesh: 16..19; particle: 16..23), 28..35 the light matrices L1, L2 (cluster and mesh load them into registers; they go here) |
+| 576 | `uint4 vu_draw` | x first quadword of the draw in `vu_stream`, y quadwords per vertex, z flags, w vertices per batch (0: one batch) |
+| 592 | `uint4 vu_batch` | x quadwords before each batch's vertices (GIF tag 1; mesh tag and colour 2, or 3 with a Mesh3D buffer's VIF qword), y quadwords after them (a Mesh3D buffer's MSCNT: 1) |
+
+Flags (`vu_draw.z`, `ICO_VU_*`): bits 0..1 the clip mode, 0 REGION (the
+loops' region test: a triangle with a vertex outside is not drawn), 1 NONE
+(normal_c 34: no test, X/Y wrap to 16 bits), 2 SCISSOR (code 36); 16 PROBE
+(tests); 32 CUT_ONLY and 64 KICK_ONLY, the two draws of a scissor batch
+(SCISSOR_COMMON's fans come before the batch's own triangles on the PS2).
+
+### Drawing
+
+Mesh programs: indexed triangle list, `RHI_TOPO_TRIANGLE_LIST`, 32-bit
+indices `kick * 4 + corner` (`ICO_VU_INDEX`), `vertexOffset` 0 (Vulkan
+adds it to `gl_VertexIndex`; the shaders read the vertex number from the
+index value). kick is the vertex whose XYZ2 draws triangle kick-2, kick-1,
+kick on the GS; the index buffer holds the triangles the strip flags and
+batch starts allow (`vu1ref_StaticKicks`), the shader drops the ones the
+region test or the scissor's trivial reject removes (all three corners go
+to a point outside the clip volume). Every invocation evaluates the three
+vertices' positions, so all corners of a triangle agree. Particles:
+`rhi_CmdDraw(6 * count)`.
+
+Positions: a triangle the GS draws as sent goes out with w = 1, X/Y from
+the 12.4 integers through `g_origin`, `g_target` and `g_space[WORLD]`
+(`vu_ndc`, the `gs_xy_to_ndc` formula), Z from the saturated GS integer
+through `gs_depth`; colour and STQ are `noperspective` (the GS interpolates
+linearly in screen space and divides S/Q, T/Q per pixel). A scissor
+triangle that crosses a clip-space Z plane goes out homogeneous so the GPU
+clips it (`vu_homogeneous_position`: z/w = gs_depth of the unsaturated GS
+Z, so the GPU clips at GS Z 0 and 2^32 for PSMZ32).
+
+### Tests
+
+| ctest | what |
+| --- | --- |
+| `vu1` | `vu1_test.c`: hand traces of every program through the CPU reference (exact); every vertex shader's probe output against the reference (lavapipe: identical in round to nearest; within 4.3e-7 / 7.8e-7 relative in Z / STQ against a round-toward-zero reference); rendered strips against the reference's triangles drawn with `sprite_world_vs` (1 LSB); the RdVuCommon / VuCB layout. Exit 77 without a Vulkan device once the CPU part passes |

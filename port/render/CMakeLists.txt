@@ -4,6 +4,22 @@
 # ico_render needs the shader table (ico_shaders, DXC) and an RHI backend
 # (ico_rhi_vk); without either it is left out with a status message, like
 # the other fetched dependencies.
+
+# ico_vu1_ref (wave 3, R3c): CPU references of the five VU1 microprograms
+# (docs/port/VU1_PROGRAMS.md), the oracle of port/shaders/test/vu1_test.c.
+# Plain C on port/math's ps2float helpers; built in every configuration.
+add_library(ico_vu1_ref STATIC
+    vu1_ref/vu1_ref.c
+    vu1_ref/vu1_normal.c
+    vu1_ref/vu1_scissor.c
+    vu1_ref/vu1_cluster.c
+    vu1_ref/vu1_mesh.c
+    vu1_ref/vu1_particle.c)
+target_include_directories(ico_vu1_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vu1_ref"
+                           PRIVATE "${CMAKE_SOURCE_DIR}/port/math")
+target_compile_options(ico_vu1_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_vu1_ref PUBLIC ico_math)
+
 if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
     message(STATUS "ico: port/render not built (needs ico_shaders and ico_rhi_vk; run "
                    "tools/fetch_deps.sh)")

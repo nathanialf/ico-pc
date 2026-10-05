@@ -1,0 +1,379 @@
+// vu_common.hlsli: what the VU1 program shaders (vu_*.hlsl) share. The
+// programs are ico2/vusrc/{normal_c,normal_l,cluster,mesh,particle}.vsm,
+// described in docs/port/VU1_PROGRAMS.md; port/render/vu1_ref/ holds the CPU
+// references the shaders are tested against (port/shaders/test/vu1_test.c).
+// Byte layouts are mirrored in shader_consts.h (IcoVuCB, IcoVuBoneCB).
+//
+// Bindings (group 1, next to DrawCB at b1):
+//   t0  vu_stream  the vertex quadwords as Packet.c / Primitive.c built them
+//                  for the VIF UNPACK (float4 each; the cluster weight qword
+//                  keeps its two int VU addresses as raw bits); static meshes
+//                  without the batches' GIF tags (rd_mesh.h)
+//   b2  VuCB       the VU1 data memory 0..35 the program reads (see below)
+//   b3  VuBoneCB   cluster only: VU memory 16..255, the bone matrices
+//
+// Drawing: the mesh programs are drawn as an indexed triangle list whose
+// index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
+// kick * 4 + corner: kick = the vertex index k whose XYZ2 draws the
+// triangle k-2, k-1, k on the GS, corner 0..2 the vertex k-2+corner. Each
+// invocation evaluates all three vertices' positions so the per-triangle
+// decisions (region test, scissor) come out the same in all three. The
+// particle program is drawn non-indexed, six vertices per particle.
+#ifndef ICO_VU_COMMON_HLSLI
+#define ICO_VU_COMMON_HLSLI
+
+#include "common.hlsli"
+
+// VuCB.vu_mem: VU1 data memory 0..35 as the program reads it.
+//   0..15   the common block (RdVuCommon, RENDER_API.md section 12): 0 =
+//           (0,0,0,1), 1 = (4095,4095,0,16777215), 2 = UV offset in xy
+//           (SET_UVOFFSET) and the cluster fade alpha in w, 3 = GIF tag,
+//           4..7 world to GS screen, 8..11 viewport, 12..15 inverse view
+//   16..19  normal_c/normal_l: model to GS screen (+0x140; also vf01..vf04).
+//           mesh: the SET_MESH_MATRIX matrix (vf01..vf04). particle:
+//           SET_PARTICLE_MATRIX's first matrix (vf01..vf04)
+//   20..23  normal: model to clip (+0x200 x model), the scissor clip space.
+//           particle: the screen matrix (vf05..vf08)
+//   24..27  normal: model to view (+0x80 x model), NORMAL_REF
+//   28..31  light matrix L1 (normal mem 28..31; mesh vf05..vf08; cluster
+//           vf13..vf16)
+//   32..35  light colour matrix L2 (normal mem 32..35; mesh vf09..vf12;
+//           cluster vf17..vf20); the fourth column is the ambient term
+// vu_draw  x = qword index in vu_stream of the draw's first batch,
+//          y = qwords per vertex, z = VU_F_* flags,
+//          w = vertices per batch (0: one batch, the stream holds vertices only)
+// vu_batch x = header qwords before each batch's vertices (the GIF tag:
+//          1; mesh: the tag and the batch colour, 2, or 3 with the VIF qword
+//          of an unstripped Mesh3D buffer), y = qwords after each batch's
+//          vertices (an unstripped Mesh3D buffer's MSCNT: 1), zw reserved
+cbuffer VuCB : register(b2, space1)
+{
+    float4 vu_mem[36];
+    uint4 vu_draw;
+    uint4 vu_batch;
+};
+
+StructuredBuffer<float4> vu_stream : register(t0, space1);
+
+// vu_draw.z
+#define VU_CLIP_MASK 3u
+#define VU_CLIP_REGION 0u  // the triangle loops' region test (codes 32, 38; cluster, mesh)
+#define VU_CLIP_NONE 1u    // normal_c code 34: no test, X/Y wrap to 16 bits as on the GS
+#define VU_CLIP_SCISSOR 2u // code 36: clip-space flags, trivial reject, clipping
+#define VU_F_PROBE 16u     // tests: write the vertex's values instead of drawing
+// Scissor draw order: SCISSOR_COMMON kicks its fans while the loop runs,
+// before the batch's own packet, so a VU batch is two draws to keep the
+// order: first with VU_F_CUT_ONLY (the triangles the VU clips), then with
+// VU_F_KICK_ONLY (the triangles the strip kicks). Neither: both, in strip
+// order.
+#define VU_F_CUT_ONLY 32u
+#define VU_F_KICK_ONLY 64u
+
+#define VU_PROBE_FIELDS 16u
+
+// ---------------------------------------------------------- VU operations
+
+// mulax / madday / maddaz / maddw: c0 * v.x + c1 * v.y + c2 * v.z + c3 * w,
+// every product and sum rounded on its own, in this order (precise: no
+// fused multiply-add, no reassociation).
+float4 vu_mat(float4 c0, float4 c1, float4 c2, float4 c3, float4 v, float w)
+{
+    precise float4 a = c0 * v.x;
+    a = a + c1 * v.y;
+    a = a + c2 * v.z;
+    a = a + c3 * w;
+    return a;
+}
+
+float4 vu_matm(uint at, float4 v, float w)
+{
+    return vu_mat(vu_mem[at], vu_mem[at + 1u], vu_mem[at + 2u], vu_mem[at + 3u], v, w);
+}
+
+// ftoi0 / ftoi4: truncation, saturating at +-2^31 like the VU.
+int vu_ftoi(float x)
+{
+    if (x >= 2147483648.0) {
+        return 0x7FFFFFFF;
+    }
+    if (x <= -2147483648.0) {
+        return (int)0x80000000u;
+    }
+    return (int)x;
+}
+
+int vu_ftoi4(float x)
+{
+    return vu_ftoi(x * 16.0);
+}
+
+// div q, vf00w, x: a zero (or denormal) divisor gives +-Fmax.
+float vu_rcp(float x)
+{
+    if ((asuint(x) & 0x7F800000u) == 0u) {
+        return asfloat((asuint(x) & 0x80000000u) | 0x7F7FFFFFu);
+    }
+    precise float q = 1.0 / x;
+    return q;
+}
+
+// The RGBAQ the GS takes from an ftoi0 quadword: bits 0..7 of each word.
+uint4 vu_rgba(float4 c)
+{
+    return uint4(vu_ftoi(c.x), vu_ftoi(c.y), vu_ftoi(c.z), vu_ftoi(c.w)) & 255u;
+}
+
+// clipw.xyz v, v.w: bit 0 +x (x > |w|), 1 -x, 2 +y, 3 -y, 4 +z, 5 -z.
+uint vu_clipw(float4 v)
+{
+    float w = abs(v.w);
+    uint f = 0u;
+    f |= v.x > w ? 1u : 0u;
+    f |= v.x < -w ? 2u : 0u;
+    f |= v.y > w ? 4u : 0u;
+    f |= v.y < -w ? 8u : 0u;
+    f |= v.z > w ? 16u : 0u;
+    f |= v.z < -w ? 32u : 0u;
+    return f;
+}
+
+// The triangle loops' region test (sub.xyw and fmand 0xD0): lo < p < hi on
+// x, y (after the divide) and w (the clip w).
+bool vu_inside(float4 p, float4 lo, float4 hi)
+{
+    return lo.x < p.x && lo.y < p.y && lo.w < p.w && p.x < hi.x && p.y < hi.y && p.w < hi.w;
+}
+
+// The bounds normal_c, normal_l and mesh load (loi 0x457FF000 = 4094.0,
+// loi 0x4B7FFFFE = 16777214.0); cluster reads mem[0] and mem[1] instead.
+static const float4 VU_LO0 = float4(0.0, 0.0, 0.0, 0.0);
+static const float4 VU_HI4094 = float4(4094.0, 4094.0, 0.0, 16777214.0);
+
+// -------------------------------------------------------------- the stream
+
+// The first qword of vertex v and of its batch.
+uint vu_batch_qw(uint v)
+{
+    uint vpb = vu_draw.w;
+    uint b = vpb != 0u ? v / vpb : 0u;
+    return vu_draw.x + b * (vu_batch.x + vpb * vu_draw.y + vu_batch.y);
+}
+
+uint vu_vertex_qw(uint v)
+{
+    uint vpb = vu_draw.w;
+    uint k = vpb != 0u ? v % vpb : v;
+    return vu_batch_qw(v) + vu_batch.x + k * vu_draw.y;
+}
+
+// ------------------------------------------------------------- one vertex
+
+// What one VU loop iteration computes for a vertex.
+struct VuVtx
+{
+    float4 h;     // the screen matrix times pos, before the divide (w: the clip w)
+    float4 p;     // xyz divided by w (pixels; z = GS Z / 16), w = h.w
+    int3 gs;      // ftoi4 of p.xyz: GS X, Y (12.4) and Z
+    uint4 rgba;   // RGBAQ, 0..255
+    float3 stq;   // PACKED ST
+    bool inside;  // the region test
+    float4 clip;  // scissor programs: model to clip space (mem[20..23]) times pos
+};
+
+VuVtx vu_vtx_init()
+{
+    VuVtx o;
+    o.h = float4(0.0, 0.0, 0.0, 1.0);
+    o.p = o.h;
+    o.gs = int3(0, 0, 0);
+    o.rgba = uint4(0u, 0u, 0u, 0u);
+    o.stq = float3(0.0, 0.0, 0.0);
+    o.inside = true;
+    o.clip = o.h;
+    return o;
+}
+
+// The divide and the conversions every loop shares: q = 1 / h.w,
+// p.xyz = h.xyz * q, ftoi4.
+float vu_divide(inout VuVtx o)
+{
+    float q = vu_rcp(o.h.w);
+    precise float3 p = o.h.xyz * q;
+    o.p = float4(p, o.h.w);
+    o.gs = int3(vu_ftoi4(p.x), vu_ftoi4(p.y), vu_ftoi4(p.z));
+    return q;
+}
+
+// ------------------------------------------------------------ the output
+
+struct VuVSOut
+{
+    float4 pos : SV_Position;
+    VK_LOC(0) noperspective float4 col : COLOR0;   // RGBA 0..255, the GS interpolates in screen space
+    VK_LOC(1) noperspective float3 stq : TEXCOORD0; // S, T, Q linear in screen space, divided per pixel
+};
+
+// GS pixels (XYOFFSET-relative window coordinates / 16) to clip space in
+// WORLD space; gs_xy_to_ndc for signed and wider-than-16-bit values.
+float2 vu_ndc(float2 px)
+{
+    float2 q = px - g_origin.xy + g_origin.zw;
+    float2 ndc = float2(q.x * g_target.z * 2.0 - 1.0, 1.0 - q.y * g_target.w * 2.0);
+    return ndc * g_space[SPACE_WORLD].xy + g_space[SPACE_WORLD].zw;
+}
+
+// The vertex as the GS gets it: X, Y and Z as integers, w = 1, no
+// perspective left. wrap: X and Y keep their low 16 bits (the XYZ2 field).
+float4 vu_gs_position(int3 gs, bool wrap)
+{
+    int2 xy = wrap ? (gs.xy & 0xFFFF) : gs.xy;
+    return float4(vu_ndc(float2(xy) * (1.0 / 16.0)), gs_depth(asuint(gs.z)), 1.0);
+}
+
+// The homogeneous form of the same mapping, for triangles the GPU has to
+// clip (scissor programs, a vertex behind the eye or outside the Z range):
+// x/w and y/w are the pixel positions above (unsnapped), z/w = gs_depth of
+// the unsaturated GS Z 16 * h.z / h.w; the GPU's 0 <= z <= w clip is then
+// the GS Z range 0 .. 1/g_z.x.
+float4 vu_homogeneous_position(float4 h)
+{
+    float2 o = g_origin.xy - g_origin.zw;
+    float2 s = g_space[SPACE_WORLD].xy;
+    float2 t = g_space[SPACE_WORLD].zw;
+    float x = ((h.x - o.x * h.w) * g_target.z * 2.0 - h.w) * s.x + t.x * h.w;
+    float y = (h.w - (h.y - o.y * h.w) * g_target.w * 2.0) * s.y + t.y * h.w;
+    float z = h.w - 16.0 * h.z * g_z.x;
+    return float4(x, y, z, h.w);
+}
+
+static const float4 VU_CULLED = float4(2.0, 2.0, 2.0, 1.0); // outside x <= w: clipped away
+
+VuVSOut vu_out_init()
+{
+    VuVSOut o;
+    o.pos = VU_CULLED;
+    o.col = float4(0.0, 0.0, 0.0, 0.0);
+    o.stq = float3(0.0, 0.0, 1.0);
+    return o;
+}
+
+// The triangle k-2, k-1, k: what the GS draws of it (see VU1_PROGRAMS.md,
+// "What reaches the GS"). me is the corner this invocation outputs.
+// mode: VU_CLIP_*; the programs without a scissor or no-test variant pass
+// VU_CLIP_REGION whatever vu_draw.z says.
+VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
+{
+    VuVSOut o = vu_out_init();
+    o.col = float4(me.rgba);
+    o.stq = me.stq;
+    if (mode == VU_CLIP_NONE) {
+        o.pos = vu_gs_position(me.gs, true);
+        return o;
+    }
+    if (mode == VU_CLIP_REGION) {
+        // any vertex outside sets ADC on itself and the next two: the
+        // triangle is not drawn
+        if (a.inside && b.inside && c.inside) {
+            o.pos = vu_gs_position(me.gs, false);
+        }
+        return o;
+    }
+    // VU_CLIP_SCISSOR
+    uint fa = vu_clipw(a.clip), fb = vu_clipw(b.clip), fc = vu_clipw(c.clip);
+    bool cut = (fa | fb | fc) != 0u;
+    if ((cut && (vu_draw.z & VU_F_KICK_ONLY) != 0u) ||
+        (!cut && (vu_draw.z & VU_F_CUT_ONLY) != 0u)) {
+        return o; // drawn by the other pass
+    }
+    if (!cut) {
+        o.pos = vu_gs_position(me.gs, false); // kicked as it is
+    } else if ((fa & fb & fc) != 0u) {
+        return o; // trivially rejected (the six fcor tests)
+    } else if (((fa | fb | fc) & 0x30u) != 0u || min(a.h.w, min(b.h.w, c.h.w)) <= 0.0) {
+        o.pos = vu_homogeneous_position(me.h); // SCISSOR_COMMON; the GPU clips
+    } else {
+        // only x/y flags: the VU clips to its guard band (the 1500 unit
+        // clip window, wider than any target), the GS scissor does the rest
+        o.pos = vu_gs_position(me.gs, false);
+    }
+    return o;
+}
+
+// The probe layout of the tests: SV_VertexID = (vertex * 16 + field) * 3 +
+// corner draws a one-pixel triangle at (field, vertex) of a 16-wide
+// RGBA8_UINT target carrying one 32-bit value (vu_probe_ps). The value rides
+// in col.xy as two 16-bit integers (a constant interpolates back to itself
+// within far less than 0.5), so the shipped pipelines need no extra varying.
+uint vu_probe_vertex(uint vid)
+{
+    return (vid / 3u) / VU_PROBE_FIELDS;
+}
+
+VuVSOut vu_probe_out(uint vid, uint value)
+{
+    VuVSOut o = vu_out_init();
+    uint cell = vid / 3u;
+    uint corner = vid % 3u;
+    float2 px = float2(float(cell % VU_PROBE_FIELDS), float(cell / VU_PROBE_FIELDS));
+    px += corner == 1u ? float2(1.5, 0.0) : (corner == 2u ? float2(0.0, 1.5) : float2(0.0, 0.0));
+    o.pos = float4(px.x * g_target.z * 2.0 - 1.0, 1.0 - px.y * g_target.w * 2.0, 0.5, 1.0);
+    o.col = float4(float(value & 0xFFFFu), float(value >> 16), 0.0, 0.0);
+    return o;
+}
+
+// Fields 0..8 of a mesh vertex probe.
+uint vu_probe_field(VuVtx v, uint field)
+{
+    uint r = 0u;
+    if (field == 0u) {
+        r = asuint(v.gs.x);
+    } else if (field == 1u) {
+        r = asuint(v.gs.y);
+    } else if (field == 2u) {
+        r = asuint(v.gs.z);
+    } else if (field == 3u) {
+        r = v.rgba.x | (v.rgba.y << 8) | (v.rgba.z << 16) | (v.rgba.w << 24);
+    } else if (field == 4u) {
+        r = asuint(v.stq.x);
+    } else if (field == 5u) {
+        r = asuint(v.stq.y);
+    } else if (field == 6u) {
+        r = asuint(v.stq.z);
+    } else if (field == 7u) {
+        r = v.inside ? 1u : 0u;
+    } else if (field == 8u) {
+        r = vu_clipw(v.clip);
+    }
+    return r;
+}
+
+// ------------------------------------------------------------ pixel side
+
+Texture2D<float4> g_texture : register(t1, space2);
+SamplerState g_sampler : register(s1, space2);
+Texture2D<float> g_dateSnap : register(t2, space2);
+
+// sprite_ps with STQ: the texel at S/Q, T/Q (the texture is padded to
+// 2^TW x 2^TH, so STQ is normalised already), texture function, TEXA,
+// alpha test, DATE, dual-source output.
+DualOut vu_pixel(VuVSOut i)
+{
+    if ((g_mode.x & DF_DATE) != 0u) {
+        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+            discard;
+        }
+    }
+    uint4 col = uint4(floor(i.col + 0.5));
+    if ((g_mode.x & DF_TEXTURED) != 0u) {
+        float2 uv = i.stq.xy / i.stq.z;
+        uint4 t = uint4(floor(g_texture.Sample(g_sampler, uv) * 255.0 + 0.5));
+        t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+        col = gs_texture_function(t, col, g_mode.x);
+    }
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        discard;
+    }
+    return gs_dual_out(col, g_mode.x, g_blend.y);
+}
+
+#endif
