@@ -4,6 +4,10 @@
  * The host build's sound.h: the declarations the game uses, from
  * sce/libsndn2/sound.h (this project's own clean-room header, MIT), with
  * pointer-sized and 64-bit types made host-correct.
+ *
+ * sce/libsndn2/sound.c is not part of the host build.  Until the sequencer
+ * moves to port/audio/sg/ (Phase 4), port/null/snd_null.c defines the Sg
+ * entry points the game calls as a silent driver.
  */
 #ifndef ICO_COMPAT_SOUND_H
 #define ICO_COMPAT_SOUND_H
@@ -78,6 +82,7 @@ int SgSePlay(int vabflags, int prog, int tone);
 void SgSeStop(int id);
 void SgSeStopAll(int immediate);
 void SgSetSeVolDirect(unsigned int id, int left, int right);
+void SgSetSePitchDirect(unsigned int id, int pitch);
 int SgGetSpuSlotMalloc(int mode);
 int SgSetSpuSlotFree(unsigned int slot);
 void SgStAdpcmInit(void);

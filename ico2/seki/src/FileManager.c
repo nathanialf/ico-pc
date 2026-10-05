@@ -37,6 +37,14 @@ void file_Init(void)
     sceCdMmode(iosCdvdMediaType);
     debug_StdPrintfDummy("done.\n");
     debug_StdPrintfDummy("load default module.\n");
+#ifdef ICO_HOST
+    /* The host has no IOP: no IOPRP224.IMG reboot and no IRX modules
+       (port/data/sif_host.c).  The disc wait stays, so a missing disc image
+       stops boot here as an empty drive did. */
+    file_WaitDisc();
+    debug_StdPrintfDummy("done.\n");
+    debug_StdPrintfDummy("loading iop modules.\n");
+#else
     do
         file_WaitDisc();
     while (sceSifRebootIop("cdrom0:\\IOPRP224.IMG;1") == 0);
@@ -67,6 +75,7 @@ void file_Init(void)
     do
         file_WaitDisc();
     while (sceSifLoadModule("cdrom0:\\SNDN2DRV.IRX;1", 0, 0) < 0);
+#endif
     debug_StdPrintfDummy("done.\n");
 }
 
