@@ -672,7 +672,7 @@ void EnemySetfDisappear(GObj *self, float *dir)
     for (i = 0; i < n; i++) {
         if ((w->broken)[i] == 0) {
             (w->broken)[i] = 1;
-            enemySetParticle(8, *(char **)((char *)sub + 12) + i * 64 + 48, dir);
+            enemySetParticle(8, ICO_RAW(char *, sub, 12, (char *)sub->nodeMtx) + i * 64 + 48, dir);
             return;
         }
     }

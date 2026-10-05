@@ -129,9 +129,15 @@ extern int CheckWeaponKind();
 #endif
 /* The actor's orient-request bitfield: three 64-bit request words at
    sub+0x478, each paired with the permission mask 16 bytes further on. */
+#ifdef ICO_HOST
+/* s is the Act (as a char *); its wish words are not at 0x478 here */
+#define ORQ(s, i) (((ActStatusWord *)&((Act *)(s))->wish0)[i].q)
+#define ORM(s, i) (((ActStatusWord *)&((Act *)(s))->wish0)[(i) + 2].q)
+#else
 #define ORQ(s, i) (((ActStatusWord *)((s) + 0x478))[i].q)       /* derived name */
 #define ORM(s, i) (((ActStatusWord *)((s) + 0x478))[(i) + 2].q) /* derived name */
-#define ORBIT(w, b) ((int)((w) >> (b)) & 1)                     /* derived name */
+#endif
+#define ORBIT(w, b) ((int)((w) >> (b)) & 1) /* derived name */
 
 /* handClInfoClear is the cleared template each frame's hand-link probe record
    (ActWork.handCl, act-game.h) starts from. */
@@ -2025,13 +2031,19 @@ static void ActOrientTest(GObj *self)
         ACTSendMailCorrect(self, 213);
     }
     if (ORBIT(ORQ((char *)s, 1), 2) && ORBIT(ORM((char *)s, 1), 2)) {
-        ActSendMail_WithAdditionalData(self, 263, self, ACTWORK(self) + 2064);
+        ActSendMail_WithAdditionalData(
+            self, 263, self,
+            ICO_RAWP(char *, ACTWORK(self), 2064, (char *)&GOBJ_WORK(self)->effRec[0]));
     }
     if (ORBIT(ORQ((char *)s, 1), 3) && ORBIT(ORM((char *)s, 1), 3)) {
-        ActSendMail_WithAdditionalData(self, 264, self, ACTWORK(self) + 2112);
+        ActSendMail_WithAdditionalData(
+            self, 264, self,
+            ICO_RAWP(char *, ACTWORK(self), 2112, (char *)&GOBJ_WORK(self)->effRec[1]));
     }
     if (ORBIT(ORQ((char *)s, 1), 4) && ORBIT(ORM((char *)s, 1), 4)) {
-        ActSendMail_WithAdditionalData(self, 265, self, ACTWORK(self) + 2160);
+        ActSendMail_WithAdditionalData(
+            self, 265, self,
+            ICO_RAWP(char *, ACTWORK(self), 2160, (char *)&GOBJ_WORK(self)->effRec[2]));
     }
     if (ORBIT(ORQ((char *)s, 0), 60) && ORBIT(ORM((char *)s, 0), 60)) {
         ACTSendMailCorrect(self, 174);
@@ -2273,9 +2285,14 @@ static void ActOrientTest(GObj *self)
                 if (s->addData != 0) {
                     if (GetMotionFrameFlag1(self)) {
                         char *ext;
+#ifdef ICO_HOST
+                        ((MotOriTarget *)s->addData)->wall = w1.wall;
+                        ext = (char *)s->addData;
+#else
                         *(U64ag *)s->addData = *(U64ag *)((char *)&w1 + 0x80);
                         ext = (char *)s->addData;
                         *(int *)(ext + 8) = *(int *)((char *)&w1 + 0x88);
+#endif
                         ActSendMail_WithAdditionalData(self, 298, self, ext);
                     }
                 }

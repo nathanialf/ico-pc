@@ -170,8 +170,11 @@ minicoro v0.2.0 (`minicoro.h` header, 2023-11-15; repository commit
 
 | preset | backend (minicoro's own choice) | guard page |
 | --- | --- | --- |
-| `linux-x64`, `asan`, `fptrap`, `linux-x64-clang`, `win-x64`, `ref-m32` | assembly switch | ours, one page below the stack |
-| `win-x86-ref` | Windows fibers (`CreateFiberEx`) | the system's stack guard |
+| `linux-x64`, `asan`, `fptrap`, `linux-x64-clang`, `win-x64` | assembly switch | ours, one page below the stack |
+
+(The retired 32-bit Windows preset `win-x86-ref` used Windows fibers
+(`CreateFiberEx`) with the system's stack guard; the i386 entry realignment
+it needed is gone from `fiber.c` and `diag_host.c`.)
 
 minicoro allocates a coroutine as one block: its record, the switch
 context, a storage area, then the stack growing down towards them. `fiber.c`
@@ -209,19 +212,24 @@ best-fit reuse, aligned allocation, realloc and full coalescing.
 - The 1 MB alignment keeps every address's residue modulo any power of two
   up to 1 MB equal to the EE's, which is what `iosMallocAlignDebug` (only
   called from the movie player) depends on.
-- On 32-bit Linux the arena is mapped at a 0x10000000 hint; 32-bit Windows
-  places it below 2 GB anyway. An EE RAM address was always positive as an
-  `int`, and the game holds addresses in ints.
+- The arena is wherever the OS maps it. (The 32-bit builds asked for a
+  0x10000000 hint so addresses stayed below 2 GB; retired at Phase 2 exit,
+  36a1d73e.) Words that hold an address hold an arena offset or an
+  `ICO_WORD` (`ico2/common/include/eeword.h`).
 - The allocator itself is unchanged: memory.c's four `__asm__("break")`
   are `ICO_BREAK()` (a trap on the host, the `break` it was on the EE), and
   memory.c has no physical-address masks (its `& 0xFFFFFFF0` are 16-byte
-  rounding, correct on 32-bit hosts). With `ICO_HEAP_STATS` it reports each
+  rounding, correct on every host). With `ICO_HEAP_STATS` it reports each
   allocation and free to `arena.c`, which logs every 64 KB of new
   high-water mark per partition on stderr.
-- 64-bit: memory.c's block header is 0x40 bytes of 32-bit pointers and its
-  address arithmetic is `unsigned int`. It compiles on the 64-bit presets
-  but cannot work there until Phase 2 (2B) retypes it; `memory_test` and
-  `ios_chain_test` skip on 64-bit hosts.
+- On x64 memory.c's block header is 0x50 bytes (the EE's 0x40) and the
+  partition record 0x70 (0x50), derived from `sizeof` with pointer-wide
+  address arithmetic (package 2B). `memory_test` and `ios_chain_test` run on
+  x64: `memory_test` computes the expected partition offsets for the host's
+  record sizes (`partition_layout`) and checks that the same function with
+  the EE's sizes reproduces the hand-worked EE addresses above;
+  `ios_chain_test` asserted event order, not addresses, and needed no change
+  beyond dropping its skip.
 
 ## Headless seam (`ICO_HEADLESS`)
 
@@ -242,11 +250,10 @@ needs the renderer-owned functions the callbacks reach.
 ## Records shared with game code
 
 `struct ThreadParam` and `struct SemaParam` (`port/compat/eekernel.h`) are
-written by game TUs, compiled with `-malign-double` on 32-bit x86 and
-`-mno-ms-bitfields` on Windows, and read by `kernel_host.c`, compiled with
+written by game TUs, compiled with `-mno-ms-bitfields` on Windows, and read by `kernel_host.c`, compiled with
 the platform ABI (`docs/research/compiler-semantics.md`, `IcoFlags.cmake`).
-Both hold only `int`, `unsigned int` and pointer fields, so their layout is
-the same under either option set.
+Both hold only `int`, `unsigned int` and pointer fields, so their layout does
+not depend on that option.
 
 ## Not done here
 
@@ -270,6 +277,6 @@ the same under either option set.
 | `sched` | preemption on wakeup, FIFO within a priority, a preempted thread keeps its place, wakeup counts and `CancelWakeupThread`, semaphore FIFO release and counts, `DeleteSema`, exit / restart / terminate / delete, the 0x22 finished-process convention, `ChangeThreadPriority` and `RotateThreadReadyQueue`, `iWakeupThread` from the vblank handler, busy waits, suspend/resume, the boot thread | every Linux preset |
 | `fiber` | 64 fibers switched round-robin with stack contents checked, 200 KB of stack use, destroying suspended fibers, FP mode inside a fiber; under `asan`, the sanitizer's fiber annotations | every Linux preset |
 | `fiber_guard` | a stack overflow in a fiber faults on the guard page | Linux |
-| `arena` | allocated once, aligned, zero filled, EE address mapping, below 2 GB on 32-bit, heap statistics | every Linux preset |
-| `memory` | the game's allocator in the arena at the EE's addresses | `ref-m32` (32-bit) |
-| `ios_chain` | thread.c, message.c and memory.c on the scheduler: vsync, vblank handler, event thread, a scheduler loop like main.c's, Main every second vsync, an actor process at 0x13 that ends at 0x22 and is destroyed | `ref-m32` (32-bit) |
+| `arena` | allocated once, aligned, zero filled, EE address mapping, heap statistics | every Linux preset |
+| `memory` | the game's allocator in the arena at the EE's offsets for the host's record sizes (and the EE's addresses from the same arithmetic with the EE's sizes) | every Linux preset |
+| `ios_chain` | thread.c, message.c and memory.c on the scheduler: vsync, vblank handler, event thread, a scheduler loop like main.c's, Main every second vsync, an actor process at 0x13 that ends at 0x22 and is destroyed | every Linux preset |

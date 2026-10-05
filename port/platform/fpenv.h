@@ -15,11 +15,6 @@
  * denormals kept, every exception masked) for host code: the platform layer,
  * SDL, the renderer and the host libc.
  *
- * On 32-bit x86 the mode only reaches SSE code: the build compiles with
- * -msse2 -mfpmath=sse (cmake/IcoFlags.cmake) so the game's float maths is
- * SSE, and the x87 control word, which only the host libm uses, is left
- * alone.
- *
  * ICO_FPTRAP (the fptrap preset) also unmasks the divide-by-zero and invalid
  * exceptions in simulation mode, so the first such operation stops the
  * program (SIGFPE on Linux, a structured exception on Windows) at the

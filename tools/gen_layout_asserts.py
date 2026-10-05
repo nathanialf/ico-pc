@@ -16,9 +16,11 @@ Every struct the asserts touch needs a line in config/struct_classes.txt:
 
 class is `runtime` (natural host layout, real pointers), `overlay` (read
 directly from disc or ELF bytes: frozen) or `save` (serialised into the save
-image or the card files: frozen). On the 32-bit presets (the EE's ILP32
-layout) every assert holds. On 64-bit presets only overlay and save structs
-are asserted; `pending=<package>` holds a frozen struct's 64-bit asserts back
+image or the card files: frozen). On the host (x64) only overlay and save
+structs are asserted. The runtime structs' asserts are documentation of the
+EE layout, compiled only with -DICO_LAYOUT_EE=1 (on an EE-layout build; the
+32-bit host that ran them every build was retired at Phase 2 exit, commit
+36a1d73e). `pending=<package>` holds a frozen struct's 64-bit asserts back
 until that package has converted its pointer fields (define
 ICO_LAYOUT_PENDING to compile them anyway). `nosize` drops a size taken from
 the struct's comment (when the comment means something else); `base=0xNN`
@@ -616,10 +618,13 @@ def render(structs, others, classes, order):
     w(" * the ico2/ headers' offset comments and config/struct_classes.txt. Do not")
     w(" * edit; rerun the script (docs/port/LAYOUT.md).")
     w(" *")
-    w(" * On the 32-bit presets (the EE's ILP32 layout, -malign-double) every assert")
-    w(" * holds. On 64-bit presets only the frozen structs (overlay: read from disc or")
-    w(" * ELF bytes; save: serialised into the save image) are asserted, except the")
-    w(" * ones still pending a conversion (ICO_LAYOUT_PENDING compiles those too). */")
+    w(" * On the host (x64) only the frozen structs (overlay: read from disc or ELF")
+    w(" * bytes; save: serialised into the save image) are asserted, except the ones")
+    w(" * still pending a conversion (ICO_LAYOUT_PENDING compiles those too). The")
+    w(" * runtime structs' asserts are documentation of the EE layout: they hold on a")
+    w(" * build with the EE's ILP32 layout and compile only with -DICO_LAYOUT_EE=1.")
+    w(" * The 32-bit host build that checked them every build was retired at Phase 2")
+    w(" * exit (commit 36a1d73e). */")
     w("")
     w("#include <stddef.h>")
     w("")
@@ -629,9 +634,7 @@ def render(structs, others, classes, order):
         if b != "typedef.h":
             w('#include "%s"' % b)
     w("")
-    w("#if __SIZEOF_POINTER__ == 4")
-    w("#define ICO_LAYOUT_EE 1")
-    w("#else")
+    w("#ifndef ICO_LAYOUT_EE")
     w("#define ICO_LAYOUT_EE 0")
     w("#endif")
     w("#ifndef ICO_LAYOUT_PENDING")

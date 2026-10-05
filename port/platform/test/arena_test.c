@@ -51,11 +51,6 @@ int main(void)
     CHECK(ico_arena_contains(base + ico_arena_size() - 16, 16));
     CHECK(!ico_arena_contains(base + ico_arena_size() - 15, 16));
     CHECK(!ico_arena_contains(base - 1, 1));
-    if (sizeof(void *) == 4) {
-        /* the arena sits below 2 GB, so int-held addresses are positive */
-        printf("arena at %p\n", (void *)base);
-        CHECK((uintptr_t)base + ico_arena_size() <= 0x80000000u);
-    }
 
     /* heap statistics */
     ico_heap_stats_alloc(&parts[0], "a", 1000);

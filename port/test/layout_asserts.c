@@ -2,10 +2,13 @@
  * the ico2/ headers' offset comments and config/struct_classes.txt. Do not
  * edit; rerun the script (docs/port/LAYOUT.md).
  *
- * On the 32-bit presets (the EE's ILP32 layout, -malign-double) every assert
- * holds. On 64-bit presets only the frozen structs (overlay: read from disc or
- * ELF bytes; save: serialised into the save image) are asserted, except the
- * ones still pending a conversion (ICO_LAYOUT_PENDING compiles those too). */
+ * On the host (x64) only the frozen structs (overlay: read from disc or ELF
+ * bytes; save: serialised into the save image) are asserted, except the ones
+ * still pending a conversion (ICO_LAYOUT_PENDING compiles those too). The
+ * runtime structs' asserts are documentation of the EE layout: they hold on a
+ * build with the EE's ILP32 layout and compile only with -DICO_LAYOUT_EE=1.
+ * The 32-bit host build that checked them every build was retired at Phase 2
+ * exit (commit 36a1d73e). */
 
 #include <stddef.h>
 
@@ -80,9 +83,7 @@
 #include "weapon.h"
 #include "backStage.h"
 
-#if __SIZEOF_POINTER__ == 4
-#define ICO_LAYOUT_EE 1
-#else
+#ifndef ICO_LAYOUT_EE
 #define ICO_LAYOUT_EE 0
 #endif
 #ifndef ICO_LAYOUT_PENDING
@@ -1272,7 +1273,6 @@ OFF(AdpcmStream, ringSize, 0x1C);
 OFF(AdpcmStream, loopStart, 0x20);
 OFF(AdpcmStream, dataSize, 0x24);
 OFF(AdpcmStream, bg, 0x28);
-OFF(AdpcmStream, pad2C, 0x2C);
 OFF(AdpcmStream, mask, 0x30);
 OFF(AdpcmStream, chAttr, 0x38);
 OFF(AdpcmStream, volL, 0x3C);
@@ -1286,7 +1286,7 @@ OFF(AdpcmStream, remain, 0x50);
 OFF(AdpcmStream, pad54, 0x54);
 #endif
 
-/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:97 */
+/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:95 */
 OFF(AdpcmDataRec, path, 0x0);
 OFF(AdpcmDataRec, loopStart, 0x30);
 OFF(AdpcmDataRec, sectors, 0x34);

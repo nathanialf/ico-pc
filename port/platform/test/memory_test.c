@@ -3,14 +3,17 @@
  *
  * The game's allocator (fumi/ios/memory.c, compiled unchanged with the game's
  * options) over the host's EE RAM arena: iosInitialize's partitions land at
- * the EE's addresses (as offsets from the arena base), and allocation, free,
- * aligned allocation and realloc behave as the algorithm does on the EE.
- * The expected addresses were worked out by hand from memory.c's arithmetic
- * (docs/port/PLATFORM.md, "Heap").
+ * the EE's offsets from the arena base, and allocation, free, aligned
+ * allocation and realloc behave as the algorithm does on the EE.
  *
- * memory.c's records hold 32-bit pointers in the EE layout (0x40-byte block
- * headers), which only a 32-bit host reproduces until Phase 2, so on a
- * 64-bit host the test exits 77 (skipped).
+ * memory.c's records hold host pointers, so on x64 the block header is 0x50
+ * bytes (the EE's is 0x40) and the partition record 0x70 (the EE's 0x50):
+ * every partition lands lower than on the EE by the sum of the differences.
+ * The expected layout is therefore computed from the algorithm's arithmetic
+ * (partition_layout below) for the host's record sizes, and the same
+ * function with the EE's sizes is checked against the addresses worked out
+ * by hand for the EE (the 32-bit oracle's values, retired with it at
+ * Phase 2 exit, 36a1d73e; docs/port/PLATFORM.md, "Heap").
  */
 #include <stdarg.h>
 #include <stdint.h>
@@ -68,7 +71,7 @@ static int walk_total(IosMemPart *part, int *n_free)
     int total = 0;
     *n_free = 0;
     for (n = (IosMemNode *)part->start; n != 0; n = n->next) {
-        total += n->size + 4;
+        total += n->size + (int)(sizeof(IosMemNode) >> 4);
         if (strcmp(n->tag, "<FREE AREA>____") == 0) {
             (*n_free)++;
         }
@@ -76,16 +79,51 @@ static int walk_total(IosMemPart *part, int *n_free)
     return total;
 }
 
+static const int sizes[11] = {4227072, 1179648, 3145728, 262144, 327680, 1,
+                              32768,   20480,   10240,   1,      15826944};
+
+/* what the root partition and iosInitialize's eleven carved partitions look
+   like, from memory.c's arithmetic: a partition record of `part` bytes and a
+   block header of `node` bytes, the root over EE 0x760000..0x1FEFFF0 */
+typedef struct Layout {
+    unsigned int off[11]; /* partition record offsets, from the arena base */
+    int root_total;       /* in quadwords */
+    int root_free;
+    int root_head;
+} Layout;
+
+static void partition_layout(Layout *l, unsigned int part, unsigned int node)
+{
+    unsigned int top = 0x1FEFFF0;
+    int total = (int)((top - (0x760000 + part)) >> 4);
+    int free = total;
+    int head = total - (int)(node >> 4);
+    int i;
+
+    l->root_total = total;
+    for (i = 0; i < 11; i++) {
+        int need = (int)((((unsigned int)sizes[i] + 15u) & ~15u) + part + node) >> 4;
+        top -= (unsigned int)need << 4;
+        l->off[i] = top;
+        free -= need;
+        head -= need;
+    }
+    l->root_free = free;
+    l->root_head = head;
+}
+
 int main(void)
 {
     IosMemPart *root;
     IosMemPart *part[11];
-    static const int sizes[11] = {4227072, 1179648, 3145728, 262144, 327680, 1,
-                                  32768,   20480,   10240,   1,      15826944};
-    /* iosInitialize's partitions, carved from the top of the root: */
-    static const unsigned int want[11] = {0x1BE7F60, 0x1AC7ED0, 0x17C7E40, 0x1787DB0,
-                                          0x1737D20, 0x1737C80, 0x172FBF0, 0x172AB60,
-                                          0x17282D0, 0x1728230, 0x08101A0};
+    /* the EE's addresses, worked out by hand (0x40-byte headers, 0x50 records) */
+    static const unsigned int want_ee[11] = {0x1BE7F60, 0x1AC7ED0, 0x17C7E40, 0x1787DB0,
+                                             0x1737D20, 0x1737C80, 0x172FBF0, 0x172AB60,
+                                             0x17282D0, 0x1728230, 0x08101A0};
+    const unsigned int node_sz = (unsigned int)sizeof(IosMemNode);
+    const unsigned int part_sz = (unsigned int)((sizeof(IosMemPart) + 15) & ~(size_t)15);
+    Layout ee_l;
+    Layout host_l;
     IosMemPart *ev;
     IosMemNode *node;
     char *p1;
@@ -96,40 +134,44 @@ int main(void)
     int i;
     int n_free;
 
-    if (sizeof(void *) != 4) {
-        printf("memory.c needs the EE's 32-bit layout; skipped on this host\n");
-        return 77;
+    partition_layout(&ee_l, 0x50, 0x40);
+    for (i = 0; i < 11; i++) {
+        CHECK(ee_l.off[i] == want_ee[i]);
     }
+    CHECK(ee_l.root_total == 1609722 && ee_l.root_free == 45077 && ee_l.root_head == 45073);
+    partition_layout(&host_l, part_sz, node_sz);
+    printf("host records: block header 0x%x, partition record 0x%x\n", node_sz, part_sz);
+
     CHECK(ico_arena_init() == 0);
     CHECK(((uintptr_t)ico_arena_base() & (ICO_ARENA_ALIGN - 1)) == 0);
 
     root = iosMallocInitPartition(ico_arena_ee_addr(0x760000), ico_arena_ee_addr(0x1FEFFF0));
     CHECK(root != 0 && ee(root) == 0x760000);
-    CHECK(ee(root->start) == 0x760050 && ee(root->top) == 0x1FEFFF0);
-    CHECK(root->total == 1609722 && root->free == 1609722);
+    CHECK(ee(root->start) == 0x760000 + part_sz && ee(root->top) == 0x1FEFFF0);
+    CHECK(root->total == host_l.root_total && root->free == host_l.root_total);
     for (i = 0; i < 11; i++) {
         part[i] = iosMallocSetPartition(root, sizes[i], 16);
-        CHECK(part[i] != 0 && ee(part[i]) == want[i]);
+        CHECK(part[i] != 0 && ee(part[i]) == host_l.off[i]);
     }
-    CHECK(root->free == 45077 && root->head->size == 45073);
+    CHECK(root->free == host_l.root_free && root->head->size == host_l.root_head);
     iosMallocSetPartitionName(part[3], "event");
 
-    /* allocations in the event partition (16388 quadwords) */
+    /* allocations in the event partition (16384 quadwords plus one block header) */
     ev = part[3];
-    CHECK(ev->free == 16388 && ev->head->size == 16384);
+    CHECK(ev->free == 16384 + (int)(node_sz >> 4) && ev->head->size == 16384);
     p1 = iosMallocDebug(ev, 100, "ios/message.c", 453);
-    CHECK(ee(p1) == 0x1787E40);
-    node = (IosMemNode *)(p1 - 64);
+    CHECK(ee(p1) == host_l.off[3] + part_sz + node_sz);
+    node = (IosMemNode *)(p1 - node_sz);
     CHECK(strcmp(node->tag, "<ALLOC>________") == 0);
     CHECK(strcmp(node->name, "ios/message0453") == 0);
     CHECK(node->size == 7 && node->line == 453 && node->part == ev);
     p2 = iosMallocDebug(ev, 16, "x.c", 1);
-    CHECK(ee(p2) == 0x1787EF0);
-    CHECK(ico_heap_stats_used(ev) == (11 + 5) * 16);
+    CHECK(ee(p2) == ee(p1) + 112 + node_sz);
+    CHECK(ico_heap_stats_used(ev) == (112 + node_sz) + (16 + node_sz));
 
     /* a freed block is reused best-fit */
     iosFree(p1);
-    CHECK(ico_heap_stats_used(ev) == 5 * 16);
+    CHECK(ico_heap_stats_used(ev) == 16 + node_sz);
     p3 = iosMallocDebug(ev, 32, "y.c", 2);
     CHECK(p3 == p1);
 
@@ -140,14 +182,14 @@ int main(void)
     /* realloc shrinks in place when the next block is free */
     pr = iosMallocDebug(ev, 4096, "r.c", 4);
     CHECK(iosReallocDebug(pr, 64) == pr);
-    CHECK(((IosMemNode *)(pr - 64))->size == 4);
+    CHECK(((IosMemNode *)(pr - node_sz))->size == 4);
 
     /* freeing everything leaves the partition whole again */
     iosFree(pa);
     iosFree(p2);
     iosFree(p3);
     iosFree(pr);
-    CHECK(walk_total(ev, &n_free) == 16388);
+    CHECK(walk_total(ev, &n_free) == 16384 + (int)(node_sz >> 4));
     CHECK(ico_heap_stats_used(ev) == 0);
     CHECK(ico_heap_stats_high_water(ev) > 0);
     printf("event partition: %d free block(s) after freeing everything, head %d qw\n", n_free,

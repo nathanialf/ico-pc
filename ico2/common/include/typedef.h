@@ -1464,7 +1464,7 @@ typedef struct Act { /* field names derived */
 
     union {
         unsigned long long ll;
-#if !defined(ICO_HOST) || __SIZEOF_POINTER__ == 4
+#ifndef ICO_HOST
         void (*afterProc)(GObj *);
 #endif
     } flags18; /* 0x18, a 64-bit word: the after-proc in the low word
@@ -1641,15 +1641,15 @@ typedef struct Act { /* field names derived */
     ICO_WORD_PTR(void *) addData; /* 0x68C, the flyer's mail additional data (act-game.c's mail 298) */
     char flyClip[0x1C0] __attribute__((aligned(16))); /* 0x690, the flyer's ClipColReq (commonact.c); the
                                   record is 0x850 bytes in all */
-#if defined(ICO_HOST) && __SIZEOF_POINTER__ > 4
+#ifdef ICO_HOST
     void (*afterProcHost)(GObj *); /* host only: flags18's after-proc (docs/port/LOADERS.md) */
 #endif
 } Act; /* derived name */
 
 /* ACT_AFTER_PROC(a): the actor's after-proc as an lvalue, the low word of
- * flags18 on the EE and on 32-bit hosts, afterProcHost on hosts with 8-byte
- * pointers.  The flag bits stay in flags18.ll on every build. */
-#if defined(ICO_HOST) && __SIZEOF_POINTER__ > 4
+ * flags18 on the EE, afterProcHost on the host (8-byte pointers).  The flag
+ * bits stay in flags18.ll on every build. */
+#ifdef ICO_HOST
 #define ACT_AFTER_PROC(a) (((Act *)(a))->afterProcHost)
 #else
 #define ACT_AFTER_PROC(a) (((Act *)(a))->flags18.afterProc)

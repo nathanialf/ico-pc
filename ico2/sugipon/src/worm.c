@@ -238,7 +238,8 @@ typedef union { /* field names derived */
 
 inline void SetWormReduceRatio(GObj *act, float ratio)
 {
-    ((WormFI *)((char *)GOBJ_SUB(act)->work + 8))->f = ratio;
+    ICO_RAWP(WormFI *, GOBJ_SUB(act)->work, 8, (WormFI *)&((WormWork *)GOBJ_SUB(act)->work)->reduce)
+        ->f = ratio;
 }
 
 void GetWormRoute(GObj *act, void *target)

@@ -12,9 +12,9 @@
  * address, and the host heap is one block, the EE RAM arena
  * (port/platform/arena.h), in which a block sits at the offset the EE
  * allocator gave it.  So on the host a word holds the address's offset in
- * the arena: on a 32-bit host that is exactly the EE address, the same
- * number the PS2 stored; on a 64-bit host it is the address the host's
- * allocator gave the block in the simulated EE RAM.
+ * the arena: the position the host's allocator gave the block in the
+ * simulated EE RAM (the EE's number only if the allocator's record sizes
+ * agreed with the EE's, which they do not on x64).
  *
  *   ICO_EEWORD(T)    the type of a frozen record's field that holds an
  *                    address: T (the original pointer or int type) on the

@@ -250,7 +250,7 @@ void iosThreadMessage(int msg)
         obj->hasQueue = 1;
 #ifdef ICO_HOST
         /* the queue record and its 8-message ring behind it: 48 + 8 * 4 = 80
-           bytes on a 32-bit host, as on the EE */
+           bytes on the EE (pointer-wide records make it larger here) */
         r = iosMallocDebug(ios_partition_root, THREAD_JOIN_QUEUE_SIZE, __FILE__, 478);
         obj->queue = r;
         iosMsgQueueCreate(r, (IosMsgWord *)((IosMsgQueue *)r + 1), 8);

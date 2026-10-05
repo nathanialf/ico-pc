@@ -53,8 +53,6 @@ typedef struct AdpcmStreamTag { /* field names derived */
     struct CdvdBgReq *bg;       /* 0x28, 8 bytes on a 64-bit host, which then has no pad2C */
 #ifndef ICO_HOST
     char pad2C[4];
-#elif __SIZEOF_POINTER__ == 4
-    char pad2C[4];
 #endif
     long long mask;  /* 0x30 */
     int chAttr;      /* 0x38 */

@@ -10,11 +10,10 @@
  * goes fiber -> scheduler -> fiber.
  *
  * Backends (minicoro's own selection, minicoro.h "MCO_USE_*"): assembly
- * switch on x86-64 Linux and Windows, i386 Linux and arm64; Windows fibers
- * on 32-bit Windows (win-x86-ref). Stacks are ICO_FIBER_STACK_SIZE bytes.
- * On the assembly backend the stack has a no-access guard page directly
- * below it, so an overflow faults instead of corrupting the fiber's
- * control block; Windows fibers have the system's own stack guard.
+ * switch on x86-64 Linux and Windows and arm64. Stacks are
+ * ICO_FIBER_STACK_SIZE bytes. On the assembly backend the stack has a
+ * no-access guard page directly below it, so an overflow faults instead of
+ * corrupting the fiber's control block.
  *
  * Neither backend is relied on for the floating-point control state: the
  * assembly switch does not save MXCSR or the x87 control word, and

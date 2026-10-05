@@ -1413,7 +1413,9 @@ static void SetDirectRootPositionXZ(void *self, void *pos)
 static inline void actMotDirToWall(GObj *self) /* derived name */
 {
     float local[4];
-    sceVu0ScaleVector(local, ICO_RAW(char *, self, 0x164, ((struct GObj *)self)->act) + 0x4B0,
+    sceVu0ScaleVector(local,
+                      ICO_RAWP(char *, ICO_RAW(char *, self, 0x164, ((struct GObj *)self)->act),
+                               0x4B0, (char *)&GOBJ_ACT(self)->env),
                       -1.0f);
     SetMotionDirection(self, local);
 }
@@ -1757,8 +1759,10 @@ void actCommonStone(GObj *volatile self)
 #else
     s->f14 = (int)afterCommonStone;
 #endif
-    *(int *)(*(char **)(ICO_RAW(char *, self, 0x164, ((struct GObj *)self)->act) + 0x680) + 0x2A0) =
-        0;
+    ICO_RAW(int,
+            ICO_RAW(char *, ICO_RAW(char *, self, 0x164, ((struct GObj *)self)->act), 0x680,
+                    (char *)GOBJ_ACT(self)->enemy),
+            0x2A0, GOBJ_ACT(self)->enemy->stonePair) = 0;
     while (1) {
         if (debug_font_flag & 1) {
             debug_Printf(10, 170, 0xFFFFFFF, "count =(%d)\n", GOBJ_ACT(self)->enemy->liftLevel);
@@ -3494,15 +3498,15 @@ void actCommonBecarry(GObj *volatile self)
         if (debug_font_flag & 1) {
             debug_Printf(
                 100, 160, 0xFFFFFFF, "[%s]\n",
-                motionKind[*(int *)(*(char **)(ICO_RAW(char *, s, 0x144, s->carrier) + 0x15C) +
-                                    0x4A0)]
+                motionKind[ICO_RAW(int, *(char **)(ICO_RAW(char *, s, 0x144, s->carrier) + 0x15C),
+                                   0x4A0, GOBJ_SUB(s->carrier)->ctrl.motion)]
                     .name);
         }
         if (debug_font_flag & 1) {
             debug_Printf(
                 100, 170, 0xFFFFFFF, "[%s]\n",
-                actModeTbl[*(int *)(*(char **)(ICO_RAW(char *, s, 0x144, s->carrier) + 0x164) +
-                                    0x34)]
+                actModeTbl[ICO_RAW(int, *(char **)(ICO_RAW(char *, s, 0x144, s->carrier) + 0x164),
+                                   0x34, GOBJ_ACT(s->carrier)->actMode)]
                     .name);
         }
         _ACTWait(1);

@@ -20,21 +20,6 @@
             }
         },
         {
-            "name": "ref-m32",
-            "inherits": "base",
-            "displayName": "Linux i386 reference, GCC",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-linux-gcc.cmake"
-        },
-        {
-            "name": "win-x86-ref",
-            "inherits": "base",
-            "displayName": "Windows 32-bit reference, mingw-w64 GCC",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-w64-mingw32-gcc.cmake",
-            "cacheVariables": {
-                "ICO_HEADLESS": "OFF"
-            }
-        },
-        {
             "name": "linux-x64",
             "inherits": "base",
             "displayName": "Linux x86-64, host GCC",
@@ -71,20 +56,6 @@
             }
         },
         {
-            "name": "ref-m32-clang",
-            "inherits": "base",
-            "displayName": "Linux i386 reference, llvm-mingw clang",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-linux-clang.cmake",
-            "description": "Clang family: the game's GNU nested functions do not compile with clang (docs/port/BUILD_STATUS.md)."
-        },
-        {
-            "name": "win-x86-ref-clang",
-            "inherits": "base",
-            "displayName": "Windows 32-bit reference, llvm-mingw clang",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/i686-w64-mingw32.cmake",
-            "description": "Clang family: the game's GNU nested functions do not compile with clang (docs/port/BUILD_STATUS.md)."
-        },
-        {
             "name": "linux-x64-clang",
             "inherits": "base",
             "displayName": "Linux x86-64, llvm-mingw clang",
@@ -100,14 +71,6 @@
         }
     ],
     "buildPresets": [
-        {
-            "name": "ref-m32",
-            "configurePreset": "ref-m32"
-        },
-        {
-            "name": "win-x86-ref",
-            "configurePreset": "win-x86-ref"
-        },
         {
             "name": "linux-x64",
             "configurePreset": "linux-x64"
@@ -125,14 +88,6 @@
             "configurePreset": "fptrap"
         },
         {
-            "name": "ref-m32-clang",
-            "configurePreset": "ref-m32-clang"
-        },
-        {
-            "name": "win-x86-ref-clang",
-            "configurePreset": "win-x86-ref-clang"
-        },
-        {
             "name": "linux-x64-clang",
             "configurePreset": "linux-x64-clang"
         },
@@ -142,13 +97,6 @@
         }
     ],
     "testPresets": [
-        {
-            "name": "ref-m32",
-            "configurePreset": "ref-m32",
-            "output": {
-                "outputOnFailure": true
-            }
-        },
         {
             "name": "linux-x64",
             "configurePreset": "linux-x64",
@@ -166,13 +114,6 @@
         {
             "name": "fptrap",
             "configurePreset": "fptrap",
-            "output": {
-                "outputOnFailure": true
-            }
-        },
-        {
-            "name": "ref-m32-clang",
-            "configurePreset": "ref-m32-clang",
             "output": {
                 "outputOnFailure": true
             }

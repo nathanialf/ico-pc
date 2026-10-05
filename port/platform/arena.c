@@ -19,11 +19,6 @@
 
 static unsigned char *arena;
 
-/* Where a 32-bit Linux host is asked to put the arena: low, so addresses
-   stay below 2 GB (mmap would otherwise take them from under the stack, near
-   3 GB). Only a hint; any address works. */
-#define ARENA_HINT_32 ((void *)(uintptr_t)0x10000000u)
-
 int ico_arena_init(void)
 {
     size_t want = (size_t)ICO_ARENA_EE_SIZE + ICO_ARENA_HEADROOM;
@@ -35,16 +30,14 @@ int ico_arena_init(void)
         return 0;
     }
 #if defined(_WIN32)
-    /* 32-bit Windows gives addresses below 2 GB unless the program is
-       large-address aware; VirtualAlloc memory is zero filled. */
+    /* VirtualAlloc memory is zero filled. */
     m = VirtualAlloc(NULL, total, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (m == NULL) {
         fprintf(stderr, "arena: cannot allocate %u bytes\n", (unsigned int)total);
         return -1;
     }
 #else
-    m = mmap(sizeof(void *) == 4 ? ARENA_HINT_32 : NULL, total, PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    m = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (m == MAP_FAILED) {
         fprintf(stderr, "arena: cannot map %lu bytes\n", (unsigned long)total);
         return -1;
@@ -52,10 +45,6 @@ int ico_arena_init(void)
 #endif
     p = ((uintptr_t)m + ICO_ARENA_ALIGN - 1) & ~(uintptr_t)(ICO_ARENA_ALIGN - 1);
     arena = (unsigned char *)p;
-    if (sizeof(void *) == 4 && p + want > 0x80000000u) {
-        fprintf(stderr, "arena: placed at %p, above 2 GB; int-held addresses are negative\n",
-                (void *)arena);
-    }
     return 0;
 }
 

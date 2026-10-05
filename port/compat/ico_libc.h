@@ -57,7 +57,7 @@
  *                          (port/platform/assert_host.c)
  *
  * The EE's `long` is 64 bits and its size_t 32. Prototypes the game spells
- * with `unsigned int` sizes match the host's only on 32-bit hosts.
+ * with `unsigned int` sizes do not match the host's `size_t`.
  */
 #ifndef ICO_COMPAT_ICO_LIBC_H
 #define ICO_COMPAT_ICO_LIBC_H

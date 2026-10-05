@@ -284,7 +284,7 @@ restart:
         root[0] = test_CURRENTROOT((void *)self)[0];
         root[1] = test_CURRENTROOT((void *)self)[1];
         root[2] = test_CURRENTROOT((void *)self)[2];
-        if (tgt.obj != 0 && *(int *)((char *)tgt.obj + 0xC) == 32 &&
+        if (tgt.obj != 0 && ICO_RAW(int, tgt.obj, 0xC, ((GObj *)tgt.obj)->kind) == 32 &&
             !(_DistSqGV(root, test_CURRENTROOT(tgt.obj)) < 90000.0f)) {
             far = 1;
         }

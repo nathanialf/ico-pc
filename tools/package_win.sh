@@ -2,8 +2,8 @@
 # tools/package_win.sh <label>
 #
 # Builds the Windows test package for HEAD: a clean worktree of HEAD under
-# build-host/pkg-wt, win-x86-ref and win-x64 with the window build and
-# -DICO_LINK_EXE=ON, staged under dist/stage/{x86,x64}/ and zipped as
+# build-host/pkg-wt, win-x64 with the window build and
+# -DICO_LINK_EXE=ON, staged under dist/stage/x64/ and zipped as
 # dist/ico-pc-<label>-win.zip (root dir ico-pc-<label>/). Quiet; the log is
 # build-host/pkg-<label>.log. Safe to re-run. See docs/port/TESTING.md.
 set -euo pipefail
@@ -46,7 +46,7 @@ ln -s "$root/build/data" "$wt/build/data"
 
 # keep the user's existing iso= line
 declare -A iso
-for a in x86 x64; do
+for a in x64; do
     iso[$a]=""
     if [[ -f "$stage/$a/ico-pc.ini" ]]; then
         line="$(grep -m1 -E '^iso=' "$stage/$a/ico-pc.ini" | tr -d '\r' || true)"
@@ -56,8 +56,8 @@ done
 
 export PATH="$wt/.venv/bin:$PATH"
 cd "$wt"
-declare -A preset=([x86]=win-x86-ref [x64]=win-x64)
-for a in x86 x64; do
+declare -A preset=([x64]=win-x64)
+for a in x64; do
     p="${preset[$a]}"
     run cmake --preset "$p" -DICO_LINK_EXE=ON "-DICO_DATA_DIR=$wt/build/data"
     run cmake --build "build-host/$p"
@@ -69,7 +69,7 @@ cd "$root"
 
 # stage
 date_str="$(date +%Y-%m-%d)"
-for a in x86 x64; do
+for a in x64; do
     p="${preset[$a]}"; b="$wt/build-host/$p"; d="$stage/$a"
     mkdir -p "$d"
     rm -f "$d"/ico_pc*.exe "$d"/ico_pc*.map
@@ -126,13 +126,13 @@ current NVIDIA, AMD or Intel driver on Windows 10/11 has it).
 
 ## Run it
 
-1. Unzip anywhere. There are two folders: `x86` (32-bit) and `x64`
-   (64-bit). Each has its own exe, `.map` file, `SDL3.dll`, `ico-pc.ini`
-   and `pad-script.txt`. Keep the files of a folder together.
+1. Unzip anywhere. There is one folder, `x64`, with the exe, `.map`
+   file, `SDL3.dll`, `ico-pc.ini` and `pad-script.txt`. Keep its files
+   together.
 2. Tell it where the ISO is, as before: set `iso=` in `ico-pc.ini`, or put
    `Ico_PAL.iso` next to the exe, or do nothing and pick it in the file
    dialog the first run opens.
-3. Double-click `x86\ico_pc_x86.exe`. After the disc check (a few seconds)
+3. Double-click `x64\ico_pc_x64.exe`. After the disc check (a few seconds)
    a window titled **ICO** opens (960 x 720). Within a few seconds you
    should see the boot signs (language, then 50/60 Hz, each fading in,
    getting "pressed" by the script, and fading out), then the title screen
@@ -146,9 +146,7 @@ current NVIDIA, AMD or Intel driver on Windows 10/11 has it).
    see-through edge around a picture, blurry or blocky text, a picture in
    the wrong place, or anything stretched.
 5. Close the window, or press **Escape**. The program ends.
-6. Do the same with `x64\ico_pc_x64.exe`.
-7. Send back both `logs` folders (`x86\logs\`, `x64\logs\`) and the
-   screenshots.
+6. Send back the `logs` folder (`x64\logs\`) and the screenshots.
 
 ## What the log will say
 
@@ -163,8 +161,7 @@ not a texture yet; each listed once). Then, as before:
   why (no Vulkan driver, or the card lacks a feature). Send the log.
 - **It crashed:** a block starting `CRASH:` names the error and where, and
   a message box appears. Send the log; the `.map` files let me find the
-  place. The 64-bit build may still crash once New Game starts loading the
-  first area.
+  place.
 - **It froze:** after 30 seconds without progress, a block starting
   `WATCHDOG:` says where it is stuck.
 
@@ -172,9 +169,9 @@ not a texture yet; each listed once). Then, as before:
 
 | file | what |
 | --- | --- |
-| `ico_pc_x86.exe`, `ico_pc_x64.exe` | the game with a window; they need `SDL3.dll` beside them and Windows' Vulkan driver |
+| `ico_pc_x64.exe` | the game with a window; they need `SDL3.dll` beside them and Windows' Vulkan driver |
 | `SDL3.dll` | the window and input library (SDL 3, zlib licence) |
-| `ico_pc_x86.map`, `ico_pc_x64.map` | link maps for turning crash addresses into function names |
+| `ico_pc_x64.map` | link maps for turning crash addresses into function names |
 | `ico-pc.ini` | `iso=` (disc image path), `watchdog=30`; no `ticks=`, so it runs until you close it |
 | `pad-script.txt` | the button presses, one line per change: `<tick> <buttons-hex>` |
 | `logs\ico-pc.log` | written by each run (replaced on the next run) |

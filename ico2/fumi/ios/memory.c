@@ -57,8 +57,9 @@ static void heapAsanReq(void *node, unsigned int bytes);
 #endif
 /* The allocator's record sizes, in bytes and in quadwords. The EE build
  * spells them as the literals it was written with; the host derives them
- * from the records, which gives the EE's values on a 32-bit host (checked
- * below) and pointer-wide headers on a 64-bit one (docs/port/LAYOUT.md):
+ * from the records, which gives pointer-wide headers on the host
+ * (docs/port/LAYOUT.md) and the EE's values where pointers are 4 bytes
+ * (checked below):
  *   NODE_SIZE   the block header in front of every allocation (IosMemNode)
  *   PART_SIZE   the partition record at the head of a partition, rounded to
  *               a quadword (IosMemPart)

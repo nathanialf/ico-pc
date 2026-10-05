@@ -232,16 +232,16 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 
 | directory | what | from |
 | --- | --- | --- |
-| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for i686 and x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
-| `sysroot-i386/` | 32-bit glibc headers, crt files and libgcc, overlaid by symlinks on the host's `/usr/include` | Debian 13 packages `libc6-dev-i386`, `libc6-i386` (2.41-12+deb13u4), `lib32gcc-14-dev`, `lib32gcc-s1` (14.2.0-19), SHA-256 pinned |
-| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for i686 and x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows (its i686 half is unused); the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
+| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned from the release's `cmake-4.4.4-SHA-256.txt` |
 
 The Debian packages come from `deb.debian.org`, falling back to
-`snapshot.debian.org` once a version is superseded. `SKIP_SYSROOT=1`,
-`SKIP_MINGW_GCC=1` and `SKIP_CMAKE=1` skip the Debian trees and CMake. The toolchain files take
-`ICO_LLVM_MINGW`, `ICO_SYSROOT_I386` and `ICO_MINGW_GCC` from the environment
-to use copies elsewhere.
+`snapshot.debian.org` once a version is superseded. `SKIP_MINGW_GCC=1` and
+`SKIP_CMAKE=1` skip the mingw-gcc tree and CMake. The toolchain files take
+`ICO_LLVM_MINGW` and `ICO_MINGW_GCC` from the environment to use copies
+elsewhere. (The i386 sysroot and the i686 mingw-gcc of the retired 32-bit
+presets are no longer fetched.)
 
 The Linux presets also use the host's gcc 14 and glibc (Debian 13 in the
 container). Ninja comes from `.venv/bin` (`tools/setup.sh`) or the `PATH`.
@@ -252,8 +252,8 @@ The commands below use the pinned CMake; any CMake 3.25 or later on the
 
 ```sh
 CMAKE=tools/toolchain/cmake/bin
-$CMAKE/cmake --preset win-x86-ref
-$CMAKE/cmake --build --preset win-x86-ref
+$CMAKE/cmake --preset win-x64
+$CMAKE/cmake --build --preset win-x64
 $CMAKE/ctest --preset linux-x64   # the unit tests, on the Linux presets
 ```
 
@@ -264,19 +264,21 @@ The unit tests (`ctest`): `fpenv` (`fpenv_test`), `sched`, `fiber`,
 `fiber_guard`, `arena`, `memory` and `ios_chain` (`port/platform/test/`,
 [`docs/port/PLATFORM.md`](port/PLATFORM.md)), and the other packages'
 tests. `memory` and `ios_chain` compile the game's allocator and thread
-layer, whose records need the EE's 32-bit layout, so they run on `ref-m32`
-and report "skipped" on 64-bit presets. The Windows presets build the test
-`.exe`s without running them.
+layer and run on the host's own record layout. The Windows presets build the
+test `.exe`s without running them.
 
 | preset | target | compiler |
 | --- | --- | --- |
-| `ref-m32` | Linux i386, the 32-bit compile check | host gcc 14 `-m32`, `sysroot-i386` |
-| `win-x86-ref` | Windows 32-bit, the 32-bit oracle the user runs | `mingw-gcc` i686 |
 | `linux-x64` | Linux x86-64 | host gcc 14 |
 | `win-x64` | Windows x64 | `mingw-gcc` x86-64 |
 | `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
 | `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in simulation mode | host gcc 14 |
-| `ref-m32-clang`, `win-x86-ref-clang`, `linux-x64-clang`, `win-x64-clang` | the same four targets | llvm-mingw clang 23 (`sysroot-i386` for i386, the host glibc for x86-64) |
+| `linux-x64-clang`, `win-x64-clang` | the same two targets | llvm-mingw clang 23 (the host glibc for Linux) |
+
+There is one architecture. The 32-bit host presets (`ref-m32`, `ref-m32-clang`,
+`win-x86-ref`, `win-x86-ref-clang`) were the oracle for the 64-bit build and
+were retired at Phase 2 exit, commit 36a1d73e, once the x64 traces matched
+theirs over 3000 ticks.
 
 GCC is the primary compiler because the game uses GNU C nested functions,
 which clang does not implement; the clang presets compile fewer files until
@@ -318,11 +320,10 @@ print. The game's `main` is compiled as `ico_game_main`.
 
 The game options (`cmake/IcoFlags.cmake`) are `-std=gnu11
 -fno-strict-aliasing -fwrapv -ffp-contract=off -fno-fast-math
--fsigned-char -fno-common -fgnu89-inline`, with `-msse2 -mfpmath=sse` on
-32-bit x86, and `ICO_HOST=1`. The game and data TUs alone also take the
-EE's record layout rules: `-mno-ms-bitfields` on Windows and
-`-malign-double` on 32-bit x86 (`port/` code keeps the platform ABI, which
-SDL's and Windows' structs need). No configuration defines `NDEBUG`: the
+-fsigned-char -fno-common -fgnu89-inline`, and `ICO_HOST=1`. The game and
+data TUs alone also take the EE's bit-field rule, `-mno-ms-bitfields` on
+Windows (`port/` code keeps the platform ABI, which SDL's and Windows'
+structs need). No configuration defines `NDEBUG`: the
 retail game ran with its asserts.
 
 ### Data tables

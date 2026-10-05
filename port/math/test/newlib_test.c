@@ -13,7 +13,6 @@
  *       -Iport/platform port/math/test/newlib_test.c port/math/newlib/rand.c
  *       port/math/newlib/qsort.c port/math/newlib/ico_libm.c
  *       port/platform/fpenv.c -o newlib_test
- * (32-bit x86 also needs -msse2 -mfpmath=sse.)
  *
  * Returns 0 when every check passes.
  */
@@ -231,12 +230,6 @@ static void check_exact(const char *env)
     size_t i;
 
     for (i = 0; i < sizeof ex / sizeof ex[0]; i++) {
-#if defined(__i386__)
-        /* the i386 ABI returns floats in st(0); loading the EE's NaN
-           0x7FB00000 there quiets it (ico_libm.c, wrappers) */
-        if (ex[i].want == 0x7fb00000 && fbits(ex[i].got) == 0x7ff00000)
-            continue;
-#endif
         CHECK(fbits(ex[i].got) == ex[i].want, "[%s] %s: 0x%08x want 0x%08x", env, ex[i].name,
               (unsigned)fbits(ex[i].got), (unsigned)ex[i].want);
     }

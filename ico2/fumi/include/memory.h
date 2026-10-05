@@ -43,8 +43,8 @@ typedef struct IosMemNode {       /* field names derived */
     int size;                     /* 0x34 */
     int line;                     /* 0x38 */
 #ifdef ICO_HOST
-    /* 16-byte aligned, so the header in front of every block is 0x40 bytes
-       on a 32-bit host, as on the EE, and 0x50 on a 64-bit host */
+    /* 16-byte aligned, so the header in front of every block is 0x50 bytes
+       on the host (0x40 on the EE) */
 } __attribute__((aligned(16))) IosMemNode; /* derived name */
 #else
     char pad3C[4];

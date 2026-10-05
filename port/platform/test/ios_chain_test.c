@@ -12,8 +12,8 @@
  *   0x13) that ends with the 0x22 convention and is torn down by thread.c's
  *   destroy manager.
  *
- * The heap records need the EE's 32-bit layout (memory_test.c), so this
- * runs on 32-bit hosts and exits 77 (skipped) elsewhere.
+ * It asserts event order and thread state, not EE addresses, so it runs on
+ * the host's own record layout.
  */
 #include <stdio.h>
 #include <string.h>
@@ -78,7 +78,7 @@ static char idleStack[0x1800] __attribute__((aligned(16)));
 static char schedStack[0x1800] __attribute__((aligned(16)));
 static char mainStack[0x1800] __attribute__((aligned(16)));
 static IosMsgQueue schedQ;
-static int schedBuf[8];
+static IosMsgWord schedBuf[8]; /* a message is pointer-wide on the host */
 
 static int vsync_msgs;
 static int parity_log[16];
@@ -103,7 +103,7 @@ static void idle(void)
 /* main.c's scheduler(), reduced to the frame step and the Main wakeup */
 static void scheduler(void)
 {
-    int msg[4];
+    IosMsgWord msg[4];
     int step = 0;
     iosMsgQueueCreate(&schedQ, schedBuf, 8);
     iosMsgSetEvent(2, &schedQ, 2);
@@ -195,10 +195,6 @@ int main(void)
     int i;
     int proc_id = 0;
 
-    if (sizeof(void *) != 4) {
-        printf("thread.c and memory.c need the EE's 32-bit layout; skipped on this host\n");
-        return 77;
-    }
     CHECK(ico_arena_init() == 0);
     ico_sched_reset();
     ico_kernel_reset();

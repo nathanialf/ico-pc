@@ -5,19 +5,25 @@ compile and run unit tests only. At each **[user test]** checkpoint the
 orchestrator hands the user a Windows package. The user runs it and sends back
 logs, and the next packages read them.
 
+The 32-bit Windows build (`win-x86-ref`, with its Linux twin `ref-m32`) was
+the oracle for the 64-bit build until Phase 2 exit. It was retired at commit
+36a1d73e, when the x64 traces were byte-identical to it over 3000 ticks, and
+packages now carry one `x64/` folder. The checkpoint records below that name
+`x86` or the 32-bit presets are history.
+
 ## Flow
 
-1. **Build.** Configure `win-x86-ref` and `win-x64` with `-DICO_LINK_EXE=ON`
+1. **Build.** Configure `win-x64` with `-DICO_LINK_EXE=ON`
    into `build-host/<pkg>-<preset>`, then build. Check the import table with
-   `tools/toolchain/mingw-gcc/usr/bin/{i686,x86_64}-w64-mingw32-objdump -p`.
+   `tools/toolchain/mingw-gcc/usr/bin/x86_64-w64-mingw32-objdump -p`.
    It must list only system DLLs (`KERNEL32`, `msvcrt`, `USER32`,
    `COMDLG32`) and the GUI subsystem; since renderer wave 2 the window build
    also imports `SDL3.dll`, which the build copies beside the exe and the
    package ships (Vulkan's `vulkan-1.dll` is loaded at run time, from the
    driver). The Windows link uses `-mwindows
    -static-libgcc -static` (`CMakeLists.txt`).
-2. **Package.** Stage the files under `dist/` (gitignored), one folder per
-   architecture with its exe, its link map (`ico_pc.map`, written beside the
+2. **Package.** Stage the files under `dist/` (gitignored), one `x64/` folder
+   with its exe, its link map (`ico_pc.map`, written beside the
    exe by the link, `port/platform/CMakeLists.txt`), `ico-pc.ini` and
    `pad-script.txt`, plus a `TEST.md`. Zip the result as
    `dist/ico-pc-<phase>-win.zip`. Keep the zip: its exes (RelWithDebInfo,
@@ -159,12 +165,12 @@ One command builds and zips the Windows test package for the current HEAD
    packages' uncommitted work is not built) and symlinks `.venv`,
    `tools/toolchain`, `baserom` and `build/data` into it.
 2. Sets `TMPDIR=build-host/tmp` (the system `/tmp` is nearly full), then
-   configures and builds `win-x86-ref` and `win-x64` with
+   configures and builds `win-x64` with
    `-DICO_LINK_EXE=ON` and `-DICO_DATA_DIR` pointing at `build/data`. The
    window build is the preset default. Any failure stops the script with
    the log tail and a non-zero exit.
-3. Stages `dist/stage/{x86,x64}/` with `ico_pc_<arch>.exe`,
-   `ico_pc_<arch>.map`, `SDL3.dll`, `ico-pc.ini` (`watchdog=30`, no
+3. Stages `dist/stage/x64/` with `ico_pc_x64.exe`,
+   `ico_pc_x64.map`, `SDL3.dll`, `ico-pc.ini` (`watchdog=30`, no
    `ticks=`; an `iso=` line already in the staged ini is kept) and
    `pad-script.txt` (`port/input/pad-boot.txt`), plus `TEST.md` with the
    label, date and commit in its heading.

@@ -17,16 +17,18 @@ non-renderer sources.
 
 | preset | compiler | game TUs compiled | blocked | data tables |
 | --- | --- | --- | --- | --- |
-| `ref-m32` | host gcc 14 `-m32` | 188 / 188 | 0 | 73 |
-| `win-x86-ref` | mingw-w64 gcc 14 (i686) | 188 / 188 | 0 | 73 |
 | `linux-x64` | host gcc 14 | 188 / 188 | 0 | 73 |
 | `win-x64` | mingw-w64 gcc 14 (x86-64) | 188 / 188 | 0 | 73 |
 | `asan` | host gcc 14 | 188 / 188 | 0 | 73 |
 | `fptrap` | host gcc 14 | 188 / 188 | 0 | 73 |
-| `ref-m32-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
-| `win-x86-ref-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
 | `linux-x64-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
 | `win-x64-clang` | llvm-mingw clang 23 | 188 / 188 | 0 | 73 |
+
+The four 32-bit presets that used to head this table (`ref-m32`,
+`ref-m32-clang`, `win-x86-ref`, `win-x86-ref-clang`) were retired at Phase 2
+exit (commit 36a1d73e: the x64 traces were identical to the 32-bit build's
+over 3000 ticks). There is one architecture from there on; the measurements
+below that name them are historical.
 
 Every preset configures and builds with exit status 0 (blocked sources
 excluded). `fpenv_test` passes on the Linux presets; the Windows `.exe`s are
@@ -91,7 +93,7 @@ them. Package 1D gave the VU0 asm left in `GsBase.c`, `GifPacket.c`,
 ## Warnings
 
 While `ICO_STRICT_WARNINGS` is off, the C89-era diagnostics are warnings.
-On `win-x86-ref` (gcc), 2,262 warnings: 2,128 `-Wstrict-prototypes`, 57
+On the retired `win-x86-ref` (gcc), 2,262 warnings: 2,128 `-Wstrict-prototypes`, 57
 `-Wint-conversion`, 52 `-Wincompatible-pointer-types`, 7
 `-Wbuiltin-declaration-mismatch` (libc functions redeclared with newlib or
 K&R prototypes), 4 `-Wimplicit-function-declaration`, 1 `-Wreturn-type`.
@@ -108,10 +110,8 @@ unresolved symbol:
 
 | preset | `ico_pc` | notes |
 | --- | --- | --- |
-| `win-x86-ref` | links | the user's test build: GUI subsystem (`-mwindows`), `-static`, imports only system DLLs |
-| `ref-m32` | links | |
 | `linux-x64` | links | |
-| `win-x64` | links | expected unreliable until Phase 2 (32-bit struct and pointer-in-int assumptions) |
+| `win-x64` | links | the user's test build: GUI subsystem (`-mwindows`), `-static`, imports only system DLLs |
 | `linux-x64-clang` | links | clang compiles every game source |
 | `asan` | builds | unit tests pass except another package's `rhi_vk` (a LeakSanitizer report inside llvmpipe) |
 
@@ -134,8 +134,8 @@ scf}_null.c`, and package 1D's `port/input/pad_script.c`).
   time; the host build defines them non-const (`gen_data_c.py --writable`,
   `ICO_DATA_WRITABLE` in `CMakeLists.txt`). The other 43 `.rodata` tables
   were checked and are only read.
-- `-malign-double` applies to game and data TUs only on the 32-bit presets,
-  `-mno-ms-bitfields` to game and data TUs only on Windows. Any record that
+- `-mno-ms-bitfields` applies to game and data TUs only on Windows
+  (`-malign-double` went with the 32-bit presets). Any record that
   game code and `port/` code both read (SDK parameter blocks, the pad
   buffer, card directory entries) must have a layout that does not depend on
   those options, or port/ must compile its users with them too.

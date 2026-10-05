@@ -13,8 +13,6 @@
  * The base is ICO_ARENA_ALIGN (1 MB) aligned, which keeps every address's
  * residue modulo any alignment up to 1 MB equal to the EE's (the allocator
  * aligns to 16 bytes; iosMallocAlignDebug's callers use larger values).
- * On 32-bit hosts the arena is placed below 2 GB when the OS allows, so an
- * address held in an `int` is positive, as every EE RAM address was.
  */
 #ifndef ICO_PLATFORM_ARENA_H
 #define ICO_PLATFORM_ARENA_H

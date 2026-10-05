@@ -1687,7 +1687,7 @@ static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived na
         return 0;
     }
     PickupWeapon(newW, boy, 0x16);
-    ((int *)boyInfo)[0] = *(int *)((char *)newW + 0x8);
+    ((int *)boyInfo)[0] = ICO_RAW(int, newW, 0x8, ((GObj *)newW)->labelId);
     sub->weapon = newW;
     SetWeaponOffsetMode(newW, 0);
 
@@ -1697,7 +1697,8 @@ static inline int SwapBoyWeapon(void *oldW, void *newW, void *boy) /* derived na
     ReleaseWeapon(oldW);
     PutWeapon();
     gamesysObjInfoPosSetStage(oldW, 0, 0, stage_no);
-    debug_StdPrintfDummy("%d -> %d\n", *(int *)((char *)oldW + 0x8), *(int *)((char *)newW + 0x8));
+    debug_StdPrintfDummy("%d -> %d\n", ICO_RAW(int, oldW, 0x8, ((GObj *)oldW)->labelId),
+                         ICO_RAW(int, newW, 0x8, ((GObj *)newW)->labelId));
     return 1;
 }
 
@@ -2606,8 +2607,8 @@ void actBoyCliffHesitate(GObj *volatile self)
     int hit = 0;
 
     ACTAdjustPlane(self, &GOBJ_WORK(self)->intrReq.b.wall);
-    GetOrientOfWall(BOY_WALL(self) + 0x8D0, GOBJ_WORK(self)->intrReq.b.wall.elem,
-                    &GOBJ_WORK(self)->intrReq.b.wall.o);
+    GetOrientOfWall(ICO_RAWP(char *, BOY_WALL(self), 0x8D0, (char *)GOBJ_WORK(self)->pad8D0),
+                    GOBJ_WORK(self)->intrReq.b.wall.elem, &GOBJ_WORK(self)->intrReq.b.wall.o);
     if (CompareAttribute(((FcWallEnt *)GOBJ_WORK(self)->intrReq.b.wall.elem)->attr, 0x400)) {
         hit = 1;
         GOBJ_WORK(self)->cliffReq.b = GOBJ_WORK(self)->intrReq.b;
@@ -2775,7 +2776,8 @@ void actBoyPullupReady(GObj *volatile self)
 
     Act *sub = GOBJ_ACT(self);
 
-    ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);
+    ACTAdjustPlane(
+        self, ICO_RAWP(char *, BOY_WALL(self), 0x8C0, (char *)&GOBJ_WORK(self)->intrReq.b.wall));
     while (1) {
         if (GOBJ_WORK(self)->boxSideSet && motionKind[GOBJ_SUB(self)->ctrl.motion].playMode != 1) {
             _MoveGV(mv, test_CURRENTROOT(self), GOBJ_WORK(self)->boxSidePos, 3.0f);
@@ -3056,7 +3058,8 @@ void actBoyDitch3mReady(GObj *volatile self)
     int a;
     int b;
 
-    ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);
+    ACTAdjustPlane(
+        self, ICO_RAWP(char *, BOY_WALL(self), 0x8C0, (char *)&GOBJ_WORK(self)->intrReq.b.wall));
     _ACTWait(1);
     ResetMotionProgramInterpInfo(self, 35);
     ResetMotionProgramInterpInfo(self, 1);

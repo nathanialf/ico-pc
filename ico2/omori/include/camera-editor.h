@@ -82,8 +82,8 @@ extern unsigned char exit_f;
    it, which it wakes and hands back to on exit, and the menu's argument. */
 typedef struct MenuThread { /* field names derived */
 #ifdef ICO_HOST
-    /* an IOSThread is 152 bytes on a 64-bit host, 112 on the EE and 32-bit hosts */
-    char thread[sizeof(void *) == 4 ? 112 : 160] __attribute__((aligned(8)));
+    /* an IOSThread is 152 bytes on the host, 112 on the EE */
+    char thread[160] __attribute__((aligned(8)));
 #else
     char thread[112];
 #endif

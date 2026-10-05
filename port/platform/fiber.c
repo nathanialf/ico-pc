@@ -148,15 +148,6 @@ static void plain_dealloc(void *ptr, size_t size, void *allocator_data)
 }
 
 #endif
-/* 32-bit Windows runs fibers through CreateFiberEx, which promises only
-   4-byte stack alignment at the fiber's entry, while GCC assumes 16 and
-   keeps SSE spills in aligned stack slots (movaps, cvtdq2ps on (%esp)):
-   realign here, once per fiber, and everything the fiber calls inherits
-   it. */
-#if defined(__i386__) && defined(__GNUC__)
-
-__attribute__((force_align_arg_pointer))
-#endif
 static void fiber_main(mco_coro *co)
 {
     IcoFiber *f = (IcoFiber *)mco_get_user_data(co);

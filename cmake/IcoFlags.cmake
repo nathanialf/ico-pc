@@ -32,24 +32,13 @@ set(ICO_SEMANTIC_OPTIONS
 
 # Record layout of the game and data TUs only (package 0C, docs/research/).
 # port/ code keeps the platform ABI, since SDL's and the Windows SDK's
-# structs assume it (-malign-double breaks SDL_Event). A record the game and
-# port/ both read must not depend on either option.
+# structs assume it. A record the game and port/ both read must not depend
+# on either option.
 #   -mno-ms-bitfields  Windows: bit-fields by the GCC rules the EE used, not
 #                      the MS rules mingw targets default to.
-#   -malign-double     32-bit x86: double and long long 8-aligned in structs,
-#                      as on the EE, so the 32-bit oracle keeps EE layouts.
 set(ICO_GAME_LAYOUT_OPTIONS "")
 if(WIN32)
     list(APPEND ICO_GAME_LAYOUT_OPTIONS -mno-ms-bitfields)
-endif()
-if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86)$")
-    list(APPEND ICO_GAME_LAYOUT_OPTIONS -malign-double)
-endif()
-
-# 32-bit x86: compile float maths to SSE so the simulation's MXCSR mode
-# (port/platform/fpenv.c) governs it and no x87 excess precision leaks in.
-if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86)$")
-    list(APPEND ICO_SEMANTIC_OPTIONS -msse2 -mfpmath=sse)
 endif()
 
 # The three diagnostics the plan makes errors (plan "Verification: Static").

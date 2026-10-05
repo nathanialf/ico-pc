@@ -6,7 +6,7 @@
  * wave 2, package R2b).  Both are disc records: frozen on every host
  * (config/struct_classes.txt, class overlay).  The 64-bit register fields
  * sit on 8-byte boundaries in the file; the host spells the 8-byte
- * alignment out, since i386's ILP32 gives a long long member only 4.
+ * alignment out, since a 4-byte-aligned ABI would give a long long member only 4.
  */
 
 #ifndef TIM2_H

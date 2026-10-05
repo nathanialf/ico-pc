@@ -3698,7 +3698,8 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
             break;
         }
         if (*mode == 3) {
-            unsigned long long f = *(unsigned long long *)((char *)GOBJ_WORK(boyGObj) + 0x448);
+            unsigned long long f = ICO_RAW(unsigned long long, GOBJ_WORK(boyGObj), 0x448,
+                                           ((ActStatusWord *)&GOBJ_WORK(boyGObj)->stopFrames)->q);
             if ((int)(f >> 33) & 1) {
                 *mode = 1;
             } else if ((int)(f >> 32) & 1) {
@@ -3706,7 +3707,8 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
             }
         }
         if (*mode == 2) {
-            unsigned long long f = *(unsigned long long *)((char *)GOBJ_WORK(boyGObj) + 0x448);
+            unsigned long long f = ICO_RAW(unsigned long long, GOBJ_WORK(boyGObj), 0x448,
+                                           ((ActStatusWord *)&GOBJ_WORK(boyGObj)->stopFrames)->q);
             if ((int)(f >> 33) & 1) {
                 *mode = 1;
             }
@@ -4474,8 +4476,8 @@ void actGirlStart(void *self)
               60.0f);
     ACTGame_LwsEffectInit(self);
     ACTLookTarget_Init(self);
-    *(int *)(p + 0x180) = 0;
-    *(int *)(p + 0x184) = 0;
+    ICO_RAW(int, p, 0x180, ((Act *)p)->heldItem.i) = 0;
+    ICO_RAW(int, p, 0x184, ((Act *)p)->nextItem.i) = 0;
     ACTParaStatus_Init(self);
     _ACTCharStatus_Init(self);
     _ACTWait(1);
@@ -4484,14 +4486,14 @@ void actGirlStart(void *self)
     if (debug_brain_flag != 0) {
         actCreateSubThread(subGirlBrainMain, 20);
     }
-    *(IntrMail **)(p + 0xD0) = &actIntrList[74];
+    ICO_RAW(IntrMail *, p, 0xD0, ((Act *)p)->mainMail) = (IntrMail *)&actIntrList[74];
     actCreateSubThread(subGirlControl, 21);
     actCreateSubThread(subGirlCollision, 21);
     actCreateSubThread(subCommonIdle, 21);
-    *(IntrMail **)(p + 0xD4) = &actIntrList[79];
-    *(int *)(p + 0x350) = 0;
-    *(float *)(p + 0x1E0) = 100.0f;
-    *(int *)(p + 0x48) = 1;
+    ICO_RAW(IntrMail *, p, 0xD4, ((Act *)p)->mail) = (IntrMail *)&actIntrList[79];
+    ICO_RAW(int, p, 0x350, ((Act *)p)->wayMode) = 0;
+    ICO_RAW(float, p, 0x1E0, ((Act *)p)->life) = 100.0f;
+    ICO_RAW(int, p, 0x48, ((Act *)p)->actKind) = 1;
     ACTSendMailCorrect(self, 0xC7);
     _ACTWait(0);
 }

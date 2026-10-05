@@ -7,7 +7,7 @@
  * and interrupt-disable calls do nothing on the host.
  *
  * ThreadParam and SemaParam hold only ints and pointers, so their layout
- * does not depend on the game TUs' -malign-double or -mno-ms-bitfields
+ * does not depend on the game TUs' -mno-ms-bitfields
  * (docs/research/compiler-semantics.md): this file, compiled with the
  * platform ABI, reads the same records the game writes.
  */

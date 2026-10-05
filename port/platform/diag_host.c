@@ -55,14 +55,7 @@
 #include <unistd.h>
 
 #endif
-/* Entry points Windows or the C library call (thread start, exception and
-   signal handlers) may arrive with a 4-byte aligned stack on i386; GCC
-   assumes 16 (fiber.c says more). */
-#if defined(__i386__) && defined(__GNUC__)
-#define ICO_ENTRY __attribute__((force_align_arg_pointer))
-#else
 #define ICO_ENTRY
-#endif
 #define LINE_MAX_BYTES 1024
 #define HEARTBEAT_S 2.0
 #define NO_PROGRESS_BEATS 3
@@ -778,9 +771,6 @@ static int sample_main(void)
 #if defined(_M_X64) || defined(__x86_64__)
         sample_pc = (uintptr_t)c.Rip;
         sample_sp = (uintptr_t)c.Rsp;
-#elif defined(_M_IX86) || defined(__i386__)
-        sample_pc = (uintptr_t)c.Eip;
-        sample_sp = (uintptr_t)c.Esp;
 #elif defined(_M_ARM64) || defined(__aarch64__)
         sample_pc = (uintptr_t)c.Pc;
         sample_sp = (uintptr_t)c.Sp;
@@ -810,9 +800,6 @@ ICO_ENTRY static void sample_handler(int sig, siginfo_t *si, void *ucv)
 #if defined(__x86_64__)
     sample_pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     sample_sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
-#elif defined(__i386__)
-    sample_pc = (uintptr_t)uc->uc_mcontext.gregs[REG_EIP];
-    sample_sp = (uintptr_t)uc->uc_mcontext.gregs[REG_ESP];
 #elif defined(__aarch64__)
     sample_pc = (uintptr_t)uc->uc_mcontext.pc;
     sample_sp = (uintptr_t)uc->uc_mcontext.sp;
@@ -1084,8 +1071,6 @@ static void crash_from_exception(EXCEPTION_POINTERS *ep)
     crash.pc = (uintptr_t)r->ExceptionAddress;
 #if defined(_M_X64) || defined(__x86_64__)
     crash.sp = (uintptr_t)c->Rsp;
-#elif defined(_M_IX86) || defined(__i386__)
-    crash.sp = (uintptr_t)c->Esp;
 #elif defined(_M_ARM64) || defined(__aarch64__)
     crash.sp = (uintptr_t)c->Sp;
 #endif
@@ -1204,9 +1189,6 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
 #if defined(__x86_64__)
     crash.pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     crash.sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
-#elif defined(__i386__)
-    crash.pc = (uintptr_t)uc->uc_mcontext.gregs[REG_EIP];
-    crash.sp = (uintptr_t)uc->uc_mcontext.gregs[REG_ESP];
 #elif defined(__aarch64__)
     crash.pc = (uintptr_t)uc->uc_mcontext.pc;
     crash.sp = (uintptr_t)uc->uc_mcontext.sp;

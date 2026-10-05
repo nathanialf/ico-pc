@@ -1,4 +1,12 @@
-# Struct layouts on 32-bit and 64-bit hosts
+# Struct layouts on the host and the EE
+
+The 32-bit host build (`ref-m32`, `win-x86-ref`) that matched the EE's ILP32
+layout and ran every assert below was retired at Phase 2 exit (commit
+36a1d73e, x64 traces identical to its over 3000 ticks). The sections that
+say "32-bit presets" describe what it checked. Today only the frozen
+structs' asserts compile on the host; the runtime structs' asserts remain in
+`port/test/layout_asserts.c` as documentation of the EE layout and compile
+with `-DICO_LAYOUT_EE=1` (an EE-layout build).
 
 Package 2B. The game's records were recovered from the ROM's load and store
 offsets, and the headers carry those offsets as `/* 0xNN */` comments. This
@@ -28,8 +36,8 @@ build's view of `#ifdef ICO_HOST`, and writes `port/test/layout_asserts.c`:
 
 The test target `layout_asserts` (`port/test/CMakeLists.txt`) compiles the
 file as the game compiles: the game's include path, `ICO_HOST`,
-`ICO_SEMANTIC_OPTIONS` and `ICO_GAME_LAYOUT_OPTIONS` (`-malign-double` on
-32-bit x86, `-mno-ms-bitfields` on Windows). A moved field fails the build.
+`ICO_SEMANTIC_OPTIONS` and `ICO_GAME_LAYOUT_OPTIONS` (`-mno-ms-bitfields` on
+Windows). A moved field fails the build.
 ctest also runs `layout_asserts_fresh`, which fails when the committed C
 does not match the headers and the classification. After changing either:
 
@@ -43,7 +51,7 @@ tools/gen_layout_asserts.py --list   # every struct and the checks found
 
 `<name> <class> [size=] [base=] [pending=] [nosize]  # evidence`
 
-| class | meaning | 32-bit presets | 64-bit presets |
+| class | meaning | EE layout (`ICO_LAYOUT_EE=1`; was the 32-bit presets) | host (x64) |
 | --- | --- | --- | --- |
 | `runtime` | natural host layout, real pointers | asserted (the EE layout) | not asserted |
 | `overlay` | read directly from disc or ELF bytes: frozen; a pointer field becomes a `u32` offset or is resolved by its loader | asserted | asserted, unless `pending=` |
@@ -134,7 +142,7 @@ which are real 64-bit faults the old `int` signature hid.
   partition record `PART_SIZE` (0x50) and what they imply (`PART_NEED` 144,
   `PART_MIN` 160, `NODE_QW` 4). On the host they come from the records;
   `IosMemNode` is 16-byte aligned there in place of its `pad3C`.
-  A `_Static_assert` pins the EE values on 32-bit hosts. **On a 64-bit host
+  A `_Static_assert` pins the EE values where pointers are 4 bytes. **On a 64-bit host
   the block header is 0x50 bytes and the partition record 0x70**, so every
   partition and block lands at a different offset than on the EE and each
   allocation costs 16 bytes more; partition sizes are unchanged.
@@ -144,8 +152,12 @@ which are real 64-bit faults the old `int` signature hid.
 - `ios.c` passes the arena addresses to `iosMallocInitPartition` without
   truncation.
 
-`memory` and `ios_chain` pass on `ref-m32` with the EE partition addresses.
-They still skip on 64-bit hosts (their expected addresses are the EE's). A
+`memory` and `ios_chain` passed on `ref-m32` with the EE partition addresses
+and skipped on 64-bit hosts. After the 32-bit presets were retired (2J) they
+run on x64: `ios_chain` needed only its skip removed (it asserted event
+order, not addresses); `memory_test` now computes the expected partition
+offsets for the host's record sizes and checks the same arithmetic with the
+EE's sizes against the EE addresses worked out by hand. A
 scratch run of the allocator on x86-64 with ASan and UBSan (a 64 MB buffer
 above 4 GB, 20 rounds of 500 mixed and 128-aligned allocations freed in
 random order, each round coalescing back to the starting free block, and a
