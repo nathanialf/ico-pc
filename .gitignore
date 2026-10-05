@@ -123,3 +123,4 @@ docs/pal_source_tree.json
 # Local caches of the matching era's tools (never committed)
 .port_cache/
 .transplant_cache/
+*.rddump

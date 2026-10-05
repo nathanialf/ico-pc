@@ -387,6 +387,13 @@ RdTarget rd_TempTarget(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcross
  * size the caller believes it is drawing into; useOffset applies the
  * XYOFFSET centre (2048 - w/2, 2048 - h/2) the game sets alongside. */
 void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset);
+/* Note (wave 1, from GifPacket.c gif_SetDrawEnviroment): the GS always
+ * centres XYOFFSET at (2048 - w/2, 2048 - h/2); useOffset adds the
+ * screenOffsetX/Y field offset on top, which the preset supplies (zero in
+ * Original until RENDER_API.md open item 4 is settled).  depth names the
+ * target whose depth buffer is bound (pass the colour target again for
+ * SCENE; id 0 = none).  The call also resets the scissor to gsW x gsH, as
+ * gif_SetDrawEnviroment writes SCISSOR_1. */
 /* gsb_UpdateGSSystem's clears / gif_Sprite full-screen clears at the frame
  * head: clear colour and optionally depth+stencil of a target. */
 void rd_ClearTarget(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z);
@@ -401,6 +408,15 @@ RdTex rd_TargetTexture(RdTarget t, RdTexView view);
  * meaningful for PSMCT16/24 sources). */
 RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMode,
                        const char *debugName);
+/* Added in wave 1 (R1b): a texture whose alpha byte is still the source
+ * format's, expanded by the shader under the TEXA state in force at replay
+ * (so TEXA leaks between lists exactly as on the GS) instead of being baked
+ * per TEXA mode.  RGB24: the alpha byte is ignored (TA0, AEM).  RGBA16: the
+ * alpha byte holds the 1-bit A (0 or 1; TA1 when set, else TA0).  The values
+ * equal TEXFMT_* in port/shaders/gs_math.hlsli. */
+typedef enum RdTexSrc { RD_TEXSRC_RGBA32 = 0, RD_TEXSRC_RGB24 = 1, RD_TEXSRC_RGBA16 = 2 } RdTexSrc;
+RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
+                          const char *debugName);
 /* tex_scrollClut: the CLUT changed, re-expanded pixels follow. */
 void rd_UpdateTexture(RdTex t, const void *rgba8);
 void rd_DestroyTexture(RdTex t);

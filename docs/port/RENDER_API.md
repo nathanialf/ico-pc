@@ -103,26 +103,44 @@ data; the `enemyParts.c` mode is fixed at 5.
 
 | GS feature | Native implementation |
 |---|---|
-| Alpha scale 0x80 = 1.0, alpha up to 0xFF | Dual-source blend. Output 0 carries colour and the stored GS alpha; output 1 carries the blend factor (As/128 or FIX/128). `RHI_BF_SRC1_*`. Required on every backend (Vulkan `dualSrcBlend`, D3D12 and Metal always). |
-| Blend equations with Cd − Cs·X | `RHI_BO_REVERSE_SUBTRACT` with the dual-source factor. |
-| Ad factors (modes 8 to 10) | `RHI_BF_DST_ALPHA` scaled: the shader cannot see Ad, so the dst alpha is stored as GS alpha and the pipeline uses DST_ALPHA with a 2× constant folded into the fragment's colour (Ad/128 = 2·Ad_unorm). Verified in the lightning scene when a stage uses it. |
-| AFAIL FB_ONLY (0x5140D) | Two draws: alpha > ref with depth write, then alpha ≤ ref with depth write off (`RdPipelineKey.afailSplit`). Self-overlap order within a strip can differ; accepted, see DIVERGENCES.md when observed. |
+| Alpha scale 0x80 = 1.0 | Dual-source blend: output 0 carries colour and the stored GS alpha, output 1 the factor As/128 or FIX/128 (`RHI_BF_SRC1_*`), required on every backend (Vulkan `dualSrcBlend`, D3D12 and Metal always). This is exact only while the factor is at most 1.0: on UNORM targets the blender clamps fixed-point factors to 0..1 (measured on llvmpipe, `shaders_pixel` cell 8: `Cs*As + Cd` with As 0xFF gives 128 where the GS gives 191; the Vulkan spec clamps the same way), so a dual-source factor above 0x80 is **not** exact. |
+| Factor above 0x80 in `Cs·F + Cd`, `Cd − Cs·F` (modes 0, 1, 5, 6) | `DF_PREMUL`: the shader writes the GS term `min((Cs·F) >> 7, 255)` and the pipeline adds it (`ONE`, `ONE`) or reverse-subtracts it, exact for F up to 0xFF. `rd_core` uses this path for these four modes always, not only when F can exceed 0x80, since As can always reach 0xFF. |
+| Factor above 0x80 in a LERP (modes 2, 4, 7) | Not representable: the GS weight on Cd goes negative. FIX is clamped to 0x80 by `rd_core` (the draw writes Cs); As is clamped by the hardware (same result). Chosen over routing to `blend_int` because these are ordinary draws into SCENE, not fullscreen feedback passes; revisit if a site with As or FIX above 0x80 shows a visible difference. |
+| `Cd·FIX + Cs` (mode 3, disc data only) | Dual-source destination factor (`ONE`, `SRC1_COLOR`); FIX above 0x80 is clamped to 0x80, i.e. `Cd + Cs`. Same reasoning as the LERPs. |
+| Ad factors (modes 8 to 10, disc data only) | `RHI_BF_DST_ALPHA`, which reads Ad/255 rather than Ad/128: half strength. The 2x fold through the fragment colour planned here does not work (the colour output is clamped to 1.0 before blending). Untested; open item 6. Exact alternatives need a shader read of the destination (DATE-style snapshot) or `blend_int`. |
+| `Cd·As + Cd` (mode 11, disc data only) | Needs a factor above 1.0 on Cd; not representable with the current shaders. The draw leaves Cd unchanged and is reported once. |
+| AFAIL FB_ONLY (0x5140D) | Two draws: alpha > ref with depth write, then alpha ≤ ref with depth write off (the split pass is a DrawCB uniform; the pipelines differ by Z write). Self-overlap order within a strip can differ; accepted, see DIVERGENCES.md when observed. |
 | AFAIL RGB_ONLY with ATST NEVER (0x3F001, 0x33001) | Colour mask RGB, depth write off, no alpha test. |
-| DATE | R8 snapshot of the scene alpha MSB (`RD_TARGET_DATE_SNAPSHOT`) taken when a DATE-consuming list starts (list 4 head, shadow composite, aura); fragment shader discards on the test. D3D12 cannot read the bound target and stencil export is not universal, so no feedback loops. Fullscreen consumers ping-pong. |
+| DATE | Not applied yet (R1b): `sprite_ps` has no snapshot input, so DATE draws are drawn untested and reported once. Plan: R8 snapshot of the scene alpha MSB (`RD_TARGET_DATE_SNAPSHOT`) taken when a DATE-consuming list starts (list 4 head, shadow composite, aura); fragment shader discards on the test. D3D12 cannot read the bound target and stencil export is not universal, so no feedback loops. Fullscreen consumers ping-pong. |
 | COLCLAMP 0 (shadow count) | Stencil increment/decrement wrap on the scene depth-stencil; `RD_POST_SHADOW_RESOLVE` writes stencil ≠ 0 into SHADOW0, then the original 256/128/64 blur chain runs. |
 | FBA | Fragment shader forces alpha MSB; per material. |
 | PABE | Fragment shader: blend factor 0 when As MSB clear (dual-source output 1 = 0 and output 0 alpha path unchanged). |
-| Z | Reversed-Z D32F with GEQUAL. GS Z after the game's projection is affine in 1/w (`gsb_SetVSMatrixSub`), so GS Z maps linearly: `z_ndc = 1 − gsZ / 2^24` for PSMZ24-scaled values (the game's far 0xFFFFFF becomes 0). One function converts sprite Z constants (DoF planes, fog far plane). |
+| Z | D32F (D32F_S8 on SCENE). The shaders map GS Z to depth `1 − gsZ / 2^24` (`gs_z_to_depth`), so a larger GS Z is a smaller depth: GS ZTST GEQUAL becomes `RHI_CMP_LEQUAL` and GREATER becomes `LESS`; a clear to GS Z `z` clears depth to `1 − z / 2^24` (`rd_pipeline.c`, `rd_replay.c`). GS Z integers below 2^24 are exact in float. (Wave 0 wrote this row as "reversed-Z with GEQUAL", which contradicts the shader mapping; the `rhi.h` comment on `depthCompare` has the same slip.) |
 | ZTE = 0 | Treated as Z ALWAYS with write enabled (GS manual: prohibited setting; one site writes TEST 0). |
 | Texture function | Fragment shader integer path in Original: `min((tex·col) >> 7, 255)`; float in Enhanced. |
 | Vertex colour | Truncated as VU `ftoi` and clamped at 255. |
-| Feedback passes | Exact GS integer blend in the shader on `RHI_FMT_RGBA8_UINT` ping-pong targets (`RdPostParams.exactInt`); see section 7. |
+| Feedback passes (any mode, any factor) | Exact GS integer blend in `blend_int` (`RdPostParams.exactInt`, `RDC_EXACT_BLEND`): source and destination are copied into `RHI_FMT_RGBA8_UINT` textures (a raw copy between the size-compatible formats), the shader writes a third, and the result is copied back into the destination. Exact for every mode, including FIX/As above 0x80 and the Ad modes; source and destination must be the same size. See section 7. |
 
 Pipeline key: `RdPipelineKey` (program, blend or none, alpha test, AFAIL
 split pass, DATE, Z test, Z write, PABE, FBA, colour mask, stencil mode,
 target format, topology). AREF, FIX, sampler state and UV offset are
-uniforms or sampler objects, not pipeline state. Expect under 100 keys;
-`RD_PIPELINE_CACHE_MAX` is 256 and `rd_core` asserts above it.
+uniforms or sampler objects, not pipeline state. The shaders also take the
+alpha test, the AFAIL split pass, the texture function, TCC, TEXA, FBA and
+PABE as uniforms, so `rd_core` normalises those fields of the key (ATST
+ALWAYS, split 0, PABE 0, FBA 0; a split pass shows in the key only through
+its Z write and colour mask) and stores one representative blend mode per
+hardware path. DATE is 0 in the key until `sprite_ps` reads the DATE
+snapshot. With the normalisation the screen and post programs reach 67
+pipelines from the game's state set (`rd__EnumerateReachable`, asserted
+under 100 by `rd_state` and `rd_pixel`); `RD_PIPELINE_CACHE_MAX` is 256 and
+`rd_core` asserts above it.
+
+Wave 1 additions to `rd.h` (R1b): `RdTexSrc` and `rd_CreateTextureSrc` (a
+PSMCT24/16 texture expanded by the shader under the TEXA state at replay,
+so TEXA leaks between lists as on the GS), and a note on `rd_SetTarget`
+(XYOFFSET is always centred; `useOffset` adds the field offset; the call
+resets the scissor; `depth` names the target whose depth buffer is bound).
+No caller exists yet.
 
 ## 4. Backend
 

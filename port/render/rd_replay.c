@@ -1,0 +1,979 @@
+/* rd_replay.c: an RdFrame onto the RHI.
+ *
+ * One command list per replay.  The lists are walked in order 0..12 (11..12
+ * for a keep frame) from the frame's start state; state commands update the
+ * state block, actions draw:
+ *
+ *   RDC_CLEAR        a render pass with load-op clear on the target
+ *   RDC_SCREEN       GS window-space prims through sprite_*_vs / sprite_ps;
+ *                    sprites, fans and strips become triangle lists, points
+ *                    become one-pixel sprites, line strips become line lists
+ *   RDC_EXACT_BLEND  blend_int on RGBA8_UINT copies of source and
+ *                    destination, written to a third RGBA8_UINT texture and
+ *                    copied back into the destination (the exact GS blend
+ *                    for feedback passes, RENDER_API.md section 7)
+ *   RDC_COPY         texture copy (gif_MoveImage)
+ *   later waves      rd__NotImplemented
+ *
+ * GS sampling rules.  The GS samples a pixel at its integer coordinate and
+ * covers x0 <= x < x1 for a sprite; the GPU samples at x + 0.5 with the
+ * top-left rule.  FrameCB.g_origin.zw = 0.5 moves GS coordinates half a
+ * pixel right and down, so a GS integer lands on a GPU pixel centre and the
+ * two rules select the same pixels; attributes interpolated at the GPU
+ * centre are the GS attributes at the integer point.  The game's own -4
+ * (quarter-pixel) corner nudges and +8 (half-texel) UV nudges stay in the
+ * data.  Texel centres are at i + 0.5 on both, so UVs only need dividing by
+ * the texture size.
+ *
+ * Render passes stay open across draws to the same colour/depth pair and
+ * are closed by a target change, a clear, a copy, or a draw that samples a
+ * target whose state must change.  rd tracks every texture's RhiState
+ * (backends do not).  A draw that samples its own render target samples a
+ * copy taken just before it (the GS reads the live buffer).
+ */
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include "rd_internal.h"
+#include "shader_consts.h"
+#include "shaders_gen.h"
+
+static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs", "sprite_world_vs", "blit_vs",
+                                                   "blend_int_vs"};
+
+static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps", "blit_ps", "blend_int_ps"};
+
+/* ------------------------------------------------------------------ init */
+
+static RhiShader makeShader(const char *name)
+{
+    const IcoShaderBlob *b = ico_FindShader(name);
+    if (!b) {
+        rd__Log("shader %s missing from the table", name);
+        return (RhiShader){0};
+    }
+    RhiShaderDesc d;
+    memset(&d, 0, sizeof(d));
+    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+    if (rhi_Backend() == RHI_BACKEND_D3D12) {
+        d.bytecode = b->dxil;
+        d.bytecodeSize = b->dxil_len;
+    } else {
+        d.bytecode = b->spirv;
+        d.bytecodeSize = b->spirv_len;
+    }
+    d.entryPoint = b->entry;
+    d.debugName = b->name;
+    return rhi_CreateShader(&d);
+}
+
+bool rd__GpuInit(void *sdlWindow)
+{
+    RhiDeviceDesc dd;
+    memset(&dd, 0, sizeof(dd));
+    dd.sdlWindow = sdlWindow;
+    dd.vsync = g_rd.settings.vsync != 0;
+    dd.appName = "ico";
+    if (!rhi_Init(&dd)) {
+        return false;
+    }
+    const RhiLimits *lim = rhi_Limits();
+    if (!lim->dualSourceBlend || !lim->stencilWrap) {
+        rd__Log("device lacks dual-source blend or stencil wrap");
+        return false;
+    }
+    const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
+    const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
+    const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
+    const RhiBindSlot s2[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS}, {1, RHI_BIND_SAMPLER, FS}};
+    const RhiBindSlot s3[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
+                               {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
+    g_rd.layoutFrame = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s0, 1, "rd frame"});
+    g_rd.layoutDraw = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 1, "rd draw"});
+    g_rd.layoutTex = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2, 2, "rd tex"});
+    g_rd.layoutInt = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s3, 2, "rd int"});
+    bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id;
+    for (int i = 0; i < RD_VS_COUNT; i++) {
+        g_rd.vs[i] = makeShader(s_vsNames[i]);
+        ok = ok && g_rd.vs[i].id;
+    }
+    for (int i = 0; i < RD_FS_COUNT; i++) {
+        g_rd.fs[i] = makeShader(s_fsNames[i]);
+        ok = ok && g_rd.fs[i].id;
+    }
+    for (int i = 0; i < RD_SAMPLER_COUNT; i++) {
+        RhiSamplerDesc sd;
+        memset(&sd, 0, sizeof(sd));
+        sd.mag = (i & 1) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.min = (i & 2) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.mip = RHI_FILTER_NEAREST;
+        sd.s = (i & 4) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
+        sd.t = (i & 8) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
+        sd.maxAnisotropy = 1.0f;
+        g_rd.samplers[i] = rhi_CreateSampler(&sd);
+        ok = ok && g_rd.samplers[i].id;
+    }
+    g_rd.dummy = rhi_CreateTexture(&(RhiTextureDesc){
+        1, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd dummy"});
+    g_rd.dummyState = RHI_STATE_UNDEFINED;
+    return ok && g_rd.dummy.id;
+}
+
+void rd__GpuShutdown(void)
+{
+    rhi_WaitIdle();
+    for (int i = 0; i < RD_SCRATCH_COUNT; i++) {
+        if (g_rd.scratch[i].tex.id) {
+            rhi_DestroyTexture(g_rd.scratch[i].tex);
+        }
+    }
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        if (g_rd.ring[i].id) {
+            rhi_DestroyBuffer(g_rd.ring[i]);
+        }
+    }
+    rd__PipelineCacheClear();
+    if (g_rd.dummy.id) {
+        rhi_DestroyTexture(g_rd.dummy);
+    }
+    for (int i = 0; i < RD_SAMPLER_COUNT; i++) {
+        if (g_rd.samplers[i].id) {
+            rhi_DestroySampler(g_rd.samplers[i]);
+        }
+    }
+    for (int i = 0; i < RD_VS_COUNT; i++) {
+        if (g_rd.vs[i].id) {
+            rhi_DestroyShader(g_rd.vs[i]);
+        }
+    }
+    for (int i = 0; i < RD_FS_COUNT; i++) {
+        if (g_rd.fs[i].id) {
+            rhi_DestroyShader(g_rd.fs[i]);
+        }
+    }
+    RhiBindGroupLayout ls[4] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex, g_rd.layoutInt};
+    for (int i = 0; i < 4; i++) {
+        if (ls[i].id) {
+            rhi_DestroyBindGroupLayout(ls[i]);
+        }
+    }
+    rhi_Shutdown();
+}
+
+/* ------------------------------------------------------------- helpers */
+
+static RhiCommandList s_cl;
+
+static uint32_t s_slot;
+
+static uint64_t s_ringOff;
+
+void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want)
+{
+    if (!t.id || *cur == want) {
+        return;
+    }
+    RhiTextureBarrier b = {t, *cur, want};
+    rhi_CmdBarrier(cl, &b, 1);
+    *cur = want;
+}
+
+uint64_t rd__RingAlloc(uint64_t size, uint64_t align)
+{
+    uint64_t off = (s_ringOff + align - 1) / align * align;
+    if (off + size > g_rd.ringCap[s_slot]) {
+        rd__Log("upload ring overflow (%llu + %llu > %llu)", (unsigned long long)off,
+                (unsigned long long)size, (unsigned long long)g_rd.ringCap[s_slot]);
+        return ~0ull;
+    }
+    s_ringOff = off + size;
+    return off;
+}
+
+static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
+                                 uint32_t size)
+{
+    uint64_t off = rd__RingAlloc(size, rhi_Limits()->uniformAlign);
+    if (off == ~0ull) {
+        return (RhiBindGroup){0};
+    }
+    memcpy(g_rd.ringMap[s_slot] + off, data, size);
+    RhiBinding b;
+    memset(&b, 0, sizeof(b));
+    b.slot = slot;
+    b.type = RHI_BIND_UNIFORM_BUFFER;
+    b.buffer = g_rd.ring[s_slot];
+    b.offset = off;
+    b.size = size;
+    return rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, &b, 1});
+}
+
+RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY)
+{
+    IcoFrameCB cb;
+    memset(&cb, 0, sizeof(cb));
+    for (int i = 0; i < 4; i++) {
+        cb.view[i * 5] = cb.proj[i * 5] = cb.viewProj[i * 5] = 1.0f;
+    }
+    cb.target[0] = (float)targetW;
+    cb.target[1] = (float)targetH;
+    cb.target[2] = 1.0f / (float)targetW;
+    cb.target[3] = 1.0f / (float)targetH;
+    cb.origin[0] = originX;
+    cb.origin[1] = originY;
+    cb.origin[2] = 0.5f; /* GS integer coordinates on GPU pixel centres */
+    cb.origin[3] = 0.5f;
+    /* Original: both spaces identity.  Mirror, widescreen anchoring and the
+     * wide projection fill these in the Enhanced presets (wave 6). */
+    cb.space[0][0] = cb.space[0][1] = 1.0f;
+    cb.space[1][0] = cb.space[1][1] = 1.0f;
+    cb.z[0] = 1.0f / 16777216.0f;
+    cb.misc[0] = (float)g_rd.replayCounter;
+    cb.misc[1] = (float)g_rd.settings.preset;
+    return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
+}
+
+RhiBindGroup rd__DrawGroup(const void *drawCB)
+{
+    return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
+}
+
+RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s)
+{
+    RhiBinding b[2];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = t;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = s;
+    return rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 2});
+}
+
+RhiSampler rd__Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
+{
+    int i = (mag ? 1 : 0) | (min ? 2 : 0) | (s ? 4 : 0) | (t ? 8 : 0);
+    return g_rd.samplers[i];
+}
+
+/* ---------------------------------------------------------------- passes */
+
+typedef struct Replay {
+    RdStateBlock st;
+    int passOpen;
+    uint32_t passColor, passDepth;
+    RhiBindGroup frameBG;
+    uint32_t frameKey[5]; /* colour, gsW, gsH, useOffset, pass serial */
+    uint32_t passSerial;
+} Replay;
+
+static void endPass(Replay *r)
+{
+    if (r->passOpen) {
+        rhi_CmdEndRenderPass(s_cl);
+        r->passOpen = 0;
+    }
+}
+
+static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
+                      RhiLoadOp colorLoad, const float clear[4], RhiLoadOp depthLoad,
+                      float clearDepth)
+{
+    endPass(r);
+    rd__Transition(s_cl, c->color, &c->colorState, RHI_STATE_RENDER_TARGET);
+    if (d) {
+        rd__Transition(s_cl, d->depth, &d->depthState, RHI_STATE_DEPTH_WRITE);
+    }
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = c->color;
+    p.color[0].load = colorLoad;
+    if (clear) {
+        memcpy(p.color[0].clear, clear, sizeof(p.color[0].clear));
+    }
+    p.colorCount = 1;
+    if (d) {
+        p.depth.texture = d->depth;
+        p.depth.depthLoad = depthLoad;
+        p.depth.stencilLoad = depthLoad;
+        p.depth.clearDepth = clearDepth;
+        p.depth.clearStencil = 0;
+    }
+    p.width = c->w;
+    p.height = c->h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)c->w, (float)c->h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(s_cl, &vp);
+    r->passOpen = 1;
+    r->passColor = cid;
+    r->passDepth = did;
+    r->passSerial++;
+}
+
+static float gsDepth(uint32_t z)
+{
+    float d = 1.0f - (float)z / 16777216.0f;
+    return d < 0.0f ? 0.0f : (d > 1.0f ? 1.0f : d);
+}
+
+/* ---------------------------------------------------------------- actions */
+
+static void doClear(Replay *r, const RdCmd *c)
+{
+    RdTargetRec *t = rd__TargetRec(c->u[0]);
+    if (!t) {
+        return;
+    }
+    float col[4];
+    for (int i = 0; i < 4; i++) {
+        col[i] = t->format == RHI_FMT_RGBA8_UINT ? (float)c->b[i] : (float)c->b[i] / 255.0f;
+    }
+    const int depth = c->b[4] && t->withDepth;
+    beginPass(r, t, depth ? t : NULL, c->u[0], depth ? c->u[0] : 0, RHI_LOAD_CLEAR, col,
+              RHI_LOAD_CLEAR, gsDepth(c->u[1]));
+    endPass(r);
+}
+
+static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const float uvOff[2],
+                    IcoSpriteVertex *o)
+{
+    int32_t x = s->x < 0 ? 0 : (s->x > 0xFFFF ? 0xFFFF : s->x);
+    int32_t y = s->y < 0 ? 0 : (s->y > 0xFFFF ? 0xFFFF : s->y);
+    o->x = (uint16_t)x;
+    o->y = (uint16_t)y;
+    o->z = s->z;
+    memcpy(o->rgba, s->rgba, 4);
+    if (uvFixed) {
+        o->u = s->s * (1.0f / 16.0f);
+        o->v = s->t * (1.0f / 16.0f);
+    } else {
+        /* STQ: per-vertex divide; screen prims carry Q = 1 in practice */
+        float q = s->q != 0.0f ? s->q : 1.0f;
+        if (q != 1.0f) {
+            rd__LogOnce(RD_ONCE_STQ, "screen prim with Q != 1: divided per vertex");
+        }
+        o->u = s->s / q * tw;
+        o->v = s->t / q * th;
+    }
+    o->u += uvOff[0] * tw;
+    o->v += uvOff[1] * th;
+}
+
+/* Expands a screen-prim command into a triangle or line list.  Returns the
+ * vertex count; *topo is RD_PRIM_TRIANGLES or RD_PRIM_LINES. */
+static uint32_t expand(const RdScreenVtx *v, uint32_t n, uint8_t prim, int uvFixed, float tw,
+                       float th, const float uvOff[2], IcoSpriteVertex *o, uint8_t *topo)
+{
+    uint32_t k = 0;
+    *topo = RD_PRIM_TRIANGLES;
+    switch (prim) {
+    case RD_PRIM_POINTS:
+        /* one pixel: the sprite [x - 0.5, x + 0.5) covers the pixel whose
+         * integer coordinate is nearest (ties to the left/top) */
+        for (uint32_t i = 0; i < n; i++) {
+            IcoSpriteVertex c;
+            convVtx(&v[i], uvFixed, tw, th, uvOff, &c);
+            IcoSpriteVertex q[4] = {c, c, c, c};
+            q[0].x = q[2].x = (uint16_t)(c.x > 8 ? c.x - 8 : 0);
+            q[1].x = q[3].x = (uint16_t)(c.x + 8);
+            q[0].y = q[1].y = (uint16_t)(c.y > 8 ? c.y - 8 : 0);
+            q[2].y = q[3].y = (uint16_t)(c.y + 8);
+            o[k++] = q[0];
+            o[k++] = q[1];
+            o[k++] = q[2];
+            o[k++] = q[2];
+            o[k++] = q[1];
+            o[k++] = q[3];
+        }
+        break;
+    case RD_PRIM_LINES:
+    case RD_PRIM_LINE_STRIP:
+        *topo = RD_PRIM_LINES;
+        for (uint32_t i = 0; i + 1 < n; i += (prim == RD_PRIM_LINES ? 2 : 1)) {
+            convVtx(&v[i], uvFixed, tw, th, uvOff, &o[k++]);
+            convVtx(&v[i + 1], uvFixed, tw, th, uvOff, &o[k++]);
+        }
+        break;
+    case RD_PRIM_TRIANGLES:
+        for (uint32_t i = 0; i + 2 < n; i += 3) {
+            for (int j = 0; j < 3; j++) {
+                convVtx(&v[i + j], uvFixed, tw, th, uvOff, &o[k++]);
+            }
+        }
+        break;
+    case RD_PRIM_TRIANGLE_STRIP:
+        for (uint32_t i = 0; i + 2 < n; i++) {
+            for (int j = 0; j < 3; j++) {
+                convVtx(&v[i + j], uvFixed, tw, th, uvOff, &o[k++]);
+            }
+        }
+        break;
+    case RD_PRIM_TRIANGLE_FAN:
+        for (uint32_t i = 1; i + 1 < n; i++) {
+            convVtx(&v[0], uvFixed, tw, th, uvOff, &o[k++]);
+            convVtx(&v[i], uvFixed, tw, th, uvOff, &o[k++]);
+            convVtx(&v[i + 1], uvFixed, tw, th, uvOff, &o[k++]);
+        }
+        break;
+    case RD_PRIM_SPRITES:
+        /* two corners; colour and Z from the second vertex (flat) */
+        for (uint32_t i = 0; i + 1 < n; i += 2) {
+            IcoSpriteVertex a, b;
+            convVtx(&v[i], uvFixed, tw, th, uvOff, &a);
+            convVtx(&v[i + 1], uvFixed, tw, th, uvOff, &b);
+            IcoSpriteVertex q[4] = {b, b, b, b};
+            q[0].x = q[2].x = a.x;
+            q[0].u = q[2].u = a.u;
+            q[0].y = q[1].y = a.y;
+            q[0].v = q[1].v = a.v;
+            o[k++] = q[0];
+            o[k++] = q[1];
+            o[k++] = q[2];
+            o[k++] = q[2];
+            o[k++] = q[1];
+            o[k++] = q[3];
+        }
+        break;
+    default:
+        break;
+    }
+    return k;
+}
+
+static RdScratch *scratchGet(uint32_t w, uint32_t h, int which)
+{
+    int seen = 0;
+    for (int i = 0; i < RD_SCRATCH_COUNT; i++) {
+        RdScratch *s = &g_rd.scratch[i];
+        if (s->tex.id && s->w == w && s->h == h && seen++ == which) {
+            return s;
+        }
+    }
+    for (int i = 0; i < RD_SCRATCH_COUNT; i++) {
+        RdScratch *s = &g_rd.scratch[i];
+        if (!s->tex.id) {
+            s->tex = rhi_CreateTexture(&(RhiTextureDesc){w, h, 1, RHI_FMT_RGBA8_UINT,
+                                                         RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED |
+                                                             RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
+                                                         "rd exact scratch"});
+            s->state = RHI_STATE_UNDEFINED;
+            s->w = w;
+            s->h = h;
+            return s->tex.id ? s : NULL;
+        }
+    }
+    /* pool full of other sizes: recycle the first slot */
+    RdScratch *s = &g_rd.scratch[which];
+    rhi_DestroyTexture(s->tex);
+    s->tex = (RhiTexture){0};
+    return scratchGet(w, h, which);
+}
+
+/* The texture a draw samples, after any state change it needs.  Returns the
+ * RhiTexture and its size and TEXFMT; dummy when untextured. */
+static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t drawTargetId,
+                                 uint32_t *w, uint32_t *h, uint32_t *fmt, int *textured)
+{
+    *textured = 0;
+    *w = *h = 1;
+    *fmt = 0;
+    if (!r->st.ds.texEnabled) {
+        return g_rd.dummy;
+    }
+    RdTexRec *t = rd__TexRec(r->st.tex);
+    if (!t) {
+        rd__LogOnce(RD_ONCE_BAD_TEX, "draw with a destroyed or unknown texture: untextured");
+        return g_rd.dummy;
+    }
+    *fmt = t->src;
+    if (t->kind == RD_TEXKIND_IMAGE) {
+        if (!t->rhi.id || t->state != RHI_STATE_SHADER_READ) {
+            return g_rd.dummy;
+        }
+        *w = t->w;
+        *h = t->h;
+        *textured = 1;
+        return t->rhi;
+    }
+    RdTargetRec *src = rd__TargetRec(t->target);
+    if (!src) {
+        return g_rd.dummy;
+    }
+    if (t->view == RD_VIEW_DEPTH) {
+        rd__NotImplemented("sampling a depth view (fog, depth of field: wave 4)");
+        return g_rd.dummy;
+    }
+    *w = src->w;
+    *h = src->h;
+    *textured = 1;
+    if (t->target == drawTargetId && src == drawTarget) {
+        /* the GS reads the buffer it is drawing into: sample a copy */
+        endPass(r);
+        if (!src->snap.id) {
+            src->snap = rhi_CreateTexture(&(RhiTextureDesc){
+                src->w, src->h, 1, src->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+            src->snapState = RHI_STATE_UNDEFINED;
+        }
+        rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
+        rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_COPY_DST);
+        rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){0, 0, src->w, src->h}, src->snap, 0, 0);
+        rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_SHADER_READ);
+        return src->snap;
+    }
+    if (src->colorState != RHI_STATE_SHADER_READ) {
+        endPass(r);
+        rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_SHADER_READ);
+    }
+    return src->color;
+}
+
+static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdTargetRec *tc = rd__TargetRec(r->st.color);
+    if (!tc || !tc->color.id) {
+        return;
+    }
+    RdTargetRec *td = rd__TargetRec(r->st.depth);
+    if (td && !td->withDepth) {
+        td = NULL;
+    }
+    const uint32_t tdId = td ? r->st.depth : 0;
+    uint32_t tw, th, tfmt;
+    int textured;
+    RhiTexture tex = resolveTexture(r, tc, r->st.color, &tw, &th, &tfmt, &textured);
+
+    /* geometry */
+    const uint32_t n = c->u[1];
+    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    const uint64_t maxBytes = (uint64_t)n * 6 * sizeof(IcoSpriteVertex);
+    const uint64_t vOff = rd__RingAlloc(maxBytes, 16);
+    if (vOff == ~0ull) {
+        return;
+    }
+    uint8_t topo;
+    IcoSpriteVertex *out = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
+    const uint32_t nv =
+        expand(v, n, c->b[0], c->b[2], (float)tw, (float)th, r->st.uvOffset, out, &topo);
+    if (nv == 0) {
+        return;
+    }
+
+    /* scissor (SCISSOR_1, inclusive) clipped to the target */
+    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
+    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
+    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
+    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
+    if (x1 < x0 || y1 < y0) {
+        return;
+    }
+
+    RdDrawPass dp[2];
+    const int np = rd__PlanScreenDraw(&r->st, topo, c->b[1], tc->format,
+                                      td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, dp);
+    if (np == 0) {
+        return;
+    }
+    RhiSampler smp = rd__Sampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                 (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t);
+    RhiBindGroup g2 = rd__TexGroup(tex, smp);
+
+    if (!r->passOpen || r->passColor != r->st.color || r->passDepth != tdId) {
+        beginPass(r, tc, td, r->st.color, tdId, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
+    }
+    const uint32_t fk[5] = {r->st.color, r->st.gsW, r->st.gsH, r->st.useOffset, r->passSerial};
+    if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
+        /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
+         * when useOffset; zero in Original, RENDER_API.md open item 4) */
+        float ox = 2048.0f - (float)(r->st.gsW >> 1);
+        float oy = 2048.0f - (float)(r->st.gsH >> 1);
+        r->frameBG = rd__FrameGroup(tc->w, tc->h, ox, oy);
+        memcpy(r->frameKey, fk, sizeof(fk));
+    }
+    RhiRect sc = {x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
+    rhi_CmdSetScissor(s_cl, &sc);
+    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    for (int i = 0; i < np; i++) {
+        RhiPipeline p = rd__GetPipeline(&dp[i].key);
+        if (!p.id) {
+            continue;
+        }
+        IcoDrawCB cb;
+        memset(&cb, 0, sizeof(cb));
+        cb.mode[0] = dp[i].flags;
+        if (textured) {
+            cb.mode[0] |= ICO_DF_TEXTURED;
+            if (r->st.ds.texFn == RD_TEXFN_DECAL) {
+                cb.mode[0] |= ICO_DF_DECAL;
+            }
+            if (r->st.ds.tcc == RD_TCC_RGBA) {
+                cb.mode[0] |= ICO_DF_TCC_RGBA;
+            }
+        }
+        cb.mode[1] = r->st.ds.texa | (tfmt << 8);
+        cb.mode[2] = dp[i].modeZ;
+        cb.mode[3] = dp[i].aref;
+        cb.blend[0] = rd__AlphaRegister(r->st.ds.blend);
+        cb.blend[1] = dp[i].fix;
+        cb.blend[2] = r->st.ds.colclamp;
+        cb.tex[0] = (float)tw;
+        cb.tex[1] = (float)th;
+        cb.tex[2] = 1.0f / (float)tw;
+        cb.tex[3] = 1.0f / (float)th;
+        rhi_CmdSetPipeline(s_cl, p);
+        rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
+        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(s_cl, 2, g2);
+        rhi_CmdDraw(s_cl, nv, 0, 1);
+    }
+}
+
+static void doExact(Replay *r, const RdCmd *c)
+{
+    RdTargetRec *src = rd__TargetRec(c->u[0]);
+    RdTargetRec *dst = rd__TargetRec(c->u[1]);
+    if (!src || !dst || !src->color.id || !dst->color.id) {
+        return;
+    }
+    endPass(r);
+    uint32_t w = dst->w, h = dst->h;
+    if (src->w != w || src->h != h) {
+        rd__LogOnce(RD_ONCE_EXACT_SIZE, "exact blend between targets of different sizes: the "
+                                        "common top-left rectangle is blended");
+        w = src->w < w ? src->w : w;
+        h = src->h < h ? src->h : h;
+    }
+    const RhiRect all = {0, 0, w, h};
+    if (!r->st.ds.abe) {
+        /* no blending: the GS writes Cs */
+        rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
+        rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
+        rhi_CmdCopyTexture(s_cl, src->color, all, dst->color, 0, 0);
+        return;
+    }
+    RdScratch *cs = scratchGet(w, h, 0), *cd = scratchGet(w, h, 1), *co = scratchGet(w, h, 2);
+    if (!cs || !cd || !co) {
+        return;
+    }
+    rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, cs->tex, &cs->state, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, src->color, all, cs->tex, 0, 0);
+    rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, cd->tex, &cd->state, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, dst->color, all, cd->tex, 0, 0);
+    rd__Transition(s_cl, cs->tex, &cs->state, RHI_STATE_SHADER_READ);
+    rd__Transition(s_cl, cd->tex, &cd->state, RHI_STATE_SHADER_READ);
+    rd__Transition(s_cl, co->tex, &co->state, RHI_STATE_RENDER_TARGET);
+
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = co->tex;
+    p.color[0].load = RHI_LOAD_DONT_CARE;
+    p.colorCount = 1;
+    p.width = w;
+    p.height = h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(s_cl, &vp);
+    rhi_CmdSetScissor(s_cl, &all);
+    RdPipeKeyInt k = rd__PostKey(RD_VS_BLEND_INT, RD_FS_BLEND_INT, RHI_FMT_RGBA8_UINT);
+    RhiPipeline pipe = rd__GetPipeline(&k);
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.blend[0] = rd__AlphaRegister(r->st.ds.blend);
+    cb.blend[1] = r->st.ds.blendFix;
+    cb.blend[2] = r->st.ds.colclamp;
+    RhiBinding b[2];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = cs->tex;
+    b[1].slot = 2;
+    b[1].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[1].texture = cd->tex;
+    if (pipe.id) {
+        rhi_CmdSetPipeline(s_cl, pipe);
+        rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
+        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(s_cl, 2,
+                            rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutInt, b, 2}));
+        rhi_CmdDraw(s_cl, 3, 0, 1);
+    }
+    rhi_CmdEndRenderPass(s_cl);
+    rd__Transition(s_cl, co->tex, &co->state, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, co->tex, all, dst->color, 0, 0);
+}
+
+static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdTargetRec *src = rd__TargetRec(c->u[0]);
+    RdTargetRec *dst = rd__TargetRec(c->u[1]);
+    if (!src || !dst || src == dst || src->format != dst->format) {
+        return;
+    }
+    RdCopyRec cr;
+    memcpy(&cr, f->payload + c->u[2], sizeof(cr));
+    if (cr.srcX < 0 || cr.srcY < 0 || cr.dstX < 0 || cr.dstY < 0) {
+        return;
+    }
+    uint32_t w = cr.w, h = cr.h;
+    if ((uint32_t)cr.srcX + w > src->w) {
+        w = src->w - (uint32_t)cr.srcX;
+    }
+    if ((uint32_t)cr.dstX + w > dst->w) {
+        w = dst->w - (uint32_t)cr.dstX;
+    }
+    if ((uint32_t)cr.srcY + h > src->h) {
+        h = src->h - (uint32_t)cr.srcY;
+    }
+    if ((uint32_t)cr.dstY + h > dst->h) {
+        h = dst->h - (uint32_t)cr.dstY;
+    }
+    if ((int32_t)w <= 0 || (int32_t)h <= 0) {
+        return;
+    }
+    endPass(r);
+    rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){cr.srcX, cr.srcY, w, h}, dst->color, cr.dstX,
+                       cr.dstY);
+}
+
+/* ----------------------------------------------------------------- frame */
+
+static uint64_t estimateRing(const RdFrame *f, int keep)
+{
+    const uint64_t align = rhi_Limits()->uniformAlign;
+    const uint64_t pitchA = rhi_Limits()->copyRowPitchAlign;
+    uint64_t total = 64 * 1024;
+    for (int l = rd__FirstList(keep); l < RD_LIST_COUNT; l++) {
+        const RdCmdList *cl = &f->lists[l];
+        for (uint32_t i = 0; i < cl->count; i++) {
+            const RdCmd *c = &cl->cmds[i];
+            total += 4 * align;
+            if (c->type == RDC_SCREEN) {
+                total += (uint64_t)c->u[1] * 6 * sizeof(IcoSpriteVertex) + 16;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+        const RdTexRec *t = &g_rd.textures[i];
+        if (t->live && t->kind == RD_TEXKIND_IMAGE && t->dirty) {
+            uint64_t pitch = ((uint64_t)t->w * 4 + pitchA - 1) / pitchA * pitchA;
+            total += pitch * t->h + rhi_Limits()->copyOffsetAlign;
+        }
+    }
+    return total;
+}
+
+static bool ensureRing(uint64_t need)
+{
+    if (g_rd.ringCap[s_slot] >= need) {
+        return true;
+    }
+    uint64_t cap = g_rd.ringCap[s_slot] ? g_rd.ringCap[s_slot] : 4u << 20;
+    while (cap < need) {
+        cap *= 2;
+    }
+    if (g_rd.ring[s_slot].id) {
+        rhi_DestroyBuffer(g_rd.ring[s_slot]);
+    }
+    g_rd.ring[s_slot] = rhi_CreateBuffer(&(RhiBufferDesc){
+        cap, RHI_BUF_VERTEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "rd ring"});
+    g_rd.ringMap[s_slot] = g_rd.ring[s_slot].id ? rhi_MapBuffer(g_rd.ring[s_slot]) : NULL;
+    g_rd.ringCap[s_slot] = g_rd.ringMap[s_slot] ? cap : 0;
+    return g_rd.ringMap[s_slot] != NULL;
+}
+
+static void uploadTextures(void)
+{
+    const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
+    const uint32_t offA = rhi_Limits()->copyOffsetAlign;
+    if (g_rd.dummyState != RHI_STATE_SHADER_READ) {
+        uint64_t off = rd__RingAlloc(4, offA);
+        static const uint8_t white[4] = {255, 255, 255, 255};
+        memcpy(g_rd.ringMap[s_slot] + off, white, 4);
+        rd__Transition(s_cl, g_rd.dummy, &g_rd.dummyState, RHI_STATE_COPY_DST);
+        rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], off, pitchA > 4 ? pitchA : 4,
+                                   g_rd.dummy, 0, (RhiRect){0, 0, 1, 1});
+        rd__Transition(s_cl, g_rd.dummy, &g_rd.dummyState, RHI_STATE_SHADER_READ);
+    }
+    for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+        RdTexRec *t = &g_rd.textures[i];
+        if (!t->live || t->kind != RD_TEXKIND_IMAGE || !t->dirty) {
+            continue;
+        }
+        if (!t->rhi.id) {
+            t->rhi = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, 1, RHI_FMT_RGBA8_UNORM,
+                                                         RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
+                                                         "rd texture"});
+            t->state = RHI_STATE_UNDEFINED;
+            if (!t->rhi.id) {
+                continue;
+            }
+        }
+        const uint32_t pitch = (t->w * 4 + pitchA - 1) / pitchA * pitchA;
+        uint64_t off = rd__RingAlloc((uint64_t)pitch * t->h, offA);
+        if (off == ~0ull) {
+            continue;
+        }
+        for (uint32_t y = 0; y < t->h; y++) {
+            memcpy(g_rd.ringMap[s_slot] + off + (uint64_t)y * pitch,
+                   t->pixels + (size_t)y * t->w * 4, (size_t)t->w * 4);
+        }
+        rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_COPY_DST);
+        rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], off, pitch, t->rhi, 0,
+                                   (RhiRect){0, 0, t->w, t->h});
+        rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
+        t->dirty = 0;
+        g_rd.stats.textureUploads++;
+    }
+}
+
+static const char *stubName(uint8_t type)
+{
+    switch (type) {
+    case RDC_MESH:
+        return "rd_DrawMesh (wave 3)";
+    case RDC_SKINNED:
+        return "rd_DrawSkinned (wave 3)";
+    case RDC_GRID:
+        return "rd_DrawGrid (wave 4)";
+    case RDC_PARTICLES:
+        return "rd_DrawParticles (wave 4)";
+    case RDC_WORLD_PRIMS:
+        return "rd_WorldPrims (wave 5)";
+    case RDC_SHADOW_STRIP:
+        return "rd_ShadowStrip (wave 4)";
+    case RDC_POST_STUB:
+        return "rd_Post (anti-alias, fog, shadow resolve, blur, film noise: waves 2-5)";
+    default:
+        return "unknown command";
+    }
+}
+
+bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
+{
+    if (!g_rd.hasDevice || !f) {
+        return false;
+    }
+    rhi_WaitFrame();
+    s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
+    g_rd.replayCounter++;
+    s_ringOff = 0;
+    if (!ensureRing(estimateRing(f, keep))) {
+        rd__Log("could not allocate the upload ring");
+        return false;
+    }
+    const bool doPresent = present && rd__PresentAcquire();
+    s_cl = rhi_BeginCommands();
+    if (!s_cl.id) {
+        return false;
+    }
+    uploadTextures();
+
+    Replay r;
+    memset(&r, 0, sizeof(r));
+    r.st = f->startState;
+    for (int l = rd__FirstList(keep); l < RD_LIST_COUNT; l++) {
+        const RdCmdList *list = &f->lists[l];
+        for (uint32_t i = 0; i < list->count; i++) {
+            const RdCmd *c = &list->cmds[i];
+            if (rd__ApplyState(&r.st, c)) {
+                continue;
+            }
+            switch (c->type) {
+            case RDC_NOP:
+                break;
+            case RDC_CLEAR:
+                doClear(&r, c);
+                break;
+            case RDC_SCREEN:
+                doScreen(&r, f, c);
+                break;
+            case RDC_EXACT_BLEND:
+                doExact(&r, c);
+                break;
+            case RDC_COPY:
+                doCopy(&r, f, c);
+                break;
+            default:
+                endPass(&r);
+                rd__NotImplemented(stubName(c->type));
+                break;
+            }
+        }
+    }
+    endPass(&r);
+    if (doPresent) {
+        rd__PresentRecord(s_cl);
+    }
+    rhi_EndCommands(s_cl);
+    rhi_Submit(s_cl);
+    if (doPresent) {
+        rd__PresentFinish();
+    }
+    g_rd.stats.pipelines = rd__PipelineCount();
+    return true;
+}
+
+/* ------------------------------------------------------------- readback */
+
+static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
+                        size_t dstSize)
+{
+    if (!t.id || dstSize < (size_t)w * h * 4) {
+        return false;
+    }
+    if (*state != RHI_STATE_COPY_SRC) {
+        RhiCommandList cl = rhi_BeginCommands();
+        if (!cl.id) {
+            return false;
+        }
+        rd__Transition(cl, t, state, RHI_STATE_COPY_SRC);
+        rhi_EndCommands(cl);
+        rhi_Submit(cl);
+    }
+    uint32_t pitch = 0;
+    if (!rhi_ReadbackTexture(t, RHI_ASPECT_COLOR, dst, dstSize, &pitch)) {
+        return false;
+    }
+    if (pitch != w * 4) {
+        uint8_t *p = dst;
+        for (uint32_t y = 1; y < h; y++) {
+            memmove(p + (size_t)y * w * 4, p + (size_t)y * pitch, (size_t)w * 4);
+        }
+    }
+    return true;
+}
+
+bool rd__ReadTarget(RdTarget target, void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    RdTargetRec *t = rd__TargetRec(target.id);
+    if (!g_rd.hasDevice || !t || t->format == RHI_FMT_R8_UNORM) {
+        return false;
+    }
+    if (w) {
+        *w = t->w;
+    }
+    if (h) {
+        *h = t->h;
+    }
+    return readTexture(t->color, &t->colorState, t->w, t->h, dst, dstSize);
+}
+
+bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    if (!g_rd.hasDevice || !g_rd.presentOut.id) {
+        return false;
+    }
+    if (w) {
+        *w = g_rd.presentOutW;
+    }
+    if (h) {
+        *h = g_rd.presentOutH;
+    }
+    return readTexture(g_rd.presentOut, &g_rd.presentOutState, g_rd.presentOutW, g_rd.presentOutH,
+                       dst, dstSize);
+}

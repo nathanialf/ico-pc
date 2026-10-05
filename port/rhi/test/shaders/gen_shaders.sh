@@ -8,7 +8,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../../.." && pwd)"
-DXC="${DXC:-$ROOT/tools/toolchain/dxc/bin/dxc}"
+DXC="${DXC:-$ROOT/tools/toolchain/deps/dxc/bin/dxc}"
 FLAGS=(-spirv -fspv-target-env=vulkan1.2 -fvk-b-shift 0 all -fvk-t-shift 16 all
        -fvk-s-shift 32 all -fvk-u-shift 48 all -O3)
 TMP="$(mktemp -d)"

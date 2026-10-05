@@ -1,0 +1,349 @@
+/* rd_dump.c: an RdFrame to a file and back.
+ *
+ * Dumps hold game assets (texture pixels) and are local only: never commit
+ * one.  The format is the in-memory frame, little-endian, versioned by
+ * RD_DUMP_VERSION; RdCmd, RdStateBlock and RdScreenVtx have fixed-width
+ * fields and no implicit padding (static asserts in rd_internal.h), so the
+ * 32-bit and 64-bit builds read each other's dumps.
+ *
+ *   char[8]  "ICORDMP\0"
+ *   u32      version, sizeof(RdCmd), sizeof(RdStateBlock), sizeof(RdScreenVtx)
+ *   u32      gsW, gsH, number, keep, hasCamera
+ *   RdCamera camera (raw)
+ *   RdStateBlock startState, endState
+ *   13 x     u32 count, RdCmd[count]
+ *   u32      payload size, payload bytes
+ *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
+ *            target, view; then w*h*4 RGBA8 bytes for images
+ *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
+ *
+ * Only the textures and temporary targets the frame references are written.
+ * Target contents are not: a frame that reads a retained target (keep,
+ * motion blur, FEED128) replays from whatever the loading context holds
+ * (zero in a fresh rd_replay_tool).
+ *
+ * Loading creates the textures and temporary targets in the current context
+ * and rewrites every id in the commands and state blocks to the new ones.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "rd_internal.h"
+
+#define MAX_REFS 4096
+
+typedef struct IdSet {
+    uint32_t ids[MAX_REFS];
+    uint32_t n;
+} IdSet;
+
+static void idAdd(IdSet *s, uint32_t id)
+{
+    if (!id) {
+        return;
+    }
+    for (uint32_t i = 0; i < s->n; i++) {
+        if (s->ids[i] == id) {
+            return;
+        }
+    }
+    if (s->n < MAX_REFS) {
+        s->ids[s->n++] = id;
+    }
+}
+
+static int isTemp(uint32_t targetId)
+{
+    return targetId && (targetId & 0xFFFF) > RD_TARGET_COUNT;
+}
+
+static void targetRef(IdSet *temps, uint32_t id)
+{
+    if (isTemp(id)) {
+        idAdd(temps, id);
+    }
+}
+
+static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps)
+{
+    const RdStateBlock *st[2] = {&f->startState, &f->endState};
+    for (int i = 0; i < 2; i++) {
+        idAdd(texs, st[i]->tex);
+        targetRef(temps, st[i]->color);
+        targetRef(temps, st[i]->depth);
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const RdCmd *c = &f->lists[l].cmds[i];
+            switch (c->type) {
+            case RDC_TEXTURE:
+                idAdd(texs, c->u[0]);
+                break;
+            case RDC_TARGET:
+            case RDC_EXACT_BLEND:
+            case RDC_COPY:
+                targetRef(temps, c->u[0]);
+                targetRef(temps, c->u[1]);
+                break;
+            case RDC_CLEAR:
+                targetRef(temps, c->u[0]);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < texs->n; i++) {
+        RdTexRec *t = rd__TexRec(texs->ids[i]);
+        if (t && t->kind == RD_TEXKIND_TARGET) {
+            targetRef(temps, t->target);
+        }
+    }
+}
+
+static bool w32(FILE *fp, uint32_t v)
+{
+    uint8_t b[4] = {(uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24)};
+    return fwrite(b, 1, 4, fp) == 4;
+}
+
+static bool wraw(FILE *fp, const void *p, size_t n)
+{
+    return n == 0 || fwrite(p, 1, n, fp) == n;
+}
+
+bool rd__DumpFrame(const RdFrame *f, const char *path)
+{
+    if (!f || !path) {
+        return false;
+    }
+    static IdSet texs, temps;
+    texs.n = temps.n = 0;
+    collectRefs(f, &texs, &temps);
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        rd__Log("dump: cannot open %s", path);
+        return false;
+    }
+    bool ok = wraw(fp, RD_DUMP_MAGIC, 8) && w32(fp, RD_DUMP_VERSION) &&
+              w32(fp, (uint32_t)sizeof(RdCmd)) && w32(fp, (uint32_t)sizeof(RdStateBlock)) &&
+              w32(fp, (uint32_t)sizeof(RdScreenVtx)) && w32(fp, f->gsW) && w32(fp, f->gsH) &&
+              w32(fp, f->number) && w32(fp, f->keep) && w32(fp, f->hasCamera) &&
+              wraw(fp, &f->camera, sizeof(f->camera)) &&
+              wraw(fp, &f->startState, sizeof(RdStateBlock)) &&
+              wraw(fp, &f->endState, sizeof(RdStateBlock));
+    for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
+        ok = w32(fp, f->lists[l].count) &&
+             wraw(fp, f->lists[l].cmds, (size_t)f->lists[l].count * sizeof(RdCmd));
+    }
+    ok = ok && w32(fp, f->payloadSize) && wraw(fp, f->payload, f->payloadSize);
+    uint32_t nt = 0;
+    for (uint32_t i = 0; i < texs.n; i++) {
+        nt += rd__TexRec(texs.ids[i]) != NULL;
+    }
+    ok = ok && w32(fp, nt);
+    for (uint32_t i = 0; ok && i < texs.n; i++) {
+        RdTexRec *t = rd__TexRec(texs.ids[i]);
+        if (!t) {
+            continue;
+        }
+        ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) && w32(fp, t->bakedTexa) &&
+             w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) && w32(fp, t->view);
+        if (ok && t->kind == RD_TEXKIND_IMAGE) {
+            ok = wraw(fp, t->pixels, (size_t)t->w * t->h * 4);
+        }
+    }
+    uint32_t nr = 0;
+    for (uint32_t i = 0; i < temps.n; i++) {
+        nr += rd__TargetRec(temps.ids[i]) != NULL;
+    }
+    ok = ok && w32(fp, nr);
+    for (uint32_t i = 0; ok && i < temps.n; i++) {
+        RdTargetRec *t = rd__TargetRec(temps.ids[i]);
+        if (t) {
+            ok = w32(fp, temps.ids[i]) && w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->withDepth) &&
+                 w32(fp, t->keepAcross);
+        }
+    }
+    ok = fclose(fp) == 0 && ok;
+    if (!ok) {
+        rd__Log("dump: write to %s failed", path);
+    }
+    return ok;
+}
+
+/* ------------------------------------------------------------------ load */
+
+static bool r32(FILE *fp, uint32_t *v)
+{
+    uint8_t b[4];
+    if (fread(b, 1, 4, fp) != 4) {
+        return false;
+    }
+    *v = (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+    return true;
+}
+
+static bool rraw(FILE *fp, void *p, size_t n)
+{
+    return n == 0 || fread(p, 1, n, fp) == n;
+}
+
+typedef struct IdMap {
+    uint32_t from[MAX_REFS], to[MAX_REFS];
+    uint32_t n;
+} IdMap;
+
+static uint32_t mapId(const IdMap *m, uint32_t id)
+{
+    for (uint32_t i = 0; i < m->n; i++) {
+        if (m->from[i] == id) {
+            return m->to[i];
+        }
+    }
+    return id;
+}
+
+static uint32_t mapTarget(const IdMap *m, uint32_t id)
+{
+    return isTemp(id) ? mapId(m, id) : id;
+}
+
+static void remapState(RdStateBlock *s, const IdMap *tex, const IdMap *tgt)
+{
+    s->tex = s->tex ? mapId(tex, s->tex) : 0;
+    s->color = mapTarget(tgt, s->color);
+    s->depth = mapTarget(tgt, s->depth);
+}
+
+typedef struct TexHeader {
+    uint32_t id, kind, src, bakedTexa, w, h, target, view;
+} TexHeader;
+
+bool rd__LoadFrame(const char *path, RdFrame *out)
+{
+    if (!g_rd.inited || !path || !out) {
+        return false;
+    }
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        rd__Log("load: cannot open %s", path);
+        return false;
+    }
+    static IdMap texMap, tgtMap;
+    texMap.n = tgtMap.n = 0;
+    memset(out, 0, sizeof(*out));
+    char magic[8];
+    uint32_t ver = 0, szCmd = 0, szState = 0, szVtx = 0;
+    bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
+              ver == RD_DUMP_VERSION && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
+              r32(fp, &szState) && szState == sizeof(RdStateBlock) && r32(fp, &szVtx) &&
+              szVtx == sizeof(RdScreenVtx);
+    if (!ok) {
+        rd__Log("load: %s is not an rd dump of version %u", path, RD_DUMP_VERSION);
+        fclose(fp);
+        return false;
+    }
+    ok = r32(fp, &out->gsW) && r32(fp, &out->gsH) && r32(fp, &out->number) && r32(fp, &out->keep) &&
+         r32(fp, &out->hasCamera) && rraw(fp, &out->camera, sizeof(out->camera)) &&
+         rraw(fp, &out->startState, sizeof(RdStateBlock)) &&
+         rraw(fp, &out->endState, sizeof(RdStateBlock));
+    for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
+        uint32_t n = 0;
+        ok = r32(fp, &n) && n < (1u << 24);
+        if (ok && n) {
+            out->lists[l].cmds = malloc((size_t)n * sizeof(RdCmd));
+            out->lists[l].cap = n;
+            out->lists[l].count = n;
+            ok = out->lists[l].cmds && rraw(fp, out->lists[l].cmds, (size_t)n * sizeof(RdCmd));
+        }
+    }
+    uint32_t psz = 0;
+    ok = ok && r32(fp, &psz) && psz < (1u << 30);
+    if (ok && psz) {
+        out->payload = malloc(psz);
+        out->payloadCap = out->payloadSize = psz;
+        ok = out->payload && rraw(fp, out->payload, psz);
+    }
+    /* textures: images now, target views after the temp targets exist */
+    uint32_t nt = 0;
+    ok = ok && r32(fp, &nt) && nt <= MAX_REFS;
+    static TexHeader views[MAX_REFS];
+    uint32_t nViews = 0;
+    for (uint32_t i = 0; ok && i < nt; i++) {
+        TexHeader h;
+        ok = r32(fp, &h.id) && r32(fp, &h.kind) && r32(fp, &h.src) && r32(fp, &h.bakedTexa) &&
+             r32(fp, &h.w) && r32(fp, &h.h) && r32(fp, &h.target) && r32(fp, &h.view);
+        if (!ok) {
+            break;
+        }
+        if (h.kind == RD_TEXKIND_IMAGE) {
+            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192;
+            uint8_t *px = ok ? malloc((size_t)h.w * h.h * 4) : NULL;
+            ok = px && rraw(fp, px, (size_t)h.w * h.h * 4);
+            if (ok) {
+                RdTex t = rd_CreateTextureSrc(h.w, h.h, px, (RdTexSrc)h.src, "dump");
+                RdTexRec *tr = rd__TexRec(t.id);
+                if (tr) {
+                    tr->bakedTexa = (uint8_t)h.bakedTexa;
+                }
+                texMap.from[texMap.n] = h.id;
+                texMap.to[texMap.n++] = t.id;
+            }
+            free(px);
+        } else {
+            views[nViews++] = h;
+        }
+    }
+    uint32_t nr = 0;
+    ok = ok && r32(fp, &nr) && nr <= RD_MAX_TEMP_PER_FRAME * 4;
+    for (uint32_t i = 0; ok && i < nr; i++) {
+        uint32_t id, w, h, d, k;
+        ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k);
+        if (ok) {
+            uint32_t nid = rd__TempTargetAlloc(w, h, (int)d, (int)k);
+            tgtMap.from[tgtMap.n] = id;
+            tgtMap.to[tgtMap.n++] = nid;
+            if (nid && out->tempCount < RD_MAX_TEMP_PER_FRAME) {
+                out->tempTargets[out->tempCount++] = nid;
+            }
+        }
+    }
+    fclose(fp);
+    for (uint32_t i = 0; ok && i < nViews; i++) {
+        RdTex t = rd_TargetTexture((RdTarget){mapTarget(&tgtMap, views[i].target)},
+                                   (RdTexView)views[i].view);
+        texMap.from[texMap.n] = views[i].id;
+        texMap.to[texMap.n++] = t.id;
+    }
+    if (!ok) {
+        rd__Log("load: %s is truncated or corrupt", path);
+        rd__FrameFree(out);
+        return false;
+    }
+    remapState(&out->startState, &texMap, &tgtMap);
+    remapState(&out->endState, &texMap, &tgtMap);
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < out->lists[l].count; i++) {
+            RdCmd *c = &out->lists[l].cmds[i];
+            switch (c->type) {
+            case RDC_TEXTURE:
+                c->u[0] = mapId(&texMap, c->u[0]);
+                break;
+            case RDC_TARGET:
+            case RDC_EXACT_BLEND:
+            case RDC_COPY:
+                c->u[0] = mapTarget(&tgtMap, c->u[0]);
+                c->u[1] = mapTarget(&tgtMap, c->u[1]);
+                break;
+            case RDC_CLEAR:
+                c->u[0] = mapTarget(&tgtMap, c->u[0]);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    out->closed = 1;
+    return true;
+}
