@@ -149,3 +149,29 @@ A Main tick is one pass of Main's loop. `common/src/main.c` calls
 - **Container checks for this package:** `rd_layout` (the layout frame
   through the host `GifPacket.c`, recording and pixels), `rd_pixel` (adds
   DATE and flat shading), headless `linux-x64` and `ref-m32` ctest.
+
+## Repeatable packaging: `tools/package_win.sh <label>`
+
+One command builds and zips the Windows test package for the current HEAD
+(`tools/package_win.sh wave2b`). It:
+
+1. Makes a clean detached worktree of HEAD at `build-host/pkg-wt` (so other
+   packages' uncommitted work is not built) and symlinks `.venv`,
+   `tools/toolchain`, `baserom` and `build/data` into it.
+2. Sets `TMPDIR=build-host/tmp` (the system `/tmp` is nearly full), then
+   configures and builds `win-x86-ref` and `win-x64` with
+   `-DICO_LINK_EXE=ON` and `-DICO_DATA_DIR` pointing at `build/data`. The
+   window build is the preset default. Any failure stops the script with
+   the log tail and a non-zero exit.
+3. Stages `dist/stage/{x86,x64}/` with `ico_pc_<arch>.exe`,
+   `ico_pc_<arch>.map`, `SDL3.dll`, `ico-pc.ini` (`watchdog=30`, no
+   `ticks=`; an `iso=` line already in the staged ini is kept) and
+   `pad-script.txt` (`port/input/pad-boot.txt`), plus `TEST.md` with the
+   label, date and commit in its heading.
+4. Writes `dist/ico-pc-<label>-win.zip` (root `ico-pc-<label>/`, no
+   `logs/` folders), prints the zip path and the commit, and removes the
+   worktree (`git worktree remove --force`, `git worktree prune`).
+
+The script is quiet and can be re-run; the full output goes to
+`build-host/pkg-<label>.log`. The `TEST.md` text lives in the script. It
+does not run the game.
