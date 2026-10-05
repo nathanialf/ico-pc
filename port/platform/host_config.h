@@ -27,6 +27,9 @@
  *   audio_dump=PATH  write the mixed 48 kHz audio to PATH (beside the ini)
  *                    as a WAV; audio_dump=1 is logs/audio.wav
  *   audio=0          window build: no audio device (the driver still runs)
+ *   saves=PATH       the memory card folder (port/save, docs/port/SAVES.md):
+ *                    the game's files are PATH/BESCES-50760ico/; default
+ *                    memcard beside the per-user folder
  */
 #ifndef ICO_PLATFORM_HOST_CONFIG_H
 #define ICO_PLATFORM_HOST_CONFIG_H
@@ -66,6 +69,10 @@ int ico_ini_store(const char *path, const char *key, const char *value);
    folder, like ico-pc.ini (one place to change when packaging moves it).
    0, or -1 (then out is "."). */
 int ico_host_pref_dir(char *out, size_t size);
+/* The memory card folder: saves= in ico-pc.ini (a relative path is taken
+   from the executable's folder), else <pref dir>/memcard. Not created. 0, or
+   -1 (then out is "memcard"). */
+int ico_host_saves_dir(char *out, size_t size);
 
 /* config.toml: a small TOML subset, enough for [sections] and key = value
    lines. Section headers are `[name]` or `[a.b]`; a key's path is

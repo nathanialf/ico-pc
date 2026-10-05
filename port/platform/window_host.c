@@ -7,6 +7,8 @@
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
+#include "host_config.h"
+#include "input_sdl.h"
 #include "rd.h"
 #include "rhi.h"
 #include "window_host.h"
@@ -17,7 +19,14 @@
 /* A host this far behind the vsync deadlines stops trying to catch up. */
 #define RESYNC_NS 100000000ull
 
+/* The game's state the mouse capture follows (common/include/main.h): the
+   boy exists in a stage, and the game is neither paused nor loading. */
+extern void *boyGObj;
+extern int game_pause;
+extern int data_loading;
+
 static SDL_Window *s_window;
+static int s_captured;
 static Uint64 s_deadline;
 static int s_open;
 
@@ -26,7 +35,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     RdSettings rs;
     int w = 0, h = 0;
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "window: SDL_Init: %s\n", SDL_GetError());
         return -1;
     }
@@ -57,7 +66,31 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
             rhi_AdapterName());
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
+    {
+        char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
+
+        ico_host_pref_dir(dir, sizeof(dir));
+        ico_path_join(path, sizeof(path), dir, "config.toml");
+        ico_input_sdl_init(path);
+    }
     return 0;
+}
+
+static void set_capture(int want)
+{
+    if (want == s_captured) {
+        return;
+    }
+    s_captured = want;
+    SDL_SetWindowRelativeMouseMode(s_window, want != 0);
+    ico_input_sdl_set_capture(want);
+}
+
+static void toggle_fullscreen(void)
+{
+    /* no mode set: SDL's borderless fullscreen at the desktop resolution; the
+       presenter letterboxes the 4:3 picture (rd_ResizeOutput follows) */
+    SDL_SetWindowFullscreen(s_window, (SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN) == 0);
 }
 
 int ico_window_pump(void)
@@ -74,6 +107,13 @@ int ico_window_pump(void)
         case SDL_EVENT_KEY_DOWN:
             if (e.key.key == SDLK_ESCAPE) {
                 quit = 1;
+            } else if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) &&
+                       (e.key.mod & SDL_KMOD_ALT) != 0) {
+                if (!e.key.repeat) {
+                    toggle_fullscreen();
+                }
+            } else {
+                ico_input_sdl_event(&e);
             }
             break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -82,9 +122,13 @@ int ico_window_pump(void)
             }
             break;
         default:
+            ico_input_sdl_event(&e);
             break;
         }
     }
+    set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
+                game_pause == 0 && data_loading == 0);
+    ico_input_sdl_update();
     return !quit;
 }
 
@@ -110,6 +154,8 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
+    set_capture(0);
+    ico_input_sdl_shutdown();
     rd_Shutdown();
     if (s_window != NULL) {
         SDL_DestroyWindow(s_window);

@@ -903,3 +903,29 @@ int ico_host_pref_dir(char *out, size_t size)
 {
     return ico_host_exe_dir(out, size);
 }
+
+int ico_host_saves_dir(char *out, size_t size)
+{
+    char dir[ICO_PATH_MAX];
+    char ini_path[ICO_PATH_MAX];
+    IcoIni *ini = malloc(sizeof(*ini));
+    const char *v;
+    int r = 0;
+
+    if (ini == NULL || ico_host_exe_dir(dir, sizeof(dir)) != 0) {
+        free(ini);
+        copy(out, size, "memcard");
+        return -1;
+    }
+    ico_path_join(ini_path, sizeof(ini_path), dir, "ico-pc.ini");
+    ico_ini_load(ini, ini_path);
+    v = ico_ini_get(ini, "saves");
+    if (v != NULL && v[0] != '\0') {
+        ico_path_join(out, size, dir, v);
+    } else {
+        r = ico_host_pref_dir(dir, sizeof(dir));
+        ico_path_join(out, size, dir, "memcard");
+    }
+    free(ini);
+    return r;
+}

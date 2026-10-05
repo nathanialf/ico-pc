@@ -2,7 +2,7 @@
  * port/input/pad_script.c
  *
  * The --pad-script reader and the scripted pad's timeline (pad_script.h).
- * port/null/pad_null.c asks it what to report.
+ * port/input/pad_host.c asks it what to report.
  */
 #include "pad_script.h"
 #include <ctype.h>

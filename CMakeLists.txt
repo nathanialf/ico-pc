@@ -299,6 +299,8 @@ add_subdirectory(port/rhi)
 add_subdirectory(port/shaders)
 add_subdirectory(port/render)
 add_subdirectory(port/audio)
+# after port/render, which finds SDL3 (input_sdl.c is the window build's)
+add_subdirectory(port/input)
 
 # --- The window build: ico_pc on port/render (renderer wave 2) ---------------
 if(TARGET ico_pc AND NOT ICO_HEADLESS)

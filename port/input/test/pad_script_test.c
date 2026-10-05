@@ -2,7 +2,7 @@
  * port/input/test/pad_script_test.c
  *
  * The --pad-script reader (port/input/pad_script.c) and what the null pad
- * (port/null/pad_null.c) then shows fumi/ios/pad.c.  pad.c itself is game
+ * (port/input/pad_host.c) then shows fumi/ios/pad.c.  pad.c itself is game
  * code and is not linked: pad_dev_tick below repeats the libpad calls of
  * its controler_stable_check (pad.c:80-270) and iosPadDevReadFunc
  * (pad.c:307-353) in their order, with the same branch conditions, and
