@@ -182,10 +182,10 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     d = CSVSYSTEM_InitDObj(1295, &InitialSObjSimpleSetting);
     p->dobj = d;
     if (d->nodeMtx != 0) {
-        iosFree(d->nodeMtx & 0xFFFFFFF);
+        iosFree(ICO_PHYS(d->nodeMtx));
     }
     if (p->dobj->nodeQuat != 0) {
-        iosFree(p->dobj->nodeQuat & 0xFFFFFFF);
+        iosFree(ICO_PHYS(p->dobj->nodeQuat));
     }
     p->dobj->nodeMtx = 0;
     p->dobj->nodeQuat = 0;
@@ -193,7 +193,7 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
     p->dobj->nodeQuat = (int)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c", 232);
     p->dobj->nodeNum = num;
     if ((int)p->dobj->nodes != 0) {
-        iosFree((int)p->dobj->nodes & 0xFFFFFFF);
+        iosFree(ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
     }
     p->dobj->nodes = iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", 232);
     for (i = 0; i < num; i++) {

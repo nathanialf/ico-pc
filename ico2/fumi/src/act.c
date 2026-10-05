@@ -535,7 +535,7 @@ void BeforeFunc(GObj *self)
     }
     {
         IntrMail *mails[5] = {&actIntrList[0], &actIntrList[3], (IntrMail *)w->mail,
-                              (IntrMail *)w->mainMail, (IntrMail *)0xFFFFFFFF};
+                              (IntrMail *)w->mainMail, (IntrMail *)ICO_INVALID_PTR};
         IntrSkip skip = {{0, 1, 0, 1}};
 
         ACTSendMailCorrect(self, actModeTbl[w->actMode].mail);
@@ -544,11 +544,11 @@ void BeforeFunc(GObj *self)
                 _ACTCorrectMsg(self, *(int *)(mb + 8 + i * 8), *(void **)(mb + 0xC + i * 8));
         }
         ACTRunIntrCorrect(self, mails[1], mails[2]);
-        for (i = 0; mails[i] != (IntrMail *)0xFFFFFFFF; i++) {
+        for (i = 0; mails[i] != (IntrMail *)ICO_INVALID_PTR; i++) {
             act_check_mail(self, mails[i]);
         }
         intr = 0;
-        for (i = 0; mails[i] != (IntrMail *)0xFFFFFFFF; i++) {
+        for (i = 0; mails[i] != (IntrMail *)ICO_INVALID_PTR; i++) {
             if (skip.w[i] == 0 || actModeTbl[w->actMode].skipMarked == 0) {
                 intr = act_check_intr_list(self, mails[i], (void **)&ent);
                 if (intr != 0) {

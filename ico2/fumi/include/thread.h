@@ -38,7 +38,7 @@ typedef struct IosSema {     /* field names derived */
 
 /* thread.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
-void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, void *stack, long stackSize,
+void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, void *stack, long long stackSize,
                      int pri);
 
 int iosThreadGetPri(IOSThread *th);
@@ -53,7 +53,7 @@ int iosSemaSignal(IosSema *self);
 int iosSemaReferStatus(IosSema *self);
 
 /* The entry points thread.c compiles in place. */
-void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap, long stackSize,
+void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap, long long stackSize,
                       int pri);
 
 void iosThreadDestroy(IOSThread *th);

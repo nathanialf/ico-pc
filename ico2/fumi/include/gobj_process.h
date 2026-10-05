@@ -30,7 +30,7 @@ typedef struct GProc {     /* field names derived */
  * out-of-line copies at the end of the object (first-declaration order). */
 inline void isysGObjProcessAlloc(unsigned int max);
 GProc *isysGObjProcAdd(GObj *g, void (*fn)(), int noThread, int pri);
-GProc *isysGObjProcAddS(GObj *g, void (*fn)(), int noThread, int pri, long stack);
+GProc *isysGObjProcAddS(GObj *g, void (*fn)(), int noThread, int pri, long long stack);
 GProc *isysGObjProcAddGOppArg(GObj *g, void (*fn)(), int noThread, int pri);
 void isysGObjProcPause(char *self);
 void isysGObjProcPauseAll(struct GObj *p);

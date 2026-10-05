@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "debug.h"
 #include "memory.h"
 #include "DmaPacket.h"
@@ -58,9 +59,8 @@ void dl_Init(void)
     dlStackDepth = 0;
     for (i = 0; i < 2; i++) {
         for (j = 0; j < 13; j++) {
-            dlBufferHead[i][j] =
-                (int)iosMallocDebug(ios_partition_common, dlBufferSize[j], __FILE__, 393) |
-                0x30000000;
+            dlBufferHead[i][j] = ICO_UNCACHED_ACCEL(
+                ICO_ADDR(iosMallocDebug(ios_partition_common, dlBufferSize[j], __FILE__, 393)));
         }
     }
     dlBank = 0;
@@ -120,15 +120,15 @@ void dl_Swap(void)
         dl_SetDLPriority(i);
         j = i + 1;
         e = (DlEntry *)((char *)dlEntries + j * stride);
-        dl_OpenDma(1, (void *)(e->start & 0xFFFFFFF), 0);
+        dl_OpenDma(1, (void *)(ICO_PHYS(e->start)), 0);
         dl_CloseDma();
         i = j;
     } while (j < 0xC);
     FlushCache(0);
     if (fbKeep) {
-        sceDmaSend(dmaVif, dlEntries[11].start & 0xFFFFFFF);
+        sceDmaSend(dmaVif, ICO_PHYS(dlEntries[11].start));
     } else {
-        sceDmaSend(dmaVif, dlEntries[0].start & 0xFFFFFFF);
+        sceDmaSend(dmaVif, ICO_PHYS(dlEntries[0].start));
     }
     dl_Clear();
 }
@@ -201,7 +201,7 @@ inline void dl_OpenDma(int id, void *addr, int qwc)
     entry->id = id;
     entry->qwc = qwc;
     entry->open = 1;
-    entry->addr = (int)addr & 0xFFFFFFF;
+    entry->addr = ICO_PHYS(ICO_ADDR(addr));
     entry->tag = old;
     entry->cur = old + 0x10;
 }

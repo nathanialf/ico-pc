@@ -284,7 +284,7 @@ static void reg_chooseReflectionMicroCode(int mode, int clip, int pri)
 }
 
 /* the quadword copy type src/Primitive.c and src/Shadow.c use */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* PacketBufferStruct (DmaPacket.h): every packet address (dma, ptr, tail,
  * gif, end) is one pointer union, read and written through its members. */
@@ -646,8 +646,8 @@ static void reg_setCMatrixPacket(Sub15C *o, float alpha, int prilist)
          * src/Primitive.c's setLight uses; the c + 0x10 store is overwritten
          * by the first increment's store */
         PacketBufferStruct.ptr.c = c + 0x10;
-        _CopyMatrix(((float (*)[16])PacketBufferStruct.ptr.c)++, (char *)o->lightMtx);
-        _CopyMatrix(((float (*)[16])PacketBufferStruct.ptr.c)++, (char *)o->lightMtx + 64);
+        _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx);
+        _CopyMatrix(ICO_POSTINC(float (*)[16], PacketBufferStruct.ptr.c), (char *)o->lightMtx + 64);
         n = PacketBufferStruct.ptr.c;
         *(int *)n = 0x15000012;
         n += 4;

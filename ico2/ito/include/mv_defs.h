@@ -17,23 +17,23 @@
  *
  * Free, the release that goes with it, is defined in each mpeg file that
  * calls it.
- *
- *
- *
- *
  */
+#include "typedef.h" /* ICO_PHYS, ICO_UNCACHED */
+
+
+
 #ifndef MV_DEFS_H
 #define MV_DEFS_H
 
 /* the physical address under a segment-mapped one, which the DMA
    controller takes */
 static __inline__ int phys_addr(int p) /* derived name */
-{ return p & 0x0FFFFFFF; }
+{ return ICO_PHYS(p); }
 
 /* the same address in the uncached-accelerated segment, ORed onto the
    physical one */
 static __inline__ int uncached_accel_addr(int p) /* derived name */
-{ return (p & 0x0FFFFFFF) | 0x20000000; }
+{ return ICO_UNCACHED(ICO_PHYS(p)); }
 #include <string.h>
 #include <assert.h>
 #include "ios.h"

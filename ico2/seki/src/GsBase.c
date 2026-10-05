@@ -270,9 +270,11 @@ void gsb_Reduction(void)
 
     sceGsSyncPath(0, 0);
     FlushCache(0);
+#ifndef ICO_HOST /* DMA channel 2 kick of the GS setup packet */
     *D2_QWC = 22;
-    *D2_MADR = (int)pk & 0x0FFFFFFF;
+    *D2_MADR = ICO_PHYS(ICO_ADDR(pk));
     *D2_CHCR = 0x101;
+#endif
     sceGsSyncPath(0, 0);
     if (pad[0].flags & 0x20) {
         debug_StdPrintfDummy("Film Noise:%d\n", optionScreenMode);
@@ -965,7 +967,11 @@ void gsb_UpdateGSSystem(int keep)
 {
     sceGsDrawEnv *draw;
 
+#ifdef ICO_HOST
+    odd_even = 0; /* GS_CSR field bit: no GS on the host */
+#else
     odd_even = (*GS_CSR >> 13) & 1;
+#endif
     gsb_Reduction();
     if (gsSystemReady == 0) {
         dl_Clear();
@@ -1011,7 +1017,11 @@ void gsb_ResetGSSystem(void)
     sceGsResetGraph(0, systemStatus[1] == 1, (unsigned short)systemStatus[0] + 2, 1);
     frame_count++;
     buffer_ID = frame_count & 1;
+#ifdef ICO_HOST
+    odd_even = 0; /* GS_CSR field bit: no GS on the host */
+#else
     odd_even = (*GS_CSR >> 13) & 1;
+#endif
     FlushCache(0);
     sceGsSwapDBuff(&db, buffer_ID);
     if (buffer_ID != 0) {

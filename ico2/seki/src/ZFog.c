@@ -219,7 +219,7 @@ void fog_DrawFog(void)
 
     FOG_END_PACKET();
 
-    dl_OpenDma(2, (void *)((int)&fogClutPacket & 0x0FFFFFFF), 67);
+    dl_OpenDma(2, (void *)ICO_PHYS(ICO_ADDR(&fogClutPacket)), 67);
     dl_CloseDma();
 
     FOG_START_PACKET();

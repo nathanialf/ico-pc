@@ -73,7 +73,11 @@ static unsigned int fadeCount; /* derived name */
 
 /* memset with an int count, which this TU's calls pin over <string.h>'s
    unsigned one */
+#ifndef ICO_HOST
+
 extern void *memset(void *dst, int c, int n);
+
+#endif
 
 #include "Texture.h"
 
@@ -660,7 +664,14 @@ void exec_layout_texture(void)
 /* init_textures_of_specified_property is a file static, as is
    ico2/common/src/kanban's function of the same name */
 /* texProperty's texNo column, &texProperty[0].texNo */
+#ifdef ICO_HOST
+#define D_0030D014 ((char *)&texProperty[0].texNo)
+#else
+
 extern char D_0030D014[];
+
+#endif
+
 /* sce/'s string.h does not declare it */
 extern char *strtok(char *s, const char *sep);
 

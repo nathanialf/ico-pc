@@ -451,7 +451,7 @@ inline void UnlockEnemyGenerate(GObj *gobj)
     Act *p = GOBJ_ACT(gobj);
     GenGeo *g = &objLayout[gobj->labelId];
     debug_StdPrintfDummy("unlock! = %d\n", gobj->labelId);
-    p->flags18.ll &= ~((unsigned long)0x8000 << 19);
+    p->flags18.ll &= ~((unsigned long long)0x8000 << 19);
     g->flags = (g->flags | 0x200000) & 0xFFFBFFFF;
 }
 

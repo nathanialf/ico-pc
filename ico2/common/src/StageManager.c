@@ -175,7 +175,7 @@ static void start_stage_Load_thread(int stage)
     stageManagerFreeResourceFlag = 1;
     stop_free_resources();
     if (mpegPlay == 0) {
-        long flags;
+        long long flags;
 
         stage_initialize();
         stageManagerFreeResourceFlag = 0;

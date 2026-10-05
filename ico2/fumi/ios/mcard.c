@@ -54,9 +54,9 @@ inline void iosMcTest(void) {}
 
 inline int iosMcSync(McMgr *mp)
 {
-    unsigned long x = mp->flags.ll;
+    unsigned long long x = mp->flags.ll;
     char y = x;
-    unsigned long z = y & 1ul;
+    unsigned long long z = y & 1ull;
     y = z;
     return -((int)y);
 }

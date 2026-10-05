@@ -255,7 +255,7 @@ static int setParticleEffect(PEGeo *self, PEPackage *pkg, struct IosMemPart *par
 }
 
 /* the EE scratchpad holds the particle being updated */
-#define PEWORK (*(PEPartRec *)0x70000000) /* derived name */
+#define PEWORK (*(PEPartRec *)ICO_SPR_ADDR(0)) /* derived name */
 
 /* the per-particle integrator: 0 for a slot that is already dead, 1
    otherwise */

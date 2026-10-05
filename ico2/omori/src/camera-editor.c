@@ -25,7 +25,7 @@
    developer's own declarations disagreed, and these calls were compiled
    against a one-argument declaration like this one. */
 extern void iosThreadCreateS(void *th, int no, void (*func)(), void *arg, void *heap,
-                             long stackSize, int pri);
+                             long long stackSize, int pri);
 extern void iosThreadStart(void *th);
 extern void iosThreadSleep(void *th);
 extern void iosThreadDestroy(void *th);
@@ -209,11 +209,11 @@ static inline void illegalMessage(int msg) /* derived name */
 void gif_test(int *a, int *b, int *c, unsigned char *rgba)
 {
     gif_SetGsReg(0, 3);
-    gif_SetGsReg(1, (long)rgba[0] | ((long)rgba[1] << 8) | ((long)rgba[2] << 16) |
-                        ((long)rgba[3] << 24));
-    gif_SetGsReg(4, (long)a[0] | ((long)a[1] << 16) | ((long)a[2] << 32));
-    gif_SetGsReg(4, (long)b[0] | ((long)b[1] << 16) | ((long)b[2] << 32));
-    gif_SetGsReg(4, (long)c[0] | ((long)c[1] << 16) | ((long)c[2] << 32));
+    gif_SetGsReg(1, (long long)rgba[0] | ((long long)rgba[1] << 8) | ((long long)rgba[2] << 16) |
+                        ((long long)rgba[3] << 24));
+    gif_SetGsReg(4, (long long)a[0] | ((long long)a[1] << 16) | ((long long)a[2] << 32));
+    gif_SetGsReg(4, (long long)b[0] | ((long long)b[1] << 16) | ((long long)b[2] << 32));
+    gif_SetGsReg(4, (long long)c[0] | ((long long)c[1] << 16) | ((long long)c[2] << 32));
 }
 
 static inline void dispPinRange(int box, int from, int to) /* derived name */

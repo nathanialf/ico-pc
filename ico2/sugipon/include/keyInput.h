@@ -9,6 +9,6 @@
 #define KEYINPUT_H
 
 void ExecKeyInput(void);
-void InitKeyInput(void);
+void InitKeyInput(int unused);
 
 #endif /* KEYINPUT_H */

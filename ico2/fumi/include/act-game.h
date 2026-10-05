@@ -171,7 +171,11 @@ int ACTGameView_Check(struct GObj *self, struct GObj *obj);
 int ACTGameViewSimple_Check(struct GObj *self, struct GObj *obj);
 int ACTGame_GetMotOrientFromWeapon(struct GObj *weapon);
 unsigned char ACTGame_NoWeapon(struct GObj *self);
+#ifdef ICO_HOST
+inline int ACTGame_isWeaponCombustible(GObj *self);
+#else
 inline int ACTGame_isWeaponCombustible(void);
+#endif
 struct GObj *ACTGame_GetNearestGObj(float *pos, int kind);
 void ACTLookTarget_Init(struct GObj *self);
 int _ACTLookTarget_Set(struct GObj *self, struct GObj *target, float *pos, int pri, int mode);

@@ -41,8 +41,8 @@ static struct SemaParam cdLockSemaParam; /* derived name */
 
 static struct SemaParam sndLockSemaParam; /* derived name */
 
-/* keyInput.h declares InitKeyInput (void); this call passes 0 */
-extern void InitKeyInput();
+/* keyInput.h is not included */
+extern void InitKeyInput(int unused);
 
 static void ios_init_plus(void)
 {

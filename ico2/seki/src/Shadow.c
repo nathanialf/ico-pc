@@ -314,7 +314,7 @@ static void shadow_getShadowVectorAverage(void *dir, Sub15C *o)
 
 /* the same quadword copy type src/Primitive.c uses: the accumulator reset is
  * one lq/sq pair per vertex */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* one weighted vertex of a cluster run: the vertex it moves and the weight it
  * moves it by */

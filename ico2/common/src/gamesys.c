@@ -264,13 +264,10 @@ void gamesysBackStageProcess(void)
     backStageProcessMain();
 }
 
-/* redeclared without a prototype: the calls here pass two or three arguments */
-extern void memcpy();
-
 void gamesysMemoryHandlerWrite(GamesysMemCursor *self, void *src, int size)
 {
     if (src != 0) {
-        memcpy(self->base + self->offset, src);
+        memcpy(self->base + self->offset, src, size);
     }
     self->offset += size;
     debug_StdPrintfDummy("write size %d\n", self->offset);
@@ -503,7 +500,7 @@ void gamesysStageExitTimeSet(int stage)
 void gamesysMemoryHandlerRead(GamesysMemCursor *self, void *dst, int size)
 {
     if (dst != 0) {
-        memcpy(dst, self->base + self->offset);
+        memcpy(dst, self->base + self->offset, size);
     }
     self->offset = self->offset + size;
 }

@@ -34,7 +34,14 @@ int kanbanCommonRead = 0;
 static KanbanCol kanbanStartCol = {{0x80, 0x80, 0x80, 0}}; /* derived name */
 
 /* texProperty's texNo column, &texProperty[0].texNo */
+#ifdef ICO_HOST
+#define D_0030D014 ((char *)&texProperty[0].texNo)
+#else
+
 extern char D_0030D014[];
+
+#endif
+
 /* a file static, as are the functions of the same name in
    ico2/fumi/src/jimaku and ico2/common/src/layout_texture */
 static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col);
@@ -126,7 +133,7 @@ static inline int kanban_layout_key(LtProp *pr) /* derived name */
     } else if ((pad[0].flags & 0x2000) && e->rightItem > 0) {
         pr->curItem = e->rightItem;
     } else {
-        unsigned long button = pad[0].flags;
+        unsigned long long button = pad[0].flags;
 
         if (button & 0x40) {
             ret = 1;

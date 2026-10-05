@@ -48,10 +48,10 @@ typedef union { /* field names derived */
     {                                                                                              \
         int n;                                                                                     \
         if ((o)->nodeMtx != 0) {                                                                   \
-            iosFree((void *)((o)->nodeMtx & 0x0FFFFFFF));                                          \
+            iosFree((void *)ICO_PHYS((o)->nodeMtx));                                          \
         }                                                                                          \
         if ((o)->nodeQuat != 0) {                                                                  \
-            iosFree((void *)((o)->nodeQuat & 0x0FFFFFFF));                                         \
+            iosFree((void *)ICO_PHYS((o)->nodeQuat));                                         \
         }                                                                                          \
         *(char **)((char *)(o) + 0xC) = 0;                                                         \
         *(char **)((char *)(o) + 0x10) = 0;                                                        \
@@ -61,7 +61,7 @@ typedef union { /* field names derived */
             iosMallocDebug(ios_partition_seki, (num) * 16, __FILE__, __LINE__);                    \
         (o)->nodeNum = (num);                                                                      \
         if ((o)->nodes != 0) {                                                                     \
-            iosFree((void *)((int)(o)->nodes & 0x0FFFFFFF));                                       \
+            iosFree((void *)ICO_PHYS(ICO_ADDR((o)->nodes)));                                       \
         }                                                                                          \
         (o)->nodes = iosMallocDebug(ios_partition_seki, (num) * 80, __FILE__, __LINE__);           \
         for (n = 0; n < (num); n++) {                                                              \

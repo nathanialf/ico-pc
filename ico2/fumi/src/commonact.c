@@ -1046,7 +1046,7 @@ void actCommonRopeClimbEnd1(GObj *volatile self)
     int step = 5;
     int isCage;
     int i;
-    long back;
+    long long back;
     int n;
     int r;
 
@@ -1996,7 +1996,7 @@ void actCommonBar(GObj *volatile self)
     ori[1] = *(float *)((char *)test_CURRENTORIENT(self) + 4);
     ori[2] = *(float *)((char *)test_CURRENTORIENT(self) + 8);
     GetRotObjectHoldPoint(hold, hold2, &GOBJ_WORK(self)->intrReq.a.wall, (void *)self);
-    (int)GOBJ_SUB(s) = (int)bar;
+    *(int *)&((GObj *)(s))->dobj = (int)bar;
     s->after = (void *)afterCommonBar;
     debug_StdPrintfDummy("set %p\n", bar);
     ((BarHold *)(int)GOBJ_SUB(self))->f1C0 = (int)bar;
@@ -2473,7 +2473,7 @@ static void flyCoreLoop(GObj *self, GObj *target, int checkStuck)
     Act *act = GOBJ_ACT(self);
     float lenSq;
     float spd;
-    unsigned long stuck =
+    unsigned long long stuck =
         checkStuck && IsFallStuckOnStep(self, 6, debug_fly_limit_test ? 29 : 30, 3, 600);
     int flags = 0;
     int ringidx;

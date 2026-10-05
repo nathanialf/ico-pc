@@ -50,7 +50,7 @@ static int stripHalfDone[2] = {0, 0}; /* derived name */
 
 static int stripHalf = 0; /* derived name */
 
-static long stripPrim = 0x144; /* derived name */
+static long long stripPrim = 0x144; /* derived name */
 
 /* project one object-space vertex through the VU0 matrix in vf4 to vf7,
    clamp it to the screen limits vf12 and vf13 carry and store the 12.4 fixed
@@ -80,17 +80,18 @@ static __inline__ void drawStrip(int *v, int n, DVColor col) /* derived name */
     int idx;
 
     gif_SetGsReg(0, stripPrim);
-    gif_SetGsReg(1, (long)col.r | ((long)col.g << 8) | ((long)col.b << 16) | ((long)col.a << 24) |
-                        ((long)0xFE00 << 46));
+    gif_SetGsReg(1, (long long)col.r | ((long long)col.g << 8) | ((long long)col.b << 16) |
+                        ((long long)col.a << 24) | ((long long)0xFE00 << 46));
     stripHalfDone[1] = 0;
     stripHalfDone[0] = 0;
     stripHalf = 0;
     while (n-- != 0) {
         projectVertex(xy, v);
         if (stripHalfDone[0] != 0 && stripHalfDone[1] != 0) {
-            gif_SetGsReg(5, (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32));
+            gif_SetGsReg(5, (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32));
         } else {
-            gif_SetGsReg(13, (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32));
+            gif_SetGsReg(13,
+                         (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32));
         }
         idx = stripHalf;
         stripHalfDone[idx] = 1;
@@ -123,8 +124,8 @@ static __inline__ void drawHalfStrip(DVSeg *b, unsigned int n, DVColor col,
                                      int side) /* derived name */
 {
     gif_SetGsReg(0, stripPrim);
-    gif_SetGsReg(1, (long)col.r | ((long)col.g << 8) | ((long)col.b << 16) | ((long)col.a << 24) |
-                        ((long)0xFE00 << 46));
+    gif_SetGsReg(1, (long long)col.r | ((long long)col.g << 8) | ((long long)col.b << 16) |
+                        ((long long)col.a << 24) | ((long long)0xFE00 << 46));
     while (n-- > 0) {
         if (b->on != 0 && b->side != side) {
             gif_SetGsReg(5, b->xy);
@@ -168,7 +169,7 @@ static void drawHT(float *v, int n, DVColor col, int neg)
         prevX = (float)xy[0];
         prevY = (float)xy[1];
         stripCount = stripCount + 1;
-        p->xy = (long)xy[0] | ((long)xy[1] << 16) | ((long)xy[2] << 32);
+        p->xy = (long long)xy[0] | ((long long)xy[1] << 16) | ((long long)xy[2] << 32);
     }
     {
         DVColor c = {-col.r, -col.g, -col.b, 128};
@@ -354,12 +355,13 @@ static void sonic(void *pos, float t)
     dvSetGsReg(0x49, 0);
     dvSetGsReg(0x42, 0x8000000044LL);
     dvSetGsReg(0x00, 0x406);
-    dvSetGsReg(0x01, (long)sonicPacketColor.r | ((long)sonicPacketColor.g << 8) |
-                         ((long)sonicPacketColor.b << 16) | ((long)sonicPacketColor.a << 24));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)sonicPacketColor.r | ((long long)sonicPacketColor.g << 8) |
+                         ((long long)sonicPacketColor.b << 16) |
+                         ((long long)sonicPacketColor.a << 24));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x4A, 0);
     dvSetGsReg(0x3B, 0x8000000080LL);
     dvSetGsReg(0x47, 0x50000);
@@ -426,14 +428,17 @@ static void sonic(void *pos, float t)
 
         dvSetGsReg(0x42, 0x8000000068LL);
         dvSetGsReg(0x00, 0x156);
-        dvSetGsReg(0x01, (long)sonicRingColor.r | ((long)sonicRingColor.g << 8) |
-                             ((long)sonicRingColor.b << 16) | ((long)sonicRingColor.a << 24));
-        dvSetGsReg(0x03, (long)rect2[0] | ((long)rect2[1] << 16));
-        dvSetGsReg(0x05, (long)(rect3[0] + 0x8000) | ((long)(rect3[1] + 0x8000) << 16) |
+        dvSetGsReg(0x01, (long long)sonicRingColor.r | ((long long)sonicRingColor.g << 8) |
+                             ((long long)sonicRingColor.b << 16) |
+                             ((long long)sonicRingColor.a << 24));
+        dvSetGsReg(0x03, (long long)rect2[0] | ((long long)rect2[1] << 16));
+        dvSetGsReg(0x05, (long long)(rect3[0] + 0x8000) | ((long long)(rect3[1] + 0x8000) << 16) |
                              0xFFFFFFFF00000000LL);
-        dvSetGsReg(0x03, (long)(rect2[0] + rect2[2]) | ((long)(rect2[1] + rect2[3]) << 16));
-        dvSetGsReg(0x05, (long)(rect3[0] + 0x8000 + rect3[2]) |
-                             ((long)(rect3[1] + 0x8000 + rect3[3]) << 16) | 0xFFFFFFFF00000000LL);
+        dvSetGsReg(0x03,
+                   (long long)(rect2[0] + rect2[2]) | ((long long)(rect2[1] + rect2[3]) << 16));
+        dvSetGsReg(0x05, (long long)(rect3[0] + 0x8000 + rect3[2]) |
+                             ((long long)(rect3[1] + 0x8000 + rect3[3]) << 16) |
+                             0xFFFFFFFF00000000LL);
         dvSetGsReg(0x4E, 0x300000C0);
         dvSetGsReg(0x47, 0x50000);
     }
@@ -500,13 +505,16 @@ static void sonic(void *pos, float t)
             dvSetGsReg(0x4E, 0x1300000C0LL);
             dvSetGsReg(0x42, 0x44);
             dvSetGsReg(0x00, 0x156);
-            dvSetGsReg(0x01, (long)c.r | ((long)c.g << 8) | ((long)c.b << 16) | ((long)c.a << 24));
-            dvSetGsReg(0x03, (long)rect4[0] | ((long)rect4[1] << 16));
-            dvSetGsReg(0x05, (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) |
+            dvSetGsReg(0x01, (long long)c.r | ((long long)c.g << 8) | ((long long)c.b << 16) |
+                                 ((long long)c.a << 24));
+            dvSetGsReg(0x03, (long long)rect4[0] | ((long long)rect4[1] << 16));
+            dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
                                  0xFFFFFFFF00000000LL);
-            dvSetGsReg(0x03, (long)(rect4[0] + rect4[2]) | ((long)(rect4[1] + rect4[3]) << 16));
-            dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                                 ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+            dvSetGsReg(0x03,
+                       (long long)(rect4[0] + rect4[2]) | ((long long)(rect4[1] + rect4[3]) << 16));
+            dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                                 ((long long)(rect[1] + 0x8000 + rect[3]) << 16) |
+                                 0xFFFFFFFF00000000LL);
         }
     }
     {
@@ -566,12 +574,13 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     dvSetGsReg(0x49, 0);
     dvSetGsReg(0x42, 0x8000000044LL);
     dvSetGsReg(0x00, 0x406);
-    dvSetGsReg(0x01, (long)volumePacketColor.r | ((long)volumePacketColor.g << 8) |
-                         ((long)volumePacketColor.b << 16) | ((long)volumePacketColor.a << 24));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)volumePacketColor.r | ((long long)volumePacketColor.g << 8) |
+                         ((long long)volumePacketColor.b << 16) |
+                         ((long long)volumePacketColor.a << 24));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x47, 0x50000);
     dvSetGsReg(0x42, 0x8000000068LL);
     dvSetGsReg(0x46, 0);
@@ -638,14 +647,15 @@ static void darkVolume(void *pos, float radius, float ratio, float edge)
     dvSetGsReg(0x47, 0x30000);
     dvSetGsReg(0x06, 0x664122800LL);
     dvSetGsReg(0x00, 0x156);
-    dvSetGsReg(0x01, (long)volumeEdgeColor.r | ((long)volumeEdgeColor.g << 8) |
-                         ((long)volumeEdgeColor.b << 16) | ((long)volumeEdgeColor.a << 24));
-    dvSetGsReg(0x03, (long)rect2[0] | ((long)rect2[1] << 16));
-    dvSetGsReg(0x05,
-               (long)(rect[0] + 0x8000) | ((long)(rect[1] + 0x8000) << 16) | 0xFFFFFFFF00000000LL);
-    dvSetGsReg(0x03, (long)(rect2[0] + rect2[2]) | ((long)(rect2[1] + rect2[3]) << 16));
-    dvSetGsReg(0x05, (long)(rect[0] + 0x8000 + rect[2]) |
-                         ((long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x01, (long long)volumeEdgeColor.r | ((long long)volumeEdgeColor.g << 8) |
+                         ((long long)volumeEdgeColor.b << 16) |
+                         ((long long)volumeEdgeColor.a << 24));
+    dvSetGsReg(0x03, (long long)rect2[0] | ((long long)rect2[1] << 16));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000) | ((long long)(rect[1] + 0x8000) << 16) |
+                         0xFFFFFFFF00000000LL);
+    dvSetGsReg(0x03, (long long)(rect2[0] + rect2[2]) | ((long long)(rect2[1] + rect2[3]) << 16));
+    dvSetGsReg(0x05, (long long)(rect[0] + 0x8000 + rect[2]) |
+                         ((long long)(rect[1] + 0x8000 + rect[3]) << 16) | 0xFFFFFFFF00000000LL);
     dvSetGsReg(0x4E, 0x300000C0);
     dvSetGsReg(0x47, 0x50000);
     {

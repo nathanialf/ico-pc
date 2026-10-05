@@ -75,7 +75,7 @@ void AdpcmInterStereoVolumeSetAll(void);
 short AdpcmInterLeaveVolumeGet(struct SqEntry *self, int idx);
 inline short AdpcmVolumeGet(struct SqEntry *self);
 inline int adpcmTickProc(struct CdvdBgReq *self, struct SqEntry *obj);
-void AdpcmInterStereoVolumeSet();
+void AdpcmInterStereoVolumeSet(void *stream, int ch);
 void AdpcmOpen(AdpcmOpenReq *self, int no, int ch, int loopNum);
 void AdpcmClose(struct SqEntry *obj);
 void AdpcmPlay(AdpcmStream *self);

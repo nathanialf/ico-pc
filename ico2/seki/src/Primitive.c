@@ -234,7 +234,7 @@ void prim_DispFan2D(Fan2D *f, int mode)
     dl_CloseDma();
 }
 
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* The mesh strip's GIF tag template: NLOOP and PRIM are ORed in per strip.
    prim_makePacketMesh3D reads it by pointer dereference. */
@@ -541,7 +541,7 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
         dd->gif.c = q + 0xC;
         ((GifPkWord *)(q + 0xC))->w[0] = 0x6C048000;
         dd->ptr.c = q + 0x10;
-        _CopyMatrix(((float (*)[16])dd->ptr.c)++, mtx);
+        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), mtx);
         r = dd->ptr.c;
         ((GifPkWord *)r)->w[0] = 0x15000010;
         r += 4;
@@ -570,8 +570,8 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
         dd->gif.c = q + 0xC;
         ((GifPkWord *)(q + 0xC))->w[0] = 0x6C088000;
         dd->ptr.c = q + 0x10;
-        _CopyMatrix(((float (*)[16])dd->ptr.c)++, lb);
-        _CopyMatrix(((float (*)[16])dd->ptr.c)++, la);
+        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), lb);
+        _CopyMatrix(ICO_POSTINC(float (*)[16], dd->ptr.c), la);
         r = dd->ptr.c;
         ((GifPkWord *)r)->w[0] = 0x15000012;
         r += 4;
@@ -602,7 +602,7 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
         dd->gif.c = q + 0xC;
         ((GifPkWord *)(q + 0xC))->w[0] = 0x6C018000;
         dd->ptr.c = q + 0x10;
-        _CopyVector(((float (*)[4])dd->ptr.c)++, v);
+        _CopyVector(ICO_POSTINC(float (*)[4], dd->ptr.c), v);
         r = dd->ptr.c;
         ((GifPkWord *)r)->w[0] = 0x15000002;
         r += 4;

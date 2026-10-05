@@ -199,8 +199,12 @@ void iosMsgQueueDestroyAll(void)
 static int signal_handler(int cause)
 {
     if (cause == 2) {
+#ifdef ICO_HOST
+        odd_even = 1; /* GS_CSR field bit read as 0: no GS on the host */
+#else
         volatile unsigned long long *reg = (volatile unsigned long long *)GS_CSR;
         odd_even = (int)(((*reg >> 13) & 1) ^ 1);
+#endif
         iWakeupThread(th_sig->id);
     }
     return 0;

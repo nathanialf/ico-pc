@@ -1,6 +1,7 @@
 #include "EnemyInit.h"
 #include "ios.h"
 #include "memory.h"
+#include "typedef.h"
 
 /* the number of enemy sets enemy_Initialize sets up, the rows of
    enemyPositionTable */
@@ -10,7 +11,7 @@ int EnemyKindNum = 0;
    position table enemy_Initialize allocates for that kind, or 0. */
 static float (*enemyPositionTable[1][27])[4]; /* derived name */
 
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 /* the stage table's record: a pointer and a count */
 typedef struct EnemySet {        /* field names derived */

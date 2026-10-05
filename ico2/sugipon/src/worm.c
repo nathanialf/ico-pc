@@ -380,10 +380,10 @@ void *InitWormGeo(GObj *act, WormInit *ini)
     d->nodes->scale[0] = 1.0f;
 
     if (d->nodeMtx != 0) {
-        iosFree(d->nodeMtx & 0xFFFFFFF);
+        iosFree(ICO_PHYS(d->nodeMtx));
     }
     if (d->nodeQuat != 0) {
-        iosFree(d->nodeQuat & 0xFFFFFFF);
+        iosFree(ICO_PHYS(d->nodeQuat));
     }
     d->nodeMtx = 0;
     d->nodeQuat = 0;
@@ -391,7 +391,7 @@ void *InitWormGeo(GObj *act, WormInit *ini)
     d->nodeQuat = (int)iosMallocDebug(ios_partition_seki, num * 16, __FILE__, 367);
     d->nodeNum = num;
     if ((int)d->nodes != 0) {
-        iosFree((int)d->nodes & 0xFFFFFFF);
+        iosFree(ICO_PHYS(ICO_ADDR(d->nodes)));
     }
     d->nodes = iosMallocDebug(ios_partition_seki, num * 80, __FILE__, 367);
     {

@@ -94,8 +94,7 @@ static void pac_DispQW(void *p, int size)
             debug_StdPrintfDummy("%12f ", ((float *)p)[i]);
         }
     }
-    debug_StdPrintfDummy("
-");
+    debug_StdPrintfDummy("\n");
 }
 
 inline void pac_Dump(int *data, int size)
@@ -147,13 +146,15 @@ void pac_DumpPac(PacHeader *pac)
             cnt--;
         }
         pac = pac->next;
-        debug_StdPrintfDummy("
-");
+        debug_StdPrintfDummy("\n");
     }
 }
 
 inline void pac_DispVu1Memory(int idx, int n, int size)
 {
+#ifdef ICO_HOST
+    /* 0x1100C000 is VU1 data memory, which has no host address */
+#else
     char *p = (char *)0x1100C000 + (idx << 4);
     int i;
     for (i = 0; i < n; i++) {
@@ -161,6 +162,7 @@ inline void pac_DispVu1Memory(int idx, int n, int size)
         p += 0x10;
         pac_DispQW(q, size);
     }
+#endif
 }
 
 /* grows the context's bounding box by one vertex (the strip builders inline
@@ -255,7 +257,7 @@ static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
     ary = obj->texDefs;
     col = obj->col;
     ctx = &pacWork;
-    *(int *)(strip - 6) = (ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag;
+    *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
         PacWork *ctx = &pacWork;
 
@@ -375,7 +377,7 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
     uv = obj->uv;
     col = obj->col;
     ctx = &pacWork;
-    *(int *)(strip - 6) = (ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag;
+    *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
         PacWork *ctx;
         int idx;
@@ -437,9 +439,15 @@ static void pac_openDmaTag(int buf)
     PacWork *ctx = &pacWork;
     float f0 = 16777215.0f;
     float f1 = -16777215.0f;
+#ifdef ICO_HOST
+    ctx->dmaTag = ICO_PHYS(buf);
+    ctx->vifCode = ICO_PHYS(buf + 0x8);
+    ctx->gifTag = ICO_PHYS(buf + 0x10);
+#else
     ctx->dmaTag = buf & mask;
     ctx->vifCode = (buf + 0x8) & mask;
     ctx->gifTag = (buf + 0x10) & mask;
+#endif
     ctx->cursor.addr = buf + 0x20;
     ctx->boxMin[2].f = f0;
     ctx->boxMin[1].f = f0;
@@ -447,7 +455,11 @@ static void pac_openDmaTag(int buf)
     ctx->boxMax[2].f = f1;
     ctx->boxMax[1].f = f1;
     ctx->boxMax[0].f = f1;
+#ifdef ICO_HOST
+    debug_StdPrintfDummy("DMAOPEN   :%p\n", ICO_PHYS(buf));
+#else
     debug_StdPrintfDummy("DMAOPEN   :%p\n", buf & mask);
+#endif
 }
 
 static void pac_setVifCode(int num)
@@ -515,8 +527,7 @@ static void pac_setGifTag(PObjMaterial *mat, PObjTexInfo *tex, unsigned long lon
     ((PacketWord *)ctx->gifTag)[1].ul = gifTagTmpl[tme].regs;
     debug_StdPrintfDummy("GIFTAG    :");
     debug_StdPrintfDummy(ctx->gifTag);
-    debug_StdPrintfDummy(" (%d)
-", nloop);
+    debug_StdPrintfDummy(" (%d)\n", nloop);
 }
 
 /* the packet bytes pac_closeTag adds up, the polygons pac_makeStrip counts, the tags
@@ -548,7 +559,7 @@ static int pac_closeTag(PObjMaterial *mat, PObjTexInfo *tex)
     unsigned int qwc;
 
     ctx = &pacWork;
-    n = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4;
+    n = ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4;
     if (n == 1) {
         ctx->dmaTag = 0;
         ctx->vifCode = 0;
@@ -557,10 +568,10 @@ static int pac_closeTag(PObjMaterial *mat, PObjTexInfo *tex)
     }
     pac_setVifCode(n);
     pac_setGifTag(mat, tex,
-                  (((((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4) - 1) /
+                  (((((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4) - 1) /
                    (unsigned int)ctx->counts.w[0]));
     pac_setVifEndCode();
-    qwc = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->dmaTag) >> 4;
+    qwc = ((ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag) >> 4;
     pac_closeDmaTag();
     pacPacketBytes += qwc * 16;
     pacTagCount += 1;
@@ -575,8 +586,8 @@ static inline void pac_continueDmaTag(void) /* derived name */
     *p++ = 0x17000000;
     ctx->cursor.i = p;
     p[0] = 0;
-    ctx->vifCode = (int)(p + 1) & 0x0FFFFFFF;
-    ctx->gifTag = (int)(p + 3) & 0x0FFFFFFF;
+    ctx->vifCode = ICO_PHYS(ICO_ADDR(p + 1));
+    ctx->gifTag = ICO_PHYS(ICO_ADDR(p + 3));
     ctx->cursor.i = p + 7;
 }
 
@@ -585,14 +596,14 @@ static void pac_continueTag(PObjMaterial *mat, PObjTexInfo *tex)
     PacWork *ctx;
 
     ctx = &pacWork;
-    if (((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4 == 1) {
+    if (((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4 == 1) {
         debug_StdPrintfDummy("pac_continueTag:Packet too small. %d\n", 0);
         debug_assert("src/Packet.c", 1147);
         __assert("src/Packet.c", 1147, "0");
     }
-    pac_setVifCode(((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4);
+    pac_setVifCode(((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4);
     pac_setGifTag(mat, tex,
-                  (((((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4) - 1) /
+                  (((((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4) - 1) /
                    (unsigned int)ctx->counts.w[0]));
     pac_continueDmaTag();
     pacTagCount += 1;
@@ -613,11 +624,11 @@ static void pac_checkDivide(int num, PObjMaterial *mat, PObjTexInfo *tex)
         debug_assert("src/Packet.c", 1172);
         __assert("src/Packet.c", 1172, "0");
     }
-    qwc = ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4;
+    qwc = ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4;
     if (qwc + ctx->counts.w[0] * num > limit) {
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     } else if ((qwc - 1) / (unsigned int)ctx->counts.w[0] * ctx->counts.w[1] + 1 +
@@ -629,14 +640,14 @@ static void pac_checkDivide(int num, PObjMaterial *mat, PObjTexInfo *tex)
             qwc + ((qwc - 1) / (unsigned int)ctx->counts.w[0] * ctx->counts.w[1] + 1));
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     } else if (ctx->counts.w[0] * num >= 256) {
         debug_StdPrintfDummy("chain too long! cut!\n");
         pac_continueTag(mat, tex);
         debug_StdPrintfDummy("size(0x%x) strips(%d)\n",
-                             ((ctx->cursor.addr & 0x0FFFFFFF) - ctx->gifTag) >> 4, pacStripCount);
+                             ((ICO_PHYS(ctx->cursor.addr)) - ctx->gifTag) >> 4, pacStripCount);
         debug_StdPrintfDummy("--- cut ---\n\n");
         pacStripCount = 0;
     }
@@ -791,13 +802,13 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
     }
     if (size > 0) {
         if (malloc_GetPartition() == 0) {
-            dst = pac_moveToSeki(pkt & 0x0FFFFFFF, size);
-            iosFree(pkt & 0x0FFFFFFF);
+            dst = pac_moveToSeki(ICO_PHYS(pkt), size);
+            iosFree(ICO_PHYS(pkt));
         } else {
-            dst = reallocseki(pkt & 0x0FFFFFFF, size);
+            dst = reallocseki(ICO_PHYS(pkt), size);
         }
     } else {
-        iosFree(pkt & 0x0FFFFFFF);
+        iosFree(ICO_PHYS(pkt));
     }
     *out = (char *)dst;
     return size;

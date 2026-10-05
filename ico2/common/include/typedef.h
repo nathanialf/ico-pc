@@ -76,6 +76,62 @@ static inline float absf(float x)
     return x < 0.0f ? -x : x;
 }
 
+/* ------------------------------------------------------------------ *
+ * Host-port seams (ICO_HOST is defined by the native build; the PS2
+ * build leaves it undefined and gets the original arithmetic).
+ *
+ * ICO_QW / ICO_UQW   the 128-bit quadword type.  ee-gcc spells it
+ *                    mode(TI); the host has no such mode under -m32, so
+ *                    it is a 16-byte-aligned pair of 64-bit halves.
+ * ICO_ADDR(p)        a pointer as the EE code held it, an int address
+ *                    (a cast there, the pointer itself on the host).
+ * ICO_PHYS(p)        the physical address of a cached or uncached EE
+ *                    address: `p & 0x0FFFFFFF`.
+ * ICO_UNCACHED(p)    the uncached alias of an address: `p | 0x20000000`.
+ * ICO_UNCACHED_ACCEL(p)  the uncached-accelerated alias: `p | 0x30000000`.
+ *                    The host has a flat address space, so the three
+ *                    address macros leave their operand unchanged, and its type, so a
+ *                    pointer stays a pointer.  The EE forms take an int
+ *                    operand; pass pointers through ICO_ADDR.
+ * ICO_INVALID_PTR    the all-ones pointer the scripts use as "none".
+ * ICO_POSTINC(T, p)  `((T)(p))++`, the cast-as-lvalue post-increment.
+ * ICO_SPR_ADDR(off)  the address `off` bytes into the 16 KB scratchpad
+ *                    (0x70000000 on the EE); the host points it at
+ *                    ico_scratchpad, defined in seki/src/Basic.c.
+ * ------------------------------------------------------------------ */
+#ifdef ICO_HOST
+typedef struct ICO_QW {
+    unsigned long long lo, hi;
+} __attribute__((aligned(16))) ICO_QW;
+typedef ICO_QW ICO_UQW;
+#define ICO_ADDR(p) (p)
+#define ICO_PHYS(p) (p)
+#define ICO_UNCACHED(p) (p)
+#define ICO_UNCACHED_ACCEL(p) (p)
+#define ICO_INVALID_PTR ((void *)(__UINTPTR_TYPE__)-1)
+extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
+#define ICO_SPR_ADDR(off) ((__UINTPTR_TYPE__)ico_scratchpad + (off))
+/* ICO_POSTINC(T, p): `((T)(p))++`, a cast used as an lvalue that ee-gcc 2.9
+ * allows and the host compiler does not.  Yields (T)p and advances the byte
+ * pointer p by sizeof(*(T)p). */
+#define ICO_POSTINC(T, p)                                                                          \
+    ({                                                                                             \
+        __typeof__((T)0) ico_old_ = (T)(p);                                                                     \
+        (p) = (void *)((char *)(p) + sizeof(*ico_old_));                                           \
+        ico_old_;                                                                                  \
+    })
+#else
+typedef int ICO_QW __attribute__((mode(TI)));
+typedef unsigned int ICO_UQW __attribute__((mode(TI)));
+#define ICO_ADDR(p) ((int)(p))
+#define ICO_PHYS(p) ((p) & 0x0FFFFFFF)
+#define ICO_UNCACHED(p) ((p) | 0x20000000)
+#define ICO_UNCACHED_ACCEL(p) ((p) | 0x30000000)
+#define ICO_INVALID_PTR ((void *)0xFFFFFFFF)
+#define ICO_SPR_ADDR(off) (0x70000000 | (off))
+#define ICO_POSTINC(T, p) ((T)(p))++
+#endif
+
 /*
  * RECONSTRUCTION.  Every shape below was read back out of the binary's own
  * memory accesses (offsets and widths from the load and store mnemonics, via

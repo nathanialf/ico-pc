@@ -2128,8 +2128,9 @@ static int GetFlyPosition(float *out, float *me, float *tgt)
 }
 
 /* An _ApproachTarget callback: _ApproachTarget_Way calls its `fn` through
-   (void (*)(char *, void *, float)).  `dist` is unused here. */
-static void NakaBoss(GObj *self, void *tgt, float dist)
+   (void (*)(char *, void *, float)).  The float is unused here; the body
+   measures its own `dist`. */
+static void NakaBoss(GObj *self, void *tgt, float distArg)
 {
     float bpos[4];
     float mpos[4];

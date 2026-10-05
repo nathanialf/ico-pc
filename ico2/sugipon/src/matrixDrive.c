@@ -30,7 +30,7 @@
 
 /* a matrix as UnitRotation keeps it: its translation row moved as one
    128-bit quadword around the unit fill */
-typedef int Qw128 __attribute__((mode(TI))); /* derived name */
+typedef ICO_QW Qw128; /* derived name */
 
 typedef struct { /* field names derived */
     char pad[48];

@@ -51,7 +51,7 @@ static inline GProc *alloc_gobj_process(void) /* derived name */
 }
 
 static GProc *isysGObjProcAdd_(GObj *gobj, GObj *arg, void (*func)(), unsigned char noThread,
-                               int pri, long stackSize)
+                               int pri, long long stackSize)
 {
     GProc *p;
     GProc *h;
@@ -119,7 +119,8 @@ inline GProc *isysGObjProcAdd(GObj *gobj, void (*func)(), int noThread, int pri)
     return isysGObjProcAdd_(gobj, gobj, func, noThread & 0xFF, pri, 0x1800);
 }
 
-inline GProc *isysGObjProcAddS(GObj *gobj, void (*func)(), int noThread, int pri, long stackSize)
+inline GProc *isysGObjProcAddS(GObj *gobj, void (*func)(), int noThread, int pri,
+                               long long stackSize)
 {
     return isysGObjProcAdd_(gobj, gobj, func, noThread & 0xFF, pri, stackSize);
 }

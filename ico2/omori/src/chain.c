@@ -723,10 +723,10 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
     }
 
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx != 0) {
-        iosFree((void *)(((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx & 0x0FFFFFFF));
+        iosFree((void *)ICO_PHYS(((ChainExtPtr *)&gobj->dobj)->sub->nodeMtx));
     }
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat != 0) {
-        iosFree((void *)(((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat & 0x0FFFFFFF));
+        iosFree((void *)ICO_PHYS(((ChainExtPtr *)&gobj->dobj)->sub->nodeQuat));
     }
     /* the node matrix and quaternion buffers are stored here as the pointers
        iosMallocDebug returns; typedef.h's Sub15C holds them as words */
@@ -739,7 +739,7 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
         (char *)iosMallocDebug(ios_partition_seki, (cw->nodes - 1) << 4, __FILE__, 1245);
     ((ChainExtPtr *)&gobj->dobj)->sub->nodeNum = cw->nodes - 1;
     if (((ChainExtPtr *)&gobj->dobj)->sub->nodes != 0) {
-        iosFree((void *)((int)((ChainExtPtr *)&gobj->dobj)->sub->nodes & 0x0FFFFFFF));
+        iosFree((void *)ICO_PHYS(ICO_ADDR(((ChainExtPtr *)&gobj->dobj)->sub->nodes)));
     }
     ((ChainExtPtr *)&gobj->dobj)->sub->nodes =
         iosMallocDebug(ios_partition_seki, (cw->nodes - 1) * 80, __FILE__, 1245);

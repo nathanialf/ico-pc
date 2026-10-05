@@ -578,7 +578,7 @@ typedef union { /* field names derived */
 } DbgPkWord; /* derived name */
 
 /* a whole quadword, for the vertex copies */
-typedef int Qw128 __attribute__((mode(TI)));
+typedef ICO_QW Qw128;
 
 /* clang-format on */
 
@@ -1060,20 +1060,28 @@ inline float debug_GetTimerSec(void)
     int v;
     float f2;
 
+#ifdef ICO_HOST
+    return -1.0f; /* no EE timer 1 on the host */
+#else
     if (*T1_MODE & 0x800) {
         return -1.0f;
     }
     v = *T1_COUNT;
     f2 = (float)(unsigned int)v;
     return f2 / clock[*T1_MODE & 3] / 60.0f;
+#endif
 }
 
 inline float debug_GetTimerCount(void)
 {
+#ifdef ICO_HOST
+    return -1.0f; /* no EE timer 1 on the host */
+#else
     if ((*T1_MODE) & 0x800) {
         return -1.0f;
     }
     return (float)(*(volatile unsigned int *)T1_COUNT);
+#endif
 }
 
 int debug_Load(char **dst, char *name, int kind)
@@ -1188,9 +1196,9 @@ static void debug_MakeFont(void)
     char *base;
     unsigned short *a, *b; unsigned short m0, m1; int i, j, k, n;
     base = iosMallocDebug(ios_partition_seki, 1, "src/debug.c", 2069); w.ptr = base;
-    *((int *)w.ptr)++ = 0x1400000C;
-    *((int *)w.ptr)++ = 0;
-    *((long long *)w.ptr)++ = 0;
+    *ICO_POSTINC(int *, w.ptr) = 0x1400000C;
+    *ICO_POSTINC(int *, w.ptr) = 0;
+    *ICO_POSTINC(long long *, w.ptr) = 0;
 
     for (i = 0; i < 256; i++) {
         a = &fontOutline[i * 16]; b = &fontGlyph[i * 8];
@@ -1209,12 +1217,12 @@ static void debug_MakeFont(void)
 
             fontPacket[i].qwc = n + 3;
             w.ptr = fontPacket[i].packet = iosMallocDebug(ios_partition_seki, (n + 3) * 16, "src/debug.c", 2090);
-            *((long long *)w.ptr)++ = 0;
-            *((int *)w.ptr)++ = 0;
-            *((int *)w.ptr)++ = ((n + 1) << 16) | 0x6C008000;
+            *ICO_POSTINC(long long *, w.ptr) = 0;
+            *ICO_POSTINC(int *, w.ptr) = 0;
+            *ICO_POSTINC(int *, w.ptr) = ((n + 1) << 16) | 0x6C008000;
 
-            *((long long *)w.ptr)++ = n | ((long long)0x8000 << 38) | debugFontTag[0];
-            *((long long *)w.ptr)++ = debugFontTag[1];
+            *ICO_POSTINC(long long *, w.ptr) = n | ((long long)0x8000 << 38) | debugFontTag[0];
+            *ICO_POSTINC(long long *, w.ptr) = debugFontTag[1];
             for (j = 0; j < 9; j++) {
                 m0 = b[j];
                 m1 = a[j];
@@ -1228,17 +1236,17 @@ static void debug_MakeFont(void)
                     if (m0 & 1) {
                         w.v[2] = 3.4028235e+38f;
                         w.v[3] = *(float *)&off;
-                        *((Qw128 *)w.ptr)++ = *(Qw128 *)w.v;
+                        *ICO_POSTINC(Qw128 *, w.ptr) = *(Qw128 *)w.v;
                     } else if (m1 & 1) {
                         w.v[2] = 1.7014117e+38f;
                         w.v[3] = *(float *)&on;
-                        *((Qw128 *)w.ptr)++ = *(Qw128 *)w.v;
+                        *ICO_POSTINC(Qw128 *, w.ptr) = *(Qw128 *)w.v;
                     }
                 }
             }
-            *((int *)w.ptr)++ = 0x1400000A;
-            *((int *)w.ptr)++ = 0;
-            *((long long *)w.ptr)++ = 0;
+            *ICO_POSTINC(int *, w.ptr) = 0x1400000A;
+            *ICO_POSTINC(int *, w.ptr) = 0;
+            *ICO_POSTINC(long long *, w.ptr) = 0;
         }
     }
 }
@@ -1294,8 +1302,8 @@ static void debug_PrintCharacter(char *str, int x, int y, int r, int g, int b, i
     ((DbgPkWord *)(p + 0x18))->w[0] = 0x200017E; PacketBufferStruct.ptr.c = p + 0x1C;
     ((DbgPkWord *)(p + 0x1C))->w[0] = 0x6C048000; PacketBufferStruct.ptr.c = p + 0x20;
 
-    _CopyIVector(((sceVu0IVECTOR *)PacketBufferStruct.ptr.c)++, col);
-    _CopyIVector(((sceVu0IVECTOR *)PacketBufferStruct.ptr.c)++, v);
+    _CopyIVector(ICO_POSTINC(sceVu0IVECTOR *, PacketBufferStruct.ptr.c), col);
+    _CopyIVector(ICO_POSTINC(sceVu0IVECTOR *, PacketBufferStruct.ptr.c), v);
 
     q = PacketBufferStruct.ptr.c; px = x * ScreenWidth / 640 + 2048; px -= ScreenWidth / 2; ((DbgPkWord *)q)->f[0] = (float)px; q += 4; PacketBufferStruct.ptr.c = q;
     py = y * ScreenHeight / 224 + 2048; py -= ScreenHeight / 2; py--; ((DbgPkWord *)q)->f[0] = (float)py; PacketBufferStruct.ptr.c = q + 4;
@@ -1410,7 +1418,11 @@ void debug_FlushFont(void)
 
 inline int debug_CallbackGsFinish(int channel)
 {
+#ifdef ICO_HOST
+    drawTimerCount = 0; /* no EE timer 0 on the host */
+#else
     drawTimerCount = *T0_COUNT;
+#endif
     return 0;
 }
 
@@ -1807,7 +1819,11 @@ inline void debug_SetBar(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type == 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
+#ifdef ICO_HOST
+        p->count = 0; /* no EE timer 0 on the host */
+#else
         p->count = *T0_COUNT;
+#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;
@@ -1825,7 +1841,11 @@ inline void debug_SetBar2(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type != 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
+#ifdef ICO_HOST
+        p->count = 0; /* no EE timer 0 on the host */
+#else
         p->count = *T0_COUNT;
+#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;

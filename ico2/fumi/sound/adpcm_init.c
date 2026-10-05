@@ -280,18 +280,10 @@ void AdpcmClose(SqEntry *obj)
     }
 }
 
-/* vol is passed (AdpcmInterLeaveVolumeSet passes it) but not read: the
-   levels come back out of the record the caller just wrote. */
-/* K&R definition: it declares no prototype, so
- * AdpcmInterStereoVolumeSetAll below calls this function with two
- * arguments. */
-void AdpcmInterStereoVolumeSet(st, ch, vol) char *st;
-
-int ch;
-
-int vol;
-
+/* the levels come back out of the record the caller just wrote */
+void AdpcmInterStereoVolumeSet(void *stream, int ch)
 {
+    char *st = (char *)stream;
     int j = ch + 1;
     short *r = (short *)(st + ch * 2);
     short *q = (short *)(st + j * 2);
@@ -327,7 +319,7 @@ void AdpcmInterLeaveVolumeSet(SqEntry *self, int idx, int vol)
     short *r = (short *)(b + idx * 4);
     q[0x20] = vol;
     r[0x1E] = vol;
-    AdpcmInterStereoVolumeSet(b, idx * 2, vol);
+    AdpcmInterStereoVolumeSet(b, idx * 2);
 }
 
 void AdpcmVolumeSet(SqEntry *self, int vol)

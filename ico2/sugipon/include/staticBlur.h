@@ -18,7 +18,7 @@ void makeFullScreenFlareBefore(int mode);
 void makeFullScreenFlareAfter(int mode);
 void depthField(float depth, float width, float rate);
 void GetSunWorldPos(float *pos);
-int InitStaticBlur(void);
+int InitStaticBlur(int unused, float *dir);
 void StaticBlur(void);
 void StaticBlurDL(void);
 void SetDepthFadeParam(float start, float width, int level);

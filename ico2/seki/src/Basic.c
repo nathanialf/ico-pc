@@ -48,7 +48,7 @@ void dma_init(void)
 
 void matrix_init(void)
 {
-    matrixptr = (char *)0x70000000;
+    matrixptr = (char *)ICO_SPR_ADDR(0);
     _UnitMatrix(matrixptr);
 }
 
@@ -128,3 +128,10 @@ float fadeSpeed = 0.0f;
 int fadeContinue = 0;
 
 unsigned char fadeColor[4] = {0};
+
+#ifdef ICO_HOST
+
+/* the EE scratchpad (0x70000000, 16 KB) as plain memory; see ICO_SPR_ADDR */
+char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
+
+#endif

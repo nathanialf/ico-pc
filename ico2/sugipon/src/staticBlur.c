@@ -1289,10 +1289,9 @@ void FullScreenEffectAfter(void)
     tex_UnlockHeadTBP(8);
 }
 
-/* declared here: matrixDrive.h is not included, since InitStaticBlur calls
-   CopyVector with one argument, which the header's prototype refuses */
+/* declared here: matrixDrive.h is not included */
 extern float ZeroPoint[4];
-extern void CopyVector();
+extern void CopyVector(float *dst, float *src);
 
 /* a file-static copy of _initStaticBlur, which InitStaticBlur inlines;
    _initStaticBlur keeps its own body, which holds 80.0f across both calls */
@@ -1302,9 +1301,11 @@ static inline void initStaticBlur(void) /* derived name */
     sunCoreFan = prim_InitFan2D(16, 80.0f, ZeroPoint, 0xFFFFFF80u, 0);
 }
 
-int InitStaticBlur(void)
+/* No caller exists.  The binary copies sunDir from a1 as it arrives, so the
+   direction is the second parameter; a0 is not read. */
+int InitStaticBlur(int unused, float *dir)
 {
-    CopyVector(sunDir);
+    CopyVector(sunDir, dir);
     sunDir[3] = 0;
     initStaticBlur();
     sunOn = 1;

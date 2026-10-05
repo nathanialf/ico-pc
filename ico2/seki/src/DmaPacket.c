@@ -1,3 +1,4 @@
+#include "typedef.h"
 #include "DmaPacket.h"
 #include "ios.h"
 #include "memory.h"
@@ -11,12 +12,10 @@ int used_dma_memory = 0;
 void dpk_Init(void)
 {
     PacketBufferStruct.cur = 0;
-    PacketBufferStruct.buf[0] =
-        (int *)((int)iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 134) |
-                0x30000000);
-    PacketBufferStruct.buf[1] =
-        (int *)((int)iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 135) |
-                0x30000000);
+    PacketBufferStruct.buf[0] = (int *)ICO_UNCACHED_ACCEL(
+        ICO_ADDR(iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 134)));
+    PacketBufferStruct.buf[1] = (int *)ICO_UNCACHED_ACCEL(
+        ICO_ADDR(iosMallocDebug(ios_partition_common, 524288, "src/DmaPacket.c", 135)));
     PacketBufferStruct.ptr.i = PacketBufferStruct.buf[PacketBufferStruct.cur];
 }
 

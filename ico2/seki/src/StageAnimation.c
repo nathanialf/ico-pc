@@ -24,7 +24,7 @@ typedef union { /* field names derived */
 } AnimWord; /* derived name */
 
 typedef union { /* field names derived */
-    long l;
+    long long l;
     short h;
 } PlayWord; /* derived name */
 
@@ -46,7 +46,7 @@ typedef union { /* field names derived */
 } StageFlags; /* derived name */
 
 typedef struct AnimNode { /* field names derived */
-    long bits;            /* 0x00 */
+    long long bits;       /* 0x00 */
     char pad08[12];
     struct AnimNode *next; /* 0x14 */
 } AnimNode;                /* derived name */
@@ -314,10 +314,10 @@ int stage_Init(void)
             e->flags.b.nodes = 0;
             for (k = 0; k < e->flags.b.count; k++) {
                 if (STG_SUB(e->obj[k])->nodeMtx != 0) {
-                    iosFree((void *)(STG_SUB(e->obj[k])->nodeMtx & 0x0FFFFFFF));
+                    iosFree((void *)ICO_PHYS(STG_SUB(e->obj[k])->nodeMtx));
                 }
                 if (STG_SUB(e->obj[k])->nodeQuat != 0) {
-                    iosFree((void *)(STG_SUB(e->obj[k])->nodeQuat & 0x0FFFFFFF));
+                    iosFree((void *)ICO_PHYS(STG_SUB(e->obj[k])->nodeQuat));
                 }
                 STG_SUB(e->obj[k])->nodeMtx = 0;
                 STG_SUB(e->obj[k])->nodeQuat = 0;
@@ -330,7 +330,7 @@ int stage_Init(void)
                    itself: a store of the field to itself */
                 STG_SUB(e->obj[k])->nodeNum = STG_SUB(e->obj[k])->nodeNum;
                 if ((int)STG_SUB(e->obj[k])->nodes != 0) {
-                    iosFree((void *)((int)STG_SUB(e->obj[k])->nodes & 0x0FFFFFFF));
+                    iosFree((void *)ICO_PHYS(ICO_ADDR(STG_SUB(e->obj[k])->nodes)));
                 }
                 STG_SUB(e->obj[k])->nodes = iosMallocDebug(
                     ios_partition_seki, STG_SUB(e->obj[k])->nodeNum * 80, __FILE__, 761);
@@ -1029,7 +1029,7 @@ inline void stage_KillPlayBgAnimationIfOverMaxCount(int key, int maxCount)
     AnimNode *p = (AnimNode *)bgaPlayList;
     int count = 0;
     while (p != 0) {
-        long v = p->bits;
+        long long v = p->bits;
         if ((((unsigned short)v << 18) >> 18) == key) {
             if (!(v & 0x8000)) {
                 count++;

@@ -597,10 +597,10 @@ BoyWork *InitBoyGeo(GObj *gobj, void *csv)
     w->head = (Sub15C *)CSVSYSTEM_InitDObj(2, csv);
     w->body = (Sub15C *)CSVSYSTEM_InitDObj(3, csv);
     if (w->body->nodeMtx != 0) {
-        iosFree(w->body->nodeMtx & 0xFFFFFFF);
+        iosFree(ICO_PHYS(w->body->nodeMtx));
     }
     if (w->body->nodeQuat != 0) {
-        iosFree(w->body->nodeQuat & 0xFFFFFFF);
+        iosFree(ICO_PHYS(w->body->nodeQuat));
     }
     w->body->nodeMtx = 0;
     w->body->nodeQuat = 0;
@@ -608,7 +608,7 @@ BoyWork *InitBoyGeo(GObj *gobj, void *csv)
     w->body->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 32, "src/boy.c", 291);
     w->body->nodeNum = 2;
     if (w->body->nodes != 0) {
-        iosFree((int)w->body->nodes & 0xFFFFFFF);
+        iosFree(ICO_PHYS(ICO_ADDR(w->body->nodes)));
     }
     w->body->nodes = iosMallocDebug(ios_partition_seki, 160, "src/boy.c", 291);
     for (i = 0; i < 2; i++) {

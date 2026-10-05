@@ -407,7 +407,11 @@ inline void ResetCollisionPC(void)
 {
     int tmp;
     pcWall0 = 0;
+#ifdef ICO_HOST
+    tmp = 0; /* no EE timer 0 on the host */
+#else
     tmp = *T0_COUNT;
+#endif
     pcWallR0 = 0;
     pcTime = tmp;
 
@@ -424,7 +428,11 @@ void DispCollisionPC(void)
     if (game_pause == 0) {
         return;
     }
+#ifdef ICO_HOST
+    pcTime = 0 - pcTime; /* no EE timer 0 on the host */
+#else
     pcTime = *T0_COUNT - pcTime;
+#endif
     sprintf(pcLine, "W :%4d %2d", pcWall0, pcWall1);
     if (debug_font_flag & 1) {
         debug_Printf(ScreenWidth / 2, ScreenHeight / 2, 0xFFFFFF00, pcLine);

@@ -426,10 +426,10 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
     } else {
         w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
         if (w->wheelDObj->nodeMtx != 0) {
-            iosFree((void *)(w->wheelDObj->nodeMtx & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeMtx)));
         }
         if (w->wheelDObj->nodeQuat != 0) {
-            iosFree((void *)(w->wheelDObj->nodeQuat & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeQuat)));
         }
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
@@ -437,7 +437,7 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         w->wheelDObj->nodeQuat = (int)iosMallocDebug(ios_partition_seki, 32, __FILE__, 560);
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
-            iosFree((void *)((int)w->wheelDObj->nodes & 0x0FFFFFFF));
+            iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
         w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, 560);
 

@@ -1175,11 +1175,10 @@ void soundSeDefStopNoRelease(int id)
     _soundSeDefStop(id, 1);
 }
 
-/* sound.h leaves it out: this call passes one argument and the definition
-   takes two */
-extern void SgSetSePitchDirect();
+/* sound.h leaves it out */
+extern void SgSetSePitchDirect(unsigned int id, int pitch);
 
-void soundSeDefPitchSet(int id)
+void soundSeDefPitchSet(int id, int pitch)
 {
     SeSlot *entry;
     short h;
@@ -1190,7 +1189,7 @@ void soundSeDefPitchSet(int id)
     id = id >> 8;
     if (id != entry->num)
         return;
-    SgSetSePitchDirect(h);
+    SgSetSePitchDirect(h, pitch);
 }
 
 inline float soundSeDefVolumeRateGet(int id)
@@ -1337,7 +1336,13 @@ void soundSeEnvPlay(void)
 }
 
 /* &stageData[0].seEnvFirst, the range soundSeEnvNotUseClose walks */
+#ifdef ICO_HOST
+#define D_005F5E60 ((char *)&stageData[0].seEnvFirst)
+#else
+
 extern char D_005F5E60[];
+
+#endif
 
 void soundSeEnvNotUseClose(int a, int b)
 {

@@ -7,7 +7,7 @@
 /* the pad device descriptor InitKeyInput hands to iosPadDevInit */
 static int keyInputPadDev[6] = {7, 2, 0, 0, 0, 0}; /* derived name */
 
-void InitKeyInput(void)
+void InitKeyInput(int unused)
 {
     int i;
     int j;

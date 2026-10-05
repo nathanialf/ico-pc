@@ -302,10 +302,7 @@ static void jimakuMgrJump(JimakuArg *p)
     jimakuMgrNext(p);
 }
 
-/* K&R definition: it declares no prototype, so jimakuEnd below calls this
- * function with no argument. */
-static void jimakuMgrEnd(p) int *p;
-
+static void jimakuMgrEnd(int *p)
 {
     int val = p[0x4C / 4];
     if (val != 0) {
@@ -382,7 +379,7 @@ void jimakuJump(JimakuArg *msg)
 void jimakuEnd(JimakuArg *msg)
 {
     systemStatus[10] = 0;
-    jimakuMgrEnd();
+    jimakuMgrEnd((int *)msg);
 }
 
 void jimakuDisp(JimakuArg *msg)

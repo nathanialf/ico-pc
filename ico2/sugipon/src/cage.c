@@ -134,10 +134,10 @@ char *InitCageGeo(char *self, SObjSimpleSetting *lay)
     /* from here to the 0x84C store: the DObj buffer reallocation, in the
        statement order box.c, boy.c and omori's chain.c also use */
     if (*(void **)((char *)w->dobj + 0xC) != 0) {
-        iosFree((void *)((int)*(void **)((char *)w->dobj + 0xC) & 0x0FFFFFFF));
+        iosFree((void *)ICO_PHYS(ICO_ADDR(*(void **)((char *)w->dobj + 0xC))));
     }
     if (w->dobj->nodeQuat != 0) {
-        iosFree((void *)(w->dobj->nodeQuat & 0x0FFFFFFF));
+        iosFree((void *)(ICO_PHYS(w->dobj->nodeQuat)));
     }
     *(char **)((char *)w->dobj + 0x10) = *(char **)((char *)w->dobj + 0xC) = 0;
     *(void **)((char *)w->dobj + 0xC) =
@@ -146,7 +146,7 @@ char *InitCageGeo(char *self, SObjSimpleSetting *lay)
         iosMallocDebug(ios_partition_seki, w->linkCount << 4, __FILE__, 128);
     w->dobj->nodeNum = w->linkCount;
     if (w->dobj->nodes != 0) {
-        iosFree((void *)((int)w->dobj->nodes & 0x0FFFFFFF));
+        iosFree((void *)(ICO_PHYS(ICO_ADDR(w->dobj->nodes))));
     }
     w->dobj->nodes = iosMallocDebug(ios_partition_seki, w->linkCount * 80, __FILE__, 128);
     for (i = 0; i < w->linkCount; i++) {

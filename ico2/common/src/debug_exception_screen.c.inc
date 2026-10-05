@@ -46,7 +46,7 @@ static DbgTexPacket drawnTexEnv
 static DbgTexPacket drawEnv
     __attribute__((aligned(16))) = {{0x1000000000008002LL, 0xE}}; /* derived name */
 
-typedef unsigned int u128_dbgscr __attribute__((mode(TI)));
+typedef ICO_UQW u128_dbgscr;
 
 /* a GIF tag as the two 64-bit words the packet takes it in, on the
    quadword boundary the GIF reads it at */
@@ -124,7 +124,7 @@ static int blinkPhase = 0; /* derived name */
 
 inline void OpenVif1DirectPacket(void *packet)
 {
-    sceVif1PkInit(packet, (vif1PacketSide << 13) | 0x70000000);
+    sceVif1PkInit(packet, ICO_SPR_ADDR(vif1PacketSide << 13));
     sceVif1PkReset(packet);
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectCode(packet, 0);
@@ -150,7 +150,7 @@ void SendVif1DirectPacket(int *self)
 
 void RestoreNormalDrawEnvironment(sceGsDBuff *db, int id, int field)
 {
-    sceGsDBuff *u = (sceGsDBuff *)((unsigned int)db | 0x20000000);
+    sceGsDBuff *u = (sceGsDBuff *)ICO_UNCACHED(ICO_ADDR(db));
     if (id != 0) {
         sceGsSetHalfOffset(&u->draw1, 0x800, 0x800, (short)field);
         sceGsPutDrawEnv(u->giftag1);
@@ -164,7 +164,7 @@ void SetTextureWithFrameBuffer(int x)
 {
     DbgTexPacket *env;
 
-    env = (DbgTexPacket *)((unsigned int)&texFrameEnv | 0x20000000);
+    env = (DbgTexPacket *)ICO_UNCACHED(ICO_ADDR(&texFrameEnv));
     sceGsSetDefTexEnv(&env->tex, 0, (short)x, (short)(ScreenWidth / 64), 1, 10, 8, 0, 0, 0, 0, 1);
     sceGsSetDefAlphaEnv(env->alpha, 0);
     env->alpha[0] = 0x44;
@@ -180,7 +180,7 @@ void SetTexDrawEnvironment(int addr)
 {
     DbgDrawPacket *env;
 
-    env = (DbgDrawPacket *)((unsigned int)&texDrawEnv | 0x20000000);
+    env = (DbgDrawPacket *)ICO_UNCACHED(ICO_ADDR(&texDrawEnv));
     sceGsSetDefDrawEnv(&env->draw, 0, (short)ScreenWidth, (short)ScreenHeight, 1, 0x31);
     env->draw.frame = (env->draw.frame & ~0x1FF) | ((addr / 32) & 0x1FF);
     env->draw.zbuf |= 0x100000000;
@@ -192,7 +192,7 @@ void SetDrawnTextureEnvironment(int x)
 {
     DbgTexPacket *env;
 
-    env = (DbgTexPacket *)((unsigned int)&drawnTexEnv | 0x20000000);
+    env = (DbgTexPacket *)ICO_UNCACHED(ICO_ADDR(&drawnTexEnv));
     sceGsSetDefTexEnv(&env->tex, 0, (short)x, (short)(ScreenWidth / 64), 0, 10, 8, 0, 0, 0, 0, 1);
     sceGsSetDefAlphaEnv(env->alpha, 0);
     env->alpha[0] = 0x44;
@@ -209,7 +209,7 @@ void SetDrawEnvironment(int mode)
 {
     DbgTexPacket *env;
 
-    env = (DbgTexPacket *)((unsigned int)&drawEnv | 0x20000000);
+    env = (DbgTexPacket *)ICO_UNCACHED(ICO_ADDR(&drawEnv));
     sceGsSetDefAlphaEnv(env->alpha, 0);
     switch (mode) {
     case 0:

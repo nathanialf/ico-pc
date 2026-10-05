@@ -6,6 +6,7 @@
 #include "ios.h"
 #include "thread.h"
 #include <assert.h>
+#include <string.h>
 
 /* The emission-order note: the `inline` functions of this TU have their
  * out-of-line copies at the end of the object, in first-declaration order
@@ -54,7 +55,7 @@ iosThreadDestroyMgr(void); /* deferred-tail member; see the emission-order note 
  * also expand: a plain `inline`, so its out-of-line copy goes to the end of
  * the object. */
 inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, void *stack,
-                            long stackSize, int pri)
+                            long long stackSize, int pri)
 {
     th->param.entry = iosThreadMain;
     th->func = func;
@@ -94,8 +95,8 @@ inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, vo
 /* iosThreadCreateS: iosThreadCreate over a malloc'd stack.  flags bit 0 marks
  * "this stack came from the heap"; iosThreadDestroyMgr reads it back and
  * frees the stack. */
-void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap, long stackSize,
-                      int pri)
+void iosThreadCreateS(IOSThread *th, int no, void (*func)(), void *arg, void *heap,
+                      long long stackSize, int pri)
 {
     void *stack;
 
@@ -244,12 +245,9 @@ inline int iosThreadJoin(IOSThread *th)
     return buf[0];
 }
 
-/* as in string.h, which this TU does not include */
-extern void strcpy();
-
-void iosThreadName(IOSThread *th)
+void iosThreadName(IOSThread *th, const char *name)
 {
-    strcpy(th->name);
+    strcpy(th->name, name);
 }
 
 void iosThreadSuspend(IOSThread *th)

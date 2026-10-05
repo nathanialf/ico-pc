@@ -277,7 +277,7 @@ static int tex_loadImage(unsigned int addr, TexData *tex, int idx, short dbp, sh
     gif_EndPacket();
     dl_OpenDma(2, &tex->levelPkt[idx], 5);
     dl_CloseDma();
-    dl_OpenDma(2, addr & 0x0FFFFFFF, size + 3);
+    dl_OpenDma(2, ICO_PHYS(addr), size + 3);
     dl_CloseDma();
     dl_OpenDma(2, texFlushPacket, 3);
     dl_CloseDma();
@@ -1011,8 +1011,7 @@ static int tex_initTextureSub(char *name, void *pkt)
         if (strcmp(name, texTable[no].rec.file) != 0) {
             /* "\x1b[31m" + EUC-JP "a texture of the same name was read from another path" + ".\n" */
             debug_StdPrintfDummy("\033[31mパスの違う同名のテクスチャを読み込もうとしました.\n");
-            debug_StdPrintfDummy("1:%s
-", name);
+            debug_StdPrintfDummy("1:%s\n", name);
             debug_StdPrintfDummy("2:%s\033[0m\n", texTable[no].rec.file);
         }
         return -1;

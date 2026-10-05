@@ -114,11 +114,18 @@ typedef enum { MPSR_OFF, MPSR_ONESHOT, MPSR_HOLD } MpsrMode;
 /* self->0x164->0x688, the per-actor motion work block, re-derived at every
    use */
 #define ACTWORK(g) ((char *)GOBJ_ACT(g)->work) /* derived name */
+#ifdef ICO_HOST
+
+/* weapon.h declares CheckWeaponKind(char *) */
+extern int CheckWeaponKind(GObj *self);
+
+#else
 
 /* unprototyped: weapon.h declares CheckWeaponKind(char *), and
    ACTGame_isWeaponCombustible calls it with no argument */
 extern int CheckWeaponKind();
 
+#endif
 /* The actor's orient-request bitfield: three 64-bit request words at
    sub+0x478, each paired with the permission mask 16 bytes further on. */
 #define ORQ(s, i) (((ActStatusWord *)((s) + 0x478))[i].q)       /* derived name */
@@ -1063,7 +1070,11 @@ inline void _GetRootObjectOrient(void *orient, GObj *obj)
 inline int ACTGame_isWeaponEnableCatchfire(GObj *self)
 {
     int ret = 0;
-    unsigned long combustible = ACTGame_isWeaponCombustible();
+#ifdef ICO_HOST
+    unsigned long long combustible = ACTGame_isWeaponCombustible(self);
+#else
+    unsigned long long combustible = ACTGame_isWeaponCombustible();
+#endif
     if (combustible) {
         ret = GetTorchGObjOfWeapon(self);
     }
@@ -1102,10 +1113,25 @@ inline unsigned char ACTGame_NoWeapon(GObj *self)
     return r;
 }
 
+/* The retail binary reaches CheckWeaponKind with the caller's `self` still in
+   a0 (ACTGame_isWeaponEnableCatchfire's argument), so the host passes it
+   explicitly.  Writing the argument on the EE moves the schedule of the
+   inlined body, so the EE spelling stays. */
+#ifdef ICO_HOST
+
+inline int ACTGame_isWeaponCombustible(GObj *self)
+{
+    return CheckWeaponKind(self) == 1;
+}
+
+#else
+
 inline int ACTGame_isWeaponCombustible(void)
 {
     return CheckWeaponKind() == 1;
 }
+
+#endif
 
 /* both absolute values are written as `((x) < 0 ? -(x) : (x))` */
 int _ACTGame_SearchGObj(GObj *self, GObj *tgt, float range, float height, int angle, float *out)

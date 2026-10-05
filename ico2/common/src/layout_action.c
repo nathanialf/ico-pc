@@ -1530,7 +1530,7 @@ int la_mc_confirm_save_file(int first, int item)
         }
         if (saveVoice != 0) {
             layoutVoice = soundDataOpenSync(&voiceOpenReq);
-            if (layoutVoice != (SqEntry *)0xFFFFFFFF) {
+            if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
                 saveVoice = 0;
                 if (layoutVoice != 0) {
                     AdpcmPlay(layoutVoice->stream);
@@ -2622,7 +2622,7 @@ int la_game_over_continue(int first)
         }
     } else if (gameOverVoice != 0) {
         layoutVoice = soundDataOpenSync(&voiceOpenReq);
-        if (layoutVoice != (SqEntry *)0xFFFFFFFF) {
+        if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
             gameOverVoice = 0;
             if (layoutVoice != 0) {
                 AdpcmPlay(layoutVoice->stream);
