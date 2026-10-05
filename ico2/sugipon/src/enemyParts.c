@@ -69,7 +69,28 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     a[0] = a[0] + f;
     _RotTransPersCurrentMatrix(b, a);
     scale = b[0] - *(float *)p->screenPos;
+#ifdef ICO_HOST
+    {
+        /* On the first update after InitPointBlur (dirty) the trail's
+           second entry has not been written: it holds whatever the stage
+           partition held there (0xFFFFFFFF in the boot script's stage 40).
+           VU0 reads an exponent-255 pattern as a number (about -2^128 for
+           that one), so c, the normal and the strip saturate; on the host
+           it is a NaN. Read it as the PS2 does (+-Fmax), which saturates
+           the same way; the trail is reset to the first point below, so
+           the strip is degenerate either way. DIVERGENCES.md F5. */
+        const float *s1 = (const float *)p->screenPos + 4;
+        float t[4];
+        int k;
+
+        for (k = 0; k < 4; k++) {
+            t[k] = ps2_operand(s1[k]);
+        }
+        _SubVector(c, t, p->screenPos);
+    }
+#else
     _SubVector(c, (char *)p->screenPos + 0x10, p->screenPos);
+#endif
     c[2] = 0.0f;
     _OuterProduct(c, c, ZUnitVector);
     _NormalizeVector(c, c);

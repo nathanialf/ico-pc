@@ -1596,7 +1596,13 @@ static ObjNode rootUpdateDirectPlay(int mode)
     p[1] = p[1] - skelMotDef->rootOffset[1];
     p[2] = p[2] + skelMotDef->rootOffset[2];
     if (kind == 14) {
+#ifdef ICO_HOST
+        /* PC port: a zero skeleton scale from the motion data: +Fmax on
+           the EE, Inf under IEEE (DIVERGENCES.md F5) */
+        s = ps2_div(1.0f, skelScale);
+#else
         s = 1.0f / skelScale;
+#endif
         p[0] = p[0] * -s;
         p[1] = p[1] * s;
         p[2] = p[2] * -s;

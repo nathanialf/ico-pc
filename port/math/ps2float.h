@@ -53,6 +53,21 @@ static inline float ps2_fmax_signed(float a, float b)
     return ps2_bits_float(((ps2_float_bits(a) ^ ps2_float_bits(b)) & 0x80000000u) | 0x7F7FFFFFu);
 }
 
+/* An operand as the PS2 reads it: the FPU and VU0 have no Inf or NaN, an
+   exponent of 255 is an ordinary exponent (about 2^128), so such a bit
+   pattern becomes +-Fmax on the host (the hardware's value is not a host
+   float: DIVERGENCES.md F3). Only for values that can come from raw memory,
+   such as the allocator's 0xFFFFFFFF fill of freed blocks. */
+static inline float ps2_operand(float x)
+{
+    uint32_t u = ps2_float_bits(x);
+
+    if ((u & 0x7F800000u) == 0x7F800000u) {
+        return ps2_bits_float((u & 0x80000000u) | 0x7F7FFFFFu);
+    }
+    return x;
+}
+
 /* a / b: VU0 `vdiv` and the EE's `div.s`. A zero divisor gives +-Fmax,
    0/0 included. */
 static inline float ps2_div(float a, float b)

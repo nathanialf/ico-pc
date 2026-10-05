@@ -20,6 +20,9 @@
 
 #include "host_loop.h"
 
+/* stands in for the game's mode word (common/src/main.c:37) */
+static int systemStatus[12];
+
 static int failures;
 
 #define CHECK(cond)                                                                                \
@@ -556,6 +559,25 @@ static void test_timers(void)
     *T0_COUNT = 0;
     ico_host_run_vsync_hooks();
     CHECK(*T0_COUNT == 11520);
+
+    /* the hook follows the game's mode word (systemStatus[0]) once it is
+       given: NTSC (0) is 1001/60000 s per vsync, 9609.6 counts at 576 kHz,
+       so five hook vsyncs are 48048; back to PAL (1), one vsync is 11520
+       again */
+    ico_clock_set_mode_word(systemStatus);
+    systemStatus[0] = 0;
+    *T0_COUNT = 0;
+    ico_host_run_vsync_hooks();
+    CHECK(*T0_COUNT == 9609);
+    for (i = 0; i < 4; i++) {
+        ico_host_run_vsync_hooks();
+    }
+    CHECK(*T0_COUNT == 48048);
+    systemStatus[0] = 1;
+    *T0_COUNT = 0;
+    ico_host_run_vsync_hooks();
+    CHECK(*T0_COUNT == 11520);
+    ico_clock_set_mode_word(NULL);
 
     /* T1 as debug_BeginTimer sets it: /16 gives 184320 per vsync, wraps to
        184320 mod 65536 = 53248 */

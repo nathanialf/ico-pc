@@ -443,7 +443,14 @@ static void checkWallState(int flag)
 
                 SubVectorXYZ(v, p->pt[2], p);
                 skelMotCtrl->wallDist = FSqrt(sceVu0InnerProduct(v, v));
+#ifdef ICO_HOST
+                /* PC port: a ray that hits the wall at its own start point
+                   gives wallDist 0; the EE's div.s makes 1 / 0 +Fmax, IEEE
+                   makes Inf (DIVERGENCES.md F5) */
+                sceVu0ScaleVector(skelMotCtrl->wallDir, v, ps2_div(1.0f, skelMotCtrl->wallDist));
+#else
                 sceVu0ScaleVector(skelMotCtrl->wallDir, v, 1.0f / skelMotCtrl->wallDist);
+#endif
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x20;
                 skelMotCtrl->pureWallAttr = skelMotCtrl->wallAttr = GetWallAttribute(p);
                 /* The hit count reaches GetOrientOfWall as a pointer-typed

@@ -1119,7 +1119,16 @@ static void getMotionGeometry(void *self)
             }
             k = motionKind[w->motion].stepNode;
             if (flag != 0) {
+#ifdef ICO_HOST
+                /* PC port: shiftMotionData sets blendFrames to 0 for a
+                   shift shorter than one frame at this rate; the guard
+                   then passes only with blendCount 0 (a record not yet
+                   shifted), where 0 / 0 is +Fmax on the EE and NaN under
+                   IEEE (DIVERGENCES.md F5) */
+                float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
+#else
                 float s = (float)w->blendCount / (float)w->blendFrames;
+#endif
 
                 GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, (StreamElem *)mot, v.f,
                                  MOWORK(self)->blendBuf, MOWORK(self)->localPos, s, blendless, n);

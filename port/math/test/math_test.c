@@ -168,6 +168,10 @@ static void test_helpers(void)
     check(ps2_ftoi4(1.5f) == 24 && ps2_ftoi4(-0.03125f) == 0, "ftoi4");
     check(ps2_ftoi4(2e8f) == INT32_MAX, "ftoi4 saturates");
     check(ps2_max(-2.0f, -3.0f) == -2.0f && ps2_min(-2.0f, -3.0f) == -3.0f, "max/min negatives");
+    check_bits(ps2_operand(ps2_bits_float(0xFFFFFFFFu)), 0xFF7FFFFFu, "operand 0xFFFFFFFF = -Fmax");
+    check_bits(ps2_operand(ps2_bits_float(0x7F800000u)), 0x7F7FFFFFu, "operand +Inf = +Fmax");
+    check_bits(ps2_operand(ps2_bits_float(0x7FC00001u)), 0x7F7FFFFFu, "operand +NaN = +Fmax");
+    check_bits(ps2_operand(-2.5f), 0xC0200000u, "operand passes a normal through");
     /* The sim mode itself: overflow lands on Fmax, tiny results flush. */
     check_bits(big * 2.0f, 0x7F7FFFFFu, "overflow is Fmax under round toward zero");
     check_bits(tiny * 1e-5f, 0x00000000u, "a denormal result flushes to zero");

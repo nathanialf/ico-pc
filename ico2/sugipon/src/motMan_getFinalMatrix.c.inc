@@ -122,10 +122,20 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
         } else {
             /* the guard is the +0x48 limit, the division the +0x30 one, as in the
                positive arm above */
+#ifdef ICO_HOST
+            /* PC port: the guard does not test the divisor, so a record
+               with a zero +0x30 limit and a non-zero +0x48 one divides by
+               zero: +-Fmax on the EE (DIVERGENCES.md F5) */
+            t = ANG_OF_DEG(lim[6].h) == 0.0f ? 0.0f
+                                             : (ps2_div((float)*hp, ANG_OF_DEG(lim[4].h)) < 0.0f
+                                                    ? -ps2_div((float)*hp, ANG_OF_DEG(lim[4].h))
+                                                    : ps2_div((float)*hp, ANG_OF_DEG(lim[4].h)));
+#else
             t = ANG_OF_DEG(lim[6].h) == 0.0f ? 0.0f
                                              : ((float)*hp / ANG_OF_DEG(lim[4].h) < 0.0f
                                                     ? -((float)*hp / ANG_OF_DEG(lim[4].h))
                                                     : (float)*hp / ANG_OF_DEG(lim[4].h));
+#endif
 
             dnlim = ANG_OF_DEG(pdn) + (ANG_OF_DEG(lim[8].p) - ANG_OF_DEG(pdn)) * t;
 
@@ -672,10 +682,20 @@ static void _getFinalMatrix(int id)
                     }
                 }
                 dd = d * d;
+#ifdef ICO_HOST
+                /* PC port: a target at the shoulder (d 0) or a zero bone
+                   length (skelScale 0) divides by zero: +-Fmax on the EE,
+                   Inf or NaN under IEEE (DIVERGENCES.md F5) */
+                ikBend0 = GetTableArcCos(
+                    ps2_div(dd + len[0] * len[0] - len[1] * len[1], 2.0f * len[0] * d));
+                ikBend1 = GetTableArcCos(
+                    ps2_div(dd + len[1] * len[1] - len[0] * len[0], 2.0f * len[1] * d));
+#else
                 ikBend0 =
                     GetTableArcCos((dd + len[0] * len[0] - len[1] * len[1]) / (2.0f * len[0] * d));
                 ikBend1 =
                     GetTableArcCos((dd + len[1] * len[1] - len[0] * len[0]) / (2.0f * len[1] * d));
+#endif
                 RotQuaternionX(qa, ba);
                 RotQuaternionZ(qa, ikBend0);
                 CopyQuaternion(s, qa);
@@ -982,8 +1002,15 @@ static void _getFinalMatrix(int id)
             aa = len[0] * len[0];
             bb = len[1] * len[1];
             d2 = d + d;
+#ifdef ICO_HOST
+            /* PC port: the same zero distance or bone length as the arm IK
+               above (DIVERGENCES.md F5) */
+            ikBend0 = acosf(ps2_div(dd + aa - bb, d2 * len[0])) * 10430.378f;
+            ikBend1 = acosf(ps2_div(dd + bb - aa, d2 * len[1])) * 10430.378f;
+#else
             ikBend0 = acosf((dd + aa - bb) / (d2 * len[0])) * 10430.378f;
             ikBend1 = acosf((dd + bb - aa) / (d2 * len[1])) * 10430.378f;
+#endif
             MatrixDrive_PopMatrix();
             if (flag == 0) {
                 MultiQuaternion(q, q, dq);

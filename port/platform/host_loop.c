@@ -13,6 +13,7 @@
 #include "diag_host.h"
 #include "fpenv.h"
 #include "host_loop.h"
+#include "clock.h"
 #include "sched.h"
 #include "trace_host.h"
 
@@ -55,6 +56,8 @@ void ico_host_init(void)
     ico_diag_name_func((void *)boot_main, "boot (the game's main)");
     /* the SPU2 and the SNDN2DRV host, before the game binds to it */
     ico_audio_host_init();
+    /* the EE timers follow the video mode (50 or 60 Hz vsyncs) */
+    ico_clock_set_mode_word(systemStatus);
     ico_sched_reset();
     ico_sched_set_fiber_start_hook(ico_fpenv_sim_enter);
     ico_sched_boot(boot_main, NULL, BOOT_PRIORITY);

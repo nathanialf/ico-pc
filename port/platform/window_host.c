@@ -33,12 +33,12 @@
 #define SLOW_STEP_LINES 5
 
 _Static_assert(SDLK_F11 == ICO_HOTKEY_KEY_F11, "hotkeys.h: SDL3's SDLK_F11");
+
 _Static_assert(SDLK_F12 == ICO_HOTKEY_KEY_F12, "hotkeys.h: SDL3's SDLK_F12");
 
 /* Package Q1: F12's dump (port/render/rd_dump.c; rd.h is outside this
    package, so it is declared here) */
 bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
-
 /* The game's state the mouse capture follows (common/include/main.h): the
    boy exists in a stage, and the game is neither paused nor loading. */
 extern void *boyGObj;

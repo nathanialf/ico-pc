@@ -65,8 +65,11 @@ enum { TIMERS = 4, MODE_CUE = 0x80, MODE_OVFF = 0x800 };
 
 /* one vsync lasts vsync_num/vsync_den seconds: 1/50, or 1001/60000 */
 static unsigned long long vsync_num = 1;
+
 static unsigned long long vsync_den = 50;
+
 static unsigned long long hblank_hz = 15625;
+
 static unsigned long long carry[TIMERS]; /* numerator left over, over vsync_den * 65536 */
 
 static volatile unsigned int *timer_count(int n)
@@ -81,6 +84,12 @@ static volatile unsigned int *timer_mode(int n)
 
 void ico_clock_set_vsync_hz(int hz)
 {
+    unsigned long long den = hz == 60 ? 60000 : 50;
+    int n;
+
+    if (den == vsync_den) {
+        return;
+    }
     if (hz == 60) {
         vsync_num = 1001;
         vsync_den = 60000;
@@ -89,6 +98,10 @@ void ico_clock_set_vsync_hz(int hz)
         vsync_num = 1;
         vsync_den = 50;
         hblank_hz = 15625;
+    }
+    /* the fractions carried over were in the old rate's units */
+    for (n = 0; n < TIMERS; n++) {
+        carry[n] = 0;
     }
 }
 
@@ -142,9 +155,23 @@ void ico_clock_timers_step(unsigned frac_q16)
     }
 }
 
+/* The game's video mode word, systemStatus[0] (common/src/main.c:37): 0 for
+   NTSC (60 Hz), 1 for PAL, as host_loop.c's ico_host_vsync_hz reads it. A
+   pointer the program sets, not an extern: this file is in ico_platform,
+   which tests link without the game. */
+static const volatile int *mode_word;
+
+void ico_clock_set_mode_word(const volatile int *word)
+{
+    mode_word = word;
+}
+
 static void on_vsync(void *user)
 {
     (void)user;
+    if (mode_word != NULL) {
+        ico_clock_set_vsync_hz(*mode_word == 0 ? 60 : 50);
+    }
     ico_clock_timers_step(65536u);
 }
 
