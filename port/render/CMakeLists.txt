@@ -31,6 +31,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_dump.c
     rd_frame.c
+    rd_interp.c # wave 7 (R7b): interpolation between the retained frames
     rd_mesh.c
     rd_pipeline.c
     rd_png.c
@@ -156,6 +157,15 @@ target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 if(WIN32)
     target_link_libraries(rd_present_test PRIVATE comdlg32 user32)
 endif()
+
+# rd_interp_test (wave 7, R7b): the presenter's interpolation between the
+# retained frames (rd_interp.c): keyed draws blend by alpha, the snap rules,
+# the feedback FIX at dt; on a device the replays at alpha 0 and 1 against
+# the frames' own, the half-way pixels, rd_Present.
+add_executable(rd_interp_test test/rd_interp_test.c)
+target_compile_options(rd_interp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_interp_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_interp_test PRIVATE ico_render)
 
 # rd_mesh_test (wave 3, R3ab): the mesh path.  Packet.c, RegistPacket.c,
 # MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
@@ -329,7 +339,7 @@ target_link_libraries(rd_debug_test PRIVATE ico_render ico_math)
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test)
+              rd_present_test rd_interp_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -369,6 +379,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_debug PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_present COMMAND rd_present_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_present PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_interp COMMAND rd_interp_test)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
@@ -381,6 +392,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog rd_blur rd_raw rd_present PROPERTIES ENVIRONMENT "${_env}")
+                             rd_fog rd_blur rd_raw rd_present rd_interp PROPERTIES ENVIRONMENT
+                                                                           "${_env}")
     endif()
 endif()

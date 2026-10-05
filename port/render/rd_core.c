@@ -9,8 +9,9 @@
  * block in the same order.  So state leaks between lists, and from one frame
  * into the next, exactly as GS registers do (rd.h, "Defaults and leakage").
  *
- * The two most recent frames are retained (the closed one and the one
- * before it) for the interpolation package; recording reuses the older.
+ * The two most recent closed frames are retained (the current one and the
+ * one before it) for the interpolation (rd_interp.c, wave 7 R7b); the frame
+ * being recorded takes a third slot (RD_FRAME_RING).
  */
 #include <assert.h>
 #include <stdarg.h>
@@ -218,6 +219,8 @@ void rd__FrameReset(RdFrame *f)
     f->hasCamera = 0;
     f->hasVu = 0;     /* R2c */
     f->headValid = 0; /* R2c */
+    f->cut = 0;       /* R7b */
+    f->fade = 0;
     f->closed = 0;
     f->keep = 0;
     f->number = 0;
@@ -814,14 +817,22 @@ static uint32_t s_dumpEvery;
 
 static char s_dumpDir[512];
 
+/* Wave 7 (R7b): ICO_RD_DUMP_INTERP=1 also dumps, next to each frame dump,
+ * the frame interpolated half way from the one before (rd-NNNNN-i50.rddump;
+ * rd__InterpFrame at alpha 0.5, the feedback passes as a first present) */
+static int s_dumpInterp;
+
 static void readDumpConfig(void)
 {
     const char *every = getenv("ICO_RD_DUMP_EVERY");
     const char *dir = getenv("ICO_RD_DUMP_DIR");
     s_dumpEvery = every ? (uint32_t)strtoul(every, NULL, 10) : 0;
     snprintf(s_dumpDir, sizeof(s_dumpDir), "%s", dir ? dir : ".");
+    const char *interp = getenv("ICO_RD_DUMP_INTERP");
+    s_dumpInterp = interp != NULL && interp[0] != '\0' && interp[0] != '0';
     if (s_dumpEvery) {
-        rd__Log("dumping every %u frames into %s", s_dumpEvery, s_dumpDir);
+        rd__Log("dumping every %u frames into %s%s", s_dumpEvery, s_dumpDir,
+                s_dumpInterp ? ", with the frame interpolated half way" : "");
     }
 }
 
@@ -856,9 +867,10 @@ void rd_Shutdown(void)
     if (g_rd.hasDevice) {
         rhi_WaitIdle();
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < RD_FRAME_RING; i++) {
         rd__FrameFree(&g_rd.frames[i]);
     }
+    rd__InterpShutdown(); /* R7b */
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
         if (g_rd.targets[i].live) {
             rd__TargetDestroyGpu(&g_rd.targets[i]);
@@ -974,9 +986,14 @@ void rd_BeginFrame(void)
         if (rd__ApplyDisplay() && g_rd.hasDevice) {
             rhi_WaitIdle();
             createNamedTargets();
+            /* R7b: the retained frames' history is dropped: the frame opened
+             * now and the next are the first pair interpolated */
+            g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }
-    int idx = g_rd.lastIndex < 0 ? 0 : g_rd.lastIndex ^ 1;
+    /* R7b: the slot after the last closed frame, which is neither it nor
+     * the one before it */
+    int idx = g_rd.lastIndex < 0 ? 0 : (g_rd.lastIndex + 1) % RD_FRAME_RING;
     RdFrame *f = &g_rd.frames[idx];
     rd__FrameReset(f);
     f->number = ++g_rd.frameCounter;
@@ -985,6 +1002,8 @@ void rd_BeginFrame(void)
     f->gsH = g_rd.gsH;
     g_rd.recIndex = idx;
     g_rd.stats.draws = 0;
+    f->cut = g_rd.cutPending; /* R7b: rd_CameraCut between frames */
+    g_rd.cutPending = 0;
     recordDefaults();
 }
 
@@ -995,6 +1014,9 @@ void rd_EndFrame(int keep)
         return;
     }
     f->keep = keep ? 1 : 0;
+    if (f->cut) {
+        f->camera.cut = 1; /* R7b */
+    }
     rd__FrameHeadResolve(f, f->keep); /* R2c: the flip's head in the first replayed list */
     f->closed = 1;
     RdStateBlock s = f->startState;
@@ -1004,7 +1026,11 @@ void rd_EndFrame(int keep)
     g_rd.lastIndex = g_rd.recIndex;
     g_rd.recIndex = -1;
     g_rd.stats.bytesPayload = f->payloadSize;
-    if (g_rd.hasDevice) {
+    g_rd.videoShown = 0; /* R7b */
+    /* R7b: with interpolation the host presents (rd_Present); otherwise,
+     * the Original preset always, the frame is replayed and presented once
+     * here, as before */
+    if (g_rd.hasDevice && !rd_InterpolationActive()) {
         rd__ReplayFrame(f, f->keep, true);
     }
     if (s_dumpEvery && f->number % s_dumpEvery == 0) {
@@ -1012,6 +1038,17 @@ void rd_EndFrame(int keep)
         snprintf(path, sizeof(path), "%s/rd-%05u.rddump", s_dumpDir, f->number);
         if (rd__DumpFrame(f, path)) {
             rd__Log("frame %u dumped to %s", f->number, path);
+        }
+        if (s_dumpInterp) {
+            RdInterpStats st;
+            const RdFrame *i = rd__InterpFrame(rd__PrevFrame(), f, 0.5f, 1.0f, 1, &st);
+            snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
+            if (i && rd__DumpFrame(i, path)) {
+                rd__Log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
+                        "%u unmatched, %u mismatched, %u jumped) dumped to %s",
+                        f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
+                        path);
+            }
         }
     }
 }
@@ -1042,6 +1079,22 @@ void rd_SetCamera(const RdCamera *cam)
     }
 }
 
+void rd_CameraCut(void)
+{
+    RdFrame *f = rd__RecFrame();
+    if (f) {
+        f->cut = 1;
+    } else {
+        g_rd.cutPending = 1;
+    }
+}
+
+uint32_t rd_FrameNumber(void)
+{
+    const RdFrame *f = rd__LastFrame();
+    return f && f->closed ? f->number : 0;
+}
+
 const RdFrame *rd__LastFrame(void)
 {
     return g_rd.lastIndex >= 0 ? &g_rd.frames[g_rd.lastIndex] : NULL;
@@ -1052,8 +1105,10 @@ const RdFrame *rd__PrevFrame(void)
     if (g_rd.lastIndex < 0) {
         return NULL;
     }
-    const RdFrame *f = &g_rd.frames[g_rd.lastIndex ^ 1];
-    return f->closed ? f : NULL;
+    /* R7b: the slot before the last closed one in the ring */
+    const RdFrame *f = &g_rd.frames[(g_rd.lastIndex + RD_FRAME_RING - 1) % RD_FRAME_RING];
+    const RdFrame *last = &g_rd.frames[g_rd.lastIndex];
+    return f->closed && f->number < last->number ? f : NULL;
 }
 
 /* ------------------------------------------------------------------ lists */

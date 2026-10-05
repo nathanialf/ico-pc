@@ -20,6 +20,18 @@
 #include "camera-ico2.h"
 #include "poly-flat.h"
 
+#ifdef ICO_HOST
+
+/* PC port (renderer R7b, docs/port/RENDER_API.md section 20): the hard
+   camera cuts, for the presenter's interpolation (port/game/video_options.c;
+   a counter no game state reads) */
+extern void ico_video_camera_cut(void);
+
+#define CAM_HOST_CUT_IF(c) ((c) ? ico_video_camera_cut() : (void)0)
+#else
+#define CAM_HOST_CUT_IF(c) ((void)0)
+#endif
+
 static int InsertCamera_isEnable(void);
 
 union PendCopy { /* field names derived */
@@ -416,6 +428,7 @@ void InitCamera(void)
 {
     GObj *gobj = getCameraDefaultTargetGObj();
     InsertCamera_Clear();
+    CAM_HOST_CUT_IF(1); /* port (R7b): a stage's first camera */
     default_cameratarget_gobj = gobj;
     cameraMode = 3;
     *(CamTgt *)&targetCameraSet = *(CamTgt *)&cameraSet = cameraTargetDefault;
@@ -564,6 +577,7 @@ void SetCameraMatrix(GObj *self)
         if (debug_ignore_demo_camera != 0) {
             goto handCamera;
         }
+        CAM_HOST_CUT_IF(gamecamCutBack != 0); /* port (R7b): the cut back to the game camera */
         SetCameraMatrix_Ico2(gamecamCutBack);
         gamecamCutBack = 0;
         if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
@@ -741,6 +755,7 @@ void SetCameraMatrix(GObj *self)
         GlobalTimer = 0;
         if (lastCameraMode != cameraMode || monitorCameraInit != 0) {
             GlobalTimer = 1;
+            CAM_HOST_CUT_IF(1); /* port (R7b): a camera mode change (path camera in or out) */
         }
         lastCameraMode = cameraMode;
         monitorCameraInit = 0;
@@ -906,6 +921,7 @@ void InsertCamera_Exec(float *cam, int *cut, int *cutType, int *enable)
     *enable = 0;
     if (insertCamera.enable) {
         if (insertCamera.cut) {
+            CAM_HOST_CUT_IF(insertCamera.cutType == 0); /* port (R7b): initMonitorCamera(1) */
             *cut = 1;
             *cutType = insertCamera.cutType;
             insertCamera.cut = 0;

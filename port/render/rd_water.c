@@ -43,11 +43,11 @@ typedef struct WaterFrame {
     uint32_t depth;
 } WaterFrame;
 
-static WaterFrame s_water[2];
+static WaterFrame s_water[RD_FRAME_RING];
 
 static WaterFrame *waterOf(const RdFrame *f)
 {
-    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + 2) {
+    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + RD_FRAME_RING) {
         return NULL;
     }
     WaterFrame *w = &s_water[f - g_rd.frames];
@@ -60,7 +60,7 @@ static WaterFrame *waterOf(const RdFrame *f)
 
 void rd__WaterFrameReset(const RdFrame *f)
 {
-    if (f >= g_rd.frames && f < g_rd.frames + 2) {
+    if (f >= g_rd.frames && f < g_rd.frames + RD_FRAME_RING) {
         memset(&s_water[f - g_rd.frames], 0, sizeof(s_water[0]));
     }
 }
@@ -236,7 +236,7 @@ const RdCamera *rd__CameraAt(const RdFrame *f, int list, uint32_t index)
     const RdCamera *cam = f != NULL && f->hasCamera ? &f->camera : NULL;
     uint32_t i;
 
-    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + 2) {
+    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + RD_FRAME_RING) {
         return cam;
     }
     const WaterFrame *w = &s_water[f - g_rd.frames];
@@ -255,7 +255,7 @@ const RdCamera *rd__CameraAt(const RdFrame *f, int list, uint32_t index)
 
 uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes)
 {
-    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + 2) {
+    if (f == NULL || f < g_rd.frames || f >= g_rd.frames + RD_FRAME_RING) {
         return 0;
     }
     const WaterFrame *w = &s_water[f - g_rd.frames];

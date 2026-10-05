@@ -72,6 +72,16 @@
 #include <string.h>
 #include "rd_internal.h"
 
+/* Wave 7 (R7b): the RdKey the next post sprites carry, so the presenter
+ * can interpolate the fade's level and the letterbox bars between ticks
+ * (rd_interp.c); 0 (snap) for every other post sprite (film noise,
+ * brightness, keep, reduction, anti-alias). */
+static RdKey s_spriteKey;
+
+static const char kPostKeyTag; /* the key's object: a fixed address of this file */
+
+#define POST_KEY(kind, n) RD_KEY(&kPostKeyTag, (kind), (n))
+
 /* A sprite with the vertices exactly as the GS receives them (12.4 window
  * coordinates, Z, UV in 12.4 texels). */
 static void spriteRaw(int32_t x0, int32_t y0, uint32_t z0, int32_t x1, int32_t y1, uint32_t z1,
@@ -92,7 +102,7 @@ static void spriteRaw(int32_t x0, int32_t y0, uint32_t z0, int32_t x1, int32_t y
     v[0].q = v[1].q = 1.0f;
     memcpy(v[0].rgba, rgba, 4);
     memcpy(v[1].rgba, rgba, 4);
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 1, 0);
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 1, s_spriteKey);
 }
 
 static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t z,
@@ -198,7 +208,13 @@ static void postFade(const RdPostParams *p)
     rd_TextureOff();
     rd_Gouraud(0);
     const int32_t x0 = -(W / 2) * 16 + 0x8000, y0 = -(H / 2) * 16 + 0x8000;
+    RdFrame *f = rd__RecFrame();
+    if (f && f->fade < 1u + p->rgba[3]) {
+        f->fade = 1u + p->rgba[3]; /* R7b: the fade edge */
+    }
+    s_spriteKey = POST_KEY(RD_POST_FADE, 0);
     sprite(x0, y0, x0 + W * 16, y0 + H * 16, 0xFFFFFFFFu, p->rgba, 0, 0, 0, 0);
+    s_spriteKey = 0;
 }
 
 static void postLetterbox(const RdPostParams *p)
@@ -216,8 +232,11 @@ static void postLetterbox(const RdPostParams *p)
     const int32_t x0 = -(W / 2) * 16 + 0x8000;
     const int32_t yTop = -(H / 2) * 16 - 4 + 0x8000;
     const int32_t yBot = ((H / 2) - lines) * 16 + 4 + 0x8000;
+    s_spriteKey = POST_KEY(RD_POST_LETTERBOX, 0);
     sprite(x0, yTop, x0 + W * 16, yTop + lines * 16, 0xFFFFFFFFu, kBar, 0, 0, 0, 0);
+    s_spriteKey = POST_KEY(RD_POST_LETTERBOX, 1);
     sprite(x0, yBot, x0 + W * 16, yBot + lines * 16, 0xFFFFFFFFu, kBar, 0, 0, 0, 0);
+    s_spriteKey = 0;
 }
 
 /* gsb_controlBrightness passes gif_MakeSpriteNoTexture corners that are

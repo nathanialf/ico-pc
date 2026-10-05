@@ -65,10 +65,10 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[video] vsync` | | `true` | the swapchain's present mode (Vulkan FIFO, else MAILBOX or IMMEDIATE; D3D12 sync interval 1 or 0 with tearing) |
 | `[video] texture_filter` | | `"original"` | Enhanced: `"original"`, `"trilinear"`, `"anisotropic"` (generated mips) |
 | `[video] full_height` | | `false` | Enhanced: skip the reduction's vertical halving |
-| `[video] framerate` | | | the interpolation package's (R7b) |
+| `[video] framerate` | | `"uncapped"` | Enhanced: `"original"` (present once per tick), `"uncapped"` (present at the display's rate, interpolating between the last two ticks), or a number 30..1000 (at most that many presents a second); Original is always `"original"` (renderer wave 7, R7b; RENDER_API.md section 20) |
 | `[video] video_mode` | | `"pal50"` | Phase 6, 6C: the boot 50/60 Hz screen's choice, which ico-pc skips: `"pal50"` (`systemStatus[0]` = 1, the PAL game's default) or `"60hz"` (0). Absent: the game's own value (50 Hz, or the card's). An explicit value wins over the memory card's system file. The Settings menu sets it (docs/port/SETTINGS.md) |
 | `[audio] enabled` | `audio` | `true` | `false`/`audio=0`: no audio device (the driver still runs) |
-| `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output does not apply it yet (open item) |
+| `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output scales its blocks by it, live (docs/port/AUDIO.md, "Output") |
 | `[input]` | | | docs/port/INPUT.md (4C); since 6C the Settings menu's remap screen writes `[input.kb]`, `[input.mouse]`, `[input.pad]` and `mouse_sensitivity` |
 | `[gameplay]` | | `false` | `stick_fix`, `yorda_safe`, `mirror`: docs/port/OPTIONS.md (6A); `developer_mode`: the debug menu and option table (R6a, docs/port/DEVELOPER_MODE.md); read through `ico_config_get_bool` on first use |
 | `[game] language` | | `"auto"` | `"auto"`, `"en"`, `"fr"`, `"de"`, `"it"`, `"es"`: the game's language since 6C (the boot language screen is skipped; "Language" below); the Settings menu sets it |
@@ -76,7 +76,7 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds, 0 off |
 | `[dev] trace` | `trace` | on | `false`/`0`/`none`: no trace; a path writes there |
-| `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build) |
+| `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build); with `ICO_RD_DUMP_INTERP=1` in the environment (R7b) each dump also gets the frame interpolated half way from the one before, `rd-NNNNN-i50.rddump` |
 | `[dev] audio_dump` | `audio_dump` | none | WAV of the mixed audio; `1` is `logs/audio.wav` |
 | `[dev] pad_script` | `pad_script` | `pad-script.txt` if present | scripted pad |
 | `[dev] verify` | `verify` | `true` | `false`/`0`: skip the disc image SHA-1 when `use_iso` is on; the first-run extraction always verifies |

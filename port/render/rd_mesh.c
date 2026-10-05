@@ -584,8 +584,17 @@ void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key)
     pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
 }
 
+/* Wave 7 (R7b): MicroCode.c draws a particle batch from the VU1 scratch
+ * (no object to key it by) with key 0; the batches are keyed here by list
+ * and the occurrence order rd_interp.c adds, and a batch interpolates only
+ * when its count matches (per particle a jump or an alpha 0 end snaps). */
+static const char kParticleKeyTag;
+
 void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
 {
+    if (key == 0) {
+        key = RD_KEY(&kParticleKeyTag, rd_CurrentList(), 18);
+    }
     if (!d || !d->qw || d->count == 0) {
         return;
     }

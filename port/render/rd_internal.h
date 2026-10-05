@@ -165,6 +165,11 @@ typedef struct RdCmdList {
 } RdCmdList;
 
 #define RD_MAX_TEMP_PER_FRAME 32
+/* Wave 7 (R7b): the frames kept: the one being recorded, the last closed
+ * (current) and the one before it (previous), which the interpolation
+ * blends while the next is recorded (rd_interp.c).  Wave 1 kept two: the
+ * recording reused the previous frame's slot. */
+#define RD_FRAME_RING 3
 
 typedef struct RdFrame {
     RdCmdList lists[RD_LIST_COUNT];
@@ -188,6 +193,11 @@ typedef struct RdFrame {
      * RDC_TARGET; headValid 0 = no head recorded */
     uint32_t headValid;
     uint32_t headStart[2], headEnd[2], headClear[2], headTarget[2];
+    /* wave 7 (R7b), rd_interp.c; not dumped: rd_CameraCut while the frame
+     * was open (rd_EndFrame copies it into camera.cut), and the strongest
+     * fade rd_Post(RD_POST_FADE) recorded, 1 + its alpha (0: none) */
+    uint32_t cut;
+    uint32_t fade;
 } RdFrame;
 
 void rd__FrameReset(RdFrame *f);
@@ -463,6 +473,47 @@ static inline bool rd__IsBlurKind(uint32_t kind)
  * all the Original preset ever passes. */
 uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
 
+/* ---------------------------------------------- interpolation (wave 7, R7b)
+ * rd_interp.c (RENDER_API.md section 20).  rd__InterpFrame builds, into a
+ * frame it owns, the current frame cur with every keyed draw's data blended
+ * from its match in prev by alpha (0 = prev's data, 1 = cur's), and the
+ * feedback passes set up for a present that stands for dt ticks
+ * (motion blur's FIX through rd__BlurFeedbackFix; the aura's FEED128
+ * writes dropped unless firstOfTick).  prev NULL, or a frame-level snap
+ * (rd__InterpSnap), copies cur's data.  The result is valid until the next
+ * call; it owns no temporary targets (cur's are used). */
+enum {
+    RD_SNAP_NONE = 0, /* interpolated */
+    RD_SNAP_NO_PREV,  /* no previous frame, or it is not closed */
+    RD_SNAP_GAP,      /* frame numbers not consecutive (a frame was discarded) */
+    RD_SNAP_KEEP,     /* either frame is a keep (fbKeep) frame */
+    RD_SNAP_CUT,      /* rd_CameraCut during cur (RdCamera.cut) */
+    RD_SNAP_CAMERA,   /* the camera turned or moved further than a cut threshold */
+    RD_SNAP_FADE,     /* either frame fully faded (the fade edge) */
+    RD_SNAP_HISTORY,  /* targets recreated after prev (display options changed) */
+    RD_SNAP_SIZE,     /* the scene size differs */
+    RD_SNAP_COUNT
+};
+
+typedef struct RdInterpStats {
+    uint32_t snap;     /* RD_SNAP_* of the frame */
+    uint32_t keyed;    /* keyed draws in cur */
+    uint32_t lerped;   /* blended */
+    uint32_t missing;  /* no match in prev (snapped) */
+    uint32_t mismatch; /* count, topology or mesh differs (snapped) */
+    uint32_t jump;     /* moved further than the teleport threshold (snapped) */
+} RdInterpStats;
+
+int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);
+const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
+                               int firstOfTick, RdInterpStats *stats);
+void rd__InterpShutdown(void);
+/* The thresholds (world units are the game's centimetres) */
+#define RD_INTERP_JUMP_WORLD 300.0f  /* an object's or bone's origin, per tick */
+#define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */
+#define RD_INTERP_CAMERA_MOVE 300.0f /* the eye, per tick */
+#define RD_INTERP_CAMERA_TURN 30.0f  /* degrees, per tick */
+
 /* fx_sprite_ps's DrawCB.mode[0] flags (FXF_* in port/shaders/fx_sprite.hlsl) */
 enum {
     RD_FXF_TEXTURED = 1,
@@ -498,7 +549,7 @@ typedef struct RdContext {
     RdSettings settings, pendingSettings;
     bool settingsPending;
 
-    RdFrame frames[2];
+    RdFrame frames[RD_FRAME_RING];
     int recIndex;  /* frame being recorded, -1 between frames */
     int lastIndex; /* last closed frame, -1 before the first */
     uint32_t frameCounter;
@@ -536,6 +587,14 @@ typedef struct RdContext {
     uint8_t filterUpgrade, fullHeight;
     int spaceOverride; /* rd_SetSpaceOverride + 1; 0 = none */
     uint32_t vsyncApplied;
+    /* wave 7 (R7b): interpolation (rd_interp.c).  interpFloor: the first
+     * frame number recorded after the targets were last recreated (a frame
+     * pair interpolates only when both are at or after it); cutPending:
+     * rd_CameraCut outside an open frame, for the next one; videoShown: an
+     * FMV picture went to the output after the last closed game frame
+     * (rd_video.c), so rd_Present leaves the output alone */
+    uint32_t interpFloor;
+    uint8_t cutPending, videoShown;
 } RdContext;
 
 extern RdContext g_rd;

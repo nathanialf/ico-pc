@@ -26,6 +26,7 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->aspect = ICO_ASPECT_4_3;
     o->vsync = 1;
     o->filter = ICO_FILTER_ORIGINAL;
+    o->framerate = ICO_FRAMERATE_UNCAPPED; /* R7b: the plan's default */
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -93,6 +94,44 @@ int ico_video_parse_filter(const char *s, int *filter)
     return -1;
 }
 
+#define FRAMERATE_MIN 30
+#define FRAMERATE_MAX 1000
+
+int ico_video_parse_framerate(const char *s, int *framerate)
+{
+    unsigned n = 0;
+    char tail = 0;
+
+    if (s == NULL) {
+        return -1;
+    }
+    if (lower_eq(s, "original")) {
+        *framerate = ICO_FRAMERATE_ORIGINAL;
+        return 0;
+    }
+    if (lower_eq(s, "uncapped")) {
+        *framerate = ICO_FRAMERATE_UNCAPPED;
+        return 0;
+    }
+    if (sscanf(s, "%u%c", &n, &tail) == 1 && n >= FRAMERATE_MIN && n <= FRAMERATE_MAX) {
+        *framerate = (int)n;
+        return 0;
+    }
+    return -1;
+}
+
+const char *ico_video_framerate_name(int framerate, char *buf, unsigned size)
+{
+    if (framerate == ICO_FRAMERATE_ORIGINAL) {
+        snprintf(buf, size, "original");
+    } else if (framerate > 0) {
+        snprintf(buf, size, "%d", framerate);
+    } else {
+        snprintf(buf, size, "uncapped");
+    }
+    return buf;
+}
+
 const char *ico_video_aspect_name(int aspect)
 {
     return aspect >= 0 && aspect < 4 ? kAspect[aspect] : kAspect[0];
@@ -135,6 +174,10 @@ static void sanitize(IcoVideoOptions *o)
     o->fullscreen = o->fullscreen != 0;
     o->vsync = o->vsync != 0;
     o->fullHeight = o->fullHeight != 0;
+    if (o->framerate != ICO_FRAMERATE_ORIGINAL && o->framerate != ICO_FRAMERATE_UNCAPPED &&
+        (o->framerate < FRAMERATE_MIN || o->framerate > FRAMERATE_MAX)) {
+        o->framerate = d.framerate;
+    }
 }
 
 static void read_config(void)
@@ -158,18 +201,23 @@ static void read_config(void)
     o.fullscreen = ico_config_get_bool("video.fullscreen", 0) != 0;
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
+    if (ico_video_parse_framerate(ico_config_get_string("video.framerate", "uncapped"),
+                                  &o.framerate) != 0) {
+        fprintf(stderr, "video: framerate not understood; \"uncapped\" used\n");
+    }
     sanitize(&o);
     s_opt = o;
     s_read = 1;
     s_serial++;
     if (o.preset == ICO_VIDEO_ENHANCED) {
-        char res[32];
+        char res[32], fr[16];
 
         fprintf(stderr,
                 "video: Enhanced preset: resolution %s, aspect %s, texture filter %s, %s "
-                "height\n",
+                "height, framerate %s\n",
                 ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
-                ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half");
+                ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
+                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
     }
 }
 
@@ -200,7 +248,7 @@ unsigned ico_video_serial(void)
 int ico_video_save(void)
 {
     IcoVideoOptions o;
-    char res[32];
+    char res[32], fr[16];
     int r = 0;
 
     ico_video_get(&o);
@@ -212,6 +260,8 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.vsync", o.vsync);
     r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
     r |= ico_config_set_bool("video.full_height", o.fullHeight);
+    r |= ico_config_set_string("video.framerate",
+                               ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
     return r != 0 ? -1 : ico_config_save();
 }
 
@@ -256,4 +306,25 @@ float ico_video_wide_x(void)
     float k = ico_video_aspect() / ASPECT_4_3;
 
     return k > 1.0f + 1e-5f ? k : 1.0f;
+}
+
+int ico_video_framerate(void)
+{
+    IcoVideoOptions o;
+
+    ico_video_get(&o);
+    return o.preset == ICO_VIDEO_ENHANCED ? o.framerate : ICO_FRAMERATE_ORIGINAL;
+}
+
+/* R7b: the camera-cut signal (video_options.h) */
+static unsigned s_cutSerial;
+
+void ico_video_camera_cut(void)
+{
+    s_cutSerial++;
+}
+
+unsigned ico_video_cut_serial(void)
+{
+    return s_cutSerial;
 }

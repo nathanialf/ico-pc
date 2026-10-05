@@ -332,8 +332,8 @@ typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
     float aspect;                       /* 4/3 .. 16/9; Original forces 4/3 */
-    uint8_t interpolate;                /* uncapped presentation; Original forces 0 */
-    uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
+    uint8_t interpolate; /* uncapped presentation (rd_Present, R7b); Original forces 0 */
+    uint8_t mirror;      /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t
         filterUpgrade; /* RdFilterUpgrade: trilinear/anisotropic with generated mips (Enhanced) */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass (Enhanced) */
@@ -397,6 +397,35 @@ void rd_ResizeOutput(uint32_t width, uint32_t height);
  * g_proj = proj43, g_viewProj = proj43 x view, g_cameraPos = the eye from
  * the view's inverse (w = cut), g_clip = near, far, zoom, aspect. */
 void rd_SetCamera(const RdCamera *cam);
+
+/* ------------------------------------------ interpolation (wave 7, R7b)
+ * docs/port/RENDER_API.md section 20.  The simulation keeps its tick; with
+ * RdSettings.interpolate in the Enhanced preset rd_EndFrame only closes the
+ * frame, and the host presents as often as it likes with rd_Present(alpha):
+ * the last closed frame replayed with every keyed draw blended from the
+ * frame before it by alpha in [0, 1) (0 = the previous frame's data, so the
+ * picture is one tick late).  Unkeyed draws, CLUT animation, film noise,
+ * dissolve and every other state stay at the tick's values.
+ *
+ * rd_InterpolationActive  Enhanced preset and RdSettings.interpolate (as
+ *                         applied at the last rd_BeginFrame)
+ * rd_Present              replays and presents; false (nothing done) when
+ *                         interpolation is off, before the first frame, or
+ *                         while an FMV picture is on the output.  Each call
+ *                         advances the feedback passes (motion blur) by the
+ *                         time since the previous one
+ * rd_FrameNumber          the last closed frame's RdFrame number, 0 before
+ *                         the first: the host's tick clock
+ * rd_CameraCut            the frame being recorded starts a new shot (a hard
+ *                         camera cut or a stage change): it is not blended
+ *                         from the one before (RdCamera.cut).  Outside an
+ *                         open frame it applies to the next one.  Called by
+ *                         the window from the game's cut signal
+ *                         (port/game/video_options.h ico_video_camera_cut) */
+bool rd_InterpolationActive(void);
+bool rd_Present(float alpha);
+uint32_t rd_FrameNumber(void);
+void rd_CameraCut(void);
 
 /* ------------------------------------------------------------- lists */
 

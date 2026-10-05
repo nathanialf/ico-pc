@@ -14,11 +14,16 @@
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
+ *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *
  * The Original preset is the PS2 picture whatever the other keys say; the
- * Enhanced preset applies resolution, aspect, texture_filter and
- * full_height, each on its own.  fullscreen and vsync apply in both.
- * ([video] framerate is the interpolation package's, R7b.)
+ * Enhanced preset applies resolution, aspect, texture_filter, full_height
+ * and framerate, each on its own.  fullscreen and vsync apply in both.
+ * framerate (renderer wave 7, R7b): "original" presents once per
+ * simulation tick (each picture held for the tick's refreshes, as the PS2);
+ * "uncapped" presents as often as the display allows (vsync) and
+ * interpolates between the last two ticks; N does the same at most N times
+ * a second.  The Original preset is always "original".
  *
  * Read from config.toml through ico_config_get_* the first time any value
  * is asked for; ico_video_set changes them at run time (the window applies
@@ -45,10 +50,14 @@ typedef struct IcoVideoOptions {
     int vsync;      /* the swapchain waits for the vertical blank */
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
+    int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second (R7b) */
 } IcoVideoOptions;
 
+/* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
+enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
+
 /* The defaults: Original, window, 4:3, windowed, vsync on, original filter,
-   half height. */
+   half height, framerate uncapped (in force only with Enhanced). */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -73,9 +82,24 @@ float ico_video_aspect(void);
 /* How much wider than 4:3 the presentation is: ico_video_aspect() / (4/3),
    1 in Original (GsBase.c gsbHostWideX). */
 float ico_video_wide_x(void);
+/* The presentation rate in force (R7b): ICO_FRAMERATE_ORIGINAL in the
+   Original preset, else the framerate option. */
+int ico_video_framerate(void);
+/* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
+   StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window
+   compares ico_video_cut_serial() once per vsync and marks the frame being
+   recorded as a cut (rd_CameraCut), so the presenter does not blend across
+   it.  A counter only: no game state reads it, so the simulation and its
+   trace are the same with or without a window. */
+void ico_video_camera_cut(void);
+unsigned ico_video_cut_serial(void);
 /* The config strings (tests and the Settings menu's labels).  The parsers
    return 0, or -1 for a string they do not know (o is then unchanged). */
 int ico_video_parse_resolution(const char *s, IcoVideoOptions *o);
+/* "original", "uncapped" or a number 30..1000 */
+int ico_video_parse_framerate(const char *s, int *framerate);
+/* "original", "uncapped" or the number, into buf (at least 16 bytes) */
+const char *ico_video_framerate_name(int framerate, char *buf, unsigned size);
 int ico_video_parse_aspect(const char *s, int *aspect);
 int ico_video_parse_filter(const char *s, int *filter);
 const char *ico_video_aspect_name(int aspect);

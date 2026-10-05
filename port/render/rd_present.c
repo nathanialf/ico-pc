@@ -12,10 +12,12 @@
  *
  * Presets (wave 2, R2c: hooks; wave 7, R7a: the display options).
  * RdPresentPreset holds everything a preset may change at present time:
- *   interpolate   R7b (rd_interp.c): present several times per simulation
- *                 tick, blending the retained frames by presentAlpha();
- *                 Original presents once per tick (inside rd_EndFrame) and
- *                 presentAlpha() is 1
+ *   interpolate   R7b (rd_interp.c): the Enhanced preset may present
+ *                 several times per simulation tick (rd_Present with
+ *                 RdSettings.interpolate), each present replaying the frame
+ *                 blended from the retained pair; Original presents once per
+ *                 tick, inside rd_EndFrame.  This step is the same either
+ *                 way: it shows whatever DISPLAY the replay left
  *   aspectFromSettings  R7a: the box takes the aspect option (g_rd.outAspect)
  *                 instead of 4:3; the projection side is rd_frame.c
  *                 rd__FillCameraCB, the replay's wide x scale and GsBase.c
@@ -81,8 +83,9 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 static const RdPresentPreset s_presets[2] = {
     /* RD_PRESET_ORIGINAL */
     {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 0, 0},
-    /* RD_PRESET_ENHANCED: the aspect and full-height options (R7a) */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 1, 0, 1},
+    /* RD_PRESET_ENHANCED: interpolation (R7b), the aspect and full-height
+     * options (R7a) */
+    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 0, 1},
 };
 
 static float clampAspect(float a)
@@ -155,14 +158,6 @@ bool rd__ApplyDisplay(void)
     }
     g_rd.vsyncApplied = vs;
     return changed;
-}
-
-/* The interpolation hook (wave 7): the weight of the newest retained frame
- * at this present.  Original presents each frame once, whole. */
-static float presentAlpha(const RdPresentPreset *pr)
-{
-    (void)pr;
-    return 1.0f;
 }
 
 static RhiTexture s_backbuffer;
@@ -263,9 +258,6 @@ void rd__PresentRecord(RhiCommandList cl)
         return;
     }
     const RdPresentPreset *pr = &s_presets[g_rd.settings.preset == RD_PRESET_ENHANCED ? 1 : 0];
-    if (pr->interpolate && presentAlpha(pr) < 1.0f) {
-        /* R7b: blend rd__PrevFrame's DISPLAY here; unreachable until then */
-    }
     RhiTexture out = s_window ? s_backbuffer : g_rd.presentOut;
     RhiState *outState = s_window ? &s_backbufferState : &g_rd.presentOutState;
 

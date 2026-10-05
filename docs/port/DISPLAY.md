@@ -13,8 +13,9 @@ except `fullscreen` and `vsync` changes it. In a window that is not 4:3 the
 picture gets black bars on the sides (or top and bottom).
 
 **Enhanced** turns on the options below. Each one is separate: Enhanced with
-`resolution = "1x"`, `aspect = "4:3"`, `texture_filter = "original"` and
-`full_height = false` looks exactly like Original.
+`resolution = "1x"`, `aspect = "4:3"`, `texture_filter = "original"`,
+`full_height = false` and `framerate = "original"` looks exactly like
+Original.
 
 The game itself (what happens, where things are, when the shadows reach
 Yorda) is the same in both presets and with every option: the options only
@@ -31,6 +32,7 @@ fullscreen = false
 vsync = true
 texture_filter = "original" # "original", "trilinear" or "anisotropic"
 full_height = false
+framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 ```
 
 | key | what it does |
@@ -42,9 +44,26 @@ full_height = false
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
 | `texture_filter` | (Enhanced) `"trilinear"` gives textures smaller versions for distant surfaces, so the ground and walls do not shimmer; `"anisotropic"` also keeps them sharp at grazing angles. Textures the game draws unfiltered (pixel-sharp) stay that way. Fences and leaves with see-through parts keep their thickness in the distance. |
 | `full_height` | (Enhanced) Keep all 512 lines of the scene instead of halving them, so the picture is not line-doubled. |
+| `framerate` | (Enhanced) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
 
-`framerate` (smooth motion between the game's 25 or 30 updates a second)
-is a separate option, described with it.
+## Smooth motion (`framerate`)
+
+The game still updates 25 times a second (30 in 60 Hz mode); nothing about
+how it plays changes. With `framerate` other than `"original"`, the picture
+between two updates is drawn part of the way from the earlier to the later
+one: characters, objects, the camera, cloth, water, particles, shadows,
+fades and the cinema bars move smoothly. This shows the game one update
+(1/25 s) later than the original setting does.
+
+Some things still change 25 times a second, as the game makes them: texture
+animations, the film grain, flickering effects such as lightning and the
+menu sparkle, menus and subtitles, the glow effect's trails, and faces
+that change shape. After a camera cut, a stage change or a fade to black
+the next picture is shown as it is, not blended from the one before. The
+motion-blur trail keeps the same length at any frame rate.
+
+On a slow computer (or a software renderer) the game draws one picture per
+update, as with `"original"`, rather than slowing the game down.
 
 ## What stays as on the PS2
 
@@ -58,7 +77,8 @@ is a separate option, described with it.
 ## Notes
 
 - Changing `resolution`, `aspect` or `full_height` while playing clears the
-  motion-blur trail for one frame.
+  motion-blur trail for one frame, and the next update is not blended.
 - On a renderer backend without mipmapped textures, `texture_filter` falls
   back to the original filtering.
-- Technical details: docs/port/RENDER_API.md section 19.
+- Technical details: docs/port/RENDER_API.md sections 19 (presets, the
+  options) and 20 (frame rate).

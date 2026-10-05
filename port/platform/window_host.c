@@ -43,6 +43,20 @@ static unsigned s_videoSerial;
 
 static int s_fullscreen;
 
+/* renderer wave 7 (R7b): the presentation loop (ico_window_pace) */
+static struct {
+    int framerate;           /* ico_video_framerate() as last applied */
+    unsigned cutSerial;      /* ico_video_cut_serial() last passed on */
+    uint32_t frame;          /* rd_FrameNumber() last seen */
+    uint32_t presentedFrame; /* the frame of the last present */
+    Uint64 tickAt, tickPrev; /* real time the last two frames closed */
+    Uint64 lastPresent;
+    Uint64 cost; /* how long the last rd_Present took */
+    /* the rate log */
+    Uint64 statAt;
+    unsigned statPresents, statFrames;
+} s_pres;
+
 /* The renderer's settings from the display options and the window's pixel
    size. */
 static void video_settings(RdSettings *rs, int w, int h)
@@ -62,6 +76,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
+    /* R7b: rd presents between ticks; rd forces it off in Original */
+    s_pres.framerate = ico_video_framerate();
+    rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
 }
 
 /* Applies the options changed since the last call (the Settings menu's
@@ -142,19 +159,21 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     }
     {
         IcoVideoOptions o;
-        char res[32];
+        char res[32], fr[16];
 
         ico_video_get(&o);
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
-                "texture filter %s, %s height), vsync %s\n",
+                "texture filter %s, %s height, framerate %s), vsync %s\n",
                 w, h, o.fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
                 o.preset == ICO_VIDEO_ENHANCED ? "Enhanced" : "Original",
                 ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
                 ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
+                ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off");
     }
+    s_pres.cutSerial = ico_video_cut_serial();
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
     /* Phase 6 (6B): the port's runtime text and popups (port/ui) */
@@ -230,6 +249,14 @@ int ico_window_pump(void)
         }
     }
     video_apply(0); /* R7a: the Settings menu's changes */
+    /* R7b: a hard camera cut or stage change the game signalled during the
+       step that just ran: the frame it recorded is not blended from the
+       one before (the step closes the previous frame before the game's
+       threads run, so the open frame is the one the cut belongs to) */
+    if (ico_video_cut_serial() != s_pres.cutSerial) {
+        s_pres.cutSerial = ico_video_cut_serial();
+        rd_CameraCut();
+    }
     set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
                 game_pause == 0 && data_loading == 0);
     ico_input_sdl_update();
@@ -241,6 +268,27 @@ int ico_window_pump(void)
     return !quit;
 }
 
+/* R7b: presents and frames per second, every 10 s of real time */
+static void pace_log(Uint64 now)
+{
+    if (s_pres.statAt == 0) {
+        s_pres.statAt = now;
+        s_pres.statPresents = s_pres.statFrames = 0;
+        return;
+    }
+    if (now - s_pres.statAt < 10000000000ull) {
+        return;
+    }
+    const double sec = (double)(now - s_pres.statAt) / 1e9;
+    fprintf(stderr,
+            "window: %u presents and %u game frames in %.1f s: %.1f presented fps, %.1f game "
+            "fps\n",
+            s_pres.statPresents, s_pres.statFrames, sec, s_pres.statPresents / sec,
+            s_pres.statFrames / sec);
+    s_pres.statAt = now;
+    s_pres.statPresents = s_pres.statFrames = 0;
+}
+
 void ico_window_pace(int hz)
 {
     /* PAL 50 Hz: 20 ms; NTSC 59.94 Hz: 16.683 ms (host_loop.c's simulated
@@ -249,10 +297,80 @@ void ico_window_pace(int hz)
     Uint64 now;
 
     s_deadline += period;
+    if (!rd_InterpolationActive()) {
+        /* Original, framerate "original": rd_EndFrame presented the frame
+           once; the picture is held until the next */
+        now = SDL_GetTicksNS();
+        if (now < s_deadline) {
+            SDL_DelayPrecise(s_deadline - now);
+        } else if (now - s_deadline > RESYNC_NS) {
+            s_deadline = now;
+        }
+        return;
+    }
+    /* R7b: the simulation keeps its vsync cadence in simulated time; until
+       this vsync's deadline the window presents as often as vsync (and the
+       framerate cap) allow, each present at alpha = the real time since the
+       last frame closed over the tick, between the last two frames (one
+       tick of latency). A frame closes inside the step before this call:
+       its time is the start of this vsync period. */
+    {
+        const uint32_t fn = rd_FrameNumber();
+
+        if (fn != s_pres.frame) {
+            s_pres.frame = fn;
+            s_pres.tickPrev = s_pres.tickAt;
+            s_pres.tickAt = s_deadline - period;
+            s_pres.statFrames++;
+        }
+    }
+    Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
+    tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
+    const Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
+    for (;;) {
+        now = SDL_GetTicksNS();
+        /* behind the deadline, or on a renderer slower than a vsync period
+           per present (a software driver): one present per new frame, none
+           more, so the presents never slow the simulation below the
+           original's one replay per frame */
+        if (s_pres.presentedFrame == s_pres.frame && (now >= s_deadline || s_pres.cost > period)) {
+            if (now < s_deadline) {
+                SDL_DelayPrecise(s_deadline - now);
+            }
+            break;
+        }
+        if (gap && s_pres.lastPresent && now - s_pres.lastPresent < gap) {
+            const Uint64 wake = s_pres.lastPresent + gap;
+
+            if (wake >= s_deadline) {
+                if (now < s_deadline) {
+                    SDL_DelayPrecise(s_deadline - now);
+                }
+                break;
+            }
+            SDL_DelayPrecise(wake - now);
+            continue;
+        }
+        double a = now > s_pres.tickAt ? (double)(now - s_pres.tickAt) / (double)tick : 0.0;
+        a = a > 0.999 ? 0.999 : a;
+        const Uint64 t0 = now;
+        const int ok = rd_Present((float)a);
+        now = SDL_GetTicksNS();
+        s_pres.cost = now - t0;
+        if (!ok) {
+            /* a movie on the output, or nothing closed yet */
+            if (now < s_deadline) {
+                SDL_DelayPrecise(s_deadline - now);
+            }
+            break;
+        }
+        s_pres.lastPresent = t0;
+        s_pres.presentedFrame = s_pres.frame;
+        s_pres.statPresents++;
+    }
     now = SDL_GetTicksNS();
-    if (now < s_deadline) {
-        SDL_DelayPrecise(s_deadline - now);
-    } else if (now - s_deadline > RESYNC_NS) {
+    pace_log(now);
+    if (now > s_deadline && now - s_deadline > RESYNC_NS) {
         s_deadline = now;
     }
 }

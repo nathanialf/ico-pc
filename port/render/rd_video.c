@@ -363,6 +363,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (out.window) {
         rhi_Present();
     }
+    g_rd.videoShown = 1; /* R7b: rd_Present leaves the picture until a game frame closes */
     return 0;
 }
 

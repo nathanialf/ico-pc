@@ -82,6 +82,8 @@ static unsigned int initIcoMiscThread[28]; /* derived name */
 
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
 
+extern void ico_video_camera_cut(void); /* port (renderer R7b): port/game/video_options.c */
+
 #endif
 
 #include "typedef.h"
@@ -191,6 +193,7 @@ static void start_stage_Load_thread(int stage)
     stage_no = stage;
 #ifdef ICO_HOST
     ico_gs_signal(ICO_GS_EV_STAGE_ENTER, stage);
+    ico_video_camera_cut(); /* port (R7b): a stage change is a cut for the presenter */
 #endif
     gsb_SetBGColor(&db, 1, 1, 1);
     sceGsSyncPath(0, 0);

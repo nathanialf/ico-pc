@@ -787,7 +787,9 @@ carries the Enhanced fields `interpolate`, `aspectFromSettings`, `mirror`,
 `fullHeight`, all at their Original values in both entries and read by
 nothing yet, and `presentAlpha()` (1: each frame presented once, whole) is
 where wave 7 blends the retained frames. Since R7a the Enhanced entry has
-`aspectFromSettings` and `fullHeight` (section 19).
+`aspectFromSettings` and `fullHeight` (section 19). Since R7b `interpolate`
+is set in the Enhanced entry and `presentAlpha()` is gone: the blend
+happens before the replay, in `rd_interp.c` (section 20).
 
 **rd.h additions (R2c).** `RdFrameHead`, `rd_FrameHead`, `rd_FrameFlip`;
 `RD_TARGET_OFFSET`, `RD_TARGET_HALF_Y` (bit 1 of `rd_SetTarget`'s
@@ -819,7 +821,8 @@ Open questions for wave 3:
    Resolved in wave 4 (R4c, section 15): `fog_lut_ps` inverts
    `gs_z_to_depth` with the depth target's scale.
 5. `cut` is never set: the interpolation package needs a camera-cut signal
-   (camera-root.c's mode changes) before it trusts `RdCamera`.
+   (camera-root.c's mode changes) before it trusts `RdCamera`. Answered in
+   wave 7 (R7b, section 20): `rd_CameraCut` from the game's cut sites.
 6. Brightness: whether the GS rasterises a sprite whose second vertex lies
    above and left of the first (the corners `gsb_controlBrightness` ends up
    sending) is not settled by any source the port uses; rd draws it, which
@@ -2325,5 +2328,266 @@ Open items:
    output's size is 6C's (no post-present hook yet).
 5. Interpolation (R7b): `RdPresentPreset.interpolate` and
    `presentAlpha()` are still the hook; the scaled DISPLAY is what it
-   blends.
+   blends. Done in R7b (section 20), differently: the presenter does not
+   blend two DISPLAY pictures; it replays the current frame with the
+   keyed draws' data blended, so DISPLAY is drawn once per present.
 6. Mirror: `RdPresentPreset.mirror` is still unimplemented.
+
+## 20. Frame rate and interpolation (wave 7, R7b)
+
+`port/render/rd_interp.c` (new: the blend, the snap rules, `rd_Present`),
+`rd_core.c` (a third retained frame, `rd_EndFrame` without a replay when
+interpolating, `rd_CameraCut`, `rd_FrameNumber`, the half-way dump),
+`rd_post.c` (the fade and letterbox sprites keyed), `rd_mesh.c` (particle
+batches keyed), `rd_water.c` (the ring), `rd_video.c` (an FMV picture
+holds the output), `rd_present.c` (`presentAlpha()` removed),
+`port/platform/window_host.c` (the presentation loop),
+`port/game/video_options.{c,h}` (`[video] framerate`, the cut signal),
+`ico2/omori/src/camera-root.c` and `ico2/common/src/StageManager.c` (the
+cut hooks). Test: `rd_interp` (`port/render/test/rd_interp_test.c`).
+
+**Setting.** `[video] framerate`: `"original"`, `"uncapped"` (the default)
+or a number 30..1000 (`ico_video_parse_framerate`; docs/port/DISPLAY.md,
+CONFIG.md). The Original preset is always `"original"`
+(`ico_video_framerate()`); in Enhanced anything else sets
+`RdSettings.interpolate`, which rd honours only in Enhanced
+(`rd_InterpolationActive`). `"original"` is the R7a path unchanged:
+`rd_EndFrame` replays and presents the frame once and the window sleeps to
+the next vsync deadline, so the picture is held for the tick's two
+refreshes (PAL frame step 2).
+
+**The loop** (`ico_window_pace`). The simulation is untouched: `main_host.c`
+still steps one simulated vsync (`ico_host_step`) and calls the pace once
+per vsync, 20 ms PAL, 16.68 ms NTSC. With interpolation, `rd_EndFrame` only
+closes the frame (and dumps it), and the pace, instead of sleeping to the
+deadline, presents until it: each present is `rd_Present(alpha)` with alpha
+= (now - the time the last frame closed) / (the time between the last two
+closes), clamped to [0, 0.999]. A frame closes inside the step before the
+pace (the scheduler's `gsb_UpdateGSSystem` -> `dl_Swap`), so its time is
+the start of that vsync period, a simulated-time clock read through
+`rd_FrameNumber()`. The present blocks on vsync (FIFO), so `"uncapped"`
+with vsync on runs at the display's rate; a number N waits at least 1/N s
+between presents; vsync off and `"uncapped"` presents back to back. Behind
+the deadline, or when one present took longer than a vsync period (a
+software driver), only a frame's first present is made, so presenting
+never costs the simulation more than the one replay per frame of the
+original path. A movie on the output (`rd_video.c` sets
+`RdContext.videoShown` until the next frame closes) makes `rd_Present`
+return false and the pace sleeps as before. The window logs presents and
+game frames every 10 s (`window: N presents and M game frames in T s`).
+
+**Latency and the pair.** alpha 0 is the previous frame's data in the
+current frame's structure, alpha 1 the current frame: presentation is one
+tick (40 ms PAL) behind the simulation. `rd_BeginFrame` records into the
+ring slot after the last closed frame (`RD_FRAME_RING` = 3: recording,
+current, previous), so the pair survives while the game records the next
+frame, which `dl_Clear` opens right after `dl_Swap` closes one.
+
+**What blends** (`rd__InterpFrame`). The output frame is a copy of the
+current frame: its lists, state commands, textures, targets and unkeyed
+draws exactly as recorded. A keyed draw (`RdKey`; RD_KEY at the call sites,
+0 = never) takes its data blended from the draw of the same type, list and
+key in the previous frame, the n-th occurrence matching the n-th (the call
+ordinal). Per command:
+
+| command | blended | kept from the current frame |
+|---|---|---|
+| `RDC_MESH`, `RDC_SKINNED` | VuCB qw 2 (the UV scroll SET_UVOFFSET left, Texture.c's wrap of uOfs/vOfs into (-1, 1] by 2 undone: a step over 1 is taken as the wrap; the cluster fade alpha in w), qw 4..15 (world to screen, viewport, inverse view), 16..27 (the model matrices), 28..35 (the light matrices); the bone quadwords | qw 0, 1, 3 (constants, the GIF tag), the mesh |
+| `RDC_GRID` | the VU block; each vertex's position, and normal when lit | strip headers, colours, STs |
+| `RDC_PARTICLES` | the VU block; each particle's (x, y, z, size) | header, UV, grey, alpha |
+| `RDC_SCREEN` | XY, Z, RGBA of every vertex | STQ, prim, space |
+| `RDC_SHADOW_STRIP` | XY and Z of every vertex | the triangle split |
+| frame camera, VU common block | `RdCamera` view, proj43, zoom, near, far; `RdVuCommon` matrices | `cut` |
+
+Blends are element-wise, `(1 - t) p + t c` (exact at both ends); a float
+pair that is bit-identical, or not both finite, keeps the current value;
+integers round to nearest. Matrices blended element by element shorten a
+rotation's axes by cos(theta/2) half way (0.4 % at 10 degrees in a tick).
+
+Keyed today: `RegistPacket.c`'s meshes (packet, list, MSCAL code), the
+grids (`Primitive.c`: the Mesh3D, list), the shadow volumes (`Shadow.c`:
+the object), the fade and letterbox sprites (`rd_post.c`), and the
+particle batches (`rd_mesh.c`, list and code 18: MicroCode.c draws them
+from the VU scratch with key 0). No 2D call site passes a key yet
+(GifPacket.c, layout_texture.c, DisplayFont.c, port/ui): their quads are
+the current frame's, which is also what keeps text and menus from sliding
+between unrelated glyphs.
+
+**What snaps.** A keyed draw is the current frame's when the previous frame
+has no match; when the shape differs (mesh, program, code, clip, payload
+size, batch range, bone, stream, vertex or particle count, prim or space;
+for a shadow volume the triangle counts: a topology change); or when it
+jumped: the model origin in the world moved more than
+`RD_INTERP_JUMP_WORLD` (300, the game's centimetres) in the tick (normal
+programs, grids, particles: the model to screen translation qw 19 through
+the inverse of the common block's world to screen qw 4..7, so the camera
+cancels; a skinned draw: its first bone's translation), or a screen prim's
+or shadow vertex moved more than `RD_INTERP_JUMP_SCREEN` (256 GS pixels).
+A particle that moved more than four times its size, or whose alpha is 0
+in either frame (born or dying), keeps the current position. The whole
+frame is the current one (`rd__InterpSnap`) without a closed previous
+frame; when the frame numbers are not consecutive (a discarded frame);
+when either frame is a keep frame; on a cut (`RdFrame.cut`, copied into
+`RdCamera.cut` at `rd_EndFrame`); when the targets were recreated after the
+previous frame (display options: `RdContext.interpFloor`); when the scene
+size changed; at a fade edge (either frame's fade at 0x80 or more: a scene
+can change behind black); and when the camera turned more than
+`RD_INTERP_CAMERA_TURN` (30 degrees) or its eye moved more than
+`RD_INTERP_CAMERA_MOVE` (300) in the tick, a cut the hooks missed.
+
+**The cut signal.** The game files call `ico_video_camera_cut()` (a counter
+in `video_options.c`, which the headless build links, read by no game code;
+under `ICO_HOST`): camera-root.c `InitCamera` (a stage's first camera), the
+camera mode change at the end of `SetCameraMatrix` (path camera in or out,
+`monitorCameraInit`; where it sets `GlobalTimer`), the cut back to the game
+camera (`gamecamCutBack` before `SetCameraMatrix_Ico2`), and
+`InsertCamera_Exec` with cutType 0 (camera-ico2.c then calls
+`initMonitorCamera(1)`); StageManager.c `start_stage_Load_thread` (a stage
+change). The window compares the counter once per vsync after the step and
+calls `rd_CameraCut()`, which marks the frame being recorded: the step
+closes the previous frame in the scheduler before the game's threads run
+the tick that cuts. Not hooked (camera-ico2.c is not this package's): the
+cut camera-ico2.c makes itself when the camera group's kind changes
+(`initMonitorCamera(1)` with `flag == 0`); the camera-jump test covers a
+cut that moves the eye 3 m or turns 30 degrees.
+
+**Held at the tick.** Everything unkeyed or carried by state: CLUT
+animation (textures are updated in place, `rd_UpdateTexture`), the
+rand-driven draws (the menu sparkle and lightning are screen and world
+prims with key 0), the dissolve FIX (an ALPHA state command), film noise
+(an unkeyed post sprite), the morph path (`rd_UpdateVuMesh` rewrites the
+mesh, not the frame: see open item 2), shadow topology changes (above),
+and the aura's feedback: its sprites whose target is FEED128 are dropped
+from every present but a tick's first (`firstOfTick`), so FEED128 advances
+once per tick as on the PS2 and the other presents paste the held buffer.
+
+**Feedback per present.** The motion blur's sprite (`RD_POST_MOTION_BLUR`:
+DISPLAY back into SCENE, LERP FIX) runs at every present, standing for dt
+ticks (`RdPostRec.scalar[2]`, R5a's hook). On the PS2 DISPLAY keeps
+a = (128 - FIX) / 128 of itself per tick; `rd__BlurFeedbackFix` gives the
+FIX that keeps a^dt: FIX' = round(128 - 128 a^dt) (additive and subtractive
+forms: FIX dt), so k presents of dt = 1/k keep a per tick at any rate. dt
+is the alpha advanced since the previous present plus whole ticks when
+frames closed in between, clamped to [1/256, 4]; dt = 1 returns FIX
+unchanged. The FIX is an integer, so a short dt rounds: FIX 32 (a = 0.75)
+at dt 1/6 wants 5.99 and gets 6.
+
+**Determinism.** `rd_interp.c` reads the retained frames and writes only
+its own copy; the game's only addition is the cut counter, which no game
+state reads. Headless `linux-x64`, `pad-boot.txt`, `ticks=3000`: HEAD
+before this package, this package with the default config, and with
+`preset = "enhanced"`, `aspect = "16:9"`, `framerate = "uncapped"` wrote
+byte-identical traces (430837 bytes, md5 644806ba35abf126b19ad44fe9b900fb,
+the same size as R7a's). Original: the 151 golden dumps of section 19
+(regenerated by the render tests of HEAD and of this package) rendered by
+`rd_replay_tool` to DISPLAY, SCENE and a 960 x 720 present: 453 PNGs,
+byte-identical to R7a's set, before and after this package, from either
+package's dumps (`build-host/r7b-golden/{gen,render,cmp}.sh`).
+`rd_present`'s Original hashes are unchanged.
+
+**Test** (`rd_interp`): without a device, two synthetic frames: alpha 1 is
+the current payload byte for byte, alpha 0 the previous frame's sprite; a
+UI sprite translated 32 px lands at 16 px (within 1/16 px) with its colour
+half way and its UVs the current; the same key twice matches in order; a
+missing key, a vertex count change and a 300 px jump snap; a cut
+(`rd_CameraCut`, `RdCamera.cut` set), a fully faded frame, a discarded
+frame between, a 40 degree camera turn and a keep frame snap the frame,
+while a 5 degree turn blends the camera to 2.5; a mesh's model and light
+matrices half way, its UV scroll across the wrap the short way, its GIF
+tag qword the current, a 10 m teleport snapping; a grid's every vertex half
+way with STs, colours and tags the current; a particle half way and one
+moved 100 sizes the current; a shadow volume half way, and the current one
+after a triangle count change; the fade level half way; the feedback FIX
+at dt 0.5 within half a FIX step of a^0.5 for FIX 8..120, additive FIX x
+0.5, the motion blur sprite carrying dt, FEED128's aura sprite dropped on a
+later present. On a device the same, then: replays of alpha 0 and alpha 1
+equal the previous and current frames' replays (0 pixels differ, outside
+the two unkeyed and unmatched sprites), the half-way sprite covers columns
+16..47 exactly; `rd_Present` does nothing in Original or with interpolate
+off, presents in Enhanced; a scale change snaps the pair across it
+(`RD_SNAP_HISTORY`) and the next pair blends. 0 validation errors.
+
+**Game run** (window build, lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`pad-boot.txt`, `ticks=1300`, `timeout 600`, 960 x 720 window,
+`preset = "enhanced"`, `resolution = "1x"`, `framerate = "100"`, vsync on,
+`dump_every=100`, `ICO_RD_DUMP_INTERP=1`): exit 0 in 305 s, frames
+100..1200 dumped with their half-way pairs. The rates are lavapipe's: the
+simulation runs well below real time (2 to 10 game frames a second), and
+the log's 10 s windows show 2.0 to 3.6 presents per game frame (e.g. 4.3
+presented fps at 2.2 game fps on the title, 25.2 at 10.1 during the stage
+load, 49 at 13.5 during the black boot frames); the cap of 100 was never
+reached. The `interp:` summaries (per 250 frames): 231, 210 and 186 frames
+blended; snaps: keep 3, 2, 4 (the dumps at 100, 200, 800, 900 and 1000 are
+keep frames), cut 2, 4, 7, fade 14, 34, 53, camera 0, gap 0, history 0;
+keyed draws 89 % / 75 % / 70 % blended, 1312..1394 unmatched per 250
+frames (about 6 a frame: draws present in one frame only), 0 / 0 / 62
+mismatched, 0 / 3510 / 21 jumped (below). Pictures (`rd_replay_tool
+--enhanced --resolution 1x`, current against half way): 1200 (stage 3's
+opening, the boy close up under the letterbox) shows the railings and the
+boy part way between the two ticks, 3 % of SCENE's pixels differ by more
+than 8, the letterbox bars black and identical in both, no tear or
+doubled UI; 500 and 600
+(title) differ in 8 and 4 pixels (the camera barely moves), the copyright
+line identical; 700 (the opening's fade-in) is half way darker. Measured
+with two things since changed (not re-run): the loop then made a second
+present per frame on this slow driver (the cost rule above came after it),
+and the jump test used the model to view translation (qw 27), which list
+5's dissolve draws do not upload (they carry another object's). In frame
+600, 49 keyed draws kept the current data (43 jumped, 6 unmatched): 33
+list 5 meshes whose qw 27 was one stale value, and 16 skinned draws (10 in
+list 0, 6 in list 1) of one character whose bones form a coherent skeleton
+about 1.5 m across. The common block inverse puts the list 5 meshes at the
+camera's eye and the stage geometry at the world origin (checked on frame
+600's dump); whether the 10 list 0 skinned draws really moved 3 m in that
+tick is not known without the previous frame's dump. The 6 list 1 skinned
+draws are unmatched in every dumped frame (500, 600, 700, 1200: about the
+6 unmatched a frame above), which suggests their key changes every frame
+(open item 7). Only frame 600 was examined draw by draw.
+
+**rd.h changes (R7b).** `rd_InterpolationActive`, `rd_Present`,
+`rd_FrameNumber`, `rd_CameraCut`; the `RdSettings.interpolate` comment.
+Internal: `RD_FRAME_RING`, `RdFrame.cut` / `.fade`, `RdContext.interpFloor`
+/ `.cutPending` / `.videoShown`, `RD_SNAP_*`, `RdInterpStats`,
+`rd__InterpSnap`, `rd__InterpFrame`, `rd__InterpShutdown`,
+`RD_INTERP_JUMP_WORLD` / `_SCREEN`, `RD_INTERP_CAMERA_MOVE` / `_TURN`;
+`rd__PrevFrame` follows the ring. The dump format is unchanged (the keys
+were always dumped; `cut` and `fade` are not). `ICO_RD_DUMP_INTERP=1`
+writes `rd-NNNNN-i50.rddump` next to each frame dump.
+
+Open items:
+
+1. 2D call sites pass no key (GifPacket.c's decoder, layout_texture.c,
+   DisplayFont.c, port/ui): menus that slide, subtitles that move and the
+   popup stay at the tick. Keying them needs a stable object per item
+   (layout row, popup); glyph quads should stay unkeyed.
+2. The morph path rewrites a mesh's stream in place (`rd_UpdateVuMesh`),
+   and the frame keeps only the mesh id: while the next frame records, its
+   morphs are already in the mesh, so a morphing face is presented with
+   the newer tick's shape (one tick early, not blended). Blending morphs
+   needs the stream in the frame (or a per-frame copy for morphing meshes).
+3. Particles are matched by list and order; an emitter that adds a batch
+   ahead of another in the same list shifts the order and snaps both (the
+   count differs) rather than mismatching.
+4. The cut camera-ico2.c makes on a camera group change is not hooked
+   (outside this package's files); the camera-jump test catches large ones.
+5. Rotations blend element-wise; a fast spin (a turn of tens of degrees in
+   one tick on a bone or object) would shrink half way. None seen; a
+   quaternion blend of the model matrices would fix it.
+6. The run's figures above were measured before two post-run fixes (the
+   slow-driver present rule and the world origin from the common block);
+   the next run with the window should confirm the jump counts drop and
+   that a software driver presents once per frame.
+7. `RegistPacket.c` keys a mesh by its PacHeader pointer, list and code. A
+   pass that builds its packet each frame in a double-buffered packet area
+   would get a new key every frame (the six list 1 skinned draws above are
+   never matched, consistent with that, unverified); such a site needs a
+   key from the object and part instead (RegistPacket.c is not this
+   package's file).
+
+Open items for mirror mode (R7c), which follows: the mirror flip belongs in
+the presenter's step 2 (`RdPresentPreset.mirror`), so it applies to every
+interpolated present as well; UI-tagged prims are pre-flipped at record
+time, which leaves the interpolation unaffected (it blends XY, and both
+frames are flipped alike); the camera-jump and world-origin tests read
+matrices, not the flipped picture, so they need nothing; `rd_video.c`'s
+own mirror flag is separate (FMV).
