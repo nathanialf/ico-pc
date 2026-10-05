@@ -22,6 +22,7 @@ port     port/data/cdvd_host.c  sceCd* over the VFS disc
          port/data/vfs.c        paths, byte reads, the disc slot
          port/data/iso9660.c    backend: the user's ISO (dev mode)
          (Phase 5)              backend: the extracted archive
+         port/data/tables.c     the 73 data tables, from the boot ELF on the disc
 ```
 
 The seam is the SDK's own function names, as declared in
@@ -103,8 +104,14 @@ above `read_sectors`:
 2. **`volume_sectors`** reports the disc's volume size, so the end-of-disc
    checks match.
 3. **What to store:** `SYSTEM.CNF` (the disc identification below reads its
-   BOOT2 line), an entry for the boot file it names (size and LSN only; the
-   port never reads the ELF at run time), and `DFDATAS/DATA.DF`. Anything
+   BOOT2 line), the boot file it names, `SCES_507.60`, **with its bytes**
+   (the table loader reads the whole ELF through `ico_vfs_open`/
+   `ico_vfs_read` at boot, "The data tables" below; 5,515,680 bytes), and
+   `DFDATAS/DATA.DF`. Keeping only the 75 table ranges would also do (about
+   1.1 MB, every range in `config/tables_manifest.txt`), but then the archive
+   needs its own container for them and `tables.c` a second entry point;
+   storing the file is simpler and the loader already checks every range's
+   CRC-32. Anything
    else the port extracts for its own use (the SNDN2DRV pitch table,
    `docs/research/sndn2drv.md`) is not a disc file to the game.
 4. Give it its own backend table (say `ico_vfs_archive`), mount it with
@@ -233,6 +240,127 @@ reader above; sector numbers and sizes only.
 | `DATA.DF;1` | LSN 19,771, 867,184,640 bytes, one extent |
 | DATA.DF directory | 193 entries, every one sector-aligned and inside DATA.DF. With DATA.DF's own entry that is 194 of the 200 slots in `iosCdvdSrhBuff`, which `unifile_read_func` fills without a bound |
 | `IOPRP224.IMG`, `SIO2MAN.IRX`, `PADMAN.IRX`, `MCMAN.IRX`, `MCSERV.IRX`, `LIBSD.IRX`, `SNDN2DRV.IRX` | present in the root (no longer read on the host) |
+
+## The data tables (`port/data/tables.c`, package 5B)
+
+The game's 73 data-only members (`config/data_schema.pal.txt`: 74 schema
+rows over 75 rows of `config/data_members.pal.txt`) are ELF data: actor
+modes, motion and sound definitions, object layouts, stage lists, the staff
+roll. The PS2 build compiles them as C written from the user's ELF
+(`tools/gen_data_c.py`). The host binary holds none of their bytes: it
+defines each table as an uninitialised array, and before the game starts
+the loader fills them from the boot ELF on the user's disc.
+
+**Generated, committed (`port/data/gen/`, by `tools/gen_data_desc.py`).**
+Types, offsets, sizes, names and CRCs only:
+
+| file | holds |
+| --- | --- |
+| `table_defs.c` | `T name[count];` for every table (in `.bss`), the string-pool buffers, and `staffRollNameDataNum` (derived as `sizeof` less 2, as the PS2 build derives it) |
+| `table_desc.c` | per record type, a field list `{path, host_offset, host_size, ee_offset, ee_size, count, kind, signed, bit, width, setter}`; per row, its member, symbol, section, EE range, CRC-32, first record offset, count, record type and host array |
+| `ee_symbols.c` | the registry: the 914 distinct EE addresses the tables' pointer words hold (913 functions, 1 object, `scpDummyGObj`), sorted, each with the host symbol |
+| `table_desc.h` | the descriptor types and `ICO_TABLE_SYMBOLS(X)` |
+| `tables.cmake` | the table names, for the test's renamed reference |
+
+The field lists come from the same parse of the record headers
+`gen_data_c.py` does (`gen_data_c.Header`, EE layout rules). Each record is
+flattened: scalars and arrays of scalars are one field each (`count` for
+the array), arrays of records are expanded by index (`ent[2].act`), a
+pointer-free union is copied as its bytes, a bit-field is one field with its
+bit position and a generated setter (`((SeDef *)r)->procRan = v`), so its
+host placement is the compiler's. `host_offset` and `host_size` are
+`offsetof`/`sizeof` expressions, evaluated by the host compiler. The EE
+offsets and sizes are asserted in `table_desc.c`: for pointer-free records
+on every host, for records with pointers on a 32-bit host (`UINTPTR_MAX`;
+checked with the i686 mingw compiler), and every scalar's host size equals
+its EE size everywhere.
+
+Coverage: 73 members, 68 record types, 75 rows (72 table rows, the
+`staffroll_dat` string pool in `.rodata` and the head of its `.sdata`, and
+its `count-of` row), 29,701 records. Field kinds used: int (1/2/4 bytes,
+signed or not, arrays), float, union bytes (`MotionDef`'s three flag
+words: `modeBits`, `flags`, `flags2`), bit-fields (in 9 record types:
+`ActModeRec`, `AttackKindEntry`, `EnemyDef`, `LtProperty`, `PObjMdl`, `SeBank`,
+`SeDef`, `SeEnvDef`, `StgPre`), 913 function targets over 9
+members' fields, 1 object target (`GenGeo.outGObj`), char pointers into the
+member's own string pool (`staffRollNameData`). No 8-byte field exists; the
+generator refuses one, a pointer inside a union, and a bit-field wider than
+32 bits.
+
+**The manifest (`config/tables_manifest.txt`).** Per row, the CRC-32 (zlib)
+of the ELF's bytes in its range, and the registry's `func`/`obj` lines (the
+address and the symbol the committed symbol lists name there). Written by
+`tools/gen_data_desc.py --manifest`, the only mode that reads the ELF; the
+CRCs and names are not disc data (`docs/LEGAL.md`).
+
+**Loading.** `ico_pc` mounts the disc, then calls `ico_tables_load_vfs`
+(port/platform/main_host.c) before the window, the pad, the trace and the
+game's `main`: nothing has read a table yet. The loader reads `SCES_507.60`
+through the VFS (any backend: the ISO today, the archive later), finds
+`.data`, `.rodata` and `.sdata` in its section headers, and:
+
+1. checks every row's range against its section and its CRC-32 against the
+   manifest, for all rows before writing any, so a wrong or modified ELF
+   leaves the tables empty and `ico_pc` stops with the row, both CRCs and
+   the reason (`ico_host_fatal`);
+2. copies the string-pool rows into their buffers;
+3. decodes each record field by field into the host array: integers,
+   floats and unions copied (the EE and the hosts are little-endian; the
+   loader refuses to compile on a big-endian host), bit-fields extracted from
+   their EE unit and stored through the setter, function-pointer words
+   looked up in the registry (binary search), object-pointer words resolved
+   first into the member's own string pool (staffroll: a pointer to pool
+   offset k becomes the host pool copy + k), then in the registry. A nonzero
+   word the registry does not hold stops the load with the table, element,
+   field, the address and the word's own address.
+
+The 64-bit record layouts (8-byte function pointers in `SeDef`, `GenGeo`,
+`ObjKindEnt` and the rest) are what the game's code is compiled against;
+the loader writes exactly them. `StageAnimDef.data` and
+`LtProperty.texData`, null in the ROM, are real host pointer slots, filled
+at run time as before.
+
+**const.** Every table is defined non-const: the loader writes them all,
+and the game writes three of the PS2 build's const `.rodata` tables
+(`stageTable` StageAnimation.c:154-160, `motionLimitDef`
+motionOrientManager.c:1436-1446, `seDef` s_init.c:1031,1085,850), which
+worked on the EE (no page protection). This replaces the old
+`ICO_DATA_WRITABLE` list (`gen_data_c.py --writable`). Headers that declare
+a table `extern const` (40 tables) are not edited: `table_defs.c` and
+`table_desc.c` `#define` each such name to `<name>_header_decl` around their
+`#include`s, so the header's declaration names an unused symbol and the
+non-const definition does not conflict. Other translation units still see
+`extern const`, which only stops them writing through that declaration; the
+object itself is writable.
+
+**`nodeLimit`.** The 2E scheme stays: `SetNodeRotationLimitDataTable` stores
+a one-based `motionLimitDef` row in the 4-byte slot (docs/port/SWEEP_2E.md).
+The table now lives in host `.bss`, still outside the arena, so an EE word
+still cannot name it; nothing here needs it to change.
+
+**Tests.**
+
+- `data_desc_fresh`: `tools/gen_data_desc.py --check` regenerates
+  `port/data/gen/` in memory and compares; that mode never opens the ELF, so
+  the files are a function of the committed text (schema, headers, symbol
+  lists, manifest) and carry no disc bytes.
+- `tables_manifest` (when the base ELF is present): the manifest equals a
+  recomputation from `baserom/pal/baseelf.elf`.
+- `tables_loader` (`port/data/test/tables_test.c`, built when the base ELF
+  and pyelftools are present): `gen_data_c.py --symbol-map` writes the 73
+  members into the build directory, compiled under renamed symbols
+  (`ico_ref_<name>`); the registry is compiled with stub definitions of its
+  914 symbols, so both sides resolve pointers to the same addresses. The
+  loader reads `SCES_507.60` through the VFS from the disc image (or the
+  ELF file without one) and every byte of every host table must equal the
+  compiled table's (the staff roll's char pointers compare by string). Then
+  a copy of the ELF with one byte of `seDef` flipped must be refused naming
+  `sedef` and its CRC, with the tables unchanged, and a non-ELF refused.
+
+**Regenerating.** After changing the schema, a record header, the symbol
+lists or `config/data_members.pal.txt`: `tools/gen_data_desc.py --manifest`
+(needs the ELF, if a range or pointer target changed) then
+`tools/gen_data_desc.py`. The output is clang-formatted by the generator.
 
 ## Tests
 

@@ -15,6 +15,19 @@ renderer layer too (docs/port/HEADLESS_STUBS.md) and leaves out only 11
 data tables compile on every preset. The table below is the pre-1D count of
 non-renderer sources.
 
+Since package 5B the data tables are not generated from the ELF at build
+time: the host binary defines them empty (`port/data/gen/table_defs.c`, in
+`.bss`) and `port/data/tables.c` fills them at boot from the boot ELF on the
+user's disc, checking each range's CRC-32 against
+`config/tables_manifest.txt` (docs/port/DATA.md, "The data tables"). The
+binary therefore holds no disc data, and configuring or building needs no
+base ELF and no pyelftools; only the loader's reference test
+(`tables_loader`) and `tables_manifest` need them, and are left out without
+them. On `linux-x64`, against package 4F's build, about 1.1 MB of initialised data and
+0.5 MB of read-only data left the binary for `.bss` (`size`: data 1,238,732 to 146,268
+bytes, text 2,527,841 to 1,996,539). `ICO_DATA_DIR`, `ICO_BASE_ELF` (for the
+game) and `ICO_DATA_WRITABLE` are gone from `CMakeLists.txt`.
+
 | preset | compiler | game TUs compiled | blocked | data tables |
 | --- | --- | --- | --- | --- |
 | `linux-x64` | host gcc 14 | 188 / 188 | 0 | 73 |
@@ -131,9 +144,10 @@ scf}_null.c`, and package 1D's `port/input/pad_script.c`).
 ## Phase 1 prerequisites
 
 - Done (1D): `stageTable`, `motionLimitDef` and `seDef` are written at run
-  time; the host build defines them non-const (`gen_data_c.py --writable`,
-  `ICO_DATA_WRITABLE` in `CMakeLists.txt`). The other 43 `.rodata` tables
-  were checked and are only read.
+  time; the host build defined them non-const (`gen_data_c.py --writable`,
+  `ICO_DATA_WRITABLE`). The other 43 `.rodata` tables were checked and are
+  only read. Since 5B every table is non-const on the host (the loader
+  writes them; docs/port/DATA.md, "const").
 - `-mno-ms-bitfields` applies to game and data TUs only on Windows
   (`-malign-double` went with the 32-bit presets). Any record that
   game code and `port/` code both read (SDK parameter blocks, the pad

@@ -17,8 +17,6 @@ option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
 option(ICO_BUILD_BLOCKED "Also compile the sources cmake/IcoExclusions.cmake blocks" OFF)
 option(ICO_LINK_EXE "Link the ico_pc executable (fails while symbols are unresolved)" OFF)
-set(ICO_DATA_DIR "${CMAKE_SOURCE_DIR}/build/data" CACHE PATH
-    "Directory of the generated data tables (<member>.c, tools/gen_data_c.py)")
 
 # The retail game ran with its asserts live (the reconstruction calls
 # __assert where the macro expanded), so no configuration defines NDEBUG:
@@ -110,118 +108,39 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
                             PROPERTIES COMPILE_DEFINITIONS "main=ico_game_main")
 
 # --- The data tables --------------------------------------------------------
-# The 73 data-only members are C written from the user's base ELF
-# (baserom/pal/baseelf.elf, never committed) by tools/gen_data_c.py in its
-# --symbol-map mode, which needs no period link. The build writes them into
-# <build>/data/. Without the base ELF or pyelftools, a directory of already
-# generated tables (ICO_DATA_DIR, by default the PS2 build's build/data/) is
-# used when complete; otherwise the data library is left out.
+# The binary holds no disc data (docs/LEGAL.md). The 73 data-only members
+# the PS2 build compiles from the user's ELF (tools/gen_data_c.py) are, here,
+# uninitialised arrays (port/data/gen/table_defs.c) that port/data/tables.c
+# fills at boot from the boot ELF on the user's disc, decoding each record
+# field by field through the generated descriptors (port/data/gen/
+# table_desc.c) and resolving pointer words through the address registry
+# (port/data/gen/ee_symbols.c). Those files hold only types, offsets, sizes,
+# names and the CRCs of config/tables_manifest.txt; tools/gen_data_desc.py
+# writes them and the data_desc_fresh test keeps them current. Configuring
+# and building need no ELF (docs/port/DATA.md, "The data tables").
 #
-# The generated C includes its record headers as "../../ico2/<prog>/include/
-# <h>.h". port/compat is on the include path and sits two levels below the
-# tree root, so those spellings resolve from any output directory.
-#
-# Tables the game writes at run time. The generator defines a .rodata row
-# const, as the PS2 build must (its --check compares sections with the ROM);
-# the EE has no page protection, so these stores worked there and fault on a
-# host. Each is defined without const here (gen_data_c.py --writable):
-#   stageTable      stage-anim        StageAnimation.c:154,158,160 (obj->data)
-#   motionLimitDef  motion-limit-def  motionOrientManager.c:1436,1437,1446
-#   seDef           sedef             s_init.c:1031,1085 then :850 (procRan)
-# The other .rodata tables were checked and are only read
-# (docs/research/loader-census.md section 4).
-set(ICO_DATA_WRITABLE stageTable motionLimitDef seDef)
-set(ICO_BASE_ELF "${CMAKE_SOURCE_DIR}/baserom/pal/baseelf.elf" CACHE FILEPATH
-    "The PAL base ELF the data tables are read from")
-set(ICO_DATA_PYTHON "${Python3_EXECUTABLE}")
-if(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python")
-    set(ICO_DATA_PYTHON "${CMAKE_SOURCE_DIR}/.venv/bin/python")
-endif()
-set(_ico_have_elftools 1)
-if(ICO_DATA_PYTHON)
-    execute_process(COMMAND "${ICO_DATA_PYTHON}" -c "import elftools"
-                    RESULT_VARIABLE _ico_have_elftools OUTPUT_QUIET ERROR_QUIET)
-endif()
-set(ICO_DATA_SOURCES "")
-if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
-    set(_gen "${CMAKE_SOURCE_DIR}/tools/gen_data_c.py")
-    set(_deps "${_gen}" "${ICO_BASE_ELF}"
-        "${CMAKE_SOURCE_DIR}/config/data_schema.pal.txt"
-        "${CMAKE_SOURCE_DIR}/config/data_members.pal.txt"
-        "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.txt"
-        "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.data.txt")
-    set(_writable "")
-    foreach(sym ${ICO_DATA_WRITABLE})
-        list(APPEND _writable --writable "${sym}")
-    endforeach()
-    foreach(m ${ICO_DATA_MEMBERS})
-        set(out "${CMAKE_BINARY_DIR}/data/${m}.c")
-        add_custom_command(
-            OUTPUT "${out}"
-            COMMAND "${ICO_DATA_PYTHON}" "${_gen}" --c "${m}" --symbol-map
-                    --elf "${ICO_BASE_ELF}" ${_writable} --out "${out}"
-            DEPENDS ${_deps}
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            COMMENT "Generating data table ${m}"
-            VERBATIM)
-        list(APPEND ICO_DATA_SOURCES "${out}")
-    endforeach()
-    message(STATUS "ico: data tables generated from ${ICO_BASE_ELF}")
-else()
-    set(ICO_DATA_MISSING "")
-    # Each table is a configure dependency: when the PS2 build regenerates
-    # or deletes build/data/, the next build re-runs this step.
-    # These tables are the PS2 build's, with ICO_DATA_WRITABLE const. A table
-    # defining one is copied into <build>/data/ with the edit --writable
-    # makes (no const; its name renamed around the #includes, whose headers
-    # may declare it extern const), so neither Python nor the ELF is needed.
-    foreach(m ${ICO_DATA_MEMBERS})
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ICO_DATA_DIR}/${m}.c")
-        if(EXISTS "${ICO_DATA_DIR}/${m}.c")
-            file(READ "${ICO_DATA_DIR}/${m}.c" _text)
-            set(_edited "${_text}")
-            foreach(sym ${ICO_DATA_WRITABLE})
-                if(_edited MATCHES "\nconst [^\n=]*[ *]${sym}\\[")
-                    string(REGEX REPLACE "\nconst ([^\n=]*[ *]${sym}\\[)" "\n#undef ${sym}\n\\1"
-                           _edited "${_edited}")
-                    set(_edited "#define ${sym} ${sym}_header_decl\n${_edited}")
-                endif()
-            endforeach()
-            if(_edited STREQUAL _text)
-                list(APPEND ICO_DATA_SOURCES "${ICO_DATA_DIR}/${m}.c")
-            else()
-                set(_copy "${CMAKE_BINARY_DIR}/data/${m}.c")
-                set(_old "")
-                if(EXISTS "${_copy}")
-                    file(READ "${_copy}" _old)
-                endif()
-                if(NOT _old STREQUAL _edited)
-                    file(WRITE "${_copy}" "${_edited}")
-                endif()
-                list(APPEND ICO_DATA_SOURCES "${_copy}")
-            endif()
-        else()
-            list(APPEND ICO_DATA_MISSING "${m}")
-        endif()
-    endforeach()
-    if(ICO_DATA_MISSING)
-        set(ICO_DATA_SOURCES "")
-        message(STATUS "ico: no data tables: ${ICO_BASE_ELF} or pyelftools (tools/setup.sh) is "
-                       "missing and ${ICO_DATA_DIR} is incomplete; the data library is not built. "
-                       "Extract your base ELF (tools/extract_elf.sh) and reconfigure.")
-    else()
-        message(STATUS "ico: data tables from ${ICO_DATA_DIR}")
-    endif()
-endif()
-if(ICO_DATA_SOURCES)
-    add_library(ico_data OBJECT ${ICO_DATA_SOURCES})
-    ico_include_dirs(sugipon incs)
-    target_include_directories(ico_data PRIVATE ${incs})
-    target_compile_definitions(ico_data PRIVATE ${ICO_GAME_DEFINITIONS})
-    target_compile_options(ico_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
-                           ${ICO_GAME_WARNINGS})
-    list(APPEND ICO_GAME_OBJECT_LIBS ico_data)
-endif()
+# No table is const on the host: the loader writes them all, and the game
+# writes three of the PS2 build's const .rodata tables (stageTable,
+# motionLimitDef, seDef: docs/port/DATA.md), which worked on the EE (no page
+# protection). The generated definitions rename a header's `extern const`
+# declaration around the #includes; no header changes.
+set(ICO_DATA_GEN_DIR "${CMAKE_SOURCE_DIR}/port/data/gen")
+add_library(ico_data OBJECT
+    "${ICO_DATA_GEN_DIR}/table_defs.c"
+    "${ICO_DATA_GEN_DIR}/table_desc.c"
+    "${ICO_DATA_GEN_DIR}/ee_symbols.c"
+    "${CMAKE_SOURCE_DIR}/port/data/tables.c")
+ico_include_dirs(sugipon incs)
+# the generated files spell the record headers repo-relative ("ico2/...")
+target_include_directories(ico_data PRIVATE ${incs} "${CMAKE_SOURCE_DIR}/port/data"
+                           "${CMAKE_SOURCE_DIR}")
+target_compile_definitions(ico_data PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(ico_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+# the loader is port code: the port's warning set
+set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/tables.c" TARGET_DIRECTORY ico_data
+                            PROPERTIES COMPILE_OPTIONS "${ICO_PORT_WARNINGS}")
+list(APPEND ICO_GAME_OBJECT_LIBS ico_data)
 
 add_subdirectory(port/fmv)
 # --- The platform layer -----------------------------------------------------

@@ -52,6 +52,7 @@
 #include "host_config.h"
 #include "host_loop.h"
 #include "pad_script.h"
+#include "tables.h"
 #include "trace_host.h"
 #ifndef ICO_HEADLESS
 #include "window_host.h"
@@ -371,6 +372,18 @@ int main(int argc, char **argv)
     }
     if (ico_cdvd_host_mount_iso(iso) != 0) {
         ico_host_fatal(log_path, "Cannot open the disc image %s.", iso);
+    }
+    /* the data tables, from the disc's boot ELF, before anything reads one
+       (port/data/tables.h) */
+    {
+        char why[512];
+
+        if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
+            ico_host_fatal(log_path, "Cannot load the game's data tables from %s.\n%s", iso, why);
+        }
+        fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
+                (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
+                ICO_TABLES_BOOT_ELF);
     }
 
     /* the pad */

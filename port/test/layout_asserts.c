@@ -119,8 +119,8 @@ OFF(Kanban, next, 0x18);
 OFF(Kanban, prev, 0x1C);
 #endif
 
-/* LtProperty: overlay, ico2/common/include/layout_texture.h:42, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* LtProperty: runtime, ico2/common/include/layout_texture.h:42 */
+#if ICO_LAYOUT_EE
 OFF(LtProperty, word0, 0x0);
 OFF(LtProperty, word4, 0x4);
 OFF(LtProperty, word8, 0x8);
@@ -151,8 +151,8 @@ OFF(LtProperty, texV, 0x68);
 SIZE(LtProperty, 0x70); /* comment */
 #endif
 
-/* LtProp: overlay, ico2/common/include/layout_texture.h:87, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* LtProp: runtime, ico2/common/include/layout_texture.h:87 */
+#if ICO_LAYOUT_EE
 OFF(LtProp, first, 0x0);
 OFF(LtProp, last, 0x4);
 OFF(LtProp, fadeInTime, 0x8);
@@ -629,8 +629,8 @@ OFF(PadState, hist, 0x14);
 OFF(PadState, ana, 0x54);
 #endif
 
-/* ObjKindEnt: overlay, ico2/common/include/typedef.h:1068, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* ObjKindEnt: runtime, ico2/common/include/typedef.h:1068 */
+#if ICO_LAYOUT_EE
 OFF(ObjKindEnt, name, 0x0);
 OFF(ObjKindEnt, targetTime, 0x24);
 OFF(ObjKindEnt, brainCapStep, 0x28);
@@ -651,8 +651,8 @@ OFF(ObjKindEnt, before, 0x60);
 SIZE(ObjKindEnt, 0x64); /* comment */
 #endif
 
-/* StgPre: overlay, ico2/common/include/typedef.h:1094, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* StgPre: runtime, ico2/common/include/typedef.h:1094 */
+#if ICO_LAYOUT_EE
 OFF(StgPre, key, 0x0);
 OFF(StgPre, name, 0x20);
 OFF(StgPre, key2, 0x40);
@@ -990,8 +990,8 @@ OFF(Act, addData, 0x68C);
 OFF(Act, flyClip, 0x690);
 #endif
 
-/* GenGeo: overlay, ico2/common/include/typedef.h:1662, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* GenGeo: runtime, ico2/common/include/typedef.h:1662 */
+#if ICO_LAYOUT_EE
 OFF(GenGeo, scale, 0x0);
 OFF(GenGeo, rot, 0xC);
 OFF(GenGeo, pos, 0x18);
@@ -1220,8 +1220,8 @@ SIZE(LookTarget, 0xC); /* comment */
 OFF(ParallelMotionRow, motion, 0x0);
 SIZE(ParallelMotionRow, 0xB0); /* comment */
 
-/* ActModeRec: overlay, ico2/fumi/include/act.h:44, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* ActModeRec: runtime, ico2/fumi/include/act.h:44 */
+#if ICO_LAYOUT_EE
 OFF(ActModeRec, ent, 0x0);
 OFF(ActModeRec, name, 0x24);
 OFF(ActModeRec, intrList, 0x44);
@@ -1229,8 +1229,8 @@ OFF(ActModeRec, mail, 0x48);
 SIZE(ActModeRec, 0x50); /* comment */
 #endif
 
-/* IntrMail: overlay, ico2/fumi/include/act.h:79, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* IntrMail: runtime, ico2/fumi/include/act.h:79 */
+#if ICO_LAYOUT_EE
 OFF(IntrMail, motion, 0x0);
 OFF(IntrMail, extra, 0x4);
 OFF(IntrMail, handler, 0x8);
@@ -1310,8 +1310,8 @@ OFF(CdvdBgReq, closeFunc, 0x124);
 OFF(CdvdBgReq, closeArg, 0x128);
 #endif
 
-/* PackKind: overlay, ico2/fumi/include/cdvd.h:89, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* PackKind: runtime, ico2/fumi/include/cdvd.h:89 */
+#if ICO_LAYOUT_EE
 OFF(PackKind, ext, 0x0);
 OFF(PackKind, func, 0x20);
 SIZE(PackKind, 0x24); /* comment */
@@ -1691,8 +1691,8 @@ OFF(SqEntry, stream, 0x2C);
 SIZE(SqEntry, 0x30); /* comment */
 #endif
 
-/* SeDef: overlay, ico2/fumi/include/s_init.h:100, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* SeDef: runtime, ico2/fumi/include/s_init.h:100 */
+#if ICO_LAYOUT_EE
 OFF(SeDef, name, 0x0);
 OFF(SeDef, kind, 0x20);
 OFF(SeDef, volume, 0x24);
@@ -1704,8 +1704,8 @@ OFF(SeDef, shock, 0x36);
 SIZE(SeDef, 0x3C); /* comment */
 #endif
 
-/* SeEnvDef: overlay, ico2/fumi/include/s_init.h:123, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* SeEnvDef: runtime, ico2/fumi/include/s_init.h:123 */
+#if ICO_LAYOUT_EE
 OFF(SeEnvDef, se, 0x0);
 OFF(SeEnvDef, proc, 0x4);
 OFF(SeEnvDef, volumeRate, 0x8);
@@ -2519,8 +2519,8 @@ OFF(PrimParticle, cur, 0x180);
 OFF(PrimParticle, objs, 0x188);
 #endif
 
-/* StageAnimDef: overlay, ico2/seki/include/StageAnimation.h:15, 64-bit pending 5 */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* StageAnimDef: runtime, ico2/seki/include/StageAnimation.h:15 */
+#if ICO_LAYOUT_EE
 OFF(StageAnimDef, path, 0x0);
 OFF(StageAnimDef, objFirst, 0x40);
 OFF(StageAnimDef, objLast, 0x44);
