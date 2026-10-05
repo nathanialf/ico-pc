@@ -3106,7 +3106,11 @@ void actBoyRescueGirlBhang(GObj *volatile self)
     int mode;
     int connect = 1;
 
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(sub) = (void (*)(GObj *))afterBoyRescueGirlBhang;
+#else
     *(void **)((char *)sub + 0x18) = (void *)afterBoyRescueGirlBhang;
+#endif
     while (1) {
         mode = 0;
         switch (GOBJ_ACT(girlGObj)->actMode) {
@@ -3475,7 +3479,11 @@ inline void actBoyHangG3M(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
 
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(sub) = (void (*)(GObj *))afterBoyHangG3M;
+#else
     *(void **)((char *)sub + 0x18) = (void *)afterBoyHangG3M;
+#endif
     while (1) {
         if (0.1f < sub->stick.mag || (sub->pad.now & 0x10)) {
             ACTSendMailCorrect(self, 0x192);

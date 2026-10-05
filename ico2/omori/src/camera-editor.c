@@ -1236,7 +1236,7 @@ inline CamGroup *_CameraEdit_BOX(int *set, int box)
 
 inline PinRec *_CameraEdit_PIN(int *set, int box, int pin)
 {
-    return &((CamGroup *)(set[1] + box * 76))->items[pin];
+    return &CAMGROUP_ITEMS((CamGroup *)(set[1] + box * 76))[pin];
 }
 
 static inline char *_CameraEdit_alloc_pool(CamMgr *mgr) /* derived name */
@@ -1264,7 +1264,7 @@ inline int _CameraEdit_add_box(CamMgr *mgr, CamGroup *src)
             *dst = *src;
             dst->first = 0;
             dst->end = 0;
-            dst->items = (PinRec *)p;
+            CAMGROUP_SET_ITEMS(dst, (PinRec *)p);
             mgr->count = mgr->count + 1;
         }
         return result;
@@ -1281,7 +1281,7 @@ inline int _CameraEdit_add_pin(CamMgr *mgr, int box, PinRec *src)
     int result = -1;
     if (n < 100) {
         int base2;
-        ((CamGroup *)base)->items[n] = *src;
+        CAMGROUP_ITEMS((CamGroup *)base)[n] = *src;
         base2 = box * 76 + (int)mgr->items;
         result = ((CamGroup *)base2)->end;
         ((CamGroup *)base2)->end = result + 1;
@@ -1298,7 +1298,7 @@ static inline void _CameraEdit_free_box_pool(CamMgr *mgr, int idx) /* derived na
     char *p = mgr->pool;
     int i;
     for (i = 0; i < 100; i++) {
-        if (p == (char *)box->items) {
+        if (p == (char *)CAMGROUP_ITEMS(box)) {
             mgr->flags[i] = 0;
         }
         p += 9200;
@@ -1327,7 +1327,7 @@ static inline CamGroup *_CameraEdit_BOX_p(CamMgr *mgr, int i) /* derived name */
 
 static inline PinRec *_CameraEdit_PIN_p(CamMgr *mgr, int i, int j) /* derived name */
 {
-    return &_CameraEdit_BOX_p(mgr, i)->items[j];
+    return &CAMGROUP_ITEMS(_CameraEdit_BOX_p(mgr, i))[j];
 }
 
 void _CameraEdit_del_pin(CamMgr *mgr, int box, int pin)
@@ -1416,9 +1416,9 @@ inline void CameraEdit_reset_box(int box)
     int i;
     src = (CamGroup *)(cameraSetOrg[1] + box * 76);
     dst = (CamGroup *)(cameraSetEdit[1] + box * 76);
-    saved = dst->items;
+    saved = CAMGROUP_ITEMS(dst);
     *dst = *src;
-    dst->items = saved;
+    CAMGROUP_SET_ITEMS(dst, saved);
     i = 0;
     while (i < CameraEdit_BOX(box)->end - CameraEdit_BOX(box)->first) {
         CameraEdit_reset_pin(box, i);
@@ -1428,8 +1428,8 @@ inline void CameraEdit_reset_box(int box)
 
 inline void CameraEdit_reset_pin(int box, int pin)
 {
-    PinRec *dst = &((CamGroup *)(cameraSetEdit[1] + box * 76))->items[pin];
-    PinRec *src = &((CamGroup *)(cameraSetOrg[1] + box * 76))->items[pin];
+    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76))[pin];
+    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(cameraSetOrg[1] + box * 76))[pin];
     *dst = *src;
 }
 
@@ -1437,10 +1437,10 @@ inline void CameraEdit_reflect_box(int box)
 {
     CamGroup *dst = (CamGroup *)(cameraSetOrg[1] + box * 76);
     CamGroup *src = (CamGroup *)(cameraSetEdit[1] + box * 76);
-    PinRec *saved = dst->items;
+    PinRec *saved = CAMGROUP_ITEMS(dst);
     int i;
     *dst = *src;
-    dst->items = saved;
+    CAMGROUP_SET_ITEMS(dst, saved);
     i = 0;
     while (i < CameraEdit_BOX(box)->end - CameraEdit_BOX(box)->first) {
         CameraEdit_reflect_pin(box, i);
@@ -1450,8 +1450,8 @@ inline void CameraEdit_reflect_box(int box)
 
 inline void CameraEdit_reflect_pin(int box, int pin)
 {
-    PinRec *dst = &((CamGroup *)(cameraSetOrg[1] + box * 76))->items[pin];
-    PinRec *src = &((CamGroup *)(cameraSetEdit[1] + box * 76))->items[pin];
+    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(cameraSetOrg[1] + box * 76))[pin];
+    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76))[pin];
     *dst = *src;
 }
 
@@ -1485,7 +1485,7 @@ inline CamGroup *CameraEdit_BOX(int box)
 
 inline PinRec *CameraEdit_PIN(int box, int pin)
 {
-    return ((CamGroup *)(cameraSetEdit[1] + box * 76))->items + pin;
+    return CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76)) + pin;
 }
 
 inline void CameraEdit_DispPin(int box, int pin)

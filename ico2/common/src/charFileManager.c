@@ -21,24 +21,11 @@
 #include <string.h>
 #include "ios.h"
 #include <assert.h>
+#include "fieldCollision.h"
 
-typedef struct { /* field names derived */
-    char pad0[68];
-    short angle; /* 0x44, the wall's angle, its sine and cosine kept at 0x4C */
-    char pad46[6];
-    float *sinCos; /* 0x4C */
-} Bone; /* 0x50 */ /* derived name */
-
-typedef struct { /* field names derived */
-    char pad0[8];
-    int count; /* 0x08 */
-    char padC[4];
-    int wcl;  /* 0x10 */
-    int fcl;  /* 0x14 */
-    int wblk; /* 0x18 */
-    int fblk; /* 0x1C */
-    int ofs;  /* 0x20 */
-} Coll;       /* derived name */
+/* the .cl file's head; its walls are fieldCollision.h's FcWallEnt (0x50
+   bytes, the angle at 0x44 and the sine and cosine pair's address at 0x4C) */
+typedef FcColl Coll; /* derived name */
 
 typedef struct {        /* field names derived */
     PObjModel *pObj;    /* 0x00 */
@@ -100,10 +87,18 @@ void ResetCharFileManager(void)
 }
 
 /* PObj.c has no header; the definition is (int, int, int) */
-extern PObjModel *InitPObj(void *buf, int name, int id);
+extern PObjModel *InitPObj(void *buf, ICO_WORD name, int id);
+
+#ifdef ICO_HOST
+
+/* PObj.c (port): frees the strip and morph tables decoded from the model
+   image just freed (docs/port/LOADERS.md) */
+void PObj_FreeImageTables(void);
+
+#endif
 
 /* "Illegal Model ID number: %d (\"%s\")\n" / "ReadModelFile:Already loaded. (id:%d)%s\n" / "ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n" / sprintf above belong to ReadModelFile. */
-void ReadModelFile(void *h, int name, int size, int id, int kind, int word08, int part)
+void ReadModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int part)
 {
     char buf[256];
     char *p;
@@ -140,9 +135,12 @@ void ReadModelFile(void *h, int name, int size, int id, int kind, int word08, in
     charFiles[id].pObj = InitPObj(p, name, id);
     charFiles[id].pObj->serial = objSerial++;
     iosFree(p);
+#ifdef ICO_HOST
+    PObj_FreeImageTables();
+#endif
 }
 
-void ReadVolumeModelFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+void ReadVolumeModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     char *buf;
 
@@ -173,12 +171,15 @@ void ReadVolumeModelFile(void *h, int name, int size, int id, int kind, int word
     charFiles[id].pObj = InitPObj(buf, name, id);
     charFiles[id].pObj->serial = objSerial++;
     iosFree(buf);
+#ifdef ICO_HOST
+    PObj_FreeImageTables();
+#endif
 }
 
 /* PObj.c has no header; the definition is (ObjHdr *, char *, int) */
-extern PObjModel *AllocPObj(void *buf, int name, int id);
+extern PObjModel *AllocPObj(void *buf, ICO_WORD name, int id);
 
-void ReadShadowModelFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+void ReadShadowModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     char *buf;
 
@@ -210,6 +211,9 @@ void ReadShadowModelFile(void *h, int name, int size, int id, int kind, int word
     charFiles[id].pShadow->serial = objSerial++;
     shadow_MakeObjectData(charFiles[id].pShadow);
     iosFree(buf);
+#ifdef ICO_HOST
+    PObj_FreeImageTables();
+#endif
 }
 
 void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08, int seg)
@@ -333,11 +337,11 @@ void ReadCollisionFile(void *h, char *name, int size, int id, int kind, int word
                 iosCdvdHandlerRead(h, charFiles[i].pColl, size);
                 debug_StdPrintfDummy("ReadCollisionFile:loaded::%s  (size:%d)\n", name, size);
                 p = charFiles[i].pColl;
-                p->wcl = (int)p + p->wcl;
-                p->fcl = (int)p + p->fcl;
-                p->wblk = (int)p + p->wblk;
-                p->fblk = (int)p + p->fblk;
-                p->ofs = (int)p + p->ofs;
+                p->wcl = ICO_EEW(p) + p->wcl;
+                p->fcl = ICO_EEW(p) + p->fcl;
+                p->wblk = ICO_EEW(p) + p->wblk;
+                p->fblk = ICO_EEW(p) + p->fblk;
+                p->ofs = ICO_EEW(p) + p->ofs;
                 debug_StdPrintfDummy("ch      :%p\n", p);
                 debug_StdPrintfDummy("ch->wcl :%p\n", p->wcl);
                 debug_StdPrintfDummy("ch->fcl :%p\n", p->fcl);
@@ -346,23 +350,35 @@ void ReadCollisionFile(void *h, char *name, int size, int id, int kind, int word
                 debug_StdPrintfDummy("ch->ofs :%p\n", p->ofs);
                 for (j = 0; j < 32; j++) {
                     for (k = 0; k < 32; k++) {
-                        if (((int *)p->wblk)[j * 32 + k] != 0) {
+                        if (ICO_EEPTR(int *, p->wblk)[j * 32 + k] != 0) {
                             debug_StdPrintfDummy("w %2d %2d :%p\n", j, k,
-                                                 ((int *)p->wblk)[j * 32 + k]);
-                            ((int *)p->wblk)[j * 32 + k] = (int)p + ((int *)p->wblk)[j * 32 + k];
+                                                 ICO_EEPTR(int *, p->wblk)[j * 32 + k]);
+                            ICO_EEPTR(int *, p->wblk)
+                            [j * 32 + k] = ICO_EEW(p) + ICO_EEPTR(int *, p->wblk)[j * 32 + k];
                         }
-                        if (((int *)p->fblk)[j * 32 + k] != 0) {
+                        if (ICO_EEPTR(int *, p->fblk)[j * 32 + k] != 0) {
                             debug_StdPrintfDummy("f %2d %2d :%p\n", j, k,
-                                                 ((int *)p->fblk)[j * 32 + k]);
-                            ((int *)p->fblk)[j * 32 + k] = (int)p + ((int *)p->fblk)[j * 32 + k];
+                                                 ICO_EEPTR(int *, p->fblk)[j * 32 + k]);
+                            ICO_EEPTR(int *, p->fblk)
+                            [j * 32 + k] = ICO_EEW(p) + ICO_EEPTR(int *, p->fblk)[j * 32 + k];
                         }
                     }
                 }
                 q = (float *)mallocseki(p->count * 8);
                 for (j = 0; j < p->count; j++) {
-                    ((Bone *)p->wcl)[j].sinCos = q + j * 2;
-                    ((Bone *)p->wcl)[j].sinCos[0] = GetTableSin(((Bone *)p->wcl)[j].angle);
-                    ((Bone *)p->wcl)[j].sinCos[1] = GetTableCos(((Bone *)p->wcl)[j].angle);
+#ifdef ICO_HOST
+                    FcWallEnt *w = &ICO_EEPTR(FcWallEnt *, p->wcl)[j];
+
+                    w->normal = ICO_EEW(q + j * 2);
+                    FC_WALL_NORMAL(w)[0] = GetTableSin(w->angle);
+                    FC_WALL_NORMAL(w)[1] = GetTableCos(w->angle);
+#else
+                    ((FcWallEnt *)p->wcl)[j].normal = q + j * 2;
+                    ((FcWallEnt *)p->wcl)[j].normal[0] =
+                        GetTableSin(((FcWallEnt *)p->wcl)[j].angle);
+                    ((FcWallEnt *)p->wcl)[j].normal[1] =
+                        GetTableCos(((FcWallEnt *)p->wcl)[j].angle);
+#endif
                 }
             }
             return;
@@ -439,7 +455,7 @@ void ReadMotionFile(void *h, char *name, int size, int id, int kind, int word08,
                          (float)GetMotionMemorySize(seg) / 1024.0f / 1024.0f);
 }
 
-void ReadParticleEffectFile(void *h, int name, int size, int id)
+void ReadParticleEffectFile(void *h, ICO_WORD name, int size, int id)
 {
     int *buf = iosMallocDebug(ios_partition_sugipon, size, __FILE__, 552);
     systemStatus[8]++;
@@ -448,7 +464,7 @@ void ReadParticleEffectFile(void *h, int name, int size, int id)
     iosFree(buf);
 }
 
-void ReadSoundBdFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+void ReadSoundBdFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     char *buf;
 
@@ -494,7 +510,7 @@ typedef struct { /* field names derived */
    load */
 static char *semiCommonHdBuf = 0; /* derived name */
 
-void ReadSoundHdFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+void ReadSoundHdFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     /* the sound bank/mode pair the switch fills in and soundHDDataSet reads
        back */
@@ -556,7 +572,7 @@ typedef struct { /* field names derived */
    ReadShockFile; they are plain `inline`, so their out-of-line bodies come
    out at the end of the object. */
 
-inline void ReadSoundSqFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+inline void ReadSoundSqFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     /* the sound bank/mode pair the switch fills in and soundSQDataSet reads
        back */
@@ -596,7 +612,8 @@ inline void ReadSoundSqFile(void *h, int name, int size, int id, int kind, int w
     debug_StdPrintfDummy("ReadSoundSqFile:loaded::[%d]%s  (size:%d)\n", id, name, size);
 }
 
-inline void ReadSoundAdpcmFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+inline void ReadSoundAdpcmFile(void *h, ICO_WORD name, int size, int id, int kind, int word08,
+                               int seg)
 {
     int key;
     int hi;
@@ -620,7 +637,7 @@ inline void ReadSoundAdpcmFile(void *h, int name, int size, int id, int kind, in
     }
 }
 
-void ReadShockFile(void *h, int name, int size, int id, int kind, int word08, int seg)
+void ReadShockFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
 {
     ShockVoiceFile *p;
 
@@ -630,7 +647,7 @@ void ReadShockFile(void *h, int name, int size, int id, int kind, int word08, in
         if (size == 0) {
             p = 0;
         } else {
-            p = iosMallocDebug(ios_partition_shock, size + 16, __FILE__, 788);
+            p = iosMallocDebug(ios_partition_shock, size + sizeof(ShockVoiceFile), __FILE__, 788);
             iosCdvdHandlerRead(h, p->image, size);
             Init_ShockVoiceSet(&p->set, p->image);
         }
@@ -640,7 +657,7 @@ void ReadShockFile(void *h, int name, int size, int id, int kind, int word08, in
         if (size == 0) {
             p = 0;
         } else {
-            p = mallocseki(size + 16);
+            p = mallocseki(size + sizeof(ShockVoiceFile));
             iosCdvdHandlerRead(h, p->image, size);
             Init_ShockVoiceSet(&p->set, p->image);
         }
@@ -649,7 +666,7 @@ void ReadShockFile(void *h, int name, int size, int id, int kind, int word08, in
     debug_StdPrintfDummy("ReadShockData:loaded::[%d]%s  (size:%d)\n", id, name, size);
 }
 
-void ReadCamerasetFile(void *h, int name, int size, int id)
+void ReadCamerasetFile(void *h, ICO_WORD name, int size, int id)
 {
     char *buf;
 
@@ -666,7 +683,7 @@ void ReadCamerasetFile(void *h, int name, int size, int id)
     iosFree(buf);
 }
 
-void ReadEndCheckFile(void *h, int name, int size)
+void ReadEndCheckFile(void *h, ICO_WORD name, int size)
 {
     char *buf = iosMallocDebug(ios_partition_oomori, size, __FILE__, 854);
     systemStatus[8]++;
@@ -674,13 +691,19 @@ void ReadEndCheckFile(void *h, int name, int size)
     iosFree(buf);
 }
 
-void ReadStageSettingFile(void *h, int name, int size)
+void ReadStageSettingFile(void *h, ICO_WORD name, int size)
 {
     char *buf;
 
     systemStatus[8]++;
     buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 905);
     iosCdvdHandlerRead(h, buf, size);
+#ifdef ICO_HOST
+    /* port: the copy has no bound; every .ssb on the disc fits (R4 s.2) */
+    if (size > (int)sizeof(GlobalStageSetting)) {
+        __builtin_trap();
+    }
+#endif
     memcpy(&GlobalStageSetting, buf, size);
     light_AddLight(0, 0, 0);
     tex_RemakeRegistersSampleMin(0);
@@ -711,7 +734,7 @@ void CSVSYSTEM_ReadCharFiles(Sub15C *rec, int id)
     }
     rec->skel = charFiles[id].pSkel;
     debug_StdPrintfDummy("skelton %p.\n", rec->skel);
-    rec->colData = (int)charFiles[id].pColl;
+    rec->colData = (ICO_WORD)charFiles[id].pColl;
     debug_StdPrintfDummy("collision %p.\n", rec->colData);
     if (rec->skel != 0) {
         while (rec->skel[n].mirror != -1) {

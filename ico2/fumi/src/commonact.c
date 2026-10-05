@@ -924,7 +924,11 @@ void actCommonRope(GObj *volatile self)
         HoldChain(s->chain, self, hand);
     }
     s->after = afterCommonRope;
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterForceRope;
+#else
     *(int *)((char *)s + 0x18) = (int)actAfterForceRope;
+#endif
     LockChainGeo(s->chain);
     _ACTWait(1);
     debug_StdPrintfDummy("enter actCommonRope\n");
@@ -1144,7 +1148,7 @@ void actCommonRopeCliff(GObj *volatile self)
     float y;
     int i = 0;
 
-    s->flags18.afterProc = afterCommonRopeCliff;
+    ACT_AFTER_PROC(s) = afterCommonRopeCliff;
     ((CagePtr *)(((CagePtr *)((char *)boyGObj + 0x15C))->p + 0x420))->p = 0;
     dst[0] = GOBJ_ACT(self)->enemy->ropeCliffX;
     dst[1] = GOBJ_ACT(self)->enemy->ropeCliffY;
@@ -1506,7 +1510,11 @@ void actCommonDown(GObj *volatile self)
     int notDamage = s->intrKind != 55 && s->intrKind != 56;
 
     debug_StdPrintfDummy("enter actCommonDown\n");
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterDown;
+#else
     *(int *)((char *)s + 0x18) = (int)actAfterDown;
+#endif
     if (notDamage) {
         if (self == boyGObj) {
             brainAddLevelGirl(1000.0f);
@@ -2136,7 +2144,7 @@ void actCommonJump(GObj *volatile self)
     int n;
 
     s->flags18.ll &= ~(1ULL << 55);
-    s->flags18.afterProc = actAfterJump;
+    ACT_AFTER_PROC(s) = actAfterJump;
     if (s->intrKind == 82) {
         GOBJ_WORK(self)->jumpTimer = ((60 - systemStatus[0] * 10) / systemStatus[1]) * 10;
     }
@@ -2237,7 +2245,7 @@ void actCommonFall(GObj *volatile self)
     wasHigh = 0;
     noVel = 0;
     slowed = 0;
-    ((Act *)(char *)s)->flags18.afterProc = actAfterFall;
+    ACT_AFTER_PROC((char *)s) = actAfterFall;
     if (stageData[stage_no].flag3) {
         keep = FALL_SUB(self)->ctrl.floorAttr & 0xF;
         debug_StdPrintfDummy("0x%8x -> 0x%8x\n", FALL_SUB(self)->ctrl.floorAttr, keep);
@@ -2842,7 +2850,7 @@ void actCommonFly(GObj *volatile self)
     GObj *gen = 0;
 
     s->flags18.ll &= ~(1ULL << 57);
-    s->flags18.afterProc = actAfterFly;
+    ACT_AFTER_PROC(s) = actAfterFly;
 
     ((FlyCtlJ *)(char *)GOBJ_SUB(self))->f5F8 = 0;
 
@@ -3416,7 +3424,7 @@ void actCommonBecarry(GObj *volatile self)
 
     g = s->carrier;
     ACTGameCollisionOff((volatile int *)self);
-    s->flags18.afterProc = afterCommonBecarry;
+    ACT_AFTER_PROC(s) = afterCommonBecarry;
     s->flags18.ll &= ~(1ULL << 46);
     _ACTWait(1);
     while (1) {
@@ -4092,7 +4100,11 @@ inline void actCommonRopeJump(GObj *volatile self)
 {
     Act *s = GOBJ_ACT(self);
 
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterRopeJump;
+#else
     *(int *)((char *)s + 0x18) = (int)actAfterRopeJump;
+#endif
     if (s->intrKind == 167) {
         ((RopeJumpWork *)(int)GOBJ_SUB(self))->f130 = 0;
         ((RopeJumpWork *)(int)GOBJ_SUB(self))->f134 = 0;

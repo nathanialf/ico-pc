@@ -1,4 +1,5 @@
 #include "typedef.h"
+#include "eeword.h"
 #include "sugiCommon.h"
 #include "debug.h"
 #include "debug_exception.h"
@@ -1385,7 +1386,7 @@ void _getMotion(void *dst, void *m, int node, int frame)
 
     char *mm = (char *)m;
 
-    type = ((unsigned char *)*(int *)(mm + 8))[node];
+    type = ICO_EEPTR(unsigned char *, *(int *)(mm + 8))[node];
     switch (type) {
     default:
         debug_StdPrintfDummy(illegalCompressMsg, type);
@@ -1393,41 +1394,43 @@ void _getMotion(void *dst, void *m, int node, int frame)
         break;
     case 1: {
         int off = frame * 0x10;
-        getMotRotElem((char *)dst, (char *)((int *)*(int *)(mm + 0xC))[node] + off);
+        getMotRotElem((char *)dst,
+                      ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]) + off);
         break;
     }
     case 2: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemF e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 4),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemF e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 4),
                       *(float *)(p + 8), *(float *)(p + 0xC), *(float *)(p + 0x10)};
         getMotRotElem((char *)dst, (char *)&e);
         break;
     }
     case 3: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemF e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 8),
-                      *(float *)(p + 0xC), *(float *)(p + 0x10), ((float *)*(int *)(p + 4))[frame]};
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemF e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 8),
+                      *(float *)(p + 0xC), *(float *)(p + 0x10),
+                      ICO_EEPTR(float *, *(int *)(p + 4))[frame]};
         getMotRotElem((char *)dst, (char *)&e);
         break;
     }
     case 4: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
         _getS16MotRotElem(dst, &((MotElemS *)p)[frame]);
         break;
     }
     case 5: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemS e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 4),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemS e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 4),
                       *(unsigned short *)(p + 6), *(unsigned short *)(p + 8),
                       *(unsigned short *)(p + 0xA)};
         _getS16MotRotElem(dst, &e);
         break;
     }
     case 6: {
-        char *p = (char *)((int *)*(int *)(mm + 0xC))[node];
-        MotElemS e = {((unsigned char *)*(int *)p)[frame], *(unsigned char *)(p + 8),
+        char *p = ICO_EEPTR(char *, ICO_EEPTR(int *, *(int *)(mm + 0xC))[node]);
+        MotElemS e = {ICO_EEPTR(unsigned char *, *(int *)p)[frame], *(unsigned char *)(p + 8),
                       *(unsigned short *)(p + 0xA), *(unsigned short *)(p + 0xC),
-                      ((unsigned short *)*(int *)(p + 4))[frame]};
+                      ICO_EEPTR(unsigned short *, *(int *)(p + 4))[frame]};
         _getS16MotRotElem(dst, &e);
         break;
     }
@@ -1545,7 +1548,7 @@ void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int 
    callers inline and the two exported functions call */
 static inline void getMotionRootPos(float *dst, void *motion, int idx) /* derived name */
 {
-    float *src = (float *)(*(int *)((char *)motion + 4) + idx * 0xC);
+    float *src = ICO_EEPTR(float *, *(int *)((char *)motion + 4) + idx * 0xC);
     getRootPos(dst, src);
 }
 
@@ -1690,8 +1693,8 @@ static inline void getShapeMotion(float *dst, char *motion, int idx, int count) 
     int m = *(int *)motion - 1;
     idx = idx - m * (idx / m);
     for (; i < count; i++) {
-        char *t = *(char **)(motion + 0x10);
-        int *elem = *(int **)(*(char **)(t + 4) + i * 4);
+        char *t = ICO_EEPTR(char *, *(int *)(motion + 0x10));
+        int *elem = ICO_EEPTR(int *, *(int *)(ICO_EEPTR(char *, *(int *)(t + 4)) + i * 4));
         if (elem != 0) {
             dst[i] = ((float *)elem)[idx];
         } else {

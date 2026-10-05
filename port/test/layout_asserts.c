@@ -66,6 +66,7 @@
 #include "frameDependSequence.h"
 #include "handManager.h"
 #include "item.h"
+#include "motionFileManager.h"
 #include "motionOrientManager.h"
 #include "multiBgaManager.h"
 #include "particleEffect.h"
@@ -90,12 +91,12 @@
 #define OFF(T, m, o) _Static_assert(offsetof(T, m) == (o), #T "." #m " at " #o)
 #define SIZE(T, n) _Static_assert(sizeof(T) == (n), "sizeof(" #T ") == " #n)
 
-/* TexRec: overlay, ico2/common/include/charFileManager.h:23 */
+/* TexRec: overlay, ico2/common/include/charFileManager.h:31 */
 OFF(TexRec, path, 0x0);
 OFF(TexRec, cameraMove, 0x30);
 SIZE(TexRec, 0x34); /* comment */
 
-/* PObjMdl: overlay, ico2/common/include/charFileManager.h:31 */
+/* PObjMdl: overlay, ico2/common/include/charFileManager.h:39 */
 OFF(PObjMdl, path, 0x0);
 OFF(PObjMdl, collPath, 0x30);
 OFF(PObjMdl, offset, 0x70);
@@ -194,7 +195,7 @@ OFF(struct DObjNode, pos, 0x40);
 SIZE(struct DObjNode, 0x50); /* comment */
 #endif
 
-/* struct GObj: runtime, ico2/common/include/typedef.h:231 */
+/* struct GObj: runtime, ico2/common/include/typedef.h:232 */
 #if ICO_LAYOUT_EE
 OFF(struct GObj, self, 0x0);
 OFF(struct GObj, labelType, 0x4);
@@ -228,7 +229,7 @@ OFF(struct GObj, active, 0x16C);
 OFF(struct GObj, pauseExempt, 0x170);
 #endif
 
-/* MotOriReq: runtime, ico2/common/include/typedef.h:305 */
+/* MotOriReq: runtime, ico2/common/include/typedef.h:306 */
 #if ICO_LAYOUT_EE
 OFF(MotOriReq, a, 0x0);
 OFF(MotOriReq, aw, 0xC);
@@ -237,7 +238,7 @@ OFF(MotOriReq, bw, 0x1C);
 SIZE(MotOriReq, 0x20); /* comment */
 #endif
 
-/* HandRec: runtime, ico2/common/include/typedef.h:323 */
+/* HandRec: runtime, ico2/common/include/typedef.h:324 */
 #if ICO_LAYOUT_EE
 OFF(HandRec, mode, 0x0);
 OFF(HandRec, obj, 0x4);
@@ -256,7 +257,7 @@ OFF(HandRec, pad5C, 0x5C);
 SIZE(HandRec, 0x60); /* comment */
 #endif
 
-/* struct MotRoot: runtime, ico2/common/include/typedef.h:347 */
+/* struct MotRoot: runtime, ico2/common/include/typedef.h:348 */
 #if ICO_LAYOUT_EE
 OFF(struct MotRoot, pos, 0x0);
 OFF(struct MotRoot, trans, 0x10);
@@ -350,7 +351,7 @@ OFF(struct MotRoot, ikRate2, 0x3C8);
 OFF(struct MotRoot, _pad3CC, 0x3CC);
 #endif
 
-/* struct MotCtrl: runtime, ico2/common/include/typedef.h:457 */
+/* struct MotCtrl: runtime, ico2/common/include/typedef.h:458 */
 #if ICO_LAYOUT_EE
 OFF(struct MotCtrl, stream, 0x0);
 OFF(struct MotCtrl, oriFrom, 0x4);
@@ -457,7 +458,7 @@ OFF(struct MotCtrl, seMute, 0x1E8);
 OFF(struct MotCtrl, _pad1EC, 0x1EC);
 #endif
 
-/* SkelNode: overlay, ico2/common/include/typedef.h:572 */
+/* SkelNode: overlay, ico2/common/include/typedef.h:573 */
 OFF(SkelNode, mirror, 0x0);
 OFF(SkelNode, kind, 0x4);
 OFF(SkelNode, pad08, 0x8);
@@ -469,7 +470,7 @@ OFF(SkelNode, parent, 0x38);
 OFF(SkelNode, pad3C, 0x3C);
 SIZE(SkelNode, 0x40); /* comment */
 
-/* MotIk: runtime, ico2/common/include/typedef.h:590 */
+/* MotIk: runtime, ico2/common/include/typedef.h:591 */
 #if ICO_LAYOUT_EE
 OFF(MotIk, rate, 0x0);
 OFF(MotIk, prevH, 0x4);
@@ -483,7 +484,7 @@ OFF(MotIk, offset, 0x30);
 SIZE(MotIk, 0x40); /* comment */
 #endif
 
-/* struct Sub15C: runtime, ico2/common/include/typedef.h:608 */
+/* struct Sub15C: runtime, ico2/common/include/typedef.h:609 */
 #if ICO_LAYOUT_EE
 OFF(struct Sub15C, parent, 0x0);
 OFF(struct Sub15C, nodeNum, 0x8);
@@ -545,7 +546,7 @@ OFF(struct Sub15C, nodes, 0x870);
 OFF(struct Sub15C, lightMtx, 0x874);
 #endif
 
-/* StageSetting: overlay, ico2/common/include/typedef.h:904 */
+/* StageSetting: overlay, ico2/common/include/typedef.h:905 */
 OFF(StageSetting, flatLightDir, 0x0);
 OFF(StageSetting, flatLightCol, 0x30);
 OFF(StageSetting, ambientCol, 0x60);
@@ -593,7 +594,7 @@ OFF(StageSetting, antiLevel, 0x19C);
 OFF(StageSetting, subMotionBlur, 0x1BC);
 SIZE(StageSetting, 0x1D0); /* config */
 
-/* BrainTarget: runtime, ico2/common/include/typedef.h:991 */
+/* BrainTarget: runtime, ico2/common/include/typedef.h:992 */
 #if ICO_LAYOUT_EE
 OFF(BrainTarget, levelCap, 0x8);
 OFF(BrainTarget, capStep, 0xC);
@@ -604,18 +605,18 @@ OFF(BrainTarget, detail, 0x1A);
 OFF(BrainTarget, pad1B, 0x1B);
 #endif
 
-/* GsysObjInfo: save, ico2/common/include/typedef.h:1022 */
+/* GsysObjInfo: save, ico2/common/include/typedef.h:1023 */
 OFF(GsysObjInfo, pad0, 0x0);
 OFF(GsysObjInfo, kind, 0x20);
 OFF(GsysObjInfo, pad24, 0x24);
 
-/* McDirEnt: save, ico2/common/include/typedef.h:1034 */
+/* McDirEnt: save, ico2/common/include/typedef.h:1035 */
 OFF(McDirEnt, pad0, 0x0);
 OFF(McDirEnt, size, 0x10);
 OFF(McDirEnt, pad14, 0x14);
 OFF(McDirEnt, name, 0x20);
 
-/* PadState: runtime, ico2/common/include/typedef.h:1048 */
+/* PadState: runtime, ico2/common/include/typedef.h:1049 */
 #if ICO_LAYOUT_EE
 OFF(PadState, now, 0x0);
 OFF(PadState, flags, 0x4);
@@ -626,7 +627,7 @@ OFF(PadState, hist, 0x14);
 OFF(PadState, ana, 0x54);
 #endif
 
-/* ObjKindEnt: overlay, ico2/common/include/typedef.h:1067, 64-bit pending 5 */
+/* ObjKindEnt: overlay, ico2/common/include/typedef.h:1068, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(ObjKindEnt, name, 0x0);
 OFF(ObjKindEnt, targetTime, 0x24);
@@ -648,7 +649,7 @@ OFF(ObjKindEnt, before, 0x60);
 SIZE(ObjKindEnt, 0x64); /* comment */
 #endif
 
-/* StgPre: overlay, ico2/common/include/typedef.h:1093, 64-bit pending 5 */
+/* StgPre: overlay, ico2/common/include/typedef.h:1094, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(StgPre, key, 0x0);
 OFF(StgPre, name, 0x20);
@@ -696,7 +697,7 @@ OFF(StgPre, pad18A, 0x18A);
 SIZE(StgPre, 0x194); /* comment */
 #endif
 
-/* ClipWork: runtime, ico2/common/include/typedef.h:1178 */
+/* ClipWork: runtime, ico2/common/include/typedef.h:1179 */
 #if ICO_LAYOUT_EE
 OFF(ClipWork, pt, 0x0);
 OFF(ClipWork, reflect.bounce, 0x30);
@@ -714,7 +715,7 @@ OFF(ClipWork, slideCount, 0xB0);
 OFF(ClipWork, padB4, 0xB4);
 #endif
 
-/* Brain: runtime, ico2/common/include/typedef.h:1199 */
+/* Brain: runtime, ico2/common/include/typedef.h:1200 */
 #if ICO_LAYOUT_EE
 OFF(Brain, lock, 0x8);
 OFF(Brain, spMode, 0xC);
@@ -727,7 +728,7 @@ OFF(Brain, targetLevel, 0x20);
 OFF(Brain, pad26, 0x26);
 #endif
 
-/* ViTs: runtime, ico2/common/include/typedef.h:1222 */
+/* ViTs: runtime, ico2/common/include/typedef.h:1223 */
 #if ICO_LAYOUT_EE
 OFF(ViTs, pts, 0x0);
 OFF(ViTs, dts, 0x8);
@@ -735,7 +736,7 @@ OFF(ViTs, pos, 0x10);
 OFF(ViTs, len, 0x14);
 #endif
 
-/* Pad: runtime, ico2/common/include/typedef.h:1230 */
+/* Pad: runtime, ico2/common/include/typedef.h:1231 */
 #if ICO_LAYOUT_EE
 OFF(Pad, now, 0x0);
 OFF(Pad, trg, 0x4);
@@ -743,11 +744,11 @@ OFF(Pad, pad08, 0x8);
 OFF(Pad, ana, 0x54);
 #endif
 
-/* ExitData: overlay, ico2/common/include/typedef.h:1238 */
+/* ExitData: overlay, ico2/common/include/typedef.h:1239 */
 OFF(ExitData, firstWalk0, 0x18);
 OFF(ExitData, nextStage, 0x24);
 
-/* ActMail: runtime, ico2/common/include/typedef.h:1252 */
+/* ActMail: runtime, ico2/common/include/typedef.h:1253 */
 #if ICO_LAYOUT_EE
 OFF(ActMail, mail, 0x0);
 OFF(ActMail, func, 0x4);
@@ -755,42 +756,7 @@ OFF(ActMail, motion, 0x8);
 OFF(ActMail, sub, 0xC);
 #endif
 
-/* PObjGObj: runtime, ico2/common/include/typedef.h:1266 */
-#if ICO_LAYOUT_EE
-OFF(PObjGObj, self, 0x0);
-OFF(PObjGObj, labelType, 0x4);
-OFF(PObjGObj, labelId, 0x8);
-OFF(PObjGObj, kind, 0xC);
-OFF(PObjGObj, next, 0x10);
-OFF(PObjGObj, prev, 0x14);
-OFF(PObjGObj, linkId, 0x18);
-OFF(PObjGObj, pad19, 0x19);
-OFF(PObjGObj, key, 0x1C);
-OFF(PObjGObj, pad20, 0x20);
-OFF(PObjGObj, fn, 0x28);
-OFF(PObjGObj, procHead, 0x2C);
-OFF(PObjGObj, procTail, 0x30);
-OFF(PObjGObj, pad34, 0x34);
-OFF(PObjGObj, kindNext, 0x3C);
-OFF(PObjGObj, dlLinkId, 0x40);
-OFF(PObjGObj, pad44, 0x44);
-OFF(PObjGObj, dl, 0x48);
-OFF(PObjGObj, word4C, 0x4C);
-OFF(PObjGObj, drawMask, 0x50);
-OFF(PObjGObj, mailQueue, 0x54);
-OFF(PObjGObj, mailNum, 0x58);
-OFF(PObjGObj, mailType, 0x5C);
-OFF(PObjGObj, mailArg, 0x60);
-OFF(PObjGObj, pad64, 0x64);
-OFF(PObjGObj, sub, 0x15C);
-OFF(PObjGObj, pad160, 0x160);
-OFF(PObjGObj, act, 0x164);
-OFF(PObjGObj, pad168, 0x168);
-OFF(PObjGObj, active, 0x16C);
-OFF(PObjGObj, pauseExempt, 0x170);
-#endif
-
-/* WVTObj: runtime, ico2/common/include/typedef.h:1350 */
+/* WVTObj: runtime, ico2/common/include/typedef.h:1357 */
 #if ICO_LAYOUT_EE
 OFF(WVTObj, pad00, 0x0);
 OFF(WVTObj, pos, 0x10);
@@ -814,7 +780,7 @@ OFF(WVTObj, pad78, 0x78);
 SIZE(WVTObj, 0x80); /* comment */
 #endif
 
-/* WayRequest: runtime, ico2/common/include/typedef.h:1379 */
+/* WayRequest: runtime, ico2/common/include/typedef.h:1386 */
 #if ICO_LAYOUT_EE
 OFF(WayRequest, done, 0x0);
 OFF(WayRequest, result, 0x4);
@@ -825,7 +791,7 @@ OFF(WayRequest, goal, 0xA0);
 OFF(WayRequest, proc, 0xB0);
 #endif
 
-/* ActEnv: runtime, ico2/common/include/typedef.h:1394 */
+/* ActEnv: runtime, ico2/common/include/typedef.h:1401 */
 #if ICO_LAYOUT_EE
 OFF(ActEnv, wallOrient, 0x0);
 OFF(ActEnv, cliffOrient, 0x10);
@@ -869,7 +835,7 @@ OFF(ActEnv, supportReq, 0x1B0);
 SIZE(ActEnv, 0x1D0); /* comment */
 #endif
 
-/* Act: runtime, ico2/common/include/typedef.h:1450 */
+/* Act: runtime, ico2/common/include/typedef.h:1457 */
 #if ICO_LAYOUT_EE
 OFF(Act, brainProc, 0x0);
 OFF(Act, actProc, 0x4);
@@ -1011,7 +977,7 @@ OFF(Act, mailAddData, 0x684);
 OFF(Act, work, 0x688);
 #endif
 
-/* GenGeo: overlay, ico2/common/include/typedef.h:1625, 64-bit pending 5 */
+/* GenGeo: overlay, ico2/common/include/typedef.h:1649, 64-bit pending 5 */
 #if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
 OFF(GenGeo, scale, 0x0);
 OFF(GenGeo, rot, 0xC);
@@ -1032,21 +998,21 @@ OFF(GenGeo, flags, 0x48);
 SIZE(GenGeo, 0x4C); /* comment */
 #endif
 
-/* OaRecB: overlay, ico2/common/include/typedef.h:1647 */
+/* OaRecB: overlay, ico2/common/include/typedef.h:1671 */
 OFF(OaRecB, baseMode, 0x0);
 OFF(OaRecB, anim2, 0x4);
 OFF(OaRecB, word8, 0x8);
 OFF(OaRecB, mode, 0xC);
 OFF(OaRecB, flags, 0x10);
 
-/* McFileInfo: save, ico2/common/include/typedef.h:1665 */
+/* McFileInfo: save, ico2/common/include/typedef.h:1689 */
 OFF(McFileInfo, stage, 0x0);
 OFF(McFileInfo, cleared, 0x4);
 OFF(McFileInfo, playTime, 0x8);
 OFF(McFileInfo, sofa, 0xC);
 OFF(McFileInfo, word10, 0x10);
 
-/* McProductFile: save, ico2/common/include/typedef.h:1673 */
+/* McProductFile: save, ico2/common/include/typedef.h:1697 */
 OFF(McProductFile, file, 0x0);
 OFF(McProductFile, soundMode, 0x190);
 OFF(McProductFile, outputMode, 0x194);
@@ -1059,7 +1025,7 @@ OFF(McProductFile, cameraMove, 0x1E8);
 OFF(McProductFile, palMode, 0x1EC);
 SIZE(McProductFile, 0x1F0); /* config */
 
-/* McMgr: runtime, ico2/common/include/typedef.h:1706 */
+/* McMgr: runtime, ico2/common/include/typedef.h:1730 */
 #if ICO_LAYOUT_EE
 OFF(McMgr, flags, 0x0);
 OFF(McMgr, port, 0x8);
@@ -1415,18 +1381,26 @@ OFF(EnemyBattleWork, climbCol, 0x350);
 OFF(EnemyBattleWork, climbObj, 0x35C);
 #endif
 
-/* FcWallEnt: overlay, ico2/fumi/include/fieldCollision.h:27, 64-bit pending 2C */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* FcWallEnt: overlay, ico2/fumi/include/fieldCollision.h:32 */
 OFF(FcWallEnt, pt, 0x0);
 OFF(FcWallEnt, height, 0x40);
 OFF(FcWallEnt, angle, 0x44);
 OFF(FcWallEnt, pad46, 0x46);
 OFF(FcWallEnt, attr, 0x48);
 OFF(FcWallEnt, normal, 0x4C);
-SIZE(FcWallEnt, 0x50); /* comment */
-#endif
+SIZE(FcWallEnt, 0x50); /* config */
 
-/* FcFloorEnt: overlay, ico2/fumi/include/fieldCollision.h:44 */
+/* FcColl: overlay, ico2/fumi/include/fieldCollision.h:51 */
+OFF(FcColl, pad0, 0x0);
+OFF(FcColl, count, 0x8);
+OFF(FcColl, nfloor, 0xC);
+OFF(FcColl, wcl, 0x10);
+OFF(FcColl, fcl, 0x14);
+OFF(FcColl, wblk, 0x18);
+OFF(FcColl, fblk, 0x1C);
+OFF(FcColl, ofs, 0x20);
+
+/* FcFloorEnt: overlay, ico2/fumi/include/fieldCollision.h:70 */
 OFF(FcFloorEnt, v, 0x0);
 OFF(FcFloorEnt, nx, 0x40);
 OFF(FcFloorEnt, d, 0x50);
@@ -1997,7 +1971,7 @@ OFF(AttackKindEntry, word0, 0x0);
 OFF(AttackKindEntry, radius, 0x18);
 OFF(AttackKindEntry, power, 0x1C);
 
-/* PinRec: overlay, ico2/omori/include/camera-editor.h:18 */
+/* PinRec: overlay, ico2/omori/include/camera-editor.h:20 */
 OFF(PinRec, pos, 0x0);
 OFF(PinRec, look, 0xC);
 OFF(PinRec, ofs, 0x18);
@@ -2015,8 +1989,7 @@ OFF(PinRec, float4C, 0x4C);
 OFF(PinRec, ofsB, 0x50);
 SIZE(PinRec, 0x5C); /* comment */
 
-/* CamGroup: overlay, ico2/omori/include/camera-editor.h:41, 64-bit pending 2C */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* CamGroup: overlay, ico2/omori/include/camera-editor.h:43 */
 OFF(CamGroup, name, 0x0);
 OFF(CamGroup, center, 0x20);
 OFF(CamGroup, range, 0x2C);
@@ -2026,9 +1999,15 @@ OFF(CamGroup, mode, 0x40);
 OFF(CamGroup, kind, 0x44);
 OFF(CamGroup, items, 0x48);
 SIZE(CamGroup, 0x4C); /* comment */
-#endif
 
-/* MenuThread: runtime, ico2/omori/include/camera-editor.h:59 */
+/* CamSetFile: overlay, ico2/omori/include/camera-editor.h:68 */
+OFF(CamSetFile, magic, 0x0);
+OFF(CamSetFile, ver, 0x4);
+OFF(CamSetFile, count, 0x8);
+OFF(CamSetFile, total, 0xC);
+SIZE(CamSetFile, 0x10); /* config */
+
+/* MenuThread: runtime, ico2/omori/include/camera-editor.h:82 */
 #if ICO_LAYOUT_EE
 OFF(MenuThread, parent, 0x70);
 OFF(MenuThread, arg, 0x74);
@@ -2071,7 +2050,86 @@ OFF(WarpRec, kind, 0x54);
 OFF(WarpRec, pad55, 0x55);
 SIZE(WarpRec, 0x58); /* comment */
 
-/* BgaAnim: runtime, ico2/seki/include/BgAnimation.h:21 */
+/* BgaEnvEnt: overlay, ico2/seki/include/BgAnimation.h:31 */
+OFF(BgaEnvEnt, type, 0x0);
+OFF(BgaEnvEnt, pad02, 0x2);
+OFF(BgaEnvEnt, data, 0x4);
+SIZE(BgaEnvEnt, 0x8); /* comment */
+
+/* BgaDObjEnt: overlay, ico2/seki/include/BgAnimation.h:42 */
+OFF(BgaDObjEnt, type, 0x0);
+OFF(BgaDObjEnt, num, 0x2);
+OFF(BgaDObjEnt, name, 0x4);
+OFF(BgaDObjEnt, u, 0x24);
+OFF(BgaDObjEnt, env, 0x28);
+OFF(BgaDObjEnt, child, 0x2C);
+OFF(BgaDObjEnt, sibling, 0x30);
+OFF(BgaDObjEnt, motion, 0x34);
+OFF(BgaDObjEnt, pad38, 0x38);
+OFF(BgaDObjEnt, parent, 0x44);
+OFF(BgaDObjEnt, pad46, 0x46);
+SIZE(BgaDObjEnt, 0x48); /* comment */
+
+/* BgaKey: overlay, ico2/seki/include/BgAnimation.h:63 */
+OFF(BgaKey, v, 0x0);
+OFF(BgaKey, tension, 0x18);
+OFF(BgaKey, bias, 0x1C);
+OFF(BgaKey, linear, 0x20);
+OFF(BgaKey, time, 0x24);
+SIZE(BgaKey, 0x28); /* comment */
+
+/* BgaMotion: overlay, ico2/seki/include/BgAnimation.h:72 */
+OFF(BgaMotion, key, 0x0);
+OFF(BgaMotion, n, 0x4);
+OFF(BgaMotion, len, 0x8);
+OFF(BgaMotion, frame, 0xC);
+
+/* BgaPtKey: overlay, ico2/seki/include/BgAnimation.h:83 */
+OFF(BgaPtKey, pos, 0x0);
+OFF(BgaPtKey, rot, 0xC);
+OFF(BgaPtKey, col, 0x18);
+OFF(BgaPtKey, tension, 0x24);
+OFF(BgaPtKey, bias, 0x28);
+OFF(BgaPtKey, linear, 0x2C);
+OFF(BgaPtKey, time, 0x30);
+SIZE(BgaPtKey, 0x34); /* comment */
+
+/* BgaPtMotion: overlay, ico2/seki/include/BgAnimation.h:94 */
+OFF(BgaPtMotion, key, 0x0);
+OFF(BgaPtMotion, n, 0x4);
+OFF(BgaPtMotion, len, 0x8);
+OFF(BgaPtMotion, frame, 0xC);
+
+/* BgaExtKey: overlay, ico2/seki/include/BgAnimation.h:102 */
+OFF(BgaExtKey, value, 0x0);
+OFF(BgaExtKey, tension, 0x4);
+OFF(BgaExtKey, bias, 0x8);
+OFF(BgaExtKey, linear, 0xC);
+OFF(BgaExtKey, time, 0x10);
+SIZE(BgaExtKey, 0x14); /* comment */
+
+/* BgaExtMotion: overlay, ico2/seki/include/BgAnimation.h:111 */
+OFF(BgaExtMotion, key, 0x0);
+OFF(BgaExtMotion, n, 0x4);
+OFF(BgaExtMotion, len, 0x8);
+OFF(BgaExtMotion, frame, 0xC);
+
+/* BgaSdfKey: overlay, ico2/seki/include/BgAnimation.h:119 */
+OFF(BgaSdfKey, pad00, 0x0);
+OFF(BgaSdfKey, pos, 0x4);
+OFF(BgaSdfKey, at, 0x10);
+OFF(BgaSdfKey, roll, 0x1C);
+OFF(BgaSdfKey, fov, 0x20);
+SIZE(BgaSdfKey, 0x24); /* comment */
+
+/* BgaSdfCam: overlay, ico2/seki/include/BgAnimation.h:130 */
+OFF(BgaSdfCam, id, 0x0);
+OFF(BgaSdfCam, num, 0x4);
+OFF(BgaSdfCam, frame, 0x8);
+OFF(BgaSdfCam, mode, 0xC);
+OFF(BgaSdfCam, key, 0x10);
+
+/* BgaAnim: runtime, ico2/seki/include/BgAnimation.h:141 */
 #if ICO_LAYOUT_EE
 OFF(BgaAnim, pos, 0x0);
 OFF(BgaAnim, quat, 0x10);
@@ -2082,8 +2140,7 @@ OFF(BgaAnim, pad2C, 0x2C);
 SIZE(BgaAnim, 0x30); /* comment */
 #endif
 
-/* BgaHeader: overlay, ico2/seki/include/BgAnimation.h:35, 64-bit pending 2C */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* BgaHeader: overlay, ico2/seki/include/BgAnimation.h:155 */
 OFF(BgaHeader, group, 0x4);
 OFF(BgaHeader, pad8, 0x8);
 OFF(BgaHeader, mode, 0xA);
@@ -2095,16 +2152,15 @@ OFF(BgaHeader, end, 0x18);
 OFF(BgaHeader, step, 0x1C);
 OFF(BgaHeader, frame, 0x20);
 OFF(BgaHeader, anim, 0x24);
-#endif
 
-/* PObjMorph: overlay, ico2/seki/include/DisplayP2O.h:20 */
+/* PObjMorph: overlay, ico2/seki/include/DisplayP2O.h:21 */
 OFF(PObjMorph, delta, 0x0);
 OFF(PObjMorph, isVertex, 0xC);
 OFF(PObjMorph, index, 0x10);
 OFF(PObjMorph, pad14, 0x14);
 SIZE(PObjMorph, 0x20); /* comment */
 
-/* PObjMatDef: overlay, ico2/seki/include/DisplayP2O.h:30 */
+/* PObjMatDef: overlay, ico2/seki/include/DisplayP2O.h:31 */
 OFF(PObjMatDef, pad00, 0x0);
 OFF(PObjMatDef, wrap, 0x5);
 OFF(PObjMatDef, fbaOff, 0x6);
@@ -2112,15 +2168,15 @@ OFF(PObjMatDef, pad07, 0x7);
 OFF(PObjMatDef, alpha, 0xC);
 SIZE(PObjMatDef, 0x10); /* comment */
 
-/* PObjTexDef: overlay, ico2/seki/include/DisplayP2O.h:40 */
+/* PObjTexDef: overlay, ico2/seki/include/DisplayP2O.h:41 */
 OFF(PObjTexDef, name, 0x0);
 OFF(PObjTexDef, scaleU, 0x84);
 OFF(PObjTexDef, scaleV, 0x88);
 OFF(PObjTexDef, pad8C, 0x8C);
 SIZE(PObjTexDef, 0x90); /* comment */
 
-/* PObjPart: overlay, ico2/seki/include/DisplayP2O.h:54, 64-bit pending 2C */
-#if ICO_LAYOUT_EE || ICO_LAYOUT_PENDING
+/* PObjPart: runtime, ico2/seki/include/DisplayP2O.h:55 */
+#if ICO_LAYOUT_EE
 OFF(PObjPart, pad00, 0x0);
 OFF(PObjPart, vtx, 0x90);
 OFF(PObjPart, vtxCount, 0x94);
@@ -2158,7 +2214,60 @@ OFF(PObjPart, pad17C, 0x17C);
 SIZE(PObjPart, 0x180); /* comment */
 #endif
 
-/* PObjMaterial: runtime, ico2/seki/include/DisplayP2O.h:97 */
+/* ObjHdr: overlay, ico2/seki/include/DisplayP2O.h:98 */
+OFF(ObjHdr, pad0, 0x0);
+OFF(ObjHdr, objTbl, 0x4);
+OFF(ObjHdr, objNum, 0x8);
+OFF(ObjHdr, clstNum, 0xC);
+OFF(ObjHdr, texTbl, 0x10);
+OFF(ObjHdr, texNum, 0x14);
+SIZE(ObjHdr, 0x18); /* config */
+
+/* ObjEnt: overlay, ico2/seki/include/DisplayP2O.h:110 */
+OFF(ObjEnt, p, 0x0);
+OFF(ObjEnt, pad4, 0x4);
+SIZE(ObjEnt, 0x10); /* comment */
+
+/* ObjRec: overlay, ico2/seki/include/DisplayP2O.h:121 */
+OFF(ObjRec, pad0, 0x0);
+OFF(ObjRec, magic, 0x80);
+OFF(ObjRec, pad84, 0x84);
+OFF(ObjRec, vtx, 0x90);
+OFF(ObjRec, vtxCount, 0x94);
+OFF(ObjRec, pad98, 0x98);
+OFF(ObjRec, nrm, 0xA0);
+OFF(ObjRec, nrmCount, 0xA4);
+OFF(ObjRec, padA8, 0xA8);
+OFF(ObjRec, uv, 0xB0);
+OFF(ObjRec, padB4, 0xB4);
+OFF(ObjRec, col, 0xC0);
+OFF(ObjRec, padC4, 0xC4);
+OFF(ObjRec, mats, 0xD0);
+OFF(ObjRec, matCount, 0xD4);
+OFF(ObjRec, padD8, 0xD8);
+OFF(ObjRec, texDefs, 0xE0);
+OFF(ObjRec, texCount, 0xE4);
+OFF(ObjRec, padE8, 0xE8);
+OFF(ObjRec, polys, 0xF0);
+OFF(ObjRec, polyCount, 0xF4);
+OFF(ObjRec, padF8, 0xF8);
+OFF(ObjRec, strips, 0x100);
+OFF(ObjRec, stripCount, 0x104);
+OFF(ObjRec, pad108, 0x108);
+OFF(ObjRec, lines, 0x110);
+OFF(ObjRec, lineCount, 0x114);
+OFF(ObjRec, pad118, 0x118);
+OFF(ObjRec, morphs, 0x120);
+OFF(ObjRec, morphCount, 0x124);
+OFF(ObjRec, pad128, 0x128);
+OFF(ObjRec, mtx, 0x130);
+OFF(ObjRec, pad170, 0x170);
+OFF(ObjRec, vtxSave, 0x174);
+OFF(ObjRec, nrmSave, 0x178);
+OFF(ObjRec, pad17C, 0x17C);
+SIZE(ObjRec, 0x180); /* comment */
+
+/* PObjMaterial: runtime, ico2/seki/include/DisplayP2O.h:166 */
 #if ICO_LAYOUT_EE
 OFF(PObjMaterial, packet, 0x0);
 OFF(PObjMaterial, attr, 0x60);
@@ -2166,7 +2275,7 @@ OFF(PObjMaterial, pad68, 0x68);
 SIZE(PObjMaterial, 0x70); /* comment */
 #endif
 
-/* PObjTexInfo: runtime, ico2/seki/include/DisplayP2O.h:122 */
+/* PObjTexInfo: runtime, ico2/seki/include/DisplayP2O.h:191 */
 #if ICO_LAYOUT_EE
 OFF(PObjTexInfo, name, 0x0);
 OFF(PObjTexInfo, nameL, 0x18);
@@ -2178,7 +2287,7 @@ OFF(PObjTexInfo, found, 0x4E);
 SIZE(PObjTexInfo, 0x50); /* comment */
 #endif
 
-/* PObjGroup: runtime, ico2/seki/include/DisplayP2O.h:136 */
+/* PObjGroup: runtime, ico2/seki/include/DisplayP2O.h:205 */
 #if ICO_LAYOUT_EE
 OFF(PObjGroup, materials, 0x0);
 OFF(PObjGroup, texs, 0x4);
@@ -2190,7 +2299,7 @@ OFF(PObjGroup, name, 0x14);
 SIZE(PObjGroup, 0x30); /* comment */
 #endif
 
-/* PObjModel: runtime, ico2/seki/include/DisplayP2O.h:146 */
+/* PObjModel: runtime, ico2/seki/include/DisplayP2O.h:215 */
 #if ICO_LAYOUT_EE
 OFF(PObjModel, name, 0x0);
 OFF(PObjModel, serial, 0x20);
@@ -2601,6 +2710,21 @@ OFF(ItemBreakRec, hitAnim, 0x14);
 OFF(ItemBreakRec, hitMode, 0x18);
 OFF(ItemBreakRec, flags, 0x1C);
 SIZE(ItemBreakRec, 0x20); /* comment */
+
+/* NodeRec: overlay, ico2/sugipon/include/motionFileManager.h:32 */
+OFF(NodeRec, nTable, 0x0);
+OFF(NodeRec, lastTable, 0x4);
+
+/* FacialRec: overlay, ico2/sugipon/include/motionFileManager.h:39 */
+OFF(FacialRec, count, 0x0);
+OFF(FacialRec, tbl, 0x4);
+
+/* MotFileHdr: overlay, ico2/sugipon/include/motionFileManager.h:48 */
+OFF(MotFileHdr, frames, 0x0);
+OFF(MotFileHdr, rootPos, 0x4);
+OFF(MotFileHdr, typeList, 0x8);
+OFF(MotFileHdr, nodeList, 0xC);
+OFF(MotFileHdr, facial, 0x10);
 
 /* MotionOrientEntry: overlay, ico2/sugipon/include/motionOrientManager.h:16 */
 OFF(MotionOrientEntry, id, 0x0);

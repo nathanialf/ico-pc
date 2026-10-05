@@ -57,6 +57,75 @@ extern void SetInfoSpKidnapGenerator(short *info);
 /* this TU passes an int *; generator.h declares a short * */
 extern void SetInfoSpKidnapEnemy(int *work);
 
+#ifdef ICO_HOST
+
+#include "eeword.h"
+#include "ios.h"
+#include "memory.h"
+#include <stdio.h>
+
+/* Port (docs/port/LOADERS.md, "The back-stage save word").  backStageSave
+ * writes the carrier, a GObj *, into the save image as 4 bytes: on the PS2
+ * the EE address of its entry in the GObj table (gobj.c), 0x174 bytes an
+ * entry.  The table is the first block allocated in the stage partition
+ * after each stage's reset (StageManager.c's stop_free_resources, then
+ * stage_initialize's iosOmInit), so on the PS2 it always sits at 0x810230.
+ * The host writes the same number, from the entry's index, and maps a
+ * loaded number back to the entry with the same index, so the save holds
+ * the PS2's bytes on every host. */
+#define BS_EE_GOBJ_TABLE 0x810230 /* port */
+#define BS_EE_GOBJ_SIZE 0x174     /* port: sizeof(GObj) on the EE */
+#define BS_GOBJ_MAX 320           /* port: iosOmInit's isysGObjInit(320) */
+
+/* the GObj table: the stage partition's first block, which gobj.c
+   allocated at line 174 */
+static GObj *bsGObjTable(void) /* port */
+{
+    static int warned;
+    IosMemNode *node = (IosMemNode *)ios_partition_isys->start;
+
+    if (node->line != 174 && warned == 0) {
+        fprintf(stderr,
+                "backStage: the stage partition's first block is not the GObj table "
+                "(line %d); the save word may not match the PS2's\n",
+                node->line);
+        warned = 1;
+    }
+    return (GObj *)(node + 1);
+}
+
+/* the save word for g: 0, or the PS2 address of its table entry */
+static int bsGObjToSaveWord(GObj *g) /* port */
+{
+    GObj *tbl;
+
+    if (g == 0) {
+        return 0;
+    }
+    tbl = bsGObjTable();
+    if (g < tbl || g >= tbl + BS_GOBJ_MAX) {
+        return ICO_EEW(g);
+    }
+    return BS_EE_GOBJ_TABLE + (int)(g - tbl) * BS_EE_GOBJ_SIZE;
+}
+
+/* the object for save word w: the table entry its PS2 address names; a word
+   that names no entry is read back as the PS2 would, as an address */
+static GObj *bsSaveWordToGObj(int w) /* port */
+{
+    unsigned int off = (unsigned int)w - BS_EE_GOBJ_TABLE;
+
+    if (w == 0) {
+        return 0;
+    }
+    if (off % BS_EE_GOBJ_SIZE == 0 && off / BS_EE_GOBJ_SIZE < BS_GOBJ_MAX) {
+        return bsGObjTable() + off / BS_EE_GOBJ_SIZE;
+    }
+    return ICO_EEPTR(GObj *, w);
+}
+
+#endif
+
 inline void backStageProcessInit(void)
 {
     backStageGirlTargetEnemyGop = 0;
@@ -398,7 +467,13 @@ void backStageProcessInStage(float arg)
 
 void backStageSave(GamesysMemCursor *h)
 {
+#ifdef ICO_HOST
+    int word = bsGObjToSaveWord(backStageGirlTargetEnemyGop);
+
+    gamesysMemoryHandlerWrite(h, &word, 4);
+#else
     gamesysMemoryHandlerWrite(h, &backStageGirlTargetEnemyGop, 4);
+#endif
     gamesysMemoryHandlerWrite(h, &kidnapState, 4);
     gamesysMemoryHandlerWrite(h, &kidnapTime, 4);
     gamesysMemoryHandlerWrite(h, &carryTime, 4);
@@ -411,7 +486,14 @@ void backStageSave(GamesysMemCursor *h)
 
 void backStageLoad(GamesysMemCursor *h)
 {
+#ifdef ICO_HOST
+    int word;
+
+    gamesysMemoryHandlerRead(h, &word, 4);
+    backStageGirlTargetEnemyGop = bsSaveWordToGObj(word);
+#else
     gamesysMemoryHandlerRead(h, &backStageGirlTargetEnemyGop, 4);
+#endif
     gamesysMemoryHandlerRead(h, &kidnapState, 4);
     gamesysMemoryHandlerRead(h, &kidnapTime, 4);
     gamesysMemoryHandlerRead(h, &carryTime, 4);

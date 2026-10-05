@@ -43,12 +43,50 @@ inline void ResetStatic2MotionManager(int seg)
    stored offset in it is added to */
 static char *motionFileBase = 0; /* derived name */
 
-/* a node of formats 3 and 6: the per-frame tables of its first and last
-   element, which _getMotion indexes by frame */
-typedef struct {   /* field names derived */
-    int nTable;    /* 0x00 */
-    int lastTable; /* 0x04 */
-} NodeRec;         /* derived name */
+/* the .mob records (MotFileHdr, FacialRec, NodeRec) are in
+   motionFileManager.h */
+
+#ifdef ICO_HOST
+
+/* The host keeps every relocated word an EE address word (eeword.h):
+   the same steps as the EE's below, each pointer stored through ICO_EEW. */
+static void pursueNodeList(IcoEEWord *node, unsigned char *type)
+{
+    int i;
+    int ofs;
+
+    i = 0;
+    while (*node != 0) {
+        ofs = (int)*node;
+        switch (type[i]) {
+        default:
+            debug_StdPrintfDummy("Invalid node formatID: (%d)\n", type[i]);
+            break;
+        case 1:
+        case 4:
+            *node = ICO_EEW(motionFileBase + ofs);
+            break;
+        case 2:
+        case 5: {
+            int *q = (int *)(motionFileBase + ofs);
+            int r = ICO_EEW(motionFileBase + *q);
+            *node = ICO_EEW(q);
+            *q = r;
+        } break;
+        case 3:
+        case 6: {
+            NodeRec *q = (NodeRec *)(motionFileBase + ofs);
+            q->nTable = ICO_EEW(motionFileBase + q->nTable);
+            q->lastTable = ICO_EEW(motionFileBase + q->lastTable);
+            *node = ICO_EEW(q);
+        } break;
+        }
+        node++;
+        i++;
+    }
+}
+
+#else
 
 static void pursueNodeList(void **node, unsigned char *type)
 {
@@ -88,10 +126,17 @@ static void pursueNodeList(void **node, unsigned char *type)
     }
 }
 
+#endif
+
 inline int CheckMotionIncludeFacialData(unsigned int *self)
 {
     int r;
+#ifdef ICO_HOST
+    /* typeList (self[2]) is an EE address word; so is the header's */
+    unsigned int p = (unsigned int)ICO_EEW(self) + 16;
+#else
     unsigned int p = (unsigned int)self + 16;
+#endif
     if (p < self[2])
         r = 0;
     else
@@ -99,24 +144,42 @@ inline int CheckMotionIncludeFacialData(unsigned int *self)
     return r;
 }
 
-/* The optional facial block: a count and the table of per-entry offsets,
-   relocated in place like the header. */
-typedef struct { /* field names derived */
-    int count;   /* 0x0 */
-    void **tbl;  /* 0x4 */
-} FacialRec;     /* derived name */
+#ifdef ICO_HOST
 
-/* The motion file header as InitMotionFile leaves it, every offset turned
-   into a pointer: pursueNodeList walks nodeList against typeList, and the
-   facial block exists when typeList does not start right after the 16-byte
-   header. */
-typedef struct {             /* field names derived */
-    int frames;              /* 0x00, the frame count */
-    char *rootPos;           /* 0x04, three floats of root position a frame */
-    unsigned char *typeList; /* 0x08 */
-    void **nodeList;         /* 0x0C */
-    FacialRec *facial;       /* 0x10 */
-} MotFileHdr;                /* derived name */
+/* relocate the facial table in place, as EE address words */
+static inline void relocFacialTable(FacialRec *p) /* derived name */
+{
+    int i;
+    IcoEEWord *tbl;
+
+    if (p->tbl != 0) {
+        p->tbl = ICO_EEW(motionFileBase + (int)p->tbl);
+        tbl = ICO_EEPTR(IcoEEWord *, p->tbl);
+        for (i = 0; i < p->count; i++) {
+            if (tbl[i] != 0) {
+                tbl[i] = ICO_EEW(motionFileBase + (int)tbl[i]);
+            }
+        }
+    }
+}
+
+/* Relocate the header in place, as EE address words. */
+static inline int relocMotionFile(MotFileHdr *self) /* derived name */
+{
+    self->rootPos = ICO_EEW((char *)self + ((unsigned int *)self)[1]);
+    self->typeList = ICO_EEW((char *)self + ((unsigned int *)self)[2]);
+    self->nodeList = ICO_EEW((char *)self + ((unsigned int *)self)[3]);
+    FlushCache(0);
+    if (CheckMotionIncludeFacialData((unsigned int *)self) == 0) {
+        self->facial = ICO_EEW(motionFileBase + ((unsigned int *)self)[4]);
+        relocFacialTable(ICO_EEPTR(FacialRec *, self->facial));
+    }
+    pursueNodeList(ICO_EEPTR(IcoEEWord *, self->nodeList),
+                   ICO_EEPTR(unsigned char *, self->typeList));
+    return 0;
+}
+
+#else
 
 /* relocate the facial table in place */
 static inline void relocFacialTable(FacialRec *p) /* derived name */
@@ -149,6 +212,8 @@ static inline int relocMotionFile(MotFileHdr *self) /* derived name */
     pursueNodeList(self->nodeList, self->typeList);
     return 0;
 }
+
+#endif
 
 void InitMotionFile(void *buf, char *name)
 {

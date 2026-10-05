@@ -14,8 +14,9 @@
 # base=      the header's comments are offsets in an enclosing record, where
 #            this struct sits at base
 # pending=   a frozen struct whose 64-bit asserts wait for that package to
-#            convert its pointer fields (2C: disc loaders; 5: the runtime ELF
-#            table loader). Remove the option when the conversion lands.
+#            convert its pointer fields (5: the runtime ELF table loader; the
+#            2C disc-loader structs are converted, docs/port/LOADERS.md).
+#            Remove the option when the conversion lands.
 # nosize     the "N bytes" in the struct's leading comment is not its size
 #
 # Evidence: "ELF <member>" is a row of config/data_schema.pal.txt (an ELF data
@@ -56,7 +57,6 @@ ViTs                 runtime   # movie time stamp pair (mv_*)
 Pad                  runtime   # head of a pad record (keyInput.c)
 ExitData             overlay   # ELF exit-data
 ActMail              runtime   # actor mail table rows; entry points are code addresses built into actor TUs' static tables
-PObjGObj             runtime   # a word view of GObj (must agree with GObj on every host)
 WVTObj               runtime   # guide-way work block, iosMalloc'd (way_sys.c) and embedded in Act at 0x360
 WayRequest           runtime   # way search request (act-way.c)
 ActEnv               runtime   # embedded in Act at 0x4B0
@@ -90,7 +90,8 @@ BecPair              overlay   # ELF pair-motion
 # --- fumi/include/enemy_act.h ------------------------------------------------
 EnemyBattleWork      runtime   # Act.enemy, the enemy work (enemy_act.c)
 # --- fumi/include/fieldCollision.h -------------------------------------------
-FcWallEnt            overlay  pending=2C   # .cl wall table (0x50 stride, R4 s.3 `wcl`); normal at 0x4C is a pointer (inference: relocated or set at load)
+FcWallEnt            overlay  size=0x50   # .cl wall table (0x50 stride, R4 s.3 `wcl`); normal at 0x4C is an EE address word ReadCollisionFile stores (LOADERS.md)
+FcColl               overlay   # .cl file head; wcl fcl wblk fblk ofs relocated in place as EE words (charFileManager.c ReadCollisionFile, R4 s.3)
 FcFloorEnt           overlay   # .cl floor table (0x70 stride, R4 s.3 `fcl`)
 # --- fumi/include/girl_act.h -------------------------------------------------
 EscapeRange          overlay   # ELF param-escape-run
@@ -159,7 +160,8 @@ VoBuf                runtime   # movie video-out ring
 # --- omori/include -----------------------------------------------------------
 AttackKindEntry      overlay   # ELF attack-def
 PinRec               overlay   # .gcm camera pin, 0x5C, copied whole (R4 s.3, camera-ico2.c ReadCameraSet)
-CamGroup             overlay  pending=2C   # .gcm camera group, 0x4C stride (R4 s.3); items at 0x48 is written as a pointer into the converted copy
+CamGroup             overlay   # .gcm camera group, 0x4C stride (R4 s.3); items at 0x48 is an EE address word into the converted copy (eeword.h, LOADERS.md)
+CamSetFile           overlay  size=0x10   # .gcm file head and the converted block's head (camera-ico2.c ReadCameraSet, R4 s.3)
 MenuThread           runtime   # camera editor menu (debug)
 EBSlot               runtime   # ebrain.c's slot
 ObjActMailEnt        overlay   # ELF obj-trigger
@@ -168,11 +170,24 @@ EffectArg            runtime   # effect argument on the stack (e3.c)
 WarpRec              overlay   # ELF girl-warp-list
 # --- seki/include ------------------------------------------------------------
 BgaAnim              runtime   # bga_InitData's 0x30-byte allocation (R4 s.5)
-BgaHeader            overlay  pending=2C   # .bga file head, mutated in place: dobjs relocated, roots and anim heap pointers (R4 s.3)
+BgaHeader            overlay   # .bga file head, relocated in place; dobjs, roots and anim are EE address words (eeword.h, docs/port/LOADERS.md)
+BgaEnvEnt            overlay   # .bga envelope entry; data is an EE word relocated in place (R4 s.3, LOADERS.md)
+BgaDObjEnt           overlay   # .bga node record; u, env, child, sibling, motion are EE words (R4 s.3, LOADERS.md)
+BgaKey               overlay   # .bga type-6 envelope key, floats normalised in place at load (R4 s.3)
+BgaMotion            overlay   # .bga envelope motion; key is an EE word (R4 s.3)
+BgaPtKey             overlay   # .bga particle/lightning motion key
+BgaPtMotion          overlay   # .bga particle motion; key is an EE word
+BgaExtKey            overlay   # .bga one-value envelope key
+BgaExtMotion         overlay   # .bga one-value envelope motion; key is an EE word
+BgaSdfKey            overlay   # .cam SDF camera key, used as loaded (R4 s.3)
+BgaSdfCam            overlay  nosize   # .cam SDF camera head, frame and mode written at run time; key[] runs on (R4 s.3)
 PObjMorph            overlay   # .p2o morph table entries, relocated image (R4 s.3)
 PObjMatDef           overlay   # .p2o material definitions (R4 s.3)
 PObjTexDef           overlay   # .p2o texture definitions (R4 s.3)
-PObjPart             overlay  pending=2C   # the 0x180-byte .p2o ObjRec copied by value into PObjModel.parts; its pointers are relocated (R4 s.3: decode into a runtime struct)
+PObjPart             runtime   # PObjModel.parts; the host decodes each file ObjRec into it field by field (PObj.c DecodePObjPart, LOADERS.md)
+ObjHdr               overlay  size=0x18   # .p2o file head, objTbl and texTbl relocated in place as EE words (PObj.c AllocPObj, R4 s.3)
+ObjEnt               overlay   # .p2o polygon table entry, p relocated in place as an EE word (R4 s.3)
+ObjRec               overlay   # .p2o part record in the image, addresses as EE words (R4 s.3, LOADERS.md)
 PObjMaterial         runtime   # built by pac_makeMaterialTable into the model's group
 PObjTexInfo          runtime   # filled by pac_getTextureInfo
 PObjGroup            runtime   # per-part group record built at load
@@ -192,6 +207,9 @@ StageAnimDef         overlay  pending=5   # ELF stage-anim; data is a run-time o
 StgObjDat            overlay   # ELF stage-anim-model
 BgaPlayNode          runtime   # bgaPlayList node (StageAnimation.c)
 # --- sugipon/include ---------------------------------------------------------
+MotFileHdr           overlay  nosize   # .mob header, words 1-4 relocated in place as EE words (motionFileManager.c relocMotionFile, R4 s.3); the comment's "16-byte header" is the header without the facial word at 0x10
+FacialRec            overlay   # .mob facial block; tbl and its entries relocated in place as EE words (R4 s.3)
+NodeRec              overlay   # .mob format 3/6 node; nTable and lastTable relocated in place as EE words (R4 s.3)
 LayoutClothDef       overlay   # ELF layout-cloth-def
 AccessaryRec         overlay   # ELF accessary
 MotSyncPair          overlay   # ELF unmapped_00533FC0 (motSyncPairs)

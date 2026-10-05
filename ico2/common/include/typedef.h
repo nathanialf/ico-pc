@@ -227,7 +227,8 @@ typedef struct IosMailBox { /* field names derived */
 
 /* GObj and PObjGObj below are two views of ONE record: the game object.  GObj
  * types the run-list links, the display object pointer and the run function;
- * PObjGObj carries them as words.  The names are this repository's. */
+ * PObjGObj carries them as words.  The names are this repository's.  On the
+ * host PObjGObj is GObj itself (docs/port/LOADERS.md). */
 struct GObj {   /* field names derived */
     GObj *self; /* 0x0, the object itself while its table entry is
                                in use, 0 when free (gobj.c) */
@@ -1262,7 +1263,12 @@ typedef union { /* field names derived */
     long long d[2];
 } __attribute__((aligned(16))) ConstVec; /* derived name */
 
-/* the object record (GObj) as a view of plain words */
+/* the object record (GObj) as a view of plain words.  No game code reads
+ * this view (it is kept for the EE build's type set); on the host the
+ * record has one definition, GObj, and PObjGObj names it (docs/port/LOADERS.md). */
+#ifdef ICO_HOST
+typedef struct GObj PObjGObj;
+#else
 typedef struct PObjGObj { /* field names derived */
     ICO_WORD self;             /* 0x000, the object itself while in use */
     int labelType;        /* 0x004, 1 for a stage layout object */
@@ -1296,6 +1302,7 @@ typedef struct PObjGObj { /* field names derived */
     int active;      /* 0x16C */
     int pauseExempt; /* 0x170 */
 } PObjGObj; /* derived name */
+#endif
 
 /* Act + 0x438: the way-state word, one 64-bit flag word whose low two bytes
    are also the way walker's two status bytes; bit 16 asks for the detailed
@@ -1457,12 +1464,17 @@ typedef struct Act { /* field names derived */
 
     union {
         unsigned long long ll;
+#if !defined(ICO_HOST) || __SIZEOF_POINTER__ == 4
         void (*afterProc)(GObj *);
+#endif
     } flags18; /* 0x18, a 64-bit word: the after-proc in the low word
                   (commonact.c stores actAfterForceRope, afterCommonRopeCliff,
                   actAfterDown and actAfterRopeJump there), the state flags
                   in the high word, which every reader tests as bits 32-63
-                  of the doubleword */
+                  of the doubleword.  On a host with 8-byte pointers the
+                  after-proc lives in afterProcHost at the end of the record
+                  (an 8-byte pointer here would overwrite the flags); reach
+                  it through ACT_AFTER_PROC below */
 
     ActStatus flags20;    /* 0x20 */
     int handFreeFrame;    /* 0x28, frames since the boy and girl let go of each other's hands */
@@ -1616,7 +1628,19 @@ typedef struct Act { /* field names derived */
     struct EnemyBattleWork *enemy;          /* 0x680, the enemy work (enemy_act.c) */
     struct MailAdditionalData *mailAddData; /* 0x684, the mail additional data table */
     ICO_WORD_PTR(void *) work; /* 0x688, the actor's extended work block (act-game.h's ActWork) */
+#if defined(ICO_HOST) && __SIZEOF_POINTER__ > 4
+    void (*afterProcHost)(GObj *); /* host only: flags18's after-proc (docs/port/LOADERS.md) */
+#endif
 } Act; /* derived name */
+
+/* ACT_AFTER_PROC(a): the actor's after-proc as an lvalue, the low word of
+ * flags18 on the EE and on 32-bit hosts, afterProcHost on hosts with 8-byte
+ * pointers.  The flag bits stay in flags18.ll on every build. */
+#if defined(ICO_HOST) && __SIZEOF_POINTER__ > 4
+#define ACT_AFTER_PROC(a) (((Act *)(a))->afterProcHost)
+#else
+#define ACT_AFTER_PROC(a) (((Act *)(a))->flags18.afterProc)
+#endif
 
 /* obj-layout: one placed object of a stage, 0x4C bytes, indexed by the
  * object's GObj labelId.  sceneManager.c creates the object from it; the

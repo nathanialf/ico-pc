@@ -277,7 +277,11 @@ Act *actInitialize(GObj *self)
     *(int *)(w + 0x8) = 0;
     *(int *)(w + 0xC) = 0;
     *(int *)(w + 0x14) = 0;
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(w) = 0;
+#else
     *(int *)(w + 0x18) = 0;
+#endif
     *(int *)(w + 0x680) = 0;
     *(int *)(w + 0x688) = 0;
     *(int *)(w + 0x10) = 0;
@@ -570,10 +574,17 @@ void BeforeFunc(GObj *self)
         act = (void *)actModeTbl[intr->mode].ent[w->actKind].act;
         if (act != 0) {
             after_func_exec(self, w->actMode, intr->mode);
+#ifdef ICO_HOST
+            if (ACT_AFTER_PROC(w) != 0) {
+                ACT_AFTER_PROC(w)((GObj *)self);
+                ACT_AFTER_PROC(w) = 0;
+            }
+#else
             if (*(int *)((char *)w + 0x18) != 0) {
                 (*(void (**)(char *))((char *)w + 0x18))(self);
                 *(int *)((char *)w + 0x18) = 0;
             }
+#endif
             w->modeFrame = 0;
             for (i = 9; i > 0; i--) {
                 ((ActExt *)*(int *)(((ActSelf *)self)->work + 0x688))->a900[i] =

@@ -4076,7 +4076,11 @@ void actGirlPulledGo(GObj *volatile self)
     ACTGame_ConnectHand();
     *(MotOriReq *)&GOBJ_SUB(self)->root.wall = s->env.motOriReq;
     *(int *)(*(char **)((char *)self + 0x15C) + 0x634) = 1;
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlPulledGo;
+#else
     *(char **)((char *)s + 0x18) = (char *)afterGirlPulledGo;
+#endif
     memset(q, 0, 0x10);
     q[3] = 1.0f;
     RotQuaternionY(q, 0);
@@ -4677,7 +4681,11 @@ void actGirlHintPoint(GObj *volatile self)
 
     tgt = (void *)*(int *)(GOBJ_ACT(self)->intrData);
     s = GOBJ_ACT(self);
+#ifdef ICO_HOST
+    ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlHintPoint;
+#else
     *(void **)((char *)s + 0x18) = (void *)afterGirlHintPoint;
+#endif
     sceVu0SubVector(d, test_CURRENTROOT(tgt), test_CURRENTROOT((void *)self));
     while (1) {
         sceVu0AddVector(p, test_CURRENTROOT((void *)self), d);
