@@ -10,9 +10,18 @@
 
 #include <eekernel.h>
 
-/* a message queue: a ring of int messages guarded by a kernel semaphore */
+/* One message: an int, or an address (thread.c, cdvd.c, mcard.c and
+   StageManager.c send pointers), so pointer-wide on the host. A ring handed
+   to iosMsgQueueCreate holds `size` of them, and iosMsgRecv stores one. */
+#ifdef ICO_HOST
+typedef __INTPTR_TYPE__ IosMsgWord; /* derived name */
+#else
+typedef int IosMsgWord; /* derived name */
+#endif
+
+/* a message queue: a ring of messages guarded by a kernel semaphore */
 typedef struct IosMsgQueue { /* field names derived */
-    int *buf;                /* 0x00, the ring */
+    IosMsgWord *buf;         /* 0x00, the ring */
     int rd;                  /* 0x04, the next slot iosMsgRecv reads */
     int num;                 /* 0x08, messages held */
     int size;                /* 0x0C, slots in the ring */
@@ -24,10 +33,10 @@ typedef struct IosMsgQueue { /* field names derived */
 /* message.o's .sdata global: the signal thread's record */
 extern struct IOSThread *th_sig;
 void iosMsgInit(void);
-void iosMsgQueueCreate(IosMsgQueue *q, int *buf, int size);
+void iosMsgQueueCreate(IosMsgQueue *q, IosMsgWord *buf, int size);
 void iosMsgQueueDestroy(IosMsgQueue *q);
-int iosMsgRecv(IosMsgQueue *q, int *out, int mode);
-int iosMsgSend(IosMsgQueue *q, int val, int mode);
-void iosMsgSetEvent(int intc, IosMsgQueue *q, int val);
+int iosMsgRecv(IosMsgQueue *q, IosMsgWord *out, int mode);
+int iosMsgSend(IosMsgQueue *q, IosMsgWord val, int mode);
+void iosMsgSetEvent(int intc, IosMsgQueue *q, IosMsgWord val);
 
 #endif /* MESSAGE_H */

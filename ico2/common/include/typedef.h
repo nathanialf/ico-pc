@@ -96,6 +96,14 @@ static inline float absf(float x)
  * ICO_INVALID_PTR    the all-ones pointer the scripts use as "none".
  * ICO_POSTINC(T, p)  `((T)(p))++`, the cast-as-lvalue post-increment.
  * ICO_BREAK()       the EE debug trap (`break`); __builtin_trap() on the host.
+ * ICO_WORD           a struct field the EE code holds an address in as an int
+ *                    ("held as a word"): `int` on the EE, whose code
+ *                    generation depends on the int type, and a pointer-wide
+ *                    integer (intptr_t) on the host, so the address survives
+ *                    a 64-bit build and the integer arithmetic the code does
+ *                    on it (byte offsets, masks) means the same.
+ * ICO_WORD_PTR(T)    the same for a word only ever converted to a pointer:
+ *                    `int` on the EE, the pointer type T on the host.
  * ICO_SPR_ADDR(off)  the address `off` bytes into the 16 KB scratchpad
  *                    (0x70000000 on the EE); the host points it at
  *                    ico_scratchpad, defined in seki/src/Basic.c.
@@ -113,6 +121,8 @@ typedef ICO_QW ICO_UQW;
 extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
 #define ICO_SPR_ADDR(off) ((__UINTPTR_TYPE__)ico_scratchpad + (off))
 #define ICO_BREAK() __builtin_trap()
+#define ICO_WORD __INTPTR_TYPE__
+#define ICO_WORD_PTR(T) T
 /* ICO_POSTINC(T, p): `((T)(p))++`, a cast used as an lvalue that ee-gcc 2.9
  * allows and the host compiler does not.  Yields (T)p and advances the byte
  * pointer p by sizeof(*(T)p). */
@@ -132,6 +142,8 @@ typedef unsigned int ICO_UQW __attribute__((mode(TI)));
 #define ICO_INVALID_PTR ((void *)0xFFFFFFFF)
 #define ICO_SPR_ADDR(off) (0x70000000 | (off))
 #define ICO_BREAK() __asm__ __volatile__("break")
+#define ICO_WORD int
+#define ICO_WORD_PTR(T) int
 #define ICO_POSTINC(T, p) ((T)(p))++
 #endif
 
@@ -164,7 +176,11 @@ typedef unsigned int ICO_UQW __attribute__((mode(TI)));
  * matching byte-for-byte WITHOUT the per-function int-typed-reload hacks
  * (COOKBOOK section 8.22). Pointer-chain users still match (no aliasing trigger).
  * Use this accessor for 0x15C; keep dobj in the struct for layout only. */
+#ifdef ICO_HOST
+#define GOBJ_SUB(o) (((GObj *)(o))->dobj)
+#else
 #define GOBJ_SUB(o) ((Sub15C *)*(int *)&((GObj *)(o))->dobj)
+#endif
 /* The 0x164 actor slot, the companion of GOBJ_SUB: the action-state object the
  * per-object functions run their state machines out of. */
 #define GOBJ_ACT(o) ((Act *)((GObj *)(o))->act)
@@ -241,7 +257,7 @@ struct GObj {   /* field names derived */
     IosMailBox mailBox; /* 0x54, the mail box obj_manager.c queues and runs */
     Sub15C *dobj;     /* 0x15C, the display object (CSVSYSTEM_InitDObj) */
     char pad160[4];
-    int act; /* 0x164, the actor/action-state object, held as a word like
+    ICO_WORD_PTR(void *) act; /* 0x164, the actor/action-state object, held as a word like
                 0x15C: the actor and script translation units read it as Act
                 through GOBJ_ACT below, other translation units hang their own
                 record there */
@@ -411,7 +427,7 @@ struct MotRoot {       /* field names derived */
     char _pad368[8];
     float holdPoint[4]; /* 0x370, the point the hang hold is measured from */
     int ropeState;      /* 0x380, 0, or -1 and 1 by the hold height on the chain */
-    int fixObj; /* 0x384, the object SetMotionNodeFixModeParameter fixes the node to; held as a word: stored as GObj * (or char *, P4-xcut), SetMotionNodeFixModeParameter's code changes (measured) */
+    ICO_WORD fixObj; /* 0x384, the object SetMotionNodeFixModeParameter fixes the node to; held as a word: stored as GObj * (or char *, P4-xcut), SetMotionNodeFixModeParameter's code changes (measured) */
     int fixNode; /* 0x388, the focus node on that object */
     char _pad38C[4];
     float fixQuat[4];     /* 0x390, the fixed node's turn */
@@ -593,13 +609,13 @@ struct Sub15C { /* field names derived */
     ObjNode
         parent; /* 0x0, the object and node this one hangs from (LinkParentOfDObj), obj 0 for none */
     int nodeNum; /* 0x8, the count of node matrices and quaternions at 0xC and 0x10 */
-    int nodeMtx; /* 0xC, one 64-byte matrix a node; held as a word: typed float (*)[4][4] or char *, attackhit.o, act-game.o, commonact.o, fieldCollision.o and girl_act.o move, where the ROM adds a byte offset to it (measured) */
-    int nodeQuat; /* 0x10, one quaternion a node; held as a word: typed float (*)[4], GetMatrixOfMotion's int-typed read of it moves (measured, P4-xcut) */
+    ICO_WORD nodeMtx; /* 0xC, one 64-byte matrix a node; held as a word: typed float (*)[4][4] or char *, attackhit.o, act-game.o, commonact.o, fieldCollision.o and girl_act.o move, where the ROM adds a byte offset to it (measured) */
+    ICO_WORD nodeQuat; /* 0x10, one quaternion a node; held as a word: typed float (*)[4], GetMatrixOfMotion's int-typed read of it moves (measured, P4-xcut) */
     char pad14[12];
     float matrix[4][4]; /* 0x20, the object's own matrix (initMatrixDObj) */
     float quat
         [4]; /* 0x60, the object's turn: weapon.c copies the root's into it, SetParticleEffect takes it */
-    int colData;   /* 0x70, the collision data; its wall list hangs at 0x10 */
+    ICO_WORD colData; /* 0x70, the collision data; its wall list hangs at 0x10 */
     int disp;      /* 0x74, nonzero while the stage animation draws the object */
     int colRotate; /* 0x78, nonzero when the collision follows the node's rotation */
     int cylinderOn; /* 0x7C, nonzero, with the word at 0x3C8, when the object takes part in cylinder collision */
@@ -1248,34 +1264,34 @@ typedef union { /* field names derived */
 
 /* the object record (GObj) as a view of plain words */
 typedef struct PObjGObj { /* field names derived */
-    int self;             /* 0x000, the object itself while in use */
+    ICO_WORD self;             /* 0x000, the object itself while in use */
     int labelType;        /* 0x004, 1 for a stage layout object */
     int labelId;          /* 0x008, the layout row */
     int kind;             /* 0x00C, the object-kind id, -1 when the object has none */
-    int next;             /* 0x010 */
-    int prev;             /* 0x014 */
+    ICO_WORD next;             /* 0x010 */
+    ICO_WORD prev;             /* 0x014 */
     unsigned char linkId; /* 0x018 */
     char pad19[3];
     unsigned int key; /* 0x01C */
     char pad20[8];
-    int fn;                 /* 0x028 */
+    ICO_WORD fn;                 /* 0x028 */
     struct GProc *procHead; /* 0x02C, head of the object's process list */
     struct GProc *procTail; /* 0x030, tail of the same list */
     char pad34[8];
-    int kindNext; /* 0x03C */
+    ICO_WORD kindNext; /* 0x03C */
     int dlLinkId; /* 0x040, the display list the object is linked into */
     char pad44[4];
-    int dl;        /* 0x048, the display function */
+    ICO_WORD dl;        /* 0x048, the display function */
     int word4C;    /* 0x04C, read only by GobjProc.c's CreateGObj, through an ObjKindEnt row */
     int drawMask;  /* 0x050, ANDed with a camera's mask */
     int mailQueue; /* 0x054, the mail box (GObj's view) */
     int mailNum;   /* 0x058 */
     int mailType;  /* 0x05C */
-    int mailArg;   /* 0x060 */
+    ICO_WORD mailArg;   /* 0x060 */
     char pad64[248];
-    int sub; /* 0x15C, the sub-object GObj's own view types as Sub15C * */
+    ICO_WORD sub; /* 0x15C, the sub-object GObj's own view types as Sub15C * */
     char pad160[4];
-    int act; /* 0x164, the actor/action-state object */
+    ICO_WORD act; /* 0x164, the actor/action-state object */
     char pad168[4];
     int active;      /* 0x16C */
     int pauseExempt; /* 0x170 */
@@ -1410,14 +1426,14 @@ typedef struct ActEnv {      /* field names derived */
     GObj *swapWeapon;     /* 0x158, the weapon the actor can swap to */
     GObj *frontObj;       /* 0x15C */
     union {
-        int i;
+        ICO_WORD i;
         GObj *obj;
     } cageObj; /* 0x160, the cage: stored as the object ACTGetEnvironment
                   found, read as an int handle (commonact.c) */
     GObj *bombObj;        /* 0x164, the bomb */
     GObj *torchRevObj;    /* 0x168, the torch */
     union {
-        int i;
+        ICO_WORD i;
         GObj *obj;
     } sofaObj; /* 0x16C, the sofa: stored as an int (ACTGetEnvironment), read
                   as the object */
@@ -1524,12 +1540,12 @@ typedef struct Act { /* field names derived */
        ItemHold): the item object, which HoldItem, ThrowItem and GetItemKind
        take as an int and the release and compare paths read as a pointer */
     union {
-        int i;
+        ICO_WORD i;
         GObj *p;
     } heldItem;
 
     union {
-        int i;
+        ICO_WORD i;
         GObj *p;
     } nextItem;
 
@@ -1599,7 +1615,7 @@ typedef struct Act { /* field names derived */
     ActEnv env; /* 0x4B0, the environment ACTGetEnvironment fills in every frame */
     struct EnemyBattleWork *enemy;          /* 0x680, the enemy work (enemy_act.c) */
     struct MailAdditionalData *mailAddData; /* 0x684, the mail additional data table */
-    int work; /* 0x688, the actor's extended work block (act-game.h's ActWork) */
+    ICO_WORD_PTR(void *) work; /* 0x688, the actor's extended work block (act-game.h's ActWork) */
 } Act; /* derived name */
 
 /* obj-layout: one placed object of a stage, 0x4C bytes, indexed by the

@@ -1,0 +1,245 @@
+# config/struct_classes.txt -- the layout class of every struct the layout
+# asserts touch (tools/gen_layout_asserts.py, port/test/layout_asserts.c,
+# docs/port/LAYOUT.md).
+#
+#   <name> <class> [size=0xNN] [base=0xNN] [pending=<package>] [nosize]  # evidence
+#
+# class
+#   runtime  natural host layout, real pointers: asserted on the 32-bit
+#            presets only (the EE layout), free to change on 64-bit
+#   overlay  read directly from disc or ELF bytes: frozen on every preset;
+#            pointer fields become u32 offsets or are resolved by the loader
+#   save     serialised into the save image or the memory card files: frozen
+# size=      the struct's size where no header comment gives it
+# base=      the header's comments are offsets in an enclosing record, where
+#            this struct sits at base
+# pending=   a frozen struct whose 64-bit asserts wait for that package to
+#            convert its pointer fields (2C: disc loaders; 5: the runtime ELF
+#            table loader). Remove the option when the conversion lands.
+# nosize     the "N bytes" in the struct's leading comment is not its size
+#
+# Evidence: "ELF <member>" is a row of config/data_schema.pal.txt (an ELF data
+# table, loaded byte for byte by package 5); "R4" is
+# docs/research/loader-census.md.
+
+# --- common/include/charFileManager.h ---------------------------------------
+TexRec               overlay   # ELF texture-path
+PObjMdl              overlay   # ELF model-path
+# --- common/include/kanban.h -------------------------------------------------
+Kanban               runtime   # kanban.c's sign list, allocated per sign (kanbanReqAdd)
+# --- common/include/layout_texture.h -----------------------------------------
+LtProperty           overlay  pending=5   # ELF tex-property; texData is a run-time pointer slot, null in the ROM (R4 s.4)
+LtProp               overlay  pending=5   # ELF texture-layout; proc is a function pointer (R4 s.4)
+# --- common/include/sceneManager.h -------------------------------------------
+SObjSimpleSetting    runtime   # built on the stack and in InitialSObjSimpleSetting (sceneManager.c), handed to constructors
+EnemyMdlRec          overlay   # ELF enemy-model-grp
+# --- common/include/typedef.h ------------------------------------------------
+DObjNode             runtime   # Sub15C + 0x870's per-node display records, iosMalloc'd (DObj.c)
+GObj                 runtime   # the game object, gobj.c's table
+MotOriReq            runtime   # orient request passed by value (SetMotionRequest)
+HandRec              runtime   # MotRoot's hand records
+MotRoot              runtime   # embedded in Sub15C at 0xA0
+MotCtrl              runtime   # embedded in Sub15C at 0x470
+SkelNode             overlay   # .skb file records, kept as loaded and checksummed byte for byte (R4 s.3, charFileManager.c ReadSkeltonFile)
+MotIk                runtime   # Sub15C nodeRotElem, allocated per skeleton
+Sub15C               runtime   # the display object, CSVSYSTEM_InitDObj
+StageSetting         overlay  size=0x1D0   # .ssb memcpy'd into GlobalStageSetting (R4 s.2: sizeof = 0x1D0, ReadStageSettingFile)
+BrainTarget          runtime   # the girl brain's target list (Brain)
+GsysObjInfo          save      # debug.c's view of a gameSysObjInfo record, written to the save image by gamesysObjInfoSave (0x2D80 bytes)
+McDirEnt             save      # memory card directory entry (sceMcTblGetDir view), filled by libmc from the card
+PadState             runtime   # keyInput.c's per-pad state
+ObjKindEnt           overlay  pending=5   # ELF obj-kind-data; 11 function pointers (R4 s.4)
+StgPre               overlay  pending=5   # ELF stage-all; initproc, endproc (R4 s.4)
+ClipWork             runtime   # collision query on the stack (ClipWall, ClipFloor)
+Brain                runtime   # the girl's brain work
+ViTs                 runtime   # movie time stamp pair (mv_*)
+Pad                  runtime   # head of a pad record (keyInput.c)
+ExitData             overlay   # ELF exit-data
+ActMail              runtime   # actor mail table rows; entry points are code addresses built into actor TUs' static tables
+PObjGObj             runtime   # a word view of GObj (must agree with GObj on every host)
+WVTObj               runtime   # guide-way work block, iosMalloc'd (way_sys.c) and embedded in Act at 0x360
+WayRequest           runtime   # way search request (act-way.c)
+ActEnv               runtime   # embedded in Act at 0x4B0
+Act                  runtime   # the actor record, actInitialize's allocation
+GenGeo               overlay  pending=5   # ELF obj-layout; proc (function), outGObj (object) (R4 s.4). Its flags and reviveCount are also packed into the save by MakeGeneratorPacket, field by field
+OaRecB               overlay   # ELF obj-action
+McFileInfo           save     nosize   # McProductFile.file[], written to the card by product_write (mcard.c); the 0x1F0 in its comment is McProductFile's size
+McProductFile        save     size=0x1F0   # the card's product file, moved whole by product_write/product_read (mcard.c)
+McMgr                runtime   # memory-card manager block (mcard.c, kanbanBoot.c)
+# --- fumi/include/act-game.h -------------------------------------------------
+ActWork              runtime   # Act.work, the actor's character work, iosMalloc'd per actor
+LookTarget           overlay   # ELF look-target-data
+# --- fumi/include/act-parallel-control.h -------------------------------------
+ParallelMotionRow    overlay   # ELF parallel-motion-tbl
+# --- fumi/include/act.h ------------------------------------------------------
+ActModeRec           overlay  pending=5   # ELF act-mode-def; ent[].act is a function pointer (R4 s.4)
+IntrMail             overlay  pending=5   # ELF act-intrlist; accept, extra, handler, motion are function pointers (R4 s.4)
+# --- fumi/include/adpcm_init.h -----------------------------------------------
+AdpcmOpenReq         runtime   # soundDataOpen's request, in memory only
+AdpcmChReq           runtime   # adpcm_init.c's channel request
+AdpcmStream          runtime   # adpcm_init.c's stream state
+AdpcmDataRec         overlay   # ELF adpcmfile
+# --- fumi/include/cdvd.h -----------------------------------------------------
+CdvdBgReq            runtime   # cdvd.c's seven background read slots
+PackKind             overlay  pending=5   # ELF init-func; func is a function pointer (R4 s.4)
+# --- fumi/include/commonact.h ------------------------------------------------
+IdlingDef            overlay   # ELF idle-mot-def
+IdleRangeRec         overlay   # ELF act-data-tbl
+ClingRec             overlay   # ELF node-fix-ofs
+BecPair              overlay   # ELF pair-motion
+# --- fumi/include/enemy_act.h ------------------------------------------------
+EnemyBattleWork      runtime   # Act.enemy, the enemy work (enemy_act.c)
+# --- fumi/include/fieldCollision.h -------------------------------------------
+FcWallEnt            overlay  pending=2C   # .cl wall table (0x50 stride, R4 s.3 `wcl`); normal at 0x4C is a pointer (inference: relocated or set at load)
+FcFloorEnt           overlay   # .cl floor table (0x70 stride, R4 s.3 `fcl`)
+# --- fumi/include/girl_act.h -------------------------------------------------
+EscapeRange          overlay   # ELF param-escape-run
+EscortPoint          overlay   # ELF auto-escort
+# --- fumi/include/gobj_process.h ---------------------------------------------
+GProc                runtime   # process node of a game object, gobj_process.c's pool
+# --- fumi/include/jimaku.h ---------------------------------------------------
+JimakuSub            runtime  base=0xC   # subtitle request body; its comments are JimakuArg offsets (jimaku.h)
+JimakuArg            runtime   # subtitle request message (jimaku.c, script TUs)
+JimakuFileName       overlay   # ELF unmapped_0055FBD0 (jimakuFileName)
+# --- fumi/include/mcard.h ----------------------------------------------------
+IconFile             overlay   # ELF iconfile
+# --- fumi/include/memory.h ---------------------------------------------------
+IosMemPart           runtime  size=0x48   # partition record at the head of each heap partition (memory.c); 80-byte header slot
+IosMemNode           runtime  size=0x40   # block header in front of every allocation (memory.c); 0x50 on 64-bit hosts (LAYOUT.md)
+# --- fumi/include/message.h --------------------------------------------------
+IosMsgQueue          runtime   # message.c's queue record
+# --- fumi/include/pad.h ------------------------------------------------------
+IosPadBuf            runtime   # libpad's DMA buffer as pad.c reads it, filled by port/ libpad
+IosPadShock          runtime   # pad.c's device record
+IosPadDevRec         runtime   # pad.c's device record
+IosPadCtx            runtime   # caller's pad handle (iosPadConnect)
+IosPadStick          runtime   # iosPadGetStick's result
+PadAct               runtime   # actuator request (iosPadActRequest)
+PadActDef            overlay   # ELF shocklist
+# --- fumi/include/s_init.h ---------------------------------------------------
+SqEntry              runtime   # soundDataTbl rows hold EE addresses as int (R4 s.5)
+SeDef                overlay  pending=5   # ELF sedef; check is a function pointer (R4 s.4)
+SeEnvDef             overlay  pending=5   # ELF se-env; proc is a function pointer (R4 s.4)
+SeBank               overlay   # ELF sefile
+SeKind               overlay   # ELF selist
+# --- fumi/include/shockdriver.h ----------------------------------------------
+ShockParam           runtime   # shockdriver.c's voice parameter
+VibDecode            runtime   # shockdriver.c's pattern decoder
+SHOCKREQUEST         runtime   # ShockRequest pool slot
+ShockRequestBox      runtime   # per-player request list
+ShockReq             runtime   # motor state
+ShockVoiceSet        runtime   # header the loader puts in front of a .svd image, pointers into it (R4 s.3, s.5)
+ShockVoiceFile       runtime   # loaded voice-set file: header + image (R4 s.5)
+# --- fumi/include/thread.h ---------------------------------------------------
+IOSThread            runtime   # thread.c's thread object
+IosSema              runtime   # thread.c's semaphore object
+# --- fumi/include/way_llf.h --------------------------------------------------
+WayPoint             runtime   # built from WaySrcPt by ExtractWayData (way_tool.c)
+WayGroup             runtime   # built from WaySrcGrp by ExtractWayData (way_tool.c)
+# --- fumi/include/way_tool.h -------------------------------------------------
+WaySrcPt             overlay   # ELF way-point
+WaySrcGrp            overlay   # ELF way-group
+# --- fumi/include/way_util.h -------------------------------------------------
+WgAll                runtime   # WayUtilWorkAlloc's path-search work block
+# --- ito/include ------------------------------------------------------------
+BirdWork             runtime   # act_bird.c's work, on Sub15C work
+GObjMailEntry        runtime   # GObj mail box entry (itou_common.h's view)
+GObjMailQueue        runtime   # GObj mail box at 0x54 (itou_common.h's view)
+LightningNode        runtime  nosize   # caller's node array (lightning.c); "16-byte position" is a member
+AudioDec             runtime   # movie audio decoder record (mv_audiodec.c)
+MvDispEnv            runtime   # movie display environment
+ReadBuf              runtime   # movie read ring
+MvCbStr              runtime   # libmpeg callback data
+ViBuf                runtime  nosize   # movie video-input ring; "2048-byte sectors" is the ring's unit
+VideoDec             runtime   # movie video decoder
+MvCbErr              runtime   # libmpeg callback data
+MvCbTs               runtime   # libmpeg callback data
+VoTag                runtime   # movie video-out DMA tags
+VoBuf                runtime   # movie video-out ring
+# --- omori/include -----------------------------------------------------------
+AttackKindEntry      overlay   # ELF attack-def
+PinRec               overlay   # .gcm camera pin, 0x5C, copied whole (R4 s.3, camera-ico2.c ReadCameraSet)
+CamGroup             overlay  pending=2C   # .gcm camera group, 0x4C stride (R4 s.3); items at 0x48 is written as a pointer into the converted copy
+MenuThread           runtime   # camera editor menu (debug)
+EBSlot               runtime   # ebrain.c's slot
+ObjActMailEnt        overlay   # ELF obj-trigger
+# --- script/include ----------------------------------------------------------
+EffectArg            runtime   # effect argument on the stack (e3.c)
+WarpRec              overlay   # ELF girl-warp-list
+# --- seki/include ------------------------------------------------------------
+BgaAnim              runtime   # bga_InitData's 0x30-byte allocation (R4 s.5)
+BgaHeader            overlay  pending=2C   # .bga file head, mutated in place: dobjs relocated, roots and anim heap pointers (R4 s.3)
+PObjMorph            overlay   # .p2o morph table entries, relocated image (R4 s.3)
+PObjMatDef           overlay   # .p2o material definitions (R4 s.3)
+PObjTexDef           overlay   # .p2o texture definitions (R4 s.3)
+PObjPart             overlay  pending=2C   # the 0x180-byte .p2o ObjRec copied by value into PObjModel.parts; its pointers are relocated (R4 s.3: decode into a runtime struct)
+PObjMaterial         runtime   # built by pac_makeMaterialTable into the model's group
+PObjTexInfo          runtime   # filled by pac_getTextureInfo
+PObjGroup            runtime   # per-part group record built at load
+PObjModel            runtime   # the model record AllocPObj builds (R4 s.5)
+LightMatrix          runtime   # Sub15C + 0x874's light matrices (Light.c)
+ObjLight             overlay   # ELF obj-light
+PacHeader            runtime   # pac_makePacket's packets
+PacLine              runtime   # pac_makePacket's line records
+PacLineSet           runtime   # line part's set record
+Mesh3D               runtime   # prim_InitMesh3D's allocation
+Fan2DVtx             runtime   # 2D fan vertex (Primitive.c)
+Fan2D                runtime  size=12   # 2D fan; prim_InitFan2D allocates 12 bytes (Primitive.c:30)
+PrimParticleBuf      runtime   # particle packet buffer
+PrimParticleObj      runtime  nosize   # VU1 particle object buffer; "32 bytes a particle" is the element
+PrimParticle         runtime   # particle object (0x198 bytes); prim_InitParticle allocates 416, the size rounded to a quadword (Primitive.c:685)
+StageAnimDef         overlay  pending=5   # ELF stage-anim; data is a run-time object pointer slot (R4 s.4)
+StgObjDat            overlay   # ELF stage-anim-model
+BgaPlayNode          runtime   # bgaPlayList node (StageAnimation.c)
+# --- sugipon/include ---------------------------------------------------------
+LayoutClothDef       overlay   # ELF layout-cloth-def
+AccessaryRec         overlay   # ELF accessary
+MotSyncPair          overlay   # ELF unmapped_00533FC0 (motSyncPairs)
+ClipColReq           runtime   # clip-collision thread request
+ExW                  runtime   # cloth chain extended weight
+ChainNode            runtime   # InitChains' chain points
+ChainParam           runtime   # chain parameters
+ClothCfg             runtime   # InitClothes config built by clothTest.c and flag.c
+ClothRec             runtime   # InitClothes' cloth
+ClothHangCfg         runtime   # InitCloth4D's table rows, static data in the actor TUs
+Cloth4DCol           runtime   # cloth collision (clothAnimation.c)
+Cloth4DCfg           runtime   # cloth mesh head (clothAnimation.c)
+ClothPoint           runtime   # InitCloth4D's scaled copy of a ClothHangCfg row
+Cloth4D              runtime  size=0x300   # InitCloth4D's cloth, iosMallocDebug(..., 0x300) (clothAnimation.c:1880)
+EnemyKindRange       overlay   # ELF enemy-random-def
+EnemyDef             overlay   # ELF enemy-def
+EnemyEye             runtime   # InitEnemyEye's allocation
+EnemyFootPrint       runtime   # enemyParts.c footprint slot
+EnemyFootPrintHead   runtime   # enemyParts.c footprint list head
+SePackage            overlay   # ELF prog-se-link
+SERandEntry          overlay   # ELF motion-se-random-def
+SECondEntry          overlay   # ELF motion-se-condition-def
+EffEntry             overlay   # ELF motion-eff-def
+VibCondEntry         overlay   # ELF motion-eff-condition-def
+HandModeRow          overlay   # ELF motion-ik-eff-def
+ItemBreakRec         overlay   # ELF item-kind-def
+MotionOrientEntry    overlay   # ELF motion-orient
+MotOriParallelEnt    overlay   # ELF parallel-motion-orient
+MotOriAlt            overlay   # ELF mirror-motion-def
+MotOriName           overlay   # ELF motion-orient-def, moviefile
+MotOriSub            overlay   # ELF blend-motion-def
+MotOriLimit          overlay   # ELF motion-limit-def (written at run time, R4 s.4)
+FDSSlot              overlay   # element of MotionDef (ELF motion-def)
+MotionDef            overlay   # ELF motion-def
+BgaDisp              runtime   # multiBgaManager.c slot
+BgaAnimeState        runtime   # multiBgaManager.c initial slot state
+PEPackage            overlay   # .pef file copied into a 160-byte slot (R4 s.2, s.3)
+PEPartRec            runtime   # particle record (particleEffect.c)
+PEGeo                runtime   # SetParticleEffectByPartition's allocation
+ParticleEffectFile   overlay   # ELF particle-effect
+PoolMesh             runtime   # pool reflection mesh (pool.c)
+SpiderKindRec        overlay   # ELF spider-def
+StormTestWork        runtime   # InitStormTestGeo's allocation
+StreamMotionFile     overlay   # ELF stream-motion-def
+LeverGeoWork         runtime   # InitFloorLeverGeo's block
+WaterDot             runtime   # waterDot.c's record
+WeaponDef            overlay   # ELF weapon-def
+FumbleRow            overlay   # ELF weapon-fumble-def
+
+# --- size only (no offset comments in the header) ---------------------------
+GamesysObjInfo       save     size=0x40   # gameSysObjInfo[182], written whole as 0x2D80 bytes by gamesysObjInfoSave (gamesys.c)

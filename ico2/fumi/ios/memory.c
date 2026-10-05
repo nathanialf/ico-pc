@@ -15,6 +15,37 @@ void ico_heap_stats_alloc(const void *part, const char *name, unsigned int bytes
 void ico_heap_stats_free(const void *part, unsigned int bytes);
 
 #endif
+/* The allocator's record sizes, in bytes and in quadwords. The EE build
+ * spells them as the literals it was written with; the host derives them
+ * from the records, which gives the EE's values on a 32-bit host (checked
+ * below) and pointer-wide headers on a 64-bit one (docs/port/LAYOUT.md):
+ *   NODE_SIZE   the block header in front of every allocation (IosMemNode)
+ *   PART_SIZE   the partition record at the head of a partition, rounded to
+ *               a quadword (IosMemPart)
+ *   PART_NEED   what carving a partition costs besides its size
+ *   PART_MIN    the smallest partition iosMallocInitPartition accepts
+ *   ADDR_MASK   rounds an address down to a quadword */
+#ifdef ICO_HOST
+#define NODE_SIZE ((int)sizeof(IosMemNode))
+#define NODE_QW (NODE_SIZE >> 4)
+#define PART_SIZE ((int)((sizeof(IosMemPart) + 15) & ~(__SIZE_TYPE__)15))
+#define PART_NEED (PART_SIZE + NODE_SIZE)
+#define PART_MIN (PART_SIZE + NODE_SIZE + 16)
+#define PART_AVAIL_QW (NODE_QW + 1)
+#define ADDR_MASK (~(IosMemAddr)0xF)
+
+_Static_assert(sizeof(void *) != 4 || (NODE_SIZE == 64 && PART_SIZE == 80),
+               "the EE's allocator records on 32-bit hosts");
+
+#else
+#define NODE_SIZE 64
+#define NODE_QW 4
+#define PART_SIZE 80
+#define PART_NEED 144
+#define PART_MIN 160
+#define PART_AVAIL_QW 5
+#define ADDR_MASK 0xFFFFFFF0
+#endif
 
 typedef struct IosMemTag { /* field names derived */
     char c[16];
@@ -24,16 +55,16 @@ typedef struct IosMemTag { /* field names derived */
 /* */
 static char nodeName[32]; /* derived name */
 
-inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
+inline IosMemPart *iosMallocInitPartition(IosMemAddr start, IosMemAddr end)
 {
     IosMemPart *part;
     IosMemNode *node;
-    unsigned int top;
+    IosMemAddr top;
 
-    part = (IosMemPart *)((start + 0xF) & 0xFFFFFFF0);
-    top = (end + 1) & 0xFFFFFFF0;
+    part = (IosMemPart *)((start + 0xF) & ADDR_MASK);
+    top = (end + 1) & ADDR_MASK;
 
-    if (top - (unsigned int)part < 160) {
+    if (top - (IosMemAddr)part < PART_MIN) {
         debug_StdPrintfDummy("mem:partition size too small\n");
         return 0;
     }
@@ -44,13 +75,13 @@ inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
     part->next = 0;
     part->child = 0;
 
-    part->start = (char *)(node = (IosMemNode *)((char *)part + 80));
+    part->start = (char *)(node = (IosMemNode *)((char *)part + PART_SIZE));
     part->end = (char *)top;
-    part->total = (top - (unsigned int)node) >> 4;
+    part->total = (top - (IosMemAddr)node) >> 4;
 
     part->nused = 0;
     part->top = (char *)top;
-    part->free = (top - (unsigned int)node) >> 4;
+    part->free = (top - (IosMemAddr)node) >> 4;
 
     part->head = node;
 
@@ -59,7 +90,7 @@ inline IosMemPart *iosMallocInitPartition(unsigned int start, unsigned int end)
     node->next = 0;
     node->free_prev = 0;
     node->free_next = 0;
-    node->size = part->free - 4;
+    node->size = part->free - NODE_QW;
 
     debug_StdPrintfDummy("mem:init partition 0x%08x - 0x%08x\n", part->start, part->end - 1);
     return part;
@@ -79,15 +110,15 @@ IosMemPart *iosMallocSetPartition(IosMemPart *part, int size, int align)
         debug_StdPrintfDummy("mem:illegal partition pointer\n");
         return 0;
     }
-    avail = part->free - 5;
-    need = (((size + 0xF) & 0xFFFFFFF0) + 144) >> 4;
+    avail = part->free - PART_AVAIL_QW;
+    need = (((size + 0xF) & 0xFFFFFFF0) + PART_NEED) >> 4;
     if (avail < need) {
         debug_StdPrintfDummy("mem: memory lack %dqw > parent:%dqw\n", need, avail);
         return 0;
     }
     base = (IosMemPart *)(part->top - (need << 4));
     debug_StdPrintfDummy("mem:set partition 0x%08x\n", base);
-    if (iosMallocInitPartition((unsigned int)base, (unsigned int)part->top - 1) == 0) {
+    if (iosMallocInitPartition((IosMemAddr)base, (IosMemAddr)part->top - 1) == 0) {
         debug_StdPrintfDummy("mem:fail init partition\n");
         return 0;
     }
@@ -128,7 +159,7 @@ IosMemPart *iosMallocResetPartition(IosMemPart *part)
     parent = part->parent;
     next = part->next;
     child = part->child;
-    iosMallocInitPartition((unsigned int)part, (unsigned int)part->end);
+    iosMallocInitPartition((IosMemAddr)part, (IosMemAddr)part->end);
     part->parent = parent;
     part->next = next;
     part->child = child;
@@ -236,7 +267,7 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
         mallocBusy = 0;
         return 0;
     }
-    need = (((size + 0xF) & 0xFFFFFFF0) + 64) >> 4;
+    need = (((size + 0xF) & 0xFFFFFFF0) + NODE_SIZE) >> 4;
     for (node = part->head; node != 0; node = node->free_next) {
         if (strcmp(node->tag, "<FREE AREA>____") != 0) {
             debug_StdPrintfDummy("mem:illegal free area pointer\n");
@@ -309,7 +340,7 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
             best->part = part;
             best->line = line;
             best->next = newnode;
-            best->size = need - 4;
+            best->size = need - NODE_QW;
             best->name[15] = 0;
             debug_StdPrintfDummy("cur: %8p %s\n", best, best->tag);
             debug_StdPrintfDummy("next:%8p %s\n", best->next, best->next->tag);
@@ -317,7 +348,7 @@ static void *_iosMallocDebug(IosMemPart *part, int size, const char *file, int l
             ico_heap_stats_alloc(part, part->name, (unsigned int)need << 4);
 #endif
             mallocBusy = 0;
-            return (char *)best + 64;
+            return (char *)best + NODE_SIZE;
         }
 #ifdef DEBUG
         tag = *(IosMemTag *)node;
@@ -355,7 +386,7 @@ inline void *iosMallocDebugNoAssert(IosMemPart *part, int size, const char *file
 
 void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *file, int line)
 {
-    unsigned int ptr;
+    IosMemAddr ptr;
     int ofs;
 
     if (align <= 16) {
@@ -363,7 +394,7 @@ void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *fil
     }
     align = (align + 15) / 16 * 16;
     size += align - 16;
-    ptr = (unsigned int)iosMallocDebug(part, size, file, line);
+    ptr = (IosMemAddr)iosMallocDebug(part, size, file, line);
     if (ptr % align != 0) {
         ofs = align - ptr % align;
         ptr = ptr + ofs;
@@ -374,17 +405,22 @@ void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *fil
 
 void _iosFreeWithFill(int *ptr, char *file, int line)
 {
+#ifdef ICO_HOST
+    /* the block's header's next pointer: where the block ends */
+    int *end = (int *)((IosMemNode *)((char *)ptr - NODE_SIZE))->next;
+#else
     int *end = *(int **)((char *)ptr - 0x1C);
+#endif
     FlushCache(0);
     iosFree(ptr);
     debug_StdPrintfDummy("IOSFILLFREE %s(%d) %p - %p\n", file, line, ptr, end);
     {
-        register int g = (unsigned int)ptr < (unsigned int)end;
+        register int g = (IosMemAddr)ptr < (IosMemAddr)end;
         if (g) {
             do {
                 *(unsigned int *)ptr = 0xFFFFFFFFu;
                 ptr++;
-            } while ((unsigned int)ptr < (unsigned int)end);
+            } while ((IosMemAddr)ptr < (IosMemAddr)end);
         }
     }
     FlushCache(0);
@@ -414,7 +450,7 @@ void *iosFree(void *ptr)
         *((char *)ptr - 16) = 0;
         next = (IosMemNode *)((char *)prev - (n - 16));
     }
-    node = (IosMemNode *)((char *)next - 64);
+    node = (IosMemNode *)((char *)next - NODE_SIZE);
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
@@ -423,7 +459,7 @@ void *iosFree(void *ptr)
         return 0;
     }
 #ifdef ICO_HEAP_STATS
-    ico_heap_stats_free(node->part, (unsigned int)(node->size + 4) << 4);
+    ico_heap_stats_free(node->part, (unsigned int)(node->size + NODE_QW) << 4);
 #endif
     next = node->next;
     prev = node->prev;
@@ -457,7 +493,7 @@ void *iosFree(void *ptr)
                         }
                     }
                     {
-                        int t = prev->size + 4;
+                        int t = prev->size + NODE_QW;
                         t += next->size;
                         prev->next = next->next;
                         prev->size = t;
@@ -479,7 +515,7 @@ void *iosFree(void *ptr)
             }
             {
                 int t = prev->size;
-                t += 4;
+                t += NODE_QW;
                 t += node->size;
                 prev->size = t;
             }
@@ -515,7 +551,7 @@ void *iosFree(void *ptr)
     node->free_next = next->free_next;
     {
         int t = node->size;
-        t += 4;
+        t += NODE_QW;
         t += next->size;
         node->size = t;
     }
@@ -597,9 +633,17 @@ void iosMallocCheckLeak(IosMemPart *part)
     }
 }
 
+#ifdef ICO_HOST
+
+/* the partition's start pointer and a node's next pointer, by offset */
+void iosMallocCheckLeak2(__INTPTR_TYPE__ part, int offset)
+{
+    char *node = *(char **)(part + offset + __builtin_offsetof(IosMemPart, start));
+#else
 void iosMallocCheckLeak2(int part, int offset)
 {
     char *node = *(char **)(part + offset + 0x38);
+#endif
     int i;
 
     debug_StdPrintfDummy("<<< check leak2 >>> %p\n", part);
@@ -621,7 +665,11 @@ void iosMallocCheckLeak2(int part, int offset)
             return;
         }
         for (i = 0; i < 12; i++) {}
+#ifdef ICO_HOST
+        node = *(char *volatile *)(node + __builtin_offsetof(IosMemNode, next));
+#else
         node = *(char *volatile *)(node + 0x24);
+#endif
     } while (node != 0);
 }
 
@@ -661,7 +709,7 @@ void *iosReallocDebug(void *ptr, unsigned int size)
         next = (IosMemNode *)((char *)prev - (n - 16));
         *((char *)ptr - 16) = 0;
     }
-    node = (IosMemNode *)((char *)next - 64);
+    node = (IosMemNode *)((char *)next - NODE_SIZE);
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);

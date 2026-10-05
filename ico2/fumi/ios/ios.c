@@ -88,8 +88,8 @@ void iosInitialize(void)
     iosThreadInit();
 #ifdef ICO_HOST
     /* the same range, inside the host's EE RAM arena; the partition keeps
-       the EE's size and offsets (the allocator's integer address arithmetic
-       needs the 32-bit host until Phase 2) */
+       the EE's size and offsets, and its addresses are pointer-wide
+       (IosMemAddr), so the arena may sit anywhere on a 64-bit host */
     ios_partition_root =
         iosMallocInitPartition(ico_arena_ee_addr(0x760000), ico_arena_ee_addr(0x1FEFFF0));
 #else

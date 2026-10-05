@@ -22,7 +22,7 @@ typedef struct MsgEventThread { /* field names derived */
     char stack[16384];          /* 0x0070, the thread's stack */
     char pad4070[32];
     IosMsgQueue *queue; /* 0x4090 */
-    int val;            /* 0x4094 */
+    IosMsgWord val;     /* 0x4094 */
     int intc;           /* 0x4098 */
 } MsgEventThread;       /* derived name */
 
@@ -43,7 +43,7 @@ static void deq_mes_th(IosMsgQueue *self)
     }
 }
 
-void iosMsgQueueCreate(IosMsgQueue *q, int *buf, int size)
+void iosMsgQueueCreate(IosMsgQueue *q, IosMsgWord *buf, int size)
 {
     q->buf = buf;
     q->rd = 0;
@@ -76,7 +76,7 @@ void iosMsgQueueDestroy(IosMsgQueue *q)
 }
 
 /* a message send, which iosMsgSend and send_signal_message inline */
-static inline int msgSend(IosMsgQueue *q, int val, int mode) /* derived name */
+static inline int msgSend(IosMsgQueue *q, IosMsgWord val, int mode) /* derived name */
 {
     struct SemaParam st;
 
@@ -115,7 +115,7 @@ static void send_signal_message(void)
     }
 }
 
-void iosMsgSetEvent(int intc, IosMsgQueue *q, int val)
+void iosMsgSetEvent(int intc, IosMsgQueue *q, IosMsgWord val)
 {
     MsgEventThread *th;
     int ret;
@@ -123,7 +123,15 @@ void iosMsgSetEvent(int intc, IosMsgQueue *q, int val)
     if (q == 0) {
         debug_StdPrintfDummy("evt:null message queue\n");
     }
+#ifdef ICO_HOST
+    /* the EE's 16576 bytes, or the record's size where a 64-bit host's
+       IOSThread makes it larger */
+    th = iosMallocDebug(ios_partition_event,
+                        sizeof(MsgEventThread) > 16576 ? (int)sizeof(MsgEventThread) : 16576,
+                        "ios/message.c", 453);
+#else
     th = iosMallocDebug(ios_partition_event, 16576, "ios/message.c", 453);
+#endif
     iosThreadCreate(&th->th, 4, send_signal_message, th, th->stack, 16384, 11);
     th->queue = q;
     th->val = val;
@@ -153,12 +161,12 @@ void iosMsgInit(void)
     }
 }
 
-int iosMsgSend(IosMsgQueue *q, int val, int mode)
+int iosMsgSend(IosMsgQueue *q, IosMsgWord val, int mode)
 {
     return msgSend(q, val, mode);
 }
 
-int iosMsgRecv(IosMsgQueue *q, int *out, int mode)
+int iosMsgRecv(IosMsgQueue *q, IosMsgWord *out, int mode)
 {
     struct SemaParam st;
     if (q == 0) {

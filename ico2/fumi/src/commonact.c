@@ -2877,7 +2877,11 @@ typedef struct { /* field names derived */
     } moveFlags; /* 0x298 */
 } LadderWork;    /* derived name */
 
+#ifdef ICO_HOST
+#define LADW ((LadderWork *)GOBJ_ACT(self)->enemy) /* Act + 0x680 */
+#else
 #define LADW ((LadderWork *)*(int *)(self->act + 0x680)) /* derived name */
+#endif
 
 void actCommonLadder(GObj *volatile self)
 {
