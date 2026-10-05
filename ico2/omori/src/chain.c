@@ -720,6 +720,15 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
         sceVu0FVECTOR p0 = {0.0f, 0.0f, -25.0f, 1.0f};
         sceVu0FVECTOR p1 = {0.0f, 0.0f, 25.0f, 1.0f};
         ClipWork w;
+#ifdef ICO_HOST
+        /* PC port (X2, DIVERGENCES.md F15): the original sets only the two
+           points, so _Clip reads the radius and the skip filter from
+           whatever the stack holds, and the wall it picks (climb.wall,
+           wallOrient: the climb-off's wall plane) followed the host's
+           garbage. The host starts from radius 0 and no filter: the wall
+           the segment crosses behind the chain. */
+        memset(&w, 0, sizeof(w));
+#endif
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(req->pos[0], req->pos[1] + 10.0f, req->pos[2]);
         MatrixDrive_RotMatrixY((short)(req->wallDir * 32768.0f / 3.1415927f));
