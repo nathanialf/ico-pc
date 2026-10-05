@@ -1,6 +1,6 @@
-# Python packages the build and its tools use, installed into .venv by
-# tools/setup.sh.
-pyelftools          # tools/gen_data_c.py, tools/extract_elf.py
+# Python packages the port's tools use, installed into .venv by
+# tools/setup.sh (and by CI).
+pyelftools          # tools/gen_data_c.py (imported by gen_data_desc.py), tools/extract_elf.py
 pycdlib             # tools/extract_elf.py reads the disc's ISO9660 filesystem
-ninja               # .venv/bin/ninja runs build.ninja (the hooks call it there)
+ninja               # .venv/bin/ninja: the CMake presets' generator (CMakePresets.json puts .venv/bin on PATH)
 clang-format>=19    # tools/format.sh

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install the IP-safety scan and the format check as a git pre-commit hook
-# (opt-in). Re-run any time the hook body changes.
+# Install the IP-safety scan, the format check and the generated-file
+# freshness checks as a git pre-commit hook (opt-in). Re-run any time the hook body changes.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # In a linked worktree `$ROOT/.git` is a FILE pointing at the main repo, and
@@ -20,6 +20,11 @@ cat > "$HOOK" <<'EOF'
 # Auto-installed by tools/install_hooks.sh. Runs, in order:
 #   1. tools/check_no_rom.sh        IP-safety scan of the staged files
 #   2. tools/format.sh --check      staged C must be clang-formatted
+#   3. freshness of the generated files (the same three CI runs):
+#        tools/gen_data_desc.py --check       port/data/gen/
+#        tools/gen_layout_asserts.py --check  the 64-bit layout asserts
+#        tools/gen_sources.py --check         cmake/IcoSources.cmake
+#      Regenerate with the same script without --check.
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -32,6 +37,16 @@ if [[ -n "$STAGED_C" ]]; then
     # shellcheck disable=SC2086
     "$ROOT/tools/format.sh" --check $STAGED_C
 fi
+
+# The generators need pyelftools (tools/requirements.txt): the venv's python.
+PY="$ROOT/.venv/bin/python"
+[[ -x "$PY" ]] || PY=python3
+for gen in gen_data_desc gen_layout_asserts gen_sources; do
+    "$PY" "$ROOT/tools/$gen.py" --check || {
+        echo "pre-commit: tools/$gen.py --check failed: run tools/$gen.py and stage its output" >&2
+        exit 1
+    }
+done
 EOF
 chmod +x "$HOOK"
 echo "Installed pre-commit hook at $HOOK"

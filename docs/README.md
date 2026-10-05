@@ -4,7 +4,7 @@ An index of this directory: what each file is for.
 
 | file | what it is |
 | --- | --- |
-| [`BUILDING.md`](BUILDING.md) | the full build: host packages, what `./build.sh`, `tools/setup.sh` and each build step do, the hooks, running the ELF in a PS2 emulator |
+| [`BUILDING.md`](BUILDING.md) | the host build: quickstart, presets and options, the hooks, CI, packages, and the maintainers' appendix on the optional EE identity check |
 | [`LEGAL.md`](LEGAL.md) | what the repository may and may not contain, why the data tables are generated from the user's ELF at build time, and which references were used. Read it before contributing |
 | [`HEADERS.md`](HEADERS.md) | which headers the disc attests, the code includes, where the other declarations live, and the derived-name tokens |
 
@@ -15,6 +15,9 @@ An index of this directory: what each file is for.
 | file | what it is |
 | --- | --- |
 | [`port/DIVERGENCES.md`](port/DIVERGENCES.md) | divergences from the PS2 original |
+| [`port/BUILD_STATUS.md`](port/BUILD_STATUS.md) | what the host build compiles per preset, and what links |
+| [`port/TESTING.md`](port/TESTING.md) | test checkpoints, `ico-pc.ini` / `config.toml` keys, `tools/package_win.sh`, `tools/package_linux.sh`, CI |
+| [`port/STEAMDECK.md`](port/STEAMDECK.md) | the Linux package and running it on a Steam Deck: where the archive, config and saves live |
 
 `docs/research/` holds research notes done for the port; other files may be added.
 

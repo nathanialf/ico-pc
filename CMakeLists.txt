@@ -1,6 +1,6 @@
-# The PC port's host build. The PS2 build is ./build.sh (build.ninja); this
-# one compiles the game for Linux and Windows hosts. Presets are in
-# CMakePresets.json; docs/BUILDING.md ("Host build") describes them.
+# The PC port's host build: compiles the game for Linux and Windows hosts. Presets
+# are in CMakePresets.json; docs/BUILDING.md describes them. (The PS2 ELF build
+# is gone; tools/ee_identity.sh keeps the period compiler as a developer check.)
 cmake_minimum_required(VERSION 3.25)
 project(ico_pc LANGUAGES C)
 
@@ -142,7 +142,6 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/tables.c" TARGET_DIRE
                             PROPERTIES COMPILE_OPTIONS "${ICO_PORT_WARNINGS}")
 list(APPEND ICO_GAME_OBJECT_LIBS ico_data)
 
-add_subdirectory(port/fmv)
 # --- The platform layer -----------------------------------------------------
 add_library(ico_platform STATIC
     port/platform/assert_host.c
@@ -224,6 +223,7 @@ add_subdirectory(port/audio)
 add_subdirectory(port/input)
 add_subdirectory(port/config)
 add_subdirectory(port/save)
+add_subdirectory(port/fmv)
 
 # --- The window build: ico_pc on port/render (renderer wave 2) ---------------
 if(TARGET ico_pc AND NOT ICO_HEADLESS)

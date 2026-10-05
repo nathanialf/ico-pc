@@ -29,7 +29,7 @@
  *                            the ISO as before
  *   disc image               Ico_PAL.iso beside the executable, else ini
  *                            iso=, else $ICO_ISO, else baserom/Ico_PAL.iso
- *                            under the working folder, else (Windows) a
+ *                            under the working folder, else a (Windows: native; Linux window build: SDL3)
  *                            file-open dialog whose answer is saved as iso=
  *                            in ico-pc.ini. With use_iso its SHA-1 is
  *                            checked against the SCES-50760 image's (ini
@@ -256,6 +256,64 @@ static void timestamp(char *out, size_t size, const char *fmt)
     }
 }
 
+#if !defined(ICO_HEADLESS) && !defined(_WIN32)
+
+/* Linux window build: SDL3's file dialog (xdg-desktop-portal, else zenity or
+   kdialog), since host_config.c's native dialog is Windows only. Returns 0
+   with the path in out, -1 when cancelled or unavailable. */
+typedef struct PickState {
+    char path[ICO_PATH_MAX];
+    int done;
+    int ok;
+} PickState;
+
+static void SDLCALL pick_done(void *user, const char *const *files, int filter)
+{
+    PickState *st = user;
+
+    (void)filter;
+    if (files != NULL && files[0] != NULL) {
+        snprintf(st->path, sizeof(st->path), "%s", files[0]);
+        st->ok = 1;
+    }
+    st->done = 1;
+}
+
+static int pick_iso_sdl(char *out, size_t size)
+{
+    static const SDL_DialogFileFilter filters[] = {
+        {"ICO disc image (*.iso)", "iso"},
+        {"All files", "*"},
+    };
+    PickState st;
+    SDL_Event ev;
+    int started = 0;
+
+    memset(&st, 0, sizeof(st));
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        fprintf(stderr, "ico_pc: no file dialog: %s\n", SDL_GetError());
+        return -1;
+    }
+    SDL_ShowOpenFileDialog(pick_done, &st, NULL, filters, 2, NULL, false);
+    started = 1;
+    while (started && !st.done) {
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_EVENT_QUIT) {
+                st.done = 1;
+            }
+        }
+        SDL_Delay(20);
+    }
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    if (!st.ok) {
+        return -1;
+    }
+    snprintf(out, size, "%s", st.path);
+    return 0;
+}
+
+#endif
+
 /* Finds the disc image; fatal when there is none. *picked is set when it
    came from the dialog (to be saved once verified). */
 static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
@@ -290,7 +348,11 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
         return;
     }
+#if !defined(ICO_HEADLESS) && !defined(_WIN32)
+    if (pick_iso_sdl(iso, ICO_PATH_MAX) == 0) {
+#else
     if (ico_host_pick_iso(iso, ICO_PATH_MAX) == 0) {
+#endif
         fprintf(stderr, "ico_pc: disc image chosen in the dialog: %s\n", iso);
         *picked = 1;
         return;

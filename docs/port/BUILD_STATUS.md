@@ -1,7 +1,11 @@
 # Host build status
 
-What the host build (`CMakeLists.txt`, `docs/BUILDING.md` "Host build")
-compiles, per preset, and why the rest does not. Measured 2026-10-05 on the
+What the host build (`CMakeLists.txt`, `docs/BUILDING.md`) compiles, per
+preset, and why the rest does not. The host build is the repository's only
+build: the PS2 ELF build (`./build.sh`, `gen_ninja.py`, the period linker) was
+removed in package 5C; the period compiler survives as the optional
+`tools/ee_identity.sh` (`docs/BUILDING.md`, "Maintainers: EE identity check").
+`sce/` and `ico2/vusrc/` are in no host target. Measured 2026-10-05 on the
 working tree with package 0B's front-end fixes in progress; rerun
 `cmake --preset <p> -DICO_BUILD_BLOCKED=ON` and build with `-k 0` to
 recheck, and delete entries from `cmake/IcoExclusions.cmake` as they compile.
@@ -127,6 +131,18 @@ unresolved symbol:
 | `win-x64` | links | the user's test build: GUI subsystem (`-mwindows`), `-static`, imports only system DLLs |
 | `linux-x64-clang` | links | clang compiles every game source |
 | `asan` | builds | unit tests pass except another package's `rhi_vk` (a LeakSanitizer report inside llvmpipe) |
+
+Package 5C (2026-10-05), a clean worktree of HEAD with no `baserom/`, each
+preset configured with `-DICO_LINK_EXE=ON`: `linux-x64` headless,
+`linux-x64` window (`-DICO_HEADLESS=OFF`), `linux-x64-clang` and `win-x64`
+(window build, with `SDL3.dll`) all configure, build and link `ico_pc`
+(`tools/package_linux.sh` builds the `linux-x64` window build as the Linux
+package; CI builds all four, `docs/BUILDING.md`, "Continuous integration").
+`ctest` on `linux-x64` headless passes 44 of 44 with 2 skipped (the disc
+tests) on a host with a Vulkan device, and with `VK_ICD_FILENAMES=/nonexistent`
+15 skipped (the 2 disc tests and 13 Vulkan ones) and exit status 0; the window
+and clang builds exit 0 with no device. A skipped test (exit 77,
+`SKIP_RETURN_CODE`) is a pass for ctest.
 
 The game links against `ico_game` (212 game objects and the 73 tables),
 `ico_platform`, `ico_math`, `ico_port_data`, `ico_port_null` and the

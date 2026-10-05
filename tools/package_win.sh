@@ -5,7 +5,8 @@
 # build-host/pkg-wt, win-x64 with the window build and
 # -DICO_LINK_EXE=ON, staged under dist/stage/x64/ and zipped as
 # dist/ico-pc-<label>-win.zip (root dir ico-pc-<label>/). Quiet; the log is
-# build-host/pkg-<label>.log. Safe to re-run. See docs/port/TESTING.md.
+# build-host/pkg-<label>.log. Safe to re-run. Needs no baserom (the binary holds
+# no disc data). ICO_PKG_FILES="path ..." overlays working-tree files on HEAD. See docs/port/TESTING.md.
 set -euo pipefail
 
 label="${1:-}"
@@ -40,9 +41,11 @@ cleanup
 run git worktree add --detach "$wt" "$commit"
 ln -s "$root/.venv" "$wt/.venv"
 ln -s "$root/tools/toolchain" "$wt/tools/toolchain"
-ln -s "$root/baserom" "$wt/baserom"
-mkdir -p "$wt/build"
-ln -s "$root/build/data" "$wt/build/data"
+for f in ${ICO_PKG_FILES:-}; do   # working-tree files to try over HEAD (see package_linux.sh)
+    [[ -f "$root/$f" ]] || fail "ICO_PKG_FILES: no such file $f"
+    mkdir -p "$(dirname "$wt/$f")"
+    cp "$root/$f" "$wt/$f"
+done
 
 # keep the user's existing iso= line
 declare -A iso
@@ -59,7 +62,7 @@ cd "$wt"
 declare -A preset=([x64]=win-x64)
 for a in x64; do
     p="${preset[$a]}"
-    run cmake --preset "$p" -DICO_LINK_EXE=ON "-DICO_DATA_DIR=$wt/build/data"
+    run cmake --preset "$p" -DICO_LINK_EXE=ON
     run cmake --build "build-host/$p"
     for f in ico_pc.exe ico_pc.map SDL3.dll; do
         [[ -f "build-host/$p/$f" ]] || fail "$p did not produce $f"
@@ -183,7 +186,8 @@ TESTMD
 rm -f "$zip"
 pkgroot="$root/build-host/tmp/zip-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot"
-cp -a "$stage" "$pkgroot/ico-pc-$label"
+mkdir -p "$pkgroot/ico-pc-$label"
+cp -a "$stage/x64" "$stage/TEST.md" "$pkgroot/ico-pc-$label/"   # not linux/ or a retired x86/
 rm -rf "$pkgroot"/ico-pc-"$label"/*/logs
 "$root/.venv/bin/python" - "$pkgroot" "ico-pc-$label" "$zip" >>"$log" 2>&1 <<'PY' || fail "zip"
 import os, sys, zipfile

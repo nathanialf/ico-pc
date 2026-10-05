@@ -243,11 +243,14 @@ One command builds and zips the Windows test package for the current HEAD
 (`tools/package_win.sh wave2b`). It:
 
 1. Makes a clean detached worktree of HEAD at `build-host/pkg-wt` (so other
-   packages' uncommitted work is not built) and symlinks `.venv`,
-   `tools/toolchain`, `baserom` and `build/data` into it.
+   packages' uncommitted work is not built) and symlinks `.venv` and
+   `tools/toolchain` into it. `ICO_PKG_FILES="path ..."` copies those
+   working-tree files over HEAD first, to try a change before it is
+   committed.
 2. Sets `TMPDIR=build-host/tmp` (the system `/tmp` is nearly full), then
    configures and builds `win-x64` with
-   `-DICO_LINK_EXE=ON` and `-DICO_DATA_DIR` pointing at `build/data`. The
+   `-DICO_LINK_EXE=ON` (no `baserom` is needed: the binary holds no disc
+   data). The
    window build is the preset default. Any failure stops the script with
    the log tail and a non-zero exit.
 3. Stages `dist/stage/x64/` with `ico_pc_x64.exe`,
@@ -262,3 +265,24 @@ One command builds and zips the Windows test package for the current HEAD
 The script is quiet and can be re-run; the full output goes to
 `build-host/pkg-<label>.log`. The `TEST.md` text lives in the script. It
 does not run the game.
+
+## Linux package: `tools/package_linux.sh <label>`
+
+`tools/package_linux.sh <label>` does the same for Linux: a clean worktree of
+HEAD at `build-host/pkg-linux-wt`, preset `linux-x64` with
+`-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` (target `ico_pc` only), then it checks
+the binary's dynamic dependencies (`libSDL3.so.0`, libc, libm; run path
+`$ORIGIN`), stages `dist/stage/linux/` (`ico_pc`, `libSDL3.so.0`,
+`ico-pc.ini`, `ico_pc.map`, `README.txt`, `LICENSE`, `THIRD_PARTY.md`; an
+`iso=` line already in the staged ini is kept) and writes
+`dist/ico-pc-<label>-linux.tar.gz` (root `ico-pc-<label>/`, owner root).
+The log is `build-host/pkg-linux-<label>.log`; it never runs the game.
+`ICO_PKG_FILES` works as for the Windows script. docs/port/STEAMDECK.md says
+what is in the package and how to run it.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` (docs/BUILDING.md, "Continuous integration")
+builds `linux-x64` headless and window, `linux-x64-clang` and `win-x64` and
+runs `ctest` on the Linux ones, with no disc image. Tests that need the disc
+or a Vulkan device exit 77 and are reported skipped, which passes.

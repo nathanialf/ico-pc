@@ -11,11 +11,13 @@ the C source of the [ICO decompilation](https://github.com/nathanialf/ico).
 
 ## Status
 
-Early. The tree is the decompilation as it was when this port was forked,
-and nothing runs natively yet. It still builds a PS2 ELF with the period
-toolchain, which runs in an emulator as a reference for the game's
-behaviour. The build does not require it to match the disc byte for byte:
-the game code is free to change.
+In progress. The game's C builds natively for 64-bit Linux and Windows, runs
+on a platform layer that replaces the PS2 hardware and Sony's libraries,
+draws through a Vulkan renderer, plays sound and FMVs, and reads your own disc
+image on the first run into a local archive. The renderer's remaining effects
+and its Direct3D 12 backend, and the PC features below, are still to come
+(`docs/port/` has the state of each part). The PS2 ELF build of the decompilation is not part of
+this repository any more; the decompilation keeps it.
 
 ## Goal
 
@@ -26,49 +28,44 @@ the same logic, timing and output, with improvements kept optional.
 
 ## Work ahead
 
-- [x] **Host build.** A second build (CMake or similar) that compiles
-      `ico2/` for 64-bit Linux and Windows next to the PS2 build, and
-      fixes what that exposes: 32-bit pointer and `int` assumptions,
-      MIPS/R5900-specific inline assembly and 128-bit types, alignment.
-- [ ] **Runtime libraries.** Replacements for what the game takes from
-      `sce/`: kernel and threads (libkernl), IOP RPC (sif), DMA and packets (libdma,
-      libpkt), the GS (libgraph), controllers (libpad), memory card
-      (libmc), the disc (libcdvd), video (libmpeg, libipu), sound
-      (libsndn2) and the VU0 maths (libvu0).
+- [x] **Host build.** CMake and Ninja compile `ico2/` for 64-bit Linux and
+      Windows (`docs/BUILDING.md`).
+- [x] **Runtime libraries.** Replacements for what the game takes from
+      `sce/`: kernel and threads, IOP RPC, DMA and packets, the GS, controllers,
+      memory card, the disc, video and sound (`port/`, `docs/port/`).
 - [ ] **Renderer.** The GS packets and the five VU1 microprograms in
-      `ico2/vusrc/` (cluster, mesh, normal_c, normal_l, particle) turned
-      into a modern graphics API.
-- [x] **Assets.** Read the game's files from the user's disc image at run
-      time: the first run verifies the image and extracts what the game
-      reads into a local archive, `ico.o2r`, and the data tables load from
-      its boot ELF (`docs/port/DATA.md`). Nothing from the disc is committed
-      or compiled into the program.
+      `ico2/vusrc/` turned into a modern graphics API (`docs/port/RENDER_API.md`;
+      Vulkan in progress, Direct3D 12 not started).
+- [x] **Assets.** The first run verifies your disc image and extracts what the
+      game reads into a local archive, `ico.o2r`, and the data tables load from
+      its boot ELF (`docs/port/DATA.md`). Nothing from the disc is committed or
+      compiled into the program.
 - [x] **Input, audio, saves and video playback** on the host.
+- [x] **Packaging and CI.** `tools/package_win.sh`, `tools/package_linux.sh`
+      (`docs/port/STEAMDECK.md`), and `.github/workflows/ci.yml`.
 - [ ] **PC features:** resolution, aspect ratio, frame rate and controller
       remapping, behind options that default to the original behaviour.
 
-## Building the PS2 ELF
+## Building
 
 ```sh
 git clone https://github.com/nathanialf/ico-pc.git
 cd ico-pc
-mkdir -p baserom
-cp "/path/to/Ico (Europe).iso" baserom/Ico_PAL.iso
-./build.sh
+sudo apt-get install build-essential curl xz-utils python3 python3-venv \
+    libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+    libxfixes-dev libxrender-dev libasound2-dev
+python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt
+tools/fetch_toolchain.sh
+tools/toolchain/cmake/bin/cmake --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON
+tools/toolchain/cmake/bin/cmake --build build-host/linux-x64
 ```
 
-`./build.sh` installs the period toolchain under `tools/cc/` on the first
-run, extracts the boot ELF from the disc image and builds `build/ico.elf`.
-The build reads the game's data tables from the extracted ELF, so it
-accepts only the PAL retail disc (SHA-1s below). The host
-needs a 64-bit Linux with 32-bit libraries, a host gcc,
-`mips-linux-gnu-objcopy` and network access for the first run.
-[`docs/BUILDING.md`](docs/BUILDING.md) lists the packages and each step.
-
-| file | SHA-1 |
-| --- | --- |
-| `baserom/pal/baseelf.elf` (the disc's `SCES_507.60`) | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` |
-| `baserom/pal/baseelf.rom` (`objcopy -O binary`) | `a401d1e5a20b1659189a8b1026a8eb35811dc9ca` |
+The build needs no disc image. Run `build-host/linux-x64/ico_pc`: the first
+run asks for your own image of the PAL disc (SCES-50760, a plain `.iso`),
+checks it and extracts the game's data once; no options are needed.
+[`docs/BUILDING.md`](docs/BUILDING.md) has the presets, the tests, CI and the
+optional PS2-compiler identity check (`tools/ee_identity.sh`);
+[`docs/port/STEAMDECK.md`](docs/port/STEAMDECK.md) covers the Linux package.
 
 ## Layout
 
@@ -77,12 +74,16 @@ ico2/          the game: one directory per subsystem, each with src/ and
                include/ (common, fumi, ito, omori, script, seki, sugipon)
 ico2/vusrc/    the five VU1 microprograms and their shared includes
 sce/           Sony's runtime libraries, newlib libc and libm, libgcc and
-               crt0.s, as the game linked them
-config/        link order, linker script, data-member lists, SHA-1s
-tools/         setup, extraction and build scripts (tools/README.md)
+               crt0.s, as the game linked them: the EE identity check's
+               reference, not part of any host target
+port/          the platform layer, renderer, audio, input and the rest of the port
+cmake/         the host build's toolchain files and source lists
+config/        source list (link order), data-member lists, SHA-1s
+tools/         toolchain fetch, packaging, generators and checks (tools/README.md)
 docs/          documentation (docs/README.md)
-baserom/       local only, gitignored: your disc image and extracted ELF
-build/         local only, gitignored: build output
+baserom/       local only, gitignored: your disc image (and, for maintainers,
+               its extracted boot ELF)
+build-host/    local only, gitignored: build output
 ```
 
 ## Syncing with the decompilation

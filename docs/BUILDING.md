@@ -1,193 +1,32 @@
 # Building
 
-The long form of the README's quickstart: what the host needs, what each step
-does, and how the hooks use the build.
+How to build, test and package the PC port. The build is CMake with Ninja
+and compiles the game's C under `ico2/` for the host, with `port/` standing
+in for Sony's libraries. The PS2 ELF build of the decompilation (`./build.sh`,
+`tools/build.sh`, `tools/gen_ninja.py` and the period linker) is gone from
+this repository; what is left of the period toolchain is an optional
+developer check, in the appendix at the end.
 
-## Host
-
-A 64-bit Linux host. The period compilers are 32-bit i386 binaries, and
-`tools/period_env.sh` builds a 32-bit preload library with `gcc -m32`, so the
-host needs 32-bit libraries and multilib gcc. On Debian or Ubuntu:
-
-```sh
-sudo dpkg --add-architecture i386
-sudo apt-get update
-sudo apt-get install git curl xz-utils make patch gcc gcc-multilib \
-    python3 python3-venv libc6:i386 libstdc++6:i386 zlib1g:i386 \
-    binutils-mips-linux-gnu
-```
-
-`binutils-mips-linux-gnu` provides `mips-linux-gnu-objcopy`, which writes the
-ROM views (`tools/extract_elf.py`, `tools/compile_c.sh`, the ninja `rom`
-rule). Other distributions need the equivalent packages. The first run needs
-network access to fetch the tools listed below.
-
-You also need your own image of the PAL disc, SCES-50760, as a plain ISO. The
-build accepts exactly one revision:
-
-| file | SHA-1 (`config/sha1sums.txt`) |
-| --- | --- |
-| `baserom/pal/baseelf.elf`, the disc's `SCES_507.60` | `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` |
-| `baserom/pal/baseelf.rom`, its `objcopy -O binary --gap-fill=0x00` view | `a401d1e5a20b1659189a8b1026a8eb35811dc9ca` |
-
-## One command
+## Quickstart (Debian 13, Ubuntu 24.04)
 
 ```sh
-mkdir -p baserom
-cp "/path/to/Ico (Europe).iso" baserom/Ico_PAL.iso
-./build.sh
+sudo apt-get install build-essential curl xz-utils python3 python3-venv \
+    libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+    libxfixes-dev libxrender-dev libasound2-dev
+python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt
+tools/fetch_toolchain.sh          # about 1.6 GB under tools/toolchain/, no root
+CMAKE=tools/toolchain/cmake/bin
+$CMAKE/cmake --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON
+$CMAKE/cmake --build build-host/linux-x64
+$CMAKE/ctest --test-dir build-host/linux-x64
 ```
 
-`./build.sh` runs the steps below that are not already done, in order, and
-stops with a non-zero exit at the first failure. On a four-core host with
-the toolchain already installed and `baserom/pal/` already extracted,
-`rm -rf build build.ninja && tools/build.sh setup && .venv/bin/ninja` took
-22 s and 39 s in two runs; a fresh clone, with the toolchain downloads of
-section 1, took 92 s on the same host (both measured on the decompilation
-before the fork). A second `./build.sh` on the built tree rebuilds nothing
-(`ninja: no work to do.`). The sections
-below describe each step; each can also be run on its own.
-
-## 1. Host setup: `tools/setup.sh`
-
-`./build.sh` runs it when the venv, ninja or any of the four tools under
-`tools/cc/` is missing. It is idempotent: a second run finds each tool and
-skips it.
-
-1. Creates `.venv/` and installs `tools/requirements.txt`: pyelftools (ELF
-   reading), pycdlib (the ISO reader), ninja and clang-format.
-2. Fetches **ee-gcc 2.9-991111-01** into `tools/cc/ee-gcc2.9-991111/` from
-   the `decompme/compilers` releases. Its bundled `as` (ee-as 2.9-991111)
-   assembles the game, libc, libm and libgcc. It also fetches **ee-gcc 2.96**
-   into `tools/cc/ee-gcc2.96/` for its bundled SCE assembler
-   (2.10-ee-001003-1), which assembles Sony's SDK archives; that compiler is
-   never run. The script warns when a compiler is present but does not run
-   (missing 32-bit libraries).
-3. Checks for `mips-linux-gnu-objcopy`.
-4. Builds the linker and the VU assembler from public GPL source (next
-   section). On a four-core host the dvp-as source fetch takes about 20 s,
-   the dvp-as build about 30 s and ld 2.10 about 17 s (`tools/setup.sh`
-   comments).
-5. Installs the git hook (`tools/install_hooks.sh`, below).
-
-`SKIP_TOOLCHAIN=1` skips steps 2 to 4.
-
-### The linker and the DVP assembler
-
-| tool | source | licence | built as |
-| --- | --- | --- | --- |
-| `tools/cc/binutils-2.10-ee/bin/ld` | GNU binutils 2.10, `https://ftp.gnu.org/gnu/binutils/binutils-2.10.tar.gz` (sha256 pinned in `tools/setup.sh`), with `tools/binutils-2.10-ee.patch` and `tools/binutils-2.10-dvp-ld.patch` | GPL-2.0-or-later | `--target=mipsel-elf`, `make all-ld` |
-| `tools/cc/dvp-as/bin/dvp-as` | ps2dev `binutils-gdb`, branch `dvp-v2.45.1`, commit `3eb45ea37f0efd498d1de3cf9562de07197aefa8` (`https://github.com/ps2dev/binutils-gdb`) | GPL-3.0-or-later | `--target=dvp`, `make all-gas` |
-
-The first patch backports, from ps2dev's `binutils-2.14-PS2.patch`
-(`github.com/ps2dev/ps2toolchain` commit `aa984e7`), the R5900 machine (so
-the inputs' `e_flags` mach bits 0x00920000 survive the link) and the DVP
-overlay section types (`.DVP.ovlytab` with its `sh_link`, `.DVP.ovlystrtab`,
-`.DVP.overlay.*`). The second is the linker side of the overlays: dvp-as
-fills `.DVP.ovlytab` itself with relocations, and the Cygnus linker in the GPL
-ee-gcc 2.9-991111 combined tree (`ld/emultempl/elf32.em` `place_orphan`,
-published as `github.com/polybiusproxy/parappa2_gcc` commit `620426a`) gives
-every `.DVP.overlay.*` orphan its own output section at address 0, as the
-retail ELF has them. Target `mipsel-elf` writes `elf32-littlemips`, the output
-format MAIN.MAP names.
-
-Neither build needs bison, flex or makeinfo. The 2.10 tarball ships its
-generated parsers, but its configure stops when it finds no lex or yacc, so
-the script answers that probe with cache variables and make never regenerates
-the shipped files. The dvp target's gas has no generated parser, and
-`MAKEINFO=true` skips the manuals. The 2.10 tree's `config.sub` and
-`config.guess` predate x86_64 hosts; the dvp clone's copies replace them. The
-2.10 sources need `gcc -std=gnu89 -fcommon`. Each tool has a stamp keyed on
-its commit, or on the tarball and patch hashes, and is rebuilt when that
-changes.
-
-## 2. The base ELF: `tools/extract_elf.sh`
-
-`./build.sh` runs it when `baserom/pal/baseelf.elf` is missing, and says so
-plainly when `baserom/Ico_PAL.iso` is missing too. The script reads the
-disc's ISO9660 filesystem with pycdlib (`tools/extract_elf.py`), extracts the
-boot file named by `SYSTEM.CNF`'s `BOOT2` line, and writes
-`baserom/pal/baseelf.elf` and its `objcopy -O binary` view
-`baserom/pal/baseelf.rom`. It checks both SHA-1s against
-`config/sha1sums.txt` and stops on a mismatch. It also copies the disc's
-`MAIN.MAP`, `SRCFILE.TXT`, `TRFILE.TXT` and `SYSTEM.CNF` into `baserom/pal/`
-as reference material (`docs/LEGAL.md`). Everything under `baserom/` is
-gitignored.
-
-## 3. `tools/build.sh setup`
-
-`./build.sh` runs it when `build.ninja` is missing, and otherwise runs
-`tools/build.sh verify`, which only checks the two SHA-1s; `build.ninja`
-rewrites itself when `tools/gen_ninja.py` or one of its inputs changes.
-
-`setup` deletes `build/` and ninja's state, verifies the SHA-1s of the base
-ELF and ROM (`tools/verify_elf.py`), and writes `build.ninja` with
-`tools/gen_ninja.py` from these inputs:
-
-- `config/link_order.pal.txt`: every object of the link in the retail link's
-  order, one source per line, with the data-only members as `data:` lines.
-  `tools/gen_ninja.py` fails if a tracked `.c`, `.s`, `.S` or `.dsm` under
-  `ico2/` or `sce/` is missing from it.
-- `config/link.pal.ld`: the hand-written linker script, which places each
-  section at the base ELF's addresses and defines the symbols the link needs.
-- `config/data_members.pal.txt`: the data-only members (member, section,
-  address range, MAIN.MAP's names at their offsets).
-- `config/data_schema.pal.txt`: the data-only members written as C (member,
-  section, element type, the game header that defines it, element count,
-  MAIN.MAP's names).
-
-`tools/build.sh` also has `verify` (the SHA-1s only), `regen` (rewrite
-`build.ninja` only), `clean` (delete `build/`), `distclean` (also
-`build.ninja` and ninja's state).
-
-## 4. `ninja`
-
-`.venv/bin/ninja`, or any ninja on the PATH. `build.ninja` does the following
-(`tools/gen_ninja.py`):
-
-- compiles every C source under `ico2/` and `sce/` with `tools/compile_c.sh`:
-  ee-gcc 2.9-991111 with the flags of the source's origin (the game
-  `-g -G 8 -fno-common`; Sony's archives `-G 0`; libc, libm and libgcc
-  `-G 0 -fno-builtin`), then the assembler of its archive. Both run through
-  `tools/period_env.sh`, which preloads `tools/period_obstack.c` to restore
-  the obstack chunk size of the machine that built the game; ee-as's R5900
-  short-loop padding depends on it;
-- assembles each hand-written `.s` (`sce/crt0.s`, `sce/libkernl/klib.s`,
-  `sce/libkernl/tlbtrap.s` and the R5900 string functions under
-  `sce/libc/machine/r5900/`) with its archive's assembler and `-G`;
-- assembles the five VU1 microprograms: the period cpp reads each program's
-  text, `ico2/vusrc/<stem>.vsm`, from standard input in `ico2/` with
-  `-Ivusrc` (it includes `vusrc/vu1_common.h` and, in normal_c and normal_l,
-  `vusrc/scissorcommcut.h`) and writes `build/ico2/vusrc/<stem>.i`; dvp-as,
-  run from `ico2/` with `-I../build/ico2`, assembles `vusrc/<stem>.dsm`, the
-  DMA tags around `.include "vusrc/<stem>.i"`. The overlay section names
-  dvp-as writes hash the name of the file it is reading and the line: the
-  `.dsm` path for the first overlay of each program, the empty name cpp gives
-  standard input and the include's path for the others;
-- writes the data-only members from the base ELF into `build/data/`. Each
-  of the 73, all listed in `config/data_schema.pal.txt`, is written as C by
-  `tools/gen_data_c.py`: an initialized array of its record type per section,
-  with every pointer named after the symbol at its address, floats as the
-  shortest decimal that reads back to the same bits and names as string
-  literals; a member's own string pool (staffroll_dat's) is written as the
-  literals its pointers name, and the compiler lays it out; a count the
-  schema marks `count-of=` (staffroll_dat's line count) is written as
-  `sizeof` over the table, not read from the ELF. The addresses
-  come from a first link, `build/ico.layout.elf`, in which a zero stand-in of
-  the member's size takes its place. The C compiles with the game's flags
-  like any `ico2/` source, each section of the object is checked against the
-  member's ROM range with its relocations applied, and a label a source
-  spells inside the member (`D_<VMA>`) is bound to the member's symbol plus
-  its offset by `build/data/<member>.alias.ld`;
-- links with ld 2.10 and `config/link.pal.ld`, once to `build/ico.syms.elf`
-  (symbols kept, with the map `build/ico.pal.map`) and once stripped to
-  `build/ico.elf`, as the base is.
-
-Nothing checks `build/ico.elf` against the disc's ELF: this repository does
-not require a byte-identical build. ninja does not
-track header or `.c.inc` dependencies (the VU includes under `ico2/vusrc/`
-are listed on the cpp step): after editing one, run
-`tools/build.sh clean` before `ninja`.
+`tools/setup.sh` does the venv step and installs the git hooks (below); it
+also fetches the period compilers unless `SKIP_TOOLCHAIN=1`, which only the
+appendix needs. The build needs no disc image and no `baserom/`: the binary
+holds no disc data. The game reads your PAL disc image (SCES-50760) at run
+time: the first run extracts it into `ico.o2r` (docs/port/DATA.md), and the
+data tables load from that archive (docs/port/DATA.md, "The data tables").
 
 ## EUC-JP sources
 
@@ -200,28 +39,62 @@ ASCII patch and `git apply`.
 
 ## Hooks
 
-`tools/install_hooks.sh` (run by `tools/setup.sh`) installs a pre-commit
-hook that runs `tools/check_no_rom.sh` (refuses disc images, executables,
-extracted assets and large binaries) and `tools/format.sh --check` on the
-staged C.
+`tools/install_hooks.sh` (run by `tools/setup.sh`) installs a pre-commit hook
+that runs, in order:
+
+1. `tools/check_no_rom.sh`: refuses disc images, executables, extracted
+   assets and large binaries;
+2. `tools/format.sh --check` on the staged C;
+3. the three freshness checks CI also runs: `tools/gen_data_desc.py
+   --check` (`port/data/gen/`), `tools/gen_layout_asserts.py --check`
+   (`port/test/layout_asserts.c`) and `tools/gen_sources.py --check`
+   (`cmake/IcoSources.cmake`). Each needs pyelftools, so the hook uses
+   `.venv/bin/python`. Regenerate with the same script without `--check`.
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
 then `tools/format_layout.py`'s top-level blank-line layout.
 
-## Running the rebuilt ELF (optional)
+## Continuous integration
 
-Any PS2 emulator can run `build/ico.elf` as a sanity check, with
-`baserom/Ico_PAL.iso` as the disc for the game's data files.
+`.github/workflows/ci.yml` runs on every push and pull request, one Linux
+job (`ubuntu-24.04`), with no secrets and no disc image:
+
+| step | what |
+| --- | --- |
+| host packages, venv | gcc, the X11 and ALSA headers SDL3 builds against, `tools/requirements.txt` |
+| cache + `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh` |
+| `tools/check_no_rom.sh` | the IP scan over every tracked file |
+| `tools/format.sh --check` | clang-format over the tracked C |
+| `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
+| `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build, `ctest` |
+| `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON`, build, `ctest` |
+| `linux-x64-clang` | build, `ctest` |
+| `win-x64` | cross-compile (mingw-w64 gcc) with the window build and `ico_pc.exe`; the tests are built, not run |
+
+A test that needs the disc (`vfs_disc`, `archive_disc`) or a Vulkan device
+(the `rhi_vk*`, `rd_*`, `shaders_pixel`, `vu1` tests) exits 77 without it, and
+`SKIP_RETURN_CODE 77` makes ctest report it as skipped, which passes
+(`ctest` exits 0; checked with no `baserom/` and with
+`VK_ICD_FILENAMES=/nonexistent`). `tables_loader` and `tables_manifest` are
+not built without a base ELF. Run the same steps locally before pushing.
+
+## Packages
+
+`tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build the
+test packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
+`dist/ico-pc-<label>-linux.tar.gz`). docs/port/TESTING.md has what each
+holds; docs/port/STEAMDECK.md covers running the Linux one.
 
 ## Host build
 
-The PC port's build is CMake with Ninja (`CMakeLists.txt`,
-`CMakePresets.json`, `cmake/`). It compiles the game's C under `ico2/` for
-the host, with `port/` standing in for Sony's libraries; it never compiles
-`sce/` or `ico2/vusrc/`. It is separate from the PS2 build above and writes
-only under `build-host/<preset>/` (`tools/build.sh setup` deletes `build/`).
-Nothing runs the game yet: the build produces the `ico_game` and
-`ico_platform` libraries and the unit tests.
+`CMakeLists.txt`, `CMakePresets.json` and `cmake/` compile the game's C under
+`ico2/` for the host, with `port/` standing in for Sony's libraries. The
+build never compiles `sce/` or `ico2/vusrc/` (no CMake file names either;
+`cmake/IcoSources.cmake` lists `ico2/` sources only). Those two directories
+stay in the tree as the reference the EE identity check compiles against
+(`sce/` holds Sony's headers the game includes under the SDK names, and the
+libraries' sources; `ico2/vusrc/` the five VU1 microprograms the renderer's
+shaders were ported from). It writes only under `build-host/<preset>/`.
 [`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) lists what compiles on
 each preset and why the rest does not.
 
@@ -244,7 +117,7 @@ elsewhere. (The i386 sysroot and the i686 mingw-gcc of the retired 32-bit
 presets are no longer fetched.)
 
 The Linux presets also use the host's gcc 14 and glibc (Debian 13 in the
-container). Ninja comes from `.venv/bin` (`tools/setup.sh`) or the `PATH`.
+container). Ninja comes from `.venv/bin` (`tools/requirements.txt`) or the `PATH`.
 The commands below use the pinned CMake; any CMake 3.25 or later on the
 `PATH` (the presets' minimum) works the same.
 
@@ -298,17 +171,17 @@ on that order at some call sites.
 | `ICO_HEADLESS` | `ON` | leaves out the renderer-owned sources (`ICO_RENDERER_SOURCES`) and defines `ICO_HEADLESS=1` |
 | `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings, so every file that can compile does |
 | `ICO_BUILD_BLOCKED` | `OFF` | also compiles `ICO_BLOCKED_SOURCES` (`cmake/IcoExclusions.cmake`), to recheck them |
-| `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), which fails while symbols are unresolved |
+| `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program |
 | `ICO_HEAP_STATS` | `OFF` | the game's allocator (`fumi/ios/memory.c`) reports to `port/platform/arena.c`, which logs each heap partition's high-water mark on stderr |
 | `ICO_FPTRAP` | `OFF` | `fptrap` preset |
 | `ICO_SANITIZE` | empty | `asan` preset: the `-fsanitize=` list |
-| `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data tables are generated from |
-| `ICO_DATA_DIR` | `build/data` | pre-generated data tables, used when the base ELF or pyelftools is missing |
+| `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the loader's reference tests read; without it they are not built |
 
 ### Sources
 
 `cmake/IcoSources.cmake` is written by `tools/gen_sources.py` from
-`config/link_order.pal.txt`: the `ico2/` C sources, one list per programmer
+`config/link_order.pal.txt` (the retail link's object list, kept as the
+source list; nothing links with it any more): the `ico2/` C sources, one list per programmer
 directory, the renderer-owned list, and the data-only members. Configure
 warns when it is stale; rerun the script after changing the link order.
 
@@ -328,15 +201,15 @@ retail game ran with its asserts.
 
 ### Data tables
 
-The 73 data-only members are C that `tools/gen_data_c.py --c <member>
---symbol-map` writes from your base ELF (`baserom/pal/baseelf.elf`,
-`ICO_BASE_ELF`) and the committed symbol lists, with no period link. The
-build runs it for each member into `build-host/<preset>/data/` and compiles
-the results as the `ico_data` object library. It needs pyelftools
-(`.venv`, `tools/setup.sh`). Without the base ELF or pyelftools it falls back
-to a complete `ICO_DATA_DIR` (default `build/data/`, the PS2 build's copies),
-and otherwise says so at configure time and leaves the library out. The
-tables are never committed.
+The binary holds no disc data. The 73 data tables are defined empty
+(`port/data/gen/table_defs.c`) and filled at boot from the boot ELF on the
+user's disc (`port/data/tables.c`, docs/port/DATA.md). The generated
+descriptors under `port/data/gen/` are committed and carry no disc bytes;
+`tools/gen_data_desc.py --check` keeps them fresh. Configuring and building
+need no base ELF and no pyelftools. Only the loader's reference test
+(`tables_loader`) and `tables_manifest` need a base ELF
+(`baserom/pal/baseelf.elf`, `ICO_BASE_ELF`: a maintainer step, see the
+appendix) and are left out without one.
 
 ### Floating point
 
@@ -344,3 +217,54 @@ tables are never committed.
 with flush-to-zero and denormals-are-zero (MXCSR; FPCR on arm64),
 `ico_fpenv_host_enter()` restores the defaults. `fpenv_test` checks both,
 and on `fptrap` that a division by zero raises SIGFPE.
+
+## Appendix, maintainers: EE identity check
+
+The port changes `ico2/` freely, but a change that should not alter what the
+PS2 compiler emits (a type sweep, a rename, a host-only `#ifdef`) is checked
+against the period compiler: `tools/ee_identity.sh`. It is optional and is
+not part of the build or of CI.
+
+```sh
+sudo dpkg --add-architecture i386 && sudo apt-get update
+sudo apt-get install gcc-multilib libc6:i386 libstdc++6:i386 zlib1g:i386 \
+    binutils-mips-linux-gnu patch
+tools/setup.sh                       # fetches the period compilers into tools/cc/
+tools/ee_identity.sh ico2/seki/src/Basic.c ico2/seki/src/MicroCode.c
+tools/ee_identity.sh -r 36a1d73e --all   # every ico2/ C source against a revision
+```
+
+For each file it compiles with `tools/compile_c.sh` (ee-gcc 2.9-991111 and
+its assembler, run through `tools/period_env.sh`) from the working tree and
+from a temporary worktree of the revision (default `HEAD`), and diffs the
+sections `.text .data .rodata .sdata .bss .sbss .lit4 .lit8` and their
+relocations. Debug sections are left out (they carry paths). Exit 0 when all
+are identical. The packages' sweeps (`docs/port/SWEEP_2D.md` to
+`SWEEP_2J.md`) did this by hand; on 2026-10-05 `--all` over the 219 sources of
+`config/link_order.pal.txt` took 37 s on four cores, and against a revision 150
+commits back it reported 42 sources different, so it does detect changes.
+
+What stays and why:
+
+| kept | for |
+| --- | --- |
+| `tools/compile_c.sh`, `tools/period_env.sh`, `tools/period_obstack.c` | the identity check's compile step (the preload library restores the obstack chunk size the original build had; ee-as's short-loop padding depends on it) |
+| `tools/setup.sh`'s compiler fetch (ee-gcc 2.9-991111 and 2.96 into `tools/cc/`) | the compilers `compile_c.sh` runs; the 2.96 tree is only its SCE assembler, for `sce/` sources |
+| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Not part of any host target |
+| `config/link_order.pal.txt` and `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as documentation of the PS2 layout. Nothing links with them |
+| `tools/extract_elf.sh`, `tools/extract_elf.py` | the maintainer step below |
+
+Removed: `./build.sh`, `tools/build.sh`, `tools/gen_ninja.py`,
+`tools/verify_elf.py` (the SHA-1 check of the PS2 link's inputs: the port's
+extractor checks the disc itself, `port/data/extract.c`), the two GNU ld 2.10
+patches and `tools/setup.sh`'s builds of ld 2.10 and dvp-as. Nothing links
+a PS2 ELF or assembles the VU1 programs now. The decompilation
+(<https://github.com/nathanialf/ico>) keeps that build.
+
+The maintainer step for the loader's reference test and `gen_data_desc.py
+--manifest`: they read the boot ELF from `baserom/pal/baseelf.elf`, which
+`tools/extract_elf.sh` writes from `baserom/Ico_PAL.iso` (the disc's
+`SCES_507.60`, SHA-1 `da3644c54c26fe760f3b6a591a5fc2eab396ed2b`, checked
+against `config/sha1sums.txt`; pycdlib and `mips-linux-gnu-objcopy`). Nothing
+under `baserom/` is committed (`docs/LEGAL.md`). Without it those two tests
+are not built, and CI never has it.

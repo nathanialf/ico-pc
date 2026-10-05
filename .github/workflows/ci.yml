@@ -1,0 +1,89 @@
+# CI for the PC port. ROM-free by construction: no secrets, no disc image, no
+# baserom/. Tests that need the user's disc exit 77 and ctest reports them as
+# skipped (SKIP_RETURN_CODE in the CMakeLists), which is not a failure.
+# docs/BUILDING.md ("Continuous integration") describes the job.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE: ${{ github.workspace }}/tools/toolchain/cmake/bin
+  PYBIN: ${{ github.workspace }}/.venv/bin
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl xz-utils python3 python3-venv \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxrender-dev libasound2-dev
+
+      - name: Python tools (venv)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r tools/requirements.txt
+
+      - name: Toolchain and dependency cache
+        uses: actions/cache@v4
+        with:
+          path: tools/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh') }}
+
+      - name: Fetch toolchain and dependencies
+        run: tools/fetch_toolchain.sh
+
+      # ---- hygiene: fast, so they fail first ----
+      - name: No disc data in the tree
+        run: tools/check_no_rom.sh
+
+      - name: Format
+        run: tools/format.sh --check
+
+      - name: Generated files are fresh
+        run: |
+          .venv/bin/python tools/gen_data_desc.py --check
+          .venv/bin/python tools/gen_layout_asserts.py --check
+          .venv/bin/python tools/gen_sources.py --check
+
+      # ---- builds and tests ----
+      - name: linux-x64, headless
+        run: |
+          $CMAKE/cmake --preset linux-x64 -DICO_LINK_EXE=ON
+          $CMAKE/cmake --build build-host/linux-x64 --parallel
+          $CMAKE/ctest --test-dir build-host/linux-x64 --output-on-failure --parallel 4
+
+      - name: linux-x64, window build
+        run: |
+          $CMAKE/cmake --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
+            -B build-host/linux-x64-window
+          $CMAKE/cmake --build build-host/linux-x64-window --parallel
+          $CMAKE/ctest --test-dir build-host/linux-x64-window --output-on-failure --parallel 4
+
+      - name: linux-x64-clang
+        run: |
+          $CMAKE/cmake --preset linux-x64-clang -DICO_LINK_EXE=ON
+          $CMAKE/cmake --build build-host/linux-x64-clang --parallel
+          $CMAKE/ctest --test-dir build-host/linux-x64-clang --output-on-failure --parallel 4
+
+      - name: win-x64 (cross-compiled; the tests are built, not run)
+        run: |
+          $CMAKE/cmake --preset win-x64 -DICO_LINK_EXE=ON
+          $CMAKE/cmake --build build-host/win-x64 --parallel
+          test -f build-host/win-x64/ico_pc.exe
+          test -f build-host/win-x64/SDL3.dll
