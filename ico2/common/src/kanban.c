@@ -54,6 +54,12 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 
+#ifdef ICO_HOST
+
+/* PC port (P3): the menu text hook (port/ui/layout_ext.h) */
+#include "layout_ext.h"
+
+#endif
 /* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
    definition reads them on hosts that pass them on the stack
    (layout_texture.c says more) */
@@ -357,7 +363,16 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         r[3] -= 8;
         uv[3] -= 8;
 
-        gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
+#ifdef ICO_HOST
+        /* PC port (P3): a menu text row (the boot screens' prompts, Yes /
+           No, the language names) is drawn with the port font where the
+           sprite would be, its texture transferred as before
+           (port/ui/menu_text.h) */
+        if (lt_ext_IsTextRow(e)) {
+            lt_ext_DrawTextRow(e, r, uv, (const unsigned char *)col->b, 0);
+        } else
+#endif
+            gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
         gif_SetZWrite(1);
         gif_EndPacket();
     }

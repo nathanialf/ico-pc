@@ -26,6 +26,7 @@ add_custom_command(
 set(_ui_sources
     font.c
     layout_ext.c
+    menu_text.c
     popup.c
     strings.c
     strings_en.c
@@ -38,7 +39,7 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c settings.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(layout_ext.c menu_text.c settings.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -162,6 +163,23 @@ target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
                       ico_platform)
+# menu_text_test (P3): the menu text table (against the disc's texProperty
+# when the image is there), the strings, the hook through the real
+# layout_texture.c (text for a table row, the texture for another, classic
+# mode) on the recording, then a title row into SCENE on a Vulkan device
+# (exit 77 without one)
+add_executable(menu_text_test test/menu_text_test.c $<TARGET_OBJECTS:ico_ui_rd>
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(menu_text_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_ui_game_incs}
+                           ${_ico_ui_seki_incs} "${CMAKE_SOURCE_DIR}/port/shaders"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
 if(WIN32 AND SDL3_FOUND)
     add_custom_command(TARGET ui_test POST_BUILD
                        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -175,9 +193,18 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
         set_tests_properties(ui PROPERTIES ENVIRONMENT
+                             "VK_ADD_LAYER_PATH=${_ico_vvl};ICO_VK_VALIDATION=1")
+        set_tests_properties(menu_text PROPERTIES ENVIRONMENT
                              "VK_ADD_LAYER_PATH=${_ico_vvl};ICO_VK_VALIDATION=1")
     endif()
 endif()

@@ -88,6 +88,16 @@ void lt_ext_Reset(void);
    box. */
 void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
 
+/* P3 (docs/port/UI.md, "Menu text"): whether display_texture draws e as
+   text: a port row, or a game row the menu text table holds while classic
+   menu text is off (menu_text.h ui_MenuTextItemOf). */
+int lt_ext_IsTextRow(const LtProperty *e);
+/* The text hook of display_texture, lt_glow_sprite and kanban.c's
+   display_texture: a port row's label (lt_ext_DrawRow) or a game row's menu
+   text (ui_MenuTextDraw); uv is the sprite's texel rectangle (1/16 texel). */
+void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
+                        const unsigned char rgba[4], int glow);
+
 #ifdef __cplusplus
 }
 #endif

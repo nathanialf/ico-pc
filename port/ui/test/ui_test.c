@@ -308,6 +308,9 @@ static void testStrings(void)
             CHECK(s != NULL && s[0] != '\0', "language %d string %d is empty", l, id);
             uint32_t cp;
             while (s && (cp = ui_Utf8Next(&s)) != 0) {
+                if (cp == '\n') {
+                    continue; /* a line break (the menu text's prompts, P3) */
+                }
                 CHECK(cp != 0xFFFD && ui_FontHasGlyph(cp),
                       "language %d string %d: U+%04X not drawable", l, id, cp);
             }

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "menu_text.h"
 #include "strings.h"
 #include "ui_internal.h"
 
@@ -233,4 +234,19 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
     ui_DrawTextXf(x, by + bh * 0.5f, size, rgba, text, flags, &xf);
     ui_SetDrawKey(owner);
+}
+
+int lt_ext_IsTextRow(const LtProperty *e)
+{
+    return lt_ext_IsPortProp(e) || ui_MenuTextItemOf(e) != NULL;
+}
+
+void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
+                        const unsigned char rgba[4], int glow)
+{
+    if (lt_ext_IsPortProp(e)) {
+        lt_ext_DrawRow(e, box, rgba, glow);
+    } else {
+        ui_MenuTextDraw(e, box, uv, rgba, glow);
+    }
 }

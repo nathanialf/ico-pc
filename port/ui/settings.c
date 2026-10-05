@@ -19,6 +19,7 @@
 #include "font.h"
 #include "input.h"
 #include "layout_ext.h"
+#include "menu_text.h"
 #include "options.h"
 #include "strings.h"
 #include "sysconf.h"
@@ -303,6 +304,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_VIDEO_MODE:
         return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
+    case UI_OPT_MENU_TEXT:
+        return ui_Str(ico_opt_classic_menu_text() ? UI_STR_VAL_CLASSIC : UI_STR_VAL_PORT_FONT);
     case UI_OPT_VOLUME: {
         double v = ico_config_get_float("audio.volume", 1.0);
         snprintf(buf, size, "%d %%", (int)(v * 100.0 + 0.5));
@@ -388,6 +391,14 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         systemStatus[0] = systemStatus[0] != 0 ? 0 : 1;
         gsResetFunc(0);
         ico_sysconf_set_video_mode(systemStatus[0]);
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_MENU_TEXT:
+        /* P3: the game's menu text from its textures or the port font; the
+           next frame draws it */
+        ico_opt_set_classic_menu_text(!ico_opt_classic_menu_text());
+        ico_config_set_bool("game.classic_menu_text", ico_opt_classic_menu_text());
+        ui_MenuTextSetClassic(ico_opt_classic_menu_text());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_VOLUME: {
@@ -662,6 +673,11 @@ static void buildMirrorScreen(void);
 
 static int rowY(int page, int i)
 {
+    if (page == UI_PAGE_DISPLAY) {
+        /* P3: eleven rows (Menu text joined Video mode): 17 field lines
+           apart from 36, so Back still ends inside the 226 lines */
+        return 36 + 17 * i;
+    }
     return page == UI_PAGE_MAIN ? 40 + 19 * i : 40 + 18 * i;
 }
 
@@ -872,6 +888,7 @@ static void build(void)
                                      {UI_OPT_FULL_HEIGHT, UI_STR_OPT_FULL_HEIGHT},
                                      {UI_OPT_FRAMERATE, UI_STR_OPT_FRAMERATE},
                                      {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
+                                     {UI_OPT_MENU_TEXT, UI_STR_OPT_MENU_TEXT},
                                      {UI_OPT_BACK, UI_STR_BACK}};
     for (unsigned i = 0; i < sizeof(dispAll) / sizeof(dispAll[0]); i++) {
         /* R7d: every row always shown, Frame rate included (stepped by
@@ -1048,6 +1065,8 @@ static void mirrorChanged(int on)
 
 void ui_SettingsInstall(void)
 {
+    /* P3: [game] classic_menu_text, before the layouts draw */
+    ui_MenuTextSetClassic(ico_opt_classic_menu_text());
     if (!s_built) {
         build();
         s_built = 1;

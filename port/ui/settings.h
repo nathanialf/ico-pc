@@ -85,6 +85,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_FULL_HEIGHT,
     UI_OPT_FRAMERATE, /* [video] framerate (R7b; stepped since R7d) */
     UI_OPT_VIDEO_MODE,
+    UI_OPT_MENU_TEXT, /* [game] classic_menu_text (P3) */
     /* Audio */
     UI_OPT_VOLUME,
     /* Controls */

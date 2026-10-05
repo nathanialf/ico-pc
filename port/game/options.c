@@ -18,6 +18,8 @@ static int s_mirror = -1;
 
 static int s_developer_mode = -1;
 
+static int s_classic_menu_text = -1;
+
 static int get(int *v, const char *path)
 {
     if (*v < 0) {
@@ -132,6 +134,16 @@ void ico_opt_set_developer_mode(int on)
     s_developer_mode = on != 0;
 }
 
+int ico_opt_classic_menu_text(void)
+{
+    return get(&s_classic_menu_text, "game.classic_menu_text");
+}
+
+void ico_opt_set_classic_menu_text(int on)
+{
+    s_classic_menu_text = on != 0;
+}
+
 int ico_opt_debug_option(void)
 {
     long long v = ico_config_get_int("dev.debug_option", 0);
@@ -141,5 +153,5 @@ int ico_opt_debug_option(void)
 
 void ico_opt_reload(void)
 {
-    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = -1;
+    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_classic_menu_text = -1;
 }

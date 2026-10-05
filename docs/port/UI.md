@@ -14,9 +14,11 @@ docs/port/SETTINGS.md) and as notification popups (achievements, package
 | `port/ui/popup.c`, `popup.h` | the popup queue, timing and drawing |
 | `port/ui/ui_host.c`, `ui_host.h` | the window build's glue: the game's globals, the decoder flush, the per-vsync step |
 | `port/ui/settings.c`, `settings.h` | the Settings menu (6C): its port layouts, the entry rows and repoints, the screens' procs |
+| `port/ui/menu_text.c`, `menu_text.h` | the game's menu text rows drawn with the port font (P3, "Menu text" below) |
 | `port/ui/embed_font.cmake` | the font file as a C array at build time |
 | `port/ui/test/ui_test.c` | the test (below) |
 | `port/ui/test/settings_test.c` | `settings_test` and, built with `SETTINGS_RENDER`, `settings_render` (below) |
+| `port/ui/test/menu_text_test.c` | `menu_text_test` (P3, "Menu text") |
 | `port/assets/fonts/` | `Arimo-Regular.ttf`, `OFL.txt` (Arimo's) |
 | `port/third_party/stb/` | `stb_truetype.h` v1.26, `LICENSE` |
 
@@ -304,7 +306,7 @@ right-aligned ending at x 344 and value rows from x 364:
 | screen | rows |
 | --- | --- |
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Developer mode (value), Back; notes under Language and Developer mode |
-| Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate (read-only, only when `[video] framerate` is in the config), Video mode, Back |
+| Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate (read-only, only when `[video] framerate` is in the config), Video mode, Menu text (P3), Back; since P3 eleven rows, 17 field lines apart from line 36 |
 | Audio | Volume, Back; a note that the output does not apply it yet |
 | Controls | Remap controls (opens the remap screen), Analogue stick fix, Mouse sensitivity, Back |
 | Gameplay | Shadows never take Yorda (+ OPTIONS.md's explanation as a note), Mirror mode "Chosen at New Game" (not selectable), Back |
@@ -355,6 +357,52 @@ row for the target becomes the source alone, and the source leaves the
 device's other targets) or gives up after 250 ticks (10 s at 25 ticks a
 second). While it waits, and for 3 ticks after, the proc sets
 `lt_item_select_disable` so the press neither moves nor confirms.
+
+## Menu text (P3)
+
+The game's own menus draw every word as a sprite cut from a pre-rendered
+sheet. Since P3 those rows are drawn with Arimo instead, at the place, size,
+colour and fade the sprite had, so the menus read like the Settings rows;
+the logo, the copyright line, the backgrounds, the button glyphs and the
+other artwork stay the original textures. On by default; `[game]
+classic_menu_text = true` (Settings > Display, "Menu text: Port font /
+Classic"; CONFIG.md) restores the textures at run time.
+
+| file | what |
+| --- | --- |
+| `port/ui/menu_text.c`, `menu_text.h` | the table (texel rectangle, string, metrics per text rectangle; texProperty row to rectangle), `ui_MenuTextItemOf`, `ui_MenuTextDraw`, the classic switch |
+| `port/ui/layout_ext.c` | `lt_ext_IsTextRow` (a port row or a table row), `lt_ext_DrawTextRow` (the dispatch to `lt_ext_DrawRow` or `ui_MenuTextDraw`) |
+| `ico2/common/src/layout_texture.c` | `display_texture` and `lt_glow_sprite` (ICO_HOST): a text row's sprite is replaced by `lt_ext_DrawTextRow`; `tex_TransTexture` still runs for every game row |
+| `ico2/common/src/kanban.c` | `display_texture` (ICO_HOST): the same for the boot screens' signs (the card prompts, Yes / No, the language and 50 / 60 Hz screens); ASCII-only patch of the EUC-JP file |
+| `port/game/options.c`, `.h` | `ico_opt_classic_menu_text` (`[game] classic_menu_text`, default false) |
+| `port/ui/test/menu_text_test.c` | the test (ctest `menu_text`, below) |
+
+**Where the text comes from.** The sheets are `text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_01..04.tm2` and `scei.tm2` (one set per language, packed in `STGTTL.DF` and `STGLOG.DF`), `text/title.tm2` (one for all languages, in `COMMON.DF`) and `text/buttons.tm2`. A `texProperty` row names its sheet through `texFile` (the base name only, so the loaded language's sheet is used) and its texel rectangle (`texU`, `texV`, `texW`, `texH`); the five language sheets share the row geometry. For P3 the sheets were decoded from the user's disc (raw deflate packs, 4-bit TIM2 with a 16-colour CLUT) into PNGs in a scratch folder outside the repository, cut per rectangle for all five languages, and every word transcribed from them by eye: the wording, capitalisation, punctuation and line breaks are the sheets' (so "Continue" is "Charger" / "Laden" / "Carica" / "Cargar" on the title, the Spanish preview's "Vagoneta__1" keeps its double underscore, the English preview names row 142 "Trolley 2" and row 173 "Trolley 1" while the other four languages number them the other way, Italian's Dark / Light are the symbols "–" and "+"). The strings are `UI_STR_MT_*` in `strings_{en,fr,de,it,es}.c` (79 strings). Nothing of the disc is in the repository: the table holds rectangles, sizes and positions measured on the sheets, and the transcribed words.
+
+**The table (`menu_text.c`).** 87 text rectangles, drawn by 124 `texProperty` rows (several rows draw one rectangle: Yes / No on six prompts, Back on the save screens). Per rectangle: the string, the alignment, the ink (light letters with the dark rim, or black letters on the white panel), the em, the anchor, the line pitch and, per language, the first line's capital middle. They were measured on the sheets: each line's capital top and baseline (the em is the capital height less 0.7 texel of antialiasing over Arimo's 0.688; a 20-texel menu row gives 13.5 texels, 27 y units, the `UI_MENU_TEXT_SIZE` 6B measured), the ink's left, centre and right edges across the five languages (the edge that stays put is the alignment: the Options labels end at one x, the pause items start at one x, the title and prompts are centred), and the line pitch (15 texels on the panel prompts). Sizes per row class: 27 y units for the 20-texel menu rows (title, vibration, pause, Options, key config, adjust screen, Yes / No, OK, Back, the save screens' Resume / End Game); 30 for the boot screens' language names and 50 / 60 Hz (title.tm2's heavier capitals); 33 for "Save?" and "Continue ?"; 24 for the white-panel prompts, the card check prompts, "Loading" / "Saving" / "Formatting" and the save headers; 27 for the save preview's location names; 21 for "Accessing"; 18 for "MEMORY CARD slot 1 / 2".
+
+| screen (layouts) | rows |
+| --- | --- |
+| boot signs, kanban.c (0 language, 1 TV, 3 / 4 card check, 5 confirm) | 12: the five language names, 50 Hz, 60 Hz, "No Memory Card (PS2) inserted", the two 360 KB prompts, Yes, No |
+| title (12, 13) and vibration (9) | 6: Continue, New Game (twice), Vibration, Activate, Deactivate |
+| memory card, save and load (14 to 47) | 69: the slot list's header and "MEMORY CARD slot 1 / 2", the preview's 16 location names, "Accessing", "Do not remove…", OK, Back, the load / save / format prompts and their failures, "Save?", "Loading", "Saving", "Formatting", "File saved.", the overwrite and format confirmations, Yes / No, Resume Game / End Game |
+| pause (56, 57) | 3: Options, Back, End Game |
+| Options (58) | 13: the header, Film Effect, Sound, Stereo, Mono, Vibration, Activate, Deactivate, Hold Type, Button Configuration, Brightness, Players, Back |
+| key config (59) | 9: the header, Jump, Attack, Action, Release, Hold hand / Call, Zoom, OK, Default |
+| adjust screen (60) | 6: Brightness, the hint, Dark, Light, OK, Default |
+| end confirm (61) and game over (62) | 6: "The game will end. Is this okay?", Yes, No, "Continue ?", Yes, No |
+
+Left as textures, with the reason (the full list is the comment at the top of `menu_text.c`): the ICO logo (31, 37); the LANGUAGE and TV headers (25, 32: lettering inside the swash artwork); the 50 / 60 Hz notes (35, 36: text inside speech-bubble artwork); "Sony Computer Entertainment Europe Presents" (46) and the copyright line (48): the corporate lettering of a credit and a legal notice; the slot numbers and the preview's digits (52..71, 74..136: digit tiles placed one glyph at a time); the Options value tiles (the film effect's 0..4, the hold type's A / B, 1 / 2 players) and arrows; R1 / R2 / L1 / L2 on the key config screen (outlined button labels, like the button glyphs); `buttons.tm2` (Cross, Triangle and the rest); the panels, bars, backdrops, the brightness markers and ruler, 1 x 1 placeholders, the preview location rows whose rectangle is blank on every sheet, a stray bubble corner (433) and the subtitle rows (434, 435).
+
+**The hook.** `display_texture` (layout_texture.c) sets `ltHostTextRow` for `lt_ext_IsTextRow(e)`: a port row as before, or a game row for which `ui_MenuTextItemOf(e)` finds an item (not in classic mode; the row's index is in the table; its texel rectangle is the one the table was measured on, so tables that are not the PAL ones keep their textures). For a game row `tex_TransTexture` runs as before, so the VRAM and packet bookkeeping is the texture path's; only `gif_SpriteSensitiveOffset` is replaced by `lt_ext_DrawTextRow(e, box, ofs, colour, 0)`, and `lt_glow_sprite` passes its stretched box the same way. Everything around it is the game's: the packet state, the colour (`ltCursorColor`'s fade, the highlight, `~reductionCol` and its -16 step, the halving of an unselected selectable row), the cursor sparkle and the glow. `kanban.c`'s `display_texture` does the same with its own box and inset. `ui_MenuTextDraw` maps the item's texel coordinates through the sprite's box and texel rectangle (so either caller's half-texel inset is honoured): x and y grid units per texel from the box and `uv`; each line at the item's anchor and capital middle, `UI_VALIGN_MIDDLE`, aligned left, centred or right; the size the em times the vertical scale, rounded to whole y units (one atlas per size). Arimo is about 1.3 times wider than the sheets' lettering at the same capital height, so a line longer than the room its anchor leaves in the rectangle is set smaller to fit, down to 60 %, as the Settings rows are. Light rows draw with `UI_HALO` (the rim) in the sprite's colour; dark rows draw black (the colour's RGB zeroed, its alpha kept) without a rim and skip the additive glow (black adds nothing there). The draws are keyed by the row and the pass for the presenter's blending (R7d), as the port rows are. The language is `ui_GetLanguage()`, which follows `NonLinearCameraMove`; a language change in Settings shows in the game's menus at once (the textures followed only at their next load).
+
+**Classic.** `[game] classic_menu_text` is read by `ico_opt_classic_menu_text`; `ui_SettingsInstall` hands it to `ui_MenuTextSetClassic` before the first layout draws, and the Display row steps it, sets the key and the switch, and is saved when the screen is left.
+
+**Test (`menu_text_test`, ctest `menu_text`, exit 77 without a Vulkan device after the CPU checks).** Every table row is a `texProperty` index, in order, its item's rectangle non-empty and on a sheet, every item used, its anchor and lines inside its rectangle in every language; with the disc image (`ICO_DISC_IMAGE`; skipped without it) every table row's rectangle equals the boot ELF's `texProperty` row (read at `0x0030CFF8` from `SCES_507.60`) and its `texFile` is a text sheet (0..5, 10..29); every string id exists in each of the five tables (no English fallback) and is drawable; through the real `layout_texture.c` on the recording (rows shaped like the PAL title's): New Game and Continue drawn as atlas text (eight halo copies and the letters each, 18 batches), the copyright line as one texture sprite, all three textures transferred; classic mode: three texture sprites, no text, three transfers; a row whose rectangle differs from the table's keeps its texture; no undecoded register write. On lavapipe: the title's New Game row through `exec_layout_texture` into SCENE: 2114 pixels painted (421 near white) inside the row's rectangle plus the rim's margin, 0 outside; `menu_text_scene.png` beside the test.
+
+Results (2026-10-05, P3): the window build on Linux (gcc, lavapipe, validation layer) 66 of 66 tests passed, `menu_text` included; `settings_test` checks the Display page's 11 rows and the Menu text value (Port font, Classic, the key written, back); `win-x64` builds `ico_pc.exe`, `menu_text_test.exe`, `ui_test.exe`, `settings_test.exe`, `settings_render.exe`.
+
+**Run (P3).** The window build on lavapipe, `SDL_VIDEODRIVER=offscreen`, `use_iso=1`, `ticks=650`, `dump_every=50`, `pad_script = port/input/pad-boot.txt`, `timeout 300`, a private pref folder: exit 0, no process left. Dumps 200, 450, 500, 550 and 600 replayed with `rd_replay_tool --present 960x720`, no command skipped: 200 is "Sony Computer Entertainment Europe Presents" (texture, as intended), 450 to 550 the title with the copyright line (texture) and the logo untouched, 550 the port's Settings row, 600 the mirror mode screen. No dumped frame holds a table row: New Game is masked at 500 and 550 (the title proc masks it until the card check ends) and the vibration screen falls between dumps 550 and 600 (this script reaches stage 41 40 ticks earlier than 6B's run, whose frame 600 showed it). The run allowance was one run, so the Arimo menu rows over the game are seen only in the test's SCENE and in `settings_render`'s screens; open item 8.
 
 ## Strings
 
@@ -597,6 +645,16 @@ row, "Press a key or button…").
    `font.hlsl`, and the post-present overlay for popups.
 7. Gamepad names on the remap screen are SDL's positions in English
    (South, LShoulder, LX-), not translated.
+8. **Menu text in a real run (P3).** The P3 run's dumps did not catch a
+   table row (Run, above). A run with `dump_every` small enough to land on
+   the vibration screen (about Main tick 560 to 590 with `pad-boot.txt`),
+   or one that opens the pause menu and Options, shows them over the game;
+   the classic path needs no run (the unit test covers it).
+9. **Settings row at the title during the card check.** In the P3 run the
+   port's Settings row is drawn at frames 500 and 550 while New Game is
+   still masked by `la_title_new_game_only`; 6C's `ui_SettingsTitleMask`
+   was meant to hide it with the title's row. Not P3's change (the
+   Settings row is a port row); to look at.
 
 6B's open items 1 (the typeface: Arimo, above), 3 (entering the menu:
 the link chain and repointed item links), 6 (values: `lt_ext_SetText` from

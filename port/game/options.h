@@ -15,6 +15,10 @@
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options (docs/port/DEVELOPER_MODE.md)
+ *   [game] classic_menu_text
+ *                          false  the menus' text drawn from the PS2's
+ *                                 pre-rendered sheets instead of the port
+ *                                 font (docs/port/UI.md, "Menu text")
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -72,6 +76,12 @@ void ico_opt_set_developer_mode(int on);
    load <pref>/dev/thisIsYourDebugOption, the file the Debug Mode page's
    TRIANGLE writes. */
 int ico_opt_debug_option(void);
+/* [game] classic_menu_text (package P3): 1 draws the game's menu text from
+   its textures, 0 (the default) with the port font.  The Settings module
+   hands the value to port/ui (ui_MenuTextSetClassic) at install and on a
+   change. */
+int ico_opt_classic_menu_text(void);
+void ico_opt_set_classic_menu_text(int on);
 /* Forget the run-time values: each option is read from the config again on
    its next use. */
 void ico_opt_reload(void);

@@ -51,6 +51,7 @@ with the values in use the next time you save.
 | Full-height picture | On, Off | keeps all 512 lines (Enhanced) |
 | Frame rate | Original, Uncapped, 60 fps, 120 fps, 144 fps, 240 fps | (both presets) how often the picture is redrawn, smoothing motion between the game's updates (docs/port/DISPLAY.md, "Smooth motion"); saved as `[video] framerate` (`"original"`, `"uncapped"` or the number). Default Uncapped; Original keeps one picture per update (the PS2's cadence) in either preset. Right steps in the order listed and wraps; a number from `config.toml` that is not listed (`"100"`) steps to the listed rate above it (Right) or below it (Left), past the ends to Original (Right) or Uncapped (Left) |
 | Video mode | PAL 50 Hz, 60 Hz | the boot screen's choice. The game runs at 25 updates a second in PAL 50 Hz and 30 in 60 Hz, as on the console; switching resets the picture the way the boot screen did |
+| Menu text | Port font, Classic | how the game's own menus (title, Options, pause, save and load, game over, the boot screens) draw their words. Port font (the default) writes them in the same typeface as this Settings menu, at the same places and sizes; Classic shows the PlayStation 2's original lettering. The logo, the copyright line, the button symbols and the pictures are the originals either way. Changes at the next frame; saved as `[game] classic_menu_text` |
 
 **Audio**
 
@@ -75,7 +76,8 @@ with the values in use the next time you save.
 | Mirror the movies | On (the default): in mirror mode the films are flipped too. Off: the films play as on the PS2. Only matters in mirror mode; saved as `[game] mirror_fmv` |
 
 **Language**: English, Français, Deutsch, Italiano, Español. The Settings
-menu changes at once; the game's own subtitles and menu pictures follow the
+menu changes at once, and so does the game's menu text with Menu text set to
+Port font; the game's own subtitles, and its menu pictures with Classic, follow the
 next time the game loads them (the next room, the next menu).
 
 **Achievements**: the list of achievements, unlocked or locked, with the

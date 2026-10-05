@@ -36,6 +36,7 @@
 #include "host_config.h"
 #include "input.h"
 #include "layout_ext.h"
+#include "menu_text.h"
 #include "options.h"
 #include "settings.h"
 #include "strings.h"
@@ -492,14 +493,21 @@ static void testBuild(void)
                                    UI_STR_SECTION_CONTROLS,   UI_STR_SECTION_GAMEPLAY,
                                    UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
                                    UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
-    static const int dispOpts[] = {
-        UI_OPT_PRESET, UI_OPT_RESOLUTION,  UI_OPT_ASPECT,    UI_OPT_FULLSCREEN, UI_OPT_VSYNC,
-        UI_OPT_FILTER, UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
-                                   UI_STR_OPT_VSYNC,       UI_STR_OPT_FILTERING,
-                                   UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,  UI_OPT_VIDEO_MODE,
+                                   UI_OPT_MENU_TEXT,   UI_OPT_BACK};
+    static const int dispStrs[] = {UI_STR_OPT_PRESET,
+                                   UI_STR_OPT_RESOLUTION,
+                                   UI_STR_OPT_ASPECT,
+                                   UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_VSYNC,
+                                   UI_STR_OPT_FILTERING,
+                                   UI_STR_OPT_FULL_HEIGHT,
+                                   UI_STR_OPT_FRAMERATE,
+                                   UI_STR_OPT_VIDEO_MODE,
+                                   UI_STR_OPT_MENU_TEXT,
+                                   UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
     static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
@@ -520,7 +528,7 @@ static void testBuild(void)
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 8), "main page rows");
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 10),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
@@ -561,6 +569,18 @@ static void testBuild(void)
           "mirror_fmv: Off");
     ui_SettingsStep(UI_OPT_MIRROR_FMV, -1);
     CHECK(ico_config_get_bool("game.mirror_fmv", 0) == 1, "mirror_fmv: On again");
+    /* P3: the menu text row: the port font by default, Classic restores the
+       textures (port/ui/menu_text.h) and is written as [game]
+       classic_menu_text */
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MENU_TEXT), "Port font") == 0 && !ui_MenuTextClassic(),
+          "menu text: Port font (%s)", ui_SettingsValueText(UI_OPT_MENU_TEXT));
+    ui_SettingsStep(UI_OPT_MENU_TEXT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MENU_TEXT), "Classic") == 0 && ui_MenuTextClassic() &&
+              ico_config_get_bool("game.classic_menu_text", 0) == 1,
+          "menu text: Classic");
+    ui_SettingsStep(UI_OPT_MENU_TEXT, -1);
+    CHECK(!ui_MenuTextClassic() && ico_config_get_bool("game.classic_menu_text", 1) == 0,
+          "menu text: Port font again");
     /* the New Game screen */
     int ml = ui_MirrorScreenLayout();
     CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "mirror screen layout");
@@ -577,7 +597,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 10), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }

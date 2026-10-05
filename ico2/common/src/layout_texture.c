@@ -471,7 +471,9 @@ extern void gif_SetGsReg(long long reg, long long data);
 #ifdef ICO_HOST
 
 /* PC port (6B): the port row display_texture is drawing, whose glow is its
-   label stretched like the texture sprite (port/ui/layout_ext.h) */
+   label stretched like the texture sprite (port/ui/layout_ext.h); since P3
+   also a game row whose texture is menu text drawn with the port font
+   (port/ui/menu_text.h) */
 static LtProperty *ltHostTextRow;
 
 #endif
@@ -494,7 +496,8 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
     gif_SetAlpha(1, 5, 0);
 #ifdef ICO_HOST
     if (ltHostTextRow != 0) {
-        lt_ext_DrawRow(ltHostTextRow, (const int *)&rr, (const unsigned char *)&c, 1);
+        lt_ext_DrawTextRow(ltHostTextRow, (const int *)&rr, (const int *)ofs,
+                           (const unsigned char *)&c, 1);
         return;
     }
 #endif
@@ -568,9 +571,11 @@ static void display_texture(int no, LtProperty *e)
                 e->right >= 0 || e->left >= 0 || e->down >= 0 || e->up >= 0);
 #ifdef ICO_HOST
         /* PC port (6B): a port row has no texture; its label is drawn where
-           the sprite would be, with the same colour */
-        ltHostTextRow = lt_ext_IsPortProp(e) ? e : 0;
-        if (ltHostTextRow == 0)
+           the sprite would be, with the same colour.  P3: a game menu text
+           row is drawn the same way, its texture still transferred so the
+           VRAM and packets are the texture path's */
+        ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
+        if (!lt_ext_IsPortProp(e))
 #endif
             tex_TransTexture(e->texNo, 11);
 
@@ -620,7 +625,8 @@ static void display_texture(int no, LtProperty *e)
         LT_HOST_KEY(e, 0);
 #ifdef ICO_HOST
         if (ltHostTextRow != 0) {
-            lt_ext_DrawRow(e, (const int *)&box, (const unsigned char *)&u.col, 0);
+            lt_ext_DrawTextRow(e, (const int *)&box, (const int *)&ofs,
+                               (const unsigned char *)&u.col, 0);
         } else
 #endif
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
