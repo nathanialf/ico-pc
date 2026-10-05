@@ -3,7 +3,8 @@
 What this repository may contain, what it must never contain, and which
 references its source was written from.
 
-This is a community decompilation project. It is not affiliated with,
+This is a community project: a PC port built from a community
+decompilation of the game. It is not affiliated with,
 endorsed by, or sponsored by Sony Interactive Entertainment Inc. (formerly
 Sony Computer Entertainment Inc.), Sony Group, Team Ico, or any of their
 affiliates. *ICO*, *PlayStation 2* and *Team Ico* are trademarks of their
@@ -11,10 +12,11 @@ respective owners.
 
 ## What is in this repository
 
-- C source written for this project: the game's source under `ico2/`, which
+- C source written for the decompilation and the port: the game's source under `ico2/`, which
   the host compiler builds into the PC port, and the port's own code under
-  `port/`. (The retired PS2 build compiled the same game source with the
-  period toolchain into a boot ELF; `docs/BUILDING.md`, appendix.)
+  `port/`. (The decompilation compiles the same game source with the
+  period toolchain into a boot ELF; this repository keeps only the optional
+  identity check of `docs/BUILDING.md`, appendix.)
 - Build scripts and tooling written for this project.
 - Documentation written for this project.
 - Configuration that describes how the user's own disc image is checked and
@@ -25,8 +27,8 @@ respective owners.
   `config/symbol_addrs.pal.data.txt`, kept as a record of the old split
   layout; nothing in the build reads them. The two symbol lists hold the
   names this tree defines and the addresses the link places them at, the
-  same facts `nm` prints over `build/ico.elf`; they are a record of the
-  rebuilt ELF, not a copy of a disc file.
+  same facts `nm` prints over the decompilation's rebuilt ELF; they are a
+  record of that ELF, not a copy of a disc file.
 
 ## What is not in this repository, and must never be added
 
@@ -69,11 +71,10 @@ descriptors under `port/data/gen/` (`tools/gen_data_desc.py`), the schema
 (`config/data_schema.pal.txt`) and the record types in the owners' headers
 hold only types, element counts, offsets and symbol names. The configuration
 files hold member names, address ranges, record types and the names MAIN.MAP
-gives the symbols, and nothing of the tables' content. The retired PS2 build
-instead generated each member as `build/data/<member>.c` from the user's own
-`baserom/pal/baseelf.elf` (`tools/gen_data_c.py`, still the reference the
-loader's test compares against); that output is gitignored and never
-committed.
+gives the symbols, and nothing of the tables' content. The loader's
+reference test, a maintainer step, generates each member as C from the
+maintainer's own `baserom/pal/baseelf.elf` (`tools/gen_data_c.py`) into the
+build directory; that output is never committed.
 
 The line drawn is between content and facts about its shape. The names,
 tables and strings are content and are never committed. A count or size
@@ -143,7 +144,7 @@ allowed are listed one by one, by file and array name, with the reason, in
 again until it is reviewed. They fall into three groups:
 
 - `sce/` (none of it is compiled into the PC program; it is the record of
-  the period library members the retired PS2 build linked):
+  the period library members the PS2 build linked):
   `sce/libkernl/intr.c` `alarm_handler` (libkernl `intr.o`'s `.data`: the
   kernel-mode alarm handler, R5900 code with its tables, that `InitAlarm`
   copies to kernel memory, plus its entry stub and syscall table; the
@@ -236,7 +237,9 @@ functions by instruction-stream correlation, never by copying an address.
 
 ## Prototype symbol maps (`aug6`)
 
-The `aug6` branch builds the August 6, 2001 ICO prototype (`SCUS_971.13`).
+The decompilation's `aug6` branch builds the August 6, 2001 ICO prototype
+(`SCUS_971.13`); the port does not merge that branch, but names the
+decompilation derived from it may reach this tree through `main`.
 That prototype disc shipped a `MAIN.MAP` and a `SRCFILE.TXT` of its own. The
 project uses the factual metadata in them (names, addresses, file boundaries,
 `__FILE__` paths) on the same terms as the retail maps above. This rests on
@@ -251,10 +254,13 @@ source and leaked SDKs stay forbidden on every branch.
 ## What you need to build
 
 You must legally own a copy of *ICO* for the PlayStation 2 and supply the
-disc image yourself. The build checks the extracted ELF's SHA-1 before it
-proceeds and refuses any other file (`config/sha1sums.txt`,
-`docs/BUILDING.md`). A SHA-1 is a fingerprint, not a copy of the work; the
-disc image and the ELF remain the property of their rightsholders.
+PAL disc image yourself. The build needs no disc data. On its first run the
+program checks the image's SHA-1 (or, for a re-dump, the boot ELF's SHA-1
+and the manifest of the data file) and refuses any other file before it
+extracts the game's data into a local archive (`docs/port/DATA.md`); the
+maintainers' ELF extraction checks `config/sha1sums.txt`. A SHA-1 is a
+fingerprint, not a copy of the work; the disc image and the ELF remain the
+property of their rightsholders.
 
 This project gives no instructions for obtaining a disc image. The only
 legitimate source is a personal dump of a disc you own, made in compliance

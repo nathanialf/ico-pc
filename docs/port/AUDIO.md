@@ -1,54 +1,55 @@
-# Audio: the software SPU2 (Phase 4A), the driver and the output (Phase 4B)
+# Audio
 
-`port/audio/` holds a clean-room software SPU2: the PS2's sound processor
-rendered on the host as 48 kHz interleaved stereo 16-bit, plus the SPU
-ADPCM decoder and a libsd-shaped front end (4A). On top of it (4B): the
-game's Sg sequencer, moved here from `sce/libsndn2/` and made 64-bit clean;
-the SNDN2DRV.IRX replacement behind the sequencer's RPC, with its ADPCM and
-PCM stream engines (per docs/research/sndn2drv.md, "R1"); and the output:
-one SPU2 render per simulated vsync into an SDL3 audio stream (window
-build), a WAV file (ini `audio_dump=`), or nowhere (headless). It is all in
-`ico_pc` since 4B; `port/null/snd_null.c` is gone.
+`port/audio/` holds the whole sound path of the port:
+
+- a clean-room software SPU2, the PS2's sound processor rendered on the
+  host as 48 kHz interleaved stereo 16-bit, with the SPU ADPCM decoder and
+  a libsd-shaped front end;
+- the game's Sg sequencer, the EE side of the sound library, made 64-bit
+  clean;
+- a host replacement for SNDN2DRV.IRX, the IOP sound driver behind the
+  sequencer's RPC, with its ADPCM and PCM stream engines, following
+  docs/research/sndn2drv.md;
+- the output: one SPU2 render per simulated vsync into an SDL3 audio
+  stream (window build), a WAV file (`audio_dump`), or nowhere (headless).
 
 | file | contents |
 |---|---|
-| `adpcm.h/.c` | SPU ("VAG") ADPCM block decoder: 16-byte blocks, 28 samples, five filter pairs, loop flags. Also for 4B's `.int` streams |
-| `spu2.h/.c` | the SPU2: 2 cores x 24 voices, 2 MB sound RAM, envelopes, volumes and sweeps, noise, mixing, reverb, transfers, AutoDMA input, IRQ |
+| `adpcm.h`, `adpcm.c` | the SPU ("VAG") ADPCM block decoder: 16-byte blocks, 28 samples, five filter pairs, loop flags; also used for the `.int` streams |
+| `spu2.h`, `spu2.c` | the SPU2: 2 cores x 24 voices, 2 MB sound RAM, envelopes, volumes and sweeps, noise, mixing, reverb, transfers, AutoDMA input, IRQ |
 | `spu2_tables.c` | the Gaussian interpolation table, the reverb resampling FIR, the reverb presets (transcribed from psx-spx) |
 | `spu2_internal.h` | tables and the envelope step, shared with the tests |
-| `spu2_sd.h/.c` | libsd's calls (`sceSdSetParam`, `SetSwitch`, `SetAddr`, `SetCoreAttr`, `SetEffectAttr`, `VoiceTrans`, `Init`) with libsd's encodings, as register writes |
-| `sg/sound.c`, `sg/sound.h` | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, this project's clean-room reconstruction, MIT), with host seams under `ICO_HOST` (4B, "The sequencer on the host") |
-| `sndn2_host.h/.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
+| `spu2_sd.h`, `spu2_sd.c` | libsd's calls (`sceSdSetParam`, `SetSwitch`, `SetAddr`, `SetCoreAttr`, `SetEffectAttr`, `VoiceTrans`, `Init`) with libsd's encodings, as register writes |
+| `sg/sound.c`, `sg/sound.h` | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, this project's clean-room reconstruction, MIT), with host seams under `ICO_HOST` |
+| `sndn2_host.h`, `sndn2_host.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
 | `stream.c`, `sndn2_internal.h` | the ADPCM stream engine (records, event queue, refill scheduler) and the PCM mixer |
-| `audio_host.h/.c` | the per-vsync render and its sinks; `wav.c` the dump writer; `out_sdl.c` the SDL3 device (window build) |
-| `test/adpcm_test.c`, `test/spu2_test.c`, `test/sndn2_test.c` | unit tests (below) |
-| `test/spu2_bench.c` | the render's bit-exactness check (ctest `spu2_render_crc`) and its timing harness (`spu2_bench`, and `spu2_prof` with the per-stage profile; "Render cost") |
+| `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device (window build), `volume.c` the output volume |
+| `test/` | the unit tests and the render benchmark (below) |
 
-Build: `ico_audio` static library (the SPU2); `ico_sndn2` (the rest; it
-links `ico_audio`, `ico_port_data` and `ico_platform`, and SDL3 in the
-window build). ctest tests `adpcm`, `spu2`, `spu2_render_crc` and `sndn2`
-(`port/audio/CMakeLists.txt`). `ico_pc` links `ico_sndn2`; the host loop
+The build has two static libraries: `ico_audio` (the SPU2) and `ico_sndn2`
+(the rest; it links `ico_audio`, `ico_port_data` and `ico_platform`, and
+SDL3 in the window build). `ico_pc` links `ico_sndn2`; the host loop
 (`port/platform/host_loop.c`) calls `ico_audio_host_init` before boot and
 `ico_audio_host_vsync` once per vsync.
 
-## Design
+## The SPU2
 
 ### State and time
 
-One global SPU2 (`spu2_reset()` returns it to power-on: RAM and registers
-zero). Time is the output frame counter at 48 kHz (`spu2_time()`).
-`spu2_write_reg(core, reg, value, time)` queues a write; `spu2_render()`
-applies every write whose time has come before rendering that frame, in
-time order and, for equal times, in call order. A time already rendered
-means "before the next frame". So a caller that stamps every write of one
-IOP tick with the same time gets block-accurate timing, and one that stamps
-finer gets sample-accurate timing. `spu2_apply_pending()` applies the queue
-at once. Reads (`spu2_read_reg`) see the state after the last rendered
-frame.
+There is one global SPU2; `spu2_reset()` returns it to power-on (RAM and
+registers zero). Time is the output frame counter at 48 kHz
+(`spu2_time()`). `spu2_write_reg(core, reg, value, time)` queues a write,
+and `spu2_render()` applies every write whose time has come before
+rendering that frame, in time order and, for equal times, in call order. A
+time already rendered means "before the next frame". A caller that stamps
+every write of one IOP tick with the same time therefore gets
+block-accurate timing, and one that stamps finer gets sample-accurate
+timing. `spu2_apply_pending()` applies the queue at once. Reads
+(`spu2_read_reg`) see the state after the last rendered frame.
 
-Addresses are SPU2 halfword addresses (20 bits); libsd's byte addresses are
-converted in `spu2_sd.c`. Sound RAM is `uint8_t[2 MB]`, little-endian
-halfwords, reached through `spu2_ram()`.
+Addresses are SPU2 halfword addresses (20 bits); libsd's byte addresses
+are converted in `spu2_sd.c`. Sound RAM is `uint8_t[2 MB]` of
+little-endian halfwords, reached through `spu2_ram()`.
 
 ### One frame
 
@@ -56,36 +57,38 @@ For core 0, then core 1:
 
 1. Each voice: the sample is the 4-tap Gaussian interpolation of the last
    four decoded samples at pitch-counter bits 4-11 (or the core's noise
-   level if NON selects it); times the ADSR level (`>> 15`); times the
-   left/right volume (`>> 15`); added to the dry buses (VMIXL/VMIXR) and
-   wet buses (VMIXEL/VMIXER). Then the envelope and volume sweeps step,
-   and the pitch counter advances by PITCH (PMON: scaled by the previous
-   voice's output + 0x8000; clamped to 0x4000), feeding one decoded sample
+   level if NON selects it), times the ADSR level (`>> 15`), times the
+   left/right volume (`>> 15`), added to the dry buses (VMIXL/VMIXR) and
+   wet buses (VMIXEL/VMIXER). Then the envelope and volume sweeps step, and
+   the pitch counter advances by PITCH (with PMON scaled by the previous
+   voice's output + 0x8000, clamped to 0x4000), feeding one decoded sample
    to the interpolator per 0x1000. Decoding fetches the next 16-byte block
    at a block end: loop end jumps to LSAX and sets ENDX, end without repeat
-   also forces release at level 0; loop start latches LSAX. Voices free-run
-   (keep decoding) after their envelope ends, as on the hardware.
+   also forces release at level 0, loop start latches LSAX. Voices
+   free-run (keep decoding) after their envelope ends, as on the hardware.
 2. The noise generator steps (ATTR bits 8-13).
 3. Buses saturate to 16 bits. MMIX selects, separately for dry and wet and
-   left and right: the voices, the external input (core 1 only: core 0's
+   left and right, the voices, the external input (core 1 only: core 0's
    output through AVOL) and the AutoDMA input (through BVOL).
-4. The wet sum enters the reverb: the 39-tap FIR filters it and every second
-   frame the reverb unit runs one 24 kHz step over the work area
-   ESA..EEA; its output is zero-stuffed back to 48 kHz through the same FIR
+4. The wet sum enters the reverb: the 39-tap FIR filters it, every second
+   frame the reverb unit runs one 24 kHz step over the work area ESA..EEA,
+   and its output is zero-stuffed back to 48 kHz through the same FIR
    (gain 2), scaled by EVOL and added to the dry sum.
-5. Master volume (with sweep) gives the core's output. Core 1's output is
-   the frame's output; core 0's goes on to core 1.
-6. Write-back areas get this frame's samples (voice 1 and 3 of each core,
-   core 0's output, each core's dry and wet sums, at the halfword addresses
-   the PCSX2 wiki lists).
+5. The master volume (with sweep) gives the core's output. Core 1's output
+   is the frame's output; core 0's goes on to core 1.
+6. The write-back areas get this frame's samples (voices 1 and 3 of each
+   core, core 0's output, each core's dry and wet sums, at the halfword
+   addresses the PCSX2 wiki lists).
 
-This order is the reference (`frame()` in `spu2.c`). `spu2_render` gets the
-same bits by running most frames in chunks, voice by voice ("Render cost").
+This order is the reference (`frame()` in `spu2.c`). `spu2_render`
+produces the same bits faster by running most frames in chunks, voice by
+voice ("Render cost" below).
 
-### Register map covered
+### Register map
 
-Offsets as ps2sdk's `spu2_mmio_hwport.h` lays out a core (core 1's bank
-selected by the `core` argument; the 0x760 block uses core 0's offsets).
+Offsets follow ps2sdk's `spu2_mmio_hwport.h` layout of a core (core 1's
+bank selected by the `core` argument; the 0x760 block uses core 0's
+offsets).
 
 | range | registers | behaviour |
 |---|---|---|
@@ -105,7 +108,7 @@ selected by the `core` argument; the 0x760 block uses core 0's offsets).
 | 0x760-0x787 | MVOL, EVOL, AVOL, BVOL, MVOLX, the ten reverb volumes | all; MVOL with sweep; MVOLX reads the current level |
 
 Not covered: S/PDIF and the 0x7C0 block (no host meaning), the PS1-mode
-capture buffers, `sceSdProcBatch` (unused by SNDN2DRV, R1).
+capture buffers, and `sceSdProcBatch` (SNDN2DRV does not use it).
 
 ### libsd front end
 
@@ -114,70 +117,62 @@ set by `spu2_sd_set_time()`. The argument encodings are libsd's ABI as
 ps2sdk's `libsd-common.h` spells them (voice selector `core | voice << 1`,
 `SD_VPARAM_*`, `SD_PARAM_*`, `SD_SWITCH_*`, `SD_ADDR_*` byte addresses,
 `SD_CORE_*`). Behaviour and init values follow ps2sdk's clean-room libsd
-(`freesd.c`, `effect.c`, `voice.c`), which R1 already marked "usable but
-not authoritative". Points to confirm against the disc's `LIBSD.IRX`
-(R1 open question 1):
+(`freesd.c`, `effect.c`, `voice.c`), which the driver research marked as
+usable but not authoritative. Where it matters:
 
-- `sceSdInit` register values (`spu2_sd_init`; DIVERGENCES A14);
+- `sceSdInit`'s register values (`spu2_sd_init`; DIVERGENCES A14);
 - the effect preset table and work area sizes (A9). The psx-spx presets'
   sizes are exactly libsd's `EffectSizes << 4` for all ten modes, which is
   how the mode order (off, room, studio 1-3 = small/medium/large, hall,
   space, echo, delay, pipe = half echo) was matched;
-- `sceSdSetEffectAttr` with a stale `delay`/`feedback` (ignored here; the
-  game never sends them, R1);
-- `sceSdVoiceTrans`'s busy check (here: refused while the channel has a
-  transfer queued or running).
+- `sceSdSetEffectAttr` with a stale `delay`/`feedback`, which is ignored
+  here; the game never sends them;
+- `sceSdVoiceTrans`'s busy check: refused while the channel has a transfer
+  queued or running.
 
 `sceSdSetEffectAttr` places the work area as libsd does: ESA = end address
 - size + 2 bytes, where the end address is `EEA << 17 | 0x1FFFF`; the
 preset's address registers (PS1 units of 8 bytes) are written as halfwords
 (x4), so byte offsets are the PS1 ones.
 
-### Interface for Phase 4B
+### Interface
 
 - Lifecycle: `spu2_reset()`, then `spu2_sd_init(hot)` for SNDN2DRV's
   command 0x1E.
 - Per IOP tick: `spu2_sd_set_time(t)` with the frame the tick lands on,
   then the libsd calls the packet dispatcher makes (`spu2_sd_set_param`,
   `_set_switch`, `_set_addr`, `_set_core_attr`, `_set_effect_attr`,
-  `_voice_trans`), then the reads for the mailbox page
+  `_voice_trans`), then the reads for the reply page
   (`spu2_sd_get_param(V(ENVX))`, `spu2_sd_get_addr(V(NAX))`) and
   `spu2_sd_voice_trans_status(1, 0)` for the stream queue.
-- Audio thread or pump: `spu2_render(out, frames)` produces 48 kHz stereo
-  for SDL. Everything is single-threaded: the caller serialises render and
-  register calls (a 4B host that ticks on the game's vsync and renders on
-  the SDL callback needs a lock or a hand-off queue).
+- Rendering: `spu2_render(out, frames)` produces 48 kHz stereo. Everything
+  is single-threaded; the caller serialises render and register calls.
 - Transfers: `spu2_set_trans_callback(chan, cb, user)` is the DMA-done
-  interrupt (SNDN2DRV's 0x508 handler writes the transfer counter into the
-  mailbox there); `spu2_set_dma_rate()` picks the transfer speed (A8).
+  interrupt (SNDN2DRV's handler writes the transfer counter into the reply
+  page there); `spu2_set_dma_rate()` picks the transfer speed (A8).
 - PCM (FMV) input: `spu2_memin_start(1, ring, cb, user)` with the IOP
   staging ring in libsd's 0x800-byte layout; `cb` is the half-done
-  callback (SNDN2DRV 0x558), `spu2_memin_half()` is
+  callback, and `spu2_memin_half()` is
   `sceSdBlockTransStatus(1, 0) & 0x01000000`. BVOL and MMIX come through
   `spu2_sd_set_param`.
 - Reverb presets: `spu2_reverb_set_preset(mode, p)` replaces a built-in
-  preset, e.g. with values read from the user's `LIBSD.IRX` at extraction
-  time (as R1 proposes for the pitch table).
-- The 608-entry pitch table (R1, "Pitch") belongs to the 4B host, not the
-  SPU2: the SPU2 takes the PITCH word the driver computes.
+  preset, for example with values read from the user's `LIBSD.IRX`.
+- The 608-entry pitch table belongs to the driver host, not the SPU2: the
+  SPU2 takes the PITCH word the driver computes.
 
-## The sequencer on the host (4B)
+## The sequencer on the host
 
-`sce/libsndn2/sound.c` and `sound.h` moved to `port/audio/sg/`. The old
-paths keep one-line includes of the new files, so the PS2 build still
-compiles the member at its link-order path (`config/link_order.pal.txt`)
-with the SDK archive flags `tools/compile_c.sh` gives `sce/` sources.
-Every host change is an `#ifdef ICO_HOST` arm whose `#else` is the EE text
-as it was, or the macro `SG_HEAD_T`, which spells the EE's own `int`.
-Checked: the file preprocessed without `ICO_HOST` (stub SDK headers) gives
-the same 23,807-token stream as the pre-move original. The period compiler
-could not be fetched in this session, so the PS2 object itself was not
-rebuilt.
+The sequencer's source is `port/audio/sg/sound.c` and `sound.h`.
+`sce/libsndn2/sound.c` keeps a one-line include of it at its link-order
+path for the EE identity check, which compiles the same text with
+`ICO_HOST` undefined. Every host change is an `#ifdef ICO_HOST` arm whose
+`#else` is the EE text, or the macro `SG_HEAD_T`, which spells the EE's own
+`int`.
 
-`port/compat/sound.h` now includes `sg/sound.h` (host view: `long long`
-for the EE's 64-bit `long` in `SgStPcmBufMode`, and the
-`SgSetSePitchDirect` prototype the EE header leaves out). None of the
-game's `soundSe*`/`Adpcm*` or raw `Sg*` call sites changed.
+`port/compat/sound.h` includes `sg/sound.h` (the host view: `long long` for
+the EE's 64-bit `long` in `SgStPcmBufMode`, and the `SgSetSePitchDirect`
+prototype the EE header leaves out). None of the game's `soundSe*`,
+`Adpcm*` or raw `Sg*` call sites change.
 
 The seams (the comment at the top of `sg/sound.c` has the details):
 
@@ -186,33 +181,33 @@ The seams (the comment at the top of `sg/sound.c` has the details):
 | the head context, 16 `int` words holding the five pointers the event decoder shares (program block, tone record, channel table, `.hd` header, event cursor), read as `int *`, `char *` and `unsigned char **` in different functions | `unsigned char *sgHeadContext[16]`; each function's view uses the pointer array |
 | vab context word 0 = the `.hd` address | a nonzero token in the word, the address in `sgVabHd[vab]` |
 | sequence context word 2 (+8) = the `.sq` body or the SE table entry | a token, the address in `sgSeqBody[seq]`; every `memset` of a context clears the token, so readers see NULL exactly where the EE saw 0 |
-| `SgVabOpenFakeBody` writes header + the words at 0x10, 0x18-0x24 into the header's 0x30, 0x38-0x44 | `sgHdRel[vab]`, a record keyed by the header address (looked up by header, among open vabs); the header is never written (docs/port/LOADERS.md "hd and sq") |
+| `SgVabOpenFakeBody` writes the header and the words at 0x10, 0x18-0x24 into the header's 0x30, 0x38-0x44 | `sgHdRel[vab]`, a record keyed by the header address (looked up by header, among open vabs); the header is never written (docs/port/LOADERS.md, "hd and sq") |
 | `sgIop2EeBuf | 0x20000000` (uncached alias) | `ICO_UNCACHED`, the identity |
 | `_SgGetPacketCntext`: `page * 0x1000 + (int)p` | pointer arithmetic |
-| `SgGetDmaTransferStatus(1)` spins on the reply's +0x1C0 | the spin calls `ico_sched_spin_vsync()` each pass: the reply that ends it comes with the sound thread's next tick, which a spinning fiber would otherwise block (R1, "Mailbox"). On the host context (tests) it returns 0 |
+| `SgGetDmaTransferStatus(1)` spins on the reply's +0x1C0 | the spin calls `ico_sched_spin_vsync()` each pass, because the reply that ends it comes with the sound thread's next tick, which a spinning fiber would otherwise block. On the host context (tests) it returns 0 |
 | `SgSndn2RemoteInit` binds to the IRX's server | registers the host server first (`ico_sndn2_host_register`) |
 
-## The SNDN2DRV host (4B)
+## The SNDN2DRV host
 
 `sndn2_host.c` is a host SIF server (`port/data/sif_host.h`) under the
-IRX's id 0x736E646E. RPC 0x65 runs one packet (the init, `{0x1E, hot}`)
-and returns a zeroed page with the return word; RPC 0x64 runs a tick:
-every 16-byte packet in order, then the ADPCM refill scheduler and event
-queue, then the reply page. Each packet is the libsd calls R1 read off
-the IRX, on `spu2_sd_*`.
+IRX's id 0x736E646E. RPC 0x65 runs one packet (the init, `{0x1E, hot}`) and
+returns a zeroed page with the return word; RPC 0x64 runs a tick: every
+16-byte packet in order, then the ADPCM refill scheduler and event queue,
+then the reply page. Each packet becomes the libsd calls the research read
+off the IRX, on `spu2_sd_*`.
 
-### Command coverage
+### Commands
 
-All 38 command ids R1 documents are handled (0x22, which the EE never
-sends, and 0x3D, which does nothing in the IRX, included); the rest of the
-IRX's jump table (1..0x4F) does nothing, and the host logs the first such
-id once.
+All 38 command ids the research documents are handled, including 0x22,
+which the EE never sends, and 0x3D, which does nothing in the IRX. The
+rest of the IRX's jump table (1 to 0x4F) does nothing, and the host logs
+the first such id once.
 
 | group | ids | host |
 |---|---|---|
 | voices | 0x01 VOL, 0x02 ADSR, 0x03 SSA, 0x04 pitch | `SetParam`/`SetAddr` on `V(slot)` |
 | masks | 0x0A KON, 0x0B KOFF (id ignored), 0x0C VMIXEL+VMIXER, 0x0D NON | `SetSwitch`, core 0 from w2, core 1 from w3 |
-| core | 0x14 EEA, 0x15 type (clear bit dropped, depth 0, effect enable), 0x16 EVOL, 0x17 delay, 0x18 feedback, 0x28 MVOL, 0x32 id 8 noise clock (core = slot / 24), id 10 S/PDIF | as R1; 0x17/0x18 re-apply the last 0x15 attr twice (A20) |
+| core | 0x14 EEA, 0x15 type (clear bit dropped, depth 0, effect enable), 0x16 EVOL, 0x17 delay, 0x18 feedback, 0x28 MVOL, 0x32 id 8 noise clock (core = slot / 24), id 10 S/PDIF | as the IRX; 0x17/0x18 re-apply the last 0x15 attr twice (A20) |
 | init | 0x1E `sceSdInit(hot)`, VMIXEL/R cleared, DMA 0 callback; 0x1F callback off | |
 | sample RAM | 0x20 write, 0x21 read (IOP address into `ico_iop_ram`), 0x22 status into the return word | the counter `w1 >> 8` is kept; DMA 0's done callback writes it into both pages at +0x1C0 |
 | ADPCM streams | 0x3C init, 0x3D quit, 0x3E open, 0x3F close, 0x40 volume, 0x41 pitch, 0x42 play, 0x43 stop | `stream.c` (below) |
@@ -221,414 +216,259 @@ id once.
 ### Reply pages
 
 Two 0x200-byte pages alternate with a counter, as in the IRX: words
-0x000-0x0BF ENVX & 0x7FFF of the 48 voices (slot = core * 24 + voice),
-0x0C0-0x17F the stream records' IOP read offsets, 0x180-0x1BF the PCM
-channels' read offsets, 0x1C0 the transfer counter (written only by the
-DMA callback, into both pages), the rest zero. The host SIF copies the
-returned page into the EE's `sgIop2EeBuf` before `sceSifCallRpc`
-returns, which the EE cannot tell from the PS2's asynchronous reply
-because it reads the page only after `SgSndn2RemoteSync`.
+0x000-0x0BF hold ENVX & 0x7FFF of the 48 voices (slot = core * 24 +
+voice), 0x0C0-0x17F the stream records' IOP read offsets, 0x180-0x1BF the
+PCM channels' read offsets, 0x1C0 the transfer counter (written only by the
+DMA callback, into both pages), and the rest zero. The host SIF copies the
+returned page into the EE's `sgIop2EeBuf` before `sceSifCallRpc` returns.
+The EE cannot tell this from the PS2's asynchronous reply, because it reads
+the page only after `SgSndn2RemoteSync`.
 
 ### Timing
 
-One tick per EE vsync, on the sound fiber, as on the PS2. The SPU2 renders
-the vsync's frames in the host step (`ico_audio_host_vsync`) after the
-vsync interrupt handlers and before the fibers run, so a tick's register
-writes (stamped `spu2_time()`) take effect at the first frame of the next
-block, and the ENVX/NAX it reads are the state at the end of the block
-just rendered (A17). Voice transfers complete one frame after they start
-(4A's default rate, A19), so a 0x20 issued in tick N reaches the EE's
-+0x1C0 in the reply of tick N+1.
+The driver ticks once per EE vsync, on the sound fiber, as on the PS2. The
+SPU2 renders the vsync's frames in the host step (`ico_audio_host_vsync`)
+after the vsync interrupt handlers and before the fibers run, so a tick's
+register writes (stamped `spu2_time()`) take effect at the first frame of
+the next block, and the ENVX and NAX it reads are the state at the end of
+the block just rendered (A17). Voice transfers complete one frame after
+they start (A19), so a 0x20 issued in tick N reaches the EE's +0x1C0 in
+the reply of tick N+1. All of it is a function of the vsync count, which
+keeps headless runs deterministic.
 
 ### Pitch table
 
-Command 0x04 computes the PITCH word as R1 gives it (32-bit unsigned
+Command 0x04 computes the PITCH word as the IRX does (32-bit unsigned
 arithmetic, the 441/480 step, the scale, `& 0xFFFF`) from a 608-entry
 table. `ico_sndn2_pitch_load` reads it at registration from the mounted
-disc: `SNDN2DRV.IRX` (checked: 20,941 bytes), file offset 0x3900, 0x4C0
-bytes, accepted when T[208] = 0x1000. Without the disc it uses
-`floor(4096 * 2^((i - 208) / 192))`, logs once and DIVERGENCES A15
-applies. The index is clamped and counted, with one log line (R1 open
-question 4; none in the 4B run).
+disc: `SNDN2DRV.IRX` (20,941 bytes), file offset 0x3900, 0x4C0 bytes,
+accepted when T[208] = 0x1000. Without the disc it falls back to
+`floor(4096 * 2^((i - 208) / 192))`, logs once, and DIVERGENCES A15
+applies. The index is clamped and counted, with one log line (A21).
 
-Correction to R1 ("Pitch"): the disc's table differs from that formula in
-32 entries, but only 30 by one. Entry 64 is 2360 (formula 2435) and entry
-172 is 3340 (formula 3596), each below its predecessor: hand-made data with
-two outliers, so the table is not monotonic and the loader does not check
-order. Measured by `sndn2_test` against `baserom/Ico_PAL.iso`.
+The disc's table differs from that formula in 32 entries, 30 of them by
+one. Entry 64 is 2360 (the formula gives 2435) and entry 172 is 3340
+(3596), each below its predecessor: hand-made data with two outliers. The
+table is therefore not monotonic, and the loader does not check order;
+this is why the port reads the table from the disc rather than generating
+it.
 
-## Streams (4B, `stream.c`)
+## Streams (`stream.c`)
 
 ### ADPCM `.int` streams
 
 The game reads a stream's file into IOP RAM itself (`fumi/sound/
-adpcm_init.c` through `iosCdvdBackGroundReadIOPm`, i.e. `sceCdReadIOPm`
-into `ico_iop_ram`, docs/port/DATA.md) and refills the ring behind the read
-offset it polls. The host engine is R1's:
+adpcm_init.c` through `iosCdvdBackGroundReadIOPm`, that is `sceCdReadIOPm`
+into `ico_iop_ram`, docs/port/DATA.md) and refills the ring behind the
+read offset it polls. The host engine follows the IRX:
 
-- 0x3E fills the 36-byte record (channels `n` from the attr byte, SPU ring
-  start and size from the `AdpcmChReq` field the decomp calls `vol`, IOP
-  ring start and size), sets SSA and ADSR 0x8080/0x808A.
+- 0x3E fills the 36-byte record (channels `n` from the attr byte, the SPU
+  ring start and size from the `AdpcmChReq` field the decompilation calls
+  `vol`, the IOP ring start and size) and sets SSA and ADSR 0x8080/0x808A.
 - 0x42 queues a FILL of the first half (loop-start flags) per voice, then
-  one KEYON for the masks; the 128-entry queue runs at most one transfer per
-  tick, on DMA channel 1, and only when the channel is idle. So a stereo
-  play keys on in the third tick (fill, fill, key on), and the IOP read
-  offset moves on by `spu_size / 2 * n`, modulo the IOP ring, when the next
-  tick finds the channel idle (one tick after the DMA).
-- Every tick, each active voice's NAX is compared with its ring's halves;
+  one KEYON for the masks. The 128-entry queue runs at most one transfer
+  per tick, on DMA channel 1, and only when the channel is idle, so a
+  stereo play keys on in the third tick (fill, fill, key on), and the IOP
+  read offset moves on by `spu_size / 2 * n`, modulo the IOP ring, when the
+  next tick finds the channel idle (one tick after the DMA).
+- Every tick each active voice's NAX is compared with its ring's halves;
   entering the other half queues a FILL of the half it left, from the
   current read offset.
 - A FILL de-interleaves `len / (0x800 / n)` chunks of `0x800 / n` bytes
   from `src`, `src + 0x800`, ... into the staging buffer and patches the
-  flag byte of the first and last block (half 1: 2 and 3; half 2: 6 and 2),
-  so the voice loops over the whole ring and re-latches LSA at its start.
-  A chunk outside IOP RAM is zero-filled and logged once (R1 open
-  question 3: a 4-channel stream reads past its ring; IOP RAM continues
-  there on the host as on the PS2).
+  flag byte of the first and last block (half 1: 2 and 3; half 2: 6 and
+  2), so the voice loops over the whole ring and re-latches LSA at its
+  start. A chunk outside IOP RAM is zero-filled and logged once (a
+  4-channel stream reads past its ring; IOP RAM continues there on the
+  host as on the PS2).
 - 0x43 cancels the voices' queued FILLs, clears their records' state and
   keys them off; 0x3F cancels and clears.
 
-### PCM streams (movie audio)
+### PCM streams (film audio)
 
 0x46 points core 1's AutoDMA input at the staging buffer (the IRX shares
 its 0x2000 bytes with the ADPCM fills; the PCM ring is its first 0x800),
 sets BVOL 0x7FFF and installs the half-done callback. On each half-done
 interrupt the half the input is not reading is zeroed and the 16 channels
-are mixed into it: 256 left samples then 256 right, each sample `(vol *
-x) >> 15` added with 16-bit wrap-around, `x` read at byte offset
+are mixed into it: 256 left samples then 256 right, each sample
+`(vol * x) >> 15` added with 16-bit wrap-around, `x` read at byte offset
 `((2 * i) >> shift) * 2`, the read offset wrapping at the buffer size,
 advancing by the open's step and stopping at the buffer-mode stop offset.
-The PS2's movie player (`ito/mpeg/mv_audiodec.c`) is not in the build; the
-host's (`port/fmv/movie.c`, Phase 4E) makes the same `SgStPcm*` calls
-(docs/port/FMV.md, "Audio"), so a movie's sound runs through this engine and
-`sndn2_test` drives it as well.
+The port's film player (`port/fmv/movie.c`) makes the same `SgStPcm*`
+calls as the PS2's (docs/port/FMV.md, "Audio"), so a film's sound runs
+through this engine.
 
-### Mirror mode (R7c)
+## Mirror mode
 
 With mirror mode on, `ico_audio_host_vsync` (`port/audio/audio_host.c`)
 swaps the left and right samples of each rendered block
 (`ico_audio_pan_mirror`) right after `spu2_render`, before the WAV dump,
 the volume scaling and the SDL queue, so the device and the dump agree.
 The SPU2, the driver and the game's pan values are untouched. The switch is
-the run's mirror mode (`ico_opt_mirror()`, `port/game/options.c`: chosen
-at New Game or by the loaded slot; docs/port/SETTINGS.md "Mirror mode"),
-read per block, so it follows a change from the next vsync. Test:
-`audio_pan` (`pan_test`, `port/audio/CMakeLists.txt`).
+the run's mirror mode (`ico_opt_mirror()`, docs/port/OPTIONS.md), read per
+block, so a change takes effect from the next vsync.
 
-A film's sound is mixed by the same SPU2 (above), so it is swapped with
-mirror mode as well. It follows mirror mode, not `[game] mirror_fmv`:
-with mirror mode on and `mirror_fmv` off the picture plays unflipped and
-its stereo is swapped (`port/audio` has no view of the movie state;
-RENDER_API.md section 21, open item 5; docs/port/FMV.md "Mirror").
+A film's sound is mixed by the same SPU2, so it is swapped with mirror
+mode too. It follows mirror mode, not `[game] mirror_fmv`, because
+`port/audio` has no view of the film state (docs/TODO.md).
 
-## Output (4B)
+## Output
 
-`audio_host.c`: once per vsync the SPU2 renders 960 frames (50 Hz) or
+Once per vsync `audio_host.c` has the SPU2 render 960 frames (50 Hz), or
 48000 x 1001 / 60000 = 800.8 on average at 59.94 Hz (800 or 801, exact
 over every five vsyncs), always on the simulation thread. The SPU2 and the
 driver are never touched from another thread, so no lock is needed. The
 frames then go to:
 
 - **SDL3** (window build, `out_sdl.c`): one `SDL_AudioStream` opened with
-  `SDL_OpenAudioDeviceStream` at 48 kHz stereo S16 (the SPU2's own
-  format). `SDL_PutAudioStreamData` is SDL's thread-safe hand-off; SDL's
-  audio thread only drains the stream. Latency target: two vsyncs (40 ms
+  `SDL_OpenAudioDeviceStream` at 48 kHz stereo S16, the SPU2's own format.
+  `SDL_PutAudioStreamData` is SDL's thread-safe hand-off; SDL's audio
+  thread only drains the stream. The latency target is two vsyncs (40 ms
   at 50 Hz) queued in the stream, plus a 480-frame (10 ms) device period
   (`SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`), plus up to one vsync between a
-  sound tick and the render that plays it: about 50-70 ms from the EE's
-  key-on to the device. When the queue holds less than a quarter vsync
-  (start-up, a stall) one vsync of silence is queued ahead of the block;
-  above four vsyncs (the simulation ran ahead of the window's pacing) the
-  block is dropped. Both are counted and logged at exit (A22). Not
-  measured on a real device: the build host has none. ini `audio=0` opens
-  no device (the driver still runs). The output volume (`[audio] volume`,
-  0.0 to 1.0, `ICO_AUDIO_VOLUME`; the Settings menu steps it live through
+  sound tick and the render that plays it: about 50 to 70 ms from the
+  EE's key-on to the device. When the queue holds less than a quarter
+  vsync (start-up, a stall) one vsync of silence is queued ahead of the
+  block; above four vsyncs (the simulation ran ahead of the window's
+  pacing) the block is dropped. Both are counted and logged at exit (A22).
+  `[audio] enabled = false` (`audio=0`) opens no device; the driver still
+  runs. The output volume (`[audio] volume`, 0.0 to 1.0, exported as
+  `ICO_AUDIO_VOLUME`; the Settings menu steps it live through
   `ico_audio_set_volume`) scales each block just before it is queued:
   `(sample * q8 + 128) >> 8` with `q8 = round(volume * 256)` clamped to
-  0..256 and the result clamped to 16 bits (`volume.c`; `volume_test`). The
-  WAV dump is taken before the scaling and stays at full volume.
-- **WAV** (any build, ini `audio_dump=PATH`, relative to the ini's folder;
-  `audio_dump=1` is `logs/audio.wav`): 16-bit stereo 48 kHz, header
-  patched every second and at exit; a summary line (frames, peak, first
-  non-silent vsync) goes to the log. `port/platform/host_config.c` hands
-  the keys over as `ICO_AUDIO_DUMP` / `ICO_AUDIO`, as it does the renderer's
-  dump keys.
+  0..256 and the result clamped to 16 bits (`volume.c`).
+- **WAV** (any build, `audio_dump=PATH`, relative to the executable's
+  folder; `audio_dump=1` is `logs/audio.wav`): 16-bit stereo 48 kHz, the
+  header patched every second and at exit, and a summary line (frames,
+  peak, first non-silent vsync) in the log. The dump is taken before the
+  volume scaling and stays at full volume. `port/platform/host_config.c`
+  hands the keys over as `ICO_AUDIO_DUMP` and `ICO_AUDIO`.
 - **Nothing** (headless without a dump). The driver and the SPU2 run
   regardless, because the game reads ENVX (slot release) and the stream
   read offsets back; everything is a function of the vsync count, so a
   headless run is deterministic and the same with or without a dump.
 
-Linux SDL3 audio: `tools/fetch_deps.sh` now builds SDL3 with the ALSA
-backend (dlopen of `libasound.so.2`; PulseAudio and PipeWire servers are
-reached through their ALSA plugins), from Debian 13's `libasound2-dev`
-headers unpacked into the build's scratch tree; `libpulse-dev` is unpacked
-too and SDL enables that backend when the build host has `libpulse.so.0`
-(this one does not). The stamp is `SDL3-3.4.18+audio`. Checked: the rebuilt
-library lists `alsa disk dummy` and `SDL_Init(SDL_INIT_AUDIO)` picks
-`alsa`. The Windows prebuilt has WASAPI.
+On Linux, `tools/fetch_deps.sh` builds SDL3 with the ALSA backend (a
+dlopen of `libasound.so.2`; PulseAudio and PipeWire servers are reached
+through their ALSA plugins) from Debian's `libasound2-dev` headers
+unpacked into the build's scratch tree; `libpulse-dev` is unpacked too,
+and SDL enables that backend when the build host has `libpulse.so.0`. The
+stamp is `SDL3-<version>+audio`. The Windows prebuilt uses WASAPI.
 
-## The 4B game run
+## Render cost
 
-One headless `linux-x64` run, `ticks=1300`, `pad-script.txt` =
-`port/input/pad-boot.txt`, `audio_dump=logs/audio.wav` (2026-10-05): 1300
-Main ticks, 2607 vsyncs, 10 s wall time, ended in stage 3. The driver
-logged no ignored command, pitch clamp or out-of-range transfer; the pitch
-table came from the disc.
+`spu2_render` runs on the simulation path (`host_loop.c` calls
+`ico_audio_host_vsync` between the vsync callbacks and the game threads),
+so its cost is paid inside every simulation step. A plain frame-by-frame
+render of the reference order cost about 2 ms per vsync even when idle,
+mostly because `spu2_sd_init` keys all 48 voices on at pitch 0x3FFF over
+the silent init block and they free-run forever, and because of the
+per-frame call chain and the reverb's two full 39-tap FIRs. The chunked
+renderer brings the idle state to about 0.24 ms and a busy game scene to
+about 0.66 ms per vsync, with bit-identical output:
 
-The WAV: 2,502,720 frames (52.1 s = 2607 x 960). Silent to vsync 895
-(17.9 s, inside stage 1, the title, which runs to vsync 1333); from there
--54 to -13 dBFS RMS per one-second window, peak 27272 (-1.6 dBFS), no
-full-scale sample on either side. Loudest at 25-27 s (the end of the
-title and the cut to the opening, -15 to -13 dBFS); the opening stages
-41-45/40 (26.7-41.6 s) between -49 and -14 dBFS, with silence at 39-41 s
-(the load into stage 3); stage 3 from 41.6 s at -20 dBFS, a dip to -53,
-then a steady -34 dBFS (80-300 Hz holds 86-94% of the energy). Per window
-the L/R correlation ranges from -0.02 to 0.87, so panning and the stereo
-streams are live.
+1. **Chunks, voice by voice** (`render_chunk`). After the frame's queued
+   writes and transfer completions (`frame_begin`), the render takes up to
+   256 frames up to the next queued write or transfer time, the next
+   transfer completion and the next AutoDMA half boundary
+   (`chunk_frames`). Nothing outside the SPU2 can see or change anything
+   inside such a stretch, provided no IRQ can be raised, so each core's
+   IRQ must be disabled or already pending (`chunk_allowed`). The
+   registers are then constant, and each voice runs all the chunk's frames
+   in one loop (`voice_chunk`) into per-frame bus arrays, core by core and
+   voice by voice; PMON reads the previous voice's per-frame outputs, and
+   NON reads a noise sequence computed first. A second pass runs steps 3
+   to 6 per frame in the reference order (`core_finish`: MMIX, reverb,
+   master volume, write-backs, AutoDMA advance). Otherwise (a write or
+   completion due next frame, an armed IRQ) the frame renders with the
+   reference `frame()`.
+2. **Hazards.** The only reordering is voices reading sound RAM before the
+   chunk's frames write it. A voice that loads a block overlapping the
+   write-back area (halfwords 0x400-0x1FFF) or a core's reverb work area
+   with writes enabled sets a flag; the voices (a snapshot taken at the
+   chunk start), ENDX and the noise state are put back and the chunk
+   renders frame by frame.
+3. **The fused voice loop** reads registers once per chunk and keeps
+   envelope, volume and pitch state in locals (the bus stores would
+   otherwise force reloads under `-fno-strict-aliasing`). The interpolator
+   is a window over the current block (`win`), so feeding 0 to 4 samples is
+   an index add and a block end is handled once per block. A zero envelope
+   skips the interpolation and the mix.
+4. **Envelope between steps** (`adsr_quiet_inc`). While `counter + inc`
+   stays below 0x8000 an ADSR tick only adds `inc`; the full `adsr_run`
+   runs only on a step or when a phase may end.
+5. **Silent voices in bulk** (`chunk_silent`). A voice with the envelope
+   off at level 0 and no PMON outputs 0 every frame; only its counter,
+   decoder and sweeps move, so the fetches are skipped a block at a time
+   (`chunk_skip`, still decoding every block for the history, ENDX and
+   LSAX). An end + mute met on the way stops the skip at the end of that
+   frame.
+6. **Silent blocks** (`adpcm_decode_block`). Data bytes all zero with
+   filter 0 or a zero history decode to 28 zeros without the loop.
+7. **Reverb.** The resampling FIR is half-band (odd taps zero except the
+   centre 0x4000) and symmetric, so it takes 10 multiplies over pair sums;
+   the even frames' zero-stuffed input meets only the centre. The
+   work-area offsets are reduced modulo the area size once per chunk
+   (`rv_plan`), so an access is an add and a compare.
 
-Against the null driver: the per-tick trace of this run equals 2J's
-`linux-x64` run (same pad script, with the since-removed `port/null/snd_null.c`) for the first
-860 ticks. Then game flag word gf0 gains bit 0x10 one tick later (tick 862
-instead of 861, stage 43, the opening), and from tick 1116 (stage 3) the
-trace's save-data hash differs; every other column stays equal to tick
-1300. A one-tick shift in the opening is what the real stream path
-predicts: the null model counted a stream's first fill at `SgStAdpcmPlay`,
-while SNDN2DRV keys on in the third tick and reports the read offset a
-tick after each DMA (R1). Which of the two the PS2 matches can only be
-settled by a capture; the driver follows R1.
+`frame()`, `core_frame`, `voice_frame` and `voice_fetch` stay as the
+reference and handle everything the chunk conditions exclude.
+`spu2_set_exact(1)` forces the reference path. `spu2_get_stats` counts
+chunked and frame-by-frame frames and hazards, and
+`ico_audio_host_shutdown` logs them (`audio: SPU2 rendered N frames voice
+by voice in C chunks and M frame by frame (H hazards)`), so a game run
+shows whether anything keeps the render on the slow path.
 
-One feature is not explained: from 25 s to 31 s up to 42% of the right
-channel's energy (8% of the left's) is below 5 Hz, a slowly decaying offset
-of up to -5300 that follows the loud event at 25 s. An offline SPU2 check
-(a loud zero-mean burst through studio-3 reverb at full EVOL) leaves at
-most 6 LSB of mean, so the reverb is not the source. The likely source is
-the program material (a sample with a DC component under a slow release),
-which only a capture from a PS2 can confirm (open item).
+### Proving identical output
 
-## Render cost (S3)
+`spu2_render_crc` (`spu2_bench --check`) takes a CRC-32 over the output,
+the registers the driver and sequencer read after every vsync (ENVX, VOLX,
+NAX, LSAX, ENDX, STATX, MVOLX, the IRQ flag), every callback with its time
+and the reads it makes, and the final 2 MB of sound RAM. Five 10-second
+scenes must match golden values taken from the frame-by-frame renderer,
+and 24 random 2-second scenes (random PMON, NON, VMIX, MMIX, AVOL/BVOL,
+reverb modes, transfer rates, IRQ, AutoDMA, NAX/LSAX/ADSR/ENVX/pitch writes
+inside the block, sample uploads under playing voices) are rendered
+chunked and with `spu2_set_exact(1)` and must agree. `spu2_bench --print`
+lists all 29 CRCs.
 
-The window build's log showed the per-vsync `audio` phase at 6-11 ms on a
-desktop (`dist/ico-pc-v0.3-win/ico-pc-v0.3/x64/logs/ico-pc.log`, e.g.
-`window: slow step 9.0 ms at vsync 700 ... audio 9.0`), already at vsync 10
-when no game sound plays yet. `spu2_render` runs on the simulation path
-(`host_loop.c` calls `ico_audio_host_vsync` between the vsync callbacks and
-the game threads) and stays there: the rewrite below changes how the frames
-are computed, not where or when, and its output is bit-identical.
+The harness must produce the same random scenes under every compiler. C
+leaves the evaluation order of function arguments and of most operands
+unspecified, and gcc and clang order them differently, so every random
+draw in `spu2_bench.c` is its own full expression (`voice_start_random`,
+`random_header`, `random_block_addr`). Neither UBSan nor
+`-Wsequence-point`/`-Wunsequenced` reports such code, because it is
+unspecified behaviour rather than undefined; a new draw must follow the
+same rule. `spu2_bench --trace-crc <scene | seed>` prints the harness PRNG
+state, the running CRC and a CRC per component after every vsync, which
+locates where two builds diverge.
 
-### Measuring
+### The benchmark
 
-`spu2_bench` (`port/audio/test/spu2_bench.c`) renders five 10 s scenes with
-`spu2_sd` calls the way the driver makes them and times each
-`spu2_render` call (one vsync) with `clock_gettime` (QueryPerformanceCounter
-on Windows; the harness builds for `win-x64` too):
+`spu2_bench` (`port/audio/test/spu2_bench.c`; it also builds for Windows)
+renders the five scenes with `spu2_sd` calls the way the driver makes them
+and times each `spu2_render` call (one vsync) with `clock_gettime`
+(QueryPerformanceCounter on Windows):
 
 | scene | what |
 |---|---|
 | idle | `spu2_sd_init` only, reverb on both cores (studio large, hall): the boot state |
 | game | 24 voices keyed over time, key offs, pitch changes, sweeps, ENVX writes on ended voices, noise, PMON, AutoDMA input, transfers, writes inside the block, effect enable toggling; 800/801 frames per vsync |
-| hazard | the game scene plus an armed IRQ on a played block and voices playing from the write-back area and from core 1's reverb work area |
+| hazard | the game scene plus an armed IRQ on a played block and voices playing from the write-back area and from core 1's reverb work area (renders mostly frame by frame by design) |
 | full48 | 48 looping voices (pitch 0x0400-0x3BFF), reverb on both cores, a pitch change and a retrigger per vsync, 960 frames per vsync |
 | full24 | the same with 24 voices |
 
 `spu2_prof` is the same harness over a copy of the SPU2 built with
-`SPU2_PROFILE`: `SPU2_LAP(stage)` points (compiled out otherwise) charge the
-time since the previous lap to a stage, and the harness subtracts one
-clock read (about 15 ns) per lap. The fine laps distort the old renderer's
-numbers more than its totals, so the totals below come from the
-uninstrumented build.
-
-Container CPU: Intel i7-7700 (4 cores), gcc `-O2` (`linux-x64` preset,
-RelWithDebInfo). The machine was shared with other jobs (load average 3-6),
-so each figure is the lowest of three interleaved runs' medians, old and new
-alternating. ms per vsync (960 frames; 800/801 for game and hazard):
-
-| scene | before | after |
-|---|---|---|
-| idle | 2.14 | 0.24 |
-| game | 1.62 | 0.66 |
-| hazard | 1.60 | 1.26 |
-| full48 | 1.83 | 0.84 |
-| full24 | 2.04 | 0.54 |
-
-`full48` medians ranged 0.81-0.85 ms across runs. `full24` was slower than
-`full48` before because its 24 idle voices free-run over the init block like
-the idle scene's. `hazard` runs mostly frame by frame by design (the armed
-IRQ). `sndn2_test` went from 1.20 s to 0.14 s.
-
-Stage profile, ms per vsync, before (frame by frame, `spu2_prof` over the
-old `spu2.c` with the same laps):
-
-| stage | idle | game | full48 | full24 |
-|---|---|---|---|---|
-| events (queue head, transfers) | 0.002 | 0.000 | 0.002 | 0.003 |
-| ADPCM decode | 0.641 | 0.359 | 0.311 | 0.498 |
-| interpolation | 0.206 | 0.089 | 0.215 | 0.292 |
-| envelope and sweeps | 0.099 | 0.199 | 0.294 | 0.264 |
-| mix | 0.168 | 0.041 | 0.149 | 0.234 |
-| pitch counter, sample feed | 0.714 | 0.357 | 0.473 | 0.688 |
-| bus, MMIX | 0.036 | 0.019 | 0.025 | 0.037 |
-| reverb (both FIRs and the unit) | 0.483 | 0.424 | 0.523 | 0.543 |
-| output, write-backs | 0.058 | 0.069 | 0.063 | 0.066 |
-
-After (the chunked voice loop fuses interpolation, envelope, mix and pitch
-into one stage):
-
-| stage | idle | game | full48 | full24 |
-|---|---|---|---|---|
-| events, chunk set-up | 0.002 | 0.003 | 0.003 | 0.003 |
-| ADPCM decode | 0.047 | 0.225 | 0.331 | 0.196 |
-| noise sequence | 0.004 | 0.004 | 0.005 | 0.004 |
-| voice loop | 0.064 | 0.286 | 0.492 | 0.257 |
-| bus, MMIX | 0.021 | 0.015 | 0.023 | 0.020 |
-| reverb | 0.098 | 0.078 | 0.130 | 0.105 |
-| output, write-backs | 0.026 | 0.032 | 0.038 | 0.030 |
-
-The hot spots were the per-frame call chain (every voice of every frame:
-`voice_frame`, `interpolate`, `adsr_tick` with the envelope's rate decode,
-two `vol_tick`, `voice_fetch` per sample), the 48 voices `spu2_sd_init`
-keys on at pitch 0x3FFF over the silent init block (four samples a frame,
-a block decode every seven frames, each voice, forever: the whole idle
-cost), and the reverb (two full 39-tap FIRs per core per frame and a 64-bit
-`%` per work-area access). The event queue was not one: `ev_run_due` looks
-only at the queue head. The Gaussian interpolation was already 32-bit.
-
-### What changed
-
-1. **Chunks, voice by voice** (`spu2_render`, `render_chunk`). After the
-   frame's queued writes and transfer completions (`frame_begin`), the
-   render takes up to 256 frames up to the next queued write or transfer
-   time, the next transfer completion and the next AutoDMA half boundary
-   (`chunk_frames`). Nothing outside the SPU2 can look or change anything
-   inside such a stretch, provided no IRQ can be raised: each core's IRQ
-   must be disabled or already pending (`chunk_allowed`), which makes every
-   IRQ check a no-op. Then the registers are constant and each voice runs
-   all the chunk's frames in one loop (`voice_chunk`) into per-frame bus
-   arrays, core by core and voice by voice; PMON reads the previous voice's
-   per-frame outputs; NON reads a noise sequence computed first. A second
-   pass runs steps 3-6 per frame in the reference order (`core_finish`:
-   MMIX, reverb, master volume, write-backs, AutoDMA advance). Otherwise
-   (a write or completion due next frame, an armed IRQ) the frame renders
-   with the reference `frame()`.
-2. **Hazards.** The only reordering is voices reading sound RAM before the
-   chunk's frames write it. A voice that loads a block overlapping the
-   write-back area (halfwords 0x400-0x1FFF) or a core's reverb work area
-   with writes enabled sets a flag; the voices (snapshot taken at the chunk
-   start), ENDX and the noise state are put back and the chunk renders
-   frame by frame.
-3. **Fused voice loop.** Registers read once per chunk; envelope, volume
-   and pitch state in locals (the bus stores would otherwise force reloads
-   under `-fno-strict-aliasing`); the interpolator is a window over the
-   current block (`win`), so feeding 0-4 samples is an index add, and a
-   block end is handled once per block. Mix bits, NON, PMON and the sweep
-   flags are hoisted. A zero envelope skips the interpolation and the mix
-   (the sample is 0 whatever the interpolator holds, and 0 adds nothing).
-4. **Envelope between steps** (`adsr_quiet_inc`). While `counter + inc`
-   stays below 0x8000 an ADSR tick only adds `inc` (no level step, no phase
-   change, given the level conditions checked when `inc` is derived); the
-   full `adsr_run` runs only on a step or when a phase may end.
-5. **Silent voices in bulk** (`chunk_silent`). A voice with the envelope off
-   at level 0 and no PMON outputs 0 every frame; only its counter, decoder
-   and sweeps move. The counter's total over m frames is `counter + m *
-   step`, so the fetches are skipped a block at a time (`chunk_skip`, still
-   decoding every block for the history, ENDX and LSAX). An end + mute met on
-   the way (the voice is in release from the next frame) stops the skip at
-   the end of that frame.
-6. **Silent blocks** (`adpcm_decode_block`). Data bytes all zero with
-   filter 0 or a zero history decode to 28 zeros and a zero history without
-   the loop: the init block every idle voice loops over.
-7. **Reverb.** The resampling FIR is half-band (odd taps zero except the
-   centre 0x4000) and symmetric: 10 multiplies over pair sums plus the
-   centre downsampling, 10 on the odd frames' upsampling and none on the
-   even frames, whose zero-stuffed input meets only the centre: `(0x4000 *
-   x) >> 14 = x`. The work-area offsets are reduced modulo the area size
-   once per chunk (`rv_plan`), so an access is an add and a compare.
-
-Kept frame by frame as the reference, and used for everything the chunk
-conditions exclude: `frame()`, `core_frame`, `voice_frame`, `voice_fetch`.
-
-### Proof of identical output
-
-- `spu2_test`'s golden scene checksum is unchanged (0x77DB2B76), and all
-  112 checks pass; `adpcm`, `sndn2`, `volume` and `audio_pan` pass.
-- `spu2_render_crc` (`spu2_bench --check`) takes a CRC-32 over the output,
-  the registers the driver and sequencer read after every vsync (ENVX,
-  VOLX, NAX, LSAX, ENDX, STATX, MVOLX, the IRQ flag), every callback with its
-  time and the reads it makes, and the final 2 MB of sound RAM. The five
-  10 s scenes match golden values taken from the old renderer (commit
-  a0a98982's `spu2.c` and `adpcm.c` built against the same harness).
-  Then 24 random 2 s scenes (random PMON, NON, VMIX, MMIX, AVOL/BVOL,
-  reverb modes, transfer rates, IRQ, AutoDMA, NAX/LSAX/ADSR/ENVX/pitch
-  writes inside the block, sample uploads under playing voices) are
-  rendered chunked and with `spu2_set_exact(1)` (reference only) and must
-  agree. `spu2_bench --print` lists all 29 CRCs; the old renderer prints
-  the same 29.
-- Coverage (a counting build, not kept): over those scenes the bulk skip
-  ran 825k times, stopped at an end + mute 444k times, the window path met
-  an end + mute 370k times, 5456 chunks fell back on a hazard, and 3.49M
-  frames were chunked against 3.53M frame by frame.
-- The `asan` preset (ASan + UBSan) runs `spu2_test`, `adpcm_test` and
-  `spu2_bench --check` clean. The changed files compile without warnings
-  for `win-x64` (mingw gcc), and `spu2_bench.exe` links there.
-
-### Compiler independence (S5)
-
-CI's `linux-x64-clang` job failed `spu2_render_crc` on `game` (0x4BEA597E)
-and `hazard` (0xD124DD98). The SPU2 was not the cause: the gcc-built
-harness object linked against the clang-built `libico_audio.a` gave the
-golden values, and the clang-built harness against the gcc-built library
-gave the failing ones. `spu2_bench --trace-crc <scene | seed>` (the harness
-PRNG state, the running CRC and a CRC per component after every vsync)
-showed `game` diverging at vsync 0 in the registers with the PRNG state
-equal, and `hazard` at vsync 0 in the samples with the PRNG state already
-different. The harness drew several `rnd()` values in one expression whose
-order C leaves unspecified (C11 6.5p3, 6.5.2.2p10): arguments such as
-`voice_start(c, v, rnd(SOUNDS), rnd(2))`, `key(c ^ 1, 1u << rnd(24),
-rnd(2))` and the transfer callback's pitch and time, and the operands of
-`|` and `+` (ADSR words, ADPCM headers, `snd_addr[rnd(..)] + 16 * rnd(4)`).
-gcc 14 evaluated those argument lists right to left and clang left to right,
-so the voices got different sounds and sustain flags (and `sustained ?
-0x7F : rnd(0x80)` then drew a different number of values). This is
-unspecified behaviour, not UB, so neither UBSan nor `-Wsequence-point`/
-`-Wunsequenced` reports it (both checked on the old harness).
-
-Every draw is now one full expression, in the order gcc used (operands left
-to right, arguments right to left: `voice_start_random`, `random_header`,
-`random_block_addr`). The golden values are unchanged: the fixed harness
-gives the same 29 CRCs (`--print`) over the current renderer and over
-a0a98982's `spu2.c`, `spu2_sd.c`, `spu2_tables.c` and `adpcm.c`, each built
-with gcc 14.2 and with llvm-mingw clang, and `--check` passes under both.
-`spu2_test`'s checksum (0x77DB2B76) was never affected (its PRNG is one
-statement per draw). The audio tests pass with `-DICO_SANITIZE=undefined`
-under gcc (runtime diagnostics) and under clang (llvm-mingw ships no Linux
-UBSan runtime, so `-fsanitize-trap=undefined` in `CMAKE_C_FLAGS` and
-`CMAKE_EXE_LINKER_FLAGS`). The `win-x64` (mingw gcc) build compiles the
-harness; it was not run here (no Wine).
-
-`spu2_get_stats` counts chunked and frame-by-frame frames and hazards;
-`ico_audio_host_shutdown` logs them (`audio: SPU2 rendered N frames voice by
-voice in C chunks and M frame by frame (H hazards)`), so a game run shows
-whether anything keeps the render on the slow path.
-
-### Open
-
-- The Windows log's 6-11 ms against about 2 ms here for the old renderer
-  is not explained by the SPU2 alone. The
-  `audio` phase also covers `ico_audio_sdl_push` (SDL's stream lock).
-  Running `spu2_bench.exe` on that machine separates the two.
-- Further headroom, if needed: the ADPCM decoder is bound by its own
-  recurrence (about 11 cycles a sample, cmov clamps in the chain; a branch
-  clamp and an algebraic fold of the `+ 32` both measured no faster), so
-  the next step would be decoding two voices' blocks interleaved, which
-  needs each voice's block sequence for the chunk worked out ahead of the
-  voice loop.
-- A block load at halfword 0xFFFF9-0xFFFFF reads past the end of sound RAM
-  (into the register array that follows it in `S`); both renderers read
-  the same bytes. Unchanged here.
+`SPU2_PROFILE`: `SPU2_LAP(stage)` points (compiled out otherwise) charge
+the time since the previous lap to a stage, and the harness subtracts one
+clock read per lap. The ADPCM decoder is bound by its own recurrence
+(about 11 cycles a sample), so further headroom would come from decoding
+two voices' blocks interleaved.
 
 ## Sources
 
 Public hardware documentation, cited where used. No emulator source was
-read for this package; nothing was copied from any implementation.
+read for the SPU2, and nothing was copied from any implementation.
 
 | what | source |
 |---|---|
@@ -637,30 +477,31 @@ read for this package; nothing was copied from any implementation.
 | SPU2 register layout (offsets of every register used here, the 0x760 block, address pairs) | ps2sdk `common/include/spu2_mmio_hwport.h`, https://github.com/ps2dev/ps2sdk (AFL-2.0; layout read, no code taken) |
 | libsd encodings and behaviour: `libsd-common.h`; `sceSdInit`, `sceSdSetParam`, `sceSdSetCoreAttr`, `sceSdSetEffectAttr` (preset order, ESA and address scaling), `sceSdVoiceTransStatus` | ps2sdk `common/include/libsd-common.h`, `iop/sound/libsd/src/freesd.c`, `effect.c`, `voice.c` (commit ac92a9f6); read for behaviour only |
 | SPU2 is two cores x 24 voices, 48 kHz, 2 MB; write-back areas (voice 1/3, core 0 output, dry/wet mixes) at halfword addresses 0x400-0x1FFF; free-running voices; IRQ on reverb accesses | PCSX2 wiki, "PCSX2 Documentation/SPU2 is more than just sound!" (prose article by Jake Stine), https://wiki.pcsx2.net/PCSX2_Documentation/SPU2_is_more_than_just_sound! (read via web.archive.org) |
-| What SNDN2DRV writes: VOLL/VOLR (raw words, sweep possible when a tone's byte at slot +0x2E is non-zero, `sound.c:1154`), ADSR, PITCH, KON/KOFF, VMIXEL/R, NON, noise clock, EVOL, MVOL, EEA, effect mode 4 (studio 3) on both cores, MMIX 0xFF0/0xFFC and the FMV values, AutoDMA PCM layout, ENVX/NAX polling | docs/research/sndn2drv.md (R1), `sce/libsndn2/sound.c` |
-| MMIX bit meanings | R1 ("PCM streams"), which read them from PCSX2 for behaviour; consistent with libsd's defaults 0xFF0/0xFFC |
-| 4B: every command's libsd calls, the packet layouts, the reply page, the stream records, event queue, refill scheduler, FILL flag patching and PCM mixer, the pitch formula and table location | docs/research/sndn2drv.md (R1, from the user's `SNDN2DRV.IRX`) |
-| 4B: the SDL3 audio stream calls and their thread safety | SDL 3.4.18's `include/SDL3/SDL_audio.h` and `SDL_hints.h` (zlib) |
+| What SNDN2DRV writes: VOLL/VOLR (raw words, sweep possible when a tone's byte at slot +0x2E is non-zero, see `sound.c`), ADSR, PITCH, KON/KOFF, VMIXEL/R, NON, noise clock, EVOL, MVOL, EEA, effect mode 4 (studio 3) on both cores, MMIX 0xFF0/0xFFC and the FMV values, AutoDMA PCM layout, ENVX/NAX polling | docs/research/sndn2drv.md, `port/audio/sg/sound.c` |
+| MMIX bit meanings | docs/research/sndn2drv.md ("PCM streams"), which read them from PCSX2 for behaviour; consistent with libsd's defaults 0xFF0/0xFFC |
+| every command's libsd calls, the packet layouts, the reply page, the stream records, event queue, refill scheduler, FILL flag patching and PCM mixer, the pitch formula and table location | docs/research/sndn2drv.md (from the user's `SNDN2DRV.IRX`) |
+| the SDL3 audio stream calls and their thread safety | SDL 3.4.18's `include/SDL3/SDL_audio.h` and `SDL_hints.h` (zlib) |
 
 Licences: psx-spx is documentation; ps2sdk is AFL-2.0 and only its
 register layout, encodings and described behaviour were used; the PCSX2
-wiki article is prose. No GPL code is in or behind this package
+wiki article is prose. No GPL code is in or behind the audio path
 (docs/research/licences.md).
 
 ### Tables
 
 - Gaussian table: psx-spx's 512 entries, transcribed by a script from the
   page's text and checked: the first sixteen are -1, the peak is 0x59B3,
-  every set of four taps sums to 0x7F7F..0x7F81 (psx-spx's stated
-  property). psx-spx shows no cosine series short of fifteen terms
+  and every set of four taps sums to 0x7F7F..0x7F81 (psx-spx's stated
+  property). psx-spx shows that no cosine series short of fifteen terms
   reproduces it, so the table is kept literal rather than generated.
 - Reverb FIR: psx-spx's 39 taps (sum 0x7FFE, unity within 2 LSB).
 - Reverb presets: psx-spx's ten examples in libsd's mode order. Compared
   word by word with ps2sdk's `EffectParams`: studio 1-3, hall, space and
   pipe are identical; off differs in unused address words, room in its
-  same/different-side and comb 3/4 addresses; echo and delay differ in their APF sizes and most
-  addresses (ps2sdk then rewrites them from delay/feedback). STUDIO_3, the
-  only mode the game selects (R1), is the same in both.
+  same/different-side and comb 3/4 addresses; echo and delay differ in
+  their APF sizes and most addresses (ps2sdk then rewrites them from
+  delay/feedback). STUDIO_3, the only mode the game selects, is the same in
+  both.
 
 ## Approximations
 
@@ -669,7 +510,7 @@ Each is a row in docs/port/DIVERGENCES.md ("Platform"):
 | row | what |
 |---|---|
 | A1 | reverb left and right computed in the same 24 kHz step |
-| A2 | reverb rounding/saturation points; vIIR = -0x8000 quirk not modelled |
+| A2 | reverb rounding/saturation points; the vIIR = -0x8000 quirk not modelled |
 | A3 | ADPCM filters 5-7 as 0, shifts 13-15 as 9 |
 | A4 | exponential decrease step floored (arithmetic shift) |
 | A5 | envelope step counter handling across steps and phase changes |
@@ -680,113 +521,53 @@ Each is a row in docs/port/DIVERGENCES.md ("Platform"):
 | A10 | ATTR mute / SPU-on bits ignored |
 | A11 | AutoDMA input from a host ring, not sound RAM |
 | A12 | no IRQ from reverb buffer accesses |
-| A13 | reverb disabled: whole chain still read |
+| A13 | reverb disabled: the whole chain is still read |
 | A14 | `spu2_sd_init` values from ps2sdk, not the disc |
-| A15 | pitch table: the formula when the disc's IRX cannot be read (4B) |
-| A16 | stream cancel leaves queued KEYON events (4B) |
-| A17 | driver writes take effect at the next vsync block; ENVX/NAX read at a block's end (4B) |
-| A18 | a channel-1 ADPCM fill does not run the PCM mix callback (4B) |
-| A19 | sample transfers complete one frame after they start (4B, closes A8's open choice) |
-| A20 | commands 0x17/0x18 re-apply the last 0x15 attr, not the IRX's stale stack slot (4B) |
-| A21 | an out-of-range pitch index is clamped, not read from the IRX's neighbouring data (4B) |
-| A22 | the SDL output drops or pads whole vsync blocks to keep two vsyncs queued (4B) |
+| A15 | pitch table: the formula when the disc's IRX cannot be read |
+| A16 | stream cancel leaves queued KEYON events |
+| A17 | driver writes take effect at the next vsync block; ENVX/NAX read at a block's end |
+| A18 | a channel-1 ADPCM fill does not run the PCM mix callback |
+| A19 | sample transfers complete one frame after they start |
+| A20 | commands 0x17/0x18 re-apply the last 0x15 attr, not the IRX's stale stack slot |
+| A21 | an out-of-range pitch index is clamped, not read from the IRX's neighbouring data |
+| A22 | the SDL output drops or pads whole vsync blocks to keep two vsyncs queued |
 
 A4, A5, A6 and A7 can reach the EE: the sequencer frees a voice when ENVX
 drops below 2, and the stream scheduler reads NAX once per tick. A tick is
-960 frames at 50 Hz, so these matter only near a tick boundary. A16, A17 and A19
-can reach the EE the same way (slot release, stream read offsets, the
-DMA-status wait).
+960 frames at 50 Hz, so these matter only near a tick boundary. A16, A17
+and A19 can reach the EE the same way (slot release, stream read offsets,
+the DMA-status wait). In particular, the real driver keys a stream on in
+its third tick and reports the read offset a tick after each DMA, so
+traces through the opening differ by a tick from a model that counts the
+first fill at `SgStAdpcmPlay`; the host follows the IRX.
 
 ## Tests
 
-`adpcm_test` (19 checks): five blocks decoded by hand in comments (no
-filter, filter 1 with shift, filter 2 with negative history and floor
-rounding, filter 4 saturation, reserved shift/filter), and history carried
-across blocks.
+All in `port/audio/test/`, registered in `port/audio/CMakeLists.txt`:
 
-`spu2_test` (112 checks):
+- `adpcm`: five blocks decoded by hand in comments (no filter, filter 1
+  with shift, filter 2 with negative history and floor rounding, filter 4
+  saturation, reserved shift/filter), and history carried across blocks.
+- `spu2`: Gaussian table properties; ADSR attack, decay and release
+  lengths against psx-spx's closed forms; pitch (a 1 kHz sine encoded to
+  ADPCM by a test-only encoder and played at five PITCH values, with zero
+  crossings over one second within 2 of the expected frequency); loop
+  flags; mixing and saturation; a timed key on; AutoDMA input; noise;
+  transfers and IRQs; the libsd front end (ESA from EEA for mode 4, address
+  scaling, EVOL, core attributes, voice address with Sony's 0x40 flag, init
+  defaults); a reverb impulse response (studio 3, decaying to about -45 dB
+  by 2 s); and a deterministic scene that must match the golden FNV-1a
+  checksum 0x77DB2B76.
+- `sndn2` (`sndn2_test [disc image]`): the RPC transport and reply pages,
+  voice and core packets as register effects, ENVX in the reply, the pitch
+  maths and clamp (and, with the disc image, the table from
+  `SNDN2DRV.IRX`, its 32 differences from the formula and the two
+  outliers), a synthetic stereo `.int` stream through fills, key on,
+  refills and stop, a mono stream at 4x pitch wrapping its read offset,
+  the PCM mixer, and the sequencer end to end from a synthetic `.hd`
+  through `SgSePlay`, `SgCalledTickProc`, `SgSeStop` and `SgVabClose`.
+- `volume`: the output volume scaling.
+- `audio_pan`: the mirror-mode channel swap.
+- `spu2_render_crc`: the chunked renderer against the reference (above).
 
-- Gaussian table properties.
-- ADSR: linear attack lengths for five rates against psx-spx's closed form
-  `ceil(0x7FFF / ((7 - step) << max(0, 11 - shift))) << max(0, shift -
-  11)`; linear release length; exponential attack; exponential decay at
-  shift 4 against the geometric rate and at shift 11 exactly (9084 frames,
-  derived band by band in the comment); exponential release reaches 0; rate
-  0x7F never steps.
-- Pitch: a 1 kHz sine encoded to ADPCM by a test-only encoder (best of the
-  five filters and 13 shifts per block, closed loop), looped over 12 blocks,
-  played at PITCH 0x0400, 0x0800, 0x1000, 0x2000, 0x3000; zero crossings
-  over one second within 2 of 250/500/1000/2000/3000 Hz.
-- Loop flags: end+mute silences and sets ENDX, LSAX latched by loop start,
-  key on clears ENDX, key off release length.
-- Mixing: one voice level through the interpolation gain, two voices
-  saturating at the bus (32765 after master), negative volume, core 0
-  through core 1's AVOL and MMIX, a linear volume sweep's length.
-- A key on stamped for frame 50 starts there.
-- AutoDMA input: both halves, half-done callbacks and the current half.
-- Noise at the fastest and a slow clock.
-- Transfers: busy for the set duration, refused while busy, callback,
-  data in RAM; libsd status poll and wait; IRQ from a voice read and from a
-  transfer.
-- libsd front end: ESA from EEA for mode 4 on both cores (0x200000 - 0x6FE0
-  and 0x1E0000 - 0x6FE0), address scaling, EVOL, core attributes, voice
-  address with Sony's 0x40 flag, init defaults.
-- Reverb impulse response (studio 3, wet only): output on both sides,
-  energy peaks in the first 0.3 s and decays (last 0.1 s of 2 s under 5% of
-  the peak; measured: about -45 dB), left and right differ; EVOL 0
-  silences it.
-- Determinism: a fixed scene (pseudo-random ADPCM over every filter and
-  shift, four voices on both cores, noise, a sweep, a timed key off, reverb
-  on both cores) renders the same twice and matches a golden FNV-1a
-  checksum, 0x77DB2B76.
-
-Results (2026-10-05): `linux-x64` both pass; `ref-m32` (i386) both pass
-with the same checksum; the `asan` preset (ASan + UBSan) passes clean.
-`win-x64` and `win-x86-ref` build without warnings; their executables were
-not run (no Windows runner or Wine on the build host).
-
-`sndn2_test` (996 checks, 4B; `sndn2_test [disc image]`):
-
-- Transport: RPC 0x65 with `{0x1E, 0}` returns zeros and applies libsd's
-  init (MMIX, VMIX); tick pages alternate; an upload (0x20, counter 7)
-  lands in SPU RAM only when rendered and its counter appears at +0x1C0 of
-  the next reply and in both pages; a read-back (0x21) returns the data;
-  +0x1C4-0x1FF stay zero.
-- Voices: 0x01-0x04 and 0x0A as register effects; ENVX in the reply after
-  a key on, zero for the neighbour, below 2 after a key off (0x0B in
-  SgQuit's shape).
-- Core packets: EEA, effect mode with the clear bit dropped and depth 0,
-  EVOL, MVOL, VMIXEL/R, NON, the noise clock on the slot's core, MMIX from
-  0x4E; 0x1F stops the counter updates.
-- Pitch: unity, octave up and down, a fifth, fine, scale, bend x range;
-  an index far below the table is clamped and counted; the formula's
-  anchors; with the disc image, the table from `SNDN2DRV.IRX`, its 32
-  differences from the formula and the two outliers.
-- ADPCM: a synthetic stereo `.int` ring (every block tagged with its
-  sector, channel and block): first-half fills on ticks 1 and 2 with flags
-  6/2, read offsets one tick behind, key on at tick 3, second-half fills
-  from offset 0x4000 with flags 2/3, the refill of the first half from
-  0x8000 when the voice crosses into the second half (about 15 vsyncs),
-  looping with the envelope up, stop clearing offsets and releasing; a mono
-  stream at 4x pitch wrapping its read offset at 0x5C000 in 0x2000 steps.
-- PCM: two left channels adding with 16-bit wrap (2 x 0x6FFF), a right
-  channel 0x400 ahead, the shift-2 channel's step, read offsets in the
-  reply, stop by command and by stop offset, output through BVOL, quit.
-- Sequencer, end to end: a synthetic `.hd` with one SE; `SgVabOpenFakeBody`
-  leaves the header untouched; `SgSePlay` + `SgCalledTickProc` produce the
-  SSA `(spu / 16 + 0x10) * 16`, pitch, ADSR, volume and key on through
-  the head context and header records; the slot stays while ENVX says
-  sounding and is freed after `SgSeStop` and a release; `SgVabClose`; the
-  DMA status poll after `SgDmaWrite`.
-
-`spu2_render_crc` (S3, `spu2_bench --check`; 29 checks): five 10 s
-scenes against golden CRCs from the frame-by-frame renderer, 24 random 2 s
-scenes chunked against frame by frame ("Render cost").
-
-Results (4B, 2026-10-05): `linux-x64` 34/34 ctest tests pass (`sndn2` with
-the disc image); the `asan` preset (ASan + UBSan) runs `sndn2_test`,
-`spu2_test` and `null_devices_test` clean; `win-x64` builds without
-warnings in the new files, with `out_sdl.c` against SDL3.dll (not run: no
-Windows runner or Wine). `ref-m32` and `win-x86-ref` no longer exist
-(package 2J retired the 32-bit presets during 4B).
-
+Open items for audio are in docs/TODO.md.

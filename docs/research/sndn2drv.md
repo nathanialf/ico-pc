@@ -1,7 +1,8 @@
-# R1: SNDN2DRV.IRX packet semantics
+# SNDN2DRV.IRX packet semantics
 
-Research note for work package 0C. Owner of the result: Phase 4 "sndn2 host +
-streams + SDL out" and "SPU2 core". The goal is a host replacement for the
+A research note written before the audio host was built, kept as the
+reference behind `port/audio/` (docs/port/AUDIO.md); it is not updated as
+the code changes. The goal it served is a host replacement for the
 IOP side of `_SgSndn2Remote` that does what the retail IRX does with every
 packet the EE sequencer (`sce/libsndn2/sound.c`) sends.
 

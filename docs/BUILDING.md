@@ -1,11 +1,11 @@
 # Building
 
-How to build, test and package the PC port. The build is CMake with Ninja
-and compiles the game's C under `ico2/` for the host, with `port/` standing
-in for Sony's libraries. The PS2 ELF build of the decompilation (`./build.sh`,
-`tools/build.sh`, `tools/gen_ninja.py` and the period linker) is gone from
-this repository; what is left of the period toolchain is an optional
-developer check, in the appendix at the end.
+How to build, test and package the PC port. The build is CMake with Ninja.
+It compiles the game's C under `ico2/` for the host, with `port/` standing in
+for the PS2 hardware and Sony's libraries. The PS2 ELF build belongs to the
+decompilation (<https://github.com/nathanialf/ico>); this repository keeps
+only an optional check against the period compiler, described in the
+appendix at the end.
 
 ## Quickstart (Debian 13, Ubuntu 24.04)
 
@@ -22,11 +22,159 @@ $CMAKE/ctest --test-dir build-host/linux-x64
 ```
 
 `tools/setup.sh` does the venv step and installs the git hooks (below); it
-also fetches the period compilers unless `SKIP_TOOLCHAIN=1`, which only the
-appendix needs. The build needs no disc image and no `baserom/`: the binary
-holds no disc data. The game reads your PAL disc image (SCES-50760) at run
-time: the first run extracts it into `ico.o2r` (docs/port/DATA.md), and the
-data tables load from that archive (docs/port/DATA.md, "The data tables").
+also fetches the period compilers unless `SKIP_TOOLCHAIN=1`, and only the
+appendix needs those.
+
+The build needs no disc image and no `baserom/`: the program holds no disc
+data. The game reads the player's own PAL disc image (SCES-50760) at run
+time. The first run extracts it into the archive `ico.o2r`, and the data
+tables load from that archive at boot ([`port/DATA.md`](port/DATA.md)).
+
+## Toolchains: `tools/fetch_toolchain.sh`
+
+Run it once. It needs `curl`, `tar`, `sha256sum` and `dpkg-deb`, no root,
+and fills `tools/toolchain/` (gitignored, about 1.6 GB):
+
+| directory | what | from |
+| --- | --- | --- |
+| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
+| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+| `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned |
+| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC and libmpeg2 | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`port/THIRD_PARTY.md`](port/THIRD_PARTY.md)) |
+
+The Debian packages come from `deb.debian.org`, falling back to
+`snapshot.debian.org` once a version is superseded. `SKIP_MINGW_GCC=1` and
+`SKIP_CMAKE=1` skip the mingw-gcc tree and CMake; the header of each script
+lists its other overrides. The toolchain files take `ICO_LLVM_MINGW` and
+`ICO_MINGW_GCC` from the environment to use copies elsewhere.
+
+The Linux presets use the host's gcc 14 and glibc. Ninja comes from
+`.venv/bin` (`tools/requirements.txt`) or the `PATH`. Any CMake 3.25 or later
+on the `PATH` works in place of the pinned one.
+
+## Presets
+
+```sh
+CMAKE=tools/toolchain/cmake/bin
+$CMAKE/cmake --preset win-x64
+$CMAKE/cmake --build --preset win-x64
+$CMAKE/ctest --preset linux-x64   # the unit tests, on the Linux presets
+```
+
+`-B <dir>` after `--preset` builds a preset into another directory, which is
+how several configurations of one preset live side by side under
+`build-host/`. The build writes nothing outside its build directory.
+
+| preset | target | compiler |
+| --- | --- | --- |
+| `linux-x64` | Linux x86-64, headless by default | host gcc 14 |
+| `win-x64` | Windows x64, window build | `mingw-gcc` x86-64 |
+| `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
+| `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in the simulation | host gcc 14 |
+| `linux-x64-clang`, `win-x64-clang` | the same two targets, headless | llvm-mingw clang 23 (the host glibc for Linux) |
+
+The port targets 64-bit x86 only.
+
+### Options
+
+| cache variable | default | effect |
+| --- | --- | --- |
+| `ICO_HEADLESS` | `ON` on every preset except `win-x64` | `OFF` is the window build: the game draws through `port/render` (`ICO_RD=1`) into an SDL3 window. `ON` is the headless build for trace and test runs: no window and no renderer, `ICO_HEADLESS=1` ([`port/TESTING.md`](port/TESTING.md), [`port/HEADLESS_STUBS.md`](port/HEADLESS_STUBS.md)). Both compile the same game sources |
+| `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program. Without it only the libraries and the tests are built |
+| `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics that modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings |
+| `ICO_BUILD_BLOCKED` | `OFF` | also compiles the sources `cmake/IcoExclusions.cmake` leaves out (the list is empty today; it is the place to park a game source that stops compiling) |
+| `ICO_HEAP_STATS` | `OFF` | the game's allocator (`fumi/ios/memory.c`) reports to `port/platform/arena.c`, which logs each heap partition's high-water mark |
+| `ICO_FPTRAP` | `OFF` | set by the `fptrap` preset |
+| `ICO_SANITIZE` | empty | the `-fsanitize=` list; the `asan` preset sets `address,undefined` |
+| `ICO_RHI_D3D12` | `ON` for 64-bit Windows | builds the Direct3D 12 renderer backend next to the Vulkan one |
+| `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
+| `ICO_DXC`, `ICO_DEPS_DIR` | the fetched copies | the shader compiler and the dependency tree ([`port/SHADERS.md`](port/SHADERS.md)) |
+
+## Compilers
+
+GCC is the primary compiler, and the clang presets build the same sources;
+CI builds both so neither drifts. The game originally used GNU C nested
+functions, which clang does not implement; they have all been rewritten as
+file-scope functions, so no game source needs GCC any more. llvm-mingw ships
+no Linux sanitizer runtimes, so the `asan` preset is GCC either way.
+
+Windows builds must target mingw (gcc or llvm-mingw), never MSVC (clang-cl
+or a `*-windows-msvc` triple). Clang targeting MSVC evaluates call arguments
+right to left, where ee-gcc and the GNU and mingw compilers go left to
+right, and the game's results depend on that order at some call sites
+([`research/compiler-semantics.md`](research/compiler-semantics.md)).
+
+## How the game is compiled
+
+`cmake/IcoSources.cmake` is written by `tools/gen_sources.py` from
+`config/link_order.pal.txt`, the retail link's object list kept as the
+source list (nothing links with it). It holds the `ico2/` C sources, one
+list per programmer directory, the data-only members, and
+`ICO_EE_ONLY_SOURCES`: the PS2's FMV player under `ito/mpeg/`, which
+`port/fmv` replaces. The build never compiles `sce/` or `ico2/vusrc/`; they
+stay in the tree as the reference for the identity check below and for the
+renderer's shaders. Configure warns when the generated list is stale; rerun
+the script after changing the link order.
+
+Each programmer directory is one object library with the include path
+`tools/compile_c.sh` gives it (its own `include/`, then the others, then
+`port/compat/` for the SDK header names), and `-fmacro-prefix-map` makes
+`__FILE__` the period spelling (`src/main.c`), which the assert messages
+print. The game's `main` is compiled as `ico_game_main`;
+`port/platform/main_host.c` is the program's entry point. `ico_pc` links
+the game objects (`ico_game`), the platform layer and the port's libraries,
+plus the hardware floor that both builds keep in the program itself
+(`port/null/gfx_null.c`, `port/null/libgcc_null.c`; HEADLESS_STUBS.md).
+
+The game options (`cmake/IcoFlags.cmake`) are `-std=gnu11
+-fno-strict-aliasing -fwrapv -ffp-contract=off -fno-fast-math
+-fsigned-char -fno-common -fgnu89-inline` and `ICO_HOST=1`; the file's
+comments say why each is there. The game and data objects alone also take
+the EE's bit-field rule, `-mno-ms-bitfields`, on Windows; `port/` code keeps
+the platform ABI, which SDL's and Windows' structs need. No configuration
+defines `NDEBUG`: the retail game ran with its asserts, and
+`port/compat/assert.h` routes them to `ico_assert`
+(`port/platform/assert_host.c`), which logs and stops the run.
+
+Rules for code that the game and the port share:
+
+- A record that game code and `port/` code both read (SDK parameter blocks,
+  the pad buffer, card directory entries) must have a layout that does not
+  depend on `-mno-ms-bitfields`, or the `port/` side must be compiled with
+  the game's layout options too. [`port/LAYOUT.md`](port/LAYOUT.md) covers
+  record layouts and their asserts.
+- `port/compat/eeregs.h` maps the EE's hardware registers to plain memory,
+  so a loop that polls one (`GS_CSR`, a DMA channel's busy bit) never sees
+  it change; such loops are replaced at their call sites
+  ([`port/HW_ADDRESS_SITES.md`](port/HW_ADDRESS_SITES.md)).
+- VU0 and R5900 inline assembly has C bodies over `port/math`
+  ([`port/MATH.md`](port/MATH.md)). Any asm wrapper that reaches a host
+  build (`VU0_*`, `QCOPY16`) is a compile error (`common/include/typedef.h`).
+- The simulation runs with the floating-point environment
+  `port/platform/fpenv.c` sets: `ico_fpenv_sim_enter()` selects round toward
+  zero with flush-to-zero and denormals-are-zero (MXCSR; FPCR on arm64),
+  `ico_fpenv_host_enter()` restores the host defaults for the window, SDL
+  and the renderer. `fpenv_test` checks both, and on `fptrap` that a
+  division by zero raises SIGFPE. Why, and where the port still differs
+  from the EE, is in [`port/MATH.md`](port/MATH.md) and
+  [`port/DIVERGENCES.md`](port/DIVERGENCES.md).
+
+While `ICO_STRICT_WARNINGS` is off the build prints many C89-era warnings,
+most of them `-Wstrict-prototypes`. The three warnings that option promotes
+can become errors once their counts reach zero.
+
+## Data tables
+
+The program holds no disc data. The game's data tables are defined empty
+(`port/data/gen/table_defs.c`) and filled at boot from the boot ELF on the
+player's disc (`port/data/tables.c`, [`port/DATA.md`](port/DATA.md)), each
+range checked against the CRC-32 in `config/tables_manifest.txt`. The
+generated descriptors under `port/data/gen/` are committed and carry no disc
+bytes; `tools/gen_data_desc.py --check` keeps them fresh. Configuring and
+building need no base ELF and no pyelftools. Only the loader's reference
+test (`tables_loader`) and `tables_manifest` need a base ELF
+(`ICO_BASE_ELF`, a maintainer step in the appendix), and they are left out
+without one.
 
 ## EUC-JP sources
 
@@ -39,11 +187,11 @@ ASCII patch and `git apply`.
 
 ## Hooks
 
-`tools/install_hooks.sh` (run by `tools/setup.sh`) installs a pre-commit hook
-that runs, in order:
+`tools/install_hooks.sh` (run by `tools/setup.sh`) installs a pre-commit
+hook that runs, in order:
 
 1. `tools/check_no_rom.sh`: refuses disc images, executables, extracted
-   assets and large binaries;
+   assets and large binaries ([`LEGAL.md`](LEGAL.md));
 2. `tools/format.sh --check` on the staged C;
 3. the three freshness checks CI also runs: `tools/gen_data_desc.py
    --check` (`port/data/gen/`), `tools/gen_layout_asserts.py --check`
@@ -52,178 +200,50 @@ that runs, in order:
    `.venv/bin/python`. Regenerate with the same script without `--check`.
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
-then `tools/format_layout.py`'s top-level blank-line layout.
+then applies `tools/format_layout.py`'s top-level blank-line layout.
+
+## Tests
+
+`ctest` runs the unit tests on the Linux presets; the Windows presets build
+the test executables without running them. A test that needs the disc
+(`vfs_disc`, `archive_disc`) or a Vulkan device (the `rhi_vk*`, `rd_*`,
+`shaders_pixel` and `vu1` tests) exits 77 without one, and
+`SKIP_RETURN_CODE 77` makes ctest report it as skipped, which passes.
+[`port/TESTING.md`](port/TESTING.md) covers running the game for tests.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, one Linux
-job (`ubuntu-24.04`), with no secrets and no disc image:
+`.github/workflows/ci.yml` runs on every push and pull request: one Linux
+job (`ubuntu-24.04`), no secrets, no disc image.
 
 | step | what |
 | --- | --- |
-| host packages, venv | gcc 14 (the developer compiler; the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags the compiler does not know), the X11, ALSA and PulseAudio headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
-| cache + `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh`; restored and saved as separate steps, so the cache is saved right after a cold fetch even when a later step fails |
+| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA and PulseAudio headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
+| cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
 | `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build, `ctest` |
-| `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON`, build, `ctest` |
+| `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |
 | `linux-x64-clang` | build, `ctest` |
-| `win-x64` | cross-compile (mingw-w64 gcc) with the window build and `ico_pc.exe`; the tests are built, not run |
+| `win-x64` | cross-compile the window build and `ico_pc.exe`; the tests are built, not run |
 
-A test that needs the disc (`vfs_disc`, `archive_disc`) or a Vulkan device
-(the `rhi_vk*`, `rd_*`, `shaders_pixel`, `vu1` tests) exits 77 without it, and
-`SKIP_RETURN_CODE 77` makes ctest report it as skipped, which passes
-(`ctest` exits 0; checked with no `baserom/` and with
-`VK_ICD_FILENAMES=/nonexistent`). `tables_loader` and `tables_manifest` are
-not built without a base ELF. Run the same steps locally before pushing.
+Run the same steps locally before pushing.
 
 ## Packages
 
-`tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build the
-test packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
-`dist/ico-pc-<label>-linux.tar.gz`). docs/port/TESTING.md has what each
-holds; docs/port/STEAMDECK.md covers running the Linux one.
-
-## Host build
-
-`CMakeLists.txt`, `CMakePresets.json` and `cmake/` compile the game's C under
-`ico2/` for the host, with `port/` standing in for Sony's libraries. The
-build never compiles `sce/` or `ico2/vusrc/` (no CMake file names either;
-`cmake/IcoSources.cmake` lists `ico2/` sources only). Those two directories
-stay in the tree as the reference the EE identity check compiles against
-(`sce/` holds Sony's headers the game includes under the SDK names, and the
-libraries' sources; `ico2/vusrc/` the five VU1 microprograms the renderer's
-shaders were ported from). It writes only under `build-host/<preset>/`.
-[`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) lists what compiles on
-each preset and why the rest does not.
-
-### Toolchains: `tools/fetch_toolchain.sh`
-
-Run it once. It needs `curl`, `tar`, `sha256sum` and `dpkg-deb` and no root,
-and fills `tools/toolchain/` (gitignored, about 1.6 GB):
-
-| directory | what | from |
-| --- | --- | --- |
-| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows (its i686 half is unused); the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
-| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
-| `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned from the release's `cmake-4.4.4-SHA-256.txt` |
-
-The Debian packages come from `deb.debian.org`, falling back to
-`snapshot.debian.org` once a version is superseded. `SKIP_MINGW_GCC=1` and
-`SKIP_CMAKE=1` skip the mingw-gcc tree and CMake. The toolchain files take
-`ICO_LLVM_MINGW` and `ICO_MINGW_GCC` from the environment to use copies
-elsewhere. (The i386 sysroot and the i686 mingw-gcc of the retired 32-bit
-presets are no longer fetched.)
-
-The Linux presets also use the host's gcc 14 and glibc (Debian 13 in the
-container). Ninja comes from `.venv/bin` (`tools/requirements.txt`) or the `PATH`.
-The commands below use the pinned CMake; any CMake 3.25 or later on the
-`PATH` (the presets' minimum) works the same.
-
-### Presets
-
-```sh
-CMAKE=tools/toolchain/cmake/bin
-$CMAKE/cmake --preset win-x64
-$CMAKE/cmake --build --preset win-x64
-$CMAKE/ctest --preset linux-x64   # the unit tests, on the Linux presets
-```
-
-`-B <dir>` after `--preset` builds a preset into another directory (each
-work package uses its own under `build-host/`).
-
-The unit tests (`ctest`): `fpenv` (`fpenv_test`), `sched`, `fiber`,
-`fiber_guard`, `arena`, `memory` and `ios_chain` (`port/platform/test/`,
-[`docs/port/PLATFORM.md`](port/PLATFORM.md)), and the other packages'
-tests. `memory` and `ios_chain` compile the game's allocator and thread
-layer and run on the host's own record layout. The Windows presets build the
-test `.exe`s without running them.
-
-| preset | target | compiler |
-| --- | --- | --- |
-| `linux-x64` | Linux x86-64 | host gcc 14 |
-| `win-x64` | Windows x64 | `mingw-gcc` x86-64 |
-| `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
-| `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in simulation mode | host gcc 14 |
-| `linux-x64-clang`, `win-x64-clang` | the same two targets | llvm-mingw clang 23 (the host glibc for Linux) |
-
-There is one architecture. The 32-bit host presets (`ref-m32`, `ref-m32-clang`,
-`win-x86-ref`, `win-x86-ref-clang`) were the oracle for the 64-bit build and
-were retired at Phase 2 exit, commit 36a1d73e, once the x64 traces matched
-theirs over 3000 ticks.
-
-GCC is the primary compiler because the game uses GNU C nested functions,
-which clang does not implement; the clang presets compile fewer files until
-those are rewritten ([`docs/port/BUILD_STATUS.md`](port/BUILD_STATUS.md) has
-the counts and the trade-off). llvm-mingw ships no Linux sanitizer runtimes.
-
-Windows builds must target mingw (gcc or llvm-mingw), never MSVC (clang-cl
-or a `*-windows-msvc` triple): clang on MSVC targets evaluates call
-arguments right to left, where ee-gcc and the mingw and Linux compilers go
-left to right (package 0C, `docs/research/`), and the game's results depend
-on that order at some call sites.
-
-### Options
-
-| cache variable | default | effect |
-| --- | --- | --- |
-| `ICO_HEADLESS` | `OFF` | `OFF` is the window build (the game's seki layer draws through `port/render`, `ICO_RD=1`); `ON` is the headless build of the trace and test runs (no window, no renderer; docs/port/HEADLESS_STUBS.md) and defines `ICO_HEADLESS=1`. Both compile the same game sources. The `linux-x64` preset sets it `ON`, `win-x64` `OFF` |
-| `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings, so every file that can compile does |
-| `ICO_BUILD_BLOCKED` | `OFF` | also compiles `ICO_BLOCKED_SOURCES` (`cmake/IcoExclusions.cmake`), to recheck them |
-| `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program |
-| `ICO_HEAP_STATS` | `OFF` | the game's allocator (`fumi/ios/memory.c`) reports to `port/platform/arena.c`, which logs each heap partition's high-water mark on stderr |
-| `ICO_FPTRAP` | `OFF` | `fptrap` preset |
-| `ICO_SANITIZE` | empty | `asan` preset: the `-fsanitize=` list |
-| `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the loader's reference tests read; without it they are not built |
-
-### Sources
-
-`cmake/IcoSources.cmake` is written by `tools/gen_sources.py` from
-`config/link_order.pal.txt` (the retail link's object list, kept as the
-source list; nothing links with it any more): the `ico2/` C sources, one list per programmer
-directory, the data-only members and `ICO_EE_ONLY_SOURCES` (the PS2's FMV player, replaced by `port/fmv`). There is one list for both builds since renderer wave 6. Configure
-warns when it is stale; rerun the script after changing the link order.
-
-Each programmer directory is one object library with the include path
-`tools/compile_c.sh` gives it (its own `include/`, then the others, then
-`port/compat/` for the SDK header names), and `-fmacro-prefix-map` makes
-`__FILE__` the period spelling (`src/main.c`), which the assert messages
-print. The game's `main` is compiled as `ico_game_main`.
-
-The game options (`cmake/IcoFlags.cmake`) are `-std=gnu11
--fno-strict-aliasing -fwrapv -ffp-contract=off -fno-fast-math
--fsigned-char -fno-common -fgnu89-inline`, and `ICO_HOST=1`. The game and
-data TUs alone also take the EE's bit-field rule, `-mno-ms-bitfields` on
-Windows (`port/` code keeps the platform ABI, which SDL's and Windows'
-structs need). No configuration defines `NDEBUG`: the
-retail game ran with its asserts.
-
-### Data tables
-
-The binary holds no disc data. The 73 data tables are defined empty
-(`port/data/gen/table_defs.c`) and filled at boot from the boot ELF on the
-user's disc (`port/data/tables.c`, docs/port/DATA.md). The generated
-descriptors under `port/data/gen/` are committed and carry no disc bytes;
-`tools/gen_data_desc.py --check` keeps them fresh. Configuring and building
-need no base ELF and no pyelftools. Only the loader's reference test
-(`tables_loader`) and `tables_manifest` need a base ELF
-(`baserom/pal/baseelf.elf`, `ICO_BASE_ELF`: a maintainer step, see the
-appendix) and are left out without one.
-
-### Floating point
-
-`port/platform/fpenv.c`: `ico_fpenv_sim_enter()` sets round toward zero
-with flush-to-zero and denormals-are-zero (MXCSR; FPCR on arm64),
-`ico_fpenv_host_enter()` restores the defaults. `fpenv_test` checks both,
-and on `fptrap` that a division by zero raises SIGFPE.
+`tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build
+the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
+`dist/ico-pc-<label>-linux.tar.gz`). [`port/TESTING.md`](port/TESTING.md)
+says what each holds; [`port/STEAMDECK.md`](port/STEAMDECK.md) covers
+running the Linux one.
 
 ## Appendix, maintainers: EE identity check
 
 The port changes `ico2/` freely, but a change that should not alter what the
-PS2 compiler emits (a type sweep, a rename, a host-only `#ifdef`) is checked
-against the period compiler: `tools/ee_identity.sh`. It is optional and is
-not part of the build or of CI.
+PS2 compiler emits (a type sweep, a rename, a host-only `#ifdef`) can be
+checked against the period compiler with `tools/ee_identity.sh`. It is
+optional and is not part of the build or of CI.
 
 ```sh
 sudo dpkg --add-architecture i386 && sudo apt-get update
@@ -231,40 +251,34 @@ sudo apt-get install gcc-multilib libc6:i386 libstdc++6:i386 zlib1g:i386 \
     binutils-mips-linux-gnu patch
 tools/setup.sh                       # fetches the period compilers into tools/cc/
 tools/ee_identity.sh ico2/seki/src/Basic.c ico2/seki/src/MicroCode.c
-tools/ee_identity.sh -r 36a1d73e --all   # every ico2/ C source against a revision
+tools/ee_identity.sh -r <revision> --all   # every ico2/ C source against a revision
 ```
 
 For each file it compiles with `tools/compile_c.sh` (ee-gcc 2.9-991111 and
 its assembler, run through `tools/period_env.sh`) from the working tree and
 from a temporary worktree of the revision (default `HEAD`), and diffs the
 sections `.text .data .rodata .sdata .bss .sbss .lit4 .lit8` and their
-relocations. Debug sections are left out (they carry paths). Exit 0 when all
-are identical. The packages' sweeps (`docs/port/SWEEP_2D.md` to
-`SWEEP_2J.md`) did this by hand; on 2026-10-05 `--all` over the 219 sources of
-`config/link_order.pal.txt` took 37 s on four cores, and against a revision 150
-commits back it reported 42 sources different, so it does detect changes.
+relocations. Debug sections are left out because they carry paths. It exits
+0 when all are identical. `--all` over every source of
+`config/link_order.pal.txt` takes well under a minute on four cores.
 
-What stays and why:
+What stays in the tree for it, and why:
 
 | kept | for |
 | --- | --- |
-| `tools/compile_c.sh`, `tools/period_env.sh`, `tools/period_obstack.c` | the identity check's compile step (the preload library restores the obstack chunk size the original build had; ee-as's short-loop padding depends on it) |
+| `tools/compile_c.sh`, `tools/period_env.sh`, `tools/period_obstack.c` | the compile step (the preload library restores the obstack chunk size the original build had; ee-as's short-loop padding depends on it) |
 | `tools/setup.sh`'s compiler fetch (ee-gcc 2.9-991111 and 2.96 into `tools/cc/`) | the compilers `compile_c.sh` runs; the 2.96 tree is only its SCE assembler, for `sce/` sources |
-| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Not part of any host target |
-| `config/link_order.pal.txt` and `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as documentation of the PS2 layout. Nothing links with them |
+| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources, and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Not part of any host target |
+| `config/link_order.pal.txt`, `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as a record of the PS2 layout. Nothing links with them |
 | `tools/extract_elf.sh`, `tools/extract_elf.py` | the maintainer step below |
 
-Removed: `./build.sh`, `tools/build.sh`, `tools/gen_ninja.py`,
-`tools/verify_elf.py` (the SHA-1 check of the PS2 link's inputs: the port's
-extractor checks the disc itself, `port/data/extract.c`), the two GNU ld 2.10
-patches and `tools/setup.sh`'s builds of ld 2.10 and dvp-as. Nothing links
-a PS2 ELF or assembles the VU1 programs now. The decompilation
-(<https://github.com/nathanialf/ico>) keeps that build.
+Nothing here links a PS2 ELF or assembles the VU1 programs; the
+decompilation keeps that build.
 
-The maintainer step for the loader's reference test and `gen_data_desc.py
---manifest`: they read the boot ELF from `baserom/pal/baseelf.elf`, which
-`tools/extract_elf.sh` writes from `baserom/Ico_PAL.iso` (the disc's
-`SCES_507.60`, SHA-1 `da3644c54c26fe760f3b6a591a5fc2eab396ed2b`, checked
-against `config/sha1sums.txt`; pycdlib and `mips-linux-gnu-objcopy`). Nothing
-under `baserom/` is committed (`docs/LEGAL.md`). Without it those two tests
-are not built, and CI never has it.
+The loader's reference test and `gen_data_desc.py --manifest` read the boot
+ELF from `baserom/pal/baseelf.elf`, which `tools/extract_elf.sh` writes from
+`baserom/Ico_PAL.iso` (the disc's `SCES_507.60`, SHA-1
+`da3644c54c26fe760f3b6a591a5fc2eab396ed2b`, checked against
+`config/sha1sums.txt`; it needs pycdlib and `mips-linux-gnu-objcopy`).
+Nothing under `baserom/` is committed ([`LEGAL.md`](LEGAL.md)). Without it
+those two tests are not built, and CI never has it.

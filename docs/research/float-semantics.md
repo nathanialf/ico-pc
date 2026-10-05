@@ -1,8 +1,11 @@
-# R2: EE FPU and VU0 float semantics
+# EE FPU and VU0 float semantics
 
-Research note for work package 0C. Owner of the recommendations: 1A
-(`port/math/`, `tools/vu0_to_c.py`) and 0A (`port/platform/fpenv.c`, compiler
-flags). Line numbers in `ico2/` and `sce/` refer to commit `d9e456d4`.
+A research note written before the port was built, kept as the reasoning
+behind `port/math/`, `port/platform/fpenv.c` and the float rows of
+docs/port/DIVERGENCES.md; it is not updated as the code changes. Codes such
+as 0A and 1A name the work items the recommendations were assigned to at
+the time (the compiler flags and floating-point environment, and the VU0
+maths). Line numbers in `ico2/` and `sce/` refer to commit `d9e456d4`.
 
 ## Agreed standard
 

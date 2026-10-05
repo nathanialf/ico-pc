@@ -10,12 +10,12 @@ instruction is cited.
 
 Implementations: CPU references `port/render/vu1_ref/` (`vu1_ref.h`), HLSL
 `port/shaders/vu_*.hlsl` (`docs/port/SHADERS.md`, "VU1 programs"), the draw
-interface for R3a/R3b `port/render/rd_mesh.h`. Test: `vu1`
+interface `port/render/rd_mesh.h`. Test: `vu1`
 (`port/shaders/test/vu1_test.c`).
 
 ## 1. How the programs run
 
-**Upload.** `mc_TransMicroCode(id, mask)` (`seki/src/MicroCode.c:115`)
+**Upload.** `mc_TransMicroCode(id, mask)` (`seki/src/MicroCode.c`)
 chains, per display list whose resident program differs, the VIF
 BASE/OFFSET pair of `mc_setBaseOffset` and the program's DMA (`DMAret`,
 `MPG 0`, the code; `normal_c.dsm`): every program is loaded at VU1 micro
@@ -62,21 +62,21 @@ the MSCALF and at the end of every batch, not at the MSCNT.
 **SET_GSREGISTER (code 0, `vu1_common.h:20-48`)** copies TOP + 0 (a GIF
 tag) and then NLOOP quadwords to TOP + 191 and kicks them: an A+D packet
 that reaches the GS in order with the mesh packets (path 1). The material,
-texture (`Texture.c:845`), specular, reflection and dissolve register
-packets (`RegistPacket.c:706, :783, :830`, `Shadow.c:129`) all take this
-route; R3a decodes them as GS register writes at their position.
+texture (`Texture.c`), specular, reflection and dissolve register
+packets (`RegistPacket.c`; `Shadow.c`'s reset) all take this route; the
+host decodes them as GS register writes at their position.
 
 **SET_UVOFFSET (code 2, `vu1_common.h:57-62`)** writes `mem[2].xy`; the
-texture's `t->uv` packet (`Texture.c:861`) and `clearUVOffset`
-(`Primitive.c:581`) send it. It stays in VU memory until the next one or
+texture's `t->uv` packet (`Texture.c`) and `clearUVOffset`
+(`Primitive.c`) send it. It stays in VU memory until the next one or
 the next common block (`gsb_MakeCommonMatrix`), so it leaks between draws.
 
-## 2. Program selection and open item 1 (code 18)
+## 2. Program selection and code 18
 
-`mc_SetMicroCode(mode, light, pass, clip, pri)` (`MicroCode.c:154-271`)
+`mc_SetMicroCode(mode, light, pass, clip, pri)` (`MicroCode.c`)
 sends one `MSCALF code`; which program the code lands in was chosen
 separately by `mc_TransMicroCode`: `reg_transMicroCode`
-(`RegistPacket.c:253`) loads cluster when `model->disp`, else normal_c for
+(`RegistPacket.c`) loads cluster when `model->disp`, else normal_c for
 `lightMtx->mode == 0`, else normal_l; `prim_DispMesh3D` loads mesh,
 `prim_DispParticle` particle.
 
@@ -92,23 +92,23 @@ separately by `mc_TransMicroCode`: `reg_transMicroCode`
 | 2 (mesh) | 0 / non-zero | | | 20 / 22 (24 with `debug_specular_flag != 0`) |
 | 3 (particle) | | | | 18 |
 
-**Open item 1, answered.** Mode 3 is only `prim_DispParticle`
-(`Primitive.c:783`, after `mc_TransMicroCode(5)` at `:780`), so code 18 is
+**Code 18.** Mode 3 is only `prim_DispParticle` (`Primitive.c`, after
+`mc_TransMicroCode(5)`), so code 18 is
 particle's BEGIN_PARTICLE (`particle.vsm:21`, `:58-61`): `nop` and the E
 bit. It draws nothing; it leaves the PC after the E bit's delay slot so
 the batch's `MSCNT` (the `0x17000000` at the end of `PrimParticleObj`,
-`Primitive.c:748-749`) runs START_PARTICLE (`:79`). It is redundant: the
-head packet's `MSCAL 16` (SET_PARTICLE_MATRIX, `Primitive.c:698`) falls
+`Primitive.c`) runs START_PARTICLE (`:79`). It is redundant: the
+head packet's `MSCAL 16` (SET_PARTICLE_MATRIX, `Primitive.c`) falls
 through into the same BEGIN_PARTICLE (`particle.vsm:43-61`). In every
 other program code 18 is the light upload (SET_NORMAL_LIGHT,
 SET_CLUSTER_LIGHT, SET_MESH_LIGHT), sent by the light packets
-(`RegistPacket.c:340`, `:467`, `:652`, `Primitive.c:570`), never by
+(`RegistPacket.c`, `Primitive.c`), never by
 `mc_SetMicroCode`. The renderer program is `RD_PROG_PARTICLE`.
 
 Combinations the table allows but data should not reach: normal_c with code
 38 runs SET_GSREGISTER on a stale TOP; normal_l with code 34 for a light-0
 material (clip -1) draws it with the specular loop. Neither is
-reproduced; rd should log the pair.
+reproduced: rd logs the pair once and does not draw the batch.
 
 ## 3. VU memory and registers the programs read
 
@@ -159,10 +159,10 @@ starts a new strip and a batch's first two vertices never draw.
 
 | program | per vertex (float4 each) | source |
 |---|---|---|
-| normal_c | pos (x, y, z, 1), ST (s, t, 1, f), colour (r, g, b, 127) | `pac_makeNormalStrip` (`Packet.c:254`) |
+| normal_c | pos (x, y, z, 1), ST (s, t, 1, f), colour (r, g, b, 127) | `pac_makeNormalStrip` (`Packet.c`) |
 | normal_l | pos, normal, ST, colour | same, normal when lit, clustered or texRef |
 | cluster | pos, normal, weights (int bone0 * 4 + 16, w0, int bone1 * 4 + 16, w1), ST, colour | `pac_makeClusterStrip` (`:381`) |
-| mesh | batch: tag, colour (Mesh3D.col, alpha 128 sent as 127); per vertex pos, [normal,] ST | `prim_makePacketMesh3D` (`Primitive.c:244`) |
+| mesh | batch: tag, colour (Mesh3D.col, alpha 128 sent as 127); per vertex pos, [normal,] ST | `prim_makePacketMesh3D` (`Primitive.c`) |
 | particle | count, tag (NLOOP 1), tag (NLOOP 1, EOP), clip min (1024, 1024, 0, 1), clip max (3071, 3071, 0, 16777215), (size scale, du, dv, 0); per particle (x, y, z, size), (u, v, grey, alpha) | `prim_InitParticleByPartition` (`:668`), enemy.c, particleEffect.c |
 
 ST.w `f` is the strip flag: 0 on the first vertex of each strip, 1
@@ -262,7 +262,7 @@ START_NORMAL_L (code 32, `:130-212`): as normal_c code 32 with
 
 There are three directional terms (the rows of L1 dotted with n) and an
 ambient term through n.w; the light matrix is world space times the node
-rotation (`RegistPacket.c:384-387`), so n is model space.
+rotation (`RegistPacket.c`), so n is model space.
 
 START_NORMAL_L_SPEC (code 34, `:241-317`, the specular pass in list 4):
 `l = max0(L1 * n)`, `c = vf09 l.x + vf10 l.y + vf11 l.z + vf00 l.w` (no
@@ -325,7 +325,7 @@ the code-20 colour squared once (`:568`), alpha `col.a * mem[2].w`
 added (`:505`, `:596`); the strip flag sets vi07 = 2 after the decrement
 (`:578`, `:588`), the same net rule.
 
-**Open item 2, answered (`cluster.vsm:460`).** Line 460 is the comment
+**The "front/back face" slots (`cluster.vsm:460`).** Line 460 is the comment
 of START_CLUSTER_1_SPEC; the instructions it describes are `:264-282`
 (code 20), `:413-431` (22) and `:571-605` (24). The two "slots" are vf26
 and vf27, both `ftoi4` of the same position, with `vf26.w = 0` (`mfir.w
@@ -368,7 +368,7 @@ alpha):
 4. Corners `(h.xy -/+ e.xy, h.z) * q`, q = 1 / h.w (`:108-121`).
 5. Both corners strictly inside the window: `clipMin < x, y` and `1 < h.w`,
    `x, y < clipMax` and `h.w < 16777215` (`:125-133`; 1024..3071 pixels
-   from `Primitive.c:674-675`); else skipped.
+   from `Primitive.c`); else skipped.
 6. Output: tag (NLOOP 1), RGBAQ `ftoi0(grey, grey, grey, alpha)`, ST0
    (u, v, 1), XYZ2 corner 0, ST1 (u + du, v + dv, 1), XYZ2 corner 1
    (`:106-139`); ST is not divided (Q = 1). PRIM 0xD6: sprite, TME, ABE,
@@ -401,7 +401,7 @@ alpha):
   flag of every batch's first vertex.
 - **Conversions.** `ftoi4` saturates: GS Z = `ftoi4(Zscreen)` where the
   screen matrix already maps to the 32-bit range (`vsParam[5..6]` = 1 ..
-  536870880, `GsBase.c:1476-1477`), so Z reaches 2^29 * 16 and saturates at
+  536870880, `GsBase.c`), so Z reaches 2^29 * 16 and saturates at
   0x7FFFFFFF for view depths below about 8 units (`zf / w + zn > 2^27`);
   everything nearer has the same Z. Colours are never clamped below 0
   except through `max0`, and the unlit paths never clamp at 255: the GS
@@ -418,7 +418,7 @@ alpha):
    its unclipped neighbours do not, by (Cs - Cd) (128 - As) / 128: one or
    two LSB at Packet.c's vertex alpha 127, more where TCC brings in a
    texture alpha below 0x80 (alpha-tested materials). Since the fans are
-   exactly the `ICO_VU_CUT_ONLY` draw, R3a can reproduce it by drawing that
+   exactly the `ICO_VU_CUT_ONLY` draw, rd reproduces it by drawing that
    pass with ABE forced on (the ALPHA register in force, as the GS would);
    the shaders need nothing for it.
 3. No UV scroll on skinned meshes (codes 20, 22) and on reflections (38).
@@ -428,10 +428,10 @@ alpha):
    common block upload the cluster region test then has a lower bound of
    (0, ~8.6e9 as a float, 0, 0): every skinned triangle drawn in the same
    list after an all-culled particle batch disappears. The reference
-   models it (`vu1_particle.c`); the shaders take mem[0..1] from VuCB, so
-   R3b decides whether to reproduce it (by passing the clobbered qword).
+   models it (`vu1_particle.c`); the shaders take mem[0..1] from VuCB, and
+   rd does not reproduce it (RENDER_API.md section 10).
 5. SET_CLUSTER_MATRIX copies one quadword more than the packet holds (the
-   count word is n + 1, `RegistPacket.c:610`, and the loop copies vi06
+   count word is n + 1, `RegistPacket.c`, and the loop copies vi06
    quadwords from TOP + 1): bone slot nodeNum gets the following VIF data.
    Harmless (no weight points there).
 6. Region bounds differ by program: normal and mesh 0 < x, y < 4094 and
@@ -440,7 +440,7 @@ alpha):
 7. The z of `ftoi4` saturates near the camera (section 6): coplanar or
    near geometry within about 8 units shares Z 0x7FFFFFFF, and GEQUAL lets
    the later draw win.
-8. `RENDER_API.md` section 12 says the screen matrix maps near/far to GS Z
+8. `RENDER_API.md` section 9 says the screen matrix maps near/far to GS Z
    536870880 and 1; that is before the mesh programs' `ftoi4`, which
    multiplies by 16 (and saturates).
 
@@ -459,7 +459,7 @@ where the GS would wrap). What cannot be identical:
 | Overflow: VU results clamp to Fmax, GPU results become Inf | only for degenerate input (a vertex at the eye in NORMAL_REF, w = 0) |
 | Triangles the scissor programs clip against a Z plane (a vertex behind M2's near or beyond its far plane) | drawn with a homogeneous position and clipped by the GPU at GS Z = 2^32 (near, about 4 units in the game, VU: 2) and GS Z = 0 (about the far plane); the VU's fan interpolates colour and STQ linearly in screen space between clip-space-interpolated cut points, the GPU over the original triangle: measured in `vu1` ("prelit 36 near", depth ratio 4:1, random colours) 296 of 302 covered pixels differ, by up to 142; coverage agrees to one pixel. Real cases are geometry crossing the camera's near plane |
 | Triangles clipped only on x/y planes | drawn as the GS would draw the unclipped triangle (the VU's guard band is wider than any target); identical when the three vertices share w, else the cut points' perspective-correct colours shift interior colours slightly |
-| Scissor fan ABE (finding 2) | the cut-only pass with ABE forced (R3a's pipeline choice) makes it exact; otherwise up to (Cs - Cd)(128 - As)/128 |
+| Scissor fan ABE (finding 2) | the cut-only pass with ABE forced (rd's pipeline choice) makes it exact; otherwise up to (Cs - Cd)(128 - As)/128 |
 | Particle PRIM.AA1 | not reproduced (the GS antialiases lines and triangles; whether it affects sprites is not settled by any source used here) |
 | GS fixed-point colour and STQ interpolation | float interpolation, colour rounded to nearest in the pixel shader (as `sprite_ps`) |
 

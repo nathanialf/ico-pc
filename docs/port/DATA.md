@@ -1,11 +1,12 @@
 # Game data: the disc layer
 
-How the host build reads the game's disc (package 1C): the VFS, the
-ISO9660 backend used in dev mode, the archive backend and its first-run
-extractor (package 5A), the libcdvd and SIF host layers under the game's
-unchanged cdvd manager, and IOP RAM. No disc data is in this repository (`docs/LEGAL.md`);
-everything below is structure, sector numbers and hashes, and the tests read
-the user's own image at run time.
+How the port reads the game's disc: the VFS, the ISO9660 backend that reads
+the user's image directly, the archive backend and its first-run extractor,
+the libcdvd and SIF host layers under the game's unchanged cdvd manager, IOP
+RAM, and the loader that fills the game's data tables from the boot ELF on
+the disc. No disc data is in this repository (`docs/LEGAL.md`); everything
+below is structure, sector numbers and hashes, and the tests read the
+user's own image at run time.
 
 ## Layers
 
@@ -20,7 +21,7 @@ port     port/data/cdvd_host.c  sceCd* over the VFS disc
          port/data/sif_host.c   sceSif* (no IOP), IOP heap, SIF DMA, RPC to host servers
          port/data/iop_ram.c    ico_iop_ram (2 MB) and the IOP heap
          port/data/vfs.c        paths, byte reads, the disc slot
-         port/data/iso9660.c    backend: the user's ISO (dev mode, use_iso)
+         port/data/iso9660.c    backend: the user's ISO (use_iso, and the extractor)
          port/data/archive.c    backend: the extracted archive ico.o2r
          port/data/extract.c    the first-run extractor that writes it
          port/data/tables.c     the 73 data tables, from the boot ELF on the disc
@@ -91,13 +92,16 @@ directory's length as the bytes in use, not a sector multiple; the walk
 reads every sector the length touches and stops at a zero length byte in
 each.
 
-### Backend 2: the archive (`port/data/archive.c`, package 5A)
+### Backend 2: the archive (`port/data/archive.c`)
 
-The Ship of Harkinian model (plan, "Game data"): the binary holds no disc
-data; the first run takes the user's image, verifies it and extracts what
-the game reads once into a local archive, `ico.o2r`; every later run mounts
-the archive. The window build uses it by default; `use_iso` (below) keeps
-reading the image directly.
+The binary holds no disc data. The first run takes the user's image,
+verifies it and extracts what the game reads, once, into a local archive,
+`ico.o2r`; every later run mounts the archive (the model Ship of Harkinian
+uses for its ROM). The archive exists so that the image is verified once
+and then never needed again: the user may delete or move it, a run does not
+hash 900 MB each start, and the file the game reads is a known, checked
+copy. The window build uses it by default; `use_iso` (below) keeps reading
+the image directly.
 
 **Format.** A ZIP (PKWARE APPNOTE; written and indexed with miniz,
 `port/third_party/miniz/`, docs/port/THIRD_PARTY.md) whose entries are all
@@ -182,10 +186,12 @@ The loader (`tables.c`), the libcdvd layer, `sndn2_host.c`'s pitch table
    `da3644c5...`), it mounts, and its `SCES_507.60` read back through the
    VFS hashes to `da3644c5...` (5.5 MB, a few milliseconds). An unusable one
    is logged with the reason and extracted again.
-2. Otherwise find the image as before (`Ico_PAL.iso` beside the exe, `iso=` /
-   `[paths] iso`, `$ICO_ISO`, `baserom/Ico_PAL.iso`, the Windows file
-   dialog) and extract it (`ico_extract_archive`) into the per-user folder.
-   A path from the dialog is saved as `iso=` once extraction succeeds.
+2. Otherwise find the image (`Ico_PAL.iso` beside the exe, `iso=` /
+   `[paths] iso`, `$ICO_ISO`, `baserom/Ico_PAL.iso` under the working
+   folder, else a file dialog: the native one on Windows, SDL3's on the
+   Linux window build) and extract it (`ico_extract_archive`) into the
+   per-user folder. A path from the dialog is saved as `iso=` once
+   extraction succeeds.
 3. Mount the result as in step 1 and boot.
 
 **Extraction** (`port/data/extract.c`): mounts the image with the ISO9660
@@ -230,14 +236,10 @@ below).
 Every path the port builds or reads is UTF-8: the per-user folder
 (`SDL_GetPrefPath`), the executable's folder (`ico_host_exe_dir`,
 `GetModuleFileNameW` on Windows), the file dialog's answer
-(`GetOpenFileNameW`) and the ini's values. Until package F2 only the
-archive's own calls were wide; `host_config.c` (`fopen` of the ini and the
-image, `_mkdir`, `MoveFileExA` of `config.toml`, `GetModuleFileNameA`,
-`GetOpenFileNameA`), `mc_host.c` (the card folder) and `iso9660.c` (the
-image) used the ANSI calls, so a user folder or an install folder with a
-character outside the ANSI code page (a Cyrillic or CJK user name on a
-Western Windows) could not be opened. Two fixes, either sufficient on its
-own:
+(`GetOpenFileNameW`) and the ini's values. Windows' narrow ("ANSI") file
+calls cannot open a path with a character outside the system code page (a
+Cyrillic or CJK user name on a Western Windows), so the port has two
+measures, either sufficient on its own:
 
 - `port/platform/host_fs.c` (`host_fs.h`, library `ico_host_fs`): `ico_fopen`,
   `ico_mkdir`, `ico_rmdir`, `ico_remove`, `ico_rename_replace`
@@ -260,18 +262,16 @@ own:
 with Latin, Greek and Japanese characters in the build tree, moves one over
 another and removes them.
 
-Measured on the container (linux-x64, the PAL image on local disk, warm
-page cache): 14.2 s in `ico_pc` (image SHA-1 6.1 s, copy 8.2 s); 11.0 s in
-`archive_test disc`.
+Extraction takes about 15 s on Linux with the image on a local disk (the
+image hash and the copy about half each).
 
 **`use_iso`** (`[dev] use_iso` in config.toml, `use_iso=` in ico-pc.ini,
-docs/port/CONFIG.md): `true` mounts the image directly with the ISO9660
-backend after the SHA-1 check (`verify=0` skips that check; it has no effect
-on extraction, which always verifies). Default: `true` in the headless build,
-so the trace runs and the tests read the image exactly as before; `false`
-in the window build. A headless run with `use_iso = false` goes through the
-archive and writes the same trace (package 5A's run: 1300 ticks of
-`pad-boot.txt`, byte-identical to 5B's).
+CONFIG.md): `true` mounts the image directly with the ISO9660 backend after
+the SHA-1 check (`verify=0` skips that check; it has no effect on
+extraction, which always verifies). Default: `true` in the headless build,
+so trace runs and tests read the image without an extraction step; `false`
+in the window build. Both backends serve the same sectors, so a headless
+run writes the same trace either way.
 
 ## libcdvd on the host (`port/data/cdvd_host.c`)
 
@@ -280,7 +280,7 @@ The subset the game links (found with `nm -u` over `ico_game`):
 `sceCdGetDiskType`, `sceCdGetError`, `sceCdBreak`, `sceCdSearchFile`,
 `sceCdRead`, `sceCdReadIOPm`, `sceCdSync`, `sceCdReadClock`,
 `sceCdStInit`, `sceCdStStart`, `sceCdStRead`, `sceCdStStop`, plus
-`sceCdStStat` (the renderer-owned `mv_main.c`), `sceCdStSeek`,
+`sceCdStStat` (the PS2 movie player's), `sceCdStSeek`,
 `sceCdStPause`, `sceCdStResume`, `sceCdStream` and `sceCdSyncS` for
 completeness.
 
@@ -294,18 +294,22 @@ completeness.
 | `sceCdRead`, `sceCdReadIOPm` | transfer now, completion at the next vsync (below); 0 while a command is in flight |
 | `sceCdSync` | even mode (blocking): from a game thread, waits (WaitSema) for the vsync that ends the command, then 0; from the host context, ends it at once. Odd mode (poll): 1 until the next vsync |
 | `sceCdGetError` | 0, or 0x01 aborted, 0x12 no disc, 0x20 bad address, 0x30 read error, 0x32 past the end (the codes `FileManager.c` names) |
-| `sceCdReadClock` | a fixed clock, 2002-01-01 00:00:00 in BCD, stat 0; `ico_cdvd_host_set_clock_source` replaces it |
+| `sceCdReadClock` | the port clock (`port/platform/clock.c`: local time, or a fixed time in the headless build, when tracing, or when `fixed_clock` says so; CONFIG.md) in BCD, stat 0; a test may install its own source with `ico_cdvd_host_set_clock_source` |
 | stream calls | read straight from the disc at the stream cursor; `sceCdStStat` reports the ring as full |
 
-**Timing.** On the PS2 a read starts and `sceCdSync` waits for it. The host
-copies the sectors when `sceCdRead` returns (no caller can look before it
-syncs) and models completion so the game's control flow is the drive's:
+### Timing
+
+On the PS2 a read starts and `sceCdSync` waits for it. The host copies the
+sectors when `sceCdRead` returns (no caller can look before it syncs) and
+models completion so the game's control flow is the drive's. Every read
+command finishes at the next simulated vsync, blocking or polled; drive seek
+and transfer times are not modelled.
 
 - a poll (`sceCdSync(1)`, the background reader in `iosCdvdBackGroundRead`
   and `...ReadIOPm`) sees the command busy until the next simulated vsync,
   so the reader's `cdWait` sleeps once, as it did while the drive worked.
   The completion is `ico_cdvd_host_vsync`, registered with
-  `ico_host_on_vsync_register` (`port/platform/host_loop.h`, package 1B).
+  `ico_host_on_vsync_register` (`port/platform/host_loop.h`).
   The host loop runs it after the vblank interrupt's handlers and before
   the woken threads run, so a cdvd thread woken by the vblank handler finds
   its read complete;
@@ -313,14 +317,14 @@ syncs) and models completion so the game's control flow is the drive's:
   blocks the calling thread on a semaphore until the same vsync, as
   libcdvd's does (`sce/libcdvd/cdvd000.c` `sceCdSync`: it loops on
   `sceCdDelayThread`, which is `CreateSema`, `SetAlarm`, `WaitSema`), so
-  the other threads run meanwhile, the same-priority Main among them.
-  Package 1C completed it on the spot instead, on the assumption that a
-  blocking caller only waits; that was wrong: a stage load then ran from
-  start to end without a Main tick, and the load thread clipped against a
-  collision list Main had built before StageManager removed every object
-  (a NULL `dobj` in `fieldCollision.c` `_Clip`, the Phase 1 x86 crash at
-  tick ~95; `docs/port/BOOT_DIAG.md`). From the host context (the unit
-  tests) the wait still completes at once.
+  the other threads run meanwhile, the same-priority Main among them. This
+  matters: a blocking caller does not only wait. If the read completed on
+  the spot, a stage load would run from start to end without a Main tick,
+  and the load thread would clip against a collision list Main built before
+  StageManager removed every object (a null `dobj` in `fieldCollision.c`
+  `_Clip`). On the PS2 a load spans many vsyncs and Main rebuilds the list
+  in each. From the host context (the unit tests) the wait completes at
+  once.
 
 **Disc identification.** `cdvd.c` keeps its check
 (`iosCdvdDiskReadyBlock`, `cdWait`): drive type 20 and a search for
@@ -365,19 +369,11 @@ id, `sceSifCallRpc` runs the server synchronously and copies its reply, and
 `sceSifCheckStatRpc` reports every call finished. The sifdev calls
 (`sceOpen`, `sceRead`, ...) served the dev kit's `host0:` and fail.
 
-## What stood in for devices (`port/null/`)
-
-Package 1D's null devices are gone; each was replaced by a real host layer:
-
-| was | now |
-|---|---|
-| `pad_null.c` (libpad, always disconnected) | `port/input/pad_host.c`: one DualShock 2 in port 0 when the pad script or the live virtual pad feeds it, nothing otherwise (then `scePadGetState` is 0 and `pad.c` keeps both ports in their error state, handing the game zero buttons); docs/port/INPUT.md |
-| `mc_null.c` (libmc, both slots empty) | `port/save/mc_host.c`: libmc over a host folder; port 1 is empty (docs/port/SAVES.md) |
-| `snd_null.c` (the Sg API and SNDN2DRV's RPC server) | `port/audio/`: the Sg sequencer (`sg/sound.c`), the SNDN2DRV host and the software SPU2 (docs/port/AUDIO.md) |
-| `scf_null.c` (libscf) | `port/config/sysconf.c`: language, time zone and summer time from the config (docs/port/CONFIG.md) |
-
-`port/null/` keeps `gfx_null.c` (package 1B's: libgraph and libdma) and
-`libgcc_null.c` (`fptodp`); docs/port/HEADLESS_STUBS.md.
+The other IOP-side devices have their own host layers: the pad
+(`port/input/pad_host.c`, INPUT.md), the memory card
+(`port/save/mc_host.c`, SAVES.md), sound (`port/audio/`, AUDIO.md) and
+libscf (`port/config/sysconf.c`, CONFIG.md). What is still a stub is in
+HEADLESS_STUBS.md.
 
 ## Facts about the PAL disc relied on
 
@@ -397,9 +393,9 @@ reader above; sector numbers and sizes only.
 | `SCES_507.60;1` | LSN 762, 5,515,680 bytes; read through the VFS it hashes to `da3644c5...` (`config/sha1sums.txt`, `baseelf.elf`) |
 | `DATA.DF;1` | LSN 19,771, 867,184,640 bytes, one extent |
 | DATA.DF directory | 193 entries, every one sector-aligned and inside DATA.DF. With DATA.DF's own entry that is 194 of the 200 slots in `iosCdvdSrhBuff`, which `unifile_read_func` fills without a bound |
-| `IOPRP224.IMG`, `SIO2MAN.IRX`, `PADMAN.IRX`, `MCMAN.IRX`, `MCSERV.IRX`, `LIBSD.IRX`, `SNDN2DRV.IRX` | present in the root (no longer read on the host) |
+| `IOPRP224.IMG`, `SIO2MAN.IRX`, `PADMAN.IRX`, `MCMAN.IRX`, `MCSERV.IRX`, `LIBSD.IRX`, `SNDN2DRV.IRX` | present in the root (not read on the host, except `SNDN2DRV.IRX` for its pitch table) |
 
-## The data tables (`port/data/tables.c`, package 5B)
+## The data tables (`port/data/tables.c`)
 
 The game's 73 data-only members (`config/data_schema.pal.txt`: 74 schema
 rows over 75 rows of `config/data_members.pal.txt`) are ELF data: actor
@@ -429,9 +425,9 @@ bit position and a generated setter (`((SeDef *)r)->procRan = v`), so its
 host placement is the compiler's. `host_offset` and `host_size` are
 `offsetof`/`sizeof` expressions, evaluated by the host compiler. The EE
 offsets and sizes are asserted in `table_desc.c`: for pointer-free records
-on every host, for records with pointers on a 32-bit host (`UINTPTR_MAX`;
-checked with the i686 mingw compiler), and every scalar's host size equals
-its EE size everywhere.
+on every host, for records with pointers only where pointers are 4 bytes
+(`UINTPTR_MAX`, an EE-layout check that no current preset compiles), and
+every scalar's host size equals its EE size everywhere.
 
 Coverage: 73 members, 68 record types, 75 rows (72 table rows, the
 `staffroll_dat` string pool in `.rodata` and the head of its `.sdata`, and
@@ -454,7 +450,7 @@ CRCs and names are not disc data (`docs/LEGAL.md`).
 **Loading.** `ico_pc` mounts the disc, then calls `ico_tables_load_vfs`
 (port/platform/main_host.c) before the window, the pad, the trace and the
 game's `main`: nothing has read a table yet. The loader reads `SCES_507.60`
-through the VFS (any backend: the ISO today, the archive later), finds
+through the VFS (either backend), finds
 `.data`, `.rodata` and `.sdata` in its section headers, and:
 
 1. checks every row's range against its section and its CRC-32 against the
@@ -480,10 +476,9 @@ at run time as before.
 
 **const.** Every table is defined non-const: the loader writes them all,
 and the game writes three of the PS2 build's const `.rodata` tables
-(`stageTable` StageAnimation.c:154-160, `motionLimitDef`
-motionOrientManager.c:1436-1446, `seDef` s_init.c:1031,1085,850), which
-worked on the EE (no page protection). This replaces the old
-`ICO_DATA_WRITABLE` list (`gen_data_c.py --writable`). Headers that declare
+(`stageTable` in `StageAnimation.c`, `motionLimitDef`
+in `motionOrientManager.c`, `seDef` in `s_init.c`), which
+worked on the EE (no page protection). Headers that declare
 a table `extern const` (40 tables) are not edited: `table_defs.c` and
 `table_desc.c` `#define` each such name to `<name>_header_decl` around their
 `#include`s, so the header's declaration names an unused symbol and the
@@ -491,10 +486,13 @@ non-const definition does not conflict. Other translation units still see
 `extern const`, which only stops them writing through that declaration; the
 object itself is writable.
 
-**`nodeLimit`.** The 2E scheme stays: `SetNodeRotationLimitDataTable` stores
-a one-based `motionLimitDef` row in the 4-byte slot (docs/port/SWEEP_2E.md).
-The table now lives in host `.bss`, still outside the arena, so an EE word
-still cannot name it; nothing here needs it to change.
+**`nodeLimit`.** On the EE `SetNodeRotationLimitDataTable` stores a pointer
+to a `motionLimitDef` row in each 4-byte slot of a display object's
+`nodeLimit` array (allocated `skelNodeNum << 2` in `common/src/DObj.c`). The
+table lives in host `.bss`, outside the arena, so an EE word cannot name it;
+on the host the slot holds the row's one-based index, and
+`_getFinalMatrix` reads `motionLimitDef[word - 1]`. The allocation stays 4
+bytes a slot.
 
 **Tests.**
 
@@ -565,10 +563,5 @@ lists or `config/data_members.pal.txt`: `tools/gen_data_desc.py --manifest`
 
 ## Divergences
 
-For `docs/port/DIVERGENCES.md` (platform):
-
-- Disc timing: every read command finishes at the next vsync, blocking or
-  polled. Drive seek and transfer times are not modelled.
-- `sceCdReadClock` reports a fixed time until the port clock lands, so the
-  save serial (`mcMakeSerial`, `layout_action.c`) is constant.
-- No pad, no card, no audio in the headless build (null devices).
+Disc timing (every read finishes at the next vsync) is described under
+"Timing" above. The disc layer has no other known difference from the PS2.

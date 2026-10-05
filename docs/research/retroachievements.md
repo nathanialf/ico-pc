@@ -1,6 +1,7 @@
-# R6: RetroAchievements feasibility
+# RetroAchievements feasibility
 
-Work package 0C. Checked 2026-10-05. Conclusion first: RetroAchievements
+A research note, kept as the reason the port has built-in achievements
+(docs/port/ACHIEVEMENTS.md). Checked 2026-10-05. Conclusion first: RetroAchievements
 (RA) will not accept a set for this port under its current policy, and the
 existing ICO set's logic could not be read without an RA login. The plan's
 port-owned achievement system stays the design; a retail-address memory

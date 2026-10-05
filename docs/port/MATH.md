@@ -1,4 +1,4 @@
-# VU0 maths on the host (package 1A)
+# VU0 maths on the host
 
 The PS2 game does its vector and matrix maths on VU0 in macro mode, through
 inline assembly in the game sources and through Sony's libvu0. The host build
@@ -9,9 +9,9 @@ the operation order, the fields it writes and its W handling. This document
 records, per routine, what the assembly did that is not obvious from the
 routine's name, so the C can be audited against it.
 
-Sources: `docs/research/float-semantics.md` (R2: the float semantics and the
+Sources: `docs/research/float-semantics.md` (the float semantics and the
 R-register vectors), the assembly in the game sources (each host body sits
-next to it under `#ifdef ICO_HOST`), and this repository's clean-room
+next to it under `#ifdef ICO_HOST`), and this repository's
 `sce/libvu0/libvu0.c` for the sceVu0 sequences.
 
 ## Layout
@@ -32,9 +32,8 @@ next to it under `#ifdef ICO_HOST`), and this repository's clean-room
 
 In the game sources, a routine whose body is all assembly is wrapped in
 `#ifndef ICO_HOST` (the host gets it from `port/math`); a routine that mixes
-C and assembly gets an `#ifdef ICO_HOST` branch next to the assembly. The EE
-build is unchanged (every touched object's `.text` and data are
-byte-identical to the period build; see "EE build" below). In
+C and assembly gets an `#ifdef ICO_HOST` branch next to the assembly, so the
+period compiler's objects do not change. In
 `typedef.h`, the host branch of the VU0 macro block includes `ico_math.h`,
 maps `SYNC()` to a fence and `DI()`/`EI()` to nothing, and turns every other
 VU0/R5900 wrapper (`VU0_*`, `QCOPY16`) into a `_Static_assert` failure, so
@@ -48,20 +47,33 @@ The sim thread runs with round toward zero and FTZ/DAZ
 mode plain C float arithmetic already gives the PS2's rounding direction,
 flushes denormals, lands an overflow on FLT_MAX (the port's Fmax), and
 `a * b + c` rounds the product before the sum, which is VU0's unfused
-multiply-add (R2). The helpers cover what remains:
+multiply-add. That is why the simulation runs in that mode rather than
+calling a helper for every operation: the PS2's rounding comes for free, and
+only the cases below need code. The helpers cover what remains:
 
 - `ps2_div(a, b)`: a divisor with a zero exponent (zero or denormal) gives
   +-Fmax with the sign of `a ^ b`, 0/0 included (VU0 `vdiv`, EE `div.s`).
 - `ps2_sqrt(x)`: `sqrt(|x|)`; zero or denormal gives +0 (VU0 `vsqrt`).
 - `ps2_rsqrt(a, b)`: `a / sqrt(|b|)` in two rounded steps; `b` zero gives
-  +-Fmax, or a signed zero when `a` is also zero (PCSX2's rule, R2 open
-  question 5).
+  +-Fmax, or a signed zero when `a` is also zero (PCSX2's rule,
+  float-semantics.md open question 5).
 - `ps2_ftoi`, `ps2_ftoi4`: truncate, saturate at +-2^31 by sign (x86 gives
-  0x80000000 for both signs).
+  0x80000000 for both signs); an exponent-255 pattern saturates by its sign
+  like `cvt.w.s`.
+- `ps2_operand(x)`: a float read from raw memory (a stale stack word, a
+  heap word nothing wrote) that has exponent 255 becomes +-Fmax. The EE and
+  VU0 have no Inf or NaN and treat such a word as a number of about
+  +-2^128; the host would read it as Inf or NaN and spread it. Every matrix
+  apply reads w through it (`ico_apply_matrix`, DIVERGENCES.md F17), and
+  the sites that read other possibly-unwritten words call it directly
+  (F5, F13, F14).
 
 Every division the assembly did through `vdiv` is `ps2_div(1.0f, w)` followed
 by a multiply, never `x / w`: the PS2 rounds the reciprocal and then the
-product. Accepted differences are DIVERGENCES.md F1-F4 and F7-F10.
+product. Plain C `/` and `(int)` in the game's own code are converted to
+the helpers site by site, where the `fptrap` preset or a reading shows the
+PS2 result differs (DIVERGENCES.md F5). The accepted differences are
+DIVERGENCES.md F1-F4 and F7-F10.
 
 ## The current matrix
 
@@ -83,9 +95,9 @@ are added as on the PS2.
 ### `_PushVu0Registers` / `_PopVu0Registers`
 
 On the PS2 these save vf1-vf31 to VU0 memory and load them back. They wrap
-the scheduler thread's `gsb_UpdateGSSystem` (`common/src/main.c:271`), the
-sound thread's tick (`fumi/sound/soundManager.c:25`) and `iosPadGetStick`
-(`fumi/ios/pad.c:598`), which the game calls directly and which runs `FSqrt`
+the scheduler thread's `gsb_UpdateGSSystem` (`common/src/main.c`), the
+sound thread's tick (`fumi/sound/soundManager.c`) and `iosPadGetStick`
+(`fumi/ios/pad.c`), which the game calls directly and which runs `FSqrt`
 and `sceVu0Normalize`; on the PS2 both write vf4, a row of the current
 matrix. On the host every routine keeps its values in C locals, so the only
 register content left is the current matrix, and the host versions save and
@@ -228,8 +240,8 @@ matrix, the PS2 used a corrupted matrix and the host does not
 (DIVERGENCES.md F10).
 
 A static scan (call order within each function, routines resolved
-transitively by name, no control flow) found these candidates, none
-triaged except the first two:
+transitively by name, no control flow) found these candidates; the first
+two are triaged, the rest are open (docs/TODO.md):
 
 - `seki/src/BgAnimation.c` `bga_CalcObject`: two hits, both false
   positives (different `switch` cases).
@@ -248,13 +260,14 @@ triaged except the first two:
   renderer routine reached transitively; each needs a look at whether the
   reader really uses the current matrix before setting it.
 
-## Doubles (follow-up, not implemented here)
+## Doubles
 
-R2's object census lists 33 functions in 20 files that do `double`
-arithmetic through libgcc's soft float (round to nearest, denormal inputs
+The object census in float-semantics.md lists 33 functions in 20 files that
+do `double` arithmetic through libgcc's soft float (round to nearest, denormal inputs
 read as zero, `dptofp` rounding to nearest, `dptoli` truncating and
 saturating). On the host they run as SSE doubles under the sim thread's
-round-toward-zero mode, so any inexact result can differ (DIVERGENCES.md F6).
+round-toward-zero mode, so any inexact result can differ (DIVERGENCES.md
+F6). This is not handled yet (docs/TODO.md).
 
 | file | functions |
 | --- | --- |
@@ -274,7 +287,7 @@ round-toward-zero mode, so any inexact result can differ (DIVERGENCES.md F6).
 | script/src/st04a, st04e (2), st05e, st06a, st13b (2), st25a | stage water, gate and elevator checks |
 | sugipon/src/waterDot | setWaterDot |
 
-Recommended handling, in order (R2): (1) `port/math/softdouble.c` written
+The recommended handling, in order (float-semantics.md): (1) `port/math/softdouble.c` written
 from the integer algorithm of `sce/libgcc/dp-bit.c`, with the double
 expressions in those functions rewritten as calls (`ico_dmul`, `ico_dsub`,
 `ico_ddiv`, `ico_dcmp`, `ico_i2d`, `ico_d2i`, `ico_d2f`, `ico_f2d`) under
@@ -294,7 +307,7 @@ state 1 at start as in `sce/libc/reent/impure.c`), `ico_qsort`
 `ico_cosf`, `ico_fmodf`, `ico_sqrtf` with their fdlibm helpers made static.
 Licence notices: SunPro fdlibm for the libm file, the UCB BSD notice for
 qsort, newlib's Red Hat notice for rand (written from the texts quoted in
-`docs/research/licences.md`; to be diffed word for word against upstream).
+`docs/research/licences.md`).
 `port/compat/math.h` and `stdlib.h` `#include_next` the host header and,
 under `ICO_HOST`, include `port/compat/ico_libc.h`, whose macros map the
 game's calls to the copies without touching call sites.
@@ -309,16 +322,16 @@ returns 0) are reproduced: `atan2f(0, 0)` = +0, `acosf`/`asinf` out of
 domain = 0, `fmodf(x, 0)` = 0x7FB00000 (the folded `0.0/0.0` passed
 through `dptofp`; from the reconstructed libgcc, not checked on hardware).
 
-**`cosf` is not linked in the EE build.** `build/ico.pal.map:5086-5130`
-lists `sf_sin.o`, `kf_cos.o` and `kf_sin.o` but no `sf_cos.o` and no `cosf`
-symbol; `build/ico.syms.elf` has no `cosf` (nor `sqrtf`), and no object in
-`build/ico2` or `build/sce` references either. `ico_cosf` exists for
+**`cosf` is not linked in the PS2 game.** The decompilation's link map lists
+`sf_sin.o`, `kf_cos.o` and `kf_sin.o` but no `sf_cos.o` and no `cosf`
+symbol; the ELF has no `cosf` (nor `sqrtf`), and no object of the game or
+of `sce/` references either. `ico_cosf` exists for
 completeness, written in `sf_sin.c`'s style, and is unverified.
 
 ## Tests
 
-`ctest` runs `math_test` and `newlib_test` (Linux presets). `math_test`
-(13,444 checks) runs in the sim FP mode and checks:
+`ctest` runs `math_test` and `newlib_test` (ctest `math`, `newlib`).
+`math_test` runs in the sim FP mode and checks:
 
 - the helpers bit for bit: division by +-0, 0/0 and a denormal divisor
   (+-Fmax), 1/3 rounding toward zero, sqrt/rsqrt of negative, zero and
@@ -327,7 +340,7 @@ completeness, written in `sf_sin.c`'s style, and is unverified.
 - multiply-add not fused (`(1 + 2^-12)^2 - 1` = 2^-11 exactly);
 - R: seed bits 0x3F9E0651, seed + 1 = 0x400F0328, R after vrinit
   0x3F8F0328, after vrxor 0x3F910579, the next six R values and
-  `_GetRandom` results from R2;
+  `_GetRandom` results from float-semantics.md;
 - matrix multiply, apply, current-matrix multiply/apply/translate, transpose,
   inverse, quaternion rows and product, normalise, inner/outer product,
   lengths and interpolation against double-precision references (relative
@@ -336,32 +349,13 @@ completeness, written in `sf_sin.c`'s style, and is unverified.
 - exact results: identity multiplies, `_InitCurrentMatrix`, quarter-turn
   rotations about X, Y and Z, push/pop and the register save/restore,
   projection with w = 0 giving Fmax rather than Inf, the triangle normal and
-  the quad normal's squared-edge term.
+  the quad normal's squared-edge term;
+- stale w lanes (`test_stale_w`): an apply whose w holds an exponent-255
+  pattern gives the rotation alone over a zero translation row, as on the
+  EE.
 
 `sceVu0RotMatrix[XYZ]` are checked against `cos`/`sin` at 81 angles over
 [-pi, pi] (tolerance 2e-5: libvu0's polynomial is that accurate).
 
-## EE build
-
-All game-file edits are `#ifdef ICO_HOST` / `#ifndef ICO_HOST` regions and
-ASCII-only (the EUC-JP files `enemy.c`, `motionManager2.c` and
-`BgAnimation.c` were edited as bytes). The objects of every touched file
-(`Matrix`, `Shadow`, `BgAnimation`, `matrixDrive`, `quaternion`,
-`clothAnimation`, `motionManager2`, `lineManager`, `stormTest`, `enemy`,
-`itou_sub`, and `a_p_1` for `sugiCommon.h`) rebuilt with `.venv/bin/ninja`
-have `.text`, `.data`, `.rodata` and `.sdata` identical to the period build.
-
-## Open questions
-
-1. The 15 untriaged register-side-effect candidates above (F10).
-2. Whether the R LFSR matches hardware (R2 open question 1, F7).
-3. `Matrix.c`, `matrixDrive.c`, `quaternion.c`, `clothAnimation.c`,
-   `lineManager.c` and `Shadow.c` are in the renderer-owned list
-   (`ICO_RENDERER_SOURCES`), so a headless build gets their VU0 routines
-   from `port/math` but not their plain C functions (`_ScaleMatrixV`,
-   `_SetCameraMatrix`, `_PushVu0Registers`, `InitMatrixDrive`, the
-   quaternion stack, the cloth simulation). They now compile on the host
-   (gcc, game flags); moving the non-renderer ones into the simulation build
-   is the source-list owner's call.
-4. `port/compat/math.h` and `stdlib.h` are new compat headers; if another
-   package adds its own wrapper for either, the two need merging.
+Open items (the untriaged register candidates, the R LFSR on hardware,
+the doubles) are in `docs/TODO.md`.

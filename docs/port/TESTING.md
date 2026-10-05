@@ -1,436 +1,294 @@
-# Test checkpoints
+# Testing
 
-The game never runs in the container (plan, "Where the game runs"). Agents
-compile and run unit tests only. At each **[user test]** checkpoint the
-orchestrator hands the user a Windows package. The user runs it and sends back
-logs, and the next packages read them.
+How to test the port: which builds to use, the settings that control a test
+run, how to replay a player's session, how to read the log and the trace,
+how to report a visual bug, the renderer's backend checks, the packages and
+CI. Building is in [`docs/BUILDING.md`](../BUILDING.md); every configuration
+key is in [`CONFIG.md`](CONFIG.md).
 
-The 32-bit Windows build (`win-x86-ref`, with its Linux twin `ref-m32`) was
-the oracle for the 64-bit build until Phase 2 exit. It was retired at commit
-36a1d73e, when the x64 traces were byte-identical to it over 3000 ticks, and
-packages now carry one `x64/` folder. The checkpoint records below that name
-`x86` or the 32-bit presets are history.
+## The two builds
 
-## Flow
+The same game sources build two programs (`ICO_HEADLESS`, docs/BUILDING.md):
 
-1. **Build.** Configure `win-x64` with `-DICO_LINK_EXE=ON`
-   into `build-host/<pkg>-<preset>`, then build. Check the import table with
-   `tools/toolchain/mingw-gcc/usr/bin/x86_64-w64-mingw32-objdump -p`.
-   It must list only system DLLs (`KERNEL32`, `msvcrt`, `USER32`,
-   `COMDLG32`) and the GUI subsystem; since renderer wave 2 the window build
-   also imports `SDL3.dll`, which the build copies beside the exe and the
-   package ships (Vulkan's `vulkan-1.dll` is loaded at run time, from the
-   driver). The Windows link uses `-mwindows
-   -static-libgcc -static` (`CMakeLists.txt`).
-2. **Package.** Stage the files under `dist/` (gitignored), one `x64/` folder
-   with its exe, its link map (`ico_pc.map`, written beside the
-   exe by the link, `port/platform/CMakeLists.txt`), `ico-pc.ini` and
-   `pad-script.txt`, plus a `TEST.md`. Zip the result as
-   `dist/ico-pc-<phase>-win.zip`. Keep the zip: its exes (RelWithDebInfo,
-   with DWARF) and maps turn crash offsets into source lines
-   (`docs/port/BOOT_DIAG.md`). Build from a clean worktree of the commit
-   being tested, not from a tree with other packages' uncommitted work.
-3. **User run.** The user double-clicks the exe. No command-line flags, no
-   console. Settings come from `ico-pc.ini` in the exe's folder and from
-   `config.toml` in the per-user folder (below); logs and the trace go to the
-   exe's folder (`port/platform/host_config.c`, `main_host.c`):
-   - **Game data:** `ico.o2r` in the per-user folder (Windows
-     `%APPDATA%\ico-pc\ico-pc\`) or beside the exe. The first run has
-     none: it finds the ISO (below), verifies it and extracts it there once
-     (about 870 MB; progress in the log and in a small window; 14 s on the
-     container, longer on a slow disk), then boots. Later runs mount the
-     archive and never open the ISO. Deleting `ico.o2r` makes the next run
-     extract again. `use_iso=1` reads the ISO directly instead
-     (docs/port/DATA.md, "Backend 2: the archive").
-   - **ISO:** `Ico_PAL.iso` beside the exe, else `iso=` in `ico-pc.ini`,
-     else a file dialog. A dialog choice is saved to the ini once it
-     verifies.
-   - **ISO check:** the extractor accepts the image by its SHA-1
-     `1017b53f...`, or by `SCES_507.60`'s SHA-1 plus DATA.DF's manifest (a
-     re-dump), and logs which; a wrong image stops with a message box. With
-     `use_iso=1` the SHA-1 check is the old one, skipped with `verify=0`.
-   - **Pad script:** `pad_script=FILE` in the ini (format in
-     `port/input/pad_script.h`); the headless build also takes
-     `pad-script.txt` beside the exe if present. The window build ignores a
-     `pad-script.txt` the ini does not name (package F2).
-   - **Logs:** stdout and stderr go to `logs/ico-pc.log`, unbuffered; the
-     diagnostics (`port/platform/diag_host.h`) write there too. The trace
-     goes to `logs/trace-<yyyymmdd-hhmmss>.txt`, flushed line by line: by
-     default in the headless build (`trace=0` turns it off); the window
-     build writes it only with `trace=1` or `trace=PATH` (package F2); the
-     Windows test package's ini sets `trace=1` (since v0.6, after the
-     W2 replay of a Windows session drifted from it after Main tick 14982
-     with no per-tick record to diff), so a session's trace can be
-     compared line by line with the headless replay of its recording.
-   - **Exit:** after `ticks=` Main ticks; with no `ticks=`, it runs until
-     closed.
-   - **Watchdog:** `watchdog=S` (default 30, 0 off): no Main tick S
-     seconds after boot started, or none for 2S seconds after the first,
-     stops the run with a report.
-   - **Fatal errors:** a message box naming the log. A crash or the
-     watchdog writes a report first (exit codes 3 and 4).
-4. **Return.** The user sends back the `logs/` folders. Read the end of
-   `ico-pc.log` (below), then the trace for the stage, the game flags and
-   the save-buffer hash per tick.
+- **The window build** (`-DICO_HEADLESS=OFF`) is the game: an SDL3 window,
+  the Vulkan or D3D12 renderer, audio and the live pad. It is what the
+  packages ship and what a player runs.
+- **The headless build** (`ICO_HEADLESS=ON`, the `linux-x64` preset's
+  default) has no window and no renderer. It runs the simulation as fast as
+  the host allows, takes its input from a pad script, writes a trace by
+  default, fixes the disc clock and mounts the disc image directly. It is
+  the build for reproducible runs: trace comparisons, replays of recorded
+  sessions, stage sweeps and CI.
 
-## Keys: `ico-pc.ini` and `config.toml`
+Both are deterministic for a given pad input, settings and memory card
+folder, so a window session's recording replays tick for tick in the
+headless build. Neither takes command-line flags in normal use: a
+double-clicked executable reads `ico-pc.ini` beside itself and
+`config.toml` in the per-user folder, and writes its logs to `logs/` beside
+itself (`port/platform/host_config.c`, `port/platform/main_host.c`).
 
-Precedence: `ico-pc.ini` beside the exe > `config.toml` > defaults
-(docs/port/CONFIG.md has the whole table). `config.toml` is in the folder
-`SDL_GetPrefPath("ico-pc", "ico-pc")` names in the window build (Windows
-`%APPDATA%\ico-pc\ico-pc\`), the exe's folder in the headless build. Each ini
-key has a `config.toml` name; a true/false toml value reads as 1/0.
+The sanitizer and trap presets (`asan`, `fptrap`) are headless builds that
+stop at the first memory error or the first float divide by zero or
+invalid operation in the simulation. `fptrap` finds the sites where the
+host's IEEE result differs from the EE's saturating one (DIVERGENCES.md,
+F5). The heap-ASan build, which poisons the game allocator's block
+headers and slack, is described in [`BOOT_DIAG.md`](BOOT_DIAG.md).
+
+## Settings for test runs
+
+`ico-pc.ini` beside the executable wins over `config.toml` in the per-user
+folder (`SDL_GetPrefPath("ico-pc", "ico-pc")`: `%APPDATA%\ico-pc\ico-pc\`
+on Windows, `~/.local/share/ico-pc/ico-pc/` on Linux; the headless build
+uses the executable's folder). Each ini key has a `config.toml` name, and a
+true/false toml value reads as 1/0. The keys a test run uses:
 
 | ini key | `config.toml` | meaning |
 | --- | --- | --- |
-| `iso=PATH` | `[paths] iso` | disc image (a dialog choice is saved to the ini) |
-| `saves=PATH` | `[paths] saves` | memory card folder |
-| `ticks=N` | `[dev] ticks` | exit after N Main ticks |
-| `watchdog=S` | `[dev] watchdog` | default 30, 0 off |
-| `trace=0` / `trace=1` / `trace=PATH` | `[dev] trace` | no trace / `logs/trace-<time>.txt` / trace there; a path also fixes the clock. Default: on in the headless build, off in the window build |
-| `verify=0` | `[dev] verify` | skip the SHA-1 check (`use_iso=1` only; extraction always verifies) |
-| `use_iso=0/1` | `[dev] use_iso` | 1: mount the ISO directly (dev mode); 0: the extracted `ico.o2r`, extracting it on the first run. Default 1 in the headless build (trace runs and tests read the ISO as before), 0 in the window build |
-| `pad_script=PATH` | `[dev] pad_script` | the scripted pad |
-| `dump_every=N`, `dump_dir=PATH` | `[dev] dump_every`, `dump_dir` | rd frame dumps (window build) |
-| `input_record=0/1/PATH` | `[dev] input_record` | the pad recording: `logs/input-<time>.txt` (1) or PATH; default on in the window build, off headless ("Reporting a visual bug" below) |
+| `iso=PATH` | `[paths] iso` | the disc image (a file-dialog choice is saved here) |
+| `saves=PATH` | `[paths] saves` | the memory card folder |
+| `use_iso=0/1` | `[dev] use_iso` | 1 mounts the disc image directly; 0 mounts the extracted `ico.o2r`, extracting it on the first run. Default 1 in the headless build, 0 in the window build |
+| `verify=0` | `[dev] verify` | skip the image's SHA-1 check when mounting it directly (extraction always verifies) |
+| `ticks=N` | `[dev] ticks` | exit after N Main ticks; without it the run goes on until the window is closed |
+| `watchdog=S` | `[dev] watchdog` | stop with a report when no Main tick comes S seconds after boot starts, or no new one for 2S seconds. Default 30, 0 off |
+| `trace=0` / `trace=1` / `trace=PATH` | `[dev] trace` | no trace / `logs/trace-<time>.txt` / a trace at PATH (a path also fixes the clock). Default on in the headless build, off in the window build |
+| `pad_script=PATH` | `[dev] pad_script` | drive the pad from a script or a recording (format in [`INPUT.md`](INPUT.md) and `port/input/pad_script.h`). The headless build also takes a `pad-script.txt` beside the executable; the window build ignores one the settings do not name |
+| `input_record=0/1/PATH` | `[dev] input_record` | the pad recording: `logs/input-<time>.txt` (1) or PATH. Default on in the window build, off headless |
+| `headless=1` | `[dev] headless` | a run for traces and tests: fixes the clock (the headless build always does) |
+| `fixed_clock=0/1` | `[dev] fixed_clock` | the disc clock (`sceCdReadClock`): 2002-01-01 00:00:00 when fixed, the host's local time otherwise. Fixed by default in the headless build, with `headless=1` or with a `trace=` path. A fixed clock keeps the save serial, which contains the clock, and so the trace's save hash reproducible |
+| `start_stage=N` | `[dev] start_stage` | boot straight into stage N (`stageData` order), skipping the boot signs and the title ([`DEVELOPER_MODE.md`](DEVELOPER_MODE.md)) |
+| `dump_every=N`, `dump_dir=PATH` | `[dev] dump_every`, `[dev] dump_dir` | write every Nth rd frame to `dumps/rd-NNNNN.rddump` (window build; [`RENDER_API.md`](RENDER_API.md)) |
+| `dump_from=N`, `dump_interp=1` | `[dev] dump_from`, `[dev] dump_interp` | the first frame `dump_every` writes; also write each dump's interpolated half-way frame |
 | `audio=0` | `[audio] enabled` | no audio device |
-| `audio_dump=PATH` | `[dev] audio_dump` | WAV of the mixed audio (`1`: `logs/audio.wav`) |
-| `headless=1` | `[dev] headless` | a run for traces and tests: fixes the clock (the headless build always is) |
-| `fixed_clock=0/1` | `[dev] fixed_clock` | the disc clock (`sceCdReadClock`): 2002-01-01 00:00:00 when fixed, the host's local time when not. Default: fixed for the headless build, `headless=1`, or a `trace=` path; real otherwise. A fixed clock keeps the save serial (the clock is in it) and so the trace's save hash reproducible |
-| | `[game] language` | `auto`, `en`, `fr`, `de`, `it`, `es`: the boot language sign's preselected item (`auto`: the system locale) |
+| `audio_dump=PATH` | `[dev] audio_dump` | a WAV of the mixed audio (`1`: `logs/audio.wav`) |
+| `backend=vulkan/d3d12` | `[video] backend` | the window build's renderer backend (default and fallback `vulkan`) |
+| | `[dev] slow_step_ms` | log a `window: slow step` line for every simulation step over this many milliseconds (default 8, 0 off) |
+| | `[dev] perf_log` | write per-frame timings to `logs/ico-pc-perf.csv` |
 
-A trace run that must be reproducible sets `headless=1` or a `trace=` path (or
-runs the headless build); the Windows user package leaves them out, so the
-clock it reports is real.
+A run that must be reproducible uses the headless build, or sets
+`headless=1` or a `trace=` path. The packages leave these out, so a player's
+clock is real.
+
+The executable also takes developer overrides on the command line, which
+win over every file: `--iso PATH`, `--pad-script FILE`, `--trace FILE|none`,
+`--ticks N`, `--vsync-rate X`, `--no-verify`, `--console` (keep stdout and
+stderr on the console instead of the log) and `--help`. A player never needs
+them.
+
+## Game data on the first run
+
+Without `use_iso`, a run looks for `ico.o2r` in the per-user folder, then
+beside the executable. On the first run there is none: it finds the disc
+image (`Ico_PAL.iso` beside the executable, else `iso=`, else `ICO_ISO`,
+else `baserom/Ico_PAL.iso` under the working folder, else a file dialog whose
+choice is saved to the ini), checks it and extracts the game's files into
+the archive once (about 870 MB; progress in the log and, in the window
+build, a small window). The extractor accepts the image by its SHA-1, or by
+the boot ELF's SHA-1 plus the manifest of `DATA.DF` for a re-dump, and logs
+which; a wrong image stops the run with a message. Deleting `ico.o2r` makes
+the next run extract again. [`DATA.md`](DATA.md) has the details.
+
+## Replaying a session
+
+The window build records the pad in every session (`input_record`, on by
+default) to `logs/input-<time>.txt`: what the game read from the pad at
+every Main tick where it changed, in the pad-script format, after a header
+with the build (`git describe`), the start time and the settings the
+simulation depends on (`[video] video_mode`, `[game] language`,
+`[gameplay] mirror`, `stick_fix`, `yorda_safe`, `developer_mode`,
+`[dev] start_stage`, and whether the clock was fixed;
+`record_keys` in `port/platform/main_host.c`).
+
+To replay it, run the headless build with `pad_script=` that file, the same
+settings in `config.toml`, `ticks=` past the point of interest and, for a
+session started with Continue, a copy of the memory card folder as it was
+when the session began (a New Game session needs none: the boot's card
+check takes the same ticks with an empty folder). The log then says
+`pad script is a recording made with this build and settings`, or names
+each header value that differs from the run's; a differing build or
+language does not necessarily change the run, but it is the first thing to
+suspect when a replay drifts. A faithful replay changes stage at the same
+Main ticks and vsyncs as the session did, and its trace matches the
+session's trace line for line when the session wrote one (the Windows test
+package sets `trace=1` for that reason).
+
+Because the replay is deterministic, a temporary probe called from
+`ico_host_main_tick` (`port/platform/trace_host.c`) can print game state at
+a chosen tick without changing the run: for a position bug, for example,
+`GetRootPosition` of `boyGObj` (the world position, with the parent
+object's node matrix and the root height applied), the action mode (names in
+`actModeTbl`) and the motion (names in `motionKind`).
 
 ## Reporting a visual bug
 
-Press **F12** when you see it, then send the two files it names and the
-pad recording of the session:
+Press **F12** when the problem is on screen, then send the two files it
+names and the session's pad recording:
 
-- `window: F12 at vsync V, Main tick T, frame F: wrote <pref>/dumps/frame-<time>-vV.rddump and ...png`
-  in `logs/ico-pc.log` (`<pref>` is `%APPDATA%\ico-pc\ico-pc` on Windows,
-  `~/.local/share/ico-pc/ico-pc` on Linux). The `.rddump` is the frame the
-  game recorded last (an rd frame dump, RENDER_API.md: it holds the game's
-  textures, so it is for the developers only and never committed), the
-  `.png` the picture as the window last presented it (the DISPLAY target,
-  read back once). `rd_replay_tool` renders the dump on any backend.
-- `logs/input-<time>.txt`, written by the window build in every session
-  (`[dev] input_record = false` turns it off): what the game read from the
-  pad at every Main tick where it changed, in the pad script format
-  (`port/input/pad_script.h`, `port/input/input_record.h`), after a header
-  with the build (`git describe`), the start time and the config values
-  the simulation depends on (`video_mode`, `language`, `mirror`,
-  `stick_fix`, `yorda_safe`, `developer_mode`, `start_stage`, and whether
-  the clock was fixed). F12 also flushes it, so it is complete up to the
-  dump; the Main tick in the F12 line is where to look. A session started
-  with Continue needs the memory card folder as it was at the start as well.
+- The log gets a line
+  `window: F12 at vsync V, Main tick T, frame F: wrote <pref>/dumps/frame-<time>-vV.rddump and ...png`.
+  The `.rddump` is the last frame the game recorded, as an rd frame dump
+  ([`RENDER_API.md`](RENDER_API.md)); the `.png` is the picture the window
+  last presented (the DISPLAY target, read back once). A dump holds the
+  game's textures, so it is for the developers only and is never committed
+  or published. `rd_replay_tool` renders it on either backend.
+- `logs/input-<time>.txt`. F12 flushes it, so it is complete up to the dump;
+  the Main tick in the F12 line says where to look in the replay.
 
-The developer replays the session in the headless build with
-`pad_script=<that file>` (and `ticks=` past the F12 tick): the log says
-`pad script is a recording made with this build and settings`, or names
-each header value that differs from the run's. Measured (package Q1): a
-window-build run on lavapipe (`pad-boot.txt`, 1500 ticks, `trace=` a path)
-recorded 224 lines; the headless build replaying that recording wrote a
-trace byte-identical to the window run's (1500 ticks, 3007 vsyncs, stage 3;
-SHA-1 247476b41be51a482b3afc49999e9ee9791dc8d0), and its own recording of
-the replay had the same lines.
-
-Measured (package S1): the user's Windows recording `input-20261005-083059.txt`
-(build a0a98982, 60 Hz, New Game) replayed in the `linux-x64` headless build
-(`-DICO_LINK_EXE=ON`, `config.toml` with `[dev] use_iso = true` and the
-header's settings, `language = "en"` for the English locale's `auto`, an
-empty `saves=` folder) ran every stage change at the user's Main tick and
-vsync (1 -> 41 at 2563 / 5135, ..., 40 -> 3 at 3917 / 7843, 3 -> 1 at
-4876 / 9761); the log names only the build (`-dirty`), `language` and
-`fixed_clock` as differing, none of which changed the run. A recording
-that starts with New Game needs no card folder: the boot's card check took
-the same ticks with an empty one. To place a position bug, a temporary probe
-called from `ico_host_main_tick` can print `boyGObj`'s `GetRootPosition`
-(the world position: it applies the parent object's node matrix and the
-root height; `Sub15C.root.pos` alone is in the parent's frame), `actMode`
-(names in `actModeTbl`, `build/ico.elf` 0x5577D0, 0x50 a row, name at
-+0x24), `ctrl.motion` (names in `motionKind`, 0x55FE58, 0x194 a row, name at
-+0xC0), `root.standNode`, `root.plane`, `ctrl.flags` (8 landing, 0x20 wall)
-and `parent.obj->kind`, with the clip rays logged inside the root update for
-a tick range; the replay is deterministic, so runs with and without the
-probe give the same trace (DIVERGENCES.md D7 was found this way).
-
-**F11** switches the `window:` stats lines (RENDER_API.md section 22) to
-every second for 30 s, for a stutter that comes and goes; F11 again goes
-back to every 10 s. Steps over `[dev] slow_step_ms` (8 ms) are logged as
-`window: slow step` lines either way.
+**F11** switches the `window:` statistics lines from every 10 seconds to
+every second for 30 seconds, for a stutter that comes and goes; pressing it
+again switches back. Slow steps are logged either way (`[dev] slow_step_ms`).
 
 ## Reading `ico-pc.log`
 
-Every failure mode leaves a distinct ending (`docs/port/BOOT_DIAG.md`,
-"What the log contains now"):
+stdout and stderr go to `logs/ico-pc.log`, unbuffered, and the
+diagnostics (`port/platform/diag_host.h`) write there too. Every way a run
+can end leaves a distinct ending:
 
 | the log ends with | meaning |
 | --- | --- |
-| `exit: ticks= reached` and `N Main ticks, V vsyncs, stage_no S` | the run completed |
-| `CRASH: <exception or signal> at ico_pc.exe+0x…`, the fault address, the game thread and its last kernel call, stack candidates, `last failure message` (assertions), a heartbeat, every thread, `the run ended`, the summary | a crash (exit code 3); look the offsets up in the map or with `addr2line` |
-| `WATCHDOG: no Main tick …` or `no new Main tick …`, `the main thread was at ico_pc.exe+0x…`, stack candidates, every thread with what it waits on | a hang (exit code 4): a spin shows its address; a deadlock shows every thread waiting |
-| heartbeat lines ending `no progress for N s` | the run stalled; the next lines are the watchdog's |
+| `exit: ticks= reached` or `exit: the window was closed`, then `N Main ticks, V vsyncs, stage_no S` | a normal end |
+| `CRASH: <exception or signal> at ico_pc.exe+0x…`, the fault address, the game thread and its last kernel call, stack candidates, the last assertion message, a heartbeat, every thread, the summary | a crash (exit code 3). Look the offsets up in the link map shipped beside the executable (`ico_pc.map`) or with `addr2line` on the RelWithDebInfo build |
+| `WATCHDOG: no Main tick …` or `no new Main tick …`, where the main thread was, stack candidates, every thread with what it waits on | a hang (exit code 4): a spin shows its address, a deadlock shows every thread waiting |
+| heartbeat lines ending `no progress for N s` | the run stalled; the watchdog's lines follow |
 | `the game called Exit(n)` or `host: the game's main returned` | the game ended itself |
-| none of these after the last milestone | the process was killed from outside (Task Manager) or Windows ended it before the handlers ran; the last milestone or heartbeat locates it |
+| none of these after the last milestone | the process was killed from outside, or the OS ended it before the handlers ran; the last milestone or heartbeat locates it |
 
-The boot milestones (`boot: file_Init`, thread creations,
-`first vsync done`, `Main: …`, `first Main tick done`, `stage_no a -> b`,
-`kanbanBoot: …`) and the heartbeat every 2 s show how far the run got.
+The milestones (`boot starts`, `boot ran until every thread waits`,
+`first vsync done`, `first Main tick done`, each `stage_no a -> b`, the boot
+sequence's `kanbanBoot: bootStep …` lines) and a heartbeat every 2 seconds
+show how far a run got. [`BOOT_DIAG.md`](BOOT_DIAG.md) describes the crash report and the
+watchdog in detail. A fatal error (no disc image, a wrong one, a bad pad
+script) is logged, shown in a message box, and exits 1.
 
-Developer overrides exist for local runs (`--iso`, `--pad-script`,
-`--trace`, `--ticks`, `--no-verify`, `--console`, `--help`). The user never
-needs them.
+## The trace
 
-## Trace format (Phase 1; package 2A replaces it)
-
-The trace has one line per Main tick (`port/platform/trace_host.c`),
-flushed as it is written, and starts with this header line, written when the
-file opens:
-`# tick vsync stage sys0 sys1 gameover gf0..gf12 save`
+The trace has one line per Main tick (`port/platform/trace_host.c`), each
+flushed as it is written, so a crash leaves it complete up to the last tick.
+It opens with `# developer_mode 0` or `1` (the developer menu can change the
+simulation) and the header line
+`# tick vsync stage sys0 sys1 gameover gf0 … gf12 save`:
 
 | column | contents |
 | --- | --- |
 | `tick` | the Main tick number |
 | `vsync` | the vsync count |
 | `stage` | `stage_no` |
-| `sys0`, `sys1` | `systemStatus[0..1]` |
+| `sys0`, `sys1` | `systemStatus[0]` and `[1]` (the video mode, and vsyncs per Main tick) |
 | `gameover` | `gameover_flag` |
-| `gf0`..`gf12` | the game flags as 32-bit words (flag 32N+b is bit b of gfN; New Game sets flag 382, which is `gf11` bit 30) |
+| `gf0` … `gf12` | the 400 game flags as 32-bit hex words: flag 32N+b is bit b of gfN (New Game sets flag 382, bit 30 of `gf11`) |
 | `save` | the FNV-1a 32 hash of `gameSysMainSaveBuff` |
 
-A Main tick is one pass of Main's loop. `common/src/main.c` calls
-`ico_host_main_tick()` after `frameReady = 1`.
+A Main tick is one pass of `Main`'s loop; `common/src/main.c` calls
+`ico_host_main_tick()` after `frameReady = 1`. Ticks are not vsyncs: a movie
+or a stage load takes many vsyncs and no Main tick. Two runs agree when
+their traces are byte-identical; the first differing line gives the tick and
+which state moved.
 
-## Phase 1 checkpoint (package 1D)
+## Booting every stage
 
-- **Package:** `dist/ico-pc-phase1-win.zip`. It holds `x86/` and `x64/`
-  (each with the exe, `ico-pc.ini` with `ticks=3000`, and `pad-script.txt`
-  = `port/input/pad-boot.txt`) and `TEST.md`.
-- **Pass:** `win-x86-ref` boots to the title and ticks a stage with null
-  devices, writing a trace (the plan's Phase 1 exit). In the trace, look for
-  flag 382 and a stage change after it.
-- **`win-x64`** is expected to be unreliable until Phase 2 (32-bit struct
-  and pointer-in-int assumptions). Its log only shows how far it gets.
-- **Boot script timing** is derived from the code and has never run. If the
-  trace shows a stall, find the stage and tick, adjust
-  `port/input/pad-boot.txt`, and once the tick of flag 382 is known, cut the
-  script after it.
+`start_stage` makes it cheap to boot each stage on its own. An idle boot of
+every stage with data (600 Main ticks, at 50 Hz and at 60 Hz through
+`[video] video_mode`) in the `fptrap` build and in the heap-ASan build is
+the check for float traps, out-of-bounds writes and heap exhaustion that a
+play-through would only reach hours in. A start-stage boot applies
+`[video] video_mode` as the normal boot would, and its game flags are those
+of a fresh boot, so a stage that expects earlier progress may behave
+differently from a play-through. Achievements are suspended in such runs
+([`ACHIEVEMENTS.md`](ACHIEVEMENTS.md)).
 
-## Phase 1b checkpoint (package 1E)
+## The renderer backends
 
-- **Package:** `dist/ico-pc-phase1b-win.zip`, root folder
-  `ico-pc-phase1b/`, with `TEST.md` and `x86/`, `x64/` (each: the exe, its
-  `.map`, `ico-pc.ini` with `iso=`, `ticks=3000` and `watchdog=30`, and
-  `pad-script.txt` = `port/input/pad-boot.txt`). Built from a clean
-  worktree of `93d918e4` plus package 1E's changes.
-- **Why:** the Phase 1 package died ~2 s into boot on both architectures,
-  with an empty log tail. `docs/port/BOOT_DIAG.md` has the causes (i386
-  argument shifts in `gif_*` externs; blocking disc reads that took no
-  simulated time; on x64, a truncated pointer in `iosCdStRead`) and the
-  fixes.
-- **Expected:** `x86` completes 3000 ticks. On `ref-m32` it sets flag 382 at
-  tick 661 and reaches stage 3 at tick 1036; Windows should match tick for
-  tick if the build is deterministic across the two, which this run tests.
-  `x64` is still expected to crash in the first stage load (on
-  `linux-x64`: `seki/src/Light.c:131`, a pointer held in an `int`, Phase 2;
-  where Windows puts its heap decides whether that truncates); its log
-  should now end in a crash report naming the location.
+The renderer has a Vulkan backend and a Direct3D 12 backend
+(`port/rhi/`, `port/rhi/d3d12/README.md`). The Windows presets build both
+(`ICO_RHI_D3D12`, on by default for 64-bit Windows). Three checks cover
+D3D12, in order:
 
-## Renderer wave 2 checkpoint (package R2a)
-
-- **Package:** `dist/ico-pc-wave2-win.zip`, root folder `ico-pc-wave2/`,
-  with `TEST.md` and `x86/`, `x64/` (each: the window exe, its `.map`,
-  `SDL3.dll`, `ico-pc.ini` with `iso=` and `watchdog=30` and no `ticks=`,
-  and `pad-script.txt` = `port/input/pad-boot.txt`). Built from a clean
-  worktree of `43bb792c` plus package R2a's changes (presets `win-x86-ref`
-  and `win-x64`, which build the window since R2a; `-DICO_LINK_EXE=ON`).
-- **What it is:** the first window. The seki 2D layer draws through `rd`
-  (`docs/port/RENDER_API.md` section 9) in real time at 50 Hz with vsync;
-  game textures are placeholders (a checker per texture) until the texture
-  package; the 3D world is not drawn (wave 3).
-- **Expected:** the boot signs and the title as groups of checker
-  rectangles that fade in and out, in a 4:3 box; `exit: the window was
-  closed` at the end of the log. `gif:` lines list the GS registers the
-  decoder does not handle (expected so far: none on the boot signs and the
-  title; the texture uploads' BITBLTBUF/TRX* do not pass through the
-  decoder). The script's New Game set flag 382 at tick 661 on the headless
-  `ref-m32` run (Phase 1b above), so the title is up for a few seconds
-  before it.
-- **Container checks for this package:** `rd_layout` (the layout frame
-  through the host `GifPacket.c`, recording and pixels), `rd_pixel` (adds
-  DATE and flat shading), headless `linux-x64` and `ref-m32` ctest.
-
-## Phase 4F run (config, language, clock)
-
-Headless `linux-x64` (`-DICO_LINK_EXE=ON`), `ticks=1300`, `pad_script` =
-`port/input/pad-boot.txt`, `verify=0` in the build folder's `ico-pc.ini`, and
-`[game] language = "fr"` in a `config.toml` beside the exe (2026-10-05):
-
-- the log shows `scf: language 2 from [game] language = "fr"` at
-  `kanbanBoot` step 101 (tick 118), the first `sceScfGetLanguage` of the boot;
-- the pad script's Cross confirmed the sign at tick 143 (`mcCheckStep` 102 ->
-  190). `NonLinearCameraMove` (read from the running process through
-  `/proc/<pid>/mem` at the symbol's address) was 3 from the first read to the
-  end of the run. 3 is also the value `Main` sets at start
-  (`main.c:139`), so the evidence that French was selected is that English,
-  the cursor's position without the config, would have changed it to 2 at
-  tick 143, and it did not change;
-- the run reached stage 3 at tick 996 (`stage_no 40 -> 3`), 1300 Main ticks,
-  2607 vsyncs, exit `ticks= reached`, as in the 4B run.
-
-## Phase 5A run (the archive)
-
-Headless `linux-x64` (`-DICO_LINK_EXE=ON`, build folder
-`build-host/5a-linux-x64`), `ticks=1300`, `pad_script` =
-`port/input/pad-boot.txt`, `watchdog=60`, `verify=0`, `iso=` the PAL image in
-`ico-pc.ini`, and `[dev] use_iso = false` in a `config.toml` beside the exe,
-no `ico.o2r` present (2026-10-05):
-
-- the first run extracted: `accepted by iso-sha1`, 13 files, 872,906,360
-  bytes, `ico.o2r` 872,910,571 bytes, 14.2 s (image SHA-1 6.1 s, copy
-  8.2 s), progress logged in tenths;
-- it mounted the archive (`game data .../ico.o2r (SCES-50760, 13 files ...)`),
-  loaded the 75 table rows and the SNDN2DRV pitch table from it, reached
-  stage 3 at tick 996 and ended at 1300 Main ticks, 2607 vsyncs, `ticks=
-  reached`;
-- the trace is byte-identical to package 5B's (`build-host/5b-linux-x64/
-  logs/trace-*.txt`, the ISO; SHA-1 `36fc27275414fe291ca0a892439de7d27773fa64`
-  for both), and the `stage_no` milestones fall on the same vsyncs and ticks.
-
-The window build has not run a first-run extraction yet (the game never
-runs in the container): the Windows checkpoint should check the progress
-window, the time on the user's disk and the `ico.o2r` in `%APPDATA%`.
-
-## Renderer wave 6: D3D12 (package R6c)
-
-The D3D12 backend (`port/rhi/d3d12/README.md`) is built by `win-x64` and
-`win-x64-clang` (`ICO_RHI_D3D12`, default ON for 64-bit Windows) next to the
-Vulkan one. Nothing of it has run yet: the container has no Windows and no
-Wine. Three checks, in order.
-
-**1. `rhi_d3d12_test.exe` (double-click).** From
-`build-host/<pkg>-win-x64/port/rhi/`: `rhi_d3d12_test.exe` and `SDL3.dll`,
-copied together into any folder. Double-clicked it shows no console, takes
-no flags, writes `rhi_d3d12_test.log` beside itself and ends with a message
-box:
-
-- *1. D3D12 on WARP*: the exact-texel cells of
-  `port/rhi/test/rhi_test_common.c` (dual-source blend, stencil wrap,
-  reversed-Z depth with exact readback, colour masks, an RGBA8_UINT target
-  with an integer clear, texture upload and sampling, R8 copies, a copied
-  vertex buffer; three frames) on Windows' software rasteriser. This is the
-  reference: it does not depend on the GPU driver.
-- *2. D3D12 on hardware*: the same cells on the default (discrete first)
-  adapter; "skipped" when the machine has none.
-- *3. swapchain*: a hidden window, six frames of clear, readback (BGRA) and
-  present, with a resize.
-- *4. Vulkan (comparison)*: the same cells on Vulkan; "skipped" without a
-  Vulkan driver, which is not a failure.
-
-Expected: PASSED, every line "pass" (or "skipped" for 2 or 4). The D3D12
-debug layer is used when installed (Settings > System > Optional features >
-add "Graphics Tools"); then every debug-layer error fails the run and is in
-the log. Send back `rhi_d3d12_test.log` either way: it names the adapters,
-whether the debug layer was on, and each mismatch with the texel's value.
-Exit code 0 pass, 1 fail, 77 nothing ran. `--console` (developer switch)
-prints to the console instead and shows no message box.
-
-**2. The window build on D3D12.** In `config.toml` (per-user folder):
-
-    [video]
-    backend = "d3d12"
-
-or `backend=d3d12` in `ico-pc.ini` beside the exe (the ini wins). Default
-and fallback: `vulkan`. `logs/ico-pc.log` then reads `window: ... D3D12 on
-<adapter>` and lists the adapters (`rhi_d3d12: adapter 0: ...`).
-
-**3. Vulkan vs D3D12 on the same frame dumps (plan: within 1 LSB).**
-
-1. Run the game on either backend with `dump_every=N` (and optionally
-   `dump_dir=`) in `ico-pc.ini`: every Nth frame goes to
-   `dumps\rd-NNNNN.rddump` beside the exe (local only: dumps hold disc
-   assets, never share or commit one).
-2. Beside the `dumps\` folder put `rd_replay_tool.exe` and `SDL3.dll`
-   (`build-host/<pkg>-win-x64/port/render/`), and `compare_backends.cmd` and
-   `compare_png.ps1` (`port/rhi/test/`). Double-click
-   `compare_backends.cmd`. For every dump it renders DISPLAY and the
-   Original presenter's 640x480 output on both backends into
-   `compare_out\` and writes `compare_backends.log`, opened in Notepad at
-   the end: per pair "max difference N LSB: within 1 LSB", or the count of
-   texels over 1 LSB and the first one's position.
-3. By hand, for one dump:
+1. **`rhi_d3d12_test.exe`.** Copy it and `SDL3.dll`
+   (`build-host/<dir>/port/rhi/`) into any folder and double-click it. It
+   shows no console, writes `rhi_d3d12_test.log` beside itself and ends with
+   a message box listing four parts: the exact-texel cells of
+   `port/rhi/test/rhi_test_common.c` (dual-source blend, stencil wrap,
+   reversed-Z depth with exact readback, colour masks, an integer target,
+   texture upload and sampling, copies) on WARP, Windows' software
+   rasteriser, which is the reference; the same cells on the default
+   hardware adapter; a swapchain test with a resize; and the same cells on
+   Vulkan for comparison. Every line must read "pass" ("skipped" is
+   acceptable for the hardware adapter and for Vulkan). With the D3D12 debug
+   layer installed (Windows' optional feature "Graphics Tools") any
+   debug-layer error fails the run. Exit code 0 pass, 1 fail, 77 nothing ran.
+2. **The game on D3D12.** Set `backend=d3d12` in `ico-pc.ini` or
+   `[video] backend = "d3d12"` in `config.toml`. The log's `window:` line
+   then names D3D12 and the adapter it runs on.
+3. **Vulkan against D3D12 on the same frames.** Write dumps with
+   `dump_every=N`, then put `rd_replay_tool.exe`, `SDL3.dll`,
+   `compare_backends.cmd` and `compare_png.ps1` (`port/rhi/test/`) beside the
+   `dumps\` folder and double-click `compare_backends.cmd`. For every dump it
+   renders the DISPLAY target and the Original presenter's 640x480 output on
+   both backends and writes `compare_backends.log` with, for each pair, the
+   largest difference; the target is agreement within 1 LSB. By hand:
 
         rd_replay_tool.exe dumps\rd-00100.rddump vk.png --backend vulkan
         rd_replay_tool.exe dumps\rd-00100.rddump dx.png --backend d3d12
         powershell -NoProfile -ExecutionPolicy Bypass -File compare_png.ps1 vk.png dx.png
 
-   (`--target NAME` picks another target, `--present WxH` the presenter.)
+`rd_replay_tool` also takes `--target NAME`, `--present WxH`, the display
+options (`--enhanced`, `--aspect`, `--resolution`, `--full-height`,
+`--filter`, `--mirror`) and inspection switches (`--list`, `--nop`,
+`--mesh`, `--dump-textures`); its usage is at the top of
+`port/render/tools/rd_replay_tool.c`.
 
-Developer path, also by hand: every `rd_*` GPU test runs on D3D12 with
-`set ICO_RHI_BACKEND=d3d12` (and `set ICO_D3D12_ADAPTER=warp` for the
-software rasteriser) before starting the test exe from `cmd`; they count
-Vulkan validation errors only, so read the D3D12 debug lines in their
-output.
+The renderer's own tests (`rd_*`, `rhi_*`, `shaders_pixel`, `vu1`) run on
+Vulkan by default; `ICO_RHI_BACKEND=d3d12` runs them on D3D12 and
+`ICO_D3D12_ADAPTER=warp` picks the software rasteriser. They count Vulkan
+validation errors only, so on D3D12 read the debug-layer lines in their
+output. On Linux without a GPU they run on Mesa's lavapipe.
 
-**Container checks for this package:** `rhi_d3d12_plan` (CPU: the barrier
-plan, buffer tracking, copy ordering, descriptor rings, layouts, the DXBC
-reader, every game vertex shader's DXIL inputs against its SPIR-V
-locations), `rhi_vk` through the backend dispatcher, the full `linux-x64`
-ctest; `win-x64` (mingw-w64 GCC 14, `-DICO_LINK_EXE=ON`) and
-`win-x64-clang` builds of `ico_rhi_d3d12`, `rhi_d3d12_test.exe`,
-`rd_replay_tool.exe` and `ico_pc.exe`, warning-free.
+The D3D12 backend has not yet been run on Windows hardware
+([`docs/TODO.md`](../TODO.md)).
 
-## Repeatable packaging: `tools/package_win.sh <label>`
+## Unit tests
 
-One command builds and zips the Windows test package for the current HEAD
-(`tools/package_win.sh wave2b`). It:
+`ctest` in a Linux build directory runs the unit tests: the platform layer
+(`fpenv`, `fiber_guard`, `memory`, `ios_chain`, …), the maths, the data
+layer, audio, input, settings, achievements, the layout asserts and the
+audits (`offset_audit`, `template_audit`), and the renderer. A test that
+needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
+77 without one, which ctest reports as skipped and counts as a pass.
+`tables_loader` and `tables_manifest` are built only when a base ELF is
+present (docs/BUILDING.md). The Windows presets build the test executables
+without running them.
 
-1. Makes a clean detached worktree of HEAD at `build-host/pkg-wt` (so other
-   packages' uncommitted work is not built) and symlinks `.venv` and
-   `tools/toolchain` into it. `ICO_PKG_FILES="path ..."` copies those
-   working-tree files over HEAD first, to try a change before it is
-   committed.
-2. Sets `TMPDIR=build-host/tmp` (the system `/tmp` is nearly full), then
-   configures and builds `win-x64` with
-   `-DICO_LINK_EXE=ON` (no `baserom` is needed: the binary holds no disc
-   data). The
-   window build is the preset default. Any failure stops the script with
-   the log tail and a non-zero exit.
-3. Stages `dist/stage/x64/` with `ico_pc_x64.exe`,
-   `ico_pc_x64.map`, `SDL3.dll`, `ico-pc.ini` (`watchdog=30`, no
-   `ticks=`; an `iso=` line already in the staged ini is kept) and
-   `pad-script.txt` (`port/input/pad-boot.txt`), plus `TEST.md` with the
-   label, date and commit in its heading. `x64/tools/` holds the R6c
-   backend checks: `rhi_d3d12_test.exe`, `rd_replay_tool.exe`, `SDL3.dll`,
-   `compare_backends.cmd` (staged with CRLF line ends) and `compare_png.ps1`;
-   `TEST.md` has a section on them.
-4. Writes `dist/ico-pc-<label>-win.zip` (root `ico-pc-<label>/`, no
-   `logs/` folders), prints the zip path and the commit, and removes the
-   worktree (`git worktree remove --force`, `git worktree prune`).
+## Packages
 
-The script is quiet and can be re-run; the full output goes to
-`build-host/pkg-<label>.log`. The `TEST.md` text lives in the script. It
-does not run the game.
+**Windows: `tools/package_win.sh <label>`.** Builds HEAD in a clean
+detached worktree (`build-host/pkg-wt`, with `.venv` and `tools/toolchain`
+symlinked in), so uncommitted work is not packaged; `ICO_PKG_FILES="path
+..."` copies those working-tree files over HEAD first, to try a change
+before committing it. It builds `win-x64` with `-DICO_LINK_EXE=ON` and
+stages one `x64/` folder: `ico_pc_x64.exe`, its link map, `SDL3.dll`,
+`ico-pc.ini` (`watchdog=30`, `trace=1`, no `ticks=`; an `iso=` line already
+in the staged ini is kept), `LICENSE.txt` and `NOTICES.txt`, and under
+`x64/tools/` the backend checks above (`rhi_d3d12_test.exe`,
+`rd_replay_tool.exe`, `SDL3.dll`, `compare_backends.cmd` with CRLF line ends,
+`compare_png.ps1`). It writes a `TEST.md` for the tester (its text lives in
+the script) and zips everything as `dist/ico-pc-<label>-win.zip`. The Windows
+link uses `-mwindows -static-libgcc -static`, so the executable imports only
+system DLLs and `SDL3.dll`; Vulkan's `vulkan-1.dll` is loaded at run time
+from the driver. Keep the zip of any build a tester ran: its RelWithDebInfo
+executable and map turn crash offsets into source lines.
 
-## Linux package: `tools/package_linux.sh <label>`
+**Linux: `tools/package_linux.sh <label>`.** The same for Linux: a clean
+worktree at `build-host/pkg-linux-wt`, the `linux-x64` window build, a check
+that the binary needs only `libSDL3.so.0`, libc and libm and has the run
+path `$ORIGIN`, and `dist/ico-pc-<label>-linux.tar.gz`.
+[`STEAMDECK.md`](STEAMDECK.md) has its contents and how to run it.
 
-`tools/package_linux.sh <label>` does the same for Linux: a clean worktree of
-HEAD at `build-host/pkg-linux-wt`, preset `linux-x64` with
-`-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` (target `ico_pc` only), then it checks
-the binary's dynamic dependencies (`libSDL3.so.0`, libc, libm; run path
-`$ORIGIN`), stages `dist/stage/linux/` (`ico_pc`, `libSDL3.so.0`,
-`ico-pc.ini`, `ico_pc.map`, `README.txt`, `LICENSE`, `THIRD_PARTY.md`; an
-`iso=` line already in the staged ini is kept) and writes
-`dist/ico-pc-<label>-linux.tar.gz` (root `ico-pc-<label>/`, owner root).
-The log is `build-host/pkg-linux-<label>.log`; it never runs the game.
-`ICO_PKG_FILES` works as for the Windows script. docs/port/STEAMDECK.md says
-what is in the package and how to run it.
+Both scripts are quiet and can be re-run; their full output goes to
+`build-host/pkg-<label>.log` and `build-host/pkg-linux-<label>.log`. Neither
+runs the game.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` (docs/BUILDING.md, "Continuous integration")
-builds `linux-x64` headless and window, `linux-x64-clang` and `win-x64` and
-runs `ctest` on the Linux ones, with no disc image. Tests that need the disc
-or a Vulkan device exit 77 and are reported skipped, which passes.
+`.github/workflows/ci.yml` builds `linux-x64` headless and window,
+`linux-x64-clang` and `win-x64` on every push and pull request, runs `ctest`
+on the Linux builds with lavapipe as the Vulkan device, and has no disc
+image. docs/BUILDING.md lists its steps.

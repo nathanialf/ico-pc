@@ -2,9 +2,9 @@
 
 `tools/package_linux.sh <label>` builds the Linux package; this note says
 what is in it and how to run it on a Steam Deck (SteamOS 3, Desktop Mode to
-set it up, then Game Mode) or any x86-64 Linux desktop. Nothing here has been
-run on a Deck: the game never runs in the build container (plan rule), so the
-Deck steps are what the package is built to do, not measured results.
+set it up, then Game Mode) or any x86-64 Linux desktop. The Deck steps
+describe what the package is built to do; they have not yet been checked on
+a Deck ([`docs/TODO.md`](../TODO.md)).
 
 ## What the package holds
 
@@ -16,7 +16,7 @@ Deck steps are what the package is built to do, not measured results.
 | `libSDL3.so.0` | SDL 3.4.18 (zlib licence), the window, input and audio library. The binary finds it beside itself (`RUNPATH $ORIGIN`) |
 | `ico-pc.ini` | optional settings: `iso=` (the disc image path) and `watchdog=30` |
 | `ico_pc.map` | link map, to turn a crash address into a function name |
-| `README.txt`, `LICENSE`, `THIRD_PARTY.md` | the short run guide, the MIT licence and the dependency licences |
+| `README.txt`, `LICENSE`, `NOTICES.txt`, `THIRD_PARTY.md` | the short run guide, the port's MIT licence, the third-party licence texts and the dependency list |
 
 No game data is in it. `tools/package_linux.sh` builds a clean worktree of
 `HEAD` (no `baserom/`, so it proves the binary needs none), checks that the
@@ -66,8 +66,9 @@ binary needs only `libSDL3.so.0`, libc and libm and that its run path is
    extracts the game's data once (about 870 MB, `ico.o2r`; docs/port/DATA.md).
    Later runs use `ico.o2r` and never open the `.iso`; you can delete it
    afterwards.
-5. The game opens in a window and plays at 50 Hz (PAL) with vsync. In Game
-   Mode Gamescope shows it full screen.
+5. The game opens in a window and plays at 50 Hz (PAL), or at 60 Hz when
+   the Settings menu's video mode says so (`[video] video_mode`), with
+   vsync. In Game Mode Gamescope shows it full screen.
 
 The first run's dialog is easier in Desktop Mode: do the first launch there,
 then use Game Mode.

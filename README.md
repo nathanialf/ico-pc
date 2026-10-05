@@ -11,49 +11,20 @@ the C source of the [ICO decompilation](https://github.com/nathanialf/ico).
 
 ## Status
 
-In progress. The game's C builds natively for 64-bit Linux and Windows, runs
-on a platform layer that replaces the PS2 hardware and Sony's libraries,
-draws through a Vulkan renderer, plays sound and FMVs, and reads your own disc
-image on the first run into a local archive. The renderer's remaining effects
-and its Direct3D 12 backend, and the PC features below, are still to come
-(`docs/port/` has the state of each part). The PS2 ELF build of the decompilation is not part of
-this repository any more; the decompilation keeps it.
+The game is playable on 64-bit Windows and Linux, including the Steam
+Deck, from your own image of the PAL disc. The game's C
+runs natively on a platform layer that replaces the PS2 hardware and Sony's
+libraries; it draws through a Vulkan renderer (a Direct3D 12 backend is
+built for Windows too), plays its sound and films, and reads its data from
+an archive that the first run extracts from your disc image. The behaviour
+target is the original game: the same logic, timing and pictures, with every
+improvement (resolution, widescreen, frame interpolation, 60 Hz, controller
+remapping, gameplay options, achievements) behind a setting that defaults to
+the original. What is known not to be done or not yet verified, such as the
+D3D12 backend on real hardware and native-speaker review of the
+translations, is listed in [`docs/TODO.md`](docs/TODO.md).
 
-## Goal
-
-The game code under `ico2/` compiles with a modern host compiler and runs
-natively, on top of a platform layer that replaces the PS2 hardware and
-Sony's runtime libraries. The behaviour target is the original game:
-the same logic, timing and output, with improvements kept optional.
-
-## Work ahead
-
-- [x] **Host build.** CMake and Ninja compile `ico2/` for 64-bit Linux and
-      Windows (`docs/BUILDING.md`).
-- [x] **Runtime libraries.** Replacements for what the game takes from
-      `sce/`: kernel and threads, IOP RPC, DMA and packets, the GS, controllers,
-      memory card, the disc, video and sound (`port/`, `docs/port/`).
-- [x] **Renderer.** The GS packets and the five VU1 microprograms in
-      `ico2/vusrc/` turned into a modern graphics API (`docs/port/RENDER_API.md`).
-      The game draws through the Vulkan backend. The Direct3D 12 backend is
-      written and builds for Windows, but it has not been run yet
-      (`docs/port/TESTING.md`, "Renderer wave 6: D3D12").
-- [x] **Assets.** The first run verifies your disc image and extracts what the
-      game reads into a local archive, `ico.o2r`, and the data tables load from
-      its boot ELF (`docs/port/DATA.md`). Nothing from the disc is committed or
-      compiled into the program.
-- [x] **Input, audio, saves and video playback** on the host.
-- [x] **Packaging and CI.** `tools/package_win.sh`, `tools/package_linux.sh`
-      (`docs/port/STEAMDECK.md`), and `.github/workflows/ci.yml`.
-- [ ] **PC features**, behind options that default to the original
-      behaviour (`docs/port/DISPLAY.md`, `docs/port/SETTINGS.md`). Landed:
-      resolution, aspect ratio, texture filtering and full height, the
-      Settings menu, controller remapping, the gameplay options and the
-      achievements. Still open: the frame rate option (frames drawn between
-      the game's updates) is in progress and not committed, and none of this
-      has been tested on Windows yet.
-
-## Building
+## Building and running
 
 ```sh
 git clone https://github.com/nathanialf/ico-pc.git
@@ -69,51 +40,48 @@ tools/toolchain/cmake/bin/cmake --build build-host/linux-x64
 
 The build needs no disc image. Run `build-host/linux-x64/ico_pc`: the first
 run asks for your own image of the PAL disc (SCES-50760, a plain `.iso`),
-checks it and extracts the game's data once; no options are needed.
-[`docs/BUILDING.md`](docs/BUILDING.md) has the presets, the tests, CI and the
-optional PS2-compiler identity check (`tools/ee_identity.sh`);
-[`docs/port/STEAMDECK.md`](docs/port/STEAMDECK.md) covers the Linux package.
+checks it and extracts the game's data once; no command-line options are
+needed. Windows builds are cross-compiled from Linux (`--preset win-x64`).
+[`docs/BUILDING.md`](docs/BUILDING.md) has the presets, the tests, CI and
+the packages; [`docs/port/STEAMDECK.md`](docs/port/STEAMDECK.md) covers the
+Linux package and the Steam Deck.
+
+## Documentation
+
+[`docs/README.md`](docs/README.md) is the index. Start with
+[`docs/port/CONFIG.md`](docs/port/CONFIG.md) for the settings,
+[`docs/port/DIVERGENCES.md`](docs/port/DIVERGENCES.md) for where the port
+knowingly differs from the PS2, and
+[`docs/port/TESTING.md`](docs/port/TESTING.md) for testing and reporting
+bugs.
 
 ## Layout
 
 ```
-ico2/          the game: one directory per subsystem, each with src/ and
+ico2/          the game: one directory per programmer, each with src/ and
                include/ (common, fumi, ito, omori, script, seki, sugipon)
-ico2/vusrc/    the five VU1 microprograms and their shared includes
-sce/           Sony's runtime libraries, newlib libc and libm, libgcc and
-               crt0.s, as the game linked them: the EE identity check's
-               reference, not part of any host target
-port/          the platform layer, renderer, audio, input and the rest of the port
+ico2/vusrc/    the five VU1 microprograms, the renderer's shaders' reference
+sce/           Sony's runtime libraries, newlib and libgcc as the game linked
+               them: the reference for the optional EE identity check, not
+               part of any host build
+port/          the platform layer, renderer, audio, input, data and the rest
+               of the port
 cmake/         the host build's toolchain files and source lists
-config/        source list (link order), data-member lists, SHA-1s
-tools/         toolchain fetch, packaging, generators and checks (tools/README.md)
+config/        the source list (link order), data-table schema and manifest,
+               SHA-1s
+tools/         toolchain fetch, packaging, generators and checks
+               (tools/README.md)
 docs/          documentation (docs/README.md)
-baserom/       local only, gitignored: your disc image (and, for maintainers,
-               its extracted boot ELF)
+baserom/       local only, gitignored: your disc image
 build-host/    local only, gitignored: build output
 ```
 
-## Syncing with the decompilation
+## The decompilation
 
-The decompilation keeps improving names, types and headers. Pull its
-changes into the port with:
-
-```sh
-git remote add upstream https://github.com/nathanialf/ico.git
-git fetch upstream
-git merge upstream/main
-```
-
-The decompilation's description of this relationship is
-[`docs/PORT.md`](https://github.com/nathanialf/ico/blob/main/docs/PORT.md).
-
-## PC port
-
-[ico-pc](https://github.com/nathanialf/ico-pc) is a fork of this repository
-that is being turned into a native PC port. This tree remains the
-byte-matched reference. Reconstruction bugs the port finds are fixed here
-first, under this repository's rules, and then merged into the port. See
-[`docs/PORT.md`](docs/PORT.md).
+This repository is a fork of the decompilation, which stays the byte-matched
+reference. Names, types and reconstruction fixes flow from it into the port
+with `git merge upstream/main`; reconstruction bugs the port finds are fixed
+there first. [`docs/PORT.md`](docs/PORT.md) describes the relationship.
 
 ## Legal and licence
 
@@ -121,4 +89,5 @@ The code in this repository is MIT licensed ([`LICENSE`](LICENSE)). The
 licence covers the code written for this project and grants no rights in the
 game, its data or anything else owned by Sony Interactive Entertainment or
 Team Ico. [`docs/LEGAL.md`](docs/LEGAL.md) says what may and may not be in
-the repository.
+the repository, and [`docs/port/THIRD_PARTY.md`](docs/port/THIRD_PARTY.md)
+lists the third-party code the program uses.

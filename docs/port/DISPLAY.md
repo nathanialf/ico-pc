@@ -34,6 +34,7 @@ vsync = true
 texture_filter = "original" # "original", "trilinear" or "anisotropic"
 full_height = false
 framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
+backend = "vulkan"          # Windows: "vulkan" or "d3d12"
 ```
 
 | key | what it does |
@@ -45,6 +46,7 @@ framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
 | `texture_filter` | (Enhanced) `"trilinear"` gives textures smaller versions for distant surfaces, so the ground and walls do not shimmer; `"anisotropic"` also keeps them sharp at grazing angles. Textures the game draws unfiltered (pixel-sharp) stay that way. Fences and leaves with see-through parts keep their thickness in the distance. |
 | `full_height` | (Enhanced) Keep all 512 lines of the scene instead of halving them, so the picture is not line-doubled. |
+| `backend` | The graphics API on Windows: `"vulkan"` (the default) or `"d3d12"`. Linux has Vulkan only. Read at start-up. The Direct3D 12 renderer has not yet been tested on real hardware. |
 | `framerate` | (Both presets) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
 
 ## Wide pictures: what stretches and what stays in the middle
@@ -52,15 +54,14 @@ framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 With `aspect` wider than 4:3, anything that covers the whole picture
 (bars, fades, dimming, backdrops, borders) reaches the left and right edges;
 anything placed on the screen (text, menu rows, button pictures, the logo)
-stays in the 4:3 frame in the middle, at the size it has at 4:3. Measured
-at 1280 x 720, 16:9 (columns 0 to 1279; the middle 4:3 frame is 160 to
-1119):
+stays in the 4:3 frame in the middle, at the size it has at 4:3 (at
+1280 x 720 and 16:9, the middle 4:3 frame is columns 160 to 1119):
 
 | what | covers |
 | --- | --- |
 | The cinema bars of the story scenes | the whole width |
 | Fades to and from black (or white), stage changes | the whole width |
-| The black bands at the top and bottom of the pause menu, Options, button configuration, Brightness, the "The game will end" question, the memory card load, save and format screens and "Continue?" after a game over | the whole width (in version 0.5 they stopped at the middle frame, columns 161 to 1118) |
+| The black bands at the top and bottom of the pause menu, Options, button configuration, Brightness, the "The game will end" question, the memory card load, save and format screens and "Continue?" after a game over | the whole width |
 | The dimming of the scene behind those menus (darker; red after a game over) | the whole width |
 | The black behind the boot signs and the memory card check | the whole width |
 | The picture's thin border (2 pixels at the sides, 8 lines top and bottom on the PS2), brightness, the "keep the last picture" of a paused game, the edge smoothing and the film grain | the whole width |
@@ -93,9 +94,8 @@ On a slow computer (or a software renderer) the game draws one picture per
 update, as with `"original"`, rather than slowing the game down.
 
 Turning things turn in between pictures: a character or object that spins
-between two updates is drawn at the in-between angle at its full size (in v0.3
-version 0.3 a fast turn shrank it slightly half way, which looked like a
-wobble). How far between the two updates each picture is drawn follows a
+between two updates is drawn at the in-between angle at its full size, and
+the camera turns as one rigid camera, so the scenery does not shear. How far between the two updates each picture is drawn follows a
 steady clock rather than the exact moment the picture was started, so
 movement advances by even steps.
 
@@ -117,12 +117,12 @@ one picture per refresh. Either way, a picture between two updates is only
 drawn when there is time for it before the next update is due, so a slow
 picture costs smoothness, never game speed.
 
-`framerate = "original"` presents each update once, as before, and with
-`vsync` that present waits for the refresh, as it did on the PS2.
+`framerate = "original"` presents each update once, and with `vsync`
+that present waits for the refresh, as on the PS2.
 `window:` lines in `logs/ico-pc.log` say which mode is in use (`present
 mode mailbox` or `fifo`) and, every 10 seconds, how many pictures and game
 updates there were and where the renderer's time went (docs/port/
-RENDER_API.md section 22; `[dev] perf_log = true` writes one line per
+RENDER_API.md section 18; `[dev] perf_log = true` writes one line per
 picture into `logs/ico-pc-perf.csv`).
 
 ## What stays as on the PS2
@@ -144,5 +144,5 @@ picture into `logs/ico-pc-perf.csv`).
   motion-blur trail for one frame, and the next update is not blended.
 - On a renderer backend without mipmapped textures, `texture_filter` falls
   back to the original filtering.
-- Technical details: docs/port/RENDER_API.md sections 19 (presets, the
-  options), 20 (frame rate) and 22 (performance).
+- Technical details: docs/port/RENDER_API.md sections 15 (presets, the
+  options), 16 (frame rate) and 18 (performance).

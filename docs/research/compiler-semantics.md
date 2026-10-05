@@ -1,12 +1,14 @@
-# R3: ee-gcc 2.9 vs modern compilers, semantic audit
+# ee-gcc 2.9 against modern compilers: a semantic audit
 
-Research note for work package 0C. It covers behaviour the game's C relies
-on that changes when the compiler changes from ee-gcc 2.9-991111 (MIPS
-R5900, EABI) to clang (or gcc) on x86, x86-64 and later AArch64. Owners of
-the recommendations: 0A (flags, toolchain), 0B (source fixes), 2B (layout
-asserts). Line numbers refer to commit `d9e456d4`. The working tree was
-being edited by other packages while this was written, so the analysis ran
-on a `git archive HEAD` export.
+A research note written before the port was built, kept as the reasoning
+behind the compiler flags and source rules in docs/BUILDING.md; it is not
+updated as the code changes. It covers behaviour the game's C relies on
+that changes when the compiler changes from ee-gcc 2.9-991111 (MIPS R5900,
+EABI) to clang or gcc on x86, x86-64 and later AArch64. Codes such as 0A,
+0B, 1A and 2B in the tables name the work items the recommendations were
+assigned to at the time (flags and toolchain, source fixes, VU0 maths,
+layout asserts). Line numbers refer to commit `d9e456d4`; the analysis ran
+on a `git archive` export of that commit.
 
 ## Method
 

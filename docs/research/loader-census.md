@@ -1,7 +1,10 @@
-# R4: loader census
+# Loader census
 
-Work package 0C. Sizes packages 2B (struct classification), 2C (loader
-conversions) and 5 (runtime table loader). Everything below was read from the
+A research note written before the 64-bit conversion, kept as the survey
+behind docs/port/LOADERS.md, docs/port/LAYOUT.md and the runtime table
+loader (docs/port/DATA.md); it is not updated as the code changes. Codes
+such as 2B and 2C name the work items it sized at the time (struct
+classification and loader conversions). Everything below was read from the
 tree at `d9e456d4`; line numbers are for that commit. Statements marked
 **(inference)** were not traced to the end.
 

@@ -1,6 +1,8 @@
-# R5: dependency licences and provenance
+# Dependency licences and provenance
 
-Work package 0C. Checked 2026-10-05. Licence identifiers are the ones GitHub
+A research note written before the dependencies were adopted, kept as the
+licence policy and the reasoning behind each choice; docs/port/THIRD_PARTY.md
+is the current list of what the port uses. Checked 2026-10-05. Licence identifiers are the ones GitHub
 reports for the repository (`gh api repos/<owner>/<repo> --jq .license`)
 unless the text says the file itself was read; where GitHub reports
 `NOASSERTION` the licence file was read.
