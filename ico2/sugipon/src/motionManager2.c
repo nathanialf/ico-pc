@@ -672,7 +672,28 @@ static MotionGeoInfo motionGeoInfoTemplate = {
    attributes at 0x17C to 0x188, GetRopeHangablePos the height at 0x1A8, and
    InitMotionStateInfo itself writes the two sound groups at 0x1AC.  Its
    vectors are Vec4, so the default is 8-byte aligned; with MotCtrl's float
-   arrays the template copy is a word copy with an alignment test (measured). */
+   arrays the template copy is a word copy with an alignment test (measured).
+   PC port: the record is copied whole over a MotCtrl, so on the host it
+   must have MotCtrl's host layout.  Vec4's long long view aligns it to 8
+   bytes where MotCtrl's float[4] has 4, and MotCtrl's pickedWeapon is a
+   pointer: with the EE spelling every field from dir on landed 4 bytes
+   late (floorFit took orientKind's 0, so no actor fitted the root to the
+   floor in a direct-move motion; docs/port/DIVERGENCES.md).  The host
+   spells those members with MotCtrl's alignment and width; the asserts
+   after InitMotionStateInfo check every offset. */
+#ifdef ICO_HOST
+
+typedef union { /* derived name */
+    float f[4];
+} MsiVec4; /* derived name */
+
+#define MSI_VEC4 MsiVec4  /* derived name */
+#define MSI_WORD ICO_WORD /* derived name */
+#else
+#define MSI_VEC4 Vec4
+#define MSI_WORD int
+#endif
+
 typedef struct MotionStateInfo { /* field names derived */
     int stream;                  /* 0x0 */
     int oriFrom;                 /* 0x4 */
@@ -717,8 +738,8 @@ typedef struct MotionStateInfo { /* field names derived */
     int blendCount;              /* 0xA0 */
     int blendFrames;             /* 0xA4 */
     char padA8[8];
-    Vec4 dir;           /* 0xB0 */
-    Vec4 lastDir;       /* 0xC0 */
+    MSI_VEC4 dir;       /* 0xB0 */
+    MSI_VEC4 lastDir;   /* 0xC0 */
     int orientKind;     /* 0xD0 */
     int floorFit;       /* 0xD4 */
     int wallReact;      /* 0xD8 */
@@ -738,44 +759,44 @@ typedef struct MotionStateInfo { /* field names derived */
     float cliffHeight;  /* 0x110 */
     float cliffDist;    /* 0x114 */
     char pad118[8];
-    Vec4 cliffNormal;      /* 0x120 */
+    MSI_VEC4 cliffNormal;  /* 0x120 */
     float wallFloorHeight; /* 0x130 */
     float wallTopHeight;   /* 0x134 */
     float wallDist;        /* 0x138 */
     char pad13C[4];
-    Vec4 wallDir;        /* 0x140 */
-    Vec4 wallNormal;     /* 0x150 */
-    Vec4 sideWallNormal; /* 0x160 */
-    float upperWallDist; /* 0x170 */
-    float sideWallDist;  /* 0x174 */
-    float cliffDepth;    /* 0x178 */
-    int pureWallAttr;    /* 0x17C */
-    int pureCliffAttr;   /* 0x180 */
-    int wallAttr;        /* 0x184 */
-    int floorAttr;       /* 0x188 */
+    MSI_VEC4 wallDir;        /* 0x140 */
+    MSI_VEC4 wallNormal;     /* 0x150 */
+    MSI_VEC4 sideWallNormal; /* 0x160 */
+    float upperWallDist;     /* 0x170 */
+    float sideWallDist;      /* 0x174 */
+    float cliffDepth;        /* 0x178 */
+    int pureWallAttr;        /* 0x17C */
+    int pureCliffAttr;       /* 0x180 */
+    int wallAttr;            /* 0x184 */
+    int floorAttr;           /* 0x188 */
     char pad18C[4];
-    int frameFlag1;    /* 0x190 */
-    int frameFlag2;    /* 0x194 */
-    int trigger1;      /* 0x198 */
-    int trigger1Done;  /* 0x19C */
-    int trigger2;      /* 0x1A0 */
-    int trigger2Done;  /* 0x1A4 */
-    float ropeHangPos; /* 0x1A8 */
-    int seGroup[2];    /* 0x1AC */
-    int slipFlags;     /* 0x1B4 */
-    int lastSlipFlags; /* 0x1B8 */
-    int slipOn;        /* 0x1BC */
-    int pickedWeapon;  /* 0x1C0 */
-    int keepWall;      /* 0x1C4 */
-    int keepStand;     /* 0x1C8 */
-    int landed;        /* 0x1CC */
-    float waterY;      /* 0x1D0 */
-    float waterDepth;  /* 0x1D4 */
-    GObj *pool;        /* 0x1D8 */
-    int contactFlags;  /* 0x1DC */
-    int mailDelay;     /* 0x1E0 */
-    int noFieldClip;   /* 0x1E4 */
-    int seMute;        /* 0x1E8 */
+    int frameFlag1;        /* 0x190 */
+    int frameFlag2;        /* 0x194 */
+    int trigger1;          /* 0x198 */
+    int trigger1Done;      /* 0x19C */
+    int trigger2;          /* 0x1A0 */
+    int trigger2Done;      /* 0x1A4 */
+    float ropeHangPos;     /* 0x1A8 */
+    int seGroup[2];        /* 0x1AC */
+    int slipFlags;         /* 0x1B4 */
+    int lastSlipFlags;     /* 0x1B8 */
+    int slipOn;            /* 0x1BC */
+    MSI_WORD pickedWeapon; /* 0x1C0 */
+    int keepWall;          /* 0x1C4 */
+    int keepStand;         /* 0x1C8 */
+    int landed;            /* 0x1CC */
+    float waterY;          /* 0x1D0 */
+    float waterDepth;      /* 0x1D4 */
+    GObj *pool;            /* 0x1D8 */
+    int contactFlags;      /* 0x1DC */
+    int mailDelay;         /* 0x1E0 */
+    int noFieldClip;       /* 0x1E4 */
+    int seMute;            /* 0x1E8 */
     char pad1EC[4];
 } MotionStateInfo; /* derived name */
 
@@ -1905,6 +1926,41 @@ void InitMotionStateInfo(struct MotCtrl *self)
     self->seGroup[0] = soundSeGroupGet();
     self->seGroup[1] = soundSeGroupGet();
 }
+
+#ifdef ICO_HOST
+/* PC port: the template copy above is only right while the record has
+   MotCtrl's host layout (the comment at MotionStateInfo): every member at
+   MotCtrl's offset, and the same size. */
+/* clang-format off */
+#define MSI_FIELDS(X) /* derived name */ \
+    X(stream) X(oriFrom) X(oriTo) X(shifted) X(ctrlFlags) X(flags) X(shiftStop) X(shiftReq) \
+    X(shiftNext) X(shiftFrom) X(shiftMode) X(request) X(motion) X(noAlt) X(shiftReady) \
+    X(animFrame) X(lastFrame) X(playTime) X(speedRatio) X(playRate) X(frameRatio) X(waterDrag) \
+    X(justShifted) X(frameEnd) X(keepUpdateMode) X(updateModeChanged) X(rootUpdateMode) \
+    X(parallelEnded) X(parallel) X(orientUpdateOff) X(noStand) X(posReserve) X(loopFlag) \
+    X(reserveBlend) X(reserveMoved) X(step) X(orientReq) X(lastMotion) X(lastNoAlt) \
+    X(shiftFrame) X(blendCount) X(blendFrames) X(dir) X(lastDir) X(orientKind) X(floorFit) \
+    X(wallReact) X(cliffWallCheck) X(catchBoy) X(sideWallCheck) X(variation) X(fallHeight) \
+    X(groundHeight) X(wallHit) X(cliffEdge) X(cliffWallHit) X(cliffBack) X(fieldWallHit) \
+    X(upperWall) X(sideWall) X(cliffHeight) X(cliffDist) X(cliffNormal) X(wallFloorHeight) \
+    X(wallTopHeight) X(wallDist) X(wallDir) X(wallNormal) X(sideWallNormal) X(upperWallDist) \
+    X(sideWallDist) X(cliffDepth) X(pureWallAttr) X(pureCliffAttr) X(wallAttr) X(floorAttr) \
+    X(frameFlag1) X(frameFlag2) X(trigger1) X(trigger1Done) X(trigger2) X(trigger2Done) \
+    X(ropeHangPos) X(seGroup) X(slipFlags) X(lastSlipFlags) X(slipOn) X(pickedWeapon) \
+    X(keepWall) X(keepStand) X(landed) X(waterY) X(waterDepth) X(pool) X(contactFlags) \
+    X(mailDelay) X(noFieldClip) X(seMute)
+/* clang-format on */
+#define MSI_SAME(f) /* derived name */                                                             \
+    _Static_assert(__builtin_offsetof(MotionStateInfo, f) ==                                       \
+                       __builtin_offsetof(struct MotCtrl, f),                                      \
+                   "MotionStateInfo." #f " is not at MotCtrl." #f);
+
+MSI_FIELDS(MSI_SAME)
+_Static_assert(sizeof(MotionStateInfo) == sizeof(struct MotCtrl), "MotionStateInfo size");
+
+#undef MSI_SAME
+#undef MSI_FIELDS
+#endif
 
 int GetSkeltonFocusNode(GObj *self, int focus)
 {

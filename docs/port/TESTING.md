@@ -132,6 +132,26 @@ trace byte-identical to the window run's (1500 ticks, 3007 vsyncs, stage 3;
 SHA-1 247476b41be51a482b3afc49999e9ee9791dc8d0), and its own recording of
 the replay had the same lines.
 
+Measured (package S1): the user's Windows recording `input-20261005-083059.txt`
+(build a0a98982, 60 Hz, New Game) replayed in the `linux-x64` headless build
+(`-DICO_LINK_EXE=ON`, `config.toml` with `[dev] use_iso = true` and the
+header's settings, `language = "en"` for the English locale's `auto`, an
+empty `saves=` folder) ran every stage change at the user's Main tick and
+vsync (1 -> 41 at 2563 / 5135, ..., 40 -> 3 at 3917 / 7843, 3 -> 1 at
+4876 / 9761); the log names only the build (`-dirty`), `language` and
+`fixed_clock` as differing, none of which changed the run. A recording
+that starts with New Game needs no card folder: the boot's card check took
+the same ticks with an empty one. To place a position bug, a temporary probe
+called from `ico_host_main_tick` can print `boyGObj`'s `GetRootPosition`
+(the world position: it applies the parent object's node matrix and the
+root height; `Sub15C.root.pos` alone is in the parent's frame), `actMode`
+(names in `actModeTbl`, `build/ico.elf` 0x5577D0, 0x50 a row, name at
++0x24), `ctrl.motion` (names in `motionKind`, 0x55FE58, 0x194 a row, name at
++0xC0), `root.standNode`, `root.plane`, `ctrl.flags` (8 landing, 0x20 wall)
+and `parent.obj->kind`, with the clip rays logged inside the root update for
+a tick range; the replay is deterministic, so runs with and without the
+probe give the same trace (DIVERGENCES.md D7 was found this way).
+
 **F11** switches the `window:` stats lines (RENDER_API.md section 22) to
 every second for 30 s, for a stutter that comes and goes; F11 again goes
 back to every 10 s. Steps over `[dev] slow_step_ms` (8 ms) are logged as
