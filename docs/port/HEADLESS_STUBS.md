@@ -106,7 +106,8 @@ developer mode).
   `debug_Printf`, `debug_PrintfDummy`, `debug_StdPrintfDummy`,
   `debug_PrintFontWindow`, `debug_FlushFont`, `debug_SESlotDisp`,
   `debug_DispQW`, `debugCdvdLoadInfoSegInit`, `debugCdvdLoadInfoSegAdd`.
-- **Values:** `debug_GetTimerSec` -1.0 (as `debug.c`'s host branch),
+- **Values:** `debug_GetTimerSec` -1.0 (as `debug.c`'s host branch; the EE
+  timer registers behind it advance since Phase 4F, docs/port/CONFIG.md),
   `debug_TryToGetStartStage` -1 (retail), `debugSceOpen`/`debugSceClose`
   through the host `sceOpen`/`sceClose` (no host files: -1),
   `gsResetFunc` calls `gsb_Init(&db)` and returns 1 as `debug.c:2364`,
@@ -126,7 +127,8 @@ build: a formatted card in a host folder (`saves=` in `ico-pc.ini`, else
 `<exe dir>/memcard`), empty until the game saves (docs/port/SAVES.md). The
 boot card check therefore finds a card with no save instead of no card, and
 skips the "no memory card" sign; the language and 50/60 Hz screens still
-show.
+show. The language sign's cursor starts on `[game] language` or the system
+locale (`port/config/sysconf.c`, Phase 4F; `port/null/scf_null.c` is gone).
 
 ## Sound (the null driver is gone, package 4B)
 

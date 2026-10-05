@@ -13,6 +13,9 @@ by unit tests (`port/platform/test/`).
 | `port/platform/kernel_host.c`, `kernel_host.h` | the `eekernel.h` calls, the INTC table |
 | `port/platform/host_loop.c`, `host_loop.h` | `ico_host_init`, `ico_host_step` |
 | `port/platform/vsync_hooks.c` | `ico_host_on_vsync_register` (package 1C's disc completion) |
+| `port/platform/clock.c`, `clock.h` | the wall clock behind `sceCdReadClock` and the EE timer counters, stepped from a vsync hook (4F; docs/port/CONFIG.md) |
+| `port/platform/hwregs.c` | the EE I/O and GS register pages as plain memory; the timer counters in the EE page are advanced by `clock.c` |
+| `port/platform/host_config.c`, `.h` | exe folder, pref folder (`SDL_GetPrefPath` in the window build), `ico-pc.ini`, `config.toml` reader and writer (4F; docs/port/CONFIG.md) |
 | `port/platform/arena.c`, `arena.h` | the EE RAM arena, heap statistics |
 | `port/null/gfx_null.c` | the headless graphics seam |
 | `port/third_party/minicoro/` | minicoro v0.2.0, vendored |
@@ -161,6 +164,16 @@ thread (lower priority) does not start the other threads until the first
 simulated vsync releases it, as on the PS2. `ico_host_init` returns at that
 point.
 
+### EE timers
+
+`T0_COUNT`..`T3_COUNT` (`port/compat/eeregs.h`) advance with simulated time:
+`clock.c` steps them from a vsync hook, by the vsync period times the rate the
+mode word's `CLKS` field selects, while `CUE` is set; 16 bits, the overflow
+flag set on a wrap (docs/port/CONFIG.md, "EE timers"). Values depend on the
+vsync count only, so runs stay deterministic. The game's own reads are
+compiled out of the host build (`ICO_HOST` branches in `debug.c` and
+`fieldCollision.c`), so nothing depends on them today.
+
 ## Fibers
 
 minicoro v0.2.0 (`minicoro.h` header, 2023-11-15; repository commit
@@ -280,3 +293,4 @@ not depend on that option.
 | `arena` | allocated once, aligned, zero filled, EE address mapping, heap statistics | every Linux preset |
 | `memory` | the game's allocator in the arena at the EE's offsets for the host's record sizes (and the EE's addresses from the same arithmetic with the EE's sizes) | every Linux preset |
 | `ios_chain` | thread.c, message.c and memory.c on the scheduler: vsync, vblank handler, event thread, a scheduler loop like main.c's, Main every second vsync, an actor process at 0x13 that ends at 0x22 and is destroyed | every Linux preset |
+| `config` | config.toml reader and writer (round trip, atomic save), ini over toml precedence, `sceScfGetLanguage`, the BCD clock, the EE timers (4F) | every preset that runs tests |

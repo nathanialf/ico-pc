@@ -14,12 +14,18 @@ build replaces).
 | `seki/src/GsBase.c` GS setup packet (near line 274) | `D2_QWC`, `D2_MADR`, `D2_CHCR` DMA kick | skipped |
 | `seki/src/GsBase.c` `gsb_UpdateGSSystem`, two sites | `GS_CSR` field bit | `odd_even = 0` |
 | `fumi/ios/message.c` `signal_handler` | `GS_CSR` field bit | `odd_even = 1` |
-| `common/src/debug.c` timer-ratio and timer-count functions | `T1_MODE`, `T1_COUNT` | return -1.0f |
-| `common/src/debug.c` `debug_CallbackGsFinish`, `debug_SetBar`, `debug_SetBar2` | `T0_COUNT` | 0 |
-| `fumi/src/fieldCollision.c` `ResetCollisionPC`, `DispCollisionPC` | `T0_COUNT` (profile display) | 0 |
 | `common/src/layout_texture.c`, `common/src/kanban.c` | `D_0030D014`, link alias of `&texProperty[0].texNo` | `#define` to that expression |
 | `fumi/sound/s_init.c` | `D_005F5E60`, link alias of `&stageData[0].seEnvFirst` | `#define` to that expression |
 | `seki/src/Basic.c`, `sugipon/src/particleEffect.c`, `common/src/debug_exception_screen.c.inc` | scratchpad `0x70000000` | `ICO_SPR_ADDR`, backed by `ico_scratchpad[]` |
+
+The EE timer sites (`debug.c`'s timer functions, `debug_CallbackGsFinish`,
+`debug_SetBar`, `debug_SetBar2`; `fieldCollision.c`'s `ResetCollisionPC` and
+`DispCollisionPC`) were guarded here until Phase 4F. The timer registers now
+advance in simulated time (`port/platform/clock.c`, docs/port/CONFIG.md, "EE
+timers"), so they are no longer stubbed hardware; their `ICO_HOST` branches
+in `ico2/` still return 0 and -1.0f instead of reading them, which is
+harmless (nothing but profiler displays reads the values) and is left for a
+change in `ico2/`.
 
 The two `D_` symbols are not hardware: the PS2 link aliases them to table
 members (`build/data/*.alias.ld`).

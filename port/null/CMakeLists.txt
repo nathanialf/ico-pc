@@ -1,16 +1,15 @@
-# port/null: the devices the headless build runs without. This package's
-# file is the system configuration (the memory card is port/save's mc_host.c
-# since Phase 4D; the sound driver is the real one since Phase 4B:
-# port/audio's ico_sndn2); package 1B's gfx_null.c is built from its own list.
-add_library(ico_port_null STATIC
-    scf_null.c)
-target_include_directories(ico_port_null
-    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/input"
-    PRIVATE "${ICO_COMPAT_DIR}")
-target_compile_options(ico_port_null PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# port/null: the devices the headless build runs without. Package 1B's
+# gfx_null.c and debug_null.c are built from the top-level list. The system
+# configuration (scf_null.c, until Phase 4F) is port/config's sysconf.c, the
+# memory card port/save's mc_host.c (4D), the sound driver port/audio's
+# ico_sndn2 (4B) and the pad port/input's (4C); this target gathers them for
+# the tests that used the null devices.
+add_library(ico_port_null INTERFACE)
+target_include_directories(ico_port_null INTERFACE "${CMAKE_SOURCE_DIR}/port/input")
 # the pad is port/input's libpad (pad_host.c; Phase 4C), which also holds the
-# --pad-script reader; without live sources it is the scripted or empty pad
-target_link_libraries(ico_port_null PUBLIC ico_port_data ico_input)
+# --pad-script reader; without live sources it is the scripted or empty pad.
+# libscf is port/config's (sysconf.c; Phase 4F)
+target_link_libraries(ico_port_null INTERFACE ico_port_data ico_input ico_config)
 
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_port_null)

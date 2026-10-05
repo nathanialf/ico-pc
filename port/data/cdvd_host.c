@@ -31,6 +31,7 @@
  * image is mounted.
  */
 #include "cdvd_host.h"
+#include "clock.h"
 #include "iop_ram.h"
 #include "vfs.h"
 #include <eekernel.h>
@@ -82,6 +83,7 @@ typedef struct {
 _Static_assert(sizeof(CdlFileHost) == 0x24, "sceCdlFILE is 0x24 bytes");
 
 _Static_assert(sizeof(CdClockHost) == 8, "sceCdCLOCK is 8 bytes");
+_Static_assert(sizeof(CdClockHost) == sizeof(IcoClockBcd), "clock.h has the same record");
 
 /* the stream commands sceCdStream takes (libcdvd's numbering) */
 enum {
@@ -471,21 +473,21 @@ int sceCdSyncS(int mode)
 
 static void fill_clock(CdClockHost *c)
 {
-    IcoCdClockTime t = {2002, 1, 1, 0, 0, 0};
+    if (cd.clock != NULL) { /* a test's source, in decimal */
+        IcoCdClockTime t = {2002, 1, 1, 0, 0, 0};
+        IcoClockBcd b;
 
-    if (cd.clock != NULL) {
         cd.clock(&t);
+        ico_clock_pack(&b, t.year, t.month, t.day, t.hour, t.minute, t.second);
+        memcpy(c, &b, sizeof(*c));
+        return;
     }
-#define BCD(v) ((uint8_t)((((v) / 10) % 10) << 4 | ((v) % 10)))
-    c->stat = 0;
-    c->second = BCD(t.second);
-    c->minute = BCD(t.minute);
-    c->hour = BCD(t.hour);
-    c->pad = 0;
-    c->day = BCD(t.day);
-    c->month = BCD(t.month);
-    c->year = BCD(t.year % 100);
-#undef BCD
+    {
+        IcoClockBcd b;
+
+        ico_clock_now(&b);
+        memcpy(c, &b, sizeof(*c));
+    }
 }
 
 int sceCdReadClock(struct sceCdCLOCK *clock)

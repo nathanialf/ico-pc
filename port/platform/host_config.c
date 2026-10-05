@@ -13,6 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef ICO_HOST_SDL_PREFPATH
+#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_stdinc.h>
+#endif
+
 #ifdef _WIN32
 
 #include <windows.h>
@@ -324,7 +329,16 @@ static void export_audio_keys(const IcoIni *ini, const char *path)
 #endif
 }
 
-int ico_ini_load(IcoIni *ini, const char *path)
+static void put_env(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
+}
+
+int ico_ini_load_file(IcoIni *ini, const char *path)
 {
     char *text = read_text(path);
 
@@ -334,9 +348,107 @@ int ico_ini_load(IcoIni *ini, const char *path)
     }
     ico_ini_parse(ini, text);
     free(text);
-    export_dump_keys(ini, path);
-    export_audio_keys(ini, path);
     return 0;
+}
+
+/* config.toml paths and the ini keys they stand for; the ini wins when it has
+   the key (docs/port/CONFIG.md, "Precedence") */
+static const struct {
+    const char *toml;
+    const char *ini;
+} ini_map[] = {
+    {"paths.iso", "iso"},
+    {"paths.saves", "saves"},
+    {"audio.enabled", "audio"},
+    {"dev.ticks", "ticks"},
+    {"dev.watchdog", "watchdog"},
+    {"dev.trace", "trace"},
+    {"dev.dump_every", "dump_every"},
+    {"dev.dump_dir", "dump_dir"},
+    {"dev.audio_dump", "audio_dump"},
+    {"dev.pad_script", "pad_script"},
+    {"dev.verify", "verify"},
+    {"dev.headless", "headless"},
+    {"dev.fixed_clock", "fixed_clock"},
+};
+
+const char *ico_config_ini_key(const char *toml_path)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(ini_map) / sizeof(ini_map[0]); i++) {
+        if (strcmp(ini_map[i].toml, toml_path) == 0) {
+            return ini_map[i].ini;
+        }
+    }
+    return NULL;
+}
+
+static void ini_add(IcoIni *ini, const char *key, const char *value)
+{
+    if (ini->count < ICO_INI_MAX_KEYS && ico_ini_get(ini, key) == NULL) {
+        copy(ini->key[ini->count], sizeof(ini->key[0]), key);
+        copy(ini->value[ini->count], sizeof(ini->value[0]), value);
+        ini->count++;
+    }
+}
+
+int ico_host_fixed_clock(const IcoIni *ini)
+{
+    const char *v = ico_ini_get(ini, "fixed_clock");
+
+    if (v != NULL && v[0] != '\0') {
+        return strcmp(v, "1") == 0 || strcmp(v, "true") == 0;
+    }
+#ifdef ICO_HEADLESS
+    return 1;
+#else
+    v = ico_ini_get(ini, "headless");
+    if (v != NULL && (strcmp(v, "1") == 0 || strcmp(v, "true") == 0)) {
+        return 1;
+    }
+    v = ico_ini_get(ini, "trace");
+    return v != NULL && v[0] != '\0' && strcmp(v, "0") != 0 && strcmp(v, "none") != 0 &&
+           strcmp(v, "false") != 0;
+#endif
+}
+
+int ico_ini_load(IcoIni *ini, const char *path)
+{
+    char own[ICO_PATH_MAX];
+    int r = ico_ini_load_file(ini, path);
+
+    ico_host_ini_path(own, sizeof(own));
+    if (strcmp(own, path) == 0) {
+        /* the executable's own ini: the layer over config.toml */
+        char dir[ICO_PATH_MAX], toml_path[ICO_PATH_MAX];
+        IcoToml *t;
+        size_t i;
+
+        ico_host_pref_dir(dir, sizeof(dir));
+        ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml");
+        t = ico_toml_load(toml_path);
+        for (i = 0; t != NULL && i < sizeof(ini_map) / sizeof(ini_map[0]); i++) {
+            const char *v = ico_toml_get(t, ini_map[i].toml);
+
+            if (v != NULL && v[0] != '\0') {
+                ini_add(ini, ini_map[i].ini,
+                        strcmp(v, "true") == 0    ? "1"
+                        : strcmp(v, "false") == 0 ? "0"
+                                                  : v);
+            }
+        }
+        if (t != NULL && ico_toml_get(t, "audio.volume") != NULL) {
+            put_env("ICO_AUDIO_VOLUME", ico_toml_get(t, "audio.volume"));
+        }
+        ico_toml_free(t);
+        put_env("ICO_FIXED_CLOCK", ico_host_fixed_clock(ini) ? "1" : "0");
+    }
+    if (r == 0 || ini->count > 0) {
+        export_dump_keys(ini, path);
+        export_audio_keys(ini, path);
+    }
+    return r;
 }
 
 const char *ico_ini_get(const IcoIni *ini, const char *key)
@@ -638,8 +750,9 @@ void ico_host_fatal(const char *log_path, const char *fmt, ...)
 /* --- config.toml: a small TOML subset ------------------------------------ */
 
 typedef struct IcoTomlEntry {
-    char *path; /* "section.key", or "key" before any section */
-    char *value;
+    char *path;  /* "section.key", or "key" before any section */
+    char *value; /* the text, a quoted string without its quotes */
+    int raw;     /* 1: written bare (bool, number, array); 0: a quoted string */
 } IcoTomlEntry;
 
 struct IcoToml {
@@ -659,17 +772,29 @@ static char *dup_range(const char *s, size_t n)
     return p;
 }
 
-static int toml_set(IcoToml *t, char *path, char *value)
+static int toml_find(const IcoToml *t, const char *path)
 {
     int i;
 
     for (i = 0; i < t->count; i++) {
-        if (strcmp(t->entry[i].path, path) == 0) { /* the later line wins */
-            free(t->entry[i].value);
-            free(path);
-            t->entry[i].value = value;
-            return 0;
+        if (strcmp(t->entry[i].path, path) == 0) {
+            return i;
         }
+    }
+    return -1;
+}
+
+/* Takes ownership of path and value. */
+static int toml_put(IcoToml *t, char *path, char *value, int raw)
+{
+    int i = toml_find(t, path);
+
+    if (i >= 0) { /* the later line wins */
+        free(t->entry[i].value);
+        free(path);
+        t->entry[i].value = value;
+        t->entry[i].raw = raw;
+        return 0;
     }
     if (t->count == t->cap) {
         int cap = t->cap != 0 ? t->cap * 2 : 32;
@@ -685,14 +810,16 @@ static int toml_set(IcoToml *t, char *path, char *value)
     }
     t->entry[t->count].path = path;
     t->entry[t->count].value = value;
+    t->entry[t->count].raw = raw;
     t->count++;
     return 0;
 }
 
 /* A value's text: a "..." or '...' string loses its quotes (and "\\" and
-   "\"" are unescaped), else a trailing # comment and blanks are dropped; an
-   array (one line, [a, "b"]) stays as written, brackets included. */
-static char *toml_value(const char *s)
+   "\"" are unescaped; *raw is 0), else a trailing # comment and blanks are
+   dropped; an array (one line, [a, "b"]) stays as written, brackets
+   included (*raw is 1). */
+static char *toml_value(const char *s, int *raw)
 {
     size_t n = strlen(s);
     char *out;
@@ -708,6 +835,7 @@ static char *toml_value(const char *s)
         return NULL;
     }
     if (*s == '"' || *s == '\'') {
+        *raw = 0;
         q = *s++;
         for (i = 0; s[i] != '\0' && s[i] != q; i++) {
             if (q == '"' && s[i] == '\\' && (s[i + 1] == '\\' || s[i + 1] == '"')) {
@@ -718,6 +846,7 @@ static char *toml_value(const char *s)
         out[o] = '\0';
         return out;
     }
+    *raw = 1;
     q = 0;
     for (i = 0; s[i] != '\0'; i++) {
         if (q != 0) {
@@ -738,6 +867,85 @@ static char *toml_value(const char *s)
     return out;
 }
 
+enum { LINE_NONE, LINE_SECTION, LINE_KEY };
+
+/* Reads one line [line, eol): a section header updates `section` (the name
+   trimmed); a key gives its range and where its value text starts (after the
+   '='); anything else, and what the reader ignores (a header without ']', a
+   key of length 0 or over 120), is LINE_NONE. */
+static int toml_scan(const char *line, const char *eol, char *section, size_t secsize,
+                     const char **kb, size_t *kn, const char **val)
+{
+    const char *eq;
+    const char *k1;
+    size_t n;
+
+    while (line < eol && (*line == ' ' || *line == '\t')) {
+        line++;
+    }
+    if (line == eol || *line == '#' || *line == '\r') {
+        return LINE_NONE;
+    }
+    if (*line == '[') {
+        const char *end = memchr(line, ']', (size_t)(eol - line));
+        const char *a = line + 1;
+
+        if (end == NULL) {
+            return LINE_NONE;
+        }
+        while (a < end && (*a == ' ' || *a == '\t')) {
+            a++;
+        }
+        n = (size_t)(end - a);
+        while (n > 0 && (a[n - 1] == ' ' || a[n - 1] == '\t')) {
+            n--;
+        }
+        if (n >= secsize) {
+            n = secsize - 1;
+        }
+        memcpy(section, a, n);
+        section[n] = '\0';
+        return LINE_SECTION;
+    }
+    eq = memchr(line, '=', (size_t)(eol - line));
+    if (eq == NULL) {
+        return LINE_NONE;
+    }
+    k1 = eq;
+    while (k1 > line && (k1[-1] == ' ' || k1[-1] == '\t')) {
+        k1--;
+    }
+    n = (size_t)(k1 - line);
+    if (n == 0 || n > 120) {
+        return LINE_NONE;
+    }
+    *kb = line;
+    *kn = n;
+    *val = eq + 1;
+    return LINE_KEY;
+}
+
+/* "section.key", or "key" before any section; malloc'd. */
+static char *toml_path(const char *section, const char *key, size_t n)
+{
+    size_t sl = strlen(section);
+    char *path = malloc(sl + 1 + n + 1);
+
+    if (path == NULL) {
+        return NULL;
+    }
+    if (sl != 0) {
+        memcpy(path, section, sl);
+        path[sl] = '.';
+        memcpy(path + sl + 1, key, n);
+        path[sl + 1 + n] = '\0';
+    } else {
+        memcpy(path, key, n);
+        path[n] = '\0';
+    }
+    return path;
+}
+
 IcoToml *ico_toml_parse(const char *text)
 {
     IcoToml *t = calloc(1, sizeof(*t));
@@ -753,72 +961,28 @@ IcoToml *ico_toml_parse(const char *text)
     while (*p != '\0') {
         const char *eol = p;
         const char *line = p;
-        const char *eq;
-        size_t n;
+        const char *kb;
+        const char *val;
+        size_t kn;
 
         while (*eol != '\0' && *eol != '\n') {
             eol++;
         }
         p = *eol != '\0' ? eol + 1 : eol;
-        while (line < eol && (*line == ' ' || *line == '\t')) {
-            line++;
-        }
-        if (line == eol || *line == '#' || *line == '\r') {
-            continue;
-        }
-        if (*line == '[') {
-            const char *end = memchr(line, ']', (size_t)(eol - line));
-            const char *a = line + 1;
+        if (toml_scan(line, eol, section, sizeof(section), &kb, &kn, &val) == LINE_KEY) {
+            char *path = toml_path(section, kb, kn);
+            char *lineval = dup_range(val, (size_t)(eol - val));
+            char *value;
+            int raw = 1;
 
-            if (end == NULL) {
-                continue;
-            }
-            while (a < end && (*a == ' ' || *a == '\t')) {
-                a++;
-            }
-            n = (size_t)(end - a);
-            while (n > 0 && (a[n - 1] == ' ' || a[n - 1] == '\t')) {
-                n--;
-            }
-            if (n >= sizeof(section)) {
-                n = sizeof(section) - 1;
-            }
-            memcpy(section, a, n);
-            section[n] = '\0';
-            continue;
-        }
-        eq = memchr(line, '=', (size_t)(eol - line));
-        if (eq != NULL) {
-            const char *k1 = eq;
-            char *path, *value, *lineval;
-            size_t sl = strlen(section);
-
-            while (k1 > line && (k1[-1] == ' ' || k1[-1] == '\t')) {
-                k1--;
-            }
-            n = (size_t)(k1 - line);
-            if (n == 0 || n > 120) {
-                continue;
-            }
-            path = malloc(sl + 1 + n + 1);
-            lineval = dup_range(eq + 1, (size_t)(eol - eq - 1));
             if (path == NULL || lineval == NULL) {
                 free(path);
                 free(lineval);
                 break;
             }
-            if (sl != 0) {
-                memcpy(path, section, sl);
-                path[sl] = '.';
-                memcpy(path + sl + 1, line, n);
-                path[sl + 1 + n] = '\0';
-            } else {
-                memcpy(path, line, n);
-                path[n] = '\0';
-            }
-            value = toml_value(lineval);
+            value = toml_value(lineval, &raw);
             free(lineval);
-            if (value == NULL || toml_set(t, path, value) != 0) {
+            if (value == NULL || toml_put(t, path, value, raw) != 0) {
                 free(value);
                 break;
             }
@@ -862,12 +1026,13 @@ const char *ico_toml_get(const IcoToml *t, const char *path)
     if (t == NULL) {
         return NULL;
     }
-    for (i = 0; i < t->count; i++) {
-        if (strcmp(t->entry[i].path, path) == 0) {
-            return t->entry[i].value;
-        }
-    }
-    return NULL;
+    i = toml_find(t, path);
+    return i >= 0 ? t->entry[i].value : NULL;
+}
+
+int ico_toml_has(const IcoToml *t, const char *path)
+{
+    return t != NULL && toml_find(t, path) >= 0;
 }
 
 int ico_toml_get_bool(const IcoToml *t, const char *path, int def)
@@ -899,9 +1064,432 @@ double ico_toml_get_float(const IcoToml *t, const char *path, double def)
     return *end == '\0' ? d : def;
 }
 
+long long ico_toml_get_int(const IcoToml *t, const char *path, long long def)
+{
+    const char *v = ico_toml_get(t, path);
+    char *end;
+    long long n;
+
+    if (v == NULL || v[0] == '\0') {
+        return def;
+    }
+    n = strtoll(v, &end, 10);
+    return *end == '\0' ? n : def;
+}
+
+static int toml_set(IcoToml *t, const char *path, const char *value, int raw)
+{
+    char *p = dup_range(path, strlen(path));
+    char *v = dup_range(value, strlen(value));
+
+    if (p == NULL || v == NULL) {
+        free(p);
+        free(v);
+        return -1;
+    }
+    return toml_put(t, p, v, raw);
+}
+
+int ico_toml_set_string(IcoToml *t, const char *path, const char *value)
+{
+    return toml_set(t, path, value, 0);
+}
+
+int ico_toml_set_bool(IcoToml *t, const char *path, int value)
+{
+    return toml_set(t, path, value ? "true" : "false", 1);
+}
+
+int ico_toml_set_int(IcoToml *t, const char *path, long long value)
+{
+    char buf[32];
+
+    snprintf(buf, sizeof(buf), "%lld", value);
+    return toml_set(t, path, buf, 1);
+}
+
+int ico_toml_set_float(IcoToml *t, const char *path, double value)
+{
+    char buf[48];
+
+    snprintf(buf, sizeof(buf), "%.9g", value);
+    if (strpbrk(buf, ".en") == NULL) { /* TOML floats need a fraction or an exponent */
+        strcat(buf, ".0");
+    }
+    return toml_set(t, path, buf, 1);
+}
+
+/* --- writing config.toml -------------------------------------------------- */
+
+typedef struct Buf {
+    char *p;
+    size_t len;
+    size_t cap;
+    int bad;
+} Buf;
+
+static void buf_add(Buf *b, const char *s, size_t n)
+{
+    if (b->bad || n == 0) {
+        return;
+    }
+    if (b->len + n + 1 > b->cap) {
+        size_t cap = b->cap != 0 ? b->cap : 1024;
+        char *grown;
+
+        while (b->len + n + 1 > cap) {
+            cap *= 2;
+        }
+        grown = realloc(b->p, cap);
+        if (grown == NULL) {
+            b->bad = 1;
+            return;
+        }
+        b->p = grown;
+        b->cap = cap;
+    }
+    memcpy(b->p + b->len, s, n);
+    b->len += n;
+    b->p[b->len] = '\0';
+}
+
+static void buf_str(Buf *b, const char *s)
+{
+    buf_add(b, s, strlen(s));
+}
+
+/* The value as it is written: bare, or quoted with \\ and \" escaped. */
+static void buf_value(Buf *b, const IcoTomlEntry *e)
+{
+    const char *s;
+
+    if (e->raw) {
+        buf_str(b, e->value);
+        return;
+    }
+    buf_add(b, "\"", 1);
+    for (s = e->value; *s != '\0'; s++) {
+        if (*s == '\\' || *s == '"') {
+            buf_add(b, "\\", 1);
+        }
+        buf_add(b, s, 1);
+    }
+    buf_add(b, "\"", 1);
+}
+
+enum { SEC_ENDS = 64 };
+
+typedef struct SecEnd {
+    char name[128];
+    size_t off; /* where a new key of that section goes in the output */
+} SecEnd;
+
+typedef struct Insert {
+    size_t off;
+    int seq;
+    Buf text;
+} Insert;
+
+static void sec_end_set(SecEnd *ends, int *n, const char *name, size_t off)
+{
+    int i;
+
+    for (i = 0; i < *n; i++) {
+        if (strcmp(ends[i].name, name) == 0) {
+            ends[i].off = off;
+            return;
+        }
+    }
+    if (*n < SEC_ENDS) {
+        snprintf(ends[*n].name, sizeof(ends[*n].name), "%s", name);
+        ends[*n].off = off;
+        (*n)++;
+    }
+}
+
+/* The section part of an entry path: everything before its last '.'. */
+static size_t path_section_len(const char *path)
+{
+    const char *dot = strrchr(path, '.');
+
+    return dot != NULL ? (size_t)(dot - path) : 0;
+}
+
+char *ico_toml_render(const IcoToml *t, const char *existing)
+{
+    Buf out = {0};
+    Buf result = {0};
+    char *used = calloc((size_t)(t->count > 0 ? t->count : 1), 1);
+    SecEnd ends[SEC_ENDS];
+    int n_ends = 0;
+    size_t first_header = (size_t)-1;
+    const char *nl = "\n";
+    char section[128] = "";
+    const char *p;
+    Insert *ins;
+    int n_ins = 0;
+    int seq = 0;
+    int i, j;
+
+    if (used == NULL) {
+        return NULL;
+    }
+    ins = calloc((size_t)(t->count + 1), sizeof(*ins));
+    if (ins == NULL) {
+        free(used);
+        return NULL;
+    }
+    if (existing == NULL) {
+        existing = "";
+    }
+    if (strstr(existing, "\r\n") != NULL) {
+        nl = "\r\n";
+    }
+    p = existing;
+    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF) {
+        buf_add(&out, p, 3);
+        p += 3;
+    }
+    while (*p != '\0') {
+        const char *eol = strchr(p, '\n');
+        const char *line_end = eol != NULL ? eol : p + strlen(p);
+        const char *kb;
+        const char *val;
+        size_t kn;
+        int kind = toml_scan(p, line_end, section, sizeof(section), &kb, &kn, &val);
+
+        if (kind == LINE_SECTION) {
+            if (first_header == (size_t)-1) {
+                first_header = out.len;
+            }
+            buf_add(&out, p, (size_t)(line_end - p));
+            if (eol != NULL) {
+                buf_add(&out, "\n", 1);
+            } else {
+                buf_str(&out, nl);
+            }
+            sec_end_set(ends, &n_ends, section, out.len);
+        } else if (kind == LINE_KEY) {
+            char *path = toml_path(section, kb, kn);
+            int idx = path != NULL ? toml_find(t, path) : -1;
+            int same = 0;
+
+            free(path);
+            if (idx >= 0) {
+                char *lineval = dup_range(val, (size_t)(line_end - val));
+                int raw = 1;
+                char *cur = lineval != NULL ? toml_value(lineval, &raw) : NULL;
+
+                same = cur != NULL && strcmp(cur, t->entry[idx].value) == 0 &&
+                       raw == t->entry[idx].raw;
+                free(cur);
+                free(lineval);
+                used[idx] = 1;
+            }
+            if (idx >= 0 && !same) {
+                const char *cr = line_end > p && line_end[-1] == '\r' ? line_end - 1 : line_end;
+
+                buf_add(&out, p, (size_t)(val - p)); /* up to and including the '=' */
+                buf_str(&out, " ");
+                buf_value(&out, &t->entry[idx]);
+                buf_add(&out, cr, (size_t)(line_end - cr));
+            } else {
+                buf_add(&out, p, (size_t)(line_end - p));
+            }
+            if (eol != NULL) {
+                buf_add(&out, "\n", 1);
+            } else {
+                buf_str(&out, nl);
+            }
+            sec_end_set(ends, &n_ends, section, out.len);
+        } else {
+            buf_add(&out, p, (size_t)(line_end - p));
+            if (eol != NULL) {
+                buf_add(&out, "\n", 1);
+            } else {
+                buf_str(&out, nl);
+            }
+        }
+        p = eol != NULL ? eol + 1 : line_end;
+    }
+
+    /* the keys the text does not have, one insert per section in the order t
+       holds them; a section the text has gets them after its last key, a new
+       one is added at the end, top-level keys go before the first header */
+    for (i = 0; i < t->count; i++) {
+        size_t sl;
+        char name[128];
+        Buf block = {0};
+        int existing_sec = 0;
+        size_t off = 0;
+        int seq_add = 0;
+
+        if (used[i]) {
+            continue;
+        }
+        sl = path_section_len(t->entry[i].path);
+        if (sl >= sizeof(name)) {
+            sl = sizeof(name) - 1;
+        }
+        memcpy(name, t->entry[i].path, sl);
+        name[sl] = '\0';
+        for (j = i; j < t->count; j++) {
+            const char *path = t->entry[j].path;
+
+            if (!used[j] && path_section_len(path) == sl && strncmp(path, name, sl) == 0) {
+                const char *key = sl != 0 ? path + sl + 1 : path;
+
+                buf_str(&block, key);
+                buf_str(&block, " = ");
+                buf_value(&block, &t->entry[j]);
+                buf_str(&block, nl);
+                used[j] = 2; /* handled */
+            }
+        }
+        for (j = 0; j < n_ends; j++) {
+            if (strcmp(ends[j].name, name) == 0) {
+                existing_sec = 1;
+                off = ends[j].off;
+            }
+        }
+        if (sl == 0 && !existing_sec) { /* no top-level key yet: before the first header */
+            existing_sec = 1;
+            off = first_header != (size_t)-1 ? first_header : out.len;
+            if (first_header != (size_t)-1) {
+                buf_str(&block, nl);
+            }
+        }
+        if (!existing_sec) {
+            Buf text = {0};
+
+            if (out.len > 0 || n_ins > 0) {
+                if (!(n_ins == 0 && out.len >= 2 && memcmp(out.p + out.len - 2, "\n\n", 2) == 0) &&
+                    !(n_ins == 0 && out.len >= 4 &&
+                      memcmp(out.p + out.len - 4, "\r\n\r\n", 4) == 0)) {
+                    buf_str(&text, nl);
+                }
+            }
+            buf_str(&text, "[");
+            buf_str(&text, name);
+            buf_str(&text, "]");
+            buf_str(&text, nl);
+            buf_add(&text, block.p != NULL ? block.p : "", block.len);
+            free(block.p);
+            block = text;
+            off = out.len;
+            seq_add = 1000000;
+        }
+        ins[n_ins].off = off;
+        ins[n_ins].seq = seq++ + seq_add;
+        ins[n_ins].text = block;
+        n_ins++;
+    }
+    /* by offset, then in the order made (appended sections last) */
+    for (i = 1; i < n_ins; i++) {
+        Insert key = ins[i];
+
+        for (j = i; j > 0 && (ins[j - 1].off > key.off ||
+                              (ins[j - 1].off == key.off && ins[j - 1].seq > key.seq));
+             j--) {
+            ins[j] = ins[j - 1];
+        }
+        ins[j] = key;
+    }
+    {
+        size_t pos = 0;
+
+        for (i = 0; i < n_ins; i++) {
+            buf_add(&result, out.p + pos, ins[i].off - pos);
+            buf_add(&result, ins[i].text.p != NULL ? ins[i].text.p : "", ins[i].text.len);
+            pos = ins[i].off;
+            free(ins[i].text.p);
+        }
+        buf_add(&result, out.p != NULL ? out.p + pos : "", out.len - pos);
+    }
+    free(used);
+    free(ins);
+    free(out.p);
+    if (result.bad) {
+        free(result.p);
+        return NULL;
+    }
+    if (result.p == NULL) {
+        result.p = calloc(1, 1);
+    }
+    return result.p;
+}
+
+int ico_toml_save(const IcoToml *t, const char *path)
+{
+    char *existing = read_text(path);
+    char *text = ico_toml_render(t, existing);
+    char tmp[ICO_PATH_MAX + 8];
+    FILE *f;
+    size_t n;
+    int ok;
+
+    free(existing);
+    if (text == NULL) {
+        return -1;
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    f = fopen(tmp, "wb");
+    if (f == NULL) {
+        free(text);
+        return -1;
+    }
+    n = strlen(text);
+    ok = fwrite(text, 1, n, f) == n;
+    ok = fflush(f) == 0 && ok;
+    ok = fclose(f) == 0 && ok;
+    free(text);
+    if (ok) {
+#ifdef _WIN32
+        ok = MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+        ok = rename(tmp, path) == 0;
+#endif
+    }
+    if (!ok) {
+        remove(tmp);
+        return -1;
+    }
+    return 0;
+}
+
 int ico_host_pref_dir(char *out, size_t size)
 {
+#ifdef ICO_HOST_SDL_PREFPATH
+    static char cached[ICO_PATH_MAX];
+
+    if (cached[0] == '\0') {
+        char *p = SDL_GetPrefPath("ico-pc", "ico-pc");
+
+        if (p != NULL) {
+            size_t n = strlen(p);
+
+            while (n > 1 && (p[n - 1] == '/' || p[n - 1] == '\\')) {
+                p[--n] = '\0';
+            }
+            copy(cached, sizeof(cached), p);
+            SDL_free(p);
+        }
+    }
+    if (cached[0] != '\0') {
+        copy(out, size, cached);
+        return 0;
+    }
+#endif
     return ico_host_exe_dir(out, size);
+}
+
+int ico_host_ini_path(char *out, size_t size)
+{
+    char dir[ICO_PATH_MAX];
+    int r = ico_host_exe_dir(dir, sizeof(dir));
+
+    ico_path_join(out, size, dir, "ico-pc.ini");
+    return r;
 }
 
 int ico_host_saves_dir(char *out, size_t size)

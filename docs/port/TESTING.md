@@ -31,8 +31,9 @@ packages now carry one `x64/` folder. The checkpoint records below that name
    (`docs/port/BOOT_DIAG.md`). Build from a clean worktree of the commit
    being tested, not from a tree with other packages' uncommitted work.
 3. **User run.** The user double-clicks the exe. No command-line flags, no
-   console. Everything comes from the exe's folder (`port/platform/
-   host_config.c`, `main_host.c`):
+   console. Settings come from `ico-pc.ini` in the exe's folder and from
+   `config.toml` in the per-user folder (below); logs and the trace go to the
+   exe's folder (`port/platform/host_config.c`, `main_host.c`):
    - **ISO:** `Ico_PAL.iso` beside the exe, else `iso=` in `ico-pc.ini`,
      else a file dialog. A dialog choice is saved to the ini once it
      verifies.
@@ -54,6 +55,34 @@ packages now carry one `x64/` folder. The checkpoint records below that name
 4. **Return.** The user sends back the `logs/` folders. Read the end of
    `ico-pc.log` (below), then the trace for the stage, the game flags and
    the save-buffer hash per tick.
+
+## Keys: `ico-pc.ini` and `config.toml`
+
+Precedence: `ico-pc.ini` beside the exe > `config.toml` > defaults
+(docs/port/CONFIG.md has the whole table). `config.toml` is in the folder
+`SDL_GetPrefPath("ico-pc", "ico-pc")` names in the window build (Windows
+`%APPDATA%\ico-pc\ico-pc\`), the exe's folder in the headless build. Each ini
+key has a `config.toml` name; a true/false toml value reads as 1/0.
+
+| ini key | `config.toml` | meaning |
+| --- | --- | --- |
+| `iso=PATH` | `[paths] iso` | disc image (a dialog choice is saved to the ini) |
+| `saves=PATH` | `[paths] saves` | memory card folder |
+| `ticks=N` | `[dev] ticks` | exit after N Main ticks |
+| `watchdog=S` | `[dev] watchdog` | default 30, 0 off |
+| `trace=0` / `trace=PATH` | `[dev] trace` | no trace / trace there; a path also fixes the clock |
+| `verify=0` | `[dev] verify` | skip the SHA-1 check |
+| `pad_script=PATH` | `[dev] pad_script` | the scripted pad |
+| `dump_every=N`, `dump_dir=PATH` | `[dev] dump_every`, `dump_dir` | rd frame dumps (window build) |
+| `audio=0` | `[audio] enabled` | no audio device |
+| `audio_dump=PATH` | `[dev] audio_dump` | WAV of the mixed audio (`1`: `logs/audio.wav`) |
+| `headless=1` | `[dev] headless` | a run for traces and tests: fixes the clock (the headless build always is) |
+| `fixed_clock=0/1` | `[dev] fixed_clock` | the disc clock (`sceCdReadClock`): 2002-01-01 00:00:00 when fixed, the host's local time when not. Default: fixed for the headless build, `headless=1`, or a `trace=` path; real otherwise. A fixed clock keeps the save serial (the clock is in it) and so the trace's save hash reproducible |
+| | `[game] language` | `auto`, `en`, `fr`, `de`, `it`, `es`: the boot language sign's preselected item (`auto`: the system locale) |
+
+A trace run that must be reproducible sets `headless=1` or a `trace=` path (or
+runs the headless build); the Windows user package leaves them out, so the
+clock it reports is real.
 
 ## Reading `ico-pc.log`
 
@@ -155,6 +184,24 @@ A Main tick is one pass of Main's loop. `common/src/main.c` calls
 - **Container checks for this package:** `rd_layout` (the layout frame
   through the host `GifPacket.c`, recording and pixels), `rd_pixel` (adds
   DATE and flat shading), headless `linux-x64` and `ref-m32` ctest.
+
+## Phase 4F run (config, language, clock)
+
+Headless `linux-x64` (`-DICO_LINK_EXE=ON`), `ticks=1300`, `pad_script` =
+`port/input/pad-boot.txt`, `verify=0` in the build folder's `ico-pc.ini`, and
+`[game] language = "fr"` in a `config.toml` beside the exe (2026-10-05):
+
+- the log shows `scf: language 2 from [game] language = "fr"` at
+  `kanbanBoot` step 101 (tick 118), the first `sceScfGetLanguage` of the boot;
+- the pad script's Cross confirmed the sign at tick 143 (`mcCheckStep` 102 ->
+  190). `NonLinearCameraMove` (read from the running process through
+  `/proc/<pid>/mem` at the symbol's address) was 3 from the first read to the
+  end of the run. 3 is also the value `Main` sets at start
+  (`main.c:139`), so the evidence that French was selected is that English,
+  the cursor's position without the config, would have changed it to 2 at
+  tick 143, and it did not change;
+- the run reached stage 3 at tick 996 (`stage_no 40 -> 3`), 1300 Main ticks,
+  2607 vsyncs, exit `ticks= reached`, as in the 4B run.
 
 ## Repeatable packaging: `tools/package_win.sh <label>`
 

@@ -1,15 +1,12 @@
 /*
  * port/null/test/null_devices_test.c
  *
- * The null pad, memory card and system configuration
- * (port/null/{pad,mc,scf}_null.c) answer as an empty console would.  The
- * sound driver's tests moved to port/audio/test/sndn2_test.c with the real
- * driver (Phase 4B).
+ * The pad as an empty console answers it (port/input's libpad without a
+ * script).  The sound driver's tests moved to port/audio/test/sndn2_test.c
+ * (Phase 4B), libscf's to port/config/test/config_test.c (4F).
  */
-#include "null_devices.h"
 #include <libmc.h>
 #include <libpad.h>
-#include <libscf.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -42,18 +39,9 @@ static void test_pad(void)
     CHECK(scePadSetActDirect(0, 0, data) == 0);
 }
 
-static void test_scf(void)
-{
-    CHECK(sceScfGetLanguage() == ICO_SCF_LANGUAGE_ENGLISH);
-    ico_scf_language = ICO_SCF_LANGUAGE_GERMAN;
-    CHECK(sceScfGetLanguage() == 4);
-    ico_scf_language = ICO_SCF_LANGUAGE_ENGLISH;
-}
-
 int main(void)
 {
     test_pad();
-    test_scf();
     printf("null_devices_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

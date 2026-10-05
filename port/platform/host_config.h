@@ -65,10 +65,29 @@ const char *ico_ini_get(const IcoIni *ini, const char *key);
    created if missing). 0, or -1. */
 int ico_ini_store(const char *path, const char *key, const char *value);
 
-/* The folder per-user settings live in (config.toml): the executable's
-   folder, like ico-pc.ini (one place to change when packaging moves it).
-   0, or -1 (then out is "."). */
+/* The folder per-user settings live in (config.toml). The window build
+   (ico_pc compiled with ICO_HOST_SDL_PREFPATH) uses SDL's
+   SDL_GetPrefPath("ico-pc", "ico-pc"); the headless build and the tests,
+   which have no SDL, the executable's folder, as does a failing
+   SDL_GetPrefPath. No trailing separator. 0, or -1 (then out is "."). */
 int ico_host_pref_dir(char *out, size_t size);
+/* The ico-pc.ini beside the executable: the override layer. */
+int ico_host_ini_path(char *out, size_t size);
+/* ico_ini_load without the layering below: the file's own keys only. */
+int ico_ini_load_file(IcoIni *ini, const char *path);
+/* The ini key a config.toml path maps onto (the keys the ini has always had:
+   "paths.iso" is iso=, "dev.ticks" is ticks=, "audio.enabled" is audio=), or
+   NULL. A true/false toml value reads as 1/0 there. ico_ini_load of
+   ico_host_ini_path() fills the ini's missing keys from these toml entries
+   (ini beside the exe > config.toml > defaults) and exports the keys that
+   other libraries read from the environment (ICO_AUDIO, ICO_AUDIO_DUMP,
+   ICO_AUDIO_VOLUME, ICO_FIXED_CLOCK, ICO_RD_DUMP_*). */
+const char *ico_config_ini_key(const char *toml_path);
+/* Whether the clock should be fixed (ICO_FIXED_CLOCK): fixed_clock= when
+   present, else true for the headless build, headless=1, or a trace written
+   to an explicit path (trace= other than 0/none; the default trace of a
+   user run does not count), else false. */
+int ico_host_fixed_clock(const IcoIni *ini);
 /* The memory card folder: saves= in ico-pc.ini (a relative path is taken
    from the executable's folder), else <pref dir>/memcard. Not created. 0, or
    -1 (then out is "memcard"). */
@@ -93,6 +112,26 @@ const char *ico_toml_get(const IcoToml *t, const char *path);
 /* A bool (true/false/1/0), or def if absent or malformed. */
 int ico_toml_get_bool(const IcoToml *t, const char *path, int def);
 double ico_toml_get_float(const IcoToml *t, const char *path, double def);
+long long ico_toml_get_int(const IcoToml *t, const char *path, long long def);
+/* Setters: a new key is added, an existing one changed (t may not be NULL).
+   Strings are written quoted, the rest as written. 0, or -1 (out of memory). */
+int ico_toml_set_string(IcoToml *t, const char *path, const char *value);
+int ico_toml_set_bool(IcoToml *t, const char *path, int value);
+int ico_toml_set_int(IcoToml *t, const char *path, long long value);
+int ico_toml_set_float(IcoToml *t, const char *path, double value);
+/* Whether path is in t. */
+int ico_toml_has(const IcoToml *t, const char *path);
+/* The file text with t's entries applied to `existing` (NULL: an empty
+   file): a line whose key is in t and whose value differs is rewritten as
+   `key = value`; everything else in the text (comments, unknown keys, array
+   layout, the lines the reader ignores) is kept byte for byte; t's keys that
+   are not in the text are added at the end of their section (a new [section]
+   at the end of the file; top-level keys before the first section). Returns
+   malloc'd text, or NULL on out of memory. */
+char *ico_toml_render(const IcoToml *t, const char *existing);
+/* Renders t over the file at path and writes it atomically (path.tmp, then
+   rename over path). 0, or -1; the old file is intact on failure. */
+int ico_toml_save(const IcoToml *t, const char *path);
 
 /* SHA-1. */
 typedef struct IcoSha1 {

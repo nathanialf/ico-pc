@@ -226,6 +226,7 @@ endif()
 # --- The platform layer -----------------------------------------------------
 add_library(ico_platform STATIC
     port/platform/assert_host.c
+    port/platform/clock.c
     port/platform/fpenv.c
     port/platform/hwregs.c)
 target_include_directories(ico_platform PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
@@ -301,6 +302,7 @@ add_subdirectory(port/render)
 add_subdirectory(port/audio)
 # after port/render, which finds SDL3 (input_sdl.c is the window build's)
 add_subdirectory(port/input)
+add_subdirectory(port/config)
 add_subdirectory(port/save)
 
 # --- The window build: ico_pc on port/render (renderer wave 2) ---------------
