@@ -77,3 +77,5 @@ was found (static audit, unit test, trace diff, user report) and the status
 | option | hook | what changes |
 |---|---|---|
 | `[gameplay] yorda_safe` (off) | `ico_opt_yorda_safe()` at `eBrainGetTarget` (`omori/src/ebrain.c`), `backStageProcessMain` (`common/src/backStage.c`), `enemyKidnapCheckGirl` and `enemyPickupCheckGirl` (`fumi/src/enemy_act.c`) | When on, the shadows fight Ico only and never take Yorda in free play; the off-screen kidnap timers do not run. Scripted captures (`ACTEnemyForceSwitchToCarry`, `st13c.c:631`) are untouched. docs/port/OPTIONS.md |
+
+| V-TM | The title logo's "TM" is authored as a 12-vertex strip that zig-zags across the M's concave outline, so four of its ten triangles fill the notches and the additive blend brightens the overlaps (visible at scale; the PS2 draws the same triangles). The host re-orders that one strip's entries (`pac_hostStripEntry`, Packet.c, matched by model name, entry count and index sequence) so the ten triangles stay inside the letter. Visual only. | default | Packet.c |

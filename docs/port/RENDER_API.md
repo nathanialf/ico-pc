@@ -586,6 +586,24 @@ overlay structs in `ico2/seki/include/Tim2.h` (`config/struct_classes.txt`,
 
 Test: `rd_tex` (`port/render/test/rd_tex_test.c`).
 
+**The title's "TM" is not a 2D sprite** (P2). The ICO logo, its TM
+included, is three VU meshes (`I`, `C`, `O`, list 5, additive `Cs*FIX + Cd`
+with no Z write) plus their `_f` glow quads and `_sd` shadows; the T and the
+M are the last two strips of model `O`'s first batch, textured with a plain
+white 32 x 32. The misshapen M comes from the disc data: the M's
+12-vertex strip (position indices 163..174) is stored in an order that
+zig-zags across the concave outline, so four of its ten triangles fill the
+notch above the V and the gap under it, and where triangles overlap the
+additive blend shows them brighter. `pac_makeNormalStrip` reads the strip as
+the PS2 does (the ST.w strip flag is 0 on the first vertex only), so the PS2
+draws the same triangles. No texture, UV or sampling rule is involved:
+decode, UVs and the 2D rows of the same frames (menu rows, the copyright
+line, the boot signs) check clean. The fix belongs in `Packet.c` as a host data correction
+(not applied by P2: the same twelve entries read in the order 163, 164, 174,
+165, 173, 166, 172, 167, 171, 168, 170, 169, which gives ten triangles inside
+the letter). `rd_replay_tool --list`, `--nop`,
+`--mesh` and `--dump-textures` are the tools used to find it.
+
 ## 12. Frame lifecycle, camera and post passes (wave 2, R2c)
 
 `ico2/seki/src/GsBase.c` under `ICO_RD` (the window build; the headless

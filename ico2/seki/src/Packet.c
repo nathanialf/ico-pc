@@ -389,6 +389,35 @@ static void pac_error(char *name, int type)
     __assert("src/Packet.c", 684, "0");
 }
 
+#ifdef ICO_HOST
+
+/* PC port: the title logo's "M" of the TM (model "O": one 12-vertex strip
+   around the letter's outline, position indices 163..174) is stored in an
+   order that zig-zags across the concave outline, so four of its ten
+   triangles fill the notch above the V and the gap below it; the PS2 draws
+   the disc data the same way. The same twelve entries taken in tmGood's
+   order make ten triangles that all lie inside the letter. Returns the
+   entry pac_makeNormalStrip reads as vertex i. */
+static short *pac_hostStripEntry(short *strip, int num, int i)
+{
+    static const short tmBad[12] = {165, 164, 166, 163, 167, 174, 168, 173, 169, 172, 170, 171};
+    static const short tmGood[12] = {163, 164, 174, 165, 173, 166, 172, 167, 171, 168, 170, 169};
+    int k;
+
+    if (num != 12 || strcmp(pacWork.name, "O") != 0) {
+        return strip + i * 8;
+    }
+    for (k = 0; k < 12; k++) {
+        if (strip[k * 8 + 2] != tmBad[k]) {
+            return strip + i * 8;
+        }
+    }
+    for (k = 0; k < 12 && tmBad[k] != tmGood[i]; k++) {}
+    return strip + k * 8;
+}
+
+#endif
+
 static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
 {
     char buf[256];
@@ -410,6 +439,9 @@ static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
     ctx = &pacWork;
     *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
+#ifdef ICO_HOST
+        v = pac_hostStripEntry(strip, num, i);
+#endif
         PacWork *ctx = &pacWork;
 
         pac_growBounds(ctx, vtx, v[2]);

@@ -27,15 +27,150 @@
  *   --mirror              the mirror mode (R7c, section 21): UI prims
  *                         flipped at replay, the present flipped (any preset)
  *
+ * Inspection (P2):
+ *   --list                prints every command of the replayed lists: the
+ *                         list, index, type and key; for a draw its texture
+ *                         (id and size), and for screen prims the prim,
+ *                         space, vertex count, the bounding box in GS pixels
+ *                         and the texel rectangle (UV, or STQ times the size)
+ *   --nop L:A[-B]         turns commands A..B of list L into NOPs before the
+ *                         replay (repeatable), to find the draw behind a pixel
+ *   --mesh NAME           prints the VU meshes of that name vertex by vertex
+ *                         (stream quadwords; '*' where the static index list
+ *                         draws the triangle ending at the vertex)
+ *   --dump-textures DIR   writes every image texture of the dump to
+ *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
+ *                         alpha byte as stored: GS 0x80 = 1.0)
+ *
  * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_mesh.h"
 
 static const char *const kNames[] = {
     "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2", "WORK0",     "WORK1",    "WORK2",
     "WORK3", "AA0",     "AA1",     "FEED128", "",        "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
+
+static const char *const kCmdNames[RDC_COUNT] = {
+    "NOP",          "TEST",          "BLEND",     "ABE",         "ZWRITE",       "FBA",
+    "PABE",         "COLCLAMP",      "TEXA",      "FILTER",      "WRAP",         "TEXTURE",
+    "TEXTURE_OFF",  "UVOFFSET",      "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
+    "SHADE",        "CLEAR",         "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
+    "SKINNED",      "GRID",          "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
+    "SHADOW_RESET", "SHADOW_RESOLVE"};
+
+static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
+                                         "tristrip", "trifan", "sprites"};
+
+static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
+{
+    const RdFrame *f = user;
+    printf("%2d:%-5u %-14s key %08x%08x", list, index,
+           c->type < RDC_COUNT ? kCmdNames[c->type] : "?", c->keyHi, c->keyLo);
+    if (c->type == RDC_TEXTURE) {
+        const RdTexRec *t = rd__TexRec(c->u[0]);
+        printf(" tex %u %ux%u fn %u tcc %u", c->u[0], t ? t->w : 0, t ? t->h : 0, c->b[0], c->b[1]);
+    } else if (c->type == RDC_FILTER || c->type == RDC_WRAP) {
+        printf(" %u %u", c->b[0], c->b[1]);
+    } else if (c->type == RDC_SCREEN &&
+               c->u[0] + (uint64_t)c->u[1] * sizeof(RdScreenVtx) <= f->payloadSize) {
+        const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+        const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        float u0 = 1e9f, v0 = 1e9f, u1 = -1e9f, v1 = -1e9f;
+        for (uint32_t i = 0; i < c->u[1]; i++) {
+            float x = v[i].x / 16.0f, y = v[i].y / 16.0f, s = v[i].s, tt = v[i].t;
+            if (c->b[2]) {
+                s /= 16.0f;
+                tt /= 16.0f;
+            } else if (t && v[i].q != 0.0f) {
+                s = s / v[i].q * (float)t->w;
+                tt = tt / v[i].q * (float)t->h;
+            }
+            x0 = x < x0 ? x : x0;
+            x1 = x > x1 ? x : x1;
+            y0 = y < y0 ? y : y0;
+            y1 = y > y1 ? y : y1;
+            u0 = s < u0 ? s : u0;
+            u1 = s > u1 ? s : u1;
+            v0 = tt < v0 ? tt : v0;
+            v1 = tt > v1 ? tt : v1;
+        }
+        printf(" %s space %u n %u xy (%.2f,%.2f)-(%.2f,%.2f)",
+               c->b[0] < 7 ? kPrimNames[c->b[0]] : "?", c->b[1], c->u[1], x0, y0, x1, y1);
+        if (st->ds.texEnabled) {
+            printf(" tex %u %ux%u %s (%.3f,%.3f)-(%.3f,%.3f) filter %u/%u", st->tex, t ? t->w : 0,
+                   t ? t->h : 0, c->b[2] ? "uv" : "stq", u0, v0, u1, v1, st->ds.magFilter,
+                   st->ds.minFilter);
+        }
+    } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
+        const RdMeshRec *m = rd__MeshRec(c->u[0]);
+        if (m) {
+            printf(" mesh %s (%u vertices, %u batches)", m->name, m->vertexCount, m->batchCount);
+        }
+        if (st->ds.texEnabled) {
+            printf(" tex %u", st->tex);
+        }
+    }
+    if (c->type >= RDC_CLEAR) {
+        const RdTestState *t = &st->ds.test;
+        printf(" | ate %u atst %u aref %u afail %u zte %u ztst %u zwrite %u abe %u blend %u fix %u",
+               t->ate, t->atst, t->aref, t->afail, t->zte, t->ztst, st->ds.zwrite, st->ds.abe,
+               st->ds.blend, st->ds.blendFix);
+    }
+    printf("\n");
+}
+
+/* --mesh NAME: every vertex of the VU meshes of that name, per batch: the
+ * quadwords as the stream holds them and whether the static index list
+ * draws the triangle that ends at the vertex */
+static void listMesh(const char *name)
+{
+    for (uint32_t i = 0; g_rd.meshes && i < RD_MAX_MESHES; i++) {
+        const RdMeshRec *m = &g_rd.meshes[i];
+        if (!m->live || !m->vu || strcmp(m->name, name) != 0) {
+            continue;
+        }
+        printf("mesh %u %s: %u vertices, %u qw each, %u batches\n", (m->gen << 16) | (i + 1),
+               m->name, m->vertexCount, m->qwPerVertex, m->batchCount);
+        for (uint32_t b = 0; b < m->batchCount; b++) {
+            const RdVuBatchRec *br = &m->batches[b];
+            printf(" batch %u: prim %03x material %u, vertices %u..%u, %u indices\n", b, br->prim,
+                   br->material, br->firstVertex, br->firstVertex + br->vertexCount - 1,
+                   br->indexCount);
+            for (uint32_t v = br->firstVertex; v < br->firstVertex + br->vertexCount; v++) {
+                bool drawn = false;
+                for (uint32_t k = 0; k < br->indexCount; k++) {
+                    drawn |= m->index[br->firstIndex + k] / 4 == v;
+                }
+                printf("  %4u %c", v, drawn ? '*' : ' ');
+                for (uint32_t q = 0; q < m->qwPerVertex; q++) {
+                    const float *f = m->stream[(size_t)v * m->qwPerVertex + q];
+                    printf(" (%g %g %g %g)", f[0], f[1], f[2], f[3]);
+                }
+                printf("\n");
+            }
+        }
+    }
+}
+
+static void dumpTextures(const char *dir)
+{
+    char path[1024];
+    for (uint32_t i = 0; g_rd.textures && i < RD_MAX_TEXTURES; i++) {
+        const RdTexRec *t = &g_rd.textures[i];
+        if (!t->live || t->kind != RD_TEXKIND_IMAGE || !t->pixels) {
+            continue;
+        }
+        const uint32_t id = (t->gen << 16) | (i + 1);
+        snprintf(path, sizeof(path), "%s/tex-%u-%ux%u.png", dir, id, t->w, t->h);
+        if (rd_WritePng(path, t->pixels, t->w, t->h, t->w * 4, 0)) {
+            printf("%s\n", path);
+        }
+    }
+}
 
 static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
 {
@@ -61,7 +196,8 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
-                "[--mirror] [--backend vulkan|d3d12]\n",
+                "[--mirror] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] [--mesh NAME] "
+                "[--dump-textures DIR]\n",
                 argv[0]);
         return 1;
     }
@@ -70,6 +206,14 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
+    bool list = false;
+    const char *texDir = NULL, *meshName = NULL;
+
+    struct {
+        unsigned l, a, b;
+    } nops[64];
+
+    int nopCount = 0;
     memset(&s, 0, sizeof(s));
     s.preset = RD_PRESET_ORIGINAL;
     s.aspect = 4.0f / 3.0f;
@@ -123,6 +267,22 @@ int main(int argc, char **argv)
             s.filterUpgrade = strcmp(v, "anisotropic") == 0 ? RD_FILTER_UPGRADE_ANISOTROPIC
                               : strcmp(v, "trilinear") == 0 ? RD_FILTER_UPGRADE_TRILINEAR
                                                             : RD_FILTER_UPGRADE_OFF;
+        } else if (strcmp(argv[i], "--list") == 0) {
+            list = true;
+        } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
+            meshName = argv[++i];
+        } else if (strcmp(argv[i], "--dump-textures") == 0 && i + 1 < argc) {
+            texDir = argv[++i];
+        } else if (strcmp(argv[i], "--nop") == 0 && i + 1 < argc && nopCount < 64) {
+            unsigned l = 0, a = 0, b = 0;
+            int n = sscanf(argv[++i], "%u:%u-%u", &l, &a, &b);
+            if (n < 2 || l >= RD_LIST_COUNT) {
+                fprintf(stderr, "bad --nop\n");
+                return 1;
+            }
+            nops[nopCount].l = l;
+            nops[nopCount].a = a;
+            nops[nopCount++].b = n == 3 ? b : a;
         } else if (strcmp(argv[i], "--present") == 0 && i + 1 < argc) {
             if (sscanf(argv[++i], "%ux%u", &pw, &ph) != 2 || !pw || !ph) {
                 fprintf(stderr, "bad --present size\n");
@@ -157,6 +317,24 @@ int main(int argc, char **argv)
     if (!rd__LoadFrame(dump, &f)) {
         rd_Shutdown();
         return 1;
+    }
+    for (int k = 0; k < nopCount; k++) {
+        const RdCmdList *cl = &f.lists[nops[k].l];
+        for (uint32_t c = nops[k].a; c <= nops[k].b && c < cl->count; c++) {
+            if (cl->cmds[c].type > RDC_STATE_LAST) {
+                cl->cmds[c].type = RDC_NOP;
+            }
+        }
+    }
+    if (list) {
+        RdStateBlock st = f.startState;
+        rd__Walk(&f, (int)f.keep, &st, listCmd, &f);
+    }
+    if (texDir) {
+        dumpTextures(texDir);
+    }
+    if (meshName) {
+        listMesh(meshName);
     }
     int rc = 1;
     if (rd__ReplayFrame(&f, (int)f.keep, pw != 0)) {
