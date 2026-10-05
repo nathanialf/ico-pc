@@ -3,8 +3,8 @@
  *
  * The achievements on the CPU (docs/port/ACHIEVEMENTS.md): the game-state
  * view over a synthetic snapshot, the signals, every achievement's
- * condition through crafted transitions (unlocked once, assisted with an
- * assist on, the upgrade to normal), the achievements.toml round trip, the
+ * condition through crafted transitions (unlocked once, suspended in developer
+ * mode, yorda_safe counting, a version 1 file), the achievements.toml round trip, the
  * popup rate limit and [game] achievements = false.  argv[1]: a writable
  * folder.
  */
@@ -301,22 +301,24 @@ static void test_signals(void)
     CHECK(ico_gs_game_overs() == 1 && ico_gs_run_game_overs() == 1);
     new_game();
     CHECK(ico_gs_run_game_overs() == 0 && ico_gs_run_captures() == 0);
-    /* the options and assists */
-    CHECK(!ico_gs_assisted_now());
+    /* the options and the suspension: yorda_safe does not suspend */
+    CHECK(!ico_gs_achievements_suspended());
     ico_opt_set_yorda_safe(1);
-    CHECK(ico_gs_yorda_safe() && ico_gs_assisted_now());
+    CHECK(ico_gs_yorda_safe() && !ico_gs_achievements_suspended());
     ticks(1);
+    CHECK(!ico_gs_run_suspended());
     ico_opt_set_yorda_safe(0);
-    ticks(1);
-    CHECK(!ico_gs_assisted_now() && ico_gs_run_assisted());
-    new_game();
-    CHECK(!ico_gs_run_assisted());
     ico_opt_set_developer_mode(1);
-    CHECK(ico_gs_developer_mode() && ico_gs_assisted_now());
+    CHECK(ico_gs_developer_mode() && ico_gs_achievements_suspended());
+    ticks(1);
     ico_opt_set_developer_mode(0);
+    ticks(1);
+    CHECK(!ico_gs_achievements_suspended() && ico_gs_run_suspended());
+    new_game();
+    CHECK(!ico_gs_run_suspended());
 #ifndef _WIN32
     setenv("ICO_START_STAGE", "34", 1);
-    CHECK(ico_gs_start_stage_used() && ico_gs_assisted_now());
+    CHECK(ico_gs_start_stage_used() && ico_gs_achievements_suspended());
     setenv("ICO_START_STAGE", "1", 1);
     CHECK(!ico_gs_start_stage_used());
     unsetenv("ICO_START_STAGE");
@@ -331,7 +333,7 @@ static void test_signals(void)
         int before_;                                                                               \
         CHECK(st(id) == ICO_ACH_LOCKED);                                                           \
         trigger;                                                                                   \
-        CHECK(st(id) == ICO_ACH_NORMAL);                                                           \
+        CHECK(st(id) == ICO_ACH_UNLOCKED);                                                         \
         before_ = file_count("[unlocked." id "]");                                                 \
         CHECK(before_ == 1);                                                                       \
         trigger;                                                                                   \
@@ -370,7 +372,7 @@ static IcoAchStats stats(void)
 /* kills up to total - 1 in all */
 static void kills_until_one_short(unsigned int total)
 {
-    unsigned int have = stats().enemies_all;
+    unsigned int have = stats().enemies;
 
     if (have + 1 < total) {
         kills((int)(total - 1 - have));
@@ -380,7 +382,7 @@ static void kills_until_one_short(unsigned int total)
 /* holds hands (unpaused) until one tick short of ms */
 static void hand_until_one_short(unsigned long long ms)
 {
-    unsigned long long have = stats().hand_ms_normal;
+    unsigned long long have = stats().hand_ms;
 
     g.hand_held = 1;
     if (have + 40 < ms) {
@@ -459,13 +461,13 @@ static void test_each(void)
 
     EXPECT_UNLOCK("first_shadow", kills(1));
     kills_until_one_short(25);
-    CHECK(stats().enemies_all == 24);
+    CHECK(stats().enemies == 24);
     CHECK(st("shadows_25") == ICO_ACH_LOCKED);
     EXPECT_UNLOCK("shadows_25", kills(1));
     kills_until_one_short(100);
     CHECK(st("shadows_100") == ICO_ACH_LOCKED);
     EXPECT_UNLOCK("shadows_100", kills(1));
-    CHECK(stats().enemies_all == 101 && stats().enemies_normal == 101);
+    CHECK(stats().enemies == 101);
 
     g.girl_present = 1;
     g.yorda_carried_by_enemy = 1;
@@ -475,15 +477,15 @@ static void test_each(void)
 
     /* hand time: 40 ms a tick at 25 Hz, paused time not counted */
     {
-        unsigned long long before = stats().hand_ms_all;
+        unsigned long long before = stats().hand_ms;
 
         g.hand_held = 1;
         g.system_status[5] = 1;
         ticks(20000);
-        CHECK(stats().hand_ms_all == before);
+        CHECK(stats().hand_ms == before);
         g.system_status[5] = 0;
         ticks(1);
-        CHECK(stats().hand_ms_all == before + 40);
+        CHECK(stats().hand_ms == before + 40);
     }
     hand_until_one_short(HAND_MS_10);
     CHECK(st("hand_10_minutes") == ICO_ACH_LOCKED);
@@ -499,7 +501,7 @@ static void test_each(void)
     save_on(-1); /* not on a couch (the ending's save) */
     save_on(1461);
     save_on(1470);
-    CHECK(stats().sofas_all == 4);
+    CHECK(stats().sofas == 4);
     CHECK(st("couches_5") == ICO_ACH_LOCKED);
     EXPECT_UNLOCK("couches_5", save_on(1500));
 
@@ -518,7 +520,7 @@ static void test_each(void)
     ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
     ticks(1);
     ending(0, 4 * 3600);
-    CHECK(st("finish") == ICO_ACH_NORMAL);
+    CHECK(st("finish") == ICO_ACH_UNLOCKED);
     CHECK(st("never_taken") == ICO_ACH_LOCKED);
     CHECK(st("unbroken") == ICO_ACH_LOCKED);
     CHECK(st("swift") == ICO_ACH_LOCKED);
@@ -530,10 +532,10 @@ static void test_each(void)
     g.layout = 54;
     ending(0, 3600);
     CHECK(st("never_taken") == ICO_ACH_LOCKED && st("unbroken") == ICO_ACH_LOCKED);
-    CHECK(st("swift") == ICO_ACH_NORMAL);
+    CHECK(st("swift") == ICO_ACH_UNLOCKED);
     new_game();
     EXPECT_UNLOCK("never_taken", ending(0, 5 * 3600));
-    CHECK(st("unbroken") == ICO_ACH_NORMAL);
+    CHECK(st("unbroken") == ICO_ACH_UNLOCKED);
     EXPECT_UNLOCK("finish_again", ending(1, 5 * 3600));
     /* "finish" and "unbroken" were checked by the runs above */
     CHECK(file_count("[unlocked.finish]") == 1);
@@ -545,7 +547,7 @@ static void test_each(void)
         int i, l;
 
         for (i = 0; i < ico_ach_count(); i++) {
-            CHECK(st(ico_ach_id(i)) == ICO_ACH_NORMAL); /* all unlocked above */
+            CHECK(st(ico_ach_id(i)) == ICO_ACH_UNLOCKED); /* all unlocked above */
             for (l = 0; l < UI_LANG_COUNT; l++) {
                 CHECK(ui_StrIn((UiLang)l, (UiStrId)ico_ach_title_str(i))[0] != '\0');
                 CHECK(ui_StrIn((UiLang)l, (UiStrId)ico_ach_desc_str(i))[0] != '\0');
@@ -554,54 +556,110 @@ static void test_each(void)
     }
 }
 
-/* --- assisted -------------------------------------------------------------------- */
+/* --- suspension ------------------------------------------------------------------ */
 
-static void test_assisted(void)
+static void test_suspended(void)
 {
-    char buf[64];
-
-    start("assisted");
+    start("suspended");
+    /* developer mode: nothing unlocks, no counter advances, no popup */
     ico_opt_set_developer_mode(1);
     stage(15);
-    CHECK(st("windmill") == ICO_ACH_ASSISTED);
-    /* its popup says so */
-    snprintf(buf, sizeof(buf), "\n%s", ui_StrIn(UI_LANG_EN, UI_STR_ACH_ASSISTED));
-    CHECK(s_pushes == 1 && strstr(s_last_body, buf) != NULL);
-    CHECK(file_count("category = \"assisted\"") == 1);
-    /* switched off in the same run: still assisted */
+    kills(3);
+    g.hand_held = 1;
+    ticks(5);
+    g.hand_held = 0;
+    CHECK(st("windmill") == ICO_ACH_LOCKED && st("first_shadow") == ICO_ACH_LOCKED);
+    CHECK(st("hand_in_hand") == ICO_ACH_LOCKED);
+    CHECK(stats().enemies == 0 && stats().hand_ms == 0);
+    CHECK(s_pushes == 0 && file_count("[unlocked.") <= 0);
+    /* switched off in the same run: still suspended */
     ico_opt_set_developer_mode(0);
     stage(16);
     stage(15);
-    CHECK(st("windmill") == ICO_ACH_ASSISTED);
-    /* a new run without it: upgraded to normal, once */
+    kills(1);
+    CHECK(st("windmill") == ICO_ACH_LOCKED && stats().enemies == 0);
+    /* a new run without it: progress resumes and unlocks, once */
     new_game();
     stage(15);
-    CHECK(st("windmill") == ICO_ACH_NORMAL);
-    CHECK(file_count("[unlocked.windmill]") == 1);
-    CHECK(file_count("category = \"assisted\"") == 0);
-    /* yorda_safe and start_stage are assists too */
-    ico_opt_set_yorda_safe(1);
-    stage(11);
-    CHECK(st("gate") == ICO_ACH_ASSISTED);
-    ico_opt_set_yorda_safe(0);
-    new_game();
+    kills(1);
+    CHECK(st("windmill") == ICO_ACH_UNLOCKED && st("first_shadow") == ICO_ACH_UNLOCKED);
+    CHECK(stats().enemies == 1 && file_count("[unlocked.windmill]") == 1);
+    CHECK(s_pushes == 1 && strstr(s_last_body, "Assisted") == NULL);
+    /* start_stage suspends too */
 #ifndef _WIN32
+    new_game();
     setenv("ICO_START_STAGE", "37", 1);
     stage(37);
-    CHECK(st("queen") == ICO_ACH_ASSISTED);
+    kills(1);
+    CHECK(st("queen") == ICO_ACH_LOCKED && stats().enemies == 1);
     unsetenv("ICO_START_STAGE");
-#endif
-    /* counters: assisted kills do not count towards the normal unlock */
-    new_game();
-    ico_opt_set_developer_mode(1);
-    kills(1);
-    CHECK(st("first_shadow") == ICO_ACH_ASSISTED);
-    ico_opt_set_developer_mode(0);
-    new_game();
     ticks(1);
-    CHECK(st("first_shadow") == ICO_ACH_ASSISTED); /* 1 kill, 0 unassisted */
+    stage(37);
+    CHECK(st("queen") == ICO_ACH_LOCKED); /* the run is still suspended */
+    new_game();
+    stage(37);
+    CHECK(st("queen") == ICO_ACH_UNLOCKED);
+#endif
+}
+
+/* yorda_safe is not an assist: its progress and unlocks count */
+static void test_yorda_safe_counts(void)
+{
+    start("yorda_safe");
+    new_game();
+    ico_opt_set_yorda_safe(1);
+    stage(11);
+    CHECK(st("gate") == ICO_ACH_UNLOCKED);
+    kills(25);
+    CHECK(stats().enemies == 25 && st("shadows_25") == ICO_ACH_UNLOCKED);
+    stage(18);
+    stage(27);
+    CHECK(st("east_and_west") == ICO_ACH_UNLOCKED);
+    CHECK(file_count("[unlocked.gate]") == 1);
+    CHECK(!ico_gs_run_suspended());
+}
+
+/* a version 1 file: both counters, a category on every unlock */
+static void test_old_file(void)
+{
+    FILE *f;
+
+    start("oldfile");
+    f = fopen(s_path, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("version = 1\n\n[stats]\nenemies_all = 9\nenemies_normal = 4\n"
+          "hand_ms_all = 800\nhand_ms_normal = 400\nsaves = 2\nclears = 0\n"
+          "couches_all = \"77,78\"\ncouches_normal = \"77\"\n\n"
+          "[unlocked.gate]\ntime = \"2025-10-05T12:00:00Z\"\ncategory = \"normal\"\n"
+          "play_time = 754\n\n"
+          "[unlocked.windmill]\ntime = \"2025-10-05T12:00:00Z\"\ncategory = \"assisted\"\n"
+          "play_time = 800\n",
+          f);
+    fclose(f);
+    ico_config_reset(s_no_config, s_no_config);
+    ico_ach_init(s_path);
+    CHECK(st("gate") == ICO_ACH_UNLOCKED && st("windmill") == ICO_ACH_UNLOCKED);
+    CHECK(st("cliff") == ICO_ACH_LOCKED);
+    CHECK(ico_ach_time(ico_ach_find("windmill")) == fixed_clock());
+    CHECK(ico_ach_play_time(ico_ach_find("windmill")) == 800);
+    CHECK(stats().enemies == 4 && stats().hand_ms == 400 && stats().sofas == 1);
+    CHECK(stats().saves == 2);
+    /* the next write is a version 2 file with the new keys and no popup
+       for the old unlocks */
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    s_pushes = 0;
+    stage(15);
+    ticks(1);
+    CHECK(pushed_body(ui_StrIn(UI_LANG_EN, UI_STR_ACH_WINDMILL)) == NULL);
     kills(1);
-    CHECK(st("first_shadow") == ICO_ACH_NORMAL);
+    ico_ach_flush();
+    CHECK(file_count("version = 2") == 1 && file_count("enemies = 5") == 1);
+    CHECK(file_count("[unlocked.gate]") == 1 && file_count("[unlocked.windmill]") == 1);
+    CHECK(file_count("category = \"assisted\"") == 1); /* an unknown key is kept */
 }
 
 /* --- the file -------------------------------------------------------------------- */
@@ -619,9 +677,7 @@ static void test_persistence(void)
     new_game();
     g.mc_preview[2] = 50 * 754;
     stage(11);
-    ico_opt_set_developer_mode(1);
     stage(15);
-    ico_opt_set_developer_mode(0);
     kills(3);
     save_on(77);
     g.girl_present = 1;
@@ -629,18 +685,18 @@ static void test_persistence(void)
     ticks(10);
     ico_ach_flush();
     ico_ach_stats(&a);
-    CHECK(a.enemies_all == 3 && a.saves == 1 && a.sofas_all == 1 && a.hand_ms_all >= 400);
+    CHECK(a.enemies == 3 && a.saves == 1 && a.sofas == 1 && a.hand_ms >= 400);
     n = ico_ach_count();
     for (i = 0; i < n; i++) {
         states[i] = (int)ico_ach_state(i);
         times[i] = ico_ach_time(i);
         plays[i] = ico_ach_play_time(i);
     }
-    CHECK(ico_ach_state(ico_ach_find("gate")) == ICO_ACH_NORMAL);
+    CHECK(ico_ach_state(ico_ach_find("gate")) == ICO_ACH_UNLOCKED);
     CHECK(ico_ach_time(ico_ach_find("gate")) == fixed_clock());
     CHECK(ico_ach_play_time(ico_ach_find("gate")) == 754);
     CHECK(file_count("time = \"2025-10-05T12:00:00Z\"") >= 2);
-    CHECK(file_count("category = \"assisted\"") >= 1);
+    CHECK(file_count("category") == 0);
     CHECK(file_count("play_time = 754") >= 2);
 
     /* read back */
@@ -744,7 +800,7 @@ static void test_popups(void)
     ticks(1);
     g.stage_no = 31;
     ticks(ICO_ACH_POPUP_GAP_TICKS * 2);
-    CHECK(st("cliff") == ICO_ACH_NORMAL);
+    CHECK(st("cliff") == ICO_ACH_UNLOCKED);
     CHECK(s_pushes == 0 && ico_ach_pending_popups() == 0);
     ico_config_reset(s_no_config, s_no_config);
 }
@@ -759,7 +815,9 @@ int main(int argc, char **argv)
     test_view();
     test_signals();
     test_each();
-    test_assisted();
+    test_suspended();
+    test_yorda_safe_counts();
+    test_old_file();
     test_persistence();
     test_popups();
     if (failures) {

@@ -139,7 +139,6 @@ typedef enum UiStrId {
     UI_STR_ACH_FAST_DESC,
     UI_STR_ACH_SECRET,
     UI_STR_ACH_SECRET_DESC,
-    UI_STR_ACH_ASSISTED, /* the popup's line for an assisted unlock */
     /* the Settings menu (6C, docs/port/SETTINGS.md) */
     UI_STR_SECTION_AUDIO,
     UI_STR_SECTION_ACHIEVEMENTS,

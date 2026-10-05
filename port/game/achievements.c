@@ -18,11 +18,8 @@
 #include "strings.h"
 
 /* --- conditions ------------------------------------------------------------
- * Each returns MET (the category follows the moment: assisted when an
- * assist is on now or was on in this run), MET_ASSISTED (met, but only
- * counting progress made with an assist on), or 0.  They read only the
- * game-state view and the counters below. */
-enum { NOT_MET = 0, MET = 1, MET_ASSISTED = 2 };
+ * Each returns nonzero when its achievement's condition holds.  They read
+ * only the game-state view and the counters below. */
 
 /* stages (stageData order; the names are the game's, docs/port/ACHIEVEMENTS.md) */
 #define ST_SACRIFICE 3   /* st13b (SACRIFICE) */
@@ -57,19 +54,14 @@ enum { NOT_MET = 0, MET = 1, MET_ASSISTED = 2 };
 
 /* persisted counters and sets */
 static IcoAchStats s_stats;
-static int s_sofa_all[SOFA_MAX], s_sofa_normal[SOFA_MAX];
-static unsigned long long s_visited_all[STAGE_BITS / 64], s_visited_normal[STAGE_BITS / 64];
+static int s_sofa[SOFA_MAX];
+static unsigned long long s_visited[STAGE_BITS / 64];
 static int s_stats_dirty;
 static unsigned int s_stats_written_tick;
 
 static int visited(const unsigned long long *set, int stage)
 {
     return stage >= 0 && stage < STAGE_BITS && ((set[stage >> 6] >> (stage & 63)) & 1u);
-}
-
-static int counter_met(unsigned long long normal, unsigned long long all, unsigned long long n)
-{
-    return normal >= n ? MET : all >= n ? MET_ASSISTED : NOT_MET;
 }
 
 static int in_stage(int stage)
@@ -128,12 +120,7 @@ static int c_cliff(void)
 
 static int c_wings(void)
 {
-    if (visited(s_visited_normal, ST_SYMMETRY_L) && visited(s_visited_normal, ST_SYMMETRY_R)) {
-        return MET;
-    }
-    return visited(s_visited_all, ST_SYMMETRY_L) && visited(s_visited_all, ST_SYMMETRY_R)
-               ? MET_ASSISTED
-               : NOT_MET;
+    return visited(s_visited, ST_SYMMETRY_L) && visited(s_visited, ST_SYMMETRY_R);
 }
 
 static int c_queen(void)
@@ -165,17 +152,17 @@ static int c_clear2(void)
 
 static int c_first_kill(void)
 {
-    return counter_met(s_stats.enemies_normal, s_stats.enemies_all, 1);
+    return s_stats.enemies >= 1;
 }
 
 static int c_kills_25(void)
 {
-    return counter_met(s_stats.enemies_normal, s_stats.enemies_all, 25);
+    return s_stats.enemies >= 25;
 }
 
 static int c_kills_100(void)
 {
-    return counter_met(s_stats.enemies_normal, s_stats.enemies_all, 100);
+    return s_stats.enemies >= 100;
 }
 
 static int c_rescue(void)
@@ -185,12 +172,12 @@ static int c_rescue(void)
 
 static int c_hand_10(void)
 {
-    return counter_met(s_stats.hand_ms_normal, s_stats.hand_ms_all, HAND_10_MIN_MS);
+    return s_stats.hand_ms >= HAND_10_MIN_MS;
 }
 
 static int c_hand_60(void)
 {
-    return counter_met(s_stats.hand_ms_normal, s_stats.hand_ms_all, HAND_60_MIN_MS);
+    return s_stats.hand_ms >= HAND_60_MIN_MS;
 }
 
 static int c_first_save(void)
@@ -200,8 +187,7 @@ static int c_first_save(void)
 
 static int c_sofas_5(void)
 {
-    return counter_met((unsigned long long)s_stats.sofas_normal,
-                       (unsigned long long)s_stats.sofas_all, 5);
+    return s_stats.sofas >= 5;
 }
 
 static int weapon_is(int k)
@@ -300,7 +286,7 @@ static const AchDef s_defs[] = {
 /* --- state ------------------------------------------------------------------ */
 
 typedef struct AchRec {
-    IcoAchState state;
+    int unlocked;
     long long time;         /* seconds since 1970 */
     unsigned int play_secs; /* the game's play time at the unlock */
 } AchRec;
@@ -363,12 +349,13 @@ static long long parse_time(const char *s)
 }
 
 /* --- the file --------------------------------------------------------------
- *   version = 1
- *   [stats]  enemies_all, enemies_normal, hand_ms_all, hand_ms_normal, saves,
- *            clears, couches_all, couches_normal ("id,id,..."),
- *            stages_all, stages_normal (128-bit hex)
- *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", category = "normal" |
- *                    "assisted", play_time = <seconds>
+ *   version = 2
+ *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
+ *            stages (128-bit hex)
+ *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>
+ * Version 1 kept every counter twice (<name>_all and <name>_normal) and an
+ * unlock's category; read_file takes the _normal counters and any unlock
+ * with a time as an unlock (docs/port/ACHIEVEMENTS.md, "The file").
  */
 
 static void sofa_list(const int *set, int n, char *out, size_t size)
@@ -420,6 +407,32 @@ static void hex_parse(const char *s, unsigned long long *set)
     set[0] = strtoull(lo, NULL, 16);
 }
 
+#define FILE_VERSION 2
+
+/* a counter under its version 2 name, else under its version 1 "_normal"
+   name (progress made with an assist on is not carried over) */
+static long long get_counter(const IcoToml *t, const char *name, long long def)
+{
+    char key[64];
+
+    snprintf(key, sizeof(key), "stats.%s", name);
+    if (!ico_toml_has(t, key)) {
+        snprintf(key, sizeof(key), "stats.%s_normal", name);
+    }
+    return ico_toml_get_int(t, key, def);
+}
+
+static const char *get_counter_str(const IcoToml *t, const char *name)
+{
+    char key[64];
+
+    snprintf(key, sizeof(key), "stats.%s", name);
+    if (!ico_toml_has(t, key)) {
+        snprintf(key, sizeof(key), "stats.%s_normal", name);
+    }
+    return ico_toml_get(t, key);
+}
+
 static int write_file(void)
 {
     IcoToml *t = ico_toml_load(s_path);
@@ -434,30 +447,22 @@ static int write_file(void)
     if (t == NULL) {
         return -1;
     }
-    ico_toml_set_int(t, "version", 1);
-    ico_toml_set_int(t, "stats.enemies_all", s_stats.enemies_all);
-    ico_toml_set_int(t, "stats.enemies_normal", s_stats.enemies_normal);
-    ico_toml_set_int(t, "stats.hand_ms_all", (long long)s_stats.hand_ms_all);
-    ico_toml_set_int(t, "stats.hand_ms_normal", (long long)s_stats.hand_ms_normal);
+    ico_toml_set_int(t, "version", FILE_VERSION);
+    ico_toml_set_int(t, "stats.enemies", s_stats.enemies);
+    ico_toml_set_int(t, "stats.hand_ms", (long long)s_stats.hand_ms);
     ico_toml_set_int(t, "stats.saves", s_stats.saves);
     ico_toml_set_int(t, "stats.clears", s_stats.clears);
-    sofa_list(s_sofa_all, s_stats.sofas_all, buf, sizeof(buf));
-    ico_toml_set_string(t, "stats.couches_all", buf);
-    sofa_list(s_sofa_normal, s_stats.sofas_normal, buf, sizeof(buf));
-    ico_toml_set_string(t, "stats.couches_normal", buf);
-    hex_set(s_visited_all, buf, sizeof(buf));
-    ico_toml_set_string(t, "stats.stages_all", buf);
-    hex_set(s_visited_normal, buf, sizeof(buf));
-    ico_toml_set_string(t, "stats.stages_normal", buf);
+    sofa_list(s_sofa, s_stats.sofas, buf, sizeof(buf));
+    ico_toml_set_string(t, "stats.couches", buf);
+    hex_set(s_visited, buf, sizeof(buf));
+    ico_toml_set_string(t, "stats.stages", buf);
     for (i = 0; i < ACH_COUNT; i++) {
-        if (s_rec[i].state == ICO_ACH_LOCKED) {
+        if (!s_rec[i].unlocked) {
             continue;
         }
         fmt_time(s_rec[i].time, buf, sizeof(buf));
         snprintf(key, sizeof(key), "unlocked.%s.time", s_defs[i].id);
         ico_toml_set_string(t, key, buf);
-        snprintf(key, sizeof(key), "unlocked.%s.category", s_defs[i].id);
-        ico_toml_set_string(t, key, s_rec[i].state == ICO_ACH_NORMAL ? "normal" : "assisted");
         snprintf(key, sizeof(key), "unlocked.%s.play_time", s_defs[i].id);
         ico_toml_set_int(t, key, s_rec[i].play_secs);
     }
@@ -480,26 +485,20 @@ static void read_file(void)
     if (t == NULL) {
         return;
     }
-    s_stats.enemies_all = (unsigned int)ico_toml_get_int(t, "stats.enemies_all", 0);
-    s_stats.enemies_normal = (unsigned int)ico_toml_get_int(t, "stats.enemies_normal", 0);
-    s_stats.hand_ms_all = (unsigned long long)ico_toml_get_int(t, "stats.hand_ms_all", 0);
-    s_stats.hand_ms_normal = (unsigned long long)ico_toml_get_int(t, "stats.hand_ms_normal", 0);
+    s_stats.enemies = (unsigned int)get_counter(t, "enemies", 0);
+    s_stats.hand_ms = (unsigned long long)get_counter(t, "hand_ms", 0);
     s_stats.saves = (unsigned int)ico_toml_get_int(t, "stats.saves", 0);
     s_stats.clears = (unsigned int)ico_toml_get_int(t, "stats.clears", 0);
-    s_stats.sofas_all = sofa_parse(ico_toml_get(t, "stats.couches_all"), s_sofa_all);
-    s_stats.sofas_normal = sofa_parse(ico_toml_get(t, "stats.couches_normal"), s_sofa_normal);
-    hex_parse(ico_toml_get(t, "stats.stages_all"), s_visited_all);
-    hex_parse(ico_toml_get(t, "stats.stages_normal"), s_visited_normal);
+    s_stats.sofas = sofa_parse(get_counter_str(t, "couches"), s_sofa);
+    hex_parse(get_counter_str(t, "stages"), s_visited);
     for (i = 0; i < ACH_COUNT; i++) {
-        const char *cat;
-
-        snprintf(key, sizeof(key), "unlocked.%s.category", s_defs[i].id);
-        cat = ico_toml_get(t, key);
-        if (cat == NULL) {
+        snprintf(key, sizeof(key), "unlocked.%s.time", s_defs[i].id);
+        /* an unlock is a record with a time; a version 1 "category" key is
+           ignored whatever it says */
+        if (!ico_toml_has(t, key)) {
             continue;
         }
-        s_rec[i].state = strcmp(cat, "normal") == 0 ? ICO_ACH_NORMAL : ICO_ACH_ASSISTED;
-        snprintf(key, sizeof(key), "unlocked.%s.time", s_defs[i].id);
+        s_rec[i].unlocked = 1;
         s_rec[i].time = parse_time(ico_toml_get(t, key));
         snprintf(key, sizeof(key), "unlocked.%s.play_time", s_defs[i].id);
         s_rec[i].play_secs = (unsigned int)ico_toml_get_int(t, key, 0);
@@ -513,8 +512,7 @@ static void clear_state(void)
 {
     memset(&s_stats, 0, sizeof(s_stats));
     memset(s_rec, 0, sizeof(s_rec));
-    memset(s_visited_all, 0, sizeof(s_visited_all));
-    memset(s_visited_normal, 0, sizeof(s_visited_normal));
+    memset(s_visited, 0, sizeof(s_visited));
     s_stats_dirty = 0;
     s_stats_written_tick = 0;
     s_popq_n = 0;
@@ -541,7 +539,7 @@ void ico_ach_flush(void)
 
 void ico_ach_init(const char *path)
 {
-    int i, n = 0, assisted = 0;
+    int i, n = 0;
 
     clear_state();
     if (path != NULL) {
@@ -555,11 +553,10 @@ void ico_ach_init(const char *path)
     s_popups = ico_config_get_bool("game.achievements", 1) != 0;
     read_file();
     for (i = 0; i < ACH_COUNT; i++) {
-        n += s_rec[i].state != ICO_ACH_LOCKED;
-        assisted += s_rec[i].state == ICO_ACH_ASSISTED;
+        n += s_rec[i].unlocked;
     }
-    ico_diag_log("achievements: %d of %d unlocked (%d assisted), popups %s, %s", n, ACH_COUNT,
-                 assisted, s_popups ? "on" : "off", s_path);
+    ico_diag_log("achievements: %d of %d unlocked, popups %s, %s", n, ACH_COUNT,
+                 s_popups ? "on" : "off", s_path);
     if (!s_inited) {
         atexit(ico_ach_flush);
     }
@@ -589,27 +586,21 @@ static void mark_stage(unsigned long long *set, int stage)
     }
 }
 
-static void update_stats(int assisted)
+static void update_stats(void)
 {
     int kills = ico_gs_signaled(ICO_GS_EV_ENEMY_KILLED);
     int saves = ico_gs_signaled(ICO_GS_EV_SAVE_DONE);
     int endings = ico_gs_signaled(ICO_GS_EV_ENDING);
 
     if (kills) {
-        s_stats.enemies_all += (unsigned int)kills;
-        if (!assisted) {
-            s_stats.enemies_normal += (unsigned int)kills;
-        }
+        s_stats.enemies += (unsigned int)kills;
         s_stats_dirty = 1;
     }
     if (ico_gs_yorda_held() && !ico_gs_paused()) {
         int hz = ico_gs_tick_hz();
         unsigned int ms = hz > 0 ? 1000u / (unsigned int)hz : 40u;
 
-        s_stats.hand_ms_all += ms;
-        if (!assisted) {
-            s_stats.hand_ms_normal += ms;
-        }
+        s_stats.hand_ms += ms;
         s_stats_dirty = 1;
     }
     if (saves) {
@@ -617,10 +608,7 @@ static void update_stats(int assisted)
 
         s_stats.saves += (unsigned int)saves;
         if (sofa >= 0) {
-            add_sofa(s_sofa_all, &s_stats.sofas_all, sofa);
-            if (!assisted) {
-                add_sofa(s_sofa_normal, &s_stats.sofas_normal, sofa);
-            }
+            add_sofa(s_sofa, &s_stats.sofas, sofa);
         }
         s_stats_dirty = 1;
     }
@@ -631,11 +619,8 @@ static void update_stats(int assisted)
     if (ico_gs_valid()) {
         int st = ico_gs_stage();
 
-        if (!visited(s_visited_all, st) || (!assisted && !visited(s_visited_normal, st))) {
-            mark_stage(s_visited_all, st);
-            if (!assisted) {
-                mark_stage(s_visited_normal, st);
-            }
+        if (!visited(s_visited, st)) {
+            mark_stage(s_visited, st);
             s_stats_dirty = 1;
         }
     }
@@ -655,19 +640,14 @@ static void queue_popup(int i)
     }
 }
 
-static void unlock(int i, int assisted)
+static void unlock(int i)
 {
-    IcoAchState cat = assisted ? ICO_ACH_ASSISTED : ICO_ACH_NORMAL;
-
-    if (s_rec[i].state == ICO_ACH_NORMAL || s_rec[i].state == cat) {
-        return;
-    }
-    s_rec[i].state = cat;
+    s_rec[i].unlocked = 1;
     s_rec[i].time = now_seconds();
     s_rec[i].play_secs = ico_gs_play_seconds();
-    ico_diag_log("achievements: unlocked \"%s\" (%s) at Main tick %u, stage %d %s, play time %us",
-                 s_defs[i].id, assisted ? "assisted" : "normal", ico_gs_ticks(), ico_gs_stage(),
-                 ico_gs_stage_name(), s_rec[i].play_secs);
+    ico_diag_log("achievements: unlocked \"%s\" at Main tick %u, stage %d %s, play time %us",
+                 s_defs[i].id, ico_gs_ticks(), ico_gs_stage(), ico_gs_stage_name(),
+                 s_rec[i].play_secs);
     write_file();
     if (s_popups) {
         queue_popup(i);
@@ -715,7 +695,6 @@ static void pump_popups(void)
 {
     unsigned int now = ico_gs_ticks();
     char text[UI_POPUP_TEXT];
-    char body[UI_POPUP_TEXT * 2]; /* ui_PopupPush keeps UI_POPUP_TEXT - 1 bytes */
     int i;
 
     if (s_popq_n == 0) {
@@ -726,12 +705,7 @@ static void pump_popups(void)
     }
     i = s_popq[0];
     wrap(ui_Str(s_defs[i].desc), text, sizeof(text));
-    if (s_rec[i].state == ICO_ACH_ASSISTED) {
-        snprintf(body, sizeof(body), "%s\n%s", text, ui_Str(UI_STR_ACH_ASSISTED));
-    } else {
-        snprintf(body, sizeof(body), "%s", text);
-    }
-    if (ui_PopupPush(ui_Str(s_defs[i].title), body) != 0) {
+    if (ui_PopupPush(ui_Str(s_defs[i].title), text) != 0) {
         return; /* the popup queue is full: try again next tick */
     }
     memmove(s_popq, s_popq + 1, (size_t)(s_popq_n - 1) * sizeof(s_popq[0]));
@@ -742,7 +716,6 @@ static void pump_popups(void)
 
 void ico_ach_tick(void)
 {
-    int assisted;
     int i;
 
     if (!s_inited) {
@@ -752,17 +725,15 @@ void ico_ach_tick(void)
     if (!ico_gs_valid()) {
         return;
     }
-    assisted = ico_gs_assisted_now() || ico_gs_run_assisted();
-    update_stats(assisted);
-    for (i = 0; i < ACH_COUNT; i++) {
-        int r;
-
-        if (s_rec[i].state == ICO_ACH_NORMAL) {
-            continue;
-        }
-        r = s_defs[i].check();
-        if (r != NOT_MET) {
-            unlock(i, assisted || r == MET_ASSISTED);
+    /* suspended (developer mode or start_stage, now or earlier in this
+       run): no counter advances and nothing unlocks; the popup queue and
+       the file's write still run */
+    if (!ico_gs_achievements_suspended() && !ico_gs_run_suspended()) {
+        update_stats();
+        for (i = 0; i < ACH_COUNT; i++) {
+            if (!s_rec[i].unlocked && s_defs[i].check()) {
+                unlock(i);
+            }
         }
     }
     pump_popups();
@@ -810,7 +781,7 @@ int ico_ach_find(const char *id)
 
 IcoAchState ico_ach_state(int i)
 {
-    return i >= 0 && i < ACH_COUNT ? s_rec[i].state : ICO_ACH_LOCKED;
+    return i >= 0 && i < ACH_COUNT && s_rec[i].unlocked ? ICO_ACH_UNLOCKED : ICO_ACH_LOCKED;
 }
 
 int ico_ach_hidden(int i)

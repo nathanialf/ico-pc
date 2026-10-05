@@ -156,8 +156,9 @@ unsigned int ico_gs_run_captures(void);
 unsigned int ico_gs_run_game_overs(void);
 /* a START skip of an opening part (op.c) in this run */
 int ico_gs_run_opening_skipped(void);
-/* an assist (below) was on at any tick of this run */
-int ico_gs_run_assisted(void);
+/* achievements were suspended (below) at any tick of this run: the flag
+   is sticky until the run resets */
+int ico_gs_run_suspended(void);
 
 /* the port's options (port/game/options.h) */
 int ico_gs_developer_mode(void);
@@ -165,8 +166,10 @@ int ico_gs_yorda_safe(void);
 int ico_gs_stick_fix(void);
 /* [dev] start_stage put the game somewhere other than the boot */
 int ico_gs_start_stage_used(void);
-/* developer mode, yorda_safe or start_stage: unlocks are "assisted" */
-int ico_gs_assisted_now(void);
+/* developer mode or start_stage is on: achievements are suspended (no
+   counter advances, nothing unlocks).  yorda_safe, the stick fix and mirror
+   mode do not suspend them. */
+int ico_gs_achievements_suspended(void);
 
 /* --- retail addresses ---------------------------------------------------- */
 

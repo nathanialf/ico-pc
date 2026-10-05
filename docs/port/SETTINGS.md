@@ -96,12 +96,12 @@ next time the game loads them (the next room, the next menu).
 
 **Achievements**: the list of achievements, unlocked or locked, with the
 description of the selected one. Hidden achievements show as "???" until
-unlocked. "Assisted" means it was unlocked in a run where developer mode,
-"Shadows never take Yorda" or a developer start stage was on; doing it again
-without them makes it a normal unlock (docs/port/ACHIEVEMENTS.md).
+unlocked. Achievements are suspended while developer mode or a developer
+start stage is on, and for the rest of that run (docs/port/ACHIEVEMENTS.md,
+"Suspension"); "Shadows never take Yorda" does not suspend them.
 
 **Developer mode**: On restores the development build's debug menu (SELECT
-opens it) and marks achievements unlocked while it is on as assisted (docs/port/DEVELOPER_MODE.md).
+opens it) and suspends achievements while it is on (docs/port/DEVELOPER_MODE.md).
 
 ## Mirror mode
 

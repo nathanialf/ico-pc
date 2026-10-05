@@ -173,7 +173,7 @@ static struct {
     unsigned int captures;
     unsigned int game_overs;
     int opening_skipped;
-    int assisted;
+    int suspended;
 } s_run;
 
 void ico_gs_set_sampler(IcoGsSampler fn)
@@ -284,8 +284,8 @@ void ico_gs_tick(void)
         s_run.opening_skipped = 1;
     }
     s_run.game_overs += (unsigned int)s_count[ICO_GS_EV_GAME_OVER];
-    if (ico_gs_assisted_now()) {
-        s_run.assisted = 1;
+    if (ico_gs_achievements_suspended()) {
+        s_run.suspended = 1;
     }
 
     s_enemies += (unsigned int)s_count[ICO_GS_EV_ENEMY_KILLED];
@@ -439,9 +439,9 @@ int ico_gs_run_opening_skipped(void)
     return s_run.opening_skipped;
 }
 
-int ico_gs_run_assisted(void)
+int ico_gs_run_suspended(void)
 {
-    return s_run.assisted;
+    return s_run.suspended;
 }
 
 int ico_gs_developer_mode(void)
@@ -474,9 +474,9 @@ int ico_gs_start_stage_used(void)
     return *end == '\0' && n > 1 && n <= 105;
 }
 
-int ico_gs_assisted_now(void)
+int ico_gs_achievements_suspended(void)
 {
-    return ico_gs_developer_mode() || ico_gs_yorda_safe() || ico_gs_start_stage_used();
+    return ico_gs_developer_mode() || ico_gs_start_stage_used();
 }
 
 /* --- retail addresses ---------------------------------------------------- */

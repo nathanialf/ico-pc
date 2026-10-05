@@ -72,7 +72,7 @@ if(TARGET ico_pc)
 endif()
 
 # The view over a synthetic state, the signals, every achievement's condition
-# through crafted transitions (once, assisted, the upgrade), the file round
+# through crafted transitions (once, suspended, yorda_safe counting, a version 1 file), the file round
 # trip and the popup rate limit. CPU only.
 add_executable(achievements_test test/achievements_test.c gamestate.c
     ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c

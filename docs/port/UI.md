@@ -400,7 +400,7 @@ right-aligned ending at x 344 and value rows from x 364:
 | Audio | Volume, Back; a note that the output does not apply it yet |
 | Controls | Remap controls (opens the remap screen), Analogue stick fix, Mouse sensitivity, Circle goes back (Q2, with a note), Back |
 | Gameplay | Shadows never take Yorda (+ OPTIONS.md's explanation as a note), Mirror mode "Chosen at New Game" (not selectable), Back |
-| Achievements | a scrolling list of 8 slots over the 30 entries and Back: title (hidden and locked: "???") and state (Unlocked, Assisted, Locked); the selected one's description below; the header counts the unlocked |
+| Achievements | a scrolling list of 8 slots over the 30 entries and Back: title (hidden and locked: "???") and state (Unlocked, Locked); the selected one's description below; the header counts the unlocked |
 | Remap controls | a scrolling list of 8 slots over the 24 targets, "Reset to defaults" and Back: the PS2 name, the keyboard and mouse sources, the gamepad sources; a hint line or "Press a key or button…" |
 
 A stepped value sits centred between two arrow rows at fixed x (362 and
@@ -538,8 +538,7 @@ note, mouse sensitivity, video mode, PAL 50 Hz, 60 Hz, frame rate, Window,
 Auto, Trilinear, Anisotropic, the mirror line, the language note, the remap
 screen's columns, hint, prompt and reset, the PS2 button and direction
 names, Locked, Unlocked); since 6E the achievements' 30 titles and 30 descriptions
-(`UI_STR_ACH_<NAME>`, `UI_STR_ACH_<NAME>_DESC`) and the popup's "Assisted"
-line (`UI_STR_ACH_ASSISTED`), listed in docs/port/ACHIEVEMENTS.md. The translations are the author's, not reviewed by native
+(`UI_STR_ACH_<NAME>`, `UI_STR_ACH_<NAME>_DESC`), listed in docs/port/ACHIEVEMENTS.md. The translations are the author's, not reviewed by native
 speakers (open item 4).
 
 ## Popups

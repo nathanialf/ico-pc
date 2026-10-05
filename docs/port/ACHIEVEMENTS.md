@@ -4,9 +4,9 @@ A port-owned achievement set with in-game popups, behind a typed game-state
 interface that an rcheevos client could drive later. RetroAchievements
 wiring is research only: RA's standalone policy excludes decompilation
 ports (docs/research/retroachievements.md, R6, section 1). The design takes
-two ideas from Dusklight (R6, section 5): event signals raised at a handful
-of game sites, consumed the tick they are seen, and a separate category for
-unlocks made with help (Dusklight's "Glitched", here "assisted").
+idea from Dusklight (R6, section 5): event signals raised at a handful of
+game sites, consumed the tick they are seen. There is one kind of unlock;
+developer mode and `[dev] start_stage` suspend achievements (below).
 
 | file | what |
 | --- | --- |
@@ -15,7 +15,7 @@ unlocks made with help (Dusklight's "Glitched", here "assisted").
 | `port/game/achievements.c`, `.h` | the table, the per-tick checks, `achievements.toml`, the popup queue |
 | `port/game/test/achievements_test.c` | ctest `achievements` (CPU) |
 | `port/platform/host_loop.c` | the tick hook: `ico_ach_host_poll(ico_host_main_ticks())` at the end of `ico_host_step` |
-| `port/ui/strings*.{h,c}` | the 61 strings (30 titles, 30 descriptions, "Assisted") in the five languages |
+| `port/ui/strings*.{h,c}` | the 60 strings (30 titles, 30 descriptions) in the five languages |
 
 ## How it runs
 
@@ -58,13 +58,14 @@ unlocks made with help (Dusklight's "Glitched", here "assisted").
 | `ico_gs_run_*` | the run (below) | |
 | `ico_gs_developer_mode`, `_yorda_safe`, `_stick_fix` | `port/game/options.h` | docs/port/OPTIONS.md |
 | `ico_gs_start_stage_used` | `ICO_START_STAGE` 2..105, as `debug_TryToGetStartStage` reads it | `common/src/debug.c:889` |
-| `ico_gs_assisted_now` | developer mode, `yorda_safe` or `start_stage` | |
+| `ico_gs_achievements_suspended` | developer mode or `start_stage` (not `yorda_safe`, the stick fix or mirror mode) | |
 
 **The run** starts at the title (entering stage 1) and is reset again by a
 new game. It is *fresh* when gflag 382 came on (the new-game choice,
 `gflagOn(382)` at `layout_action.c:738`) and no load followed (layout 25,
 `la_load_processing`). It counts captures, game overs, whether any of
-`op.c`'s opening parts was skipped, and whether an assist was on at any tick.
+`op.c`'s opening parts was skipped, and whether achievements were suspended
+at any tick (`ico_gs_run_suspended`, sticky for the run).
 Run state is not persisted: quitting mid-run and loading a save ends the run
 as not fresh (open item 3).
 
@@ -137,7 +138,7 @@ its host value is a host pointer), and any global not in the table. The
 
 ## The set
 
-30 achievements. "Normal" or "assisted" is decided at the unlock (below).
+30 achievements, one kind of unlock.
 Stage names are `stageData[].name` in the retail tables.
 
 | id | title | condition | game facts read |
@@ -194,22 +195,23 @@ length, grip, power, then ints):
 Calling kind 4 "the sword" and 8/9 "the blade of light" is an inference from
 these numbers and draw functions; neither was confirmed in play (open item 1).
 
-## Categories: normal and assisted
+## Suspension
 
-An unlock is **assisted** when, at that tick, developer mode, `[gameplay]
-yorda_safe` or `[dev] start_stage` is on, or one of them was on at any tick
-of the current run. Counters that build up (enemies, hand time, couches,
-visited stages) are kept twice, all and unassisted, so progress made with an
-assist on never counts towards a normal unlock: reaching 25 enemies with
-some killed in developer mode gives "assisted" until 25 were killed without
-an assist. An assisted unlock is upgraded to normal (with a second popup)
-when the condition is later met without an assist; a normal unlock is final.
-The stick fix and mirror mode change input, not the game's rules, and are
-not assists.
+Achievements are **suspended** while developer mode or `[dev] start_stage`
+is on, and for the rest of the run in which either was (the run is defined
+above; `ico_gs_run_suspended` is set at any tick with
+`ico_gs_achievements_suspended` true and cleared when the run resets at the
+title or a new game). While suspended no counter advances (enemies, hand
+time, couches, visited stages) and nothing unlocks; queued popups still show.
+Progress resumes when a run starts without them. The hook is `ico_ach_tick`
+(`port/game/achievements.c`), which skips the counters and the conditions
+when either query is true. Unlocks that exist stay unlocked.
+
+`[gameplay] yorda_safe`, the stick fix and mirror mode are not assists:
+progress and unlocks with them on count normally. Counters are kept once.
 
 docs/port/DEVELOPER_MODE.md, docs/port/OPTIONS.md and the
-`UI_STR_DEVELOPER_NOTE` string agree since 7A: achievements are recorded as
-assisted in developer mode, not suspended.
+`UI_STR_DEVELOPER_NOTE` string say "suspended".
 
 ## The file: `<pref>/achievements.toml`
 
@@ -220,39 +222,42 @@ at once on every unlock and otherwise when counters changed, at most every
 kept.
 
 ```toml
-version = 1
+version = 2
 
 [stats]
-enemies_all = 3
-enemies_normal = 0
-hand_ms_all = 400
-hand_ms_normal = 0
+enemies = 3
+hand_ms = 400
 saves = 1
 clears = 0
-couches_all = "77"
-couches_normal = ""
-stages_all = "000000000000000000002f000000800a"   # 128-bit set, stage n = bit n
-stages_normal = "..."
+couches = "77"
+stages = "000000000000000000002f000000800a"   # 128-bit set, stage n = bit n
 
 [unlocked.gate]
 time = "2025-10-05T12:00:00Z"   # UTC
-category = "normal"             # or "assisted"
 play_time = 754                 # the game's play time at the unlock, seconds
 ```
+
+**Migration from version 1.** Version 1 kept each counter twice
+(`enemies_all`, `enemies_normal`, `hand_ms_*`, `couches_*`, `stages_*`) and
+had `category = "normal"` or `"assisted"` in each unlock. Reading: an
+`[unlocked.<id>]` table with a `time` is an unlock whatever its `category`;
+a counter is read from its version 2 key, else from its `_normal` key (the
+progress made with an assist on is not carried over). Writing: version 2,
+no `category`. The old keys are left in the file as unknown keys (the TOML
+writer has no remove); they are ignored.
 
 ## Popups
 
 `ui_PopupPush(title, body)` (docs/port/UI.md, "Popups") in the current
 language at push time: the title, the description broken at spaces into
-lines of at most 44 letters (the popup does not wrap), and for an assisted
-unlock a last line "Assisted". Unlocks queue (64 deep); one popup is pushed
+lines of at most 44 letters (the popup does not wrap). Unlocks queue (64 deep); one popup is pushed
 at most every 125 Main ticks (5 s; a popup shows for 230 vsyncs, 115 ticks),
 and a push the UI queue refuses is retried on the next tick.
 `[game] achievements = false` turns popups off; unlocks are recorded either
 way. The headless build has no popup step (`ui_PopupVsync` is the window
 build's), so there the first push stays current; the log line is the record.
 
-Each unlock is logged: `achievements: unlocked "<id>" (<category>) at Main
+Each unlock is logged: `achievements: unlocked "<id>" at Main
 tick <t>, stage <n> <name>, play time <s>s`.
 
 ## rcheevos readiness
@@ -268,8 +273,8 @@ interface:
   queries.
 - **Frame hook:** `ico_ach_host_poll` is where `rc_client_do_frame` (per
   Main tick) and `rc_client_idle` would go.
-- **Hardcore:** `ico_gs_assisted_now` is the switch that would force
-  Casual mode (developer mode, `yorda_safe`, `start_stage`).
+- **Hardcore:** `ico_gs_achievements_suspended` is the switch that would
+  force Casual mode (developer mode, `start_stage`).
 - **Hash:** not here; the extractor would compute rcheevos' PS2 hash from
   `SYSTEM.CNF` and the ELF (R6, section 2).
 - **Missing:** a memory region map for `rc_client` (only scattered
@@ -289,17 +294,21 @@ interface:
   ignored, the 128 bound and the drop count; the polled save (38 then 41,
   the couch id), load, new game; a capture by hook and one the hook missed;
   a rescue, and a stage change that is not one; game-over counters; the run
-  reset; each assist (developer mode, `yorda_safe`, `ICO_START_STAGE`);
+  reset; the suspension query (developer mode, `ICO_START_STAGE`; not
+  `yorda_safe`) and the run's sticky flag;
 - every achievement: locked before its trigger, unlocked as normal by it,
   one `[unlocked.<id>]` record after triggering it again; the near misses
   (an opening part skipped, 24 of 25 enemies, paused hand time not counted,
   one short of 10 and 60 minutes, a repeated couch and a save off a couch, a
   capture, a game over, 4 hours of play, a loaded game for the fresh-run
   challenges); every id has a title and description in all five languages;
-- assisted: developer mode gives "assisted" and the popup's "Assisted" line;
-  still assisted after switching it off within the run; upgraded to normal
-  in a new run with one record; `yorda_safe` and `start_stage`; an enemy
-  killed in developer mode does not count towards the normal unlock;
+- suspension: in developer mode nothing unlocks, no counter advances and no
+  popup is pushed; still suspended after switching it off within the run;
+  progress and unlocks resume in a new run, with one record; `start_stage`
+  suspends the same way; `yorda_safe` counts normally (unlocks, 25 kills,
+  the visited-stage pair); a version 1 file with both counters and a
+  `category` on each unlock reads as unlocks and `_normal` counters, and
+  the next write is version 2;
 - the file: stats, states, times (a fixed clock: `2025-10-05T12:00:00Z`) and
   play times survive a write and `ico_ach_init`; an unlocked achievement
   gives no second record or popup; a missing file reads as empty;
@@ -344,10 +353,10 @@ signal firing (signals are not logged) and any unlock in the live game.
 3. **Run state is in memory.** The fresh-run challenges (`never_taken`,
    `unbroken`) need one session from new game to ending; per-save run state
    (Dusklight keeps per-achievement state in its file) would lift that.
-4. **Developer mode wording** (done in 7A): DEVELOPER_MODE.md, OPTIONS.md,
-   SETTINGS.md and `UI_STR_DEVELOPER_NOTE` now say achievements are recorded
-   as assisted in developer mode.
-5. **`port/ui/strings.h`** was extended with the 61 ids (an enum the tables
+4. **Developer mode wording**: DEVELOPER_MODE.md, OPTIONS.md, SETTINGS.md and
+   `UI_STR_DEVELOPER_NOTE` say achievements are suspended in developer mode
+   (the "assisted" category of 7A was removed).
+5. **`port/ui/strings.h`** was extended with the 60 ids (an enum the tables
    need); the brief named only the tables. Translations are the author's,
    as for 6B (UI.md open item 4).
 6. **List view** (done in 6C): the Settings menu's Achievements page lists

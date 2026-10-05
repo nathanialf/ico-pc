@@ -7,10 +7,9 @@
  * Main tick; unlocks persist in <pref>/achievements.toml and show a popup
  * (port/ui/popup.h) unless [game] achievements = false.
  *
- * Unlocks made while an assist is on (developer mode, [gameplay]
- * yorda_safe, [dev] start_stage), or in a run where one was on, are
- * recorded in the "assisted" category, never as normal; a later unassisted
- * unlock of the same achievement upgrades it to normal.
+ * Achievements are suspended while developer mode or [dev] start_stage is on,
+ * and for the rest of a run in which either was (ico_gs_run_suspended): no
+ * counter advances and nothing unlocks.  There is one kind of unlock.
  */
 #ifndef ICO_PORT_GAME_ACHIEVEMENTS_H
 #define ICO_PORT_GAME_ACHIEVEMENTS_H
@@ -19,11 +18,7 @@
 extern "C" {
 #endif
 
-typedef enum IcoAchState {
-    ICO_ACH_LOCKED = 0,
-    ICO_ACH_ASSISTED = 1,
-    ICO_ACH_NORMAL = 2
-} IcoAchState;
+typedef enum IcoAchState { ICO_ACH_LOCKED = 0, ICO_ACH_UNLOCKED = 1 } IcoAchState;
 
 /* Main ticks between two popups (5 s at PAL's 25 Hz Main tick; a popup
    shows for 230 vsyncs, 115 ticks): further unlocks wait in a queue. */
@@ -64,11 +59,11 @@ int ico_ach_pending_popups(void);
 
 /* the persisted counters */
 typedef struct IcoAchStats {
-    unsigned int enemies_all, enemies_normal;
-    unsigned long long hand_ms_all, hand_ms_normal;
+    unsigned int enemies;
+    unsigned long long hand_ms;
     unsigned int saves;
     unsigned int clears;
-    int sofas_all, sofas_normal; /* distinct couches saved on */
+    int sofas; /* distinct couches saved on */
 } IcoAchStats;
 
 void ico_ach_stats(IcoAchStats *out);

@@ -1490,9 +1490,7 @@ static void refreshAchievements(Page *pg, int cur)
         IcoAchState st = ico_ach_state(d);
         int hidden = ico_ach_hidden(d) && st == ICO_ACH_LOCKED;
         lt_ext_SetText(lab, hidden ? "???" : ui_Str((UiStrId)ico_ach_title_str(d)));
-        lt_ext_SetStr(val, st == ICO_ACH_NORMAL     ? UI_STR_ACH_STATE_UNLOCKED
-                           : st == ICO_ACH_ASSISTED ? UI_STR_ACH_ASSISTED
-                                                    : UI_STR_ACH_LOCKED);
+        lt_ext_SetStr(val, st == ICO_ACH_UNLOCKED ? UI_STR_ACH_STATE_UNLOCKED : UI_STR_ACH_LOCKED);
     }
     int s = slotOf(pg, cur);
     int d = s >= 0 ? pg->offset + s : -1;
