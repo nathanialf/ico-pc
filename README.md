@@ -97,6 +97,14 @@ git merge upstream/main
 The decompilation's description of this relationship is
 [`docs/PORT.md`](https://github.com/nathanialf/ico/blob/main/docs/PORT.md).
 
+## PC port
+
+[ico-pc](https://github.com/nathanialf/ico-pc) is a fork of this repository
+that is being turned into a native PC port. This tree remains the
+byte-matched reference. Reconstruction bugs the port finds are fixed here
+first, under this repository's rules, and then merged into the port. See
+[`docs/PORT.md`](docs/PORT.md).
+
 ## Legal and licence
 
 The code in this repository is MIT licensed ([`LICENSE`](LICENSE)). The
