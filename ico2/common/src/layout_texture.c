@@ -81,6 +81,23 @@ extern void *memset(void *dst, int c, int n);
 
 #include "Texture.h"
 
+/* PC port (Phase 6, 6B): the rows past the game's tables.  texLayout[80] and
+   texProperty[436] are fixed-size runtime-loaded arrays with no free
+   property row; the port's Settings rows live in an extension past their
+   ends (port/ui/layout_ext.h), which this file's lookups fall through to.
+   The texture initialisation below walks the stages' layout ranges, which
+   never reach an extension index, and keeps the plain arrays. */
+#ifdef ICO_HOST
+
+#include "layout_ext.h"
+
+#define LT_LAYOUT(i) (*lt_ext_Layout(i))
+#define LT_PROP(i) (*lt_ext_Prop(i))
+#else
+#define LT_LAYOUT(i) texLayout[i]
+#define LT_PROP(i) texProperty[i]
+#endif
+
 static void default_item_select(int no);
 
 /* The sprite rectangle the gif helpers take: origin and size, in 1/16 pixels. */
@@ -104,27 +121,27 @@ static void display_texture_fade_cancel_chk(int from, int to)
     int n1 = 0;
     int n2 = 0;
 
-    for (i = from; i >= 0; i = texLayout[i].link) {
-        for (j = texLayout[i].first; j < texLayout[i].last; j++) {
-            LtProperty *pr = &texProperty[j];
+    for (i = from; i >= 0; i = LT_LAYOUT(i).link) {
+        for (j = LT_LAYOUT(i).first; j < LT_LAYOUT(i).last; j++) {
+            LtProperty *pr = &LT_PROP(j);
 
             pr->fade_cancel = 0;
             list1[n1++] = j;
         }
     }
-    for (i = to; i >= 0; i = texLayout[i].link) {
-        for (j = texLayout[i].first; j < texLayout[i].last; j++) {
-            LtProperty *pr = &texProperty[j];
+    for (i = to; i >= 0; i = LT_LAYOUT(i).link) {
+        for (j = LT_LAYOUT(i).first; j < LT_LAYOUT(i).last; j++) {
+            LtProperty *pr = &LT_PROP(j);
 
             pr->fade_cancel = 0;
             list2[n2++] = j;
         }
     }
     for (k = 0; k < n1; k++) {
-        LtProperty *p = &texProperty[list1[k]];
+        LtProperty *p = &LT_PROP(list1[k]);
 
         for (l = 0; l < n2; l++) {
-            LtProperty *q = &texProperty[list2[l]];
+            LtProperty *q = &LT_PROP(list2[l]);
 
             if (p->texFileNo == q->texFileNo && p->texU == q->texU && p->texV == q->texV &&
                 p->texW == q->texW && p->texH == q->texH && p->dispX == q->dispX &&
@@ -184,12 +201,12 @@ static inline int lt_property_visible(int no) /* derived name */
 
 static inline void lt_draw_layout(int no) /* derived name */
 {
-    int i = texLayout[no].first;
-    int last = texLayout[no].last;
+    int i = LT_LAYOUT(no).first;
+    int last = LT_LAYOUT(no).last;
 
     for (; i < last; i++) {
         if (lt_property_visible(i)) {
-            display_texture(no, &texProperty[i]);
+            display_texture(no, &LT_PROP(i));
         }
     }
 }
@@ -227,8 +244,8 @@ static inline void lt_switch_layout_3(int no) /* derived name */
 
 static void default_item_select(int no)
 {
-    LtProp *p = &texLayout[no];
-    LtProperty *e = &texProperty[p->curItem];
+    LtProp *p = &LT_LAYOUT(no);
+    LtProperty *e = &LT_PROP(p->curItem);
     int prev;
 
     if (p->curItem < 0) {
@@ -247,12 +264,12 @@ static void default_item_select(int no)
             if ((pad[0].flags & 0x1000) && e->upItem >= 0) {
                 p->curItem = e->upItem;
                 while (!lt_property_visible(p->curItem)) {
-                    p->curItem = texProperty[p->curItem].upItem;
+                    p->curItem = LT_PROP(p->curItem).upItem;
                 }
             } else if ((pad[0].flags & 0x4000) && e->downItem >= 0) {
                 p->curItem = e->downItem;
                 while (!lt_property_visible(p->curItem)) {
-                    p->curItem = texProperty[p->curItem].downItem;
+                    p->curItem = LT_PROP(p->curItem).downItem;
                 }
             } else if ((pad[0].flags & 0x8000) && e->leftItem >= 0) {
                 p->curItem = e->leftItem;
@@ -272,7 +289,7 @@ static void default_item_select(int no)
         fadeCallback = 0;
     }
 
-    e = &texProperty[p->curItem];
+    e = &LT_PROP(p->curItem);
     if (pad[0].flags & 0x40) {
         if (e->right >= 0) {
             if (fadeState == 2) {
@@ -294,11 +311,11 @@ static void default_item_select(int no)
 
 static inline void lt_reset_property_chain(int no) /* derived name */
 {
-    LtProp *p = &texLayout[no];
+    LtProp *p = &LT_LAYOUT(no);
     int i = p->link;
 
     while (i >= 0) {
-        p = &texLayout[i];
+        p = &LT_LAYOUT(i);
         p->curItem = p->defaultItem;
         p->procFirst = 1;
         i = p->link;
@@ -379,11 +396,11 @@ static void texture_fading(LtProp *p)
         /* fall through */
     case 6:
         current_layout_id = nextLayout;
-        cur = &texLayout[current_layout_id].curItem;
-        *cur = texLayout[current_layout_id].defaultItem;
+        cur = &LT_LAYOUT(current_layout_id).curItem;
+        *cur = LT_LAYOUT(current_layout_id).defaultItem;
         ltSelectFlag = 1;
         fadeState = 0;
-        if (texLayout[current_layout_id].fadeInTime == 0.0f) {
+        if (LT_LAYOUT(current_layout_id).fadeInTime == 0.0f) {
             lt_item_select_disable = 1;
             fadeState = 2;
         }
@@ -428,6 +445,14 @@ extern void gif_SpriteSensitiveOffset(SprRect *r, unsigned int z, SprRect *uv, S
 extern void gif_PointOffset(int *v, long long z, SprCol *col, int prim);
 extern void gif_SetGsReg(long long reg, long long data);
 
+#ifdef ICO_HOST
+
+/* PC port (6B): the port row display_texture is drawing, whose glow is its
+   label stretched like the texture sprite (port/ui/layout_ext.h) */
+static LtProperty *ltHostTextRow;
+
+#endif
+
 /* the pulsing highlight sprite, inlined three times by display_texture */
 static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int b, float t, int dx,
                                   int dy) /* derived name */
@@ -444,6 +469,12 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
     rr.w = rr.w + s * dx * 2;
     rr.h = rr.h + s * dy * 2;
     gif_SetAlpha(1, 5, 0);
+#ifdef ICO_HOST
+    if (ltHostTextRow != 0) {
+        lt_ext_DrawRow(ltHostTextRow, (const int *)&rr, (const unsigned char *)&c, 1);
+        return;
+    }
+#endif
     gif_SpriteSensitiveOffset(&rr, 0xFFFFFF9B, ofs, &c, 1);
 }
 
@@ -481,7 +512,7 @@ static void display_texture(int no, LtProperty *e)
     }
     box.y = (e->dispY - 113) * 16;
 
-    sel = (e == &texProperty[texLayout[no].curItem]);
+    sel = (e == &LT_PROP(LT_LAYOUT(no).curItem));
     if (sel && lt_item_select_disable == 0 && fadeState == 2 && e->selectable == 0) {
         SprCol pcol;
 
@@ -502,7 +533,13 @@ static void display_texture(int no, LtProperty *e)
 
         flag = (e->upItem >= 0 || e->downItem >= 0 || e->leftItem >= 0 || e->rightItem >= 0 ||
                 e->right >= 0 || e->left >= 0 || e->down >= 0 || e->up >= 0);
-        tex_TransTexture(e->texNo, 11);
+#ifdef ICO_HOST
+        /* PC port (6B): a port row has no texture; its label is drawn where
+           the sprite would be, with the same colour */
+        ltHostTextRow = lt_ext_IsPortProp(e) ? e : 0;
+        if (ltHostTextRow == 0)
+#endif
+            tex_TransTexture(e->texNo, 11);
 
         gif_StartPacketPri(11);
         gif_SetZTest(0);
@@ -540,14 +577,19 @@ static void display_texture(int no, LtProperty *e)
                 u.col.b = 0;
             }
         }
-        if (texLayout[no].curItem != e->ownerItem) {
+        if (LT_LAYOUT(no).curItem != e->ownerItem) {
             if (e->selectable != 0 && sel == 0 && (flag != 0 || e->ownerItem >= 0)) {
                 u.col.r = u.col.r * 0.5f;
                 u.col.g = u.col.g * 0.5f;
                 u.col.b = u.col.b * 0.5f;
             }
         }
-        gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
+#ifdef ICO_HOST
+        if (ltHostTextRow != 0) {
+            lt_ext_DrawRow(e, (const int *)&box, (const unsigned char *)&u.col, 0);
+        } else
+#endif
+            gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
 
         if (e->selectable != 0 && sel != 0 && fadeState == 8) {
             float t = (float)fadeCount / (float)fadeLength;
@@ -557,6 +599,9 @@ static void display_texture(int no, LtProperty *e)
         } else if (e->selectable != 0 && sel != 0 && glowOn != 0) {
             lt_glow_sprite(&box, &ofs, 54, 80, 115, (float)glowCount / (float)glowLength, 32, 32);
         }
+#ifdef ICO_HOST
+        ltHostTextRow = 0;
+#endif
         gif_SetZWrite(1);
         gif_EndPacket();
     }
@@ -580,7 +625,7 @@ static inline void lt_draw_primary_sprite(SprCol *col) /* derived name */
 static void display_primary_texture_layout(int no, int sel)
 {
     SprCol col;
-    LtProp *p = &texLayout[no];
+    LtProp *p = &LT_LAYOUT(no);
     int m;
     int flag;
 
@@ -591,7 +636,7 @@ static void display_primary_texture_layout(int no, int sel)
     lt_draw_primary_sprite(&col);
     if (p->proc != 0 && (fadeState == 1 || fadeState == 2)) {
         if (p->curItem >= 0) {
-            m = texProperty[p->curItem].selectMode;
+            m = LT_PROP(p->curItem).selectMode;
         } else {
             m = 0;
         }
@@ -636,23 +681,23 @@ void exec_layout_texture(void)
     if (frame_count - selectFrame == 0 || frame_count - selectFrame == 1) {
         pad[0].flags = 0;
     }
-    p = &texLayout[current_layout_id];
+    p = &LT_LAYOUT(current_layout_id);
     for (;;) {
         for (j = p->first; j < p->last; j++) {
-            LtProperty *e = &texProperty[j];
+            LtProperty *e = &LT_PROP(j);
 
             e->masked = e->defaultMask;
         }
         if (p->link >= 0) {
             list[n++] = p->link;
-            p = &texLayout[p->link];
+            p = &LT_LAYOUT(p->link);
         } else {
             break;
         }
     }
     list[n] = -1;
     for (n--; n != -1; n--) {
-        p = &texLayout[list[n]];
+        p = &LT_LAYOUT(list[n]);
         v = p->curItem;
         ltCurrentItem = v;
         if (p->proc != 0 && (fadeState == 1 || fadeState == 2)) {
@@ -666,7 +711,7 @@ void exec_layout_texture(void)
             default_item_select(list[n]);
         }
     }
-    p = &texLayout[current_layout_id];
+    p = &LT_LAYOUT(current_layout_id);
     ltCurrentItem = p->curItem;
     display_primary_texture_layout(current_layout_id, ret);
     if (p->curItem >= 0 && lt_item_select_disable == 0) {
@@ -769,7 +814,7 @@ static inline void lt_init_stage_textures(int stage) /* derived name */
     for (; i < last; i++) {
         init_textures_of_specified_property(texLayout[i].first, texLayout[i].last);
     }
-    ltCurrentItem = texLayout[current_layout_id].defaultItem;
+    ltCurrentItem = LT_LAYOUT(current_layout_id).defaultItem;
 }
 
 void init_layout_texture(int stage)
@@ -797,7 +842,7 @@ void init_layout_texture(int stage)
         current_layout_id = 54;
     }
     lt_init_stage_textures(stage);
-    texLayout[current_layout_id].curItem = texLayout[current_layout_id].defaultItem;
+    LT_LAYOUT(current_layout_id).curItem = LT_LAYOUT(current_layout_id).defaultItem;
     ltSelectFlag = 1;
     fadeState = 0;
     lt_reset_property_chain(current_layout_id);
@@ -826,13 +871,13 @@ inline int lt_link_layout(int dir)
 {
     switch (dir) {
     case 0:
-        return texProperty[lt_current_property_item()].right;
+        return LT_PROP(lt_current_property_item()).right;
     case 1:
-        return texProperty[lt_current_property_item()].left;
+        return LT_PROP(lt_current_property_item()).left;
     case 2:
-        return texProperty[lt_current_property_item()].down;
+        return LT_PROP(lt_current_property_item()).down;
     case 3:
-        return texProperty[lt_current_property_item()].up;
+        return LT_PROP(lt_current_property_item()).up;
     }
     return -1;
 }
@@ -859,13 +904,13 @@ inline int lt_next_layout(int stage)
 
 inline void lt_mask_property(int idx, int flag)
 {
-    LtProperty *p = &texProperty[idx];
+    LtProperty *p = &LT_PROP(idx);
     p->masked = flag & 1;
 }
 
 inline void lt_default_mask_property(int idx, int flag)
 {
-    LtProperty *p = &texProperty[idx];
+    LtProperty *p = &LT_PROP(idx);
     p->defaultMask = flag & 1;
 }
 

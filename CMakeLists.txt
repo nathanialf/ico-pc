@@ -225,6 +225,7 @@ add_subdirectory(port/input)
 add_subdirectory(port/config)
 add_subdirectory(port/save)
 add_subdirectory(port/fmv)
+add_subdirectory(port/ui) # Phase 6, 6B: runtime text, layout extension, popups
 
 # --- The window build: ico_pc on port/render (renderer wave 2) ---------------
 if(TARGET ico_pc AND NOT ICO_HEADLESS)

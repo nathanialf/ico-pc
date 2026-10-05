@@ -11,6 +11,8 @@
 #include "input_sdl.h"
 #include "rd.h"
 #include "rhi.h"
+#include "trace_host.h"
+#include "ui_host.h"
 #include "window_host.h"
 
 /* The window's first client size: 4:3, three times 320 x 240. */
@@ -66,6 +68,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
             rhi_AdapterName());
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
+    /* Phase 6 (6B): the port's runtime text and popups (port/ui) */
+    ui_HostInit();
     {
         char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
@@ -129,6 +133,11 @@ int ico_window_pump(void)
     set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
                 game_pause == 0 && data_loading == 0);
     ico_input_sdl_update();
+    /* Phase 6 (6B): the popup overlay's clock, and the popup recorded into
+       the open frame once per game frame.  rd presents inside rd_EndFrame
+       and has no post-present overlay hook yet, so the popup is drawn into
+       the frame's list 12 (port/ui/popup.h, docs/port/UI.md) */
+    ui_HostVsync(ico_host_main_ticks());
     return !quit;
 }
 
@@ -156,6 +165,7 @@ void ico_window_close(void)
     s_open = 0;
     set_capture(0);
     ico_input_sdl_shutdown();
+    ui_HostShutdown();
     rd_Shutdown();
     if (s_window != NULL) {
         SDL_DestroyWindow(s_window);

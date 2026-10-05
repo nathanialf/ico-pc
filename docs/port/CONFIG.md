@@ -77,6 +77,7 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[dev] headless` | `headless` | `false` | a run for traces and tests: fixes the clock (below). The headless build is headless regardless |
 | `[dev] fixed_clock` | `fixed_clock` | see below | the disc clock is fixed or real |
 | `[dev] start_stage` | `start_stage` | none | developer key (renderer wave 5): the stage Main starts in instead of stage 1 (boot, language, title), 1..105 (`stageData` order, e.g. 34 st13a ELEVATOR, 15 st09a WINDMILL, 37 st25a QUEEN); handed over as `ICO_START_STAGE` to `debug_TryToGetStartStage` (`port/null/debug_null.c`), the hook the development build's start-stage file fed (`common/src/main.c:147`). Skips the boot and title flow, so game flags are those of a fresh boot |
+| `[dev] popup_test` | `popup_test` | off | developer key (Phase 6, 6B): `true`/`1`/`on`/`yes` queues the test popup at Main tick 100 and every 150 ticks after (window build; handed over as `ICO_UI_POPUP_TEST` to `port/ui/ui_host.c`; docs/port/UI.md, "Popups") |
 
 `ico_config_save()` writes `version`, `[paths] iso`, `[video]`, `[audio]`
 and `[game] language` when they are absent; the `[dev]` and `[input]` keys only

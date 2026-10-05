@@ -375,6 +375,8 @@ static const struct {
     {"dev.use_iso", "use_iso"},
     /* the stage Main starts in (developer key, renderer wave 5, R5b) */
     {"dev.start_stage", "start_stage"},
+    /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
+    {"dev.popup_test", "popup_test"},
 };
 
 const char *ico_config_ini_key(const char *toml_path)
@@ -457,6 +459,12 @@ int ico_ini_load(IcoIni *ini, const char *path)
            (port/null/debug_null.c), which reads ICO_START_STAGE */
         if (ico_ini_get(ini, "start_stage") != NULL) {
             put_env("ICO_START_STAGE", ico_ini_get(ini, "start_stage"));
+        }
+        /* popup_test=true (developer key, Phase 6 6B): port/ui/ui_host.c
+           queues a test popup at Main tick 100 and every 150 ticks after;
+           it reads ICO_UI_POPUP_TEST (1, true, on, yes) */
+        if (ico_ini_get(ini, "popup_test") != NULL) {
+            put_env("ICO_UI_POPUP_TEST", ico_ini_get(ini, "popup_test"));
         }
     }
     return r;
