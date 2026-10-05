@@ -2211,7 +2211,8 @@ scales (`rd__ApplyDisplay`):
 |---|---|
 | SCENE, WORK2, AURA_WORK, DATE_SNAPSHOT, temporary targets of the scene's GS size (the shadow count) | the scene's: `resolution` `Nx`: sy = N, sx = N x aspect / (4/3); `WxH`: W / gsW, H / gsH; `window`: the presentation box in the window; at least 1, at most 3840 x 2160 |
 | DISPLAY | the scene's, sy doubled with `full_height` |
-| SHADOW0..2, WORK0, WORK1, WORK3, AA0, AA1, FEED128, AURA_TAP, WORK2_PAD | `rd_WorkTargetScale(Enhanced, sy x 448)`: sy clamped to [1, 2] (`RD_WORK_SCALE_APPLY` is 1 now), so blur radii, which are GS distances, stay the same fraction of the screen at finer sampling |
+| WORK0, WORK1, WORK3, AA0, AA1, FEED128, AURA_TAP, WORK2_PAD | `rd_WorkTargetScale(Enhanced, sy x 448)`: sy clamped to [1, 2] (`RD_WORK_SCALE_APPLY` is 1 now), so blur radii, which are GS distances, stay the same fraction of the screen at finer sampling |
+| SHADOW0..2 | the PS2 sizes at every scale since package V3 (`shadowLevel` in `rd__TargetScaleOf`): the shadow's blur is the levels' resolution, not a GS distance (section 20, "Package V3") |
 | other temporary targets (puddle and pool reflections, render-to-texture blocks) | 1 |
 
 Sampling a target through `rd_TargetTexture` is normalised, so it needs
@@ -3019,6 +3020,155 @@ Open items:
 4. The per-present cost is a few 4 x 4 products and inversions per VU draw
    (the frame-camera test is cached per common block); not measured on the
    GPU host.
+
+### Package V3: the cast shadows
+
+`port/render/rd_shadow.c` (the tags), `rd_interp.c` (`blendPrisms`,
+`prismsOf`, `alignPrisms`, `prismMedian`), `rd_internal.h`
+(`RD_SHADOW_PRISM_TRIS`, `rd__ShadowTag`, `rd__SetShadowTag`,
+`RD_INTERP_PRISM_GAP`), `rd_core.c` (`shadowLevel`). Tests: `rd_interp`
+(prisms), `rd_shadow` (tags, level sizes).
+
+**The report.** On the V0.4 package (HEAD db6b860f) at Enhanced, 4x,
+16:9, interpolation on, uncapped: the wobble is gone, "but some shadows
+being cast don't look exact yet" (the cast shadows of Shadow.c, section
+14). No dump came with it. Four candidates were tested separately.
+
+**Data.** (1) S6's dumps of the user's recording (`build-host/s6/run2-after`,
+stage 3, frames 4080 to 4680 every 20 with their previous frames,
+recorded before the tags). (2) Two window runs of this package's build
+(lavapipe, offscreen, `timeout 300` under the run lock, Original preset so
+that the run is faster, `start_stage = 3` and a scratch pad script walking
+and running in a square): `w1`, 1500 ticks, a dump and its previous frame
+every 10 ticks from 150 (stage 3 to 5 at tick 180, back at 1174; exit 0 in
+261 s); `w2`, 640 ticks, every frame from 380 to 639 (exit 0 in 123 s).
+The dumps are recordings; the half-way frames were made from them by
+`rd__InterpFrame` in a scratch tool, against HEAD's `rd_interp.c` and this
+package's, and rendered with `rd_replay_tool`. A shadow's picture is the
+difference of SCENE rendered with and without list 3's `SHADOW_STRIP`
+commands (`--nop`).
+
+**(1) Interpolation: confirmed, two faults.** A Shadow.c volume is one
+closed prism per caster triangle (`emitVolumeStrip`: ten strip positions
+over six vertices, eight triangles), each triangle counted +1 or -1 by its
+facing; `rd_ShadowTris` sorts the triangles into increments then
+decrements. The measure: a volume of closed prisms nets to 0 at every pixel
+when no Z test is applied, so a pixel whose signed count without the Z test
+is not 0 is wrong whatever the scene (rasterised on the 12.4 grid with one
+top-left rule for all frames).
+
+* Volumes of equal counts were lerped triangle for triangle in sorted
+  order; once a face changed sides (another triangle among the increments,
+  the totals equal), faces of different prisms were joined. `w1` at alpha
+  0.5: 20 of 92 such volumes leaked, 12996 pixels in all (the ticks
+  themselves: 27 and 20); frame 4600 of the user's recording drew Ico's
+  legs' shadow doubled half way (1325 pixels).
+* Volumes of different counts (prisms come and go as triangles turn from
+  the light: 176 of 323 pairs in `w1`, 28 of 71 in the user's stage 3, and
+  21 more with equal totals and another split) took cur's volume moved by
+  the median shift (S2): a tick ahead of its caster in shape, and limbs
+  moving against the body off by half their own motion.
+
+The fix. `rd_ShadowTris` tags every vertex with its triangle's place in
+the call (RdScreenVtx.rgba, which the volume draw never writes; 0 in older
+dumps), and `blendPrisms` regroups each tick's prisms (eight triangles by
+tag, the six vertices from positions 0 to 9, every repeated position
+checked). The two sequences keep the caster's triangle order; they are
+aligned by dynamic programming in a band about the diagonal: a pair costs
+the mean square distance of its top caps (the caster triangle) once the
+volume's median shift is taken out, and needs the same strip sign s0; an
+unmatched prism costs `RD_INTERP_PRISM_GAP` squared (32 GS pixels). A pair
+is lerped vertex by vertex and its triangles take the sign emitVolumeStrip
+gives the blended geometry: plus where W s0 (-1)^i > 0, W the triangle's
+winding in 12.4 units, i its strip position, the second triangle of each
+side quad the first's sign. A prism of one tick only is drawn on the
+nearer tick's side of t = 0.5, moved by the volume's shift; the output is
+cur's place in the payload when it fits, else appended. Untagged volumes
+(dumps recorded before V3) and anything that is not Shadow.c's structure
+keep S2's path. The rule was checked on `w1`'s ticks: it gives the
+recorded sign for 488,000 of 489,704 triangles; the 1704 others are slivers
+of at most 1.95 square pixels (the float faceZ against the 12.4 W). No
+volume failed the structure checks (326).
+
+Measured. Leak at alpha 0.5 on `w1`: equal splits 12996 to 54 pixels,
+equal totals 67 to 69, other counts 236 to 449 (the ticks: 273 and 261;
+the prisms' 2.5 pixels a volume come from slivers whose sign the blend
+recomputes). A ground truth: ticks N - 1 and N + 1 blended at 0.5 against
+tick N (`w2`, 65 frames with a shadow), and N - 1 with N + 3 at 0.25
+against N (63 frames), compared only where the scene without shadows is
+the same in the truth and both blends (the ground, not Ico's body):
+
+| | HEAD: mean / median of the error over the truth's shadow | pixels off by more than 8 levels (mean, max) | V3 | |
+|---|---|---|---|---|
+| two ticks, t = 0.5 | 0.331 / 0.228 | 57.7, 373 | 0.136 / 0.116 | 4.0, 49 |
+| four ticks, t = 0.25 | 0.521 / 0.457 | 85.1, 570 | 0.252 / 0.186 | 18.1, 437 |
+
+The volumes' screen coverage (two ticks) differs from the truth's by 8.8 %
+of its area on average with HEAD, 4.8 % with V3. The gap was swept on the
+two-tick truth: 1, 2, 4, 8, 16, 32, 64 and 256 GS pixels give 0.311,
+0.300, 0.254, 0.178, 0.145, 0.136, 0.137, 0.138; one-tick-only prisms
+drawn always from cur instead of from the nearer tick: 0.257 / 0.197 /
+19.3 at 0.25 against 0.255 / 0.186 / 18.2. Cost: `rd__InterpFrame` on
+stage 5's frame 410 (six volumes, up to 168 prisms) 2.14 ms with HEAD,
+0.86 ms with V3 (HEAD sorted every triangle vertex for the medians; the
+medians are now selections over the prisms' vertices); frame 900 1.80 to
+0.60 ms (scratch tool, lavapipe host, mean of 200).
+
+The camera (S6 open item 3). Matched volumes blend in screen space, the
+ground through the rigid half-way camera: for 5055 static vertices of the
+S6 pairs the midpoint of the two ticks' projections is 0.010 GS pixels from
+the rigid camera's projection on average, 0.255 at most, so a matched
+volume stays on its receiver. Unmatched volumes (1 of 71 in the user's
+stage 3, none in `w1`) still stand at the tick.
+
+**(2) Resolution: confirmed for the blur, not the count.** The count is
+resolved at the scene's resolution and the chain reads it as on the PS2;
+frame 4600 rendered Original and Enhanced 4x (4:3 and 16:9, full height):
+the shadows' integrals agree within 2 %, the best alignment of the 4x
+picture with the Original scaled is 2 and 1 output pixels (half a GS pixel,
+the 4x pixel centres), the 16:9 shadow lands where the compressed scene puts
+it (scissorRect maps the GS scissor over the wide target's whole width).
+But the blur levels were work targets (scale 2 at 896 lines and up), and
+the shadow's blur is their resolution: each level is a bilinear half of the
+one before and is composited back with bilinear magnification, so at
+scale 2 every level's texel was half the PS2's and the penumbra half as
+wide. Frame 4600's levels, magnified alike: Enhanced level 1 needs a
+further Gaussian of 1 GS pixel to match the Original's, level 2 1.5, level
+3 4 (total variation 1.15, 1.40, 1.69 times the Original's). The levels now
+keep the PS2 sizes at every scale. Six `w2` frames at 4:3 4x against the
+Original scaled: the relative darkening's mean error 0.0155 to 0.0110, the
+Gaussian that best matches the Original from 4 to 6 output pixels to 2 (the
+rest is the 4x scene's own edges: Ico's outline, the floor's texture). The
+cost: the chain's first step samples the 4x count at the PS2's level-1
+size (bilinear, 2 x 2 texels of a 4 x 4 footprint): over 16 consecutive
+frames the shadow's integral against the Original's varies by 2.6 % (std)
+instead of 2.0 %. A box reduction of the count before the chain (in
+`doShadowResolve`) would remove that; not done (rd_replay.c is outside
+this package).
+
+**(3) Blend: ruled out.** The count is exact by construction (section 14:
+n mod 64 in the stencil, 4 n mod 256 written; `rd_shadow` (a): 0 of
+262,144 pixels differ) and the composites within 3 LSB of the GS LERP
+(`rd_shadow` (c)); the preset changes neither the state nor the pipelines.
+
+**(4) Widescreen clipping: not seen.** No shadow was cut at the 4:3 edge in
+the 16:9 renders, and the scissor and the volume draws cover the wide
+target (above); no dump had a shadow near the edge.
+
+**Original unchanged.** The tags ride in a field the volume draw does not
+read and the levels change only above scale 1. The 151 R7d golden dumps
+rendered by this build's `rd_replay_tool` (DISPLAY, SCENE, a 960 x 720
+present): 453 PNGs, 0 differ from `build-host/r7d-golden/png`. `ctest` 70
+of 70.
+
+Open items:
+
+1. The user's Windows run: an F12 dump (the frame and the frame before
+   come with `dump_interp`) where a shadow looks wrong would show whether
+   anything remains; the stage-3 `interp:` lines' shadow figures count the
+   volumes with a prism of one tick only.
+2. Unmatched volumes and screen prims still stand at the tick (S6 item 3).
+3. The level-1 step undersamples the scaled count (above).
 
 ## 21. Mirror mode (wave 7, R7c)
 

@@ -39,6 +39,10 @@
  * bilinear filter work on expanded texels as the GS filter does (rd's
  * shader expands TEXA after the sampler has filtered).
  *
+ * Package V3: every vertex carries the place its triangle had in the call
+ * (rd__SetShadowTag, in rgba: the volume draw writes no colour), so
+ * rd_interp.c can regroup Shadow.c's prisms after the split.
+ *
  * Replay (rd_replay.c, doShadow*) draws on the state block's colour and
  * depth targets at the command, so the commands leak and inherit state like
  * any other.  Recording is here; rd_ShadowStrip (rd_core.c) shares
@@ -96,6 +100,9 @@ void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, 
     for (uint32_t t = 0; t < triCount; t++) {
         uint32_t *at = sign[t] > 0 ? &a : &b;
         memcpy(&out[*at], &v[t * 3], 3 * sizeof(RdScreenVtx));
+        for (uint32_t k = 0; k < 3; k++) {
+            rd__SetShadowTag(&out[*at + k], t + 1); /* V3: the call's order */
+        }
         *at += 3;
     }
     RdCmd *c = rd__Push(RDC_SHADOW_STRIP);

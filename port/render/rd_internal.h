@@ -113,6 +113,27 @@ _Static_assert(sizeof(RdCmd) == 40, "RdCmd is dumped as raw bytes");
 /* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps
  * (RENDER_API.md section 14). */
 #define RD_SHADOW_STENCIL_MASK 0x3Fu
+/* Package V3: rd_ShadowTris tags every vertex with the place (1-based) its
+ * triangle had in the call, in RdScreenVtx.rgba (little-endian; the volume
+ * draw writes no colour), since the split into increments and decrements
+ * loses the order; 0 is untagged (a dump recorded before V3).  rd_interp.c
+ * regroups Shadow.c's triangles into their prisms by it: emitVolumeStrip's
+ * ten positions over six vertices kick eight triangles per strip. */
+#define RD_SHADOW_PRISM_TRIS 8
+
+static inline uint32_t rd__ShadowTag(const RdScreenVtx *v)
+{
+    return (uint32_t)v->rgba[0] | (uint32_t)v->rgba[1] << 8 | (uint32_t)v->rgba[2] << 16 |
+           (uint32_t)v->rgba[3] << 24;
+}
+
+static inline void rd__SetShadowTag(RdScreenVtx *v, uint32_t tag)
+{
+    v->rgba[0] = (uint8_t)tag;
+    v->rgba[1] = (uint8_t)(tag >> 8);
+    v->rgba[2] = (uint8_t)(tag >> 16);
+    v->rgba[3] = (uint8_t)(tag >> 24);
+}
 
 /* RD_POST_COPY's rectangle. */
 typedef struct RdCopyRec {
@@ -559,7 +580,8 @@ typedef struct RdInterpStats {
     uint32_t rotated;
     uint32_t turned;  /* of them, turning more than 10 degrees in the tick */
     float maxTurn;    /* the largest turn of a model or bone in the tick, degrees */
-    uint32_t shifted; /* shadow volumes whose topology changed, moved by the volume's shift */
+    uint32_t shifted; /* shadow volumes whose topology changed: S2 moved cur's by the volume's
+                         shift; since V3 those with a prism of one tick only */
     /* S6: VU draws drawn through the rigidly blended camera (matched and
      * not), and of the not-blended ones (unmatched, mismatched, jumped,
      * unkeyed) those re-based */
@@ -600,6 +622,11 @@ void rd__InterpShutdown(void);
 /* S2: a model matrix or bone turning further than this in a tick (3600
  * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's */
 #define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
+/* V3: in the alignment of two ticks' shadow prisms, a prism left unmatched
+ * costs as much as a pair whose top caps lie this far apart (rms, GS pixels)
+ * once the volume's shift is taken out; a pair further apart than sqrt(2)
+ * times this is cheaper as two unmatched prisms */
+#define RD_INTERP_PRISM_GAP 32.0
 
 /* fx_sprite_ps's DrawCB.mode[0] flags (FXF_* in port/shaders/fx_sprite.hlsl) */
 enum {

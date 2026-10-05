@@ -20,6 +20,11 @@
  *   particles a batch's particles blend; one moved further than four sizes
  *             keeps the current position
  *   shadow    a shadow volume's vertices blend; a triangle count change snaps
+ *   prisms    (V3) Shadow.c's prisms regrouped by their tags: two ticks of
+ *             equal counts whose faces changed sides blend prism by prism,
+ *             every prism closed (its faces' signed areas net to 0) and half
+ *             way; a prism of one tick only is drawn on the nearer tick's
+ *             side of t = 0.5; alpha 1 is the current volume byte for byte
  *   fade      the fade sprite's level blends (the post sprite is keyed)
  *   text      (R7d) a string's glyph quads keyed as port/ui/font.c keys them
  *             (the string's hash): moved and faded, every glyph blends half
@@ -542,6 +547,200 @@ static void testVu(void)
               (v[0].x - OX) / 16, v[0].z);
     }
     rd_DestroyVuMesh(mesh);
+}
+
+/* ------------------------------------------- shadow prisms (package V3) */
+
+/* Shadow.c's volume for one caster triangle: emitVolumeStrip's ten
+ * positions over the top cap (whole pixels from x0, y0) and the cap moved
+ * by d, each triangle signed by the GS rule (faceZ x the running sign < 0:
+ * RGBAQ 0x04), written as rd_ShadowTris takes it */
+static const int kTestStrip[10] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3};
+
+static double faceZOf(const double (*p)[2], int a, int b, int c)
+{
+    return (p[a][0] - p[b][0]) * (p[c][1] - p[b][1]) - (p[c][0] - p[b][0]) * (p[a][1] - p[b][1]);
+}
+
+static int emitPrism(const int (*top)[2], const int *d, float sgn, uint32_t z, RdScreenVtx *v,
+                     int8_t *sign)
+{
+    double p[6][2];
+    for (int k = 0; k < 3; k++) {
+        p[k][0] = top[k][0];
+        p[k][1] = top[k][1];
+        p[k + 3][0] = top[k][0] + d[0];
+        p[k + 3][1] = top[k][1] + d[1];
+    }
+    double fz[10];
+    int plus = 0;
+    for (int i = 0; i < 10; i++, sgn = -sgn) {
+        static const int abc[10][3] = {{0},       {0}, {0, 1, 3}, {0},       {3, 4, 5},
+                                       {4, 5, 1}, {0}, {1, 2, 0}, {2, 0, 5}, {0}};
+        fz[i] = i < 2 ? 1.0
+                      : (i == 3 || i == 6 || i == 9 ? -fz[i - 1]
+                                                    : faceZOf(p, abc[i][0], abc[i][1], abc[i][2]));
+        if (i < 2) {
+            continue;
+        }
+        sign[i - 2] = fz[i] * sgn < 0.0 ? 1 : -1;
+        plus += sign[i - 2] > 0;
+        for (int k = 0; k < 3; k++) {
+            RdScreenVtx *o = &v[(i - 2) * 3 + k];
+            const int q = kTestStrip[i - 2 + k];
+            memset(o, 0, sizeof(*o));
+            o->x = OX + (int32_t)p[q][0] * 16;
+            o->y = OY + (int32_t)p[q][1] * 16;
+            o->z = z + (q >= 3 ? 40u : 0u);
+            o->q = 1.0f;
+        }
+    }
+    return plus;
+}
+
+/* a volume of the prisms listed (top-left corners x, extrusions d; the
+ * strip sign is the caster triangle's, alternating with x / 50 as along a
+ * caster strip); returns the increments */
+static int recordPrisms(const int *xs, const int (*d)[2], int n, int dy, RdKey key)
+{
+    RdScreenVtx v[6 * 24];
+    int8_t sign[6 * 8];
+    int inc = 0;
+    for (int i = 0; i < n; i++) {
+        const int top[3][2] = {{xs[i], 20 + dy}, {xs[i] + 30, 20 + dy}, {xs[i], 50 + dy}};
+        const float sgn = (xs[i] / 50) & 1 ? -1.0f : 1.0f;
+        inc += emitPrism(top, d[i], sgn, 1000u, &v[i * 24], &sign[i * 8]);
+    }
+    rd_SelectList(3);
+    rd_ShadowTris(v, sign, (uint32_t)n * 8, key);
+    return inc;
+}
+
+/* checks the volume of key k in f: every prism (eight triangles by tag)
+ * closed, its signed areas summing to 0, and returns how many there are */
+static int closedPrisms(const RdFrame *f, RdKey k, int *closed)
+{
+    const RdCmd *c = findKey(f, 3, k, 0);
+    *closed = 0;
+    if (!c || c->b[0] != RD_SHADOW_TRIS) {
+        return -1;
+    }
+    const uint32_t n = (c->u[0] + c->u[3]) / 3;
+    const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + c->u[1]);
+    int64_t sum[8] = {0};
+    for (uint32_t t = 0; t < n; t++) {
+        const RdScreenVtx *a = &v[t * 3];
+        const uint32_t tag = rd__ShadowTag(a);
+        if (tag == 0 || tag > n || (tag - 1) / 8 >= 8) {
+            return -1;
+        }
+        int64_t w = ((int64_t)a[1].x - a[0].x) * ((int64_t)a[2].y - a[0].y) -
+                    ((int64_t)a[1].y - a[0].y) * ((int64_t)a[2].x - a[0].x);
+        w = w < 0 ? -w : w;
+        sum[(tag - 1) / 8] += t * 3 < c->u[0] ? w : -w;
+    }
+    for (uint32_t p = 0; p < n / 8; p++) {
+        *closed += sum[p] == 0;
+    }
+    return (int)(n / 8);
+}
+
+static void prismFrame(const int *xs, const int (*d)[2], int n, int dy, int *inc)
+{
+    rd_BeginFrame();
+    frameHead();
+    *inc = recordPrisms(xs, d, n, dy, RD_KEY(&kObjE, 9, 0));
+    rd_EndFrame(0);
+}
+
+static void testPrisms(void)
+{
+    const RdKey key = RD_KEY(&kObjE, 9, 0);
+    /* (1) the same two prisms, moved 8 pixels down, with extrusions turned
+     * so that side faces change sides in both: the counts stay 8 and 8 but
+     * the triangles sorted into increments no longer pair up */
+    static const int xs[2] = {10, 60};
+    static const int dPrev[2][2] = {{-30, -30}, {-30, -30}}, dCur[2][2] = {{-30, 10}, {-30, 10}};
+    int incP, incC;
+    prismFrame(xs, dPrev, 2, 0, &incP);
+    prismFrame(xs, dCur, 2, 8, &incC);
+    const RdFrame *pv = rd__PrevFrame(), *cu = rd__LastFrame();
+    const RdCmd *pc = findKey(pv, 3, key, 0), *cc = findKey(cu, 3, key, 0);
+    int differ = 0;
+    if (pc && cc) {
+        const RdScreenVtx *a = (const RdScreenVtx *)(const void *)(pv->payload + pc->u[1]);
+        const RdScreenVtx *b = (const RdScreenVtx *)(const void *)(cu->payload + cc->u[1]);
+        for (uint32_t i = 0; i < pc->u[0] && i < cc->u[0]; i += 3) {
+            differ |= rd__ShadowTag(&a[i]) != rd__ShadowTag(&b[i]);
+        }
+    }
+    CHECK(incP == incC && differ,
+          "precondition: equal counts (%d, %d), the increments of different triangles", incP, incC);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdFrame *f = built(0.5f);
+    int closed = 0;
+    int np = closedPrisms(f, key, &closed);
+    CHECK(st->lerped >= 1 && np == 2 && closed == 2,
+          "equal counts: 2 prisms, %d of %d closed (the faces' signed areas net to 0)", closed, np);
+    const RdCmd *hc = findKey(f, 3, key, 0);
+    if (hc) {
+        /* every vertex half way: the top caps at y 20, 50 then 28, 58 (24,
+         * 54), the bottom caps at -10, 20 then 38, 68 (14, 44) */
+        const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + hc->u[1]);
+        int ok = 1;
+        for (uint32_t i = 0; i < hc->u[0] + hc->u[3]; i++) {
+            const int y = (v[i].y - OY) / 16;
+            ok &= (v[i].y - OY) % 16 == 0 && (y == 24 || y == 54 || y == 14 || y == 44);
+        }
+        CHECK(ok, "the prisms' vertices half way");
+    }
+    /* (2) a prism comes in cur (a triangle turned to the light): the pairs
+     * blend, the new one is drawn from t = 0.5 (moved back by half the
+     * volume's shift), not before */
+    static const int xs3[3] = {10, 60, 110};
+    static const int dSame[3][2] = {{10, 30}, {10, 30}, {10, 30}};
+    static const int xs2[2] = {10, 110};
+    prismFrame(xs2, dSame, 2, 0, &incP);
+    prismFrame(xs3, dSame, 3, 8, &incC);
+    build(0.25f, 1.0f, 1);
+    f = built(0.25f);
+    np = closedPrisms(f, key, &closed);
+    CHECK(np == 2 && closed == 2, "a prism of cur only: at 0.25, %d prisms (2), %d closed", np,
+          closed);
+    f = built(0.75f);
+    np = closedPrisms(f, key, &closed);
+    CHECK(np == 3 && closed == 3, "a prism of cur only: at 0.75, %d prisms (3), %d closed", np,
+          closed);
+    /* (3) and one that goes: drawn until t = 0.5 */
+    prismFrame(xs3, dSame, 3, 0, &incP);
+    prismFrame(xs2, dSame, 2, 8, &incC);
+    f = built(0.25f);
+    np = closedPrisms(f, key, &closed);
+    CHECK(np == 3 && closed == 3, "a prism of prev only: at 0.25, %d prisms (3), %d closed", np,
+          closed);
+    hc = findKey(f, 3, key, 0);
+    if (hc) {
+        /* the pairs at 0.25 of the 8 pixels (2), the lone prism moved with
+         * the volume's shift as well */
+        const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + hc->u[1]);
+        int ok = 1;
+        for (uint32_t i = 0; i < hc->u[0] + hc->u[3]; i++) {
+            ok &= (v[i].y - OY) % 16 == 0 && ((v[i].y - OY) / 16 - 2) % 10 == 0;
+        }
+        CHECK(ok, "every vertex a quarter of the way");
+    }
+    f = built(0.75f);
+    np = closedPrisms(f, key, &closed);
+    CHECK(np == 2 && closed == 2, "a prism of prev only: at 0.75, %d prisms (2), %d closed", np,
+          closed);
+    /* alpha 1 is cur's volume byte for byte */
+    f = built(1.0f);
+    hc = findKey(f, 3, key, 0);
+    cc = findKey(rd__LastFrame(), 3, key, 0);
+    CHECK(hc && cc && hc->u[0] == cc->u[0] && hc->u[3] == cc->u[3] &&
+              memcmp(f->payload + hc->u[1], rd__LastFrame()->payload + cc->u[1],
+                     (cc->u[0] + cc->u[3]) * sizeof(RdScreenVtx)) == 0,
+          "alpha 1: the current volume");
 }
 
 /* -------------------------------------------------- fade and feedback */
@@ -1232,7 +1431,8 @@ static void s6ProjectF(const float (*m)[4], const double x[3], double out[2])
 static const char kObjS6;
 
 static const double kS6PointA[3] = {300.0, 0.0, 0.0}; /* in A's model space (W = I) */
-static const double kS6PointB[3] = {0.0, 0.0, 0.0};   /* B's origin: W = (-200, 0, 150) */
+
+static const double kS6PointB[3] = {0.0, 0.0, 0.0}; /* B's origin: W = (-200, 0, 150) */
 
 /* a prelit static mesh with model to world w through the camera v */
 static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
@@ -1511,6 +1711,7 @@ static void runCpu(void)
     testSpriteSnaps();
     testFrameSnaps();
     testVu();
+    testPrisms();
     testFade();
     testFeedback();
     testText();

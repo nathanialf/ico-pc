@@ -433,6 +433,18 @@ static int sceneClass(int id)
            id == RD_TARGET_AURA_WORK || id == RD_TARGET_DATE_SNAPSHOT;
 }
 
+/* Package V3: Shadow.c's blur levels (SHADOW0..2) keep the PS2 sizes at
+ * every scale.  The shadow's blur is not a GS distance there but the levels'
+ * resolution itself (each level a bilinear half of the one before, 256, 128
+ * and 64 texels over the screen, composited back with bilinear
+ * magnification), so levels at the work scale halved the penumbra: at 4x
+ * the softest level needed a further Gaussian of about 4 GS pixels to match
+ * the Original preset's (RENDER_API.md, package V3). */
+static int shadowLevel(int id)
+{
+    return id == RD_TARGET_SHADOW0 || id == RD_TARGET_SHADOW1 || id == RD_TARGET_SHADOW2;
+}
+
 static uint32_t scaled(uint32_t n, float k)
 {
     uint32_t v = (uint32_t)((float)n * k + 0.5f);
@@ -454,7 +466,7 @@ void rd__TargetScaleOf(RdTargetRec *t, int named)
         if (named == RD_TARGET_DISPLAY && g_rd.fullHeight) {
             sy *= 2.0f; /* the full-height scene: no vertical halving */
         }
-    } else if (named >= 0 && g_rd.workScale > 1.0f) {
+    } else if (named >= 0 && g_rd.workScale > 1.0f && !shadowLevel(named)) {
         sx = sy = g_rd.workScale;
     }
     t->sx = sx;

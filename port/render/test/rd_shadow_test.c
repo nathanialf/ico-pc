@@ -11,7 +11,9 @@
  *   e  shadow_Reset, shadow_RenderVolume and shadow_Draw record, in list 3,
  *      the register writes of their packets as rd state, the reset and the
  *      resolve, and the volume's eight triangles with the signs of the RGBAQ
- *      the packet carries (compared with the packet words Shadow.c wrote).
+ *      the packet carries (compared with the packet words Shadow.c wrote),
+ *      each vertex tagged with its triangle's place (V3); at a work scale
+ *      of 2 the blur levels keep 256, 128 and 64 texels (V3).
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   a  the resolved count against the wrapped colour sum the GS makes (4 n
  *      mod 256, A = 0x80 where non-zero), exact, for net counts 0..127,
@@ -31,7 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "rd_internal.h"
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
@@ -60,14 +61,23 @@ static int failures;
 
 /* ------------------------------------------------- what the files import */
 int ScreenWidth = 512, ScreenHeight = 512;
+
 float center_X = 2048.0f, center_Y = 2048.0f;
+
 int screenOffsetX, screenOffsetY;
+
 int fbKeep;
+
 void *ios_partition_common;
+
 void *dmaVif;
+
 char *matrixptr;
+
 int debug_font_flag;
+
 StageSetting GlobalStageSetting;
+
 PadState pad[16];
 
 static unsigned char s_heap[8u << 20] __attribute__((aligned(16)));
@@ -201,12 +211,19 @@ int ico_arena_contains(const void *p, __SIZE_TYPE__ n)
 #define H 512
 
 static const uint8_t kClear[4] = {20, 40, 60, 0x80};
+
 static const uint8_t kRecv[4] = {200, 180, 160, 0x40};
-static const uint32_t kZr = 0x40000000u;       /* receiver */
-static const uint32_t kZf = 0x50000000u;       /* volume faces in front of it */
-static const uint32_t kZb = 0x30000000u;       /* and behind it (fail Z GEQUAL) */
+
+static const uint32_t kZr = 0x40000000u; /* receiver */
+
+static const uint32_t kZf = 0x50000000u; /* volume faces in front of it */
+
+static const uint32_t kZb = 0x30000000u; /* and behind it (fail Z GEQUAL) */
+
 static const int kShadowCol[3] = {64, 48, 32}; /* GlobalStageSetting.shadowColR/G/B */
-static const int kDepth = 0x70;                /* shadowDepth */
+
+static const int kDepth = 0x70; /* shadowDepth */
+
 static const int kBlend[4] = {0, 0x80, 0x60, 0x40};
 
 static RdScreenVtx sv(int px, int py, uint32_t z, const uint8_t *rgba)
@@ -623,12 +640,15 @@ static void checkRecording(void)
             uint32_t *at = psign[t] > 0 ? &a : &b;
             inc += psign[t] > 0;
             for (int k = 0; k < 3; k++) {
-                bad += *at + k < c->u[0] + c->u[3] ? !sameXyz(&v[*at + k], &ptri[t * 3 + k]) : 1;
+                bad += *at + k < c->u[0] + c->u[3] ? !sameXyz(&v[*at + k], &ptri[t * 3 + k]) ||
+                                                         rd__ShadowTag(&v[*at + k]) != t + 1
+                                                   : 1;
             }
             *at += 3;
         }
         CHECK(bad == 0 && inc * 3 == c->u[0],
-              "volume: the triangles and signs are the packet's kicks (%u mismatched vertices)",
+              "volume: the triangles and signs are the packet's kicks, each vertex tagged with "
+              "its triangle's place in the packet (V3) (%u mismatched vertices)",
               bad);
         printf("  volume strip: %u triangles count +1 (RGBAQ 0x04), %u count -1 (0xFC)\n", inc,
                pn - inc);
@@ -903,6 +923,32 @@ static void checkPipelines(void)
     printf("  pipelines: %u created, %u reachable\n", rd__PipelineCount(), n);
 }
 
+/* V3: at a work scale of 2 (Enhanced, 896 lines and up) the blur levels
+ * keep the PS2 sizes, whose texels are the shadow's blur; WORK0 scales */
+static void checkLevelScale(void)
+{
+    const float keep = g_rd.workScale;
+    g_rd.workScale = 2.0f;
+
+    static const struct {
+        int id;
+        uint32_t w;
+    } k[4] = {{RD_TARGET_SHADOW0, 256},
+              {RD_TARGET_SHADOW1, 128},
+              {RD_TARGET_SHADOW2, 64},
+              {RD_TARGET_WORK0, 512}};
+
+    for (int i = 0; i < 4; i++) {
+        RdTargetRec t;
+        memset(&t, 0, sizeof(t));
+        t.w = t.h = k[i].id == RD_TARGET_WORK0 ? 256 : k[i].w;
+        rd__TargetScaleOf(&t, k[i].id);
+        CHECK(t.tw == k[i].w, "work scale 2: target %d is %u texels wide (%u)", k[i].id, t.tw,
+              k[i].w);
+    }
+    g_rd.workScale = keep;
+}
+
 int main(void)
 {
     static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
@@ -917,6 +963,7 @@ int main(void)
     dl_Init();
     recordFrame(VOL_MODEL, kAll);
     checkRecording();
+    checkLevelScale();
     rd_Shutdown();
     if (failures) {
         printf("rd_shadow_test: %d failures\n", failures);

@@ -31,7 +31,8 @@
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
- *   RDC_SHADOW_STRIP        XY and Z of each vertex
+ *   RDC_SHADOW_STRIP        XY and Z of each vertex; since V3 Shadow.c's
+ *                           volumes prism by prism (blendPrisms)
  * Matrices blend element by element, except (package S2) a normal
  * program's model matrices and a skinned draw's bones, which blend as a
  * slerped rotation and a lerped stretch about a pivot (rotateModel,
@@ -47,7 +48,7 @@
  * A keyed draw snaps (is cur's) when prev has no match, when the payload's
  * shape differs (mesh, program, batch range, bone, vertex or particle
  * count, prim type; since S2 neither a mesh's code and clip mode nor a
- * shadow volume's topology, which shiftShadow moves instead), or when it
+ * shadow volume's topology, which blendPrisms (V3) or shiftShadow handles), or when it
  * jumped: a model's origin in the world (the model to screen translation
  * through the inverse of the frame's world to screen; a skinned draw's first
  * bone) moved more than RD_INTERP_JUMP_WORLD in the tick, or a screen prim's
@@ -152,9 +153,11 @@ static bool copyFrame(const RdFrame *cur)
 static void presentReset(void);
 static void scratchReset(void);
 static void flapFree(void);
+static void prismFree(void);
 
 void rd__InterpShutdown(void)
 {
+    prismFree();
     flapFree();
     outFree();
     presentReset();
@@ -921,7 +924,8 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
     return true;
 }
 
-static int s_rebased;    /* S6: VU draws re-based on the blended camera, this frame */
+static int s_rebased; /* S6: VU draws re-based on the blended camera, this frame */
+
 static int s_rebasedCur; /* of them, draws that are cur's */
 
 /* A draw that is cur's (unmatched, mismatched, jumped, unkeyed): cur's
@@ -1454,10 +1458,504 @@ static int shiftShadow(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     return R_LERP;
 }
 
-static int blendShadow(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
+/* V3: Shadow.c's volumes blended prism by prism.  A volume is one closed
+ * prism per caster triangle (emitVolumeStrip: ten strip positions over six
+ * vertices, eight triangles), each triangle counted +1 or -1 by its facing.
+ * rd_ShadowTris sorts the triangles into increments and decrements, so two
+ * ticks' volumes of equal counts did not pair triangle for triangle once a
+ * face had changed sides (the lerp then joined faces of different prisms
+ * and the count no longer netted to 0 outside the shadow), and volumes of
+ * different counts (prisms come and go as triangles turn from the light)
+ * took cur's shape moved by the median shift, a tick ahead of the caster.
+ * Here the tags (rd_internal.h, RD_SHADOW_PRISM_TRIS) regroup each tick's
+ * prisms; the two sequences, which keep the caster's triangle order, are
+ * aligned by dynamic programming (a pair costs the mean square distance of
+ * the top caps, the caster triangle, after the volume's median shift, and
+ * needs the same strip sign; RD_INTERP_PRISM_GAP prices an unmatched
+ * prism); a pair is blended vertex by vertex and its eight triangles are
+ * given the signs of their blended facing, the rule emitVolumeStrip applies
+ * (plus where W s0 (-1)^i > 0, W the triangle's winding, i its strip
+ * position, s0 the strip's sign; the second triangle of each side quad
+ * takes the first's), so every blended prism is closed again.  The prisms
+ * of one tick only are those of the nearer tick (prev's below t = 0.5,
+ * cur's from it), moved by the volume's shift. */
+typedef struct ShPrism {
+    RdScreenVtx v[6]; /* emitVolumeStrip's vi[0..5]: the top cap 0..2, the bottom 3..5 */
+    int8_t plus[8];   /* the recorded signs of its triangles (1: increment) */
+    int8_t s0;        /* the strip sign (0: every triangle degenerate) */
+    int32_t match;    /* the other tick's prism, -1 */
+} ShPrism;
+
+/* emitVolumeStrip's order[0..9]: the vertex at each strip position */
+static const uint8_t kStripVtx[10] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3};
+
+static ShPrism *s_prism[2];
+
+static uint32_t s_prismCap[2];
+
+static const RdScreenVtx **s_byTag;
+
+static int8_t *s_tagSign;
+
+static uint32_t s_byTagCap, s_tagSignCap;
+
+static uint8_t *s_dpWay;
+
+static size_t s_dpCap;
+
+static double *s_dpRow;
+
+static uint32_t s_dpRowCap;
+
+static RdScreenVtx *s_prismOut;
+
+static int8_t *s_prismOutSign;
+
+static uint32_t s_prismOutCap, s_prismOutSignCap;
+
+static double *s_sel;
+
+static uint32_t s_selCap;
+
+static void prismFree(void)
+{
+    for (int k = 0; k < 2; k++) {
+        free(s_prism[k]);
+        s_prism[k] = NULL;
+        s_prismCap[k] = 0;
+    }
+    free(s_byTag);
+    free(s_tagSign);
+    free(s_dpWay);
+    free(s_dpRow);
+    free(s_prismOut);
+    free(s_prismOutSign);
+    free(s_sel);
+    s_sel = NULL;
+    s_selCap = 0;
+    s_byTag = NULL;
+    s_tagSign = NULL;
+    s_dpWay = NULL;
+    s_dpRow = NULL;
+    s_prismOut = NULL;
+    s_prismOutSign = NULL;
+    s_byTagCap = s_tagSignCap = s_dpRowCap = s_prismOutCap = s_prismOutSignCap = 0;
+    s_dpCap = 0;
+}
+
+static bool growTo(void **p, uint32_t *cap, uint32_t n, size_t size)
+{
+    if (n <= *cap) {
+        return true;
+    }
+    void *q = realloc(*p, (size_t)n * size);
+    if (!q) {
+        return false;
+    }
+    *p = q;
+    *cap = n;
+    return true;
+}
+
+static bool sameXyz(const RdScreenVtx *a, const RdScreenVtx *b)
+{
+    return a->x == b->x && a->y == b->y && a->z == b->z;
+}
+
+/* twice the signed area of the triangle a b c, in GS 12.4 units */
+static int64_t windingOf(const RdScreenVtx *a, const RdScreenVtx *b, const RdScreenVtx *c)
+{
+    return ((int64_t)b->x - a->x) * ((int64_t)c->y - a->y) -
+           ((int64_t)b->y - a->y) * ((int64_t)c->x - a->x);
+}
+
+/* the strip triangle that sets the sign of strip position i (2..9): the
+ * second triangle of a side quad (3, 6, 9) takes the first's */
+static int signSource(int i)
+{
+    return i == 3 || i == 6 || i == 9 ? i - 1 : i;
+}
+
+/* the signs of a prism's eight triangles from its vertices and s0 */
+static void prismSigns(const ShPrism *pr, int8_t *plus)
+{
+    for (int i = 2; i < 10; i++) {
+        const int s = signSource(i);
+        const int64_t w =
+            windingOf(&pr->v[kStripVtx[s - 2]], &pr->v[kStripVtx[s - 1]], &pr->v[kStripVtx[s]]);
+        plus[i - 2] = (int8_t)((s & 1 ? -w : w) * pr->s0 > 0);
+    }
+}
+
+/* the prisms of a tagged RD_SHADOW_TRIS draw (inc and n in triangles) into
+ * s_prism[k]; false when it is not Shadow.c's structure or is untagged */
+static bool prismsOf(const RdScreenVtx *v, uint32_t inc, uint32_t n, int k)
+{
+    if (n == 0 || n % RD_SHADOW_PRISM_TRIS != 0 ||
+        !growTo((void **)&s_byTag, &s_byTagCap, n, sizeof(*s_byTag)) ||
+        !growTo((void **)&s_tagSign, &s_tagSignCap, n, sizeof(*s_tagSign))) {
+        return false;
+    }
+    const uint32_t np = n / RD_SHADOW_PRISM_TRIS;
+    if (!growTo((void **)&s_prism[k], &s_prismCap[k], np, sizeof(ShPrism))) {
+        return false;
+    }
+    memset(s_byTag, 0, n * sizeof(*s_byTag));
+    for (uint32_t i = 0; i < n; i++) {
+        const uint32_t tag = rd__ShadowTag(&v[i * 3]);
+        if (tag == 0 || tag > n || s_byTag[tag - 1]) {
+            return false;
+        }
+        s_byTag[tag - 1] = &v[i * 3];
+        s_tagSign[tag - 1] = (int8_t)(i < inc);
+    }
+    for (uint32_t p = 0; p < np; p++) {
+        ShPrism *pr = &s_prism[k][p];
+        const RdScreenVtx *const *tri = &s_byTag[p * RD_SHADOW_PRISM_TRIS];
+        const RdScreenVtx *pos[10];
+        pos[0] = &tri[0][0];
+        pos[1] = &tri[0][1];
+        for (int j = 0; j < RD_SHADOW_PRISM_TRIS; j++) {
+            if (!sameXyz(&tri[j][0], pos[j]) || !sameXyz(&tri[j][1], pos[j + 1])) {
+                return false;
+            }
+            pos[j + 2] = &tri[j][2];
+            pr->plus[j] = s_tagSign[p * RD_SHADOW_PRISM_TRIS + j];
+        }
+        for (int i = 0; i < 10; i++) {
+            const RdScreenVtx *seen = &pr->v[kStripVtx[i]];
+            if ((i == 5 || i >= 7) && !sameXyz(seen, pos[i])) {
+                return false; /* positions 5, 7, 8, 9 repeat vertices 1, 0, 5, 3 */
+            }
+            pr->v[kStripVtx[i]] = *pos[i];
+        }
+        for (int i = 0; i < 6; i++) {
+            rd__SetShadowTag(&pr->v[i], 0);
+        }
+        /* s0 from the triangle of the largest area: plus = W s0 (-1)^i > 0 */
+        int64_t best = 0;
+        pr->s0 = 0;
+        for (int i = 2; i < 10; i++) {
+            if (signSource(i) != i) {
+                continue;
+            }
+            const int64_t w = windingOf(pos[i - 2], pos[i - 1], pos[i]);
+            const int64_t a = w < 0 ? -w : w;
+            if (a > best) {
+                best = a;
+                const int s = (w > 0 ? 1 : -1) * (i & 1 ? -1 : 1);
+                pr->s0 = (int8_t)(pr->plus[i - 2] ? s : -s);
+            }
+        }
+        pr->match = -1;
+    }
+    return true;
+}
+
+/* the cost of pairing prev's prism a with cur's b (shift: cur minus prev),
+ * -1 when they cannot pair */
+static double prismCost(const ShPrism *a, const ShPrism *b, const double *shift)
+{
+    if (a->s0 != b->s0) {
+        return -1.0;
+    }
+    const double lim = RD_INTERP_JUMP_SCREEN * 16.0;
+    double sum = 0.0;
+    for (int i = 0; i < 6; i++) {
+        const double dx = (double)b->v[i].x - a->v[i].x, dy = (double)b->v[i].y - a->v[i].y;
+        if (fabs(dx) > lim || fabs(dy) > lim) {
+            return -1.0;
+        }
+        if (i < 3) {
+            sum += (dx - shift[0]) * (dx - shift[0]) + (dy - shift[1]) * (dy - shift[1]);
+        }
+    }
+    return sum / (3.0 * 256.0); /* square GS pixels */
+}
+
+/* the median of field k (0 x, 1 y, 2 z) of the six vertices of s_prism[s]'s
+ * n prisms, by selection (the volume's shift; a sort of every triangle's
+ * vertices cost a millisecond a present) */
+static bool prismMedian(int s, uint32_t n, int k, double *out)
+{
+    const uint32_t m = n * 6;
+    if (m == 0 || !growTo((void **)&s_sel, &s_selCap, m, sizeof(double))) {
+        return false;
+    }
+    for (uint32_t p = 0; p < n; p++) {
+        for (int i = 0; i < 6; i++) {
+            const RdScreenVtx *v = &s_prism[s][p].v[i];
+            s_sel[p * 6 + (uint32_t)i] = k == 0 ? v->x : (k == 1 ? v->y : (double)v->z);
+        }
+    }
+    /* Hoare's selection of the element of rank m / 2 */
+    uint32_t a = 0, b = m - 1;
+    const uint32_t r = m / 2;
+    while (a < b) {
+        const double pivot = s_sel[a + (b - a) / 2];
+        uint32_t i = a, j = b;
+        while (i <= j) {
+            while (s_sel[i] < pivot) {
+                i++;
+            }
+            while (s_sel[j] > pivot) {
+                j--;
+            }
+            if (i <= j) {
+                const double tmp = s_sel[i];
+                s_sel[i] = s_sel[j];
+                s_sel[j] = tmp;
+                i++;
+                if (j == 0) {
+                    break;
+                }
+                j--;
+            }
+        }
+        if (r <= j) {
+            b = j;
+        } else if (r >= i) {
+            a = i;
+        } else {
+            break;
+        }
+    }
+    *out = s_sel[r];
+    return true;
+}
+
+/* s_prism[0] (np, prev) against s_prism[1] (nc, cur): sets .match; false
+ * when the table would be too large.  The path is searched in a band about
+ * the diagonal: the difference of the counts and RD_INTERP_PRISM_BAND more
+ * (a prism count changes by a few a tick; the full table cost 1.8 ms a
+ * present in stage 5's six volumes). */
+#define RD_INTERP_PRISM_BAND 16
+
+static bool alignPrisms(uint32_t np, uint32_t nc, const double *shift)
+{
+    const size_t w = (size_t)nc + 1, cells = ((size_t)np + 1) * w;
+    if (cells > (size_t)1 << 22) {
+        return false;
+    }
+    if (cells > s_dpCap) {
+        uint8_t *q = realloc(s_dpWay, cells);
+        if (!q) {
+            return false;
+        }
+        s_dpWay = q;
+        s_dpCap = cells;
+    }
+    if (!growTo((void **)&s_dpRow, &s_dpRowCap, (uint32_t)(2 * w), sizeof(double))) {
+        return false;
+    }
+    const double gap = RD_INTERP_PRISM_GAP * RD_INTERP_PRISM_GAP;
+    /* j - i within [lo, hi] */
+    const int64_t d = (int64_t)nc - (int64_t)np;
+    const int64_t lo = (d < 0 ? d : 0) - RD_INTERP_PRISM_BAND;
+    const int64_t hi = (d > 0 ? d : 0) + RD_INTERP_PRISM_BAND;
+    double *row = s_dpRow, *last = s_dpRow + w;
+
+    enum { WAY_PAIR = 0, WAY_PREV, WAY_CUR }; /* WAY_PREV: prev's prism alone */
+
+    for (uint32_t j = 0; j <= nc; j++) {
+        last[j] = j <= hi ? gap * j : HUGE_VAL;
+        s_dpWay[j] = WAY_CUR;
+    }
+    for (uint32_t i = 1; i <= np; i++) {
+        const int64_t j0 = (int64_t)i + lo < 1 ? 1 : (int64_t)i + lo;
+        const int64_t j1 = (int64_t)i + hi > (int64_t)nc ? (int64_t)nc : (int64_t)i + hi;
+        for (uint32_t j = 0; j <= nc; j++) {
+            row[j] = HUGE_VAL;
+        }
+        if (-(int64_t)i >= lo) {
+            row[0] = gap * i;
+        }
+        s_dpWay[i * w] = WAY_PREV;
+        for (int64_t jj = j0; jj <= j1; jj++) {
+            const uint32_t j = (uint32_t)jj;
+            double best = last[j] + gap;
+            uint8_t way = WAY_PREV;
+            if (row[j - 1] + gap < best) {
+                best = row[j - 1] + gap;
+                way = WAY_CUR;
+            }
+            const double c = prismCost(&s_prism[0][i - 1], &s_prism[1][j - 1], shift);
+            if (c >= 0.0 && last[j - 1] + c <= best) {
+                best = last[j - 1] + c;
+                way = WAY_PAIR;
+            }
+            row[j] = best;
+            s_dpWay[i * w + j] = way;
+        }
+        double *tmp = last;
+        last = row;
+        row = tmp;
+    }
+    uint32_t i = np, j = nc;
+    while (i > 0 || j > 0) {
+        const uint8_t way = i == 0 ? WAY_CUR : (j == 0 ? WAY_PREV : s_dpWay[i * w + j]);
+        if (way == WAY_PAIR) {
+            s_prism[0][i - 1].match = (int32_t)(j - 1);
+            s_prism[1][j - 1].match = (int32_t)(i - 1);
+            i--;
+            j--;
+        } else if (way == WAY_PREV) {
+            i--;
+        } else {
+            j--;
+        }
+    }
+    return true;
+}
+
+/* space for n vertices in s_out's payload: cur's place when it fits, else
+ * appended (the command is pointed there) */
+static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
+{
+    const uint32_t had = cc->u[0] + cc->u[3];
+    if (n <= had) {
+        return (RdScreenVtx *)(void *)op;
+    }
+    const uint32_t off = (s_out.payloadSize + 15u) & ~15u;
+    const uint64_t end = (uint64_t)off + (uint64_t)n * sizeof(RdScreenVtx);
+    if (end > UINT32_MAX) {
+        return NULL;
+    }
+    if (end > s_out.payloadCap) {
+        const uint64_t cap = end + end / 2;
+        uint8_t *p = realloc(s_out.payload, (size_t)(cap > UINT32_MAX ? end : cap));
+        if (!p) {
+            return NULL;
+        }
+        s_out.payload = p;
+        s_out.payloadCap = (uint32_t)(cap > UINT32_MAX ? end : cap);
+    }
+    s_out.payloadSize = (uint32_t)end;
+    cc->u[1] = off;
+    return (RdScreenVtx *)(void *)(s_out.payload + off);
+}
+
+/* R_LERP, R_JUMP, or -1 when the volumes are not tagged prisms (the caller
+ * then blends as before V3) */
+static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd *cc, float t)
+{
+    const uint32_t nvp = pc->u[0] + pc->u[3], nvc = cc->u[0] + cc->u[3];
+    const RdScreenVtx *p = payloadAt(prev, pc->u[1], nvp * (uint32_t)sizeof(RdScreenVtx));
+    const RdScreenVtx *c = (const RdScreenVtx *)(const void *)op;
+    if (!p || nvp % 3 != 0 || nvc % 3 != 0 || !prismsOf(p, pc->u[0] / 3, nvp / 3, 0) ||
+        !prismsOf(c, cc->u[0] / 3, nvc / 3, 1)) {
+        return -1;
+    }
+    double mp[3], mc[3];
+    const uint32_t np = nvp / 3 / RD_SHADOW_PRISM_TRIS, nc = nvc / 3 / RD_SHADOW_PRISM_TRIS;
+    for (int k = 0; k < 3; k++) {
+        if (!prismMedian(0, np, k, &mp[k]) || !prismMedian(1, nc, k, &mc[k])) {
+            return -1;
+        }
+    }
+    const double lim = RD_INTERP_JUMP_SCREEN * 16.0;
+    if (fabs(mp[0] - mc[0]) > lim || fabs(mp[1] - mc[1]) > lim) {
+        return R_JUMP;
+    }
+    const double shift[2] = {mc[0] - mp[0], mc[1] - mp[1]};
+    if (!alignPrisms(np, nc, shift)) {
+        return -1;
+    }
+    /* the prisms drawn: every pair, and the nearer tick's unmatched ones */
+    const int prevSide = t < 0.5f;
+    uint32_t out = 0, alone = 0;
+    for (uint32_t j = 0; j < nc; j++) {
+        out += s_prism[1][j].match >= 0 || !prevSide;
+        alone += s_prism[1][j].match < 0;
+    }
+    for (uint32_t i = 0; i < np; i++) {
+        out += s_prism[0][i].match < 0 && prevSide;
+        alone += s_prism[0][i].match < 0;
+    }
+    const uint32_t nv = out * RD_SHADOW_PRISM_TRIS * 3;
+    if (!growTo((void **)&s_prismOut, &s_prismOutCap, nv, sizeof(RdScreenVtx)) ||
+        !growTo((void **)&s_prismOutSign, &s_prismOutSignCap, out * RD_SHADOW_PRISM_TRIS, 1)) {
+        return -1;
+    }
+    /* the moves of a prism of one tick only: to its place at t */
+    const double w = prevSide ? (double)t : (double)t - 1.0;
+    const int32_t dx = (int32_t)floor(w * (mc[0] - mp[0]) + 0.5);
+    const int32_t dy = (int32_t)floor(w * (mc[1] - mp[1]) + 0.5);
+    const double dz = floor(w * (mc[2] - mp[2]) + 0.5);
+    uint32_t inc = 0, o = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        for (uint32_t q = 0; q < (pass ? np : nc); q++) {
+            const ShPrism *src = &s_prism[pass ? 0 : 1][q];
+            if (pass == 1 && src->match >= 0) {
+                continue; /* drawn as cur's pair */
+            }
+            if (src->match < 0 && (pass == 1) != prevSide) {
+                continue; /* the farther tick's */
+            }
+            ShPrism b = *src;
+            int8_t plus[8];
+            memcpy(plus, src->plus, sizeof(plus));
+            if (src->match >= 0) {
+                const ShPrism *a = &s_prism[0][src->match];
+                bool moved = false;
+                for (int k = 0; k < 6; k++) {
+                    b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
+                    b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
+                    b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
+                    moved |= !sameXyz(&b.v[k], &src->v[k]);
+                }
+                if (moved && b.s0 != 0) {
+                    prismSigns(&b, plus);
+                }
+            } else {
+                for (int k = 0; k < 6; k++) {
+                    b.v[k].x += dx;
+                    b.v[k].y += dy;
+                    const double z = (double)b.v[k].z + dz;
+                    b.v[k].z = z < 0.0 ? 0u : (z > 4294967295.0 ? 0xFFFFFFFFu : (uint32_t)z);
+                }
+            }
+            for (int i = 2; i < 10; i++) {
+                const uint32_t n = o * RD_SHADOW_PRISM_TRIS + (uint32_t)i - 2;
+                RdScreenVtx *tri = &s_prismOut[(size_t)n * 3];
+                tri[0] = b.v[kStripVtx[i - 2]];
+                tri[1] = b.v[kStripVtx[i - 1]];
+                tri[2] = b.v[kStripVtx[i]];
+                for (int k = 0; k < 3; k++) {
+                    rd__SetShadowTag(&tri[k], n + 1);
+                }
+                s_prismOutSign[n] = plus[i - 2];
+                inc += plus[i - 2] != 0;
+            }
+            o++;
+        }
+    }
+    RdScreenVtx *dst = shadowOut(cc, op, nv);
+    if (!dst) {
+        return -1;
+    }
+    const uint32_t tris = out * RD_SHADOW_PRISM_TRIS;
+    uint32_t a = 0, d = inc;
+    for (uint32_t k = 0; k < tris; k++) {
+        const uint32_t at = s_prismOutSign[k] ? a++ : d++;
+        memcpy(&dst[(size_t)at * 3], &s_prismOut[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
+    }
+    cc->u[0] = inc * 3;
+    cc->u[3] = (tris - inc) * 3;
+    s_shifted = alone > 0;
+    return R_LERP;
+}
+
+static int blendShadow(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd *cc, float t)
 {
     if (pc->b[0] != cc->b[0]) {
         return mismatch(RD_MISMATCH_TOPOLOGY);
+    }
+    if (cc->b[0] == RD_SHADOW_TRIS && !rd__S2Legacy()) {
+        const int r = blendPrisms(op, prev, pc, cc, t); /* V3 */
+        if (r >= 0) {
+            return r;
+        }
     }
     if (pc->u[0] != cc->u[0] || pc->u[2] != cc->u[2] || pc->u[3] != cc->u[3]) {
         if (cc->b[0] == RD_SHADOW_TRIS && !rd__S2Legacy()) {
