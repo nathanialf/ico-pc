@@ -190,7 +190,13 @@ static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
 
     if (geo->clip != 0) {
         sceVu0ApplyMatrix(v, matrixptr + 0x100, geo->pos);
+#ifdef ICO_HOST
+        /* PC port: w is 0 for an origin on the camera plane (seen at
+           stage 7, Main tick 115 of a start_stage boot; DIVERGENCES.md F5) */
+        sceVu0ScaleVectorXYZ(v, v, ps2_div(1.0f, v[3]));
+#else
         sceVu0ScaleVectorXYZ(v, v, 1.0f / v[3]);
+#endif
         if (v[2] < 0.0f || v[0] < 0.0f || 4095.0f < v[0] || v[1] < 0.0f || 4095.0f < v[1]) {
             return 1;
         }

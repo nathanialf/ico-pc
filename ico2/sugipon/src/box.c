@@ -45,7 +45,9 @@ typedef struct BoxWork { /* field names derived */
     int mode;     /* 0x020, 0 still, 1 auto move, 2 falling, 3 to 5 the fall's phases, 6 aligning */
     float scaleX; /* 0x024, the layout's X scale */
     float scaleZ; /* 0x028, the layout's Z scale */
-    int colData;  /* 0x02C, the collision ReInitBoxGeo restores */
+    /* 0x02C, the collision ReInitBoxGeo restores: Sub15C.colData, a
+       pointer held as a word (an int on the EE truncated it on x64) */
+    ICO_WORD colData;
     int moveFrames; /* 0x030, the frames left of an auto move */
     char pad034[12];
     float vel[4];   /* 0x040, the move per frame */
@@ -87,6 +89,15 @@ typedef struct BoxWork { /* field names derived */
     char pad184[12];
     float moveDir[4];                  /* 0x190, the direction of the last push */
 } __attribute__((aligned(8))) BoxWork; /* derived name */
+
+#ifdef ICO_HOST
+
+/* colData holds Sub15C.colData across ReInitBoxGeo: it must keep the
+   pointer's width (DIVERGENCES.md D10) */
+_Static_assert(sizeof(((BoxWork *)0)->colData) == sizeof(((Sub15C *)0)->colData),
+               "BoxWork.colData is narrower than Sub15C.colData");
+
+#endif
 
 static void landingSE(GObj *self)
 {

@@ -121,6 +121,7 @@ under ee-gcc 2.9 (`tools/ee_identity.sh --all`).
 | `fumi/src/girl_brain_attract.c.inc` | EnemyBattleWork 0x230, 0x240 (`GirlSofaWork`); Sub15C 0 | wrote `clingReq`/`clingTarget`/`liftedObj`; read 4 bytes of `parent.obj` | `readyPosX..Z`, `readyDirX..Z`; `parent.obj` and its `kind` |
 | `fumi/ios/pad.c` | IosPadBuf 0..3 | `*(unsigned int *)b >> 12` over `pad0` | `termId >> 4` |
 | `fumi/ios/cdvd.c` | | `bgRunning` held the running request in an `int` | `ICO_WORD` |
+| `sugipon/src/box.c` `InitBoxGeo`, `ReInitBoxGeo` | BoxWork 0x2C | `colData`, an `int`, held `Sub15C.colData` (a pointer) and gave it back truncated (DIVERGENCES.md D10, X1) | `ICO_WORD`, width asserted on the host |
 
 Package W2: an index spelled as a byte offset over the element size
 (`q[0x500 / 4]`, `((float *)x)[0x10 / 4]`) was not seen: `view_index` and
