@@ -124,11 +124,22 @@ GS_FN int gs_blend_reg_ch(uint reg, int cs, int cd, int as, int ad, int fix, uin
 }
 
 // GS Z to reversed-Z depth: 1 - z * scale. scale is 1 / 2^24 for PSMZ24
-// values (0xFFFFFF, the game's far, becomes about 0), 1 / 2^32 for PSMZ32.
-// Exact for integers below 2^24 at scale 2^-24.
+// values (0xFFFFFF, the game's far, becomes about 0), 1 / 2^32 for PSMZ32
+// (every ZBUF the game writes; FrameCB g_z.x per target, R2c), 1 / 2^16
+// for PSMZ16. Computed as (zmax - z + 1) * scale with zmax the format's
+// largest Z, which is the same value but keeps the large Z values exact:
+// the UI's 0xFFFFFF9B and 0xFFFFFFFF stay apart under PSMZ32, where
+// 1 - (float)z * scale would round both to 0. Exact for every z at 2^-24
+// and 2^-16, and for z >= 2^32 - 2^24 at 2^-32 (smaller z round like any
+// float near 1). Z above zmax clamps to 0, the format's maximum.
 GS_FN float gs_z_to_depth(uint z, float scale)
 {
-    return clamp(1.0f - (float)z * scale, 0.0f, 1.0f);
+    uint zmax = scale < 1.0e-9f ? 0xFFFFFFFFu : (uint)(1.0f / scale) - 1u;
+    if (z > zmax) {
+        return 0.0f;
+    }
+    float d = (float)(zmax - z) * scale + scale;
+    return d > 1.0f ? 1.0f : d;
 }
 
 #endif

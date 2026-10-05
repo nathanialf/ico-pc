@@ -115,7 +115,7 @@ data; the `enemyParts.c` mode is fixed at 5.
 | COLCLAMP 0 (shadow count) | Stencil increment/decrement wrap on the scene depth-stencil; `RD_POST_SHADOW_RESOLVE` writes stencil ≠ 0 into SHADOW0, then the original 256/128/64 blur chain runs. |
 | FBA | Fragment shader forces alpha MSB; per material. |
 | PABE | Fragment shader: blend factor 0 when As MSB clear (dual-source output 1 = 0 and output 0 alpha path unchanged). |
-| Z | D32F (D32F_S8 on SCENE). The shaders map GS Z to depth `1 − gsZ / 2^24` (`gs_z_to_depth`), so a larger GS Z is a smaller depth: GS ZTST GEQUAL becomes `RHI_CMP_LEQUAL` and GREATER becomes `LESS`; a clear to GS Z `z` clears depth to `1 − z / 2^24` (`rd_pipeline.c`, `rd_replay.c`). GS Z integers below 2^24 are exact in float. (Wave 0 wrote this row as "reversed-Z with GEQUAL", which contradicts the shader mapping; the `rhi.h` comment on `depthCompare` has the same slip.) |
+| Z | D32F (D32F_S8 on SCENE). The shaders map GS Z to depth `1 − gsZ / 2^24` (`gs_z_to_depth`), so a larger GS Z is a smaller depth: GS ZTST GEQUAL becomes `RHI_CMP_LEQUAL` and GREATER becomes `LESS`; a clear to GS Z `z` clears depth to `1 − z / 2^24` (`rd_pipeline.c`, `rd_replay.c`). GS Z integers below 2^24 are exact in float. (Wave 0 wrote this row as "reversed-Z with GEQUAL", which contradicts the shader mapping; the `rhi.h` comment on `depthCompare` has the same slip.) Wave 2 (R2c): the scale is per depth target, 2^-32 for the game's PSMZ32 (section 12). |
 | ZTE = 0 | Treated as Z ALWAYS with write enabled (GS manual: prohibited setting; one site writes TEST 0). |
 | Texture function | Fragment shader integer path in Original: `min((tex·col) >> 7, 255)`; float in Enhanced. |
 | Vertex colour | Truncated as VU `ftoi` and clamped at 255. |
@@ -206,12 +206,15 @@ at 2× so blur radii stay a constant fraction of the screen.
   the border crop (2 px left/right; 2 lines NTSC, 8 lines PAL top/bottom).
 - Present: DISPLAY into a centred 4:3 rectangle, each line doubled
   vertically, bilinear horizontally. PAL pixel aspect is 4:3.
-- No dithering (DTHE never written; default to confirm).
+- No dithering: the flip's draw environment writes DTHE 0 every frame
+  (`sceGsSetDefDrawEnv` with a PSMCT32 frame, `sce/libgraph/graph006.c`),
+  and nothing else writes it (section 12).
 - Simulation and presentation at 25/30 Hz; each frame shown for two
   refreshes; interpolation off. Vsync on.
-- Field parity: `odd_even` drives `sceGsSetHalfOffset` (`GsBase.c:968`).
-  With frame step 2 the parity is believed constant; the preset fixes one
-  parity until confirmed (open item).
+- Field parity: the half-line XYOFFSET offset `sceGsSetHalfOffset` puts in
+  the flip's draw environment, reproduced from `GS_CSR.FIELD` as the PS2
+  read it (section 12): constant while the frame step stays 2, changing
+  parity after an odd-length stall.
 
 Enhanced settings, each independent: output resolution up to 4K, aspect
 4:3 to 16:9/16:10 (projection and cull frustum widen; gameplay screen
@@ -256,11 +259,9 @@ count with stencil.
 3. ZFog Z byte: which byte of the PSMZ32 depth the PSMT8H reinterpretation
    plus the PSMT4 block shuffles at `ZFog.c:236` selects. Derive with a
    small host test over the GS swizzle tables before writing the fog shader.
-4. Field parity: whether `odd_even` alternates with frame step 2; affects
-   the half-pixel offset in the Original preset.
-5. DTHE default after `sceGsResetGraph`: libgraph's default decides
-   whether the PS2 image was dithered. No emulator is available; derive from
-   the libgraph reimplementation in `sce/libgraph` and public documentation.
+4. Field parity: settled in wave 2 (R2c), section 12.
+5. DTHE: settled in wave 2 (R2c): the flip writes DTHE 0 every frame
+   (section 12), so the image was not dithered.
 6. Ad-factor blend modes (8 to 10): whether any shipped stage's BGA
    lightning record uses them; decides whether the DST_ALPHA mapping needs
    verification or stays untested.
@@ -336,7 +337,8 @@ through DMA, which the host does not interpret.
 one PRIM write, and draws all glyphs as one `rd_ScreenPrims` of sprites in
 UI space (`gif_HostScreenPrims`).
 
-**GsBase hooks** (marked `R2a`, for package R2c to take over): the
+**GsBase hooks** (marked `R2a`; taken over and replaced by package R2c,
+section 12; the paragraph below is the R2a state): the
 reduction as `rd_Post(RD_POST_REDUCTION)` at the end of list 12 of the frame
 `dl_Swap` closes, with the tint `gsb_Reduction` just computed (on the PS2
 that is the tint of the reduction of the frame that `dl_Swap` kicks); the
@@ -353,7 +355,7 @@ sleep-until with resynchronisation past 100 ms behind, presentation inside
 `rd_EndFrame` after each `gsb_UpdateGSSystem`. Escape or closing the window
 exits. ini key: none new; the headless build is the CMake option.
 
-Open questions for R2b and R2c:
+Open questions for R2b and R2c (R2c's, 3 to 6, are answered in section 12):
 
 1. R2b: the resolver receives TEX0 and the list; Texture.c allocates VRAM
    per list (`tex_AllocVramAuto`), so the TBP alone is ambiguous across
@@ -388,3 +390,360 @@ shaders, `GifPacket.c` reimplemented on `rd_*`, TIM2 decode to
 `rd_CreateTexture`, and the frame lifecycle in `gsb_UpdateGSSystem`. That
 is the title screen, menus and debug font without any mesh or VU shader
 work.
+
+## 11. Textures (wave 2, R2b)
+
+`port/render/rd_tex.h`, `rd_tex.c` (the cache) and `ico2/seki/src/Texture.c`
+under `ICO_RD` (the game side). The headless build keeps the original
+packet code; only the pointer-width fixes below apply to it.
+
+**Decode.** At load (`tex_initTextureSub`) and on any later cache miss,
+from the copies of the TIM2 images and CLUT that `Texture.c` already keeps
+per record (`TexData.lv[].addr`, `TexData.clut.addr`, each behind a 32-byte
+DMA header). No conversion at extraction time. Formats: PSMCT32, PSMCT24,
+PSMCT16, PSMCT16S, PSMT8, PSMT4 (low nibble first) from TIM2, and in the
+decoder also PSMT8H, PSMT4HL, PSMT4HH and the PSMZ formats (read as the
+colour format of the same size). CLUTs: PSMCT32 or PSMCT16 entries (24-bit
+TIM2 CLUTs, which the GS cannot use, as RGB24), read in CSM1 memory order
+(a 256-entry CLUT swaps entries 8-15 and 16-23 of every 32; a 16-entry CLUT
+is straight). 16-bit texels expand as `c << 3` (the GS does not replicate
+the high bits). The texture is padded with zero texels to 2^TW x 2^TH, the
+size the GS addresses, so STQ coordinates and REPEAT wrap where they do on
+the GS.
+
+**TEXA: applied at replay, not baked.** The cache creates PSMCT16/24 and
+16-bit-CLUT textures with `rd_CreateTextureSrc` (alpha byte = the A bit, or
+unused for RGB24) and `sprite_ps` applies the TEXA in force at replay
+(`gs_texa_alpha`). Reasons: TEXA leaks between lists like every other
+register (lists 1 and 2 default to 7F/81+AEM, the others to 80/80, and the
+2D layer writes 80/80+AEM in the middle of a list), so a baked texture
+would need one copy per mode and a guess at replay time about which one
+was in force; one copy per texture is also a third of the memory. The
+cache key keeps the TEXA mode (`RDTEX_TEXA_REPLAY` for these entries), and
+`rdtex_Store` with an `RdTexA` bakes a variant (`rdtex_ApplyTexa`, the same
+rule on the CPU) for a caller that needs one.
+
+**Cache.** Key (texture id, content generation, TEXA mode). `Texture.c`
+uses the table index as the id and `serial * 8 + TexExt.level` as the
+generation; the serial is new at every load into a slot, at a CLUT scroll
+that changed the CLUT (`tex_textureAnimation`, `tex_SetClutAnimation`;
+compared byte for byte before and after) and at a `tex_Tool` CLUT reset.
+A new generation of the same size and source format is re-expanded into
+the same `RdTex` (`rd_UpdateTexture`); otherwise a new texture is created
+and the old one retired, destroyed two `rdtex_FrameTick` calls (frames)
+later so no recorded frame loses a texture it draws. `tex_FreeTexture`
+drops the entry the same way.
+
+`rd_UpdateTexture` replaces the pixels for every draw of the frame being
+recorded. That is also the PS2's behaviour for the CLUT scroll:
+`tex_ResetVram` runs the animation just before `dl_Swap`, and the DMA chain
+the swap kicks reads the CLUT from memory at that point, so the frame
+being closed already shows the new CLUT.
+
+**Mips.** Original: one level per texture, `TexExt.level` (0 unless the
+texture tool changes it), decoded at its own size; `tex_UpdateMipMapLevel`
+only rewrites TEX1. MIPTBP1/2 are not written on rd. Enhanced hook:
+`rdtex_SetEnhancedMips(1)` keeps a CPU box-filtered chain per entry
+(`rdtex_BuildMipChain`) for the RHI to upload once it has mipmapped
+textures; not in the settings yet.
+
+**Binding.** `tex_TransTexture(id, pri)` keeps its PS2 logic (the per-list
+`transDone` and `lastTex` checks, the VRAM bump allocator as bookkeeping,
+the same return values). Where the PS2 chained the record's own TEX1/TEST
+packet by DMA reference (`tex_transRegister`), the host writes TEX1 and
+TEST into `tex_setTexReg`'s packet ahead of TEX0, so `GifPacket.c`'s
+decoder turns them into `rd_SamplerFilter` and `rd_TestGs` (ATE GREATER,
+AREF 96 or the TIM2 value, AFAIL FB_ONLY or the TIM2 value, Z GEQUAL) in
+packet order, only when the PS2 sent them (`lastTex != id`). TEX1's filter
+comes from the ICO block's SMPMAG/SMPMIN, or MMAG linear and MMIN
+`GlobalStageSetting.texSampleMode` without it; the ICO block has no wrap
+mode, so CLAMP stays with the materials and raw writes. The texture
+image transfers (BITBLTBUF, TRXPOS/REG/DIR, TEXFLUSH packet) are not
+written on rd.
+
+**Resolver** (R2a's open questions 1 and 2). `tex_Init` registers
+`texHostResolve` with `gif_HostSetTex0Resolver`. `tex_setTexReg` notes the
+TEX0 it wrote per list (TBP, TBW, PSM, TW, TH, CBP, CPSM; 16 notes per
+list, most recent first), since the bump allocator hands out TBPs per list.
+The resolver looks the TEX0 up in its list's notes, then in the other
+lists' (a list that never wrote TEX0 inherits another's), and returns the
+cached texture at its current generation. Anything else returns 0, so the
+decoder falls through to the named render targets (TBP 0, 0x800, 0x2800,
+0x2840, 0x2C00, 0x3000, 0x3F00) and then to R2a's checker placeholder; the
+resolver logs each such TBP once (up to 16). A texture placed by the bump
+allocator at 0x2800 (its start when no head TBP is locked) wins over the
+work buffer in the list that bound it, as the VRAM would until the work
+buffer is drawn.
+
+**UV scroll.** `t->uv` (uOfs/vOfs) stays a VU1 packet: the PS2 applies it
+in the mesh microprograms only, never to GIF sprites, and the 2D code that
+wants it reads it itself (`tex_printTexture`). `rd_UVOffset` offsets screen
+primitives at replay, so calling it from `tex_TransTexture` would scroll
+2D sprites the PS2 does not scroll. The mesh path (wave 3) takes the
+offset from the record into `RdMaterial.uvOffset`.
+
+**Render-target aliases in Texture.c.** `tex_TransTextureDefocus` (no
+caller in the game) draws a texture at 1/2^lv into a bump-allocated block
+and binds the block; on rd the block is an `rd_TempTarget`, noted as the
+texture of that TEX0. The other `tex_AllocVramAuto` callers (`puddle.c`,
+`pool.c`, `queen_barrier_disp.c`, `ZFog.c`) and the raw TEX0 writers of
+`staticBlur.c`, `darkVolume.c`, `puddle.c`, `pool.c` and
+`queen_barrier_disp.c` belong to the 3D waves; their TBPs reach the
+placeholder until those files are converted.
+
+**Host fixes in Texture.c** (both host builds): `tex_loadImage` takes the
+image address as an `ICO_WORD` (was `(unsigned int)addr`, `Texture.c:382`);
+the three `%s` prints of a record pass its name instead of `(int)rec`
+(`:1662`, `:1873`, `:1878`); `tex_convertClutCSM2ToCSM1` (TIM2 ClutType bit
+7: CLUT stored in index order) rearranges by the CLUT's own entry size and
+count, where the PS2 code moves 256 words whatever the CLUT holds (right
+only for 256 32-bit entries; past the end of the file image otherwise);
+`tex_convertImage` (the `sceGsExecLoadImage`/`StoreImage` round trip,
+unreachable: `tex_makeCopyImage` is only called with convert 0) copies the
+image unconverted and logs once. `Tim2Picture` and `Tim2Mipmap` are frozen
+overlay structs in `ico2/seki/include/Tim2.h` (`config/struct_classes.txt`,
+`port/test/layout_asserts.c`).
+
+Test: `rd_tex` (`port/render/test/rd_tex_test.c`).
+
+## 12. Frame lifecycle, camera and post passes (wave 2, R2c)
+
+`ico2/seki/src/GsBase.c` under `ICO_RD` (the window build; the headless
+build compiles the original code), `port/render/rd_frame.c` (new),
+`rd_post.c`, `rd_present.c`, small hooks in `rd_core.c` and `rd_replay.c`.
+Test: `rd_gsbase` (`port/render/test/rd_gsbase_test.c`), which compiles
+`GsBase.c`, `GifPacket.c`, `DisplayList.c` and `DmaPacket.c` as the window
+build does and drives the real `gsb_InitGSSystem`, `gsb_SyncGSSystem` and
+`gsb_UpdateGSSystem`.
+
+**What a flip does on the PS2.** `scheduler()` (`common/src/main.c`) calls,
+every `systemStatus[1]` vsyncs (2: 25 Hz PAL), `gsb_SyncGSSystem`
+(`gsb_PostEffect` appends the post passes to the frame Main recorded) and
+then `gsb_UpdateGSSystem(0)`, which in order:
+
+1. reads `odd_even` from `GS_CSR` bit 13 (FIELD);
+2. `gsb_Reduction`: a stack packet on DMA channel 2 reduces SCENE, as the
+   lists kicked at the previous flip left it, into DISPLAY, with the tint
+   the previous call computed (the packet is built before the tint update);
+3. `sceGsSwapDBuff(&db, buffer_ID)` (`sce/libgraph/graph010.c`): the display
+   environment, then `sceGsPutDrawEnv` sends `db.draw[buffer_ID]` and its
+   clear packet on GIF path 3 (`graph008.c`): FRAME FBP 0x40, ZBUF 0xC0
+   PSMZ32 write on (`gsb_SetFrame`), XYOFFSET, SCISSOR, PRMODECONT 1,
+   COLCLAMP 1, DTHE 0, TEST 0x50000 (`graph006.c`, ztst 2), then TEST
+   0x30000, PRIM 6, RGBAQ, a full-scene sprite at Z 0, TEST 0x50000
+   (`graph007.c`); the RGBAQ is the word `gsb_SetBGColor` writes at
+   `db+0x100` / `db+0x1F0` (`clear0.rgbaq`, `clear1.rgbaq`), alpha 0x80;
+4. `sceGsSetHalfOffset(draw[buffer_ID], ..., odd_even == 0)` rewrites the
+   XYOFFSET of the environment just sent (`graph021.c`: OFY + 8, half a
+   line), so it takes effect when that buffer is sent again, two flips
+   later;
+5. `dl_Swap` kicks the 13 lists recorded since the previous flip (from
+   list 11 with `fbKeep`); path 3 is ahead of them.
+
+**Clear colour (R2a question 3).** A frame's lists therefore draw over a
+clear to the BG colour current at the flip that kicks them, not at the flip
+that opened them. `rd_FrameHead` (rd.h) records the draw environment and
+the clear when the frame opens (`gsbHostFrameHead`, after `dl_Swap` /
+`dl_Clear`), and `rd_FrameFlip` rewrites the clear colour and the half
+offset in place at the flip (`gsbHostFlip`, between `sceGsSwapDBuff` and
+`sceGsSetHalfOffset`), so the commands keep their position at the head of
+the list. The head is recorded twice, at the head of list 0 and of list 11;
+`rd_EndFrame` keeps the copy in the first list it replays (11 for a keep
+frame, 0 otherwise) and turns the other into `RDC_NOP`s. A keep frame is
+therefore cleared as on the PS2 (R2a's hook skipped the clear: list 0 is not
+replayed), and a full frame's list 11 runs in the state list 10 left, not
+in a re-applied scene environment. The head is recorded after
+`rd_BeginFrame`'s list defaults; the GS has it before them, but the head
+ends on TEST 0x50000 and Z write on, the normal defaults, so the state at
+every later command is the same. Test: `bg` (the colour changed mid-tick),
+`keep`, `clear` (pixels).
+
+**Present boundary.** `dl_Swap` calls `rd_EndFrame(fbKeep)`, which replays
+and presents; `gsb_UpdateGSSystem(1)` (the movie path) and the
+`gsSystemReady == 0` path drop the open frame (`dl_Clear`,
+`rd_DiscardFrame`). The PS2 still flips there (reduction, clear); nothing
+of it is visible because the next frame's head clears again. The host shows
+a frame one flip earlier than the PS2, which reduces it at the next flip
+(R2a, section 9).
+
+**`fbKeep`.** `fbKeep` is read at `dl_Swap` (replay 11..12 over the retained
+DISPLAY) and by `gsb_Reduction` (tint 128 while set) and `gsb_PostEffect`
+(`gsb_KeepFrameBuffer` draws DISPLAY back into SCENE at 112/128 in list 11,
+after whatever the game drew there). A keep frame thus darkens the kept
+image by 112/128 per frame unless something else redraws it, exactly as the
+PS2 would.
+
+**Field parity (open item 4).** The PS2 samples FIELD at every
+`gsb_UpdateGSSystem`, which runs every second vsync. FIELD changes every
+vsync (the host loop models it that way, `port/platform/host_loop.c`; the
+game calls `sceGsResetGraph(0, systemStatus[1] == 1, ...)`, so `inter` is 0
+at step 2; that FIELD also toggles every vsync in that mode is the host
+model's assumption, not checked against hardware), so in steady state
+every flip sees the same FIELD and both draw
+environments carry the same half offset: constant parity. A skipped flip
+(`gsb_SyncGSSystem` returning 1 leaves `frameStepCount` running, the
+update lands one vsync later) or any other odd-length gap flips the parity
+from then on; at frame step 1 the parity alternates per buffer. The
+Original preset reproduces exactly this: `gsbHostField` reads the host's
+`GS_CSR` (not `odd_even`, which stays 0 on the host so game state is
+unchanged), `gsbHostHalf[2]` mirrors the bit in each draw environment of
+`db`, and the flip sends the value of the buffer it flips to, i.e. the one
+decided two flips earlier. The half offset is `RD_TARGET_HALF_Y` in the
+head's `rd_SetTarget` (XYOFFSET.y + 0.5, origin y + 0.5 at replay); any
+later `gif_SetDrawEnviroment(0x800, ...)` (fade, letterbox, anti-alias, the
+2D layer) writes XYOFFSET without it, as on the GS. On the host no flip is
+ever skipped, so the parity is fixed for a session segment by which vsync
+the scheduler's frame step lands on after boot or a stage load. Test:
+`parity` (constant field: no offset on the first two flips, then on every
+one; field alternating per flip: one parity per buffer), `half` (pixels:
+rows averaged).
+
+**DTHE (open item 5).** Every flip writes DTHE 0 (the frame PSM is
+PSMCT32, `graph006.c` clears DTHE when `psm & 2` is 0), and no game code
+writes DTHE: no dithering.
+
+**Camera (`rd_SetCamera`).** `gsb_MakeCommonMatrix` is where the view
+(`matrixptr+0x80`, written by `camera-root.c` after `gsb_SetVSMatrix`) and
+the screen matrix (`+0xC0`) are both final, so it fills `RdCamera`: `view`
+= `+0x80`, `proj43` = `+0xC0` (view to GS window X/Y and GS Z after the
+divide by w; 4:3), `zoom` = `vsParam[0]`, `aspect43` = 4/3, `nearZ`/`farZ`
+= `vsParam[7]`/`[8]` (2 and 262144; the screen matrix maps them to GS Z
+536870880 and 1, about 2^29: the scene's Z is 32-bit). `gsb_SetVSMatrix`
+itself does not call `rd_SetCamera`: `puddle.c` and `pool.c` call it
+mid-frame for their render-to-texture views and restore the matrices by
+copying, so the frame camera would end up theirs. `cut` is 0 (no cut
+detection yet). Replay fills FrameCB from the frame's camera (the previous
+one when a frame has none): `g_view`, `g_proj` = `proj43`, `g_viewProj` =
+`proj43` x `view` (the product the game keeps at `+0x100`), `g_cameraPos`
+= the eye from the inverse view, `g_clip` = near, far, zoom, aspect. The
+gameplay matrices are untouched. Test: `vu` (recording) and `camera`
+(`rd__CameraProbe`: `camera_probe_ps` returns the three products as float
+bits; within 1e-5 relative of the C products, and GS X/Y within 1/16 pixel
+of `sceVu0RotTransPers` through `+0x100`).
+
+**Widescreen hook.** `gsbHostWideX()` (1 in Original) and
+`gsbHostWidenCull` divide `projHalf[0]` (`+0x240`, the projection of the
+visible screen that `+0x280` and `RegistPacket.c`'s per-object `+0x300`
+are built from and `gsb_ClipBox` culls against) by the output's widening;
+called after `gsb_SetVSMatrixSub` under `ICO_RD` and a no-op at 1. The
+renderer projection widens in `rd__FillCameraCB` (`rd_frame.c`, a comment
+marks the place); `+0x80`/`+0xC0` stay 4:3.
+
+**VU parameter block** (`rd_SetVuCommon`, `RdVuCommon` in rd.h). The
+packet `gsb_MakeCommonMatrix` builds (when `game_pause` is non-zero) is a
+DMA `cnt` of 17 qwords: FLUSHA, UNPACK V4-32 of 16 qwords to VU1 data
+memory 0, then:
+
+| VU1 qw | content | source |
+|---|---|---|
+| 0 | 0, 0, 0, 1 | `commonMatrixHead.row[0]` |
+| 1 | 4095, 4095, 0, 16777215 | `row[1]` (clip extents) |
+| 2 | 0, 0, 0, 0 | `row[2]` |
+| 3 | GIF tag 0x8000, 0x302EC000, 0x512, 0: EOP, PRE, PRIM 0x5D (fan, IIP, TME, ABE), PACKED, NREG 3 (ST, RGBAQ, XYZ2) | `commonMatrixHead.tag` |
+| 4..7 | world to GS screen: screen (`+0xC0`) x view (`+0x80`) | `+0x100` |
+| 8..11 | viewport | `+0x340` |
+| 12..15 | inverse view | `+0x380` |
+
+Every one of the 13 lists gets a DMA reference to it at its current
+position each time it is built (at the frame head through
+`gsb_SetGsDefault`, and again when `camera-root.c` sets the camera), so a
+draw sees the block current at its position in its list. rd keeps the last
+block of the open frame (`RdFrame.vu`, not dumped); wave 3 needs the
+per-list position (a state command in the lists) if a list draws before and
+after a camera change in one tick. No lights: `light_ResetLight` is empty
+and lights are per object (`light_MakeLightMatrix`). `gsb_SetGsDefault`'s
+list-0 head is VIF BASE 0x100 / OFFSET 0x180 (VU1 double buffering), which
+fixes where the mesh programs' input buffers start: wave 3.
+
+**Post passes.** `gsb_KeepFrameBuffer`, `gsb_fade`, `gsb_scissorOnDemo`,
+`gsb_controlBrightness`, `gsb_antiAlias` and `gsb_filmNoise` call `rd_Post`
+under `ICO_RD` (`dl_SetDLPriority` as their packet start did; game logic,
+fade and letterbox state machines unchanged). Each kind records the
+original's register writes and sprites in order as rd state (rd_post.c
+lists them), so the state they leak is the state the GS kept:
+
+| kind | original | CPU reference (rd_gsbase) | tolerance, measured on llvmpipe |
+|---|---|---|---|
+| `RD_POST_KEEP` | DISPLAY as PSMCT24 at 112/128, TEXA 80/80, PRIM 0x116, the filter in force | bilinear at the GS sample point of the stretched sprite, then the modulate | 1 LSB, 1 |
+| `RD_POST_FADE` | scene environment, TEST 0x30000, Z write off, PABE 0, ALPHA 0x44, PRIM 0x446 | GS LERP with As | 1, 1 |
+| `RD_POST_LETTERBOX` | two 58-line bars, ALPHA 0x64 with FIX = the level, Z write on | GS LERP with FIX (level 25 after 10 ticks) | 1, 1 |
+| `RD_POST_BRIGHTNESS` | white, alpha = the step, mode 7, PRIM 0x446 | GS LERP with As | 1, 1 |
+| `RD_POST_AA_DOWNSAMPLE` | SCENE to AA0 (256²) and with `lines` 2 AA0 to AA1 (128²), PABE 1, ALPHA 0x64 FIX 0x80, no ABE | exact copy of every second texel (nearest leaking from the scene draw) | 0, 0 |
+| `RD_POST_AA_COMPOSITE` | AA1 at `rgba[1]`, then AA0 at `rgba[0]`, LERP FIX into SCENE 512² (the original's literal size), then Z write on, TEST 0x50000, the scene environment | GS LERP of the nearest texel | 1 per level alone (1, 1); 2 with both (measured 1) |
+| `RD_POST_FILM_NOISE` | CLAMP 0 (REPEAT), Z write off, TEST 0x30000, PABE 0, ALPHA 0x44, PRIM 0x56 (STQ), RGBAQ 128 grey with the grain alpha, ST 0..grain scale over window 0x7000..0x9000 | bilinear REPEAT on a periodic texture, modulate, GS LERP with As | 1, 1 |
+
+`gsb_filmNoise` keeps `tex_TransTexture(n, 0xA)` and binds `sandstorm_spr`
+through the decoder with one PRIM write (the TEX0 that call wrote goes
+through R2b's resolver), as `DisplayFont.c` does; the pass then draws with
+the bound texture. The film noise lands in whatever list is current
+(`dl_GetPri()`), as on the PS2.
+
+Two findings from the register values: `gsb_controlBrightness` passes
+`gif_MakeSpriteNoTexture` corners that are already absolute, and the
+helper adds the 0x8000 window origin again, so the GS receives (3840.0,
+3840.0) and, from the carries of the 17-bit far corner, (256.0, 256.0625)
+with Z 0xFFFFFFFF; the rectangle between them covers the whole scene, and
+rd records exactly those vertices. `gsb_antiAlias` restores the scene
+environment as 512 x 512 even at 448 lines (NTSC), which offsets XYOFFSET
+by 32 lines there; recorded as written.
+
+What these passes do not update is the decoder's per-list register shadow
+(PRIM, TEX0, FRAME, XYOFFSET, SCISSOR in `GifPacket.c`): a later packet in
+the same list that relies on a PRIM or TEX0 it did not write would see the
+decoder's older value where the GS had the pass's. Every game path writes
+both before drawing; it is a gap only for code that relied on the leak.
+
+**Depth scale (R2a question 4).** Every ZBUF the game writes has PSM nibble
+0 (PSMZ32: `gsb_SetFrame`, `gif_SetZWrite`, the post passes), and the scene
+Z reaches 2^29, so FrameCB `g_z.x` is now the scale of the bound depth
+target: `RdTargetRec.zFormat` (`rd_SetTargetZFormat`, default PSMZ32 =
+2^-32; PSMZ24 2^-24 and PSMZ16 2^-16 for completeness), used by
+`doScreen` through `rd__FrameGroupZ` and by clears through `rd__GsDepth`.
+`gs_z_to_depth` computes `(zmax - z + 1) * scale` instead of
+`1 - z * scale`: the same value, exact for every Z at 2^-24, and for the
+large Z values at 2^-32, so the UI's 0xFFFFFF9B and 0xFFFFFFFF compare as on
+the GS. Z of the far end (small Z) rounds like any float near 1: about 256
+Z units per depth step around 2^29 (open question 3 below). Test:
+`zscale` (CPU) and `depth` (a GEQUAL sprite at 0xFFFFFF9B over 0xFFFFFFFF
+fails, the reverse passes, on SCENE).
+
+**Presets and interpolation (hooks).** `RdPresentPreset` (rd_present.c)
+carries the Enhanced fields `interpolate`, `aspectFromSettings`, `mirror`,
+`fullHeight`, all at their Original values in both entries and read by
+nothing yet, and `presentAlpha()` (1: each frame presented once, whole) is
+where wave 7 blends the retained frames.
+
+**rd.h additions (R2c).** `RdFrameHead`, `rd_FrameHead`, `rd_FrameFlip`;
+`RD_TARGET_OFFSET`, `RD_TARGET_HALF_Y` (bit 1 of `rd_SetTarget`'s
+`useOffset`); `RdZFormat`, `rd_SetTargetZFormat`, `rd_TargetZScale`;
+`RdVuCommon`, `rd_SetVuCommon`, `rd_GetVuCommon`; the `rd_SetCamera`
+comment now says what the fields hold. Internal: `RdFrame` head and VU
+fields, `RdTargetRec.zFormat`, `rd__FrameGroupZ`, `rd__GsDepth`,
+`rd__TargetZScale`, `rd__FillCameraCB`, `rd__SetReplayCamera`,
+`rd__CameraProbe`, `RD_FS_CAMERA_PROBE` (`camera_probe_ps`, tests only).
+The dump format is unchanged (the head lives in ordinary commands; the VU
+block and Z format are not dumped).
+
+Open questions for wave 3:
+
+1. The VU block is per list position on the PS2; rd keeps one per frame.
+   A list that draws meshes before and after `camera-root.c`'s
+   `gsb_MakeCommonMatrix` in one tick needs a recorded command.
+2. `g_proj` is the GS screen matrix, not a clip matrix: the mesh vertex
+   shaders divide by w, apply the GS window to NDC conversion of the bound
+   target (`gs_xy_to_ndc`, which also gives puddle/pool targets their own
+   origin) and `gs_depth`; the VU1 `ftoi4` snapping of X/Y to 1/16 pixel is
+   theirs to reproduce or not.
+3. Depth precision: D32F with `(zmax - z + 1) * 2^-32` resolves about 256
+   GS Z units near the scene's 2^29 range; coplanar decals that rely on
+   GEQUAL ties at closer Z need a check (or a mapping with scale 2^-29 for
+   SCENE).
+4. `fog_lut.hlsl` derives Z as `(1 - d) * 2^24`; with SCENE at 2^-32 the
+   fog package must use the target's scale (open item 3, the Z byte).
+5. `cut` is never set: the interpolation package needs a camera-cut signal
+   (camera-root.c's mode changes) before it trusts `RdCamera`.
+6. Brightness: whether the GS rasterises a sprite whose second vertex lies
+   above and left of the first (the corners `gsb_controlBrightness` ends up
+   sending) is not settled by any source the port uses; rd draws it, which
+   is the visible-overlay reading. If the GS drew nothing, the brightness
+   step never showed on the PS2 and the Original preset should skip it.

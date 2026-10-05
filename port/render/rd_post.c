@@ -2,23 +2,46 @@
  *
  * The post kinds that are plain GS sprites in the original are recorded as
  * the register writes and sprites the original routine issues, through the
- * same rd_* calls the seki layer uses.  They therefore leak state into the
- * rest of the list exactly as the original packets do (the fade leaves
- * ALPHA 0x44 and PABE 0 behind, the keep pass leaves TEXA 80/80, ...), and
- * they replay through the one screen-prim path with the GS sampling rules.
- * Geometry is taken from ico2/seki/src/GsBase.c:
+ * same rd_* calls the seki layer uses, in the original's order.  They
+ * therefore leak state into the rest of the list exactly as the original
+ * packets do (the fade leaves ALPHA 0x44 and PABE 0 behind, the keep pass
+ * leaves TEXA 80/80 and DISPLAY bound, the anti-alias pass PABE 0 and the
+ * last level's FIX, ...), and they replay through the one screen-prim path
+ * with the GS sampling rules.  Registers the original does not write (TEX1,
+ * CLAMP, FBA in most passes) are left as they are, so they leak in.  PRIM is
+ * recorded as its three state bits (ABE, TME through rd_Texture /
+ * rd_TextureOff, IIP).  Geometry and register values are taken from
+ * ico2/seki/src/GsBase.c:
  *
- *   REDUCTION   gsb_Reduction (:213): clear DISPLAY black, then SCENE drawn
- *               into it at half height, bilinear (TEX1 0x60), tinted, inside
- *               the border-crop scissor (2 px left/right; 8 lines top/bottom
- *               for a 512-line scene, 2 for 448)
- *   KEEP        gsb_KeepFrameBuffer (:360): DISPLAY read as PSMCT24 (TEXA
- *               80/80) drawn back over the whole scene at 112 grey
- *   FADE        gsb_fade (:391): full-scene sprite, LERP_AS, fade colour
- *   LETTERBOX   gsb_scissorOnDemo (:479): two 58-line black bars, LERP_FIX
- *               with FIX = the band level, Z write on
- *   BRIGHTNESS  gsb_controlBrightness (:534): white sprite, alpha = step,
- *               gif_SetAlpha(1, 7, 0)
+ *   REDUCTION     gsb_Reduction: clear DISPLAY black, then SCENE drawn into
+ *                 it at half height, bilinear (TEX1 0x60), tinted, inside the
+ *                 border-crop scissor (2 px left/right; 8 lines top/bottom
+ *                 for a 512-line scene, 2 for 448)
+ *   KEEP          gsb_KeepFrameBuffer: DISPLAY read as PSMCT24 (TEXA 80/80)
+ *                 drawn back over the whole scene at 112 grey, PRIM 0x116
+ *   FADE          gsb_fade: gif_SetDrawEnviroment(0x800, ...), full-scene
+ *                 sprite, ALPHA 0x44, PABE 0, PRIM 0x446, the fade colour
+ *   LETTERBOX     gsb_scissorOnDemo: two 58-line black bars, ALPHA 0x64 with
+ *                 FIX = the band level, Z write on
+ *   BRIGHTNESS    gsb_controlBrightness: white sprite, alpha = the step,
+ *                 gif_SetAlpha(1, 7, 0), PRIM 0x446, with the corners the GS
+ *                 receives (see postBrightness)
+ *   AA_DOWNSAMPLE gsb_antiAlias, first half: SCENE (512 x 512) into AA0
+ *                 (256 x 256), then with params->lines >= 2 AA0 into AA1
+ *                 (128 x 128); TEST 0x30000, Z write off, PABE 1, ALPHA 0x64
+ *                 FIX 0x80 (gif_SetAlpha(0, 2, 128)), no ABE
+ *   AA_COMPOSITE  gsb_antiAlias, second half: into SCENE (512 x 512, the
+ *                 original's literal), AA1 at FIX params->rgba[1] when it is
+ *                 not 0, then AA0 at FIX params->rgba[0] when it is not 0,
+ *                 each a LERP_FIX sprite with ABE (PABE 0); then Z write on,
+ *                 TEST 0x50000 and the SCENE environment at the scene size
+ *   FILM_NOISE    gsb_filmNoise: CLAMP 0 (REPEAT), Z write off, TEST
+ *                 0x30000, PABE 0, ALPHA 0x44, PRIM 0x56 (sprite, TME, ABE,
+ *                 STQ), RGBAQ 128 grey with alpha params->rgba[3] and Q 1,
+ *                 ST 0,0 to params->scalar[0] (the grain scale) at window
+ *                 0x7000..0x9000; the texture is the one bound (the caller
+ *                 lets the decoder bind sandstorm_spr's TEX0 through the
+ *                 resolver), or rd_TargetTexture(params->src) when given
  *
  * COMPOSITE_FIX records ALPHA (params->blend, params->fix), TEX0 (src) and
  * one sprite covering params->rect (x, y, w, h in GS pixels of dst; zero =
@@ -32,14 +55,16 @@
  * COPY is gif_MoveImage: params->uv (x, y) in src to params->rect (x, y,
  * w, h) in dst, a texture copy.
  *
- * The remaining kinds (anti-alias, fog, shadow resolve, blur, film noise)
- * are recorded with their parameters and stop at replay (waves 2-5).
+ * The remaining kinds (fog, shadow resolve, blur) are recorded with their
+ * parameters and stop at replay (waves 4-5).
  */
 #include <string.h>
 #include "rd_internal.h"
 
-static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t z,
-                   const uint8_t rgba[4], int32_t u0, int32_t v0, int32_t u1, int32_t v1)
+/* A sprite with the vertices exactly as the GS receives them (12.4 window
+ * coordinates, Z, UV in 12.4 texels). */
+static void spriteRaw(int32_t x0, int32_t y0, uint32_t z0, int32_t x1, int32_t y1, uint32_t z1,
+                      const uint8_t rgba[4], int32_t u0, int32_t v0, int32_t u1, int32_t v1)
 {
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
@@ -47,7 +72,8 @@ static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t z,
     v[0].y = y0;
     v[1].x = x1;
     v[1].y = y1;
-    v[0].z = v[1].z = z;
+    v[0].z = z0;
+    v[1].z = z1;
     v[0].s = (float)u0;
     v[0].t = (float)v0;
     v[1].s = (float)u1;
@@ -56,6 +82,20 @@ static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t z,
     memcpy(v[0].rgba, rgba, 4);
     memcpy(v[1].rgba, rgba, 4);
     rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 1, 0);
+}
+
+static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t z,
+                   const uint8_t rgba[4], int32_t u0, int32_t v0, int32_t u1, int32_t v1)
+{
+    spriteRaw(x0, y0, z, x1, y1, z, rgba, u0, v0, u1, v1);
+}
+
+/* PRIM's state bits: ABE and IIP (TME is the caller's rd_Texture /
+ * rd_TextureOff). */
+static void prim(int abe, int iip)
+{
+    rd__RecABE(abe);
+    rd_Gouraud(iip);
 }
 
 static RdTarget orDefault(RdTarget t, RdTargetId d)
@@ -113,7 +153,7 @@ static void postKeep(const RdPostParams *p)
     const uint8_t *col = (p->rgba[0] | p->rgba[1] | p->rgba[2] | p->rgba[3]) ? p->rgba : kKeep;
     if (p->dst.id) {
         rd_SetTarget(p->dst, p->dst.id == RD_TARGET_SCENE + 1 ? p->dst : (RdTarget){0}, (uint32_t)W,
-                     (uint32_t)H, 1);
+                     (uint32_t)H, RD_TARGET_OFFSET);
     }
     rd_TestGs(RD_TEST_Z_ALWAYS);
     rd_ZWrite(0);
@@ -121,25 +161,31 @@ static void postKeep(const RdPostParams *p)
     rd_TexA(RD_TEXA_80_80);
     /* TEX0: TBP 0, PSMCT24, TCC 1, MODULATE */
     rd_Texture(rd_TargetTexture(src, RD_VIEW_RGB24_TA0), RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd__RecABE(0); /* PRIM 0x116 */
+    prim(0, 0); /* PRIM 0x116 */
     /* r0 = {-(W/2)*16 - 12, -(H/2)*16 - 12, W*16 + 32, H*16 + 32},
      * r1 = {8, 8, W*16, H/2*16} */
     const int32_t x0 = -(W / 2) * 16 - 12 + 0x8000, y0 = -(H / 2) * 16 - 12 + 0x8000;
     sprite(x0, y0, x0 + W * 16 + 32, y0 + H * 16 + 32, 0, col, 8, 8, 8 + W * 16, 8 + H / 2 * 16);
 }
 
+/* gif_SetDrawEnviroment(0x800, 0, W, H, 1, 0): FRAME, SCISSOR, XYOFFSET of
+ * the scene; the decoder binds the scene's depth with it */
+static void sceneEnv(RdTarget dst, int32_t W, int32_t H)
+{
+    rd_SetTarget(dst, dst.id == RD_TARGET_SCENE + 1 ? dst : (RdTarget){0}, (uint32_t)W, (uint32_t)H,
+                 RD_TARGET_OFFSET);
+}
+
 static void postFade(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
-    RdTarget dst = orDefault(p->dst, RD_TARGET_SCENE);
-    /* gif_SetDrawEnviroment(0x800, 0, W, H, 1, 0) */
-    rd_SetTarget(dst, dst.id == RD_TARGET_SCENE + 1 ? dst : (RdTarget){0}, (uint32_t)W, (uint32_t)H,
-                 1);
+    sceneEnv(orDefault(p->dst, RD_TARGET_SCENE), W, H);
     rd_TestGs(RD_TEST_Z_ALWAYS);
     rd_ZWrite(0);
     rd_PABE(0);
     rd_Blend(RD_BLEND_LERP_AS, 0, 1); /* ALPHA 0x44 (FIX 0); PRIM 0x446 sets ABE */
     rd_TextureOff();
+    rd_Gouraud(0);
     const int32_t x0 = -(W / 2) * 16 + 0x8000, y0 = -(H / 2) * 16 + 0x8000;
     sprite(x0, y0, x0 + W * 16, y0 + H * 16, 0xFFFFFFFFu, p->rgba, 0, 0, 0, 0);
 }
@@ -148,15 +194,14 @@ static void postLetterbox(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
     const int32_t lines = p->lines ? (int32_t)p->lines : 58;
-    RdTarget dst = orDefault(p->dst, RD_TARGET_SCENE);
     static const uint8_t kBar[4] = {0, 0, 0, 0x80};
-    rd_SetTarget(dst, dst.id == RD_TARGET_SCENE + 1 ? dst : (RdTarget){0}, (uint32_t)W, (uint32_t)H,
-                 1);
+    sceneEnv(orDefault(p->dst, RD_TARGET_SCENE), W, H);
     rd_TestGs(RD_TEST_Z_ALWAYS);
     rd_ZWrite(1); /* ZBUF 0x300000C0 */
     rd_PABE(0);
-    rd_Blend(RD_BLEND_LERP_FIX, p->fix, 1);
+    rd_Blend(RD_BLEND_LERP_FIX, p->fix, 1); /* ALPHA 0x64 | level << 32; PRIM 0x446 */
     rd_TextureOff();
+    rd_Gouraud(0);
     const int32_t x0 = -(W / 2) * 16 + 0x8000;
     const int32_t yTop = -(H / 2) * 16 - 4 + 0x8000;
     const int32_t yBot = ((H / 2) - lines) * 16 + 4 + 0x8000;
@@ -164,22 +209,128 @@ static void postLetterbox(const RdPostParams *p)
     sprite(x0, yBot, x0 + W * 16, yBot + lines * 16, 0xFFFFFFFFu, kBar, 0, 0, 0, 0);
 }
 
+/* gsb_controlBrightness passes gif_MakeSpriteNoTexture corners that are
+ * already absolute ((0x800 - W/2) << 4) and the helper adds the 0x8000
+ * window origin again (GIF_XY), so the GS receives the first corner at
+ * 0xF000 (3840.0) and a far corner whose 17-bit X carries into Y and whose
+ * Y carries into Z: (256.0, 256.0625) for a 512 x 512 scene, Z 0xFFFFFFFF.
+ * Both corners are recorded as the GS gets them; the rectangle between them
+ * covers the whole scene.  Whether the GS draws a sprite whose second corner
+ * lies above and left of the first is not documented in the sources this
+ * port uses; rd draws it (RENDER_API.md section 12). */
 static void postBrightness(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
     const uint8_t col[4] = {0xFF, 0xFF, 0xFF, p->rgba[3]};
     if (p->dst.id) {
-        rd_SetTarget(p->dst, p->dst.id == RD_TARGET_SCENE + 1 ? p->dst : (RdTarget){0}, (uint32_t)W,
-                     (uint32_t)H, 1);
+        sceneEnv(p->dst, W, H);
     }
     rd_TestGs(RD_TEST_Z_ALWAYS);
     rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS_ALT, 0, 1);
+    rd_PABE(0);                           /* gif_SetAlpha(1, ...) */
+    rd_Blend(RD_BLEND_LERP_AS_ALT, 0, 1); /* mode 7: ALPHA 0x44; PRIM 0x446 sets ABE */
     rd_TextureOff();
-    /* gif_MakeSpriteNoTexture((0x800 - W/2) << 4, (0x800 - H/2) << 4, W << 4, H << 4,
-     * 0xFFFFFFFE, ...): absolute window coordinates */
-    const int32_t x0 = (0x800 - W / 2) << 4, y0 = (0x800 - H / 2) << 4;
-    sprite(x0, y0, x0 + (W << 4), y0 + (H << 4), 0xFFFFFFFEu, col, 0, 0, 0, 0);
+    rd_Gouraud(0);
+    const int64_t x = (int64_t)((0x800 - W / 2) << 4), y = (int64_t)((0x800 - H / 2) << 4);
+    const int64_t w = (int64_t)W << 4, h = (int64_t)H << 4;
+    const uint64_t z = 0xFFFFFFFEull;
+    /* GIF_XY(x, y, z) and GIF_XY0(x + fx, y + fy, z), fx = w + 0x8000 */
+    const uint64_t a = (uint64_t)(x + 0x8000) | ((uint64_t)(y + 0x8000) << 16) | (z << 32);
+    const uint64_t b = (uint64_t)(x + w + 0x8000) | ((uint64_t)(y + h + 0x8000) << 16) | (z << 32);
+    spriteRaw((int32_t)(a & 0xFFFF), (int32_t)((a >> 16) & 0xFFFF), (uint32_t)(a >> 32),
+              (int32_t)(b & 0xFFFF), (int32_t)((b >> 16) & 0xFFFF), (uint32_t)(b >> 32), col, 0, 0,
+              0, 0);
+}
+
+/* gif_MakeSprite(x, y, w, h, 0, uv, col, prim) as gif_SpriteSensitiveOrg
+ * calls it: corners GIF_XY(x, y) and x + w + 0x8000, UV and UV + size */
+static void makeSprite(int32_t x, int32_t y, int32_t w, int32_t h, const int32_t uv[4],
+                       const uint8_t col[4])
+{
+    sprite(x + 0x8000, y + 0x8000, x + w + 0x8000, y + h + 0x8000, 0, col, uv[0], uv[1],
+           uv[0] + uv[2], uv[1] + uv[3]);
+}
+
+static const uint8_t kAaCol[4] = {128, 128, 128, 128};
+
+static void postAaDownsample(const RdPostParams *p)
+{
+    static const int32_t s0[4] = {4, 4, 8192, 8192}, s1[4] = {4, 4, 4096, 4096};
+    RdTarget scene = orDefault(p->src, RD_TARGET_SCENE);
+    rd_TestGs(RD_TEST_Z_ALWAYS); /* gif_SetZTest(0) */
+    rd_ZWrite(0);                /* gif_SetZWrite(0) */
+    /* gif_SetDrawEnviroment(0x2800, 0, 256, 256, 0, 0) */
+    rd_SetTarget(rd_Target(RD_TARGET_AA0), (RdTarget){0}, 256, 256, 0);
+    /* TEX0 0x800, TBW 8, 512 x 512, TCC 1, MODULATE */
+    rd_Texture(rd_TargetTexture(scene, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_PABE(1); /* gif_SetAlpha(0, 2, 128) */
+    rd_BlendFunc(RD_BLEND_LERP_FIX, 128);
+    prim(0, 0); /* PRIM 0x116 */
+    makeSprite(-2052, -2052, 4096, 4096, s0, kAaCol);
+    if (p->lines >= 2) {
+        /* TEX0 0x2800, TBW 4, 256 x 256; gif_SetDrawEnviroment(0x2C00, 0, 128, 128, 0, 0) */
+        rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_AA0), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+                   RD_TCC_RGBA);
+        rd_SetTarget(rd_Target(RD_TARGET_AA1), (RdTarget){0}, 128, 128, 0);
+        makeSprite(-1028, -1028, 2048, 2048, s1, kAaCol);
+    }
+}
+
+static void postAaComposite(const RdPostParams *p)
+{
+    static const int32_t s1[4] = {4, 4, 4096, 4096}, s2[4] = {4, 4, 2048, 2048};
+    RdTarget scene = orDefault(p->dst, RD_TARGET_SCENE);
+    const uint8_t lv0 = p->rgba[0], lv1 = p->rgba[1];
+    /* gif_SetDrawEnviroment(0x800, 0, 512, 512, 1, 0): 512 lines whatever
+     * the scene size, as the original writes it */
+    sceneEnv(scene, 512, 512);
+    if (lv1) {
+        rd_PABE(0); /* gif_SetAlpha(1, 2, lv1) */
+        rd_BlendFunc(RD_BLEND_LERP_FIX, lv1);
+        /* TEX0 0x2C00, TBW 2, 128 x 128 */
+        rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_AA1), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+                   RD_TCC_RGBA);
+        prim(1, 0); /* PRIM 0x156 */
+        makeSprite(-4100, -4100, 8192, 8192, s2, kAaCol);
+    }
+    if (lv0) {
+        rd_PABE(0);
+        rd_BlendFunc(RD_BLEND_LERP_FIX, lv0);
+        rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_AA0), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+                   RD_TCC_RGBA);
+        prim(1, 0);
+        makeSprite(-4100, -4100, 8192, 8192, s1, kAaCol);
+    }
+    rd_ZWrite(1);                /* gif_SetZWrite(1) */
+    rd_TestGs(RD_TEST_Z_GEQUAL); /* gif_SetZTest(1) */
+    sceneEnv(scene, (int32_t)g_rd.gsW, (int32_t)g_rd.gsH);
+}
+
+static void postFilmNoise(const RdPostParams *p)
+{
+    const uint8_t col[4] = {0x80, 0x80, 0x80, p->rgba[3]};
+    const float scale = p->scalar[0];
+    rd_SamplerWrap(RD_WRAP_REPEAT, RD_WRAP_REPEAT); /* CLAMP_1 0 */
+    rd_ZWrite(0);                                   /* ZBUF 0x1300000C0 */
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_PABE(0);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0); /* ALPHA 0x44 */
+    if (p->src.id) {
+        rd_Texture(rd_TargetTexture(p->src, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    }
+    prim(1, 0); /* PRIM 0x56: sprite, TME, ABE, ST */
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    /* ST 0,0 at XYZ2 0xFFFFFFFF70007000; ST scale,scale at 0xFFFFFFFF90009000 */
+    v[0].x = v[0].y = 0x7000;
+    v[1].x = v[1].y = 0x9000;
+    v[0].z = v[1].z = 0xFFFFFFFFu;
+    v[0].s = v[0].t = 0.0f;
+    v[1].s = v[1].t = scale;
+    v[0].q = v[1].q = 1.0f;
+    memcpy(v[0].rgba, col, 4);
+    memcpy(v[1].rgba, col, 4);
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 0, 0);
 }
 
 static void postComposite(const RdPostParams *p)
@@ -301,6 +452,15 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
         break;
     case RD_POST_BRIGHTNESS:
         postBrightness(params);
+        break;
+    case RD_POST_AA_DOWNSAMPLE:
+        postAaDownsample(params);
+        break;
+    case RD_POST_AA_COMPOSITE:
+        postAaComposite(params);
+        break;
+    case RD_POST_FILM_NOISE:
+        postFilmNoise(params);
         break;
     case RD_POST_COMPOSITE_FIX:
         postComposite(params);

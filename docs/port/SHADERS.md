@@ -94,21 +94,25 @@ Uniform ranges are aligned by the caller to `RhiLimits.uniformAlign`.
 
 | offset | HLSL | meaning |
 | --- | --- | --- |
-| 0 | `column_major float4x4 g_view` | world to view |
-| 64 | `column_major float4x4 g_proj` | view to clip |
-| 128 | `column_major float4x4 g_viewProj` | world to clip |
+| 0 | `column_major float4x4 g_view` | world to view (`matrixptr+0x80`) |
+| 64 | `column_major float4x4 g_proj` | view to GS window coordinates and GS Z after the divide by w: the game's screen matrix `matrixptr+0xC0` (4:3), not a D3D clip matrix (wave 2, R2c) |
+| 128 | `column_major float4x4 g_viewProj` | `g_proj` x `g_view`, world to GS window/Z (the product `matrixptr+0x100` holds) |
 | 192 | `float4 g_cameraPos` | xyz world eye, w = 1 on a camera-cut tick |
 | 208 | `float4 g_clip` | near, far, zoom, aspect |
 | 224 | `float4 g_target` | bound target size in GS pixels (xy), 1/size (zw) |
 | 240 | `float4 g_origin` | xy = XYOFFSET/16, the GS window coordinate of the target's top-left pixel; zw = added after (pixel-centre convention; 0 puts GS integers on pixel edges) |
 | 256 | `float4 g_space[2]` | [0] WORLD, [1] UI: `ndc = ndc * xy + zw` (mirror flip, 4:3 anchoring, wide projection) |
-| 288 | `float4 g_z` | x = 1/2^24 (PSMZ24 scale; 1/2^32 for PSMZ32 values) |
+| 288 | `float4 g_z` | x = the GS Z scale of the bound depth buffer: 2^-32 for PSMZ32 (SCENE and every depth target the game uses; wave 2, R2c), 2^-24 for PSMZ24 and with no depth bound, 2^-16 for PSMZ16 |
 | 304 | `float4 g_misc` | frame counter, preset (0 Original, 1 Enhanced), reserved |
 
 Matrices are column-major `float[16]` (element `[column * 4 + row]`), used
-as `mul(M, v)` with column vectors. The layout is declared, not yet
-exercised: no entry reads the matrices before the mesh programs of later
-waves.
+as `mul(M, v)` with column vectors. Since wave 2 (R2c) replay fills them from
+the frame's `RdCamera` (`gsb_MakeCommonMatrix` sets it; a frame without one
+keeps the previous frame's), and `rd_gsbase_test` checks the packing:
+`camera_probe_ps` evaluates `mul(g_view, p)`, `mul(g_proj, mul(g_view, p))`
+and `mul(g_viewProj, p)` on the GPU, which agree with the C products to
+1e-5 relative and with `sceVu0RotTransPers` through `matrixptr+0x100` to
+1/16 pixel in GS X/Y. No mesh entry reads them before wave 3.
 
 ### DrawCB (group 1, slot 1, 96 bytes)
 
@@ -146,7 +150,7 @@ vertex shader with `g_tex.zw`.
 | function | what |
 | --- | --- |
 | `gs_xy_to_ndc(xy, space)` | 12.4 XY to clip, through `g_origin`, `g_target`, `g_space[space]` |
-| `gs_z_to_depth(z, scale)`, `gs_depth(z)` | `1 - z * scale`, clamped: reversed-Z, 0xFFFFFF becomes 2^-24 |
+| `gs_z_to_depth(z, scale)`, `gs_depth(z)` | `1 - z * scale` computed as `(zmax - z + 1) * scale` (zmax = the format's largest Z), 0 above zmax: reversed-Z; exact for every Z at 2^-24 and 2^-16 and for large Z at 2^-32, so the UI's 0xFFFFFF9B and 0xFFFFFFFF stay apart under PSMZ32 (wave 2, R2c; `rd__GsDepth` is the CPU copy for clears) |
 | `gs_tfx_mod`, `gs_texture_function` | `min((tex * col) >> 7, 255)`; DECAL; TCC |
 | `gs_texa_alpha`, `gs_texa_expand` | the three `RdTexA` modes for PSMCT24/16 texels (`TEXFMT_*`) |
 | `gs_alpha_pass`, `gs_alpha_discard` | the eight `RdAlphaTest` compares; AFAIL split passes |
@@ -180,6 +184,7 @@ exceed 0x80.
 | `blit_vs` | blit.hlsl | vertex | fullscreen triangle, source rectangle from `g_uvRect` |
 | `blit_ps` | blit.hlsl | fragment | one output; texture function with the tint, or the tint alone without `DF_TEXTURED` |
 | `blit_fix_ps` | blit.hlsl | fragment | same, dual-source with the FIX factor |
+| `camera_probe_ps` | blit.hlsl | fragment | wave 2 (R2c), tests only: FrameCB's matrices applied to `g_param`, written as float bytes into a 4 x 3 RGBA8 target (`rd__CameraProbe`); not in the reachable pipeline set |
 | `blend_int_vs`, `blend_int_ps` | blend_int.hlsl | vertex, fragment | t1 = Cs, t2 = Cd (RGBA8_UINT), ALPHA register in `g_blend`, writes RGBA8_UINT; no sampler |
 | `fog_lut_vs`, `fog_lut_ps` | fog_lut.hlsl | vertex, fragment | wave 4 placeholder: depth to a 256x1 LUT, index = top byte of the 24-bit Z (which byte the game reads is open item 3 of RENDER_API.md) |
 | `font_vs`, `font_ps` | font.hlsl | vertex, fragment | R8 atlas coverage times vertex alpha, UI space |

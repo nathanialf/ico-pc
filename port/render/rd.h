@@ -347,7 +347,14 @@ bool rd_FrameOpen(void);
  * from inside a frame's replay. */
 void rd_ResizeOutput(uint32_t width, uint32_t height);
 /* gsb_SetVSMatrix: the camera for this frame (used by Enhanced projection,
- * interpolation and the WORLD-space 2D conversion). */
+ * interpolation and the WORLD-space 2D conversion).
+ * Wave 2 (R2c): called from gsb_MakeCommonMatrix, the point where the view
+ * (matrixptr+0x80) and the screen matrix (+0xC0) are both final; view is
+ * +0x80, proj43 the GS screen matrix +0xC0 (view space to GS window
+ * coordinates and GS Z after the divide by w), zoom vsParam[0], aspect43
+ * 4/3, nearZ/farZ vsParam[7]/[8].  Replay puts them in FrameCB: g_view,
+ * g_proj = proj43, g_viewProj = proj43 x view, g_cameraPos = the eye from
+ * the view's inverse (w = cut), g_clip = near, far, zoom, aspect. */
 void rd_SetCamera(const RdCamera *cam);
 
 /* ------------------------------------------------------------- lists */
@@ -496,6 +503,80 @@ void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
  * gif_MoveImage: fullscreen or rectangle passes between targets.  Recorded
  * into the current list like any draw. */
 void rd_Post(RdPostKind kind, const RdPostParams *params);
+
+/* ------------------------------------- frame lifecycle and camera (R2c) */
+
+/* Added in wave 2 (R2c).  The flip (gsb_UpdateGSSystem -> sceGsSwapDBuff)
+ * sends the scene's draw environment and, with fbClear, its clear packet on
+ * GIF path 3 right before dl_Swap kicks the frame's lists, so the PS2 drew
+ * every frame (keep frames too) over:
+ *   FRAME FBP 0x40, ZBUF 0xC0 PSMZ32 write on, XYOFFSET centred (+0.5 line
+ *   when the draw environment carries sceGsSetHalfOffset's half offset),
+ *   SCISSOR full, PRMODECONT 1, COLCLAMP 1, DTHE 0, TEST 0x50000; then
+ *   TEST 0x30000, PRIM 6 (sprite, no ABE, no TME, flat), RGBAQ = the BG
+ *   colour, the full-scene sprite at Z 0, TEST 0x50000.
+ * rd_FrameHead records that, as rd state and an rd_ClearTarget, at the head
+ * of list 0 and again at the head of list 11 of the open frame (call it right
+ * after rd_BeginFrame).  rd_FrameFlip, called before the frame closes, sets
+ * what the flip actually sent: the BG colour current at the flip (the PS2
+ * consumes gsb_SetBGColor's packet then, one tick after the frame opened) and
+ * the half offset of the draw environment that flip sends.  rd_EndFrame keeps
+ * the copy in the first replayed list (11 for a keep frame, 0 otherwise) and
+ * turns the other into no-ops, so a full frame's list 11 runs in whatever
+ * state list 10 left, as on the GS. */
+typedef struct RdFrameHead {
+    uint8_t rgba[4];   /* RGBAQ of the clear sprite (gsb_SetBGColor, alpha 0x80) */
+    uint32_t z;        /* the clear sprite's Z (sceGsSetDefClear: 0) */
+    uint32_t gsW, gsH; /* the scene size (ScreenWidth, ScreenHeight) */
+    uint8_t halfY;     /* XYOFFSET.y + 8 (sceGsSetHalfOffset with half != 0) */
+    uint8_t clear;     /* fbClear: the clear packet is part of the flip */
+    uint8_t _pad[2];
+} RdFrameHead;
+
+void rd_FrameHead(const RdFrameHead *head);
+/* Rewrites the recorded head's clear colour and half offset; no-op without a
+ * recorded head in the open frame. */
+void rd_FrameFlip(const uint8_t rgba[4], int halfY);
+
+/* rd_SetTarget's useOffset, bit 1 (R2c): XYOFFSET.y + 0.5 GS pixel, the
+ * field half offset sceGsSetHalfOffset writes into the flip's draw
+ * environment.  Bit 0 keeps its meaning. */
+#define RD_TARGET_OFFSET 1
+#define RD_TARGET_HALF_Y 2
+
+/* The ZBUF.PSM of a target's depth buffer, which fixes how GS Z maps to
+ * depth (FrameCB g_z.x, gs_z_to_depth): every ZBUF the game writes is PSMZ32
+ * (ZBUF 0x...000C0 with PSM nibble 0), so that is the default for SCENE and
+ * temporary targets; PSMZ24/16 exist for completeness. */
+typedef enum RdZFormat { RD_ZFMT_32 = 0, RD_ZFMT_24 = 1, RD_ZFMT_16 = 2 } RdZFormat;
+
+void rd_SetTargetZFormat(RdTarget t, RdZFormat fmt);
+/* GS Z to depth for a target's Z format: the scale FrameCB g_z.x carries
+ * (2^-32, 2^-24 or 2^-16). */
+float rd_TargetZScale(RdTarget t);
+
+/* gsb_MakeCommonMatrix's per-frame VU1 parameter block: the 16 quadwords
+ * the packet unpacks (VIF UNPACK V4-32, 16 qw) to VU1 data memory 0..15,
+ * referenced from the current position of every one of the 13 lists each
+ * time it is built.  Matrices are column-major float[16] as the scratchpad
+ * holds them (matrixptr offsets in parentheses).  Nothing consumes it before
+ * wave 3; rd keeps the last one recorded in the open frame
+ * (docs/port/RENDER_API.md "VU parameter block"). */
+typedef struct RdVuCommon {
+    float unitW[4];       /* qw 0: 0, 0, 0, 1 */
+    float clip[4];        /* qw 1: 4095, 4095, 0, 16777215 */
+    float zero[4];        /* qw 2: 0 */
+    uint32_t giftag[4];   /* qw 3: 0x8000, 0x302EC000, 0x512, 0 (EOP, PRE PRIM 0x5D, PACKED
+                             ST RGBAQ XYZ2) */
+    float screenView[16]; /* qw 4..7: world to GS screen, screen (+0xC0) x view (+0x80) = +0x100 */
+    float viewport[16];   /* qw 8..11: +0x340 */
+    float invView[16];    /* qw 12..15: inverse of the view, +0x380 */
+} RdVuCommon;
+
+void rd_SetVuCommon(const RdVuCommon *block);
+/* The block of the open frame, else of the last closed frame; NULL before
+ * the first one. */
+const RdVuCommon *rd_GetVuCommon(void);
 
 /* ------------------------------------------------------- verification */
 

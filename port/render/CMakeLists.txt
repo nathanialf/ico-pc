@@ -87,8 +87,25 @@ target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_tex_test PRIVATE ico_render ico_math)
 
+# rd_gsbase_test (wave 2, R2c): GsBase.c's host path with the 2D layer
+# (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
+# the rest of the game stubbed: frame lifecycle, field parity, camera
+# packing, Z scale and the post passes against CPU references.
+add_executable(rd_gsbase_test test/rd_gsbase_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_gsbase_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(rd_gsbase_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_gsbase_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math)
+
 if(WIN32 AND SDL3_FOUND)
-    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test)
+    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -104,6 +121,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
+    set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
@@ -120,7 +139,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
     endif()
     if(_env)
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex PROPERTIES ENVIRONMENT
-                             "${_env}")
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase
+                             PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

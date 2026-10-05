@@ -214,6 +214,8 @@ void rd__FrameReset(RdFrame *f)
     }
     f->tempCount = 0;
     f->hasCamera = 0;
+    f->hasVu = 0;     /* R2c */
+    f->headValid = 0; /* R2c */
     f->closed = 0;
     f->keep = 0;
     f->number = 0;
@@ -506,7 +508,8 @@ void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, in
     c->u[0] = color.id;
     c->u[1] = depth.id;
     c->u[2] = (gsW & 0xFFFF) | ((gsH & 0xFFFF) << 16);
-    c->b[0] = useOffset ? 1 : 0;
+    /* bit 0 RD_TARGET_OFFSET, bit 1 RD_TARGET_HALF_Y (R2c, the flip's half offset) */
+    c->b[0] = (uint8_t)(useOffset & (RD_TARGET_OFFSET | RD_TARGET_HALF_Y));
 }
 
 void rd_ClearTarget(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z)
@@ -882,6 +885,7 @@ void rd_EndFrame(int keep)
         return;
     }
     f->keep = keep ? 1 : 0;
+    rd__FrameHeadResolve(f, f->keep); /* R2c: the flip's head in the first replayed list */
     f->closed = 1;
     RdStateBlock s = f->startState;
     rd__Walk(f, f->keep, &s, NULL, NULL);

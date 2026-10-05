@@ -42,7 +42,7 @@ static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs", "sprite_world
                                                    "blend_int_vs"};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps", "blit_ps", "blend_int_ps",
-                                                   "date_snap_ps"};
+                                                   "date_snap_ps", "camera_probe_ps"};
 
 /* ------------------------------------------------------------------ init */
 
@@ -227,13 +227,32 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const
     return rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, &b, 1});
 }
 
+/* The camera of the frame being replayed (R2c): the frame's own, else the
+ * last one a replayed frame carried (the VU keeps its matrices until the
+ * game uploads new ones). */
+static RdCamera s_replayCam;
+
+static int s_hasReplayCam;
+
+void rd__SetReplayCamera(const RdCamera *cam)
+{
+    if (cam) {
+        s_replayCam = *cam;
+        s_hasReplayCam = 1;
+    }
+}
+
 RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY)
+{
+    return rd__FrameGroupZ(targetW, targetH, originX, originY, 1.0f / 16777216.0f);
+}
+
+RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                             float zScale)
 {
     IcoFrameCB cb;
     memset(&cb, 0, sizeof(cb));
-    for (int i = 0; i < 4; i++) {
-        cb.view[i * 5] = cb.proj[i * 5] = cb.viewProj[i * 5] = 1.0f;
-    }
+    rd__FillCameraCB(&cb, s_hasReplayCam ? &s_replayCam : NULL);
     cb.target[0] = (float)targetW;
     cb.target[1] = (float)targetH;
     cb.target[2] = 1.0f / (float)targetW;
@@ -246,7 +265,9 @@ RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, f
      * wide projection fill these in the Enhanced presets (wave 6). */
     cb.space[0][0] = cb.space[0][1] = 1.0f;
     cb.space[1][0] = cb.space[1][1] = 1.0f;
-    cb.z[0] = 1.0f / 16777216.0f;
+    /* the GS Z scale of the bound depth buffer: 2^-32 for the game's PSMZ32
+     * (R2c), so UI Z values above 2^24 keep their order */
+    cb.z[0] = zScale;
     cb.misc[0] = (float)g_rd.replayCounter;
     cb.misc[1] = (float)g_rd.settings.preset;
     return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
@@ -341,12 +362,6 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     r->passSerial++;
 }
 
-static float gsDepth(uint32_t z)
-{
-    float d = 1.0f - (float)z / 16777216.0f;
-    return d < 0.0f ? 0.0f : (d > 1.0f ? 1.0f : d);
-}
-
 /* ---------------------------------------------------------------- actions */
 
 static void doClear(Replay *r, const RdCmd *c)
@@ -362,7 +377,7 @@ static void doClear(Replay *r, const RdCmd *c)
     const int depth = c->b[4] && t->withDepth;
     r->writeSerial++;
     beginPass(r, t, depth ? t : NULL, c->u[0], depth ? c->u[0] : 0, RHI_LOAD_CLEAR, col,
-              RHI_LOAD_CLEAR, gsDepth(c->u[1]));
+              RHI_LOAD_CLEAR, rd__GsDepth(c->u[1], rd__TargetZScale(c->u[0])));
     endPass(r);
 }
 
@@ -699,7 +714,10 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
          * when useOffset; zero in Original, RENDER_API.md open item 4) */
         float ox = 2048.0f - (float)(r->st.gsW >> 1);
         float oy = 2048.0f - (float)(r->st.gsH >> 1);
-        r->frameBG = rd__FrameGroup(tc->w, tc->h, ox, oy);
+        if (r->st.useOffset & RD_TARGET_HALF_Y) {
+            oy += 0.5f; /* the flip's sceGsSetHalfOffset (R2c) */
+        }
+        r->frameBG = rd__FrameGroupZ(tc->w, tc->h, ox, oy, rd__TargetZScale(tdId));
         memcpy(r->frameKey, fk, sizeof(fk));
     }
     RhiRect sc = {x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
@@ -964,7 +982,7 @@ static const char *stubName(uint8_t type)
     case RDC_SHADOW_STRIP:
         return "rd_ShadowStrip (wave 4)";
     case RDC_POST_STUB:
-        return "rd_Post (anti-alias, fog, shadow resolve, blur, film noise: waves 2-5)";
+        return "rd_Post (fog, shadow resolve, blur: waves 4-5)";
     default:
         return "unknown command";
     }
@@ -990,6 +1008,9 @@ bool rd__ReplayFrame(const RdFrame *f, int keep, bool present)
     }
     uploadTextures();
 
+    if (f->hasCamera) {
+        rd__SetReplayCamera(&f->camera);
+    }
     Replay r;
     memset(&r, 0, sizeof(r));
     r.st = f->startState;
@@ -1078,6 +1099,91 @@ bool rd__ReadTarget(RdTarget target, void *dst, size_t dstSize, uint32_t *w, uin
         *h = t->h;
     }
     return readTexture(t->color, &t->colorState, t->w, t->h, dst, dstSize);
+}
+
+/* ---------------------------------------------------------- camera probe */
+
+bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4])
+{
+    if (!g_rd.hasDevice || !cam) {
+        return false;
+    }
+
+    /* one pixel per float: column = component, row = mul(g_view, p),
+     * mul(g_proj, mul(g_view, p)), mul(g_viewProj, p) */
+    enum { PW = 4, PH = 3 };
+
+    RhiTexture t = rhi_CreateTexture(&(RhiTextureDesc){PW, PH, 1, RHI_FMT_RGBA8_UNORM,
+                                                       RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+                                                       "rd camera probe"});
+    RhiState ts = RHI_STATE_UNDEFINED;
+    if (!t.id) {
+        return false;
+    }
+    rhi_WaitFrame();
+    s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
+    g_rd.replayCounter++;
+    s_ringOff = 0;
+    bool ok = ensureRing(64 * 1024);
+    s_cl = ok ? rhi_BeginCommands() : (RhiCommandList){0};
+    ok = ok && s_cl.id;
+    if (ok) {
+        const RdCamera saved = s_replayCam;
+        const int savedHas = s_hasReplayCam;
+        rd__SetReplayCamera(cam);
+        uploadTextures(); /* the dummy texture group 2 binds */
+        rd__Transition(s_cl, t, &ts, RHI_STATE_RENDER_TARGET);
+        RhiRenderPassDesc pd;
+        memset(&pd, 0, sizeof(pd));
+        pd.color[0].texture = t;
+        pd.color[0].load = RHI_LOAD_CLEAR;
+        pd.colorCount = 1;
+        pd.width = PW;
+        pd.height = PH;
+        rhi_CmdBeginRenderPass(s_cl, &pd);
+        RhiViewport vp = {0.0f, 0.0f, (float)PW, (float)PH, 0.0f, 1.0f};
+        rhi_CmdSetViewport(s_cl, &vp);
+        const RhiRect sc = {0, 0, PW, PH};
+        rhi_CmdSetScissor(s_cl, &sc);
+        RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_CAMERA_PROBE, RHI_FMT_RGBA8_UNORM);
+        RhiPipeline pipe = rd__GetPipeline(&k);
+        if (pipe.id) {
+            IcoDrawCB cb;
+            memset(&cb, 0, sizeof(cb));
+            memcpy(cb.param, p, sizeof(cb.param));
+            cb.uvRect[2] = cb.uvRect[3] = 1.0f;
+            cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
+            rhi_CmdSetPipeline(s_cl, pipe);
+            rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(PW, PH, 0.0f, 0.0f));
+            rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+            rhi_CmdSetBindGroup(
+                s_cl, 2,
+                rd__TexGroup(g_rd.dummy, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                     RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
+            rhi_CmdDraw(s_cl, 3, 0, 1);
+        }
+        rhi_CmdEndRenderPass(s_cl);
+        rhi_EndCommands(s_cl);
+        rhi_Submit(s_cl);
+        s_replayCam = saved;
+        s_hasReplayCam = savedHas;
+        ok = pipe.id != 0;
+    }
+    uint8_t px[PW * PH * 4];
+    ok = ok && readTexture(t, &ts, PW, PH, px, sizeof(px));
+    rhi_WaitIdle();
+    rhi_DestroyTexture(t);
+    if (ok) {
+        for (int r = 0; r < PH; r++) {
+            for (int c = 0; c < PW; c++) {
+                const uint8_t *b = &px[(r * PW + c) * 4];
+                const uint32_t bits = (uint32_t)b[0] | ((uint32_t)b[1] << 8) |
+                                      ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+                memcpy(&out[r][c], &bits, 4);
+            }
+        }
+    }
+    return ok;
 }
 
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h)

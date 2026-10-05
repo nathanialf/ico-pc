@@ -12,6 +12,8 @@
  *                  the enumeration of the reachable pipelines
  *   rd_replay.c    an RdFrame onto the RHI
  *   rd_present.c   DISPLAY to the output (Original preset)
+ *   rd_frame.c     the flip's frame head, per-target Z scale, VU block, camera
+ *                  into FrameCB (wave 2, R2c)
  *   rd_dump.c      frame dump and load
  *   rd_png.c       a minimal PNG writer for the replay tool and tests
  *
@@ -156,6 +158,14 @@ typedef struct RdFrame {
     uint32_t gsW, gsH;
     uint32_t tempTargets[RD_MAX_TEMP_PER_FRAME]; /* owned, freed when the frame is reused */
     uint32_t tempCount;
+    /* wave 2 (R2c), rd_frame.c; not dumped */
+    RdVuCommon vu; /* gsb_MakeCommonMatrix's block, the last one recorded */
+    uint32_t hasVu;
+    /* rd_FrameHead's two copies: [0] at the head of list 0, [1] of list 11;
+     * command index ranges [start, end) and the index of each RDC_CLEAR and
+     * RDC_TARGET; headValid 0 = no head recorded */
+    uint32_t headValid;
+    uint32_t headStart[2], headEnd[2], headClear[2], headTarget[2];
 } RdFrame;
 
 void rd__FrameReset(RdFrame *f);
@@ -193,7 +203,14 @@ typedef struct RdTargetRec {
     uint32_t snapFor;    /* replay counter at which snap was taken */
     uint32_t viewTex[3]; /* RdTex ids of rd_TargetTexture, per RdTexView */
     uint32_t ownerFrame;
+    uint8_t zFormat; /* RdZFormat of the depth buffer (R2c); 0 = PSMZ32 */
 } RdTargetRec;
+
+/* GS Z to depth scale of a target id's depth buffer (2^-32 for PSMZ32, the
+ * default; 2^-32 also for an unknown id). */
+float rd__TargetZScale(uint32_t id);
+/* gs_z_to_depth on the CPU (clears): the same formula as gs_math.hlsli. */
+float rd__GsDepth(uint32_t z, float scale);
 
 RdTargetRec *rd__TargetRec(uint32_t id);
 /* Creates the GPU textures of a target record (no-op without a device). */
@@ -246,7 +263,8 @@ typedef enum RdFsId {
     RD_FS_SPRITE = 0,
     RD_FS_BLIT,
     RD_FS_BLEND_INT,
-    RD_FS_DATE_SNAP, /* wave 2: destination alpha MSB into the R8 DATE snapshot */
+    RD_FS_DATE_SNAP,    /* wave 2: destination alpha MSB into the R8 DATE snapshot */
+    RD_FS_CAMERA_PROBE, /* wave 2 (R2c): FrameCB matrices applied to a point, as bytes (tests) */
     RD_FS_COUNT
 } RdFsId;
 
@@ -398,6 +416,26 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
 uint64_t rd__RingAlloc(uint64_t size, uint64_t align);
 /* Per-frame uniform bind groups for the presenter and posts. */
 RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY);
+/* The same with the GS Z scale of the bound depth buffer (R2c); rd__FrameGroup
+ * uses 2^-24 (no depth bound). */
+RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                             float zScale);
+
+/* ------------------------------------------------- frame head and camera
+ * rd_frame.c (wave 2, R2c). */
+/* rd_EndFrame: keep the head copy in the first replayed list, no-op the
+ * other (rd.h, rd_FrameHead). */
+void rd__FrameHeadResolve(RdFrame *f, int keep);
+/* Fills FrameCB's camera fields (view, proj, viewProj, cameraPos, clip)
+ * from cam, or identity with cam NULL.  cb is an IcoFrameCB. */
+void rd__FillCameraCB(void *cb, const RdCamera *cam);
+/* The camera FrameCB carries during the replay of a frame (rd_replay.c). */
+void rd__SetReplayCamera(const RdCamera *cam);
+/* Test hook: FrameCB from cam, then camera_probe_ps evaluates
+ * mul(g_view, p), mul(g_proj, mul(g_view, p)) and mul(g_viewProj, p) on the
+ * GPU and returns them in out[0..2] (bit patterns read back).  False without
+ * a device. */
+bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4]);
 RhiBindGroup rd__DrawGroup(const void *drawCB);
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s);
 /* The same with t2 (sprite_ps's DATE snapshot) bound to date; rd__TexGroup binds

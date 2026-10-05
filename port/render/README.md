@@ -9,10 +9,11 @@ implementation.
 | `rd_state.h` | spec (wave 0) | the finite GS state the game uses, enumerated from call sites, and the pipeline key |
 | `rd_internal.h` | wave 1 | command records, frame, state block, registries, the hooks tests and tools use |
 | `rd_core.c` | wave 1 | recording: lists, payload arena, state deltas, list defaults, named and temporary targets, texture registry, frame retention, the state walk |
-| `rd_post.c` | wave 1 | `rd_Post`: reduction, keep, fade, letterbox, brightness as the GS writes and sprites of `GsBase.c`; composite (hardware or exact), copy; the other kinds recorded as stubs |
+| `rd_post.c` | waves 1, 2 (R2c) | `rd_Post`: reduction, keep, fade, letterbox, brightness, anti-alias (downsample, composite), film noise as the GS writes and sprites of `GsBase.c`, in order, so they leak the same state; composite (hardware or exact), copy; fog, shadow resolve and blur recorded as stubs |
 | `rd_pipeline.c` | wave 1 | pipeline key derivation from the state block (blend paths, AFAIL split, Z), the cache, the reachable-pipeline enumeration |
 | `rd_replay.c` | wave 1 | an `RdFrame` onto the RHI: passes, state tracking, GS sampling rules, the exact `blend_int` path |
-| `rd_present.c` | wave 1 skeleton | DISPLAY to the output, Original preset (4:3 box, line doubling, bilinear horizontal); preset hooks |
+| `rd_present.c` | wave 1, hooks in wave 2 (R2c) | DISPLAY to the output, Original preset (4:3 box, line doubling, bilinear horizontal); the Enhanced fields (interpolation, aspect, mirror, full height) present and unused |
+| `rd_frame.c` | wave 2 (R2c) | the flip's draw environment and clear (`rd_FrameHead`, `rd_FrameFlip`), per-target Z scale, `gsb_MakeCommonMatrix`'s VU block, `RdCamera` into FrameCB (`docs/port/RENDER_API.md` section 12) |
 | `rd_dump.c` | wave 1 | frame dump and load (local only: dumps hold assets, never commit one) |
 | `rd_png.c` | wave 1 | a minimal stored-deflate PNG writer (own code, no dependency) |
 | `tools/rd_replay_tool.c` | wave 1 | a dump to a PNG, headless |
@@ -32,9 +33,10 @@ texture copies. Recorded with their payload and key but stopped at replay
 by `rd__NotImplemented` (prints, then asserts): `rd_DrawMesh`,
 `rd_DrawSkinned` (wave 3), `rd_DrawGrid`, `rd_DrawParticles`,
 `rd_ShadowStrip` (wave 4), `rd_WorldPrims` (wave 5), and the post kinds
-anti-alias, fog, shadow resolve, blur, film noise, present blit. DATE is
-applied since wave 2 (an R8 snapshot of the target's alpha MSB read by
-`sprite_ps` at t2).
+fog, shadow resolve, blur, present blit. DATE is applied since wave 2 (an R8
+snapshot of the target's alpha MSB read by `sprite_ps` at t2); anti-alias
+and film noise replay since wave 2 (R2c). FrameCB carries the frame's
+camera and the bound depth target's Z scale since R2c.
 
 ## Tests
 
@@ -45,6 +47,8 @@ applied since wave 2 (an R8 snapshot of the target's alpha MSB read by
 | `rd_replay_tool` | the dump `rd_pixel` leaves, through the tool and the presenter, to a PNG (77 when `rd_pixel` skipped) |
 | `rd_layout` | wave 2: `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` built as the window build has them (`ICO_RD`), fed `layout_texture.c`'s call sequence for a synthetic layout item (after `Texture.c`'s raw TEX0 packet); checks the recorded state, sprites, UI tags, texture seam and that no register went undecoded, then one sprite's pixels on a device (77 without one) |
 | `rd_tex` | wave 2 (R2b): `Texture.c` with the three files above (`ICO_RD`), fed synthetic TIM2 files: every texel of PSMT4/PSMT8 (32- and 16-bit CLUTs, CSM1 and index order), PSMCT16/24/32, ICO block, padding, and the decoder's PSMT8H/4HL/4HH against independent references; TEXA on the CPU; sampler from the ICO block; a CLUT scroll re-expanding one texture in place; cache keys and retirement; the decoder binding the cached texture with the record's TEX1/TEST; then a PSMT8 and a PSMCT16 (TEXA 7F/81+AEM) sprite through `tex_TransTexture` give exact texels on a device (77 without one) |
+
+| `rd_gsbase` | wave 2 (R2c): `GsBase.c` with the three files above (`ICO_RD`), the rest of the game stubbed, driven through `gsb_InitGSSystem`, `gsb_SyncGSSystem` and `gsb_UpdateGSSystem`: the head clear takes the flip's BG colour, keep frames keep the head in list 11, the half offset follows `GS_CSR.FIELD` two flips late, post-pass state leaks, the VU block and camera, the Z formula; on a device: the camera packing through `camera_probe_ps` against the C products and `sceVu0RotTransPers` (1/16 px), PSMZ32 depth order of UI Z above 2^24, the half-offset rows, the clear, and keep, fade, brightness, anti-alias (each level, both), film noise and letterbox against CPU references within 1 LSB (2 for both anti-alias levels) |
 
 `port/test/gs_blend_test.c` is the single-file CPU program behind
 `docs/port/RENDER_API.md` section 7:

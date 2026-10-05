@@ -10,10 +10,24 @@
  * texture of RdSettings.outputWidth x outputHeight (tests, the replay tool;
  * none when either is 0).
  *
- * Hooks for the later presets (wave 6): RdPresentPreset picks the box, the
- * filters and whether lines are doubled; mirror and widescreen add the x
- * flip and the box aspect here.  Field parity (RENDER_API.md open item 4)
- * would offset step 1 by half a line.
+ * Presets (wave 2, R2c: hooks only).  RdPresentPreset holds everything a
+ * preset may change at present time.  RD_PRESET_ORIGINAL is the only one
+ * implemented; RD_PRESET_ENHANCED's entry carries the Enhanced fields
+ * (interpolation, output aspect, mirror, full-height scene) set to their
+ * Original values, and nothing reads them yet:
+ *   interpolate   wave 7 (rd_interp.c): present several times per
+ *                 simulation tick, blending the retained frames by
+ *                 presentAlpha(); Original presents once per tick (inside
+ *                 rd_EndFrame) and presentAlpha() is 1
+ *   aspectFromSettings  widescreen (wave 6): the box takes RdSettings.aspect
+ *                 instead of 4:3; the projection side is rd_frame.c
+ *                 rd__FillCameraCB and GsBase.c gsbHostWideX
+ *   mirror        mirror mode: step 2 flips x
+ *   fullHeight    Enhanced "full-height scene": DISPLAY is the scene height
+ *                 and step 1 does not double lines
+ * Field parity is not a present-time effect: the PS2 shifts the scene's
+ * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
+ * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -24,6 +38,11 @@ typedef struct RdPresentPreset {
     RdFilter doubleFilter; /* step 1 */
     RdFilter scaleFilter;  /* step 2 */
     int lineDouble;
+    /* Enhanced hooks (unused; Original values in both entries) */
+    int interpolate;
+    int aspectFromSettings;
+    int mirror;
+    int fullHeight;
 } RdPresentPreset;
 
 static void box43(uint32_t outW, uint32_t outH, RhiRect *box)
@@ -41,10 +60,18 @@ static void box43(uint32_t outW, uint32_t outH, RhiRect *box)
 
 static const RdPresentPreset s_presets[2] = {
     /* RD_PRESET_ORIGINAL */
-    {box43, RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1},
-    /* RD_PRESET_ENHANCED: the Original path until wave 6 */
-    {box43, RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1},
+    {box43, RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 0, 0},
+    /* RD_PRESET_ENHANCED: the Original path until waves 6 and 7 */
+    {box43, RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 0, 0},
 };
+
+/* The interpolation hook (wave 7): the weight of the newest retained frame
+ * at this present.  Original presents each frame once, whole. */
+static float presentAlpha(const RdPresentPreset *pr)
+{
+    (void)pr;
+    return 1.0f;
+}
 
 static RhiTexture s_backbuffer;
 
@@ -144,6 +171,9 @@ void rd__PresentRecord(RhiCommandList cl)
         return;
     }
     const RdPresentPreset *pr = &s_presets[g_rd.settings.preset == RD_PRESET_ENHANCED ? 1 : 0];
+    if (pr->interpolate && presentAlpha(pr) < 1.0f) {
+        /* wave 7: blend rd__PrevFrame's DISPLAY here; unreachable until then */
+    }
     RhiTexture out = s_window ? s_backbuffer : g_rd.presentOut;
     RhiState *outState = s_window ? &s_backbufferState : &g_rd.presentOutState;
 

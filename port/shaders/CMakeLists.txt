@@ -11,6 +11,8 @@ ico_add_shader(date_snap_ps sprite.hlsl date_snap_ps fragment)
 ico_add_shader(blit_vs blit.hlsl blit_vs vertex)
 ico_add_shader(blit_ps blit.hlsl blit_ps fragment)
 ico_add_shader(blit_fix_ps blit.hlsl blit_fix_ps fragment)
+# wave 2 (R2c): tests only, rd__CameraProbe
+ico_add_shader(camera_probe_ps blit.hlsl camera_probe_ps fragment)
 ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
 ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
 # wave 4 placeholder
