@@ -34,11 +34,21 @@ packages now carry one `x64/` folder. The checkpoint records below that name
    console. Settings come from `ico-pc.ini` in the exe's folder and from
    `config.toml` in the per-user folder (below); logs and the trace go to the
    exe's folder (`port/platform/host_config.c`, `main_host.c`):
+   - **Game data:** `ico.o2r` in the per-user folder (Windows
+     `%APPDATA%\ico-pc\ico-pc\`) or beside the exe. The first run has
+     none: it finds the ISO (below), verifies it and extracts it there once
+     (about 870 MB; progress in the log and in a small window; 14 s on the
+     container, longer on a slow disk), then boots. Later runs mount the
+     archive and never open the ISO. Deleting `ico.o2r` makes the next run
+     extract again. `use_iso=1` reads the ISO directly instead
+     (docs/port/DATA.md, "Backend 2: the archive").
    - **ISO:** `Ico_PAL.iso` beside the exe, else `iso=` in `ico-pc.ini`,
      else a file dialog. A dialog choice is saved to the ini once it
      verifies.
-   - **ISO check:** SHA-1 `1017b53f...` (docs/port/DATA.md), skipped with
-     `verify=0`.
+   - **ISO check:** the extractor accepts the image by its SHA-1
+     `1017b53f...`, or by `SCES_507.60`'s SHA-1 plus DATA.DF's manifest (a
+     re-dump), and logs which; a wrong image stops with a message box. With
+     `use_iso=1` the SHA-1 check is the old one, skipped with `verify=0`.
    - **Pad script:** `pad-script.txt`, used if present (format in
      `port/input/pad_script.h`).
    - **Logs:** stdout and stderr go to `logs/ico-pc.log`, unbuffered; the
@@ -71,7 +81,8 @@ key has a `config.toml` name; a true/false toml value reads as 1/0.
 | `ticks=N` | `[dev] ticks` | exit after N Main ticks |
 | `watchdog=S` | `[dev] watchdog` | default 30, 0 off |
 | `trace=0` / `trace=PATH` | `[dev] trace` | no trace / trace there; a path also fixes the clock |
-| `verify=0` | `[dev] verify` | skip the SHA-1 check |
+| `verify=0` | `[dev] verify` | skip the SHA-1 check (`use_iso=1` only; extraction always verifies) |
+| `use_iso=0/1` | `[dev] use_iso` | 1: mount the ISO directly (dev mode); 0: the extracted `ico.o2r`, extracting it on the first run. Default 1 in the headless build (trace runs and tests read the ISO as before), 0 in the window build |
 | `pad_script=PATH` | `[dev] pad_script` | the scripted pad |
 | `dump_every=N`, `dump_dir=PATH` | `[dev] dump_every`, `dump_dir` | rd frame dumps (window build) |
 | `audio=0` | `[audio] enabled` | no audio device |
@@ -202,6 +213,29 @@ Headless `linux-x64` (`-DICO_LINK_EXE=ON`), `ticks=1300`, `pad_script` =
   tick 143, and it did not change;
 - the run reached stage 3 at tick 996 (`stage_no 40 -> 3`), 1300 Main ticks,
   2607 vsyncs, exit `ticks= reached`, as in the 4B run.
+
+## Phase 5A run (the archive)
+
+Headless `linux-x64` (`-DICO_LINK_EXE=ON`, build folder
+`build-host/5a-linux-x64`), `ticks=1300`, `pad_script` =
+`port/input/pad-boot.txt`, `watchdog=60`, `verify=0`, `iso=` the PAL image in
+`ico-pc.ini`, and `[dev] use_iso = false` in a `config.toml` beside the exe,
+no `ico.o2r` present (2026-10-05):
+
+- the first run extracted: `accepted by iso-sha1`, 13 files, 872,906,360
+  bytes, `ico.o2r` 872,910,571 bytes, 14.2 s (image SHA-1 6.1 s, copy
+  8.2 s), progress logged in tenths;
+- it mounted the archive (`game data .../ico.o2r (SCES-50760, 13 files ...)`),
+  loaded the 75 table rows and the SNDN2DRV pitch table from it, reached
+  stage 3 at tick 996 and ended at 1300 Main ticks, 2607 vsyncs, `ticks=
+  reached`;
+- the trace is byte-identical to package 5B's (`build-host/5b-linux-x64/
+  logs/trace-*.txt`, the ISO; SHA-1 `36fc27275414fe291ca0a892439de7d27773fa64`
+  for both), and the `stage_no` milestones fall on the same vsyncs and ticks.
+
+The window build has not run a first-run extraction yet (the game never
+runs in the container): the Windows checkpoint should check the progress
+window, the time on the user's disk and the `ico.o2r` in `%APPDATA%`.
 
 ## Repeatable packaging: `tools/package_win.sh <label>`
 

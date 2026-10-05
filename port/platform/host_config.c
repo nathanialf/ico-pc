@@ -370,6 +370,9 @@ static const struct {
     {"dev.verify", "verify"},
     {"dev.headless", "headless"},
     {"dev.fixed_clock", "fixed_clock"},
+    /* 1: mount the disc image directly instead of the extracted ico.o2r
+       (main_host.c; default 1 headless, 0 in the window build) */
+    {"dev.use_iso", "use_iso"},
 };
 
 const char *ico_config_ini_key(const char *toml_path)

@@ -26,7 +26,7 @@ the same logic, timing and output, with improvements kept optional.
 
 ## Work ahead
 
-- [ ] **Host build.** A second build (CMake or similar) that compiles
+- [x] **Host build.** A second build (CMake or similar) that compiles
       `ico2/` for 64-bit Linux and Windows next to the PS2 build, and
       fixes what that exposes: 32-bit pointer and `int` assumptions,
       MIPS/R5900-specific inline assembly and 128-bit types, alignment.
@@ -38,10 +38,12 @@ the same logic, timing and output, with improvements kept optional.
 - [ ] **Renderer.** The GS packets and the five VU1 microprograms in
       `ico2/vusrc/` (cluster, mesh, normal_c, normal_l, particle) turned
       into a modern graphics API.
-- [ ] **Assets.** Read the game's files from the user's disc image at run
-      time. The data tables the build already generates from the user's
-      ELF (`build/data/`) are the model: nothing from the disc is committed.
-- [ ] **Input, audio, saves and video playback** on the host.
+- [x] **Assets.** Read the game's files from the user's disc image at run
+      time: the first run verifies the image and extracts what the game
+      reads into a local archive, `ico.o2r`, and the data tables load from
+      its boot ELF (`docs/port/DATA.md`). Nothing from the disc is committed
+      or compiled into the program.
+- [x] **Input, audio, saves and video playback** on the host.
 - [ ] **PC features:** resolution, aspect ratio, frame rate and controller
       remapping, behind options that default to the original behaviour.
 

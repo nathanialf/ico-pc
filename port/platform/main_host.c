@@ -16,13 +16,25 @@
  *
  *   logs/ico-pc.log          stdout and stderr, rewritten each run
  *   logs/trace-<time>.txt    the trace (trace_host.h); ini trace=0 or PATH
+ *   game data                the extracted archive ico.o2r (port/data/
+ *                            archive.h) in the per-user folder, else beside
+ *                            the executable. Without one (the first run) the
+ *                            disc image is found as below, verified and
+ *                            extracted into the per-user folder once
+ *                            (port/data/extract.h), with progress in the log
+ *                            and, in the window build, a small progress
+ *                            window. use_iso=1 ([dev] use_iso) mounts the
+ *                            image directly instead: the default of the
+ *                            headless build, so trace runs and tests read
+ *                            the ISO as before
  *   disc image               Ico_PAL.iso beside the executable, else ini
  *                            iso=, else $ICO_ISO, else baserom/Ico_PAL.iso
  *                            under the working folder, else (Windows) a
  *                            file-open dialog whose answer is saved as iso=
- *                            in ico-pc.ini; then its SHA-1 is checked
- *                            against the SCES-50760 image's (ini verify=0
- *                            skips it)
+ *                            in ico-pc.ini. With use_iso its SHA-1 is
+ *                            checked against the SCES-50760 image's (ini
+ *                            verify=0 skips it); the extractor always
+ *                            verifies (docs/port/DATA.md)
  *   pad script               ini pad_script=, else pad-script.txt beside the
  *                            executable if present, else no controller
  *   ticks                    ini ticks=N exits after N Main ticks
@@ -47,20 +59,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "archive.h"
 #include "cdvd_host.h"
 #include "diag_host.h"
+#include "extract.h"
 #include "host_config.h"
 #include "host_loop.h"
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
 #ifndef ICO_HEADLESS
+#include <SDL3/SDL.h>
 #include "window_host.h"
 #endif
 
 /* The PAL disc image's SHA-1 (docs/port/DATA.md, "Facts about the PAL disc
    relied on"). */
-#define ICO_ISO_SHA1 "1017b53f6e80f41f823369b0be1d8c69f7e16dc6"
+#define ICO_ISO_SHA1 ICO_DISC_ISO_SHA1
 /* Vsyncs without a Main tick after which the loop warns once (the game's
    tick hook may be missing, and then ticks= never ends). */
 #define NO_TICK_WARN_VSYNCS 3000u
@@ -306,6 +321,276 @@ static void verify_iso(const char *iso)
     fprintf(stderr, "ico_pc: disc image verified (SCES-50760)\n");
 }
 
+/* --- the game data: the archive, or the image in dev mode ----------------- */
+
+/* use_iso= / [dev] use_iso: 1 reads the image directly. Default: the
+   headless build reads the image (trace runs and tests stay as they were),
+   the window build the archive. */
+static int use_iso_mode(const IcoIni *ini)
+{
+    const char *v = ico_ini_get(ini, "use_iso");
+
+    if (v != NULL && v[0] != '\0') {
+        return strcmp(v, "1") == 0 || strcmp(v, "true") == 0;
+    }
+#ifdef ICO_HEADLESS
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+#ifndef ICO_HEADLESS
+
+/* The window build's progress window during the first-run extraction: SDL's
+   2D renderer, a title and a bar, closed before the game's window opens. */
+static SDL_Window *progressWin;
+static SDL_Renderer *progressRen;
+static int progressClosed;
+
+static void progress_ui_open(void)
+{
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        fprintf(stderr, "ico_pc: no progress window: %s\n", SDL_GetError());
+        return;
+    }
+    progressWin = SDL_CreateWindow("ICO: preparing the game data", 480, 72, 0);
+    if (progressWin == NULL) {
+        fprintf(stderr, "ico_pc: no progress window: %s\n", SDL_GetError());
+        return;
+    }
+    progressRen = SDL_CreateRenderer(progressWin, NULL);
+}
+
+/* 1 when the user closed the window (cancel). */
+static int progress_ui_update(const char *phase, int pct)
+{
+    SDL_Event ev;
+    char title[128];
+
+    if (progressWin == NULL) {
+        return 0;
+    }
+    while (SDL_PollEvent(&ev)) {
+        if (ev.type == SDL_EVENT_QUIT || ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+            progressClosed = 1;
+        }
+    }
+    snprintf(title, sizeof(title), "ICO: preparing the game data (first run): %s %d%%",
+             strcmp(phase, "hash") == 0 ? "checking the disc image" : "copying", pct);
+    SDL_SetWindowTitle(progressWin, title);
+    if (progressRen != NULL) {
+        SDL_FRect frame = {16.0f, 24.0f, 448.0f, 24.0f};
+        SDL_FRect bar = {18.0f, 26.0f, 444.0f * (float)pct / 100.0f, 20.0f};
+
+        SDL_SetRenderDrawColor(progressRen, 24, 24, 24, 255);
+        SDL_RenderClear(progressRen);
+        SDL_SetRenderDrawColor(progressRen, 160, 160, 160, 255);
+        SDL_RenderRect(progressRen, &frame);
+        SDL_SetRenderDrawColor(progressRen, 200, 180, 120, 255);
+        SDL_RenderFillRect(progressRen, &bar);
+        SDL_RenderPresent(progressRen);
+    }
+    return progressClosed;
+}
+
+static void progress_ui_close(void)
+{
+    if (progressRen != NULL) {
+        SDL_DestroyRenderer(progressRen);
+        progressRen = NULL;
+    }
+    if (progressWin != NULL) {
+        SDL_DestroyWindow(progressWin);
+        progressWin = NULL;
+    }
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+#endif
+
+typedef struct Progress {
+    int logged; /* the last tenth logged, per phase */
+    const char *phase;
+    double ui_at;
+} Progress;
+
+static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_t total)
+{
+    Progress *p = ctx;
+    int pct = total > 0 ? (int)(done * 100u / total) : 0;
+
+    if (p->phase == NULL || strcmp(p->phase, phase) != 0) {
+        p->phase = phase;
+        p->logged = -1;
+        fprintf(stderr, "ico_pc: first run: %s\n",
+                strcmp(phase, "hash") == 0 ? "checking the disc image's SHA-1"
+                                           : "copying the game's files into the archive");
+    }
+    if (pct / 10 != p->logged) {
+        p->logged = pct / 10;
+        fprintf(stderr, "ico_pc: first run: %3d%% (%llu of %llu MB)\n", pct,
+                (unsigned long long)(done >> 20), (unsigned long long)(total >> 20));
+    }
+#ifndef ICO_HEADLESS
+    {
+        double now = ico_diag_uptime();
+
+        if (now - p->ui_at >= 0.05 || done == total) {
+            p->ui_at = now;
+            return progress_ui_update(phase, pct);
+        }
+    }
+#endif
+    return 0;
+}
+
+/* Checks an archive (meta.json, this disc, the boot ELF's hash read back
+   through it) and makes it the disc. 0, or -1 with the reason. */
+static int mount_archive(const char *path, char *why, size_t whysize)
+{
+    static unsigned char chunk[1 << 16];
+    IcoArchiveInfo info;
+    IcoVfs *vfs;
+    IcoVfsFile f;
+    IcoSha1 s;
+    unsigned char d[20];
+    char hex[41];
+    uint64_t off;
+    int i;
+
+    if (ico_archive_read_info(path, &info, why, whysize) != 0 ||
+        !ico_archive_info_acceptable(&info, why, whysize)) {
+        return -1;
+    }
+    vfs = ico_vfs_mount_archive(path);
+    if (vfs == NULL) {
+        snprintf(why, whysize, "it cannot be mounted");
+        return -1;
+    }
+    if (ico_vfs_open(vfs, ICO_TABLES_BOOT_ELF, &f) != 0) {
+        ico_vfs_unmount(vfs);
+        snprintf(why, whysize, "it holds no %s", ICO_TABLES_BOOT_ELF);
+        return -1;
+    }
+    ico_sha1_init(&s);
+    for (off = 0; off < f.entry.size;) {
+        int64_t n = ico_vfs_read(&f, off, chunk, sizeof(chunk));
+
+        if (n <= 0) {
+            break;
+        }
+        ico_sha1_update(&s, chunk, (size_t)n);
+        off += (uint64_t)n;
+    }
+    ico_sha1_final(&s, d);
+    for (i = 0; i < 20; i++) {
+        snprintf(hex + 2 * i, 3, "%02x", d[i]);
+    }
+    if (off != f.entry.size || strcmp(hex, ICO_DISC_ELF_SHA1) != 0) {
+        ico_vfs_unmount(vfs);
+        snprintf(why, whysize, "its %s reads back with SHA-1 %s", ICO_TABLES_BOOT_ELF, hex);
+        return -1;
+    }
+    ico_vfs_set_disc(vfs);
+    fprintf(stderr,
+            "ico_pc: game data %s (%s, %u files, %llu bytes; from an image with SHA-1 %s, "
+            "accepted by %s)\n",
+            path, info.disc_id, (unsigned)info.stored, (unsigned long long)info.file_bytes,
+            info.iso_sha1, info.accepted_by);
+    return 0;
+}
+
+static void copy_path(char *out, size_t size, const char *s)
+{
+    size_t n = strlen(s);
+
+    if (n >= size) {
+        n = size - 1;
+    }
+    memcpy(out, s, n);
+    out[n] = '\0';
+}
+
+/* The archive mode: mount ico.o2r, extracting it on the first run. */
+static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir,
+                            const char *ini_path, char *source, size_t source_size)
+{
+    char pref[ICO_PATH_MAX];
+    char cand[2][ICO_PATH_MAX];
+    char iso[ICO_PATH_MAX];
+    char why[1024];
+    IcoExtractResult res;
+    Progress prog;
+    int picked, i, r;
+
+    ico_host_pref_dir(pref, sizeof(pref));
+    ico_path_join(cand[0], sizeof(cand[0]), pref, ICO_ARCHIVE_NAME);
+    ico_path_join(cand[1], sizeof(cand[1]), exe_dir, ICO_ARCHIVE_NAME);
+    for (i = 0; i < 2; i++) {
+        if ((i == 1 && strcmp(cand[0], cand[1]) == 0) || !ico_file_exists(cand[i])) {
+            continue;
+        }
+        if (mount_archive(cand[i], why, sizeof(why)) == 0) {
+            copy_path(source, source_size, cand[i]);
+            return;
+        }
+        fprintf(stderr, "ico_pc: %s is not usable: %s\n", cand[i], why);
+    }
+
+    /* the first run: the image, verified and extracted once */
+    fprintf(stderr, "ico_pc: no usable %s in %s: the first run extracts it from the disc image\n",
+            ICO_ARCHIVE_NAME, pref);
+    find_iso(a, ini, exe_dir, iso, &picked);
+    if (ico_make_dir(pref) != 0) {
+        ico_host_fatal(log_path, "Cannot create the folder %s for the game data.", pref);
+    }
+    memset(&prog, 0, sizeof(prog));
+#ifndef ICO_HEADLESS
+    progress_ui_open();
+#endif
+    r = ico_extract_archive(iso, cand[0], 0, extract_progress, &prog, &res, why, sizeof(why));
+#ifndef ICO_HEADLESS
+    progress_ui_close();
+#endif
+    if (r != 0 && res.cancelled) {
+        fprintf(stderr, "ico_pc: first run: cancelled; nothing was written\n");
+        fflush(stderr);
+        exit(0);
+    }
+    if (r != 0) {
+        ico_host_fatal(log_path, "Could not prepare the game data from %s into %s.\n%s", iso,
+                       cand[0], why);
+    }
+    fprintf(stderr,
+            "ico_pc: first run: disc image SHA-1 %s, %llu bytes; accepted by %s%s\n"
+            "ico_pc: first run: %u files, %llu bytes, into %s (%llu bytes) in %.1f s "
+            "(SHA-1 %.1f s, copy %.1f s)\n",
+            res.iso_sha1, (unsigned long long)res.iso_size, res.rule,
+            strcmp(res.rule, ICO_RULE_ISO_SHA1) == 0
+                ? " (the image's SHA-1)"
+                : " (SCES_507.60's SHA-1 and DATA.DF's manifest: a re-dump of the PAL disc)",
+            (unsigned)res.files, (unsigned long long)res.bytes, cand[0],
+            (unsigned long long)res.archive_bytes, res.hash_seconds + res.extract_seconds,
+            res.hash_seconds, res.extract_seconds);
+    if (!res.datadf_ok) {
+        fprintf(stderr, "ico_pc: first run: note: DATA.DF did not match the manifest (%s)\n",
+                res.datadf_why);
+    }
+    if (picked) {
+        if (ico_ini_store(ini_path, "iso", iso) == 0) {
+            fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+        } else {
+            fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
+        }
+    }
+    if (mount_archive(cand[0], why, sizeof(why)) != 0) {
+        ico_host_fatal(log_path, "The game data just written to %s cannot be used: %s", cand[0],
+                       why);
+    }
+    copy_path(source, source_size, cand[0]);
+}
+
 int main(int argc, char **argv)
 {
     Args a;
@@ -356,22 +641,27 @@ int main(int argc, char **argv)
 
     /* the disc goes in before boot, so a missing image fails here rather
        than leaving the game at file_Init's disc wait (docs/port/DATA.md) */
-    find_iso(&a, &ini, exe_dir, iso, &picked);
-    v = ico_ini_get(&ini, "verify");
-    if (a.no_verify || (v != NULL && strcmp(v, "0") == 0)) {
-        fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
-    } else {
-        verify_iso(iso);
-    }
-    if (picked) {
-        if (ico_ini_store(ini_path, "iso", iso) == 0) {
-            fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+    if (use_iso_mode(&ini)) {
+        fprintf(stderr, "ico_pc: use_iso: the disc image is read directly\n");
+        find_iso(&a, &ini, exe_dir, iso, &picked);
+        v = ico_ini_get(&ini, "verify");
+        if (a.no_verify || (v != NULL && strcmp(v, "0") == 0)) {
+            fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
         } else {
-            fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
+            verify_iso(iso);
         }
-    }
-    if (ico_cdvd_host_mount_iso(iso) != 0) {
-        ico_host_fatal(log_path, "Cannot open the disc image %s.", iso);
+        if (picked) {
+            if (ico_ini_store(ini_path, "iso", iso) == 0) {
+                fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+            } else {
+                fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
+            }
+        }
+        if (ico_cdvd_host_mount_iso(iso) != 0) {
+            ico_host_fatal(log_path, "Cannot open the disc image %s.", iso);
+        }
+    } else {
+        mount_game_data(&a, &ini, exe_dir, ini_path, iso, sizeof(iso));
     }
     /* the data tables, from the disc's boot ELF, before anything reads one
        (port/data/tables.h) */

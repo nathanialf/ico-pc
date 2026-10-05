@@ -24,6 +24,9 @@ for `sceCdReadClock` and the EE timers are answered from it and from the host.
   The memory card folder (`ico_host_saves_dir`) defaults to `<pref folder>/memcard`,
   so the window build's saves move with it; `[paths] saves` or `saves=` set it.
 - **ico-pc.ini:** beside the executable, as before (docs/port/TESTING.md).
+- **ico.o2r** (the extracted game data, docs/port/DATA.md): `<pref folder>/ico.o2r`,
+  written on the first run; one beside the executable is also used when the
+  pref folder has none. Headless, the pref folder is the executable's.
 - Logs, the trace and the `dumps/` folder stay in the executable's folder.
 - A relative path in either file (`iso`, `saves`, `pad_script`, `dump_dir`,
   `audio_dump`, `trace`) is taken from the executable's folder, not the pref
@@ -68,7 +71,8 @@ as before. Environment variables the other libraries read (`ICO_ISO`,
 | `[dev] dump_every`, `dump_dir` | `dump_every`, `dump_dir` | off, `dumps` | rd frame dumps (window build) |
 | `[dev] audio_dump` | `audio_dump` | none | WAV of the mixed audio; `1` is `logs/audio.wav` |
 | `[dev] pad_script` | `pad_script` | `pad-script.txt` if present | scripted pad |
-| `[dev] verify` | `verify` | `true` | `false`/`0`: skip the disc image SHA-1 |
+| `[dev] verify` | `verify` | `true` | `false`/`0`: skip the disc image SHA-1 when `use_iso` is on; the first-run extraction always verifies |
+| `[dev] use_iso` | `use_iso` | `true` headless, `false` window build | `true`: mount the disc image directly (dev mode). `false`: mount the extracted `ico.o2r` (per-user folder, else beside the exe), extracting it from the image on the first run (docs/port/DATA.md, "Backend 2: the archive") |
 | `[dev] headless` | `headless` | `false` | a run for traces and tests: fixes the clock (below). The headless build is headless regardless |
 | `[dev] fixed_clock` | `fixed_clock` | see below | the disc clock is fixed or real |
 

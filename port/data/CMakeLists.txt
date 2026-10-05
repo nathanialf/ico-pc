@@ -2,8 +2,25 @@
 # layer the game's fumi/ios/cdvd.c and seki/src/FileManager.c call, the SIF
 # host layer (no IOP reboot, no IRX modules, RPC to host servers) and the
 # IOP RAM stand-in. docs/port/DATA.md describes the design.
+# miniz (MIT, port/third_party/miniz, docs/port/THIRD_PARTY.md): the ZIP
+# reader and writer behind the extracted archive (archive.c, extract.c).
+# Third-party code: upstream's split sources as released (plus the
+# miniz_export.h its build would generate), warnings off; the
+# zlib-compatible names are left out so nothing can clash with a system zlib.
+set(_miniz "${CMAKE_SOURCE_DIR}/port/third_party/miniz")
+add_library(ico_miniz STATIC "${_miniz}/miniz.c" "${_miniz}/miniz_tdef.c"
+                             "${_miniz}/miniz_tinfl.c" "${_miniz}/miniz_zip.c")
+target_include_directories(ico_miniz PUBLIC "${CMAKE_SOURCE_DIR}/port/third_party/miniz")
+target_compile_definitions(ico_miniz PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES=1)
+target_compile_options(ico_miniz PRIVATE -w)
+
+# archive.c is the VFS backend over ico.o2r; extract.c the first-run
+# extractor that writes it (it calls host_config.c's SHA-1, which ico_pc and
+# archive_test compile).
 add_library(ico_port_data STATIC
+    archive.c
     cdvd_host.c
+    extract.c
     iop_ram.c
     iso9660.c
     sif_host.c
@@ -17,6 +34,9 @@ target_compile_options(ico_port_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 # cdvd_host.c registers with ico_platform's host loop. Tests that drive the
 # vsync themselves define ico_host_on_vsync_register and pull nothing from it.
 target_link_libraries(ico_port_data INTERFACE ico_platform)
+target_link_libraries(ico_port_data INTERFACE ico_miniz)
+target_include_directories(ico_port_data PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/miniz")
+target_compile_definitions(ico_port_data PRIVATE MINIZ_NO_ZLIB_COMPATIBLE_NAMES=1)
 
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_port_data)
@@ -34,6 +54,25 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
         "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME vfs_disc COMMAND vfs_test disc "${ICO_DISC_IMAGE}")
     set_tests_properties(vfs_disc PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# The archive (docs/port/DATA.md, "Backend 2: the archive"): extraction into
+# a temporary archive and mount, compared with the ISO backend. `synth` uses
+# vfs_test's synthetic image and runs everywhere; `disc` reads the user's
+# image and is skipped (77) without it.
+add_executable(archive_test test/archive_test.c ../platform/host_config.c)
+target_include_directories(archive_test PRIVATE "${ICO_COMPAT_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(archive_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(archive_test PRIVATE ico_port_data)
+if(WIN32)
+    target_link_libraries(archive_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME archive_synthetic COMMAND archive_test synth "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"
+                                       "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endif()
 
 # --- The data tables' runtime loader (docs/port/DATA.md, "The data tables") --

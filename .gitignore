@@ -44,6 +44,9 @@ build/
 
 # --- Extracted assets (populated at build time from the user's disc) ---
 assets/
+# the port's extracted game archive (docs/port/DATA.md, "Backend 2: the archive")
+*.o2r
+*.o2r.tmp
 
 # --- Audio / texture / model dumps ---
 *.aifc

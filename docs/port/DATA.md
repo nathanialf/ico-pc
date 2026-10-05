@@ -1,9 +1,9 @@
 # Game data: the disc layer
 
 How the host build reads the game's disc (package 1C): the VFS, the
-ISO9660 backend used in dev mode, the libcdvd and SIF host layers under the
-game's unchanged cdvd manager, IOP RAM, and the interface Phase 5's archive
-backend implements. No disc data is in this repository (`docs/LEGAL.md`);
+ISO9660 backend used in dev mode, the archive backend and its first-run
+extractor (package 5A), the libcdvd and SIF host layers under the game's
+unchanged cdvd manager, and IOP RAM. No disc data is in this repository (`docs/LEGAL.md`);
 everything below is structure, sector numbers and hashes, and the tests read
 the user's own image at run time.
 
@@ -20,8 +20,9 @@ port     port/data/cdvd_host.c  sceCd* over the VFS disc
          port/data/sif_host.c   sceSif* (no IOP), IOP heap, SIF DMA, RPC to host servers
          port/data/iop_ram.c    ico_iop_ram (2 MB) and the IOP heap
          port/data/vfs.c        paths, byte reads, the disc slot
-         port/data/iso9660.c    backend: the user's ISO (dev mode)
-         (Phase 5)              backend: the extracted archive
+         port/data/iso9660.c    backend: the user's ISO (dev mode, use_iso)
+         port/data/archive.c    backend: the extracted archive ico.o2r
+         port/data/extract.c    the first-run extractor that writes it
          port/data/tables.c     the 73 data tables, from the boot ELF on the disc
 ```
 
@@ -90,33 +91,153 @@ directory's length as the bytes in use, not a sector multiple; the walk
 reads every sector the length touches and stops at a zero length byte in
 each.
 
-### Backend 2 (Phase 5): the archive
+### Backend 2: the archive (`port/data/archive.c`, package 5A)
 
-The first-run extractor's archive must look like the disc to everything
-above `read_sectors`:
+The Ship of Harkinian model (plan, "Game data"): the binary holds no disc
+data; the first run takes the user's image, verifies it and extracts what
+the game reads once into a local archive, `ico.o2r`; every later run mounts
+the archive. The window build uses it by default; `use_iso` (below) keeps
+reading the image directly.
 
-1. **Keep disc LSNs.** Store, per file, its disc path, first LSN and byte
-   size; `lookup` answers from that table and `read_sectors` maps an LSN
-   range onto the file containing it. DATA.DF must stay one contiguous LSN
-   range (`DATA.DF's LSN + offset / 2048` is computed by the game).
-   Store whole sectors, so the tail of a file's last sector reads as it did
-   from the disc; a range that touches no stored file fails (`-1`).
-2. **`volume_sectors`** reports the disc's volume size, so the end-of-disc
-   checks match.
-3. **What to store:** `SYSTEM.CNF` (the disc identification below reads its
-   BOOT2 line), the boot file it names, `SCES_507.60`, **with its bytes**
-   (the table loader reads the whole ELF through `ico_vfs_open`/
-   `ico_vfs_read` at boot, "The data tables" below; 5,515,680 bytes), and
-   `DFDATAS/DATA.DF`. Keeping only the 75 table ranges would also do (about
-   1.1 MB, every range in `config/tables_manifest.txt`), but then the archive
-   needs its own container for them and `tables.c` a second entry point;
-   storing the file is simpler and the loader already checks every range's
-   CRC-32. Anything
-   else the port extracts for its own use (the SNDN2DRV pitch table,
-   `docs/research/sndn2drv.md`) is not a disc file to the game.
-4. Give it its own backend table (say `ico_vfs_archive`), mount it with
-   `ico_vfs_mount` and hand it over with `ico_vfs_set_disc` before the game
-   boots; the libcdvd layer then never opens the ISO.
+**Format.** A ZIP (PKWARE APPNOTE; written and indexed with miniz,
+`port/third_party/miniz/`, docs/port/THIRD_PARTY.md) whose entries are all
+stored, method 0, never deflated: the game reads by sector and the DATA.DF
+packs are compressed already. Entries:
+
+| entry | holds |
+| --- | --- |
+| `disc/<PATH>` | the disc file `PATH` byte for byte: `SYSTEM.CNF`, `SCES_507.60` (the boot file BOOT2 names; 5,515,680 bytes, read whole by the table loader), every root `*.IRX` (`SNDN2DRV.IRX` for the pitch table, docs/port/AUDIO.md; `LIBSD.IRX` and the others are small and kept for later checks), `DUMMY.TXT`, and everything under `DFDATAS/` (`DFDATAS/DATA.DF` whole, 867,184,640 bytes) |
+| `tail/<PATH>` | the bytes after `PATH`'s end to the end of its last sector, only when any is nonzero (the PAL disc has none: every selected file's tail is zero), so a sector read returns what the disc held |
+| `meta.json` | below |
+
+On the PAL image: 13 files, 872,906,360 bytes, archive 872,910,571 bytes
+(4,211 bytes of ZIP headers, directory and meta.json).
+
+`meta.json`:
+
+```json
+{
+  "format": "ico.o2r", "version": 1, "extractor": "ico-pc extract 1",
+  "disc_id": "SCES-50760",
+  "source": {"sha1": "<image SHA-1>", "size": <bytes>, "accepted_by": "iso-sha1",
+             "elf_sha1": "<SCES_507.60 SHA-1>", "datadf_manifest": true},
+  "volume_sectors": 443216,
+  "entries": [
+    {"path": "", "name": "", "lsn": 261, "size": 1168, "dir": true, "date": [...]},
+    {"path": "DFDATAS/DATA.DF", "name": "DATA.DF;1", "lsn": 19771, "size": 867184640,
+     "date": [...], "data": "disc/DFDATAS/DATA.DF"},
+    ...
+  ]
+}
+```
+
+Each entry is what `iso9660.c`'s look-up returned for that path on the
+image (`IcoVfsEntry`: first LSN, size, the 7-byte ISO date, the directory
+flag, the name with its `;1`). The root and `DFDATAS` directories are
+listed without data, so `sceCdSearchFile` of a directory fails as on the
+disc. `volume_sectors` is the image's primary volume descriptor value, so
+the end-of-disc checks (`sceCdRead` past the end, the stream's clip) match.
+
+**The backend.** `ico_vfs_mount_archive(path)` (= `ico_vfs_mount(&
+ico_vfs_archive, path)`). At mount miniz reads the central directory over a
+read callback on the archive file, `meta.json` is parsed (a small JSON
+reader in `archive.c`), and every `data`/`tail` entry is checked: present,
+stored, not encrypted, exactly the size `meta.json` gives, its data
+(local header + name + extra) inside the file. A malformed, truncated or
+foreign file fails the mount. Then:
+
+1. `lookup` answers from the entry table (normalized path, exact match).
+2. `read_sectors(lsn, count)` maps each run of sectors onto the stored file
+   whose disc range (`lsn` .. `lsn + ceil(size / 2048)`) holds it and reads
+   it with one `fseek`/`fread` on the archive file; the bytes past a file's
+   end in its last sector come from its `tail/` entry or are zero. Runs may
+   cross from one stored file into the next. DATA.DF is one stored file
+   with its disc LSN, so it stays one contiguous LSN range and `DATA.DF's
+   LSN + offset / 2048` (`cdvd.c`'s `unifile_read_func`) reads the same
+   bytes as from the image.
+3. A sector no stored file covers (the volume descriptors, the directory
+   sectors, files not extracted such as `IOPRP224.IMG`, `MAIN.MAP`,
+   `SRCFILE.TXT`, `TRFILE.TXT`, `TRTABLE.BIN`, and the 14 sectors after
+   `DUMMY.TXT`) fails (`-1`), as does a range past the volume's end.
+   `DUMMY.TXT` (LSN 443,201) starts where DATA.DF's last sector ends, so a
+   read that runs over DATA.DF's end still finds the disc's bytes there. A
+   look-up of a file not extracted fails, where the image would find it; the
+   game never asks for one: it searches `\DFDATAS\DATA.DF;1` and
+   `\SCES_507.60;1`, its other names resolve in `cdvd.c`'s directory cache
+   from DATA.DF's directory, and `file_LoadCDFile` (through `file_LoadFile`)
+   has no caller in `ico2/`.
+
+The loader (`tables.c`), the libcdvd layer, `sndn2_host.c`'s pitch table
+(`ico_vfs_open(ico_vfs_disc(), "SNDN2DRV.IRX")`) and the rest read through
+`ico_vfs_disc()` and need no change.
+
+**First run** (`port/platform/main_host.c`, `mount_game_data`):
+
+1. Look for `ico.o2r` in the per-user folder (`ico_host_pref_dir`: the SDL
+   pref path in the window build, the executable's folder headless), then
+   beside the executable. A candidate is used when `meta.json` reads,
+   `ico_archive_info_acceptable` passes (format version 1, extractor
+   `ico-pc extract 1`, disc id `SCES-50760`, rule `iso-sha1` with the
+   image SHA-1 `1017b53f...` or rule `elf-sha1+datadf-crc`, boot ELF SHA-1
+   `da3644c5...`), it mounts, and its `SCES_507.60` read back through the
+   VFS hashes to `da3644c5...` (5.5 MB, a few milliseconds). An unusable one
+   is logged with the reason and extracted again.
+2. Otherwise find the image as before (`Ico_PAL.iso` beside the exe, `iso=` /
+   `[paths] iso`, `$ICO_ISO`, `baserom/Ico_PAL.iso`, the Windows file
+   dialog) and extract it (`ico_extract_archive`) into the per-user folder.
+   A path from the dialog is saved as `iso=` once extraction succeeds.
+3. Mount the result as in step 1 and boot.
+
+**Extraction** (`port/data/extract.c`): mounts the image with the ISO9660
+backend, reads `SYSTEM.CNF`'s BOOT2, walks the root and `DFDATAS`
+directories, then
+
+1. hashes the whole image (SHA-1, `host_config.c`'s);
+2. streams each selected file into `<pref>/ico.o2r.tmp` through
+   `mz_zip_writer_add_read_buf_callback` with `MZ_NO_COMPRESSION`, hashing
+   `SCES_507.60` and taking the CRC-32 of DATA.DF's directory and of each
+   of its members on the way, and checks every file arrived whole;
+3. accepts the image by the first rule that holds and logs which:
+   - `iso-sha1`: the image's SHA-1 is `1017b53f6e80f41f823369b0be1d8c69f7e16dc6`;
+   - `elf-sha1+datadf-crc`: `SCES_507.60` hashes to
+     `da3644c54c26fe760f3b6a591a5fc2eab396ed2b` and DATA.DF matches the
+     manifest compiled into `extract.c`: size 867,184,640, 193 members,
+     the CRC-32 of the directory (4 + 40 x 193 bytes, which covers the
+     member names) and each member's offset, size and CRC-32. A re-dump of
+     the PAL disc with other padding, another volume size or other file
+     placement passes this rule. The manifest is sizes, offsets and CRCs
+     only, like `config/tables_manifest.txt` (docs/LEGAL.md);
+     `archive_test manifest <iso>` regenerates the block;
+   - neither: refused with both hashes and the DATA.DF mismatch, and the
+     `.tmp` removed;
+4. writes `meta.json` last, finishes the ZIP, re-opens the `.tmp` with the
+   backend's checks and moves it over `ico.o2r` atomically (`rename`;
+   Windows `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING |
+   MOVEFILE_WRITE_THROUGH`). Any failure (a read error, disk full, a refused
+   image, a cancel) removes the `.tmp`; nothing half-written is ever named
+   `ico.o2r`. `main_host.c` reports a failure with `ico_host_fatal`: the log
+   line and, on Windows, the message box naming the log; no console.
+
+Progress goes to the log in tenths ("first run: 40% (680 of 1698 MB)",
+the image hash and the copy counted together). The window build also opens
+a small SDL window (SDL's 2D renderer: a bar, the percentage in the title)
+for the extraction and closes it before the game's window opens; closing it
+cancels the extraction and exits 0. Paths: UTF-8 on Windows through
+`_wfopen` / `MoveFileExW`, falling back to the ANSI code page for a path
+that is not valid UTF-8 (the file dialog's).
+
+Measured on the container (linux-x64, the PAL image on local disk, warm
+page cache): 14.2 s in `ico_pc` (image SHA-1 6.1 s, copy 8.2 s); 11.0 s in
+`archive_test disc`.
+
+**`use_iso`** (`[dev] use_iso` in config.toml, `use_iso=` in ico-pc.ini,
+docs/port/CONFIG.md): `true` mounts the image directly with the ISO9660
+backend after the SHA-1 check (`verify=0` skips that check; it has no effect
+on extraction, which always verifies). Default: `true` in the headless build,
+so the trace runs and the tests read the image exactly as before; `false`
+in the window build. A headless run with `use_iso = false` goes through the
+archive and writes the same trace (package 5A's run: 1300 ticks of
+`pad-boot.txt`, byte-identical to 5B's).
 
 ## libcdvd on the host (`port/data/cdvd_host.c`)
 
@@ -174,7 +295,7 @@ syncs) and models completion so the game's control flow is the drive's:
 the VFS, so the check identifies the image as it identified the disc. The
 check only runs after the drive reports not-ready, which the host never
 does with an image mounted; the authoritative check is the extractor's
-hash (Phase 5, below).
+(Backend 2 above).
 
 **No disc.** With no image, `sceCdDiskReady` says not ready and
 `sceCdStatus` stopped, and `file_Init` waits at its disc wait as a console
@@ -364,7 +485,8 @@ lists or `config/data_members.pal.txt`: `tools/gen_data_desc.py --manifest`
 
 ## Tests
 
-`port/data/test/vfs_test.c` (ctest `vfs_synthetic`, `vfs_disc`) and
+`port/data/test/vfs_test.c` (ctest `vfs_synthetic`, `vfs_disc`),
+`port/data/test/archive_test.c` (`archive_synthetic`, `archive_disc`) and
 `port/null/test/null_devices_test.c` (`null_devices`):
 
 - `vfs_synthetic` builds a 40-sector ISO9660 image in the build directory
@@ -379,6 +501,27 @@ lists or `config/data_members.pal.txt`: `tools/gen_data_desc.py --manifest`
   sha1sums.txt`, walks DATA.DF's directory as `unifile_read_func` does, and
   checks the libcdvd layer identifies the disc. It exits 77 (skipped) when
   the image is absent. `ICO_DISC_IMAGE` (CMake cache) names another path.
+- `archive_synthetic` (`port/data/test/archive_test.c`, which includes
+  `vfs_test.c` for its synthetic image builder) extracts that image with a
+  nonzero tail byte planted after the boot file: refused without
+  `ICO_EXTRACT_NO_VERIFY` and nothing left behind; a cancel from the
+  progress callback leaves nothing; then extracted unverified and compared
+  with the ISO backend: look-ups (`IcoVfsEntry` byte for byte), every
+  sector of every stored file, every run inside DATA.DF, runs across files,
+  the tail entry, failures outside stored files and past the end, the
+  DATA.DF walk, `sceCdSearchFile` records, disc identification; a truncated
+  file and a non-ZIP are refused; an unverified archive is not acceptable;
+  a second extraction replaces the archive. Needs no disc.
+- `archive_disc` extracts the user's image into `$TMPDIR` (else the build
+  folder), expects rule `iso-sha1` with the ELF hash and the DATA.DF
+  manifest also matching (what the second rule checks), mounts it and
+  checks: `SCES_507.60` read back hashes to `da3644c5...`, `volume_sectors`
+  equal, look-ups and every sector of the small files equal, all of DATA.DF
+  equal through both backends chunk by chunk (and its CRC-32), every sixth
+  directory member (and the last) equal sector for sector by the LSN
+  `cdvd.c` computes, 4,000 pseudo-random sector runs inside DATA.DF and one
+  over its end into `DUMMY.TXT` equal, `sceCdSearchFile` records equal. 77
+  without the image; about 25 s; the archive is deleted afterwards.
 - `null_devices` checks the four null devices, including the sound
   server's reply page and transfer-counter echo.
 
