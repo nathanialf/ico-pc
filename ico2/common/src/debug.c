@@ -585,7 +585,18 @@ static char sceOpenPath[256]; /* derived name */
 static unsigned short fontOutline[256 * 16]; /* derived name */
 
 /* the glyph re-expanded to 8 shorts */
+#ifdef ICO_HOST
+
+/* debug_makeBackImage zeroes 16 shorts per glyph and reads two past the
+   eight, so the last glyph's pass runs 16 bytes beyond the array: on the
+   EE into the next .bss object. The host gives it slack instead. */
+static unsigned short fontGlyph[256 * 8 + 8]; /* derived name */
+
+#else
+
 static unsigned short fontGlyph[256 * 8]; /* derived name */
+
+#endif
 
 static DbgGlyphPacket fontPacket[256]; /* derived name */
 
