@@ -570,7 +570,14 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
     w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 759);
 
     for (i = 0; i < 1; i++) {
+#ifdef ICO_HOST
+        /* PC port: a division by the literal 0: 0 / 0 for the only sword,
+           which the EE's div.s makes +Fmax and IEEE makes NaN
+           (DIVERGENCES.md F5) */
+        queenSwordOfs[2] = ps2_div(weaponKind[w->kind].length * (float)i, 0.0f);
+#else
         queenSwordOfs[2] = weaponKind[w->kind].length * (float)i / 0.0f;
+#endif
         o = CreateLayoutedGObj(10, 75, -1, i == 0, &r, -1, 7, 0);
         LinkParentOfDObj(o, &lnk);
         CopyVector(GOBJ_SUB(o)->root.pos, queenSwordOfs);

@@ -1333,6 +1333,15 @@ void gsb_ResetGSSystem(void)
     gsb_SetGsDefault();
 }
 
+#ifdef ICO_HOST
+/* PC port: the zoom vs[0] is 0 before the first stage sets the view scale
+   (vsync 6); the EE's div.s gives +-Fmax there, IEEE gives Inf and then NaN
+   in 0 * Inf (DIVERGENCES.md F5, F11). */
+#define VS_DIV(a, b) ps2_div((a), (b))
+#else
+#define VS_DIV(a, b) ((a) / (b))
+#endif
+
 /* the 1500 unit screen the projection proj is scaled to */
 static const float vsScreenSize[] = {1500.0f, 1500.0f, 0.0f, 0.0f}; /* derived name */
 
@@ -1358,11 +1367,11 @@ static void gsb_SetVSMatrixSub(float *screen, float *proj, float *projHalf, floa
     float rx;
     float ry;
 
-    sx = vs[7] * vsScreenSize[0] / vs[0];
-    sy = vs[7] * vsScreenSize[1] / vs[0];
+    sx = VS_DIV(vs[7] * vsScreenSize[0], vs[0]);
+    sy = VS_DIV(vs[7] * vsScreenSize[1], vs[0]);
 
-    cx = vs[7] * v[0] / vs[0];
-    cy = vs[7] * v[1] / vs[0];
+    cx = VS_DIV(vs[7] * v[0], vs[0]);
+    cy = VS_DIV(vs[7] * v[1], vs[0]);
 
     zn = (-vs[6] * vs[7] + vs[5] * vs[8]) / (-vs[7] + vs[8]);
 

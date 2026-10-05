@@ -482,11 +482,12 @@ void ACTGetEnvironment(void *self, void *dir, float *orient, EnvFlag *flags, Act
     Act *sub = GOBJ_ACT(self);
     GObj *obj = GOBJ_SUB(self)->root.wall.o.obj;
     GObj *parent = GOBJ_SUB(self)->parent.obj;
-    float dist = ((EnvMotion *)(char *)sub->motReq)->wallDist;
-    float hgt = -((EnvMotion *)(char *)sub->motReq)->height;
+    float dist = ICO_RAW(float, sub->motReq, 0x138, ((struct MotCtrl *)sub->motReq)->wallDist);
+    float hgt =
+        -ICO_RAW(float, sub->motReq, 0x130, ((struct MotCtrl *)sub->motReq)->wallFloorHeight);
     float wallh = -GOBJ_SUB(self)->ctrl.wallTopHeight;
-    float hh = ((EnvMotion *)(char *)sub->motReq)->cliffDist;
-    float f26 = ((EnvMotion *)(char *)sub->motReq)->cliffDepth;
+    float hh = ICO_RAW(float, sub->motReq, 0x114, ((struct MotCtrl *)sub->motReq)->cliffDist);
+    float f26 = ICO_RAW(float, sub->motReq, 0x110, ((struct MotCtrl *)sub->motReq)->cliffHeight);
     int v1D8 = 1;
     int v1DC = 1;
     int v1E0;

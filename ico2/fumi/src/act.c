@@ -469,7 +469,8 @@ inline int ACTReserveTarget(GObj *self, void *arg, int mail)
 }
 
 /* The interrupt list lives at self+0x54: a count at +4 and 8-byte entries
-   from +8. */
+   from +8. It is the GObj's mail box (IosMailBox's layout); on a 64-bit
+   host the box is not at +0x54 and the entries are 16 bytes. */
 typedef struct { /* field names derived */
     int id;
     void *f4;
@@ -483,7 +484,7 @@ typedef struct { /* field names derived */
 
 static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
 {
-    IntrList *k = (IntrList *)(self + 0x54);
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
     MotOriReq buf;
     int i;
@@ -503,8 +504,9 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
                     mot = ACTGetOrientFromIntrK(self, k->ent[i].id, &buf, i);
                     p = SetMotionRequest(self, mot, buf);
                     w->motReq = p;
-                    if (*(int *)(p + 0xC) == 0 &&
-                        (*(unsigned short *)((char *)m + 0x16) & 1) == 0 &&
+                    if (ICO_RAW(int, p, 0xC, ((struct MotCtrl *)p)->shifted) == 0 &&
+                        (ICO_RAW(unsigned short, m, 0x16, (unsigned short)(m->flags >> 16)) & 1) ==
+                            0 &&
                         (w->actMode != 0 || m->mode == 0)) {
                         continue;
                     }
@@ -525,7 +527,7 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
 
 static void act_check_mail(void *self, IntrMail *m)
 {
-    IntrList *k = (IntrList *)(self + 0x54);
+    IntrList *k = ICO_RAWP(IntrList *, self, 0x54, (IntrList *)&((GObj *)self)->mailBox);
     Act *w = GOBJ_ACT(self);
     int i;
     int id;
@@ -651,7 +653,8 @@ void BeforeFunc(GObj *self)
         ACTSendMailCorrect(self, actModeTbl[w->actMode].mail);
         for (i = 0; i < *(int *)(mb + 4); i++) {
             ((IntrList *)mb)->ent[i].id =
-                _ACTCorrectMsg(self, *(int *)(mb + 8 + i * 8), *(void **)(mb + 0xC + i * 8));
+                _ACTCorrectMsg(self, ICO_RAW(int, mb, 8 + i * 8, ((IosMailBox *)mb)->mail[i].type),
+                               ICO_RAW(void *, mb, 0xC + i * 8, ((IosMailBox *)mb)->mail[i].arg));
         }
         ACTRunIntrCorrect(self, mails[1], mails[2]);
         for (i = 0; mails[i] != (IntrMail *)ICO_INVALID_PTR; i++) {

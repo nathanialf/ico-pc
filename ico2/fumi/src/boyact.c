@@ -2333,6 +2333,14 @@ typedef struct { /* field names derived */
 } BoyExt;          /* derived name */
 
 #define BOY_EXT(o) (*(BoyExt **)(*(char **)((char *)(o) + 0x164) + 0x680)) /* derived name */
+/* One BoyExt field f; the host reads the record as what it is, the actor's
+   EnemyBattleWork, by that record's field hf (BoyExt's offsets are the EE's
+   and the actor is not at GObj + 0x164 on a 64-bit host) */
+#ifdef ICO_HOST
+#define BOY_EXT_F(o, f, hf) (GOBJ_ACT(o)->enemy->hf)
+#else
+#define BOY_EXT_F(o, f, hf) (BOY_EXT(o)->f)
+#endif
 
 /* GObj's 0x15C slot read through a union (typedef.h: an int handle the
    engine casts to a pointer) */
@@ -2340,7 +2348,11 @@ typedef union { /* field names derived */
     char *sub;
 } GObjSubSlot; /* derived name */
 
+#ifdef ICO_HOST
+#define GOBJ_SUBSLOT(o) ((char *)GOBJ_SUB(o))
+#else
 #define GOBJ_SUBSLOT(o) (((GObjSubSlot *)((char *)(o) + 0x15C))->sub) /* derived name */
+#endif
 
 void actBoySwim(GObj *volatile self)
 {
@@ -2348,27 +2360,27 @@ void actBoySwim(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
     int padReq = 0;
 
-    BOY_EXT(self)->holdBox = 0;
+    BOY_EXT_F(self, holdBox, word2C0) = 0;
     sub->after = (void *)afterBoySwim;
     while (1) {
-        GObj *box = BOY_EXT(self)->box;
+        GObj *box = BOY_EXT_F(self, box, holdObj);
 
         if (sub->curMot == 0xAD) {
             sub->flags20.ll |= 0x800000000ULL;
         }
-        if (BOY_EXT(self)->holdBox) {
-            RequestChangeHandMode(self, 0, 3, 1, box, 0, BOY_EXT(self)->grip);
-            BOY_EXT(self)->grip[3] = 1.0f;
+        if (BOY_EXT_F(self, holdBox, word2C0)) {
+            RequestChangeHandMode(self, 0, 3, 1, box, 0, BOY_EXT_F(self, grip, holdPoint));
+            BOY_EXT_F(self, grip, holdPoint)[3] = 1.0f;
             sceVu0ApplyMatrix(
                 pos, ICO_RAW(void *, GOBJ_SUBSLOT(box), 0xC, *(void **)&GOBJ_SUB(box)->nodeMtx),
-                BOY_EXT(self)->grip);
+                BOY_EXT_F(self, grip, holdPoint));
             debug_NMarker(pos, 0xFF, 0, 0, 100.0f);
             MoveFloatingBox(box, self,
                             *(char **)&GOBJ_SUB(self)->nodeMtx +
                                 GetSkeltonFocusNode(self, 0x13) * 0x40 + 0x30,
-                            BOY_EXT(self)->grip, 30.0f);
+                            BOY_EXT_F(self, grip, holdPoint), 30.0f);
             if (!(_DistSqGV(test_CURRENTROOT((void *)self), pos) < 4e+04f)) {
-                BOY_EXT(self)->holdBox = 0;
+                BOY_EXT_F(self, holdBox, word2C0) = 0;
             }
 #ifdef ICO_HOST
             GOBJ_SUB(self)->root.filter.o.obj = box;
@@ -2470,7 +2482,8 @@ inline void actBoyFall(GObj *volatile self)
    actBoyAttack inline */
 static inline void searchEnemy(void *self, ICO_WORD *out_id, float *out_vec) /* derived name */
 {
-    searchGObj(self, (*(int *)((char *)self + 0xC) ^ 1) ? 1 : 4, 0x5A, out_id, out_vec, 300.0f);
+    searchGObj(self, (ICO_RAW(int, self, 0xC, ((GObj *)self)->kind) ^ 1) ? 1 : 4, 0x5A, out_id,
+               out_vec, 300.0f);
 }
 
 void actBoyAttack(GObj *volatile self)
@@ -2843,9 +2856,9 @@ void actBoyBelift(GObj *volatile self)
         ratio = 0.2f;
     }
     mode = GOBJ_ACT(girl)->enemy->liftKind == 3 ? 0 : 2;
-    BOY_EXT(self)->liftObj = girl;
+    BOY_EXT_F(self, liftObj, liftedObj) = girl;
     beliftGirl = girl;
-    BOY_EXT(self)->liftLevel = 10;
+    BOY_EXT_F(self, liftLevel, liftLevel) = 10;
     if (GOBJ_ACT(girl)->enemy->liftKind == 3) {
         RotQuaternionX(q.f, 0x4000);
     }
@@ -2856,7 +2869,7 @@ void actBoyBelift(GObj *volatile self)
     _ACTWait(1);
     while (1) {
         if (GOBJ_ACT(girl)->enemy->liftKind == 3 && (unsigned int)GOBJ_ACT(girl)->actMode == 0x61) {
-            lv = BOY_EXT(self)->liftLevel;
+            lv = BOY_EXT_F(self, liftLevel, liftLevel);
             lv = lv < 0 ? 0 : (10.0f < lv ? 10.0f : lv);
             lv = lv * 0.5f;
             dist = lv * 100.0f + 500.0f;

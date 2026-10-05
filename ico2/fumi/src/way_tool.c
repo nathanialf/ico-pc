@@ -675,7 +675,8 @@ int debug_WayTool(void)
     cursorGObj = isysGObjSearchFromObjLayoutID(2);
     if (cursorGObj != 0) {
         if (first_waytool == 0) {
-            *(void **)&cursorGObj->act = iosMallocDebug(ios_partition_seki, 0x850, __FILE__, 0x4AA);
+            *(void **)&cursorGObj->act =
+                iosMallocDebug(ios_partition_seki, ICO_MAX_SIZE(Act, 0x850), __FILE__, 0x4AA);
             isysGObjProcAdd(cursorGObj, cursor_control, 0, 0x13);
             isysGObjLinkObjDL(cursorGObj, way_toolDL, 0, 0, 0xFFFFFFFF);
             first_waytool = 1;

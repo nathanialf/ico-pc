@@ -78,6 +78,16 @@ static long long seChMask;
 
 static SqEntry soundDataTbl[16]; /* derived name */
 
+/* The byte walks over soundDataTbl: the EE's 0x30-byte stride and 768-byte
+   end; SqEntry is 0x48 bytes on a 64-bit host (package 2I). */
+#ifdef ICO_HOST
+#define SQ_STRIDE ((int)sizeof(SqEntry))
+#define SQ_END ((int)sizeof(soundDataTbl))
+#else
+#define SQ_STRIDE 0x30
+#define SQ_END 768
+#endif
+
 static SeSlot seSlotTbl[48]; /* derived name */
 
 /* the SPU buffer's segment-0 allocation pointer and the top of segment 1
@@ -611,7 +621,7 @@ void soundDataSegAllClose(int seg, int mode)
     char *tbl;
     /* base in the loop header, as its sibling
        soundDataSegNextStageNotUseClose carries it */
-    for (i = 0, tbl = (char *)soundDataTbl; i < 768; i += 0x30) {
+    for (i = 0, tbl = (char *)soundDataTbl; i < SQ_END; i += SQ_STRIDE) {
         SqEntry *p = (SqEntry *)(tbl + i);
         if (*(int *)p != 0 && p->seg == seg && p->mode == mode) {
             soundDataClose(p);
@@ -1310,7 +1320,7 @@ inline void soundReqTickProc(void)
 inline void soundVBlank(void)
 {
     int i;
-    for (i = 0; i < 768; i += 0x30) {
+    for (i = 0; i < SQ_END; i += SQ_STRIDE) {
         SqEntry *p = (SqEntry *)((char *)soundDataTbl + i);
         if (p->bank == 17) {
             adpcmTickProc2(p);
@@ -1514,7 +1524,7 @@ void soundDataSegNextStageNotUseClose(int mode, int stage)
     char *tbl;
     /* base in the loop header, not in a declaration of its own: that is what
        keeps the walk on the entry pointer and the test against the table end */
-    for (i = 0, tbl = (char *)soundDataTbl; i < 768; i += 0x30) {
+    for (i = 0, tbl = (char *)soundDataTbl; i < SQ_END; i += SQ_STRIDE) {
         SqEntry *p = (SqEntry *)(tbl + i);
         if (*(int *)p != 0 && p->seg == 1 && p->mode == mode) {
             found = 1;

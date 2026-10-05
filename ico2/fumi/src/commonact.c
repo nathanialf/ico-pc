@@ -2224,7 +2224,11 @@ void actCommonJump(GObj *volatile self)
 /* The 0x15C slot is the engine's sub-object handle, read here as the SubHandle
  * union the way geometryManager.c's SUBOF reads it; the other readers use
  * GOBJ_SUB's int view. */
+#ifdef ICO_HOST
+#define FALL_SUB(o) GOBJ_SUB(o)
+#else
 #define FALL_SUB(o) ((Sub15C *)((SubHandle *)((char *)(o) + 0x15C))->p) /* derived name */
+#endif
 
 /* A static inline that actCommonFall and flyCoreLoop call: whether the
  * actor has been stuck on a step for `need` hits.  flyCoreLoop passes a
@@ -4599,7 +4603,13 @@ inline float *test_CURRENTROOT(GObj *self)
     case 2:
     case 4:
         p = (float *)(char *)GOBJ_ACT(self);
+#ifdef ICO_HOST
+        /* PC port: the EE spelling is Act + 0x100 through GObj's mail box
+           offset (0x54 + 172); on a 64-bit host neither offset holds. */
+        p = (float *)GOBJ_ACT(self)->pad100;
+#else
         p = (float *)((char *)&((struct GObj *)p)->mailBox + 172);
+#endif
         GetRootPosition(p, self);
         return p;
     case 0x2C:

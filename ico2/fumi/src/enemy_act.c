@@ -2610,7 +2610,7 @@ static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float
     GetRootProjectionPosOfGObj(p0, tgt);
     GetRootProjectionPosOfGObj(p1, self);
     for (i = 0; i < (60 - systemStatus[0] * 10) / systemStatus[1] * 40 / 60; i++) {
-        if (IsSelectID_EnemyCtrl(*(int *)((char *)self + 8)) != 0) {
+        if (IsSelectID_EnemyCtrl(ICO_RAW(int, self, 8, ((GObj *)self)->labelId)) != 0) {
             break;
         }
         _ACTWait(1);
@@ -2660,7 +2660,8 @@ static int _ApproachTarget_Way(GObj *self, void *tgt, void *pos, void *fn, float
             }
             FlyMail(self);
         }
-        if (*(int *)((char *)self + 8) == 0xEAD && (((int)(sub->flags20.ll >> 39)) & 1)) {
+        if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == 0xEAD &&
+            (((int)(sub->flags20.ll >> 39)) & 1)) {
             FlyMail(self);
         }
         if (stage_no == 9 && CheckFloorAttribute(self, 0x100000) != 0 &&
@@ -2754,7 +2755,7 @@ void actEnemyStart(GObj *self)
     actInitialize_ext_charcter(self);
     actInitialize_only_charcter((char *)self);
     actInitialize_geo(self);
-    if (*(int *)((char *)self + 8) == 3757) {
+    if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == 3757) {
         act->flags20.ll = act->flags20.ll | 0x40000000;
     }
     ACTGame_LwsEffectInit(self);
@@ -2808,7 +2809,8 @@ void actEnemyStart(GObj *self)
         act->flags18.ll = act->flags18.ll & ~(1LL << 33);
     }
     _ACTWait(1);
-    GOBJ_WORK(self)->motherLabel = GetMotherGenerator(*(int *)((char *)self + 8));
+    GOBJ_WORK(self)->motherLabel =
+        GetMotherGenerator(ICO_RAW(int, self, 8, ((GObj *)self)->labelId));
     if (GOBJ_WORK(self)->motherLabel != -1) {
         GOBJ_WORK(self)->motherGObj = isysGObjSearchFromObjLayoutID(GOBJ_WORK(self)->motherLabel);
     }

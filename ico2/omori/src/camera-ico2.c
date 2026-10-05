@@ -73,9 +73,19 @@ static float targetBSmooth[3]; /* derived name */
 
 static float groupProbePos[36]; /* derived name */
 
-static float targetAPrev[3]; /* derived name */
+/* SetCameraTargetPosition stores both with a 16-byte vector store; on the
+   EE each lies in its own 16-byte slot of .bss and the fourth word lands in
+   the slot's padding.  The host gives them that fourth word (package 2I,
+   ASan global-buffer-overflow). */
+#ifdef ICO_HOST
+#define CAM_PREV_WORDS 4
+#else
+#define CAM_PREV_WORDS 3
+#endif
 
-static float targetBPrev[3]; /* derived name */
+static float targetAPrev[CAM_PREV_WORDS]; /* derived name */
+
+static float targetBPrev[CAM_PREV_WORDS]; /* derived name */
 
 /* ten sets, the AddPluralCameraSet limit */
 static PluralCameraSet pluralCameraSet[10]; /* derived name */

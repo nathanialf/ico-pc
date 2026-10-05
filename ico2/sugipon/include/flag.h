@@ -53,7 +53,10 @@ typedef union { /* field names derived */
    vectors, 0x870 the 80-byte nodes) freed and reallocated for n nodes, and
    the nodes reset; worm.c and boy.c carry the same block.  The block has its
    own counter, and each node's 0.0f words are stored from one float set at
-   the top of the loop body. */
+   the top of the loop body.  FLAG_NODE_WORD is the word at the EE offset
+   off, on the host the field it holds (Sub15C's prefix is wider on a 64-bit
+   host: package 2I). */
+#define FLAG_NODE_WORD(o, off, field) ICO_RAW(char *, o, off, *(char **)&(o)->field)
 #define FLAG_ALLOC_NODES(o, num) /* derived name */                                                \
     {                                                                                              \
         int n;                                                                                     \
@@ -63,11 +66,11 @@ typedef union { /* field names derived */
         if ((o)->nodeQuat != 0) {                                                                  \
             iosFree((void *)ICO_PHYS((o)->nodeQuat));                                         \
         }                                                                                          \
-        *(char **)((char *)(o) + 0xC) = 0;                                                         \
-        *(char **)((char *)(o) + 0x10) = 0;                                                        \
-        *(char **)((char *)(o) + 0xC) =                                                            \
+        FLAG_NODE_WORD(o, 0xC, nodeMtx) = 0;                                                       \
+        FLAG_NODE_WORD(o, 0x10, nodeQuat) = 0;                                                     \
+        FLAG_NODE_WORD(o, 0xC, nodeMtx) =                                                          \
             iosMallocDebug(ios_partition_seki, (num) * 64, __FILE__, __LINE__);                    \
-        *(char **)((char *)(o) + 0x10) =                                                           \
+        FLAG_NODE_WORD(o, 0x10, nodeQuat) =                                                        \
             iosMallocDebug(ios_partition_seki, (num) * 16, __FILE__, __LINE__);                    \
         (o)->nodeNum = (num);                                                                      \
         if ((o)->nodes != 0) {                                                                     \

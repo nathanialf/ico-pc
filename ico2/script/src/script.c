@@ -517,9 +517,17 @@ void scpPlayEnd(GObj *self)
 inline void scpPlayWaitMotEnd(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
+#ifdef ICO_HOST
+    /* PC port: motReq is the struct MotCtrl SetMotionRequest returns; 0x5C
+       (frameEnd) is the EE offset */
+    while ((((struct MotCtrl *)p->motReq)->frameEnd & 1) == 0) {
+        _ACTWait(1);
+    }
+#else
     while ((*(int *)((char *)p->motReq + 0x5C) & 1) == 0) {
         _ACTWait(1);
     }
+#endif
 }
 
 void scpTrans(void *self, float *rot)

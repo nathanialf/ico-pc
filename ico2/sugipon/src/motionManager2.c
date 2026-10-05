@@ -435,11 +435,27 @@ typedef struct {     /* field names derived */
     int cliffWallCount; /* 0xFC */
     WallCfg aheadWall;  /* 0x100 */
     int word10C;
+#ifdef ICO_HOST
+    /* PC port: InitMotionGeoInfo copies this record over a MotRoot, so the
+       host layout must be MotRoot's.  MotRoot has 20 unread bytes at 0x10C
+       (not a WallCfg, which is 24 bytes on a 64-bit host) and a 16-byte
+       aligned plane; with the EE types every field from filter on landed 8
+       or 16 bytes off on x64 (armTwist read as 0: package 2I). */
+    struct {
+        int o[2];
+        int elem;
+    } wall110;
+#else
     WallCfg wall110;
+#endif
     int word11C;
     WallCfg filter; /* 0x120 */
     char pad12C[4];
-    Vec4 plane;       /* 0x130, the field plane under the actor */
+#ifdef ICO_HOST
+    Vec16 plane; /* 0x130, the field plane under the actor */
+#else
+    Vec4 plane; /* 0x130, the field plane under the actor */
+#endif
     int lastField;    /* 0x140 */
     void *cliffFloor; /* 0x144 */
     char pad148[8];
@@ -491,8 +507,12 @@ typedef struct {     /* field names derived */
     char pad368[8];
     Vec4 holdPoint; /* 0x370 */
     int ropeState;  /* 0x380 */
-    int fixObj;     /* 0x384 */
-    int fixNode;    /* 0x388 */
+#ifdef ICO_HOST
+    ICO_WORD fixObj; /* 0x384, MotRoot's type: a word wide enough for a host pointer */
+#else
+    int fixObj; /* 0x384 */
+#endif
+    int fixNode; /* 0x388 */
     char pad38C[4];
     Vec4 fixQuat;         /* 0x390 */
     Vec4 fixPos;          /* 0x3A0 */
@@ -505,6 +525,20 @@ typedef struct {     /* field names derived */
     float ikRate2;        /* 0x3C8 */
     char pad3CC[4];
 } MotionGeoInfo; /* derived name */
+
+#ifdef ICO_HOST
+
+/* InitMotionGeoInfo's copy is only right if the two layouts agree */
+_Static_assert(
+    sizeof(MotionGeoInfo) == sizeof(struct MotRoot) &&
+        __builtin_offsetof(MotionGeoInfo, plane) == __builtin_offsetof(struct MotRoot, plane) &&
+        __builtin_offsetof(MotionGeoInfo, armTwist) ==
+            __builtin_offsetof(struct MotRoot, armTwist) &&
+        __builtin_offsetof(MotionGeoInfo, fixQuat) == __builtin_offsetof(struct MotRoot, fixQuat) &&
+        __builtin_offsetof(MotionGeoInfo, ikRate2) == __builtin_offsetof(struct MotRoot, ikRate2),
+    "MotionGeoInfo must have MotRoot's host layout");
+
+#endif
 
 /* the record InitMotionGeoInfo copies over every new actor's geometry
    state */

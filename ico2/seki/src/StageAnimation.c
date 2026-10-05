@@ -1042,7 +1042,10 @@ BgaPlayNode *stage_MakePlayBgAnimation(int key)
         return 0;
     }
 
-    p = iosMallocDebug(ios_partition_seki, 64, __FILE__, 1494);
+    /* BgaPlayNode is 64 bytes on the EE and 80 on a 64-bit host (its list
+       links are pointers): the BgAnimation.c idiom keeps the EE's 64 */
+    p = iosMallocDebug(ios_partition_seki, sizeof(BgaPlayNode) > 64 ? sizeof(BgaPlayNode) : 64,
+                       __FILE__, 1494);
     if (p == 0) {
         /* "cannot allocate memory for the stage segment (heap exhausted)" */
         debug_StdPrintfDummy("ステージセグメントにメモリが確保できません.(ヒープメモリ不足)\n");

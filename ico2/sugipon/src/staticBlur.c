@@ -1024,7 +1024,14 @@ static void calcSun(void)
     _ScaleVector(buf, buf, 1000000.0f);
     buf[3] = 1.0f;
     _ApplyMatrix(buf, matrixptr + 256, buf);
+#ifdef ICO_HOST
+    /* PC port: the view matrix is still zero on the stage's first tick, so
+       buf[3] is 0; the EE's division gives Fmax, and Fmax * 0 is 0, where
+       IEEE gives Inf * 0 = NaN (DIVERGENCES.md F5). */
+    _ScaleVectorXYZ(buf, buf, ps2_div(1.0f, buf[3]));
+#else
     _ScaleVectorXYZ(buf, buf, 1.0f / buf[3]);
+#endif
     _AddVectorXYZ(buf, buf, sunScreenOffset);
     _FTOI0Vector(sunScreen, buf);
     _ApplyMatrix(sunView, matrixptr + 128, sunDir);

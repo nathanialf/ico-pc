@@ -442,3 +442,58 @@ The 10 changed game TUs (`kanban.c`, `layout_texture.c`, `memory.c`,
 `Primitive.c`) compile with `tools/compile_c.sh` to the same `.text`,
 `.data`, `.rodata`, `.sdata`, `.bss`, `.sbss`, `.lit4`, `.lit8` and
 relocations as a `HEAD` (`5ddb5feb`) worktree.
+
+# Package 2I: x64 to 3000 ticks, traces identical
+
+Package 2H's three open items (the node 33 NaN, the remaining literal-size
+allocations, the fptrap stop at vsync 6) and Phase 2's exit criterion. The
+full list of faults and fixes is `SWEEP_2I.md`.
+
+## Result
+
+- `linux-x64` and `ref-m32` headless, `ticks=3000`, `pad-boot.txt`: both
+  reach 3000 Main ticks, 6007 vsyncs, stage 3, and their per-tick traces are
+  byte-identical. The `asan` preset with `ICO_HEAP_ASAN` (built as in 2H) is
+  clean to 3000 ticks after one fix, and its trace is identical too.
+- The node 33 NaN: `InitMotionGeoInfo` copies a template record over the
+  motion root block (`struct MotRoot`) as a struct; the two declarations
+  differ on x64 from offset 0x120 (a `WallCfg` where MotRoot has 20 bytes of
+  padding, an 8-byte aligned plane, an `int` `fixObj`), so `armTwist` read 0
+  and the whole skeleton below node 1 went to the zero quaternion. Node 33's
+  `RegularizeQuaternion` then divided by zero.
+- After it, the traces diverged at tick 802 (gflag word 0) and the run
+  stopped at ticks 433, 828 and 1009 on further 64-bit raw views (GObj's mail
+  box, Sub15C and Act read at EE offsets, `SetMotionRequest`'s EE pointer,
+  a 0x30-byte walk over 0x48-byte sound entries, the flag's node buffers
+  stored at EE offsets). The tick 802 one is worth noting as a pattern: the
+  wrong sound table stride left an ADPCM stream open, which kept the
+  background CD manager full, which skipped the next-stage preload, which made
+  stage 42's load 28 ticks slower; no game logic differed until then.
+- The fptrap preset now runs to Main tick 1011 (stage 40). It found four
+  divisions by zero the PS2 also performs (`GsBase.c`, `staticBlur.c`,
+  `camera-root.c`, `weapon.c`), now `ps2_div` on the host (DIVERGENCES.md F5;
+  F11 for the one result that differs from the PS2). The tick 1011 stop is a
+  NaN reaching `_FTOI4Vector`; not followed.
+
+## How it was run
+
+As 2H, with two changes forced by the environment: on 2026-10-05 at 05:30 the
+targets of the `baserom/` and `tools/cc/` symlinks (`/primary/dev/ico/...`)
+were emptied by something outside this package. The runs then used
+`-DICO_BASE_ELF="/primary/tmp/Ico PS2 PAL/extracted/SCES_507.60"` (its SHA-1 is
+`config/sha1sums.txt`'s `baseelf.elf`) and `iso=` that disc's `Ico.iso`, and
+the EE comparison used ee-gcc 2.9-991111 fetched from the `tools/setup.sh`
+URL into a scratch directory, linked as `tools/cc` in two worktrees
+(`build-host/2i-ee/head` at `HEAD`, `build-host/2i-ee/new` with this
+package's `ico2` files; both removed afterwards).
+
+The divergences were bisected with temporary `fprintf` probes on both builds
+(per-tick boy and girl state, `systemStatus`, the pack loader, the stream
+ring, the background CD table, the motion shift requests), diffed line by
+line; all are removed.
+
+## EE identity
+
+The 20 changed game TUs (listed in `SWEEP_2I.md`) compile with
+`tools/compile_c.sh` to the same `.text`, `.data`, `.rodata`, `.sdata`,
+`.bss`, `.sbss`, `.lit4`, `.lit8` and relocations as a `HEAD` worktree.

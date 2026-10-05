@@ -724,8 +724,15 @@ void SetCameraMatrix(GObj *self)
         } else {
             debug_zoom_per = (float)debug_zoom_per * (1.0f - zoomBlend) + (float)target * zoomBlend;
         }
+#ifdef ICO_HOST
+        /* PC port: the range is empty (max == min) on some stages; the EE's
+           div.s gives +-Fmax there, IEEE gives Inf or NaN (DIVERGENCES.md F5) */
+        SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
+                                                (float)(zoomRangeMax - zoomRangeMin)));
+#else
         SetCameraZoomOffsetRatio(1.0f - (float)(debug_zoom_per - zoomRangeMin) /
                                             (float)(zoomRangeMax - zoomRangeMin));
+#endif
     }
     /* the mode the last frame ran in */
     {

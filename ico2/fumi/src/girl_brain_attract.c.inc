@@ -129,7 +129,8 @@ static int checkWaterfallResult(float *out)
     }
     if (r0 == 1) {
         if (*(void **)((char *)GOBJ_SUB(boyGObj)) != 0 &&
-            *(int *)((char *)*(void **)((char *)GOBJ_SUB(boyGObj)) + 0xC) == 17) {
+            ICO_RAW(int, *(void **)((char *)GOBJ_SUB(boyGObj)), 0xC,
+                    (*(GObj **)GOBJ_SUB(boyGObj))->kind) == 17) {
             t.f[0] = (test_CURRENTROOT(*(void **)((char *)GOBJ_SUB(boyGObj))))[0];
             t.f[1] = (test_CURRENTROOT(*(void **)((char *)GOBJ_SUB(boyGObj))))[1];
             t.f[2] = (test_CURRENTROOT(*(void **)((char *)GOBJ_SUB(boyGObj))))[2];
@@ -187,7 +188,7 @@ static __inline__ int getKind(void *cur) /* derived name */
 {
     if (cur == (void *)boyGObj && GOBJ_ACT(boyGObj)->actMode == 45) {
         return 0;
-    } else if (*(int *)((char *)cur + 0xC) == 16) {
+    } else if (ICO_RAW(int, cur, 0xC, ((GObj *)cur)->kind) == 16) {
         return 1;
     } else if (GOBJ_ACT(boyGObj)->actMode == 49 &&
                *(int *)GOBJ_SUB(girlGObj) == (int)GOBJ_ACT(boyGObj)->box) {

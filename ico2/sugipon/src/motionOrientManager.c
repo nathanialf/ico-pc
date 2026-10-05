@@ -869,7 +869,13 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
             }
         }
     }
+#ifdef ICO_HOST
+    /* PC port: the callers read the result as the motion control block
+       (struct MotCtrl); GOBJ_SUB + 0x470 is that block on the EE only */
+    return (char *)c;
+#else
     return w;
+#endif
 }
 
 inline void SetParallelMotionTableWithNoRequest(void *self, int *next, int *req)

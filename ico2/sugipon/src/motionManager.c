@@ -1066,7 +1066,14 @@ void GetMatrixOfMotion(GObj *self, char *tbl, void *ofs)
     skelRoot = &GOBJ_SUB(self)->root;
     skelMotCtrl = &GOBJ_SUB(self)->ctrl;
     skelNodeNum = GOBJ_SUB(self)->skelNodeNum;
+#ifdef ICO_HOST
+    /* PC port: GObj+8 is labelId and the row is a GenGeo (0x4C bytes and
+       kind at 0x46 on the EE only; a 64-bit host has wider pointers in
+       both records) */
+    skelGeoType = ((GenGeo *)objLayout)[self->labelId].kind;
+#else
     skelGeoType = objLayout[*(GenGeoKind *)(((char *)self) + 8) * 76 + 70];
+#endif
     skelGObj = (ICO_WORD)self;
     MatrixDrive_PushMatrix();
     PushQuaternion();
