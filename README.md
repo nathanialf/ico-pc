@@ -33,9 +33,11 @@ the same logic, timing and output, with improvements kept optional.
 - [x] **Runtime libraries.** Replacements for what the game takes from
       `sce/`: kernel and threads, IOP RPC, DMA and packets, the GS, controllers,
       memory card, the disc, video and sound (`port/`, `docs/port/`).
-- [ ] **Renderer.** The GS packets and the five VU1 microprograms in
-      `ico2/vusrc/` turned into a modern graphics API (`docs/port/RENDER_API.md`;
-      Vulkan in progress, Direct3D 12 not started).
+- [x] **Renderer.** The GS packets and the five VU1 microprograms in
+      `ico2/vusrc/` turned into a modern graphics API (`docs/port/RENDER_API.md`).
+      The game draws through the Vulkan backend. The Direct3D 12 backend is
+      written and builds for Windows, but it has not been run yet
+      (`docs/port/TESTING.md`, "Renderer wave 6: D3D12").
 - [x] **Assets.** The first run verifies your disc image and extracts what the
       game reads into a local archive, `ico.o2r`, and the data tables load from
       its boot ELF (`docs/port/DATA.md`). Nothing from the disc is committed or
@@ -43,8 +45,13 @@ the same logic, timing and output, with improvements kept optional.
 - [x] **Input, audio, saves and video playback** on the host.
 - [x] **Packaging and CI.** `tools/package_win.sh`, `tools/package_linux.sh`
       (`docs/port/STEAMDECK.md`), and `.github/workflows/ci.yml`.
-- [ ] **PC features:** resolution, aspect ratio, frame rate and controller
-      remapping, behind options that default to the original behaviour.
+- [ ] **PC features**, behind options that default to the original
+      behaviour (`docs/port/DISPLAY.md`, `docs/port/SETTINGS.md`). Landed:
+      resolution, aspect ratio, texture filtering and full height, the
+      Settings menu, controller remapping, the gameplay options and the
+      achievements. Still open: the frame rate option (frames drawn between
+      the game's updates) is in progress and not committed, and none of this
+      has been tested on Windows yet.
 
 ## Building
 

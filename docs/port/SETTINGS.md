@@ -56,7 +56,7 @@ with the values in use the next time you save.
 
 | line | values | what it does |
 | --- | --- | --- |
-| Volume | 0 % to 100 % | saved as `[audio] volume`. The audio output does not apply it yet; the line says so |
+| Volume | 0 % to 100 % | saved as `[audio] volume` and applied at once: the SDL output scales its blocks by it (docs/port/AUDIO.md, "Output") |
 
 **Controls**
 

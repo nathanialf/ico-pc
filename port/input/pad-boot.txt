@@ -21,18 +21,18 @@
 # does advance; a build that stubs gsb_UpdateGSSystem would eat every press.
 #
 # Pad: the null pad reports a DualShock that reaches pad.c's stable analog
-# state on tick 6 and is first read on tick 7 (port/null/pad_null.c); the
+# state on tick 6 and is first read on tick 7 (port/input/pad_host.c); the
 # first press is at tick 8.
 #
 # Screens in order, what accepts input, and how this script answers.
 # Confidence is for the logic; no step's timing is known.
 #
 #  1. Stage 1 load, memory-card check. kanbanBootMcCheck checks ports 0 and
-#     1, ten tries (common/src/kanbanBoot.c:66-117); the null card answers
-#     "no card" (port/null/null_devices.h:25). No input. Confidence: high.
+#     1, ten tries (common/src/kanbanBoot.c:66-117); the host card layer
+#     (port/save/mc_host.c) answers per its folder, port 1 empty. No input. Confidence: high.
 #  2. Language sign (kanban 0, kanbanBoot.c:153-174), cursor on English
 #     (item 26 for sceScfGetLanguage 1, kanbanBoot.c:157-158;
-#     port/null/scf_null.c default English). CROSS confirms (kanban.c:138-141
+#     port/config/sysconf.c; English = 1). CROSS confirms (kanban.c:138-141
 #     -> key 1, kanbanBoot.c:177). A sign takes input from its first tick,
 #     fading in or not (kanban.c:394). LEFT: item 26 has no left link
 #     (texProperty[26]), so it does nothing. Confidence: high.

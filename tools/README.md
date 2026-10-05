@@ -2,9 +2,8 @@
 
 Every file in this directory, with what it does. The port builds with CMake
 (`../CMakeLists.txt`, `docs/BUILDING.md`); nothing here builds the game. The
-PS2 ELF build's scripts (`../build.sh`, `build.sh`, `gen_ninja.py`,
-`verify_elf.py`, the two GNU ld 2.10 patches and `setup.sh`'s ld and dvp-as
-builds) were removed in package 5C. The tools work on the branch's target as
+PS2 ELF build's scripts were removed in package 5C (docs/BUILDING.md lists
+them); none is described below. The tools work on the branch's target as
 `ico_version.py` reports it (`main` is PAL retail, slug `pal`). `tools/cc/`
 (the period compilers) and `tools/toolchain/` (the host build's compilers and
 libraries) are fetched, not tracked.
@@ -15,7 +14,7 @@ libraries) are fetched, not tracked.
 |---|---|
 | `fetch_toolchain.sh` | fills `tools/toolchain/`: llvm-mingw, mingw-w64 gcc, CMake; calls `fetch_deps.sh` last. No root. Run once; CI caches the result |
 | `fetch_deps.sh` | fills `tools/toolchain/deps/`: Vulkan-Headers, volk, SDL3 (Linux build and mingw release), DXC, libmpeg2, the validation layer (tests only) |
-| `package_win.sh <label>` | the Windows test package for HEAD: `dist/ico-pc-<label>-win.zip` (docs/port/TESTING.md) |
+| `package_win.sh <label>` | the Windows test package for HEAD: `dist/ico-pc-<label>-win.zip`, with the D3D12 backend checks under `x64/tools/` (docs/port/TESTING.md) |
 | `package_linux.sh <label>` | the Linux package for HEAD: `dist/ico-pc-<label>-linux.tar.gz` with `ico_pc` and `libSDL3.so.0` (docs/port/STEAMDECK.md) |
 | `gen_sources.py` | writes `cmake/IcoSources.cmake` from `config/link_order.pal.txt`; `--check` for CI and the hook |
 | `gen_layout_asserts.py` | writes `port/test/layout_asserts.c` from the headers' offset comments; `--check` |
@@ -25,7 +24,7 @@ libraries) are fetched, not tracked.
 | `install_hooks.sh` | writes the pre-commit hook: `check_no_rom.sh`, `format.sh --check` on the staged C, and the three `--check`s above |
 | `setup.sh` | idempotent: the venv from `requirements.txt`, the period compilers (skip with `SKIP_TOOLCHAIN=1`), the git hooks |
 | `requirements.txt` | the venv's packages: pyelftools, pycdlib, ninja, clang-format |
-| `host_syntax_check.sh` | package 0B's front-end check with a 32-bit host gcc over `ico2/`; the CMake presets supersede it |
+| `host_syntax_check.sh` | package 0B's front-end check with a 32-bit host gcc over `ico2/` (`-m32`: the 32-bit presets are retired, so it needs a multilib gcc); the CMake presets supersede it |
 
 ### Maintainers: the EE identity check and the base ELF
 

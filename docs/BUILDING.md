@@ -168,7 +168,7 @@ on that order at some call sites.
 
 | cache variable | default | effect |
 | --- | --- | --- |
-| `ICO_HEADLESS` | `ON` | leaves out the renderer-owned sources (`ICO_RENDERER_SOURCES`) and defines `ICO_HEADLESS=1` |
+| `ICO_HEADLESS` | `OFF` | `OFF` is the window build (the game's seki layer draws through `port/render`, `ICO_RD=1`); `ON` is the headless build of the trace and test runs (no window, no renderer; docs/port/HEADLESS_STUBS.md) and defines `ICO_HEADLESS=1`. Both compile the same game sources. The `linux-x64` preset sets it `ON`, `win-x64` `OFF` |
 | `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings, so every file that can compile does |
 | `ICO_BUILD_BLOCKED` | `OFF` | also compiles `ICO_BLOCKED_SOURCES` (`cmake/IcoExclusions.cmake`), to recheck them |
 | `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program |
@@ -182,7 +182,7 @@ on that order at some call sites.
 `cmake/IcoSources.cmake` is written by `tools/gen_sources.py` from
 `config/link_order.pal.txt` (the retail link's object list, kept as the
 source list; nothing links with it any more): the `ico2/` C sources, one list per programmer
-directory, the renderer-owned list, and the data-only members. Configure
+directory, the data-only members and `ICO_EE_ONLY_SOURCES` (the PS2's FMV player, replaced by `port/fmv`). There is one list for both builds since renderer wave 6. Configure
 warns when it is stale; rerun the script after changing the link order.
 
 Each programmer directory is one object library with the include path

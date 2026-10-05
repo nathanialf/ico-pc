@@ -5,7 +5,8 @@ add_library(ico_audio STATIC
     adpcm.c
     spu2.c
     spu2_sd.c
-    spu2_tables.c)
+    spu2_tables.c
+    volume.c)
 target_include_directories(ico_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(ico_audio PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
@@ -22,7 +23,12 @@ if(NOT WIN32)
     target_link_libraries(spu2_test PRIVATE m)
 endif()
 
+add_executable(volume_test test/volume_test.c)
+target_compile_options(volume_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(volume_test PRIVATE ico_audio)
+
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME volume COMMAND volume_test)
     add_test(NAME adpcm COMMAND adpcm_test)
     add_test(NAME spu2 COMMAND spu2_test)
 endif()

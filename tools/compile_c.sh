@@ -2,8 +2,8 @@
 # tools/compile_c.sh <src.c> <out.o>
 #
 # Compile one C source: ee-gcc 2.9-991111 to a .s, then the assembler of the
-# source's archive to the object. build.ninja's cc rule (tools/gen_ninja.py)
-# runs it per object.
+# source's archive to the object. The retired PS2 build's ninja rule ran it per
+# object; tools/ee_identity.sh runs it now.
 
 set -eu
 

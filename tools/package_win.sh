@@ -64,8 +64,11 @@ for a in x64; do
     p="${preset[$a]}"
     run cmake --preset "$p" -DICO_LINK_EXE=ON
     run cmake --build "build-host/$p"
-    for f in ico_pc.exe ico_pc.map SDL3.dll; do
+    for f in ico_pc.exe ico_pc.map SDL3.dll port/rhi/rhi_d3d12_test.exe port/render/rd_replay_tool.exe; do
         [[ -f "build-host/$p/$f" ]] || fail "$p did not produce $f"
+    done
+    for f in compare_backends.cmd compare_png.ps1; do
+        [[ -f "port/rhi/test/$f" ]] || fail "port/rhi/test/$f is missing from HEAD"
     done
 done
 cd "$root"
@@ -79,6 +82,15 @@ for a in x64; do
     cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
     cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
     cp "$b/SDL3.dll" "$d/SDL3.dll"
+    # the R6c backend checks (docs/port/TESTING.md, "Renderer wave 6: D3D12"),
+    # in their own folder with the SDL3.dll they need beside them
+    rm -rf "$d/tools"; mkdir -p "$d/tools"
+    cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/SDL3.dll" "$d/tools/"
+    cp "$wt/port/rhi/test/compare_png.ps1" "$d/tools/"
+    # the repository stores the .cmd with LF (it has no labels or goto, so
+    # cmd.exe runs it either way); the package gets CRLF, what Notepad and
+    # cmd.exe expect of a batch file
+    sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
     cp "$wt/port/input/pad-boot.txt" "$d/pad-script.txt"
     cat > "$d/ico-pc.ini" <<INI
 # ico-pc.ini: settings for the $label test build (a window).
@@ -177,8 +189,33 @@ not a texture yet; each listed once). Then, as before:
 | `ico_pc_x64.map` | link maps for turning crash addresses into function names |
 | `ico-pc.ini` | `iso=` (disc image path), `watchdog=30`; no `ticks=`, so it runs until you close it |
 | `pad-script.txt` | the button presses, one line per change: `<tick> <buttons-hex>` |
+| `tools\rhi_d3d12_test.exe` | optional: the Direct3D 12 backend's own tests (below) |
+| `tools\rd_replay_tool.exe`, `tools\compare_backends.cmd`, `tools\compare_png.ps1` | optional: render frame dumps on Vulkan and D3D12 and compare them (below) |
+| `tools\SDL3.dll` | a copy for the two `.exe` files in `tools\` |
 | `logs\ico-pc.log` | written by each run (replaced on the next run) |
 | `logs\trace-*.txt` | one line per game tick, as in the earlier tests |
+
+## Backend checks (optional, `x64\tools\`)
+
+The Direct3D 12 backend has not run on Windows yet; these check it. Each
+step is independent of the game and needs no disc image.
+
+1. Double-click `tools\rhi_d3d12_test.exe`. It runs the renderer's pixel
+   cells on D3D12 (the WARP software adapter, then the GPU), a swapchain on
+   a hidden window, and Vulkan for comparison, writes
+   `rhi_d3d12_test.log` beside itself and ends with a message box (PASSED, or
+   which cell failed). Send back the log. "skipped" lines are not failures.
+2. To use D3D12 in the game, set `backend=d3d12` in `ico-pc.ini` (the
+   default and the fallback are Vulkan); `logs\ico-pc.log` then says
+   `D3D12 on <adapter>`.
+3. To compare the two backends on the same frames: add `dump_every=N`
+   (say 100) to `ico-pc.ini`, run the game, close it, and copy the `dumps\`
+   folder it made into `tools\`. Double-click `tools\compare_backends.cmd`:
+   it renders each dump on both backends with `rd_replay_tool.exe` and
+   compares the PNGs with `compare_png.ps1` (PowerShell), writes
+   `compare_backends.log` (opened in Notepad) and the images in
+   `compare_out\`. Send back the log. Dumps hold pictures from your disc:
+   do not share them.
 TESTMD
 } > "$stage/TEST.md"
 

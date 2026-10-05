@@ -92,8 +92,8 @@ config/local.*
 tools/cc/
 tools/ghidra/
 # The host build's toolchains (tools/fetch_toolchain.sh) and build trees
-# (CMakePresets.json; build/ belongs to the PS2 build and tools/build.sh
-# setup deletes it).
+# (CMakePresets.json; build/ held the retired PS2 build's output and is
+# ignored as well).
 tools/toolchain/
 build-host/
 # test checkpoint packages (docs/port/TESTING.md)
@@ -104,9 +104,8 @@ dist/
 # it stays out of the public repo.
 CLAUDE.md
 .claude/
-# Ninja build files: the manifest is written by tools/gen_ninja.py from
-# config/link_order.pal.txt on every `tools/build.sh setup`. The .ninja_log
-# and .ninja_deps are runtime state.
+# Ninja state: build.ninja, .ninja_log and .ninja_deps are written by Ninja
+# (or left by the retired PS2 build) in the directory it ran in.
 build.ninja
 .ninja_log
 .ninja_deps

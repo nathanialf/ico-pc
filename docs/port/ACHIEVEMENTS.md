@@ -207,10 +207,9 @@ when the condition is later met without an assist; a normal unlock is final.
 The stick fix and mirror mode change input, not the game's rules, and are
 not assists.
 
-This differs from docs/port/DEVELOPER_MODE.md and the
-`UI_STR_DEVELOPER_NOTE` string ("Achievements are paused while developer
-mode is on"): under this package's brief they are recorded as assisted, not
-suspended (open item 4).
+docs/port/DEVELOPER_MODE.md, docs/port/OPTIONS.md and the
+`UI_STR_DEVELOPER_NOTE` string agree since 7A: achievements are recorded as
+assisted in developer mode, not suspended.
 
 ## The file: `<pref>/achievements.toml`
 
@@ -345,14 +344,13 @@ signal firing (signals are not logged) and any unlock in the live game.
 3. **Run state is in memory.** The fresh-run challenges (`never_taken`,
    `unbroken`) need one session from new game to ending; per-save run state
    (Dusklight keeps per-achievement state in its file) would lift that.
-4. **Developer mode wording.** DEVELOPER_MODE.md, OPTIONS.md and
-   `UI_STR_DEVELOPER_NOTE` say achievements are suspended in developer
-   mode; they are recorded as assisted. Those texts are outside this
-   package's files.
+4. **Developer mode wording** (done in 7A): DEVELOPER_MODE.md, OPTIONS.md,
+   SETTINGS.md and `UI_STR_DEVELOPER_NOTE` now say achievements are recorded
+   as assisted in developer mode.
 5. **`port/ui/strings.h`** was extended with the 61 ids (an enum the tables
    need); the brief named only the tables. Translations are the author's,
    as for 6B (UI.md open item 4).
-6. **No list view.** Nothing in the Settings menu shows the achievements
-   yet (6C could add a page reading `ico_ach_*`).
+6. **List view** (done in 6C): the Settings menu's Achievements page lists
+   them (docs/port/SETTINGS.md).
 7. **Popups in the headless build** do not advance (no `ui_PopupVsync`), as
    for every popup.

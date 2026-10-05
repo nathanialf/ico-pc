@@ -14,6 +14,10 @@
  * (a stall) one vsync of silence is queued ahead of the block to rebuild
  * the cushion, and when more than four vsyncs are queued (the simulation ran
  * ahead) the block is dropped.  Both are counted and logged at the close.
+ *
+ * Volume: each block is scaled by audio_host.h's ico_audio_volume_q8()
+ * (0..256 in 1/256 steps) just before it is queued, so a change from the
+ * Settings menu is heard within two vsyncs.
  */
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -28,6 +32,7 @@ static SDL_AudioStream *stream;
 static unsigned long underruns;
 static unsigned long drops;
 static int16_t silence[1024 * CHANNELS];
+static int16_t scaled[1024 * CHANNELS];
 
 int ico_audio_sdl_open(void)
 {
@@ -72,6 +77,12 @@ void ico_audio_sdl_push(const int16_t *frames, int count)
             underruns++;
         }
         SDL_PutAudioStreamData(stream, silence, vsync_bytes);
+    }
+    if (count <= 1024 && ico_audio_volume_q8() != 256) {
+        /* the volume (audio_host.h): scaled into a copy, the caller's block
+           stays unscaled for the WAV dump */
+        ico_audio_scale(scaled, frames, count * CHANNELS, ico_audio_volume_q8());
+        frames = scaled;
     }
     SDL_PutAudioStreamData(stream, frames, vsync_bytes);
 }

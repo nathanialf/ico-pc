@@ -62,7 +62,7 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # the Settings menu's view of the port's option modules (includes only; the
 # programs link the libraries)
-set(_ui_settings_deps ico_achievements ico_input ico_options ico_config)
+set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
     target_sources(${name} PRIVATE settings.c)
     foreach(_lib ${_ui_settings_deps})

@@ -109,13 +109,16 @@ words and `LeverGeoWork.base` are `ICO_WORD_PTR`. `GProc.pad20` is `arg`
    `+0x38` views in `adpcm_init.c`) stay valid.
 2. `nodeLimit` (host): `SetNodeRotationLimitDataTable` stores `i + 1`, and
    `_getFinalMatrix` reads `motionLimitDef[word - 1]`. `motionLimitDef` is ELF data
-   outside the arena, so an EE word cannot name it. The Phase 5 table loader may
-   replace this.
+   outside the arena, so an EE word cannot name it. Phase 5's loader fills
+   `motionLimitDef` at run time (docs/port/DATA.md, "The data tables"); the
+   index scheme stayed.
 3. `SeDef` and `SeEnvDef` (`pending=5`) are still the EE layout plus a function
-   pointer, so `sizeof(SeDef)` is 0x40 on the host until Phase 5; `debug_req` uses
-   pointer subtraction on the host.
+   pointer, so `sizeof(SeDef)` was 0x40 on the host until Phase 5; since then the
+   64-bit record layouts are what the code is compiled against and the loader
+   writes (docs/port/DATA.md); `debug_req` uses pointer subtraction on the host.
 4. `Init*Geo` constructors and the thread entries are reached through ELF function
-   tables, which need the function map of Phase 5; their types are ready.
+   tables; Phase 5's registry (`port/data/gen/ee_symbols.c`, docs/port/DATA.md) is
+   that function map, and the loader resolves the pointer words through it.
 5. Raw offsets that remain are pointer independent: `matrixptr + 0x80/0xC0/0x100`
    (float matrix table), vector words, `ExW` and `DObjNode` fields
    (`+0x3A` flags, scale, no pointers), GIF packet cursors in `darkVolume.c`,

@@ -111,8 +111,8 @@ Two of them read garbage on any host, as they presumably did on the EE:
   (`clothAnimation.c:1980`).
 
 Neither is on the boot path. `fptodp` is declared `double` in
-`motMan_getFinalMatrix.c.inc:1023` but `int` in `debug_null.c` and
-`boyact.c`. Its result only goes to the debug printfs, and on i386 the
+`motMan_getFinalMatrix.c.inc:1023` but `int` in `debug_null.c` (since
+removed, R6a) and `boyact.c`. Its result only goes to the debug printfs, and on i386 the
 mismatch leaves the x87 stack balanced (an `fstp` of an empty register,
 masked). It would trap under the `fptrap` preset. To reproduce the list:
 configure `ref-m32` with `-flto=auto -ffat-lto-objects` in `CMAKE_C_FLAGS`
@@ -193,7 +193,7 @@ checked against the code, and against the runs where noted.
 | candidate | verdict and evidence |
 | --- | --- |
 | `file_Init` disc wait spins without yielding | Ruled out. `sceCdStatus` returns `0x0A` with a disc mounted, and `sceCdDiskReady` returns 2 (`cdvd_host.c`); `main_host.c` mounts the image before boot. Log: `boot: iosInitialize` follows `boot: file_Init` at once. |
-| `iosInitialize` / `SgSndn2RemoteInit` / `soundInit` waits | Ruled out. The null server is registered before the bind (`snd_null.c` `SgSndn2RemoteInit`). `sceSifDmaStat` returns -1, which ends `Ee2Iop`'s loop (`s_init.c:112`). `SgSndn2RemoteSync` returns 0. `SgGetDmaTransferStatus` returns 1. The IOP heap holds sound and both ADPCM rings. |
+| `iosInitialize` / `SgSndn2RemoteInit` / `soundInit` waits | Ruled out. The null server is registered before the bind (`snd_null.c` `SgSndn2RemoteInit`; since removed, the sequencer and driver are `port/audio/`). `sceSifDmaStat` returns -1, which ends `Ee2Iop`'s loop (`s_init.c:112`). `SgSndn2RemoteSync` returns 0. `SgGetDmaTransferStatus` returns 1. The IOP heap holds sound and both ADPCM rings. |
 | fibers run before the first vsync / busy-waits starve the host loop | Ruled out. `ico_host_init` runs fibers until all wait or the top one spins. `VSync`, `sceGsSyncV` and the idle loop yield through `ico_sched_spin_vsync`, which returns to the host when the spinning thread is the highest ready one (`sched.c` `ico_sched_run`). Log: `boot ran until every thread waits`, then `first vsync done`. |
 | scheduler semantics (self-wakeup, pending wakeups, same-priority signal, priority 33/34 parking, `DeleteSema` with waiters) | Ruled out by the audit and the run. They match the rules in `sched.h`. |
 | stream-manager livelock / background reader "read command fail" | Ruled out. The stream manager fills its 0x380-sector ring and blocks. The background reader only runs on the cdvd thread, and `cd.busy` clears at each vsync before any fiber runs. |
@@ -306,10 +306,10 @@ manager), and the game's per-object threads.
 - `port/data/cdvd_host.c`: blocking `sceCdSync` waits for the vsync
   (crash 2); drive counters for the heartbeat.
 - `port/data/sif_host.c`: last RPC for the heartbeat.
-- `port/null/snd_null.c`: ADPCM streams advance (`HEADLESS_STUBS.md`).
+- `port/null/snd_null.c` (since removed, Phase 4B): ADPCM streams advance (`HEADLESS_STUBS.md`).
 - `port/null/gfx_null.c`: `sceGsSyncV` records its call for the thread
   dump.
-- `port/null/debug_null.c`: asserts set the failure message.
+- `port/null/debug_null.c` (since removed, R6a: `common/src/debug.c` is compiled): asserts set the failure message.
 - `port/platform/`:
   - new `diag_host.{h,c}` and `test/diag_test.c`;
   - `sched.{h,c}`: per-thread last call, views for the dump; `sched.h`
@@ -377,7 +377,7 @@ and run it:
 
 ```
 cmake --preset asan -B build-host/2h-asan -DICO_LINK_EXE=ON \
-  -DICO_DATA_DIR=$PWD/build/data -DICO_SANITIZE=address \
+  -DICO_SANITIZE=address \
   "-DCMAKE_C_FLAGS=-DICO_HEAP_ASAN=1 --param=asan-instrument-reads=0"
 cmake --build build-host/2h-asan --target ico_pc
 cd build-host/2h-asan    # ico-pc.ini, pad-script.txt as in TESTING.md

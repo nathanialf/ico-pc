@@ -336,6 +336,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         v = v < 0 ? 0 : v > 10 ? 10 : v;
         ico_config_set_float("audio.volume", v / 10.0);
         s_dirtyConfig = 1;
+        ico_audio_set_volume(v / 10.0); /* live; the SDL output reads it per block */
         break;
     }
     case UI_OPT_STICK_FIX:
@@ -688,7 +689,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_DISPLAY:
         break;
     case UI_PAGE_AUDIO:
-        addNote(pg, UI_OPT_VOLUME, UI_STR_VOLUME_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);

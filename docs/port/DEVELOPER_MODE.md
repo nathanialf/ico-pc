@@ -13,7 +13,7 @@ both on the host.
 | option file | `config.toml` `[dev] debug_option` (int, default 0), `ico_opt_debug_option()` |
 | host0: files | `<pref>/dev/` (`port/data/sifdev_host.c`; `<pref>` is the per-user folder, docs/port/CONFIG.md) |
 | snapshots | `<pref>/dev/screenshots/snapNNNNNNN.png` |
-| achievements | suspended while on (the achievements package reads `ico_opt_developer_mode()`) |
+| achievements | recorded as "assisted", not suspended: an unlock made while it is on is an assisted unlock (the achievements package reads `ico_opt_developer_mode()`; docs/port/ACHIEVEMENTS.md, "Categories") |
 | trace | the first line of every trace is `# developer_mode 0` or `1` (`port/platform/trace_host.c`) |
 
 ## What it changes

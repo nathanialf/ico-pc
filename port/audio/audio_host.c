@@ -61,11 +61,15 @@ void ico_audio_host_init(void)
 {
     const char *dump = getenv("ICO_AUDIO_DUMP");
     const char *enable = getenv("ICO_AUDIO");
+    const char *vol = getenv("ICO_AUDIO_VOLUME");
 
     if (started) {
         return;
     }
     started = 1;
+    if (vol != NULL && vol[0] != '\0') {
+        ico_audio_set_volume(strtod(vol, NULL));
+    }
     ico_sndn2_host_register();
     if (dump != NULL && dump[0] != '\0') {
         wav = ico_wav_open(dump, SPU2_RATE);

@@ -35,6 +35,19 @@ What the headless `ico_pc` (package 1D) links in place of hardware. The
 renderer waves delete these as they land. `docs/port/BUILD_STATUS.md` has
 the per-preset link status.
 
+## What remains stubbed (checked in 7A)
+
+`port/null/` holds two files and nothing else is a stand-in for hardware in
+either build: `gfx_null.c` (libgraph's GS calls and libdma's `sceDmaReset`,
+`sceDmaSend`, `sceDmaGetChan`) and `libgcc_null.c` (`fptodp`). Everything
+else the first packages stubbed has a real host layer: the pad
+(`port/input/pad_host.c`, an empty console when nothing feeds it), the memory
+card (`port/save/mc_host.c`), sound (`port/audio/`), libscf
+(`port/config/sysconf.c`), `debug.c` (compiled, R6a) and the movie player
+(`port/fmv`). The headless build differs from the window build only in what
+happens to the packets (built and not consumed), the sound and picture output
+and the missing window.
+
 ## Design: stub the hardware, not the renderer layer
 
 The headless build compiles the game's own renderer layer (all of

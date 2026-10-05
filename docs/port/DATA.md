@@ -331,16 +331,19 @@ id, `sceSifCallRpc` runs the server synchronously and copies its reply, and
 `sceSifCheckStatRpc` reports every call finished. The sifdev calls
 (`sceOpen`, `sceRead`, ...) served the dev kit's `host0:` and fail.
 
-## Null devices (`port/null/`)
+## What stood in for devices (`port/null/`)
 
-| file | stands in for | answers |
-|---|---|---|
-| `pad_null.c` | libpad | init and port open succeed; `scePadGetState` 0 (disconnected), so `pad.c` keeps both ports in their error state and hands the game zero buttons |
-| `mc_null.c` | libmc | removed in Phase 4D: the memory card is `port/save/mc_host.c`, libmc over a host folder (`docs/port/SAVES.md`); port 1 there still answers as the null card did (-10, type 0) |
-| `snd_null.c` | the Sg API and SNDN2DRV's RPC server | IOP half: server 0x736E646E, takes the init and tick calls, replies with a zeroed 0x200 page except the transfer counter at +0x1C0, echoed from the last 0x20/0x21 packet. EE half (until the sequencer moves to `port/audio/sg/`): `_SgSndn2Remote`, `SgSndn2RemoteInit/Sync` bind and call the IOP half through the host SIF; the rest accept requests and report nothing playing |
-| `scf_null.c` | libscf | `sceScfGetLanguage` returns `ico_scf_language`, default 1 (English in libscf's numbering) |
+Package 1D's null devices are gone; each was replaced by a real host layer:
 
-`gfx_null.c` is package 1B's.
+| was | now |
+|---|---|
+| `pad_null.c` (libpad, always disconnected) | `port/input/pad_host.c`: one DualShock 2 in port 0 when the pad script or the live virtual pad feeds it, nothing otherwise (then `scePadGetState` is 0 and `pad.c` keeps both ports in their error state, handing the game zero buttons); docs/port/INPUT.md |
+| `mc_null.c` (libmc, both slots empty) | `port/save/mc_host.c`: libmc over a host folder; port 1 is empty (docs/port/SAVES.md) |
+| `snd_null.c` (the Sg API and SNDN2DRV's RPC server) | `port/audio/`: the Sg sequencer (`sg/sound.c`), the SNDN2DRV host and the software SPU2 (docs/port/AUDIO.md) |
+| `scf_null.c` (libscf) | `port/config/sysconf.c`: language, time zone and summer time from the config (docs/port/CONFIG.md) |
+
+`port/null/` keeps `gfx_null.c` (package 1B's: libgraph and libdma) and
+`libgcc_null.c` (`fptodp`); docs/port/HEADLESS_STUBS.md.
 
 ## Facts about the PAL disc relied on
 
@@ -522,8 +525,9 @@ lists or `config/data_members.pal.txt`: `tools/gen_data_desc.py --manifest`
   `cdvd.c` computes, 4,000 pseudo-random sector runs inside DATA.DF and one
   over its end into `DUMMY.TXT` equal, `sceCdSearchFile` records equal. 77
   without the image; about 25 s; the archive is deleted afterwards.
-- `null_devices` checks the four null devices, including the sound
-  server's reply page and transfer-counter echo.
+- `null_devices` checks the pad as an empty console answers it (no feed:
+  state 0, `scePadRead` fails); the sound, card and libscf checks live in
+  `sndn2_test`, `mc_test` and `config_test`.
 
 ## Divergences
 

@@ -336,7 +336,10 @@ One command builds and zips the Windows test package for the current HEAD
    `ico_pc_x64.map`, `SDL3.dll`, `ico-pc.ini` (`watchdog=30`, no
    `ticks=`; an `iso=` line already in the staged ini is kept) and
    `pad-script.txt` (`port/input/pad-boot.txt`), plus `TEST.md` with the
-   label, date and commit in its heading.
+   label, date and commit in its heading. `x64/tools/` holds the R6c
+   backend checks: `rhi_d3d12_test.exe`, `rd_replay_tool.exe`, `SDL3.dll`,
+   `compare_backends.cmd` (staged with CRLF line ends) and `compare_png.ps1`;
+   `TEST.md` has a section on them.
 4. Writes `dist/ico-pc-<label>-win.zip` (root `ico-pc-<label>/`, no
    `logs/` folders), prints the zip path and the commit, and removes the
    worktree (`git worktree remove --force`, `git worktree prune`).

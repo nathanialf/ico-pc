@@ -588,12 +588,9 @@ row, "Press a key or button…").
 2. **Framerate.** Shown read-only from `[video] framerate`; R7b's
    `IcoVideoOptions.framerate` (original, uncapped, a cap) was in flight in
    the tree, so the row does not step it yet.
-3. **Volume** is saved but not applied (CONFIG.md's open item: the SDL
-   output does not read `[audio] volume`).
-4. **THIRD_PARTY.md** still lists EB Garamond; its font row is to become
-   Arimo's (the provenance and digests above, the OFL 1.1, "Copyright 2020
-   The Arimo Project Authors"; the shipped OFL.txt's first line reads
-   2026); outside this package's files.
+3. **Volume** (done in 7A): the SDL output applies `[audio] volume`, live
+   (docs/port/AUDIO.md, "Output").
+4. **THIRD_PARTY.md** (done in 7A): the font row is Arimo's.
 5. **Translations** need a native-speaker review; the French, German,
    Italian and Spanish strings are the author's (6B's and 6C's).
 6. **The rd entry points** (Requested rd API): the R8 atlas through

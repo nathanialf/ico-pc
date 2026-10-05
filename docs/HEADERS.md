@@ -116,5 +116,8 @@ then the `sce/` archive directories. The relative spellings are the ones the
 ROM's `__FILE__` strings record. Sony's members compile from inside their
 own directory by bare file name, for the same reason.
 
-ninja does not track header dependencies: after editing a header, run
-`tools/build.sh clean` before `ninja`.
+The CMake build (Ninja) tracks header dependencies through compiler
+depfiles, so after editing a header `cmake --build` recompiles what includes
+it; no clean step is needed. (`tools/compile_c.sh`, the period-compiler
+spelling of the search order, belongs to the optional EE check in
+docs/BUILDING.md's appendix.)

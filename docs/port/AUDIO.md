@@ -294,8 +294,10 @@ are mixed into it: 256 left samples then 256 right, each sample `(vol *
 x) >> 15` added with 16-bit wrap-around, `x` read at byte offset
 `((2 * i) >> shift) * 2`, the read offset wrapping at the buffer size,
 advancing by the open's step and stopping at the buffer-mode stop offset.
-The movie player (`ito/mpeg/mv_audiodec.c`) is not in the build yet
-(docs/port/HEADLESS_STUBS.md), so only `sndn2_test` drives this path.
+The PS2's movie player (`ito/mpeg/mv_audiodec.c`) is not in the build; the
+host's (`port/fmv/movie.c`, Phase 4E) makes the same `SgStPcm*` calls
+(docs/port/FMV.md, "Audio"), so a movie's sound runs through this engine and
+`sndn2_test` drives it as well.
 
 ## Output (4B)
 
@@ -317,7 +319,12 @@ frames then go to:
   above four vsyncs (the simulation ran ahead of the window's pacing) the
   block is dropped. Both are counted and logged at exit (A22). Not
   measured on a real device: the build host has none. ini `audio=0` opens
-  no device (the driver still runs).
+  no device (the driver still runs). The output volume (`[audio] volume`,
+  0.0 to 1.0, `ICO_AUDIO_VOLUME`; the Settings menu steps it live through
+  `ico_audio_set_volume`) scales each block just before it is queued:
+  `(sample * q8 + 128) >> 8` with `q8 = round(volume * 256)` clamped to
+  0..256 and the result clamped to 16 bits (`volume.c`; `volume_test`). The
+  WAV dump is taken before the scaling and stays at full volume.
 - **WAV** (any build, ini `audio_dump=PATH`, relative to the ini's folder;
   `audio_dump=1` is `logs/audio.wav`): 16-bit stereo 48 kHz, header
   patched every second and at exit; a summary line (frames, peak, first
@@ -358,7 +365,7 @@ the L/R correlation ranges from -0.02 to 0.87, so panning and the stereo
 streams are live.
 
 Against the null driver: the per-tick trace of this run equals 2J's
-`linux-x64` run (same pad script, `port/null/snd_null.c`) for the first
+`linux-x64` run (same pad script, with the since-removed `port/null/snd_null.c`) for the first
 860 ticks. Then game flag word gf0 gains bit 0x10 one tick later (tick 862
 instead of 861, stage 43, the opening), and from tick 1116 (stage 3) the
 trace's save-data hash differs; every other column stays equal to tick

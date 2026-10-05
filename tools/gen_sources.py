@@ -2,8 +2,8 @@
 """Write cmake/IcoSources.cmake, the host build's source lists.
 
 The lists come from config/link_order.pal.txt, the one inventory of the
-game's translation units (tools/gen_ninja.py fails on a tracked source it
-does not list). The host build takes its ico2/ C sources and its data-only
+game's translation units (the PS2 build's tools/gen_ninja.py, now retired,
+failed on a tracked source it did not list). The host build takes its ico2/ C sources and its data-only
 members, never sce/ (Sony's libraries are replaced by port/) or the VU1
 microprograms (ico2/vusrc/, replaced by shaders).
 

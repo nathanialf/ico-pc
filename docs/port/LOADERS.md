@@ -209,10 +209,10 @@ image's address and hand it to the sound library: `SgVabOpenFakeBody`
 relocates header words 0x10 and 0x18-0x24 into the slots at 0x30 and
 0x38-0x44, and `SgBgmOpen` keeps the sequence's address
 (`sce/libsndn2/sound.c`, R4). Neither function is in the host build: the
-host links `port/null/snd_null.c`'s stubs, which touch nothing. The
-Phase 4 host sound library (`port/audio/sg`) must keep its own record of
-these addresses (pattern (b)) and never write an 8-byte address into the
-header's 4-byte slots; the game side needs no change. `.bd`, `.int`,
+host (`snd_null.c`'s stubs then; the host sound library in `port/audio/sg`
+since Phase 4B) must keep its own record of these addresses (pattern (b))
+and never write an 8-byte address into the header's 4-byte slots; the game
+side needs no change. `.bd`, `.int`,
 `.pef`, `.ssb`, `.skb`, `.tm2` and `.zzz` hold no addresses (R4 section 3).
 
 ## Records that are not loader formats
@@ -388,11 +388,11 @@ For the renderer (Phase 3), package 2G:
 For Phase 4: the host sound library keeps its own record of the `.hd` and
 `.sq` addresses (above).
 
-For Phase 5 (runtime table loader): `StageAnimDef.data` and
-`LtProperty.texData` are run-time pointer slots in tables the loader will
-read byte for byte; on the host they can hold EE words (`eeword.h`) or move
-to a parallel host array. `eeword.h` covers heap addresses only; the
-function-pointer fields need the address-to-function map R4 describes.
+For Phase 5 (runtime table loader; done, docs/port/DATA.md, "The data
+tables"): `StageAnimDef.data` and `LtProperty.texData` are real host pointer
+slots, null in the ROM and filled at run time; the function-pointer fields
+resolve through the registry `port/data/gen/ee_symbols.c`, the
+address-to-function map R4 describes.
 
 General:
 - Every word read on the host calls `ico_arena_base()`; Phase 7's hot-path

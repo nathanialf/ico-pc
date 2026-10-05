@@ -37,6 +37,16 @@ int ico_audio_host_frames(int hz, unsigned int vsync_index);
 void ico_audio_set_mirror(int on);
 int ico_audio_mirror(void);
 
+/* Output volume (volume.c; the SDL device only, a WAV dump stays unscaled).
+   `volume` is 0.0 .. 1.0 (the ini's [audio] volume, exported as
+   ICO_AUDIO_VOLUME and read at init); stored as 0..256 in 1/256 steps,
+   clamped, and live: the next pushed block uses it. */
+void ico_audio_set_volume(double volume);
+int ico_audio_volume_q8(void);
+/* dst[i] = clamp16(src[i] * q8 / 256), `count` samples (dst may equal src);
+   integer math, q8 clamped to 0..256, 256 is a copy. */
+void ico_audio_scale(int16_t *dst, const int16_t *src, int count, int q8);
+
 /* Close the WAV and the device (also an atexit handler). */
 void ico_audio_host_shutdown(void);
 

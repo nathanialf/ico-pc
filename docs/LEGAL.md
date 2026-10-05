@@ -11,15 +11,16 @@ respective owners.
 
 ## What is in this repository
 
-- C and assembly source written for this project, which the period toolchain
-  compiles into the game's boot ELF.
-- Build scripts and tooling written for this project, and two patches to GNU
-  binutils 2.10 (GPL, like the code they patch).
+- C source written for this project: the game's source under `ico2/`, which
+  the host compiler builds into the PC port, and the port's own code under
+  `port/`. (The retired PS2 build compiled the same game source with the
+  period toolchain into a boot ELF; `docs/BUILDING.md`, appendix.)
+- Build scripts and tooling written for this project.
 - Documentation written for this project.
 - Configuration that describes how the user's own disc image is checked and
-  how the rebuilt ELF is linked: the link order, the linker script, the
-  data-table index, the data-table schema (record types and counts, no
-  values) and the SHA-1s of the expected files.
+  how the data tables are read: the link order (kept as the source list), the
+  linker script, the data-table index, the data-table schema (record types
+  and counts, no values) and the SHA-1s of the expected files.
 - `config/ico.pal.yaml`, `config/symbol_addrs.pal.txt` and
   `config/symbol_addrs.pal.data.txt`, kept as a record of the old split
   layout; nothing in the build reads them. The two symbol lists hold the
@@ -48,24 +49,29 @@ harder to commit such material by accident. They do not replace care. If you
 suspect a file in this repository breaks these rules, open an issue tagged
 `legal`.
 
-## The data tables are generated at build time
+## The data tables are loaded at run time
 
-The PAL link includes 70 members of the game's archive `ico2000.a` that have
-data sections and no code (MAIN.MAP), plus three data runs MAIN.MAP does not
-list; `config/data_members.pal.txt` lists them all. They are the game's
-content: stage object layouts, model and motion file tables, sound
-definitions, way points, the staff roll. There is no
-program in them to re-derive, and their values are never committed, as C,
-as assembly or in any other form.
+The game's archive `ico2000.a` has 70 members that have data sections and no
+code (MAIN.MAP), plus three data runs MAIN.MAP does not list;
+`config/data_members.pal.txt` lists them all. They are the game's content:
+stage object layouts, model and motion file tables, sound definitions, way
+points, the staff roll. There is no program in them to re-derive, and their
+values are never committed, as C, as assembly or in any other form.
 
-The build reads them from the user's own `baserom/pal/baseelf.elf` and
-writes them under `build/data/`, which is gitignored. Each member is
-written as `build/data/<member>.c`, an initialized array of its record type
-from `config/data_schema.pal.txt` that compiles with the game's flags
-(`tools/gen_data_c.py`). The committed schema and the record types in the
-owners' headers hold only types, element counts and symbol names. The
-configuration files hold member names, address ranges, record types and the
-names MAIN.MAP gives the symbols, and nothing of the tables' content.
+The host binary holds none of their bytes. It defines each of the 73 tables
+as an empty array (`port/data/gen/table_defs.c`), and at start-up the
+runtime loader (`port/data/tables.c`, docs/port/DATA.md, "The data tables")
+fills them from the boot ELF on the user's own disc, checked against the
+committed manifest of CRCs (`config/tables_manifest.txt`). The committed
+descriptors under `port/data/gen/` (`tools/gen_data_desc.py`), the schema
+(`config/data_schema.pal.txt`) and the record types in the owners' headers
+hold only types, element counts, offsets and symbol names. The configuration
+files hold member names, address ranges, record types and the names MAIN.MAP
+gives the symbols, and nothing of the tables' content. The retired PS2 build
+instead generated each member as `build/data/<member>.c` from the user's own
+`baserom/pal/baseelf.elf` (`tools/gen_data_c.py`, still the reference the
+loader's test compares against); that output is gitignored and never
+committed.
 
 The line drawn is between content and facts about its shape. The names,
 tables and strings are content and are never committed. A count or size

@@ -70,9 +70,10 @@ void ico_cdvd_host_stats(IcoCdvdStats *out);
 /* Whether sceCdInit registered ico_cdvd_host_vsync with the host loop. */
 int ico_cdvd_host_vsync_hooked(void);
 
-/* The clock sceCdReadClock reports, in decimal.  The default is a fixed
-   moment (2002-01-01 00:00:00) so runs are reproducible; the port's clock
-   layer replaces it later (plan Phase 4, "config, language, clock"). */
+/* A test's source for the clock sceCdReadClock reports, in decimal.  Without
+   one (the default) sceCdReadClock reads the port clock (ico_clock_now,
+   port/platform/clock.c: the host's local time, or a fixed moment when
+   ICO_FIXED_CLOCK is set, so runs stay reproducible). */
 typedef struct IcoCdClockTime {
     int year; /* four digits */
     int month;
