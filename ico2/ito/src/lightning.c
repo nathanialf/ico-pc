@@ -503,7 +503,14 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         if (s < half) {
             sc = GetTableSin((short)(s * two * 1.5707964f * 10430.378f));
         } else if (lim <= s) {
+#ifdef ICO_HOST
+            /* cvt.w.s: past a zero-length segment s is Fmax (above), the
+               product overflows (-Fmax on the EE, -Inf here) and the
+               conversion saturates to 0x80000000 (DIVERGENCES.md F5) */
+            sc = GetTableSin((short)ps2_ftoi((1.0f - (s - lim) * two) * 1.5707964f * 10430.378f));
+#else
             sc = GetTableSin((short)((1.0f - (s - lim) * two) * 1.5707964f * 10430.378f));
+#endif
         } else {
             sc = 1.0f;
         }

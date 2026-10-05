@@ -124,6 +124,7 @@ under ee-gcc 2.9 (`tools/ee_identity.sh --all`).
 | `fumi/ios/pad.c` | IosPadBuf 0..3 | `*(unsigned int *)b >> 12` over `pad0` | `termId >> 4` |
 | `fumi/ios/cdvd.c` | | `bgRunning` held the running request in an `int` | `ICO_WORD` |
 | `sugipon/src/box.c` `InitBoxGeo`, `ReInitBoxGeo` | BoxWork 0x2C | `colData`, an `int`, held `Sub15C.colData` (a pointer) and gave it back truncated (DIVERGENCES.md D10, X1) | `ICO_WORD`, width asserted on the host |
+| `omori/src/ebrain.c` `eBrainGetTarget` | .bss `boyTargets` 0x380, `girlTargets` 0x400 (after `ebrainSlots`) | index -1 stored into the array before it (DIVERGENCES.md D13, X3) | the EE's neighbour word cleared by name |
 | `fumi/ios/cdvd.c` `iosCdvdBackGroundMgrDeleteRequestGet`, `iosCdvdBackGroundMgrEntryNum` (`StageManager.c:283`, `:452`) | | walked `bgReqTable` while `(int)p < (int)limit`: the low 32 bits of two host addresses, wrong if the table straddles a 2^31 boundary of the low word (X4) | `(ICO_WORD)p < (ICO_WORD)limit` (`int` on the EE, the same tokens) |
 | `fumi/ios/cdvd.c` `iosCdvdBackGroundMgrGetRunning`, `iosCdvdDiskReady`, `iosCdvdLoad` (no callers) | | returned `bgRunning` (a request address) as `int`; took the request record's address as `int req` (X4) | `ICO_WORD` return and parameters |
 | `fumi/ios/shockdriver.c` `ShockDriver_GetShockVoiceMax` (no callers) | ShockVoiceSet 0 | `(int)arr[idx]`, then `*(int *)p`: the set's and its image's addresses in an `int` (X4) | `ICO_HOST`: `arr[idx]->top.half[4]` |

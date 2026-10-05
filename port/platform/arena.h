@@ -21,7 +21,10 @@
 #include <stdint.h>
 
 #define ICO_ARENA_EE_SIZE (32u * 1024u * 1024u)
-#define ICO_ARENA_HEADROOM (1u * 1024u * 1024u)
+/* 6.25 MB of it is the heap partitions' host extra (fumi/ios/ios.c
+   ICO_HOST_HEAP_EXTRA: the root partition ends that far past the EE's
+   0x1FEFFF0); the rest is spare */
+#define ICO_ARENA_HEADROOM (8u * 1024u * 1024u)
 #define ICO_ARENA_ALIGN (1u * 1024u * 1024u)
 
 /* Allocates the arena on the first call; later calls do nothing. Returns

@@ -128,6 +128,8 @@ void ico_host_milestone(const char *what);
 void ico_host_name_func(void *func, const char *name);
 /* port/game/options.h: developer mode (renderer wave 6, R6a) */
 int ico_opt_developer_mode(void);
+/* port/config/sysconf.c: [video] video_mode, else current */
+int ico_boot_video_mode(int current);
 /* common/src/debug.c; debug.h declares only debug_Menu_off */
 void debug_Menu(void);
 
@@ -159,6 +161,17 @@ void Main(void)
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
+#ifdef ICO_HOST
+    /* PC port: a start stage ([dev] start_stage) skips kanbanBoot, whose
+       step 200 applies [video] video_mode (kanbanBoot.c), so systemStatus[0]
+       would stay the PAL default whatever the setting: apply it here the
+       same way. This runs before gsb_InitGSSystem below, so the GS starts in
+       that mode and step 200's gsResetFunc is not needed. Stage 1 runs the
+       boot, which applies it again. */
+    if (n > 0) {
+        systemStatus[0] = ico_boot_video_mode(systemStatus[0]);
+    }
+#endif
     debug_VariableInit();
     InitDelayFree();
     debug_StdPrintfDummy("Main() in\n");

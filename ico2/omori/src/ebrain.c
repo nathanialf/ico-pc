@@ -423,7 +423,27 @@ EBSlot *eBrainGetTarget(GObj *gop)
                 }
             }
             if (p->status != 0) {
+#ifdef ICO_HOST
+                /* PC port: one of the two indices is -1 here (the enemy chases
+                   the one it found). The EE stores to the word before the
+                   array (ebrain.o 0x9fc and 0xa08, .bss girlTargets at 0x400
+                   and boyTargets at 0x380 after ebrainSlots[32]):
+                   girlTargets[-1] is boyTargets[31] and boyTargets[-1] is
+                   ebrainSlots[31].owner. The host's statics are not laid out
+                   so; it clears those two (DIVERGENCES.md D13) */
+                if (girlIdx >= 0) {
+                    girlTargets[girlIdx] = 0;
+                } else {
+                    boyTargets[31] = 0;
+                }
+                if (boyIdx >= 0) {
+                    boyTargets[boyIdx] = 0;
+                } else {
+                    ebrainSlots[31].owner = 0;
+                }
+#else
                 boyTargets[boyIdx] = girlTargets[girlIdx] = 0;
+#endif
                 changed = 1;
             }
             break;

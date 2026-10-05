@@ -1025,7 +1025,19 @@ static void _Clip(ClipWork *self, int mode)
             do {
                 m = (char *)clipMatrix;
                 sub = obj->dobj;
+#ifdef ICO_HOST
+                /* PC port: the list is the previous Main tick's
+                   (MakeCollisionDependGObjList), so during a stage's
+                   InitIcoMisc it still names the last stage's objects, and a
+                   slot may already hold a new object whose dobj is not set yet
+                   (stage 49 -> 56, the first InitMotionGeoInfo floor clip).
+                   The EE reads disp at address 0x74, below the game's memory;
+                   the host reads the slot as one that does not display
+                   (DIVERGENCES.md D11) */
+                if (sub != 0 && sub->disp != 0) {
+#else
                 if (sub->disp != 0) {
+#endif
                     if (x != 0) {
                         if (obj == self->filter.o.obj) {
                             if (self->filter.o.node < 0) {

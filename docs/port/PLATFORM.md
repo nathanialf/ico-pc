@@ -269,10 +269,20 @@ instead of leaving a frozen window (port/rhi/d3d12/README.md).
 
 `ios.c` used to carve the heap from EE physical addresses:
 `iosMallocInitPartition(0x760000, 0x1FEFFF0)`. On the host,
-`port/platform/arena.c` allocates the EE's 32 MB plus 1 MB of headroom once,
+`port/platform/arena.c` allocates the EE's 32 MB plus 8 MB of headroom once,
 zero filled, 1 MB aligned, and `ico_arena_ee_addr(ee)` turns an EE address
-into the matching host address, so the root partition spans the same
-offsets and size and every block lands at its EE offset from the base.
+into the matching host address, so the root partition starts at the same
+offset. Since X3 it ends `ICO_HOST_HEAP_EXTRA` (6.25 MB) past the EE's
+0x1FEFFF0 (`ios.c`): x64 block headers and records are larger, and the
+plaza (stage 16) ran out of the EE's stage partition (DIVERGENCES.md D12).
+The host adds 4 MB to the stage partition (15,826,944 bytes on the EE) and
+the same share, rounded up to 64 KB, to `common` (+0x120000), `stat mot`
+(+0x50000) and `demo mot` (+0xD0000). Partitions are carved from the root's
+end down, so the stage partition, the last, keeps the EE's start (0x8101A0)
+and the others move up. No address mask reaches arena offsets on the host
+(`ICO_PHYS` and the uncached aliases are the identity, `typedef.h`; words
+are 32-bit arena offsets, `eeword.h`; the heap-ASan ranges come from the
+partitions). `memory_test` below checks the allocator with the EE's sizes.
 `memory_test` checks iosInitialize's eleven partitions against addresses
 worked out by hand from memory.c's arithmetic (`common` at 0x1BE7F60,
 `event` at 0x1787DB0, `stage` at 0x08101A0, and so on), and allocation,

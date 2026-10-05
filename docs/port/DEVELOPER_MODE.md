@@ -52,7 +52,9 @@ With it true:
    retail values.
 
 `[dev] start_stage` (renderer wave 5) is independent of developer mode: it
-feeds `debug_TryToGetStartStage` in every build.
+feeds `debug_TryToGetStartStage` in every build. Since X3 Main (`common/src/main.c`, after that hook) also applies
+`[video] video_mode` to `systemStatus[0]`, as `kanbanBoot`'s step 200 does on a
+normal boot (a start stage never runs that step).
 
 ## Using the menu
 

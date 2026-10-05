@@ -42,12 +42,14 @@
  *
  * Not reproduced: the EE FPU's own division (the copies use the host's
  * IEEE division, under the simulation's rounding mode) and its lack of
- * infinities and NaNs. Both are package 1A's port/math helpers' concern;
+ * infinities and NaNs, except in acosf's and asinf's domain errors
+ * (ico_domain_error). The rest is package 1A's port/math helpers' concern;
  * these functions see only finite inputs in the game.
  */
 #include <stdint.h>
 
 #include "ico_newlib.h"
+#include "../ps2float.h"
 
 #if defined(__FLT_EVAL_METHOD__) && __FLT_EVAL_METHOD__ != 0
 #error "port/math/newlib needs float maths without excess precision (x86: -msse2 -mfpmath=sse)"
@@ -976,6 +978,22 @@ static const float ico_acos_qS4 = 7.7038154006e-02f;
 #define ICO_ACOS_Q(z)                                                                              \
     (ico_acos_one + (z) * (ico_acos_qS1 + (z) * (ico_acos_qS2 + (z) * (ico_acos_qS3 + (z) * ico_acos_qS4))))
 
+/* The domain-error value of acosf's and asinf's cores, (x - x) / (x - x),
+ * as the EE computes it: ef_acos.o 0x64 sub.s then 0x70 div.s, ef_asin.o
+ * 0x6c and 0x78, both at run time. The FPU reads an exponent-255 pattern
+ * as a number, so x - x is +0, and div.s gives +Fmax for 0 / 0 (ps2_div).
+ * The host's IEEE 0 / 0 is NaN and raises invalid (the fptrap preset's
+ * stop in the leg IK, motMan_getFinalMatrix.c.inc:1008, x = 0x3f8007a8 at
+ * a stage 6 boot). The wrappers return 0.0f for |x| > 1 whatever the core
+ * gives, so this value reaches a caller only for an exponent-255 pattern
+ * (ico_isnanf), where it is the EE's +Fmax (DIVERGENCES.md F5). */
+static float ico_domain_error(float x)
+{
+    float d = ps2_operand(x) - ps2_operand(x);
+
+    return ps2_div(d, d);
+}
+
 static float ico___ieee754_acosf(float x)
 {
     float z, p, q, r, w, s, c, df;
@@ -990,7 +1008,7 @@ static float ico___ieee754_acosf(float x)
             return ico_acos_pi_2lo;
         }
     } else if (ix > 0x3f800000) {
-        return (x - x) / (x - x);
+        return ico_domain_error(x); /* (x - x) / (x - x) */
     }
     if (ix < 0x3f000000) {
         if (ix <= 0x23000000) {
@@ -1059,7 +1077,7 @@ static float ico___ieee754_asinf(float x)
         /* asin(1) = +-pi/2 with inexact */
         return x * ico_asin_pio2_hi + x * ico_asin_pio2_lo;
     } else if (ix > 0x3f800000) { /* |x| >= 1 */
-        return (x - x) / (x - x); /* asin(x) = NaN */
+        return ico_domain_error(x); /* (x - x) / (x - x), asin(x) = NaN */
     } else if (ix < 0x3f000000) { /* |x| < 0.5 */
         if (ix < 0x32000000) {    /* if |x| < 2**-27 */
             if (ico_asin_huge + x > ico_asin_one) {
