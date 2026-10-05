@@ -20,6 +20,48 @@
 #include "ios.h"
 #include <assert.h>
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+#include "rd_mesh.h"
+
+/* PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md section 13): the
+   VU1 chains this file builds also go through the host's VIF reader
+   (mc_HostDma): prim_DispFan2D's SET_GSREGISTER fan reaches the GS register
+   decoder, prim_DispMesh3D's matrix, light and UV packets and
+   prim_DispParticle's matrix packet the list's VU state, and a particle
+   batch's MSCNT draws it (rd_DrawVuParticles).  A Mesh3D packet buffer is
+   drawn whole (primHostGrid, rd_DrawVuGrid). */
+static void primHostGrid(Mesh3D *m)
+{
+    unsigned long long prim[2];
+    unsigned long long tag;
+    RdVuDraw d;
+    RdVuGridDraw g;
+
+    if (m->strips <= 0 || m->stripLen < 3) {
+        return;
+    }
+    /* every strip's GIF tag (PRE) writes this PRIM (prim_InitMesh3D's) */
+    memcpy(&tag, (char *)m->bufs[buffer_ID] + 0x10, 8);
+    prim[0] = (tag >> 47) & 0x7FF;
+    prim[1] = 0;
+    gif_HostWriteRegs(prim, 1);
+    if (!rd_VuDrawFromState(&d)) {
+        return;
+    }
+    memset(&g, 0, sizeof(g));
+    g.qw = (const float (*)[4])m->bufs[buffer_ID];
+    g.strips = (uint32_t)m->strips;
+    g.stripLen = (uint32_t)m->stripLen;
+    g.lit = m->lit != 0;
+    g.code = d.code;
+    g.vu = d.vu;
+    rd_DrawVuGrid(&g, RD_KEY(m, rd_CurrentList(), 0));
+}
+
+#endif
+
 Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int rc)
 {
     Fan2D *f;
@@ -233,6 +275,9 @@ void prim_DispFan2D(Fan2D *f, int mode)
 
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+#endif
 }
 
 typedef ICO_QW Qw128; /* derived name */
@@ -654,12 +699,18 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
     d->ptr.c = q + 0x10;
     dl_OpenDma(5, d->dma.c, 0);
     dl_CloseDma();
+#ifdef ICO_RD
+    mc_HostDma(5, d->dma.c, 0);
+#endif
     gif_StartPacketPri(pri);
     gif_SetGsReg(0x4A, 0);
     gif_EndPacket();
     mc_SetMicroCode(2, m->lit, 0, 1, pri);
     dl_OpenDma(2, m->bufs[buffer_ID], m->qwc);
     dl_CloseDma();
+#ifdef ICO_RD
+    primHostGrid(m);
+#endif
 }
 
 /* One 16-byte constant packet template, copied to the stack. */
@@ -780,9 +831,15 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
             mc_TransMicroCode(5, 1 << pri);
             dl_OpenDma(2, &p->buf[p->cur], p->headQwc);
             dl_CloseDma();
+#ifdef ICO_RD
+            mc_HostDma(2, &p->buf[p->cur], p->headQwc);
+#endif
             mc_SetMicroCode(3, 0, 0, 0, pri);
             dl_OpenDma(2, p->objs[p->cur], p->objSize);
             dl_CloseDma();
+#ifdef ICO_RD
+            mc_HostDma(2, p->objs[p->cur], p->objSize);
+#endif
             if (systemStatus[5] == 0) {
                 p->cur ^= 1;
             }

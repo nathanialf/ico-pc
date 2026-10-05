@@ -89,4 +89,14 @@ void pac_Init(void);
 void pac_DispVu1Memory(int idx, int n, int size);
 void pac_MakePacket(Sub15C *o);
 
+#ifdef ICO_RD
+/* PC port (renderer wave 3, R3ab): the id of the rd mesh (RdMesh.id,
+   rd_mesh.h) of a packet pac_makePacket built (its vertex batches), made at
+   load and again whenever rd evicted it; 0 for a packet without batches.
+   The id is kept in the header's pad word.  pac_HostRefresh re-reads the
+   packet's vertex quadwords after reg_setShape rewrote them. */
+unsigned int pac_HostMesh(PacHeader *pk);
+void pac_HostRefresh(PacHeader *pk);
+#endif
+
 #endif /* PACKET_H */

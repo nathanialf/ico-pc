@@ -123,7 +123,8 @@ typedef enum RdProg {
     RD_PROG_COUNT
 } RdProg;
 
-/* Mode 3 (code 18) is unconfirmed, see RENDER_API.md "Open items". */
+/* Mode 3 (code 18) is particle's BEGIN_PARTICLE, RD_PROG_PARTICLE (RENDER_API.md
+ * section 8, item 1). */
 
 typedef enum RdPrim {
     RD_PRIM_POINTS = 0,     /* GS PRIM 0 */
@@ -461,6 +462,11 @@ void rd_UpdateTexture(RdTex t, const void *rgba8);
 void rd_DestroyTexture(RdTex t);
 
 /* -------------------------------------------------------------- meshes */
+
+/* Wave 3 (R3ab): the mesh path is rd_mesh.h's (the VU1 program shaders on
+ * the packets the game builds, docs/port/RENDER_API.md section 13).  The
+ * four semantic draw calls below are kept for an Enhanced path and record
+ * nothing; rd_CreateMesh keeps a record without geometry. */
 
 /* pac_MakePacket (Packet.c): one RdMesh per PObjPart, built once at load. */
 RdMesh rd_CreateMesh(const RdMeshDesc *desc);

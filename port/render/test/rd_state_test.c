@@ -11,13 +11,15 @@
  *   stubs      later-wave draws and post kinds are recorded with payload
  *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw)
  *   dump       a frame with textures and a temp target survives dump/load
- *   pipelines  the reachable pipeline set is under 100 keys
+ *   pipelines  the reachable screen and post set is under 100 keys, with
+ *              the VU program families (wave 3) under RD_PIPELINE_CACHE_MAX
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_mesh.h"
 #include "shader_consts.h"
 
 static int failures;
@@ -194,19 +196,38 @@ static void testKeep(void)
 
 static void testStubs(void)
 {
-    RdMeshDesc md;
+    /* wave 3 (R3ab): a VU mesh of one batch of three prelit vertices (a GIF
+     * tag with NLOOP 3, then pos, ST, colour each) */
+    static float qw[1 + 3 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8003u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 3; k++) {
+        qw[1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* strip flag */
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
     memset(&md, 0, sizeof(md));
-    md.vertexCount = 3;
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 10;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
     md.materialCount = 2;
-    RdMesh m = rd_CreateMesh(&md);
+    RdMesh m = rd_CreateVuMesh(&md);
+    const RdMeshRec *mr = rd__MeshRec(m.id);
+    CHECK(mr && mr->vertexCount == 3 && mr->indexCount == 3 && mr->index[0] == ICO_VU_INDEX(2, 0),
+          "VU mesh: three vertices, one kick");
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_LIT;
+    d.code = 32;
+    d.vu.mem[2][0] = 0.5f;
     RdXform xf;
-    memset(&xf, 0, sizeof(xf));
-    RdMaterial mats[2];
-    memset(mats, 0, sizeof(mats));
     static const uint8_t lut[256 * 4] = {1, 2, 3, 4};
     rd_BeginFrame();
     rd_SelectList(3);
-    rd_DrawMesh(m, RD_PROG_LIT, &xf, NULL, mats, RD_KEY(&xf, 1, 2));
+    rd_DrawVuMesh(m, &d, RD_KEY(&xf, 1, 2));
     float sv[4][4] = {{0}};
     rd_ShadowStrip(sv, 4, -1.0f, 7);
     RdPostParams pp;
@@ -222,8 +243,14 @@ static void testStubs(void)
         RdKey k = RD_KEY(&xf, 1, 2);
         CHECK(cl->cmds[0].type == RDC_MESH && cl->cmds[0].u[0] == m.id &&
                   cl->cmds[0].keyLo == (uint32_t)k && cl->cmds[0].keyHi == (uint32_t)(k >> 32) &&
-                  cl->cmds[0].u[2] == sizeof(RdXform) + 2 * sizeof(RdMaterial),
+                  cl->cmds[0].u[2] == sizeof(RdVuPayload) + sizeof(RdVuBlock),
               "mesh draw recorded with key and payload");
+        RdVuPayload p;
+        memcpy(&p, f->payload + cl->cmds[0].u[1], sizeof(p));
+        float m2;
+        memcpy(&m2, f->payload + cl->cmds[0].u[1] + sizeof(p) + 2 * 16, 4);
+        CHECK(p.prog == RD_PROG_LIT && p.code == 32 && p.batchCount == 1 && m2 == 0.5f,
+              "the VU payload: program, code, batches, VuCB");
         CHECK(cl->cmds[1].type == RDC_SHADOW_STRIP && cl->cmds[1].u[0] == 4 &&
                   cl->cmds[1].f[0] == -1.0f,
               "shadow strip recorded");
@@ -355,8 +382,12 @@ static void testEnumeration(void)
 {
     static RdPipeKeyInt keys[512];
     uint32_t n = rd__EnumerateReachable(keys, 512);
-    printf("  reachable pipelines: %u\n", n);
-    CHECK(n > 0 && n < 100, "reachable pipeline count %u must stay under 100", n);
+    const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
+    n = rd__EnumerateReachable(keys, 512);
+    printf("  reachable pipelines: %u (screen and post %u, VU programs %u)\n", n, ns, n - ns);
+    CHECK(ns > 0 && ns < 100, "reachable screen and post pipelines %u must stay under 100", ns);
+    CHECK(n < RD_PIPELINE_CACHE_MAX, "reachable pipeline count %u must stay under %d", n,
+          RD_PIPELINE_CACHE_MAX);
     for (uint32_t i = 0; i < n && i < 512; i++) {
         for (uint32_t j = i + 1; j < n && j < 512; j++) {
             CHECK(!rd__PipeKeyEqual(&keys[i], &keys[j]), "duplicate key %u/%u", i, j);

@@ -241,14 +241,52 @@ typedef struct RdTexRec {
 
 RdTexRec *rd__TexRec(uint32_t id);
 
-/* --------------------------------------------------------------- meshes */
+/* --------------------------------------------------------------- meshes
+ * rd_mesh.c (wave 3, R3ab).  A VU mesh keeps its vertex stream (the
+ * batches' vertices without their GIF tags, float4 quadwords as the VIF
+ * unpacked them) and its index list (ICO_VU_INDEX(kick, corner)) on the CPU;
+ * replay copies them into the frame's upload ring once per replayed frame
+ * (rd_replay.c) and binds the stream as the storage buffer t0. */
+typedef struct RdVuBatchRec {
+    uint32_t firstIndex, indexCount; /* in the mesh's index list */
+    uint32_t firstVertex, vertexCount;
+    uint32_t srcQw;    /* the batch's GIF tag in the creation stream (rd_UpdateVuMesh) */
+    uint32_t prim;     /* the tag's PRIM field */
+    uint16_t material; /* RdVuBatchDesc.material */
+    uint16_t group;
+} RdVuBatchRec;
+
 typedef struct RdMeshRec {
     uint32_t gen;
     uint8_t live;
+    uint8_t vu; /* rd_CreateVuMesh */
+    uint8_t _pad[2];
     uint32_t vertexCount, stripCount, materialCount;
+    /* VU meshes */
+    uint32_t qwPerVertex, batchCount, srcQw;
+    float (*stream)[4]; /* vertexCount * qwPerVertex quadwords */
+    uint32_t *index;
+    uint32_t indexCount;
+    RdVuBatchRec *batches;
+    uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
+    uint32_t replaySeen; /* g_rd.replayCounter of the replay that uploaded it */
+    uint64_t ringStream, ringIndex;
+    char name[24];
 } RdMeshRec;
 
-#define RD_MAX_MESHES 4096
+#define RD_MAX_MESHES 16384
+
+RdMeshRec *rd__MeshRec(uint32_t id);
+/* Creates a VU mesh record from a stream and index list already in the
+ * tagless layout (dump loading); returns the id, 0 on failure. */
+uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uint32_t qwPerVertex,
+                             const uint32_t *index, uint32_t indexCount,
+                             const RdVuBatchRec *batches, uint32_t batchCount, const char *name);
+/* rd_mesh.c: the per-list VU images (rd_SetVuCommon updates all 13). */
+void rd__VuInit(void);
+void rd__VuShutdown(void);
+void rd__VuLoadCommon(const RdVuCommon *block);
+void rd__MeshShutdown(void);
 
 /* ------------------------------------------------------------ pipelines */
 typedef enum RdVsId {
@@ -256,8 +294,23 @@ typedef enum RdVsId {
     RD_VS_SPRITE_WORLD,
     RD_VS_BLIT,
     RD_VS_BLEND_INT,
+    /* wave 3 (R3ab): the VU1 program shaders (vu_*.hlsl), group 1 = layoutVu */
+    RD_VS_VU_PRELIT,
+    RD_VS_VU_LIT,
+    RD_VS_VU_LIT_SPEC,
+    RD_VS_VU_REFLECT,
+    RD_VS_VU_SKIN,
+    RD_VS_VU_SKIN_SPEC,
+    RD_VS_VU_SKIN_DEBUG,
+    RD_VS_VU_GRID,
+    RD_VS_VU_GRID_LIT,
+    RD_VS_VU_GRID_SPEC,
+    RD_VS_VU_PARTICLE,
     RD_VS_COUNT
 } RdVsId;
+
+#define RD_VS_VU_FIRST RD_VS_VU_PRELIT
+#define RD_VS_VU_LAST RD_VS_VU_PARTICLE
 
 typedef enum RdFsId {
     RD_FS_SPRITE = 0,
@@ -265,6 +318,7 @@ typedef enum RdFsId {
     RD_FS_BLEND_INT,
     RD_FS_DATE_SNAP,    /* wave 2: destination alpha MSB into the R8 DATE snapshot */
     RD_FS_CAMERA_PROBE, /* wave 2 (R2c): FrameCB matrices applied to a point, as bytes (tests) */
+    RD_FS_VU,           /* wave 3 (R3ab): vu_ps, the pixel side of every VU program */
     RD_FS_COUNT
 } RdFsId;
 
@@ -316,6 +370,14 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i);
  * set (rd_pipeline.c lists the families and their sources).  Writes up to
  * max keys, returns the total. */
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max);
+/* The screen and post families alone (wave 2's set, asserted under 100). */
+uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max);
+/* Wave 3 (R3ab): the VU program families (rd_mesh.c): each VU vertex shader
+ * under the states the mesh lists draw with.  Appends to out[0..n). */
+uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* The (program, code) row of rd_mesh.h's table: the RdProg, the vertex
+ * shader and the clip mode; false without a row. */
+bool rd__VuRow(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);
 bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
 
 /* ------------------------------------------------------------- context */
@@ -349,6 +411,7 @@ typedef struct RdContext {
 
     /* GPU objects (rd_replay.c / rd_pipeline.c) */
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
+    RhiBindGroupLayout layoutVu; /* wave 3: t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
     RhiSampler samplers[RD_SAMPLER_COUNT];
     RhiTexture dummy;
@@ -380,7 +443,14 @@ enum {
     RD_ONCE_STQ,
     RD_ONCE_LIST_RANGE,
     RD_ONCE_TEMP_FULL,
-    RD_ONCE_DATE_SIZE
+    RD_ONCE_DATE_SIZE,
+    /* wave 3 (R3ab) */
+    RD_ONCE_VU_ROW,       /* a (program, code) pair without a table row */
+    RD_ONCE_VU_ENDTAG,    /* the particle end-tag quirk would have hidden a skinned draw */
+    RD_ONCE_VU_MATERIALS, /* RdVuDraw.materials given: recorded, not applied */
+    RD_ONCE_VU_MESHES,    /* the mesh registry evicted meshes */
+    RD_ONCE_VU_CODE,      /* an MSCAL code rd_VuCall does not model (debug font) */
+    RD_ONCE_SEMANTIC_MESH /* the wave-0 semantic mesh calls: not recorded */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -457,7 +527,8 @@ bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Dumps (rd_dump.c).  Loading creates the frame's textures and temporary
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
-#define RD_DUMP_VERSION 2u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2) */
+#define RD_DUMP_VERSION                                                                            \
+    3u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3) */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

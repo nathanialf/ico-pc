@@ -49,6 +49,13 @@ RdTex gif_HostPlaceholder(unsigned int tbp);
 void gif_HostForgetTextures(void);
 /* the frame boundary: forget what was emitted (DisplayList.c, dl_Clear) */
 void gif_HostFrameReset(void);
+/* wave 3 (R3ab): n A+D pairs (data, register: two doublewords each, as in a
+   PACKED A+D GIF packet) that reach the GS by another path than the open
+   packet (VU1 SET_GSREGISTER, a mesh batch tag's PRIM), decoded in order
+   after what the open packet holds.  A FRAME.FBP that names no fixed buffer
+   (since R3ab) draws into a temporary target for the rest of the frame,
+   and a TEX0 with that block's TBP samples it. */
+void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n);
 
 #endif /* ICO_RD */
 

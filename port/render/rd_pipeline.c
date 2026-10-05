@@ -324,7 +324,10 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
     };
-    RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw,
+    const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
+    /* wave 3 (R3ab): the VU program shaders read the stream, VuCB and
+     * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
+    RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, vu ? g_rd.layoutVu : g_rd.layoutDraw,
                                      k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex};
     RhiPipelineDesc d;
     memset(&d, 0, sizeof(d));
@@ -424,7 +427,11 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  * The mode 3 and Ad blends are reachable only through BGA lightning data,
  * drawn by rd_WorldPrims (wave 5), so they are not in the screen families.
  * Each enumerated state goes through rd__PlanScreenDraw, the function the
- * replayer uses, so the count is the count the cache would reach. */
+ * replayer uses, so the count is the count the cache would reach.
+ *
+ * Wave 3 (R3ab): rd__EnumerateReachable adds the VU program families
+ * (rd__EnumerateReachableVu, rd_mesh.c) to these; the screen and post set
+ * alone stays rd__EnumerateReachableScreen. */
 static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < n && i < max; i++) {
@@ -439,6 +446,11 @@ static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipe
 }
 
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
+{
+    return rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
+}
+
+uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
 {
     static const uint64_t kUiTests[] = {RD_TEST_Z_ALWAYS, RD_TEST_Z_ALWAYS_ATST_GT,
                                         RD_TEST_AT_LT129, RD_TEST_OFF};

@@ -938,6 +938,18 @@ typedef struct GsShim { /* port */
     } ph[GS_PLACEHOLDERS];
 
     int phCount;
+
+    /* wave 3 (R3ab): render-to-texture targets.  A FRAME.FBP that names no
+       fixed buffer (puddle, pool and queen barrier blocks from
+       tex_AllocVramAuto) draws into an rd_TempTarget of the size XYOFFSET
+       gives, with its own depth, for the rest of the frame; a TEX0 whose
+       TBP is that block's (FBP * 32) samples it */
+    struct {
+        unsigned int fbp, w, h;
+        RdTarget t;
+    } alias[8];
+
+    int aliasCount;
 } GsShim;
 
 static GsShim gs = {.q = 1.0f};
@@ -1059,6 +1071,33 @@ static void gsFlushBatch(void)
 
 /* ------------------------------------------------------- targets, scissor */
 
+/* wave 3 (R3ab): the temporary target standing in for a VRAM block that is
+   no fixed buffer, one per FBP and size and frame. */
+static RdTarget gsAliasTarget(unsigned int fbp, unsigned int w, unsigned int h)
+{
+    int i;
+
+    for (i = 0; i < gs.aliasCount; i++) {
+        if (gs.alias[i].fbp == fbp && gs.alias[i].w == w && gs.alias[i].h == h) {
+            return gs.alias[i].t;
+        }
+    }
+    if (gs.aliasCount == (int)(sizeof(gs.alias) / sizeof(gs.alias[0]))) {
+        return rd_Target(RD_TARGET_SCENE);
+    }
+    gs.alias[gs.aliasCount].fbp = fbp;
+    gs.alias[gs.aliasCount].w = w;
+    gs.alias[gs.aliasCount].h = h;
+    gs.alias[gs.aliasCount].t = rd_TempTarget(w, h, 1, 0);
+    return gs.alias[gs.aliasCount++].t;
+}
+
+static int gsIsNamedFbp(unsigned int fbp)
+{
+    return fbp == 0 || fbp == 0x40 || fbp == 0x140 || fbp == 0x142 || fbp == 0x160 ||
+           fbp == 0x180 || fbp == 0x1F8;
+}
+
 /* FRAME.FBP (2048-word pages) to the named target standing in for it. */
 static RdTargetId gsTargetOfFbp(unsigned int fbp, unsigned int w, unsigned int h)
 {
@@ -1120,9 +1159,16 @@ static void gsSyncEnv(void)
         if (h == 0) {
             h = w;
         }
-        id = gsTargetOfFbp(fbp, w, h);
-        rd_SetTarget(rd_Target(id), id == RD_TARGET_SCENE ? rd_Target(id) : (RdTarget){0}, w, h,
-                     id == RD_TARGET_SCENE);
+        if (!gsIsNamedFbp(fbp)) {
+            /* wave 3 (R3ab): a render-to-texture block */
+            RdTarget t = gsAliasTarget(fbp, w, h);
+
+            rd_SetTarget(t, t, w, h, 0);
+        } else {
+            id = gsTargetOfFbp(fbp, w, h);
+            rd_SetTarget(rd_Target(id), id == RD_TARGET_SCENE ? rd_Target(id) : (RdTarget){0}, w, h,
+                         id == RD_TARGET_SCENE);
+        }
         gs.curW = w;
         gs.curH = h;
         gs.frameDirty = 0;
@@ -1222,8 +1268,17 @@ static RdTex gsResolveTex0(unsigned long long tex0)
     case 0x3F00:
         id = RD_TARGET_FEED128;
         break;
-    default:
+    default: {
+        int i;
+
+        /* wave 3 (R3ab): a render-to-texture block drawn this frame */
+        for (i = 0; i < gs.aliasCount; i++) {
+            if (gs.alias[i].fbp * 32 == tbp) {
+                return rd_TargetTexture(gs.alias[i].t, RD_VIEW_RGBA);
+            }
+        }
         return gif_HostPlaceholder(tbp);
+    }
     }
     return rd_TargetTexture(rd_Target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
 }
@@ -1658,8 +1713,24 @@ void gif_HostForgetTextures(void)
     memset(gs.ph, 0, sizeof(gs.ph));
 }
 
+/* wave 3 (R3ab): A+D writes that reach the GS through the VU (SET_GSREGISTER,
+   the PRIM of a mesh batch's GIF tag), decoded in order with what the open
+   packet holds; whatever the decoder still batches goes to rd first. */
+void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n)
+{
+    unsigned int i;
+
+    gsRawFlush();
+    for (i = 0; i < n; i++) {
+        gsWrite(ad[2 * i + 1], ad[2 * i]);
+    }
+    gsSyncEnv();
+    gsFlushBatch();
+}
+
 void gif_HostFrameReset(void)
 {
+    gs.aliasCount = 0; /* wave 3: the temporary targets die with the frame */
     gs.nb = 0;
     gs.qn = 0;
     gs.emValid = 0;

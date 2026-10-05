@@ -16,6 +16,10 @@
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
  *            target, view; then w*h*4 RGBA8 bytes for images
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
+ *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
+ *            qwPerVertex, indexCount, batchCount, char[24] name, then the
+ *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
+ *            (u32 each) and the batch records (RdVuBatchRec, raw)
  *
  * Only the textures and temporary targets the frame references are written.
  * Target contents are not: a frame that reads a retained target (keep,
@@ -64,7 +68,9 @@ static void targetRef(IdSet *temps, uint32_t id)
     }
 }
 
-static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps)
+_Static_assert(sizeof(RdVuBatchRec) == 28, "RdVuBatchRec is dumped as raw bytes");
+
+static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps, IdSet *meshes)
 {
     const RdStateBlock *st[2] = {&f->startState, &f->endState};
     for (int i = 0; i < 2; i++) {
@@ -87,6 +93,10 @@ static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps)
                 break;
             case RDC_CLEAR:
                 targetRef(temps, c->u[0]);
+                break;
+            case RDC_MESH:
+            case RDC_SKINNED:
+                idAdd(meshes, c->u[0]);
                 break;
             default:
                 break;
@@ -117,9 +127,9 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     if (!f || !path) {
         return false;
     }
-    static IdSet texs, temps;
-    texs.n = temps.n = 0;
-    collectRefs(f, &texs, &temps);
+    static IdSet texs, temps, meshes;
+    texs.n = temps.n = meshes.n = 0;
+    collectRefs(f, &texs, &temps, &meshes);
     FILE *fp = fopen(path, "wb");
     if (!fp) {
         rd__Log("dump: cannot open %s", path);
@@ -164,6 +174,23 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
             ok = w32(fp, temps.ids[i]) && w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->withDepth) &&
                  w32(fp, t->keepAcross);
         }
+    }
+    uint32_t nm = 0;
+    for (uint32_t i = 0; i < meshes.n; i++) {
+        const RdMeshRec *m = rd__MeshRec(meshes.ids[i]);
+        nm += m && m->vu;
+    }
+    ok = ok && w32(fp, nm);
+    for (uint32_t i = 0; ok && i < meshes.n; i++) {
+        const RdMeshRec *m = rd__MeshRec(meshes.ids[i]);
+        if (!m || !m->vu) {
+            continue;
+        }
+        ok = w32(fp, meshes.ids[i]) && w32(fp, m->vertexCount) && w32(fp, m->qwPerVertex) &&
+             w32(fp, m->indexCount) && w32(fp, m->batchCount) && wraw(fp, m->name, 24) &&
+             wraw(fp, m->stream, (size_t)m->vertexCount * m->qwPerVertex * 16) &&
+             wraw(fp, m->index, (size_t)m->indexCount * 4) &&
+             wraw(fp, m->batches, (size_t)m->batchCount * sizeof(RdVuBatchRec));
     }
     ok = fclose(fp) == 0 && ok;
     if (!ok) {
@@ -230,8 +257,8 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         rd__Log("load: cannot open %s", path);
         return false;
     }
-    static IdMap texMap, tgtMap;
-    texMap.n = tgtMap.n = 0;
+    static IdMap texMap, tgtMap, meshMap;
+    texMap.n = tgtMap.n = meshMap.n = 0;
     memset(out, 0, sizeof(*out));
     char magic[8];
     uint32_t ver = 0, szCmd = 0, szState = 0, szVtx = 0;
@@ -309,6 +336,32 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
             }
         }
     }
+    uint32_t nm = 0;
+    ok = ok && r32(fp, &nm) && nm <= MAX_REFS;
+    for (uint32_t i = 0; ok && i < nm; i++) {
+        uint32_t id, nv, qpv, ni, nb;
+        char name[25];
+        ok = r32(fp, &id) && r32(fp, &nv) && r32(fp, &qpv) && r32(fp, &ni) && r32(fp, &nb) &&
+             nv < (1u << 22) && qpv <= 8 && ni < (1u << 24) && nb < (1u << 20) &&
+             rraw(fp, name, 24);
+        if (!ok) {
+            break;
+        }
+        name[24] = 0;
+        float (*st)[4] = malloc((size_t)(nv ? nv : 1) * qpv * 16 + 16);
+        uint32_t *ix = malloc((size_t)ni * 4 + 4);
+        RdVuBatchRec *br = malloc((size_t)nb * sizeof(RdVuBatchRec) + 4);
+        ok = st && ix && br && rraw(fp, st, (size_t)nv * qpv * 16) &&
+             rraw(fp, ix, (size_t)ni * 4) && rraw(fp, br, (size_t)nb * sizeof(RdVuBatchRec));
+        if (ok) {
+            meshMap.from[meshMap.n] = id;
+            meshMap.to[meshMap.n++] =
+                rd__VuMeshCreateRaw((const float (*)[4])st, nv, qpv, ix, ni, br, nb, name);
+        }
+        free(st);
+        free(ix);
+        free(br);
+    }
     fclose(fp);
     for (uint32_t i = 0; ok && i < nViews; i++) {
         RdTex t = rd_TargetTexture((RdTarget){mapTarget(&tgtMap, views[i].target)},
@@ -338,6 +391,10 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
                 break;
             case RDC_CLEAR:
                 c->u[0] = mapTarget(&tgtMap, c->u[0]);
+                break;
+            case RDC_MESH:
+            case RDC_SKINNED:
+                c->u[0] = mapId(&meshMap, c->u[0]);
                 break;
             default:
                 break;

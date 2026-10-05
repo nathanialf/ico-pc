@@ -141,6 +141,11 @@ void rd_SetVuCommon(const RdVuCommon *block)
         f->vu = *block;
         f->hasVu = 1;
     }
+    if (block) {
+        /* wave 3 (R3ab): the packet is referenced from the current position
+         * of all 13 lists, so every list's VU image takes it here */
+        rd__VuLoadCommon(block);
+    }
 }
 
 const RdVuCommon *rd_GetVuCommon(void)

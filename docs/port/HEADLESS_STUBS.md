@@ -3,7 +3,12 @@
 Since renderer wave 2 (package R2a) the default `ico_pc` is the window build
 (`ICO_HEADLESS=OFF`, compile definition `ICO_RD`): `GifPacket.c`,
 `DisplayList.c`, `DmaPacket.c`, `DisplayFont.c` and hooks in `GsBase.c` draw
-through `port/render` (`docs/port/RENDER_API.md` section 9). The headless
+through `port/render` (`docs/port/RENDER_API.md` section 9). Since wave 3
+(package R3ab) the 3D world does too: `Packet.c`, `RegistPacket.c`,
+`MicroCode.c`, `Primitive.c` and `Texture.c`'s UV offset packet read their
+VU1 chains on the host (`mc_HostDma`) and draw the mesh packets, grids and
+particle batches through `rd_mesh.h` (section 13); the window build no
+longer depends on the microprogram address table. The headless
 build stays a CMake option (`-DICO_HEADLESS=ON`; the Linux presets set it,
 the Windows presets build the window) for the trace and test runs, with the
 original packet code. Both builds link `port/null/gfx_null.c` and
@@ -70,8 +75,11 @@ them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`,
 
 `seki/src/MicroCode.c`'s VU1 microprogram address table is all zero on the
 host (`#ifdef ICO_HOST`): `ico2/vusrc` is assembled only by the PS2 build and
-a function address does not fit its `int` slots on 64-bit hosts. The
-addresses reach DMA tags only.
+a function address does not fit its `int` slots on 64-bit hosts. Since wave
+3 (R3ab) no host path reads it: `mc_TransMicroCode` chains address 0 and
+`p2o_TransMicroProgram` kicks address 0 without converting an `int` to a
+pointer (the values are the same as before). In the window build the VU1
+programs are the `vu_*.hlsl` shaders (`docs/port/VU1_PROGRAMS.md`).
 
 ## Stubs: `port/null/debug_null.c` (27 functions, 59 variables)
 
@@ -171,7 +179,9 @@ progress back.
 | --- | --- |
 | `seki/src/GsBase.c` | `gsb_ClipBox`: the two VU0 clip blocks as C (`gsb_clipCorner`) |
 | `seki/src/GifPacket.c` | `rotTransPers` as C |
-| `seki/src/MicroCode.c` | empty microprogram table (above) |
+| `seki/src/MicroCode.c` | empty microprogram table (above); the upload chains address 0 directly (wave 3) |
+| `seki/src/DisplayP2O.c` | `p2o_TransMicroProgram` kicks address 0 (wave 3) |
+| `seki/src/RegistPacket.c` | `reg_transMicroCode` passes the list mask to `mc_TransMicroCode` (the PS2's one-argument K&R call left it in the second argument register; on the host the callee read garbage), with `MicroCode.h`'s prototypes (wave 3) |
 | `sugipon/src/darkVolume.c` | `projectVertex`, `setScreenClamp`, `addScaledVectorXYZ` as C |
 | `ito/src/lightning.c` | `clip_flags`, `apply_m34`, the R-register reseed (`ico_vu0_random_set`) as C |
 | `ito/src/act_bird.c` | `Debug_WireString_Bird` uses a host `va_list` (clang has no `__builtin_next_arg`) |

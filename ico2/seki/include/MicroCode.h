@@ -18,4 +18,12 @@ void mc_SetMicroCode(int mode, int light, int pass, int clip, int pri);
    microprogram address per microprogram id. */
 extern int MicroCodeAddress[];
 
+#ifdef ICO_RD
+/* PC port (renderer wave 3, R3ab): what a DMA chain the seki layer chains for
+   VU1 does to the current list's VU state and the GS, read on the host as
+   the VIF would (MicroCode.c): id and qwc as dl_OpenDma takes them (5: a
+   call into a cnt/ret chain, 2: qwc quadwords of VIF codes). */
+void mc_HostDma(int id, const void *addr, int qwc);
+#endif
+
 #endif /* MICROCODE_H */

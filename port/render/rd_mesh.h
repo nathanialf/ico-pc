@@ -1,7 +1,8 @@
-/* rd_mesh.h: the mesh draws on the VU1 program shaders (wave 3, R3c). Header
- * only: packages R3a (Packet.c / RegistPacket.c, static and skinned
- * objects) and R3b (Primitive.c grids and particles) implement it in
- * rd_core.c / rd_replay.c.
+/* rd_mesh.h: the mesh draws on the VU1 program shaders (wave 3, R3c; the
+ * interface). Implemented by package R3ab in rd_mesh.c (recording, the
+ * mesh registry, the per-list VU state) and rd_replay.c (the draws), called
+ * from Packet.c / RegistPacket.c / MicroCode.c (static and skinned objects)
+ * and Primitive.c (grids and particles); docs/port/RENDER_API.md section 13.
  *
  * The VU1 programs and what each computes: docs/port/VU1_PROGRAMS.md. The
  * shaders: port/shaders/vu_*.hlsl, binding and constant layouts in
@@ -123,6 +124,18 @@ typedef struct RdVuMeshDesc {
  * (REGION, NONE), or batch by batch, twice, under SCISSOR (see below). */
 RdMesh rd_CreateVuMesh(const RdVuMeshDesc *desc);
 
+/* Added in wave 3 (R3ab).  The morph path (reg_setShape) rewrites the
+ * vertex quadwords of a packet in place every tick; the PS2's DMA reads
+ * them when the frame's lists are kicked, so every draw of the frame being
+ * recorded sees the last write.  rd_UpdateVuMesh re-reads the stream (the
+ * same layout as at creation: desc->qw with the same batches) with that
+ * meaning.  Destroy frees the mesh; a mesh no frame has drawn for a while
+ * may also be evicted when the registry fills (rd_VuMeshValid tells the
+ * seki side to build it again from its packet). */
+void rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
+void rd_DestroyVuMesh(RdMesh m);
+bool rd_VuMeshValid(RdMesh m);
+
 /* --------------------------------------------------------- per draw */
 
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map
@@ -162,8 +175,51 @@ typedef struct RdVuDraw {
 
 /* reg_dispNObj / reg_dispLObj / reg_dispCObj and the specular, reflection
  * and dissolve passes: records an RDC_MESH (or RDC_SKINNED when bones is
- * set) with the payload below. */
+ * set) with the payload below.
+ *
+ * Wave 3 (R3ab): materials may be NULL, and the seki sites pass NULL. The
+ * GS state a batch draws with (TEX0, TEX1, CLAMP, ALPHA, FBA, TEST, the
+ * batch tag's PRIM.ABE/TME, ...) is the state block at the command's
+ * position: the material, texture, dissolve, specular and reflection
+ * packets reach the GS through SET_GSREGISTER in order with the meshes, so
+ * the seki layer decodes them into ordinary rd state commands
+ * (GifPacket.c's decoder, gif_HostWriteRegs) and they leak between draws
+ * and lists exactly as on the GS. A non-NULL materials array is recorded
+ * for a later Enhanced path and not applied. */
 void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
+
+/* ------------------------------------- VU1 state per list (wave 3, R3ab)
+ *
+ * VU1 data memory and the VF registers the programs keep between MSCALs
+ * persist across draws and across lists (one VU, the 13 lists kicked in
+ * order). Every list's chain, though, re-establishes what its draws read
+ * before drawing: gsb_MakeCommonMatrix references the common block from the
+ * current position of all 13 lists (and gsb_SetGsDefault at their heads),
+ * and each object chains its own matrix and light packets into every list
+ * it draws in. So rd keeps, at record time, one VU image per list, as the
+ * chains recorded into that list so far leave it (RENDER_API.md section 12
+ * open question 1): the common block (rd_SetVuCommon updates all 13), the
+ * SET_* uploads, the UV offset (SET_UVOFFSET, which persists until the next
+ * one or the next common block), the resident program (mc_TransMicroCode)
+ * and the BEGIN code of the last MSCALF. A draw takes its VuCB from the
+ * image of its list at its position.
+ *
+ * rd_VuProgram  the resident program of the current list: 1 normal_c,
+ *               2 normal_l, 3 cluster, 4 mesh, 5 particle (MicroCodeAddress)
+ * rd_VuCall     MSCAL / MSCALF code with the quadwords the preceding VIF
+ *               UNPACKs left at TOP: SET_UVOFFSET (2), SET_*_MATRIX (16),
+ *               SET_*_LIGHT (18; particle: BEGIN_PARTICLE), and the BEGIN
+ *               codes (20..24, 32..38), which are remembered for the next
+ *               batches. Code 0 (SET_GSREGISTER) is the caller's: the A+D
+ *               payload goes to the GS register decoder.
+ * rd_VuDrawFromState
+ *               fills prog, code, clip, vu and bones of a draw from the
+ *               current list's image; false (and a once-per-pair log) when
+ *               the (program, code) pair has no row in the table above. */
+void rd_VuProgram(int id);
+int rd_VuCurrentProgram(void);
+void rd_VuCall(int code, const float (*top)[4], uint32_t qw);
+bool rd_VuDrawFromState(RdVuDraw *d);
 
 /* ------------------------------------------------- grids (R3b, mesh.vsm)
  * prim_DispMesh3D: the Mesh3D packet buffer of the frame (m->bufs[buffer_ID],

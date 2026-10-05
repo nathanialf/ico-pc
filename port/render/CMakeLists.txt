@@ -30,6 +30,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_dump.c
     rd_frame.c
+    rd_mesh.c
     rd_pipeline.c
     rd_png.c
     rd_post.c
@@ -40,7 +41,7 @@ target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders)
+target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref)
 if(NOT WIN32)
     target_link_libraries(ico_render PUBLIC m)
 endif()
@@ -120,8 +121,33 @@ target_compile_options(rd_gsbase_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math)
 
+# rd_mesh_test (wave 3, R3ab): the mesh path.  Packet.c, RegistPacket.c,
+# MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
+# as the window build has them, fed synthetic p2o-decoded models, a grid and
+# a particle batch: the meshes, the recorded draws and VuCB, the GS state;
+# on a device each case against the VU reference drawn as sprites (77
+# without one).
+add_executable(rd_mesh_test test/rd_mesh_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Packet.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/RegistPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/MicroCode.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayP2O.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Primitive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(rd_mesh_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/render/vu1_ref")
+target_compile_definitions(rd_mesh_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math)
+
 if(WIN32 AND SDL3_FOUND)
-    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test)
+    foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
+              rd_mesh_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -139,6 +165,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_mesh COMMAND rd_mesh_test)
+    set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
     # the dump rd_pixel leaves behind, through the tool
     add_test(NAME rd_replay_tool
@@ -155,7 +183,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
     endif()
     if(_env)
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh
                              PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()

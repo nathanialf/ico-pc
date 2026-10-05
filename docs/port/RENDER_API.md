@@ -130,10 +130,12 @@ PABE as uniforms, so `rd_core` normalises those fields of the key (ATST
 ALWAYS, split 0, PABE 0, FBA 0; a split pass shows in the key only through
 its Z write and colour mask) and stores one representative blend mode per
 hardware path. DATE is 0 in the key until `sprite_ps` reads the DATE
-snapshot. With the normalisation the screen and post programs reach 67
-pipelines from the game's state set (`rd__EnumerateReachable`, asserted
-under 100 by `rd_state` and `rd_pixel`); `RD_PIPELINE_CACHE_MAX` is 256 and
-`rd_core` asserts above it.
+snapshot. With the normalisation the screen and post programs reach 68
+pipelines from the game's state set (`rd__EnumerateReachableScreen`,
+asserted under 100 by `rd_state` and `rd_pixel`; the text said 67 until wave
+3, the count was 68 already); `RD_PIPELINE_CACHE_MAX` is 256 and `rd_core`
+asserts above it. Wave 3 (R3ab) adds the VU program families (section 13):
+`rd__EnumerateReachable` is 156 keys, asserted under the cache maximum.
 
 Wave 1 additions to `rd.h` (R1b): `RdTexSrc` and `rd_CreateTextureSrc` (a
 PSMCT24/16 texture expanded by the shader under the TEXA state at replay,
@@ -250,12 +252,15 @@ count with stencil.
 
 ## 8. Open items to confirm before wave 3
 
-1. MSCALF code 18 ("mode 3" in `mc_SetMicroCode`): which program and what
-   it draws. Read `MicroCode.c` and the `.vsm` entry table.
-2. `cluster.vsm:460` "front/back slot selection": facing test (needs
-   winding handling in `RD_PROG_SKIN`) or XYZ2/XYZ3 kick selection (no
-   renderer effect). The file's comments are machine-generated; read the
-   instructions.
+1. MSCALF code 18 ("mode 3" in `mc_SetMicroCode`): resolved in wave 3
+   (R3c, `VU1_PROGRAMS.md` section 2): it is particle's BEGIN_PARTICLE, a
+   redundant entry before the particle batch's MSCNT; in every other
+   program code 18 is the light upload. rd maps (particle, 18) to
+   `RD_PROG_PARTICLE` (section 13).
+2. `cluster.vsm:460` "front/back slot selection": resolved in wave 3 (R3c,
+   `VU1_PROGRAMS.md` section 5): XYZ2 kick selection by the region test and
+   the ADC counter, no facing test; `RD_PROG_SKIN` pipelines keep
+   `cullNone` (section 13).
 3. ZFog Z byte: which byte of the PSMZ32 depth the PSMT8H reinterpretation
    plus the PSMT4 block shuffles at `ZFog.c:236` selects. Derive with a
    small host test over the GS swizzle tables before writing the fog shader.
@@ -747,3 +752,201 @@ Open questions for wave 3:
    sending) is not settled by any source the port uses; rd draws it, which
    is the visible-overlay reading. If the GS drew nothing, the brightness
    step never showed on the PS2 and the Original preset should skip it.
+
+Wave 3 (R3ab) answers questions 1 and 2 in section 13: the VU block is kept
+per list at record time with the rest of the VU state, and the mesh shaders
+take what the VU took (`VuCB`), the GS window conversion of the bound target
+and the `ftoi4` snapping of the programs (`VU1_PROGRAMS.md` section 8).
+
+## 13. The mesh path (wave 3, R3ab)
+
+`port/render/rd_mesh.c` (recording, the mesh registry, the per-list VU
+state, the VU pipeline families), `rd_replay.c` (`doVu`), `rd_mesh.h` (the
+interface R3c fixed, with the additions below); on the game side the host
+paths (`ICO_RD`) of `Packet.c`, `RegistPacket.c`, `MicroCode.c`,
+`Primitive.c` and `DisplayP2O.c`. Test: `rd_mesh`
+(`port/render/test/rd_mesh_test.c`). The shaders and their CPU references
+are R3c's (`docs/port/VU1_PROGRAMS.md`, `SHADERS.md` "VU1 programs");
+nothing in them changed.
+
+**Principle.** The PS2 builds, per list, DMA chains for VU1: the common
+block, the program upload, per object its matrix and light packets, per
+packet the texture packet (TEX0 on path 2/3 plus the VU UV offset), the
+material register packet, the MSCALF code and the vertex batches. The host
+reads the small packets as the VIF would, when they are chained, and keeps
+the effect: `MicroCode.c`'s `mc_HostDma(id, addr, qwc)` walks the chain
+(id 5: cnt tags whose upper doubleword carries two VIF words, up to ret;
+id 2: qwc quadwords of VIF codes) and interprets UNPACK V4-32 to TOP, MSCAL
+and MSCALF, and MSCNT:
+
+| VIF | host |
+|---|---|
+| UNPACK V4-32, FLG | the quadwords into a TOP staging buffer |
+| MSCAL/MSCALF 0 (SET_GSREGISTER) | the GIF tag at TOP and its NLOOP A+D pairs to the GS register decoder, `gif_HostWriteRegs` (GifPacket.c, section 9): material ALPHA/CLAMP/FBA, the specular pass's PABE/ALPHA, the reflection pass's CLAMP/PABE/ALPHA, the dissolve's PABE/ALPHA/ZBUF and its reset, the point and line objects' PRIM/RGBAQ/XYZ2 (`reg_dispPoint`, `reg_dispLine`), `prim_DispFan2D` |
+| MSCAL/MSCALF other | `rd_VuCall(code, TOP)`: SET_UVOFFSET (2), SET_*_MATRIX (16), SET_*_LIGHT (18), the BEGIN codes, through the resident program of the list (`rd_VuProgram`, set by `mc_TransMicroCode` where it uploads) |
+| MSCNT | a particle batch (`rd_DrawVuParticles`); other programs' batches never arrive here |
+
+`RegistPacket.c` routes every `dl_OpenDma` of the file through
+`mc_HostDma` (a file-local wrapper), `Texture.c`'s `tex_TransTexture` its UV
+offset packet, `Primitive.c` its matrix, light, UV, fan and particle
+chains, `mc_SetMicroCode` its MSCALF. The vertex batches of a model packet
+(`pk->data`) are not interpreted but drawn: `regHostMesh` sends the
+batches' GIF tag PRIM (strip, IIP, TME, ABE) to the decoder, then records
+`rd_DrawVuMesh` of the packet's mesh with `rd_VuDrawFromState`. A
+`Mesh3D` buffer is drawn whole (`rd_DrawVuGrid`, after its strips' PRIM).
+Culling (`reg_clipPacketBoundingBox` against `+0x300`, `gsb_ClipBox`), the
+list choices, the packets and the allocations are unchanged; the headless
+build keeps the original code byte for byte except the two host fixes
+below.
+
+**GS state.** A mesh batch draws with the replay state block at its
+command, as screen prims do: the material, texture, dissolve, specular and
+reflection register packets were decoded into ordinary rd state commands in
+order with the meshes, so they leak between draws and lists as on the GS.
+`RdVuDraw.materials` is optional (the seki sites pass NULL); a given array
+is recorded for a later Enhanced path and not applied.
+
+**Meshes.** One `RdMesh` per `PacHeader` (rather than per `PObjPart`: the
+reg_disp* loops draw packet by packet, and the morph copy has its own
+data). `pac_makePacket` builds it from the packet's UNPACK payloads
+(`pac_hostBuild`) and keeps the id in `PacHeader.pad9C` (padding on the
+EE). The mesh keeps on the CPU the vertex stream without the GIF tags and
+the index list `ICO_VU_INDEX(kick, corner)` for every vertex k >= 2 of a
+batch whose ST.w and the previous vertex's are 1 (the strip-flag rule of
+`vu1ref_StaticKicks`); replay copies both into the frame's upload ring once
+per replayed frame (no device buffers: no allocation count to watch, and a
+morph update is a CPU write). `reg_setShape` rewrites the packets' vertex
+quadwords every tick; `pac_HostRefresh` re-reads them (`rd_UpdateVuMesh`,
+new), which the frame being recorded sees for every draw, as the PS2's DMA
+reads the packet at the kick. The registry holds 16384 meshes; when it is
+full, meshes no frame drew for a while are evicted (`rd_VuMeshValid`, new),
+and `pac_HostMesh` builds a mesh again from its packet on the next draw.
+
+**VU state per list (section 12, question 1).** rd keeps one VU image per
+list at record time (a `Vu1Ref`, `vu1_ref.h`: data memory and the VF
+registers, plus the resident program and the last BEGIN code). The common
+block (`rd_SetVuCommon`) loads all 13, as `gsb_MakeCommonMatrix` references
+it from every list's current position; SET_* uploads and SET_UVOFFSET load
+the current list's. So the UV offset in VU memory 2 carries over from draw
+to draw until the next SET_UVOFFSET or common block, exactly as on the VU,
+and a list that draws before and after a camera change in one tick draws
+each mesh with the block current at its position. VU memory does persist
+across lists on the PS2; every list's chain re-establishes what its draws
+read (the common block at its head, each object's matrices in every list it
+draws in), so per-list images give the same values. `rd_VuDrawFromState`
+builds the draw's VuCB from the image: normal_c/normal_l memory 0..35;
+cluster memory 0..15, VF13..VF20 (lights) at 28..35, memory 16..255 as
+`VuBoneCB`; mesh 0..15 with VF01..VF04 at 16 and VF05..VF12 at 28; particle
+0..15 with VF01..VF08 at 16 (`vu_common.hlsli`'s map).
+
+**Program table** (rd_mesh.h): (normal_c, 32/34/36) `RD_PROG_PRELIT`
+REGION/NONE/SCISSOR; (normal_l, 32/34/36/38) `LIT`, `LIT_SPEC`, `LIT`
+SCISSOR, `REFLECT`; (cluster, 20/22/24) `SKIN`, `SKIN_SPEC` (24 with
+`vu_skin_debug_vs`); (mesh, 20/22/24) `GRID`, `GRID_LIT` (24 with
+`vu_grid_spec_vs`); (particle, 18) `PARTICLE`. A pair without a row is
+logged once and the batch is not drawn (normal_c 38, normal_l 34 on a
+light-0 material: `VU1_PROGRAMS.md` section 2).
+
+**Replay** (`doVu`). Group 1 is `layoutVu` (t0 the stream, b1 DrawCB, b2
+VuCB, b3 VuBoneCB; a zero bone block for the programs that do not read it).
+The pipeline key's program is the RdProg, its vertex shader the VU entry,
+its fragment shader `vu_ps`; the blend path, alpha test split, Z and colour
+mask come from the state block through `rd__PlanScreenDraw`, as for screen
+prims. Static and skinned meshes: one indexed draw over the batches'
+index range (REGION, NONE); under SCISSOR two draws a batch, the triangles
+SCISSOR_COMMON clips (`ICO_VU_CUT_ONLY`) with PRIM.ABE forced on (the fans'
+PRIM is the common block's 0x5D) and then the strip's kicks
+(`ICO_VU_KICK_ONLY`), which keeps the fans-first order and makes the fans'
+blend exact (`VU1_PROGRAMS.md` findings 1, 2). Grids: the Mesh3D buffer as
+it is (`vu_batch` = 3, 1), indices k = 2 .. stripLen - 1 per strip. Particles:
+`rhi_CmdDraw(6 * count)`.
+
+**Pipelines.** `rd__EnumerateReachableVu` adds, for each of the 11 VU
+vertex shaders, TEST 0x50000, the split pair of 0x5140D (and Texture.c's
+per-texture TEST, the same keys) and 0x5C000, Z write on and off, ALPHA off
+and the material/dissolve/specular/particle equations (four hardware
+paths), on SCENE's D32F_S8: 88 keys, 156 with the screen and post set
+(asserted under `RD_PIPELINE_CACHE_MAX` by `rd_state`, `rd_pixel` and
+`rd_mesh`; `rd_mesh` checks every pipeline it creates is enumerated).
+
+**Render-to-texture (reflections).** `reg_RenderReflection` draws in list
+4 into whatever FRAME `puddle.c`/`pool.c` set (a `tex_AllocVramAuto`
+block). The decoder (GifPacket.c, a minimal R3ab change) now maps a
+FRAME.FBP that names no fixed buffer to an `rd_TempTarget` of the size
+XYOFFSET gives, with its own depth, for the rest of the frame, and a TEX0
+whose TBP is that block's (FBP x 32) samples it; before, such draws went
+into SCENE. The surfaces that read the reflection are wave 5's; the
+reflection pass itself draws into the temporary target.
+
+**Quirks.** The particle end-tag quirk (`VU1_PROGRAMS.md` finding 4) is not
+reproduced: the cluster region test reads the common block's mem[0..1]
+from the list image as the game intends. `rd_DrawVuParticles` runs
+`vu1ref_Particle` on a copy of the list image; when a batch would have
+clobbered the common block, a later skinned draw in that list logs once
+("particle end-tag quirk ... not reproduced"). The scissor fans' ABE is
+reproduced (above). SET_CLUSTER_MATRIX's extra quadword (finding 5) is
+reproduced: the copy reads the TOP staging buffer's next quadword.
+
+**Host fixes in these files** (both host builds): `MicroCode.c` no longer
+passes the `int` microprogram address table as a DMA pointer
+(`dl_OpenDma(5, 0, 0)` on the host, the table being zero there),
+`DisplayP2O.c`'s `p2o_TransMicroProgram` likewise; `RegistPacket.c`'s
+`reg_transMicroCode` calls `mc_TransMicroCode` with the mask the PS2 left
+in the second argument register (the K&R one-argument call read garbage on
+the host's stack ABI), with `MicroCode.h`'s prototypes.
+
+**Frame dumps.** Version 3 adds the VU meshes a frame draws (stream, index
+list, batches), so `rd_replay_tool` replays meshes. ico-pc.ini
+`dump_every=N` (and `dump_dir=`, default `dumps` beside the ini) writes every
+Nth frame (`rd-NNNNN.rddump`, the renderer's frame number, one per Main
+tick); `host_config.c` hands the keys to `rd_Init` in the environment
+(`ICO_RD_DUMP_EVERY`, `ICO_RD_DUMP_DIR`), since port/render does not link
+the platform layer.
+
+**rd.h and rd_mesh.h changes (R3ab).** rd.h: none in the declarations; the
+wave-0 semantic calls `rd_DrawMesh`, `rd_DrawSkinned`, `rd_DrawGrid`,
+`rd_DrawParticles` are kept declared for an Enhanced path but record nothing
+(logged once); `rd_CreateMesh` keeps a geometry-less record. rd_mesh.h:
+`rd_UpdateVuMesh`, `rd_DestroyVuMesh`, `rd_VuMeshValid`, `rd_VuProgram`,
+`rd_VuCurrentProgram`, `rd_VuCall`, `rd_VuDrawFromState`; materials
+optional. GifHost.h: `gif_HostWriteRegs`. MicroCode.h: `mc_HostDma`.
+Packet.h: `pac_HostMesh`, `pac_HostRefresh`. Internal: `RdMeshRec`
+(stream, indices, batches), `RdVuBatchRec`, `RD_VS_VU_*`, `RD_FS_VU`,
+`layoutVu`, `rd__VuRow`, `rd__EnumerateReachableScreen`/`Vu`; dump version 3.
+
+**Measured** (`rd_mesh` on lavapipe): prelit code 32 and 36, cluster 20,
+grid 20 and a particle batch each identical to the CPU reference's
+triangles (sprites) drawn through `sprite_world_vs`/`sprite_ps` in the same
+GS state: maximum difference 0 on every pixel (the tolerance is 1).
+
+**Game run** (window build on lavapipe, `SDL_VIDEODRIVER=offscreen`,
+`pad-boot.txt`, 1300 ticks in 77 s, `dump_every=100`; dumps replayed with
+`rd_replay_tool`, no command skipped). Frame 600 (title): the castle,
+cliffs, bridges and sea fully textured, the title menu over it; 94 static
+mesh draws and 10 skinned in list 0, 6 skinned and 5 grids in list 1, 37
+static in list 2, 52 in list 5 (dissolve), 5 particle batches in list 6.
+Frame 700 is the black of a stage change; frame 800 the white fade of
+stage 41's opening. Frame 1200 (stage 3, fading in under the letterbox):
+the boy lying on the textured stone floor, skinned and lit, hair, bandage
+and tunic textured; 35 static and 10 skinned draws in list 0, 6 skinned
+and 5 grids in list 1, 3 specular/reflection passes in list 4. Missing:
+shadows (wave 4), fog, and the effects outside seki listed below. No
+`rd`/`mc` warning was logged (no unknown program/code pair, no undecoded
+register from the VU packets).
+
+Open items for waves 4 and 5:
+
+1. `Shadow.c` sends its register packets through SET_GSREGISTER
+   (`Shadow.c:129`) and its volumes as VU batches; they are not yet read by
+   `mc_HostDma` (wave 4 routes them).
+2. `particleEffect.c`, `enemy.c`'s own particle packets and other VU users
+   outside seki (`lightning.c`, `darkVolume.c`) chain their packets without
+   the host reader; only `prim_DispParticle` batches draw today.
+3. The reflection and other render-to-texture blocks are temporary targets
+   per frame and per FBP; the surfaces that read them (`puddle.c`,
+   `pool.c`, `queen_barrier_disp.c`, `staticBlur.c` work buffers) are wave
+   5's and may want named or kept targets.
+4. Mesh vertex data is re-uploaded every replayed frame; a device arena with
+   dirty tracking is an optimisation for later.
+5. Near-plane scissor cases colour-interpolate over the original triangle
+   (`VU1_PROGRAMS.md` section 8); not seen as an issue in the run.

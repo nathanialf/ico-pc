@@ -12,6 +12,144 @@
 #include "memory.h"
 #include <assert.h>
 
+#ifdef ICO_RD
+
+#include <stdlib.h>
+#include <string.h>
+#include "rd_mesh.h"
+
+#endif
+#ifdef ICO_RD
+
+/* ===================================================================== *
+ * PC port (renderer wave 3, R3ab): one rd mesh per packet (rd_mesh.h).
+ *
+ * A packet is a VIF code stream: per batch NOP NOP NOP UNPACK(n) (the DMA
+ * tag pac_closeDmaTag zeroes reads as two NOPs), n quadwords at TOP (the GIF
+ * tag, then the vertices, counts.w[0] quadwords each), MSCNT, and so on
+ * (pac_continueTag, pac_setVifEndCode).  The UNPACK payloads, back to back,
+ * are the mesh's creation stream; RegistPacket.c draws the mesh where the
+ * PS2 chains the packet (dl_OpenDma(2, pk->data, ...)).  The mesh id lives
+ * in the header's pad word (PacHeader.pad9C: four bytes of padding on the
+ * EE, unused).
+ * ===================================================================== */
+
+#define PAC_HOST_BATCHES 512
+
+/* The UNPACK payloads of a packet into qw (at most cap quadwords) and their
+   batches; returns the quadword count, 0 when the packet has none. */
+static unsigned int pac_hostStream(const PacHeader *pk, float (*qw)[4], unsigned int cap,
+                                   RdVuBatchDesc *b, unsigned int *nb, unsigned int *qpv)
+{
+    const unsigned char *p = (const unsigned char *)pk->data;
+    unsigned int nw = pk->size / 4, i = 0, n = 0;
+
+    *nb = 0;
+    *qpv = 0;
+    while (i < nw) {
+        unsigned int code;
+        unsigned int cmd;
+
+        memcpy(&code, p + (size_t)i * 4, 4);
+        i++;
+        cmd = (code >> 24) & 0x7F;
+        if (cmd == 0x6C) { /* UNPACK V4-32 */
+            unsigned int num = (code >> 16) & 0xFF;
+            unsigned int nloop;
+
+            if (num == 0) {
+                num = 256;
+            }
+            if (i + num * 4 > nw || n + num > cap || *nb == PAC_HOST_BATCHES) {
+                break;
+            }
+            memcpy(qw[n], p + (size_t)i * 4, (size_t)num * 16);
+            memcpy(&nloop, qw[n], 4);
+            nloop &= 0x7FFF;
+            if (nloop != 0 && *qpv == 0) {
+                *qpv = (num - 1) / nloop;
+            }
+            b[*nb].firstQw = n;
+            b[*nb].material = (unsigned short)pk->mat;
+            b[*nb].group = 0;
+            (*nb)++;
+            n += num;
+            i += num * 4;
+        }
+    }
+    return n;
+}
+
+static float (*pacHostQw)[4];
+
+static unsigned int pacHostQwCap;
+
+static RdVuBatchDesc pacHostBatch[PAC_HOST_BATCHES];
+
+static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsigned int *qpv)
+{
+    unsigned int need = pk->size / 16 + 1;
+
+    if (need > pacHostQwCap) {
+        free(pacHostQw);
+        pacHostQw = malloc((size_t)need * 16);
+        pacHostQwCap = pacHostQw ? need : 0;
+    }
+    if (pacHostQw == 0) {
+        return 0;
+    }
+    return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv);
+}
+
+static void pac_hostBuild(PacHeader *pk, const char *name)
+{
+    RdVuMeshDesc d;
+    RdMesh m = {0};
+    unsigned int nb, qpv, n;
+
+    memset(pk->pad9C, 0, sizeof(pk->pad9C));
+    if (pk->data == 0 || pk->size == 0) {
+        return;
+    }
+    n = pac_hostCollect(pk, &nb, &qpv);
+    if (n != 0 && nb != 0 && qpv != 0) {
+        memset(&d, 0, sizeof(d));
+        d.qw = (const float (*)[4])pacHostQw;
+        d.qwCount = n;
+        d.qwPerVertex = qpv;
+        d.batchCount = nb;
+        d.batches = pacHostBatch;
+        d.materialCount = 1;
+        d.debugName = name;
+        m = rd_CreateVuMesh(&d);
+    }
+    memcpy(pk->pad9C, &m.id, sizeof(m.id));
+}
+
+unsigned int pac_HostMesh(PacHeader *pk)
+{
+    RdMesh m;
+
+    memcpy(&m.id, pk->pad9C, sizeof(m.id));
+    if (m.id == 0 || !rd_VuMeshValid(m)) {
+        pac_hostBuild(pk, "pac");
+        memcpy(&m.id, pk->pad9C, sizeof(m.id));
+    }
+    return m.id;
+}
+
+void pac_HostRefresh(PacHeader *pk)
+{
+    RdMesh m = {pac_HostMesh(pk)};
+    unsigned int nb, qpv;
+
+    if (m.id != 0 && pac_hostCollect(pk, &nb, &qpv) != 0) {
+        rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw);
+    }
+}
+
+#endif /* ICO_RD */
+
 /* the largest packet pac_MakePacket has built so far */
 static int maxPacketSize = 0; /* derived name */
 
@@ -1226,6 +1364,9 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                         node->size = sz;
                         node->clip = obj->mode.s.shade;
                         node->next = prev;
+#ifdef ICO_RD
+                        pac_hostBuild(node, obj->name);
+#endif
                         pac_makeBoundingBox(node->box, obj->mode.s.type == 1);
                         prev = node;
                     } else if (sz < 0) {
@@ -1246,6 +1387,10 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                     p->data = mallocseki(prev->size);
                     p->size = prev->size;
                     malloc_MemCpy(p->data, prev->data, prev->size);
+#ifdef ICO_RD
+                    /* the copy has its own data: its own mesh */
+                    pac_hostBuild(p, obj->name);
+#endif
                     prev = prev->next;
                     if (prev != 0) {
                         last = p;

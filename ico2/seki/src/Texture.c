@@ -19,6 +19,7 @@
 #ifdef ICO_RD
 
 #include "GifHost.h"
+#include "MicroCode.h" /* R3ab: mc_HostDma */
 #include "rd_tex.h"
 
 #endif
@@ -1436,6 +1437,10 @@ int tex_TransTexture(int id, int ret)
     }
     dl_OpenDma(2, &t->uv, 3);
     dl_CloseDma();
+#ifdef ICO_RD
+    /* R3ab: SET_UVOFFSET reaches the list's VU state (rd_mesh.h) */
+    mc_HostDma(2, &t->uv, 3);
+#endif
     return ret;
 }
 

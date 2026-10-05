@@ -165,6 +165,13 @@ void ico_assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
+/* wave 3 (R3ab): tex_TransTexture's UV offset packet to the VU state
+   (MicroCode.c); the mesh path's test covers it (rd_mesh_test) */
+void mc_HostDma(int id, const void *addr, int qwc)
+{
+    (void)id, (void)addr, (void)qwc;
+}
+
 float GetTableSin(short angle)
 {
     (void)angle;

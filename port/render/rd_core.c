@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_mesh.h"
 
 RdContext g_rd;
 
@@ -672,26 +673,20 @@ RdMesh rd_CreateMesh(const RdMeshDesc *desc)
         m->vertexCount = desc->vertexCount;
         m->stripCount = desc->stripCount;
         m->materialCount = desc->materialCount;
-        /* wave 3 (Packet.c) builds the vertex and index buffers here */
+        /* wave 3 (R3ab): the seki layer builds VU meshes (rd_CreateVuMesh,
+           rd_mesh.h); this semantic description is kept for an Enhanced
+           path and holds no geometry */
         return (RdMesh){(m->gen << 16) | (i + 1)};
     }
     return (RdMesh){0};
 }
 
-static RdMeshRec *meshRec(uint32_t id)
-{
-    uint32_t slot = (id & 0xFFFF) - 1;
-    if (id == 0 || slot >= RD_MAX_MESHES || !g_rd.meshes) {
-        return NULL;
-    }
-    RdMeshRec *m = &g_rd.meshes[slot];
-    return m->live && m->gen == (id >> 16) ? m : NULL;
-}
-
 void rd_DestroyMesh(RdMesh mesh)
 {
-    RdMeshRec *m = meshRec(mesh.id);
-    if (m) {
+    RdMeshRec *m = rd__MeshRec(mesh.id);
+    if (m && m->vu) {
+        rd_DestroyVuMesh(mesh);
+    } else if (m) {
         m->live = 0;
     }
 }
@@ -711,6 +706,7 @@ static void initCommon(uint32_t gsW, uint32_t gsH, const RdSettings *settings)
     g_rd.recIndex = -1;
     g_rd.lastIndex = -1;
     rd__ResetStateBlock(&g_rd.persistent);
+    rd__VuInit(); /* wave 3: the per-list VU images */
     g_rd.inited = true;
 }
 
@@ -725,6 +721,24 @@ bool rd__InitRecordOnly(uint32_t gsW, uint32_t gsH)
     }
     createNamedTargets();
     return true;
+}
+
+/* Frame dumps every N replayed frames (wave 3): ico-pc.ini dump_every= and
+ * dump_dir=, handed over by port/platform/host_config.c in the environment
+ * (ICO_RD_DUMP_EVERY, ICO_RD_DUMP_DIR), read at rd_Init. */
+static uint32_t s_dumpEvery;
+
+static char s_dumpDir[512];
+
+static void readDumpConfig(void)
+{
+    const char *every = getenv("ICO_RD_DUMP_EVERY");
+    const char *dir = getenv("ICO_RD_DUMP_DIR");
+    s_dumpEvery = every ? (uint32_t)strtoul(every, NULL, 10) : 0;
+    snprintf(s_dumpDir, sizeof(s_dumpDir), "%s", dir ? dir : ".");
+    if (s_dumpEvery) {
+        rd__Log("dumping every %u frames into %s", s_dumpEvery, s_dumpDir);
+    }
 }
 
 bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow)
@@ -745,6 +759,7 @@ bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     }
     g_rd.hasDevice = true;
     createNamedTargets();
+    readDumpConfig();
     return true;
 }
 
@@ -778,6 +793,8 @@ void rd_Shutdown(void)
         rd__GpuShutdown();
     }
     rd__PipelineCacheClear();
+    rd__MeshShutdown();
+    rd__VuShutdown();
     free(g_rd.textures);
     free(g_rd.meshes);
     memset(&g_rd, 0, sizeof(g_rd));
@@ -896,6 +913,13 @@ void rd_EndFrame(int keep)
     g_rd.stats.bytesPayload = f->payloadSize;
     if (g_rd.hasDevice) {
         rd__ReplayFrame(f, f->keep, true);
+    }
+    if (s_dumpEvery && f->number % s_dumpEvery == 0) {
+        char path[600];
+        snprintf(path, sizeof(path), "%s/rd-%05u.rddump", s_dumpDir, f->number);
+        if (rd__DumpFrame(f, path)) {
+            rd__Log("frame %u dumped to %s", f->number, path);
+        }
     }
 }
 
@@ -1183,65 +1207,41 @@ static RdCmd *pushStub(uint8_t type, RdKey key, const void *const *parts, const 
     return c;
 }
 
+/* The wave-0 semantic mesh calls (rd.h): superseded by rd_mesh.h's exact
+ * path in wave 3 (R3ab), whose payload RDC_MESH and the other three now
+ * carry.  Kept declared for an Enhanced path; they record nothing. */
+static void semanticMesh(const char *what)
+{
+    rd__LogOnce(RD_ONCE_SEMANTIC_MESH, "%s is not recorded: the mesh path is rd_mesh.h's", what);
+}
+
 void rd_DrawMesh(RdMesh m, RdProg prog, const RdXform *xf, const RdLights *lights,
                  const RdMaterial *materials, RdKey key)
 {
-    RdMeshRec *mr = meshRec(m.id);
-    uint32_t nm = mr ? mr->materialCount : 0;
-    const void *parts[3] = {xf, lights, materials};
-    uint32_t sizes[3] = {xf ? (uint32_t)sizeof(*xf) : 0, lights ? (uint32_t)sizeof(*lights) : 0,
-                         materials ? nm * (uint32_t)sizeof(RdMaterial) : 0};
-    RdCmd *c = pushStub(RDC_MESH, key, parts, sizes, 3);
-    if (c) {
-        c->u[0] = m.id;
-        c->b[0] = (uint8_t)prog;
-    }
+    (void)m, (void)prog, (void)xf, (void)lights, (void)materials, (void)key;
+    semanticMesh("rd_DrawMesh");
 }
 
 void rd_DrawSkinned(RdMesh m, RdProg prog, const RdXform *xf, const float (*bones)[16],
                     uint32_t boneCount, const RdLights *lights, const RdMaterial *materials,
                     RdKey key)
 {
-    RdMeshRec *mr = meshRec(m.id);
-    uint32_t nm = mr ? mr->materialCount : 0;
-    const void *parts[4] = {xf, lights, materials, bones};
-    uint32_t sizes[4] = {xf ? (uint32_t)sizeof(*xf) : 0, lights ? (uint32_t)sizeof(*lights) : 0,
-                         materials ? nm * (uint32_t)sizeof(RdMaterial) : 0,
-                         bones ? boneCount * 64u : 0};
-    RdCmd *c = pushStub(RDC_SKINNED, key, parts, sizes, 4);
-    if (c) {
-        c->u[0] = m.id;
-        c->u[3] = boneCount;
-        c->b[0] = (uint8_t)prog;
-    }
+    (void)m, (void)prog, (void)xf, (void)bones, (void)boneCount, (void)lights, (void)materials;
+    (void)key;
+    semanticMesh("rd_DrawSkinned");
 }
 
 void rd_DrawGrid(const struct Mesh3D *grid, const RdXform *xf, const RdLights *lights,
                  const RdMaterial *mat, RdKey key)
 {
-    /* wave 4 (Primitive.c) copies the grid's vertex arrays; Mesh3D's layout
-     * belongs to seki and is not read here yet */
-    const void *parts[3] = {xf, lights, mat};
-    uint32_t sizes[3] = {xf ? (uint32_t)sizeof(*xf) : 0, lights ? (uint32_t)sizeof(*lights) : 0,
-                         mat ? (uint32_t)sizeof(*mat) : 0};
-    (void)grid;
-    pushStub(RDC_GRID, key, parts, sizes, 3);
+    (void)grid, (void)xf, (void)lights, (void)mat, (void)key;
+    semanticMesh("rd_DrawGrid");
 }
 
 void rd_DrawParticles(const RdParticleBatch *b, RdKey key)
 {
-    if (!b) {
-        return;
-    }
-    uint32_t n = b->count;
-    const void *parts[5] = {b->pos, b->size, b->rgba, b->uvRect, b->viewMtx};
-    uint32_t sizes[5] = {b->pos ? n * 16u : 0, b->size ? n * 8u : 0, b->rgba ? n * 4u : 0,
-                         b->uvRect ? n * 16u : 0, b->viewMtx ? 64u : 0};
-    RdCmd *c = pushStub(RDC_PARTICLES, key, parts, sizes, 5);
-    if (c) {
-        c->u[0] = n;
-        c->u[3] = b->tex.id;
-    }
+    (void)b, (void)key;
+    semanticMesh("rd_DrawParticles");
 }
 
 void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key)
