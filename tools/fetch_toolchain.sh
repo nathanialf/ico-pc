@@ -208,4 +208,5 @@ else
     echo "$CMAKE_NAME" > "$CMAKE_DIR/.ico-release"
     "$CMAKE_DIR/bin/cmake" --version | head -n 1
 fi
+"$ROOT/tools/fetch_deps.sh" # library dependencies: Vulkan headers, volk, SDL3
 echo "==> done: $DEST"
