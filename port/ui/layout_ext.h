@@ -65,6 +65,9 @@ int lt_ext_SetText(int index, const char *utf8);
 int lt_ext_SetStr(int index, int strId);
 /* the label as it would be drawn now */
 const char *lt_ext_RowText(int index);
+/* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0
+   if index is not a port row */
+float lt_ext_RowSize(int index);
 
 /* The table lookups layout_texture.c makes through LT_LAYOUT/LT_PROP: the
    game's row for an index below its count (or any index outside both

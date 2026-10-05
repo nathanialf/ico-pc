@@ -9,7 +9,8 @@ closed.
 
 - **On the title screen:** move down from "New Game" (or "Continue / New
   Game") to "Settings" and press Cross. Triangle, Circle (or the menu's
-  "Back") returns to the title.
+  "Back") returns to the title. "Settings" and "Quit to desktop" appear
+  together with "New Game", once the memory card check has finished.
 - **During play:** press START to pause, choose "Options", then move to
   "Settings" (below the last option) and press Cross. Triangle or Circle
   goes back to Options.

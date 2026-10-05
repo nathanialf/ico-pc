@@ -295,10 +295,14 @@ packet state (Z test off, Z write off, ALPHA 0x44, TEX1 0x60), the colour
 (the points drawn around a selected unselectable row) and the glow:
 `lt_glow_sprite` calls `lt_ext_DrawRow(row, stretched box, glow colour, 1)`
 after its own `gif_SetAlpha(1, 5, 0)` (ALPHA 0x48), which maps the label
-through the same stretch the sprite would get. The label is vertically
-centred on the capitals in the row's box and aligned left at `dispX` (or
-centred / right, `LtExtText.align`); `centerX` centres the box as for a
-texture row.
+through the same stretch the sprite would get. The label's capitals have
+their middle 2 y units (a field line) above the centre of the row's box,
+where the game's 20-texel menu rows have theirs (texel 9.0 of 20 in
+`menu_text.c`: Options, pause, vibration, Continue, and New Game outside
+English, which is 9.5), so a port row on the game's grid lines up with the
+game's rows (V2; before V2 the capitals were centred in the box, a field
+line lower). The label is aligned left at `dispX` (or centred / right,
+`LtExtText.align`); `centerX` centres the box as for a texture row.
 
 **The chained-row selection** (6C, `display_texture`, under `ICO_HOST`). A
 port row drawn from a layout that has no cursor of its own (`curItem` < 0)
@@ -327,18 +331,32 @@ links crossing between game and port rows):
 
 | from | repointed | the row |
 | --- | --- | --- |
-| Options 58 | `325.downItem` and `300.upItem` (both were 300 / 325, the wrap) -> row; `58.link` -> row layout (was -1) | up 325, down 300, `right` the Settings layout, `left` 57 (Triangle back to the pause menu, as every Options row); y 165, in place of 325, which `lt_property_visible` hides until the game is cleared, and 185 once it shows (the entry proc moves it); right-aligned ending at x 364 like the Options labels |
-| Title 12 "Continue / New Game" | `50.downItem` -> row (was -1); `12.link` -> row layout -> 11 (was 11) | up 50, down the "Quit to desktop" row (Q2); centred at y 175 (size 22; 6C had y 181, size 24), between "New Game" (165) and the copyright line (row 48 at 195, letters from about 205) |
+| Options 58 | `325.downItem` and `300.upItem` (both were 300 / 325, the wrap) -> row; `58.link` -> row layout (was -1) | up 325, down 300, `right` the Settings layout, `left` 57 (Triangle back to the pause menu, as every Options row); y 165 (325's), in place of 325, which `lt_property_visible` hides until the game is cleared, and one Options pitch (325 less 324, 20 field lines) below it, 185, once it shows (the entry proc sets it from the loaded rows); right-aligned ending at x 357, where the Options labels' letters end (`menu_text.c`'s right anchors: 236 + 121, 172 + 185, 108 + 248; V2, was 364, their rectangles' end) |
+| Title 12 "Continue / New Game" | `50.downItem` -> row (was -1); `12.link` -> row layout -> 11 (was 11) | up 50, down the "Quit to desktop" row (Q2); centred, at the game rows' size (27) and box height in a 400-pixel box, on the title's pitch below New Game (V2: 159; Q2 had 175, size 22; 6C 181, size 24); masked by default as 49 to 51 are |
 | Title 13 "New Game" | `51.downItem` -> row (was -1); `13.link` -> row layout -> 11 (was 11) | up 51; the same place |
 
-**Quit to desktop (Q2).** On the title the row layout holds two rows: Settings
-and, right after it, "Quit to desktop" (y 184, size 22). Placed from the Q2
-run's title frame (960 x 720, 3 pixels a field line): New Game's capitals
-end at pixel 571 (6C's measurement), the copyright's start at about 645; at
-y 176 and 187 (the first placement) the two rows' capitals were on 583..605
-and 622..642, the second 3 pixels from the copyright, so they moved to 175
-and 184 (about 580..602 and 613..635, 9 to 11 pixels from each neighbour;
-not seen in a run, open item 10). Its up item is Settings, its `right` link the quit screen, a port
+**The title's layout (V2).** The port lays the title out
+(`settings.c` `placeTitle`, from `repoint` at each install, so the game's
+textures and classic menu text get the same places): the PAL data has
+Continue (49) at 135, New Game (50, and 51 on the New-Game-only layout) at
+165 and the copyright line (48) at 195, the next 30-line step below New
+Game, which left no room for Settings and "Quit to desktop". In the loaded
+table (the disc is not changed) Continue is moved to 119, New Game (50 and
+51) to 139, and the copyright line to 198; Settings is at 159 and Quit at
+179: one 20-field-line pitch (the Options screen's), and the copyright 19
+lines below Quit, which gives the same space between its capitals (24
+output pixels at 960 x 720) and Quit's as between the rows' (31 pixels).
+The New-Game-only layout keeps New Game at 139 (the slot above stays
+empty), and 51 is 50's y, so the switch from 12 to 13 still pairs them in
+the fade-cancel check (`display_texture_fade_cancel_chk` compares
+`dispY`). The block's place was measured ("Title rows (V2)" under Runs):
+the copyright line's sprite (rim and descenders included) may go at most
+5 field lines below 195 before it leaves the picture, and the logo ends
+384 pixels down at 960 x 720, so 119 .. 198 leaves about 6 pixels at
+either end. The install accepts the title rows at the PAL places or at
+these (a second install, or tables loaded again). Both port rows are
+masked by default (`defaultMask`, as 49 to 51), so they show only when the
+title's proc shows New Game. Its up item is Settings, its `right` link the quit screen, a port
 layout like the mirror screen: the header "Quit to desktop?" (y 112) and
 Yes / No side by side (x 200 and 330, y 146; the game's own Yes / No
 strings, `UI_STR_MT_YES` / `UI_STR_MT_NO`), the cursor on No. Its proc
@@ -494,7 +512,7 @@ Left as textures, with the reason (the full list is the comment at the top of `m
 
 **Classic.** `[game] classic_menu_text` is read by `ico_opt_classic_menu_text`; `ui_SettingsInstall` hands it to `ui_MenuTextSetClassic` before the first layout draws, and the Display row steps it, sets the key and the switch, and is saved when the screen is left.
 
-**Test (`menu_text_test`, ctest `menu_text`, exit 77 without a Vulkan device after the CPU checks).** Every table row is a `texProperty` index, in order, its item's rectangle non-empty and on a sheet, every item used, its anchor and lines inside its rectangle in every language; with the disc image (`ICO_DISC_IMAGE`; skipped without it) every table row's rectangle equals the boot ELF's `texProperty` row (read at `0x0030CFF8` from `SCES_507.60`) and its `texFile` is a text sheet (0..5, 10..29); every string id exists in each of the five tables (no English fallback) and is drawable; through the real `layout_texture.c` on the recording (rows shaped like the PAL title's): New Game and Continue drawn as atlas text (eight halo copies and the letters each, 18 batches), the copyright line as one texture sprite, all three textures transferred; classic mode: three texture sprites, no text, three transfers; a row whose rectangle differs from the table's keeps its texture; no undecoded register write. On lavapipe: the title's New Game row through `exec_layout_texture` into SCENE: 2114 pixels painted (421 near white) inside the row's rectangle plus the rim's margin, 0 outside; `menu_text_scene.png` beside the test.
+**Test (`menu_text_test`, ctest `menu_text`, exit 77 without a Vulkan device after the CPU checks).** Every table row is a `texProperty` index, in order, its item's rectangle non-empty and on a sheet, every item used, its anchor and lines inside its rectangle in every language; with the disc image (`ICO_DISC_IMAGE`; skipped without it) every table row's rectangle equals the boot ELF's `texProperty` row (read at `0x0030CFF8` from `SCES_507.60`) and its `texFile` is a text sheet (0..5, 10..29); every string id exists in each of the five tables (no English fallback) and is drawable; through the real `layout_texture.c` on the recording (rows shaped like the PAL title's): New Game and Continue drawn as atlas text (eight halo copies and the letters each, 18 batches), the copyright line as one texture sprite, all three textures transferred; classic mode: three texture sprites, no text, three transfers; a row whose rectangle differs from the table's keeps its texture; V2: a port row (`layout_ext.c`) "OK" at size 27 in the same box as the game's OK row (181, capitals at texel 9.0) draws its halo copies and letters at the same y as the game row's, vertex for vertex (worst 0.000 GS pixels; the pre-V2 anchor gives 2.3); no undecoded register write. On lavapipe: the title's New Game row through `exec_layout_texture` into SCENE: 2114 pixels painted (421 near white) inside the row's rectangle plus the rim's margin, 0 outside; `menu_text_scene.png` beside the test.
 
 Results (2026-10-05, P3): the window build on Linux (gcc, lavapipe, validation layer) 66 of 66 tests passed, `menu_text` included; `settings_test` checks the Display page's 11 rows and the Menu text value (Port font, Classic, the key written, back); `win-x64` builds `ico_pc.exe`, `menu_text_test.exe`, `ui_test.exe`, `settings_test.exe`, `settings_render.exe`.
 
@@ -657,6 +675,18 @@ tables shaped like the PAL ones and run by the real `layout_texture.c`
   press made before the capture started is not taken; the timeout leaves
   the binding; a mouse button; clear; the row text "Tab, Backquote" reads
   back through `ico_bindings_set`;
+- V2, the entry rows' places from the table data (`testPlacement`):
+  over the PAL title rows, and again over reloaded PAL rows, Continue,
+  New Game (50 and 51 at one y), Settings and Quit one pitch apart, the
+  copyright line below, the space between consecutive capitals (sizes
+  through `ui_FontMetrics`, the copyright's 15.5 y units measured) equal
+  between the rows and within a field line to the copyright, the copyright
+  at most 5 field lines below 195; the port rows at the game rows' size,
+  box height and centring, masked by default as New Game; in Options the
+  row at 325's y with 323 -> 324 -> 325 one pitch, ending within half a
+  pixel of where the Brightness label's letters end (the menu text
+  table's right anchor); the navigation test checks 325's y and one pitch
+  below it once cleared from the table;
 - Q2: the quit rows follow the Settings rows of 12 and 13 in one entry
   layout, below them, with the confirmation as their `right` link; the
   question in the five languages; masked with the title's rows; through
@@ -773,6 +803,93 @@ after it (Settings menu, "Quit to desktop (Q2)"). The vibration screen
 follows from frame 560; the confirmation screen was not reached in the
 run (`settings_render`'s PNG shows it).
 
+### Title rows (V2, 2026-10-05)
+
+The window build on lavapipe, `SDL_VIDEODRIVER=offscreen`, `use_iso=1`, a
+private pref folder, each run `flock`ed and under `timeout 300`, every one
+exit 0 with no process left. Title runs: `pad-boot.txt` up to tick 517
+(the START that skips the demo), nothing until New Game shows, then DOWN,
+DOWN, UP, CROSS (into Settings) and TRIANGLE, `dump_every=10` from 480;
+once in classic mode (`[game] classic_menu_text = true`). Options runs:
+`start_stage=15`, START, UP, CROSS, five DOWNs to the Settings row
+(French, the pref folder's default locale), port font and classic. Dumps
+replayed with `rd_replay_tool --present 960x720` (Original) and
+`--present 1920x1440 --enhanced --resolution 4x --full-height`, and also
+`--present 1920x1440` without `--enhanced`; each row measured by replaying
+the dump without the row's letters (`--nop` on its last draw) and taking
+the pixels that got lighter: the first capital's top and bottom, the
+baseline, the ink's x extent. Output pixels; 960 x 720 is 3.21 pixels a
+field line.
+
+The game's rows, from the table (boot ELF, `texProperty` at `0x0030CFF8`):
+Continue 49 at `dispY` 135, New Game 50 / 51 at 165, the copyright line
+48 at 195, all centred in 20-field-line boxes, 49 to 51 masked by default;
+Options labels 308 .. 325 at 65, 85, .. 165 (20 field lines apart),
+right-aligned; pause 294, 295, 296 at 50, 70, 120.
+
+Title, frame 600 (New Game selected; English; no memory card, so the
+New-Game-only layout 13), capitals' top..bottom in output pixels (the
+first capital; S and the © include their overshoot, Q its tail cut at the
+baseline), and the space between consecutive lines' capitals:
+
+| | HEAD (before V2) | V2, port font | V2, classic |
+| --- | --- | --- | --- |
+| rows (`dispY`) | New Game 165, Settings 175, Quit 184 (size 22), copyright 195 | Continue 119, New Game 139, Settings 159, Quit 179 (size 27), copyright 198 | the same |
+| 960 x 720 Original: New Game | 542..573 | 458..489 | 459..488 (texture) |
+| Settings | 579..604 | 521..551 | 521..551 |
+| Quit to desktop | 608..632 | 585..615 | 585..615 |
+| copyright | 641..665 | 650..674 | 650..674 |
+| space between capitals | 6, 4, 9 | 32, 34, 35 | 33, 34, 35 |
+| copyright sprite / picture | 627..680 / 22..697 | 638..691 / 22..697 | the same |
+| 1920 x 1440 Enhanced 4x full height: New Game | 1083..1144 (Q2 placement: Settings 1159..1203, Quit 1217..1261) | 915..976 | 915..977 |
+| Settings, Quit | | 1041..1102, 1170..1230 | 1041..1101, 1170..1230 |
+| copyright sprite / picture | 1255..1363 / 45..1394 | 1274..1382 / 45..1394 | the same |
+| 1920 x 1440 Original | | New Game 916..978, Settings 1041..1102, Quit 1170..1231, copyright sprite 1276..1383 / picture 44..1395 | |
+
+All rows centred at x 480 (959..961 at 1920; the classic New Game
+texture's letters 484.5 / 970, the sheet's lettering). The pitch is 64.3
+pixels at 960 x 720 (3.21 a field line): capitals' middles 473.5, 536,
+600 and the copyright's 662 (English New Game sits 1.6 pixels lower than
+the other rows' convention, its sheet's anchor is 9.5 texels, not 9.0,
+which is the 32 against 34). Continue is not on screen in these runs (no
+save on the card); on the same pitch its capitals are at about 395..426,
+11 pixels under the logo's lowest pixel (384, the I, C and O meshes with
+their shadows, measured by removing them). Placements tried first: the
+copyright at 215 or 205, as asked, leaves the picture (its sprite ends 17
+pixels above the picture's end at 195, 5 field lines); the copyright 20
+lines below Quit (Continue 118 .. copyright 198) gave 32, 34 and 38: the
+copyright's capitals are smaller, so 19 lines give it the rows' spacing.
+Before the re-layout, V2's first placement kept the game rows and put the
+port rows in New Game .. copyright (Settings 176, Quit 185, size 20: 7, 9
+and 12 pixels between capitals); measured candidates on one run that
+cycled the placement every 6 ticks: thirds (175 / 185) at size 22 3, 8
+and 9 (New Game and Settings touching), at 20 4, 12 and 12; 176 / 186 7,
+12 and 7 with Quit's "p" on the copyright's capitals.
+
+Masking: before V2, frames 490 to 510 drew Settings and Quit with New Game
+masked (open item 9); in V2 they are hidden with it (490 to 510, and the
+fade out into Settings, 790 and 800) and shown from 520; on the final
+layout's run frames 500 and 510 draw only the copyright line, 520 all rows.
+
+Options, frame 400 (the cursor on the Settings row, "Paramètres"), the
+game's rows drawn in the port font; middles of the capitals:
+
+| output | Luminosité (324) | Paramètres before V2 | Paramètres V2 | game pitch | right edge (game labels / before / V2) |
+| --- | --- | --- | --- | --- | --- |
+| 960 x 720, Original | 491.5 | 557.5 (+66) | 555 (+63.5) | 64.3 | 532..534 / 544 / 534 |
+| 1920 x 1440, Enhanced 4x | 981.5 | 1116 (+134.5) | 1109.5 (+128) | 128.25 | 1063..1066 / 1087 / 1066 |
+
+The game's own rows in the port font against their textures (classic,
+the same frame): the same middles and the same 20-field-line pitch (Son
+217..247 against the texture's 214..250, both centred on 232; baselines
+247, 312, 376, 441, 505 in the port font, 250, 314, 379, 443, 508 with the
+textures' softer lower edge), so the menu text rows (`menu_text.c`) have no
+pitch or baseline defect; the pause menu's (Options 294, Back 295, port
+rows none) baselines 201 and 266, 65 pixels (20 field lines) apart as the
+table's 50 and 70. Only the
+port rows differed: a field line low (the anchor) and, in Options, 7 grid
+pixels right.
+
 ## Open items
 
 1. **Entering Settings in a real run.** The 6C window run did not reach
@@ -796,17 +913,25 @@ run (`settings_render`'s PNG shows it).
    the vibration screen (about Main tick 560 to 590 with `pad-boot.txt`),
    or one that opens the pause menu and Options, shows them over the game;
    the classic path needs no run (the unit test covers it).
-9. **Settings row at the title during the card check.** In the P3 run the
-   port's Settings row is drawn at frames 500 and 550 while New Game is
-   still masked by `la_title_new_game_only`; 6C's `ui_SettingsTitleMask`
-   was meant to hide it with the title's row. Not P3's change (the
-   Settings row is a port row); to look at.
+9. **Settings row at the title during the card check** (done in V2). The
+   cause: the title's rows 49 to 51 are masked by default in the PAL table
+   (`defaultMask` 1), the port rows were not (0). `exec_layout_texture`
+   resets every row of the layout chain to its `defaultMask` each frame and
+   the title's proc, which masks or shows its rows and (since 6C) the port
+   rows, runs only in fade states 1 and 2 (`display_primary_texture_layout`),
+   so in the other frames (the logo's fade, the layout's fade out) New Game
+   was hidden by default and the port rows were drawn. The port rows are
+   now masked by default as well; in the V2 run they are hidden while New
+   Game is (frames 490 to 510, and the fade out into Settings at 790 to
+   800) and shown with it from frame 520.
+10. **Title rows (Q2)** (done in V2): the title is laid out by the port
+    on one pitch, the game's rows moved in the loaded table, measured on
+    runs' titles with New Game shown ("Title rows (V2)" under Runs;
+    Settings menu, "The title's layout (V2)").
 
-10. **Title rows (Q2).** Settings and "Quit to desktop" at y 175 and 184
-    were placed from the Q2 run's frame 550 (the rows then at 176 and 187)
-    by the 3-pixel-a-line scale; a run's title frame with New Game unmasked
-    should confirm the gaps. That frame also showed both port rows drawn
-    while New Game is masked (open item 9).
+8 and 1 were exercised by the V2 runs: the pause menu and Options in the
+port font and in classic mode over the game (stage 15 through
+`start_stage`), and the Settings screen entered from the title.
 
 6B's open items 1 (the typeface: Arimo, above), 3 (entering the menu:
 the link chain and repointed item links), 6 (values: `lt_ext_SetText` from

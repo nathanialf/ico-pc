@@ -733,7 +733,7 @@ static void collectAll(void *user, int list, uint32_t index, const RdCmd *c, con
 
 static const char *const kRows4[] = {"New Game",  "Settings", "Quit to desktop",
                                      "Vibration", "Activate", "Deactivate"};
-static const float kRowY4[] = {165.0f * 2.0f, 175.0f * 2.0f, 184.0f * 2.0f,
+static const float kRowY4[] = {165.0f * 2.0f, 175.0f * 2.0f, 185.0f * 2.0f,
                                60.0f * 2.0f,  80.0f * 2.0f,  100.0f * 2.0f};
 static const float kRowSize4[] = {27.0f, 22.0f, 22.0f, 27.0f, 27.0f, 27.0f};
 

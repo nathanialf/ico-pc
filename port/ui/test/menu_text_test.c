@@ -442,6 +442,91 @@ static void layoutFrame(void)
     dl_Swap();
 }
 
+/* the frame's atlas text batches in list 11, in draw order */
+static int textBatches(const RdCmd **cmd, int max)
+{
+    const RdFrame *f = rd__LastFrame();
+    Walk *w = calloc(1, sizeof(Walk));
+    RdStateBlock s = f->startState;
+    rd__Walk(f, 0, &s, collect, w);
+    int n = 0;
+    for (int i = 0; i < w->n && n < max; i++) {
+        for (int px = 1; px < 64; px++) {
+            if (w->st[i].tex == ui_FontPageTex(px, 0) && w->st[i].tex != 0) {
+                cmd[n++] = w->cmd[i];
+                break;
+            }
+        }
+    }
+    free(w);
+    return n;
+}
+
+/* A port row (layout_ext.c) placed where a game menu row is, with the same
+   label and size, draws its letters at the same height: OK (181, a
+   20-texel row whose capitals sit at texel 9.0) and a port row "OK" at
+   size 27 in the same 20-field-line box, drawn by one layout and its
+   link.  Before the fix the port row centred the capitals in the box, a
+   field line (2 y units) lower than the game's rows (docs/port/UI.md, open
+   item 10). */
+static void testPortRowAnchor(void)
+{
+    memset(texLayout, 0, sizeof(texLayout));
+    lt_ext_Reset();
+    setRow(181, 270, 100, 40, 0);
+    LtProperty pr;
+    memset(&pr, 0, sizeof(pr));
+    pr.word0 = -1;
+    pr.ownerItem = -1;
+    pr.up = pr.down = pr.left = pr.right = -1;
+    pr.rightItem = pr.leftItem = pr.upItem = pr.downItem = -1;
+    pr.dispX = 270;
+    pr.dispY = 100;
+    pr.dispW = 100;
+    pr.dispH = 40;
+    pr.selectable = 1;
+    LtExtText t = {0, "OK", UI_MENU_TEXT_SIZE, UI_ALIGN_LEFT};
+    const int port = lt_ext_AddProperty(&pr, &t);
+    LtProp pl;
+    memset(&pl, 0, sizeof(pl));
+    pl.first = port;
+    pl.last = port + 1;
+    pl.defaultItem = pl.curItem = -1;
+    pl.link = -1;
+    LtProp *l = &texLayout[TITLE_LAYOUT];
+    l->first = 181;
+    l->last = 182;
+    l->defaultItem = l->curItem = 181;
+    l->link = lt_ext_AddLayout(&pl);
+    current_layout_id = TITLE_LAYOUT;
+    layoutFrame();
+    const RdCmd *cmd[32];
+    const int n = textBatches(cmd, 32);
+    CHECK(n == 18, "two text rows: %d atlas batches, expected 18", n);
+    if (n != 18) {
+        return;
+    }
+    /* the halo copies and the letters, batch by batch: the same glyphs at
+       the same y (x differs: the game row's lettering starts 7 texels in) */
+    const RdFrame *f = rd__LastFrame();
+    int same = 1;
+    float worst = 0.0f;
+    for (int b = 0; b < 9; b++) {
+        const RdScreenVtx *g = (const RdScreenVtx *)(f->payload + cmd[b]->u[0]);
+        const RdScreenVtx *p = (const RdScreenVtx *)(f->payload + cmd[9 + b]->u[0]);
+        same = same && cmd[b]->u[1] == cmd[9 + b]->u[1];
+        for (uint32_t k = 0; same && k < cmd[b]->u[1]; k++) {
+            const float d = fabsf((float)p[k].y - (float)g[k].y) / 16.0f;
+            worst = d > worst ? d : worst;
+        }
+    }
+    CHECK(same && worst <= 1.0f / 16.0f,
+          "the port row's letters at the game row's height (worst %.3f GS pixels)", worst);
+    printf("menu_text_test: port row vs game row OK: %d batches each, worst y difference %.3f\n",
+           n / 2, worst);
+    lt_ext_Reset();
+}
+
 /* the text and the texture sprites of list 11, the backdrop left out */
 static void countSprites(int *text, int *texture)
 {
@@ -523,6 +608,7 @@ static void testHook(void)
     layoutFrame();
     countSprites(&text, &texture);
     CHECK(text == 9 && texture == 2, "one text row, two textures (%d, %d)", text, texture);
+    testPortRowAnchor();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     rd_Shutdown();

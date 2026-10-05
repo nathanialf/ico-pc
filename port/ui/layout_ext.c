@@ -14,6 +14,14 @@
 
 #define TEXT_MAX 96
 
+/* The capitals' middle of a label, above its box's centre.  The game's menu
+   rows (a 20-texel sheet rectangle in a 20-field-line box) have it at texel
+   9.0 of 20 (menu_text.c's anchors: Options, pause, vibration, Continue,
+   New Game outside English), a texel (2 y units) above the centre of the
+   box display_texture draws, so a port row placed on the game's grid lines
+   up with the game's rows (docs/port/UI.md, "Layout extension"). */
+#define ROW_CAPS_ABOVE_CENTRE 2.0f
+
 typedef struct ExtRow {
     LtExtText text;
     char literal[TEXT_MAX];
@@ -128,6 +136,15 @@ const char *lt_ext_RowText(int index)
     return r->hasLiteral ? r->literal : ui_Str((UiStrId)r->text.strId);
 }
 
+float lt_ext_RowSize(int index)
+{
+    ExtRow *r = rowOf(index);
+    if (!r) {
+        return 0.0f;
+    }
+    return r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
+}
+
 LtProp *lt_ext_Layout(int index)
 {
     int i = index - LT_GAME_LAYOUT_COUNT;
@@ -190,6 +207,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     const float by = (float)r->base[1] / 8.0f + UI_GRID_CY;
     const float bw = (float)r->base[2] / 16.0f;
     const float bh = (float)r->base[3] / 8.0f;
+    const float y = by + bh * 0.5f - ROW_CAPS_ABOVE_CENTRE;
     float x;
     unsigned flags = UI_KEEP_STATE | UI_VALIGN_MIDDLE;
     switch (r->text.align) {
@@ -221,7 +239,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     const uint64_t owner =
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
     if (!glow) {
-        ui_DrawText(x, by + bh * 0.5f, size, rgba, text, flags | UI_HALO);
+        ui_DrawText(x, y, size, rgba, text, flags | UI_HALO);
         ui_SetDrawKey(owner);
         return;
     }
@@ -233,7 +251,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.scaleY = bh > 0.0f ? ((float)box[3] / 8.0f) / bh : 1.0f;
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
-    ui_DrawTextXf(x, by + bh * 0.5f, size, rgba, text, flags, &xf);
+    ui_DrawTextXf(x, y, size, rgba, text, flags, &xf);
     ui_SetDrawKey(owner);
 }
 

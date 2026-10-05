@@ -78,7 +78,7 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 /* geometry, in the layout grid (dispX pixels of 640, dispY field lines of 226) */
 #define HEADER_Y 12
 #define LABEL_X 44
-#define LABEL_W 300 /* right-aligned, ending at x 344 as the Options labels end at 364 */
+#define LABEL_W 300 /* right-aligned, ending at x 344 as the Options rectangles end at 364 */
 #define VALUE_X 364
 #define VALUE_W 256 /* a value that is not stepped (the mirror line) */
 /* a stepped value: centred between its two arrows, as the Options screen's
@@ -96,20 +96,36 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 
 /* where the Options screen's Settings row goes: the girl-control row (325)
    is hidden until the game is cleared, so the row takes its place, and moves
-   below it once 325 shows */
-#define OPTIONS_ROW_Y 165
-#define OPTIONS_ROW_Y_CLEARED 185
-/* the title's: under "New Game" (rows 50 and 51 at 165), above the
-   copyright line (row 48 at 195).  Q2: Settings and "Quit to desktop"
-   share that room at size 22, 9 field lines apart.  Measured on the Q2
-   run's title frame at 960 x 720 (3 pixels a field line): New Game's
-   capitals end at pixel 571 (6C), the copyright's start at about 645,
-   and size-22 rows at y 176 and 187 had their capitals on 583..605 and
-   622..642; 175 and 184 put them on about 580..602 and 613..635, 9 to 11
-   pixels from their neighbours */
-#define TITLE_ROW_Y 175
-#define TITLE_QUIT_Y 184
-#define TITLE_ROW_SIZE 22.0f
+   one Options pitch (325 less 324: 20 field lines) below it once 325 shows
+   (entryProc, from the loaded rows).  Right-aligned where the Options
+   labels' letters end, x 357 (menu_text.c's right anchors: 236 + 121 for
+   Vibration, Brightness and Players, 172 + 185 Film Effect, 108 + 248
+   Button Configuration), not at their rectangles' end (364) */
+#define OPTIONS_LABELS_END 357
+/* The title is laid out by the port (placeTitle): its four rows, Continue
+   (49), New Game (50, and 51 on the New-Game-only layout), Settings and
+   "Quit to desktop", one game pitch apart (20 field lines, the Options
+   screen's), and the copyright line (48) below Quit with the same space
+   between its capitals and Quit's as between the rows' (19 field lines:
+   its capitals are 24 output pixels at 960 x 720, the rows' 31).  The PAL
+   data has Continue at 135, New Game at 165 and the copyright line at 195,
+   the next step below New Game, which left no room for the port rows.
+   Where the block can go was measured on window runs' titles (960 x 720
+   Original, 1920 x 1440 Enhanced at full height; docs/port/UI.md, "Title
+   rows (V2)"): the copyright line's sprite, its rim and descenders
+   included, ends 17 pixels above the picture's end at 195 (5 field
+   lines), and the logo ends 384 pixels down; Continue at 119 and the
+   copyright line at 198 leave about 6 pixels at either end. */
+#define TITLE_PITCH 20
+#define TITLE_CONTINUE_Y 119
+#define TITLE_COPYRIGHT_STEP 19
+/* the rows: 0 Continue, 1 New Game, 2 Settings, 3 Quit */
+#define TITLE_Y(row) (TITLE_CONTINUE_Y + (row) * TITLE_PITCH)
+#define TITLE_COPYRIGHT_Y (TITLE_Y(3) + TITLE_COPYRIGHT_STEP)
+/* where the PAL data has Continue, New Game and the copyright line */
+#define PAL_CONTINUE_Y 135
+#define PAL_NEW_GAME_Y 165
+#define PAL_COPYRIGHT_Y 195
 
 #define MAX_ROWS 16
 
@@ -868,12 +884,18 @@ static void buildEntries(void)
 {
     for (int e = 0; e < ENTRY_COUNT; e++) {
         int title = e != ENTRY_OPTIONS;
-        int row = title ? addRow(170, TITLE_ROW_Y, 300, 40, 1, -1, UI_STR_SETTINGS, NULL,
-                                 TITLE_ROW_SIZE, UI_ALIGN_CENTER)
-                        : addRow(64, OPTIONS_ROW_Y, 300, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f,
-                                 UI_ALIGN_RIGHT);
+        /* the y and the title rows' box are set with the game's rows
+           (placeTitle, entryProc); the title rows' box is wider than the
+           game's so the longer translations keep the game rows' size */
+        int row = title
+                      ? addRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_CENTER)
+                      : addRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY, LABEL_W, 40, 1,
+                               -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_RIGHT);
         if (title) {
             P(row)->centerX = 1;
+            /* hidden unless the title's proc shows it, as New Game (49 to
+               51 are masked by default; open item 9) */
+            P(row)->defaultMask = 1;
         }
         P(row)->right = s_pages[UI_PAGE_MAIN].layout;
         if (!title) {
@@ -885,9 +907,10 @@ static void buildEntries(void)
         if (title) {
             /* Q2: "Quit to desktop" under Settings, in the same layout (the
                rows are contiguous); Cross opens the confirmation */
-            int q = addRow(170, TITLE_QUIT_Y, 300, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL,
-                           TITLE_ROW_SIZE, UI_ALIGN_CENTER);
+            int q =
+                addRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f, UI_ALIGN_CENTER);
             P(q)->centerX = 1;
+            P(q)->defaultMask = 1;
             P(q)->right = s_quitLayout;
             P(q)->upItem = row;
             P(row)->downItem = q;
@@ -1147,6 +1170,36 @@ static int quitScreenProc(int first, int item)
     return -1;
 }
 
+/* whether the title's game rows are at (Continue, New Game, copyright) */
+static int titleRowsAt(int cont, int newGame, int copyright)
+{
+    return texProperty[49].dispY == cont && texProperty[50].dispY == newGame &&
+           texProperty[51].dispY == newGame && texProperty[48].dispY == copyright;
+}
+
+/* The title's rows on one pitch (TITLE_Y): the game's rows moved in the
+   loaded table (the textures and the menu text alike, so classic menu
+   text gets the same places), the port rows of both title layouts in New
+   Game's box height at the game rows' size (UI_MENU_TEXT_SIZE), centred as
+   they are.  New Game keeps its place on the New-Game-only layout (51 is
+   50's y, as in the PAL data, so the switch from 12 to 13 still pairs
+   them in the fade-cancel check). */
+static void placeTitle(void)
+{
+    texProperty[49].dispY = TITLE_Y(0);
+    texProperty[50].dispY = texProperty[51].dispY = TITLE_Y(1);
+    texProperty[48].dispY = TITLE_COPYRIGHT_Y;
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+        const int rows[2] = {s_entryRow[e], s_quitRow[e]};
+        for (int i = 0; i < 2; i++) {
+            if (rows[i] >= 0) {
+                P(rows[i])->dispY = TITLE_Y(2 + i);
+                P(rows[i])->dispH = texProperty[50].dispH;
+            }
+        }
+    }
+}
+
 /* The game's rows, pointed at the entry rows.  Checked against the loaded
    tables first: a table that does not look like the PAL data is left
    alone (logged once). */
@@ -1156,13 +1209,16 @@ static void repoint(void)
     int s58 = s_entryRow[ENTRY_OPTIONS];
     if (texLayout[58].first != 297 || texLayout[58].last != 333 || r325->upItem != 324 ||
         (r325->downItem != 300 && r325->downItem != s58) || texLayout[12].first != 49 ||
-        texLayout[13].first != 51) {
+        texLayout[13].first != 51 ||
+        !(titleRowsAt(PAL_CONTINUE_Y, PAL_NEW_GAME_Y, PAL_COPYRIGHT_Y) ||
+          titleRowsAt(TITLE_Y(0), TITLE_Y(1), TITLE_COPYRIGHT_Y))) {
         if (!s_warned) {
             fprintf(stderr, "settings: the layout tables are not the expected ones; no entry\n");
             s_warned = 1;
         }
         return;
     }
+    placeTitle();
     r325->downItem = s58;
     r300->upItem = s58;
     P(s58)->upItem = 325;
@@ -1346,8 +1402,10 @@ static int entryProc(int first, int item)
         }
     }
     if (cur == LAYOUT_PAUSE_OPTIONS && s_entryRow[ENTRY_OPTIONS] >= 0) {
+        /* in 325's place, or one Options pitch below it once it shows */
+        const LtProperty *r324 = &texProperty[324], *r325 = &texProperty[325];
         P(s_entryRow[ENTRY_OPTIONS])->dispY =
-            gFlagGameClear ? OPTIONS_ROW_Y_CLEARED : OPTIONS_ROW_Y;
+            r325->dispY + (gFlagGameClear ? r325->dispY - r324->dispY : 0);
     }
     if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
         /* the cursor came back to the Settings row; the title's own

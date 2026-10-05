@@ -5,6 +5,9 @@
  *     pages and their rows, in order, with the expected labels;
  *   - the navigation repoint: the Options screen's rows 325/300 and the
  *     title's 50/51 lead to the entry rows, the link chains, idempotence;
+ *   - the entry rows' places from the table data: the title's evenly
+ *     spaced between New Game and the copyright line, masked by default as
+ *     New Game; the Options row on the labels' pitch and right edge;
  *   - through the real layout_texture.c: the cursor in layout 58 moves from
  *     324 onto the Settings row (325 and 300 hidden before the game is
  *     cleared), Cross opens the menu, a right press on Language changes the
@@ -33,6 +36,7 @@
 #include "StageManager.h"
 #include <libscf.h>
 #include "config.h"
+#include "font.h"
 #include "host_config.h"
 #include "input.h"
 #include "layout_ext.h"
@@ -47,7 +51,6 @@
 
 #include "DisplayList.h"
 #include "GifHost.h"
-#include "font.h"
 #include "rd_internal.h"
 #include "ui_internal.h"
 
@@ -387,10 +390,21 @@ static void fakeTables(void)
     setRow(324, -1, -1, 325, 323, 57, 60, 145);
     setRow(325, -1, -1, 300, 324, 57, -1, 165);
     setRow(330, -1, -1, 300, 324, 57, 57, 1);
-    /* title */
+    /* the labels' x (the Settings row ends where their letters end) */
+    texProperty[323].dispX = 108;
+    texProperty[324].dispX = 236;
+    texProperty[325].dispX = 236;
+    /* title: the copyright line (48), Continue (49) and New Game (50, 51),
+       centred in 20-field-line boxes; 49..51 masked by default */
+    setRow(48, -1, -1, -1, -1, -1, -1, 195);
     setRow(49, -1, -1, 50, -1, -1, -1, 135);
     setRow(50, -1, -1, -1, 49, -1, -1, 165);
     setRow(51, -1, -1, -1, -1, -1, -1, 165);
+    for (int i = 48; i <= 51; i++) {
+        texProperty[i].dispW = 0;
+        texProperty[i].centerX = 1;
+        texProperty[i].defaultMask = i != 48;
+    }
 }
 
 /* ------------------------------------------------------- frames */
@@ -714,6 +728,108 @@ static void testRepoint(void)
     CHECK(texProperty[325].downItem == 300, "unexpected tables: no repoint");
 }
 
+/* The copyright line's capitals (row 48, a texture): 25 output pixels at
+   960 x 720 on a window run's title, in y units (720 / 448 pixels each) */
+#define COPYRIGHT_CAPS 15.5f
+
+/* The entry rows on the game's grid (docs/port/UI.md, open items 9 and 10,
+   "Title rows (V2)"): the title laid out by the port, Continue (49), New
+   Game (50, and 51 at the same y), Settings and "Quit to desktop" one pitch
+   apart, the same space between their capitals, and between Quit's and
+   the copyright line's (48; its capitals 15.5 y units, measured; the
+   others' through ui_FontMetrics) to within a field line, the copyright
+   line at most 5 field lines below the PAL one (the room measured below
+   it); the port rows in New Game's box height, at the game rows'
+   size, centred, masked by default as 49..51; a reinstall over reloaded
+   PAL rows places them again; in Options the row continues the labels'
+   pitch (323 -> 324 -> 325) and ends where their letters end (the menu
+   text table's right anchor). */
+static void testPlacement(void)
+{
+    useConfig("version = 1\n");
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 0) {
+            fakeTables();
+            lt_ext_Reset();
+            ui_SettingsReset();
+        } else {
+            /* the tables reloaded from the disc: the PAL rows again */
+            texProperty[49].dispY = 135;
+            texProperty[50].dispY = texProperty[51].dispY = 165;
+            texProperty[48].dispY = 195;
+        }
+        ui_SettingsInstall();
+        if (pass == 1) {
+            CHECK(texProperty[50].dispY != 165, "a reinstall places the title again");
+            ui_SettingsInstall();
+        }
+    }
+    const int copyright = texProperty[48].dispY;
+    CHECK(copyright > 195 - 20 && copyright <= 195 + 5,
+          "the copyright line at %d: inside the picture (at most 5 below 195)", copyright);
+    CHECK(texProperty[51].dispY == texProperty[50].dispY,
+          "New Game at the same y on both title layouts");
+    for (int g = 12; g <= 13; g++) {
+        const LtProperty *ng = &texProperty[g == 12 ? 50 : 51];
+        const int si = ui_SettingsEntryRow(g), qi = ui_SettingsQuitRow(g);
+        const LtProperty *s = lt_ext_Prop(si);
+        const LtProperty *q = lt_ext_Prop(qi);
+        const LtProperty *rows[5] = {&texProperty[49], ng, s, q, &texProperty[48]};
+        /* capitals' middles (2 y units a field line; the game's and the
+           port's rows share the anchor, layout_ext.c) and heights */
+        float a, d, capGame, capS, capQ;
+        ui_FontMetrics(UI_MENU_TEXT_SIZE, &a, &d, &capGame);
+        ui_FontMetrics(lt_ext_RowSize(si), &a, &d, &capS);
+        ui_FontMetrics(lt_ext_RowSize(qi), &a, &d, &capQ);
+        const float cap[5] = {capGame, capGame, capS, capQ, COPYRIGHT_CAPS};
+        const int pitch = ng->dispY - rows[0]->dispY;
+        float gaps[4];
+        int even = pitch > 0;
+        for (int i = 0; i < 4; i++) {
+            even = even && (i == 3 || rows[i + 1]->dispY - rows[i]->dispY == pitch);
+            gaps[i] = (2.0f * (float)rows[i + 1]->dispY - cap[i + 1] * 0.5f) -
+                      (2.0f * (float)rows[i]->dispY + cap[i] * 0.5f);
+        }
+        CHECK(even && rows[4]->dispY > q->dispY,
+              "title %d: Continue %d, New Game %d, Settings %d, Quit %d one pitch apart, the "
+              "copyright %d below",
+              g, rows[0]->dispY, ng->dispY, s->dispY, q->dispY, rows[4]->dispY);
+        CHECK(gaps[0] > 0.0f && gaps[0] == gaps[1] && gaps[1] == gaps[2] &&
+                  gaps[3] - gaps[2] < 2.0f && gaps[2] - gaps[3] < 2.0f,
+              "title %d: the space between the capitals %.2f, %.2f, %.2f, to the copyright %.2f "
+              "y units",
+              g, gaps[0], gaps[1], gaps[2], gaps[3]);
+        CHECK(lt_ext_RowSize(si) == UI_MENU_TEXT_SIZE && lt_ext_RowSize(qi) == UI_MENU_TEXT_SIZE,
+              "title %d: the port rows at the game rows' size", g);
+        CHECK(s->dispH == ng->dispH && q->dispH == ng->dispH && s->centerX == ng->centerX &&
+                  q->centerX == ng->centerX,
+              "title %d: New Game's box height and centring", g);
+        CHECK(ng->defaultMask && s->defaultMask && q->defaultMask,
+              "title %d: masked by default as New Game", g);
+    }
+    const LtProperty *r323 = &texProperty[323], *r324 = &texProperty[324];
+    const LtProperty *r325 = &texProperty[325];
+    const LtProperty *o = lt_ext_Prop(ui_SettingsEntryRow(58));
+    CHECK(r325->dispY - r324->dispY == r324->dispY - r323->dispY && o->dispY == r325->dispY,
+          "Options: the row at %d, the labels' pitch from 324 (%d)", o->dispY, r324->dispY);
+    /* display_texture's box: x from dispX + 1/4 (its inset), dispW - 1
+       wide; the game row's letters end at dispX - 1/4 + the item's right
+       anchor (menu_text.c ui_MenuTextDraw: the half-texel uv inset) */
+    const UiMenuTextItem *it = NULL;
+    for (int i = 0; i < ui_menu_text_row_count; i++) {
+        if (ui_menu_text_rows[i].row == 324) {
+            it = &ui_menu_text_items[ui_menu_text_rows[i].item];
+        }
+    }
+    CHECK(it && it->align == UI_ALIGN_RIGHT, "Brightness (324) in the menu text table");
+    if (it) {
+        const float portEnd = (float)(o->dispX + o->dispW) - 0.75f;
+        const float gameEnd = (float)r324->dispX + it->x - 0.25f;
+        CHECK(portEnd - gameEnd <= 0.5f && gameEnd - portEnd <= 0.5f,
+              "Options: the row ends at x %.2f, the labels' letters at %.2f", portEnd, gameEnd);
+    }
+}
+
 static void testNavigation(void)
 {
     useConfig("version = 1\n");
@@ -734,7 +850,8 @@ static void testNavigation(void)
     press(0x4000); /* down: 325 is hidden, the Settings row */
     CHECK(texLayout[58].curItem == s58, "down from 324: the Settings row (%d)",
           texLayout[58].curItem);
-    CHECK(lt_ext_Prop(s58)->dispY == 165, "in 325's place before the game is cleared");
+    CHECK(lt_ext_Prop(s58)->dispY == texProperty[325].dispY,
+          "in 325's place before the game is cleared");
     press(0x4000); /* down: 300 hidden, 308 */
     CHECK(texLayout[58].curItem == 308, "down from the row: 308 (%d)", texLayout[58].curItem);
     press(0x1000); /* up from 308: 300 hidden, the row */
@@ -768,7 +885,8 @@ static void testNavigation(void)
     /* after the game is cleared the row sits under 325 */
     gFlagGameClear = 1;
     frame(0);
-    CHECK(lt_ext_Prop(s58)->dispY == 185, "below 325 once cleared");
+    CHECK(lt_ext_Prop(s58)->dispY == 2 * texProperty[325].dispY - texProperty[324].dispY,
+          "one Options pitch below 325 once cleared");
     gFlagGameClear = 0;
 
     /* into Controls -> Remap, capture a key on the first row (Cross) */
@@ -1486,6 +1604,7 @@ int main(int argc, char **argv)
     setEnv("LANG", "en_GB.UTF-8");
     testBuild();
     testRepoint();
+    testPlacement();
     testNavigation();
     testMirrorScreen();
     testQuit();
