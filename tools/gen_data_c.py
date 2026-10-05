@@ -33,6 +33,14 @@ Four modes, one member each (MEMBER is the name in the schema):
       section (zero fill after it); otherwise the first differing offset and
       the field there are reported
 
+--c and --check take --symbol-map in place of --layout ELF: the addresses
+then come from the committed symbol lists (config/symbol_addrs.pal.txt,
+config/symbol_addrs.pal.data.txt), the data members' own symbols
+(config/data_members.pal.txt) and SUPPLEMENT below, plus any
+--extra-symbols FILE, so a host build can write the tables without the
+period toolchain's layout link. Over the 73 members it writes the same C as
+--layout does (tools/README.md says how that was compared).
+
 The record type is read from the header the schema row names: a typedef of a
 struct, or a struct tag (`struct Name { ... };`, which the C then spells
 `struct Name`), whose fields are integers, enums, floats, pointers (object or
@@ -511,6 +519,27 @@ class Layout:
                 if info["bind"] == "STB_GLOBAL":
                     self.by_name[s.name] = s["st_value"]
 
+    def add(self, name, addr, func):
+        """A global the symbol map names (SymbolMap); shndx "MAP" stands for
+        any defined, non-absolute section."""
+        typ = "STT_FUNC" if func else "STT_OBJECT"
+        if name in self.local:
+            self.by_addr.setdefault(addr, []).append((name, "STB_LOCAL", typ, "MAP"))
+            return
+        if self.by_name.setdefault(name, addr) != addr:
+            # one name at two addresses: two files' statics (allow_duplicated),
+            # which no other file can name, as the layout link has them
+            first = self.by_name.pop(name)
+            self.local.add(name)
+            for a in (first, addr):
+                self.by_addr[a] = [(n, "STB_LOCAL" if n == name else b, t, s)
+                                   for n, b, t, s in self.by_addr.get(a, [])]
+            self.by_addr.setdefault(addr, []).append((name, "STB_LOCAL", typ, "MAP"))
+            return
+        rec = (name, "STB_GLOBAL", typ, "MAP")
+        if rec not in self.by_addr.setdefault(addr, []):
+            self.by_addr[addr].append(rec)
+
     def name_at(self, addr, func):
         """The global a source can name at addr: a function when func, else an object."""
         cands = self.by_addr.get(addr, [])
@@ -526,6 +555,42 @@ class Layout:
             return None, (f"no global symbol at 0x{addr:08X}" +
                           (f" (only {', '.join(local)}, not visible to another file)" if local else ""))
         return None, f"several globals at 0x{addr:08X}: {', '.join(names)}"
+
+
+SYMBOL_LISTS = [ROOT / "config/symbol_addrs.pal.txt", ROOT / "config/symbol_addrs.pal.data.txt"]
+
+# Globals a data member points at that neither symbol list names, at the
+# address the layout link gives them (the fact `nm build/ico.layout.elf`
+# prints). Each entry belongs in config/symbol_addrs.pal.data.txt; it is here
+# until that file, which another work package owns, takes it.
+SUPPLEMENT = [
+    ("scpDummyGObj", 0x0063AA20, False),  # ico2/script/src/script.c .sdata
+]
+
+SPLAT_LINE = re.compile(r"\s*([A-Za-z_]\w*)\s*=\s*(0x[0-9A-Fa-f]+)\s*;(.*)")
+
+
+class SymbolMap(Layout):
+    """The layout link's view of addresses, built without the period link:
+    every name the committed symbol lists (splat's `name = 0xADDR; // type:func`
+    lines; a line marked can_be_referenced:False is skipped), the data
+    members' own symbols (config/data_members.pal.txt), the SUPPLEMENT above
+    and any extra list place at a retail address. The retail ELF is stripped
+    (no .symtab), so it has no symbol information of its own to read."""
+
+    def __init__(self, extra=()):
+        self.by_addr, self.by_name, self.local = {}, {}, set()
+        for path in list(SYMBOL_LISTS) + [Path(p) for p in extra]:
+            for n, line in enumerate(path.read_text(encoding="latin-1").splitlines(), 1):
+                m = SPLAT_LINE.match(line)
+                if not m or "can_be_referenced:False" in m.group(3):
+                    continue
+                self.add(m.group(1), int(m.group(2), 16), "type:func" in m.group(3))
+        for r in parse_table(TABLE):
+            for name, off in r["syms"]:
+                self.add(name, r["lo"] + off, False)
+        for name, addr, func in SUPPLEMENT:
+            self.add(name, addr, func)
 
 
 # ----------------------------------------------------------- spelling -------
@@ -879,7 +944,12 @@ def main():
     g.add_argument("--c")
     g.add_argument("--check")
     ap.add_argument("--elf", type=Path, default=BASE_ELF)
-    ap.add_argument("--layout", type=Path)
+    src = ap.add_mutually_exclusive_group()
+    src.add_argument("--layout", type=Path)
+    src.add_argument("--symbol-map", action="store_true",
+                     help="name pointers from the committed symbol lists, not a layout link")
+    ap.add_argument("--extra-symbols", type=Path, action="append", default=[],
+                    help="with --symbol-map: another splat-format list (repeatable)")
     ap.add_argument("--labels", type=Path)
     ap.add_argument("--obj", type=Path)
     ap.add_argument("--out", type=Path, required=True)
@@ -897,7 +967,14 @@ def main():
         elf = ELFFile(fh)
         datas = {r["section"]: rom_bytes(elf, r["lo"], r["hi"], r["section"])
                  for _, r in rows}
-    layout = Layout(a.layout)
+    if a.extra_symbols and not a.symbol_map:
+        fail("--extra-symbols needs --symbol-map")
+    if a.symbol_map:
+        layout = SymbolMap(a.extra_symbols)
+    elif a.layout:
+        layout = Layout(a.layout)
+    else:
+        fail("--c and --check need --layout ELF or --symbol-map")
     if a.c:
         write_if_changed(a.out, write_c(member, rows, datas, layout))
         return 0

@@ -94,6 +94,9 @@ git fetch upstream
 git merge upstream/main
 ```
 
+The decompilation's description of this relationship is
+[`docs/PORT.md`](https://github.com/nathanialf/ico/blob/main/docs/PORT.md).
+
 ## Legal and licence
 
 The code in this repository is MIT licensed ([`LICENSE`](LICENSE)). The
