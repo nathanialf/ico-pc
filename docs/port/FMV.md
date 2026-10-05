@@ -286,6 +286,52 @@ nothing, letting the title sequence run out.
   contains a film, and before this package a film took no simulated time,
   so there is nothing to compare the film itself with.
 
+## Package V1: the window build showed no picture
+
+User report (`dist/ico-pc-v0.4-win.zip`, Windows): the title's attract
+film (stage 58, `pal_advertise.pss`) played its sound and no picture.
+
+- **Cause.** `movie.c` hands pictures to `rd_video.c` only under
+  `#ifdef ICO_RD` (`show_clear`, `show_slot`). `movie.c` is one of
+  `ico_pc`'s own sources (`port/fmv/CMakeLists.txt`), and `ico_pc`'s
+  definitions never had `ICO_RD`: the top-level `CMakeLists.txt` puts it
+  in `ICO_GAME_DEFINITIONS`, which only the game libraries get, and
+  `ico_pc` gets `ICO_HEADLESS` in the headless build and nothing in the
+  window build. So since Phase 4 every window build compiled `movie.c`'s
+  headless branch: decoded pictures dropped, the audio path untouched.
+  Every film was affected, on Vulkan and D3D12 alike (a compile-time
+  switch, before any backend). The v0.4 map shows it:
+  `libico_render.a(rd_video.c.obj)` is pulled in by `settings.c`
+  (`rd_VideoSetMirrorOption`), not by `movie.c` (`ico_pc_x64.map`, lines
+  480-481).
+- **Change.** `port/fmv/CMakeLists.txt` gives `movie.c` `ICO_RD=1` in the
+  window build (`NOT ICO_HEADLESS`), and `movie.c` stops the build with an
+  `#error` when neither `ICO_RD` nor `ICO_HEADLESS` is defined, so a
+  build that loses the define fails instead of shipping a silent film.
+  `rd_video.c` and the backends needed no change.
+- **Measured** (window build `linux-x64`, lavapipe, `SDL_VIDEODRIVER=
+  offscreen`, `start_stage=58`, a temporary probe in `presentVideo` that
+  logged its calls and read the swapchain image back every 250th picture,
+  removed afterwards): before the change `presentVideo` was never called
+  (no probe line; `fmv: movie_proc played after 6868 vsyncs ... 3433
+  shown`); after it, the first call was `movie_init`'s clear and every
+  later one a 720 x 480 picture into the 960 x 720 output (probe lines
+  through call 3400 of 3433 shown), and the 13 read-back frames each had
+  exactly the 960 x 600 picture area non-black (576000 pixels; mean level
+  30 to 136 by scene) with black bars above and below: the film in its
+  PS2 place (frame 1250 inspected by eye). The same 6868 vsyncs and audio
+  byte count as before. The title's idle path to the film (tick 2613 in
+  the game run above) was not run in the window build: lavapipe reached
+  tick 1489 in 300 s. It goes through the same `movie_init` /
+  `movie_proc` calls, and the cause does not depend on how the film is
+  reached.
+- D3D12 was not run here. Its path is the one `rd_present.c` already
+  uses for every game frame (backbuffer acquire with an undefined start
+  state, the transition to render target and to present), plus a
+  buffer-to-texture copy whose row pitch and offset `rd_video.c` aligns
+  to the backend's `copyRowPitchAlign` / `copyOffsetAlign` (256 / 512 on
+  D3D12, `d3d12_device.c`).
+
 ## Open items
 
 - The EE heap: the PS2 player took about 14 MB from `ios_partition_mpeg`
@@ -295,10 +341,8 @@ nothing, letting the title sequence run out.
   theirs. The port uses host memory for all of it. Whether the partition's
   state after a film is observable (the stage switch that follows reloads
   the stage) is not checked.
-- The window build's film was not seen running: no display here, and the
-  user's Windows test has not run it. `rd_video_test` covers the draw and
-  readback on lavapipe; the swapchain path (acquire, present) is the same
-  calls as `rd_present.c`'s.
+- The window build's film was not seen running until package V1 (above):
+  it never drew there.
 - The CSC constants come from PCSX2's model, not from hardware.
 - `advertise.pss` (NTSC, 29.97 fps) and `pal_advertise576.pss` were
   inspected, not played.

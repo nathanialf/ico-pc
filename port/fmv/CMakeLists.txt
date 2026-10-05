@@ -85,6 +85,15 @@ if(TARGET ico_pc)
                                 "${CMAKE_CURRENT_SOURCE_DIR}/movie_pace.c"
                                 TARGET_DIRECTORY ico_pc PROPERTIES INCLUDE_DIRECTORIES
                                 "${ICO_COMPAT_DIR};${CMAKE_SOURCE_DIR}/port/platform;${CMAKE_SOURCE_DIR}/port/data;${CMAKE_SOURCE_DIR}/port/audio/sg;${CMAKE_SOURCE_DIR}/port/render")
+    # movie.c draws its pictures through rd_video.c under ICO_RD.  ico_pc's
+    # own definitions carry ICO_HEADLESS only (the game's ICO_RD is in
+    # ICO_GAME_DEFINITIONS, on the game libraries), so the window build
+    # names it here; without it the film played its sound and showed no
+    # picture (package V1, docs/port/FMV.md "Display").
+    if(NOT ICO_HEADLESS)
+        set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/movie.c" TARGET_DIRECTORY ico_pc
+                                    PROPERTIES COMPILE_DEFINITIONS ICO_RD=1)
+    endif()
     target_link_libraries(ico_pc PRIVATE ico_fmv)
 endif()
 
