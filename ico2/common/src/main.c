@@ -116,6 +116,10 @@ int ico_kernel_raise_intc(int cause);
 void ico_vsync(int field_parity);
 /* port/platform/trace_host.c: one Main tick done (trace, --ticks, pad script) */
 void ico_host_main_tick(void);
+/* port/platform/diag_host.c: boot milestones in the log, and the names of
+   this file's static thread functions */
+void ico_host_milestone(const char *what);
+void ico_host_name_func(void *func, const char *name);
 
 #endif
 
@@ -155,12 +159,18 @@ void Main(void)
     debug_StdPrintfDummy("IosstgMgrLock %d\n", IosStgMgrLock);
     WaitSema(IosStgMgrLock);
     DeleteSema(IosStgMgrLock);
+#ifdef ICO_HOST
+    ico_host_milestone("Main: past IosPadLock and IosStgMgrLock");
+#endif
     stgmgrForceSwitchWithFade(thisIsYourStartStage < 0 ? 1 : thisIsYourStartStage, 255.0f, 0.0f);
     iosThreadCancelWakeup(0);
     systemStatus[5] = 0;
     _InitRandom(1.2345678f);
     gsb_InitGSSystem();
     debug_StdPrintfDummy("main start\n");
+#ifdef ICO_HOST
+    ico_host_milestone("Main: gsb_InitGSSystem done, entering the loop");
+#endif
     while (1) {
         iosThreadCancelWakeup(0);
         iosThreadSleep();
@@ -247,6 +257,9 @@ static void idle(void)
     iosThreadStart(&mainThread);
     debug_StdPrintfDummy("--- loop continues infinitely ... ---\n");
     iosThreadSetPri(0, 0x20);
+#ifdef ICO_HOST
+    ico_host_milestone("idle: every thread started, idle loop");
+#endif
     while (1) {
 #ifdef ICO_HOST
         /* The busy loop holds the CPU until the next vsync: lower priorities
@@ -275,6 +288,9 @@ static void scheduler(void)
     sceGsSyncV(0);
     iosMsgQueueCreate(&SchedulerMsgQ, schedulerMsgBuff, 8);
     iosMsgSetEvent(2, &SchedulerMsgQ, 2);
+#ifdef ICO_HOST
+    ico_host_milestone("scheduler: vsync event set");
+#endif
     while (1) {
         iosMsgRecv(&SchedulerMsgQ, msg, 1);
         if (msg[0] == 2) {
@@ -354,9 +370,20 @@ static void boot(void)
 {
     debug_StdPrintfDummy("boot()\n");
     debug_StdPrintfDummy("file init\n");
+#ifdef ICO_HOST
+    ico_host_name_func((void *)idle, "idle");
+    ico_host_name_func((void *)scheduler, "scheduler");
+    ico_host_milestone("boot: file_Init");
+#endif
     file_Init();
     debug_StdPrintfDummy("iosInit\n");
+#ifdef ICO_HOST
+    ico_host_milestone("boot: iosInitialize");
+#endif
     iosInitialize();
+#ifdef ICO_HOST
+    ico_host_milestone("boot: iosInitialize done");
+#endif
     gflagInit();
     systemStatus[2] = 1;
     stage_no = 1;
@@ -366,6 +393,9 @@ static void boot(void)
     iosThreadCreate(&schedulerThread, 1, scheduler, 0, schedulerThreadStack,
                     sizeof(schedulerThreadStack), 0xF);
     iosThreadStart(&schedulerThread);
+#ifdef ICO_HOST
+    ico_host_milestone("boot: idle and scheduler started, boot thread sleeps");
+#endif
     iosThreadSleep();
 }
 

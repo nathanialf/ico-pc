@@ -130,7 +130,7 @@ completeness.
 | `sceCdGetDiskType` | 0x14 (PS2 DVD, `cdvd.c`'s `cdDiskType`) when SYSTEM.CNF's BOOT2 names a file on the disc, else 0 (no disc) |
 | `sceCdSearchFile` | VFS look-up; writes libcdvd's 0x24-byte record (lsn, size, name[16], date[8], flag), never more |
 | `sceCdRead`, `sceCdReadIOPm` | transfer now, completion at the next vsync (below); 0 while a command is in flight |
-| `sceCdSync` | even mode (blocking): ends the command, 0. Odd mode (poll): 1 until the next vsync |
+| `sceCdSync` | even mode (blocking): from a game thread, waits (WaitSema) for the vsync that ends the command, then 0; from the host context, ends it at once. Odd mode (poll): 1 until the next vsync |
 | `sceCdGetError` | 0, or 0x01 aborted, 0x12 no disc, 0x20 bad address, 0x30 read error, 0x32 past the end (the codes `FileManager.c` names) |
 | `sceCdReadClock` | a fixed clock, 2002-01-01 00:00:00 in BCD, stat 0; `ico_cdvd_host_set_clock_source` replaces it |
 | stream calls | read straight from the disc at the stream cursor; `sceCdStStat` reports the ring as full |
@@ -148,9 +148,17 @@ syncs) and models completion so the game's control flow is the drive's:
   the woken threads run, so a cdvd thread woken by the vblank handler finds
   its read complete;
 - a blocking wait (`sceCdSync(0)`: the stream manager, `file_LoadCDFile`)
-  completes on the spot. Blocking for a vsync would mean yielding the fiber;
-  every blocking caller only waits, so the order of game events is kept
-  and only simulated time is saved (instant loads; plan, top risk 5).
+  blocks the calling thread on a semaphore until the same vsync, as
+  libcdvd's does (`sce/libcdvd/cdvd000.c` `sceCdSync`: it loops on
+  `sceCdDelayThread`, which is `CreateSema`, `SetAlarm`, `WaitSema`), so
+  the other threads run meanwhile, the same-priority Main among them.
+  Package 1C completed it on the spot instead, on the assumption that a
+  blocking caller only waits; that was wrong: a stage load then ran from
+  start to end without a Main tick, and the load thread clipped against a
+  collision list Main had built before StageManager removed every object
+  (a NULL `dobj` in `fieldCollision.c` `_Clip`, the Phase 1 x86 crash at
+  tick ~95; `docs/port/BOOT_DIAG.md`). From the host context (the unit
+  tests) the wait still completes at once.
 
 **Disc identification.** `cdvd.c` keeps its check
 (`iosCdvdDiskReadyBlock`, `cdWait`): drive type 20 and a search for
@@ -250,8 +258,8 @@ reader above; sector numbers and sizes only.
 
 For `docs/port/DIVERGENCES.md` (platform):
 
-- Disc timing: blocking reads finish instantly; polled reads finish at the
-  next vsync. Drive seek and transfer times are not modelled.
+- Disc timing: every read command finishes at the next vsync, blocking or
+  polled. Drive seek and transfer times are not modelled.
 - `sceCdReadClock` reports a fixed time until the port clock lands, so the
   save serial (`mcMakeSerial`, `layout_action.c`) is constant.
 - No pad, no card, no audio in the headless build (null devices).

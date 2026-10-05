@@ -5,10 +5,19 @@
 
 target_sources(ico_platform PRIVATE
     arena.c
+    diag_host.c
     fiber.c
     kernel_host.c
     sched.c
     vsync_hooks.c)
+# diag_host.c's heartbeat and watchdog thread (pthreads on POSIX).
+find_package(Threads REQUIRED)
+target_link_libraries(ico_platform PUBLIC Threads::Threads)
+if(TARGET ico_pc)
+    # A link map beside the program, shipped with test builds, to turn the
+    # crash report's executable offsets into symbols (docs/port/BOOT_DIAG.md).
+    target_link_options(ico_pc PRIVATE "LINKER:-Map=$<TARGET_FILE_DIR:ico_pc>/ico_pc.map")
+endif()
 # host_loop.c calls into the game (its main, ico_vsync, systemStatus), so it
 # goes into the program beside main_host.c, ahead of the game library on the
 # link line, rather than into ico_platform, which the game itself needs.
@@ -32,7 +41,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set(_ico_run_tests ON)
 endif()
 
-foreach(t sched fiber arena)
+foreach(t sched fiber arena diag)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -41,6 +50,9 @@ foreach(t sched fiber arena)
         add_test(NAME ${t} COMMAND ${t}_test)
     endif()
 endforeach()
+if(_ico_run_tests)
+    set_tests_properties(diag PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 if(_ico_run_tests AND NOT WIN32)
     # a stack overflow in a fiber must hit the guard page
     add_test(NAME fiber_guard COMMAND fiber_test guard)

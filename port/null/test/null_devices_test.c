@@ -6,13 +6,11 @@
  */
 #include "null_devices.h"
 #include "sif_host.h"
-
 #include <libmc.h>
 #include <libpad.h>
 #include <libscf.h>
 #include <sifrpc.h>
 #include <sound.h>
-
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +82,42 @@ static void test_scf(void)
     ico_scf_language = ICO_SCF_LANGUAGE_ENGLISH;
 }
 
+/* An ADPCM stream's IOP read offset moves on as it plays (snd_null.c):
+   stereo at 48 kHz with a 16 KB SPU ring refills half the ring (8 KB per
+   channel, 14336 samples) every 14336 / 960 = 14.9 vsyncs. */
+static void test_adpcm_stream(void)
+{
+    int req[6] = {5, 0x20002, 0x10000, 0x5C000, 0x1E0000, 0x4000};
+    int i;
+    SgStAdpcmInit();
+    CHECK(SgStAdpcmOpen(req) == 0);
+    SgStAdpcmChannelPitch(1ull << 5, 48000);
+    CHECK(SgStAdpcmIopReadAddr(5) == 0);
+    SgStAdpcmPlay(1ull << 5);
+    CHECK(SgStAdpcmIopReadAddr(5) == 0x4000); /* the first fill: 8 KB x 2 */
+    for (i = 0; i < 14; i++) {
+        SgCalledTickProc();
+    }
+    CHECK(SgStAdpcmIopReadAddr(5) == 0x4000);
+    SgCalledTickProc();
+    CHECK(SgStAdpcmIopReadAddr(5) == 0x8000);
+    /* paused (rate 0): held */
+    SgStAdpcmChannelPitch(1ull << 5, 0);
+    for (i = 0; i < 100; i++) {
+        SgCalledTickProc();
+    }
+    CHECK(SgStAdpcmIopReadAddr(5) == 0x8000);
+    /* the offset wraps in the IOP ring */
+    SgStAdpcmChannelPitch(1ull << 5, 48000);
+    for (i = 0; i < 15 * 30; i++) {
+        SgCalledTickProc();
+    }
+    CHECK(SgStAdpcmIopReadAddr(5) < 0x5C000);
+    SgStAdpcmStop(1ull << 5);
+    CHECK(SgStAdpcmIopReadAddr(5) == 0);
+    SgStAdpcmClose(5);
+}
+
 static void test_snd(void)
 {
     static unsigned char page[ICO_SND_REPLY_SIZE];
@@ -142,6 +176,7 @@ int main(void)
     test_mc();
     test_scf();
     test_snd();
+    test_adpcm_stream();
     printf("null_devices_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

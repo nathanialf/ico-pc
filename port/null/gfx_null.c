@@ -20,9 +20,7 @@
 #include <eeregs.h>
 #include <libdma.h>
 #include <libgraph.h>
-
 #include <string.h>
-
 #include "sched.h"
 
 /* --- libgraph ---------------------------------------------------------------- */
@@ -33,6 +31,7 @@
 int sceGsSyncV(int mode)
 {
     (void)mode;
+    ico_sched_note("sceGsSyncV", 0, __builtin_return_address(0));
     ico_sched_spin_vsync();
     return (int)((*GS_CSR >> 13) & 1);
 }

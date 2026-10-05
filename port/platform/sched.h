@@ -35,6 +35,13 @@
  * and ico_sched_run returns to the host when it is the highest ready
  * thread, until the host advances the vsync count.
  */
+/* This file shadows the C library's <sched.h> for every source that has
+   port/platform on its include path. A source that needs the library's
+   (through <pthread.h>: diag_host.c) defines ICO_WANT_LIBC_SCHED around
+   that include. */
+#ifdef ICO_WANT_LIBC_SCHED
+#include_next <sched.h>
+#else
 #ifndef ICO_PLATFORM_SCHED_H
 #define ICO_PLATFORM_SCHED_H
 
@@ -141,4 +148,36 @@ int ico_sched_wait_sema(int id);
 int ico_sched_poll_sema(int id);
 int ico_sched_refer_sema(int id, IcoSemaInfo *info);
 
+/* --- Diagnostics (diag_host.c) -------------------------------------------- */
+
+/* What a thread was last seen doing: the kernel call, its argument and the
+   caller's return address. */
+typedef struct IcoSchedView {
+    int status; /* ICO_THS_*; RUN for the current thread */
+    int priority;
+    int init_priority;
+    int wait_type;
+    int wait_id;
+    int wakeup_count;
+    int spinning;
+    unsigned int spin_until;
+    int parent; /* the creating thread's id, 0 for the host */
+    void *entry;
+    const char *note; /* NULL before the first call */
+    int note_arg;
+    void *note_caller;
+    unsigned int note_vsync;
+} IcoSchedView;
+
+/* Records the current thread's kernel call (no-op on the host context). */
+void ico_sched_note(const char *what, int arg, void *caller);
+/* The thread on the CPU, 0 on the host context. */
+int ico_sched_current(void);
+/* 1 and *v when id is a thread, else 0. Reads only plain fields, so a
+   watchdog thread may call it (the values may be a moment stale). */
+int ico_sched_view(int id, IcoSchedView *v);
+/* 1 with the count and the number of waiters when id is a semaphore. */
+int ico_sched_sema_view(int id, int *count, int *num_wait);
+
 #endif /* ICO_PLATFORM_SCHED_H */
+#endif /* ICO_WANT_LIBC_SCHED */

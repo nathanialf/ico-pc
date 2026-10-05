@@ -53,6 +53,20 @@ void ico_cdvd_host_vsync(void *ctx);
 /* Nonzero while a non-blocking command waits for the next vsync. */
 int ico_cdvd_host_busy(void);
 
+/* The drive's counters, for the diagnostics heartbeat (port/platform/
+   diag_host.c). */
+typedef struct IcoCdvdStats {
+    int busy;              /* a command waits for the next vsync */
+    int waiters;           /* threads blocked in sceCdSync(0) */
+    unsigned int reads;    /* read commands started */
+    unsigned int sectors;  /* sectors read */
+    unsigned int last_lsn; /* the last command's first sector */
+    int stream_active;     /* sceCdStStart'ed */
+    unsigned int stream_lsn;
+} IcoCdvdStats;
+
+void ico_cdvd_host_stats(IcoCdvdStats *out);
+
 /* Whether sceCdInit registered ico_cdvd_host_vsync with the host loop. */
 int ico_cdvd_host_vsync_hooked(void);
 

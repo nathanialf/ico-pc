@@ -50,5 +50,8 @@ IcoFiber *ico_fiber_current(void);
 const char *ico_fiber_backend(void);
 /* 1 when stacks have a guard page of ours below them. */
 int ico_fiber_has_guard_page(void);
+/* The running fiber's stack bounds on this OS thread; -1 on the host
+   context or when the backend does not expose them (Windows fibers). */
+int ico_fiber_current_stack(void **lo, void **hi);
 
 #endif /* ICO_PLATFORM_FIBER_H */

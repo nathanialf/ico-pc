@@ -14,12 +14,15 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <eekernel.h>
 #include <eeregs.h>
-
+#include "diag_host.h"
 #include "kernel_host.h"
 #include "sched.h"
+
+/* The last kernel call of the calling thread, for the diagnostics (its
+   caller is the game's call site). */
+#define NOTE(what, arg) ico_sched_note(what, (int)(arg), __builtin_return_address(0))
 
 /* The link's small-data base (ee-gcc's $gp). thread.c stores its address
    in each ThreadParam; nothing on the host reads it. */
@@ -42,17 +45,27 @@ typedef struct HandlerList {
 } HandlerList;
 
 static HandlerList intc_handlers[INTC_CAUSES];
+
 static HandlerList dmac_handlers[DMAC_CHANNELS];
+
 static unsigned int intc_mask;
+
 static unsigned int dmac_mask;
+
 static int next_handler_id = 1;
 
 static volatile unsigned int *vsync_flag;
+
 static volatile unsigned long long *vsync_csr;
+
 static unsigned long long gs_imr = 0x7F00; /* every GS interrupt masked */
+
 static short crt_interlace;
+
 static short crt_omode;
+
 static short crt_ffmd;
+
 static int tty_on = -1;
 
 void ico_kernel_reset(void)
@@ -304,31 +317,37 @@ int DeleteThread(int id)
 
 int StartThread(int id, void *arg)
 {
+    NOTE("StartThread", id);
     return ico_sched_start_thread(id, arg);
 }
 
 void ExitThread(void)
 {
+    NOTE("ExitThread", 0);
     ico_sched_exit_thread();
 }
 
 void ExitDeleteThread(void)
 {
+    NOTE("ExitDeleteThread", 0);
     ico_sched_exit_delete_thread();
 }
 
 int TerminateThread(int id)
 {
+    NOTE("TerminateThread", id);
     return ico_sched_terminate_thread(id);
 }
 
 int ChangeThreadPriority(int id, int priority)
 {
+    NOTE("ChangeThreadPriority", priority);
     return ico_sched_change_priority(id, priority, 0);
 }
 
 int RotateThreadReadyQueue(int priority)
 {
+    NOTE("RotateThreadReadyQueue", priority);
     return ico_sched_rotate_ready_queue(priority, 0);
 }
 
@@ -360,11 +379,13 @@ int ReferThreadStatus(int id, struct ThreadParam *info)
 
 int SleepThread(void)
 {
+    NOTE("SleepThread", 0);
     return ico_sched_sleep();
 }
 
 int WakeupThread(int id)
 {
+    NOTE("WakeupThread", id);
     return ico_sched_wakeup(id, 0);
 }
 
@@ -380,11 +401,13 @@ int CancelWakeupThread(int id)
 
 int SuspendThread(int id)
 {
+    NOTE("SuspendThread", id);
     return ico_sched_suspend(id, 0);
 }
 
 int ResumeThread(int id)
 {
+    NOTE("ResumeThread", id);
     return ico_sched_resume(id, 0);
 }
 
@@ -397,11 +420,13 @@ int CreateSema(struct SemaParam *param)
 
 int DeleteSema(int sema)
 {
+    NOTE("DeleteSema", sema);
     return ico_sched_delete_sema(sema);
 }
 
 int SignalSema(int sema)
 {
+    NOTE("SignalSema", sema);
     return ico_sched_signal_sema(sema, 0);
 }
 
@@ -412,11 +437,13 @@ int iSignalSema(int sema)
 
 int WaitSema(int sema)
 {
+    NOTE("WaitSema", sema);
     return ico_sched_wait_sema(sema);
 }
 
 int PollSema(int sema)
 {
+    NOTE("PollSema", sema);
     return ico_sched_poll_sema(sema);
 }
 
@@ -439,6 +466,7 @@ int ReferSemaStatus(int sema, struct SemaParam *info)
 
 void Exit(int status)
 {
+    ico_diag_log("ico_pc: the game called Exit(%d)", status);
     fflush(stdout);
     fflush(stderr);
     exit(status);
@@ -507,11 +535,13 @@ void SetVCommonHandler(int cause, void *handler)
    lower priorities do not. */
 void VSync(void)
 {
+    NOTE("VSync", 0);
     ico_sched_spin_vsync();
 }
 
 long long VSync2(void)
 {
+    NOTE("VSync2", 0);
     ico_sched_spin_vsync();
     return (long long)*GS_CSR;
 }

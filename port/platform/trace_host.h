@@ -50,5 +50,8 @@ void ico_trace_poll(void);
 void ico_trace_close(void);
 /* The game's stage_no, for the host's exit summary. */
 int ico_host_stage_no(void);
+/* The heartbeat's line of game state (diag_host.h, IcoDiagStatusFn). */
+#include <stddef.h>
+void ico_host_status(char *out, size_t size);
 
 #endif /* ICO_PLATFORM_TRACE_HOST_H */

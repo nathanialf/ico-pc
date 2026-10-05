@@ -5,8 +5,8 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-
 #include "arena.h"
+#include "diag_host.h"
 #include "fpenv.h"
 #include "host_loop.h"
 #include "sched.h"
@@ -17,7 +17,9 @@ int ico_game_main(void);
 extern int systemStatus[];
 
 static unsigned int vsyncs;
+
 static int field;
+
 static unsigned long long time_us;
 
 /* The EE's main thread starts at priority 0 and libkernl's InitThread
@@ -37,8 +39,10 @@ void ico_host_init(void)
 {
     ico_fpenv_sim_enter();
     if (ico_arena_init() != 0) {
+        fprintf(stderr, "host: cannot allocate the EE RAM arena\n");
         exit(1);
     }
+    ico_diag_name_func((void *)boot_main, "boot (the game's main)");
     ico_sched_reset();
     ico_sched_set_fiber_start_hook(ico_fpenv_sim_enter);
     ico_sched_boot(boot_main, NULL, BOOT_PRIORITY);

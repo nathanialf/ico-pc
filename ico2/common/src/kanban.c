@@ -53,9 +53,30 @@ extern void gif_EndPacket(void);
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
+
+/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
+   definition reads them on hosts that pass them on the stack
+   (layout_texture.c says more) */
+#ifdef ICO_HOST
+
+extern void gif_SpriteSensitive(int *r, long long z, int *uv, unsigned char *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitive(int *r, unsigned int z, int *uv, unsigned char *col, int prim);
+
+#endif
+#ifdef ICO_HOST
+
+extern void gif_SpriteSensitiveOffset(int *r, long long z, int *uv, unsigned char *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitiveOffset(int *r, unsigned int z, int *uv, unsigned char *col,
                                       int prim);
+
+#endif
+
 extern void gif_PointOffset(int *v, long long z, unsigned char *col, int prim);
 extern void gif_StartPacketPri(int pri);
 

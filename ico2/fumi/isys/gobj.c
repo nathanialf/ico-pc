@@ -466,7 +466,14 @@ inline void *isysGObjSearchFromObjLayoutID(int layoutId)
 /* the next live object after p of the given kind, or 0 */
 static __inline__ GObj *searchGObjOfObjKind(GObj *p, int kind) /* derived name */
 {
+#ifdef ICO_HOST
+    /* the EE's 32-bit address arithmetic: with no table yet (gobjMax 0)
+       the index wraps to -1 and end == start; zero-extended on a 64-bit
+       host it would not */
+    GObj *end = gobjTable + (int)(gobjMax - 1);
+#else
     GObj *end = &gobjTable[gobjMax - 1];
+#endif
 
     while (p != end) {
         p++;
@@ -509,7 +516,14 @@ inline void *isysGObjSearchFromLabelTypeID(int labelType)
 inline void *isysGObjGetExist_begin(void)
 {
     GObj *start = gobjTable - 1;
+#ifdef ICO_HOST
+    /* the EE's 32-bit address arithmetic: with no table yet (gobjMax 0)
+       the index wraps to -1 and end == start; zero-extended on a 64-bit
+       host it would not */
+    GObj *end = gobjTable + (int)(gobjMax - 1);
+#else
     GObj *end = &gobjTable[gobjMax - 1];
+#endif
     while (start != end) {
         start++;
         if (start->self != 0) {
@@ -521,7 +535,14 @@ inline void *isysGObjGetExist_begin(void)
 
 inline void *isysGObjGetExist_next(GObj *start)
 {
+#ifdef ICO_HOST
+    /* the EE's 32-bit address arithmetic: with no table yet (gobjMax 0)
+       the index wraps to -1 and end == start; zero-extended on a 64-bit
+       host it would not */
+    GObj *end = gobjTable + (int)(gobjMax - 1);
+#else
     GObj *end = &gobjTable[gobjMax - 1];
+#endif
     while (start != end) {
         start++;
         if (start->self != 0) {

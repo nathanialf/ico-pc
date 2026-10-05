@@ -43,7 +43,7 @@ them in both modes. `ICO_RENDERER_SOURCES` now holds only `common/src/debug.c`,
 
 | symbol | returns | why |
 | --- | --- | --- |
-| `sceGsSyncV` | GS_CSR field bit | 1B's: busy-waits for the next simulated vsync, as libgraph's |
+| `sceGsSyncV` | GS_CSR field bit | 1B's: busy-waits for the next simulated vsync, as libgraph's; records itself as the thread's last kernel call for the diagnostics (`docs/port/BOOT_DIAG.md`) |
 | `sceGsSyncPath` | 0 | paths always drained; `gsb_Init` loops until 0, `gsb_SyncGSSystem` skips the frame on nonzero |
 | `sceGsResetGraph`, `sceGsResetPath` | - | no GS |
 | `sceGsSetDefDBuff`, `sceGsSetDefDispEnv`, `sceGsSetHalfOffset` | - | register images nothing reads; `gsb_SetFrame` patches fields of the zeroed `db` |
@@ -92,8 +92,51 @@ developer mode).
   menu's tools call them).
 - **Failures:** `debug_assert`, `debug_assertMessage`, `debug_Assert` hang
   on the PS2 (exception screen); headless they print the location to the
-  log and `abort()`.
+  log, keep it as the last failure message and `abort()`, which the crash
+  handler reports (`docs/port/BOOT_DIAG.md`).
 - **`fptodp`** (libgcc soft-float): 0; only passed to debug printfs.
+
+## The null sound driver's ADPCM streams (`port/null/snd_null.c`, package 1E)
+
+The Sg API is otherwise silent: requests are accepted and nothing ever
+sounds. ADPCM streams are the exception, because the game reads their
+progress back.
+
+- **Open.** A stream opens through the cdvd background reader
+  (`fumi/sound/adpcm_init.c` `AdpcmOpen` → `adpcmOpenProc` reads the first
+  368 KB into IOP RAM; `AdpcmOpenSync` returns -1 until it has). The
+  opening demo's skip waits on that open (`script/src/op.c:161`,
+  `titleSubAdpcm`), not on the driver. It completes headless: the 1E
+  `ref-m32` run reached the title and set flag 382 at tick 661.
+- **Progress.** `adpcmTickProc` refills the IOP ring behind
+  `SgStAdpcmIopReadAddr`. `adpcmTickProc2` counts loops from it and closes a
+  stream once it has played `loopNum` times. Scripts wait for that close
+  (`op.c:516` `while (adpcm_conte01_sea != 0)` after a play-once
+  `scpAdpcmPlayRequestFunc`; the `scpAdpcmPlayRequestNum() != 0` checks in
+  `st01b.c`, `st02a.c`, `st07a.c`, `st17a.c`, `st18a.c`, `st24a.c`). A read
+  offset that never moved would hold them forever. So `snd_null.c` advances
+  each playing stream as SNDN2DRV does (`docs/research/sndn2drv.md`, "ADPCM
+  streams"):
+  - `SgStAdpcmOpen` records the slot's channel count (`attr >> 16`), IOP
+    ring size and SPU ring size (the request's last field, 0x4000);
+  - `SgStAdpcmChannelPitch` sets its sample rate in Hz;
+  - `SgStAdpcmPlay` counts the first half fill (read offset += SPU ring/2 ×
+    channels);
+  - every `SgCalledTickProc` (the sound thread runs once per vsync; PAL,
+    50 Hz assumed) adds the samples played. Each time half the SPU ring
+    (8 KB, 14336 samples) has played, the offset moves on by another half
+    fill, modulo the IOP ring;
+  - a rate of 0 (`adpcmTickProc2` while paused or the disc is not ready)
+    holds the stream; `SgStAdpcmStop` and `SgStAdpcmClose` clear the
+    offset.
+
+  So a stream lasts its real length in simulated time, and the background
+  reader refills its ring from the disc as on the PS2. Phase 4's
+  `sndn2_host.c` replaces this with the real mixer. The model is tested in
+  `port/null/test/null_devices_test.c` (`test_adpcm_stream`).
+- **Not modelled.** The one-DMA-per-tick queue, so key-on comes at once, not
+  on the third tick; NAX-based half tracking; PCM streams (FMV audio, Phase
+  4).
 
 ## Known differences from a renderer build
 
@@ -118,6 +161,9 @@ developer mode).
 | `sugipon/src/darkVolume.c` | `projectVertex`, `setScreenClamp`, `addScaledVectorXYZ` as C |
 | `ito/src/lightning.c` | `clip_flags`, `apply_m34`, the R-register reseed (`ico_vu0_random_set`) as C |
 | `ito/src/act_bird.c` | `Debug_WireString_Bird` uses a host `va_list` (clang has no `__builtin_next_arg`) |
+| `common/src/layout_texture.c`, `kanban.c`, `layout_action.c`, `icoMisc.c`, `fumi/src/jimaku.c`, `seki/src/GsBase.c`, `sugipon/src/staticBlur.c` | the local `gif_*` externs take `GifPacket.c`'s parameter types (they shifted stack arguments on i386; `docs/port/BOOT_DIAG.md`, crash 1) |
+| `fumi/ios/cdvd.c`, `fumi/isys/gobj.c` | pointer-wide ring copy; table end pointers wrap as on the EE (64-bit) |
+| `common/src/main.c`, `fumi/ios/thread.c`, `common/src/kanbanBoot.c` | diagnostics hooks: milestones, thread functions, kanban steps |
 
 Unconditional (as package 0E): the GNU nested functions of
 `sugipon/src/clothAnimation.c` (8, two through context structs

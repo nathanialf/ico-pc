@@ -47,18 +47,58 @@ static float pasteToFBPoint[4] = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
 
 /* as in GifPacket.h, which this file does not include */
 extern void gif_EndPacket(void);
+
 /* void (int, int, int) here, void (long long, long long, long long) in GifPacket.h */
+/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
+   definition reads them on hosts that pass them on the stack
+   (layout_texture.c says more) */
+#ifdef ICO_HOST
+
+extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
+
+#else
+
 extern void gif_SetAlpha(int alpha, int mode, int fix);
+
+#endif
 /* void (int, int, int, int, int, int) here, void (unsigned long long, unsigned long long, unsigned int, unsigned int, int, int) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_SetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
+                                  unsigned int h, int useoffset, int clear);
+
+#else
+
 extern void gif_SetDrawEnviroment(int fbp, int psm, int w, int h, int useoffset, int clear);
+
+#endif
 /* void (int, long long) here, void (long long, long long) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_SetGsReg(long long reg, long long data);
+
+#else
+
 extern void gif_SetGsReg(int reg, long long data);
+
+#endif
+
 /* as in GifPacket.h, which this file does not include */
 extern void gif_SetZTest(int on);
 /* as in GifPacket.h, which this file does not include */
 extern void gif_SetZWrite(int on);
+
 /* void (void *, unsigned int, void *, void *, int) here, void (int *, long long, int *, unsigned char *, int) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_SpriteSensitiveOrg(void *r, long long z, void *uv, void *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitiveOrg(void *r, unsigned int z, void *uv, void *col, int prim);
+
+#endif
+
 /* as in GifPacket.h, which this file does not include */
 extern void gif_StartPacketPri(int pri);
 

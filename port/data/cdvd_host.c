@@ -15,20 +15,27 @@
  *     busy until the next simulated vsync (ico_cdvd_host_vsync, registered
  *     with the host loop), so the background reader's cdWait sleeps once,
  *     as it did while the drive worked;
- *   - a blocking wait (sceCdSync with an even mode) completes the command
- *     on the spot.  A blocking wait would otherwise have to yield the fiber
- *     until the vsync; every blocking caller only waits, so the order of
- *     game events is the same and only simulated time is saved.
+ *   - a blocking wait (sceCdSync with an even mode) from a game thread
+ *     blocks that thread until the same vsync, as libcdvd's does
+ *     (sce/libcdvd/cdvd000.c: sceCdSync(0) loops on sceCdDelayThread,
+ *     which is CreateSema, SetAlarm and WaitSema): while the drive works
+ *     the other threads run, the same-priority Main among them.  An
+ *     earlier version completed the command on the spot, assuming the
+ *     waiter's order of events did not depend on it; it does: a stage
+ *     load then ran start to end without a Main tick, and the stage-load
+ *     thread clipped against a collision list (fumi/src/fieldCollision.c
+ *     colObjList) that Main had built before StageManager removed every
+ *     object (docs/port/BOOT_DIAG.md).  From the host context (tests) the
+ *     wait still completes at once.
  * The drive never reports a tray-open or not-ready state while a disc
  * image is mounted.
  */
 #include "cdvd_host.h"
-
 #include "iop_ram.h"
 #include "vfs.h"
-
+#include <eekernel.h>
 #include <libcdvd.h>
-
+#include "sched.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +47,9 @@
    ico_cdvd_host_vsync itself. */
 #if defined(__has_include)
 #if __has_include("host_loop.h")
+
 #include "host_loop.h"
+
 #define ICO_CDVD_HAVE_HOST_LOOP 1
 #endif
 #endif
@@ -71,6 +80,7 @@ typedef struct {
 } CdClockHost;
 
 _Static_assert(sizeof(CdlFileHost) == 0x24, "sceCdlFILE is 0x24 bytes");
+
 _Static_assert(sizeof(CdClockHost) == 8, "sceCdCLOCK is 8 bytes");
 
 /* the stream commands sceCdStream takes (libcdvd's numbering) */
@@ -86,8 +96,13 @@ enum {
 };
 
 static struct {
-    int busy;  /* a non-blocking command waits for the next vsync */
-    int error; /* sceCdGetError's value */
+    int busy;             /* a non-blocking command waits for the next vsync */
+    int syncSema;         /* sceCdSync(0)'s waiters (ids > 0; 0 = not made) */
+    int syncWaiters;      /* threads blocked on it */
+    unsigned int reads;   /* read commands started (diagnostics) */
+    unsigned int sectors; /* sectors read */
+    uint32_t lastLsn;     /* the last command's first sector */
+    int error;            /* sceCdGetError's value */
     int vsyncHooked;
     int defaultTried;
     IcoVfs *owned; /* a disc this layer mounted */
@@ -233,6 +248,23 @@ void ico_cdvd_host_vsync(void *ctx)
 {
     (void)ctx;
     cd.busy = 0;
+    /* the command has ended: release sceCdSync(0)'s waiters (interrupt
+       code, as libcdvd's alarm callback) */
+    while (cd.syncWaiters > 0) {
+        cd.syncWaiters--;
+        iSignalSema(cd.syncSema);
+    }
+}
+
+void ico_cdvd_host_stats(IcoCdvdStats *out)
+{
+    out->busy = cd.busy;
+    out->waiters = cd.syncWaiters;
+    out->reads = cd.reads;
+    out->sectors = cd.sectors;
+    out->last_lsn = cd.lastLsn;
+    out->stream_active = cd.stActive;
+    out->stream_lsn = cd.stLsn;
 }
 
 int ico_cdvd_host_busy(void)
@@ -292,6 +324,9 @@ static int start_read(uint32_t lsn, uint32_t sectors, void *dst)
         cd.error = (lsn >= vol || sectors > vol - lsn) ? ICO_CD_ERR_END : ICO_CD_ERR_READ;
     }
     cd.busy = 1;
+    cd.reads++;
+    cd.sectors += sectors;
+    cd.lastLsn = lsn;
     return 1;
 }
 
@@ -407,7 +442,23 @@ int sceCdReadIOPm(int lsn, int sectors, void *buf, CdRMode *mode)
 int sceCdSync(int mode)
 {
     if ((mode & 1) == 0) {
-        cd.busy = 0; /* blocking: the command ends now (file comment) */
+        /* blocking: a game thread waits for the vsync that ends the
+           command (file comment); the host context cannot wait */
+        if (cd.busy && cd.vsyncHooked && ico_sched_in_thread()) {
+            if (cd.syncSema <= 0) {
+                struct SemaParam p;
+
+                memset(&p, 0, sizeof(p));
+                p.initCount = 0;
+                p.maxCount = ICO_SCHED_MAX_THREADS;
+                cd.syncSema = CreateSema(&p);
+            }
+            while (cd.busy && cd.syncSema > 0) {
+                cd.syncWaiters++;
+                WaitSema(cd.syncSema);
+            }
+        }
+        cd.busy = 0;
         return 0;
     }
     return cd.busy;

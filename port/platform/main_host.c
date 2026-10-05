@@ -21,6 +21,10 @@
  *   pad script               ini pad_script=, else pad-script.txt beside the
  *                            executable if present, else no controller
  *   ticks                    ini ticks=N exits after N Main ticks
+ *   watchdog                 ini watchdog=S (default 30): the run is stopped
+ *                            and reported when no Main tick came S seconds
+ *                            after boot started, or no new one for 2*S
+ *                            seconds; 0 turns it off (diag_host.h)
  *
  * Developer overrides, which win over all of the above:
  *
@@ -39,6 +43,7 @@
 #include <string.h>
 #include <time.h>
 #include "cdvd_host.h"
+#include "diag_host.h"
 #include "host_config.h"
 #include "host_loop.h"
 #include "pad_script.h"
@@ -50,6 +55,24 @@
 /* Vsyncs without a Main tick after which the loop warns once (the game's
    tick hook may be missing, and then ticks= never ends). */
 #define NO_TICK_WARN_VSYNCS 3000u
+/* watchdog= when the ini has none: seconds to the first Main tick */
+#define WATCHDOG_DEFAULT_S 30u
+
+/* The game's thread functions with external names, for the thread lines
+   (main.c names its static idle and scheduler itself). */
+void Main(void);
+void StageManager(void);
+void iosCdvdManager(void);
+void iosMcManager(void);
+void jimakuManager(void);
+void sndManager(void);
+void InitIcoMisc(void);
+
+#ifdef _WIN32
+
+void ico_diag_arm_vectored(void);
+
+#endif
 
 typedef struct Args {
     const char *iso;
@@ -100,13 +123,25 @@ static int parse_rate(const char *s)
     return errno != 0 || end == s || *end != '\0' || !(v > 0.0) ? -1 : 0;
 }
 
+static const char *exit_reason = "exit() from the game or the C library";
+
+/* Every normal end goes through here (atexit). */
 static void summary(void)
 {
     ico_trace_close();
-    fprintf(stderr, "ico_pc: %u Main ticks, %u vsyncs, stage_no %d\n", ico_host_main_ticks(),
-            ico_host_vsync_count(), ico_host_stage_no());
     fflush(stdout);
     fflush(stderr);
+    ico_diag_log("ico_pc: exit: %s", exit_reason);
+    ico_diag_log("ico_pc: %u Main ticks, %u vsyncs, stage_no %d", ico_host_main_ticks(),
+                 ico_host_vsync_count(), ico_host_stage_no());
+}
+
+/* A crash or the watchdog (diag_host.h): the same summary without stdio,
+   whose locks the stopped thread may hold. */
+static void fatal_summary(const char *reason)
+{
+    ico_diag_log("ico_pc: %u Main ticks, %u vsyncs, stage_no %d (%s)", ico_host_main_ticks(),
+                 ico_host_vsync_count(), ico_host_stage_no(), reason);
 }
 
 /* "--name VALUE" or "--name=VALUE": 1 and *value when argv[*i] is the
@@ -274,6 +309,7 @@ int main(int argc, char **argv)
     char stamp[32];
     const char *v;
     unsigned long ticks = 0;
+    unsigned long watchdog;
     int have_ticks = 0;
     int picked;
     int warned = 0;
@@ -294,6 +330,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "ico_pc: cannot write %s; logging to the console\n", log_path);
         snprintf(log_path, sizeof(log_path), "(none: the logs folder is not writable)");
     }
+    /* crash handlers and the unbuffered diagnostics writer, first thing */
+    ico_diag_init(a.console ? NULL : log_path);
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
     for (r = 1; r < argc; r++) {
@@ -385,16 +423,41 @@ int main(int argc, char **argv)
     } else {
         fprintf(stderr, "ico_pc: no tick limit\n");
     }
+    v = ico_ini_get(&ini, "watchdog");
+    watchdog = WATCHDOG_DEFAULT_S;
+    if (v != NULL && v[0] != '\0' && parse_count(v, &watchdog) != 0) {
+        ico_host_fatal(log_path, "watchdog=%s in %s is not a number of seconds.", v, ini_path);
+    }
     atexit(summary);
 
     if (have_ticks && ticks == 0) {
+        exit_reason = "ticks=0";
         return 0;
     }
+    ico_diag_set_sources(ico_host_status, ico_host_main_ticks, ico_host_vsync_count);
+    ico_diag_set_exit_hook(fatal_summary);
+    ico_diag_name_func((void *)Main, "Main");
+    ico_diag_name_func((void *)StageManager, "StageManager");
+    ico_diag_name_func((void *)iosCdvdManager, "iosCdvdManager");
+    ico_diag_name_func((void *)iosMcManager, "iosMcManager");
+    ico_diag_name_func((void *)jimakuManager, "jimakuManager");
+    ico_diag_name_func((void *)sndManager, "sndManager");
+    ico_diag_name_func((void *)InitIcoMisc, "InitIcoMisc");
+#ifdef _WIN32
+    ico_diag_arm_vectored();
+#endif
+    ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
+    ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
+    ico_diag_milestone("boot ran until every thread waits");
     for (;;) {
         ico_host_step();
+        if (ico_host_vsync_count() == 1) {
+            ico_diag_milestone("first vsync done");
+        }
         ico_trace_poll();
         if (have_ticks && ico_host_main_ticks() >= ticks) {
+            exit_reason = "ticks= reached";
             return 0;
         }
         if (!warned && ico_host_main_ticks() == 0 &&

@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "diag_host.h"
 #include "fiber.h"
 #include "sched.h"
 
@@ -42,6 +42,12 @@ typedef struct Thread {
     int rq_prev; /* ready queue links (thread ids, 0 = none) */
     int rq_next;
     int sq_next; /* semaphore wait queue link */
+    int parent;  /* the thread that created it (diagnostics) */
+    /* the last kernel call this thread made (ico_sched_note) */
+    const char *note;
+    int note_arg;
+    void *note_caller;
+    unsigned int note_vsync;
 } Thread;
 
 typedef struct Sema {
@@ -57,22 +63,32 @@ typedef struct Sema {
 } Sema;
 
 static Thread threads[ICO_SCHED_MAX_THREADS];
+
 static Sema semas[ICO_SCHED_MAX_SEMAS];
+
 static int rq_head[ICO_SCHED_PRIORITIES];
+
 static int rq_tail[ICO_SCHED_PRIORITIES];
 
 static int current_id; /* the thread on the CPU, 0 on the host context */
+
 static int last_id;    /* the thread that ran last (iGetThreadId) */
+
 static int dispatching;
+
 static int interrupt_depth;
+
 static unsigned int vsync_count;
+
 static unsigned long switch_count;
+
 static void (*fiber_start_hook)(void);
 
 static void fatal(const char *what)
 {
     fprintf(stderr, "sched: %s\n", what);
     fflush(stderr);
+    ico_diag_set_failure("sched: %s", what);
     abort();
 }
 
@@ -272,6 +288,7 @@ int ico_sched_create_thread(void (*entry)(void *), void *stack, int stack_size, 
     t->init_priority = init_priority;
     t->attr = attr;
     t->option = option;
+    t->parent = current_id;
     reset_thread(t);
     return id;
 }
@@ -723,4 +740,60 @@ void ico_sched_spin_vsync(void)
 int ico_sched_in_thread(void)
 {
     return current_id != 0;
+}
+
+/* --- Diagnostics ------------------------------------------------------------ */
+
+void ico_sched_note(const char *what, int arg, void *caller)
+{
+    Thread *t;
+    if (current_id == 0) {
+        return;
+    }
+    t = &threads[current_id];
+    t->note = what;
+    t->note_arg = arg;
+    t->note_caller = caller;
+    t->note_vsync = vsync_count;
+}
+
+int ico_sched_current(void)
+{
+    return current_id;
+}
+
+int ico_sched_view(int id, IcoSchedView *v)
+{
+    Thread *t;
+    memset(v, 0, sizeof *v);
+    if (id <= 0 || id >= ICO_SCHED_MAX_THREADS || !threads[id].used) {
+        return 0;
+    }
+    t = &threads[id];
+    v->status = id == current_id ? ICO_THS_RUN : t->status;
+    v->priority = t->priority;
+    v->init_priority = t->init_priority;
+    v->wait_type = t->wait_type;
+    v->wait_id = t->wait_id;
+    v->wakeup_count = t->wakeup_count;
+    v->spinning = t->spinning;
+    v->spin_until = t->spin_until;
+    v->parent = t->parent;
+    v->entry = (void *)t->entry;
+    v->note = t->note;
+    v->note_arg = t->note_arg;
+    v->note_caller = t->note_caller;
+    v->note_vsync = t->note_vsync;
+    return 1;
+}
+
+int ico_sched_sema_view(int id, int *count, int *num_wait)
+{
+    Sema *s = sema_of(id);
+    if (s == NULL) {
+        return 0;
+    }
+    *count = s->count;
+    *num_wait = s->num_wait;
+    return 1;
 }

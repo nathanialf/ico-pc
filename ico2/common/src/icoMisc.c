@@ -79,8 +79,21 @@ static int partitionUsedColor[4] = {64, 128, 255, 128}; /* derived name */
 extern void gif_StartPacketPri(int pri);
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_EndPacket(void);
+
+/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
+   definition reads them on hosts that pass them on the stack
+   (layout_texture.c says more) */
+#ifdef ICO_HOST
+
+extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, long long z, MiscColor *col,
+                                    int prim);
+
+#else
+
 extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, unsigned int z, MiscColor *col,
                                     int prim);
+
+#endif
 
 /* .bss: the line buffer the memory report is printed through */
 static char printBuf[128]; /* derived name */

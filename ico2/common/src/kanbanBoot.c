@@ -296,8 +296,18 @@ static Kanban *waitKanban; /* derived name */ /* the "please wait" sign */
 
 static int waitTimer; /* derived name */ /* frames left on that sign */
 
+#ifdef ICO_HOST
+
+/* port/platform/diag_host.c: logs the two steps when they change */
+void ico_host_kanban_step(int boot_step, int mc_check_step);
+
+#endif
+
 void kanbanBootMain(void)
 {
+#ifdef ICO_HOST
+    ico_host_kanban_step(bootStep, mcCheckStep);
+#endif
     switch (bootStep) {
     case 0:
         isysGObjActiveLink(0, 1);

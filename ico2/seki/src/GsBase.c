@@ -295,8 +295,21 @@ static const unsigned char keepFrameColor[4] = {112, 112, 112, 128}; /* derived 
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_EndPacket(void);
+
 /* void (int, long long) here, void (long long, long long) in GifPacket.h */
+/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
+   definition reads them on hosts that pass them on the stack
+   (layout_texture.c says more) */
+#ifdef ICO_HOST
+
+extern void gif_SetGsReg(long long reg, long long data);
+
+#else
+
 extern void gif_SetGsReg(int reg, long long data);
+
+#endif
+
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_StartPacketPriPath1(int pri);
 
@@ -381,8 +394,18 @@ static int gsbUnusedWord; /* derived name */
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_StartPacketPri(int pri);
+
 /* void (int, int, int, int, int, int) here, void (unsigned long long, unsigned long long, unsigned int, unsigned int, int, int) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_SetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
+                                  unsigned int h, int useoffset, int clear);
+
+#else
+
 extern void gif_SetDrawEnviroment(int fbp, int psm, int w, int h, int useoffset, int clear);
+
+#endif
 
 /* The fade overlay: step the fade level by half the speed each frame, clamp
  * it to 0 to 128, stop or hand over to the continue state at the ends, and
@@ -523,10 +546,27 @@ static void gsb_scissorOnDemo(void)
 }
 
 /* void (int, int, int) here, void (long long, long long, long long) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
+
+#else
+
 extern void gif_SetAlpha(int alpha, int mode, int fix);
+
+#endif
 /* void (int, int, int, int, unsigned int, unsigned char *, int) here, void (int, int, int, int, long long, GifColor *, int) in GifPacket.h */
+#ifdef ICO_HOST
+
+extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, long long z, unsigned char *col,
+                                    int prim);
+
+#else
+
 extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, unsigned int z, unsigned char *col,
                                     int prim);
+
+#endif
 
 /* Darken the whole frame by the stage record's brightness step: a full screen
  * white sprite in destination-alpha blend whose alpha is the step, clamped to

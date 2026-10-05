@@ -7,8 +7,11 @@
 #include "trace_host.h"
 #include <stdint.h>
 #include <stdio.h>
+#include "cdvd_host.h"
+#include "diag_host.h"
 #include "host_loop.h"
 #include "pad_script.h"
+#include "sif_host.h"
 
 /* The game's state the trace reads (each defined in the file named). */
 extern int stage_no;               /* common/src/main.c:428 */
@@ -16,11 +19,20 @@ extern int systemStatus[];         /* common/src/main.c:37, int[12] */
 extern int gameover_flag;          /* common/src/main.c:493 */
 extern char gameSysMainSaveBuff[]; /* common/src/gamesys.c:79 */
 int gflagChk(int bit_idx);         /* script/src/gflag.c:58 */
+/* read by the heartbeat (ico_host_status) */
+extern int fadeStatus;                   /* seki/src/Basic.c:124 */
+extern int mpegPlay;                     /* common/src/StageManager.c:73 */
+extern int mpegInitDone;                 /* common/src/StageManager.c:75 */
+extern int stageManagerFreeResourceFlag; /* common/src/StageManager.c:81 */
+extern int stgMgrWakeupRequest;          /* common/src/StageManager.c:83 */
+extern int IosCdvdMgrSleep;              /* fumi/ios/cdvd.c:114 */
+extern int iosCdvdBackGroundMgrRunning;  /* fumi/ios/cdvd.c */
+extern int kanbanBootEnd;                /* common/src/kanbanBoot.c:25 */
+extern int game_pause;                   /* common/src/main.c */
 
 #define SAVE_BUFF_SIZE 25596 /* gameSysMainSaveBuff[25596], gamesys.c:79 */
 #define GFLAG_COUNT 400      /* gflags[50], script/src/gflag.c:14 */
 #define GFLAG_WORDS ((GFLAG_COUNT + 31) / 32)
-#define FLUSH_EVERY 64 /* lines between flushes, so a killed run keeps most */
 
 static unsigned int main_ticks;
 
@@ -28,10 +40,43 @@ static unsigned int traced_ticks;
 
 static FILE *trace;
 
+static int logged_stage = -1;
+
 void ico_host_main_tick(void)
 {
+    if (main_ticks == 0) {
+        ico_diag_milestone("first Main tick done (stage_no %d)", stage_no);
+    }
     main_ticks++;
     ico_pad_script_set_tick(main_ticks);
+    if (stage_no != logged_stage) {
+        ico_diag_milestone("stage_no %d -> %d", logged_stage, stage_no);
+        logged_stage = stage_no;
+    }
+}
+
+/* The heartbeat's game state (diag_host.h): only plain reads, it runs on
+   the watchdog thread. */
+void ico_host_status(char *out, size_t size)
+{
+    IcoCdvdStats cd;
+    unsigned int sid;
+    unsigned int rpc;
+    unsigned int rpcs;
+
+    ico_cdvd_host_stats(&cd);
+    ico_sif_host_last_rpc(&sid, &rpc, &rpcs);
+    snprintf(out, size,
+             "vsync %u, tick %u, stage %d (sys5 %d sys6 %d sys7 %d sys8 %d), fade %d, mpeg %d/%d, "
+             "stgmgr free %d wake %d, pause %d, kanbanEnd %d | cd: %u reads, %u sectors, last lsn "
+             "%u, busy %d, %d waiting, stream %d@%u, cdvd thread %s%s | sif: %u calls, last "
+             "0x%08x/0x%x",
+             ico_host_vsync_count(), main_ticks, stage_no, systemStatus[5], systemStatus[6],
+             systemStatus[7], systemStatus[8], fadeStatus, mpegPlay, mpegInitDone,
+             stageManagerFreeResourceFlag, stgMgrWakeupRequest, game_pause, kanbanBootEnd, cd.reads,
+             cd.sectors, cd.last_lsn, cd.busy, cd.waiters, cd.stream_active, cd.stream_lsn,
+             IosCdvdMgrSleep ? "asleep" : "awake",
+             iosCdvdBackGroundMgrRunning ? " (background reads)" : "", rpcs, sid, rpc);
 }
 
 unsigned int ico_host_main_ticks(void)
@@ -58,6 +103,9 @@ int ico_trace_open(const char *path)
         fprintf(trace, " gf%d", i);
     }
     fprintf(trace, " save\n");
+    /* the header reaches the disc now, and every line after it (below), so
+       a crash or a kill leaves the trace up to the last tick */
+    fflush(trace);
     traced_ticks = main_ticks;
     return 0;
 }
@@ -105,9 +153,7 @@ void ico_trace_poll(void)
     while (traced_ticks < main_ticks) {
         write_line(traced_ticks);
         traced_ticks++;
-        if (traced_ticks % FLUSH_EVERY == 0) {
-            fflush(trace);
-        }
+        fflush(trace);
     }
 }
 

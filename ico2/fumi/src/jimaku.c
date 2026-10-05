@@ -80,8 +80,19 @@ extern void gif_SetGsReg(long long reg, long long data);
 extern void gif_SetZWrite(int on);
 /* as in GifPacket.h, which this TU does not include (gif_SpriteSensitiveOffset differs) */
 extern void gif_SetZTest(int on);
-/* z is unsigned int here, long long in GifPacket.h */
+
+/* z is unsigned int here, long long in GifPacket.h; the host uses the
+   definition's type (layout_texture.c says why) */
+#ifdef ICO_HOST
+
+extern void gif_SpriteSensitiveOffset(int *r, long long z, int *uv, JimCol *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitiveOffset(int *r, unsigned int z, int *uv, JimCol *col, int prim);
+
+#endif
+
 /* as in GifPacket.h, which this TU does not include (gif_SpriteSensitiveOffset differs) */
 extern void gif_EndPacket(void);
 

@@ -653,7 +653,12 @@ static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *se
         }
         if (size != 0) {
             bytes = size << 11;
+#ifdef ICO_HOST
+            /* pointer-wide: the ring may sit above 4 GB on a 64-bit host */
+            memcpy((char *)buf, (char *)req->buf + (req->readPos << 11), bytes);
+#else
             memcpy((char *)buf, (char *)((req->readPos << 11) + (int)req->buf), bytes);
+#endif
             if (req->readPos + size >= req->size) {
                 req->readPos = 0;
             } else {

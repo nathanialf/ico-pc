@@ -52,6 +52,10 @@ static inline void
 iosThreadDestroyMgr(void); /* deferred-tail member; see the emission-order note */
 
 #ifdef ICO_HOST
+
+/* port/platform/diag_host.h */
+void ico_host_thread_func(int id, void *func, int priority);
+
 /* iosThreadMessage's and iosThreadJoin's queue: the record and its 8-message
    ring in one allocation */
 #define THREAD_JOIN_QUEUE_SIZE ((int)(sizeof(IosMsgQueue) + 8 * sizeof(IosMsgWord)))
@@ -94,6 +98,10 @@ inline void iosThreadCreate(IOSThread *th, int no, void (*func)(), void *arg, vo
     } else {
         iosThreadTable[th->id] = th;
     }
+#ifdef ICO_HOST
+    /* port/platform/diag_host.c: the thread lines name it by func */
+    ico_host_thread_func(th->id, (void *)func, pri);
+#endif
 
     n_thread++;
     debug_StdPrintfDummy("n_thread %d\n", n_thread);

@@ -98,10 +98,15 @@
 #   CROSS in play is a game action. Once a trace shows the tick where
 #   gf11 bit 30 (0x40000000, flag 382) sets, delete every line after it.
 #
-# Null devices on the way: disc reads finish at the next vsync when polled
-# and at once when blocking (docs/port/DATA.md, "Timing"); the null sound
-# driver accepts everything and reports nothing playing; the memory card
-# reports "no card" (-10) for every request.
+# Null devices on the way: every disc read finishes at the next vsync
+# (docs/port/DATA.md, "Timing"); the null sound driver accepts everything,
+# reports nothing playing and advances ADPCM streams in simulated time
+# (docs/port/HEADLESS_STUBS.md); the memory card reports "no card" (-10)
+# for every request.
+#
+# Measured (package 1E, ref-m32 on Linux, the same code as win-x86-ref):
+# flag 382 sets at Main tick 661 (stage 1); the stages then run 41 (tick
+# 663), 42, 43, 45, 40 and 3 (tick 1036).
 
 # ---- phase 1: ticks 8..1599, every 40 ticks: LEFT, CROSS, START ----
 8 8000    # LEFT

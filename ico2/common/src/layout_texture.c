@@ -404,10 +404,27 @@ extern void gif_StartPacketPri(int pri);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
+
+#ifdef ICO_HOST
+
+/* The host passes z as GifPacket.c defines it: on the EE each argument has
+   its own 64-bit register, so the narrower declaration only changed how the
+   constant was loaded; on a host that passes arguments on the stack (i386)
+   it shifts uv, col and prim by a word.  Only z's low 32 bits are used
+   (GIF_XY), so the value is the same. */
+extern void gif_SpriteSensitive(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
+extern void gif_EndPacket(void);
+extern void gif_SpriteSensitiveOffset(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
+
+#else
+
 extern void gif_SpriteSensitive(SprRect *r, unsigned int z, SprRect *uv, SprCol *col, int prim);
 extern void gif_EndPacket(void);
 extern void gif_SpriteSensitiveOffset(SprRect *r, unsigned int z, SprRect *uv, SprCol *col,
                                       int prim);
+
+#endif
+
 extern void gif_PointOffset(int *v, long long z, SprCol *col, int prim);
 extern void gif_SetGsReg(long long reg, long long data);
 

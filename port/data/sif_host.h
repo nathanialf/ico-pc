@@ -21,4 +21,8 @@ int ico_sif_register_server(unsigned int sid, IcoSifServerFn fn);
 /* Forget every server and the IOP heap (tests). */
 void ico_sif_host_reset(void);
 
+/* The last sceSifCallRpc's server id and RPC number, and how many calls
+   there were (the diagnostics heartbeat). */
+void ico_sif_host_last_rpc(unsigned int *sid, unsigned int *rpc, unsigned int *count);
+
 #endif /* ICO_PORT_SIF_HOST_H */

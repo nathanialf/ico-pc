@@ -14,12 +14,9 @@
  * on the host they fail, as host0: did on a retail console.
  */
 #include "sif_host.h"
-
 #include "iop_ram.h"
-
 #include <sifdev.h>
 #include <sifrpc.h>
-
 #include <stdint.h>
 #include <string.h>
 
@@ -31,6 +28,20 @@ static struct {
 } servers[MAX_SERVERS];
 
 static int serverCount;
+
+/* the last RPC, for the diagnostics heartbeat */
+static unsigned int lastSid;
+
+static unsigned int lastRpc;
+
+static unsigned int rpcCount;
+
+void ico_sif_host_last_rpc(unsigned int *sid, unsigned int *rpc, unsigned int *count)
+{
+    *sid = lastSid;
+    *rpc = rpcCount != 0 ? lastRpc : 0;
+    *count = rpcCount;
+}
 
 int ico_sif_register_server(unsigned int sid, IcoSifServerFn fn)
 {
@@ -207,6 +218,9 @@ int sceSifCallRpc(struct sceSifRpcClientData *cd, unsigned int rpc_number, unsig
     if (i < 0) {
         return -1;
     }
+    lastSid = cd->command;
+    lastRpc = rpc_number;
+    rpcCount++;
     reply = servers[i].fn(rpc_number, sendbuf, ssize, rsize);
     if (recvbuf != NULL && rsize > 0) {
         if (reply != NULL) {

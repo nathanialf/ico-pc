@@ -23,7 +23,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "diag_host.h"
 #include <libgraph.h>
 #include <sifdev.h>
 
@@ -32,66 +32,124 @@
 int LoadFileType = 1;
 
 int debug_act_sub_thread = 0;
+
 int debug_actnode_flag = 0;
+
 int debug_ambient_volume = 0;
+
 int debug_bar_flag; /* debug.c only declares it (extern) */
+
 int debug_bounding_flag = 0;
+
 int debug_brain_bar_flag = 0;
+
 int debug_brain_flag = 0;
+
 int debug_camera_flag = 0;
+
 int debug_chain_cycle_speed = 0;
+
 int debug_chain_slow_speed = 0;
+
 int debug_cloth_info = 0;
+
 int debug_col_old_proc = 0;
+
 int debug_disp_escort_ball = 0;
+
 int debug_disp_mesh = 0;
+
 int debug_disp_particle = 0;
+
 int debug_enemy_battle_type = 0;
+
 int debug_enemy_fly_with_girl = 0;
+
 int debug_enemy_kidnap_timer = 0;
+
 int debug_face_rot_w_ratio = 0;
+
 int debug_fieldcollision_flag = 0;
+
 int debug_fly_limit_test = 0;
+
 int debug_font_flag = 0;
+
 int debug_font_flag2 = 0;
+
 int debug_font_flag3 = 0;
+
 int debug_fullscreen_effect = 0;
+
 int debug_girl_detour_flag = 0;
+
 int debug_hair_bend_angle = 0;
+
 int debug_hair_collision = 0;
+
 int debug_hair_gravity_level = 0;
+
 int debug_hair_tight_level = 0;
+
 int debug_hand_camera = 0;
+
 int debug_ignore_demo_camera = 0;
+
 int debug_ignore_dodge = 0;
+
 int debug_lwskyomi_lookonly = 0;
+
 int debug_mem_partition_flag = 0;
+
 int debug_memory_bar = 0;
+
 int debug_mot_debug_target = 0;
+
 int debug_mot_slope_interp = 0;
+
 int debug_motion_interporate = 0;
+
 int debug_no_breast_hang = 0;
+
 int debug_now_motion_viewer = 0;
+
 int debug_one_hit_only = 0;
+
 int debug_seslotdisp_flag = 0;
+
 int debug_shadow_flag = 0;
+
 int debug_skel_flag = 0;
+
 int debug_snapshot_num = 0;
+
 int debug_snapshot_reserve = 0;
+
 int debug_specular_flag = 0;
+
 int debug_stick_input = 0;
+
 int debug_stick_simulate = 0;
+
 int debug_use_new_queen_battle = 0;
+
 int debug_wallcheck_flag = 0;
+
 int debug_wallhitcoldisp = 0;
+
 int debug_wayline = 0;
+
 int debug_window_flag = 0;
+
 int debug_wire_string = 0;
+
 int debug_zoom_per = 0;
 
 /* the texture statistics Texture.c counts and debug.c's bar prints */
 int texregs = 0;
+
 int textures = 0;
+
 int texturetranssize = 0;
 
 /* the game's (common/src/main.c, fumi/src/fieldCollision.c) */
@@ -323,6 +381,7 @@ void debug_assertMessage(const char *file, int line, const char *mes)
 {
     fprintf(stderr, "debug_assertMessage: %s:%d: %s\n", file, line, mes != NULL ? mes : "");
     fflush(stderr);
+    ico_diag_set_failure("debug_assertMessage: %s:%d: %s", file, line, mes != NULL ? mes : "");
     abort();
 }
 
@@ -330,6 +389,7 @@ void debug_assert(const char *file, int line)
 {
     fprintf(stderr, "debug_assert: %s:%d\n", file, line);
     fflush(stderr);
+    ico_diag_set_failure("debug_assert: %s:%d", file, line);
     abort();
 }
 

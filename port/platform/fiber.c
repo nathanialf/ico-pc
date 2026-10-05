@@ -6,24 +6,27 @@
  */
 #define MINICORO_IMPL
 #define MCO_NO_DEFAULT_ALLOCATOR
-#include "../third_party/minicoro/minicoro.h"
 
+#include "../third_party/minicoro/minicoro.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "diag_host.h"
 #include "fiber.h"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+
 #include <windows.h>
+
 #else
+
 #include <sys/mman.h>
 #include <unistd.h>
-#endif
 
+#endif
 #if defined(__SANITIZE_ADDRESS__)
 #define ICO_FIBER_ASAN 1
 #elif defined(__has_feature)
@@ -32,7 +35,9 @@
 #endif
 #endif
 #ifdef ICO_FIBER_ASAN
+
 #include <sanitizer/asan_interface.h>
+
 #endif
 
 struct IcoFiber {
@@ -54,8 +59,8 @@ struct IcoFiber {
 #if defined(MCO_USE_ASM) || defined(MCO_USE_UCONTEXT)
 #define ICO_FIBER_GUARD 1
 #endif
-
 #ifdef ICO_FIBER_GUARD
+
 static size_t page_size(void)
 {
     static size_t ps;
@@ -126,7 +131,9 @@ static void guarded_dealloc(void *ptr, size_t size, void *allocator_data)
     munmap((void *)base, size + ps);
 #endif
 }
+
 #else
+
 static void *plain_alloc(size_t size, void *allocator_data)
 {
     (void)allocator_data;
@@ -139,8 +146,17 @@ static void plain_dealloc(void *ptr, size_t size, void *allocator_data)
     (void)allocator_data;
     free(ptr);
 }
-#endif
 
+#endif
+/* 32-bit Windows runs fibers through CreateFiberEx, which promises only
+   4-byte stack alignment at the fiber's entry, while GCC assumes 16 and
+   keeps SSE spills in aligned stack slots (movaps, cvtdq2ps on (%esp)):
+   realign here, once per fiber, and everything the fiber calls inherits
+   it. */
+#if defined(__i386__) && defined(__GNUC__)
+
+__attribute__((force_align_arg_pointer))
+#endif
 static void fiber_main(mco_coro *co)
 {
     IcoFiber *f = (IcoFiber *)mco_get_user_data(co);
@@ -198,12 +214,14 @@ void ico_fiber_yield(void)
     mco_result res;
     if (co == NULL) {
         fprintf(stderr, "fiber: yield outside a fiber\n");
+        ico_diag_set_failure("fiber: yield outside a fiber");
         abort();
     }
     res = mco_yield(co);
     if (res != MCO_SUCCESS) {
         /* MCO_STACK_OVERFLOW: the stack pointer left the fiber's stack */
         fprintf(stderr, "fiber: mco_yield: %s\n", mco_result_description(res));
+        ico_diag_set_failure("fiber: mco_yield: %s", mco_result_description(res));
         abort();
     }
 }
@@ -251,4 +269,15 @@ int ico_fiber_has_guard_page(void)
 #else
     return 0;
 #endif
+}
+
+int ico_fiber_current_stack(void **lo, void **hi)
+{
+    mco_coro *co = mco_running();
+    if (co == NULL || co->stack_base == NULL || co->stack_size == 0) {
+        return -1;
+    }
+    *lo = co->stack_base;
+    *hi = (char *)co->stack_base + co->stack_size;
+    return 0;
 }
