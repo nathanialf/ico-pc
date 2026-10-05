@@ -151,6 +151,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_TEXT] = "Menu text",
     [UI_STR_VAL_PORT_FONT] = "Port font",
     [UI_STR_VAL_CLASSIC] = "Classic",
+    [UI_STR_QUIT_DESKTOP] = "Quit to desktop",
+    [UI_STR_QUIT_CONFIRM] = "Quit to desktop?",
+    [UI_STR_OPT_CIRCLE_BACK] = "Circle goes back",
+    [UI_STR_CIRCLE_BACK_NOTE] =
+        "Circle (gamepad B) also backs out of the game's menus, as Triangle does.",
     /* the game's menu text (P3), as the PAL sheets have it */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",

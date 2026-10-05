@@ -155,6 +155,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_TEXT] = "Texte des menus",
     [UI_STR_VAL_PORT_FONT] = "Police du portage",
     [UI_STR_VAL_CLASSIC] = "Classique",
+    [UI_STR_QUIT_DESKTOP] = "Quitter vers le bureau",
+    [UI_STR_QUIT_CONFIRM] = "Quitter vers le bureau ?",
+    [UI_STR_OPT_CIRCLE_BACK] = "Rond pour revenir",
+    [UI_STR_CIRCLE_BACK_NOTE] =
+        "Rond (B sur la manette) quitte aussi les menus du jeu, comme Triangle.",
     /* the game's menu text (P3), as the PAL sheets have it */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",

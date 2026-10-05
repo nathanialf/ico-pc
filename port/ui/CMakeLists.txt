@@ -75,6 +75,13 @@ endfunction()
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
         ico_ui_library(ico_ui ON ui_host.c)
+        if(TARGET SDL3::SDL3-shared)
+            # Q2: ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
+            # desktop" (the headers only; ico_pc links SDL3)
+            target_compile_definitions(ico_ui PRIVATE ICO_UI_HAVE_SDL=1)
+            target_include_directories(ico_ui PRIVATE
+                $<TARGET_PROPERTY:SDL3::SDL3-shared,INTERFACE_INCLUDE_DIRECTORIES>)
+        endif()
     else()
         ico_ui_library(ico_ui OFF)
     endif()

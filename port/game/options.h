@@ -7,7 +7,9 @@
  *
  * Each option is read once from config.toml ([gameplay], via
  * ico_config_get_bool) the first time it is asked for, and can be set at run
- * time. Every default is the original game's behaviour.
+ * time. Every default is the original game's behaviour, except
+ * classic_menu_text and circle_back (default-on port behaviour,
+ * docs/port/DIVERGENCES.md "Optional features").
  *
  *   [gameplay] stick_fix   false  the stick fix (docs/port/INPUT.md)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
@@ -19,6 +21,9 @@
  *                          false  the menus' text drawn from the PS2's
  *                                 pre-rendered sheets instead of the port
  *                                 font (docs/port/UI.md, "Menu text")
+ *   [game] circle_back     true   Circle backs out of the game's menus as
+ *                                 Triangle does (docs/port/SETTINGS.md);
+ *                                 false is the PS2's behaviour
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -82,6 +87,13 @@ int ico_opt_debug_option(void);
    change. */
 int ico_opt_classic_menu_text(void);
 void ico_opt_set_classic_menu_text(int on);
+/* [game] circle_back (package Q2): 1 (the default) makes Circle an alias of
+   the game menus' Triangle back action (common/src/layout_action.c,
+   layout_texture.c default_item_select, through port/ui/layout_ext.h
+   lt_ext_BackButtons); 0 is the PS2's behaviour.  The Settings module hands
+   the value to port/ui (lt_ext_SetCircleBack) at install and on a change. */
+int ico_opt_circle_back(void);
+void ico_opt_set_circle_back(int on);
 /* Forget the run-time values: each option is read from the config again on
    its next use. */
 void ico_opt_reload(void);

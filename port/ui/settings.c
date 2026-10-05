@@ -5,12 +5,14 @@
  * Port layouts in the layout extension, run by the game's layout code; this
  * file builds them, repoints the game's rows at the entry rows, and holds
  * the screens' procs: the value texts, left/right on a value, Cross on an
- * action, Triangle back, the scrolling lists, the remap capture, and the
- * saves when a screen is left.
+ * action, Triangle or Circle back, the scrolling lists, the remap capture,
+ * the saves when a screen is left, and the title's "Quit to desktop" row
+ * with its confirmation (Q2).
  */
 #include "settings.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "achievements.h"
@@ -48,6 +50,7 @@ extern void la_host_new_game_go(void);
 
 /* the pad's trigger bits (keyInput.c's logical word) */
 #define PAD_TRIANGLE 0x0010
+#define PAD_CIRCLE 0x0020
 #define PAD_CROSS 0x0040
 #define PAD_START 0x0800
 #define PAD_SQUARE 0x0080
@@ -55,6 +58,12 @@ extern void la_host_new_game_go(void);
 #define PAD_RIGHT 0x2000
 #define PAD_DOWN 0x4000
 #define PAD_LEFT 0x8000
+/* Q2: on the port's screens Circle goes back as Triangle does, whatever
+   [game] circle_back says (that switch is for the game's own menus,
+   layout_ext.h lt_ext_BackButtons): no PS2 behaviour to keep here, and
+   Circle has no other use on them (a remap capture takes it before this
+   check) */
+#define PAD_BACK (PAD_TRIANGLE | PAD_CIRCLE)
 
 /* the game layouts the menu is entered from */
 #define LAYOUT_PAUSE_OPTIONS 58
@@ -91,9 +100,16 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 #define OPTIONS_ROW_Y 165
 #define OPTIONS_ROW_Y_CLEARED 185
 /* the title's: under "New Game" (rows 50 and 51 at 165), above the
-   copyright line (row 48 at 195, its letters from about line 205) */
-#define TITLE_ROW_Y 181
-#define TITLE_ROW_SIZE 24.0f
+   copyright line (row 48 at 195).  Q2: Settings and "Quit to desktop"
+   share that room at size 22, 9 field lines apart.  Measured on the Q2
+   run's title frame at 960 x 720 (3 pixels a field line): New Game's
+   capitals end at pixel 571 (6C), the copyright's start at about 645,
+   and size-22 rows at y 176 and 187 had their capitals on 583..605 and
+   622..642; 175 and 184 put them on about 580..602 and 613..635, 9 to 11
+   pixels from their neighbours */
+#define TITLE_ROW_Y 175
+#define TITLE_QUIT_Y 184
+#define TITLE_ROW_SIZE 22.0f
 
 #define MAX_ROWS 16
 
@@ -124,6 +140,7 @@ static Page s_pages[UI_PAGE_COUNT];
 static int s_built;
 static int s_warned;
 static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1};
+static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1}; /* Q2: the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
 static int s_origin = LAYOUT_PAUSE_OPTIONS; /* the game layout the menu returns to */
 static int s_restoreTitle = -1;             /* a title layout whose defaultItem to restore */
@@ -316,6 +333,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_MOUSE_SENS:
         snprintf(buf, size, "%.2f", (double)liveBindings()->mouse_sens);
         return buf;
+    case UI_OPT_CIRCLE_BACK:
+        return onOff(ico_opt_circle_back());
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
     case UI_OPT_MIRROR_INFO:
@@ -428,6 +447,13 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyBindings = 1;
         break;
     }
+    case UI_OPT_CIRCLE_BACK:
+        /* Q2: the game menus' alias, live from the next press */
+        ico_opt_set_circle_back(!ico_opt_circle_back());
+        ico_config_set_bool("game.circle_back", ico_opt_circle_back());
+        lt_ext_SetCircleBack(ico_opt_circle_back());
+        s_dirtyConfig = 1;
+        break;
     case UI_OPT_YORDA:
         ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
         ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
@@ -670,6 +696,9 @@ static void setNote(int row, int strId)
 static int settingsProc(int first, int item);
 static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
+static void buildQuitScreen(void);
+static int s_quitLayout = -1;
+static void titleCursorOn(int to, int row);
 
 static int rowY(int page, int i)
 {
@@ -775,6 +804,9 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_AUDIO:
         break;
+    case UI_PAGE_CONTROLS:
+        addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
+        break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         addNote(pg, UI_OPT_MIRROR_FMV, UI_STR_MIRROR_FMV_NOTE);
@@ -849,10 +881,22 @@ static void buildEntries(void)
             P(row)->left = 57;
         }
         s_entryRow[e] = row;
+        s_quitRow[e] = -1;
+        if (title) {
+            /* Q2: "Quit to desktop" under Settings, in the same layout (the
+               rows are contiguous); Cross opens the confirmation */
+            int q = addRow(170, TITLE_QUIT_Y, 300, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL,
+                           TITLE_ROW_SIZE, UI_ALIGN_CENTER);
+            P(q)->centerX = 1;
+            P(q)->right = s_quitLayout;
+            P(q)->upItem = row;
+            P(row)->downItem = q;
+            s_quitRow[e] = q;
+        }
         LtProp l;
         memset(&l, 0, sizeof(l));
         l.first = row;
-        l.last = row + 1;
+        l.last = (s_quitRow[e] >= 0 ? s_quitRow[e] : row) + 1;
         l.proc = entryProc;
         l.procFirst = 1;
         l.defaultItem = -1;
@@ -898,10 +942,11 @@ static void build(void)
     }
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS,
+                                  UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
-                                  UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1};
+                                  UI_STR_OPT_CIRCLE_BACK, UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1};
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
                                    UI_OPT_BACK};
     static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
@@ -916,7 +961,7 @@ static void build(void)
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 2,
                     UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
+    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 5,
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 4,
                     UI_PAGE_MAIN);
@@ -932,6 +977,7 @@ static void build(void)
             }
         }
     }
+    buildQuitScreen();
     buildEntries();
     buildMirrorScreen();
 }
@@ -1012,9 +1058,91 @@ static int mirrorScreenProc(int first, int item)
         la_host_new_game_go();
         return -1;
     }
-    if (flags & PAD_TRIANGLE) {
+    if (flags & PAD_BACK) {
         NEGATIVE_SE();
         return LAYOUT_VIBE_SELECT;
+    }
+    return -1;
+}
+
+/* ------------------------------------------------- the quit screen (Q2)
+ * "Quit to desktop?" with Yes and No side by side (left/right through
+ * their item links, the cursor on No), opened by the title's Quit row
+ * (settings.h ui_SettingsSetQuitHandler), laid out as the mirror screen. */
+
+static int s_quitYesNo[2] = {-1, -1}; /* No, Yes */
+static int s_quitChosen;
+static void (*s_quitHandler)(void);
+
+static int quitScreenProc(int first, int item);
+
+static void buildQuitScreen(void)
+{
+    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    int h =
+        addRow(20, 112, 600, 40, 0, -1, UI_STR_QUIT_CONFIRM, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    P(h)->centerX = 1;
+    s_quitYesNo[1] = addRow(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_quitYesNo[0] = addRow(330, 146, 110, 40, 1, -1, UI_STR_MT_NO, NULL, 0.0f, UI_ALIGN_CENTER);
+    P(s_quitYesNo[1])->rightItem = s_quitYesNo[0];
+    P(s_quitYesNo[0])->leftItem = s_quitYesNo[1];
+    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    s_quitLayout = addLayout(first, last + 1, 0.6f, quitScreenProc, s_quitYesNo[0]);
+}
+
+void ui_SettingsSetQuitHandler(void (*fn)(void))
+{
+    s_quitHandler = fn;
+}
+
+int ui_QuitScreenLayout(void)
+{
+    return s_built ? s_quitLayout : -1;
+}
+
+int ui_QuitScreenRow(int yes)
+{
+    return s_quitYesNo[yes ? 1 : 0];
+}
+
+static void requestQuit(void)
+{
+    /* what a Settings page writes when it is left, should anything be
+       pending; the achievements and the audio are the atexit handlers' */
+    ui_SettingsSave();
+    if (s_quitHandler != NULL) {
+        s_quitHandler();
+        return;
+    }
+    fprintf(stderr, "settings: quit to desktop\n");
+    fflush(stderr);
+    exit(0);
+}
+
+static int quitScreenProc(int first, int item)
+{
+    (void)item;
+    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    LtProp *l = lt_ext_Layout(s_quitLayout);
+    if (first) {
+        s_quitChosen = 0; /* the switch put the cursor on No (the default) */
+    }
+    if (s_quitChosen || lt_fade_status() != 2) {
+        return -1;
+    }
+    int flags = pad[0].flags;
+    int to = s_origin == LAYOUT_TITLE_CONTINUE ? LAYOUT_TITLE_CONTINUE : LAYOUT_TITLE_NEW;
+    if ((flags & PAD_CROSS) && l->curItem == s_quitYesNo[1]) {
+        s_quitChosen = 1;
+        POSITIVE_SE();
+        requestQuit();
+        return -1;
+    }
+    if (flags & (PAD_CROSS | PAD_BACK)) {
+        NEGATIVE_SE();
+        la_host_leave();
+        titleCursorOn(to, s_quitRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+        return to;
     }
     return -1;
 }
@@ -1067,6 +1195,8 @@ void ui_SettingsInstall(void)
 {
     /* P3: [game] classic_menu_text, before the layouts draw */
     ui_MenuTextSetClassic(ico_opt_classic_menu_text());
+    /* Q2: [game] circle_back, before the game's menus read a press */
+    lt_ext_SetCircleBack(ico_opt_circle_back());
     if (!s_built) {
         build();
         s_built = 1;
@@ -1087,17 +1217,19 @@ void ui_SettingsReset(void)
     s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
     memset(&s_capture, 0, sizeof(s_capture));
     for (int e = 0; e < ENTRY_COUNT; e++) {
-        s_entryRow[e] = s_entryLayout[e] = -1;
+        s_entryRow[e] = s_entryLayout[e] = s_quitRow[e] = -1;
     }
     memset(s_pages, 0, sizeof(s_pages));
     s_mirrorLayout = s_mirrorRow[0] = s_mirrorRow[1] = -1;
     s_mirrorChosen = 0;
+    s_quitLayout = s_quitYesNo[0] = s_quitYesNo[1] = -1;
+    s_quitChosen = 0;
 }
 
 int ui_SettingsEntryItem(int item)
 {
     for (int e = 0; e < ENTRY_COUNT; e++) {
-        if (item >= 0 && item == s_entryRow[e]) {
+        if (item >= 0 && (item == s_entryRow[e] || item == s_quitRow[e])) {
             return 1;
         }
     }
@@ -1106,9 +1238,13 @@ int ui_SettingsEntryItem(int item)
 
 void ui_SettingsTitleMask(int masked)
 {
-    if (s_entryRow[ENTRY_TITLE12] >= 0) {
-        lt_mask_property(s_entryRow[ENTRY_TITLE12], masked);
-        lt_mask_property(s_entryRow[ENTRY_TITLE13], masked);
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+        if (s_entryRow[e] >= 0) {
+            lt_mask_property(s_entryRow[e], masked);
+        }
+        if (s_quitRow[e] >= 0) {
+            lt_mask_property(s_quitRow[e], masked);
+        }
     }
 }
 
@@ -1117,6 +1253,16 @@ int ui_SettingsEntryRow(int gameLayout)
     for (int e = 0; e < ENTRY_COUNT; e++) {
         if (kEntryGame[e] == gameLayout) {
             return s_entryRow[e];
+        }
+    }
+    return -1;
+}
+
+int ui_SettingsQuitRow(int gameLayout)
+{
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        if (kEntryGame[e] == gameLayout) {
+            return s_quitRow[e];
         }
     }
     return -1;
@@ -1212,6 +1358,18 @@ static int entryProc(int first, int item)
     return -1;
 }
 
+/* The title layout `to` opens with the cursor on row (a port row of its
+   entry layout); entryProc gives the title its own default back on the
+   next frame. */
+static void titleCursorOn(int to, int row)
+{
+    if (s_restoreTitle != to) {
+        s_restoreDefault = texLayout[to].defaultItem;
+    }
+    s_restoreTitle = to;
+    texLayout[to].defaultItem = row;
+}
+
 /* Leaves page pg for layout `to` (a page's or the game's), the cursor of the
    layout returned to on the row that led here; saves what changed. */
 static int leaveTo(int pageId, int to)
@@ -1230,10 +1388,7 @@ static int leaveTo(int pageId, int to)
         /* as la_key_config and la_adjust_screen put it on their rows */
         texLayout[58].defaultItem = s_entryRow[ENTRY_OPTIONS];
     } else if (to == LAYOUT_TITLE_CONTINUE || to == LAYOUT_TITLE_NEW) {
-        s_restoreTitle = to;
-        s_restoreDefault = texLayout[to].defaultItem;
-        texLayout[to].defaultItem =
-            s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12];
+        titleCursorOn(to, s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
     }
     return to;
 }
@@ -1354,7 +1509,7 @@ static void scrollList(Page *pg, LtProp *lay, int flags)
 {
     int s = slotOf(pg, lay->curItem);
     int shown = pg->items < LIST_SLOTS ? pg->items : LIST_SLOTS;
-    if (s < 0 || (flags & (PAD_CROSS | PAD_TRIANGLE))) {
+    if (s < 0 || (flags & (PAD_CROSS | PAD_BACK))) {
         return;
     }
     if ((flags & PAD_DOWN) && s == shown - 1) {
@@ -1398,7 +1553,7 @@ static int listProc(Page *pg, int id, LtProp *lay, int flags)
             lt_item_select_disable = 1;
             return -1;
         }
-        if (flags & PAD_TRIANGLE) {
+        if (flags & PAD_BACK) {
             return leaveTo(id, parentLayout(pg));
         }
         if (d >= 0 && d < ICO_T_COUNT) {
@@ -1432,7 +1587,7 @@ static int listProc(Page *pg, int id, LtProp *lay, int flags)
         return -1;
     }
     /* achievements */
-    if ((flags & PAD_TRIANGLE) || ((flags & PAD_CROSS) && d == pg->items - 1)) {
+    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && d == pg->items - 1)) {
         return leaveTo(id, parentLayout(pg));
     }
     scrollList(pg, lay, flags);
@@ -1467,7 +1622,7 @@ static int settingsProc(int first, int item)
         refreshPage(pg, id, lay->curItem);
         return r;
     }
-    if (flags & PAD_TRIANGLE) {
+    if (flags & PAD_BACK) {
         return leaveTo(id, parentLayout(pg));
     }
     for (int i = 0; i < pg->count; i++) {

@@ -98,6 +98,19 @@ int lt_ext_IsTextRow(const LtProperty *e);
 void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
                         const unsigned char rgba[4], int glow);
 
+/* Q2 (docs/port/SETTINGS.md, "Circle goes back"): the pad bits that take
+   the game menus' back action, where the game checks Triangle for it
+   (default_item_select's left link in layout_texture.c, the la_* procs'
+   cancels in layout_action.c, both under ICO_HOST).  Triangle (0x10), plus
+   Circle (0x20) while the alias is on ([game] circle_back, default on; the
+   Settings module sets it from port/game/options.h at install and on a
+   change).  Off, it is 0x10 alone: the PS2's checks exactly. */
+#define LT_PAD_TRIANGLE 0x0010
+#define LT_PAD_CIRCLE 0x0020
+int lt_ext_BackButtons(void);
+void lt_ext_SetCircleBack(int on);
+int lt_ext_CircleBack(void);
+
 #ifdef __cplusplus
 }
 #endif

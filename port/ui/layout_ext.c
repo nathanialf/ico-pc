@@ -27,6 +27,7 @@ static LtProperty s_props[LT_EXT_MAX_PROPERTIES];
 static ExtRow s_rows[LT_EXT_MAX_PROPERTIES];
 static int s_layoutCount;
 static int s_propCount;
+static int s_circleBack = 1; /* [game] circle_back's default */
 
 void lt_ext_Reset(void)
 {
@@ -249,4 +250,19 @@ void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
     } else {
         ui_MenuTextDraw(e, box, uv, rgba, glow);
     }
+}
+
+int lt_ext_BackButtons(void)
+{
+    return LT_PAD_TRIANGLE | (s_circleBack ? LT_PAD_CIRCLE : 0);
+}
+
+void lt_ext_SetCircleBack(int on)
+{
+    s_circleBack = on != 0;
+}
+
+int lt_ext_CircleBack(void)
+{
+    return s_circleBack;
 }

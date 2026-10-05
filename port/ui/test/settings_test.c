@@ -510,9 +510,10 @@ static void testBuild(void)
                                    UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS, UI_OPT_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS,
+                                  UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
-                                  UI_STR_BACK};
+                                  UI_STR_OPT_CIRCLE_BACK, UI_STR_BACK};
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
                                    UI_OPT_BACK};
     static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
@@ -531,7 +532,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 5), "controls rows");
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 4), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -877,6 +878,227 @@ static void testMirrorScreen(void)
     CHECK(ui_MirrorScreenEnter() == -1 && ui_MirrorScreenLayout() == -1, "not built: -1");
 }
 
+/* Q2: the title's "Quit to desktop" row under Settings (layouts 12 and 13,
+ * in the entry layout), its confirmation screen run by the real layout
+ * code: the cursor starts on No; Cross on No, Triangle and Circle return
+ * to the title with the cursor on the row and the title's own default
+ * restored after; Cross on Yes saves what is pending and calls the quit
+ * handler once. */
+static int s_quits;
+
+static void countQuit(void)
+{
+    s_quits++;
+}
+
+static void testQuit(void)
+{
+    char p[1100];
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    s_quits = 0;
+    ui_SettingsSetQuitHandler(countQuit);
+    init_layout_texture(2);
+    settle(54, 4);
+    int s12 = ui_SettingsEntryRow(12), s13 = ui_SettingsEntryRow(13);
+    int q12 = ui_SettingsQuitRow(12), q13 = ui_SettingsQuitRow(13);
+    int ql = ui_QuitScreenLayout(), yes = ui_QuitScreenRow(1), no = ui_QuitScreenRow(0);
+    CHECK(q12 == s12 + 1 && q13 == s13 + 1, "the quit rows follow the Settings rows (%d %d)", q12,
+          q13);
+    CHECK(ui_SettingsQuitRow(58) == -1, "no quit row in Options");
+    CHECK(lt_ext_Prop(s13)->downItem == q13 && lt_ext_Prop(q13)->upItem == s13 &&
+              lt_ext_Prop(q13)->downItem == -1 && lt_ext_Prop(q13)->left == -1,
+          "Settings <-> Quit");
+    CHECK(lt_ext_Prop(q13)->dispY > lt_ext_Prop(s13)->dispY &&
+              lt_ext_Prop(s13)->dispY > texProperty[51].dispY,
+          "below Settings, which is below New Game");
+    CHECK(ql >= LT_GAME_LAYOUT_COUNT && lt_ext_Prop(q13)->right == ql &&
+              lt_ext_Prop(q12)->right == ql,
+          "Cross: the confirmation");
+    CHECK(ui_SettingsEntryItem(q12) && ui_SettingsEntryItem(q13), "entry items (no game start)");
+    LtProp *el = lt_ext_Layout(ui_SettingsEntryLayout(13));
+    CHECK(el->first == s13 && el->last == q13 + 1, "one entry layout, two rows");
+    CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0, "the label: %s",
+          lt_ext_RowText(q13));
+    static const char *const kQuit[5] = {"Quit to desktop?", "Quitter vers le bureau ?",
+                                         "Zum Desktop beenden?", "Uscire al desktop?",
+                                         "\xC2\xBFSalir al escritorio?"};
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    for (int i = 0; i < 5; i++) {
+        CHECK(strcmp(ui_StrIn(kLangs[i], UI_STR_QUIT_CONFIRM), kQuit[i]) == 0 &&
+                  ui_StrIn(kLangs[i], UI_STR_QUIT_DESKTOP)[0] != '\0',
+              "the question in language %d: %s", i, ui_StrIn(kLangs[i], UI_STR_QUIT_CONFIRM));
+    }
+    ui_SettingsTitleMask(1);
+    CHECK(lt_ext_Prop(q12)->masked && lt_ext_Prop(q13)->masked && lt_ext_Prop(s13)->masked,
+          "masked with the title's rows");
+    ui_SettingsTitleMask(0);
+
+    lt_switch_layout(13);
+    CHECK(settle(13, 60), "the title");
+    CHECK(texLayout[13].curItem == 51, "on New Game");
+    press(0x4000);
+    CHECK(texLayout[13].curItem == s13, "down: Settings");
+    press(0x4000);
+    CHECK(texLayout[13].curItem == q13, "down: Quit to desktop");
+    press(0x40);
+    CHECK(settle(ql, 60), "Cross: the confirmation (%d)", current_layout_id);
+    CHECK(lt_ext_Layout(ql)->curItem == no, "the cursor on No");
+    press(0x40); /* Cross on No */
+    CHECK(settle(13, 60), "No: the title");
+    CHECK(texLayout[13].curItem == q13, "the cursor on the quit row");
+    frame(0);
+    CHECK(texLayout[13].defaultItem == 51, "the title's own default again (%d)",
+          texLayout[13].defaultItem);
+    static const int kBack[2] = {0x10, 0x20};
+    for (int i = 0; i < 2; i++) {
+        press(0x40);
+        CHECK(settle(ql, 60), "the confirmation again");
+        int neg = s_sounds[2];
+        press(kBack[i]);
+        CHECK(settle(13, 60), "%s: the title", i ? "Circle" : "Triangle");
+        CHECK(texLayout[13].curItem == q13 && s_sounds[2] > neg, "on the row, the cancel sound");
+    }
+    CHECK(s_quits == 0, "no quit yet");
+    /* Yes: a pending change is written, the handler runs once */
+    press(0x40);
+    CHECK(settle(ql, 60), "the confirmation a fourth time");
+    CHECK(lt_ext_Layout(ql)->curItem == no, "on No again");
+    press(0x8000);
+    CHECK(lt_ext_Layout(ql)->curItem == yes, "left: Yes");
+    ui_SettingsStep(UI_OPT_STICK_FIX, 1);
+    press(0x40);
+    CHECK(s_quits == 1, "Cross on Yes: the quit handler");
+    press(0x40);
+    press(0x20);
+    CHECK(s_quits == 1 && current_layout_id == ql, "once, and the screen stays");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "gameplay.stick_fix", 0) == 1,
+          "the pending change written before the quit");
+    if (t) {
+        ico_toml_free(t);
+    }
+    ico_opt_set_stick_fix(0);
+    ui_SettingsSetQuitHandler(NULL);
+}
+
+/* Q2: Circle leaves every port screen as Triangle does, even with the game
+ * menus' alias off ([game] circle_back = false): the Settings pages, the
+ * two lists, the menu itself (to the Options screen) and the mirror screen
+ * (the quit screen: testQuit). */
+static void testCirclePortScreens(void)
+{
+    useConfig("version = 1\n[game]\ncircle_back = false\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    gFlagGameClear = 0;
+    init_layout_texture(2);
+    settle(54, 4);
+    CHECK(lt_ext_BackButtons() == 0x10, "the game menus' alias off");
+    int s58 = ui_SettingsEntryRow(58), mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    lt_switch_layout(58);
+    CHECK(settle(58, 40), "Options");
+    texLayout[58].curItem = s58;
+    press(0x40);
+    CHECK(settle(mainL, 60), "the menu");
+
+    static const struct {
+        int row; /* main page row */
+        UiSettingsPage page;
+    } kPages[] = {{0, UI_PAGE_DISPLAY},
+                  {1, UI_PAGE_AUDIO},
+                  {2, UI_PAGE_CONTROLS},
+                  {3, UI_PAGE_GAMEPLAY},
+                  {5, UI_PAGE_ACHIEVEMENTS}};
+
+    int labels[16];
+    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    for (unsigned i = 0; i < sizeof(kPages) / sizeof(kPages[0]); i++) {
+        lt_ext_Layout(mainL)->curItem = labels[kPages[i].row];
+        press(0x40);
+        CHECK(settle(ui_SettingsPageLayout(kPages[i].page), 60), "page %d opens", kPages[i].page);
+        int leaves = s_leaves;
+        press(0x20);
+        CHECK(settle(mainL, 60) && s_leaves == leaves + 1, "Circle: page %d back to the menu",
+              kPages[i].page);
+        CHECK(lt_ext_Layout(mainL)->curItem == labels[kPages[i].row], "on its row");
+    }
+    /* Controls -> Remap -> Circle -> Controls */
+    lt_ext_Layout(mainL)->curItem = labels[2];
+    press(0x40);
+    int ctlL = ui_SettingsPageLayout(UI_PAGE_CONTROLS);
+    CHECK(settle(ctlL, 60), "Controls");
+    press(0x40);
+    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_REMAP), 60), "Remap");
+    press(0x20);
+    CHECK(settle(ctlL, 60), "Circle: Remap back to Controls");
+    press(0x20);
+    CHECK(settle(mainL, 60), "Circle: Controls back to the menu");
+    press(0x20);
+    CHECK(settle(58, 60), "Circle: the menu back to Options");
+    CHECK(texLayout[58].curItem == s58, "on the Settings row");
+    /* the mirror screen: Circle is Triangle there (the vibration screen) */
+    lt_switch_layout(54);
+    settle(54, 60);
+    int ml = ui_MirrorScreenEnter(), games = s_newGames;
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the mirror screen");
+    press(0x20);
+    CHECK(settle(9, 60), "Circle: the vibration screen (%d)", current_layout_id);
+    CHECK(s_newGames == games, "no game started");
+}
+
+/* Q2: the game's own menus through the real layout_texture.c: the Options
+ * screen's rows go back to the pause menu (57) through their left link,
+ * which default_item_select follows on Triangle, and on Circle while
+ * [game] circle_back is on (the default); off, Circle does nothing there
+ * and Triangle still goes back. */
+static void testCircleGameMenu(void)
+{
+    for (int on = 1; on >= 0; on--) {
+        useConfig(on ? "version = 1\n" : "version = 1\n[game]\ncircle_back = false\n");
+        fakeTables();
+        lt_ext_Reset();
+        ui_SettingsReset();
+        memset(pad, 0, sizeof(pad));
+        pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+        gFlagGameClear = 0;
+        init_layout_texture(2);
+        settle(54, 4);
+        CHECK(lt_ext_BackButtons() == (on ? 0x30 : 0x10), "circle_back %d: the bits", on);
+        static const int kRows[2] = {308, -1}; /* a game row, then the Settings row */
+        for (int r = 0; r < 2; r++) {
+            int row = kRows[r] >= 0 ? kRows[r] : ui_SettingsEntryRow(58);
+            lt_switch_layout(58);
+            CHECK(settle(58, 60), "Options");
+            texLayout[58].curItem = row;
+            press(0x20);
+            if (on) {
+                CHECK(settle(57, 60), "circle_back on: Circle on %d goes back to the pause menu",
+                      row);
+            } else {
+                for (int i = 0; i < 30; i++) {
+                    frame(0);
+                }
+                CHECK(current_layout_id == 58 && texLayout[58].curItem == row,
+                      "circle_back off: Circle on %d does nothing (%d)", row, current_layout_id);
+                press(0x10);
+                CHECK(settle(57, 60), "circle_back off: Triangle on %d still goes back", row);
+            }
+        }
+    }
+}
+
 static void testValues(void)
 {
     char p[1100];
@@ -942,6 +1164,19 @@ static void testValues(void)
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");
     ui_SettingsStep(UI_OPT_MOUSE_SENS, 1);
     CHECK(ico_input_live_bindings()->mouse_sens == 1.25f, "mouse sensitivity 1.25");
+    /* Q2: Circle goes back, on by default; the step turns the game menus'
+       alias off at once and sets the key */
+    CHECK(ico_opt_circle_back() == 1 && lt_ext_CircleBack() == 1 &&
+              strcmp(ui_SettingsValueText(UI_OPT_CIRCLE_BACK), "On") == 0 &&
+              lt_ext_BackButtons() == 0x30,
+          "circle_back: on by default");
+    ui_SettingsStep(UI_OPT_CIRCLE_BACK, 1);
+    CHECK(ico_opt_circle_back() == 0 && lt_ext_BackButtons() == 0x10 &&
+              strcmp(ui_SettingsValueText(UI_OPT_CIRCLE_BACK), "Off") == 0 &&
+              ico_config_get_bool("game.circle_back", 1) == 0,
+          "circle_back: off (Triangle alone)");
+    ui_SettingsStep(UI_OPT_CIRCLE_BACK, -1);
+    CHECK(ico_opt_circle_back() == 1 && lt_ext_BackButtons() == 0x30, "circle_back: on again");
     NonLinearCameraMove = 6;
     ui_SettingsStep(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2, "language wraps ES -> EN");
@@ -1167,6 +1402,13 @@ static int render(void)
     press(0x2000);
     frame(0);
     snap("settings_mirror_screen.png");
+    /* Q2: the quit confirmation, the cursor on Yes */
+    int ql = ui_QuitScreenLayout();
+    lt_switch_layout(ql);
+    CHECK(settle(ql, 60), "the quit screen");
+    press(0x8000);
+    frame(0);
+    snap("settings_quit_screen.png");
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     ui_FontShutdown();
@@ -1193,6 +1435,9 @@ int main(int argc, char **argv)
     testRepoint();
     testNavigation();
     testMirrorScreen();
+    testQuit();
+    testCirclePortScreens();
+    testCircleGameMenu();
     testValues();
     testFramerate();
     testCapture();

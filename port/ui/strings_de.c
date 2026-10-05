@@ -155,6 +155,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_TEXT] = "Menütext",
     [UI_STR_VAL_PORT_FONT] = "Port-Schrift",
     [UI_STR_VAL_CLASSIC] = "Klassisch",
+    [UI_STR_QUIT_DESKTOP] = "Zum Desktop beenden",
+    [UI_STR_QUIT_CONFIRM] = "Zum Desktop beenden?",
+    [UI_STR_OPT_CIRCLE_BACK] = "Kreis für Zurück",
+    [UI_STR_CIRCLE_BACK_NOTE] =
+        "Kreis (B am Gamepad) verlässt auch die Menüs des Spiels, wie Dreieck.",
     /* the game's menu text (P3), as the PAL sheets have it */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",

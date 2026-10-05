@@ -37,8 +37,9 @@ extern "C" {
 /* init_layout_texture (ICO_HOST): builds the port layouts the first time
    and (re)points the game's rows at the entry rows.  Idempotent. */
 void ui_SettingsInstall(void);
-/* Whether item is one of the entry rows (the title procs leave Cross and
-   START on it to default_item_select). */
+/* Whether item is one of the entry rows, the title's "Quit to desktop" rows
+   included (the title procs leave Cross and START on them to
+   default_item_select). */
 int ui_SettingsEntryItem(int item);
 /* The title procs: masked while their own rows are (the card check). */
 void ui_SettingsTitleMask(int masked);
@@ -56,6 +57,30 @@ int ui_MirrorScreenEnter(void);
 int ui_MirrorScreenLayout(void);
 /* the "Off" (on = 0) and "On" (on = 1) rows */
 int ui_MirrorScreenRow(int on);
+
+/* "Quit to desktop" (package Q2; docs/port/SETTINGS.md "Quitting"): a port
+   row under the title's Settings row (layouts 12 and 13, in the same
+   chained entry layout) whose Cross opens a confirmation screen, "Quit to
+   desktop?" with Yes and No (the cursor on No).  Cross on Yes writes what
+   the Settings menu has not saved yet (ui_SettingsSave) and calls the quit
+   handler once; Cross on No, Triangle or Circle return to the title with
+   the cursor on the row.  The window build's handler (ui_host.c) posts
+   SDL_EVENT_QUIT, so the program ends through the path closing the window
+   takes (ico_window_pump returns 0, main returns, the atexit handlers flush
+   the achievements, stop the audio and close the window).  Without a
+   handler (the headless build) the request calls exit(0), which runs the
+   same atexit handlers.  NULL restores that. */
+void ui_SettingsSetQuitHandler(void (*fn)(void));
+int ui_QuitScreenLayout(void);
+/* the "Yes" (yes = 1) and "No" (yes = 0) rows */
+int ui_QuitScreenRow(int yes);
+/* the title's "Quit to desktop" row of layout 12 or 13, -1 otherwise */
+int ui_SettingsQuitRow(int gameLayout);
+
+/* Circle in the menus (Q2): every port screen (the Settings pages, the
+   lists, the mirror and quit screens) takes Circle as Triangle, always;
+   the game's own menus do while [game] circle_back is on
+   (port/ui/layout_ext.h lt_ext_BackButtons, Settings > Controls). */
 
 /* --- for tests and docs -------------------------------------------------- */
 
@@ -91,6 +116,7 @@ typedef enum UiSettingsOpt {
     /* Controls */
     UI_OPT_STICK_FIX,
     UI_OPT_MOUSE_SENS,
+    UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */
     /* Gameplay */
     UI_OPT_YORDA,
     UI_OPT_MIRROR_INFO, /* the run's mirror mode, read-only (R7c) */

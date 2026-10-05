@@ -154,6 +154,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_MENU_TEXT] = "Testo dei menu",
     [UI_STR_VAL_PORT_FONT] = "Carattere del port",
     [UI_STR_VAL_CLASSIC] = "Classico",
+    [UI_STR_QUIT_DESKTOP] = "Esci al desktop",
+    [UI_STR_QUIT_CONFIRM] = "Uscire al desktop?",
+    [UI_STR_OPT_CIRCLE_BACK] = "Cerchio per tornare indietro",
+    [UI_STR_CIRCLE_BACK_NOTE] =
+        "Cerchio (B sul gamepad) esce anche dai menu del gioco, come Triangolo.",
     /* the game's menu text (P3), as the PAL sheets have it */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",

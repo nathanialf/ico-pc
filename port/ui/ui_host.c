@@ -6,15 +6,20 @@
  */
 #include "ui_host.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef ICO_RD
 #include "rd.h"
 #endif
+#ifdef ICO_UI_HAVE_SDL
+#include <SDL3/SDL.h>
+#endif
 
 #include "font.h"
 #include "popup.h"
+#include "settings.h"
 #include "strings.h"
 #include "ui_internal.h"
 
@@ -55,6 +60,25 @@ static int truthy(const char *v)
                          strcmp(v, "yes") == 0);
 }
 
+#ifdef ICO_UI_HAVE_SDL
+
+/* Q2: the title's "Quit to desktop" (settings.h): the event closing the
+   window posts, so ico_window_pump ends the run the same way (main returns,
+   the atexit handlers flush the achievements, stop the audio, close the
+   window) */
+static void hostQuit(void)
+{
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_EVENT_QUIT;
+    if (!SDL_PushEvent(&e)) {
+        fprintf(stderr, "ui: could not post the quit event: %s\n", SDL_GetError());
+        exit(0);
+    }
+}
+
+#endif
+
 void ui_HostInit(void)
 {
     ui_FontInit();
@@ -63,6 +87,9 @@ void ui_HostInit(void)
     ui__SetRecordHook(gif_HostFlush);
 #endif
     ui_PopupSetDevTest(truthy(getenv("ICO_UI_POPUP_TEST")));
+#ifdef ICO_UI_HAVE_SDL
+    ui_SettingsSetQuitHandler(hostQuit);
+#endif
 }
 
 void ui_HostVsync(unsigned int mainTick)
@@ -79,6 +106,9 @@ void ui_HostVsync(unsigned int mainTick)
 
 void ui_HostShutdown(void)
 {
+#ifdef ICO_UI_HAVE_SDL
+    ui_SettingsSetQuitHandler(NULL);
+#endif
     ui_FontShutdown();
     ui__SetRecordHook(NULL);
     ui__SetSyncHook(NULL);

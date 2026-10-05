@@ -8,16 +8,28 @@ closed.
 ## Opening it
 
 - **On the title screen:** move down from "New Game" (or "Continue / New
-  Game") to "Settings" and press Cross. Triangle (or the menu's "Back")
-  returns to the title.
+  Game") to "Settings" and press Cross. Triangle, Circle (or the menu's
+  "Back") returns to the title.
 - **During play:** press START to pause, choose "Options", then move to
-  "Settings" (below the last option) and press Cross. Triangle goes back
-  to Options.
+  "Settings" (below the last option) and press Cross. Triangle or Circle
+  goes back to Options.
 
 The menu works like the game's own Options screen: up and down move the
 cursor, left and right change the value on the selected line, Cross opens a
-section or confirms, Triangle goes back. Changes take effect at once and
-are written to `config.toml` when you leave a screen.
+section or confirms, Triangle or Circle goes back (on a gamepad Circle is
+the east button, B on an Xbox layout). Changes take effect at once and are
+written to `config.toml` when you leave a screen.
+
+## Quitting
+
+The title screen has a "Quit to desktop" line under "Settings". Cross on it
+asks "Quit to desktop?" with Yes and No (the cursor starts on No). Yes
+closes the game exactly as closing the window does: anything Settings has
+not written yet is saved to `config.toml`, the achievements are written,
+the sound stops and the window closes. No, Triangle or Circle return to the
+title. During play the pause menu's own "End Game" returns to the title as
+on the PS2; there is no "Quit to desktop" there (close the window or press
+Escape).
 
 ## The language and 50/60 Hz screens
 
@@ -66,6 +78,7 @@ with the values in use the next time you save.
 | Remap controls | opens the remap screen (below) |
 | Analogue stick fix | On makes diagonals on the stick as strong as straight pushes (docs/port/INPUT.md, "Stick fix"); Off is the original |
 | Mouse sensitivity | 0.25 to 4: how fast the mouse turns the camera |
+| Circle goes back | On (the default): Circle (gamepad B) also backs out of the game's own menus wherever Triangle does (below); Off: only Triangle, as on the PS2. Saved as `[game] circle_back` |
 
 **Gameplay**
 
@@ -100,7 +113,8 @@ game; only what you see and hear is flipped.
 
 It is chosen when you start a New Game: after "Vibration", the "Mirror
 mode" screen offers Off (selected) and On. Left and right move between
-them, Cross or START confirms, Triangle goes back to the vibration screen.
+them, Cross or START confirms, Triangle or Circle goes back to the
+vibration screen.
 
 The choice belongs to that game and goes with its saves:
 
@@ -133,13 +147,36 @@ gamepad.
   binding is left as it was.
 - **Square** on a line clears all of its bindings.
 - **Reset to defaults** (at the end of the list) puts every binding back.
-- **Triangle** or **Back** leaves; the bindings are written to
+- **Triangle**, **Circle** or **Back** leaves (while "Press a key or
+  button…" is shown, Circle is bound like any other button instead); the
+  bindings are written to
   `[input.kb]`, `[input.mouse]` and `[input.pad]` in `config.toml`.
 
 Escape always closes the game and cannot be bound. The menus need Cross,
 Triangle and the directions; if you clear or move those, use the keyboard's
 defaults that remain, or "Reset to defaults". Gamepad sticks always drive
 the sticks; binding a stick direction adds a button that does the same.
+
+## Circle goes back
+
+On the PS2, Triangle backs out of the game's menus and Circle does nothing
+there. ico-pc's own screens (Settings and its pages, the remap and
+achievement lists, the Mirror mode and Quit screens) always take Circle as
+Triangle. In the game's own menus Circle does the same while "Circle goes
+back" (Settings > Controls, `[game] circle_back`) is On, the default:
+
+- the Options screen and the Settings line in it (back to the pause menu);
+- the pause menu (closes it, as Triangle and START do);
+- the vibration screen after New Game (back to the title);
+- the memory card screens: choosing the slot, choosing the save to load or
+  to save over, "Save?", the overwrite and format questions, the
+  "End Game" question and the delete result, each where Triangle cancels.
+
+It changes nothing where Circle or Triangle mean something else: on the
+Button Configuration screen Circle is one of the buttons you assign, and on
+the Brightness screen Triangle resets the setting (Circle does nothing
+there either way). The title screen and the game over screen have no back
+action. Off, every menu checks Triangle alone, as on the PS2.
 
 ## Notes
 

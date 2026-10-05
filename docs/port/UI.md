@@ -282,8 +282,34 @@ links crossing between game and port rows):
 | from | repointed | the row |
 | --- | --- | --- |
 | Options 58 | `325.downItem` and `300.upItem` (both were 300 / 325, the wrap) -> row; `58.link` -> row layout (was -1) | up 325, down 300, `right` the Settings layout, `left` 57 (Triangle back to the pause menu, as every Options row); y 165, in place of 325, which `lt_property_visible` hides until the game is cleared, and 185 once it shows (the entry proc moves it); right-aligned ending at x 364 like the Options labels |
-| Title 12 "Continue / New Game" | `50.downItem` -> row (was -1); `12.link` -> row layout -> 11 (was 11) | up 50; centred at y 181 (size 24), between "New Game" (165) and the copyright line (row 48 at 195, letters from about 205) |
+| Title 12 "Continue / New Game" | `50.downItem` -> row (was -1); `12.link` -> row layout -> 11 (was 11) | up 50, down the "Quit to desktop" row (Q2); centred at y 175 (size 22; 6C had y 181, size 24), between "New Game" (165) and the copyright line (row 48 at 195, letters from about 205) |
 | Title 13 "New Game" | `51.downItem` -> row (was -1); `13.link` -> row layout -> 11 (was 11) | up 51; the same place |
+
+**Quit to desktop (Q2).** On the title the row layout holds two rows: Settings
+and, right after it, "Quit to desktop" (y 184, size 22). Placed from the Q2
+run's title frame (960 x 720, 3 pixels a field line): New Game's capitals
+end at pixel 571 (6C's measurement), the copyright's start at about 645; at
+y 176 and 187 (the first placement) the two rows' capitals were on 583..605
+and 622..642, the second 3 pixels from the copyright, so they moved to 175
+and 184 (about 580..602 and 613..635, 9 to 11 pixels from each neighbour;
+not seen in a run, open item 10). Its up item is Settings, its `right` link the quit screen, a port
+layout like the mirror screen: the header "Quit to desktop?" (y 112) and
+Yes / No side by side (x 200 and 330, y 146; the game's own Yes / No
+strings, `UI_STR_MT_YES` / `UI_STR_MT_NO`), the cursor on No. Its proc
+(`quitScreenProc`): Cross on Yes plays `POSITIVE_SE`, writes what Settings
+has pending (`ui_SettingsSave`) and calls the quit handler once; Cross on
+No, Triangle or Circle play `NEGATIVE_SE`, call `la_host_leave()` and
+return to the title layout it came from with the cursor on the row (the
+title's own default restored on its next frame, as for Settings). The
+handler (`ui_SettingsSetQuitHandler`) is set by `ui_HostInit` in the window
+build: it posts `SDL_EVENT_QUIT`, so `ico_window_pump` returns 0 at the end
+of the vsync and the program ends through the path closing the window
+takes (`main` returns with "the window was closed"; the atexit handlers
+`ico_window_close`, `ico_ach_flush`, `ico_audio_host_shutdown` and the
+summary run). Without one (headless) the request calls `exit(0)`, which
+runs the same atexit handlers. The title procs treat the row as an entry
+row (`ui_SettingsEntryItem`: no game start on Cross or START) and mask it
+with their own (`ui_SettingsTitleMask`).
 
 `lt_property_visible`'s skip (it follows `downItem` / `upItem` past the
 hidden 300 and 325 before the game is cleared) gives the order 308, ...,
@@ -308,7 +334,7 @@ right-aligned ending at x 344 and value rows from x 364:
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Developer mode (value), Back; notes under Language and Developer mode |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate (read-only, only when `[video] framerate` is in the config), Video mode, Menu text (P3), Back; since P3 eleven rows, 17 field lines apart from line 36 |
 | Audio | Volume, Back; a note that the output does not apply it yet |
-| Controls | Remap controls (opens the remap screen), Analogue stick fix, Mouse sensitivity, Back |
+| Controls | Remap controls (opens the remap screen), Analogue stick fix, Mouse sensitivity, Circle goes back (Q2, with a note), Back |
 | Gameplay | Shadows never take Yorda (+ OPTIONS.md's explanation as a note), Mirror mode "Chosen at New Game" (not selectable), Back |
 | Achievements | a scrolling list of 8 slots over the 30 entries and Back: title (hidden and locked: "???") and state (Unlocked, Assisted, Locked); the selected one's description below; the header counts the unlocked |
 | Remap controls | a scrolling list of 8 slots over the 24 targets, "Reset to defaults" and Back: the PS2 name, the keyboard and mouse sources, the gamepad sources; a hint line or "Press a key or button…" |
@@ -327,9 +353,33 @@ row gets a texel V of its own so the layout's fade-cancel pairing
 (wrapping like the Options rows); left and right (`0x8000`, `0x2000`, the
 stick through `lt_analog2Pad`) step the selected value, with `CUR_SE`;
 Cross on a section follows its `right` link (`POSITIVE` sound, the glow);
-Cross on Back and Triangle anywhere go back with `NEGATIVE_SE`, after
-`la_host_leave()` (layout_action.c: `lt_set_item_select_func(0)`,
+Cross on Back and Triangle or Circle anywhere go back with `NEGATIVE_SE`,
+after `la_host_leave()` (layout_action.c: `lt_set_item_select_func(0)`,
 `actionStarted = 0`, what every game proc does before it returns a layout).
+Circle (0x20) is taken on every port screen whatever `[game] circle_back`
+says (`PAD_BACK` in settings.c); a remap capture in progress binds it
+instead, as it binds any press.
+
+**Circle in the game's menus (Q2).** The PAL game backs out with Triangle in
+two ways: `default_item_select` follows the selected row's `left` link on
+0x10 (the Options rows 300 to 330 -> 57, the Settings entry row -> 57, the
+memory card screens' Back rows -> 21 or 28), and the `la_*` procs test 0x10
+themselves (the table in DIVERGENCES.md, "Optional features"). Under
+`ICO_HOST` both test `lt_ext_BackButtons()` instead (`LT_BACK_BUTTONS` in
+layout_texture.c, `LA_BACK` in layout_action.c): 0x30 while `[game]
+circle_back` is on (the default), 0x10 when it is off, the PS2's test.
+Checked against the PAL tables (`texLayout` at 0x00533FE8 and `texProperty`
+at 0x0030CFF8 of the boot ELF, the procs named from
+`port/data/gen/ee_symbols.c`): no layout proc and no `default_item_select`
+path reads 0x20 except `la_key_config` (layout 59, `keyConfigMask` 0xFF:
+Circle is one of the buttons it assigns; its rows have no `left` link), so
+it is left as it is, as is `la_adjust_screen` (60: Triangle resets the
+brightness to 7, not a cancel). The title (12, 13), the vibration
+screen's Cross, the boot card prompt (5) and game over (62) have no
+Triangle cancel. `la_save_confirm_yesno` and `PSH_POSITIVE_OR_NEGATIVE`
+test 0x10 but no layout uses them. kanban.c's boot screens are not
+changed. The movement guard (`flags & 0x50` before the item links) still
+tests Triangle alone.
 In the lists the slots' first and last item links stop at the ends and the
 proc scrolls (wrapping at the ends of the list).
 
@@ -548,6 +598,20 @@ tables shaped like the PAL ones and run by the real `layout_texture.c`
   press made before the capture started is not taken; the timeout leaves
   the binding; a mouse button; clear; the row text "Tab, Backquote" reads
   back through `ico_bindings_set`;
+- Q2: the quit rows follow the Settings rows of 12 and 13 in one entry
+  layout, below them, with the confirmation as their `right` link; the
+  question in the five languages; masked with the title's rows; through
+  `exec_layout_texture` on 13: down, down, Cross opens the confirmation on
+  No; Cross on No, Triangle and Circle return to 13 with the cursor on the
+  row and the title's default back to 51; left to Yes and Cross call the
+  handler once and write a pending Settings change first;
+- Q2: with `circle_back = false`, Circle still leaves Display, Audio,
+  Controls, Gameplay, Achievements, Remap, Controls, the menu (to 58, the
+  cursor on the row) and the mirror screen (to 9);
+- Q2: in the Options layout 58, Circle on row 308 and on the Settings row
+  goes back to 57 with `circle_back` on; off, it does nothing for 30
+  frames and Triangle still goes back; the Controls row steps the value,
+  the key and `lt_ext_BackButtons` (0x30 / 0x10);
 - the boot skip's mapping: libscf 0..5 to the game's 2, 2, 3, 6, 4, 5 and
   back; `language = "de"` and `video_mode = "60hz"` give 4 and 0 and win
   over a card's values; "it" / "pal50"; "auto" follows the host's locale
@@ -564,6 +628,14 @@ Results (2026-10-05, 6C): the headless Linux build 58 of 58 and the window
 build on Linux (lavapipe) 58 of 58 with `settings`, `settings_render` and
 `ui` (the "H" check now 27 to 29 px for Arimo: 28); `win-x64` builds
 `ico_pc.exe`, `settings_test.exe` and `ui_test.exe`.
+
+Results (2026-10-05, Q2): the window build on Linux (gcc, lavapipe) 68 of
+68 tests passed with `settings` (the quit flow, Circle on every port
+screen, Circle in the Options layout with `circle_back` on and off, the
+Controls row) and `settings_render` (which now also writes
+`settings_quit_screen.png`); with the Circle mask in `default_item_select`
+or `PAD_BACK` reverted to Triangle alone the new checks fail; `win-x64`
+builds `ico_pc.exe` and `settings_test.exe`.
 
 ## Runs
 
@@ -627,6 +699,18 @@ first), the remap screen (Cross "Space, Mouse L" / "South", the face
 buttons, shoulders, the hint line) and a capture in progress ("…" on the
 row, "Press a key or button…").
 
+### Q2 (2026-10-05)
+
+The window build on lavapipe, `SDL_VIDEODRIVER=offscreen`, `use_iso=1`,
+`ticks=600`, `dump_every=10`, `pad_script = port/input/pad-boot.txt`,
+`timeout 300`, a private pref folder: exit 0, no process left. Frame 550
+replayed with `rd_replay_tool --present 960x720` shows "Settings" and
+"Quit to desktop" centred under the (masked) New Game, the Quit row's
+capitals 3 pixels above the copyright line's; the rows were moved up
+after it (Settings menu, "Quit to desktop (Q2)"). The vibration screen
+follows from frame 560; the confirmation screen was not reached in the
+run (`settings_render`'s PNG shows it).
+
 ## Open items
 
 1. **Entering Settings in a real run.** The 6C window run did not reach
@@ -655,6 +739,12 @@ row, "Press a key or button…").
    still masked by `la_title_new_game_only`; 6C's `ui_SettingsTitleMask`
    was meant to hide it with the title's row. Not P3's change (the
    Settings row is a port row); to look at.
+
+10. **Title rows (Q2).** Settings and "Quit to desktop" at y 175 and 184
+    were placed from the Q2 run's frame 550 (the rows then at 176 and 187)
+    by the 3-pixel-a-line scale; a run's title frame with New Game unmasked
+    should confirm the gaps. That frame also showed both port rows drawn
+    while New Game is masked (open item 9).
 
 6B's open items 1 (the typeface: Arimo, above), 3 (entering the menu:
 the link chain and repointed item links), 6 (values: `lt_ext_SetText` from

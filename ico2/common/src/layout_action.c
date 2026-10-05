@@ -312,6 +312,16 @@ void ui_SettingsTitleMask(int masked);
 
 #define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
 
+/* PC port (Q2, docs/port/SETTINGS.md "Circle goes back"): the bits of the
+   procs' Triangle cancels.  With [game] circle_back on (the default) Circle
+   is an alias of Triangle there (port/ui/layout_ext.h lt_ext_BackButtons);
+   off, 0x10 alone, the PS2's checks.  Not used where Triangle is not a
+   cancel (la_adjust_screen: it resets the brightness) or where Circle has
+   a meaning of its own (la_key_config: it is one of the buttons assigned). */
+int lt_ext_BackButtons(void);
+
+#define LA_BACK lt_ext_BackButtons()
+
 /* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
    the vibration choice (port/ui/settings.h ui_MirrorScreen*) and kept per
    save slot in the port config (port/game/options.h ico_mirror_slot_*;
@@ -334,6 +344,7 @@ static int la_host_mirror_screen(void)
 
 #else
 #define LA_HOST_NOT_SETTINGS_ROW
+#define LA_BACK 0x10
 #endif
 
 static int fightSoundStopped = 0; /* derived name */
@@ -782,7 +793,7 @@ int la_vibe_select(void)
     if (lt_fade_status() != 2) {
         return -1;
     }
-    if ((pad[0].flags & 0x10) == 0) {
+    if ((pad[0].flags & LA_BACK) == 0) {
         return -1;
     }
     NEGATIVE_SE();
@@ -1072,7 +1083,7 @@ int la_mc_file_select(int first)
 
     previewInfo = *(struct McPreview *)&IosMcProductFile[filePort].file[curFile];
 
-    return (pad[0].flags & 0x50) ? curFile : -1;
+    return (pad[0].flags & (0x40 | LA_BACK)) ? curFile : -1;
 }
 
 static void _la_mask_preview_info(void)
@@ -1247,7 +1258,7 @@ inline int la_mc_load_current_slot_select(void)
         actionStarted = 0;
         return 0x13;
     }
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1285,7 +1296,7 @@ int la_mc_load_file_select(int first, int item)
     }
     lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1708,7 +1719,7 @@ int la_mc_confirm_save_file(int first, int item)
             if (lt_fade_status() != 2) {
                 return -1;
             }
-            if ((pad[0].flags & 0x10) == 0) {
+            if ((pad[0].flags & LA_BACK) == 0) {
                 return -1;
             }
             if (stage_no == 0x3F) {
@@ -1794,7 +1805,7 @@ inline int la_mc_save_current_slot_select(void)
         actionStarted = 0;
         return 0x21;
     }
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LA_BACK) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -1917,7 +1928,7 @@ int la_mc_save_file_select(int first, int item)
     }
 
     if (actionStarted != 0) {
-        if (pad[0].flags & 0x10) {
+        if (pad[0].flags & LA_BACK) {
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -2099,7 +2110,7 @@ int la_save_confirm_overwrite(int first, int item)
     }
     fileMask = 0x3FF;
     _la_set_preview_info();
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -2154,7 +2165,7 @@ int la_format_confirm(int first, int item)
     if (first) {
         filePort = curPort;
     }
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -2486,7 +2497,7 @@ int la_end_confirm(void)
 {
     int item;
 
-    if (lt_fade_status() == 2 && (pad[0].flags & 0x10)) {
+    if (lt_fade_status() == 2 && (pad[0].flags & LA_BACK)) {
         NEGATIVE_SE();
         item = lt_current_property_item();
         if (item >= 270) {
@@ -2624,7 +2635,7 @@ int la_delete_processing(int first)
 inline int la_delete_confirm_complete(void)
 {
     int ret;
-    if ((pad[0].flags & 0x10) == 0)
+    if ((pad[0].flags & LA_BACK) == 0)
         goto fail;
     lt_set_item_select_func(0);
     actionStarted = 0;
@@ -2751,7 +2762,8 @@ inline int la_game_pause(int first)
     if (lt_fade_status() != 2) {
         return -1;
     }
-    if (((pad[0].flags & 0x40) && lt_current_property_item() == 0x127) || (pad[0].flags & 0x810)) {
+    if (((pad[0].flags & 0x40) && lt_current_property_item() == 0x127) ||
+        (pad[0].flags & (0x800 | LA_BACK))) {
         NEGATIVE_SE(0);
         adpcmPauseRequest(0);
         lt_set_item_select_func(0);

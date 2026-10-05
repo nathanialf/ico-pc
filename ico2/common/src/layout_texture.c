@@ -97,9 +97,14 @@ void ui_SettingsInstall(void);
 
 #define LT_LAYOUT(i) (*lt_ext_Layout(i))
 #define LT_PROP(i) (*lt_ext_Prop(i))
+/* PC port (Q2): Triangle follows the selected row's left link back; with
+   [game] circle_back on, Circle does too (layout_ext.h lt_ext_BackButtons;
+   0x10 alone when it is off) */
+#define LT_BACK_BUTTONS lt_ext_BackButtons()
 #else
 #define LT_LAYOUT(i) texLayout[i]
 #define LT_PROP(i) texProperty[i]
+#define LT_BACK_BUTTONS 0x10
 #endif
 
 static void default_item_select(int no);
@@ -322,7 +327,7 @@ static void default_item_select(int no)
             }
         }
     }
-    if (pad[0].flags & 0x10) {
+    if (pad[0].flags & LT_BACK_BUTTONS) {
         if (e->left >= 0) {
             if (fadeState == 2) {
                 soundSeDefPlay(413, 0xFFFFFFFE, 0, 0);

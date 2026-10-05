@@ -185,6 +185,12 @@ typedef enum UiStrId {
     UI_STR_OPT_MENU_TEXT,
     UI_STR_VAL_PORT_FONT,
     UI_STR_VAL_CLASSIC,
+    /* Q2: the title's "Quit to desktop" row and its confirmation, and
+       Settings > Controls, "Circle goes back" ([game] circle_back) */
+    UI_STR_QUIT_DESKTOP,
+    UI_STR_QUIT_CONFIRM,
+    UI_STR_OPT_CIRCLE_BACK,
+    UI_STR_CIRCLE_BACK_NOTE,
     /* P3: the game's menu text, transcribed from the PAL sheets
        (text/menu_PAL_xx, scei.tm2, title.tm2) with their wording and
        capitalisation; menu_text.c maps the texProperty rows to them */
