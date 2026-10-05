@@ -64,7 +64,12 @@ void staffRollStart(float t, int alpha)
 
 /* The scroll loop walks the 300-entry table by byte offset and spells the
    base at every use site. */
+#ifdef ICO_HOST
+/* the entry holds a pointer, so it is wider than the EE's 16 bytes: index by entry */
+#define SROLL(off) (&rollLines[(off) / 16])
+#else
 #define SROLL(off) ((StaffRollEntry *)((char *)rollLines + (off)))
+#endif
 
 static int staffRollScroll(void)
 {

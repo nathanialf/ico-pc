@@ -146,6 +146,21 @@ void la_TESTFUNCTION(void)
 /* .data: the game-flag ids the load carries across gflagInit.  The list
    holds five ids and the key-config tables follow it; the keep/restore loops
    below walk twenty words. */
+#ifdef ICO_HOST
+
+/* The keep/restore loops read twenty words from keepFlagNo: the five ids, then
+   keyConfigCode and the first seven keyConfigSlot, which follow it in the EE's
+   .data (so a load also keeps those game flag ids and the key-config slots;
+   docs/research/compiler-semantics.md s.6).  The host holds the three as one
+   array so the walk is in bounds and reads the same words. */
+static int keepWords[21] = {388, 384, 383, 385, 382, 16, 128, 32, 64, 8, 2,
+                            1,   4,   1,   2,   3,   4,  5,   0,  0,  0};
+
+#define keepFlagNo keepWords
+#define keyConfigCode (keepWords + 5)
+#define keyConfigSlot (keepWords + 13)
+#else
+
 static int keepFlagNo[5] = {388, 384, 383, 385, 382}; /* derived name */
 
 /* the eight pad button
@@ -154,6 +169,8 @@ static int keepFlagNo[5] = {388, 384, 383, 385, 382}; /* derived name */
 static int keyConfigCode[8] = {16, 128, 32, 64, 8, 2, 1, 4}; /* derived name */
 
 static int keyConfigSlot[8] = {1, 2, 3, 4, 5, 0, 0, 0}; /* derived name */
+
+#endif
 
 /* the memory-card request block the layout actions drive */
 McMgr mc = {{0}};
@@ -173,6 +190,54 @@ extern void iosMcSaveGameBlock(McMgr *mp, void *arg);
 extern void iosMcDelete(McMgr *mp);
 /* mcard.c's preview record */
 extern int IosMcPreviewInfo[];
+
+/* McMgr is a runtime record: its fields are not at the EE's byte offsets once
+   segArg is 8 bytes wide, so the host names them */
+#ifdef ICO_HOST
+#define MC_PORT(p) (((McMgr *)(p))->port)
+#define MC_PATH(p) (((McMgr *)(p))->path)
+
+static int _la_mcard_error_check(void *req)
+{
+    McMgr *w = (McMgr *)req;
+
+    if (w->result >= 0) {
+        return 1;
+    }
+    switch (w->result) {
+    case 0:
+        return 1;
+    case -2:
+        debug_StdPrintfDummy("unformatted %d\n", w->result);
+        return -1;
+    case -9:
+        debug_StdPrintfDummy("not insert memory card %d\n", w->result);
+        return -1;
+    case -4:
+        debug_StdPrintfDummy("%s file not found\n", w->path);
+        return -1;
+    case -14:
+        debug_StdPrintfDummy("%s Directory not found\n", w->dirName);
+        return -1;
+    case -16:
+        debug_StdPrintfDummy("segID %d check sum err rom:%d != load:%d\n", w->segment, w->readSum,
+                             w->sum);
+        return -1;
+    case -15:
+        debug_StdPrintfDummy("%s handler func ret err code\n", w->path);
+        return -1;
+    case -10:
+        debug_StdPrintfDummy("memory over\n");
+        return -1;
+    default:
+        debug_StdPrintfDummy("memory card another err %d\n", w->result);
+        return -2;
+    }
+}
+
+#else
+#define MC_PORT(p) (*(int *)((char *)(p) + 8))
+#define MC_PATH(p) ((char *)(p) + 0x47C)
 
 static int _la_mcard_error_check(void *req)
 {
@@ -211,6 +276,8 @@ static int _la_mcard_error_check(void *req)
         return -2;
     }
 }
+
+#endif
 
 /* file-local: nothing outside this TU calls it */
 static int _la_memory_card_check(McMgr *p, int step);
@@ -266,7 +333,7 @@ static int _la_memory_card_check(McMgr *p, int step)
         step++;
         break;
     case 20:
-        strcpy((char *)p + 0x47C, "game.");
+        strcpy(MC_PATH(p), "game.");
         iosMcGetBlockSaveInfo(p);
         step++;
         break;
@@ -387,16 +454,16 @@ static int _la_set_current_port_2(void *p, int first)
     int q = 0;
 
     if (first != 0) {
-        *(int *)((char *)p + 8) = 0;
+        MC_PORT(p) = 0;
         port2Step = 0;
         port2SubStep = 0;
         fileMask = 0;
         return 0;
     }
-    curPortInfo = &mcPortInfo[*(int *)((char *)p + 8)];
+    curPortInfo = &mcPortInfo[MC_PORT(p)];
     port2Step = _la_memory_card_check(p, port2Step);
     if (port2Step == 99) {
-        switch (*(int *)((char *)p + 8)) {
+        switch (MC_PORT(p)) {
         case 0:
             portLockState = currentPortLockState();
             port2Changed = (curPortInfo->flags.w >> 5) & 1;
@@ -404,7 +471,7 @@ static int _la_set_current_port_2(void *p, int first)
             /* the whole 8-byte record is copied to a local and never read
                again */
             tmp = *curPortInfo;
-            *(int *)((char *)p + 8) = 1;
+            MC_PORT(p) = 1;
             port2Step = 0;
             break;
         case 1:
@@ -497,14 +564,14 @@ static int _la_set_current_port_lock_2(void *p, int first)
     int q;
 
     if (first != 0 || lock2Restart != 0) {
-        *(int *)((char *)p + 8) = curPort;
+        MC_PORT(p) = curPort;
         lock2Step = 0;
         lock2Restart = 0;
         lock2SubStep = 0;
         fileMask = 0;
         return 0;
     }
-    curPortInfo = &mcPortInfo[*(int *)((char *)p + 8)];
+    curPortInfo = &mcPortInfo[MC_PORT(p)];
     lock2Step = _la_memory_card_check(p, lock2Step);
     if (lock2Step != 99) {
         return 0;
@@ -525,10 +592,10 @@ static int _la_set_current_port_lock_2(void *p, int first)
             }
         }
         if (lock2Locked != 0 && q != 0) {
-            mcPortInfo[*(int *)((char *)p + 8)].flags.w |= 4;
+            mcPortInfo[MC_PORT(p)].flags.w |= 4;
         }
         if (lock2Changed != 0 && a != 0) {
-            mcPortInfo[*(int *)((char *)p + 8)].flags.w |= 0x40;
+            mcPortInfo[MC_PORT(p)].flags.w |= 0x40;
         }
         _la_set_current_port_lock_2(p, 1);
         return 1;
@@ -1136,7 +1203,7 @@ int la_mc_load_file_select(int first, int item)
         lt_mask_property(195, 1);
         lt_mask_property(196, 1);
     }
-    lt_set_item_select_func((int)la_mc_saved_file_select);
+    lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
     if (pad[0].flags & 0x10) {
         NEGATIVE_SE();

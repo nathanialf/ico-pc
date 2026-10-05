@@ -19,6 +19,15 @@
 #include "main.h"
 #include "script.h"
 
+/* GObj.drawMask (0x50): cleared so no camera draws the object */
+#ifdef ICO_HOST
+#define SCP_CLEAR_DRAWMASK(id) (scpSearchGobj(id)->drawMask = 0)
+#define SCP_SET_DRAWMASK(id) (scpSearchGobj(id)->drawMask = 0xFFFFFFFF)
+#else
+#define SCP_CLEAR_DRAWMASK(id) (((int *)scpSearchGobj(id))[80 / 4] = 0)
+#define SCP_SET_DRAWMASK(id) (((unsigned int *)scpSearchGobj(id))[80 / 4] = 0xFFFFFFFF)
+#endif
+
 static void actSt08aDoorUpSub(GObj *volatile self);
 static void actSt08aGirlPosChk(GObj *volatile self);
 static void actSt08aHasiMain(GObj *volatile self);
@@ -281,17 +290,17 @@ static void actSt08aTorchOnChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    ((unsigned int *)scpSearchGobj(350))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(351))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(352))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(353))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(354))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(355))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(356))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(357))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(358))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(359))[80 / 4] = 0xFFFFFFFF;
-    ((unsigned int *)scpSearchGobj(348))[80 / 4] = 0xFFFFFFFF;
+    SCP_SET_DRAWMASK(350);
+    SCP_SET_DRAWMASK(351);
+    SCP_SET_DRAWMASK(352);
+    SCP_SET_DRAWMASK(353);
+    SCP_SET_DRAWMASK(354);
+    SCP_SET_DRAWMASK(355);
+    SCP_SET_DRAWMASK(356);
+    SCP_SET_DRAWMASK(357);
+    SCP_SET_DRAWMASK(358);
+    SCP_SET_DRAWMASK(359);
+    SCP_SET_DRAWMASK(348);
 
     torch_on_mes[0].func = actSt08aTorchOffChk;
     act->mail = torch_on_mes;
@@ -309,17 +318,17 @@ static void actSt08aTorchOffChk(GObj *volatile self)
         _ACTWait(1);
     }
 
-    ((int *)scpSearchGobj(350))[80 / 4] = 0;
-    ((int *)scpSearchGobj(351))[80 / 4] = 0;
-    ((int *)scpSearchGobj(352))[80 / 4] = 0;
-    ((int *)scpSearchGobj(353))[80 / 4] = 0;
-    ((int *)scpSearchGobj(354))[80 / 4] = 0;
-    ((int *)scpSearchGobj(355))[80 / 4] = 0;
-    ((int *)scpSearchGobj(356))[80 / 4] = 0;
-    ((int *)scpSearchGobj(357))[80 / 4] = 0;
-    ((int *)scpSearchGobj(358))[80 / 4] = 0;
-    ((int *)scpSearchGobj(359))[80 / 4] = 0;
-    ((int *)scpSearchGobj(348))[80 / 4] = 0;
+    SCP_CLEAR_DRAWMASK(350);
+    SCP_CLEAR_DRAWMASK(351);
+    SCP_CLEAR_DRAWMASK(352);
+    SCP_CLEAR_DRAWMASK(353);
+    SCP_CLEAR_DRAWMASK(354);
+    SCP_CLEAR_DRAWMASK(355);
+    SCP_CLEAR_DRAWMASK(356);
+    SCP_CLEAR_DRAWMASK(357);
+    SCP_CLEAR_DRAWMASK(358);
+    SCP_CLEAR_DRAWMASK(359);
+    SCP_CLEAR_DRAWMASK(348);
 
     torch_off_mes[0].func = actSt08aTorchOnChk;
     act->mail = torch_off_mes;

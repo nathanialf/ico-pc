@@ -81,7 +81,7 @@ inline void eBrainInit(void)
     }
 }
 
-inline int eBrainStatusSet(GObj *gop, int status)
+inline ICO_WORD eBrainStatusSet(GObj *gop, int status)
 {
     EBSlot *slot;
     int i;
@@ -102,7 +102,7 @@ inline int eBrainStatusSet(GObj *gop, int status)
     slot->owner = gop;
     slot->status = 0;
     slot->message = 0;
-    return (int)slot;
+    return (ICO_WORD)slot;
 }
 
 static EBSlot *boyTargets[32]; /* derived name */

@@ -140,7 +140,7 @@ void actE3Title(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    if ((int)boyGObj != 0) {
+    if ((ICO_WORD)boyGObj != 0) {
         scpPlayMot(boyGObj, 0);
     }
 
@@ -326,12 +326,12 @@ void actE3Capsule(GObj *volatile self)
 
     _ACTWait(1);
 
-    if ((int)girlGObj == 0) {
+    if ((ICO_WORD)girlGObj == 0) {
         ScpCallCameraOff();
     }
 
     if (gflagChk(358) == 0) {
-        if ((int)boyGObj != 0) {
+        if ((ICO_WORD)boyGObj != 0) {
             scpPlayMot(boyGObj, 0);
         }
 
@@ -477,7 +477,7 @@ void actE3CageFall(GObj *volatile self)
         stage_SetAnimation(76, 0, 0);
         stage_SetAnimation(72, 0, -1);
 
-        if ((int)girlGObj == 0) {
+        if ((ICO_WORD)girlGObj == 0) {
             _ACTWait(0);
         }
 
@@ -792,7 +792,7 @@ void actE3St09aSekizoChk(GObj *volatile self)
 {
     float dir[4];
 
-    if ((int)girlGObj == 0) {
+    if ((ICO_WORD)girlGObj == 0) {
         _ACTWait(0);
     }
 
@@ -874,7 +874,7 @@ void actE3GateChk(GObj *volatile self)
 {
     int i;
 
-    if ((int)girlGObj == 0) {
+    if ((ICO_WORD)girlGObj == 0) {
         _ACTWait(0);
     }
 
@@ -1106,7 +1106,7 @@ void actE3Inst1(GObj *volatile self)
     _ACTWait(1);
 
     scpBoyControlReadDisable = 1;
-    if ((int)boyGObj != 0) {
+    if ((ICO_WORD)boyGObj != 0) {
         scpPlayMot(boyGObj, 0);
     }
 
@@ -1432,7 +1432,7 @@ inline void actE3CageFallReadyChk(GObj *volatile self)
 
 inline void actE3St01bEneChk(GObj *volatile self)
 {
-    if ((int)girlGObj == 0) {
+    if ((ICO_WORD)girlGObj == 0) {
         _ACTWait(0);
     }
 

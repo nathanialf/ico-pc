@@ -90,6 +90,13 @@ typedef struct {             /* field names derived */
     /* 0xD0 */ ChainNode *node;
 } ChainRecord; /* derived name */
 
+/* an address in a chain's node array, byte offset first as the ROM adds them */
+#ifdef ICO_HOST
+#define CHAIN_NODE_ADDR(T, cw, off) ((T)((char *)(cw)->node + (off)))
+#else
+#define CHAIN_NODE_ADDR(T, cw, off) ((T)((off) + (int)(cw)->node))
+#endif
+
 static int UpdateRootPosition(GObj *gobj)
 {
     float pos[4];
@@ -412,7 +419,7 @@ static void chain_simulate_term_down(GObj *gobj)
     sceVu0AddVector(w, &cw->node[cw->holdNode], v);
     chain_sub_pendulum(cw->node, cw->holdNode, w);
     if (cw->holdNode + 1 <= cw->nodes - 1) {
-        nd = (ChainNode *)((cw->holdNode << 5) + (int)cw->node);
+        nd = CHAIN_NODE_ADDR(ChainNode *, cw, cw->holdNode << 5);
         next = nd + 1;
         next->x = nd->x;
         next->y = nd->y + 50.0f;
@@ -671,7 +678,12 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__, 1181);
 
+#ifdef ICO_HOST
+    /* the record is wider here (8-byte pointers): copy the typed template */
+    *cw = chainRecordDefault;
+#else
     *(ChainRecTemplate *)cw = *(ChainRecTemplate *)&chainRecordDefault;
+#endif
 
     cw->nodes = n;
     cw->node = (ChainNode *)(cw + 1);
@@ -792,7 +804,7 @@ static void chain_set_charachara(GObj *gobj, float amp)
     v[2] = s;
     _ApplyRyGV(v, (float)deg * 3.1415927f / 180.0f);
 
-    p = (char *)((idx << 5) + (int)cw->node);
+    p = CHAIN_NODE_ADDR(char *, cw, idx << 5);
     *(float *)p = *(float *)(p - 32) + v[0];
 
     *(float *)(p + 8) = *(float *)(p - 24) + v[2];
@@ -879,7 +891,7 @@ static inline unsigned char isChainHitByHand(GObj *gobj, float *p, float *v, flo
     v[1] = 0.0f;
 
     for (i = 2; i <= cw->nodes - 1; i++) {
-        ChainNode *nd = (ChainNode *)((i << 5) + (int)cw->node);
+        ChainNode *nd = CHAIN_NODE_ADDR(ChainNode *, cw, i << 5);
 
         if (nd->y < p[1] && p[1] < nd->y + 50.0f) {
             float t;
@@ -1021,7 +1033,7 @@ void ChainGeo(GObj *gobj)
             break;
         case 2:
             if (act != 0) {
-                float *nd = (float *)((cw->holdNode << 5) + (int)cw->node);
+                float *nd = CHAIN_NODE_ADDR(float *, cw, cw->holdNode << 5);
                 float h;
 
                 ((ChainExtPtr *)&boyGObj->dobj)->sub->root.move[0] = 0.0f;
@@ -1200,18 +1212,16 @@ typedef struct { /* field names derived */
 
 /* the climb work's storage, twelve words reached through ChainClimbWork
  * casts; the mode word at 0x28 starts at -1 */
-static int chainClimb[12] = {/* derived name */ 0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             0,
-                             -1,
-                             0};
+#ifdef ICO_HOST
+/* ChainClimbWork holds 16-byte aligned vectors; the EE placed the array on a
+   quadword, the host must say so (a 32-bit host would not) */
+#define CHAIN_CLIMB_ALIGN __attribute__((aligned(16)))
+#else
+#define CHAIN_CLIMB_ALIGN
+#endif
+
+static int chainClimb[12] CHAIN_CLIMB_ALIGN = {
+    /* derived name */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0};
 
 /* the two climb helpers and TestChainUpDown */
 /* clang-format off */
@@ -1682,7 +1692,7 @@ int GetChainNearestNodePosition(float *out, GObj *gobj, float *p)
         float d = _DistSqGV(p, &cw->node[i]);
 
         if (d < best) {
-            float *e = (float *)(i * 32 + (int)cw->node);
+            float *e = CHAIN_NODE_ADDR(float *, cw, i * 32);
             out[0] = e[0];
             out[1] = e[1];
             out[2] = e[2];

@@ -2051,7 +2051,7 @@ OFF(AttackKindEntry, word0, 0x0);
 OFF(AttackKindEntry, radius, 0x18);
 OFF(AttackKindEntry, power, 0x1C);
 
-/* PinRec: overlay, ico2/omori/include/camera-editor.h:20 */
+/* PinRec: overlay, ico2/omori/include/camera-editor.h:21 */
 OFF(PinRec, pos, 0x0);
 OFF(PinRec, look, 0xC);
 OFF(PinRec, ofs, 0x18);
@@ -2069,7 +2069,7 @@ OFF(PinRec, float4C, 0x4C);
 OFF(PinRec, ofsB, 0x50);
 SIZE(PinRec, 0x5C); /* comment */
 
-/* CamGroup: overlay, ico2/omori/include/camera-editor.h:43 */
+/* CamGroup: overlay, ico2/omori/include/camera-editor.h:44 */
 OFF(CamGroup, name, 0x0);
 OFF(CamGroup, center, 0x20);
 OFF(CamGroup, range, 0x2C);
@@ -2080,14 +2080,14 @@ OFF(CamGroup, kind, 0x44);
 OFF(CamGroup, items, 0x48);
 SIZE(CamGroup, 0x4C); /* comment */
 
-/* CamSetFile: overlay, ico2/omori/include/camera-editor.h:68 */
+/* CamSetFile: overlay, ico2/omori/include/camera-editor.h:69 */
 OFF(CamSetFile, magic, 0x0);
 OFF(CamSetFile, ver, 0x4);
 OFF(CamSetFile, count, 0x8);
 OFF(CamSetFile, total, 0xC);
 SIZE(CamSetFile, 0x10); /* config */
 
-/* MenuThread: runtime, ico2/omori/include/camera-editor.h:82 */
+/* MenuThread: runtime, ico2/omori/include/camera-editor.h:83 */
 #if ICO_LAYOUT_EE
 OFF(MenuThread, parent, 0x70);
 OFF(MenuThread, arg, 0x74);

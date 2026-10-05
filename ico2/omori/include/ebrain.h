@@ -8,6 +8,8 @@
 #ifndef EBRAIN_H
 #define EBRAIN_H
 
+#include "typedef.h"
+
 /* how many enemies chase the boy and the girl */
 extern int eBrainBoyChaseCount;
 extern int eBrainGirlChaseCount;
@@ -26,7 +28,7 @@ typedef struct EBSlot { /* field names derived */
 
 void eBrainInit(void);
 void eBrainProcess(void);
-int eBrainStatusSet(struct GObj *gop, int status);
+ICO_WORD eBrainStatusSet(struct GObj *gop, int status);
 void eBrainSendMes(struct GObj *gop, int mes);
 int GetStageFromLabel(int label);
 int eBrainGetTargetGeneratorFromLabelStage(int label, int stage);

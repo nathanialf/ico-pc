@@ -42,6 +42,23 @@ static void actSt04aModelOffChk(GObj *volatile self);
 static void actSt04aModelOnChk(GObj *volatile self);
 static void finishCallBackFunc(struct GObj *obj);
 
+#ifdef ICO_HOST
+
+/* on the host the shared records are used: Act and GObj are runtime layout (the
+   private pad views below are the EE's), and the torch's three words go in
+   fields this actor does not otherwise use: torchAnim in Act.pad470, torchObj
+   in doorCamera (a door-script field; the EE's 0x474 pointer has no room in
+   4 bytes here) and torchFlag in the low word of wish0 (0x478, where the EE
+   keeps it) */
+typedef Act ActSt04A;
+
+typedef GObj PObjGObjSt04A;
+
+#define TORCH_ANIM(a) (*(int *)(a)->pad470)
+#define TORCH_OBJ(a) ((a)->doorCamera)
+#define TORCH_FLAG(a) ((a)->wish0.w[0])
+#else
+
 /* this file's own view of Act (the shared one is in typedef.h) */
 typedef struct ActSt04A { /* field names derived */
     char pad0[32];        /* 0x00 */
@@ -66,6 +83,11 @@ typedef struct PObjGObjSt04A { /* field names derived */
     char pad168[4];            /* 0x168 */
     int active;                /* 0x16C */
 } PObjGObjSt04A;               /* derived name */
+
+#define TORCH_ANIM(a) ((a)->torchAnim)
+#define TORCH_OBJ(a) ((a)->torchObj)
+#define TORCH_FLAG(a) ((a)->torchFlag)
+#endif
 
 /* .data, ahead of model_on and model_off: each action's mail pair, the check
    handler stored into its first entry at run time, and the matrix
@@ -1667,69 +1689,69 @@ void actSt04aTorch1Chk(GObj *volatile self)
 
     switch (self->labelId) {
     case 555:
-        act->torchFlag = 145;
-        act->torchObj = scpSearchGobj(563);
-        act->torchAnim = 283;
+        TORCH_FLAG(act) = 145;
+        TORCH_OBJ(act) = scpSearchGobj(563);
+        TORCH_ANIM(act) = 283;
         actCreateSubThread(actSt04aTorchAllFlagfChk, 21);
         break;
     case 556:
-        act->torchFlag = 146;
-        act->torchObj = scpSearchGobj(564);
-        act->torchAnim = 284;
+        TORCH_FLAG(act) = 146;
+        TORCH_OBJ(act) = scpSearchGobj(564);
+        TORCH_ANIM(act) = 284;
         break;
     case 557:
-        act->torchFlag = 147;
-        act->torchObj = scpSearchGobj(565);
-        act->torchAnim = 285;
+        TORCH_FLAG(act) = 147;
+        TORCH_OBJ(act) = scpSearchGobj(565);
+        TORCH_ANIM(act) = 285;
         break;
     case 558:
-        act->torchFlag = 148;
-        act->torchObj = scpSearchGobj(566);
-        act->torchAnim = 286;
+        TORCH_FLAG(act) = 148;
+        TORCH_OBJ(act) = scpSearchGobj(566);
+        TORCH_ANIM(act) = 286;
         break;
     case 559:
-        act->torchFlag = 149;
-        act->torchObj = scpSearchGobj(567);
-        act->torchAnim = 287;
+        TORCH_FLAG(act) = 149;
+        TORCH_OBJ(act) = scpSearchGobj(567);
+        TORCH_ANIM(act) = 287;
         break;
     case 560:
-        act->torchFlag = 150;
-        act->torchObj = scpSearchGobj(568);
-        act->torchAnim = 288;
+        TORCH_FLAG(act) = 150;
+        TORCH_OBJ(act) = scpSearchGobj(568);
+        TORCH_ANIM(act) = 288;
         break;
     case 561:
-        act->torchFlag = 151;
-        act->torchObj = scpSearchGobj(569);
-        act->torchAnim = 289;
+        TORCH_FLAG(act) = 151;
+        TORCH_OBJ(act) = scpSearchGobj(569);
+        TORCH_ANIM(act) = 289;
         break;
     case 562:
-        act->torchFlag = 152;
-        act->torchObj = scpSearchGobj(570);
-        act->torchAnim = 290;
+        TORCH_FLAG(act) = 152;
+        TORCH_OBJ(act) = scpSearchGobj(570);
+        TORCH_ANIM(act) = 290;
         break;
     }
 
     while (1) {
-        if (scpTriggerBall(self, act->torchObj, 5.0f) != 0) {
+        if (scpTriggerBall(self, TORCH_OBJ(act), 5.0f) != 0) {
             scpBoyControlReadDisable = 1;
 
-            act->torchObj->active = 0;
+            TORCH_OBJ(act)->active = 0;
 
-            stage_SetAnimation(act->torchAnim, 1, 0);
+            stage_SetAnimation(TORCH_ANIM(act), 1, 0);
 
-            while (stage_CheckAnimationFrame(act->torchAnim, 2, 0) == 0) {
+            while (stage_CheckAnimationFrame(TORCH_ANIM(act), 2, 0) == 0) {
                 _ACTWait(1);
             }
             _ACTWait(1);
 
             soundSeDefPlay(1363, 0, 0, 1);
 
-            while (stage_CheckAnimationFinish(act->torchAnim) == 0) {
+            while (stage_CheckAnimationFinish(TORCH_ANIM(act)) == 0) {
                 _ACTWait(1);
             }
             _ACTWait(1);
 
-            gflagOn(act->torchFlag);
+            gflagOn(TORCH_FLAG(act));
 
             scpBoyControlReadDisable = 0;
             break;
@@ -2041,7 +2063,7 @@ static void finishCallBackFunc(GObj *obj)
     Vec4St04A v;
     int i;
 
-    _ApplyMatrix(&v, GOBJ_SUB(obj)->nodeMtx, YUnitVector);
+    _ApplyMatrix(&v, (void *)GOBJ_SUB(obj)->nodeMtx, YUnitVector);
     v.m[1] = 0.0f;
     _NormalizeVector(GOBJ_SUB(obj)->ctrl.dir, &v);
 

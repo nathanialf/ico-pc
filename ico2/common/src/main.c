@@ -93,7 +93,7 @@ static IOSThread soundThread; /* derived name */
 
 static char soundThreadStack[8192] __attribute__((aligned(16))); /* derived name */
 
-static int schedulerMsgBuff[8]; /* derived name */
+static IosMsgWord schedulerMsgBuff[8]; /* derived name */
 
 /* the six threads Emergency_DestroyAllThread tears down, every thread boot
    starts except idle; first in this object's .rodata, ahead of Main's
@@ -282,7 +282,7 @@ static int frameStepCount = 0; /* derived name */
 
 static void scheduler(void)
 {
-    int msg[4];
+    IosMsgWord msg[4];
 
     debug_StdPrintfDummy("scheduler() in\n");
     sceGsSyncV(0);

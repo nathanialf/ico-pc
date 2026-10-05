@@ -1,4 +1,11 @@
 #include "charFileManager.h"
+
+#ifdef ICO_HOST
+
+#include <string.h>
+
+#endif
+
 #include "debug.h"
 #include "fieldCollision.h"
 #include "memory.h"
@@ -24,11 +31,22 @@ typedef union { /* field names derived */
     float f;
 } DObjWord; /* derived name */
 
+#ifdef ICO_HOST
+
+/* the stand-in is a real GObj on the host (its dobj is not at 0x15C there) */
+typedef GObj DObjGObj;
+
+#define DOBJ_D(p) ((p)->dobj)
+#else
+
 typedef struct { /* field names derived */
     char pad[348];
     DObjWord data;
     char pad2[32];
 } DObjGObj; /* derived name */
+
+#define DOBJ_D(p) ((p)->data.d)
+#endif
 
 typedef union { /* field names derived */
     int i[8];
@@ -73,9 +91,13 @@ typedef struct { /* field names derived */
     long long pad848[7];
 } DObjRecord; /* derived name */
 
+#ifndef ICO_HOST
+
 static DObjRecord emptyDObj = {
     {0, -1}, {0}, 0, 1, 1, 1, 0, 1552, {0}, 0, -1, {0},
 }; /* derived name */
+
+#endif
 
 /* One entry of the rotation element array at 0x80c: a zero vector then
    three identity quaternions. */
@@ -125,51 +147,51 @@ static void initGeometryState(Sub15C *self, SObjSimpleSetting *lay)
     int n;
 
     p = &g;
-    g.data.d = self;
+    DOBJ_D(&g) = self;
     InitMotionGeoInfo(&self->root, lay->pos[0], lay->pos[1], lay->pos[2], lay->rot[0], lay->rot[1],
                       lay->rot[2]);
-    InitMotionStateInfo(&p->data.d->ctrl);
-    InitFrameDependSequence(p->data.d->fdsFlags);
-    p->data.d->motion = initialGeoWork;
+    InitMotionStateInfo(&DOBJ_D(p)->ctrl);
+    InitFrameDependSequence(DOBJ_D(p)->fdsFlags);
+    DOBJ_D(p)->motion = initialGeoWork;
 
-    if (p->data.d->skel != 0) {
-        p->data.d->root.plane.f[3] =
-            p->data.d->root.plane.f[3] + p->data.d->skel->pos[1] * self->nodes->scale[0];
-        p->data.d->blendBuf =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 5, __FILE__, 125);
-        p->data.d->motionBuf =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 5, __FILE__, 127);
-        InitMotionRotElem(p->data.d->blendBuf, p->data.d->skelNodeNum);
-        InitMotionRotElem(p->data.d->motionBuf, p->data.d->skelNodeNum);
-        CopyVector(p->data.d->localPos, ZeroPoint);
-        CopyVector(p->data.d->localPos, ZeroPoint);
-        CopyVector(p->data.d->localMove, ZeroVector);
-        p->data.d->localHeight = 0.0f;
-        p->data.d->local = InitialObjPointer;
-        p->data.d->nodeRotElem =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 6, __FILE__, 137);
-        for (i = 0; i < p->data.d->skelNodeNum; i++) {
-            *(DObjBlk40 *)&p->data.d->nodeRotElem[i] = initialRotElem;
+    if (DOBJ_D(p)->skel != 0) {
+        DOBJ_D(p)->root.plane.f[3] =
+            DOBJ_D(p)->root.plane.f[3] + DOBJ_D(p)->skel->pos[1] * self->nodes->scale[0];
+        DOBJ_D(p)->blendBuf =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5, __FILE__, 125);
+        DOBJ_D(p)->motionBuf =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5, __FILE__, 127);
+        InitMotionRotElem(DOBJ_D(p)->blendBuf, DOBJ_D(p)->skelNodeNum);
+        InitMotionRotElem(DOBJ_D(p)->motionBuf, DOBJ_D(p)->skelNodeNum);
+        CopyVector(DOBJ_D(p)->localPos, ZeroPoint);
+        CopyVector(DOBJ_D(p)->localPos, ZeroPoint);
+        CopyVector(DOBJ_D(p)->localMove, ZeroVector);
+        DOBJ_D(p)->localHeight = 0.0f;
+        DOBJ_D(p)->local = InitialObjPointer;
+        DOBJ_D(p)->nodeRotElem =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6, __FILE__, 137);
+        for (i = 0; i < DOBJ_D(p)->skelNodeNum; i++) {
+            *(DObjBlk40 *)&DOBJ_D(p)->nodeRotElem[i] = initialRotElem;
         }
-        p->data.d->nodeLimit =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 2, __FILE__, 145);
-        for (j = 0; j < p->data.d->skelNodeNum; j++) {
-            p->data.d->nodeLimit[j] = 0;
+        DOBJ_D(p)->nodeLimit =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 2, __FILE__, 145);
+        for (j = 0; j < DOBJ_D(p)->skelNodeNum; j++) {
+            DOBJ_D(p)->nodeLimit[j] = 0;
         }
-        p->data.d->nodeVec =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 4, __FILE__, 153);
-        for (k = 0; k < p->data.d->skelNodeNum; k++) {
-            CopyVector(p->data.d->nodeVec[k], ZeroVector);
+        DOBJ_D(p)->nodeVec =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 4, __FILE__, 153);
+        for (k = 0; k < DOBJ_D(p)->skelNodeNum; k++) {
+            CopyVector(DOBJ_D(p)->nodeVec[k], ZeroVector);
         }
-        p->data.d->blendRot =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum << 6, __FILE__, 161);
-        for (m = 0; m < p->data.d->skelNodeNum; m++) {
-            *(DObjBlk40 *)p->data.d->blendRot[m] = initialBlendRot;
+        DOBJ_D(p)->blendRot =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6, __FILE__, 161);
+        for (m = 0; m < DOBJ_D(p)->skelNodeNum; m++) {
+            *(DObjBlk40 *)DOBJ_D(p)->blendRot[m] = initialBlendRot;
         }
-        p->data.d->blendless =
-            iosMallocDebug(ios_partition_sugipon, p->data.d->skelNodeNum, __FILE__, 169);
-        for (n = 0; n < p->data.d->skelNodeNum; n++) {
-            p->data.d->blendless[n] = 0;
+        DOBJ_D(p)->blendless =
+            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum, __FILE__, 169);
+        for (n = 0; n < DOBJ_D(p)->skelNodeNum; n++) {
+            DOBJ_D(p)->blendless[n] = 0;
         }
 
         {
@@ -178,16 +200,16 @@ static void initGeometryState(Sub15C *self, SObjSimpleSetting *lay)
             SetMotionDirection(p, dir.f);
         }
     } else {
-        p->data.d->blendBuf = 0;
-        p->data.d->nodeRotElem = 0;
-        p->data.d->nodeLimit = 0;
-        p->data.d->nodeVec = 0;
-        p->data.d->blendRot = 0;
-        p->data.d->blendless = 0;
+        DOBJ_D(p)->blendBuf = 0;
+        DOBJ_D(p)->nodeRotElem = 0;
+        DOBJ_D(p)->nodeLimit = 0;
+        DOBJ_D(p)->nodeVec = 0;
+        DOBJ_D(p)->blendRot = 0;
+        DOBJ_D(p)->blendless = 0;
     }
-    p->data.d->rideFunc = 0;
-    *(DObjBlk20 *)&p->data.d->streamScale = initialGeoState;
-    initGeometryScaleRatio(p->data.d);
+    DOBJ_D(p)->rideFunc = 0;
+    *(DObjBlk20 *)&DOBJ_D(p)->streamScale = initialGeoState;
+    initGeometryScaleRatio(DOBJ_D(p));
 }
 
 static void initMatrixDObj(Sub15C *self, SObjSimpleSetting *lay)
@@ -215,6 +237,17 @@ static void initMatrixDObj(Sub15C *self, SObjSimpleSetting *lay)
 
 typedef struct DObjNode DObjNode; /* derived name */
 
+#ifdef ICO_HOST
+
+/* the node records are 80 bytes on every host (no pointers); the node is
+   addressed by index instead of an int sum */
+_Static_assert(sizeof(struct DObjNode) == 80, "DObjNode is 80 bytes");
+
+#define DOBJ_NODE_AT(self, i) (&(self)->nodes[i])
+#else
+#define DOBJ_NODE_AT(self, i) ((DObjNode *)((i) * 80 + (int)(self)->nodes))
+#endif
+
 /* A block's node is addressed as an int sum, the index first: the ROM adds
    in that order, and &nodes[i] or nodes + i put the base first (measured). */
 static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
@@ -228,7 +261,7 @@ static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
         self->nodes[i].flags.ll &= ~1;
         self->nodes[i].flags.ll &= ~2;
         {
-            DObjNode *e = (DObjNode *)(i * 80 + (int)self->nodes);
+            DObjNode *e = DOBJ_NODE_AT(self, i);
             e->flags.ll &= ~4;
             e->pos[1] = 0.0f;
             e->pos[2] = 0.0f;
@@ -236,7 +269,7 @@ static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
             e->pos[0] = 0.0f;
         }
         {
-            DObjNode *e = (DObjNode *)(i * 80 + (int)self->nodes);
+            DObjNode *e = DOBJ_NODE_AT(self, i);
             e->fade = 0.0f;
             e->alpha = 1.0f;
             *(short *)((char *)e + 0x3A) = 0;
@@ -252,14 +285,14 @@ static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
         }
         self->nodes[j].flags.ll &= ~2;
         {
-            DObjNode *e = (DObjNode *)(j * 80 + (int)self->nodes);
+            DObjNode *e = DOBJ_NODE_AT(self, j);
             e->pos[0] = e->pos[1] = e->pos[2] = 0.0f;
             e->pos[3] = 1.0f;
             e->flags.ll &= ~4;
         }
         self->nodes[j].flags.ll &= ~1;
         {
-            DObjNode *e = (DObjNode *)(j * 80 + (int)self->nodes);
+            DObjNode *e = DOBJ_NODE_AT(self, j);
             e->fade = 0.0f;
             e->alpha = 1.0f;
             *(short *)((char *)e + 0x3A) = 0;
@@ -413,8 +446,21 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 {
     Sub15C *d;
 
+#ifdef ICO_HOST
+    /* the record is a runtime Sub15C here (wider than the EE's 0x880): the
+       same all-zero start with the template's non-zero words by name */
+    d = iosMallocDebug(ios_partition_seki, sizeof(Sub15C), __FILE__, 463);
+    memset(d, 0, sizeof(Sub15C));
+    d->parent.node = -1;
+    d->disp = 1;
+    d->colRotate = 1;
+    d->cylinderOn = 1;
+    d->modelId = 1552;
+    d->accessary = -1;
+#else
     d = iosMallocDebug(ios_partition_seki, sizeof(DObjRecord), __FILE__, 463);
     *(DObjRecord *)d = emptyDObj;
+#endif
     if (id != 1552) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }

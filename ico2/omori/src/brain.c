@@ -369,13 +369,20 @@ void brainAddLevelGop(GObj *gobj, float lv)
     }
 }
 
+/* the target list's address: Brain + 0x28 on the EE, the field on the host */
+#ifdef ICO_HOST
+#define BRAIN_TGT_ADDR(b) ((b)->tgt)
+#else
+#define BRAIN_TGT_ADDR(b) ((b) + 0x28)
+#endif
+
 /* brainSubLevelGop, brainSetLevelGop and brainDecTargetTimer walk the
    targets from an int address; brainGirl.tgt[i] or a BrainTarget pointer
    moves .text in each */
 void brainSubLevelGop(GObj *gobj, float lv)
 {
-    int brain = (int)&brainGirl;
-    int tgt = brain + 0x28;
+    ICO_WORD_PTR(Brain *) brain = (ICO_WORD_PTR(Brain *)) & brainGirl;
+    ICO_WORD_PTR(BrainTarget *) tgt = BRAIN_TGT_ADDR(brain);
     int i;
 
     for (i = 0; i < 40; i++) {
@@ -397,8 +404,8 @@ void brainSubLevelGop(GObj *gobj, float lv)
 
 void brainSetLevelGop(GObj *gobj, float lv, int lookOnly, int alwaysSeen)
 {
-    int brain = (int)&brainGirl;
-    int tgt = brain + 0x28;
+    ICO_WORD_PTR(Brain *) brain = (ICO_WORD_PTR(Brain *)) & brainGirl;
+    ICO_WORD_PTR(BrainTarget *) tgt = BRAIN_TGT_ADDR(brain);
     int i;
 
     for (i = 0; i < 40; i++) {
@@ -432,8 +439,8 @@ static inline int brainDecTimer(BrainTarget *e) /* derived name */
 
 int brainDecTargetTimer(GObj *gobj)
 {
-    int brain = (int)&brainGirl;
-    int tgt = brain + 0x28;
+    ICO_WORD_PTR(Brain *) brain = (ICO_WORD_PTR(Brain *)) & brainGirl;
+    ICO_WORD_PTR(BrainTarget *) tgt = BRAIN_TGT_ADDR(brain);
     BrainTarget *e;
     int i;
 

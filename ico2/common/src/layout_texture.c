@@ -43,7 +43,7 @@ static int fadeType = 0; /* derived name */
 
 int lt_item_select_disable = 0;
 
-static int fadeCallback = 0; /* derived name */
+static ICO_WORD_PTR(LtSelectFn) fadeCallback = 0; /* derived name */
 
 static unsigned int ltBlinkCount = 0; /* derived name */
 
@@ -862,7 +862,7 @@ inline int lt_fade_status(void)
     return fadeState;
 }
 
-inline void lt_set_item_select_func(int val)
+inline void lt_set_item_select_func(ICO_WORD_PTR(LtSelectFn) val)
 {
     fadeCallback = val;
 }

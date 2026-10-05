@@ -39,7 +39,7 @@ typedef struct CamMgr { /* field names derived */
     char flags[100];    /* 0x0C, one per pool block, set while in use */
 } CamMgr;               /* derived name */
 
-int curmenu;
+ICO_WORD curmenu;
 
 static void EnterMenu(void *func, int arg, void *parent)
 {
@@ -48,7 +48,7 @@ static void EnterMenu(void *func, int arg, void *parent)
     m->arg = arg;
     m->parent = parent;
     iosThreadStart(m);
-    curmenu = (int)m;
+    curmenu = (ICO_WORD)m;
     if (parent != 0) {
         iosThreadSleep(parent);
     }
@@ -121,7 +121,7 @@ static inline void writeCameraSetFile(char *name, void *buf, int size) /* derive
     debug_openLog();
 }
 
-static void saveEditedDataBinary(char *name, int boxes, int count)
+static void saveEditedDataBinary(char *name, ICO_WORD boxes, int count)
 {
     /* the header record: the body writes the four words straight into buf,
        and only the DEBUG build reads them back through it after the file
@@ -148,10 +148,39 @@ static void saveEditedDataBinary(char *name, int boxes, int count)
 }
 
 /* the camera set the stage plays and the copy the editor edits: two fixed
-   buffers in the development kit's extra memory */
+   buffers in the development kit's extra memory.  Each is a CamMgr (the count,
+   then the groups' address) followed on the EE by the groups and the pin blocks
+   (0xE27E0 bytes: 0x70 + 100 * 76 + 100 * 9200).  The addresses lie outside the
+   32 MB the host simulates, so there the sets are static records and each box's
+   pin block is a heap block (see docs/port/SWEEP_2F.md); CS_COUNT and CS_ITEMS
+   read a set's two words. */
+#ifdef ICO_HOST
+#define CAMSET_T CamMgr
+#define CS_COUNT(set) ((set)->count)
+#define CS_ITEMS(set) ((ICO_WORD)(set)->items)
+
+static CamMgr cameraSetOrgMgr; /* derived name */
+
+static CamMgr cameraSetEditMgr; /* derived name */
+
+static CamGroup cameraSetOrgGroups[100]; /* derived name */
+
+static CamGroup cameraSetEditGroups[100]; /* derived name */
+
+static CamMgr *cameraSetOrg = &cameraSetOrgMgr; /* derived name */
+
+static CamMgr *cameraSetEdit = &cameraSetEditMgr; /* derived name */
+
+#else
+#define CAMSET_T int
+#define CS_COUNT(set) ((set)[0])
+#define CS_ITEMS(set) ((set)[1])
+
 static int *cameraSetOrg = (int *)0x3000000; /* derived name */
 
 static int *cameraSetEdit = (int *)0x30E27E0; /* derived name */
+
+#endif
 
 /* the line buffer every row of the dump is formatted into before it is
    written and echoed */
@@ -174,19 +203,20 @@ static void saveEditedData(int *range)
         __assert(__FILE__, 435, "0");
     }
     for (i = from; i < to; i++) {
-        CamGroup *b = (CamGroup *)(cameraSetEdit[1] + i * 76);
+        CamGroup *b = (CamGroup *)(CS_ITEMS(cameraSetEdit) + i * 76);
 
         sprintf(dumpLine, "group[%s]\n%d\t\t%d\t%d\t%d\t\t\t%d\t%d\t%d\n", b->name, b->kind,
                 (int)b->center[0], (int)b->center[1], (int)b->center[2], (int)b->range[0],
-                (int)b->range[1], (int)((CamGroup *)(i * 76 + cameraSetEdit[1]))->range[2]);
+                (int)b->range[1], (int)((CamGroup *)(i * 76 + CS_ITEMS(cameraSetEdit)))->range[2]);
         sceWrite(fd, dumpLine, strlen(dumpLine));
         debug_StdPrintfDummy(dumpLine);
     }
     for (i = from; i < to; i++) {
-        sprintf(dumpLine, "group[%s]'s pin\n", ((CamGroup *)(cameraSetEdit[1] + i * 76))->name);
+        sprintf(dumpLine, "group[%s]'s pin\n",
+                ((CamGroup *)(CS_ITEMS(cameraSetEdit) + i * 76))->name);
         sceWrite(fd, dumpLine, strlen(dumpLine));
-        for (j = ((CamGroup *)(i * 76 + cameraSetEdit[1]))->first;
-             j < ((CamGroup *)(i * 76 + cameraSetEdit[1]))->end; j++) {
+        for (j = ((CamGroup *)(i * 76 + CS_ITEMS(cameraSetEdit)))->first;
+             j < ((CamGroup *)(i * 76 + CS_ITEMS(cameraSetEdit)))->end; j++) {
             PinRec *p = CameraEdit_PIN(i, j);
 
             /* the pin flag prints as a maru when set and a batsu when clear */
@@ -342,7 +372,7 @@ static void DispCameraGroup(int box, unsigned char sel)
     int j;
     int k;
     int i;
-    CamGroup *b = (CamGroup *)(cameraSetEdit[1] + box * 76);
+    CamGroup *b = (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
     BoxVtx v[8] = {
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] - b->range[2], 1.0f},
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] + b->range[2], 1.0f},
@@ -633,7 +663,7 @@ void dispCameraGroupType2(int box, unsigned char sel)
     unsigned char *col;
     unsigned int *c0;
     unsigned int *c1;
-    CamGroup *b = (CamGroup *)(cameraSetEdit[1] + box * 76);
+    CamGroup *b = (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
     BoxVtx v[8] = {
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] - b->range[2], 1.0f},
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] + b->range[2], 1.0f},
@@ -778,7 +808,7 @@ static void dispBox(unsigned char *ca, unsigned char *cb, CamVtx *v, float m[4][
 void CameraEdit_DispBoxType2_Plane(int box, int sel)
 {
     int n;
-    CamGroup *b = (CamGroup *)(cameraSetEdit[1] + box * 76);
+    CamGroup *b = (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
     CamVtx v[8] = {
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] - b->range[2], 1.0f},
         {b->center[0] - b->range[0], b->center[1] - b->range[1], b->center[2] + b->range[2], 1.0f},
@@ -865,13 +895,13 @@ void menuGroupSelect(MenuThread *m)
                 if (debug_font_flag & 1) {
                     print_y += 10;
                     debug_Printf(40, print_y, 0xFFFFFF00, ">> %s",
-                                 ((CamGroup *)(cameraSetEdit[1] + i * 76))->name);
+                                 ((CamGroup *)(CS_ITEMS(cameraSetEdit) + i * 76))->name);
                 }
             } else {
                 if (debug_font_flag & 1) {
                     print_y += 10;
                     debug_Printf(40, print_y, 0xFFFFFF00, "   %s",
-                                 ((CamGroup *)(cameraSetEdit[1] + i * 76))->name);
+                                 ((CamGroup *)(CS_ITEMS(cameraSetEdit) + i * 76))->name);
                 }
             }
         }
@@ -897,7 +927,7 @@ typedef struct { /* field names derived */
 
 void menuGroupEdit(MenuThread *m)
 {
-    CamGroup *rec = (CamGroup *)(cameraSetEdit[1] + m->arg * 76);
+    CamGroup *rec = (CamGroup *)(CS_ITEMS(cameraSetEdit) + m->arg * 76);
     int cur = 0;
     int i;
 
@@ -967,7 +997,7 @@ void menuGroupEdit(MenuThread *m)
             rec->range[2] = (float)item[6].val;
         }
         if (pad[1].flags & 0x10) {
-            curmenu = (int)m->parent;
+            curmenu = (ICO_WORD)m->parent;
             iosThreadDestroy(m);
         }
         iosThreadSleep(m);
@@ -996,7 +1026,7 @@ static int editPinNo; /* derived name */
 void menuPinSelect(MenuThread *m)
 {
     int no = m->arg;
-    int cur = ((CamGroup *)(cameraSetEdit[1] + no * 76))->first;
+    int cur = ((CamGroup *)(CS_ITEMS(cameraSetEdit) + no * 76))->first;
     int min;
     int max;
     int i;
@@ -1010,8 +1040,8 @@ void menuPinSelect(MenuThread *m)
 
     while (1) {
         PIN_WINDOW_TRACE(start, end);
-        min = ((CamGroup *)(cameraSetEdit[1] + no * 76))->first;
-        max = ((CamGroup *)(cameraSetEdit[1] + no * 76))->end;
+        min = ((CamGroup *)(CS_ITEMS(cameraSetEdit) + no * 76))->first;
+        max = ((CamGroup *)(CS_ITEMS(cameraSetEdit) + no * 76))->end;
         if (pad[1].flags & 0x1000) {
             cur--;
         }
@@ -1057,7 +1087,7 @@ void menuPinSelect(MenuThread *m)
             SetWSMatrix(&cw);
         }
         if (pad[1].flags & 0x10) {
-            curmenu = (int)m->parent;
+            curmenu = (ICO_WORD)m->parent;
             iosThreadDestroy(m);
         } else if (pad[1].flags & 0x20) {
             editPinNo = no;
@@ -1176,7 +1206,7 @@ void menuPinEdit(MenuThread *m)
             }
         }
         if (pad[1].flags & 0x10) {
-            curmenu = (int)m->parent;
+            curmenu = (ICO_WORD)m->parent;
             iosThreadDestroy(m);
         }
         iosThreadSleep(m);
@@ -1190,7 +1220,7 @@ inline void menu_2(MenuThread *m)
     while (1) {
         debug_StdPrintfDummy("menu_2, arg=%d\n", m->arg);
         if (pad[1].flags & 0x20) {
-            curmenu = (int)m->parent;
+            curmenu = (ICO_WORD)m->parent;
             iosThreadDestroy(m);
         }
         iosThreadSleep(m);
@@ -1218,8 +1248,8 @@ void wakeup_cameraedit(void)
     if (curmenu != 0) {
         iosThreadWakeup((void *)curmenu);
         if (pad[1].flags & 0x400) {
-            saveEditedDataBinary(cameraSetList[stageData[stage_no].camSetId], cameraSetEdit[1],
-                                 cameraSetEdit[0]);
+            saveEditedDataBinary(cameraSetList[stageData[stage_no].camSetId],
+                                 CS_ITEMS(cameraSetEdit), CS_COUNT(cameraSetEdit));
         }
     }
 }
@@ -1229,15 +1259,27 @@ void test_camedit(void)
     EnterMenu(menuGroupSelect, 0, 0);
 }
 
-inline CamGroup *_CameraEdit_BOX(int *set, int box)
+inline CamGroup *_CameraEdit_BOX(CAMSET_T *set, int box)
 {
-    return (CamGroup *)(set[1] + box * 76);
+    return (CamGroup *)(CS_ITEMS(set) + box * 76);
 }
 
-inline PinRec *_CameraEdit_PIN(int *set, int box, int pin)
+inline PinRec *_CameraEdit_PIN(CAMSET_T *set, int box, int pin)
 {
-    return &CAMGROUP_ITEMS((CamGroup *)(set[1] + box * 76))[pin];
+    return &CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(set) + box * 76))[pin];
 }
+
+#ifdef ICO_HOST
+
+/* a box's pin block: 100 pins, from the heap so CamGroup.items can hold its
+   address as an EE word; 0 when the heap is out of room (the caller then
+   reports the box as not added) */
+static inline char *_CameraEdit_alloc_pool(CamMgr *mgr) /* derived name */
+{
+    return iosMallocDebugNoAssert(ios_partition_root, 9200, __FILE__, 1262);
+}
+
+#else
 
 static inline char *_CameraEdit_alloc_pool(CamMgr *mgr) /* derived name */
 {
@@ -1250,6 +1292,8 @@ static inline char *_CameraEdit_alloc_pool(CamMgr *mgr) /* derived name */
     }
     return 0;
 }
+
+#endif
 
 inline int _CameraEdit_add_box(CamMgr *mgr, CamGroup *src)
 {
@@ -1276,13 +1320,13 @@ inline int _CameraEdit_add_box(CamMgr *mgr, CamGroup *src)
 
 inline int _CameraEdit_add_pin(CamMgr *mgr, int box, PinRec *src)
 {
-    int base = box * 76 + (int)mgr->items;
+    ICO_WORD base = box * 76 + (ICO_WORD)mgr->items;
     int n = ((CamGroup *)base)->end;
     int result = -1;
     if (n < 100) {
-        int base2;
+        ICO_WORD base2;
         CAMGROUP_ITEMS((CamGroup *)base)[n] = *src;
-        base2 = box * 76 + (int)mgr->items;
+        base2 = box * 76 + (ICO_WORD)mgr->items;
         result = ((CamGroup *)base2)->end;
         ((CamGroup *)base2)->end = result + 1;
     } else {
@@ -1291,6 +1335,19 @@ inline int _CameraEdit_add_pin(CamMgr *mgr, int box, PinRec *src)
     }
     return result;
 }
+
+#ifdef ICO_HOST
+
+static inline void _CameraEdit_free_box_pool(CamMgr *mgr, int idx) /* derived name */
+{
+    CamGroup *box = (CamGroup *)(idx * 76 + (ICO_WORD)mgr->items);
+
+    if (CAMGROUP_ITEMS(box) != 0) {
+        iosFree(CAMGROUP_ITEMS(box));
+    }
+}
+
+#else
 
 static inline void _CameraEdit_free_box_pool(CamMgr *mgr, int idx) /* derived name */
 {
@@ -1304,6 +1361,8 @@ static inline void _CameraEdit_free_box_pool(CamMgr *mgr, int idx) /* derived na
         p += 9200;
     }
 }
+
+#endif
 
 void _CameraEdit_del_box(CamMgr *mgr, int idx)
 {
@@ -1322,7 +1381,7 @@ void _CameraEdit_del_box(CamMgr *mgr, int idx)
 
 static inline CamGroup *_CameraEdit_BOX_p(CamMgr *mgr, int i) /* derived name */
 {
-    return (CamGroup *)(i * 76 + (int)mgr->items);
+    return (CamGroup *)(i * 76 + (ICO_WORD)mgr->items);
 }
 
 static inline PinRec *_CameraEdit_PIN_p(CamMgr *mgr, int i, int j) /* derived name */
@@ -1376,14 +1435,14 @@ void CameraEdit_DispBox(int box, unsigned char sel)
 
 void CameraEdit_Reflect(void)
 {
-    int *p = cameraSetOrg;
-    ReflectCameraSetBinary((CamGroup *)p[1], p[0]);
+    CAMSET_T *p = cameraSetOrg;
+    ReflectCameraSetBinary((CamGroup *)CS_ITEMS(p), CS_COUNT(p));
 }
 
 void CameraEdit_Save(char *name)
 {
-    int *p = cameraSetOrg;
-    saveEditedDataBinary(name, p[1], p[0]);
+    CAMSET_T *p = cameraSetOrg;
+    saveEditedDataBinary(name, CS_ITEMS(p), CS_COUNT(p));
 }
 
 inline void InitCameraEditor(void)
@@ -1414,8 +1473,8 @@ inline void CameraEdit_reset_box(int box)
     CamGroup *dst;
     PinRec *saved;
     int i;
-    src = (CamGroup *)(cameraSetOrg[1] + box * 76);
-    dst = (CamGroup *)(cameraSetEdit[1] + box * 76);
+    src = (CamGroup *)(CS_ITEMS(cameraSetOrg) + box * 76);
+    dst = (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
     saved = CAMGROUP_ITEMS(dst);
     *dst = *src;
     CAMGROUP_SET_ITEMS(dst, saved);
@@ -1428,15 +1487,15 @@ inline void CameraEdit_reset_box(int box)
 
 inline void CameraEdit_reset_pin(int box, int pin)
 {
-    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76))[pin];
-    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(cameraSetOrg[1] + box * 76))[pin];
+    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76))[pin];
+    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(cameraSetOrg) + box * 76))[pin];
     *dst = *src;
 }
 
 inline void CameraEdit_reflect_box(int box)
 {
-    CamGroup *dst = (CamGroup *)(cameraSetOrg[1] + box * 76);
-    CamGroup *src = (CamGroup *)(cameraSetEdit[1] + box * 76);
+    CamGroup *dst = (CamGroup *)(CS_ITEMS(cameraSetOrg) + box * 76);
+    CamGroup *src = (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
     PinRec *saved = CAMGROUP_ITEMS(dst);
     int i;
     *dst = *src;
@@ -1450,14 +1509,18 @@ inline void CameraEdit_reflect_box(int box)
 
 inline void CameraEdit_reflect_pin(int box, int pin)
 {
-    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(cameraSetOrg[1] + box * 76))[pin];
-    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76))[pin];
+    PinRec *dst = &CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(cameraSetOrg) + box * 76))[pin];
+    PinRec *src = &CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76))[pin];
     *dst = *src;
 }
 
 inline int CameraEdit_BOX_NUMBER(void)
 {
+#ifdef ICO_HOST
+    return cameraSetEdit->count;
+#else
     return *cameraSetEdit;
+#endif
 }
 
 inline int CameraEdit_PIN_NUMBER(int box)
@@ -1480,12 +1543,12 @@ inline int CameraEdit_PIN_NUMBER_ALL(CamGroup *box, int n)
 
 inline CamGroup *CameraEdit_BOX(int box)
 {
-    return (CamGroup *)(cameraSetEdit[1] + box * 76);
+    return (CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76);
 }
 
 inline PinRec *CameraEdit_PIN(int box, int pin)
 {
-    return CAMGROUP_ITEMS((CamGroup *)(cameraSetEdit[1] + box * 76)) + pin;
+    return CAMGROUP_ITEMS((CamGroup *)(CS_ITEMS(cameraSetEdit) + box * 76)) + pin;
 }
 
 inline void CameraEdit_DispPin(int box, int pin)
@@ -1537,17 +1600,36 @@ inline void ConvertCameraSetBuffer(int n, CamGroup *item, char *groups)
     int b;
     char *f;
     cameraPinDefault.eyeRate = stageData[stage_no].handCameraRate;
+#ifdef ICO_HOST
+    /* give back the pin blocks of the sets this call replaces */
+    for (i = 0; i < cameraSetOrgMgr.count; i++) {
+        _CameraEdit_free_box_pool(&cameraSetOrgMgr, i);
+    }
+    for (i = 0; i < cameraSetEditMgr.count; i++) {
+        _CameraEdit_free_box_pool(&cameraSetEditMgr, i);
+    }
+#endif
     m1 = (CamMgr *)cameraSetOrg;
+#ifdef ICO_HOST
+    m1->items = (char *)cameraSetOrgGroups;
+    m1->pool = 0;
+#else
     m1->items = (char *)m1 + sizeof(CamMgr);
     m1->pool = (char *)m1 + sizeof(CamMgr) + 100 * sizeof(CamGroup);
+#endif
     m1->count = 0;
     f = &m1->flags[99];
     for (a = 99; a >= 0; a--) {
         *f-- = 0;
     }
     m2 = (CamMgr *)cameraSetEdit;
+#ifdef ICO_HOST
+    m2->items = (char *)cameraSetEditGroups;
+    m2->pool = 0;
+#else
     m2->items = (char *)m2 + sizeof(CamMgr);
     m2->pool = (char *)m2 + sizeof(CamMgr) + 100 * sizeof(CamGroup);
+#endif
     m2->count = 0;
     f = &m2->flags[99];
     for (b = 99; b >= 0; b--) {

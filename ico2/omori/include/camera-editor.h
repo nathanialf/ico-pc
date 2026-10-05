@@ -9,6 +9,7 @@
 #define CAMERA_EDITOR_H
 
 #include "eeword.h"
+#include "typedef.h"
 
 /* A camera pin, one item record of a camera set (0x5C bytes, copied whole):
  * the camera position and the point it looks at, two offsets of the look-at
@@ -74,13 +75,18 @@ typedef struct CamSetFile { /* field names derived */
 
 extern PinRec cameraPinDefault;
 extern CamGroup cameraGroupDefault;
-extern int curmenu;
+extern ICO_WORD curmenu;
 extern int print_y;
 extern unsigned char exit_f;
 /* A menu of the camera editor: its thread record, then the menu that opened
    it, which it wakes and hands back to on exit, and the menu's argument. */
 typedef struct MenuThread { /* field names derived */
+#ifdef ICO_HOST
+    /* an IOSThread is 152 bytes on a 64-bit host, 112 on the EE and 32-bit hosts */
+    char thread[sizeof(void *) == 4 ? 112 : 160] __attribute__((aligned(8)));
+#else
     char thread[112];
+#endif
     char *parent; /* 0x70 */
     int arg;      /* 0x74 */
 } MenuThread; /* derived name */

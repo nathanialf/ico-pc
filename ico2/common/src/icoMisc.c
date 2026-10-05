@@ -177,7 +177,11 @@ static void disp_memory_partition_bar(void)
             do {
                 used += e->size << 4;
                 e = e->free_next;
+#ifdef ICO_HOST
+                if (e != 0 && !ico_arena_contains(e, 0)) {
+#else
                 if ((unsigned int)e > 0x1FEFFF0) {
+#endif
                     sprintf(
                         buf,
                         "DISP_MEMORY_PARTITION_BAR():\n\tINVALID MEMORY FREE AREA INDICATED IN PARTITION \"%s\"\n\tMALLOCED MEMORY'S NEXT_FREE: %p\n",
