@@ -160,14 +160,6 @@ pointer to this file.
   clamped edge (`rd_water.c`, `puddle.c`, `pool.c`).
 - **Narrow UI scissor.** A UI scissor narrower than the screen is not
   widened; it clips less, never more, and none has been seen.
-- **Port UI at output resolution.** The port's popups and text draw into
-  list 12 of the game frame (`port/ui/popup.c`), so they render at the
-  scene's resolution inside the 4:3 box, are halved by the reduction, and a
-  paused keep frame shows the last popup under the live one. Wanted: an
-  overlay hook (`rd_OverlayPrims` or `rd_SetPresentOverlay(fn, user)`) called
-  from `rd__PresentRecord` in `port/render/rd_present.c` after the scale
-  blit, never mirrored, also in the headless output for `rd_ReadDisplay`
-  and the replay tool; then move `popup.c` onto it.
 - **Mirror glyph edges.** The reduction samples at u = x + 0.75, which is
   not mirror-symmetric, so mirrored UI glyph edges blend with the
   neighbour on the other side.

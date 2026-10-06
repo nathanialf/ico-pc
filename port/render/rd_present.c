@@ -37,7 +37,17 @@
  * Field parity is not a present-time effect: the PS2 shifts the scene's
  * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
  * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
+ *
+ * The overlay (package OV, rd.h rd_SetPresentOverlay; RENDER_API.md "The
+ * presentation overlay"): after step 2, the prims the registered callback
+ * gave for this present are drawn on the output in a load-preserving pass,
+ * one 12.4 unit a sixteenth of an output pixel, unflipped.  The callback
+ * runs before the frame's replay (rd__OverlayCollect, from replayFrame) so
+ * the textures it touches upload with the frame; only the drawing is here.
+ * With no callback registered nothing below step 2 runs, and the output is
+ * byte for byte what it was before the overlay existed.
  */
+#include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "shader_consts.h"
@@ -92,6 +102,17 @@ static const RdPresentPreset s_presets[2] = {
      * options (R7a), the mirror (R7c) */
     {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 1, 1},
 };
+
+static const RdPresentPreset *activePreset(void)
+{
+    return &s_presets[g_rd.settings.preset == RD_PRESET_ENHANCED ? 1 : 0];
+}
+
+/* step 2's box in an outW x outH output */
+static void outputBox(const RdPresentPreset *pr, uint32_t outW, uint32_t outH, RhiRect *box)
+{
+    rd__PresentBox(outW, outH, pr->aspectFromSettings ? g_rd.outAspect : RD_ASPECT_43, box);
+}
 
 static float clampAspect(float a)
 {
@@ -260,13 +281,147 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     rhi_CmdEndRenderPass(cl);
 }
 
+/* --------------------------------------------- the overlay (package OV) */
+
+typedef struct OverlayBatch {
+    uint32_t first, count; /* in s_ov.v */
+    uint32_t tex;          /* RdTex id, 0 untextured */
+    uint8_t prim, blend;
+} OverlayBatch;
+
+/* outside g_rd: the registration outlives rd_Shutdown / rd_Init (port/ui
+ * registers once at start-up; the tests restart rd between checks) */
+static struct {
+    RdOverlayFn fn;
+    void *user;
+    int inside; /* in fn: rd_OverlayPrims keeps prims */
+    RdOverlayCtx ctx;
+    RdScreenVtx *v;
+    uint32_t vCount, vCap;
+    OverlayBatch *b;
+    uint32_t bCount, bCap;
+} s_ov;
+
+/* a present's prims at most (a popup is a few hundred) */
+#define RD_OVERLAY_MAX_VERTICES (1u << 20)
+
+void rd_SetPresentOverlay(RdOverlayFn fn, void *user)
+{
+    s_ov.fn = fn;
+    s_ov.user = fn ? user : NULL;
+    s_ov.vCount = s_ov.bCount = 0;
+}
+
+void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    if (!s_ov.inside || !v || n == 0 || (uint32_t)type > RD_PRIM_SPRITES ||
+        n > RD_OVERLAY_MAX_VERTICES - s_ov.vCount) {
+        return;
+    }
+    if (s_ov.vCount + n > s_ov.vCap) {
+        uint32_t cap = s_ov.vCap ? s_ov.vCap : 1024;
+        while (cap < s_ov.vCount + n) {
+            cap *= 2;
+        }
+        RdScreenVtx *p = realloc(s_ov.v, (size_t)cap * sizeof(*p));
+        if (!p) {
+            return;
+        }
+        s_ov.v = p;
+        s_ov.vCap = cap;
+    }
+    if (s_ov.bCount == s_ov.bCap) {
+        const uint32_t cap = s_ov.bCap ? s_ov.bCap * 2 : 64;
+        OverlayBatch *p = realloc(s_ov.b, (size_t)cap * sizeof(*p));
+        if (!p) {
+            return;
+        }
+        s_ov.b = p;
+        s_ov.bCap = cap;
+    }
+    memcpy(s_ov.v + s_ov.vCount, v, (size_t)n * sizeof(*v));
+    OverlayBatch *b = &s_ov.b[s_ov.bCount++];
+    b->first = s_ov.vCount;
+    b->count = n;
+    b->tex = tex.id;
+    b->prim = (uint8_t)type;
+    b->blend = (uint8_t)blend;
+    s_ov.vCount += n;
+}
+
+void rd__OverlayCollect(void)
+{
+    s_ov.vCount = s_ov.bCount = 0;
+    const uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
+    if (!s_ov.fn || !w || !h) {
+        return;
+    }
+    /* the output and box rd__PresentRecord will use: both come from
+     * g_rd.settings, which does not change inside a replay */
+    const RdPresentPreset *pr = activePreset();
+    RhiRect box;
+    outputBox(pr, w, h, &box);
+    RdOverlayCtx *c = &s_ov.ctx;
+    c->outW = w;
+    c->outH = h;
+    c->box = (RdRect){box.x, box.y, box.w, box.h};
+    c->boxScale = (float)box.h / 448.0f;
+    c->mirror = pr->mirror && rd__MirrorOn();
+    s_ov.inside = 1;
+    s_ov.fn(c, s_ov.user);
+    s_ov.inside = 0;
+}
+
+uint64_t rd__OverlayRingBytes(void)
+{
+    if (!s_ov.bCount) {
+        return 0;
+    }
+    const uint64_t align = rhi_Limits()->uniformAlign;
+    /* FrameCB once, a DrawCB and the expanded vertices (sprites and points
+     * give 6 a prim's 2 or 1) a batch */
+    uint64_t total = sizeof(IcoFrameCB) + 2 * align;
+    total += (uint64_t)s_ov.bCount * (sizeof(IcoDrawCB) + 2 * align + 16);
+    total += (uint64_t)s_ov.vCount * 6 * sizeof(IcoSpriteVertex);
+    return total;
+}
+
+static void overlayRecord(RhiCommandList cl, RhiTexture out)
+{
+    if (!s_ov.bCount || s_ov.ctx.outW != s_outW || s_ov.ctx.outH != s_outH) {
+        return;
+    }
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = out;
+    p.color[0].load = RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.width = s_outW;
+    p.height = s_outH;
+    rhi_CmdBeginRenderPass(cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)s_outW, (float)s_outH, 0.0f, 1.0f};
+    rhi_CmdSetViewport(cl, &vp);
+    const RhiRect full = {0, 0, s_outW, s_outH};
+    rhi_CmdSetScissor(cl, &full);
+    /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
+     * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
+    const RhiBindGroup frame = rd__FrameGroup(s_outW, s_outH, 0.5f, 0.5f);
+    for (uint32_t i = 0; i < s_ov.bCount; i++) {
+        const OverlayBatch *b = &s_ov.b[i];
+        rd__OverlayDraw(cl, s_outFormat, frame, b->prim, s_ov.v + b->first, b->count, b->tex,
+                        b->blend);
+    }
+    rhi_CmdEndRenderPass(cl);
+    s_ov.vCount = s_ov.bCount = 0;
+}
+
 void rd__PresentRecord(RhiCommandList cl)
 {
     RdTargetRec *disp = rd__TargetRec(RD_TARGET_DISPLAY + 1);
     if (!disp || !disp->color.id) {
         return;
     }
-    const RdPresentPreset *pr = &s_presets[g_rd.settings.preset == RD_PRESET_ENHANCED ? 1 : 0];
+    const RdPresentPreset *pr = activePreset();
     RhiTexture out = s_window ? s_backbuffer : g_rd.presentOut;
     RhiState *outState = s_window ? &s_backbufferState : &g_rd.presentOutState;
 
@@ -297,10 +452,21 @@ void rd__PresentRecord(RhiCommandList cl)
         sh = lh;
     }
     RhiRect box;
-    rd__PresentBox(s_outW, s_outH, pr->aspectFromSettings ? g_rd.outAspect : RD_ASPECT_43, &box);
+    outputBox(pr, s_outW, s_outH, &box);
     rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
     blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, pr->scaleFilter,
          pr->mirror && rd__MirrorOn());
+    /* ==== INSERTION POINT for later presentation passes ====================
+     * The plan's "deferred text" and "CRT" packages draw here: after the box
+     * blit (they read or write the boxed picture) and before the overlay
+     * (the port's UI stays sharp and unfiltered above them).  Each one is a
+     * pass on `out` (RHI_STATE_RENDER_TARGET at this point; a pass that
+     * samples the picture copies it first or blits from `src`, `box`)
+     * with rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit()
+     * does.  Keep the overlay last.  (RENDER_API.md "The presentation
+     * overlay", "Ordering".)
+     * ======================================================================= */
+    overlayRecord(cl, out);
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
     }
@@ -322,6 +488,21 @@ void rd__PresentShutdown(void)
         rhi_DestroyTexture(g_rd.presentOut);
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
+    /* the overlay's prims (the registration stays) */
+    free(s_ov.v);
+    free(s_ov.b);
+    s_ov.v = NULL;
+    s_ov.b = NULL;
+    s_ov.vCount = s_ov.vCap = s_ov.bCount = s_ov.bCap = 0;
+}
+
+bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h)
+{
+    /* the window build presents the swapchain image and keeps no copy */
+    if (!g_rd.hasDevice || !dst || s_window || rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
+        return false;
+    }
+    return rd__ReadPresent(dst, (size_t)g_rd.presentOutW * g_rd.presentOutH * 4, w, h);
 }
 
 void rd_ResizeOutput(uint32_t width, uint32_t height)

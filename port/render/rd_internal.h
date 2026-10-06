@@ -831,6 +831,20 @@ void rd__TargetScaleOf(RdTargetRec *t, int named);
 bool rd__PresentAcquire(void);
 void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
+/* Package OV, the presentation overlay (rd.h rd_SetPresentOverlay;
+ * rd_present.c).  rd__OverlayCollect runs the registered callback for the
+ * present about to be replayed (replayFrame, before the ring is sized and
+ * the textures uploaded) and keeps its prims; rd__OverlayRingBytes is what
+ * drawing them takes from the upload ring; rd__PresentRecord draws them
+ * after the box blit.  rd__OverlayDraw (rd_replay.c) draws one batch into
+ * the pass open on an output of format fmt, FrameCB bound by the caller;
+ * rd__OverlayState (rd_pipeline.c) is the synthetic state block it plans
+ * with, which rd__EnumerateReachableScreen enumerates too. */
+void rd__OverlayCollect(void);
+uint64_t rd__OverlayRingBytes(void);
+void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8_t prim,
+                     const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend);
+void rd__OverlayState(RdStateBlock *s, uint8_t blend);
 /* Moves a texture to a state with a barrier when needed (outside passes). */
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
 /* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,

@@ -259,9 +259,22 @@ const UiGsFrame *ui_GetGsFrame(void)
     return &s_font.frame;
 }
 
+/* package OV: overlay mode (font.h ui_BeginOverlay) */
+static struct {
+    int active;
+    float left, top;  /* the 4:3 picture's top-left corner, output pixels */
+    float sx, sy;     /* output pixels per grid unit */
+    float savedScale; /* the scale ui_EndOverlay restores */
+} s_ov;
+
 void ui_SetScale(float scale)
 {
-    s_font.scale = scale > 0.25f ? scale : 0.25f;
+    const float s = scale > 0.25f ? scale : 0.25f;
+    if (s_ov.active) {
+        s_ov.savedScale = s;
+        return;
+    }
+    s_font.scale = s;
 }
 
 float ui_GetScale(void)
@@ -713,6 +726,82 @@ static void setState(unsigned flags)
 }
 #endif
 
+/* ------------------------------------------------ overlay (package OV) */
+
+/* the frame's 448 lines are grid y 2 .. 450 (centre 226) */
+#define OV_GRID_TOP (UI_GRID_CY - 224.0f)
+
+int ui_OverlayActive(void)
+{
+    return s_ov.active;
+}
+
+void ui_OverlayMap(float gx, float gy, float *x16, float *y16)
+{
+    if (x16) {
+        *x16 = (s_ov.left + gx * s_ov.sx) * 16.0f;
+    }
+    if (y16) {
+        *y16 = (s_ov.top + (gy - OV_GRID_TOP) * s_ov.sy) * 16.0f;
+    }
+}
+
+#ifdef ICO_RD
+static UiOverlaySink s_ovSink;
+
+void ui__SetOverlaySink(UiOverlaySink fn)
+{
+    s_ovSink = fn;
+}
+
+void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
+{
+    if (!ctx || s_ov.active || !ctx->box.w || !ctx->box.h) {
+        return;
+    }
+    const float bw = (float)ctx->box.w, bh = (float)ctx->box.h;
+    const float w = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
+    s_ov.left = (float)ctx->box.x + (bw - w) * 0.5f;
+    s_ov.top = (float)ctx->box.y;
+    s_ov.sx = w / UI_GRID_W;
+    s_ov.sy = bh / 448.0f;
+    s_ov.savedScale = s_font.scale;
+    s_font.scale = ctx->boxScale > 0.25f ? ctx->boxScale : 0.25f;
+    s_ov.active = 1;
+}
+
+void ui_EndOverlay(void)
+{
+    if (s_ov.active) {
+        s_ov.active = 0;
+        s_font.scale = s_ov.savedScale;
+    }
+}
+
+static void ovEmit(const RdScreenVtx *v, uint32_t n, uint32_t tex, unsigned flags)
+{
+    const RdBlend blend = (flags & UI_ADDITIVE) ? RD_BLEND_CS_AS_ADD_CD : RD_BLEND_LERP_AS;
+    if (s_ovSink) {
+        s_ovSink(RD_PRIM_SPRITES, v, n, (RdTex){tex}, blend);
+    } else {
+        rd_OverlayPrims(RD_PRIM_SPRITES, v, n, (RdTex){tex}, blend);
+    }
+}
+
+/* whole output pixels, in 12.4 */
+static int32_t ovPix(float p16)
+{
+    return (int32_t)lrintf(p16 / 16.0f) * 16;
+}
+#else
+void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
+{
+    (void)ctx;
+}
+
+void ui_EndOverlay(void) {}
+#endif
+
 static void drawHalo(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                      unsigned flags, const UiXform *xf);
 
@@ -823,7 +912,45 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
         q->y1 = base + q->y1 * ys;
     }
 #ifdef ICO_RD
-    if (c.n > 0) {
+    if (c.n > 0 && s_ov.active) {
+        /* package OV: on the output, each quad's corner on a whole pixel,
+           its size kept (a texel a pixel) */
+        RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)c.n);
+        for (int page = 0; v && page < z->pageCount; page++) {
+            uint32_t n = 0;
+            for (int i = 0; i < c.n; i++) {
+                const Quad *q = &c.q[i];
+                if (q->page != page) {
+                    continue;
+                }
+                float ax = q->x0, ay = q->y0, bx = q->x1, by = q->y1;
+                mapXf(xf, &ax, &ay);
+                mapXf(xf, &bx, &by);
+                float ax16, ay16, bx16, by16;
+                ui_OverlayMap(ax, ay, &ax16, &ay16);
+                ui_OverlayMap(bx, by, &bx16, &by16);
+                RdScreenVtx *a = &v[n++], *b = &v[n++];
+                memset(a, 0, sizeof(*a));
+                memset(b, 0, sizeof(*b));
+                a->x = ovPix(ax16);
+                a->y = ovPix(ay16);
+                b->x = a->x + ovPix(bx16 - ax16);
+                b->y = a->y + ovPix(by16 - ay16);
+                a->s = (float)(q->u0 * 16);
+                a->t = (float)(q->v0 * 16);
+                b->s = (float)(q->u1 * 16);
+                b->t = (float)(q->v1 * 16);
+                a->q = b->q = 1.0f;
+                memcpy(a->rgba, rgba, 4);
+                memcpy(b->rgba, rgba, 4);
+            }
+            const uint32_t tex = n ? pageTexture(z, page) : 0;
+            if (tex) {
+                ovEmit(v, n, tex, flags);
+            }
+        }
+        free(v);
+    } else if (c.n > 0) {
         RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)c.n);
         if (v) {
             setState(flags);
@@ -904,6 +1031,21 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
 #ifdef ICO_RD
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
+    if (s_ov.active) {
+        /* package OV: both corners on whole output pixels */
+        float ax, ay, bx, by;
+        ui_OverlayMap(x0, y0, &ax, &ay);
+        ui_OverlayMap(x1, y1, &bx, &by);
+        v[0].x = ovPix(ax);
+        v[0].y = ovPix(ay);
+        v[1].x = ovPix(bx);
+        v[1].y = ovPix(by);
+        v[0].q = v[1].q = 1.0f;
+        memcpy(v[0].rgba, rgba, 4);
+        memcpy(v[1].rgba, rgba, 4);
+        ovEmit(v, 2, 0, 0);
+        return;
+    }
     v[0].x = gsX(x0);
     v[0].y = gsY(y0);
     v[1].x = gsX(x1);

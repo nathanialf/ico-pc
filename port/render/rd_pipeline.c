@@ -239,6 +239,18 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
     return 2;
 }
 
+/* Package OV: the presentation overlay's state (rd.h rd_OverlayPrims):
+ * blend with ABE on, no Z test or write (and no depth target), no alpha
+ * test, no DATE, FBA and PABE off, COLCLAMP on, all channels written. */
+void rd__OverlayState(RdStateBlock *s, uint8_t blend)
+{
+    rd__ResetStateBlock(s);
+    s->ds.test = rd_TestFromGs(RD_TEST_OFF);
+    s->ds.zwrite = RD_ZWRITE_OFF;
+    s->ds.abe = 1;
+    s->ds.blend = blend;
+}
+
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
 {
     RdPipeKeyInt k;
@@ -682,6 +694,22 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                         }
                     }
                 }
+            }
+        }
+    }
+    /* package OV: the presentation overlay on the headless output and the
+     * swapchain (sprites and triangles; the popups' blend and the glow's) */
+    static const uint8_t kOverlayBlends[] = {RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD};
+    static const RhiFormat kOutFormats[] = {RHI_FMT_RGBA8_UNORM, RHI_FMT_BGRA8_UNORM};
+    for (size_t f = 0; f < 2; f++) {
+        for (size_t b = 0; b < 2; b++) {
+            RdStateBlock s;
+            rd__OverlayState(&s, kOverlayBlends[b]);
+            RdDrawPass dp[2];
+            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
+                                              RHI_FMT_UNKNOWN, dp);
+            for (int i = 0; i < np; i++) {
+                n = addKey(out, max, n, &dp[i].key);
             }
         }
     }

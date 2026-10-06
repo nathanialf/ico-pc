@@ -13,7 +13,6 @@
 
 #include "font.h"
 #include "strings.h"
-#include "ui_internal.h"
 
 /* the panel, in the layout grid (font.h) */
 #define TITLE_SIZE 26.0f
@@ -31,10 +30,7 @@
 typedef struct Popup {
     char title[UI_POPUP_TEXT];
     char body[UI_POPUP_TEXT];
-    uint32_t id; /* R7d: the push's sequence number, the draws' key */
 } Popup;
-
-static uint32_t s_nextId;
 
 static Popup s_queue[UI_POPUP_QUEUE];
 static int s_head, s_count;
@@ -65,7 +61,6 @@ int ui_PopupPush(const char *title, const char *body)
     Popup *p = &s_queue[(s_head + s_count) % UI_POPUP_QUEUE];
     copyText(p->title, title);
     copyText(p->body, body);
-    p->id = ++s_nextId;
     if (s_count == 0) {
         s_age = 0;
     }
@@ -199,45 +194,34 @@ static void scaled(uint8_t out[4], uint8_t r, uint8_t g, uint8_t b, uint8_t a, f
 }
 #endif
 
-void ui_PopupRecord(void)
+void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
 {
 #ifdef ICO_RD
-    if (s_count == 0 || !rd_FrameOpen() || !ui_FontInit()) {
+    if (s_count == 0 || !ctx || !ui_FontInit()) {
         return;
     }
-    ui__Sync();
+    /* package OV: on the output (font.h ui_BeginOverlay), at this present;
+       measured at the overlay's scale, so the panel fits its text */
+    ui_BeginOverlay(ctx);
     Panel pn;
-    if (!panel(&pn) || pn.alpha <= 0.0f) {
-        return;
+    if (panel(&pn) && pn.alpha > 0.0f) {
+        const Popup *p = &s_queue[s_head];
+        uint8_t c[4];
+        /* the panel: dark, translucent, a hairline in the menu's warm grey
+           on top */
+        scaled(c, 6, 6, 9, 0x5C, pn.alpha);
+        ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y1, c);
+        scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
+        ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
+        scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
+        ui_DrawText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE);
+        if (p->body[0]) {
+            scaled(c, 0x66, 0x64, 0x5E, 0x80, pn.alpha);
+            ui_DrawText(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP);
+        }
     }
-    const Popup *p = &s_queue[s_head];
-    /* the decoder's pending output goes to the list it was recording */
-    ui__RunRecordHook();
-    ui__SuppressRecordHook(1);
-    const int list = rd_CurrentList();
-    rd_SelectList(12);
-    /* R7d: the panel, its rects and its text keyed by the popup, so its
-       slide and fade blend between ticks */
-    static const char kPopupKeyTag;
-    const uint64_t owner = ui_SetDrawKey(((uint64_t)(uintptr_t)&kPopupKeyTag << 20) ^ p->id);
-    uint8_t c[4];
-    /* the panel: dark, translucent, a hairline in the menu's warm grey on top */
-    scaled(c, 6, 6, 9, 0x5C, pn.alpha);
-    ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y1, c);
-    scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
-    ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
-    scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
-    ui_DrawText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE);
-    if (p->body[0]) {
-        scaled(c, 0x66, 0x64, 0x5E, 0x80, pn.alpha);
-        ui_DrawText(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP);
-    }
-    /* list 12's defaults (normal: TEST 0x50000, Z write on) for whatever
-       the game records there after this */
-    ui_SetDrawKey(owner);
-    rd_TestGs(0x50000);
-    rd_ZWrite(1);
-    rd_SelectList(list);
-    ui__SuppressRecordHook(-1);
+    ui_EndOverlay();
+#else
+    (void)ctx;
 #endif
 }

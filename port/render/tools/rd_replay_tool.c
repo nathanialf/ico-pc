@@ -26,6 +26,13 @@
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode (R7c, section 21): UI prims
  *                         flipped at replay, the present flipped (any preset)
+ *   --overlay-test        (with --present) registers a presentation overlay
+ *                         (package OV, rd.h rd_SetPresentOverlay) drawing a
+ *                         test pattern after the box blit: a one-pixel white
+ *                         outline on the box's edge and a 32 x 32 square,
+ *                         opaque red, 16 pixels in from the box's top-left
+ *                         corner, plus a half-transparent white one beside
+ *                         it.  Without it the tool registers no overlay
  *
  * Inspection (P2):
  *   --list                prints every command of the replayed lists: the
@@ -190,14 +197,44 @@ static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
     return ok;
 }
 
+/* --overlay-test: rd_OverlayPrims sprites in 12.4 output pixels */
+static void overlaySprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t c[4])
+{
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    v[0].x = x0 * 16;
+    v[0].y = y0 * 16;
+    v[1].x = x1 * 16;
+    v[1].y = y1 * 16;
+    v[0].q = v[1].q = 1.0f;
+    memcpy(v[0].rgba, c, 4);
+    memcpy(v[1].rgba, c, 4);
+    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+}
+
+static void overlayTest(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    static const uint8_t white[4] = {0xFF, 0xFF, 0xFF, 0x80}, red[4] = {0xFF, 0, 0, 0x80},
+                         half[4] = {0xFF, 0xFF, 0xFF, 0x40};
+    const int32_t x0 = ctx->box.x, y0 = ctx->box.y;
+    const int32_t x1 = x0 + (int32_t)ctx->box.w, y1 = y0 + (int32_t)ctx->box.h;
+    overlaySprite(x0, y0, x1, y0 + 1, white);
+    overlaySprite(x0, y1 - 1, x1, y1, white);
+    overlaySprite(x0, y0, x0 + 1, y1, white);
+    overlaySprite(x1 - 1, y0, x1, y1, white);
+    overlaySprite(x0 + 16, y0 + 16, x0 + 48, y0 + 48, red);
+    overlaySprite(x0 + 64, y0 + 16, x0 + 96, y0 + 48, half);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
-                "[--mirror] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] [--mesh NAME] "
-                "[--dump-textures DIR]\n",
+                "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
+                "[--mesh NAME] [--dump-textures DIR]\n",
                 argv[0]);
         return 1;
     }
@@ -206,7 +243,7 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
-    bool list = false;
+    bool list = false, overlay = false;
     const char *texDir = NULL, *meshName = NULL;
 
     struct {
@@ -267,6 +304,8 @@ int main(int argc, char **argv)
             s.filterUpgrade = strcmp(v, "anisotropic") == 0 ? RD_FILTER_UPGRADE_ANISOTROPIC
                               : strcmp(v, "trilinear") == 0 ? RD_FILTER_UPGRADE_TRILINEAR
                                                             : RD_FILTER_UPGRADE_OFF;
+        } else if (strcmp(argv[i], "--overlay-test") == 0) {
+            overlay = true;
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
@@ -313,6 +352,9 @@ int main(int argc, char **argv)
         return 77;
     }
     rd__SetNotImplementedFatal(false);
+    if (overlay) {
+        rd_SetPresentOverlay(overlayTest, NULL);
+    }
     RdFrame f;
     if (!rd__LoadFrame(dump, &f)) {
         rd_Shutdown();
@@ -341,7 +383,7 @@ int main(int argc, char **argv)
         uint32_t w = 0, h = 0;
         size_t cap = pw ? (size_t)pw * ph * 4 : (size_t)4096 * 4096 * 4;
         uint8_t *px = malloc(cap);
-        bool ok = px && (pw ? rd__ReadPresent(px, cap, &w, &h)
+        bool ok = px && (pw ? rd_ReadPresented(px, &w, &h)
                             : rd__ReadTarget(rd_Target((RdTargetId)target), px, cap, &w, &h));
         if (ok && rd_WritePng(png, px, w, h, w * 4, 1)) {
             printf("%s: frame %u, %ux%u -> %s (%u commands skipped)\n", dump, f.number, w, h, png,

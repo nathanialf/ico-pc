@@ -34,6 +34,15 @@
  *             one two pixels short stays boxed
  *   mips      the trilinear filter: a mipmapped game texture, minified,
  *             samples its average
+ *   overlay   package OV, the presentation overlay (rd.h
+ *             rd_SetPresentOverlay): the rich frame presented at 960 x 720
+ *             and 1920 x 1080 with a callback drawing two rectangles (one
+ *             in the box, one in the pillarbox) and "H" through port/ui's
+ *             font in overlay mode: the rectangles exactly at their output
+ *             pixels, the glyph's stems inside its quad (texel for pixel),
+ *             nothing else changed against the present without the
+ *             overlay; with the mirror on the box is flipped and the
+ *             overlay is not; unregistered, the present hashes as before
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -45,6 +54,12 @@
 #include "rd_tex.h"
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
+
+#ifndef RD_PRESENT_BASELINE
+/* port/ui's font (package OV: the overlay check draws a glyph) */
+#include "font.h"
+#include "ui_internal.h"
+#endif
 
 #ifndef RD_PRESENT_BASELINE
 
@@ -989,6 +1004,8 @@ static void checkCoverage(void)
 
 static bool s_llvmpipe;
 
+static uint64_t s_presentOriginal; /* checkOriginal's present hash (package OV) */
+
 static void checkOriginal(void)
 {
     makeNoiseScene();
@@ -998,6 +1015,7 @@ static void checkOriginal(void)
         CHECK(0, "original: rd_Init");
         return;
     }
+    s_presentOriginal = h.present;
     printf("  original: display %016llx scene %016llx present %016llx\n",
            (unsigned long long)h.display, (unsigned long long)h.scene,
            (unsigned long long)h.present);
@@ -1263,6 +1281,219 @@ static void checkMips(void)
     rd_Shutdown();
 }
 
+/* ---------------------------------------------- the overlay (package OV) */
+
+typedef struct OvTest {
+    int rects;  /* draw the two rectangles and the glyph */
+    RdRect box; /* the ctx the callback saw */
+    float boxScale;
+    int mirror;
+    int calls;
+    int32_t hx0, hy0, hx1, hy1; /* the glyph quad, output pixels */
+    int hquads;
+} OvTest;
+
+static OvTest s_ovt;
+
+/* the box rectangle and the pillarbox one, output pixels from the box */
+#define OV_RX0 100
+#define OV_RY0 50
+#define OV_RX1 140
+#define OV_RY1 71
+
+static void ovRect(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t c[4])
+{
+    RdScreenVtx v[2] = {vtx(x0 * 16, y0 * 16, 0, c, 0.0f, 0.0f),
+                        vtx(x1 * 16, y1 * 16, 0, c, 0.0f, 0.0f)};
+    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+}
+
+/* the glyph's quad on its way to rd (font.c's overlay sink) */
+static void ovSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    if (n == 2) {
+        s_ovt.hx0 = v[0].x / 16;
+        s_ovt.hy0 = v[0].y / 16;
+        s_ovt.hx1 = v[1].x / 16;
+        s_ovt.hy1 = v[1].y / 16;
+        s_ovt.hquads++;
+    }
+    rd_OverlayPrims(type, v, n, tex, blend);
+}
+
+static void ovCallback(const RdOverlayCtx *ctx, void *user)
+{
+    OvTest *t = user;
+    t->calls++;
+    t->box = ctx->box;
+    t->boxScale = ctx->boxScale;
+    t->mirror = ctx->mirror;
+    if (!t->rects) {
+        return;
+    }
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, green[4] = {0, 255, 0, 0x80},
+                         white[4] = {0x80, 0x80, 0x80, 0x80};
+    ovRect(ctx->box.x + OV_RX0, ctx->box.y + OV_RY0, ctx->box.x + OV_RX1, ctx->box.y + OV_RY1, red);
+    /* the whole output is the overlay's, the pillarbox too (1080p) */
+    if (ctx->box.x >= 30) {
+        ovRect(10, 20, 30, 40, green);
+    }
+    ui__SetOverlaySink(ovSink);
+    ui_BeginOverlay(ctx);
+    ui_DrawText(320.0f, 300.0f, 40.0f, white, "H", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_EndOverlay();
+    ui__SetOverlaySink(NULL);
+}
+
+/* the rich frame presented at w x h, mirror on or off, with the overlay
+ * (rects) or without one; the output into dst */
+static bool ovPresent(uint32_t w, uint32_t h, int mirror, int rects, uint8_t *dst)
+{
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    s.mirror = (uint8_t)mirror;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        return false;
+    }
+    memset(&s_ovt, 0, sizeof(s_ovt));
+    s_ovt.rects = rects;
+    if (rects) {
+        rd_SetPresentOverlay(ovCallback, &s_ovt);
+    }
+    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(t, 1);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd_ReadPresented(dst, &ow, &oh) && ow == w && oh == h;
+    CHECK(ok, "overlay: the presented %ux%u output", w, h);
+    CHECK(!rects || s_ovt.calls == 1, "overlay: one callback a present (%d)", s_ovt.calls);
+    rd_SetPresentOverlay(NULL, NULL);
+    ui_FontShutdown();
+    rd_DestroyTexture(t);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    return ok;
+}
+
+static int ovInside(int32_t x, int32_t y, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
+{
+    return x >= x0 && x < x1 && y >= y0 && y < y1;
+}
+
+static void checkOverlayAt(uint32_t w, uint32_t h)
+{
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *plain = malloc(n), *over = malloc(n), *plainM = malloc(n), *overM = malloc(n);
+    if (!plain || !over || !plainM || !overM) {
+        CHECK(0, "overlay: memory");
+        free(plain);
+        free(over);
+        free(plainM);
+        free(overM);
+        return;
+    }
+    if (!ovPresent(w, h, 0, 0, plain) || !ovPresent(w, h, 0, 1, over)) {
+        free(plain);
+        free(over);
+        free(plainM);
+        free(overM);
+        return;
+    }
+    const OvTest t = s_ovt;
+    RhiRect box;
+    rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+    CHECK(t.box.x == box.x && t.box.y == box.y && t.box.w == box.w && t.box.h == box.h &&
+              fabsf(t.boxScale - (float)box.h / 448.0f) < 1e-6f && !t.mirror,
+          "overlay %ux%u: the ctx (box %d,%d %ux%u scale %g)", w, h, t.box.x, t.box.y, t.box.w,
+          t.box.h, (double)t.boxScale);
+    const int32_t rx0 = box.x + OV_RX0, ry0 = box.y + OV_RY0;
+    const int32_t rx1 = box.x + OV_RX1, ry1 = box.y + OV_RY1;
+    const int pillar = box.x >= 30;
+    /* the glyph: a px-pixel "H", its quad the bitmap's size */
+    const int px = (int)lrintf(40.0f * (float)box.h / 448.0f);
+    UiGlyph g;
+    CHECK(t.hquads == 1 && ui_FontGlyph('H', px, &g) && t.hx1 - t.hx0 == g.w &&
+              t.hy1 - t.hy0 == g.h,
+          "overlay %ux%u: one glyph quad of the %d px bitmap (%d x %d)", w, h, px, t.hx1 - t.hx0,
+          t.hy1 - t.hy0);
+    uint32_t badRect = 0, badOutside = 0, stem = 0, pillarBad = 0;
+    for (int32_t y = 0; y < (int32_t)h; y++) {
+        for (int32_t x = 0; x < (int32_t)w; x++) {
+            const size_t i = ((size_t)y * w + (size_t)x) * 4;
+            const uint8_t *o = &over[i];
+            if (ovInside(x, y, rx0, ry0, rx1, ry1)) {
+                badRect += !(o[0] == 255 && o[1] == 0 && o[2] == 0);
+            } else if (pillar && ovInside(x, y, 10, 20, 30, 40)) {
+                pillarBad += !(o[0] == 0 && o[1] == 255 && o[2] == 0);
+            } else if (ovInside(x, y, t.hx0, t.hy0, t.hx1, t.hy1)) {
+                stem += o[0] == 255 && o[1] == 255 && o[2] == 255;
+            } else {
+                badOutside += memcmp(o, &plain[i], 4) != 0;
+            }
+        }
+    }
+    CHECK(badRect == 0, "overlay %ux%u: %u pixels of the rectangle are not its red", w, h, badRect);
+    CHECK(pillarBad == 0, "overlay %ux%u: %u pillarbox pixels are not its green", w, h, pillarBad);
+    /* the stems: two bars about 0.1 em wide over the capitals' height */
+    CHECK(stem > (uint32_t)(g.h * px / 8), "overlay %ux%u: %u solid white glyph pixels", w, h,
+          stem);
+    CHECK(badOutside == 0, "overlay %ux%u: %u pixels outside the overlay changed", w, h,
+          badOutside);
+    printf("  overlay %ux%u: box %d,%d %ux%u, H %d px at %d,%d (%u solid)\n", w, h, box.x, box.y,
+           box.w, box.h, px, t.hx0, t.hy0, stem);
+
+    /* the mirror flips the box blit, never the overlay */
+    if (ovPresent(w, h, 1, 0, plainM) && ovPresent(w, h, 1, 1, overM)) {
+        CHECK(s_ovt.mirror, "overlay %ux%u: ctx.mirror with the mirror on", w, h);
+        CHECK(memcmp(plain, plainM, n) != 0, "overlay %ux%u: the mirror flips the picture", w, h);
+        uint32_t same = 0, total = 0, outside = 0;
+        for (int32_t y = 0; y < (int32_t)h; y++) {
+            for (int32_t x = 0; x < (int32_t)w; x++) {
+                const size_t i = ((size_t)y * w + (size_t)x) * 4;
+                if (ovInside(x, y, rx0, ry0, rx1, ry1) ||
+                    (pillar && ovInside(x, y, 10, 20, 30, 40))) {
+                    total++;
+                    same += memcmp(&over[i], &overM[i], 3) == 0;
+                } else if (!ovInside(x, y, t.hx0, t.hy0, t.hx1, t.hy1)) {
+                    outside += memcmp(&overM[i], &plainM[i], 4) != 0;
+                }
+            }
+        }
+        CHECK(same == total, "overlay %ux%u mirrored: %u of %u rectangle pixels where they were", w,
+              h, same, total);
+        CHECK(s_ovt.hx0 == t.hx0 && s_ovt.hy0 == t.hy0,
+              "overlay %ux%u mirrored: the glyph where it was (%d,%d against %d,%d)", w, h,
+              s_ovt.hx0, s_ovt.hy0, t.hx0, t.hy0);
+        CHECK(outside == 0, "overlay %ux%u mirrored: %u pixels outside the overlay changed", w, h,
+              outside);
+    }
+    free(plain);
+    free(over);
+    free(plainM);
+    free(overM);
+}
+
+static void checkOverlay(uint64_t presentNoOverlay)
+{
+    checkOverlayAt(960, 720);
+    checkOverlayAt(1920, 1080);
+    /* registered and unregistered again: the Original present as before */
+    rd_SetPresentOverlay(ovCallback, &s_ovt);
+    rd_SetPresentOverlay(NULL, NULL);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    FrameHashes h;
+    if (richFrame(&s, &h)) {
+        CHECK(h.present == presentNoOverlay,
+              "overlay: without a callback the present hashes %016llx, not %016llx",
+              (unsigned long long)h.present, (unsigned long long)presentNoOverlay);
+        CHECK(!s_llvmpipe || h.present == GOLD_PRESENT,
+              "overlay: without a callback the present is the recorded one");
+    }
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char **argv)
@@ -1296,6 +1527,7 @@ int main(int argc, char **argv)
     checkScale2();
     checkWide169();
     checkMips();
+    checkOverlay(s_presentOriginal);
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);
         return 1;

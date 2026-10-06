@@ -14,12 +14,23 @@
  *     with the colours the texture path would have used, no texture lookup
  *     for a port row, the glow (additive) after a cursor move and the
  *     sparkle on an unselectable selected row;
- *   - the popup queue's timing and panel.
+ *   - the popup queue's timing and panel;
+ *   - package OV, overlay mode (ui_BeginOverlay): the grid mapped onto the
+ *     4:3 picture of a 1080p and a 4K output (and of a 16:9 box), glyph
+ *     quads on whole output pixels at the bitmap's size, rasterised at
+ *     round(size * box.h / 448), rects snapped, the scale restored; a
+ *     popup drawn on the overlay records nothing into the open frame's
+ *     lists (list 12 included), sits at the 4:3 picture's right, and is
+ *     the same with the mirror on.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): "ICO" and
  * "Éléphant" drawn through rd into SCENE: coverage only inside the bounds
  * the glyph quads give, the acute above the capitals, and the blend of a
  * known colour over a known background (exact at alpha 0x80, the GS
  * formula within one step at 0x40).
+ *
+ * Last, package OV: a popup on the presentation overlay of a 1920 x 1080
+ * Original present: at the 4:3 picture's right, text pixels in the panel,
+ * nothing changed outside it (ui_test_popup.png, the panel's crop).
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU checks).
  */
@@ -548,6 +559,286 @@ static void testPopups(void)
     ui_PopupSetDevTest(0);
 }
 
+/* ------------------------------------------- the overlay (package OV) */
+
+typedef struct OvCap {
+    int n;
+    RdPrim type[64];
+    uint32_t count[64], tex[64];
+    RdBlend blend[64];
+    RdScreenVtx v[64][2];
+} OvCap;
+
+static OvCap s_cap;
+
+static void capSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    if (s_cap.n == 64) {
+        return;
+    }
+    const int i = s_cap.n++;
+    s_cap.type[i] = type;
+    s_cap.count[i] = n;
+    s_cap.tex[i] = tex.id;
+    s_cap.blend[i] = blend;
+    memcpy(s_cap.v[i], v, sizeof(RdScreenVtx) * (n < 2 ? n : 2));
+}
+
+static RdOverlayCtx ovCtx(uint32_t w, uint32_t h, float aspect)
+{
+    RhiRect b;
+    rd__PresentBox(w, h, aspect, &b);
+    RdOverlayCtx c;
+    memset(&c, 0, sizeof(c));
+    c.outW = w;
+    c.outH = h;
+    c.box = (RdRect){b.x, b.y, b.w, b.h};
+    c.boxScale = (float)b.h / 448.0f;
+    return c;
+}
+
+static void checkOverlayMap(uint32_t w, uint32_t h, float aspect)
+{
+    const RdOverlayCtx c = ovCtx(w, h, aspect);
+    /* the 4:3 picture the game's UI is in */
+    const float pw = (float)c.box.h * 4.0f / 3.0f;
+    const float left = (float)c.box.x + ((float)c.box.w - pw) * 0.5f;
+    const float before = ui_GetScale();
+    ui_BeginOverlay(&c);
+    CHECK(ui_OverlayActive() && ui_GetScale() == c.boxScale, "%ux%u: overlay scale %g", w, h,
+          (double)ui_GetScale());
+    float x16, y16, x16b, y16b;
+    ui_OverlayMap(0.0f, UI_GRID_CY - 224.0f, &x16, &y16);
+    ui_OverlayMap(UI_GRID_W, UI_GRID_CY + 224.0f, &x16b, &y16b);
+    CHECK(fabsf(x16 - left * 16.0f) < 0.5f && fabsf(y16 - (float)c.box.y * 16.0f) < 0.5f &&
+              fabsf(x16b - (left + pw) * 16.0f) < 0.5f &&
+              fabsf(y16b - (float)(c.box.y + (int32_t)c.box.h) * 16.0f) < 0.5f,
+          "%ux%u: the frame's 640 x 448 grid onto the 4:3 picture (%g,%g .. %g,%g)", w, h,
+          (double)x16 / 16, (double)y16 / 16, (double)x16b / 16, (double)y16b / 16);
+    /* a glyph: on whole pixels, the bitmap's size, a texel a pixel */
+    memset(&s_cap, 0, sizeof(s_cap));
+    ui__SetOverlaySink(capSink);
+    static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
+    ui_DrawText(100.3f, 100.7f, 26.0f, white, "H", UI_VALIGN_BASELINE);
+    const int px = (int)lrintf(26.0f * c.boxScale);
+    UiGlyph g;
+    const bool have = ui_FontGlyph('H', px, &g);
+    CHECK(have && s_cap.n == 1 && s_cap.type[0] == RD_PRIM_SPRITES && s_cap.count[0] == 2 &&
+              s_cap.tex[0] == ui_FontPageTex(px, g.page) && s_cap.tex[0] != 0 &&
+              s_cap.blend[0] == RD_BLEND_LERP_AS,
+          "%ux%u: one sprite of the %d px atlas, ALPHA 0x44 (%d batches)", w, h, px, s_cap.n);
+    if (have && s_cap.n == 1) {
+        const RdScreenVtx *a = &s_cap.v[0][0], *b = &s_cap.v[0][1];
+        CHECK(a->x % 16 == 0 && a->y % 16 == 0 && b->x % 16 == 0 && b->y % 16 == 0,
+              "%ux%u: glyph corners on whole pixels (%d,%d %d,%d)", w, h, a->x, a->y, b->x, b->y);
+        CHECK((b->x - a->x) / 16 == g.w && (b->y - a->y) / 16 == g.h &&
+                  (int)(b->s - a->s) / 16 == g.w && (int)(b->t - a->t) / 16 == g.h,
+              "%ux%u: the quad is the %dx%d bitmap, a texel a pixel", w, h, g.w, g.h);
+        /* where the grid puts it: the pen at 100.3, the baseline at 100.7 */
+        const float xs = UI_X_PER_Y / c.boxScale, ys = 1.0f / c.boxScale;
+        float ex, ey;
+        ui_OverlayMap(100.3f + g.xoff * xs, 100.7f + g.yoff * ys, &ex, &ey);
+        CHECK(fabsf((float)a->x - ex) <= 8.0f && fabsf((float)a->y - ey) <= 8.0f,
+              "%ux%u: the glyph at %d,%d (12.4), the grid says %g,%g", w, h, a->x, a->y, (double)ex,
+              (double)ey);
+    }
+    /* a rect: both corners rounded */
+    memset(&s_cap, 0, sizeof(s_cap));
+    ui_DrawRect(10.2f, 20.6f, 50.5f, 30.1f, white);
+    float rx0, ry0, rx1, ry1;
+    ui_OverlayMap(10.2f, 20.6f, &rx0, &ry0);
+    ui_OverlayMap(50.5f, 30.1f, &rx1, &ry1);
+    CHECK(s_cap.n == 1 && s_cap.tex[0] == 0 && s_cap.v[0][0].x == lrintf(rx0 / 16.0f) * 16 &&
+              s_cap.v[0][0].y == lrintf(ry0 / 16.0f) * 16 &&
+              s_cap.v[0][1].x == lrintf(rx1 / 16.0f) * 16 &&
+              s_cap.v[0][1].y == lrintf(ry1 / 16.0f) * 16,
+          "%ux%u: the rect on whole pixels", w, h);
+    /* a sync while drawing changes the scale after, not now */
+    ui_SetScale(3.0f);
+    CHECK(ui_GetScale() == c.boxScale, "%ux%u: ui_SetScale defers in overlay mode", w, h);
+    ui__SetOverlaySink(NULL);
+    ui_EndOverlay();
+    CHECK(!ui_OverlayActive() && ui_GetScale() == 3.0f, "%ux%u: the deferred scale", w, h);
+    ui_SetScale(before);
+}
+
+/* the popup on the overlay: nothing recorded into the game's frame */
+static void checkOverlayPopup(void)
+{
+    if (!rd__InitRecordOnly(512, 512)) {
+        CHECK(0, "rd__InitRecordOnly");
+        return;
+    }
+    ui_FontForgetTextures();
+    ui_PopupReset();
+    ui_PopupPush("Title", "Body line");
+    for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+        ui_PopupVsync();
+    }
+    /* a frame without the popup, then the same with it drawn */
+    rd_BeginFrame();
+    rd_SelectList(5);
+    rd_EndFrame(0);
+    uint32_t before[RD_LIST_COUNT];
+    const RdFrame *f = rd__LastFrame();
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        before[l] = f ? f->lists[l].count : 0;
+    }
+    rd_BeginFrame();
+    rd_SelectList(5);
+    static OvCap plain;
+    for (int mirror = 0; mirror < 2; mirror++) {
+        RdOverlayCtx c = ovCtx(1920, 1080, 4.0f / 3.0f);
+        c.mirror = mirror;
+        memset(&s_cap, 0, sizeof(s_cap));
+        ui__SetOverlaySink(capSink);
+        ui_PopupDrawOverlay(&c);
+        ui__SetOverlaySink(NULL);
+        CHECK(!ui_OverlayActive(), "the popup ends overlay mode");
+        /* the panel, its hairline, the title and the body */
+        CHECK(s_cap.n >= 4 && s_cap.tex[0] == 0 && s_cap.count[0] == 2,
+              "the popup on the overlay: %d batches", s_cap.n);
+        if (s_cap.n >= 1) {
+            /* the panel at the 4:3 picture's right, 18 x units in */
+            const int32_t right = (c.box.x + (int32_t)c.box.w) * 16;
+            const int32_t mid = (c.box.x + (int32_t)c.box.w / 2) * 16;
+            const RdScreenVtx *a = &s_cap.v[0][0], *b = &s_cap.v[0][1];
+            CHECK(b->x < right && b->x > right - 30 * 16 * 3 && a->x > mid,
+                  "mirror %d: the panel %d..%d at the picture's right (%d)", mirror, a->x, b->x,
+                  right);
+        }
+        if (mirror == 0) {
+            memcpy(&plain, &s_cap, sizeof(plain));
+        } else {
+            CHECK(memcmp(&plain, &s_cap, sizeof(plain)) == 0,
+                  "the popup is drawn the same with the mirror on");
+        }
+    }
+    CHECK(rd_CurrentList() == 5, "the current list untouched (%d)", rd_CurrentList());
+    rd_EndFrame(0);
+    f = rd__LastFrame();
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        CHECK(f && f->lists[l].count == before[l], "list %d: %u commands, %u without the popup", l,
+              f ? f->lists[l].count : 0, before[l]);
+    }
+    rd_Shutdown();
+    ui_FontForgetTextures();
+    ui_PopupReset();
+}
+
+static void testOverlay(void)
+{
+    if (!rd__InitRecordOnly(512, 512)) {
+        CHECK(0, "rd__InitRecordOnly");
+        return;
+    }
+    ui_FontForgetTextures();
+    checkOverlayMap(1920, 1080, 4.0f / 3.0f);
+    checkOverlayMap(3840, 2160, 4.0f / 3.0f);
+    checkOverlayMap(1920, 1080, 16.0f / 9.0f);
+    rd_Shutdown();
+    ui_FontForgetTextures();
+    checkOverlayPopup();
+}
+
+/* The popup on the device (package OV): a 1920 x 1080 Original present
+   with and without the popup, the overlay registered as ui_host.c does. */
+static void popupOverlay(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    ui_PopupDrawOverlay(ctx);
+}
+
+static bool popupPresent(int popup, uint8_t *dst)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ORIGINAL;
+    st.outputWidth = 1920;
+    st.outputHeight = 1080;
+    if (!rd_Init(512, 512, &st, NULL)) {
+        return false;
+    }
+    ui_FontForgetTextures();
+    rd_SetPresentOverlay(popupOverlay, NULL);
+    ui_PopupReset();
+    if (popup) {
+        ui_PopupPush("Achievement unlocked", "Éléphant, Größe, señor");
+        for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
+            ui_PopupVsync();
+        }
+    }
+    static const uint8_t grey[4] = {90, 100, 110, 0x80};
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_DISPLAY), grey, 0, 0);
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    const bool ok = rd_ReadPresented(dst, &w, &h) && w == 1920 && h == 1080;
+    CHECK(ok, "popup: the presented output");
+    rd_SetPresentOverlay(NULL, NULL);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "popup: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    ui_FontShutdown();
+    rd_Shutdown();
+    return ok;
+}
+
+static void testPopupPixels(void)
+{
+    const size_t n = (size_t)1920 * 1080 * 4;
+    uint8_t *plain = malloc(n), *pop = malloc(n);
+    float r[4];
+    if (!plain || !pop || !popupPresent(0, plain) || !popupPresent(1, pop) || !ui_PopupPanel(r)) {
+        CHECK(0, "popup: the presents");
+        free(plain);
+        free(pop);
+        ui_PopupReset();
+        return;
+    }
+    /* the panel's grid rectangle on the output (the overlay's mapping) */
+    const RdOverlayCtx c = ovCtx(1920, 1080, 4.0f / 3.0f);
+    ui_BeginOverlay(&c);
+    float x0, y0, x1, y1;
+    ui_FontInit();
+    ui_PopupPanel(r); /* measured at the overlay's scale */
+    ui_OverlayMap(r[0], r[1], &x0, &y0);
+    ui_OverlayMap(r[2], r[3], &x1, &y1);
+    ui_EndOverlay();
+    const int px0 = (int)lrintf(x0 / 16.0f), py0 = (int)lrintf(y0 / 16.0f);
+    const int px1 = (int)lrintf(x1 / 16.0f), py1 = (int)lrintf(y1 / 16.0f);
+    int outside = 0, panelPx = 0, bright = 0;
+    for (int y = 0; y < 1080; y++) {
+        for (int x = 0; x < 1920; x++) {
+            const size_t i = ((size_t)y * 1920 + (size_t)x) * 4;
+            const int in = x >= px0 && x < px1 && y >= py0 && y < py1;
+            if (!in) {
+                outside += memcmp(&pop[i], &plain[i], 3) != 0;
+                continue;
+            }
+            panelPx++;
+            bright += pop[i] > 200 && pop[i + 1] > 200;
+        }
+    }
+    printf("ui_test: popup panel %d,%d .. %d,%d on 1920 x 1080 (box %d..%d), %d bright text "
+           "pixels\n",
+           px0, py0, px1, py1, c.box.x, c.box.x + (int)c.box.w, bright);
+    /* 18 x units (40 pixels here) in from the 4:3 picture's right edge */
+    const int right = c.box.x + (int)c.box.w;
+    CHECK(px1 <= right && px1 >= right - 41 && px0 > c.box.x + (int)c.box.w / 4,
+          "popup: the panel at the picture's right");
+    CHECK(outside == 0, "popup: %d pixels changed outside the panel", outside);
+    CHECK(bright > 200, "popup: %d bright text pixels", bright);
+    /* for the eye: the panel and a margin */
+    const int cx0 = px0 - 8 < 0 ? 0 : px0 - 8, cy0 = py0 - 8 < 0 ? 0 : py0 - 8;
+    const int cx1 = px1 + 8 > 1920 ? 1920 : px1 + 8, cy1 = py1 + 8 > 1080 ? 1080 : py1 + 8;
+    rd_WritePng("ui_test_popup.png", pop + ((size_t)cy0 * 1920 + (size_t)cx0) * 4,
+                (uint32_t)(cx1 - cx0), (uint32_t)(cy1 - cy0), 1920 * 4, 0);
+    free(plain);
+    free(pop);
+    ui_PopupReset();
+}
+
 /* --------------------------------------------------------------- pixels */
 
 static const uint8_t kBg[4] = {20, 40, 60, 0x80};
@@ -951,6 +1242,7 @@ int main(void)
     testStrings();
     testLayoutExtension();
     testPopups();
+    testOverlay();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;
@@ -977,6 +1269,7 @@ int main(void)
           rhi_vk_ValidationErrorCount());
     ui_FontShutdown();
     rd_Shutdown();
+    testPopupPixels();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;

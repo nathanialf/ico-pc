@@ -127,6 +127,20 @@ if(NOT TARGET ico_render)
     return()
 endif()
 
+# rd_present_test's overlay check (package OV, port/render/CMakeLists.txt)
+# draws a glyph through font.c's overlay mode: font.c and the embedded font
+# alone, with ICO_RD
+if(TARGET rd_present_test)
+    add_library(ico_ui_font_rd OBJECT font.c "${_ui_font_c}")
+    target_include_directories(ico_ui_font_rd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                               PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+    target_compile_definitions(ico_ui_font_rd PRIVATE ICO_HOST=1 ICO_RD=1)
+    target_compile_options(ico_ui_font_rd PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(ico_ui_font_rd PUBLIC ico_render)
+    target_sources(rd_present_test PRIVATE $<TARGET_OBJECTS:ico_ui_font_rd>)
+    target_include_directories(rd_present_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
+
 # --- Tests ----------------------------------------------------------------------
 # ui_test: the atlas and glyph metrics, UTF-8, measuring, the string tables,
 # the layout extension through the real layout_texture.c (with GifPacket.c,

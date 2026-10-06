@@ -1249,6 +1249,80 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* --------------------------------- the presentation overlay (package OV)
+ * One rd_OverlayPrims batch (rd.h; rd_present.c overlayRecord opens the
+ * pass on the output and makes FrameCB): expanded as a screen-prim command
+ * (sprites to quads, uvFixed texels), no sprite snapping or UV shift (the
+ * output has no GS pixel grid), never mirrored, drawn with sprite_ui_vs /
+ * sprite_ps under rd__OverlayState's block: the blend given, no Z, no
+ * alpha test, no DATE, MODULATE with TCC RGBA when textured. */
+void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8_t prim,
+                     const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend)
+{
+    RhiTexture t = g_rd.dummy;
+    uint32_t tw = 1, th = 1, tfmt = 0;
+    int textured = 0;
+    if (tex) {
+        const RdTexRec *r = rd__TexRec(tex);
+        if (!r || r->kind != RD_TEXKIND_IMAGE || !r->rhi.id || r->state != RHI_STATE_SHADER_READ) {
+            rd__LogOnce(RD_ONCE_BAD_TEX, "overlay prims with an unknown or unready texture");
+            return;
+        }
+        t = r->rhi;
+        tw = r->w;
+        th = r->h;
+        tfmt = r->src;
+        textured = 1;
+    }
+    setUvShift(1.0f, 1.0f);
+    IcoSpriteVertex *out = vxScratch((uint64_t)n * 6);
+    if (!out) {
+        return;
+    }
+    static const float noOff[2] = {0.0f, 0.0f};
+    uint8_t topo;
+    const uint32_t nv = expand(v, n, prim, 1, (float)tw, (float)th, noOff, out, &topo, 1);
+    if (nv == 0) {
+        return;
+    }
+    const uint64_t vOff = rd__RingAlloc((uint64_t)nv * sizeof(*out), 16);
+    if (vOff == ~0ull) {
+        return;
+    }
+    memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out));
+    RdStateBlock st;
+    rd__OverlayState(&st, blend);
+    RdDrawPass dp[2];
+    const int np = rd__PlanScreenDraw(&st, topo, RD_SPACE_UI, fmt, RHI_FMT_UNKNOWN, dp);
+    const RhiBindGroup g2 = rd__TexGroup(
+        t, rd__Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP));
+    rhi_CmdSetVertexBuffer(cl, 0, g_rd.ring[s_slot], vOff);
+    for (int i = 0; i < np; i++) {
+        RhiPipeline p = rd__GetPipeline(&dp[i].key);
+        if (!p.id) {
+            continue;
+        }
+        IcoDrawCB cb;
+        memset(&cb, 0, sizeof(cb));
+        cb.mode[0] = dp[i].flags | (textured ? ICO_DF_TEXTURED | ICO_DF_TCC_RGBA : 0u);
+        cb.mode[1] = st.ds.texa | (tfmt << 8);
+        cb.mode[2] = dp[i].modeZ;
+        cb.mode[3] = dp[i].aref;
+        cb.blend[0] = rd__AlphaRegister(st.ds.blend);
+        cb.blend[1] = dp[i].fix;
+        cb.blend[2] = st.ds.colclamp;
+        cb.tex[0] = (float)tw;
+        cb.tex[1] = (float)th;
+        cb.tex[2] = 1.0f / (float)tw;
+        cb.tex[3] = 1.0f / (float)th;
+        rhi_CmdSetPipeline(cl, p);
+        rhi_CmdSetBindGroup(cl, 0, frame);
+        rhi_CmdSetBindGroup(cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(cl, 2, g2);
+        rhi_CmdDraw(cl, nv, 0, 1);
+    }
+}
+
 /* ------------------------------------- COLCLAMP 0 wrap (wave 5, R5c)
  * A screen-prim command whose blend result the GS masks to 8 bits instead of
  * clamping it (COLCLAMP 0) under an equation that adds or subtracts a term of
@@ -2832,7 +2906,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     s_ringOff = 0;
-    if (!ensureRing(estimateRing(f, keep))) {
+    if (present) {
+        rd__OverlayCollect(); /* package OV: before the ring and the uploads */
+    }
+    if (!ensureRing(estimateRing(f, keep) + rd__OverlayRingBytes())) {
         rd__Log("could not allocate the upload ring");
         return false;
     }

@@ -963,8 +963,9 @@ so at the sides of a 16:9 frame a puddle shows its reflection's clamped
 edge; a UI draw under a scissor narrower than the screen keeps the 4:3 clip
 rectangle (it clips less, never more; none seen); a world-projected prim
 drawn as a sprite spanning the whole width is taken for a fill and
-stretched. The port's popups and text draw in list 12 in UI space, so they
-sit in the 4:3 box at the scene's resolution.
+stretched. The port's menu text draws in list 11 in UI space, so it sits in
+the 4:3 box at the scene's resolution; the popups are on the presentation
+overlay (below), at the output's resolution in the same 4:3 picture.
 
 **Presentation.** Original: DISPLAY into the 4:3 box, each line doubled,
 bilinear horizontally. Enhanced: the box of the aspect option; with
@@ -983,6 +984,83 @@ leaves keep their thickness in the distance. Draws whose TEX1 minifies
 linearly sample with mip-linear or anisotropic samplers (up to 16);
 textures authored nearest stay nearest. A change of the option recreates
 the textures.
+
+### The presentation overlay
+
+`rd.h` `rd_SetPresentOverlay`, `rd_OverlayPrims`, `rd_ReadPresented`;
+`rd_present.c` (`rd__OverlayCollect`, `overlayRecord`), `rd_replay.c`
+(`rd__OverlayDraw`), `rd_pipeline.c` (`rd__OverlayState`). The port's own
+UI that does not belong to the game's picture, today the popups
+(UI.md "Popups"), is drawn on the output after the box blit, at the
+output's resolution.
+
+**Contract.** One callback is registered at a time (`port/ui/ui_host.c`
+registers the popups' at start-up; the registration survives `rd_Shutdown`
+and `rd_Init`). It is called once per present that reaches an output:
+`rd_EndFrame`'s in Original, every `rd_Present`, the replay tool's
+`--present`; not for the movie picture (`rd_video.c`). It gets an
+`RdOverlayCtx`: the output's size, the box DISPLAY was blitted into,
+`boxScale` = box height / 448 (output pixels per line of the 448-line
+frame) and whether the blit was mirrored. Inside it, and only there,
+`rd_OverlayPrims(prim, v, n, tex, blend)` adds prims:
+
+- XY in 12.4 output pixels from the output's top-left corner, an integer
+  on a pixel's top-left edge (pixel (x, y) covers [x, x + 1) × [y, y + 1),
+  not the GS convention), so a texture drawn 1:1 samples its texel
+  centres; at most 4095 pixels each way (the sprite vertex's u16 12.4);
+- s, t in 12.4 texels; tex 0 untextured, else MODULATE with TCC RGBA,
+  bilinear, clamped; colours and the texture's alpha in GS units (0x80 =
+  1.0);
+- `blend` the GS equation with ABE on (the popups use `RD_BLEND_LERP_AS`,
+  the glow `RD_BLEND_CS_AS_ADD_CD`); no depth, no alpha test, no DATE,
+  COLCLAMP on; no keys, so nothing is interpolated; never mirrored (the
+  mirror mode flips only the box blit); no scissor but the output.
+
+The callback runs before the frame's replay (`replayFrame` calls
+`rd__OverlayCollect` before it sizes the upload ring), so textures it
+creates or updates (the font's atlas pages) are uploaded with the frame and
+the ring has room for its vertices; the prims are kept and drawn later in
+`rd__PresentRecord`. The output and box it is given come from `RdSettings`,
+which do not change inside a replay, so they are the ones the present
+uses.
+
+**Drawing.** After the box blit `overlayRecord` opens one load-preserving
+pass on the output (the headless `presentOut` or the swapchain image),
+viewport and scissor the whole output, FrameCB `rd__FrameGroup(outW, outH,
+0.5, 0.5)` (`sprite_ui_vs` then maps x / 16 to the pixel position x: the
+origin's half pixel cancels `g_origin.zw`), and draws each batch through
+the screen-prim path (`expand`, no sprite snap, no UV shift, no mirror) with
+`sprite_ps` and the pipeline `rd__PlanScreenDraw` plans for
+`rd__OverlayState`'s block. The overlay's pipelines (LERP and additive,
+RGBA8 and BGRA8, no depth) are in `rd__EnumerateReachableScreen`, so
+`rd_PrecreatePipelines` makes them at start-up.
+
+**Ordering.** In `rd__PresentRecord`: DISPLAY to the line-doubled target,
+the box blit, then the presentation passes of later packages (the plan's
+"deferred text" and "CRT" passes; a marked insertion point in
+`rd_present.c` says where), then the overlay, last, then the window's
+transition to PRESENT. A pass inserted there draws on `out` (in
+RENDER_TARGET at that point) with `rd__FrameGroup(s_outW, s_outH, ...)` as
+`blit()` does; the overlay stays above it.
+
+**What it fixes.** The popups were recorded into list 12 of the game's
+frame: drawn at the scene's resolution and halved by the reduction,
+pre-flipped with the UI, and part of DISPLAY, so a keep frame drew the last
+full frame's popup under the live one. On the overlay none of that can
+happen: the overlay is never in DISPLAY. Since it is not part of the
+frame, a frame dump does not contain it; `rd_replay_tool --overlay-test`
+draws a test pattern on the overlay instead.
+
+**Unchanged without it.** With no callback registered nothing is collected
+and `overlayRecord` returns at once: the Original present's bytes are the
+recorded ones (`rd_present`'s hash).
+
+**Reading the output.** `rd_ReadPresented` reads the last presented output
+(RGBA8, outputWidth × outputHeight), overlay included, from the headless
+output. The window build presents the swapchain image and keeps no copy,
+so there it returns false; a photo mode wants a copy of `out` taken at the
+end of `rd__PresentRecord` (the swapchain is created with transfer-source
+usage), which is where one would go.
 
 ## 16. Frame rate and interpolation
 
@@ -1118,7 +1196,7 @@ therefore shown with its own tick's shape, half way between the ticks.
 | layout rows | the row's `texProperty` entry; part 0 the sprite, part 1 its glow | `layout_texture.c` |
 | subtitles | the subtitle's block, a part per row | `jimaku.c` |
 | `font_Print` | FNV-1a of the string (`gif_HostDrawKeyText`) | `DisplayFont.c` |
-| the port's text and rects | FNV-1a of the string, the alignment, the atlas page and the owner (`ui_SetDrawKey`); rects only under an owner | `port/ui/font.c`, `layout_ext.c`, `popup.c` |
+| the port's text and rects | FNV-1a of the string, the alignment, the atlas page and the owner (`ui_SetDrawKey`); rects only under an owner | `port/ui/font.c`, `layout_ext.c` |
 
 Glyphs match within a draw by order, so a string that moves or fades blends
 glyph for glyph, and a changed string is a new key. The menu sparkle,
@@ -1219,6 +1297,10 @@ and the font's colours are flat). The reduction samples SCENE at
 u = x + 0.75, a bias that is not mirror-symmetric, so with the mirror on a
 glyph edge's 25 % blend sits on its other side.
 
+**The overlay.** The presentation overlay (section 15) is drawn after the
+flip and is never flipped: the popups read normally without a pre-flip and
+stay at the right of the picture.
+
 **FMV.** `rd_video.c` draws the film mirrored exactly when the mirror is on;
 the audio pan follows the mirror mode too (AUDIO.md, FMV.md).
 
@@ -1314,7 +1396,9 @@ headlessly and writes PNGs: `--target NAME` (SCENE, DISPLAY, any named
 target), `--present WxH`, `--list` (every command with its list and index),
 `--nop L:I` (skip a command), `--mesh` and `--dump-textures` (inspect
 inputs), `--enhanced`, `--aspect`, `--resolution`, `--full-height`,
-`--filter`, `--mirror` (the display options), `--backend`.
+`--filter`, `--mirror` (the display options), `--backend`, and
+`--overlay-test` (with `--present`: a test pattern on the presentation
+overlay; without it the tool registers no overlay).
 
 ## 20. Tests
 
@@ -1333,7 +1417,7 @@ inputs), `--enhanced`, `--aspect`, `--resolution`, `--full-height`,
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames |
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path |
 | `rd_debug` | the debug font and menu |
-| `rd_present` | presets, scales, widescreen, mips; Original byte-identical |
+| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback |
 | `rd_mirror` | the present flip and the UI flip |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays |

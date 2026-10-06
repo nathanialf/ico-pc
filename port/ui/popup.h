@@ -6,16 +6,13 @@
  * right edge of the 4:3 picture, held, and sliding out, timed in vsyncs
  * (docs/port/UI.md, "Popups").
  *
- * Where they are drawn.  The design is an overlay the presenter draws
- * after it has scaled DISPLAY to the output (output resolution, after the
- * mirror flip, outside the game's fade and never in DISPLAY's history).
- * rd has no entry point for that yet (docs/port/UI.md, "Requested rd
- * API"), so ui_PopupRecord draws the popup into list 12 of the open rd
- * frame instead: after list 11 (the game's UI and fade), before the
- * reduction, UI-tagged (pre-flipped in mirror mode).  It is therefore at
- * the scene's resolution and reaches DISPLAY, so a keep frame (pause)
- * shows the last popup frame under the live one; window_host.c calls it
- * once per game frame.
+ * Where they are drawn (package OV).  On the presentation overlay
+ * (port/render/rd.h rd_SetPresentOverlay; docs/port/UI.md "Popups"): the
+ * presenter calls ui_host.c's overlay function at every present, which
+ * calls ui_PopupDrawOverlay, so the popup is drawn on the output after the
+ * box blit, at the output's resolution, outside the game's frame (never
+ * reduced, never in DISPLAY's history, so a keep frame cannot show it
+ * twice), never mirrored, and at each present's state of the queue.
  */
 #ifndef PORT_UI_POPUP_H
 #define PORT_UI_POPUP_H
@@ -37,9 +34,11 @@ int ui_PopupPush(const char *title, const char *body);
 void ui_PopupVsync(void);
 /* whether a popup is showing or waiting */
 int ui_PopupActive(void);
-/* Records the current popup into the open rd frame's list 12 (above);
-   restores the current list.  No-op without a popup or an open frame. */
-void ui_PopupRecord(void);
+/* Draws the current popup on the output (above): inside an rd overlay
+   callback, ctx the callback's RdOverlayCtx (rd.h).  No-op without a
+   popup, and without ICO_RD. */
+struct RdOverlayCtx;
+void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx);
 /* The developer trigger ([dev] popup_test): on, it queues the test popup
    when mainTick reaches 100 and every 150 ticks after (so a run's frame
    dumps catch one on any screen). */

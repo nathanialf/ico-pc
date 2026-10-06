@@ -7,13 +7,14 @@
  * calls these (docs/port/UI.md, "Popups").
  *
  *   ui_HostInit()            after rd_Init: the font, the hooks, the
- *                            [dev] popup_test switch (ICO_UI_POPUP_TEST,
- *                            exported by host_config.c)
+ *                            presentation overlay that draws the popups
+ *                            (rd_SetPresentOverlay), the [dev] popup_test
+ *                            switch (ICO_UI_POPUP_TEST, exported by
+ *                            host_config.c)
  *   ui_HostVsync(mainTick)   once per vsync after the simulation step: the
- *                            popup test trigger, the popup clock, and the
- *                            popup recorded into the open frame once per
- *                            game frame (frame_count)
- *   ui_HostShutdown()        before rd_Shutdown: the atlases' textures
+ *                            popup test trigger and the popup clock
+ *   ui_HostShutdown()        before rd_Shutdown: the overlay, the atlases'
+ *                            textures
  */
 #ifndef PORT_UI_HOST_H
 #define PORT_UI_HOST_H

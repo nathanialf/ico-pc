@@ -6,6 +6,10 @@
 #ifndef PORT_UI_INTERNAL_H
 #define PORT_UI_INTERNAL_H
 
+#ifdef ICO_RD
+#include "rd.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,6 +30,15 @@ void ui__SuppressRecordHook(int delta);
    and rd (ui_host.c). */
 void ui__SetSyncHook(void (*fn)(void));
 void ui__Sync(void);
+
+#ifdef ICO_RD
+/* Tests: in overlay mode (font.h ui_BeginOverlay) the prims go to fn
+   instead of rd_OverlayPrims, so a test can see them outside a present.
+   NULL: rd_OverlayPrims. */
+typedef void (*UiOverlaySink)(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex,
+                              RdBlend blend);
+void ui__SetOverlaySink(UiOverlaySink fn);
+#endif
 
 #ifdef __cplusplus
 }

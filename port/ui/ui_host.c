@@ -29,12 +29,17 @@ extern int ScreenHeight;
 extern float center_X;
 extern float center_Y;
 extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
-extern int frame_count;         /* gsb_UpdateGSSystem's flip count */
 #ifdef ICO_RD
 extern void gif_HostFlush(void); /* GifHost.h */
-#endif
 
-static int s_lastFrame = -1;
+/* package OV: the presenter's overlay, at every present (rd.h
+   rd_SetPresentOverlay): the popup on the output */
+static void hostOverlay(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    ui_PopupDrawOverlay(ctx);
+}
+#endif
 
 static void sync(void)
 {
@@ -85,6 +90,7 @@ void ui_HostInit(void)
     ui__SetSyncHook(sync);
 #ifdef ICO_RD
     ui__SetRecordHook(gif_HostFlush);
+    rd_SetPresentOverlay(hostOverlay, NULL);
 #endif
     ui_PopupSetDevTest(truthy(getenv("ICO_UI_POPUP_TEST")));
 #ifdef ICO_UI_HAVE_SDL
@@ -96,16 +102,13 @@ void ui_HostVsync(unsigned int mainTick)
 {
     ui_PopupDevTick(mainTick);
     ui_PopupVsync();
-#ifdef ICO_RD
-    if (ui_PopupActive() && rd_FrameOpen() && frame_count != s_lastFrame) {
-        s_lastFrame = frame_count;
-        ui_PopupRecord();
-    }
-#endif
 }
 
 void ui_HostShutdown(void)
 {
+#ifdef ICO_RD
+    rd_SetPresentOverlay(NULL, NULL);
+#endif
 #ifdef ICO_UI_HAVE_SDL
     ui_SettingsSetQuitHandler(NULL);
 #endif

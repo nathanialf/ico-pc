@@ -158,6 +158,28 @@ straight edges and the letters step. Text is port content, not PS2
 content, so it is drawn continuous; at scale 1 the snap does nothing, so
 the Original preset is unaffected.
 
+**Overlay mode** (package OV). Between `ui_BeginOverlay(ctx)` and
+`ui_EndOverlay()`, called inside a presentation overlay callback
+(RENDER_API.md, "The presentation overlay"), `ui_DrawText`, `ui_DrawTextXf`
+and `ui_DrawRect` draw on the output through `rd_OverlayPrims` instead of
+recording into the current list. The grid maps onto the 4:3 picture inside
+the box the presenter drew DISPLAY into (the box itself in 4:3, its centred
+4:3 part when the box is wider, where the game's UI is): x' = left + gx × W
+/ 640, y' = box.y + (gy − 2) × box.h / 448, with W = min(box.w, box.h ×
+4/3) and left = box.x + (box.w − W) / 2. That is where the list-11 path puts
+a grid point after the reduction and the box blit: 226 is the frame's
+centre line, so its 448 lines are grid y 2 to 450. The scale is
+`ctx->boxScale` (box.h / 448) until `ui_EndOverlay`, so text is rasterised
+at round(size × box.h / 448) pixels (a 26-unit title is 63 px at 1080
+lines, 125 px at 2160), one atlas texel to one output pixel; each glyph
+quad has its top-left corner rounded to a whole pixel and keeps the
+bitmap's size, and rects have both corners rounded, so the glyphs are drawn
+texel for pixel and sampled at their texel centres. The blend is
+`ui_DrawText`'s (0x44, `UI_ADDITIVE` 0x48); there are no draw keys, the
+state flags are ignored and nothing is mirrored. `ui_SetScale` meanwhile
+sets the scale restored afterwards. Measuring in overlay mode uses the
+overlay's scale, so a panel fits its text.
+
 Before each recording the game build runs `gif_HostFlush` (the record hook
 `ui_host.c` installs): the register decoder emits what it still batches
 into the current list and forgets the state it emitted, so its next
@@ -167,15 +189,12 @@ the draw calls measure and record nothing.
 
 ### Requested rd API
 
-The text is drawn with what `rd.h` offers today, which costs in two
-places. Each atlas page is uploaded as RGBA8 (four times the memory, and a
+The text is drawn with what `rd.h` offers today, which costs in one place.
+Each atlas page is uploaded as RGBA8 (four times the memory, and a
 whole-page `rd_UpdateTexture` when glyphs are added) and drawn by
 `sprite_ps`, because `rd.h` has no R8 texture and no way to select the
-`font_vs`/`font_ps` shaders for screen prims. And because the presenter
-draws DISPLAY to the output inside `rd_EndFrame`, nothing outside
-`port/render` can draw after the scale and mirror, so popups go into the
-game's frame ("Popups" below). The wanted entry points are in
-docs/TODO.md.
+`font_vs`/`font_ps` shaders for screen prims. Drawing after the scale and
+the mirror is the presentation overlay (overlay mode above).
 
 ## Layout extension
 
@@ -563,30 +582,36 @@ side, at most the picture's width less the margins: a dark translucent
 panel (GS 6, 6, 9, alpha 0x5C), a 1.5-unit hairline in the menu's warm
 grey on top, the title in warm white and the body in a lighter grey.
 
-**Where it is drawn.** `rd` has no overlay entry point after the present,
-so `ui_PopupRecord` draws into list 12 of the open frame, once per game
-frame (`ui_host.c` compares `frame_count`, then flushes the decoder into
-the list it was recording, selects list 12, draws, writes back list 12's
-defaults, TEST 0x50000 and Z write on, and restores the list). That puts
-the popup after the game's UI and fade (list 11) and before the
-reduction, so:
+**Where it is drawn.** On the presentation overlay (RENDER_API.md, "The
+presentation overlay"): `ui_HostInit` registers an overlay callback with
+`rd_SetPresentOverlay`, and the presenter calls it at every present, after
+it has drawn DISPLAY into the box; the callback calls
+`ui_PopupDrawOverlay(ctx)`, which draws the panel and its text in overlay
+mode (font.h `ui_BeginOverlay`). So:
 
-- it is drawn at the scene's resolution and reduced with the frame (half
-  height, the stage tint), not at output resolution;
-- it reaches DISPLAY: a keep frame (pause) draws DISPLAY back, so the
-  popup of the last full frame shows under the live one while paused;
-- it is in UI space, so in mirror mode it is pre-flipped like the rest of
-  the UI and reads correctly after the flip.
-
-Because the popup is part of the renderer's frame, the `dump_every` dumps
-and `rd_replay_tool` show it. docs/TODO.md has the overlay entry point that
-would draw it at output resolution instead.
+- it is drawn at the output's resolution, never reduced or tinted with the
+  frame, over the game's UI and fade;
+- it is never in DISPLAY: a keep frame (pause) draws DISPLAY back without a
+  popup in it, so the stale popup under the live one cannot happen, by
+  construction;
+- it is never mirrored: the mirror mode flips only the box blit, and the
+  overlay comes after it, so the popup reads normally and stays at the
+  right of the picture without a pre-flip;
+- it is drawn at each present, with the queue as it is then; it is not
+  interpolated (no keys), so with the frame rate uncapped its slide steps
+  at the vsync clock that drives it;
+- it is not part of the game's frame, so frame dumps (`dump_every`, F12)
+  and `rd_replay_tool` replays of them do not show it (the tool's
+  `--overlay-test` draws a test pattern on the overlay), and it is not
+  drawn over the movies (`rd_video.c` presents without the overlay).
 
 **Hooks.** `port/platform/window_host.c` calls `ui_HostInit()` after
-`rd_Init` (the font, the hooks, the popup test switch, the quit handler),
+`rd_Init` (the font, the hooks, the overlay, the popup test switch, the
+quit handler),
 `ui_HostVsync(ico_host_main_ticks())` at the end of `ico_window_pump` once
-per vsync, after the simulation step, and `ui_HostShutdown()` before
-`rd_Shutdown`. The developer key `[dev] popup_test = true` (ini
+per vsync, after the simulation step (the test trigger and the popup
+clock), and `ui_HostShutdown()` before `rd_Shutdown` (it unregisters the
+overlay). The developer key `[dev] popup_test = true` (ini
 `popup_test=1`; exported as `ICO_UI_POPUP_TEST`) queues the test popup
 ("Test popup", "Runtime text: Éléphant, Größe, señor, città, cœur") at
 Main tick 100 and every 150 ticks after, so any run's frame dumps catch
@@ -603,13 +628,22 @@ one.
   the real `layout_texture.c` over fake tables (the fall-through, a port
   layout drawn with its halo copies and labels, no texture transfer, the
   cursor and the glow, the sparkle, no undecoded register write); the
-  popup queue and slide; on the device, text drawn into SCENE inside its
+  popup queue and slide; overlay mode at 1080 and 2160 lines and in a 16:9
+  box (the grid onto the 4:3 picture, glyph quads on whole pixels at the
+  bitmap's size, the pixel size, rects snapped, the scale restored), and a
+  popup drawn on the overlay recording nothing into the frame's lists (list
+  12 included), at the picture's right, the same with the mirror on; on the
+  device, text drawn into SCENE inside its
   measured bounds and blended exactly as the GS formula, and at Enhanced
   4x (SCENE 2048 x 2048) the title's rows compared texel by texel with a
   CPU reference of the recorded quads at a 960-line and, with trilinear
   filtering, a 2160-line output (none more than 6 levels off, nothing
-  outside the quads); the atlas page shape. It writes `ui_test_scene.png`,
-  `ui_test_scene4x.png` and `ui_test_scene4x_plain.png` beside itself.
+  outside the quads); the atlas page shape; a popup on the overlay of a
+  1920 x 1080 present (at the picture's right, text in the panel, nothing
+  changed outside it). It writes `ui_test_scene.png`, `ui_test_scene4x.png`,
+  `ui_test_scene4x_plain.png` and `ui_test_popup.png` beside itself.
+  `rd_present` (port/render) draws a glyph through overlay mode on a real
+  present too.
 - `settings_test` (ctest `settings`, CPU): the menu built over fake tables
   shaped like the PAL ones and run by the real `layout_texture.c`: each
   screen's rows and labels; the repoint and its idempotence, and tables

@@ -109,7 +109,8 @@ void ui_FontForgetTextures(void);
 
 void ui_SetGsFrame(const UiGsFrame *f);
 const UiGsFrame *ui_GetGsFrame(void);
-/* atlas pixels per y unit; 1 by default */
+/* atlas pixels per y unit; 1 by default (in overlay mode, the scale
+   ui_EndOverlay restores) */
 void ui_SetScale(float scale);
 float ui_GetScale(void);
 /* the scale a preset wants: 1 for Original (preset 0), else outputHeight /
@@ -139,6 +140,36 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
    match in order.  A rect is keyed only under an owner (owner and the rect
    ordinal; 0: unkeyed, as before).  Returns the previous owner. */
 uint64_t ui_SetDrawKey(uint64_t owner);
+
+/* Package OV: the presentation overlay (port/render/rd.h
+   rd_SetPresentOverlay; docs/port/UI.md "Popups").  Between
+   ui_BeginOverlay(ctx) and ui_EndOverlay(), inside an rd overlay callback,
+   ui_DrawText, ui_DrawTextXf and ui_DrawRect draw on the output through
+   rd_OverlayPrims instead of recording into the current rd list:
+   - the grid maps onto the 4:3 picture in ctx->box (the box itself in 4:3,
+     its centred 4:3 part when the box is wider, where the game's UI is):
+     x' = left + gx * W / 640 and y' = box.y + (gy - 2) * box.h / 448, W =
+     min(box.w, box.h * 4 / 3), left = box.x + (box.w - W) / 2: the same
+     place the GS path puts a grid point after the reduction and the box
+     blit (226 is the frame's centre line, so its 448 lines are 2 .. 450);
+   - text is rasterised at round(size * box.h / 448) pixels (the scale is
+     ctx->boxScale until ui_EndOverlay; ui_SetScale meanwhile sets the
+     scale restored after), so one atlas texel is one output pixel, and
+     each glyph quad's top-left corner is rounded to a whole output pixel
+     with its size kept, so the glyphs are drawn texel for pixel;
+   - rects have both corners rounded to whole pixels;
+   - blend as ui_DrawText's (0x44, UI_ADDITIVE 0x48), no draw keys, the
+     state flags (UI_KEEP_STATE) ignored; nothing is mirrored.
+   ctx is an RdOverlayCtx (rd.h).  Measuring (ui_MeasureText,
+   ui_FontMetrics) works in overlay mode with the overlay's scale.  Without
+   ICO_RD both are no-ops. */
+struct RdOverlayCtx;
+void ui_BeginOverlay(const struct RdOverlayCtx *ctx);
+void ui_EndOverlay(void);
+/* whether ui_BeginOverlay is in force, and where it puts the grid point
+   (gx, gy): 12.4 output pixels, unrounded (tests) */
+int ui_OverlayActive(void);
+void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
 
 /* The next code point of a UTF-8 string, advancing *s; U+FFFD for a
    malformed or overlong sequence or a surrogate (one byte consumed), 0 at

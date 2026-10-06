@@ -413,10 +413,8 @@ int ico_window_pump(void)
     set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
                 game_pause == 0 && data_loading == 0);
     ico_input_sdl_update();
-    /* Phase 6 (6B): the popup overlay's clock, and the popup recorded into
-       the open frame once per game frame.  rd presents inside rd_EndFrame
-       and has no post-present overlay hook yet, so the popup is drawn into
-       the frame's list 12 (port/ui/popup.h, docs/port/UI.md) */
+    /* Phase 6 (6B): the popups' clock; the presenter draws them on its
+       overlay at each present (package OV, port/ui/ui_host.c) */
     ui_HostVsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
     return !quit;

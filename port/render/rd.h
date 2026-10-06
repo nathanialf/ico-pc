@@ -483,6 +483,65 @@ float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, dou
 void rd_SetMirror(int on);
 bool rd_MirrorActive(void);
 
+/* ---------------------------------- presentation overlay (package OV)
+ * docs/port/RENDER_API.md "The presentation overlay".  The port's own UI
+ * (port/ui's popups) drawn on the output itself, after the presenter's box
+ * blit (rd_present.c rd__PresentRecord), at the output's resolution:
+ * outside the game's frame, so it is never reduced, never in DISPLAY's
+ * history (a keep frame cannot show it twice), never mirrored and never
+ * interpolated.
+ *
+ * rd_SetPresentOverlay  registers fn (NULL: none; one at a time).  rd calls
+ *                       fn(ctx, user) once per present that reaches an
+ *                       output (rd_EndFrame's in Original, each rd_Present,
+ *                       the replay tool's --present), before the frame's
+ *                       replay, so the textures fn creates or updates
+ *                       (rd_CreateTexture, rd_UpdateTexture: the font
+ *                       atlases) are uploaded with the frame.  Not for the
+ *                       movie picture (rd_video.c).  The registration
+ *                       survives rd_Shutdown / rd_Init
+ * rd_OverlayPrims       valid only inside fn (ignored elsewhere): prims in
+ *                       12.4 fixed-point OUTPUT pixels, origin at the
+ *                       output's top-left corner, an integer coordinate on
+ *                       a pixel's top-left edge (pixel (x, y) is the square
+ *                       [x, x + 1) x [y, y + 1); not the GS convention, so a
+ *                       texture drawn 1:1 is sampled at its texel centres).
+ *                       Up to 4095 pixels each way.  z is ignored (no depth
+ *                       test, no Z write), s, t are 12.4 texels of tex
+ *                       (uvFixed 1), q unused, rgba a GS colour (0x80 =
+ *                       1.0).  tex id 0 draws untextured; otherwise
+ *                       MODULATE with TCC RGBA, the texture's alpha in GS
+ *                       units, bilinear, clamped.  blend: the GS equation
+ *                       (RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD; ABE on),
+ *                       no alpha test, no DATE, COLCLAMP on.  Drawn in
+ *                       call order after the box blit, never flipped (the
+ *                       mirror mode flips only the box blit), with no
+ *                       scissor but the output
+ * rd_ReadPresented      the last presented output, tightly packed RGBA8
+ *                       (outputWidth x outputHeight x 4 bytes, the overlay
+ *                       included): the headless output (tests, the replay
+ *                       tool).  The window build presents the swapchain
+ *                       image and keeps no copy, so it returns false there
+ *                       (a capture copy in rd__PresentRecord is the place
+ *                       to add one) */
+typedef struct RdRect {
+    int32_t x, y;
+    uint32_t w, h;
+} RdRect;
+
+typedef struct RdOverlayCtx {
+    uint32_t outW, outH; /* the output, pixels */
+    RdRect box;          /* the presentation box DISPLAY was blitted into */
+    float boxScale;      /* box.h / 448: output pixels per 448-line frame line */
+    int mirror;          /* the box blit was flipped (the overlay is not) */
+} RdOverlayCtx;
+
+typedef void (*RdOverlayFn)(const RdOverlayCtx *ctx, void *user);
+
+void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
+void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
+bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
+
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */
@@ -848,8 +907,9 @@ const RdVuCommon *rd_GetVuCommon(void);
  * referenced by id) so tools/verify can replay it headless on another
  * backend.  Dumps contain game assets and are never committed. */
 bool rd_DumpFrame(const char *path);
-/* Readback of the DISPLAY target or backbuffer after present, tightly
- * packed RGBA8, for screenshots and image comparison. */
+/* Readback of the DISPLAY target (the reduced frame the presenter scales;
+ * the output itself is rd_ReadPresented), tightly packed RGBA8, for
+ * screenshots and image comparison. */
 bool rd_ReadDisplay(void *dst, uint32_t *w, uint32_t *h);
 
 /* --------------------------------------------------------- statistics */
