@@ -3,13 +3,14 @@
 # port/input/pad_script.h. Buttons: CROSS 0040, TRIANGLE 0010, START 0800,
 # DOWN 4000, LEFT 8000.
 #
-# Ticks 8..477: the boot signs, as port/input/pad-boot.txt's first phase
+# Ticks 8..397: the boot signs, as port/input/pad-boot.txt's first phase
 # (LEFT, CROSS, START every 40 ticks), up to the title. On the headless build
 # with an empty card folder the log shows kanbanBoot's step 8 at tick 318
 # (358 before the boot lost its stage reload and second card check), so the
 # title (layout 12) is up at about tick 398 (it was 438) and turns to "New
-# Game" only (layout 13) at about tick 461 (it was 501). The shift is one
-# press cycle (40 ticks), so the presses meet the title in the same phase.
+# Game" only (layout 13) at about tick 461 (it was 501). The boot presses
+# end with the START at 394, before the title (as headless_common.py's
+# BOOT_LAST 400): a CROSS or START on the title would start New Game.
 # Then, a press every 12 ticks or more, each after the screen's fade-in:
 #   545  DOWN     the title's cursor from New Game to Settings
 #   565  CROSS    Settings (its main page, up at tick 586)
@@ -83,18 +84,6 @@
 384 0000
 394 0800    # START
 397 0000
-408 8000    # LEFT
-411 0000
-421 0040    # CROSS
-424 0000
-434 0800    # START
-437 0000
-448 8000    # LEFT
-451 0000
-461 0040    # CROSS
-464 0000
-474 0800    # START
-477 0000
 545 4000
 548 0000
 565 0040
