@@ -123,3 +123,12 @@ docs/pal_source_tree.json
 .port_cache/
 .transplant_cache/
 *.rddump
+
+# --- Local-only working notes: never part of the repository ---
+# The maintainer's cookbook, notes and matching guides, kept beside the
+# working trees.
+docs/COOKBOOK.md
+docs/NOTES.md
+docs/ARCHIVE_retired_notes.md
+docs/MATCH_VU.md
+docs/MATCHING_NOTES.md
