@@ -48,7 +48,10 @@ END_TOL = 0.35      # seconds the end line may fall short of the total
 RING_PAD = 0x5C000  # the bytes each .int carries past its table's sectors
 PAGE_OPEN = 785     # Main tick of the Cross on Music
 FIRST = PAGE_OPEN + 50
-TPS = 25
+# the video mode the run is given (config.toml [video] video_mode) and its Main
+# ticks a second, ((60 - 10 * PAL) / 2): 25 at "pal50", 30 at "60hz"
+VIDEO_MODE = "60hz"
+TPS = {"pal50": 25, "60hz": 30}[VIDEO_MODE]
 # one entry of each group the streams and banks above do not reach: an
 # ambience, a com_v voice, an effect from a bank the title does not hold;
 # with the streams' 47 (soundtrack), 87 (scene) and 101 (voice), every group
@@ -244,6 +247,8 @@ def main():
     # the opening's seconds; the run is stopped once the page has left
     ticks = FIRST + 8 * TPS + (104 * (DWELL + 4) + (3 * BANKS + len(GROUP_PLAY)) * (SE_DWELL + 3) +
                                60) * TPS
+    with open(os.path.join(work, "config.toml"), "w") as f:
+        f.write('[video]\nvideo_mode = "%s"\n' % VIDEO_MODE)
     with open(os.path.join(work, "ico-pc.ini"), "w") as f:
         f.write("iso=%s\nsaves=%s\nticks=%d\ntrace=0\nwatchdog=120\npad_script=%s\naudio_dump=%s\n" %
                 (os.path.abspath(iso), os.path.join(work, "saves"), ticks,

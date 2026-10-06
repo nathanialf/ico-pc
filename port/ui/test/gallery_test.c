@@ -33,6 +33,9 @@
 #include "tables.h"
 #include "vfs.h"
 
+/* the video mode gallery.c reads: 60 Hz, two vsyncs a Main tick */
+int systemStatus[12] = {0, 2};
+
 extern SeDef seDef[];
 
 static int failures;

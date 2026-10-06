@@ -581,7 +581,16 @@ int gallery_HdHas(const uint8_t *hd, size_t size, int prog, int tone)
 #define SCRIPT_MAX 512
 #define SCRIPT_START 50
 #define SCRIPT_TICKS 200
-#define TICKS_PER_S 25 /* PAL's Main tick */
+extern int systemStatus[12]; /* [0]: 1 PAL 50 Hz, 0 60 Hz; [1]: the frame step */
+
+/* Main ticks a second in the video mode in force, as ico_gs_tick_hz */
+static int ticksPerSecond(void)
+{
+    const int step = systemStatus[1] > 0 ? systemStatus[1] : 2;
+    return (systemStatus[0] ? 50 : 60) / step;
+}
+
+#define TICKS_PER_S ticksPerSecond()
 static char s_scriptKind[SCRIPT_MAX][8];
 static int s_scriptVal[SCRIPT_MAX], s_scriptVal2[SCRIPT_MAX];
 static int s_scriptN, s_scriptPos, s_scriptTick, s_scriptDone, s_scriptLeave;
