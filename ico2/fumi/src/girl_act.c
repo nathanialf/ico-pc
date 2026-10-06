@@ -5245,7 +5245,11 @@ void actGirlHintPoint(GObj *volatile self)
     Act *s;
 
 #ifdef ICO_HOST
-    tgt = (void *)GOBJ_ACT(self)->intrData;
+    /* intrData is the mail's additional data, the address of the target
+       (attractMailData, girl_brain_attract.c.inc): the target is the
+       pointer stored there, as the EE's load through it reads
+       (DIVERGENCES.md D14) */
+    tgt = *(void **)GOBJ_ACT(self)->intrData;
 #else
     tgt = (void *)*(int *)(GOBJ_ACT(self)->intrData);
 #endif
