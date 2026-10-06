@@ -7,7 +7,7 @@
 
 const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_NONE] = "",
-    [UI_STR_SETTINGS] = "Ajustes",
+    [UI_STR_SETTINGS] = "Opción",
     [UI_STR_SECTION_DISPLAY] = "Pantalla",
     [UI_STR_SECTION_CONTROLS] = "Controles",
     [UI_STR_SECTION_GAMEPLAY] = "Juego",

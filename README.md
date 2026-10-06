@@ -73,17 +73,17 @@ mapped by position, so an Xbox, PlayStation or Switch pad all feel the same.
 | Right stick (look) | right stick | I J K L | mouse movement |
 
 Escape closes the game. Alt+Enter toggles fullscreen. Everything else can be
-rebound in Settings > Controls > Remap controls.
+rebound in Options > Controls > Remap controls.
 
-## Settings
+## Options
 
-Open **Settings** from the title screen, or press Start during play and
-choose **Options**, which opens the same Settings menu. Up and Down move,
+Open **Options** from the title screen, or press Start during play and
+choose **Options** there: both open the same menu. Up and Down move,
 Left and Right change a value, Cross opens or confirms, Triangle or Circle
 goes back. Changes apply at once and are saved to `config.toml`.
 
 The PS2 Options screen's settings are on these pages too, shown only when
-Settings is opened from the pause menu: Brightness (Display); Button
+Options is opened from the pause menu: Brightness (Display); Button
 configuration, Vibration and Hold type (Controls); Film effect and Players
 (Gameplay, once you have finished the game). They are kept in your save, as
 on the PS2, not in `config.toml`.
@@ -94,7 +94,7 @@ on the PS2, not in `config.toml`.
   rate (original, uncapped or fixed up to 240 fps, which smooths motion
   between the game's updates), a CRT filter with several tube styles and a
   strength, and the video mode (PAL 50 Hz or 60 Hz; the default is 60 Hz).
-  The video mode can only be changed when Settings is opened from the title.
+  The video mode can only be changed when Options is opened from the title.
 - **Audio:** master, music and effects volume, stereo or mono, and the output
   device.
 - **Controls:** remapping, mouse sensitivity, "Circle goes back" (Circle backs
@@ -119,7 +119,7 @@ on the PS2, not in `config.toml`.
 - **Developer mode:** restores the development build's debug menu. Leave it
   off for normal play.
 
-**Mirror mode** is not in Settings: when you start a New Game, a screen after
+**Mirror mode** is not in Options: when you start a New Game, a screen after
 "Vibration" offers to play the whole game flipped left to right. The choice
 belongs to that save.
 
@@ -168,10 +168,11 @@ do not share them publicly.
 
 ## Differences from the PS2 you will notice
 
-- A **Settings** line on the title screen, which the pause menu's
-  **Options** also opens, and a **Quit to desktop** line on the title screen.
+- An **Options** line on the title screen, the same menu as the pause
+  menu's **Options**, and a **Quit to desktop** line on the title screen.
+  The PS2's own Options screen's settings are pages of that menu.
 - The language and 50/60 Hz questions the PS2 asked at first start are
-  skipped; both come from Settings.
+  skipped; both come from Options.
 - New Game has one extra **Mirror mode** screen after Vibration.
 - The language can be switched mid-game, where the PS2 only chose it at
   boot: the menus change at once, the game's own text and subtitles at the

@@ -37,7 +37,8 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
-    int dim; /* greyed (lt_ext_SetDim): the colour at half */
+    int dim;      /* greyed (lt_ext_SetDim): the colour at half */
+    int wordText; /* ROW_GLYPH from lt_ext_AddWord: its label without the texture */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -197,22 +198,23 @@ float lt_ext_RowSize(int index)
    the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
    Triangle beside OK (181) and Back (183), 343 and 344 the key config
    screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2 labels, 301 and 302
-   the Options screen's value arrows) and the height each has beside the
+   the Options screen's value arrows, 294 the pause menu's Options) and the height each has beside the
    game's 27-unit labels (dispH, y units; the width is the rectangle's, a
    pixel a texel). */
 static const struct {
     short row, u, v, w, h, dispH;
 } kGlyph[LT_GLYPH_COUNT] = {
-    {182, 32, 30, 32, 30, 30},   /* Cross, text/buttons.tm2 */
-    {344, 0, 30, 32, 30, 30},    /* Circle */
-    {343, 32, 0, 32, 30, 30},    /* Square */
-    {184, 0, 0, 32, 30, 30},     /* Triangle */
-    {349, 420, 240, 40, 15, 30}, /* L1, menu_PAL_02 */
-    {346, 340, 240, 40, 15, 30}, /* R1 */
-    {348, 460, 240, 40, 15, 30}, /* L2 */
-    {347, 380, 240, 40, 15, 30}, /* R2 */
-    {301, 490, 130, 20, 20, 40}, /* Left, menu_PAL_01 */
-    {302, 490, 150, 20, 20, 40}, /* Right */
+    {182, 32, 30, 32, 30, 30},    /* Cross, text/buttons.tm2 */
+    {344, 0, 30, 32, 30, 30},     /* Circle */
+    {343, 32, 0, 32, 30, 30},     /* Square */
+    {184, 0, 0, 32, 30, 30},      /* Triangle */
+    {349, 420, 240, 40, 15, 30},  /* L1, menu_PAL_02 */
+    {346, 340, 240, 40, 15, 30},  /* R1 */
+    {348, 460, 240, 40, 15, 30},  /* L2 */
+    {347, 380, 240, 40, 15, 30},  /* R2 */
+    {301, 490, 130, 20, 20, 40},  /* Left, menu_PAL_01 */
+    {302, 490, 150, 20, 20, 40},  /* Right */
+    {294, 384, 120, 128, 20, 40}, /* Options, menu_PAL_01 (the pause menu's word) */
 };
 
 int lt_ext_GlyphSource(int glyph, int uvwh[4])
@@ -272,6 +274,39 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size)
         e->glyph = glyph;
     }
     return i;
+}
+
+int lt_ext_AddWord(int glyph, const LtProperty *row, const LtExtText *text)
+{
+    if (glyph < 0 || glyph >= LT_GLYPH_COUNT || !row) {
+        return -1;
+    }
+    LtProperty r = *row;
+    r.texU = kGlyph[glyph].u;
+    r.texV = kGlyph[glyph].v;
+    r.texW = kGlyph[glyph].w;
+    r.texH = kGlyph[glyph].h;
+    r.texFileNo = 0x7000 + s_propCount; /* as lt_ext_AddGlyph */
+    int i = lt_ext_AddProperty(&r, text);
+    if (i >= 0) {
+        ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
+        e->kind = ROW_GLYPH;
+        e->glyph = glyph;
+        e->wordText = text != NULL;
+    }
+    return i;
+}
+
+int lt_ext_SetGlyphTexW(int index, int texW)
+{
+    ExtRow *r = rowOf(index);
+    if (!r || r->kind != ROW_GLYPH) {
+        return -1;
+    }
+    LtProperty *p = &s_props[index - LT_GAME_PROPERTY_COUNT];
+    const int w = kGlyph[r->glyph].w;
+    p->texW = texW <= 0 || texW > w ? w : texW;
+    return 0;
 }
 
 int lt_ext_IsGlyphRow(const LtProperty *e)
@@ -430,7 +465,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     ui__Sync();
     ExtRow *r = &s_rows[e - s_props];
-    if (r->kind == ROW_GLYPH) {
+    if (r->kind == ROW_GLYPH && !r->wordText) {
         return; /* a glyph without its texture (tables not PAL): nothing */
     }
     if (r->kind == ROW_RECT) {

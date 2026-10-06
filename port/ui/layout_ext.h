@@ -83,9 +83,11 @@ float lt_ext_RowSize(int index);
    the menus), the texel rectangle that row's.  The face buttons are
    text/buttons.tm2's four (the save prompts' OK and Back, the key config
    screen's columns), L1, R1, L2 and R2 the key config screen's labels
-   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01).
-   When the loaded tables are not the PAL ones (the row's rectangle
-   differs) the glyph draws nothing. */
+   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01),
+   Options the pause menu's word (row 294, menu_PAL_01: each language's
+   sheet its own word).  When the loaded tables are not the PAL ones (the
+   row's rectangle differs) the glyph draws nothing, or a word row's
+   label (lt_ext_AddWord). */
 typedef enum LtExtGlyph {
     LT_GLYPH_CROSS = 0,
     LT_GLYPH_CIRCLE,
@@ -97,6 +99,7 @@ typedef enum LtExtGlyph {
     LT_GLYPH_R2,
     LT_GLYPH_LEFT,
     LT_GLYPH_RIGHT,
+    LT_GLYPH_OPTIONS,
     LT_GLYPH_COUNT
 } LtExtGlyph;
 
@@ -104,6 +107,14 @@ typedef enum LtExtGlyph {
    the size it has beside a label of em `size` (the game's own pairs, a
    27-unit label: 32 x 30 for a face button); -1 when full. */
 int lt_ext_AddGlyph(int glyph, int x, int y, float size);
+/* Appends a word row: row (its box, links and flags as any port row) drawn
+   as glyph's texels, as a game row draws its rectangle; text the label it
+   draws instead when the glyph has no texture (tables not the PAL ones).
+   -1 when full. */
+int lt_ext_AddWord(int glyph, const LtProperty *row, const LtExtText *text);
+/* A word row's rectangle cut to its left texW texels (0 or more than the
+   glyph's width: all of it); -1 if index is not a glyph row. */
+int lt_ext_SetGlyphTexW(int index, int texW);
 /* The box (dispW pixels, dispH y units) of a glyph beside a label of em
    size, without adding it (layout). */
 void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);

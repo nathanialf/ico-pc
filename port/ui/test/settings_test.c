@@ -2557,6 +2557,7 @@ static void testGlyphSources(void)
         {LT_GLYPH_R2, 347, 380, 240, 40, 15, 40, 30},
         {LT_GLYPH_LEFT, 301, 490, 130, 20, 20, 20, 40},
         {LT_GLYPH_RIGHT, 302, 490, 150, 20, 20, 20, 40},
+        {LT_GLYPH_OPTIONS, 294, 384, 120, 128, 20, 128, 40},
     };
 
     CHECK(sizeof(k) / sizeof(k[0]) == LT_GLYPH_COUNT, "a source listed for every glyph");
@@ -2570,6 +2571,59 @@ static void testGlyphSources(void)
               uvwh[3]);
         CHECK(bw == k[i].boxW && bh == k[i].boxH, "glyph %d: box %dx%d", k[i].glyph, bw, bh);
     }
+}
+
+/* The title's Options rows: the pause menu's word, row 294's texels (its
+   sheet, so each language's own word), drawn as a game row, centred and
+   cut to the word; with tables that are not the PAL ones, the label */
+static void testTitleOptionsWord(void)
+{
+    const int mainL = enterMain(1);
+    (void)mainL;
+    const LtProperty *src = &texProperty[294];
+    for (int g = 12; g <= 13; g++) {
+        const int row = ui_SettingsEntryRow(g);
+        const LtProperty *e = lt_ext_Prop(row);
+        CHECK(row >= 0 && lt_ext_IsGlyphRow(e) && !lt_ext_IsTextRow(e) &&
+                  lt_ext_GlyphTexNo(e) == src->texNo && src->texNo >= 0,
+              "title %d: Options draws row 294's texture (%d, %d)", g, lt_ext_GlyphTexNo(e),
+              src->texNo);
+        CHECK(e->texU == src->texU && e->texV == src->texV && e->texH == src->texH && e->texW > 0 &&
+                  e->texW <= src->texW,
+              "title %d: row 294's rectangle (%d,%d %dx%d of %d,%d %dx%d)", g, e->texU, e->texV,
+              e->texW, e->texH, src->texU, src->texV, src->texW, src->texH);
+        CHECK(e->centerX && e->dispW == 0 && e->dispH == texProperty[50].dispH && e->selectable,
+              "title %d: a game row's box, centred (%d x %d)", g, e->dispW, e->dispH);
+        CHECK(strcmp(lt_ext_RowText(row), "Options") == 0, "title %d: its label Options (%s)", g,
+              lt_ext_RowText(row));
+    }
+    /* the cut: 7 texels each side of the lettering (English: texels 7 to
+       84 of the rectangle), so the word's middle is the row's */
+    const int row = ui_SettingsEntryRow(13);
+    CHECK(lt_ext_Prop(row)->texW == 92, "the cut: %d texels", lt_ext_Prop(row)->texW);
+    ui_SetLanguage(UI_LANG_DE);
+    NonLinearCameraMove = 4; /* German */
+    lt_switch_layout(13);
+    settle(13, 60);
+    CHECK(lt_ext_Prop(row)->texW == 105, "German: the cut follows the word (%d)",
+          lt_ext_Prop(row)->texW);
+    NonLinearCameraMove = 2;
+    ui_SetLanguage(UI_LANG_EN);
+    settle(13, 60);
+    frame(0);
+    /* every language's word: the main page's heading and the label */
+    static const char *const kWord[5] = {"Options", "Options", "Optionen", "Opzioni", "Opción"};
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    for (int i = 0; i < 5; i++) {
+        CHECK(strcmp(ui_StrIn(kLangs[i], UI_STR_SETTINGS), kWord[i]) == 0 &&
+                  strcmp(ui_StrIn(kLangs[i], UI_STR_MT_OPTIONS), kWord[i]) == 0,
+              "language %d: the menu is the game's word %s (%s)", i, kWord[i],
+              ui_StrIn(kLangs[i], UI_STR_SETTINGS));
+    }
+    /* not the PAL rectangle: the label in the port's lettering */
+    texProperty[294].texW = 100;
+    CHECK(lt_ext_IsTextRow(lt_ext_Prop(row)), "tables not PAL: the label instead");
+    texProperty[294].texW = 128;
 }
 
 static void testGallery(void)
@@ -3274,6 +3328,13 @@ static void makeSheets(void)
     segment(m, 512, 496, 140, 504, 147, 2, white);
     segment(m, 512, 496, 153, 504, 160, 2, white);
     segment(m, 512, 504, 160, 496, 167, 2, white);
+    /* the pause menu's Options (384, 120), 128 x 20: the English word's
+       extent on the sheet (texels 7 to 84), a framed bar with a cross */
+    segment(m, 512, 392, 124, 468, 124, 2, white);
+    segment(m, 512, 392, 136, 468, 136, 2, white);
+    segment(m, 512, 392, 124, 392, 136, 2, white);
+    segment(m, 512, 468, 124, 468, 136, 2, white);
+    segment(m, 512, 392, 124, 468, 136, 2, red);
     s_sheet[0] = rd_CreateTexture(64, 64, b, RD_TEXA_80_80, "settings_render buttons");
     s_sheet[1] = rd_CreateTexture(512, 256, m, RD_TEXA_80_80, "settings_render menu sheet");
 }
@@ -3564,6 +3625,22 @@ static int render(void)
     press(0x8000);
     frame(0);
     snap("settings_quit_screen.png");
+    /* the title (New Game only): Options, the pause menu's word centred
+       (the stand-in's framed bar), Quit to desktop under it */
+    lt_switch_layout(13);
+    CHECK(settle(13, 60), "the title");
+    {
+        /* shown, as the title's proc (la_title) shows them once its menu
+           is up */
+        const int opt = ui_SettingsEntryRow(13), quit = ui_SettingsQuitRow(13);
+        lt_ext_Prop(opt)->defaultMask = lt_ext_Prop(quit)->defaultMask = 0;
+        ui_SettingsTitleMask(0);
+        texLayout[13].curItem = opt;
+        frame(0);
+        snap("settings_title_entry.png");
+        lt_ext_Prop(opt)->defaultMask = lt_ext_Prop(quit)->defaultMask = 1;
+        ui_SettingsTitleMask(1);
+    }
     /* T1: the Settings and Display screens at Enhanced 4x, full height, the
        atlas at a 960-line output's scale (settings_main_4x.png,
        settings_display_4x.png) */
@@ -3755,6 +3832,7 @@ int main(int argc, char **argv)
     testBootSkip();
     testExtras();
     testGlyphSources();
+    testTitleOptionsWord();
     testGallery();
     testList();
     testGameOptions();

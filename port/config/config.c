@@ -240,7 +240,7 @@ int ico_config_save(void)
    default, and a line per section */
 static const char first_run_text[] =
     "# ico-pc settings. Every key below is at its default; edit and restart.\n"
-    "# The Settings menu rewrites only the lines it changes, so comments and\n"
+    "# The Options menu rewrites only the lines it changes, so comments and\n"
     "# keys of your own stay. Keys not listed here keep their defaults.\n"
     "\n"
     "version = 1\n"

@@ -133,8 +133,11 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE, LAYOUT_TITLE_CONTINUE,
    lettering a quarter before the anchor) */
 #define PAUSE_LETTERS_IN 6
 #define PAUSE_ROW_W 300
+/* the Options word's lettering in its rectangle (menu_text.c row 294): its
+   left edge 7 texels in, left aligned on every sheet */
+#define OPTIONS_INK_LEFT 7.0f
 /* The title is laid out by the port (placeTitle): its four rows, Continue
-   (49), New Game (50, and 51 on the New-Game-only layout), Settings and
+   (49), New Game (50, and 51 on the New-Game-only layout), Options and
    "Quit to desktop", one game pitch apart (20 field lines, the Options
    screen's), and the copyright line (48) below Quit with the same space
    between its capitals and Quit's as between the rows' (19 field lines:
@@ -1373,12 +1376,23 @@ static void buildEntries(void)
                                    UI_ALIGN_LEFT);
     addEntryLayout(ENTRY_PAUSE, s_photoRow, s_photoRow);
     for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
-        /* the y and the box are set with the game's rows (placeTitle); the
-           box is wider than the game's so the longer translations keep the
-           game rows' size */
-        int row =
-            ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_CENTER);
-        P(row)->centerX = 1;
+        /* "Options": the pause menu's word (row 294's texels, each
+           language's sheet), a game row as Continue and New Game are (no
+           box width: the rectangle's, centred); the y, the height and the
+           rectangle's cut are set with the game's rows (placeTitle) */
+        LtProperty w;
+        memset(&w, 0, sizeof(w));
+        w.word0 = w.word4 = w.word8 = w.wordC = -1;
+        w.ownerItem = -1;
+        w.up = w.down = w.left = w.right = -1;
+        w.rightItem = w.leftItem = w.downItem = w.upItem = -1;
+        w.word40 = 1;
+        w.dispX = 120;
+        w.dispH = 40;
+        w.selectable = 1;
+        w.centerX = 1;
+        const LtExtText fallback = {UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_CENTER};
+        int row = lt_ext_AddWord(LT_GLYPH_OPTIONS, &w, &fallback);
         /* hidden unless the title's proc shows it, as New Game (49 to 51
            are masked by default) */
         P(row)->defaultMask = 1;
@@ -1692,6 +1706,26 @@ static int titleRowsAt(int cont, int newGame, int copyright)
    they are.  New Game keeps its place on the New-Game-only layout (51 is
    50's y, as in the PAL data, so the switch from 12 to 13 still pairs
    them in the fade-cancel check). */
+/* The title's Options row cut to the word: its rectangle from the left
+   edge to as far past the lettering as the lettering starts in, so the
+   word, left aligned on the sheet, is centred as Continue and New Game are.
+   The lettering's width in texels per sheet (UiLang order): English
+   measured on the sheet (texels 7 to 84, a title frame dump's menu_PAL_01),
+   the others from the game face's advances (cut from the five sheets; they
+   give English's within a texel). */
+static void placeOptionsWord(void)
+{
+    static const float kInk[UI_LANG_COUNT] = {78.0f, 78.0f, 91.0f, 77.0f, 72.0f};
+    const UiLang lang = ui_LangFromGame(NonLinearCameraMove);
+    const float ink = kInk[lang >= 0 && lang < UI_LANG_COUNT ? lang : 0];
+    const int cut = (int)(2.0f * OPTIONS_INK_LEFT + ink + 0.5f);
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+        if (s_entryRow[e] >= 0) {
+            lt_ext_SetGlyphTexW(s_entryRow[e], cut);
+        }
+    }
+}
+
 static void placeTitle(void)
 {
     texProperty[49].dispY = TITLE_Y(0);
@@ -1706,6 +1740,7 @@ static void placeTitle(void)
             }
         }
     }
+    placeOptionsWord();
 }
 
 /* The pause menu: "Photo mode" one pitch under Options while a stage
@@ -1981,6 +2016,9 @@ static int entryProc(int first, int item)
     }
     if (cur == LAYOUT_PAUSE) {
         placePause();
+    }
+    if (cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
+        placeOptionsWord(); /* the language may have changed */
     }
     if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
         /* the cursor came back to the row that left; the layout's own
