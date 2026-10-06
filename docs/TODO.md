@@ -140,12 +140,17 @@ pointer to this file.
   (`east_and_west`) are inferred from the code. A wrong guess gives an
   achievement a trigger that never fires; confirm in play and fix
   `port/game/achievements.c` if needed.
-- **Developer menu entries.** Of the 27 entries in `common/src/debug.c`'s
-  `debugMenu`, only Debug Mode and Snap Shot are tested (`rd_debug_test`);
-  Free Camera, Stage Select, the editors, Memory Card, the sound tests and
-  the rest compile but have not been opened on the host. The camera editor
-  takes a 9,200-byte block per box from the root partition, so its capacity
-  should be measured too. Results go in DEVELOPER_MODE.md's table.
+- **Camera editor needs a second pad.** The Developer menu's Camera Editor
+  (`omori/src/camera-editor.c`) reads only `pad[1]`, which the host never
+  connects (`port/input/pad_host.c`: port 0 slot 0), so it opens but cannot
+  be driven or left: every control, including the exit (`menu` thread,
+  `exit_f`), is a pad 2 press. Repro: `[gameplay] developer_mode = true`,
+  `start_stage=11`, a pad script pressing SELECT (0100) at tick 150, DOWN
+  six times (row 6), CIRCLE: the menu stays in the
+  editor for the rest of the run (docs/port/DEVELOPER_MODE.md). Its box
+  capacity ("memory full") could not be measured for the same reason. Map a
+  second pad or a keyboard layer to `pad[1]` in developer mode, or let
+  SELECT on pad 1 leave the editor. Pad2 Control has the same limit.
 
 ## Licences
 

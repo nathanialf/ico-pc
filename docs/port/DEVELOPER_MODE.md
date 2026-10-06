@@ -81,38 +81,38 @@ open the menu.
 
 ## The menu entries
 
-"Host" says what the entry does on the host. "Untested" means the entry
-compiles and has its host paths, but no run or test has opened it.
+"Host" says what the entry does on the host; "opened on the host" is what
+a headless run found (below).
 
-| # | entry | host | files (under `<pref>/dev/`) |
-| --- | --- | --- | --- |
-| 0 | Debug Mode | works: the 76 options (below); `rd_debug_test` checks the page and the file round trip | `thisIsYourDebugOption` (written by TRIANGLE; read at boot with `debug_option`) |
-| 1 | Free Camera | untested (`CameraSetMode(1)`; SELECT leaves) | |
-| 2 | Stage Select | untested: the 106 `stageData` rows; CIRCLE switches stage (rows whose data file has `NOCD_` are refused, as on the PS2) | |
-| 3 | Target Object | untested (`debug_menu.c`: camera on the chosen object, which blinks) | |
-| 4 | Stage Setting | untested (`GsBase.c` `gsb_StageSetting`) | read/write `object/stagesetting/<key2>.ssb`, `<key2>.lock`; append `object/stagesetting/change.txt` |
-| 5 | Way Test | untested (`fumi/src/way_tool.c` `debug_WayTool`) | write `test.wp`, `way0000.txt`; read `test.wp` |
-| 6 | Camera Editor | untested (`omori/src/camera-editor.c`) | write `ico2Data/<camera set name>` (the editor's camera sets in their host record layout), `a.txt` (the text dump) |
-| 7 | Motion Viewer | untested (`sugipon/src/motionViewer.c`) | |
-| 8 | Effect Tool | untested (`sugipon/src/effectTool.c`) | write `particleEffectFile[id].path` (the effect's own path) |
-| 9 | TextureList | untested (`seki/src/Texture.c` `tex_ListTool`) | |
-| 10 | Snap Shot | works when SnapSize is not None (Debug Mode page): a PNG of the last presented frame (the renderer's DISPLAY target, the reduced 512 x 224/256 picture); window build only, the headless build writes nothing. SnapForm (TIM2/BMP) and the SnapSize tiling are ignored; `rd_debug_test` checks the PNG | write `screenshots/snapNNNNNNN.png` |
-| 11 | Memory Card | untested: LOAD, SAVE, DELETE, FORMAT, UNFORMAT and TEST act on the host card (`port/save/mc_host.c`, docs/port/SAVES.md); FORMAT and DELETE destroy saves | |
-| 12 | STAFF ROLL TEST | untested (`staffRollStart`) | |
-| 13 | ADPCM TEST | untested: the 105 `adpcmFile` streams | |
-| 14 | SE TEST | untested: the `seDef` sounds at the boy | |
-| 15 | REVERB TEST | untested (UP/DOWN change the depth) | |
-| 16 | Game Over | only closes the menu (the retail body) | |
-| 17 | Ending Demo | only closes the menu (the retail body) | |
-| 18 | BackStage Test | untested (`backStageProcessInStage` with 10,000,000 s away) | |
-| 19 | LoadINFO | untested: per-stage load sizes, which `fumi/ios/cdvd.c` counts in every build | |
-| 20 | Chara Info | untested (`_ACTDebugPrint` of the chosen actor) | |
-| 21 | Pad2 Control | untested (`CurrentTargetGObjSub`) | |
-| 22 | DispBox | untested (`DebugDispBox` at the boy) | |
-| 23 | DispBall | untested (a wire sphere and `scpTriggerPosBall`) | |
-| 24 | Collision Test | untested (a ray moved with the right stick, `ClipCollision`) | |
-| 25 | Hint Start | untested (the first hint object) | |
-| 26 | Tsuresari Time Zero | untested (`backStageDebugTimeZero`) | |
+| # | entry | host | files (under `<pref>/dev/`) | opened on the host |
+| --- | --- | --- | --- | --- |
+| 0 | Debug Mode | works: the 76 options (below); `rd_debug_test` checks the page and the file round trip | `thisIsYourDebugOption` (written by TRIANGLE; read at boot with `debug_option`) | tested (`rd_debug_test`) |
+| 1 | Free Camera | (`CameraSetMode(1)`; SELECT leaves) |  | opens, SELECT leaves |
+| 2 | Stage Select | the 106 `stageData` rows; CIRCLE switches stage (rows whose data file has `NOCD_` are refused, as on the PS2) |  | opens; CIRCLE on row 12 switched stage 11 to 12 at tick 244, the menu closed and the stage ran on (280 ticks); row 0 closes the menu without switching |
+| 3 | Target Object | (`debug_menu.c`: camera on the chosen object, which blinks) |  | opens, SELECT leaves |
+| 4 | Stage Setting | (`GsBase.c` `gsb_StageSetting`) | read/write `object/stagesetting/<key2>.ssb`, `<key2>.lock`; append `object/stagesetting/change.txt` | opens, SELECT leaves; wrote nothing under `dev/` in 90 ticks |
+| 5 | Way Test | (`fumi/src/way_tool.c` `debug_WayTool`) | write `test.wp`, `way0000.txt`; read `test.wp` | opens, SELECT leaves; wrote nothing under `dev/` (no waypoints were set) |
+| 6 | Camera Editor | (`omori/src/camera-editor.c`) | write `ico2Data/<camera set name>` (the editor's camera sets in their host record layout), `a.txt` (the text dump) | opens but cannot be driven or left: every control reads `pad[1]`, which the host never connects (port 0 only); SELECT and CROSS do nothing, the menu stays in the entry for the rest of the run (no crash, exit 0). TODO.md |
+| 7 | Motion Viewer | (`sugipon/src/motionViewer.c`) |  | opens, SELECT leaves |
+| 8 | Effect Tool | (`sugipon/src/effectTool.c`) | write `particleEffectFile[id].path` (the effect's own path) | opens, SELECT leaves; wrote no effect file |
+| 9 | TextureList | (`seki/src/Texture.c` `tex_ListTool`) |  | opens, SELECT leaves |
+| 10 | Snap Shot | works when SnapSize is not None (Debug Mode page): a PNG of the last presented frame (the renderer's DISPLAY target, the reduced 512 x 224/256 picture); window build only, the headless build writes nothing. SnapForm (TIM2/BMP) and the SnapSize tiling are ignored; `rd_debug_test` checks the PNG | write `screenshots/snapNNNNNNN.png` | tested (`rd_debug_test`) |
+| 11 | Memory Card | LOAD, SAVE, DELETE, FORMAT, UNFORMAT and TEST act on the host card (`port/save/mc_host.c`, docs/port/SAVES.md); FORMAT and DELETE destroy saves |  | opens; CIRCLE on the first item (LOAD) with an empty card folder, 100 ticks, SELECT leaves; no card file written. FORMAT, DELETE and SAVE were not pressed |
+| 12 | STAFF ROLL TEST | (`staffRollStart`) |  | opens and returns to the menu by itself on the next tick (`staffRollStart` returned non-zero); no stage change |
+| 13 | ADPCM TEST | the 105 `adpcmFile` streams |  | opens, SELECT leaves (sound output not captured) |
+| 14 | SE TEST | the `seDef` sounds at the boy |  | opens, SELECT leaves (sound output not captured) |
+| 15 | REVERB TEST | (UP/DOWN change the depth) |  | opens, SELECT leaves |
+| 16 | Game Over | only closes the menu (the retail body) |  | opens and returns by itself on the next tick |
+| 17 | Ending Demo | only closes the menu (the retail body) |  | opens and returns by itself on the next tick |
+| 18 | BackStage Test | (`backStageProcessInStage` with 10,000,000 s away) |  | opens and returns to the menu by itself on the next tick; no stage change |
+| 19 | LoadINFO | per-stage load sizes, which `fumi/ios/cdvd.c` counts in every build |  | opens, SELECT leaves |
+| 20 | Chara Info | (`_ACTDebugPrint` of the chosen actor) |  | opens, SELECT leaves |
+| 21 | Pad2 Control | (`CurrentTargetGObjSub`) |  | opens, SELECT leaves; pad 2 is not connected, so nothing can be steered |
+| 22 | DispBox | (`DebugDispBox` at the boy) |  | opens, SELECT leaves |
+| 23 | DispBall | (a wire sphere and `scpTriggerPosBall`) |  | opens, SELECT leaves |
+| 24 | Collision Test | (a ray moved with the right stick, `ClipCollision`) |  | opens, SELECT leaves |
+| 25 | Hint Start | (the first hint object) |  | opens and closes the menu at once (stay flag 1); no crash |
+| 26 | Tsuresari Time Zero | (`backStageDebugTimeZero`) |  | opens and closes the menu at once (stay flag 1); no crash |
 
 These parts of the development tooling are unavailable on the host because
 they needed the development kit or its build:
@@ -193,4 +193,45 @@ the PS2 passed its address through an `int`.
 - `options_test`: `developer_mode` and `debug_option` read from
   `config.toml`.
 
-Most menu entries are untested on the host; docs/TODO.md tracks this.
+## The entries opened on the host
+
+Every entry except Debug Mode and Snap Shot (tested above) was opened in
+the headless `linux-x64` build, from a boot of stage 11 (`start_stage=11`,
+`[gameplay] developer_mode = true` in a `config.toml` beside the executable,
+the corpus plain run's other settings) with a pad script: at Main tick 150
+SELECT (0100) opens the menu with the cursor on row 0; DOWN (4000) for rows
+0 to 13, or UP (1000) from row 0 (it wraps to row 26) for the rest, one
+press every 5 ticks; CIRCLE (0020) chooses; 60 ticks later SELECT, CROSS
+(0040), CROSS leave the entry and close the menu whatever state it reached
+(SELECT leaves a tool; the menu list takes SELECT or CROSS as back). The
+menu has no text in the headless build, so the observation was a temporary,
+uncommitted probe in `debug_Menu` that printed `menuState` and `menuSelect`
+to the log on every change; the table's "opens" is that state 2 was reached
+on the row and "leaves" that the state went back. Six runs were made:
+the first, without the probe, showed that the log records nothing of the
+menu; the next five, with it, opened 25 entries (the camera editor's stuck
+state, below, cost a rerun of four entries behind it). Every run ended
+`exit: ticks= reached`, exit code 0, with no `CRASH`, `WATCHDOG` or
+assertion line, and the trace's stage column changed only for Stage Select
+(11 to 12). The log shows nothing else for any entry (the tools' text goes to the
+debug font, not the log), and no entry wrote a file under `dev/`, the card
+folder or `screenshots/` in these runs; the editors' files need edits the
+scripts did not make. The sound entries' output was not captured.
+
+A scripted pad is port 0 only. Entries that read `pad[1]` (the camera
+editor, Pad2 Control) therefore cannot be steered on the host.
+
+### Camera editor capacity
+
+Not measured: the editor cannot be driven without pad 2 (above), and it
+logs no count. By the code (`omori/src/camera-editor.c`,
+`_CameraEdit_add_box`) a box needs a 9,200-byte block from
+`ios_partition_root` (`iosMallocDebugNoAssert`; 9,280 bytes with the host's
+0x50-byte block header, `fumi/ios/ios.c`), a set holds at most 100 boxes,
+and the add reports "not added" when the heap is out of room. The root's own
+space after the partitions carved from it is
+25,755,632 - 25,032,706 = 722,926 bytes (the EE sizes, before the host's
+extra, which goes to the four partitions), which is at most 77 boxes before
+the root's other allocations (thread stacks created in the root, such as the
+0x18000 InitIcoMisc stack), so the heap, not the 100-box limit, is the
+bound on the host as on the EE.
