@@ -833,7 +833,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
         /* the end-tag quirk check, on a copy (see the file comment) */
         VuParticleOut out;
         memcpy(&s_scratch, &v->ref, sizeof(s_scratch));
-        vu1ref_Particle(&s_scratch, d->qw, &out);
+        vu1ref_Particle(&s_scratch, d->qw, 6 + 2 * count, &out);
         if (out.count == 0 && memcmp(s_scratch.mem, v->ref.mem, 2 * 16) != 0) {
             v->endTagHit = 1;
         }

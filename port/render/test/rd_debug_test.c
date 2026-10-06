@@ -67,6 +67,8 @@ void dl_SetDLPriority(int pri);
 void dl_Swap(void);
 void dl_Clear(void);
 extern int debug_window_flag;
+extern int debug_font_flag;
+extern void debug_ClearFontWindow(void);
 extern int debug_hair_tight_level;
 extern int debug_zoom_per;
 extern int debug_snapshot_size;
@@ -605,6 +607,103 @@ static void checkOptionFile(const char *root)
     remove(path);
 }
 
+/* Package RSMALL: the developer text under the mirror mode.  The present
+ * flips the picture, so the target the overlay is drawn into (SCENE, or
+ * DISPLAY after the reduction) must hold it flipped about its centre (pixel
+ * p at w - 1 - p): glyphs, outlines and backdrops together, for an
+ * asymmetric string ("F7"), the font window and the developer menu, as for
+ * the other UI.  Each overlay is drawn twice per pass: what a frame leaves
+ * in the state reaches the next frame's lists, so both passes start from the
+ * state the overlay itself leaves. */
+static void sceneFrame(RdTargetId id)
+{
+    static const uint8_t black[4] = {0, 0, 0, 0x80};
+    dl_SetDLPriority(0);
+    rd_SetTarget(rd_Target(id), id == RD_TARGET_DISPLAY ? (RdTarget){0} : rd_Target(id), 512,
+                 id == RD_TARGET_DISPLAY ? 256 : 512, 1);
+    rd_ClearTarget(rd_Target(id), black, 1, 0);
+}
+
+static void drawOverlay(int kind)
+{
+    sceneFrame(kind == 3 ? RD_TARGET_DISPLAY : RD_TARGET_SCENE);
+    switch (kind) {
+    case 0:
+    case 3:
+        debug_font_flag |= 2; /* the backdrop sprite too */
+        debug_Printf(100, kind == 3 ? 130 : 50, 0xFF800000u, "F7"); /* DISPLAY is 256 high */
+        break;
+    case 1:
+        debug_PrintFontWindow(0xFFFFFF00, "hello\nworld 7\n");
+        debug_window_flag = 1;
+        debug_FlushFont();
+        debug_window_flag = 0;
+        break;
+    default:
+        /* SELECT opens the menu, 66 ticks later it is whole */
+        dl_Swap();
+        for (int step = 0; step < 67; step++) {
+            sceneFrame(RD_TARGET_SCENE);
+            pad[0].flags = step == 0 ? 0x100 : 0;
+            debug_Menu();
+            dl_Swap();
+        }
+        pad[0].flags = 0;
+        return;
+    }
+    dl_Swap();
+}
+
+static void checkMirroredText(const char *scale)
+{
+    static uint8_t a[1024 * 1024 * 4], b[1024 * 1024 * 4];
+    static const char *const kName[4] = {"text F7", "font window", "menu", "text F7 on DISPLAY"};
+    const int saveFlag = debug_font_flag;
+    for (int kind = 0; kind < 4; kind++) {
+        const RdTargetId id = kind == 3 ? RD_TARGET_DISPLAY : RD_TARGET_SCENE;
+        uint32_t w = 0, h = 0;
+        for (int mirror = 0; mirror < 2; mirror++) {
+            rd_SetMirror(mirror);
+            s_dev = 1;
+            systemStatus[1] = 2;
+            for (int rep = 0; rep < 2; rep++) {
+                if (kind == 2) {
+                    debug_Menu_off();
+                }
+                if (kind == 1) {
+                    debug_ClearFontWindow();
+                }
+                drawOverlay(kind);
+            }
+            if (!rd__ReadTarget(rd_Target(id), mirror ? b : a, sizeof(a), &w, &h) || w < 512) {
+                CHECK(0, "readback (%s, mirror %d)", kName[kind], mirror);
+                rd_SetMirror(0);
+                debug_font_flag = saveFlag;
+                return;
+            }
+        }
+        rd_SetMirror(0);
+        int lit = 0, bad = 0;
+        for (uint32_t y = 0; y < h; y++) {
+            for (uint32_t x = 0; x < w; x++) {
+                const uint8_t *p = &a[((size_t)y * w + x) * 4];
+                const uint8_t *q = &b[((size_t)y * w + (w - 1 - x)) * 4];
+                lit += p[0] != 0;
+                if (memcmp(p, q, 4) != 0 && bad++ < 3) {
+                    printf("  %s: differs at %u,%u: %u,%u,%u,%u vs %u,%u,%u,%u\n", kName[kind], x,
+                           y, p[0], p[1], p[2], p[3], q[0], q[1], q[2], q[3]);
+                }
+            }
+        }
+        printf("  mirrored developer overlay (%s), %s: %d lit pixels, %d differ from the flip\n",
+               scale, kName[kind], lit, bad);
+        CHECK(lit > 20, "%s drew %d lit pixels", kName[kind], lit);
+        CHECK(bad == 0, "%s: %d pixels differ from the flipped unmirrored overlay", kName[kind],
+              bad);
+    }
+    debug_font_flag = saveFlag;
+}
+
 static void checkPixels(const char *root)
 {
     uint32_t w = 0, h = 0;
@@ -636,6 +735,7 @@ static void checkPixels(const char *root)
               in[2], out[0], out[1], out[2]);
     }
     free(px);
+    checkMirroredText("Original");
 
     /* the snapshot: SnapSize None writes nothing, 1x1 a PNG */
     debug_snapshot_size = 0;
@@ -702,6 +802,22 @@ int main(int argc, char **argv)
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     rd_Shutdown();
+    /* package RSMALL: the mirrored overlay again at scene scale 2 (Enhanced) */
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.aspect = 4.0f / 3.0f;
+    st.sceneScale = 2.0f;
+    if (rd_Init(512, 512, &st, NULL)) {
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        dl_Clear();
+        checkMirroredText("Enhanced 2x");
+        rd_Shutdown();
+    } else {
+        CHECK(0, "rd_Init at scene scale 2");
+    }
     if (failures) {
         printf("rd_debug_test: %d failures\n", failures);
         return 1;

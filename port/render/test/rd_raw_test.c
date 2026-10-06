@@ -1533,7 +1533,7 @@ static void gpuParticles(int alphaMode, int enemy)
     vu1ref_LoadCommon(&r, (const float (*)[4])s_common);
     vu1ref_ParticleSetMatrix(&r, (const float (*)[4])m);
     static VuParticleOut out;
-    vu1ref_Particle(&r, (const float (*)[4])buf, &out);
+    vu1ref_Particle(&r, (const float (*)[4])buf, (uint32_t)g->prim->objSize - 1, &out);
     const int mode = enemy ? 4 : kMode[alphaMode];
     for (int i = 0; i < W * H; i++) {
         memcpy(&s_ref[i * 4], bg, 4);

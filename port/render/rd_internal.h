@@ -460,6 +460,9 @@ typedef enum RdVsId {
      * sprite vertex and its coverage) */
     RD_VS_SPRITE_AA1_UI,
     RD_VS_SPRITE_AA1_WORLD,
+    /* package RSMALL: IcoSpriteStqVertex, screen prims with Q != 1 (sprite_stq_*_vs) */
+    RD_VS_SPRITE_STQ_UI,
+    RD_VS_SPRITE_STQ_WORLD,
     RD_VS_COUNT
 } RdVsId;
 
@@ -480,6 +483,8 @@ typedef enum RdFsId {
     RD_FS_WRAP_RESOLVE, /* wrap_resolve_ps: (Cd + acc) mod 256 into the target */
     RD_FS_FONT,         /* package R8: font_ps, screen prims sampling an R8 coverage texture */
     RD_FS_SPRITE_AA1,   /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
+    RD_FS_BOX_REDUCE,   /* package RSMALL: box_reduce_ps, the shadow count at the GS size */
+    RD_FS_SPRITE_STQ,   /* package RSMALL: sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
     RD_FS_COUNT
 } RdFsId;
 
@@ -526,6 +531,9 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
  * rd__PlanScreenDraw is aa1 0. */
 int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
                          RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2]);
+/* Package RSMALL: turns a planned pass of a command whose prims carry Q != 1
+ * into the STQ shaders (IcoSpriteStqVertex); 0 when the pass keeps its own. */
+int rd__StqPass(RdDrawPass *dp);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k);
@@ -554,6 +562,7 @@ bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
  * the count is not 0. */
 RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int decr);
 RdPipeKeyInt rd__ShadowResolveKey(int pass);
+RdPipeKeyInt rd__ShadowReduceKey(void); /* package RSMALL */
 #define RD_SHADOW_RESOLVE_PASSES 7
 /* The shadow families above under the states the game draws them with
  * (Shadow.c: TEST 0x50000); appends to out[0..n). */
@@ -568,6 +577,8 @@ int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
 uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* rd_replay.c: frees the fog's depth copy and LUT textures (rd__GpuShutdown). */
 void rd__FogShutdown(void);
+void rd__WideScissor(int32_t *x0, int32_t *x1, int32_t w, float f); /* package RSMALL */
+void rd__ShadowShutdown(void); /* package RSMALL: the reduced shadow count */
 /* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c, RENDER_API.md "Full-screen effects and the
  * raw packet builders"): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
  * under state s (fx_rect_vs / fx_sprite_ps, no hardware blending, the

@@ -274,6 +274,21 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     return 2;
 }
 
+/* Package RSMALL: a planned screen pass for a command whose prims carry
+ * Q != 1 (RENDER_API.md "STQ on screen prims"): the STQ vertex shader of its
+ * space and sprite_stq_ps.  Only the plain sprite pass converts (an R8
+ * font texture and PRIM.AA1 keep their shaders); returns whether it did. */
+int rd__StqPass(RdDrawPass *dp)
+{
+    RdPipeKeyInt *k = &dp->key;
+    if (k->fs != RD_FS_SPRITE || (k->vs != RD_VS_SPRITE_UI && k->vs != RD_VS_SPRITE_WORLD)) {
+        return 0;
+    }
+    k->vs = k->vs == RD_VS_SPRITE_WORLD ? RD_VS_SPRITE_STQ_WORLD : RD_VS_SPRITE_STQ_UI;
+    k->fs = RD_FS_SPRITE_STQ;
+    return 1;
+}
+
 /* Package OV: the presentation overlay's state (rd.h rd_OverlayPrims):
  * blend with ABE on, no Z test or write (and no depth target), no alpha
  * test, no DATE, FBA and PABE off, COLCLAMP on, all channels written. */
@@ -424,6 +439,15 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
         {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteAa1Vertex, cov)},
     };
+    /* package RSMALL: the same and Q */
+    static const RhiVertexBinding vbStq = {0, sizeof(IcoSpriteStqVertex), false};
+    static const RhiVertexAttr vaStq[5] = {
+        {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
+        {1, 0, RHI_VTX_U32x1, offsetof(IcoSpriteVertex, z)},
+        {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
+        {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
+        {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteStqVertex, q)},
+    };
     const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
     /* wave 3 (R3ab): the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
@@ -444,6 +468,11 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         d.vertexBindings = &vbAa1;
         d.vertexBindingCount = 1;
         d.vertexAttrs = vaAa1;
+        d.vertexAttrCount = 5;
+    } else if (k->vs == RD_VS_SPRITE_STQ_UI || k->vs == RD_VS_SPRITE_STQ_WORLD) {
+        d.vertexBindings = &vbStq;
+        d.vertexBindingCount = 1;
+        d.vertexAttrs = vaStq;
         d.vertexAttrCount = 5;
     }
     d.topology = k->gs.prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
@@ -678,6 +707,13 @@ RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int 
     return k;
 }
 
+/* Package RSMALL: the box reduction of the scaled count to the GS size
+ * (rd_replay.c shadowReduce): RGBA8 like the count. */
+RdPipeKeyInt rd__ShadowReduceKey(void)
+{
+    return rd__PostKey(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
+}
+
 RdPipeKeyInt rd__ShadowResolveKey(int pass)
 {
     RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
@@ -707,6 +743,8 @@ uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t 
         const RdPipeKeyInt k = rd__ShadowResolveKey(p);
         n = addKey(out, max, n, &k);
     }
+    const RdPipeKeyInt kr = rd__ShadowReduceKey(); /* package RSMALL */
+    n = addKey(out, max, n, &kr);
     return n;
 }
 
@@ -730,18 +768,35 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                 for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
                     for (size_t p = 0; p < sizeof(kPrims); p++) {
                         for (size_t dz = 0; dz < 2; dz++) {
-                            RdStateBlock s;
-                            rd__ResetStateBlock(&s);
-                            s.ds.test = rd_TestFromGs(tests[t]);
-                            s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
-                            s.ds.abe = kBlends[b] >= 0;
-                            s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
-                            RdDrawPass dp[2];
-                            int np = rd__PlanScreenDraw(&s, kPrims[p],
-                                                        space ? RD_SPACE_WORLD : RD_SPACE_UI,
-                                                        RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
-                            for (int i = 0; i < np; i++) {
-                                n = addKey(out, max, n, &dp[i].key);
+                            /* UI space also under the dark volume's colour mask
+                             * 7 (PSMCT24 composite: FBMSK holds until the next
+                             * FRAME write, so the list-11 2D draws of a frame
+                             * without the anti-alias pass take it) */
+                            for (int m = 0; m < (space ? 1 : 2); m++) {
+                                RdStateBlock s;
+                                rd__ResetStateBlock(&s);
+                                s.ds.test = rd_TestFromGs(tests[t]);
+                                s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                                s.ds.abe = kBlends[b] >= 0;
+                                s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
+                                s.ds.colorMask = m ? 0x7 : 0xF;
+                                RdDrawPass dp[2];
+                                int np = rd__PlanScreenDraw(&s, kPrims[p],
+                                                            space ? RD_SPACE_WORLD : RD_SPACE_UI,
+                                                            RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+                                for (int i = 0; i < np; i++) {
+                                    n = addKey(out, max, n, &dp[i].key);
+                                }
+                                /* package RSMALL: a textured STQ triangle
+                                 * command with Q != 1 (the lightning's strips,
+                                 * raw GIF writes: WORLD space) */
+                                if (space && kPrims[p] == RD_PRIM_TRIANGLES) {
+                                    for (int i = 0; i < np; i++) {
+                                        if (rd__StqPass(&dp[i])) {
+                                            n = addKey(out, max, n, &dp[i].key);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -816,6 +871,8 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                               RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
             for (int i = 0; i < np; i++) {
                 dp[i].key.fs = RD_FS_FONT;
+                n = addKey(out, max, n, &dp[i].key);
+                dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */
                 n = addKey(out, max, n, &dp[i].key);
             }
         }

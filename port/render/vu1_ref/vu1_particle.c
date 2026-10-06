@@ -4,11 +4,18 @@
  * matrixptr + 0x100), vf05..vf08 = the screen matrix matrixptr + 0xC0. */
 #include "vu1_ref_internal.h"
 
-void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], VuParticleOut *out)
+void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out)
 {
+    if (inQw < 6) {
+        memset(out, 0, sizeof(*out));
+        return;
+    }
     /* :80-91: vi07 = count; vf23, vf24 = the two tags; vf26, vf27 = the clip
      * window corners; vf29 = (size scale, du, dv, -); vi03 = output 544 */
     int32_t n = vu_int(in[0][0]);
+    if (n > (int32_t)((inQw - 6) / 2)) {
+        n = (int32_t)((inQw - 6) / 2);
+    }
     const float *clipMin = in[3], *clipMax = in[4], *k = in[5];
     memcpy(out->tag[0], in[1], 16);
     memcpy(out->tag[1], in[2], 16);

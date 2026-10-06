@@ -11,13 +11,11 @@
  * none when either is 0).
  *
  * Presets (wave 2, R2c: hooks; wave 7, R7a: the display options).
- * RdPresentPreset holds everything a preset may change at present time:
- *   interpolate   R7b (rd_interp.c): the Enhanced preset may present
- *                 several times per simulation tick (rd_Present with
- *                 RdSettings.interpolate), each present replaying the frame
- *                 blended from the retained pair; Original presents once per
- *                 tick, inside rd_EndFrame.  This step is the same either
- *                 way: it shows whatever DISPLAY the replay left
+ * RdPresentPreset holds everything a preset may change at present time (the
+ * Enhanced preset's interpolation, R7b rd_interp.c, is not one: it presents
+ * several times per tick through rd_Present with RdSettings.interpolate, each
+ * present replaying the frame blended from the retained pair, and this step is
+ * the same either way: it shows whatever DISPLAY the replay left):
  *   aspectFromSettings  R7a: the box takes the aspect option (g_rd.outAspect)
  *                 instead of 4:3; the projection side is rd_frame.c
  *                 rd__FillCameraCB, the replay's wide x scale and GsBase.c
@@ -57,7 +55,6 @@ typedef struct RdPresentPreset {
     RdFilter scaleFilter;  /* step 2 */
     int lineDouble;
     /* Enhanced fields */
-    int interpolate; /* R7b */
     int aspectFromSettings;
     int mirror; /* R7c: step 2 flips x when the mirror mode is on */
     int fullHeight;
@@ -97,10 +94,10 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 
 static const RdPresentPreset s_presets[2] = {
     /* RD_PRESET_ORIGINAL */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 0, 1, 0},
-    /* RD_PRESET_ENHANCED: interpolation (R7b), the aspect and full-height
-     * options (R7a), the mirror (R7c) */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 1, 1},
+    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 1, 0},
+    /* RD_PRESET_ENHANCED: the aspect and full-height options (R7a), the
+     * mirror (R7c) */
+    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 1},
 };
 
 static const RdPresentPreset *activePreset(void)

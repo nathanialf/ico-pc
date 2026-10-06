@@ -554,7 +554,7 @@ static void traceMesh(void)
 static void traceParticle(void)
 {
     Vu1Ref r;
-    float in[6 + 2 * 3][4];
+    float in[6 + 2 * 4][4]; /* three particles and a fourth that must not be read */
     /* START_PARTICLE, M = S = the scene's M, k = (1, 0.5, 0.5):
      * p0 (0, 0, 4, size 2), (u 0.25, v 0.5, grey 128, alpha 64):
      *   :97-104 h = M (0,0,4,1) = (8192, 8192, 9437184, 4); :99-112 e =
@@ -580,7 +580,7 @@ static void traceParticle(void)
     qw(in[11], 0, 0, 128, 64);
     VuParticleOut po;
     stateParticle(&r);
-    vu1ref_Particle(&r, (const float (*)[4])in, &po);
+    vu1ref_Particle(&r, (const float (*)[4])in, 12, &po);
     if (po.count != 1 || po.s[0].index != 0) {
         FAILF("particle count %d, expected 1\n", po.count);
         return;
@@ -606,9 +606,29 @@ static void traceParticle(void)
     r.vi[4] = 0;
     qw(in[0], fbits(1), 0, 0, 0);
     qw(in[7], 0, 0, 128, 0);
-    vu1ref_Particle(&r, (const float (*)[4])in, &po);
+    vu1ref_Particle(&r, (const float (*)[4])in, 8, &po);
     if (po.count != 0 || ubits(r.mem[0][0]) != 0x8001u) {
         FAILF("particle empty batch: count %d, mem[0].x %08x\n", po.count, ubits(r.mem[0][0]));
+    }
+    /* an over-count input: the count word says 1000, the buffer holds 3
+     * particles (12 qwords): only those are read (particle 0 draws, 1 has
+     * alpha 0, 2 is clipped); a buffer of 8 qwords holds one, of 7 or 5 none
+     * (the particle needs both its qwords; the header needs 6) */
+    qw(in[0], fbits(1000), 0, 0, 0);
+    qw(in[7], 0.25f, 0.5f, 128, 64);
+    qw(in[12], 0, 0, 4, 2);
+    qw(in[13], 0, 0, 128, 64); /* beyond the 12: must not be read (a visible particle) */
+    static const struct {
+        uint32_t qwords;
+        int want;
+    } over[] = {{12, 1}, {8, 1}, {7, 0}, {6, 0}, {5, 0}};
+    for (size_t k = 0; k < sizeof(over) / sizeof(over[0]); k++) {
+        stateParticle(&r);
+        vu1ref_Particle(&r, (const float (*)[4])in, over[k].qwords, &po);
+        if (po.count != over[k].want) {
+            FAILF("particle over-count input of %u qwords: %d particles, expected %d\n",
+                  over[k].qwords, po.count, over[k].want);
+        }
     }
 }
 
@@ -854,13 +874,13 @@ static IcoSpriteVertex spriteV(const VuGsVertex *v)
 
 /* Run the reference over the case and collect vertices and the triangles
  * the GS would draw (kicks and fans) as sprite vertices. */
-static void runRef(const Case *c, const float (*in)[4], CaseRef *cr)
+static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
 {
     Vu1Ref r;
     baseState(c, &r);
     memset(cr, 0, sizeof(*cr));
     if (c->prog == P_PARTICLE) {
-        vu1ref_Particle(&r, in, &cr->po);
+        vu1ref_Particle(&r, in, (uint32_t)nq, &cr->po);
         for (int i = 0; i < cr->po.count; i++) {
             const VuGsSprite *s = &cr->po.s[i];
             VuGsVertex a, b;
@@ -1190,7 +1210,7 @@ static int gpuTests(void)
         rngState = 777u + (uint32_t)ci * 31u;
         memset(in, 0, sizeof(in));
         int nq = makeInput(c, in);
-        runRef(c, (const float (*)[4])in, &cr);
+        runRef(c, (const float (*)[4])in, nq, &cr);
 
         rhi_WaitFrame();
         if (c->tagless) {
@@ -1370,7 +1390,7 @@ static int gpuTests(void)
         {
             static CaseRef rz;
             fesetround(FE_TOWARDZERO);
-            runRef(c, (const float (*)[4])in, &rz);
+            runRef(c, (const float (*)[4])in, nq, &rz);
             fesetround(FE_TONEAREST);
             statSet = 1;
             compareProbe(c, &rz, pimg, ppitch);

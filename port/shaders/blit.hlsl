@@ -48,6 +48,30 @@ DualOut blit_fix_ps(BlitVSOut i)
     return gs_dual_out(blit_color(i.uv), g_mode.x, g_blend.y);
 }
 
+// box_reduce_ps (package RSMALL; rd_replay.c doShadowResolve): the exact box
+// average of a scaled target down to its GS size, t1 read with Load. The
+// output pixel p averages the source texels under [p * f, (p + 1) * f), f =
+// DrawCB.g_param.xy the source texels per output pixel (not necessarily an
+// integer: a texel counts by its overlap), g_param.zw the source size in
+// texels. Drawn with blit_vs into an RGBA8 target of the GS size, the
+// viewport the target.
+float4 box_reduce_ps(BlitVSOut i) : SV_Target0
+{
+    float2 lo = floor(i.pos.xy) * g_param.xy;
+    float2 hi = lo + g_param.xy;
+    int2 first = int2(floor(lo));
+    int2 last = min(int2(ceil(hi)), int2(g_param.zw));
+    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    for (int y = first.y; y < last.y; y++) {
+        float wy = min(hi.y, float(y + 1)) - max(lo.y, float(y));
+        for (int x = first.x; x < last.x; x++) {
+            float wx = min(hi.x, float(x + 1)) - max(lo.x, float(x));
+            sum += g_texture.Load(int3(x, y, 0)) * (wx * wy);
+        }
+    }
+    return sum / (g_param.x * g_param.y);
+}
+
 // camera_probe_ps (wave 2, R2c; tests only, rd__CameraProbe): FrameCB's
 // matrices applied to the point DrawCB.g_param, written as raw float bits so
 // the HLSL column_major packing can be compared with the C side. Target 4 x 3

@@ -1051,7 +1051,8 @@ static void refParticles(void)
     refCommon(&r);
     vu1ref_ParticleSetMatrix(&r, (const float (*)[4])m);
     VuParticleOut out;
-    vu1ref_Particle(&r, (const float (*)[4])(const void *)s_part->objs[0]->num, &out);
+    vu1ref_Particle(&r, (const float (*)[4])(const void *)s_part->objs[0]->num, 6 + 2 * NPART,
+                    &out);
     s_nref = 0;
     for (int i = 0; i < out.count && s_nref + 2 <= MAXREF; i++) {
         const VuGsSprite *s = &out.s[i];
@@ -1282,7 +1283,7 @@ int main(void)
     rd__EnumerateReachable(keys, 512);
     printf("  pipelines: %u created, %u reachable (%u screen and post)\n", rd__PipelineCount(), n,
            ns);
-    CHECK(n < RD_PIPELINE_REACHABLE_MAX && ns < 100, "reachable pipelines %u (screen %u)", n, ns);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX && ns < 150, "reachable pipelines %u (screen %u)", n, ns);
     for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
         const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
         int found = 0;

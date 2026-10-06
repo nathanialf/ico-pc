@@ -162,6 +162,60 @@ DualOut sprite_aa1_ps(SpriteAa1VSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
+// ------------------------------------------------ perspective STQ (package RSMALL)
+
+// The vertex of sprite_stq_*_vs (IcoSpriteStqVertex, 24 bytes) adds
+//   loc 4  RHI_VTX_F32x1   Q
+// to the four of SpriteVSIn; loc 3 holds S and T in texels of t1 (times the
+// texture size, not divided by Q). The GS interpolates S, T and Q in screen
+// space and divides per pixel: the vertex shader passes (s, t, q) without
+// perspective, sprite_stq_ps divides. Colour stays screen-space linear as
+// everywhere. Drawn only for the screen prims whose Q is not 1
+// (RENDER_API.md "STQ on screen prims"); every other prim keeps sprite_ps.
+struct SpriteStqVSIn
+{
+    VK_LOC(0) uint2 xy : POSITION;
+    VK_LOC(1) uint z : TEXCOORD1;
+    VK_LOC(2) uint4 col : COLOR0;
+    VK_LOC(3) float2 uv : TEXCOORD0;
+    VK_LOC(4) float q : TEXCOORD2;
+};
+
+struct SpriteStqVSOut
+{
+    float4 pos : SV_Position;
+    VK_LOC(0) float4 col : COLOR0;
+    VK_LOC(1) noperspective float3 stq : TEXCOORD0; // s, t normalised, q
+};
+
+SpriteStqVSOut sprite_stq_vertex(SpriteStqVSIn i, int space)
+{
+    SpriteStqVSOut o;
+    o.pos = float4(gs_xy_to_ndc(i.xy, space), gs_depth(i.z), 1.0);
+    o.col = float4(i.col);
+    o.stq = float3(i.uv * g_tex.zw, i.q);
+    return o;
+}
+
+SpriteStqVSOut sprite_stq_ui_vs(SpriteStqVSIn i)
+{
+    return sprite_stq_vertex(i, SPACE_UI);
+}
+
+SpriteStqVSOut sprite_stq_world_vs(SpriteStqVSIn i)
+{
+    return sprite_stq_vertex(i, SPACE_WORLD);
+}
+
+DualOut sprite_stq_ps(SpriteStqVSOut i)
+{
+    uint4 col = sprite_colour(i.pos, i.col, i.stq.xy / i.stq.z);
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        discard;
+    }
+    return gs_dual_out(col, g_mode.x, g_blend.y);
+}
+
 // date_snap_ps (wave 2): the bound target's alpha MSB into the R8 DATE
 // snapshot, pixel for pixel (t1 is the target, read with Load; viewport =
 // the target's size). Drawn with blit_vs.

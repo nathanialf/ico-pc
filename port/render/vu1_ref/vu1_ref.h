@@ -158,8 +158,12 @@ void vu1ref_Mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
 /* particle: code 18 BEGIN_PARTICLE (or the fall-through from code 16) then
  * START_PARTICLE. in[0].x = count, in[1], in[2] GIF tags, in[3] clip
  * minimum, in[4] clip maximum, in[5] (size scale, du, dv, -), then two qwords
- * per particle: (x, y, z, size), (u, v, grey, alpha). */
-void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], VuParticleOut *out);
+ * per particle: (x, y, z, size), (u, v, grey, alpha).
+ * inQw is the number of qwords readable at in: the count in[0].x is clamped to
+ * (inQw - 6) / 2 particles, and an input shorter than the 6 header qwords
+ * draws nothing (the game fills count from its own buffer, a corrupt or
+ * over-large count must not read past it). */
+void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out);
 
 /* ------------------------------------------------------------- helpers */
 

@@ -192,6 +192,7 @@ ALWAYS with write enabled (the GS manual calls ZTE 0 a prohibited setting).
 | COLCLAMP 0 | Shadow volumes: a stencil count (section 10). Other draws: the wrap path (section 14). |
 | FBA | The fragment shader forces the alpha MSB. |
 | PRIM.AA1 (lines and triangles) | The AA1 key bit: `sprite_aa1_*_vs` / `sprite_aa1_ps` over the edge geometry `rd_replay.c` adds, the coverage as the fragment's alpha ("PRIM.AA1" below). |
+| STQ (Q != 1) | A textured triangle command (list, strip or fan, not `uvFixed`) whose vertices all have Q above 0 and some Q other than 1 (the lightning's strips: Q = 1 / w) draws with `sprite_stq_*_vs` / `sprite_stq_ps` over `IcoSpriteStqVertex` (24 bytes: the sprite vertex and Q; S and T are not divided). The vertex shader passes (s, t, q) without perspective and the pixel shader divides, as the GS interpolates S, T and Q linearly on the screen and divides per pixel. Colour and Z stay as for every prim. Every other command (UV mode, sprites, lines, an R8 texture, PRIM.AA1, a vertex with Q at or below 0) keeps `sprite_ps` and the per-vertex divide; `sprite_ps` is unchanged. A bolt that recedes in depth now maps its texture perspective-correctly (DIVERGENCES.md V-STQ). |
 | PABE | The fragment shader sets the blend factor to 0 where the As MSB is clear. |
 | Z | D32F (D32F with stencil on SCENE). The shaders map GS Z to depth `(zmax − z + 1) · scale` (`gs_z_to_depth`), the same value as `1 − z · scale` computed without cancellation, so a larger GS Z is a smaller depth: GS GEQUAL becomes `RHI_CMP_LEQUAL`, GREATER becomes `LESS`. The scale is per depth target: 2^-32 for the game's PSMZ32 (every ZBUF it writes), 2^-24 and 2^-16 for the other formats. The UI's Z values 0xFFFFFF9B and 0xFFFFFFFF stay distinct. |
 | Texture function | Integer `min((tex·col) >> 7, 255)` in the shader. |
@@ -211,7 +212,11 @@ the attachment formats; a screen-prim draw whose bound texture is R8
 format, so text and sprites under the same state are two keys. The
 reachable set has the font's keys for the text in the frame (TEST
 0x30000, no Z write, ALPHA 0x44 or 0x48, with and without the depth
-target) and on the overlay.
+target) and on the overlay. Under the dark volume's FBMSK the 2D draws of
+list 11 on a frame without the anti-alias pass (and of any later list-11
+pass, until the next FRAME write) draw with colour mask 7: the UI keys and
+the font keys are enumerated with mask 7 as well as 0xF (`rd_pixel` checks
+them), as are the STQ keys of the WORLD triangle passes.
 `rd__EnumerateReachable` lists every key the game's state set can reach
 (the screen and post programs, the VU program families, shadows, fog,
 water and the effect sprites); the tests hold it under
@@ -746,8 +751,16 @@ leaks into list 4 onwards as on the GS.
 blur levels keep the PS2 sizes at every scale: the shadow's softness is the
 levels' resolution, not a GS distance, and at scale 2 work-sized levels made
 the penumbra half as wide. The first level then samples a 4x count with
-2×2 bilinear taps of a 4×4 footprint, so the shadow's integral varies by
-2.6 % frame to frame instead of 2.0 % (docs/TODO.md).
+2×2 bilinear taps of a 4×4 footprint, so the shadow's integral varied by
+2.6 % frame to frame instead of 2.0 %. Now a scaled count is box-reduced to
+its GS size first: `doShadowResolve` runs `box_reduce_ps` (an exact
+area-weighted average of the count's texels under each GS pixel, any scale)
+into an RGBA8 texture of the GS size, and `resolveTexture` gives that texture
+to whatever samples the count as a texture, so level 1 reads what the PS2's
+read and its integral is the area's however the volume sits against the
+grid (`rd_shadow`, scale 4: a rectangle moved by quarter pixels, level 1's
+sum within 0.005 %; before the fix 3.9 %). Original (scale 1) takes no
+extra pass and is byte for byte what it was (DIVERGENCES.md V-SHL1).
 
 ## 12. Depth fog
 
@@ -1035,6 +1048,12 @@ and w − 2 or more), and the fullscreen-triangle passes. `rd__FillCameraCB`
 compresses `g_proj` and `g_viewProj` the same way. The presenter boxes
 DISPLAY at A; movies keep the 4:3 box.
 
+A UI-space screen prim's scissor follows the wide scale too: a scissor that
+does not reach the target's left or right edge moves with the draw about the
+target's centre, rounded outwards (`rd__WideScissor`, `rd_state`), so it
+clips as much as the draw does; a side at the edge stays there. (It used
+to keep its 4:3 position, which clips less, never more; none was seen.)
+
 The widescreen audit, each full-frame draw with the 512×512 scene (GS
 origin 1792):
 
@@ -1067,8 +1086,7 @@ question), 62 and 64 (game over "Continue?").
 
 What does not widen: the reflections' render-to-texture targets keep 4:3,
 so at the sides of a 16:9 frame a puddle shows its reflection's clamped
-edge; a UI draw under a scissor narrower than the screen keeps the 4:3 clip
-rectangle (it clips less, never more; none seen); a world-projected prim
+edge; a world-projected prim
 drawn as a sprite spanning the whole width is taken for a fill and
 stretched. The port's menu text draws in list 11 in UI space, so it sits in
 the 4:3 box at the scene's resolution; the popups are on the presentation
@@ -1388,6 +1406,18 @@ shadows, the decoder's world prims and the post passes flip with the
 present: they are the world. No winding, culling (`cullNone` everywhere),
 VU program, shadow sign, DATE or feedback path changes.
 
+**The developer overlay.** `debug.c`'s text is UI like the rest: the glyph
+points are raw register writes in list 12 (UI by the list rule of
+`GifPacket.c` `gsSpace`), the backdrops, bars and the font window are
+`gif_Sprite`/`gif_Line` calls (UI helpers), so all of it is flipped where it
+is drawn and the present flips it back. `rd_debug` draws "F7" (asymmetric),
+the font window and the developer menu with the mirror off and on, into
+SCENE and into DISPLAY, in Original and at scene scale 2, and requires the
+mirrored target to be the exact horizontal flip of the unmirrored one, every
+byte. (`rd_replay_tool --mirror` has no present to flip back, so it shows
+all UI, the overlay included, mirrored; the TODO entry that said the
+developer font reads mirrored did not reproduce in the game's path.)
+
 The flip is done at replay rather than at record time: the interpolation
 blends the recorded XY and the reflection is affine, so flipping after the
 blend equals blending flipped frames; the reflection needs the bound
@@ -1535,19 +1565,19 @@ dumps, with AA1 off.
 
 | ctest | what |
 |---|---|
-| `rd_state` | pipeline keys, the reachable set, normalisation; the AA1 bit through a dump, a version 3 dump, the AA1 plans |
-| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump; an AA1 line and triangle edge against a CPU coverage reference (0 LSB of As on lavapipe) |
+| `rd_state` | pipeline keys, the reachable set (under 150 screen and post keys), normalisation; the wide scissor; the AA1 bit through a dump, a version 3 dump, the AA1 plans |
+| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; a receding STQ strip (Q 1 to 0.25) perspective-correct against the analytic U, a strip with Q 1 affine; the enumeration holding the colour mask 7 and STQ keys; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump; an AA1 line and triangle edge against a CPU coverage reference (0 LSB of As on lavapipe) |
 | `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache; R8 textures and rectangle updates (the union uploaded alone, read back from the GPU) |
 | `rd_mip` | the mip chain size and alpha coverage |
 | `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes, FBMSK's extent |
 | `rd_layout` | the layout's draws and keys |
 | `rd_mesh` | VU programs drawn against the CPU reference (0 LSB) |
-| `rd_shadow` | the stencil count, levels, composites, tags |
+| `rd_shadow` | the stencil count, levels, composites, tags; at scale 4 the level 1 integral independent of the volume's sub-pixel position |
 | `rd_fog` | the Z byte model, the CLUT, the fog pixels |
 | `rd_water` | puddle, pool, barrier, water drops, cloth |
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
-| `rd_debug` | the debug font and menu |
+| `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |

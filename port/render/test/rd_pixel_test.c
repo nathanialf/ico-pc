@@ -15,6 +15,9 @@
  *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
+ *   stq      (package RSMALL) a textured triangle strip with Q 1 to 0.25
+ *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
+ *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
  *   reduce   rd_Post(RD_POST_REDUCTION) on a synthetic 512x512 scene
  *            against a CPU reference of gsb_Reduction (the GS bilinear at
  *            the GS sample points, tint, border crop) exactly (R-POST: the
@@ -33,7 +36,9 @@
  *            fringe outside its top edge at 1 - d; As = the 16-bit coverage
  *            >> 9; within 1 LSB of As
  *   pipes    every pipeline created is in the enumerated reachable set,
- *            whose screen and post part has fewer than 100 keys (all of it,
+ *            whose screen and post part has fewer than 150 keys and holds the colour
+ *            mask 7 keys of the 2D draws under the dark volume's FBMSK and the
+ *            STQ keys of the lightning (all of it,
  *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
@@ -406,6 +411,73 @@ static void testSprites(void)
     }
     rd_DestroyTexture(t32);
     rd_DestroyTexture(t24);
+}
+
+/* ------------------------------------------------------------------- STQ */
+
+/* A textured triangle strip receding in depth: the near edge has Q = 1, the
+ * far edge Q = 0.25 (S = u * Q).  The GS interpolates S, T and Q linearly on
+ * the screen and divides per pixel, so U at a fraction f along the quad is
+ * f * q1 / (q0 + f * (q1 - q0)), not f.  Texel x of the 64-wide texture has
+ * R = 4 x.  A second strip with every Q = 1 (UV mode: nothing changes) must
+ * stay affine. */
+static void testStq(void)
+{
+    static uint8_t tex[64 * 4 * 4];
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 64; x++) {
+            uint8_t *p = &tex[(y * 64 + x) * 4];
+            p[0] = (uint8_t)(x * 4);
+            p[1] = (uint8_t)(y * 60);
+            p[2] = 7;
+            p[3] = 0x80;
+        }
+    }
+    RdTex t = rd_CreateTexture(64, 4, tex, RD_TEXA_80_80, "stq");
+    static const uint8_t black[4] = {0, 0, 0, 0}, white[4] = {0x80, 0x80, 0x80, 0x80};
+    rd_BeginFrame();
+    rd_SelectList(11);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_ABE(0);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    const int32_t ox = (2048 - 128) * 16, oy = (2048 - 128) * 16;
+    for (int strip = 0; strip < 2; strip++) {
+        const float q1 = strip ? 1.0f : 0.25f;
+        const int32_t y0 = (20 + 40 * strip) * 16, y1 = (50 + 40 * strip) * 16;
+        RdScreenVtx v[4] = {vtx(ox + 16 * 16, oy + y0, 0, white, 0.0f, 0.0f),
+                            vtx(ox + 16 * 16, oy + y1, 0, white, 0.0f, 1.0f),
+                            vtx(ox + 144 * 16, oy + y0, 0, white, q1, 0.0f),
+                            vtx(ox + 144 * 16, oy + y1, 0, white, q1, 1.0f)};
+        v[2].q = v[3].q = q1;
+        rd_ScreenPrims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
+    }
+    rd_EndFrame(0);
+    uint32_t w, h;
+    const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (img) {
+        for (int strip = 0; strip < 2; strip++) {
+            const double q1 = strip ? 1.0 : 0.25;
+            const int y = 35 + 40 * strip;
+            for (int x = 20; x < 140; x += 3) {
+                const double f = ((double)x + 0.5 - 16.0) / 128.0;
+                const double u = f * q1 / (1.0 + f * (q1 - 1.0));
+                const double want = u * 64.0;
+                const uint8_t *p = img + ((size_t)y * w + (size_t)x) * 4;
+                if (fabs((double)p[0] / 4.0 + 0.5 - want) > 1.6) {
+                    const int wantv[4] = {(int)(want * 4.0), 0, 7, 0x80};
+                    pixFail(strip ? "STQ with Q = 1 stays affine" : "perspective STQ", x, y, p,
+                            wantv);
+                }
+            }
+        }
+    }
+    rd_DestroyTexture(t);
 }
 
 /* ------------------------------------------------------------------ font */
@@ -863,7 +935,58 @@ static void testPipelines(void)
     const uint32_t n = rd__EnumerateReachable(keys, 512);
     const uint32_t c = rd__PipelineCount();
     printf("  pipelines: %u created, %u reachable (%u screen and post)\n", c, n, ns);
-    CHECK(ns < 100, "reachable screen and post pipelines %u >= 100", ns);
+    CHECK(ns < 150, "reachable screen and post pipelines %u >= 150", ns);
+    /* the keys a frame with the dark volume's FBMSK (colour mask 7 until the
+     * next FRAME write) and the lightning's perspective STQ would otherwise
+     * create at run time */
+    {
+        RdStateBlock s;
+        rd__ResetStateBlock(&s);
+        s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+        s.ds.zwrite = RD_ZWRITE_OFF;
+        s.ds.abe = 1;
+        s.ds.blend = RD_BLEND_LERP_AS;
+        s.ds.colorMask = 0x7;
+        for (int dz = 0; dz < 2; dz++) {
+            RdDrawPass dp[2];
+            const RhiFormat depth = dz ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
+            for (int prim = 0; prim < 2; prim++) {
+                const int np = rd__PlanScreenDraw(
+                    &s, prim ? RD_PRIM_LINES : RD_PRIM_TRIANGLES, RD_SPACE_UI,
+                    RHI_FMT_RGBA8_UNORM, depth, dp);
+                for (int i = 0; i < np; i++) {
+                    int found = 0;
+                    for (uint32_t j = 0; j < ns; j++) {
+                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                    }
+                    CHECK(dp[i].key.gs.colorMask == 0x7 && found,
+                          "UI draw under colour mask 7 (lines %d, depth %d) is not enumerated",
+                          prim, dz);
+                    dp[i].key.fs = RD_FS_FONT;
+                    found = 0;
+                    for (uint32_t j = 0; j < ns; j++) {
+                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                    }
+                    CHECK(prim || found, "font draw under colour mask 7 (depth %d) is not enumerated",
+                          dz);
+                }
+            }
+            s.ds.colorMask = 0xF;
+            s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
+            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                              RHI_FMT_RGBA8_UNORM, depth, dp);
+            for (int i = 0; i < np; i++) {
+                int found = 0;
+                CHECK(rd__StqPass(&dp[i]), "a plain world sprite pass takes the STQ shaders");
+                for (uint32_t j = 0; j < ns; j++) {
+                    found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                }
+                CHECK(found, "STQ world triangle pass (depth %d) is not enumerated", dz);
+            }
+            s.ds.colorMask = 0x7;
+            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+        }
+    }
     CHECK(n < RD_PIPELINE_REACHABLE_MAX,
           "reachable pipelines %u >= %d (wave 3: with the VU programs)", n,
           RD_PIPELINE_REACHABLE_MAX);
@@ -899,6 +1022,7 @@ int main(int argc, char **argv)
     testDateFlat();
     testSprites();
     testFont(dir);
+    testStq();
     testAa1();
     testReduction(dir);
     testPresent();

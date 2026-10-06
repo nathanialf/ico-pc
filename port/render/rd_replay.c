@@ -54,7 +54,8 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "vu_prelit_vs",     "vu_lit_vs",          "vu_lit_spec_vs",   "vu_reflect_vs",
     "vu_skin_vs",       "vu_skin_spec_vs",    "vu_skin_debug_vs", "vu_grid_vs",
     "vu_grid_lit_vs",   "vu_grid_spec_vs",    "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */,
-    "sprite_aa1_ui_vs", "sprite_aa1_world_vs" /* package AA1 */};
+    "sprite_aa1_ui_vs", "sprite_aa1_world_vs" /* package AA1 */,
+    "sprite_stq_ui_vs", "sprite_stq_world_vs" /* package RSMALL */};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "blit_ps",
@@ -67,7 +68,9 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "wrap_acc_ps",
                                                    "wrap_resolve_ps" /* wave 5 (R5c) */,
                                                    "font_ps" /* package R8 */,
-                                                   "sprite_aa1_ps" /* package AA1 */};
+                                                   "sprite_aa1_ps" /* package AA1 */,
+                                                   "box_reduce_ps" /* package RSMALL */,
+                                                   "sprite_stq_ps" /* package RSMALL */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -191,6 +194,7 @@ void rd__GpuShutdown(void)
     rd__PipelineCacheClear();
     rd__MeshGpuShutdown(); /* P1: the mesh arena */
     rd__FogShutdown();     /* wave 4 (R4c) */
+    rd__ShadowShutdown();  /* package RSMALL */
     rd__WrapShutdown();    /* wave 5 (R5c) */
     if (g_rd.dummy.id) {
         rhi_DestroyTexture(g_rd.dummy);
@@ -490,6 +494,7 @@ typedef struct Replay {
     uint32_t frameKey[6]; /* colour, gsW, gsH, useOffset, pass serial, full-screen (R7a) */
     int stretch;          /* R7a: the draw being bound is full-screen (no wide x scale) */
     int mirror;           /* R7c: the draw being bound is a flipped UI draw (scissor too) */
+    int uiPrim;           /* the draw being bound is a UI-space screen prim (RSMALL: its scissor takes the wide scale) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
@@ -575,10 +580,13 @@ static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const
         o->u = s->s * (1.0f / 16.0f);
         o->v = s->t * (1.0f / 16.0f);
     } else {
-        /* STQ: per-vertex divide; screen prims carry Q = 1 in practice */
+        /* STQ: the per-vertex divide; a textured triangle command with Q != 1
+         * is drawn by the STQ shaders instead (doScreen), which divide per
+         * pixel from the same S, T and Q */
         float q = s->q != 0.0f ? s->q : 1.0f;
         if (q != 1.0f) {
-            rd__LogOnce(RD_ONCE_STQ, "screen prim with Q != 1: divided per vertex");
+            rd__LogOnce(RD_ONCE_STQ, "screen prim with Q != 1 (divided per pixel when it is a "
+                                    "textured triangle command, else per vertex)");
         }
         o->u = s->s / q * tw;
         o->v = s->t / q * th;
@@ -870,6 +878,15 @@ static RdScratch *scratchGet(uint32_t w, uint32_t h, int which)
     return scratchGet(w, h, which);
 }
 
+/* package RSMALL: the box-reduced shadow count (doShadowResolve) */
+static RhiTexture s_shadowRed;
+
+static RhiState s_shadowRedState;
+
+static uint32_t s_shadowRedW, s_shadowRedH;
+
+static uint32_t s_shadowRedFor; /* the count target (RdTarget id) s_shadowRed holds; 0 none */
+
 /* The texture a draw samples, after any state change it needs.  Returns the
  * RhiTexture and its size and TEXFMT; dummy when untextured. */
 static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t drawTargetId,
@@ -913,6 +930,9 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
     *w = src->w;
     *h = src->h;
     *textured = 1;
+    if (s_shadowRedFor && t->target == s_shadowRedFor && s_shadowRed.id && t->target != drawTargetId) {
+        return s_shadowRed; /* package RSMALL: the shadow count at the GS size */
+    }
     if (t->target == drawTargetId && src == drawTarget) {
         /* the GS reads the buffer it is drawing into: sample a copy */
         endPass(r);
@@ -1021,6 +1041,26 @@ static int32_t floorDiv16(int32_t v)
     return v >= 0 ? v / 16 : -((-v + 15) / 16);
 }
 
+/* Package RSMALL: the scissor x0..x1 (inclusive GS pixels, inside 0..w-1) of
+ * a UI draw on a target w pixels wide under the wide x scale f (the draw's x
+ * about w / 2 is multiplied by f, rd_frame.c).  A side that reaches the
+ * target's edge stays there; the other follows the draw, rounded outwards, so
+ * the scissor clips as much as the draw does (a UI scissor used to keep its
+ * 4:3 position: it clipped less, never more).  f 1 leaves it alone. */
+void rd__WideScissor(int32_t *x0, int32_t *x1, int32_t w, float f)
+{
+    if (f == 1.0f || f <= 0.0f) {
+        return;
+    }
+    const float c = (float)w * 0.5f;
+    if (*x0 > 0) {
+        *x0 = (int32_t)floorf(c + f * ((float)*x0 - c));
+    }
+    if (*x1 < w - 1) {
+        *x1 = (int32_t)ceilf(c + f * ((float)(*x1 + 1) - c)) - 1;
+    }
+}
+
 /* the scissor in texels: GS pixels x0..x1 (inclusive) cover texels
  * floor(x0 * sx) .. ceil((x1 + 1) * sx) - 1 */
 static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
@@ -1031,6 +1071,11 @@ static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
     int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
     if (x1 < x0 || y1 < y0) {
         return false;
+    }
+    if (r->uiPrim) {
+        /* package RSMALL: a UI draw's x scale about the target's centre (the
+         * wide factor) applies to a scissor that does not reach the edges */
+        rd__WideScissor(&x0, &x1, (int32_t)tc->w, wideFor(tc, r->stretch));
     }
     if (r->mirror) {
         /* R7c: a flipped UI draw clips where its scissor lands after the
@@ -1111,6 +1156,7 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
     memset(ds, 0, sizeof(*ds));
     r->stretch = 0; /* R7a: doScreen decides for screen prims after this */
     r->mirror = 0;  /* R7c: likewise */
+    r->uiPrim = 0;  /* doScreen and doScreenWrap set it */
     ds->tc = rd__TargetRec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
@@ -1323,6 +1369,65 @@ static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, i
     return k;
 }
 
+/* Package RSMALL: perspective-correct STQ.  A triangle command with texture
+ * coordinates in STQ (not uvFixed) whose vertices all have Q > 0 and some
+ * Q != 1 takes the STQ shaders: Q goes with the vertex and the pixel shader
+ * divides.  qOrder gives each of expand()'s output vertices its source
+ * vertex's Q (same order) and returns their count, 0 for a command that
+ * keeps the per-vertex divide. */
+static float *s_qv;
+
+static uint32_t s_qvCap;
+
+static uint32_t qOrder(const RdScreenVtx *v, uint32_t n, uint8_t prim, float **q)
+{
+    if (prim != RD_PRIM_TRIANGLES && prim != RD_PRIM_TRIANGLE_STRIP &&
+        prim != RD_PRIM_TRIANGLE_FAN) {
+        return 0;
+    }
+    int differs = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (!(v[i].q > 0.0f) || !isfinite(v[i].q)) {
+            return 0;
+        }
+        differs |= v[i].q != 1.0f;
+    }
+    if (!differs) {
+        return 0;
+    }
+    const uint64_t cap = (uint64_t)n * 3;
+    if (cap > s_qvCap) {
+        float *p = realloc(s_qv, (size_t)cap * sizeof(*p));
+        if (!p) {
+            return 0;
+        }
+        s_qv = p;
+        s_qvCap = (uint32_t)cap;
+    }
+    uint32_t k = 0;
+    if (prim == RD_PRIM_TRIANGLES) {
+        for (uint32_t i = 0; i + 2 < n; i += 3) {
+            for (uint32_t j = 0; j < 3; j++) {
+                s_qv[k++] = v[i + j].q;
+            }
+        }
+    } else if (prim == RD_PRIM_TRIANGLE_STRIP) {
+        for (uint32_t i = 0; i + 2 < n; i++) {
+            for (uint32_t j = 0; j < 3; j++) {
+                s_qv[k++] = v[i + j].q;
+            }
+        }
+    } else {
+        for (uint32_t i = 1; i + 1 < n; i++) {
+            s_qv[k++] = v[0].q;
+            s_qv[k++] = v[i].q;
+            s_qv[k++] = v[i + 1].q;
+        }
+    }
+    *q = s_qv;
+    return k;
+}
+
 static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
 
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -1343,6 +1448,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
     r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
+    r->uiPrim = c->b[1] == RD_SPACE_UI;
     setUvShift(ds.tc->sx * wideFor(ds.tc, r->stretch), ds.tc->sy);
     const uint64_t maxBytes = (uint64_t)n * 6 * sizeof(IcoSpriteVertex);
     const uint64_t vOff = rd__RingAlloc(maxBytes, 16);
@@ -1371,6 +1477,29 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     const int np = rd__PlanScreenDrawEx(&r->st, topo, aa1, c->b[1], ds.tc->format, ds.depthFmt, dp);
     if (np == 0) {
         return;
+    }
+    /* package RSMALL: a textured STQ triangle command with Q != 1 draws with
+     * the STQ shaders, its vertices rewritten into the ring slot (24 bytes
+     * each, at most 3 per source vertex: inside maxBytes) */
+    if (!aa1 && !c->b[2] && ds.textured) {
+        float *qv;
+        const uint32_t nq = qOrder(v, n, c->b[0], &qv);
+        RdDrawPass sp[2];
+        int stq = nq == nv;
+        memcpy(sp, dp, sizeof(sp));
+        for (int i = 0; i < np && stq; i++) {
+            stq = rd__StqPass(&sp[i]);
+        }
+        if (stq) {
+            memcpy(dp, sp, sizeof(sp));
+            IcoSpriteStqVertex *sv = (IcoSpriteStqVertex *)(g_rd.ringMap[s_slot] + vOff);
+            for (uint32_t i = 0; i < nv; i++) {
+                sv[i].v = out[i];
+                sv[i].v.u *= qv[i]; /* S and T, not divided: out holds S / Q */
+                sv[i].v.v *= qv[i];
+                sv[i].q = qv[i];
+            }
+        }
     }
     uint32_t nDraw = nv, nFirst = nv;
     uint64_t drawOff = vOff;
@@ -1684,6 +1813,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     RdTargetRec *td = ds.tdId ? rd__TargetRec(ds.tdId) : NULL;
     r->stretch = screenStretch(r, tc, (const RdScreenVtx *)(f->payload + c->u[0]), c->u[1], c->b[0],
                                c->b[1]);
+    r->uiPrim = c->b[1] == RD_SPACE_UI;
     setUvShift(tc->sx * wideFor(tc, r->stretch), tc->sy);
     if (tc->format != RHI_FMT_RGBA8_UNORM || (td && (td->tw != tc->tw || td->th != tc->th))) {
         rd__LogOnce(RD_ONCE_WRAP, "COLCLAMP 0 draw on a non-RGBA8 target or a depth of another "
@@ -2253,6 +2383,7 @@ static void doShadowReset(Replay *r)
         return;
     }
     endPass(r);
+    s_shadowRedFor = 0; /* package RSMALL: a new count starts */
     rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
     rd__Transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
     RhiRenderPassDesc p;
@@ -2349,6 +2480,79 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* Package RSMALL: the count at the GS size.  The first blur level reads the
+ * count with a 2:1 bilinear sprite, which averages a 2x2 block of the PS2's
+ * 512x512 count exactly; on a count at s times the resolution the same
+ * sprite takes 2x2 taps of an 2s x 2s footprint, and the shadow's integral
+ * varies with the volume's sub-pixel position (2.6 % at 4x against 2.0 %).
+ * With the count target scaled, doShadowResolve box-averages it down to its
+ * GS size (box_reduce_ps) into s_shadowRed and resolveTexture hands that to
+ * whatever samples the count as a texture, so the level reads what the PS2's
+ * did.  Unscaled targets (Original) never come here. */
+void rd__ShadowShutdown(void)
+{
+    if (s_shadowRed.id) {
+        rhi_DestroyTexture(s_shadowRed);
+    }
+    s_shadowRed = (RhiTexture){0};
+    s_shadowRedW = s_shadowRedH = 0;
+    s_shadowRedFor = 0;
+}
+
+static void shadowReduce(Replay *r, RdTargetRec *tc)
+{
+    s_shadowRedFor = 0;
+    if (!s_shadowRed.id || s_shadowRedW != tc->w || s_shadowRedH != tc->h) {
+        if (s_shadowRed.id) {
+            rhi_DestroyTexture(s_shadowRed);
+        }
+        s_shadowRed = rhi_CreateTexture(&(RhiTextureDesc){
+            tc->w, tc->h, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+            "rd shadow count reduced"});
+        s_shadowRedState = RHI_STATE_UNDEFINED;
+        s_shadowRedW = tc->w;
+        s_shadowRedH = tc->h;
+    }
+    RdPipeKeyInt k = rd__ShadowReduceKey(); /* RGBA8, like the count */
+    RhiPipeline pipe = rd__GetPipeline(&k);
+    if (!s_shadowRed.id || !pipe.id) {
+        return;
+    }
+    endPass(r);
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
+    rd__Transition(s_cl, s_shadowRed, &s_shadowRedState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = s_shadowRed;
+    p.color[0].load = RHI_LOAD_DONT_CARE;
+    p.colorCount = 1;
+    p.width = tc->w;
+    p.height = tc->h;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)tc->w, (float)tc->h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(s_cl, &vp);
+    const RhiRect all = {0, 0, tc->w, tc->h};
+    rhi_CmdSetScissor(s_cl, &all);
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.uvRect[2] = cb.uvRect[3] = 1.0f;
+    cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
+    cb.param[0] = (float)tc->tw / (float)tc->w;
+    cb.param[1] = (float)tc->th / (float)tc->h;
+    cb.param[2] = (float)tc->tw;
+    cb.param[3] = (float)tc->th;
+    rhi_CmdSetPipeline(s_cl, pipe);
+    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f));
+    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rhi_CmdSetBindGroup(s_cl, 2,
+                        rd__TexGroup(tc->color, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                            RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
+    rhi_CmdDraw(s_cl, 3, 0, 1);
+    rhi_CmdEndRenderPass(s_cl);
+    rd__Transition(s_cl, s_shadowRed, &s_shadowRedState, RHI_STATE_SHADER_READ);
+    s_shadowRedFor = r->st.color;
+}
+
 static void doShadowResolve(Replay *r)
 {
     RdTargetRec *td;
@@ -2387,6 +2591,10 @@ static void doShadowResolve(Replay *r)
         rhi_CmdDraw(s_cl, 3, 0, 1);
     }
     endPass(r);
+    s_shadowRedFor = 0;
+    if (tc->tw != tc->w || tc->th != tc->h) {
+        shadowReduce(r, tc);
+    }
 }
 
 /* --------------------------------------------------- fog (wave 4, R4c)

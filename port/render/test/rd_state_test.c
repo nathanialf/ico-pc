@@ -9,13 +9,15 @@
  *   keep       rd_EndFrame(1) walks lists 11 and 12 only
  *   retention  the closed frame and the one before it are kept
  *   stubs      later-wave draws and post kinds are recorded with payload
+ *   scissor    (package RSMALL) rd__WideScissor: a UI scissor narrower than the
+ *              target follows the wide x scale, outwards, edges stay
  *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw)
  *   dump       a frame with textures and a temp target survives dump/load;
  *              package AA1: RDC_AA1 and RdStateBlock.aa1 round-trip, and a
  *              version 3 dump (no aa1) still loads, with AA1 off
  *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
  *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
- *   pipelines  the reachable screen and post set is under 100 keys, with
+ *   pipelines  the reachable screen and post set is under 150 keys, with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
@@ -486,7 +488,7 @@ static void testEnumeration(void)
     const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
     n = rd__EnumerateReachable(keys, 512);
     printf("  reachable pipelines: %u (screen and post %u, VU programs %u)\n", n, ns, n - ns);
-    CHECK(ns > 0 && ns < 100, "reachable screen and post pipelines %u must stay under 100", ns);
+    CHECK(ns > 0 && ns < 150, "reachable screen and post pipelines %u must stay under 150", ns);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipeline count %u must stay under %d", n,
           RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < n && i < 512; i++) {
@@ -497,6 +499,41 @@ static void testEnumeration(void)
                   keys[i].gs.afailSplit == 0 && keys[i].gs.date == 0,
               "key %u normalised", i);
     }
+}
+
+/* Package RSMALL: a UI scissor narrower than the target follows the wide x
+ * scale about the target's centre, rounded outwards (it clips as much as the
+ * draw does, no more); a side at the target's edge stays; f 1 changes nothing. */
+static void testWideScissor(void)
+{
+    int32_t x0 = 100, x1 = 300;
+    rd__WideScissor(&x0, &x1, 512, 0.75f);
+    CHECK(x0 == 139 && x1 == 289, "wide scissor 100..300 of 512 at 0.75 is %d..%d (139..289)", x0,
+          x1);
+    /* the draw's pixels 100..300 land at 256 + 0.75 (p - 256): all inside */
+    CHECK(256.0f + 0.75f * (100.0f - 256.0f) >= (float)x0 &&
+              256.0f + 0.75f * (301.0f - 256.0f) <= (float)(x1 + 1),
+          "the scissor covers the compressed draw");
+    x0 = 0;
+    x1 = 300;
+    rd__WideScissor(&x0, &x1, 512, 0.75f);
+    CHECK(x0 == 0 && x1 == 289, "a scissor from the left edge keeps it: %d..%d", x0, x1);
+    x0 = 100;
+    x1 = 511;
+    rd__WideScissor(&x0, &x1, 512, 0.75f);
+    CHECK(x0 == 139 && x1 == 511, "a scissor to the right edge keeps it: %d..%d", x0, x1);
+    x0 = 0;
+    x1 = 511;
+    rd__WideScissor(&x0, &x1, 512, 0.75f);
+    CHECK(x0 == 0 && x1 == 511, "the full-width scissor is untouched: %d..%d", x0, x1);
+    x0 = 100;
+    x1 = 300;
+    rd__WideScissor(&x0, &x1, 512, 1.0f);
+    CHECK(x0 == 100 && x1 == 300, "f 1 leaves the scissor alone: %d..%d", x0, x1);
+    /* a one-pixel scissor stays one pixel or more and inside the target */
+    x0 = x1 = 5;
+    rd__WideScissor(&x0, &x1, 512, 0.75f);
+    CHECK(x0 >= 0 && x1 >= x0 && x1 < 512, "a one-pixel scissor: %d..%d", x0, x1);
 }
 
 int main(int argc, char **argv)
@@ -513,6 +550,7 @@ int main(int argc, char **argv)
     testDump(dir);
     testAa1Plans();
     testEnumeration();
+    testWideScissor();
     rd_Shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

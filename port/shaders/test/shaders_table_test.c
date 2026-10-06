@@ -17,6 +17,7 @@ static const char *const expected[] = {
     "vu_particle_vs",   "vu_probe_ps",         "yuv_vs",         "yuv_ps",
     "fx_rect_vs",       "fx_sprite_ps",        "wrap_acc_ps",    "wrap_resolve_ps",
     "sprite_aa1_ui_vs", "sprite_aa1_world_vs", "sprite_aa1_ps",
+    "sprite_stq_ui_vs", "sprite_stq_world_vs", "sprite_stq_ps", "box_reduce_ps",
 };
 
 int main(void)

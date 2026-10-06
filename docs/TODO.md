@@ -90,14 +90,6 @@ pointer to this file.
   dark-volume composite is off by up to 52 LSB on a one-pixel rim). A manual
   four-tap filter with TEXA per texel, as `fx_sprite_ps` does, would fix it
   (`port/shaders/sprite.hlsl`, `vu_common.hlsli`).
-- **Perspective-correct STQ on screen prims.** Lightning strips carry
-  Q = 1/w, but screen prims divide per vertex (`RD_ONCE_STQ` in
-  `rd_replay.c`), so a bolt receding in depth maps its texture affinely. Pass
-  Q to the sprite vertex shader and divide per pixel.
-- **Shadow level 1 at high scales.** At 4x the first blur step samples the
-  scaled count with 2x2 taps of a 4x4 footprint, so the shadow's integral
-  varies 2.6% frame to frame instead of 2.0%. Box-reduce the count to the
-  level-1 size first (`doShadowResolve` in `rd_replay.c`).
 - **Ad blend modes 8 to 11.** Modes 8 to 10 draw at half strength (Ad/255
   instead of Ad/128) and mode 11 leaves Cd unchanged. They are reachable
   only through a stage's BGA lightning record; survey the disc's lightning
@@ -141,10 +133,6 @@ pointer to this file.
 - **Reflections at 16:9.** The reflections' render-to-texture targets stay
   4:3, so a puddle at the side of a 16:9 frame shows its reflection's
   clamped edge (`rd_water.c`, `puddle.c`, `pool.c`).
-- **Narrow UI scissor.** A UI scissor narrower than the screen is not
-  widened; it clips less, never more, and none has been seen.
-- **Mirror debug font.** `debug.c`'s list-11 font reads mirrored in
-  developer mode.
 
 ## Game code and 64-bit safety
 
@@ -333,14 +321,12 @@ pointer to this file.
 - **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`
   packet words and 8-byte alignment of `sgComContext` (a host change, made
   here).
-- **`vu1ref_Particle` bounds.** Pass the input's qword count and clamp the
-  particle count to it (`rd_mesh.c` `rd_DrawVuParticles`).
 - **BGA last key (F12).** Log when the host's last-key path runs with
   `f > k->time` or with `linear` differing from the next record, then amend
   F12.
 - **Small cleanups.** `dl_OpenDma(int, const void *, int)`; clear
   `texHost.bind` for a freed id in `tex_FreeTexture`; drop the dead `ICO_RD`
-  `tex_TransTextureDefocus` and `RdPresentPreset.interpolate`; share
+  `tex_TransTextureDefocus`; share
   `vsel()`; `rd_perf` GPU records keyed by RHI frame index.
 
 ## Checks that need a PS2 or a play-through

@@ -154,6 +154,12 @@ shader with `g_tex.zw`.
 the edge geometry `rd_replay.c` adds, `ICO_AA1_INTERIOR` (2.0) on a
 triangle's own vertices (RENDER_API.md "PRIM.AA1").
 
+`sprite_stq_ui_vs` and `sprite_stq_world_vs` (package RSMALL) take
+`IcoSpriteStqVertex`, 24 bytes: the same four and, at loc 4
+(`RHI_VTX_F32x1`), Q. Loc 3 holds S and T in texels of t1 (times the texture
+size), not divided; the vertex shader hands (s, t, q) to `sprite_stq_ps`
+without perspective and the pixel shader divides.
+
 ## common.hlsli and gs_math.hlsli
 
 | function | what |
@@ -188,6 +194,9 @@ clamp (RENDER_API.md section 4).
 | `sprite_ui_vs`, `sprite_world_vs` | sprite.hlsl | vertex | 12.4 GS coordinates; UI and WORLD apply different `g_space` entries; any topology |
 | `sprite_ps` | sprite.hlsl | fragment | untextured or textured, texture function, TEXA, alpha test, DATE (t2), dual-source output |
 | `sprite_aa1_ui_vs`, `sprite_aa1_world_vs` | sprite.hlsl | vertex | as `sprite_ui_vs` / `sprite_world_vs` with the coverage (package AA1) |
+| `sprite_stq_ui_vs`, `sprite_stq_world_vs` | sprite.hlsl | vertex | as `sprite_ui_vs` / `sprite_world_vs` with Q (package RSMALL); they pass (s, t, q) without perspective |
+| `sprite_stq_ps` | sprite.hlsl | fragment | `sprite_ps` with the texture coordinate divided by Q per pixel (RENDER_API.md "GS to pipeline mapping", STQ); `sprite_ps` is unchanged |
+| `box_reduce_ps` | blit.hlsl | fragment | the exact box average of a scaled target down to its GS size (the shadow count; RENDER_API.md section 11) |
 | `sprite_aa1_ps` | sprite.hlsl | fragment | `sprite_ps` with PRIM.AA1's coverage alpha before the alpha test (RENDER_API.md "PRIM.AA1"); `sprite_ps`'s SPIR-V and DXIL are unchanged by it |
 | `date_snap_ps` | sprite.hlsl | fragment | the bound target's alpha MSB (t1, `Load`) into the R8 DATE snapshot; drawn with `blit_vs` |
 | `blit_vs` | blit.hlsl | vertex | fullscreen triangle, source rectangle from `g_uvRect` |

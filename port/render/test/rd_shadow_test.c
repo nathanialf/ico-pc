@@ -27,6 +27,9 @@
  *   e  Shadow.c's own volume shadows the receiver where the caster's
  *      projection along the shadow direction lands (count +-1) and nowhere
  *      far from it.
+ *   f  (package RSMALL) at scene scale 4 the first blur level's integral of a
+ *      rectangle moved by quarter pixels varies by under 0.5 % (the count is
+ *      box-reduced to the GS size before level 1 samples it).
  * Every pipeline created is enumerated; no validation errors. */
 #include <math.h>
 #include <stdarg.h>
@@ -443,7 +446,10 @@ static void modelShadowPixel(int *px, int *py)
 }
 
 /* ------------------------------------------------------------- the frame */
-enum { VOL_SYNTH = 0, VOL_MODEL = 1 };
+enum { VOL_SYNTH = 0, VOL_MODEL = 1, VOL_SUB = 2 };
+
+/* VOL_SUB: one rectangle, 64.25 pixels wide, shifted by s_subOff sixteenths */
+static int s_subOff;
 
 static char *s_volPacket, *s_volEnd; /* Shadow.c's packet for the model's volume */
 
@@ -479,6 +485,18 @@ static void recordFrame(int vol, const int blend[4])
     if (vol == VOL_SYNTH) {
         buildVolumes();
         rd_ShadowTris(s_tri, s_sign, s_nt, 1);
+    } else if (vol == VOL_SUB) {
+        const int32_t x0 = (2048 - W / 2 + 100) * 16 + s_subOff, x1 = x0 + 64 * 16 + 4;
+        const int32_t y0 = (2048 - H / 2 + 100) * 16 + s_subOff, y1 = y0 + 40 * 16 + 4;
+        RdScreenVtx q[6];
+        const int32_t xs[6] = {x0, x1, x0, x0, x1, x1}, ys[6] = {y0, y0, y1, y1, y0, y1};
+        for (int i = 0; i < 6; i++) {
+            q[i] = sv(0, 0, kZf, NULL);
+            q[i].x = xs[i];
+            q[i].y = ys[i];
+        }
+        static const int8_t plus[2] = {1, 1};
+        rd_ShadowTris(q, plus, 2, 1);
     } else {
         s_volPacket = PacketBufferStruct.ptr.c;
         shadow_RenderVolume(s_obj);
@@ -949,6 +967,49 @@ static void checkLevelScale(void)
     g_rd.workScale = keep;
 }
 
+/* Package RSMALL: the count of a rectangle at scale 4 (Enhanced), after
+ * the box reduction to the GS size, gives the first blur level the integral
+ * the area gives however the rectangle sits against the GS pixel grid
+ * (sub-pixel offsets of a quarter pixel); sampled with 2x2 taps it varied by
+ * about 2.6 %. */
+static void checkScaledIntegral(void)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.aspect = 4.0f / 3.0f;
+    st.sceneScale = 4.0f;
+    if (!rd_Init(W, H, &st, NULL)) {
+        CHECK(0, "rd_Init at scene scale 4");
+        return;
+    }
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
+    double lo = 1e30, hi = 0.0;
+    for (int k = 0; k < 4; k++) {
+        s_subOff = 4 * k;
+        recordFrame(VOL_SUB, kAll);
+        CHECK(g_rd.sceneSx > 3.9f, "the scene is at scale %.2f", (double)g_rd.sceneSx);
+        if (!readTarget(rd_Target(RD_TARGET_SHADOW0), s_lv[0], 256, 256)) {
+            break;
+        }
+        double sum = 0.0;
+        for (int i = 0; i < 256 * 256; i++) {
+            sum += s_lv[0][i * 4] + s_lv[0][i * 4 + 3];
+        }
+        printf("  scale 4, offset %d/16: level 1 integral %.0f\n", s_subOff, sum);
+        lo = sum < lo ? sum : lo;
+        hi = sum > hi ? sum : hi;
+    }
+    CHECK(hi > 0.0 && (hi - lo) / hi < 0.005, "level 1 integral varies by %.2f %% with the offset",
+          hi > 0.0 ? 100.0 * (hi - lo) / hi : 0.0);
+    rd_Shutdown();
+}
+
 int main(void)
 {
     static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
@@ -1020,6 +1081,7 @@ int main(void)
           rhi_vk_ValidationErrorCount());
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     rd_Shutdown();
+    checkScaledIntegral();
     if (failures) {
         printf("rd_shadow_test: %d failures\n", failures);
         return 1;

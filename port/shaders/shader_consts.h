@@ -78,6 +78,17 @@ typedef struct IcoSpriteAa1Vertex {
 
 #define ICO_AA1_INTERIOR 2.0f
 
+/* Perspective-correct STQ (RENDER_API.md "STQ on screen prims"): the vertex
+ * of sprite_stq_*_vs, 24 bytes: IcoSpriteVertex and, at loc 4
+ * (RHI_VTX_F32x1), the GS Q.  u and v are S and T in texels of t1 (S times
+ * the texture size, the UV offset added times Q), not divided: the shader
+ * interpolates (u, v, q) in screen space and sprite_stq_ps divides per
+ * pixel, as the GS does. */
+typedef struct IcoSpriteStqVertex {
+    IcoSpriteVertex v;
+    float q;
+} IcoSpriteStqVertex;
+
 _Static_assert(offsetof(IcoFrameCB, view) == 0, "view");
 
 _Static_assert(offsetof(IcoFrameCB, proj) == 64, "proj");
@@ -123,6 +134,8 @@ _Static_assert(offsetof(IcoSpriteVertex, u) == 12, "vertex uv");
 _Static_assert(sizeof(IcoSpriteVertex) == 20, "vertex size");
 _Static_assert(offsetof(IcoSpriteAa1Vertex, cov) == 20, "AA1 vertex coverage");
 _Static_assert(sizeof(IcoSpriteAa1Vertex) == 24, "AA1 vertex size");
+_Static_assert(offsetof(IcoSpriteStqVertex, q) == 20, "STQ vertex q");
+_Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
 
 /* ---------------------------------------------------------------- VU1
  * Wave 3 (R3c): the VU1 program shaders (vu_common.hlsli,
