@@ -90,7 +90,7 @@ static int inner_check(float *p, float *o, float *a, float *b, float r, float t)
     if (ok == 0) {
         return 0;
     }
-    lim = (_DistGV(o, a) + _DistGV(o, b)) * 0.5;
+    lim = ico_d2f(ico_dmul(ico_f2d(_DistGV(o, a) + _DistGV(o, b)), ICO_D(0.5)));
     if (_DistGV(p, o) < lim + r) {
         float v0[4];
         float v1[4];

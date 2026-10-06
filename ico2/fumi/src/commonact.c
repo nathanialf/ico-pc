@@ -2400,8 +2400,10 @@ void actCommonFall(GObj *volatile self)
                 FALL_SUB(self)->root.move[0] = FALL_SUB(self)->root.move[2] = 0.0f;
             }
             if (slowed) {
-                FALL_SUB(self)->root.move[0] *= 0.8;
-                FALL_SUB(self)->root.move[2] *= 0.8;
+                FALL_SUB(self)->root.move[0] =
+                    ico_d2f(ico_dmul(ico_f2d(FALL_SUB(self)->root.move[0]), ICO_D(0.8)));
+                FALL_SUB(self)->root.move[2] =
+                    ico_d2f(ico_dmul(ico_f2d(FALL_SUB(self)->root.move[2]), ICO_D(0.8)));
             }
         }
         ACTSendMailCorrect(self, 314);
@@ -3826,7 +3828,7 @@ inline void WithMailFunc_FallDead(GObj *self)
     v[1] = s->root.plane.f[1];
     v[2] = s->root.plane.f[2];
     sceVu0Normalize(v, v);
-    if ((double)FSqrt(v[0] * v[0] + v[2] * v[2]) > 0.3) {
+    if (ico_dcmp(ico_f2d(FSqrt(v[0] * v[0] + v[2] * v[2])), ICO_D(0.3)) > 0) {
         v[1] = 0.0f;
         sceVu0Normalize(v, v);
         SetMotionDirection(self, v);

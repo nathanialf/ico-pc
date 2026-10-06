@@ -1090,7 +1090,7 @@ void actSt06aSuimonEffect(GObj *volatile self)
 
 void actSt06aSuimonFlagOn(GObj *volatile self)
 {
-    int i = (60 - systemStatus[0] * 10) / systemStatus[1] * 7.0;
+    int i = ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(7.0)));
 
     riverFadeSpeed = 0.005f;
 

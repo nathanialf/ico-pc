@@ -203,7 +203,7 @@ void actSt05eWaterSwitch(GObj *volatile self)
 
 void actSt05eWaterFlagOn(GObj *volatile self)
 {
-    int i = (60 - systemStatus[0] * 10) / systemStatus[1] * 6.0;
+    int i = ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(6.0)));
 
     riverFadeSpeed = 0.005f;
 

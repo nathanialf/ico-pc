@@ -45,7 +45,7 @@ void ACTGetWish_FromPad(GObj *self, float *dir)
 
     s->wish4.ll |= 2;
 
-    if ((s->pad.now & 0x20) || GOBJ_WORK(self)->stickMag < 0.9) {
+    if ((s->pad.now & 0x20) || ico_dcmp(ico_f2d(GOBJ_WORK(self)->stickMag), ICO_D(0.9)) < 0) {
         s->wish4.ll |= 4;
     }
     s->wish3.ll |= 1ULL << 63;

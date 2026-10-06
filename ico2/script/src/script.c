@@ -1210,7 +1210,7 @@ static void scpWoodSrh(GObj *self, struct WoodBoxEnt *w)
         case 7:
             if (pos[1] > -190.0f && (pos[0] < 660.0f || pos[0] > 916.0f) && pos[2] > -1600.0f) {
                 st = 1;
-                if (pos[0] > 916.0) {
+                if (ico_dcmp(ico_f2d(pos[0]), ICO_D(916.0)) > 0) {
                     w->ofs[0] = 100.0f;
                 } else {
                     w->ofs[0] = -100.0f;
@@ -1222,7 +1222,7 @@ static void scpWoodSrh(GObj *self, struct WoodBoxEnt *w)
         case 9:
             if (pos[1] > 750.0f && (pos[0] < -515.0f || pos[0] > 325.0f)) {
                 st = 1;
-                if (pos[0] > 325.0) {
+                if (ico_dcmp(ico_f2d(pos[0]), ICO_D(325.0)) > 0) {
                     w->ofs[0] = 100.0f;
                 } else {
                     w->ofs[0] = -100.0f;

@@ -458,7 +458,8 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
 {
     SprRect rr = *box;
     SprCol c = {r, g, b, 127};
-    float s = GetTableSin((short)(t * 3.1415926535897932 * 10430.3779296875));
+    float s = GetTableSin((short)ico_d2i(
+        ico_dmul(ico_dmul(ico_f2d(t), ICO_D(3.1415926535897932)), ICO_D(10430.3779296875))));
 
     c.r = c.r * s;
     c.g = c.g * s;

@@ -735,7 +735,7 @@ void SetCameraMatrix(GObj *self)
         zoomRangeMin = zoomBase;
         zoomRangeMax = zoomBase + zoomMax;
         if (zoomRequest == 2) {
-            zoomRangeMax = zoomBase * 0.75;
+            zoomRangeMax = ico_d2i(ico_dmul(ico_i2d(zoomBase), ICO_D(0.75)));
         }
         target = step != 0 ? zoomRangeMax : zoomBase;
         zoomRequest = 0;

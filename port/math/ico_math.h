@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "ps2float.h"
+#include "softdouble.h"
 #include "vector_inline.h"
 
 /* The "current matrix": seki/src/Matrix.c kept it in VU0 registers

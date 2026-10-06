@@ -198,10 +198,12 @@ void actSt13bConte02(GObj *volatile self)
     stage_SetAnimation(34, 1, 0);
     stage_SetAnimation(21, 1, 0);
 
-    _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 0.15);
+    _ACTWait(
+        ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(0.15))));
 
     if (systemStatus[0] != 0) {
-        _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 1.0);
+        _ACTWait(ico_d2i(
+            ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]))); /* ee-gcc folded the * 1.0 */
     }
 
     AdpcmPlay(st13b_adpcm->stream);
@@ -966,7 +968,8 @@ static void actSt13bElev2Chk(GObj *volatile self)
             _ACTWait(1);
         }
 
-        _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 0.15);
+        _ACTWait(
+            ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(0.15))));
         stage_SetAnimation(41, 1, 0);
 
         while (stage_CheckAnimationFinish(41) == 0) {

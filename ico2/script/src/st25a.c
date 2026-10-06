@@ -732,7 +732,8 @@ static void actSt25aElevChk(GObj *volatile self)
         while (elevAgain == 0) {
             _ACTWait(1);
         }
-        _ACTWait((int)((60 - systemStatus[0] * 10) / systemStatus[1] * 0.15));
+        _ACTWait(
+            ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(0.15))));
         stage_SetAnimation(162, 1, 0);
         while (stage_CheckAnimationFinish(162) == 0) {
             _ACTWait(1);

@@ -486,7 +486,8 @@ restart:
             } else {
                 if (!noTurn) {
                     margin = 100.0f;
-                } else if (sub->actMode == 3 && (double)girlBrainGetTypeRatio(type2) > 0.8) {
+                } else if (sub->actMode == 3 &&
+                           ico_dcmp(ico_f2d(girlBrainGetTypeRatio(type2)), ICO_D(0.8)) > 0) {
                     margin = 100.0f;
                 } else {
                     margin = 0.0f;

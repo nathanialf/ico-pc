@@ -2419,9 +2419,9 @@ void debug_PrintFontf(int x, int y, char *p, ...)
                 d += sprintf(d, f, va_arg(ap, int));
                 break;
             case 'f':
-                v = (float)va_arg(ap, double);
+                v = ico_d2f(ico_dbits(va_arg(ap, double)));
                 f = "%f";
-                d += sprintf(d, f, v);
+                d += sprintf(d, f, ico_dval(ico_f2d(v)));
                 break;
             default:
                 f = "debug_PrintFontf error\n";

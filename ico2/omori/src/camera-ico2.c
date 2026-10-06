@@ -464,8 +464,10 @@ static void monitorMonitorCamera(CamWork *cam, CamWork *out)
         }
     }
     if (insertCameraBlendTimer != 0) {
-        r1 = (float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 30.0;
-        r2 = 3.0 / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
+        r1 = ico_d2f(
+            ico_ddiv(ico_f2d((float)((60 - systemStatus[0] * 10) / systemStatus[1])), ICO_D(30.0)));
+        r2 = ico_d2f(
+            ico_ddiv(ICO_D(3.0), ico_f2d((float)((60 - systemStatus[0] * 10) / systemStatus[1]))));
         _InterGV(out->eye.f, cam->eye.f, monitorCamera.work.eye.f, r1, r2);
         _InterGV(out->at.f, cam->at.f, monitorCamera.work.at.f, r1, r2);
         out->ext.f[0] = (cam->ext.f[0] * r2 + monitorCamera.work.ext.f[0] * r1) / (r1 + r2);

@@ -69,7 +69,7 @@ void setWaterDot(WaterDot *dot, VECTOR *pos, VECTOR *vel)
     dot->frame = 0;
     n = (int)(crt_random_unit() * 64.0f + 32.0f);
     dot->life = n;
-    dot->scale = 1.0 - (256 - n) * 0.00078125;
+    dot->scale = ico_d2f(ico_dsub(ICO_D(1.0), ico_dmul(ico_i2d(256 - n), ICO_D(0.00078125))));
     CopyVector(&dot->pos, pos);
     CopyVector(&dot->vel, vel);
 }

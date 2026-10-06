@@ -240,7 +240,7 @@ void actSt04eWaterSwitch(GObj *volatile self)
 
 void actSt04eWaterFlagOn(GObj *volatile self)
 {
-    int t = (60 - systemStatus[0] * 10) / systemStatus[1] * 6.0;
+    int t = ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(6.0)));
 
     riverFadeSpeed = 0.005f;
 
@@ -348,7 +348,8 @@ static void actSt04eSeChk(GObj *volatile self)
         }
 
         h = soundSeDefPlay(1340, 0, seChkPos, 1);
-        _ACTWait((60 - systemStatus[0] * 10) / systemStatus[1] * 0.5);
+        _ACTWait(
+            ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(0.5))));
         soundSeDefStop(h);
 
         soundSeDefPlay(1341, 0, seChkPos, 1);

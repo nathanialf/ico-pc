@@ -164,16 +164,16 @@ void brainLevelProcess(Brain *b)
             t->level = 0.0f;
             continue;
         }
-        if (t != b->cur && t->level > 1.9 && girlGObj != 0 &&
+        if (t != b->cur && ico_dcmp(ico_f2d(t->level), ICO_D(1.9)) > 0 && girlGObj != 0 &&
             ((int)(GOBJ_ACT(girlGObj)->flags20.ll >> 27) & 1)) {
             float r;
             /* 3.40282347e+38f is FLT_MAX */
             if (ACTGameViewSimple_Check(b->girl, t->gobj) != 0) {
-                t->level = t->level - 0.002;
+                t->level = ico_d2f(ico_dsub(ico_f2d(t->level), ICO_D(0.002)));
             } else {
-                t->level = t->level - 0.005;
+                t->level = ico_d2f(ico_dsub(ico_f2d(t->level), ICO_D(0.005)));
             }
-            if (t->level < 1.9) {
+            if (ico_dcmp(ico_f2d(t->level), ICO_D(1.9)) < 0) {
                 r = 1.9f;
             } else if (t->level > 3.40282347e+38f) {
                 r = 3.40282347e+38f;

@@ -2393,7 +2393,7 @@ void actBoyWalk(GObj *volatile self)
                 80.0f < d) {
                 d = (d - 80.0f) / 10.0f;
                 d = d < 0.0f ? 0.0f : (1.0f < d ? 1.0f : d);
-                ratio = 0.9 - d * 0.2;
+                ratio = ico_d2f(ico_dsub(ICO_D(0.9), ico_dmul(ico_f2d(d), ICO_D(0.2))));
                 ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, ratio, 2);
             }
         }
@@ -2419,7 +2419,7 @@ void actBoyRun(GObj *volatile self)
                 90.0f < d) {
                 d = (d - 90.0f) / 10.0f;
                 d = d < 0.0f ? 0.0f : (1.0f < d ? 1.0f : d);
-                ratio = 0.7 - d * 0.2;
+                ratio = ico_d2f(ico_dsub(ICO_D(0.7), ico_dmul(ico_f2d(d), ICO_D(0.2))));
                 ACTGame_SetMotionPlaySpeedRatio_Reserve((void *)self, ratio, 2);
             }
         }

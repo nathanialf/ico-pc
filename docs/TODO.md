@@ -211,13 +211,6 @@ pointer to this file.
 
 ## Floating point
 
-- **Doubles (DIVERGENCES F6).** 33 functions in 20 files do `double`
-  arithmetic that the PS2 ran through libgcc's dp-bit soft float (round to
-  nearest); the host uses SSE doubles under the simulation's
-  round-toward-zero mode, which can change frame-count scaling and camera
-  and chain physics. Write `port/math/softdouble.c` from
-  `sce/libgcc/dp-bit.c` and route those expressions through it
-  (docs/port/MATH.md, "Doubles").
 - **Register side effects (F10).** 15 candidate call sequences where a
   routine clobbers vf4 to vf7 between setting and reading the current matrix
   are not triaged (list in docs/port/MATH.md, "Register side effects").

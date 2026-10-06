@@ -212,7 +212,7 @@ void actSt04aGateChk(GObj *volatile self)
 
     scpFadeIn(6.0f);
 
-    _ACTWait((int)((60 - systemStatus[0] * 10) / systemStatus[1] * 2.5));
+    _ACTWait(ico_d2i(ico_dmul(ico_i2d((60 - systemStatus[0] * 10) / systemStatus[1]), ICO_D(2.5))));
 
     demoEnd = 0;
     while (demoEnd == 0 && ((pad[0].flags & 0x800) == 0 || scpAdpcmPlayRequestNum() != 0)) {

@@ -274,9 +274,9 @@ static void chain_simulate_term_loop(GObj *gobj)
         chainDebugY = chainDebugY + 10;
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_loop\n");
     }
-    if (cw->pdl.amp < 0.5) {
+    if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
         cw->pdl.ampSpeed = -0.01f;
-    } else if (cw->pdl.amp < 1.0) {
+    } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
         cw->pdl.ampSpeed = -0.05f;
     } else {
         cw->pdl.ampSpeed = -0.15f;
@@ -292,9 +292,9 @@ static void chain_simulate_term_swingready(GObj *gobj)
         chainDebugY = chainDebugY + 10;
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_swingready\n");
     }
-    if (cw->pdl.amp < 0.5) {
+    if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
         cw->pdl.ampSpeed = -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-    } else if (cw->pdl.amp < 1.0) {
+    } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
         cw->pdl.ampSpeed = -1.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
     } else {
         cw->pdl.ampSpeed = -4.5f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
@@ -315,16 +315,16 @@ static void chain_simulate_term_swingstart(GObj *gobj)
     h = GOBJ_SUB(boyGObj)->ctrl.animFrame;
 
     if (h < 20.0f) {
-        if (cw->pdl.amp < 0.3) {
+        if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.3)) < 0) {
             cw->pdl.ampSpeed =
                 -0.29999998f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-        } else if (cw->pdl.amp < 1.0) {
+        } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(1.0)) < 0) {
             cw->pdl.ampSpeed = -6.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
         } else {
             cw->pdl.ampSpeed = -9.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
         }
     } else {
-        if (h >= 20.0 && h < 21.5) {
+        if (ico_dcmp(ico_f2d(h), ICO_D(20.0)) >= 0 && ico_dcmp(ico_f2d(h), ICO_D(21.5)) < 0) {
             cw->pdl.phase = 0.0f;
             cw->pdl.ampLimit = 360.0f;
         }
@@ -352,7 +352,7 @@ static void chain_simulate_term_moveup(GObj *gobj)
     if (cw->pdl.amp < 1.0f) {
         cw->pdl.amp = 1.0f;
         cw->pdl.ampSpeed = 0.0f;
-    } else if (cw->pdl.amp < 2.0) {
+    } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(2.0)) < 0) {
         cw->pdl.ampSpeed = -0.05f;
     } else {
         cw->pdl.ampSpeed = -0.15f;
@@ -363,8 +363,13 @@ static void chain_simulate_term_moveup(GObj *gobj)
     v[1] = cw->pdl.orient[1];
     v[2] = cw->pdl.orient[2];
     _ApplyRyGV(v, -1.5707964f);
-    sceVu0ScaleVector(v, v,
-                      GetTableSin(h * 6.283185307179586 / 40.0 * 32768.0 / 3.1415927f) * 5.0f);
+    sceVu0ScaleVector(
+        v, v,
+        GetTableSin((short)ico_d2i(
+            ico_ddiv(ico_dmul(ico_ddiv(ico_dmul(ico_f2d(h), ICO_D(6.283185307179586)), ICO_D(40.0)),
+                              ICO_D(32768.0)),
+                     ico_f2d(3.1415927f)))) *
+            5.0f);
     sceVu0AddVector(w, &cw->node[cw->holdNode], v);
     chain_sub_pendulum(cw->node, cw->holdNode, w);
 }
@@ -377,9 +382,9 @@ static void chain_simulate_term_free(GObj *gobj)
         chainDebugY = chainDebugY + 10;
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_free\n");
     }
-    if (cw->pdl.amp < 0.5) {
+    if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
         cw->pdl.ampSpeed = -0.01f;
-    } else if (cw->pdl.amp < 2.0) {
+    } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(2.0)) < 0) {
         cw->pdl.ampSpeed = -0.05f;
     } else {
         cw->pdl.ampSpeed = -0.15f;
@@ -401,9 +406,9 @@ static void chain_simulate_term_down(GObj *gobj)
         /* a 2001 copy and paste: this arm prints the sibling term's name */
         debug_Printf(10, chainDebugY, 0x0FFFFFFF, "chain_simulate_term_free\n");
     }
-    if (cw->pdl.amp < 0.5) {
+    if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(0.5)) < 0) {
         cw->pdl.ampSpeed = -0.01f;
-    } else if (cw->pdl.amp < 2.0) {
+    } else if (ico_dcmp(ico_f2d(cw->pdl.amp), ICO_D(2.0)) < 0) {
         cw->pdl.ampSpeed = -0.05f;
     } else {
         cw->pdl.ampSpeed = -0.15f;
@@ -414,8 +419,13 @@ static void chain_simulate_term_down(GObj *gobj)
     v[1] = cw->pdl.orient[1];
     v[2] = cw->pdl.orient[2];
     _ApplyRyGV(v, -1.5707964f);
-    sceVu0ScaleVector(v, v,
-                      GetTableSin(h * 6.283185307179586 / 23.0 * 32768.0 / 3.1415927f) * 2.0f);
+    sceVu0ScaleVector(
+        v, v,
+        GetTableSin((short)ico_d2i(
+            ico_ddiv(ico_dmul(ico_ddiv(ico_dmul(ico_f2d(h), ICO_D(6.283185307179586)), ICO_D(23.0)),
+                              ICO_D(32768.0)),
+                     ico_f2d(3.1415927f)))) *
+            2.0f);
     sceVu0AddVector(w, &cw->node[cw->holdNode], v);
     chain_sub_pendulum(cw->node, cw->holdNode, w);
     if (cw->holdNode + 1 <= cw->nodes - 1) {
@@ -540,18 +550,22 @@ unsigned char flag;
     up = w->ampSpeed > 0.0f ? 1 : 0;
 
     if (debug_font_flag & 1) {
-        debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "time = %f\n", w->phase);
+        debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "time = %f\n", ico_dval(ico_f2d(w->phase)));
         if (debug_font_flag & 1) {
-            debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "rad  = %f\n", w->angle);
+            debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "rad  = %f\n",
+                         ico_dval(ico_f2d(w->angle)));
             if (debug_font_flag & 1) {
-                debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "max  = %f\n", w->amp);
+                debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "max  = %f\n",
+                             ico_dval(ico_f2d(w->amp)));
                 if (debug_font_flag & 1) {
-                    debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "maxl = %f\n", w->ampLimit);
+                    debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "maxl = %f\n",
+                                 ico_dval(ico_f2d(w->ampLimit)));
                     if (debug_font_flag & 1) {
-                        debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "T    = %f\n", w->cycle);
+                        debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "T    = %f\n",
+                                     ico_dval(ico_f2d(w->cycle)));
                         if (debug_font_flag & 1) {
                             debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "d    = %f\n",
-                                         w->length);
+                                         ico_dval(ico_f2d(w->length)));
                             if (debug_font_flag & 1) {
                                 debug_Printf(10, chainDebugY += 10, 0x0FFFFFFF, "inc  = %d\n", up);
                             }
@@ -587,7 +601,8 @@ unsigned char flag;
         w->angle = w->angle < -w->ampLimit ? -w->ampLimit
                                            : (w->ampLimit < w->angle ? w->ampLimit : w->angle);
 
-        if (w->cycle * 0.25 < w->phase && w->phase < w->cycle * 0.75) {
+        if (ico_dcmp(ico_dmul(ico_f2d(w->cycle), ICO_D(0.25)), ico_f2d(w->phase)) < 0 &&
+            ico_dcmp(ico_f2d(w->phase), ico_dmul(ico_f2d(w->cycle), ICO_D(0.75))) < 0) {
             w->swing = 1;
         } else {
             w->swing = 0;

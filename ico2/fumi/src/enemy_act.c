@@ -1096,7 +1096,9 @@ void actEnemyKidnapEnd(GObj *volatile self)
 
             if ((char *)girlGObj == 0 || act != carriedAct || gsub->carrier != self) {
                 ratio = dist / (float)((60 - systemStatus[0] * 10) / systemStatus[1]);
-                SetEnemyDissolve(self, (ratio < 0.01) ? 0.01f : ((1.0f < ratio) ? 1.0f : ratio));
+                SetEnemyDissolve(self, (ico_dcmp(ico_f2d(ratio), ICO_D(0.01)) < 0)
+                                           ? 0.01f
+                                           : ((1.0f < ratio) ? 1.0f : ratio));
                 dist = dist + 1.0f;
             }
             if (50.0f < GOBJ_SUB(self)->ctrl.animFrame) {
@@ -1112,7 +1114,7 @@ void actEnemyKidnapEnd(GObj *volatile self)
                                 GetRootPosition(pos, (void *)boyGObj);
                                 GetRootPosition(tmp, girlGObj);
                                 best = GetPointDistance(pos, tmp) + 1000.0f;
-                                debug_StdPrintfDummy("radius: %f\n", best);
+                                debug_StdPrintfDummy("radius: %f\n", ico_dval(ico_f2d(best)));
                             }
                             gameover_flag = 1;
                             if ((char *)girlGObj != 0) {
@@ -1958,7 +1960,7 @@ static inline float battleRangeScale(GObj *self, float v) /* derived name */
     case 1:
         v = work->bodySize * v;
         if (((int)(work->flags.ll >> 1)) & 1) {
-            v = v * 1.2;
+            v = ico_d2f(ico_dmul(ico_f2d(v), ICO_D(1.2)));
         }
         break;
     case 2:
@@ -2154,7 +2156,7 @@ static void NakaBoss(GObj *self, void *tgt, float distArg)
                            test_CURRENTROOT(boy)) == 2) {
             ACTSendMailCorrect(self, 0x1D);
         }
-        if (dist < 360.0) {
+        if (ico_dcmp(ico_f2d(dist), ICO_D(360.0)) < 0) {
             GetRootPosition(bpos, boy);
             GetRootPosition(mpos, self);
             _OrientXZGV(dir, mpos, bpos);
@@ -2162,14 +2164,14 @@ static void NakaBoss(GObj *self, void *tgt, float distArg)
             ori[1] = test_CURRENTORIENT(boy)[1];
             ori[2] = test_CURRENTORIENT(boy)[2];
             if (_AbsRotyGV(ori, dir) < 60) {
-                if (dist < 270.0) {
+                if (ico_dcmp(ico_f2d(dist), ICO_D(270.0)) < 0) {
                     if (GetFlyPosition((float *)&GOBJ_WORK(self)->emgPosX, mpos, bpos) == 0) {
                         debug_StdPrintfDummy("not found");
                     }
                     inc = 1;
                     if (half < GOBJ_WORK(self)->nakaBossCount) {
                         ACTSendMailCorrect(self, 0x1D);
-                    } else if (dist < 120.0) {
+                    } else if (ico_dcmp(ico_f2d(dist), ICO_D(120.0)) < 0) {
                         ACTSendMailCorrect(self, 0x113);
                     }
                 } else {

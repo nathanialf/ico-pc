@@ -28,7 +28,8 @@ R-register vectors), the assembly in the decompilation's game sources
 | `port/math/cloth.c` | `sugipon/src/clothAnimation.c`'s external VU0 routines |
 | `port/math/libvu0.c` | the `sceVu0*` entry points (signatures of `port/compat/libvu0.h`) |
 | `port/math/newlib/` | newlib's `rand`, `qsort` and float libm, renamed `ico_*` (below) |
-| `port/math/test/` | `math_test`, `newlib_test` (ctest `math`, `newlib`) |
+| `port/math/softdouble.h`, `softdouble.c` | the EE's soft-float `double` arithmetic, integer only (below, "Doubles") |
+| `port/math/test/` | `math_test`, `newlib_test`, `softdouble_test` (ctest `math`, `newlib`, `softdouble`) |
 
 In the game sources, a routine whose body was all assembly is gone (the
 host gets it from `port/math`), and a routine that mixed C and assembly has
@@ -282,41 +283,97 @@ two are triaged, the rest are open (docs/TODO.md):
 
 ## Doubles
 
-The object census in float-semantics.md lists 33 functions in 20 files that
-do `double` arithmetic through libgcc's soft float (round to nearest, denormal inputs
-read as zero, `dptofp` rounding to nearest, `dptoli` truncating and
-saturating). On the host they run as SSE doubles under the sim thread's
-round-toward-zero mode, so any inexact result can differ (DIVERGENCES.md
-F6). This is not handled yet (docs/TODO.md).
+The EE has no double hardware. ee-gcc compiled every `double` operation as
+a call to libgcc's soft float (`sce/libgcc/dp-bit.c`, `fp-bit.c`: `dpadd`,
+`dpsub`, `dpmul`, `dpdiv`, `dpcmp`, `litodp`, `dptoli`, `dptofp`,
+`fptodp`), which rounds to nearest even, reads a denormal operand as zero
+(`NO_DENORMALS`, defined at the top of `dp-bit.c`), truncates a result below
+2^-1022 into a denormal, and in `dptoli` truncates and saturates. On the
+host the same C would run as SSE doubles under the simulation thread's
+round-toward-zero mode (DIVERGENCES.md F6). The object census in
+float-semantics.md lists the functions that call those routines: 33 in 20
+files, plus the two static inline helpers expanded into them
+(`lt_glow_sprite` in `display_texture`, `battleRangeScale` in
+`Battle_isCurrentStatus`):
 
 | file | functions |
 | --- | --- |
 | common/src/debug | debug_PrintFontf |
-| common/src/layout_texture | display_texture |
+| common/src/layout_texture | display_texture (lt_glow_sprite) |
 | fumi/src/act-wish | ACTGetWish_FromPad |
 | fumi/src/boyact | actBoyRun, actBoyWalk |
 | fumi/src/commonact | WithMailFunc_FallDead, actCommonFall |
-| fumi/src/enemy_act | Battle_isCurrentStatus, NakaBoss, actEnemyKidnapEnd |
-| fumi/src/girl_act | HandMgr_Speed, subGirlBrain_Attract |
+| fumi/src/enemy_act | Battle_isCurrentStatus (battleRangeScale), NakaBoss, actEnemyKidnapEnd |
+| fumi/src/girl_act | HandMgr_Speed (girl_act_hand.c.inc), subGirlBrain_Attract (girl_brain_attract.c.inc) |
 | omori/src/attackhit | inner_check |
 | omori/src/brain | brainLevelProcess |
 | omori/src/camera-ico2 | monitorMonitorCamera |
 | omori/src/camera-root | SetCameraMatrix |
 | omori/src/chain | chain_simulate_term_{down,moveup,free,loop,swingready,swingstart}, pendulum_Process |
 | script/src/script | scpWoodSrh |
-| script/src/st04a, st04e (2), st05e, st06a, st13b (2), st25a | stage water, gate and elevator checks |
+| script/src/st04a, st04e, st05e, st06a, st13b, st25a | actSt04aGateChk, actSt04eSeChk, actSt04eWaterFlagOn, actSt05eWaterFlagOn, actSt06aSuimonFlagOn, actSt13bConte02, actSt13bElev2Chk, actSt25aElevChk |
 | sugipon/src/waterDot | setWaterDot |
 
-The recommended handling, in order (float-semantics.md): (1) `port/math/softdouble.c` written
-from the integer algorithm of `sce/libgcc/dp-bit.c`, with the double
-expressions in those functions rewritten as calls (`ico_dmul`, `ico_dsub`,
-`ico_ddiv`, `ico_dcmp`, `ico_i2d`, `ico_d2i`, `ico_d2f`, `ico_f2d`),
-bit-identical by construction; (2) if source edits are refused,
-a scoped helper that switches the FP environment to round-to-nearest with
-FTZ/DAZ off around each double section, which leaves only dp-bit's
-denormal-input flush and truncating denormal output as differences. Most of
-the comparisons (`dpcmp`) are exact either way; the multiplies, divisions
-and `dptofp`/`dptoli` conversions are where results move.
+**`port/math/softdouble.c`** computes the EE's results with integer
+arithmetic only, on the IEEE bit patterns (`uint64_t` for a double):
+`ico_dadd`, `ico_dsub`, `ico_dmul`, `ico_ddiv`, `ico_dcmp`, `ico_i2d`,
+`ico_d2i`, `ico_d2f`/`ico_d2f_bits`, `ico_f2d`/`ico_f2d_bits`, and
+`ICO_D(lit)` for the bits of a double constant. `ico_dcmp` returns
+`dpcmp`'s -1, 0 or 1 (1 when either operand is a NaN), and each call site
+tests it against 0 with the source's operator, as the compiled code did
+(the census objects pass the operands in source order, the constant
+second). It is written from the IEEE-754 definition plus the library's
+policies (the header comment of `softdouble.c` lists them: 8 guard bits
+with a sticky bit, the product's and quotient's tie rule, the NaN signs and
+the static NaN for invalid operations, `dptofp`'s sticky bit and float
+packing, `fptodp`'s NaN fraction); no libgcc code is copied, so the file is
+MIT. For results in the normal range the library is plain round-to-nearest
+IEEE (20 million random pairs of normal operands: no difference from the
+host's own round-to-nearest add, subtract, multiply or divide); it differs
+in the denormal policy and the NaN details.
+
+The double expressions in the listed functions are written as calls in the
+original evaluation order: each `float` operand that C promoted goes
+through `ico_f2d`, each `int` through `ico_i2d`, a result assigned to a
+float through `ico_d2f`, to an int through `ico_d2i` (`GetTableSin`'s
+`short` argument takes the low half of the int, as on the EE), and a
+compound `x *= 0.8` becomes `x = ico_d2f(ico_dmul(ico_f2d(x), ICO_D(0.8)))`.
+`actSt13bConte02`'s `... * 1.0` is `ico_d2i(ico_i2d(...))`: ee-gcc folded the
+multiply (the object has `litodp` and `dptoli` there and no `dpmul`), and a
+product by 1.0 is exact in the library anyway. Variadic float arguments
+(`debug_Printf`, `debug_StdPrintfDummy`, `sprintf` in `debug_PrintFontf`)
+are passed as `ico_dval(ico_f2d(x))`, and `debug_PrintFontf` reads its `%f`
+argument as `ico_d2f(ico_dbits(va_arg(ap, double)))`. Every `ICO_D`
+constant's bits are the ones in the EE object (its `.rodata`, or an
+immediate for a constant whose low 48 bits are zero).
+
+The gate is `tools/softdouble_gate.py` (ctest `softdouble_gate`): in those
+35 functions' source, no `double` keyword (bar `va_arg(ap, double)`) and no
+unsuffixed floating constant outside `ICO_D()`; with the build's
+`compile_commands.json`, the 20 files compiled with `-Wdouble-promotion
+-Wfloat-conversion` give no warning about a double inside them. Run on the
+sources before this change it reports 59 double constants and 2 `(double)`
+casts from the source pass and 71 warnings from the compile pass.
+
+The proof is `port/math/test/softdouble_test.c` (ctest `softdouble`), whose
+oracle is the library itself: `sce/libgcc/dp-bit.c` and `fp-bit.c`, copied
+into the build by `port/math/test/dpbit_harness.cmake` and compiled with
+their exported names prefixed `ref_`. The reconstructions match the EE
+objects byte for byte, so a few of their functions are declared `void` or
+`int` and leave a 64-bit result in `v0` (or a float in `$f0`) from their
+last call; the harness gives those a host return type and a `return`, and
+spells the EE's 64-bit `long` arguments `long long`, each edit checked to
+apply exactly once. Linux builds only: the libraries' bitfield unions need
+GCC's layout, not mingw's `ms_struct`. The test compares about 65 million
+results bit for bit: every pair of 30 special values (zeros, denormals,
+Infs, quiet and signalling NaNs of both signs, the int and float edges), 1.5
+million rounds of random pairs (random bits; chosen sign, exponent and
+fraction classes; pairs close enough to cancel or to straddle the 64-bit
+alignment limit; pairs whose product or quotient lands at the denormal or
+overflow edge), `d2i` around +-2^31 and +-0.5, `d2f` at the rounding ties
+and their neighbours for every float exponent from the float denormal range
+to overflow, `i2d` at the int edges and on a stride through every int, and
+`f2d` on every float exponent and 4 million random floats.
 
 ## newlib copies
 
@@ -350,7 +407,9 @@ completeness, written in `sf_sin.c`'s style, and is unverified.
 
 ## Tests
 
-`ctest` runs `math_test` and `newlib_test` (ctest `math`, `newlib`).
+`ctest` runs `math_test`, `newlib_test` and `softdouble_test` (ctest `math`,
+`newlib`, `softdouble`; the last is described under "Doubles") and the
+`softdouble_gate` check.
 `math_test` runs in the sim FP mode and checks:
 
 - the helpers bit for bit: division by +-0, 0/0 and a denormal divisor
@@ -377,5 +436,5 @@ completeness, written in `sf_sin.c`'s style, and is unverified.
 `sceVu0RotMatrix[XYZ]` are checked against `cos`/`sin` at 81 angles over
 [-pi, pi] (tolerance 2e-5: libvu0's polynomial is that accurate).
 
-Open items (the untriaged register candidates, the R LFSR on hardware,
-the doubles) are in `docs/TODO.md`.
+Open items (the untriaged register candidates, the R LFSR on hardware)
+are in `docs/TODO.md`.
