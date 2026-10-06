@@ -143,6 +143,16 @@ typedef struct DxFrame {
     uint32_t nullGroups[DX_MAX_LAYOUTS]; /* per layout slot: a bind group of null views */
 } DxFrame;
 
+/* Deferred releases that found their frame's garbage list unable to grow
+ * (out of memory): kept with the frame slot that deferred them and released
+ * with that slot's own garbage (dx_DestroyGarbage). */
+#define DX_GARBAGE_OVERFLOW 256
+
+typedef struct DxGarbageOverflow {
+    IUnknown *obj;
+    uint32_t slot;
+} DxGarbageOverflow;
+
 /* -------------------------------------------------------------- device */
 typedef struct DxState {
     bool initialised;
@@ -202,6 +212,9 @@ typedef struct DxState {
     uint32_t swapTextures[4];
     uint32_t swapIndex;
     bool swapAcquired;
+
+    DxGarbageOverflow overflow[DX_GARBAGE_OVERFLOW]; /* see DX_GARBAGE_OVERFLOW */
+    uint32_t overflowCount;
 } DxState;
 
 extern DxState g_dx;

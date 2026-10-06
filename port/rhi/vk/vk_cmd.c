@@ -327,6 +327,21 @@ static bool vkr_SubmitBatch(const VkCommandBuffer *cbs, uint32_t count, bool for
     return true;
 }
 
+/* Submits nothing but the wait on a pending acquire semaphore, then waits
+ * for it: a swapchain recreate drops acquireWaitPending, and the semaphore
+ * must not stay signalled for the frame's next acquire. */
+bool vkr_SubmitEmpty(void)
+{
+    if (!g_vkr.acquireWaitPending) {
+        return true;
+    }
+    if (!vkr_SubmitBatch(NULL, 0, false)) {
+        return false;
+    }
+    vkr_WaitValue(g_vkr.timelineValue);
+    return true;
+}
+
 void rhi_Submit(RhiCommandList cl)
 {
     VkrCmdList *c = vkr_GetCmd(cl);

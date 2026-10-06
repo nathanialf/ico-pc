@@ -245,6 +245,11 @@ same; the D3D12 backend should confirm it with the same test.
   after the GPU finished every frame that could reference them.
   `rhi_WaitIdle` destroys the other slots' garbage (the current frame's
   stays: a list recorded but not submitted may still use it).
+  When a slot's garbage list cannot grow (out of memory), the object goes
+  to a fixed overflow array (`VKR_GARBAGE_OVERFLOW` = 256 entries, each
+  tagged with its slot) and is destroyed with that slot's garbage, so it
+  still waits for the slot's fence. Only when that array holds nothing but
+  the current frame's entries is one object leaked, with a log line.
 - Swapchain: the first submit after an acquire waits on the acquire
   semaphore (all stages). `rhi_Present` submits an empty batch that waits
   for the latest timeline value and signals the image's render-done binary
@@ -254,7 +259,10 @@ same; the D3D12 backend should confirm it with the same test.
   with vsync, else MAILBOX, IMMEDIATE, FIFO in that order. Format: BGRA8
   UNORM sRGB-nonlinear, else RGBA8 UNORM (reported by
   `rhi_SwapchainFormat`). Images have colour-attachment, transfer-dst and
-  transfer-src usage.
+  transfer-src usage. A recreate (`rhi_ResizeSwapchain`, after a device
+  wait) first drains a pending acquire: an empty submit that waits on the
+  acquire semaphore, so the frame's next acquire never reuses a signalled
+  semaphore (if that submit fails, the semaphore is recreated).
 - `rhi_ReadbackTexture` records a one-shot copy into a temporary READBACK
   buffer, submits it after all earlier work, and waits for its timeline
   value.
@@ -264,7 +272,7 @@ same; the D3D12 backend should confirm it with the same test.
 | test | what |
 | --- | --- |
 | `rhi_vk_enum` | every RHI enumerator has a Vulkan mapping (static asserts on table sizes against the `*_COUNT` sentinels; a run over the `set` flags; spot checks of the GS-critical values) |
-| `rhi_vk` | headless rendering checked texel by texel: dual-source blend (SRC1_COLOR, SRC1_ALPHA), stencil DECR_WRAP and INCR_WRAP, reversed-Z GEQUAL with exact depth readback, colour masks, an RGBA8_UINT target (integer clear and output), texture upload and sampling (indexed draw), R8 texture copies, a device buffer filled by `rhi_CmdCopyBuffer`; three frames; fails on any validation error |
+| `rhi_vk` | headless rendering checked texel by texel: dual-source blend (SRC1_COLOR, SRC1_ALPHA), stencil DECR_WRAP and INCR_WRAP, reversed-Z GEQUAL with exact depth readback, colour masks, an RGBA8_UINT target (integer clear and output), texture upload and sampling (indexed draw), R8 texture copies, a device buffer filled by `rhi_CmdCopyBuffer`; three frames; then a hazard-tracking cell (a second pass on the same target adds one barrier, a pass on another target none; the counts are skipped under `ICO_VK_GLOBAL_BARRIERS=1`); fails on any validation error |
 | `rhi_vk_swapchain` | the window path through SDL's offscreen video driver (`VK_EXT_headless_surface`): six frames of acquire, clear, readback, present, with a resize |
 
 In the container they run on Mesa lavapipe with the Khronos validation layer

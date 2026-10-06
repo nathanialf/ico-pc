@@ -190,12 +190,6 @@ pointer to this file.
 - **`check_no_rom.sh` scope.** Rule 5b scans only `ico2/` and `sce/`; widen
   it to `port/` (exempting `port/data/extract.c`'s DATA.DF manifest) and
   read staged blobs (`git show :path`) in pre-commit mode.
-- **Vulkan swapchain: a pending acquire on recreate.** `vkr_SwapchainCreate`
-  drops `acquireWaitPending` while the frame's acquire semaphore may still
-  be signalled; submit an empty batch that waits on it first.
-- **Deferred destruction out of memory.** `vkr_Defer` / `dx_Defer` destroy or
-  drop objects still referenced by unsubmitted lists when the garbage list
-  cannot grow; keep a fixed overflow array.
 - **D3D12 buffer copy states.** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and

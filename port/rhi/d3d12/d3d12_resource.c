@@ -16,9 +16,34 @@ void dx_Defer(IUnknown *obj)
         uint32_t cap = f->garbageCap ? f->garbageCap * 2u : 64u;
         IUnknown **g = realloc(f->garbage, cap * sizeof(*g));
         if (!g) {
-            DX_LOG("out of memory for deferred destroys; waiting idle");
-            dx_WaitFence(dx_Signal());
-            IUnknown_Release(obj);
+            /* the frame's list cannot grow: park the object in the fixed
+             * overflow array, released with this slot's garbage.  Releasing
+             * it now could free an object an unsubmitted list still uses. */
+            const uint32_t slot = (uint32_t)(f - g_dx.frames);
+            if (g_dx.overflowCount == DX_GARBAGE_OVERFLOW) {
+                /* full: the other slots' entries are free after the GPU idles */
+                DX_LOG("out of memory for deferred destroys; waiting idle");
+                dx_WaitFence(dx_Signal());
+                uint32_t keep = 0;
+                for (uint32_t i = 0; i < g_dx.overflowCount; i++) {
+                    DxGarbageOverflow *e = &g_dx.overflow[i];
+                    if (e->slot != slot) {
+                        IUnknown_Release(e->obj);
+                    } else {
+                        g_dx.overflow[keep++] = *e;
+                    }
+                }
+                g_dx.overflowCount = keep;
+            }
+            if (g_dx.overflowCount == DX_GARBAGE_OVERFLOW) {
+                /* every entry belongs to the current frame: nothing can be
+                 * released safely, so this one object leaks */
+                DX_LOG("deferred destroy overflow full; leaking one object");
+                return;
+            }
+            g_dx.overflow[g_dx.overflowCount].obj = obj;
+            g_dx.overflow[g_dx.overflowCount].slot = slot;
+            g_dx.overflowCount++;
             return;
         }
         f->garbage = g;
@@ -33,6 +58,18 @@ void dx_DestroyGarbage(DxFrame *f)
         IUnknown_Release(f->garbage[i]);
     }
     f->garbageCount = 0;
+    /* the objects that overflowed from this slot (dx_Defer) */
+    const uint32_t slot = (uint32_t)(f - g_dx.frames);
+    uint32_t keep = 0;
+    for (uint32_t i = 0; i < g_dx.overflowCount; i++) {
+        DxGarbageOverflow *e = &g_dx.overflow[i];
+        if (e->slot == slot) {
+            IUnknown_Release(e->obj);
+        } else {
+            g_dx.overflow[keep++] = *e;
+        }
+    }
+    g_dx.overflowCount = keep;
 }
 
 static void dx_SetName(ID3D12Object *o, const char *name)

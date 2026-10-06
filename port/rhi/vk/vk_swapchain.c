@@ -147,6 +147,25 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     if (count > VKR_MAX_SWAP_IMAGES) {
         count = VKR_MAX_SWAP_IMAGES;
     }
+    if (g_vkr.acquireWaitPending && !vkr_SubmitEmpty()) {
+        /* the wait could not be queued: the device is idle, so recreate the
+         * frame's semaphore instead of leaving it signalled */
+        VkSemaphoreCreateInfo asci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        VkSemaphore fresh;
+        if (VKR_CHECK(vkCreateSemaphore(g_vkr.device, &asci, NULL, &fresh))) {
+            for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+                if (g_vkr.frames[i].acquireSem == g_vkr.acquireSem) {
+                    vkDestroySemaphore(g_vkr.device, g_vkr.acquireSem, NULL);
+                    g_vkr.frames[i].acquireSem = fresh;
+                    fresh = VK_NULL_HANDLE;
+                    break;
+                }
+            }
+            if (fresh) {
+                vkDestroySemaphore(g_vkr.device, fresh, NULL);
+            }
+        }
+    }
     VkSwapchainKHR old = g_vkr.swapchain;
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

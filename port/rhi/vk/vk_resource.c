@@ -77,6 +77,8 @@ static void vkr_SetName(VkObjectType type, uint64_t handle, const char *name)
 }
 
 /* ------------------------------------------------------ deferred destroy */
+static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h);
+
 void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
 {
     if (!handle) {
@@ -87,9 +89,36 @@ void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
         uint32_t cap = f->garbageCap ? f->garbageCap * 2u : 64u;
         VkrGarbage *g = realloc(f->garbage, cap * sizeof(*g));
         if (!g) {
-            VKR_LOG("out of memory for deferred destroys; waiting idle");
-            vkDeviceWaitIdle(g_vkr.device);
-            vkr_DestroyGarbage(f);
+            /* the frame's list cannot grow: park the entry in the fixed
+             * overflow array, destroyed with this slot's garbage.  Never
+             * destroy the frame's garbage here: an unsubmitted command
+             * list may still use it. */
+            const uint32_t slot = (uint32_t)(f - g_vkr.frames);
+            if (g_vkr.overflowCount == VKR_GARBAGE_OVERFLOW) {
+                /* full: the other slots' entries are free after an idle */
+                VKR_LOG("out of memory for deferred destroys; waiting idle");
+                vkDeviceWaitIdle(g_vkr.device);
+                uint32_t keep = 0;
+                for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
+                    VkrGarbage *e = &g_vkr.overflow[i];
+                    if (e->slot != slot) {
+                        vkr_DestroyOne(e->kind, e->handle);
+                    } else {
+                        g_vkr.overflow[keep++] = *e;
+                    }
+                }
+                g_vkr.overflowCount = keep;
+            }
+            if (g_vkr.overflowCount == VKR_GARBAGE_OVERFLOW) {
+                /* every entry belongs to the current frame: nothing can be
+                 * destroyed safely, so this one object leaks */
+                VKR_LOG("deferred destroy overflow full; leaking one object");
+                return;
+            }
+            VkrGarbage *e = &g_vkr.overflow[g_vkr.overflowCount++];
+            e->kind = kind;
+            e->handle = handle;
+            e->slot = slot;
             return;
         }
         f->garbage = g;
@@ -100,42 +129,58 @@ void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
     f->garbageCount++;
 }
 
-void vkr_DestroyGarbage(VkrFrame *f)
+static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h)
 {
     VkDevice d = g_vkr.device;
+    switch (kind) {
+    case VKR_GARBAGE_BUFFER:
+        vkDestroyBuffer(d, (VkBuffer)h, NULL);
+        break;
+    case VKR_GARBAGE_IMAGE:
+        vkDestroyImage(d, (VkImage)h, NULL);
+        break;
+    case VKR_GARBAGE_VIEW:
+        vkDestroyImageView(d, (VkImageView)h, NULL);
+        break;
+    case VKR_GARBAGE_MEMORY:
+        vkFreeMemory(d, (VkDeviceMemory)h, NULL);
+        break;
+    case VKR_GARBAGE_SAMPLER:
+        vkDestroySampler(d, (VkSampler)h, NULL);
+        break;
+    case VKR_GARBAGE_PIPELINE:
+        vkDestroyPipeline(d, (VkPipeline)h, NULL);
+        break;
+    case VKR_GARBAGE_PIPELINE_LAYOUT:
+        vkDestroyPipelineLayout(d, (VkPipelineLayout)h, NULL);
+        break;
+    case VKR_GARBAGE_SET_LAYOUT:
+        vkDestroyDescriptorSetLayout(d, (VkDescriptorSetLayout)h, NULL);
+        break;
+    case VKR_GARBAGE_SHADER:
+        vkDestroyShaderModule(d, (VkShaderModule)h, NULL);
+        break;
+    }
+}
+
+void vkr_DestroyGarbage(VkrFrame *f)
+{
     for (uint32_t i = 0; i < f->garbageCount; i++) {
-        uint64_t h = f->garbage[i].handle;
-        switch (f->garbage[i].kind) {
-        case VKR_GARBAGE_BUFFER:
-            vkDestroyBuffer(d, (VkBuffer)h, NULL);
-            break;
-        case VKR_GARBAGE_IMAGE:
-            vkDestroyImage(d, (VkImage)h, NULL);
-            break;
-        case VKR_GARBAGE_VIEW:
-            vkDestroyImageView(d, (VkImageView)h, NULL);
-            break;
-        case VKR_GARBAGE_MEMORY:
-            vkFreeMemory(d, (VkDeviceMemory)h, NULL);
-            break;
-        case VKR_GARBAGE_SAMPLER:
-            vkDestroySampler(d, (VkSampler)h, NULL);
-            break;
-        case VKR_GARBAGE_PIPELINE:
-            vkDestroyPipeline(d, (VkPipeline)h, NULL);
-            break;
-        case VKR_GARBAGE_PIPELINE_LAYOUT:
-            vkDestroyPipelineLayout(d, (VkPipelineLayout)h, NULL);
-            break;
-        case VKR_GARBAGE_SET_LAYOUT:
-            vkDestroyDescriptorSetLayout(d, (VkDescriptorSetLayout)h, NULL);
-            break;
-        case VKR_GARBAGE_SHADER:
-            vkDestroyShaderModule(d, (VkShaderModule)h, NULL);
-            break;
-        }
+        vkr_DestroyOne(f->garbage[i].kind, f->garbage[i].handle);
     }
     f->garbageCount = 0;
+    /* the entries that overflowed from this slot (vkr_Defer) */
+    const uint32_t slot = (uint32_t)(f - g_vkr.frames);
+    uint32_t keep = 0;
+    for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
+        VkrGarbage *e = &g_vkr.overflow[i];
+        if (e->slot == slot) {
+            vkr_DestroyOne(e->kind, e->handle);
+        } else {
+            g_vkr.overflow[keep++] = *e;
+        }
+    }
+    g_vkr.overflowCount = keep;
 }
 
 /* Handles are cast through uintptr_t-sized integers: on 32-bit targets

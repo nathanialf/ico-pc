@@ -107,7 +107,13 @@ typedef enum VkrGarbageKind {
 typedef struct VkrGarbage {
     VkrGarbageKind kind;
     uint64_t handle; /* any non-dispatchable Vulkan handle */
+    uint32_t slot;   /* overflow entries only: the frame slot that deferred it */
 } VkrGarbage;
+
+/* Deferred destroys that found their frame's garbage list unable to grow
+ * (out of memory): kept here, per entry with its frame slot, and destroyed
+ * with that slot's own garbage (vkr_DestroyGarbage). */
+#define VKR_GARBAGE_OVERFLOW 256
 
 #define VKR_MAX_CMD_LISTS 8
 #define VKR_DESC_POOLS_MAX 16
@@ -218,6 +224,9 @@ typedef struct VkrState {
     /* package PB: hazard tracking (vk_cmd.c, "Hazards") */
     bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: main's global barrier path */
     uint64_t hzEpoch;    /* the last command list's epoch (one per rhi_BeginCommands) */
+
+    VkrGarbage overflow[VKR_GARBAGE_OVERFLOW]; /* see VKR_GARBAGE_OVERFLOW */
+    uint32_t overflowCount;
 } VkrState;
 
 extern VkrState g_vkr;
@@ -244,6 +253,7 @@ bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryP
 
 void vkr_Defer(VkrGarbageKind kind, uint64_t handle);
 void vkr_DestroyGarbage(VkrFrame *f);
+bool vkr_SubmitEmpty(void); /* vk_cmd.c: an empty submit that waits on a pending acquire */
 VkrBuffer *vkr_GetBuffer(RhiBuffer b);
 VkrTexture *vkr_GetTexture(RhiTexture t);
 
