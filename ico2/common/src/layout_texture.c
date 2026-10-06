@@ -541,10 +541,15 @@ static void display_texture(int no, LtProperty *e)
         /* PC port (6B): a port row has no texture; its label is drawn where
            the sprite would be, with the same colour.  P3: a game menu text
            row is drawn the same way, its texture still transferred so the
-           VRAM and packets are the texture path's */
+           VRAM and packets are the texture path's.  A port glyph row is the
+           exception: it draws a game texture as the game's rows do */
         ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
         if (!lt_ext_IsPortProp(e))
             tex_TransTexture(e->texNo, 11);
+        else if (ltHostTextRow == 0)
+            /* a port glyph row: a game texture (layout_ext.h, the button
+               glyphs), drawn as the game's own rows are */
+            tex_TransTexture(lt_ext_GlyphTexNo(e), 11);
 
         gif_StartPacketPri(11);
         gif_SetZTest(0);

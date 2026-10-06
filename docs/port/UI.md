@@ -15,6 +15,7 @@ save screens' figures.
 | `port/ui/popup.c`, `popup.h` | the popup queue, timing and drawing |
 | `port/ui/ui_host.c`, `ui_host.h` | the window build's glue: the game's globals, the decoder flush, the per-vsync step |
 | `port/ui/settings.c`, `settings.h` | the Settings menu: its port layouts, the entry rows and repoints, the screens' procs, the title layout, the quit and mirror-mode screens |
+| `port/ui/ui_hint.c`, `ui_hint.h` | lines of button prompts: the game's button glyphs beside port words ("Button glyphs" below) |
 | `port/ui/ui_list.c`, `ui_list.h` | the scrolling list pages ("Lists" below): the slots, the refresh from the page's items, headings the cursor skips, the scrolling; the achievements and remap pages use it |
 | `port/ui/menu_text.c`, `menu_text.h` | the game's menu text drawn with the port font ("Menu text" below) |
 | `port/ui/subtitles.c`, `subtitles.h` | the subtitles' words per language and set, transcribed, and the faces' metrics ("Subtitles" below) |
@@ -276,6 +277,20 @@ grid lines up with the game's rows. The label is aligned left at `dispX`
 (or centred or right, `LtExtText.align`); `centerX` centres the box as
 for a texture row.
 
+**Glyph and rect rows.** Two kinds of port row draw no label.
+`lt_ext_AddGlyph(glyph, x, y, size)` adds a row that draws one of the
+game's button glyphs as the game draws it: `lt_ext_IsTextRow` is false for
+it, so `display_texture` takes its texture path (`tex_TransTexture` of the
+glyph's texture, then `gif_SpriteSensitiveOffset` with the row's texel
+rectangle and the colour, fade and key the game computes); the one change
+in `layout_texture.c` is that a port row that is not a text row transfers
+`lt_ext_GlyphTexNo(e)`. `lt_ext_AddRect(x, y, w, h, rgba)` adds a row that
+`lt_ext_DrawRow` draws as an untextured rectangle over its box (the half
+texel inset taken back), the left `lt_ext_SetFill` part of it, in `rgba`
+times the row's colour; no glow. Both get a `texFileNo` of their own
+(0x7000 up), which nothing looks up, so the fade-cancel check pairs none of
+them. `lt_ext_SetSize` changes a label's em (a prompt line set smaller).
+
 **Chained-row selection** (`display_texture`). A port
 row drawn from a layout with no cursor of its own (`curItem` < 0) takes
 its selection and dimming from the current layout's cursor (`LT_CUR_NO`:
@@ -383,7 +398,7 @@ rows right-aligned ending at x 344 and value rows from x 364:
 | --- | --- |
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Extras (opens its page; from the title only), Developer mode (value), Back; notes under Language and Developer mode. With the Extras row there are nine rows on a 17-line pitch from line 40 (the notes sit at 196); from the pause menu the row is masked (`defaultMask`), the eight left keep the 19-line pitch, and `layoutMain` relinks the rows' up and down items past it each tick, because `lt_property_visible` does not look at masks |
 | Extras | Music, Models, Credits, Back; a note under Credits while it is locked |
-| Music | the music gallery (docs/port/MUSIC.md): a scrolling list of 8 slots over the groups' headings (drawn at x 24, skipped by the cursor) and entries (x 40: the album's title or the file; column A at x 420, right-aligned: the in-game file), a status line at 184 (group, asset, Playing or Stopped) and a hint line at 204 |
+| Music | the music gallery (docs/port/MUSIC.md): a scrolling list of 8 slots from line 38, 16 apart, over the groups' headings (drawn at x 24, skipped by the cursor) and entries (x 40, 24 units: the asset's name; column A at x 440, right-aligned, 21: an ambience's stage), a status line at 168 (group, asset, Playing, Paused or Stopped), the progress bar at 188 (rect rows: rim, track, fill; the times beside it) and the transport at 200 (glyphs and words, "Button glyphs") |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, CRT filter (Off, Scanlines, Consumer TV, Trinitron, PVM: `[video] crt` and `crt_mode` in one row), CRT strength (0 to 100 % in tens), Video mode (changes only when Settings was opened from the title; from the pause menu its value reads "PAL 50 Hz (title only)" and Left and Right do nothing), Menu text, Back; 14 field lines apart from line 36 |
 | Audio | Volume, Music volume, Effects volume, Sound output, Output device (the name cut with "…" where it would not fit the value box at the 60 % shrink), Back |
 | Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
@@ -414,8 +429,8 @@ handler `ui_SettingsSetModelsHandler` registers: the model viewer
 (`port/game/model_viewer.c`, docs/port/EXTRAS.md "Models") registers
 `ico_mv_models_enter` on its first tick, which builds its two layouts on
 first use (the model list, a list page like the achievements', and the
-viewer's animation list with its hint and the headless rows) after the
-Settings pages, 38 properties and 2 layouts, and returns the list's.
+viewer's animation list, its name, animation and frame rows and the prompt lines) after the
+Settings pages, 53 properties and 2 layouts, and returns the list's.
 `extrasMusic` opens the music gallery's page (`UI_PAGE_MUSIC`, a list page
 over `kGalDef`; `gallery.h`, docs/port/MUSIC.md); leaving it puts the cursor
 back on the Music row. The locked style is `rowLocked` (Credits while
@@ -425,7 +440,7 @@ back), the value shows `UI_STR_ACH_LOCKED`, and the note
 `UI_STR_EXTRAS_LOCKED_NOTE` unmasks while the cursor is on the row. `build()`
 prints the layout extension's use under developer mode (`lt_ext_PropCount`
 of `LT_EXT_MAX_PROPERTIES` 256, `lt_ext_LayoutCount` of 32); with Extras it is
-154 properties and 13 layouts, and `settings_test` asserts both are under the
+171 properties and 13 layouts, and `settings_test` asserts both are under the
 limits.
 
 **Lists** (`ui_list.h`). A list page is a window of `UI_LIST_SLOTS` (8) slots
@@ -510,6 +525,48 @@ after 250 ticks (10 s at 25 ticks a second). While it waits, and for 3
 ticks after, the proc sets `lt_item_select_disable` so the press neither
 moves nor confirms. docs/port/INPUT.md, "Remap screen", has the input
 side.
+
+## Button glyphs
+
+The game draws its button prompts with sprites: `text/buttons.tm2` (COMMON.DF,
+64 x 64) holds the four face buttons in 32 x 30 cells, Triangle (0, 0),
+Square (32, 0), Circle (0, 30), Cross (32, 30); the key config screen draws
+its L1 / R1 / L2 / R2 labels from `menu_PAL_02` (40 x 15 at v 240: R1 u 340,
+R2 380, L1 420, L2 460, the same in the five languages), and the Options
+values sit between two arrows from `menu_PAL_01` (20 x 20 at u 490, v 130
+and 150). The sheets were decoded with `tools/tm2_sheets.py` and the rows
+read from the boot ELF's `texProperty`: the save prompts place Cross (row
+182, x 180, y 204) before OK (181, x 212) and Triangle (184, x 364) before
+Back (183, x 396), each glyph a 32-pixel-wide sprite 30 y units high
+(`dispH` 30) beside 27-unit words, its middle on the words' capitals; the
+key config screen's columns use rows 342 to 345 (the four faces) and 346 to
+349 (R1, R2, L2, L1).
+
+The port uses the same sprites. `layout_ext.h` `LtExtGlyph` names Cross,
+Circle, Square, Triangle, L1, R1, Left and Right, each with the PAL row it
+is drawn from (182, 344, 343, 184, 349, 346, 301, 302) and its rectangle; a
+glyph row takes that row's `texNo`, which every stage's texture set-up fills
+(every stage's layout range covers the menus), so the glyph is the loaded
+sheet in the loaded language. If the row's rectangle is not the PAL one
+(other tables) the glyph draws nothing. Its size follows the words beside
+it: at em `size` it is the game's sprite times size / 27.
+
+`ui_hint.h` builds a line of prompts from items (a glyph, an optional
+second glyph for a pair such as L1 R1, none for a word alone such as "Left
+stick: turn", and a string id): each glyph a glyph row, each word a port row
+(so the words are the Settings rows' text: the light letters with the rim,
+deferred at the output's resolution in Enhanced, quads under classic menu
+text), 5 pixels from glyph to word and 24 between items at the words' size,
+the line centred across the screen and its glyphs' middles on the words'
+capitals. `ui_HintLayout` measures the words in the current language each
+time it runs, and a line wider than 600 pixels is set smaller to fit, glyphs
+and words together, down to 60 %. The lines in use: the music gallery's
+transport (L1 Previous, Cross Play / Pause, Square Stop, R1 Next, Left /
+Right Section, Triangle Back; MUSIC.md) and the model viewer's (the model
+list's Cross View, Triangle Back or Title screen; the viewer's "Left stick:
+turn", "Right stick: zoom" and Cross Play, Square Loop, L1 R1 Animation,
+Triangle Models; EXTRAS.md). The words are `UI_STR_HINT_*`, `UI_STR_MV_HINT_*`
+and the existing Back, Loop, Animation and Models, in the five languages.
 
 ## Menu text
 
@@ -907,18 +964,19 @@ R3, "D-pad Up", "L-stick Left"), "Uncapped" and "fps" are
 `UI_STR_VAL_UNCAPPED` and `UI_STR_FPS_UNIT`. The music gallery's group
 names, hint line, Playing and Stopped and its "tables not loaded" status are
 `UI_STR_GAL_*`; its entries' labels are the game's own names (files,
-`seDef` names) and the album's titles, in every language. The model viewer's
+`seDef` names), in every language. The model viewer's
 (docs/port/EXTRAS.md, "Models") are `UI_STR_MV_*`: its words (Animation,
 Loop, Frame, No animations), its hint lines (the list's, from the title and
 from a model, and the viewer's, with and without animations) and the 23
 model names: the game's own where its text names them (Ico, Yorda, the
 Queen), plain descriptive words otherwise, in the five languages.
 
-**The model viewer's overlay** (`model_overlay.c`, `ui_ModelOverlayDraw`):
-the model's name (26 y units, warm white), the animation and the frame (19,
-grey) on a dark translucent panel (as the popup's) 16 units in from the top
-left of the 4:3 picture, sized to the text; drawn on the presentation
-overlay through `ui_host.c` (`ui_HostSetViewerOverlay`, under the popups).
+**The model viewer's text** (port/game/model_viewer.c): the model's name
+(24 units, a list label's size), the animation and the frame (19, a note's)
+at the top left, and the prompts, are rows of the viewer's layout drawn as
+every Settings row is. Until this package the window build drew the name,
+animation and frame on the presentation overlay with a panel of its own, in
+other colours and without the rim; that path (`model_overlay.c`) is gone.
 
 `ui_StringsForEach(fn, user)` calls `fn(lang, utf8, user)` for every
 non-empty entry of every language's table and then for every subtitle of
@@ -1000,11 +1058,9 @@ one.
   glyphs five rectangle updates and no whole-page update, known glyphs
   none); a popup on the overlay of a
   1920 x 1080 present (at the picture's right, text in the panel, nothing
-  changed outside it), and the model viewer's overlay panel on a 1920 x
-  1080 Enhanced 16:9 present (at the 4:3 picture's top left, text in the
-  panel, nothing changed outside it). It writes `ui_test_scene.png`,
-  `ui_test_scene4x.png`, `ui_test_scene4x_plain.png`, `ui_test_popup.png`
-  and `ui_test_model_overlay.png` beside itself.
+  changed outside it). It writes `ui_test_scene.png`,
+  `ui_test_scene4x.png`, `ui_test_scene4x_plain.png` and `ui_test_popup.png`
+  beside itself.
 - `model_viewer` (ctest, CPU; port/game/test): the model viewer's table
   against its motion blocks (ordered, apart, inside the motion-kind and
   motion-orient tables; each model's motions inside one block with its
@@ -1040,7 +1096,12 @@ one.
   toggle switches the path); package TXT: the save screen's slot numbers
   (used black, empty grey) and play time over fake rows at the PAL places,
   the same two ways (`settings_save_preview_1080.png`,
-  `settings_save_preview_1080_classic.png`).
+  `settings_save_preview_1080_classic.png`); the music gallery with a
+  stream playing (its bar and transport, `settings_music_1080.png`) and the
+  model viewer's rows and prompts as model_viewer.c lays them out
+  (`settings_viewer_1080.png`), the same two ways. The button glyphs there
+  are drawn stand-ins of the real sheets (no disc data in the test), bound
+  through a TEX0 resolver at the glyphs' rectangles.
 - `font_edge_test` (ctest `font_edge`, package DEF, exit 77 without a
   Vulkan device): a deferred "H" and an overlay "H" presented at Enhanced
   1920 x 1080 and 3840 x 2160: on rows through the stems every edge has at

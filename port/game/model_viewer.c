@@ -42,7 +42,7 @@
  *               distance through SetWSMatrix, the camera left in mode 0,
  *               which does not touch the view).  Its animations are a list
  *               at the right; its name, the animation and the frame are on
- *               the presentation overlay (layout rows without one)
+ *               rows of the viewer's layout, styled as the Settings rows
  *   MV_LIST     Triangle: the model list on the host stage.  Cross loads
  *               the next model's stage (the same stage is loaded again, so
  *               each model starts from a fresh stage); Triangle goes back
@@ -74,17 +74,16 @@
 
 #include "font.h"
 #include "layout_ext.h"
-#include "model_overlay.h"
 #include "model_viewer.h"
 #include "options.h"
 #include "settings.h"
 #include "strings.h"
+#include "ui_hint.h"
 #include "ui_list.h"
 
 #ifdef ICO_RD
 #include "GifHost.h"
 #include "rd.h"
-#include "ui_host.h"
 #endif
 
 /* --- the game's side ------------------------------------------------------- */
@@ -191,9 +190,11 @@ static const char *modelNameEn(int row)
 /* --- the layouts ---------------------------------------------------------- */
 
 static int s_listLayout = -1, s_viewLayout = -1;
-static int s_viewHint = -1;
-static int s_rowName = -1, s_rowAnim = -1, s_rowFrame = -1; /* without an overlay */
+static int s_rowName = -1, s_rowAnim = -1, s_rowFrame = -1;
 static UiList s_list, s_animList;
+/* the prompts (ui_hint.h): the model list's, and the viewer's two lines
+   (the sticks; the buttons) */
+static UiHint s_listHint, s_viewSticks, s_viewKeys;
 
 static int listProc(int first, int item);
 static int viewProc(int first, int item);
@@ -243,8 +244,10 @@ static void listDecorate(void *user, int d)
 {
     (void)user;
     (void)d;
-    lt_ext_SetStr(s_list.status,
-                  s_state == MV_LIST ? UI_STR_MV_LIST_HINT_STAGE : UI_STR_MV_LIST_HINT);
+    /* Triangle: back to Extras from the title, to the title from a model */
+    ui_HintSetStr(&s_listHint, UI_HINT_MV_LIST_BACK,
+                  s_state == MV_LIST ? UI_STR_MV_HINT_TITLE : UI_STR_BACK);
+    ui_HintLayout(&s_listHint);
 }
 
 static void mvStart(int row);
@@ -321,6 +324,8 @@ static void build(void)
     st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
     st.statusY = 196;
     ui_ListBuild(&s_list, &kListDef, NULL, &st);
+    /* the status line stays empty: the prompts take its place */
+    ui_HintBuild(&s_listHint, 196, 19.0f, ui_hint_mv_list, UI_HINT_MV_LIST_COUNT);
     last = nextRow() - 1;
     s_listLayout = addLayout(first, last + 1, 0.6f, listProc, s_list.label[0]);
 
@@ -332,14 +337,15 @@ static void build(void)
     st.pitch = 15;
     st.label = (UiListCol){404, 216, 18.0f, UI_ALIGN_LEFT};
     st.colA = (UiListCol){620, 4, 18.0f, UI_ALIGN_RIGHT};
-    st.statusY = 186;
+    st.statusY = 196;
     ui_ListBuild(&s_animList, &kAnimDef, NULL, &st);
-    s_viewHint = s_animList.status;
-    /* the name, the animation and the frame as rows, where no presentation
-       overlay draws them (the headless build) */
-    s_rowName = ui_SettingsAddRow(24, 10, 360, 30, 0, -1, 0, " ", 26.0f, UI_ALIGN_LEFT);
-    s_rowAnim = ui_SettingsAddRow(24, 26, 360, 26, 0, -1, 0, " ", 20.0f, UI_ALIGN_LEFT);
-    s_rowFrame = ui_SettingsAddRow(24, 39, 360, 26, 0, -1, 0, " ", 20.0f, UI_ALIGN_LEFT);
+    ui_HintBuild(&s_viewSticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
+    ui_HintBuild(&s_viewKeys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
+    /* the name, the animation and the frame at the top left, as Settings
+       rows: a list label's size, then a note's */
+    s_rowName = ui_SettingsAddRow(24, 10, 360, 30, 0, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
+    s_rowAnim = ui_SettingsAddRow(24, 26, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
+    s_rowFrame = ui_SettingsAddRow(24, 38, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
     last = nextRow() - 1;
     s_viewLayout = addLayout(first, last + 1, 0.0f, viewProc, s_animList.label[0]);
     fprintf(stderr, "model_viewer: layouts %d and %d (%d of %d properties in use)\n", s_listLayout,
@@ -388,16 +394,15 @@ static void refreshView(void)
     if (s_animCount == 0) {
         lt_ext_SetStr(s_animList.label[0], UI_STR_MV_NO_ANIMATIONS);
     }
-    lt_ext_SetStr(s_viewHint, s_animCount > 0 ? UI_STR_MV_VIEW_HINT : UI_STR_MV_VIEW_HINT_STATIC);
-#ifdef ICO_RD
-    lt_ext_SetText(s_rowName, "");
-    lt_ext_SetText(s_rowAnim, "");
-    lt_ext_SetText(s_rowFrame, "");
-#else
+    /* without animations only Triangle is left */
+    for (int i = UI_HINT_MV_PLAY; i < UI_HINT_MV_BACK; i++) {
+        ui_HintShow(&s_viewKeys, i, s_animCount > 0);
+    }
+    ui_HintLayout(&s_viewSticks);
+    ui_HintLayout(&s_viewKeys);
     lt_ext_SetText(s_rowName, s_ovName);
     lt_ext_SetText(s_rowAnim, s_ovAnim);
     lt_ext_SetText(s_rowFrame, s_ovFrame);
-#endif
 }
 
 static int viewProc(int first, int item)
@@ -420,19 +425,6 @@ int ico_mv_models_enter(void)
     }
     return s_listLayout;
 }
-
-/* --- the overlay ----------------------------------------------------------- */
-
-#ifdef ICO_RD
-/* the presentation overlay (ui_host.c): the name, the animation and the
-   frame at the top left, on the output (port/ui/model_overlay.c) */
-static void mvOverlay(const struct RdOverlayCtx *ctx)
-{
-    if (s_state == MV_VIEW) {
-        ui_ModelOverlayDraw(ctx, s_ovName, s_ovAnim, s_ovFrame);
-    }
-}
-#endif
 
 /* --- the viewer ------------------------------------------------------------ */
 
@@ -895,9 +887,6 @@ void ico_mv_tick(void)
     if (!hooked) {
         hooked = 1;
         ui_SettingsSetModelsHandler(ico_mv_models_enter);
-#ifdef ICO_RD
-        ui_HostSetViewerOverlay(mvOverlay);
-#endif
     }
     unsigned int now = ico_host_main_ticks();
     switch (s_state) {

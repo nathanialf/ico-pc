@@ -10,10 +10,9 @@ time from the game's tables, and the sounds come from the disc.
 | --- | --- |
 | `port/ui/gallery.h`, `gallery.c` | the list (groups, items, texts), the page's calls into the engine, the `ICO_GALLERY_PLAY` script |
 | `port/ui/gallery_play.c` | the engine: the game's stream and effect calls, the bank loads and the title's restore (`ico_pc` only; installed by `host_loop.c`) |
-| `port/ui/settings.c` | the page (`UI_PAGE_MUSIC`, a list page, `kGalDef`) and the Extras hook `extrasMusic` |
-| `port/audio/track_names.h`, `track_names.c` | the album's titles by stream number, with their provenance |
+| `port/ui/settings.c` | the page (`UI_PAGE_MUSIC`, a list page, `kGalDef`), its progress bar and transport, and the Extras hook `extrasMusic` |
+| `port/ui/ui_hint.h`, `ui_hint.c` | the transport line: the game's button glyphs beside their words (UI.md, "Button glyphs") |
 | `port/data/df_pack.h`, `df_pack.c` | one member of a DATA.DF stage pack read through the VFS |
-| `tools/match_tracks.py` | the matching behind `track_names.c` |
 | `ico2/fumi/sound/s_init.c` | `soundSeReqStop`, a port hook: stops every slot playing from a bank |
 
 ## The list
@@ -25,8 +24,8 @@ Built once, the first time the page opens, from `adpcmFile`, `seFile`,
 
 | group | entries | what |
 | --- | --- | --- |
-| Soundtrack | 52 | the streams of `adpcmFile` 1 to 100 that are music: `battle.int`, every `event/` stream (the scored scenes, the ending), the title theme (56, `event2/50.int`) and any stream the album names (55, `event2/00.int`) |
-| Scene sounds | 44 | the other `event2/` streams: the machinery's stingers (the scripts' handles name them: gondolas, idols' doors, lifts, gates, bridges, chains, lightning) |
+| Soundtrack | 51 | the streams of `adpcmFile` 1 to 100 of the score: `battle.int`, every `event/` stream (the scored scenes, the ending) and the title theme (56, `event2/50.int`, op.c's `titleAdpcm`) |
+| Scene sounds | 45 | the other `event2/` streams: the machinery's stingers (the scripts' handles name them: gondolas, idols' doors, lifts, gates, bridges, chains, lightning) |
 | Ambience | 67 | the stage environment sounds (`seEnv`) of stages 1 to 39, one entry per sound, from the bank that stage plays it from |
 | Voice | 184 | Yorda's hint voices (streams 101 to 104) and the com_v bank's effects |
 | Sound effects | 3022 | one headed group per bank (68 banks, deduplicated by their `.hd` file; the common banks and the banks the game's stages and cutscenes load, stages 1 to 56), the effects by their `seDef` names |
@@ -45,17 +44,64 @@ music is streamed, so the gallery has no sequence group, and
 `ICO_GALLERY_PLAY=seq:B` logs `gallery: failed seq B: the disc has no
 sequenced music`.
 
-**Columns.** The label is the album's title when `track_names.c` has the
-stream, else the file (`event/39_7.int`, without `sound/ICO_ADPCM/`), or the
-effect's `seDef` name. Column A is the file when the label is the album's,
-and the stage's key for an ambience. The status line is the group, the asset
-(the stream's file, or the bank's file with the effect's program and tone)
-and Playing or Stopped; the hint line under it names the buttons. Headings
-are drawn 16 units left of the entries.
+The split is the disc's folders: `event2/` holds the stingers, `event/` and
+`battle.int` the score, and the title theme is the title's music by op.c's
+use of it. Nothing else decides it: an earlier album-title table also moved
+stream 55 (`event2/00.int`, st06a's `toge`) to the soundtrack; with the
+table gone it is a scene sound.
 
-**Buttons.** Cross plays the entry under the cursor (stopping what plays),
-Square stops, Left and Right jump to the previous or next group (its heading
-at the top of the window), Triangle or Circle and Back leave.
+**Names.** Every entry is named by its asset: a stream by its file under
+`sound/ICO_ADPCM/` without the `.int` (`event/39_8`, `event2/hint1_1`), an
+effect by its `seDef` name. Column A is empty but for an ambience, which
+shows its stage's key. Headings are drawn 16 units left of the entries.
+
+**The page.** The list (8 slots from field line 38, 16 apart, at the list
+pages' sizes: 24 for the entries, 21 for the column), then the status line
+(168: the group, the asset (the stream's file, or the bank's file with the
+effect's program and tone) and Playing, Paused or Stopped), the progress
+bar and the transport. Every word is a port row drawn like the Settings
+rows (the light letters with the dark rim, deferred at the output's
+resolution in Enhanced, quads under classic menu text).
+
+**The progress bar** (188, x 150 to 490) is three rect rows of the layout
+extension (UI.md, "Layout extension"): a dark rim, the track, and the fill
+in the letters' colour, with the elapsed time at its left and the total at
+its right (m:ss). It shows the item sounding or paused, whatever the cursor
+is on, and is empty (0:00, 0:00) when nothing sounds. A stream's position is
+what its record has consumed: `AdpcmStream.dataSize - remain`
+(`adpcmTickProc` moves `remain` on by the IOP read offset's progress,
+`stream.c`'s `read_off`, which the driver moves on by half the 16 KB SPU
+ring per channel per fill), less 1.5 halves of the ring, which the SPU holds
+ahead of the voice on average, so it is within about a sixth of a second.
+Seconds are bytes / channels / 16 * 28 / the stream's rate (`adpcmFile`
+`pitch`, Hz; the total from `sectors * 2048`). An effect's total is its
+sample: the voices that start sounding after the request inside the bank's
+SPU buffer, each read in sound RAM from its start address (SSA) to the
+16-byte block with the end flag, at the voice's pitch; its elapsed time is
+counted from the request on the SPU2's clock. A sample whose end block
+loops repeats, and the bar then starts again each loop length (the loop
+restarts at its loop point, not its start, so this is the sample's length,
+not the loop's). Until the effect's voice is found the total shows `-:--`.
+
+**Seeking** is not offered. Restarting a stream at an offset is not a
+fill from a chosen IOP offset: the background reader has already filled the
+IOP ring ahead from the file, so a seek would need the ring flushed, the
+reader re-seeked (`iosCdvdBackGroundMgrSeek`) and the SPU ring refilled
+before the voices key on again, which is the whole open path; the bar is a
+display only, and Left and Right keep jumping between the groups.
+
+**Buttons** (the transport, each the game's own glyph beside its word):
+L1 previous, Cross play or pause, Square stop, R1 next, Left / Right
+section, Triangle back. Cross on the entry sounding pauses it (the word
+reads Pause while the cursor is on it), on the entry paused resumes it, on
+any other entry plays it (stopping what plays). A stream pauses as the
+pause menu pauses the game's streams, `adpcmPauseRequest(1)` (every stream
+voice's pitch 0, the reader's accounting held); an effect cannot pause, so
+Cross stops it and holds it: the status reads Paused and the next Cross
+plays it again from its start. L1 and R1 move the cursor to the previous or
+next entry that plays (past the headings and Back, wrapping) and play it.
+Square stops, Left and Right jump to the previous or next group (its
+heading at the top of the window), Triangle or Circle and Back leave.
 
 ## Playback
 
@@ -108,92 +154,6 @@ distance or their environment's procs. A stream restarts from the
 beginning; the title theme restarts from its start on leaving. Opening the
 gallery from the pause menu is not possible (Extras is a title-only page).
 
-## Names
-
-`track_names.c` maps a stream (its `adpcmFile` row) to the title of the
-album track it is: "ICO - Perfect Music Files" (2021), the user's FLAC copy
-(41 tracks at 24-bit 96 kHz; tracks 40 and 41 are re-recordings, not in the
-game). Titles keep the album's capitalisation. The file holds only stream
-numbers, the in-game file names and the titles, with the evidence per row;
-nothing of the disc or the album. 30 streams have a title, 24 of the 39
-album tracks are named; the rest keep their file names. The header of
-`track_names.c` lists the evidence, the close calls and the unmatched
-candidates.
-
-**Method** (`tools/match_tracks.py`). A stream's length is `sectors * 2048 /
-channels / 16 * 28 / pitch` seconds (16-byte SPU ADPCM blocks of 28 samples;
-the pitch word is Hz, `stream.c` `st_adpcm_pitch` turns it into
-`hz * 4096 / 48000`); an album track's is its FLAC STREAMINFO samples over
-rate. Lengths alone do not decide: many album tracks are longer edits or
-open with something else. With `--features` (numpy and soundfile, from
-wheels in a scratch venv) every stream on the disc is decoded from its
-`.int` file and every album track read, both become 12-bin chroma and log
-energy per 0.1 s, the shorter slides over the longer, and the score is the
-mean chroma cosine where the shorter one is loud. A stream takes the best
-track at a score of 0.85, or 0.5 with a margin of 0.2 over the runner-up and
-a z-score of 2.8 over all the tracks. Close calls were checked by playing
-the stream through the gallery in the headless game
-(`ICO_GALLERY_PLAY=stream:N`, `audio_dump=`) and scoring the dump's first
-7.5 s the same way: 28 (reflector I over reflector III), 13 (impression over
-its reprise) and 46 (collapse, below the disc pass's bar, 0.91 in the
-render), which is the one row taken from the render.
-
-| stream | file | album track | score | margin | offset in the track |
-| --- | --- | --- | --- | --- | --- |
-| 1 | battle.int | darkness | 0.99 | 0.52 | -3.9 s |
-| 6 | event/01.int | prologue | 0.92 | 0.45 | +42.6 s |
-| 10 | event/02_1d.int | cave | 0.87 | 0.52 | -0.9 s |
-| 11 | event/02_2.int | coffin | 0.71 | 0.30 | +24.6 s |
-| 12 | event/03.int | déjà vu | 0.66 | 0.26 | +0.4 s |
-| 13 | event/04.int | impression | 0.90 (render 0.91) | 0.07 (render 0.07) | +0.3 s |
-| 14 | event/05.int | cage | 0.84 | 0.51 | +0.2 s |
-| 15 | event/06.int | Who are you | 0.86 | 0.47 | +21.6 s |
-| 16 | event/07.int | hold hands | 0.77 | 0.28 | +0.4 s |
-| 18 | event/09.int | open II | 0.80 | 0.39 | +0.3 s |
-| 19 | event/09_2.int | open II | 0.66 | 0.27 | +0.3 s |
-| 20 | event/10.int | darkness | 0.97 | 0.25 | +0.4 s |
-| 21 | event/11.int | stairway I | 0.70 | 0.34 | +0.3 s |
-| 22 | event/12.int | heal | 0.96 | 0.53 | +0.2 s |
-| 23 | event/13.int | Queen (reprise) | 0.77 | 0.25 | +36.3 s |
-| 28 | event/18a.int | reflector I | 0.87 (render 0.90) | 0.10 (render 0.22) | -0.3 s |
-| 31 | event/24_1.int | bridge I | 0.70 | 0.28 | -0.3 s |
-| 34 | event/26.int | impression (reprise) | 0.97 | 0.07 | +0.3 s |
-| 35 | event/27.int | reunion | 0.81 | 0.31 | +0.5 s |
-| 36 | event/29.int | Shadow | 0.73 | 0.27 | +0.3 s |
-| 37 | event/29a.int | Shadow | 0.95 | 0.54 | +6.3 s |
-| 40 | event/32_2.int | Queen (reprise) | 0.81 | 0.21 | -0.3 s |
-| 41 | event/33.int | Entity | 0.98 | 0.49 | +0.4 s |
-| 46 | event/39_7.int | collapse | 0.85 (render 0.91) | 0.13 (render 0.15) | 0.0 s |
-| 47 | event/39_8.int | ICO -You were there- | 0.99 | 0.46 | +0.4 s |
-| 49 | event/39_10.int | Castle in the Mist | 0.95 | 0.28 | +0.4 s |
-| 52 | event/37.int | continue | 0.97 | 0.48 | +36.3 s |
-| 53 | event/42.int | beginning | 0.68 | 0.23 | +0.3 s |
-| 54 | event/43.int | reflector II | 0.83 | 0.48 | +0.4 s |
-| 55 | event2/00.int | stairway I | 0.95 | 0.52 | +0.4 s |
-
-Unmatched, with the best candidate: 9 sword (0.73, margin 0.17), 30
-reflector IV (0.56), 32 bridge II (0.52), 38 stairway II (0.64, z 2.7), 51
-cave (0.64), 56 the title theme (open III, 0.55); every other stream scores
-below 0.6. Album tracks no stream matched: sword, open I, The Gate, Queen,
-open III, open IV, open V, open VI, reflector III, reflector IV, bridge II,
-bridge III, falling down (nonomori) and stairway II. They may be edits the
-album made from several cues, or sounds the game plays from its effect
-banks; the gallery does not try to name effects.
-
-**Regenerating.** With the base ELF, the disc image and the album folder:
-
-```
-python3 -m venv /tmp/mt && /tmp/mt/bin/pip install numpy soundfile
-/tmp/mt/bin/python tools/match_tracks.py --elf baserom/pal/baseelf.elf \
-    --iso baserom/Ico_PAL.iso --album "<album folder>" --features --emit-c
-```
-
-prints every stream's verdict and the rows for `track_names.c` (the decode
-is pure Python and takes about four minutes). Without `--features` it lists
-the lengths only (standard library). A close call is rendered with the
-headless build: an `ico-pc.ini` with `audio_dump=PATH`, the pad script of
-`port/ui/test/gallery_headless.py` and `ICO_GALLERY_PLAY=stream:N`.
-
 ## Testing
 
 `ICO_GALLERY_PLAY` (environment, developer only; the player never needs it)
@@ -201,7 +161,10 @@ is a comma-separated list of `kind:value` entries the page plays when it
 opens, one every 200 Main ticks (8 s) from 50 ticks after it opens:
 `stream:N` (an `adpcmFile` row), `env:I` (the ambience of `seEnv` row I),
 `se:D` (the `seDef` row D, in the Voice group, else the first bank that has
-it), `seq:B` (logs the failure above). Each play logs `gallery: playing
+it), `pause:0` (Cross on the entry sounding or paused: `gallery: paused`,
+`gallery: resumed` or, for an effect, `gallery: stopped ... (held)`),
+`seq:B` (logs the failure above). While an entry sounds the page logs where
+it is every 50 Main ticks: `gallery: stream 47 at 7.6 s of 265.6 s`. Each play logs `gallery: playing
 <group> <key> (<label>)`, then the engine's line: `gallery: stream N (...)
 opened on SPU voices A and B at audio frame F` or `gallery: effect D from
 bank B (program P, tone T) keyed at audio frame F` (F is `spu2_time()`, the
@@ -210,9 +173,12 @@ WAV dump's frame). After the last, `gallery: script done`. A failure is a
 
 - `gallery` (CPU; the base ELF, and the disc image when present; 77 without
   the ELF): the list from the real tables: keys in range, groups in order
-  with one heading each, no key twice in a group, every name-table row on the
-  list with its title, every label, column, asset and gallery string in the
-  five languages drawn by the font (`ui_FontHasGlyph`), Left and Right; with
+  with one heading each, no key twice in a group, every stream named by its
+  file without the folder and `.int` with no column and in the group its
+  folder gives (47 is `event/39_8`, the title theme in the soundtrack, 55 a
+  scene sound), L1 and R1 (`gallery_Step`: over a heading, wrapping at the
+  ends), every label, column, asset and gallery string in the five
+  languages drawn by the font (`ui_FontHasGlyph`), Left and Right; with
   the disc, the streams not on it left out and every listed bank found in a
   pack.
 - `gallery_headless` (the headless build and the disc image; RUN_SERIAL,
@@ -226,4 +192,10 @@ WAV dump's frame). After the last, `gallery: script done`. A failure is a
   restore, and no `gallery: failed`.
 - `settings` and `settings_render`: the Music row opens the page and
   Triangle comes back to it; the page over a fake engine (rows, the heading
-  skip, Cross, Square, Left, Right, leaving); `settings_music_4x.png`.
+  skip, the transport's words each after its glyph row, left to right, the
+  glyph centred on its word's capitals; the bar empty and 0:00 with nothing
+  playing, at 42.4 of 265.6 s with 0:42 and 4:25 while a stream plays;
+  Cross play, pause (Paused, the bar kept) and resume, R1 and L1, Square,
+  Left, Right, leaving); `settings_music_4x.png`, and
+  `settings_music_1080.png` / `_classic.png` (a stream playing, Enhanced
+  1920 x 1080).

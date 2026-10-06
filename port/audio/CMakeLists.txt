@@ -7,8 +7,7 @@ add_library(ico_audio STATIC
     spu2_sd.c
     spu2_tables.c
     volume.c
-    mix_gain.c
-    track_names.c)
+    mix_gain.c)
 target_include_directories(ico_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(ico_audio PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 

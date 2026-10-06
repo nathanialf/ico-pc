@@ -10,8 +10,10 @@
  *   - the groups come in order, each with one heading (one per bank for the
  *     sound effects), and Back last;
  *   - no key twice in a group (in a bank's section for the effects);
- *   - every row of the name table (port/audio/track_names.c) is a list item
- *     shown with its title;
+ *   - every stream is named by its asset (its file under sound/ICO_ADPCM/
+ *     without the .int, event/39_8), with no column; the score (battle.int,
+ *     event/, the title theme) is the soundtrack, event2/ the scene sounds;
+ *   - L1 and R1 step to the previous and next entry that plays;
  *   - every label, column, heading and gallery string, in the five
  *     languages, has a glyph for every character (ui_FontHasGlyph);
  *   - Left and Right jump between the groups.
@@ -28,7 +30,6 @@
 #include "gallery.h"
 #include "strings.h"
 #include "tables.h"
-#include "track_names.h"
 #include "vfs.h"
 
 extern SeDef seDef[];
@@ -211,22 +212,63 @@ int main(int argc, char **argv)
         items[GAL_G_SOUNDTRACK], items[GAL_G_SCENE], items[GAL_G_AMBIENCE], items[GAL_G_VOICE],
         items[GAL_G_SE], headings[GAL_G_SE]);
 
-    /* the name table */
-    for (int r = 0; r < ico_track_name_count; r++) {
-        const IcoTrackName *tn = &ico_track_names[r];
-        int i = gallery_Find(-1, GAL_K_STREAM, tn->key, -1);
-        CHECK(tn->kind == ICO_TRACK_STREAM && i >= 0, "name row %d (stream %d) is on the list", r,
-              tn->key);
-        if (i >= 0) {
-            CHECK(strcmp(gallery_Label(i, buf, sizeof(buf)), tn->title) == 0 &&
-                      gallery_Item(i)->group == GAL_G_SOUNDTRACK,
-                  "stream %d shows \"%s\" in the soundtrack", tn->key, tn->title);
-            CHECK(strstr(adpcmFile[tn->key].path, tn->asset) != NULL,
-                  "row %d's asset %s is stream %d's", r, tn->asset, tn->key);
-            CHECK(strcmp(gallery_ColA(i, buf2, sizeof(buf2)), tn->asset) == 0,
-                  "stream %d's column shows the file", tn->key);
+    /* the names: every stream by its asset, with no column, in the group
+       its folder gives (the title theme, event2/50.int, with the score) */
+    int streams = 0;
+    for (int i = 0; i < n; i++) {
+        const GalleryItem *it = gallery_Item(i);
+        if (it->kind != GAL_K_STREAM) {
+            continue;
         }
-        CHECK(glyphMissing(tn->title) == 0, "title \"%s\" has its glyphs", tn->title);
+        const char *path = adpcmFile[it->key].path;
+        char want[64];
+        snprintf(want, sizeof(want), "%s", path + strlen("sound/ICO_ADPCM/"));
+        char *dot = strrchr(want, '.');
+        CHECK(strncmp(path, "sound/ICO_ADPCM/", 16) == 0 && dot && strcmp(dot, ".int") == 0,
+              "stream %d's file %s", it->key, path);
+        if (dot) {
+            *dot = '\0';
+        }
+        CHECK(strcmp(gallery_Label(i, buf, sizeof(buf)), want) == 0,
+              "stream %d is named \"%s\" (\"%s\")", it->key, want, buf);
+        CHECK(gallery_ColA(i, buf2, sizeof(buf2))[0] == '\0', "stream %d has no column", it->key);
+        if (it->key <= 100) {
+            int scene = strstr(path, "/event2/") != NULL && it->key != 56;
+            CHECK(it->group == (scene ? GAL_G_SCENE : GAL_G_SOUNDTRACK),
+                  "stream %d (%s) in group %d", it->key, path, it->group);
+        }
+        streams++;
+    }
+    {
+        int i47 = gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 47, -1);
+        CHECK(i47 >= 0 && strcmp(gallery_Label(i47, buf, sizeof(buf)), "event/39_8") == 0,
+              "stream 47 is event/39_8");
+        CHECK(gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 56, -1) >= 0,
+              "the title theme in the soundtrack");
+        CHECK(gallery_Find(GAL_G_SCENE, GAL_K_STREAM, 55, -1) >= 0,
+              "event2/00 in the scene sounds");
+    }
+    printf("     %d streams named by their files\n", streams);
+
+    /* L1 and R1: the previous and next entry that plays */
+    {
+        int f = gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 1, -1);
+        int lastSt = -1;
+        for (int i = 0; i < n; i++) {
+            if (gallery_Item(i)->group == GAL_G_SOUNDTRACK &&
+                gallery_Item(i)->kind == GAL_K_STREAM) {
+                lastSt = i;
+            }
+        }
+        int nx = gallery_Step(lastSt, 1);
+        CHECK(nx >= 0 && gallery_Item(nx)->group == GAL_G_SCENE &&
+                  gallery_Item(nx)->kind == GAL_K_STREAM,
+              "R1 from the last soundtrack entry: the first scene sound (%d)", nx);
+        CHECK(gallery_Step(nx, -1) == lastSt, "L1 back over the heading");
+        int pv = gallery_Step(f, -1);
+        CHECK(pv >= 0 && gallery_Item(pv)->kind == GAL_K_SE && pv == n - 2,
+              "L1 from the first entry wraps to the last effect (%d of %d)", pv, n);
+        CHECK(gallery_Step(pv, 1) == f, "R1 from the last effect wraps to the first entry");
     }
 
     /* every text the page shows */
@@ -240,7 +282,7 @@ int main(int argc, char **argv)
             cp = glyphMissing(gallery_Asset(i, buf, sizeof(buf)));
             CHECK(cp == 0, "item %d asset: U+%04X", i, cp);
         }
-        for (int s = UI_STR_GAL_SOUNDTRACK; s <= UI_STR_GAL_EMPTY; s++) {
+        for (int s = UI_STR_GAL_SOUNDTRACK; s <= UI_STR_HINT_SECTION; s++) {
             const char *txt = ui_StrIn((UiLang)l, (UiStrId)s);
             CHECK(txt[0] != '\0' && glyphMissing(txt) == 0, "string %d in language %d: \"%s\"", s,
                   l, txt);

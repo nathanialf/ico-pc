@@ -7,12 +7,14 @@
  * engines.
  *
  * The list (gallery.c, no game code: the tables come in a GalleryTables):
- *   Soundtrack     the streams (adpcmFile 1..100) that are music: every
- *                  event/ stream (the scored scenes and battles), the title
- *                  theme and any stream the album names (track_names.c);
- *                  the album's title where it has one
+ *   Soundtrack     the streams (adpcmFile 1..100) of the score: battle.int,
+ *                  every event/ stream (the scored scenes and battles) and
+ *                  the title theme (event2/50, op.c's titleAdpcm)
  *   Scene sounds   the other streams: the event2/ machinery stingers
  *                  (gondolas, gates, idols, lifts)
+ * Every entry is named by its asset: a stream by its file under
+ * sound/ICO_ADPCM/ without the .int (event/39_8), an effect by its seDef
+ * name.
  *   Ambience       the stage sound environments (seEnv), one entry per
  *                  sound, from the stages of the game (stageData 1..39)
  *   Voice          Yorda's hint voices (streams 101..104) and the com_v bank
@@ -98,8 +100,15 @@ typedef struct GalleryEngine {
     void (*stop)(void);
     /* once a Main tick while the page is up */
     void (*tick)(void);
-    /* the item now sounding (the one last played, while it sounds), NULL */
+    /* the item now sounding (the one last played, while it sounds or is
+       paused), NULL */
     const GalleryItem *(*playing)(void);
+    /* pauses (on 1) or resumes (0) what sounds: 0, or -1 when the engine
+       cannot pause it (an effect; a stream not open yet) */
+    int (*pause)(int on);
+    /* where the item sounding is, in seconds: elapsed, and total (0 while
+       not known); 0, or -1 when nothing sounds */
+    int (*position)(float *elapsed, float *total);
 } GalleryEngine;
 
 void gallery_SetEngine(const GalleryEngine *e);
@@ -115,10 +124,11 @@ int gallery_Find(int group, int kind, int key, int bank);
    wrapping. */
 int gallery_JumpGroup(int i, int dir);
 
-/* The texts: the label (the album's title, or the asset's name), column A
-   (the in-game name when the label is the album's), the asset (a stream's
-   file, a bank's file and the effect's program and tone).  buf holds the
-   text when one is built. */
+/* The texts: the label (the asset's name: a stream's file without its
+   folder sound/ICO_ADPCM/ and its .int, an effect's seDef name), column A
+   (an ambience's stage key, else empty), the asset (a stream's file, a
+   bank's file and the effect's program and tone).  buf holds the text when
+   one is built. */
 const char *gallery_Label(int i, char *buf, size_t n);
 const char *gallery_ColA(int i, char *buf, size_t n);
 const char *gallery_Asset(int i, char *buf, size_t n);
@@ -133,7 +143,20 @@ void gallery_Leave(void);
 int gallery_Play(int i);
 void gallery_Stop(void);
 void gallery_Tick(void);
+/* the item sounding or paused, -1 */
 int gallery_Playing(void);
+/* Cross on item i (MUSIC.md, "Buttons"): i sounding pauses it (an effect,
+   which the engine cannot pause, is stopped and held: Cross plays it again
+   from its start); i paused resumes it; any other item plays.  0, -1. */
+int gallery_Toggle(int i);
+/* the item paused or held, -1 */
+int gallery_Paused(void);
+/* the item sounding or paused: elapsed and total seconds (total 0 while
+   not known); 0, or -1 (both 0) when nothing sounds */
+int gallery_Position(float *elapsed, float *total);
+/* the next (dir +1) or previous (-1) entry that plays from i, wrapping,
+   past the headings and Back; -1 when there is none */
+int gallery_Step(int i, int dir);
 const GalleryTables *gallery_Tables(void);
 
 #ifdef __cplusplus

@@ -25,7 +25,13 @@
    up with the game's rows (docs/port/UI.md, "Layout extension"). */
 #define ROW_CAPS_ABOVE_CENTRE 2.0f
 
+enum { ROW_TEXT = 0, ROW_GLYPH, ROW_RECT };
+
 typedef struct ExtRow {
+    int kind;              /* ROW_TEXT, ROW_GLYPH, ROW_RECT */
+    int glyph;             /* ROW_GLYPH: LtExtGlyph */
+    unsigned char rgba[4]; /* ROW_RECT: the colour at a full row colour */
+    float fill;            /* ROW_RECT: the left part drawn, 0..1 */
     LtExtText text;
     char literal[TEXT_MAX];
     int hasLiteral;
@@ -120,6 +126,16 @@ int lt_ext_SetText(int index, const char *utf8)
     return 0;
 }
 
+int lt_ext_SetSize(int index, float size)
+{
+    ExtRow *r = rowOf(index);
+    if (!r) {
+        return -1;
+    }
+    r->text.size = size;
+    return 0;
+}
+
 int lt_ext_SetDim(int index, int dim)
 {
     ExtRow *r = rowOf(index);
@@ -163,6 +179,163 @@ float lt_ext_RowSize(int index)
         return 0.0f;
     }
     return r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
+}
+
+/* The glyphs' sources in the PAL tables (texProperty rows, checked against
+   the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
+   Triangle beside OK (181) and Back (183), 343 and 344 the key config
+   screen's Square and Circle, 349 and 346 its L1 and R1 labels, 301 and 302
+   the Options screen's value arrows) and the height each has beside the
+   game's 27-unit labels (dispH, y units; the width is the rectangle's, a
+   pixel a texel). */
+static const struct {
+    short row, u, v, w, h, dispH;
+} kGlyph[LT_GLYPH_COUNT] = {
+    {182, 32, 30, 32, 30, 30},   /* Cross, text/buttons.tm2 */
+    {344, 0, 30, 32, 30, 30},    /* Circle */
+    {343, 32, 0, 32, 30, 30},    /* Square */
+    {184, 0, 0, 32, 30, 30},     /* Triangle */
+    {349, 420, 240, 40, 15, 30}, /* L1, menu_PAL_02 */
+    {346, 340, 240, 40, 15, 30}, /* R1 */
+    {301, 490, 130, 20, 20, 40}, /* Left, menu_PAL_01 */
+    {302, 490, 150, 20, 20, 40}, /* Right */
+};
+
+int lt_ext_GlyphSource(int glyph, int uvwh[4])
+{
+    if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
+        return -1;
+    }
+    if (uvwh) {
+        uvwh[0] = kGlyph[glyph].u;
+        uvwh[1] = kGlyph[glyph].v;
+        uvwh[2] = kGlyph[glyph].w;
+        uvwh[3] = kGlyph[glyph].h;
+    }
+    return kGlyph[glyph].row;
+}
+
+void lt_ext_GlyphBox(int glyph, float size, int *w, int *h)
+{
+    float k = (size > 0.0f ? size : UI_MENU_TEXT_SIZE) / UI_MENU_TEXT_SIZE;
+    if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
+        glyph = 0;
+    }
+    if (w) {
+        *w = (int)((float)kGlyph[glyph].w * k + 0.5f);
+    }
+    if (h) {
+        *h = (int)((float)kGlyph[glyph].dispH * k + 0.5f);
+    }
+}
+
+int lt_ext_AddGlyph(int glyph, int x, int y, float size)
+{
+    if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
+        return -1;
+    }
+    LtProperty r;
+    memset(&r, 0, sizeof(r));
+    r.word0 = r.word4 = r.word8 = r.wordC = -1;
+    r.ownerItem = -1;
+    r.up = r.down = r.left = r.right = -1;
+    r.rightItem = r.leftItem = r.downItem = r.upItem = -1;
+    r.word40 = 1;
+    r.dispX = x;
+    r.dispY = y;
+    lt_ext_GlyphBox(glyph, size, &r.dispW, &r.dispH);
+    r.texU = kGlyph[glyph].u;
+    r.texV = kGlyph[glyph].v;
+    r.texW = kGlyph[glyph].w;
+    r.texH = kGlyph[glyph].h;
+    /* never looked up (no stage range reaches a port row); a value of its
+       own, so the fade-cancel check pairs no two glyph rows */
+    r.texFileNo = 0x7000 + s_propCount;
+    int i = lt_ext_AddProperty(&r, NULL);
+    if (i >= 0) {
+        ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
+        e->kind = ROW_GLYPH;
+        e->glyph = glyph;
+    }
+    return i;
+}
+
+int lt_ext_IsGlyphRow(const LtProperty *e)
+{
+    return lt_ext_IsPortProp(e) && s_rows[e - s_props].kind == ROW_GLYPH;
+}
+
+int lt_ext_GlyphTexNo(const LtProperty *e)
+{
+    if (!lt_ext_IsGlyphRow(e)) {
+        return -1;
+    }
+    int g = s_rows[e - s_props].glyph;
+    const LtProperty *src = &texProperty[kGlyph[g].row];
+    if (src->texU != kGlyph[g].u || src->texV != kGlyph[g].v || src->texW != kGlyph[g].w ||
+        src->texH != kGlyph[g].h || src->texNo < 0) {
+        return -1;
+    }
+    return src->texNo;
+}
+
+int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4])
+{
+    LtProperty r;
+    memset(&r, 0, sizeof(r));
+    r.word0 = r.word4 = r.word8 = r.wordC = -1;
+    r.ownerItem = -1;
+    r.up = r.down = r.left = r.right = -1;
+    r.rightItem = r.leftItem = r.downItem = r.upItem = -1;
+    r.word40 = 1;
+    r.dispX = x;
+    r.dispY = y;
+    r.dispW = w > 0 ? w : 1;
+    r.dispH = h > 0 ? h : 1;
+    r.texFileNo = 0x7000 + s_propCount; /* as a glyph row's */
+    int i = lt_ext_AddProperty(&r, NULL);
+    if (i >= 0) {
+        ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
+        e->kind = ROW_RECT;
+        memcpy(e->rgba, rgba, 4);
+        e->fill = 1.0f;
+    }
+    return i;
+}
+
+int lt_ext_SetFill(int index, float fill)
+{
+    ExtRow *r = rowOf(index);
+    if (!r || r->kind != ROW_RECT) {
+        return -1;
+    }
+    r->fill = fill < 0.0f ? 0.0f : fill > 1.0f ? 1.0f : fill;
+    return 0;
+}
+
+float lt_ext_RowFill(int index)
+{
+    ExtRow *r = rowOf(index);
+    return r && r->kind == ROW_RECT ? r->fill : 0.0f;
+}
+
+/* a rect row: its box as dispX..dispY gave it (display_texture's half-texel
+   inset taken back), the fill's part, the colour times the row's */
+static void drawRect(const ExtRow *r, const int box[4], const unsigned char rgba[4])
+{
+    const float x0 = (float)(box[0] - 4) / 16.0f + UI_GRID_CX;
+    const float y0 = (float)(box[1] - 4) / 8.0f + UI_GRID_CY;
+    const float w = (float)(box[2] + 16) / 16.0f;
+    const float h = (float)(box[3] + 16) / 8.0f;
+    unsigned char c[4];
+    for (int k = 0; k < 4; k++) {
+        unsigned v = (unsigned)r->rgba[k] * rgba[k] / 0x80u;
+        c[k] = (unsigned char)(v > 255 ? 255 : v);
+    }
+    if (r->fill <= 0.0f) {
+        return;
+    }
+    ui_DrawRect(x0, y0, x0 + w * r->fill, y0 + h, c);
 }
 
 LtProp *lt_ext_Layout(int index)
@@ -216,6 +389,17 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     ui__Sync();
     ExtRow *r = &s_rows[e - s_props];
+    if (r->kind == ROW_GLYPH) {
+        return; /* a glyph without its texture (tables not PAL): nothing */
+    }
+    if (r->kind == ROW_RECT) {
+        if (!glow) {
+            const uint64_t owner = ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ 1u);
+            drawRect(r, box, rgba);
+            ui_SetDrawKey(owner);
+        }
+        return;
+    }
     unsigned char grey[4];
     if (r->dim) {
         /* a locked row (Settings > Extras): the colour at half, the alpha kept */
@@ -298,6 +482,9 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
 
 int lt_ext_IsTextRow(const LtProperty *e)
 {
+    if (lt_ext_IsGlyphRow(e)) {
+        return lt_ext_GlyphTexNo(e) < 0;
+    }
     return lt_ext_IsPortProp(e) || ui_MenuTextItemOf(e) != NULL;
 }
 

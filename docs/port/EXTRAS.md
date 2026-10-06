@@ -8,7 +8,7 @@ galleries take over the stage and the pause menu has no stage to give.
 
 | entry | what it will be | status |
 | --- | --- | --- |
-| Music | the music gallery: the soundtrack (the streamed music, with the album's titles), the scene sounds, the ambiences, the voices and the sound effects by bank, played through the game's own engines | live; docs/port/MUSIC.md |
+| Music | the music gallery: the soundtrack (the streamed music, by file), the scene sounds, the ambiences, the voices and the sound effects by bank, played through the game's own engines | live; docs/port/MUSIC.md |
 | Models | a viewer for the game's character and object models (below) | live |
 | Credits | the ending from the scene where the staff roll starts to the end of the roll, then the title; locked until the ending has been reached ("Finish the game to unlock") | live; "Credits" below |
 
@@ -38,9 +38,15 @@ stage lights it, with its animations to play.
 
 The animation list at the right holds the motion names as the game's own
 table spells them (`BOY STAND`, `EN1 FLY`, `D1_C9A_SA`). At the top left
-the overlay shows the model's name, the animation playing (with "Loop" while
-it loops) and its frame, "Frame F / N". An object with no animations shows
-"No animations" and can still be turned and zoomed.
+are the model's name, the animation playing (with "Loop" while it loops)
+and its frame, "Frame F / N"; at the bottom the prompts, "Left stick: turn",
+"Right stick: zoom" and a line of the game's own button glyphs with their
+words (Cross Play, Square Loop, L1 R1 Animation, Triangle Models; the model
+list's Cross View, Triangle Back or Title screen). All of it is rows of the
+viewer's layouts in the port font, styled as the Settings rows
+(docs/port/UI.md, "Button glyphs"). An object with no animations shows
+"No animations", only Triangle among the buttons, and can still be turned
+and zoomed.
 
 **How it works** (`port/game/model_viewer.c`, `model_viewer.h`). Each model
 is an object one stage of the game builds when it loads: its host stage.
@@ -100,8 +106,7 @@ second), `model_viewer: the title is back`, and `model_viewer: failed:
 
 The picture keeps the host stage's own look: its lights on the model and
 the stage's colour grading over the whole frame, so the grey has the
-stage's tint. Without a presentation overlay (the headless build) the name,
-animation and frame are rows of the viewer's layout instead.
+stage's tint.
 
 **The table** (`port/game/model_viewer_table.c`). Each row: the name (a
 port string, `UI_STR_MV_*`, in the five languages), the model (the

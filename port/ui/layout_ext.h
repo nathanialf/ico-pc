@@ -63,6 +63,9 @@ int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text);
    -1 if index is not a port row. */
 int lt_ext_SetText(int index, const char *utf8);
 int lt_ext_SetStr(int index, int strId);
+/* Changes a port label's em (a line of button prompts set smaller to fit);
+   -1 if index is not a port row. */
+int lt_ext_SetSize(int index, float size);
 /* Greys a port row (its colour at half, whatever the cursor does): the
    "locked" style of Settings > Extras.  Cleared by lt_ext_Reset. */
 int lt_ext_SetDim(int index, int dim);
@@ -72,6 +75,53 @@ const char *lt_ext_RowText(int index);
 /* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0
    if index is not a port row */
 float lt_ext_RowSize(int index);
+
+/* The game's button glyphs on a port row (docs/port/UI.md, "Button
+   glyphs").  A glyph row draws one of the game's own sprites, the texture
+   path of display_texture unchanged: the texture is the one a game row of
+   the PAL tables draws the glyph from (its texNo, which the stage's texture
+   set-up fills for every stage, since every stage's layout range covers
+   the menus), the texel rectangle that row's.  The face buttons are
+   text/buttons.tm2's four (the save prompts' OK and Back, the key config
+   screen's columns), L1 and R1 the key config screen's labels
+   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01).
+   When the loaded tables are not the PAL ones (the row's rectangle
+   differs) the glyph draws nothing. */
+typedef enum LtExtGlyph {
+    LT_GLYPH_CROSS = 0,
+    LT_GLYPH_CIRCLE,
+    LT_GLYPH_SQUARE,
+    LT_GLYPH_TRIANGLE,
+    LT_GLYPH_L1,
+    LT_GLYPH_R1,
+    LT_GLYPH_LEFT,
+    LT_GLYPH_RIGHT,
+    LT_GLYPH_COUNT
+} LtExtGlyph;
+
+/* Appends a glyph row at (x, y) (dispX, dispY: its box's left and top) at
+   the size it has beside a label of em `size` (the game's own pairs, a
+   27-unit label: 32 x 30 for a face button); -1 when full. */
+int lt_ext_AddGlyph(int glyph, int x, int y, float size);
+/* The box (dispW pixels, dispH y units) of a glyph beside a label of em
+   size, without adding it (layout). */
+void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);
+/* whether e is a glyph row; the texture it draws (texProperty's texNo of
+   its game row), -1 when the tables are not the PAL ones */
+int lt_ext_IsGlyphRow(const LtProperty *e);
+int lt_ext_GlyphTexNo(const LtProperty *e);
+/* The PAL texProperty row a glyph is drawn from and its texel rectangle
+   (u, v, w, h), for tests that build fake tables. */
+int lt_ext_GlyphSource(int glyph, int uvwh[4]);
+
+/* A filled rectangle on a port row (the music gallery's progress bar): the
+   row's box (dispX, dispY, dispW, dispH), the left `fill` of it (0..1,
+   lt_ext_SetFill; 1 when added), in rgba (GS, 0x80 = 1.0) times the row's
+   colour (its fade), drawn where a label would be (no glow); -1 when
+   full. */
+int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4]);
+int lt_ext_SetFill(int index, float fill);
+float lt_ext_RowFill(int index);
 
 /* The table lookups layout_texture.c makes through LT_LAYOUT/LT_PROP: the
    game's row for an index below its count (or any index outside both
@@ -96,8 +146,9 @@ void lt_ext_Reset(void);
 void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
 
 /* P3 (docs/port/UI.md, "Menu text"): whether display_texture draws e as
-   text: a port row, or a game row the menu text table holds while classic
-   menu text is off (menu_text.h ui_MenuTextItemOf). */
+   text: a port row (a glyph row only when it has no texture: it then draws
+   nothing), or a game row the menu text table holds while classic menu
+   text is off (menu_text.h ui_MenuTextItemOf). */
 int lt_ext_IsTextRow(const LtProperty *e);
 /* The text hook of display_texture, lt_glow_sprite and kanban.c's
    display_texture: a port row's label (lt_ext_DrawRow) or a game row's menu

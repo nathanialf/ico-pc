@@ -32,6 +32,23 @@
  * Leaving closes it, reads the closed banks back into their segments in
  * their order (the headers kept where the game put them; each must come
  * back at its old address) and rebuilds seKind (soundSeKindBuild).
+ *
+ * Pause.  A stream pauses as the pause menu pauses the game's streams
+ * (layout_action.c la_game_pause): adpcmPauseRequest(1) sets every stream
+ * voice's pitch to 0 and stops the disc reader's accounting until
+ * adpcmPauseRequest(0).  An effect cannot pause (the page stops it).
+ *
+ * Position.  A stream's elapsed time is what its record has consumed
+ * (AdpcmStream dataSize - remain: adpcmTickProc moves remain on by the IOP
+ * read offset's progress, which the driver moves by half the SPU ring per
+ * fill) less the 1.5 halves the SPU ring holds ahead of the voice on
+ * average, in seconds at the stream's rate (adpcmFile pitch, Hz; 16 bytes
+ * of SPU ADPCM are 28 samples per channel); its total is the file's
+ * sectors.  An effect's total is its sample: the voices keyed after the
+ * request that were silent before it and start inside the bank's SPU
+ * buffer, each read in sound RAM from its start (SSA) to the block with
+ * the end flag, at its voice's pitch; a sample whose last block loops
+ * repeats, and its elapsed time is then counted within the loop.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -43,6 +60,7 @@
 #include "gallery.h"
 #include "s_init.h"
 #include "spu2.h"
+#include "spu2_sd.h"
 #include "typedef.h"
 #include "vfs.h"
 
@@ -92,6 +110,17 @@ static struct {
 } s_evict[MAX_EVICT];
 
 static int s_nEvict, s_evicted;
+
+/* pause and position */
+static int s_pausedStream;
+static unsigned long long s_seFrame; /* the effect's request, audio frames */
+static unsigned long long s_seBusy;  /* the voices sounding before it */
+static float s_seTotal;              /* its sample's seconds, 0 until found */
+static int s_seLoops;
+
+#define SPU_RATE 48000.0
+#define STREAM_SPU_HALF 0x2000 /* a stream voice's SPU ring (adpcmDataSet's 0x4000) halved */
+#define SE_FIND_FRAMES 96000u  /* how long the effect's voices are looked for (2 s) */
 
 static unsigned long long audioFrame(void)
 {
@@ -352,6 +381,80 @@ static void restoreTitleBanks(void)
     fprintf(stderr, "gallery: the title's stage banks are back\n");
 }
 
+/* --- where the item is --------------------------------------------------------- */
+
+static uint16_t voiceEntry(int slot, uint16_t param)
+{
+    return (uint16_t)(param | SPU2_SD_VOICE(slot / 24, slot % 24));
+}
+
+static int voiceSounding(int slot)
+{
+    return spu2_sd_get_param(voiceEntry(slot, SPU2_SD_VPARAM_ENVX)) != 0;
+}
+
+static unsigned long long soundingVoices(void)
+{
+    unsigned long long m = 0;
+    for (int v = 0; v < 48; v++) {
+        if (voiceSounding(v)) {
+            m |= 1ull << v;
+        }
+    }
+    return m;
+}
+
+/* a sample's 16-byte blocks from addr to the one with the end flag; *loops
+   when that block also repeats */
+static int sampleBlocks(uint32_t addr, int *loops)
+{
+    const uint8_t *ram = spu2_ram();
+    int n = 0;
+    *loops = 0;
+    for (uint32_t a = addr & ~15u; a + 16 <= 0x200000u; a += 16) {
+        n++;
+        if (ram[a + 1] & 1) {
+            *loops = (ram[a + 1] & 2) != 0;
+            break;
+        }
+    }
+    return n;
+}
+
+/* the effect's voices, once they are keyed: its sample's length */
+static void findEffectVoices(void)
+{
+    struct SqEntry *b = resident(s_cur->bank);
+    if (b == NULL || s_seTotal > 0.0f) {
+        return;
+    }
+    uint32_t lo = (uint32_t)b->spu.buf.addr, hi = lo + (uint32_t)b->spu.buf.size;
+    for (int v = 0; v < 48; v++) {
+        if ((s_seBusy >> v) & 1 || !voiceSounding(v)) {
+            continue;
+        }
+        uint32_t ssa = spu2_sd_get_addr(voiceEntry(v, SPU2_SD_VADDR_SSA));
+        unsigned pitch = spu2_sd_get_param(voiceEntry(v, SPU2_SD_VPARAM_PITCH));
+        if (ssa < lo || ssa >= hi || pitch == 0) {
+            continue;
+        }
+        int loops;
+        int blocks = sampleBlocks(ssa, &loops);
+        float t = (float)((double)blocks * 28.0 * 4096.0 / ((double)pitch * SPU_RATE));
+        if (t > s_seTotal) {
+            s_seTotal = t;
+            s_seLoops = loops;
+        }
+    }
+}
+
+static double streamSeconds(int no, double bytes)
+{
+    int ch = adpcmFile[no].channels > 0 ? adpcmFile[no].channels : 1;
+    int hz = adpcmFile[no].pitch > 0 ? adpcmFile[no].pitch : 44100;
+    return bytes / ch / 16.0 * 28.0 / hz;
+}
+
 static int playSe(const GalleryItem *it)
 {
     int def = it->key, bank = it->bank;
@@ -372,6 +475,10 @@ static int playSe(const GalleryItem *it)
         return -1;
     }
     seKind[idx] = (unsigned short)row;
+    s_seBusy = soundingVoices();
+    s_seFrame = audioFrame();
+    s_seTotal = 0.0f;
+    s_seLoops = 0;
     s_seId = soundSeDefPlay(def, 0xFFFFFFFFu, NULL, 0);
     if (s_seId < 0) {
         fprintf(stderr, "gallery: failed: soundSeDefPlay(%d) returned %d\n", def, s_seId);
@@ -388,6 +495,12 @@ static int playSe(const GalleryItem *it)
 
 static void stopAll(void)
 {
+    if (s_pausedStream) {
+        adpcmPauseRequest(0);
+        s_pausedStream = 0;
+    }
+    s_seTotal = 0.0f;
+    s_seLoops = 0;
     if (s_wantStream) {
         s_wantStream = 0;
     }
@@ -481,7 +594,61 @@ static const GalleryItem *playing(void)
     return s_seId >= 0 && soundSeDefVolumeRateGet(s_seId) > 0.0f ? s_cur : NULL;
 }
 
-static const GalleryEngine kEngine = {tables, enter, leave, play, stop, tick, playing};
+static int pauseItem(int on)
+{
+    if (on) {
+        if (s_cur == NULL || s_cur->kind != GAL_K_STREAM || s_streamPending || s_wantStream ||
+            !streamAlive()) {
+            return -1;
+        }
+        adpcmPauseRequest(1);
+        s_pausedStream = 1;
+        return 0;
+    }
+    if (!s_pausedStream) {
+        return -1;
+    }
+    adpcmPauseRequest(0);
+    s_pausedStream = 0;
+    return 0;
+}
+
+static int positionOf(float *elapsed, float *total)
+{
+    *elapsed = *total = 0.0f;
+    if (playing() == NULL) {
+        return -1;
+    }
+    if (s_cur->kind == GAL_K_STREAM) {
+        int no = s_cur->key;
+        const double size = (double)adpcmFile[no].sectors * 2048.0;
+        *total = (float)streamSeconds(no, size);
+        if (s_stream != NULL && !s_streamPending && streamAlive() && s_stream->stream != NULL) {
+            const AdpcmStream *st = s_stream->stream;
+            double played = (double)st->dataSize - (double)st->remain -
+                            1.5 * STREAM_SPU_HALF * (st->n > 0 ? st->n : 1);
+            played = played < 0.0 ? 0.0 : played > size ? size : played;
+            *elapsed = (float)streamSeconds(no, played);
+        }
+        return 0;
+    }
+    if (audioFrame() - s_seFrame < SE_FIND_FRAMES) {
+        findEffectVoices();
+    }
+    double t = (double)(audioFrame() - s_seFrame) / SPU_RATE;
+    if (s_seLoops && s_seTotal > 0.0f) {
+        t = t - (double)s_seTotal * (double)(long long)(t / (double)s_seTotal);
+    }
+    *elapsed = (float)t;
+    *total = s_seTotal;
+    if (*total > 0.0f && *elapsed > *total) {
+        *elapsed = *total;
+    }
+    return 0;
+}
+
+static const GalleryEngine kEngine = {tables, enter,   leave,     play,      stop,
+                                      tick,   playing, pauseItem, positionOf};
 
 void gallery_EngineInstall(void)
 {

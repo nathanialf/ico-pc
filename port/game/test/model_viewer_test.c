@@ -164,11 +164,10 @@ int main(void)
     }
 
     /* the viewer's words */
-    static const int kWords[] = {UI_STR_MV_ANIMATION, UI_STR_MV_LOOP,
-                                 UI_STR_MV_FRAME,     UI_STR_MV_NO_ANIMATIONS,
-                                 UI_STR_MV_LIST_HINT, UI_STR_MV_LIST_HINT_STAGE,
-                                 UI_STR_MV_VIEW_HINT, UI_STR_MV_VIEW_HINT_STATIC,
-                                 UI_STR_EXTRAS_MODELS};
+    static const int kWords[] = {UI_STR_MV_ANIMATION,     UI_STR_MV_LOOP,      UI_STR_MV_FRAME,
+                                 UI_STR_MV_NO_ANIMATIONS, UI_STR_MV_HINT_VIEW, UI_STR_MV_HINT_TITLE,
+                                 UI_STR_MV_HINT_PLAY,     UI_STR_MV_HINT_TURN, UI_STR_MV_HINT_ZOOM,
+                                 UI_STR_EXTRAS_MODELS,    UI_STR_BACK};
     for (unsigned i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
         checkText(kWords[i], ui_StrIn(UI_LANG_EN, (UiStrId)kWords[i]));
     }

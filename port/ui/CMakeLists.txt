@@ -6,7 +6,8 @@
 #                ui_host.c (the game's globals, the decoder flush) in the
 #                window build only
 #   ico_ui_rd    the same sources with ICO_RD for ui_test (needs ico_render)
-#   settings.c, ui_list.c   the Settings menu (6C) and its list pages, in ico_ui and settings_test: it
+#   settings.c, ui_list.c, ui_hint.c   the Settings menu (6C), its list
+#                pages and its button prompts, in ico_ui and settings_test: it
 #                reads the port's option modules (port/game, port/input,
 #                port/config) and the game's layout globals
 #
@@ -28,7 +29,6 @@ set(_ui_sources
     game_text.c
     layout_ext.c
     menu_text.c
-    model_overlay.c
     popup.c
     strings.c
     strings_en.c
@@ -42,8 +42,8 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c gallery.c
-                            photo_ui.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c ui_hint.c
+                            gallery.c photo_ui.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -71,7 +71,7 @@ target_include_directories(ico_fumi PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    target_sources(${name} PRIVATE settings.c ui_list.c gallery.c photo_ui.c)
+    target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -143,13 +143,13 @@ endif()
 # --- gallery_test (CPU) --------------------------------------------------------
 # The music gallery's list (gallery.c, docs/port/MUSIC.md) built from the
 # PAL base ELF's tables as the game loads them (port/data/tables.c, as
-# tables_test does): keys, group order and headings, duplicates, the name
-# table, the glyphs; with the disc image, the streams on the disc and every
+# tables_test does): keys, group order and headings, duplicates, the asset
+# names, the glyphs; with the disc image, the streams on the disc and every
 # listed bank in a pack. Exit 77 without the ELF.
 set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
 add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
     strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c "${_ui_font_c}"
-    "${CMAKE_SOURCE_DIR}/port/audio/track_names.c" "${_gal_data}/tables.c"
+    "${_gal_data}/tables.c"
     "${_gal_data}/gen/table_defs.c" "${_gal_data}/gen/table_desc.c"
     "${_gal_data}/gen/ee_symbols.c")
 ico_include_dirs(sugipon _ico_gal_incs)

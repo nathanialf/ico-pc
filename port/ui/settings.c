@@ -29,6 +29,7 @@
 #include "photo_ui.h"
 #include "strings.h"
 #include "sysconf.h"
+#include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
 
@@ -55,6 +56,8 @@ extern void soundOutputModeSet(int mode);
 extern void la_host_new_game_go(void);
 
 /* the pad's trigger bits (keyInput.c's logical word) */
+#define PAD_L1 0x0004
+#define PAD_R1 0x0008
 #define PAD_TRIANGLE 0x0010
 #define PAD_CIRCLE 0x0020
 #define PAD_CROSS 0x0040
@@ -972,12 +975,49 @@ static void setNote(int row, int strId)
 
 static int settingsProc(int first, int item);
 static const UiListDef kAchDef, kRemapDef, kGalDef;
-static int s_galHint = -1; /* the music gallery's hint line */
+/* the music gallery's progress bar (its rim, track and fill, the elapsed
+   and total times) and its transport, a line of the game's button glyphs */
+static int s_galRim = -1, s_galTrack = -1, s_galFill = -1, s_galTime = -1, s_galTotal = -1;
+static UiHint s_galHint;
 static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
 static void buildQuitScreen(void);
 static int s_quitLayout = -1;
 static void titleCursorOn(int to, int row);
+
+/* the music gallery's page (docs/port/MUSIC.md, "The page"), in field
+   lines: the list, the status line, the progress bar (its rim, the track
+   inside it, the times beside it) and the transport */
+#define GAL_LIST_Y 38
+#define GAL_LIST_PITCH 16
+#define GAL_STATUS_Y 168
+#define GAL_BAR_X 150
+#define GAL_BAR_W 340
+#define GAL_BAR_Y 188
+#define GAL_BAR_H 6 /* y units: three field lines */
+#define GAL_TIME_GAP 12
+#define GAL_HINT_Y 200
+
+static void buildGalleryBar(void)
+{
+    static const unsigned char kRim[4] = {0, 0, 0, 0x50};
+    static const unsigned char kTrack[4] = {0x26, 0x25, 0x22, 0x80};
+    /* the letters' colour: the row's own */
+    static const unsigned char kFill[4] = {0x80, 0x80, 0x80, 0x80};
+    /* the rim a field line round the track */
+    s_galRim = lt_ext_AddRect(GAL_BAR_X - 2, GAL_BAR_Y - 1, GAL_BAR_W + 4, GAL_BAR_H + 4, kRim);
+    s_galTrack = lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kTrack);
+    s_galFill = lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kFill);
+    lt_ext_SetFill(s_galFill, 0.0f);
+    /* the times' capitals on the bar's middle line (a label's capitals sit
+       6.5 field lines below its 30-unit box's top) */
+    const int ty = GAL_BAR_Y + GAL_BAR_H / 4 - 6;
+    s_galTime = ui_SettingsAddRow(GAL_BAR_X - GAL_TIME_GAP - 100, ty, 100, 30, 0, -1, 0, " ",
+                                  NOTE_SIZE, UI_ALIGN_RIGHT);
+    s_galTotal = ui_SettingsAddRow(GAL_BAR_X + GAL_BAR_W + GAL_TIME_GAP, ty, 100, 30, 0, -1, 0, " ",
+                                   NOTE_SIZE, UI_ALIGN_LEFT);
+    ui_HintBuild(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
+}
 
 static int rowY(int page, int i)
 {
@@ -1127,12 +1167,14 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.colB = (UiListCol){420, 190, 21.0f, UI_ALIGN_LEFT};
         st.statusY = 198;
     } else if (id == UI_PAGE_MUSIC) {
-        /* the label (the album's title or the file), the in-game file at
-           the right; the status and the hint below */
-        st.y0 = 40;
-        st.label = (UiListCol){40, 380, 22.0f, UI_ALIGN_LEFT};
-        st.colA = (UiListCol){420, 180, 19.0f, UI_ALIGN_RIGHT};
-        st.statusY = 184;
+        /* the label (the asset's name), an ambience's stage at the right,
+           in the list pages' sizes on a closer pitch; the status, the
+           progress bar and the transport below */
+        st.y0 = GAL_LIST_Y;
+        st.pitch = GAL_LIST_PITCH;
+        st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+        st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
+        st.statusY = GAL_STATUS_Y;
     } else {
         st.y0 = 40;
         st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
@@ -1141,8 +1183,7 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     }
     ui_ListBuild(&pg->list, def, NULL, &st);
     if (id == UI_PAGE_MUSIC) {
-        s_galHint = ui_SettingsAddRow(20, 204, 600, 26, 0, -1, 0, " ", 16.0f, UI_ALIGN_CENTER);
-        P(s_galHint)->centerX = 1;
+        buildGalleryBar();
     }
     for (int i = 0; i < UI_LIST_SLOTS; i++) {
         Row *r = &pg->rows[i];
@@ -1983,8 +2024,40 @@ static int galHeading(void *user, int d)
     return it != NULL && it->kind == GAL_K_HEADING;
 }
 
+/* m:ss */
+static void galClock(char *buf, size_t n, float s)
+{
+    int t = s > 0.0f ? (int)s : 0;
+    snprintf(buf, n, "%d:%02d", t / 60, t % 60);
+}
+
+/* the bar and the times: the item sounding or paused, empty when none */
+static void galBar(void)
+{
+    float el, tot;
+    char a[16], b[16];
+    if (s_galFill < 0) {
+        return;
+    }
+    if (gallery_Position(&el, &tot) == 0) {
+        lt_ext_SetFill(s_galFill, tot > 0.0f ? el / tot : 0.0f);
+        galClock(a, sizeof(a), el);
+        if (tot > 0.0f) {
+            galClock(b, sizeof(b), tot);
+        } else {
+            snprintf(b, sizeof(b), "-:--");
+        }
+    } else {
+        lt_ext_SetFill(s_galFill, 0.0f);
+        galClock(a, sizeof(a), 0.0f);
+        galClock(b, sizeof(b), 0.0f);
+    }
+    lt_ext_SetText(s_galTime, a);
+    lt_ext_SetText(s_galTotal, b);
+}
+
 /* headings stand out to the left; the status line: the group, the file and
-   whether the entry under the cursor plays */
+   whether the entry under the cursor plays; the bar; Cross's word */
 static void galDecorate(void *user, int d)
 {
     (void)user;
@@ -2003,14 +2076,20 @@ static void galDecorate(void *user, int d)
         snprintf(s_text, sizeof(s_text), "%s", gallery_Asset(d, asset, sizeof(asset)));
         lt_ext_SetText(pg->list.status, s_text);
     } else {
+        int state = gallery_Paused() == d    ? UI_STR_GAL_PAUSED
+                    : gallery_Playing() == d ? UI_STR_GAL_PLAYING
+                                             : UI_STR_GAL_STOPPED;
         snprintf(s_text, sizeof(s_text), "%s  \xC2\xB7  %s  \xC2\xB7  %s",
                  ui_Str((UiStrId)gallery_GroupStr(it->group)),
-                 gallery_Asset(d, asset, sizeof(asset)),
-                 ui_Str(gallery_Playing() == d ? UI_STR_GAL_PLAYING : UI_STR_GAL_STOPPED));
+                 gallery_Asset(d, asset, sizeof(asset)), ui_Str((UiStrId)state));
         lt_ext_SetText(pg->list.status, s_text);
     }
-    if (s_galHint >= 0) {
-        setNote(s_galHint, UI_STR_GAL_HINT);
+    galBar();
+    if (s_galHint.n > 0) {
+        /* Cross pauses the entry under the cursor while it sounds */
+        int pausing = d >= 0 && gallery_Playing() == d && gallery_Paused() != d;
+        ui_HintSetStr(&s_galHint, UI_HINT_GAL_PLAY, pausing ? UI_STR_HINT_PAUSE : UI_STR_HINT_PLAY);
+        ui_HintLayout(&s_galHint);
     }
 }
 
@@ -2035,11 +2114,27 @@ static int galInput(void *user, int d, int flags)
         return galLeave();
     }
     if ((flags & PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
-        gallery_Play(d);
+        gallery_Toggle(d);
         return -1;
     }
     if (flags & PAD_SQUARE) {
         gallery_Stop();
+        return -1;
+    }
+    if ((flags & (PAD_L1 | PAD_R1)) && d >= 0) {
+        /* the previous or next entry: the cursor on it, and it plays */
+        int k = gallery_Step(d, (flags & PAD_L1) ? -1 : 1);
+        int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
+        if (k >= 0) {
+            if (k < pg->list.offset) {
+                pg->list.offset = k > 0 && galHeading(NULL, k - 1) ? k - 1 : k;
+            } else if (k >= pg->list.offset + shown) {
+                pg->list.offset = k - shown + 1;
+            }
+            pg->list.offset = pg->list.offset > n - shown ? n - shown : pg->list.offset;
+            lt_ext_Layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
+            gallery_Play(k);
+        }
         return -1;
     }
     if ((flags & (PAD_LEFT | PAD_RIGHT)) && d >= 0) {

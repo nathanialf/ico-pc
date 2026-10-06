@@ -2,8 +2,8 @@
  * port/ui/gallery.c
  *
  * The music gallery's list (gallery.h; docs/port/MUSIC.md): built from the
- * game's tables, named from the album (port/audio/track_names.h), and the
- * page's calls into the engine (gallery_play.c in the game build).
+ * game's tables, each entry named by its asset, and the page's calls into
+ * the engine (gallery_play.c in the game build).
  */
 #include "gallery.h"
 
@@ -12,7 +12,6 @@
 #include <string.h>
 
 #include "strings.h"
-#include "track_names.h"
 
 /* op.c: the title theme, actTitleShortCut's request (kind 56, titleAdpcm) */
 #define TITLE_THEME 56
@@ -38,6 +37,10 @@ static GalleryTables s_tables;
 static int s_haveTables;
 static int s_built;
 static const GalleryEngine *s_engine;
+/* the item paused by Cross (in the engine), or held (an effect stopped by
+   Cross, played again by the next); -1 */
+static int s_paused = -1;
+static int s_held;
 
 void gallery_SetEngine(const GalleryEngine *e)
 {
@@ -84,11 +87,13 @@ static int streamListed(const GalleryTables *t, int no)
     return t->streamOnDisc == NULL || t->streamOnDisc(no);
 }
 
-/* event2/ streams are the machinery's stingers unless the album names
-   them; event/ and battle.int are the score, as is the title theme */
+/* by the disc's folders: event2/ holds the machinery's stingers (the
+   scripts' handles name them: gondola, gate_open, hane1up, chain10r, ...),
+   event/ and battle.int the score; the title theme (event2/50.int) is
+   op.c's titleAdpcm, the title's music */
 static int isSceneStream(const GalleryTables *t, int no)
 {
-    if (no == TITLE_THEME || ico_track_name(ICO_TRACK_STREAM, no) != NULL) {
+    if (no == TITLE_THEME) {
         return 0;
     }
     return strstr(t->adpcm[no].path, "/event2/") != NULL;
@@ -338,6 +343,17 @@ static const char *streamAsset(int no)
     return strncmp(p, ADPCM_PREFIX, strlen(ADPCM_PREFIX)) == 0 ? p + strlen(ADPCM_PREFIX) : p;
 }
 
+/* a stream's name: its file without the folder and the .int */
+static const char *streamName(int no, char *buf, size_t n)
+{
+    snprintf(buf, n, "%s", streamAsset(no));
+    char *dot = strrchr(buf, '.');
+    if (dot && strchr(dot, '/') == NULL) {
+        *dot = '\0';
+    }
+    return buf;
+}
+
 /* a bank's name: its .hd file without the folder and the extension */
 static const char *bankName(int b, char *buf, size_t n)
 {
@@ -372,10 +388,8 @@ const char *gallery_Label(int i, char *buf, size_t n)
             return buf;
         }
         return ui_Str((UiStrId)gallery_GroupStr(it->group));
-    case GAL_K_STREAM: {
-        const char *t = ico_track_name(ICO_TRACK_STREAM, it->key);
-        return t ? t : streamAsset(it->key);
-    }
+    case GAL_K_STREAM:
+        return streamName(it->key, buf, n);
     case GAL_K_SE:
         snprintf(buf, n, "%.32s", s_tables.seDef[it->key].name);
         if (buf[0] == '\0') {
@@ -396,9 +410,6 @@ const char *gallery_ColA(int i, char *buf, size_t n)
     (void)n;
     if (it == NULL) {
         return "";
-    }
-    if (it->kind == GAL_K_STREAM && ico_track_name(ICO_TRACK_STREAM, it->key) != NULL) {
-        return streamAsset(it->key);
     }
     if (it->group == GAL_G_AMBIENCE && it->stage >= 0) {
         return s_tables.stage[it->stage].key;
@@ -516,6 +527,16 @@ static void scriptStep(void)
     }
     const char *kind = s_scriptKind[s_scriptPos];
     int v = s_scriptVal[s_scriptPos++];
+    if (strcmp(kind, "pause") == 0) {
+        /* Cross on the item sounding or paused */
+        int i = gallery_Playing();
+        if (i < 0) {
+            fprintf(stderr, "gallery: failed pause: nothing plays\n");
+            return;
+        }
+        gallery_Toggle(i);
+        return;
+    }
     if (strcmp(kind, "seq") == 0) {
         fprintf(stderr, "gallery: failed seq %d: the disc has no sequenced music\n", v);
         return;
@@ -554,6 +575,8 @@ void gallery_Enter(void)
 
 void gallery_Leave(void)
 {
+    s_paused = -1;
+    s_held = 0;
     if (s_engine && s_engine->leave) {
         s_engine->leave();
     }
@@ -565,6 +588,8 @@ int gallery_Play(int i)
     if (it == NULL || (it->kind != GAL_K_STREAM && it->kind != GAL_K_SE)) {
         return -1;
     }
+    s_paused = -1;
+    s_held = 0;
     char buf[96];
     fprintf(stderr, "gallery: playing %s %d (%s)\n", groupToken(it->group), it->key,
             gallery_Label(i, buf, sizeof(buf)));
@@ -576,15 +601,36 @@ int gallery_Play(int i)
 
 void gallery_Stop(void)
 {
+    s_paused = -1;
+    s_held = 0;
     if (s_engine && s_engine->stop) {
         s_engine->stop();
     }
 }
 
+/* once every LOG_TICKS Main ticks while an item sounds: where it is */
+#define LOG_TICKS 50
+static int s_logTick;
+
 void gallery_Tick(void)
 {
     if (s_engine && s_engine->tick) {
         s_engine->tick();
+    }
+    float el, tot;
+    int i = gallery_Playing();
+    if (i >= 0 && gallery_Position(&el, &tot) == 0) {
+        if (++s_logTick >= LOG_TICKS) {
+            s_logTick = 0;
+            fprintf(stderr, "gallery: %s %d at %.1f s of %.1f s%s\n",
+                    s_items[i].kind == GAL_K_STREAM ? "stream" : "effect", s_items[i].key, el, tot,
+                    s_paused == i ? " (paused)" : "");
+        }
+    } else {
+        s_logTick = 0;
+    }
+    if (s_paused >= 0 && !s_held && gallery_Playing() != s_paused) {
+        s_paused = -1; /* it ended or was stopped under the page */
     }
     scriptStep();
 }
@@ -593,4 +639,67 @@ int gallery_Playing(void)
 {
     const GalleryItem *it = s_engine && s_engine->playing ? s_engine->playing() : NULL;
     return it != NULL && it >= s_items && it < s_items + s_count ? (int)(it - s_items) : -1;
+}
+
+int gallery_Paused(void)
+{
+    return s_paused;
+}
+
+int gallery_Toggle(int i)
+{
+    const GalleryItem *it = gallery_Item(i);
+    if (it == NULL || (it->kind != GAL_K_STREAM && it->kind != GAL_K_SE)) {
+        return -1;
+    }
+    if (s_paused == i && !s_held) {
+        if (s_engine && s_engine->pause && s_engine->pause(0) == 0) {
+            s_paused = -1;
+            fprintf(stderr, "gallery: resumed %s %d\n", groupToken(it->group), it->key);
+            return 0;
+        }
+    }
+    if (s_paused == i && s_held) {
+        return gallery_Play(i); /* from its start */
+    }
+    if (gallery_Playing() == i) {
+        if (s_engine && s_engine->pause && s_engine->pause(1) == 0) {
+            s_paused = i;
+            s_held = 0;
+            fprintf(stderr, "gallery: paused %s %d\n", groupToken(it->group), it->key);
+        } else {
+            /* the engine cannot pause it: stopped, and Cross plays it again */
+            gallery_Stop();
+            s_paused = i;
+            s_held = 1;
+            fprintf(stderr, "gallery: stopped %s %d (held)\n", groupToken(it->group), it->key);
+        }
+        return 0;
+    }
+    return gallery_Play(i);
+}
+
+int gallery_Position(float *elapsed, float *total)
+{
+    *elapsed = *total = 0.0f;
+    if (gallery_Playing() < 0 || s_engine == NULL || s_engine->position == NULL) {
+        return -1;
+    }
+    return s_engine->position(elapsed, total);
+}
+
+int gallery_Step(int i, int dir)
+{
+    if (s_count == 0) {
+        return -1;
+    }
+    dir = dir < 0 ? -1 : 1;
+    int k = i < 0 ? (dir > 0 ? -1 : 0) : i;
+    for (int guard = 0; guard < s_count; guard++) {
+        k = ((k + dir) % s_count + s_count) % s_count;
+        if (s_items[k].kind == GAL_K_STREAM || s_items[k].kind == GAL_K_SE) {
+            return k;
+        }
+    }
+    return -1;
 }

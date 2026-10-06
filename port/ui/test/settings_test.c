@@ -30,6 +30,7 @@
  * RDC_OVERLAY_TEXT items off
  * (settings_<screen>.png): no game data, the backdrop over a flat colour.
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,6 +57,7 @@
 #include "settings.h"
 #include "strings.h"
 #include "sysconf.h"
+#include "ui_hint.h"
 #include "ui_list.h"
 #include "video_options.h"
 
@@ -216,10 +218,18 @@ void la_host_new_game_go(void)
     s_newGames++;
 }
 
+#ifdef SETTINGS_RENDER
+static void bindFakeSheet(int no);
+#endif
+
 void tex_TransTexture(int no, int pri)
 {
-    (void)no;
     (void)pri;
+#ifdef SETTINGS_RENDER
+    bindFakeSheet(no);
+#else
+    (void)no;
+#endif
 }
 
 int tex_GetTextureNo(char *name)
@@ -464,6 +474,18 @@ static void fakeTables(void)
         texProperty[i].dispW = 0;
         texProperty[i].centerX = 1;
         texProperty[i].defaultMask = i != 48;
+    }
+    /* the button glyphs' rows (layout_ext.h): their PAL rectangles, and a
+       texture number per sheet (1 buttons.tm2, 2 menu_PAL_02, 3
+       menu_PAL_01) that settings_render binds to a drawn stand-in */
+    for (int g = 0; g < LT_GLYPH_COUNT; g++) {
+        int uv[4];
+        int r = lt_ext_GlyphSource(g, uv);
+        texProperty[r].texU = uv[0];
+        texProperty[r].texV = uv[1];
+        texProperty[r].texW = uv[2];
+        texProperty[r].texH = uv[3];
+        texProperty[r].texNo = g <= LT_GLYPH_TRIANGLE ? 1 : g <= LT_GLYPH_R1 ? 2 : 3;
     }
 }
 
@@ -2199,7 +2221,7 @@ static void listStep(UiList *l, LtProp *lay, int flags)
  * The list from the PAL tables is gallery_test's. */
 
 static AdpcmDataRec s_fakeAdpcm[105];
-static int s_galPlays, s_galStops, s_galLeaves, s_galLastKey = -1;
+static int s_galPlays, s_galStops, s_galLeaves, s_galLastKey = -1, s_galPaused;
 static const GalleryItem *s_galCur;
 
 static int galTables(GalleryTables *t)
@@ -2226,6 +2248,7 @@ static int galTables(GalleryTables *t)
 
 static int galPlay(const GalleryItem *it)
 {
+    s_galPaused = 0;
     s_galPlays++;
     s_galLastKey = it->key;
     s_galCur = it;
@@ -2234,6 +2257,7 @@ static int galPlay(const GalleryItem *it)
 
 static void galStop(void)
 {
+    s_galPaused = 0;
     s_galStops++;
     s_galCur = NULL;
 }
@@ -2249,8 +2273,51 @@ static const GalleryItem *galPlaying(void)
     return s_galCur;
 }
 
-static const GalleryEngine kFakeEngine = {galTables, NULL, galLeaveHook, galPlay,
-                                          galStop,   NULL, galPlaying};
+/* a stream pauses; an effect cannot */
+static int galPause(int on)
+{
+    if (s_galCur == NULL || s_galCur->kind != GAL_K_STREAM) {
+        return -1;
+    }
+    s_galPaused = on;
+    return 0;
+}
+
+/* 42 s into 4:25 */
+static int galPosition(float *el, float *tot)
+{
+    if (s_galCur == NULL) {
+        return -1;
+    }
+    *el = 42.4f;
+    *tot = 265.6f;
+    return 0;
+}
+
+static const GalleryEngine kFakeEngine = {galTables, NULL,       galLeaveHook, galPlay,    galStop,
+                                          NULL,      galPlaying, galPause,     galPosition};
+
+/* the port row of a page with that text right after a glyph row */
+static int glyphBefore(UiSettingsPage page, const char *word)
+{
+    int t = rowWithText(page, word);
+    return t > 0 && lt_ext_IsGlyphRow(lt_ext_Prop(t - 1)) ? t - 1 : -1;
+}
+
+static int fillRow(UiSettingsPage page)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    int last = -1;
+    /* the third rect of the page: the rim, the track, the fill */
+    int n = 0;
+    for (int j = l->first; j < l->last; j++) {
+        LtProperty *p = lt_ext_Prop(j);
+        if (p->texFileNo >= 0x7000 && !lt_ext_IsGlyphRow(p) && ++n == 3) {
+            last = j;
+        }
+    }
+    return last;
+}
 
 static void testGallery(void)
 {
@@ -2270,40 +2337,91 @@ static void testGallery(void)
     frame(0);
     int lab[16], opts[16];
     ui_SettingsPageRows(UI_PAGE_MUSIC, lab, opts, NULL, 16);
-    /* Soundtrack, darkness (stream 1, the album's), event/01.int (prologue),
-       Scene sounds, event2/54.int, event2/55.int, Ambience, Voice */
+    /* Soundtrack, battle, event/01, Scene sounds, event2/54, event2/55,
+       Ambience, Voice: the assets' names, no column */
     CHECK(strcmp(lt_ext_RowText(lab[0]), "Soundtrack") == 0 &&
-              strcmp(lt_ext_RowText(lab[1]), "darkness") == 0 &&
-              strcmp(lt_ext_RowText(lab[2]), "prologue") == 0 &&
+              strcmp(lt_ext_RowText(lab[1]), "battle") == 0 &&
+              strcmp(lt_ext_RowText(lab[2]), "event/01") == 0 &&
               strcmp(lt_ext_RowText(lab[3]), "Scene sounds") == 0 &&
-              strcmp(lt_ext_RowText(lab[4]), "event2/54.int") == 0,
+              strcmp(lt_ext_RowText(lab[4]), "event2/54") == 0,
           "gallery rows: \"%s\" \"%s\" \"%s\" \"%s\" \"%s\"", lt_ext_RowText(lab[0]),
           lt_ext_RowText(lab[1]), lt_ext_RowText(lab[2]), lt_ext_RowText(lab[3]),
           lt_ext_RowText(lab[4]));
-    CHECK(strcmp(lt_ext_RowText(lab[1] + 1), "battle.int") == 0,
-          "the album's title, the file in the column (\"%s\")", lt_ext_RowText(lab[1] + 1));
+    CHECK(strcmp(lt_ext_RowText(lab[1] + 1), "") == 0, "no column for a stream (\"%s\")",
+          lt_ext_RowText(lab[1] + 1));
     CHECK(lt_ext_Prop(lab[0])->dispX < lt_ext_Prop(lab[1])->dispX, "headings stand out");
+    /* the transport: each word after its glyph (a texture row: the fake
+       tables hold the glyphs' rectangles), on one line */
+    static const char *const kWords[] = {"Previous", "Play", "Stop", "Next", "Section", "Back"};
+    int lastX = -1;
+    for (unsigned w = 0; w < sizeof(kWords) / sizeof(kWords[0]); w++) {
+        int g = glyphBefore(UI_PAGE_MUSIC, kWords[w]);
+        int t = rowWithText(UI_PAGE_MUSIC, kWords[w]);
+        CHECK(g >= 0, "the transport's \"%s\" after a glyph", kWords[w]);
+        if (g < 0) {
+            continue;
+        }
+        LtProperty *gp = lt_ext_Prop(g), *tp = lt_ext_Prop(t);
+        CHECK(!lt_ext_IsTextRow(gp) && lt_ext_GlyphTexNo(gp) > 0, "\"%s\": a texture glyph",
+              kWords[w]);
+        CHECK(gp->dispX + gp->dispW <= tp->dispX && gp->dispX > lastX,
+              "\"%s\": glyph then word, left to right", kWords[w]);
+        /* the glyph's middle on the word's capitals (6.5 field lines into
+           its box), within a field line */
+        float mid = (float)gp->dispY + (float)gp->dispH * 0.25f;
+        CHECK(mid > (float)tp->dispY + 5.4f && mid < (float)tp->dispY + 7.6f,
+              "\"%s\": glyph centred on the word (%.1f, box %d)", kWords[w], mid, tp->dispY);
+        lastX = tp->dispX;
+    }
+    int fill = fillRow(UI_PAGE_MUSIC);
+    CHECK(fill >= 0 && lt_ext_RowFill(fill) == 0.0f, "the bar empty while nothing plays");
+    CHECK(rowWithText(UI_PAGE_MUSIC, "0:00") >= 0, "0:00 while nothing plays");
     LtProp *l = lt_ext_Layout(galL);
-    CHECK(l->curItem == lab[1], "the cursor skips the heading onto darkness");
+    CHECK(l->curItem == lab[1], "the cursor skips the heading onto battle");
     press(0x40);
     CHECK(s_galPlays == 1 && s_galLastKey == 1, "Cross plays stream 1");
     frame(0);
     CHECK(rowWithText(UI_PAGE_MUSIC, "Soundtrack  \xC2\xB7  battle.int  \xC2\xB7  Playing") >= 0,
           "the status: group, file, Playing");
+    CHECK(fill >= 0 && lt_ext_RowFill(fill) > 0.15f && lt_ext_RowFill(fill) < 0.17f,
+          "the bar at 42.4 of 265.6 s (%.3f)", fill >= 0 ? lt_ext_RowFill(fill) : -1.0f);
+    CHECK(rowWithText(UI_PAGE_MUSIC, "0:42") >= 0 && rowWithText(UI_PAGE_MUSIC, "4:25") >= 0,
+          "the times 0:42 and 4:25");
+    CHECK(glyphBefore(UI_PAGE_MUSIC, "Pause") >= 0, "Cross's word is Pause while it plays");
+    press(0x40);
+    CHECK(s_galPaused == 1 && s_galPlays == 1, "Cross again pauses it");
+    frame(0);
+    CHECK(rowWithText(UI_PAGE_MUSIC, "Soundtrack  \xC2\xB7  battle.int  \xC2\xB7  Paused") >= 0,
+          "the status: Paused");
+    CHECK(rowWithText(UI_PAGE_MUSIC, "0:42") >= 0, "the bar kept while paused");
+    press(0x40);
+    CHECK(s_galPaused == 0 && s_galPlays == 1, "Cross again resumes it");
+    press(0x0008);
+    CHECK(s_galPlays == 2 && s_galLastKey == 6 &&
+              strcmp(lt_ext_RowText(l->curItem), "event/01") == 0,
+          "R1: the next entry, under the cursor (%d)", s_galLastKey);
+    press(0x0008);
+    CHECK(s_galLastKey == 60 && strcmp(lt_ext_RowText(l->curItem), "event2/54") == 0,
+          "R1 over the Scene sounds heading");
+    press(0x0004);
+    CHECK(s_galLastKey == 6, "L1: the previous entry");
+    press(0x0004);
     press(0x80);
     CHECK(s_galStops == 1, "Square stops");
+    frame(0);
+    CHECK(fill >= 0 && lt_ext_RowFill(fill) == 0.0f, "the bar empty once stopped");
     press(0x4000);
     press(0x4000);
-    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54.int") == 0,
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54") == 0,
           "Down skips the Scene sounds heading");
     press(0x8000);
-    CHECK(strcmp(lt_ext_RowText(l->curItem), "darkness") == 0,
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "battle") == 0,
           "Left: back to the soundtrack's first entry");
     press(0x2000);
-    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54.int") == 0,
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54") == 0,
           "Right: the scene sounds' first entry (\"%s\")", lt_ext_RowText(l->curItem));
     press(0x2000);
-    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/hint1_1.int") == 0,
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/hint1_1") == 0,
           "Right: over the empty Ambience to the voices (\"%s\")", lt_ext_RowText(l->curItem));
     press(0x10);
     CHECK(settle(exL, 60) && s_galLeaves == 1, "Triangle leaves the gallery");
@@ -2457,6 +2575,139 @@ static void snap4(const char *name)
     free(out);
 }
 
+/* The button glyphs' sheets: no disc data here, so drawn stand-ins with the
+   real sheets' layout (buttons.tm2's triangle, square, circle and cross in
+   32 x 30 cells; menu_PAL_01 / 02's L1, R1 and the value arrows at their
+   rectangles), bound by tex_TransTexture through a TEX0 the resolver maps:
+   the snapshots show where and how large the glyphs are, the window build's
+   dumps show the game's own. */
+#define FAKE_TBP 0x1000
+static RdTex s_sheet[2];
+
+static void plot(uint8_t *px, int w, int x, int y, const uint8_t c[3])
+{
+    uint8_t *p = &px[((size_t)y * (size_t)w + (size_t)x) * 4];
+    p[0] = c[0];
+    p[1] = c[1];
+    p[2] = c[2];
+    p[3] = 0x80;
+}
+
+/* a thick segment (a, b) inside the box x0..x1, y0..y1 */
+static void segment(uint8_t *px, int w, float ax, float ay, float bx, float by, float th,
+                    const uint8_t c[3])
+{
+    int x0 = (int)(ax < bx ? ax : bx) - 3, x1 = (int)(ax > bx ? ax : bx) + 3;
+    int y0 = (int)(ay < by ? ay : by) - 3, y1 = (int)(ay > by ? ay : by) + 3;
+    float dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+            float t = l2 > 0.0f ? ((x + 0.5f - ax) * dx + (y + 0.5f - ay) * dy) / l2 : 0.0f;
+            t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+            float ex = ax + t * dx - (x + 0.5f), ey = ay + t * dy - (y + 0.5f);
+            if (ex * ex + ey * ey <= th * th * 0.25f) {
+                plot(px, w, x, y, c);
+            }
+        }
+    }
+}
+
+static void makeSheets(void)
+{
+    static uint8_t b[64 * 64 * 4], m[512 * 256 * 4];
+    static const uint8_t green[3] = {0x30, 0xE0, 0x90}, pink[3] = {0xE8, 0xA0, 0xC0},
+                         red[3] = {0xF0, 0x78, 0x60}, blue[3] = {0x78, 0x98, 0xE8},
+                         white[3] = {0xE8, 0xE8, 0xE8};
+    memset(b, 0, sizeof(b));
+    memset(m, 0, sizeof(m));
+    segment(b, 64, 16, 5, 4, 26, 3, green);
+    segment(b, 64, 4, 26, 28, 26, 3, green);
+    segment(b, 64, 28, 26, 16, 5, 3, green);
+    segment(b, 64, 38, 5, 58, 5, 3, pink);
+    segment(b, 64, 58, 5, 58, 25, 3, pink);
+    segment(b, 64, 58, 25, 38, 25, 3, pink);
+    segment(b, 64, 38, 25, 38, 5, 3, pink);
+    for (int k = 0; k < 32; k++) {
+        float a0 = (float)k * 6.2831853f / 32.0f, a1 = (float)(k + 1) * 6.2831853f / 32.0f;
+        segment(b, 64, 16 + 10 * cosf(a0), 45 + 10 * sinf(a0), 16 + 10 * cosf(a1),
+                45 + 10 * sinf(a1), 3, red);
+    }
+    segment(b, 64, 38, 35, 58, 55, 3, blue);
+    segment(b, 64, 58, 35, 38, 55, 3, blue);
+    /* L1 (420, 240) and R1 (340, 240), 40 x 15: the letters as strokes */
+    for (int k = 0; k < 2; k++) {
+        float x = k == 0 ? 428.0f : 348.0f;
+        if (k == 0) {
+            segment(m, 512, x, 242, x, 252, 2, white); /* L */
+            segment(m, 512, x, 252, x + 7, 252, 2, white);
+        } else {
+            segment(m, 512, x, 242, x, 252, 2, white); /* R */
+            segment(m, 512, x, 242, x + 6, 242, 2, white);
+            segment(m, 512, x + 6, 242, x + 6, 247, 2, white);
+            segment(m, 512, x + 6, 247, x, 247, 2, white);
+            segment(m, 512, x + 2, 247, x + 7, 252, 2, white);
+        }
+        segment(m, 512, x + 14, 244, x + 17, 242, 2, white); /* 1 */
+        segment(m, 512, x + 17, 242, x + 17, 252, 2, white);
+    }
+    /* the value arrows (490, 130) and (490, 150), 20 x 20 */
+    segment(m, 512, 504, 133, 496, 140, 2, white);
+    segment(m, 512, 496, 140, 504, 147, 2, white);
+    segment(m, 512, 496, 153, 504, 160, 2, white);
+    segment(m, 512, 504, 160, 496, 167, 2, white);
+    s_sheet[0] = rd_CreateTexture(64, 64, b, RD_TEXA_80_80, "settings_render buttons");
+    s_sheet[1] = rd_CreateTexture(512, 256, m, RD_TEXA_80_80, "settings_render menu sheet");
+}
+
+static RdTex sheetResolve(unsigned long long tex0, int list)
+{
+    (void)list;
+    unsigned tbp = (unsigned)(tex0 & 0x3FFF);
+    return tbp == FAKE_TBP + 0x40                             ? s_sheet[0]
+           : tbp >= FAKE_TBP + 0x80 && tbp <= FAKE_TBP + 0xC0 ? s_sheet[1]
+                                                              : (RdTex){0};
+}
+
+static void bindFakeSheet(int no)
+{
+    if (no < 1 || no > 3) {
+        return;
+    }
+    const unsigned long long w = no == 1 ? 64 : 512, h = no == 1 ? 64 : 256;
+    const unsigned long long tw = no == 1 ? 6 : 9, th = no == 1 ? 6 : 8;
+    unsigned long long tex0 = (unsigned long long)(FAKE_TBP + 0x40 * no) | (w / 64) << 14 |
+                              tw << 26 | th << 30 | 1ull << 34;
+    (void)h;
+    gif_StartPacketPri(11);
+    gif_SetGsReg(0x06, (long long)tex0);
+    gif_EndPacket();
+}
+
+/* the model viewer's prompts and top-left rows as port/game/model_viewer.c
+   lays them out (its layout needs the game; the prompt lines are
+   ui_hint.c's own), over no model */
+static int viewerLayout(void)
+{
+    static UiHint sticks, keys;
+    int first = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    int name = ui_SettingsAddRow(24, 10, 360, 30, 0, -1, 0, "Ico", 24.0f, UI_ALIGN_LEFT);
+    ui_SettingsAddRow(24, 26, 360, 30, 0, -1, 0, "Animation: BOY STAND  \xC2\xB7  Loop", 19.0f,
+                      UI_ALIGN_LEFT);
+    ui_SettingsAddRow(24, 38, 360, 30, 0, -1, 0, "Frame 117 / 299", 19.0f, UI_ALIGN_LEFT);
+    ui_HintBuild(&sticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
+    ui_HintBuild(&keys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
+    LtProp l;
+    memset(&l, 0, sizeof(l));
+    l.first = first;
+    l.last = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    l.colA = 0.0f;
+    l.procFirst = 1;
+    l.defaultItem = l.curItem = -1;
+    l.link = -1;
+    (void)name;
+    return lt_ext_AddLayout(&l);
+}
+
 /* package DEF: the RDC_OVERLAY_TEXT items of the last frame */
 static int textItems(void)
 {
@@ -2571,6 +2822,8 @@ static int render(void)
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
     ui__SetRecordHook(gif_HostFlush);
+    makeSheets();
+    gif_HostSetTex0Resolver(sheetResolve);
     dl_Init();
     GlobalStageSetting.reductionCol[0] = GlobalStageSetting.reductionCol[1] =
         GlobalStageSetting.reductionCol[2] = 0x80;
@@ -2784,6 +3037,35 @@ static int render(void)
         CHECK(settle(ql, 60), "the quit screen at 1080p");
         press(0x8000);
         snap1080("settings_quit_screen");
+        /* the music gallery with a stream playing (the fake engine: 42 s
+           of 4:25), its bar and transport; then the model viewer's rows
+           and prompts */
+        {
+            gallery_SetEngine(&kFakeEngine);
+            lt_switch_layout(13);
+            CHECK(settle(13, 60), "the title at 1080p");
+            press(0x4000);
+            press(0x40);
+            CHECK(settle(mainL, 60), "the menu from the title at 1080p");
+            lt_ext_Layout(mainL)->curItem = ml[6];
+            press(0x40);
+            int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+            CHECK(settle(exL, 60), "Extras at 1080p");
+            lt_ext_Layout(exL)->curItem = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+            frame(0);
+            press(0x40);
+            int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+            CHECK(settle(galL, 60), "the gallery at 1080p");
+            press(0x40);
+            snap1080("settings_music");
+            press(0x10);
+            CHECK(settle(exL, 60), "back to Extras at 1080p");
+            gallery_SetEngine(NULL);
+            int vl = viewerLayout();
+            lt_switch_layout(vl);
+            CHECK(settle(vl, 60), "the viewer's rows at 1080p");
+            snap1080("settings_viewer");
+        }
         /* package TXT: the save screen's slot numbers and play time */
         fakeSaveRows();
         lt_switch_layout(14);
