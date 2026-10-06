@@ -152,12 +152,6 @@ pointer to this file.
   second pad or a keyboard layer to `pad[1]` in developer mode, or let
   SELECT on pad 1 leave the editor. Pad2 Control has the same limit.
 
-## Licences
-
-- **newlib notices.** The notices in `port/math/newlib/` were written from
-  the texts quoted in `docs/research/licences.md`; diff them word for word
-  against the upstream fdlibm, UCB and newlib texts.
-
 ## From the final code review
 
 - **Warnings as errors in `port/`.** Add `-Werror` to `ICO_PORT_WARNINGS`

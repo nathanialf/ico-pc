@@ -201,6 +201,30 @@ Math). `rand` here is the 31-bit LCG `s = s * 0x41C64E6D + 0x3039`, state at
 `_impure_ptr + 0x58` (`sce/libc/stdlib/rand.c:15`), a raw-offset access the
 64-bit sweep must keep pointing at a real `int` field.
 
+## newlib notices: word-for-word check
+
+Checked 2026-10-06 (whitespace-insensitive, comment-star prefixes ignored)
+against the upstream texts fetched from newlib's git, `HEAD`, as
+`https://sourceware.org/git/?p=newlib-cygwin.git;a=blob_plain;hb=HEAD;f=<path>`:
+
+| notice in the tree | upstream text | result |
+|---|---|---|
+| `port/math/newlib/ico_libm.c`, SunPro fdlibm notice (from "Copyright (C) 1993 by Sun Microsystems" to "is preserved.") and the quoted "Conversion to float by Ian Lance Taylor, Cygnus Support, ian@cygnus.com." | `newlib/libm/math/{ef_atan2,ef_acos,ef_asin,ef_fmod,ef_sqrt,sf_sin,sf_cos,sf_atan,kf_sin,kf_cos,ef_rem_pio2,kf_rem_pio2,sf_floor,sf_fabs}.c`, `newlib/libm/common/{sf_copysign,sf_scalbn}.c`; the diff was run on `ef_atan2.c`, `ef_sqrt.c`, `sf_atan.c` and the other 13 files all carry "Developed at SunPro" and one copy of the same notice | identical, no change |
+| `port/math/newlib/qsort.c`, UCB 3-clause notice ("Copyright (c) 1992, 1993" to "SUCH DAMAGE.") | `newlib/libc/search/qsort.c` (there is no `newlib/libc/stdlib/qsort.c`; that URL returns an error page) | identical, no change |
+| `port/math/newlib/rand.c`, Red Hat notice, item (1) | `COPYING.NEWLIB`, "(1) Red Hat Incorporated" to "permission of Red Hat, Inc." | identical, no change |
+
+`newlib/libc/stdlib/rand.c` and `newlib/libc/reent/impure.c` contain no
+copyright or Red Hat text at all (0 matches), confirming that item (1) of
+`COPYING.NEWLIB` is the only notice that covers `rand`.
+
+For comparison, fdlibm's own `https://www.netlib.org/fdlibm/e_sqrt.c` reads
+"Developed at SunSoft" where newlib's float copies read "Developed at
+SunPro"; the tree follows newlib, which is the source the files derive from.
+
+Result: no differences found; no notice text was changed. Open question 1
+below is answered by the same fetch: `newlib/libm/math/sf_cos.c` exists
+upstream.
+
 ## Open questions
 
 1. `cosf`: which member provides it (no `sf_cos.c` in `sce/libm/math`).
