@@ -30,6 +30,32 @@ pointer to this file.
   preset's output path only while active. Config keys under `[photo]`;
   rows in `port/ui/settings.c`; documented in DISPLAY.md and SETTINGS.md.
 
+## Extras (title-screen galleries)
+
+- **Music gallery.** A title-screen entry (a port row like Settings) that
+  lists everything the sound system can play and plays it on demand: the
+  soundtrack first (the streamed `.int` ADPCM tracks and the sequenced
+  pieces the stages start, with the track names the release used), then,
+  under a separate heading, the other audio assets (the ambiences, the
+  voice lines, the sound effects by bank). The two groups must be clearly
+  delineated in the list. Playback goes through the existing sequencer and
+  stream engine (`sce/libsndn2/sound.c`, `port/audio/stream.c`,
+  `port/audio/sndn2_host.c`) so what is heard is the game's own mix; the
+  list is built from the disc's sound banks and the stage table at run
+  time, nothing is shipped. Rows through `port/ui/layout_ext.c`, strings in
+  the five languages, a page in SETTINGS.md's style.
+- **Model viewer.** A title-screen entry that loads any character or object
+  model from the disc (`PObj`/`charFileManager`, the pack loaders in
+  LOADERS.md), shows it on a neutral background under the renderer's normal
+  lighting, lets the player orbit and zoom, and lists that model's
+  animations (the motion tables `motionKind` names, the skeleton's motion
+  data) so each can be triggered and looped, with the current animation's
+  name and frame shown. It runs the real motion system (`sugipon/src/
+  motionManager2.c`, the retail build's own Motion Viewer in
+  `motionViewer.c` is a starting point, DEVELOPER_MODE.md) on an otherwise
+  empty stage, so the poses are the game's. Developer mode's debug menu
+  entries stay as they are; this is a player-facing gallery.
+
 ## Platforms
 
 - **Run the D3D12 backend on Windows hardware.** It builds, but it has never
