@@ -41,8 +41,9 @@
  *             font in overlay mode: the rectangles exactly at their output
  *             pixels, the glyph's stems inside its quad (texel for pixel),
  *             nothing else changed against the present without the
- *             overlay; with the mirror on the box is flipped and the
- *             overlay is not; unregistered, the present hashes as before
+ *             overlay; with the mirror on the all-UI box shows the same
+ *             picture (within 1 LSB) and the overlay is not flipped;
+ *             unregistered, the present hashes as before
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -594,10 +595,15 @@ static RdSettings originalSettings(void)
 
 /* What the renderer before R7a produced for the rich frame on llvmpipe:
  * rd_replay_tool (pre-R7a build) on rd_pixel_test's dump of this frame,
- * DISPLAY, SCENE and --present 960x720 (RENDER_API.md "Presets and display options"). */
-#define GOLD_DISPLAY 0xde837c63a5e63c88ull
+ * DISPLAY, SCENE and --present 960x720 (RENDER_API.md "Presets and display
+ * options").  R-POST moved the reduction onto the GS sprite model (the GS
+ * integer bilinear instead of the hardware's, at most 1 LSB apart;
+ * rd_pixel_test checks it exactly), so DISPLAY and the present are that
+ * build's values for those two (0xde837c63a5e63c88, 0xbc970416f934e0c1
+ * before) and SCENE is still the pre-R7a value. */
+#define GOLD_DISPLAY 0x212c1c733f4ba8a1ull
 #define GOLD_SCENE 0x8da6e2ca4577cdacull
-#define GOLD_PRESENT 0xbc970416f934e0c1ull
+#define GOLD_PRESENT 0xedb088b74a237351ull
 #ifdef RD_PRESENT_BASELINE
 
 /* built against the pre-R7a renderer: prints the hashes of this file's own
@@ -1021,7 +1027,7 @@ static void checkOriginal(void)
            (unsigned long long)h.present);
     if (s_llvmpipe) {
         CHECK(h.display == GOLD_DISPLAY && h.scene == GOLD_SCENE && h.present == GOLD_PRESENT,
-              "original: the bytes of the renderer before R7a");
+              "original: the bytes of the renderer before R7a (with R-POST's reduction)");
     } else {
         printf("  original: not llvmpipe, the recorded hashes are not compared\n");
     }
@@ -1447,7 +1453,18 @@ static void checkOverlayAt(uint32_t w, uint32_t h)
     /* the mirror flips the box blit, never the overlay */
     if (ovPresent(w, h, 1, 0, plainM) && ovPresent(w, h, 1, 1, overM)) {
         CHECK(s_ovt.mirror, "overlay %ux%u: ctx.mirror with the mirror on", w, h);
-        CHECK(memcmp(plain, plainM, n) != 0, "overlay %ux%u: the mirror flips the picture", w, h);
+        /* the rich frame is all UI: the replay's flip and the present's
+         * cancel, and since R-POST the reduction samples the mirror image
+         * too, so the box shows the same picture, exactly where the box's
+         * horizontal scale gives mirrored bilinear weights equal ones
+         * (RENDER_API.md "Mirror mode"), else within 1 LSB */
+        int maxd = 0;
+        for (size_t i = 0; i < n; i++) {
+            const int d = abs((int)plain[i] - (int)plainM[i]);
+            maxd = d > maxd ? d : maxd;
+        }
+        CHECK(maxd <= 1, "overlay %ux%u: the mirrored all-UI picture is the same (max %d LSB)", w,
+              h, maxd);
         uint32_t same = 0, total = 0, outside = 0;
         for (int32_t y = 0; y < (int32_t)h; y++) {
             for (int32_t x = 0; x < (int32_t)w; x++) {

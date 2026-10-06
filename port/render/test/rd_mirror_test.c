@@ -17,8 +17,15 @@
  *             off (the replay's flip and the present's cancel), while a
  *             WORLD sprite in the same frame is flipped
  *   scene     the same UI drawn into SCENE: SCENE with the mirror on is the
- *             exact flip of SCENE with it off (the reduction to DISPLAY then
- *             carries its own quarter-pixel horizontal bias, section 21)
+ *             exact flip of SCENE with it off
+ *   reduce    R-POST: that UI plus glyph-like stems (one to three pixels
+ *             wide, quarter-pixel edges, a 1:1 textured run) in SCENE,
+ *             reduced to DISPLAY by rd_Post(RD_POST_REDUCTION) with a tint:
+ *             DISPLAY with the mirror on is the exact flip of DISPLAY with
+ *             it off (the mirrored reduction samples at u = x + 0.25, the
+ *             mirror image of the GS's x + 0.75), so the presented UI is the
+ *             same pixels with the mirror on and off; Original, and Enhanced
+ *             at 1x and 2x
  *   interp    Enhanced with interpolation: rd_Present(0.5) of a keyed WORLD
  *             sprite moving between two frames is flipped exactly too
  */
@@ -357,6 +364,90 @@ static void testScene(void)
     printf("  scene: UI flipped about the target's centre\n");
 }
 
+/* glyph-like UI: stems one to three pixels wide with whole and quarter
+ * pixel edges, and a 1:1 textured run (a font's texels) */
+static void glyphContent(int w, int h)
+{
+    rd_TextureOff();
+    for (int i = 0; i < 12; i++) {
+        const int32_t x0 = (60 + 23 * i) * 16 + (i & 3) * 4;
+        const int32_t x1 = x0 + 16 * (1 + i % 3) + ((i >> 2) & 1) * 8;
+        sprite(w, h, RD_SPACE_UI, x0, 300 * 16, x1, 340 * 16, i & 1 ? kRed : kGreen, 0, 0, 0, 0, 0);
+    }
+    textured();
+    for (int i = 0; i < 6; i++) {
+        sprite(w, h, RD_SPACE_UI, (70 + 37 * i) * 16 + 4 * i, 360 * 16, (86 + 37 * i) * 16 + 4 * i,
+               376 * 16, kGrey, 8, 8, 16 * 16 + 8, 16 * 16 + 8, 0);
+    }
+    rd_TextureOff();
+}
+
+/* UI into SCENE, then the reduction into DISPLAY */
+static void reducedFrame(void)
+{
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), (RdTarget){0}, 512, 512, 0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBlack, 0, 0);
+    rd_SelectList(11);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), (RdTarget){0}, 512, 512, 0);
+    opaque2D();
+    uiContent(512, 512);
+    glyphContent(512, 512);
+    rd_SelectList(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = 128;
+    pp.rgba[1] = 120;
+    pp.rgba[2] = 100;
+    pp.rgba[3] = 0x80;
+    rd_Post(RD_POST_REDUCTION, &pp);
+    rd_EndFrame(0);
+}
+
+static void testReduce(RdPreset preset, float scale, const char *name)
+{
+    static uint8_t a[1024 * 512 * 4], b[1024 * 512 * 4];
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    int fx, fy;
+    settings(preset, 0);
+    if (scale > 1.0f) {
+        RdSettings s = *rd_GetSettings();
+        s.sceneScale = scale;
+        rd_SetSettings(&s);
+    }
+    rd_SetMirror(0);
+    reducedFrame();
+    if (!readTarget(RD_TARGET_DISPLAY, a, sizeof(a), &w, &h) || !readOut(s_off)) {
+        return;
+    }
+    rd_SetMirror(1);
+    reducedFrame();
+    if (!readTarget(RD_TARGET_DISPLAY, b, sizeof(b), &w2, &h2) || !readOut(s_on)) {
+        rd_SetMirror(0);
+        return;
+    }
+    rd_SetMirror(0);
+    CHECK(w == w2 && h == h2 && w == (uint32_t)(512 * scale), "%s: DISPLAY %ux%u", name, w, h);
+    const int asym = compare(a, a, (int)w, (int)h, 1, &fx, &fy);
+    CHECK(asym > 1000, "%s: the reduced UI is not symmetric (%d)", name, asym);
+    int lit = 0;
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        lit += a[i * 4] | a[i * 4 + 1] | a[i * 4 + 2] ? 1 : 0;
+    }
+    CHECK(lit > 2000, "%s: UI reduced into DISPLAY (%d lit pixels)", name, lit);
+    const int bad = compare(b, a, (int)w, (int)h, 1, &fx, &fy);
+    CHECK(bad == 0, "%s: mirrored DISPLAY is the flip of DISPLAY: %d pixels differ (first %d, %d)",
+          name, bad, fx, fy);
+    const int same = compare(s_on, s_off, OUT_W, OUT_H, 0, &fx, &fy);
+    CHECK(same == 0,
+          "%s: the presented UI is the same with the mirror on: %d differ (first %d, %d)", name,
+          same, fx, fy);
+    printf("  reduce %s: DISPLAY %ux%u, %d lit, %d asymmetric pixels; %d pixels differ from the "
+           "flip, %d presented pixels from the mirror off\n",
+           name, w, h, lit, asym, bad, same);
+}
+
 static void testInterp(void)
 {
     int fx, fy;
@@ -423,6 +514,9 @@ int main(void)
     testPresent(RD_PRESET_ENHANCED, "Enhanced 1x");
     testUi();
     testScene();
+    testReduce(RD_PRESET_ORIGINAL, 1.0f, "Original");
+    testReduce(RD_PRESET_ENHANCED, 1.0f, "Enhanced 1x");
+    testReduce(RD_PRESET_ENHANCED, 2.0f, "Enhanced 2x");
     testInterp();
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     const uint32_t verr = rhi_vk_ValidationErrorCount();

@@ -26,6 +26,11 @@
  *             FBMSK 0xFF000000 (FRAME PSMCT24) reading the block's RGB24
  *             view, the state left (ZBUF write on, TEST 0x50000); sonic's
  *             TEST 0x33001 (RGB_ONLY) sprite reading SCENE
+ *   mask      FBMSK's extent (R-POST): a draw after the composite and
+ *             before the next FRAME write draws with alpha masked, one
+ *             after the anti-alias pass's FRAME writes or after the next
+ *             frame's head writes alpha (and a list-0 draw before the head
+ *             still does not)
  *   nothing reaches the decoder undecoded.
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   dark      a wall over the left half of SCENE at the volume's centre
@@ -37,6 +42,8 @@
  *             (TEXA expanded after filtering, as rd samples RGB24), 1 LSB,
  *             SCENE's alpha untouched (PSMCT24); the GS order (TEXA before
  *             filtering) is measured and printed
+ *   mask      the five sprites of the mask check: RGB written, alpha
+ *             written only by the two after a FRAME write
  *   lightning one bolt with c = 4 (LERP As) and one with c = 5 (Cs As + Cd)
  *             over a grey SCENE against a CPU raster of the recorded
  *             triangles with the GS integer blend: 1 LSB a layer
@@ -878,6 +885,8 @@ static void checkLineRecording(void)
 static void sceneWall(const uint8_t *bg, const uint8_t *wall, uint32_t zWall, uint32_t zBg)
 {
     dl_SetDLPriority(0);
+    /* the flip's FRAME write (FBMSK 0), as rd_FrameHead records it */
+    rd_ColorMask(0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, zBg);
     gif_StartPacketPri(0);
@@ -1594,6 +1603,165 @@ static void gpuLines(void)
 }
 
 /* ----------------------------------------------------------- main */
+/* ------------------------------------------------- FBMSK's extent
+ * darkVolume.c's composite writes FRAME PSMCT24 (FBMSK 0xFF000000); on the
+ * GS that mask holds until the next FRAME write.  R-POST: rd records FBMSK
+ * 0 with every FRAME write of its own (rd_FrameHead, the rd_Post passes),
+ * and the dark volume leaves the mask in force.  Five 16 x 16 sprites into
+ * SCENE (RGB and alpha their own):
+ *   frame 1  the wall, the dark volume, A in list 10 after it (masked), the
+ *            anti-alias pass (FRAME writes), B after it (alpha written)
+ *   frame 2  the wall, the dark volume, C in list 10 after it (masked)
+ *   frame 3  no clear: D in list 0 before the frame head (the mask frame 2
+ *            left: masked), the head, E after it (alpha written) */
+static const uint8_t kMaskCol[5][4] = {{200, 10, 10, 0x11},
+                                       {10, 200, 10, 0x22},
+                                       {10, 10, 200, 0x33},
+                                       {200, 200, 10, 0x44},
+                                       {10, 200, 200, 0x55}};
+
+#define MASK_X(i) (300 + 24 * (i))
+#define MASK_Y 100
+
+static void maskSprite(int i)
+{
+    const int32_t ox = (2048 - W / 2) * 16, oy = (2048 - H / 2) * 16;
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    v[0].x = ox + MASK_X(i) * 16;
+    v[0].y = oy + MASK_Y * 16;
+    v[1].x = v[0].x + 16 * 16;
+    v[1].y = v[0].y + 16 * 16;
+    v[0].q = v[1].q = 1.0f;
+    memcpy(v[0].rgba, kMaskCol[i], 4);
+    memcpy(v[1].rgba, kMaskCol[i], 4);
+    gif_HostFlush();
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_FBA(0);
+    rd_TextureOff();
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+}
+
+static void recordMaskFrame(int n)
+{
+    static float pos[4] = {0.0f, 0.0f, DV_Z, 1.0f};
+    dl_Clear();
+    if (n < 3) {
+        sceneWall(kDvBg, kDvWall, DV_ZWALL, DV_ZBG);
+        SetupDarkVolume(pos, 2.4f, 0.9f);
+        dl_SetDLPriority(10);
+        maskSprite(n == 1 ? 0 : 2);
+        if (n == 1) {
+            RdPostParams pp;
+            memset(&pp, 0, sizeof(pp));
+            pp.lines = 1;
+            rd_Post(RD_POST_AA_DOWNSAMPLE, &pp);
+            memset(&pp, 0, sizeof(pp));
+            rd_Post(RD_POST_AA_COMPOSITE, &pp); /* levels 0: the FRAME writes alone */
+            maskSprite(1);
+        }
+    } else {
+        dl_SetDLPriority(0);
+        maskSprite(3);
+        RdFrameHead h;
+        memset(&h, 0, sizeof(h));
+        h.gsW = W;
+        h.gsH = H;
+        rd_FrameHead(&h);
+        dl_SetDLPriority(0);
+        maskSprite(4);
+    }
+    dl_Swap();
+}
+
+/* the colour mask each of the frame's sprites drew with (bit 3 = alpha), -1
+ * where it is not in the frame */
+static void maskOf(int mask[5])
+{
+    collect();
+    for (int i = 0; i < 5; i++) {
+        mask[i] = -1;
+    }
+    for (int k = 0; k < s_nev; k++) {
+        const Ev *e = &s_ev[k];
+        if (e->cmd->type != RDC_SCREEN || e->st.color != rd_Target(RD_TARGET_SCENE).id) {
+            continue;
+        }
+        const RdScreenVtx *v = vtxOf(e->cmd);
+        for (int i = 0; i < 5; i++) {
+            if (e->cmd->u[1] == 2 && memcmp(v[0].rgba, kMaskCol[i], 4) == 0) {
+                mask[i] = e->st.ds.colorMask;
+            }
+        }
+    }
+}
+
+static void checkMaskRecording(void)
+{
+    static const int kFrameOf[5] = {1, 1, 2, 3, 3};
+    static const int kWrites[5] = {0, 1, 0, 0, 1};
+    for (int n = 1; n <= 3; n++) {
+        InitGameOverEffect();
+        recordMaskFrame(n);
+        int mask[5];
+        maskOf(mask);
+        for (int i = 0; i < 5; i++) {
+            if (kFrameOf[i] != n) {
+                continue;
+            }
+            CHECK(mask[i] >= 0 && (mask[i] & 7) == 7 && ((mask[i] & 8) != 0) == kWrites[i],
+                  "FBMSK extent: sprite %c in frame %d drew with colour mask %x, want %s", 'A' + i,
+                  n, mask[i], kWrites[i] ? "F" : "7");
+        }
+    }
+}
+
+static void gpuMask(void)
+{
+    static const int kFrameOf[5] = {1, 1, 2, 3, 3};
+    static const int kWrites[5] = {0, 1, 0, 0, 1};
+    static uint8_t before[W * H * 4];
+    int bad = 0;
+    for (int n = 1; n <= 3; n++) {
+        InitGameOverEffect();
+        /* SCENE as the frame found it (frame 3 does not clear) */
+        if (!readTarget(rd_Target(RD_TARGET_SCENE).id, before)) {
+            CHECK(0, "mask: SCENE readback");
+            return;
+        }
+        recordMaskFrame(n);
+        rhi_WaitIdle();
+        if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu)) {
+            CHECK(0, "mask: SCENE readback");
+            return;
+        }
+        for (int i = 0; i < 5; i++) {
+            if (kFrameOf[i] != n) {
+                continue;
+            }
+            const size_t at = ((size_t)(MASK_Y + 8) * W + (size_t)(MASK_X(i) + 8)) * 4;
+            const uint8_t *g = &s_gpu[at];
+            /* the wall and the dark volume leave the background's alpha
+             * there in frames 1 and 2; frame 3 finds frame 2's */
+            const uint8_t oldA = n < 3 ? kDvBg[3] : before[at + 3];
+            const uint8_t wantA = kWrites[i] ? kMaskCol[i][3] : oldA;
+            const int ok = g[0] == kMaskCol[i][0] && g[1] == kMaskCol[i][1] &&
+                           g[2] == kMaskCol[i][2] && g[3] == wantA;
+            if (!ok) {
+                printf("  mask: sprite %c (frame %d): %u %u %u %u, want %u %u %u %u\n", 'A' + i, n,
+                       g[0], g[1], g[2], g[3], kMaskCol[i][0], kMaskCol[i][1], kMaskCol[i][2],
+                       wantA);
+            }
+            bad += !ok;
+        }
+    }
+    CHECK(bad == 0, "mask: %d sprites wrote the wrong alpha", bad);
+    printf("  mask: the composite's FBMSK holds until the next FRAME write (anti-alias pass, "
+           "frame head)\n");
+}
+
 static void setup(void)
 {
     gif_HostSetTex0Resolver(texResolve);
@@ -1616,6 +1784,7 @@ int main(void)
     checkLightningRecording();
     checkLineRecording();
     checkDarkRecording();
+    checkMaskRecording();
     CHECK(gif_HostUndecodedTotal() == 0, "%u GS writes undecoded", gif_HostUndecodedTotal());
     rd_Shutdown();
     printf("  recording checks: %s\n", failures ? "FAILED" : "ok");
@@ -1637,6 +1806,7 @@ int main(void)
     setup();
     gpuDark();
     gpuSonic();
+    gpuMask();
     gpuLightning(4);
     gpuLightning(5);
     gpuParticles(1, 0);

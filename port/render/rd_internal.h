@@ -554,13 +554,26 @@ void rd__FogShutdown(void);
 RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
                          int *useDepth);
 uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* rd_blur.c: records the sprite (rd_Post's wave-5 kinds). */
+/* rd_blur.c: records the sprite (rd_Post's wave-5 kinds, and since R-POST
+ * the reduction's two sprites, rd_post.c). */
 void rd__PostBlur(RdPostKind kind, const RdPostParams *p);
+/* The same with the sprite's two screen vertices, then the mirrored pair,
+ * kept in the payload (RdPostRec.lutOffset) for rd__BlurScreenFallback. */
+void rd__PostBlurVerts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx v[4]);
+/* rd_blur.c: the payload offset of the screen vertices a recorded sprite is
+ * drawn with instead of the model (the reduction on a scaled target), or
+ * ~0u (R-POST). */
+uint32_t rd__BlurScreenFallback(uint32_t kind, const RdPostRec *p, const RdStateBlock *st);
+/* rd_blur.c: the UV rectangle the replay draws a recorded sprite with: the
+ * recorded one, except the reduction's with the mirror on, which samples
+ * the mirror image of the unmirrored sample points (R-POST). */
+void rd__BlurUvRect(uint32_t kind, const RdPostRec *p, float uv[4]);
 
-/* True for the wave-5 kinds. */
+/* True for the kinds drawn by the GS sprite model (doBlurSprite): the
+ * wave-5 kinds and the reduction (R-POST). */
 static inline bool rd__IsBlurKind(uint32_t kind)
 {
-    return kind >= RD_POST_MOTION_BLUR && kind <= RD_POST_EYE_BLUR;
+    return kind == RD_POST_REDUCTION || (kind >= RD_POST_MOTION_BLUR && kind <= RD_POST_EYE_BLUR);
 }
 
 /* The interpolation hook of the feedback passes (motion blur, aura): the

@@ -304,7 +304,10 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
         }
         RdPostRec r;
         memcpy(&r, f->payload + c->u[1], sizeof(r));
-        return r.lutOffset == ~0u || payloadRange(psz, r.lutOffset, 256 * 4);
+        /* the fog's LUT, or (R-POST) the reduction's four screen vertices */
+        const uint64_t n =
+            c->b[0] == RD_POST_REDUCTION ? 4 * (uint64_t)sizeof(RdScreenVtx) : 256 * 4;
+        return r.lutOffset == ~0u || payloadRange(psz, r.lutOffset, n);
     }
     case RDC_WORLD_PRIMS:
         return payloadRange(psz, c->u[1], c->u[2]);

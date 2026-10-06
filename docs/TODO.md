@@ -94,16 +94,6 @@ pointer to this file.
   Q = 1/w, but screen prims divide per vertex (`RD_ONCE_STQ` in
   `rd_replay.c`), so a bolt receding in depth maps its texture affinely. Pass
   Q to the sprite vertex shader and divide per pixel.
-- **FBMSK scope.** `rd_FrameHead` and the `rd_Post` kinds record no FBMSK, so
-  `darkVolume.c`'s PSMCT24 mask ends at its composite (`dvHostBlockEnd`)
-  rather than at the next FRAME write as on the GS; list-10 draws between the
-  dark volume and the anti-alias pass then write SCENE alpha on rd but not on
-  the PS2. Record FBMSK 0 in `rd_FrameHead` and the post kinds
-  (`rd_frame.c`, `rd_post.c`).
-- **Exact motion blur loop.** The loop includes `RD_POST_REDUCTION`, a
-  hardware-filtered sprite (1 LSB off). Routing the reduction through the
-  `fx_sprite_ps` model would make it exact end to end (`rd_post.c`,
-  `rd_blur.c`).
 - **Shadow level 1 at high scales.** At 4x the first blur step samples the
   scaled count with 2x2 taps of a 4x4 footprint, so the shadow's integral
   varies 2.6% frame to frame instead of 2.0%. Box-reduce the count to the
@@ -160,9 +150,6 @@ pointer to this file.
   clamped edge (`rd_water.c`, `puddle.c`, `pool.c`).
 - **Narrow UI scissor.** A UI scissor narrower than the screen is not
   widened; it clips less, never more, and none has been seen.
-- **Mirror glyph edges.** The reduction samples at u = x + 0.75, which is
-  not mirror-symmetric, so mirrored UI glyph edges blend with the
-  neighbour on the other side.
 - **Mirror debug font.** `debug.c`'s list-11 font reads mirrored in
   developer mode.
 

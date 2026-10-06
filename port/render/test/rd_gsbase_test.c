@@ -17,6 +17,9 @@
  *            per buffer when it alternates per flip
  *   leak     the post passes leave their state: fade -> ALPHA 0x44, ABE,
  *            PABE 0; keep -> TEXA 80/80, DISPLAY bound
+ *   mask     FBMSK's extent (R-POST): FRAME.FBMSK masked in list 10 holds
+ *            for a draw after it and ends at the anti-alias pass's FRAME
+ *            write or the reduction's
  *   vu       gsb_MakeCommonMatrix's VU block and the frame camera
  *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32
  * On a Vulkan device (exit 77 without one, after the recording checks):
@@ -487,17 +490,22 @@ static void checkKeep(void)
         }
     }
     CHECK(keepAfter, "keep: the keep sprite follows the head");
-    /* the reduction in list 12: its tinted sprite's colour */
+    /* the reduction in list 12: its tinted sprite's colour (R-POST: an
+     * RdPostRec of kind RD_POST_REDUCTION) */
     const RdCmd *last = NULL;
     for (uint32_t i = 0; i < f->lists[12].count; i++) {
-        if (f->lists[12].cmds[i].type == RDC_SCREEN) {
-            last = &f->lists[12].cmds[i];
+        const RdCmd *k = &f->lists[12].cmds[i];
+        if (k->type == RDC_POST_STUB && k->b[0] == RD_POST_REDUCTION) {
+            last = k;
         }
     }
-    const RdScreenVtx *v = last ? (const RdScreenVtx *)(f->payload + last->u[0]) : NULL;
-    CHECK(v && v[1].rgba[0] == 128 && v[1].rgba[1] == 128 && v[1].rgba[2] == 128,
-          "keep: reduction tint 128 (got %u %u %u)", v ? v[1].rgba[0] : 0, v ? v[1].rgba[1] : 0,
-          v ? v[1].rgba[2] : 0);
+    RdPostRec red;
+    memset(&red, 0, sizeof(red));
+    if (last) {
+        memcpy(&red, f->payload + last->u[1], sizeof(red));
+    }
+    CHECK(last && red.rgba[0] == 128 && red.rgba[1] == 128 && red.rgba[2] == 128,
+          "keep: reduction tint 128 (got %u %u %u)", red.rgba[0], red.rgba[1], red.rgba[2]);
     /* the keep pass leaks TEXA 80/80 and DISPLAY into what follows */
     RdStateBlock s = f->startState;
     int texaOk = 0;
@@ -1122,6 +1130,65 @@ static void checkPipelines(void)
 
 /* ------------------------------------------------------------------ main */
 
+/* FBMSK's extent (R-POST): a FRAME.FBMSK left masked in list 10 (as
+ * darkVolume.c's PSMCT24 composite leaves it) holds for the draws after it
+ * until the next FRAME write: the anti-alias pass's or the reduction's
+ * (rd_raw_test checks the frame head's) */
+static RdStateBlock s_maskAt[3];
+static int s_maskSeen[3];
+
+static void maskWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
+{
+    (void)user, (void)index;
+    int slot = -1;
+    if (list == 10 && c->type == RDC_TEXTURE_OFF && !s_maskSeen[0]) {
+        slot = 0; /* the list-10 state after the mask */
+    } else if (list == 10 && c->type == RDC_SCREEN && st->color == RD_TARGET_AA0 + 1) {
+        slot = 1; /* the anti-alias downsample */
+    } else if (list == 12 && c->type == RDC_POST_STUB && c->b[0] == RD_POST_REDUCTION) {
+        slot = 2;
+    }
+    if (slot >= 0 && !s_maskSeen[slot]) {
+        s_maskSeen[slot] = 1;
+        s_maskAt[slot] = *st;
+    }
+}
+
+static void maskFrame(const RdFrame *f)
+{
+    memset(s_maskSeen, 0, sizeof(s_maskSeen));
+    RdStateBlock st = f->startState;
+    rd__Walk(f, 0, &st, maskWalk, NULL);
+}
+
+static void checkMask(void)
+{
+    for (int aa = 1; aa >= 0; aa--) {
+        tick(); /* opens the frame */
+        dl_SetDLPriority(10);
+        rd_ColorMask(0xFF000000u); /* the composite's FRAME PSMCT24 */
+        rd_TextureOff();           /* what a list-10 draw after it would draw with */
+        GlobalStageSetting.antiLevel0 = aa ? 0x40 : 0;
+        tick(); /* closes it: anti-alias (list 10), reduction (list 12) */
+        GlobalStageSetting.antiLevel0 = 0;
+        const RdFrame *f = rd__LastFrame();
+        if (!f) {
+            CHECK(0, "mask: a frame");
+            return;
+        }
+        maskFrame(f);
+        CHECK(s_maskSeen[0] && s_maskAt[0].ds.colorMask == 0x7,
+              "mask: list 10 after the composite keeps alpha (mask %x)", s_maskAt[0].ds.colorMask);
+        if (aa) {
+            CHECK(s_maskSeen[1] && s_maskAt[1].ds.colorMask == 0xF && s_maskAt[1].ds.fbmsk == 0,
+                  "mask: the anti-alias pass's FRAME write ends it (mask %x)",
+                  s_maskAt[1].ds.colorMask);
+        }
+        CHECK(s_maskSeen[2] && s_maskAt[2].ds.colorMask == 0xF,
+              "mask: the reduction writes DISPLAY's alpha (mask %x)", s_maskAt[2].ds.colorMask);
+    }
+}
+
 static void boot(void)
 {
     matrixptr = s_spr;
@@ -1140,6 +1207,7 @@ static void recordingChecks(void)
     checkKeep();
     checkParity();
     checkLeak();
+    checkMask();
     checkVu();
     checkZScale();
 }

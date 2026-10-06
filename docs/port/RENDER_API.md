@@ -301,7 +301,7 @@ the next `gif_*` entry or at the end of the packet), and the GIF packets
 decodes PRIM (ABE, TME, IIP, FST, the vertex queue), RGBAQ, ST, UV,
 XYZ2/XYZF2 (kick), XYZ3/XYZF3, TEX0, TEX1, CLAMP, ALPHA, TEST, ZBUF, FBA,
 PABE, TEXA, COLCLAMP, FRAME (FBP to a named target, FBMSK to
-`rd_ColorMask`), XYOFFSET (which gives the target size), SCISSOR, and the
+`rd_ColorMask`, at the FRAME write itself), XYOFFSET (which gives the target size), SCISSOR, and the
 no-ops TEXFLUSH, PRMODECONT 1 and DTHE 0. PRIM, TEX0, FRAME, XYOFFSET and
 SCISSOR are kept per list, since lists are recorded in any order but
 replayed 0 to 12. Primitives of one kind, space and UV mode are batched
@@ -447,8 +447,8 @@ sprite in the background colour at Z 0); sets the half-line offset of that
 environment for the flip after next (`sceGsSetHalfOffset`); and finally
 kicks the 13 lists recorded since the previous flip (`dl_Swap`).
 
-**On rd.** `rd_FrameHead` records the draw environment and the clear when
-the frame opens; `rd_FrameFlip` rewrites the clear colour and the half
+**On rd.** `rd_FrameHead` records the draw environment (FRAME with FBMSK 0
+first) and the clear when the frame opens; `rd_FrameFlip` rewrites the clear colour and the half
 offset in place at the flip. A frame's lists therefore draw over a clear to
 the background colour current at the flip that kicks them, as on the PS2.
 The head is recorded at the head of list 0 and of list 11; replay keeps the
@@ -523,7 +523,39 @@ arithmetic:
 | `RD_POST_AA_DOWNSAMPLE` | SCENE to AA0 (256²), and AA0 to AA1 (128²) | 0 |
 | `RD_POST_AA_COMPOSITE` | AA1 then AA0 LERPed into SCENE at 512×512 | 1 per level, 2 with both |
 | `RD_POST_FILM_NOISE` | REPEAT, STQ, grey with the grain alpha | 1 |
-| `RD_POST_REDUCTION` | SCENE to DISPLAY at half height, bilinear, tint, border crop | 1 |
+| `RD_POST_REDUCTION` | SCENE to DISPLAY at half height, bilinear, tint, border crop | 0 |
+
+**FBMSK.** FRAME.FBMSK is part of the FRAME register, so on the GS a mask
+holds until the next FRAME write, whatever draws in between. `rd` records it
+the same way: the decoder records `rd_ColorMask` at each FRAME write it
+decodes, and every post pass whose original writes FRAME (the reduction,
+the fade, the letterbox, both halves of the anti-alias pass, and the keep
+and brightness passes when given a target) and the frame head record FBMSK
+0 with their `rd_SetTarget`. The only mask the game sets is the dark
+volume's PSMCT24 composite (section 14); it now lasts, as on the PS2, to
+the anti-alias pass's FRAME write in list 10, or, on a stage without
+anti-aliasing, to the next FRAME write after list 10 (a list-11 pass or
+2D packet, at the latest the reduction in list 12). Draws in between keep
+SCENE's alpha. `rd_gsbase` and `rd_raw` check the extent.
+
+**The reduction** is two sprites drawn through the GS sprite model of
+section 14 (`fx_sprite_ps`, recorded as `RdPostRec`s of kind
+`RD_POST_REDUCTION`): the black clear of DISPLAY, then SCENE at
+u = x + 0.75, v = 2y + 1 with the GS's 4-bit bilinear (texels x and x + 1
+weighted 12 and 4, rows 2y and 2y + 1 weighted 8 and 8, the sum shifted
+down by 8), modulated by the tint, inside the border-crop scissor. The
+Original output is that integer result exactly (`rd_pixel`), so the motion
+blur loop through it is exact end to end. Enhanced on targets of scale 1
+(1x at 4:3) takes the same model and gives the same bytes. On a scaled
+target (Enhanced above 1x, or 1x at a wider aspect) the textured sprite is
+drawn as the hardware-filtered screen sprite it was before (its vertices
+are kept with the record, `rd__BlurScreenFallback`): the model steps the GS
+position in 1/16 pixel and weighs in 1/16 texel, which at a scale that is
+not an integer moves neighbouring samples up to a tenth of a texel and
+shows as edge jitter of up to 33 LSB at 16:9 1080p, where the hardware
+filter is continuous in both. Enhanced thus keeps its pictures as they
+were, and DISPLAY's 2x block averages stay within 2 LSB of the 1x pixel
+(`rd_present`). With the mirror on the sampling is mirrored (section 17).
 
 Two quirks are recorded as written. `gsb_controlBrightness` passes corners
 that are already absolute to a helper that adds the window origin again,
@@ -844,8 +876,10 @@ the sprite DDA or the filter's rounding, and no hardware capture was
 available. `rd_blur`'s CPU reference implements the same rules
 independently, and the GPU matches it with 0 LSB for every effect,
 including 600 feedback frames of motion blur and aura. The motion blur loop
-also runs through the reduction, which is still a hardware-filtered sprite
-(1 LSB), so the loop is exact only up to it (docs/TODO.md).
+also runs through the reduction, which is drawn by the same model (section
+9), so the loop is exact end to end: `rd_blur` runs it with the real
+`rd_Post(RD_POST_REDUCTION)` and a tint, and checks the reduction against
+the GS formula written out as well.
 
 **Time-corrected feedback.** `RdPostRec.scalar[2]` carries the number of
 ticks a sprite stands for (1 in Original); `rd__BlurFeedbackFix` turns FIX
@@ -865,10 +899,11 @@ spheres into a scene-sized block with Z GEQUAL against the scene, no Z
 write and COLCLAMP 0, each face adding its colour or its two's complement by
 its screen winding, so each pixel ends at (front − back) × colour per
 sphere, modulo 256; then composites the block into SCENE as PSMCT24 (alpha
-kept). Three facts the decoder cannot know are supplied by explicit host
+kept). Two facts the decoder cannot know are supplied by explicit host
 calls (`dvHostBlockBegin`, `dvHostSceneZ`, `dvHostBlockEnd`): the block is
-scene-sized (`rd_BlockTarget`), it uses SCENE's Z buffer, and the PSMCT24
-frame mask ends with the composite.
+scene-sized (`rd_BlockTarget`) and it uses SCENE's Z buffer. The PSMCT24
+frame mask is left in force after the composite and ends at the next FRAME
+write, as on the GS (section 9, "FBMSK").
 
 **COLCLAMP 0 wrap** (`doScreenWrap`, `raw_wrap.hlsl`). A screen-prim
 command under COLCLAMP 0 with an equation that adds or subtracts a source
@@ -1326,9 +1361,23 @@ X' = C − 1 + 1/16 − X with C = 2(ox + w/2), which gives exactly the
 mirrored pixels for any 12.4 edge. Each triangle's UVs are moved back by a
 sixteenth of a pixel of their x gradient, so textured sprites sample the
 same texel at the mirrored pixel. Colours and Z are not moved (the layout's
-and the font's colours are flat). The reduction samples SCENE at
-u = x + 0.75, a bias that is not mirror-symmetric, so with the mirror on a
-glyph edge's 25 % blend sits on its other side.
+and the font's colours are flat).
+
+**The reduction.** The GS samples SCENE at u = x + 0.75 for DISPLAY pixel
+x (texels x and x + 1 at 12/16 and 4/16), a bias that is not
+mirror-symmetric: with the UI drawn flipped and the present flipping it
+back, a glyph edge's 25 % blend would sit on its other side. With the
+mirror on, the replay moves the reduction's U back by half a texel
+(`rd__BlurUvRect`, `rd_blur.c`), so it samples at u = x + 0.25 (texels
+x − 1 and x at 4/16 and 12/16), the mirror image of the unmirrored sample
+points; the crop scissor and the clear are symmetric already and V is
+unchanged. DISPLAY with the mirror on is then the exact flip of DISPLAY
+with it off for the UI, so the presented UI is the same pixels either way
+(`rd_mirror`, Original and Enhanced at 1x and 2x; on a scaled target the
+hardware sprite's U moves the same half texel, so its samples are
+x ± s/4 in the target's texels), and
+the world, which the present flips, is reduced as the PS2 would reduce the
+flipped picture. With the mirror off nothing changes: the GS's 0.75 stays.
 
 **The overlay.** The presentation overlay (section 15) is drawn after the
 flip and is never flipped: the popups read normally without a pre-flip and
@@ -1444,18 +1493,18 @@ overlay; without it the tool registers no overlay).
 | `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump |
 | `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache; R8 textures and rectangle updates (the union uploaded alone, read back from the GPU) |
 | `rd_mip` | the mip chain size and alpha coverage |
-| `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes |
+| `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes, FBMSK's extent |
 | `rd_layout` | the layout's draws and keys |
 | `rd_mesh` | VU programs drawn against the CPU reference (0 LSB) |
 | `rd_shadow` | the stencil count, levels, composites, tags |
 | `rd_fog` | the Z byte model, the CLUT, the fog pixels |
 | `rd_water` | puddle, pool, barrier, water drops, cloth |
-| `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames |
-| `rd_raw` | dark volume, lightning, particles, lines, the wrap path |
+| `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
+| `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent |
 | `rd_debug` | the debug font and menu |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback |
-| `rd_mirror` | the present flip and the UI flip |
+| `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays |
 | `rd_replay_tool` | the tool on a test dump |
 | `rhi_vk`, `rhi_vk_enum`, `rhi_vk_swapchain`, `rhi_d3d12`, `rhi_d3d12_plan` | the backends |

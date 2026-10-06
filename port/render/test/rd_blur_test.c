@@ -28,8 +28,10 @@
  *      field, combinations; the sun on for the eye blur's ghosts and the
  *      DATE pass), and a dump -> load -> replay of one of them;
  *   m  600 frames of motion blur feedback (DISPLAY -> SCENE, then SCENE
- *      reduced into DISPLAY): FIX 0x40 on a static image, FIX 0x40 on
- *      noise, FIX 0x70 with cuts (RENDER_API.md "Blend exactness under feedback"'s cases);
+ *      reduced into DISPLAY by rd_Post(RD_POST_REDUCTION), tinted, the
+ *      whole loop in the model since R-POST): FIX 0x40 on a static image,
+ *      FIX 0x40 on noise, FIX 0x70 with cuts (RENDER_API.md "Blend
+ *      exactness under feedback"'s cases);
  *   a  600 frames of the aura feedback through FEED128, 200 each of modes
  *      1 (aura), 2 (mirage) and 3 (aura v2), blurCol alpha 0x20 then 0x40.
  * Tolerance 0 everywhere.  Every pipeline created is enumerated; no
@@ -263,6 +265,8 @@ static const char *kindName(uint32_t k)
         return "AURA";
     case RD_POST_EYE_BLUR:
         return "EYE_BLUR";
+    case RD_POST_REDUCTION:
+        return "REDUCTION";
     default:
         return "?";
     }
@@ -945,30 +949,21 @@ static void putScene(void)
     }
 }
 
-/* the reduction stand-in that closes the motion blur loop: SCENE into
- * DISPLAY, every second line, nearest (exact on both sides) */
+/* the reduction that closes the motion blur loop: gsbHostReduction's
+ * rd_Post(RD_POST_REDUCTION) in list 12 (the black clear of DISPLAY, then
+ * SCENE bilinear at u = x + 0.75, v = 2y + 1, tinted, inside the border
+ * crop), drawn through the GS sprite model since R-POST, so the CPU model
+ * runs it as one more sprite and the loop is compared exactly */
 static void putReduction(void)
 {
     dl_SetDLPriority(12);
-    rd_SetTarget(rd_Target(RD_TARGET_DISPLAY), (RdTarget){0}, W, H / 2, 0);
-    rd_TestGs(0x30000);
-    rd_ZWrite(0);
-    rd_ABE(0);
-    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
-    rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_SCENE), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
-               RD_TCC_RGBA);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
-    p.rect[0] = (float)(0x8000 - W / 2 * 16);
-    p.rect[1] = (float)(0x8000 - H / 4 * 16);
-    p.rect[2] = (float)(0x8000 + W / 2 * 16);
-    p.rect[3] = (float)(0x8000 + H / 4 * 16);
-    p.uv[2] = (float)(W * 16);
-    p.uv[3] = (float)(H * 16);
-    p.rgba[0] = p.rgba[1] = p.rgba[2] = p.rgba[3] = 0x80;
-    p.scalar[0] = p.scalar[1] = 512.0f;
-    p.scalar[2] = 1.0f;
-    rd_Post(RD_POST_FLARE, &p);
+    p.rgba[0] = 0x80;
+    p.rgba[1] = 0x78;
+    p.rgba[2] = 0x64;
+    p.rgba[3] = 0x80;
+    rd_Post(RD_POST_REDUCTION, &p);
 }
 
 /* every compared target cleared to 0 (and SCENE's Z) on both sides */
@@ -1094,6 +1089,34 @@ static void checkMotionBlur(void)
         blurred += (i & 3) != 3 && s_cpu[RD_TARGET_SCENE].c[i] != s_img[i];
     }
     CHECK(blurred > W * H, "(m) the motion blur changed %d channels of the last frame", blurred);
+    /* the model's reduction against the GS formula written out: DISPLAY
+     * (x, y) inside the crop is the bilinear of SCENE texels x, x + 1
+     * (4-bit weights 12, 4) and rows 2y, 2y + 1 (8, 8), the sum >> 8, then
+     * MODULATE by the tint; black outside (the GPU equals the model, above) */
+    {
+        static const uint32_t kTint[4] = {0x80, 0x78, 0x64, 0x80};
+        const CpuT *sc = &s_cpu[RD_TARGET_SCENE], *dp = &s_cpu[RD_TARGET_DISPLAY];
+        int bad = 0;
+        for (int py = 0; py < dp->h; py++) {
+            for (int px = 0; px < dp->w; px++) {
+                const int inside = px >= 2 && px <= W - 3 && py >= 8 && py <= H / 2 - 9;
+                for (int k = 0; k < 4; k++) {
+                    uint32_t want = 0;
+                    if (inside) {
+                        const uint8_t *r0 = &sc->c[((size_t)(2 * py) * W + px) * 4 + k];
+                        const uint8_t *r1 = r0 + (size_t)W * 4;
+                        const uint32_t t = (12u * 8u * r0[0] + 4u * 8u * r0[4] + 12u * 8u * r1[0] +
+                                            4u * 8u * r1[4]) >>
+                                           8;
+                        want = (t * kTint[k]) >> 7;
+                        want = want > 255 ? 255 : want;
+                    }
+                    bad += dp->c[((size_t)py * dp->w + px) * 4 + k] != want;
+                }
+            }
+        }
+        CHECK(bad == 0, "(m) the reduction is the GS formula: %d channels differ", bad);
+    }
     printf("  (m) 600 motion blur frames (FIX 0x40 static, 0x40 noise, 0x70 cuts): max difference "
            "%d LSB (%d of the last frame's RGB channels blurred)\n",
            worst, blurred);

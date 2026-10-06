@@ -10,13 +10,16 @@
  * with the GS sampling rules.  Registers the original does not write (TEX1,
  * CLAMP, FBA in most passes) are left as they are, so they leak in.  PRIM is
  * recorded as its three state bits (ABE, TME through rd_Texture /
- * rd_TextureOff, IIP).  Geometry and register values are taken from
- * ico2/seki/src/GsBase.c:
+ * rd_TextureOff, IIP).  Every pass that writes FRAME records FBMSK 0 with
+ * it (rd_ColorMask), so a mask left by an earlier FRAME write
+ * (darkVolume.c's PSMCT24 composite) ends there, as on the GS.  Geometry
+ * and register values are taken from ico2/seki/src/GsBase.c:
  *
  *   REDUCTION     gsb_Reduction: clear DISPLAY black, then SCENE drawn into
  *                 it at half height, bilinear (TEX1 0x60), tinted, inside the
  *                 border-crop scissor (2 px left/right; 8 lines top/bottom
- *                 for a 512-line scene, 2 for 448)
+ *                 for a 512-line scene, 2 for 448); both sprites are
+ *                 RdPostRecs drawn through the GS sprite model (rd_blur.c)
  *   KEEP          gsb_KeepFrameBuffer: DISPLAY read as PSMCT24 (TEXA 80/80)
  *                 drawn back over the whole scene at 112 grey, PRIM 0x116
  *   FADE          gsb_fade: gif_SetDrawEnviroment(0x800, ...), full-scene
@@ -138,6 +141,63 @@ static int32_t win(int32_t px16, uint32_t w)
     return 0x8000 - (int32_t)(w / 2) * 16 + px16;
 }
 
+/* One reduction sprite (R-POST): an RdPostRec of kind RD_POST_REDUCTION,
+ * drawn by rd_replay.c's doBlurSprite through fx_sprite_ps in the GS
+ * integer arithmetic (rd_blur.c), with the state block in force: corners
+ * and UV as the GS receives them (12.4), the TEX0 size 2^TW x 2^TH of
+ * gsb_Reduction's TEX0 (TW = TH = 9), MODULATE (TFX 0). */
+static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t rgba[4],
+                            int32_t u0, int32_t v0, int32_t u1, int32_t v1, int textured)
+{
+    RdPostParams q;
+    memset(&q, 0, sizeof(q));
+    q.rect[0] = (float)x0;
+    q.rect[1] = (float)y0;
+    q.rect[2] = (float)x1;
+    q.rect[3] = (float)y1;
+    q.uv[0] = (float)u0;
+    q.uv[1] = (float)v0;
+    q.uv[2] = (float)u1;
+    q.uv[3] = (float)v1;
+    memcpy(q.rgba, rgba, 4);
+    q.z = 0xFFFFFFFFu;
+    q.scalar[0] = q.scalar[1] = 512.0f;
+    q.scalar[2] = 1.0f;
+    if (!textured) {
+        rd__PostBlur(RD_POST_REDUCTION, &q);
+        return;
+    }
+    /* the hardware sprite a scaled replay draws instead (rd_blur.c
+     * rd__BlurScreenFallback): as recorded before R-POST, then mirrored */
+    RdScreenVtx v[4];
+    memset(v, 0, sizeof(v));
+    for (int m = 0; m < 2; m++) {
+        RdScreenVtx *w = &v[2 * m];
+        w[0].x = x0;
+        w[0].y = y0;
+        w[1].x = x1;
+        w[1].y = y1;
+        w[0].z = w[1].z = q.z;
+        w[0].s = (float)(u0 - 8 * m);
+        w[0].t = (float)v0;
+        w[1].s = (float)(u1 - 8 * m);
+        w[1].t = (float)v1;
+        w[0].q = w[1].q = 1.0f;
+        memcpy(w[0].rgba, rgba, 4);
+        memcpy(w[1].rgba, rgba, 4);
+    }
+    rd__PostBlurVerts(RD_POST_REDUCTION, &q, v);
+}
+
+/* gsb_Reduction.  Both sprites go through the GS sprite model rather than
+ * the hardware sampler (R-POST): the bilinear SCENE read is the GS's 4-bit
+ * fractions with the sum shifted down (rd_blur.c), so the reduction, and
+ * with it the motion blur loop that feeds DISPLAY back into SCENE, is the
+ * GS integer result.  On a scaled target the textured sprite is drawn as
+ * the hardware sprite instead (rd__BlurScreenFallback).  The textured sprite samples SCENE at u = x + 0.75
+ * (corners at -0.25 px, UV 0.5 at the corner), v = 2y + 1; with the mirror
+ * on, the replay samples at u = x + 0.25 instead, the mirror image
+ * (rd__BlurUvRect, RENDER_API.md "Mirror mode"). */
 static void postReduction(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
@@ -146,8 +206,9 @@ static void postReduction(const RdPostParams *p)
     RdTarget dst = orDefault(p->dst, RD_TARGET_DISPLAY);
     static const uint8_t kBlack[4] = {0, 0, 0, 0};
     const uint8_t tint[4] = {p->rgba[0], p->rgba[1], p->rgba[2], 0x80};
-    /* FBA 0, ALPHA 0x8000000048, FRAME FBP 0, XYOFFSET centred on W x H/2,
-     * SCISSOR W x H/2, TEST 0x30000, ZBUF mask on */
+    /* FBA 0, ALPHA 0x8000000048, FRAME FBP 0 (FBMSK 0), XYOFFSET centred on
+     * W x H/2, SCISSOR W x H/2, TEST 0x30000, ZBUF mask on */
+    rd_ColorMask(0);
     rd_SetTarget(dst, (RdTarget){0}, (uint32_t)W, (uint32_t)(H / 2), 0);
     rd_FBA(0);
     rd_Blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 0); /* PRIM 0x106 / 0x116: no ABE */
@@ -157,12 +218,12 @@ static void postReduction(const RdPostParams *p)
     /* corners at -0.25 px: covers pixels 0..W-1, 0..H/2-1 */
     const int32_t x0 = -W / 2 * 16 + 0x8000 - 4, y0 = -H / 4 * 16 + 0x8000 - 4;
     const int32_t x1 = x0 + W * 16, y1 = y0 + H / 2 * 16;
-    sprite(x0, y0, x1, y1, 0xFFFFFFFFu, kBlack, 0, 0, 0, 0);
+    reductionSprite(x0, y0, x1, y1, kBlack, 0, 0, 0, 0, 0);
     rd__RecScissor(2, crop, W - 3, H / 2 - 1 - crop);
     rd_Texture(rd_TargetTexture(src, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
     rd__RecFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
     /* UV 0.5 .. W+0.5, 0.5 .. H+0.5 */
-    sprite(x0, y0, x1, y1, 0xFFFFFFFFu, tint, 8, 8, W * 16 + 8, H * 16 + 8);
+    reductionSprite(x0, y0, x1, y1, tint, 8, 8, W * 16 + 8, H * 16 + 8, 1);
     rd__RecScissor(0, 0, W, H);
 }
 
@@ -173,6 +234,7 @@ static void postKeep(const RdPostParams *p)
     static const uint8_t kKeep[4] = {112, 112, 112, 128};
     const uint8_t *col = (p->rgba[0] | p->rgba[1] | p->rgba[2] | p->rgba[3]) ? p->rgba : kKeep;
     if (p->dst.id) {
+        rd_ColorMask(0);
         rd_SetTarget(p->dst, p->dst.id == RD_TARGET_SCENE + 1 ? p->dst : (RdTarget){0}, (uint32_t)W,
                      (uint32_t)H, RD_TARGET_OFFSET);
     }
@@ -189,10 +251,11 @@ static void postKeep(const RdPostParams *p)
     sprite(x0, y0, x0 + W * 16 + 32, y0 + H * 16 + 32, 0, col, 8, 8, 8 + W * 16, 8 + H / 2 * 16);
 }
 
-/* gif_SetDrawEnviroment(0x800, 0, W, H, 1, 0): FRAME, SCISSOR, XYOFFSET of
- * the scene; the decoder binds the scene's depth with it */
+/* gif_SetDrawEnviroment(0x800, 0, W, H, 1, 0): FRAME (FBMSK 0), SCISSOR,
+ * XYOFFSET of the scene; the decoder binds the scene's depth with it */
 static void sceneEnv(RdTarget dst, int32_t W, int32_t H)
 {
+    rd_ColorMask(0);
     rd_SetTarget(dst, dst.id == RD_TARGET_SCENE + 1 ? dst : (RdTarget){0}, (uint32_t)W, (uint32_t)H,
                  RD_TARGET_OFFSET);
 }
@@ -289,7 +352,8 @@ static void postAaDownsample(const RdPostParams *p)
     RdTarget scene = orDefault(p->src, RD_TARGET_SCENE);
     rd_TestGs(RD_TEST_Z_ALWAYS); /* gif_SetZTest(0) */
     rd_ZWrite(0);                /* gif_SetZWrite(0) */
-    /* gif_SetDrawEnviroment(0x2800, 0, 256, 256, 0, 0) */
+    /* gif_SetDrawEnviroment(0x2800, 0, 256, 256, 0, 0): FBMSK 0 */
+    rd_ColorMask(0);
     rd_SetTarget(rd_Target(RD_TARGET_AA0), (RdTarget){0}, 256, 256, 0);
     /* TEX0 0x800, TBW 8, 512 x 512, TCC 1, MODULATE */
     rd_Texture(rd_TargetTexture(scene, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
@@ -301,6 +365,7 @@ static void postAaDownsample(const RdPostParams *p)
         /* TEX0 0x2800, TBW 4, 256 x 256; gif_SetDrawEnviroment(0x2C00, 0, 128, 128, 0, 0) */
         rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_AA0), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
                    RD_TCC_RGBA);
+        rd_ColorMask(0);
         rd_SetTarget(rd_Target(RD_TARGET_AA1), (RdTarget){0}, 128, 128, 0);
         makeSprite(-1028, -1028, 2048, 2048, s1, kAaCol);
     }
@@ -373,6 +438,7 @@ static void postComposite(const RdPostParams *p)
     targetSize(p->dst, &dw, &dh);
     targetSize(p->src, &sw, &sh);
     RdTarget depth = p->dst.id == RD_TARGET_SCENE + 1 ? p->dst : (RdTarget){0};
+    rd_ColorMask(0);
     rd_SetTarget(p->dst, depth, dw, dh, 0);
     rd_Blend((RdBlend)p->blend, p->fix, 1);
     if (p->exactInt) {

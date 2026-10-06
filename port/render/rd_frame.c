@@ -24,10 +24,13 @@ static void recordHead(RdFrame *f, int copy, int list, const RdFrameHead *h)
 {
     rd_SelectList(list);
     f->headStart[copy] = f->lists[list].count;
+    /* the draw environment: FRAME (FBMSK 0, which ends a mask an earlier
+     * FRAME write left, as the flip's FRAME write does on the GS), ZBUF
+     * (PSMZ32, ZMSK 0), XYOFFSET, SCISSOR, PRMODECONT 1 (nothing to do),
+     * COLCLAMP 1, DTHE 0 (rd never dithers), TEST 0x50000
+     * (sceGsSetDefDrawEnv with ztst 2) */
+    rd_ColorMask(0);
     f->headTarget[copy] = f->lists[list].count;
-    /* the draw environment: FRAME, ZBUF (PSMZ32, ZMSK 0), XYOFFSET, SCISSOR,
-     * PRMODECONT 1 (nothing to do), COLCLAMP 1, DTHE 0 (rd never dithers),
-     * TEST 0x50000 (sceGsSetDefDrawEnv with ztst 2) */
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), h->gsW, h->gsH,
                  RD_TARGET_OFFSET | (h->halfY ? RD_TARGET_HALF_Y : 0));
     rd_ZWrite(1);

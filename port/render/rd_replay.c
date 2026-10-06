@@ -2392,6 +2392,18 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdPostRec p;
     memcpy(&p, f->payload + c->u[1], sizeof(p));
+    const uint32_t screenVtx = rd__BlurScreenFallback(c->b[0], &p, &r->st);
+    if (screenVtx != ~0u) { /* R-POST: the reduction at a scale, a hardware sprite */
+        RdCmd sc = *c;
+        sc.type = RDC_SCREEN;
+        sc.b[0] = RD_PRIM_SPRITES;
+        sc.b[1] = RD_SPACE_FULLSCREEN;
+        sc.b[2] = 1;
+        sc.u[0] = screenVtx;
+        sc.u[1] = 2;
+        doScreen(r, f, &sc);
+        return;
+    }
     RdTargetRec *tc = rd__TargetRec(r->st.color);
     if (!tc || !tc->color.id || tc->format != RHI_FMT_RGBA8_UNORM) {
         rd__LogOnce(RD_ONCE_BLUR, "staticBlur sprite without an RGBA8 colour target: skipped");
@@ -2536,7 +2548,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.blend[1] = rd__BlurFeedbackFix(d->blend, d->blendFix, p.scalar[2]);
     cb.blend[2] = d->colclamp;
     cb.blend[3] = p.z;
-    memcpy(cb.uvRect, p.uv, sizeof(cb.uvRect));
+    rd__BlurUvRect(c->b[0], &p, cb.uvRect); /* R-POST: the reduction's mirror */
     cb.tex[0] = p.scalar[0];
     cb.tex[1] = p.scalar[1];
     cb.tex[2] = (float)tw;

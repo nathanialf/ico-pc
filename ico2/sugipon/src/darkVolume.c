@@ -313,7 +313,7 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
    packets below are VU1 SET_GSREGISTER packets (VIF UNPACK V4-32 of the GIF
    tag and its A+D pairs to TOP, MSCALF 0) and the spheres are raw GIF writes
    (gif_SetGsReg); both reach the GS register decoder as on the PS2, the
-   packets through mc_HostDma once chained.  Three things the decoder cannot
+   packets through mc_HostDma once chained.  Two things the decoder cannot
    know, supplied here:
      - FRAME FBP 0x140 (TBP 0x2800) at the scene's size is a scene-sized
        VRAM block, not the anti-alias buffer the decoder names for that FBP
@@ -321,8 +321,7 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
        effect's packets (R5b's rd_GsNamedBlock / rd_AliasTarget), so the
        clear, the spheres and the TEX0 read of 0x2800 all use it;
      - ZBUF ZBP 0xC0 is the scene's Z buffer: the spheres are Z-tested
-       against SCENE's depth (the decoder binds depth only with SCENE);
-     - where the composite's PSMCT24 frame mask ends (dvHostBlockEnd).
+       against SCENE's depth (the decoder binds depth only with SCENE).
    The COLCLAMP 0 wrap of the additive spheres and the PSMCT24 frame itself
    are generic (rd_replay.c's wrap path, mc_HostDma's FRAME rule). */
 static RdTarget dvHostBlock; /* derived name */
@@ -361,12 +360,10 @@ static void dvHostBlockEnd(void) /* derived name */
     }
     dvHostBlock = (RdTarget){0};
     /* The composite's FRAME is PSMCT24 (mc_HostDma: FBMSK 0xFF000000).  On
-       the GS that holds until the next FRAME write, the anti-alias pass's or
-       the flip's; rd records those (rd_Post, rd_FrameHead) without FBMSK, so
-       the mask ends here: list-10 draws between the dark volume and the
-       anti-alias pass write SCENE's alpha on rd and not on the PS2
-       (RENDER_API.md "Full-screen effects and the raw packet builders", open item). */
-    rd_ColorMask(0);
+       the GS that holds until the next FRAME write, the anti-alias pass's,
+       another dark volume's or the flip's; rd records FBMSK 0 with each of
+       those (rd_Post, rd_FrameHead, the decoder), so the mask is left in
+       force here and ends where the GS's does. */
 }
 
 #else

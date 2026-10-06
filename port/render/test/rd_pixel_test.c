@@ -16,8 +16,9 @@
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
  *   reduce   rd_Post(RD_POST_REDUCTION) on a synthetic 512x512 scene
- *            against a CPU reference of gsb_Reduction (bilinear at the GS
- *            sample points, tint, border crop) within 1 LSB
+ *            against a CPU reference of gsb_Reduction (the GS bilinear at
+ *            the GS sample points, tint, border crop) exactly (R-POST: the
+ *            reduction is drawn through the GS sprite model)
  *   keep     a keep frame (lists 11/12 only) draws DISPLAY back at 112/128
  *   exact    100 frames of RD_POST_COMPOSITE_FIX with exactInt into
  *            FEED128 equal the GS integer formula exactly every frame
@@ -452,8 +453,7 @@ static void testReduction(const char *dir)
         s_scene[i * 4 + 3] = (uint8_t)((hsh >> 24) & 0x7F) + 0x40;
     }
     RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
-    /* tints at or below 0x80: a 1-LSB filter difference stays 1 LSB after the
-     * modulate (the game's reduction colours are of this kind) */
+    /* tints at or below 0x80 (the game's reduction colours are of this kind) */
     const uint8_t tint[3] = {100, 128, 90};
     rd_BeginFrame();
     drawScene(t);
@@ -485,16 +485,15 @@ static void testReduction(const char *dir)
             const int inside = px >= 2 && px <= 509 && py >= 8 && py <= 247;
             if (inside) {
                 /* GS sample point (px, py): u = px + 0.75, v = 2py + 1 (texels);
-                 * bilinear between texels px, px+1 (0.75/0.25) and rows 2py,
-                 * 2py+1 (0.5/0.5) */
+                 * the GS bilinear between texels px, px+1 (4-bit weights 12
+                 * and 4) and rows 2py, 2py+1 (8 and 8), the sum >> 8 */
                 for (int k = 0; k < 4; k++) {
                     const int x0 = px, x1 = px + 1, y0 = 2 * py, y1 = 2 * py + 1;
-                    double v = 0.375 * scene[((size_t)y0 * 512 + x0) * 4 + k] +
-                               0.125 * scene[((size_t)y0 * 512 + x1) * 4 + k] +
-                               0.375 * scene[((size_t)y1 * 512 + x0) * 4 + k] +
-                               0.125 * scene[((size_t)y1 * 512 + x1) * 4 + k];
-                    int t8 = (int)(v + 0.5);
-                    want[k] = (int)gs_tfx_mod((uint32_t)t8, k < 3 ? tint[k] : 0x80);
+                    const int v = 12 * 8 * scene[((size_t)y0 * 512 + x0) * 4 + k] +
+                                  4 * 8 * scene[((size_t)y0 * 512 + x1) * 4 + k] +
+                                  12 * 8 * scene[((size_t)y1 * 512 + x0) * 4 + k] +
+                                  4 * 8 * scene[((size_t)y1 * 512 + x1) * 4 + k];
+                    want[k] = (int)gs_tfx_mod((uint32_t)(v >> 8), k < 3 ? tint[k] : 0x80);
                 }
             }
             int bad = 0;
@@ -503,7 +502,7 @@ static void testReduction(const char *dir)
                 if (e > worst) {
                     worst = e;
                 }
-                if (e > (inside ? 1 : 0)) {
+                if (e > 0) {
                     bad = 1;
                 }
             }
