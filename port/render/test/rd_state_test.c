@@ -324,6 +324,91 @@ static void testPlans(void)
           "no depth attachment: Z test and write normalised off");
 }
 
+/* A version 5 dump (before RD_TARGET_FEED_HELD): 16 fixed targets, so its
+   first temporary slot has low half 17, FEED_HELD's handle now.  The dump
+   at path with its temp's handle moved to slot 17 and its version set to 5
+   loads with the temp recreated and remapped, not read as FEED_HELD. */
+static void testDumpV5Temps(const RdFrame *f, const char *path, const char *dir)
+{
+    uint32_t tid = 0;
+    for (uint32_t i = 0; i < f->lists[7].count && !tid; i++) {
+        if (f->lists[7].cmds[i].type == RDC_TARGET) {
+            tid = f->lists[7].cmds[i].u[0];
+        }
+    }
+    CHECK(rd_Target(RD_TARGET_FEED_HELD).id == 17u && (tid & 0xFFFF) > 17u,
+          "FEED_HELD's handle 17, the temp's slot past it (%#x)", tid);
+    FILE *fp = fopen(path, "rb");
+    long size = 0;
+    uint8_t *buf = NULL;
+    if (fp && fseek(fp, 0, SEEK_END) == 0 && (size = ftell(fp)) > 0 &&
+        fseek(fp, 0, SEEK_SET) == 0) {
+        buf = malloc((size_t)size);
+        if (buf && fread(buf, 1, (size_t)size, fp) != (size_t)size) {
+            free(buf);
+            buf = NULL;
+        }
+    }
+    if (fp) {
+        fclose(fp);
+    }
+    if (!buf || !tid) {
+        CHECK(0, "v5: dump read back");
+        free(buf);
+        return;
+    }
+    /* every field holding the temp's handle (the commands, the state
+       blocks, its view's texture header, the temp section) */
+    const uint32_t old = (tid & 0xFFFF0000u) | 17u;
+    int moved = 0;
+    for (long o = 0; o + 4 <= size; o += 4) {
+        uint32_t v;
+        memcpy(&v, buf + o, 4);
+        if (v == tid) {
+            memcpy(buf + o, &old, 4);
+            moved++;
+        }
+    }
+    uint32_t v5 = 5;
+    memcpy(buf + 8, &v5, 4);
+    char path5[1100];
+    snprintf(path5, sizeof(path5), "%s/rd_state_test_v5.rddump", dir);
+    fp = fopen(path5, "wb");
+    CHECK(moved >= 4 && fp && fwrite(buf, 1, (size_t)size, fp) == (size_t)size,
+          "v5 dump written (%d handles moved)", moved);
+    if (fp) {
+        fclose(fp);
+    }
+    free(buf);
+    RdFrame h;
+    if (!rd__LoadFrame(path5, &h)) {
+        CHECK(0, "version 5 dump loaded");
+        remove(path5);
+        return;
+    }
+    int targets = 0, views = 0;
+    for (uint32_t i = 0; i < h.lists[7].count; i++) {
+        const RdCmd *c = &h.lists[7].cmds[i];
+        if (c->type == RDC_TARGET) {
+            const RdTargetRec *t = rd__TargetRec(c->u[0]);
+            CHECK(c->u[0] != old && (c->u[0] & 0xFFFF) > RD_TARGET_COUNT && t && t->w == 64 &&
+                      t->h == 32 && t->withDepth,
+                  "version 5: the temp at slot 17 recreated, not FEED_HELD (%#x)", c->u[0]);
+            targets++;
+        } else if (c->type == RDC_TEXTURE) {
+            const RdTexRec *tx = rd__TexRec(c->u[0]);
+            if (tx && tx->kind == RD_TEXKIND_TARGET) {
+                CHECK(tx->target != old && (tx->target & 0xFFFF) > RD_TARGET_COUNT,
+                      "version 5: the temp's view on the new temp (%#x)", tx->target);
+                views++;
+            }
+        }
+    }
+    CHECK(targets == 1 && views == 1, "version 5: one target, one view (%d, %d)", targets, views);
+    rd__FrameFree(&h);
+    remove(path5);
+}
+
 static void testDump(const char *dir)
 {
     uint8_t px[4 * 4 * 4];
@@ -444,6 +529,7 @@ static void testDump(const char *dir)
         }
         remove(path3);
     }
+    testDumpV5Temps(f, path, dir);
     remove(path);
 }
 

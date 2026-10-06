@@ -1244,9 +1244,10 @@ bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
 #define RD_DUMP_VERSION                                                                            \
-    5u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
+    6u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
           RDC_AA1, RdStateBlock.aa1 (package AA1); 5: RDC_OVERLAY_TEXT and RDC_SCREEN's       \
-          RD_SCREEN_TEXT_QUADS (package DEF).  rd__LoadFrame reads 3, 4 and 5 */
+          RD_SCREEN_TEXT_QUADS (package DEF); 6: RD_TARGET_FEED_HELD, a 17th fixed target.    \
+          rd__LoadFrame reads 3 to 6 */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

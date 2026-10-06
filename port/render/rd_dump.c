@@ -23,6 +23,8 @@
  *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
  *   dump has none, so it replays as before in every preset)
+ *   (version 6: RD_TARGET_FEED_HELD appended, so the temporary targets'
+ *   slots start one later; an older dump's temps start at low half 17)
  *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
@@ -64,9 +66,16 @@ static void idAdd(IdSet *s, uint32_t id)
     }
 }
 
+/* a temporary target's handle has a slot past the fixed targets in its low
+   half; count is the fixed targets' count the dump was written with */
+static int isTempOf(uint32_t targetId, uint32_t count)
+{
+    return targetId && (targetId & 0xFFFF) > count;
+}
+
 static int isTemp(uint32_t targetId)
 {
-    return targetId && (targetId & 0xFFFF) > RD_TARGET_COUNT;
+    return isTempOf(targetId, RD_TARGET_COUNT);
 }
 
 static void targetRef(IdSet *temps, uint32_t id)
@@ -229,6 +238,7 @@ static bool rraw(FILE *fp, void *p, size_t n)
 typedef struct IdMap {
     uint32_t from[MAX_REFS], to[MAX_REFS];
     uint32_t n;
+    uint32_t fixedCount; /* the targets map: RD_TARGET_COUNT when the dump was written */
 } IdMap;
 
 static uint32_t mapId(const IdMap *m, uint32_t id)
@@ -243,7 +253,7 @@ static uint32_t mapId(const IdMap *m, uint32_t id)
 
 static uint32_t mapTarget(const IdMap *m, uint32_t id)
 {
-    return isTemp(id) ? mapId(m, id) : id;
+    return isTempOf(id, m->fixedCount) ? mapId(m, id) : id;
 }
 
 static void remapState(RdStateBlock *s, const IdMap *tex, const IdMap *tgt)
@@ -366,15 +376,18 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     /* package AA1: version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
      * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes */
     bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
-              (ver == RD_DUMP_VERSION || ver == 3u || ver == 4u) && r32(fp, &szCmd) &&
-              szCmd == sizeof(RdCmd) && r32(fp, &szState) &&
+              ver >= 3u && ver <= RD_DUMP_VERSION && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
+              r32(fp, &szState) &&
               szState == (ver == 3u ? RD_STATE_BLOCK_V3_SIZE : sizeof(RdStateBlock)) &&
               r32(fp, &szVtx) && szVtx == sizeof(RdScreenVtx);
     if (!ok) {
-        rd__Log("load: %s is not an rd dump of version 3, 4 or %u", path, RD_DUMP_VERSION);
+        rd__Log("load: %s is not an rd dump of version 3 to %u", path, RD_DUMP_VERSION);
         fclose(fp);
         return false;
     }
+    /* version 6 appended RD_TARGET_FEED_HELD: an older dump's handles have
+       16 fixed targets, so its first temporary slot's low half is 17 */
+    tgtMap.fixedCount = ver <= 5u ? 16u : RD_TARGET_COUNT;
     ok = r32(fp, &out->gsW) && r32(fp, &out->gsH) && r32(fp, &out->number) && r32(fp, &out->keep) &&
          r32(fp, &out->hasCamera) && rraw(fp, &out->camera, sizeof(out->camera)) &&
          rraw(fp, &out->startState, szState) && rraw(fp, &out->endState, szState);
