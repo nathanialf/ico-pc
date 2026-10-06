@@ -12,6 +12,7 @@
 #include "debug_exception.h"
 #include "Basic.h"
 #include <assert.h>
+#include <stdio.h>
 
 #ifdef ICO_RD
 
@@ -58,6 +59,43 @@ static const int dlBufferSize[13] = {
     81920, 14336, 30720, 4096, 16384, 65536, 40960, 12288, 26624, 14336, 4096, 28672, 86016,
 };
 
+/* PC port (DIVERGENCES.md D16): each list buffer gets DL_HOST_PAD bytes past
+   the EE's size. Nothing checks the fill on the EE (dl_CheckDLOverflow is
+   compiled out, DL_DEBUG): the test stage 88 (STGBOSS_TEST) fills list 10
+   (4096 bytes; the shadows' eyes, DispEnemyEye) and its next tags land on
+   what follows the buffer, the next block's header first. The host keeps
+   them in the pad, logs each new 1 KB of fill past the EE's size, and drops
+   a tag (dlHostSink) only when the pad is full too, keeping the last
+   quadword for dl_Swap's chain tag (ids 1 and 7). */
+#define DL_HOST_PAD 0x2000
+
+static unsigned int dlHostPeak[13];
+
+static unsigned long long dlHostSink[2] __attribute__((aligned(16)));
+
+/* 1 when the tag about to open must be dropped */
+static int dlHostFull(const DlEntry *entry, int id)
+{
+    unsigned int used = (unsigned int)(entry->cur - entry->start) + 0x10;
+    unsigned int ee = (unsigned int)dlBufferSize[dlPriority];
+
+    if (used <= ee) {
+        return 0;
+    }
+    if (used > dlHostPeak[dlPriority]) {
+        unsigned int peak = dlHostPeak[dlPriority];
+
+        if (peak <= ee || ((used - ee - 1) >> 10) != ((peak - ee - 1) >> 10)) {
+            fprintf(stderr,
+                    "dl: list %d at %u bytes, past the EE's %u (DIVERGENCES D16; "
+                    "logged per 1 KB)\n",
+                    dlPriority, used, ee);
+        }
+        dlHostPeak[dlPriority] = used;
+    }
+    return id != 1 && id != 7 && used > ee + DL_HOST_PAD - 0x10;
+}
+
 void dl_Init(void)
 {
     int i;
@@ -66,8 +104,8 @@ void dl_Init(void)
     dlStackDepth = 0;
     for (i = 0; i < 2; i++) {
         for (j = 0; j < 13; j++) {
-            dlBufferHead[i][j] = (ICO_WORD)ICO_UNCACHED_ACCEL(
-                ICO_ADDR(iosMallocDebug(ios_partition_common, dlBufferSize[j], __FILE__, 393)));
+            dlBufferHead[i][j] = (ICO_WORD)ICO_UNCACHED_ACCEL(ICO_ADDR(iosMallocDebug(
+                ios_partition_common, dlBufferSize[j] + DL_HOST_PAD, __FILE__, 393)));
         }
     }
     dlBank = 0;
@@ -231,6 +269,14 @@ inline void dl_OpenDma(int id, const void *addr, int qwc)
     }
     if (entry->open) {
         dl_CloseDma();
+    }
+    if (dlHostFull(entry, id)) {
+        entry->id = id;
+        entry->qwc = qwc;
+        entry->open = 1;
+        entry->addr = (long long)ICO_PHYS((ICO_WORD)ICO_ADDR(addr));
+        entry->tag = (ICO_WORD)dlHostSink;
+        return;
     }
     old = entry->cur;
     entry->id = id;

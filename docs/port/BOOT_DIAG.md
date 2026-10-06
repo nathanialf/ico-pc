@@ -108,7 +108,11 @@ came from; a rebuild moves every function.
   applies `[video] video_mode` as `kanbanBoot.c`'s step 200 would, so a
   developer boot runs at the user's 50 or 60 Hz. An idle boot of every stage
   with data under the `fptrap` and heap-ASan builds below, at both rates, is
-  the way to sweep code the boot script never reaches.
+  the way to sweep code the boot script never reaches. Every such stage
+  boots clean in both builds; the last finding was the test stage 88's
+  display list 10 running past its EE size (`DIVERGENCES.md` D16). A
+  `dl: list N at B bytes, past the EE's S` line in the log marks a list
+  that did so; the host's pad holds 0x2000 bytes more.
 - A user's pad recording (`logs/input-<time>.txt`) replays in the headless
   build as a pad script (`pad_script=`); with `trace=1` on both sides the
   two traces can be compared tick by tick (`TESTING.md`).

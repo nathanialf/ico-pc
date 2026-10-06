@@ -48,11 +48,6 @@ pointer to this file.
 
 ## Game code and 64-bit safety
 
-- **Test stages 88 and 91 under ASan.** After the all-stage boot sweep every
-  stage with data on the disc (1 to 63, 88, 91, 103 to 105) boots clean in
-  the `fptrap` and heap-ASan builds except the test stages 88 and 91, which
-  still report under ASan (commit 48ffde63). Boot each with `start_stage` in
-  the heap-ASan build (docs/port/BOOT_DIAG.md) and fix the finding or record it in DIVERGENCES.md.
 - **`rootUpdateY` copies the floor normal on a miss.**
   `sugipon/src/motMan_rootUpdate.c.inc` `rootUpdateY` copies `w.normal` into
   `skelRoot->plane` after `getFieldCollision(&w)` whether or not the ray hit,
