@@ -132,6 +132,13 @@ int main(void)
         CHECK(m->nameStr >= UI_STR_MV_ICO && m->nameStr < UI_STR_COUNT, "model %d: name id %d", i,
               m->nameStr);
         checkText(m->nameStr, en);
+        /* the list's label column: 560 px at size 24 (model_viewer.c; the model
+         list has no value column) */
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            const char *nm = ui_StrIn((UiLang)l, (UiStrId)m->nameStr);
+            const float w = ui_MeasureText(24.0f, nm);
+            CHECK(w <= 560.0f, "%s in %s: %.1f px wide, the label column is 560", en, kLang[l], w);
+        }
         CHECK(dataStage(m->stage), "%s: host stage %d", en, m->stage);
         CHECK(m->kind >= 1 && m->kind < KINDS, "%s: kind %d", en, m->kind);
         CHECK(m->charId >= 0 && m->charId < MODELS, "%s: model %d", en, m->charId);

@@ -323,7 +323,7 @@ static void build(void)
     memset(&st, 0, sizeof(st));
     st.y0 = 40;
     st.pitch = 18;
-    st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+    st.label = (UiListCol){40, 560, 24.0f, UI_ALIGN_LEFT};
     st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
     st.statusY = 196;
     ui_ListBuild(&s_list, &kListDef, NULL, &st);
@@ -816,11 +816,13 @@ static void setup(void)
 static void viewInput(void)
 {
     int flags = pad[0].flags;
-    /* the left stick orbits, the right stick's vertical axis zooms */
-    s_yaw -= stick(pad[0].ana[2]) * YAW_RATE;
-    s_pitch += stick(pad[0].ana[3]) * PITCH_RATE;
+    /* the right stick (ana[0] x, ana[1] y) orbits, the left stick's vertical
+       axis (ana[3]) zooms; the signs are as they were when the sticks were
+       the other way round */
+    s_yaw -= stick(pad[0].ana[0]) * YAW_RATE;
+    s_pitch += stick(pad[0].ana[1]) * PITCH_RATE;
     s_pitch = s_pitch > PITCH_MAX ? PITCH_MAX : s_pitch < -PITCH_MAX ? -PITCH_MAX : s_pitch;
-    s_dist *= expf(stick(pad[0].ana[1]) * ZOOM_RATE);
+    s_dist *= expf(stick(pad[0].ana[3]) * ZOOM_RATE);
     s_dist = s_dist < s_distMin ? s_distMin : s_dist > s_distMax ? s_distMax : s_dist;
     if (lt_fade_status() != 2 || current_layout_id != s_viewLayout) {
         return;
