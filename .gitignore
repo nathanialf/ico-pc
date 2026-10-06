@@ -26,6 +26,8 @@ SCUS-*
 SCES-*
 SCPS-*
 baserom/
+# the same as symlinks (git worktrees link them; tools/worktree.sh)
+/baserom
 baseelf*
 # The PAL disc's reference files (tools/extract_elf.py copies them to baserom/pal/)
 MAIN.MAP
@@ -70,6 +72,7 @@ assets/
 
 # --- Toolchain / venv / editor noise ---
 .venv/
+/.venv
 venv/
 __pycache__/
 *.pyc
@@ -95,6 +98,7 @@ tools/ghidra/
 # (CMakePresets.json; build/ held the retired PS2 build's output and is
 # ignored as well).
 tools/toolchain/
+/tools/toolchain
 build-host/
 # test checkpoint packages (docs/port/TESTING.md)
 dist/

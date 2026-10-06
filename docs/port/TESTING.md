@@ -270,6 +270,26 @@ output. On Linux without a GPU they run on Mesa's lavapipe.
 The D3D12 backend has not yet been run on Windows hardware
 ([`docs/TODO.md`](../TODO.md)).
 
+## The dump corpus
+
+A change that may move pixels or the simulation is checked against a baseline
+kept under `build-host/tmp/corpus/` (never committed). For each of a boot
+(`port/input/pad-boot.txt`, 1500 ticks) and `start_stage` runs of 600 ticks
+(a plain stage, a stage with puddles, one with lightning and the Queen's
+stage) the headless build writes a `trace=` file; the window build, run with
+`SDL_VIDEODRIVER=offscreen` (it renders on lavapipe and needs no display),
+the same ini plus `headless=1`, `dump_dir=`, `dump_every=N` and `dump_from=N`
+writes `.rddump` frames, three kept per run. `rd_replay_tool` then renders each
+dump as the DISPLAY target, with `--present 640x480` (Original), with
+`--mirror`, and with `--enhanced` at 16:9 and at `--resolution 4x`, and a
+`SHA256SUMS` over the PNGs and traces records the result. After a change,
+repeat the runs into another folder and compare the sums and the traces;
+compare PNGs and traces, not the `.rddump` files, whose bytes differ between
+identical runs. The window run's trace is byte-identical to the headless one.
+`--mirror` in the tool flips UI prims only, so it matches the Original render
+of a frame that has none. The scripts and the exact inis are in that folder's
+`README.md`.
+
 ## Unit tests
 
 `ctest` in a Linux build directory runs the unit tests: the platform layer
