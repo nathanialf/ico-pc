@@ -35,6 +35,7 @@ tracked.
 |---|---|
 | `extract_elf.sh` / `extract_elf.py` | reads the user's disc image and writes `baserom/<ver>/baseelf.elf` and its `objcopy -O binary` view, and on PAL the disc's `MAIN.MAP`, `SRCFILE.TXT`, `TRFILE.TXT` and `SYSTEM.CNF`; checks the SHA-1s in `config/sha1sums.txt`. Needed only for the loader's reference test and `gen_data_desc.py --check-manifest`; the port itself reads the disc at run time |
 | `ico_version.py` / `ico_version.sh` | the branch's target slug and its base file paths, for the Python and shell tools |
+| `vu0_clobber_scan.py --elf BASE --syms SYMS [--candidates F...]` | the F10 check (docs/port/MATH.md, "Register side effects"): disassembles the base ELF's `.text` with `mips-linux-gnu-objdump -m mips:5900`, names it from a byte-identical symbol build (the decomp's `build/ico.syms.elf`), and runs a per-function dataflow over vf4-vf7 that reports every current-matrix read of a lane another routine wrote; with `--candidates`, each function's first set-clobber-read call sequence and where its reads take the matrix from. Exit 1 on a finding |
 | `gen_data_c.py` | reads `config/data_members.pal.txt` and writes each data-only member `config/data_schema.pal.txt` types as C from the base ELF, with the committed symbol lists (`--symbol-map`, below). `gen_data_desc.py` imports its parsers and the loader's reference test compiles its output; nothing it writes is committed |
 
 ## `gen_data_c.py --symbol-map`

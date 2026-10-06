@@ -253,33 +253,61 @@ members `sceVu0ViewScreenMatrix`, `sceVu0DropShadowMatrix` and libvu0's
 
 On the PS2 most libvu0 routines and several game helpers (`FSqrt`,
 `VectorLength`, `GetPointDistance`, `AddVectorXYZ`, `SubVectorXYZ`,
-`apply_matrix_w1`, the cloth helpers) overwrite vf4-vf7, where `Matrix.c`
-keeps the current matrix. Matrix.c's own non-current routines avoid
-vf4-vf7. The host routines touch only their arguments. If the game sets the
-current matrix, calls one of those routines and then reads the current
-matrix, the PS2 used a corrupted matrix and the host does not
-(DIVERGENCES.md F10).
+`apply_matrix_w1`, the cloth helpers, `_InversMatrix`, `apply_m34`) write
+vf4-vf7, where `Matrix.c` keeps the current matrix. The host routines touch
+only their arguments. The two differ only where the EE reads the current
+matrix after such a write without loading it again (DIVERGENCES.md F10).
 
-A static scan (call order within each function, routines resolved
-transitively by name, no control flow) found these candidates; the first
-two are triaged, the rest are open (docs/TODO.md):
+`tools/vu0_clobber_scan.py` decides that on the EE's code: it disassembles
+the retail ELF's `.text` (checked equal to the decomp's symbol build) with
+`mips-linux-gnu-objdump -m mips:5900` and runs a per-function dataflow over
+the control-flow graph (delay slots, jump tables from `.rodata`, callee
+summaries, the push stack), tracking each of the 16 lanes of vf4-vf7 as
+"set by a current-matrix routine the host implements", "the caller's",
+"written by a routine the host does not mirror", "after a thread switch"
+(the EE kernel does not save VU0 registers), "after an indirect call" or
+"popped from a caller's push". The header comment lists the rules. Over all
+5767 functions it finds no current-matrix read of a lane another routine
+wrote: every reader in the game loads the matrix itself
+(`_SetCurrentMatrix`/`_InitCurrentMatrix`) before reading it, or is a leaf
+reader (`gsb_ClipBox`, `gif_Draw*`, `reg_dispPoint`/`reg_dispLine`,
+`setLight`, `draw`/`drawHT`, `makeRefractST`, `bga_CalcObject`) whose every
+caller loads it immediately before the call. The only lanes read after a
+foreign write are libvu0's own register passing: `_sceVu0ecossin` returns
+cos and sin in vf4/vf5 to `sceVu0RotMatrix{X,Y,Z}` and first multiplies
+vf4.yzw by vf0.x = 0 (0x25D768), so the stale lanes drop out (VU0 has no
+NaN or infinity) and are overwritten before use.
 
-- `seki/src/BgAnimation.c` `bga_CalcObject`: two hits, both false
-  positives (different `switch` cases).
-- `fumi/src/way_tool.c` `draw_way_group`, `way_toolDL`: `sceVu0UnitMatrix`
-  then `DrawLine`; `DrawLine` sets the current matrix in `_getLine` before
-  use (the hit comes from the nested `perspLine`), so false positive.
-- To triage: `fumi/src/enemy_act.c` `subEnemyCollision`,
-  `ito/src/queen.c` `QueenBallDL`, `seki/src/RegistPacket.c` `reg_DispObj`,
-  `sugipon/src/boy.c` `BoyDL`, `BoyGeo`, `sugipon/src/clothAnimation.c`
-  `GetChainAnimation`, `sugipon/src/enemy.c` `DisplayEnemy`,
-  `sugipon/src/flag.c` `FlagDL`, `sugipon/src/girl.c` `GirlGeo`,
-  `sugipon/src/item.c` `ItemDL`, `sugipon/src/pool.c` `PoolDL`,
-  `sugipon/src/switch.c.inc` `FloorLeverDL`, `WallLeverDL`,
-  `sugipon/src/weapon.c` `dispLaserSword`, `sugipon/src/windmill.c`
-  `InitWindMillGeo`. Most are display-list functions whose "read" is a
-  renderer routine reached transitively; each needs a look at whether the
-  reader really uses the current matrix before setting it.
+Each candidate of the earlier name-based scan (call order, routines
+resolved transitively by name, no control flow), with the sequence the
+scan saw (EE addresses of the calls) and where the reads on that path take
+the matrix from:
+
+| candidate | verdict | evidence | action |
+| --- | --- | --- | --- |
+| `seki/src/BgAnimation.c` `bga_CalcObject` | false positive | the two hits are in different `switch` cases; its reads take the matrix from the caller, `bga_CalcAnimation`, which sets it (`_SetCurrentMatrix`/`_InitCurrentMatrix`) right before the call (0x209934) | none |
+| `fumi/src/way_tool.c` `draw_way_group`, `way_toolDL` | false positive | `sceVu0UnitMatrix` (0x21764C) then `DrawLine` (0x217664); the read is in `_getLine`, which sets the current matrix first | none |
+| `fumi/src/enemy_act.c` `subEnemyCollision` | false positive | set in `ACTGame_CommonLoop` (0x164B88), clobber in `CommonAttackCenter` (0x164B94), read under `DispMultiBgaManagerWithKind` (0x164E70): the readers there (`bga_CalcAnimation`, the `reg_set*MatrixPacket` and shadow routines) each set the matrix before reading; the `_ACTWait` thread switches are followed by no read before a set | none |
+| `ito/src/queen.c` `QueenBallDL` | false positive | set in `SetupDarkVolume` (0x1A44BC), clobber in `p2o_DispVU1Default` (0x1A44CC) and `sceVu0Normalize`/`sceVu0OuterProduct`, read under `stage_DispBgAnimation` (0x1A44EC, 0x1A45DC): every reader there sets the matrix first (`bga_CalcAnimation`, `reg_setMMatrixPacket`, `reg_setNMatrixPacket`, `light_getAmbientLight`, `_getLine`, `renderViewCoordZSphere`) | none |
+| `seki/src/RegistPacket.c` `reg_DispObj` | false positive | set in `reg_dispPointLineObj` (0x1243D0), clobber in `reg_dispMObj` (0x1243D8), read in `reg_dispNObj` (0x124424): `reg_dispNObj` and `reg_setNMatrixPacket` load the object matrix with `_SetCurrentMatrix` before reading | none |
+| `sugipon/src/boy.c` `BoyDL` | false positive | set in `stage_PlayBgAnimation` (0x1CC53C), clobber in `p2o_DispVU1` (0x1CC578), read in `dispSubParts` (0x1CC580): its readers (`reg_set*MatrixPacket`, `reg_dispNObj`, `light_getAmbientLight`, `shadow_Entry*`) set first; `SetLimitedPoolReflactionMesh`/`DispLimitedPoolReflactionMesh` set with `_SetCurrentMatrix` too | none |
+| `sugipon/src/boy.c` `BoyGeo` | false positive | set in `ExecMotionOrient` (0x1CC2B8, debug lines through `DrawLineG`), clobber in `synchronizeMotionOutputOriginForGirl` (0x1CC2C0), read under `SetActressLight` (0x1CC2E4): the readers set first; `CylinderCollision`, `HandManager`, `actionOfWater` only clobber | none |
+| `sugipon/src/clothAnimation.c` `GetChainAnimation` | false positive | nothing under it sets or reads the current matrix on the EE (`sceVu0UnitMatrix`, `AddVectorXYZ`, `sceVu0ScaleVector`, `calc2`, `sceVu0ApplyMatrix` only clobber) | none |
+| `sugipon/src/enemy.c` `DisplayEnemy` | false positive | set in `reg_DispEnemy` (0x1D9878), clobber in `DispEnemyEye` (0x1D989C), read in the second `DispEnemyEye` (0x1D98A4): it reads through `reg_DispMultiPri` -> `reg_setMMatrixPacket`, which sets first; `dispEnemyObject` sets with `_SetCurrentMatrix` (0x1D8DB4) before its inline reads | none |
+| `sugipon/src/flag.c` `FlagDL` | false positive | set in `p2o_DispVU1Multi` (0x1DBB50), clobber in `light_MakeLightMatrix` (0x1DBB60), read in `DispClothMesh` (0x1DBB78): the read is `prim_makeNormal`'s, after its own `_SetCurrentMatrix` | none |
+| `sugipon/src/girl.c` `GirlGeo` | false positive | set in `ExecMotionOrient` (0x1DD7C4), clobber in `SetActressLight` (0x1DD7D8) and `FSqrt` (0x1DD8E8), read in `execClothes` (0x1DD944): the reads are `getCloth4D_preProcess`'s and `_getLine`'s, each after its own `_SetCurrentMatrix` | none |
+| `sugipon/src/item.c` `ItemDL` | false positive | set in `stage_DispBgAnimation` (0x1DFFC4), clobber in `bombSparkSE` (0x1E0064, `sceVu0Normalize` in the sound position), read in `p2o_DispVU1` (0x1E0084): its readers set first | none |
+| `sugipon/src/pool.c` `PoolDL` | false positive | set and clobber in the two `DispMultiBgaManagerWithKind` calls (0x10C5AC, 0x10C5BC), read in `updatePoolGeo` (0x10C650): `updatePoolGeo` and `dispPool` load the matrix with `_SetCurrentMatrix` before reading | none |
+| `sugipon/src/switch.c.inc` `FloorLeverDL` | false positive | set in `p2o_DispVU1` (0x1C6300), clobber in `GetRootMatrix`/`MatrixDrive_RotMatrixZ`/`X` (0x1C631C-0x1C632C), read in `p2o_DispVU1DObj` (0x1C6348): its readers set first | none |
+| `sugipon/src/switch.c.inc` `WallLeverDL` | false positive | as `FloorLeverDL` (0x1C66B8, 0x1C66D4-0x1C66E4, 0x1C6700) | none |
+| `sugipon/src/weapon.c` `dispLaserSword` | false positive | set in `p2o_DispVU1` (0x2022F8), clobber in `MatrixDrive_TransMatrix`/`ScaleMatrix` (0x202338, 0x202358), read in `p2o_DispVU1DObj` (0x202374, 0x2023CC): its readers set first | none |
+| `sugipon/src/windmill.c` `InitWindMillGeo` | false positive | set in `SetFlag4PointFixID` (0x204458), clobber in `CreateLayoutedGObj` (0x20448C), read in the next `SetFlag4PointFixID` (0x2044B0): the read is `prim_makeNormal`'s, after its own `_SetCurrentMatrix` | none |
+
+Side finding, no effect: `bga_CalcSdfCamera` calls `_InitCurrentMatrix`
+between its `_PushCurrentMatrix` and `_PopCurrentMatrix`; the init resets
+vi15 to 0, so the pop loads quadwords 252-255 of VU0 memory (the host pops
+stack slot 63, the same addresses) and `stage_CalcAnimationNoParent`
+returns with that matrix. The scan finds no read of it before the next set.
 
 ## Doubles
 

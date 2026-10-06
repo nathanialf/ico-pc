@@ -198,9 +198,6 @@ pointer to this file.
 
 ## Floating point
 
-- **Register side effects (F10).** 15 candidate call sequences where a
-  routine clobbers vf4 to vf7 between setting and reading the current matrix
-  are not triaged (list in docs/port/MATH.md, "Register side effects").
 - **VU0 R register (F7).** The LFSR uses PCSX2's taps 4 and 22, not checked
   on hardware; the random sequences depend on it (`port/math/matrix.c`).
 - **Exact adder (F1, optional).** An exact model of the PS2 adder in
