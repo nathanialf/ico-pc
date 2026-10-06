@@ -135,9 +135,23 @@ static uint8_t tfmtOf(RhiFormat f)
 int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFormat colorFmt,
                        RhiFormat depthFmt, RdDrawPass out[2])
 {
+    return rd__PlanScreenDrawEx(s, prim, 0, space, colorFmt, depthFmt, out);
+}
+
+/* Package AA1: aa1 is PRIM.AA1 on a line or triangle command (rd_replay.c
+ * doScreen decides; points and sprites pass 0).  The key takes the AA1 bit
+ * and the AA1 shaders, the topology becomes triangles (rd_replay.c draws an
+ * antialiased line as quads), blending is on whatever PRIM.ABE says (the
+ * ALPHA register's equation; with ABE 0 the coverage alpha replaces every
+ * fragment's alpha, ICO_DF_AA1_FULL, else only an alpha of 0x80), and an
+ * antialiased line writes no Z: all its pixels are edge pixels.  The edge geometry of a triangle draws with the
+ * pass's key and zwrite off (rd_replay.c). */
+int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
+                         RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2])
+{
     const RdDrawState *d = &s->ds;
     const int hasDepth = depthFmt != RHI_FMT_UNKNOWN;
-    uint8_t blend = d->abe ? d->blend : RD_BLEND_COUNT;
+    uint8_t blend = (d->abe || aa1) ? d->blend : RD_BLEND_COUNT;
     if (blend > RD_BLEND_COUNT) {
         blend = RD_BLEND_COUNT;
     }
@@ -179,6 +193,19 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
         const RdTexRec *tr = rd__TexRec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
             k->fs = RD_FS_FONT;
+        }
+    }
+    /* package AA1 (not for an R8 texture: no AA1 draw samples one) */
+    if (aa1 && k->fs == RD_FS_SPRITE) {
+        k->gs.aa1 = 1;
+        k->gs.prim = RD_PRIM_TRIANGLES;
+        if (prim == RD_PRIM_LINES) {
+            k->gs.zwrite = RD_ZWRITE_OFF;
+        }
+        k->vs = space == RD_SPACE_WORLD ? RD_VS_SPRITE_AA1_WORLD : RD_VS_SPRITE_AA1_UI;
+        k->fs = RD_FS_SPRITE_AA1;
+        if (!d->abe) {
+            base.flags |= ICO_DF_AA1_FULL;
         }
     }
 
@@ -388,6 +415,15 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
     };
+    /* package AA1: the same and the coverage */
+    static const RhiVertexBinding vbAa1 = {0, sizeof(IcoSpriteAa1Vertex), false};
+    static const RhiVertexAttr vaAa1[5] = {
+        {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
+        {1, 0, RHI_VTX_U32x1, offsetof(IcoSpriteVertex, z)},
+        {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
+        {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
+        {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteAa1Vertex, cov)},
+    };
     const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
     /* wave 3 (R3ab): the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
@@ -404,6 +440,11 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         d.vertexBindingCount = 1;
         d.vertexAttrs = va;
         d.vertexAttrCount = 4;
+    } else if (k->vs == RD_VS_SPRITE_AA1_UI || k->vs == RD_VS_SPRITE_AA1_WORLD) {
+        d.vertexBindings = &vbAa1;
+        d.vertexBindingCount = 1;
+        d.vertexAttrs = vaAa1;
+        d.vertexAttrCount = 5;
     }
     d.topology = k->gs.prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
     d.cullNone = true;
@@ -546,6 +587,9 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   list 1/2 default 0x5140D (AFAIL split) and the list 4 default 0x5C000
  *   (DATE, normalised out).
  *   The DATE snapshot (wave 2): blit_vs/date_snap_ps into R8.
+ *   PRIM.AA1 lines and triangles (package AA1): WORLD screen prims through
+ *   sprite_aa1_world_vs / sprite_aa1_ps, the states stormTest.c and puddle.c
+ *   draw them under (rd__EnumerateReachableScreen lists them).
  *   Blits: blit_vs/blit_ps into RGBA8 (presenter line doubling, headless
  *   output) and into the swapchain format (BGRA8 or RGBA8); blend_int into
  *   RGBA8_UINT (exact feedback blends).
@@ -699,6 +743,37 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                             for (int i = 0; i < np; i++) {
                                 n = addKey(out, max, n, &dp[i].key);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* package AA1: the PRIM.AA1 lines and triangles, WORLD space (the storm's
+     * line strips, stormTest.c: list 11, TEST 0x50000, ZMSK, ALPHA mode 5
+     * with ABE 0; the puddle's ripple strips, puddle.c: TEST 0x3F000, mode 0
+     * or 4 with ABE 1), with every game blend literal, Z on and off, with and
+     * without a depth target; the edge geometry's zwrite-off keys are among
+     * them */
+    static const uint64_t kAa1Tests[] = {RD_TEST_Z_ALWAYS, RD_TEST_Z_GEQUAL, RD_TEST_RGBONLY_DATE1};
+    static const int kAa1Blends[] = {0, 1, 2, 4, 5, 6, 7};
+    for (size_t t = 0; t < sizeof(kAa1Tests) / sizeof(kAa1Tests[0]); t++) {
+        for (int zw = 0; zw < 2; zw++) {
+            for (size_t b = 0; b < sizeof(kAa1Blends) / sizeof(kAa1Blends[0]); b++) {
+                for (size_t p = 0; p < sizeof(kPrims); p++) {
+                    for (size_t dz = 0; dz < 2; dz++) {
+                        RdStateBlock s;
+                        rd__ResetStateBlock(&s);
+                        s.ds.test = rd_TestFromGs(kAa1Tests[t]);
+                        s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                        s.ds.abe = 1;
+                        s.ds.blend = (uint8_t)kAa1Blends[b];
+                        s.aa1 = 1;
+                        RdDrawPass dp[2];
+                        const int np = rd__PlanScreenDrawEx(&s, kPrims[p], 1, RD_SPACE_WORLD,
+                                                            RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+                        for (int i = 0; i < np; i++) {
+                            n = addKey(out, max, n, &dp[i].key);
                         }
                     }
                 }

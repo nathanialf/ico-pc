@@ -174,6 +174,7 @@ ALWAYS with write enabled (the GS manual calls ZTE 0 a prohibited setting).
 | COLCLAMP | 1 (4), 0 (3) | 0 in `Shadow.c` and `darkVolume.c` |
 | DTHE, DIMX | never written by the game | the flip writes DTHE 0: no dithering |
 | FRAME psm | PSMCT32, PSMCT24 in `darkVolume.c` | no 16-bit framebuffer |
+| PRIM.AA1 | `lineManager.c`'s 0x189 and 0x18A (lines, ABE 0: the storm's streaks, `stormTest.c`), `gif_DrawStripFST`'s 0xD4 (strips, ABE 1: the puddle's ripples, `puddle.c`), the particles' GIF tag 0xD6 (sprites) | decoded since package AA1 ("PRIM.AA1" below); no effect on sprites |
 
 ## 4. GS to pipeline mapping
 
@@ -190,6 +191,7 @@ ALWAYS with write enabled (the GS manual calls ZTE 0 a prohibited setting).
 | DATE | A screen draw with TEST.DATE first takes an R8 snapshot of its target's alpha MSB (`date_snap_ps`, `dateSnapshot` in `rd_replay.c`); `sprite_ps` reads it and discards where the MSB differs from DATM. The snapshot is retaken when the target changes or anything since may have written alpha, so consecutive DATE draws see each other's writes as on the GS; overlapping primitives inside one draw see the snapshot. |
 | COLCLAMP 0 | Shadow volumes: a stencil count (section 10). Other draws: the wrap path (section 14). |
 | FBA | The fragment shader forces the alpha MSB. |
+| PRIM.AA1 (lines and triangles) | The AA1 key bit: `sprite_aa1_*_vs` / `sprite_aa1_ps` over the edge geometry `rd_replay.c` adds, the coverage as the fragment's alpha ("PRIM.AA1" below). |
 | PABE | The fragment shader sets the blend factor to 0 where the As MSB is clear. |
 | Z | D32F (D32F with stencil on SCENE). The shaders map GS Z to depth `(zmax − z + 1) · scale` (`gs_z_to_depth`), the same value as `1 − z · scale` computed without cancellation, so a larger GS Z is a smaller depth: GS GEQUAL becomes `RHI_CMP_LEQUAL`, GREATER becomes `LESS`. The scale is per depth target: 2^-32 for the game's PSMZ32 (every ZBUF it writes), 2^-24 and 2^-16 for the other formats. The UI's Z values 0xFFFFFF9B and 0xFFFFFFFF stay distinct. |
 | Texture function | Integer `min((tex·col) >> 7, 255)` in the shader. |
@@ -225,6 +227,45 @@ an assert would abort a release build): a key past it is logged once and
 its draws are skipped. A key whose `rhi_CreatePipeline` failed is
 remembered (`RD_PIPELINE_FAIL_MAX`, 64) and not retried. Both reset with
 the cache.
+
+### PRIM.AA1
+
+The GS's edge antialiasing. `GifPacket.c` records PRIM bit 7 as `rd_AA1`
+(`RDC_AA1`, `RdStateBlock.aa1`) for the line and triangle types (1 to 5)
+and returns it to 0 at the end of the packet, so the bit never leaks into
+another list; points and sprites record nothing. The model is the one
+PCSX2's software renderer implements (`pcsx2/GS/Renderers/SW/GSRasterizer.cpp`
+`DrawEdgeLine`, `DrawEdgeTriangle`; `GSDrawScanline.cpp` `CDrawEdge` and the
+`sel.aa1` block; `GSState.cpp` `IsCoverageAlpha`, read from PCSX2's master
+branch in October 2026), whose comments cite hardware tests:
+
+| | PCSX2's software renderer | rd |
+|---|---|---|
+| which primitives | lines and triangles (`IsCoverageAlpha`); points and sprites draw as without AA1 | the same (`aa1Prim` in `rd_replay.c`; the decoder records nothing for sprites) |
+| line | all edge: per step along the major axis the two pixels nearest the line on the minor axis, coverage 1 − d and d (d the minor-axis distance of the nearer one) | the line widened by one GS pixel on each side of its minor axis, coverage interpolated from 1 on the line to 0 at the sides: 1 − d at every sample point |
+| triangle | its interior as without AA1; per edge, one pixel per major-axis step just outside it, coverage 1 − d, inside the other two edges' half-planes | the interior as without AA1; per edge a band one GS pixel deep outside it along its minor axis, over the edge's major-axis extent, coverage 1 − d |
+| strips and fans | every triangle on its own: shared edges get fringes too | the same (each triangle of the expanded list) |
+| edge pixel attributes | the edge's interpolated colour, texture coordinates and Z | the edge's: the band's far vertices copy its near ones |
+| alpha | a = coverage (16 bits) >> 9 (0..0x7F) on an edge pixel, 0x80 inside; with ABE 0 a replaces the alpha of every pixel, with ABE 1 only an alpha of exactly 0x80; before the alpha test; that alpha is the blend's As and the alpha written | the same (`sprite_aa1_ps`, `ICO_DF_AA1_FULL` for ABE 0) |
+| blending | on with AA1 whatever ABE says (`sel.abe \|\| sel.aa1`), the ALPHA register's equation | the same (`rd__PlanScreenDrawEx`) |
+| Z | edge pixels write none (`CDrawEdge` clears `zwrite`); so a line writes none | lines: Z write off in the key; triangles: the interiors drawn with the state's Z write, then the fringes without (two draws, so a strip's fringes land after all its interiors when Z is written; in one draw, in the GS's order, when it is not) |
+
+Not settled, and kept simple: the ends of a line (PCSX2 applies the
+diamond-exit rule to the first and last pixel; rd's band ends on the
+end points' minor-axis lines), a fringe pixel at a triangle's corner (PCSX2
+keeps it inside the other two edges' half-planes; rd's band is a
+parallelogram over the edge's extent, so at a sharp corner it can reach
+past them or leave a gap), a sample point exactly on an edge (PCSX2 picks
+the pixel by the top-left rule with coverage 0 or 1; rd's rasteriser gives
+it to the triangle or the band by its fill rule), the order of fringes and
+interiors noted above, and everything only a PS2 capture can settle (the
+GS's own coverage precision). A FIX blend (modes 0 to 3) does not read As,
+so the ripples of every stage but 0x22 (34; the others use mode 0, FIX 0x60) change only by
+their fringes; the storm's lines (mode 5, Cs·As + Cd, with ABE 0) went from
+opaque to additive. DIVERGENCES.md V-AA1 records the change.
+
+Not implemented: AA1 under COLCLAMP 0 (the wrap path, section 14) draws
+without coverage and is reported once; no game draw combines them.
 
 ## 5. Blend exactness under feedback
 
@@ -324,11 +365,10 @@ similar) are logged once each.
 | 0 / 0 | DISPLAY (TEX0 PSMCT24: the RGB24 view) |
 | 0x40 / 0x800 | SCENE (with its depth) |
 | 0x140 / 0x2800 | WORK0 when 128 lines high, else AA0 |
-| 0x142 / 0x2840 | SHADOW0 (no current user: `Shadow.c` bypasses the decoder) |
 | 0x160 / 0x2C00 | AA1 when 128 wide, else WORK1 |
 | 0x180 / 0x3000 | WORK2 |
 | 0x1F8 / 0x3F00 | FEED128 |
-| other FBP | an `rd_TempTarget` of the size XYOFFSET gives, with its own depth, for the rest of the frame; a TEX0 whose TBP is that block's samples it |
+| other FBP | an `rd_TempTarget` of the size XYOFFSET gives, with its own depth, for the rest of the frame; a TEX0 whose TBP is that block's samples it. This includes 0x142, the shadow count's buffer, which never reaches the decoder: `Shadow.c` records its passes on `rd` directly (section 11) |
 
 What the decoder does not see is state recorded by direct `rd` calls
 (`rd_Post`, `Shadow.c`, `ZFog.c`, `staticBlur.c`): its per-list register
@@ -802,8 +842,8 @@ does). Measured against CPU rasters: the puddle block and composite 0 LSB;
 the pool's grids within the GS's 1/16-texel addressing and 4-bit filter
 weights (1 LSB from the centre sample, 0 outside that range).
 
-PRIM.AA1 (the ripple strips' edge antialiasing) is not decoded
-(docs/TODO.md).
+The ripple strips carry PRIM.AA1 (0xD4): their triangles get the edge
+fringes of section 4, "PRIM.AA1".
 
 ## 14. Full-screen effects and the raw packet builders
 
@@ -1483,14 +1523,20 @@ target), `--present WxH`, `--list` (every command with its list and index),
 inputs; an R8 texture is written as a grey image), `--enhanced`, `--aspect`, `--resolution`, `--full-height`,
 `--filter`, `--mirror` (the display options), `--backend`, and
 `--overlay-test` (with `--present`: a test pattern on the presentation
-overlay; without it the tool registers no overlay).
+overlay; without it the tool registers no overlay), and `--no-aa1` (every
+`RDC_AA1` dropped: the frame as `rd` drew it before PRIM.AA1 was decoded,
+for a before/after pair from one dump).
+
+Dumps carry `RD_DUMP_VERSION` (`rd_internal.h`), 4 since package AA1
+(`RDC_AA1` and `RdStateBlock.aa1`); `rd__LoadFrame` also reads version 3
+dumps, with AA1 off.
 
 ## 20. Tests
 
 | ctest | what |
 |---|---|
-| `rd_state` | pipeline keys, the reachable set, normalisation |
-| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump |
+| `rd_state` | pipeline keys, the reachable set, normalisation; the AA1 bit through a dump, a version 3 dump, the AA1 plans |
+| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump; an AA1 line and triangle edge against a CPU coverage reference (0 LSB of As on lavapipe) |
 | `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache; R8 textures and rectangle updates (the union uploaded alone, read back from the GPU) |
 | `rd_mip` | the mip chain size and alpha coverage |
 | `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes, FBMSK's extent |
@@ -1500,7 +1546,7 @@ overlay; without it the tool registers no overlay).
 | `rd_fog` | the Z byte model, the CLUT, the fog pixels |
 | `rd_water` | puddle, pool, barrier, water drops, cloth |
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
-| `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent |
+| `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback |
@@ -1516,3 +1562,8 @@ GPU tests exit 77 (skipped) without a device and fail on validation errors.
 Differences from the PS2 that are accepted are listed in DIVERGENCES.md.
 Renderer work still open, and the facts that need a PS2 capture to settle,
 are in docs/TODO.md.
+
+Approximations kept in the code and described with their feature:
+PRIM.AA1 (section 4, "PRIM.AA1": PCSX2's software model, with the line
+ends, the fringe corners, on-edge sample points and the fringe order of a
+Z-writing strip left approximate; sprites and points unaffected).

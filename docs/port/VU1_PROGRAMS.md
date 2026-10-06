@@ -460,7 +460,7 @@ where the GS would wrap). What cannot be identical:
 | Triangles the scissor programs clip against a Z plane (a vertex behind M2's near or beyond its far plane) | drawn with a homogeneous position and clipped by the GPU at GS Z = 2^32 (near, about 4 units in the game, VU: 2) and GS Z = 0 (about the far plane); the VU's fan interpolates colour and STQ linearly in screen space between clip-space-interpolated cut points, the GPU over the original triangle: measured in `vu1` ("prelit 36 near", depth ratio 4:1, random colours) 296 of 302 covered pixels differ, by up to 142; coverage agrees to one pixel. Real cases are geometry crossing the camera's near plane |
 | Triangles clipped only on x/y planes | drawn as the GS would draw the unclipped triangle (the VU's guard band is wider than any target); identical when the three vertices share w, else the cut points' perspective-correct colours shift interior colours slightly |
 | Scissor fan ABE (finding 2) | the cut-only pass with ABE forced (rd's pipeline choice) makes it exact; otherwise up to (Cs - Cd)(128 - As)/128 |
-| Particle PRIM.AA1 | not reproduced (the GS antialiases lines and triangles; whether it affects sprites is not settled by any source used here) |
+| Particle PRIM.AA1 | no effect, as in the model rd implements (RENDER_API.md "PRIM.AA1": PCSX2's software renderer antialiases lines and triangles only, `GSState.cpp` `IsCoverageAlpha`); a PS2 capture would settle whether the GS antialiases sprites |
 | GS fixed-point colour and STQ interpolation | float interpolation, colour rounded to nearest in the pixel shader (as `sprite_ps`) |
 
 Exact by construction: which triangles draw (region test, strip flags, ADC

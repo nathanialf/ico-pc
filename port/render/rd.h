@@ -595,6 +595,12 @@ void rd_Scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
 void rd_SamplerFilter(RdFilter mag, RdFilter min);
 void rd_SamplerWrap(RdWrap s, RdWrap t);
 void rd_Gouraud(int iip);
+/* Package AA1: PRIM.AA1, the GS's edge antialiasing (0 = off, the default).
+ * It acts on lines and triangles only: their edge pixels take the coverage
+ * as As and write no Z (RENDER_API.md "GS to pipeline mapping"); points and
+ * sprites ignore it.  GifPacket.c sets it from PRIM and returns it to 0 at
+ * the end of the packet, so the state never leaks into another list. */
+void rd_AA1(int aa1);
 
 /* ------------------------------------------------------------ targets */
 

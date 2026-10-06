@@ -10,7 +10,11 @@
  *   retention  the closed frame and the one before it are kept
  *   stubs      later-wave draws and post kinds are recorded with payload
  *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw)
- *   dump       a frame with textures and a temp target survives dump/load
+ *   dump       a frame with textures and a temp target survives dump/load;
+ *              package AA1: RDC_AA1 and RdStateBlock.aa1 round-trip, and a
+ *              version 3 dump (no aa1) still loads, with AA1 off
+ *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
+ *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
  *   pipelines  the reachable screen and post set is under 100 keys, with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
  *
@@ -334,6 +338,10 @@ static void testDump(const char *dir)
     rd_Texture(b, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     rd_Texture(rd_TargetTexture(tt, RD_VIEW_RGB24_TA0), RD_TEXFN_MODULATE, RD_TCC_RGBA);
     draw(2);
+    rd_AA1(1); /* package AA1 */
+    draw(3);
+    rd_AA1(0);
+    draw(4);
     rd_EndFrame(0);
     const RdFrame *f = rd__LastFrame();
     char path[1024];
@@ -374,8 +382,101 @@ static void testDump(const char *dir)
         }
     }
     CHECK(texSeen == 3, "three texture binds compared, got %d", texSeen);
+    /* package AA1: the bit at each draw after the round trip */
+    Seen seen;
+    walk(&g, &seen);
+    const RdStateBlock *s2 = stateFor(&seen, 2), *s3 = stateFor(&seen, 3), *s4 = stateFor(&seen, 4);
+    CHECK(s2 && s3 && s4 && s2->aa1 == 0 && s3->aa1 == 1 && s4->aa1 == 0,
+          "AA1 off, on, off at draws 2, 3, 4 after the round trip");
+    CHECK(g.endState.aa1 == f->endState.aa1 && g.startState.aa1 == f->startState.aa1,
+          "state blocks' aa1 round trip");
     rd__FrameFree(&g);
+
+    /* a version 3 dump: the same file with the version and state size of
+       version 3 and the state blocks without their trailing aa1, read with
+       AA1 off (every command but the two RDC_AA1, which version 3 lacks,
+       left in place: the loader takes the commands as they are) */
+    FILE *fp = fopen(path, "rb");
+    long size = 0;
+    uint8_t *buf = NULL;
+    if (fp && fseek(fp, 0, SEEK_END) == 0 && (size = ftell(fp)) > 0 &&
+        fseek(fp, 0, SEEK_SET) == 0) {
+        buf = malloc((size_t)size);
+        if (buf && fread(buf, 1, (size_t)size, fp) != (size_t)size) {
+            free(buf);
+            buf = NULL;
+        }
+    }
+    if (fp) {
+        fclose(fp);
+    }
+    CHECK(buf != NULL, "dump read back");
+    if (buf) {
+        const size_t st0 = 8 + 4 * 4 + 5 * 4 + sizeof(RdCamera);
+        uint32_t v3 = 3, sz3 = RD_STATE_BLOCK_V3_SIZE;
+        memcpy(buf + 8, &v3, 4);
+        memcpy(buf + 16, &sz3, 4);
+        /* the end state's aa1, then the start state's */
+        memmove(buf + st0 + 2 * sizeof(RdStateBlock) - 4, buf + st0 + 2 * sizeof(RdStateBlock),
+                (size_t)size - (st0 + 2 * sizeof(RdStateBlock)));
+        memmove(buf + st0 + sizeof(RdStateBlock) - 4, buf + st0 + sizeof(RdStateBlock),
+                (size_t)size - 4 - (st0 + sizeof(RdStateBlock)));
+        char path3[1100];
+        snprintf(path3, sizeof(path3), "%s/rd_state_test_v3.rddump", dir);
+        fp = fopen(path3, "wb");
+        CHECK(fp && fwrite(buf, 1, (size_t)size - 8, fp) == (size_t)size - 8, "v3 dump written");
+        if (fp) {
+            fclose(fp);
+        }
+        free(buf);
+        RdFrame h;
+        if (rd__LoadFrame(path3, &h)) {
+            CHECK(h.startState.aa1 == 0 && h.endState.aa1 == 0 &&
+                      memcmp(&h.startState, &f->startState, RD_STATE_BLOCK_V3_SIZE) == 0 &&
+                      h.payloadSize == f->payloadSize,
+                  "version 3 dump: the state blocks without aa1, AA1 off");
+            rd__FrameFree(&h);
+        } else {
+            CHECK(0, "version 3 dump loaded");
+        }
+        remove(path3);
+    }
     remove(path);
+}
+
+static void testAa1Plans(void)
+{
+    RdStateBlock s;
+    RdDrawPass dp[2], base[2];
+    rd__ResetStateBlock(&s);
+    s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
+    s.ds.zwrite = RD_ZWRITE_ON;
+    s.ds.abe = 0;
+    s.ds.blend = RD_BLEND_CS_AS_ADD_CD; /* the storm: mode 5 under PRIM ABE 0 */
+    s.aa1 = 1;
+    int n = rd__PlanScreenDrawEx(&s, RD_PRIM_LINES, 1, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                 RHI_FMT_D32F_S8, dp);
+    CHECK(n == 1 && dp[0].key.gs.aa1 == 1 && dp[0].key.gs.prim == RD_PRIM_TRIANGLES &&
+              dp[0].key.vs == RD_VS_SPRITE_AA1_WORLD && dp[0].key.fs == RD_FS_SPRITE_AA1 &&
+              dp[0].key.gs.zwrite == RD_ZWRITE_OFF &&
+              rd__BlendPath(dp[0].key.gs.blend) == RD_BP_PREMUL_ADD &&
+              (dp[0].flags & ICO_DF_AA1_FULL) && (dp[0].flags & ICO_DF_PREMUL),
+          "AA1 line with ABE 0: AA1 shaders, triangles, mode 5 blended, no Z write");
+    s.ds.abe = 1;
+    s.ds.blend = RD_BLEND_LERP_AS;
+    n = rd__PlanScreenDrawEx(&s, RD_PRIM_TRIANGLES, 1, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_D32F_S8, dp);
+    CHECK(n == 1 && dp[0].key.gs.aa1 == 1 && dp[0].key.gs.zwrite == RD_ZWRITE_ON &&
+              !(dp[0].flags & ICO_DF_AA1_FULL),
+          "AA1 triangles with ABE 1: Z written (the interior), As kept");
+    /* aa1 0: the plan rd__PlanScreenDraw makes, whatever the state's bit */
+    n = rd__PlanScreenDrawEx(&s, RD_PRIM_TRIANGLES, 0, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_D32F_S8, dp);
+    s.aa1 = 0;
+    const int nb = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                      RHI_FMT_D32F_S8, base);
+    CHECK(n == nb && memcmp(&dp[0], &base[0], sizeof(dp[0])) == 0 && dp[0].key.gs.aa1 == 0,
+          "aa1 0 plans as before AA1");
 }
 
 static void testEnumeration(void)
@@ -410,6 +511,7 @@ int main(int argc, char **argv)
     testStubs();
     testPlans();
     testDump(dir);
+    testAa1Plans();
     testEnumeration();
     rd_Shutdown();
     if (failures) {

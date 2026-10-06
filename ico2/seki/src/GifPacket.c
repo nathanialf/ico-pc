@@ -846,7 +846,9 @@ int _IsInScreen(volatile int *v)
  * becomes rd state and screen primitives in the list dl_SetDLPriority
  * selected:
  *
- *   PRIM            ABE, TME (texture on/off), IIP; resets the vertex queue
+ *   PRIM            ABE, TME (texture on/off), IIP; resets the vertex queue;
+ *                   AA1 on a line or triangle type (rd_AA1, package AA1),
+ *                   returned to 0 when the packet ends
  *   RGBAQ ST UV     the current vertex attributes
  *   XYZ2 XYZF2      a vertex with a drawing kick; XYZ3 XYZF3 without one
  *                   (the queue still advances, as the strip helpers rely on)
@@ -898,6 +900,10 @@ typedef struct GsShim { /* port */
     int qn;
     /* what this packet has emitted to rd (emValid 0: nothing known) */
     int emValid, emTme, emAbe, emIip;
+    /* package AA1: rd's AA1 bit as this packet left it.  0 outside packets
+       (gsAa1Off at every end), so a list recorded in any order replays with
+       AA1 off wherever its own packet did not set it */
+    int emAa1;
     unsigned long long emTex0;
     /* the open batch */
     RdScreenVtx batch[GS_BATCH_MAX];
@@ -1079,8 +1085,7 @@ static RdTarget gsAliasTarget(unsigned int fbp, unsigned int w, unsigned int h)
 
 static int gsIsNamedFbp(unsigned int fbp)
 {
-    return fbp == 0 || fbp == 0x40 || fbp == 0x140 || fbp == 0x142 || fbp == 0x160 ||
-           fbp == 0x180 || fbp == 0x1F8;
+    return fbp == 0 || fbp == 0x40 || fbp == 0x140 || fbp == 0x160 || fbp == 0x180 || fbp == 0x1F8;
 }
 
 /* FRAME.FBP (2048-word pages) to the named target standing in for it. */
@@ -1093,8 +1098,6 @@ static RdTargetId gsTargetOfFbp(unsigned int fbp, unsigned int w, unsigned int h
         return RD_TARGET_SCENE;
     case 0x140:
         return h <= 128 ? RD_TARGET_WORK0 : RD_TARGET_AA0; /* TBP 0x2800 */
-    case 0x142:
-        return RD_TARGET_SHADOW0;
     case 0x160:
         return w <= 128 ? RD_TARGET_AA1 : RD_TARGET_WORK1; /* TBP 0x2C00 */
     case 0x180:
@@ -1284,11 +1287,25 @@ static void gsBindTexture(void)
 
 /* --------------------------------------------------------------- PRIM */
 
+/* package AA1: rd's AA1 bit back to 0 (the batch already flushed) */
+static void gsAa1Off(void)
+{
+    if (gs.emAa1) {
+        rd_AA1(0);
+        gs.emAa1 = 0;
+    }
+}
+
 static void gsApplyPrim(void)
 {
     int tme = (int)((gs.primL[gsList()] >> 4) & 1);
     int abe = (int)((gs.primL[gsList()] >> 6) & 1);
     int iip = (int)((gs.primL[gsList()] >> 3) & 1);
+    /* package AA1: PRIM.AA1 (bit 7) acts on lines and triangles (types 1 to
+       5); points and sprites (the particles' 0xD6) draw as without it, so
+       rd is told only where it matters */
+    int type = (int)(gs.primL[gsList()] & 7);
+    int aa1 = (int)((gs.primL[gsList()] >> 7) & 1) && type >= 1 && type <= 5;
 
     if ((gs.primL[gsList()] & 7) == 7) {
         gsOnce(GS_ONCE_PRIM7, "PRIM type 7 (reserved): ignored", gs.primL[gsList()]);
@@ -1318,6 +1335,11 @@ static void gsApplyPrim(void)
         gsFlushBatch();
         rd_Gouraud(iip);
         gs.emIip = iip;
+    }
+    if (aa1 != gs.emAa1) {
+        gsFlushBatch();
+        rd_AA1(aa1);
+        gs.emAa1 = aa1;
     }
     gs.emValid = 1;
 }
@@ -1680,6 +1702,7 @@ static void gsPacketEnd(void)
     gsRawFlush();
     gsSyncEnv();
     gsFlushBatch();
+    gsAa1Off();
     gs.emValid = 0;
     gs.rawFrom = 0;
 }
@@ -1689,6 +1712,7 @@ void gif_HostFlush(void)
     gsRawFlush();
     gsSyncEnv();
     gsFlushBatch();
+    gsAa1Off();
     gs.emValid = 0;
 }
 
@@ -1744,6 +1768,7 @@ void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n)
     }
     gsSyncEnv();
     gsFlushBatch();
+    gsAa1Off();
 }
 
 void gif_HostFrameReset(void)
@@ -1752,6 +1777,7 @@ void gif_HostFrameReset(void)
     gs.nb = 0;
     gs.qn = 0;
     gs.emValid = 0;
+    gs.emAa1 = 0;
     gs.rawFrom = 0;
     gs.depth = 0;
     gs.space = GIF_SP_AUTO;

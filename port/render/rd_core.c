@@ -136,6 +136,7 @@ void rd__ResetStateBlock(RdStateBlock *s)
     s->scissor[2] = (int32_t)s->gsW - 1;
     s->scissor[3] = (int32_t)s->gsH - 1;
     s->gouraud = 1;
+    s->aa1 = 0;
 }
 
 static uint8_t maskFromFbmsk(uint32_t fbmsk)
@@ -238,6 +239,9 @@ bool rd__ApplyState(RdStateBlock *s, const RdCmd *c)
         return true;
     case RDC_SHADE:
         s->gouraud = c->b[0];
+        return true;
+    case RDC_AA1:
+        s->aa1 = c->b[0];
         return true;
     default:
         return false;
@@ -1575,6 +1579,11 @@ void rd_SamplerWrap(RdWrap s, RdWrap t)
 void rd_Gouraud(int iip)
 {
     push1(RDC_SHADE, iip ? 1 : 0);
+}
+
+void rd_AA1(int aa1)
+{
+    push1(RDC_AA1, aa1 ? 1 : 0);
 }
 
 /* ------------------------------------------------------------------ draws */

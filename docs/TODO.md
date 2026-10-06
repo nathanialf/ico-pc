@@ -98,13 +98,6 @@ pointer to this file.
   scaled count with 2x2 taps of a 4x4 footprint, so the shadow's integral
   varies 2.6% frame to frame instead of 2.0%. Box-reduce the count to the
   level-1 size first (`doShadowResolve` in `rd_replay.c`).
-- **Stale FBP 0x142 mapping.** `gsTargetOfFbp` in `seki/src/GifPacket.c`
-  still maps FBP 0x142 to SHADOW0, now blur level 1. Nothing uses it,
-  because `Shadow.c` bypasses the decoder; remove the case or point it at
-  the count target.
-- **PRIM.AA1 not decoded.** GS edge antialiasing is missing on the ripple
-  strips, `lineManager.c`'s lines and the particles. It needs the decoder
-  (`GifPacket.c`) and a coverage-as-alpha path in the shaders.
 - **Ad blend modes 8 to 11.** Modes 8 to 10 draw at half strength (Ad/255
   instead of Ad/128) and mode 11 leaves Cd unchanged. They are reachable
   only through a stage's BGA lightning record; survey the disc's lightning

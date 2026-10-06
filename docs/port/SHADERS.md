@@ -132,7 +132,8 @@ Flags: `DF_TEXTURED` 1 (TME), `DF_DECAL` 2 (else MODULATE), `DF_TCC_RGBA` 4,
 As), `DF_PREMUL` 64 (below), `DF_DATE` 128 and `DF_DATM` 256 (`sprite_ps`
 loads the R8 snapshot at t2 in target pixels and discards where its MSB
 differs from DATM; t2 is fetched only under `DF_DATE`, so a 1×1 dummy is
-bound otherwise).
+bound otherwise), `DF_AA1_FULL` 512 (`sprite_aa1_ps`: PRIM.ABE 0, the
+coverage alpha replaces every fragment's alpha).
 
 ### Vertex (sprite.hlsl; `IcoSpriteVertex`, 20 bytes)
 
@@ -146,6 +147,12 @@ bound otherwise).
 Colour is interpolated as float (0..255) and rounded to the nearest integer
 in the pixel shader. UVs are normalised in the vertex
 shader with `g_tex.zw`.
+
+`sprite_aa1_ui_vs` and `sprite_aa1_world_vs` (package AA1) take
+`IcoSpriteAa1Vertex`, 24 bytes: the same four and, at loc 4
+(`RHI_VTX_F32x1`), the coverage, interpolated without perspective: 0..1 on
+the edge geometry `rd_replay.c` adds, `ICO_AA1_INTERIOR` (2.0) on a
+triangle's own vertices (RENDER_API.md "PRIM.AA1").
 
 ## common.hlsli and gs_math.hlsli
 
@@ -180,6 +187,8 @@ clamp (RENDER_API.md section 4).
 | --- | --- | --- | --- |
 | `sprite_ui_vs`, `sprite_world_vs` | sprite.hlsl | vertex | 12.4 GS coordinates; UI and WORLD apply different `g_space` entries; any topology |
 | `sprite_ps` | sprite.hlsl | fragment | untextured or textured, texture function, TEXA, alpha test, DATE (t2), dual-source output |
+| `sprite_aa1_ui_vs`, `sprite_aa1_world_vs` | sprite.hlsl | vertex | as `sprite_ui_vs` / `sprite_world_vs` with the coverage (package AA1) |
+| `sprite_aa1_ps` | sprite.hlsl | fragment | `sprite_ps` with PRIM.AA1's coverage alpha before the alpha test (RENDER_API.md "PRIM.AA1"); `sprite_ps`'s SPIR-V and DXIL are unchanged by it |
 | `date_snap_ps` | sprite.hlsl | fragment | the bound target's alpha MSB (t1, `Load`) into the R8 DATE snapshot; drawn with `blit_vs` |
 | `blit_vs` | blit.hlsl | vertex | fullscreen triangle, source rectangle from `g_uvRect` |
 | `blit_ps` | blit.hlsl | fragment | texture function with the tint, or the tint alone without `DF_TEXTURED`; also the shadow resolve |

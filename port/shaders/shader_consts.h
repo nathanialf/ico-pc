@@ -46,8 +46,9 @@ enum {
     ICO_DF_PABE = 16,
     ICO_DF_FIX_FACTOR = 32,
     ICO_DF_PREMUL = 64,
-    ICO_DF_DATE = 128, /* destination alpha test against t2 (the DATE snapshot) */
-    ICO_DF_DATM = 256  /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
+    ICO_DF_DATE = 128,    /* destination alpha test against t2 (the DATE snapshot) */
+    ICO_DF_DATM = 256,    /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
+    ICO_DF_AA1_FULL = 512 /* sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha */
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
@@ -65,6 +66,17 @@ typedef struct IcoSpriteVertex {
     uint8_t rgba[4]; /* alpha 0x80 = 1.0 */
     float u, v;      /* texels of t1 */
 } IcoSpriteVertex;
+
+/* Package AA1: the vertex of sprite_aa1_*_vs, 24 bytes: IcoSpriteVertex and,
+ * at loc 4 (RHI_VTX_F32x1), the coverage: 0..1 on the geometry rd_replay.c
+ * adds along an antialiased edge (interpolated, it is the pixel's coverage),
+ * ICO_AA1_INTERIOR on a triangle's own vertices. */
+typedef struct IcoSpriteAa1Vertex {
+    IcoSpriteVertex v;
+    float cov;
+} IcoSpriteAa1Vertex;
+
+#define ICO_AA1_INTERIOR 2.0f
 
 _Static_assert(offsetof(IcoFrameCB, view) == 0, "view");
 
@@ -109,6 +121,8 @@ _Static_assert(offsetof(IcoSpriteVertex, rgba) == 8, "vertex rgba");
 _Static_assert(offsetof(IcoSpriteVertex, u) == 12, "vertex uv");
 
 _Static_assert(sizeof(IcoSpriteVertex) == 20, "vertex size");
+_Static_assert(offsetof(IcoSpriteAa1Vertex, cov) == 20, "AA1 vertex coverage");
+_Static_assert(sizeof(IcoSpriteAa1Vertex) == 24, "AA1 vertex size");
 
 /* ---------------------------------------------------------------- VU1
  * Wave 3 (R3c): the VU1 program shaders (vu_common.hlsli,

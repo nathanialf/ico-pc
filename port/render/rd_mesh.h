@@ -256,7 +256,7 @@ typedef struct RdVuParticleDraw {
     uint32_t count; /* PrimParticle.num (at most 80) */
     uint32_t _pad;
     RdVuBlock vu;        /* mem[16..19] = mtx, mem[20..23] = lmtx (SET_PARTICLE_MATRIX) */
-    RdMaterial material; /* the particle texture; PRIM 0xD6: TME, ABE (AA1 not reproduced) */
+    RdMaterial material; /* the particle texture; PRIM 0xD6: TME, ABE (AA1: no effect on sprites) */
 } RdVuParticleDraw;
 
 void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key);

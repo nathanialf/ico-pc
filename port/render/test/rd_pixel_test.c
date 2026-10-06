@@ -24,12 +24,21 @@
  *            FEED128 equal the GS integer formula exactly every frame
  *   dump     a frame replayed, dumped, loaded and replayed again gives the
  *            same DISPLAY bytes; the dump is left for rd_replay_tool
+ *   aa1      PRIM.AA1 (package AA1) against a CPU coverage reference, in
+ *            GS pixels at the integer sample points, As on the 0x80 scale
+ *            (grey 0x80 LERPed over black writes As itself): a line with
+ *            ABE 0 (the storm's) has coverage 1 - d on the two pixels per
+ *            column nearest it, d the vertical distance; a triangle with
+ *            ABE 1 and alpha 0x80 has its interior at 0x80 and a one-pixel
+ *            fringe outside its top edge at 1 - d; As = the 16-bit coverage
+ *            >> 9; within 1 LSB of As
  *   pipes    every pipeline created is in the enumerated reachable set,
  *            whose screen and post part has fewer than 100 keys (all of it,
  *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -188,6 +197,92 @@ static void testDateFlat(void)
     CHECK(l1[1] == 200 && r1[1] == 20, "DATM 0 draws where it is clear (%u, %u)", l1[1], r1[1]);
     CHECK(tri[0] == 0 && tri[1] == 0 && tri[2] == 200, "flat triangle %u,%u,%u", tri[0], tri[1],
           tri[2]);
+}
+
+/* -------------------------------------------------------------------- AA1 */
+
+/* the coverage alpha of an edge pixel: the 16-bit coverage >> 9 (0..0x7F),
+ * as PCSX2's GSDrawScanline takes it */
+static int covAs(double cov)
+{
+    cov = cov < 0.0 ? 0.0 : (cov > 1.0 ? 1.0 : cov);
+    return (int)floor(cov * 65535.0) >> 9;
+}
+
+static void testAa1(void)
+{
+    static const uint8_t black[4] = {0, 0, 0, 0}, grey[4] = {0x80, 0x80, 0x80, 0x80};
+    const int32_t ox = (2048 - 128) * 16, oy = (2048 - 128) * 16;
+    /* the line (12.4, relative to the target) and the triangle */
+    const int32_t la[2] = {20 * 16 + 5, 40 * 16 + 7}, lb[2] = {220 * 16 + 3, 90 * 16 + 12};
+    const int32_t t0[2] = {30 * 16 + 5, 140 * 16 + 10}, t1[2] = {225 * 16 + 13, 160 * 16 + 3},
+                  t2[2] = {120 * 16 + 2, 240 * 16 + 8};
+    rd_BeginFrame();
+    rd_SelectList(11);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    opaque2D(); /* LERP As with ABE 0; WORLD prims, the space the game's AA1 draws use */
+    rd_TextureOff();
+    rd_AA1(1);
+    {
+        RdScreenVtx v[2] = {vtx(ox + la[0], oy + la[1], 0, grey, 0, 0),
+                            vtx(ox + lb[0], oy + lb[1], 0, grey, 0, 0)};
+        rd_ScreenPrims(RD_PRIM_LINES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_ABE(1);
+    {
+        RdScreenVtx v[3] = {vtx(ox + t0[0], oy + t0[1], 0, grey, 0, 0),
+                            vtx(ox + t1[0], oy + t1[1], 0, grey, 0, 0),
+                            vtx(ox + t2[0], oy + t2[1], 0, grey, 0, 0)};
+        rd_ScreenPrims(RD_PRIM_TRIANGLES, v, 3, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_AA1(0);
+    rd_EndFrame(0);
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (!img) {
+        return;
+    }
+    int bad = 0, maxd = 0, edge = 0;
+    /* the line: every pixel of columns 22..218, rows 30..100 */
+    for (int x = 22; x <= 218; x++) {
+        const double yl =
+            (la[1] + (double)(x * 16 - la[0]) * (lb[1] - la[1]) / (lb[0] - la[0])) / 16.0;
+        for (int y = 30; y <= 100; y++) {
+            const int want = covAs(1.0 - fabs(yl - y));
+            const int got = img[(y * w + x) * 4];
+            const int d = abs(got - want);
+            maxd = d > maxd ? d : maxd;
+            edge += want > 0;
+            if (d > 1 && bad++ < 8) {
+                printf("FAIL aa1 line (%d,%d): As %d, expected %d (line at y %.4f)\n", x, y, got,
+                       want, yl);
+            }
+        }
+    }
+    printf("  aa1 line: %d edge pixels, max difference %d LSB of As\n", edge, maxd);
+    CHECK(bad == 0 && edge > 300, "aa1 line: %d pixels over 1 LSB (%d edge pixels)", bad, edge);
+    /* the triangle: columns 40..200 around its top edge t0-t1 (inside the
+       other two edges there): 0 above the fringe, 1 - d in it, 0x80 below */
+    bad = maxd = edge = 0;
+    for (int x = 40; x <= 200; x++) {
+        const double ye =
+            (t0[1] + (double)(x * 16 - t0[0]) * (t1[1] - t0[1]) / (t1[0] - t0[0])) / 16.0;
+        for (int y = (int)ye - 4; y <= (int)ye + 4; y++) {
+            const int want = (double)y >= ye ? 0x80 : covAs(1.0 - (ye - y));
+            const int got = img[(y * w + x) * 4];
+            const int d = abs(got - want);
+            maxd = d > maxd ? d : maxd;
+            edge += want > 0 && want < 0x80;
+            if (d > 1 && bad++ < 8) {
+                printf("FAIL aa1 triangle (%d,%d): As %d, expected %d (edge at y %.4f)\n", x, y,
+                       got, want, ye);
+            }
+        }
+    }
+    printf("  aa1 triangle edge: %d fringe pixels, max difference %d LSB of As\n", edge, maxd);
+    CHECK(bad == 0 && edge > 140, "aa1 triangle: %d pixels over 1 LSB (%d fringe pixels)", bad,
+          edge);
 }
 
 /* ----------------------------------------------------------------- sprite */
@@ -804,6 +899,7 @@ int main(int argc, char **argv)
     testDateFlat();
     testSprites();
     testFont(dir);
+    testAa1();
     testReduction(dir);
     testPresent();
     testKeep();

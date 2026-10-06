@@ -315,7 +315,7 @@ static void collect(void *user, int list, uint32_t index, const RdCmd *c, const 
         }
     } else if (c->type == RDC_SCREEN && (list == 7 || list == 8)) {
         s_screens78++;
-    } else if (c->type > RDC_STATE_LAST && c->type != RDC_CLEAR && c->type != RDC_NOP) {
+    } else if (!rd__CmdIsState(c->type) && c->type != RDC_CLEAR && c->type != RDC_NOP) {
         s_others++;
     }
 }
@@ -792,7 +792,7 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
 {
     const RdFrame *f = user;
     (void)list, (void)index;
-    if (c->type <= RDC_STATE_LAST || c->type == RDC_NOP) {
+    if (rd__CmdIsState(c->type) || c->type == RDC_NOP) {
         return;
     }
     if (c->type == RDC_CLEAR) {

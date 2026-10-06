@@ -10,7 +10,8 @@
  *   u32      version, sizeof(RdCmd), sizeof(RdStateBlock), sizeof(RdScreenVtx)
  *   u32      gsW, gsH, number, keep, hasCamera
  *   RdCamera camera (raw)
- *   RdStateBlock startState, endState
+ *   RdStateBlock startState, endState (version 3: without the trailing aa1,
+ *            80 bytes; rd__LoadFrame reads it with AA1 off)
  *   13 x     u32 count, RdCmd[count]
  *   u32      payload size, payload bytes
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
@@ -355,19 +356,21 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     memset(out, 0, sizeof(*out));
     char magic[8];
     uint32_t ver = 0, szCmd = 0, szState = 0, szVtx = 0;
+    /* package AA1: version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
+     * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes */
     bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
-              ver == RD_DUMP_VERSION && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
-              r32(fp, &szState) && szState == sizeof(RdStateBlock) && r32(fp, &szVtx) &&
-              szVtx == sizeof(RdScreenVtx);
+              (ver == RD_DUMP_VERSION || ver == 3u) && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
+              r32(fp, &szState) &&
+              szState == (ver == 3u ? RD_STATE_BLOCK_V3_SIZE : sizeof(RdStateBlock)) &&
+              r32(fp, &szVtx) && szVtx == sizeof(RdScreenVtx);
     if (!ok) {
-        rd__Log("load: %s is not an rd dump of version %u", path, RD_DUMP_VERSION);
+        rd__Log("load: %s is not an rd dump of version 3 or %u", path, RD_DUMP_VERSION);
         fclose(fp);
         return false;
     }
     ok = r32(fp, &out->gsW) && r32(fp, &out->gsH) && r32(fp, &out->number) && r32(fp, &out->keep) &&
          r32(fp, &out->hasCamera) && rraw(fp, &out->camera, sizeof(out->camera)) &&
-         rraw(fp, &out->startState, sizeof(RdStateBlock)) &&
-         rraw(fp, &out->endState, sizeof(RdStateBlock));
+         rraw(fp, &out->startState, szState) && rraw(fp, &out->endState, szState);
     for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
         uint32_t n = 0;
         ok = r32(fp, &n) && n < (1u << 24);

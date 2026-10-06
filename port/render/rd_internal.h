@@ -96,6 +96,10 @@ typedef enum RdCmdType {
     /* wave 4 (R4b), rd_shadow.c: on the state block's colour and depth targets */
     RDC_SHADOW_RESET,   /* the depth target's stencil to 0 */
     RDC_SHADOW_RESOLVE, /* the stencil count into the colour target (rd.h rd_ShadowResolve) */
+    /* package AA1 (dump version 4): a state delta numbered after the actions,
+     * so a version 3 dump's command numbers keep their meaning
+     * (rd__CmdIsState) */
+    RDC_AA1, /* b[0] PRIM.AA1 */
     RDC_COUNT
 } RdCmdType;
 
@@ -108,6 +112,12 @@ typedef struct RdCmd {
 } RdCmd;
 
 _Static_assert(sizeof(RdCmd) == 40, "RdCmd is dumped as raw bytes");
+
+/* Whether a command is a state delta (rd__ApplyState) rather than an action. */
+static inline int rd__CmdIsState(uint8_t type)
+{
+    return type <= RDC_STATE_LAST || type == RDC_AA1;
+}
 
 /* RDC_SHADOW_STRIP's b[0] (wave 4, R4b). */
 #define RD_SHADOW_TRIS 1
@@ -170,10 +180,13 @@ typedef struct RdStateBlock {
     uint32_t useOffset; /* add the preset's field offset to XYOFFSET */
     int32_t scissor[4]; /* x0, y0, x1, y1 inclusive */
     uint32_t gouraud;   /* PRIM.IIP (rd_Gouraud), 1 = Gouraud */
+    uint32_t aa1;       /* PRIM.AA1 (rd_AA1), package AA1; a version 3 dump loads it as 0 */
 } RdStateBlock;
 
 _Static_assert(sizeof(RdDrawState) == 28, "RdDrawState layout");
-_Static_assert(sizeof(RdStateBlock) == 80, "RdStateBlock is dumped as raw bytes");
+_Static_assert(sizeof(RdStateBlock) == 84, "RdStateBlock is dumped as raw bytes");
+/* The state block of a version 3 dump: the same fields without aa1. */
+#define RD_STATE_BLOCK_V3_SIZE 80u
 
 /* Applies a state command to s.  Returns false (s untouched) for actions. */
 bool rd__ApplyState(RdStateBlock *s, const RdCmd *c);
@@ -443,6 +456,10 @@ typedef enum RdVsId {
     RD_VS_VU_GRID_SPEC,
     RD_VS_VU_PARTICLE,
     RD_VS_FX_RECT, /* wave 5 (R5a): fx_rect_vs, the fullscreen triangle at the sprite's Z */
+    /* package AA1: PRIM.AA1 lines and triangles, IcoSpriteAa1Vertex (the
+     * sprite vertex and its coverage) */
+    RD_VS_SPRITE_AA1_UI,
+    RD_VS_SPRITE_AA1_WORLD,
     RD_VS_COUNT
 } RdVsId;
 
@@ -462,6 +479,7 @@ typedef enum RdFsId {
     RD_FS_WRAP_ACC,     /* wrap_acc_ps: the blend terms into an RGBA16F accumulator */
     RD_FS_WRAP_RESOLVE, /* wrap_resolve_ps: (Cd + acc) mod 256 into the target */
     RD_FS_FONT,         /* package R8: font_ps, screen prims sampling an R8 coverage texture */
+    RD_FS_SPRITE_AA1,   /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
     RD_FS_COUNT
 } RdFsId;
 
@@ -503,6 +521,11 @@ uint32_t rd__AlphaRegister(uint8_t blend);
  * 2 passes. */
 int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFormat colorFmt,
                        RhiFormat depthFmt, RdDrawPass out[2]);
+/* The same for a command PRIM.AA1 antialiases (aa1 1: a line or triangle
+ * command under s->aa1; rd_pipeline.c says what changes).
+ * rd__PlanScreenDraw is aa1 0. */
+int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
+                         RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2]);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k);
@@ -803,7 +826,9 @@ enum {
     /* wave 7 (R7a) */
     RD_ONCE_COPY_SCALE, /* a copy between targets of different resolution scales */
     /* package P1 */
-    RD_ONCE_MESH_ARENA /* the mesh arena is full: meshes past it drawn from the ring */
+    RD_ONCE_MESH_ARENA, /* the mesh arena is full: meshes past it drawn from the ring */
+    /* package AA1 */
+    RD_ONCE_AA1_WRAP /* PRIM.AA1 under COLCLAMP 0: the wrap path draws without coverage */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -947,7 +972,8 @@ bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
 #define RD_DUMP_VERSION                                                                            \
-    3u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3) */
+    4u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
+          RDC_AA1, RdStateBlock.aa1 (package AA1).  rd__LoadFrame reads 3 and 4 */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

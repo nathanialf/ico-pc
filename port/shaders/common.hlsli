@@ -84,6 +84,7 @@ cbuffer DrawCB : register(b1, space1)
 #define DF_PREMUL 64u    // colour output is (Cs * factor) >> 7, pipeline src factor ONE
 #define DF_DATE 128u     // TEST.DATE: destination alpha test against the snapshot in t2
 #define DF_DATM 256u     // TEST.DATM: with DF_DATE, pass where the MSB is 1 (else 0)
+#define DF_AA1_FULL 512u // sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the

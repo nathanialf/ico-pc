@@ -49,6 +49,10 @@
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
  *                         texture as grey, its byte in each channel)
+ *   --no-aa1              (package AA1) replays with PRIM.AA1 off: every
+ *                         RDC_AA1 a NOP and the start state's bit clear, the
+ *                         frame as the renderer drew it before AA1 was
+ *                         decoded (a before/after pair from one dump)
  *
  * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
@@ -62,12 +66,12 @@ static const char *const kNames[] = {
     "WORK3", "AA0",     "AA1",     "FEED128", "",        "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
-    "NOP",          "TEST",          "BLEND",     "ABE",         "ZWRITE",       "FBA",
-    "PABE",         "COLCLAMP",      "TEXA",      "FILTER",      "WRAP",         "TEXTURE",
-    "TEXTURE_OFF",  "UVOFFSET",      "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
-    "SHADE",        "CLEAR",         "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
-    "SKINNED",      "GRID",          "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
-    "SHADOW_RESET", "SHADOW_RESOLVE"};
+    "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",
+    "PABE",         "COLCLAMP",       "TEXA",      "FILTER",      "WRAP",         "TEXTURE",
+    "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
+    "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
+    "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
+    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1"};
 
 static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
                                          "tristrip", "trifan", "sprites"};
@@ -108,6 +112,9 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         }
         printf(" %s space %u n %u xy (%.2f,%.2f)-(%.2f,%.2f)",
                c->b[0] < 7 ? kPrimNames[c->b[0]] : "?", c->b[1], c->u[1], x0, y0, x1, y1);
+        if (st->aa1) {
+            printf(" aa1");
+        }
         if (st->ds.texEnabled) {
             printf(" tex %u %ux%u %s (%.3f,%.3f)-(%.3f,%.3f) filter %u/%u", st->tex, t ? t->w : 0,
                    t ? t->h : 0, c->b[2] ? "uv" : "stq", u0, v0, u1, v1, st->ds.magFilter,
@@ -246,7 +253,7 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR]\n",
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1]\n",
                 argv[0]);
         return 1;
     }
@@ -255,7 +262,7 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
-    bool list = false, overlay = false;
+    bool list = false, overlay = false, noAa1 = false;
     const char *texDir = NULL, *meshName = NULL;
 
     struct {
@@ -318,6 +325,8 @@ int main(int argc, char **argv)
                                                             : RD_FILTER_UPGRADE_OFF;
         } else if (strcmp(argv[i], "--overlay-test") == 0) {
             overlay = true;
+        } else if (strcmp(argv[i], "--no-aa1") == 0) {
+            noAa1 = true;
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
@@ -375,8 +384,18 @@ int main(int argc, char **argv)
     for (int k = 0; k < nopCount; k++) {
         const RdCmdList *cl = &f.lists[nops[k].l];
         for (uint32_t c = nops[k].a; c <= nops[k].b && c < cl->count; c++) {
-            if (cl->cmds[c].type > RDC_STATE_LAST) {
+            if (!rd__CmdIsState(cl->cmds[c].type)) {
                 cl->cmds[c].type = RDC_NOP;
+            }
+        }
+    }
+    if (noAa1) {
+        f.startState.aa1 = 0;
+        for (int l = 0; l < RD_LIST_COUNT; l++) {
+            for (uint32_t c = 0; c < f.lists[l].count; c++) {
+                if (f.lists[l].cmds[c].type == RDC_AA1) {
+                    f.lists[l].cmds[c].type = RDC_NOP;
+                }
             }
         }
     }

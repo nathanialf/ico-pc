@@ -251,7 +251,9 @@ typedef struct RdPipelineKey {
     uint8_t stencil;   /* RdStencilMode (rd.h): shadow volumes only */
     uint8_t targetFmt; /* RdTargetFormat (rd.h) */
     uint8_t prim;      /* RdPrim topology (rd.h) */
-    uint8_t _pad[3];
+    uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
+                    coverage (RENDER_API.md "GS to pipeline mapping") */
+    uint8_t _pad[2];
 } RdPipelineKey;
 
 #define RD_PIPELINE_REACHABLE_MAX 256

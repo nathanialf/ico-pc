@@ -50,18 +50,24 @@
 #include "shaders_gen.h"
 
 static const char *const s_vsNames[RD_VS_COUNT] = {
-    "sprite_ui_vs",   "sprite_world_vs", "blit_vs",          "blend_int_vs",
-    "vu_prelit_vs",   "vu_lit_vs",       "vu_lit_spec_vs",   "vu_reflect_vs",
-    "vu_skin_vs",     "vu_skin_spec_vs", "vu_skin_debug_vs", "vu_grid_vs",
-    "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */};
+    "sprite_ui_vs",     "sprite_world_vs",    "blit_vs",          "blend_int_vs",
+    "vu_prelit_vs",     "vu_lit_vs",          "vu_lit_spec_vs",   "vu_reflect_vs",
+    "vu_skin_vs",       "vu_skin_spec_vs",    "vu_skin_debug_vs", "vu_grid_vs",
+    "vu_grid_lit_vs",   "vu_grid_spec_vs",    "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */,
+    "sprite_aa1_ui_vs", "sprite_aa1_world_vs" /* package AA1 */};
 
-static const char *const s_fsNames[RD_FS_COUNT] = {
-    "sprite_ps",       "blit_ps",
-    "blend_int_ps",    "date_snap_ps",
-    "camera_probe_ps", "vu_ps",
-    "fog_lut_ps",      "fx_sprite_ps" /* wave 5 (R5a) */,
-    "wrap_acc_ps",     "wrap_resolve_ps" /* wave 5 (R5c) */,
-    "font_ps" /* package R8 */};
+static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
+                                                   "blit_ps",
+                                                   "blend_int_ps",
+                                                   "date_snap_ps",
+                                                   "camera_probe_ps",
+                                                   "vu_ps",
+                                                   "fog_lut_ps",
+                                                   "fx_sprite_ps" /* wave 5 (R5a) */,
+                                                   "wrap_acc_ps",
+                                                   "wrap_resolve_ps" /* wave 5 (R5c) */,
+                                                   "font_ps" /* package R8 */,
+                                                   "sprite_aa1_ps" /* package AA1 */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -1187,12 +1193,145 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     cb->tex[3] = 1.0f / (float)ds->th;
 }
 
+/* ------------------------------------------------ PRIM.AA1 (package AA1)
+ * The model (RENDER_API.md "PRIM.AA1"), PCSX2's software renderer's
+ * (GSRasterizer.cpp DrawEdgeLine / DrawEdgeTriangle, GSDrawScanline.cpp):
+ * a line or triangle with PRIM.AA1 has edge pixels, which carry a coverage
+ * and write no Z; sprite_aa1_ps turns the coverage into the alpha.
+ *   a line       is all edge: per step along its major axis the two pixels
+ *                nearest it on the minor axis, coverage 1 - d (d the
+ *                distance along the minor axis from the pixel's sample
+ *                point to the line, in GS pixels): drawn as the line
+ *                widened by one GS pixel to each side of the minor axis,
+ *                coverage 1 on the line and 0 at the far sides
+ *   a triangle   is drawn as without AA1 (its interior pixels), and each of
+ *                its three edges gets the pixels outside it whose sample
+ *                point lies within one GS pixel of it along its minor axis,
+ *                coverage 1 - d again: a one-pixel fringe; every triangle
+ *                on its own, as the GS draws a strip's triangles one by one
+ * The coverage is the vertex's IcoSpriteAa1Vertex.cov, interpolated without
+ * perspective: ICO_AA1_INTERIOR on a triangle's own vertices. */
+static int aa1Prim(uint8_t prim)
+{
+    return prim == RD_PRIM_LINES || prim == RD_PRIM_LINE_STRIP || prim == RD_PRIM_TRIANGLES ||
+           prim == RD_PRIM_TRIANGLE_STRIP || prim == RD_PRIM_TRIANGLE_FAN;
+}
+
+static IcoSpriteAa1Vertex *s_ax;
+
+static uint32_t s_axCap;
+
+static IcoSpriteAa1Vertex *axScratch(uint64_t n)
+{
+    if (n > s_axCap) {
+        const uint32_t cap = (uint32_t)(n < 4096 ? 4096 : n * 2);
+        IcoSpriteAa1Vertex *p = realloc(s_ax, (size_t)cap * sizeof(*p));
+        if (!p) {
+            return NULL;
+        }
+        s_ax = p;
+        s_axCap = cap;
+    }
+    return s_ax;
+}
+
+static IcoSpriteAa1Vertex aa1Vtx(const IcoSpriteVertex *v, int32_t mx, int32_t my, float cov)
+{
+    IcoSpriteAa1Vertex o;
+    const int32_t x = (int32_t)v->x + mx, y = (int32_t)v->y + my;
+    o.v = *v;
+    o.v.x = (uint16_t)(x < 0 ? 0 : (x > 0xFFFF ? 0xFFFF : x));
+    o.v.y = (uint16_t)(y < 0 ? 0 : (y > 0xFFFF ? 0xFFFF : y));
+    o.cov = cov;
+    return o;
+}
+
+/* the edge p-q widened by (mx, my) (one GS pixel along its minor axis, in
+ * 12.4): coverage 1 on the edge, 0 on the far side; attributes the edge's */
+static uint32_t aa1Band(const IcoSpriteVertex *p, const IcoSpriteVertex *q, int32_t mx, int32_t my,
+                        IcoSpriteAa1Vertex *o)
+{
+    const IcoSpriteAa1Vertex p0 = aa1Vtx(p, 0, 0, 1.0f), q0 = aa1Vtx(q, 0, 0, 1.0f);
+    const IcoSpriteAa1Vertex p1 = aa1Vtx(p, mx, my, 0.0f), q1 = aa1Vtx(q, mx, my, 0.0f);
+    o[0] = p0;
+    o[1] = q0;
+    o[2] = q1;
+    o[3] = p0;
+    o[4] = q1;
+    o[5] = p1;
+    return 6;
+}
+
+/* the fringe of edge p-q of a triangle whose third vertex is t: outside
+ * the edge along its minor axis; none for a degenerate triangle */
+static uint32_t aa1Fringe(const IcoSpriteVertex *p, const IcoSpriteVertex *q,
+                          const IcoSpriteVertex *t, IcoSpriteAa1Vertex *o)
+{
+    const int64_t dx = (int64_t)q->x - p->x, dy = (int64_t)q->y - p->y;
+    const int64_t cross = dx * ((int64_t)t->y - p->y) - dy * ((int64_t)t->x - p->x);
+    if (cross == 0) {
+        return 0;
+    }
+    const int sc = cross > 0 ? 1 : -1;
+    if ((dx < 0 ? -dx : dx) >= (dy < 0 ? -dy : dy)) {
+        return aa1Band(p, q, 0, -16 * sc * (dx > 0 ? 1 : -1), o); /* x-major: up or down */
+    }
+    return aa1Band(p, q, 16 * sc * (dy > 0 ? 1 : -1), 0, o); /* y-major: left or right */
+}
+
+/* expand()'s output (line pairs or triangles) as AA1 geometry; returns the
+ * vertex count.  split: the triangles' own vertices first (*nInterior of
+ * them) and every fringe after, for a draw whose fringes need Z write off
+ * (two draws); else triangle by triangle, the GS's order, *nInterior = the
+ * total (one draw).  Lines are all fringe: *nInterior = 0. */
+static uint32_t aa1Expand(const IcoSpriteVertex *in, uint32_t n, uint8_t topo, int split,
+                          IcoSpriteAa1Vertex *o, uint32_t *nInterior)
+{
+    uint32_t k = 0;
+    if (topo == RD_PRIM_LINES) {
+        for (uint32_t i = 0; i + 1 < n; i += 2) {
+            const IcoSpriteVertex *a = &in[i], *b = &in[i + 1];
+            const int32_t dx = (int32_t)b->x - a->x, dy = (int32_t)b->y - a->y;
+            const int xMajor = (dx < 0 ? -dx : dx) >= (dy < 0 ? -dy : dy);
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            k += aa1Band(a, b, xMajor ? 0 : -16, xMajor ? -16 : 0, &o[k]);
+            k += aa1Band(a, b, xMajor ? 0 : 16, xMajor ? 16 : 0, &o[k]);
+        }
+        *nInterior = 0;
+        return k;
+    }
+    for (uint32_t i = 0; i + 2 < n; i += 3) {
+        for (int j = 0; j < 3; j++) {
+            o[k++] = aa1Vtx(&in[i + j], 0, 0, ICO_AA1_INTERIOR);
+        }
+        if (!split) {
+            k += aa1Fringe(&in[i], &in[i + 1], &in[i + 2], &o[k]);
+            k += aa1Fringe(&in[i + 1], &in[i + 2], &in[i], &o[k]);
+            k += aa1Fringe(&in[i + 2], &in[i], &in[i + 1], &o[k]);
+        }
+    }
+    *nInterior = k;
+    if (split) {
+        for (uint32_t i = 0; i + 2 < n; i += 3) {
+            k += aa1Fringe(&in[i], &in[i + 1], &in[i + 2], &o[k]);
+            k += aa1Fringe(&in[i + 1], &in[i + 2], &in[i], &o[k]);
+            k += aa1Fringe(&in[i + 2], &in[i], &in[i + 1], &o[k]);
+        }
+    }
+    return k;
+}
+
 static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
 
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
     if (rd__WrapApplies(&r->st)) {
+        if (r->st.aa1 && aa1Prim(c->b[0])) {
+            rd__LogOnce(RD_ONCE_AA1_WRAP, "PRIM.AA1 under COLCLAMP 0: drawn without edge coverage");
+        }
         doScreenWrap(r, f, c); /* wave 5 (R5c): COLCLAMP 0 */
         return;
     }
@@ -1223,17 +1362,39 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, ds.tc, out, nv, topo); /* R7c */
     }
-    memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out)); /* P1 */
+    /* package AA1: PRIM.AA1 on a line or triangle command */
+    const int aa1 = r->st.aa1 && aa1Prim(c->b[0]);
+    if (!aa1) {
+        memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out)); /* P1 */
+    }
     RdDrawPass dp[2];
-    const int np = rd__PlanScreenDraw(&r->st, topo, c->b[1], ds.tc->format, ds.depthFmt, dp);
+    const int np = rd__PlanScreenDrawEx(&r->st, topo, aa1, c->b[1], ds.tc->format, ds.depthFmt, dp);
     if (np == 0) {
         return;
+    }
+    uint32_t nDraw = nv, nFirst = nv;
+    uint64_t drawOff = vOff;
+    if (aa1) {
+        int split = 0;
+        for (int i = 0; i < np; i++) {
+            split |= topo == RD_PRIM_TRIANGLES && dp[i].key.gs.zwrite == RD_ZWRITE_ON;
+        }
+        IcoSpriteAa1Vertex *ax = axScratch((uint64_t)nv * 7);
+        if (!ax) {
+            return;
+        }
+        nDraw = aa1Expand(out, nv, topo, split, ax, &nFirst);
+        drawOff = nDraw ? rd__RingAlloc((uint64_t)nDraw * sizeof(*ax), 16) : ~0ull;
+        if (drawOff == ~0ull) {
+            return;
+        }
+        memcpy(g_rd.ringMap[s_slot] + drawOff, ax, (size_t)nDraw * sizeof(*ax));
     }
     RhiBindGroup g2 = bindDraw(r, &ds);
     if (!g2.id) {
         return;
     }
-    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
+    rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], drawOff);
     for (int i = 0; i < np; i++) {
         RhiPipeline p = rd__GetPipeline(&dp[i].key);
         if (!p.id) {
@@ -1245,7 +1406,25 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
         rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
-        rhi_CmdDraw(s_cl, nv, 0, 1);
+        if (!aa1 || nFirst == nDraw) {
+            rhi_CmdDraw(s_cl, nDraw, 0, 1);
+        } else {
+            /* package AA1: the triangles with the pass's Z write, then
+             * their fringes without (edge pixels write no Z) */
+            if (nFirst) {
+                rhi_CmdDraw(s_cl, nFirst, 0, 1);
+            }
+            RdPipeKeyInt ek = dp[i].key;
+            ek.gs.zwrite = RD_ZWRITE_OFF;
+            RhiPipeline pe = rd__GetPipeline(&ek);
+            if (pe.id) {
+                rhi_CmdSetPipeline(s_cl, pe);
+                rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
+                rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+                rhi_CmdSetBindGroup(s_cl, 2, g2);
+                rhi_CmdDraw(s_cl, nDraw - nFirst, nFirst, 1);
+            }
+        }
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }
@@ -2593,6 +2772,15 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
     const uint64_t align = rhi_Limits()->uniformAlign;
     const uint64_t pitchA = rhi_Limits()->copyRowPitchAlign;
     uint64_t total = 64 * 1024;
+    /* package AA1: with PRIM.AA1 anywhere in the frame, room for every
+     * screen command's AA1 geometry too (at most 7 vertices per expanded
+     * vertex, 21 per vertex of a triangle strip) */
+    int hasAa1 = f->startState.aa1 != 0;
+    for (int l = rd__FirstList(keep); l < RD_LIST_COUNT && !hasAa1; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count && !hasAa1; i++) {
+            hasAa1 = f->lists[l].cmds[i].type == RDC_AA1;
+        }
+    }
     for (int l = rd__FirstList(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *cl = &f->lists[l];
         for (uint32_t i = 0; i < cl->count; i++) {
@@ -2600,6 +2788,9 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
             total += 4 * align;
             if (c->type == RDC_SCREEN) {
                 total += (uint64_t)c->u[1] * 6 * sizeof(IcoSpriteVertex) + 16;
+                if (hasAa1) {
+                    total += (uint64_t)c->u[1] * 21 * sizeof(IcoSpriteAa1Vertex) + 16;
+                }
             } else if (c->type == RDC_SHADOW_STRIP) {
                 /* wave 4 (R4b): the triangles, or a strip's 3 (n - 2) */
                 total += ((uint64_t)c->u[0] * 3 + c->u[3]) * sizeof(IcoSpriteVertex) + 64;

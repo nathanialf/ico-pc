@@ -18,7 +18,10 @@
  *             table, c = 12 and -1 mode 0 (reported once)
  *   lines     Draw2DLine (flat, Z given or the vertices'), Draw2DLineG
  *             (Gouraud), the segment pair, DrawLine / DrawLineG through
- *             _getLine against a double-precision projection
+ *             _getLine against a double-precision projection; PRIM.AA1
+ *             (package AA1): 0x18A and 0x189 draw under rd_AA1(1), 0x142
+ *             under 0, and the packet's end returns it to 0; the
+ *             particles' PRIM 0xD6 (a sprite) records no RDC_AA1
  *   dark      SetupDarkVolume and DispGameOverEffect: packet 1 hand-decoded,
  *             the block target (not AA0) for the clear and the spheres, the
  *             spheres against SCENE's depth under COLCLAMP 0 / ALPHA 0x68
@@ -615,6 +618,11 @@ static void checkParticleRecording(void)
         }
         CHECK(seen == 1 && ok == 1, "alphaMode %d: one batch in list 6 with ALPHA 0x%x (%d/%d)",
               mode, kAlpha[mode], ok, seen);
+        int aa1 = 0;
+        for (int i = 0; i < s_nev; i++) {
+            aa1 += s_ev[i].cmd->type == RDC_AA1;
+        }
+        CHECK(aa1 == 0, "particles: PRIM 0xD6's AA1 is a sprite's, no RDC_AA1 (%d)", aa1);
     }
     /* enemy.c's packet code: mode 4 */
     recordParticles(0, 1, bg);
@@ -819,9 +827,12 @@ static void checkLineRecording(void)
     static const uint8_t bg[4] = {10, 10, 10, 0x80};
     recordLines(bg);
     collect();
-    int lines = 0, flat = 0, gour = 0;
+    int lines = 0, flat = 0, gour = 0, aa1 = 0, aa1Last = -1;
     for (int i = 0; i < s_nev; i++) {
         const RdCmd *c = s_ev[i].cmd;
+        if (c->type == RDC_AA1 && s_ev[i].list == 2) {
+            aa1Last = c->b[0];
+        }
         if (c->type != RDC_SCREEN || s_ev[i].list != 2) {
             continue;
         }
@@ -832,6 +843,10 @@ static void checkLineRecording(void)
         } else {
             flat += (int)c->u[1] / 2;
         }
+        /* package AA1: 0x18A and 0x189 (Gouraud) set PRIM.AA1, 0x142 does not */
+        CHECK(s_ev[i].st.aa1 == s_ev[i].st.gouraud, "line AA1 %u with IIP %u", s_ev[i].st.aa1,
+              s_ev[i].st.gouraud);
+        aa1 += s_ev[i].st.aa1 ? (int)c->u[1] / 2 : 0;
         const RdScreenVtx *v = vtxOf(c);
         for (uint32_t k = 0; k < c->u[1]; k++) {
             /* z = -1 gives Z 0xFFFFFFFF; the segment takes the vertices' Z (0) */
@@ -841,6 +856,8 @@ static void checkLineRecording(void)
     }
     CHECK(lines == 4 && flat == 2 && gour == 2, "4 lines, 2 flat (0x142), 2 Gouraud (%d, %d, %d)",
           lines, flat, gour);
+    CHECK(aa1 == 2 && aa1Last == 0, "2 AA1 lines (%d), AA1 back to 0 at the packet's end (%d)", aa1,
+          aa1Last);
     /* DrawLine through _getLine: the projected end points (12.4, as the
        FTOI4 of the projection) */
     dl_Clear();
