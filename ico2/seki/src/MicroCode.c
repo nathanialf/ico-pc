@@ -336,6 +336,14 @@ static float mcHostTop[1024][4];
 
 static unsigned int mcHostOnce;
 
+/* package I1: mc_HostParticleKey's emitter, 0 = none */
+static const void *mcHostEmitter;
+
+void mc_HostParticleKey(const void *emitter)
+{
+    mcHostEmitter = emitter;
+}
+
 static void mcHostOnceLog(int bit, const char *msg, unsigned int v)
 {
     if ((mcHostOnce & (1u << bit)) == 0) {
@@ -562,7 +570,9 @@ static void mcHostBatch(void)
         pd.qw = (const float (*)[4])mcHostTop;
         pd.count = (uint32_t)(n > 80 ? 80 : n);
         pd.vu = d.vu;
-        rd_DrawVuParticles(&pd, 0);
+        /* package I1: keyed by the emitter (prim_DispParticle), so a batch
+           another emitter inserts ahead of it does not shift its match */
+        rd_DrawVuParticles(&pd, mcHostEmitter ? RD_KEY(mcHostEmitter, 18, 0) : 0);
         return;
     }
     mcHostOnceLog(1, "a VU batch chained as a small packet is not drawn (program)",

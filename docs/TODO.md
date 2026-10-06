@@ -103,16 +103,6 @@ pointer to this file.
 
 ## Interpolation (`port/render/rd_interp.c`)
 
-- **Unmatched draws hold.** Screen prims and shadow volumes with no partner
-  in the other tick stand at the tick, so a packet drawn in the previous
-  frame and culled in the current one disappears half way.
-- **Particle order.** Particle batches match by list order, so an emitter
-  that inserts a batch ahead of another snaps both.
-- **Light matrices.** The light matrices blend element by element, so a
-  fast turn dims the lighting half way.
-- **Morph limits.** A mesh rewritten more than once between two presents
-  keeps only its last version, and past 64 morph draws per present
-  (`RD_INTERP_SCRATCH`) the live stream is used.
 - **Unkeyed 2D.** `kanban.c`'s signs, `staffroll.c` (keyed only by string
   through `font_Print`) and `debug.c` are not keyed, so they step at the
   tick rate.

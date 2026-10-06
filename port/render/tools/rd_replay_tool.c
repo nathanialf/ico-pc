@@ -59,6 +59,15 @@
  *                         frame as the renderer drew it before AA1 was
  *                         decoded (a before/after pair from one dump)
  *
+ * Interpolation (package I1; RENDER_API.md "Frame rate and interpolation"):
+ *   --interp T PREV       replays the frame the presenter builds between the
+ *                         dump PREV (the tick before, e.g. the game's
+ *                         rd-NNNNN-prev.rddump) and <dump> at alpha T (0..1)
+ *                         instead of <dump> itself: rd__InterpFrame as a
+ *                         tick's first present (dt 1); the two must be
+ *                         consecutive frames.  The meshes' kept versions are
+ *                         not in a dump: each frame's own mesh is its stream
+ *
  * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -258,7 +267,7 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats]\n",
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n",
                 argv[0]);
         return 1;
     }
@@ -268,7 +277,8 @@ int main(int argc, char **argv)
     /* R7a: the display options */
     RdSettings s;
     bool list = false, overlay = false, noAa1 = false, stats = false;
-    const char *texDir = NULL, *meshName = NULL;
+    const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
+    float interpT = 1.0f;
 
     struct {
         unsigned l, a, b;
@@ -334,6 +344,14 @@ int main(int argc, char **argv)
             stats = true;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
+        } else if (strcmp(argv[i], "--interp") == 0 && i + 2 < argc) {
+            char *end = NULL;
+            interpT = strtof(argv[++i], &end);
+            if (!end || *end != '\0' || !(interpT >= 0.0f && interpT <= 1.0f)) {
+                fprintf(stderr, "bad --interp alpha\n");
+                return 1;
+            }
+            interpPrev = argv[++i];
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
@@ -383,8 +401,14 @@ int main(int argc, char **argv)
     if (overlay) {
         rd_SetPresentOverlay(overlayTest, NULL);
     }
-    RdFrame f;
+    RdFrame pf, f;
+    memset(&pf, 0, sizeof(pf));
+    if (interpPrev && !rd__LoadFrame(interpPrev, &pf)) {
+        rd_Shutdown();
+        return 1;
+    }
     if (!rd__LoadFrame(dump, &f)) {
+        rd__FrameFree(&pf);
         rd_Shutdown();
         return 1;
     }
@@ -406,9 +430,26 @@ int main(int argc, char **argv)
             }
         }
     }
+    const RdFrame *rf = &f;
+    if (interpPrev) {
+        /* I1: the presenter's frame between the two */
+        RdInterpStats ist;
+        rf = rd__InterpFrame(&pf, &f, interpT, 1.0f, 1, &ist);
+        if (!rf) {
+            fprintf(stderr, "rd__InterpFrame failed\n");
+            rd__FrameFree(&pf);
+            rd__FrameFree(&f);
+            rd_Shutdown();
+            return 1;
+        }
+        printf("interp %u -> %u at %g: snap %u, %u keyed draws: %u blended, %u unmatched, %u "
+               "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations\n",
+               pf.number, f.number, (double)interpT, ist.snap, ist.keyed, ist.lerped, ist.missing,
+               ist.mismatch, ist.jump, ist.morph, ist.rotated);
+    }
     if (list) {
-        RdStateBlock st = f.startState;
-        rd__Walk(&f, (int)f.keep, &st, listCmd, &f);
+        RdStateBlock st = rf->startState;
+        rd__Walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
     }
     if (texDir) {
         dumpTextures(texDir);
@@ -417,7 +458,7 @@ int main(int argc, char **argv)
         listMesh(meshName);
     }
     int rc = 1;
-    const bool replayed = rd__ReplayFrame(&f, (int)f.keep, pw != 0);
+    const bool replayed = rd__ReplayFrame(rf, (int)rf->keep, pw != 0);
     if (replayed && stats) {
         /* the record rd__PerfEnd just closed (rd_PerfPop hands it out only
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
@@ -444,6 +485,7 @@ int main(int argc, char **argv)
         free(px);
     }
     rd__FrameFree(&f);
+    rd__FrameFree(&pf);
     rd_Shutdown();
     return rc;
 }

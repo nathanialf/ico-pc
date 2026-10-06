@@ -1246,11 +1246,11 @@ frame, the n-th occurrence matching the n-th:
 
 | command | blended | kept from the current frame |
 |---|---|---|
-| `RDC_MESH`, `RDC_SKINNED` | VuCB qw 2 (the UV scroll, unwrapped the short way; the cluster fade alpha), qw 4..15, the model matrices qw 16..27, the light matrices qw 28..35, the bones | qw 0, 1, 3, the mesh |
+| `RDC_MESH`, `RDC_SKINNED` | VuCB qw 2 (the UV scroll, unwrapped the short way; the cluster fade alpha), qw 4..15, the model matrices qw 16..27, the light matrices qw 28..35 (below), the bones | qw 0, 1, 3, the mesh |
 | `RDC_GRID` | the VU block; each vertex's position, and normal when lit | strip headers, colours, STs |
 | `RDC_PARTICLES` | the VU block; each particle's position and size | header, UV, grey, alpha |
-| `RDC_SCREEN` | XY, Z and RGBA of every vertex | STQ, prim, space |
-| `RDC_SHADOW_STRIP` | the volume's prisms (below) | |
+| `RDC_SCREEN` | XY, Z and RGBA of every vertex; unmatched, the alpha (below) | STQ, prim, space |
+| `RDC_SHADOW_STRIP` | the volume's prisms (below); unmatched, drawn on the nearer tick's side | |
 | frame camera, VU common block | one rigid camera for the frame (below) | `cut` |
 
 Blends are `(1 − t) p + t c`, exact at both ends; a bit-identical pair, or
@@ -1268,8 +1268,28 @@ ticks' images: for a bone the weighted centroid of the vertices bound to it
 joint, and turning about it detached limbs), for a rigid mesh its vertices'
 centroid. A turn over `RD_INTERP_TURN_SNAP` (120 degrees a tick) is taken as
 a flip and that matrix is the tick's. Matrices that are not affine, are
-singular or change handedness keep the element-wise blend, as do the light
-matrices (a fast turn dims the lighting half way without changing shape).
+singular or change handedness keep the element-wise blend.
+
+**Light matrices.** A lit normal program (`normal_l`, `RD_PROG_LIT`,
+`RD_PROG_LIT_SPEC`) computes `l = max0(L1 n)` from the model-space normal and
+`c = max0(L2 l)` (VU1_PROGRAMS.md "normal_l"). L1 (qw 28..31) has the three
+lights' directions as rows 0..2 and (0, 0, 0, 1) as row 3, which carries
+`n.w` into `l.w`; L2 (qw 32..35) has the three lights' colours as columns
+0..2 and the ambient colour as column 3. `RegistPacket.c` builds L1 as
+Light.c's normal light matrix Ln (`_MakeNormalLightMatrix`: the negated unit
+directions, an unused light a zero row) times the node's 3 x 3, which is the
+model to world W's. Element by element a turning object's rows shorten by
+cos(θ/2) half way, so its lighting dimmed (29 % at 90 degrees a tick). Now
+the world-space part Ln = L1 W⁻¹ blends element-wise (between ticks the
+lights change only as the nearest lights and their strengths do) and is
+multiplied by the blended W(t) of the model matrices, so the lights turn
+with the object at full strength (a 90-degree turn keeps the luminance
+within 1 % at t = 0.5, 1.000000 in `rd_interp_test`, against 0.707
+element-wise). Row 3,
+column 3 and L2 (colours and ambient) blend element-wise; a flip (over
+`RD_INTERP_TURN_SNAP`) takes the tick's L1 with its model matrices. The
+cluster and grid programs' lights are in world space (the bones and the
+grid carry the motion) and blend element-wise.
 
 **The camera.** The whole frame is drawn through one rigid camera: the two
 ticks' inverse views blended with the eye lerped and the rotation slerped
@@ -1286,7 +1306,31 @@ both ticks nothing is touched, bit for bit. Draws through another camera (a
 reflection's scope) keep the element-wise blend. CPU-projected draws
 (`RDC_SCREEN`, `RDC_SHADOW_STRIP`) hold GS positions: matched ones blend in
 screen space, which for static geometry lands within 0.26 GS pixels of the
-rigid camera's projection; unmatched ones stay at the tick.
+rigid camera's projection; unmatched ones are faded or switched (below).
+
+**Unmatched screen prims and shadow volumes.** A CPU-projected draw with no
+partner in the other tick (a packet culled in one tick, a string that
+changed, a caster that came or went) cannot be re-based. Standing at the
+tick, a draw of the current tick only appeared a tick early and one of the
+previous tick only vanished a tick early. Now a screen prim whose blend
+fades with its vertex alpha (GS ALPHA with C = As and D = Cd: `LERP_AS`,
+`CS_AS_ADD_CD`, `CD_SUB_CS_AS`, `CD_AS_ADD_CD`; ABE on, PABE off, since with
+PABE a pixel whose alpha drops under 0x80 is written unblended; and the
+vertex alpha reaching As: untextured, TCC RGB or MODULATE) is drawn with its
+alpha times t (the current tick's) or 1 − t (the previous tick's). Any other
+screen prim, and every shadow volume, is drawn whole on the nearer tick's
+side of t = 0.5. A volume only counts the stencil and `RDC_SHADOW_RESOLVE`
+darkens every pixel whose count is not 0 by one shadow colour for all the
+volumes, so there is no alpha to fade and a partial volume would unbalance
+the count; the half-way switch is the rule the prism blend already applies
+to a prism of one tick only. A draw of the previous tick is inserted after
+the match of the keyed draw before it in its list (else before the match of
+the one after it), bracketed by state commands that set its own tick's
+state and restore the current one; a volume only beside a volume or before
+the list's `RDC_SHADOW_RESOLVE`, and only when the colour and depth targets
+agree, otherwise it is not drawn, as before. Alpha 0 then shows the previous
+tick's unmatched draws and none of the current's; alpha 1 is the tick,
+byte for byte (nothing blends at 1).
 
 **Shadow volumes.** A volume is one closed prism per caster triangle.
 `rd_ShadowTris` tags every vertex with its triangle's place in the call
@@ -1308,9 +1352,19 @@ median shift; a shift over `RD_INTERP_JUMP_SCREEN` jumps.
 stream while the next frame records. `rd_mesh.c` keeps the two last
 replaced streams with the frames that drew them (`rd__MeshStreamAt`), and
 `rd__InterpFrame` gives a morphing draw a scratch mesh (up to
-`RD_INTERP_SCRATCH`, 64 a present) holding the current stream with each
-vertex's position and normal blended from the previous one. A morph is
-therefore shown with its own tick's shape, half way between the ticks.
+`RD_INTERP_SCRATCH`, 256 a present; past it the live stream) holding the
+current stream with each vertex's position and normal blended from the
+previous one. A morph is therefore shown with its own tick's shape, half
+way between the ticks. A scratch mesh holds a copy of its mesh's stream,
+indices and batches; the log's third `interp:` line gives the most scratch
+meshes a present used and their bytes. A mesh rewritten more than once
+while a frame records (two `reg_setShape` calls, or a twin rewritten twice
+before its frame) keeps the version a retained frame drew, since the first
+rewrite keeps it and the later ones replace a stream no frame drew; the
+frame then draws the last version. So a double rewrite blends from the
+previous tick's shape to the last one (`rd_interp_test`). A mesh drawn twice
+in one frame with a rewrite between its draws gives both draws the last
+version, in the tick's own replay too.
 
 **Keys.** The call sites build keys that are stable from frame to frame:
 
@@ -1318,7 +1372,7 @@ therefore shown with its own tick's shape, half way between the ticks.
 |---|---|---|
 | VU meshes | `RD_KEY(object, part, packet × 4 + pass)`: the object, the part index, the packet's place in the part's chain (the same in `grp->packets` and `grp->morph`), the pass (material, specular, reflection) | `RegistPacket.c` (`regKeyPart`, `regKeyOrdinal`, `regHostMesh`) |
 | grids, shadow volumes | the Mesh3D and list; the object | `Primitive.c`, `Shadow.c` |
-| particle batches | list and code 18, matched by order | `rd_mesh.c` |
+| particle batches | the emitter (`prim_DispParticle`'s `PrimParticle`, `mc_HostParticleKey`) and code 18, the n-th batch of an emitter matching the n-th; a batch drawn outside it: the list and code 18, matched by order | `Primitive.c`, `MicroCode.c`, `rd_mesh.c` |
 | fade, letterbox | the post kind | `rd_post.c` |
 | the decoder's 2D | `gif_HostDrawKey(obj, part, ordinal)` keys every primitive decoded after it | `GifPacket.c`, `GifHost.h` |
 | layout rows | the row's `texProperty` entry; part 0 the sprite, part 1 its glow | `layout_texture.c` |
@@ -1376,8 +1430,11 @@ byte-identical.
 **Diagnostics.** Every 250 frames the log has `interp:` lines: frames
 blended and snapped by reason, keyed draws blended, unmatched, mismatched
 (by reason) and jumped, rotation blends, shadow volumes moved, VU draws
-re-based onto the blended camera, and up to six `interp: flapping draw`
-lines naming draws whose outcome changed four or more times.
+re-based onto the blended camera, unmatched screen prims and shadow volumes
+faded or switched at half way and those not placed, lit draws whose lights
+turned with them, the scratch meshes' most and bytes, and up to six
+`interp: flapping draw` lines naming draws whose outcome changed four or
+more times.
 `ICO_RD_S2_LEGACY=1` in the environment turns off the rotation blend, the
 rigid camera, the prism blend, the unquantised positions and the present
 clock, for A/B comparison.

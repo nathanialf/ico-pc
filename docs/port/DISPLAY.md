@@ -83,7 +83,12 @@ animations, the film grain, flickering effects such as lightning and the
 menu sparkle, menus and subtitles, the glow effect's trails, and faces
 that change shape. After a camera cut, a stage change or a fade to black
 the next picture is shown as it is, not blended from the one before. The
-motion-blur trail keeps the same length at any frame rate.
+motion-blur trail keeps the same length at any frame rate. Flat elements
+and shadows that appear or disappear between two updates (a sign coming
+into view, a changed line of text, a shadow whose caster left) fade in or
+out over the in-between pictures where their blending allows it, and
+otherwise switch half way, instead of appearing or vanishing a whole update
+early.
 
 This applies to both presets: with Original, each of the game's updates is
 still drawn exactly as on the PS2 and only the pictures in between are
@@ -94,8 +99,8 @@ On a slow computer (or a software renderer) the game draws one picture per
 update, as with `"original"`, rather than slowing the game down.
 
 Turning things turn in between pictures: a character or object that spins
-between two updates is drawn at the in-between angle at its full size, and
-the camera turns as one rigid camera, so the scenery does not shear. How far between the two updates each picture is drawn follows a
+between two updates is drawn at the in-between angle at its full size, its
+lighting turning with it at full strength, and the camera turns as one rigid camera, so the scenery does not shear. How far between the two updates each picture is drawn follows a
 steady clock rather than the exact moment the picture was started, so
 movement advances by even steps.
 

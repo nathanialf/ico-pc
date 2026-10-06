@@ -23,8 +23,9 @@
  *                           cluster fade alpha), qw 4..15 (the common
  *                           block's world to screen, viewport and inverse
  *                           view matrices), 16..27 (the model matrices),
- *                           28..35 (the light matrices); the bones; not qw
- *                           0, 1, 3 (constants and the GIF tag)
+ *                           28..35 (the light matrices; I1: a lit program's
+ *                           L1 turns with the model, rotateLight); the
+ *                           bones; not qw 0, 1, 3 (constants and the GIF tag)
  *   RDC_GRID                the VU block and each vertex's position (and
  *                           normal when lit); the strip headers, colours
  *                           and STs are cur's
@@ -33,6 +34,9 @@
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
  *   RDC_SHADOW_STRIP        XY and Z of each vertex; since V3 Shadow.c's
  *                           volumes prism by prism (blendPrisms)
+ * Since I1 the RDC_SCREEN and RDC_SHADOW_STRIP draws of one tick only fade
+ * in or out with t, or switch at t = 0.5 (unmatchedPass); prev's are
+ * inserted into the output.
  * Matrices blend element by element, except (package S2) a normal
  * program's model matrices and a skinned draw's bones, which blend as a
  * slerped rotation and a lerped stretch about a pivot (rotateModel,
@@ -82,6 +86,7 @@
  * at most 4.
  */
 #include <math.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
@@ -154,9 +159,11 @@ static void presentReset(void);
 static void scratchReset(void);
 static void flapFree(void);
 static void prismFree(void);
+static void umFree(void);
 
 void rd__InterpShutdown(void)
 {
+    umFree();
     prismFree();
     flapFree();
     outFree();
@@ -644,6 +651,64 @@ static bool rotateBone(float (*o)[4], const float (*p)[4], const float (*c)[4], 
     return true;
 }
 
+/* Package I1: a lit program's light matrix L1 (qw 28..31) follows the
+ * object's turn.  normal_l computes l = max0(L1 n) from the model-space
+ * normal n (n.w the ambient weight) and c = max0(L2 l) (VU1_PROGRAMS.md
+ * "normal_l"): L1's rows 0..2 are the three lights' directions in model
+ * space, row 3 (0, 0, 0, 1) carries n.w into l.w; L2 (qw 32..35) holds the
+ * lights' colours in columns 0..2 and the ambient colour in column 3.
+ * RegistPacket.c builds L1 = Ln N: Light.c's normal light matrix
+ * (_MakeNormalLightMatrix: the negated unit directions as rows, an unused
+ * light a zero row) times the node's 3 x 3 with its scale, the translation
+ * cleared, which is W's 3 x 3.  Element by element a turn of the object
+ * shortens the rows by cos(theta / 2) half way, so the lighting dims (29 %
+ * at 90 degrees a tick).  Here the world-space part Ln = L1 W^-1 blends
+ * element-wise (the lights change between ticks only as the near lights or
+ * their strengths do) and the result is Ln(t) W(t), W(t) the model blend
+ * rotateModel made; row 3, column 3 and L2 (colours, ambient) keep the
+ * element-wise blend.  A zero row (no light) stays zero.  False: L1 keeps
+ * the element-wise blend. */
+static int s_lightRot; /* draws whose L1 blended with the model's turn, this present */
+
+static bool rotateLight(float (*o)[4], const float (*p)[4], const float (*c)[4], float t,
+                        const double *iwp, const double *iwc, const double *wt)
+{
+    if (sameQw4(p, c, 28)) {
+        return false; /* the lighting in the model's space did not change */
+    }
+    double lp[3][3], lc[3][3], res[3][3];
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            /* Ln = L1 W^-1: row i, column j (W affine: W^-1's 3 x 3 inverts W's) */
+            double a = 0.0, b = 0.0;
+            for (int k = 0; k < 3; k++) {
+                a += (double)p[28 + k][i] * iwp[j * 4 + k];
+                b += (double)c[28 + k][i] * iwc[j * 4 + k];
+            }
+            lp[i][j] = a;
+            lc[i][j] = b;
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            double v = 0.0;
+            for (int k = 0; k < 3; k++) {
+                v += ((1.0 - t) * lp[i][k] + t * lc[i][k]) * wt[j * 4 + k];
+            }
+            if (!isfinite(v) || fabs(v) > 3.0e38) {
+                return false;
+            }
+            res[i][j] = v;
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            o[28 + j][i] = (float)res[i][j];
+        }
+    }
+    return true;
+}
+
 /* A normal program's model matrices (qw 16..19 model to screen, 20..23
  * model to clip, 24..27 model to view) are each a camera part times the
  * object's model to world W.  W = S^-1 (qw 16..19), S the common block's
@@ -651,9 +716,10 @@ static bool rotateBone(float (*o)[4], const float (*p)[4], const float (*c)[4], 
  * camera part C = M W^-1 element-wise like the common block, and the result
  * is C(t) W(t).  An element-wise blend of M shortens the axes of a turning
  * object by cos(theta / 2) half way (8 % at a 45 degree turn in a tick).
+ * With lit (normal_l), the light matrix L1 turns with W (rotateLight).
  * o holds the element-wise blend already; false: it stays. */
 static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4], float t,
-                        const double *pivot)
+                        const double *pivot, bool lit)
 {
     double sp[16], sc[16], isp[16], isc[16], mp[16], mc[16], wp[16], wc[16], wt[16], iwp[16],
         iwc[16];
@@ -673,7 +739,8 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
         return false;
     }
     if (s_turnDeg > RD_INTERP_TURN_SNAP) {
-        memcpy(o[16], c[16], 12 * sizeof(o[0])); /* a flip, not a motion: the tick's */
+        /* a flip, not a motion: the tick's (I1: its lights with it) */
+        memcpy(o[16], c[16], (lit ? 16 : 12) * sizeof(o[0]));
         return true;
     }
     float res[12][4];
@@ -701,6 +768,9 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
         }
     }
     memcpy(o[16], res, sizeof(res));
+    if (lit && !rd__S2Legacy()) {
+        s_lightRot += rotateLight(o, p, c, t, iwp, iwc, wt);
+    }
     return true;
 }
 
@@ -718,8 +788,9 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
  * parts agree and only the object moves); an unmatched, mismatched, jumped
  * or unkeyed one is cur's object through Vt, so it stays with its neighbours
  * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
- * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space;
- * draws under another camera (a reflection's) keep the element-wise blend. */
+ * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space
+ * (unmatched, I1's fade or half-way switch, unmatchedPass); draws under
+ * another camera (a reflection's) keep the element-wise blend. */
 static bool isNormalProg(uint8_t prog);
 static uint8_t *outPayload(const RdCmd *c);
 
@@ -1046,6 +1117,7 @@ typedef struct Slot {
 typedef struct Node {
     uint32_t list, index;
     int32_t next;
+    int32_t out; /* I1: the index of its match in s_out's list, -1: unmatched */
 } Node;
 
 static Slot *s_slots;
@@ -1151,6 +1223,7 @@ static bool buildIndex(const RdFrame *prev)
             s_nodes[k].list = (uint32_t)l;
             s_nodes[k].index = i;
             s_nodes[k].next = -1;
+            s_nodes[k].out = -1;
             if (s->tail >= 0) {
                 s_nodes[s->tail].next = k;
             } else {
@@ -1162,15 +1235,16 @@ static bool buildIndex(const RdFrame *prev)
     return true;
 }
 
-/* the next unmatched occurrence in prev of cur's draw c in list l */
-static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l)
+/* the next unmatched occurrence in prev of cur's draw c, index i in list l */
+static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t i)
 {
     Slot *s = slotFind(c, l, false);
     if (!s || s->cursor < 0) {
         return NULL;
     }
-    const Node *nd = &s_nodes[s->cursor];
+    Node *nd = &s_nodes[s->cursor];
     s->cursor = nd->next;
+    nd->out = (int32_t)i;
     return &prev->lists[nd->list].cmds[nd->index];
 }
 
@@ -1297,7 +1371,8 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
         double centre[3];
         const bool hasCentre = meshCentroid(cc->u[0], centre);
-        s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL);
+        s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL,
+                                 cc->b[0] == RD_PROG_LIT || cc->b[0] == RD_PROG_LIT_SPEC);
         s_drawTurn = fmax(s_drawTurn, s_turnDeg);
     }
     if (hc.boneQw) {
@@ -2032,8 +2107,15 @@ static uint8_t *outPayload(const RdCmd *c)
  * of the same layout holding cur's stream, its vertex positions (qw 0) and
  * normals (qw 1, the lit and skinned layouts) blended from prev's
  * (rd__MeshStreamAt: rd_mesh.c keeps what the retained frames drew).  At
- * most RD_INTERP_SCRATCH draws a present; more keep the live stream. */
-#define RD_INTERP_SCRATCH 64
+ * most RD_INTERP_SCRATCH draws a present; more keep the live stream (I1:
+ * 256, was 64; a scratch mesh holds a copy of its mesh's stream, indices
+ * and batches, s_scratchBytes, logged).  A mesh rewritten more than once
+ * while a frame records keeps the version a retained frame drew (the first
+ * rewrite keeps it: rd_mesh.c keepVersion), and the frame takes the last. */
+#define RD_INTERP_SCRATCH 256
+
+/* I1: the bytes the scratch meshes of the last present hold */
+static uint64_t s_scratchBytes;
 
 static uint32_t s_scratch[RD_INTERP_SCRATCH];
 
@@ -2105,6 +2187,8 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
     }
     m->materialCount = c->materialCount;
     m->srcQw = c->srcQw;
+    s_scratchBytes +=
+        size + (uint64_t)c->indexCount * 4u + (uint64_t)c->batchCount * sizeof(RdVuBatchRec);
     m->lastUsed = g_rd.frameCounter;
     m->replaySeen = 0; /* upload again */
     m->transient = 1;  /* P1: from the ring, not the device arena */
@@ -2152,6 +2236,568 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
     }
     o->u[0] = s->gen << 16 | (uint32_t)(s - g_rd.meshes + 1);
     return true;
+}
+
+/* ------------------------------- unmatched CPU-projected draws (I1)
+ *
+ * A screen prim (RDC_SCREEN) or a shadow volume (RDC_SHADOW_STRIP) holds GS
+ * positions and cannot be re-based on the blended camera.  One that has no
+ * partner in the other tick (a packet culled in one tick, a string that
+ * changed, a caster that came or went) used to stand at the tick: a draw of
+ * cur only was drawn whole from t = 0, a tick early, and one of prev only
+ * was never drawn between the ticks, so it vanished a tick early.  Now:
+ *
+ *   a screen prim whose blend fades with its vertex alpha (alphaFades:
+ *   ALPHA's C is As and D is Cd, ABE on, PABE off, and the vertex alpha
+ *   reaches As: untextured, TCC RGB or MODULATE) is drawn with its alpha
+ *   times t (cur's) or 1 - t (prev's): it fades in or out over the interval;
+ *
+ *   any other screen prim, and every shadow volume, is drawn on the nearer
+ *   tick's side of t = 0.5 (prev's below it, cur's from it), whole.  A
+ *   shadow volume only counts the stencil (RENDER_API.md "Shadows": each
+ *   triangle +1 or -1, then RDC_SHADOW_RESOLVE darkens every pixel whose
+ *   count is not 0 by one shadow colour for all the volumes), so it has no
+ *   alpha to fade and a partial volume would leave the count unbalanced:
+ *   the switch is the rule blendPrisms already applies to a prism of one
+ *   tick only.
+ *
+ * A draw of prev only is inserted into s_out's list after the match of the
+ * keyed draw before it in prev's list (else before the match of the one
+ * after it), bracketed by state commands that set prev's state for it and
+ * restore cur's (stateDiff); a shadow volume only next to a volume (or
+ * before the list's RDC_SHADOW_RESOLVE), and only when the colour and depth
+ * targets agree.  A draw that cannot be placed is not drawn, as before. */
+typedef struct UmAt {
+    uint32_t list, index;
+} UmAt;
+
+typedef struct UmIns {
+    uint32_t list, pos; /* inserted before s_out's command pos */
+    uint32_t node;      /* the prev draw's s_nodes entry */
+    uint32_t seq;       /* prev's order, the tie break */
+    float weight;       /* alpha weight, 1: whole */
+    uint32_t cmds;      /* the commands it adds: the bracket and the draw */
+    RdStateBlock want;  /* prev's state at the draw */
+    RdStateBlock have;  /* cur's at pos */
+} UmIns;
+
+typedef struct StQ {
+    uint32_t list, pos, slot;
+} StQ;
+
+static UmAt *s_umCur;
+
+static uint32_t s_umCurN, s_umCurCap;
+
+static UmIns *s_umIns;
+
+static uint32_t s_umInsN, s_umInsCap;
+
+static StQ *s_umQ;
+
+static uint32_t s_umQCap;
+
+static RdStateBlock *s_umSt, *s_umWant;
+
+static uint32_t s_umStCap, s_umWantCap;
+
+static int32_t *s_umNext;
+
+static uint32_t s_umNextCap;
+
+static RdCmd *s_umCmds;
+
+static uint32_t s_umCmdsCap;
+
+/* this present: faded in, faded out, switched at half way (cur's, prev's),
+ * prev's not placed */
+static uint32_t s_umFadeIn, s_umFadeOut, s_umHalfIn, s_umHalfOut, s_umHeld;
+
+static void umFree(void)
+{
+    free(s_umCur);
+    free(s_umIns);
+    free(s_umQ);
+    free(s_umSt);
+    free(s_umNext);
+    free(s_umCmds);
+    free(s_umWant);
+    s_umWant = NULL;
+    s_umWantCap = 0;
+    s_umCur = NULL;
+    s_umIns = NULL;
+    s_umQ = NULL;
+    s_umSt = NULL;
+    s_umNext = NULL;
+    s_umCmds = NULL;
+    s_umCurN = s_umCurCap = s_umInsN = s_umInsCap = s_umQCap = s_umStCap = s_umNextCap = 0;
+    s_umCmdsCap = 0;
+}
+
+static bool isProjected(uint8_t type)
+{
+    return type == RDC_SCREEN || type == RDC_SHADOW_STRIP;
+}
+
+/* a keyed draw of cur with no match in prev (RDC_SCREEN, RDC_SHADOW_STRIP) */
+static void umCurOnly(uint32_t list, uint32_t index)
+{
+    if (!growTo((void **)&s_umCur, &s_umCurCap, s_umCurN + 1, sizeof(UmAt))) {
+        return; /* it stays whole, as before */
+    }
+    s_umCur[s_umCurN].list = list;
+    s_umCur[s_umCurN].index = index;
+    s_umCurN++;
+}
+
+/* whether the draw's vertex alpha scales its effect down to nothing: the
+ * blend is C = As with D = Cd (GS ALPHA), ABE on and PABE off (with PABE a
+ * pixel whose alpha drops under 0x80 is written unblended), and As carries
+ * the vertex alpha (untextured, TCC RGB, or MODULATE's At x Af) */
+static bool alphaFades(const RdStateBlock *s)
+{
+    const RdDrawState *d = &s->ds;
+    if (!d->abe || d->pabe) {
+        return false;
+    }
+    switch (d->blend) {
+    case RD_BLEND_LERP_AS:
+    case RD_BLEND_CS_AS_ADD_CD:
+    case RD_BLEND_CD_SUB_CS_AS:
+    case RD_BLEND_LERP_AS_ALT:
+    case RD_BLEND_CD_AS_ADD_CD:
+        break;
+    default:
+        return false;
+    }
+    return !d->texEnabled || d->tcc == RD_TCC_RGB || d->texFn == RD_TEXFN_MODULATE;
+}
+
+static int cmpStQ(const void *a, const void *b)
+{
+    const StQ *x = a, *y = b;
+    if (x->list != y->list) {
+        return x->list < y->list ? -1 : 1;
+    }
+    return (x->pos > y->pos) - (x->pos < y->pos);
+}
+
+/* the state of f before command pos of list (every earlier command applied)
+ * for each of the n queries q, into out[q.slot]; sorts q */
+static void statesAt(const RdFrame *f, StQ *q, uint32_t n, RdStateBlock *out)
+{
+    qsort(q, n, sizeof(StQ), cmpStQ);
+    RdStateBlock st = f->startState;
+    uint32_t k = 0;
+    for (int l = rd__FirstList((int)f->keep); l < RD_LIST_COUNT && k < n; l++) {
+        const RdCmdList *cl = &f->lists[l];
+        for (uint32_t i = 0;; i++) {
+            while (k < n && q[k].list == (uint32_t)l && q[k].pos == i) {
+                out[q[k++].slot] = st;
+            }
+            if (i >= cl->count) {
+                break;
+            }
+            rd__ApplyState(&st, &cl->cmds[i]);
+        }
+    }
+    while (k < n) {
+        out[q[k++].slot] = st; /* past the replayed lists: not expected */
+    }
+}
+
+static RdCmd stateCmd(uint8_t type)
+{
+    RdCmd c;
+    memset(&c, 0, sizeof(c));
+    c.type = type;
+    return c;
+}
+
+/* the state commands that take a to b into out (16 at most); false when
+ * b cannot be reached so (another target, a derived field) */
+static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, uint32_t *n)
+{
+    const RdDrawState *x = &a->ds, *y = &b->ds;
+    uint32_t k = 0;
+    if (a->color != b->color || a->depth != b->depth || a->gsW != b->gsW || a->gsH != b->gsH ||
+        a->useOffset != b->useOffset) {
+        return false;
+    }
+    if (memcmp(&x->test, &y->test, sizeof(x->test)) != 0) {
+        RdCmd c = stateCmd(RDC_TEST);
+        c.b[0] = y->test.ate;
+        c.b[1] = y->test.atst;
+        c.b[2] = y->test.aref;
+        c.b[3] = y->test.afail;
+        c.b[4] = y->test.date;
+        c.b[5] = y->test.zte;
+        c.b[6] = y->test.ztst;
+        out[k++] = c;
+    }
+    if (x->blend != y->blend || x->blendFix != y->blendFix || x->abe != y->abe) {
+        RdCmd c = stateCmd(RDC_BLEND);
+        c.b[0] = y->blend;
+        c.b[1] = y->blendFix;
+        c.b[2] = y->abe;
+        out[k++] = c;
+    }
+
+    static const struct {
+        uint8_t type;
+        size_t off;
+    } bytes[] = {{RDC_ZWRITE, offsetof(RdDrawState, zwrite)},
+                 {RDC_FBA, offsetof(RdDrawState, fba)},
+                 {RDC_PABE, offsetof(RdDrawState, pabe)},
+                 {RDC_COLCLAMP, offsetof(RdDrawState, colclamp)},
+                 {RDC_TEXA, offsetof(RdDrawState, texa)}};
+
+    for (size_t i = 0; i < sizeof(bytes) / sizeof(bytes[0]); i++) {
+        const uint8_t u = ((const uint8_t *)x)[bytes[i].off],
+                      v = ((const uint8_t *)y)[bytes[i].off];
+        if (u != v) {
+            RdCmd c = stateCmd(bytes[i].type);
+            c.b[0] = v;
+            out[k++] = c;
+        }
+    }
+    if (x->magFilter != y->magFilter || x->minFilter != y->minFilter) {
+        RdCmd c = stateCmd(RDC_FILTER);
+        c.b[0] = y->magFilter;
+        c.b[1] = y->minFilter;
+        out[k++] = c;
+    }
+    if (x->wrap.s != y->wrap.s || x->wrap.t != y->wrap.t) {
+        RdCmd c = stateCmd(RDC_WRAP);
+        c.b[0] = y->wrap.s;
+        c.b[1] = y->wrap.t;
+        out[k++] = c;
+    }
+    bool texOn = false;
+    if (a->tex != b->tex || x->texFn != y->texFn || x->tcc != y->tcc ||
+        (y->texEnabled && !x->texEnabled)) {
+        RdCmd c = stateCmd(RDC_TEXTURE);
+        c.u[0] = b->tex;
+        c.b[0] = y->texFn;
+        c.b[1] = y->tcc;
+        out[k++] = c;
+        texOn = true;
+    }
+    if (!y->texEnabled && (x->texEnabled || texOn)) {
+        out[k++] = stateCmd(RDC_TEXTURE_OFF); /* RDC_TEXTURE above turned it on */
+    }
+    if (memcmp(a->uvOffset, b->uvOffset, sizeof(a->uvOffset)) != 0) {
+        RdCmd c = stateCmd(RDC_UVOFFSET);
+        c.f[0] = b->uvOffset[0];
+        c.f[1] = b->uvOffset[1];
+        out[k++] = c;
+    }
+    if (x->fbmsk != y->fbmsk || x->colorMask != y->colorMask) {
+        RdCmd c = stateCmd(RDC_COLORMASK);
+        c.u[0] = y->fbmsk;
+        out[k++] = c;
+    }
+    if (memcmp(a->scissor, b->scissor, sizeof(a->scissor)) != 0) {
+        RdCmd c = stateCmd(RDC_SCISSOR);
+        for (int i = 0; i < 4; i++) {
+            c.u[i] = (uint32_t)b->scissor[i];
+        }
+        out[k++] = c;
+    }
+    if (a->gouraud != b->gouraud) {
+        RdCmd c = stateCmd(RDC_SHADE);
+        c.b[0] = (uint8_t)b->gouraud;
+        out[k++] = c;
+    }
+    if (a->aa1 != b->aa1) {
+        RdCmd c = stateCmd(RDC_AA1);
+        c.b[0] = (uint8_t)b->aa1;
+        out[k++] = c;
+    }
+    /* the commands must give b exactly (colorMask is derived from FBMSK) */
+    RdStateBlock s = *a;
+    for (uint32_t i = 0; i < k; i++) {
+        rd__ApplyState(&s, &out[i]);
+    }
+    *n = k;
+    return memcmp(&s, b, sizeof(s)) == 0;
+}
+
+/* n bytes appended to s_out's payload (16-aligned), NULL on out of memory */
+static uint8_t *outAppend(uint32_t n, uint32_t *off)
+{
+    const uint32_t at = (s_out.payloadSize + 15u) & ~15u;
+    const uint64_t end = (uint64_t)at + n;
+    if (end > UINT32_MAX) {
+        return NULL;
+    }
+    if (end > s_out.payloadCap) {
+        const uint64_t cap = end + end / 2;
+        const uint32_t c32 = (uint32_t)(cap > UINT32_MAX ? end : cap);
+        uint8_t *p = realloc(s_out.payload, c32);
+        if (!p) {
+            return NULL;
+        }
+        s_out.payload = p;
+        s_out.payloadCap = c32;
+    }
+    s_out.payloadSize = (uint32_t)end;
+    *off = at;
+    return s_out.payload + at;
+}
+
+static void scaleAlpha(RdScreenVtx *v, uint32_t n, float w)
+{
+    for (uint32_t i = 0; i < n; i++) {
+        v[i].rgba[3] = (uint8_t)floorf((float)v[i].rgba[3] * w + 0.5f);
+    }
+}
+
+static int cmpIns(const void *a, const void *b)
+{
+    const UmIns *x = a, *y = b;
+    if (x->list != y->list) {
+        return x->list < y->list ? -1 : 1;
+    }
+    if (x->pos != y->pos) {
+        return x->pos < y->pos ? -1 : 1;
+    }
+    return (x->seq > y->seq) - (x->seq < y->seq);
+}
+
+/* the first RDC_SHADOW_RESOLVE of s_out's list l, or ~0u */
+static uint32_t resolveOf(uint32_t l)
+{
+    for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
+        if (s_out.lists[l].cmds[i].type == RDC_SHADOW_RESOLVE) {
+            return i;
+        }
+    }
+    return ~0u;
+}
+
+/* where prev's unmatched draw of node k goes in s_out, ~0u: nowhere */
+static uint32_t umPlace(const RdFrame *prev, uint32_t k, int32_t lastOut)
+{
+    const Node *nd = &s_nodes[k];
+    const RdCmd *pc = &prev->lists[nd->list].cmds[nd->index];
+    const RdCmdList *ol = &s_out.lists[nd->list];
+    const int32_t at = lastOut >= 0 ? lastOut : s_umNext[k];
+    if (pc->type != RDC_SHADOW_STRIP) {
+        return at < 0 ? ~0u : (uint32_t)(lastOut >= 0 ? at + 1 : at);
+    }
+    /* a volume goes between a stencil reset and its resolve: next to a
+     * volume, else before the list's resolve */
+    if (at >= 0 && (uint32_t)at < ol->count && ol->cmds[at].type == RDC_SHADOW_STRIP) {
+        return (uint32_t)(lastOut >= 0 ? at + 1 : at);
+    }
+    return resolveOf(nd->list);
+}
+
+/* I1: the unmatched screen prims and shadow volumes at t (see above);
+ * after the blends and the morph pass, which keep command indices */
+static void unmatchedPass(const RdFrame *prev, float t)
+{
+    s_umInsN = 0;
+    /* prev's unplaced draws and their anchors: s_nodes is in list order */
+    uint32_t cand = 0;
+    for (uint32_t k = 0; k < s_nodeCount; k++) {
+        const Node *nd = &s_nodes[k];
+        cand += nd->out < 0 && isProjected(prev->lists[nd->list].cmds[nd->index].type);
+    }
+    if (cand == 0 && s_umCurN == 0) {
+        return;
+    }
+    if (cand && growTo((void **)&s_umNext, &s_umNextCap, s_nodeCount, sizeof(int32_t))) {
+        int32_t next = -1;
+        uint32_t list = ~0u;
+        for (uint32_t k = s_nodeCount; k-- > 0;) {
+            if (s_nodes[k].list != list) {
+                list = s_nodes[k].list;
+                next = -1;
+            }
+            s_umNext[k] = next;
+            if (s_nodes[k].out >= 0) {
+                next = s_nodes[k].out;
+            }
+        }
+        int32_t lastOut = -1;
+        list = ~0u;
+        for (uint32_t k = 0; k < s_nodeCount; k++) {
+            const Node *nd = &s_nodes[k];
+            if (nd->list != list) {
+                list = nd->list;
+                lastOut = -1;
+            }
+            if (nd->out >= 0) {
+                lastOut = nd->out;
+                continue;
+            }
+            const uint8_t type = prev->lists[nd->list].cmds[nd->index].type;
+            if (!isProjected(type)) {
+                continue;
+            }
+            const uint32_t pos = umPlace(prev, k, lastOut);
+            if (pos == ~0u || pos > s_out.lists[nd->list].count ||
+                !growTo((void **)&s_umIns, &s_umInsCap, s_umInsN + 1, sizeof(UmIns))) {
+                s_umHeld++;
+                continue;
+            }
+            UmIns *in = &s_umIns[s_umInsN++];
+            in->list = nd->list;
+            in->pos = pos;
+            in->node = k;
+            in->seq = k;
+            in->weight = 1.0f;
+        }
+    }
+    /* the states: cur's at its unmatched draws and at the insertions,
+     * prev's at its unmatched draws */
+    const uint32_t nq = s_umCurN + s_umInsN;
+    if (!growTo((void **)&s_umQ, &s_umQCap, nq ? nq : 1, sizeof(StQ)) ||
+        !growTo((void **)&s_umSt, &s_umStCap, nq ? nq : 1, sizeof(RdStateBlock))) {
+        return;
+    }
+    for (uint32_t i = 0; i < s_umCurN; i++) {
+        s_umQ[i] = (StQ){s_umCur[i].list, s_umCur[i].index, i};
+    }
+    for (uint32_t i = 0; i < s_umInsN; i++) {
+        s_umQ[s_umCurN + i] = (StQ){s_umIns[i].list, s_umIns[i].pos, s_umCurN + i};
+    }
+    statesAt(&s_out, s_umQ, nq, s_umSt);
+    for (uint32_t i = 0; i < s_umInsN; i++) {
+        const Node *nd = &s_nodes[s_umIns[i].node];
+        s_umQ[i] = (StQ){nd->list, nd->index, i};
+    }
+    const RdStateBlock *have = s_umSt + s_umCurN; /* cur's at each insertion */
+    if (s_umInsN && !growTo((void **)&s_umWant, &s_umWantCap, s_umInsN, sizeof(RdStateBlock))) {
+        s_umHeld += s_umInsN;
+        s_umInsN = 0;
+    }
+    const RdStateBlock *want = s_umWant;
+    if (s_umInsN) {
+        statesAt(prev, s_umQ, s_umInsN, s_umWant);
+    }
+    /* cur's unmatched draws: faded in, or from half way */
+    for (uint32_t i = 0; i < s_umCurN; i++) {
+        RdCmd *c = &s_out.lists[s_umCur[i].list].cmds[s_umCur[i].index];
+        if (c->type == RDC_SCREEN && alphaFades(&s_umSt[i])) {
+            RdScreenVtx *v = (RdScreenVtx *)(void *)outPayload(c);
+            if (v) {
+                scaleAlpha(v, c->u[1], t);
+            }
+            s_umFadeIn++;
+        } else if (t < 0.5f) {
+            c->type = RDC_NOP;
+            s_umHalfIn++;
+        }
+    }
+    /* prev's: faded out, or until half way; the others dropped */
+    uint32_t keep = 0;
+    for (uint32_t i = 0; i < s_umInsN; i++) {
+        UmIns in = s_umIns[i];
+        const RdCmd *pc = &prev->lists[in.list].cmds[s_nodes[in.node].index];
+        in.want = want[i];
+        in.have = have[i];
+        RdCmd tmp[16];
+        uint32_t n0 = 0, n1 = 0;
+        if (!stateDiff(&have[i], &in.want, tmp, &n0) || !stateDiff(&in.want, &have[i], tmp, &n1)) {
+            s_umHeld++;
+            continue;
+        }
+        if (pc->type == RDC_SCREEN && alphaFades(&in.want)) {
+            in.weight = 1.0f - t;
+            s_umFadeOut++;
+        } else if (t < 0.5f) {
+            s_umHalfOut++;
+        } else {
+            continue; /* the far tick's */
+        }
+        in.cmds = n0 + n1 + 1;
+        s_umIns[keep++] = in;
+    }
+    s_umInsN = keep;
+    if (s_umInsN == 0) {
+        return;
+    }
+    qsort(s_umIns, s_umInsN, sizeof(UmIns), cmpIns);
+    /* the payloads first (s_out's payload may move), then the lists */
+    for (uint32_t i = 0; i < s_umInsN; i++) {
+        UmIns *in = &s_umIns[i];
+        const RdCmd *pc = &prev->lists[in->list].cmds[s_nodes[in->node].index];
+        const uint32_t from = pc->type == RDC_SCREEN ? pc->u[0] : pc->u[1];
+        const uint32_t size = pc->type == RDC_SCREEN ? pc->u[1] * (uint32_t)sizeof(RdScreenVtx)
+                              : pc->b[0] == RD_SHADOW_TRIS
+                                  ? (pc->u[0] + pc->u[3]) * (uint32_t)sizeof(RdScreenVtx)
+                                  : pc->u[0] * 16u;
+        const void *src = payloadAt(prev, from, size);
+        uint32_t off = 0;
+        uint8_t *dst = src ? outAppend(size ? size : 16u, &off) : NULL;
+        if (!dst) {
+            in->node = ~0u; /* dropped */
+            continue;
+        }
+        memcpy(dst, src, size);
+        if (pc->type == RDC_SCREEN && in->weight < 1.0f) {
+            scaleAlpha((RdScreenVtx *)(void *)dst, pc->u[1], in->weight);
+        }
+        in->seq = off; /* now the payload offset */
+    }
+    uint32_t i = 0;
+    while (i < s_umInsN) {
+        const uint32_t l = s_umIns[i].list;
+        uint32_t j = i, add = 0;
+        for (; j < s_umInsN && s_umIns[j].list == l; j++) {
+            add += s_umIns[j].node != ~0u ? s_umIns[j].cmds : 0u;
+        }
+        RdCmdList *cl = &s_out.lists[l];
+        const uint32_t cap = cl->count + add;
+        if (!growTo((void **)&s_umCmds, &s_umCmdsCap, cap, sizeof(RdCmd))) {
+            i = j;
+            continue;
+        }
+        uint32_t o = 0, src = 0;
+        for (uint32_t k = i; k < j; k++) {
+            const UmIns *in = &s_umIns[k];
+            if (in->node == ~0u) {
+                continue;
+            }
+            while (src < in->pos) {
+                s_umCmds[o++] = cl->cmds[src++];
+            }
+            /* prev's state for the draw, then cur's again (checked above) */
+            RdCmd pre[16], post[16];
+            uint32_t n0 = 0, n1 = 0;
+            (void)stateDiff(&in->have, &in->want, pre, &n0);
+            (void)stateDiff(&in->want, &in->have, post, &n1);
+            memcpy(&s_umCmds[o], pre, n0 * sizeof(RdCmd));
+            o += n0;
+            RdCmd c = prev->lists[l].cmds[s_nodes[in->node].index];
+            if (c.type == RDC_SCREEN) {
+                c.u[0] = in->seq;
+            } else {
+                c.u[1] = in->seq;
+            }
+            s_umCmds[o++] = c;
+            memcpy(&s_umCmds[o], post, n1 * sizeof(RdCmd));
+            o += n1;
+        }
+        while (src < cl->count) {
+            s_umCmds[o++] = cl->cmds[src++];
+        }
+        if (o > cl->cap) {
+            RdCmd *p = realloc(cl->cmds, (size_t)o * sizeof(RdCmd));
+            if (!p) {
+                i = j;
+                continue;
+            }
+            cl->cmds = p;
+            cl->cap = o;
+        }
+        memcpy(cl->cmds, s_umCmds, (size_t)o * sizeof(RdCmd));
+        cl->count = o;
+        i = j;
+    }
 }
 
 /* ------------------------------------------------- flap detector (S2)
@@ -2445,7 +3091,11 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
         }
     }
     s_scratchUsed = 0;
+    s_scratchBytes = 0;
     s_doneCount = 0;
+    s_umCurN = 0; /* I1 */
+    s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
+    s_lightRot = 0;
     s_pivotMesh = 0; /* S2: the pivots are recomputed per present */
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
@@ -2489,11 +3139,14 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                     camCurDraw(c); /* S6: unkeyed, cur's through the blended camera */
                     continue;
                 }
-                const RdCmd *pc = matchOf(prev, c, l);
+                const RdCmd *pc = matchOf(prev, c, l, i);
                 uint8_t *op = outPayload(c);
                 if (!pc || !op) {
                     st.missing++;
                     camCurDraw(c);
+                    if (!pc && isProjected(c->type)) {
+                        umCurOnly((uint32_t)l, i); /* I1: faded in, or from half way */
+                    }
                     if (s_track) {
                         flapNote(c, l, O_UNMATCHED, NULL, cur->number);
                     }
@@ -2555,6 +3208,9 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
             st.morph += morphDraw(c, NULL, NULL, cur, 1.0f);
         }
     }
+    if (blend) {
+        unmatchedPass(prev, t); /* I1: inserts commands, so after the passes above */
+    }
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
     feedback(dt, firstOfTick);
@@ -2579,6 +3235,12 @@ static struct {
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* S6 */
+    /* I1: unmatched screen prims and shadow volumes (faded in, faded out,
+     * switched at half way, cur's and prev's; prev's not placed), lit draws
+     * whose light matrix turned with the model */
+    uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
+    uint32_t scratchMax;      /* the most scratch meshes a present used */
+    uint64_t scratchBytesMax; /* and the most bytes they held */
 } s_pres;
 
 #define RD_INTERP_LOG_FRAMES 250
@@ -2603,6 +3265,15 @@ static void presentLog(void)
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
     s_pres.maxTurn = fmaxf(s_pres.maxTurn, st->maxTurn);
+    s_pres.fadeIn += s_umFadeIn;
+    s_pres.fadeOut += s_umFadeOut;
+    s_pres.halfIn += s_umHalfIn;
+    s_pres.halfOut += s_umHalfOut;
+    s_pres.held += s_umHeld;
+    s_pres.lightRot += (uint64_t)s_lightRot;
+    s_pres.scratchMax = s_scratchUsed > s_pres.scratchMax ? s_scratchUsed : s_pres.scratchMax;
+    s_pres.scratchBytesMax =
+        s_scratchBytes > s_pres.scratchBytesMax ? s_scratchBytes : s_pres.scratchBytesMax;
     s_pres.snapFlips +=
         s_pres.frames > 1 && (st->snap == RD_SNAP_NONE) != (s_pres.lastSnap == RD_SNAP_NONE);
     s_pres.lastSnap = st->snap;
@@ -2633,6 +3304,15 @@ static void presentLog(void)
         (unsigned long long)s_pres.turned, (double)s_pres.maxTurn,
         (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN, s_pres.snapFlips,
         (unsigned long long)s_pres.rebased, (unsigned long long)s_pres.rebasedCur);
+    /* I1: a third line */
+    rd__Log("interp: unmatched screen prims and shadow volumes: %llu faded in, %llu faded out, "
+            "%llu of the tick drawn from half way, %llu of the tick before drawn until half way, "
+            "%llu of the tick before not placed; %llu lit draws whose lights turned with them; "
+            "at most %u of %u scratch meshes in a present (%llu bytes)",
+            (unsigned long long)s_pres.fadeIn, (unsigned long long)s_pres.fadeOut,
+            (unsigned long long)s_pres.halfIn, (unsigned long long)s_pres.halfOut,
+            (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
+            RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
     const uint32_t number = s_pres.number;
     const float alpha = s_pres.alpha;
     memset(&s_pres, 0, sizeof(s_pres));

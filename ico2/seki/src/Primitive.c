@@ -844,7 +844,9 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
             dl_OpenDma(2, p->objs[p->cur], p->objSize);
             dl_CloseDma();
 #ifdef ICO_RD
+            mc_HostParticleKey(p); /* package I1: the batch keyed by its emitter */
             mc_HostDma(2, p->objs[p->cur], p->objSize);
+            mc_HostParticleKey(0);
 #endif
             if (systemStatus[5] == 0) {
                 p->cur ^= 1;

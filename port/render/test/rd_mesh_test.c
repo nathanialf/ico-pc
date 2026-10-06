@@ -16,7 +16,8 @@
  *   cluster  a skinned model (two bones) through reg_dispCObj (code 20)
  *   grid     a Mesh3D through prim_InitMesh3D / prim_UpdateMesh3D /
  *            prim_DispMesh3D (mesh code 20)
- *   particle prim_InitParticleByPartition / prim_DispParticle (code 18)
+ *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
+ *            batch keyed by its emitter (package I1)
  *
  * Checks on the recording (no device needed): the mesh built from the
  * packet (vertex count, batches, the index list against vu1ref_StaticKicks);
@@ -935,6 +936,11 @@ static void checkParticleRecording(void)
               memEq(mem + 80, (const float *)(matrixptr + 0xC0), 4),
           "VuCB 16..23: SET_PARTICLE_MATRIX's two matrices");
     CHECK(fd.st[0].ds.abe == 1, "PRIM 0xD6: ABE");
+    /* package I1: keyed by its emitter (mc_HostParticleKey), so the
+     * presenter matches it whatever other emitters draw before it */
+    const RdKey k = RD_KEY(s_part, 18, 0);
+    CHECK(fd.cmd[0]->keyLo == (uint32_t)k && fd.cmd[0]->keyHi == (uint32_t)(k >> 32),
+          "the batch is keyed by its emitter (%08x%08x)", fd.cmd[0]->keyHi, fd.cmd[0]->keyLo);
 }
 
 /* ------------------------------------------------------ the reference */

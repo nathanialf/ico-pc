@@ -1701,6 +1701,392 @@ static void testPresentClock(void)
           "present clock: a 500 ms pause resets it (alpha %.4f)", a);
 }
 
+/* ------------------------------- I1: unmatched draws, particles, lights */
+
+static const char kObjU, kObjP1, kObjP2, kObjP3, kObjL;
+
+/* the alpha of the (only) RDC_SCREEN draw with key k in list 0, -1: none */
+static int alphaOf(const RdFrame *f, RdKey k)
+{
+    const RdCmd *c = findKey(f, 0, k, 0);
+    return c && c->type == RDC_SCREEN ? screenVtx(f, c)[0].rgba[3] : -1;
+}
+
+static int drawsOf(const RdFrame *f, int l, RdKey k, uint8_t type)
+{
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        const RdCmd *c = &f->lists[l].cmds[i];
+        n += c->type == type && c->keyLo == (uint32_t)k && c->keyHi == (uint32_t)(k >> 32);
+    }
+    return n;
+}
+
+/* the state at the first draw of key k in list l */
+static int stateAt(const RdFrame *f, int l, RdKey k, RdStateBlock *out)
+{
+    RdStateBlock st = f->startState;
+    for (int li = 0; li < RD_LIST_COUNT; li++) {
+        for (uint32_t i = 0; i < f->lists[li].count; i++) {
+            const RdCmd *c = &f->lists[li].cmds[i];
+            rd__ApplyState(&st, c);
+            if (li == l && c->type != RDC_NOP && !rd__CmdIsState(c->type) &&
+                c->keyLo == (uint32_t)k && c->keyHi == (uint32_t)(k >> 32)) {
+                *out = st;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void endStateOf(const RdFrame *f, RdStateBlock *out)
+{
+    *out = f->startState;
+    rd__Walk(f, (int)f->keep, out, NULL, NULL);
+}
+
+/* a 3-triangle volume at x0 in list 3 (untagged layout as rd_ShadowTris
+ * records it) */
+static void volume(int x0, RdKey key)
+{
+    RdScreenVtx sv[9];
+    int8_t sign[3] = {1, -1, 1};
+    memset(sv, 0, sizeof(sv));
+    for (int i = 0; i < 9; i++) {
+        sv[i].x = OX + (x0 + i * 4) * 16;
+        sv[i].y = OY + i * 16;
+        sv[i].z = 1000u;
+    }
+    rd_ShadowTris(sv, sign, 3, key);
+}
+
+/* prev (second 0): KM, a fading KP (ABE on, LERP As), an opaque KQ, and
+ * volumes KS then KT; cur: KM, a fading KN, an opaque KR, volumes KS, KU */
+static void recordUnmatched(int second)
+{
+    static const uint8_t grey[4] = {90, 90, 90, 0x80};
+    rd_BeginFrame();
+    frameHead();
+    sprite(second ? 4 : 0, 0, (second ? 4 : 0) + 10, 10, grey, RD_KEY(&kObjU, 0, 0)); /* KM */
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    sprite(20, 0, 30, 10, grey, RD_KEY(&kObjU, second ? 2 : 1, 0)); /* KN / KP: fade */
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    sprite(40, 0, 50, 10, grey, RD_KEY(&kObjU, second ? 4 : 3, 0)); /* KR / KQ: opaque */
+    rd_SelectList(3);
+    rd_ShadowReset();
+    volume(second ? 2 : 0, RD_KEY(&kObjU, 5, 0));  /* KS */
+    volume(60, RD_KEY(&kObjU, second ? 7 : 6, 0)); /* KU / KT */
+    rd_ShadowResolve();
+    rd_EndFrame(0);
+}
+
+static void testUnmatched(void)
+{
+    const RdKey kM = RD_KEY(&kObjU, 0, 0), kP = RD_KEY(&kObjU, 1, 0), kN = RD_KEY(&kObjU, 2, 0);
+    const RdKey kQ = RD_KEY(&kObjU, 3, 0), kR = RD_KEY(&kObjU, 4, 0), kT = RD_KEY(&kObjU, 6, 0);
+    const RdKey kU = RD_KEY(&kObjU, 7, 0);
+    recordUnmatched(0);
+    recordUnmatched(1);
+    const RdFrame *cur = rd__LastFrame();
+    RdStateBlock endCur, endOut, at;
+    endStateOf(cur, &endCur);
+    /* a quarter of the way: the tick before's draws mostly */
+    const RdFrame *f = built(0.25f);
+    CHECK(alphaOf(f, kN) == 0x20 && alphaOf(f, kP) == 0x60,
+          "t 0.25: the new sprite fades in (alpha %d, want 0x20), the gone one fades out (alpha "
+          "%d, want 0x60)",
+          alphaOf(f, kN), alphaOf(f, kP));
+    CHECK(alphaOf(f, kQ) == 0x80 && drawsOf(f, 0, kR, RDC_SCREEN) == 0,
+          "t 0.25: an opaque sprite of the tick before is drawn whole, the new one not yet");
+    CHECK(drawsOf(f, 3, kT, RDC_SHADOW_STRIP) == 1 && drawsOf(f, 3, kU, RDC_SHADOW_STRIP) == 0,
+          "t 0.25: the volume of the tick before is drawn, the new one not yet (%d, %d)",
+          drawsOf(f, 3, kT, RDC_SHADOW_STRIP), drawsOf(f, 3, kU, RDC_SHADOW_STRIP));
+    CHECK(stateAt(f, 0, kP, &at) && at.ds.abe == 1 && stateAt(f, 0, kQ, &at) && at.ds.abe == 0,
+          "the inserted sprites draw with their own tick's state");
+    endStateOf(f, &endOut);
+    CHECK(memcmp(&endOut, &endCur, sizeof(endCur)) == 0,
+          "the insertions restore the state: the frame ends as the tick does");
+    {
+        /* the volume sits between the stencil reset and the resolve */
+        int seenReset = 0, ok = 0;
+        for (uint32_t i = 0; i < f->lists[3].count; i++) {
+            const RdCmd *c = &f->lists[3].cmds[i];
+            seenReset |= c->type == RDC_SHADOW_RESET;
+            if (c->type == RDC_SHADOW_STRIP && c->keyLo == (uint32_t)kT) {
+                ok = seenReset;
+            }
+            if (c->type == RDC_SHADOW_RESOLVE) {
+                break;
+            }
+        }
+        CHECK(ok, "the volume of the tick before is drawn inside the stencil pass");
+    }
+    /* three quarters */
+    f = built(0.75f);
+    CHECK(alphaOf(f, kN) == 0x60 && alphaOf(f, kP) == 0x20,
+          "t 0.75: alpha in %d (want 0x60), out %d (want 0x20)", alphaOf(f, kN), alphaOf(f, kP));
+    CHECK(drawsOf(f, 0, kQ, RDC_SCREEN) == 0 && alphaOf(f, kR) == 0x80,
+          "t 0.75: the opaque sprite of the tick before is gone, the new one is drawn");
+    CHECK(drawsOf(f, 3, kT, RDC_SHADOW_STRIP) == 0 && drawsOf(f, 3, kU, RDC_SHADOW_STRIP) == 1,
+          "t 0.75: the new volume is drawn, the one of the tick before not");
+    endStateOf(f, &endOut);
+    CHECK(memcmp(&endOut, &endCur, sizeof(endCur)) == 0, "t 0.75: the frame ends as the tick does");
+    /* the ends: alpha 0 has the tick before's unmatched draws whole and none
+     * of the new; alpha 1 is the tick, byte for byte */
+    f = built(0.0f);
+    CHECK(alphaOf(f, kP) == 0x80 && alphaOf(f, kN) == 0 && alphaOf(f, kQ) == 0x80 &&
+              drawsOf(f, 0, kR, RDC_SCREEN) == 0,
+          "alpha 0: the tick before's sprites whole, the new ones invisible");
+    f = built(1.0f);
+    CHECK(f && f->payloadSize == cur->payloadSize &&
+              memcmp(f->payload, cur->payload, cur->payloadSize) == 0 &&
+              f->lists[0].count == cur->lists[0].count &&
+              memcmp(f->lists[0].cmds, cur->lists[0].cmds, cur->lists[0].count * sizeof(RdCmd)) ==
+                  0 &&
+              f->lists[3].count == cur->lists[3].count,
+          "alpha 1: the tick's lists and payload");
+    /* the matched sprite still blends */
+    f = built(0.5f);
+    const RdScreenVtx *m = screenVtx(f, findKey(f, 0, kM, 0));
+    CHECK(m && m[0].x == OX + 2 * 16, "the matched sprite blends as before");
+}
+
+/* two emitters' batches (2 and 3 particles) in list 6, keyed by emitter as
+ * MicroCode.c keys prim_DispParticle's (RD_KEY(emitter, 18, 0)); with
+ * insert, a third emitter's batch of 4 comes first.  byEmitter 0: the
+ * batches keyed 0 (rd_mesh.c's list key, matched by order) */
+static void particleBatch(const void *emitter, int n, float x, int byEmitter)
+{
+    static float p[6 + 2 * 4][4];
+    memset(p, 0, sizeof(p));
+    const int32_t cnt = n;
+    memcpy(&p[0][0], &cnt, 4);
+    for (int i = 0; i < n; i++) {
+        p[6 + 2 * i][0] = x + (float)i;
+        p[6 + 2 * i][3] = 1.0f;
+        p[7 + 2 * i][3] = 0.5f;
+    }
+    RdVuParticleDraw pd;
+    memset(&pd, 0, sizeof(pd));
+    pd.qw = (const float (*)[4])p;
+    pd.count = (uint32_t)n;
+    identity(pd.vu.mem, 4);
+    identity(pd.vu.mem, 16);
+    pd.vu.mem[19][0] = 2048.0f;
+    pd.vu.mem[19][1] = 2048.0f;
+    pd.vu.mem[19][3] = 1.0f;
+    rd_DrawVuParticles(&pd, byEmitter ? RD_KEY(emitter, 18, 0) : 0);
+}
+
+static void recordParticleOrder(int second, int byEmitter)
+{
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(6);
+    if (second) {
+        particleBatch(&kObjP3, 4, 500.0f, byEmitter); /* a new emitter, ahead of the others */
+    }
+    particleBatch(&kObjP1, 2, second ? 2.0f : 0.0f, byEmitter);
+    particleBatch(&kObjP2, 3, second ? 12.0f : 10.0f, byEmitter);
+    rd_EndFrame(0);
+}
+
+/* the first particle's x of the n-th particle batch of list 6 */
+static float particleX(const RdFrame *f, int nth)
+{
+    for (uint32_t i = 0; i < f->lists[6].count; i++) {
+        const RdCmd *c = &f->lists[6].cmds[i];
+        if (c->type == RDC_PARTICLES && nth-- == 0) {
+            const float (*q)[4] = (const float (*)[4])(
+                const void *)(f->payload + c->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+            return q[6][0];
+        }
+    }
+    return -1.0f;
+}
+
+static void testParticleOrder(void)
+{
+    /* before: by list order, the new batch pairs with the first and every
+     * pair differs in count: all three snap */
+    recordParticleOrder(0, 0);
+    recordParticleOrder(1, 0);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->lerped == 0 && st->mismatch == 2 && st->missing == 1,
+          "particles by list order: a batch inserted ahead snaps the others (lerped %u, "
+          "mismatch %u, missing %u)",
+          st->lerped, st->mismatch, st->missing);
+    /* I1: by emitter, the two batches keep their partners */
+    recordParticleOrder(0, 1);
+    recordParticleOrder(1, 1);
+    st = build(0.5f, 1.0f, 1);
+    const RdFrame *f = built(0.5f);
+    CHECK(st->lerped == 2 && st->mismatch == 0 && st->missing == 1,
+          "particles by emitter: both batches blend, the new one is the tick's (lerped %u, "
+          "mismatch %u, missing %u)",
+          st->lerped, st->mismatch, st->missing);
+    CHECK(particleX(f, 0) == 500.0f && particleX(f, 1) == 1.0f && particleX(f, 2) == 11.0f,
+          "particles by emitter: half way (%g, %g, %g)", particleX(f, 0), particleX(f, 1),
+          particleX(f, 2));
+}
+
+/* a lit mesh (normal_l) turning deg about z with one light along x: L1 =
+ * Ln W, Ln's row 0 the light, rows 1 and 2 zero (no light), row 3 (0, 0,
+ * 0, 1); L2 a colour and an ambient */
+static void recordLitTurn(RdMesh mesh, double deg)
+{
+    rd_BeginFrame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_LIT;
+    d.code = 32;
+    double w[16];
+    turnZ(w, deg, 1.0, 10.0);
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    for (int cI = 0; cI < 4; cI++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[16 + cI][r] = (float)w[cI * 4 + r];
+            d.vu.mem[20 + cI][r] = (float)w[cI * 4 + r];
+            d.vu.mem[24 + cI][r] = (float)w[cI * 4 + r];
+        }
+    }
+    /* L1 = Ln W: row 0 = (1, 0, 0) W's 3 x 3, i.e. W's first row */
+    memset(&d.vu.mem[28], 0, 8 * 16);
+    for (int cI = 0; cI < 3; cI++) {
+        d.vu.mem[28 + cI][0] = (float)w[cI * 4 + 0];
+    }
+    d.vu.mem[31][3] = 1.0f;
+    d.vu.mem[32][0] = 0.8f; /* L2: light 0's colour */
+    d.vu.mem[32][1] = 0.6f;
+    d.vu.mem[32][2] = 0.4f;
+    d.vu.mem[32][3] = 1.0f;
+    d.vu.mem[35][0] = d.vu.mem[35][1] = d.vu.mem[35][2] = 0.25f; /* the ambient */
+    d.vu.mem[35][3] = 1.0f;
+    rd_SelectList(0);
+    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjL, 0, 32));
+    rd_EndFrame(0);
+}
+
+static void testLightTurn(void)
+{
+    RdMesh mesh = makeMesh();
+    recordLitTurn(mesh, 0.0);
+    recordLitTurn(mesh, 90.0);
+    build(0.5f, 1.0f, 1);
+    const RdFrame *f = built(0.5f);
+    const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjL, 0, 32), 0));
+    if (m) {
+        /* the luminance of the normal facing the light is the length of L1's
+         * row 0 (max0(L1 n), n a unit normal): 1 at either tick; element by
+         * element (1, 0, 0) and (0, -1, 0) meet at 0.707 */
+        const float x = m[28][0], y = m[29][0], z = m[30][0];
+        const float lum = sqrtf(x * x + y * y + z * z);
+        const float ew = sqrtf(0.5f * 0.5f + 0.5f * 0.5f);
+        CHECK(fabsf(lum - 1.0f) < 0.01f && fabsf(x - 0.70710678f) < 1e-4f &&
+                  fabsf(y + 0.70710678f) < 1e-4f,
+              "a 90 degree turn: the light row at 45 degrees with luminance %.5f (element-wise "
+              "%.5f)",
+              lum, ew);
+        printf("rd_interp_test: lit 90 degree turn at alpha 0.5: luminance %.6f (element-wise "
+               "%.6f)\n",
+               lum, ew);
+        CHECK(m[28][1] == 0.0f && m[29][2] == 0.0f && m[31][3] == 1.0f && m[31][0] == 0.0f,
+              "the unused lights stay zero, row 3 and column 3 as recorded");
+        CHECK(m[32][0] == 0.8f && m[35][0] == 0.25f, "the colours and the ambient as recorded");
+    } else {
+        CHECK(0, "the lit draw");
+    }
+    rd_DestroyVuMesh(mesh);
+}
+
+/* I1: morph limits.  A mesh rewritten twice before its draw in every frame
+ * (two reg_setShape calls), twins (C in odd frames, D in even ones) each
+ * rewritten twice in the frame before their draw, and RD_INTERP_MORPH_MANY
+ * meshes rewritten every frame (more than the 64 scratch meshes a present
+ * had before I1) */
+#define RD_INTERP_MORPH_MANY 200
+
+static void morphLimitFrame(RdMesh a, RdMesh c, RdMesh d, const RdMesh *many, int n, float x,
+                            int odd)
+{
+    rd_BeginFrame();
+    frameHead();
+    morphUpdate(a, x - 5.0f); /* an intermediate shape no frame draws */
+    morphUpdate(a, x);
+    morphDrawAt(a, RD_KEY(&kObjD, 7, 0));
+    /* the twin not drawn this frame takes the next frame's shape, twice */
+    morphUpdate(odd ? d : c, x + 13.0f);
+    morphUpdate(odd ? d : c, x + 20.0f);
+    morphDrawAt(odd ? c : d, RD_KEY(&kObjD, 8, 0));
+    for (int i = 0; i < n; i++) {
+        morphUpdate(many[i], x + (float)i);
+        morphDrawAt(many[i], RD_KEY(&kObjD, 9, i));
+    }
+}
+
+static void testMorphLimits(void)
+{
+    RdSettings s = *rd_GetSettings(), keep = s;
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 1.0f;
+    s.interpolate = 1;
+    rd_SetSettings(&s);
+    static RdMesh many[RD_INTERP_MORPH_MANY];
+    RdMesh a = morphMesh(0.0f), c = morphMesh(0.0f), d = morphMesh(0.0f);
+    for (int i = 0; i < RD_INTERP_MORPH_MANY; i++) {
+        many[i] = morphMesh(0.0f);
+    }
+    /* the twins: D drawn in frame 1 with the shape set before it */
+    morphUpdate(d, 100.0f);
+    morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 100.0f, 0); /* draws D (100) */
+    rd_EndFrame(0);
+    morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 120.0f, 1); /* draws C (120) */
+    rd_EndFrame(0);
+    morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 200.0f, 0); /* records */
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdFrame *f = built(0.5f);
+    /* frame 1 drew a at 100, D at 100 (set before it), frame 2 a at 120, C
+     * at 100 + 20 (rewritten twice in frame 1) */
+    CHECK(morphX(f, RD_KEY(&kObjD, 7, 0), 0) == 110.0f,
+          "a double rewrite blends from the first tick's shape (%g, want 110)",
+          morphX(f, RD_KEY(&kObjD, 7, 0), 0));
+    CHECK(morphX(f, RD_KEY(&kObjD, 8, 0), 0) == 110.0f,
+          "twins rewritten twice: from D's 100 to C's 120 (%g, want 110)",
+          morphX(f, RD_KEY(&kObjD, 8, 0), 0));
+    int ok = 1, last = -1;
+    for (int i = 0; i < RD_INTERP_MORPH_MANY; i++) {
+        const float x = morphX(f, RD_KEY(&kObjD, 9, i), 0);
+        if (x != 110.0f + (float)i) {
+            ok = 0;
+            last = i;
+        }
+    }
+    CHECK(ok && st->morph == RD_INTERP_MORPH_MANY + 2,
+          "%d morph draws in a present all blend (%u streams; draw %d is not)",
+          RD_INTERP_MORPH_MANY + 2, st->morph, last);
+    f = built(0.0f);
+    CHECK(morphX(f, RD_KEY(&kObjD, 7, 0), 0) == 100.0f &&
+              morphX(f, RD_KEY(&kObjD, 9, RD_INTERP_MORPH_MANY - 1), 0) ==
+                  100.0f + (float)(RD_INTERP_MORPH_MANY - 1),
+          "alpha 0: the first tick's shapes");
+    if (g_rd.hasDevice) {
+        CHECK(rd__ReplayFrame(built(0.5f), 0, false), "morph limits: the half-way frame replays");
+    }
+    rd_EndFrame(0);
+    rd_SetSettings(&keep);
+    rd_BeginFrame();
+    rd_EndFrame(0);
+    rd_DestroyVuMesh(a);
+    rd_DestroyVuMesh(c);
+    rd_DestroyVuMesh(d);
+    for (int i = 0; i < RD_INTERP_MORPH_MANY; i++) {
+        rd_DestroyVuMesh(many[i]);
+    }
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -1716,6 +2102,10 @@ static void runCpu(void)
     testFeedback();
     testText();
     testMorph();
+    testUnmatched();
+    testParticleOrder();
+    testLightTurn();
+    testMorphLimits();
 }
 
 int main(void)
