@@ -694,6 +694,27 @@ uint32_t rd__CrtGapColumns(float r);
 float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd, int ch);
 float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch);
 float rd__CrtRowGain(int mask, float gap);
+/* The highlights, as crt.hlsl draws them (the CPU side of the same maths,
+ * for the tests).  rd__CrtStrengthAt: the mask's strength under a source
+ * pixel p (linear), eased to half as its brightest channel goes from 0.5
+ * to 1.  rd__CrtTriadTop: channel ch's largest stripe weight over source
+ * pixel sx's columns (1, or the leak in a triad short of its stripe).
+ * rd__CrtGainFade: the fraction t of the gains (gain[c], each channel's
+ * triad and row gain) a pixel of colour col takes so that no channel's
+ * brightest stripe, col (1 + fade (top (1 + t (gain - 1)) - 1)), passes 1;
+ * one t for the three channels, so the hue holds.  rd__CrtGlowMix: halation (halo,
+ * the wide glow) and bloom (glow, weighted by its luminance) mixed into
+ * col in proportion, never added.  rd__CrtShoulder: a colour whose
+ * brightest channel passes 1 - 0.1 st scaled as a whole, that channel
+ * rolled off toward 1.  rd__CrtBeam: a line of colour c (one channel,
+ * linear) at d lines from its centre (crt.hlsl beamOf). */
+float rd__CrtStrengthAt(float strength, const float p[3]);
+float rd__CrtTriadTop(int mask, float r, float gap, int sx, float v, int ch);
+float rd__CrtGainFade(const float col[3], const float gain[3], const float top[3], float fade);
+void rd__CrtGlowMix(float col[3], const float halo[3], const float glow[3], float halation,
+                    float bloom, float st);
+void rd__CrtShoulder(float c[3], float st);
+float rd__CrtBeam(float c, float d, float beamMin, float beamMax);
 /* True when the present draws the CRT filter (a mode, strength > 0). */
 bool rd__CrtOn(void);
 /* The filter's source grid: the PS2 picture's pixels, vw across (512 at

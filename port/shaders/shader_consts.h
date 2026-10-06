@@ -53,8 +53,8 @@ typedef struct IcoCrtCB {
                     * leak), fade (rd__CrtMaskFade), halation */
     float glow[4]; /* bloom, curvature x, curvature y, corner radius (of the box height) */
     float tone[4]; /* vignette, gamma in, gamma out, strength */
-    float pass[4]; /* x mirror, y the slot bridges' row gain (rd__CrtRowGain), zw 1 / the
-                    * blurred target's size */
+    float pass[4]; /* x mirror, y unused (the slot's row gain is per pixel: crt.hlsl
+                    * rowGainOf), zw 1 / the blurred target's size */
 } IcoCrtCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */

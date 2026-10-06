@@ -18,7 +18,7 @@
 //                    channel and leaking the other two (maskOf) under the
 //                    beam of the line at its
 //                    height, halation and bloom from the blurred target,
-//                    vignette, rounded corners, gamma
+//                    vignette, rounded corners, a soft shoulder, gamma
 //
 // Bindings: CrtCB (b1, space1: the DrawCB slot, and the same 112 bytes, so
 // the passes run under the post pipelines' layouts; shader_consts.h
@@ -42,7 +42,8 @@ cbuffer CrtCB : register(b1, space1)
     float4 c_mask; // type (0 none, 1 grille, 2 slot, 3 dots), strength (1 - the leak), fade, halation
     float4 c_glow; // bloom, curvature x, curvature y, corner radius (of the box height)
     float4 c_tone; // vignette, gamma in, gamma out, strength
-    float4 c_pass; // x mirror, y the slot bridges' row gain, zw 1 / the blurred target's size
+    float4 c_pass; // x mirror, y unused (the slot's row gain is per pixel, rowGainOf), zw 1 /
+                   // the blurred target's size
 };
 
 Texture2D<float4> g_texture : register(t1, space2);
@@ -117,7 +118,11 @@ float3 linearLoad(int2 p)
 // The beam of a line of colour c at distance d (lines): a Gaussian whose
 // full width at half maximum grows from c_beam.y (dark) to c_beam.z (bright),
 // per channel, normalised to unit area so a line's light is its colour
-// whatever the width (the brighter, the wider and the flatter)
+// whatever the width (the brighter, the wider and the flatter). Its peak
+// passes the colour where the beam is narrower than about a line, which
+// only a dark line's is: a bright line's beam is near its widest, a few
+// per cent over at the most, and gainFadeOf and shoulderOf take that
+// (rd_crt.c rd__CrtBeam is the same function)
 float3 beamOf(float3 c, float d)
 {
     float3 width = lerp(c_beam.yyy, c_beam.zzz, saturate(c));
@@ -134,9 +139,9 @@ float3 beamOf(float3 c, float d)
 // of the line, half a line later in odd columns. Dots: the line's second
 // half a second row of dots one stripe over (half a triad rounded down to
 // whole stripes).
-float3 stripeOf(float f, float v)
+float3 stripeOf(float f, float v, float strength)
 {
-    float r = c_box.x * c_src.z, g = c_beam.w, leak = 1.0 - c_mask.y;
+    float r = c_box.x * c_src.z, g = c_beam.w, leak = 1.0 - strength;
     if (c_mask.x > 2.5 && v >= 0.5) {
         f = frac(f + 1.0 / 3.0);
     }
@@ -150,17 +155,71 @@ float3 stripeOf(float f, float v)
 
 // the slot's bridge: 1 - the leak over the last third of the line, half a
 // line later in odd columns; 1 elsewhere and in the other masks
-float slotOf(float v, int odd)
+float slotOf(float v, int odd, float strength)
 {
     if (c_mask.x > 1.5 && c_mask.x < 2.5 && frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
-        return 1.0 - c_mask.y;
+        return 1.0 - strength;
     }
     return 1.0;
 }
 
-float3 maskOf(float f, float v, int odd)
+float3 maskOf(float f, float v, int odd, float strength)
 {
-    return stripeOf(f, v) * slotOf(v, odd);
+    return stripeOf(f, v, strength) * slotOf(v, odd, strength);
+}
+
+// 1 over the slot bridges' mean over a line (rd_crt.c rd__CrtRowGain)
+float rowGainOf(float strength)
+{
+    return c_mask.x > 1.5 && c_mask.x < 2.5 && strength < 1.0 ? 1.0 / (1.0 - strength / 3.0)
+                                                               : 1.0;
+}
+
+// The mask's strength under a source pixel p (linear; rd_crt.c
+// rd__CrtStrengthAt): eased to half from its brightest channel 0.5 to 1,
+// so a white still shows its stripes, more softly, as a lit tube does
+// where its glass glows
+float strengthAt(float3 p)
+{
+    return c_mask.y * (1.0 - 0.5 * smoothstep(0.5, 1.0, max(p.r, max(p.g, p.b))));
+}
+
+// How much of the gains a pixel of colour col takes (rd_crt.c
+// rd__CrtGainFade): the gains (gain) bring each triad's light up to its
+// pixel's, but where a lit stripe would pass 1 the light would clip and
+// the stripes flatten into white. One fraction t for the three channels
+// (so a colour keeps its hue): the largest that keeps each channel's
+// brightest weight in the triad (top: 1 where it has a stripe, the leak in
+// a triad short of one), col (1 + fade (top (1 + t (gain - 1)) - 1)), at
+// 1. A highlight's triad is then darker than its pixel, as on a tube.
+float gainFadeOf(float3 col, float3 gain, float3 top, float fade)
+{
+    float t = 1.0;
+    [unroll] for (int k = 0; k < 3; k++) {
+        float over = col[k] * fade * top[k] * (gain[k] - 1.0);
+        if (over > 1e-6) {
+            t = min(t, (1.0 - col[k] * (1.0 + fade * (top[k] - 1.0))) / over);
+        }
+    }
+    return saturate(t);
+}
+
+// The soft shoulder (rd_crt.c rd__CrtShoulder): a colour whose brightest
+// channel passes the knee (1 - 0.1 strength) is scaled down as a whole,
+// that channel rolled off toward 1, so a light colour keeps its hue rather
+// than clipping channel by channel toward white
+float3 shoulderOf(float3 c, float st)
+{
+    float m = max(c.r, max(c.g, c.b));
+    float k = 1.0 - 0.1 * st;
+    if (m <= k) {
+        return c;
+    }
+    if (k >= 0.9999) {
+        return c / m;
+    }
+    float y = k + (1.0 - k) * (1.0 - exp(-(m - k) / (1.0 - k)));
+    return c * (y / m);
 }
 
 // The box pixel px warped by the curvature (crt-lottes' warp: x scaled by
@@ -233,12 +292,13 @@ float2 colsOf(FlatCols c, float lo, float hi, float d, float j)
     return float2(n, hit);
 }
 
-// the stripe weights of column j in source pixel sx times the gain that
-// keeps the pixel's light (stripeOf and triadGain on the flat face)
-float3 stripeGainFlat(float j, int sx, float v)
+// the stripe weights of column j in source pixel sx, in gain the gain that
+// keeps the pixel's light and in top each channel's largest weight over
+// the source pixel (stripeOf and triadGain on the flat face)
+float3 stripeGainFlat(float j, int sx, float v, float strength, out float3 gain, out float3 top)
 {
     FlatCols c = flatCols(sx);
-    float g = c_beam.w, leak = 1.0 - c_mask.y;
+    float g = c_beam.w, leak = 1.0 - strength;
     float d = (c_mask.x > 2.5 && v >= 0.5) ? c.r / 3.0 : 0.0;
     float t = (c.r - g) / 3.0;
     float2 k0 = colsOf(c, 0.0, t, d, j), k1 = colsOf(c, t, 2.0 * t, d, j),
@@ -246,26 +306,31 @@ float3 stripeGainFlat(float j, int sx, float v)
     float n = c.e1 - c.e0;
     float3 own = float3(k0.x, k1.x, k2.x);
     float3 mean = n > 0.0 ? (own + leak * (n - own)) / n : float3(1.0, 1.0, 1.0);
-    float3 w = lerp(float3(leak, leak, leak), float3(1.0, 1.0, 1.0), float3(k0.y, k1.y, k2.y));
-    return w / max(mean, float3(0.1, 0.1, 0.1));
+    gain = 1.0 / max(mean, float3(0.1, 0.1, 0.1));
+    top = lerp(float3(leak, leak, leak), float3(1.0, 1.0, 1.0), saturate(own));
+    return lerp(float3(leak, leak, leak), float3(1.0, 1.0, 1.0), float3(k0.y, k1.y, k2.y));
 }
 
-float3 triadGain(float2 px, int sx, float v)
+float3 triadGain(float2 px, int sx, float v, float strength, out float3 top)
 {
     int k0 = int(ceil(c_box.x * c_src.z)) + 1;
     float3 sum = float3(0.0, 0.0, 0.0);
     float n = 0.0;
+    top = float3(0.0, 0.0, 0.0);
     [loop] for (int k = -k0; k <= k0; k++) {
         float x = px.x + float(k);
         if (x >= 0.0 && x < c_box.x) {
             float s = clamp(warpOf(float2(x, px.y)).x, 0.0, 0.99999) * c_src.x;
             if (int(floor(s)) == sx) {
-                sum += stripeOf(s - floor(s), v);
+                float3 sw = stripeOf(s - floor(s), v, strength);
+                sum += sw;
+                top = max(top, sw);
                 n += 1.0;
             }
         }
     }
     float3 mean = n > 0.0 ? sum / n : float3(1.0, 1.0, 1.0);
+    top = n > 0.0 ? top : float3(1.0, 1.0, 1.0);
     return 1.0 / max(mean, float3(0.1, 0.1, 0.1));
 }
 
@@ -313,30 +378,51 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
     float3 col = lerp(p, beam, c_beam.x);
 
     // the phosphor of this output pixel: its channel of the source pixel,
-    // the other two leaking through, times the gains that keep each
-    // triad's light (triadGain across, c_pass.y the slot's rows), faded in
-    // by the box
+    // the other two leaking through (the strength eased in the highlights,
+    // strengthAt), times the gains that keep each triad's light (triadGain
+    // across, rowGainOf the slot's rows) as far as no lit stripe clips
+    // (gainFadeOf), faded in by the box
     if (c_mask.x > 0.5 && c_mask.z > 0.0) {
-        float3 m = flat ? stripeGainFlat(j, sp.x, v) * slotOf(v, sp.x & 1)
-                        : maskOf(f, v, sp.x & 1) * triadGain(px, sp.x, v);
-        m *= c_pass.y;
+        float ms = strengthAt(p);
+        float3 gain, top;
+        float3 m;
+        if (flat) {
+            m = stripeGainFlat(j, sp.x, v, ms, gain, top) * slotOf(v, sp.x & 1, ms);
+        } else {
+            m = maskOf(f, v, sp.x & 1, ms);
+            gain = triadGain(px, sp.x, v, ms, top);
+        }
+        gain *= rowGainOf(ms);
+        float t = gainFadeOf(col, gain, top, c_mask.z);
+        m *= lerp(float3(1.0, 1.0, 1.0), gain, t);
         col *= lerp(float3(1.0, 1.0, 1.0), m, c_mask.z);
     }
     col = lerp(p, col, st);
 
     // halation (wide, all light) and bloom (narrower, the bright parts),
-    // from the glow of the grid
+    // from the glow of the grid: each takes its share of the light from the
+    // picture (rd_crt.c rd__CrtGlowMix), so a flat field keeps its level and
+    // a highlight spreads rather than brightens
     float2 wm = float2(mirror > 0.5 ? 1.0 - w.x : w.x, w.y);
     float3 b = g_bloom.SampleLevel(g_sampler, wm, 0.0).rgb;
+    float3 halo = b;
+    float kh = 0.0;
     if (c_mask.w > 0.0) {
         float2 dx = float2(4.0 * c_pass.z, 0.0), dy = float2(0.0, 4.0 * c_pass.w);
-        float3 halo = b + g_bloom.SampleLevel(g_sampler, wm + dx, 0.0).rgb +
-                      g_bloom.SampleLevel(g_sampler, wm - dx, 0.0).rgb +
-                      g_bloom.SampleLevel(g_sampler, wm + dy, 0.0).rgb +
-                      g_bloom.SampleLevel(g_sampler, wm - dy, 0.0).rgb;
-        col += st * c_mask.w * halo * 0.2;
+        halo = (b + g_bloom.SampleLevel(g_sampler, wm + dx, 0.0).rgb +
+                g_bloom.SampleLevel(g_sampler, wm - dx, 0.0).rgb +
+                g_bloom.SampleLevel(g_sampler, wm + dy, 0.0).rgb +
+                g_bloom.SampleLevel(g_sampler, wm - dy, 0.0).rgb) * 0.2;
+        kh = st * c_mask.w;
     }
-    col += st * c_glow.x * b * smoothstep(0.2, 1.0, luma(b));
+    float kb = st * c_glow.x * smoothstep(0.2, 1.0, luma(b));
+    float kg = kh + kb;
+    if (kg > 1.0) {
+        kh /= kg;
+        kb /= kg;
+        kg = 1.0;
+    }
+    col = col * (1.0 - kg) + halo * kh + b * kb;
 
     // vignette
     if (c_tone.x > 0.0) {
@@ -346,5 +432,5 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
     col *= edge;
 
     float gout = lerp(c_tone.y, c_tone.z, st);
-    return float4(powp(saturate(col), 1.0 / gout), 1.0);
+    return float4(powp(saturate(shoulderOf(col, st)), 1.0 / gout), 1.0);
 }

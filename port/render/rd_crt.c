@@ -29,7 +29,9 @@
  *                    pixel in full and the other two dimmed by the mask
  *                    strength, under the beam of its line at its height
  *                    (rd__CrtMaskWeight); halation and bloom from B,
- *                    vignette, rounded corners, gamma.  Nothing resamples
+ *                    mixed in rather than added, vignette, rounded
+ *                    corners, a soft shoulder, gamma (the highlights:
+ *                    rd__CrtStrengthAt and the functions after it).  Nothing resamples
  *                    the mask: each output pixel is one source pixel seen
  *                    through one phosphor.
  */
@@ -179,8 +181,10 @@ float rd__CrtMaskFade(uint32_t boxH)
  * output columns its source pixel actually has (2 or 3 at 1440 x 1080, the
  * stripes 1 or 2 pixels wide) average to 1 after rd__CrtTriadGain, and the
  * slot's bridges over the line after rd__CrtRowGain, so every source
- * pixel keeps its own colour and light before the final clamp (with one
- * gain for the whole box the triads short of a stripe would tint in bands).
+ * pixel keeps its own colour and light (with one gain for the whole box
+ * the triads short of a stripe would tint in bands), up to where a lit
+ * stripe would pass 1: in the highlights the gains fade (rd__CrtGainFade)
+ * and the triad is darker than its pixel, as on a tube.
  *   grille: the stripes run down the whole line;
  *   slot:   a bridge (all at 1 - gap) over the last third of the line,
  *           half a line later in the odd source columns (the slots
@@ -249,6 +253,91 @@ float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch)
 float rd__CrtRowGain(int mask, float gap)
 {
     return mask == RD_CRT_MASK_SLOT && gap < 1.0f ? 1.0f / (1.0f - gap / 3.0f) : 1.0f;
+}
+
+/* The highlights (crt.hlsl strengthAt, gainFadeOf, the glow, shoulderOf;
+ * the same functions, for the tests' model of a flat field).  Before these
+ * a white went out brighter than it came in: the gains lifted each lit
+ * stripe past 1, so it clipped, the other two stripes rose to nearly the
+ * same level and the mask vanished into a flat white; halation and bloom
+ * were added on top (a white field some 15 to 27 % over); and the final
+ * clamp, channel by channel, bleached light colours toward white. */
+static float smooth01(float e0, float e1, float x)
+{
+    float t = (x - e0) / (e1 - e0);
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+float rd__CrtStrengthAt(float strength, const float p[3])
+{
+    const float m = fmaxf(p[0], fmaxf(p[1], p[2]));
+    return strength * (1.0f - 0.5f * smooth01(0.5f, 1.0f, m));
+}
+
+float rd__CrtTriadTop(int mask, float r, float gap, int sx, float v, int ch)
+{
+    if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
+        return 1.0f;
+    }
+    float top = 0.0f;
+    int n = 0;
+    for (int x = (int)floorf((float)sx * r) - 1; x <= (int)ceilf((float)(sx + 1) * r) + 1; x++) {
+        const float px = ((float)x + 0.5f) / r;
+        if (x >= 0 && (int)floorf(px) == sx) {
+            top = fmaxf(top, stripeWeight(mask, r, gap, px - (float)sx, v, ch));
+            n++;
+        }
+    }
+    return n ? top : 1.0f;
+}
+
+float rd__CrtGainFade(const float col[3], const float gain[3], const float top[3], float fade)
+{
+    float t = 1.0f;
+    for (int k = 0; k < 3; k++) {
+        const float over = col[k] * fade * top[k] * (gain[k] - 1.0f);
+        if (over > 1e-6f) {
+            t = fminf(t, (1.0f - col[k] * (1.0f + fade * (top[k] - 1.0f))) / over);
+        }
+    }
+    return t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+}
+
+void rd__CrtGlowMix(float col[3], const float halo[3], const float glow[3], float halation,
+                    float bloom, float st)
+{
+    const float l = 0.299f * glow[0] + 0.587f * glow[1] + 0.114f * glow[2];
+    float kh = st * halation, kb = st * bloom * smooth01(0.2f, 1.0f, l);
+    const float k = kh + kb;
+    if (k > 1.0f) {
+        kh /= k;
+        kb /= k;
+    }
+    for (int c = 0; c < 3; c++) {
+        col[c] = col[c] * (1.0f - kh - kb) + halo[c] * kh + glow[c] * kb;
+    }
+}
+
+void rd__CrtShoulder(float c[3], float st)
+{
+    const float m = fmaxf(c[0], fmaxf(c[1], c[2])), k = 1.0f - 0.1f * st;
+    if (m <= k) {
+        return;
+    }
+    const float y = k >= 0.9999f ? 1.0f : k + (1.0f - k) * (1.0f - expf(-(m - k) / (1.0f - k)));
+    for (int i = 0; i < 3; i++) {
+        c[i] *= y / m;
+    }
+}
+
+float rd__CrtBeam(float c, float d, float beamMin, float beamMax)
+{
+    const float cl = c < 0.0f ? 0.0f : (c > 1.0f ? 1.0f : c);
+    const float width = beamMin + (beamMax - beamMin) * cl;
+    float sig = width / 2.3548f;
+    sig = sig > 0.05f ? sig : 0.05f;
+    return c * expf(-0.5f * d * d / (sig * sig)) / (sig * 2.5066283f);
 }
 
 void rd__CrtGrid(uint32_t *vw, uint32_t *vh)
@@ -454,7 +543,6 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
     cb.tone[2] = p.gammaOut > 0.1f ? p.gammaOut : 2.2f;
     cb.tone[3] = unit(g_rd.settings.crtStrength);
     cb.pass[0] = mirror ? 1.0f : 0.0f;
-    cb.pass[1] = rd__CrtRowGain(p.mask, unit(p.maskStrength));
 
     /* 1. the horizontal glow, 2. the vertical */
     const RhiRect glowArea = {0, 0, gw, gh};

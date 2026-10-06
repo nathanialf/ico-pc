@@ -1534,7 +1534,9 @@ static void checkOverlayCrt(void)
     s.outputHeight = h;
     rd_CrtSettings(&s, RD_CRT_TRINITRON, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
-    s.crtMask = 1.0f; /* pure stripes: the R column passes red alone */
+    s.crtMask = 1.0f; /* pure stripes: the R column passes red alone (in a highlight,
+                       * the overlay's full red, the strength eases to half: the G
+                       * column leaks half the R column's red, package C1) */
     if (!px || !rd_Init(512, 512, &s, NULL)) {
         free(px);
         return;
@@ -1561,11 +1563,13 @@ static void checkOverlayCrt(void)
         /* the rectangle: grid x 100..140, frame lines 50..71 (DISPLAY lines
          * 25..35): output columns 300..420, rows about 112..160 */
         const uint32_t y = 136;
+        const float leak = powf(0.5f, 1.0f / 2.2f);
         int phosphors = 1;
         for (uint32_t gx = 104; gx < 136; gx++) {
             const uint8_t *r = &px[((size_t)y * w + gx * 3) * 4];
             const uint8_t *g = &px[((size_t)y * w + gx * 3 + 1) * 4];
-            phosphors &= r[0] > 100 && r[1] < 30 && r[2] < 30 && g[0] < 30 && g[1] < 30;
+            phosphors &= r[0] > 100 && r[1] < 30 && r[2] < 30 && g[1] < 30 &&
+                         fabsf((float)g[0] / (float)r[0] - leak) < 0.05f;
         }
         const uint8_t *r = &px[((size_t)y * w + 360) * 4];
         printf("  overlay crt: red rectangle at (360, %u): R column %u %u %u, G column %u %u %u\n",
