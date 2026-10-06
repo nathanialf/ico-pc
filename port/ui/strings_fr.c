@@ -122,7 +122,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_AUTO] = "Auto",
     [UI_STR_VAL_TRILINEAR] = "Trilinéaire",
     [UI_STR_VAL_ANISOTROPIC] = "Anisotrope",
-    [UI_STR_MIRROR_INFO] = "Choisi en nouvelle partie",
     [UI_STR_LANGUAGE_NOTE] =
         "Les sous-titres et les textes du jeu changent au prochain chargement.",
     [UI_STR_REMAP_KEYBOARD] = "Clavier",
@@ -145,12 +144,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "droite",
     [UI_STR_ACH_LOCKED] = "Verrouillé",
     [UI_STR_ACH_STATE_UNLOCKED] = "Débloqué",
-    [UI_STR_MIRROR_ON_RUN] = "Activé (cette partie)",
     [UI_STR_MIRROR_SCREEN] =
         "Toute la partie est inversée de gauche à droite. Chaque sauvegarde garde ce choix.",
-    [UI_STR_OPT_MIRROR_FMV] = "Inverser les vidéos",
-    [UI_STR_MIRROR_FMV_NOTE] =
-        "Le mode miroir se choisit en nouvelle partie ; ceci inverse aussi les vidéos.",
     [UI_STR_OPT_MENU_TEXT] = "Texte des menus",
     [UI_STR_VAL_PORT_FONT] = "Police du portage",
     [UI_STR_VAL_CLASSIC] = "Classique",

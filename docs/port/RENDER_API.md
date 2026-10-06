@@ -1219,11 +1219,8 @@ and the font's colours are flat). The reduction samples SCENE at
 u = x + 0.75, a bias that is not mirror-symmetric, so with the mirror on a
 glyph edge's 25 % blend sits on its other side.
 
-**FMV.** `rd_video.c` draws the film mirrored when the mirror is on and both
-switches are: `[game] mirror_fmv` (default true, `rd_VideoSetMirrorOption`)
-and the per-movie `rd_VideoSetMirror`, on unless the developer variable
-`ICO_MIRROR_FMV` is `0`. The audio pan follows the mirror mode, not
-`mirror_fmv` (AUDIO.md, FMV.md).
+**FMV.** `rd_video.c` draws the film mirrored exactly when the mirror is on;
+the audio pan follows the mirror mode too (AUDIO.md, FMV.md).
 
 ## 18. Performance
 

@@ -29,8 +29,6 @@
 
 #ifdef ICO_RD
 #include "rd.h" /* rd_SetMirror (R7c) */
-/* port/fmv/rd_video.h (port/render/rd_video.c): the player's FMV switch */
-void rd_VideoSetMirrorOption(int on);
 #endif
 
 /* --- the game's side (common/; layout_texture.h declares the lt_* calls) -- */
@@ -79,8 +77,6 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 #define HEADER_Y 12
 #define LABEL_X 44
 #define LABEL_W 300 /* right-aligned, ending at x 344 as the Options rectangles end at 364 */
-#define VALUE_X 364
-#define VALUE_W 256 /* a value that is not stepped (the mirror line) */
 /* a stepped value: centred between its two arrows, as the Options screen's
    values sit between rows 309 and 310 */
 #define ARROW_L_X 362
@@ -364,11 +360,6 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_circle_back());
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
-    case UI_OPT_MIRROR_INFO:
-        /* R7c: the run's value (chosen at New Game or by the loaded save) */
-        return ui_Str(ico_opt_mirror() ? UI_STR_MIRROR_ON_RUN : UI_STR_OFF);
-    case UI_OPT_MIRROR_FMV:
-        return onOff(ico_config_get_bool("game.mirror_fmv", 1));
     case UI_OPT_LANGUAGE:
         return languageName(NonLinearCameraMove);
     case UI_OPT_DEVELOPER:
@@ -380,7 +371,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
 
 static int steppable(int opt)
 {
-    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER && opt != UI_OPT_MIRROR_INFO;
+    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER;
 }
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
@@ -494,15 +485,6 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         NonLinearCameraMove = ICO_GAME_LANGUAGE_ENGLISH + i;
         ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
         ico_sysconf_set_language(ico_game_to_scf_language(NonLinearCameraMove));
-        s_dirtyConfig = 1;
-        break;
-    }
-    case UI_OPT_MIRROR_FMV: {
-        int on = !ico_config_get_bool("game.mirror_fmv", 1);
-        ico_config_set_bool("game.mirror_fmv", on);
-#ifdef ICO_RD
-        rd_VideoSetMirrorOption(on);
-#endif
         s_dirtyConfig = 1;
         break;
     }
@@ -753,15 +735,11 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
     r->link = link;
     r->note = -1;
     r->value = -1;
-    int nav = opt != UI_OPT_MIRROR_INFO;
-    r->label = addRow(LABEL_X, y, LABEL_W, h, 1, nav ? -1 : 0, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
+    r->label = addRow(LABEL_X, y, LABEL_W, h, 1, -1, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
     if (steppable(opt)) {
         r->value = addRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
         addRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9", 0.0f, UI_ALIGN_LEFT);
         addRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA", 0.0f, UI_ALIGN_LEFT);
-    } else if (opt != UI_OPT_LINK && opt != UI_OPT_BACK) {
-        r->value =
-            addRow(VALUE_X, y, VALUE_W, h, 1, nav ? r->label : 0, 0, " ", 0.0f, UI_ALIGN_LEFT);
     }
     pg->count++;
 }
@@ -786,9 +764,7 @@ static void linkRows(Page *pg)
 {
     int idx[MAX_ROWS], n = 0;
     for (int i = 0; i < pg->count; i++) {
-        if (pg->rows[i].opt != UI_OPT_MIRROR_INFO) {
-            idx[n++] = pg->rows[i].label;
-        }
+        idx[n++] = pg->rows[i].label;
     }
     for (int i = 0; i < n; i++) {
         P(idx[i])->downItem = idx[(i + 1) % n];
@@ -798,12 +774,7 @@ static void linkRows(Page *pg)
 
 static int pageFirstNav(Page *pg)
 {
-    for (int i = 0; i < pg->count; i++) {
-        if (pg->rows[i].opt != UI_OPT_MIRROR_INFO) {
-            return pg->rows[i].label;
-        }
-    }
-    return -1;
+    return pg->count > 0 ? pg->rows[0].label : -1;
 }
 
 static void finishPage(Page *pg, int first, int last)
@@ -836,7 +807,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
-        addNote(pg, UI_OPT_MIRROR_FMV, UI_STR_MIRROR_FMV_NOTE);
         break;
     default:
         break;
@@ -976,15 +946,12 @@ static void build(void)
     }
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS,
-                                  UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
-                                  UI_STR_OPT_CIRCLE_BACK, UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
-                                   UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_BACK};
 
     ui_FontInit(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
@@ -995,9 +962,9 @@ static void build(void)
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 2,
                     UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 5,
+    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
                     UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 4,
+    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 3,
                     UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, ico_ach_count() + 1,
                   UI_PAGE_MAIN);
@@ -1269,7 +1236,6 @@ void ui_SettingsInstall(void)
         s_built = 1;
 #ifdef ICO_RD
         ico_opt_set_mirror_listener(mirrorChanged);
-        rd_VideoSetMirrorOption(ico_config_get_bool("game.mirror_fmv", 1));
 #endif
     }
     repoint();

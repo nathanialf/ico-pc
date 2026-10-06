@@ -123,7 +123,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_AUTO] = "Automatisch",
     [UI_STR_VAL_TRILINEAR] = "Trilinear",
     [UI_STR_VAL_ANISOTROPIC] = "Anisotrop",
-    [UI_STR_MIRROR_INFO] = "Wird bei „Neues Spiel“ gewählt",
     [UI_STR_LANGUAGE_NOTE] = "Untertitel und Spieltexte ändern sich beim nächsten Laden.",
     [UI_STR_REMAP_KEYBOARD] = "Tastatur",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
@@ -145,12 +144,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "rechts",
     [UI_STR_ACH_LOCKED] = "Gesperrt",
     [UI_STR_ACH_STATE_UNLOCKED] = "Freigeschaltet",
-    [UI_STR_MIRROR_ON_RUN] = "Ein (dieses Spiel)",
     [UI_STR_MIRROR_SCREEN] =
         "Das ganze Spiel wird seitenverkehrt gespielt. Jeder Spielstand behält die Wahl.",
-    [UI_STR_OPT_MIRROR_FMV] = "Videos spiegeln",
-    [UI_STR_MIRROR_FMV_NOTE] =
-        "Der Spiegelmodus wird bei „Neues Spiel“ gewählt; dies spiegelt auch die Videos.",
     [UI_STR_OPT_MENU_TEXT] = "Menütext",
     [UI_STR_VAL_PORT_FONT] = "Port-Schrift",
     [UI_STR_VAL_CLASSIC] = "Klassisch",

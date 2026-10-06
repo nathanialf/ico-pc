@@ -122,7 +122,6 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_AUTO] = "Automático",
     [UI_STR_VAL_TRILINEAR] = "Trilineal",
     [UI_STR_VAL_ANISOTROPIC] = "Anisotrópico",
-    [UI_STR_MIRROR_INFO] = "Se elige en Nueva partida",
     [UI_STR_LANGUAGE_NOTE] = "Los subtítulos y los textos del juego cambian en la próxima carga.",
     [UI_STR_REMAP_KEYBOARD] = "Teclado",
     [UI_STR_REMAP_GAMEPAD] = "Mando",
@@ -144,12 +143,8 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "derecha",
     [UI_STR_ACH_LOCKED] = "Bloqueado",
     [UI_STR_ACH_STATE_UNLOCKED] = "Desbloqueado",
-    [UI_STR_MIRROR_ON_RUN] = "Activado (esta partida)",
     [UI_STR_MIRROR_SCREEN] =
         "Toda la partida se juega invertida de izquierda a derecha. Cada partida guardada conserva la elección.",
-    [UI_STR_OPT_MIRROR_FMV] = "Invertir los vídeos",
-    [UI_STR_MIRROR_FMV_NOTE] =
-        "El modo espejo se elige en Nueva partida; esto invierte también los vídeos.",
     [UI_STR_OPT_MENU_TEXT] = "Texto de los menús",
     [UI_STR_VAL_PORT_FONT] = "Fuente del port",
     [UI_STR_VAL_CLASSIC] = "Clásico",

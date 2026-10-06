@@ -210,17 +210,11 @@ aligned to the backend's `copyRowPitchAlign` and `copyOffsetAlign` (256 and
   2). The PS2 player ignored the aspect code, so 16:9 content would be
   shown squeezed in the 4:3 area as on the PS2; no stream on the disc needs
   more.
-- **Mirror:** the film is unmirrored unless mirror mode is on
-  (`rd__MirrorOn`: the run's `rd_SetMirror` or `RdSettings.mirror`) and
-  both switches in `port/render/rd_video.c` are on: the player's
-  `[game] mirror_fmv` (default `true`; docs/port/CONFIG.md), which
-  `port/ui/settings.c` hands to `rd_VideoSetMirrorOption` when the Settings
-  menu installs and again from the Gameplay page's "Mirror the movies" row,
-  and `movie.c`'s per-movie `rd_VideoSetMirror`, which is on unless the
-  developer environment variable `ICO_MIRROR_FMV` is `0` (read in
-  `movie_init`). The film's sound goes through the SPU2 and is swapped with
-  mirror mode regardless of `mirror_fmv` (docs/port/AUDIO.md,
-  "Mirror mode").
+- **Mirror:** the film is flipped exactly when mirror mode is on
+  (`rd__MirrorOn`: the run's `rd_SetMirror` or `RdSettings.mirror`;
+  `port/render/rd_video.c`); there is no separate switch. The film's sound
+  goes through the SPU2 and is swapped with mirror mode too
+  (docs/port/AUDIO.md, "Mirror mode").
 - **Headless:** there is no renderer; pictures are decoded and dropped.
   `ICO_FMV_DECODE=0` skips the decoding; the timing is the same.
 

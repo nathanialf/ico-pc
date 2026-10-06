@@ -162,20 +162,17 @@ static void testMirror(void)
     const uint32_t pitch[3] = {OW, OW / 2, OW / 2};
 
     setMirror(1);
-    rd_VideoSetMirror(1);
     CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "mirror frame");
     if (readOut() == 0) {
         int bad = checkRamp(1);
-        CHECK(bad == 0, "mirror on, toggle on: %d pixels differ from the flipped model", bad);
-    }
-    rd_VideoSetMirror(0);
-    CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "mirror frame");
-    if (readOut() == 0) {
-        int bad = checkRamp(0);
-        CHECK(bad == 0, "mirror on, toggle off: %d pixels differ from the unflipped model", bad);
+        CHECK(bad == 0, "mirror on: %d pixels differ from the flipped model", bad);
     }
     setMirror(0);
-    rd_VideoSetMirror(1);
+    CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "unmirrored frame");
+    if (readOut() == 0) {
+        int bad = checkRamp(0);
+        CHECK(bad == 0, "mirror off: %d pixels differ from the unflipped model", bad);
+    }
 }
 
 int main(void)

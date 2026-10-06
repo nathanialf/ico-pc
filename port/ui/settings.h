@@ -114,13 +114,11 @@ typedef enum UiSettingsOpt {
     /* Audio */
     UI_OPT_VOLUME,
     /* Controls */
-    UI_OPT_STICK_FIX,
     UI_OPT_MOUSE_SENS,
     UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */
     /* Gameplay */
+    UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
-    UI_OPT_MIRROR_INFO, /* the run's mirror mode, read-only (R7c) */
-    UI_OPT_MIRROR_FMV,  /* [game] mirror_fmv (R7c) */
     /* Main */
     UI_OPT_LANGUAGE,
     UI_OPT_DEVELOPER,

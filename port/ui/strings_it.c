@@ -122,7 +122,6 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_AUTO] = "Automatico",
     [UI_STR_VAL_TRILINEAR] = "Trilineare",
     [UI_STR_VAL_ANISOTROPIC] = "Anisotropico",
-    [UI_STR_MIRROR_INFO] = "Si sceglie a Nuova partita",
     [UI_STR_LANGUAGE_NOTE] = "I sottotitoli e i testi del gioco cambiano al prossimo caricamento.",
     [UI_STR_REMAP_KEYBOARD] = "Tastiera",
     [UI_STR_REMAP_GAMEPAD] = "Controller",
@@ -144,12 +143,8 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_DIR_RIGHT] = "destra",
     [UI_STR_ACH_LOCKED] = "Bloccato",
     [UI_STR_ACH_STATE_UNLOCKED] = "Sbloccato",
-    [UI_STR_MIRROR_ON_RUN] = "Attivato (questa partita)",
     [UI_STR_MIRROR_SCREEN] =
         "L'intera partita è ribaltata da sinistra a destra. Ogni salvataggio conserva la scelta.",
-    [UI_STR_OPT_MIRROR_FMV] = "Specchia i filmati",
-    [UI_STR_MIRROR_FMV_NOTE] =
-        "La modalità specchio si sceglie a Nuova partita; questo ribalta anche i filmati.",
     [UI_STR_OPT_MENU_TEXT] = "Testo dei menu",
     [UI_STR_VAL_PORT_FONT] = "Carattere del port",
     [UI_STR_VAL_CLASSIC] = "Classico",

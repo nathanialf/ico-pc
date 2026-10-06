@@ -77,7 +77,6 @@ with the values in use the next time you save.
 | line | what it does |
 | --- | --- |
 | Remap controls | opens the remap screen (below) |
-| Analogue stick fix | On makes diagonals on the stick as strong as straight pushes (docs/port/INPUT.md, "Stick fix"); Off is the original |
 | Mouse sensitivity | 0.25 to 4: how fast the mouse turns the camera |
 | Circle goes back | On (the default): Circle (gamepad B) also backs out of the game's own menus wherever Triangle does (below); Off: only Triangle, as on the PS2. Saved as `[game] circle_back` |
 
@@ -86,8 +85,10 @@ with the values in use the next time you save.
 | line | what it does |
 | --- | --- |
 | Shadows never take Yorda | On: the shadows fight Ico and never carry Yorda off. For a less stressful game; a few scripted scenes still show the capture (docs/port/OPTIONS.md) |
-| Mirror mode | shows the current game's choice, "On (this game)" or "Off"; it is chosen when you start a New Game (below), not here |
-| Mirror the movies | On (the default): in mirror mode the films are flipped too. Off: the films play as on the PS2. Only matters in mirror mode; saved as `[game] mirror_fmv` |
+| Analogue stick fix | On makes diagonals on the stick as strong as straight pushes (docs/port/INPUT.md, "Stick fix"); Off is the original |
+
+Mirror mode is not a Settings line: it is chosen when you start a New Game
+(below). The films follow it.
 
 **Language**: English, Français, Deutsch, Italiano, Español. The Settings
 menu changes at once, and so does the game's menu text with Menu text set to
@@ -131,8 +132,8 @@ The choice belongs to that game and goes with its saves:
 - The title screen is always in normal mode. A cleared game's "New Game"
   (loading a cleared save starts a new game) asks again.
 
-The Gameplay page shows the current game's choice; it cannot be changed
-there. "Mirror the movies" decides whether the films are flipped too.
+The Settings menu does not show the choice and cannot change it. The films
+are flipped with the game.
 
 ## Remapping the controls
 

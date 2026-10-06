@@ -308,8 +308,7 @@ the run's mirror mode (`ico_opt_mirror()`, docs/port/OPTIONS.md), read per
 block, so a change takes effect from the next vsync.
 
 A film's sound is mixed by the same SPU2, so it is swapped with mirror
-mode too. It follows mirror mode, not `[game] mirror_fmv`, because
-`port/audio` has no view of the film state (docs/TODO.md).
+mode too, as the picture is flipped (docs/port/FMV.md, "Mirror").
 
 ## Output
 

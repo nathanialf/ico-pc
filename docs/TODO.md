@@ -173,11 +173,6 @@ pointer to this file.
   neighbour on the other side.
 - **Mirror debug font.** `debug.c`'s list-11 font reads mirrored in
   developer mode.
-- **Film stereo follows mirror mode, not `mirror_fmv`.** With mirror mode on
-  and `[game] mirror_fmv = false` the film picture plays unflipped, but
-  `ico_audio_pan_mirror` (`port/audio/audio_host.c`) still swaps the
-  channels, because `port/audio` cannot see that a film is playing. A
-  film-active flag from `port/fmv/movie.c` should gate the swap.
 
 ## Game code and 64-bit safety
 

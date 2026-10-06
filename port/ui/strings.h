@@ -153,7 +153,6 @@ typedef enum UiStrId {
     UI_STR_VAL_AUTO,
     UI_STR_VAL_TRILINEAR,
     UI_STR_VAL_ANISOTROPIC,
-    UI_STR_MIRROR_INFO,
     UI_STR_LANGUAGE_NOTE,
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
@@ -176,10 +175,7 @@ typedef enum UiStrId {
     UI_STR_ACH_LOCKED,
     UI_STR_ACH_STATE_UNLOCKED,
     /* mirror mode (renderer wave 7, R7c) */
-    UI_STR_MIRROR_ON_RUN,  /* the Gameplay row's value while the run is mirrored */
-    UI_STR_MIRROR_SCREEN,  /* the New Game screen's explanation */
-    UI_STR_OPT_MIRROR_FMV, /* [game] mirror_fmv */
-    UI_STR_MIRROR_FMV_NOTE,
+    UI_STR_MIRROR_SCREEN, /* the New Game screen's explanation */
     /* P3: Settings > Display, "Menu text" ([game] classic_menu_text) */
     UI_STR_OPT_MENU_TEXT,
     UI_STR_VAL_PORT_FONT,

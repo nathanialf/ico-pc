@@ -719,8 +719,6 @@ int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, i
     sceGsSyncV(0);
 #ifdef ICO_RD
     rd_VideoSetDisplay((uint32_t)imageW, (uint32_t)imageH);
-    env = getenv("ICO_MIRROR_FMV");
-    rd_VideoSetMirror(!(env != NULL && strcmp(env, "0") == 0));
 #endif
     show_clear((unsigned int)clearCol);
 

@@ -342,8 +342,8 @@ rows right-aligned ending at x 344 and value rows from x 364:
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Developer mode (value), Back; notes under Language and Developer mode |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode, Menu text, Back; 17 field lines apart from line 36 |
 | Audio | Volume, Back |
-| Controls | Remap controls (opens the remap screen), Analogue stick fix, Mouse sensitivity, Circle goes back (with a note), Back |
-| Gameplay | Shadows never take Yorda (with OPTIONS.md's explanation as a note), Mirror mode (the run's value, not selectable), Mirror the movies (with a note), Back |
+| Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
+| Gameplay | Shadows never take Yorda (with OPTIONS.md's explanation as a note), Analogue stick fix, Back |
 | Achievements | a scrolling list of 8 slots over the 30 entries and Back: title (hidden and locked: "???") and state (Unlocked, Locked); the selected one's description below; the header counts the unlocked |
 | Remap controls | a scrolling list of 8 slots over the 24 targets, "Reset to defaults" and Back: the PS2 name, the keyboard and mouse sources, the gamepad sources; a hint line or "Press a key or button…" |
 

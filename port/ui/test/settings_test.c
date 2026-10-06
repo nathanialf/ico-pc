@@ -524,14 +524,11 @@ static void testBuild(void)
                                    UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_STICK_FIX, UI_OPT_MOUSE_SENS,
-                                  UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_STICK_FIX, UI_STR_OPT_MOUSE_SENS,
-                                  UI_STR_OPT_CIRCLE_BACK, UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_MIRROR_INFO, UI_OPT_MIRROR_FMV,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_MIRROR, UI_STR_OPT_MIRROR_FMV,
-                                   UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -546,8 +543,8 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 5), "controls rows");
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 4), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 3), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
 
@@ -565,25 +562,12 @@ static void testBuild(void)
                   l->first >= LT_GAME_PROPERTY_COUNT && l->last > l->first && l->proc != NULL,
               "page %d layout", p);
     }
-    /* the gameplay option's explanation and the mirror line */
+    /* the gameplay option's explanation */
     int yorda = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_YORDA);
     CHECK(yorda >= 0, "the Yorda row");
-    /* R7c: the run's mirror mode, read-only, and the FMV switch */
-    ico_opt_set_mirror(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "Off") == 0, "mirror: Off (%s)",
-          ui_SettingsValueText(UI_OPT_MIRROR_INFO));
-    ico_opt_set_mirror(1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "On (this game)") == 0,
-          "mirror: On (this game) (%s)", ui_SettingsValueText(UI_OPT_MIRROR_INFO));
-    ico_opt_set_mirror(0);
-    CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_MIRROR_FMV) >= 0, "the FMV row");
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_FMV), "On") == 0, "mirror_fmv: On");
-    ui_SettingsStep(UI_OPT_MIRROR_FMV, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_FMV), "Off") == 0 &&
-              ico_config_get_bool("game.mirror_fmv", 1) == 0,
-          "mirror_fmv: Off");
-    ui_SettingsStep(UI_OPT_MIRROR_FMV, -1);
-    CHECK(ico_config_get_bool("game.mirror_fmv", 0) == 1, "mirror_fmv: On again");
+    /* the Gameplay page holds the stick fix beside Yorda's */
+    CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
+    CHECK(ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) < 0, "not on Controls");
     /* P3: the menu text row: the port font by default, Classic restores the
        textures (port/ui/menu_text.h) and is written as [game]
        classic_menu_text */
@@ -965,8 +949,6 @@ static void testMirrorScreen(void)
     press(0x40);
     press(0x800);
     CHECK(s_newGames == games + 1, "once");
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MIRROR_INFO), "On (this game)") == 0,
-          "the Gameplay row shows it");
 
     /* again: the cursor back on Off, START picks it */
     lt_switch_layout(54);
