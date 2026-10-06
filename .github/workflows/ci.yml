@@ -8,6 +8,9 @@ name: ci
 
 on:
   push:
+    branches: ['**']
+    # a tag push re-tests a commit that was already tested on its branch
+    tags-ignore: ['**']
   pull_request:
 
 permissions:
