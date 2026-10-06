@@ -18,7 +18,7 @@ ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
 # wave 4 placeholder
 ico_add_shader(fog_lut_vs fog_lut.hlsl fog_lut_vs vertex)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
-ico_add_shader(font_vs font.hlsl font_vs vertex)
+# package R8: R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
 # wave 3 (R3c): the VU1 microprograms (docs/port/VU1_PROGRAMS.md)
 ico_add_shader(vu_prelit_vs vu_prelit.hlsl vu_prelit_vs vertex)

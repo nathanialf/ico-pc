@@ -173,6 +173,14 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
     k->fs = RD_FS_SPRITE;
     k->colorFmt = (uint8_t)colorFmt;
     k->depthFmt = (uint8_t)depthFmt;
+    /* package R8: an R8 coverage texture (rd_CreateTextureR8) is drawn by
+     * font_ps; the fragment shader is part of the key */
+    if (d->texEnabled) {
+        const RdTexRec *tr = rd__TexRec(s->tex);
+        if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
+            k->fs = RD_FS_FONT;
+        }
+    }
 
     if (d->fba) {
         base.flags |= ICO_DF_FBA;
@@ -709,6 +717,30 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
                                               RHI_FMT_UNKNOWN, dp);
             for (int i = 0; i < np; i++) {
+                n = addKey(out, max, n, &dp[i].key);
+                /* package R8: the font atlas on the overlay (font_ps) */
+                dp[i].key.fs = RD_FS_FONT;
+                n = addKey(out, max, n, &dp[i].key);
+            }
+        }
+    }
+    /* package R8: the port's text in the frame (port/ui/font.c setState:
+     * TEST 0x30000, no Z write, ALPHA 0x44 or 0x48; UI_KEEP_STATE keeps the
+     * layout packet's, which differs only in the alpha test, a uniform)
+     * through font_ps, with and without the depth target */
+    for (size_t b = 0; b < 2; b++) {
+        for (size_t dz = 0; dz < 2; dz++) {
+            RdStateBlock s;
+            rd__ResetStateBlock(&s);
+            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+            s.ds.zwrite = RD_ZWRITE_OFF;
+            s.ds.abe = 1;
+            s.ds.blend = kOverlayBlends[b];
+            RdDrawPass dp[2];
+            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
+                                              RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+            for (int i = 0; i < np; i++) {
+                dp[i].key.fs = RD_FS_FONT;
                 n = addKey(out, max, n, &dp[i].key);
             }
         }

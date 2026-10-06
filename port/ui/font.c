@@ -64,8 +64,7 @@ extern const unsigned int ui_font_ttf_size;
 
 typedef struct Page {
     uint8_t *cov; /* pageW x pageH coverage (SizeSet) */
-    uint32_t tex; /* RdTex id, 0 before the first upload */
-    int dirty;
+    uint32_t tex; /* R8 RdTex id (rd_CreateTextureR8), 0 until the page is first drawn */
     int shelfX, shelfY, shelfH;
 } Page;
 
@@ -91,8 +90,6 @@ static struct {
     UiGsFrame frame;
     float scale;
     SizeSet sizes[MAX_SIZES];
-    uint8_t *rgba; /* upload scratch, rgbaBytes */
-    size_t rgbaBytes;
     void (*recordHook)(void);
     void (*syncHook)(void);
     int suppress;
@@ -199,9 +196,6 @@ void ui_FontShutdown(void)
             freeSize(&s_font.sizes[i], 1);
         }
     }
-    free(s_font.rgba);
-    s_font.rgba = NULL;
-    s_font.rgbaBytes = 0;
     s_font.inited = 0;
     s_font.failed = 0;
     s_font.warnedSizes = s_font.warnedPages = 0;
@@ -213,7 +207,6 @@ void ui_FontForgetTextures(void)
         SizeSet *z = &s_font.sizes[i];
         for (int p = 0; p < z->pageCount; p++) {
             z->pages[p].tex = 0;
-            z->pages[p].dirty = 1;
         }
     }
 }
@@ -353,7 +346,6 @@ static Page *newPage(SizeSet *z)
     p->shelfX = GUTTER;
     p->shelfY = GUTTER;
     p->shelfH = 0;
-    p->dirty = 1;
     z->pageCount++;
     return p;
 }
@@ -395,6 +387,16 @@ static int allocCell(SizeSet *z, int w, int h, int *page, int *x, int *y)
     }
     return 0;
 }
+
+#ifdef ICO_RD
+/* the texels rd gets: coverage in GS alpha units (255 -> 0x80, rounded) */
+static void gsCoverage(uint8_t *dst, const uint8_t *cov, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        dst[i] = (uint8_t)((cov[i] * 128 + 127) / 255);
+    }
+}
+#endif
 
 static int glyphIndex(uint32_t cp)
 {
@@ -441,7 +443,22 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
         Page *p = &z->pages[page];
         stbtt_MakeGlyphBitmap(&s_font.info, p->cov + (size_t)y * (size_t)z->pageW + (size_t)x, w,
                               hgt, z->pageW, z->scale, z->scale, g);
-        p->dirty = 1;
+#ifdef ICO_RD
+        /* R8: a page already on the GPU gets the glyph's cell alone; a page
+           not yet drawn is created whole when it is (pageTexture) */
+        if (p->tex) {
+            uint8_t *cell = malloc((size_t)w * (size_t)hgt);
+            if (cell) {
+                for (int r = 0; r < hgt; r++) {
+                    gsCoverage(cell + (size_t)r * (size_t)w,
+                               p->cov + (size_t)(y + r) * (size_t)z->pageW + (size_t)x, (size_t)w);
+                }
+                rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)x, (uint32_t)y, (uint32_t)w,
+                                     (uint32_t)hgt, cell);
+                free(cell);
+            }
+        }
+#endif
         out.page = page;
         out.x = x;
         out.y = y;
@@ -507,38 +524,25 @@ uint32_t ui_FontPageTex(int px, int page)
 }
 
 #ifdef ICO_RD
-/* the page as rd sees it: RGBA8, white, alpha the coverage in GS units
-   (255 -> 0x80, rounded) */
+/* the page as rd sees it: R8, the coverage in GS alpha units (255 ->
+   0x80, rounded; rd_CreateTextureR8), drawn by font_ps as a white texel
+   with that alpha; created whole the first time the page is drawn, after
+   that each new glyph's cell is uploaded alone (glyphIn) */
 static uint32_t pageTexture(SizeSet *z, int page)
 {
     Page *p = &z->pages[page];
-    if (p->tex && !p->dirty) {
-        return p->tex;
-    }
-    const size_t texels = (size_t)z->pageW * (size_t)z->pageH;
-    if (s_font.rgbaBytes < texels * 4) {
-        uint8_t *buf = realloc(s_font.rgba, texels * 4);
-        if (!buf) {
+    if (!p->tex) {
+        const size_t texels = (size_t)z->pageW * (size_t)z->pageH;
+        uint8_t *gs = malloc(texels);
+        if (!gs) {
             return 0;
         }
-        s_font.rgba = buf;
-        s_font.rgbaBytes = texels * 4;
-    }
-    for (size_t i = 0; i < texels; i++) {
-        uint8_t *o = &s_font.rgba[i * 4];
-        o[0] = o[1] = o[2] = 0xFF;
-        o[3] = (uint8_t)((p->cov[i] * 128 + 127) / 255);
-    }
-    if (!p->tex) {
+        gsCoverage(gs, p->cov, texels);
         char name[32];
         snprintf(name, sizeof(name), "ui font %dpx p%d", z->px, page);
-        p->tex = rd_CreateTexture((uint32_t)z->pageW, (uint32_t)z->pageH, s_font.rgba,
-                                  RD_TEXA_80_80, name)
-                     .id;
-    } else {
-        rd_UpdateTexture((RdTex){p->tex}, s_font.rgba);
+        p->tex = rd_CreateTextureR8((uint32_t)z->pageW, (uint32_t)z->pageH, gs, name).id;
+        free(gs);
     }
-    p->dirty = 0;
     return p->tex;
 }
 #endif

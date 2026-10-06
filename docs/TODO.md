@@ -298,11 +298,6 @@ pointer to this file.
   strings.** The port's own strings in `port/ui/strings_{fr,de,it,es}.c`
   (Settings, notes, achievements, popups) are the author's translations.
   The menu words transcribed from the game's own sheets need no review.
-- **R8 font atlas.** Atlas pages are uploaded as RGBA8 (four times the
-  memory, a whole-page `rd_UpdateTexture` for every new glyph) and drawn by
-  `sprite_ps`, because `port/render/rd.h` has no R8 texture or font-shader
-  selection. Wanted: `rd_CreateTextureR8`, a way for `rd_ScreenPrims` to draw
-  with `font_ps`, and a sub-rectangle update; then switch `port/ui/font.c`.
 
 ## Gameplay features
 

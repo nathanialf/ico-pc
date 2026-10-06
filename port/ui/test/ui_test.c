@@ -726,6 +726,66 @@ static void checkOverlayPopup(void)
     ui_PopupReset();
 }
 
+/* package R8: the atlas pages are R8 coverage; a page is created whole
+   when first drawn, then each new glyph is one rectangle update and no page
+   is uploaded whole again, in the frame and on the overlay */
+static void checkAtlasPage(const char *what, int px, int page)
+{
+    int w = 0, h = 0;
+    const uint8_t *cov = ui_FontPage(px, page, &w, &h);
+    const RdTexRec *t = rd__TexRec(ui_FontPageTex(px, page));
+    int bad = !cov || !t || t->format != RD_TEXEL_R8 || (int)t->w != w || (int)t->h != h;
+    for (size_t i = 0; !bad && i < (size_t)w * (size_t)h; i++) {
+        bad = t->pixels[i] != (cov[i] * 128 + 127) / 255;
+    }
+    CHECK(!bad, "%s: the %d px page %d is R8, the coverage in GS units", what, px, page);
+}
+
+static void checkAtlasUploads(const char *what, float size, int px)
+{
+    static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
+    ui_DrawText(100.0f, 100.0f, size, white, "AB", 0);
+    CHECK(ui_FontPageTex(px, 0) != 0, "%s: the %d px page drawn", what, px);
+    const uint32_t rect0 = g_rd.texRectUpdates, full0 = g_rd.texFullUpdates;
+    ui_DrawText(100.0f, 140.0f, size, white, "CDEFG", 0);
+    CHECK(g_rd.texRectUpdates - rect0 == 5 && g_rd.texFullUpdates == full0,
+          "%s: 5 new glyphs, %u rectangle updates, %u whole-page updates", what,
+          g_rd.texRectUpdates - rect0, g_rd.texFullUpdates - full0);
+    ui_DrawText(100.0f, 180.0f, size, white, "GFEDCBA", 0);
+    CHECK(g_rd.texRectUpdates - rect0 == 5 && g_rd.texFullUpdates == full0,
+          "%s: no new glyph, no update (%u)", what, g_rd.texRectUpdates - rect0);
+    checkAtlasPage(what, px, 0);
+}
+
+static void testAtlasUploads(void)
+{
+    if (!rd__InitRecordOnly(512, 512)) {
+        CHECK(0, "rd__InitRecordOnly");
+        return;
+    }
+    ui_FontForgetTextures();
+    const float before = ui_GetScale();
+    ui_SetScale(1.0f);
+    rd_BeginFrame();
+    rd_SelectList(11);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    checkAtlasUploads("in the frame", 33.0f, 33);
+    rd_EndFrame(0);
+    const RdOverlayCtx c = ovCtx(1280, 720, 4.0f / 3.0f);
+    memset(&s_cap, 0, sizeof(s_cap));
+    ui__SetOverlaySink(capSink);
+    ui_BeginOverlay(&c);
+    const int px = (int)lrintf(31.0f * c.boxScale);
+    checkAtlasUploads("on the overlay", 31.0f, px);
+    CHECK(s_cap.n == 3 && s_cap.tex[0] == ui_FontPageTex(px, 0), "on the overlay: %d batches",
+          s_cap.n);
+    ui_EndOverlay();
+    ui__SetOverlaySink(NULL);
+    ui_SetScale(before);
+    rd_Shutdown();
+    ui_FontForgetTextures();
+}
+
 static void testOverlay(void)
 {
     if (!rd__InitRecordOnly(512, 512)) {
@@ -1072,7 +1132,8 @@ static int textQuads4(Q4 *q, int max)
 }
 
 /* the atlas texel's GS alpha (0..128), bilinear at (u, v) in texels with
- * texel centres at +0.5, clamped at the page's edges */
+ * texel centres at +0.5, clamped at the page's edges (the R8 page holds
+ * GS alpha, rd_CreateTextureR8) */
 static float atlasAlpha(const RdTexRec *t, float u, float v)
 {
     const float fu = u - 0.5f, fv = v - 0.5f;
@@ -1085,7 +1146,7 @@ static float atlasAlpha(const RdTexRec *t, float u, float v)
             x = x < 0 ? 0 : (x >= (int)t->w ? (int)t->w - 1 : x);
             y = y < 0 ? 0 : (y >= (int)t->h ? (int)t->h - 1 : y);
             const float wgt = (i ? au : 1.0f - au) * (j ? av : 1.0f - av);
-            acc += wgt * (float)t->pixels[((size_t)y * t->w + (size_t)x) * 4 + 3];
+            acc += wgt * (float)t->pixels[(size_t)y * t->w + (size_t)x];
         }
     }
     return acc;
@@ -1243,6 +1304,7 @@ int main(void)
     testLayoutExtension();
     testPopups();
     testOverlay();
+    testAtlasUploads();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;

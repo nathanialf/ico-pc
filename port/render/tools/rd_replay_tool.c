@@ -47,7 +47,8 @@
  *                         draws the triangle ending at the vertex)
  *   --dump-textures DIR   writes every image texture of the dump to
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
- *                         alpha byte as stored: GS 0x80 = 1.0)
+ *                         alpha byte as stored: GS 0x80 = 1.0; an R8
+ *                         texture as grey, its byte in each channel)
  *
  * Exit: 0 written, 1 error, 77 no device or no dump file. */
 #include <stdio.h>
@@ -173,7 +174,18 @@ static void dumpTextures(const char *dir)
         }
         const uint32_t id = (t->gen << 16) | (i + 1);
         snprintf(path, sizeof(path), "%s/tex-%u-%ux%u.png", dir, id, t->w, t->h);
-        if (rd_WritePng(path, t->pixels, t->w, t->h, t->w * 4, 0)) {
+        if (t->format == RD_TEXEL_R8) {
+            /* package R8: coverage as grey */
+            uint8_t *grey = malloc((size_t)t->w * t->h * 4);
+            for (size_t k = 0; grey && k < (size_t)t->w * t->h; k++) {
+                grey[k * 4] = grey[k * 4 + 1] = grey[k * 4 + 2] = t->pixels[k];
+                grey[k * 4 + 3] = 0xFF;
+            }
+            if (grey && rd_WritePng(path, grey, t->w, t->h, t->w * 4, 0)) {
+                printf("%s\n", path);
+            }
+            free(grey);
+        } else if (rd_WritePng(path, t->pixels, t->w, t->h, t->w * 4, 0)) {
             printf("%s\n", path);
         }
     }

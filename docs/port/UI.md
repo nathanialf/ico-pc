@@ -120,6 +120,18 @@ texel past the cell, which is zero coverage. Glyphs are cached per (size,
 code point); kerning comes from GPOS pair adjustment
 (`stbtt_GetGlyphKernAdvance`; at 40 px: AV -5.6, To -4.2 px).
 
+**The atlas on rd** (package R8). `font.c` keeps each page's coverage
+(0..255, `ui_FontPage`) and gives rd a one-byte-a-texel copy in GS alpha
+units, `(c × 128 + 127) / 255` (`rd_CreateTextureR8`, RENDER_API.md
+"Textures"): a page is created whole the first time it is drawn, in the
+frame or on the overlay, and from then on a glyph rasterised into it is
+uploaded as its cell alone (`rd_UpdateTextureRect`), so a new glyph costs
+its own bytes, not a page. Screen prims and overlay prims with an R8
+texture are drawn by `font_ps`, whose output is the bytes the RGBA8
+atlas (white, the same alpha) gave through `sprite_ps`: the Original
+preset's popups and menu text are unchanged, and a page takes a quarter
+of the memory it took as RGBA8.
+
 **Menu size (`UI_MENU_TEXT_SIZE` = 27).** The game's menu capitals on the
 title measure 29 to 31 output pixels at 960 x 720, about 18.7 y units or
 9.3 field lines in a 20-field-line row. Arimo's capitals are 0.688 em, so
@@ -140,8 +152,9 @@ baseline, and records one `rd_ScreenPrims(RD_PRIM_SPRITES, ...,
 RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS)` per atlas page into the current list:
 TEX0 the atlas page, MODULATE with TCC RGBA, linear filtering, clamp, ABE
 on, ALPHA 0x44 ((Cs - Cd) As + Cd), Z test ALWAYS, no Z write. The colour
-is a GS colour (0x80 = 1.0); the atlas texels are white with the coverage
-as GS alpha (255 to 0x80), so a label takes the same vertex colour as a
+is a GS colour (0x80 = 1.0); the atlas page is an R8 texture of the
+coverage in GS alpha units (255 to 0x80), which `font_ps` reads as a white
+texel with that alpha, so a label takes the same vertex colour as a
 textured layout sprite. `UI_ADDITIVE` gives ALPHA 0x48 (the layout's
 glow); `UI_KEEP_STATE` records only the texture, the sampler, ABE and the
 sprites (for the layout hook, whose packet holds the game's state);
@@ -186,15 +199,6 @@ into the current list and forgets the state it emitted, so its next
 primitive re-sends PRIM and TEX0 after the text's own `rd_Texture` (the
 pattern `DisplayFont.c`'s host path uses). Built headless (no `ICO_RD`),
 the draw calls measure and record nothing.
-
-### Requested rd API
-
-The text is drawn with what `rd.h` offers today, which costs in one place.
-Each atlas page is uploaded as RGBA8 (four times the memory, and a
-whole-page `rd_UpdateTexture` when glyphs are added) and drawn by
-`sprite_ps`, because `rd.h` has no R8 texture and no way to select the
-`font_vs`/`font_ps` shaders for screen prims. Drawing after the scale and
-the mirror is the presentation overlay (overlay mode above).
 
 ## Layout extension
 
@@ -642,7 +646,10 @@ one.
   4x (SCENE 2048 x 2048) the title's rows compared texel by texel with a
   CPU reference of the recorded quads at a 960-line and, with trilinear
   filtering, a 2160-line output (none more than 6 levels off, nothing
-  outside the quads); the atlas page shape; a popup on the overlay of a
+  outside the quads); the atlas page shape; the atlas uploads, in the frame
+  and on the overlay (a page R8 holding the coverage in GS units, five new
+  glyphs five rectangle updates and no whole-page update, known glyphs
+  none); a popup on the overlay of a
   1920 x 1080 present (at the picture's right, text in the panel, nothing
   changed outside it). It writes `ui_test_scene.png`, `ui_test_scene4x.png`,
   `ui_test_scene4x_plain.png` and `ui_test_popup.png` beside itself.

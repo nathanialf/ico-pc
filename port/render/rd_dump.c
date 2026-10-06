@@ -14,7 +14,10 @@
  *   13 x     u32 count, RdCmd[count]
  *   u32      payload size, payload bytes
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
- *            target, view; then w*h*4 RGBA8 bytes for images
+ *            target, view; then the texels for images.  An image has no
+ *            view: its view word holds the texel format (RD_TEXEL_*,
+ *            package R8; 0 RGBA8 in every older dump), and its texels are
+ *            w*h*4 RGBA8 bytes or w*h R8 bytes
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
@@ -158,10 +161,12 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
         if (!t) {
             continue;
         }
+        const int image = t->kind == RD_TEXKIND_IMAGE;
         ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) && w32(fp, t->bakedTexa) &&
-             w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) && w32(fp, t->view);
-        if (ok && t->kind == RD_TEXKIND_IMAGE) {
-            ok = wraw(fp, t->pixels, (size_t)t->w * t->h * 4);
+             w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) &&
+             w32(fp, image ? t->format : t->view);
+        if (ok && image) {
+            ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__TexelBytes(t->format));
         }
     }
     uint32_t nr = 0;
@@ -395,11 +400,14 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
             break;
         }
         if (h.kind == RD_TEXKIND_IMAGE) {
-            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192;
-            uint8_t *px = ok ? malloc((size_t)h.w * h.h * 4) : NULL;
-            ok = px && rraw(fp, px, (size_t)h.w * h.h * 4);
+            /* R8: an image's view word is its texel format */
+            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && h.view < RD_TEXEL_COUNT;
+            const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes((uint8_t)h.view);
+            uint8_t *px = ok ? malloc(bytes) : NULL;
+            ok = px && rraw(fp, px, bytes);
             if (ok) {
-                RdTex t = rd_CreateTextureSrc(h.w, h.h, px, (RdTexSrc)h.src, "dump");
+                RdTex t =
+                    rd__CreateTextureFmt(h.w, h.h, px, (uint8_t)h.view, (RdTexSrc)h.src, "dump");
                 RdTexRec *tr = rd__TexRec(t.id);
                 if (tr) {
                     tr->bakedTexa = (uint8_t)h.bakedTexa;

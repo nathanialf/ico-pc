@@ -789,10 +789,22 @@ static uint32_t texAlloc(void)
     return 0;
 }
 
-RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
-                          const char *debugName)
+/* R8: the whole texture changed (a create, rd_UpdateTexture) */
+static void texDirtyAll(RdTexRec *t)
 {
-    if (!g_rd.inited || w == 0 || h == 0) {
+    if (!t->dirty) {
+        g_rd.texDirtyCount++; /* P1 */
+    }
+    t->dirty = 1;
+    t->dirtyX0 = t->dirtyY0 = 0;
+    t->dirtyX1 = t->w;
+    t->dirtyY1 = t->h;
+}
+
+RdTex rd__CreateTextureFmt(uint32_t w, uint32_t h, const void *px, uint8_t format, RdTexSrc src,
+                           const char *debugName)
+{
+    if (!g_rd.inited || w == 0 || h == 0 || format >= RD_TEXEL_COUNT) {
         return (RdTex){0};
     }
     uint32_t id = texAlloc();
@@ -800,24 +812,36 @@ RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc sr
     if (!t) {
         return (RdTex){0};
     }
+    const size_t bytes = (size_t)w * h * rd__TexelBytes(format);
     t->kind = RD_TEXKIND_IMAGE;
     t->src = (uint8_t)src;
+    t->format = format;
     t->w = w;
     t->h = h;
-    t->pixels = malloc((size_t)w * h * 4);
+    t->pixels = malloc(bytes);
     if (!t->pixels) {
         t->live = 0;
         return (RdTex){0};
     }
-    if (rgba8) {
-        memcpy(t->pixels, rgba8, (size_t)w * h * 4);
+    if (px) {
+        memcpy(t->pixels, px, bytes);
     } else {
-        memset(t->pixels, 0, (size_t)w * h * 4);
+        memset(t->pixels, 0, bytes);
     }
-    t->dirty = 1;
-    g_rd.texDirtyCount++; /* P1 */
+    texDirtyAll(t);
     snprintf(t->name, sizeof(t->name), "%s", debugName ? debugName : "texture");
     return (RdTex){id};
+}
+
+RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
+                          const char *debugName)
+{
+    return rd__CreateTextureFmt(w, h, rgba8, RD_TEXEL_RGBA8, src, debugName);
+}
+
+RdTex rd_CreateTextureR8(uint32_t w, uint32_t h, const uint8_t *cov, const char *debugName)
+{
+    return rd__CreateTextureFmt(w, h, cov, RD_TEXEL_R8, RD_TEXSRC_RGBA32, debugName);
 }
 
 RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMode,
@@ -837,16 +861,53 @@ void rd_UpdateTexture(RdTex tex, const void *rgba8)
     if (!t || t->kind != RD_TEXKIND_IMAGE || !rgba8) {
         return;
     }
+    const size_t bytes = (size_t)t->w * t->h * rd__TexelBytes(t->format);
     /* P1: an update that changes nothing (a page or CLUT re-expanded to the
      * same texels) is not uploaded again */
-    if (memcmp(t->pixels, rgba8, (size_t)t->w * t->h * 4) == 0) {
+    if (memcmp(t->pixels, rgba8, bytes) == 0) {
         return;
     }
-    memcpy(t->pixels, rgba8, (size_t)t->w * t->h * 4);
+    memcpy(t->pixels, rgba8, bytes);
+    texDirtyAll(t);
+    g_rd.texFullUpdates++;
+}
+
+void rd_UpdateTextureRect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void *px)
+{
+    RdTexRec *t = rd__TexRec(tex.id);
+    if (!t || t->kind != RD_TEXKIND_IMAGE || !px || x >= t->w || y >= t->h || !w || !h) {
+        return;
+    }
+    const uint32_t bpp = rd__TexelBytes(t->format);
+    const size_t srcPitch = (size_t)w * bpp;
+    const uint32_t cw = w < t->w - x ? w : t->w - x, ch = h < t->h - y ? h : t->h - y;
+    const size_t rowBytes = (size_t)cw * bpp;
+    const uint8_t *src = px;
+    int changed = 0;
+    for (uint32_t r = 0; r < ch; r++) {
+        uint8_t *dst = t->pixels + ((size_t)(y + r) * t->w + x) * bpp;
+        if (memcmp(dst, src + r * srcPitch, rowBytes) != 0) {
+            memcpy(dst, src + r * srcPitch, rowBytes);
+            changed = 1;
+        }
+    }
+    if (!changed) {
+        return; /* P1's rule: nothing to upload */
+    }
+    g_rd.texRectUpdates++;
     if (!t->dirty) {
         g_rd.texDirtyCount++;
+        t->dirty = 1;
+        t->dirtyX0 = x;
+        t->dirtyY0 = y;
+        t->dirtyX1 = x + cw;
+        t->dirtyY1 = y + ch;
+        return;
     }
-    t->dirty = 1;
+    t->dirtyX0 = x < t->dirtyX0 ? x : t->dirtyX0;
+    t->dirtyY0 = y < t->dirtyY0 ? y : t->dirtyY0;
+    t->dirtyX1 = x + cw > t->dirtyX1 ? x + cw : t->dirtyX1;
+    t->dirtyY1 = y + ch > t->dirtyY1 ? y + ch : t->dirtyY1;
 }
 
 void rd_DestroyTexture(RdTex tex)

@@ -26,7 +26,15 @@
  *   pixels   (Vulkan, lavapipe in the container) one PSMT8 sprite and one
  *            PSMCT16 sprite under TEXA 7F/81+AEM, drawn through
  *            tex_TransTexture + gif_SpriteSensitiveOrg, give the exact
- *            texels in SCENE.
+ *            texels in SCENE;
+ *   r8       (package R8) rd_CreateTextureR8 keeps w * h bytes and the
+ *            format; rd_UpdateTextureRect writes the rectangle alone,
+ *            clipped, counts only updates that change texels and keeps the
+ *            union of the rectangles as the dirty one; an RGBA8 texture
+ *            takes rectangles too.  On the device the texture reads back
+ *            as created, and after two rectangle updates the GPU copy
+ *            changed inside their union only (texels changed in the CPU
+ *            copy outside it without an update stay as uploaded before).
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -804,6 +812,130 @@ static void checkPixels(void)
     free(px);
 }
 
+/* ----------------------------------------------------------------- R8 */
+
+static uint8_t r8At(int x, int y)
+{
+    return (uint8_t)hash((uint32_t)(y * 64 + x) + 991u);
+}
+
+static void r8Checks(void)
+{
+    enum { W = 37, H = 23 };
+
+    static uint8_t cov[W * H];
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            cov[y * W + x] = r8At(x, y);
+        }
+    }
+    RdTex t = rd_CreateTextureR8(W, H, cov, "r8");
+    RdTexRec *r = rd__TexRec(t.id);
+    CHECK(r && r->kind == RD_TEXKIND_IMAGE && r->format == RD_TEXEL_R8 && r->w == W && r->h == H,
+          "R8 record");
+    if (!r) {
+        return;
+    }
+    CHECK(memcmp(r->pixels, cov, sizeof(cov)) == 0, "R8 texels kept as given");
+    CHECK(r->dirty && r->dirtyX0 == 0 && r->dirtyY0 == 0 && r->dirtyX1 == W && r->dirtyY1 == H,
+          "a new texture is dirty whole");
+    /* as if uploaded: the rectangles below start a new union */
+    r->dirty = 0;
+    r->dirtyX0 = r->dirtyY0 = r->dirtyX1 = r->dirtyY1 = 0;
+    g_rd.texDirtyCount--;
+    const uint32_t rects0 = g_rd.texRectUpdates, full0 = g_rd.texFullUpdates;
+    uint8_t a[4 * 3], b[5 * 5];
+    memset(a, 0xA5, sizeof(a));
+    memset(b, 0x3C, sizeof(b));
+    rd_UpdateTextureRect(t, 2, 3, 4, 3, a);
+    CHECK(r->dirty && r->dirtyX0 == 2 && r->dirtyY0 == 3 && r->dirtyX1 == 6 && r->dirtyY1 == 6,
+          "dirty rectangle %u,%u-%u,%u", r->dirtyX0, r->dirtyY0, r->dirtyX1, r->dirtyY1);
+    /* past the right and bottom edges: clipped to 3 x 2 at (34, 21) */
+    rd_UpdateTextureRect(t, 34, 21, 5, 5, b);
+    CHECK(r->dirtyX0 == 2 && r->dirtyY0 == 3 && r->dirtyX1 == W && r->dirtyY1 == H,
+          "union %u,%u-%u,%u", r->dirtyX0, r->dirtyY0, r->dirtyX1, r->dirtyY1);
+    int bad = 0;
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            uint8_t want = r8At(x, y);
+            if (x >= 2 && x < 6 && y >= 3 && y < 6) {
+                want = 0xA5;
+            } else if (x >= 34 && y >= 21) {
+                want = 0x3C;
+            }
+            bad += r->pixels[y * W + x] != want;
+        }
+    }
+    CHECK(bad == 0, "R8 rectangles: %d texels wrong", bad);
+    /* the same texels again change nothing and count nothing */
+    rd_UpdateTextureRect(t, 2, 3, 4, 3, a);
+    rd_UpdateTextureRect(t, W, 0, 1, 1, a); /* outside: ignored */
+    CHECK(g_rd.texRectUpdates - rects0 == 2 && g_rd.texFullUpdates == full0,
+          "rectangle updates counted %u (full %u)", g_rd.texRectUpdates - rects0,
+          g_rd.texFullUpdates - full0);
+    rd_UpdateTexture(t, cov);
+    CHECK(g_rd.texFullUpdates - full0 == 1 && memcmp(r->pixels, cov, sizeof(cov)) == 0 &&
+              r->dirtyX0 == 0 && r->dirtyX1 == W,
+          "rd_UpdateTexture on R8: w * h bytes, dirty whole");
+    rd_DestroyTexture(t);
+
+    /* RGBA8 takes rectangles in its own format */
+    static uint8_t rgba[8 * 8 * 4];
+    memset(rgba, 0, sizeof(rgba));
+    RdTex u = rd_CreateTexture(8, 8, rgba, RD_TEXA_80_80, "rect rgba");
+    const uint8_t px[2 * 4] = {1, 2, 3, 4, 5, 6, 7, 8};
+    rd_UpdateTextureRect(u, 6, 7, 2, 1, px);
+    const RdTexRec *ur = rd__TexRec(u.id);
+    CHECK(ur && ur->format == RD_TEXEL_RGBA8 && memcmp(ur->pixels + (7 * 8 + 6) * 4, px, 8) == 0 &&
+              ur->pixels[(7 * 8 + 5) * 4] == 0,
+          "RGBA8 rectangle");
+    rd_DestroyTexture(u);
+}
+
+static void r8Pixels(void)
+{
+    enum { W = 37, H = 23 };
+
+    static uint8_t cov[W * H], got[W * H];
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            cov[y * W + x] = r8At(x, y);
+        }
+    }
+    RdTex t = rd_CreateTextureR8(W, H, cov, "r8 gpu");
+    rd_BeginFrame();
+    rd_EndFrame(0); /* the replay uploads it */
+    uint32_t w = 0, h = 0;
+    CHECK(rd__ReadTexture(t, got, sizeof(got), &w, &h) && w == W && h == H &&
+              memcmp(got, cov, sizeof(cov)) == 0,
+          "R8 texture reads back as created");
+    RdTexRec *r = rd__TexRec(t.id);
+    if (!r) {
+        return;
+    }
+    /* outside the coming union, behind rd's back: must not reach the GPU */
+    r->pixels[0] ^= 0xFF;
+    r->pixels[(H - 1) * W + W - 1] ^= 0xFF;
+    const uint8_t a[3 * 2] = {10, 20, 30, 40, 50, 60}, b[2 * 2] = {7, 8, 9, 11};
+    rd_UpdateTextureRect(t, 4, 5, 3, 2, a);
+    rd_UpdateTextureRect(t, 9, 9, 2, 2, b);
+    rd_BeginFrame();
+    rd_EndFrame(0);
+    CHECK(rd__ReadTexture(t, got, sizeof(got), &w, &h), "R8 readback after the rectangles");
+    int bad = 0;
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            const int in = x >= 4 && x < 11 && y >= 5 && y < 11;
+            const uint8_t want = in ? r->pixels[y * W + x] : cov[y * W + x];
+            bad += got[y * W + x] != want;
+        }
+    }
+    CHECK(bad == 0, "R8 rectangle upload: %d texels differ (the union 4,5-11,11 uploaded alone)",
+          bad);
+    CHECK(got[(5 * W) + 4] == 10 && got[(10 * W) + 10] == 11, "the rectangles' texels on the GPU");
+    rd_DestroyTexture(t);
+}
+
 int main(void)
 {
     systemStatus[1] = 1;
@@ -819,6 +951,7 @@ int main(void)
     samplerChecks();
     scrollChecks();
     cacheChecks();
+    r8Checks();
     dl_Clear();
     recordFrame();
     {
@@ -848,6 +981,7 @@ int main(void)
     dl_Clear();
     recordFrame();
     checkPixels();
+    r8Pixels();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     rd_Shutdown();

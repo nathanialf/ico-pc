@@ -202,6 +202,14 @@ colour mask, the stencil mode, the target format and the topology. AREF,
 FIX, the texture function, TCC, TEXA, FBA, PABE and the alpha test are
 uniforms, and the sampler state is a sampler object, so the key normalises
 those fields and stores one representative blend mode per hardware path.
+The internal key (`RdPipeKeyInt`) adds the vertex and fragment shaders and
+the attachment formats; a screen-prim draw whose bound texture is R8
+(section 8) has `RD_FS_FONT` (`font_ps`) where the others have
+`RD_FS_SPRITE`, chosen by `rd__PlanScreenDraw` from the texture record's
+format, so text and sprites under the same state are two keys. The
+reachable set has the font's keys for the text in the frame (TEST
+0x30000, no Z write, ALPHA 0x44 or 0x48, with and without the depth
+target) and on the overlay.
 `rd__EnumerateReachable` lists every key the game's state set can reach
 (the screen and post programs, the VU program families, shadows, fog,
 water and the effect sprites); the tests hold it under
@@ -398,6 +406,30 @@ programs only, never to GIF sprites.
 
 **Mips.** Original: one level per texture (`TexExt.level`), decoded at its
 own size. With the Enhanced trilinear or anisotropic filter, section 15.
+
+**R8 textures and rectangle updates** (package R8). Besides the RGBA8
+images above, `rd_CreateTextureR8(w, h, cov, name)` makes a one-channel
+texture of `w × h` bytes, the port's font atlas pages (UI.md "Coordinates
+and metrics"). A byte is the coverage in GS alpha units (0x80 full) and
+stands for a white texel with that alpha: screen prims and overlay prims
+that sample it are drawn by `font_ps`, whose texture function, TCC, alpha
+test, DATE and output are `sprite_ps`'s (SHADERS.md), so the pixels are
+those of the same texels as RGBA8 `(255, 255, 255, cov)`, filtered or not
+(the sampler filters the same UNORM8 values), at a quarter of the memory.
+An R8 texture never gets a mip chain. The texture record (`RdTexRec`)
+holds the format (`RD_TEXEL_RGBA8`, `RD_TEXEL_R8`) and a CPU copy of
+`w × h` texels of it.
+
+`rd_UpdateTextureRect(t, x, y, w, h, px)` replaces a rectangle of an image
+texture (rows of `w` texels in the texture's format, clipped to the
+texture); an update that changes nothing is dropped, as `rd_UpdateTexture`'s
+is. Each record keeps the union of the rectangles changed since its last
+upload, and `uploadTextures` (`rd_replay.c`) copies that rectangle alone
+through the ring with `rhi_CmdCopyBufferToTexture`'s region, in the
+record's format; a create, `rd_UpdateTexture`, a new RHI texture (the
+filter option changed) or a mip chain uploads the whole texture. The font
+creates a page whole when it is first drawn and after that uploads each
+new glyph's cell alone.
 
 ## 9. Frame lifecycle, camera and the post passes
 
@@ -1010,7 +1042,7 @@ frame) and whether the blit was mirrored. Inside it, and only there,
   centres; at most 4095 pixels each way (the sprite vertex's u16 12.4);
 - s, t in 12.4 texels; tex 0 untextured, else MODULATE with TCC RGBA,
   bilinear, clamped; colours and the texture's alpha in GS units (0x80 =
-  1.0);
+  1.0; an R8 texture's byte is that alpha);
 - `blend` the GS equation with ABE on (the popups use `RD_BLEND_LERP_AS`,
   the glow `RD_BLEND_CS_AS_ADD_CD`); no depth, no alpha test, no DATE,
   COLCLAMP on; no keys, so nothing is interpolated; never mirrored (the
@@ -1030,9 +1062,10 @@ viewport and scissor the whole output, FrameCB `rd__FrameGroup(outW, outH,
 0.5, 0.5)` (`sprite_ui_vs` then maps x / 16 to the pixel position x: the
 origin's half pixel cancels `g_origin.zw`), and draws each batch through
 the screen-prim path (`expand`, no sprite snap, no UV shift, no mirror) with
-`sprite_ps` and the pipeline `rd__PlanScreenDraw` plans for
-`rd__OverlayState`'s block. The overlay's pipelines (LERP and additive,
-RGBA8 and BGRA8, no depth) are in `rd__EnumerateReachableScreen`, so
+`sprite_ps` (`font_ps` for an R8 texture, section 8) and the pipeline
+`rd__PlanScreenDraw` plans for `rd__OverlayState`'s block with the batch's
+texture bound. The overlay's pipelines (LERP and additive, RGBA8 and BGRA8,
+no depth, both fragment shaders) are in `rd__EnumerateReachableScreen`, so
 `rd_PrecreatePipelines` makes them at start-up.
 
 **Ordering.** In `rd__PresentRecord`: DISPLAY to the line-doubled target,
@@ -1374,7 +1407,10 @@ they wait on for at most 500 ms.
 
 **Frame dumps.** A dump (`rd_dump.c`, `.rddump`) holds one recorded frame:
 its 13 lists, state, textures, the VU meshes it draws, and the targets'
-contents it needs. It carries no display options; those are flags of the
+contents it needs. An image texture's header word for the view (which only
+target views have) holds its texel format, 0 (RGBA8) in every dump written
+before R8 textures, so the version did not change and older dumps load as
+before. It carries no display options; those are flags of the
 replay tool. Keys (`ico-pc.ini`, or `[dev]` in `config.toml`; CONFIG.md):
 
 | key | effect |
@@ -1395,7 +1431,7 @@ send.
 headlessly and writes PNGs: `--target NAME` (SCENE, DISPLAY, any named
 target), `--present WxH`, `--list` (every command with its list and index),
 `--nop L:I` (skip a command), `--mesh` and `--dump-textures` (inspect
-inputs), `--enhanced`, `--aspect`, `--resolution`, `--full-height`,
+inputs; an R8 texture is written as a grey image), `--enhanced`, `--aspect`, `--resolution`, `--full-height`,
 `--filter`, `--mirror` (the display options), `--backend`, and
 `--overlay-test` (with `--present`: a test pattern on the presentation
 overlay; without it the tool registers no overlay).
@@ -1405,8 +1441,8 @@ overlay; without it the tool registers no overlay).
 | ctest | what |
 |---|---|
 | `rd_state` | pipeline keys, the reachable set, normalisation |
-| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references |
-| `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache |
+| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump |
+| `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache; R8 textures and rectangle updates (the union uploaded alone, read back from the GPU) |
 | `rd_mip` | the mip chain size and alpha coverage |
 | `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes |
 | `rd_layout` | the layout's draws and keys |

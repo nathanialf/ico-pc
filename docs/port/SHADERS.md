@@ -82,8 +82,8 @@ D3D's: x and y in −1..1, +y up, depth 0..1. GS Z maps to depth so that a
 larger (nearer) GS Z is a smaller depth, and GS GEQUAL is drawn with
 `RHI_CMP_LEQUAL` (RENDER_API.md section 4).
 
-Textures are RGBA8 UNORM and read back as integers by
-`round(sample * 255)`; the texture function and TEXA are integer maths on
+Textures are RGBA8 UNORM (R8 UNORM for the font atlas, `font_ps`) and read
+back as integers by `round(sample * 255)`; the texture function and TEXA are integer maths on
 those. Exact integer paths load texels with `Load` and no sampler.
 
 ## Constant blocks
@@ -134,7 +134,7 @@ loads the R8 snapshot at t2 in target pixels and discards where its MSB
 differs from DATM; t2 is fetched only under `DF_DATE`, so a 1×1 dummy is
 bound otherwise).
 
-### Vertex (sprite.hlsl, font.hlsl; `IcoSpriteVertex`, 20 bytes)
+### Vertex (sprite.hlsl; `IcoSpriteVertex`, 20 bytes)
 
 | loc | RHI format | content |
 | --- | --- | --- |
@@ -144,7 +144,7 @@ bound otherwise).
 | 3 | `RHI_VTX_F32x2` | UV in texels of t1 |
 
 Colour is interpolated as float (0..255) and rounded to the nearest integer
-in the pixel shader; font colour is flat. UVs are normalised in the vertex
+in the pixel shader. UVs are normalised in the vertex
 shader with `g_tex.zw`.
 
 ## common.hlsli and gs_math.hlsli
@@ -188,7 +188,7 @@ clamp (RENDER_API.md section 4).
 | `blend_int_vs`, `blend_int_ps` | blend_int.hlsl | vertex, fragment | t1 Cs, t2 Cd (RGBA8_UINT), the ALPHA register in `g_blend`, writes RGBA8_UINT; no sampler |
 | `fog_lut_ps` | fog_lut.hlsl | fragment | the fog sprite (RENDER_API.md section 12) behind `sprite_ui_vs`: t1 a copy of the depth, `Load`ed at the texel the UV addresses; t2 the 256×1 LUT; reconstructs the GS Z as `(zmax + 1) − d / scale`, does the GEQUAL test in the shader, caps a passing pixel's Z at the sprite's, index = Z bits 16..23, MODULATE, alpha test, dual-source output |
 | `fog_lut_vs` | fog_lut.hlsl | vertex | a fullscreen triangle with `fog_lut_ps`'s inputs; not used by rd, kept in the table |
-| `font_vs`, `font_ps` | font.hlsl | vertex, fragment | R8 atlas coverage times vertex alpha, UI space |
+| `font_ps` | font.hlsl | fragment | screen prims with an R8 texture (the font atlas, RENDER_API.md section 8) behind `sprite_ui_vs` or `sprite_world_vs` with `sprite_ps`'s bind groups: the R8 byte is the alpha of a white texel, then `sprite_ps`'s texture function, alpha test, DATE and dual-source output, so its bytes equal `sprite_ps` on the same texels as RGBA8; selected by `rd__PlanScreenDraw` from the texture's format |
 | `fx_rect_vs` | fx_sprite.hlsl | vertex | a fullscreen triangle at the sprite's depth, no vertex input; the scissor and `fx_sprite_ps`'s coverage test bound it |
 | `fx_sprite_ps` | fx_sprite.hlsl | fragment | one `staticBlur.c` sprite in the GS's integer arithmetic (RENDER_API.md section 14): coverage from the 12.4 corners, the UV stepped in 12.4 integers, nearest or the 4-bit bilinear of `Load`ed texels with CLAMP or REPEAT and TEXA before filtering, TFX MODULATE, DECAL, HIGHLIGHT and HIGHLIGHT2, the alpha test with AFAIL, DATE and `gs_blend_int` against t2 (a copy of the target taken before the sprite), PABE, FBA, COLCLAMP; writes k / 255 with no hardware blending. Flags `FXF_*` in `g_mode.x` (`RD_FXF_*` in `rd_internal.h`) |
 | `wrap_acc_ps` | raw_wrap.hlsl | fragment | COLCLAMP 0: each fragment adds its GS blend term, reduced to −128..127, into an RGBA16F accumulator and writes alpha As + 1 |

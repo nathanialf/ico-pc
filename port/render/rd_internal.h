@@ -294,16 +294,35 @@ void rd__TempTargetPoolClear(void);
 
 enum { RD_TEXKIND_IMAGE = 1, RD_TEXKIND_TARGET = 2 };
 
+/* Package R8: an image texture's texel format (RdTexRec.format; the dump
+ * writes it in the image's view word, so 0 is what every older dump holds).
+ * RGBA8: rd_CreateTexture/rd_CreateTextureSrc, 4 bytes a texel.  R8:
+ * rd_CreateTextureR8, 1 byte (coverage in GS alpha units), drawn with font_ps
+ * (rd__PlanScreenDraw selects RD_FS_FONT for it) and never given mips. */
+enum { RD_TEXEL_RGBA8 = 0, RD_TEXEL_R8 = 1, RD_TEXEL_COUNT };
+
+static inline uint32_t rd__TexelBytes(uint8_t format)
+{
+    return format == RD_TEXEL_R8 ? 1u : 4u;
+}
+
 typedef struct RdTexRec {
     uint32_t gen;
     uint8_t live, kind;
     uint8_t src;       /* RdTexSrc: TEXFMT_* for the shader's TEXA expansion */
     uint8_t bakedTexa; /* rd_CreateTexture's texaMode, kept for dumps and debugging */
     uint32_t w, h;
-    uint8_t *pixels; /* RGBA8, w * h * 4; the CPU copy dumps and re-uploads read */
+    uint8_t *pixels; /* w * h texels of format; the CPU copy dumps and re-uploads read */
     RhiTexture rhi;
     RhiState state;
     uint8_t dirty;
+    uint8_t format; /* R8: RD_TEXEL_* (images; targets leave it 0) */
+    /* R8: with dirty, the texels changed since the last upload: the union
+     * of the updates, [dirtyX0, dirtyX1) x [dirtyY0, dirtyY1); the whole
+     * texture after a create or rd_UpdateTexture.  uploadTextures copies
+     * that rectangle (the whole texture when it makes the RHI texture or
+     * a mip chain) */
+    uint32_t dirtyX0, dirtyY0, dirtyX1, dirtyY1;
     uint8_t view;      /* RdTexView, RD_TEXKIND_TARGET */
     uint8_t mipLevels; /* R7a: levels of rhi (1 unless the Enhanced filter generated mips) */
     uint32_t target;   /* RdTarget id, RD_TEXKIND_TARGET */
@@ -316,6 +335,11 @@ typedef struct RdTexRec {
 } RdTexRec;
 
 RdTexRec *rd__TexRec(uint32_t id);
+/* R8: an image texture of format (RD_TEXEL_*), texels copied from px
+ * (w * h * rd__TexelBytes bytes) or zero; rd_CreateTextureSrc and
+ * rd_CreateTextureR8 are this, and the dump loader. */
+RdTex rd__CreateTextureFmt(uint32_t w, uint32_t h, const void *px, uint8_t format, RdTexSrc src,
+                           const char *debugName);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c (wave 3, R3ab).  A VU mesh keeps its vertex stream (the
@@ -437,6 +461,7 @@ typedef enum RdFsId {
     /* wave 5 (R5c): COLCLAMP 0 screen prims (rd_replay.c doScreenWrap, raw_wrap.hlsl) */
     RD_FS_WRAP_ACC,     /* wrap_acc_ps: the blend terms into an RGBA16F accumulator */
     RD_FS_WRAP_RESOLVE, /* wrap_resolve_ps: (Cd + acc) mod 256 into the target */
+    RD_FS_FONT,         /* package R8: font_ps, screen prims sampling an R8 coverage texture */
     RD_FS_COUNT
 } RdFsId;
 
@@ -717,6 +742,10 @@ typedef struct RdContext {
      * walk of the table while there are none and the filter is unchanged) */
     uint32_t texDirtyCount;
     int texLevelsFilter; /* filterUpgrade the table was last walked for, -1 = never */
+    /* package R8: image texture updates that changed texels since rd_Init,
+     * whole (rd_UpdateTexture) and rectangles (rd_UpdateTextureRect); the
+     * font's tests count them */
+    uint32_t texFullUpdates, texRectUpdates;
 } RdContext;
 
 extern RdContext g_rd;
@@ -896,6 +925,10 @@ const RdFrame *rd__PrevFrame(void);
 bool rd__ReadTarget(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* Package R8: reads an image texture's level 0 back from the GPU as its
+ * format holds it (tightly packed, w * h * rd__TexelBytes bytes); false
+ * before its first upload. */
+bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 
 /* Dumps (rd_dump.c).  Loading creates the frame's textures and temporary
  * targets in the current context and rewrites the ids in the commands. */

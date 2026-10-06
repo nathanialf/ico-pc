@@ -8,6 +8,13 @@
  *            covering no pixel centre, a one-pixel sprite; a textured
  *            sprite with the +8 UV nudge copies texels exactly; TEXA
  *            7F/81+AEM on an RGB24 source; rd_UVOffset
+ *   font     (package R8) a 4x4 R8 coverage atlas (GS alpha units) drawn
+ *            through rd_ScreenPrims under port/ui/font.c's state (font_ps):
+ *            1:1 at texel centres the stored alpha is (c * va) >> 7, and
+ *            1:1 and magnified 8x with bilinear filtering every byte equals
+ *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
+ *            the frame dumped and loaded has the texture as R8 with its
+ *            texels and replays to the same bytes
  *   reduce   rd_Post(RD_POST_REDUCTION) on a synthetic 512x512 scene
  *            against a CPU reference of gsb_Reduction (bilinear at the GS
  *            sample points, tint, border crop) within 1 LSB
@@ -303,6 +310,117 @@ static void testSprites(void)
     }
     rd_DestroyTexture(t32);
     rd_DestroyTexture(t24);
+}
+
+/* ------------------------------------------------------------------ font */
+
+static void fontState(void)
+{
+    rd_Blend(RD_BLEND_LERP_AS, 0, 1); /* port/ui/font.c setState */
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_FBA(0);
+    rd_PABE(0);
+    rd_ABE(1);
+    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+}
+
+static void testFont(const char *dir)
+{
+    /* coverage in GS units: none, full, past full, values either side of
+       the halves */
+    static const uint8_t cov[16] = {0,  1,  2,  31,  32,  63,  64,  65,
+                                    95, 96, 97, 127, 128, 129, 255, 77};
+    uint8_t rgba[16 * 4];
+    for (int i = 0; i < 16; i++) {
+        rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 0xFF;
+        rgba[i * 4 + 3] = cov[i];
+    }
+    RdTex r8 = rd_CreateTextureR8(4, 4, cov, "font r8");
+    RdTex t32 = rd_CreateTexture(4, 4, rgba, RD_TEXA_80_80, "font rgba8");
+    static const uint8_t bg[4] = {40, 80, 120, 0x80};
+    static const uint8_t col[4] = {0x70, 0x50, 0x80, 0x60};
+    rd_BeginFrame();
+    rd_SelectList(11);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), bg, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    fontState();
+    for (int k = 0; k < 2; k++) {
+        rd_Texture(k ? t32 : r8, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        /* 1:1, the +8 nudge: each pixel samples a texel centre */
+        sprite(256, 256, (10 + 10 * k) * 16, 10 * 16, (14 + 10 * k) * 16, 14 * 16, col, 8, 8,
+               4 * 16 + 8, 4 * 16 + 8);
+        /* 8x: bilinear between the texels */
+        sprite(256, 256, (40 + 40 * k) * 16, 40 * 16, (72 + 40 * k) * 16, 72 * 16, col, 0, 0,
+               4 * 16, 4 * 16);
+    }
+    rd_EndFrame(0);
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (img) {
+        int bad = 0;
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                const uint8_t *a = &img[((size_t)(10 + y) * w + 10 + x) * 4];
+                const uint8_t *b = &img[((size_t)(10 + y) * w + 20 + x) * 4];
+                const int as = (int)gs_tfx_mod(cov[y * 4 + x], col[3]);
+                if (a[3] != as || memcmp(a, b, 4) != 0) {
+                    const int want[4] = {b[0], b[1], b[2], as};
+                    bad += pixFail("R8 atlas 1:1 against RGBA8", 10 + x, 10 + y, a, want);
+                }
+            }
+        }
+        int worst[4] = {0, 0, 0, 0}, inked = 0, offA = 0;
+        for (int y = 0; y < 32; y++) {
+            for (int x = 0; x < 32; x++) {
+                const uint8_t *a = &img[((size_t)(40 + y) * w + 40 + x) * 4];
+                const uint8_t *b = &img[((size_t)(40 + y) * w + 80 + x) * 4];
+                for (int c = 0; c < 4; c++) {
+                    const int d = abs((int)a[c] - (int)b[c]);
+                    worst[c] = d > worst[c] ? d : worst[c];
+                }
+                offA += a[3] != b[3];
+                inked += a[3] != 0;
+            }
+        }
+        CHECK(offA == 0 && worst[0] == 0 && worst[1] == 0 && worst[2] == 0,
+              "R8 atlas magnified: %d alphas, worst %d %d %d %d off the RGBA8 path", offA, worst[0],
+              worst[1], worst[2], worst[3]);
+        CHECK(inked > 900, "R8 atlas magnified: %d pixels with alpha", inked);
+        printf("  font: 1:1 %d off, magnified worst %d %d %d %d (%d alphas differ)\n", bad,
+               worst[0], worst[1], worst[2], worst[3], offA);
+        /* the dump keeps the format: load, replay, the same bytes */
+        static uint8_t first[512 * 512 * 4];
+        memcpy(first, img, (size_t)w * h * 4); /* readTarget's buffer is as large */
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/rd_pixel_font.rddump", dir);
+        CHECK(rd_DumpFrame(path), "rd_DumpFrame (font)");
+        RdFrame f;
+        if (rd__LoadFrame(path, &f)) {
+            int r8s = 0;
+            for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+                const RdTexRec *t = &g_rd.textures[i];
+                r8s += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_R8 &&
+                       t->w == 4 && t->h == 4 && memcmp(t->pixels, cov, 16) == 0 &&
+                       strcmp(t->name, "dump") == 0;
+            }
+            CHECK(r8s == 1, "the loaded dump has the R8 atlas (%d)", r8s);
+            static const uint8_t junk[4] = {1, 2, 3, 4};
+            rd_BeginFrame();
+            rd_SelectList(0);
+            rd_ClearTarget(rd_Target(RD_TARGET_WORK1), junk, 0, 0);
+            rd_EndFrame(0);
+            CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the loaded font frame");
+            uint8_t *again = readTarget(RD_TARGET_WORK1, &w, &h);
+            CHECK(again && memcmp(again, first, (size_t)w * h * 4) == 0,
+                  "font dump -> load -> replay: the same WORK1");
+            rd__FrameFree(&f);
+        } else {
+            CHECK(0, "rd__LoadFrame (font)");
+        }
+    }
+    rd_DestroyTexture(r8);
+    rd_DestroyTexture(t32);
 }
 
 /* ------------------------------------------------------------- reduction */
@@ -686,6 +804,7 @@ int main(int argc, char **argv)
     testOrder();
     testDateFlat();
     testSprites();
+    testFont(dir);
     testReduction(dir);
     testPresent();
     testKeep();

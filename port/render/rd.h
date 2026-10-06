@@ -496,8 +496,8 @@ bool rd_MirrorActive(void);
  *                       output (rd_EndFrame's in Original, each rd_Present,
  *                       the replay tool's --present), before the frame's
  *                       replay, so the textures fn creates or updates
- *                       (rd_CreateTexture, rd_UpdateTexture: the font
- *                       atlases) are uploaded with the frame.  Not for the
+ *                       (rd_CreateTextureR8, rd_UpdateTextureRect: the
+ *                       font atlases) are uploaded with the frame.  Not for the
  *                       movie picture (rd_video.c).  The registration
  *                       survives rd_Shutdown / rd_Init
  * rd_OverlayPrims       valid only inside fn (ignored elsewhere): prims in
@@ -511,7 +511,8 @@ bool rd_MirrorActive(void);
  *                       (uvFixed 1), q unused, rgba a GS colour (0x80 =
  *                       1.0).  tex id 0 draws untextured; otherwise
  *                       MODULATE with TCC RGBA, the texture's alpha in GS
- *                       units, bilinear, clamped.  blend: the GS equation
+ *                       units (an R8 texture through font_ps, as
+ *                       rd_CreateTextureR8 says), bilinear, clamped.  blend: the GS equation
  *                       (RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD; ABE on),
  *                       no alpha test, no DATE, COLCLAMP on.  Drawn in
  *                       call order after the box blit, never flipped (the
@@ -642,9 +643,27 @@ typedef enum RdTexSrc { RD_TEXSRC_RGBA32 = 0, RD_TEXSRC_RGB24 = 1, RD_TEXSRC_RGB
 
 RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
                           const char *debugName);
-/* tex_scrollClut: the CLUT changed, re-expanded pixels follow. */
+/* tex_scrollClut: the CLUT changed, re-expanded pixels follow (the whole
+ * texture, in its own format: w * h bytes for an R8 one). */
 void rd_UpdateTexture(RdTex t, const void *rgba8);
 void rd_DestroyTexture(RdTex t);
+
+/* Package R8 (docs/port/RENDER_API.md "Textures"): a one-channel coverage
+ * texture, w * h bytes (null: zero), the port's font atlas pages.  A byte
+ * is the coverage in GS alpha units (0x80 = full, as an RGBA8 texture's
+ * alpha byte) and stands for a white texel with that alpha: screen prims
+ * and overlay prims that sample it are drawn with font_ps, whose texture
+ * function, TCC, alpha test and output are sprite_ps's, so the pixels are
+ * those of the same texels as RGBA8 (255, 255, 255, cov) at a quarter of
+ * the memory.  Never mipmapped, whatever the filter option. */
+RdTex rd_CreateTextureR8(uint32_t w, uint32_t h, const uint8_t *cov, const char *debugName);
+/* Package R8: replaces the w x h texels at (x, y) of an image texture with
+ * px (tightly packed rows in the texture's format: w * h bytes for R8,
+ * w * h * 4 for RGBA8).  The rectangle is clipped to the texture; the
+ * next replay uploads the union of the rectangles changed since the last
+ * upload, not the whole texture.  An update that changes nothing is not
+ * uploaded. */
+void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void *px);
 
 /* -------------------------------------------------------------- meshes */
 

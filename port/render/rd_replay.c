@@ -56,9 +56,12 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "vu_grid_lit_vs", "vu_grid_spec_vs", "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {
-    "sprite_ps",       "blit_ps",        "blend_int_ps", "date_snap_ps",
-    "camera_probe_ps", "vu_ps",          "fog_lut_ps",   "fx_sprite_ps" /* wave 5 (R5a) */,
-    "wrap_acc_ps",     "wrap_resolve_ps" /* wave 5 (R5c) */};
+    "sprite_ps",       "blit_ps",
+    "blend_int_ps",    "date_snap_ps",
+    "camera_probe_ps", "vu_ps",
+    "fog_lut_ps",      "fx_sprite_ps" /* wave 5 (R5a) */,
+    "wrap_acc_ps",     "wrap_resolve_ps" /* wave 5 (R5c) */,
+    "font_ps" /* package R8 */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -1292,6 +1295,8 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8
     memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out));
     RdStateBlock st;
     rd__OverlayState(&st, blend);
+    st.tex = tex; /* R8: the planner picks font_ps for a coverage texture */
+    st.ds.texEnabled = (uint8_t)textured;
     RdDrawPass dp[2];
     const int np = rd__PlanScreenDraw(&st, topo, RD_SPACE_UI, fmt, RHI_FMT_UNKNOWN, dp);
     const RhiBindGroup g2 = rd__TexGroup(
@@ -2556,7 +2561,8 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
  * Enhanced filter on and power-of-two sides, else 1 (Original). */
 static uint8_t texLevels(const RdTexRec *t)
 {
-    if (!g_rd.filterUpgrade || t->w < 2 || t->h < 2 || (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
+    if (!g_rd.filterUpgrade || t->format == RD_TEXEL_R8 || t->w < 2 || t->h < 2 ||
+        (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
         return 1;
     }
     uint8_t n = 1;
@@ -2612,7 +2618,8 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
     for (uint32_t i = 0; walk && i < RD_MAX_TEXTURES; i++) {
         const RdTexRec *t = &g_rd.textures[i];
         if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
-            uint64_t pitch = ((uint64_t)t->w * 4 + pitchA - 1) / pitchA * pitchA;
+            uint64_t pitch =
+                ((uint64_t)t->w * rd__TexelBytes(t->format) + pitchA - 1) / pitchA * pitchA;
             uint64_t one = pitch * t->h + rhi_Limits()->copyOffsetAlign;
             /* R7a: a mip chain adds at most the base again (with the
              * padding of every level) */
@@ -2716,33 +2723,48 @@ static void uploadTextures(void)
         if (!t->dirty) {
             continue;
         }
+        /* R8: the format's texels; the changed rectangle only, unless the
+         * RHI texture is new or has a mip chain to rebuild */
+        const uint32_t bpp = rd__TexelBytes(t->format);
+        int whole = levels > 1;
         if (!t->rhi.id) {
-            t->rhi = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, levels, RHI_FMT_RGBA8_UNORM,
-                                                         RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
-                                                         "rd texture"});
+            t->rhi = rhi_CreateTexture(
+                &(RhiTextureDesc){t->w, t->h, levels,
+                                  t->format == RD_TEXEL_R8 ? RHI_FMT_R8_UNORM : RHI_FMT_RGBA8_UNORM,
+                                  RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd texture"});
             t->state = RHI_STATE_UNDEFINED;
             t->mipLevels = levels;
             if (!t->rhi.id) {
                 continue;
             }
+            whole = 1;
         }
-        const uint32_t pitch = (t->w * 4 + pitchA - 1) / pitchA * pitchA;
-        uint64_t off = rd__RingAlloc((uint64_t)pitch * t->h, offA);
+        uint32_t rx = 0, ry = 0, rw = t->w, rh = t->h;
+        if (!whole && t->dirtyX1 > t->dirtyX0 && t->dirtyY1 > t->dirtyY0 && t->dirtyX1 <= t->w &&
+            t->dirtyY1 <= t->h) {
+            rx = t->dirtyX0;
+            ry = t->dirtyY0;
+            rw = t->dirtyX1 - t->dirtyX0;
+            rh = t->dirtyY1 - t->dirtyY0;
+        }
+        const uint32_t pitch = (rw * bpp + pitchA - 1) / pitchA * pitchA;
+        uint64_t off = rd__RingAlloc((uint64_t)pitch * rh, offA);
         if (off == ~0ull) {
             continue;
         }
-        for (uint32_t y = 0; y < t->h; y++) {
+        for (uint32_t y = 0; y < rh; y++) {
             memcpy(g_rd.ringMap[s_slot] + off + (uint64_t)y * pitch,
-                   t->pixels + (size_t)y * t->w * 4, (size_t)t->w * 4);
+                   t->pixels + ((size_t)(ry + y) * t->w + rx) * bpp, (size_t)rw * bpp);
         }
         rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_COPY_DST);
         rhi_CmdCopyBufferToTexture(s_cl, g_rd.ring[s_slot], off, pitch, t->rhi, 0,
-                                   (RhiRect){0, 0, t->w, t->h});
+                                   (RhiRect){(int32_t)rx, (int32_t)ry, rw, rh});
         if (levels > 1) {
             uploadMips(t, levels);
         }
         rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
         t->dirty = 0;
+        t->dirtyX0 = t->dirtyY0 = t->dirtyX1 = t->dirtyY1 = 0;
         stillDirty--;
         g_rd.stats.textureUploads++;
         g_rdPerf.textureUploads++;
@@ -3015,10 +3037,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
 
 /* ------------------------------------------------------------- readback */
 
-static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
-                        size_t dstSize)
+/* bpp: the format's bytes a texel (R8: 1 for the coverage textures) */
+static bool readTextureBpp(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, uint32_t bpp,
+                           void *dst, size_t dstSize)
 {
-    if (!t.id || dstSize < (size_t)w * h * 4) {
+    if (!t.id || dstSize < (size_t)w * h * bpp) {
         return false;
     }
     if (*state != RHI_STATE_COPY_SRC) {
@@ -3037,13 +3060,46 @@ static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, v
     if (!ok) {
         return false;
     }
-    if (pitch != w * 4) {
+    if (pitch != w * bpp) {
         uint8_t *p = dst;
         for (uint32_t y = 1; y < h; y++) {
-            memmove(p + (size_t)y * w * 4, p + (size_t)y * pitch, (size_t)w * 4);
+            memmove(p + (size_t)y * w * bpp, p + (size_t)y * pitch, (size_t)w * bpp);
         }
     }
     return true;
+}
+
+static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
+                        size_t dstSize)
+{
+    return readTextureBpp(t, state, w, h, 4, dst, dstSize);
+}
+
+bool rd__ReadTexture(RdTex tex, void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    RdTexRec *t = rd__TexRec(tex.id);
+    if (!g_rd.hasDevice || !t || t->kind != RD_TEXKIND_IMAGE || !t->rhi.id ||
+        t->state == RHI_STATE_UNDEFINED) {
+        return false;
+    }
+    if (w) {
+        *w = t->w;
+    }
+    if (h) {
+        *h = t->h;
+    }
+    const bool ok =
+        readTextureBpp(t->rhi, &t->state, t->w, t->h, rd__TexelBytes(t->format), dst, dstSize);
+    /* draws sample image textures only in SHADER_READ (resolveTexture) */
+    if (t->state != RHI_STATE_SHADER_READ) {
+        RhiCommandList cl = rhi_BeginCommands();
+        if (cl.id) {
+            rd__Transition(cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
+            rhi_EndCommands(cl);
+            rhi_Submit(cl);
+        }
+    }
+    return ok;
 }
 
 bool rd__ReadTarget(RdTarget target, void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
