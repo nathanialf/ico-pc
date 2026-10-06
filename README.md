@@ -83,7 +83,8 @@ Left and Right change a value, Cross opens or confirms, Triangle or Circle
 goes back. Changes apply at once and are saved to `config.toml`.
 
 The PS2 Options screen's settings are on these pages too, shown only when
-Options is opened from the pause menu: Brightness (Display); Button
+Options is opened from the pause menu: Brightness (Display; Square puts back
+the default, 7); Button
 configuration, Vibration and Hold type (Controls); Film effect and Players
 (Gameplay, once you have finished the game). They are kept in your save, as
 on the PS2, not in `config.toml`.
