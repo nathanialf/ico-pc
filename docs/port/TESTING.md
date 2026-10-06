@@ -310,11 +310,19 @@ needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
 77 without one, which ctest reports as skipped and counts as a pass.
 `tables_loader` and `tables_manifest` are built only when a base ELF is
 present (docs/BUILDING.md); `gallery` exits 77 without one.
-`font_coverage` (CPU, no device) asks the embedded font for a glyph of every
-code point of the five languages' tables and subtitles, the port's roll
-lines and the font corpus, and with the base ELF the staff roll's lines and
-the sound names; `font_audit` (Python, no build needed) checks the same
-sources against the subset's unicode ranges (docs/port/UI.md, "The font").
+`font_coverage` (CPU, no device) checks that every code point of the five
+languages' tables and subtitles, the port's roll lines and the font corpus,
+and with the base ELF the staff roll's lines and the sound names, is drawn by
+a face; with the base ELF and the disc image it first builds the game face
+from the disc's menu sheets (as the first run does), reports per character
+which face serves it (and for the game face, the sheet it was cut from), and
+writes the face to `port/ui/gamefont.bin` of the build directory for the
+tests after it (fixture `gamefont`: `settings_render` and `menu_text` draw
+with it; without it they draw Arimo). `game_font` (CPU) runs the face's
+builder on a synthetic sheet (the letters segmented and matched, a touching
+pair split, the advances and the space, the rim cell, the blob read back and
+refused when malformed). `font_audit` (Python, no build needed) checks the
+same sources against Arimo's subset ranges (docs/port/UI.md, "The font").
 `gallery_headless` runs the headless game itself (a copy of `ico_pc` in
 `port/ui/gallery_headless/` of the build directory, with its own
 `ico-pc.ini`, pad script and WAV dump): it boots to the title, opens

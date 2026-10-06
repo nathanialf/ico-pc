@@ -21,6 +21,9 @@
  *                          false  the menus' text drawn from the PS2's
  *                                 pre-rendered sheets instead of the port
  *                                 font (docs/port/UI.md, "Menu text")
+ *   [game] port_font       "game" the port's text in the game's own lettering
+ *                                 ("arimo": Arimo alone; docs/port/UI.md,
+ *                                 "The font")
  *   [game] circle_back     true   Circle backs out of the game's menus as
  *                                 Triangle does (docs/port/SETTINGS.md);
  *                                 false is the PS2's behaviour
@@ -93,6 +96,12 @@ int ico_opt_debug_option(void);
    change. */
 int ico_opt_classic_menu_text(void);
 void ico_opt_set_classic_menu_text(int on);
+/* [game] port_font (package GFONT): "game" (the default) draws the port's text
+   in the game's own lettering (port/ui/game_font.h), "arimo" in Arimo alone.
+   1 for "arimo".  The Settings module hands it to port/ui (ui_SetFace) at
+   install and on a change. */
+int ico_opt_port_font_arimo(void);
+void ico_opt_set_port_font_arimo(int on);
 /* [game] circle_back (package Q2): 1 (the default) makes Circle an alias of
    the game menus' Triangle back action (common/src/layout_action.c,
    layout_texture.c default_item_select, through port/ui/layout_ext.h

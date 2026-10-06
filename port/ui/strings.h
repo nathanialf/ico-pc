@@ -208,6 +208,10 @@ typedef enum UiStrId {
     UI_STR_OPT_MENU_TEXT,
     UI_STR_VAL_PORT_FONT,
     UI_STR_VAL_CLASSIC,
+    /* GFONT: Settings > Display, "Font" ([game] port_font) */
+    UI_STR_OPT_FONT,
+    UI_STR_VAL_FONT_GAME,
+    UI_STR_VAL_FONT_ARIMO,
     /* package CRT: Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,

@@ -569,6 +569,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
     case UI_OPT_MENU_TEXT:
         return ui_Str(ico_opt_classic_menu_text() ? UI_STR_VAL_CLASSIC : UI_STR_VAL_PORT_FONT);
+    case UI_OPT_FONT:
+        return ui_Str(ico_opt_port_font_arimo() ? UI_STR_VAL_FONT_ARIMO : UI_STR_VAL_FONT_GAME);
     case UI_OPT_VOLUME: {
         snprintf(buf, size, "%d %%", (int)(unit01("audio.volume") * 100.0 + 0.5));
         return buf;
@@ -712,6 +714,14 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_opt_set_classic_menu_text(!ico_opt_classic_menu_text());
         ico_config_set_bool("game.classic_menu_text", ico_opt_classic_menu_text());
         ui_MenuTextSetClassic(ico_opt_classic_menu_text());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_FONT:
+        /* GFONT: the port's text in the game's lettering or in Arimo; the
+           next frame draws it */
+        ico_opt_set_port_font_arimo(!ico_opt_port_font_arimo());
+        ico_config_set_string("game.port_font", ico_opt_port_font_arimo() ? "arimo" : "game");
+        ui_SetFace(ico_opt_port_font_arimo() ? UI_FACE_ARIMO : UI_FACE_GAME);
         s_dirtyConfig = 1;
         break;
     case UI_OPT_VOLUME: {
@@ -1324,6 +1334,7 @@ static void build(void)
                                      {UI_OPT_CRT_STRENGTH, UI_STR_OPT_CRT_STRENGTH},
                                      {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
                                      {UI_OPT_MENU_TEXT, UI_STR_OPT_MENU_TEXT},
+                                     {UI_OPT_FONT, UI_STR_OPT_FONT},
                                      {UI_OPT_BACK, UI_STR_BACK}};
     for (unsigned i = 0; i < sizeof(dispAll) / sizeof(dispAll[0]); i++) {
         /* R7d: every row always shown, Frame rate included (stepped by
@@ -1654,6 +1665,8 @@ void ui_SettingsInstall(void)
 {
     /* P3: [game] classic_menu_text, before the layouts draw */
     ui_MenuTextSetClassic(ico_opt_classic_menu_text());
+    /* GFONT: [game] port_font, the face the port's text is drawn in */
+    ui_SetFace(ico_opt_port_font_arimo() ? UI_FACE_ARIMO : UI_FACE_GAME);
     /* Q2: [game] circle_back, before the game's menus read a press */
     lt_ext_SetCircleBack(ico_opt_circle_back());
     /* [audio] output: an explicit stereo or mono is the game's from the

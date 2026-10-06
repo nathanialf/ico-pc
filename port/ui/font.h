@@ -37,6 +37,7 @@
 #define PORT_UI_FONT_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -203,6 +204,47 @@ void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
 void ui_DrawTextDeferred(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                          unsigned flags, const UiXform *xf);
 void ui_InstallDeferredText(int on);
+
+/* ------------------------------------------- the faces (package GFONT) */
+
+/* The port's text has two faces (docs/port/UI.md, "The font"):
+   - UI_FACE_GAME, the game's own lettering: the letters of the PAL menu
+     sheets, extracted on the player's machine from the player's disc
+     (game_font.h) into one atlas at the sheets' size (the menu rows' 13.5
+     texel em, 27 y units) with the sheets' rim; any other size is that
+     bitmap scaled, bilinearly (soft, as the game's own words scale on a
+     larger output; never re-rasterised).  Kerning and spacing are the
+     sheets', measured.  UI_HALO draws the glyphs' own rim (black, under
+     the letters) instead of the eight offset copies.
+   - UI_FACE_ARIMO, the embedded Arimo: the whole text when the game face is
+     not loaded or [game] port_font = "arimo", and otherwise per character
+     for those the sheets never show, at the size that gives its capitals the
+     game glyphs' height; it keeps the halo, so a fallback letter sits in the
+     same dark rim.
+   The game face is used when it is loaded (ui_GameFaceLoad) and preferred
+   (ui_SetFace, the default); with it, ui_FontMetrics gives its capital
+   height, and the line pitch stays Arimo's. */
+typedef enum UiFace { UI_FACE_ARIMO = 0, UI_FACE_GAME = 1 } UiFace;
+
+/* the blob game_font.h describes (copied); false if it does not parse */
+bool ui_GameFaceLoad(const void *blob, size_t size);
+void ui_GameFaceUnload(void);
+bool ui_GameFaceLoaded(void);
+/* [game] port_font: the preferred face (UI_FACE_GAME by default) */
+void ui_SetFace(UiFace face);
+UiFace ui_GetFace(void);
+/* which face draws cp now: UI_FACE_GAME, UI_FACE_ARIMO, or -1 when neither
+   has it (it is then drawn as Arimo's '?') */
+int ui_FontFaceOf(uint32_t cp);
+/* the game face's glyph of cp: the sheet it was cut from, the language
+   (0..4: EG FR GR IT SP) and how many times the sheets show it; false when
+   the face has no such glyph */
+bool ui_GameFaceSource(uint32_t cp, const char **sheet, int *lang, int *count);
+/* the game face's characters: the count, the first cap of them in cps */
+int ui_GameFaceChars(uint32_t *cps, int cap);
+/* the code points that fell back to Arimo while the game face was in use,
+   each logged once: the count, the first cap of them in cps */
+int ui_FontFallbackSeen(uint32_t *cps, int cap);
 
 /* The next code point of a UTF-8 string, advancing *s; U+FFFD for a
    malformed or overlong sequence or a surrogate (one byte consumed), 0 at

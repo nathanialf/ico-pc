@@ -83,6 +83,9 @@
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
+#ifndef ICO_HEADLESS
+#include "game_font.h" /* port/ui: the game face, extracted after the tables */
+#endif
 
 #ifndef ICO_HEADLESS
 
@@ -970,6 +973,13 @@ int main(int argc, char **argv)
                 (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
                 ICO_TABLES_BOOT_ELF);
     }
+#ifndef ICO_HEADLESS
+    /* the game's own lettering as the port's font (port/ui/game_font.h): read
+       from the archive, or extracted from the disc's menu sheets with the
+       tables just loaded and added to it (the first run, or an older item);
+       with use_iso, built each start.  A failure leaves Arimo. */
+    ui_GameFontPrepare(use_iso_mode(&ini) ? NULL : iso);
+#endif
 
     /* the pad */
     /* command-line paths are the working folder's, ini paths the

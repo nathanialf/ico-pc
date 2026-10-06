@@ -91,4 +91,11 @@ int64_t ico_archive_tell(FILE *fp);
 int ico_archive_remove(const char *path);
 int ico_archive_replace(const char *from, const char *to);
 
+/* An item the port keeps in the archive beside the disc's files (not in
+   meta.json; the game face, port/ui/game_font.h): `name`'s bytes into a
+   buffer *data of *size bytes, freed with ico_archive_free_item.  0, 1 when
+   the archive has no such item, -1 when it cannot be read. */
+int ico_archive_read_item(const char *path, const char *name, void **data, size_t *size);
+void ico_archive_free_item(void *data);
+
 #endif /* ICO_PORT_ARCHIVE_H */

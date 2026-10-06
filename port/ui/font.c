@@ -38,6 +38,7 @@
 #pragma GCC diagnostic pop
 #endif
 
+#include "game_font.h"
 #include "ui_internal.h"
 
 /* the font file, embedded at build time (port/ui/embed_font.cmake) */
@@ -95,6 +96,54 @@ static struct {
     int suppress;
     int warnedSizes, warnedPages;
 } s_font = {.frame = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z}, .scale = 1.0f};
+
+/* the game face (package GFONT; below) */
+/* a glyph's alpha / light pairs after its ink (game_font.h): the main
+   cell, the left cap, the right cap */
+enum { GG_MAIN, GG_LEFT, GG_RIGHT, GG_PAIRS };
+
+typedef struct GPair {
+    int ax, ay, px, py; /* the alpha and the light cells in the atlas */
+    int w, h;           /* with a texel of apron all round */
+    float top;          /* the first inner row from the baseline, main texels */
+} GPair;
+
+typedef struct GGlyph {
+    uint32_t cp;
+    float scale;        /* main texels per cell texel */
+    int ix, iy, iw, ih; /* the ink cell (zero border) */
+    GPair c[GG_PAIRS];
+    float idx, idy, adv; /* main texels */
+    int sheet, lang, count;
+    int gx[4], gy[4], gw, gh; /* the fitted glow cells (zero border): inside a
+                                 word, at its start, its end, alone */
+    float gdx, gdy;           /* their top-left from the pen on the baseline, main texels */
+    int mv[3][4]; /* the main cell's alpha x, y and light x, y at a word's start, end, alone */
+} GGlyph;
+
+typedef struct GKern {
+    uint32_t a, b;
+    float adj;
+} GKern;
+
+static struct {
+    int loaded;
+    UiFace face;
+    int w, h;
+    float em, cap, space;
+    GGlyph *g;
+    int ng;
+    GKern *k;
+    int nk;
+    char (*sheets)[UI_GF_SHEET_NAME];
+    int nsheets;
+    uint8_t *cov;
+    uint32_t tex;
+} s_game = {.face = UI_FACE_GAME};
+
+static int gameActive(void);
+static float gameMeasure(float size, const char *utf8);
+static float gameCapY(float size);
 
 /* --------------------------------------------------------------- UTF-8 */
 
@@ -196,6 +245,12 @@ void ui_FontShutdown(void)
             freeSize(&s_font.sizes[i], 1);
         }
     }
+#ifdef ICO_RD
+    if (s_game.tex) {
+        rd_DestroyTexture((RdTex){s_game.tex});
+    }
+#endif
+    s_game.tex = 0;
     s_font.inited = 0;
     s_font.failed = 0;
     s_font.warnedSizes = s_font.warnedPages = 0;
@@ -203,6 +258,7 @@ void ui_FontShutdown(void)
 
 void ui_FontForgetTextures(void)
 {
+    s_game.tex = 0;
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
         for (int p = 0; p < z->pageCount; p++) {
@@ -612,7 +668,7 @@ void ui_FontMetrics(float size, float *ascent, float *descent, float *capHeight)
         *descent = (float)-s_font.descent * sc;
     }
     if (capHeight) {
-        *capHeight = (float)s_font.capHeight * sc;
+        *capHeight = gameActive() ? gameCapY(size) : (float)s_font.capHeight * sc;
     }
 }
 
@@ -675,6 +731,9 @@ float ui_MeasureText(float size, const char *utf8)
 {
     if (!utf8 || !ui_FontInit()) {
         return 0.0f;
+    }
+    if (gameActive()) {
+        return gameMeasure(size, utf8);
     }
     SizeSet *z = sizeSet(pxFor(size));
     if (!z) {
@@ -876,6 +935,761 @@ static uint64_t rectKey(void)
 }
 #endif
 
+/* ------------------------------------------- the game face (package GFONT) */
+
+static uint32_t rd32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static int rd16(const uint8_t *p)
+{
+    return (int)p[0] | ((int)p[1] << 8);
+}
+
+static float rdF(const uint8_t *p)
+{
+    const uint32_t v = rd32(p);
+    float f;
+    memcpy(&f, &v, 4);
+    return f;
+}
+
+void ui_GameFaceUnload(void)
+{
+#ifdef ICO_RD
+    if (s_game.tex) {
+        rd_DestroyTexture((RdTex){s_game.tex});
+    }
+#endif
+    free(s_game.g);
+    free(s_game.k);
+    free(s_game.sheets);
+    free(s_game.cov);
+    const UiFace face = s_game.face;
+    memset(&s_game, 0, sizeof(s_game));
+    s_game.face = face;
+}
+
+bool ui_GameFaceLoad(const void *blob, size_t size)
+{
+    const uint8_t *p = blob;
+    ui_GameFaceUnload();
+    if (!p || size < UI_GF_HEADER || memcmp(p, "ICGF", 4) != 0 || rd32(p + 4) != UI_GF_VERSION) {
+        fprintf(stderr, "ui: the game font item does not parse (version %u, %zu bytes)\n",
+                p && size >= 8 ? (unsigned)rd32(p + 4) : 0u, size);
+        return false;
+    }
+    const int w = rd16(p + 8), h = rd16(p + 10);
+    const uint32_t ng = rd32(p + 24), nk = rd32(p + 28), ns = rd32(p + 32);
+    const uint64_t need = (uint64_t)UI_GF_HEADER + (uint64_t)ng * UI_GF_GLYPH +
+                          (uint64_t)nk * UI_GF_KERN + (uint64_t)ns * UI_GF_SHEET_NAME +
+                          (uint64_t)w * (uint64_t)h;
+    const float em = rdF(p + 12), cap = rdF(p + 16), space = rdF(p + 20);
+    if (w <= 0 || h <= 0 || ng == 0 || ng > 4096 || nk > 65536 || ns > 4096 || need != size ||
+        !(em > 1.0f && em < 100.0f) || !(cap > 1.0f && cap < 100.0f) ||
+        !(space >= 0.0f && space < 100.0f)) {
+        fprintf(stderr, "ui: the game font item is malformed\n");
+        return false;
+    }
+    s_game.g = calloc(ng, sizeof(GGlyph));
+    s_game.k = calloc(nk ? nk : 1, sizeof(GKern));
+    s_game.sheets = calloc(ns ? ns : 1, UI_GF_SHEET_NAME);
+    s_game.cov = malloc((size_t)w * (size_t)h);
+    if (!s_game.g || !s_game.k || !s_game.sheets || !s_game.cov) {
+        ui_GameFaceUnload();
+        return false;
+    }
+    const uint8_t *q = p + UI_GF_HEADER;
+    for (uint32_t i = 0; i < ng; i++, q += UI_GF_GLYPH) {
+        GGlyph *g = &s_game.g[i];
+        g->cp = rd32(q);
+        g->scale = rdF(q + 4);
+        g->ix = rd16(q + 8);
+        g->iy = rd16(q + 10);
+        g->iw = rd16(q + 12);
+        g->ih = rd16(q + 14);
+        int bad = 0;
+        for (int k = 0; k < GG_PAIRS; k++) {
+            const uint8_t *r = q + 16 + k * 16;
+            GPair *c = &g->c[k];
+            c->ax = rd16(r);
+            c->ay = rd16(r + 2);
+            c->px = rd16(r + 4);
+            c->py = rd16(r + 6);
+            c->w = rd16(r + 8);
+            c->h = rd16(r + 10);
+            c->top = rdF(r + 12);
+            bad |= c->w < 3 || c->h < 3 || c->ax + c->w > w || c->px + c->w > w ||
+                   c->ay + c->h > h || c->py + c->h > h || !(fabsf(c->top) < 1000.0f);
+        }
+        g->idx = rdF(q + 64);
+        g->idy = rdF(q + 68);
+        g->adv = rdF(q + 72);
+        g->sheet = rd16(q + 76);
+        g->lang = q[78];
+        g->count = q[79];
+        g->gdx = rdF(q + 80);
+        g->gdy = rdF(q + 84);
+        g->gw = rd16(q + 88);
+        g->gh = rd16(q + 90);
+        for (int v = 0; v < 4; v++) {
+            g->gx[v] = rd16(q + 92 + v * 4);
+            g->gy[v] = rd16(q + 94 + v * 4);
+            bad |= g->gx[v] + g->gw > w || g->gy[v] + g->gh > h;
+        }
+        for (int v = 0; v < 3; v++) {
+            for (int j = 0; j < 4; j++) {
+                g->mv[v][j] = rd16(q + 108 + v * 8 + j * 2);
+            }
+            bad |= g->mv[v][0] + g->c[GG_MAIN].w > w || g->mv[v][2] + g->c[GG_MAIN].w > w ||
+                   g->mv[v][1] + g->c[GG_MAIN].h > h || g->mv[v][3] + g->c[GG_MAIN].h > h;
+        }
+        bad |= g->ix + g->iw > w || g->iy + g->ih > h || !(g->scale > 0.1f && g->scale < 10.0f) ||
+               (i > 0 && g->cp <= s_game.g[i - 1].cp) || g->sheet >= (int)(ns ? ns : 1) ||
+               !(g->adv > 0.0f && g->adv < 1000.0f);
+        if (bad) {
+            fprintf(stderr, "ui: the game font item's glyph %u is malformed\n", (unsigned)i);
+            ui_GameFaceUnload();
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < nk; i++, q += UI_GF_KERN) {
+        s_game.k[i].a = rd32(q);
+        s_game.k[i].b = rd32(q + 4);
+        s_game.k[i].adj = rdF(q + 8);
+    }
+    memcpy(s_game.sheets, q, (size_t)ns * UI_GF_SHEET_NAME);
+    for (uint32_t i = 0; i < ns; i++) {
+        s_game.sheets[i][UI_GF_SHEET_NAME - 1] = '\0';
+    }
+    q += (size_t)ns * UI_GF_SHEET_NAME;
+    memcpy(s_game.cov, q, (size_t)w * (size_t)h);
+    s_game.w = w;
+    s_game.h = h;
+    s_game.em = em;
+    s_game.cap = cap;
+    s_game.space = space;
+    s_game.ng = (int)ng;
+    s_game.nk = (int)nk;
+    s_game.nsheets = (int)ns;
+    s_game.loaded = 1;
+    return true;
+}
+
+bool ui_GameFaceLoaded(void)
+{
+    return s_game.loaded != 0;
+}
+
+void ui_SetFace(UiFace face)
+{
+    s_game.face = face == UI_FACE_ARIMO ? UI_FACE_ARIMO : UI_FACE_GAME;
+}
+
+UiFace ui_GetFace(void)
+{
+    return s_game.face;
+}
+
+static int gameActive(void)
+{
+    return s_game.loaded && s_game.face == UI_FACE_GAME;
+}
+
+static const GGlyph *gameGlyph(uint32_t cp)
+{
+    int lo = 0, hi = s_game.ng - 1;
+    while (lo <= hi) {
+        const int mid = (lo + hi) / 2;
+        if (s_game.g[mid].cp == cp) {
+            return &s_game.g[mid];
+        }
+        if (s_game.g[mid].cp < cp) {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return NULL;
+}
+
+static float gameKern(uint32_t a, uint32_t b)
+{
+    for (int i = 0; i < s_game.nk; i++) {
+        if (s_game.k[i].a == a && s_game.k[i].b == b) {
+            return s_game.k[i].adj;
+        }
+    }
+    return 0.0f;
+}
+
+static int isSpace(uint32_t cp)
+{
+    return cp == ' ' || cp == 0xA0;
+}
+
+int ui_FontFaceOf(uint32_t cp)
+{
+    if (gameActive() && (gameGlyph(cp) || isSpace(cp))) {
+        return UI_FACE_GAME;
+    }
+    return ui_FontHasGlyph(cp) ? UI_FACE_ARIMO : -1;
+}
+
+bool ui_GameFaceSource(uint32_t cp, const char **sheet, int *lang, int *count)
+{
+    const GGlyph *g = s_game.loaded ? gameGlyph(cp) : NULL;
+    if (!g) {
+        return false;
+    }
+    if (sheet) {
+        *sheet = g->sheet < s_game.nsheets ? s_game.sheets[g->sheet] : "";
+    }
+    if (lang) {
+        *lang = g->lang;
+    }
+    if (count) {
+        *count = g->count;
+    }
+    return true;
+}
+
+int ui_GameFaceChars(uint32_t *cps, int cap)
+{
+    for (int i = 0; cps && i < s_game.ng && i < cap; i++) {
+        cps[i] = s_game.g[i].cp;
+    }
+    return s_game.loaded ? s_game.ng : 0;
+}
+
+/* the code points the game face lacks, drawn with Arimo: each logged once */
+static uint32_t s_fallback[MISSING_MAX];
+static int s_fallbackN;
+
+static void noteFallback(uint32_t cp)
+{
+    for (int i = 0; i < s_fallbackN; i++) {
+        if (s_fallback[i] == cp) {
+            return;
+        }
+    }
+    if (s_fallbackN < MISSING_MAX) {
+        s_fallback[s_fallbackN++] = cp;
+        fprintf(stderr, "ui: the game's lettering has no U+%04X; drawn with Arimo\n", (unsigned)cp);
+    }
+}
+
+int ui_FontFallbackSeen(uint32_t *cps, int cap)
+{
+    for (int i = 0; cps && i < s_fallbackN && i < cap; i++) {
+        cps[i] = s_fallback[i];
+    }
+    return s_fallbackN;
+}
+
+/* grid units of the game face at size: x units and y units per main texel
+   (a texel of the sheets is a pixel wide and a field line, two y units,
+   tall; the main em, 13.5 texels, is 27 y units) */
+static void gameUnits(float size, float *mx, float *my)
+{
+    const float m = size / (2.0f * s_game.em);
+    *mx = m;
+    *my = 2.0f * m;
+}
+
+/* the capitals' height of the game face at size, y units */
+static float gameCapY(float size)
+{
+    float mx, my;
+    gameUnits(size, &mx, &my);
+    return s_game.cap * my;
+}
+
+/* the size Arimo stands in at for a game-face size: its capitals the game
+   glyphs' height */
+static float arimoSizeFor(float size)
+{
+    const float upem = 1.0f / stbtt_ScaleForMappingEmToPixels(&s_font.info, 1.0f);
+    const float arimoCap = (float)s_font.capHeight / upem; /* per em */
+    return gameCapY(size) / arimoCap;
+}
+
+/* The game face's passes (UI.md "The font"): the ink (text drawn without
+   the rim: its light fill, blend 0x44); the sheets' alpha in black (0x44)
+   and then their light added in the text's colour (0x48), which together
+   are the sprite's MODULATE blend of the sheet's texels; Arimo's halo
+   copies for the fallback letters */
+/* GP_ARIMO: Arimo's letters alone (after the game letters' alpha and light) */
+enum { GP_INK = 0, GP_ALPHA = 1, GP_LIGHT = 2, GP_ARIMO_HALO = 3, GP_ARIMO = 4, GP_GLOW = 5 };
+
+#define MQ_GAME 0x100 /* the game atlas, as a quad's texture */
+
+typedef struct MQuad {
+    float x0, y0, x1, y1; /* grid units from the pen origin (x) and the first baseline (y) */
+    int tex;              /* an Arimo page, or MQ_GAME */
+    int arimo;
+    int line;
+    int u0, v0, u1, v1;
+} MQuad;
+
+typedef struct MPlaced {
+    const GGlyph *g;   /* the game face's glyph, or */
+    const UiGlyph *ag; /* Arimo's */
+    float penX, penY;  /* grid units */
+    int line;
+    int first, last; /* the first or last game letter of a word */
+} MPlaced;
+
+typedef struct MLayout {
+    MPlaced *p;
+    int n, max;
+    float lineW[MAX_LINES];
+    int lines;
+    float widest;
+    float mx, my, axs, ays;
+    SizeSet *z; /* Arimo's set for the fallback */
+} MLayout;
+
+/* Lays utf8 out in both faces, in grid units: x from the line's start, y
+   from the first baseline (y down).  The glyphs are kept when L->p is set.
+   The game face's advances, kerning and space are whole texels, so at its
+   own size a word's cells tile as the sheet's columns did. */
+static void gameLayout(float size, const char *utf8, MLayout *L)
+{
+    gameUnits(size, &L->mx, &L->my);
+    const float mx = L->mx;
+    const float sa = arimoSizeFor(size);
+    const int apx = pxFor(sa);
+    SizeSet *z = sizeSet(apx);
+    L->ays = z ? (float)apx / (float)z->px / s_font.scale : 0.0f;
+    L->axs = L->ays * UI_X_PER_Y;
+    /* the line pitch as Arimo's at the requested size */
+    const int lpx = pxFor(size);
+    const float lineStep = (float)(s_font.ascent - s_font.descent + s_font.lineGap) *
+                           stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)lpx) / s_font.scale;
+    float penX = 0.0f, penY = 0.0f;
+    uint32_t prev = 0;
+    int prevGame = 0, line = 0, inWord = 0, lastGame = -1;
+    const char *s = utf8;
+    uint32_t cp;
+    L->z = z;
+    L->widest = 0.0f;
+    L->n = 0;
+    while ((cp = ui_Utf8Next(&s)) != 0) {
+        const GGlyph *g = (cp == '\n' || isSpace(cp)) ? NULL : gameGlyph(cp);
+        if (!g && inWord) {
+            if (L->p && lastGame >= 0) {
+                L->p[lastGame].last = 1;
+            }
+            inWord = 0;
+        }
+        if (cp == '\n') {
+            if (line < MAX_LINES) {
+                L->lineW[line] = penX;
+            }
+            L->widest = penX > L->widest ? penX : L->widest;
+            line++;
+            penX = 0.0f;
+            penY += lineStep;
+            prev = 0;
+            continue;
+        }
+        if (isSpace(cp)) {
+            penX += s_game.space * mx;
+            prev = cp;
+            prevGame = 1;
+            continue;
+        }
+        if (g) {
+            if (prev && prevGame) {
+                penX += gameKern(prev, cp) * mx;
+            }
+            if (L->p && L->n < L->max) {
+                MPlaced *pl = &L->p[L->n];
+                memset(pl, 0, sizeof(*pl));
+                pl->g = g;
+                pl->penX = penX;
+                pl->penY = penY;
+                pl->line = line;
+                pl->first = !inWord;
+                lastGame = L->n++;
+            }
+            inWord = 1;
+            penX += g->adv * mx;
+            prev = cp;
+            prevGame = 1;
+            continue;
+        }
+        noteFallback(cp);
+        if (!z) {
+            continue;
+        }
+        if (prev && !prevGame) {
+            penX +=
+                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), glyphIndex(cp)) *
+                z->scale * L->axs;
+        }
+        const UiGlyph *ag = glyphIn(z, cp);
+        if (ag) {
+            if (L->p && ag->w > 0 && L->n < L->max) {
+                MPlaced *pl = &L->p[L->n++];
+                memset(pl, 0, sizeof(*pl));
+                pl->ag = ag;
+                pl->penX = penX;
+                pl->penY = penY;
+                pl->line = line;
+            }
+            penX += ag->advance * L->axs;
+        }
+        prev = cp;
+        prevGame = 0;
+    }
+    if (inWord && L->p && lastGame >= 0) {
+        L->p[lastGame].last = 1;
+    }
+    if (line < MAX_LINES) {
+        L->lineW[line] = penX;
+    }
+    L->widest = penX > L->widest ? penX : L->widest;
+    L->lines = line + 1;
+}
+
+/* one alpha or light cell of a game glyph as a quad: its inner texels
+   (inside the apron), from the pen at grid (px, py) */
+static void gameCellQuad(const MLayout *L, const GGlyph *g, int k, int light, int variant, float px,
+                         float py, MQuad *q)
+{
+    const GPair *c = &g->c[k];
+    const float sx = g->scale * L->mx, sy = g->scale * L->my;
+    const int inner = c->w - 2;
+    const float x0 = k == GG_MAIN   ? px
+                     : k == GG_LEFT ? px - (float)inner * sx
+                                    : px + g->adv * L->mx;
+    q->x0 = x0;
+    /* the main cell ends exactly where the next letter's starts (the same
+       sum), so a word's tiles leave no hairline between them */
+    q->x1 = k == GG_MAIN ? px + g->adv * L->mx : k == GG_LEFT ? px : x0 + (float)inner * sx;
+    q->y0 = py + c->top * L->my;
+    q->y1 = q->y0 + (float)(c->h - 2) * sy;
+    q->u0 = (light ? c->px : c->ax) + 1;
+    q->v0 = (light ? c->py : c->ay) + 1;
+    if (k == GG_MAIN && variant > 0) {
+        /* the main cell at a word's start, end, or alone */
+        q->u0 = g->mv[variant - 1][light ? 2 : 0] + 1;
+        q->v0 = g->mv[variant - 1][light ? 3 : 1] + 1;
+    }
+    q->u1 = q->u0 + inner;
+    q->v1 = q->v0 + c->h - 2;
+    q->tex = MQ_GAME;
+    q->arimo = 0;
+}
+
+/* the quads of one pass */
+static int gameQuads(const MLayout *L, int pass, MQuad *out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < L->n && n + 3 <= max; i++) {
+        const MPlaced *pl = &L->p[i];
+        if (pl->ag) {
+            if (pass == GP_ALPHA || pass == GP_LIGHT || pass == GP_GLOW) {
+                continue;
+            }
+            const UiGlyph *ag = pl->ag;
+            MQuad *q = &out[n++];
+            q->x0 = pl->penX + ag->xoff * L->axs;
+            q->y0 = pl->penY + ag->yoff * L->ays;
+            q->x1 = q->x0 + (float)ag->w * L->axs;
+            q->y1 = q->y0 + (float)ag->h * L->ays;
+            q->tex = ag->page;
+            q->arimo = 1;
+            q->line = pl->line;
+            q->u0 = ag->x;
+            q->v0 = ag->y;
+            q->u1 = ag->x + ag->w;
+            q->v1 = ag->y + ag->h;
+            continue;
+        }
+        if (pass == GP_ARIMO_HALO || pass == GP_ARIMO) {
+            continue;
+        }
+        const GGlyph *g = pl->g;
+        if (pass == GP_INK) {
+            MQuad *q = &out[n++];
+            q->x0 = pl->penX + g->idx * L->mx;
+            q->y0 = pl->penY + g->idy * L->my;
+            q->x1 = q->x0 + (float)g->iw * g->scale * L->mx;
+            q->y1 = q->y0 + (float)g->ih * g->scale * L->my;
+            q->tex = MQ_GAME;
+            q->arimo = 0;
+            q->line = pl->line;
+            q->u0 = g->ix;
+            q->v0 = g->iy;
+            q->u1 = g->ix + g->iw;
+            q->v1 = g->iy + g->ih;
+            continue;
+        }
+        if (pass == GP_GLOW) {
+            MQuad *q = &out[n++];
+            q->x0 = pl->penX + g->gdx * L->mx;
+            q->y0 = pl->penY + g->gdy * L->my;
+            q->x1 = q->x0 + (float)g->gw * g->scale * L->mx;
+            q->y1 = q->y0 + (float)g->gh * g->scale * L->my;
+            q->tex = MQ_GAME;
+            q->arimo = 0;
+            q->line = pl->line;
+            const int v = (pl->first ? 1 : 0) | (pl->last ? 2 : 0);
+            q->u0 = g->gx[v];
+            q->v0 = g->gy[v];
+            q->u1 = g->gx[v] + g->gw;
+            q->v1 = g->gy[v] + g->gh;
+            continue;
+        }
+        const int light = pass == GP_LIGHT;
+        const int variant = (pl->first ? 1 : 0) | (pl->last ? 2 : 0);
+        gameCellQuad(L, g, GG_MAIN, light, variant, pl->penX, pl->penY, &out[n]);
+        out[n++].line = pl->line;
+        if (pl->first) {
+            gameCellQuad(L, g, GG_LEFT, light, 0, pl->penX, pl->penY, &out[n]);
+            out[n++].line = pl->line;
+        }
+        if (pl->last) {
+            gameCellQuad(L, g, GG_RIGHT, light, 0, pl->penX, pl->penY, &out[n]);
+            out[n++].line = pl->line;
+        }
+    }
+    return n;
+}
+
+#ifdef ICO_RD
+static uint32_t gameTexture(void)
+{
+    if (!s_game.tex && s_game.loaded) {
+        const size_t texels = (size_t)s_game.w * (size_t)s_game.h;
+        uint8_t *gs = malloc(texels);
+        if (!gs) {
+            return 0;
+        }
+        gsCoverage(gs, s_game.cov, texels);
+        s_game.tex =
+            rd_CreateTextureR8((uint32_t)s_game.w, (uint32_t)s_game.h, gs, "ui game font").id;
+        free(gs);
+    }
+    return s_game.tex;
+}
+#endif
+
+static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                         unsigned flags, const UiXform *xf, int pass)
+{
+    MLayout L;
+    memset(&L, 0, sizeof(L));
+    L.max = MAX_QUADS;
+    L.p = malloc(sizeof(MPlaced) * (size_t)L.max);
+    MQuad *qs = malloc(sizeof(MQuad) * (size_t)L.max * 3);
+    if (!L.p || !qs) {
+        free(L.p);
+        free(qs);
+        return;
+    }
+    gameLayout(size, utf8, &L);
+    const int nq = gameQuads(&L, pass, qs, L.max * 3);
+    float base;
+    switch (flags & UI_VALIGN_MASK) {
+    case UI_VALIGN_MIDDLE:
+        base = y + gameCapY(size) * 0.5f;
+        break;
+    case UI_VALIGN_BASELINE:
+        base = y;
+        break;
+    default: {
+        float asc = 0.0f;
+        ui_FontMetrics(size, &asc, NULL, NULL);
+        base = y + asc;
+        break;
+    }
+    }
+    /* the game face on whole texels: the baseline and each line's start on
+       the sheets' texel grid at this size (at the sheets' size the cells sit
+       texel for texel where a sprite's texels would) */
+    base = floorf(base / L.my + 0.5f) * L.my;
+    /* the light pass adds (0x48) */
+    const unsigned passFlags = pass == GP_LIGHT ? flags | UI_ADDITIVE : flags;
+#ifdef ICO_RD
+    if (nq > 0) {
+        RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)nq);
+        if (!v) {
+            free(L.p);
+            free(qs);
+            return;
+        }
+        int texIds[MAX_PAGES + 1], ntex = 0;
+        for (int i = 0; i < nq; i++) {
+            int t = qs[i].tex, seen = 0;
+            for (int k = 0; k < ntex; k++) {
+                seen |= texIds[k] == t;
+            }
+            if (!seen && ntex < MAX_PAGES + 1) {
+                texIds[ntex++] = t;
+            }
+        }
+        /* a pass that adds where the caller's packet holds the plain blend
+           (UI_KEEP_STATE): set it, and the plain one again after */
+        const int setAdd = pass == GP_LIGHT && (flags & UI_KEEP_STATE) && !(flags & UI_ADDITIVE);
+        if (!s_ov.active) {
+            setState(passFlags);
+            if (setAdd) {
+                rd_Blend(RD_BLEND_CS_AS_ADD_CD, 0, 1);
+            }
+            rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        }
+        for (int k = 0; k < ntex; k++) {
+            const int t = texIds[k];
+            uint32_t nv = 0;
+            for (int i = 0; i < nq; i++) {
+                const MQuad *q = &qs[i];
+                if (q->tex != t) {
+                    continue;
+                }
+                const int line = q->line < MAX_LINES ? q->line : MAX_LINES - 1;
+                const float w = L.lineW[line];
+                float ox = (flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER  ? -w * 0.5f
+                           : (flags & UI_ALIGN_MASK) == UI_ALIGN_RIGHT ? -w
+                                                                       : 0.0f;
+                ox = floorf((x + ox) / L.mx + 0.5f) * L.mx - x;
+                float ax = x + ox + q->x0, ay = base + q->y0, bx = x + ox + q->x1,
+                      by = base + q->y1;
+                mapXf(xf, &ax, &ay);
+                mapXf(xf, &bx, &by);
+                RdScreenVtx *a = &v[nv++], *b = &v[nv++];
+                memset(a, 0, sizeof(*a));
+                memset(b, 0, sizeof(*b));
+                if (s_ov.active) {
+                    float ax16, ay16, bx16, by16;
+                    ui_OverlayMap(ax, ay, &ax16, &ay16);
+                    ui_OverlayMap(bx, by, &bx16, &by16);
+                    if (q->arimo) {
+                        /* Arimo: a texel a pixel, as ui_DrawTextXf */
+                        a->x = ovPix(ax16);
+                        a->y = ovPix(ay16);
+                        b->x = a->x + ovPix(bx16 - ax16);
+                        b->y = a->y + ovPix(by16 - ay16);
+                    } else {
+                        /* the game face: the sheet's texels scaled, continuous */
+                        a->x = (int32_t)lrintf(ax16);
+                        a->y = (int32_t)lrintf(ay16);
+                        b->x = (int32_t)lrintf(bx16);
+                        b->y = (int32_t)lrintf(by16);
+                    }
+                } else {
+                    a->x = gsX(ax);
+                    a->y = gsY(ay);
+                    b->x = gsX(bx);
+                    b->y = gsY(by);
+                    a->z = b->z = s_font.frame.z;
+                }
+                a->s = (float)(q->u0 * 16);
+                a->t = (float)(q->v0 * 16);
+                b->s = (float)(q->u1 * 16);
+                b->t = (float)(q->v1 * 16);
+                a->q = b->q = 1.0f;
+                memcpy(a->rgba, rgba, 4);
+                memcpy(b->rgba, rgba, 4);
+            }
+            if (nv == 0) {
+                continue;
+            }
+            const uint32_t tex = t == MQ_GAME                  ? gameTexture()
+                                 : (L.z && t < L.z->pageCount) ? pageTexture(L.z, t)
+                                                               : 0;
+            if (!tex) {
+                continue;
+            }
+            if (s_ov.active) {
+                ovEmit(v, nv, tex, passFlags);
+            } else {
+                rd_Texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+                rd_ScreenPrims(RD_PRIM_SPRITES, v, nv, RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
+                               textKey(utf8, flags, t == MQ_GAME ? MQ_GAME + pass : t));
+            }
+        }
+        if (!s_ov.active && setAdd) {
+            rd_Blend(RD_BLEND_LERP_AS, 0, 1);
+        }
+        free(v);
+    }
+#else
+    (void)x;
+    (void)rgba;
+    (void)xf;
+    (void)base;
+    (void)passFlags;
+    (void)nq;
+#endif
+    free(L.p);
+    free(qs);
+}
+
+/* the game face's draw (UI.md "The font"):
+   - with UI_HALO: Arimo's fallback letters' eight dark copies; the game
+     letters' fitted glow in black (each letter's whole reach, overlapping),
+     their sheet alpha in black (the text's alpha) and their sheet light
+     added in the text's colour (with the alpha, the sprite's blend of the
+     sheet's texels near the letters); then Arimo's letters;
+   - UI_ADDITIVE (the glow, an additive sprite of the sheet: col L A): the
+     light added, and Arimo's letters added;
+   - else (black, white or grey letters without a rim): the letters' ink */
+static void gameDraw(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                     unsigned flags, const UiXform *xf)
+{
+    if (flags & UI_HALO) {
+        flags &= ~(unsigned)UI_HALO;
+        static const float dirs[8][2] = {{-1, 0},  {1, 0},  {0, -1}, {0, 1},
+                                         {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+        const uint8_t dark[4] = {0, 0, 0, (uint8_t)(rgba[3] / 4)};
+        const float r = 1.5f * size / UI_MENU_TEXT_SIZE;
+        int anyArimo = 0, anyGame = 0;
+        for (const char *s = utf8; *s;) {
+            const uint32_t cp = ui_Utf8Next(&s);
+            if (cp != '\n' && !isSpace(cp)) {
+                anyArimo |= !gameGlyph(cp);
+                anyGame |= gameGlyph(cp) != NULL;
+            }
+        }
+        if (anyArimo) {
+            for (int i = 0; i < 8; i++) {
+                const float k = (dirs[i][0] != 0.0f && dirs[i][1] != 0.0f) ? 0.7071f : 1.0f;
+                gameDrawPass(x + dirs[i][0] * r * k * UI_X_PER_Y, y + dirs[i][1] * r * k, size,
+                             dark, utf8, flags, xf, GP_ARIMO_HALO);
+            }
+        }
+        if (anyGame && !(flags & UI_ADDITIVE)) {
+            const uint8_t black[4] = {0, 0, 0, rgba[3]};
+            gameDrawPass(x, y, size, black, utf8, flags, xf, GP_GLOW);
+            gameDrawPass(x, y, size, black, utf8, flags, xf, GP_ALPHA);
+            gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
+        }
+        if (anyArimo) {
+            gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
+        }
+        return;
+    }
+    if (flags & UI_ADDITIVE) {
+        gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
+        gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
+        return;
+    }
+    gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_INK);
+}
+
+static float gameMeasure(float size, const char *utf8)
+{
+    MLayout L;
+    memset(&L, 0, sizeof(L));
+    gameLayout(size, utf8, &L);
+    return L.widest;
+}
+
 static void drawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                        unsigned flags, const UiXform *xf, int soft);
 
@@ -898,6 +1712,10 @@ static void drawTextXf(float x, float y, float size, const uint8_t rgba[4], cons
                        unsigned flags, const UiXform *xf, int soft)
 {
     if (!utf8 || !*utf8 || !ui_FontInit()) {
+        return;
+    }
+    if (gameActive()) {
+        gameDraw(x, y, size, rgba, utf8, flags, xf);
         return;
     }
     if (flags & UI_HALO) {

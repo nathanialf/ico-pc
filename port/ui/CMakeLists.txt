@@ -26,6 +26,7 @@ add_custom_command(
 
 set(_ui_sources
     font.c
+    game_font_build.c
     game_text.c
     layout_ext.c
     menu_text.c
@@ -43,7 +44,7 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c ui_hint.c
-                            gallery.c photo_ui.c PROPERTIES COMPILE_OPTIONS
+                            gallery.c photo_ui.c game_font_disc.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -80,7 +81,7 @@ endfunction()
 
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
-        ico_ui_library(ico_ui ON ui_host.c)
+        ico_ui_library(ico_ui ON ui_host.c game_font_disc.c)
         if(TARGET SDL3::SDL3-shared)
             # Q2: ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
             # desktop" (the headers only; ico_pc links SDL3)
@@ -92,6 +93,14 @@ if(TARGET ico_pc)
         ico_ui_library(ico_ui OFF)
     endif()
     ico_ui_settings(ico_ui)
+    # GFONT: game_font_disc.c (the game face from the disc and the archive;
+    # main_host.c calls it in the window build) reads port/data's headers;
+    # ico_pc links ico_port_data
+    if(NOT ICO_HEADLESS AND NOT TARGET ico_render)
+        target_sources(ico_ui PRIVATE game_font_disc.c)
+    endif()
+    target_include_directories(ico_ui PRIVATE
+        $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_ui>)
     # the music gallery's engine (gallery_play.c): the game's sound calls, so
     # the game's include path, definitions and record layout
@@ -227,6 +236,22 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME model_viewer COMMAND model_viewer_test)
 endif()
 
+# game_font_test (package GFONT): the game face's builder on a synthetic
+# sheet (the letters segmented, a touching pair split, the advances, the
+# rim), the blob read back by font.c and the per-character fallback. CPU only.
+add_executable(game_font_test test/game_font_test.c font.c game_font_build.c "${_ui_font_c}")
+target_include_directories(game_font_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+target_compile_options(game_font_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT WIN32)
+    target_link_libraries(game_font_test PRIVATE m)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME game_font COMMAND game_font_test)
+endif()
+
 if(NOT TARGET ico_render)
     message(STATUS "ico: ui_test not built (needs port/render)")
     return()
@@ -341,6 +366,11 @@ if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
         "${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c")
     set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c" PROPERTIES
                                 COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+    # GFONT: the game face built from the disc image (game_font_disc.c over the
+    # menu text table), when the image is there
+    target_sources(font_coverage_test PRIVATE game_font_build.c game_font_disc.c menu_text.c)
+    set_source_files_properties(game_font_disc.c menu_text.c TARGET_DIRECTORY font_coverage_test
+                                PROPERTIES COMPILE_OPTIONS "-Wno-strict-prototypes")
     target_include_directories(font_coverage_test PRIVATE ${_ico_cov_data_incs}
                                "${CMAKE_SOURCE_DIR}/port/data" "${CMAKE_SOURCE_DIR}")
     target_compile_definitions(font_coverage_test PRIVATE FONT_COVERAGE_ELF=1
@@ -349,16 +379,29 @@ if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
 endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    set(_ico_cov_disc "")
+    if(_ico_cov_elf AND EXISTS "${ICO_DISC_IMAGE}")
+        set(_ico_cov_disc "${ICO_DISC_IMAGE}")
+    endif()
     add_test(NAME font_coverage
              COMMAND font_coverage_test "${CMAKE_CURRENT_SOURCE_DIR}/test/font_corpus"
-                     ${_ico_cov_elf})
-    set_tests_properties(font_coverage PROPERTIES SKIP_RETURN_CODE 77)
+                     ${_ico_cov_elf} ${_ico_cov_disc})
+    # GFONT: with the disc, the game face it builds is written beside the
+    # tests (gamefont.bin), which settings_render and menu_text then draw with
+    # (fixture gamefont)
+    set_tests_properties(font_coverage PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP gamefont
+                         ENVIRONMENT "ICO_GAME_FONT_OUT=${CMAKE_CURRENT_BINARY_DIR}/gamefont.bin")
 endif()
 # font_edge_test (package DEF): a deferred menu row and an overlay line of
 # text presented at Enhanced 1920 x 1080 and 3840 x 2160, each glyph edge at
 # most one pixel between background and ink; the Original present with a
 # deferred row and a popup recorded byte-identical to the plain quads
-add_executable(font_edge_test test/font_edge_test.c $<TARGET_OBJECTS:ico_ui_font_rd>)
+add_executable(font_edge_test test/font_edge_test.c game_font_build.c
+               $<TARGET_OBJECTS:ico_ui_font_rd>)
 target_include_directories(font_edge_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_definitions(font_edge_test PRIVATE ICO_HOST=1 ICO_RD=1)
@@ -382,14 +425,15 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
+    set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77
+                         FIXTURES_REQUIRED gamefont)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
             "The PAL disc image (SCES-50760) the disc tests read, never committed")
     endif()
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77)
+    set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED gamefont)
     add_test(NAME font_edge COMMAND font_edge_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(font_edge PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")

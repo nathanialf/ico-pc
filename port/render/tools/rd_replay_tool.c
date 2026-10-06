@@ -33,6 +33,11 @@
  *                         output (a before/after pair from one dump).  By
  *                         default the tool installs port/ui/font.c's
  *                         renderer (ui_InstallDeferredText)
+ *   --game-font FILE      (package GFONT) the game face's blob (port/ui/
+ *                         game_font.h; font_coverage writes it from the
+ *                         disc, ICO_GAME_FONT_OUT): the deferred text is laid
+ *                         out in the game's lettering, as the game run that
+ *                         recorded the dump drew it.  Without it, Arimo
  *   --crt MODE            (with --present; package CRT) the CRT filter in
  *                         MODE (scanlines, consumer, trinitron, pvm, shadow) at
  *                         full strength, the modes' own parameters
@@ -309,6 +314,24 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
     ui_EndOverlay();
 }
 
+/* package GFONT: the game face from a blob file */
+static bool loadGameFont(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+    fseek(f, 0, SEEK_END);
+    const long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *blob = n > 0 ? malloc((size_t)n) : NULL;
+    const bool ok =
+        blob && fread(blob, 1, (size_t)n, f) == (size_t)n && ui_GameFaceLoad(blob, (size_t)n);
+    free(blob);
+    fclose(f);
+    return ok;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 3) {
@@ -328,6 +351,7 @@ int main(int argc, char **argv)
     /* R7a: the display options */
     RdSettings s;
     bool list = false, overlay = false, noAa1 = false, stats = false, quadText = false;
+    const char *gameFont = NULL;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
 
@@ -405,6 +429,8 @@ int main(int argc, char **argv)
             interpPrev = argv[++i];
         } else if (strcmp(argv[i], "--quad-text") == 0) {
             quadText = true;
+        } else if (strcmp(argv[i], "--game-font") == 0 && i + 1 < argc) {
+            gameFont = argv[++i];
         } else if (strcmp(argv[i], "--crt") == 0 && i + 1 < argc) {
             /* package CRT: the CRT filter's mode, at full strength */
             static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm",
@@ -481,6 +507,11 @@ int main(int argc, char **argv)
     /* package DEF: the menu rows' items at the output's resolution in an
        Enhanced present */
     ui_InstallDeferredText(!quadText);
+    if (gameFont && !loadGameFont(gameFont)) {
+        fprintf(stderr, "cannot use the game font %s\n", gameFont);
+        rd_Shutdown();
+        return 1;
+    }
     RdFrame pf, f;
     memset(&pf, 0, sizeof(pf));
     if (interpPrev && !rd__LoadFrame(interpPrev, &pf)) {

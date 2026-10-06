@@ -23,7 +23,10 @@
  * Then on a Vulkan device (exit 77 without one; lavapipe here): the title's
  * "New Game" row through exec_layout_texture into SCENE: the text covers
  * pixels only inside the row's rectangle (with the rim's margin), none
- * elsewhere.  Writes menu_text_scene.png beside itself.
+ * elsewhere.  Writes menu_text_scene.png beside itself.  With gamefont.bin
+ * beside it (font_coverage writes it from the disc; package GFONT) the row
+ * is drawn in the game's own lettering, at the sheet's size: a texel of the
+ * sheet a texel of the frame, as the PS2's sprite was.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU checks).
  */
@@ -1126,12 +1129,16 @@ static void testPixels(void)
     }
     rd_WritePng("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
     /* the row's sprite rectangle (display_texture: centred, 172 texels
-       wide, 20 field lines from dispY 165), plus the rim's 1.5 y units */
+       wide, 20 field lines from dispY 165), plus the rim's reach: Arimo's
+       halo 1.5 y units; the game face's rim (GFONT) its glow, 6 texels round
+       the letters (6 x units, 12 y units), as the sheet's own glow reaches
+       past the letters */
     const LtProperty *e = &texProperty[50];
     const float gx0 = UI_GRID_CX - (float)e->texW * 0.5f, gx1 = UI_GRID_CX + (float)e->texW * 0.5f;
     const float gy0 = (float)e->dispY * 2.0f, gy1 = gy0 + (float)e->dispH;
-    const int x0 = toPixX(gx0 - 2.0f), x1 = toPixX(gx1 + 2.0f);
-    const int y0 = toPixY(gy0 - 2.0f), y1 = toPixY(gy1 + 2.0f);
+    const float mx = ui_GameFaceLoaded() ? 7.0f : 2.0f, my = ui_GameFaceLoaded() ? 13.0f : 2.0f;
+    const int x0 = toPixX(gx0 - mx), x1 = toPixX(gx1 + mx);
+    const int y0 = toPixY(gy0 - my), y1 = toPixY(gy1 + my);
     int inside = 0, outside = 0, bright = 0;
     for (int y = 0; y < 512; y++) {
         for (int x = 0; x < 512; x++) {
@@ -1154,6 +1161,25 @@ static void testPixels(void)
            y0, x1, y1, inside, bright, outside);
     free(px);
     ui__SetRecordHook(NULL);
+}
+
+static void loadGameFace(const char *p)
+{
+    FILE *f = fopen(p, "rb");
+    if (!f) {
+        printf("menu_text_test: no %s (no disc): the pixels in Arimo\n", p);
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    const long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *blob = n > 0 ? malloc((size_t)n) : NULL;
+    if (blob && fread(blob, 1, (size_t)n, f) == (size_t)n) {
+        CHECK(ui_GameFaceLoad(blob, (size_t)n), "the game face in %s loads", p);
+        printf("menu_text_test: the pixels in the game face from %s\n", p);
+    }
+    free(blob);
+    fclose(f);
 }
 
 int main(int argc, char **argv)
@@ -1184,6 +1210,10 @@ int main(int argc, char **argv)
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
+    /* GFONT: the pixels in the game's lettering when font_coverage built it
+       from the disc (gamefont.bin, fixture gamefont); the CPU checks above
+       count Arimo's halo draws and ran without it */
+    loadGameFace("gamefont.bin");
     testPixels();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());

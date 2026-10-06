@@ -56,6 +56,7 @@
 #include "photo_ui.h"
 #include "settings.h"
 #include "strings.h"
+#include "subtitles.h"
 #include "sysconf.h"
 #include "ui_hint.h"
 #include "ui_list.h"
@@ -502,6 +503,10 @@ static int s_reduce;
 
 #endif
 
+#ifdef SETTINGS_RENDER
+static void (*s_frameText)(void);
+#endif
+
 static void frame(int flags)
 {
     frame_count++;
@@ -511,7 +516,11 @@ static void frame(int flags)
     dl_SetDLPriority(0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
-    exec_layout_texture();
+    if (s_frameText) {
+        s_frameText(); /* GFONT: game text drawn by its hooks, no layout */
+    } else {
+        exec_layout_texture();
+    }
     if (s_reduce) {
         RdPostParams pp;
         memset(&pp, 0, sizeof(pp));
@@ -605,12 +614,14 @@ static void testBuild(void)
                                    UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
                                    UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_MENU_TEXT,
-                                   UI_OPT_BACK};
-    static const int dispStrs[] = {
-        UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
-        UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
-        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_OPT_MENU_TEXT,
-        UI_STR_BACK};
+                                   UI_OPT_FONT,         UI_OPT_BACK};
+    static const int dispStrs[] = {UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION,
+                                   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_VSYNC,       UI_STR_OPT_FILTERING,
+                                   UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
+                                   UI_STR_OPT_CRT,         UI_STR_OPT_CRT_STRENGTH,
+                                   UI_STR_OPT_VIDEO_MODE,  UI_STR_OPT_MENU_TEXT,
+                                   UI_STR_OPT_FONT,        UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -638,7 +649,7 @@ static void testBuild(void)
                                          UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
@@ -678,6 +689,19 @@ static void testBuild(void)
     ui_SettingsStep(UI_OPT_MENU_TEXT, -1);
     CHECK(!ui_MenuTextClassic() && ico_config_get_bool("game.classic_menu_text", 1) == 0,
           "menu text: Port font again");
+    /* GFONT: the font row: the game's lettering by default, Arimo written as
+       [game] port_font = "arimo" and handed to the font */
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FONT), "Game") == 0 && ui_GetFace() == UI_FACE_GAME,
+          "font: Game (%s)", ui_SettingsValueText(UI_OPT_FONT));
+    ui_SettingsStep(UI_OPT_FONT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FONT), "Arimo") == 0 &&
+              ui_GetFace() == UI_FACE_ARIMO &&
+              strcmp(ico_config_get_string("game.port_font", ""), "arimo") == 0,
+          "font: Arimo");
+    ui_SettingsStep(UI_OPT_FONT, -1);
+    CHECK(ui_GetFace() == UI_FACE_GAME &&
+              strcmp(ico_config_get_string("game.port_font", ""), "game") == 0,
+          "font: Game again");
     /* the New Game screen */
     int ml = ui_MirrorScreenLayout();
     CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "mirror screen layout");
@@ -694,7 +718,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
@@ -2841,6 +2865,83 @@ static void fakeSaveRows(void)
     texLayout[14].fadeInTime = texLayout[15].fadeInTime = 0.0f;
 }
 
+/* GFONT: the game face the font_coverage test built from the disc
+   (gamefont.bin beside the snapshots, fixture gamefont); without it the
+   port's text is Arimo alone, as without a disc */
+static void loadGameFace(void)
+{
+    char p[1100];
+    path(p, sizeof(p), "gamefont.bin");
+    FILE *f = fopen(p, "rb");
+    if (!f) {
+        printf("settings_render: no %s (no disc): the text is Arimo alone\n", p);
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    const long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *blob = n > 0 ? malloc((size_t)n) : NULL;
+    if (blob && fread(blob, 1, (size_t)n, f) == (size_t)n) {
+        CHECK(ui_GameFaceLoad(blob, (size_t)n), "the game face in %s loads", p);
+        printf("settings_render: the game face from %s\n", p);
+    }
+    free(blob);
+    fclose(f);
+}
+
+/* GFONT: a subtitle and the staff roll through their hooks (game_text.c),
+   as jimaku.c and staffroll.c call them: English block 1 (two lines) in
+   row 434's box, and roll lines in font_Print's places */
+static void drawSubtitleAndRoll(void)
+{
+    int dst[4], src[4];
+    src[0] = 8;
+    src[1] = 8;
+    src[2] = 256 << 4;
+    src[3] = 48 << 4;
+    dst[2] = src[2];
+    dst[3] = (src[3] >> 1) * 2;
+    dst[0] = (64 - 320) << 4;
+    dst[1] = (144 - 112) << 4;
+    static const int ring[2];
+    const unsigned char col[4] = {0x80, 0x80, 0x80, 0x80};
+    const UiSubtitle *two = ui_SubtitleFind(UI_LANG_EN, 0, 1);
+    dl_SetDLPriority(11);
+    if (two) {
+        lt_ext_DrawSubtitle(two, &ring[0], dst, src, col);
+    }
+    const unsigned char white[4] = {255, 255, 255, 128};
+    dl_SetDLPriority(12);
+    lt_ext_DrawRollLine(0, "{#FFFFFF80}{R}< Game Design > ", 0.0f, 40.0f, 2, white,
+                        0x80u | 0x70707000u);
+    lt_ext_DrawRollLine(1, "{R}Fumito Ueda ", 0.0f, 70.0f, 2, white, 0x80u | 0x70707000u);
+    lt_ext_DrawRollLine(2, "{R}< Decompilation and PC Port > ", 0.0f, 110.0f, 2, white,
+                        0x80u | 0x70707000u);
+    lt_ext_DrawRollLine(3, "{R}Nathanial Fine ", 0.0f, 140.0f, 2, white, 0x80u | 0x70707000u);
+    lt_ext_DrawRollLine(4, "{C}@ 2001 Sony Computer Entertainment Inc.", 0.0f, 200.0f, 0, white,
+                        0x80u | 0x70707000u);
+    dl_SetDLPriority(0);
+}
+
+/* the presented 1920 x 1080 output to name.png, once (no classic pass) */
+static void snapOnce1080(const char *name)
+{
+    const uint32_t w = 1920, h = 1080;
+    uint8_t *px = malloc((size_t)w * h * 4);
+    char p[1400];
+    frame(0);
+    uint32_t ow = 0, oh = 0;
+    if (!px || !rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
+        CHECK(0, "%s: the presented output", name);
+        free(px);
+        return;
+    }
+    path(p, sizeof(p), name);
+    rd_WritePng(p, px, w, h, w * 4, 0);
+    printf("settings_render: %s (%d items)\n", p, textItems());
+    free(px);
+}
+
 static int render(void)
 {
     RdSettings st;
@@ -2851,6 +2952,7 @@ static int render(void)
         return 77;
     }
     ui_FontForgetTextures();
+    loadGameFace();
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
@@ -3104,6 +3206,24 @@ static int render(void)
         lt_switch_layout(14);
         CHECK(settle(14, 60), "the save screen at 1080p");
         snap1080("settings_save_preview");
+        /* GFONT: a subtitle and the roll at 1080p, the game face and Arimo;
+           the main page in Arimo beside its game-face shot */
+        s_frameText = drawSubtitleAndRoll;
+        snapOnce1080("settings_subtitle_roll_1080.png");
+        if (ui_GameFaceLoaded()) {
+            ui_SetFace(UI_FACE_ARIMO);
+            snapOnce1080("settings_subtitle_roll_1080_arimo.png");
+            ui_SetFace(UI_FACE_GAME);
+        }
+        s_frameText = NULL;
+        if (ui_GameFaceLoaded()) {
+            lt_switch_layout(mainL);
+            CHECK(settle(mainL, 60), "the menu at 1080p, Arimo");
+            lt_ext_Layout(mainL)->curItem = ml[4];
+            ui_SetFace(UI_FACE_ARIMO);
+            snapOnce1080("settings_main_1080_arimo.png");
+            ui_SetFace(UI_FACE_GAME);
+        }
         s_reduce = 0;
         ui_InstallDeferredText(0);
     }

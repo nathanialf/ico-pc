@@ -28,6 +28,13 @@
  *             of an "I" is soft: across the stem its blue steps at most a
  *             third of its peak a pixel (package GHOST: drawn a texel a
  *             pixel it was a sharp second copy of the letters)
+ *   faces     package GFONT: with a game face loaded (a synthetic one, built
+ *             by game_font_build.c from a drawn sheet holding "I" and "L"),
+ *             the edge check applies to Arimo, which stands in for the "H"
+ *             the face lacks: still at most one pixel between on an edge at
+ *             1080p; the game face's own "I" is its bitmap scaled
+ *             bilinearly, soft by design (more than one pixel between), and
+ *             is not held to it
  *
  * Usage: font_edge_test [dir]  (dir: where the PNGs go)
  * Exit 0, 1 on a failure, 77 without a device.
@@ -38,6 +45,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "game_font.h"
 #include "rd_internal.h"
 #include "ui_internal.h"
 #include "vk/rhi_vk.h"
@@ -509,6 +517,93 @@ static void checkGlow(void)
     free(px);
 }
 
+/* ------------------------------------------------------------ faces */
+
+/* a game face of two letters drawn on a sheet: I (2 x 10 texels) and L */
+static int loadSyntheticFace(void)
+{
+    enum { W = 128, H = 20 };
+
+    static uint8_t sheet[W * H * 4];
+    memset(sheet, 0, sizeof(sheet));
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            uint8_t *p = sheet + ((size_t)y * W + (size_t)x) * 4;
+            p[0] = p[1] = p[2] = 255;
+            const int inI = x >= 10 && x < 12 && y >= 5 && y < 15;
+            const int inL =
+                (x >= 20 && x < 22 && y >= 5 && y < 15) || (x >= 20 && x < 26 && y >= 13 && y < 15);
+            p[3] = (inI || inL) ? 255 : 0;
+        }
+    }
+    UiGfBuilder *b = ui_GfBuilderNew();
+    if (!b) {
+        return 0;
+    }
+    UiGfSource src;
+    memset(&src, 0, sizeof(src));
+    src.rgba = sheet;
+    src.sheetW = W;
+    src.sheetH = H;
+    src.w = W;
+    src.h = H;
+    src.em = 13.5f;
+    src.capMid = 10.0f;
+    src.pitch = 15.5f;
+    src.text = "I L";
+    src.sheet = ui_GfBuilderSheet(b, "synthetic.tm2");
+    ui_GfBuilderAdd(b, &src);
+    uint8_t *blob = NULL;
+    size_t size = 0;
+    const int ok =
+        ui_GfBuilderFinish(b, 13.5f, &blob, &size, NULL) == 0 && ui_GameFaceLoad(blob, size);
+    free(blob);
+    ui_GfBuilderFree(b);
+    return ok;
+}
+
+static void checkFaces(void)
+{
+    CHECK(loadSyntheticFace(), "the synthetic game face loads");
+    CHECK(ui_FontFaceOf('I') == UI_FACE_GAME && ui_FontFaceOf('H') == UI_FACE_ARIMO,
+          "I from the game face, H from Arimo");
+    const uint32_t w = 1920, h = 1080;
+    const RdSettings s = settingsOf(1, w, h, 0);
+    const int mid = colOf(&s, (DEF_X + OVL_X) * 0.5f);
+    /* the Arimo fallback: as sharp as before */
+    const Frame fh = {.deferred = 1, .row = 1, .word = "H", .rowY = WORD_Y};
+    uint8_t *px = present(&s, 1, 0, &fh, 1);
+    if (px) {
+        writePng("font_edge_1080_fallback.png", px, w, h);
+        const int d = checkH("1080 deferred H (Arimo, the game face loaded)", px, w, h, 0, mid, 1);
+        CHECK(d <= 1, "the Arimo fallback has %d pixels between on an edge (at most 1)", d);
+    }
+    free(px);
+    /* the game face's I: drawn, soft (its 2-texel stem scaled about 4.8
+       times vertically, bilinearly), not held to the edge check */
+    const Frame fi = {.deferred = 1, .row = 1, .word = "I", .rowY = WORD_Y};
+    px = present(&s, 1, 0, &fi, 1);
+    if (px) {
+        writePng("font_edge_1080_game.png", px, w, h);
+        int b[4];
+        CHECK(inkBox(px, w, 0, 0, mid, (int)h, b), "the game face's I is drawn");
+        if (inkBox(px, w, 0, 0, mid, (int)h, b)) {
+            const int y = (b[1] + b[3]) / 2;
+            int ink = 0, worst = 0;
+            for (int x = b[0]; x <= b[2]; x++) {
+                ink = lum(px, w, x, y) > ink ? lum(px, w, x, y) : ink;
+            }
+            rowEdges(px, w, y, b[0] - 3, b[2] + 3, ink, &worst);
+            printf("font_edge: 1080 game-face I: ink %dx%d, %d pixel(s) between on an edge (soft "
+                   "by design)\n",
+                   b[2] - b[0] + 1, b[3] - b[1] + 1, worst);
+            CHECK(worst > 1, "the game face is its bitmap scaled bilinearly: %d between", worst);
+        }
+    }
+    free(px);
+    ui_GameFaceUnload();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -524,6 +619,7 @@ int main(int argc, char **argv)
     checkOriginal();
     checkFold();
     checkGlow();
+    checkFaces();
     if (failures) {
         printf("font_edge_test: %d failure(s)\n", failures);
         return 1;

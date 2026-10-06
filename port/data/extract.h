@@ -72,4 +72,15 @@ int ico_extract_print_datadf_manifest(IcoVfs *iso, FILE *out);
 /* The number of members the compiled manifest describes (0: none). */
 uint32_t ico_extract_datadf_manifest_count(void);
 
+/* Adds an item the port derives from the disc to an extracted archive (the
+   game face, port/ui/game_font.h, extracted the first run after the
+   archive is written and again when its version changes): `name`, stored,
+   written where the central directory was, the directory written again
+   after it; the disc's files are not touched and meta.json does not list
+   it.  A name already present is left as it is.  0, or -1 with the reason in
+   why (an archive whose directory was not rewritten is not mountable, and is
+   extracted again on the next run). */
+int ico_extract_add_item(const char *archive_path, const char *name, const void *data, size_t size,
+                         char *why, size_t whysize);
+
 #endif /* ICO_PORT_EXTRACT_H */

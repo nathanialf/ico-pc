@@ -1,8 +1,9 @@
 # Runtime text, the layout extension, popups and the Settings menu
 
-The port draws its own text: a typeface embedded in the program,
-rasterised at run time and drawn through the renderer (`rd`) inside the
-game's own layout system. That text serves the Settings menu (the player's
+The port draws its own text, in the game's own lettering (cut from the
+player's disc on the first run) with Arimo, a typeface embedded in the
+program, for the characters the game never shows, drawn through the
+renderer (`rd`) inside the game's own layout system. That text serves the Settings menu (the player's
 view is docs/port/SETTINGS.md), the achievement popups, and, by default,
 the words of the game's own menus, its subtitles, the staff roll and the
 save screens' figures.
@@ -10,6 +11,7 @@ save screens' figures.
 | file | what |
 | --- | --- |
 | `port/ui/font.c`, `font.h` | the font, the per-size glyph atlases, `ui_MeasureText`, `ui_DrawText` |
+| `port/ui/game_font.h`, `game_font_build.c`, `game_font_disc.c` | the game face: the blob's format, the builder (segmentation, measurement, atlas), the disc side (the sheets through the tables, the archive item) ("The font" below) |
 | `port/ui/layout_ext.c`, `layout_ext.h` | port rows past the ends of `texLayout` / `texProperty`, the draw hook |
 | `port/ui/strings.c`, `strings.h`, `strings_{en,fr,de,it,es}.c` | `ui_Str(id)` in the game's five languages |
 | `port/ui/popup.c`, `popup.h` | the popup queue, timing and drawing |
@@ -21,25 +23,229 @@ save screens' figures.
 | `port/ui/subtitles.c`, `subtitles.h` | the subtitles' words per language and set, transcribed, and the faces' metrics ("Subtitles" below) |
 | `port/ui/game_text.c` | the subtitle and staff roll hooks (`lt_ext_SubtitleFind`, `lt_ext_DrawSubtitle`, `lt_ext_DrawRollLine`, `lt_ext_PortText`) |
 | `port/ui/embed_font.cmake` | turns the font file into a C array at build time |
-| `port/ui/test/ui_test.c`, `settings_test.c`, `menu_text_test.c`, `font_edge_test.c` | the tests (below) |
+| `port/ui/test/ui_test.c`, `settings_test.c`, `menu_text_test.c`, `font_edge_test.c`, `font_coverage_test.c`, `game_font_test.c` | the tests (below) |
 | `tools/tm2_sheets.py` | decodes the disc's text sheets and subtitle pictures to PNGs for transcription (tools/README.md) |
 | `port/assets/fonts/` | `Arimo-Regular.ttf`, `OFL.txt` (Arimo's licence) |
 | `port/third_party/stb/` | `stb_truetype.h` v1.26, `LICENSE` |
 
 ## The font
 
-The font is **Arimo Regular** (SIL OFL 1.1). The PAL menus' lettering (the
-vibration screen's rows and the Options rows, texFile 21 `menu_PAL_0x`) is
-a plain neo-grotesque sans, Helvetica or Arial-like, light grey with a soft
-dark rim baked around the letters, so the port uses an OFL sans with
-Arial's metrics and draws the same kind of rim. Arimo is metrically
-compatible with Arial, has every letter the five languages need (Latin-1,
-Latin Extended-A: Œ œ Ÿ, ß, ñ, the grave and acute vowels), has GPOS pair
-kerning, and its licence names no Reserved Font Name, so the subset keeps
-its name. On the title, the game's "New Game" and the port's "Settings"
-read as the same family with the same light-on-dark-rim treatment.
+The port's text has two faces (`port/ui/font.h`, `UiFace`):
 
-### The font file
+- **the game face** (the default): the game's own lettering. The PAL menu
+  screens draw their words from pre-rendered sheets ("Menu text" below);
+  the port cuts the letters out of those words on the player's machine, from
+  the player's disc, and composes every text it draws from them: its
+  Settings and Extras pages, the popups, the hints, and (unless
+  `classic_menu_text` is on) the game's menu rows, subtitles, staff roll and
+  save figures. Nothing of the disc is in the repository.
+- **Arimo** (SIL OFL 1.1, embedded): the fallback, per character, for the
+  characters the sheets never show (X, ß, ñ, %, the quotes, …), and the whole
+  text when `[game] port_font = "arimo"` (Settings > Display, "Font: Game /
+  Arimo"; docs/port/CONFIG.md) or when the game face could not be made.
+
+`ui_DrawText`, `ui_DrawTextXf`, `ui_DrawTextDeferred`, the overlay mode and
+`ui_MeasureText` pick the face per character: the game face's glyph when it
+has one, else Arimo's (`ui_FontFaceOf(cp)`: `UI_FACE_GAME`, `UI_FACE_ARIMO`,
+or -1 when neither has it, drawn as Arimo's '?'). A character that falls back
+is logged once: `ui: the game's lettering has no U+0058; drawn with Arimo`
+(`ui_FontFallbackSeen`).
+
+### The game face
+
+**The sheets.** `text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_01..04.tm2` and
+`scei.tm2` (one set per language) and `text/title.tm2` (one for all), the
+same sheets `tools/tm2_sheets.py` decodes. Each is 4-bit with a 16-colour
+palette that mixes the light letters (white, or grey 151 for the empty slot
+numbers), black letters (the white panel's prompts), the letters'
+antialiasing and a soft dark rim (black on the English and German sheets,
+grey 62 / 255 on the French, Italian and Spanish ones). The capitals of the
+menu rows are 10 texels high at half coverage, on 20-texel rows shown 20
+field lines tall: a texel is a pixel wide and a field line (two y units)
+high, so the letters are about 13 texels wide for 10 tall on the sheet and
+read in their proportions on screen.
+
+**What is cut.** The word rectangles of the menu text table (`menu_text.c`,
+125 rectangles) in the five languages: 625 rectangles, the sheet of each
+named by the game's tables (the first `texProperty` row that draws it gives
+its `texFileNo`; that `texFile` path's language folder is replaced by each
+language's, as the game loads its sheets by base name). The rows left as
+textures (the logo, the corporate lettering of the copyright and the SCEE
+credit, the button labels) are not in the table and are not cut.
+
+**The builder** (`port/ui/game_font_build.c`, no game or disc code; the
+steps are in its header comment). Per rectangle: the ink coverage from each
+texel's luminance and alpha (ink over rim: `c = (L A - R A) / (Lmax - R)`,
+`Lmax` the letters' luminance, `R` the rim's; black letters are their
+alpha); the letters' shapes are the 8-connected components of the ink above
+0.35 (0.5 over a grey rim) (the rim cannot be segmented on: it is one glow
+over the whole word); each component goes to the line whose capital middle
+(the table's) is nearest; marks join their letter (a component above or
+below another within its columns, or a small one inside them: i and j's
+dots, the accents, the umlaut, ':'); the components are matched to the
+line's characters (its `UI_STR_MT_*` string, spaces left out) left to right
+by dynamic programming, a component taking one to three characters, the
+cost its width against the characters' expected widths (the median width
+per character over a first pass), so a touching pair ("Te", "ff", "rt",
+"ti") is found where a component is about two letters wide and cut at the
+column of least ink within two texels of the boundary the widths put. Each
+letter keeps the ink it owns (its shape's texels and, within two texels,
+the antialiasing next to them), its box, its height from the line's
+baseline (the median bottom of the line's letters that sit on it) and the
+gap to the next letter of the word, or over a space to the next word.
+
+Then over all rectangles and languages, per character: the instance kept
+is from the main size class (the 13.5-texel em of the menu rows) when the
+character appears there, else from the class it appears in most; within it
+from the rows whose texels serve best (a black rim, a one-line rectangle,
+not cut from a touching pair, a letter inside a word), and among those the
+medoid of the ink (the instance nearest all the others, laid on its box
+and baseline, so a badly cut one is never kept). The side bearings are
+fitted to every gap measured within words (`gap(a, b) = right(a) +
+left(b)`, least squares, normalised to the main class) and rounded to whole
+texels, so a word's cells tile as the sheet's columns did; a kerning pair
+where a pair's mean residual over at least two sightings sets it half a
+texel or more closer (only closer: a pair set apart would leave a column
+between the cells); the space is the median word gap less the bearings
+either side.
+
+**The texels: the sheet's own.** A word drawn from the atlas is drawn as
+the PS2 drew the word's sprite. The sprite is the sheet's texels (alpha A,
+luminance L) under MODULATE with the row's colour `col` and alpha `a`:
+`dst (1 - A a) + col L A a`. The atlas keeps, per letter, the sheet's
+alpha and its light `L A` as cut, and draws them as two passes: the alpha
+in black (blend 0x44) and the light added in the row's colour (0x48). That
+is the same sum, so the letters, their antialiasing and the dark edge of
+the rim match the sprite under any colour, alpha and dimming. An
+unselected row, which the layout dims by halving its colour and keeping
+its alpha (`layout_texture.c`), keeps its dark edge at the sheet's
+strength and its letters at half light, as the PS2 showed it. Per letter:
+
+- the main cell: the letter's columns between its bearings and the line's
+  rows, the sheet's alpha and light within two texels of a letter's ink on
+  the sheet (its own, or its neighbour's in a gap: in a word set by the
+  face it has a neighbour there too; another letter's ink texels are not
+  kept), fading out over the next two; columns past the instance's own
+  cell on the sheet repeat its edge. Variants for a word's start, end and a
+  one-letter word keep, on the open side, only the letter's own
+  surroundings, not the edge of the neighbour it had on the sheet;
+- the caps: the 10 columns beyond either side, drawn at a word's ends, cut
+  from an instance that ends a word on that side;
+- the fitted glow: the rim's lighter plateau further out is the one place
+  the sheets differ from row to row (its level, black or grey), and cut
+  per letter it would patch, so it is a fitted glow per glyph,
+  `0.5 (1 - exp(-G(D(ink))))` (D a dilation by a disc of 2 texels, G a
+  Gaussian of 4 texels, at least the ink), fitted on the 17 black-rimmed
+  rectangles' texels further than 2.5 from any ink with each word's glow
+  the alpha blend of its letters' (squared error 0.0066 per texel). It is
+  zero where the cells keep the sheet's texels and is drawn first,
+  overlapping, so a word's glows add up as the sheet's word glow does;
+  four variants, as for the main cell;
+- the ink cell: the letter's own light fill, for text drawn without the rim.
+
+On the PAL disc: 717 lines, 524 one component a letter and 193 aligned with
+262 touching pairs split, none left out; 7,065 letters measured; 91
+characters, 20 kerning pairs (`T a` -2 texels, `P A`, `V o`, `V a`, `f i`
+-1), the space 7 texels, the capitals 10.0; a 512 x 3116 atlas, 1,608,928
+bytes (`game_font.h`: a 132-byte record per glyph). The characters and the
+sheet each main cell was cut from (`font_coverage` prints this list):
+
+| sheet | characters |
+| --- | --- |
+| EG menu_PAL_01 | Y |
+| EG menu_PAL_02 | 0 1 6 |
+| EG menu_PAL_03 | C D G a c e i n o r t u v w |
+| EG scei | ) |
+| FR menu_PAL_01 | N ° |
+| FR menu_PAL_02 | x É è |
+| FR menu_PAL_03 | A M P Q Z h m p q y â é |
+| GR menu_PAL_01 | . 7 ä |
+| GR menu_PAL_02 | 3 ö ü |
+| GR menu_PAL_03 | - B E F H K R T W g k |
+| GR menu_PAL_04 | ? I S |
+| GR scei | , |
+| IT menu_PAL_01 | + : ì – |
+| IT menu_PAL_02 | ! ( |
+| IT menu_PAL_03 | V f z à |
+| IT menu_PAL_04 | ' |
+| SP menu_PAL_01 | 4 8 9 O |
+| SP menu_PAL_02 | 2 _ ú |
+| SP menu_PAL_03 | / J L b j l s í ó |
+| SP menu_PAL_04 | d ¿ á |
+| title | 5 U Ç Ñ (title.tm2's heavier capitals: U, Ç and Ñ appear only in the language names, 5 only in "50 Hz") |
+
+The figures 4, 8 and 9 come from the save screens' figure tiles (an 18-texel
+class), drawn at the main class's size. Of what the five languages draw,
+20 characters fall back to Arimo: `% & < > X ¡ ¥ © È Ê ß ç ê ñ ò ô ù œ ’ …`.
+
+**How close to the sprite.** `game_font` checks the construction: a word
+whose letters each appear once on a synthetic sheet, set again from the
+atlas at the sheet's size and drawn dimmed (colour halved, alpha kept) over
+a light background, is the sheet's sprite drawn the same way to 0 levels
+of 255 on every texel within two of its ink. On the disc, "New Game" set
+from the atlas (its letters cut from other words and rows) against the
+title sheet's own "New Game" sprite, both dimmed over a light grey: the
+ink peaks at 204 levels in both, the darkest rim texel is 64 in the sprite
+and 58 from the atlas, the mean 157.6 and 159.1. What differs is where the
+letters sit (the sprite's own spacing, the atlas's fitted one) and the
+plateau far from the letters (fitted). Seen enlarged (a subtitle at 1.2
+times the menu size, 1080p), the cells of letters cut from different rows
+can show their rows' slightly different rim darkness as soft blocks behind
+a word.
+
+**The archive item.** The blob (`game_font.h`) is the item
+`port/gamefont-1.bin` of `ico.o2r` (docs/port/DATA.md, "The port's items"):
+made once, the first start after the extraction, as `main_host.c` calls
+`ui_GameFontPrepare` after the tables load; an archive without it, or with
+an older version (the version is in the name), gets it the same way without
+re-extracting anything else. With `use_iso` it is built in memory each start
+(about a second). Logged: `ui: the game's lettering: 625 rectangles, 717
+lines (...), 91 characters, 20 kerning pairs, 1608928 bytes, ... s` and `ui:
+port/gamefont-1.bin added to <archive>`, or `ui: the game's lettering:
+port/gamefont-1.bin from <archive>` on later starts.
+
+**Sizes.** The atlas is at the sheets' own size: at 27 y units (the menu
+rows' 13.5-texel em, `UI_MENU_TEXT_SIZE`) a texel of the sheet is an x unit
+wide and two y units high, exactly as the PS2's sprite drew it, and the
+baseline and each line's start are put on the sheets' texel grid, so the
+Original preset draws a menu row texel for texel (`menu_text_scene.png`).
+Any other size is the same bitmap scaled by size / 27 (a glyph from another
+class by its own factor too), and the Enhanced output scales it bilinearly:
+on a 1080-line output the 27-unit rows are about 4.8 times their texels
+tall, soft as the game's own words are when scaled, never re-rasterised.
+The overlay and deferred paths place a game glyph's quad corners where they
+fall (Arimo's are snapped to whole pixels, a texel a pixel); a word's main
+cells share their edges exactly. The capitals' middle (`UI_VALIGN_MIDDLE`)
+and `ui_FontMetrics`' capital height are the game face's (10 texels: 20 y
+units at 27); the line pitch and the ascent stay Arimo's. A fallback letter
+is Arimo at the size whose capitals are the game face's capitals (1.08
+times the size), so it stands on the same baseline at the same height;
+between a game letter and an Arimo letter there is no kerning.
+
+**Drawing.** The atlas is one R8 page (`rd_CreateTextureR8`, GS alpha units,
+drawn by `font_ps` as white with that alpha, linear filtering, clamp),
+created the first time it is drawn. With `UI_HALO` a string is drawn as:
+Arimo's eight halo copies for the fallback letters (black, a quarter of the
+alpha, as before: a little lighter and tighter than the game letters' rim,
+a dark edge rather than a glow; the two read as one line); the game
+letters' fitted glow, then their alpha, in black at the text's alpha
+(0x44); their light added in the text's colour (0x48; under
+`UI_KEEP_STATE` the blend is set for that pass and put back); then Arimo's
+letters. `UI_ADDITIVE` (the glow pass of a selected row: an additive
+sprite of the sheet, `col L A`) draws the light added. Without either (the
+white panel's black prompts, the roll, the save figures) the ink cells.
+Each pass is one `rd_ScreenPrims` per texture, keyed by the pass, so it
+interpolates as Arimo's pages do.
+
+### Arimo
+
+Arimo Regular (SIL OFL 1.1) is metrically compatible with Arial, has every
+letter the five languages need (Latin-1, Latin Extended-A: Œ œ Ÿ, ß, ñ, the
+grave and acute vowels), has GPOS pair kerning, and its licence names no
+Reserved Font Name, so the subset keeps its name. It is rasterised at run
+time (stb_truetype) into per-size atlases ("Coordinates and metrics").
+
+#### The font file
 
 `Arimo-Regular.ttf` is derived from `google/fonts`
 `ofl/arimo/Arimo[wght].ttf` (the variable font, "Version 1.341"; last
@@ -92,11 +298,12 @@ docs/port/THIRD_PARTY.md.
 
 ### Coverage
 
-Every character the game can draw has a glyph in the subset, and two tests
-keep it so.
+Every character the game can draw has a glyph in a face (Arimo's subset
+holds all of them), and two tests keep it so.
 
 `font_coverage` (`port/ui/test/font_coverage_test.c`, CPU only, no device)
-asks the embedded font (`ui_FontHasGlyph`) for each code point of:
+asks which face draws each code point (`ui_FontFaceOf`; a failure only when
+neither does) of:
 
 - `ui_StringsForEach`: every entry of the five languages' tables and both
   subtitle sets (the model names and the kanban sign rows are table
@@ -118,6 +325,17 @@ points a language draws (tables, subtitles and corpus) are 93 English
 (the roll's lines are counted here), 95 French, 90 German, 97 Italian and 94
 Spanish, all inside the subset: it was not widened.
 
+With the base ELF and the disc image (`ICO_DISC_IMAGE`) it first builds the
+game face from the disc as the first run does (`ui_GameFontBuild`; every
+line must align) and loads it, so the walk checks the two faces together, and
+it prints per face the characters the five languages draw that it serves:
+for the game face grouped by the sheet each was cut from (the table in "The
+game face"), for Arimo the fallbacks (91 from the game's lettering, 20 from
+Arimo). With `ICO_GAME_FONT_OUT` set (ctest sets it to
+`port/ui/gamefont.bin` of the build directory, fixture `gamefont`) it writes
+the face there for `settings_render`, `menu_text` and
+`rd_replay_tool --game-font`.
+
 The corpus is the in-game text that is not a string entry: a `#` provenance
 line naming where each part is drawn (settings values and units, the save
 screen's digits and `: / . -`, the gallery's asset-name characters
@@ -136,12 +354,12 @@ update the size and the SHA-256 in "The font file".
 
 ### The fallback
 
-A code point the font lacks is drawn as `?` (`glyphIndex` in `font.c`), as
-before, and logged once per code point, whatever the size or how often it is
-drawn: `ui: no glyph for U+4E2D; drawn as '?'` (64 code points at most are
+A code point neither face has is drawn as Arimo's `?` (`glyphIndex` in
+`font.c`), and logged once per code point, whatever the size or how often it
+is drawn: `ui: no glyph for U+4E2D; drawn as '?'` (64 code points at most are
 logged). Text the port does not own (an audio device's name, a photo's file
-name) can reach it; the tables cannot, which the tests prove. `ui_FontMissingSeen`
-lists the ones seen so far.
+name) can reach it; the tables cannot, which the tests prove.
+`ui_FontMissingSeen` lists the ones seen so far.
 
 ## Coordinates and metrics
 
@@ -160,7 +378,8 @@ vertically, so both axes count "pixels" of a 640 x 448 frame shown at 4:3:
 - to the GS: `x = center_X * 16 + (gx - 320) * 16 * ScreenWidth / 640`,
   `y = center_Y * 16 + (gy - 226) * 8 * ScreenHeight / 224` (12.4).
 
-**Atlases.** There is one set per rasterised pixel size, built on demand:
+**Atlases** (Arimo's; the game face has one atlas at the sheets' size,
+"The font"). There is one set per rasterised pixel size, built on demand:
 the pixel size is `round(size * scale)`, where the scale is 1 in the
 Original preset (an atlas pixel per y unit, about 1.14 GS lines) and the
 output height / 448 in Enhanced (`ui_ScaleFor`; `ui_host.c` sets it from
@@ -198,10 +417,12 @@ the em is 27 (capitals 18.6 y units). Row boxes default to the Options
 screen's 20 field lines (`dispH` 40) and a 400-pixel width.
 
 **The halo.** The game's menu textures carry a dark soft rim around the
-letters, which keeps them legible over the bright fogged title. Port rows
-draw the same kind of rim (`UI_HALO`: eight copies 1.5 y units out, black
-at a quarter of the row's alpha, under the label). The rim's width is in y
-units, so it scales with the output like the game's baked rim.
+letters, which keeps them legible over the bright fogged title. With the
+game face, `UI_HALO` draws the glyphs' own rim (cut with them, "The font").
+Arimo's letters draw the same kind of rim (`UI_HALO`: eight copies 1.5 y
+units out, black at a quarter of the row's alpha, under the label). The
+rim's width is in y units, so it scales with the output like the game's
+baked rim.
 
 ## Drawing
 
@@ -624,8 +845,9 @@ and the existing Back, Loop, Animation and Models, in the five languages.
 ## Menu text
 
 The game's own menus draw every word as a sprite cut from a pre-rendered
-sheet. By default the port draws those words with Arimo instead, at the
-place, size, colour and fade the sprite had, so the game's menus and the
+sheet. By default the port draws those words as text instead, in the port
+font (the game face composed from those same sheets' letters, "The font"),
+at the place, size, colour and fade the sprite had, so the game's menus and the
 Settings menu read alike and change language at once; the logo, the
 copyright line, the backgrounds, the button glyphs and the other artwork
 stay the original textures. `[game] classic_menu_text = true` (Settings >
@@ -723,13 +945,14 @@ packet state, the colour and fade, the cursor sparkle, the glow).
 box and texel rectangle (so either caller's half-texel inset is
 honoured): each line goes at the item's anchor and capital middle,
 `UI_VALIGN_MIDDLE`, aligned left, centred or right, at the em times the
-vertical scale rounded to whole y units (one atlas per size). Arimo is
-about 1.3 times wider than the sheets' lettering at the same capital
-height, so a line longer than the room its anchor leaves in the rectangle
-is set smaller to fit, down to 60 %, as the Settings rows are. Light rows
-draw with `UI_HALO` in the sprite's colour; dark rows draw black (the
-colour's RGB zeroed, its alpha kept) without a rim and skip the additive
-glow. The draws are keyed by the row and the pass for the presenter's
+vertical scale rounded to whole y units (one atlas per size). A line
+longer than the room its anchor leaves in the rectangle is set smaller to
+fit, down to 60 %, as the Settings rows are (Arimo is about 1.3 times wider
+than the sheets' lettering at the same capital height; the game face is the
+sheets' own width, so its words fit where the sprites did). Light rows
+draw with `UI_HALO` in the sprite's colour (the game face: the glyphs' own
+rim); dark rows draw black (the colour's RGB zeroed, its alpha kept) without
+a rim and skip the additive glow. The draws are keyed by the row and the pass for the presenter's
 interpolation, as the port rows are. The language is `ui_GetLanguage()`,
 which follows `NonLinearCameraMove`, so a language change in Settings
 shows in the game's menus at once (the textures follow only at their next
@@ -1156,7 +1379,12 @@ one.
   `settings_save_preview_1080_classic.png`); the music gallery with a
   stream playing (its bar and transport, `settings_music_1080.png`) and the
   model viewer's rows and prompts as model_viewer.c lays them out
-  (`settings_viewer_1080.png`), the same two ways. The button glyphs there
+  (`settings_viewer_1080.png`), the same two ways. Package GFONT: with
+  `gamefont.bin` (font_coverage's, from the disc) every screen is drawn in
+  the game face; then a subtitle (English block 1) and staff roll lines
+  through their hooks (`settings_subtitle_roll_1080.png`), and that frame
+  and the Settings page with `port_font = "arimo"` beside them
+  (`settings_subtitle_roll_1080_arimo.png`, `settings_main_1080_arimo.png`). The button glyphs there
   are drawn stand-ins of the real sheets (no disc data in the test), bound
   through a TEX0 resolver at the glyphs' rectangles.
 - `font_edge_test` (ctest `font_edge`, package DEF, exit 77 without a
@@ -1168,8 +1396,30 @@ one.
   drawn with plain quads and to the frame with no renderer; a fade at 0x80
   hides a row and at 0x40 halves it, the letterbox cuts it at its band, a
   KEEP after it drops it and a keep frame's row after its KEEP is drawn.
+  Package GFONT: with a synthetic game face loaded (built by the builder
+  from a drawn sheet of "I" and "L"), the "H" it lacks is Arimo and still
+  has at most one pixel between on an edge at 1080p (the edge check is
+  Arimo's), while the game face's "I", its bitmap scaled bilinearly, is soft
+  by design (3 pixels between) and not held to it.
   Writes `font_edge_<lines>.png`, `font_edge_<lines>_quads.png`,
-  `font_edge_original.png` and `font_edge_letterbox.png`.
+  `font_edge_original.png`, `font_edge_letterbox.png`,
+  `font_edge_1080_fallback.png` and `font_edge_1080_game.png`.
+- `game_font_test` (ctest `game_font`, CPU, package GFONT): the builder on a
+  synthetic sheet of block letters H, I, L, T with a dark rim, in "H I L T",
+  "HILT" (twice) and "LITH" with the T touching the H: every line aligned,
+  the touching pair split (one split), 16 letters and 4 characters each
+  seen 4 times, each ink cell the letter's width plus its border, the main
+  cell the letter's columns and the line's rows, the caps 10 columns; a
+  one-word sheet's "HILT" set again from the atlas and drawn dimmed as the
+  sprite is (alpha in black, light added) against the sheet's sprite drawn
+  the same way, every texel within two of the ink within 2 levels (0); through font.c, "HILT" measuring the drawn word, a junction
+  the drawn two texels and the space the drawn gap less the bearings; H
+  and the space from the game face, x from Arimo (logged once), U+4E2D
+  from neither; `[game] port_font = "arimo"` serving H from Arimo; a blob
+  of another version or cut short refused.
+- `font_coverage_test` (ctest `font_coverage`, CPU): "Coverage" above; with
+  the disc it builds the game face and writes it for the tests after it
+  (fixture `gamefont`).
 - `menu_text_test` (ctest `menu_text`, exit 77 without a Vulkan device
   after the CPU checks): the table's integrity in every language; with the
   disc image (`ICO_DISC_IMAGE`), every row's rectangle against the boot
@@ -1198,7 +1448,9 @@ one.
   one black and a play-time figure white without a rim through the real
   `layout_texture.c`; on the device, the title's New
   Game row painted inside its rectangle and rim only
-  (`menu_text_scene.png`).
+  (`menu_text_scene.png`; with `gamefont.bin` in the game face at the
+  sheet's own size, its rim's reach of 7 texels allowed round the
+  rectangle).
 - `credits_test` (ctest `credits`, CPU; `port/game/test/`): the game's
   `staffroll.c` run to its end over a short table in the disc's forms, the
   port credit's lines posted after the disc's, the heading then the name
