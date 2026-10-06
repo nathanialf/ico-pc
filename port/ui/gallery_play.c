@@ -102,7 +102,6 @@ static int s_titleWas;
 static int s_seId = -1;
 static struct SqEntry *s_bank;
 static void *s_bankHd;
-static int s_bankNo;
 
 static struct {
     int num, seg, addr;
@@ -336,7 +335,6 @@ static int ensureBank(int no)
         return -1;
     }
     s_bankHd = hd;
-    s_bankNo = no;
     soundSeKindBuild();
     fprintf(stderr, "gallery: bank %d (%s) loaded at SPU 0x%X, %d bytes\n", no, seFile[no].bdPath,
             s_bank->spu.buf.addr, s_bank->spu.buf.size);

@@ -450,7 +450,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog rd_blur rd_raw rd_present rd_crt rd_interp rd_mirror PROPERTIES ENVIRONMENT
+                             rd_fog rd_blur rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_perf PROPERTIES ENVIRONMENT
                                                                            "${_env}")
     endif()
 endif()

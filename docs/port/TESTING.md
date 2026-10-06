@@ -379,7 +379,21 @@ runs the game.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` builds `linux-x64` headless and window,
-`linux-x64-clang` and `win-x64` on every push and pull request, runs `ctest`
-on the Linux builds with lavapipe as the Vulkan device, and has no disc
-image. docs/BUILDING.md lists its steps.
+`.github/workflows/ci.yml` runs on every push and pull request, with no
+disc image, in two jobs side by side:
+
+| job | builds | tests |
+| --- | --- | --- |
+| `linux` | the hygiene checks, then `linux-x64` headless, `linux-x64` window, `linux-x64-clang`, `win-x64` | `ctest` on the three Linux builds; `win-x64` checks that `ico_pc.exe` and `SDL3.dll` exist |
+| `extra` (matrix) | `asan`, `fptrap`, `win-x64-clang`, one runner each | `ctest` on `asan` and `fptrap`; `win-x64-clang` checks that `ico_pc.exe` and `SDL3.dll` exist |
+
+`ctest` uses lavapipe as the Vulkan device; the tests that need the disc
+exit 77 and are reported as skipped. docs/BUILDING.md lists the steps.
+
+On `asan`, the Vulkan tests run with `ASAN_OPTIONS=detect_leaks=0` (the
+driver's allocations at `vkDestroyInstance`, port/rhi/CMakeLists.txt). With
+the disc present, the three tests that run the headless game
+(`model_viewer_headless`, `gallery_headless`, `credits_headless`) fail on
+`asan` at `fumi/isys/gobj.c`'s pointer arithmetic on a null table
+([`BOOT_DIAG.md`](BOOT_DIAG.md), "ICO_HEAP_ASAN"); without the disc, as in CI,
+they skip.

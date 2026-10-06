@@ -164,6 +164,16 @@ While `ICO_STRICT_WARNINGS` is off the build prints many C89-era warnings,
 most of them `-Wstrict-prototypes`. The three warnings that option promotes
 can become errors once their counts reach zero.
 
+The port's own code (`port/`, every target compiled with
+`ICO_PORT_WARNINGS`) builds with `-Wall -Wextra -Wno-unused-parameter
+-Werror` on every preset, gcc and clang: a new warning there fails the
+build. The game code (`ico2/`, the generated data tables) and the port
+tests that compile game sources into their executable keep
+`ICO_GAME_WARNINGS`, which only warn. A port TU that includes a game header
+still declaring an unprototyped function (`typedef.h`, `thread.h`, `act.h`,
+`s_init.h`, `debug.h`) adds `-Wno-strict-prototypes` for itself in its
+`CMakeLists.txt`; no other warning is switched off for port code.
+
 ## The game code
 
 `ico2/` (and `sce/` and `ico2/vusrc/` where the port compiles them) is the
@@ -228,7 +238,9 @@ ASCII patch and `git apply`.
 hook that runs, in order:
 
 1. `tools/check_no_rom.sh`: refuses disc images, executables, extracted
-   assets and large binaries ([`LEGAL.md`](LEGAL.md));
+   assets, large binaries and integer tables ([`LEGAL.md`](LEGAL.md)). It
+   reads the staged blobs (`git show :path`), so what it judges is what
+   is committed;
 2. `tools/format.sh --check` on the staged C;
 3. the three freshness checks CI also runs: `tools/gen_data_desc.py
    --check` (`port/data/gen/`), `tools/gen_layout_asserts.py --check`
@@ -252,8 +264,11 @@ the test executables without running them. A test that needs the disc
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request: one Linux
-job (`ubuntu-24.04`), no secrets, no disc image.
+`.github/workflows/ci.yml` runs on every push and pull request: two Linux
+jobs (`ubuntu-24.04`) side by side, no secrets, no disc image. `linux` runs
+the steps below in order; `extra` is a matrix of three runners, each with
+the same host packages, venv and (restored, never saved) toolchain cache,
+that builds one more preset.
 
 | step | what |
 | --- | --- |
@@ -267,6 +282,9 @@ job (`ubuntu-24.04`), no secrets, no disc image.
 | `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |
 | `linux-x64-clang` | build, `ctest` |
 | `win-x64` | cross-compile the window build and `ico_pc.exe`; the tests are built, not run |
+| `extra`: `asan` | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
+| `extra`: `fptrap` | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
+| `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
 
 Run the same steps locally before pushing.
 

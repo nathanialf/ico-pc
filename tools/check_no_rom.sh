@@ -17,11 +17,16 @@
 #      except the named text files below.
 #   4. ELF magic (\x7fELF) sniff regardless of extension.
 #   5. Raw byte-array initializers in tracked C (D_<VMA> names), and any
-#      large all-integer-literal array initializer in ico2/ and sce/ whatever
-#      its name (tools/check_int_arrays.py, with a per-table reviewed
-#      exemption list).
+#      large all-integer-literal array initializer in ico2/, sce/ and port/
+#      whatever its name (tools/check_int_arrays.py, with a per-table
+#      reviewed exemption list).
 #   6. Any file whose path matches our gitignore patterns but is somehow
 #      tracked anyway (checked against the patterns, not the index).
+#
+# In pre-commit mode (something is staged) the content rules (3, 4, 5, 5b)
+# read the staged blobs (`git show :path`), not the working tree: what is
+# committed is the index, and a file edited after `git add` must not hide
+# (or fake) a hit.
 #
 # Exit non-zero on any hit.
 # =============================================================================
@@ -32,13 +37,21 @@ set -euo pipefail
 # NUL-separated (-z): without it git C-quotes a path with a non-ASCII byte
 # ("d\303\244ta.bin" in quotes), and the quoted name then fails every rule
 # below (no extension match, no such file for the size and ELF checks).
+staged=0
 if [[ -n "${FILES:-}" ]]; then
     mapfile -t files < <(printf "%s\n" "$FILES" | tr ' ' '\n')
 elif git diff --cached --name-only --quiet 2>/dev/null; then
     mapfile -d '' -t files < <(git ls-files -z)
 else
+    staged=1
     mapfile -d '' -t files < <(git diff --cached --name-only -z --diff-filter=ACMR)
 fi
+
+# The content of a file to judge: its staged blob in pre-commit mode, else
+# the working tree file.
+have() { if ((staged)); then git cat-file -e ":$1" 2>/dev/null; else [[ -f "$1" ]]; fi; }
+blob() { if ((staged)); then git show ":$1"; else cat -- "$1"; fi; }
+blob_size() { if ((staged)); then git cat-file -s ":$1"; else wc -c <"$1"; fi; }
 
 bad=0
 note() { echo "check_no_rom: $*" >&2; bad=1; }
@@ -80,7 +93,7 @@ done
 src_large_re='^(ico2|sce)/.*\.(c|h|c\.inc|inc)$'
 for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
-    [[ ! -f "$f" ]] && continue
+    have "$f" || continue
     # Symbol-address files (config/symbol_addrs.<ver>.txt: pal, us, aug6) are
     # `Name = 0xADDR; // type:func` declarations, no byte data. The aug6 and
     # PAL ones are large (>256 KiB) only because those builds are fully named
@@ -92,7 +105,7 @@ for f in "${files[@]}"; do
     # rows and their per-row reasoning comments, no byte data (the comments
     # pushed it past 256 KiB).
     case "$f" in config/ico.*.yaml) continue ;; esac
-    size=$(wc -c < "$f")
+    size=$(blob_size "$f")
     if [[ "$f" =~ $src_large_re ]]; then
         if (( size > 8388608 )); then
             note "tracked source >8MiB (suspicious): $f ($size bytes)"
@@ -105,8 +118,8 @@ done
 # --- 4. ELF magic sniff ---
 for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
-    [[ ! -f "$f" ]] && continue
-    head4=$(head -c 4 "$f" 2>/dev/null | od -An -tx1 -N4 | tr -d ' \n' || true)
+    have "$f" || continue
+    head4=$(blob "$f" 2>/dev/null | head -c 4 | od -An -tx1 -N4 | tr -d ' \n' || true)
     if [[ "$head4" == "7f454c46" ]]; then
         note "file starts with ELF magic: $f"
     fi
@@ -135,17 +148,17 @@ attr_opt_re='(__attribute__[[:space:]]*\(\([[:space:]]*section[[:space:]]*\([[:s
 raw_byte_re="^[[:space:]]*${attr_opt_re}(const[[:space:]]+)?${byte_type_re}[[:space:]]+D_[0-9A-Fa-f]{8}[[:space:]]*\[[0-9]+\][[:space:]]*=[[:space:]]*\{[[:space:]]*0x[0-9A-Fa-f]{1,2}[[:space:]]*,[^}]*\}"
 for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
-    [[ ! -f "$f" ]] && continue
     # Only tracked C under ico2/ and sce/.
     case "$f" in
         ico2/*.c|ico2/*.c.inc|sce/*.c) ;;
         *) continue ;;
     esac
-    if grep -nE "${raw_byte_re}" "$f" >/dev/null 2>&1; then
+    have "$f" || continue
+    if blob "$f" 2>/dev/null | grep -nE "${raw_byte_re}" >/dev/null 2>&1; then
         note "raw byte-array initializer in tracked source: $f"
         note "  ICO data sections must be typed (string literal / int / float /"
         note "  named pointer array / struct), not raw bytes. See docs/LEGAL.md."
-        grep -nE "${raw_byte_re}" "$f" 2>&1 | head -3 >&2
+        blob "$f" 2>/dev/null | grep -nE "${raw_byte_re}" 2>&1 | head -3 >&2
     fi
 done
 
@@ -155,20 +168,27 @@ done
 # the same shape (bytes or words copied out of the binary); the C the
 # decompilation writes uses typed forms. tools/check_int_arrays.py finds them
 # and keeps the reviewed exemptions per (file, array), each with its reason
-# (docs/LEGAL.md, "Exemptions from the IP-safety scan").
+# (docs/LEGAL.md, "Exemptions from the IP-safety scan"). port/ is scanned
+# too: the port's own tables (hardware constants, test vectors, generated
+# test shaders) are listed there one by one, so a disc table pasted into
+# port/ fails like one in ico2/.
 int_scan=()
 for f in "${files[@]}"; do
     [[ -z "$f" ]] && continue
-    [[ ! -f "$f" ]] && continue
     case "$f" in
-        ico2/*.c|ico2/*.h|ico2/*.inc|sce/*.c|sce/*.h|sce/*.inc) int_scan+=("$f") ;;
+        ico2/*.c|ico2/*.h|ico2/*.inc|sce/*.c|sce/*.h|sce/*.inc) ;;
+        port/*.c|port/*.h|port/*.inc) ;;
+        *) continue ;;
     esac
+    have "$f" && int_scan+=("$f")
 done
+int_args=()
+((staged)) && int_args+=(--staged)
 if (( ${#int_scan[@]} )); then
     py="$(command -v python3 || true)"
     if [[ -z "$py" ]]; then
         note "rule 5b needs python3 (tools/check_int_arrays.py)"
-    elif ! hits="$("$py" "$(dirname "${BASH_SOURCE[0]}")/check_int_arrays.py" "${int_scan[@]}")"; then
+    elif ! hits="$("$py" "$(dirname "${BASH_SOURCE[0]}")/check_int_arrays.py" "${int_args[@]}" "${int_scan[@]}")"; then
         note "large integer-array initializer in tracked source:"
         printf "%s\n" "$hits" | head -20 >&2
         note "  a table of integer literals is the shape of copied bytes; write it"

@@ -64,6 +64,7 @@
 #ifdef SETTINGS_RENDER
 
 #include "DisplayList.h"
+#include "GifPacket.h"
 #include "GifHost.h"
 #include "rd_internal.h"
 #include "ui_internal.h"

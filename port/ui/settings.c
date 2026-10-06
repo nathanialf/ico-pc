@@ -975,9 +975,10 @@ static void setNote(int row, int strId)
 
 static int settingsProc(int first, int item);
 static const UiListDef kAchDef, kRemapDef, kGalDef;
-/* the music gallery's progress bar (its rim, track and fill, the elapsed
-   and total times) and its transport, a line of the game's button glyphs */
-static int s_galRim = -1, s_galTrack = -1, s_galFill = -1, s_galTime = -1, s_galTotal = -1;
+/* the music gallery's progress bar (its fill, the elapsed and total times;
+   the rim and track never change after they are added) and its transport,
+   a line of the game's button glyphs */
+static int s_galFill = -1, s_galTime = -1, s_galTotal = -1;
 static UiHint s_galHint;
 static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
@@ -1005,8 +1006,8 @@ static void buildGalleryBar(void)
     /* the letters' colour: the row's own */
     static const unsigned char kFill[4] = {0x80, 0x80, 0x80, 0x80};
     /* the rim a field line round the track */
-    s_galRim = lt_ext_AddRect(GAL_BAR_X - 2, GAL_BAR_Y - 1, GAL_BAR_W + 4, GAL_BAR_H + 4, kRim);
-    s_galTrack = lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kTrack);
+    (void)lt_ext_AddRect(GAL_BAR_X - 2, GAL_BAR_Y - 1, GAL_BAR_W + 4, GAL_BAR_H + 4, kRim);
+    (void)lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kTrack);
     s_galFill = lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kFill);
     lt_ext_SetFill(s_galFill, 0.0f);
     /* the times' capitals on the bar's middle line (a label's capitals sit

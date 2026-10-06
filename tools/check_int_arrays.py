@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/check_int_arrays.py FILE...
+"""tools/check_int_arrays.py [--staged] FILE...
 
 Rule 5b of tools/check_no_rom.sh: flags any large array initialiser of an
 integer type in C source whose elements are all integer literals, whatever
@@ -22,9 +22,13 @@ below: a new table in an exempted file, or an exempted table renamed, is
 flagged again. Prints one line per hit (path:line: name[count]) and exits 1
 if any. docs/LEGAL.md, "Exemptions from the IP-safety scan", explains the
 list.
+
+--staged reads each FILE's staged blob (`git show :FILE`) instead of the
+working tree, so the pre-commit hook judges what is being committed.
 """
 
 import re
+import subprocess
 import sys
 
 MIN_ELEMENTS = 64
@@ -40,6 +44,12 @@ _ICO2 = (
     "decompiled source and compiled into the port (docs/LEGAL.md keeps the "
     "data-only members out; code members' own tables are part of the "
     "re-derived source). "
+)
+
+_PORT = "port/ is the PC port's own code, not decompiled from the game. "
+_SHADER = (
+    "compiled shader bytecode of the RHI test's own rhi_test.hlsl, generated "
+    "by port/rhi/test/shaders/gen_shaders.sh (DXC)."
 )
 
 # (path, array name) -> reason. Every entry is reviewed; see
@@ -80,6 +90,36 @@ EXEMPT = {
     ("ico2/common/src/debug_exception.c", "dbgFont"): _ICO2
     + "the exception report's 8x8 font; as debug.c fontBitmap (flagged for "
     "review in F2).",
+    # port/: the PC port's own code. (port/data/extract.c's DATA.DF manifest,
+    # dfMembers, is an array of DfMember structs, offsets, sizes and CRC-32s
+    # of the user's disc, not of an integer type, so the scan never sees it.)
+    ("port/audio/spu2_tables.c", "spu2_gauss"): _PORT
+    + "the SPU's 4-point Gaussian interpolation table, a documented hardware "
+    "constant transcribed from psx-spx (the file header cites the page and "
+    "commit); not from the game's disc.",
+    ("port/math/newlib/ico_libm.c", "ico_rem_two_over_pi"): _PORT
+    + "fdlibm's published table of the bits of 2/pi (Sun notice), a "
+    "mathematical constant; as sce/libm/math/ef_rem_pio2.c two_over_pi.",
+    ("port/fmv/test/fmv_test.c", "es"): _PORT
+    + "a hand-written MPEG elementary stream of start codes and filler bytes "
+    "the unit splitter is tested on (each line commented).",
+    ("port/render/test/rd_fog_test.c", "kColT4"): _PORT
+    + "the GS PSMT4 column layout (which nibble each of 32 x 4 pixels is), "
+    "the reference swizzle the test checks the port's against.",
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_vs_main"): _PORT
+    + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_ps_dual"): _PORT
+    + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_ps_color"): _PORT
+    + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_ps_tex"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_ps_uint"): _PORT
+    + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_vs_main"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_ps_dual"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_ps_color"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_ps_tex"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_ps_uint"): _PORT + _SHADER,
 }
 
 INT_TYPE = (
@@ -144,14 +184,27 @@ def body_at(src, start):
     return src[start + 1 :]
 
 
-def scan(path):
-    """[(line, name, count)] for every flagged initialiser in path."""
-    hits = []
+def read_source(path, staged):
+    """path's text: the staged blob with staged, else the working tree file."""
+    if staged:
+        r = subprocess.run(["git", "show", ":" + path], capture_output=True)
+        if r.returncode != 0:
+            return None
+        return r.stdout.decode("latin-1")
     try:
         with open(path, encoding="latin-1") as f:
-            src = strip_comments(f.read())
+            return f.read()
     except OSError:
+        return None
+
+
+def scan(path, staged=False):
+    """[(line, name, count)] for every flagged initialiser in path."""
+    hits = []
+    text = read_source(path, staged)
+    if text is None:
         return hits
+    src = strip_comments(text)
     for m in DECL_RE.finditer(src):
         brace = m.end() - 1
         body = body_at(src, brace)
@@ -167,8 +220,12 @@ def scan(path):
 
 def main(argv):
     bad = False
-    for path in argv[1:]:
-        for line, name, count in scan(path):
+    args = argv[1:]
+    staged = bool(args) and args[0] == "--staged"
+    if staged:
+        args = args[1:]
+    for path in args:
+        for line, name, count in scan(path, staged):
             if (path, name) in EXEMPT:
                 continue
             print(f"{path}:{line}: {name}[{count} integer literals]")

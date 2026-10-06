@@ -787,11 +787,14 @@ typedef struct { /* field names derived */
     char *end;
 } GifDpk; /* derived name */
 
-/* a packet doubleword with its two word halves */
+/* a packet doubleword with its two word halves. Aligned 4: the packet
+   builders write VIF codes and GIF tags through it at any word boundary
+   (the EE stores them with sw); only the type of the access, never a
+   record's layout (it is used through pointer casts only). */
 typedef union { /* field names derived */
     long long d;
     int w[2];
-} GifPkWord; /* derived name */
+} GifPkWord __attribute__((aligned(4))); /* derived name */
 
 /* a gamesys object-info record as debug.c reads it: the kind word */
 typedef struct { /* field names derived */

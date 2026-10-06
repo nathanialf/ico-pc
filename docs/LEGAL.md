@@ -136,11 +136,11 @@ exemption.
 ### Exemptions from the IP-safety scan
 
 `tools/check_no_rom.sh` rule 5b fails on any array initializer of 64 or more
-integer literals in `ico2/` or `sce/`, whatever its name, since that is the
-shape of bytes copied out of the binary. The tables it finds that are
+integer literals in `ico2/`, `sce/` or `port/`, whatever its name, since that
+is the shape of bytes copied out of the binary. The tables it finds that are
 allowed are listed one by one, by file and array name, with the reason, in
 `tools/check_int_arrays.py` (`EXEMPT`); a new table, or a renamed one, fails
-again until it is reviewed. They fall into three groups:
+again until it is reviewed. They fall into four groups:
 
 - `sce/` (none of it is compiled into the PC program; it is the record of
   the period library members the PS2 build linked):
@@ -161,6 +161,15 @@ again until it is reviewed. They fall into three groups:
   members' `.rodata`. Listed so the scan passes, and marked in the
   exemption list as under review: if they are judged asset content, the fix
   is a port-owned replacement font, not a wider exemption.
+- The port's own tables in `port/`: the SPU's Gaussian interpolation table
+  (`port/audio/spu2_tables.c`, transcribed from psx-spx), fdlibm's 2/pi
+  bits (`port/math/newlib/ico_libm.c`), two test vectors (a hand-written
+  MPEG stream in `port/fmv/test/fmv_test.c`, the GS PSMT4 column layout in
+  `port/render/test/rd_fog_test.c`) and the RHI test's compiled shaders
+  (`port/rhi/test/shaders/`, generated from its own `rhi_test.hlsl`).
+  `port/data/extract.c`'s DATA.DF manifest (offsets, sizes and CRC-32s of
+  the user's disc, no bytes of it) is an array of structs, not of an
+  integer type, so the rule does not see it.
 
 ## Public reverse-engineering material (allowed as references)
 

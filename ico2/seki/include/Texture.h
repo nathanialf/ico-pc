@@ -56,10 +56,10 @@ typedef struct TexExt { /* field names derived */
     void *clutA;
     void *clutB;
     void *clutOrg; /* the untouched copy the other two are restored from */
-    /* one byte per display list priority: the slot's transfer-done flag */
-    char transDone[8];
-    unsigned int pad68;
-    unsigned char pad6C;
+    /* one byte per display list priority (13, DisplayList.c's dlEntries):
+       the slot's transfer-done flag. The EE record named eight and two
+       pads after them; priorities 8 to 12 wrote into those pads. */
+    char transDone[13];
     unsigned short used : 1;
     /* the mipmap level the record is drawn from */
     unsigned short level : 15;

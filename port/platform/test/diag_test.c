@@ -70,6 +70,11 @@ static void exit_hook(const char *reason)
 
 static int sema;
 
+/* the store to NULL is the point: UBSan (the asan preset) must let it
+   fault so the crash report is what is tested */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((no_sanitize("undefined")))
+#endif
 static void segv_thread(void *arg)
 {
     volatile int *p = (volatile int *)arg;

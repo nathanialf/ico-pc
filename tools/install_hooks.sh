@@ -18,7 +18,9 @@ fi
 cat > "$HOOK" <<'EOF'
 #!/usr/bin/env bash
 # Auto-installed by tools/install_hooks.sh. Runs, in order:
-#   1. tools/check_no_rom.sh        IP-safety scan of the staged files
+#   1. tools/check_no_rom.sh        IP-safety scan of the staged files; with
+#                                   something staged it reads the staged
+#                                   blobs (git show :path), not the worktree
 #   2. tools/format.sh --check      staged C must be clang-formatted
 #   3. freshness of the generated files (the same three CI runs):
 #        tools/gen_data_desc.py --check       port/data/gen/

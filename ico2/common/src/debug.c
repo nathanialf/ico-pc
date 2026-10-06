@@ -596,12 +596,13 @@ static DebugBar debugBars[1024]; /* derived name */
 /* two pages of 26 {count, mark} pairs */
 static int loadInfoSeg[2][26][2]; /* derived name */
 
-/* one 64-bit packet slot, written whole or as its two 32-bit halves */
+/* one 64-bit packet slot, written whole or as its two 32-bit halves; aligned
+   4 as typedef.h's GifPkWord, since the packet is written at any word */
 typedef union { /* field names derived */
     long long d;
     int w[2];
     float f[2];
-} DbgPkWord; /* derived name */
+} DbgPkWord __attribute__((aligned(4))); /* derived name */
 
 /* a whole quadword, for the vertex copies */
 typedef ICO_QW Qw128;

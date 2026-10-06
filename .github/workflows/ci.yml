@@ -1,7 +1,9 @@
 # CI for the PC port. ROM-free by construction: no secrets, no disc image, no
 # baserom/. Tests that need the user's disc exit 77 and ctest reports them as
 # skipped (SKIP_RETURN_CODE in the CMakeLists), which is not a failure.
-# docs/BUILDING.md ("Continuous integration") describes the job.
+# docs/BUILDING.md ("Continuous integration") describes the jobs: `linux`
+# (the hygiene checks and the four main builds) and `extra`, a matrix of the
+# sanitizer, float-trap and Windows clang builds that runs beside it.
 name: ci
 
 on:
@@ -107,3 +109,58 @@ jobs:
           $CMAKE/cmake --build build-host/win-x64 --parallel
           test -f build-host/win-x64/ico_pc.exe
           test -f build-host/win-x64/SDL3.dll
+
+  # The presets the main job does not build, one runner each so the job
+  # stays well inside its timeout. Each restores the toolchain the `linux`
+  # job caches (and fetches it on a miss); only `linux` saves it.
+  extra:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [asan, fptrap, win-x64-clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 curl xz-utils python3 python3-venv \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libvulkan1 mesa-vulkan-drivers
+
+      - name: Python tools (venv)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r tools/requirements.txt
+
+      - name: Toolchain and dependency cache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: tools/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh') }}
+
+      - name: Fetch toolchain and dependencies
+        run: tools/fetch_toolchain.sh
+
+      # asan: AddressSanitizer + UBSan (Debug, -O1); fptrap: float
+      # divide-by-zero and invalid trap. Headless with the exe linked, as the
+      # linux-x64 headless step.
+      - name: ${{ matrix.preset }}
+        if: matrix.preset != 'win-x64-clang'
+        run: |
+          $CMAKE/cmake --preset ${{ matrix.preset }} -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC
+          $CMAKE/cmake --build build-host/${{ matrix.preset }} --parallel
+          $CMAKE/ctest --test-dir build-host/${{ matrix.preset }} --output-on-failure --parallel 4
+
+      - name: win-x64-clang (cross-compiled; the tests are built, not run)
+        if: matrix.preset == 'win-x64-clang'
+        run: |
+          # the window build, as win-x64 (the preset itself is headless)
+          $CMAKE/cmake --preset win-x64-clang -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON
+          $CMAKE/cmake --build build-host/win-x64-clang --parallel
+          test -f build-host/win-x64-clang/ico_pc.exe
+          test -f build-host/win-x64-clang/SDL3.dll

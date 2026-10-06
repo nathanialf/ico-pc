@@ -95,7 +95,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     list(APPEND ICO_GAME_WARNINGS -Wno-unknown-warning-option -Wno-invalid-source-encoding)
 endif()
 
-set(ICO_PORT_WARNINGS -Wall -Wextra -Wno-unused-parameter
+set(ICO_PORT_WARNINGS -Wall -Wextra -Wno-unused-parameter -Werror
     -Werror=return-type -Werror=implicit-function-declaration -Werror=strict-prototypes)
 
 # Sanitizers (the asan preset): ICO_SANITIZE=address,undefined.

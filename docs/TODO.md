@@ -138,15 +138,6 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 None of these needs hardware; each was filed and not done.
 
-- **Warnings as errors in `port/` (follow-up).** Add `-Werror` to `ICO_PORT_WARNINGS`
-  (`cmake/IcoFlags.cmake`) once the game headers that port TUs include
-  (`typedef.h`, `thread.h`, `act.h`, `s_init.h`, `debug.h`) stop raising
-  `-Wstrict-prototypes`, or compile those TUs with `-Wno-strict-prototypes`.
-- **CI coverage (follow-up).** Add the `asan` and `fptrap` presets (build and ctest) and
-  a `win-x64-clang` build to `.github/workflows/ci.yml`.
-- **`check_no_rom.sh` scope (follow-up).** Rule 5b scans only `ico2/` and `sce/`; widen
-  it to `port/` (exempting `port/data/extract.c`'s DATA.DF manifest) and
-  read staged blobs (`git show :path`) in pre-commit mode.
 - **D3D12 buffer copy states (needs Windows hardware).** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
 

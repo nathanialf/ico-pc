@@ -56,6 +56,21 @@ if(NOT WIN32)
     add_library(ico_dpbit_ref STATIC "${ICO_DPBIT_DIR}/dp-bit.c" "${ICO_DPBIT_DIR}/fp-bit.c")
     target_compile_definitions(ico_dpbit_ref PRIVATE ${ICO_DPBIT_RENAMES})
     target_compile_options(ico_dpbit_ref PRIVATE -w -fno-builtin -fno-strict-aliasing)
+    # The period code reads locals it never set: dptofp passes the
+    # normal_exp __unpack_d leaves unset for a NaN or infinity, which
+    # __pack_f then ignores. clang's -O2 treats that uninitialized argument
+    # as undefined behaviour and folds dptofp of a NaN to infinity; zeroing
+    # the locals gives the read a value, as the EE's stack always did.
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag(-ftrivial-auto-var-init=zero ICO_HAS_AUTO_VAR_INIT_ZERO)
+    if(ICO_HAS_AUTO_VAR_INIT_ZERO)
+        target_compile_options(ico_dpbit_ref PRIVATE -ftrivial-auto-var-init=zero)
+    endif()
+    # and shifts a fraction into the sign bit of a long long (fptodp), as
+    # the EE's sll did; UBSan (the asan preset) would stop there
+    if(ICO_SANITIZE)
+        target_compile_options(ico_dpbit_ref PRIVATE -fno-sanitize=shift)
+    endif()
 
     add_executable(softdouble_test test/softdouble_test.c)
     target_compile_options(softdouble_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
