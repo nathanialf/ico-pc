@@ -35,10 +35,18 @@ from headless_common import PadScript, fresh_work
 # the boot: port/input/pad-boot.txt's presses up to the opening demo's skip
 # (the title shows at about Main tick 399), then Down to Settings, Cross, Down six
 # times to Extras, Cross, Down twice to Credits, Cross (headless_common.py)
-# the roll takes about 5,900 Main ticks from the STAFF1 stage; the title is
-# back about 6,000 ticks after the Cross (Main tick 6,840), and the run goes
-# on for 1,500 ticks of title
-TICKS = 8400
+# the video mode the run is given (config.toml [video] video_mode) and its
+# Main ticks a second, ((60 - 10 * PAL) / 2): 25 at "pal50", 30 at "60hz"
+# (the port's boot default since the boot lost its 50/60 Hz sign)
+VIDEO_MODE = "60hz"
+TPS = {"pal50": 25, "60hz": 30}[VIDEO_MODE]
+# the roll is paced in seconds: the title is back about 240 s after the
+# Cross (Main tick 815), at Main tick 7,972 at 60 Hz (6,840 at 50 Hz).  The
+# run allows those seconds at TPS, then 1,500 ticks of title and 600 of
+# margin
+CROSS_TICK = 815
+ROLL_S = 240
+TICKS = CROSS_TICK + ROLL_S * TPS + 1500 + 600
 
 
 def pad_script(src):
@@ -68,12 +76,14 @@ def run(exe, iso, work, ticks, pad, unlock):
     exe_copy = fresh_work(exe, work)
     with open(os.path.join(work, "pad.txt"), "w") as f:
         f.write(pad)
+    with open(os.path.join(work, "config.toml"), "w") as f:
+        f.write('[video]\nvideo_mode = "%s"\n' % VIDEO_MODE)
     with open(os.path.join(work, "ico-pc.ini"), "w") as f:
         f.write("iso=%s\nsaves=%s\nticks=%d\ntrace=0\npad_script=%s\n%s" %
                 (os.path.abspath(iso), os.path.join(work, "saves"), ticks,
                  os.path.join(work, "pad.txt"), "unlock_credits=1\n" if unlock else ""))
     r = subprocess.run([exe_copy], cwd=work,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=270)
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=450)
     log = open(os.path.join(work, "logs", "ico-pc.log"), errors="replace").read()
     return r.returncode, log, listing(os.path.join(work, "saves"))
 
