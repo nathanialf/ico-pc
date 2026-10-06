@@ -3,32 +3,34 @@
 Work that is wanted but not done, and facts that are not yet verified. Each
 entry says what, why it matters, and where it would go. Finished work is not
 listed here; `git log` has it. The other documents keep at most a one-line
-pointer to this file.
+pointer to this file. What is left needs something the code cannot give:
+Windows or Steam Deck hardware, a PS2 capture, a play-through, a native
+speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 ## Platforms
 
-- **Run the D3D12 backend on Windows hardware.** It builds, but it has never
+- **Run the D3D12 backend on Windows hardware (needs Windows hardware).** It builds, but it has never
   run on a real device (`port/rhi/d3d12/README.md`). It also has no GPU
   counters, timestamps or mailbox present: `rhi_GetStats`,
   `rhi_TimestampsSupported` and `rhi_PresentMailbox` are stubs in
   `port/rhi/d3d12/d3d12_device.c`, so its performance lines carry CPU phases
   only. Run the three checks in docs/port/TESTING.md ("The renderer
   backends"), then add timestamp queries in `port/rhi/d3d12/`.
-- **Try the Linux package on a Steam Deck.** docs/port/STEAMDECK.md
+- **Try the Linux package on a Steam Deck (needs a Steam Deck).** docs/port/STEAMDECK.md
   describes what the package is built to do; the steps (first-run file
   dialog through zenity, Game Mode, the built-in controls) have not been
   checked on a Deck.
-- **Shaders build only on a Linux x86-64 host.** DXC is pinned for Linux
+- **Shaders build only on a Linux x86-64 host (needs Windows or arm64 hardware to pin).** DXC is pinned for Linux
   x86-64 alone (`tools/fetch_deps.sh`). Building on Windows or arm64 would
   need another DXC pin and a path in `cmake/IcoShaders.cmake`.
-- **D3D12 headers without LGPL text.** The D3D12 backend compiles against
+- **D3D12 headers without LGPL text (a licence decision, needs a Windows build to check).** The D3D12 backend compiles against
   the mingw-w64 headers, parts of which are LGPL-2.1+ (docs/port/THIRD_PARTY.md).
   If the project wants none, Microsoft's DirectX-Headers (MIT) can replace
   them, pinned in `tools/fetch_deps.sh`.
 
 ## Renderer
 
-- **TEXA before filtering for RGB24 and RGBA16 textures.** `sprite_ps` and
+- **TEXA before filtering for RGB24 and RGBA16 textures (follow-up, shader work; a PS2 capture would confirm the GS side).** `sprite_ps` and
   `vu_ps` expand TEXA after the sampler filters, where the GS expands before.
   With AEM, bilinear edges between texels of different alpha differ (the
   dark-volume composite is off by up to 52 LSB on a one-pixel rim). A manual
@@ -37,7 +39,7 @@ pointer to this file.
 
 ## Interpolation (`port/render/rd_interp.c`)
 
-- **Rope-top presentation and the 60 Hz climb rate.** The floaty stand-up
+- **Rope-top presentation and the 60 Hz climb rate (follow-up filed by the F15 fix; needs a look at dumped frames).** The floaty stand-up
   at the top of a rope was a simulation defect (DIVERGENCES.md F15) and the
   headless replay is clean now, but the drawn pose over that transition was
   not dumped at the Enhanced preset with interpolation on, and the chain
@@ -48,17 +50,17 @@ pointer to this file.
 
 ## Game code and 64-bit safety
 
-- **`rootUpdateY` copies the floor normal on a miss.**
+- **`rootUpdateY` copies the floor normal on a miss (follow-up; needs the ROM's EE frame settled).**
   `sugipon/src/motMan_rootUpdate.c.inc` `rootUpdateY` copies `w.normal` into
   `skelRoot->plane` after `getFieldCollision(&w)` whether or not the ray hit,
   and `w` is not initialised, so on a miss the plane may be a stale stack
   value (the same class as DIVERGENCES F15 and F16). Settle from the ROM
   what the EE's frame holds there, then zero or seed `w`.
-- **`st13c.c` stops an SE handle nobody wrote.** `script/src/st13c.c`
+- **`st13c.c` stops an SE handle nobody wrote (follow-up; needs the PS2's effective value).** `script/src/st13c.c`
   `actSt13cSekizoChk` calls `soundSeDefStop(se)` with `volatile int se` never
   written, reading stack garbage on the PS2 and the host alike. Decide the
   PS2's effective value and pass it (-1 if none).
-- **Freed model images.** Whether anything reads a model image's tables
+- **Freed model images (research).** Whether anything reads a model image's tables
   after the loader frees the image is not settled
   (docs/research/loader-census.md). The decoded tables live outside the
   arena, so the `asan` preset covers them; the image itself is in the arena
@@ -67,31 +69,31 @@ pointer to this file.
 
 ## Floating point
 
-- **VU0 R register (F7).** The LFSR uses PCSX2's taps 4 and 22, not checked
+- **VU0 R register (F7; needs a PS2).** The LFSR uses PCSX2's taps 4 and 22, not checked
   on hardware; the random sequences depend on it (`port/math/matrix.c`).
-- **Exact adder (F1, optional).** An exact model of the PS2 adder in
+- **Exact adder (F1, optional; follow-up, no hardware needed).** An exact model of the PS2 adder in
   `port/math/ps2float.h` would close the 1-ulp difference in effective
   subtraction.
 
 ## Audio
 
-- **Windows audio push cost.** A Windows window-build log showed the
+- **Windows audio push cost (needs Windows hardware).** A Windows window-build log showed the
   per-vsync `audio` phase at 6 to 11 ms, while the SPU2 render itself takes
   under 1 ms; the phase also covers `ico_audio_sdl_push` (SDL's stream lock,
   `port/audio/out_sdl.c`). Running `spu2_bench.exe` on that machine and
   timing the push separately in `audio_host.c` would show where the time
   goes.
-- **Output latency.** The 50 to 70 ms key-on-to-device figure is computed
+- **Output latency (needs Windows and Steam Deck hardware).** The 50 to 70 ms key-on-to-device figure is computed
   from the queue target in `out_sdl.c`, not measured. A loopback measurement
   on Windows and the Steam Deck would confirm or retune it.
-- **Driver details that need a PS2 (A4, A8, A19).** Measure the SPU2 DMA
+- **Driver details (A4, A8, A19; need a PS2).** Measure the SPU2 DMA
   rate (uploads take one frame on the host, which can shift load timing),
   and capture the exponential-decrease envelope's rounding on hardware.
-- **ADPCM filters 5 to 7 on the disc (A3).** Scan the disc's VAG bodies and
+- **ADPCM filters 5 to 7 on the disc (A3; follow-up filed by package AU1, a disc scan).** Scan the disc's VAG bodies and
   `.int` streams for blocks whose filter nibble is 5 to 7 or whose shift is
   13 to 15 (a static read of the data, no hardware needed); none found
   means A3 never applies.
-- **A low-frequency offset after loud events.** A WAV dump of the boot run
+- **A low-frequency offset after loud events (needs a PS2 capture).** A WAV dump of the boot run
   shows a sub-5 Hz offset of up to -5300 on the right channel for about 6 s
   after the loud cut into the opening. An offline reverb test rules out the
   reverb; it is probably in the program material, which only a PS2 capture
@@ -99,48 +101,48 @@ pointer to this file.
 
 ## Films
 
-- **Colour conversion against a real IPU.** `port/shaders/yuv.hlsl`
+- **Colour conversion against a real IPU (needs a PS2 capture).** `port/shaders/yuv.hlsl`
   reproduces PCSX2's reference model bit-exactly, but nobody has compared
   it with PS2 output, so film colours could be a step off.
 
 ## Input and saves
 
-- **Mouse capture on the title and pause screens.** Capture is decided by
+- **Mouse capture on the title and pause screens (needs a play-through on a desktop).** Capture is decided by
   `boyGObj != NULL && game_pause == 0 && data_loading == 0` in
   `port/platform/window_host.c`, derived from the sources, not observed. If
   it is wrong the cursor hides in a menu or the camera moves under it.
-- **The importer on real cards; `.max` and `.cbs`.** `mc_import`
+- **The importer on real cards; `.max` and `.cbs` (needs real card images; package S1).** `mc_import`
   (docs/port/SAVES.md, "Importing saves") is tested only on synthetic
   `.ps2` images and `.psu` files built to the same description it reads.
   Import a real PCSX2 `.ps2`, a plain `.bin` dump and a uLaunchELF `.psu`
   holding ICO's save, and load the save in the game. `.max` (LZARI) and
   `.cbs` are refused; decode them once sample files are at hand.
-- **`IosMcLock` signalling.** The host signals it once per vsync so
+- **`IosMcLock` signalling (research; needs libmc's disassembly).** The host signals it once per vsync so
   `iosMcMgrSync` progresses; whether libmc or the IOP does this on the PS2
   is unknown and affects how fast card requests poll. Settle it from libmc's
   disassembly and note it in SAVES.md and DIVERGENCES.md.
 
 ## Configuration and text
 
-- **Native-speaker review of the French, German, Italian and Spanish port
+- **Native-speaker review (needs native speakers) of the French, German, Italian and Spanish port
   strings.** The port's own strings in `port/ui/strings_{fr,de,it,es}.c`
   (Settings, notes, achievements, popups) are the author's translations.
   The menu words transcribed from the game's own sheets need no review.
 
 ## Gameplay features
 
-- **"Shadows never take Yorda" in play.** The hooks in `omori/src/ebrain.c`,
+- **"Shadows never take Yorda" in play (needs a play-through).** The hooks in `omori/src/ebrain.c`,
   `common/src/backStage.c` and `fumi/src/enemy_act.c` are covered only by
   `options_test`; no recorded play-through confirms the first shadow
   encounter (`st03t.c`) and the later rooms. A pad script or a play-through
   past `st03t`'s trigger would.
-- **Achievement identities.** Weapon kind 4 as the sword, kinds 8 and 9 as
+- **Achievement identities (need a play-through).** Weapon kind 4 as the sword, kinds 8 and 9 as
   the blade of light, item kind 3 at the beach (`shore_secret`), game flag
   338 as the Queen's death and st04b/st05b as the symmetrical halls
   (`east_and_west`) are inferred from the code. A wrong guess gives an
   achievement a trigger that never fires; confirm in play and fix
   `port/game/achievements.c` if needed.
-- **Camera editor needs a second pad.** The Developer menu's Camera Editor
+- **Camera editor needs a second pad (a defect found by the DEV package; needs a code change and a second pad to check).** The Developer menu's Camera Editor
   (`omori/src/camera-editor.c`) reads only `pad[1]`, which the host never
   connects (`port/input/pad_host.c`: port 0 slot 0), so it opens but cannot
   be driven or left: every control, including the exit (`menu` thread,
@@ -152,19 +154,22 @@ pointer to this file.
   second pad or a keyboard layer to `pad[1]` in developer mode, or let
   SELECT on pad 1 leave the editor. Pad2 Control has the same limit.
 
-## From the final code review
+## Follow-ups from the final code review
 
-- **Warnings as errors in `port/`.** Add `-Werror` to `ICO_PORT_WARNINGS`
+None of these needs hardware; each was filed and not done.
+
+- **Warnings as errors in `port/` (follow-up).** Add `-Werror` to `ICO_PORT_WARNINGS`
   (`cmake/IcoFlags.cmake`) once the game headers that port TUs include
   (`typedef.h`, `thread.h`, `act.h`, `s_init.h`, `debug.h`) stop raising
   `-Wstrict-prototypes`, or compile those TUs with `-Wno-strict-prototypes`.
-- **CI coverage.** Add the `asan` and `fptrap` presets (build and ctest) and
+- **CI coverage (follow-up).** Add the `asan` and `fptrap` presets (build and ctest) and
   a `win-x64-clang` build to `.github/workflows/ci.yml`.
-- **`check_no_rom.sh` scope.** Rule 5b scans only `ico2/` and `sce/`; widen
+- **`check_no_rom.sh` scope (follow-up).** Rule 5b scans only `ico2/` and `sce/`; widen
   it to `port/` (exempting `port/data/extract.c`'s DATA.DF manifest) and
   read staged blobs (`git show :path`) in pre-commit mode.
-- **D3D12 buffer copy states.** `d3dp_BufferBeginCopyDst` assumes COMMON at
+- **D3D12 buffer copy states (needs Windows hardware).** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
+
 ## Checks that need a PS2 or a play-through
 
 These cannot be settled in code. Each needs a capture from a PS2 or a

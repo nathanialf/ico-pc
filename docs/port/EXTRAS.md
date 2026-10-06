@@ -120,7 +120,7 @@ kind name, model, model name, layout row, whether it was active, its
 motion-orient rows and how many of the motions those rows reach the stage
 holds, the shadows' layout-row flags, and the motion-kind table's names.
 A host stage builds the model active at load, holds the most of its block,
-and is not 88 or 91 (the ending's). The motion blocks are the Motion
+and is not 88 or 91 (`STGBOSS_TEST` and `STG8TEST`, test stages). The motion blocks are the Motion
 Viewer's `objMenu` (the boy 0..532, the girl 532..834, the shadows
 834..983, the queen 1072..1134, the bird 1134..1143) and, between the
 shadows' and the queen's, the opening's three guards and their horses

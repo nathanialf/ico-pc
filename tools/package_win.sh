@@ -64,7 +64,7 @@ for a in x64; do
     p="${preset[$a]}"
     run cmake --preset "$p" -DICO_LINK_EXE=ON
     run cmake --build "build-host/$p"
-    for f in ico_pc.exe ico_pc.map SDL3.dll port/rhi/rhi_d3d12_test.exe port/render/rd_replay_tool.exe; do
+    for f in ico_pc.exe ico_pc.map SDL3.dll port/rhi/rhi_d3d12_test.exe port/render/rd_replay_tool.exe port/save/mc_import.exe; do
         [[ -f "build-host/$p/$f" ]] || fail "$p did not produce $f"
     done
     for f in compare_backends.cmd compare_png.ps1; do
@@ -85,7 +85,7 @@ for a in x64; do
     # the R6c backend checks (docs/port/TESTING.md, "The renderer backends"),
     # in their own folder with the SDL3.dll they need beside them
     rm -rf "$d/tools"; mkdir -p "$d/tools"
-    cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/SDL3.dll" "$d/tools/"
+    cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
     cp "$wt/port/rhi/test/compare_png.ps1" "$d/tools/"
     # the repository stores the .cmd with LF (it has no labels or goto, so
     # cmd.exe runs it either way); the package gets CRLF, what Notepad and
@@ -192,6 +192,7 @@ not a texture yet; each listed once). Then, as before:
 | `NOTICES.txt` | the licences of the third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype, the Arimo font, minicoro, newlib, the MinGW-w64 runtime) |
 | `tools\rhi_d3d12_test.exe` | optional: the Direct3D 12 backend's own tests (below) |
 | `tools\rd_replay_tool.exe`, `tools\compare_backends.cmd`, `tools\compare_png.ps1` | optional: render frame dumps on Vulkan and D3D12 and compare them (below) |
+| `tools\mc_import.exe` | optional: copies ICO's save out of a PS2 memory card image or a `.psu` into the saves folder (docs/port/SAVES.md, "Importing saves") |
 | `tools\SDL3.dll` | a copy for the two `.exe` files in `tools\` |
 | `logs\ico-pc.log` | written by each run (replaced on the next run) |
 | `logs\trace-*.txt` | one line per game tick (`trace=1` in `ico-pc.ini`, on in this build): send it with the recording |
@@ -232,7 +233,7 @@ cp -a "$stage/TEST.md" "$pkgroot/ico-pc-$label/TEST.md"
 for a in x64; do
     mkdir -p "$pkgroot/ico-pc-$label/$a/tools"
     for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \
-        tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/SDL3.dll tools/compare_png.ps1 \
+        tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/mc_import.exe tools/SDL3.dll tools/compare_png.ps1 \
         tools/compare_backends.cmd; do
         cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
     done

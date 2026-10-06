@@ -63,6 +63,8 @@ describes every tool.
 | [`port/SETTINGS.md`](port/SETTINGS.md) | the Settings menu: pages, boot screens, controller remap |
 | [`port/UI.md`](port/UI.md) | runtime text, the layout extension, the title's layout, popups and the font |
 | [`port/ACHIEVEMENTS.md`](port/ACHIEVEMENTS.md) | the built-in achievements over the typed game-state interface, and `achievements.toml` |
+| [`port/EXTRAS.md`](port/EXTRAS.md) | Settings > Extras: the music gallery, the model viewer, the credits |
+| [`port/MUSIC.md`](port/MUSIC.md) | the music gallery: what it lists, how entries play through the game's own sound engines |
 | [`port/DEVELOPER_MODE.md`](port/DEVELOPER_MODE.md) | developer mode: the debug menu, `host0:` files, snapshots |
 
 ## Research notes (`research/`)
