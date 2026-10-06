@@ -124,6 +124,40 @@ int ico_df_has(IcoVfs *vfs, const char *name)
     return 0;
 }
 
+int64_t ico_df_size(IcoVfs *vfs, const char *name)
+{
+    IcoVfsFile df;
+    if (loadDir(vfs, &df) != 0) {
+        return -1;
+    }
+    for (int i = 0; i < s_dirCount; i++) {
+        if (nameEq(s_dir[i].name, name)) {
+            return (int64_t)s_dir[i].size;
+        }
+    }
+    return -1;
+}
+
+int64_t ico_df_read(IcoVfs *vfs, const char *name, uint64_t off, void *dst, size_t n)
+{
+    IcoVfsFile df;
+    if (loadDir(vfs, &df) != 0) {
+        return -1;
+    }
+    for (int i = 0; i < s_dirCount; i++) {
+        if (nameEq(s_dir[i].name, name)) {
+            if (off >= s_dir[i].size) {
+                return 0;
+            }
+            if (n > s_dir[i].size - off) {
+                n = (size_t)(s_dir[i].size - off);
+            }
+            return ico_vfs_read(&df, (uint64_t)s_dir[i].off + off, dst, n);
+        }
+    }
+    return -1;
+}
+
 /* --- inflating a pack ------------------------------------------------------ */
 
 typedef struct Inflater {

@@ -75,10 +75,11 @@ stderr on the console instead of the log) and `--help`. A player never needs
 them.
 
 The environment variable `ICO_GALLERY_PLAY` (developer only) gives the
-music gallery a list of entries to play when its page opens, one every 8 s,
-for headless renders and the `gallery_headless` test
-(docs/port/MUSIC.md, "Testing"): `stream:N`, `env:I`, `se:D`, comma
-separated.
+music gallery a list of entries to play when its page opens, one every 8 s
+or, after a `dwell:S` entry, each until it ends (at most S seconds), for
+headless renders and the `gallery_headless` and `gallery_sweep` tests
+(docs/port/MUSIC.md, "Testing"): `stream:N`, `env:I`, `se:D`, `bank:K.J`,
+`pause:0`, `dwell:S`, `leave:0`, comma separated.
 
 ## Game data on the first run
 
@@ -327,7 +328,16 @@ Credits and plays the ending's staff scenes back to the title, checking the
 log's `credits:` and `staff roll:` lines in order, the title running on
 after it, and the saves folder unchanged (docs/port/EXTRAS.md, "Credits").
 It needs the disc image (77 without), runs serially and takes about a
-minute. The Windows presets build the test executables
+minute. `gallery_sweep` runs it once more
+(`port/ui/gallery_sweep/`) for every stream: each of the 100 on the disc
+played through the gallery until it ends (at most 95 s), then three effects
+of every bank, R1 and L1 while a stream plays, and the page's leave; it
+fails on a stream that does not play once to its end with its total, or
+plays past it or wraps, on an effect not keyed, or on any `gallery: failed`,
+and writes the table of every stream to `table.md` there (docs/port/
+MUSIC.md, "Findings" and "Testing"). It needs the disc image (77 without),
+runs serially and takes about three minutes; the 750 MB WAV dump is
+deleted when it passes. The Windows presets build the test executables
 without running them.
 
 ## The model viewer run
@@ -392,8 +402,9 @@ exit 77 and are reported as skipped. docs/BUILDING.md lists the steps.
 
 On `asan`, the Vulkan tests run with `ASAN_OPTIONS=detect_leaks=0` (the
 driver's allocations at `vkDestroyInstance`, port/rhi/CMakeLists.txt). With
-the disc present, the three tests that run the headless game
-(`model_viewer_headless`, `gallery_headless`, `credits_headless`) fail on
+the disc present, the four tests that run the headless game
+(`model_viewer_headless`, `gallery_headless`, `gallery_sweep`,
+`credits_headless`) fail on
 `asan` at `fumi/isys/gobj.c`'s pointer arithmetic on a null table
 ([`BOOT_DIAG.md`](BOOT_DIAG.md), "ICO_HEAP_ASAN"); without the disc, as in CI,
 they skip.

@@ -2280,6 +2280,9 @@ static int settingsProc(int first, int item)
     }
     lt_analog2Pad();
     int flags = pad[0].flags;
+    if (id == UI_PAGE_MUSIC && gallery_ScriptLeave()) {
+        return galLeave(); /* the ICO_GALLERY_PLAY script's leave entry */
+    }
     if (pg->isList) {
         int r = ui_ListProc(&pg->list, lay, flags);
         refreshPage(pg, id, lay->curItem);

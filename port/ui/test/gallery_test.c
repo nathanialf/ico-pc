@@ -21,6 +21,7 @@
  * left out and every listed bank's .hd and .bd are found in a pack
  * (port/data/df_pack.h).  Exit 77 without the ELF.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +53,35 @@ static int onDisc(int no)
 {
     const char *p = strrchr(adpcmFile[no].path, '/');
     return ico_df_has(s_vfs, p ? p + 1 : adpcmFile[no].path) == 1;
+}
+
+/* GalleryTables.seInBank from the disc: the bank's .hd from its pack */
+static int s_hdRefused;
+
+static int hdHas(int bank, int prog, int tone)
+{
+    static int cached = -1;
+    static unsigned char *hd;
+    static uint32_t size;
+    if (bank != cached) {
+        IcoDfMember m;
+        free(hd);
+        hd = NULL;
+        size = 0;
+        cached = bank;
+        if (ico_df_find_member(s_vfs, seFile[bank].hdPath, &m) == 0 && (hd = malloc(m.size)) &&
+            ico_df_read_member(s_vfs, &m, hd) == 0) {
+            size = m.size;
+        }
+    }
+    return hd && size ? gallery_HdHas(hd, size, prog, tone) : -1;
+}
+
+static int seInBank(int bank, int prog, int tone)
+{
+    int r = hdHas(bank, prog, tone);
+    s_hdRefused += r == 0;
+    return r;
 }
 
 static unsigned char *readFile(const char *path, size_t *size)
@@ -111,8 +141,80 @@ static int listRowOf(int bank, int idx)
     return -1;
 }
 
+/* a stream's time on synthetic records (gallery.h, MUSIC.md "Position") */
+static void timeMaths(void)
+{
+    AdpcmDataRec r;
+    memset(&r, 0, sizeof(r));
+    r.sectors = 2032;
+    r.pitch = 44068;
+    r.channels = 2;
+    CHECK(gallery_StreamBytes(&r) == 4161536.0, "the pass of 2032 sectors");
+    double t = gallery_StreamSeconds(&r, gallery_StreamBytes(&r));
+    CHECK(t > 82.62 && t < 82.64, "battle.int's 2032 sectors at 44068 Hz: %.3f s", t);
+    r.channels = 1;
+    r.pitch = 18000;
+    t = gallery_StreamSeconds(&r, 16.0 * 18000.0 / 28.0 * 3.0);
+    CHECK(t > 2.999 && t < 3.001, "mono at 18000 Hz: %.3f s", t);
+
+    GalleryStreamClock c;
+    gallery_ClockReset(&c);
+    const uint32_t ring = 0x1E0000;
+    gallery_ClockStep(&c, 0x1000, ring, GALLERY_SPU_RING); /* not this ring: not keyed */
+    CHECK(!c.started && c.played == 0, "a NAX outside the ring does not start the clock");
+    uint32_t nax = ring;
+    unsigned long long want = 0;
+    for (int i = 0; i < 1000; i++) {
+        nax = ring + (nax - ring + 1008) % GALLERY_SPU_RING; /* a Main tick at 44.1 kHz */
+        gallery_ClockStep(&c, nax, ring, GALLERY_SPU_RING);
+        want += 1008;
+    }
+    CHECK(c.started && c.played == want, "1000 steps of 1008 bytes over the ring's wrap: %llu",
+          c.played);
+    gallery_ClockStep(&c, nax, ring, GALLERY_SPU_RING);
+    CHECK(c.played == want && c.step == 0, "a paused voice (NAX still) plays nothing");
+    gallery_ClockStep(&c, nax - 2, ring, GALLERY_SPU_RING);
+    CHECK(c.played == want, "a voice looping one block (NAX back 2) plays nothing");
+    c.played = 1000;
+    c.step = 100;
+    CHECK(gallery_ClockAtEnd(&c, 2, 2100.0) && !gallery_ClockAtEnd(&c, 2, 2101.0),
+          "the end within half a step");
+
+    uint8_t buf[0x1800];
+    for (size_t i = 0; i < sizeof(buf); i += 16) {
+        buf[i] = 0x0C;
+        buf[i + 1] = 2;
+    }
+    CHECK(gallery_StreamEndBlock(buf, sizeof(buf), 2) == -1, "no end block");
+    buf[0x1410 + 1] = 0xFF;
+    CHECK(gallery_StreamEndBlock(buf, sizeof(buf), 2) == 0x1000, "a blank block's sector");
+
+    uint8_t hd[0x60];
+    memset(hd, 0, sizeof(hd));
+    hd[0x0C] = 'S', hd[0x0D] = 'S', hd[0x0E] = 'h', hd[0x0F] = 'd';
+    hd[0x1C] = 0x40;
+    const unsigned short tbl[] = {2, 8, 0xFFFF, 12, 3, 0, 0, 0};
+    for (int i = 0; i < 8; i++) {
+        hd[0x40 + 2 * i] = (uint8_t)tbl[i];
+        hd[0x41 + 2 * i] = (uint8_t)(tbl[i] >> 8);
+    }
+    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 3) == 1 && gallery_HdHas(hd, sizeof(hd), 0, 4) == 0,
+          "program 0 has tones 0 to 3");
+    CHECK(gallery_HdHas(hd, sizeof(hd), 1, 0) == 0, "program 1 is absent");
+    CHECK(gallery_HdHas(hd, sizeof(hd), 2, 0) == 1 && gallery_HdHas(hd, sizeof(hd), 2, 1) == 0,
+          "program 2 has tone 0");
+    CHECK(gallery_HdHas(hd, sizeof(hd), 3, 0) == 0, "program 3 is past the last");
+    hd[0x0C] = 0;
+    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 0) == 0, "no magic, no program");
+}
+
 int main(int argc, char **argv)
 {
+    timeMaths();
+    if (failures) {
+        printf("gallery_test: %d failure(s) in the time maths\n", failures);
+        return 1;
+    }
     char err[512];
     size_t size;
     unsigned char *elf = argc > 1 ? readFile(argv[1], &size) : NULL;
@@ -143,7 +245,8 @@ int main(int argc, char **argv)
                        425,
                        stageData,
                        106,
-                       s_vfs ? onDisc : NULL};
+                       s_vfs ? onDisc : NULL,
+                       s_vfs ? seInBank : NULL};
     int n = gallery_Build(&t);
     printf("     %d items (%s)\n", n, s_vfs ? "streams checked on the disc" : "no disc image");
     CHECK(n > 100, "a list (%d items)", n);
@@ -317,6 +420,55 @@ int main(int argc, char **argv)
         }
         printf("     %d bank runs checked against %d packs (%d members)\n", banks,
                ico_df_index_packs(), ico_df_index_members());
+    }
+    /* with the disc: every listed effect's row is in its bank's header,
+       and the streams' files: the table's pass plus the ring pad, and no
+       end block inside the pass but event/40's blank */
+    if (s_vfs) {
+        int listed = 0;
+        for (int i = 0; i < n; i++) {
+            const GalleryItem *it = gallery_Item(i);
+            if (it->kind != GAL_K_SE) {
+                continue;
+            }
+            int row = listRowOf(it->bank, seDef[it->key].kind);
+            CHECK(row >= 0 && hdHas(it->bank, seList[row].prog, seList[row].tone) == 1,
+                  "effect %d (%s) of bank %d: program %d tone %d in the header", it->key,
+                  seDef[it->key].name, it->bank, row >= 0 ? seList[row].prog : -1,
+                  row >= 0 ? seList[row].tone : -1);
+            listed++;
+        }
+        printf("     %d effects listed, %d rows left out (not in their bank's header)\n", listed,
+               s_hdRefused);
+        CHECK(s_hdRefused > 0, "some rows are not in their bank's header (%d)", s_hdRefused);
+        int ended = 0;
+        for (int no = 1; no <= 104; no++) {
+            const char *b = strrchr(adpcmFile[no].path, '/');
+            b = b ? b + 1 : adpcmFile[no].path;
+            if (!onDisc(no)) {
+                continue;
+            }
+            long long pass = (long long)gallery_StreamBytes(&adpcmFile[no]);
+            long long disc = (long long)ico_df_size(s_vfs, b);
+            CHECK(disc == pass + 0x5C000, "stream %d (%s): %lld bytes, the pass %lld + 0x5C000", no,
+                  b, disc, pass);
+            unsigned char *buf = malloc((size_t)pass);
+            long e = -1;
+            if (buf && ico_df_read(s_vfs, b, 0, buf, (size_t)pass) == pass) {
+                e = gallery_StreamEndBlock(buf, (size_t)pass, adpcmFile[no].channels);
+            } else {
+                CHECK(0, "stream %d: read", no);
+            }
+            free(buf);
+            if (e >= 0) {
+                ended++;
+                printf("     stream %d (%s): an end block at byte 0x%lX, %.1f s of %.1f s\n", no,
+                       adpcmFile[no].path, e, gallery_StreamSeconds(&adpcmFile[no], (double)e),
+                       gallery_StreamSeconds(&adpcmFile[no], (double)pass));
+            }
+            CHECK(e < 0 || (no == 50 && e == 0x93000), "stream %d: an end block at 0x%lX", no, e);
+        }
+        CHECK(ended == 1, "one stream ends early on the disc (%d)", ended);
     }
     free(elf);
     if (failures) {

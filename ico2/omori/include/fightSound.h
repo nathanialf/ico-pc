@@ -16,5 +16,7 @@ void fightSoundProcessRequestPause(void);
 void fightSoundProcessRequestStart(void);
 void fightSoundProcess(void);
 int fightSoundProcessRequestStatus(void);
+/* PC port (MUS3): set while the music gallery is open (fightSound.c) */
+extern int fightSoundHostHold;
 
 #endif /* FIGHTSOUND_H */

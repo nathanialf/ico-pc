@@ -92,10 +92,20 @@ static void fightSoundProcessMain(void)
     }
 }
 
+/* PC port (package MUS3; docs/port/MUSIC.md, "Playback"): while set, the
+   fight music's step does nothing.  The step finds stream 1 (battle.int) by
+   its number whoever opened it, and with no fight on fades it out and
+   closes it at once; the music gallery sets this while it is open so that
+   its battle.int plays. */
+int fightSoundHostHold = 0;
+
 void fightSoundProcess(void)
 {
     SqEntry *h;
 
+    if (fightSoundHostHold != 0) {
+        return;
+    }
     switch (fightSoundState) {
     case 0:
         fightSoundProcessMain();

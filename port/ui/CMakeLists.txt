@@ -185,6 +185,17 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
                          "${CMAKE_CURRENT_BINARY_DIR}/gallery_headless")
         set_tests_properties(gallery_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                              TIMEOUT 300)
+        # every stream and three effects of every bank through the gallery in
+        # one headless run (gallery_sweep.py, package MUS3): each stream once
+        # to its end with its total, R1 and L1, the title restored; the table
+        # in gallery_sweep/table.md
+        add_test(NAME gallery_sweep
+                 COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/gallery_sweep.py"
+                         "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
+                         "${CMAKE_CURRENT_BINARY_DIR}/gallery_sweep"
+                         --report "${CMAKE_CURRENT_BINARY_DIR}/gallery_sweep/table.md")
+        set_tests_properties(gallery_sweep PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
+                             TIMEOUT 3600)
         # Extras > Credits in the headless game (credits_headless.py, package
         # CRED): the ending's staff scenes from the title and back, no save
         add_test(NAME credits_headless

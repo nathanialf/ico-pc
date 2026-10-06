@@ -41,6 +41,15 @@ typedef struct IcoDfMember {
    cannot be read. */
 int ico_df_has(IcoVfs *vfs, const char *name);
 
+/* The byte size of DATA.DF's directory entry `name` (a loose file, as
+   "01.int"), or -1 when it has none or DATA.DF cannot be read. */
+int64_t ico_df_size(IcoVfs *vfs, const char *name);
+
+/* Reads up to n bytes of the loose file `name` from its byte `off`: the
+   bytes read (0 past its end), or -1 when DATA.DF has no such entry or
+   cannot be read. */
+int64_t ico_df_read(IcoVfs *vfs, const char *name, uint64_t off, void *dst, size_t n);
+
 /* The first pack member named `name` (the member's full name, as
    "sound/ICO_SE/com_v.hd"; case-insensitive) in DATA.DF's directory order.
    0 and *out filled, or -1 when no pack has it or the disc cannot be read. */

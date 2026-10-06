@@ -38,17 +38,27 @@
  * voice's pitch to 0 and stops the disc reader's accounting until
  * adpcmPauseRequest(0).  An effect cannot pause (the page stops it).
  *
- * Position.  A stream's elapsed time is what its record has consumed
- * (AdpcmStream dataSize - remain: adpcmTickProc moves remain on by the IOP
- * read offset's progress, which the driver moves by half the SPU ring per
- * fill) less the 1.5 halves the SPU ring holds ahead of the voice on
- * average, in seconds at the stream's rate (adpcmFile pitch, Hz; 16 bytes
- * of SPU ADPCM are 28 samples per channel); its total is the file's
- * sectors.  An effect's total is its sample: the voices keyed after the
- * request that were silent before it and start inside the bank's SPU
- * buffer, each read in sound RAM from its start (SSA) to the block with
- * the end flag, at its voice's pitch; a sample whose last block loops
- * repeats, and its elapsed time is then counted within the loop.
+ * Streams play one pass (docs/port/MUSIC.md, "One pass"): requested with
+ * loopNum 2, so the engine's own close (when the reads, which run ahead of
+ * the voice by the SPU ring, have gone round loopNum times) never comes,
+ * and closed here when the voice has played the pass.  While the page is
+ * up the fight music's step is held (fightSoundHostHold): it finds stream
+ * 1, battle.int, by its number and closes it when no fight is on.
+ *
+ * Position.  A stream's elapsed time is what its voice has played: NAX in
+ * its SPU ring followed once a Main tick from the key-on (gallery.h,
+ * GalleryStreamClock), in seconds at the stream's rate (adpcmFile pitch,
+ * Hz; 16 bytes of SPU ADPCM are 28 samples per channel); its total is the
+ * file's sectors, or less where the disc's file is blank (an end block
+ * inside the pass: event/40.int).  An effect's total is its sample: the
+ * voices keyed after the request that were silent before it and start
+ * inside the bank's SPU buffer, each read in sound RAM from its start (SSA)
+ * to the block with the end flag, at its voice's pitch; a sample whose last
+ * block loops repeats, and its elapsed time is then counted within the
+ * loop.
+ *
+ * The list leaves out an effect whose row's program or tone its bank's
+ * header lacks (seInBank: SgSePlay would refuse it).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -57,6 +67,7 @@
 
 #include "adpcm_init.h"
 #include "df_pack.h"
+#include "fightSound.h"
 #include "gallery.h"
 #include "s_init.h"
 #include "spu2.h"
@@ -98,6 +109,7 @@ static struct SqEntry *s_stream;
 static int s_streamNo, s_wantStream, s_streamPending;
 static int s_titleState; /* 0 untouched, 1 fading, 2 closed by the gallery */
 static int s_titleWas;
+static GalleryStreamClock s_clock; /* what the stream's voice has played */
 /* effects */
 static int s_seId = -1;
 static struct SqEntry *s_bank;
@@ -118,13 +130,14 @@ static float s_seTotal;              /* its sample's seconds, 0 until found */
 static int s_seLoops;
 
 #define SPU_RATE 48000.0
-#define STREAM_SPU_HALF 0x2000 /* a stream voice's SPU ring (adpcmDataSet's 0x4000) halved */
-#define SE_FIND_FRAMES 96000u  /* how long the effect's voices are looked for (2 s) */
+#define SE_FIND_FRAMES 96000u /* how long the effect's voices are looked for (2 s) */
 
 static unsigned long long audioFrame(void)
 {
     return (unsigned long long)spu2_time();
 }
+
+static double streamSeconds(int no, double bytes);
 
 /* --- the tables ---------------------------------------------------------------- */
 
@@ -136,6 +149,82 @@ static int onDisc(int no)
     }
     const char *p = strrchr(adpcmFile[no].path, '/');
     return ico_df_has(vfs, p ? p + 1 : adpcmFile[no].path) == 1;
+}
+
+/* bank b's header has the row's program and tone (GalleryTables.seInBank):
+   read from its pack once, at the list's build */
+static int seInBank(int b, int prog, int tone)
+{
+    static int cached = -1;
+    static uint8_t *hd;
+    static uint32_t hdSize;
+    if (b <= 0 || b >= N_SEFILE || ico_vfs_disc() == NULL) {
+        return -1;
+    }
+    if (b != cached) {
+        IcoDfMember m;
+        free(hd);
+        hd = NULL;
+        hdSize = 0;
+        cached = b;
+        if (ico_df_find_member(ico_vfs_disc(), seFile[b].hdPath, &m) == 0 &&
+            (hd = malloc(m.size)) != NULL) {
+            if (ico_df_read_member(ico_vfs_disc(), &m, hd) == 0) {
+                hdSize = m.size;
+            } else {
+                free(hd);
+                hd = NULL;
+            }
+        }
+    }
+    return hd == NULL ? -1 : gallery_HdHas(hd, hdSize, prog, tone);
+}
+
+/* The bytes of stream `no` that play: its pass (sectors * 2048), or less
+   when the disc's file holds a block with the end flag inside it (only
+   event/40.int, blank from byte 0x93000: MUSIC.md, "Findings").  Read
+   once per stream, at its first play. */
+static double s_audible[N_ADPCM];
+static unsigned char s_audibleKnown[N_ADPCM];
+
+static double audibleBytes(int no)
+{
+    const double pass = gallery_StreamBytes(&adpcmFile[no]);
+    IcoVfs *vfs = ico_vfs_disc();
+    if (no <= 0 || no >= N_ADPCM || vfs == NULL) {
+        return pass;
+    }
+    if (s_audibleKnown[no]) {
+        return s_audible[no];
+    }
+    const char *base = strrchr(adpcmFile[no].path, '/');
+    base = base ? base + 1 : adpcmFile[no].path;
+
+    enum { CHUNK = 0x10000 };
+
+    uint8_t *buf = malloc(CHUNK);
+    double at = pass;
+    for (uint64_t off = 0; buf != NULL && off < (uint64_t)pass; off += CHUNK) {
+        size_t want = (uint64_t)pass - off < CHUNK ? (size_t)((uint64_t)pass - off) : CHUNK;
+        int64_t got = ico_df_read(vfs, base, off, buf, want);
+        if (got <= 0) {
+            break;
+        }
+        long e = gallery_StreamEndBlock(buf, (size_t)got, adpcmFile[no].channels);
+        if (e >= 0) {
+            at = (double)(off + (uint64_t)e);
+            fprintf(stderr,
+                    "gallery: stream %d (%s): the disc's file has an end block at byte 0x%llX "
+                    "(blank from there): %.1f s of its %.1f s play\n",
+                    no, adpcmFile[no].path, (unsigned long long)(off + (uint64_t)e),
+                    streamSeconds(no, at), streamSeconds(no, pass));
+            break;
+        }
+    }
+    free(buf);
+    s_audible[no] = at;
+    s_audibleKnown[no] = 1;
+    return at;
 }
 
 static int tables(GalleryTables *t)
@@ -156,6 +245,7 @@ static int tables(GalleryTables *t)
     t->stage = stageData;
     t->stageCount = N_STAGE;
     t->streamOnDisc = onDisc;
+    t->seInBank = seInBank;
     return 0;
 }
 
@@ -448,9 +538,7 @@ static void findEffectVoices(void)
 
 static double streamSeconds(int no, double bytes)
 {
-    int ch = adpcmFile[no].channels > 0 ? adpcmFile[no].channels : 1;
-    int hz = adpcmFile[no].pitch > 0 ? adpcmFile[no].pitch : 44100;
-    return bytes / ch / 16.0 * 28.0 / hz;
+    return gallery_StreamSeconds(&adpcmFile[no], bytes);
 }
 
 static int playSe(const GalleryItem *it)
@@ -509,6 +597,7 @@ static void stopAll(void)
     }
     s_streamPending = 0;
     s_stream = NULL;
+    gallery_ClockReset(&s_clock);
     if (s_seId >= 0) {
         soundSeDefStop(s_seId);
         s_seId = -1;
@@ -520,6 +609,7 @@ static void enter(void)
 {
     s_titleState = 0;
     s_titleWas = 0;
+    fightSoundHostHold = 1; /* battle.int is ours while the page is up */
 }
 
 static void leave(void)
@@ -533,12 +623,24 @@ static void leave(void)
     }
     s_titleState = 0;
     s_titleWas = 0;
+    fightSoundHostHold = 0;
 }
 
 static int play(const GalleryItem *it)
 {
     stopAll();
     if (it->kind == GAL_K_STREAM) {
+        const AdpcmDataRec *r = &adpcmFile[it->key];
+        const char *base = strrchr(r->path, '/');
+        IcoVfs *vfs = ico_vfs_disc();
+        long long disc = vfs ? (long long)ico_df_size(vfs, base ? base + 1 : r->path) : -1;
+        fprintf(stderr,
+                "gallery: stream %d file %s: %d sectors (%d bytes, %.1f s), loop start %d, "
+                "%d Hz, %d channels; the disc's file %lld bytes\n",
+                it->key, r->path, r->sectors, r->sectors * 2048,
+                streamSeconds(it->key, (double)r->sectors * 2048.0), r->loopStart, r->pitch,
+                r->channels, disc);
+        audibleBytes(it->key);
         titleFade();
         s_wantStream = it->key;
         s_cur = it;
@@ -560,16 +662,79 @@ static void stop(void)
     stopAll();
 }
 
+/* follows the stream voice's NAX in its SPU ring from the key-on (the
+   first IOP read moves `remain`, as the driver keys on with the first
+   fill) and closes the stream when one pass has been heard */
+static void streamTick(void)
+{
+    if (s_stream == NULL || s_streamPending || !streamAlive() || s_stream->stream == NULL) {
+        return;
+    }
+    const AdpcmStream *st = s_stream->stream;
+    if (!s_clock.started && st->remain >= st->dataSize) {
+        return; /* not keyed on yet */
+    }
+    uint32_t ssa = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_SSA));
+    uint32_t nax = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_NAX));
+    gallery_ClockStep(&s_clock, nax, ssa, GALLERY_SPU_RING);
+    if (gallery_ClockAtEnd(&s_clock, st->n, audibleBytes(s_streamNo))) {
+        int ch = st->n > 0 ? st->n : 1;
+        fprintf(stderr,
+                "gallery: stream %d closed at its end: %llu of %d bytes played (%.2f s), audio "
+                "frame %llu\n",
+                s_streamNo, s_clock.played * (unsigned long long)ch, st->dataSize,
+                streamSeconds(s_streamNo, (double)s_clock.played * ch), audioFrame());
+        scpAdpcmCloseFunc(&s_stream);
+        s_stream = NULL;
+    }
+}
+
+/* a stream that does not open: why, logged, and the item stops */
+static int s_waitTicks;
+#define OPEN_TIMEOUT 250 /* Main ticks (10 s) */
+
+static void streamFailed(const char *why)
+{
+    fprintf(stderr, "gallery: failed stream %d: %s\n", s_wantStream ? s_wantStream : s_streamNo,
+            why);
+    stopAll();
+}
+
 static void tick(void)
 {
     titleTick();
+    if (s_wantStream || (s_streamPending && s_stream == NULL)) {
+        s_waitTicks++;
+    } else {
+        s_waitTicks = 0;
+    }
+    if (s_streamPending && s_stream == NULL && scpAdpcmCloseChkFunc(&s_stream) == 0) {
+        /* the daemon took the request and gave no handle: AdpcmOpen found
+           the stream already open, or no IOP ring free */
+        s_waitTicks = 0;
+        streamFailed("the engine did not open it (the same stream open, or no IOP ring free)");
+        return;
+    }
+    if (s_waitTicks >= OPEN_TIMEOUT) {
+        s_waitTicks = 0;
+        streamFailed(s_titleState != 2               ? "the title theme did not close"
+                     : scpAdpcmPlayRequestNum() != 0 ? "the stream request queue stayed busy"
+                     : AdpcmFreeAreaGet() == 0       ? "no IOP ring came free"
+                                                     : "the engine did not open it in 10 s");
+        return;
+    }
     if (s_wantStream && s_titleState == 2 && scpAdpcmPlayRequestNum() == 0 &&
         AdpcmFreeAreaGet() > 0) {
         s_streamNo = s_wantStream;
         s_wantStream = 0;
         s_stream = NULL;
-        scpAdpcmPlayRequestFunc(s_streamNo, &s_stream, 1, 1, 1);
+        /* two passes: the engine closes a stream when the voice's reads
+           (not the voice) reach the pass's end, which cuts what the SPU ring
+           still holds (up to 0.7 s); the page closes it when the voice has
+           played the pass (streamTick) */
+        scpAdpcmPlayRequestFunc(s_streamNo, &s_stream, 1, 2, 1);
         s_streamPending = 1;
+        gallery_ClockReset(&s_clock);
     }
     if (s_streamPending && s_stream != NULL) {
         s_streamPending = 0;
@@ -579,6 +744,7 @@ static void tick(void)
             s_stream->stream && s_stream->stream->n > 1 ? s_stream->stream->ch[1] : -1,
             audioFrame());
     }
+    streamTick();
 }
 
 static const GalleryItem *playing(void)
@@ -619,14 +785,12 @@ static int positionOf(float *elapsed, float *total)
     }
     if (s_cur->kind == GAL_K_STREAM) {
         int no = s_cur->key;
-        const double size = (double)adpcmFile[no].sectors * 2048.0;
+        const double size = audibleBytes(no);
         *total = (float)streamSeconds(no, size);
-        if (s_stream != NULL && !s_streamPending && streamAlive() && s_stream->stream != NULL) {
-            const AdpcmStream *st = s_stream->stream;
-            double played = (double)st->dataSize - (double)st->remain -
-                            1.5 * STREAM_SPU_HALF * (st->n > 0 ? st->n : 1);
-            played = played < 0.0 ? 0.0 : played > size ? size : played;
-            *elapsed = (float)streamSeconds(no, played);
+        if (s_clock.started) {
+            int ch = adpcmFile[no].channels > 0 ? adpcmFile[no].channels : 1;
+            double played = (double)s_clock.played * ch;
+            *elapsed = (float)streamSeconds(no, played > size ? size : played);
         }
         return 0;
     }

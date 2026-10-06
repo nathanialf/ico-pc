@@ -149,6 +149,14 @@ static int listRow(const GalleryTables *t, int b, int idx)
     return -1;
 }
 
+/* whether row j of seList plays from its bank (its header has the row's
+   program and tone; unknown counts as yes) */
+static int rowPlays(const GalleryTables *t, int j)
+{
+    return t->seInBank == NULL ||
+           t->seInBank(t->seList[j].num, t->seList[j].prog, t->seList[j].tone) != 0;
+}
+
 /* the bank a def plays from on stage s: the stage's own banks first (they
    are loaded after the common ones, so soundSeKindBuild leaves theirs in
    seKind), then the common banks; -1 */
@@ -157,13 +165,15 @@ static int bankForDef(const GalleryTables *t, int def, int s)
     int idx = t->seDef[def].kind;
     if (s >= 0) {
         for (int b = t->stage[s].seSegLast - 1; b >= t->stage[s].seSegFirst; b--) {
-            if (b > 0 && b < t->seFileCount && listRow(t, b, idx) >= 0) {
+            int j = b > 0 && b < t->seFileCount ? listRow(t, b, idx) : -1;
+            if (j >= 0 && rowPlays(t, j)) {
                 return b;
             }
         }
     }
     for (int b = LAST_COMMON_BANK; b >= FIRST_COMMON_BANK; b--) {
-        if (listRow(t, b, idx) >= 0) {
+        int j = listRow(t, b, idx);
+        if (j >= 0 && rowPlays(t, j)) {
             return b;
         }
     }
@@ -184,8 +194,8 @@ static void addBankItems(const GalleryTables *t, int group, int canon)
                 continue;
             }
             int def = defOfKind(t, t->seList[j].idx);
-            if (def < 0) {
-                continue;
+            if (def < 0 || listRow(t, b, t->seList[j].idx) != j || !rowPlays(t, j)) {
+                continue; /* the engine plays a kind's first row in the bank */
             }
             int dup = 0;
             for (int k = first; k < s_count && !dup; k++) {
@@ -205,7 +215,8 @@ static int bankHasItems(const GalleryTables *t, int canon)
             continue;
         }
         for (int j = 0; j < t->seListCount; j++) {
-            if (t->seList[j].num == b && defOfKind(t, t->seList[j].idx) >= 0) {
+            if (t->seList[j].num == b && defOfKind(t, t->seList[j].idx) >= 0 &&
+                listRow(t, b, t->seList[j].idx) == j && rowPlays(t, j)) {
                 return 1;
             }
         }
@@ -443,17 +454,119 @@ const char *gallery_Asset(int i, char *buf, size_t n)
     return "";
 }
 
+/* --- a stream's time ------------------------------------------------------- */
+
+double gallery_StreamSeconds(const AdpcmDataRec *r, double bytes)
+{
+    int ch = r->channels > 0 ? r->channels : 1;
+    int hz = r->pitch > 0 ? r->pitch : 44100;
+    return bytes / ch / 16.0 * 28.0 / hz;
+}
+
+double gallery_StreamBytes(const AdpcmDataRec *r)
+{
+    return (double)r->sectors * 2048.0;
+}
+
+void gallery_ClockReset(GalleryStreamClock *c)
+{
+    memset(c, 0, sizeof(*c));
+}
+
+unsigned long long gallery_ClockStep(GalleryStreamClock *c, uint32_t nax, uint32_t start,
+                                     uint32_t size)
+{
+    if (size == 0 || nax < start || nax >= start + size) {
+        return c->played;
+    }
+    if (!c->started) {
+        c->started = 1;
+        c->prev = start;
+    }
+    c->step = (nax - c->prev + size) % size;
+    if (c->step > size / 2) {
+        /* NAX went back: the voice is looping a block (a blank sector's
+           end flags) or was keyed again; nothing played */
+        c->step = 0;
+    }
+    c->played += c->step;
+    c->prev = nax;
+    return c->played;
+}
+
+int gallery_ClockAtEnd(const GalleryStreamClock *c, int channels, double bytes)
+{
+    int ch = channels > 0 ? channels : 1;
+    return c->started && ((double)c->played + c->step / 2.0) * ch >= bytes;
+}
+
+long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels)
+{
+    for (size_t sec = 0; sec + 0x800 <= n; sec += 0x800) {
+        for (size_t b = 0; b < 0x800; b += 16) {
+            if (buf[sec + b + 1] & 1) {
+                return (long)sec;
+            }
+        }
+    }
+    (void)channels; /* every channel's chunk is blocks of 16 bytes */
+    return -1;
+}
+
+static uint32_t rd32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+static unsigned rd16(const uint8_t *p)
+{
+    return (unsigned)p[0] | (unsigned)p[1] << 8;
+}
+
+int gallery_HdHas(const uint8_t *hd, size_t size, int prog, int tone)
+{
+    if (hd == NULL || size < 0x24 || prog < 0 || prog >= 0x80 || tone < 0 || tone >= 0x80 ||
+        rd32(hd + 0x0C) != 0x64685353u || rd32(hd + 0x20) == 0xFFFFFFFFu) {
+        return 0;
+    }
+    uint32_t off = rd32(hd + 0x1C);
+    if (off == 0xFFFFFFFFu || off + 2 > size) {
+        return 0;
+    }
+    const uint8_t *tbl = hd + off;
+    if (rd16(tbl) < (unsigned)prog || off + 2 * (size_t)(prog + 2) > size) {
+        return 0;
+    }
+    unsigned pe = rd16(tbl + 2 * (prog + 1));
+    if (pe == 0xFFFF || off + (size_t)(pe / 2) * 2 + 2 > size) {
+        return 0;
+    }
+    return rd16(tbl + (pe / 2) * 2) >= (unsigned)tone;
+}
+
 /* --- the page --------------------------------------------------------------- */
 
 /* the ICO_GALLERY_PLAY script: entries kind:value, comma separated, each
    played SCRIPT_TICKS Main ticks from SCRIPT_START ticks after the page
-   opens; then "gallery: script done" */
-#define SCRIPT_MAX 16
+   opens; then "gallery: script done".  After a dwell:S entry each entry
+   instead lasts until it has ended (a second after its end line) or S
+   seconds (it is then stopped: "cut"), and the position is logged every
+   second; dwell:0 goes back to the fixed steps.  The sweep
+   (test/gallery_sweep.py) plays every stream and effects of every bank so. */
+#define SCRIPT_MAX 512
 #define SCRIPT_START 50
 #define SCRIPT_TICKS 200
+#define TICKS_PER_S 25 /* PAL's Main tick */
 static char s_scriptKind[SCRIPT_MAX][8];
-static int s_scriptVal[SCRIPT_MAX];
-static int s_scriptN, s_scriptPos, s_scriptTick, s_scriptDone;
+static int s_scriptVal[SCRIPT_MAX], s_scriptVal2[SCRIPT_MAX];
+static int s_scriptN, s_scriptPos, s_scriptTick, s_scriptDone, s_scriptLeave;
+static int s_dwell;     /* seconds an entry may last; 0: SCRIPT_TICKS steps */
+static int s_dwellItem; /* the entry playing in dwell mode, -1 */
+static int s_dwellTick, s_dwellSeen, s_dwellGone;
+/* the item sounding at the last tick (-1) and where it was, for the end
+   and wrap lines (gallery_Tick) */
+static int s_track = -1;
+static float s_trackEl, s_trackTot;
 
 static const char *groupToken(int g)
 {
@@ -465,12 +578,17 @@ static const char *groupToken(int g)
 static void scriptParse(void)
 {
     const char *env = getenv("ICO_GALLERY_PLAY");
-    s_scriptN = s_scriptPos = s_scriptTick = s_scriptDone = 0;
+    s_scriptN = s_scriptPos = s_scriptTick = s_scriptDone = s_scriptLeave = 0;
+    s_dwell = 0;
+    s_dwellItem = -1;
     if (env == NULL || env[0] == '\0') {
         return;
     }
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s", env);
+    char *buf = malloc(strlen(env) + 1);
+    if (buf == NULL) {
+        return;
+    }
+    strcpy(buf, env);
     for (char *tok = strtok(buf, ",|"); tok && s_scriptN < SCRIPT_MAX; tok = strtok(NULL, ",|")) {
         char *colon = strchr(tok, ':');
         if (colon == NULL) {
@@ -479,13 +597,41 @@ static void scriptParse(void)
         }
         *colon = '\0';
         snprintf(s_scriptKind[s_scriptN], sizeof(s_scriptKind[0]), "%s", tok);
+        const char *dot = strchr(colon + 1, '.');
+        s_scriptVal2[s_scriptN] = dot ? atoi(dot + 1) : 0;
         s_scriptVal[s_scriptN++] = atoi(colon + 1);
     }
+    free(buf);
     fprintf(stderr, "gallery: script of %d entries\n", s_scriptN);
 }
 
+/* the K-th bank's section of the sound effects: its first (J 0), middle
+   (1) or last (2) effect, -1 */
+static int bankItem(int k, int j)
+{
+    int head = -1, n = 0;
+    for (int i = 0; i < s_count; i++) {
+        if (s_items[i].group == GAL_G_SE && s_items[i].kind == GAL_K_HEADING && n++ == k) {
+            head = i;
+            break;
+        }
+    }
+    if (head < 0) {
+        return -1;
+    }
+    int last = head;
+    while (last + 1 < s_count && s_items[last + 1].kind == GAL_K_SE &&
+           s_items[last + 1].group == GAL_G_SE) {
+        last++;
+    }
+    if (last == head) {
+        return -1;
+    }
+    return j <= 0 ? head + 1 : j == 1 ? head + 1 + (last - head - 1) / 2 : last;
+}
+
 /* the item a script entry names, -1 */
-static int scriptItem(const char *kind, int v)
+static int scriptItem(const char *kind, int v, int v2)
 {
     if (strcmp(kind, "stream") == 0) {
         return gallery_Find(-1, GAL_K_STREAM, v, -1);
@@ -503,7 +649,48 @@ static int scriptItem(const char *kind, int v)
         int i = gallery_Find(GAL_G_VOICE, GAL_K_SE, v, -1);
         return i >= 0 ? i : gallery_Find(GAL_G_SE, GAL_K_SE, v, -1);
     }
+    if (strcmp(kind, "bank") == 0) {
+        return bankItem(v, v2);
+    }
     return -1;
+}
+
+static const char *kindToken(const GalleryItem *it)
+{
+    return it->kind == GAL_K_STREAM ? "stream" : "effect";
+}
+
+/* dwell mode: whether the entry playing is over (ended, cut, or never
+   sounded) */
+static int dwellOver(void)
+{
+    if (s_dwellItem < 0) {
+        return 1;
+    }
+    const GalleryItem *it = &s_items[s_dwellItem];
+    s_dwellTick++;
+    if (gallery_Playing() == s_dwellItem) {
+        s_dwellSeen = 1;
+        s_dwellGone = 0;
+    } else if (s_dwellSeen) {
+        s_dwellGone++;
+    }
+    if (s_dwellSeen && s_dwellGone >= TICKS_PER_S) {
+        return 1;
+    }
+    if (!s_dwellSeen && s_dwellTick >= 15 * TICKS_PER_S) {
+        fprintf(stderr, "gallery: failed %s %d: never sounded\n", kindToken(it), it->key);
+        return 1;
+    }
+    if (s_dwellTick >= s_dwell * TICKS_PER_S) {
+        float el = 0.0f, tot = 0.0f;
+        gallery_Position(&el, &tot);
+        fprintf(stderr, "gallery: %s %d cut at %.1f s of %.1f s (dwell %d s)\n", kindToken(it),
+                it->key, el, tot, s_dwell);
+        gallery_Stop();
+        return 1;
+    }
+    return 0;
 }
 
 static void scriptStep(void)
@@ -515,9 +702,16 @@ static void scriptStep(void)
     if (s_scriptTick < SCRIPT_START) {
         return;
     }
-    int t = s_scriptTick - SCRIPT_START;
-    if (t % SCRIPT_TICKS != 0) {
-        return;
+    if (s_dwell > 0) {
+        if (!dwellOver()) {
+            return;
+        }
+        s_dwellItem = -1;
+    } else {
+        int t = s_scriptTick - SCRIPT_START;
+        if (t % SCRIPT_TICKS != 0) {
+            return;
+        }
     }
     if (s_scriptPos >= s_scriptN) {
         gallery_Stop();
@@ -526,7 +720,20 @@ static void scriptStep(void)
         return;
     }
     const char *kind = s_scriptKind[s_scriptPos];
-    int v = s_scriptVal[s_scriptPos++];
+    int v = s_scriptVal[s_scriptPos], v2 = s_scriptVal2[s_scriptPos];
+    s_scriptPos++;
+    if (strcmp(kind, "dwell") == 0) {
+        s_dwell = v > 0 ? v : 0;
+        s_scriptTick = SCRIPT_START; /* the next entry: now, or one step on */
+        fprintf(stderr, "gallery: dwell %d s\n", s_dwell);
+        return;
+    }
+    if (strcmp(kind, "leave") == 0) {
+        s_scriptLeave = 1; /* the page leaves, as Triangle */
+        s_scriptDone = 1;
+        fprintf(stderr, "gallery: script done\n");
+        return;
+    }
     if (strcmp(kind, "pause") == 0) {
         /* Cross on the item sounding or paused */
         int i = gallery_Playing();
@@ -541,12 +748,25 @@ static void scriptStep(void)
         fprintf(stderr, "gallery: failed seq %d: the disc has no sequenced music\n", v);
         return;
     }
-    int i = scriptItem(kind, v);
+    int i = scriptItem(kind, v, v2);
     if (i < 0) {
         fprintf(stderr, "gallery: failed %s %d: no such entry in the list\n", kind, v);
         return;
     }
-    gallery_Play(i);
+    if (gallery_Play(i) != 0) {
+        return; /* logged; the next entry at the next step */
+    }
+    if (s_dwell > 0) {
+        s_dwellItem = i;
+        s_dwellTick = s_dwellSeen = s_dwellGone = 0;
+    }
+}
+
+int gallery_ScriptLeave(void)
+{
+    int r = s_scriptLeave;
+    s_scriptLeave = 0;
+    return r;
 }
 
 void gallery_Enter(void)
@@ -575,6 +795,7 @@ void gallery_Enter(void)
 
 void gallery_Leave(void)
 {
+    s_track = -1;
     s_paused = -1;
     s_held = 0;
     if (s_engine && s_engine->leave) {
@@ -590,6 +811,7 @@ int gallery_Play(int i)
     }
     s_paused = -1;
     s_held = 0;
+    s_track = -1;
     char buf[96];
     fprintf(stderr, "gallery: playing %s %d (%s)\n", groupToken(it->group), it->key,
             gallery_Label(i, buf, sizeof(buf)));
@@ -603,12 +825,15 @@ void gallery_Stop(void)
 {
     s_paused = -1;
     s_held = 0;
+    s_track = -1;
     if (s_engine && s_engine->stop) {
         s_engine->stop();
     }
 }
 
-/* once every LOG_TICKS Main ticks while an item sounds: where it is */
+/* once every LOG_TICKS Main ticks while an item sounds (every second in
+   the script's dwell mode): where it is; when it ends by itself, where it
+   ended; when its position goes back, that it wrapped */
 #define LOG_TICKS 50
 static int s_logTick;
 
@@ -617,14 +842,26 @@ void gallery_Tick(void)
     if (s_engine && s_engine->tick) {
         s_engine->tick();
     }
-    float el, tot;
+    float el = 0.0f, tot = 0.0f;
     int i = gallery_Playing();
-    if (i >= 0 && gallery_Position(&el, &tot) == 0) {
-        if (++s_logTick >= LOG_TICKS) {
+    int pos = i >= 0 && gallery_Position(&el, &tot) == 0;
+    if (s_track >= 0 && i != s_track) {
+        fprintf(stderr, "gallery: %s %d ended at %.1f s of %.1f s\n", kindToken(&s_items[s_track]),
+                s_items[s_track].key, s_trackEl, s_trackTot);
+        s_track = -1;
+    }
+    if (pos) {
+        if (s_track == i && el + 1.0f < s_trackEl) {
+            fprintf(stderr, "gallery: %s %d wrapped at %.1f s to %.1f s of %.1f s\n",
+                    kindToken(&s_items[i]), s_items[i].key, s_trackEl, el, tot);
+        }
+        s_track = i;
+        s_trackEl = el;
+        s_trackTot = tot;
+        if (++s_logTick >= (s_dwell > 0 ? TICKS_PER_S : LOG_TICKS)) {
             s_logTick = 0;
-            fprintf(stderr, "gallery: %s %d at %.1f s of %.1f s%s\n",
-                    s_items[i].kind == GAL_K_STREAM ? "stream" : "effect", s_items[i].key, el, tot,
-                    s_paused == i ? " (paused)" : "");
+            fprintf(stderr, "gallery: %s %d at %.1f s of %.1f s%s\n", kindToken(&s_items[i]),
+                    s_items[i].key, el, tot, s_paused == i ? " (paused)" : "");
         }
     } else {
         s_logTick = 0;
