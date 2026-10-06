@@ -618,10 +618,12 @@ static void traceParticle(void)
     qw(in[7], 0.25f, 0.5f, 128, 64);
     qw(in[12], 0, 0, 4, 2);
     qw(in[13], 0, 0, 128, 64); /* beyond the 12: must not be read (a visible particle) */
+
     static const struct {
         uint32_t qwords;
         int want;
     } over[] = {{12, 1}, {8, 1}, {7, 0}, {6, 0}, {5, 0}};
+
     for (size_t k = 0; k < sizeof(over) / sizeof(over[0]); k++) {
         stateParticle(&r);
         vu1ref_Particle(&r, (const float (*)[4])in, over[k].qwords, &po);

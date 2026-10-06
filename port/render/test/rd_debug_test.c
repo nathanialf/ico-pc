@@ -630,7 +630,7 @@ static void drawOverlay(int kind)
     switch (kind) {
     case 0:
     case 3:
-        debug_font_flag |= 2; /* the backdrop sprite too */
+        debug_font_flag |= 2;                                       /* the backdrop sprite too */
         debug_Printf(100, kind == 3 ? 130 : 50, 0xFF800000u, "F7"); /* DISPLAY is 256 high */
         break;
     case 1:
