@@ -149,6 +149,18 @@ static void test_helpers(void)
     check_bits(ps2_div(-0.0f, 0.0f), 0xFF7FFFFFu, "div -0/+0 = -Fmax");
     check_bits(ps2_div(2.0f, denorm), 0x7F7FFFFFu, "div by a denormal = Fmax");
     check_bits(ps2_div(one, three), 0x3EAAAAAAu, "div 1/3 rounds toward zero");
+    /* the EE adder (PCSX2 PR #12001's PS2Float model): the smaller operand
+       keeps one bit below its alignment shift, then the sum truncates */
+    check_bits(ps2_sub(1.0f, ps2_bits_float(0x30800000u)), 0x3F800000u,
+               "1 - 2^-30 = 1 (25 or more binades apart)");
+    check_bits(ps2_sub(one, ps2_bits_float(0x3E800001u)), 0x3F400000u,
+               "1 - 0x3E800001: the dropped bit leaves 0x3F400000 (IEEE RTZ 0x3F3FFFFF)");
+    check_bits(ps2_sub(1.0f, ps2_bits_float(0x3C000001u)), 0x3F7E0000u,
+               "1 - 0x3C000001 = 0x3F7E0000 (IEEE RTZ 0x3F7DFFFF)");
+    check_bits(ps2_add(-1.0f, ps2_bits_float(0x3C000001u)), 0xBF7E0000u,
+               "-1 + 0x3C000001 = -0x3F7E0000");
+    check_bits(ps2_add(1.0f, ps2_bits_float(0x3C000001u)), 0x3F810000u, "same-sign sum = IEEE RTZ");
+    check_bits(ps2_add(2.0f, denorm), 0x40000000u, "a denormal operand reads as zero");
     check_bits(ps2_sqrt(-4.0f), 0x40000000u, "sqrt(-4) = 2");
     check_bits(ps2_sqrt(denorm), 0x00000000u, "sqrt(denormal) = +0");
     check_bits(ps2_sqrt(-0.0f), 0x00000000u, "sqrt(-0) = +0");

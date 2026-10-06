@@ -78,6 +78,86 @@ static inline float ps2_div(float a, float b)
     return a / b;
 }
 
+/* a + b and a - b as the EE adder computes them (DIVERGENCES.md F1), after
+   PCSX2's hardware-derived PS2Float::Add/Sub/DoAdd (PR #12001,
+   docs/research/float-semantics.md): the operand with the smaller exponent
+   keeps one bit below its alignment shift (its lower bits are masked off),
+   the mantissas are summed as integers with six extra low bits, and the sum
+   is truncated. An effective subtraction can therefore come out one ulp
+   larger in magnitude than IEEE round toward zero, and an operand 25 or
+   more binades below the other drops entirely (1.0f - 2^-30 is 0x3F800000
+   on the PS2, 0x3F7FFFFF under IEEE RTZ). A zero or denormal operand reads
+   as zero, as under DAZ. Not used for ordinary game arithmetic, which stays
+   plain C under round toward zero (F1); see MATH.md for where it is. */
+static inline float ps2_add_aligned(uint32_t a, uint32_t b)
+{
+    int ea = (int)((a >> 23) & 0xFFu);
+    int eb = (int)((b >> 23) & 0xFFu);
+    int d;
+    int32_t ma, mb, man;
+    uint32_t am;
+    int p;
+    int e;
+
+    if (ea < eb) {
+        uint32_t t = a;
+        int te = ea;
+
+        a = b;
+        b = t;
+        ea = eb;
+        eb = te;
+    }
+    d = ea - eb;
+    if (d >= 25) {
+        return ps2_bits_float(a);
+    }
+    ma = (int32_t)((a & 0x7FFFFFu) | 0x800000u) * 64;
+    mb = (int32_t)((b & 0x7FFFFFu) | 0x800000u) * 64;
+    if (a & 0x80000000u) {
+        ma = -ma;
+    }
+    /* an arithmetic shift: a negative mantissa rounds toward minus infinity */
+    mb = (b & 0x80000000u) ? -(int32_t)(((uint32_t)mb + ((1u << d) - 1u)) >> d) : mb >> d;
+    man = ma + mb;
+    if (man == 0) {
+        return 0.0f;
+    }
+    am = man < 0 ? (uint32_t)-man : (uint32_t)man;
+    p = 31 - __builtin_clz(am);
+    e = ea - 6 + (p - 23);
+    am = p > 23 ? am >> (p - 23) : am << (23 - p);
+    if (e > 254) {
+        return man < 0 ? -FLT_MAX : FLT_MAX;
+    }
+    if (e < 1) {
+        return man < 0 ? -0.0f : 0.0f;
+    }
+    return ps2_bits_float((man < 0 ? 0x80000000u : 0u) | ((uint32_t)e << 23) | (am & 0x7FFFFFu));
+}
+
+static inline float ps2_add(float fa, float fb)
+{
+    uint32_t a = ps2_float_bits(fa);
+    uint32_t b = ps2_float_bits(fb);
+    int d = (int)((a >> 23) & 0xFFu) - (int)((b >> 23) & 0xFFu);
+
+    if ((a & 0x7F800000u) == 0 || (b & 0x7F800000u) == 0) {
+        return fa + fb;
+    }
+    if (d > 0 && d < 25) {
+        b &= 0xFFFFFFFFu << (d - 1);
+    } else if (d < 0 && d > -25) {
+        a &= 0xFFFFFFFFu << (-d - 1);
+    }
+    return ps2_add_aligned(a, b);
+}
+
+static inline float ps2_sub(float a, float b)
+{
+    return ps2_add(a, -b);
+}
+
 /* VU0 `vsqrt`: sqrt(|x|), so a negative input is not NaN. port/math/ps2float.c. */
 float ps2_sqrt(float x);
 

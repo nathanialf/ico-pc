@@ -40,6 +40,16 @@
  *     computed at run time. The section of each says what the EE object
  *     shows (the objects under build/sce/libm/, mips-linux-gnu-objdump -d).
  *
+ * Changed to give the EE's result: every float addition and subtraction in
+ * sinf (__kernel_sinf, __kernel_cosf, __ieee754_rem_pio2f up to the
+ * large-argument path), atanf, atan2f, acosf and asinf goes through
+ * ps2_add/ps2_sub (port/math/ps2float.h), the EE adder, which drops the
+ * smaller operand's bits below one guard bit; IEEE round toward zero does
+ * not (DIVERGENCES.md F18). sinf's table argument just under pi/2 is the
+ * case that shows it: 1 - 4.7e-9 is 1.0 on the EE and 0x3F7FFFFF under IEEE
+ * RTZ. Left as IEEE: __kernel_rem_pio2f and floorf (sinf's arguments above
+ * 2^7 * pi/2 only, which the game never passes), fmodf (exact).
+ *
  * Not reproduced: the EE FPU's own division (the copies use the host's
  * IEEE division, under the simulation's rounding mode) and its lack of
  * infinities and NaNs, except in acosf's and asinf's domain errors
@@ -282,11 +292,13 @@ static float ico___kernel_sinf(float x, float y, int iy)
     }
     z = x * x;
     v = z * x;
-    r = ico_ksin_S2 + z * (ico_ksin_S3 + z * (ico_ksin_S4 + z * (ico_ksin_S5 + z * ico_ksin_S6)));
+    r = ps2_add(ico_ksin_S2,
+                z * ps2_add(ico_ksin_S3,
+                            z * ps2_add(ico_ksin_S4, z * ps2_add(ico_ksin_S5, z * ico_ksin_S6))));
     if (iy == 0) {
-        return x + v * (ico_ksin_S1 + z * r);
+        return ps2_add(x, v * ps2_add(ico_ksin_S1, z * r));
     }
-    return x - ((z * (ico_ksin_half * y - v * r) - y) - v * ico_ksin_S1);
+    return ps2_sub(x, ps2_sub(ps2_sub(z * ps2_sub(ico_ksin_half * y, v * r), y), v * ico_ksin_S1));
 }
 
 /* ---- kf_cos.c (libm.a member kf_cos.o) --------------------------------- */
@@ -312,20 +324,23 @@ static float ico___kernel_cosf(float x, float y)
         }
     }
     z = x * x;
-    r = z * (ico_kcos_C1 +
-             z * (ico_kcos_C2 +
-                  z * (ico_kcos_C3 + z * (ico_kcos_C4 + z * (ico_kcos_C5 + z * ico_kcos_C6)))));
+    r = z *
+        ps2_add(ico_kcos_C1,
+                z * ps2_add(ico_kcos_C2,
+                            z * ps2_add(ico_kcos_C3,
+                                        z * ps2_add(ico_kcos_C4,
+                                                    z * ps2_add(ico_kcos_C5, z * ico_kcos_C6)))));
     if (ix < 0x3e99999a) {
-        return ico_kcos_one - ((float)0.5 * z - (z * r - x * y));
+        return ps2_sub(ico_kcos_one, ps2_sub((float)0.5 * z, ps2_sub(z * r, x * y)));
     } else {
         if (ix > 0x3f480000) {
             qx = (float)0.28125;
         } else {
             SET_FLOAT_WORD(qx, ix - 0x01000000);
         }
-        hz = (float)0.5 * z - qx;
-        a = ico_kcos_one - qx;
-        return a - (hz - (z * r - x * y));
+        hz = ps2_sub((float)0.5 * z, qx);
+        a = ps2_sub(ico_kcos_one, qx);
+        return ps2_sub(a, ps2_sub(hz, ps2_sub(z * r, x * y)));
     }
 }
 
@@ -601,61 +616,61 @@ static int32_t ico___ieee754_rem_pio2f(float x, float *y)
     }
     if (ix < 0x4016cbe4) { /* |x| < 3pi/4, special case with n = +-1 */
         if (hx > 0) {
-            z = x - ico_rem_pio2_1;
+            z = ps2_sub(x, ico_rem_pio2_1);
             if ((ix & 0xfffffff0) != 0x3fc90fd0) { /* 24+24 bit pi OK */
-                y[0] = z - ico_rem_pio2_1t;
-                y[1] = (z - y[0]) - ico_rem_pio2_1t;
+                y[0] = ps2_sub(z, ico_rem_pio2_1t);
+                y[1] = ps2_sub(ps2_sub(z, y[0]), ico_rem_pio2_1t);
             } else { /* near pi/2, use 24+24+24 bit pi */
-                z -= ico_rem_pio2_2;
-                y[0] = z - ico_rem_pio2_2t;
-                y[1] = (z - y[0]) - ico_rem_pio2_2t;
+                z = ps2_sub(z, ico_rem_pio2_2);
+                y[0] = ps2_sub(z, ico_rem_pio2_2t);
+                y[1] = ps2_sub(ps2_sub(z, y[0]), ico_rem_pio2_2t);
             }
             return 1;
         } else { /* negative x */
-            z = x + ico_rem_pio2_1;
+            z = ps2_add(x, ico_rem_pio2_1);
             if ((ix & 0xfffffff0) != 0x3fc90fd0) { /* 24+24 bit pi OK */
-                y[0] = z + ico_rem_pio2_1t;
-                y[1] = (z - y[0]) + ico_rem_pio2_1t;
+                y[0] = ps2_add(z, ico_rem_pio2_1t);
+                y[1] = ps2_add(ps2_sub(z, y[0]), ico_rem_pio2_1t);
             } else { /* near pi/2, use 24+24+24 bit pi */
-                z += ico_rem_pio2_2;
-                y[0] = z + ico_rem_pio2_2t;
-                y[1] = (z - y[0]) + ico_rem_pio2_2t;
+                z = ps2_add(z, ico_rem_pio2_2);
+                y[0] = ps2_add(z, ico_rem_pio2_2t);
+                y[1] = ps2_add(ps2_sub(z, y[0]), ico_rem_pio2_2t);
             }
             return -1;
         }
     }
     if (ix <= 0x43490f80) { /* |x| ~<= 2^7*(pi/2), medium size */
         t = ico_fabsf(x);
-        n = (int32_t)(t * ico_rem_invpio2 + ico_rem_half);
+        n = (int32_t)ps2_add(t * ico_rem_invpio2, ico_rem_half);
         fn = (float)n;
-        r = t - fn * ico_rem_pio2_1;
+        r = ps2_sub(t, fn * ico_rem_pio2_1);
         w = fn * ico_rem_pio2_1t; /* 1st round good to 40 bit */
         if (n < 32 && (int32_t)(ix & 0xffffff00) != ico_rem_npio2_hw[n - 1]) {
-            y[0] = r - w; /* quick check no cancellation */
+            y[0] = ps2_sub(r, w); /* quick check no cancellation */
         } else {
             uint32_t high;
             j = ix >> 23;
-            y[0] = r - w;
+            y[0] = ps2_sub(r, w);
             GET_FLOAT_WORD(high, y[0]);
             i = j - (int32_t)((high >> 23) & 0xff);
             if (i > 8) { /* 2nd iteration needed, good to 57 */
                 t = r;
                 w = fn * ico_rem_pio2_2;
-                r = t - w;
-                w = fn * ico_rem_pio2_2t - ((t - r) - w);
-                y[0] = r - w;
+                r = ps2_sub(t, w);
+                w = ps2_sub(fn * ico_rem_pio2_2t, ps2_sub(ps2_sub(t, r), w));
+                y[0] = ps2_sub(r, w);
                 GET_FLOAT_WORD(high, y[0]);
                 i = j - (int32_t)((high >> 23) & 0xff);
                 if (i > 25) { /* 3rd iteration needed, 74 bits accuracy */
                     t = r;    /* will cover all possible cases */
                     w = fn * ico_rem_pio2_3;
-                    r = t - w;
-                    w = fn * ico_rem_pio2_3t - ((t - r) - w);
-                    y[0] = r - w;
+                    r = ps2_sub(t, w);
+                    w = ps2_sub(fn * ico_rem_pio2_3t, ps2_sub(ps2_sub(t, r), w));
+                    y[0] = ps2_sub(r, w);
                 }
             }
         }
-        y[1] = (r - y[0]) - w;
+        y[1] = ps2_sub(ps2_sub(r, y[0]), w);
         if (hx < 0) {
             y[0] = -y[0];
             y[1] = -y[1];
@@ -800,14 +815,14 @@ static float ico_atanf(float x)
             return x + x;
         }
         if (hx > 0) {
-            return hi3 + lo3;
+            return ps2_add(hi3, lo3);
         } else {
-            return -hi3 - lo3;
+            return ps2_sub(-hi3, lo3);
         }
     }
     if (ix < 0x3ee00000) {
         if (ix < 0x31000000) {
-            if (ico_atan_huge + x > ico_atan_one) {
+            if (ps2_add(ico_atan_huge, x) > ico_atan_one) {
                 return x;
             }
         }
@@ -817,15 +832,15 @@ static float ico_atanf(float x)
         if (ix < 0x3f980000) {
             if (ix < 0x3f300000) {
                 id = 0;
-                x = ((float)2.0 * x - ico_atan_one) / ((float)2.0 + x);
+                x = ps2_sub((float)2.0 * x, ico_atan_one) / ps2_add((float)2.0, x);
             } else {
                 id = 1;
-                x = (x - ico_atan_one) / (x + ico_atan_one);
+                x = ps2_sub(x, ico_atan_one) / ps2_add(x, ico_atan_one);
             }
         } else {
             if (ix < 0x401c0000) {
                 id = 2;
-                x = (x - (float)1.5) / (ico_atan_one + (float)1.5 * x);
+                x = ps2_sub(x, (float)1.5) / ps2_add(ico_atan_one, (float)1.5 * x);
             } else {
                 id = 3;
                 x = -(float)1.0 / x;
@@ -834,17 +849,20 @@ static float ico_atanf(float x)
     }
     z = x * x;
     w = z * z;
-    s1 = z * (ico_atan_aT[0] +
-              w * (ico_atan_aT[2] +
-                   w * (ico_atan_aT[4] +
-                        w * (ico_atan_aT[6] + w * (ico_atan_aT[8] + w * ico_atan_aT[10])))));
-    s2 = w *
-         (ico_atan_aT[1] +
-          w * (ico_atan_aT[3] + w * (ico_atan_aT[5] + w * (ico_atan_aT[7] + w * ico_atan_aT[9]))));
+    s1 = z * ps2_add(ico_atan_aT[0],
+                     w * ps2_add(ico_atan_aT[2],
+                                 w * ps2_add(ico_atan_aT[4],
+                                             w * ps2_add(ico_atan_aT[6],
+                                                         w * ps2_add(ico_atan_aT[8],
+                                                                     w * ico_atan_aT[10])))));
+    s2 = w * ps2_add(ico_atan_aT[1],
+                     w * ps2_add(ico_atan_aT[3],
+                                 w * ps2_add(ico_atan_aT[5],
+                                             w * ps2_add(ico_atan_aT[7], w * ico_atan_aT[9]))));
     if (id < 0) {
-        return x - x * (s1 + s2);
+        return ps2_sub(x, x * ps2_add(s1, s2));
     }
-    z = ico_atan_atanhi[id] - ((x * (s1 + s2) - ico_atan_atanlo[id]) - x);
+    z = ps2_sub(ico_atan_atanhi[id], ps2_sub(ps2_sub(x * ps2_add(s1, s2), ico_atan_atanlo[id]), x));
     return (hx < 0) ? -z : z;
 }
 
@@ -947,9 +965,9 @@ static float ico___ieee754_atan2f(float y, float x)
     }
         return z;
     case 2:
-        return ico_atan2_pi - (z - ico_atan2_pi_lo);
+        return ps2_sub(ico_atan2_pi, ps2_sub(z, ico_atan2_pi_lo));
     default:
-        return (z - ico_atan2_pi_lo) - ico_atan2_pi;
+        return ps2_sub(ps2_sub(z, ico_atan2_pi_lo), ico_atan2_pi);
     }
 }
 
@@ -976,13 +994,18 @@ static const float ico_acos_qS3 = -6.8828397989e-01f;
 static const float ico_acos_qS4 = 7.7038154006e-02f;
 
 #define ICO_ACOS_P(z)                                                                              \
-    ((z) * (ico_acos_pS0 +                                                                         \
-            (z) * (ico_acos_pS1 +                                                                  \
-                   (z) * (ico_acos_pS2 +                                                           \
-                          (z) * (ico_acos_pS3 + (z) * (ico_acos_pS4 + (z) * ico_acos_pS5))))))
+    ((z) *                                                                                         \
+     ps2_add(ico_acos_pS0,                                                                         \
+             (z) * ps2_add(ico_acos_pS1,                                                           \
+                           (z) * ps2_add(ico_acos_pS2,                                             \
+                                         (z) * ps2_add(ico_acos_pS3,                               \
+                                                       (z) * ps2_add(ico_acos_pS4,                 \
+                                                                     (z) * ico_acos_pS5))))))
 #define ICO_ACOS_Q(z)                                                                              \
-    (ico_acos_one +                                                                                \
-     (z) * (ico_acos_qS1 + (z) * (ico_acos_qS2 + (z) * (ico_acos_qS3 + (z) * ico_acos_qS4))))
+    ps2_add(ico_acos_one,                                                                          \
+            (z) * ps2_add(ico_acos_qS1,                                                            \
+                          (z) * ps2_add(ico_acos_qS2,                                              \
+                                        (z) * ps2_add(ico_acos_qS3, (z) * ico_acos_qS4))))
 
 /* The domain-error value of acosf's and asinf's cores, (x - x) / (x - x),
  * as the EE computes it: ef_acos.o 0x64 sub.s then 0x70 div.s, ef_asin.o
@@ -1024,28 +1047,28 @@ static float ico___ieee754_acosf(float x)
         p = ICO_ACOS_P(z);
         q = ICO_ACOS_Q(z);
         r = p / q;
-        return ico_acos_pio2_hi - (x - (ico_acos_pio2_lo - x * r));
+        return ps2_sub(ico_acos_pio2_hi, ps2_sub(x, ps2_sub(ico_acos_pio2_lo, x * r)));
     } else if (hx < 0) {
-        z = (ico_acos_one + x) * (float)0.5;
+        z = ps2_add(ico_acos_one, x) * (float)0.5;
         p = ICO_ACOS_P(z);
         q = ICO_ACOS_Q(z);
         s = ico___ieee754_sqrtf(z);
         r = p / q;
-        w = r * s - ico_acos_pio2_lo;
-        return ico_acos_pi - (float)2.0 * (s + w);
+        w = ps2_sub(r * s, ico_acos_pio2_lo);
+        return ps2_sub(ico_acos_pi, (float)2.0 * ps2_add(s, w));
     } else {
         int32_t idf;
-        z = (ico_acos_one - x) * (float)0.5;
+        z = ps2_sub(ico_acos_one, x) * (float)0.5;
         s = ico___ieee754_sqrtf(z);
         df = s;
         GET_FLOAT_WORD(idf, df);
         SET_FLOAT_WORD(df, idf & 0xfffff000);
-        c = (z - df * df) / (s + df);
+        c = ps2_sub(z, df * df) / ps2_add(s, df);
         p = ICO_ACOS_P(z);
         q = ICO_ACOS_Q(z);
         r = p / q;
-        w = r * s + c;
-        return (float)2.0 * (df + w);
+        w = ps2_add(r * s, c);
+        return (float)2.0 * ps2_add(df, w);
     }
 }
 
@@ -1058,16 +1081,8 @@ static const float ico_asin_huge = 1.0000000150e+30f;    /* 0x7149F2CA */
 static const float ico_asin_pio2_hi = 1.5707962513e+00f; /* 0x3FC90FDA */
 static const float ico_asin_pio2_lo = 7.5497894159e-08f; /* 0x33A22168 */
 static const float ico_asin_pio4_hi = 7.8539818525e-01f; /* 0x3F490FDB */
-#define ico_asin_pS0 ico_acos_pS0 /* 0x3E2AAAAB; the same coefficients as acos */
-#define ico_asin_pS1 ico_acos_pS1 /* 0xBEA6B090 */
-#define ico_asin_pS2 ico_acos_pS2 /* 0x3E4E0AA8 */
-#define ico_asin_pS3 ico_acos_pS3 /* 0xBD241146 */
-#define ico_asin_pS4 ico_acos_pS4 /* 0x3A4F7F04 */
-#define ico_asin_pS5 ico_acos_pS5 /* 0x3811EF08 */
-#define ico_asin_qS1 ico_acos_qS1 /* 0xC019D139 */
-#define ico_asin_qS2 ico_acos_qS2 /* 0x4001572D */
-#define ico_asin_qS3 ico_acos_qS3 /* 0xBF303361 */
-#define ico_asin_qS4 ico_acos_qS4 /* 0x3D9DC62E */
+/* asin's pS0-pS5 and qS1-qS4 are acos's coefficients (0x3E2AAAAB ... 0x3D9DC62E), so its
+   polynomials are ICO_ACOS_P and ICO_ACOS_Q. */
 
 static float ico___ieee754_asinf(float x)
 {
@@ -1081,47 +1096,40 @@ static float ico___ieee754_asinf(float x)
     ix = hx & 0x7fffffff;
     if (ix == 0x3f800000) {
         /* asin(1) = +-pi/2 with inexact */
-        return x * ico_asin_pio2_hi + x * ico_asin_pio2_lo;
+        return ps2_add(x * ico_asin_pio2_hi, x * ico_asin_pio2_lo);
     } else if (ix > 0x3f800000) {   /* |x| >= 1 */
         return ico_domain_error(x); /* (x - x) / (x - x), asin(x) = NaN */
     } else if (ix < 0x3f000000) {   /* |x| < 0.5 */
         if (ix < 0x32000000) {      /* if |x| < 2**-27 */
-            if (ico_asin_huge + x > ico_asin_one) {
+            if (ps2_add(ico_asin_huge, x) > ico_asin_one) {
                 return x; /* return x with inexact if x != 0 */
             }
         } else
             t = x * x;
-        p = t *
-            (ico_asin_pS0 +
-             t * (ico_asin_pS1 +
-                  t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
-        q = ico_asin_one +
-            t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
+        p = ICO_ACOS_P(t);
+        q = ICO_ACOS_Q(t);
         w = p / q;
-        return x + x * w;
+        return ps2_add(x, x * w);
     }
     /* 1 > |x| >= 0.5 */
-    w = ico_asin_one - ico_fabsf(x);
+    w = ps2_sub(ico_asin_one, ico_fabsf(x));
     t = w * (float)0.5;
-    p = t * (ico_asin_pS0 +
-             t * (ico_asin_pS1 +
-                  t * (ico_asin_pS2 + t * (ico_asin_pS3 + t * (ico_asin_pS4 + t * ico_asin_pS5)))));
-    q = ico_asin_one +
-        t * (ico_asin_qS1 + t * (ico_asin_qS2 + t * (ico_asin_qS3 + t * ico_asin_qS4)));
+    p = ICO_ACOS_P(t); /* asin's pS and qS are acos's */
+    q = ICO_ACOS_Q(t);
     s = ico___ieee754_sqrtf(t);
     if (ix >= 0x3F79999A) { /* if |x| > 0.975 */
         w = p / q;
-        t = ico_asin_pio2_hi - ((float)2.0 * (s + s * w) - ico_asin_pio2_lo);
+        t = ps2_sub(ico_asin_pio2_hi, ps2_sub((float)2.0 * ps2_add(s, s * w), ico_asin_pio2_lo));
     } else {
         int32_t iw;
         w = s;
         GET_FLOAT_WORD(iw, w);
         SET_FLOAT_WORD(w, iw & 0xfffff000);
-        c = (t - w * w) / (s + w);
+        c = ps2_sub(t, w * w) / ps2_add(s, w);
         r = p / q;
-        p = (float)2.0 * s * r - (ico_asin_pio2_lo - (float)2.0 * c);
-        q = ico_asin_pio4_hi - (float)2.0 * w;
-        t = ico_asin_pio4_hi - (p - q);
+        p = ps2_sub((float)2.0 * s * r, ps2_sub(ico_asin_pio2_lo, (float)2.0 * c));
+        q = ps2_sub(ico_asin_pio4_hi, (float)2.0 * w);
+        t = ps2_sub(ico_asin_pio4_hi, ps2_sub(p, q));
     }
     if (hx > 0) {
         return t;

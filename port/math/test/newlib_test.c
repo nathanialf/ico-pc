@@ -296,17 +296,29 @@ int main(void)
     check_vals("rz", 3);
     check_exact("rz");
     /* atanf's huge-argument sum is computed at run time, as on the EE:
-       atan2f(y, 1) with |y| >= 2^34 reaches it. RTZ gives 0x3fc90fda,
-       round to nearest 0x3fc90fdb. */
+       atan2f(y, 1) with |y| >= 2^34 reaches it. The EE adder gives
+       0x3fc90fda (IEEE round to nearest would give 0x3fc90fdb). */
     {
         float a = ico_atan2f(1e20f, 1.0f);
         CHECK(fbits(a) == 0x3fc90fda, "[rz] atan2f(1e20, 1): 0x%08x want 0x3fc90fda",
               (unsigned)fbits(a));
     }
+    /* sinTable's last entry (sugipon/src/tableSin.c makeSinTable, i =
+       16384): 1 - 4.7e-9 in __kernel_cosf is 1.0 on the EE adder, 0x3f7fffff
+       under IEEE RTZ (DIVERGENCES.md F18). */
+    {
+        volatile float m = 1.5707964f;
+        volatile float d = 16385.0f;
+        float a = ico_sinf((float)16384 * m / d);
+        CHECK(fbits(a) == 0x3f800000,
+              "[rz] sinf(16384 * 1.5707964 / 16385): 0x%08x want 0x3f800000", (unsigned)fbits(a));
+    }
     ico_fpenv_host_enter();
+    /* the sum goes through ps2_add, the EE adder, so the host's rounding
+       mode does not reach it: the EE's 0x3fc90fda in either mode */
     {
         float a = ico_atan2f(1e20f, 1.0f);
-        CHECK(fbits(a) == 0x3fc90fdb, "[rn] atan2f(1e20, 1): 0x%08x want 0x3fc90fdb",
+        CHECK(fbits(a) == 0x3fc90fda, "[rn] atan2f(1e20, 1): 0x%08x want 0x3fc90fda",
               (unsigned)fbits(a));
     }
 

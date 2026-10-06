@@ -51,6 +51,13 @@ multiply-add. That is why the simulation runs in that mode rather than
 calling a helper for every operation: the PS2's rounding comes for free, and
 only the cases below need code. The helpers cover what remains:
 
+- `ps2_add(a, b)`, `ps2_sub(a, b)`: the EE adder (PCSX2 PR #12001's
+  `PS2Float` model): the smaller operand keeps one bit below its alignment
+  shift and the sum truncates, so an effective subtraction can be 1 ulp
+  larger in magnitude than IEEE round toward zero, and an operand 25 or
+  more binades smaller drops. Integer arithmetic, so the host's rounding
+  mode does not reach it. Used in the newlib copies (`port/math/newlib`,
+  DIVERGENCES.md F18); game code stays plain C (F1).
 - `ps2_div(a, b)`: a divisor with a zero exponent (zero or denormal) gives
   +-Fmax with the sign of `a ^ b`, 0/0 included (VU0 `vdiv`, EE `div.s`).
 - `ps2_sqrt(x)`: `sqrt(|x|)`; zero or denormal gives +0 (VU0 `vsqrt`).
