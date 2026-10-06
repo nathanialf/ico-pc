@@ -44,6 +44,11 @@ typedef struct VkrBuffer {
     RhiMemory kind;
     void *mapped;
     bool coherent;
+    /* package PB, hazard tracking (vk_cmd.c, "Hazards"): a copy's write or
+     * read not yet behind a barrier, valid while hzEpoch is the recording
+     * list's */
+    uint64_t hzEpoch;
+    bool hzXferWrite, hzXferRead;
 } VkrBuffer;
 
 typedef struct VkrTexture {
@@ -56,7 +61,16 @@ typedef struct VkrTexture {
     VkImageAspectFlags aspects;
     uint32_t width, height, mips;
     bool swapchain;
+    /* package PB, hazard tracking (vk_cmd.c, "Hazards"): what touched the
+     * image since its last barrier, valid while hzEpoch is the recording
+     * list's: the mips a copy wrote, and an attachment write or read */
+    uint64_t hzEpoch;
+    uint32_t hzXferMips;
+    uint8_t hzAttach; /* VKR_HZ_ATTACH_* */
 } VkrTexture;
+
+#define VKR_HZ_ATTACH_WRITE 1u
+#define VKR_HZ_ATTACH_READ 2u
 
 typedef struct VkrShader {
     VkShaderModule module;
@@ -112,6 +126,11 @@ typedef struct VkrCmdList {
     uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
     uint32_t groupDirty; /* bit per group */
     bool inPass;
+    /* package PB: the list's hazard-tracking epoch (g_vkr.hzEpoch when it
+     * began); globalOrder: a global barrier before every pass and copy
+     * instead (ICO_VK_GLOBAL_BARRIERS=1, or lists recorded interleaved) */
+    uint64_t epoch;
+    bool globalOrder;
 } VkrCmdList;
 
 typedef struct VkrFrame {
@@ -195,6 +214,10 @@ typedef struct VkrState {
     uint64_t tsResult[RHI_MAX_TIMESTAMPS];
     uint32_t tsCount; /* of the slot rhi_WaitFrame recycled last */
     bool mailbox;     /* the swapchain presents in mailbox mode (rhi_PreferMailbox) */
+
+    /* package PB: hazard tracking (vk_cmd.c, "Hazards") */
+    bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: main's global barrier path */
+    uint64_t hzEpoch;    /* the last command list's epoch (one per rhi_BeginCommands) */
 } VkrState;
 
 extern VkrState g_vkr;
@@ -240,7 +263,7 @@ bool vkr_FramesInit(void);
 bool vkr_SubmitPresentSignal(void);
 void vkr_FramesShutdown(void);
 VkrCmdList *vkr_GetCmd(RhiCommandList cl);
-void vkr_ImageBarrier(VkCommandBuffer cb, VkrTexture *t, RhiState before, RhiState after);
+void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after);
 /* vk_swapchain.c */
 bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);
 void vkr_SwapchainDestroy(void);

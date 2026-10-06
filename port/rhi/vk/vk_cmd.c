@@ -8,6 +8,13 @@
 /* ------------------------------------------------------------------ frames */
 bool vkr_FramesInit(void)
 {
+    /* package PB: main's global barrier before every pass and copy, for A/B
+     * comparisons and bisecting ("Hazards" below) */
+    const char *gb = getenv("ICO_VK_GLOBAL_BARRIERS");
+    g_vkr.globalBarriers = gb && gb[0] && gb[0] != '0';
+    if (g_vkr.globalBarriers) {
+        VKR_LOG("ICO_VK_GLOBAL_BARRIERS: a global barrier before every render pass and copy");
+    }
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         VkrFrame *f = &g_vkr.frames[i];
         VkCommandPoolCreateInfo pci = {
@@ -168,6 +175,8 @@ void rhi_WaitIdle(void)
     }
 }
 
+static void vkr_OpenBarrier(VkCommandBuffer cb);
+
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1). */
 VkrCmdList *vkr_GetCmd(RhiCommandList cl)
@@ -198,6 +207,20 @@ RhiCommandList rhi_BeginCommands(void)
         return out;
     }
     c->recording = true;
+    /* package PB: a new hazard-tracking epoch ("Hazards") */
+    c->epoch = ++g_vkr.hzEpoch;
+    c->globalOrder = g_vkr.globalBarriers;
+    for (uint32_t j = 0; j < f->listCount; j++) {
+        if (f->lists[j].recording) {
+            /* recorded interleaved: tracking follows one list's order, so
+             * both lists fall back to the global barriers */
+            f->lists[j].globalOrder = true;
+            c->globalOrder = true;
+        }
+    }
+    if (!c->globalOrder) {
+        vkr_OpenBarrier(c->cb);
+    }
     f->listCount++;
     if (f->queryPool && !f->tsReset) {
         /* package P1: the slot's timestamps start unwritten (outside any
@@ -318,13 +341,35 @@ bool vkr_SubmitPresentSignal(void)
 }
 
 /* ---------------------------------------------------------------- barriers */
-void vkr_ImageBarrier(VkCommandBuffer cb, VkrTexture *t, RhiState before, RhiState after)
+void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after)
 {
     const VkrStateMap *b = &vkr_stateMap[before];
     const VkrStateMap *a = &vkr_stateMap[after];
+    VkPipelineStageFlags src = b->stages;
+    VkAccessFlags srcAccess = b->access;
+    if (t->hzEpoch == c->epoch) {
+        /* package PB: the uses still pending on the image join the first
+         * scope (they are the before state's own, unless the caller
+         * discards the contents with before = UNDEFINED) */
+        const bool depth = (t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        if (t->hzXferMips) {
+            src |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+            srcAccess |= VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        if (t->hzAttach) {
+            src |= depth ? VKR_DEPTH_STAGES : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            if (t->hzAttach & VKR_HZ_ATTACH_WRITE) {
+                srcAccess |= depth ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                                   : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            }
+        }
+        if (src != VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) {
+            src &= ~(VkPipelineStageFlags)VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        }
+    }
     VkImageMemoryBarrier ib = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = b->access,
+        .srcAccessMask = srcAccess,
         .dstAccessMask = a->access,
         .oldLayout = vkr_StateLayout(before, t->rhiFormat),
         .newLayout = vkr_StateLayout(after, t->rhiFormat),
@@ -337,8 +382,12 @@ void vkr_ImageBarrier(VkCommandBuffer cb, VkrTexture *t, RhiState before, RhiSta
     if (after == RHI_STATE_PRESENT) {
         dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     }
-    vkCmdPipelineBarrier(cb, b->stages, dst, 0, 0, NULL, 0, NULL, 1, &ib);
+    vkCmdPipelineBarrier(c->cb, src, dst, 0, 0, NULL, 0, NULL, 1, &ib);
     g_vkr.stats.barriers++;
+    /* package PB: the barrier covers whatever was pending on the image */
+    t->hzEpoch = 0;
+    t->hzXferMips = 0;
+    t->hzAttach = 0;
 }
 
 void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
@@ -353,7 +402,7 @@ void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32
             VKR_LOG("rhi_CmdBarrier: invalid barrier %u", i);
             continue;
         }
-        vkr_ImageBarrier(c->cb, t, barriers[i].before, barriers[i].after);
+        vkr_ImageBarrier(c, t, barriers[i].before, barriers[i].after);
     }
 }
 
@@ -361,9 +410,11 @@ void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32
  * changes state; two writes in the same state (a copy after a copy into one
  * texture, a render pass after a render pass on one target) are ordered by
  * the backend.  Vulkan gives no implicit ordering across copies or across
- * render passes, so a global memory barrier goes before each copy and each
- * render pass.  It is cheap at this game's scale (tens of passes per frame,
- * copies mostly at load). */
+ * render passes.
+ *
+ * vkr_OrderWrites is main's way, kept for ICO_VK_GLOBAL_BARRIERS=1 and for
+ * lists recorded interleaved: a global memory barrier before every copy and
+ * every render pass. */
 static void vkr_OrderWrites(VkCommandBuffer cb, bool attachments)
 {
     VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -385,6 +436,182 @@ static void vkr_OrderWrites(VkCommandBuffer cb, bool attachments)
     g_vkr.stats.barriers++;
 }
 
+/* Hazards (package PB; README.md, "States and barriers").  Each texture and
+ * buffer records what touched it since its last barrier: the mips a copy
+ * wrote, an attachment write or a read-only depth attachment read (a
+ * buffer: a copy's write or read).  A render pass or copy emits one
+ * pipeline barrier holding an image (buffer) barrier for each resource it
+ * uses that has a pending hazard with that use (write after write, read
+ * after write, write after read), in the layout the use needs (old = new:
+ * layouts change only at the caller's rhi_CmdBarrier, which clears the
+ * record).  Anything else needs no barrier: sampling, copying from and
+ * presenting all need a state change, and that transition is the caller's.
+ *
+ * The record belongs to one command list (its epoch).  Each list begins
+ * with one global barrier over attachment and transfer writes
+ * (vkr_OpenBarrier), which orders it after every list submitted before it,
+ * this frame's and the frames' still in flight, so a record from an older
+ * list counts as clean and nothing is carried across submissions or frame
+ * slots.  Lists recorded interleaved fall back to vkr_OrderWrites. */
+static void vkr_OpenBarrier(VkCommandBuffer cb)
+{
+    const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                        VKR_DEPTH_STAGES | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkMemoryBarrier mb = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+    };
+    vkCmdPipelineBarrier(cb, stages, stages, 0, 1, &mb, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
+}
+
+/* the barriers one pass or copy needs, emitted as one vkCmdPipelineBarrier */
+typedef struct VkrHz {
+    VkImageMemoryBarrier img[RHI_MAX_COLOR_TARGETS + 2];
+    VkBufferMemoryBarrier buf[2];
+    uint32_t imgCount, bufCount;
+    VkPipelineStageFlags src, dst;
+} VkrHz;
+
+static void vkr_HzTouch(const VkrCmdList *c, VkrTexture *t)
+{
+    if (t->hzEpoch != c->epoch) {
+        t->hzEpoch = c->epoch;
+        t->hzXferMips = 0;
+        t->hzAttach = 0;
+    }
+}
+
+/* A use of t in `layout` by dstStages/dstAccess; writeMips: the mips the
+ * use writes (0: a read). */
+static void vkr_HzImage(VkrHz *h, const VkrCmdList *c, VkrTexture *t, VkImageLayout layout,
+                        VkPipelineStageFlags dstStages, VkAccessFlags dstAccess, uint32_t writeMips)
+{
+    if (t->hzEpoch != c->epoch) {
+        return; /* behind the list's opening barrier */
+    }
+    const bool need = (t->hzXferMips & (writeMips ? writeMips : ~0u)) != 0 ||
+                      (t->hzAttach & VKR_HZ_ATTACH_WRITE) ||
+                      (writeMips && (t->hzAttach & VKR_HZ_ATTACH_READ));
+    if (!need) {
+        return;
+    }
+    const bool depth = (t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+    VkPipelineStageFlags src = 0;
+    VkAccessFlags srcAccess = 0;
+    if (t->hzXferMips) {
+        src |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        srcAccess |= VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+    if (t->hzAttach) {
+        src |= depth ? VKR_DEPTH_STAGES : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        if (t->hzAttach & VKR_HZ_ATTACH_WRITE) {
+            srcAccess |= depth ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+                               : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        }
+    }
+    h->img[h->imgCount++] = (VkImageMemoryBarrier){
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = srcAccess,
+        .dstAccessMask = dstAccess,
+        .oldLayout = layout,
+        .newLayout = layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = t->image,
+        .subresourceRange = {t->aspects, 0, t->mips, 0, 1},
+    };
+    h->src |= src;
+    h->dst |= dstStages;
+    t->hzXferMips = 0;
+    t->hzAttach = 0;
+}
+
+/* A copy's use of a buffer: write (a copy's destination) or read. */
+static void vkr_HzBuffer(VkrHz *h, const VkrCmdList *c, VkrBuffer *b, bool write)
+{
+    if (b->hzEpoch != c->epoch) {
+        b->hzEpoch = c->epoch;
+        b->hzXferWrite = false;
+        b->hzXferRead = false;
+    }
+    if (b->hzXferWrite || (write && b->hzXferRead)) {
+        h->buf[h->bufCount++] = (VkBufferMemoryBarrier){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = b->hzXferWrite ? VK_ACCESS_TRANSFER_WRITE_BIT : 0,
+            .dstAccessMask = write ? VK_ACCESS_TRANSFER_WRITE_BIT : VK_ACCESS_TRANSFER_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = b->buffer,
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        };
+        h->src |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        h->dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        b->hzXferWrite = false;
+        b->hzXferRead = false;
+    }
+    if (write) {
+        b->hzXferWrite = true;
+    } else {
+        b->hzXferRead = true;
+    }
+}
+
+static void vkr_HzFlush(VkCommandBuffer cb, const VkrHz *h)
+{
+    if (h->imgCount + h->bufCount == 0) {
+        return;
+    }
+    vkCmdPipelineBarrier(cb, h->src, h->dst, 0, 0, NULL, h->bufCount, h->buf, h->imgCount, h->img);
+    g_vkr.stats.barriers++;
+}
+
+static uint32_t vkr_MipBit(uint32_t mip)
+{
+    return mip < 32 ? 1u << mip : 0x80000000u;
+}
+
+/* A copy from srcTex or srcBuf into dstTex (mip dstMip) or dstBuf. */
+static void vkr_HzCopy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, VkrTexture *dstTex,
+                       uint32_t dstMip, VkrBuffer *dstBuf)
+{
+    if (c->globalOrder) {
+        vkr_OrderWrites(c->cb, false);
+        return;
+    }
+    VkrHz h;
+    h.imgCount = h.bufCount = 0;
+    h.src = h.dst = 0;
+    if (srcTex) {
+        vkr_HzImage(&h, c, srcTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0);
+    }
+    if (dstTex) {
+        vkr_HzImage(&h, c, dstTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                    vkr_MipBit(dstMip));
+    }
+    if (srcBuf) {
+        vkr_HzBuffer(&h, c, srcBuf, false);
+    }
+    if (dstBuf) {
+        vkr_HzBuffer(&h, c, dstBuf, true);
+    }
+    vkr_HzFlush(c->cb, &h);
+    if (dstTex) {
+        vkr_HzTouch(c, dstTex);
+        dstTex->hzXferMips |= vkr_MipBit(dstMip);
+    }
+}
+
 /* ------------------------------------------------------------ render passes */
 void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
@@ -393,6 +620,8 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         return;
     }
     VkRenderingAttachmentInfo color[RHI_MAX_COLOR_TARGETS];
+    VkrTexture *colorTex[RHI_MAX_COLOR_TARGETS];
+    VkrTexture *depthTex = NULL;
     for (uint32_t i = 0; i < pass->colorCount; i++) {
         const RhiColorAttachment *a = &pass->color[i];
         VkrTexture *t = vkr_GetTexture(a->texture);
@@ -400,6 +629,7 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             VKR_LOG("render pass: invalid colour target %u", i);
             return;
         }
+        colorTex[i] = t;
         VkClearValue cv;
         if (vkr_formatMap[t->rhiFormat].isInteger) {
             /* integer targets clear with integer values: the float clear
@@ -434,6 +664,7 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                                    : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         VkClearValue cv = {.depthStencil = {pass->depth.clearDepth, pass->depth.clearStencil}};
         hasDepth = true;
+        depthTex = t;
         depth.imageView = t->view;
         depth.imageLayout = layout;
         depth.loadOp =
@@ -464,7 +695,42 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         .pDepthAttachment = hasDepth ? &depth : NULL,
         .pStencilAttachment = hasStencil ? &stencil : NULL,
     };
-    vkr_OrderWrites(c->cb, true);
+    if (c->globalOrder) {
+        vkr_OrderWrites(c->cb, true);
+    } else {
+        /* package PB: barriers for the targets only ("Hazards") */
+        VkrHz h;
+        h.imgCount = h.bufCount = 0;
+        h.src = h.dst = 0;
+        for (uint32_t i = 0; i < pass->colorCount; i++) {
+            vkr_HzImage(&h, c, colorTex[i], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                        ~0u);
+        }
+        /* a read-only depth attachment is only read when it is loaded and
+         * not stored; anything else writes it */
+        bool depthWrites = false;
+        if (depthTex) {
+            depthWrites = depth.storeOp == VK_ATTACHMENT_STORE_OP_STORE ||
+                          depth.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD ||
+                          (hasStencil && (stencil.storeOp == VK_ATTACHMENT_STORE_OP_STORE ||
+                                          stencil.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD));
+            vkr_HzImage(&h, c, depthTex, depth.imageLayout, VKR_DEPTH_STAGES,
+                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            (depthWrites ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0),
+                        depthWrites ? ~0u : 0u);
+        }
+        vkr_HzFlush(c->cb, &h);
+        for (uint32_t i = 0; i < pass->colorCount; i++) {
+            vkr_HzTouch(c, colorTex[i]);
+            colorTex[i]->hzAttach |= VKR_HZ_ATTACH_WRITE;
+        }
+        if (depthTex) {
+            vkr_HzTouch(c, depthTex);
+            depthTex->hzAttach |= depthWrites ? VKR_HZ_ATTACH_WRITE : VKR_HZ_ATTACH_READ;
+        }
+    }
     g_vkr.cmdBeginRendering(c->cb, &ri);
     c->inPass = true;
     g_vkr.stats.renderPasses++;
@@ -711,7 +977,7 @@ void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOf
         .imageOffset = {region.x, region.y, 0},
         .imageExtent = {region.w, region.h, 1},
     };
-    vkr_OrderWrites(c->cb, false);
+    vkr_HzCopy(c, NULL, s, t, mip, NULL);
     vkCmdCopyBufferToImage(c->cb, s->buffer, t->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
     g_vkr.stats.copies++;
 }
@@ -732,7 +998,7 @@ void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, Rh
         .dstOffset = {dstX, dstY, 0},
         .extent = {srcRegion.w, srcRegion.h, 1},
     };
-    vkr_OrderWrites(c->cb, false);
+    vkr_HzCopy(c, s, NULL, d, 0, NULL);
     vkCmdCopyImage(c->cb, s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
     g_vkr.stats.copies++;
@@ -756,7 +1022,7 @@ void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect
         .imageOffset = {region.x, region.y, 0},
         .imageExtent = {region.w, region.h, 1},
     };
-    vkr_OrderWrites(c->cb, false);
+    vkr_HzCopy(c, t, NULL, NULL, 0, d);
     vkCmdCopyImageToBuffer(c->cb, t->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->buffer, 1, &r);
     g_vkr.stats.copies++;
 }

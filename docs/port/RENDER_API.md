@@ -1781,6 +1781,53 @@ stats lines to every second for 30 s.
   are GPU passes.
 - `rhi_CmdCopyBuffer` waits for earlier reads of its destination, so an
   arena range freed while the GPU may still read it can be reused at once.
+- Barriers only where a resource has a hazard (package PB). The Vulkan
+  backend used to put a global memory barrier before every render pass and
+  copy to order same-state writes; it now records, per texture and buffer,
+  what touched it since its last barrier and emits an image (buffer) barrier
+  only for a pass's targets or a copy's resources that were written since
+  (or, for a write, read as read-only depth), in the layout the use needs.
+  Layout changes stay the renderer's `rd__Transition` calls. Each command
+  list opens with one global barrier, so nothing is tracked across
+  submissions or frames in flight. `ICO_VK_GLOBAL_BARRIERS=1` restores the
+  old path; `port/rhi/vk/README.md` ("Hazard tracking") has the model.
+  `rd_replay_tool --stats` prints the barrier and copy counts, and `rd_perf`
+  checks its synthetic frame's: 36 a steady replay and 39 a recorded frame
+  (44 and 48 on the global path).
+
+  Pipeline barriers of a steady replay (`rd_perf_test --dump`, Original
+  preset; main at 81318c6d, the global path with
+  `ICO_VK_GLOBAL_BARRIERS=1`, which records the same counts, and the
+  tracked path; the 75 corpus PNGs are byte-identical to main's):
+
+  | dump | passes, copies | main | tracked |
+  | --- | --- | --- | --- |
+  | boot 200, 400, 600 | 58 + 13, 51 + 8, 53 + 9 | 196, 161, 171 | 140, 116, 123 |
+  | lightning 200, 300 | 29 + 6 | 94 | 71 |
+  | plain 200, 300 | 28 + 6 | 89 | 68 |
+  | puddle 200, 300 | 60 + 11 | 201 | 147 |
+  | queen 200, 300 | 29 + 6 | 94 | 71 |
+  | the load frames (100) | 6 + 0 | 12 | 9 |
+
+  The rest are the renderer's transitions (main's count less one per pass
+  and copy: 125 on boot 200, 55 on plain 200), the list's opening barrier,
+  and the hazard barriers proper (boot 200: 14, plain 200: 12; on plain 200
+  every one is a pass on a target the previous pass on it wrote with no
+  transition between). The first replay of a dump, with its texture
+  uploads (two transitions a texture), goes from 537 to 438 on boot 200
+  (`--stats`). On lavapipe the replay time did not change measurably: the
+  mean steady replays (`rd_perf_test --dump --repeat 10`) of main, the
+  global path and the tracked path differ by up to 7 % on the gameplay
+  dumps and more on the 20 ms load frames, in both directions, with other
+  work on the machine. No GPU driver has been measured.
+
+  The Khronos validation layer's synchronisation validation (1.4.309, the
+  copy `tools/fetch_deps.sh` unpacks) reports nothing on the `rd_*` and
+  `rhi_*` tests. It does report a copy written twice without a barrier,
+  but it reported nothing either when the attachment hazard barriers were
+  deliberately dropped (a local experiment on plain 200), so it does not
+  check same-target render passes under dynamic rendering in this version:
+  for those the barrier counts above and `rd_perf`'s are the check.
 
 **Logging cost.** On Windows stdout and stderr are fully buffered and the
 host loop calls `ico_host_log_flush` once per vsync, after the step. The

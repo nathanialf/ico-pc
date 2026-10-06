@@ -65,7 +65,8 @@
  *                         performance record (rd.h RdPerfRecord): draws,
  *                         passes, bind groups created (rd's uniform and
  *                         texture groups apart), bind group and pipeline
- *                         binds, ring bytes
+ *                         binds, ring bytes, (package PB) pipeline
+ *                         barriers and copies
  *   --no-aa1              (package AA1) replays with PRIM.AA1 off: every
  *                         RDC_AA1 a NOP and the start state's bit clear, the
  *                         frame as the renderer drew it before AA1 was
@@ -529,10 +530,10 @@ int main(int argc, char **argv)
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
-               "group binds, %u pipeline binds, %llu ring bytes\n",
+               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies\n",
                dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
-               (unsigned long long)pr->uploadBytes);
+               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies);
     }
     if (replayed) {
         uint32_t w = 0, h = 0;

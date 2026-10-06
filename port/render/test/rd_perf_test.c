@@ -16,7 +16,9 @@
  *             lavapipe that is the rasterisation) is under 20 ms; and
  *             (package PA) every replay, here and below, creates one
  *             uniform bind group per uniform layout (frame, draw, VU),
- *             however many draws;
+ *             however many draws; (package PB) a steady replay records
+ *             exactly BARRIERS_REPLAY pipeline barriers (BARRIERS_RECORD
+ *             below);
  *   record    200 frames recorded and closed as the game does (rd_EndFrame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
@@ -263,6 +265,8 @@ typedef struct Sum {
      * and texture groups (the least and most of the uniform ones) */
     uint64_t groups, uniformGroups, textureGroups;
     uint32_t uniformMin, uniformMax;
+    /* package PB: pipeline barriers recorded per replay (least, most) */
+    uint32_t barrierMin, barrierMax;
 } Sum;
 
 static void add(Sum *s, const RdPerfRecord *r)
@@ -293,6 +297,12 @@ static void add(Sum *s, const RdPerfRecord *r)
     if (s->n == 1 || r->uniformGroups > s->uniformMax) {
         s->uniformMax = r->uniformGroups;
     }
+    if (s->n == 1 || r->barriers < s->barrierMin) {
+        s->barrierMin = r->barriers;
+    }
+    if (s->n == 1 || r->barriers > s->barrierMax) {
+        s->barrierMax = r->barriers;
+    }
     s->groups += r->bindGroups;
     s->uniformGroups += r->uniformGroups;
     s->textureGroups += r->textureGroups;
@@ -310,9 +320,10 @@ static void print(const char *what, const Sum *s)
            (double)s->texUploads / n, (double)s->meshUploads / n, (double)s->meshBytes / n / 1024.0,
            (unsigned long long)s->created, (unsigned long long)s->destroyed,
            (unsigned long long)s->allocs, (unsigned long long)s->waitIdles);
-    printf("%s: bind groups per replay %.2f: uniform %.2f (%u..%u), texture %.2f\n", what,
-           (double)s->groups / n, (double)s->uniformGroups / n, s->uniformMin, s->uniformMax,
-           (double)s->textureGroups / n);
+    printf("%s: bind groups per replay %.2f: uniform %.2f (%u..%u), texture %.2f; barriers "
+           "%u..%u\n",
+           what, (double)s->groups / n, (double)s->uniformGroups / n, s->uniformMin, s->uniformMax,
+           (double)s->textureGroups / n, s->barrierMin, s->barrierMax);
 }
 
 /* every finished record into first (the first `skip`) or rest */
@@ -366,6 +377,30 @@ static void checkGroups(const char *what, const Sum *s)
     CHECK(s->groups == s->uniformGroups + s->textureGroups,
           "%s: %llu bind groups, %llu uniform + %llu texture", what, (unsigned long long)s->groups,
           (unsigned long long)s->uniformGroups, (unsigned long long)s->textureGroups);
+}
+
+/* Package PB: the pipeline barriers of a steady replay.  The Vulkan backend
+ * orders same-state writes per resource (port/rhi/vk/README.md, "Hazard
+ * tracking"): one list-opening barrier and one per pass or copy whose target
+ * has a write pending, instead of a global barrier before every pass and
+ * copy (ICO_VK_GLOBAL_BARRIERS=1, the _GLOBAL counts).  A backend
+ * without counters (D3D12) reads 0 and is not checked. */
+#define BARRIERS_REPLAY 36
+#define BARRIERS_RECORD 39
+#define BARRIERS_REPLAY_GLOBAL 44
+#define BARRIERS_RECORD_GLOBAL 48
+
+static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint32_t global)
+{
+    const char *env = getenv("ICO_VK_GLOBAL_BARRIERS");
+    const uint32_t want = env && env[0] && env[0] != '0' ? global : tracked;
+    if (s->n > 0 && s->barrierMax == 0) {
+        printf("%s: the backend counts no barriers: not checked\n", what);
+        return;
+    }
+    CHECK(s->n > 0 && s->barrierMin == want && s->barrierMax == want,
+          "%s: %u..%u pipeline barriers a replay, %u expected", what, s->barrierMin, s->barrierMax,
+          want);
 }
 
 static int synthetic(void)
@@ -427,6 +462,7 @@ static int synthetic(void)
           "replay: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     checkGroups("replay", &rest);
+    checkBarriers("replay", &rest, BARRIERS_REPLAY, BARRIERS_REPLAY_GLOBAL);
 
     /* record: 200 frames as the game makes them */
     memset(&first, 0, sizeof(first));
@@ -464,6 +500,7 @@ static int synthetic(void)
           "record: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     checkGroups("record", &rest);
+    checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
     rd_Shutdown();
     return 0;
 }

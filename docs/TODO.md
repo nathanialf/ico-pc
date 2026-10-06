@@ -73,11 +73,9 @@ pointer to this file.
   only through a stage's BGA lightning record; survey the disc's lightning
   records and, if any uses them, add an exact path with a destination
   snapshot in `rd_replay.c`.
-- **Performance.** `vkr_OrderWrites` (`port/rhi/vk/vk_cmd.c`) puts
-  a global barrier before every render pass and copy, about 100 per frame
-  in a typical stage; per-target hazard tracking would remove most. Runs of
-  screen-prim commands under the same state are one draw each; merging them
-  must keep the AFAIL-split and DATE boundaries.
+- **Performance.** Runs of screen-prim commands under the same state are
+  one draw each; merging them must keep the AFAIL-split and DATE
+  boundaries.
 
 ## Interpolation (`port/render/rd_interp.c`)
 

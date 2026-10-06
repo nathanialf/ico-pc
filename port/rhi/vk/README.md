@@ -160,13 +160,60 @@ DEPTH_WRITE with `depthWrite = false`. A render pass's depth attachment is
 in DEPTH_READ when `readOnlyDepth` is set, DEPTH_WRITE otherwise; colour
 attachments are in RENDER_TARGET.
 
-The backend does not track states, but it orders writes within one state,
-which the caller cannot express with a transition (rhi.h, "commands"): a
-global memory barrier precedes every copy (transfer writes) and every
-render pass (attachment writes), and `rhi_CmdCopyBuffer` is followed by a
-barrier that makes the range visible to vertex, index, uniform, storage and
-copy reads. Every command list ends with a transfer-to-host barrier for
-READBACK buffers.
+The backend does not track states (layouts change only at the caller's
+`rhi_CmdBarrier`), but it orders writes within one state, which the caller
+cannot express with a transition (rhi.h, "commands"): a render pass after a
+render pass on one target, a copy after a copy into one texture.
+
+**Hazard tracking (package PB).** Each texture and buffer records what
+touched it since its last barrier (`VkrTexture.hz*`, `VkrBuffer.hz*`): the
+mips a copy wrote, an attachment write, a read-only depth attachment read;
+for a buffer, a copy's write or read. A render pass or copy then emits one
+`vkCmdPipelineBarrier` holding an image (or buffer) barrier for each
+resource it uses with a pending hazard against that use: a target written
+by an earlier pass (write after write), a read-only depth read before a
+write (write after read), a texture mip written by an earlier copy, a
+buffer written by an earlier copy. The barrier keeps the layout the use
+needs (old = new), so layouts still change only where the renderer asks.
+A use with nothing pending emits nothing: sampling a target, copying from
+it and presenting it all need a state change, and that transition is the
+caller's (`rd__Transition`), whose image barrier clears the record. No pass
+samples its own attachment: the renderer copies the target first (DATE
+snapshots, the exact-blend copies, the snapshot taken when the GS reads
+the buffer it draws into; RENDER_API.md section 2), and the validation
+layer would reject the layout otherwise.
+
+A record belongs to the command list that made it (an epoch per
+`rhi_BeginCommands`). Every list begins with one global memory barrier over
+attachment and transfer writes, which orders it after everything submitted
+before it, the frame's earlier lists and the frames still in flight, so a
+record from an older list counts as clean and nothing is carried across
+submissions or frame slots. Two lists of one frame recorded interleaved
+both fall back to the global path below for the rest of their recording.
+Readback (`rhi_ReadbackTexture`) is its own submission with a full
+`MEMORY_WRITE` to `TRANSFER_READ` barrier, as before.
+
+`ICO_VK_GLOBAL_BARRIERS=1` restores main's path for A/B runs and bisecting:
+a global memory barrier before every render pass (attachment writes) and
+every copy (transfer writes), and no list-opening barrier.
+
+`rhi_CmdCopyBuffer` keeps its two global barriers: before it, one that
+waits for earlier vertex, shader and copy reads of the destination; after
+it, one that makes the range visible to vertex, index, uniform, storage
+and copy reads (buffer reads by draws are not tracked). Every command list
+ends with a transfer-to-host barrier for READBACK buffers. Host writes to
+UPLOAD buffers (the ring, the dynamic uniform blocks) need no barrier: the
+submission makes them visible, and `rhi_WaitFrame` keeps the CPU off a
+slot's ring until the GPU is done with it.
+
+`RhiStats.barriers` counts `vkCmdPipelineBarrier` calls: the transitions,
+the hazard barriers, the list-opening ones and the buffer-copy ones.
+
+Synchronisation validation (layer 1.4.309) catches a copy hazard (a copy
+written twice without a barrier) but reported nothing with the attachment
+hazard barriers dropped on a corpus dump, so a missing barrier between two
+render passes on one target would go unseen by it; `rd_perf` asserts the
+barrier count of its synthetic frame instead (RENDER_API.md section 18).
 
 The viewport is set with a negative height (core since 1.1), so clip space
 is D3D's (y up) and the same HLSL runs on both backends without
