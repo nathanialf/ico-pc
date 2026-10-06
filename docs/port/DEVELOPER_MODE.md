@@ -53,7 +53,11 @@ With it on:
 `[dev] start_stage` is independent of developer mode: it feeds
 `debug_TryToGetStartStage` in every build, and `Main` then applies
 `[video] video_mode` to `systemStatus[0]` as the boot's step 200 would
-have (docs/port/CONFIG.md).
+have (docs/port/CONFIG.md). Like Stage Select's refusal of the `NOCD_` rows,
+`Main` refuses a start stage whose data file is not on the disc (`NOCD_` or
+`ONLYSAMPLE_` in `stageData[].dataFile`: 64 to 87, 89, 90, 92 to 102), logs
+`start_stage N (name) refused` and boots normally; booted, those stages die
+building their objects at Main tick 66.
 
 ## Using the menu
 

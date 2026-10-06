@@ -28,6 +28,7 @@
 #include "geometryManager.h"
 #include "libgraph.h"
 #include <stdlib.h>
+#include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
 
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0)
@@ -234,6 +235,19 @@ void Main(void)
     systemFault = 0;
     lock_execIcoMisc = 0;
     n = debug_TryToGetStartStage();
+    /* PC port: a stage whose data file the retail disc does not hold
+       (STGNOCD_*, the development stages, and STGONLYSAMPLE_*, the E3 sample
+       stages: 64 to 87, 89, 90, 92 to 102) loads nothing and dies building
+       its objects. Refused as debug_SelectStageMain refuses the NOCD_ rows;
+       the boot runs instead. */
+    if (n > 1 && n < 106 &&
+        (strstr(stageData[n].dataFile, "NOCD_") != 0 ||
+         strstr(stageData[n].dataFile, "ONLYSAMPLE_") != 0)) {
+        ico_diag_milestone("start_stage %d (%s) refused: its data file %s is not on the disc; "
+                           "booting normally",
+                           n, stageData[n].name, stageData[n].dataFile);
+        n = -1;
+    }
     thisIsYourStartStage = n < 106 ? n : 105;
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;

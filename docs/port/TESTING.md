@@ -186,7 +186,9 @@ which state moved.
 ## Booting every stage
 
 `start_stage` makes it cheap to boot each stage on its own. An idle boot of
-every stage with data (600 Main ticks, at 50 Hz and at 60 Hz through
+every stage with data on the disc (1 to 63, 88, 91 and 103 to 105; the
+others' data files, `STGNOCD_*` and `STGONLYSAMPLE_*`, are not in
+`DFDATAS/DATA.DF`, and `start_stage` refuses them) (600 Main ticks, at 50 Hz and at 60 Hz through
 `[video] video_mode`) in the `fptrap` build and in the heap-ASan build is
 the check for float traps, out-of-bounds writes and heap exhaustion that a
 play-through would only reach hours in. A start-stage boot applies
