@@ -17,6 +17,19 @@ pointer to this file.
   mask type as config keys (`[video] crt`, `crt_strength`) with Settings
   rows, documented in DISPLAY.md and CONFIG.md.
 
+- **Photo mode.** A pause-time mode (a Settings toggle or a button chord
+  from the pause menu) that freezes the simulation and lets the player move
+  the camera freely: orbit, dolly and roll on the sticks, field of view,
+  hide the HUD, optional depth of field, and a key that writes a PNG of
+  the presented frame at the output resolution (the F12 readback path in
+  `port/platform/hotkeys.c` already produces one). The camera override
+  sits in the renderer's per-present camera (`port/render/rd_interp.c`
+  builds one rigid camera per present; a photo-mode camera replaces it
+  without touching the game's camera state), so leaving the mode restores
+  the game's view exactly and no game state changes. Off in the Original
+  preset's output path only while active. Config keys under `[photo]`;
+  rows in `port/ui/settings.c`; documented in DISPLAY.md and SETTINGS.md.
+
 ## Platforms
 
 - **Run the D3D12 backend on Windows hardware.** It builds, but it has never
