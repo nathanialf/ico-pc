@@ -124,7 +124,6 @@ typedef enum UiSettingsOpt {
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,
-    UI_OPT_REMAP_RESET,
     /* list rows (achievements, remap targets) */
     UI_OPT_LIST
 } UiSettingsOpt;

@@ -104,12 +104,9 @@ unsigned int ico_input_last_press(int *kind, int *code)
     return s_press_seq;
 }
 
-static const char *const mouse_names[ICO_MOUSE_BUTTONS] = {"none",   "left", "right",
-                                                           "middle", "x1",   "x2"};
-
 const char *ico_mouse_name(int button)
 {
-    return button > 0 && button < ICO_MOUSE_BUTTONS ? mouse_names[button] : "none";
+    return button > 0 && button < ICO_MOUSE_BUTTONS ? ico_mouse_names[button] : "none";
 }
 
 static unsigned char *row_of(IcoBindings *b, int kind, int target)

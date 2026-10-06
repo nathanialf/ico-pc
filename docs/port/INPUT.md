@@ -299,6 +299,15 @@ tables live:
   re-arms below a quarter). `ico_input_last_press(&kind, &code)` returns a
   sequence number that changes with every press, and the screen binds the
   first press after the one that started the capture.
+- **Names.** The screen's gamepad column writes each source through
+  `UI_STR_PAD_*` (`port/ui/strings.h`), in ICO_GP_* order, in the menu's
+  language: the face buttons by position (South, East, West, North), the
+  shoulders, triggers and stick clicks as the game shows them (L1, R1, L2,
+  R2, L3, R3), Select, Start, and the D-pad and stick directions
+  ("D-pad Up", "L-stick Left"). These are display names only; the config
+  names (`south`, `leftshoulder`, `leftx-`, `left`, `x1`) are
+  `gp_names[]` and `ico_mouse_names[]` in `bindings.c`, one table each for
+  the parser and the writer (`input_config.c` uses `ico_mouse_names` too).
 - **Assigning.** `ico_bindings_assign(b, target, kind, code)` makes that
   device's row for the target the source alone (the other devices' rows
   stay) and takes the source off the device's other targets, so a key does

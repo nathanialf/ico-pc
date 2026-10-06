@@ -1395,6 +1395,79 @@ static void testBootSkip(void)
           "the setter");
 }
 
+/* U1: the Video mode row changes only when Settings was opened from the
+   title; from the pause menu Left and Right leave it. Pad names and the
+   frame-rate words are translated. */
+static void testVideoGate(void)
+{
+    for (int title = 0; title < 2; title++) {
+        useConfig("version = 1\n");
+        fakeTables();
+        lt_ext_Reset();
+        ui_SettingsReset();
+        memset(pad, 0, sizeof(pad));
+        pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+        NonLinearCameraMove = 2;
+        init_layout_texture(2);
+        settle(54, 4);
+        if (title) {
+            int s13 = ui_SettingsEntryRow(13);
+            lt_switch_layout(13);
+            CHECK(settle(13, 60), "the title");
+            press(0x4000);
+            CHECK(texLayout[13].curItem == s13, "on Settings");
+        } else {
+            int s58 = ui_SettingsEntryRow(58);
+            lt_switch_layout(58);
+            CHECK(settle(58, 40), "the Options screen");
+            texLayout[58].curItem = s58;
+        }
+        press(0x40);
+        int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+        CHECK(settle(mainL, 60), "the menu (title %d)", title);
+        press(0x40); /* Display */
+        int dispL = ui_SettingsPageLayout(UI_PAGE_DISPLAY);
+        CHECK(settle(dispL, 60), "Display");
+        int labels[16], opts[16];
+        int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, labels, opts, NULL, 16);
+        int vm = 0;
+        while (vm < n && opts[vm] != UI_OPT_VIDEO_MODE) {
+            vm++;
+        }
+        for (int i = 0; i < vm; i++) {
+            press(0x4000);
+        }
+        CHECK(lt_ext_Layout(dispL)->curItem == labels[vm], "on Video mode (%d of %d)", vm, n);
+        systemStatus[0] = 1;
+        CHECK((strstr(ui_SettingsValueText(UI_OPT_VIDEO_MODE), "(title only)") != NULL) == !title,
+              "title %d: the value reads \"%s\"", title, ui_SettingsValueText(UI_OPT_VIDEO_MODE));
+        press(0x2000);
+        CHECK(systemStatus[0] == (title ? 0 : 1), "title %d: Right on Video mode: %d", title,
+              systemStatus[0]);
+        systemStatus[0] = 1;
+        press(0x8000);
+        CHECK(systemStatus[0] == (title ? 0 : 1), "title %d: Left on Video mode: %d", title,
+              systemStatus[0]);
+        systemStatus[0] = 1;
+    }
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    static const char *const kUncapped[5] = {"Uncapped", "Illimit\xC3\xA9", "Unbegrenzt",
+                                             "Illimitato", "Sin l\xC3\xADmite"};
+    for (int i = 0; i < 5; i++) {
+        CHECK(strcmp(ui_StrIn(kLangs[i], UI_STR_VAL_UNCAPPED), kUncapped[i]) == 0,
+              "Uncapped in language %d", i);
+        CHECK(strcmp(ui_StrIn(kLangs[i], UI_STR_FPS_UNIT), "fps") == 0, "fps in language %d", i);
+        CHECK(ui_StrIn(kLangs[i], UI_STR_VIDEO_MODE_TITLE_ONLY)[0] != '\0', "note %d", i);
+        for (int id = UI_STR_PAD_SOUTH; id <= UI_STR_PAD_RSTICK_DOWN; id++) {
+            CHECK(ui_StrIn(kLangs[i], (UiStrId)id)[0] != '\0', "pad name %d in language %d", id, i);
+        }
+    }
+    CHECK(strcmp(ui_StrIn(UI_LANG_FR, UI_STR_PAD_DPAD_UP), "Croix haut") == 0 &&
+              strcmp(ui_StrIn(UI_LANG_DE, UI_STR_PAD_DPAD_UP), "Kreuz oben") == 0 &&
+              strcmp(ui_StrIn(UI_LANG_EN, UI_STR_PAD_L1), "L1") == 0,
+          "pad names");
+}
+
 #ifdef SETTINGS_RENDER
 
 /* SCENE (512 x 512 for the 640 x 448 grid) to a PNG at 4:3, 683 x 512 */
@@ -1489,11 +1562,9 @@ static int render(void)
         int row; /* main page row */
         int downs;
         const char *name;
-    } pages[] = {{0, 0, "settings_display.png"},
-                 {1, 0, "settings_audio.png"},
-                 {2, 1, "settings_controls.png"},
-                 {3, 0, "settings_gameplay.png"},
-                 {5, 0, "settings_achievements.png"}};
+    } pages[] = {{0, 0, "settings_display.png"},  {0, 8, "settings_display_videomode.png"},
+                 {1, 0, "settings_audio.png"},    {2, 1, "settings_controls.png"},
+                 {3, 0, "settings_gameplay.png"}, {5, 0, "settings_achievements.png"}};
 
     int labels[16];
     ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -1519,6 +1590,11 @@ static int render(void)
     CHECK(settle(ui_SettingsPageLayout(UI_PAGE_REMAP), 60), "Remap");
     frame(0);
     snap("settings_remap.png");
+    NonLinearCameraMove = 3; /* French: the gamepad column's names */
+    frame(0);
+    snap("settings_remap_fr.png");
+    NonLinearCameraMove = 2;
+    frame(0);
     press(0x4000);
     press(0x40);
     frame(0);
@@ -1593,6 +1669,7 @@ int main(int argc, char **argv)
     testCirclePortScreens();
     testCircleGameMenu();
     testValues();
+    testVideoGate();
     testFramerate();
     testCapture();
     testBootSkip();

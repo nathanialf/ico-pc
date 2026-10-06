@@ -359,7 +359,7 @@ rows right-aligned ending at x 344 and value rows from x 364:
 | screen | rows |
 | --- | --- |
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Developer mode (value), Back; notes under Language and Developer mode |
-| Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode, Menu text, Back; 17 field lines apart from line 36 |
+| Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode (changes only when Settings was opened from the title; from the pause menu its value reads "PAL 50 Hz (title only)" and Left and Right do nothing), Menu text, Back; 17 field lines apart from line 36 |
 | Audio | Volume, Back |
 | Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
 | Gameplay | Shadows never take Yorda (with OPTIONS.md's explanation as a note), Analogue stick fix, Back |
@@ -413,7 +413,9 @@ Triangle alone.
 through `ico_video_get` / `ico_video_set` (the window applies them at its
 next pump). Video mode toggles `systemStatus[0]` and calls
 `gsResetFunc(0)` as the boot's step 201 does, and sets
-`[video] video_mode`. Language steps `NonLinearCameraMove` 2..6 as the
+`[video] video_mode` (only from the title: `canStep` refuses the row when
+`s_origin` is the pause layout, and `rawValue` appends
+`UI_STR_VIDEO_MODE_TITLE_ONLY`). Language steps `NonLinearCameraMove` 2..6 as the
 boot's step 102 stores it, sets the port strings' language at once
 (`ui_SetLanguage`) and `[game] language` (`ico_sysconf_set_language`).
 The stick fix, Shadows never take Yorda and developer mode go through
@@ -568,7 +570,9 @@ descriptions (`UI_STR_ACH_<NAME>`, `UI_STR_ACH_<NAME>_DESC`; listed in
 docs/port/ACHIEVEMENTS.md), and the game's menu words (`UI_STR_MT_*`). The
 French, German, Italian and Spanish strings of the port's own text are the
 author's translations (docs/TODO.md). Gamepad source names on the remap
-screen are SDL's position names in English (South, LShoulder, LX-).
+screen are `UI_STR_PAD_*` (position names: South, East, West, North, L1 to
+R3, "D-pad Up", "L-stick Left"), "Uncapped" and "fps" are
+`UI_STR_VAL_UNCAPPED` and `UI_STR_FPS_UNIT`.
 
 ## Popups
 

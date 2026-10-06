@@ -240,6 +240,9 @@ const char *ico_bindings_row_text(const IcoBindings *b, int kind, int target, ch
                                   unsigned size);
 /* A mouse button's config name ("left", "right", "middle", "x1", "x2"). */
 const char *ico_mouse_name(int button);
+/* The config names of the mouse buttons by number (0 is "none"), one table
+   for the parser (bindings.c) and the writer (input_config.c). */
+extern const char *const ico_mouse_names[ICO_MOUSE_BUTTONS];
 
 /* The binding tables into config.toml through port/config (ico_config_set_*;
    the caller saves with ico_config_save): [input.kb], [input.mouse] and

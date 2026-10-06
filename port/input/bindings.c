@@ -25,8 +25,9 @@ static const char *const gp_names[ICO_GP_COUNT] = {
     "dpright",   "lefttrigger", "righttrigger", "leftx-",        "leftx+", "lefty-", "lefty+",
     "rightx-",   "rightx+",     "righty-",      "righty+"};
 
-static const char *const mouse_names[ICO_MOUSE_BUTTONS] = {"none",   "left", "right",
-                                                           "middle", "x1",   "x2"};
+/* shared with input_config.c (input.h) */
+const char *const ico_mouse_names[ICO_MOUSE_BUTTONS] = {"none",   "left", "right",
+                                                        "middle", "x1",   "x2"};
 
 static const struct {
     const char *name;
@@ -135,7 +136,7 @@ static int mouse_from_name(const char *name)
     int i;
 
     for (i = 1; i < ICO_MOUSE_BUTTONS; i++) {
-        if (name_eq(name, mouse_names[i])) {
+        if (name_eq(name, ico_mouse_names[i])) {
             return i;
         }
     }

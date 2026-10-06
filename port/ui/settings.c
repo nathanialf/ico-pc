@@ -155,7 +155,16 @@ static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1};
 static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1}; /* Q2: the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
 static int s_origin = LAYOUT_PAUSE_OPTIONS; /* the game layout the menu returns to */
-static int s_restoreTitle = -1;             /* a title layout whose defaultItem to restore */
+
+/* The video mode arms the tick rate (the game's timers are armed at the
+   rate in force), so it changes only when Settings was opened from the
+   title; from the pause menu its value shows "(title only)". */
+static int onTitle(void)
+{
+    return s_origin == LAYOUT_TITLE_CONTINUE || s_origin == LAYOUT_TITLE_NEW;
+}
+
+static int s_restoreTitle = -1; /* a title layout whose defaultItem to restore */
 static int s_restoreDefault;
 static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
 static UiRemapCapture s_capture;
@@ -339,11 +348,17 @@ static const char *rawValue(int opt, char *buf, unsigned size)
             return ui_Str(UI_STR_VAL_ORIGINAL);
         }
         if (o.framerate == ICO_FRAMERATE_UNCAPPED) {
-            return "Uncapped"; /* no UI_STR_ id yet (strings_*.c) */
+            return ui_Str(UI_STR_VAL_UNCAPPED);
         }
-        snprintf(buf, size, "%d fps", o.framerate);
+        snprintf(buf, size, "%d %s", o.framerate, ui_Str(UI_STR_FPS_UNIT));
         return buf;
     case UI_OPT_VIDEO_MODE:
+        if (!onTitle()) {
+            snprintf(buf, size, "%s (%s)",
+                     ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ),
+                     ui_Str(UI_STR_VIDEO_MODE_TITLE_ONLY));
+            return buf;
+        }
         return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
     case UI_OPT_MENU_TEXT:
         return ui_Str(ico_opt_classic_menu_text() ? UI_STR_VAL_CLASSIC : UI_STR_VAL_PORT_FONT);
@@ -372,6 +387,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
 static int steppable(int opt)
 {
     return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER;
+}
+
+/* a press changes the option now: the video mode only from the title */
+static int canStep(int opt)
+{
+    return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle());
 }
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
@@ -622,12 +643,12 @@ static void targetName(int t, char *buf, unsigned size)
     snprintf(buf, size, "%s %s", ui_Str((UiStrId)what), ui_Str((UiStrId)dirs[dir & 3]));
 }
 
-/* gamepad sources by position (SDL's layout names) */
-static const char *const kPadNames[ICO_GP_COUNT] = {
-    "",        "South",    "East",      "West",      "North", "Back",   "Start",
-    "LStick",  "RStick",   "LShoulder", "RShoulder", "D-Up",  "D-Down", "D-Left",
-    "D-Right", "LTrigger", "RTrigger",  "LX-",       "LX+",   "LY-",    "LY+",
-    "RX-",     "RX+",      "RY-",       "RY+"};
+/* gamepad sources by position (ICO_GP_*); the names are UI_STR_PAD_*, in order */
+static const char *padName(int src)
+{
+    return ui_Str((UiStrId)(UI_STR_PAD_SOUTH + src - ICO_GP_SOUTH));
+}
+
 static const char *const kMouseNames[ICO_MOUSE_BUTTONS] = {"",        "Mouse L",  "Mouse R",
                                                            "Mouse M", "Mouse X1", "Mouse X2"};
 
@@ -641,7 +662,7 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
         const char *name = NULL;
         if (gamepad) {
             if (i < ICO_BIND_MAX && b->gp[t][i]) {
-                name = kPadNames[b->gp[t][i]];
+                name = padName(b->gp[t][i]);
             }
         } else if (i < ICO_BIND_MAX) {
             if (b->kb[t][i]) {
@@ -1663,7 +1684,7 @@ static int settingsProc(int first, int item)
         if (r->label != lay->curItem) {
             continue;
         }
-        if ((flags & (PAD_LEFT | PAD_RIGHT)) && steppable(r->opt)) {
+        if ((flags & (PAD_LEFT | PAD_RIGHT)) && canStep(r->opt)) {
             ui_SettingsStep((UiSettingsOpt)r->opt, (flags & PAD_LEFT) ? -1 : 1);
             CUR_SE();
             refreshPage(pg, id, lay->curItem);

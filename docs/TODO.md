@@ -274,9 +274,6 @@ pointer to this file.
   `boyGObj != NULL && game_pause == 0 && data_loading == 0` in
   `port/platform/window_host.c`, derived from the sources, not observed. If
   it is wrong the cursor hides in a menu or the camera moves under it.
-- **Gamepad names on the remap screen.** They show SDL's English position
-  names (South, LShoulder, LX-) from `port/input/bindings.c` and `keys.def`;
-  they should become `ui_Str` ids in `port/ui/strings*.c`.
 - **Import card images and save archives.** `port/save/mc_host.c` reads only
   folder cards; `.ps2`/`.bin` images and `.psu`/`.max`/`.cbs` archives must
   be converted with another tool first. An importer in `tools/` or in the
@@ -377,10 +374,6 @@ pointer to this file.
   silently; return an error and check it where files are created.
 - **Directory sync and Windows errno.** After `ico_rename_replace`, fsync the
   directory on POSIX; on Windows map `GetLastError()` to errno there.
-- **Settings mid-run: video mode and language.** Both rows are reachable from
-  the pause menu and change discrete state mid-run (tick rate for armed
-  timers, language-selected objects); add DIVERGENCES rows or restrict them
-  to the title.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
 - **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`
@@ -393,9 +386,8 @@ pointer to this file.
   F12.
 - **Small cleanups.** `dl_OpenDma(int, const void *, int)`; clear
   `texHost.bind` for a freed id in `tex_FreeTexture`; drop the dead `ICO_RD`
-  `tex_TransTextureDefocus`, `RdPresentPreset.interpolate`,
-  `UI_OPT_REMAP_RESET`; share `mouse_names[]` and `vsel()`; localise
-  "Uncapped"/"fps"; `rd_perf` GPU records keyed by RHI frame index.
+  `tex_TransTextureDefocus` and `RdPresentPreset.interpolate`; share
+  `vsel()`; `rd_perf` GPU records keyed by RHI frame index.
 
 ## Checks that need a PS2 or a play-through
 
