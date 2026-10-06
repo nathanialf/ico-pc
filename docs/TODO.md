@@ -151,9 +151,12 @@ is in its title.
   `gs_block_uv`), but the barrier's 512x256 block, which has no depth
   buffer, is not widened. At 16:9 the barrier's refraction therefore samples
   a 4:3 block under a widened scene: its picture is stretched across the
-  wider screen. Widen the block as the others are (or show it needs no
-  widening) and add the barrier at 16:9 to `rd_water`, which checks the
-  puddle and the pool only.
+  wider screen. The block, a 512x256 copy of the wide SCENE, stays 4:3
+  because `rd__TargetScaleOf` widens only blocks with their own depth. A
+  fix needs a "render-to-texture block without depth" target property
+  carried through `rd__TempTargetAlloc`, `parkedFits`, the settings rescale
+  and the dump format, and a 16:9 barrier pixel test in `rd_water` (which
+  checks the puddle and the pool only).
 - **A near-white Enhanced frame on the Music page (unverified; left for a later version, no hardware needed).**
   Package UIFIX reported one frame drawn nearly white in the Enhanced
   preset at Main tick 1000 with Settings > Extras > Music open; it was not

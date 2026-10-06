@@ -36,6 +36,12 @@ are answered from these files and from the host.
 - **ico.o2r**, the extracted game data (docs/port/DATA.md), is
   `<pref folder>/ico.o2r`, written on the first run. One beside the
   executable is used when the pref folder has none.
+- **gamefont-<version>-<disc SHA-1>.bin**, the game's lettering cut from
+  the disc (docs/port/DATA.md, "The port's files"), is written beside
+  `ico.o2r` on the first start and rebuilt when it does not load.
+- **pipelines.vkcache**, the persisted Vulkan pipeline cache
+  (docs/port/RENDER_API.md), is `<pref folder>/pipelines.vkcache`, written
+  at shutdown and ignored when its device header does not match the device.
 - Logs, the trace and the `dumps/` folder are written in the executable's
   folder.
 - A path that does not fit in `ICO_PATH_MAX` (1024) is an error, not a cut-off
