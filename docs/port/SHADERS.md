@@ -146,7 +146,13 @@ As), `DF_PREMUL` 64 (below), `DF_DATE` 128 and `DF_DATM` 256 (`sprite_ps`
 loads the R8 snapshot at t2 in target pixels and discards where its MSB
 differs from DATM; t2 is fetched only under `DF_DATE`, so a 1×1 dummy is
 bound otherwise), `DF_AA1_FULL` 512 (`sprite_aa1_ps`: PRIM.ABE 0, the
-coverage alpha replaces every fragment's alpha).
+coverage alpha replaces every fragment's alpha). `sprite_texa_ps` and
+`vu_texa_ps` only (package TEXA; `rd_replay.c` `fillDrawCB` sets them for
+those entries): `DF_TEXA_MAG_LINEAR` 1024, `DF_TEXA_MIN_LINEAR` 2048,
+`DF_TEXA_CLAMP_S` 4096, `DF_TEXA_CLAMP_T` 8192 (the sampler state the
+four-tap filter reproduces) and `DF_TEXA_MIN_SAMPLED` 16384 (a minified
+pixel takes the bound sampler, the Enhanced trilinear or anisotropic
+filter over the mips, and expands TEXA after it).
 
 ### Vertex (sprite.hlsl; `IcoSpriteVertex`, 20 bytes)
 
@@ -181,6 +187,7 @@ without perspective and the pixel shader divides.
 | `gs_z_to_depth(z, scale)`, `gs_depth(z)` | `1 − z · scale` computed as `(zmax − z + 1) · scale` (zmax the format's largest Z), 0 above zmax; exact for every Z at 2^-24 and 2^-16 and for large Z at 2^-32, so the UI's 0xFFFFFF9B and 0xFFFFFFFF stay apart under PSMZ32 (`rd__GsDepth` is the CPU copy for clears) |
 | `gs_tfx_mod`, `gs_texture_function` | `min((tex · col) >> 7, 255)`; DECAL; TCC |
 | `gs_texa_alpha`, `gs_texa_expand` | the three TEXA modes for PSMCT24/16 texels |
+| `gs_texa_load`, `gs_texa_texture` (common.hlsli) | a texel `Load`ed with REPEAT or CLAMP and TEXA expanded; the four-tap GS bilinear of expanded texels (`sprite_texa_ps`, `vu_texa_ps`) |
 | `gs_alpha_pass`, `gs_alpha_discard` | the eight alpha-test compares; the AFAIL split passes |
 | `gs_date_discard` | TEST.DATE against the snapshot texel |
 | `DualOut`, `gs_dual_out` | `SV_Target0` colour/255 with the stored GS alpha (0x80 stays 0x80), `SV_Target1` the factor As/128 or FIX/128; FBA, PABE |
@@ -206,6 +213,7 @@ clamp (RENDER_API.md section 4).
 | --- | --- | --- | --- |
 | `sprite_ui_vs`, `sprite_world_vs` | sprite.hlsl | vertex | 12.4 GS coordinates; UI and WORLD apply different `g_space` entries; any topology |
 | `sprite_ps` | sprite.hlsl | fragment | untextured or textured, texture function, TEXA, alpha test, DATE (t2), dual-source output |
+| `sprite_texa_ps` | sprite.hlsl | fragment | `sprite_ps` with TEXA per texel before the bilinear filter (`gs_texa_texture`: four `Load`ed texels, TEXA on each, the GS 4-bit weights; REPEAT/CLAMP, MAG/MIN and the Enhanced mipmapped minification from `DF_TEXA_*` in `g_mode.x`), for a 24- or 16-bit texture under AEM with a linear filter (RENDER_API.md "Textures", package TEXA); `sprite_ps` is unchanged |
 | `sprite_aa1_ui_vs`, `sprite_aa1_world_vs` | sprite.hlsl | vertex | as `sprite_ui_vs` / `sprite_world_vs` with the coverage (package AA1) |
 | `sprite_stq_ui_vs`, `sprite_stq_world_vs` | sprite.hlsl | vertex | as `sprite_ui_vs` / `sprite_world_vs` with Q (package RSMALL); they pass (s, t, q) without perspective |
 | `sprite_stq_ps` | sprite.hlsl | fragment | `sprite_ps` with the texture coordinate divided by Q per pixel (RENDER_API.md "GS to pipeline mapping", STQ); `sprite_ps` is unchanged |
@@ -271,6 +279,7 @@ draw interface: `port/render/rd_mesh.h`.
 | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` | vu_grid.hlsl | vertex | mesh 20, 22, 24 | batches with headers |
 | `vu_particle_vs` | vu_particle.hlsl | vertex | particle 18 | non-indexed, 6 vertices a particle |
 | `vu_ps` | vu_prelit.hlsl | fragment | all | `sprite_ps` on STQ: texture function, TEXA, alpha test, DATE, dual-source |
+| `vu_texa_ps` | vu_prelit.hlsl | fragment | all | `vu_ps` with TEXA per texel before the bilinear filter, as `sprite_texa_ps` (package TEXA) |
 | `vu_probe_ps` | vu_prelit.hlsl | fragment | tests only | writes probe values to an RGBA8_UINT target; not in the reachable pipeline set |
 
 Shared code: `vu_common.hlsli` (the VU operations, the stream addressing,

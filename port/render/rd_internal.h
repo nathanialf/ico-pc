@@ -530,6 +530,10 @@ typedef enum RdFsId {
     RD_FS_CRT_BLOOM, /* crt_bloom_ps: half size, linear, horizontal Gaussian (RGBA16F) */
     RD_FS_CRT_BLUR,  /* crt_blur_ps: the vertical Gaussian (RGBA16F) */
     RD_FS_CRT,       /* crt_ps: the box of the output */
+    /* package TEXA: TEXA per texel before the bilinear filter, for a 24- or
+     * 16-bit texture under AEM with a linear filter (rd__TexaPerTexel) */
+    RD_FS_SPRITE_TEXA, /* sprite_texa_ps */
+    RD_FS_VU_TEXA,     /* vu_texa_ps */
     RD_FS_COUNT
 } RdFsId;
 
@@ -579,6 +583,12 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
 /* Package RSMALL: turns a planned pass of a command whose prims carry Q != 1
  * into the STQ shaders (IcoSpriteStqVertex); 0 when the pass keeps its own. */
 int rd__StqPass(RdDrawPass *dp);
+/* Package TEXA: whether a draw under this state samples a PSMCT24 or
+ * PSMCT16 texture (or one with a 24- or 16-bit CLUT: RdTexRec.src not
+ * RGBA32) under a TEXA with AEM through a linear MAG or MIN filter, the
+ * draws whose bilinear edges depend on TEXA coming before the filter; the
+ * planners give them sprite_texa_ps / vu_texa_ps (RENDER_API.md "Textures"). */
+int rd__TexaPerTexel(const RdStateBlock *s);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k);

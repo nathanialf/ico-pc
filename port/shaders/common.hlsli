@@ -96,6 +96,14 @@ float2 gs_block_uv(float2 uv)
 #define DF_DATE 128u     // TEST.DATE: destination alpha test against the snapshot in t2
 #define DF_DATM 256u     // TEST.DATM: with DF_DATE, pass where the MSB is 1 (else 0)
 #define DF_AA1_FULL 512u // sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha
+// sprite_texa_ps and vu_texa_ps only (gs_texa_texture): the sampler state
+// the four-tap filter reproduces. Other entries never read these bits.
+#define DF_TEXA_MAG_LINEAR 1024u  // TEX1.MMAG linear
+#define DF_TEXA_MIN_LINEAR 2048u  // TEX1.MMIN linear
+#define DF_TEXA_CLAMP_S 4096u     // CLAMP on s (else REPEAT)
+#define DF_TEXA_CLAMP_T 8192u     // CLAMP on t (else REPEAT)
+#define DF_TEXA_MIN_SAMPLED 16384u // a minified pixel takes the bound sampler (the Enhanced
+                                   // trilinear or anisotropic filter over the mips), TEXA after
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the
@@ -143,6 +151,56 @@ uint4 gs_texa_expand(uint4 t, uint mode, uint fmt)
         return t;
     }
     return uint4(t.rgb, gs_texa_alpha(t.r, t.g, t.b, t.a, mode, fmt));
+}
+
+// TEXA before filtering (sprite_texa_ps, vu_texa_ps; RENDER_API.md
+// "Textures"): the texel of a PSMCT24 or PSMCT16 texture (or one with a
+// 24- or 16-bit CLUT) under TEXA with AEM, filtered as the GS filters it.
+// The GS expands TEXA per texel and then filters; the sampler would filter
+// RGB and the A bit first, so where texels of different alpha meet (AEM's
+// black, 7F/81's two A values) a bilinear edge differs. Here each of the
+// four texels around the sample point is loaded, expanded, and weighted
+// with the GS's 4-bit fractions (the UV rounded to 12.4 texels, u - 0.5,
+// floor of the weighted sum >> 8), as fx_sprite_ps does. Addressing is the
+// sampler's: REPEAT or CLAMP at t1's own size. MAG or MIN by the
+// footprint (rho > 1 texel: minified), as the sampler picks it. uvn is the
+// normalised UV (after gs_block_uv); flags g_mode.x.
+uint4 gs_texa_load(Texture2D<float4> tex, int2 c, int2 size, uint flags)
+{
+    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1)
+                                          : ((c.x % size.x) + size.x) % size.x;
+    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1)
+                                          : ((c.y % size.y) + size.y) % size.y;
+    uint4 t = uint4(floor(tex.Load(int3(c, 0)) * 255.0 + 0.5));
+    return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+}
+
+uint4 gs_texa_texture(Texture2D<float4> tex, SamplerState smp, float2 uvn, uint flags)
+{
+    uint w, h;
+    tex.GetDimensions(w, h);
+    const int2 size = max(int2(int(w), int(h)), int2(1, 1));
+    const float2 tc = uvn * float2(size);
+    const float2 dx = ddx(uvn), dy = ddy(uvn);
+    const float2 tdx = dx * float2(size), tdy = dy * float2(size);
+    const bool minified = max(dot(tdx, tdx), dot(tdy, tdy)) > 1.0;
+    if (minified && (flags & DF_TEXA_MIN_SAMPLED) != 0u) {
+        uint4 t = uint4(floor(tex.SampleGrad(smp, uvn, dx, dy) * 255.0 + 0.5));
+        return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+    }
+    const bool filtered = (flags & (minified ? DF_TEXA_MIN_LINEAR : DF_TEXA_MAG_LINEAR)) != 0u;
+    if (!filtered) {
+        return gs_texa_load(tex, int2(floor(tc)), size, flags);
+    }
+    const int2 q = int2(floor(tc * 16.0 + 0.5)) - int2(8, 8);
+    const int2 i0 = q >> 4;
+    const uint fu = uint(q.x & 15), fv = uint(q.y & 15);
+    const uint4 a = gs_texa_load(tex, i0, size, flags);
+    const uint4 b = gs_texa_load(tex, i0 + int2(1, 0), size, flags);
+    const uint4 c = gs_texa_load(tex, i0 + int2(0, 1), size, flags);
+    const uint4 d = gs_texa_load(tex, i0 + int2(1, 1), size, flags);
+    return (a * ((16u - fu) * (16u - fv)) + b * (fu * (16u - fv)) + c * ((16u - fu) * fv) +
+            d * (fu * fv)) >> 8;
 }
 
 // The integer blend per channel with the ALPHA register, for feedback

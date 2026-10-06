@@ -82,6 +82,29 @@ DualOut sprite_ps(SpriteVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
+// sprite_texa_ps (package TEXA): sprite_ps for a PSMCT24 or PSMCT16 texture
+// (or a 24- or 16-bit CLUT) under a TEXA with AEM and a linear filter, which
+// the planner (rd_pipeline.c rd__TexaPerTexel) gives this entry: TEXA per
+// texel before the bilinear weights, as the GS (gs_texa_texture). sprite_ps
+// itself is unchanged.
+DualOut sprite_texa_ps(SpriteVSOut i)
+{
+    if ((g_mode.x & DF_DATE) != 0u) {
+        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+            discard;
+        }
+    }
+    uint4 col = uint4(floor(i.col + 0.5));
+    if ((g_mode.x & DF_TEXTURED) != 0u) {
+        uint4 t = gs_texa_texture(g_texture, g_sampler, gs_block_uv(i.uv), g_mode.x);
+        col = gs_texture_function(t, col, g_mode.x);
+    }
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        discard;
+    }
+    return gs_dual_out(col, g_mode.x, g_blend.y);
+}
+
 // ------------------------------------------------------- PRIM.AA1 (package AA1)
 
 // sprite_ps's DATE, texture function and TEXA: the fragment's colour before

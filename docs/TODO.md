@@ -28,15 +28,6 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
   If the project wants none, Microsoft's DirectX-Headers (MIT) can replace
   them, pinned in `tools/fetch_deps.sh`.
 
-## Renderer
-
-- **TEXA before filtering for RGB24 and RGBA16 textures (follow-up, shader work; a PS2 capture would confirm the GS side).** `sprite_ps` and
-  `vu_ps` expand TEXA after the sampler filters, where the GS expands before.
-  With AEM, bilinear edges between texels of different alpha differ (the
-  dark-volume composite is off by up to 52 LSB on a one-pixel rim). A manual
-  four-tap filter with TEXA per texel, as `fx_sprite_ps` does, would fix it
-  (`port/shaders/sprite.hlsl`, `vu_common.hlsli`).
-
 ## Interpolation (`port/render/rd_interp.c`)
 
 - **Rope-top presentation and the 60 Hz climb rate (follow-up filed by the F15 fix; needs a look at dumped frames).** The floaty stand-up

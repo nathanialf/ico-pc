@@ -91,7 +91,9 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "sprite_stq_ps" /* package RSMALL */,
                                                    "crt_bloom_ps",
                                                    "crt_blur_ps",
-                                                   "crt_ps" /* package CRT */};
+                                                   "crt_ps" /* package CRT */,
+                                                   "sprite_texa_ps",
+                                                   "vu_texa_ps" /* package TEXA */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -1387,6 +1389,19 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
         }
     }
     cb->mode[1] = r->st.ds.texa | (ds->tfmt << 8);
+    if (dp->key.fs == RD_FS_SPRITE_TEXA || dp->key.fs == RD_FS_VU_TEXA) {
+        /* package TEXA: the sampler state the four-tap filter reproduces;
+         * minified pixels of a texture texSampler upgrades (the Enhanced
+         * trilinear or anisotropic filter) keep the sampler */
+        const RdDrawState *d = &r->st.ds;
+        cb->mode[0] |= (d->magFilter == RD_FILTER_LINEAR ? ICO_DF_TEXA_MAG_LINEAR : 0u) |
+                       (d->minFilter == RD_FILTER_LINEAR ? ICO_DF_TEXA_MIN_LINEAR : 0u) |
+                       (d->wrap.s != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S : 0u) |
+                       (d->wrap.t != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
+        if (ds->mipmapped && d->minFilter == RD_FILTER_LINEAR && g_rd.filterUpgrade) {
+            cb->mode[0] |= ICO_DF_TEXA_MIN_SAMPLED;
+        }
+    }
     cb->mode[2] = dp->modeZ;
     cb->mode[3] = dp->aref;
     cb->blend[0] = rd__AlphaRegister(r->st.ds.blend);
@@ -2415,7 +2430,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     for (int i = 0; i < np; i++) {
         dp[i].key.gs.program = prog;
         dp[i].key.vs = vs;
-        dp[i].key.fs = RD_FS_VU;
+        /* package TEXA: the planner's sprite_texa_ps becomes vu_texa_ps */
+        dp[i].key.fs = dp[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         RhiPipeline p = rd__GetPipeline(&dp[i].key);
         if (!p.id) {
             continue;

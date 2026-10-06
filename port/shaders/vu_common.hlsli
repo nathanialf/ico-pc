@@ -390,4 +390,26 @@ DualOut vu_pixel(VuVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
+// vu_texa_ps (package TEXA): vu_pixel with TEXA per texel before the
+// bilinear weights (gs_texa_texture), for the draws rd_replay.c's VU
+// planner gives it (the texture formats and TEXA modes of sprite_texa_ps).
+DualOut vu_pixel_texa(VuVSOut i)
+{
+    if ((g_mode.x & DF_DATE) != 0u) {
+        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+            discard;
+        }
+    }
+    uint4 col = uint4(floor(i.col + 0.5));
+    if ((g_mode.x & DF_TEXTURED) != 0u) {
+        float2 uv = gs_block_uv(i.stq.xy / i.stq.z);
+        uint4 t = gs_texa_texture(g_texture, g_sampler, uv, g_mode.x);
+        col = gs_texture_function(t, col, g_mode.x);
+    }
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        discard;
+    }
+    return gs_dual_out(col, g_mode.x, g_blend.y);
+}
+
 #endif

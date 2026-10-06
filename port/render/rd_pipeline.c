@@ -209,6 +209,11 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
         }
     }
 
+    /* package TEXA: TEXA per texel before the bilinear filter */
+    if (k->fs == RD_FS_SPRITE && rd__TexaPerTexel(s)) {
+        k->fs = RD_FS_SPRITE_TEXA;
+    }
+
     if (d->fba) {
         base.flags |= ICO_DF_FBA;
     }
@@ -274,14 +279,31 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     return 2;
 }
 
+int rd__TexaPerTexel(const RdStateBlock *s)
+{
+    const RdDrawState *d = &s->ds;
+    if (!d->texEnabled || d->texa == RD_TEXA_80_80) {
+        return 0; /* TEXA 80/80 gives every texel alpha 0x80: no order to keep */
+    }
+    if (d->magFilter != RD_FILTER_LINEAR && d->minFilter != RD_FILTER_LINEAR) {
+        return 0; /* nearest: one texel, expanded after the fetch as before */
+    }
+    const RdTexRec *tr = rd__TexRec(s->tex);
+    return tr && tr->src != RD_TEXSRC_RGBA32 &&
+           !(tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8);
+}
+
 /* Package RSMALL: a planned screen pass for a command whose prims carry
  * Q != 1 (RENDER_API.md "STQ on screen prims"): the STQ vertex shader of its
  * space and sprite_stq_ps.  Only the plain sprite pass converts (an R8
- * font texture and PRIM.AA1 keep their shaders); returns whether it did. */
+ * font texture and PRIM.AA1 keep their shaders); returns whether it did.
+ * Package TEXA: a sprite_texa_ps pass converts too, and sprite_stq_ps
+ * expands TEXA after the sampler (RENDER_API.md "Textures"). */
 int rd__StqPass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
-    if (k->fs != RD_FS_SPRITE || (k->vs != RD_VS_SPRITE_UI && k->vs != RD_VS_SPRITE_WORLD)) {
+    if ((k->fs != RD_FS_SPRITE && k->fs != RD_FS_SPRITE_TEXA) ||
+        (k->vs != RD_VS_SPRITE_UI && k->vs != RD_VS_SPRITE_WORLD)) {
         return 0;
     }
     k->vs = k->vs == RD_VS_SPRITE_WORLD ? RD_VS_SPRITE_STQ_WORLD : RD_VS_SPRITE_STQ_UI;
@@ -802,6 +824,11 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                                             RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                                 for (int i = 0; i < np; i++) {
                                     n = addKey(out, max, n, &dp[i].key);
+                                    /* package TEXA: the same state on a 24-
+                                     * or 16-bit texture under AEM */
+                                    RdPipeKeyInt kt = dp[i].key;
+                                    kt.fs = RD_FS_SPRITE_TEXA;
+                                    n = addKey(out, max, n, &kt);
                                 }
                                 /* package RSMALL: a textured STQ triangle
                                  * command with Q != 1 (the lightning's strips,

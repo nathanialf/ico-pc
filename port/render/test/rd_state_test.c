@@ -17,7 +17,8 @@
  *              version 3 dump (no aa1) still loads, with AA1 off
  *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
  *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
- *   pipelines  the reachable screen and post set is under 150 keys, with
+ *   pipelines  the reachable screen and post set is under 250 keys (150
+ *              before package TEXA's sprite_texa_ps twins), with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
@@ -488,7 +489,7 @@ static void testEnumeration(void)
     const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
     n = rd__EnumerateReachable(keys, 512);
     printf("  reachable pipelines: %u (screen and post %u, VU programs %u)\n", n, ns, n - ns);
-    CHECK(ns > 0 && ns < 150, "reachable screen and post pipelines %u must stay under 150", ns);
+    CHECK(ns > 0 && ns < 250, "reachable screen and post pipelines %u must stay under 250", ns);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipeline count %u must stay under %d", n,
           RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < n && i < 512; i++) {

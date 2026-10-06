@@ -891,11 +891,13 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                     RdDrawPass dp[2];
                     int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
                                                 RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
-                    for (int i = 0; i < np; i++) {
-                        RdPipeKeyInt k = dp[i].key;
+                    /* package TEXA: vu_ps and, for a 24- or 16-bit texture
+                     * under AEM, vu_texa_ps */
+                    for (int i = 0; i < np * 2; i++) {
+                        RdPipeKeyInt k = dp[i / 2].key;
                         k.gs.program = prog;
                         k.vs = vs;
-                        k.fs = RD_FS_VU;
+                        k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
                         int dup = 0;
                         for (uint32_t j = 0; j < n && j < max; j++) {
                             dup |= rd__PipeKeyEqual(&out[j], &k);

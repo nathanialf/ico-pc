@@ -62,9 +62,16 @@ enum {
     ICO_DF_PABE = 16,
     ICO_DF_FIX_FACTOR = 32,
     ICO_DF_PREMUL = 64,
-    ICO_DF_DATE = 128,    /* destination alpha test against t2 (the DATE snapshot) */
-    ICO_DF_DATM = 256,    /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
-    ICO_DF_AA1_FULL = 512 /* sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha */
+    ICO_DF_DATE = 128,     /* destination alpha test against t2 (the DATE snapshot) */
+    ICO_DF_DATM = 256,     /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
+    ICO_DF_AA1_FULL = 512, /* sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha */
+    /* package TEXA: the sampler state sprite_texa_ps and vu_texa_ps filter
+     * by (gs_texa_texture in common.hlsli); set only for those entries */
+    ICO_DF_TEXA_MAG_LINEAR = 1024,
+    ICO_DF_TEXA_MIN_LINEAR = 2048,
+    ICO_DF_TEXA_CLAMP_S = 4096,
+    ICO_DF_TEXA_CLAMP_T = 8192,
+    ICO_DF_TEXA_MIN_SAMPLED = 16384 /* minified pixels: the bound (Enhanced, mipmapped) sampler */
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */

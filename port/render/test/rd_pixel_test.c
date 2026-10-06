@@ -8,6 +8,11 @@
  *            covering no pixel centre, a one-pixel sprite; a textured
  *            sprite with the +8 UV nudge copies texels exactly; TEXA
  *            7F/81+AEM on an RGB24 source; rd_UVOffset
+ *   texa     (package TEXA) an RGBA16 texture with A = 0, A = 1 and black
+ *            texels under 7F/81+AEM, magnified 4x: bilinear is the GS
+ *            order (TEXA per texel, then the 4-bit bilinear) with 0 LSB
+ *            (sprite_texa_ps), nearest is the expanded texel with 0 LSB
+ *            (sprite_ps); the planner's choice of entry
  *   font     (package R8) a 4x4 R8 coverage atlas (GS alpha units) drawn
  *            through rd_ScreenPrims under port/ui/font.c's state (font_ps):
  *            1:1 at texel centres the stored alpha is (c * va) >> 7, and
@@ -41,7 +46,8 @@
  *            fringe outside its top edge at 1 - d; As = the 16-bit coverage
  *            >> 9; within 1 LSB of As
  *   pipes    every pipeline created is in the enumerated reachable set,
- *            whose screen and post part has fewer than 150 keys and holds the colour
+ *            whose screen and post part has fewer than 250 keys (with package
+ *            TEXA's sprite_texa_ps twins) and holds the colour
  *            mask 7 keys of the 2D draws under the dark volume's FBMSK and the
  *            STQ keys of the lightning (all of it,
  *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
@@ -520,6 +526,171 @@ static void testSprites(void)
     }
     rd_DestroyTexture(t32);
     rd_DestroyTexture(t24);
+}
+
+/* ------------------------------------------------------------------ TEXA */
+
+/* The GS texel of an RGBA16 texture (RGBA8 with the A bit in the alpha
+ * byte) at (x, y), CLAMP, TEXA expanded */
+static void texaTexel(const uint8_t *tex, int n, int x, int y, uint32_t mode, uint32_t o[4])
+{
+    x = x < 0 ? 0 : (x >= n ? n - 1 : x);
+    y = y < 0 ? 0 : (y >= n ? n - 1 : y);
+    const uint8_t *t = &tex[(y * n + x) * 4];
+    o[0] = t[0];
+    o[1] = t[1];
+    o[2] = t[2];
+    o[3] = gs_texa_alpha(t[0], t[1], t[2], t[3], mode, TEXFMT_RGBA16);
+}
+
+/* Package TEXA: an RGBA16 texture whose texels mix A = 0 and A = 1 and
+ * black ones (AEM), drawn magnified 4x (UV 8 + 4 x in 12.4, the 4-bit
+ * fractions 0, 4, 8 and 12) under TEXA 7F/81+AEM, MODULATE by 0x80 with
+ * TCC RGBA: every pixel is the GS order (TEXA per texel, then the 4-bit
+ * bilinear, floor of the sum >> 8), 0 LSB, through sprite_texa_ps; the
+ * same sprite with nearest filtering (UV 10 + 4 x, off the texel edges) is
+ * the expanded texel under it, 0 LSB,
+ * through sprite_ps as before.  The planner gives sprite_texa_ps only to a
+ * 24- or 16-bit texture under AEM with a linear filter. */
+static void testTexa(void)
+{
+    enum { N = 16, S = 4 };
+
+    static uint8_t tex[N * N * 4];
+    for (int i = 0; i < N * N; i++) {
+        const uint32_t hsh = hash((uint32_t)i + 991);
+        const int black = (hsh >> 24) % 4 == 0;
+        tex[i * 4 + 0] = black ? 0 : (uint8_t)((hsh & 0x1F) << 3 | 8);
+        tex[i * 4 + 1] = black ? 0 : (uint8_t)(((hsh >> 5) & 0x1F) << 3);
+        tex[i * 4 + 2] = black ? 0 : (uint8_t)(((hsh >> 10) & 0x1F) << 3);
+        tex[i * 4 + 3] = (uint8_t)((hsh >> 16) & 1); /* the A bit */
+    }
+    static const uint8_t black[4] = {0, 0, 0, 0}, grey[4] = {0x80, 0x80, 0x80, 0x80};
+    RdTex t16 = rd_CreateTextureSrc(N, N, tex, RD_TEXSRC_RGBA16, "texa rgba16");
+    RdTex t32 = rd_CreateTexture(N, N, tex, RD_TEXA_80_80, "texa rgba32");
+
+    /* the planner */
+    {
+        RdStateBlock st;
+        rd__ResetStateBlock(&st);
+        st.ds.texEnabled = 1;
+        st.tex = t16.id;
+        st.ds.texa = RD_TEXA_7F_81_AEM;
+        st.ds.magFilter = st.ds.minFilter = RD_FILTER_LINEAR;
+        RdDrawPass dp[2];
+        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                           RHI_FMT_UNKNOWN, dp);
+        CHECK(dp[0].key.fs == RD_FS_SPRITE_TEXA, "texa: RGBA16, AEM, bilinear: sprite_texa_ps");
+        st.ds.magFilter = RD_FILTER_NEAREST;
+        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                           RHI_FMT_UNKNOWN, dp);
+        CHECK(dp[0].key.fs == RD_FS_SPRITE_TEXA, "texa: linear MIN alone: sprite_texa_ps");
+        st.ds.minFilter = RD_FILTER_NEAREST;
+        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                           RHI_FMT_UNKNOWN, dp);
+        CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: nearest: sprite_ps");
+        st.ds.magFilter = st.ds.minFilter = RD_FILTER_LINEAR;
+        st.ds.texa = RD_TEXA_80_80;
+        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                           RHI_FMT_UNKNOWN, dp);
+        CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: TEXA 80/80: sprite_ps");
+        st.ds.texa = RD_TEXA_80_80_AEM;
+        st.tex = t32.id;
+        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                           RHI_FMT_UNKNOWN, dp);
+        CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: RGBA32: sprite_ps");
+    }
+
+    rd_BeginFrame();
+    rd_SelectList(11);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    opaque2D();
+    rd_TexA(RD_TEXA_7F_81_AEM);
+    rd_Texture(t16, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    sprite(256, 256, 10 * 16, 10 * 16, (10 + N * S) * 16, (10 + N * S) * 16, grey, 8, 8, N * 16 + 8,
+           N * 16 + 8);
+    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    /* UV 10 + 4 x: off the texel edges, where the nearest texel is unambiguous */
+    sprite(256, 256, 100 * 16, 10 * 16, (100 + N * S) * 16, (10 + N * S) * 16, grey, 10, 10,
+           N * 16 + 10, N * 16 + 10);
+    rd_TexA(RD_TEXA_80_80);
+    rd_EndFrame(0);
+
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (img) {
+        int bad = 0, badN = 0, maxd = 0, after = 0;
+        for (int y = 0; y < N * S; y++) {
+            for (int x = 0; x < N * S; x++) {
+                /* the GS: u = 8 + 4 x (12.4), u - 8 split into texel and fraction */
+                const int uu = 4 * x, vv = 4 * y;
+                const int i0 = uu >> 4, j0 = vv >> 4;
+                const uint32_t fu = (uint32_t)(uu & 15), fv = (uint32_t)(vv & 15);
+                uint32_t a[4], b[4], c[4], d[4];
+                texaTexel(tex, N, i0, j0, TEXA_7F_81_AEM, a);
+                texaTexel(tex, N, i0 + 1, j0, TEXA_7F_81_AEM, b);
+                texaTexel(tex, N, i0, j0 + 1, TEXA_7F_81_AEM, c);
+                texaTexel(tex, N, i0 + 1, j0 + 1, TEXA_7F_81_AEM, d);
+                int want[4], late[4];
+                for (int k = 0; k < 4; k++) {
+                    want[k] = (int)((a[k] * (16 - fu) * (16 - fv) + b[k] * fu * (16 - fv) +
+                                     c[k] * (16 - fu) * fv + d[k] * fu * fv) >>
+                                    8);
+                    want[k] = (int)gs_tfx_mod((uint32_t)want[k], 0x80);
+                }
+                /* the order sprite_ps keeps: RGB and the A bit filtered, TEXA after */
+                {
+                    uint32_t ab[4] = {0, 0, 0, 0};
+                    const int tx[4] = {i0, i0 + 1, i0, i0 + 1}, ty[4] = {j0, j0, j0 + 1, j0 + 1};
+                    const uint32_t wt[4] = {(16 - fu) * (16 - fv), fu * (16 - fv), (16 - fu) * fv,
+                                            fu * fv};
+                    for (int q = 0; q < 4; q++) {
+                        const int cx = tx[q] >= N ? N - 1 : tx[q], cy = ty[q] >= N ? N - 1 : ty[q];
+                        for (int k = 0; k < 4; k++) {
+                            ab[k] += tex[(cy * N + cx) * 4 + k] * wt[q];
+                        }
+                    }
+                    for (int k = 0; k < 4; k++) {
+                        late[k] = (int)((ab[k] + 128) >> 8);
+                    }
+                    late[3] =
+                        (int)gs_texa_alpha((uint32_t)late[0], (uint32_t)late[1], (uint32_t)late[2],
+                                           (uint32_t)late[3], TEXA_7F_81_AEM, TEXFMT_RGBA16);
+                }
+                after += late[3] != want[3];
+                const uint8_t *p = img + ((size_t)(10 + y) * w + (size_t)(10 + x)) * 4;
+                int dmax = 0;
+                for (int k = 0; k < 4; k++) {
+                    const int e = abs((int)p[k] - want[k]);
+                    dmax = e > dmax ? e : dmax;
+                }
+                maxd = dmax > maxd ? dmax : maxd;
+                if (dmax != 0 && bad++ < 8) {
+                    pixFail("TEXA before the bilinear filter (RGBA16, 7F/81+AEM)", 10 + x, 10 + y,
+                            p, want);
+                }
+                /* nearest: texel (10 + 4 x) >> 4, expanded */
+                uint32_t t[4];
+                texaTexel(tex, N, (10 + uu) >> 4, (10 + vv) >> 4, TEXA_7F_81_AEM, t);
+                const int wn[4] = {(int)t[0], (int)t[1], (int)t[2], (int)gs_tfx_mod(t[3], 0x80)};
+                const uint8_t *pn = img + ((size_t)(10 + y) * w + (size_t)(100 + x)) * 4;
+                if ((pn[0] != wn[0] || pn[1] != wn[1] || pn[2] != wn[2] || pn[3] != wn[3]) &&
+                    badN++ < 8) {
+                    pixFail("RGBA16 nearest under 7F/81+AEM", 100 + x, 10 + y, pn, wn);
+                }
+            }
+        }
+        printf("  texa: %d pixels bilinear, max difference %d from the GS order (TEXA per "
+               "texel); %d of them would differ in alpha with TEXA after the filter\n",
+               N * S * N * S, maxd, after);
+        CHECK(bad == 0, "texa: %d bilinear pixels differ from the GS order", bad);
+        CHECK(after > 100, "texa: the texture exercises the order (%d pixels)", after);
+        CHECK(badN == 0, "texa: %d nearest pixels differ", badN);
+    }
+    rd_DestroyTexture(t16);
+    rd_DestroyTexture(t32);
 }
 
 /* ------------------------------------------------------------------- STQ */
@@ -1044,7 +1215,7 @@ static void testPipelines(void)
     const uint32_t n = rd__EnumerateReachable(keys, 512);
     const uint32_t c = rd__PipelineCount();
     printf("  pipelines: %u created, %u reachable (%u screen and post)\n", c, n, ns);
-    CHECK(ns < 150, "reachable screen and post pipelines %u >= 150", ns);
+    CHECK(ns < 250, "reachable screen and post pipelines %u >= 250", ns);
     /* the keys a frame with the dark volume's FBMSK (colour mask 7 until the
      * next FRAME write) and the lightning's perspective STQ would otherwise
      * create at run time */
@@ -1130,6 +1301,7 @@ int main(int argc, char **argv)
     testDateFlat();
     testScreenRuns();
     testSprites();
+    testTexa();
     testFont(dir);
     testStq();
     testAa1();

@@ -230,8 +230,7 @@ typedef struct RdDrawState {
 
 /* Pipeline key: what actually selects a GPU pipeline.  Everything in
  * RdDrawState that is not a pipeline-level property (aref, blendFix,
- * sampler settings) goes in a uniform or sampler object instead.  Fewer
- * than 100 distinct keys are expected.  The tests hold the enumerated
+ * sampler settings) goes in a uniform or sampler object instead.  The tests hold the enumerated
  * reachable set under RD_PIPELINE_REACHABLE_MAX (rd__EnumerateReachable);
  * the runtime cache has four times that room, and a key past it (or one
  * whose creation failed) is logged once and drawn as nothing, never an
@@ -256,7 +255,11 @@ typedef struct RdPipelineKey {
     uint8_t _pad[2];
 } RdPipelineKey;
 
-#define RD_PIPELINE_REACHABLE_MAX 256
+/* 512 since package TEXA: every sprite_ps and vu_ps key has a twin with
+ * sprite_texa_ps / vu_texa_ps (TEXA, the texture's format and its filter
+ * are runtime state that leaks between lists, so any of those states can
+ * meet a 24- or 16-bit texture under AEM), 426 keys against 250 before */
+#define RD_PIPELINE_REACHABLE_MAX 512
 #define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
 /* keys whose rhi_CreatePipeline failed, remembered so they are not retried
  * (and logged) on every draw */

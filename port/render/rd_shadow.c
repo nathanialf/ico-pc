@@ -36,8 +36,9 @@
  * The A the resolve writes is the TEXA expansion of the PSMCT24 read, not
  * the alpha the GS stored (As = 0x80 wherever a face was drawn); nothing
  * reads FBP 0x142 as 32 bits, and baking the expansion lets the chain's
- * bilinear filter work on expanded texels as the GS filter does (rd's
- * shader expands TEXA after the sampler has filtered).
+ * bilinear filter work on expanded texels as the GS filter does (chosen
+ * when rd's shader still expanded TEXA after the sampler had filtered;
+ * RENDER_API.md "Textures").
  *
  * Package V3: every vertex carries the place its triangle had in the call
  * (rd__SetShadowTag, in rgba: the volume draw writes no colour), so

@@ -418,11 +418,34 @@ textures are created with `rd_CreateTextureSrc` and `sprite_ps` applies the
 TEXA in force when the draw replays (`gs_texa_alpha`). TEXA leaks between
 lists like every other register (lists 1 and 2 default to 7F/81+AEM, the
 others to 80/80, and the 2D layer writes 80/80+AEM mid-list), so a baked
-texture would need one copy per mode and a guess at which was in force. The
-shader expands TEXA after the sampler has filtered, where the GS expands
-before; with AEM or two TA values, bilinear edges between texels of
-different alpha can differ (docs/TODO.md). The shadow chain avoids this by
-baking (section 10).
+texture would need one copy per mode and a guess at which was in force.
+
+**TEXA before the filter.** The GS expands TEXA per texel and then
+filters. Under AEM (7F/81+AEM, 80/80+AEM) the order matters: black texels
+have alpha 0 and the others TA0 or TA1, so a bilinear edge between them
+blends alphas that a sampler filtering RGB and the A bit first would not
+produce (the dark-volume composite was off by up to 52 LSB on a one-pixel
+rim). So the planner (`rd_pipeline.c` `rd__TexaPerTexel`) gives a draw that
+samples a texture whose `RdTexRec.src` is RGB24 or RGBA16 (PSMCT24,
+PSMCT16/16S, or an indexed texture with a 24- or 16-bit CLUT) under a TEXA
+with AEM through a linear MAG or MIN filter its own fragment shader:
+`sprite_texa_ps` for screen prims, `vu_texa_ps` for the VU programs. They
+load the four texels around the sample point (`gs_texa_texture` in
+`common.hlsli`), expand TEXA on each, and weight them with the GS's 4-bit
+fractions (the UV rounded to 12.4, u − 0.5, the sum floored `>> 8`), as
+`fx_sprite_ps` does; REPEAT or CLAMP and the MAG/MIN choice by the pixel's
+footprint are the sampler's. Every other draw (32-bit textures, TEXA
+80/80, nearest filtering) keeps `sprite_ps` / `vu_ps`, whose SPIR-V and
+DXIL did not change. Kept in the sampler order: a minified pixel of a
+mipmapped texture under the Enhanced trilinear or anisotropic filter (the
+sampler's mips), `sprite_stq_ps` (screen prims with Q ≠ 1),
+`sprite_aa1_ps` and the COLCLAMP 0 accumulation pass (`wrap_acc_ps`). Each
+`sprite_ps` and `vu_ps` key has a TEXA twin in the reachable set (TEXA, the
+format and the filter are runtime state), 426 keys against 250 before, so
+`RD_PIPELINE_REACHABLE_MAX` is 512. `rd_pixel` checks an RGBA16 texture of
+A = 0, A = 1 and black texels magnified under 7F/81+AEM against the GS
+order with 0 LSB; `rd_raw`'s dark composite is within 1 LSB of the GS
+order (52 before).
 
 **Cache.** The key is (texture id, content generation, TEXA mode).
 `Texture.c` uses the table index as the id and `serial * 8 + TexExt.level`
@@ -733,10 +756,9 @@ the Z test writes nothing, so face order and the split into increments and
 decrements change nothing. An 8-bit stencil wrapping at 256 would differ for
 n = 64, 128, 192, where the GS colour is 0; the write mask removes that.
 `rd_shadow` checks every count over a 512×512 target: all pixels equal the
-wrapped colour sum. The resolve writes the AEM expansion as alpha directly,
-because the shader expands TEXA after filtering and an RGB24 view would give
-alpha 0x80 to every filtered texel next to a non-zero one; baking is exact
-because `shadow_Draw` writes the TEXA it reads with itself.
+wrapped colour sum. The resolve writes the AEM expansion as alpha directly
+(chosen when the shader still expanded TEXA after filtering, section 8);
+baking is exact because `shadow_Draw` writes the TEXA it reads with itself.
 
 **Precision of the composites.** The chain levels match the GS bilinear of
 the level before with 0 LSB. One composite alone is within 1 LSB (level 1)
@@ -2182,7 +2204,10 @@ are in docs/TODO.md.
 Approximations kept in the code and described with their feature:
 PRIM.AA1 (section 4, "PRIM.AA1": PCSX2's software model, with the line
 ends, the fringe corners, on-edge sample points and the fringe order of a
-Z-writing strip left approximate; sprites and points unaffected).
+Z-writing strip left approximate; sprites and points unaffected). TEXA
+before the bilinear filter (section 8) covers `sprite_ps` and `vu_ps`; the
+STQ, AA1 and COLCLAMP 0 screen prims and the Enhanced mipmapped
+minification still expand TEXA after the sampler.
 
 The Ad blend modes 8 to 10 (Ad/255 where the GS reads Ad/128) and mode 11
 (Cd left unchanged) stay approximate because no disc data reaches them. The
