@@ -57,6 +57,13 @@ extern "C" {
    field lines tall): about 18.7 y units, measured on the title frame of a
    run (docs/port/UI.md, "Coordinates and metrics"). 27 gives 18.6. */
 #define UI_MENU_TEXT_SIZE 27.0f
+/* package GHOST: atlas pixels per grid y unit of a glow (UI_ADDITIVE) in
+   overlay mode: the menu sheets' texel density (a 20-texel row is 40 y
+   units), the glyphs magnified to the output and sampled linearly.  The
+   game's glow is its row's sheet stretched (layout_texture.c
+   lt_glow_sprite), a soft picture; rasterised a texel a pixel like the
+   label, it is a sharp, stretched second copy of the letters around them */
+#define UI_GLOW_SCALE 0.5f
 
 /* the Z the layout draws its rows at (layout_texture.c) */
 #define UI_LAYOUT_Z 0xFFFFFF9Bu
@@ -156,7 +163,9 @@ uint64_t ui_SetDrawKey(uint64_t owner);
      ctx->boxScale until ui_EndOverlay; ui_SetScale meanwhile sets the
      scale restored after), so one atlas texel is one output pixel, and
      each glyph quad's top-left corner is rounded to a whole output pixel
-     with its size kept, so the glyphs are drawn texel for pixel;
+     with its size kept, so the glyphs are drawn texel for pixel; except
+     UI_ADDITIVE text (the glow), rasterised at UI_GLOW_SCALE and drawn
+     magnified, continuous (package GHOST);
    - rects have both corners rounded to whole pixels;
    - blend as ui_DrawText's (0x44, UI_ADDITIVE 0x48), no draw keys, the
      state flags (UI_KEEP_STATE) ignored; nothing is mirrored.

@@ -24,6 +24,10 @@
  *             0x40 halves it; a full letterbox cuts the part of a row inside
  *             its band; a KEEP after the row drops it, a row after the KEEP
  *             of a keep frame (lists 11, 12) is drawn
+ *   glow      Enhanced 1920 x 1080: the title's glow (additive, stretched)
+ *             of an "I" is soft: across the stem its blue steps at most a
+ *             third of its peak a pixel (package GHOST: drawn a texel a
+ *             pixel it was a sharp second copy of the letters)
  *
  * Usage: font_edge_test [dir]  (dir: where the PNGs go)
  * Exit 0, 1 on a failure, 77 without a device.
@@ -70,6 +74,8 @@ typedef struct Frame {
     int letterbox;  /* 1 + the band level (0: none) */
     int keepBefore; /* KEEP before the row (a keep frame: lists 11, 12) */
     int keepAfter;  /* KEEP after the row */
+    int glow;       /* the title's glow alone (1) or under the row (2; package GHOST) */
+    uint8_t bg;     /* the scene's grey */
     float rowY;
 } Frame;
 
@@ -80,11 +86,11 @@ static void scissorAll(void)
 
 static void recordFrame(const Frame *fr)
 {
-    static const uint8_t black[4] = {0, 0, 0, 0x80};
+    const uint8_t bg[4] = {fr->bg, fr->bg, fr->bg, 0x80};
     rd_BeginFrame();
     if (!fr->keepBefore) {
         rd_SelectList(0);
-        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
         scissorAll();
     }
     rd_SelectList(11);
@@ -97,7 +103,18 @@ static void recordFrame(const Frame *fr)
     }
     if (fr->row) {
         const unsigned flags = UI_ALIGN_CENTER | UI_VALIGN_MIDDLE;
-        if (fr->deferred) {
+        if (fr->glow == 2) {
+            ui_DrawTextDeferred(DEF_X, fr->rowY, 27.0f, kWhite, fr->word, flags | UI_HALO, NULL);
+        }
+        if (fr->glow) {
+            /* lt_glow_sprite's at its brightest: the row's box (400 x 38
+               y units here) 4 wider and 8 taller, additive, blue */
+            static const uint8_t blue[4] = {54, 80, 115, 127};
+            const float bx = DEF_X - 200.0f, by = fr->rowY - 17.0f;
+            const UiXform xf = {bx, by, 404.0f / 400.0f, 46.0f / 38.0f, -2.0f, -4.0f};
+            ui_DrawTextDeferred(DEF_X, fr->rowY, fr->glow == 2 ? 27.0f : WORD_SIZE, blue, fr->word,
+                                flags | UI_ADDITIVE, &xf);
+        } else if (fr->deferred) {
             ui_DrawTextDeferred(DEF_X, fr->rowY, WORD_SIZE, kWhite, fr->word, flags, NULL);
         } else {
             ui_DrawText(DEF_X, fr->rowY, WORD_SIZE, kWhite, fr->word, flags);
@@ -432,6 +449,66 @@ static void checkFold(void)
           keepFrame);
 }
 
+/* ---------------------------------------------------------------- glow */
+
+/* package GHOST: the selected row's glow (lt_glow_sprite: the row stretched,
+   additive) is the game's sheet stretched, a soft picture.  Deferred, it is
+   rasterised at the sheets' density and magnified (font.h UI_GLOW_SCALE):
+   across the stem of an "I" its blue rises and falls over several pixels.
+   Drawn a texel a pixel like the label, it rose in about one pixel, a sharp
+   stretched copy of the letters beside the label's: the ghost. */
+static void checkGlow(void)
+{
+    const uint32_t w = 1920, h = 1080;
+    const RdSettings s = settingsOf(1, w, h, 0);
+    const int mid = colOf(&s, (DEF_X + OVL_X) * 0.5f);
+    const Frame fr = {.deferred = 1, .row = 1, .glow = 1, .word = "I", .rowY = WORD_Y};
+    uint8_t *px = present(&s, 1, 0, &fr, 1);
+    if (!px) {
+        return;
+    }
+    writePng("font_edge_glow.png", px, w, h);
+    /* the glow's extent: blue above 0 */
+    int b[4] = {1 << 30, 1 << 30, -1, -1};
+    for (int y = 0; y < (int)h; y++) {
+        for (int x = 0; x < mid; x++) {
+            if (px[((size_t)y * w + (size_t)x) * 4 + 2] > 0) {
+                b[0] = x < b[0] ? x : b[0];
+                b[1] = y < b[1] ? y : b[1];
+                b[2] = x > b[2] ? x : b[2];
+                b[3] = y > b[3] ? y : b[3];
+            }
+        }
+    }
+    CHECK(b[2] >= 0, "glow: drawn");
+    if (b[2] >= 0) {
+        const int y = (b[1] + b[3]) / 2;
+        int peakB = 0, step = 0;
+        for (int x = b[0] - 2; x <= b[2] + 2; x++) {
+            const int v = px[((size_t)y * w + (size_t)x) * 4 + 2];
+            const int u = px[((size_t)y * w + (size_t)x - 1) * 4 + 2];
+            peakB = v > peakB ? v : peakB;
+            step = abs(v - u) > step ? abs(v - u) : step;
+        }
+        printf("font_edge: glow I: %d px wide, blue peaks at %d, steps at most %d a pixel\n",
+               b[2] - b[0] + 1, peakB, step);
+        CHECK(peakB >= 64, "glow: the blue peaks at %d (at least 64)", peakB);
+        CHECK(step * 3 <= peakB,
+              "glow: across the stem the blue steps %d in a pixel, more than a third of its "
+              "peak %d: a sharp copy, not a glow",
+              step, peakB);
+    }
+    free(px);
+    /* to look at: a title row, its halo and its glow over the fog's grey */
+    const Frame title = {
+        .deferred = 1, .row = 1, .glow = 2, .bg = 0x90, .word = "Continue", .rowY = WORD_Y};
+    px = present(&s, 1, 0, &title, 1);
+    if (px) {
+        writePng("font_edge_glow_title.png", px, w, h);
+    }
+    free(px);
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -446,6 +523,7 @@ int main(int argc, char **argv)
     checkEdgesAt(3840, 2160);
     checkOriginal();
     checkFold();
+    checkGlow();
     if (failures) {
         printf("font_edge_test: %d failure(s)\n", failures);
         return 1;

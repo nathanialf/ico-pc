@@ -876,8 +876,26 @@ static uint64_t rectKey(void)
 }
 #endif
 
+static void drawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                       unsigned flags, const UiXform *xf, int soft);
+
 void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                    unsigned flags, const UiXform *xf)
+{
+    if (s_ov.active && (flags & UI_ADDITIVE)) {
+        /* package GHOST: the glow on the output is rasterised at the menu
+           sheets' texel density and magnified (font.h UI_GLOW_SCALE) */
+        const float keep = s_font.scale;
+        s_font.scale = UI_GLOW_SCALE;
+        drawTextXf(x, y, size, rgba, utf8, flags, xf, 1);
+        s_font.scale = keep;
+        return;
+    }
+    drawTextXf(x, y, size, rgba, utf8, flags, xf, 0);
+}
+
+static void drawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                       unsigned flags, const UiXform *xf, int soft)
 {
     if (!utf8 || !*utf8 || !ui_FontInit()) {
         return;
@@ -955,7 +973,11 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                 if (q->page != page) {
                     continue;
                 }
-                float ax = q->x0, ay = q->y0, bx = q->x1, by = q->y1;
+                /* a magnified glyph takes one gutter texel (zero) on each
+                   side, so its edge fades out instead of being cut */
+                const int m = soft ? 1 : 0;
+                float ax = q->x0 - (float)m * xs, ay = q->y0 - (float)m * ys;
+                float bx = q->x1 + (float)m * xs, by = q->y1 + (float)m * ys;
                 mapXf(xf, &ax, &ay);
                 mapXf(xf, &bx, &by);
                 float ax16, ay16, bx16, by16;
@@ -964,14 +986,22 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                 RdScreenVtx *a = &v[n++], *b = &v[n++];
                 memset(a, 0, sizeof(*a));
                 memset(b, 0, sizeof(*b));
-                a->x = ovPix(ax16);
-                a->y = ovPix(ay16);
-                b->x = a->x + ovPix(bx16 - ax16);
-                b->y = a->y + ovPix(by16 - ay16);
-                a->s = (float)(q->u0 * 16);
-                a->t = (float)(q->v0 * 16);
-                b->s = (float)(q->u1 * 16);
-                b->t = (float)(q->v1 * 16);
+                if (soft) {
+                    /* magnified: continuous, sampled linearly */
+                    a->x = (int32_t)lrintf(ax16);
+                    a->y = (int32_t)lrintf(ay16);
+                    b->x = (int32_t)lrintf(bx16);
+                    b->y = (int32_t)lrintf(by16);
+                } else {
+                    a->x = ovPix(ax16);
+                    a->y = ovPix(ay16);
+                    b->x = a->x + ovPix(bx16 - ax16);
+                    b->y = a->y + ovPix(by16 - ay16);
+                }
+                a->s = (float)((q->u0 - m) * 16);
+                a->t = (float)((q->v0 - m) * 16);
+                b->s = (float)((q->u1 + m) * 16);
+                b->t = (float)((q->v1 + m) * 16);
                 a->q = b->q = 1.0f;
                 memcpy(a->rgba, rgba, 4);
                 memcpy(b->rgba, rgba, 4);
@@ -1031,6 +1061,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
 #else
     (void)rgba;
     (void)xf;
+    (void)soft;
 #endif
     free(c.q);
 }

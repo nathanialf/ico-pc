@@ -765,8 +765,12 @@ decided when it replays (RENDER_API.md "The deferred text pass"):
   scene, the demo letterbox cuts it in its bands, the brightness step lifts
   it, a KEEP drops it, the reduction's stage tint colours it, as each did
   to the quads). The glow pass is an
-  additive item with the stretch; the white panel's dark prompts are plain
-  items. The mirror mode does not move it: the quads are pre-flipped and the
+  additive item with the stretch, rasterised at the menu sheets' density
+  (`UI_GLOW_SCALE`, half an atlas pixel a y unit) and drawn magnified with
+  linear sampling, as the game's stretched sheet was: drawn a texel a pixel
+  like the label it was a sharp, stretched second copy of the letters, a
+  ghost beside every stem of the selected row (package GHOST, `font_edge`
+  "glow"); the white panel's dark prompts are plain items. The mirror mode does not move it: the quads are pre-flipped and the
   present flips them back, the item is drawn unflipped where the quads end
   up.
 - Original, classic menu text, no renderer, or a replay without a present:

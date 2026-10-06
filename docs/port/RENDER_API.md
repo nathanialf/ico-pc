@@ -1320,7 +1320,9 @@ UI is in), the reduction's border crop (2 of 512 columns, 8 of 256 lines;
 2 below a 512-line scene) and the segment's lines, in whole output pixels.
 port/ui's renderer lays the item out through font.c's overlay mode, so the
 prims are rasterised at the box's scale with each glyph's corner on a whole
-output pixel; `rd_OverlayPrims` gives them the region as their batch's
+output pixel (an additive item, the glow, is the exception: rasterised at
+the menu sheets' density and magnified, since a sharp glow is a stretched
+second copy of the row's letters, which ghosted the selected title row); `rd_OverlayPrims` gives them the region as their batch's
 scissor.
 
 **Drawing.** `textRecord` draws the items' batches in one load-preserving
