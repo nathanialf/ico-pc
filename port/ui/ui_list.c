@@ -165,6 +165,7 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
     int n = ui_ListCount(l);
     int s = ui_ListSlotOf(l, lay->curItem);
     int shown = ui_ListShown(l);
+    int wrapped = 0;
     if (s < 0 || shown == 0 || (flags & (PAD_CROSS | PAD_BACK))) {
         return;
     }
@@ -174,6 +175,7 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
         } else {
             l->offset = 0;
             lay->curItem = l->label[0];
+            wrapped = 1;
         }
         CUR_SE();
     } else if ((flags & PAD_UP) && s == 0) {
@@ -182,8 +184,16 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
         } else {
             l->offset = n - shown;
             lay->curItem = l->label[shown - 1];
+            wrapped = 1;
         }
         CUR_SE();
+    }
+    if (wrapped) {
+        /* the layout's own move (default_item_select) runs after this proc
+           with the same pad flags: it would follow the new row's link one
+           row further (skipping the end row) and play the cursor sound a
+           second time.  The wrap is this frame's move. */
+        lt_item_select_disable = 1;
     }
 }
 

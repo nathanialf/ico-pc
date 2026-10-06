@@ -2338,10 +2338,16 @@ static void tlDecorate(void *u, int cur)
     s_hdrDecorated = cur;
 }
 
+static int s_moveSounds; /* default_item_select's cursor sounds */
+
+/* the engine's order in exec_layout_texture: the layout's proc, then
+   default_item_select unless the proc set lt_item_select_disable (reset at
+   the end of the frame) */
 static void listStep(UiList *l, LtProp *lay, int flags)
 {
     ui_ListProc(l, lay, flags);
-    if (!(flags & 0x50)) {
+    int before = lay->curItem;
+    if (!(flags & 0x50) && lt_item_select_disable == 0) {
         const LtProperty *e = lt_ext_Prop(lay->curItem);
         if ((flags & 0x1000) && e->upItem >= 0) {
             lay->curItem = e->upItem;
@@ -2349,6 +2355,10 @@ static void listStep(UiList *l, LtProp *lay, int flags)
             lay->curItem = e->downItem;
         }
     }
+    if (lay->curItem != before) {
+        s_moveSounds++;
+    }
+    lt_item_select_disable = 0;
     ui_ListRefresh(l, lay->curItem);
 }
 
@@ -2565,8 +2575,61 @@ static void testGallery(void)
     gallery_SetEngine(NULL);
 }
 
+static int tlPlain(void *u, int k)
+{
+    (void)u;
+    (void)k;
+    return 0;
+}
+
+/* a wrap through the engine's order (proc, then default_item_select) lands
+   on the end row, with one cursor sound and no extra move */
+static void testListWrap(int count)
+{
+    UiListDef def = {tlCount, tlFill, tlPlain, NULL, tlDecorate};
+    UiListStyle st;
+    UiList l;
+    LtProp lay;
+    memset(&st, 0, sizeof(st));
+    st.y0 = 40;
+    st.pitch = 18;
+    st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+    st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
+    st.statusY = 196;
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_ListBuild(&l, &def, &count, &st);
+    memset(&lay, 0, sizeof(lay));
+    ui_ListReset(&l);
+    ui_ListRefresh(&l, -1);
+    int shown = ui_ListShown(&l);
+    /* Up from the first item wraps to the last */
+    lay.curItem = l.label[0];
+    ui_ListRefresh(&l, lay.curItem);
+    int snd = s_sounds[0] + s_moveSounds;
+    listStep(&l, &lay, 0x1000);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == count - 1 && l.offset == count - shown,
+          "%d items: Up from the first wraps to the last (item %d, offset %d)", count,
+          ui_ListItemOfRow(&l, lay.curItem), l.offset);
+    CHECK(s_sounds[0] + s_moveSounds == snd + 1, "%d items: one cursor sound on the Up wrap (%d)",
+          count, s_sounds[0] + s_moveSounds - snd);
+    listStep(&l, &lay, 0);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == count - 1, "%d items: the next frame stays", count);
+    /* Down from the last item wraps to the first */
+    snd = s_sounds[0] + s_moveSounds;
+    listStep(&l, &lay, 0x4000);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 0 && l.offset == 0,
+          "%d items: Down from the last wraps to the first (item %d, offset %d)", count,
+          ui_ListItemOfRow(&l, lay.curItem), l.offset);
+    CHECK(s_sounds[0] + s_moveSounds == snd + 1, "%d items: one cursor sound on the Down wrap (%d)",
+          count, s_sounds[0] + s_moveSounds - snd);
+}
+
 static void testList(void)
 {
+    testListWrap(20);
+    testListWrap(5);
+
     int count = 20;
     UiListDef def = {tlCount, tlFill, tlHeading, NULL, tlDecorate};
     UiListStyle st;
