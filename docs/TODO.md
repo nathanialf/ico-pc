@@ -30,14 +30,13 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 ## Interpolation (`port/render/rd_interp.c`)
 
-- **Rope-top presentation and the 60 Hz climb rate (follow-up filed by the F15 fix; needs a look at dumped frames).** The floaty stand-up
-  at the top of a rope was a simulation defect (DIVERGENCES.md F15) and the
-  headless replay is clean now, but the drawn pose over that transition was
-  not dumped at the Enhanced preset with interpolation on, and the chain
-  climb's phase step at 60 Hz (`TestChainUpDown` in `ico2/omori/src/chain.c`,
-  `30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1])`) was not compared
-  against the 50 Hz value. Dump one climb-top (`[dev] dump_from`) and look at
-  the half-way frames; compare the phase step in both video modes.
+- **Rope-top presentation, drawn pose.** No script reaches the top of a
+  rope or chain: the recorded session (`build-host/tmp/s4/session.txt`) has
+  none in ticks 4200 to 4730 of its chain stage (DIVERGENCES.md F15's note).
+  Record a climb with F12 at the top, replay it with `dump_interp=1` and
+  `dump_from` there, and look at `rd_replay_tool --interp 0.5` frames at the
+  Enhanced preset. The 60 Hz phase step is settled (the same 30 units a
+  second as at 50 Hz).
 
 ## Game code and 64-bit safety
 

@@ -1694,6 +1694,7 @@ faded or switched at half way and those not placed, lit draws whose lights
 turned with them, the scratch meshes' most and bytes, and up to six
 `interp: flapping draw` lines naming draws whose outcome changed four or
 more times.
+The drawn pose at the top of a rope or chain climb was looked for in the recorded session and not reached (DIVERGENCES.md F15's note records the attempt), so it has not been checked with interpolation on.
 `ICO_RD_S2_LEGACY=1` in the environment turns off the rotation blend, the
 rigid camera, the prism blend, the unquantised positions and the present
 clock, for A/B comparison.

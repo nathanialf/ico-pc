@@ -75,6 +75,29 @@ goes in `docs/TODO.md`.
 | F20 | `sugipon/src/motMan_rootUpdate.c.inc` `rootUpdateY` (root update mode 3), `getFieldCollision(&w)` then `CopyVector(&skelRoot->plane, &w.normal)` | the plane is copied hit or miss, and `_Clip` (`fumi/src/fieldCollision.c`) sets `w.normal` only for a floor hit, so a miss copies what the stack holds. ROM: `w` is sp+240 of the 864-byte frame (0x1EB540), `w.normal` the caller's sp - 464 in `_getGeometryOfMotion` (1232-byte frame, the only call at 0x1EC180); no callee of `rootUpdateY` reaches above its sp. Earlier in the same `_getGeometryOfMotion` call the `pursueNaturalGeometry` walk (96-byte frames) stores into x and y on every tick for a skeleton four or more levels deep: the fifth level's `sd s1,16(sp)` (0x1ED564) and the fourth level's `GetMatrixFromQuaternionPos` `sd ra,16(sp)` (0x10DE98), a node index or 0x001E51A4 with a zero high word, so a denormal and +0, which the EE's FPU and VU0 read as zero. Nothing in that call stores into z and w but a floor hit at the same address: `rootUpdateY`'s own or `rootUpdateXZ_MotPos`'s (`ClipWork` at sp+16 of 640, 0x1E8C60). A miss therefore gives (0, 0, z, w) with z and w those of the last normal stored at that address; for an actor's consecutive ticks in mode 3 (or after mode 2/17) that is its own last floor normal. Other actors' `_getGeometryOfMotion` calls and other code at that depth between ticks can store there (`BoyGeo`, `GirlGeo` and `EnemyGeo` reach `ExecMotionOrient` through 48-, 80- and 112-byte frames, so another actor's `rootUpdate*` frames cover the same address), so the value is not determinate in general | `w.normal` is seeded with (0, 0, `skelRoot->plane` z, `skelRoot->plane` w) before the ray: the same-actor case, deterministic. Before: the host's own stack (garbage per build) | yes (the plane feeds `getFieldCollision`'s next height test, `GetYProjectionOfPlane` in `motionManager.c` and the cloth's floor; a different actor's write between ticks is not reproduced) | TODO audit, ROM disassembly and a stack-slot sweep of `_getGeometryOfMotion`'s callees | fixed (the same-actor case) |
 | F21 | `script/src/st13c.c` `actSt13cSekizoChk` (stage 13c, the statue check), `soundSeDefStop(se)` after `gflagOn(31)` | `volatile int se` is never written (st07a's twin `actSt07aSekizoChk` stores `soundSeDefPlay(1217, ...)` there first; this one has no play). ROM: `se` is 4(sp) of the 96-byte frame, read by `lw a0,4(sp)` at 0x24BE14; the only store near it is `sw a0,0(sp)` (`self`, 0x24BC14). The function is a thread's entry (the mail's main: `act2.c` `actChangeActMain`, `isysGObjProcAdd`, `iosThreadCreateS` over an `iosMallocDebug` stack nothing clears) below `iosThreadMain`'s 32-byte frame, which calls only the `GetThreadId` syscall first, so the word is whatever the heap block held: indeterminate. `_soundSeDefStop` stops slot `id & 0xFF` only when its handle is live and `id >> 8` equals the slot's unsigned short `num`, so anything but a live handle of that exact slot is a no-op (and a low byte of 48 or more reads past `seSlotTbl[48]`) | `soundSeDefStop(-256)`: slot 0, `id >> 8` = -1, never a `num`, so a no-op without reading past the table (-1 would read `seSlotTbl[255]`) | no, unless the PS2's heap word was a live handle of the matching slot | TODO audit, ROM disassembly | fixed (the common case: no stop) |
 
+**F15, the rope-top pose and the chain climb at 60 Hz.** The drawn pose
+over a rope or chain top was looked for with `dump_interp=1` (the dumps
+carry the half-way frame; `rd_replay_tool --interp 0.5 PREV` and `--enhanced`
+render it) and not reached: the recorded session (`build-host/tmp/s4/session.txt`, 5090 ticks,
+replayed at 60 Hz on the window build under lavapipe) spends ticks 3916 to
+4875 in the stage the trace numbers 3 (F15's "stage 4", counted from 1; not
+confirmed), and dumps every 12th frame over
+ticks 4200 to 4730 show the boy turning on the spot, crossing a courtyard
+and climbing a stone staircase; no chain is touched, and the 145 ticks
+after 4730 are button presses with the boy standing in a room. The pose at a
+climb top is therefore unchecked on the drawn side (the simulation side is
+the headless replay above). The chain climb's phase step in
+`TestChainUpDown` is `30.0f / (float)((60 - systemStatus[0] * 10) /
+systemStatus[1])`, all `int` until the cast, no `double`; `systemStatus` starts
+`{1, 2, ...}` (`common/src/main.c`: PAL, frame step 2) and `[0]` is 1 at 50 Hz
+and 0 at 60 Hz (`[video] video_mode`). At 50 Hz it is `(60 - 10) / 2 = 25`,
+a step of `30.0f / 25.0f = 1.2f` (0x3F99999A, inexact) per tick, and a tick
+every 2 vsyncs is 25 ticks a second: 30 phase units a second. At 60 Hz it
+is `60 / 2 = 30`, a step of exactly `1.0f` at 30 ticks a second: 30 phase
+units a second. The climb rate per second is the same in both modes; only
+the 50 Hz step carries a rounding (1.2f summed over a climb).
+
+
 ### Sites converted for F5
 
 Each uses `ps2_div`, `ps2_ftoi` or `ps2_operand` on the host only:
