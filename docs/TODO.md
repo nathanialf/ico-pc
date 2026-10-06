@@ -76,10 +76,6 @@ pointer to this file.
 
 ## Interpolation (`port/render/rd_interp.c`)
 
-- **Unkeyed 2D.** `kanban.c`'s signs, `staffroll.c` (keyed only by string
-  through `font_Print`) and `debug.c` are not keyed, so they step at the
-  tick rate.
-
 - **Rope-top presentation and the 60 Hz climb rate.** The floaty stand-up
   at the top of a rope was a simulation defect (DIVERGENCES.md F15) and the
   headless replay is clean now, but the drawn pose over that transition was
@@ -181,18 +177,6 @@ pointer to this file.
 
 ## Configuration and text
 
-- **The port font everywhere.** The 124 menu rows use the port font
-  (`[game] classic_menu_text` off), but the remaining in-game text still
-  comes from the disc's textures or `DisplayFont.c`'s bitmap font: the
-  signs (`kanban.c`), the staff roll, the save and load screens' values,
-  the game over and Continue? prompts, the subtitles. Route each through
-  `port/ui/menu_text.c`'s path with the same classic fallback, so one
-  typeface covers the whole game at every scale. The menu rows are drawn
-  at the output's resolution in Enhanced since package DEF (UI.md "Menu
-  text", RENDER_API.md "The deferred text pass"): text drawn through
-  `ui_DrawTextDeferred` (`port/ui/font.h`) is composited after the box
-  blit, texel for pixel, in its list order. Package TXT routes the
-  subtitles (`jimaku.c`) and the staff roll through that call.
 - **Native-speaker review of the French, German, Italian and Spanish port
   strings.** The port's own strings in `port/ui/strings_{fr,de,it,es}.c`
   (Settings, notes, achievements, popups) are the author's translations.

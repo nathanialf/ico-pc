@@ -51,6 +51,20 @@ extern void gif_SetZWrite(int on);
 /* PC port (P3): the menu text hook (port/ui/layout_ext.h) */
 #include "layout_ext.h"
 
+#ifdef ICO_RD
+
+/* PC port (package TXT): GifHost.h's key of the decoder's primitives, so
+   the presenter matches a sign's sprites between ticks by its row (its
+   texProperty entry) and the backdrop by its packet, and blends their
+   fades; the menu text rows are keyed by the row in menu_text.c.  The
+   cursor sparkle stays unkeyed (its points are random each tick). */
+extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
+
+#define KANBAN_HOST_KEY(obj, part) gif_HostDrawKey((obj), (part), 0)
+#else
+#define KANBAN_HOST_KEY(obj, part) ((void)0)
+#endif
+
 /* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
    definition reads them on hosts that pass them on the stack
    (layout_texture.c says more) */
@@ -331,10 +345,12 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
            No, the language names) is drawn with the port font where the
            sprite would be, its texture transferred as before
            (port/ui/menu_text.h) */
+        KANBAN_HOST_KEY(e, 0);
         if (lt_ext_IsTextRow(e)) {
             lt_ext_DrawTextRow(e, r, uv, (const unsigned char *)col->b, 0);
         } else
             gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
+        KANBAN_HOST_KEY(0, 0);
         gif_SetZWrite(1);
         gif_EndPacket();
     }
@@ -431,7 +447,9 @@ inline void kanbanExec(void)
         gif_SetZWrite(0);
         gif_SetAlpha(1, 7, 0);
         pkt = kanbanSprite;
+        KANBAN_HOST_KEY(&kanbanSprite, 0);
         gif_SpriteSensitive(pkt.i, 0xFFFFFFFFu, 0, col, 1);
+        KANBAN_HOST_KEY(0, 0);
         gif_SetZWrite(1);
         gif_SetZTest(1);
         gif_EndPacket();

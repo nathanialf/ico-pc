@@ -105,6 +105,39 @@ int lt_ext_IsTextRow(const LtProperty *e);
 void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
                         const unsigned char rgba[4], int glow);
 
+/* Package TXT (port/ui/game_text.c; docs/port/UI.md "Subtitles", "Staff
+   roll").  [game] classic_menu_text (ui_MenuTextClassic) turns every one of
+   these off, so the game's own pictures and bitmap font draw again.
+   lt_ext_PortText: 1 while the port font draws the game's text (classic
+   off). */
+int lt_ext_PortText(void);
+/* The subtitles: the transcription of block `block` of the subtitle file of
+   set `set` (0 the first run, 1 after the game is cleared) in the current
+   language, or NULL (classic mode, no transcription: Yorda's script, an
+   empty block), when jimakuDisp draws the picture as before. */
+const struct UiSubtitle *lt_ext_SubtitleFind(int set, int block);
+/* jimaku.c's display_texture for row 434: the subtitle's lines where the
+   strip's two sprites would be.  box and uv are row 434's sprite rectangle
+   and texel rectangle as jimaku.c passes them to gif_SpriteSensitiveOffset
+   (1/16 pixel and 1/16 field line from the centre; 1/16 texel), rgba the
+   sprite colour; key is the subtitle's ring group: line n is drawn under
+   the owner RD_KEY(key, n, 0) (font.h ui_SetDrawKey), so a subtitle blends
+   between ticks.  Through ui_DrawTextDeferred: at the output's resolution
+   in Enhanced. */
+void lt_ext_DrawSubtitle(const struct UiSubtitle *s, const void *key, const int box[4],
+                         const int uv[4], const unsigned char rgba[4]);
+
+/* The staff roll: line i of staffroll.c's rollLines, the string str as
+   font_Print would draw it (its {L} {R} {C} {#rrggbbaa} codes skipped, the
+   bitmap font's '@' (its copyright sign) and '\' (its yen sign) mapped), at
+   font_Print's x, y and alignment, in the colour font_Print computes from
+   color (its packed argument) and col (font_CheckAlign's colour).  Keyed by
+   the line (RD_KEY of line i's slot), so lines with the same text move
+   independently.  Returns 0 in classic mode, when the caller draws with
+   font_Print; 1 when drawn (a blank line draws nothing). */
+int lt_ext_DrawRollLine(int i, const char *str, float x, float y, int align,
+                        const unsigned char col[4], unsigned int color);
+
 /* Q2 (docs/port/SETTINGS.md, "Circle goes back"): the pad bits that take
    the game menus' back action, where the game checks Triangle for it
    (default_item_select's left link in layout_texture.c, the la_* procs'

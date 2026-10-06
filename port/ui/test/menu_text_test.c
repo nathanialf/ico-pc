@@ -50,6 +50,7 @@
 #include "layout_ext.h"
 #include "menu_text.h"
 #include "strings.h"
+#include "subtitles.h"
 #include "ui_internal.h"
 
 static int failures;
@@ -220,8 +221,12 @@ static void testTable(void)
         CHECK(it->w > 0 && it->h > 0 && it->u + it->w <= 512 && it->v + it->h <= 256,
               "item %d: a non-empty rectangle on a sheet (%u,%u %ux%u)", i, it->u, it->v, it->w,
               it->h);
-        CHECK(it->x >= 0.0f && it->x <= (float)it->w && it->em > 0.0f && it->em <= (float)it->h,
+        /* package TXT: a digit tile's figure fills it (capitals 13 of 15
+           texels: an em of 18) */
+        CHECK(it->x >= 0.0f && it->x <= (float)it->w && it->em > 0.0f &&
+                  it->em <= (float)it->h * 1.25f,
               "item %d: anchor %g, em %g inside %ux%u", i, it->x, it->em, it->w, it->h);
+        CHECK(it->ink <= UI_INK_GREY, "item %d: ink %u", i, it->ink);
         CHECK(it->align == UI_ALIGN_LEFT || it->align == UI_ALIGN_CENTER ||
                   it->align == UI_ALIGN_RIGHT,
               "item %d: alignment %u", i, it->align);
@@ -737,6 +742,281 @@ static void testDeferred(void)
            prims);
 }
 
+/* ------------------------------------------- package TXT: the game's text */
+
+/* every RDC_OVERLAY_TEXT item of the last frame in list `list`, with its key */
+typedef struct ItemWalk {
+    int n;
+    RdTextItem item[8];
+    uint64_t key[8];
+} ItemWalk;
+
+static void itemWalk(ItemWalk *w, int list)
+{
+    memset(w, 0, sizeof(*w));
+    const RdFrame *f = rd__LastFrame();
+    for (uint32_t i = 0; f && i < f->lists[list].count; i++) {
+        const RdCmd *c = &f->lists[list].cmds[i];
+        if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
+            if (w->n < 8) {
+                memcpy(&w->item[w->n], f->payload + c->u[1], sizeof(RdTextItem));
+                w->key[w->n] = (uint64_t)c->keyLo | (uint64_t)c->keyHi << 32;
+            }
+            w->n++;
+        }
+    }
+}
+
+static int validUtf8Drawable(const char *s)
+{
+    uint32_t cp;
+    while ((cp = ui_Utf8Next(&s)) != 0) {
+        if (cp != '\n' && (cp == 0xFFFD || !ui_FontHasGlyph(cp))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* the subtitle tables: sorted, one or two lines, every code point drawable,
+   the centres on the strip; the lookup by language, set and block, with
+   the picture kept (NULL) for Yorda's script and empty blocks */
+static void testSubtitleTables(void)
+{
+    int total = 0;
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int set = 0; set < 2; set++) {
+            int n = 0;
+            const UiSubtitle *t = ui_SubtitleTable((UiLang)l, set, &n);
+            CHECK(t && n >= 30, "language %d set %d: %d subtitles", l, set, n);
+            for (int i = 0; t && i < n; i++) {
+                int lines = 1;
+                for (const char *p = t[i].text; *p; p++) {
+                    lines += *p == '\n';
+                }
+                CHECK(i == 0 || t[i].block > t[i - 1].block, "language %d set %d: sorted at %d", l,
+                      set, t[i].block);
+                CHECK(t[i].block >= 0 && t[i].block < UI_SUB_BLOCKS && lines <= 2 && t[i].text[0] &&
+                          validUtf8Drawable(t[i].text),
+                      "language %d set %d block %d: \"%s\"", l, set, t[i].block, t[i].text);
+                for (int k = 0; k < lines; k++) {
+                    CHECK(t[i].x[k] > 32.0f && t[i].x[k] < UI_SUB_STRIP_W - 32.0f,
+                          "language %d set %d block %d line %d: centre %g", l, set, t[i].block, k,
+                          t[i].x[k]);
+                }
+                CHECK(ui_SubtitleFind((UiLang)l, set, t[i].block) == &t[i], "lookup of block %d",
+                      t[i].block);
+            }
+            total += n;
+        }
+        const UiSubtitleFace *fc = ui_SubtitleFace((UiLang)l);
+        CHECK(fc->em > 12.0f && fc->em < 20.0f && fc->y[0] < fc->y[1] && fc->y[1] < UI_SUB_STRIP_H,
+              "language %d: face em %g, slots %g %g", l, fc->em, fc->y[0], fc->y[1]);
+    }
+    const UiSubtitle *a = ui_SubtitleFind(UI_LANG_EN, 0, 0);
+    CHECK(a && strcmp(a->text, "Get the sword.") == 0, "English block 0");
+    /* block 9 is Yorda's script on the first run, the Queen's words once
+       the game is cleared */
+    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 9) == NULL, "English first run block 9 keeps its picture");
+    a = ui_SubtitleFind(UI_LANG_EN, 1, 9);
+    CHECK(a && strcmp(a->text, "Who are you ?\nHow did you get in here ?") == 0,
+          "English after the clear, block 9");
+    /* the French file keeps block 91 in Yorda's script after the clear */
+    CHECK(ui_SubtitleFind(UI_LANG_FR, 1, 91) == NULL && ui_SubtitleFind(UI_LANG_DE, 1, 91),
+          "block 91 after the clear: French picture, German text");
+    a = ui_SubtitleFind(UI_LANG_ES, 0, 2);
+    CHECK(a && strcmp(a->text, "\xC2\xBFHay alguien ah\xC3\xAD? \xC2\xBFQui\xC3\xA9n eres?") == 0,
+          "Spanish block 2");
+    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 3) == NULL && ui_SubtitleFind(UI_LANG_EN, 0, -1) == NULL &&
+              ui_SubtitleFind(UI_LANG_EN, 0, 115) == NULL &&
+              ui_SubtitleFind(UI_LANG_EN, 2, 0) == NULL,
+          "no entry: an empty block, out of range, a third set");
+    /* the hook's lookup follows the language and the classic switch */
+    ui_SetLanguage(UI_LANG_DE);
+    a = lt_ext_SubtitleFind(1, 112);
+    CHECK(a && strcmp(a->text, "Auf Wiedersehen.") == 0, "German block 112 after the clear");
+    ui_MenuTextSetClassic(1);
+    CHECK(lt_ext_SubtitleFind(0, 0) == NULL && !lt_ext_PortText(), "classic: no subtitle text");
+    ui_MenuTextSetClassic(0);
+    ui_SetLanguage(UI_LANG_EN);
+    printf("menu_text_test: %d subtitles over 5 languages and 2 sets\n", total);
+}
+
+/* the strings visitor reaches the menu words and the subtitles */
+static int s_visits, s_visitSub;
+
+static void visit(UiLang lang, const char *s, void *user)
+{
+    (void)user;
+    s_visits++;
+    s_visitSub += lang == UI_LANG_IT && strcmp(s, "Prendi la spada") == 0;
+}
+
+/* jimaku.c's display_texture for row 434 (dispX 64, dispY 144, the strip's
+   left 256 x 48 texels): the rectangle and texels it gives the sprite */
+static void jimakuBox(int dst[4], int src[4])
+{
+    src[0] = (0 << 4) + 8;
+    src[1] = (0 << 4) + 8;
+    src[2] = 256 << 4;
+    src[3] = 48 << 4;
+    dst[2] = src[2];
+    dst[3] = (src[3] >> 1) * 2;
+    dst[0] = (64 - 320) << 4;
+    dst[1] = (144 - 112) << 4;
+}
+
+static void testSubtitleDraw(void)
+{
+    int dst[4], src[4];
+    jimakuBox(dst, src);
+    const unsigned char col[4] = {0x80, 0x80, 0x80, 0x80};
+    static const int ring[2]; /* stands for jimaku.c's ring groups */
+    ui_SetLanguage(UI_LANG_EN);
+    const UiSubtitle *one = ui_SubtitleFind(UI_LANG_EN, 0, 0),
+                     *two = ui_SubtitleFind(UI_LANG_EN, 0, 1);
+    CHECK(one && two, "blocks 0 and 1");
+    if (!one || !two) {
+        return;
+    }
+    dl_SetDLPriority(11);
+    lt_ext_DrawSubtitle(two, &ring[0], dst, src, col);
+    lt_ext_DrawSubtitle(one, &ring[1], dst, src, col);
+    dl_Swap();
+    ItemWalk w;
+    itemWalk(&w, 11);
+    CHECK(w.n == 3, "a two-line and a one-line subtitle: %d items (3)", w.n);
+    if (w.n == 3) {
+        const UiSubtitleFace *fc = ui_SubtitleFace(UI_LANG_EN);
+        /* the strip's texel (x, y) is grid (63.5 + x, 289 + 2 y): row 434's
+           box from x 64, y 290 (dispY 144 - 112 field lines below the
+           centre), a field line a texel, the sprite's half-texel inset */
+        CHECK(strcmp(w.item[0].utf8, "Do not be angry with us.") == 0 &&
+                  strcmp(w.item[1].utf8, "This is for the good of the village.") == 0 &&
+                  strcmp(w.item[2].utf8, "Get the sword.") == 0,
+              "the lines: \"%s\" \"%s\" \"%s\"", w.item[0].utf8, w.item[1].utf8, w.item[2].utf8);
+        CHECK(fabsf(w.item[0].x - (63.5f + two->x[0])) < 0.01f &&
+                  fabsf(w.item[0].y - (289.0f + 2.0f * fc->y[0])) < 0.01f &&
+                  fabsf(w.item[1].y - (289.0f + 2.0f * fc->y[1])) < 0.01f &&
+                  fabsf(w.item[2].x - (63.5f + one->x[0])) < 0.01f &&
+                  fabsf(w.item[2].y - (289.0f + 2.0f * fc->y[1])) < 0.01f,
+              "placed on the strip: (%.2f %.2f) (%.2f %.2f) (%.2f %.2f)", w.item[0].x, w.item[0].y,
+              w.item[1].x, w.item[1].y, w.item[2].x, w.item[2].y);
+        CHECK(w.item[2].size == 32.0f && w.item[0].size <= 32.0f && w.item[0].size >= 19.0f,
+              "the em, 16 texels at 2 y units a texel: %g, %g", w.item[2].size, w.item[0].size);
+        CHECK(w.item[0].size == w.item[1].size, "one size a subtitle");
+        CHECK((w.item[0].flags & UI_HALO) && (w.item[0].flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
+                  (w.item[0].flags & UI_VALIGN_MASK) == UI_VALIGN_MIDDLE &&
+                  w.item[0].rgba[3] == 0x80,
+              "halo, centred, middle of the capitals, the sprite's alpha");
+        CHECK(w.key[0] != w.key[1] && w.key[0] != w.key[2] && w.key[0] && w.key[2],
+              "keyed per group and line");
+    }
+    printf("menu_text_test: subtitles: %d items from two blocks\n", w.n);
+}
+
+/* the staff roll's line hook: the codes skipped, the bitmap font's signs
+   mapped, font_Print's place, alignment and colour, a key per line slot;
+   blank lines draw nothing, classic draws nothing and returns 0 */
+static void testRollLine(void)
+{
+    const unsigned char white[4] = {255, 255, 255, 128};
+    const unsigned char plain[4] = {128, 128, 128, 128};
+    dl_SetDLPriority(12);
+    int r1 = lt_ext_DrawRollLine(3, "{#FFFFFF80}{R} ICO Staff  ", 0.0f, 112.0f, 2, white,
+                                 0x80u | 0x70707000u);
+    int r2 = lt_ext_DrawRollLine(7, "@ 2002 Sony Computer Entertainment Inc.", 0.0f, 300.0f, 0,
+                                 plain, 0x40u | 0x70707000u);
+    int r3 = lt_ext_DrawRollLine(8, " ", 0.0f, 200.0f, 0, plain, 0x80u | 0x70707000u);
+    /* the same name on two lines: two keys */
+    int r4 = lt_ext_DrawRollLine(10, "Kei Kuwabara ", 0.0f, 150.0f, 1, plain, 0x80u | 0x70707000u);
+    int r5 = lt_ext_DrawRollLine(11, "Kei Kuwabara ", 0.0f, 170.0f, 1, plain, 0x80u | 0x70707000u);
+    dl_Swap();
+    CHECK(r1 && r2 && r3 && r4 && r5, "drawn by the port font");
+    ItemWalk w;
+    itemWalk(&w, 12);
+    CHECK(w.n == 4, "four items, the blank line none: %d", w.n);
+    if (w.n == 4) {
+        CHECK(strcmp(w.item[0].utf8, " ICO Staff  ") == 0 &&
+                  strcmp(w.item[1].utf8, "\xC2\xA9 2002 Sony Computer Entertainment Inc.") == 0,
+              "codes skipped, '@' the copyright sign: \"%s\", \"%s\"", w.item[0].utf8,
+              w.item[1].utf8);
+        /* 512 x 512 GS frame: right-aligned 4 GS pixels (5 x units) in
+           from the right edge; centred on x + 320; capitals' middle 12.3 GS
+           lines below y, y 128 the centre line: grid 226 + (y + 12.3 - 128)
+           x 0.875 */
+        CHECK((w.item[0].flags & UI_ALIGN_MASK) == UI_ALIGN_RIGHT &&
+                  fabsf(w.item[0].x - 635.0f) < 0.01f &&
+                  fabsf(w.item[0].y - (226.0f + (112.0f + 12.3125f - 128.0f) * 0.875f)) < 0.01f,
+              "right edge %.2f, middle %.2f", w.item[0].x, w.item[0].y);
+        CHECK((w.item[1].flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
+                  fabsf(w.item[1].x - 320.0f) < 0.01f &&
+                  (w.item[2].flags & UI_ALIGN_MASK) == UI_ALIGN_LEFT &&
+                  fabsf(w.item[2].x - 5.0f) < 0.01f,
+              "centre %.2f, left %.2f", w.item[1].x, w.item[2].x);
+        CHECK(w.item[0].rgba[0] == 0x70 && w.item[0].rgba[3] == 0x80 && w.item[1].rgba[0] == 0x38 &&
+                  w.item[1].rgba[3] == 0x40,
+              "font_Print's colours: %u/%u, %u/%u", w.item[0].rgba[0], w.item[0].rgba[3],
+              w.item[1].rgba[0], w.item[1].rgba[3]);
+        CHECK(w.item[0].size == 22.0f && !(w.item[0].flags & UI_HALO),
+              "the bitmap font's capitals: size %g, no rim", w.item[0].size);
+        CHECK(strcmp(w.item[2].utf8, w.item[3].utf8) == 0 && w.key[2] != w.key[3] && w.key[2],
+              "the same name on two lines, two keys");
+    }
+    ui_MenuTextSetClassic(1);
+    dl_SetDLPriority(12);
+    const int rc = lt_ext_DrawRollLine(3, "Fumito Ueda ", 0.0f, 112.0f, 2, white, 0x80u);
+    dl_Swap();
+    itemWalk(&w, 12);
+    CHECK(rc == 0 && w.n == 0, "classic: font_Print's turn (%d), no item (%d)", rc, w.n);
+    ui_MenuTextSetClassic(0);
+    printf("menu_text_test: staff roll: 4 lines, keyed per slot; classic none\n");
+}
+
+/* the save screens' values through the menu text path: a play-time digit
+   (row 76, white without a rim), an empty file's slot number (52, grey) and
+   a used file's (62, black) */
+static void testDigits(void)
+{
+    memset(texLayout, 0, sizeof(texLayout));
+    setRow(52, 210, 70, 30, 0);
+    setRow(62, 210, 90, 30, 0);
+    setRow(76, 240, 160, 30, 0);
+    for (int r = 52; r <= 76; r += 1) {
+        texProperty[r].selectable = 0;
+    }
+    LtProp *l = &texLayout[TITLE_LAYOUT];
+    l->first = 52;
+    l->last = 77;
+    l->defaultItem = l->curItem = -1;
+    l->link = -1;
+    for (int r = 53; r < 76; r++) {
+        if (r != 62) {
+            texProperty[r].masked = 1;
+        }
+    }
+    current_layout_id = TITLE_LAYOUT;
+    layoutFrame();
+    ItemWalk w;
+    itemWalk(&w, 11);
+    CHECK(w.n == 3, "three digit rows: %d items", w.n);
+    if (w.n == 3) {
+        CHECK(strcmp(w.item[0].utf8, "1") == 0 && strcmp(w.item[1].utf8, "1") == 0 &&
+                  strcmp(w.item[2].utf8, "1") == 0,
+              "the figure 1 three times");
+        /* grey: 151 / 255 of the sprite's colour, no rim; black; white,
+           no rim */
+        CHECK(!(w.item[0].flags & UI_HALO) && w.item[0].rgba[0] < w.item[2].rgba[0] &&
+                  w.item[0].rgba[0] > 0 && w.item[1].rgba[0] == 0 && !(w.item[2].flags & UI_HALO),
+              "inks: grey %u, black %u, white %u", w.item[0].rgba[0], w.item[1].rgba[0],
+              w.item[2].rgba[0]);
+    }
+    for (int r = 52; r < 77; r++) {
+        texProperty[r].masked = 0;
+    }
+    printf("menu_text_test: digits: %d items\n", w.n);
+}
+
 static void testHook(void)
 {
     CHECK(itemOfRow(50) && itemOfRow(49) && !itemOfRow(48),
@@ -791,6 +1071,9 @@ static void testHook(void)
     CHECK(text == 9 && texture == 2, "one text row, two textures (%d, %d)", text, texture);
     testDeferred();
     testPortRowAnchor();
+    testSubtitleDraw();
+    testRollLine();
+    testDigits();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     rd_Shutdown();
@@ -868,6 +1151,11 @@ int main(int argc, char **argv)
     ui_SetLanguage(UI_LANG_EN);
     testTable();
     testStrings();
+    testSubtitleTables();
+    ui_StringsForEach(visit, NULL);
+    CHECK(s_visits > 5 * 300 && s_visitSub == 2,
+          "ui_StringsForEach: %d strings, Italian \"Prendi la spada\" in both sets (%d)", s_visits,
+          s_visitSub);
     testDiscRows(argc > 1 ? argv[1] : NULL);
     testHook();
     if (failures) {

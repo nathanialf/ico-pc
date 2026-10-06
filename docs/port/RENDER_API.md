@@ -1201,8 +1201,9 @@ usage), which is where one would go.
 `rd_replay.c` (`doScreen`), `rd_interp.c` (`blendText`); `port/ui/font.c`
 (`ui_DrawTextDeferred`, the renderer); UI.md "Menu text". Package DEF.
 
-The game's menu rows are text the port draws (UI.md "Menu text"). Drawn as
-glyph quads into list 11 they are rasterised at the scene's resolution,
+The game's menu rows, its subtitles (list 11) and the staff roll (list 12)
+are text the port draws (UI.md "Menu text", "Subtitles", "Staff roll").
+Drawn as glyph quads into list 11 they are rasterised at the scene's resolution,
 halved by the reduction and scaled by the box blit, which in Enhanced
 leaves three pixels between background and ink on a glyph's edge at 1080p.
 Drawn on the output after the box blit they are rasterised at the shown
@@ -1551,15 +1552,17 @@ version, in the tick's own replay too.
 | fade, letterbox | the post kind | `rd_post.c` |
 | the decoder's 2D | `gif_HostDrawKey(obj, part, ordinal)` keys every primitive decoded after it | `GifPacket.c`, `GifHost.h` |
 | layout rows | the row's `texProperty` entry; part 0 the sprite, part 1 its glow | `layout_texture.c` |
-| subtitles | the subtitle's block, a part per row | `jimaku.c` |
+| boot signs | the row's `texProperty` entry (the sprite; a text row also as a layout row's text); the backdrop by its packet | `kanban.c` |
+| subtitles | the subtitle's ring group, a part per row; as text, the group and the line as the owner | `jimaku.c`, `port/ui/game_text.c` |
+| staff roll | the line's slot in `rollLines` as the owner (two lines with the same name are two keys); classic: FNV-1a of the string | `staffroll.c`, `port/ui/game_text.c`; `DisplayFont.c` |
 | `font_Print` | FNV-1a of the string (`gif_HostDrawKeyText`) | `DisplayFont.c` |
 | the port's text and rects | FNV-1a of the string, the alignment, the atlas page and the owner (`ui_SetDrawKey`); rects only under an owner | `port/ui/font.c`, `layout_ext.c` |
 | deferred text items, their ops | the quads' key with a page no atlas has; the post kind | `port/ui/font.c` `ui_DrawTextDeferred`, `rd_post.c` |
 
 Glyphs match within a draw by order, so a string that moves or fades blends
 glyph for glyph, and a changed string is a new key. The menu sparkle,
-lightning, the debug font and anything drawn outside these sites stay
-unkeyed and show the current frame.
+lightning, the debug font (a developer overlay) and anything drawn outside
+these sites stay unkeyed and show the current frame.
 
 **What snaps.** A keyed draw is the current frame's when the previous frame
 has no match; when its shape differs (mesh layout, program, payload size,
@@ -1986,7 +1989,7 @@ and op and marks the quads `text-quads`.
 | `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides; on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %, a white frame's mask period equal to the pitch at 1920×1440 (Trinitron 3, PVM 2) and no mask in a 720-line box |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
-| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops |
+| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays; uniform groups, barriers and screen-prim draws (85 one per command, 66 merged) per replay |
 | `rd_replay_tool` | the tool on a test dump |

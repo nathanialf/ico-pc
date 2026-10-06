@@ -18,6 +18,14 @@
  * sheets' words, transcribed with their wording, capitalisation and
  * punctuation (strings_*.c, UI_STR_MT_*), line breaks where the sheet breaks.
  *
+ * Package TXT added the digit and letter tiles (one glyph a tile, the same
+ * on the five sheets): the save screens' slot numbers (grey for an empty
+ * file, black for a used one), the preview's play time and colons (white
+ * without a rim; layout_action.c _la_set_preview_info picks a row per
+ * figure), and the Options values (the film effect's 0..4, the hold type's
+ * A / B, 1 / 2 players; light with the rim).  Their em, anchor and capital
+ * middle were measured the same way, per ink (UiMenuTextInk).
+ *
  * Rows left as textures (not in the table), and why:
  *   0..24      the stage's preload rows (layout 6, never drawn)
  *   25, 32     the LANGUAGE and TV headers: lettering inside the swash
@@ -28,9 +36,7 @@
  *              credit in the corporate lettering (artwork, as the copyright)
  *   47, 196, 240, 330, 412, 420 and the 1 x 1 rows: placeholders and ticks
  *   48         the copyright line (the corporate lettering, a legal notice)
- *   52..71     the slot numbers 1..10: digit tiles
- *   74..136    the preview's digits, colon and brackets: digit tiles placed
- *              one glyph at a time
+ *   136        the preview's mark of a cleared game (a symbol, not a letter)
  *   137..139, 141, 143, 144, 148, 150, 152, 154, 157, 158, 161, 162,
  *   164..172   preview location rows whose rectangle is blank on every sheet
  *   178..180, 188..190, 197..199, 202..204, 207..209, 212, 213, 216, 217,
@@ -41,9 +47,8 @@
  *   182, 184, 192, 194, 236, 238, 331, 342..345, 350..353, 358..361,
  *   366..369, 374..377, 382..385, 417, 419
  *              the pad's button glyphs (buttons.tm2)
- *   301..307, 309, 310, 314, 315, 319..322, 326..329
- *              the Options value arrows and the digit / letter tiles of
- *              the values (40 x 20 cells: 1 / 2 players, the hold types)
+ *   301, 302, 309, 310, 314, 315, 319, 320, 326, 327
+ *              the Options value arrows (bracket-shaped pointers)
  *   346..349 and their copies 354..357 ... 386..389
  *              R1, R2, L2, L1: the pad's shoulder-button labels, outlined
  *              like the button glyphs
@@ -63,7 +68,7 @@
 #define LT_GAME_ROWS 436
 
 /* clang-format off */
-/* {u, v, w, h, string, align, dark, em, x, pitch, {y EN, FR, DE, IT, ES}}, the
+/* {u, v, w, h, string, align, ink, em, x, pitch, {y EN, FR, DE, IT, ES}}, the
    first row that draws it and the English text */
 const UiMenuTextItem ui_menu_text_items[] = {
     {0, 25, 150, 20, UI_STR_MT_LANG_ENGLISH, UI_ALIGN_CENTER, 0, 15.0f, 75.0f, 18.9f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 26: ENGLISH */
@@ -83,8 +88,39 @@ const UiMenuTextItem ui_menu_text_items[] = {
     {384, 160, 128, 20, UI_STR_MT_DEACTIVATE, UI_ALIGN_CENTER, 0, 13.5f, 64.0f, 17.2f, {9.0f, 8.5f, 9.0f, 8.5f, 8.5f}}, /* 45: Deactivate */
     {384, 140, 128, 20, UI_STR_MT_CONTINUE, UI_ALIGN_CENTER, 0, 13.5f, 64.5f, 15.5f, {9.0f, 9.0f, 8.5f, 9.0f, 9.0f}}, /* 49: Continue */
     {340, 0, 172, 20, UI_STR_MT_NEW_GAME, UI_ALIGN_CENTER, 0, 13.5f, 86.0f, 15.5f, {9.5f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 50: New Game */
+    {390, 30, 20, 15, UI_STR_MT_DIGIT_1, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 52: 1 */
+    {410, 30, 20, 15, UI_STR_MT_DIGIT_2, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 53: 2 */
+    {430, 30, 20, 15, UI_STR_MT_DIGIT_3, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 54: 3 */
+    {450, 30, 20, 15, UI_STR_MT_DIGIT_4, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 55: 4 */
+    {470, 30, 20, 15, UI_STR_MT_DIGIT_5, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 56: 5 */
+    {490, 30, 20, 15, UI_STR_MT_DIGIT_6, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 57: 6 */
+    {390, 45, 20, 15, UI_STR_MT_DIGIT_7, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 58: 7 */
+    {410, 45, 20, 15, UI_STR_MT_DIGIT_8, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 59: 8 */
+    {430, 45, 20, 15, UI_STR_MT_DIGIT_9, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 10.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 60: 9 */
+    {483, 15, 29, 15, UI_STR_MT_DIGIT_10, UI_ALIGN_CENTER, UI_INK_GREY, 16.6f, 14.5f, 15.5f, {8.4f, 8.4f, 8.4f, 8.4f, 8.4f}}, /* 61: 10 */
+    {390, 0, 20, 15, UI_STR_MT_DIGIT_1, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 62: 1 */
+    {410, 0, 20, 15, UI_STR_MT_DIGIT_2, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 63: 2 */
+    {430, 0, 20, 15, UI_STR_MT_DIGIT_3, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 64: 3 */
+    {450, 0, 20, 15, UI_STR_MT_DIGIT_4, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 65: 4 */
+    {470, 0, 20, 15, UI_STR_MT_DIGIT_5, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 66: 5 */
+    {490, 0, 20, 15, UI_STR_MT_DIGIT_6, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 67: 6 */
+    {390, 15, 20, 15, UI_STR_MT_DIGIT_7, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 68: 7 */
+    {410, 15, 20, 15, UI_STR_MT_DIGIT_8, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 69: 8 */
+    {430, 15, 20, 15, UI_STR_MT_DIGIT_9, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 10.5f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 70: 9 */
+    {450, 15, 33, 15, UI_STR_MT_DIGIT_10, UI_ALIGN_CENTER, UI_INK_DARK, 18.1f, 16.0f, 15.5f, {7.9f, 7.9f, 7.9f, 7.9f, 7.9f}}, /* 71: 10 */
     {0, 180, 340, 45, UI_STR_MT_DO_NOT_REMOVE, UI_ALIGN_CENTER, 1, 12.1f, 170.0f, 15.0f, {6.5f, 6.5f, 6.5f, 6.5f, 6.5f}}, /* 72: Do not remove the / Memory Card (PS2) / or turn off the power */
     {0, 0, 256, 15, UI_STR_MT_ACCESSING, UI_ALIGN_CENTER, 0, 10.6f, 128.5f, 12.2f, {6.5f, 6.0f, 6.0f, 7.0f, 6.5f}}, /* 73: Accessing */
+    {450, 75, 20, 15, UI_STR_MT_COLON, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 74: : */
+    {450, 45, 20, 15, UI_STR_MT_DIGIT_1, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 76: 1 */
+    {470, 45, 20, 15, UI_STR_MT_DIGIT_2, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 77: 2 */
+    {490, 45, 20, 15, UI_STR_MT_DIGIT_3, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 78: 3 */
+    {390, 60, 20, 15, UI_STR_MT_DIGIT_4, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 79: 4 */
+    {410, 60, 20, 15, UI_STR_MT_DIGIT_5, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 80: 5 */
+    {430, 60, 20, 15, UI_STR_MT_DIGIT_6, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 81: 6 */
+    {450, 60, 20, 15, UI_STR_MT_DIGIT_7, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 82: 7 */
+    {390, 75, 20, 15, UI_STR_MT_DIGIT_8, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 83: 8 */
+    {410, 75, 20, 15, UI_STR_MT_DIGIT_9, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 84: 9 */
+    {430, 75, 20, 15, UI_STR_MT_DIGIT_0, UI_ALIGN_CENTER, UI_INK_PLAIN, 17.9f, 10.5f, 15.5f, {8.5f, 8.5f, 8.5f, 8.5f, 8.5f}}, /* 85: 0 */
     {340, 0, 172, 15, UI_STR_MT_LOC_OLD_BRIDGE, UI_ALIGN_CENTER, 0, 13.5f, 86.5f, 15.5f, {6.0f, 6.0f, 6.0f, 5.5f, 6.0f}}, /* 140: Old Bridge */
     {340, 30, 172, 15, UI_STR_MT_LOC_TROLLEY_A, UI_ALIGN_CENTER, 0, 13.5f, 86.5f, 15.5f, {6.0f, 6.0f, 6.0f, 6.0f, 6.0f}}, /* 142: Trolley 2 */
     {300, 225, 210, 15, UI_STR_MT_LOC_MAIN_GATE, UI_ALIGN_CENTER, 0, 13.5f, 107.0f, 15.5f, {6.0f, 6.0f, 6.0f, 6.0f, 6.0f}}, /* 145: Main Gate */
@@ -131,11 +167,18 @@ const UiMenuTextItem ui_menu_text_items[] = {
     {128, 0, 212, 20, UI_STR_MT_END_GAME, UI_ALIGN_LEFT, 0, 13.5f, 7.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 296: End Game */
     {384, 225, 128, 20, UI_STR_MT_OPTIONS, UI_ALIGN_CENTER, 0, 13.5f, 64.5f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.5f}}, /* 299: Options */
     {0, 100, 192, 20, UI_STR_MT_FILM_EFFECT, UI_ALIGN_RIGHT, 0, 13.5f, 185.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 300: Film Effect */
+    {390, 90, 40, 20, UI_STR_MT_DIGIT_0, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.5f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 303: 0 */
+    {430, 90, 40, 20, UI_STR_MT_DIGIT_1, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.0f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 304: 1 */
+    {470, 90, 40, 20, UI_STR_MT_DIGIT_2, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.5f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 305: 2 */
+    {390, 110, 40, 20, UI_STR_MT_DIGIT_3, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.5f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 306: 3 */
+    {430, 110, 40, 20, UI_STR_MT_DIGIT_4, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.0f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 307: 4 */
     {426, 40, 86, 20, UI_STR_MT_SOUND, UI_ALIGN_RIGHT, 0, 13.5f, 79.0f, 17.2f, {9.5f, 8.5f, 9.0f, 8.5f, 8.5f}}, /* 308: Sound */
     {128, 160, 128, 20, UI_STR_MT_STEREO, UI_ALIGN_CENTER, 0, 13.5f, 64.0f, 17.2f, {9.0f, 8.5f, 9.0f, 8.5f, 8.5f}}, /* 311: Stereo */
     {340, 20, 86, 20, UI_STR_MT_MONO, UI_ALIGN_CENTER, 0, 13.5f, 44.0f, 15.5f, {9.0f, 9.0f, 8.5f, 9.0f, 9.0f}}, /* 312: Mono */
     {384, 100, 128, 20, UI_STR_MT_VIBRATION, UI_ALIGN_RIGHT, 0, 13.5f, 121.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 313: Vibration */
     {192, 100, 192, 20, UI_STR_MT_HOLD_TYPE, UI_ALIGN_RIGHT, 0, 13.5f, 184.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 318: Hold Type */
+    {470, 110, 40, 20, UI_STR_MT_VAL_A, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 20.0f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 321: A */
+    {470, 70, 40, 20, UI_STR_MT_VAL_B, UI_ALIGN_CENTER, UI_INK_LIGHT, 18.0f, 21.0f, 15.5f, {10.0f, 10.0f, 10.0f, 10.0f, 10.0f}}, /* 322: B */
     {0, 120, 256, 20, UI_STR_MT_BUTTON_CONFIG, UI_ALIGN_RIGHT, 0, 13.5f, 248.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 323: Button Configuration */
     {256, 120, 128, 20, UI_STR_MT_BRIGHTNESS, UI_ALIGN_RIGHT, 0, 13.5f, 121.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 324: Brightness */
     {0, 140, 128, 20, UI_STR_MT_PLAYERS, UI_ALIGN_RIGHT, 0, 13.5f, 121.0f, 15.5f, {9.0f, 9.0f, 9.0f, 9.0f, 9.0f}}, /* 325: Players */
@@ -176,110 +219,201 @@ const UiMenuTextRow ui_menu_text_rows[] = {
     {49, 15},
     {50, 16},
     {51, 16},
-    {72, 17},
-    {73, 18},
-    {140, 19},
-    {142, 20},
-    {145, 21},
-    {146, 21},
-    {147, 22},
-    {149, 23},
-    {151, 24},
-    {153, 25},
-    {155, 26},
-    {156, 27},
-    {159, 28},
-    {160, 29},
-    {163, 30},
-    {173, 31},
-    {174, 32},
-    {175, 33},
-    {176, 34},
-    {177, 35},
-    {181, 36},
-    {183, 37},
-    {185, 38},
-    {186, 34},
-    {187, 35},
-    {191, 36},
-    {193, 37},
-    {195, 39},
-    {200, 40},
-    {201, 41},
-    {205, 42},
-    {206, 41},
-    {210, 17},
-    {211, 43},
+    {52, 17},
+    {53, 18},
+    {54, 19},
+    {55, 20},
+    {56, 21},
+    {57, 22},
+    {58, 23},
+    {59, 24},
+    {60, 25},
+    {61, 26},
+    {62, 27},
+    {63, 28},
+    {64, 29},
+    {65, 30},
+    {66, 31},
+    {67, 32},
+    {68, 33},
+    {69, 34},
+    {70, 35},
+    {71, 36},
+    {72, 37},
+    {73, 38},
+    {74, 39},
+    {75, 39},
+    {76, 40},
+    {77, 41},
+    {78, 42},
+    {79, 43},
+    {80, 44},
+    {81, 45},
+    {82, 46},
+    {83, 47},
+    {84, 48},
+    {85, 49},
+    {86, 40},
+    {87, 41},
+    {88, 42},
+    {89, 43},
+    {90, 44},
+    {91, 45},
+    {92, 46},
+    {93, 47},
+    {94, 48},
+    {95, 49},
+    {96, 40},
+    {97, 41},
+    {98, 42},
+    {99, 43},
+    {100, 44},
+    {101, 45},
+    {102, 46},
+    {103, 47},
+    {104, 48},
+    {105, 49},
+    {106, 40},
+    {107, 41},
+    {108, 42},
+    {109, 43},
+    {110, 44},
+    {111, 45},
+    {112, 46},
+    {113, 47},
+    {114, 48},
+    {115, 49},
+    {116, 40},
+    {117, 41},
+    {118, 42},
+    {119, 43},
+    {120, 44},
+    {121, 45},
+    {122, 46},
+    {123, 47},
+    {124, 48},
+    {125, 49},
+    {126, 40},
+    {127, 41},
+    {128, 42},
+    {129, 43},
+    {130, 44},
+    {131, 45},
+    {132, 46},
+    {133, 47},
+    {134, 48},
+    {135, 49},
+    {140, 50},
+    {142, 51},
+    {145, 52},
+    {146, 52},
+    {147, 53},
+    {149, 54},
+    {151, 55},
+    {153, 56},
+    {155, 57},
+    {156, 58},
+    {159, 59},
+    {160, 60},
+    {163, 61},
+    {173, 62},
+    {174, 63},
+    {175, 64},
+    {176, 65},
+    {177, 66},
+    {181, 67},
+    {183, 68},
+    {185, 69},
+    {186, 65},
+    {187, 66},
+    {191, 67},
+    {193, 68},
+    {195, 70},
+    {200, 71},
+    {201, 72},
+    {205, 73},
+    {206, 72},
+    {210, 37},
+    {211, 74},
     {214, 10},
     {215, 11},
     {218, 10},
     {219, 11},
-    {220, 44},
-    {224, 40},
-    {225, 41},
-    {229, 45},
-    {230, 46},
-    {231, 41},
-    {235, 36},
-    {237, 37},
-    {239, 47},
-    {242, 48},
-    {244, 49},
-    {248, 17},
-    {249, 50},
-    {253, 17},
-    {254, 51},
-    {258, 17},
-    {259, 18},
-    {261, 52},
-    {264, 53},
-    {265, 54},
-    {269, 55},
+    {220, 75},
+    {224, 71},
+    {225, 72},
+    {229, 76},
+    {230, 77},
+    {231, 72},
+    {235, 67},
+    {237, 68},
+    {239, 78},
+    {242, 79},
+    {244, 80},
+    {248, 37},
+    {249, 81},
+    {253, 37},
+    {254, 82},
+    {258, 37},
+    {259, 38},
+    {261, 83},
+    {264, 84},
+    {265, 85},
+    {269, 86},
     {270, 10},
     {271, 11},
-    {275, 56},
-    {276, 41},
-    {280, 57},
-    {281, 41},
-    {285, 58},
-    {286, 41},
-    {290, 59},
-    {291, 41},
-    {294, 60},
-    {295, 61},
-    {296, 62},
-    {299, 63},
-    {300, 64},
-    {308, 65},
-    {311, 66},
-    {312, 67},
-    {313, 68},
+    {275, 87},
+    {276, 72},
+    {280, 88},
+    {281, 72},
+    {285, 89},
+    {286, 72},
+    {290, 90},
+    {291, 72},
+    {294, 91},
+    {295, 92},
+    {296, 93},
+    {299, 94},
+    {300, 95},
+    {303, 96},
+    {304, 97},
+    {305, 98},
+    {306, 99},
+    {307, 100},
+    {308, 101},
+    {311, 102},
+    {312, 103},
+    {313, 104},
     {316, 13},
     {317, 14},
-    {318, 69},
-    {323, 70},
-    {324, 71},
-    {325, 72},
-    {332, 37},
-    {335, 73},
-    {336, 74},
-    {337, 75},
-    {338, 76},
-    {339, 77},
-    {340, 78},
-    {341, 79},
-    {390, 36},
-    {391, 80},
-    {394, 81},
-    {413, 82},
-    {414, 83},
-    {415, 84},
-    {416, 36},
-    {418, 80},
-    {423, 85},
+    {318, 105},
+    {321, 106},
+    {322, 107},
+    {323, 108},
+    {324, 109},
+    {325, 110},
+    {328, 97},
+    {329, 98},
+    {332, 68},
+    {335, 111},
+    {336, 112},
+    {337, 113},
+    {338, 114},
+    {339, 115},
+    {340, 116},
+    {341, 117},
+    {390, 67},
+    {391, 118},
+    {394, 119},
+    {413, 120},
+    {414, 121},
+    {415, 122},
+    {416, 67},
+    {418, 118},
+    {423, 123},
     {424, 10},
     {425, 11},
-    {428, 86},
+    {428, 124},
     {429, 10},
     {430, 11},
 };
@@ -437,11 +571,15 @@ void ui_MenuTextDraw(const LtProperty *e, const int box[4], const int uv[4],
     }
 
     unsigned char col[4] = {rgba[0], rgba[1], rgba[2], rgba[3]};
-    if (it->dark) {
+    if (it->ink == UI_INK_DARK) {
         if (glow) {
             return; /* black letters add nothing to the additive glow */
         }
         col[0] = col[1] = col[2] = 0;
+    } else if (it->ink == UI_INK_GREY) {
+        for (int c = 0; c < 3; c++) {
+            col[c] = (unsigned char)((col[c] * 151 + 127) / 255);
+        }
     }
     UiLang lang = ui_GetLanguage();
     if ((int)lang < 0 || lang >= UI_LANG_COUNT) {
@@ -449,7 +587,7 @@ void ui_MenuTextDraw(const LtProperty *e, const int box[4], const int uv[4],
     }
     const float x = ox + it->x * sx;
     unsigned flags = UI_KEEP_STATE | UI_VALIGN_MIDDLE | it->align;
-    if (!glow && !it->dark) {
+    if (!glow && it->ink == UI_INK_LIGHT) {
         flags |= UI_HALO;
     }
     if (glow) {

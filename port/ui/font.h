@@ -187,7 +187,7 @@ void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
    string, the alignment and the owner).  Outside ICO_RD or in overlay mode,
    ui_DrawTextXf.  This is the entry point for any game text that should be
    shown at the output's resolution: the layout's menu rows (menu_text.c,
-   layout_ext.c) today, the subtitles and the staff roll next.
+   layout_ext.c), the subtitles and the staff roll (game_text.c).
    ui_InstallDeferredText(1) registers font.c's renderer with rd
    (rd_SetDeferredTextFn; the window build's ui_host.c, the replay tool, the
    tests); 0 removes it. */

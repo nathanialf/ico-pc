@@ -66,7 +66,7 @@ with the values in use the next time you save.
 | CRT filter | Off, Scanlines, Consumer TV, Trinitron, PVM (translated: Lignes de balayage, Téléviseur; Bildzeilen, Fernseher; Linee di scansione, Televisore; Líneas de barrido, Televisor) | (both presets) the picture through a simulated cathode-ray tube, each mode a different kind of screen (docs/port/DISPLAY.md, "CRT filter"). One row for `[video] crt` (Off) and `crt_mode` (the others); Right steps in the order listed and wraps. Changes at the next picture |
 | CRT strength | 0 % to 100 % in tens | how much of the filtered picture is mixed with the plain one; saved as `[video] crt_strength`. Stops at 0 and 100 % |
 | Video mode | PAL 50 Hz, 60 Hz | the boot screen's choice. The game runs at 25 updates a second in PAL 50 Hz and 30 in 60 Hz, as on the console; switching resets the picture the way the boot screen did. It changes only when Settings was opened from the title screen (the tick rate arms the game's timers): opened from the pause menu the row shows the value followed by "(title only)" ("titre seul", "nur Titel", "solo titolo", "solo título") and Left and Right do nothing |
-| Menu text | Port font, Classic | how the game's own menus (title, Options, pause, save and load, game over, the boot screens) draw their words. Port font (the default) writes them in the same typeface as this Settings menu, at the same places and sizes; Classic shows the PlayStation 2's original lettering. The logo, the copyright line, the button symbols and the pictures are the originals either way. Changes at the next frame; saved as `[game] classic_menu_text` |
+| Menu text | Port font, Classic | how the game draws its words: its menus (title, Options, pause, save and load with their figures, game over, the boot screens), the subtitles and the end credits. Port font (the default) writes them in the same typeface as this Settings menu, at the same places and sizes; Classic shows the PlayStation 2's original lettering. The logo, the copyright line, the button symbols and the pictures are the originals either way. Changes at the next frame; saved as `[game] classic_menu_text` |
 
 **Audio**
 
@@ -100,9 +100,9 @@ Mirror mode is not a Settings line: it is chosen when you start a New Game
 (below). The films follow it.
 
 **Language**: English, Français, Deutsch, Italiano, Español. The Settings
-menu changes at once, and so does the game's menu text with Menu text set to
-Port font; the game's own subtitles, and its menu pictures with Classic, follow the
-next time the game loads them (the next room, the next menu). The row works
+menu changes at once, and so do the game's menu text and subtitles with Menu
+text set to Port font; with Classic, the game's own subtitle and menu pictures
+follow the next time the game loads them (the next room, the next menu). The row works
 from the title and from the pause menu; a change mid-run chooses
 language-dependent objects at once, where the PS2 could set the language only
 at boot (docs/port/DIVERGENCES.md, A23).

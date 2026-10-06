@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 
+#include "subtitles.h"
+
 static UiLang s_lang = UI_LANG_EN;
 
 static const char *const *const s_tables[UI_LANG_COUNT] = {
@@ -59,4 +61,28 @@ const char *ui_StrIn(UiLang lang, UiStrId id)
 const char *ui_Str(UiStrId id)
 {
     return ui_StrIn(s_lang, id);
+}
+
+void ui_StringsForEach(UiStringFn fn, void *user)
+{
+    if (!fn) {
+        return;
+    }
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int id = 0; id < UI_STR_COUNT; id++) {
+            const char *s = s_tables[l][id];
+            if (s && *s) {
+                fn((UiLang)l, s, user);
+            }
+        }
+    }
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int set = 0; set < 2; set++) {
+            int n = 0;
+            const UiSubtitle *t = ui_SubtitleTable((UiLang)l, set, &n);
+            for (int i = 0; t && i < n; i++) {
+                fn((UiLang)l, t[i].text, user);
+            }
+        }
+    }
 }

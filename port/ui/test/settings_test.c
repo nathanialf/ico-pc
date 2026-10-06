@@ -2321,6 +2321,63 @@ static void snap1080(const char *name)
     free(px);
 }
 
+/* package TXT: the save screen's values (docs/port/UI.md "Save screens"):
+   layout 14's slot numbers (files 1, 2 and 5 used: black; the others empty:
+   grey) and layout 15's play time "12:34:56" (white), at the PAL rows'
+   places, their texel rectangles the menu text table's, everything else of
+   the two layouts masked; the save panel's white backing is a texture the
+   fake tables do not have, so the black figures stand on the mid-tone */
+static void fakeSaveRows(void)
+{
+    for (int r = 52; r < 176; r++) {
+        setRow(r, -1, -1, -1, -1, -1, -1, 0);
+        texProperty[r].masked = 1;
+        texProperty[r].selectable = 0;
+    }
+    for (int i = 0; i < ui_menu_text_row_count; i++) {
+        const int r = ui_menu_text_rows[i].row;
+        if (r >= 52 && r < 176) {
+            const UiMenuTextItem *it = &ui_menu_text_items[ui_menu_text_rows[i].item];
+            texProperty[r].texU = it->u;
+            texProperty[r].texV = it->v;
+            texProperty[r].texW = it->w;
+            texProperty[r].texH = it->h;
+            texProperty[r].dispW = 0;
+            texProperty[r].dispH = 30;
+        }
+    }
+    static const int slotX[5] = {210, 260, 310, 360, 410};
+    for (int i = 0; i < 10; i++) {
+        const int used = i == 0 || i == 1 || i == 4;
+        LtProperty *e = &texProperty[(used ? 62 : 52) + i];
+        e->dispX = i == 9 ? 404 : slotX[i % 5];
+        e->dispY = i < 5 ? 70 : 90;
+        e->masked = 0;
+    }
+    /* layout_action.c _la_set_preview_info: digit d of a pair at row base +
+       (d + 9) % 10; hours 76 / 86, minutes 96 / 106, seconds 116 / 126,
+       the colons 74 and 75 */
+    static const int base[6] = {76, 86, 96, 106, 116, 126};
+    static const int pos[6] = {240, 260, 300, 320, 360, 380};
+    static const int digits[6] = {1, 2, 3, 4, 5, 6};
+    for (int k = 0; k < 6; k++) {
+        LtProperty *e = &texProperty[base[k] + (digits[k] + 9) % 10];
+        e->dispX = pos[k];
+        e->dispY = 160;
+        e->masked = 0;
+    }
+    texProperty[74].dispX = 280;
+    texProperty[75].dispX = 340;
+    texProperty[74].dispY = texProperty[75].dispY = 160;
+    texProperty[74].masked = texProperty[75].masked = 0;
+    for (int r = 52; r < 176; r++) {
+        texProperty[r].defaultMask = texProperty[r].masked; /* kept by the switch */
+    }
+    setLayout(14, 52, 74, -1, 15);
+    setLayout(15, 74, 176, -1, -1);
+    texLayout[14].fadeInTime = texLayout[15].fadeInTime = 0.0f;
+}
+
 static int render(void)
 {
     RdSettings st;
@@ -2548,6 +2605,11 @@ static int render(void)
         CHECK(settle(ql, 60), "the quit screen at 1080p");
         press(0x8000);
         snap1080("settings_quit_screen");
+        /* package TXT: the save screen's slot numbers and play time */
+        fakeSaveRows();
+        lt_switch_layout(14);
+        CHECK(settle(14, 60), "the save screen at 1080p");
+        snap1080("settings_save_preview");
         s_reduce = 0;
         ui_InstallDeferredText(0);
     }

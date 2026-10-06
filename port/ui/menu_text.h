@@ -28,14 +28,24 @@
 extern "C" {
 #endif
 
+/* The letters' fill on the sheet. */
+typedef enum UiMenuTextInk {
+    UI_INK_LIGHT = 0, /* light letters with the dark rim (the menu rows); drawn in the
+                         sprite's colour with UI_HALO */
+    UI_INK_DARK = 1,  /* black letters without a rim (the white panel's prompts, the
+                         save screens' slot numbers of a used file); black, no glow */
+    UI_INK_PLAIN = 2, /* white letters without a rim (the save preview's play time) */
+    UI_INK_GREY = 3   /* grey letters without a rim, 151 / 255 of white (the slot
+                         numbers of an empty file) */
+} UiMenuTextInk;
+
 /* One text rectangle of the sheets.  Texel coordinates are measured from
    the rectangle's top-left corner, at texel edges (0 .. w, 0 .. h). */
 typedef struct UiMenuTextItem {
     unsigned short u, v, w, h; /* the texel rectangle, as the PAL rows have it */
     int str;                   /* UiStrId: the text, lines split at '\n' */
     unsigned char align;       /* UI_ALIGN_LEFT / CENTER / RIGHT about x */
-    unsigned char dark;        /* 1: black letters without a rim (the white panel's
-                                  prompts); 0: light letters with the dark rim */
+    unsigned char ink;         /* UiMenuTextInk: how the sheet colours the letters */
     float em;                  /* the em, texels (vertical) */
     float x;                   /* the anchor: the lettering's left edge, centre or right
                                   edge, texels */

@@ -65,7 +65,8 @@ bars and sits where the menu puts it, in the middle 4:3 frame. The
 Original preset draws it into the PS2-sized picture as before, and
 Settings > Display > "Menu text: Classic" (`[game] classic_menu_text`)
 brings back the PS2's own lettering and drawing order in both presets. The
-subtitles and the end credits are not yet drawn this way.
+subtitles, the end credits and the memory card screens' figures are drawn
+the same way; the subtitles in Yorda's script stay the game's pictures.
 
 ## CRT filter
 

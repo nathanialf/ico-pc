@@ -303,6 +303,22 @@ typedef enum UiStrId {
     UI_STR_MT_DARK,
     UI_STR_MT_LIGHT,
     UI_STR_MT_CONTINUE_Q,
+    /* the digit and letter tiles: the save screens' slot numbers and play
+       time, the Options values (the same glyphs on the five sheets) */
+    UI_STR_MT_DIGIT_0,
+    UI_STR_MT_DIGIT_1,
+    UI_STR_MT_DIGIT_2,
+    UI_STR_MT_DIGIT_3,
+    UI_STR_MT_DIGIT_4,
+    UI_STR_MT_DIGIT_5,
+    UI_STR_MT_DIGIT_6,
+    UI_STR_MT_DIGIT_7,
+    UI_STR_MT_DIGIT_8,
+    UI_STR_MT_DIGIT_9,
+    UI_STR_MT_DIGIT_10,
+    UI_STR_MT_COLON,
+    UI_STR_MT_VAL_A,
+    UI_STR_MT_VAL_B,
     UI_STR_EXTRAS,
     UI_STR_EXTRAS_MUSIC,
     UI_STR_EXTRAS_MODELS,
@@ -339,6 +355,16 @@ UiLang ui_LangFromGame(int nonLinearCameraMove);
 const char *ui_Str(UiStrId id);
 /* the same in a given language (tests, the Language section) */
 const char *ui_StrIn(UiLang lang, UiStrId id);
+
+/* Every string the port draws from a table, for the font coverage test:
+   fn(lang, utf8, user) once for each non-empty entry of each language's
+   table (the Settings menu, notes, Extras, achievements, popups, the menu
+   words UI_STR_MT_*), then for each subtitle of both sets of each language
+   (subtitles.h).  A missing translation is not visited (ui_StrIn would give
+   the English one, which is visited under UI_LANG_EN).  The staff roll's
+   lines are the game's data (staffroll.c), not a port table. */
+typedef void (*UiStringFn)(UiLang lang, const char *utf8, void *user);
+void ui_StringsForEach(UiStringFn fn, void *user);
 
 /* the tables, one per strings_<lang>.c, UI_STR_COUNT entries */
 extern const char *const ui_strings_en[UI_STR_COUNT];

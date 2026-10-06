@@ -76,7 +76,7 @@ endif()
 # trip and the popup rate limit. CPU only.
 add_executable(achievements_test test/achievements_test.c gamestate.c
     ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
-    ../ui/strings_it.c ../ui/strings_es.c ../platform/host_config.c)
+    ../ui/strings_it.c ../ui/strings_es.c ../ui/subtitles.c ../platform/host_config.c)
 target_include_directories(achievements_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")

@@ -25,6 +25,7 @@ add_custom_command(
 
 set(_ui_sources
     font.c
+    game_text.c
     layout_ext.c
     menu_text.c
     popup.c
@@ -34,12 +35,13 @@ set(_ui_sources
     strings_de.c
     strings_it.c
     strings_es.c
+    subtitles.c
     "${_ui_font_c}")
 
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c gallery.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c gallery.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -58,8 +60,10 @@ function(ico_ui_library name rd)
     endif()
 endfunction()
 
-# the game's layout_texture.c reads its tables through layout_ext.h
+# the game's layout_texture.c reads its tables through layout_ext.h;
+# jimaku.c (fumi) and staffroll.c (common) draw through its text hooks
 target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(ico_fumi PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # the Settings menu's view of the port's option modules (includes only; the
 # programs link the libraries)
@@ -142,7 +146,7 @@ endif()
 # listed bank in a pack. Exit 77 without the ELF.
 set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
 add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
-    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}"
+    strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c "${_ui_font_c}"
     "${CMAKE_SOURCE_DIR}/port/audio/track_names.c" "${_gal_data}/tables.c"
     "${_gal_data}/gen/table_defs.c" "${_gal_data}/gen/table_desc.c"
     "${_gal_data}/gen/ee_symbols.c")
