@@ -351,4 +351,16 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_PHOTO_FOV] = "Champ de vision %d°",
     [UI_STR_PHOTO_SAVED] = "Image enregistrée",
     [UI_STR_PHOTO_FAILED] = "Image non enregistrée",
+    [UI_STR_OPT_BRIGHTNESS] = "Luminosité",
+    [UI_STR_OPT_HOLD_TYPE] = "Conserver type",
+    [UI_STR_OPT_BUTTON_CONFIG] = "Configuration des touches",
+    [UI_STR_OPT_FILM_EFFECT] = "Effet séquence",
+    [UI_STR_OPT_PLAYERS] = "Joueurs",
+    [UI_STR_VAL_HOLD_A] = "A (maintenir)",
+    [UI_STR_VAL_HOLD_B] = "B (bascule)",
+    [UI_STR_HOLD_TYPE_NOTE] =
+        "A : la main de Yorda reste tenue tant que R1 est maintenu. B : appuyez sur R1 pour lâcher sa main.",
+    [UI_STR_PLAYERS_NOTE] = "2 : une deuxième manette dirige Yorda.",
+    [UI_STR_BUTTON_CONFIG_NOTE] =
+        "La disposition des touches du jeu, gardée dans la sauvegarde. Configurer les touches règle clavier et manette.",
 };

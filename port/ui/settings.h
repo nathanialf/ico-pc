@@ -10,21 +10,28 @@
  * layout, and the backdrop, fades and sounds are the game's.  The values are
  * port rows whose text is set with lt_ext_SetText from the screens' procs.
  *
- * Entry: a "Settings" row is chained after the Options screen (layout 58)
- * and after both title menus (12 "Continue / New Game", 13 "New Game"), each
- * in a one-row port layout on the game layout's link chain; the game rows
- * around it are repointed onto it (ui_SettingsInstall):
- *   Options 58:  325.downItem and 300.upItem -> the row; its up 325, down 300
- *                (the visibility skip of layout_texture.c steps over 325
- *                and 300 before the game is cleared, as it did)
+ * Entry: the pause menu's Options row (294, layout 57) opens the main page
+ * (its right link repointed; package S1: the game's Options screen, layout
+ * 58, is no longer reached, its settings are on the pages), and a
+ * "Settings" row is chained after both title menus (12 "Continue / New
+ * Game", 13 "New Game"), each in a one-row port layout on the game layout's
+ * link chain; the game rows around it are repointed onto it
+ * (ui_SettingsInstall):
+ *   Pause 57:    294.right -> the main page; "Photo mode" under Options
+ *                (a port row in a port layout chained after 57, Back 295
+ *                one pitch lower while it shows)
  *   Title 12:    50.downItem -> the row; its up 50
  *   Title 13:    51.downItem -> the row; its up 51
- *   link:        58 -> row layout; 12 and 13 -> row layout -> 11 (was 11)
+ *   link:        57 -> photo layout; 12 and 13 -> row layout -> 11 (was 11)
  *
  * Changes apply at once through the existing setters (ico_video_set,
  * ico_opt_set_*, the live binding table, NonLinearCameraMove,
  * systemStatus[0] with gsResetFunc) and are written with ico_video_save /
- * ico_config_save when a screen is left.
+ * ico_config_save when a screen is left.  The game's own settings
+ * (Brightness, Vibration, Hold type, Film effect, Players) are its
+ * variables, written by the game's saves as the Options screen left them
+ * (fumi/ios/mcard.c), never into the port config; they show only from the
+ * pause menu, as the Options screen did (a load sets them from the save).
  */
 #ifndef PORT_UI_SETTINGS_H
 #define PORT_UI_SETTINGS_H
@@ -115,6 +122,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_FRAMERATE,    /* [video] framerate (R7b; stepped since R7d) */
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row (package CRT) */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
+    UI_OPT_BRIGHTNESS,   /* S1: the game's brightness step, systemStatus[11] 0..14 */
     UI_OPT_VIDEO_MODE,
     /* Audio */
     UI_OPT_VOLUME,
@@ -125,9 +133,13 @@ typedef enum UiSettingsOpt {
     /* Controls */
     UI_OPT_MOUSE_SENS,
     UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */
+    UI_OPT_VIBRATION,   /* S1: the game's iosPadActRequestEnable */
+    UI_OPT_HOLD_TYPE,   /* S1: the game's optionControlType, A 0 or B 1 */
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
+    UI_OPT_FILM_EFFECT, /* S1: the game's optionScreenMode 0..4, once cleared */
+    UI_OPT_PLAYERS,     /* S1: the game's girlControlMode, 1 or 2, once cleared */
     /* Main */
     UI_OPT_LANGUAGE,
     UI_OPT_DEVELOPER,
@@ -138,16 +150,28 @@ typedef enum UiSettingsOpt {
     /* Extras: entries that open a gallery */
     UI_OPT_EXTRAS_MUSIC,
     UI_OPT_EXTRAS_MODELS,
-    UI_OPT_EXTRAS_CREDITS /* locked until the ending has been reached */
+    UI_OPT_EXTRAS_CREDITS, /* locked until the ending has been reached */
+    /* S1: Controls > Button configuration opens the game's own screen
+       (layout 59, la_key_config), whose OK comes back to Controls */
+    UI_OPT_BUTTON_CONFIG
 } UiSettingsOpt;
 
-/* The entry rows and the menu's layouts (-1 before ui_SettingsInstall). */
-int ui_SettingsEntryRow(int gameLayout); /* 58, 12 or 13 */
+/* The entry rows and the menu's layouts (-1 before ui_SettingsInstall):
+   for the pause menu (57) the game's Options row (294) and the port layout
+   chained after 57 (the Photo mode row's); the title's (12, 13) port rows
+   and their layouts. */
+int ui_SettingsEntryRow(int gameLayout); /* 57, 12 or 13 */
 int ui_SettingsEntryLayout(int gameLayout);
-/* Package PHOTO: the Options screen's "Photo mode" row (under Settings,
-   in the same port layout; masked and stepped over unless a stage runs,
-   photo_ui.h ui_PhotoAvailable), -1 before the build. */
+/* Package PHOTO (S1: in the pause menu): the "Photo mode" row under
+   Options (masked and stepped over unless a stage runs, photo_ui.h
+   ui_PhotoAvailable), -1 before the build. */
 int ui_SettingsPhotoRow(void);
+/* photo_ui.c's way back: the pause menu (57) with the cursor on the row. */
+int ui_SettingsPhotoBack(void);
+/* la_key_config's OK (S1): Settings > Controls with the cursor on Button
+   configuration, or the game's Options screen (58) when the pause menu
+   still opens it (before the build, or tables not the PAL ones). */
+int ui_SettingsKeyConfigBack(void);
 int ui_SettingsPageLayout(UiSettingsPage page);
 /* A page's navigable rows in order: the label row of each, its option, its
    value row (-1 for none).  Returns the count. */

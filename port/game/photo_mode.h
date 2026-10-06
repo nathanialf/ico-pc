@@ -2,8 +2,8 @@
  * port/game/photo_mode.h
  *
  * Photo mode's state (package PHOTO): a
- * free camera over the paused picture.  The pause menu's Options > "Photo
- * mode" row opens a port layout (port/ui/photo_ui.c) whose proc calls
+ * free camera over the paused picture.  The pause menu's "Photo mode" row
+ * opens a port layout (port/ui/photo_ui.c) whose proc calls
  * ico_photo_enter, then ico_photo_update once a Main tick with the pad, and
  * ico_photo_exit on the way back.  The window (port/platform/window_host.c)
  * turns the state into the renderer's camera override every vsync
@@ -31,7 +31,7 @@
  *   Select          back to the game's camera
  *   Square          the HUD (the port's help lines) shown or hidden
  *   Cross           a capture (ico_photo_take_capture)
- *   Triangle, Circle, Start  leave (the proc goes back to Options)
+ *   Triangle, Circle, Start  leave (the proc goes back to the pause menu)
  * The pivot is the game camera's look-at point: the point of its forward
  * axis nearest the object the camera follows (ico_photo_set_subject; the
  * photo screen gives camera-root.c's default_cameratarget_gobj's root), or

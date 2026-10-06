@@ -264,6 +264,8 @@ static int actionStarted = 0; /* derived name */
    their own rows while the memory card check runs. */
 int ui_SettingsEntryItem(int item);
 void ui_SettingsTitleMask(int masked);
+/* S1: la_key_config's OK goes back to Settings > Controls (settings.h) */
+int ui_SettingsKeyConfigBack(void);
 
 #define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
 
@@ -2890,7 +2892,9 @@ int la_key_config(int first)
             }
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return 58;
+            /* PC port (S1): back to Settings > Controls, which opens this
+               screen now that the Options screen (58) is not reached */
+            return ui_SettingsKeyConfigBack();
         }
     }
     return -1;
@@ -3066,6 +3070,28 @@ void la_host_leave(void)
 {
     lt_set_item_select_func(0);
     actionStarted = 0;
+}
+
+/* PC port (S1): Settings > Gameplay > Film effect, what la_game_option does
+   when row 300 changes the mode: the old mode's stage animation stopped, the
+   new one's started */
+void la_host_film_effect(int mode)
+{
+    int item;
+
+    if (mode < 0 || mode >= 5 || mode == optionScreenMode) {
+        return;
+    }
+    if (optionScreenMode >= 0 && optionScreenMode < 5 && screenModeAnim[optionScreenMode] != -1) {
+        stage_SetLoopFlag(screenModeAnim[optionScreenMode], 0);
+        stage_SetAnimation(screenModeAnim[optionScreenMode], -1, -2);
+    }
+    item = screenModeAnim[mode];
+    if (item != -1) {
+        stage_SetLoopFlag(item, 1);
+        stage_SetAnimation(item, 1, 0);
+    }
+    optionScreenMode = mode;
 }
 
 /* PC port (package MV): the model viewer leaves the title as a new game

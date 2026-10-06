@@ -384,8 +384,9 @@ typedef enum UiStrId {
     UI_STR_MV_SWORD,
     UI_STR_MV_MAGIC_SWORD,
     UI_STR_MV_COUCH,
-    /* Options > Photo mode (package PHOTO): the row, the HUD's lines, the capture's popup; FOV takes the
-       vertical field of view in degrees (%d) */
+    /* the pause menu's Photo mode (package PHOTO; S1 moved the row from
+       the Options screen to the pause menu): the row, the HUD's lines, the
+       capture's popup; FOV takes the vertical field of view in degrees (%d) */
     UI_STR_PHOTO_MODE,
     UI_STR_PHOTO_HUD_MOVE,
     UI_STR_PHOTO_HUD_LENS,
@@ -393,6 +394,19 @@ typedef enum UiStrId {
     UI_STR_PHOTO_FOV,
     UI_STR_PHOTO_SAVED,
     UI_STR_PHOTO_FAILED,
+    /* package S1: the game's Options screen's settings on the Settings
+       pages (the labels in the game's own words; Vibration is
+       UI_STR_OPT_VIBRATION above), Hold type's values and the notes */
+    UI_STR_OPT_BRIGHTNESS,
+    UI_STR_OPT_HOLD_TYPE,
+    UI_STR_OPT_BUTTON_CONFIG,
+    UI_STR_OPT_FILM_EFFECT,
+    UI_STR_OPT_PLAYERS,
+    UI_STR_VAL_HOLD_A,
+    UI_STR_VAL_HOLD_B,
+    UI_STR_HOLD_TYPE_NOTE,
+    UI_STR_PLAYERS_NOTE,
+    UI_STR_BUTTON_CONFIG_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

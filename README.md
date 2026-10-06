@@ -82,6 +82,12 @@ choose **Options**, which opens the same Settings menu. Up and Down move,
 Left and Right change a value, Cross opens or confirms, Triangle or Circle
 goes back. Changes apply at once and are saved to `config.toml`.
 
+The PS2 Options screen's settings are on these pages too, shown only when
+Settings is opened from the pause menu: Brightness (Display); Button
+configuration, Vibration and Hold type (Controls); Film effect and Players
+(Gameplay, once you have finished the game). They are kept in your save, as
+on the PS2, not in `config.toml`.
+
 - **Display:** a Preset (Original is the PS2 picture; Enhanced turns on the
   options below), resolution scale, aspect ratio (4:3, 16:10, 16:9, Auto),
   fullscreen, vertical sync, texture filtering, full-height picture, frame
@@ -162,8 +168,8 @@ do not share them publicly.
 
 ## Differences from the PS2 you will notice
 
-- A **Settings** line on the title screen and in the pause menu's Options,
-  and a **Quit to desktop** line on the title screen.
+- A **Settings** line on the title screen, which the pause menu's
+  **Options** also opens, and a **Quit to desktop** line on the title screen.
 - The language and 50/60 Hz questions the PS2 asked at first start are
   skipped; both come from Settings.
 - New Game has one extra **Mirror mode** screen after Vibration.

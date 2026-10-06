@@ -33,15 +33,12 @@ extern void la_host_leave(void);
 extern void *default_cameratarget_gobj;
 extern void GetRootPosition(void *pos, void *obj);
 
-#define LAYOUT_PAUSE_OPTIONS 58
-
-static int s_layout = -1, s_row = -1, s_back = -1;
+static int s_layout = -1, s_row = -1;
 
 static int photoProc(int first, int item);
 
-int ui_PhotoBuild(int back)
+int ui_PhotoBuild(void)
 {
-    s_back = back;
     /* one row, masked: nothing drawn, no cursor (the layout's curItem -1),
        and a texel rectangle of its own as every port row has */
     s_row =
@@ -73,7 +70,7 @@ int ui_PhotoLayout(void)
 
 void ui_PhotoReset(void)
 {
-    s_layout = s_row = s_back = -1;
+    s_layout = s_row = -1;
     ico_photo_exit();
 }
 
@@ -112,10 +109,8 @@ static int photoProc(int first, int item)
         ico_photo_exit();
         NEGATIVE_SE();
         la_host_leave();
-        if (s_back >= 0) {
-            texLayout[LAYOUT_PAUSE_OPTIONS].defaultItem = s_back;
-        }
-        return LAYOUT_PAUSE_OPTIONS;
+        /* the pause menu, the cursor on the row (settings.c) */
+        return ui_SettingsPhotoBack();
     }
     return -1;
 }

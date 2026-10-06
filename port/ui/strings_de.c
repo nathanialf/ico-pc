@@ -352,4 +352,16 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_PHOTO_FOV] = "Bildwinkel %d°",
     [UI_STR_PHOTO_SAVED] = "Bild gespeichert",
     [UI_STR_PHOTO_FAILED] = "Bild nicht gespeichert",
+    [UI_STR_OPT_BRIGHTNESS] = "Helligkeit",
+    [UI_STR_OPT_HOLD_TYPE] = "Halte-Typ",
+    [UI_STR_OPT_BUTTON_CONFIG] = "Tasten-Konfiguration",
+    [UI_STR_OPT_FILM_EFFECT] = "Film-Effekt",
+    [UI_STR_OPT_PLAYERS] = "Spieler",
+    [UI_STR_VAL_HOLD_A] = "A (halten)",
+    [UI_STR_VAL_HOLD_B] = "B (umschalten)",
+    [UI_STR_HOLD_TYPE_NOTE] =
+        "A: Yordas Hand bleibt gehalten, solange R1 gedrückt bleibt. B: R1 drücken, um ihre Hand loszulassen.",
+    [UI_STR_PLAYERS_NOTE] = "2: Ein zweiter Controller steuert Yorda.",
+    [UI_STR_BUTTON_CONFIG_NOTE] =
+        "Die Tastenbelegung des Spiels, im Spielstand gespeichert. Tastatur und Gamepad: unter Tastenbelegung.",
 };

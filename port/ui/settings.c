@@ -53,6 +53,18 @@ extern void soundOutputModeSet(int mode);
 /* layout_action.c (ICO_HOST, R7c): what la_vibe_select's confirm did after
    the vibration choice, gflagOn(382): the new game starts */
 extern void la_host_new_game_go(void);
+/* S1: the game's Options screen's settings (common/src/main.c,
+   fumi/ios/pad.c): its film effect 0..4 (only once the game is cleared),
+   hold type A 0 or B 1, players 1 (0) or 2 (1), and the vibration switch;
+   the brightness step is systemStatus[11].  The game's saves write them
+   (fumi/ios/mcard.c product_write, gameblock_write). */
+extern int optionScreenMode;
+extern int optionControlType;
+extern int girlControlMode;
+extern int iosPadActRequestEnable;
+/* layout_action.c (ICO_HOST, S1): a film effect in force with the stage
+   animations la_game_option starts and stops for it */
+extern void la_host_film_effect(int mode);
 
 /* the pad's trigger bits (keyInput.c's logical word) */
 #define PAD_L1 0x0004
@@ -74,14 +86,27 @@ extern void la_host_new_game_go(void);
 #define PAD_BACK (PAD_TRIANGLE | PAD_CIRCLE)
 
 /* the game layouts the menu is entered from */
-#define LAYOUT_PAUSE_OPTIONS 58
+#define LAYOUT_PAUSE 57
 #define LAYOUT_TITLE_CONTINUE 12
 #define LAYOUT_TITLE_NEW 13
+/* the game's Options screen (no longer reached, S1) and its button
+   configuration screen (Settings > Controls opens it) */
+#define LAYOUT_GAME_OPTIONS 58
+#define LAYOUT_KEY_CONFIG 59
+/* the pause menu's rows: Options (opens Settings), Back, End Game */
+#define ROW_PAUSE_OPTIONS 294
+#define ROW_PAUSE_BACK 295
+#define ROW_PAUSE_END 296
+/* the pause menu's pitch in the PAL data (Options 50, Back 70) */
+#define PAUSE_PITCH 20
 
-enum { ENTRY_OPTIONS, ENTRY_TITLE12, ENTRY_TITLE13, ENTRY_COUNT };
+/* the brightness step's range (la_adjust_screen) */
+#define BRIGHTNESS_MAX 14
+#define FILM_EFFECTS 5
 
-static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_CONTINUE,
-                                            LAYOUT_TITLE_NEW};
+enum { ENTRY_PAUSE, ENTRY_TITLE12, ENTRY_TITLE13, ENTRY_COUNT };
+
+static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE, LAYOUT_TITLE_CONTINUE, LAYOUT_TITLE_NEW};
 
 /* geometry, in the layout grid (dispX pixels of 640, dispY field lines of 226) */
 #define HEADER_Y 12
@@ -99,14 +124,12 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 #define NOTE_SIZE 19.0f
 #define REMAP_ITEMS (ICO_T_COUNT + 2) /* the targets, Reset, Back */
 
-/* where the Options screen's Settings row goes: the girl-control row (325)
-   is hidden until the game is cleared, so the row takes its place, and moves
-   one Options pitch (325 less 324: 20 field lines) below it once 325 shows
-   (entryProc, from the loaded rows).  Right-aligned where the Options
-   labels' letters end, x 357 (menu_text.c's right anchors: 236 + 121 for
-   Vibration, Brightness and Players, 172 + 185 Film Effect, 108 + 248
-   Button Configuration), not at their rectangles' end (364) */
-#define OPTIONS_LABELS_END 357
+/* the pause menu's Photo mode row: under Options, its letters starting
+   where the pause rows' do (menu_text.c's left anchor, 7 texels into the
+   rectangle at x 40; display_texture's box starts a quarter pixel in, the
+   lettering a quarter before the anchor) */
+#define PAUSE_LETTERS_IN 6
+#define PAUSE_ROW_W 300
 /* The title is laid out by the port (placeTitle): its four rows, Continue
    (49), New Game (50, and 51 on the New-Game-only layout), Settings and
    "Quit to desktop", one game pitch apart (20 field lines, the Options
@@ -156,14 +179,14 @@ typedef struct Page {
 static Page s_pages[UI_PAGE_COUNT];
 static int s_built;
 static int s_warned;
-static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1};
-static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1}; /* Q2: the title's "Quit to desktop" */
+static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1}; /* [ENTRY_PAUSE]: 294, once installed */
+static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1};  /* Q2: the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
-/* package PHOTO: "Photo mode" under the Options screen's Settings row, in
-   the same port layout; opens photo_ui.c's layout (only while a stage runs:
-   entryProc) */
+/* package PHOTO (S1: in the pause menu): "Photo mode" under Options, in a
+   port layout chained after 57; opens photo_ui.c's layout (only while a
+   stage runs: placePause) */
 static int s_photoRow = -1;
-static int s_origin = LAYOUT_PAUSE_OPTIONS; /* the game layout the menu returns to */
+static int s_origin = LAYOUT_PAUSE; /* the game layout the menu returns to */
 
 /* The video mode arms the tick rate (the game's timers are armed at the
    rate in force), so it changes only when Settings was opened from the
@@ -173,7 +196,7 @@ static int onTitle(void)
     return s_origin == LAYOUT_TITLE_CONTINUE || s_origin == LAYOUT_TITLE_NEW;
 }
 
-static int s_restoreTitle = -1; /* a title layout whose defaultItem to restore */
+static int s_restoreTitle = -1; /* a game layout whose defaultItem to restore */
 static int s_restoreDefault;
 static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
 static UiRemapCapture s_capture;
@@ -406,6 +429,13 @@ static const char *languageName(int game)
     return ui_Str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
 }
 
+/* the game's brightness step as gsb_controlBrightness clamps it */
+static int brightness(void)
+{
+    const int v = systemStatus[11];
+    return v < 0 ? 0 : v > BRIGHTNESS_MAX ? BRIGHTNESS_MAX : v;
+}
+
 static int resolutionIndex(const IcoVideoOptions *o)
 {
     if (o->resScale >= 1 && o->resScale <= 4) {
@@ -466,7 +496,7 @@ static int extrasModels(void)
    (ico_credits.h).  The menu closes on the
    game's empty layout while the stage changes, as leaving it saves first;
    the title comes back with the cursor on Settings.  Locked: nothing. */
-static void titleCursorOn(int to, int row);
+static void gameCursorOn(int to, int row);
 
 static int extrasCredits(void)
 {
@@ -483,8 +513,8 @@ static int extrasCredits(void)
         return -1;
     }
     la_host_leave();
-    titleCursorOn(s_origin,
-                  s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+    gameCursorOn(s_origin,
+                 s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
     return to;
 }
 
@@ -558,6 +588,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_CRT_STRENGTH:
         snprintf(buf, size, "%d %%", (int)(o.crtStrength * 100.0f + 0.5f));
         return buf;
+    case UI_OPT_BRIGHTNESS:
+        snprintf(buf, size, "%d", brightness());
+        return buf;
     case UI_OPT_VIDEO_MODE:
         if (!onTitle()) {
             snprintf(buf, size, "%s (%s)",
@@ -595,6 +628,18 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_CIRCLE_BACK:
         return onOff(ico_opt_circle_back());
+    case UI_OPT_VIBRATION:
+        return onOff(iosPadActRequestEnable);
+    case UI_OPT_HOLD_TYPE:
+        return ui_Str(optionControlType == 1 ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
+    case UI_OPT_FILM_EFFECT:
+        if (optionScreenMode <= 0 || optionScreenMode >= FILM_EFFECTS) {
+            return ui_Str(UI_STR_OFF);
+        }
+        snprintf(buf, size, "%d", optionScreenMode);
+        return buf;
+    case UI_OPT_PLAYERS:
+        return girlControlMode != 0 ? "2" : "1";
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
     case UI_OPT_LANGUAGE:
@@ -606,6 +651,30 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     default:
         return "";
     }
+}
+
+/* S1: the game's settings, shown from the pause menu only (as its Options
+   screen was: a load sets them from the save, so a change on the title
+   would not last); the film effect and players once the game is cleared
+   (layout_texture.c lt_property_visible) */
+static int isGameOpt(int opt)
+{
+    return opt == UI_OPT_BRIGHTNESS || opt == UI_OPT_VIBRATION || opt == UI_OPT_HOLD_TYPE ||
+           opt == UI_OPT_BUTTON_CONFIG || opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS;
+}
+
+static int optShown(int opt, int link)
+{
+    if (opt == UI_OPT_LINK && link == UI_PAGE_EXTRAS) {
+        return onTitle();
+    }
+    if (isGameOpt(opt) && onTitle()) {
+        return 0;
+    }
+    if (opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS) {
+        return gFlagGameClear != 0;
+    }
+    return 1;
 }
 
 static int steppable(int opt)
@@ -624,7 +693,7 @@ static int resolutionLocked(void)
    resolution not under the CRT filter */
 static int canStep(int opt)
 {
-    return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle()) &&
+    return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle()) && optShown(opt, -1) &&
            (opt != UI_OPT_RESOLUTION || !resolutionLocked());
 }
 
@@ -726,6 +795,12 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_opt_set_output_mode(m);
         ico_config_set_string("audio.output", ico_opt_output_name(m));
         applyOutputMode(1);
+        if (m != ICO_OUTPUT_AUTO) {
+            /* S1: the rest of what the Options screen's Sound row (308)
+               did (applyOutputMode set the mode): the game's own mode, the
+               one its saves write and Auto shows, is this one too */
+            ico_opt_output_toggled(m);
+        }
         s_dirtyConfig = 1;
         break;
     }
@@ -774,6 +849,30 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         break;
     }
+    case UI_OPT_BRIGHTNESS: {
+        /* as la_adjust_screen: a step at a time, no wrap */
+        int v = brightness() + dir;
+        systemStatus[11] = v < 0 ? 0 : v > BRIGHTNESS_MAX ? BRIGHTNESS_MAX : v;
+        break;
+    }
+    case UI_OPT_VIBRATION:
+        /* la_game_option's row 313 */
+        iosPadActRequestEnable = iosPadActRequestEnable == 0;
+        break;
+    case UI_OPT_HOLD_TYPE:
+        /* row 318 */
+        optionControlType = optionControlType == 0;
+        break;
+    case UI_OPT_FILM_EFFECT: {
+        /* row 300: 0..4 around, the stage animations with it */
+        int m = optionScreenMode >= 0 && optionScreenMode < FILM_EFFECTS ? optionScreenMode : 0;
+        la_host_film_effect(stepIndex(m, FILM_EFFECTS, dir));
+        break;
+    }
+    case UI_OPT_PLAYERS:
+        /* row 325 */
+        girlControlMode = girlControlMode == 0;
+        break;
     case UI_OPT_DEVELOPER:
         ico_opt_set_developer_mode(!ico_opt_developer_mode());
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
@@ -1008,7 +1107,6 @@ static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
 static void buildQuitScreen(void);
 static int s_quitLayout = -1;
-static void titleCursorOn(int to, int row);
 
 /* the music gallery's page, in field
    lines: the list, the status line, the progress bar (its rim, the track
@@ -1044,15 +1142,30 @@ static void buildGalleryBar(void)
     ui_HintBuild(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
 }
 
-static int rowY(int page, int i)
+/* A page's first row and pitch for n rows shown.  Display: twelve rows
+   (package CRT: the CRT filter and its strength; TXT2: no Menu text row)
+   14 field lines apart from 36, thirteen (S1: Brightness, from the pause
+   menu) 13 apart from 34, so Back still ends inside the 226 lines.  Main:
+   the nine of the title on a 17 line pitch so Back stays above the notes,
+   the eight of the pause menu on the original 19. */
+static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
-        /* twelve rows (package CRT: the CRT filter and its strength; TXT2:
-           no Menu text row): 14 field lines apart from 36, so Back still
-           ends inside the 226 lines */
-        return 36 + 14 * i;
+        *y0 = n > 12 ? 34 : 36;
+        return n > 12 ? 13 : 14;
     }
-    return page == UI_PAGE_MAIN ? 40 + 19 * i : 40 + 18 * i;
+    *y0 = 40;
+    if (page == UI_PAGE_MAIN) {
+        return n > 8 ? 17 : 19;
+    }
+    return 18;
+}
+
+static int rowY(int page, int i)
+{
+    int y0;
+    const int pitch = pagePitch(page, page == UI_PAGE_MAIN ? 8 : 12, &y0);
+    return y0 + pitch * i;
 }
 
 static void addHeader(Page *pg, int strId)
@@ -1144,10 +1257,13 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_AUDIO:
         break;
     case UI_PAGE_CONTROLS:
+        addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
+        addNote(pg, UI_OPT_HOLD_TYPE, UI_STR_HOLD_TYPE_NOTE);
         addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
+        addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
         break;
     case UI_PAGE_EXTRAS:
         /* the locked style's value: Credits shows it until unlocked */
@@ -1223,72 +1339,60 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     finishPage(pg, first, last);
 }
 
+static void addEntryLayout(int e, int first, int last)
+{
+    LtProp l;
+    memset(&l, 0, sizeof(l));
+    l.first = first;
+    l.last = last + 1;
+    l.proc = entryProc;
+    l.procFirst = 1;
+    l.defaultItem = -1;
+    l.curItem = -1;
+    l.link = -1;
+    s_entryLayout[e] = lt_ext_AddLayout(&l);
+}
+
 static void buildEntries(void)
 {
-    for (int e = 0; e < ENTRY_COUNT; e++) {
-        int title = e != ENTRY_OPTIONS;
-        /* the y and the title rows' box are set with the game's rows
-           (placeTitle, entryProc); the title rows' box is wider than the
-           game's so the longer translations keep the game rows' size */
+    /* the pause menu: the game's Options row opens the menu (repoint), and
+       "Photo mode" goes under it, alone in a port layout chained after 57
+       (placePause sets its place, mask and links) */
+    s_entryRow[ENTRY_PAUSE] = ROW_PAUSE_OPTIONS;
+    s_quitRow[ENTRY_PAUSE] = -1;
+    s_photoRow = ui_SettingsAddRow(0, 0, PAUSE_ROW_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
+                                   UI_ALIGN_LEFT);
+    addEntryLayout(ENTRY_PAUSE, s_photoRow, s_photoRow);
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+        /* the y and the box are set with the game's rows (placeTitle); the
+           box is wider than the game's so the longer translations keep the
+           game rows' size */
         int row =
-            title ? ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f,
-                                      UI_ALIGN_CENTER)
-                  : ui_SettingsAddRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY, LABEL_W,
-                                      40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_RIGHT);
-        if (title) {
-            P(row)->centerX = 1;
-            /* hidden unless the title's proc shows it, as New Game (49 to
-               51 are masked by default) */
-            P(row)->defaultMask = 1;
-        }
+            ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_CENTER);
+        P(row)->centerX = 1;
+        /* hidden unless the title's proc shows it, as New Game (49 to 51
+           are masked by default) */
+        P(row)->defaultMask = 1;
         P(row)->right = s_pages[UI_PAGE_MAIN].layout;
-        if (!title) {
-            /* Triangle goes back to the pause menu, as on every Options row */
-            P(row)->left = 57;
-        }
         s_entryRow[e] = row;
-        s_quitRow[e] = -1;
-        if (!title) {
-            /* package PHOTO: one Options pitch below Settings (entryProc
-               sets the y with Settings'); Triangle back to the pause menu */
-            int ph = ui_SettingsAddRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY + 20,
-                                       LABEL_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
-                                       UI_ALIGN_RIGHT);
-            P(ph)->left = 57;
-            P(ph)->upItem = row;
-            P(row)->downItem = ph;
-            s_photoRow = ph;
-        }
-        if (title) {
-            /* Q2: "Quit to desktop" under Settings, in the same layout (the
-               rows are contiguous); Cross opens the confirmation */
-            int q = ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f,
-                                      UI_ALIGN_CENTER);
-            P(q)->centerX = 1;
-            P(q)->defaultMask = 1;
-            P(q)->right = s_quitLayout;
-            P(q)->upItem = row;
-            P(row)->downItem = q;
-            s_quitRow[e] = q;
-        }
-        LtProp l;
-        memset(&l, 0, sizeof(l));
-        l.first = row;
-        l.last =
-            (s_quitRow[e] >= 0 ? s_quitRow[e] : (!title && s_photoRow >= 0 ? s_photoRow : row)) + 1;
-        l.proc = entryProc;
-        l.procFirst = 1;
-        l.defaultItem = -1;
-        l.curItem = -1;
-        l.link = -1;
-        s_entryLayout[e] = lt_ext_AddLayout(&l);
+        /* Q2: "Quit to desktop" under Settings, in the same layout (the
+           rows are contiguous); Cross opens the confirmation */
+        int q = ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f,
+                                  UI_ALIGN_CENTER);
+        P(q)->centerX = 1;
+        P(q)->defaultMask = 1;
+        P(q)->right = s_quitLayout;
+        P(q)->upItem = row;
+        P(row)->downItem = q;
+        s_quitRow[e] = q;
+        addEntryLayout(e, row, q);
     }
 }
 
 static void build(void)
 {
     /* Extras (after Achievements) is shown only when Settings was opened
-       from the title (layoutMain) */
+       from the title (layoutPage) */
     static const int mainOpts[] = {UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
                                    UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_LINK,
                                    UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
@@ -1309,41 +1413,56 @@ static void build(void)
                                      UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
                                      UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
-    /* R7d: every Display row always shown, Frame rate included */
+    /* R7d: every Display row always shown, Frame rate included (S1:
+       Brightness from the pause menu) */
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
                                    UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
-                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
+                                   UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
+                                   UI_OPT_BACK};
     static const int dispStrs[] = {
         UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
         UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
-        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
-    _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
-    const int nd = (int)(sizeof(dispOpts) / sizeof(dispOpts[0]));
+        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_BRIGHTNESS,  UI_STR_OPT_VIDEO_MODE,
+        UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_BACK};
+    /* S1: the game's Button configuration, Vibration and Hold type after
+       Remap, from the pause menu */
+    static const int ctlOpts[] = {UI_OPT_LINK,      UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE, UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
+                                  UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,      UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION, UI_STR_OPT_HOLD_TYPE,
+        UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,   UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1};
+    /* S1: the game's Film effect and Players, once the game is cleared */
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
+#define N_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
+    _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
+    _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
+                   "a string and a link for each Controls row");
+    _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
 
     ui_FontInit(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
     /* the pages first (their layouts are the links' targets), then the
        entry rows */
     buildOptionPage(UI_PAGE_MAIN, UI_STR_SETTINGS, mainOpts, mainStrs, mainLinks, 9, -1);
-    buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL, nd,
-                    UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 6,
-                    UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
-                    UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 3,
-                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL,
+                    N_OF(dispOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL,
+                    N_OF(audioOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks,
+                    N_OF(ctlOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL,
+                    N_OF(gameOpts), UI_PAGE_MAIN);
+#undef N_OF
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, NULL, 4, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
@@ -1357,10 +1476,18 @@ static void build(void)
             }
         }
     }
+    /* S1: Button configuration opens the game's own screen (la_key_config
+       comes back through ui_SettingsKeyConfigBack) */
+    {
+        const int bc = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
+        if (bc >= 0) {
+            P(bc)->right = LAYOUT_KEY_CONFIG;
+        }
+    }
     buildQuitScreen();
     buildEntries();
     if (s_photoRow >= 0) {
-        P(s_photoRow)->right = ui_PhotoBuild(s_photoRow);
+        P(s_photoRow)->right = ui_PhotoBuild();
     }
     buildMirrorScreen();
     if (ico_opt_developer_mode()) {
@@ -1536,7 +1663,7 @@ static int quitScreenProc(int first, int item)
     if (flags & (PAD_CROSS | PAD_BACK)) {
         NEGATIVE_SE();
         la_host_leave();
-        titleCursorOn(to, s_quitRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+        gameCursorOn(to, s_quitRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
         return to;
     }
     return -1;
@@ -1572,23 +1699,45 @@ static void placeTitle(void)
     }
 }
 
-/* Package PHOTO: the "Photo mode" row under Settings while a stage runs
-   (ui_PhotoAvailable); otherwise masked and stepped over through the item
-   links (layout_texture.c's visibility skip does not look at masks):
-   Settings -> 300 and 300 -> Settings as before the row existed. */
-static void photoLinks(void)
+/* The pause menu: "Photo mode" one pitch under Options while a stage
+   runs (ui_PhotoAvailable), with Back (295) one pitch lower to make room
+   (End Game, 296, is further down in the PAL data); otherwise masked and
+   stepped over through the item links (layout_texture.c's visibility skip
+   does not look at masks), Back in its own place: Options -> Back and Back
+   -> Options as before the row existed.  The row's letters start where the
+   pause rows' do. */
+static void placePause(void)
 {
-    const int s58 = s_entryRow[ENTRY_OPTIONS];
-    if (s_photoRow < 0 || s58 < 0) {
+    LtProperty *opt = &texProperty[ROW_PAUSE_OPTIONS], *back = &texProperty[ROW_PAUSE_BACK];
+    if (s_photoRow < 0) {
         return;
     }
     const int on = ui_PhotoAvailable();
-    P(s_photoRow)->defaultMask = on ? 0 : 1;
+    LtProperty *ph = P(s_photoRow);
+    ph->dispX = opt->dispX + PAUSE_LETTERS_IN;
+    ph->dispY = opt->dispY + PAUSE_PITCH;
+    ph->dispH = opt->dispH;
+    ph->defaultMask = on ? 0 : 1;
     lt_mask_property(s_photoRow, on ? 0 : 1);
-    P(s_photoRow)->upItem = s58;
-    P(s_photoRow)->downItem = 300;
-    P(s58)->downItem = on ? s_photoRow : 300;
-    texProperty[300].upItem = on ? s_photoRow : s58;
+    ph->upItem = ROW_PAUSE_OPTIONS;
+    ph->downItem = ROW_PAUSE_BACK;
+    back->dispY = opt->dispY + (on ? 2 : 1) * PAUSE_PITCH;
+    opt->downItem = on ? s_photoRow : ROW_PAUSE_BACK;
+    back->upItem = on ? s_photoRow : ROW_PAUSE_OPTIONS;
+}
+
+/* whether the pause menu's rows are the PAL ones (or as placePause and
+   repoint left them) */
+static int pauseRowsOk(void)
+{
+    const LtProperty *o = &texProperty[ROW_PAUSE_OPTIONS], *b = &texProperty[ROW_PAUSE_BACK];
+    const int ph = s_photoRow;
+    return texLayout[LAYOUT_PAUSE].first == 292 && texLayout[LAYOUT_PAUSE].last == 297 &&
+           (o->right == LAYOUT_GAME_OPTIONS || o->right == s_pages[UI_PAGE_MAIN].layout) &&
+           (o->downItem == ROW_PAUSE_BACK || o->downItem == ph) &&
+           (b->upItem == ROW_PAUSE_OPTIONS || b->upItem == ph) &&
+           (b->dispY == o->dispY + PAUSE_PITCH || b->dispY == o->dispY + 2 * PAUSE_PITCH) &&
+           texProperty[ROW_PAUSE_END].dispY >= o->dispY + 3 * PAUSE_PITCH;
 }
 
 /* The game's rows, pointed at the entry rows.  Checked against the loaded
@@ -1596,11 +1745,7 @@ static void photoLinks(void)
    alone (logged once). */
 static void repoint(void)
 {
-    LtProperty *r325 = &texProperty[325], *r300 = &texProperty[300];
-    int s58 = s_entryRow[ENTRY_OPTIONS];
-    if (texLayout[58].first != 297 || texLayout[58].last != 333 || r325->upItem != 324 ||
-        (r325->downItem != 300 && r325->downItem != s58) || texLayout[12].first != 49 ||
-        texLayout[13].first != 51 ||
+    if (!pauseRowsOk() || texLayout[12].first != 49 || texLayout[13].first != 51 ||
         !(titleRowsAt(PAL_CONTINUE_Y, PAL_NEW_GAME_Y, PAL_COPYRIGHT_Y) ||
           titleRowsAt(TITLE_Y(0), TITLE_Y(1), TITLE_COPYRIGHT_Y))) {
         if (!s_warned) {
@@ -1610,20 +1755,17 @@ static void repoint(void)
         return;
     }
     placeTitle();
-    r325->downItem = s58;
-    r300->upItem = s58;
-    P(s58)->upItem = 325;
-    P(s58)->downItem = 300;
-    photoLinks();
-    if (texLayout[58].link != s_entryLayout[ENTRY_OPTIONS]) {
-        lt_ext_Layout(s_entryLayout[ENTRY_OPTIONS])->link = texLayout[58].link;
-        texLayout[58].link = s_entryLayout[ENTRY_OPTIONS];
-    }
-    static const int gameRow[3] = {0, 50, 51};
-    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+    /* S1: the pause menu's Options opens Settings (the game's Options
+       screen, 58, is no longer reached: its settings are on the pages) */
+    texProperty[ROW_PAUSE_OPTIONS].right = s_pages[UI_PAGE_MAIN].layout;
+    placePause();
+    static const int gameRow[ENTRY_COUNT] = {0, 50, 51};
+    for (int e = 0; e < ENTRY_COUNT; e++) {
         int g = kEntryGame[e];
-        texProperty[gameRow[e]].downItem = s_entryRow[e];
-        P(s_entryRow[e])->upItem = gameRow[e];
+        if (e != ENTRY_PAUSE) {
+            texProperty[gameRow[e]].downItem = s_entryRow[e];
+            P(s_entryRow[e])->upItem = gameRow[e];
+        }
         if (texLayout[g].link != s_entryLayout[e]) {
             lt_ext_Layout(s_entryLayout[e])->link = texLayout[g].link;
             texLayout[g].link = s_entryLayout[e];
@@ -1660,7 +1802,7 @@ void ui_SettingsReset(void)
 {
     s_built = 0;
     s_warned = 0;
-    s_origin = LAYOUT_PAUSE_OPTIONS;
+    s_origin = LAYOUT_PAUSE;
     s_restoreTitle = -1;
     s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
     memset(&s_capture, 0, sizeof(s_capture));
@@ -1681,7 +1823,8 @@ void ui_SettingsReset(void)
 
 int ui_SettingsEntryItem(int item)
 {
-    for (int e = 0; e < ENTRY_COUNT; e++) {
+    /* the title's port rows (the pause menu's entry is the game's row) */
+    for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
         if (item >= 0 && (item == s_entryRow[e] || item == s_quitRow[e])) {
             return 1;
         }
@@ -1724,6 +1867,27 @@ int ui_SettingsQuitRow(int gameLayout)
 int ui_SettingsPhotoRow(void)
 {
     return s_photoRow;
+}
+
+int ui_SettingsPhotoBack(void)
+{
+    if (s_photoRow >= 0) {
+        gameCursorOn(LAYOUT_PAUSE, s_photoRow);
+    }
+    return LAYOUT_PAUSE;
+}
+
+int ui_SettingsKeyConfigBack(void)
+{
+    const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
+    /* the Options screen opened it when the pause menu was left as the
+       game's (tables not the PAL ones: no repoint) */
+    if (!s_built || row < 0 || s_pages[UI_PAGE_CONTROLS].layout < 0 ||
+        texProperty[ROW_PAUSE_OPTIONS].right != s_pages[UI_PAGE_MAIN].layout) {
+        return LAYOUT_GAME_OPTIONS;
+    }
+    lt_ext_Layout(s_pages[UI_PAGE_CONTROLS].layout)->defaultItem = row;
+    return s_pages[UI_PAGE_CONTROLS].layout;
 }
 
 int ui_SettingsEntryLayout(int gameLayout)
@@ -1795,38 +1959,29 @@ static int entryProc(int first, int item)
     (void)first;
     (void)item;
     int cur = current_layout_id;
-    if (cur == LAYOUT_PAUSE_OPTIONS || cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
+    if (cur == LAYOUT_PAUSE || cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
         s_origin = cur;
-        /* the menu opens on its first row each time, as Options does */
+        /* the menu opens on its first row each time, as Options did */
         if (s_pages[UI_PAGE_MAIN].layout >= 0) {
             LtProp *m = lt_ext_Layout(s_pages[UI_PAGE_MAIN].layout);
             m->defaultItem = pageFirstNav(&s_pages[UI_PAGE_MAIN]);
         }
     }
-    if (cur == LAYOUT_PAUSE_OPTIONS && s_entryRow[ENTRY_OPTIONS] >= 0) {
-        /* in 325's place, or one Options pitch below it once it shows */
-        const LtProperty *r324 = &texProperty[324], *r325 = &texProperty[325];
-        P(s_entryRow[ENTRY_OPTIONS])->dispY =
-            r325->dispY + (gFlagGameClear ? r325->dispY - r324->dispY : 0);
-        if (s_photoRow >= 0) {
-            P(s_photoRow)->dispY =
-                P(s_entryRow[ENTRY_OPTIONS])->dispY + (r325->dispY - r324->dispY);
-            photoLinks();
-        }
+    if (cur == LAYOUT_PAUSE) {
+        placePause();
     }
     if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
-        /* the cursor came back to the Settings row; the title's own
+        /* the cursor came back to the row that left; the layout's own
            default is the game's again for its next showing */
-        lt_ext_Layout(s_restoreTitle)->defaultItem = s_restoreDefault;
+        texLayout[s_restoreTitle].defaultItem = s_restoreDefault;
         s_restoreTitle = -1;
     }
     return -1;
 }
 
-/* The title layout `to` opens with the cursor on row (a port row of its
-   entry layout); entryProc gives the title its own default back on the
-   next frame. */
-static void titleCursorOn(int to, int row)
+/* The game layout `to` (the pause menu or a title) opens with the cursor on
+   row; entryProc gives the layout its own default back on the next frame. */
+static void gameCursorOn(int to, int row)
 {
     if (s_restoreTitle != to) {
         s_restoreDefault = texLayout[to].defaultItem;
@@ -1849,11 +2004,11 @@ static int leaveTo(int pageId, int to)
                 lt_ext_Layout(to)->defaultItem = s_pages[toPage].rows[i].label;
             }
         }
-    } else if (to == LAYOUT_PAUSE_OPTIONS) {
-        /* as la_key_config and la_adjust_screen put it on their rows */
-        texLayout[58].defaultItem = s_entryRow[ENTRY_OPTIONS];
+    } else if (to == LAYOUT_PAUSE) {
+        /* on Options, as the Options screen's Triangle came back */
+        gameCursorOn(LAYOUT_PAUSE, ROW_PAUSE_OPTIONS);
     } else if (to == LAYOUT_TITLE_CONTINUE || to == LAYOUT_TITLE_NEW) {
-        titleCursorOn(to, s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+        gameCursorOn(to, s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
     }
     return to;
 }
@@ -2177,33 +2332,39 @@ static int rowLocked(const Row *r)
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
-/* The main page's rows as the entry in force shows them: the Extras row
-   only from the title.  The visible rows are spaced evenly (the nine of the
-   title on a 17 line pitch so Back stays above the notes, the eight of the
-   pause menu on the original 19), linked in a loop that skips the hidden
-   one, and the hidden one is masked. */
-static void layoutMain(Page *pg)
+/* A page's rows as the entry in force shows them (optShown): the main
+   page's Extras row only from the title, the game's settings (S1) only
+   from the pause menu, its Film effect and Players once the game is
+   cleared.  The visible rows are spaced evenly (pagePitch), linked in a
+   loop that skips the hidden ones, and the hidden ones are masked with
+   their values. */
+static void layoutPage(Page *pg, int id)
 {
     int shown[MAX_ROWS], n = 0;
     for (int i = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
-        int show = !(r->opt == UI_OPT_LINK && r->link == UI_PAGE_EXTRAS) || onTitle();
+        const int show = optShown(r->opt, r->link);
         P(r->label)->defaultMask = !show;
         lt_mask_property(r->label, !show);
+        /* a stepped value's row and its two arrows, added after the label */
+        const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
+        for (int j = 0; j < nv; j++) {
+            P(r->value + j)->defaultMask = !show;
+            lt_mask_property(r->value + j, !show);
+        }
         if (show) {
             shown[n++] = i;
         }
     }
-    int pitch = n > 8 ? 17 : 19;
+    int y0;
+    const int pitch = pagePitch(id, n, &y0);
     for (int k = 0; k < n; k++) {
         Row *r = &pg->rows[shown[k]];
-        int y = 40 + pitch * k;
+        const int y = y0 + pitch * k;
         P(r->label)->dispY = y;
-        if (r->value >= 0) {
-            /* the value and its two arrows, added after the label */
-            for (int j = 0; j < 3; j++) {
-                P(r->value + j)->dispY = y;
-            }
+        const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
+        for (int j = 0; j < nv; j++) {
+            P(r->value + j)->dispY = y;
         }
         P(r->label)->downItem = pg->rows[shown[(k + 1) % n]].label;
         P(r->label)->upItem = pg->rows[shown[(k + n - 1) % n]].label;
@@ -2216,9 +2377,7 @@ static void refreshPage(Page *pg, int id, int cur)
         ui_ListRefresh(&pg->list, cur);
         return;
     }
-    if (id == UI_PAGE_MAIN) {
-        layoutMain(pg);
-    }
+    layoutPage(pg, id);
     for (int i = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
         int locked = rowLocked(r);

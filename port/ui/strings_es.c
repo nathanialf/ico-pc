@@ -349,4 +349,16 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_PHOTO_FOV] = "Campo de visión %d°",
     [UI_STR_PHOTO_SAVED] = "Imagen guardada",
     [UI_STR_PHOTO_FAILED] = "Imagen no guardada",
+    [UI_STR_OPT_BRIGHTNESS] = "Brillo",
+    [UI_STR_OPT_HOLD_TYPE] = "Tipo de sujeción",
+    [UI_STR_OPT_BUTTON_CONFIG] = "Configuración de botones",
+    [UI_STR_OPT_FILM_EFFECT] = "Efecto película",
+    [UI_STR_OPT_PLAYERS] = "Jugadores",
+    [UI_STR_VAL_HOLD_A] = "A (mantener)",
+    [UI_STR_VAL_HOLD_B] = "B (alternar)",
+    [UI_STR_HOLD_TYPE_NOTE] =
+        "A: la mano de Yorda sigue cogida mientras mantienes R1. B: pulsa R1 para soltar su mano.",
+    [UI_STR_PLAYERS_NOTE] = "2: un segundo mando controla a Yorda.",
+    [UI_STR_BUTTON_CONFIG_NOTE] =
+        "La disposición de botones del juego, guardada en la partida. Configurar controles ajusta teclado y mando.",
 };

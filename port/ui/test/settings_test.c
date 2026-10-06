@@ -2,15 +2,18 @@
  *
  *   - the menu builds over fake game tables shaped like the PAL ones: the
  *     pages and their rows, in order, with the expected labels;
- *   - the navigation repoint: the Options screen's rows 325/300 and the
- *     title's 50/51 lead to the entry rows, the link chains, idempotence;
+ *   - the navigation repoint: the pause menu's Options (294) opens the
+ *     menu (S1), the title's 50/51 lead to the entry rows, the link
+ *     chains, idempotence;
  *   - the entry rows' places from the table data: the title's evenly
  *     spaced between New Game and the copyright line, masked by default as
- *     New Game; the Options row on the labels' pitch and right edge;
- *   - through the real layout_texture.c: the cursor in layout 58 moves from
- *     324 onto the Settings row (325 and 300 hidden before the game is
- *     cleared), Cross opens the menu, a right press on Language changes the
- *     language, Triangle goes back to 58 with the cursor on the row;
+ *     New Game; the pause menu's Photo mode row under Options;
+ *   - through the real layout_texture.c: the cursor in layout 57 moves onto
+ *     Options, Cross opens the menu, a right press on Language changes the
+ *     language, Triangle goes back to 57 with the cursor on Options;
+ *   - the game's Options screen's settings on the pages (S1): their game
+ *     variables, the pause-only and cleared-only rows, Button
+ *     configuration's way to the game's screen and back;
  *   - value cycling: each option's setter and its text;
  *   - the save: config.toml holds what changed;
  *   - the remap capture: a key, a gamepad source, the duplicate taken off
@@ -217,6 +220,20 @@ int ico_audio_sdl_reopen(const char *name)
 void la_host_new_game_go(void)
 {
     s_newGames++;
+}
+
+/* S1: the game's Options screen's settings (common/src/main.c,
+   fumi/ios/pad.c), and layout_action.c's film effect (la_game_option's
+   stage animations), which records the mode it was given */
+int optionScreenMode, optionControlType, girlControlMode;
+int iosPadActRequestEnable = 1;
+static int s_filmCalls, s_filmLast = -1;
+
+void la_host_film_effect(int mode)
+{
+    s_filmCalls++;
+    s_filmLast = mode;
+    optionScreenMode = mode;
 }
 
 #ifdef SETTINGS_RENDER
@@ -445,6 +462,16 @@ static void fakeTables(void)
     texLayout[54].fadeOutTime = 0.0f;
     setLayout(57, 292, 297, 295, -1);
     setLayout(58, 297, 333, 308, -1);
+    setLayout(59, 333, 392, 336, -1); /* the game's button configuration */
+    setRow(336, -1, -1, -1, -1, -1, -1, 52);
+    /* the pause menu (S1): Options (opens 58 in the PAL data), Back, End
+       Game, their letters 7 texels into rectangles at x 40 */
+    setRow(294, -1, -1, 295, -1, -1, 58, 50);
+    setRow(295, -1, -1, 296, 294, -1, -1, 70);
+    setRow(296, -1, -1, -1, 295, -1, 61, 120);
+    for (int i = 294; i <= 296; i++) {
+        texProperty[i].dispX = 40;
+    }
     setLayout(11, 48, 49, -1, -1);
     setLayout(12, 49, 51, 49, 11);
     setLayout(13, 51, 52, 51, 11);
@@ -604,20 +631,27 @@ static void testBuild(void)
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
                                    UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
-                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
+                                   UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
+                                   UI_OPT_BACK};
     static const int dispStrs[] = {
         UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
         UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
-        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
+        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_BRIGHTNESS,  UI_STR_OPT_VIDEO_MODE,
+        UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK,      UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE, UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
+                                  UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,      UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION, UI_STR_OPT_HOLD_TYPE,
+        UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,   UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -636,11 +670,11 @@ static void testBuild(void)
                                          UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 3), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 7), "controls rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 5), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
 
@@ -691,7 +725,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
@@ -878,16 +912,24 @@ static void testRepoint(void)
     fakeTables();
     lt_ext_Reset();
     ui_SettingsReset();
+    stage_no = 0; /* no stage: no Photo mode row */
     ui_SettingsInstall();
-    int s58 = ui_SettingsEntryRow(58), s12 = ui_SettingsEntryRow(12), s13 = ui_SettingsEntryRow(13);
-    CHECK(s58 >= LT_GAME_PROPERTY_COUNT && s12 > s58 && s13 > s12, "entry rows");
-    CHECK(texProperty[325].downItem == s58 && texProperty[300].upItem == s58, "325/300 -> row");
-    CHECK(lt_ext_Prop(s58)->upItem == 325 && lt_ext_Prop(s58)->downItem == 300, "row -> 325/300");
-    CHECK(lt_ext_Prop(s58)->left == 57, "Triangle on the row: the pause menu");
-    CHECK(lt_ext_Prop(s58)->right == ui_SettingsPageLayout(UI_PAGE_MAIN), "Cross: the menu");
-    CHECK(texLayout[58].link == ui_SettingsEntryLayout(58) &&
-              lt_ext_Layout(ui_SettingsEntryLayout(58))->link == -1,
-          "58 -> entry layout");
+    int s57 = ui_SettingsEntryRow(57), s12 = ui_SettingsEntryRow(12), s13 = ui_SettingsEntryRow(13);
+    int ph = ui_SettingsPhotoRow(), mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    CHECK(s57 == 294 && ph >= LT_GAME_PROPERTY_COUNT && s12 > ph && s13 > s12, "entry rows");
+    CHECK(ui_SettingsEntryRow(58) == -1 && ui_SettingsEntryLayout(58) == -1,
+          "nothing on the Options screen");
+    /* S1: the pause menu's Options opens the menu, not the Options screen */
+    CHECK(texProperty[294].right == mainL, "294: Cross opens the menu (%d)",
+          texProperty[294].right);
+    CHECK(texLayout[57].link == ui_SettingsEntryLayout(57) &&
+              lt_ext_Layout(ui_SettingsEntryLayout(57))->link == -1 &&
+              lt_ext_Layout(ui_SettingsEntryLayout(57))->first == ph,
+          "57 -> the Photo mode row's layout");
+    CHECK(texProperty[294].downItem == 295 && texProperty[295].upItem == 294 &&
+              texProperty[295].dispY == 70 && lt_ext_Prop(ph)->defaultMask,
+          "no stage: the row masked, Options <-> Back as in the PAL data");
+    CHECK(texLayout[58].link == -1, "the Options screen's chain untouched");
     CHECK(texProperty[50].downItem == s12 && lt_ext_Prop(s12)->upItem == 50, "title 12");
     CHECK(texProperty[51].downItem == s13 && lt_ext_Prop(s13)->upItem == 51, "title 13");
     CHECK(texLayout[12].link == ui_SettingsEntryLayout(12) &&
@@ -895,18 +937,20 @@ static void testRepoint(void)
               texLayout[13].link == ui_SettingsEntryLayout(13) &&
               lt_ext_Layout(ui_SettingsEntryLayout(13))->link == 11,
           "12 and 13 -> entry -> 11");
-    CHECK(ui_SettingsEntryItem(s12) && ui_SettingsEntryItem(s58) && !ui_SettingsEntryItem(50),
-          "entry items");
+    CHECK(ui_SettingsEntryItem(s12) && !ui_SettingsEntryItem(294) && !ui_SettingsEntryItem(ph) &&
+              !ui_SettingsEntryItem(50),
+          "entry items: the title's port rows");
     int count = lt_ext_PropCount();
     ui_SettingsInstall();
-    CHECK(lt_ext_PropCount() == count && texLayout[58].link == ui_SettingsEntryLayout(58) &&
+    CHECK(lt_ext_PropCount() == count && texLayout[57].link == ui_SettingsEntryLayout(57) &&
+              lt_ext_Layout(ui_SettingsEntryLayout(57))->link == -1 &&
               lt_ext_Layout(ui_SettingsEntryLayout(12))->link == 11,
           "a second install changes nothing");
     /* tables that are not the PAL ones are left alone */
-    texLayout[58].first = 0;
-    texProperty[325].downItem = 300;
+    texLayout[57].first = 0;
+    texProperty[294].right = 58;
     ui_SettingsInstall();
-    CHECK(texProperty[325].downItem == 300, "unexpected tables: no repoint");
+    CHECK(texProperty[294].right == 58, "unexpected tables: no repoint");
 }
 
 /* The copyright line's capitals (row 48, a texture): 25 output pixels at
@@ -987,28 +1031,48 @@ static void testPlacement(void)
         CHECK(ng->defaultMask && s->defaultMask && q->defaultMask,
               "title %d: masked by default as New Game", g);
     }
-    const LtProperty *r323 = &texProperty[323], *r324 = &texProperty[324];
-    const LtProperty *r325 = &texProperty[325];
-    const LtProperty *o = lt_ext_Prop(ui_SettingsEntryRow(58));
-    CHECK(r325->dispY - r324->dispY == r324->dispY - r323->dispY && o->dispY == r325->dispY,
-          "Options: the row at %d, the labels' pitch from 324 (%d)", o->dispY, r324->dispY);
-    /* display_texture's box: x from dispX + 1/4 (its inset), dispW - 1
-       wide; the game row's letters end at dispX - 1/4 + the item's right
-       anchor (menu_text.c: where the sheet's lettering ends in the sprite,
-       less the half-texel uv inset) */
+    /* S1: the pause menu's Photo mode row one pitch under Options while a
+       stage runs, Back one pitch lower, End Game where it was; its letters
+       start where Options' do (display_texture's box: x from dispX + 1/4;
+       the game row's letters at dispX - 1/4 + the item's left anchor) */
+    stage_no = 11;
+    ui_SettingsInstall();
+    const LtProperty *r294 = &texProperty[294];
+    const LtProperty *ph = lt_ext_Prop(ui_SettingsPhotoRow());
+    CHECK(ph->dispY == r294->dispY + 20 && texProperty[295].dispY == r294->dispY + 40 &&
+              texProperty[296].dispY == 120 && ph->dispH == r294->dispH && !ph->defaultMask,
+          "pause: Options %d, Photo mode %d, Back %d, End Game %d", r294->dispY, ph->dispY,
+          texProperty[295].dispY, texProperty[296].dispY);
+    CHECK(lt_ext_RowSize(ui_SettingsPhotoRow()) == UI_MENU_TEXT_SIZE,
+          "pause: the row at the game rows' size");
     const UiMenuTextItem *it = NULL;
     for (int i = 0; i < ui_menu_text_row_count; i++) {
-        if (ui_menu_text_rows[i].row == 324) {
+        if (ui_menu_text_rows[i].row == 294) {
             it = &ui_menu_text_items[ui_menu_text_rows[i].item];
         }
     }
-    CHECK(it && it->align == UI_ALIGN_RIGHT, "Brightness (324) in the menu text table");
+    CHECK(it && it->align == UI_ALIGN_LEFT, "Options (294) in the menu text table");
     if (it) {
-        const float portEnd = (float)(o->dispX + o->dispW) - 0.75f;
-        const float gameEnd = (float)r324->dispX + it->x - 0.25f;
-        CHECK(portEnd - gameEnd <= 0.5f && gameEnd - portEnd <= 0.5f,
-              "Options: the row ends at x %.2f, the labels' letters at %.2f", portEnd, gameEnd);
+        const float portStart = (float)ph->dispX + 0.25f;
+        const float gameStart = (float)r294->dispX + it->x - 0.25f;
+        CHECK(portStart - gameStart <= 0.5f && gameStart - portStart <= 0.5f,
+              "pause: the row starts at x %.2f, the rows' letters at %.2f", portStart, gameStart);
     }
+    stage_no = 0;
+    ui_SettingsInstall();
+    CHECK(texProperty[295].dispY == r294->dispY + 20 && lt_ext_Prop(ui_SettingsPhotoRow())->masked,
+          "no stage: Back in its own place (%d)", texProperty[295].dispY);
+}
+
+/* Settings from the pause menu: 57 with the cursor on Options (294), Cross */
+static void pauseToMain(void)
+{
+    lt_switch_layout(57);
+    CHECK(settle(57, 40), "the pause menu");
+    texLayout[57].curItem = 294;
+    press(0x40);
+    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_MAIN), 60), "Options: the menu (%d)",
+          current_layout_id);
 }
 
 static void testNavigation(void)
@@ -1021,22 +1085,17 @@ static void testNavigation(void)
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     NonLinearCameraMove = 2;
     gFlagGameClear = 0;
+    stage_no = 0;
     init_layout_texture(2); /* installs; layout 54 */
-    int s58 = ui_SettingsEntryRow(58);
-    CHECK(s58 >= 0, "installed by init_layout_texture");
+    CHECK(ui_SettingsEntryLayout(57) >= 0, "installed by init_layout_texture");
     settle(54, 4);
-    lt_switch_layout(58);
-    CHECK(settle(58, 40), "the Options screen");
-    texLayout[58].curItem = 324;
-    press(0x4000); /* down: 325 is hidden, the Settings row */
-    CHECK(texLayout[58].curItem == s58, "down from 324: the Settings row (%d)",
-          texLayout[58].curItem);
-    CHECK(lt_ext_Prop(s58)->dispY == texProperty[325].dispY,
-          "in 325's place before the game is cleared");
-    press(0x4000); /* down: 300 hidden, 308 */
-    CHECK(texLayout[58].curItem == 308, "down from the row: 308 (%d)", texLayout[58].curItem);
-    press(0x1000); /* up from 308: 300 hidden, the row */
-    CHECK(texLayout[58].curItem == s58, "up from 308: the row");
+    /* S1: the pause menu opens on Back (295); Up is Options, whose Cross
+       opens the Settings menu */
+    lt_switch_layout(57);
+    CHECK(settle(57, 40), "the pause menu");
+    CHECK(texLayout[57].curItem == 295, "on Back (%d)", texLayout[57].curItem);
+    press(0x1000);
+    CHECK(texLayout[57].curItem == 294, "up: Options (%d)", texLayout[57].curItem);
     press(0x40); /* Cross */
     int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "Cross opens the Settings menu (%d)", current_layout_id);
@@ -1059,16 +1118,14 @@ static void testNavigation(void)
     CHECK(strcmp(ico_config_get_string("game.language", ""), "fr") == 0, "[game] language");
     press(0x8000); /* left: English again */
     CHECK(NonLinearCameraMove == 2, "left: English");
-    /* Triangle: back to 58, the cursor on the row */
+    /* Triangle: back to the pause menu, the cursor on Options; its own
+       default (Back) again for the next pause */
     press(0x10);
-    CHECK(settle(58, 60), "Triangle: Options again");
-    CHECK(texLayout[58].curItem == s58, "the cursor on the Settings row");
-    /* after the game is cleared the row sits under 325 */
-    gFlagGameClear = 1;
+    CHECK(settle(57, 60), "Triangle: the pause menu again (%d)", current_layout_id);
+    CHECK(texLayout[57].curItem == 294, "the cursor on Options (%d)", texLayout[57].curItem);
     frame(0);
-    CHECK(lt_ext_Prop(s58)->dispY == 2 * texProperty[325].dispY - texProperty[324].dispY,
-          "one Options pitch below 325 once cleared");
-    gFlagGameClear = 0;
+    CHECK(texLayout[57].defaultItem == 295, "the pause menu's own default again (%d)",
+          texLayout[57].defaultItem);
 
     /* into Controls -> Remap, capture a key on the first row (Cross) */
     press(0x40);
@@ -1115,12 +1172,12 @@ static void testNavigation(void)
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
 }
 
-/* Package PHOTO: the Options screen's "Photo mode" row exists only while a
- * stage runs (masked and stepped over on stage 0 or 1, the title's); with
- * one, it sits one Options pitch under Settings, Cross opens the photo
- * layout (no dimming, the row masked), whose proc turns the left stick into
- * an orbit, Cross into a capture, Square into the HUD's toggle, and
- * Triangle back to Options with the cursor on the row. */
+/* Package PHOTO (S1: in the pause menu): the "Photo mode" row exists only
+ * while a stage runs (masked and stepped over on stage 0 or 1, the
+ * title's); with one, it sits under Options, Cross opens the photo layout
+ * (no dimming, the row masked), whose proc turns the left stick into an
+ * orbit, Cross into a capture, Square into the HUD's toggle, and Triangle
+ * back to the pause menu with the cursor on the row. */
 static void testPhoto(void)
 {
     useConfig("version = 1\n[photo]\nstick_speed = 2.0\n");
@@ -1133,38 +1190,40 @@ static void testPhoto(void)
     gFlagGameClear = 0;
     stage_no = 1; /* the title's stage */
     init_layout_texture(2);
-    const int s58 = ui_SettingsEntryRow(58), ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
-    CHECK(ph > s58 && pl >= LT_GAME_LAYOUT_COUNT && lt_ext_Prop(ph)->right == pl,
-          "the row (%d) after Settings (%d), opening the photo layout (%d)", ph, s58, pl);
+    const int ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
+    CHECK(ph >= LT_GAME_PROPERTY_COUNT && pl >= LT_GAME_LAYOUT_COUNT &&
+              lt_ext_Prop(ph)->right == pl,
+          "the row (%d) opens the photo layout (%d)", ph, pl);
     CHECK(strcmp(lt_ext_RowText(ph), ui_Str(UI_STR_PHOTO_MODE)) == 0, "labelled \"%s\"",
           lt_ext_RowText(ph));
+    CHECK(lt_ext_Prop(ph)->left == -1, "Triangle on the row: the pause menu's own (it resumes)");
     settle(54, 4);
-    lt_switch_layout(58);
-    CHECK(settle(58, 40), "the Options screen");
-    CHECK(lt_ext_Prop(ph)->masked && lt_ext_Prop(s58)->downItem == 300 &&
-              texProperty[300].upItem == s58,
+    lt_switch_layout(57);
+    CHECK(settle(57, 40), "the pause menu");
+    CHECK(lt_ext_Prop(ph)->masked && texProperty[294].downItem == 295 &&
+              texProperty[295].upItem == 294,
           "no stage: masked and stepped over");
-    texLayout[58].curItem = s58;
+    texLayout[57].curItem = 294;
     press(0x4000);
-    CHECK(texLayout[58].curItem == 308, "no stage: down from Settings is 308 (%d)",
-          texLayout[58].curItem);
+    CHECK(texLayout[57].curItem == 295, "no stage: down from Options is Back (%d)",
+          texLayout[57].curItem);
     stage_no = 11; /* st04a: a stage runs */
     frame(0);
-    CHECK(!lt_ext_Prop(ph)->masked && lt_ext_Prop(s58)->downItem == ph &&
-              lt_ext_Prop(ph)->upItem == s58 && lt_ext_Prop(ph)->downItem == 300 &&
-              texProperty[300].upItem == ph,
-          "a stage: shown under Settings");
-    CHECK(lt_ext_Prop(ph)->dispY ==
-              lt_ext_Prop(s58)->dispY + texProperty[325].dispY - texProperty[324].dispY,
-          "one Options pitch below Settings (%d, %d)", lt_ext_Prop(ph)->dispY,
-          lt_ext_Prop(s58)->dispY);
-    texLayout[58].curItem = s58;
+    CHECK(!lt_ext_Prop(ph)->masked && texProperty[294].downItem == ph &&
+              lt_ext_Prop(ph)->upItem == 294 && lt_ext_Prop(ph)->downItem == 295 &&
+              texProperty[295].upItem == ph,
+          "a stage: shown under Options");
+    CHECK(lt_ext_Prop(ph)->dispY == texProperty[294].dispY + 20 &&
+              texProperty[295].dispY == texProperty[294].dispY + 40,
+          "one pitch below Options, Back one lower (%d, %d)", lt_ext_Prop(ph)->dispY,
+          texProperty[295].dispY);
+    texLayout[57].curItem = 294;
     press(0x4000);
-    CHECK(texLayout[58].curItem == ph, "down from Settings: the row (%d)", texLayout[58].curItem);
+    CHECK(texLayout[57].curItem == ph, "down from Options: the row (%d)", texLayout[57].curItem);
     press(0x4000);
-    CHECK(texLayout[58].curItem == 308, "down from the row: 308 (%d)", texLayout[58].curItem);
+    CHECK(texLayout[57].curItem == 295, "down from the row: Back (%d)", texLayout[57].curItem);
     press(0x1000);
-    CHECK(texLayout[58].curItem == ph, "up from 308: the row (%d)", texLayout[58].curItem);
+    CHECK(texLayout[57].curItem == ph, "up from Back: the row (%d)", texLayout[57].curItem);
     press(0x40);
     CHECK(settle(pl, 60) && ico_photo_active(), "Cross: photo mode (%d)", current_layout_id);
     CHECK(lt_ext_Layout(pl)->colA == 0.0f && lt_ext_Prop(lt_ext_Layout(pl)->first)->masked,
@@ -1186,8 +1245,12 @@ static void testPhoto(void)
     press(0x80);
     CHECK(!ico_photo_hud() && ico_photo_active(), "Square: the HUD hidden");
     press(0x10);
-    CHECK(settle(58, 60) && !ico_photo_active(), "Triangle: Options again (%d)", current_layout_id);
-    CHECK(texLayout[58].curItem == ph, "the cursor on the row (%d)", texLayout[58].curItem);
+    CHECK(settle(57, 60) && !ico_photo_active(), "Triangle: the pause menu again (%d)",
+          current_layout_id);
+    CHECK(texLayout[57].curItem == ph, "the cursor on the row (%d)", texLayout[57].curItem);
+    frame(0);
+    CHECK(texLayout[57].defaultItem == 295, "the pause menu's own default again (%d)",
+          texLayout[57].defaultItem);
     stage_no = 0;
 }
 
@@ -1283,7 +1346,7 @@ static void testQuit(void)
     int ql = ui_QuitScreenLayout(), yes = ui_QuitScreenRow(1), no = ui_QuitScreenRow(0);
     CHECK(q12 == s12 + 1 && q13 == s13 + 1, "the quit rows follow the Settings rows (%d %d)", q12,
           q13);
-    CHECK(ui_SettingsQuitRow(58) == -1, "no quit row in Options");
+    CHECK(ui_SettingsQuitRow(57) == -1, "no quit row in the pause menu");
     CHECK(lt_ext_Prop(s13)->downItem == q13 && lt_ext_Prop(q13)->upItem == s13 &&
               lt_ext_Prop(q13)->downItem == -1 && lt_ext_Prop(q13)->left == -1,
           "Settings <-> Quit");
@@ -1363,7 +1426,7 @@ static void testQuit(void)
 
 /* Q2: Circle leaves every port screen as Triangle does, even with the game
  * menus' alias off ([game] circle_back = false): the Settings pages, the
- * two lists, the menu itself (to the Options screen) and the mirror screen
+ * two lists, the menu itself (to the pause menu) and the mirror screen
  * (the quit screen: testQuit). */
 static void testCirclePortScreens(void)
 {
@@ -1378,12 +1441,8 @@ static void testCirclePortScreens(void)
     init_layout_texture(2);
     settle(54, 4);
     CHECK(lt_ext_BackButtons() == 0x10, "the game menus' alias off");
-    int s58 = ui_SettingsEntryRow(58), mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
-    lt_switch_layout(58);
-    CHECK(settle(58, 40), "Options");
-    texLayout[58].curItem = s58;
-    press(0x40);
-    CHECK(settle(mainL, 60), "the menu");
+    int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    pauseToMain();
 
     static const struct {
         int row; /* main page row */
@@ -1418,8 +1477,8 @@ static void testCirclePortScreens(void)
     press(0x20);
     CHECK(settle(mainL, 60), "Circle: Controls back to the menu");
     press(0x20);
-    CHECK(settle(58, 60), "Circle: the menu back to Options");
-    CHECK(texLayout[58].curItem == s58, "on the Settings row");
+    CHECK(settle(57, 60), "Circle: the menu back to the pause menu");
+    CHECK(texLayout[57].curItem == 294, "on Options");
     /* the mirror screen: Circle is Triangle there (the vibration screen) */
     lt_switch_layout(54);
     settle(54, 60);
@@ -1432,10 +1491,11 @@ static void testCirclePortScreens(void)
 }
 
 /* Q2: the game's own menus through the real layout_texture.c: the Options
- * screen's rows go back to the pause menu (57) through their left link,
- * which default_item_select follows on Triangle, and on Circle while
- * [game] circle_back is on (the default); off, Circle does nothing there
- * and Triangle still goes back. */
+ * screen's rows (S1: no longer reached, its links the PAL data's) go back
+ * to the pause menu (57) through their left link, which
+ * default_item_select follows on Triangle, and on Circle while [game]
+ * circle_back is on (the default); off, Circle does nothing there and
+ * Triangle still goes back. */
 static void testCircleGameMenu(void)
 {
     for (int on = 1; on >= 0; on--) {
@@ -1449,9 +1509,9 @@ static void testCircleGameMenu(void)
         init_layout_texture(2);
         settle(54, 4);
         CHECK(lt_ext_BackButtons() == (on ? 0x30 : 0x10), "circle_back %d: the bits", on);
-        static const int kRows[2] = {308, -1}; /* a game row, then the Settings row */
+        static const int kRows[2] = {308, 323}; /* two game rows */
         for (int r = 0; r < 2; r++) {
-            int row = kRows[r] >= 0 ? kRows[r] : ui_SettingsEntryRow(58);
+            int row = kRows[r];
             lt_switch_layout(58);
             CHECK(settle(58, 60), "Options");
             texLayout[58].curItem = row;
@@ -1715,8 +1775,9 @@ static void testAudio(void)
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECTS), "30 %") == 0, "effects 30 %% (%s)",
           ui_SettingsValueText(UI_OPT_EFFECTS));
 
-    /* output: Auto shows the game's mode; Stereo and Mono set it; Auto
-       gives the game's own back */
+    /* output: Auto shows the game's mode; Stereo and Mono set it and (S1,
+       what the Options screen's Sound row did) make it the game's own, so
+       Auto keeps the last one chosen */
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Stereo)") == 0, "output Auto (%s)",
           ui_SettingsValueText(UI_OPT_OUTPUT));
     s_outputMode = 1; /* the game's Options row: Mono */
@@ -1733,9 +1794,11 @@ static void testAudio(void)
           "output Mono");
     ui_SettingsStep(UI_OPT_OUTPUT, -1);
     ui_SettingsStep(UI_OPT_OUTPUT, -1);
-    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 1 &&
-              strcmp(ico_config_get_string("audio.output", ""), "auto") == 0,
-          "Auto again: the game's own mode (Mono) back");
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 0 &&
+              strcmp(ico_config_get_string("audio.output", ""), "auto") == 0 &&
+              strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Stereo)") == 0,
+          "Auto again: the game's own mode, the last chosen (Stereo; %s)",
+          ui_SettingsValueText(UI_OPT_OUTPUT));
     ui_SettingsStep(UI_OPT_OUTPUT, -1);
     CHECK(ico_opt_output_mode() == ICO_OUTPUT_MONO, "Left from Auto wraps to Mono");
     /* explicit: the card's mode does not win, the Options row's change is
@@ -1940,13 +2003,10 @@ static void testVideoGate(void)
             CHECK(settle(13, 60), "the title");
             press(0x4000);
             CHECK(texLayout[13].curItem == s13, "on Settings");
+            press(0x40);
         } else {
-            int s58 = ui_SettingsEntryRow(58);
-            lt_switch_layout(58);
-            CHECK(settle(58, 40), "the Options screen");
-            texLayout[58].curItem = s58;
+            pauseToMain();
         }
-        press(0x40);
         int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
         CHECK(settle(mainL, 60), "the menu (title %d)", title);
         press(0x40); /* Display */
@@ -1954,11 +2014,15 @@ static void testVideoGate(void)
         CHECK(settle(dispL, 60), "Display");
         int labels[16], opts[16];
         int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, labels, opts, NULL, 16);
-        int vm = 0;
+        int vm = 0, downs = 0;
         while (vm < n && opts[vm] != UI_OPT_VIDEO_MODE) {
+            /* S1: Brightness, from the pause menu only, is above it */
+            downs += !lt_ext_Prop(labels[vm])->defaultMask;
             vm++;
         }
-        for (int i = 0; i < vm; i++) {
+        CHECK(downs == (title ? vm - 1 : vm), "title %d: Brightness %s", title,
+              title ? "hidden" : "shown");
+        for (int i = 0; i < downs; i++) {
             press(0x4000);
         }
         CHECK(lt_ext_Layout(dispL)->curItem == labels[vm], "on Video mode (%d of %d)", vm, n);
@@ -2036,7 +2100,7 @@ static int rowWithText(UiSettingsPage page, const char *str)
     return -1;
 }
 
-/* Settings from the title (13) or from the Options screen (58) to the main
+/* Settings from the title (13) or from the pause menu (57) to the main
    page */
 static int enterMain(int title)
 {
@@ -2055,12 +2119,10 @@ static int enterMain(int title)
         CHECK(settle(13, 60), "the title");
         press(0x4000);
         CHECK(texLayout[13].curItem == ui_SettingsEntryRow(13), "on Settings");
+        press(0x40);
     } else {
-        lt_switch_layout(58);
-        CHECK(settle(58, 40), "the Options screen");
-        texLayout[58].curItem = ui_SettingsEntryRow(58);
+        pauseToMain();
     }
-    press(0x40);
     int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "the menu (title %d)", title);
     return mainL;
@@ -2616,6 +2678,223 @@ static void testListWrap(int count)
           ui_ListItemOfRow(&l, lay.curItem), l.offset);
     CHECK(s_sounds[0] + s_moveSounds == snd + 1, "%d items: one cursor sound on the Down wrap (%d)",
           count, s_sounds[0] + s_moveSounds - snd);
+}
+
+/* --------------------------------------- the game's settings (S1) */
+
+static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
+{
+    const int row = ui_SettingsRowOf(page, opt);
+    return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+}
+
+/* the main page's row `mainRow` (all rows counted), Cross: its page */
+static int openPage(int mainL, int mainRow, UiSettingsPage page)
+{
+    int labels[16];
+    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    lt_ext_Layout(mainL)->curItem = labels[mainRow];
+    press(0x40);
+    const int l = ui_SettingsPageLayout(page);
+    CHECK(settle(l, 60), "page %d opens (%d)", page, current_layout_id);
+    return l;
+}
+
+/* the page in front: its shown rows top to bottom at least 13 field lines
+   apart, below the header, the last one's box inside the 226 lines */
+static void checkPageFits(UiSettingsPage page, const char *what)
+{
+    int labels[16];
+    const int n = ui_SettingsPageRows(page, labels, NULL, NULL, 16);
+    int prev = -1, last = -1;
+    for (int i = 0; i < n; i++) {
+        const LtProperty *r = lt_ext_Prop(labels[i]);
+        if (r->defaultMask) {
+            continue;
+        }
+        CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 13,
+              "%s: row %d at y %d (the one above at %d)", what, i, r->dispY, prev);
+        prev = r->dispY;
+        last = labels[i];
+    }
+    CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+          "%s: the last row's box ends at %d", what,
+          last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+}
+
+/* the note row of `page` whose text starts with prefix, -1 */
+static int noteStarting(UiSettingsPage page, const char *prefix)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    for (int j = l->first; j < l->last; j++) {
+        if (strncmp(lt_ext_RowText(j), prefix, strlen(prefix)) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+/* S1: the game's Options screen's settings on the pages.  Brightness
+ * (Display), Button configuration, Vibration and Hold type (Controls) show
+ * from the pause menu only, Film effect and Players (Gameplay) only there
+ * once the game is cleared; the hidden rows are stepped over and the pages
+ * still fit.  Their values are the game's variables; Film effect goes
+ * through la_host_film_effect (the stage animations); Button configuration
+ * opens the game's layout 59, whose OK comes back to Controls on the row. */
+static void testGameOptions(void)
+{
+    for (int title = 1; title >= 0; title--) {
+        gFlagGameClear = 0;
+        stage_no = title ? 1 : 11;
+        int mainL = enterMain(title);
+        openPage(mainL, 0, UI_PAGE_DISPLAY);
+        CHECK(rowShown(UI_PAGE_DISPLAY, UI_OPT_BRIGHTNESS) == !title, "title %d: Brightness %s",
+              title, title ? "hidden" : "shown");
+        checkPageFits(UI_PAGE_DISPLAY, title ? "Display (title)" : "Display (pause)");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Display: back");
+        const int ctlL = openPage(mainL, 2, UI_PAGE_CONTROLS);
+        CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE) == !title,
+              "title %d: the game's controls %s", title, title ? "hidden" : "shown");
+        checkPageFits(UI_PAGE_CONTROLS, title ? "Controls (title)" : "Controls (pause)");
+        press(0x4000);
+        CHECK(lt_ext_Layout(ctlL)->curItem ==
+                  ui_SettingsRowOf(UI_PAGE_CONTROLS,
+                                   title ? UI_OPT_MOUSE_SENS : UI_OPT_BUTTON_CONFIG),
+              "title %d: down from Remap", title);
+        press(0x10);
+        CHECK(settle(mainL, 60), "Controls: back");
+        openPage(mainL, 3, UI_PAGE_GAMEPLAY);
+        CHECK(!rowShown(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT) &&
+                  !rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
+              "title %d, not cleared: no Film effect or Players", title);
+        checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (not cleared)");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Gameplay: back");
+    }
+
+    /* cleared, from the pause menu */
+    gFlagGameClear = 1;
+    stage_no = 11;
+    int mainL = enterMain(0);
+    const int gameL = openPage(mainL, 3, UI_PAGE_GAMEPLAY);
+    const int film = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
+    const int players = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);
+    CHECK(rowShown(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT) &&
+              rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
+          "cleared: Film effect and Players");
+    checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared)");
+    press(0x4000);
+    press(0x4000);
+    CHECK(lt_ext_Layout(gameL)->curItem == film, "down twice from Yorda: Film effect");
+    optionScreenMode = 0;
+    s_filmCalls = 0;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
+          ui_SettingsValueText(UI_OPT_FILM_EFFECT));
+    press(0x2000);
+    CHECK(s_filmCalls == 1 && s_filmLast == 1 && optionScreenMode == 1 &&
+              strcmp(ui_SettingsValueText(UI_OPT_FILM_EFFECT), "1") == 0,
+          "Right: film effect 1 through la_host_film_effect (%d calls, %d)", s_filmCalls,
+          s_filmLast);
+    press(0x8000);
+    press(0x8000);
+    CHECK(s_filmCalls == 3 && s_filmLast == 4 && optionScreenMode == 4,
+          "Left twice: Off, then around to 4 (%d)", optionScreenMode);
+    la_host_film_effect(0);
+    press(0x4000);
+    CHECK(lt_ext_Layout(gameL)->curItem == players, "down: Players");
+    girlControlMode = 0;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PLAYERS), "1") == 0, "Players 1");
+    press(0x2000);
+    CHECK(girlControlMode == 1 && strcmp(ui_SettingsValueText(UI_OPT_PLAYERS), "2") == 0,
+          "Right: Players 2 (girlControlMode %d)", girlControlMode);
+    const int pnote = noteStarting(UI_PAGE_GAMEPLAY, "2: a second");
+    CHECK(pnote >= 0 && !lt_ext_Prop(pnote)->masked, "the Players note on the cursor");
+    press(0x8000);
+    CHECK(girlControlMode == 0, "Left: Players 1");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Gameplay: back");
+
+    /* Controls: Vibration and Hold type, Button configuration to 59 and back */
+    const int ctlL = openPage(mainL, 2, UI_PAGE_CONTROLS);
+    const int bc = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
+    CHECK(bc >= 0 && lt_ext_Prop(bc)->right == 59, "Button configuration opens 59");
+    press(0x4000);
+    press(0x4000);
+    CHECK(lt_ext_Layout(ctlL)->curItem == ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_VIBRATION),
+          "on Vibration");
+    iosPadActRequestEnable = 1;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_VIBRATION), "On") == 0, "vibration On");
+    press(0x2000);
+    CHECK(iosPadActRequestEnable == 0 && strcmp(ui_SettingsValueText(UI_OPT_VIBRATION), "Off") == 0,
+          "Right: vibration off (%d)", iosPadActRequestEnable);
+    press(0x8000);
+    CHECK(iosPadActRequestEnable == 1, "Left: on again");
+    press(0x4000);
+    optionControlType = 0;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_HOLD_TYPE), "A (hold)") == 0, "hold type A (%s)",
+          ui_SettingsValueText(UI_OPT_HOLD_TYPE));
+    press(0x2000);
+    CHECK(optionControlType == 1 &&
+              strcmp(ui_SettingsValueText(UI_OPT_HOLD_TYPE), "B (toggle)") == 0,
+          "Right: hold type B (%d)", optionControlType);
+    const int hnote = noteStarting(UI_PAGE_CONTROLS, "A: Yorda");
+    CHECK(hnote >= 0 && !lt_ext_Prop(hnote)->masked, "the Hold type note on the cursor");
+    press(0x2000);
+    CHECK(optionControlType == 0, "Right again: A");
+    press(0x1000);
+    press(0x1000);
+    CHECK(lt_ext_Layout(ctlL)->curItem == bc, "up twice: Button configuration");
+    press(0x40);
+    CHECK(settle(59, 60), "Cross: the game's button configuration (%d)", current_layout_id);
+    /* la_key_config's OK returns what ui_SettingsKeyConfigBack gives */
+    const int to = ui_SettingsKeyConfigBack();
+    CHECK(to == ctlL && lt_ext_Layout(ctlL)->defaultItem == bc,
+          "its OK: Controls with the cursor on the row (%d)", to);
+    lt_switch_layout(to);
+    CHECK(settle(ctlL, 60) && lt_ext_Layout(ctlL)->curItem == bc, "back on Button configuration");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Controls: back");
+    press(0x10);
+    CHECK(settle(57, 60) && texLayout[57].curItem == 294, "the menu: back to Options");
+
+    /* Brightness: 0..14 a step at a time, no wrap (la_adjust_screen) */
+    systemStatus[11] = 7;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "7") == 0, "brightness 7");
+    ui_SettingsStep(UI_OPT_BRIGHTNESS, 1);
+    CHECK(systemStatus[11] == 8, "brightness 8");
+    for (int i = 0; i < 10; i++) {
+        ui_SettingsStep(UI_OPT_BRIGHTNESS, 1);
+    }
+    CHECK(systemStatus[11] == 14, "brightness stops at 14 (%d)", systemStatus[11]);
+    for (int i = 0; i < 20; i++) {
+        ui_SettingsStep(UI_OPT_BRIGHTNESS, -1);
+    }
+    CHECK(systemStatus[11] == 0 && strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "0") == 0,
+          "brightness stops at 0 (%d)", systemStatus[11]);
+    systemStatus[11] = 0;
+
+    /* the game's variables, never the port config */
+    CHECK(ico_config_get_string("video.brightness", NULL) == NULL &&
+              ico_config_get_string("input.vibration", NULL) == NULL,
+          "no port keys for the game's settings");
+    /* the strings in every language */
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    static const int kIds[] = {
+        UI_STR_OPT_BRIGHTNESS,    UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
+        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_FILM_EFFECT,   UI_STR_OPT_PLAYERS,
+        UI_STR_VAL_HOLD_A,        UI_STR_VAL_HOLD_B,        UI_STR_HOLD_TYPE_NOTE,
+        UI_STR_PLAYERS_NOTE,      UI_STR_BUTTON_CONFIG_NOTE};
+    for (int i = 0; i < 5; i++) {
+        for (unsigned k = 0; k < sizeof(kIds) / sizeof(kIds[0]); k++) {
+            CHECK(ui_StrIn(kLangs[i], (UiStrId)kIds[k])[0] != '\0', "string %d in language %d",
+                  kIds[k], i);
+        }
+    }
+    gFlagGameClear = 0;
+    stage_no = 0;
 }
 
 static void testList(void)
@@ -3330,6 +3609,7 @@ int main(int argc, char **argv)
     testExtras();
     testGallery();
     testList();
+    testGameOptions();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

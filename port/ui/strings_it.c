@@ -349,4 +349,16 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_PHOTO_FOV] = "Campo visivo %d°",
     [UI_STR_PHOTO_SAVED] = "Immagine salvata",
     [UI_STR_PHOTO_FAILED] = "Immagine non salvata",
+    [UI_STR_OPT_BRIGHTNESS] = "Luminosità",
+    [UI_STR_OPT_HOLD_TYPE] = "Tipo di presa",
+    [UI_STR_OPT_BUTTON_CONFIG] = "Configurazione tasti",
+    [UI_STR_OPT_FILM_EFFECT] = "Effetto film",
+    [UI_STR_OPT_PLAYERS] = "Giocatori",
+    [UI_STR_VAL_HOLD_A] = "A (tieni premuto)",
+    [UI_STR_VAL_HOLD_B] = "B (alterna)",
+    [UI_STR_HOLD_TYPE_NOTE] =
+        "A: la mano di Yorda resta stretta finché tieni premuto R1. B: premi R1 per lasciarle la mano.",
+    [UI_STR_PLAYERS_NOTE] = "2: un secondo controller guida Yorda.",
+    [UI_STR_BUTTON_CONFIG_NOTE] =
+        "La disposizione dei tasti del gioco, nel salvataggio. Configura i comandi regola tastiera e gamepad.",
 };

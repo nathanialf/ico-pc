@@ -112,7 +112,8 @@ int ico_opt_output_resolve(int current);
    force (the key's when explicit). */
 int ico_opt_output_card(int card_mode);
 /* The Options screen hook (common/src/layout_action.c, the Stereo/Mono
-   row): records the new mode as the game's own; with an explicit key the
+   row; since S1 Settings > Audio > Output's Stereo and Mono, the Options
+   screen being no longer reached): records the new mode as the game's own; with an explicit key the
    key follows it and config.toml is saved at once, so the file and the
    card (which the game writes from soundOutputModeGet) never disagree. */
 void ico_opt_output_toggled(int mode);

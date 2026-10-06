@@ -345,4 +345,16 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_PHOTO_FOV] = "Field of view %d°",
     [UI_STR_PHOTO_SAVED] = "Picture saved",
     [UI_STR_PHOTO_FAILED] = "Picture not saved",
+    [UI_STR_OPT_BRIGHTNESS] = "Brightness",
+    [UI_STR_OPT_HOLD_TYPE] = "Hold type",
+    [UI_STR_OPT_BUTTON_CONFIG] = "Button configuration",
+    [UI_STR_OPT_FILM_EFFECT] = "Film effect",
+    [UI_STR_OPT_PLAYERS] = "Players",
+    [UI_STR_VAL_HOLD_A] = "A (hold)",
+    [UI_STR_VAL_HOLD_B] = "B (toggle)",
+    [UI_STR_HOLD_TYPE_NOTE] =
+        "A: Yorda’s hand stays held while R1 is held down. B: press R1 to let go of her hand.",
+    [UI_STR_PLAYERS_NOTE] = "2: a second controller controls Yorda.",
+    [UI_STR_BUTTON_CONFIG_NOTE] =
+        "The game’s button layout, kept in your save. Remap controls sets the keys and pad buttons.",
 };
