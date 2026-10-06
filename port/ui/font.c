@@ -398,10 +398,30 @@ static void gsCoverage(uint8_t *dst, const uint8_t *cov, size_t n)
 }
 #endif
 
+/* The code points drawn as '?' so far (the font has no glyph for them): each
+   is logged once.  A fixed set; past it the log stops, the drawing does not. */
+#define MISSING_MAX 64
+static uint32_t s_missing[MISSING_MAX];
+static int s_missingN;
+
+static void noteMissing(uint32_t cp)
+{
+    for (int i = 0; i < s_missingN; i++) {
+        if (s_missing[i] == cp) {
+            return;
+        }
+    }
+    if (s_missingN < MISSING_MAX) {
+        s_missing[s_missingN++] = cp;
+        fprintf(stderr, "ui: no glyph for U+%04X; drawn as '?'\n", (unsigned)cp);
+    }
+}
+
 static int glyphIndex(uint32_t cp)
 {
     int g = stbtt_FindGlyphIndex(&s_font.info, (int)cp);
     if (g == 0 && cp != '?') {
+        noteMissing(cp);
         g = stbtt_FindGlyphIndex(&s_font.info, '?');
     }
     return g;
@@ -492,6 +512,14 @@ float ui_FontKern(uint32_t a, uint32_t b, int px)
     }
     float sc = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)px);
     return (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(a), glyphIndex(b)) * sc;
+}
+
+int ui_FontMissingSeen(uint32_t *cps, int cap)
+{
+    for (int i = 0; cps && i < s_missingN && i < cap; i++) {
+        cps[i] = s_missing[i];
+    }
+    return s_missingN;
 }
 
 bool ui_FontHasGlyph(uint32_t cp)

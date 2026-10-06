@@ -298,6 +298,51 @@ target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
+# font_coverage_test (docs/port/UI.md, "The font"): every character of the
+# five languages' tables and subtitles, the port's roll lines and the corpus
+# (test/font_corpus) has a glyph in the embedded subset; with the base ELF,
+# the staff roll's lines and the sound names too. CPU only. The strings and
+# the font are compiled again here (font.c from ico_ui_font_rd) so the test
+# needs nothing of the game but the ELF's table loader.
+ico_include_dirs(common _ico_cov_incs)
+ico_include_dirs(sugipon _ico_cov_data_incs)
+add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
+    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c
+    "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"
+                           "${CMAKE_SOURCE_DIR}/port/game" "${CMAKE_SOURCE_DIR}/port/platform")
+set_source_files_properties(test/font_coverage_test.c PROPERTIES COMPILE_OPTIONS
+                            "-Wno-strict-prototypes")
+target_compile_definitions(font_coverage_test PRIVATE ICO_HOST=1)
+target_compile_options(font_coverage_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(font_coverage_test PRIVATE ico_render ico_config ico_platform)
+if(WIN32)
+    target_link_libraries(font_coverage_test PRIVATE comdlg32 user32)
+endif()
+set(_ico_cov_elf "")
+if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
+    set(_ico_cov_elf "${ICO_BASE_ELF}")
+    target_sources(font_coverage_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/port/data/tables.c" "${CMAKE_SOURCE_DIR}/port/data/gen/table_defs.c"
+        "${CMAKE_SOURCE_DIR}/port/data/gen/table_desc.c"
+        "${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c")
+    set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c" PROPERTIES
+                                COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+    target_include_directories(font_coverage_test PRIVATE ${_ico_cov_data_incs}
+                               "${CMAKE_SOURCE_DIR}/port/data" "${CMAKE_SOURCE_DIR}")
+    target_compile_definitions(font_coverage_test PRIVATE FONT_COVERAGE_ELF=1
+                               ${ICO_GAME_DEFINITIONS})
+    target_link_libraries(font_coverage_test PRIVATE ico_port_data)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME font_coverage
+             COMMAND font_coverage_test "${CMAKE_CURRENT_SOURCE_DIR}/test/font_corpus"
+                     ${_ico_cov_elf})
+    set_tests_properties(font_coverage PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 # font_edge_test (package DEF): a deferred menu row and an overlay line of
 # text presented at Enhanced 1920 x 1080 and 3840 x 2160, each glyph edge at
 # most one pixel between background and ink; the Original present with a

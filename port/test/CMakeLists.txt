@@ -28,6 +28,12 @@ if(Python3_FOUND)
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/gen_layout_asserts.py" --check)
 endif()
 
+# font_audit (docs/port/UI.md, "The font"): every code point of the port's
+# string literals and the font corpus lies in the subset's unicode ranges
+if(Python3_FOUND)
+    add_test(NAME font_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/font_audit.py")
+endif()
+
 # offset_audit (docs/port/OFFSET_AUDIT.md): every raw EE-offset access the host
 # compiles (ICO_RAW/ICO_RAWP, (char *)x + 0xNN, ((int *)x)[N], variable
 # strides, scalar and record views of a record, pad<HEX> members, static

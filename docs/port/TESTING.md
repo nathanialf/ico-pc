@@ -309,6 +309,11 @@ needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
 77 without one, which ctest reports as skipped and counts as a pass.
 `tables_loader` and `tables_manifest` are built only when a base ELF is
 present (docs/BUILDING.md); `gallery` exits 77 without one.
+`font_coverage` (CPU, no device) asks the embedded font for a glyph of every
+code point of the five languages' tables and subtitles, the port's roll
+lines and the font corpus, and with the base ELF the staff roll's lines and
+the sound names; `font_audit` (Python, no build needed) checks the same
+sources against the subset's unicode ranges (docs/port/UI.md, "The font").
 `gallery_headless` runs the headless game itself (a copy of `ico_pc` in
 `port/ui/gallery_headless/` of the build directory, with its own
 `ico-pc.ini`, pad script and WAV dump): it boots to the title, opens

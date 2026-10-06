@@ -218,6 +218,9 @@ const uint8_t *ui_FontPage(int px, int page, int *w, int *h);
 uint32_t ui_FontPageTex(int px, int page);
 /* whether the font maps cp to a glyph (not .notdef) */
 bool ui_FontHasGlyph(uint32_t cp);
+/* the code points drawn as '?' so far, each once (logged once as well): the
+   count, and the first cap of them in cps */
+int ui_FontMissingSeen(uint32_t *cps, int cap);
 
 #ifdef __cplusplus
 }

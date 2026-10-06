@@ -90,6 +90,59 @@ tools). Nothing generated is tracked, and the program needs no file beside
 it. The licence text ships as `port/assets/fonts/OFL.txt` and is listed in
 docs/port/THIRD_PARTY.md.
 
+### Coverage
+
+Every character the game can draw has a glyph in the subset, and two tests
+keep it so.
+
+`font_coverage` (`port/ui/test/font_coverage_test.c`, CPU only, no device)
+asks the embedded font (`ui_FontHasGlyph`) for each code point of:
+
+- `ui_StringsForEach`: every entry of the five languages' tables and both
+  subtitle sets (the model names and the kanban sign rows are table
+  strings), and each table entry again by id, so an empty one fails;
+- the port's staff roll lines (`ico_roll_port_line`);
+- the corpus, `port/ui/test/font_corpus/<lang>.txt`;
+- with the base ELF (`ICO_BASE_ELF`, as `tables_loader`; without it the walk
+  is left out): `staffRollNameData` as `game_text.c` draws it (the `{...}`
+  codes skipped, `@` the copyright sign, `\` the yen sign, any other byte
+  outside ASCII a failure), the `adpcmFile` paths and the `seDef` names the
+  Music gallery shows.
+
+It fails on a code point without a glyph, U+FFFD or malformed UTF-8, a C0 or
+C1 control other than `\n`, an empty table entry and a language without a
+corpus file. Last it draws a code point outside the subset (U+4E2D) and
+checks the fallback below. With the 1.0 tables it checks 93,019 code points
+and 962 roll lines and 1,531 sound names from the ELF; the distinct code
+points a language draws (tables, subtitles and corpus) are 93 English
+(the roll's lines are counted here), 95 French, 90 German, 97 Italian and 94
+Spanish, all inside the subset: it was not widened.
+
+The corpus is the in-game text that is not a string entry: a `#` provenance
+line naming where each part is drawn (settings values and units, the save
+screen's digits and `: / . -`, the gallery's asset-name characters
+`a-z A-Z 0-9 / _ .`, and the copyright sign and the yen sign that the roll's `@` and
+`\` become) and then the text itself, one copy per language. Add a line to
+all five files when new text that is not a string appears.
+
+`font_audit` (`tools/font_audit.py`, stdlib, a ctest) needs no build: it
+reads the string literals of `strings_*.c`, `subtitles.c` and
+`model_viewer_table.c` and the corpus, and compares each code point with the
+ranges on the `# subset:` line of `port/ui/embed_font.cmake` (UI.md's recipe
+above must list the same ranges; it fails if they differ). It names the
+first file using each code point that is outside. To widen the subset, add
+the ranges to the recipe above and to that line, redo the recipe, and
+update the size and the SHA-256 in "The font file".
+
+### The fallback
+
+A code point the font lacks is drawn as `?` (`glyphIndex` in `font.c`), as
+before, and logged once per code point, whatever the size or how often it is
+drawn: `ui: no glyph for U+4E2D; drawn as '?'` (64 code points at most are
+logged). Text the port does not own (an audio device's name, a photo's file
+name) can reach it; the tables cannot, which the tests prove. `ui_FontMissingSeen`
+lists the ones seen so far.
+
 ## Coordinates and metrics
 
 **The grid.** `layout_texture.c` places rows on a 640-pixel by
