@@ -23,7 +23,7 @@ extern char stamp_str[];
 extern void *gameSysMemoryFuncList[];
 extern int gamesysStageExitTime[];
 extern GamesysObjInfo gameSysObjInfo[];
-extern char gameSysMainSaveBuff[];
+extern char gameSysMainSaveBuff[25596]; /* sized: the port copies it (credits_live.c) */
 extern int gamesysTimeCount;
 extern int gamesysAnotherStageTsuresari;
 extern int gamesysVersionDiff;

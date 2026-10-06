@@ -59,7 +59,12 @@ extern const unsigned int ui_font_ttf_size;
 #define PAGE_TRIM 8
 #define GUTTER 2
 #define MAX_PAGES 4
-#define MAX_SIZES 16
+/* Size sets live at once.  Measuring makes none (its advances come from the
+   font's metrics); a draw makes its size's set, and when every slot is
+   taken the set drawn least recently goes, once EVICT_FRAMES rd frames have
+   closed since its last draw (a frame still replayed may name its pages). */
+#define MAX_SIZES 32
+#define EVICT_FRAMES 4
 #define GLYPH_SLOTS 1024 /* per size, open addressing; a power of two */
 #define MAX_QUADS 512    /* glyphs per draw call */
 
@@ -76,8 +81,10 @@ typedef struct GlyphSlot {
 } GlyphSlot;
 
 typedef struct SizeSet {
-    int px;      /* 0: free */
-    float scale; /* stb scale for px */
+    int px;             /* 0: free */
+    uint32_t lastUse;   /* s_font.useClock at its last lookup (least recent goes) */
+    uint32_t lastFrame; /* rd_FrameNumber at its last lookup (ICO_RD) */
+    float scale;        /* stb scale for px */
     int pageW, pageH;
     int pageCount;
     Page pages[MAX_PAGES];
@@ -95,6 +102,7 @@ static struct {
     void (*syncHook)(void);
     int suppress;
     int warnedSizes, warnedPages;
+    uint32_t useClock;
 } s_font = {.frame = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z}, .scale = 1.0f};
 
 /* the game face (package GFONT; below) */
@@ -341,14 +349,40 @@ float ui_ScaleFor(int preset, uint32_t outputHeight)
 
 /* -------------------------------------------------------------- atlas */
 
+/* the rd frame a lookup belongs to (no frames without rd: nothing to wait for) */
+static uint32_t frameNow(void)
+{
+#ifdef ICO_RD
+    return rd_FrameNumber();
+#else
+    return 0;
+#endif
+}
+
+/* a set no recorded or replayed frame can still name */
+static int evictable(const SizeSet *z, uint32_t now)
+{
+#ifdef ICO_RD
+    return now - z->lastFrame >= EVICT_FRAMES;
+#else
+    (void)z;
+    (void)now;
+    return 1;
+#endif
+}
+
 static SizeSet *sizeSet(int px)
 {
-    SizeSet *freeSlot = NULL, *nearest = NULL;
+    SizeSet *freeSlot = NULL, *nearest = NULL, *oldest = NULL;
     int bestDist = 1 << 30;
+    const uint32_t now = frameNow();
 
+    s_font.useClock++;
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
         if (z->px == px) {
+            z->lastUse = s_font.useClock;
+            z->lastFrame = now;
             return z;
         }
         if (!z->px && !freeSlot) {
@@ -360,11 +394,19 @@ static SizeSet *sizeSet(int px)
                 bestDist = d;
                 nearest = z;
             }
+            if (evictable(z, now) && (!oldest || z->lastUse < oldest->lastUse)) {
+                oldest = z;
+            }
         }
     }
+    if (!freeSlot && oldest) {
+        /* the size drawn least recently, not drawn for EVICT_FRAMES frames */
+        freeSize(oldest, 1);
+        freeSlot = oldest;
+    }
     if (!freeSlot) {
-        /* every slot in use: no eviction (draws already recorded this frame
-           may name the textures); the nearest size stands in */
+        /* every slot drawn in the last EVICT_FRAMES frames (draws recorded
+           may name their textures): the nearest size stands in */
         if (!s_font.warnedSizes) {
             fprintf(stderr, "ui: more than %d text sizes; reusing the nearest\n", MAX_SIZES);
             s_font.warnedSizes = 1;
@@ -376,6 +418,8 @@ static SizeSet *sizeSet(int px)
         return NULL;
     }
     freeSlot->px = px;
+    freeSlot->lastUse = s_font.useClock;
+    freeSlot->lastFrame = now;
     freeSlot->scale = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)px);
     /* T1: about 32 cells of a px-high glyph a page at least */
     freeSlot->pageW = PAGE_MIN;
@@ -726,6 +770,39 @@ static float layoutRun(SizeSet *z, const char *utf8, GlyphFn fn, void *user, flo
     return widest;
 }
 
+/* a glyph's advance at stb scale sc, atlas pixels (glyphIn's) */
+static float advanceAt(uint32_t cp, float sc)
+{
+    int adv, lsb;
+    stbtt_GetGlyphHMetrics(&s_font.info, glyphIndex(cp), &adv, &lsb);
+    return (float)adv * sc;
+}
+
+/* layoutRun's widest line without the atlas: the advances and the kerning
+   from the font's metrics at stb scale sc */
+static float measureRun(const char *utf8, float sc)
+{
+    float penX = 0.0f, widest = 0.0f;
+    uint32_t prev = 0, cp;
+    const char *s = utf8;
+    while ((cp = ui_Utf8Next(&s)) != 0) {
+        if (cp == '\n') {
+            widest = penX > widest ? penX : widest;
+            penX = 0.0f;
+            prev = 0;
+            continue;
+        }
+        if (prev) {
+            penX +=
+                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), glyphIndex(cp)) *
+                sc;
+        }
+        penX += advanceAt(cp, sc);
+        prev = cp;
+    }
+    return penX > widest ? penX : widest;
+}
+
 float ui_MeasureText(float size, const char *utf8)
 {
     if (!utf8 || !ui_FontInit()) {
@@ -734,12 +811,10 @@ float ui_MeasureText(float size, const char *utf8)
     if (gameActive()) {
         return gameMeasure(size, utf8);
     }
-    SizeSet *z = sizeSet(pxFor(size));
-    if (!z) {
-        return 0.0f;
-    }
-    const float xs = UI_X_PER_Y / s_font.scale * ((float)pxFor(size) / (float)z->px);
-    return layoutRun(z, utf8, NULL, NULL, NULL, 0, NULL) * xs;
+    /* the font's metrics at the size's pixels, as layoutRun advances a
+       drawn line: no size set made for a measure */
+    const float sc = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)pxFor(size));
+    return measureRun(utf8, sc) * (UI_X_PER_Y / s_font.scale);
 }
 
 #define MAX_LINES 16
@@ -1248,8 +1323,12 @@ static void gameLayout(float size, const char *utf8, MLayout *L)
     const float mx = L->mx;
     const float sa = arimoSizeFor(size);
     const int apx = pxFor(sa);
-    SizeSet *z = sizeSet(apx);
-    L->ays = z ? (float)apx / (float)z->px / s_font.scale : 0.0f;
+    /* Arimo's set for the fallback letters, made at the first one a draw
+       places; a measure takes their advances from the metrics at apx (as
+       the set at apx has them) and makes no set */
+    SizeSet *z = NULL;
+    float asc = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)apx);
+    L->ays = 1.0f / s_font.scale;
     L->axs = L->ays * UI_X_PER_Y;
     /* the line pitch as Arimo's at the requested size */
     const int lpx = pxFor(size);
@@ -1260,7 +1339,7 @@ static void gameLayout(float size, const char *utf8, MLayout *L)
     int prevGame = 0, line = 0, inWord = 0, lastGame = -1;
     const char *s = utf8;
     uint32_t cp;
-    L->z = z;
+    L->z = NULL;
     L->widest = 0.0f;
     L->n = 0;
     while ((cp = ui_Utf8Next(&s)) != 0) {
@@ -1309,13 +1388,27 @@ static void gameLayout(float size, const char *utf8, MLayout *L)
             continue;
         }
         noteFallback(cp);
-        if (!z) {
-            continue;
+        if (L->p && !z) {
+            z = sizeSet(apx);
+            if (!z) {
+                continue;
+            }
+            /* a stand-in size (every slot drawn this frame) scales */
+            L->z = z;
+            asc = z->scale;
+            L->ays = (float)apx / (float)z->px / s_font.scale;
+            L->axs = L->ays * UI_X_PER_Y;
         }
         if (prev && !prevGame) {
             penX +=
                 (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), glyphIndex(cp)) *
-                z->scale * L->axs;
+                asc * L->axs;
+        }
+        if (!L->p) {
+            penX += advanceAt(cp, asc) * L->axs;
+            prev = cp;
+            prevGame = 0;
+            continue;
         }
         const UiGlyph *ag = glyphIn(z, cp);
         if (ag) {
@@ -1466,21 +1559,21 @@ static uint32_t gameTexture(void)
 }
 #endif
 
-static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                         unsigned flags, const UiXform *xf, int pass)
+/* gameDraw's buffers: the text laid out once (s_gamePlaced), then each
+   pass's quads (s_gameQuads) and vertices (s_gameVtx) built from it.  The
+   font is drawn on one thread, and gameDraw does not nest. */
+static MPlaced s_gamePlaced[MAX_QUADS];
+static MQuad s_gameQuads[MAX_QUADS * 3];
+#ifdef ICO_RD
+static RdScreenVtx s_gameVtx[MAX_QUADS * 3 * 2];
+#endif
+
+static void gameDrawPass(const MLayout *lay, float x, float y, float size, const uint8_t rgba[4],
+                         const char *utf8, unsigned flags, const UiXform *xf, int pass)
 {
-    MLayout L;
-    memset(&L, 0, sizeof(L));
-    L.max = MAX_QUADS;
-    L.p = malloc(sizeof(MPlaced) * (size_t)L.max);
-    MQuad *qs = malloc(sizeof(MQuad) * (size_t)L.max * 3);
-    if (!L.p || !qs) {
-        free(L.p);
-        free(qs);
-        return;
-    }
-    gameLayout(size, utf8, &L);
-    const int nq = gameQuads(&L, pass, qs, L.max * 3);
+    const MLayout L = *lay;
+    MQuad *qs = s_gameQuads;
+    const int nq = gameQuads(&L, pass, qs, MAX_QUADS * 3);
     float base;
     switch (flags & UI_VALIGN_MASK) {
     case UI_VALIGN_MIDDLE:
@@ -1504,12 +1597,7 @@ static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], co
     const unsigned passFlags = pass == GP_LIGHT ? flags | UI_ADDITIVE : flags;
 #ifdef ICO_RD
     if (nq > 0) {
-        RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)nq);
-        if (!v) {
-            free(L.p);
-            free(qs);
-            return;
-        }
+        RdScreenVtx *v = s_gameVtx;
         int texIds[MAX_PAGES + 1], ntex = 0;
         for (int i = 0; i < nq; i++) {
             int t = qs[i].tex, seen = 0;
@@ -1603,7 +1691,6 @@ static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], co
         if (!s_ov.active && setAdd) {
             rd_Blend(RD_BLEND_LERP_AS, 0, 1);
         }
-        free(v);
     }
 #else
     (void)x;
@@ -1612,9 +1699,8 @@ static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], co
     (void)base;
     (void)passFlags;
     (void)nq;
+    (void)utf8;
 #endif
-    free(L.p);
-    free(qs);
 }
 
 /* the game face's draw (UI.md "The font"):
@@ -1629,6 +1715,11 @@ static void gameDrawPass(float x, float y, float size, const uint8_t rgba[4], co
 static void gameDraw(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                      unsigned flags, const UiXform *xf)
 {
+    MLayout L;
+    memset(&L, 0, sizeof(L));
+    L.p = s_gamePlaced;
+    L.max = MAX_QUADS;
+    gameLayout(size, utf8, &L);
     if (flags & UI_HALO) {
         flags &= ~(unsigned)UI_HALO;
         static const float dirs[8][2] = {{-1, 0},  {1, 0},  {0, -1}, {0, 1},
@@ -1646,27 +1737,51 @@ static void gameDraw(float x, float y, float size, const uint8_t rgba[4], const 
         if (anyArimo) {
             for (int i = 0; i < 8; i++) {
                 const float k = (dirs[i][0] != 0.0f && dirs[i][1] != 0.0f) ? 0.7071f : 1.0f;
-                gameDrawPass(x + dirs[i][0] * r * k * UI_X_PER_Y, y + dirs[i][1] * r * k, size,
+                gameDrawPass(&L, x + dirs[i][0] * r * k * UI_X_PER_Y, y + dirs[i][1] * r * k, size,
                              dark, utf8, flags, xf, GP_ARIMO_HALO);
             }
         }
         if (anyGame && !(flags & UI_ADDITIVE)) {
             const uint8_t black[4] = {0, 0, 0, rgba[3]};
-            gameDrawPass(x, y, size, black, utf8, flags, xf, GP_GLOW);
-            gameDrawPass(x, y, size, black, utf8, flags, xf, GP_ALPHA);
-            gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
+            gameDrawPass(&L, x, y, size, black, utf8, flags, xf, GP_GLOW);
+            gameDrawPass(&L, x, y, size, black, utf8, flags, xf, GP_ALPHA);
+            gameDrawPass(&L, x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
         }
         if (anyArimo) {
-            gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
+            gameDrawPass(&L, x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
         }
         return;
     }
     if (flags & UI_ADDITIVE) {
-        gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
-        gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
+        gameDrawPass(&L, x, y, size, rgba, utf8, flags, xf, GP_LIGHT);
+        gameDrawPass(&L, x, y, size, rgba, utf8, flags, xf, GP_ARIMO);
         return;
     }
-    gameDrawPass(x, y, size, rgba, utf8, flags, xf, GP_INK);
+    gameDrawPass(&L, x, y, size, rgba, utf8, flags, xf, GP_INK);
+}
+
+int ui__FontSizeSets(int *px, int cap)
+{
+    int n = 0;
+    for (int i = 0; i < MAX_SIZES; i++) {
+        if (s_font.sizes[i].px) {
+            if (px && n < cap) {
+                px[n] = s_font.sizes[i].px;
+            }
+            n++;
+        }
+    }
+    return n;
+}
+
+int ui__FontReusedNearest(void)
+{
+    return s_font.warnedSizes;
+}
+
+int ui__FontFallbackPx(float size)
+{
+    return ui_FontInit() && gameActive() ? pxFor(arimoSizeFor(size)) : 0;
 }
 
 static float gameMeasure(float size, const char *utf8)

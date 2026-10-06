@@ -24,7 +24,8 @@ end (within END_TOL of its total; a piece longer than the dwell must have
 moved at the audio clock's rate to its cut), plays past its end or wraps,
 when a listed total is not the file's (the disc file is the table's sectors
 plus the 0x5C000-byte ring pad), when R1 or L1 does not start the next
-entry, when an effect is not keyed, when the title's banks and theme are
+entry, when an effect is not keyed or its bar wraps (a looping sample plays
+one pass), when the title's banks and theme are
 not restored, or on any "gallery: failed".
 
   gallery_sweep.py <ico_pc> <disc image> <work folder> [--report FILE]
@@ -118,6 +119,7 @@ class Item:
         self.notes = []
         self.level = 0.0
         self.closed = None        # the engine's close line
+        self.onepass = None       # an effect's "stopped after one pass" (its sample's seconds)
 
 
 def parse(log):
@@ -170,6 +172,10 @@ def parse(log):
         m = re.match(r"gallery: (stream|effect) (\d+) wrapped at ([\d.]+) s to ([\d.]+) s", ln)
         if m and int(m.group(2)) == current.key:
             current.wraps.append((float(m.group(3)), float(m.group(4))))
+            continue
+        m = re.match(r"gallery: effect (\d+) stopped after one pass of its looping sample \(([\d.]+) s\)", ln)
+        if m and int(m.group(1)) == current.key:
+            current.onepass = float(m.group(2))
             continue
         m = re.match(r"gallery: stream (\d+) closed at its end: (\d+) of (\d+) bytes played", ln)
         if m and int(m.group(1)) == current.key:
@@ -374,6 +380,17 @@ def judge(work, stopped, rc, report, keep):
         note = "; ".join(it.fails) if it.fails else ""
         if not ok:
             fails.append("effect %d (%s): never keyed %s" % (it.key, it.label, note))
+        # one pass (docs/port/MUSIC.md): a looping sample stops after its
+        # length, so an effect's bar never wraps, and one stopped so ends
+        # rather than being cut at the dwell when it is shorter
+        if it.wraps:
+            fails.append("effect %d (%s): wrapped %s" % (it.key, it.label, ", ".join(
+                "%.1f->%.1f" % w for w in it.wraps)))
+        if it.onepass is not None and it.onepass + END_TOL < SE_DWELL and it.cut is not None:
+            fails.append("effect %d (%s): stopped after one pass (%.2f s) but cut at the dwell" % (
+                it.key, it.label, it.onepass))
+        if it.onepass is not None and not note:
+            note = "one pass of a looping sample"
         erows.append("| %d | %s | %s | %s | %s | %s |" % (it.key, it.label, "%.2f s" % tot if tot else "-:--",
                                                          "-" if obs is None else "%.1f s %s" % (obs, "end" if it.end is not None else "cut"),
                                                          "yes" if ok else "NO", note or ("loops" if it.cut is not None else "")))

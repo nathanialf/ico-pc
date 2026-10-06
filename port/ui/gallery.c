@@ -513,6 +513,31 @@ long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels)
     return -1;
 }
 
+long long gallery_StreamBlankFrom(uint64_t pass,
+                                  int (*read)(void *user, uint64_t off, uint8_t *buf), void *user)
+{
+    uint8_t buf[GALLERY_SECTOR];
+    const long long n = (long long)(pass / GALLERY_SECTOR);
+    if (n <= 0 || read(user, (uint64_t)(n - 1) * GALLERY_SECTOR, buf) != 0 ||
+        gallery_StreamEndBlock(buf, GALLERY_SECTOR, 1) < 0) {
+        return -1; /* the pass's last sector plays: no blank tail */
+    }
+    /* sectors below lo play, hi and every one after it are blank */
+    long long lo = -1, hi = n - 1;
+    while (hi - lo > 1) {
+        const long long mid = lo + (hi - lo) / 2;
+        if (read(user, (uint64_t)mid * GALLERY_SECTOR, buf) != 0) {
+            return -1;
+        }
+        if (gallery_StreamEndBlock(buf, GALLERY_SECTOR, 1) >= 0) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    return hi * GALLERY_SECTOR;
+}
+
 static uint32_t rd32(const uint8_t *p)
 {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
@@ -530,7 +555,7 @@ int gallery_HdHas(const uint8_t *hd, size_t size, int prog, int tone)
         return 0;
     }
     uint32_t off = rd32(hd + 0x1C);
-    if (off == 0xFFFFFFFFu || off + 2 > size) {
+    if (off == 0xFFFFFFFFu || (size_t)off + 2 > size) {
         return 0;
     }
     const uint8_t *tbl = hd + off;

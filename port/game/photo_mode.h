@@ -18,7 +18,6 @@
  *   [photo] stick_speed  1.0           the sticks' rates (orbit, dolly, pan) times this
  *   [photo] invert_y     false         the left stick's up and down swapped
  *   [photo] png_dir      "screenshots" the captures' folder, in the pref folder
- *   [photo] dof          false         depth of field (not implemented: logged once)
  *
  * The controls (the game's logical pad word, as layout procs read it):
  *   left stick      orbit: yaw about the world's vertical through the pivot,
@@ -113,11 +112,10 @@ float ico_photo_fov_deg(const RdCamera *cam);
 int ico_photo_take_capture(void);
 int ico_photo_hud(void);
 void ico_photo_get(IcoPhotoState *out);
-/* [photo]: stick_speed, invert_y, png_dir, dof (read at each enter) */
+/* [photo]: stick_speed, invert_y, png_dir (read at each enter) */
 float ico_photo_stick_speed(void);
 int ico_photo_invert_y(void);
 const char *ico_photo_png_dir(void);
-int ico_photo_dof(void);
 /* The capture's file name for a local time (ico-YYYYMMDD-HHMMSS.png, then
    -2, -3 ... when seq > 1), into buf. */
 void ico_photo_file_name(char *buf, unsigned size, int year, int mon, int day, int hour, int min,

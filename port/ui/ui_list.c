@@ -165,7 +165,7 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
     int n = ui_ListCount(l);
     int s = ui_ListSlotOf(l, lay->curItem);
     int shown = ui_ListShown(l);
-    if (s < 0 || (flags & (PAD_CROSS | PAD_BACK))) {
+    if (s < 0 || shown == 0 || (flags & (PAD_CROSS | PAD_BACK))) {
         return;
     }
     if ((flags & PAD_DOWN) && s == shown - 1) {

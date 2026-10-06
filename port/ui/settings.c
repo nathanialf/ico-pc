@@ -421,9 +421,9 @@ static int resolutionIndex(const IcoVideoOptions *o)
 /* ------------------------------------------------------------- Extras
  * Settings > Extras (docs/port/EXTRAS.md), shown from the title only: the
  * galleries leave the stage, and the pause menu has no Extras row (it is
- * masked and skipped by the cursor).  Music, Models and Credits are
- * placeholders until their packages land: each row's hook returns the layout
- * to open, or -1 when the entry is not there yet (a log line, nothing else). */
+ * masked and skipped by the cursor).  Music, Models and Credits: each row's
+ * hook returns the layout to open, or -1 when it cannot open (not built,
+ * off the title, locked: a log line, nothing else). */
 
 static int isExtrasOpt(int opt)
 {
@@ -502,8 +502,9 @@ static int extrasOpen(int opt)
     for (unsigned i = 0; i < sizeof(kExtras) / sizeof(kExtras[0]); i++) {
         if (kExtras[i].opt == opt) {
             int to = kExtras[i].open();
-            if (to < 0) {
-                fprintf(stderr, "extras: %s not available yet\n", kExtras[i].name);
+            /* a locked Credits press has logged "credits: locked" */
+            if (to < 0 && !(opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked())) {
+                fprintf(stderr, "extras: %s not available\n", kExtras[i].name);
             }
             return to;
         }
@@ -950,13 +951,22 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
 static void wrapText(const char *text, float size, float width, char *out, unsigned outSize)
 {
     unsigned n = 0, lineStart = 0, lastSpace = 0;
-    for (const char *p = text; *p && n + 1 < outSize; p++) {
-        out[n] = *p;
-        out[n + 1] = '\0';
+    for (const char *p = text; *p;) {
+        /* a whole UTF-8 sequence at a time: the line is measured only on a
+           character's end (a cut "'" measured as U+FFFD) */
+        const char *next = p;
+        ui_Utf8Next(&next);
+        const unsigned len = (unsigned)(next - p);
+        if (n + len + 1 > outSize) {
+            break;
+        }
+        memcpy(out + n, p, len);
+        out[n + len] = '\0';
         if (*p == ' ') {
             lastSpace = n;
         }
-        n++;
+        n += len;
+        p = next;
         if (lastSpace > lineStart && ui_MeasureText(size, out + lineStart) > width) {
             out[lastSpace] = '\n';
             lineStart = lastSpace + 1;
@@ -1038,9 +1048,9 @@ static void buildGalleryBar(void)
 static int rowY(int page, int i)
 {
     if (page == UI_PAGE_DISPLAY) {
-        /* thirteen rows (P3: Menu text joined Video mode; package CRT: the
-           CRT filter and its strength): 14 field lines apart from 36, so
-           Back still ends inside the 226 lines */
+        /* twelve rows (package CRT: the CRT filter and its strength; TXT2:
+           no Menu text row): 14 field lines apart from 36, so Back still
+           ends inside the 226 lines */
         return 36 + 14 * i;
     }
     return page == UI_PAGE_MAIN ? 40 + 19 * i : 40 + 18 * i;
@@ -1300,25 +1310,17 @@ static void build(void)
                                      UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
                                      UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
-    int dispOpts[16], dispStrs[16], nd = 0;
-    static const int dispAll[][2] = {{UI_OPT_PRESET, UI_STR_OPT_PRESET},
-                                     {UI_OPT_RESOLUTION, UI_STR_OPT_RESOLUTION},
-                                     {UI_OPT_ASPECT, UI_STR_OPT_ASPECT},
-                                     {UI_OPT_FULLSCREEN, UI_STR_OPT_FULLSCREEN},
-                                     {UI_OPT_VSYNC, UI_STR_OPT_VSYNC},
-                                     {UI_OPT_FILTER, UI_STR_OPT_FILTERING},
-                                     {UI_OPT_FULL_HEIGHT, UI_STR_OPT_FULL_HEIGHT},
-                                     {UI_OPT_FRAMERATE, UI_STR_OPT_FRAMERATE},
-                                     {UI_OPT_CRT, UI_STR_OPT_CRT},
-                                     {UI_OPT_CRT_STRENGTH, UI_STR_OPT_CRT_STRENGTH},
-                                     {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
-                                     {UI_OPT_BACK, UI_STR_BACK}};
-    for (unsigned i = 0; i < sizeof(dispAll) / sizeof(dispAll[0]); i++) {
-        /* R7d: every row always shown, Frame rate included (stepped by
-           ui_SettingsStep since R7d; read-only from the config in R7b) */
-        dispOpts[nd] = dispAll[i][0];
-        dispStrs[nd++] = dispAll[i][1];
-    }
+    /* R7d: every Display row always shown, Frame rate included */
+    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
+                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
+        UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
+    _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
+    const int nd = (int)(sizeof(dispOpts) / sizeof(dispOpts[0]));
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,

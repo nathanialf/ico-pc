@@ -32,7 +32,8 @@
  *
  * The poll (once per vsync, after the game's threads) logs the stages and
  * the song.  A start that never reaches STAFF1 is a failure: logged, the
- * flag cleared (the stage change is the game's by then).
+ * title requested and the state put back as it is entered, the flag kept
+ * until then (a bound on each wait; see REACH_TICKS).
  */
 #include <stdio.h>
 
@@ -54,9 +55,12 @@ extern void ACTGame_SetActors_Debug(int stage, unsigned char flag);
 extern void ACTGame_StageChangeGObjID(int no, int kind, int idx);
 extern unsigned int ico_host_main_ticks(void);
 
-extern struct SqEntry *sea;        /* end.c: the ending's song */
-extern char gameSysMainSaveBuff[]; /* gamesys.c: the checkpoint image */
-#define SAVE_IMAGE 25596           /* sizeof gameSysMainSaveBuff */
+extern struct SqEntry *sea; /* end.c: the ending's song */
+extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r,
+                                    unsigned char gr, unsigned char b);
+/* gamesys.c's checkpoint image, sized in gamesys.h (its definition's size,
+   checked by the compiler against the declaration) */
+#define SAVE_IMAGE ((int)sizeof(gameSysMainSaveBuff))
 
 /* The ending's song, "ICO -You were there-" (adpcmFile 47, event/39_8.int,
    265.6 s), starts in actEndDemo06Chk, six scenes before the roll.  Run
@@ -81,10 +85,17 @@ extern char gameSysMainSaveBuff[]; /* gamesys.c: the checkpoint image */
 /* the story flags: gflag.c's 50-byte bitmap */
 #define GFLAG_COUNT 400
 /* Main ticks the stage change may take before it counts as failed (the
-   load of STAFF1 takes a few hundred) */
+   load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
+   running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
+   stage to come back before the state is put back where it stands */
 #define REACH_TICKS 1500
+#define REACH_LIMIT 4500
+#define RETURN_TICKS 1500
 
-enum { PH_IDLE, PH_SWITCHING, PH_PLAYING };
+/* PH_RETURNING: the start failed and the title was requested; the flag
+   stays set (a late STAFF1 runs the Extras' ending, not the real one's
+   save) until the title's stage is entered */
+enum { PH_IDLE, PH_SWITCHING, PH_PLAYING, PH_RETURNING };
 
 static int s_phase = PH_IDLE;
 static unsigned char s_flags[GFLAG_COUNT];
@@ -93,6 +104,7 @@ static char s_world[SAVE_IMAGE];
 static char s_checkpoint[SAVE_IMAGE];
 static int s_status[3];
 static unsigned int s_startTick;
+static unsigned int s_returnTick;
 static int s_lastStage;
 static unsigned int s_songTick;
 static int s_songSeen;
@@ -185,7 +197,27 @@ void ico_credits_stage_enter(int stage)
 {
     if (s_phase == PH_PLAYING && stage == ICO_CREDITS_TITLE_STAGE) {
         finish("back at the title", 1);
+    } else if (s_phase == PH_RETURNING && stage == ICO_CREDITS_TITLE_STAGE) {
+        finish("failed: back at the title", 1);
     }
+}
+
+/* the start did not reach STAFF1: back to the title (the roll's own way
+   there, actStaff3RollChk), the state put back as the title is entered;
+   still on the title with no stage change running: put back now */
+static void failStart(void)
+{
+    fprintf(stderr,
+            "credits: failed: the staff roll's stage was not reached by Main tick %u (stage %d, "
+            "stage change %d)\n",
+            ico_host_main_ticks(), stage_no, systemStatus[6]);
+    if (stage_no == ICO_CREDITS_TITLE_STAGE && systemStatus[6] == 0) {
+        finish("failed: stopped on the title", 1);
+        return;
+    }
+    s_phase = PH_RETURNING;
+    s_returnTick = ico_host_main_ticks();
+    RequestStageChangeSimple(ICO_CREDITS_TITLE_STAGE, 16.0f, 8.0f, 0, 0, 0);
 }
 
 void ico_credits_host_poll(void)
@@ -202,8 +234,17 @@ void ico_credits_host_poll(void)
             s_phase = PH_PLAYING;
             fprintf(stderr, "credits: stage %d up at Main tick %u\n", stage_no,
                     ico_host_main_ticks());
-        } else if (ico_host_main_ticks() - s_startTick > REACH_TICKS) {
-            finish("failed: the staff roll's stage was not reached; stopped", 0);
+        } else {
+            const unsigned int t = ico_host_main_ticks() - s_startTick;
+            if ((t > REACH_TICKS && systemStatus[6] == 0) || t > REACH_LIMIT) {
+                failStart();
+            }
+        }
+        return;
+    }
+    if (s_phase == PH_RETURNING) {
+        if (ico_host_main_ticks() - s_returnTick > RETURN_TICKS) {
+            finish("failed: the title did not come back; the state put back where it stands", 1);
         }
         return;
     }

@@ -7,7 +7,9 @@
 # boot through Settings > Extras > Models to the first model, an animation
 # played, the list and the title again.  The log must show the host stage
 # loaded with the model, the animation past its first frame, the title back,
-# the run to its last tick, and no "model_viewer: failed".  Without the
+# the run to its last tick, no "model_viewer: failed", and the port's
+# layout rows under their cap ("(N of CAP properties in use)" with N < CAP,
+# no "layout extension full" or "names no row").  Without the
 # disc image the test is skipped.
 
 if(NOT EXISTS "${ISO}")
@@ -45,6 +47,15 @@ endif()
 if(_text MATCHES "model_viewer: failed")
     string(REGEX MATCH "model_viewer: failed[^\n]*" _failed "${_text}")
     string(APPEND _bad "\n  ${_failed}")
+endif()
+string(REGEX MATCH "\\(([0-9]+) of ([0-9]+) properties in use\\)" _props "${_text}")
+if(NOT _props)
+    string(APPEND _bad "\n  no \"(N of CAP properties in use)\" line")
+elseif(NOT CMAKE_MATCH_1 LESS CMAKE_MATCH_2)
+    string(APPEND _bad "\n  the layout rows at their cap: ${_props}")
+endif()
+if(_text MATCHES "ui: layout extension full" OR _text MATCHES "names no (row|layout)")
+    string(APPEND _bad "\n  a layout row was not added or a bad row index was used")
 endif()
 if(NOT _text MATCHES "exit: ticks= reached")
     string(APPEND _bad "\n  the run did not reach its last tick (exit ${_rc})")

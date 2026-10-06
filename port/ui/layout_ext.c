@@ -5,6 +5,7 @@
  */
 #include "layout_ext.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "font.h"
@@ -58,6 +59,12 @@ void lt_ext_Reset(void)
 int lt_ext_AddLayout(const LtProp *layout)
 {
     if (!layout || s_layoutCount == LT_EXT_MAX_LAYOUTS) {
+        static int logged;
+        if (layout && !logged) {
+            logged = 1;
+            fprintf(stderr, "ui: layout extension full (%d layouts); a page is missing\n",
+                    LT_EXT_MAX_LAYOUTS);
+        }
         return -1;
     }
     s_layouts[s_layoutCount] = *layout;
@@ -88,6 +95,12 @@ static void copyText(ExtRow *r, const char *utf8)
 int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text)
 {
     if (!row || s_propCount == LT_EXT_MAX_PROPERTIES) {
+        static int logged;
+        if (row && !logged) {
+            logged = 1;
+            fprintf(stderr, "ui: layout extension full (%d properties); rows are missing\n",
+                    LT_EXT_MAX_PROPERTIES);
+        }
         return -1;
     }
     LtProperty *p = &s_props[s_propCount];
@@ -337,13 +350,31 @@ static void drawRect(const ExtRow *r, const int box[4], const unsigned char rgba
     ui_DrawRect(x0, y0, x0 + w * r->fill, y0 + h, c);
 }
 
+/* An index that names no row gets a scratch row instead of memory outside
+   the tables: its readers see zeros, its writers write nowhere that
+   matters (re-zeroed on every such lookup).  -1 is the tables' "none" (a
+   layout with no current item: display_texture compares each row with
+   &LT_PROP(curItem)), and a failed add's result, which logged already; any
+   other index is logged once. */
+static LtProp s_scratchLayout;
+static LtProperty s_scratchProp;
+
 LtProp *lt_ext_Layout(int index)
 {
     int i = index - LT_GAME_LAYOUT_COUNT;
     if (i >= 0 && i < s_layoutCount) {
         return &s_layouts[i];
     }
-    return &texLayout[index];
+    if (index >= 0 && index < LT_GAME_LAYOUT_COUNT) {
+        return &texLayout[index];
+    }
+    static int logged;
+    if (index != -1 && !logged) {
+        logged = 1;
+        fprintf(stderr, "ui: layout index %d names no layout; a scratch row used\n", index);
+    }
+    memset(&s_scratchLayout, 0, sizeof(s_scratchLayout));
+    return &s_scratchLayout;
 }
 
 LtProperty *lt_ext_Prop(int index)
@@ -352,7 +383,16 @@ LtProperty *lt_ext_Prop(int index)
     if (i >= 0 && i < s_propCount) {
         return &s_props[i];
     }
-    return &texProperty[index];
+    if (index >= 0 && index < LT_GAME_PROPERTY_COUNT) {
+        return &texProperty[index];
+    }
+    static int logged;
+    if (index != -1 && !logged) {
+        logged = 1;
+        fprintf(stderr, "ui: property index %d names no row; a scratch row used\n", index);
+    }
+    memset(&s_scratchProp, 0, sizeof(s_scratchProp));
+    return &s_scratchProp;
 }
 
 int lt_ext_PropIndex(const LtProperty *e)

@@ -322,7 +322,8 @@ int ico_video_save(void)
                                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
     r |= ico_config_set_bool("video.crt", o.crt);
     r |= ico_config_set_string("video.crt_mode", ico_video_crt_mode_name(o.crtMode));
-    /* in tenths, as the Settings row steps it, without float noise */
+    /* to the hundredth, without float noise (the Settings row steps tenths;
+       a hand-set 0.25 is kept) */
     r |= ico_config_set_float("video.crt_strength",
                               (double)(int)(o.crtStrength * 100.0f + 0.5f) / 100.0);
     /* the overrides only when set: an absent key is the mode's value */

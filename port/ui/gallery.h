@@ -160,6 +160,16 @@ int gallery_ClockAtEnd(const GalleryStreamClock *c, int channels, double bytes);
    0x93000).  Its offset in buf, or -1. */
 long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels);
 
+/* Where a stream's blank tail starts: the first of the sectors, up to the
+   pass's end (`pass` bytes), that hold an end block (gallery_StreamEndBlock)
+   when the pass's last sector holds one, found by halving with `read` (one
+   GALLERY_SECTOR-byte sector at a byte offset; 0 when read) about
+   log2(sectors) times.  Its byte offset, or -1 (no blank tail, or a read
+   failed). */
+#define GALLERY_SECTOR 0x800
+long long gallery_StreamBlankFrom(uint64_t pass,
+                                  int (*read)(void *user, uint64_t off, uint8_t *buf), void *user);
+
 /* Whether a sound bank header (a .hd, `size` bytes) has program prog with
    tone tone, by SgSePlay's own checks (sce/libsndn2/sound.c): the "SShd"
    magic at 0x0C, the SE table (its offset at 0x1C) present, prog no more

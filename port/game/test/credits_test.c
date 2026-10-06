@@ -15,13 +15,18 @@
  * included, is drawn by font_Print; the roll ends (staffRollStartFlag 0)
  * only after them; the port lines are ASCII and outside the range NULL.  Then
  * the lock: locked with no achievement and no key, unlocked with
- * unlock_credits=1 in the ini.
+ * unlock_credits=1 in the ini.  Last, the engine (credits_live.c) over
+ * stubs of the game's side: a start whose stage never comes up fails after
+ * its bound with the flag kept, requests the title, and puts the game's
+ * state back as the title is entered (review finding 4); one that never
+ * left the title is put back at once.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "DisplayFont.h"
+#include "adpcm_init.h"
 #include "achievements.h"
 #include "config.h"
 #include "ico_credits.h"
@@ -143,6 +148,94 @@ void ico_ach_stats(IcoAchStats *out)
     memset(out, 0, sizeof(*out));
 }
 
+/* the engine's view of the game (credits_live.c) */
+int stage_no = 1;
+struct SqEntry *titleAdpcm;
+struct SqEntry *sea;
+int seEnvForceClose;
+int gFlagGameClear;
+char gameSysMainSaveBuff[25596];
+void *gameSysMemoryFuncList[1];
+static unsigned char s_gflags[400];
+static unsigned int s_ticks;
+static int s_switchTo = -1, s_simpleTo = -1, s_loads, s_world;
+
+int gflagChk(int i)
+{
+    return s_gflags[i];
+}
+
+void gflagOn(int i)
+{
+    s_gflags[i] = 1;
+}
+
+void gflagOff(int i)
+{
+    s_gflags[i] = 0;
+}
+
+/* the "world": one int the save image carries */
+void gamesysMemorySave(void **tbl, void *mem, void *arg)
+{
+    (void)tbl;
+    (void)arg;
+    memcpy(mem, &s_world, sizeof(s_world));
+}
+
+void gamesysMemoryLoad(void **tbl, void *mem, void *arg)
+{
+    (void)tbl;
+    (void)arg;
+    memcpy(&s_world, mem, sizeof(s_world));
+    s_loads++;
+}
+
+const AdpcmDataRec adpcmFile[64];
+
+void ico_adpcm_set_start(int no, int bytes)
+{
+    (void)no;
+    (void)bytes;
+}
+
+void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
+{
+    (void)fadeIn;
+    (void)fadeOut;
+    s_switchTo = stage;
+}
+
+void ACTGame_SetActors_Debug(int stage, unsigned char flag)
+{
+    (void)stage;
+    (void)flag;
+}
+
+void ACTGame_StageChangeGObjID(int no, int kind, int idx)
+{
+    (void)no;
+    (void)kind;
+    s_world = idx; /* the boy's record moved to the entrance */
+}
+
+int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r, unsigned char gr,
+                             unsigned char b)
+{
+    (void)speed;
+    (void)wait;
+    (void)r;
+    (void)gr;
+    (void)b;
+    s_simpleTo = no;
+    return 0;
+}
+
+unsigned int ico_host_main_ticks(void)
+{
+    return s_ticks;
+}
+
 /* --- the tests ------------------------------------------------------------- */
 
 static int ascii(const char *s)
@@ -245,10 +338,77 @@ static void test_lock(const char *dir)
     CHECK(!ico_credits_active());
 }
 
+/* credits_live.c (host_loop.c declares it so too) */
+void ico_credits_engine_install(void);
+
+/* polls n Main ticks */
+static void runTicks(unsigned int n)
+{
+    while (n-- > 0) {
+        s_ticks++;
+        ico_credits_host_poll();
+    }
+}
+
+static void test_engine_failure(void)
+{
+    ico_credits_engine_install();
+    /* a stage change that starts and never ends */
+    stage_no = 1;
+    systemStatus[6] = 0;
+    s_world = 7;
+    gFlagGameClear = 1;
+    memset(s_gflags, 0, sizeof(s_gflags));
+    s_gflags[10] = 1;
+    gameSysMainSaveBuff[0] = 'C';
+    s_loads = 0;
+    CHECK(ico_credits_start() >= 0 && ico_credits_active() && s_switchTo == 60);
+    CHECK(s_world == 216); /* the boy at the ending's entrance */
+    systemStatus[6] = 1;
+    s_gflags[10] = 0; /* what the staff scenes would change */
+    s_gflags[20] = 1;
+    gameSysMainSaveBuff[0] = 'X';
+    runTicks(2000);
+    /* past REACH_TICKS with the stage change running: still waiting */
+    CHECK(ico_credits_active() && s_simpleTo == -1 && s_loads == 0);
+    runTicks(3000);
+    /* past REACH_LIMIT: failed, the title requested, the flag kept */
+    CHECK(s_simpleTo == 1 && ico_credits_active() && s_loads == 0);
+    /* a late STAFF1 entry does not end it; the title's does, the state put
+       back */
+    ico_credits_stage_enter(60);
+    CHECK(ico_credits_active());
+    stage_no = 1;
+    systemStatus[6] = 0;
+    ico_credits_stage_enter(1);
+    CHECK(!ico_credits_active() && s_loads == 1 && s_world == 7);
+    CHECK(s_gflags[10] == 1 && s_gflags[20] == 0 && gFlagGameClear == 1);
+    CHECK(gameSysMainSaveBuff[0] == 'C');
+
+    /* the title never left: put back once REACH_TICKS pass */
+    s_simpleTo = -1;
+    s_loads = 0;
+    CHECK(ico_credits_start() >= 0 && ico_credits_active());
+    runTicks(1600);
+    CHECK(!ico_credits_active() && s_loads == 1 && s_world == 7 && s_simpleTo == -1);
+
+    /* the title does not come back either: put back after RETURN_TICKS */
+    s_loads = 0;
+    CHECK(ico_credits_start() >= 0);
+    systemStatus[6] = 1;
+    runTicks(4600);
+    CHECK(s_simpleTo == 1 && ico_credits_active());
+    runTicks(1600);
+    CHECK(!ico_credits_active() && s_loads == 1 && s_world == 7);
+    systemStatus[6] = 0;
+    ico_credits_set_engine(NULL);
+}
+
 int main(int argc, char **argv)
 {
     test_roll();
     test_lock(argc > 1 ? argv[1] : ".");
+    test_engine_failure();
     if (failures) {
         fprintf(stderr, "credits_test: %d failure(s)\n", failures);
         return 1;

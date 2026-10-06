@@ -697,6 +697,108 @@ static void testBuild(void)
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
 
+/* Review finding 1: Settings (its Music page and the photo, quit and
+   mirror screens included) and the model viewer's two screens built
+   together stay inside the layout extension, with room to spare, and no
+   row or layout came back -1.  The viewer's rows are built as
+   port/game/model_viewer.c build() builds them (a heading, a list of 8
+   slots with a right column, its hint; a list of 8 slots, two hints, three
+   rows; two layouts). */
+static int budgetCount(void *user)
+{
+    (void)user;
+    return 3;
+}
+
+static void budgetFill(void *user, int d, UiListSlot *out)
+{
+    (void)user;
+    (void)d;
+    out->label = "model";
+}
+
+static void testBudget(void)
+{
+    enum { MARGIN = 64 };
+
+    static const UiListDef def = {budgetCount, budgetFill, NULL, NULL, NULL};
+    static UiList list, anim;
+    static UiHint listHint, sticks, keys;
+    UiListStyle st;
+
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_SetLanguage(UI_LANG_EN);
+    ui_SettingsInstall();
+    const int settingsRows = lt_ext_PropCount(), settingsLayouts = lt_ext_LayoutCount();
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        int rows[64];
+        const int n = ui_SettingsPageRows((UiSettingsPage)p, rows, NULL, NULL, 64);
+        CHECK(ui_SettingsPageLayout((UiSettingsPage)p) >= LT_GAME_LAYOUT_COUNT,
+              "page %d has its layout", p);
+        for (int k = 0; k < n && k < 64; k++) {
+            CHECK(rows[k] >= LT_GAME_PROPERTY_COUNT, "page %d row %d: index %d", p, k, rows[k]);
+        }
+    }
+    /* the model viewer's screens, after Settings as in the game */
+    const int first = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    const int header = ui_SettingsAddRow(20, 12, 600, 40, 0, -1, UI_STR_EXTRAS_MODELS, NULL, 30.0f,
+                                         UI_ALIGN_CENTER);
+    memset(&st, 0, sizeof(st));
+    st.y0 = 40;
+    st.pitch = 18;
+    st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+    st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
+    st.statusY = 196;
+    ui_ListBuild(&list, &def, NULL, &st);
+    ui_HintBuild(&listHint, 196, 19.0f, ui_hint_mv_list, UI_HINT_MV_LIST_COUNT);
+    const int l1 = lt_ext_AddLayout(
+        &(LtProp){.first = first, .last = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount(), .link = -1});
+    const int first2 = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    memset(&st, 0, sizeof(st));
+    st.y0 = 30;
+    st.pitch = 15;
+    st.label = (UiListCol){404, 216, 18.0f, UI_ALIGN_LEFT};
+    st.colA = (UiListCol){620, 4, 18.0f, UI_ALIGN_RIGHT};
+    st.statusY = 196;
+    ui_ListBuild(&anim, &def, NULL, &st);
+    ui_HintBuild(&sticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
+    ui_HintBuild(&keys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
+    int last = -1;
+    for (int k = 0; k < 3; k++) {
+        last = ui_SettingsAddRow(24, 10 + 14 * k, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
+        CHECK(last >= LT_GAME_PROPERTY_COUNT, "viewer row %d: index %d", k, last);
+    }
+    const int l2 = lt_ext_AddLayout(&(LtProp){
+        .first = first2, .last = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount(), .link = -1});
+    CHECK(header >= 0 && l1 >= 0 && l2 >= 0, "the viewer's heading and layouts (%d, %d, %d)",
+          header, l1, l2);
+    for (int i = 0; i < UI_LIST_SLOTS; i++) {
+        CHECK(list.label[i] >= 0 && list.colA[i] >= 0 && anim.label[i] >= 0 && anim.colA[i] >= 0,
+              "viewer list slot %d", i);
+    }
+    CHECK(list.status >= 0 && anim.status >= 0, "the viewer lists' status rows");
+    const int rows = lt_ext_PropCount(), layouts = lt_ext_LayoutCount();
+    printf("settings_test: layout extension: Settings %d rows, %d layouts; with the model viewer "
+           "%d of %d rows, %d of %d layouts\n",
+           settingsRows, settingsLayouts, rows, LT_EXT_MAX_PROPERTIES, layouts, LT_EXT_MAX_LAYOUTS);
+    CHECK(rows + MARGIN <= LT_EXT_MAX_PROPERTIES, "%d rows leave %d of %d spare (at least %d)",
+          rows, LT_EXT_MAX_PROPERTIES - rows, LT_EXT_MAX_PROPERTIES, MARGIN);
+    CHECK(layouts + 4 <= LT_EXT_MAX_LAYOUTS, "%d layouts leave %d of %d spare (at least 4)",
+          layouts, LT_EXT_MAX_LAYOUTS - layouts, LT_EXT_MAX_LAYOUTS);
+    /* a bad index reads and writes a scratch row, never memory outside the
+       tables */
+    LtProperty *bad = lt_ext_Prop(-1);
+    CHECK(bad != NULL && lt_ext_PropIndex(bad) == -1, "lt_ext_Prop(-1) is a scratch row");
+    bad->downItem = 5;
+    CHECK(lt_ext_Prop(LT_GAME_PROPERTY_COUNT + rows)->downItem == 0,
+          "past the last row: a fresh scratch row");
+    CHECK(lt_ext_PropIndex(lt_ext_Prop(LT_GAME_PROPERTY_COUNT - 1)) == LT_GAME_PROPERTY_COUNT - 1,
+          "the game's last row is the game's");
+}
+
 /* R7d: the Frame rate row steps original, uncapped, 60, 120, 144, 240 */
 static void testFramerate(void)
 {
@@ -2118,8 +2220,11 @@ static void testExtras(void)
             press(0x40);
             errRelease(log, sizeof(log));
             char line[64];
-            snprintf(line, sizeof(line), "extras: %s not available yet", want[k]);
-            CHECK(strstr(log, line) != NULL && current_layout_id == exL,
+            snprintf(line, sizeof(line), "extras: %s not available", want[k]);
+            /* Models: "not available"; the locked Credits: "credits: locked"
+               alone (review nit: no false "not available") */
+            CHECK((k == 2 ? strstr(log, line) == NULL : strstr(log, line) != NULL) &&
+                      current_layout_id == exL,
                   "Cross on %s logs and stays (\"%s\")", want[k], log);
             CHECK(k != 2 || (strstr(log, "credits: locked") != NULL && !ico_credits_active()),
                   "Cross on the locked Credits: \"%s\"", log);
@@ -3151,6 +3256,7 @@ int main(int argc, char **argv)
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
     testBuild();
+    testBudget();
     testRepoint();
     testPlacement();
     testNavigation();

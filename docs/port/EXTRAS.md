@@ -103,7 +103,9 @@ stage is up, or goes back to the title. The log has
 `model_viewer: stage S loaded id N "name"` when a model is up,
 `model_viewer: motion "name" frame F/N` while an animation plays (every
 second), `model_viewer: the title is back`, and `model_viewer: failed:
-<why>` when a model cannot be shown.
+<why>` when a model cannot be shown or the title does not come back
+within 3000 Main ticks of leaving (the viewer then lets go of the game
+where it stands).
 
 The picture keeps the host stage's own look: its lights on the model and
 the stage's colour grading over the whole frame, so the grey has the
@@ -230,6 +232,13 @@ the rest of that run (docs/port/ACHIEVEMENTS.md, "Suspension"). The log
 has `credits: enter`, `credits: stage 60 up`, the song's request and start,
 `staff roll: start ... (Extras > Credits)`, `staff roll: the port credit is
 posted`, and `credits: back at the title ..., the game's state put back`.
+A start whose stage 60 is not up within 1500 Main ticks (with no stage
+change running; 4500 whatever runs) logs `credits: failed: the staff
+roll's stage was not reached ...`, asks for the title as the roll's end
+does, and keeps the flag until the title's stage is entered, where the
+state is put back (`credits: failed: back at the title ...`); if the title
+does not come within 1500 more ticks the state is put back where the game
+stands. The engine is `port/game/credits_live.c`.
 
 **No skip.** Triangle and Start do nothing during the playback, as in the
 real ending (its staff scenes switch to the empty layout, 55, and the

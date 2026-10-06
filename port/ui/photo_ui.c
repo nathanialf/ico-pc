@@ -146,7 +146,15 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     RdCamera game, ov;
     char fov[96] = "";
     if (rd_PhotoSceneCamera(&game) && ico_photo_camera(&ov, &game)) {
-        snprintf(fov, sizeof(fov), ui_Str(UI_STR_PHOTO_FOV), (int)(ico_photo_fov_deg(&ov) + 0.5f));
+        /* the translation is data, not a format: its "%d" replaced here */
+        const char *t = ui_Str(UI_STR_PHOTO_FOV);
+        const char *at = strstr(t, "%d");
+        const int deg = (int)(ico_photo_fov_deg(&ov) + 0.5f);
+        if (at) {
+            snprintf(fov, sizeof(fov), "%.*s%d%s", (int)(at - t), t, deg, at + 2);
+        } else {
+            snprintf(fov, sizeof(fov), "%s %d", t, deg);
+        }
     }
     const char *lines[5] = {ui_Str(UI_STR_PHOTO_MODE), ui_Str(UI_STR_PHOTO_HUD_MOVE),
                             ui_Str(UI_STR_PHOTO_HUD_LENS), ui_Str(UI_STR_PHOTO_HUD_KEYS), fov};

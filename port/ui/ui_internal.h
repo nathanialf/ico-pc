@@ -31,6 +31,15 @@ void ui__SuppressRecordHook(int delta);
 void ui__SetSyncHook(void (*fn)(void));
 void ui__Sync(void);
 
+/* Tests: the pixel sizes of the Arimo size sets alive now (up to cap
+   written), returns their count; whether a draw has had to reuse the
+   nearest size (every slot drawn within the last frames); the pixel size
+   of the Arimo fallback letters at a game-face size (0 without the game
+   face). */
+int ui__FontSizeSets(int *px, int cap);
+int ui__FontReusedNearest(void);
+int ui__FontFallbackPx(float size);
+
 #ifdef ICO_RD
 /* Tests: in overlay mode (font.h ui_BeginOverlay) the prims go to fn
    instead of rd_OverlayPrims, so a test can see them outside a present.

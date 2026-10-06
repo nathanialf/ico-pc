@@ -54,8 +54,8 @@
  * voices keyed after the request that were silent before it and start
  * inside the bank's SPU buffer, each read in sound RAM from its start (SSA)
  * to the block with the end flag, at its voice's pitch; a sample whose last
- * block loops repeats, and its elapsed time is then counted within the
- * loop.
+ * block loops is stopped when its length has played (one pass, as a
+ * stream).
  *
  * The list leaves out an effect whose row's program or tone its bank's
  * header lacks (seInBank: SgSePlay would refuse it).
@@ -94,7 +94,7 @@ extern void iosFree(void *p);
 #define SE_BANK 11           /* SqEntry.bank of an effect bank */
 #define STREAM_BANK 17       /* of a stream */
 #define SPU_SEG_TOP 0x1D9020 /* s_init.c: the top of segment 1 */
-#define MAX_EVICT 8
+#define MAX_EVICT 16         /* the title's stage banks closed for the gallery's (it has 1) */
 
 #define N_ADPCM 105
 #define N_SEFILE 104
@@ -153,37 +153,52 @@ static int onDisc(int no)
 
 /* bank b's header has the row's program and tone (GalleryTables.seInBank):
    read from its pack once, at the list's build */
+static int s_inBankCached = -1;
+static uint8_t *s_inBankHd;
+static uint32_t s_inBankSize;
+
+static void seInBankForget(void)
+{
+    free(s_inBankHd);
+    s_inBankHd = NULL;
+    s_inBankSize = 0;
+    s_inBankCached = -1;
+}
+
 static int seInBank(int b, int prog, int tone)
 {
-    static int cached = -1;
-    static uint8_t *hd;
-    static uint32_t hdSize;
     if (b <= 0 || b >= N_SEFILE || ico_vfs_disc() == NULL) {
         return -1;
     }
-    if (b != cached) {
+    if (b != s_inBankCached) {
         IcoDfMember m;
-        free(hd);
-        hd = NULL;
-        hdSize = 0;
-        cached = b;
+        seInBankForget();
+        s_inBankCached = b;
         if (ico_df_find_member(ico_vfs_disc(), seFile[b].hdPath, &m) == 0 &&
-            (hd = malloc(m.size)) != NULL) {
-            if (ico_df_read_member(ico_vfs_disc(), &m, hd) == 0) {
-                hdSize = m.size;
+            (s_inBankHd = malloc(m.size)) != NULL) {
+            if (ico_df_read_member(ico_vfs_disc(), &m, s_inBankHd) == 0) {
+                s_inBankSize = m.size;
             } else {
-                free(hd);
-                hd = NULL;
+                free(s_inBankHd);
+                s_inBankHd = NULL;
             }
         }
     }
-    return hd == NULL ? -1 : gallery_HdHas(hd, hdSize, prog, tone);
+    return s_inBankHd == NULL ? -1 : gallery_HdHas(s_inBankHd, s_inBankSize, prog, tone);
 }
 
 /* The bytes of stream `no` that play: its pass (sectors * 2048), or less
-   when the disc's file holds a block with the end flag inside it (only
-   event/40.int, blank from byte 0x93000: MUSIC.md, "Findings").  Read
-   once per stream, at its first play. */
+   when the disc's file is blank (blocks with the end flag) from a sector
+   inside it to the pass's end (only event/40.int, blank from byte 0x93000:
+   MUSIC.md, "Findings").  Found once per stream, at its first play, from
+   the pass's last sector back (gallery_StreamBlankFrom: a dozen sector
+   reads, not the file). */
+static int readSector(void *user, uint64_t off, uint8_t *buf)
+{
+    const char *base = user;
+    return ico_df_read(ico_vfs_disc(), base, off, buf, GALLERY_SECTOR) == GALLERY_SECTOR ? 0 : -1;
+}
+
 static double s_audible[N_ADPCM];
 static unsigned char s_audibleKnown[N_ADPCM];
 
@@ -200,28 +215,16 @@ static double audibleBytes(int no)
     const char *base = strrchr(adpcmFile[no].path, '/');
     base = base ? base + 1 : adpcmFile[no].path;
 
-    enum { CHUNK = 0x10000 };
-
-    uint8_t *buf = malloc(CHUNK);
     double at = pass;
-    for (uint64_t off = 0; buf != NULL && off < (uint64_t)pass; off += CHUNK) {
-        size_t want = (uint64_t)pass - off < CHUNK ? (size_t)((uint64_t)pass - off) : CHUNK;
-        int64_t got = ico_df_read(vfs, base, off, buf, want);
-        if (got <= 0) {
-            break;
-        }
-        long e = gallery_StreamEndBlock(buf, (size_t)got, adpcmFile[no].channels);
-        if (e >= 0) {
-            at = (double)(off + (uint64_t)e);
-            fprintf(stderr,
-                    "gallery: stream %d (%s): the disc's file has an end block at byte 0x%llX "
-                    "(blank from there): %.1f s of its %.1f s play\n",
-                    no, adpcmFile[no].path, (unsigned long long)(off + (uint64_t)e),
-                    streamSeconds(no, at), streamSeconds(no, pass));
-            break;
-        }
+    const long long from = gallery_StreamBlankFrom((uint64_t)pass, readSector, (void *)base);
+    if (from >= 0) {
+        at = (double)from;
+        fprintf(stderr,
+                "gallery: stream %d (%s): the disc's file has an end block at byte 0x%llX "
+                "(blank from there): %.1f s of its %.1f s play\n",
+                no, adpcmFile[no].path, (unsigned long long)from, streamSeconds(no, at),
+                streamSeconds(no, pass));
     }
-    free(buf);
     s_audible[no] = at;
     s_audibleKnown[no] = 1;
     return at;
@@ -357,8 +360,19 @@ static struct SqEntry *loadBank(int no, int seg, void **hdInOut)
     return e;
 }
 
-static void evictTitleBanks(void)
+static int evictTitleBanks(void)
 {
+    int n = 0;
+    for (int b = 0; b < N_SEFILE; b++) {
+        struct SqEntry *e = resident(b);
+        n += e && e->mode == 0 && e->seg != 0;
+    }
+    if (n > MAX_EVICT) {
+        /* they could not all be read back: none is closed */
+        fprintf(stderr, "gallery: failed: %d stage banks on the title, more than the %d kept\n", n,
+                MAX_EVICT);
+        return -1;
+    }
     s_nEvict = 0;
     for (int b = 0; b < N_SEFILE; b++) {
         struct SqEntry *e = resident(b);
@@ -366,7 +380,7 @@ static void evictTitleBanks(void)
             fprintf(stderr, "gallery: resident bank %d (%s): segment %d, SPU 0x%X, %d bytes\n", b,
                     seFile[b].bdPath, e->seg, e->spu.buf.addr, e->spu.buf.size);
         }
-        if (e && e->mode == 0 && e->seg != 0 && s_nEvict < MAX_EVICT) {
+        if (e && e->mode == 0 && e->seg != 0) {
             s_evict[s_nEvict].num = b;
             s_evict[s_nEvict].seg = e->seg;
             s_evict[s_nEvict].addr = e->spu.buf.addr;
@@ -379,6 +393,7 @@ static void evictTitleBanks(void)
     soundDataSegAllClose(2, 0);
     s_evicted = 1;
     fprintf(stderr, "gallery: closed the title's %d stage banks for the gallery's\n", s_nEvict);
+    return 0;
 }
 
 static void closeGalleryBank(void)
@@ -407,8 +422,8 @@ static int ensureBank(int no)
         fprintf(stderr, "gallery: failed: %s is in no pack on the disc\n", seFile[no].bdPath);
         return -1;
     }
-    if (!s_evicted) {
-        evictTitleBanks();
+    if (!s_evicted && evictTitleBanks() != 0) {
+        return -1;
     }
     closeGalleryBank();
     int size = ((int)(m.size - 1) / 64 + 1) * 64;
@@ -617,6 +632,19 @@ static void leave(void)
     stopAll();
     restoreTitleBanks();
     soundSeKindBuild(); /* playSe pointed kinds at the gallery's rows */
+    seInBankForget();
+    titleTick();
+    if (s_titleState == 1) {
+        /* still fading: the theme is closed now (AdpcmClose is immediate),
+           so the request below cannot find it open, and titleAdpcm is not
+           overwritten under the fade */
+        if (titleAdpcm != NULL && scpAdpcmCloseChkFunc(&titleAdpcm) != 0) {
+            scpAdpcmCloseFunc(&titleAdpcm);
+        }
+        titleAdpcm = NULL;
+        s_titleState = 2;
+        fprintf(stderr, "gallery: the title theme's fade cut short on leaving\n");
+    }
     if (s_titleWas) {
         scpAdpcmPlayRequestFunc(TITLE_THEME, &titleAdpcm, 0, 0, 1);
         fprintf(stderr, "gallery: the title theme is requested again\n");
@@ -700,9 +728,32 @@ static void streamFailed(const char *why)
     stopAll();
 }
 
+/* An effect plays once (docs/port/MUSIC.md, "One pass"): a sample whose
+   end block loops is stopped when its length has played, so the bar never
+   wraps (within the Main tick this is polled on) */
+static void effectTick(void)
+{
+    if (s_cur == NULL || s_cur->kind != GAL_K_SE || s_seId < 0) {
+        return;
+    }
+    const unsigned long long el = audioFrame() - s_seFrame;
+    if (el < SE_FIND_FRAMES) {
+        findEffectVoices();
+    }
+    if (s_seLoops && s_seTotal > 0.0f && (double)el / SPU_RATE >= (double)s_seTotal) {
+        soundSeDefStop(s_seId);
+        s_seId = -1;
+        fprintf(stderr,
+                "gallery: effect %d stopped after one pass of its looping sample (%.2f s) at "
+                "audio frame %llu\n",
+                s_cur->key, (double)s_seTotal, audioFrame());
+    }
+}
+
 static void tick(void)
 {
     titleTick();
+    effectTick();
     if (s_wantStream || (s_streamPending && s_stream == NULL)) {
         s_waitTicks++;
     } else {
@@ -797,10 +848,8 @@ static int positionOf(float *elapsed, float *total)
     if (audioFrame() - s_seFrame < SE_FIND_FRAMES) {
         findEffectVoices();
     }
-    double t = (double)(audioFrame() - s_seFrame) / SPU_RATE;
-    if (s_seLoops && s_seTotal > 0.0f) {
-        t = t - (double)s_seTotal * (double)(long long)(t / (double)s_seTotal);
-    }
+    /* one pass (effectTick): no wrap */
+    const double t = (double)(audioFrame() - s_seFrame) / SPU_RATE;
     *elapsed = (float)t;
     *total = s_seTotal;
     if (*total > 0.0f && *elapsed > *total) {

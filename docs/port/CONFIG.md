@@ -107,7 +107,6 @@ user-facing switch.
 | `[photo] stick_speed` | | `1.0` | photo mode (docs/port/DISPLAY.md, "Photo mode"): the sticks' speeds (orbit, dolly, pan) times this, above 0, at most 10; read each time photo mode opens |
 | `[photo] invert_y` | | `false` | photo mode: the left stick's up and down swapped (up lowers the camera) |
 | `[photo] png_dir` | | `"screenshots"` | photo mode: the folder the pictures go to, in the pref folder (`<pref>/screenshots/ico-<date>-<time>.png`); created when missing (one level) |
-| `[photo] dof` | | `false` | photo mode's depth of field: not implemented; `true` only logs `photo: [photo] dof is not implemented` |
 | `[dev] ticks` | `ticks` | none | exit after N Main ticks |
 | `[dev] watchdog` | `watchdog` | `30` | seconds without progress before the watchdog fires; 0 is off |
 | `[dev] trace` | `trace` | on in the headless build, off in the window build | `true`/`1` writes `logs/trace-<time>.txt`, a path writes there, `false`/`0`/`none` writes none. The window build writes a trace only when asked, so a player's `logs/` does not grow by one per run; `logs/ico-pc.log` is always written |

@@ -45,11 +45,15 @@ static unsigned long drops;
 static int16_t silence[1024 * CHANNELS];
 static int16_t scaled[1024 * CHANNELS];
 
-/* the playback device called `name`, 0 when none is */
+/* the playback device called `name`, 0 when none is.  A name as long as
+   the list's buffers hold (ico_audio_sdl_devices cuts at
+   ICO_AUDIO_DEVICE_NAME_MAX - 1 bytes, and Settings saves what it listed)
+   matches a device whose name starts with it, when no name is equal. */
 static SDL_AudioDeviceID find_device(const char *name)
 {
-    SDL_AudioDeviceID found = 0;
+    SDL_AudioDeviceID found = 0, prefixed = 0;
     SDL_AudioDeviceID *ids;
+    const size_t len = strlen(name);
     int n = 0;
     int i;
 
@@ -57,12 +61,18 @@ static SDL_AudioDeviceID find_device(const char *name)
     for (i = 0; ids != NULL && i < n && found == 0; i++) {
         const char *s = SDL_GetAudioDeviceName(ids[i]);
 
-        if (s != NULL && strcmp(s, name) == 0) {
+        if (s == NULL) {
+            continue;
+        }
+        if (strcmp(s, name) == 0) {
             found = ids[i];
+        } else if (prefixed == 0 && len >= ICO_AUDIO_DEVICE_NAME_MAX - 1 &&
+                   strncmp(s, name, len) == 0) {
+            prefixed = ids[i];
         }
     }
     SDL_free(ids);
-    return found;
+    return found != 0 ? found : prefixed;
 }
 
 /* the stream on `name`'s device, or the default; playing */

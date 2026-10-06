@@ -136,6 +136,9 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 #define ZOOM_RATE 0.08f
 #define PITCH_MAX 1.35f
 #define LOAD_TIMEOUT_TICKS 3000u
+/* the title's stage back after End Game (a few hundred ticks); past this
+   the viewer lets go of the game anyway */
+#define LEAVE_TIMEOUT_TICKS 3000u
 #define LOG_EVERY_TICKS 25u
 
 enum { MV_OFF, MV_LOADING, MV_VIEW, MV_LIST, MV_LEAVING };
@@ -473,6 +476,18 @@ static void mvStart(int row)
        End Game's gflagInit clears) */
     ACTGame_SetActors_Debug(m->stage, 0);
     stgmgrForceSwitchWithFade(m->stage, 1.0f, 8.0f);
+}
+
+/* the viewer off: the draw filter, the pause menu and the flag given back */
+static void mvLetGo(void)
+{
+#ifdef ICO_RD
+    rd_SetDrawFilter(false, NULL, 0);
+#endif
+    ico_mv_active = 0;
+    enable_game_pause = s_pauseSaved;
+    s_model = -1;
+    setState(MV_OFF);
 }
 
 static void mvToTitle(void)
@@ -932,14 +947,14 @@ void ico_mv_tick(void)
             s_sawChange = 1;
         }
         if (s_sawChange && systemStatus[6] == 0 && stage_no == TITLE_STAGE) {
-#ifdef ICO_RD
-            rd_SetDrawFilter(false, NULL, 0);
-#endif
-            ico_mv_active = 0;
-            enable_game_pause = s_pauseSaved;
-            s_model = -1;
-            setState(MV_OFF);
+            mvLetGo();
             fprintf(stderr, "model_viewer: the title is back\n");
+        } else if (now - s_since > LEAVE_TIMEOUT_TICKS) {
+            /* the title never came: the draw filter, the pause and the flag
+               given back where the game stands */
+            mvLetGo();
+            fprintf(stderr, "model_viewer: failed: the title did not come back (stage %d)\n",
+                    stage_no);
         }
         return;
     }

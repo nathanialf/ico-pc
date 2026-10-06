@@ -21,7 +21,12 @@
  *     round(size * box.h / 448), rects snapped, the scale restored; a
  *     popup drawn on the overlay records nothing into the open frame's
  *     lists (list 12 included), sits at the 4:3 picture's right, and is
- *     the same with the mirror on.
+ *     the same with the mirror on;
+ *   - the size sets (review finding 2): a synthetic game face loaded, 40
+ *     sizes of "IHL" measured (no Arimo set made) and then drawn over five
+ *     frames: each draw has the H's Arimo set at its exact size, the least
+ *     recently drawn sets go, "the nearest" is never reused, and a text
+ *     without a fallback letter makes no set.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): "ICO" and
  * "Éléphant" drawn through rd into SCENE: coverage only inside the bounds
  * the glyph quads give, the acute above the capitals, and the blend of a
@@ -54,6 +59,7 @@
 #include "GifPacket.h"
 /* port/ui */
 #include "font.h"
+#include "game_font.h"
 #include "layout_ext.h"
 #include "popup.h"
 #include "strings.h"
@@ -1295,6 +1301,103 @@ done:
     free(q);
 }
 
+/* a game face of two letters drawn on a sheet: I and L (font_edge_test's) */
+static int loadSyntheticFace(void)
+{
+    enum { W = 128, H = 20 };
+
+    static uint8_t sheet[W * H * 4];
+    memset(sheet, 0, sizeof(sheet));
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            uint8_t *p = sheet + ((size_t)y * W + (size_t)x) * 4;
+            p[0] = p[1] = p[2] = 255;
+            const int inI = x >= 10 && x < 12 && y >= 5 && y < 15;
+            const int inL =
+                (x >= 20 && x < 22 && y >= 5 && y < 15) || (x >= 20 && x < 26 && y >= 13 && y < 15);
+            p[3] = (inI || inL) ? 255 : 0;
+        }
+    }
+    UiGfBuilder *b = ui_GfBuilderNew();
+    if (!b) {
+        return 0;
+    }
+    UiGfSource src;
+    memset(&src, 0, sizeof(src));
+    src.rgba = sheet;
+    src.sheetW = W;
+    src.sheetH = H;
+    src.w = W;
+    src.h = H;
+    src.em = 13.5f;
+    src.capMid = 10.0f;
+    src.pitch = 15.5f;
+    src.text = "I L";
+    src.sheet = ui_GfBuilderSheet(b, "synthetic.tm2");
+    ui_GfBuilderAdd(b, &src);
+    uint8_t *blob = NULL;
+    size_t size = 0;
+    const int ok =
+        ui_GfBuilderFinish(b, 13.5f, &blob, &size, NULL) == 0 && ui_GameFaceLoad(blob, size);
+    free(blob);
+    ui_GfBuilderFree(b);
+    return ok;
+}
+
+static void testSizeSets(void)
+{
+    enum { N = 40, PER_FRAME = 8 };
+
+    static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
+    if (!rd__InitRecordOnly(512, 512)) {
+        CHECK(0, "rd__InitRecordOnly");
+        return;
+    }
+    ui_FontShutdown();
+    const float before = ui_GetScale();
+    ui_SetScale(1.0f);
+    CHECK(ui_FontInit() && ui__FontSizeSets(NULL, 0) == 0, "no size set to start");
+    CHECK(loadSyntheticFace(), "the synthetic game face loads");
+    float sizes[N];
+    int pxs[N];
+    for (int i = 0; i < N; i++) {
+        sizes[i] = 8.0f + 2.0f * (float)i;
+        pxs[i] = ui__FontFallbackPx(sizes[i]);
+        CHECK(pxs[i] > 0 && (i == 0 || pxs[i] != pxs[i - 1]), "size %.0f: fallback %d px",
+              (double)sizes[i], pxs[i]);
+        CHECK(ui_MeasureText(sizes[i], "IHL") > 0.0f, "size %.0f measured", (double)sizes[i]);
+    }
+    CHECK(ui__FontSizeSets(NULL, 0) == 0, "measuring made %d size sets (none)",
+          ui__FontSizeSets(NULL, 0));
+    for (int f = 0; f < N / PER_FRAME; f++) {
+        rd_BeginFrame();
+        rd_SelectList(11);
+        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+        for (int k = 0; k < PER_FRAME; k++) {
+            const int i = f * PER_FRAME + k;
+            const float w = ui_MeasureText(sizes[i], "IHL");
+            ui_DrawText(100.0f, 100.0f, sizes[i], white, "IHL", UI_HALO);
+            int w0 = 0, h0 = 0;
+            CHECK(ui_FontPage(pxs[i], 0, &w0, &h0) != NULL && ui_FontPageTex(pxs[i], 0) != 0,
+                  "size %.0f: the H drawn from its own %d px set", (double)sizes[i], pxs[i]);
+            CHECK(ui_MeasureText(sizes[i], "IHL") == w, "size %.0f: the measure unchanged",
+                  (double)sizes[i]);
+        }
+        rd_EndFrame(0);
+    }
+    const int live = ui__FontSizeSets(NULL, 0);
+    CHECK(!ui__FontReusedNearest(), "no draw reused the nearest size (%d sets alive)", live);
+    rd_BeginFrame();
+    ui_DrawText(100.0f, 100.0f, 91.0f, white, "ILLI", UI_HALO);
+    rd_EndFrame(0);
+    CHECK(ui__FontSizeSets(NULL, 0) == live, "game letters alone made no size set (%d, %d)",
+          ui__FontSizeSets(NULL, 0), live);
+    ui_GameFaceUnload();
+    ui_SetScale(before);
+    rd_Shutdown();
+    ui_FontForgetTextures();
+}
+
 int main(void)
 {
     testGlyphs();
@@ -1305,6 +1408,7 @@ int main(void)
     testPopups();
     testOverlay();
     testAtlasUploads();
+    testSizeSets();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;

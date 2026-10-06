@@ -392,8 +392,16 @@ the pixel size is `round(size * scale)`, where the scale is 1 in the
 Original preset (an atlas pixel per y unit, about 1.14 GS lines) and the
 output height / 448 in Enhanced (`ui_ScaleFor`; `ui_host.c` sets it from
 `rd_GetSettings()` before each draw), so text is rasterised at the
-output's density. Pages are shelf-packed, up to 4 per size and 16 sizes
-(beyond that the nearest size stands in, logged once). A page is 512
+output's density. Pages are shelf-packed, up to 4 per size and 32 sizes
+alive. Measuring makes no set (the advances and kerning come from the font's
+metrics at the pixel size, as the set has them), and a game-face text makes
+Arimo's set only when a fallback letter is drawn. When all 32 are taken the
+set drawn least recently goes, once 4 rd frames have closed since it was
+last drawn (a frame still replayed may name its pages); only when every set
+was drawn in those frames does the nearest size stand in, logged once
+(`ui_test` draws 40 sizes over five frames and asserts it never does). The
+game face's passes (ink, glow, alpha, light, Arimo's halo and letters) are
+built from one layout per draw, in static buffers. A page is 512
 texels wide, or 1024 or 2048 for pixel sizes above 85 or 170 (an Enhanced
 4K output sets the menu's 27 units at about 130 px), and 8 texels less
 high, so its height is never a power of two. That is deliberate: the
@@ -700,8 +708,9 @@ stop at the ends and the proc scrolls, wrapping at the ends of the list.
 
 **Extras** (`UI_PAGE_EXTRAS`, docs/port/EXTRAS.md). Each entry is an
 `UI_OPT_EXTRAS_*` row whose Cross calls a hook in `settings.c` (`extrasMusic`,
-`extrasModels`, `extrasCredits`) that returns the layout to open, or -1 for
-"not there yet" (logged as `extras: <entry> not available yet`).
+`extrasModels`, `extrasCredits`) that returns the layout to open, or -1 when
+it cannot open (logged as `extras: <entry> not available`; a locked Credits
+logs `credits: locked` alone).
 `extrasCredits` returns -1 while `creditsUnlocked()` (`ico_credits_unlocked`)
 is false; unlocked, it saves the menu, starts the playback
 (`ico_credits_start`, `port/game/credits.c`) and returns the game's empty
@@ -721,9 +730,16 @@ row (the colour at half, whatever the cursor does; `lt_ext_RowDim` reads it
 back), the value shows `UI_STR_ACH_LOCKED`, and the note
 `UI_STR_EXTRAS_LOCKED_NOTE` unmasks while the cursor is on the row. `build()`
 prints the layout extension's use under developer mode (`lt_ext_PropCount`
-of `LT_EXT_MAX_PROPERTIES` 256, `lt_ext_LayoutCount` of 32); with Extras it is
-171 properties and 13 layouts, and `settings_test` asserts both are under the
-limits.
+of `LT_EXT_MAX_PROPERTIES` 512, `lt_ext_LayoutCount` of `LT_EXT_MAX_LAYOUTS`
+32): Settings with its Music page and its screens is 212 properties and 15
+layouts, and with the model viewer's two screens 265 and 17 (`settings_test`
+builds both and asserts 64 properties and 4 layouts to spare; the
+`model_viewer_headless` run fails when its "(N of 512 properties in use)" line
+reaches the cap). A full extension logs `ui: layout extension full` once and
+the add returns -1; `lt_ext_Prop` and `lt_ext_Layout` of an index that names no
+row (-1, the tables' "none" and a failed add's result, or past the end)
+return a zeroed scratch row, never memory outside the tables (an index other
+than -1 is logged once).
 
 **Lists** (`ui_list.h`). A list page is a window of `UI_LIST_SLOTS` (8) slots
 over N items, described by a `UiListDef`: `count`, `fill` (label, column A and

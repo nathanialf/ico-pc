@@ -38,8 +38,6 @@ static struct {
     float speed;
     int invertY;
     char pngDir[256];
-    int dof;
-    int dofWarned;
     float fovGame; /* the game camera's vertical field of view at the last ico_photo_camera */
     float elev0;   /* and the elevation of its forward axis */
     int haveElev;
@@ -69,7 +67,6 @@ static void readConfig(void)
     s.invertY = ico_config_get_bool("photo.invert_y", 0);
     const char *d = ico_config_get_string("photo.png_dir", "screenshots");
     snprintf(s.pngDir, sizeof(s.pngDir), "%s", d && d[0] ? d : "screenshots");
-    s.dof = ico_config_get_bool("photo.dof", 0);
 }
 
 float ico_photo_stick_speed(void)
@@ -90,11 +87,6 @@ const char *ico_photo_png_dir(void)
     return s.pngDir;
 }
 
-int ico_photo_dof(void)
-{
-    return s.dof;
-}
-
 void ico_photo_enter(void)
 {
     const int hud = s.st.active ? s.st.hud : 1;
@@ -107,10 +99,6 @@ void ico_photo_enter(void)
     s.capturePending = 0;
     fprintf(stderr, "photo: enter (stick_speed %.2f, invert_y %d, png_dir \"%s\")\n",
             (double)s.speed, s.invertY, s.pngDir);
-    if (s.dof && !s.dofWarned) {
-        fprintf(stderr, "photo: [photo] dof is not implemented; the picture is sharp\n");
-        s.dofWarned = 1;
-    }
 }
 
 void ico_photo_exit(void)

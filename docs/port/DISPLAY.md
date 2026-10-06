@@ -263,8 +263,7 @@ Everything else (the castle, the characters, the plants, the water's
 surface, the fog, the glow and blur effects) is drawn again for the new
 camera. The motion blur's trail is not kept while the camera moves.
 
-**Depth of field** (`[photo] dof`) is not implemented: the key is read and
-logged, and the picture stays sharp.
+Photo mode has no depth of field: the picture stays sharp.
 
 ## Wide pictures: what stretches and what stays in the middle
 

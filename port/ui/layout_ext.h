@@ -41,7 +41,7 @@ extern "C" {
 #define LT_GAME_LAYOUT_COUNT 80
 #define LT_GAME_PROPERTY_COUNT 436
 #define LT_EXT_MAX_LAYOUTS 32
-#define LT_EXT_MAX_PROPERTIES 256
+#define LT_EXT_MAX_PROPERTIES 512
 
 /* The label of a port row. */
 typedef struct LtExtText {
@@ -55,7 +55,8 @@ typedef struct LtExtText {
    the extension is full.  first/last name port property indices. */
 int lt_ext_AddLayout(const LtProp *layout);
 /* Appends a property row with its label; returns its index
-   (>= LT_GAME_PROPERTY_COUNT), or -1.  A row with neither dispW nor texW
+   (>= LT_GAME_PROPERTY_COUNT), or -1 (full: "ui: layout extension full",
+   logged once).  A row with neither dispW nor texW
    gets dispW 400, one with neither dispH nor texH dispH 40 (the Options
    screen's row height: 20 field lines). */
 int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text);
@@ -124,8 +125,9 @@ int lt_ext_SetFill(int index, float fill);
 float lt_ext_RowFill(int index);
 
 /* The table lookups layout_texture.c makes through LT_LAYOUT/LT_PROP: the
-   game's row for an index below its count (or any index outside both
-   ranges, as the plain array access would), else the port's. */
+   game's row for an index below its count, the port's above it; an index in
+   neither (-1, the tables' "none", or past the port's last row) a zeroed
+   scratch row, never memory outside the tables (logged once unless -1). */
 LtProp *lt_ext_Layout(int index);
 LtProperty *lt_ext_Prop(int index);
 /* whether e is a port row, and its index */

@@ -160,9 +160,10 @@ endif()
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
 # roll's forms, and the roll ends after them; then the lock ([dev]
-# unlock_credits through the ini) and a start with no engine. CPU only.
+# unlock_credits through the ini) and a start with no engine; then
+# credits_live.c's failure paths over stubs of the game. CPU only.
 ico_include_dirs(common _ico_credits_incs)
-add_executable(credits_test test/credits_test.c credits.c
+add_executable(credits_test test/credits_test.c credits.c credits_live.c
     "${CMAKE_SOURCE_DIR}/ico2/common/src/staffroll.c" ../platform/host_config.c)
 target_include_directories(credits_test PRIVATE ${_ico_credits_incs} "${_ico_gs_include}"
                            "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")

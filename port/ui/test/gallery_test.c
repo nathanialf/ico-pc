@@ -142,6 +142,29 @@ static int listRowOf(int bank, int idx)
 }
 
 /* a stream's time on synthetic records (gallery.h, MUSIC.md "Position") */
+/* a stream of sectors that play below s_blankFrom and are blank (0xFF,
+   the end flag) from it */
+static long long s_blankFrom;
+static int s_reads;
+
+static int fakeSector(void *user, uint64_t off, uint8_t *buf)
+{
+    (void)user;
+    s_reads++;
+    memset(buf, (long long)(off / 0x800) >= s_blankFrom ? 0xFF : 0x0C, 0x800);
+    if ((long long)(off / 0x800) < s_blankFrom) {
+        for (int i = 0; i < 0x800; i += 16) {
+            buf[i + 1] = 2;
+        }
+    }
+    return 0;
+}
+
+static int discSector(void *user, uint64_t off, uint8_t *buf)
+{
+    return ico_df_read(s_vfs, (const char *)user, off, buf, 0x800) == 0x800 ? 0 : -1;
+}
+
 static void timeMaths(void)
 {
     AdpcmDataRec r;
@@ -204,8 +227,24 @@ static void timeMaths(void)
     CHECK(gallery_HdHas(hd, sizeof(hd), 2, 0) == 1 && gallery_HdHas(hd, sizeof(hd), 2, 1) == 0,
           "program 2 has tone 0");
     CHECK(gallery_HdHas(hd, sizeof(hd), 3, 0) == 0, "program 3 is past the last");
+    /* an SE table offset near 2^32: off + 2 must not wrap past the size check */
+    hd[0x1C] = 0xFE, hd[0x1D] = 0xFF, hd[0x1E] = 0xFF, hd[0x1F] = 0xFF;
+    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 0) == 0, "a table offset of 0xFFFFFFFE is out");
+    hd[0x1C] = 0x40, hd[0x1D] = 0, hd[0x1E] = 0, hd[0x1F] = 0;
     hd[0x0C] = 0;
     CHECK(gallery_HdHas(hd, sizeof(hd), 0, 0) == 0, "no magic, no program");
+
+    /* the blank tail by halving: blank from sector 37 of 100, from 0, none */
+    s_blankFrom = 37;
+    s_reads = 0;
+    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == 37 * 0x800 && s_reads <= 9,
+          "blank from sector 37 (%d reads)", s_reads);
+    s_blankFrom = 0;
+    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == 0, "blank from the start");
+    s_blankFrom = 100;
+    s_reads = 0;
+    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == -1 && s_reads == 1,
+          "no blank tail: one read");
 }
 
 int main(int argc, char **argv)
@@ -467,6 +506,9 @@ int main(int argc, char **argv)
                        gallery_StreamSeconds(&adpcmFile[no], (double)pass));
             }
             CHECK(e < 0 || (no == 50 && e == 0x93000), "stream %d: an end block at 0x%lX", no, e);
+            /* the engine's halving from the pass's last sector finds the same */
+            CHECK(gallery_StreamBlankFrom((uint64_t)pass, discSector, (void *)b) == e,
+                  "stream %d: the blank tail by halving at the whole scan's 0x%lX", no, e);
         }
         CHECK(ended == 1, "one stream ends early on the disc (%d)", ended);
     }

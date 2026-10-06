@@ -102,10 +102,10 @@ An effect's total is its sample: the voices that start sounding after the
 request inside the bank's SPU buffer, each read in sound RAM from its start
 address (SSA) to the 16-byte block with the end flag, at the voice's pitch;
 its elapsed time is counted from the request on the SPU2's clock. A sample
-whose end block loops repeats (an ambience, a machine's hum), and the bar
-then starts again each loop length (the loop restarts at its loop point,
-not its start, so this is the sample's length, not the loop's); the effect
-sounds until Square, the next play or leaving. Until the effect's voice is
+whose end block loops (an ambience, a machine's hum) is stopped when its
+length has played (one pass, below; the loop restarts at its loop point,
+not its start, so the length is the sample's, not the loop's), within the
+Main tick the page polls on: the bar never wraps. Until the effect's voice is
 found the total shows `-:--`.
 
 **Seeking** is not offered. Restarting a stream at an offset is not a
@@ -147,8 +147,10 @@ Then `titleAdpcm` is cleared, as op.c does after its own fade:
 whatever it points to. On leaving, a theme that was playing is requested
 again, from its start.
 
-**One pass.** Every stream plays once, from its start to its end, and
-stops; none loops, `loopStart` or not. The engine's own end is early for
+**One pass.** Every piece plays once, from its start to its end, and
+stops; no stream loops, `loopStart` or not, and no effect: a looping
+effect sample is stopped after its length (`effectTick`, logged as
+`gallery: effect N stopped after one pass of its looping sample`). The engine's own end is early for
 this: with `loopNum` N, `adpcmTickProc2` closes the stream when the reader's
 count of consumed bytes (`remain`, moved by the IOP read offset) has gone
 round N times, and the reads run ahead of the voice by what the SPU ring
@@ -180,10 +182,13 @@ from byte 0x93000 (11.9 s in) to the end of its pass: 4,438 of its 4,732
 sectors are 0xFF bytes (its ring pad is not), on the image the port accepts (SHA-1 `1017b53f...`,
 DATA.md). An ADPCM block of 0xFF bytes has the end, repeat and loop-start
 flags, so the voice loops that one block, the driver's fills stop and the
-time stood at 11.9 s. No script requests stream 50. The engine reads each
-stream's pass once, at its first play, for a block with the end flag
-(`gallery_StreamEndBlock`; only event/40 has one inside its pass, checked by
-the `gallery` test), logs `gallery: stream 50 (...): the disc's file has an
+time stood at 11.9 s. No script requests stream 50. The engine looks once
+per stream, at its first play, for a blank tail: the pass's last sector is
+read, and when it holds a block with the end flag the first such sector is
+found by halving (`gallery_StreamBlankFrom`, about a dozen sector reads, not
+the file; only event/40 has one inside its pass, and the `gallery` test
+checks that the halving finds what a scan of every stream's whole pass
+finds), logs `gallery: stream 50 (...): the disc's file has an
 end block at byte 0x93000 (blank from there): 11.9 s of its 192.3 s play`,
 and plays and shows that much: its total is 0:11 and it ends there.
 
@@ -215,7 +220,7 @@ in memory, each at its old address (a different address is logged as
 `gallery: failed`).
 
 **Limits.** No sequenced music (above). Effects play without position, pan,
-distance or their environment's procs; a looping sample loops. A stream
+distance or their environment's procs; a looping sample plays once. A stream
 restarts from the beginning; the title theme restarts from its start on
 leaving. A stall of the simulation thread longer than a ring (0.37 s at
 44.1 kHz) would miscount the NAX clock; the menu has none. Opening the
@@ -250,7 +255,8 @@ After: every listed stream plays once from its start and ends with the bar
 at its total (within 0.1 s, the log's rounding; the voice within 20 ms of
 the last byte), battle.int included; event/40 plays its 11.9 s and ends
 there; no wrap; every one of the 180 effects sampled from the 60 banks is
-keyed (44 of them loop and are cut at the 10 s dwell); R1 and L1 start the
+keyed (44 of them loop and were cut at the 10 s dwell; since then a
+looping effect stops after one pass, "One pass", not yet re-swept); R1 and L1 start the
 next and previous entry while a stream plays; the title's banks and theme
 come back on leaving. The "before" ends are the time the page showed then
 (`dataSize - remain` less 1.5 ring halves); the "after" ends are the voice's
