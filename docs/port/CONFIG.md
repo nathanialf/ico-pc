@@ -27,11 +27,6 @@ are answered from these files and from the host.
   `<pref folder>/memcard`, so the saves live with the config;
   `[paths] saves` or `saves=` moves them; `[paths] saves2` adds a second
   card in port 1.
-- **pipelines.vkcache** is `<pref folder>/pipelines.vkcache`: the Vulkan
-  pipeline cache, written at shutdown and read at the next start when its
-  header matches the device (vendor, device, cache UUID); otherwise it is
-  ignored and rewritten. Deleting it only costs the next start's shader
-  compiles (docs/port/RENDER_API.md, "Pipelines").
 - **ico-pc.ini** sits beside the executable (docs/port/TESTING.md).
 - **ico.o2r**, the extracted game data (docs/port/DATA.md), is
   `<pref folder>/ico.o2r`, written on the first run. One beside the
