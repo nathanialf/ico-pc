@@ -14,8 +14,10 @@ import shutil
 import sys
 
 # the opening demo's skip is pad-boot.txt's last press at or before this Main
-# tick (the title shows at 439)
-BOOT_LAST = 440
+# tick (the title shows at about 399: kanbanBoot's step 8 is at tick 318 in
+# the log, the title 80 ticks on; it was 439 before the boot lost its stage
+# reload and second card check)
+BOOT_LAST = 400
 
 
 class PadScript:

@@ -4,9 +4,12 @@
 # DOWN 4000, LEFT 8000.
 #
 # Ticks 8..477: the boot signs, as port/input/pad-boot.txt's first phase
-# (LEFT, CROSS, START every 40 ticks), up to the title. Measured on the
-# headless build with an empty card folder: the title (layout 12) is up at
-# tick 438 and turns to "New Game" only (layout 13) at tick 501.
+# (LEFT, CROSS, START every 40 ticks), up to the title. On the headless build
+# with an empty card folder the log shows kanbanBoot's step 8 at tick 318
+# (358 before the boot lost its stage reload and second card check), so the
+# title (layout 12) is up at about tick 398 (it was 438) and turns to "New
+# Game" only (layout 13) at about tick 461 (it was 501). The shift is one
+# press cycle (40 ticks), so the presses meet the title in the same phase.
 # Then, a press every 12 ticks or more, each after the screen's fade-in:
 #   545  DOWN     the title's cursor from New Game to Settings
 #   565  CROSS    Settings (its main page, up at tick 586)

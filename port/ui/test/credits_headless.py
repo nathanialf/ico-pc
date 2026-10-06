@@ -33,7 +33,7 @@ import sys
 from headless_common import PadScript, fresh_work
 
 # the boot: port/input/pad-boot.txt's presses up to the opening demo's skip
-# (the title shows at Main tick 439), then Down to Settings, Cross, Down six
+# (the title shows at about Main tick 399), then Down to Settings, Cross, Down six
 # times to Extras, Cross, Down twice to Credits, Cross (headless_common.py)
 # the roll takes about 5,900 Main ticks from the STAFF1 stage; the title is
 # back about 6,000 ticks after the Cross (Main tick 6,840), and the run goes
