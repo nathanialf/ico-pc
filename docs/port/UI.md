@@ -14,6 +14,7 @@ the words of the game's own menus.
 | `port/ui/popup.c`, `popup.h` | the popup queue, timing and drawing |
 | `port/ui/ui_host.c`, `ui_host.h` | the window build's glue: the game's globals, the decoder flush, the per-vsync step |
 | `port/ui/settings.c`, `settings.h` | the Settings menu: its port layouts, the entry rows and repoints, the screens' procs, the title layout, the quit and mirror-mode screens |
+| `port/ui/ui_list.c`, `ui_list.h` | the scrolling list pages ("Lists" below): the slots, the refresh from the page's items, headings the cursor skips, the scrolling; the achievements and remap pages use it |
 | `port/ui/menu_text.c`, `menu_text.h` | the game's menu text drawn with the port font ("Menu text" below) |
 | `port/ui/embed_font.cmake` | turns the font file into a C array at build time |
 | `port/ui/test/ui_test.c`, `settings_test.c`, `menu_text_test.c` | the tests (below) |
@@ -362,7 +363,8 @@ rows right-aligned ending at x 344 and value rows from x 364:
 
 | screen | rows |
 | --- | --- |
-| Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Developer mode (value), Back; notes under Language and Developer mode |
+| Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Extras (opens its page; from the title only), Developer mode (value), Back; notes under Language and Developer mode. With the Extras row there are nine rows on a 17-line pitch from line 40 (the notes sit at 196); from the pause menu the row is masked (`defaultMask`), the eight left keep the 19-line pitch, and `layoutMain` relinks the rows' up and down items past it each tick, because `lt_property_visible` does not look at masks |
+| Extras | Music, Models, Credits, Back; a note under Credits while it is locked |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode (changes only when Settings was opened from the title; from the pause menu its value reads "PAL 50 Hz (title only)" and Left and Right do nothing), Menu text, Back; 17 field lines apart from line 36 |
 | Audio | Volume, Back |
 | Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
@@ -379,6 +381,35 @@ units by measuring (`ui_MeasureText`), redone when the language changes.
 Every port row gets a texel V of its own so the fade-cancel pairing never
 matches two port rows. In the lists the slots' first and last item links
 stop at the ends and the proc scrolls, wrapping at the ends of the list.
+
+**Extras** (`UI_PAGE_EXTRAS`, docs/port/EXTRAS.md). Each entry is an
+`UI_OPT_EXTRAS_*` row whose Cross calls a hook in `settings.c` (`extrasMusic`,
+`extrasModels`, `extrasCredits`, marked for packages MUS, MV and CRED) that
+returns the layout to open, or -1 for "not there yet" (logged as `extras:
+<entry> not available yet`). The locked style is `rowLocked` (Credits while
+`creditsUnlocked()` is false): `lt_ext_SetDim` greys the label and the value
+row (the colour at half, whatever the cursor does; `lt_ext_RowDim` reads it
+back), the value shows `UI_STR_ACH_LOCKED`, and the note
+`UI_STR_EXTRAS_LOCKED_NOTE` unmasks while the cursor is on the row. `build()`
+prints the layout extension's use under developer mode (`lt_ext_PropCount`
+of `LT_EXT_MAX_PROPERTIES` 256, `lt_ext_LayoutCount` of 32); with Extras it is
+154 properties and 13 layouts, and `settings_test` asserts both are under the
+limits.
+
+**Lists** (`ui_list.h`). A list page is a window of `UI_LIST_SLOTS` (8) slots
+over N items, described by a `UiListDef`: `count`, `fill` (label, column A and
+B of item k, as text or a string id), optional `heading` (shown, never
+selected), optional `input` (a press on item k; `UI_LIST_PASS` lets the list
+scroll) and optional `decorate` (the page's header and status line, given the
+item under the cursor). `ui_ListBuild` adds the rows (label, columns and
+item links per slot, then the status line), `ui_ListRefresh` fills them, and
+`ui_ListProc` is one tick of input: first a cursor on a heading goes on in the
+direction it came from (the layout moves the cursor after the proc, so this
+happens on the next tick; the window scrolls to show the item), then
+`input`, then the scrolling (at the first or last slot the window moves by one,
+wrapping at the ends). The achievements and remap pages are `kAchDef` and
+`kRemapDef` in `settings.c`; their snapshots did not change when the code moved
+out of `settings.c` (`settings_render`). The Extras galleries will use the same API.
 
 **Buttons**, as the game's menus have them (`la_game_option`,
 `default_item_select`): up and down move the cursor on the item links

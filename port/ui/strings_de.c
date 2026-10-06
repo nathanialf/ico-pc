@@ -265,4 +265,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_MT_DARK] = "Dunkel",
     [UI_STR_MT_LIGHT] = "Hell",
     [UI_STR_MT_CONTINUE_Q] = "Weiter?",
+    [UI_STR_EXTRAS] = "Extras",
+    [UI_STR_EXTRAS_MUSIC] = "Musik",
+    [UI_STR_EXTRAS_MODELS] = "Modelle",
+    [UI_STR_EXTRAS_CREDITS] = "Mitwirkende",
+    [UI_STR_EXTRAS_LOCKED_NOTE] = "Beende das Spiel, um freizuschalten",
 };

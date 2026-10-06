@@ -25,6 +25,7 @@
 #include "options.h"
 #include "strings.h"
 #include "sysconf.h"
+#include "ui_list.h"
 #include "video_options.h"
 
 #ifdef ICO_RD
@@ -87,7 +88,6 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
 #define NOTE_Y 196
 #define HEADER_SIZE 30.0f
 #define NOTE_SIZE 19.0f
-#define LIST_SLOTS 8
 #define REMAP_ITEMS (ICO_T_COUNT + 2) /* the targets, Reset, Back */
 
 /* where the Options screen's Settings row goes: the girl-control row (325)
@@ -140,12 +140,9 @@ typedef struct Page {
     int parent; /* UiSettingsPage, -1: where the menu was entered from */
     int count;
     Row rows[MAX_ROWS];
-    /* the scrolling lists (achievements, remap) */
+    /* the scrolling lists (achievements, remap; ui_list.h) */
     int isList;
-    int items; /* data items, the last ones are the actions */
-    int offset;
-    int colA[LIST_SLOTS], colB[LIST_SLOTS];
-    int status; /* the description / hint line */
+    UiList list;
 } Page;
 
 static Page s_pages[UI_PAGE_COUNT];
@@ -182,8 +179,8 @@ static const int kRemapOrder[ICO_T_COUNT] = {
 
 static int s_uid;
 
-static int addRow(int x, int y, int w, int h, int selectable, int owner, int strId,
-                  const char *text, float size, int align)
+int ui_SettingsAddRow(int x, int y, int w, int h, int selectable, int owner, int strId,
+                      const char *text, float size, int align)
 {
     LtProperty r;
     memset(&r, 0, sizeof(r));
@@ -317,6 +314,66 @@ static int resolutionIndex(const IcoVideoOptions *o)
     return -1; /* a WxH or a larger N from the file */
 }
 
+/* ------------------------------------------------------------- Extras
+ * Settings > Extras (docs/port/EXTRAS.md), shown from the title only: the
+ * galleries leave the stage, and the pause menu has no Extras row (it is
+ * masked and skipped by the cursor).  Music, Models and Credits are
+ * placeholders until their packages land: each row's hook returns the layout
+ * to open, or -1 when the entry is not there yet (a log line, nothing else). */
+
+static int isExtrasOpt(int opt)
+{
+    return opt == UI_OPT_EXTRAS_MUSIC || opt == UI_OPT_EXTRAS_MODELS ||
+           opt == UI_OPT_EXTRAS_CREDITS;
+}
+
+/* package CRED: true once the ending has been reached (the save's flag) */
+static int creditsUnlocked(void)
+{
+    return 0;
+}
+
+/* package MUS: the music gallery's layout */
+static int extrasMusic(void)
+{
+    return -1;
+}
+
+/* package MV: the model viewer's layout */
+static int extrasModels(void)
+{
+    return -1;
+}
+
+/* package CRED: the credits' layout (the staff roll); only reachable while
+   creditsUnlocked() */
+static int extrasCredits(void)
+{
+    return -1;
+}
+
+static int extrasOpen(int opt)
+{
+    static const struct {
+        int opt;
+        const char *name;
+        int (*open)(void);
+    } kExtras[] = {{UI_OPT_EXTRAS_MUSIC, "music", extrasMusic},
+                   {UI_OPT_EXTRAS_MODELS, "models", extrasModels},
+                   {UI_OPT_EXTRAS_CREDITS, "credits", extrasCredits}};
+
+    for (unsigned i = 0; i < sizeof(kExtras) / sizeof(kExtras[0]); i++) {
+        if (kExtras[i].opt == opt) {
+            int to = kExtras[i].open();
+            if (to < 0) {
+                fprintf(stderr, "extras: %s not available yet\n", kExtras[i].name);
+            }
+            return to;
+        }
+    }
+    return -1;
+}
+
 static const char *rawValue(int opt, char *buf, unsigned size)
 {
     IcoVideoOptions o;
@@ -379,6 +436,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return languageName(NonLinearCameraMove);
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
+    case UI_OPT_EXTRAS_CREDITS:
+        return creditsUnlocked() ? "" : ui_Str(UI_STR_ACH_LOCKED);
     default:
         return "";
     }
@@ -724,6 +783,7 @@ static void setNote(int row, int strId)
 /* ------------------------------------------------------------ building */
 
 static int settingsProc(int first, int item);
+static const UiListDef kAchDef, kRemapDef;
 static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
 static void buildQuitScreen(void);
@@ -742,7 +802,8 @@ static int rowY(int page, int i)
 
 static void addHeader(Page *pg, int strId)
 {
-    pg->header = addRow(20, HEADER_Y, 600, 40, 0, -1, strId, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    pg->header =
+        ui_SettingsAddRow(20, HEADER_Y, 600, 40, 0, -1, strId, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
     P(pg->header)->centerX = 1;
 }
 
@@ -756,11 +817,14 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
     r->link = link;
     r->note = -1;
     r->value = -1;
-    r->label = addRow(LABEL_X, y, LABEL_W, h, 1, -1, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
+    r->label = ui_SettingsAddRow(LABEL_X, y, LABEL_W, h, 1, -1, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
     if (steppable(opt)) {
-        r->value = addRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
-        addRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9", 0.0f, UI_ALIGN_LEFT);
-        addRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA", 0.0f, UI_ALIGN_LEFT);
+        r->value =
+            ui_SettingsAddRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
+        ui_SettingsAddRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9", 0.0f,
+                          UI_ALIGN_LEFT);
+        ui_SettingsAddRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA", 0.0f,
+                          UI_ALIGN_LEFT);
     }
     pg->count++;
 }
@@ -769,7 +833,8 @@ static void addNote(Page *pg, int opt, int strId)
 {
     for (int i = 0; i < pg->count; i++) {
         if (pg->rows[i].opt == opt) {
-            int n = addRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+            int n =
+                ui_SettingsAddRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
             P(n)->centerX = 1;
             P(n)->defaultMask = 1;
             pg->rows[i].note = n;
@@ -829,6 +894,17 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         break;
+    case UI_PAGE_EXTRAS:
+        /* the locked style's value: Credits shows it until unlocked */
+        for (int i = 0; i < pg->count; i++) {
+            Row *r = &pg->rows[i];
+            if (r->opt == UI_OPT_EXTRAS_CREDITS) {
+                r->value = ui_SettingsAddRow(STEP_X, rowY(id, i), STEP_W, 36, 1, r->label, 0, " ",
+                                             0.0f, UI_ALIGN_CENTER);
+            }
+        }
+        addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
+        break;
     default:
         break;
     }
@@ -837,47 +913,45 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     finishPage(pg, first, last);
 }
 
-static void buildListPage(int id, int header, int items, int parent)
+static void buildListPage(int id, int header, const UiListDef *def, int parent)
 {
     Page *pg = &s_pages[id];
     memset(pg, 0, sizeof(*pg));
     pg->parent = parent;
     pg->isList = 1;
-    pg->items = items;
     int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
     addHeader(pg, header);
     int remap = id == UI_PAGE_REMAP;
-    int y0 = remap ? 50 : 40;
+    UiListStyle st;
+    memset(&st, 0, sizeof(st));
+    st.pitch = 18;
     if (remap) {
         /* the column heads */
-        addRow(230, 32, 180, 30, 0, -1, UI_STR_REMAP_KEYBOARD, NULL, NOTE_SIZE, UI_ALIGN_LEFT);
-        addRow(420, 32, 190, 30, 0, -1, UI_STR_REMAP_GAMEPAD, NULL, NOTE_SIZE, UI_ALIGN_LEFT);
+        ui_SettingsAddRow(230, 32, 180, 30, 0, -1, UI_STR_REMAP_KEYBOARD, NULL, NOTE_SIZE,
+                          UI_ALIGN_LEFT);
+        ui_SettingsAddRow(420, 32, 190, 30, 0, -1, UI_STR_REMAP_GAMEPAD, NULL, NOTE_SIZE,
+                          UI_ALIGN_LEFT);
+        st.y0 = 50;
+        st.label = (UiListCol){40, 180, 24.0f, UI_ALIGN_LEFT};
+        st.colA = (UiListCol){230, 180, 21.0f, UI_ALIGN_LEFT};
+        st.colB = (UiListCol){420, 190, 21.0f, UI_ALIGN_LEFT};
+        st.statusY = 198;
+    } else {
+        st.y0 = 40;
+        st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+        st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
+        st.statusY = NOTE_Y;
     }
-    for (int i = 0; i < LIST_SLOTS; i++) {
+    ui_ListBuild(&pg->list, def, NULL, &st);
+    for (int i = 0; i < UI_LIST_SLOTS; i++) {
         Row *r = &pg->rows[i];
-        int y = y0 + 18 * i;
         r->opt = UI_OPT_LIST;
         r->note = -1;
         r->link = -1;
-        if (remap) {
-            r->label = addRow(40, y, 180, 36, 1, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
-            pg->colA[i] = addRow(230, y, 180, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_LEFT);
-            pg->colB[i] = addRow(420, y, 190, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_LEFT);
-        } else {
-            r->label = addRow(40, y, 400, 36, 1, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
-            pg->colA[i] = addRow(440, y, 160, 36, 1, r->label, 0, " ", 21.0f, UI_ALIGN_RIGHT);
-            pg->colB[i] = -1;
-        }
-        r->value = pg->colA[i];
+        r->label = pg->list.label[i];
+        r->value = pg->list.colA[i];
         pg->count++;
     }
-    for (int i = 0; i < LIST_SLOTS; i++) {
-        P(pg->rows[i].label)->downItem = i + 1 < LIST_SLOTS ? pg->rows[i + 1].label : -1;
-        P(pg->rows[i].label)->upItem = i > 0 ? pg->rows[i - 1].label : -1;
-    }
-    pg->status =
-        addRow(20, remap ? 198 : NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
-    P(pg->status)->centerX = 1;
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
     finishPage(pg, first, last);
 }
@@ -889,10 +963,11 @@ static void buildEntries(void)
         /* the y and the title rows' box are set with the game's rows
            (placeTitle, entryProc); the title rows' box is wider than the
            game's so the longer translations keep the game rows' size */
-        int row = title
-                      ? addRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_CENTER)
-                      : addRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY, LABEL_W, 40, 1,
-                               -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_RIGHT);
+        int row =
+            title ? ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f,
+                                      UI_ALIGN_CENTER)
+                  : ui_SettingsAddRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY, LABEL_W,
+                                      40, 1, -1, UI_STR_SETTINGS, NULL, 0.0f, UI_ALIGN_RIGHT);
         if (title) {
             P(row)->centerX = 1;
             /* hidden unless the title's proc shows it, as New Game (49 to
@@ -909,8 +984,8 @@ static void buildEntries(void)
         if (title) {
             /* Q2: "Quit to desktop" under Settings, in the same layout (the
                rows are contiguous); Cross opens the confirmation */
-            int q =
-                addRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f, UI_ALIGN_CENTER);
+            int q = ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f,
+                                      UI_ALIGN_CENTER);
             P(q)->centerX = 1;
             P(q)->defaultMask = 1;
             P(q)->right = s_quitLayout;
@@ -933,20 +1008,28 @@ static void buildEntries(void)
 
 static void build(void)
 {
-    static const int mainOpts[] = {UI_OPT_LINK,     UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
-                                   UI_OPT_LANGUAGE, UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,    UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
+    /* Extras (after Achievements) is shown only when Settings was opened
+       from the title (layoutMain) */
+    static const int mainOpts[] = {UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_LINK,
+                                   UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
+    static const int mainStrs[] = {
+        UI_STR_SECTION_DISPLAY,  UI_STR_SECTION_AUDIO,      UI_STR_SECTION_CONTROLS,
+        UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
+        UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
                                     -1,
                                     UI_PAGE_ACHIEVEMENTS,
+                                    UI_PAGE_EXTRAS,
                                     -1,
                                     -1};
+    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
+                                     UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
+    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
+                                     UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
     int dispOpts[12], dispStrs[12], nd = 0;
     static const int dispAll[][2] = {{UI_OPT_PRESET, UI_STR_OPT_PRESET},
                                      {UI_OPT_RESOLUTION, UI_STR_OPT_RESOLUTION},
@@ -978,7 +1061,7 @@ static void build(void)
     memset(s_pages, 0, sizeof(s_pages));
     /* the pages first (their layouts are the links' targets), then the
        entry rows */
-    buildOptionPage(UI_PAGE_MAIN, UI_STR_SETTINGS, mainOpts, mainStrs, mainLinks, 8, -1);
+    buildOptionPage(UI_PAGE_MAIN, UI_STR_SETTINGS, mainOpts, mainStrs, mainLinks, 9, -1);
     buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL, nd,
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 2,
@@ -987,9 +1070,9 @@ static void build(void)
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL, 3,
                     UI_PAGE_MAIN);
-    buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, ico_ach_count() + 1,
-                  UI_PAGE_MAIN);
-    buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, REMAP_ITEMS, UI_PAGE_CONTROLS);
+    buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, NULL, 4, UI_PAGE_MAIN);
+    buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
+    buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
     /* the section rows open their pages */
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         for (int i = 0; i < s_pages[p].count; i++) {
@@ -1002,6 +1085,13 @@ static void build(void)
     buildQuitScreen();
     buildEntries();
     buildMirrorScreen();
+    if (ico_opt_developer_mode()) {
+        /* the layout extension's budget (layout_ext.h): what Settings and
+           its screens use of the tables */
+        fprintf(stderr, "settings: layout extension: %d of %d properties, %d of %d layouts\n",
+                lt_ext_PropCount(), LT_EXT_MAX_PROPERTIES, lt_ext_LayoutCount(),
+                LT_EXT_MAX_LAYOUTS);
+    }
 }
 
 /* ------------------------------------------------- the mirror screen (R7c)
@@ -1022,13 +1112,16 @@ static int mirrorScreenProc(int first, int item);
 static void buildMirrorScreen(void)
 {
     int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
-    int h = addRow(20, 112, 600, 40, 0, -1, UI_STR_OPT_MIRROR, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, UI_STR_OPT_MIRROR, NULL, HEADER_SIZE,
+                              UI_ALIGN_CENTER);
     P(h)->centerX = 1;
-    s_mirrorRow[0] = addRow(200, 146, 110, 40, 1, -1, UI_STR_OFF, NULL, 0.0f, UI_ALIGN_CENTER);
-    s_mirrorRow[1] = addRow(330, 146, 110, 40, 1, -1, UI_STR_ON, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_mirrorRow[0] =
+        ui_SettingsAddRow(200, 146, 110, 40, 1, -1, UI_STR_OFF, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_mirrorRow[1] =
+        ui_SettingsAddRow(330, 146, 110, 40, 1, -1, UI_STR_ON, NULL, 0.0f, UI_ALIGN_CENTER);
     P(s_mirrorRow[0])->rightItem = s_mirrorRow[1];
     P(s_mirrorRow[1])->leftItem = s_mirrorRow[0];
-    int n = addRow(20, 182, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+    int n = ui_SettingsAddRow(20, 182, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
     P(n)->centerX = 1;
     setNote(n, UI_STR_MIRROR_SCREEN);
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
@@ -1101,11 +1194,13 @@ static int quitScreenProc(int first, int item);
 static void buildQuitScreen(void)
 {
     int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
-    int h =
-        addRow(20, 112, 600, 40, 0, -1, UI_STR_QUIT_CONFIRM, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, UI_STR_QUIT_CONFIRM, NULL, HEADER_SIZE,
+                              UI_ALIGN_CENTER);
     P(h)->centerX = 1;
-    s_quitYesNo[1] = addRow(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
-    s_quitYesNo[0] = addRow(330, 146, 110, 40, 1, -1, UI_STR_MT_NO, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_quitYesNo[1] =
+        ui_SettingsAddRow(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_quitYesNo[0] =
+        ui_SettingsAddRow(330, 146, 110, 40, 1, -1, UI_STR_MT_NO, NULL, 0.0f, UI_ALIGN_CENTER);
     P(s_quitYesNo[1])->rightItem = s_quitYesNo[0];
     P(s_quitYesNo[0])->leftItem = s_quitYesNo[1];
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
@@ -1274,6 +1369,9 @@ void ui_SettingsReset(void)
         s_entryRow[e] = s_entryLayout[e] = s_quitRow[e] = -1;
     }
     memset(s_pages, 0, sizeof(s_pages));
+    /* the wrapped notes are set again on the rebuilt rows */
+    memset(s_noteStr, 0, sizeof(s_noteStr));
+    memset(s_noteLang, 0, sizeof(s_noteLang));
     s_mirrorLayout = s_mirrorRow[0] = s_mirrorRow[1] = -1;
     s_mirrorChosen = 0;
     s_quitLayout = s_quitYesNo[0] = s_quitYesNo[1] = -1;
@@ -1454,198 +1552,223 @@ static int parentLayout(const Page *pg)
     return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
 }
 
-static int slotOf(const Page *pg, int item)
+/* ------------------------------------------------- the list pages (ui_list.h)
+ * Achievements and the remap targets: what each page's items are; the
+ * window, the scrolling and the rows are ui_list.c's. */
+
+static int achCount(void *user)
 {
-    for (int i = 0; i < LIST_SLOTS; i++) {
-        if (pg->rows[i].label == item) {
-            return i;
-        }
-    }
-    return -1;
+    (void)user;
+    return ico_ach_count() + 1; /* the achievements, then Back */
 }
 
-static void refreshAchievements(Page *pg, int cur)
+static void achFill(void *user, int d, UiListSlot *out)
 {
+    (void)user;
+    if (d == ico_ach_count()) {
+        out->labelStr = UI_STR_BACK;
+        return;
+    }
+    IcoAchState st = ico_ach_state(d);
+    int hidden = ico_ach_hidden(d) && st == ICO_ACH_LOCKED;
+    out->label = hidden ? "???" : ui_Str((UiStrId)ico_ach_title_str(d));
+    out->colAStr = st == ICO_ACH_UNLOCKED ? UI_STR_ACH_STATE_UNLOCKED : UI_STR_ACH_LOCKED;
+}
+
+/* the header carries the count; the status line is the cursor's description */
+static void achDecorate(void *user, int d)
+{
+    (void)user;
+    Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
     int n = ico_ach_count(), got = 0;
     for (int i = 0; i < n; i++) {
         got += ico_ach_state(i) != ICO_ACH_LOCKED;
     }
     snprintf(s_text, sizeof(s_text), "%s   %d / %d", ui_Str(UI_STR_SECTION_ACHIEVEMENTS), got, n);
     lt_ext_SetText(pg->header, s_text);
-    for (int s = 0; s < LIST_SLOTS; s++) {
-        int d = pg->offset + s;
-        int lab = pg->rows[s].label, val = pg->colA[s];
-        if (d >= pg->items) {
-            lt_ext_SetText(lab, "");
-            lt_ext_SetText(val, "");
-            continue;
-        }
-        if (d == n) {
-            lt_ext_SetStr(lab, UI_STR_BACK);
-            lt_ext_SetText(val, "");
-            continue;
-        }
-        IcoAchState st = ico_ach_state(d);
-        int hidden = ico_ach_hidden(d) && st == ICO_ACH_LOCKED;
-        lt_ext_SetText(lab, hidden ? "???" : ui_Str((UiStrId)ico_ach_title_str(d)));
-        lt_ext_SetStr(val, st == ICO_ACH_UNLOCKED ? UI_STR_ACH_STATE_UNLOCKED : UI_STR_ACH_LOCKED);
-    }
-    int s = slotOf(pg, cur);
-    int d = s >= 0 ? pg->offset + s : -1;
     char buf[256];
     if (d >= 0 && d < n) {
         int hidden = ico_ach_hidden(d) && ico_ach_state(d) == ICO_ACH_LOCKED;
         wrapText(hidden ? "???" : ui_Str((UiStrId)ico_ach_desc_str(d)), NOTE_SIZE, 580.0f, buf,
                  sizeof(buf));
-        lt_ext_SetText(pg->status, buf);
+        lt_ext_SetText(pg->list.status, buf);
     } else {
-        lt_ext_SetText(pg->status, "");
+        lt_ext_SetText(pg->list.status, "");
     }
 }
 
-static void refreshRemap(Page *pg)
+static int achInput(void *user, int d, int flags)
 {
-    IcoBindings *b = liveBindings();
-    char buf[96];
-    for (int s = 0; s < LIST_SLOTS; s++) {
-        int d = pg->offset + s;
-        int lab = pg->rows[s].label;
-        if (d < ICO_T_COUNT) {
-            int t = kRemapOrder[d];
-            targetName(t, buf, sizeof(buf));
-            lt_ext_SetText(lab, buf);
-            if (s_capture.active && s_capture.target == t) {
-                lt_ext_SetText(pg->colA[s], "\xE2\x80\xA6"); /* ... */
-                lt_ext_SetText(pg->colB[s], "\xE2\x80\xA6");
-            } else {
-                sourcesText(b, t, 0, buf, sizeof(buf));
-                lt_ext_SetText(pg->colA[s], buf);
-                sourcesText(b, t, 1, buf, sizeof(buf));
-                lt_ext_SetText(pg->colB[s], buf);
-            }
+    (void)user;
+    Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
+    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && d == ico_ach_count())) {
+        return leaveTo(UI_PAGE_ACHIEVEMENTS, parentLayout(pg));
+    }
+    return UI_LIST_PASS;
+}
+
+static const UiListDef kAchDef = {achCount, achFill, NULL, achInput, achDecorate};
+
+static int remapCount(void *user)
+{
+    (void)user;
+    return REMAP_ITEMS;
+}
+
+static void remapFill(void *user, int d, UiListSlot *out)
+{
+    (void)user;
+    static char lab[96], colA[96], colB[96];
+    if (d < ICO_T_COUNT) {
+        int t = kRemapOrder[d];
+        targetName(t, lab, sizeof(lab));
+        out->label = lab;
+        if (s_capture.active && s_capture.target == t) {
+            out->colA = out->colB = "\xE2\x80\xA6"; /* ... */
         } else {
-            lt_ext_SetStr(lab, d == ICO_T_COUNT ? UI_STR_REMAP_RESET : UI_STR_BACK);
-            lt_ext_SetText(pg->colA[s], "");
-            lt_ext_SetText(pg->colB[s], "");
+            IcoBindings *b = liveBindings();
+            sourcesText(b, t, 0, colA, sizeof(colA));
+            sourcesText(b, t, 1, colB, sizeof(colB));
+            out->colA = colA;
+            out->colB = colB;
+        }
+    } else {
+        out->labelStr = d == ICO_T_COUNT ? UI_STR_REMAP_RESET : UI_STR_BACK;
+    }
+}
+
+static void remapDecorate(void *user, int d)
+{
+    (void)user;
+    (void)d;
+    setNote(s_pages[UI_PAGE_REMAP].list.status,
+            s_capture.active ? UI_STR_REMAP_PRESS : UI_STR_REMAP_HINT);
+}
+
+static int remapInput(void *user, int d, int flags)
+{
+    (void)user;
+    Page *pg = &s_pages[UI_PAGE_REMAP];
+    if (s_capture.active) {
+        lt_item_select_disable = 1;
+        int r = ui_RemapCaptureStep(&s_capture, liveBindings());
+        if (r == UI_CAPTURE_BOUND) {
+            s_dirtyBindings = 1;
+            POSITIVE_SE();
+        } else if (r == UI_CAPTURE_TIMEOUT) {
+            NEGATIVE_SE();
+        }
+        return -1;
+    }
+    if (s_capture.cooldown > 0) {
+        /* the captured press must not also move or confirm */
+        s_capture.cooldown--;
+        lt_item_select_disable = 1;
+        return -1;
+    }
+    if (flags & PAD_BACK) {
+        return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
+    }
+    if (d >= 0 && d < ICO_T_COUNT) {
+        if (flags & PAD_CROSS) {
+            POSITIVE_SE();
+            ui_RemapCaptureStart(&s_capture, kRemapOrder[d]);
+            lt_item_select_disable = 1;
+            return -1;
+        }
+        if (flags & PAD_SQUARE) {
+            CUR_SE();
+            ico_bindings_clear(liveBindings(), kRemapOrder[d]);
+            s_dirtyBindings = 1;
+            return -1;
+        }
+    } else if (d == ICO_T_COUNT && (flags & PAD_CROSS)) {
+        /* the bindings only; sensitivity and the other [input] values stay */
+        IcoBindings def, *b = liveBindings();
+        ico_bindings_defaults(&def);
+        memcpy(b->kb, def.kb, sizeof(b->kb));
+        memcpy(b->mouse, def.mouse, sizeof(b->mouse));
+        memcpy(b->gp, def.gp, sizeof(b->gp));
+        memcpy(b->walk, def.walk, sizeof(b->walk));
+        s_dirtyBindings = 1;
+        POSITIVE_SE();
+        return -1;
+    } else if (d == ICO_T_COUNT + 1 && (flags & PAD_CROSS)) {
+        return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
+    }
+    return UI_LIST_PASS;
+}
+
+static const UiListDef kRemapDef = {remapCount, remapFill, NULL, remapInput, remapDecorate};
+
+/* the locked style (a row greyed, with a note while the cursor is on it) */
+static int rowLocked(const Row *r)
+{
+    return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
+}
+
+/* The main page's rows as the entry in force shows them: the Extras row
+   only from the title.  The visible rows are spaced evenly (the nine of the
+   title on a 17 line pitch so Back stays above the notes, the eight of the
+   pause menu on the original 19), linked in a loop that skips the hidden
+   one, and the hidden one is masked. */
+static void layoutMain(Page *pg)
+{
+    int shown[MAX_ROWS], n = 0;
+    for (int i = 0; i < pg->count; i++) {
+        Row *r = &pg->rows[i];
+        int show = !(r->opt == UI_OPT_LINK && r->link == UI_PAGE_EXTRAS) || onTitle();
+        P(r->label)->defaultMask = !show;
+        lt_mask_property(r->label, !show);
+        if (show) {
+            shown[n++] = i;
         }
     }
-    setNote(pg->status, s_capture.active ? UI_STR_REMAP_PRESS : UI_STR_REMAP_HINT);
+    int pitch = n > 8 ? 17 : 19;
+    for (int k = 0; k < n; k++) {
+        Row *r = &pg->rows[shown[k]];
+        int y = 40 + pitch * k;
+        P(r->label)->dispY = y;
+        if (r->value >= 0) {
+            /* the value and its two arrows, added after the label */
+            for (int j = 0; j < 3; j++) {
+                P(r->value + j)->dispY = y;
+            }
+        }
+        P(r->label)->downItem = pg->rows[shown[(k + 1) % n]].label;
+        P(r->label)->upItem = pg->rows[shown[(k + n - 1) % n]].label;
+    }
 }
 
 static void refreshPage(Page *pg, int id, int cur)
 {
-    if (id == UI_PAGE_ACHIEVEMENTS) {
-        refreshAchievements(pg, cur);
+    if (pg->isList) {
+        ui_ListRefresh(&pg->list, cur);
         return;
     }
-    if (id == UI_PAGE_REMAP) {
-        refreshRemap(pg);
-        return;
+    if (id == UI_PAGE_MAIN) {
+        layoutMain(pg);
     }
     for (int i = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
+        int locked = rowLocked(r);
         if (r->value >= 0) {
             lt_ext_SetText(r->value, ui_SettingsValueText((UiSettingsOpt)r->opt));
         }
+        if (isExtrasOpt(r->opt)) {
+            /* the locked style: the label and its value greyed */
+            lt_ext_SetDim(r->label, locked);
+            if (r->value >= 0) {
+                lt_ext_SetDim(r->value, locked);
+            }
+        }
         if (r->note >= 0) {
             setNote(r->note, r->noteStr);
-            if (cur == r->label) {
+            if (cur == r->label && (!isExtrasOpt(r->opt) || locked)) {
                 lt_mask_property(r->note, 0);
             }
         }
     }
-}
-
-/* The scrolling lists: the cursor moves on the slots through their item
-   links; at the first or last slot the list scrolls (wrapping at the ends,
-   as the Options screen's rows do). */
-static void scrollList(Page *pg, LtProp *lay, int flags)
-{
-    int s = slotOf(pg, lay->curItem);
-    int shown = pg->items < LIST_SLOTS ? pg->items : LIST_SLOTS;
-    if (s < 0 || (flags & (PAD_CROSS | PAD_BACK))) {
-        return;
-    }
-    if ((flags & PAD_DOWN) && s == shown - 1) {
-        if (pg->offset + shown < pg->items) {
-            pg->offset++;
-        } else {
-            pg->offset = 0;
-            lay->curItem = pg->rows[0].label;
-        }
-        CUR_SE();
-    } else if ((flags & PAD_UP) && s == 0) {
-        if (pg->offset > 0) {
-            pg->offset--;
-        } else {
-            pg->offset = pg->items - shown;
-            lay->curItem = pg->rows[shown - 1].label;
-        }
-        CUR_SE();
-    }
-}
-
-static int listProc(Page *pg, int id, LtProp *lay, int flags)
-{
-    int s = slotOf(pg, lay->curItem);
-    int d = s >= 0 ? pg->offset + s : -1;
-    if (id == UI_PAGE_REMAP) {
-        if (s_capture.active) {
-            lt_item_select_disable = 1;
-            int r = ui_RemapCaptureStep(&s_capture, liveBindings());
-            if (r == UI_CAPTURE_BOUND) {
-                s_dirtyBindings = 1;
-                POSITIVE_SE();
-            } else if (r == UI_CAPTURE_TIMEOUT) {
-                NEGATIVE_SE();
-            }
-            return -1;
-        }
-        if (s_capture.cooldown > 0) {
-            /* the captured press must not also move or confirm */
-            s_capture.cooldown--;
-            lt_item_select_disable = 1;
-            return -1;
-        }
-        if (flags & PAD_BACK) {
-            return leaveTo(id, parentLayout(pg));
-        }
-        if (d >= 0 && d < ICO_T_COUNT) {
-            if (flags & PAD_CROSS) {
-                POSITIVE_SE();
-                ui_RemapCaptureStart(&s_capture, kRemapOrder[d]);
-                lt_item_select_disable = 1;
-                return -1;
-            }
-            if (flags & PAD_SQUARE) {
-                CUR_SE();
-                ico_bindings_clear(liveBindings(), kRemapOrder[d]);
-                s_dirtyBindings = 1;
-                return -1;
-            }
-        } else if (d == ICO_T_COUNT && (flags & PAD_CROSS)) {
-            /* the bindings only; sensitivity and the other [input] values stay */
-            IcoBindings def, *b = liveBindings();
-            ico_bindings_defaults(&def);
-            memcpy(b->kb, def.kb, sizeof(b->kb));
-            memcpy(b->mouse, def.mouse, sizeof(b->mouse));
-            memcpy(b->gp, def.gp, sizeof(b->gp));
-            memcpy(b->walk, def.walk, sizeof(b->walk));
-            s_dirtyBindings = 1;
-            POSITIVE_SE();
-            return -1;
-        } else if (d == ICO_T_COUNT + 1 && (flags & PAD_CROSS)) {
-            return leaveTo(id, parentLayout(pg));
-        }
-        scrollList(pg, lay, flags);
-        return -1;
-    }
-    /* achievements */
-    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && d == pg->items - 1)) {
-        return leaveTo(id, parentLayout(pg));
-    }
-    scrollList(pg, lay, flags);
-    return -1;
 }
 
 static int settingsProc(int first, int item)
@@ -1661,7 +1784,7 @@ static int settingsProc(int first, int item)
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
     if (first) {
         if (pg->isList) {
-            pg->offset = 0;
+            ui_ListReset(&pg->list);
         }
         memset(&s_capture, 0, sizeof(s_capture));
     }
@@ -1672,7 +1795,7 @@ static int settingsProc(int first, int item)
     lt_analog2Pad();
     int flags = pad[0].flags;
     if (pg->isList) {
-        int r = listProc(pg, id, lay, flags);
+        int r = ui_ListProc(&pg->list, lay, flags);
         refreshPage(pg, id, lay->curItem);
         return r;
     }
@@ -1691,6 +1814,13 @@ static int settingsProc(int first, int item)
         }
         if ((flags & PAD_CROSS) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));
+        }
+        if ((flags & PAD_CROSS) && isExtrasOpt(r->opt)) {
+            int to = extrasOpen(r->opt);
+            if (to >= 0) {
+                POSITIVE_SE();
+                return to;
+            }
         }
         break;
     }

@@ -6,7 +6,7 @@
 #                ui_host.c (the game's globals, the decoder flush) in the
 #                window build only
 #   ico_ui_rd    the same sources with ICO_RD for ui_test (needs ico_render)
-#   settings.c   the Settings menu (6C), in ico_ui and settings_test: it
+#   settings.c, ui_list.c   the Settings menu (6C) and its list pages, in ico_ui and settings_test: it
 #                reads the port's option modules (port/game, port/input,
 #                port/config) and the game's layout globals
 #
@@ -39,7 +39,7 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c menu_text.c settings.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -65,7 +65,7 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    target_sources(${name} PRIVATE settings.c)
+    target_sources(${name} PRIVATE settings.c ui_list.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)

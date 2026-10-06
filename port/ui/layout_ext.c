@@ -31,6 +31,7 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
+    int dim; /* greyed (lt_ext_SetDim): the colour at half */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -119,6 +120,22 @@ int lt_ext_SetText(int index, const char *utf8)
     return 0;
 }
 
+int lt_ext_SetDim(int index, int dim)
+{
+    ExtRow *r = rowOf(index);
+    if (!r) {
+        return -1;
+    }
+    r->dim = dim != 0;
+    return 0;
+}
+
+int lt_ext_RowDim(int index)
+{
+    ExtRow *r = rowOf(index);
+    return r ? r->dim : 0;
+}
+
 int lt_ext_SetStr(int index, int strId)
 {
     ExtRow *r = rowOf(index);
@@ -199,6 +216,15 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     ui__Sync();
     ExtRow *r = &s_rows[e - s_props];
+    unsigned char grey[4];
+    if (r->dim) {
+        /* a locked row (Settings > Extras): the colour at half, the alpha kept */
+        grey[0] = (unsigned char)(rgba[0] / 2);
+        grey[1] = (unsigned char)(rgba[1] / 2);
+        grey[2] = (unsigned char)(rgba[2] / 2);
+        grey[3] = rgba[3];
+        rgba = grey;
+    }
     const char *text = r->hasLiteral ? r->literal : ui_Str((UiStrId)r->text.strId);
     if (!glow || !r->hasBase) {
         memcpy(r->base, box, sizeof(r->base));

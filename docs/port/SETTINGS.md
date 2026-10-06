@@ -104,8 +104,23 @@ unlocked. Achievements are suspended while developer mode or a developer
 start stage is on, and for the rest of that run (docs/port/ACHIEVEMENTS.md,
 "Suspension"); "Shadows never take Yorda" does not suspend them.
 
+**Extras**: opens the Extras page (below). The row sits after Achievements
+and is there only when Settings was opened from the title; from the pause
+menu it is hidden, the rows below it move up, and the cursor skips it.
+
 **Developer mode**: On restores the development build's debug menu (SELECT
 opens it) and suspends achievements while it is on (docs/port/DEVELOPER_MODE.md).
+
+## Extras
+
+Settings > Extras (title only; the galleries leave the stage, and the title
+menu has no room for more rows) opens a page with **Music**, **Models**,
+**Credits** and Back. The three entries are not available yet: Cross on one
+does nothing but write `extras: <entry> not available yet` to the log. Credits
+shows the locked style, its label and its value ("Locked") greyed and, with
+the cursor on it, the note "Finish the game to unlock"; it stays locked until
+the ending has been reached. docs/port/EXTRAS.md says what each entry will be
+and which package adds it.
 
 ## Mirror mode
 

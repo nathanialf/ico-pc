@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "typedef.h"
 #include "main.h"
 #include "layout_texture.h"
@@ -45,6 +46,7 @@
 #include "settings.h"
 #include "strings.h"
 #include "sysconf.h"
+#include "ui_list.h"
 #include "video_options.h"
 
 #ifdef SETTINGS_RENDER
@@ -501,12 +503,13 @@ static int labelsAre(UiSettingsPage page, const int *opts, const int *strs, int 
 
 static void testBuild(void)
 {
-    static const int mainOpts[] = {UI_OPT_LINK,     UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
-                                   UI_OPT_LANGUAGE, UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,    UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
+    static const int mainOpts[] = {UI_OPT_LINK, UI_OPT_LINK,      UI_OPT_LINK,
+                                   UI_OPT_LINK, UI_OPT_LANGUAGE,  UI_OPT_LINK,
+                                   UI_OPT_LINK, UI_OPT_DEVELOPER, UI_OPT_BACK};
+    static const int mainStrs[] = {
+        UI_STR_SECTION_DISPLAY,  UI_STR_SECTION_AUDIO,      UI_STR_SECTION_CONTROLS,
+        UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
+        UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
     static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
                                    UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,  UI_OPT_VIDEO_MODE,
@@ -539,7 +542,14 @@ static void testBuild(void)
     ui_SettingsReset();
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 8), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 9), "main page rows");
+    {
+        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
+                                         UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
+        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
+                                         UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
+    }
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
@@ -1468,6 +1478,351 @@ static void testVideoGate(void)
           "pad names");
 }
 
+/* --------------------------------------------- Extras and the shared lists */
+
+/* stderr to a file for a stretch: the log lines the menus write */
+static int s_errSaved = -1;
+
+static void errCapture(void)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    s_errSaved = dup(2);
+    FILE *f = freopen(p, "wb", stderr);
+    (void)f;
+}
+
+static void errRelease(char *out, size_t n)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    dup2(s_errSaved, 2);
+    close(s_errSaved);
+    clearerr(stderr);
+    out[0] = '\0';
+    FILE *f = fopen(p, "rb");
+    if (f) {
+        size_t got = fread(out, 1, n - 1, f);
+        out[got] = '\0';
+        fclose(f);
+    }
+}
+
+/* the row of layout page whose text is str, -1 */
+static int rowWithText(UiSettingsPage page, const char *str)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    for (int j = l->first; j < l->last; j++) {
+        if (strcmp(lt_ext_RowText(j), str) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+/* Settings from the title (13) or from the Options screen (58) to the main
+   page */
+static int enterMain(int title)
+{
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    ui_SetLanguage(UI_LANG_EN);
+    init_layout_texture(2);
+    settle(54, 4);
+    if (title) {
+        lt_switch_layout(13);
+        CHECK(settle(13, 60), "the title");
+        press(0x4000);
+        CHECK(texLayout[13].curItem == ui_SettingsEntryRow(13), "on Settings");
+    } else {
+        lt_switch_layout(58);
+        CHECK(settle(58, 40), "the Options screen");
+        texLayout[58].curItem = ui_SettingsEntryRow(58);
+    }
+    press(0x40);
+    int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    CHECK(settle(mainL, 60), "the menu (title %d)", title);
+    return mainL;
+}
+
+/* Settings > Extras: a row of the main page after Achievements, from the
+   title only; Music, Models, Credits and Back; the entries are placeholders
+   that log; Credits shows the locked style. */
+static void testExtras(void)
+{
+    char log[512];
+    for (int title = 0; title < 2; title++) {
+        int mainL = enterMain(title);
+        int labels[16], opts[16];
+        int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, opts, NULL, 16);
+        int ex = ui_SettingsRowOf(UI_PAGE_MAIN, UI_OPT_LINK), idx = 0;
+        for (int i = 0; i < n; i++) {
+            if (strcmp(lt_ext_RowText(labels[i]), "Extras") == 0) {
+                ex = labels[i];
+                idx = i;
+            }
+        }
+        CHECK(n == 9 && idx == 6, "Extras is the row after Achievements (index %d of %d)", idx, n);
+        CHECK(lt_ext_Prop(ex)->right == ui_SettingsPageLayout(UI_PAGE_EXTRAS), "Extras opens");
+        CHECK(lt_ext_Prop(ex)->defaultMask == !title, "title %d: the Extras row is %s", title,
+              title ? "shown" : "hidden (masked)");
+        /* the cursor: Achievements, Down */
+        lt_ext_Layout(mainL)->curItem = labels[5];
+        press(0x4000);
+        CHECK(lt_ext_Layout(mainL)->curItem == (title ? ex : labels[7]),
+              "title %d: Down from Achievements lands on %s", title,
+              title ? "Extras" : "Developer");
+        /* the rows below follow: Back's y, one pitch table for each entry */
+        CHECK(title ? lt_ext_Prop(labels[8])->dispY == 40 + 17 * 8
+                    : lt_ext_Prop(labels[8])->dispY == 40 + 19 * 7,
+              "title %d: Back at y %d", title, lt_ext_Prop(labels[8])->dispY);
+        if (!title) {
+            continue;
+        }
+        /* open it */
+        press(0x40);
+        int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+        CHECK(settle(exL, 60), "the Extras page");
+        int el[8], eo[8], ev[8];
+        int en = ui_SettingsPageRows(UI_PAGE_EXTRAS, el, eo, ev, 8);
+        CHECK(en == 4 && lt_ext_Layout(exL)->curItem == el[0], "four rows, the cursor on Music");
+        CHECK(strcmp(lt_ext_RowText(el[0]), "Music") == 0 &&
+                  strcmp(lt_ext_RowText(el[1]), "Models") == 0 &&
+                  strcmp(lt_ext_RowText(el[2]), "Credits") == 0 &&
+                  strcmp(lt_ext_RowText(el[3]), "Back") == 0,
+              "Music, Models, Credits, Back");
+        /* the locked style on Credits: greyed label and value, the note on
+           the cursor only */
+        CHECK(ev[2] >= 0 && strcmp(lt_ext_RowText(ev[2]), "Locked") == 0 &&
+                  lt_ext_RowDim(el[2]) == 1 && lt_ext_RowDim(ev[2]) == 1 &&
+                  lt_ext_RowDim(el[0]) == 0,
+              "Credits: locked value \"%s\", greyed", ev[2] >= 0 ? lt_ext_RowText(ev[2]) : "-");
+        int note = rowWithText(UI_PAGE_EXTRAS, "Finish the game to unlock");
+        CHECK(note >= 0, "the locked note");
+        frame(0);
+        CHECK(note >= 0 && lt_ext_Prop(note)->masked == 1, "no note on Music");
+        press(0x4000);
+        press(0x4000);
+        CHECK(lt_ext_Layout(exL)->curItem == el[2], "on Credits");
+        CHECK(note >= 0 && lt_ext_Prop(note)->masked == 0, "the note on Credits");
+        /* every entry only logs, and stays on the page */
+        const char *want[3] = {"music", "models", "credits"};
+        for (int k = 0; k < 3; k++) {
+            lt_ext_Layout(exL)->curItem = el[k];
+            frame(0);
+            errCapture();
+            press(0x40);
+            errRelease(log, sizeof(log));
+            char line[64];
+            snprintf(line, sizeof(line), "extras: %s not available yet", want[k]);
+            CHECK(strstr(log, line) != NULL && current_layout_id == exL,
+                  "Cross on %s logs and stays (\"%s\")", want[k], log);
+        }
+        /* Back and Triangle return to the main page, the cursor on Extras */
+        lt_ext_Layout(exL)->curItem = el[3];
+        press(0x40);
+        CHECK(settle(mainL, 60) && lt_ext_Layout(mainL)->curItem == ex,
+              "Back: the cursor on Extras");
+        press(0x40);
+        CHECK(settle(exL, 60), "Extras again");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Triangle: the menu");
+    }
+
+    /* the strings, five languages */
+    static const char *const want[5][5] = {
+        {"Extras", "Music", "Models", "Credits", "Finish the game to unlock"},
+        {"Extras", "Musique", "Mod\xC3\xA8les",
+         "Cr\xC3\xA9"
+         "dits",
+         NULL},
+        {"Extras", "Musik", "Modelle", "Mitwirkende", NULL},
+        {"Extra", "Musica", "Modelli", "Crediti", NULL},
+        {"Extras", "M\xC3\xBAsica", "Modelos",
+         "Cr\xC3\xA9"
+         "ditos",
+         NULL}};
+    static const int ids[5] = {UI_STR_EXTRAS, UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
+                               UI_STR_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE};
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int i = 0; i < 5; i++) {
+            const char *got = ui_StrIn((UiLang)l, (UiStrId)ids[i]);
+            CHECK(want[l][i]
+                      ? strcmp(got, want[l][i]) == 0
+                      : (got[0] != '\0' && strcmp(got, ui_StrIn(UI_LANG_EN, (UiStrId)ids[i])) != 0),
+                  "string %d in language %d: \"%s\"", i, l, got);
+        }
+    }
+
+    /* the layout extension's budget (layout_ext.h): what is used, and the
+       developer-mode line */
+    useConfig("version = 1\n[gameplay]\ndeveloper_mode = true\n");
+    lt_ext_Reset();
+    ui_SettingsReset();
+    errCapture();
+    ui_SettingsInstall();
+    errRelease(log, sizeof(log));
+    printf("settings_test: %d of %d properties, %d of %d layouts used\n", lt_ext_PropCount(),
+           LT_EXT_MAX_PROPERTIES, lt_ext_LayoutCount(), LT_EXT_MAX_LAYOUTS);
+    CHECK(lt_ext_PropCount() < LT_EXT_MAX_PROPERTIES, "property budget (%d of %d)",
+          lt_ext_PropCount(), LT_EXT_MAX_PROPERTIES);
+    CHECK(lt_ext_LayoutCount() < LT_EXT_MAX_LAYOUTS, "layout budget (%d of %d)",
+          lt_ext_LayoutCount(), LT_EXT_MAX_LAYOUTS);
+    char want_line[96];
+    snprintf(want_line, sizeof(want_line), "layout extension: %d of %d properties",
+             lt_ext_PropCount(), LT_EXT_MAX_PROPERTIES);
+    CHECK(strstr(log, want_line) != NULL, "developer mode prints the budget (\"%s\")", log);
+}
+
+/* The shared list pages (ui_list.h) on a list of its own: 20 items, three
+   headings (item 0, items 5 and 6 together, item 19) the cursor skips. */
+static int s_fills;
+
+static int tlCount(void *u)
+{
+    return *(int *)u;
+}
+
+static int tlHeading(void *u, int k)
+{
+    (void)u;
+    return k == 0 || k == 5 || k == 6 || k == 19;
+}
+
+static void tlFill(void *u, int k, UiListSlot *out)
+{
+    static char text[8][16];
+    (void)u;
+    s_fills++;
+    char *t = text[k % 8];
+    snprintf(t, 16, "item %d", k);
+    out->label = t;
+    out->colAStr = UI_STR_ON;
+}
+
+/* one tick: the proc, then the layout's move (default_item_select) */
+static int s_hdrDecorated;
+
+static void tlDecorate(void *u, int cur)
+{
+    (void)u;
+    s_hdrDecorated = cur;
+}
+
+static void listStep(UiList *l, LtProp *lay, int flags)
+{
+    ui_ListProc(l, lay, flags);
+    if (!(flags & 0x50)) {
+        const LtProperty *e = lt_ext_Prop(lay->curItem);
+        if ((flags & 0x1000) && e->upItem >= 0) {
+            lay->curItem = e->upItem;
+        } else if ((flags & 0x4000) && e->downItem >= 0) {
+            lay->curItem = e->downItem;
+        }
+    }
+    ui_ListRefresh(l, lay->curItem);
+}
+
+static void testList(void)
+{
+    int count = 20;
+    UiListDef def = {tlCount, tlFill, tlHeading, NULL, tlDecorate};
+    UiListStyle st;
+    UiList l;
+    LtProp lay;
+    memset(&st, 0, sizeof(st));
+    st.y0 = 40;
+    st.pitch = 18;
+    st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
+    st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
+    st.statusY = 196;
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_ListBuild(&l, &def, &count, &st);
+    CHECK(lt_ext_PropCount() == UI_LIST_SLOTS * 2 + 1 && l.colB[0] == -1,
+          "the list adds two rows a slot and the status line (%d)", lt_ext_PropCount());
+    memset(&lay, 0, sizeof(lay));
+
+    /* refresh counts: every slot filled from its item, empty past the end */
+    s_fills = 0;
+    ui_ListRefresh(&l, -1);
+    CHECK(s_fills == UI_LIST_SLOTS && strcmp(lt_ext_RowText(l.label[0]), "item 0") == 0 &&
+              strcmp(lt_ext_RowText(l.label[7]), "item 7") == 0 &&
+              strcmp(lt_ext_RowText(l.colA[2]), "On") == 0 && s_hdrDecorated == -1,
+          "refresh fills %d slots (%d)", UI_LIST_SLOTS, s_fills);
+    count = 5;
+    s_fills = 0;
+    ui_ListRefresh(&l, l.label[3]);
+    CHECK(s_fills == 5 && ui_ListShown(&l) == 5 &&
+              strcmp(lt_ext_RowText(l.label[4]), "item 4") == 0 &&
+              lt_ext_RowText(l.label[5])[0] == '\0' && lt_ext_RowText(l.colA[7])[0] == '\0' &&
+              s_hdrDecorated == 3 && ui_ListItemAt(&l, 6) == -1,
+          "5 items: 5 fills, the rest empty (%d)", s_fills);
+    count = 0;
+    s_fills = 0;
+    ui_ListRefresh(&l, -1);
+    CHECK(s_fills == 0 && ui_ListShown(&l) == 0 && lt_ext_RowText(l.label[0])[0] == '\0',
+          "no items: no fills");
+    count = 20;
+
+    /* the cursor starts on item 1 (item 0 is a heading); Down to item 4 */
+    ui_ListReset(&l);
+    ui_ListRefresh(&l, -1);
+    lay.curItem = l.label[1];
+    for (int i = 0; i < 3; i++) {
+        listStep(&l, &lay, 0x4000);
+    }
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 4, "item 4 (%d)", ui_ListItemOfRow(&l, lay.curItem));
+    /* Down onto the headings 5 and 6: the next tick goes on to 7 */
+    listStep(&l, &lay, 0x4000);
+    listStep(&l, &lay, 0);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 7 && l.offset == 0,
+          "Down skips the headings 5 and 6 (%d)", ui_ListItemOfRow(&l, lay.curItem));
+    /* Up from there: 6 and 5 are headings, back to 4 */
+    listStep(&l, &lay, 0x1000);
+    listStep(&l, &lay, 0);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 4, "Up skips them (%d)",
+          ui_ListItemOfRow(&l, lay.curItem));
+    /* the last slot scrolls the window */
+    lay.curItem = l.label[7];
+    listStep(&l, &lay, 0);
+    int beforeScroll = l.offset;
+    listStep(&l, &lay, 0x4000);
+    CHECK(l.offset == beforeScroll + 1 && ui_ListItemOfRow(&l, lay.curItem) == 8,
+          "Down at the last slot scrolls by one (offset %d, item %d)", l.offset,
+          ui_ListItemOfRow(&l, lay.curItem));
+    CHECK(strcmp(lt_ext_RowText(l.label[0]), "item 1") == 0, "the window shows item 1 first");
+    /* the end: 18, then the heading 19, wrapping to 1 (0 is a heading) */
+    lay.curItem = l.label[6];
+    l.offset = 12; /* items 12..19 */
+    ui_ListRefresh(&l, lay.curItem);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 18, "item 18");
+    listStep(&l, &lay, 0x4000);
+    listStep(&l, &lay, 0);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 1 && l.offset == 0,
+          "Down past the last heading wraps to item 1 (item %d, offset %d)",
+          ui_ListItemOfRow(&l, lay.curItem), l.offset);
+    /* Up from item 1: the heading 0, then the wrap to 18 under the heading 19 */
+    listStep(&l, &lay, 0x1000);
+    listStep(&l, &lay, 0);
+    CHECK(ui_ListItemOfRow(&l, lay.curItem) == 18 && l.offset == 12,
+          "Up past the first heading wraps to item 18 (item %d, offset %d)",
+          ui_ListItemOfRow(&l, lay.curItem), l.offset);
+    CHECK(strcmp(lt_ext_RowText(l.label[7]), "item 19") == 0,
+          "the last window ends on the heading");
+    /* Cross and Triangle do not move or scroll the list */
+    int off = l.offset, cur = lay.curItem;
+    listStep(&l, &lay, 0x40 | 0x4000);
+    CHECK(l.offset == off && lay.curItem == cur, "Cross does not scroll");
+}
+
 #ifdef SETTINGS_RENDER
 
 /* SCENE (512 x 512 for the 640 x 448 grid) to a PNG at 4:3, 683 x 512 */
@@ -1638,6 +1993,30 @@ static int render(void)
         frame(0);
         snap4("settings_display_4x.png");
     }
+    /* the title entry (last: it makes Extras part of the main page): the
+       main page with its Extras row, and the Extras page with the cursor on
+       the locked Credits row, at the same 4x */
+    {
+        lt_switch_layout(13);
+        CHECK(settle(13, 60), "the title");
+        press(0x4000);
+        press(0x40);
+        CHECK(settle(mainL, 60), "the menu from the title");
+        int ml[16];
+        ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        lt_ext_Layout(mainL)->curItem = ml[5];
+        frame(0);
+        frame(0);
+        snap4("settings_main_title_4x.png");
+        lt_ext_Layout(mainL)->curItem = ml[6];
+        press(0x40);
+        int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+        CHECK(settle(exL, 60), "Extras at 4x");
+        press(0x4000);
+        press(0x4000);
+        frame(0);
+        snap4("settings_extras_4x.png");
+    }
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
     ui_FontShutdown();
@@ -1673,6 +2052,8 @@ int main(int argc, char **argv)
     testFramerate();
     testCapture();
     testBootSkip();
+    testExtras();
+    testList();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

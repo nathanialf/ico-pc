@@ -63,6 +63,10 @@ int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text);
    -1 if index is not a port row. */
 int lt_ext_SetText(int index, const char *utf8);
 int lt_ext_SetStr(int index, int strId);
+/* Greys a port row (its colour at half, whatever the cursor does): the
+   "locked" style of Settings > Extras.  Cleared by lt_ext_Reset. */
+int lt_ext_SetDim(int index, int dim);
+int lt_ext_RowDim(int index);
 /* the label as it would be drawn now */
 const char *lt_ext_RowText(int index);
 /* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0

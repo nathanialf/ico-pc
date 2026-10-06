@@ -92,6 +92,7 @@ typedef enum UiSettingsPage {
     UI_PAGE_GAMEPLAY,
     UI_PAGE_ACHIEVEMENTS,
     UI_PAGE_REMAP,
+    UI_PAGE_EXTRAS, /* Music, Models, Credits (from the title only) */
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -125,7 +126,11 @@ typedef enum UiSettingsOpt {
     /* actions */
     UI_OPT_BACK,
     /* list rows (achievements, remap targets) */
-    UI_OPT_LIST
+    UI_OPT_LIST,
+    /* Extras (docs/port/EXTRAS.md): entries that open a gallery */
+    UI_OPT_EXTRAS_MUSIC,
+    UI_OPT_EXTRAS_MODELS,
+    UI_OPT_EXTRAS_CREDITS /* locked until the ending has been reached */
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_SettingsInstall). */

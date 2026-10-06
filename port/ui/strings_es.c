@@ -263,4 +263,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_MT_DARK] = "Oscuro",
     [UI_STR_MT_LIGHT] = "Brillante",
     [UI_STR_MT_CONTINUE_Q] = "¿Deseas continuar?",
+    [UI_STR_EXTRAS] = "Extras",
+    [UI_STR_EXTRAS_MUSIC] = "Música",
+    [UI_STR_EXTRAS_MODELS] = "Modelos",
+    [UI_STR_EXTRAS_CREDITS] = "Créditos",
+    [UI_STR_EXTRAS_LOCKED_NOTE] = "Termina el juego para desbloquear",
 };
