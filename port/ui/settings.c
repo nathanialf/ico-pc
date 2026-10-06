@@ -102,6 +102,9 @@ extern void la_host_film_effect(int mode);
 
 /* the brightness step's range (la_adjust_screen) */
 #define BRIGHTNESS_MAX 14
+/* its default: la_adjust_screen's Triangle (0x1BE0F8, "Default", row 391)
+   and script/src/e3.c set 7; here Square, Triangle being Back */
+#define BRIGHTNESS_DEFAULT 7
 #define FILM_EFFECTS 5
 
 enum { ENTRY_PAUSE, ENTRY_TITLE12, ENTRY_TITLE13, ENTRY_COUNT };
@@ -589,7 +592,11 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         snprintf(buf, size, "%d %%", (int)(o.crtStrength * 100.0f + 0.5f));
         return buf;
     case UI_OPT_BRIGHTNESS:
-        snprintf(buf, size, "%d", brightness());
+        if (brightness() == BRIGHTNESS_DEFAULT) {
+            snprintf(buf, size, "%d (%s)", brightness(), ui_Str(UI_STR_MT_DEFAULT));
+        } else {
+            snprintf(buf, size, "%d", brightness());
+        }
         return buf;
     case UI_OPT_VIDEO_MODE:
         if (!onTitle()) {
@@ -2471,6 +2478,12 @@ static int settingsProc(int first, int item)
         }
         if ((flags & (PAD_LEFT | PAD_RIGHT)) && canStep(r->opt)) {
             ui_SettingsStep((UiSettingsOpt)r->opt, (flags & PAD_LEFT) ? -1 : 1);
+            CUR_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_SQUARE) && r->opt == UI_OPT_BRIGHTNESS && canStep(r->opt)) {
+            /* the adjust screen's Default */
+            systemStatus[11] = BRIGHTNESS_DEFAULT;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }

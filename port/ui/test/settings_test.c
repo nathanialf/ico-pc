@@ -2957,9 +2957,11 @@ static void testGameOptions(void)
 
     /* Brightness: 0..14 a step at a time, no wrap (la_adjust_screen) */
     systemStatus[11] = 7;
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "7") == 0, "brightness 7");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "7 (Default)") == 0,
+          "brightness 7, the default (%s)", ui_SettingsValueText(UI_OPT_BRIGHTNESS));
     ui_SettingsStep(UI_OPT_BRIGHTNESS, 1);
-    CHECK(systemStatus[11] == 8, "brightness 8");
+    CHECK(systemStatus[11] == 8 && strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "8") == 0,
+          "brightness 8 (%s)", ui_SettingsValueText(UI_OPT_BRIGHTNESS));
     for (int i = 0; i < 10; i++) {
         ui_SettingsStep(UI_OPT_BRIGHTNESS, 1);
     }
@@ -2969,6 +2971,22 @@ static void testGameOptions(void)
     }
     CHECK(systemStatus[11] == 0 && strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "0") == 0,
           "brightness stops at 0 (%d)", systemStatus[11]);
+    /* Square on the row: the default again (the adjust screen's Default) */
+    {
+        const int mainB = enterMain(0);
+        const int dispL = openPage(mainB, 0, UI_PAGE_DISPLAY);
+        lt_ext_Layout(dispL)->curItem = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_BRIGHTNESS);
+        frame(0);
+        press(0x0080);
+        CHECK(systemStatus[11] == 7 && settle(dispL, 4), "Square: brightness 7 again (%d)",
+              systemStatus[11]);
+        systemStatus[11] = 3;
+        lt_ext_Layout(dispL)->curItem = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_VIDEO_MODE);
+        press(0x0080);
+        CHECK(systemStatus[11] == 3, "Square on another row: no reset (%d)", systemStatus[11]);
+        press(0x10);
+        CHECK(settle(mainB, 60), "Display: back");
+    }
     systemStatus[11] = 0;
 
     /* the game's variables, never the port config */
