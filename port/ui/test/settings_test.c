@@ -2492,7 +2492,8 @@ static int render(void)
         press(0x40);
         frame(0);
         snap4("settings_music_4x.png");
-        press(0x10);
+        press(0x10); /* Back leaves for Extras, the Music row under the cursor */
+        CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
         gallery_SetEngine(NULL);
     }
     /* package DEF: every screen presented at Enhanced 1080p, deferred and
