@@ -50,7 +50,7 @@ directory format of `unifile_read_func` in `fumi/ios/cdvd.c`):
 | --- | --- | --- | --- | --- |
 | `pal_advertise.pss` | 390270976, 130301956 | 720 x 480, 4:3 (aspect code 2), 25 fps, Main@Main, frame pictures, I/P/B (234 I, 934 P, 2270 B), 234 GOPs | 3438 | PCM 48 kHz stereo, 26,413,056 bytes (137.57 s) |
 | `pal_advertise576.pss` | 520574976, 130334724 | 720 x 576, 4:3, 25 fps, frame pictures | 3439 | same format |
-| `advertise.pss` | 762783744, 104398852 | 720 x 480, 4:3, 29.97 fps (frame rate code 4), frame pictures | about 4100 (start-code count) | same format |
+| `advertise.pss` | 762783744, 104398852 | 720 x 480, 4:3, 29.97 fps (frame rate code 4), frame pictures | 4123 | same format |
 
 `movieFile` (the `moviefile` data member) also names
 `movie/pal_demo_advertise.pss`, `movie/pal_end.pss` and
@@ -67,6 +67,29 @@ the title sequence runs out with no START: mode 0 ends, its 10 s timer
 runs, and mode 2 calls `stgmgrForceSwitchWithFade(58, ...)` with
 `mpegPlayReturnStage = 1`. The PAL player is thus given a 720 x 480 stream
 in a 720 x 576 display (`main.c` passes `systemStatus[0] ? 576 : 480`).
+
+### Films played headless
+
+Played through `movie_proc` on the Linux headless build (disc image, `audio=0`),
+the figures from the `fmv: movie_init` and `fmv: movie_proc` log lines; the
+sequence headers (size, aspect code, frame rate code) are those read from the
+disc. The pace is vsync-driven (see Timing), so there are no late or dropped
+pictures to count: a picture is either shown at its slot or, for the last 5 of
+the stream, never shown, and a decode that fell behind would show as a decoder
+error, of which there were none.
+
+| film | run | resolution | pictures decoded | shown | vsyncs (duration) | decoder errors | outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `advertise.pss` | `start_stage=57` (50 Hz mode, display 720 x 576) | 720 x 480, 29.97 fps | 4123 of 4123 | 4118 | 8238 (137.3 s at 60 vsyncs/s; 164.8 s if the 50 Hz vsync rate is kept) | 0 | played to the end, PCM 26,413,056 bytes sent, the game went on (`stage_no` 3, 300 Main ticks) |
+| `pal_advertise576.pss` | `start_stage=59` | 720 x 576, 25 fps | 3439 of 3439 | 3434 | 6870 (137.4 s at 50 vsyncs/s) | 0 | played to the end, all 26,413,056 PCM bytes sent, 300 Main ticks |
+| `advertise.pss` | `[video] video_mode = "60hz"` from the title, left alone | 720 x 480 (display 720 x 480) | 4123 of 4123, three times in 12000 ticks | 4118 | 8238 (137.3 s) each | 0 | the attract loop played the film three times (title, film, title ...), each time to the end |
+
+The 576-line film is a real 576-line stream, so no black bars; the 480-line
+film in the PAL 576 display is the centred case described under Display.
+Not checked by these runs: the pictures themselves (headless drops them),
+the sound, and the window build's drawing of a 29.97 fps film at 60 Hz
+(`rd_video`'s own test covers only the draw path).
+
 
 ### PSS format
 
@@ -126,6 +149,13 @@ number of vsyncs headless, in the window, with `ICO_FMV_DECODE=0`, and on
 any host; that keeps traces through a film reproducible. For
 `pal_advertise.pss` (3438 pictures) that is 6867 vsyncs from the display
 start, 3433 pictures shown, and the abort poll from vsync 14.
+
+A sequence header with another size mid-stream (libmpeg2's
+`IVD_RES_CHANGED`, which it reports only once a picture has been decoded)
+makes `m2v.c` reset the decoder, drop the pictures it was holding from the
+old sequence (at most the reference it kept back) and take the unit again
+through the header path, which sizes the planes for the new picture;
+`ico_m2v_resets` counts them. None of the disc's films changes size.
 
 libmpeg2 puts its first picture out only after the third access unit, so
 `decode_into` reads on until the decoder has its next unit; otherwise the
@@ -248,6 +278,10 @@ partition untouched.
     pictures out, the rest held for display order; 0 errors). This is
     where P/B decoding is exercised, on the real content, without a
     reference image to compare with;
+  - a resolution change: two sequences of different sizes (32 x 32 then 48 x
+    32, and back) decoded one after the other by one decoder, the second
+    sequence's picture checked at its own size and values, with one reset
+    and no errors;
   - the pacing state machine (the counts above).
 - `rd_video` (`port/fmv/test/rd_video_test.c`, on the renderer's headless
   device; exit 77 without one; with the validation layer when fetched): a

@@ -33,7 +33,7 @@ struct IcoM2v {
     uint32_t w, h, aspect;
     uint8_t *planes[3];
     uint32_t plane_size[3];
-    uint32_t frames, errors;
+    uint32_t frames, errors, resets;
     int flushing;
 };
 
@@ -304,6 +304,31 @@ int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
         len -= op.u4_num_bytes_consumed;
     }
     r = decode_call(d, au, len, &op);
+    if (op.u4_error_code == (UWORD32)IVD_RES_CHANGED && !op.u4_output_present) {
+        /* A sequence header with another size (the library only says so
+           once a picture has been decoded).  Reset the decoder, which drops
+           the pictures it still holds from the old sequence (at most the
+           reference it was keeping back), and take this unit again through
+           the header path so the planes are sized for the new picture. */
+        ivd_ctl_reset_ip_t rip;
+        ivd_ctl_reset_op_t rop;
+
+        memset(&rip, 0, sizeof(rip));
+        memset(&rop, 0, sizeof(rop));
+        rip.e_cmd = IVD_CMD_VIDEO_CTL;
+        rip.e_sub_cmd = IVD_CMD_CTL_RESET;
+        rip.u4_size = sizeof(rip);
+        rop.u4_size = sizeof(rop);
+        if (api(d, &rip, &rop) != IV_SUCCESS) {
+            d->errors++;
+            return -1;
+        }
+        d->have_header = 0;
+        d->flushing = 0;
+        d->resets++;
+        set_mode(d, IVD_DECODE_HEADER);
+        return ico_m2v_decode(d, au, len, out);
+    }
     if (r != IV_SUCCESS && !op.u4_output_present) {
         d->errors++;
         return -1;
@@ -347,6 +372,11 @@ int ico_m2v_flush(IcoM2v *d, IcoM2vFrame *out)
 uint32_t ico_m2v_frames_out(const IcoM2v *d)
 {
     return d != NULL ? d->frames : 0;
+}
+
+uint32_t ico_m2v_resets(const IcoM2v *d)
+{
+    return d != NULL ? d->resets : 0;
 }
 
 uint32_t ico_m2v_errors(const IcoM2v *d)

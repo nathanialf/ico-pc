@@ -45,6 +45,8 @@ int ico_m2v_flush(IcoM2v *d, IcoM2vFrame *out);
 /* Pictures output and units that failed, since create. */
 uint32_t ico_m2v_frames_out(const IcoM2v *d);
 uint32_t ico_m2v_errors(const IcoM2v *d);
+/* Sequence-size changes followed (decoder reset, planes resized). */
+uint32_t ico_m2v_resets(const IcoM2v *d);
 /* The sequence header's picture size and aspect_ratio_information (1 square
    samples, 2 4:3, 3 16:9, 4 2.21:1); zeros before the first header. */
 void ico_m2v_seq_info(const IcoM2v *d, uint32_t *w, uint32_t *h, uint32_t *aspect_code);

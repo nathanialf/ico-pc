@@ -99,11 +99,6 @@ pointer to this file.
 
 ## Films
 
-- **Play the 60 Hz and 576-line films.** In 60 Hz mode the title plays
-  stage 57, `advertise.pss` (29.97 fps), and `pal_advertise576.pss`
-  (stage 59) also exists; both have been inspected but not played. Run with
-  `[video] video_mode = "60hz"` or `start_stage=57` / `59` and record the
-  result in docs/port/FMV.md.
 - **Colour conversion against a real IPU.** `port/shaders/yuv.hlsl`
   reproduces PCSX2's reference model bit-exactly, but nobody has compared
   it with PS2 output, so film colours could be a step off.
@@ -171,8 +166,6 @@ pointer to this file.
   read staged blobs (`git show :path`) in pre-commit mode.
 - **D3D12 buffer copy states.** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
-- **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
-  reallocate the planes (`port/fmv/m2v.c`).
 ## Checks that need a PS2 or a play-through
 
 These cannot be settled in code. Each needs a capture from a PS2 or a

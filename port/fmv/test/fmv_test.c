@@ -365,13 +365,13 @@ static void dc_block(Bits *w, int chroma, int diff)
 /* One I picture, 32 x 32, every macroblock flat: luma Y[mb], chroma Cb, Cr
    per macroblock. DC precision 8 bits: the predictor starts each slice at
    128 and a block's value is 128 + the running sum of its differences. */
-static void build_stream(Buf *out, const int Y[4], const int Cb[4], const int Cr[4])
+static void build_stream_cols(Buf *out, int cols, const int *Y, const int *Cb, const int *Cr)
 {
     Bits w = {out, 0, 0};
     int row, col;
 
     start_code(&w, 0xB3);
-    bits(&w, 32, 12);
+    bits(&w, (uint32_t)(cols * 16), 12);
     bits(&w, 32, 12);
     bits(&w, 2, 4);     /* 4:3 */
     bits(&w, 3, 4);     /* 25 fps */
@@ -416,8 +416,8 @@ static void build_stream(Buf *out, const int Y[4], const int Cb[4], const int Cr
         start_code(&w, (unsigned)(row + 1));
         bits(&w, 8, 5); /* quantiser_scale_code */
         bits(&w, 0, 1);
-        for (col = 0; col < 2; col++) {
-            int mb = row * 2 + col, k;
+        for (col = 0; col < cols; col++) {
+            int mb = row * cols + col, k;
 
             bits(&w, 1, 1); /* address increment 1 */
             bits(&w, 1, 1); /* intra */
@@ -432,6 +432,74 @@ static void build_stream(Buf *out, const int Y[4], const int Cb[4], const int Cr
         }
     }
     start_code(&w, 0xB7);
+}
+
+static void build_stream(Buf *out, const int Y[4], const int Cb[4], const int Cr[4])
+{
+    build_stream_cols(out, 2, Y, Cb, Cr);
+}
+
+/* Two concatenated sequences of different sizes, 32 x 32 then 48 x 32 and
+   the other way round: the decoder follows the change (IVD_RES_CHANGED:
+   reset, the unit taken again), so the picture of the second sequence comes
+   out at its own size with the coded values. */
+static void check_resize(int colsA, int colsB)
+{
+    static const int Y2[4] = {16, 235, 100, 180}, Cb2[4] = {128, 90, 240, 16},
+                     Cr2[4] = {128, 200, 16, 240};
+    static const int Y3[6] = {40, 200, 90, 150, 220, 60}, Cb3[6] = {100, 128, 200, 60, 30, 250},
+                     Cr3[6] = {128, 20, 99, 210, 140, 70};
+    Buf a = {0}, b = {0};
+    IcoM2v *d = ico_m2v_create();
+    IcoM2vFrame f;
+    const int *Y = colsB == 3 ? Y3 : Y2, *Cb = colsB == 3 ? Cb3 : Cb2, *Cr = colsB == 3 ? Cr3 : Cr2;
+    uint32_t w = (uint32_t)colsB * 16, aw, ah, asp;
+    int r, got, bad = 0, x, yy;
+
+    CHECK(d != NULL, "decoder created (resize)");
+    if (d == NULL) {
+        return;
+    }
+    build_stream_cols(&a, colsA, colsA == 3 ? Y3 : Y2, colsA == 3 ? Cb3 : Cb2,
+                      colsA == 3 ? Cr3 : Cr2);
+    build_stream_cols(&b, colsB, Y, Cb, Cr);
+    r = ico_m2v_decode(d, a.p, a.n - 4, &f);
+    CHECK(r >= 0, "%d to %d: first unit returned %d", colsA, colsB, r);
+    r = ico_m2v_decode(d, b.p, b.n - 4, &f);
+    CHECK(r >= 0, "%d to %d: second unit returned %d", colsA, colsB, r);
+    got = r == 1 || ico_m2v_flush(d, &f) == 1;
+    CHECK(got, "%d to %d: a picture came out", colsA, colsB);
+    ico_m2v_seq_info(d, &aw, &ah, &asp);
+    CHECK(aw == w && ah == 32, "%d to %d: sequence info %u x %u", colsA, colsB, aw, ah);
+    if (got) {
+        CHECK(f.w == w && f.h == 32, "%d to %d: picture %u x %u", colsA, colsB, f.w, f.h);
+        for (yy = 0; yy < 32 && f.w == w && f.h == 32; yy++) {
+            for (x = 0; x < (int)w; x++) {
+                int mb = (yy / 16) * colsB + x / 16;
+                if (f.y[yy * f.pitch[0] + x] != Y[mb]) {
+                    bad++;
+                }
+                if (x < (int)w / 2 && yy < 16 &&
+                    (f.u[yy * f.pitch[1] + x] != Cb[(yy / 8) * colsB + x / 8] ||
+                     f.v[yy * f.pitch[2] + x] != Cr[(yy / 8) * colsB + x / 8])) {
+                    bad++;
+                }
+            }
+        }
+        CHECK(bad == 0, "%d to %d: %d samples differ", colsA, colsB, bad);
+    }
+    CHECK(ico_m2v_errors(d) == 0, "%d to %d: %u decode errors", colsA, colsB, ico_m2v_errors(d));
+    CHECK(ico_m2v_resets(d) == 1, "%d to %d: %u resets", colsA, colsB, ico_m2v_resets(d));
+    ico_m2v_destroy(d);
+    free(a.p);
+    free(b.p);
+}
+
+static void test_resize(void)
+{
+    check_resize(2, 3);
+    check_resize(3, 2);
+    printf("resize: done\n");
 }
 
 static void test_decode(void)
@@ -712,6 +780,7 @@ int main(int argc, char **argv)
     test_pss();
     test_units();
     test_decode();
+    test_resize();
     test_pace();
     test_disc(argc > 1 ? argv[1] : NULL);
     if (failures != 0) {
