@@ -11,6 +11,7 @@
 #include <libvu0.h>
 #include "typedef.h"
 #include "main.h"
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
 
 /* actDeja installs actDejaChk as the actor's next mail handler. */
 
@@ -76,6 +77,7 @@ void actDejaChk(GObj *volatile self)
     while (demoEnd == 0 && ((pad[0].flags & 0x800) == 0 || scpAdpcmPlayRequestNum() != 0)) {
         _ACTWait(1);
     }
+    ico_gs_signal(ICO_GS_EV_DEMO_END, 10 + (demoEnd == 0));
     if (demoEnd == 0 && deja != 0) {
         shadow_DispCancel(74, 0);
         scpAdpcmFadeCloseFunc(&deja, 128);

@@ -410,17 +410,28 @@ static void ending(int clear_before, int play_seconds)
     ticks(1);
 }
 
-/* op.c's three parts (gflags 2..4 as they set them), then st13b */
-static void opening(int skip_part)
+/* the opening's five parts (op.c's three with gflags 2..4 as they set
+   them, st13b's conte 02, deja.c's), the part skip_part skipped with START;
+   the parts not in `only` (a bit mask, 0: all) are not signalled */
+static void opening_parts(int skip_part, unsigned int only)
 {
     int p;
 
-    for (p = 1; p <= 3; p++) {
-        flag(p + 1, 1);
+    for (p = 1; p <= ICO_GS_OPENING_PARTS; p++) {
+        if (only != 0 && !((only >> (p - 1)) & 1u)) {
+            continue;
+        }
+        if (p <= 3) {
+            flag(p + 1, 1);
+        }
         ico_gs_signal(ICO_GS_EV_DEMO_END, p * 2 + (p == skip_part));
         stage(40 + p);
     }
-    stage(3);
+}
+
+static void opening(int skip_part)
+{
+    opening_parts(skip_part, 0);
 }
 
 #define HAND_MS_10 (10ull * 60ull * 1000ull)
@@ -696,6 +707,147 @@ static void test_persistence(void)
     CHECK(ico_ach_state(ico_ach_find("gate")) == ICO_ACH_LOCKED);
 }
 
+/* --- the opening's parts ------------------------------------------------------ */
+
+static void test_opening(void)
+{
+    int p;
+
+    start("opening");
+    for (p = 1; p <= ICO_GS_OPENING_PARTS; p++) {
+        /* each part skipped on its own keeps it locked, with a part unseen
+           too */
+        new_game();
+        opening(p);
+        CHECK(st("opening") == ICO_ACH_LOCKED);
+        CHECK(ico_gs_run_opening_skipped() == 1);
+        new_game();
+        opening_parts(0, 0x1Fu & ~(1u << (p - 1)));
+        CHECK(st("opening") == ICO_ACH_LOCKED);
+        CHECK(ico_gs_run_opening_parts() == (0x1Fu & ~(1u << (p - 1))));
+    }
+    /* four parts watched do not unlock; the fifth does, at its end */
+    new_game();
+    opening_parts(0, 0x0Fu);
+    CHECK(st("opening") == ICO_ACH_LOCKED);
+    EXPECT_UNLOCK("opening", opening_parts(0, 0x10u));
+    CHECK(ico_gs_run_opening_parts() == 0x1Fu);
+    start("opening_loaded");
+    opening(0); /* without a new game */
+    CHECK(st("opening") == ICO_ACH_LOCKED);
+}
+
+/* --- run state per save slot ------------------------------------------------------- */
+
+static void save_slot(int slot, unsigned int sum)
+{
+    ico_ach_slot_saved(slot, sum);
+}
+
+static void test_run_slots(void)
+{
+    IcoGsRun r;
+
+    start("runslots");
+    new_game();
+    opening_parts(0, 0x07u);
+    g.stage_no = 11;
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 5);
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    ticks(1);
+    save_slot(3, 0xFFFFFFF0u);
+    CHECK(file_count("slot_3_sum = 4294967280") == 1);
+    CHECK(file_count("slot_3_fresh = true") == 1);
+    CHECK(file_count("slot_3_captures = 1") == 1);
+    CHECK(file_count("slot_3_game_overs = 2") == 1);
+
+    /* another save in slot 4 after more play */
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    ticks(1);
+    save_slot(4, 77u);
+
+    /* quit and continue: a new process reads the file, the load restores */
+    ico_config_reset(s_no_config, s_no_config);
+    ico_ach_reset(s_path);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    CHECK(ico_gs_run_fresh() == 0 && ico_gs_run_captures() == 0);
+    g.layout = 25; /* la_load_processing */
+    ticks(1);
+    g.layout = 54;
+    ticks(1);
+    CHECK(ico_ach_slot_loaded(3, 0xFFFFFFF0u) == 1);
+    ico_gs_run_get(&r);
+    CHECK(r.fresh == 1 && r.captures == 1 && r.game_overs == 2);
+    CHECK(r.opening_parts == 0x07u && r.opening_skipped == 0 && r.suspended == 0);
+    ticks(3);
+    CHECK(ico_gs_run_fresh() == 1 && ico_gs_run_game_overs() == 2);
+    /* slot 4's run is its own */
+    CHECK(ico_ach_slot_loaded(4, 77u) == 1);
+    CHECK(ico_gs_run_game_overs() == 3);
+    /* a save with another checksum, or no entry, restores nothing */
+    memset(&r, 0, sizeof(r));
+    ico_gs_run_set(&r);
+    CHECK(ico_ach_slot_loaded(3, 0x1234u) == 0);
+    CHECK(ico_ach_slot_loaded(9, 0u) == 0);
+    CHECK(ico_ach_slot_loaded(-1, 0u) == 0);
+    CHECK(ico_gs_run_fresh() == 0);
+
+    /* the fresh-run challenges across the quit: the ending of a restored
+       run with a capture and game overs unlocks neither */
+    CHECK(ico_ach_slot_loaded(4, 77u) == 1);
+    ending(0, 3600);
+    CHECK(st("never_taken") == ICO_ACH_LOCKED && st("unbroken") == ICO_ACH_LOCKED);
+
+    /* a skipped part and a suspended run are kept too */
+    start("runslots2");
+    new_game();
+    opening(2);
+    ico_opt_set_developer_mode(1);
+    ticks(1);
+    save_slot(0, 1u);
+    ico_opt_set_developer_mode(0);
+    ico_ach_reset(s_path);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    CHECK(ico_ach_slot_loaded(0, 1u) == 1);
+    ico_gs_run_get(&r);
+    CHECK(r.opening_skipped == 1 && r.suspended == 1 && r.fresh == 1);
+
+    /* New Game after loading slot 0 clears that slot's entry */
+    new_game();
+    CHECK(ico_gs_run_fresh() == 1 && ico_gs_run_opening_parts() == 0);
+    CHECK(ico_ach_slot_loaded(0, 1u) == 0);
+    /* and the next save there writes the new run */
+    save_slot(0, 2u);
+    CHECK(ico_ach_slot_loaded(0, 2u) == 1);
+    CHECK(ico_gs_run_fresh() == 1 && ico_gs_run_opening_skipped() == 0);
+    /* a New Game that followed no load clears nothing: slot 4 stays */
+    start("runslots3");
+    save_slot(4, 5u);
+    ico_ach_reset(s_path);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    new_game();
+    CHECK(ico_ach_slot_loaded(4, 5u) == 1);
+    /* a clean run saved, the process restarted, the game continued to its
+       ending */
+    start("runslots4");
+    new_game();
+    save_slot(6, 9u);
+    ico_ach_reset(s_path);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    CHECK(ico_ach_slot_loaded(6, 9u) == 1);
+    ending(0, 3600);
+    CHECK(st("never_taken") == ICO_ACH_UNLOCKED && st("unbroken") == ICO_ACH_UNLOCKED);
+}
+
 /* --- popups ---------------------------------------------------------------------- */
 
 static void test_popups(void)
@@ -789,6 +941,8 @@ int main(int argc, char **argv)
     test_view();
     test_signals();
     test_each();
+    test_opening();
+    test_run_slots();
     test_suspended();
     test_yorda_safe_counts();
     test_persistence();

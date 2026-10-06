@@ -65,11 +65,53 @@ suspend achievements (below).
 game. It is *fresh* when gflag 382 came on (the new-game choice,
 `gflagOn(382)` in `layout_action.c`) and no load followed (layout 25,
 `la_load_processing`). It counts captures and game overs, records whether
-any of `op.c`'s opening parts was skipped, and whether achievements were
-suspended at any tick (`ico_gs_run_suspended`, sticky for the run). The run
-lives in memory only, so quitting mid-run and loading a save ends it as not
-fresh; the fresh-run challenges need one session from New Game to the
-ending.
+which opening parts were watched to their end and whether any was skipped,
+and whether achievements were suspended at any tick
+(`ico_gs_run_suspended`, sticky for the run). The run lives in memory
+(`IcoGsRun`, `ico_gs_run_get` / `ico_gs_run_set`) and is also kept per save
+slot (below), so quitting and continuing does not end it.
+
+**The opening's parts** are the scenes with their own skip loop on START or
+Cross (`pad[0].flags & 0x800`) from New Game to the first checkpoint, in the
+order the game flags show: parts 1 to 3 in `op.c` (flags 2 to 4), part 4 the
+conte 02 in `st13b.c` `actSt13bFloorChk` (flag 5), part 5 the demo in
+`deja.c` `actDejaChk` (flag 6; it ends in `CheckPoint` via `actDejaAfterChk`,
+flag 7). Each raises DEMO_END with `part * 2`, plus 1 when skipped; the run
+keeps a bit per part watched (`ico_gs_run_opening_parts`) and a flag for any
+skip. The other loops in those stages (`st13b.c` meet-again, boss, elevator
+and door demos; `st13c.c`, `st13a.c` and the later stages) are scenes of
+the game proper, not the opening. The order of parts 4 and 5 is read from
+the flags and the stage changes in the scripts; no play-through confirmed it.
+
+**Per save slot.** `[run]` in `achievements.toml`, keyed as options.h's
+`[mirror] slot_N` (docs/port/SAVES.md, "Mirror mode"): N is the save file's
+number (`mc.fileNo`) and `slot_N_sum` the save block's checksum:
+
+```toml
+[run]
+slot_3_sum = 1834213
+slot_3_fresh = true
+slot_3_captures = 1
+slot_3_game_overs = 2
+slot_3_opening = 31      # parts watched, bit 0 = part 1; plus 256 if any was skipped
+slot_3_suspended = false
+```
+
+- Saving to slot N (`la_save_processing`, `common/src/layout_action.c`, at
+  the call that writes the mirror entry) calls `ico_ach_slot_saved`, which
+  writes the run as of the last tick, replacing the slot's entry.
+- Loading from slot N (`la_load_processing`, at the mirror call) calls
+  `ico_ach_slot_loaded`: when `slot_N_sum` equals the loaded block's
+  checksum the run is restored (`ico_gs_run_set`: fresh, counts, parts,
+  suspension), else the run stays not fresh (a PS2 save, an imported one,
+  another card's save in that slot).
+- New Game after a load from slot N (a cleared save's New Game) marks N's
+  entry cleared (`slot_N_sum = -1`); a New Game that follows no load
+  clears nothing, and the first save into a slot replaces its old entry.
+- The title still ends the run (a new run begins with the next New Game).
+  A save the port did not make while the run was fresh has no entry, so
+  the fresh-run challenges need the run's saves to be made with this
+  build.
 
 ### Signals
 
@@ -87,7 +129,7 @@ of the file.
 | YORDA_GRABBED | the enemy's label | `ico2/fumi/src/enemy_act.c` `actEnemyForceSwitchToCarry`, after `carrier = self` (free play and the scripted capture in `st13c.c`) |
 | ENDING | `gFlagGameClear` before the ending's save | `ico2/script/src/end.c`, the start of `actEndingSave` (after the END logo) |
 | FMV_END | 1 skipped (`movie_proc` returned 1), 0 played out | `ico2/common/src/main.c`, after `movie_proc` |
-| DEMO_END | `part * 2`, plus 1 if START skipped it | `ico2/script/src/op.c`, after the three opening parts' wait loops (`actOpDemo01_2`, `actOpDemo02Chk`, `actOpDemo03Chk`) |
+| DEMO_END | `part * 2`, plus 1 if START skipped it (the opening's parts, below) | `ico2/script/src/op.c`, after the three opening parts' wait loops (parts 1 to 3: `actOpDemo01_2`, `actOpDemo02Chk`, `actOpDemo03Chk`); `ico2/script/src/st13b.c` `actSt13bFloorChk`, after the conte-02 wait loop (part 4, `conte02End == 0` is the skip); `ico2/script/src/deja.c` `actDejaChk`, after the demo's wait loop (part 5, `demoEnd == 0` is the skip) |
 | WEAPON | the weapon kind | `ico2/sugipon/src/weapon.c` `PickupWeapon` (NONE, which is dropped, when the holder is not the boy) |
 
 Polled events, derived by `ico_gs_tick` with no hook:
@@ -146,7 +188,7 @@ the retail tables.
 
 | id | title | condition | game facts read |
 | --- | --- | --- | --- |
-| `opening` | The Sacrifice | enter stage 3 (st13b SACRIFICE) in a fresh run with gflag 4 on and none of `op.c`'s three opening parts skipped with START | STAGE_ENTER, gflag 4 (`actOpDemo03Chk`), DEMO_END args, NEW_GAME |
+| `opening` | The Sacrifice | a fresh run in which all five opening parts (below) were watched to their ends and none was skipped with START; true from the fifth part's end | DEMO_END args, NEW_GAME |
 | `hand_in_hand` | Hand in Hand | holding hands | `ACTGame_FLAG_TETSUNAGI` |
 | `gate` | The Castle Gate | in stage 11, st04a (GATE_1ST) | `stage_no` |
 | `windmill` | The Windmill | stage 15, st09a (WINDMILL) | `stage_no` |

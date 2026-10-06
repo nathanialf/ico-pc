@@ -41,7 +41,7 @@ typedef enum IcoGsEvent {
     ICO_GS_EV_GAME_OVER,     /* arg: 0; the game-over layout was requested */
     ICO_GS_EV_ENDING,        /* arg: gFlagGameClear before the ending's save */
     ICO_GS_EV_FMV_END,       /* arg: 1 skipped, 0 played out (main.c) */
-    ICO_GS_EV_DEMO_END,      /* arg: 1 skipped with START, 0 played out (op.c) */
+    ICO_GS_EV_DEMO_END,      /* arg: part * 2, plus 1 skipped with START (op.c, st13b.c, deja.c) */
     ICO_GS_EV_WEAPON,        /* arg: the weapon kind the boy picked up (weapon.c) */
     /* polled (derived from the snapshot by ico_gs_tick) */
     ICO_GS_EV_SAVE_DONE,     /* arg: the couch's label id (IosMcPreviewInfo[3]) */
@@ -157,11 +157,30 @@ unsigned int ico_gs_endings(void);
 int ico_gs_run_fresh(void);
 unsigned int ico_gs_run_captures(void);
 unsigned int ico_gs_run_game_overs(void);
-/* a START skip of an opening part (op.c) in this run */
+/* a START skip of an opening part (op.c, st13b.c, deja.c) in this run */
 int ico_gs_run_opening_skipped(void);
+/* The opening's parts (DEMO_END's arg / 2, 1 to ICO_GS_OPENING_PARTS: op.c's
+   three, st13b's conte 02, deja.c's) watched to the end in this run: bit
+   part - 1 */
+#define ICO_GS_OPENING_PARTS 5
+unsigned int ico_gs_run_opening_parts(void);
 /* achievements were suspended (below) at any tick of this run: the flag
    is sticky until the run resets */
 int ico_gs_run_suspended(void);
+
+/* The run as a value, to keep per save slot (achievements.c) */
+typedef struct {
+    int fresh;
+    unsigned int captures;
+    unsigned int game_overs;
+    unsigned int opening_parts; /* ico_gs_run_opening_parts */
+    int opening_skipped;
+    int suspended;
+} IcoGsRun;
+
+void ico_gs_run_get(IcoGsRun *out);
+/* Replaces the run (a loaded slot's); the next tick goes on from it */
+void ico_gs_run_set(const IcoGsRun *in);
 
 /* the port's options (port/game/options.h) */
 int ico_gs_developer_mode(void);

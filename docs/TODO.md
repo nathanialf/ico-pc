@@ -156,16 +156,6 @@ pointer to this file.
   (`east_and_west`) are inferred from the code. A wrong guess gives an
   achievement a trigger that never fires; confirm in play and fix
   `port/game/achievements.c` if needed.
-- **The later parts of the opening.** The `opening` achievement checks only
-  `op.c`'s three parts; the later opening stages have their own skip loops,
-  which are not hooked, so skipping them still counts as watching. Add
-  `ico_gs_signal` calls in those scripts and a condition in
-  `achievements.c`.
-- **Run state per save.** The fresh-run challenges (`never_taken`,
-  `unbroken`) need one session from New Game to the ending, because run
-  state lives in memory (`port/game/gamestate.c`). Per-slot run state in
-  `achievements.toml`, keyed like the `[mirror] slot_N` entries, would lift
-  that.
 - **Developer menu entries.** Of the 27 entries in `common/src/debug.c`'s
   `debugMenu`, only Debug Mode and Snap Shot are tested (`rd_debug_test`);
   Free Camera, Stage Select, the editors, Memory Card, the sound tests and

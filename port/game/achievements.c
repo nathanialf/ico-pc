@@ -22,7 +22,6 @@
  * only the game-state view and the counters below. */
 
 /* stages (stageData order; the names are the game's, docs/port/ACHIEVEMENTS.md) */
-#define ST_SACRIFICE 3   /* st13b (SACRIFICE) */
 #define ST_GATE 11       /* st04a (GATE_1ST) */
 #define ST_GRAVE 13      /* st18a (GRAVE) */
 #define ST_WINDMILL 15   /* st09a (WINDMILL) */
@@ -37,7 +36,6 @@
 #define STAGE_BITS 128
 
 /* story flags */
-#define GF_OPENING_PART3 4  /* actOpDemo03Chk, op.c */
 #define GF_QUEEN_DEAD 338   /* actSt25aQueenDeadChk, st25a.c:565 */
 #define GF_BEACH_SECRET 354 /* actSt27aEndChk, end.c:1061: item kind 3 held */
 
@@ -72,11 +70,11 @@ static int in_stage(int stage)
 
 static int c_opening(void)
 {
-    /* arriving in st13b (SACRIFICE) in a run from a new game, after the
-       third opening part (gflag 4, op.c actOpDemo03Chk), with none of
-       op.c's three parts skipped with START */
-    return ico_gs_stage_entered() && ico_gs_stage() == ST_SACRIFICE && ico_gs_run_fresh() &&
-           ico_gs_flag(GF_OPENING_PART3) && !ico_gs_run_opening_skipped();
+    /* a run from a new game in which every opening part was watched to its
+       end: op.c's three, st13b's conte 02 and deja.c's (DEMO_END parts 1 to
+       5), none skipped with START; true from the last part's end on */
+    return ico_gs_run_fresh() && !ico_gs_run_opening_skipped() &&
+           ico_gs_run_opening_parts() == (1u << ICO_GS_OPENING_PARTS) - 1u;
 }
 
 static int c_hand(void)
@@ -510,6 +508,133 @@ static void read_file(void)
     ico_toml_free(t);
 }
 
+/* --- run state per save slot ----------------------------------------------------- */
+
+/* run.slot_N_*: the run (ico_gs_run_get) as the save in slot N (the game's
+   file number) left it, with run.slot_N_sum the save block's checksum, as
+   options.c keeps [mirror] slot_N.  A load whose checksum differs finds no
+   entry.  A sum of -1 marks a cleared entry. */
+#define RUN_NO_SUM (-1LL)
+#define RUN_SKIPPED_BIT 0x100
+
+static int s_run_slot = -1; /* the slot the run was last loaded from or saved to */
+
+static int run_key(int slot, const char *name, char *key, size_t size)
+{
+    if (slot < 0 || slot > 99) {
+        return -1;
+    }
+    snprintf(key, size, "run.slot_%d%s", slot, name);
+    return 0;
+}
+
+static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
+{
+    IcoToml *t = ico_toml_load(s_path);
+    char key[64];
+    int rc;
+
+    if (t == NULL) {
+        t = ico_toml_parse("");
+    }
+    if (t == NULL) {
+        return;
+    }
+    ico_toml_set_int(t, "version", FILE_VERSION);
+    run_key(slot, "_sum", key, sizeof(key));
+    ico_toml_set_int(t, key, sum);
+    if (run != NULL) {
+        run_key(slot, "_fresh", key, sizeof(key));
+        ico_toml_set_bool(t, key, run->fresh);
+        run_key(slot, "_captures", key, sizeof(key));
+        ico_toml_set_int(t, key, run->captures);
+        run_key(slot, "_game_overs", key, sizeof(key));
+        ico_toml_set_int(t, key, run->game_overs);
+        run_key(slot, "_opening", key, sizeof(key));
+        ico_toml_set_int(
+            t, key, (long long)run->opening_parts | (run->opening_skipped ? RUN_SKIPPED_BIT : 0));
+        run_key(slot, "_suspended", key, sizeof(key));
+        ico_toml_set_bool(t, key, run->suspended);
+    }
+    rc = ico_toml_save(t, s_path);
+    ico_toml_free(t);
+    if (rc != 0) {
+        ico_diag_log("achievements: cannot write %s", s_path);
+    }
+}
+
+void ico_ach_slot_saved(int slot, unsigned int sum)
+{
+    IcoGsRun run;
+
+    if (slot < 0 || slot > 99) {
+        return;
+    }
+    if (!s_inited) {
+        ico_ach_init(NULL);
+    }
+    ico_gs_run_get(&run);
+    run_slot_write(slot, &run, (long long)sum);
+    s_run_slot = slot;
+}
+
+int ico_ach_slot_loaded(int slot, unsigned int sum)
+{
+    IcoToml *t;
+    IcoGsRun run;
+    char key[64];
+    long long v;
+
+    s_run_slot = -1;
+    if (slot < 0 || slot > 99) {
+        return 0;
+    }
+    if (!s_inited) {
+        ico_ach_init(NULL);
+    }
+    s_run_slot = slot; /* a New Game from this slot's load clears its entry */
+    t = ico_toml_load(s_path);
+    if (t == NULL) {
+        return 0;
+    }
+    run_key(slot, "_sum", key, sizeof(key));
+    if (ico_toml_get_int(t, key, RUN_NO_SUM) != (long long)sum) {
+        ico_toml_free(t);
+        return 0;
+    }
+    memset(&run, 0, sizeof(run));
+    run_key(slot, "_fresh", key, sizeof(key));
+    run.fresh = ico_toml_get_bool(t, key, 0) != 0;
+    run_key(slot, "_captures", key, sizeof(key));
+    v = ico_toml_get_int(t, key, 0);
+    run.captures = v < 0 || v > 0xFFFFFFFFLL ? 0u : (unsigned int)v;
+    run_key(slot, "_game_overs", key, sizeof(key));
+    v = ico_toml_get_int(t, key, 0);
+    run.game_overs = v < 0 || v > 0xFFFFFFFFLL ? 0u : (unsigned int)v;
+    run_key(slot, "_opening", key, sizeof(key));
+    v = ico_toml_get_int(t, key, 0);
+    if (v < 0) {
+        v = 0;
+    }
+    run.opening_parts = (unsigned int)(v & 0xFF);
+    run.opening_skipped = (v & RUN_SKIPPED_BIT) != 0;
+    run_key(slot, "_suspended", key, sizeof(key));
+    run.suspended = ico_toml_get_bool(t, key, 0) != 0;
+    ico_toml_free(t);
+    ico_gs_run_set(&run);
+    return 1;
+}
+
+/* New Game on a slot that was loaded (a cleared save's New Game) ends that
+   slot's run: its entry is cleared, the next save there writes the new one */
+static void run_slot_clear(void)
+{
+    if (s_run_slot >= 0) {
+        run_slot_write(s_run_slot, NULL, RUN_NO_SUM);
+        s_run_slot = -1;
+    }
+}
+
 /* --- init and reset ---------------------------------------------------------- */
 
 static void clear_state(void)
@@ -530,6 +655,7 @@ void ico_ach_reset(const char *path)
 {
     clear_state();
     ico_gs_reset();
+    s_run_slot = -1;
     snprintf(s_path, sizeof(s_path), "%s", path != NULL ? path : "achievements.toml");
     s_popups = 1;
     s_inited = 1;
@@ -733,6 +859,9 @@ void ico_ach_tick(void)
     ico_gs_tick();
     if (!ico_gs_valid()) {
         return;
+    }
+    if (ico_gs_signaled(ICO_GS_EV_NEW_GAME)) {
+        run_slot_clear();
     }
     /* suspended (developer mode or start_stage, now or earlier in this
        run): no counter advances and nothing unlocks; the popup queue and

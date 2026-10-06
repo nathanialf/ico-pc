@@ -20,6 +20,7 @@
 #include "typedef.h"
 #include "main.h"
 #include "script.h"
+#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
 
 static void actSt13bDoorUpSub(GObj *volatile self);
 static void actSt13bElev2CharaChk(GObj *volatile self);
@@ -158,6 +159,7 @@ void actSt13bFloorChk(GObj *volatile self)
     while (conte02End == 0 && ((pad[0].flags & 0x800) == 0 || scpAdpcmPlayRequestNum() != 0)) {
         _ACTWait(1);
     }
+    ico_gs_signal(ICO_GS_EV_DEMO_END, 8 + (conte02End == 0));
 
     if (conte02End == 0) {
         v = 64;

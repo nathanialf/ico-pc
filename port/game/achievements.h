@@ -36,6 +36,14 @@ void ico_ach_host_poll(unsigned int main_ticks);
 /* One Main tick: ico_gs_tick, then every locked achievement's condition,
    the popup queue, and the counters' write when due. */
 void ico_ach_tick(void);
+/* The run state per save slot (achievements.toml, run.slot_N_*, keyed as
+   options.h's [mirror] slot_N).  saved: the game wrote the block of slot
+   `slot` (checksum `sum`): the run is stored.  loaded: it read that block:
+   the run is restored when the stored checksum matches (1), else it stays
+   as ico_gs_tick left it, not fresh (0).  A New Game after a load clears
+   that slot's entry. */
+void ico_ach_slot_saved(int slot, unsigned int sum);
+int ico_ach_slot_loaded(int slot, unsigned int sum);
 /* Writes the counters if they changed (atexit). */
 void ico_ach_flush(void);
 

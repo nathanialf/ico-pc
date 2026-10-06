@@ -174,6 +174,7 @@ static struct {
     unsigned int captures;
     unsigned int game_overs;
     int opening_skipped;
+    unsigned int opening_parts;
     int suspended;
 } s_run;
 
@@ -214,6 +215,7 @@ void ico_gs_tick(void)
 {
     int i;
     int demo_skipped;
+    unsigned int demo_watched;
 
     s_prev = s_snap;
     memset(&s_snap, 0, sizeof(s_snap));
@@ -230,11 +232,18 @@ void ico_gs_tick(void)
     /* this tick's signals: the ones raised since the last tick */
     memset(s_count, 0, sizeof(s_count));
     demo_skipped = 0;
+    demo_watched = 0;
     for (i = 0; i < s_pending_n; i++) {
         raise_now((IcoGsEvent)s_pending[i].event, s_pending[i].arg);
-        /* op.c's DEMO_END: part * 2, plus 1 when START skipped it */
-        if (s_pending[i].event == ICO_GS_EV_DEMO_END && (s_pending[i].arg & 1)) {
-            demo_skipped = 1;
+        /* DEMO_END: part * 2, plus 1 when START skipped it */
+        if (s_pending[i].event == ICO_GS_EV_DEMO_END) {
+            int part = s_pending[i].arg >> 1;
+
+            if (s_pending[i].arg & 1) {
+                demo_skipped = 1;
+            } else if (part >= 1 && part <= ICO_GS_OPENING_PARTS) {
+                demo_watched |= 1u << (part - 1);
+            }
         }
     }
     s_pending_n = 0;
@@ -284,6 +293,7 @@ void ico_gs_tick(void)
     if (demo_skipped) {
         s_run.opening_skipped = 1;
     }
+    s_run.opening_parts |= demo_watched;
     s_run.game_overs += (unsigned int)s_count[ICO_GS_EV_GAME_OVER];
     if (ico_gs_achievements_suspended()) {
         s_run.suspended = 1;
@@ -443,6 +453,31 @@ int ico_gs_run_opening_skipped(void)
 int ico_gs_run_suspended(void)
 {
     return s_run.suspended;
+}
+
+unsigned int ico_gs_run_opening_parts(void)
+{
+    return s_run.opening_parts;
+}
+
+void ico_gs_run_get(IcoGsRun *out)
+{
+    out->fresh = s_run.fresh;
+    out->captures = s_run.captures;
+    out->game_overs = s_run.game_overs;
+    out->opening_parts = s_run.opening_parts;
+    out->opening_skipped = s_run.opening_skipped;
+    out->suspended = s_run.suspended;
+}
+
+void ico_gs_run_set(const IcoGsRun *in)
+{
+    s_run.fresh = in->fresh != 0;
+    s_run.captures = in->captures;
+    s_run.game_overs = in->game_overs;
+    s_run.opening_parts = in->opening_parts & ((1u << ICO_GS_OPENING_PARTS) - 1u);
+    s_run.opening_skipped = in->opening_skipped != 0;
+    s_run.suspended = in->suspended != 0;
 }
 
 int ico_gs_developer_mode(void)

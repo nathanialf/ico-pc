@@ -287,6 +287,9 @@ int ui_MirrorScreenEnter(void);
 int ui_MirrorScreenLayout(void);
 int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
+/* port/game/achievements.h: the run state kept per save slot */
+void ico_ach_slot_saved(int slot, unsigned int sum);
+int ico_ach_slot_loaded(int slot, unsigned int sum);
 void ico_opt_mirror_reset(void);
 /* port/game/options.h: the Stereo/Mono row's choice, for [audio] output */
 void ico_opt_output_toggled(int mode);
@@ -1539,6 +1542,7 @@ int la_load_processing(int first)
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         loadSerial = mcSetFileNo(mc.port, mc.fileNo);
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* R7c: the slot's flag */
+        ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);    /* the slot's achievement run */
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         if (titleAdpcm != 0) {
@@ -2387,6 +2391,7 @@ int la_save_processing(int first)
         break;
     case 10:
         ico_mirror_slot_saved(mc.fileNo, (unsigned int)mc.sum); /* R7c: the run's flag */
+        ico_ach_slot_saved(mc.fileNo, (unsigned int)mc.sum);    /* the achievement run */
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
