@@ -173,8 +173,9 @@ do not share them publicly.
 - The language and 50/60 Hz questions the PS2 asked at first start are
   skipped; both come from Settings.
 - New Game has one extra **Mirror mode** screen after Vibration.
-- Switching language mid-game takes effect at once, where the PS2 only chose
-  it at boot.
+- The language can be switched mid-game, where the PS2 only chose it at
+  boot: the menus change at once, the game's own text and subtitles at the
+  next area load.
 - The staff roll runs about four seconds longer, for a line of port credit.
 - Saves are host files, not a memory card image, and port 1 can optionally be
   a second card (`[paths] saves2` in `config.toml`).
