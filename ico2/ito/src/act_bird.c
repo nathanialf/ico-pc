@@ -789,15 +789,11 @@ static void Debug_WireString_Bird(float *pos, char *fmt, ...)
 {
     float m[16];
     char buf[256];
-#ifdef ICO_HOST
     /* the host's va_list (clang has no __builtin_next_arg, and the EE's
        char * va_list layout does not hold on the host) */
     __builtin_va_list args;
 
     __builtin_va_start(args, fmt);
-#else
-    void *args = (char *)__builtin_next_arg(fmt) - 0x30;
-#endif
 
     MatrixDrive_PushMatrix();
     sceVu0TransposeMatrix(m, (void *)(matrixptr + 128));
@@ -807,9 +803,7 @@ static void Debug_WireString_Bird(float *pos, char *fmt, ...)
     sceVu0MulMatrix(MatrixDrive_GetMatrix(), MatrixDrive_GetMatrix(), m);
     MatrixDrive_PushMatrix();
     vsprintf(buf, fmt, args);
-#ifdef ICO_HOST
     __builtin_va_end(args);
-#endif
     MatrixDrive_TransMatrix(0.0f, -50.0f, 0.0f);
     DispWireString(buf);
     MatrixDrive_PopMatrix();
@@ -874,14 +868,9 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
     GOBJ_SUB(gobj)->ctrl.catchBoy = 0;
     /* the animation frame at 0x4AC and the word after it start at the same
        random frame */
-#ifdef ICO_HOST
     ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f = random_unit() * 100.0f;
     ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.lastFrame)->f =
         ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f;
-#else
-    ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4AC))->f = random_unit() * 100.0f;
-    ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4B0))->f = ((IntFloat *)((int)GOBJ_SUB(gobj) + 0x4AC))->f;
-#endif
     GOBJ_SUB(gobj)->ctrl.waterDrag = 0;
     SetLodLevel(gobj, 3);
     return w;

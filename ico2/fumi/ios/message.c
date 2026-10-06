@@ -123,15 +123,11 @@ void iosMsgSetEvent(int intc, IosMsgQueue *q, IosMsgWord val)
     if (q == 0) {
         debug_StdPrintfDummy("evt:null message queue\n");
     }
-#ifdef ICO_HOST
     /* the EE's 16576 bytes, or the record's size where a 64-bit host's
        IOSThread makes it larger */
     th = iosMallocDebug(ios_partition_event,
                         sizeof(MsgEventThread) > 16576 ? (int)sizeof(MsgEventThread) : 16576,
                         "ios/message.c", 453);
-#else
-    th = iosMallocDebug(ios_partition_event, 16576, "ios/message.c", 453);
-#endif
     iosThreadCreate(&th->th, 4, send_signal_message, th, th->stack, 16384, 11);
     th->queue = q;
     th->val = val;

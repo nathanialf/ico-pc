@@ -12,9 +12,6 @@
 #include "lightning.h"
 #include "DisplayList.h"
 #include "DmaPacket.h"
-
-#ifdef ICO_HOST
-
 #include <stdio.h>
 #include "MicroCode.h"
 
@@ -42,8 +39,6 @@ static int lightningHostMode(int c) /* derived name */
     }
     return 0;
 }
-
-#endif
 
 /* the four control points lightning_test draws through */
 typedef struct { /* field names derived */
@@ -90,22 +85,17 @@ static __inline__ int fbits(float f) /* derived name */
     return *(int *)&f;
 }
 
-#ifdef ICO_HOST
-
 /* VU0's clip flag register on the host: each judgment shifts the older ones
    up by 6 bits and the register keeps the last four (24 bits).  On the PS2
    GsBase.c's vclipw shares it; here lightning keeps its own history, which
    only changes the packets it builds. */
 static unsigned int clipFlagReg; /* derived name */
 
-#endif
-
 /* VU0's clipping flags for one w-homogeneous point */
 static __inline__ int clip_flags(LightningVtx *p) /* derived name */
 {
     int flags;
 
-#ifdef ICO_HOST
     {
         /* vclipw.xyzw: +x, -x, +y, -y, +z, -z against |w|, bits 0-5 */
         float w = __builtin_fabsf(p->f[3]);
@@ -120,21 +110,6 @@ static __inline__ int clip_flags(LightningVtx *p) /* derived name */
         clipFlagReg = ((clipFlagReg << 6) | j) & 0xFFFFFFu;
         flags = (int)clipFlagReg;
     }
-#else
-    __asm__ __volatile__(".set noreorder\n\t"
-                         "lqc2 $vf1, 0(%1)\n\t"
-                         "vclipw.xyzw $vf1, $vf1w\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "cfc2.ni %0, $vi18\n\t"
-                         ".set reorder"
-                         : "=r"(flags)
-                         : "r"(p)
-                         : "memory");
-#endif
     return flags;
 }
 
@@ -179,14 +154,10 @@ static void set_vertex(LightningVtx *dir, LightningVtx *pos, float u, int *col, 
 
     for (i = 0; i < 2; i++) {
         apply_matrix_w1(&pt, matrixptr + 0xC0, &e[i]);
-#ifdef ICO_HOST
         /* div.s: a bolt vertex on the camera plane (view z 0, so w 0; the
            stage 47 bolts after the stage 54 exit) gives Fmax on the EE, not
            Inf (DIVERGENCES.md F5) */
         q = ps2_div(1.0f, pt.f[3]);
-#else
-        q = 1.0f / pt.f[3];
-#endif
         sceVu0ScaleVectorXYZ(&pt, &pt, q);
         sceVu0ScaleVectorXYZ(&t, &uv[i], q);
         sceVu0FTOI4Vector(&xyz, &pt);
@@ -243,7 +214,6 @@ static void set_vertex(LightningVtx *dir, LightningVtx *pos, float u, int *col, 
 /* out = the 3x4 part of m applied to in */
 inline void apply_m34(void *out, void *m, void *in)
 {
-#ifdef ICO_HOST
     /* m[0]*x + m[1]*y + m[2]*z, all four fields (vmulax, vmadday, vmaddz) */
     const float (*a)[4] = (const float (*)[4])m;
     const float *v = in;
@@ -256,21 +226,6 @@ inline void apply_m34(void *out, void *m, void *in)
         r[k] = r[k] + a[2][k] * v[2];
     }
     __builtin_memcpy(out, r, sizeof r);
-#else
-    __asm__ __volatile__(".set noreorder\n\t"
-                         "lqc2 $vf8, 0x0(%2)\n\t"
-                         "lqc2 $vf4, 0x0(%1)\n\t"
-                         "lqc2 $vf5, 0x10(%1)\n\t"
-                         "lqc2 $vf6, 0x20(%1)\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                         "vmaddz.xyzw $vf12, $vf6, $vf8z\n\t"
-                         "sqc2 $vf12, 0x0(%0)\n\t"
-                         ".set reorder"
-                         :
-                         : "r"(out), "r"(m), "r"(in)
-                         : "memory");
-#endif
 }
 
 /* a random value between lo and hi */
@@ -298,8 +253,6 @@ static LightningMtx catmullRom = {
     {0.0f, 1.0f, 0.0f, 0.0f},
 };
 
-#ifdef ICO_HOST
-
 #include <stdio.h>
 
 /* The segment the bolt position s is on: (int)s, as the EE's cvt.w.s
@@ -326,8 +279,6 @@ static int lightningSeg(float s, int num) /* derived name */
     }
     return seg;
 }
-
-#endif
 
 void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin, float stepMax,
                     float swayStepMin, float swayStepMax, float turnMin, float turnMax,
@@ -392,11 +343,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
     }
     gif_StartPacketPri(6);
     if (dpk_CheckBufferSize() >= 64) {
-#ifdef ICO_HOST
         gif_SetAlpha(1, lightningHostMode(c), 128);
-#else
-        gif_SetAlpha(1, c, 128);
-#endif
         gif_SetGsReg(78, 0x1300000C0LL);
         gif_SetGsReg(8, 1);
         gif_SetGsReg(0, 84);
@@ -422,7 +369,6 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         if (seed == one) {
             seed = 1.5f;
         }
-#ifdef ICO_HOST
         {
             /* the float's bits into the R register ("r" moved them to a GPR) */
             uint32_t bits;
@@ -430,14 +376,6 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
             __builtin_memcpy(&bits, &seed, sizeof bits);
             ico_vu0_random_set(bits);
         }
-#else
-        __asm__ __volatile__("ctc2.ni %0, $vi20\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop"
-                             :
-                             : "r"(seed));
-#endif
     }
     if (stepMin < 15.0f) {
         stepMin = 15.0f;
@@ -476,11 +414,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
     sway = 0.0f;
     ang = random_range(0.0f, 6.2831855f);
     for (;;) {
-#ifdef ICO_HOST
         seg = lightningSeg(s, num);
-#else
-        seg = (int)s;
-#endif
         f = s - (float)seg;
         if (dpk_CheckBufferSize() < 64) {
             goto end;
@@ -496,28 +430,19 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         sceVu0SubVector(&a, &a, &tmp);
         sceVu0Normalize(&a, &a);
         sceVu0OuterProduct(&b, &dir, &a);
-#ifdef ICO_HOST
         /* div.s: a zero-length segment (two nodes at one place) gives Fmax on
            the EE, not Inf (DIVERGENCES.md F5) */
         s += ps2_div(random_range(stepMin, stepMax), _GetLength(&v[seg + 1], &v[seg]));
         seg = lightningSeg(s, num);
-#else
-        s += random_range(stepMin, stepMax) / _GetLength(&v[seg + 1], &v[seg]);
-        seg = (int)s;
-#endif
         f = s - (float)seg;
         lim = (float)(num - 1) - half;
         if (s < half) {
             sc = GetTableSin((short)(s * two * 1.5707964f * 10430.378f));
         } else if (lim <= s) {
-#ifdef ICO_HOST
             /* cvt.w.s: past a zero-length segment s is Fmax (above), the
                product overflows (-Fmax on the EE, -Inf here) and the
                conversion saturates to 0x80000000 (DIVERGENCES.md F5) */
             sc = GetTableSin((short)ps2_ftoi((1.0f - (s - lim) * two) * 1.5707964f * 10430.378f));
-#else
-            sc = GetTableSin((short)((1.0f - (s - lim) * two) * 1.5707964f * 10430.378f));
-#endif
         } else {
             sc = 1.0f;
         }

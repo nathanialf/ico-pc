@@ -1,6 +1,5 @@
 #include "sugiCommon.h"
 
-#ifdef ICO_HOST
 /* clothAnimation.h for the ChainSet record only: the file's own prototypes of
    the chain functions (below) stay */
 #define GetChainCollision hdr_GetChainCollision
@@ -23,9 +22,6 @@
 #include <string.h> /* memset (InitRopeGeo's ClipWork) */
 
 #define ROPE_EX_OFS offsetof(ChainNode, ex)
-#else
-#define ROPE_EX_OFS 0x10
-#endif
 
 #include "rope.h"
 #include "debug.h"
@@ -65,8 +61,6 @@ typedef struct { /* field names derived */
     int pad44[3];
 } RopeTemplate; /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: InitChains reads the copied list as clothAnimation.h's ChainCfg
    through a void *, so the template must have ChainCfg's host layout, which
    is its EE one (num, node at 0x10, step 0x14, root 0x20, weight 0x40, 0x50
@@ -77,8 +71,6 @@ _Static_assert(__builtin_offsetof(RopeTemplate, node) == 0x10 &&
                    __builtin_offsetof(RopeTemplate, root) == 0x20 &&
                    __builtin_offsetof(RopeTemplate, weight) == 0x40 && sizeof(RopeTemplate) == 0x50,
                "RopeTemplate does not have ChainCfg's layout on the host");
-
-#endif
 
 /* the zero vector HoldRope clears the holder's offset with, then the
    template */
@@ -131,12 +123,10 @@ void *InitRopeGeo(GObj *o, const float *p)
         sceVu0FVECTOR v1 = {0.0f, 0.0f, 10.0f, 1.0f};
         ClipWork cw;
 
-#ifdef ICO_HOST
         /* PC port (X4, DIVERGENCES.md F16): the original sets only the two
            points, so ClipWall's radius was a stale stack word; the host
            starts from radius 0 (a segment test) and no filter */
         memset(&cw, 0, sizeof(cw));
-#endif
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(p[0], p[1] + 10.0f, p[2]);
         MatrixDrive_RotMatrixY(p[5] * 10430.378f);
@@ -278,18 +268,10 @@ void HoldRope(GObj *rope, GObj *holder)
     CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 4, v);
     CopyVector((float *)((char *)sys[2] + (w1 * 0x50 + ROPE_EX_OFS)) + 8, v);
     CopyVector((float *)((char *)sys[2] + (w2 * 0x50 + ROPE_EX_OFS)) + 8, v);
-#ifdef ICO_HOST
     /* floats 9 and 13 from node + w1 * 0x50 are ex[w1].v0.y and .v1.y (ex
        starts at 0x10 on the EE, after the node's three pointers here) */
     ((ChainNode *)sys[2])->ex[w1].v0.y -= 100.0f;
     ((ChainNode *)sys[2])->ex[w1].v1.y -= 100.0f;
-#else
-    {
-        float *q = (float *)((char *)sys[2] + w1 * 0x50);
-        q[9] -= 100.0f;
-        q[13] -= 100.0f;
-    }
-#endif
     /* read through the SubHandle union: GOBJ_SUB's int read is hoisted
        above the float stores (measured) */
     CopyVector(((SubHandle *)&holder->dobj)->sub->root.move, ropeZeroVector);
@@ -359,15 +341,9 @@ void RopeDL(GObj *rope)
     float (*v)[4];
 
     p2o_SetDefaultEnviroment();
-#ifdef ICO_HOST
     for (i = 0; i < ((ChainSet *)set)->num; i++) {
         n = ((ChainSet *)set)->cfg[i].num;
         v = ((ChainSet *)set)->nodes[i].pos;
-#else
-    for (i = 0; i < *(int *)(set + 4); i++) {
-        n = *(int *)(*(char **)set + i * 0x50);
-        v = (float (*)[4]) * (int *)(*(char **)(set + 8) + i * 0x1A0);
-#endif
         for (j = 1; j < n; j++) {
             sceVu0UnitMatrix(MatrixDrive_GetMatrix());
             MatrixDrive_TransMatrix(v[j][0], v[j][1], v[j][2]);

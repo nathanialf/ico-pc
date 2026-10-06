@@ -6,15 +6,10 @@
 #include "Matrix.h"
 #include "charFileManager.h"
 #include <assert.h>
-
-#ifdef ICO_HOST
-
 #include "Light.h"
 #include "eeword.h"
 #include <stdlib.h>
 #include <string.h>
-
-#endif
 
 /* a 16-byte aligned float[4], the shape of libvu0's sceVu0FVECTOR */
 typedef float Vec[4] __attribute__((aligned(16))); /* derived name */
@@ -23,8 +18,6 @@ typedef struct PktHdr { /* field names derived */
     char pad0[240];
     int kind; /* 0xF0 */
 } PktHdr;     /* derived name */
-
-#ifdef ICO_HOST
 
 /* The host has one definition of each record (docs/port/LOADERS.md): the
  * display object MakePacket allocates is typedef.h's Sub15C, a part is
@@ -48,25 +41,6 @@ _Static_assert(__builtin_offsetof(PObjSub, vtx) == __builtin_offsetof(PObjPart, 
                        __builtin_offsetof(PObjPart, vtxCount) &&
                    sizeof(PObjSub) == sizeof(PObjPart),
                "PObjSub is a view of PObjPart");
-
-#else
-
-typedef struct PObjPkt { /* field names derived */
-    char pad0[2132];
-    struct PObj *owner; /* 0x854 */
-    char pad858[24];
-    void *nodes;      /* 0x870, one 80-byte node record a part */
-    PktHdr *lightMtx; /* 0x874, the light matrices (Light.h), their mode at 0xF0 */
-} PObjPkt;            /* derived name */
-
-typedef struct PObjSub { /* field names derived */ /* 0x180 stride, hung off the PObj at 0x40 */
-    long long pad0[18];
-    Vec *vtx;              /* 0x90 */
-    unsigned int vtxCount; /* 0x94 */
-    long long pad98[(0x180 - 0x98) / 8];
-} PObjSub; /* derived name */
-
-#endif
 
 typedef struct PObj { /* field names derived */
     char pad0[36];
@@ -92,17 +66,11 @@ typedef struct PObj { /* field names derived */
     float shadowLength; /* 0x3C */
     PObjSub *sub;       /* 0x40 */
     Vec (*boxes)[8];    /* 0x44 */
-#ifdef ICO_HOST
-    PObjGroup *groups; /* 0x48, PObjModel's */
+    PObjGroup *groups;  /* 0x48, PObjModel's */
     char pad4C[4];
     float bb[8][4] __attribute__((aligned(16))); /* 0x50 */
-#else
-    char pad48[8];
-    Vec bb[8]; /* 0x50 */
-#endif
-} PObj; /* derived name */
+} PObj;                                          /* derived name */
 
-#ifdef ICO_HOST
 #define POBJ_SAME(a, b) (__builtin_offsetof(PObj, a) == __builtin_offsetof(PObjModel, b))
 
 _Static_assert(POBJ_SAME(image, pad24) && POBJ_SAME(pkt, dobj) && POBJ_SAME(spare, spare) &&
@@ -121,8 +89,6 @@ _Static_assert(sizeof(void *) != 4 ||
                     ((sizeof(Sub15C) + 15) & ~15) == 0x880 && sizeof(LightMatrix) == 0x100 &&
                     sizeof(struct DObjNode) == 80),
                "the EE record sizes on a 32-bit host");
-
-#endif
 
 /* the file's own name tidier, inlined once, into AllocPObj */
 static __inline__ void TidyPObjName(char *name) /* derived name */
@@ -237,8 +203,6 @@ static void MakeBoundingBox(PObj *self)
     }
 }
 
-#ifdef ICO_HOST
-
 /* the EE's MakePacket with the display object, its light matrices and node
    records allocated at their host sizes (0x880, 0x100 and 80 a part on the
    EE) and filled through Sub15C's own names */
@@ -266,34 +230,6 @@ static void MakePacket(PObj *p, int n)
     debug_StdPrintfDummy("end of packet making...\n");
 }
 
-#else
-
-static void MakePacket(PObj *p, int n)
-{
-    PObjPkt *q;
-
-    p->tag.v.nloop = n;
-    p->tag.ll = (p->tag.ll & ~0x3C0000LL) | ((long long)modelData[n].shade << 18);
-    p->tag.ll = (p->tag.ll & ~0x3C00000LL) | ((long long)modelData[n].lod << 22);
-    p->tag.v.lightScale = modelData[n].lightScale;
-    p->ambientScale = modelData[n].ambientScale;
-
-    q = (PObjPkt *)mallocseki(0x880);
-    p->pkt = q;
-    q->lightMtx = (PktHdr *)mallocseki(0x100);
-    q->lightMtx->kind = modelData[n].pktKind;
-
-    q->owner = p;
-    q->nodes = mallocseki(p->partCount * 80);
-    if (q->lightMtx->kind != 4) {
-        if (p->image != 0)
-            p2o_MakePacket(q);
-    }
-    debug_StdPrintfDummy("end of packet making...\n");
-}
-
-#endif
-
 /* the file's own vector setter, inlined into InitPObj */
 static __inline__ void SetPObjVector(Vec v, float x, float y, float z) /* derived name */
 {
@@ -304,8 +240,6 @@ static __inline__ void SetPObjVector(Vec v, float x, float y, float z) /* derive
 }
 
 /* ObjHdr, ObjEnt and ObjRec, the file records, are in DisplayP2O.h. */
-
-#ifdef ICO_HOST
 
 /* The host's AllocPObj (docs/port/LOADERS.md, p2o).  It relocates the file
  * image exactly as the EE does, every relocated word an EE word (eeword.h),
@@ -489,110 +423,6 @@ PObj *AllocPObj(ObjHdr *h, char *name, int n)
 
     return p;
 }
-
-#else
-
-/* the sub-record table allocate and copy, inlined once */
-static __inline__ void AllocPObjSubs(PObj *p, int *list) /* derived name */
-{
-    int i;
-
-    p->sub = (PObjSub *)mallocseki(p->partCount * sizeof(PObjSub));
-
-    for (i = 0; i < p->partCount; i++)
-        p->sub[i] = *(PObjSub *)list[i];
-}
-
-/* the header fields of a freshly allocated PObj */
-static __inline__ void InitPObjHeader(PObj *p, ObjHdr *h, int n) /* derived name */
-{
-    p->image = (int)h;
-    p->pkt = 0;
-    p->spare = 0;
-    p->partCount = h->objNum;
-    p->clstNum = h->clstNum;
-    p->tag.ll &= ~0x30000LL;
-    p->tag.ll &= ~0x4000000LL;
-    p->shadowLength = modelData[n].shadowLength;
-}
-
-PObj *AllocPObj(ObjHdr *h, char *name, int n)
-{
-    PObj *p;
-    int *tex;
-    int *list;
-    ObjRec *o;
-    unsigned int i;
-    unsigned int j;
-
-    h->objTbl += (int)h;
-
-    if (h->texTbl != 0)
-        h->texTbl += (int)h;
-    tex = (int *)h->texTbl;
-
-    list = (int *)h->objTbl;
-
-    debug_StdPrintfDummy("\033[33mobject info : adrs(%p) objnum(%d) clstnum(%d)\n", h, h->objNum,
-                         h->clstNum);
-
-    p = (PObj *)mallocseki(0xD0);
-    sprintf((char *)p, "%s", name);
-    TidyPObjName((char *)p);
-
-    debug_StdPrintfDummy("            : object name (%s)\n", (char *)p);
-    debug_StdPrintfDummy("            : object table (%p)\033\n", list);
-    if (tex != 0)
-        debug_StdPrintfDummy("            : texture table (%p)\033[m\n", tex);
-    else
-        debug_StdPrintfDummy("\033[m");
-
-    if (tex != 0) {
-        for (i = 0; i < h->texNum; i++)
-            tex[i] += (int)h;
-    }
-
-    debug_StdPrintfDummy("Solve object address. %p\n", list);
-
-    for (i = 0; i < h->objNum; i++) {
-        list[i] += (int)h;
-        o = (ObjRec *)list[i];
-
-        if (o->magic != *(int *)"OBJH") {
-            debug_StdPrintfDummy("allocPObj:Invalid Object.\n");
-            debug_assert(__FILE__, 249);
-            __assert(__FILE__, 249, "FALSE");
-        }
-
-        o->vtx += (int)h;
-        o->nrm += (int)h;
-        o->uv += (int)h;
-        o->col += (int)h;
-        o->mats += (int)h;
-        o->texDefs += (int)h;
-        o->polys += (int)h;
-        for (j = 0; j < o->polyCount; j++)
-            ((ObjEnt *)o->polys)[j].p = (void *)((int)((ObjEnt *)o->polys)[j].p + (int)h);
-        o->strips += (int)h;
-        for (j = 0; j < o->stripCount; j++)
-            ((void **)o->strips)[j] = (void *)((int)((void **)o->strips)[j] + (int)h);
-        o->lines += (int)h;
-        o->morphs += (int)h;
-        for (j = 0; j < o->morphCount; j++) {
-            if (((void **)o->morphs)[j] != 0)
-                ((void **)o->morphs)[j] = (void *)((int)((void **)o->morphs)[j] + (int)h);
-        }
-    }
-
-    InitPObjHeader(p, h, n);
-    AllocPObjSubs(p, list);
-
-    MakeBoundingBox(p);
-
-    return p;
-}
-
-#endif
 
 PObj *InitPObj(ICO_WORD h, ICO_WORD name, int n)
 {

@@ -88,14 +88,9 @@ void ResetCharFileManager(void)
 
 /* PObj.c has no header; the definition is (int, int, int) */
 extern PObjModel *InitPObj(void *buf, ICO_WORD name, int id);
-
-#ifdef ICO_HOST
-
 /* PObj.c (port): frees the strip and morph tables decoded from the model
    image just freed (docs/port/LOADERS.md) */
 void PObj_FreeImageTables(void);
-
-#endif
 
 /* "Illegal Model ID number: %d (\"%s\")\n" / "ReadModelFile:Already loaded. (id:%d)%s\n" / "ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n" / sprintf above belong to ReadModelFile. */
 void ReadModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int part)
@@ -135,9 +130,7 @@ void ReadModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word0
     charFiles[id].pObj = InitPObj(p, name, id);
     charFiles[id].pObj->serial = objSerial++;
     iosFree(p);
-#ifdef ICO_HOST
     PObj_FreeImageTables();
-#endif
 }
 
 void ReadVolumeModelFile(void *h, ICO_WORD name, int size, int id, int kind, int word08, int seg)
@@ -171,9 +164,7 @@ void ReadVolumeModelFile(void *h, ICO_WORD name, int size, int id, int kind, int
     charFiles[id].pObj = InitPObj(buf, name, id);
     charFiles[id].pObj->serial = objSerial++;
     iosFree(buf);
-#ifdef ICO_HOST
     PObj_FreeImageTables();
-#endif
 }
 
 /* PObj.c has no header; the definition is (ObjHdr *, char *, int) */
@@ -211,9 +202,7 @@ void ReadShadowModelFile(void *h, ICO_WORD name, int size, int id, int kind, int
     charFiles[id].pShadow->serial = objSerial++;
     shadow_MakeObjectData(charFiles[id].pShadow);
     iosFree(buf);
-#ifdef ICO_HOST
     PObj_FreeImageTables();
-#endif
 }
 
 void ReadTextureFile(void *h, char *name, int size, int id, int kind, int word08, int seg)
@@ -366,19 +355,11 @@ void ReadCollisionFile(void *h, char *name, int size, int id, int kind, int word
                 }
                 q = (float *)mallocseki(p->count * 8);
                 for (j = 0; j < p->count; j++) {
-#ifdef ICO_HOST
                     FcWallEnt *w = &ICO_EEPTR(FcWallEnt *, p->wcl)[j];
 
                     w->normal = ICO_EEW(q + j * 2);
                     FC_WALL_NORMAL(w)[0] = GetTableSin(w->angle);
                     FC_WALL_NORMAL(w)[1] = GetTableCos(w->angle);
-#else
-                    ((FcWallEnt *)p->wcl)[j].normal = q + j * 2;
-                    ((FcWallEnt *)p->wcl)[j].normal[0] =
-                        GetTableSin(((FcWallEnt *)p->wcl)[j].angle);
-                    ((FcWallEnt *)p->wcl)[j].normal[1] =
-                        GetTableCos(((FcWallEnt *)p->wcl)[j].angle);
-#endif
                 }
             }
             return;
@@ -698,12 +679,10 @@ void ReadStageSettingFile(void *h, ICO_WORD name, int size)
     systemStatus[8]++;
     buf = iosMallocDebug(ios_partition_seki, size, __FILE__, 905);
     iosCdvdHandlerRead(h, buf, size);
-#ifdef ICO_HOST
     /* port: the copy has no bound; every .ssb on the disc fits (R4 s.2) */
     if (size > (int)sizeof(GlobalStageSetting)) {
         __builtin_trap();
     }
-#endif
     memcpy(&GlobalStageSetting, buf, size);
     light_AddLight(0, 0, 0);
     tex_RemakeRegistersSampleMin(0);

@@ -16,11 +16,7 @@ void *mallocseki(int size);
 int freeseki(void *ptr);
 void resetmallocseki(void);
 void *mallocsekistage(int size);
-#ifdef ICO_HOST
 void *reallocseki(void *ptr, int size);
-#else
-int reallocseki(int size, int align);
-#endif
 
 void dma_init(void);
 void matrix_init(void);

@@ -115,60 +115,19 @@ typedef enum { MPSR_OFF, MPSR_ONESHOT, MPSR_HOLD } MpsrMode;
 /* self->0x164->0x688, the per-actor motion work block, re-derived at every
    use */
 #define ACTWORK(g) ((char *)GOBJ_ACT(g)->work) /* derived name */
-#ifdef ICO_HOST
-#ifdef ICO_HOST
 
 /* weapon.h declares CheckWeaponKind(char *) */
 extern int CheckWeaponKind(GObj *self);
 
-#else
-
-/* unprototyped: weapon.h declares CheckWeaponKind(char *), and
-   ACTGame_isWeaponCombustible calls it with no argument */
-extern int CheckWeaponKind();
-
-#endif
 /* The actor's orient-request bitfield: three 64-bit request words at
    sub+0x478, each paired with the permission mask 16 bytes further on. */
-#ifdef ICO_HOST
 /* s is the Act (as a char *); its wish words are not at 0x478 here */
 #define ORQ(s, i) (((ActStatusWord *)&((Act *)(s))->wish0)[i].q)
 #define ORM(s, i) (((ActStatusWord *)&((Act *)(s))->wish0)[(i) + 2].q)
-#else
-#define ORQ(s, i) (((ActStatusWord *)((s) + 0x478))[i].q)       /* derived name */
-#define ORM(s, i) (((ActStatusWord *)((s) + 0x478))[(i) + 2].q) /* derived name */
-#endif
 #define ORBIT(w, b) ((int)((w) >> (b)) & 1) /* derived name */
+
 /* handClInfoClear is the cleared template each frame's hand-link probe record
    (ActWork.handCl, act-game.h) starts from. */
-#else
-
-/* unprototyped: weapon.h declares CheckWeaponKind(char *), and
-   ACTGame_isWeaponCombustible calls it with no argument */
-extern int CheckWeaponKind();
-
-/* The actor's orient-request bitfield: three 64-bit request words at
-   sub+0x478, each paired with the permission mask 16 bytes further on. */
-#define ORQ(s, i) (((ActStatusWord *)((s) + 0x478))[i].q)       /* derived name */
-#define ORM(s, i) (((ActStatusWord *)((s) + 0x478))[(i) + 2].q) /* derived name */
-#define ORBIT(w, b) ((int)((w) >> (b)) & 1)                     /* derived name */
-
-/* The pair of hand-link wall probes the debug overlay draws, mirrored into
-   the actor work area at +0x540; handClInfoClear is the cleared template
-   each frame starts from. */
-typedef struct {        /* field names derived */
-    unsigned char on;   /* 0x00 */
-    unsigned char hit;  /* 0x01 */
-    unsigned char attr; /* 0x02 */
-    char pad3[13];
-    long long orient[2]; /* 0x10 -- GetOrientOfWall's output */
-    unsigned char hit2;  /* 0x20 */
-    unsigned char attr2; /* 0x21 */
-    char pad22[14];
-    long long orient2[2]; /* 0x30 */
-} HandClInfo;             /* derived name */
-
-#endif
 
 static HandClInfo handClInfoClear = {0}; /* derived name */
 
@@ -184,26 +143,8 @@ static void ACTItemWatchMotion(GObj *self);
 /* as in boyact.h, which this TU does not include */
 extern void PrivInsCamSet(float *pos, float *tgt, GObj *track, int inFrames, int outFrames,
                           float inRate, float blend, unsigned char control);
-
-#ifdef ICO_HOST
-
 /* as in weapon.h, which this TU does not include (CheckWeaponKind differs) */
 extern ICO_WORD_PTR(GObj *) GetTorchGObjOfWeapon(GObj *weapon);
-
-#else
-
-/* The pending hand-mode command record: two ints at +0x314 (connect) and
-   +0x31C (disconnect) of the actor's hand work block. */
-typedef struct { /* field names derived */
-    int flag;    /* the hand mode set, 0 for none */
-    int pri;     /* the priority it was set at */
-} HandModeCmd;   /* derived name */
-
-/* as in weapon.h, which this TU does not include (CheckWeaponKind differs) */
-extern int GetTorchGObjOfWeapon(GObj *weapon);
-
-#endif
-
 extern WeaponEntry weaponKind[];
 
 inline void ACTGameCollisionOff(volatile int *self)
@@ -498,7 +439,6 @@ inline int ACTGame_GetCurrentCallStatus(GObj *self)
    actGirlDitch3mReady) walked to a point made of them. */
 inline void PAIR_GetPosition_BOY_DITCH(float *pos, float *dir)
 {
-#ifdef ICO_HOST
     ActEnv *e = &GOBJ_ACT(boyGObj)->env;
     pos[0] = e->ditchPos[0];
     pos[1] = e->ditchPos[1];
@@ -506,15 +446,6 @@ inline void PAIR_GetPosition_BOY_DITCH(float *pos, float *dir)
     dir[0] = e->ditchDir[0];
     dir[1] = e->ditchDir[1];
     dir[2] = e->ditchDir[2];
-#else
-    float *q = (float *)(char *)GOBJ_ACT(boyGObj);
-    pos[0] = q[0x510 / 4];
-    pos[1] = q[0x514 / 4];
-    pos[2] = q[0x518 / 4];
-    dir[0] = q[0x520 / 4];
-    dir[1] = q[0x524 / 4];
-    dir[2] = q[0x528 / 4];
-#endif
 }
 
 inline int PAIR_IsStatus_BOY_DITCH(void)
@@ -544,7 +475,6 @@ inline int PAIR_IsStatus_BOY_DITCH(void)
 
 inline void PAIR_GetPosition_BOY(float *pos, float *dir)
 {
-#ifdef ICO_HOST
     ActEnv *e = &GOBJ_ACT(boyGObj)->env;
     pos[0] = e->cliffStepPos[0];
     pos[1] = e->cliffStepPos[1];
@@ -552,15 +482,6 @@ inline void PAIR_GetPosition_BOY(float *pos, float *dir)
     dir[0] = e->cliffOrient[0];
     dir[1] = e->cliffOrient[1];
     dir[2] = e->cliffOrient[2];
-#else
-    float *q = (float *)(char *)GOBJ_ACT(boyGObj);
-    pos[0] = q[0x500 / 4];
-    pos[1] = q[0x504 / 4];
-    pos[2] = q[0x508 / 4];
-    dir[0] = q[0x4C0 / 4];
-    dir[1] = q[0x4C4 / 4];
-    dir[2] = q[0x4C8 / 4];
-#endif
 }
 
 inline int PAIR_IsStatus_BOY_PULL(void)
@@ -1126,22 +1047,10 @@ inline void _GetRootObjectOrient(void *orient, GObj *obj)
     sceVu0ApplyMatrix(orient, (void *)GOBJ_SUB(obj)->nodeMtx, v);
 }
 
-#ifdef ICO_HOST
-
 inline ICO_WORD_PTR(GObj *) ACTGame_isWeaponEnableCatchfire(GObj *self)
 {
     ICO_WORD_PTR(GObj *) ret = 0;
-#ifdef ICO_HOST
     unsigned long long combustible = ACTGame_isWeaponCombustible(self);
-#else
-    unsigned long long combustible = ACTGame_isWeaponCombustible();
-#endif
-#else
-inline int ACTGame_isWeaponEnableCatchfire(GObj *self)
-{
-    int ret = 0;
-    unsigned long combustible = ACTGame_isWeaponCombustible();
-#endif
     if (combustible) {
         ret = GetTorchGObjOfWeapon(self);
     }
@@ -1181,24 +1090,13 @@ inline unsigned char ACTGame_NoWeapon(GObj *self)
 }
 
 /* The retail binary reaches CheckWeaponKind with the caller's `self` still in
-   a0 (ACTGame_isWeaponEnableCatchfire's argument), so the host passes it
-   explicitly.  Writing the argument on the EE moves the schedule of the
-   inlined body, so the EE spelling stays. */
-#ifdef ICO_HOST
+   a0 (ACTGame_isWeaponEnableCatchfire's argument); the port passes it
+   explicitly. */
 
 inline int ACTGame_isWeaponCombustible(GObj *self)
 {
     return CheckWeaponKind(self) == 1;
 }
-
-#else
-
-inline int ACTGame_isWeaponCombustible(void)
-{
-    return CheckWeaponKind() == 1;
-}
-
-#endif
 
 /* both absolute values are written as `((x) < 0 ? -(x) : (x))` */
 int _ACTGame_SearchGObj(GObj *self, GObj *tgt, float range, float height, int angle, float *out)
@@ -1365,17 +1263,11 @@ void ACTParaStatus_Exec(GObj *self)
 
 inline void _ACTCharStatus_Init(int **self)
 {
-#ifdef ICO_HOST
     /* self[0x59] is the act word at GObj + 0x164 only with 4-byte words */
     Act *a = GOBJ_ACT(self);
 
     a->bits58 = 0;
     a->bits60 = 0;
-#else
-    long long *p = (long long *)self[0x59];
-    p[0xB] = 0;
-    p[0xC] = 0;
-#endif
 }
 
 void _ACTCharStatus_Clear(void *self)
@@ -1387,14 +1279,10 @@ void _ACTCharStatus_Clear(void *self)
     float nearest;
     float d;
 
-#ifdef ICO_HOST
     /* the EE clears 0x38 bytes, bits58 up to paraStatus; the host record
        is wider there (pointer-wide words), so clear the same members */
     memset((char *)&s->bits58, 0,
            __builtin_offsetof(Act, paraStatus) - __builtin_offsetof(Act, bits58));
-#else
-    memset((char *)&s->bits58, 0, 0x38);
-#endif
     if (self == (char *)boyGObj || self == ((char *)girlGObj)) {
         nearest = 3.40282347e+38f; /* FLT_MAX */
         sel = 0;
@@ -1620,12 +1508,7 @@ static void ACTGame_InnerVelocityUpdate(GObj *self)
     pos[0] = test_CURRENTROOT(self)[0];
     pos[1] = test_CURRENTROOT(self)[1];
     pos[2] = test_CURRENTROOT(self)[2];
-#ifdef ICO_HOST
     sceVu0SubVector((char *)&GOBJ_WORK(self)->velX, pos, (char *)&GOBJ_WORK(self)->lastPosX);
-#else
-    sceVu0SubVector((char *)GOBJ_ACT(self)->work + 0x430, pos,
-                    (char *)GOBJ_ACT(self)->work + 0x420);
-#endif
     speed = FSqrt(GOBJ_WORK(self)->velX * GOBJ_WORK(self)->velX +
                   GOBJ_WORK(self)->velY * GOBJ_WORK(self)->velY +
                   GOBJ_WORK(self)->velZ * GOBJ_WORK(self)->velZ);
@@ -2378,14 +2261,8 @@ static void ActOrientTest(GObj *self)
                 if (s->addData != 0) {
                     if (GetMotionFrameFlag1(self)) {
                         char *ext;
-#ifdef ICO_HOST
                         ((MotOriTarget *)s->addData)->wall = w1.wall;
                         ext = (char *)s->addData;
-#else
-                        *(U64ag *)s->addData = *(U64ag *)((char *)&w1 + 0x80);
-                        ext = (char *)s->addData;
-                        *(int *)(ext + 8) = *(int *)((char *)&w1 + 0x88);
-#endif
                         ActSendMail_WithAdditionalData(self, 298, self, ext);
                     }
                 }
@@ -2468,11 +2345,7 @@ static void GetGirlHandlinkClInfo(void)
     int ok;
     float dy;
 
-#ifdef ICO_HOST
     *(HandClInfo *)&GOBJ_WORK(girlGObj)->handCl = handClInfoClear;
-#else
-    *(HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540) = handClInfoClear;
-#endif
     if (boyGObj == 0 || ((char *)girlGObj) == 0) {
         return;
     }
@@ -2494,15 +2367,10 @@ static void GetGirlHandlinkClInfo(void)
         }
     }
 work:
-#ifdef ICO_HOST
     ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->on = 1;
-#else
-    ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->on = 1;
-#endif
     GetSkeltonPosition(boyHand, boyGObj, 44);
     GetSkeltonPosition(girlHand, (girlGObj), 44);
 
-#ifdef ICO_HOST
     ok = ACTCheckCollis_W(20.0f, girlHand, boyHand, 0, 0,
                           ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->orient, &attr);
     ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->hit = ok;
@@ -2514,25 +2382,9 @@ work:
     ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->hit2 = ok;
     if (CompareAttribute(attr, 0x40000)) {
         ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->attr2 = 1;
-#else
-    ok = ACTCheckCollis_W(
-        20.0f, girlHand, boyHand, 0, 0,
-        ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->orient, &attr);
-    ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->hit = ok;
-    if (CompareAttribute(attr, 0x40000)) {
-        ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->attr = 1;
-    }
-    ok = ACTCheckCollis_W(
-        20.0f, boyHand, girlHand, 0, 0,
-        ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->orient2, &attr);
-    ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->hit2 = ok;
-    if (CompareAttribute(attr, 0x40000)) {
-        ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->attr2 = 1;
-#endif
     }
 
 draw:
-#ifdef ICO_HOST
     if (((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->hit) {
         debug_Arrow(100.0f, test_CURRENTROOT(girlGObj),
                     ((HandClInfo *)&GOBJ_WORK(girlGObj)->handCl)->orient, 255, 0, 0);
@@ -2552,7 +2404,6 @@ static int hand_able_connect(void)
     if (boyGObj == 0 || ((char *)girlGObj) == 0) {
         return 0;
     }
-#ifdef ICO_HOST
     /* the girl's work + 0x540..0x561 is ActWork.handCl (wider records before
        it on the host) */
     if (debug_font_flag & 1) {
@@ -2577,26 +2428,6 @@ static int hand_able_connect(void)
         }
     }
     (void)h;
-#else
-    if (debug_font_flag & 1) {
-        unsigned char *d = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-
-        debug_Printf(10, 120, 0x0FFFFFFF, "[%d] [%d] [%d] [%d] [%d]\n", d[0x540], d[0x541],
-                     d[0x542], d[0x560], d[0x561]);
-    }
-    h = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-    if (h[0x540] != 0) {
-        if (h[0x541] != 0 || h[0x560] != 0) {
-            if (h[0x542] != 0) {
-                return 1;
-            }
-            if (h[0x561] == 0) {
-                return 0;
-            }
-        }
-        return 1;
-    }
-#endif
     boy[0] = test_CURRENTROOT(boyGObj)[0];
     boy[1] = test_CURRENTROOT(boyGObj)[1];
     boy[2] = test_CURRENTROOT(boyGObj)[2];
@@ -2607,18 +2438,6 @@ static int hand_able_connect(void)
         return 0;
     }
     return 0;
-#else
-    if (((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->hit) {
-        debug_Arrow(100.0f, test_CURRENTROOT(girlGObj),
-                    ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->orient,
-                    255, 0, 0);
-    }
-    if (((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->hit2) {
-        debug_Arrow(100.0f, test_CURRENTROOT(boyGObj),
-                    ((HandClInfo *)((char *)GOBJ_ACT(((char *)girlGObj))->work + 0x540))->orient2,
-                    0, 0, 255);
-    }
-#endif
 }
 
 void ACTGame_CommonLoop(GObj *self)
@@ -2630,47 +2449,6 @@ void ACTGame_CommonLoop(GObj *self)
     float third;
     float half;
 
-#ifndef ICO_HOST
-    int hand_able_connect(void)
-    {
-        unsigned char *h;
-        float boy[4];
-        float girl[4];
-
-        if (boyGObj == 0 || ((char *)girlGObj) == 0) {
-            return 0;
-        }
-        if (debug_font_flag & 1) {
-            unsigned char *d = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-
-            debug_Printf(10, 120, 0x0FFFFFFF, "[%d] [%d] [%d] [%d] [%d]\n", d[0x540], d[0x541],
-                         d[0x542], d[0x560], d[0x561]);
-        }
-        h = (unsigned char *)GOBJ_ACT(((char *)girlGObj))->work;
-        if (h[0x540] != 0) {
-            if (h[0x541] != 0 || h[0x560] != 0) {
-                if (h[0x542] != 0) {
-                    return 1;
-                }
-                if (h[0x561] == 0) {
-                    return 0;
-                }
-            }
-            return 1;
-        }
-        boy[0] = test_CURRENTROOT(boyGObj)[0];
-        boy[1] = test_CURRENTROOT(boyGObj)[1];
-        boy[2] = test_CURRENTROOT(boyGObj)[2];
-        girl[0] = test_CURRENTROOT(girlGObj)[0];
-        girl[1] = test_CURRENTROOT(girlGObj)[1];
-        girl[2] = test_CURRENTROOT(girlGObj)[2];
-        if (GOBJ_ACT(((char *)girlGObj))->actMode != 29 || _DistSqGV((int *)boy, girl) < 10000.0f) {
-            return 0;
-        }
-        return 0;
-    }
-
-#endif
     if (self == (girlGObj)) {
         GetGirlHandlinkClInfo();
     }
@@ -2842,7 +2620,6 @@ void ACTGame_CommonLoop(GObj *self)
     half = (60 - systemStatus[0] * 10) / systemStatus[1] / 2;
 
     if ((s->pad.trg & 0xF0) != 0) {
-#ifdef ICO_HOST
         (GOBJ_ACT(self)->enemy->liftLevel)--;
     }
 
@@ -2851,76 +2628,38 @@ void ACTGame_CommonLoop(GObj *self)
             GOBJ_ACT(self)->enemy->liftToggle = !GOBJ_ACT(self)->enemy->liftToggle;
             (GOBJ_ACT(self)->enemy->liftLevel)--;
             GOBJ_ACT(self)->enemy->liftTimer = third;
-#else
-        (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xCC))--;
-    }
-
-    if (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC4) != 0) {
-        if (0.5f < s->stick.mag) {
-            *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC4) =
-                !*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC4);
-            (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xCC))--;
-            *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD4) = third;
-#endif
         }
     } else {
         if (!(0.5f < s->stick.mag)) {
-#ifdef ICO_HOST
             GOBJ_ACT(self)->enemy->liftToggle = !GOBJ_ACT(self)->enemy->liftToggle;
-#else
-            *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC4) =
-                !*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC4);
-#endif
         }
     }
 
     if (0.5f < s->stick.mag) {
-#ifdef ICO_HOST
         switch (GOBJ_ACT(self)->enemy->liftPhase) {
         case 0:
             if (0.5f < s->stick.dz) {
                 GOBJ_ACT(self)->enemy->liftPhase = 1;
                 (GOBJ_ACT(self)->enemy->liftLevel)--;
                 GOBJ_ACT(self)->enemy->liftTimer = half;
-#else
-        switch (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8)) {
-        case 0:
-            if (0.5f < s->stick.dz) {
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8) = 1;
-                (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xCC))--;
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD4) = half;
-#endif
             }
             break;
         case 1:
             if (!(0.5f < s->stick.dz)) {
-#ifdef ICO_HOST
                 GOBJ_ACT(self)->enemy->liftPhase = 0;
                 (GOBJ_ACT(self)->enemy->liftLevel)--;
                 GOBJ_ACT(self)->enemy->liftTimer = half;
-#else
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8) = 0;
-                (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xCC))--;
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD4) = half;
-#endif
             }
             break;
         case -1:
             if (0.5f < s->stick.dz) {
-#ifdef ICO_HOST
                 GOBJ_ACT(self)->enemy->liftPhase = 1;
             } else {
                 GOBJ_ACT(self)->enemy->liftPhase = 0;
-#else
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8) = 1;
-            } else {
-                *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8) = 0;
-#endif
             }
             break;
         }
     } else {
-#ifdef ICO_HOST
         GOBJ_ACT(self)->enemy->liftPhase = -1;
     }
 
@@ -2932,20 +2671,6 @@ void ACTGame_CommonLoop(GObj *self)
     (GOBJ_ACT(self)->enemy->liftTimer)--;
 
     if ((&motionKind[GOBJ_SUB(self)->ctrl.motion])->flags2 & 1) {
-#else
-        *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xC8) = -1;
-    }
-
-    if (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD4) > 0) {
-        *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD0) = 1;
-    } else {
-        *(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD0) = 0;
-    }
-    (*(int *)(((char *)GOBJ_ACT(self)->enemy) + 0xD4))--;
-
-    if ((&motionKind[*(int *)((char *)((IntFloat *)((char *)self + 0x15C))->i + 0x4A0)])->flags2 &
-        1) {
-#endif
         s->msgBlockTimer = (60 - systemStatus[0] * 10) / systemStatus[1] / 3;
     }
 
@@ -2967,8 +2692,6 @@ inline void GetOtherStageGirlOrient(float *orient, float *root)
     GetGirlPositionAtThisStage(pos);
     _OrientGV(orient, pos, root);
 }
-
-#ifdef ICO_HOST
 
 static int GetTarget(GObj *self, char *s, int kind, float *pos, int *pmode)
 {
@@ -3019,47 +2742,9 @@ static int GetTarget(GObj *self, char *s, int kind, float *pos, int *pmode)
             target = girlGObj;
             *pmode = 2;
             if (target == 0) {
-#else
-void ACTLookTargetSystem_Exec(GObj *self)
-{
-    char *s = (char *)((int *)self)[89];
-
-    /* GNU nested function GetTarget: it reads `self` and `s` from
-       ACTLookTargetSystem_Exec's frame through the static chain. */
-    int GetTarget(int kind, float *pos, int *pmode)
-    {
-        float dir[4];
-        float p[4];
-        GObj *target = 0;
-        int rv = 0;
-
-        switch (kind) {
-        case 13:
-            GetSkeltonPosition(p, self, 0x23);
-            sceVu0ScaleVector(dir, (char *)GOBJ_ACT(self)->work + 0x4A0, 300.0f);
-            sceVu0AddVector(pos, p, dir);
-            GOBJ_SUB(self)->root.ikRate0 = 0.3f;
-            GOBJ_SUB(self)->root.ikRate1 = 0.3f;
-            GOBJ_SUB(self)->root.ikRate2 = 0.3f;
-            rv = 1;
-            break;
-        case 12:
-            target = *(GObj **)(s + 0x88);
-            break;
-        case 10:
-            target = *(GObj **)(s + 0x78);
-            break;
-        case 5:
-            target = *(GObj **)(s + 0x7C);
-            break;
-        case 4:
-            target = girlGObj;
-            if (target == 0 && (*(unsigned long long *)(s + 0x20) & 0x3800000) == 0x800000) {
-#endif
                 GetGirlPositionAtThisStage(pos);
                 rv = 1;
             }
-#ifdef ICO_HOST
         }
         if ((int)(((Act *)s)->flags20.ll >> 24) & 3) {
             ScpCallCameraGetTarget(pos);
@@ -3125,92 +2810,6 @@ void ACTLookTargetSystem_Exec(GObj *self)
 void ACTLookTargetSystem_Exec(GObj *self)
 {
     char *s = (char *)GOBJ_ACT(self);
-#else
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
-                ScpCallCameraGetTarget(pos);
-                target = 0;
-                rv = 1;
-            }
-            break;
-        case 11:
-            GetRootPosition(pos, *(GObj **)(s + 0x74));
-            pos[1] = *(float *)&test_CURRENTROOT(self)[1];
-            *pmode = 2;
-            rv = 1;
-            break;
-        case 6:
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 23) & 1) {
-                target = girlGObj;
-                *pmode = 2;
-                if (target == 0) {
-                    GetGirlPositionAtThisStage(pos);
-                    rv = 1;
-                }
-            }
-            if ((int)(*(unsigned long long *)(s + 0x20) >> 24) & 3) {
-                ScpCallCameraGetTarget(pos);
-                target = 0;
-                rv = 1;
-            }
-            break;
-        case 8:
-            if (*(int *)(s + 0x10) % 15 / 10 != 0) {
-                target = *(GObj **)(s + 0x80);
-            } else {
-                target = boyGObj;
-            }
-            break;
-        case 9:
-            target = *(GObj **)(s + 0x84);
-            break;
-        case 7:
-            target = boyGObj;
-            if (*(int *)(s + 0x10) % 15 / 10 != 0) {
-                target = *(GObj **)(s + 0x80);
-            }
-            break;
-        case 3:
-            target = boyGObj;
-            break;
-        case 1:
-            sceVu0ScaleVector(pos, test_CURRENTORIENT(self), 200.0f);
-            pos[1] = 0.0f;
-            sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
-            rv = 1;
-            break;
-        case 2:
-            sceVu0ScaleVector(pos, test_CURRENTORIENT(self), *(float *)(s + 0x5E8));
-            pos[1] = 150.0f;
-            sceVu0AddVector(pos, test_CURRENTROOT(self), pos);
-            rv = 1;
-            break;
-        case 14:
-            pos[0] = GOBJ_WORK(self)->hintPosX;
-            pos[1] = GOBJ_WORK(self)->hintPosY;
-            pos[2] = GOBJ_WORK(self)->hintPosZ;
-            rv = 1;
-            break;
-        }
-        if (target != 0) {
-            if (target == boyGObj) {
-                /* these two statements written out instead of calling
-                   GetSkeltonPosition: the node comes off `target` and the
-                   skeleton off the global */
-                int idx = GetSkeltonFocusNode(target, 35) << 6;
-                ((IntFloat *)pos)[0].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x30);
-                ((IntFloat *)pos)[1].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x34);
-                ((IntFloat *)pos)[2].f =
-                    *(float *)(idx + *(int *)((int)((GObj *)boyGObj)->dobj + 0xC) + 0x38);
-            } else {
-                GetRootPosition(pos, target);
-            }
-            rv = 1;
-        }
-        return rv;
-    }
-#endif
 
     float pos[4];
     int mode = 1;
@@ -3313,11 +2912,7 @@ void ACTLookTargetSystem_Exec(GObj *self)
     for (i = 0; i < 27; i++) {
         int kind = lookTargetData[i].kind[col];
         if ((flags >> i) & 1) {
-#ifdef ICO_HOST
             if (GetTarget(self, s, kind, pos, &mode) != 0) {
-#else
-            if (GetTarget(kind, pos, &mode) != 0) {
-#endif
                 found = 1;
                 break;
             }
@@ -3374,8 +2969,6 @@ inline void ACTGame_SendSoundMail(GObj *self, int mail, GObj *from, int mot, int
     }
 }
 
-#ifdef ICO_HOST
-
 static void ItemHold(Act *sub, GObj *self) /* derived name */
 {
     if (sub->heldItem.i != 0) {
@@ -3416,64 +3009,12 @@ static void ACTItemThrow(Act *sub, GObj *self)
     sub->nextItem.i = sub->heldItem.i = 0;
 }
 
-#endif
-
 static void ACTItemWatchMotion(GObj *self)
 {
     MotionRec *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
     Act *sub = GOBJ_ACT(self);
     int mode = rec->modeBits.w >> 19;
     int frame = rec->modeBits.b;
-#ifndef ICO_HOST
-
-    /* nested inline: the "take the pending item" request, expanded at the four
-       motion arms below */
-    inline void ItemHold(void) /* derived name */
-    {
-        if (sub->heldItem.i != 0) {
-            return;
-        }
-        if ((sub->heldItem.i = sub->nextItem.i) == 0) {
-            return;
-        }
-        HoldItem(sub->heldItem.p, self);
-    }
-
-    /* nested inline: drop whatever is held, read through the slots' pointer
-       member, as the head block below compares them against the other
-       actor's pair */
-    inline void ItemRelease(void) /* derived name */
-    {
-        if (sub->heldItem.p == 0) {
-            return;
-        }
-        ReleaseItem(sub->heldItem.p);
-        sub->nextItem.p = sub->heldItem.p = 0;
-    }
-
-    /* a GNU nested function, reading `sub` and `self` through the static
-       chain */
-    void ACTItemThrow(void)
-    {
-        float v[4];
-        int kind;
-
-        if (sub->heldItem.i == 0) {
-            return;
-        }
-        sceVu0ScaleVector(v, test_CURRENTORIENT(self),
-                          _ACTGame_GetParamF(9) + _ACTGame_GetParamF(9));
-        kind = GetItemKind(sub->heldItem.p);
-        if (kind == 1 || kind == 6) {
-            debug_StdPrintfDummy("BOMB!!\n");
-            v[0] *= 0.5f;
-            v[1] -= 25.0f;
-            v[2] *= 0.5f;
-        }
-        ThrowItem(sub->heldItem.p, v);
-        sub->nextItem.i = sub->heldItem.i = 0;
-    }
-#endif
 
     mode &= 7;
 
@@ -3495,11 +3036,7 @@ static void ACTItemWatchMotion(GObj *self)
     switch (mode) {
     case 2:
         if ((float)frame < GOBJ_SUB(self)->ctrl.animFrame) {
-#ifdef ICO_HOST
             ItemHold(sub, self);
-#else
-            ItemHold();
-#endif
         } else if (sub->heldItem.i != 0) {
             float pos[4];
             GetRootPosition(pos, sub->heldItem.p);
@@ -3510,46 +3047,26 @@ static void ACTItemWatchMotion(GObj *self)
 
     case 4:
         if (GOBJ_SUB(self)->ctrl.animFrame < (float)frame) {
-#ifdef ICO_HOST
             ItemHold(sub, self);
         } else {
             ItemRelease(sub);
-#else
-            ItemHold();
-        } else {
-            ItemRelease();
-#endif
         }
         break;
 
     case 3:
         if (GOBJ_SUB(self)->ctrl.animFrame < (float)frame) {
-#ifdef ICO_HOST
             ItemHold(sub, self);
         } else {
             ACTItemThrow(sub, self);
-#else
-            ItemHold();
-        } else {
-            ACTItemThrow();
-#endif
         }
         break;
 
     case 1:
-#ifdef ICO_HOST
         ItemHold(sub, self);
-#else
-        ItemHold();
-#endif
         break;
 
     case 0:
-#ifdef ICO_HOST
         ItemRelease(sub);
-#else
-        ItemRelease();
-#endif
         break;
     }
 
@@ -3613,8 +3130,6 @@ void ACTGame_InsertCamera_GirlIsPinch(void)
                   (60 - systemStatus[0] * 10) / systemStatus[1] * 45 / 60, 0.05f, 0.25f, 1);
 }
 
-#ifdef ICO_HOST
-
 static void updateHMC(HandModeCmd *hmc, GObj *self, int mode, int pri, int flag, GObj *p5, int p6,
                       float *p7)
 {
@@ -3644,58 +3159,16 @@ static void updateHMC(HandModeCmd *hmc, GObj *self, int mode, int pri, int flag,
     }
 }
 
-#endif
-
 void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, int p6, float *p7)
 {
     HandModeCmd *hmc = 0;
 
-#ifdef ICO_HOST
     switch (mode) {
     case 0:
         hmc = (HandModeCmd *)&GOBJ_ACT(self)->enemy->handConnect;
         break;
     case 1:
         hmc = (HandModeCmd *)&GOBJ_ACT(self)->enemy->handDisconnect;
-#else
-    /* updateHMC is a GNU nested function: it reads self, mode, pri, flag, p5,
-       p6, p7 and hmc out of RequestChangeHandMode's frame through the
-       static chain. */
-    void updateHMC(void)
-    {
-        hmc->flag = flag;
-        hmc->pri = pri;
-        switch (mode) {
-        case 0:
-            GOBJ_SUB(self)->root.hand0.mode = hmc->flag;
-            GOBJ_SUB(self)->root.hand0.obj = p5;
-            GOBJ_SUB(self)->root.hand0.node = p6;
-            if (p7 != 0) {
-                GOBJ_SUB(self)->root.hand0.pos[0] = p7[0];
-                GOBJ_SUB(self)->root.hand0.pos[1] = p7[1];
-                GOBJ_SUB(self)->root.hand0.pos[2] = p7[2];
-            }
-            break;
-        case 1:
-            GOBJ_SUB(self)->root.hand1.mode = hmc->flag;
-            GOBJ_SUB(self)->root.hand1.obj = p5;
-            GOBJ_SUB(self)->root.hand1.node = p6;
-            if (p7 != 0) {
-                GOBJ_SUB(self)->root.hand1.pos[0] = p7[0];
-                GOBJ_SUB(self)->root.hand1.pos[1] = p7[1];
-                GOBJ_SUB(self)->root.hand1.pos[2] = p7[2];
-            }
-            break;
-        }
-    }
-
-    switch (mode) {
-    case 0:
-        hmc = (HandModeCmd *)((char *)GOBJ_ACT(self)->enemy + 0x314);
-        break;
-    case 1:
-        hmc = (HandModeCmd *)((char *)GOBJ_ACT(self)->enemy + 0x31C);
-#endif
         break;
     default:
         debug_assert("src/act-game.c", 4727);
@@ -3712,15 +3185,9 @@ void RequestChangeHandMode(GObj *self, int mode, int pri, int flag, GObj *p5, in
         }
     }
     if (hmc->pri == 0 || hmc->flag == 0) {
-#ifdef ICO_HOST
         updateHMC(hmc, self, mode, pri, flag, p5, p6, p7);
     } else if (pri >= hmc->pri) {
         updateHMC(hmc, self, mode, pri, flag, p5, p6, p7);
-#else
-        updateHMC();
-    } else if (pri >= hmc->pri) {
-        updateHMC();
-#endif
     }
 }
 

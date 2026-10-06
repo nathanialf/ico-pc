@@ -20,17 +20,12 @@
 #include "camera-ico2.h"
 #include "poly-flat.h"
 
-#ifdef ICO_HOST
-
 /* PC port (renderer R7b, docs/port/RENDER_API.md "Frame rate and interpolation"): the hard
    camera cuts, for the presenter's interpolation (port/game/video_options.c;
    a counter no game state reads) */
 extern void ico_video_camera_cut(void);
 
 #define CAM_HOST_CUT_IF(c) ((c) ? ico_video_camera_cut() : (void)0)
-#else
-#define CAM_HOST_CUT_IF(c) ((void)0)
-#endif
 
 static int InsertCamera_isEnable(void);
 
@@ -102,8 +97,6 @@ typedef struct InsertCameraWork { /* field names derived */
    insert-camera request. */
 static union CameraSetIn prevCameraSet; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: InitCamera and CameraSetTargetGObj copy a CamTgt (pos over pos and
@@ -124,14 +117,6 @@ ICO_LAYOUT_SIZE(CamTgt, CameraSet2);
 _Static_assert(__alignof__(cameraSet) >= __alignof__(CamTgt) &&
                    __alignof__(targetCameraSet) >= __alignof__(CamTgt),
                "the camera sets are not aligned for CamTgt's copy");
-
-#else
-
-static CameraSet2 cameraSet; /* derived name */
-
-static CameraSet2 targetCameraSet; /* derived name */
-
-#endif
 
 static CamCtrl camctrl; /* derived name */
 
@@ -765,15 +750,10 @@ void SetCameraMatrix(GObj *self)
         } else {
             debug_zoom_per = (float)debug_zoom_per * (1.0f - zoomBlend) + (float)target * zoomBlend;
         }
-#ifdef ICO_HOST
         /* PC port: the range is empty (max == min) on some stages; the EE's
            div.s gives +-Fmax there, IEEE gives Inf or NaN (DIVERGENCES.md F5) */
         SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
                                                 (float)(zoomRangeMax - zoomRangeMin)));
-#else
-        SetCameraZoomOffsetRatio(1.0f - (float)(debug_zoom_per - zoomRangeMin) /
-                                            (float)(zoomRangeMax - zoomRangeMin));
-#endif
     }
     /* the mode the last frame ran in */
     {

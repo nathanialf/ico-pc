@@ -42,8 +42,6 @@ static void actSt04aModelOffChk(GObj *volatile self);
 static void actSt04aModelOnChk(GObj *volatile self);
 static void finishCallBackFunc(struct GObj *obj);
 
-#ifdef ICO_HOST
-
 /* on the host the shared records are used: Act and GObj are runtime layout (the
    private pad views below are the EE's), and the torch's three words go in
    fields this actor does not otherwise use: torchAnim in Act.torchAnim, torchObj
@@ -57,37 +55,6 @@ typedef GObj PObjGObjSt04A;
 #define TORCH_ANIM(a) ((a)->torchAnim)
 #define TORCH_OBJ(a) ((a)->doorCamera)
 #define TORCH_FLAG(a) ((a)->wish0.w[0])
-#else
-
-/* this file's own view of Act (the shared one is in typedef.h) */
-typedef struct ActSt04A { /* field names derived */
-    char pad0[32];        /* 0x00 */
-    ActStatus flags20;    /* 0x20 */
-    char pad28[12];       /* 0x28 */
-    int actMode;          /* 0x34, the current action mode */
-    char pad38[152];      /* 0x38 */
-    ActMail *mainMail;    /* 0xD0 */
-    ActMail *mail;        /* 0xD4 */
-    char padD8[920];      /* 0xD8 */
-    int torchAnim;        /* 0x470, the stage animation the lit torch plays */
-    GObj *torchObj;       /* 0x474, the torch the ball must reach */
-    int torchFlag;        /* 0x478, the game flag raised once it is lit */
-} ActSt04A;               /* derived name */
-
-/* this file's own view of GObj (the shared one is in typedef.h) */
-typedef struct PObjGObjSt04A { /* field names derived */
-    char pad00[348];           /* 0x000 */
-    Sub15C *dobj;              /* 0x15C */
-    char pad160[4];            /* 0x160 */
-    ActSt04A *act;             /* 0x164 */
-    char pad168[4];            /* 0x168 */
-    int active;                /* 0x16C */
-} PObjGObjSt04A;               /* derived name */
-
-#define TORCH_ANIM(a) ((a)->torchAnim)
-#define TORCH_OBJ(a) ((a)->torchObj)
-#define TORCH_FLAG(a) ((a)->torchFlag)
-#endif
 
 /* .data, ahead of model_on and model_off: each action's mail pair, the check
    handler stored into its first entry at run time, and the matrix
@@ -99,14 +66,10 @@ static ActMail gate_open_mail[2] = {{430}, {429}}; /* derived name */
 static Mtx44 jointMtxInit = {{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
                               1.0f, 0.0f, 0.0f, 0.0f, 1.0f}}; /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: finishCallBackFunc moves this matrix whole over every node's MotIk
    (rate .. pitchSpeed, q, step, offset); the sizes must agree
    (tools/template_audit.py) */
 _Static_assert(sizeof(Mtx44) == sizeof(MotIk), "Mtx44 and MotIk differ in size on the host");
-
-#endif
 
 static ActMail gate_open2_ready_mail[2] = {{430}, {429}}; /* derived name */
 
@@ -2077,14 +2040,10 @@ static void finishCallBackFunc(GObj *obj)
     _NormalizeVector(GOBJ_SUB(obj)->ctrl.dir, &v);
 
     for (i = 0; i < GOBJ_SUB(obj)->skelNodeNum; i++) {
-#ifdef ICO_HOST
         /* PC port: Mtx44 is 16-byte aligned and MotIk is not, so the host
            compiler's aligned SSE copy would rely on the heap's alignment;
            the same 64 bytes are moved without it (tools/template_audit.py) */
         __builtin_memcpy(&GOBJ_SUB(obj)->nodeRotElem[i], &jointMtxInit, sizeof(Mtx44));
-#else
-        *(Mtx44 *)&GOBJ_SUB(obj)->nodeRotElem[i] = jointMtxInit;
-#endif
     }
 }
 

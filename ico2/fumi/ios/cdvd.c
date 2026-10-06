@@ -140,17 +140,9 @@ static CdvdBgReq bgReqTable[7]; /* derived name */
 
 static unsigned char skipBuf[1024]; /* derived name */
 
-#ifdef ICO_HOST
-
 /* a 64-bit host's IOSThread is wider than the EE's 120 bytes */
 static char stThread[sizeof(IOSThread) > 120 ? sizeof(IOSThread) : 120]
     __attribute__((aligned(16))); /* derived name */
-
-#else
-
-static char stThread[120]; /* derived name */
-
-#endif
 
 static char stStack[16384]; /* derived name */
 
@@ -663,12 +655,8 @@ static int iosCdStRead(unsigned int n, int *buf, int flag, int *result, char *se
         }
         if (size != 0) {
             bytes = size << 11;
-#ifdef ICO_HOST
             /* pointer-wide: the ring may sit above 4 GB on a 64-bit host */
             memcpy((char *)buf, (char *)req->buf + (req->readPos << 11), bytes);
-#else
-            memcpy((char *)buf, (char *)((req->readPos << 11) + (int)req->buf), bytes);
-#endif
             if (req->readPos + size >= req->size) {
                 req->readPos = 0;
             } else {

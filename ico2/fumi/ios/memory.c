@@ -55,18 +55,16 @@ void *iosReallocDebug(void *ptr, unsigned int size);
 static void heapAsanReq(void *node, unsigned int bytes);
 
 #endif
-/* The allocator's record sizes, in bytes and in quadwords. The EE build
- * spells them as the literals it was written with; the host derives them
- * from the records, which gives pointer-wide headers on the host
- * (docs/port/LAYOUT.md) and the EE's values where pointers are 4 bytes
- * (checked below):
+/* The allocator's record sizes, in bytes and in quadwords. The original
+ * spells them as literals; the port derives them from the records, which
+ * gives pointer-wide headers on a 64-bit host (docs/port/LAYOUT.md) and the
+ * EE's values where pointers are 4 bytes (checked below):
  *   NODE_SIZE   the block header in front of every allocation (IosMemNode)
  *   PART_SIZE   the partition record at the head of a partition, rounded to
  *               a quadword (IosMemPart)
  *   PART_NEED   what carving a partition costs besides its size
  *   PART_MIN    the smallest partition iosMallocInitPartition accepts
  *   ADDR_MASK   rounds an address down to a quadword */
-#ifdef ICO_HOST
 #define NODE_SIZE ((int)sizeof(IosMemNode))
 #define NODE_QW (NODE_SIZE >> 4)
 #define PART_SIZE ((int)((sizeof(IosMemPart) + 15) & ~(__SIZE_TYPE__)15))
@@ -77,16 +75,6 @@ static void heapAsanReq(void *node, unsigned int bytes);
 
 _Static_assert(sizeof(void *) != 4 || (NODE_SIZE == 64 && PART_SIZE == 80),
                "the EE's allocator records on 32-bit hosts");
-
-#else
-#define NODE_SIZE 64
-#define NODE_QW 4
-#define PART_SIZE 80
-#define PART_NEED 144
-#define PART_MIN 160
-#define PART_AVAIL_QW 5
-#define ADDR_MASK 0xFFFFFFF0
-#endif
 
 typedef struct IosMemTag { /* field names derived */
     char c[16];
@@ -449,12 +437,8 @@ void *iosMallocAlignDebug(IosMemPart *part, int size, int align, const char *fil
 
 void _iosFreeWithFill(int *ptr, char *file, int line)
 {
-#ifdef ICO_HOST
     /* the block's header's next pointer: where the block ends */
     int *end = (int *)((IosMemNode *)((char *)ptr - NODE_SIZE))->next;
-#else
-    int *end = *(int **)((char *)ptr - 0x1C);
-#endif
     FlushCache(0);
     iosFree(ptr);
     debug_StdPrintfDummy("IOSFILLFREE %s(%d) %p - %p\n", file, line, ptr, end);
@@ -677,17 +661,10 @@ void iosMallocCheckLeak(IosMemPart *part)
     }
 }
 
-#ifdef ICO_HOST
-
 /* the partition's start pointer and a node's next pointer, by offset */
 void iosMallocCheckLeak2(__INTPTR_TYPE__ part, int offset)
 {
     char *node = *(char **)(part + offset + __builtin_offsetof(IosMemPart, start));
-#else
-void iosMallocCheckLeak2(int part, int offset)
-{
-    char *node = *(char **)(part + offset + 0x38);
-#endif
     int i;
 
     debug_StdPrintfDummy("<<< check leak2 >>> %p\n", part);
@@ -709,11 +686,7 @@ void iosMallocCheckLeak2(int part, int offset)
             return;
         }
         for (i = 0; i < 12; i++) {}
-#ifdef ICO_HOST
         node = *(char *volatile *)(node + __builtin_offsetof(IosMemNode, next));
-#else
-        node = *(char *volatile *)(node + 0x24);
-#endif
     } while (node != 0);
 }
 
@@ -729,8 +702,6 @@ typedef struct IosMemNodeRec {    /* field names derived */
     int size;                     /* 0x34 */
     int line;                     /* 0x38 */
 } IosMemNodeRec;                  /* derived name */
-
-#ifdef ICO_HOST
 
 #include "ee_view.h"
 
@@ -765,8 +736,6 @@ ICO_LAYOUT_AT(IosMemNodeRec, line, IosMemNode, line);
 
 _Static_assert(sizeof(IosMemNodeRec) <= sizeof(IosMemNode),
                "IosMemNodeRec is wider than IosMemNode");
-
-#endif
 
 void *iosReallocDebug(void *ptr, unsigned int size)
 {

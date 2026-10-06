@@ -269,11 +269,7 @@ inline GObj *CreateLayoutedGObj(int id, int model, int accessary, int light, voi
     void *(*fn)(GObj *, void *);
 
     /* the 0x15C slot is the int handle GOBJ_SUB reads (typedef.h) */
-#ifdef ICO_HOST
     gobj->dobj = dobj;
-#else
-    *(int *)&gobj->dobj = (int)dobj;
-#endif
     dobj->accessary = accessary;
 
     light_AddLight(gobj, light, 1);
@@ -442,13 +438,8 @@ static void initParentLink(int id)
                 __assert(__FILE__, 502, "0");
             }
             debug_StdPrintfDummy("Parentize \"%s\"\n", lay);
-#ifdef ICO_HOST
             GOBJ_SUB(self)->parent.obj = parent;
             GOBJ_SUB(self)->parent.node = 0;
-#else
-            *(int *)((int)GOBJ_SUB(self)) = parent;
-            *(int *)((int)GOBJ_SUB(self) + 4) = 0;
-#endif
         } else {
             /* tried to make "%s" a parent-child link, but the parent cannot be found */
             debug_StdPrintfDummy("\"%s\"の親子関係づけをしようとしましたが、親が見つかりません。\n",

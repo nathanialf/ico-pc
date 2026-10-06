@@ -4,7 +4,7 @@
 The members config/data_schema.pal.txt lists are written in the form the
 developers compiled: one C translation unit per member, an initialized array
 (or a single object) of a record type per section the member occupies, which
-ninja compiles with the game's flags (tools/compile_c.sh). The values come
+the build compiles with the game's flags. The values come
 from the user's own baserom/pal/baseelf.elf at build time and are never
 committed (docs/LEGAL.md); the schema rows and the records' header hold only
 types. A member row with no schema row is the member's own string pool: the

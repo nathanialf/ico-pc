@@ -10,8 +10,8 @@
 # target (pal) by this file's existence.
 #
 # Line forms:
-#   <path>             a source file (.c compiled by tools/compile_c.sh, .s
-#                      assembled per archive, ico2/vusrc/*.dsm by dvp-as)
+#   <path>             a source file (.c; in the PS2 build .s assembled per
+#                      archive and ico2/vusrc/*.dsm by dvp-as)
 #   data:<member>      a data-only ico2000.a member: every row of
 #                      config/data_members.pal.txt for it, generated from the
 #                      user's base ELF at build time by tools/gen_data_c.py from

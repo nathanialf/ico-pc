@@ -75,9 +75,8 @@ ending.
 
 `ico_gs_signal(event, arg)` queues an event; `ico_gs_signaled(ev)` and
 `ico_gs_signal_arg(ev)` read the current tick's count and last argument.
-Each hook site is one call under `#ifdef ICO_HOST`, with
-`#include "ico_gamestate.h"` under `#ifdef ICO_HOST` at the top of the
-file.
+Each hook site is one call, with `#include "ico_gamestate.h"` at the top
+of the file.
 
 | event | arg | site |
 | --- | --- | --- |

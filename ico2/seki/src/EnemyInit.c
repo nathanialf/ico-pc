@@ -28,15 +28,9 @@ typedef struct EnemyKindRec { /* field names derived */
 /* the set's j-th EnemyKindRec: on the EE its two words are read by hand
    (indexing the typed array moves the bytes); the host record is two words
    wider (a 64-bit pointer) and is addressed as the typed array */
-#ifdef ICO_HOST
 #define ENEMY_REC_DECL(rec, set, j) EnemyKindRec *rec = &(set)->kinds[j]
 #define ENEMY_REC_KIND(rec) ((rec)->kind)
 #define ENEMY_REC_LIST(rec) ((rec)->list)
-#else
-#define ENEMY_REC_DECL(rec, set, j) int *rec = (int *)(j * 8 + *(int *)(set))
-#define ENEMY_REC_KIND(rec) ((rec)[1])
-#define ENEMY_REC_LIST(rec) ((int *)(rec)[0])
-#endif
 
 /* a model file's placement set: its kind lists and its position table */
 typedef struct EnemyModelSet { /* field names derived */

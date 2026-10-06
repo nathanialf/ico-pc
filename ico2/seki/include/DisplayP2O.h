@@ -239,12 +239,8 @@ typedef struct PObjModel { /* field names derived */
     char *boxes;        /* 0x44, eight vectors a part */
     PObjGroup *groups;  /* 0x48 */
     char pad4C[4];
-#ifdef ICO_HOST
     /* a quadword boundary on every host, as on the EE (0x50) */
     float box[8][4] __attribute__((aligned(16))); /* 0x50 */
-#else
-    float box[8][4]; /* 0x50 */
-#endif
 } PObjModel; /* derived name */
 
 void p2o_DispVU1(GObj *self);

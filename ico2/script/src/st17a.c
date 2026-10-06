@@ -433,13 +433,8 @@ void actSt17aSekizoEvent(int x)
 
 void actLinkTestChk(GObj *volatile self)
 {
-#ifdef ICO_HOST
     GOBJ_SUB(boyGObj)->ctrl.noStand = 1; /* Sub15C + 0x4E8 */
     GOBJ_SUB(boyGObj)->ctrl.noStand = 0;
-#else
-    *(int *)(((int *)boyGObj)[87] + 1256) = 1;
-    *(int *)(((int *)boyGObj)[87] + 1256) = 0;
-#endif
     scpGetWallCollision(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f);
     _ACTWait(60);
 }

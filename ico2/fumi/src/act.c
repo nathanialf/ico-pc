@@ -209,7 +209,6 @@ inline void actInitialize_geo(void *self) {}
 void actInitialize_ext_charcter(GObj *self)
 {
     Act *g = GOBJ_ACT(self);
-#ifdef ICO_HOST
     char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__, 885);
 
     memset(p, 0, sizeof(EnemyBattleWork));
@@ -221,19 +220,6 @@ void actInitialize_ext_charcter(GObj *self)
     GOBJ_ACT(self)->enemy->stoneHitWeapon = -1;
     GOBJ_ACT(self)->enemy->word2B0 = -1;
     InitMailAdditionalData(self, (struct MailAdditionalData *)GOBJ_ACT(self)->enemy);
-#else
-    char *p = (char *)iosMallocDebug(ios_partition_seki, 0x400, __FILE__, 885);
-
-    memset(p, 0, 0x400);
-    *(char **)((char *)g + 0x680) = p;
-    *(float *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x58) = 1.0f;
-    GOBJ_ACT(self)->enemy->stonePair = -1;
-    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2A4) = -1;
-    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2A8) = -1;
-    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2AC) = -1;
-    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2B0) = -1;
-    InitMailAdditionalData(self, *(char **)((int)GOBJ_ACT(self) + 0x680));
-#endif
 }
 
 /* The actor object: only the work pointer at +0x164 matters here. */
@@ -255,8 +241,6 @@ typedef struct { /* field names derived */
     int a928[10];
     int a950[10];
 } ActExt; /* derived name */
-
-#ifdef ICO_HOST
 
 void actInitialize_only_charcter(char *self)
 {
@@ -282,35 +266,6 @@ void actInitialize_only_charcter(char *self)
         q->prevHist[i] = 0x1A2;
     }
 }
-
-#else
-
-void actInitialize_only_charcter(char *self)
-{
-    Act *g = GOBJ_ACT(self);
-    char *p = (char *)iosMallocDebug(ios_partition_seki, 0x980, __FILE__, 907);
-    Vec4 *q;
-    int i;
-
-    memset(p, 0, 0x980);
-    g->work = (int)p;
-    q = (Vec4 *)*(char **)(*(char **)(self + 0x164) + 0x688);
-    ((Vec4 *)((char *)q + 0x320))->f[0] = GOBJ_SUB(self)->root.ikRate0;
-    ((Vec4 *)((char *)q + 0x320))->f[1] = GOBJ_SUB(self)->root.ikRate1;
-    ((Vec4 *)((char *)q + 0x320))->f[2] = GOBJ_SUB(self)->root.ikRate2;
-    ((ActFWord *)((char *)q + 0x330))->f = -1.0f;
-    ((ActFWord *)((char *)q + 0x334))->f = 1.0f;
-    ((ActFWord *)((char *)q + 0x348))->f = 3.0f;
-    *(int *)((char *)q + 0x800) = 0;
-    for (i = 0; i < 10; i++) {
-        GOBJ_WORK(self)->modeHist[i] = 0;
-        GOBJ_WORK(self)->frameHist[i] = 0;
-        GOBJ_WORK(self)->prevHist[i] = 0x1A2;
-    }
-}
-
-#endif
-#ifdef ICO_HOST
 
 /* the EE code's zero fills after the field stores (restart position, sound
    words, chain slots, wish words, environment, pad and stick records) cover
@@ -381,95 +336,6 @@ Act *actInitialize(GObj *self)
     return w;
 }
 
-#else
-
-Act *actInitialize(GObj *self)
-{
-    char *w = (char *)iosMallocDebug(ios_partition_seki, 0x850, __FILE__, 934);
-
-    *(char **)((char *)self + 0x164) = w;
-    memset(w, 0, 0x850);
-
-    *(void **)(w + 0x4) = isysCurrentGObjProcess;
-    *(int *)(w + 0x0) = 0;
-    *(int *)(w + 0x8) = 0;
-    *(int *)(w + 0xC) = 0;
-    *(int *)(w + 0x14) = 0;
-#ifdef ICO_HOST
-    ACT_AFTER_PROC(w) = 0;
-#else
-    *(int *)(w + 0x18) = 0;
-#endif
-    *(int *)(w + 0x680) = 0;
-    *(int *)(w + 0x688) = 0;
-    *(int *)(w + 0x10) = 0;
-
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 32;
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 33;
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 39);
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 40);
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 43;
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 44);
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 46;
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 47);
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 48;
-    ((ActStatusWord *)(w + 0x18))->q |= 1LL << 49;
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 51);
-    ((ActStatusWord *)(w + 0x18))->q &= ~(1LL << 52);
-
-    *(int *)(w + 0x28) = 0;
-    *(int *)(w + 0x34) = 0;
-    *(int *)(w + 0x38) = 0;
-    *(int *)(w + 0x4C) = 0;
-    *(int *)(w + 0x350) = 0;
-    *(int *)(w + 0x38C) = 0;
-    *(int *)(w + 0x3D4) = 0;
-    *(int *)(w + 0x48) = -1;
-    *(int *)(w + 0xD0) = 0;
-    *(int *)(w + 0xD4) = 0;
-    *(int *)(w + 0x130) = 0;
-    *(int *)(w + 0x13C) = 0;
-    *(int *)(w + 0x148) = 0;
-    *(int *)(w + 0x14C) = 0;
-    *(int *)(w + 0x150) = 0;
-    *(int *)(w + 0x154) = 0;
-    *(int *)(w + 0x440) = 0;
-    *(int *)(w + 0x444) = 0;
-    *(int *)(w + 0x448) = 0;
-    *(int *)(w + 0x44C) = 0;
-    *(int *)(w + 0x54) = 0;
-
-    ((ActStatusWord *)(w + 0x20))->q |= 0x800000;
-    ((ActStatusWord *)(w + 0x20))->q &= ~0x3000000;
-    ((ActStatusWord *)(w + 0x20))->q |= 0x20000000;
-    ((ActStatusWord *)(w + 0x20))->q |= 1LL << 43;
-    ((ActStatusWord *)(w + 0x20))->q |= 1LL << 46;
-
-    *(int *)(w + 0x3A4) = 0;
-    *(int *)(w + 0x3C4) = -1;
-    {
-        /* the chase is read as `int` */
-        Act *p = GOBJ_ACT(self);
-        p->attacker = 0;
-        p->hit = 0;
-    }
-    ((Act *)w)->padConf = iosPadConfDefault;
-
-    memset(w + 0x170, 0, 0x20);
-    memset(w + 0x134, 0, 0x8);
-    memset(w + 0x190, 0, 0x20);
-    memset(w + 0x47C, 0, 0x10);
-    memset(w + 0x48C, 0, 0x10);
-    memset(w + 0x49C, 0, 0x10);
-    memset(w + 0x4B0, 0x0, 0x1D0);
-    memset(w + 0x2D8, 0, 0x60);
-    memset(w + 0x338, 0, 0x18);
-
-    return (Act *)w;
-}
-
-#endif
-
 inline int ACTReserveTarget(GObj *self, void *arg, int mail)
 {
     Act *g = GOBJ_ACT(self);
@@ -527,12 +393,7 @@ static IntrMail *act_check_intr_list(void *self, IntrMail *m, void **out)
                     w->intrMot = mot;
                     w->intrArg = k->ent[i].f4;
                     ICO_RAW(char *, w, 0x30, w->intrData) = (char *)GetMailAdditionalData(self, i);
-#ifdef ICO_HOST
                     GOBJ_WORK(self)->intrReq = buf;
-#else
-                    ICO_RAW(MotOriReq, *(char **)((int)GOBJ_ACT(self) + 0x688), 0x8B0,
-                            GOBJ_WORK(self)->intrReq) = buf;
-#endif
                     *out = &k->ent[i];
                     return m;
                 }
@@ -618,14 +479,8 @@ typedef struct { /* field names derived */
 void BeforeFunc(GObj *self)
 {
     Act *w = GOBJ_ACT(self);
-#ifdef ICO_HOST
     char *mb = (char *)&((struct GObj *)self)->mailBox;
     IntrMail *intr;
-#else
-    char *mb = (char *)self + 0x54;
-    IntrMail *intr;
-    char *g;
-#endif
     void *act;
     IntrEnt *ent;
     int i;
@@ -705,17 +560,10 @@ void BeforeFunc(GObj *self)
         act = (void *)actModeTbl[intr->mode].ent[w->actKind].act;
         if (act != 0) {
             after_func_exec(self, w->actMode, intr->mode);
-#ifdef ICO_HOST
             if (ACT_AFTER_PROC(w) != 0) {
                 ACT_AFTER_PROC(w)((GObj *)self);
                 ACT_AFTER_PROC(w) = 0;
             }
-#else
-            if (*(int *)((char *)w + 0x18) != 0) {
-                (*(void (**)(char *))((char *)w + 0x18))(self);
-                *(int *)((char *)w + 0x18) = 0;
-            }
-#endif
             w->modeFrame = 0;
             for (i = 9; i > 0; i--) {
                 GOBJ_WORK(self)->modeHist[i] = GOBJ_WORK(self)->modeHist[i - 1];
@@ -746,11 +594,7 @@ void BeforeFunc(GObj *self)
         }
         ACTAcceptMail(self, (short)intr->kind);
     }
-#ifdef ICO_HOST
     w->soundFlag &= ~1;
-#else
-    ((ActStatusWord *)((char *)w + 0x138))->q &= ~(1LL << 0);
-#endif
     w->reserved = 0;
     *(int *)(mb + 4) = 0;
     ClearMailAdditionalData(self);

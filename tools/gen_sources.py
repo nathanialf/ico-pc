@@ -8,7 +8,7 @@ members, never sce/ (Sony's libraries are replaced by port/) or the VU1
 microprograms (ico2/vusrc/, replaced by shaders).
 
 Each C source lands in one list per programmer directory (the directory
-decides its include path, as tools/compile_c.sh has it), or in
+decides its include path, as the period build had it), or in
 ICO_EE_ONLY_SOURCES when port/ replaces it for good (the ito/mpeg movie
 player: port/fmv). Since renderer wave 6 (package R6a) there is one host
 source list: the renderer-owned files the renderer waves rewrote (all of

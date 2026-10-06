@@ -27,12 +27,7 @@
 #include "ios.h"
 #include "sceneManager.h"
 #include "DObj.h"
-
-#ifdef ICO_HOST
-
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
-
-#endif
 
 static void calcDynamicGeometry(struct GObj *g);
 
@@ -576,14 +571,10 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
     w->objs = iosMallocDebug(ios_partition_sugipon, 1 * sizeof(GObj *), __FILE__, 759);
 
     for (i = 0; i < 1; i++) {
-#ifdef ICO_HOST
         /* PC port: a division by the literal 0: 0 / 0 for the only sword,
            which the EE's div.s makes +Fmax and IEEE makes NaN
            (DIVERGENCES.md F5) */
         queenSwordOfs[2] = ps2_div(weaponKind[w->kind].length * (float)i, 0.0f);
-#else
-        queenSwordOfs[2] = weaponKind[w->kind].length * (float)i / 0.0f;
-#endif
         o = CreateLayoutedGObj(10, 75, -1, i == 0, &r, -1, 7, 0);
         LinkParentOfDObj(o, &lnk);
         CopyVector(GOBJ_SUB(o)->root.pos, queenSwordOfs);
@@ -946,9 +937,7 @@ void PickupWeapon(GObj *self, GObj *holder, int focus)
     p->holder = holder;
     p->holderId = GetSkeltonFocusNode(holder, focus);
     GOBJ_SUB(holder)->ctrl.pickedWeapon = self;
-#ifdef ICO_HOST
     ico_gs_signal(holder == boyGObj ? ICO_GS_EV_WEAPON : ICO_GS_EV_NONE, p->kind);
-#endif
 }
 
 GObj *CheckSwapableWeapon(GObj *self, float dist)

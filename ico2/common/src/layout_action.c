@@ -66,8 +66,6 @@ struct McPreview { /* field names derived */
     int word10;    /* 0x10, no C reader */
 }; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: the menus copy a save's preview whole out of and into the card's
@@ -84,8 +82,6 @@ ICO_LAYOUT_AT(struct McPreview, sofa, McFileInfo, sofa);
 ICO_LAYOUT_AT(struct McPreview, word10, McFileInfo, word10);
 
 ICO_LAYOUT_SIZE(struct McPreview, McFileInfo);
-
-#endif
 
 /* .sbss, thirteen words: the port-0 lock state _la_set_current_port_2 records and the one
    _la_set_current_port_lock_2 records, the lock results for port 0 and port 1
@@ -167,7 +163,6 @@ void la_TESTFUNCTION(void)
 /* .data: the game-flag ids the load carries across gflagInit.  The list
    holds five ids and the key-config tables follow it; the keep/restore loops
    below walk twenty words. */
-#ifdef ICO_HOST
 
 /* The keep/restore loops read twenty words from keepFlagNo: the five ids, then
    keyConfigCode and the first seven keyConfigSlot, which follow it in the EE's
@@ -180,18 +175,6 @@ static int keepWords[21] = {388, 384, 383, 385, 382, 16, 128, 32, 64, 8, 2,
 #define keepFlagNo keepWords
 #define keyConfigCode (keepWords + 5)
 #define keyConfigSlot (keepWords + 13)
-#else
-
-static int keepFlagNo[5] = {388, 384, 383, 385, 382}; /* derived name */
-
-/* the eight pad button
-   codes the key-config screen offers, and the six-plus-two slot assignments it
-   edits. */
-static int keyConfigCode[8] = {16, 128, 32, 64, 8, 2, 1, 4}; /* derived name */
-
-static int keyConfigSlot[8] = {1, 2, 3, 4, 5, 0, 0, 0}; /* derived name */
-
-#endif
 
 /* the memory-card request block the layout actions drive */
 McMgr mc = {{0}};
@@ -214,7 +197,6 @@ extern int IosMcPreviewInfo[];
 
 /* McMgr is a runtime record: its fields are not at the EE's byte offsets once
    segArg is 8 bytes wide, so the host names them */
-#ifdef ICO_HOST
 #define MC_PORT(p) (((McMgr *)(p))->port)
 #define MC_PATH(p) (((McMgr *)(p))->path)
 
@@ -256,50 +238,6 @@ static int _la_mcard_error_check(void *req)
     }
 }
 
-#else
-#define MC_PORT(p) (*(int *)((char *)(p) + 8))
-#define MC_PATH(p) ((char *)(p) + 0x47C)
-
-static int _la_mcard_error_check(void *req)
-{
-    char *w = (char *)req;
-
-    if (*(int *)(w + 0x10) >= 0) {
-        return 1;
-    }
-    switch (*(int *)(w + 0x10)) {
-    case 0:
-        return 1;
-    case -2:
-        debug_StdPrintfDummy("unformatted %d\n", *(int *)(w + 0x10));
-        return -1;
-    case -9:
-        debug_StdPrintfDummy("not insert memory card %d\n", *(int *)(w + 0x10));
-        return -1;
-    case -4:
-        debug_StdPrintfDummy("%s file not found\n", w + 0x47C);
-        return -1;
-    case -14:
-        debug_StdPrintfDummy("%s Directory not found\n", w + 0x454);
-        return -1;
-    case -16:
-        debug_StdPrintfDummy("segID %d check sum err rom:%d != load:%d\n", *(int *)(w + 0x24),
-                             *(int *)(w + 0x50), *(int *)(w + 0x4C));
-        return -1;
-    case -15:
-        debug_StdPrintfDummy("%s handler func ret err code\n", w + 0x47C);
-        return -1;
-    case -10:
-        debug_StdPrintfDummy("memory over\n");
-        return -1;
-    default:
-        debug_StdPrintfDummy("memory card another err %d\n", *(int *)(w + 0x10));
-        return -2;
-    }
-}
-
-#endif
-
 /* file-local: nothing outside this TU calls it */
 static int _la_memory_card_check(McMgr *p, int step);
 
@@ -320,8 +258,6 @@ static int nextStage = 1; /* derived name */
 static int fileMask = 0; /* derived name */
 
 static int actionStarted = 0; /* derived name */
-
-#ifdef ICO_HOST
 
 /* PC port (Phase 6, 6C): the Settings menu (port/ui/settings.h,
    docs/port/SETTINGS.md).  Its entry rows are chained after the title's
@@ -362,11 +298,6 @@ static int la_host_mirror_screen(void)
     actionStarted = 0;
     return ui_MirrorScreenEnter();
 }
-
-#else
-#define LA_HOST_NOT_SETTINGS_ROW
-#define LA_BACK 0x10
-#endif
 
 static int fightSoundStopped = 0; /* derived name */
 
@@ -796,11 +727,9 @@ int la_vibe_select(void)
             iosPadActRequestEnable = 0;
             break;
         }
-#ifdef ICO_HOST
         if (ui_MirrorScreenLayout() >= 0) {
             return la_host_mirror_screen(); /* R7c: the mirror screen, then the start */
         }
-#endif
         if (titleAdpcm != 0) {
             titleAdpcm->stream->fadeStep = 0x80;
         }
@@ -823,8 +752,6 @@ int la_vibe_select(void)
     return 0xC;
 }
 
-#ifdef ICO_HOST
-
 /* PC port (renderer wave 7, R7c): the start la_vibe_select's confirm made,
    run by the mirror screen's confirm (port/ui/settings.c) once the player
    has picked: the title music fades, the game flags and the key config are
@@ -841,8 +768,6 @@ void la_host_new_game_go(void)
     systemStatus[4] = 0;
     gflagOn(382);
 }
-
-#endif
 
 inline int la_scei_logo(int first)
 {
@@ -878,9 +803,7 @@ int la_title_continue_or_new(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
-#ifdef ICO_HOST
         ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
-#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -896,9 +819,7 @@ int la_title_continue_or_new(int first)
         lt_mask_property(0x31, 1);
         lt_mask_property(0x32, 1);
     }
-#ifdef ICO_HOST
     ui_SettingsTitleMask(continueDecided == 0);
-#endif
     /* PC port (6C): not on the Settings row, whose Cross default_item_select
        takes (it opens the menu) */
     if (continueDecided != 0 && (pad[0].flags & 0x840) &&
@@ -949,9 +870,7 @@ int la_title_new_game_only(int first)
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
         gflagOff(382);
-#ifdef ICO_HOST
         ico_opt_mirror_reset(); /* R7c: the title belongs to no run */
-#endif
         if (gflagChk(385) == 0) {
             gflagOn(385);
         }
@@ -966,9 +885,7 @@ int la_title_new_game_only(int first)
         lt_item_select_disable = 1;
         lt_mask_property(51, 1);
     }
-#ifdef ICO_HOST
     ui_SettingsTitleMask(newGameDecided == 0);
-#endif
     /* PC port (6C): not on the Settings row, whose Cross default_item_select
        takes (it opens the menu) */
     if (newGameDecided != 0 && (pad[0].flags & 0x840) &&
@@ -1619,9 +1536,7 @@ int la_load_processing(int first)
             *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         loadSerial = mcSetFileNo(mc.port, mc.fileNo);
-#ifdef ICO_HOST
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* R7c: the slot's flag */
-#endif
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         if (titleAdpcm != 0) {
@@ -1861,16 +1776,8 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 /* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
    definition reads them on hosts that pass them on the stack
    (layout_texture.c says more) */
-#ifdef ICO_HOST
 
 extern void gif_Sprite(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
-
-#else
-
-extern void gif_Sprite(SprRect *r, unsigned int z, SprRect *uv, SprCol *col, int prim);
-
-#endif
-
 extern void gif_EndPacket(void);
 
 static int barStep = 0; /* derived name */
@@ -2477,9 +2384,7 @@ int la_save_processing(int first)
         saveStep++;
         break;
     case 10:
-#ifdef ICO_HOST
         ico_mirror_slot_saved(mc.fileNo, (unsigned int)mc.sum); /* R7c: the run's flag */
-#endif
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
@@ -3150,8 +3055,6 @@ int la_adjust_screen(void)
     return -1;
 }
 
-#ifdef ICO_HOST
-
 /* PC port (6C): what every proc does before it returns the layout it
    switches to, for the port's Settings procs (actionStarted is this file's) */
 void la_host_leave(void)
@@ -3159,8 +3062,6 @@ void la_host_leave(void)
     lt_set_item_select_func(0);
     actionStarted = 0;
 }
-
-#endif
 
 unsigned int stage_after_skipping_demo = 0;
 

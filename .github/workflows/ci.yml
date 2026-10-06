@@ -71,6 +71,9 @@ jobs:
       - name: Format
         run: tools/format.sh --check
 
+      - name: No ICO_HOST conditional in the game sources
+        run: python3 tools/strip_host_gates.py --check
+
       - name: Generated files are fresh
         run: |
           .venv/bin/python tools/gen_data_desc.py --check

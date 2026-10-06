@@ -435,7 +435,7 @@ typedef struct {     /* field names derived */
     int cliffWallCount; /* 0xFC */
     WallCfg aheadWall;  /* 0x100 */
     int word10C;
-#ifdef ICO_HOST
+
     /* PC port: InitMotionGeoInfo copies this record over a MotRoot, so the
        host layout must be MotRoot's.  MotRoot has 20 unread bytes at 0x10C
        (not a WallCfg, which is 24 bytes on a 64-bit host) and a 16-byte
@@ -445,17 +445,11 @@ typedef struct {     /* field names derived */
         int o[2];
         int elem;
     } wall110;
-#else
-    WallCfg wall110;
-#endif
+
     int word11C;
     WallCfg filter; /* 0x120 */
     char pad12C[4];
-#ifdef ICO_HOST
-    Vec16 plane; /* 0x130, the field plane under the actor */
-#else
-    Vec4 plane; /* 0x130, the field plane under the actor */
-#endif
+    Vec16 plane;      /* 0x130, the field plane under the actor */
     int lastField;    /* 0x140 */
     void *cliffFloor; /* 0x144 */
     char pad148[8];
@@ -505,14 +499,10 @@ typedef struct {     /* field names derived */
     int handIK;      /* 0x360 */
     int stepNode;    /* 0x364 */
     char pad368[8];
-    Vec4 holdPoint; /* 0x370 */
-    int ropeState;  /* 0x380 */
-#ifdef ICO_HOST
+    Vec4 holdPoint;  /* 0x370 */
+    int ropeState;   /* 0x380 */
     ICO_WORD fixObj; /* 0x384, MotRoot's type: a word wide enough for a host pointer */
-#else
-    int fixObj; /* 0x384 */
-#endif
-    int fixNode; /* 0x388 */
+    int fixNode;     /* 0x388 */
     char pad38C[4];
     Vec4 fixQuat;         /* 0x390 */
     Vec4 fixPos;          /* 0x3A0 */
@@ -526,7 +516,6 @@ typedef struct {     /* field names derived */
     char pad3CC[4];
 } MotionGeoInfo; /* derived name */
 
-#ifdef ICO_HOST
 /* InitMotionGeoInfo's copy is only right if the two layouts agree: every
    member at MotRoot's member of the same name (or the one at its EE offset:
    rot is quat, nextPos move, fieldPos footPos), the words MotRoot keeps as
@@ -571,7 +560,6 @@ ICO_LAYOUT_SIZE(MotionGeoInfo, struct MotRoot);
 
 #undef MGI_SAME
 #undef MGI_FIELDS
-#endif
 
 /* the record InitMotionGeoInfo copies over every new actor's geometry
    state */
@@ -714,7 +702,6 @@ static MotionGeoInfo motionGeoInfoTemplate = {
    floor in a direct-move motion; docs/port/DIVERGENCES.md).  The host
    spells those members with MotCtrl's alignment and width; the asserts
    after InitMotionStateInfo check every offset. */
-#ifdef ICO_HOST
 
 typedef union { /* derived name */
     float f[4];
@@ -722,10 +709,6 @@ typedef union { /* derived name */
 
 #define MSI_VEC4 MsiVec4  /* derived name */
 #define MSI_WORD ICO_WORD /* derived name */
-#else
-#define MSI_VEC4 Vec4
-#define MSI_WORD int
-#endif
 
 typedef struct MotionStateInfo { /* field names derived */
     int stream;                  /* 0x0 */
@@ -1374,47 +1357,19 @@ static inline float motDecodeS16(int h) /* derived name */
     return m * s;
 }
 
-#ifdef ICO_HOST
-
 /* VU0's Q register, which carries the root from motSqrtStart to motSqrtEnd */
 static float motSqrtQ; /* derived name */
-
-#endif
 
 /* the VU0 square root split in two so the Q-pipeline latency is covered by
    the vector copy in between */
 static inline void motSqrtStart(float d) /* derived name */
 {
-#ifdef ICO_HOST
     motSqrtQ = ps2_sqrt(1.0f - d);
-#else
-    float t = 1.0f - d;
-
-    __asm__ __volatile__(".set noreorder\n"
-                         "mfc1 $6, %0\n"
-                         "qmtc2.ni $6, $vf1\n"
-                         ".set reorder\n"
-                         :
-                         : "f"(t));
-    VU0_WORD(0x4A0103BD);
-#endif
 }
 
 static inline float motSqrtEnd(void) /* derived name */
 {
-#ifdef ICO_HOST
     return motSqrtQ;
-#else
-    float r;
-
-    VU0_WAIT();
-    __asm__ __volatile__(".set noreorder\n"
-                         "cfc2.ni $7, $vi22\n"
-                         "mtc1 $7, %0\n"
-                         ".set reorder\n"
-                         : "=f"(r));
-    return r;
-#endif
 }
 
 void _getS16MotRotElem(void *dst, void *src)
@@ -1574,7 +1529,6 @@ int GetStreamMotion(StreamElem *dst, float *out, char *node, SkelNode *skel)
 /* copyMotionWithNodeHrc is a nested function inside CopyMotionWithNodeHrc:
  * the parent passes it a static chain, through which it reaches
  * dst/src/flag/hrc. */
-#ifdef ICO_HOST
 
 /* The nested copyMotionWithNodeHrc as a file-scope function (clang has no
    nested functions); the parent's dst, src, hrc and flag are parameters. */
@@ -1603,35 +1557,6 @@ void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int 
         copyMotionWithNodeHrc(dst, src, hrc, flag, hrc[node].child);
     }
 }
-
-#else
-
-void CopyMotionWithNodeHrc(StreamElem *dst, StreamElem *src, SkelNode *hrc, int node, int flag)
-{
-    inline void copyMotionWithNodeHrc(int n)
-    {
-        dst[n] = src[n];
-        if (flag == 0) {
-            *(int *)&dst[n] = 250;
-        }
-        if (hrc[n].child != -1) {
-            copyMotionWithNodeHrc(hrc[n].child);
-        }
-        if (hrc[n].sibling != -1) {
-            copyMotionWithNodeHrc(hrc[n].sibling);
-        }
-    }
-
-    dst[node] = src[node];
-    if (flag == 0) {
-        *(int *)&dst[node] = 250;
-    }
-    if (hrc[node].child != -1) {
-        copyMotionWithNodeHrc(hrc[node].child);
-    }
-}
-
-#endif
 
 /* the bodies of GetMotionRootPos and GetBlendedMotionRootPos, which their
    callers inline and the two exported functions call */
@@ -1822,13 +1747,8 @@ void FeedbackWallWorkInfoToBrainSystem(GObj *self)
 {
     Sub15C *p = self->dobj;
     char *d = (char *)self->act;
-#ifdef ICO_HOST
     p->root.wall = p->root.aheadWall;
     GOBJ_ACT(self)->env.motOriReq.a.wall = p->root.aheadWall;
-#else
-    *(WallWork *)((char *)p + 0x180) = *(WallWork *)((char *)p + 0x1A0);
-    *(WallWork *)(d + 0x620) = *(WallWork *)((char *)p + 0x1A0);
-#endif
 }
 
 void *GetMotionPointer(GObj *self)
@@ -1891,12 +1811,7 @@ static inline void debugDisp1CollisionWithColor(WallCfg *cfg, void *color) /* de
     int i;
     GObj *obj = cfg->o.obj;
     int sh = cfg->o.node << 6;
-#ifdef ICO_HOST
     ICO_WORD v_c = obj->dobj->nodeMtx;
-#else
-    int *p15c = (int *)obj->dobj;
-    int v_c = p15c[0xC / 4];
-#endif
 
     GetWallGlobalInfo(pts, pts[4], cfg->elem, (void *)(v_c + sh));
     gif_StartPacketPri(11);
@@ -1960,7 +1875,6 @@ void InitMotionStateInfo(struct MotCtrl *self)
     self->seGroup[1] = soundSeGroupGet();
 }
 
-#ifdef ICO_HOST
 /* PC port: the template copy above is only right while the record has
    MotCtrl's host layout (the comment at MotionStateInfo): every member at
    MotCtrl's offset, and the same size. */
@@ -1993,7 +1907,6 @@ _Static_assert(sizeof(MotionStateInfo) == sizeof(struct MotCtrl), "MotionStateIn
 
 #undef MSI_SAME
 #undef MSI_FIELDS
-#endif
 
 int GetSkeltonFocusNode(GObj *self, int focus)
 {

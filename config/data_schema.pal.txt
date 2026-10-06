@@ -4,8 +4,8 @@
 # tools/gen_data_c.py writes as one C translation unit instead of assembly.
 # The row holds facts about the member's type, never its values: the build
 # reads the values from the user's own baserom/pal/baseelf.elf and writes
-# build/data/<member>.c, which ninja compiles with the game's flags
-# (tools/compile_c.sh). Nothing generated is committed (docs/LEGAL.md).
+# build/data/<member>.c, which the build compiles with the game's flags.
+# Nothing generated is committed (docs/LEGAL.md).
 #
 # Columns: <member> <section> <type> <header> <count> <symbols> [hex=<field>,...]
 #   member    the member's name in config/data_members.pal.txt

@@ -13,7 +13,7 @@
 #   -fsigned-char           ee-gcc's MIPS default is signed char. Package 0C
 #                           verifies this against the period compiler's
 #                           specs (docs/research/); until then it is assumed.
-#   -fno-common             the game was built -fno-common (tools/compile_c.sh).
+#   -fno-common             the game was built -fno-common.
 #   -fgnu89-inline          ee-gcc 2.9's `inline`: a plain `inline` function
 #                           definition is also the external one (script.h
 #                           declares scpFadeIn and others `inline` and other

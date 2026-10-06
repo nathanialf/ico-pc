@@ -3,9 +3,8 @@
 How to build, test and package the PC port. The build is CMake with Ninja.
 It compiles the game's C under `ico2/` for the host, with `port/` standing in
 for the PS2 hardware and Sony's libraries. The PS2 ELF build belongs to the
-decompilation (<https://github.com/nathanialf/ico>); this repository keeps
-only an optional check against the period compiler, described in the
-appendix at the end.
+decompilation (<https://github.com/nathanialf/ico>); this repository has
+none (["The game code"](#the-game-code)).
 
 ## Quickstart (Debian 13, Ubuntu 24.04)
 
@@ -22,8 +21,8 @@ $CMAKE/ctest --test-dir build-host/linux-x64
 ```
 
 `tools/setup.sh` does the venv step and installs the git hooks (below); it
-also fetches the period compilers unless `SKIP_TOOLCHAIN=1`, and only the
-appendix needs those.
+also checks for a MIPS objcopy unless `SKIP_TOOLCHAIN=1`, and only the
+appendix needs that.
 
 The build needs no disc image and no `baserom/`: the program holds no disc
 data. The game reads the player's own PAL disc image (SCES-50760) at run
@@ -114,11 +113,12 @@ list per programmer directory, the data-only members, and
 `port/fmv` replaces. Of `sce/` the build compiles only
 `sce/libsndn2/sound.c`, the Sg sequencer (`port/audio`); the rest of `sce/`
 and `ico2/vusrc/` stay in the tree as the decomp's sources, the SDK headers
-the game includes, and the reference for the renderer's shaders. Configure warns when the generated list is stale; rerun
-the script after changing the link order.
+the game includes, and the reference for the renderer's shaders. Configure
+warns when the generated list is stale; rerun the script after changing the
+link order.
 
-Each programmer directory is one object library with the include path
-`tools/compile_c.sh` gives it (its own `include/`, then the others, then
+Each programmer directory is one object library with the include path the
+period build gave it (its own `include/`, then the others, then
 `port/compat/` for the SDK header names), and `-fmacro-prefix-map` makes
 `__FILE__` the period spelling (`src/main.c`), which the assert messages
 print. The game's `main` is compiled as `ico_game_main`;
@@ -149,8 +149,8 @@ Rules for code that the game and the port share:
   it change; such loops are replaced at their call sites
   ([`port/HW_ADDRESS_SITES.md`](port/HW_ADDRESS_SITES.md)).
 - VU0 and R5900 inline assembly has C bodies over `port/math`
-  ([`port/MATH.md`](port/MATH.md)). Any asm wrapper that reaches a host
-  build (`VU0_*`, `QCOPY16`) is a compile error (`common/include/typedef.h`).
+  ([`port/MATH.md`](port/MATH.md)); the compiled game sources hold no EE
+  assembly and no EE opcode wrappers.
 - The simulation runs with the floating-point environment
   `port/platform/fpenv.c` sets: `ico_fpenv_sim_enter()` selects round toward
   zero with flush-to-zero and denormals-are-zero (MXCSR; FPCR on arm64),
@@ -163,6 +163,42 @@ Rules for code that the game and the port share:
 While `ICO_STRICT_WARNINGS` is off the build prints many C89-era warnings,
 most of them `-Wstrict-prototypes`. The three warnings that option promotes
 can become errors once their counts reach zero.
+
+## The game code
+
+`ico2/` (and `sce/` and `ico2/vusrc/` where the port compiles them) is the
+port's own source. It started as the decompilation's `main`, but it is only
+ever compiled for the host, so a change to it is a platform change made
+directly in the code: the host form replaces the original spelling. There
+are no `#ifdef ICO_HOST` / `#else` arms carrying the PS2 text, and the tree
+is not expected to compile for the PS2 or to match the ROM. `ICO_HOST` stays
+defined in the build (headers under `port/` test it); conditionals that
+select between host build variants (`ICO_RD`, `ICO_HEADLESS`,
+`ICO_HEAP_ASAN`, `ICO_FPTRAP`) stay too. `tools/strip_host_gates.py` is the
+record of how the gated tree became this one (968 sites); its `--check`
+runs in CI and in the pre-commit hook and fails on any `ICO_HOST`
+conditional under `ico2/`, `sce/` or `vusrc/`.
+
+The conventions that still matter on the host are in
+[`port/OFFSET_AUDIT.md`](port/OFFSET_AUDIT.md), "Conventions in `ico2/`":
+`ICO_WORD` for a word that holds an address (pointer-wide), `ICO_RAW` /
+`ICO_RAWP` for a view of a record at an EE offset, `ICO_MAX_SIZE` for a host
+record wider than the original literal, the layout asserts
+([`port/LAYOUT.md`](port/LAYOUT.md)) and the template audit.
+
+The decompilation (<https://github.com/nathanialf/ico>) is upstream for
+reconstruction fixes only: a wrong type, field, operand or control flow in
+a function, a name, a struct layout. Such a fix flows one way:
+
+1. it is found in the port (a bug, a trace, a crash);
+2. it is verified in the decompilation against the ROM with that
+   repository's tooling (its byte-match build and checks);
+3. it is committed there under its rules;
+4. it is applied here by hand, to the host form of the code, with a
+   reference to the decompilation's commit.
+
+Nothing is merged from the decompilation, and platform changes never go
+back to it. [`PORT.md`](PORT.md) has the same rule from the port's side.
 
 ## Data tables
 
@@ -198,7 +234,9 @@ hook that runs, in order:
    --check` (`port/data/gen/`), `tools/gen_layout_asserts.py --check`
    (`port/test/layout_asserts.c`) and `tools/gen_sources.py --check`
    (`cmake/IcoSources.cmake`). Each needs pyelftools, so the hook uses
-   `.venv/bin/python`. Regenerate with the same script without `--check`.
+   `.venv/bin/python`. Regenerate with the same script without `--check`;
+4. `tools/strip_host_gates.py --check`: no `ICO_HOST` conditional in the
+   game sources ([The game code](#the-game-code)).
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
 then applies `tools/format_layout.py`'s top-level blank-line layout.
@@ -223,6 +261,7 @@ job (`ubuntu-24.04`), no secrets, no disc image.
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
+| `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/`, `sce/`, `vusrc/` |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
 | `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |
@@ -239,54 +278,18 @@ the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 says what each holds; [`port/STEAMDECK.md`](port/STEAMDECK.md) covers
 running the Linux one.
 
-## Appendix, maintainers: EE identity check
+## Appendix, maintainers: the base ELF
 
-`ico2/` and `sce/` are the decomp's code
-([ico](https://github.com/nathanialf/ico), the `upstream` remote): the port's
-copy equals `upstream/main` there, and a change to them is made in the decomp
-and merged here. A host change has to leave the EE objects as they are: it
-is spelled so the period compiler sees the same tokens (`ICO_WORD`,
-`ICO_RAW`, `ICO_MAX_SIZE`, [`port/OFFSET_AUDIT.md`](port/OFFSET_AUDIT.md)
-"Conventions in `ico2/`"), or it goes under `#ifdef ICO_HOST` with the
-decomp's text in `#else` (the file-scope versions of GNU nested functions,
-which clang lacks, are all gated this way). The gate is the decomp's: its
-`./build.sh` rebuilds the PAL ELF and `tools/check_elf.py` checks it
-byte-identical, and nothing lands there that fails it.
-
-`tools/ee_identity.sh` is the quick check of a change before it goes to the
-decomp: it compiles the given files with the period compiler and compares
-the objects. It is optional and is not part of the build or of CI. A decomp
-checkout's toolchain serves as well: `ln -s /path/to/ico/tools/cc tools/cc`.
-
-```sh
-sudo dpkg --add-architecture i386 && sudo apt-get update
-sudo apt-get install gcc-multilib libc6:i386 libstdc++6:i386 zlib1g:i386 \
-    binutils-mips-linux-gnu patch
-tools/setup.sh                       # fetches the period compilers into tools/cc/
-tools/ee_identity.sh ico2/seki/src/Basic.c ico2/seki/src/MicroCode.c
-tools/ee_identity.sh -r <revision> --all   # every ico2/ C source against a revision
-```
-
-For each file it compiles with `tools/compile_c.sh` (ee-gcc 2.9-991111 and
-its assembler, run through `tools/period_env.sh`) from the working tree and
-from a temporary worktree of the revision (default `HEAD`), and diffs the
-sections `.text .data .rodata .sdata .bss .sbss .lit4 .lit8` and their
-relocations. Debug sections are left out because they carry paths. It exits
-0 when all are identical. `--all` over every source of
-`config/link_order.pal.txt` takes well under a minute on four cores.
-
-What stays in the tree for it, and why:
+What stays in the tree besides the host build, and why:
 
 | kept | for |
 | --- | --- |
-| `tools/compile_c.sh`, `tools/period_env.sh`, `tools/period_obstack.c` | the compile step (the preload library restores the obstack chunk size the original build had; ee-as's short-loop padding depends on it) |
-| `tools/setup.sh`'s compiler fetch (ee-gcc 2.9-991111 and 2.96 into `tools/cc/`) | the compilers `compile_c.sh` runs; the 2.96 tree is only its SCE assembler, for `sce/` sources |
-| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources, and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Only `sce/libsndn2/sound.c` is in a host target (`ico_sndn2`) |
+| `sce/`, `ico2/vusrc/` | the game includes `sce/`'s headers under the SDK names; the VU1 sources are the shaders' reference. Only `sce/libsndn2/sound.c` is in a host target (`ico_sndn2`) |
 | `config/link_order.pal.txt`, `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as a record of the PS2 layout. Nothing links with them |
 | `tools/extract_elf.sh`, `tools/extract_elf.py` | the maintainer step below |
 
-Nothing here links a PS2 ELF or assembles the VU1 programs; the
-decompilation keeps that build.
+Nothing here compiles for the PS2, links a PS2 ELF or assembles the VU1
+programs; the decompilation keeps that build.
 
 The loader's reference test and `gen_data_desc.py --manifest` read the boot
 ELF from `baserom/pal/baseelf.elf`, which `tools/extract_elf.sh` writes from

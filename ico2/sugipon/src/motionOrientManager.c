@@ -26,12 +26,7 @@
 #include "main.h"
 #include "Matrix.h"
 #include "ee_view.h"
-
-#ifdef ICO_HOST
-
 #include <string.h> /* memset (shiftMotionOrientBeginFunc) */
-
-#endif
 
 static void getMotionGeometry(void *self);
 static void getStreamBlendShapeGeometry(void *self, void *m0, void *m1, float t);
@@ -619,14 +614,8 @@ inline void CopyBlendMotionDataSource(void *self, short ang)
     CopyMotion(mot, MOWORK(self)->motionBuf, MOWORK(self)->skelNodeNum);
     CopyVector(MOWORK(self)->localPos, MOWORK(self)->motionPos);
     CopyVector(MOWORK(self)->localMove, MOWORK(self)->root.move);
-#ifdef ICO_HOST
     MOWORK(self)->localHeight = MOWORK(self)->root.height;
     MOWORK(self)->local = MOWORK(self)->parent;
-#else
-    *(struct MotOriFloat *)((char *)MOWORK(self) + 0x808) =
-        *(struct MotOriFloat *)((char *)MOWORK(self) + 0x160);
-    *(struct MotOriHead8 *)((char *)MOWORK(self) + 0x800) = *(struct MotOriHead8 *)MOWORK(self);
-#endif
     while (MOWORK(self)->skel[i].parent == -1) {
         SetQuaternionByAxisRotate(quat, ang, 0.0f, 1.0f, 0.0f);
         MultiQuaternion(mot[i].q, quat, mot[i].q);
@@ -816,9 +805,7 @@ typedef struct MotOriSpin { /* field names derived */
 char *SetMotionRequest(void *self, int mot, MotOriReq req)
 {
     char *w = ICO_RAWP(char *, GOBJ_SUB(self), 0x470, (char *)&GOBJ_SUB(self)->ctrl);
-#ifdef ICO_HOST
     struct MotCtrl *c = &GOBJ_SUB(self)->ctrl;
-#endif
     int old = ICO_RAW(int, w, 0xD0, c->orientKind);
 
     ICO_RAW(int, w, 0xD0, c->orientKind) = mot;
@@ -875,13 +862,9 @@ char *SetMotionRequest(void *self, int mot, MotOriReq req)
             }
         }
     }
-#ifdef ICO_HOST
     /* PC port: the callers read the result as the motion control block
        (struct MotCtrl); GOBJ_SUB + 0x470 is that block on the EE only */
     return (char *)c;
-#else
-    return w;
-#endif
 }
 
 inline void SetParallelMotionTableWithNoRequest(void *self, int *next, int *req)
@@ -995,7 +978,6 @@ static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* d
         debug_assertMessage(__FILE__, 1287, buf);
         __assert(__FILE__, 1287, "e");
     }
-#ifdef ICO_HOST
 }
 
 /* a nested function of getMotionGeometry, inlined into the arm that uses it */
@@ -1007,7 +989,6 @@ static inline void rotateNodes(char *m, SkelNode *s, void *q) /* derived name */
         MultiQuaternion(m + i * 32 + 16, q, m + i * 32 + 16);
         i = s[i].sibling;
     } while (i != -1);
-#endif
 }
 
 static void getMotionGeometry(void *self)
@@ -1043,7 +1024,6 @@ static void getMotionGeometry(void *self)
             v.f[0] = v.f[0] + 1.0f;
         }
         sceVu0ScaleVector(&v, &v, scale);
-#ifdef ICO_HOST
         /* PC port: a root position blended between two frames
            (GetBlendedMotionRootPos) gets x, y and z only, so w is the stack
            word an earlier call left in v (and in rv). VU0 scales an
@@ -1053,14 +1033,11 @@ static void getMotionGeometry(void *self)
            there gave NaN in all three (a shadow carrying the girl, stage 4).
            Read it as the PS2 does (DIVERGENCES.md F14). */
         v.f[3] = ps2_operand(v.f[3]);
-#endif
         if (w->animFrame < w->lastFrame) {
             CopyVector(mo->step, ZeroVector);
         } else {
             sceVu0ScaleVector(&rv, &rv, scale);
-#ifdef ICO_HOST
             rv.f[3] = ps2_operand(rv.f[3]);
-#endif
             sceVu0SubVector(mo->step, &v, &rv);
         }
         if (w->noAlt != 0) {
@@ -1080,19 +1057,6 @@ static void getMotionGeometry(void *self)
             float r;
             int flag;
             int k;
-#ifndef ICO_HOST
-
-            /* a nested function, inlined into the arm that uses it */
-            inline void rotateNodes(char *m, SkelNode *s, void *q) /* derived name */
-            {
-                int i = 0;
-
-                do {
-                    MultiQuaternion(m + i * 32 + 16, q, m + i * 32 + 16);
-                    i = s[i].sibling;
-                } while (i != -1);
-            }
-#endif
 
             len = VectorLength(mo->move) *
                   ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f);
@@ -1154,16 +1118,12 @@ static void getMotionGeometry(void *self)
             }
             k = motionKind[w->motion].stepNode;
             if (flag != 0) {
-#ifdef ICO_HOST
                 /* PC port: shiftMotionData sets blendFrames to 0 for a
                    shift shorter than one frame at this rate; the guard
                    then passes only with blendCount 0 (a record not yet
                    shifted), where 0 / 0 is +Fmax on the EE and NaN under
                    IEEE (DIVERGENCES.md F5) */
                 float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
-#else
-                float s = (float)w->blendCount / (float)w->blendFrames;
-#endif
 
                 GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, (StreamElem *)mot, v.f,
                                  MOWORK(self)->blendBuf, MOWORK(self)->localPos, s, blendless, n);
@@ -1497,13 +1457,9 @@ void SetNodeRotationLimitDataTable(void *self, int from, int to)
             debug_assert(__FILE__, 1838);
             __assert(__FILE__, 1838, "0");
         }
-#ifdef ICO_HOST
         /* a 4-byte word cannot hold the row's address: the row, one-based
            (motMan_getFinalMatrix.c.inc reads it back) */
         MOWORK(self)->nodeLimit[node] = i + 1;
-#else
-        MOWORK(self)->nodeLimit[node] = (int)&motionLimitDef[i];
-#endif
         if (motionLimitDef[i].mid.y < motionLimitDef[i + 2].mid.y) {
             tmp = motionLimitDef[i];
             *(MotOriLimit *)&motionLimitDef[i] = motionLimitDef[i + 2];

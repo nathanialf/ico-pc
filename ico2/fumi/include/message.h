@@ -13,11 +13,7 @@
 /* One message: an int, or an address (thread.c, cdvd.c, mcard.c and
    StageManager.c send pointers), so pointer-wide on the host. A ring handed
    to iosMsgQueueCreate holds `size` of them, and iosMsgRecv stores one. */
-#ifdef ICO_HOST
 typedef __INTPTR_TYPE__ IosMsgWord; /* derived name */
-#else
-typedef int IosMsgWord; /* derived name */
-#endif
 
 /* a message queue: a ring of messages guarded by a kernel semaphore */
 typedef struct IosMsgQueue { /* field names derived */

@@ -54,9 +54,6 @@ static int bootVideoMode; /* derived name */ /* the video mode in force when the
 extern void iosMcChdirProduct(McMgr *mp);
 extern int iosMcSync(McMgr *mp);
 extern void iosMcLoadProductBlock(McMgr *mp);
-
-#ifdef ICO_HOST
-
 /* PC port (Phase 6, 6C): the language and 50/60 Hz screens are skipped; the
    values they stored come from the port's config (port/config/sysconf.h,
    docs/port/SETTINGS.md), and the Settings menu changes them later */
@@ -64,8 +61,6 @@ int ico_boot_language(void);
 int ico_boot_video_mode(int current);
 int ico_boot_card_language(int card);
 int ico_boot_card_video_mode(int card);
-
-#endif
 
 static int kanbanBootMcCheck(void)
 {
@@ -143,11 +138,9 @@ static int kanbanBootMcCheck(void)
         r = &IosMcProductFile[mc->port];
         NonLinearCameraMove = r->cameraMove;
         systemStatus[0] = r->palMode;
-#ifdef ICO_HOST
         /* an explicit config value (the Settings menu's) wins over the card */
         NonLinearCameraMove = ico_boot_card_language(NonLinearCameraMove);
         systemStatus[0] = ico_boot_card_video_mode(systemStatus[0]);
-#endif
         gsResetFunc(0);
         break;
     case 97:
@@ -168,7 +161,6 @@ static int kanbanBootMcCheck(void)
             break;
         }
         mcKanbanId = -1;
-#ifdef ICO_HOST
         /* no language screen: what step 102 would have stored, from the
            config or the host's locale (sceScfGetLanguage, as the screen's
            cursor) */
@@ -176,7 +168,6 @@ static int kanbanBootMcCheck(void)
         mcCheckStep = 190;
         bootKanbanDone = 1;
         break;
-#endif
         lang = sceScfGetLanguage();
         lp = &texLayout[0].defaultItem;
         switch (lang) {
@@ -247,7 +238,6 @@ static int kanbanBootMcCheck(void)
         isysGObjActiveLink(0, 1);
         break;
     case 200:
-#ifdef ICO_HOST
         /* no 50/60 Hz screen: [video] video_mode, else the screen's default
            item (50 Hz, the value in force), with step 201's reset on a
            change */
@@ -259,7 +249,6 @@ static int kanbanBootMcCheck(void)
         }
         mcCheckStep = 202;
         break;
-#endif
         bootKanban = kanbanReqAdd(1, 2);
         bootVideoMode = systemStatus[0];
         mcCheckStep++;
@@ -335,18 +324,12 @@ static Kanban *waitKanban; /* derived name */ /* the "please wait" sign */
 
 static int waitTimer; /* derived name */ /* frames left on that sign */
 
-#ifdef ICO_HOST
-
 /* port/platform/diag_host.c: logs the two steps when they change */
 void ico_host_kanban_step(int boot_step, int mc_check_step);
 
-#endif
-
 void kanbanBootMain(void)
 {
-#ifdef ICO_HOST
     ico_host_kanban_step(bootStep, mcCheckStep);
-#endif
     switch (bootStep) {
     case 0:
         isysGObjActiveLink(0, 1);

@@ -879,11 +879,7 @@ void GeneratorGeo(GObj *gobj)
     const StgPre *sd = &stageData[stage_no];
     int noBoy = sd->flag1 && girlGObj == 0;
 
-#ifdef ICO_HOST
     w->hard = IsNeedGeneratorHard(gobj) != 0; /* only ever tested against 0 */
-#else
-    w->hard = (int)IsNeedGeneratorHard(gobj);
-#endif
     if (w->hard != 0) {
         if (w->timer < 30) {
             w->timer = 30;

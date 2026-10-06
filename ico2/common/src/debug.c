@@ -44,9 +44,6 @@
 #include "Texture.h"
 #include "debug_exception.h"
 #include <assert.h>
-
-#ifdef ICO_HOST
-
 /* PC port (renderer wave 6, R6a): debug.c is compiled on the host
    (docs/port/DEVELOPER_MODE.md).  Its EE-only parts have ICO_HOST bodies:
    varargs through va_list, the VU1 register dumps, the snapshot (an rd
@@ -68,7 +65,6 @@ int ico_opt_debug_option(void);
 bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
                  int withAlpha);
 
-#endif
 #endif
 
 static int debug_CollisionTest(int reset);
@@ -585,18 +581,11 @@ static char sceOpenPath[256]; /* derived name */
 static unsigned short fontOutline[256 * 16]; /* derived name */
 
 /* the glyph re-expanded to 8 shorts */
-#ifdef ICO_HOST
 
 /* debug_makeBackImage zeroes 16 shorts per glyph and reads two past the
    eight, so the last glyph's pass runs 16 bytes beyond the array: on the
    EE into the next .bss object. The host gives it slack instead. */
 static unsigned short fontGlyph[256 * 8 + 8]; /* derived name */
-
-#else
-
-static unsigned short fontGlyph[256 * 8]; /* derived name */
-
-#endif
 
 static DbgGlyphPacket fontPacket[256]; /* derived name */
 
@@ -817,15 +806,11 @@ inline void ChangeGirlControlMode(int mode)
 void debug_Assert(char *fmt, ...)
 {
     char buf[256];
-#ifdef ICO_HOST
     va_list ap;
 
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-#else
-    vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 56);
-#endif
     debug_assertMessage("src/debug.c", 1392, buf);
     __assert("src/debug.c", 1392, "e");
     debug_assert("src/debug.c", 1393);
@@ -868,15 +853,11 @@ void debug_LogPrintf(const char *fmt, ...)
 {
     char buf[256];
     int info;
-#ifdef ICO_HOST
     va_list ap;
 
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-#else
-    vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 0x38);
-#endif
     info = strlen(buf);
     sceWrite(logFd, buf, info);
 }
@@ -899,7 +880,6 @@ inline void debug_SaveStartStageFile(int stage)
 
 inline int debug_TryToGetStartStage(void)
 {
-#ifdef ICO_HOST
     /* PC port (renderer wave 5, R5b): the developer key [dev] start_stage
        (docs/port/CONFIG.md), which host_config.c hands over as
        ICO_START_STAGE, takes the place of the development build's
@@ -918,9 +898,6 @@ inline int debug_TryToGetStartStage(void)
         return -1;
     }
     return (int)n;
-#else
-    return -1;
-#endif
 }
 
 static void debug_SaveDebugOptionFile(void)
@@ -1017,12 +994,10 @@ static int debug_GetDebugOption(void)
 
 void debug_SetDmaCallback(void)
 {
-#ifdef ICO_HOST
     /* PC port: the GIF DMA end interrupt latched EE timer 0 for the
        profiler bar (debug_CallbackGsFinish); the host has no DMA interrupts,
        so no handler is installed and drawTimerCount keeps its value. */
     return;
-#endif
     if ((int)dmaHandlerId != -1) {
         RemoveDmacHandler(1, dmaHandlerId);
     }
@@ -1111,7 +1086,6 @@ void debug_VariableInit(void)
     game_pause = 0;
     ChangeFieldCollisionDebugMode(0);
     ChangeGirlControlMode(debug_girl_pad_control);
-#ifdef ICO_HOST
     /* PC port (R6a): in developer mode, [dev] debug_option non-zero loads
        the option table the Debug Mode page saved (TRIANGLE), as the
        development build's start-up check of its option file did.  Off: the
@@ -1119,7 +1093,6 @@ void debug_VariableInit(void)
     if (ico_opt_developer_mode() && ico_opt_debug_option() != 0) {
         debug_GetDebugOption();
     }
-#endif
 }
 
 void debug_Init(void)
@@ -1149,29 +1122,12 @@ inline float debug_GetTimerSec(void)
     int v;
     float f2;
 
-#ifdef ICO_HOST
     return -1.0f; /* no EE timer 1 on the host */
-#else
-    if (*T1_MODE & 0x800) {
-        return -1.0f;
-    }
-    v = *T1_COUNT;
-    f2 = (float)(unsigned int)v;
-    return f2 / clock[*T1_MODE & 3] / 60.0f;
-#endif
 }
 
 inline float debug_GetTimerCount(void)
 {
-#ifdef ICO_HOST
-#ifdef ICO_HOST
     return -1.0f; /* no EE timer 1 on the host */
-#else
-    if ((*T1_MODE) & 0x800) {
-        return -1.0f;
-    }
-    return (float)(*(volatile unsigned int *)T1_COUNT);
-#endif
 }
 
 static void loadReport(char **dst, char *name, int size)
@@ -1179,12 +1135,6 @@ static void loadReport(char **dst, char *name, int size)
     debug_StdPrintfDummy(
         "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)", name,
         *dst, size);
-#else
-    if ((*T1_MODE) & 0x800) {
-        return -1.0f;
-    }
-    return (float)(*(volatile unsigned int *)T1_COUNT);
-#endif
 }
 
 int debug_Load(char **dst, char *name, int kind)
@@ -1204,118 +1154,66 @@ int debug_Load(char **dst, char *name, int kind)
     sceLseek(fd, 0, 0);
     sz = (size / 16 + 1) * 16;
     {
-#ifdef ICO_HOST
         /* the iosMallocDebug calls pass the source's own line numbers */
-#else
-        /* the line every arm prints once it has the file's address, a nested
-           function that reads dst, name and size from the enclosing frame;
-           the iosMallocDebug calls pass the source's own line numbers */
-        inline void loadReport(void)
-        {
-            debug_StdPrintfDummy(
-                "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)",
-                name, *dst, size);
-        }
-#endif
         switch (kind) {
         case 0:
         default:
             *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", 1958);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
             *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", 1965);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
             *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", 1973);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
             *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", 1982);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
             *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", 1991);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
             *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", 2000);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
             *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", 2007);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
             *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", 2014);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
             *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", 2019);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
             *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 2024);
-#ifdef ICO_HOST
             loadReport(dst, name, size);
-#else
-            loadReport();
-#endif
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
         }
@@ -1334,8 +1232,6 @@ typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived na
 /* the GIF tag debug_MakeFont copies ahead of each font packet, as
    debug_exception's fontTag */
 static GifTag debugFontTag = {0x2000400000008000LL, 0x51}; /* derived name */
-
-#ifdef ICO_HOST
 
 /* PC port (renderer wave 6, R6a): the glyph packets live in this buffer, not
    in the stage partition.  On the PS2 debug_Init (every stage_initialize,
@@ -1363,8 +1259,6 @@ static void *debugHostFontAlloc(int size)
     return p;
 }
 
-#endif
-
 /* clang-format off */
 static void debug_MakeFont(void)
 {
@@ -1372,11 +1266,7 @@ static void debug_MakeFont(void)
     struct { /* field names derived */ float v[4]; char *volatile ptr; } w; /* the cursor is re-read from the frame at every push */
     char *base;
     unsigned short *a, *b; unsigned short m0, m1; int i, j, k, n;
-#ifdef ICO_HOST
     debugHostFontUsed = 0; base = debugHostFontAlloc(16); w.ptr = base;
-#else
-    base = iosMallocDebug(ios_partition_seki, 1, "src/debug.c", 2069); w.ptr = base;
-#endif
     *ICO_POSTINC(int *, w.ptr) = 0x1400000C;
     *ICO_POSTINC(int *, w.ptr) = 0;
     *ICO_POSTINC(long long *, w.ptr) = 0;
@@ -1397,11 +1287,7 @@ static void debug_MakeFont(void)
 
 
             fontPacket[i].qwc = n + 3;
-#ifdef ICO_HOST
             w.ptr = fontPacket[i].packet = debugHostFontAlloc((n + 3) * 16);
-#else
-            w.ptr = fontPacket[i].packet = iosMallocDebug(ios_partition_seki, (n + 3) * 16, "src/debug.c", 2090);
-#endif
             *ICO_POSTINC(long long *, w.ptr) = 0;
             *ICO_POSTINC(int *, w.ptr) = 0;
             *ICO_POSTINC(int *, w.ptr) = ((n + 1) << 16) | 0x6C008000;
@@ -1669,7 +1555,6 @@ inline void debug_ClearFontWindow(void)
     char *p = (char *)fontLines;
     int i;
     p += 0x5B4;
-#ifdef ICO_HOST
     /* The EE loop starts at line 26, one past the 26-entry array, and writes
        a byte into whatever follows fontLines in .bss (alignment slack on the
        PS2). The host skips that out-of-range write; lines 0..25 clear as
@@ -1678,12 +1563,6 @@ inline void debug_ClearFontWindow(void)
         p -= 0x38;
         *p = 0;
     }
-#else
-    for (i = 26; i >= 0; i--) {
-        *p = 0;
-        p -= 0x38;
-    }
-#endif
     fontWindowLine = 0;
 }
 
@@ -1726,11 +1605,7 @@ void debug_FlushFont(void)
 
 inline int debug_CallbackGsFinish(int channel)
 {
-#ifdef ICO_HOST
     drawTimerCount = 0; /* no EE timer 0 on the host */
-#else
-    drawTimerCount = *T0_COUNT;
-#endif
     return 0;
 }
 
@@ -1768,8 +1643,6 @@ static DbgCol brainColHigh[1] = {{0xFF, 0x40, 0x40, 0xFF}}; /* derived name */
 
 static DbgCol brainColMax[1] = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
 
-#ifdef ICO_HOST
-
 static void draw_batsu(DbgPos *p)
 {
     DbgCol col = markCol[0];
@@ -1794,30 +1667,6 @@ static void draw_shikaku(DbgPos *p)
 
 static void debug_brainBar(void)
 {
-#else
-static void debug_brainBar(void)
-{
-    void draw_batsu(DbgPos * p)
-    {
-        DbgCol col = markCol[0];
-        DbgVtx v[4];
-
-        make_mark_points(v, p, 3);
-        gif_Line(&v[0].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[1].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-    }
-    void draw_shikaku(DbgPos * p)
-    {
-        DbgCol col = markCol[0];
-        DbgVtx v[4];
-
-        make_mark_points(v, p, 3);
-        gif_Line(&v[0].x, &v[1].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[1].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-        gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
-    }
-#endif
     DbgCol c0 = brainColLow[0];
     DbgCol c1 = brainColMid[0];
     DbgCol c2 = brainColHigh[0];
@@ -1940,12 +1789,9 @@ static DbgCol barScaleCol[1] = {{0xA0, 0xA0, 0xA0, 0xA0}}; /* derived name */
 static DbgCol barLabelCol[1] = {{0x80, 0x80, 0x80, 0x60}}; /* derived name */
 
 /* clang-format off */
-#ifdef ICO_HOST
 
 /* the time stamp of bar i, read by both bar loops */
 static int barTime(int i) { return debugBars[i].count; } /* derived name */
-
-#endif
 
 static void debug_DrawBar(void)
 {
@@ -1962,10 +1808,6 @@ static void debug_DrawBar(void)
     int i;
     int w;
     int len;
-#ifndef ICO_HOST
-    inline int barTime(void) { return debugBars[i].count; } /* derived name */ /* the time stamp of bar i, read by both bar loops */
-#endif
-
 
     flip = 0;
     scale = 1.0f / (270000.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
@@ -2013,11 +1855,7 @@ static void debug_DrawBar(void)
 
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
 
-#ifdef ICO_HOST
         int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
-#else
-        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
-#endif
 
         long long alpha;
 
@@ -2109,11 +1947,7 @@ static void debug_DrawBar(void)
 
     flip = 0;
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
-#ifdef ICO_HOST
         int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
-#else
-        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
-#endif
 
         int dpct;
         int pct;
@@ -2172,11 +2006,7 @@ inline void debug_SetBar(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type == 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
-#ifdef ICO_HOST
         p->count = 0; /* no EE timer 0 on the host */
-#else
-        p->count = *T0_COUNT;
-#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;
@@ -2194,11 +2024,7 @@ inline void debug_SetBar2(char *name, unsigned int col, char *file, int line)
     DebugBar *p = &debugBars[debugBarCount];
     if (debug_profile_type != 0 && debugBarCount != 0x400) {
         sprintf(p->name, "%8s", name);
-#ifdef ICO_HOST
         p->count = 0; /* no EE timer 0 on the host */
-#else
-        p->count = *T0_COUNT;
-#endif
         p->col.r = col >> 24;
         p->col.g = col >> 16;
         p->col.b = col >> 8;
@@ -2246,111 +2072,6 @@ inline void debug_ResetBar(void)
     texturetranssize = 0;
     debugBarCount = 0;
 }
-
-#ifdef ICO_HOST
-#ifndef ICO_HOST /* EE addresses as int (the snapshot's EE path) */
-
-static unsigned int *spix(int src, int px)
-{
-    return (unsigned int *)(px * 4 + src);
-}
-
-static int clip(int v)
-{
-    return v < 256 ? (v > -1 ? v : 0) : 255;
-}
-
-static unsigned int *dpix(int dst, int px, int py)
-{
-    return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
-}
-
-/* Halves a 32-bit snapshot with a 2x2 box filter. */
-static void debug_ResizeSnapShot(int dst, int src, int w, int h)
-{
-    int r, g, b, a;
-    int x, y, i, j;
-    int row;
-    unsigned char *p;
-
-    for (y = 0; y < h; y += 2) {
-        for (x = 0; x < w; x += 2) {
-            /* clang-format off */
-            r = 0; g = 0; b = 0; a = 0;
-            /* clang-format on */
-            for (i = 0; i < 2; i++) {
-                /* clang-format off */
-                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(src, x) + row); j < 2; j++) {
-                    /* clang-format on */
-                    r = r + p[0] * 0.25f;
-                    g = g + p[1] * 0.25f;
-                    b = b + p[2] * 0.25f;
-                    a = a + p[3] * 0.25f;
-                    p += 4;
-                }
-            }
-            r = clip(r);
-            g = clip(g);
-            b = clip(b);
-            a = clip(a);
-            *dpix(dst, x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
-        }
-    }
-    FlushCache(0);
-}
-
-#endif /* !ICO_HOST */
-#else
-
-/* Halves a 32-bit snapshot with a 2x2 box filter; the clamp and the
-   destination helper are nested functions. */
-static void debug_ResizeSnapShot(int dst, int src, int w, int h)
-{
-    int r, g, b, a;
-    int x, y, i, j;
-    int row;
-    unsigned char *p;
-
-    inline unsigned int *spix(int px)
-    {
-        return (unsigned int *)(px * 4 + src);
-    }
-    inline int clip(int v)
-    {
-        return v < 256 ? (v > -1 ? v : 0) : 255;
-    }
-    inline unsigned int *dpix(int px, int py)
-    {
-        return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
-    }
-
-    for (y = 0; y < h; y += 2) {
-        for (x = 0; x < w; x += 2) {
-            /* clang-format off */
-            r = 0; g = 0; b = 0; a = 0;
-            /* clang-format on */
-            for (i = 0; i < 2; i++) {
-                /* clang-format off */
-                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(x) + row); j < 2; j++) {
-                    /* clang-format on */
-                    r = r + p[0] * 0.25f;
-                    g = g + p[1] * 0.25f;
-                    b = b + p[2] * 0.25f;
-                    a = a + p[3] * 0.25f;
-                    p += 4;
-                }
-            }
-            r = clip(r);
-            g = clip(g);
-            b = clip(b);
-            a = clip(a);
-            *dpix(x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
-        }
-    }
-    FlushCache(0);
-}
-
-#endif
 
 static inline void debug_WriteTim2(int fd, int *img, int w, int h) /* derived name */
 {
@@ -2451,7 +2172,6 @@ int debug_SnapShot(int idx)
     if (debug_snapshot_size == 0) {
         return -1;
     }
-#ifdef ICO_HOST
     /* PC port (renderer wave 6, R6a): the PS2 stored the scene buffer
        (sceGsStoreImage of TBP 0x800) into EE memory at 0x2000000, tiled
        SnapSize x SnapSize frames and wrote a TIM2 or BMP to
@@ -2514,69 +2234,6 @@ int debug_SnapShot(int idx)
     fprintf(stderr, "debug: snapshot: unavailable in the headless build\n");
 #endif
     return 1;
-#else
-    mask = 1 << (debug_snapshot_size - 1);
-    debugBackGroundDisableFlag = 1;
-    if (snapFirst != 0) {
-        if (iosCdvdBackGroundMgrRunning != 0) {
-            return -1;
-        }
-        snapFirst = 0;
-    }
-    sceGsSyncPath(0, 0);
-    debug_StdPrintfDummy("Snap:%d:%p\n", idx, 0x2000000);
-    sceGsSetDefStoreImage(&si, 0x800, ScreenWidth / 64, 0, 0, 0, ScreenWidth, ScreenHeight);
-    FlushCache(0);
-    sceGsExecStoreImage(&si, (void *)0x2000000);
-    sceGsSyncPath(0, 0);
-    src = (int *)0x2000000;
-    FlushCache(0);
-    if (debug_snapshot_size < 5) {
-        if (debug_snapshot_size > 0) {
-            w = ScreenWidth;
-            h = ScreenHeight;
-            buf = (int *)(0x2000000 + size);
-            dst = buf + ((idx / mask) * (w * mask) + idx % mask);
-            for (y = 0; y < h; y++) {
-                for (i = 0; i < w; i++) {
-                    *dst = *src++;
-                    dst += mask;
-                }
-                dst += (mask - 1) * (mask * w);
-            }
-            if (idx == mask * mask - 1) {
-                for (i = 0;; i++) {
-                    if (debug_snapshot_format == 0) {
-                        sprintf(name, "snapshot/snap%07d.tm2", i);
-                    } else {
-                        sprintf(name, "snapshot/snap%07d.bmp", i);
-                    }
-                    fd = debugSceOpen(name, 1);
-                    debugSceClose(fd);
-                    if (fd < 0) {
-                        break;
-                    }
-                }
-                if (debug_snapshot_format == 0) {
-                    sprintf(name, "snapshot/snap%07d.tm2", i);
-                } else {
-                    sprintf(name, "snapshot/snap%07d.bmp", i);
-                }
-                fd = debugSceOpen(name, 0x602);
-                if (debug_snapshot_format == 0) {
-                    debug_WriteTim2(fd, buf, w * mask, h * mask);
-                } else {
-                    debug_WriteBMP(fd, w * mask, h * mask, (unsigned int *)buf);
-                }
-                if (debugSceClose(fd) < 0) {
-                    debug_StdPrintfDummy("debug_SnapShot:host file close error.\n");
-                }
-            }
-        }
-    }
-    dma_init();
-    return 1;
-#endif
 }
 
 void debug_DispQW(void *p, int size)
@@ -2624,8 +2281,6 @@ inline void debug_DispMatrix(int *m)
     }
 }
 
-#ifdef ICO_HOST
-
 void debug_Printf(int a, int b, unsigned int c, const char *fmt, ...)
 {
     char buf[256];
@@ -2647,26 +2302,6 @@ void debug_Printf2(int a, int b, unsigned int c, const char *fmt, ...)
     va_end(ap);
     debug_PrintFont(a, b, c, buf);
 }
-
-#else
-
-void debug_Printf(int a, int b, unsigned int c, const char *fmt, ...)
-{
-    char buf[256];
-    void *args = (char *)__builtin_next_arg(fmt) - 0x20;
-    vsprintf(buf, fmt, args);
-    debug_PrintFont(a, b, c, buf);
-}
-
-void debug_Printf2(int a, int b, unsigned int c, const char *fmt, ...)
-{
-    char buf[256];
-    void *args = (char *)__builtin_next_arg(fmt) - 0x20;
-    vsprintf(buf, fmt, args);
-    debug_PrintFont(a, b, c, buf);
-}
-
-#endif
 
 void debug_PrintFontWindow(int col, const char *fmt, ...)
 {
@@ -2675,7 +2310,6 @@ void debug_PrintFontWindow(int col, const char *fmt, ...)
     int nl = 0;
     int i;
 
-#ifdef ICO_HOST
     {
         va_list ap;
 
@@ -2683,9 +2317,6 @@ void debug_PrintFontWindow(int col, const char *fmt, ...)
         vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
     }
-#else
-    vsprintf(buf, fmt, (char *)__builtin_next_arg(fmt) - 0x30);
-#endif
     if (buf[0] == '\n') {
         fontWindowLine++;
         p = &buf[1];
@@ -2722,8 +2353,6 @@ inline void debug_ResizeFontWindowHeight(int val)
 
 inline void debug_SetBarDummy(void) {}
 
-#ifdef ICO_HOST
-
 /* PC port (R6a): the retail build compiled the development build's
    debug_Printf calls (the debug menu, its tools and a few status lines) to
    this empty function.  In developer mode it prints them through the debug
@@ -2742,12 +2371,6 @@ void debug_PrintfDummy(int x, int y, unsigned int col, const char *fmt, ...)
     debug_PrintFont(x, y, (int)col, buf);
 }
 
-#else
-
-void debug_PrintfDummy(int x, int y, unsigned int col, const char *fmt, ...) {}
-
-#endif
-
 void debug_PrintFontWindowDummy(int col, int fmt, ...) {}
 
 void debug_StdPrintfDummy(const char *fmt, ...)
@@ -2762,7 +2385,6 @@ void debug_PrintFontf(int x, int y, char *p, ...)
     char *f;
     char c;
     float v;
-#ifdef ICO_HOST
     va_list ap;
 
     va_start(ap, p);
@@ -2773,14 +2395,6 @@ void debug_PrintFontf(int x, int y, char *p, ...)
         va_end(ap);
         return;
     }
-#else
-    d = fontfLine;
-    va = (char *)__builtin_next_arg(p) - 0x28;
-    if (*p == 0) {
-        *d = 0;
-        return;
-    }
-#endif
     do {
         c = *p;
         if (c == '\n') {
@@ -2796,7 +2410,6 @@ void debug_PrintFontf(int x, int y, char *p, ...)
         } else {
             p++;
             switch (*p) {
-#ifdef ICO_HOST
             case 'd':
                 f = "%d";
                 d += sprintf(d, f, va_arg(ap, int));
@@ -2810,24 +2423,6 @@ void debug_PrintFontf(int x, int y, char *p, ...)
                 f = "%f";
                 d += sprintf(d, f, v);
                 break;
-#else
-            case 'd':
-                va += 8;
-                f = "%d";
-                d += sprintf(d, f, *(int *)(va - 8));
-                break;
-            case 'x':
-                va += 8;
-                f = "%x";
-                d += sprintf(d, f, *(int *)(va - 8));
-                break;
-            case 'f':
-                va += 8;
-                v = dptofp(*(double *)(va - 8));
-                f = "%f";
-                d += sprintf(d, f, v);
-                break;
-#endif
             default:
                 f = "debug_PrintFontf error\n";
                 debug_StdPrintfDummy(f);
@@ -2837,9 +2432,7 @@ void debug_PrintFontf(int x, int y, char *p, ...)
         p++;
     } while (*p != 0);
     *d = 0;
-#ifdef ICO_HOST
     va_end(ap);
-#endif
 }
 
 void debug_PrintMatrix(float *arg)
@@ -2857,7 +2450,6 @@ void debug_DispVu1FReg(int no, int mode)
     int i;
     float f[4];
     int buf[4];
-#ifdef ICO_HOST
     /* PC port: there is no VU1 to read; the dump prints nothing (its
        printf is the retail dummy) */
     (void)i;
@@ -2865,87 +2457,24 @@ void debug_DispVu1FReg(int no, int mode)
     (void)buf;
     (void)no;
     (void)mode;
-#else
-    if (mode != 0) {
-        if (no >= 0) {
-            __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x400));
-            __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-            __asm__ __volatile__("sqc2 $vf2, 0(%0)" : : "r"(f) : "memory");
-            debug_StdPrintfDummy("VF%02d:%f %f %f %f\n", no, f[0], f[1], f[2], f[3]);
-        } else {
-            __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(0x400));
-            for (i = 0; i < 32; i++) {
-                __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-                __asm__ __volatile__("sqc2 $vf2, 0(%0)" : : "r"(f) : "memory");
-                debug_StdPrintfDummy("VF%02d:%f %f %f %f\n", i, f[0], f[1], f[2], f[3]);
-            }
-        }
-    } else {
-        if (no >= 0) {
-            __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x400));
-            __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-            __asm__ __volatile__("sqc2 $vf2, 0(%0)" : : "r"(buf) : "memory");
-            debug_StdPrintfDummy("VF%02d:%8x %8x %8x %8x\n", no, buf[0], buf[1], buf[2], buf[3]);
-        } else {
-            __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(0x400));
-            for (i = 0; i < 32; i++) {
-                __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-                __asm__ __volatile__("sqc2 $vf2, 0(%0)" : : "r"(buf) : "memory");
-                debug_StdPrintfDummy("VF%02d:%8x %8x %8x %8x\n", i, buf[0], buf[1], buf[2], buf[3]);
-            }
-        }
-    }
-#endif
 }
 
 inline void debug_DispVu1IReg(int no)
 {
     int i;
     int buf[4];
-#ifdef ICO_HOST
     (void)i;
     (void)buf;
     (void)no;
-#else
-    if (no >= 0) {
-        __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x420));
-        __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-        __asm__ __volatile__("sqc2 $vf2, %0" : "=m"(buf) : : "memory");
-        debug_StdPrintfDummy("VI%02d:%08x %08x %08x %08x\n", no, buf[0], buf[1], buf[2], buf[3]);
-    } else {
-        __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(0x420));
-        for (i = 0; i < 16; i++) {
-            __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-            __asm__ __volatile__("sqc2 $vf2, %0" : "=m"(buf) : : "memory");
-            debug_StdPrintfDummy("VI%02d:%08x %08x %08x %08x\n", i, buf[0], buf[1], buf[2], buf[3]);
-        }
-    }
-#endif
 }
 
 inline void debug_DispVu1SReg(int no)
 {
     int i;
     int buf[4];
-#ifdef ICO_HOST
     (void)i;
     (void)buf;
     (void)no;
-#else
-    if (no >= 0) {
-        __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(no * 16 + 0x420));
-        __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-        __asm__ __volatile__("sqc2 $vf2, %0" : "=m"(buf) : : "memory");
-        debug_StdPrintfDummy("VS%02d:%08x %08x %08x %08x\n", no, buf[0], buf[1], buf[2], buf[3]);
-    } else {
-        __asm__ __volatile__("ctc2.ni %0, $vi1" : : "r"(0x420));
-        for (i = 0; i < 16; i++) {
-            __asm__ __volatile__("vlqi.xyzw $vf2, ($vi1++)");
-            __asm__ __volatile__("sqc2 $vf2, %0" : "=m"(buf) : : "memory");
-            debug_StdPrintfDummy("VS%02d:%08x %08x %08x %08x\n", i, buf[0], buf[1], buf[2], buf[3]);
-        }
-    }
-#endif
 }
 
 inline int gsResetFunc(int val)
@@ -3022,8 +2551,6 @@ static int debug_Mode(void)
 
     return ret;
 }
-
-#ifdef ICO_HOST
 
 /* PC port (renderer wave 6, R6a): the csv windows on a 64-bit host.
 
@@ -3210,153 +2737,6 @@ int debug_SelectCsvWindow(char *title, int x, int y, int rows, const void *base,
                          csvGetHost, 0);
 }
 
-#else
-
-int debug_SelectCsvWindowVal(char *title, int x, int y, int rows, int count, int *psel,
-                             int (*fn)(int, int), int arg)
-{
-    char buf[count][37];
-    int i;
-    for (i = 0; i < count; i++) {
-        if (fn != 0) {
-            int r = fn(i, arg);
-            sprintf(buf[i], "%3d %s", i, r);
-        } else {
-            sprintf(buf[i], "%3d", i);
-        }
-        if ((unsigned int)strlen(buf[i]) >= 0x26) {
-            buf[i][0x24] = 0;
-            debug_StdPrintfDummy("debug_SelectCsvWindowVal: func return string length over\n");
-        }
-    }
-    return debug_SelectCsvWindow(title, x, y, rows, buf, 37, 0, 0, count, psel);
-}
-
-/* the csv window's scroll counter */
-static int csvScroll = 0; /* derived name */
-
-inline int _debug_SelectCsvWindow(char *title, int x, int y, int rows, int base, int stride, int off,
-                           int deref, int n, int *psel, void (*getline)(), int (*colfunc)(int))
-{
-    char buf[256];
-    int sel;
-    int i;
-    int half;
-    int k;
-    int top;
-    int yy;
-    int len;
-    int v;
-    int col;
-
-    sel = *psel;
-    debug_PrintfDummy(x, y, 0xFFFFFF00u, "%s", title);
-    if ((pad[0].now & 2) == 0) {
-        if (pad[0].flags & 0x80) {
-            debug_font_flag ^= 2;
-        }
-        if (sel >= n) {
-            sel = n - 1;
-        }
-        if (pad[0].rep & 0x4000) {
-            sel++;
-            if (sel >= n) {
-                sel = 0;
-            }
-        }
-        if (pad[0].rep & 0x1000) {
-            sel--;
-            if (sel < 0) {
-                sel = n - 1;
-            }
-        }
-        if (n < rows) {
-            rows = n;
-        }
-        half = (int)(((float)rows - 0.5f) * 0.5f);
-        if (sel < half) {
-            k = sel;
-        } else if (n - (rows - half) < sel) {
-            k = rows - (n - sel);
-        } else {
-            k = half;
-        }
-        top = sel - k;
-        yy = y + 8;
-        for (i = top; i < top + rows; i++) {
-            if (i - top == k) {
-                col = 0xFF404000;
-            } else if (colfunc == 0) {
-                col = 0xFFFFFF00;
-            } else {
-                col = colfunc(i);
-            }
-            v = base + stride * i + off;
-            if (deref == 1) {
-                v = *(int *)v;
-            }
-            len = csvScroll;
-            getline(buf, i, v);
-            if (len >= 2) {
-                if (len >= 0x100) {
-                    len = 0xFF;
-                }
-                buf[len - 1] = -110;
-                buf[len] = 0;
-            } else {
-                buf[0] = 0;
-            }
-            debug_PrintfDummy(x, yy, col, "  %s", buf);
-            yy += 8;
-        }
-        if (csvScroll <= 0xFFFE) {
-            csvScroll += systemStatus[1];
-        }
-        *psel = sel;
-        if (pad[0].flags & 0x20) {
-            csvScroll = 0;
-            return 1;
-        } else if (pad[0].flags & 0x140) {
-            csvScroll = 0;
-            return -1;
-        }
-    }
-    return 0;
-}
-
-static void getLineBuffer(char *buf, int line, char *str)
-{
-    sprintf(buf, "%02d:%s", line, str);
-}
-
-inline int debug_SelectCsvWindowWithLine(char *title, int x, int y, int rows, const void *base, int stride,
-                                  int off, int deref, int n, int *psel)
-{
-    return _debug_SelectCsvWindow(title, x, y, rows, (int)base, stride, off, deref, n, psel,
-                                      getLineBuffer, 0);
-}
-
-inline int debug_SelectCsvWindowWithLineColor(char *title, int x, int y, int rows, const void *base, int stride,
-                                       int off, int deref, int n, int *psel, int (*colfunc)(int))
-{
-    return _debug_SelectCsvWindow(title, x, y, rows, (int)base, stride, off, deref, n, psel,
-                                      getLineBuffer, colfunc);
-}
-
-static void getBuffer(char *buf)
-{
-    sprintf(buf, "%s");
-}
-
-int debug_SelectCsvWindow(char *title, int x, int y, int rows, const void *base, int stride, int off,
-                          int deref, int n, int *psel)
-{
-    return _debug_SelectCsvWindow(title, x, y, rows, (int)base, stride, off, deref, n, psel,
-                                      getBuffer, 0);
-}
-
-#endif
-
 static int debug_SelectStageMain(int ret, int stage)
 {
     if (systemStatus[6] != 0) {
@@ -3418,8 +2798,6 @@ static int formatState = 0; /* derived name */
 
 static int formatBlink = 0; /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: debug_MemoryCard calls its entries with &mc (layout_action.h),
    which an int parameter cannot hold on a 64-bit host: the format, unformat
    and save-number entries use the global directly */
@@ -3429,9 +2807,6 @@ static McMgr *debugHostMc(void)
 }
 
 #define DEBUG_MC_PORT debugHostMc()
-#else
-#define DEBUG_MC_PORT port
-#endif
 
 inline int debug_mcFormat(int port)
 {
@@ -3442,22 +2817,14 @@ inline int debug_mcFormat(int port)
         if (r != 1) {
             return r;
         }
-#ifdef ICO_HOST
         iosMcFormat(DEBUG_MC_PORT);
-#else
-        iosMcFormat(port);
-#endif
         formatState++;
         break;
     case 1:
         if (formatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now formatting");
         }
-#ifdef ICO_HOST
         if (iosMcSync(DEBUG_MC_PORT) != 0) {
-#else
-        if (iosMcSync(port) != 0) {
-#endif
             formatState++;
         }
         break;
@@ -3481,22 +2848,14 @@ inline int debug_mcUnformat(int port)
         if (r != 1) {
             return r;
         }
-#ifdef ICO_HOST
         iosMcUnformat(DEBUG_MC_PORT);
-#else
-        iosMcUnformat(port);
-#endif
         unformatState++;
         break;
     case 1:
         if (unformatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now unformatting");
         }
-#ifdef ICO_HOST
         if (iosMcSync(DEBUG_MC_PORT) != 0) {
-#else
-        if (iosMcSync(port) != 0) {
-#endif
             unformatState++;
         }
         break;
@@ -3613,9 +2972,7 @@ static int debug_selectFile(McMgr *mc)
 
 inline void *debug_saveNumFunc(int no, void *mc)
 {
-#ifdef ICO_HOST
     mc = debugHostMc(); /* the int argument cannot carry the pointer */
-#endif
     if ((1 << no) & ((McMgr *)mc)->mask) {
         return "SAVED";
     }
@@ -3653,11 +3010,7 @@ static int debug_mcSaveMainBlock(McMgr *mc)
         }
         r = debug_SelectCsvWindowVal("SAVE NO.", 80, 70, 10, 10, &mc->fileNo,
                                      (int (*)(int, int))debug_saveNumFunc,
-#ifdef ICO_HOST
                                      0);
-#else
-                                     (int)mc);
-#endif
         if (r > 0) {
             r = 0;
             saveState++;
@@ -3728,11 +3081,7 @@ static int debug_mcLoadMainBlock(McMgr *mc)
         }
         r = debug_SelectCsvWindowVal("SAVE NO.", 80, 70, 10, 10, &mc->fileNo,
                                      (int (*)(int, int))debug_saveNumFunc,
-#ifdef ICO_HOST
                                      0);
-#else
-                                     (int)mc);
-#endif
         if (r > 0) {
             r = 0;
             loadState++;
@@ -3932,11 +3281,7 @@ int debug_SETest(int reset)
     r = debug_SelectCsvWindowWithLineColor("SE LIST", 0xA, 0x3C, 0xA, seDef, 0x3C, 0,
                                                0, 0x592, &seSelect, debug_SETest_color);
     if (r > 0) {
-#ifdef ICO_HOST
         seHandle = soundSeDefPlay(seSelect, 0, (float *)(GOBJ_SUB(boyGObj)->nodeMtx + 0x30), 1);
-#else
-        seHandle = soundSeDefPlay(seSelect, 0, GOBJ_SUB(boyGObj)->nodeMtx + 0x30, 1);
-#endif
         return 0;
     }
     if (r < 0) {
@@ -4256,7 +3601,6 @@ static int debug_DispBox(int on)
     }
     CameraSetMode(1);
     DebugDispBox(boxCentre, boxWidth);
-#ifdef ICO_HOST /* the strings as pointers */
     if (debug_font_flag & 1) {
         debug_Printf(10, 150, 0xFFFFFF00u, "[%s] %4d %4d %4d", "center", (int)boxCentre[0],
                      (int)boxCentre[1], (int)boxCentre[2]);
@@ -4265,16 +3609,6 @@ static int debug_DispBox(int on)
         debug_Printf(10, 160, 0xFFFFFF00u, "[%s] %4d %4d %4d", " width", (int)boxWidth[0],
                      (int)boxWidth[1], (int)boxWidth[2]);
     }
-#else
-    if (debug_font_flag & 1) {
-        debug_Printf(10, 150, 0xFFFFFF00u, "[%s] %4d %4d %4d", (int)"center", (int)boxCentre[0],
-                     (int)boxCentre[1], (int)boxCentre[2]);
-    }
-    if (debug_font_flag & 1) {
-        debug_Printf(10, 160, 0xFFFFFF00u, "[%s] %4d %4d %4d", (int)" width", (int)boxWidth[0],
-                     (int)boxWidth[1], (int)boxWidth[2]);
-    }
-#endif
     return (pad[0].flags & 0x40) ? -1 : 0;
 }
 
@@ -4332,24 +3666,10 @@ static int debug_DispBall(int on)
         break;
     }
     for (i = 0; i < num; i++) {
-#ifdef ICO_HOST /* the name as a pointer */
         if (debug_font_flag & 1) {
             debug_Printf(10, i * 10 + 80, 0xFFFFFF00u, i == dispBallRow ? ">>%8s = %d\n" : "  %8s = %d\n",
                          list.v[i].name, (int)*list.v[i].val);
         }
-#else
-        if (i == dispBallRow) {
-            if (debug_font_flag & 1) {
-                debug_Printf(10, i * 10 + 80, 0xFFFFFF00u, ">>%8s = %d\n", (int)list.v[i].name,
-                             (int)*list.v[i].val);
-            }
-        } else {
-            if (debug_font_flag & 1) {
-                debug_Printf(10, i * 10 + 80, 0xFFFFFF00u, "  %8s = %d\n", (int)list.v[i].name,
-                             (int)*list.v[i].val);
-            }
-        }
-#endif
     }
     CameraSetMode(1);
     if (boyGObj != 0) {
@@ -4430,9 +3750,6 @@ static int debug_CollisionTest(int reset)
     if (collisionRay.wall.elem != 0) {
         wall.o = collisionRay.wall.o;
         wall.elem = collisionRay.wall.elem;
-#ifndef ICO_HOST /* a host WallCfg (two pointers) does not fit a VECTOR */
-        *(WallCfg *)&mv = wall;
-#endif
         gif_StartPacketPri(11);
         gif_SetZWrite(0);
         gif_SetZTest(0);
@@ -4441,11 +3758,7 @@ static int debug_CollisionTest(int reset)
         MatrixDrive_TransMatrixV(collisionRay.pt[2]);
         prim_DispWireSphere(5.0f, (void *)&collisionWallCol, 8, 4);
         gif_EndPacket();
-#ifdef ICO_HOST
         DebugDisp1Collision(&wall);
-#else
-        DebugDisp1Collision(&mv);
-#endif
         debug_PrintfDummy(80, 180, 0xFFFFFF00u, "HIT: %p,%d", collisionRay.wall.o.obj,
                           collisionRay.wall.o.node);
         debug_PrintfDummy(80, 190, 0xFFFFFF00u, "ATTR: %x",
@@ -4623,7 +3936,6 @@ static int sceFd = -1; /* derived name */
 
 inline int debugSceOpen(const char *name, int mode)
 {
-#ifdef ICO_HOST
     /* PC port (R6a): in developer mode the development kit's host0:, which
        port/data/sifdev_host.c maps to <pref>/dev/ (the debug option file,
        the start stage, snapshots, way_tool.c's and camera-editor.c's files,
@@ -4633,7 +3945,6 @@ inline int debugSceOpen(const char *name, int mode)
         snprintf(sceOpenPath, sizeof(sceOpenPath), "host0:%s", name);
         return sceFd = sceOpen((unsigned char *)sceOpenPath, mode);
     }
-#endif
     sprintf(sceOpenPath, "%s%s;1", "cdrom0:\\", name);
     return sceFd = sceOpen(sceOpenPath, mode);
 }

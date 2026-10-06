@@ -61,7 +61,6 @@ void TestDispChainAnimation(ChainSet *sys)
             DrawLine(p, q, col, 0);
         }
         for (j = 0; j < 5; j++) {
-#ifdef ICO_HOST
             /* the EE offsets 0x10 + j * 0x50, 0x30 and 0x80 of the node are
                ex[j].w, ex[0].v1 and ex[1].v1 (ChainNode's three pointers
                move ex on the host) */
@@ -70,13 +69,6 @@ void TestDispChainAnimation(ChainSet *sys)
             if (0.0f <= nd->ex[j].w) {
                 DrawLine(&nd->ex[0].v1, &nd->ex[1].v1, &c0, 0);
             }
-#else
-            char *base = (char *)&sys->nodes[i];
-            char *w = base + j * 0x50;
-            if (0.0f <= *(float *)(w + 0x10)) {
-                DrawLine(base + 0x30, base + 0x80, &c0, 0);
-            }
-#endif
         }
     }
     gif_EndPacket();
@@ -94,8 +86,6 @@ static __inline__ void chainDebugOld(VECTOR *old) /* derived name */
     DrawLine((char *)old[0], (char *)old[1], (LineColor *)&chainLineColor1, 0);
 #endif
 }
-
-#ifdef ICO_HOST
 
 /* GetChainAnimation's constraint passes.  In the original, bindExWeight,
    bind2 and calc2 were GNU nested functions inside its node loop; they are
@@ -290,8 +280,6 @@ static void calc2(ChainStepCtx *c, float (*pp)[4], int lo, int hi)
     sceVu0ApplyMatrix(c->pts, c->mtx + c->no * 4, c->cp->root);
 }
 
-#endif
-
 void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
 {
     VECTOR dv;
@@ -359,7 +347,6 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
         }
 
         {
-#ifdef ICO_HOST
             ChainStepCtx ctx;
 
             ctx.sys = sys;
@@ -377,186 +364,6 @@ void GetChainAnimation(ChainSet *sys, GObj *obj, float (*mtx)[4])
             calc2(&ctx, pts, 0, n - 1);
             calc2(&ctx, pts, 0, n - 1);
             calc2(&ctx, pts, 0, n - 1);
-#else
-            void bindExWeight(char *ex, void *ev, float t)
-            {
-                VECTOR va;
-                VECTOR vb;
-                int id;
-                int id1;
-                float ll;
-                float ka;
-                float kb;
-                float ka2;
-                float kb2;
-                float cl;
-                float wa;
-                float wb;
-                float l;
-
-                id = (int)*(float *)ex;
-                id1 = id + 1;
-                ll = *(float *)(ex + 0x40) * *(float *)(ex + 0x40);
-                ka = t * (*(float *)ex - (float)(int)*(float *)ex);
-                kb = t * (1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-                ka2 = ka * ka;
-                kb2 = kb * kb;
-                cl = sys->cfg[i].pm.weight;
-
-                wa = cl;
-                wb = *(float *)(ex + 0x44);
-
-                sceVu0InterVector(&vb, pts[id], pts[id1],
-                                  1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-
-                sceVu0SubVector(&dv, &vb, ex + 0x20);
-                l = VectorLengthSquare(&dv);
-                if (ll < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, *(float *)(ex + 0x40) / _Sqrt(l));
-                    AddVectorXYZ(ex + 0x10, ex + 0x20, &dv);
-
-                    SubVectorXYZ(&dv, ex + 0x10, pts[id]);
-                    l = VectorLengthSquare(&dv);
-                    if (ka2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                        AddVectorXYZ(&dv, pts[id], &dv);
-                    } else {
-                        CopyVector(&dv, ex + 0x10);
-                        wa = wb;
-                    }
-
-                    SubVectorXYZ(&va, ex + 0x10, pts[id1]);
-                    l = VectorLengthSquare(&va);
-                    if (kb2 < l) {
-                        sceVu0ScaleVectorXYZ(&va, &va, kb / _Sqrt(l));
-                        AddVectorXYZ(&va, pts[id1], &va);
-                    } else {
-                        CopyVector(&va, ex + 0x10);
-                        cl = wb;
-                    }
-
-                    sceVu0ScaleVector(&dv, &dv, wa / (cl + wa));
-                    sceVu0ScaleVector(&va, &va, cl / (cl + wa));
-                    AddVectorXYZ(&dv, &dv, &va);
-
-                    SubVectorXYZ(&dv, &dv, ex + 0x10);
-                    sceVu0ScaleVector(&dv, &dv, 1.0f - wb / (cl + wa + wb));
-                    AddVectorXYZ(ex + 0x10, ex + 0x10, &dv);
-
-                    SubVectorXYZ(&dv, pts[id], ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (ka2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                        AddVectorXYZ(pts[id], ex + 0x10, &dv);
-                    }
-
-                    SubVectorXYZ(&dv, pts[id1], ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (kb2 < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, kb / _Sqrt(l));
-                        AddVectorXYZ(pts[id1], ex + 0x10, &dv);
-                    }
-
-                    sceVu0SubVector(&dv, ex + 0x20, ex + 0x10);
-                    l = VectorLengthSquare(&dv);
-                    if (ll < l) {
-                        sceVu0ScaleVectorXYZ(&dv, &dv, *(float *)(ex + 0x40) / _Sqrt(l));
-                        sceVu0AddVector(ex + 0x20, ex + 0x10, &dv);
-                    }
-                }
-                sceVu0InterVector(ex + 0x10, pts[id], pts[id1],
-                                  1.0f - (*(float *)ex - (float)(int)*(float *)ex));
-            }
-
-            void bind2(float (*pp)[4], int id, int ip, int in, float t)
-            {
-                float ka;
-                float kb;
-                float ka2;
-                float kb2;
-                float cl;
-                float wa;
-                float wb;
-                float l;
-
-                ka = (float)(id - ip < 0 ? -(id - ip) : id - ip) * t;
-                kb = (float)(id - in < 0 ? -(id - in) : id - in) * t;
-                ka2 = ka * ka;
-                kb2 = kb * kb;
-                cl = sys->cfg[i].pm.weight;
-
-                wa = cl;
-                wb = cl;
-
-                SubVectorXYZ(&dv, pp[id], pp[ip]);
-                l = VectorLengthSquare(&dv);
-                if (ka2 < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                    AddVectorXYZ(&dv, pp[ip], &dv);
-                } else {
-                    CopyVector(&dv, pp[id]);
-                    cl = wb;
-                }
-
-                SubVectorXYZ(&tv, pp[id], pp[in]);
-                l = VectorLengthSquare(&tv);
-                if (kb2 < l) {
-                    sceVu0ScaleVectorXYZ(&tv, &tv, kb / _Sqrt(l));
-                    AddVectorXYZ(&tv, pp[in], &tv);
-                } else {
-                    CopyVector(&tv, pp[id]);
-                    cl = wb;
-                }
-
-                sceVu0ScaleVector(&dv, &dv, wa / (cl + wa));
-                sceVu0ScaleVector(&tv, &tv, cl / (cl + wa));
-                AddVectorXYZ(&dv, &dv, &tv);
-
-                SubVectorXYZ(&dv, &dv, pp[id]);
-                sceVu0ScaleVector(&dv, &dv, 1.0f - wb / (cl + wa + wb));
-                AddVectorXYZ(pp[id], pp[id], &dv);
-
-                SubVectorXYZ(&dv, pp[ip], pp[id]);
-                l = VectorLengthSquare(&dv);
-                if (ka < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, ka / _Sqrt(l));
-                }
-                AddVectorXYZ(pp[ip], pp[id], &dv);
-
-                SubVectorXYZ(&dv, pp[in], pp[id]);
-                l = VectorLengthSquare(&dv);
-                if (kb < l) {
-                    sceVu0ScaleVectorXYZ(&dv, &dv, kb / _Sqrt(l));
-                }
-                AddVectorXYZ(pp[in], pp[id], &dv);
-            }
-
-            void calc2(float (*pp)[4], int lo, int hi)
-            {
-                int m;
-                int q;
-
-                sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
-                for (m = 0; m < 5; m++) {
-                    if (0.0f <= (sys->nodes + i)->ex[m].w) {
-                        bindExWeight((char *)&(sys->nodes + i)->ex[m], &ew[m], cp->step);
-                    }
-                }
-                for (m = 0; m < n; m++) {
-                    int mp = m + 1;
-                    q = n - mp;
-                    bind2(pp, m, m - 1 < 0 ? 0 : m - 1, mp < n ? mp : n - 1, cp->step);
-                    bind2(pp, q, q - 1 < 0 ? 0 : q - 1, q + 1 < n ? q + 1 : n - 1, cp->step);
-                }
-                chainDebugOld(old);
-                sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
-            }
-
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
-            calc2(pts, 0, n - 1);
-#endif
         }
 
         sceVu0ApplyMatrix(pts, mtx + no * 4, cp->root);
@@ -612,7 +419,6 @@ static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived na
     float d = plane_distance(p, plane);
 
     if (d < 0.0f) {
-#ifdef ICO_HOST
         _ScaleVector(&tv, (void *)plane, d);
         _SubVectorXYZ(p, p, &tv);
     }
@@ -628,11 +434,6 @@ static __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived nam
     float cc = c * c;
 
     return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
-#else
-        _ScaleVector(&tv, plane, d);
-        _SubVectorXYZ(p, p, &tv);
-    }
-#endif
 }
 
 /* The sixth parameter is the wall count, which the function recomputes from
@@ -749,18 +550,6 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
             }
         }
     } else {
-#ifndef ICO_HOST
-        /* the law of cosines on a triangle whose sides are a, b and c,
-           handed straight to the arc-cosine table */
-        __inline__ int arcCosOfTriangle(float a, float b, float c) /* derived name */
-        {
-            float aa = a * a;
-            float bb = b * b;
-            float cc = c * c;
-
-            return GetTableArcCos((aa + bb - cc) / ((a + a) * b));
-        }
-#endif
         for (i = 0; i < n0; i++) {
             float len = *(float *)(pts + i * 48 + 4);
             float lim = len * len;
@@ -837,20 +626,11 @@ void GetClothAnimation(VECTOR **pos, VECTOR **vel, GObj *obj, void *m, ClothCfg 
     for (n = 0; n < nwall; n++) {
         /* the wall owner's sub-record, then the query for its n-th wall
            plane */
-#ifdef ICO_HOST
         FcColl *fc = (FcColl *)GOBJ_SUB(wallOwner)->colData;
         WallCfg q = {{wallOwner, 0}, ICO_EEPTR(char *, fc->wcl) + n * 80};
-#else
-        int sub = *(int *)(wallOwner + 0x15C),
-            q[3] = {wallOwner, 0, *(int *)(*(int *)(sub + 0x70) + 0x10) + n * 80};
-#endif
         VECTOR pl;
 
-#ifdef ICO_HOST
         GetGlobalWallPlane(&pl.x, &q);
-#else
-        GetGlobalWallPlane(&pl.x, (WallCfg *)q);
-#endif
         for (i = 0; i < n0; i++) {
             for (j = 1; j < nx; j++) {
                 pushInsidePlane(((char **)pos)[i] + j * 16, &pl);
@@ -889,7 +669,6 @@ static __inline__ void clothFixDebug(ClothFixPoint *fix) /* derived name */
 #ifdef DEBUG
     DrawLine((char *)fix->v0, (char *)fix->v1, (LineColor *)&chainLineColor0, 0);
 #endif
-#ifdef ICO_HOST
 }
 
 /* GetClothAnimationFix4Points's row and column passes.  In the original they
@@ -937,7 +716,6 @@ static void xTension(VECTOR **pa, int nx, int x)
         interHalf(&pa[y][x], &pa[y + 1][x], &pa[y - 1][x]);
         interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
     }
-#endif
 }
 
 void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *mtx)
@@ -972,60 +750,12 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
     _ApplyMatrix(&pa[nx - 1][ny - 1], mtx, &q[3].v1);
 
     {
-#ifndef ICO_HOST
-        void yTension(int y)
-        {
-            __inline__ void interHalf(VECTOR * d, VECTOR * a, VECTOR * b) /* derived name */
-            {
-                _InterVectorXYZ(d, a, b, 0.5f);
-            }
-            VECTOR *r;
-            int x;
-            int xp;
-            int m;
-            int mp;
-            int mm;
-
-            r = pa[y];
-            clothFixDebug(q);
-            for (x = 1; x < ny - 1; x++) {
-                xp = x + 1;
-                m = ny - xp;
-                mp = m + 1;
-                mm = m - 1;
-                interHalf(&r[x], &r[x + 1], &r[x - 1]);
-                interHalf(&r[m], &r[mp], &r[mm]);
-            }
-        }
-        void xTension(int x)
-        {
-            __inline__ void interHalf(VECTOR * d, VECTOR * a, VECTOR * b) /* derived name */
-            {
-                _InterVectorXYZ(d, a, b, 0.5f);
-            }
-            int y;
-            int yp;
-            int m;
-            int mp;
-            int mm;
-
-            for (y = 1; y < nx - 1; y++) {
-                yp = y + 1;
-                m = nx - yp;
-                mp = m + 1;
-                mm = m - 1;
-                interHalf(&pa[y][x], &pa[y + 1][x], &pa[y - 1][x]);
-                interHalf(&pa[m][x], &pa[mp][x], &pa[mm][x]);
-            }
-        }
-#endif
         VECTOR rv;
         VECTOR rt;
         VECTOR wp;
         VECTOR *wv;
         int n;
 
-#ifdef ICO_HOST
         yTension(pa, q, ny, 0);
         yTension(pa, q, ny, nx - 1);
         xTension(pa, nx, 0);
@@ -1035,17 +765,6 @@ void GetClothAnimationFix4Points(VECTOR **pa, VECTOR **pv, ClothCfg *cfg, void *
         }
         for (n = 1; n < ny - 1; n++) {
             xTension(pa, nx, n);
-#else
-        yTension(0);
-        yTension(nx - 1);
-        xTension(0);
-        xTension(ny - 1);
-        for (n = 1; n < nx - 1; n++) {
-            yTension(n);
-        }
-        for (n = 1; n < ny - 1; n++) {
-            xTension(n);
-#endif
         }
 
         wv = (VECTOR *)GetWindVector(&wp.x, &pa[0]->x);
@@ -1109,22 +828,7 @@ static __inline__ void getCrossPoint_i(void *out, void *seg, void *plane) /* der
 /* the squared XZ length, getXZLengthSquare's sequence */
 static __inline__ float xzLengthSquare(const void *p) /* derived name */
 {
-#ifdef ICO_HOST
-#ifdef ICO_HOST
     return ico_xz_length_square(p);
-#else
-    float d;
-    /* one asm block in plane_distance's style, without a memory clobber */
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
-                         "vmul.xz $vf4, $vf4, $vf4\n\t"
-                         "vaddz.x $vf4, $vf4, $vf4z\n\t"
-                         "qmfc2.ni $2, $vf4\n\t"
-                         "mtc1 $2, %0"
-                         : "=f"(d)
-                         : "r"(p)
-                         : "$2");
-    return d;
-#endif
 }
 
 /* tests both ends of the segment p against one plane; nested in
@@ -1144,37 +848,6 @@ static int clipCylinderCollision(char *p, void *pt)
         return -1;
     }
     if (bothOverThePlane(p, clipPlane[1])) {
-#else
-    float d;
-    /* one asm block in plane_distance's style, without a memory clobber */
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
-                         "vmul.xz $vf4, $vf4, $vf4\n\t"
-                         "vaddz.x $vf4, $vf4, $vf4z\n\t"
-                         "qmfc2.ni $2, $vf4\n\t"
-                         "mtc1 $2, %0"
-                         : "=f"(d)
-                         : "r"(p)
-                         : "$2");
-    return d;
-}
-
-/* bothOverThePlane, nested before `d`, tests both ends of the segment p
-   against one plane */
-static int clipCylinderCollision(char *p, void *pt)
-{
-    __inline__ int bothOverThePlane(const void *pl) /* derived name */
-    {
-        if (checkOverThePlane_i(p, pl) && checkOverThePlane_i(p + 0x10, pl))
-            return 1;
-        return 0;
-    }
-    float d[4];
-
-    if (bothOverThePlane(clipPlane[0])) {
-        return -1;
-    }
-    if (bothOverThePlane(clipPlane[1])) {
-#endif
         return -1;
     }
     sceVu0SubVector(d, p, p + 0x10);
@@ -1586,104 +1259,29 @@ static float *procSinZX = &procMatrix[2][0]; /* derived name */
 
 static __inline__ float fSqrtInv_i(float x) /* derived name */
 {
-#ifdef ICO_HOST
     return ps2_rsqrt(1.0f, x);
-#else
-    float r;
-
-    __asm__ __volatile__("mfc1 $8, %1\n\t"
-                         "qmtc2.ni $8, $vf4\n\t"
-                         "vrsqrt Q, $vf0w, $vf4x\n\t"
-                         "vwaitq\n\t"
-                         "cfc2.ni $2, $vi22\n\t"
-                         "mtc1 $2, %0"
-                         : "=f"(r)
-                         : "f"(x)
-                         : "$2", "$8");
-    return r;
-#endif
 }
 
 static __inline__ float xzInvLength_i(const void *v) /* derived name */
 {
-#ifdef ICO_HOST
     return ps2_rsqrt(1.0f, ico_xz_length_square(v));
-#else
-    float r;
-
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
-                         "vmul.xz $vf4, $vf4, $vf4\n\t"
-                         "vaddz.x $vf4, $vf4, $vf4z\n\t"
-                         "vrsqrt Q, $vf0w, $vf4x\n\t"
-                         "vwaitq\n\t"
-                         "cfc2.ni $2, $vi22\n\t"
-                         "mtc1 $2, %0"
-                         : "=f"(r)
-                         : "r"(v)
-                         : "$2");
-    return r;
-#endif
 }
 
 static __inline__ void scaleVectorXZ_i(void *d, const void *s, float k) /* derived name */
 {
-#ifdef ICO_HOST
     ico_scale_xz(d, s, k);
-#else
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
-                         "mfc1 $8, %2\n\t"
-                         "qmtc2.ni $8, $vf5\n\t"
-                         "vmulx.xz $vf4, $vf4, $vf5x\n\t"
-                         "sqc2 $vf4, 0x0(%0)"
-                         :
-                         : "r"(d), "r"(s), "f"(k)
-                         : "$8");
-#endif
 }
 
 static __inline__ float subAndGetInvLength_i(void *d, const void *a,
                                              const void *b) /* derived name */
 {
-#ifdef ICO_HOST
     return ico_sub_inv_length(d, a, b);
-#else
-    float inv;
-
-    __asm__ __volatile__("lqc2 $vf1, 0x0(%1)\n\t"
-                         "lqc2 $vf2, 0x0(%2)\n\t"
-                         "vsub.xyzw $vf4, $vf1, $vf2\n\t"
-                         "vmul.xyz $vf3, $vf4, $vf4\n\t"
-                         "vaddy.x $vf3, $vf3, $vf3y\n\t"
-                         "vaddz.x $vf3, $vf3, $vf3z\n\t"
-                         "vrsqrt Q, $vf0w, $vf3x\n\t"
-                         "sqc2 $vf4, 0x0(%3)\n\t"
-                         "vwaitq\n\t"
-                         "cfc2.ni $2, $vi22\n\t"
-                         "mtc1 $2, %0"
-                         : "=f"(inv)
-                         : "r"(a), "r"(b), "r"(d)
-                         : "$2");
-    return inv;
-#endif
 }
 
 static __inline__ void scaleAndAddVectorXYZ_i(void *d, const void *a, const void *b,
                                               float k) /* derived name */
 {
-#ifdef ICO_HOST
     ico_scale_add_xyz(d, a, b, k);
-#else
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%1)\n\t"
-                         "lqc2 $vf5, 0x0(%2)\n\t"
-                         "mfc1 $8, %3\n\t"
-                         "qmtc2.ni $8, $vf6\n\t"
-                         "vmulx.xyz $vf5, $vf5, $vf6x\n\t"
-                         "vadd.xyz $vf4, $vf4, $vf5\n\t"
-                         "sqc2 $vf4, 0x0(%0)"
-                         :
-                         : "r"(d), "r"(a), "r"(b), "f"(k)
-                         : "$8");
-#endif
 }
 
 static __inline__ void tensionMove_i(void *out, const void *a, const void *b, float k,
@@ -1704,7 +1302,6 @@ static __inline__ void setClipCylinder(ClothPoint *pt) /* derived name */
     clipPlane[0][0][3] = pt->bottom;
     clipPlane[1][0][3] = -pt->top;
     cylinderRadiusSq = pt->radius * pt->radius;
-#ifdef ICO_HOST
 }
 
 /* getCloth4D's collision step.  In the original, proc (and hit inside it)
@@ -1803,7 +1400,6 @@ static int proc(Cloth4DProcCtx *c, Prim3DVec *p, Prim3DVec *q, Prim3DVec *qa, Pr
         return ret;
     tensionMove_i(p, p, q, *c->tk, *c->tlim);
     return -1;
-#endif
 }
 
 static void getCloth4D(Cloth4D *c, int **rows)
@@ -1921,7 +1517,6 @@ static void getCloth4D(Cloth4D *c, int **rows)
     }
 #endif
     {
-#ifdef ICO_HOST
         Cloth4DProcCtx pc;
 
         pc.cnt = cnt;
@@ -1933,85 +1528,6 @@ static void getCloth4D(Cloth4D *c, int **rows)
         pc.t1 = &t1;
         pc.tk = &tk;
         pc.tlim = &tlim;
-#else
-        /* proc reads only p, q and k.  Each caller also passes own, the
-           owner of q's point that its test has just loaded. */
-        int proc(Prim3DVec * p, Prim3DVec * q, Prim3DVec * qa, Prim3DVec * qb, float k, int own)
-        {
-            __inline__ int hit(int i) /* derived name */
-            {
-                VECTOR a;
-                VECTOR b;
-                float r2;
-                float r;
-
-                if (checkOverThePlane_i(p, &vG[i]))
-                    return 0;
-                if (checkOverThePlane_i(p, &vH[i]))
-                    return 0;
-                r = pts[i].radius;
-                r2 = r * r;
-                if (t1 < distance_squared(p, q)) {
-                    tensionMove_i(p, p, q, tk, tlim);
-                    _ApplyMatrix(&a, mF[i], p);
-                    if (xzLengthSquare(&a) < r2) {
-                        float rr = (r + tk) * (r + tk);
-                        float len;
-
-                        _ApplyMatrix(&b, mF[i], q);
-                        len = xzLengthSquare(&b);
-                        if (len < rr) {
-                            float d = r2 - t1;
-                            float inv;
-                            float e;
-                            float s;
-                            float ir;
-                            float sy;
-                            float sn;
-
-                            inv = fSqrtInv_i(len);
-                            e = (len + d) * pts[i].invDiameter * inv;
-                            s = FSqrt(1.0f - e * e);
-                            ir = r * inv;
-                            sy = a.y;
-                            *procCosXX = *procCosZZ = e * ir;
-                            sn = k * pts[i].turn * s * ir;
-                            *procSinXZ = sn;
-                            *procSinZX = -sn;
-                            _ApplyMatrix(&a, procMatrix, &b);
-                            a.y = sy;
-                            _ApplyMatrix(p, mD[i], &a);
-                            return 1;
-                        }
-                    }
-                } else {
-                    float len;
-
-                    _ApplyMatrix(&a, mF[i], p);
-                    len = xzLengthSquare(&a);
-                    if (len < r2) {
-                        VECTOR v;
-
-                        scaleVectorXZ_i(&v, &a, r * fSqrtInv_i(len));
-                        _ApplyMatrix(p, mD[i], &v);
-                        return 1;
-                    }
-                }
-                return 0;
-            }
-            int i;
-            int ret = -1;
-
-            for (i = 0; i < cnt; i++) {
-                if (hit(i))
-                    ret = i;
-            }
-            if (ret != -1)
-                return ret;
-            tensionMove_i(p, p, q, tk, tlim);
-            return -1;
-        }
-#endif
 
         if (wrap) {
             if (c->sweepRight) {
@@ -2033,22 +1549,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x % nx;
                         xp = (x + 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-#ifdef ICO_HOST
                             rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
-#else
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
-#endif
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = (y + 1) % nx;
                         x0 = y % nx;
                         xp = (y - 1) % nx;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-#ifdef ICO_HOST
                             rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
-#else
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
-#endif
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }
@@ -2072,22 +1580,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y % nx;
                         ym = (y - 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-#ifdef ICO_HOST
                             rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
-#else
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
-#endif
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = (x - 1) % nx;
                         y0 = x % nx;
                         ym = (x + 1) % nx;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-#ifdef ICO_HOST
                             rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
-#else
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
-#endif
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -2112,22 +1612,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         y0 = y;
                         ym = y - 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-#ifdef ICO_HOST
                             rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
-#else
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
-#endif
                                                &pos[y0][j - 1], 1.0f, rows[yp][j]);
                         }
                         yp = x - 1;
                         y0 = x;
                         ym = x + 1;
                         if (rows[yp][j] != -1 || rows[y0][j] == -1) {
-#ifdef ICO_HOST
                             rows[y0][j] = proc(&pc, &pos[y0][j], &pos[yp][j], &pos[ym][j],
-#else
-                            rows[y0][j] = proc(&pos[y0][j], &pos[yp][j], &pos[ym][j],
-#endif
                                                &pos[y0][j - 1], -1.0f, rows[yp][j]);
                         }
                     }
@@ -2147,22 +1639,14 @@ static void getCloth4D(Cloth4D *c, int **rows)
                         x0 = x;
                         xp = x + 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-#ifdef ICO_HOST
                             rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
-#else
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
-#endif
                                                &pos[x0][j - 1], -1.0f, rows[xm][j]);
                         }
                         xm = y + 1;
                         x0 = y;
                         xp = y - 1;
                         if (rows[xm][j] != -1 || rows[x0][j] == -1) {
-#ifdef ICO_HOST
                             rows[x0][j] = proc(&pc, &pos[x0][j], &pos[xm][j], &pos[xp][j],
-#else
-                            rows[x0][j] = proc(&pos[x0][j], &pos[xm][j], &pos[xp][j],
-#endif
                                                &pos[x0][j - 1], 1.0f, rows[xm][j]);
                         }
                     }
@@ -2300,8 +1784,6 @@ typedef struct { /* field names derived */
     long long q[8];
 } Blob64; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: InitCloth4D copies each ClothHangCfg row whole over a ClothPoint
@@ -2334,8 +1816,6 @@ ICO_LAYOUT_AT(ClothHangCfg, posY, ClothPoint, pos[1]);
 ICO_LAYOUT_AT(ClothHangCfg, posW, ClothPoint, pos[3]);
 
 ICO_LAYOUT_AT(ClothHangCfg, turn, ClothPoint, turn);
-
-#endif
 
 Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
 {
@@ -2497,175 +1977,6 @@ float GetChainCollision(ChainSet *sys, void *pos, float r)
     }
     return -1.0f;
 }
-
-#ifndef ICO_HOST /* the host build has these in port/math (docs/port/MATH.md) */
-
-void FSqrtInv(void)
-{
-    VU0_NOREORDER_BEGIN();
-    VU0_MFC1(8, 12);
-    VU0_QMTC2_NI(8, 4);
-    VU0_NOREORDER_END();
-    VU0_REG("vrsqrt Q, $vf0w, $vf4x");
-    VU0_WAIT();
-    VU0_NOREORDER_BEGIN();
-    VU0_CFC2_NI(2, 22);
-    VU0_MTC1(2, 0);
-    VU0_NOREORDER_END();
-}
-
-float getXZLength(void *v)
-{
-    VU0_LSV(lqc2, 4, 0x0, 4);
-    VU0_V3OP(vmul.xz, 4, 4, 4);
-    VU0_V3OP_BC(vaddz.x, 4, 4, 4, z);
-    VU0_WORD(0x4A0403BD);
-    VU0_WAIT();
-    VU0_NOREORDER_BEGIN();
-    VU0_CFC2_NI(2, 22);
-    VU0_MTC1(2, 0);
-    VU0_NOREORDER_END();
-}
-
-float getXZInvLength(void *v)
-{
-    VU0_LSV(lqc2, 4, 0x0, 4);
-    VU0_V3OP(vmul.xz, 4, 4, 4);
-    VU0_V3OP_BC(vaddz.x, 4, 4, 4, z);
-    VU0_REG("vrsqrt Q, $vf0w, $vf4x");
-    VU0_WAIT();
-    VU0_NOREORDER_BEGIN();
-    VU0_CFC2_NI(2, 22);
-    VU0_MTC1(2, 0);
-    VU0_NOREORDER_END();
-}
-
-float getXZLengthSquare(void *v)
-{
-    VU0_LSV(lqc2, 4, 0x0, 4);
-    VU0_V3OP(vmul.xz, 4, 4, 4);
-    VU0_V3OP_BC(vaddz.x, 4, 4, 4, z);
-    VU0_QMFC2_NI(2, 4);
-    VU0_MTC1(2, 0);
-}
-
-float subAndGetInvLength(void *d, const void *a, const void *b)
-{
-    VU0_LSV(lqc2, 1, 0x0, 5);
-    VU0_LSV(lqc2, 2, 0x0, 6);
-    VU0_V3OP(vsub.xyzw, 4, 1, 2);
-    VU0_V3OP(vmul.xyz, 3, 4, 4);
-    VU0_V3OP_BC(vaddy.x, 3, 3, 3, y);
-    VU0_V3OP_BC(vaddz.x, 3, 3, 3, z);
-    VU0_REG("vrsqrt Q, $vf0w, $vf3x");
-    VU0_LSV(sqc2, 4, 0x0, 4);
-    VU0_WAIT();
-    VU0_NOREORDER_BEGIN();
-    VU0_CFC2_NI(2, 22);
-    VU0_MTC1(2, 0);
-    VU0_NOREORDER_END();
-}
-
-void scaleAndAddVectorXYZ(void *d, const void *a, const void *b, float k)
-{
-    VU0_LSV(lqc2, 4, 0x0, 5);
-    VU0_LSV(lqc2, 5, 0x0, 6);
-    VU0_NOREORDER_BEGIN();
-    VU0_MFC1(8, 12);
-    VU0_QMTC2_NI(8, 6);
-    VU0_NOREORDER_END();
-    VU0_V3OP_BC(vmulx.xyz, 5, 5, 6, x);
-    VU0_V3OP(vadd.xyz, 4, 4, 5);
-    VU0_LSV(sqc2, 4, 0x0, 4);
-}
-
-void scaleVectorXZ(void *d, const void *s, float k)
-{
-    VU0_LSV(lqc2, 4, 0x0, 5);
-    VU0_NOREORDER_BEGIN();
-    VU0_MFC1(8, 12);
-    VU0_QMTC2_NI(8, 5);
-    VU0_NOREORDER_END();
-    VU0_V3OP_BC(vmulx.xz, 4, 4, 5, x);
-    VU0_LSV(sqc2, 4, 0x0, 4);
-}
-
-void tensionMoveNoReduce(void *out, void *a, void *b, float k)
-{
-    int buf[4];
-    VU0_LSV(lqc2, 1, 0x0, 5);
-    VU0_LSV(lqc2, 2, 0x0, 6);
-    VU0_REG("vsub.xyzw $vf4, $vf1, $vf2");
-    VU0_V3OP(vmul.xyz, 3, 4, 4);
-    VU0_V3OP_BC(vaddy.x, 3, 3, 3, y);
-    VU0_V3OP_BC(vaddz.x, 3, 3, 3, z);
-    VU0_REG("vrsqrt Q, $vf0w, $vf3x");
-    __asm__ __volatile__(".set noreorder\n\tsqc2 $vf4, %0\n\t.set reorder"
-                         : "=m"(buf)
-                         :
-                         : "memory");
-    VU0_WAIT();
-    VU0_NOREORDER_BEGIN();
-    VU0_CFC2_NI(2, 22);
-    VU0_MTC1(2, 0);
-    VU0_REG("mul.s $f12, $f12, $f0");
-    VU0_NOREORDER_END();
-
-    VU0_LSV(lqc2, 4, 0x0, 6);
-    __asm__ __volatile__(".set noreorder\n\tlqc2 $vf5, %0\n\t.set reorder"
-                         :
-                         : "m"(buf[0])
-                         : "memory");
-    VU0_NOREORDER_BEGIN();
-    VU0_MFC1(8, 12);
-    VU0_QMTC2_NI(8, 6);
-    VU0_NOREORDER_END();
-    VU0_REG("vmulx.xyz $vf5, $vf5, $vf6x");
-    VU0_V3OP(vadd.xyz, 4, 4, 5);
-    VU0_LSV(sqc2, 4, 0x0, 4);
-}
-
-void tensionMove(void *out, void *a, void *b, float k, float lim)
-{
-    int buf[4];
-    float inv;
-    float scale;
-    VU0_LSV(lqc2, 1, 0x0, 5);
-    VU0_LSV(lqc2, 2, 0x0, 6);
-    VU0_REG("vsub.xyzw $vf4, $vf1, $vf2");
-    VU0_V3OP(vmul.xyz, 3, 4, 4);
-    VU0_V3OP_BC(vaddy.x, 3, 3, 3, y);
-    VU0_V3OP_BC(vaddz.x, 3, 3, 3, z);
-    VU0_REG("vrsqrt Q, $vf0w, $vf3x");
-    __asm__ __volatile__(".set noreorder\n\tsqc2 $vf4, %0\n\t.set reorder"
-                         : "=m"(buf)
-                         :
-                         : "memory");
-    VU0_WAIT();
-    __asm__ __volatile__(".set noreorder\n"
-                         "cfc2.ni $2, $vi22\n"
-                         "mtc1 $2, %0\n"
-                         ".set reorder\n"
-                         : "=f"(inv)::"$2");
-    if (inv < lim) {
-        scale = k * inv;
-        VU0_LSV(lqc2, 4, 0x0, 6);
-        __asm__ __volatile__(".set noreorder\n\tlqc2 $vf5, %0\n\t.set reorder"
-                             :
-                             : "m"(buf[0])
-                             : "memory");
-        __asm__ __volatile__(".set noreorder\n"
-                             "mfc1 $8, %0\n"
-                             "qmtc2.ni $8, $vf6\n"
-                             ".set reorder\n" ::"f"(scale)
-                             : "$8");
-        VU0_REG("vmulx.xyz $vf5, $vf5, $vf6x");
-        VU0_V3OP(vadd.xyz, 4, 4, 5);
-        VU0_LSV(sqc2, 4, 0x0, 4);
-    }
-}
-
-#endif /* ICO_HOST: port/math */
 
 void getCrossPoint(void *out, void *seg, void *plane)
 {

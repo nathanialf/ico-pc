@@ -68,11 +68,7 @@ void p2o_DispVU1Default(GObj *self)
 
 void p2o_TransMicroProgram(void)
 {
-#ifdef ICO_HOST
     /* no microprogram image on the host (MicroCode.c): the kick's address
        word is the table's 0, without reading an int as a pointer */
     sceDmaSend(dmaVif, 0);
-#else
-    sceDmaSend(dmaVif, MicroCodeAddress[1]);
-#endif
 }

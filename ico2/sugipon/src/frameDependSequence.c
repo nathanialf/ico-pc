@@ -378,7 +378,6 @@ static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
     int no;
 
     /* the display object, read as a char pointer like fdsGObj */
-#ifdef ICO_HOST
     Sub15C *s = gobj->dobj;
 
     w = (char *)s;
@@ -392,19 +391,6 @@ static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
         fdsGroup = s->ctrl.seGroup[id];
         fdsLayout = &s->ctrl;
     } else {
-#else
-    w = *(char **)((char *)gobj + 0x15C);
-    fdsGObj = (char *)gobj;
-    if (w != 0) {
-        no = *(int *)(w + 0x84);
-        p = w + 0x470;
-        fdsWork = w + 0xA0;
-        fdsFlags = (FDSFlags *)(w + 0x740);
-        fdsRecord = &motionKind[*(int *)(p + 0x30)];
-        fdsGroup = *(int *)(w + (id << 2) + 0x61C);
-        fdsLayout = (struct MotCtrl *)p;
-    } else {
-#endif
         no = -1;
         fdsLayout = 0;
         fdsWork = 0;

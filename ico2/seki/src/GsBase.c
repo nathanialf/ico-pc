@@ -33,20 +33,11 @@
 #include "rd.h"
 
 #endif
-#ifdef ICO_HOST
 
 /* string.h: memset's count is a size_t, and strlen and strcmp (the tool
    lock and log files) have no declaration otherwise, so their results
    would be read as int */
 #include <string.h>
-
-#else
-
-/* declared here with an int count, not through string.h, as in
-   layout_action.c and puddle.c */
-extern void *memset(void *p, int c, int n);
-
-#endif
 
 /* GsBase.c's globals, tentative definitions: the frame buffer flags, the
    screen centre and size, then the XYOFFSET adjustment and the frame size
@@ -102,7 +93,6 @@ static void gsbHostResetHalf(void);
 static void gsbHostCommon(void);
 
 #endif
-#ifdef ICO_HOST
 
 /* PC port (renderer wave 7, R7a): the widescreen cull hook, in every port
    build (the headless one too, so a headless run proves the widened cull
@@ -111,8 +101,6 @@ static void gsbHostWidenCull(float *projHalf);
 /* port/game/video_options.c: the presentation's aspect / (4/3), 1 in the
    Original preset */
 extern float ico_video_wide_x(void);
-
-#endif
 
 /* Point the double buffer's two display and two draw environments at the
  * frame this stage draws into: the low nine bits of each frame word carry the
@@ -322,11 +310,6 @@ void gsb_Reduction(void)
 
     sceGsSyncPath(0, 0);
     FlushCache(0);
-#ifndef ICO_HOST /* DMA channel 2 kick of the GS setup packet */
-    *D2_QWC = 22;
-    *D2_MADR = ICO_PHYS(ICO_ADDR(pk));
-    *D2_CHCR = 0x101;
-#endif
     sceGsSyncPath(0, 0);
     if (pad[0].flags & 0x20) {
         debug_StdPrintfDummy("Film Noise:%d\n", optionScreenMode);
@@ -347,21 +330,8 @@ static const unsigned char keepFrameColor[4] = {112, 112, 112, 128}; /* derived 
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_EndPacket(void);
-
-/* void (int, long long) here, void (long long, long long) in GifPacket.h */
-/* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
-   definition reads them on hosts that pass them on the stack
-   (layout_texture.c says more) */
-#ifdef ICO_HOST
-
+/* as in GifPacket.h, which this file does not include */
 extern void gif_SetGsReg(long long reg, long long data);
-
-#else
-
-extern void gif_SetGsReg(int reg, long long data);
-
-#endif
-
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_StartPacketPriPath1(int pri);
 
@@ -455,18 +425,9 @@ static int gsbUnusedWord; /* derived name */
 
 /* as in GifPacket.h, which this TU does not include */
 extern void gif_StartPacketPri(int pri);
-
-/* void (int, int, int, int, int, int) here, void (unsigned long long, unsigned long long, unsigned int, unsigned int, int, int) in GifPacket.h */
-#ifdef ICO_HOST
-
+/* as in GifPacket.h, which this file does not include */
 extern void gif_SetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
                                   unsigned int h, int useoffset, int clear);
-
-#else
-
-extern void gif_SetDrawEnviroment(int fbp, int psm, int w, int h, int useoffset, int clear);
-
-#endif
 
 /* The fade overlay: step the fade level by half the speed each frame, clamp
  * it to 0 to 128, stop or hand over to the continue state at the ends, and
@@ -641,28 +602,11 @@ static void gsb_scissorOnDemo(void)
     }
 }
 
-/* void (int, int, int) here, void (long long, long long, long long) in GifPacket.h */
-#ifdef ICO_HOST
-
+/* as in GifPacket.h, which this file does not include */
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
-
-#else
-
-extern void gif_SetAlpha(int alpha, int mode, int fix);
-
-#endif
-/* void (int, int, int, int, unsigned int, unsigned char *, int) here, void (int, int, int, int, long long, GifColor *, int) in GifPacket.h */
-#ifdef ICO_HOST
-
+/* as in GifPacket.h, which this file does not include */
 extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, long long z, unsigned char *col,
                                     int prim);
-
-#else
-
-extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, unsigned int z, unsigned char *col,
-                                    int prim);
-
-#endif
 
 /* Darken the whole frame by the stage record's brightness step: a full screen
  * white sprite in destination-alpha blend whose alpha is the step, clamped to
@@ -1261,11 +1205,7 @@ void gsb_UpdateGSSystem(int keep)
 {
     sceGsDrawEnv *draw;
 
-#ifdef ICO_HOST
     odd_even = 0; /* GS_CSR field bit: no GS on the host */
-#else
-    odd_even = (*GS_CSR >> 13) & 1;
-#endif
     gsb_Reduction();
     if (gsSystemReady == 0) {
         dl_Clear();
@@ -1325,11 +1265,7 @@ void gsb_ResetGSSystem(void)
     sceGsResetGraph(0, systemStatus[1] == 1, (unsigned short)systemStatus[0] + 2, 1);
     frame_count++;
     buffer_ID = frame_count & 1;
-#ifdef ICO_HOST
     odd_even = 0; /* GS_CSR field bit: no GS on the host */
-#else
-    odd_even = (*GS_CSR >> 13) & 1;
-#endif
     FlushCache(0);
     sceGsSwapDBuff(&db, buffer_ID);
 #ifdef ICO_RD
@@ -1353,14 +1289,10 @@ void gsb_ResetGSSystem(void)
     gsb_SetGsDefault();
 }
 
-#ifdef ICO_HOST
 /* PC port: the zoom vs[0] is 0 before the first stage sets the view scale
    (vsync 6); the EE's div.s gives +-Fmax there, IEEE gives Inf and then NaN
    in 0 * Inf (DIVERGENCES.md F5, F11). */
 #define VS_DIV(a, b) ps2_div((a), (b))
-#else
-#define VS_DIV(a, b) ((a) / (b))
-#endif
 
 /* the 1500 unit screen the projection proj is scaled to */
 static const float vsScreenSize[] = {1500.0f, 1500.0f, 0.0f, 0.0f}; /* derived name */
@@ -1511,12 +1443,8 @@ void gsb_SetVSMatrix(int w, int h, float d)
         (float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f) * (float)h / (float)ScreenHeight;
     gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
-#ifdef ICO_HOST
     gsbHostWidenCull((float *)(matrixptr + 0x240));
-#endif
 }
-
-#ifdef ICO_HOST
 
 /* PC port (R2c; wave 7, R7a), the widescreen hook (plan "Widescreen"): how
    much wider than 4:3 the output is, (aspect) / (4/3), from the display
@@ -1547,7 +1475,6 @@ static void gsbHostWidenCull(float *projHalf)
     }
 }
 
-#endif
 #ifdef ICO_RD
 
 /* PC port (R2c): gsb_MakeCommonMatrix's VU1 parameter block (the 16
@@ -1581,12 +1508,12 @@ static void gsbHostCommon(void)
 }
 
 #endif
+
 /* Clip a box against the current matrix: transform its eight corners with the
  * matrix in $vf4 to $vf7 and read the clip flags out of $vi18.  All eight
  * corners outside one plane gives 0, no corner clipped at all gives -1, and
  * the second pass re-clips against a 0.99 w so a corner that only just crosses
  * the near plane still counts as visible: 2 when it does, 1 when it does not. */
-#ifdef ICO_HOST
 
 /* gsb_ClipBox's VU0 step on the host: the corner through the current
  * matrix with w taken as 1 (vmaddw by vf0w), then vclipw.xyz against |cw|
@@ -1610,8 +1537,6 @@ static int gsb_clipCorner(const float *v, int useConst) /* derived name */
     return f;
 }
 
-#endif
-
 int gsb_ClipBox(float *p)
 {
     int all = 0x3F;
@@ -1623,27 +1548,7 @@ int gsb_ClipBox(float *p)
     for (i = 0; i < 8; q += 4, i++) {
         int cf;
 
-#ifdef ICO_HOST
         cf = gsb_clipCorner(q, 0);
-#else
-        __asm__ __volatile__(".set noreorder\n\t"
-                             "lqc2 $vf8, 0x0(%1)\n\t"
-                             "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                             "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                             "vmaddaz.xyzw ACC, $vf6, $vf8z\n\t"
-                             "vmaddw.xyzw $vf10, $vf7, $vf0w\n\t"
-                             "vclipw.xyz $vf10, $vf10w\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "cfc2.ni %0, $vi18\n\t"
-                             ".set reorder"
-                             : "=r"(cf)
-                             : "r"(q)
-                             : "memory");
-#endif
         all &= cf;
         any |= cf;
     }
@@ -1656,30 +1561,7 @@ int gsb_ClipBox(float *p)
     for (i = 0; i < 8; p += 4, i++) {
         int cf;
 
-#ifdef ICO_HOST
         cf = gsb_clipCorner(p, 1);
-#else
-        __asm__ __volatile__(".set noreorder\n\t"
-                             "mfc1 $8, %1\n\t"
-                             "lqc2 $vf8, 0x0(%2)\n\t"
-                             "qmtc2.ni $8, $vf1\n\t"
-                             "vmulx.w $vf1, $vf0, $vf1x\n\t"
-                             "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                             "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                             "vmaddaz.xyzw ACC, $vf6, $vf8z\n\t"
-                             "vmaddw.xyzw $vf10, $vf7, $vf0w\n\t"
-                             "vclipw.xyz $vf10, $vf1w\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "cfc2.ni %0, $vi18\n\t"
-                             ".set reorder"
-                             : "=r"(cf)
-                             : "f"(0.99f), "r"(p)
-                             : "memory");
-#endif
         c |= cf;
     }
     return (c & 0x20) ? 2 : 1;

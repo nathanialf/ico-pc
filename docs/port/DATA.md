@@ -32,7 +32,7 @@ The seam is the SDK's own function names, as declared in
 `sceCdRead`, the host build links `port/data`'s definition. `cdvd.c` is not
 edited; everything above the seam (the queue, the threads, the cache, the
 retry and drive-recovery paths) runs as written. `FileManager.c` has one
-`#ifdef ICO_HOST` block (below).
+host change (below).
 
 ## The VFS (`port/data/vfs.h`)
 
@@ -341,7 +341,7 @@ with an empty drive did. `cdvd_host.c` prints the path it tried once.
 
 ## Boot (`seki/src/FileManager.c`)
 
-`file_Init` under `ICO_HOST` keeps `sceSifInitRpc`, `sceCdInit`,
+`file_Init` on the host keeps `sceSifInitRpc`, `sceCdInit`,
 `sceCdMmode` and one disc wait, and leaves out the `IOPRP224.IMG` reboot and
 the six `sceSifLoadModule` calls (SIO2MAN, PADMAN, MCMAN, MCSERV, LIBSD,
 SNDN2DRV). `file_LoadCDFile`, the boot-time loader, is unchanged and reads

@@ -190,13 +190,6 @@ void ez_circle(void *pos, void *base, unsigned int col, float r)
     volatile int local[12];
 }
 
-/* void * (void *, int, int) here, void * (void *, int, unsigned int) in string.h */
-#ifndef ICO_HOST
-
-extern void *memset(void *dst, int c, int n);
-
-#endif
-
 int short_direction_between_wp(WayPoint *from, WayPoint *to)
 {
     float len[2];

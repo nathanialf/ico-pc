@@ -10,11 +10,7 @@
 
 /* an address the allocator computes with: unsigned int on the EE,
    pointer-wide on the host */
-#ifdef ICO_HOST
 typedef __UINTPTR_TYPE__ IosMemAddr; /* derived name */
-#else
-typedef unsigned int IosMemAddr; /* derived name */
-#endif
 
 typedef struct IosMemPart {    /* field names derived */
     char tag[16];              /* 0x00 */
@@ -42,14 +38,9 @@ typedef struct IosMemNode {       /* field names derived */
     struct IosMemPart *part;      /* 0x30 */
     int size;                     /* 0x34 */
     int line;                     /* 0x38 */
-#ifdef ICO_HOST
     /* 16-byte aligned, so the header in front of every block is 0x50 bytes
        on the host (0x40 on the EE) */
 } __attribute__((aligned(16))) IosMemNode; /* derived name */
-#else
-    char pad3C[4];
-} IosMemNode; /* derived name */
-#endif
 
 /* memory.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */

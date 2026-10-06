@@ -474,7 +474,6 @@ static inline int isInScreen(volatile int *p) /* derived name */
    fixed-point screen coordinates, stored to dst, in one asm statement. */
 static inline void rotTransPers(volatile int *dst, void *src) /* derived name */
 {
-#ifdef ICO_HOST
     /* the current matrix applied to src (all four fields), xyz times 1/w,
        xyz to 12.4; dst[3] is left alone (the PS2 stored vf11's stale w,
        which no caller reads) */
@@ -486,23 +485,6 @@ static inline void rotTransPers(volatile int *dst, void *src) /* derived name */
     dst[0] = ps2_ftoi4(v[0] * q);
     dst[1] = ps2_ftoi4(v[1] * q);
     dst[2] = ps2_ftoi4(v[2] * q);
-#else
-    __asm__ __volatile__(".set noreorder\n\t"
-                         "lqc2 $vf8, 0x0(%1)\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                         "vmaddaz.xyzw ACC, $vf6, $vf8z\n\t"
-                         "vmaddw.xyzw $vf10, $vf7, $vf8w\n\t"
-                         "vdiv Q, $vf0w, $vf10w\n\t"
-                         "vwaitq\n\t"
-                         "vmulq.xyz $vf10, $vf10, Q\n\t"
-                         "vftoi4.xyz $vf11, $vf10\n\t"
-                         "sqc2 $vf11, 0x0(%0)\n\t"
-                         ".set reorder"
-                         :
-                         : "r"(dst), "r"(src)
-                         : "memory");
-#endif
 }
 
 /* One vertex through the VU0 pipeline into a caller-supplied projected-vertex

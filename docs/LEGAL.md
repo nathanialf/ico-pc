@@ -14,9 +14,8 @@ respective owners.
 
 - C source written for the decompilation and the port: the game's source under `ico2/`, which
   the host compiler builds into the PC port, and the port's own code under
-  `port/`. (The decompilation compiles the same game source with the
-  period toolchain into a boot ELF; this repository keeps only the optional
-  identity check of `docs/BUILDING.md`, appendix.)
+  `port/`. (The decompilation compiles its version of the game source with
+  the period toolchain into a boot ELF; this repository has no PS2 build.)
 - Build scripts and tooling written for this project.
 - Documentation written for this project.
 - Configuration that describes how the user's own disc image is checked and
@@ -238,8 +237,9 @@ functions by instruction-stream correlation, never by copying an address.
 ## Prototype symbol maps (`aug6`)
 
 The decompilation's `aug6` branch builds the August 6, 2001 ICO prototype
-(`SCUS_971.13`); the port does not merge that branch, but names the
-decompilation derived from it may reach this tree through `main`.
+(`SCUS_971.13`); the port does not take that branch, but names the
+decompilation derived from it may reach this tree as reconstruction fixes
+applied from its `main`.
 That prototype disc shipped a `MAIN.MAP` and a `SRCFILE.TXT` of its own. The
 project uses the factual metadata in them (names, addresses, file boundaries,
 `__FILE__` paths) on the same terms as the retail maps above. This rests on

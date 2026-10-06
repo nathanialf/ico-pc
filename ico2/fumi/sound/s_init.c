@@ -80,13 +80,8 @@ static SqEntry soundDataTbl[16]; /* derived name */
 
 /* The byte walks over soundDataTbl: the EE's 0x30-byte stride and 768-byte
    end; SqEntry is 0x48 bytes on a 64-bit host (package 2I). */
-#ifdef ICO_HOST
 #define SQ_STRIDE ((int)sizeof(SqEntry))
 #define SQ_END ((int)sizeof(soundDataTbl))
-#else
-#define SQ_STRIDE 0x30
-#define SQ_END 768
-#endif
 
 static SeSlot seSlotTbl[48]; /* derived name */
 
@@ -150,26 +145,15 @@ int soundInit(void)
     SgSetMasterVol(0, 0, 0);
     SgSetMasterVol(1, 0, 0);
     for (i = 15; i >= 0; i--) {
-#ifdef ICO_HOST
         *(int *)&soundDataTbl[i] = 0;
-#else
-        *(int *)&((char *)soundDataTbl)[i * 48] = 0;
-#endif
     }
     adpcmChMask = 0;
     seChMask = 0;
     /* the request slot of every SeSlot, walked through a base pointer: that is
        what keeps the +0x30 out of the symbol's %hi/%lo and in the loop start value */
-#ifdef ICO_HOST
     for (i = 47; i >= 0; i--) {
         seSlotTbl[i].req = 0;
     }
-#else
-    p = (char *)seSlotTbl;
-    for (i = 47; i >= 0; i--) {
-        *(int *)&p[i * 64 + 0x30] = 0;
-    }
-#endif
     AdpcmStreamInit();
     seEnvForceClose = 0;
     return 0;
@@ -237,11 +221,7 @@ found:
     seChMask |= bit;
     req->seMask |= bit;
     /* the slot indexed by byte offset */
-#ifdef ICO_HOST
     seSlotTbl[i].flag.all &= 0xFDFFFFFF;
-#else
-    ((SeSlot *)&((char *)seSlotTbl)[i * 64])->flag.all &= 0xFDFFFFFF;
-#endif
     return i;
 }
 
@@ -350,12 +330,7 @@ static void soundDataOpenChk(SqEntry *self)
         }
         off = ch * 64;
         hr = SgBgmOpen(self->vab, self->sq);
-#ifdef ICO_HOST
         seSlotTbl[ch].handle = hr;
-#else
-        slot = &((char *)seSlotTbl)[off];
-        *(short *)(slot + 0x10) = hr;
-#endif
         h = hr;
         if (h < 0) {
             seReqRelease(ch);
@@ -364,13 +339,8 @@ static void soundDataOpenChk(SqEntry *self)
         }
         SgSetBgmVol(h, 64, 0xFFFF);
         SgBgmPlay(h);
-#ifdef ICO_HOST
         seSlotTbl[ch].req = self;
         seSlotTbl[ch].owner = 0;
-#else
-        *(SqEntry **)&((char *)seSlotTbl)[off + 0x30] = self;
-        *(int *)&((char *)seSlotTbl)[off + 8] = 0;
-#endif
         debug_StdPrintfDummy("bgm play\n");
         return;
     default:
@@ -750,11 +720,7 @@ static void debug_DispSEInfo(void)
         solo = 1;
     }
     for (i = 0; i < 48; i++) {
-#ifdef ICO_HOST
         if (seSlotTbl[i].req == 0) {
-#else
-        if (*(int *)&((char *)seSlotTbl)[i * 64 + 0x30] == 0) {
-#endif
             continue;
         }
         p = &seSlotTbl[i];
@@ -876,13 +842,9 @@ static void sound3DParamSet(SeSlot *self)
     self->level1 = 0x1000;
     self->level0 = 0x1000;
     if (self->proc != 0) {
-#ifdef ICO_HOST
         /* the EE call leaves the slot in $a0, which every stageSE proc reads
            as its argument; the host passes it */
         ret = self->proc(self);
-#else
-        ret = self->proc();
-#endif
         if (ret > 0) {
             self->flag.bit.audible = 1;
             self->flag.bit.placed = 0;
@@ -1240,7 +1202,6 @@ void soundSeDefPitchSet(int id, int pitch)
 
 inline float soundSeDefVolumeRateGet(int id)
 {
-#ifdef ICO_HOST
     SeSlot *e = &seSlotTbl[id & 0xFF];
     if (e->handle >= 0) {
         goto check;
@@ -1253,26 +1214,10 @@ check:
         goto fail;
     }
     return e->volumeRate;
-#else
-    int off = (id & 0xFF) * 64;
-    char *e = (char *)seSlotTbl + off;
-    if (*(short *)(e + 0x10) >= 0) {
-        goto check;
-    }
-fail:
-    return 0.0f;
-check:
-    id = id >> 8;
-    if (id != *(unsigned short *)e) {
-        goto fail;
-    }
-    return *(float *)((char *)seSlotTbl + off + 0x18);
-#endif
 }
 
 inline void soundSeDefVolumeRateSet(int id, float rate)
 {
-#ifdef ICO_HOST
     SeSlot *e = &seSlotTbl[id & 0xFF];
     if (e->handle >= 0) {
         id = id >> 8;
@@ -1280,16 +1225,6 @@ inline void soundSeDefVolumeRateSet(int id, float rate)
             e->volumeRate = rate;
         }
     }
-#else
-    int off = (id & 0xFF) * 64;
-    char *e = (char *)seSlotTbl + off;
-    if (*(short *)(e + 0x10) >= 0) {
-        id = id >> 8;
-        if (id == *(unsigned short *)e) {
-            *(float *)((char *)seSlotTbl + off + 0x18) = rate;
-        }
-    }
-#endif
 }
 
 inline void soundReqTickProc(void)
@@ -1406,15 +1341,6 @@ void soundSeEnvPlay(void)
     }
 }
 
-/* &stageData[0].seEnvFirst, the range soundSeEnvNotUseClose walks by the
-   EE's 0x194-byte stride; the host names the fields (StgPre is larger on
-   the host, docs/port/OFFSET_AUDIT.md) */
-#ifndef ICO_HOST
-
-extern char D_005F5E60[];
-
-#endif
-
 void soundSeEnvNotUseClose(int a, int b)
 {
     const SeBank *p = 0;
@@ -1470,17 +1396,9 @@ void soundSeEnvNotUseClose(int a, int b)
     for (m = 0; m < 48; m++) {
         e = &seSlotTbl[m];
         req = e->req;
-#ifdef ICO_HOST
         first = (int *)&stageData[a].seEnvFirst;
-#else
-        first = (int *)&D_005F5E60[a * 404];
-#endif
         if (req != 0 && req->mode == 0 && e->owner == 0xFFFFFFFF) {
-#ifdef ICO_HOST
             for (j = *first; j < stageData[a].seEnvLast; j++) {
-#else
-            for (j = *first; j < *(int *)&D_005F5E60[a * 404 + 4]; j++) {
-#endif
                 if (e->src == &seDef[seEnv[j].se]) {
                     if (ok == 0 || seFile[seList[seKind[e->src->kind]].num].loaded != 1) {
                         goto next;
@@ -1568,7 +1486,6 @@ void soundDataSegNextStageNotUseClose(int mode, int stage)
 
 inline int debug_req(void)
 {
-#ifdef ICO_HOST
     SeSlot *e = seSlotTbl;
     int i = 0x2F;
     do {
@@ -1578,18 +1495,5 @@ inline int debug_req(void)
         e++;
         i--;
     } while (i >= 0);
-#else
-    char *e = (char *)seSlotTbl;
-    int sz = 0x3C;
-    int i = 0x2F;
-    do {
-        if (*(int *)(e + 0x30) != 0) {
-            debug_StdPrintfDummy("num %d %d\n", *(short *)(e + 0x10),
-                                 (unsigned int)(*(int *)(e + 0x38) - (int)seDef) / sz);
-        }
-        e += 0x40;
-        i--;
-    } while (i >= 0);
-#endif
     ICO_BREAK();
 }

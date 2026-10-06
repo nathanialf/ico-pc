@@ -14,9 +14,6 @@
 #include "FileManager.h"
 #include <assert.h>
 #include <stdio.h>
-
-#ifdef ICO_HOST
-
 #include "Tim2.h"
 
 #ifdef ICO_RD
@@ -25,7 +22,6 @@
 #include "MicroCode.h" /* R3ab: mc_HostDma */
 #include "rd_tex.h"
 
-#endif
 #endif
 
 /* One mipmap level of a texture record, 0x24 bytes: the address, the buffer
@@ -72,46 +68,8 @@ typedef struct TexLevelPkt { /* field names derived */
     DpkRegAD trxdir;
 } TexLevelPkt; /* derived name */
 
-#ifdef ICO_HOST
 /* the TIM2 picture and mipmap headers (Tim2Picture, Tim2Mipmap) are in
  * Tim2.h */
-#else
-
-/* the TIM2 picture header.  The fields this file reads off
- * it are clutColors at 0x0E, clutType at 0x12 (masked with 0x3F where the
- * compound bits have to go), imageType at 0x13 and the width and height at
- * 0x14 and 0x16. */
-typedef struct Tim2Picture { /* field names derived */
-    unsigned int totalSize;
-    unsigned int clutSize;
-    unsigned int imageSize;
-    unsigned short headerSize;
-    unsigned short clutColors;
-    unsigned char picFormat;
-    unsigned char mipMapTextures;
-    unsigned char clutType;
-    unsigned char imageType;
-    unsigned short imageWidth;
-    unsigned short imageHeight;
-    unsigned long long GsTex0;
-    unsigned long long GsTex1;
-    unsigned int GsRegs;
-    unsigned int GsTexClut;
-} Tim2Picture; /* derived name */
-
-/* the TIM2 mipmap header that follows the picture header when there is more
- * than one level, two MIPTBP registers and then one image size per level.
- * tex_makeTexturePacket copies 0x30 bytes of picture header into the record
- * and a second 0x30 bytes of mipmap header after it, and steps over a variable
- * number of size words through the mipmap_header_size table before it reaches
- * the ICO block. */
-typedef struct Tim2Mipmap { /* field names derived */
-    unsigned long long GsMiptbp1;
-    unsigned long long GsMiptbp2;
-    unsigned int sizes[8];
-} Tim2Mipmap; /* derived name */
-
-#endif
 
 struct TexData { /* field names derived */
     /* the trimmed name tex_GetTextureNo compares against, and behind it the
@@ -256,15 +214,10 @@ static const unsigned int texFlushPacket[3][4] __attribute__((aligned(16))) = {
 static void texHostEnsure(TexData *t);
 
 #endif
-#ifdef ICO_HOST
 
 /* the image's address is held as a pointer-wide word on the host */
 static int tex_loadImage(ICO_WORD addr, TexData *tex, int idx, short dbp, short dbw, short dpsm,
                          short dsax, short dsay, short w, short h)
-#else
-static int tex_loadImage(unsigned int addr, TexData *tex, int idx, short dbp, short dbw, short dpsm,
-                         short dsax, short dsay, short w, short h)
-#endif
 {
     int size = 0;
 
@@ -320,11 +273,7 @@ static int tex_loadImage(unsigned int addr, TexData *tex, int idx, short dbp, sh
     gif_EndPacket();
     dl_OpenDma(2, &tex->levelPkt[idx], 5);
     dl_CloseDma();
-#ifdef ICO_HOST
     dl_OpenDma(2, (void *)ICO_PHYS(addr), size + 3);
-#else
-    dl_OpenDma(2, ICO_PHYS(addr), size + 3);
-#endif
     dl_CloseDma();
     dl_OpenDma(2, texFlushPacket, 3);
     dl_CloseDma();
@@ -673,11 +622,7 @@ static inline void texAllocVram(TexData *t, int levels, int lv) /* derived name 
 static inline int texLoadLevel(void *addr, TexData *t, int n, int dbp, int dbw, int dpsm, int w,
                                int h) /* derived name */
 {
-#ifdef ICO_HOST
     return tex_loadImage((ICO_WORD)addr, t, n, dbp, dbw, dpsm, 0, 0, w, h);
-#else
-    return tex_loadImage((unsigned int)addr, t, n, dbp, dbw, dpsm, 0, 0, w, h);
-#endif
 }
 
 static int tex_transVramClutTex(Tim2Picture *pic, TexData *t, int levels, int lv)
@@ -1028,8 +973,6 @@ static void tex_initTM2(Tim2Picture *pic, TexData *t)
     tex_setRegisters(pic, t);
 }
 
-#ifdef ICO_HOST
-
 /* PC port: the same rearrangement per CLUT entry, of the CLUT's own size.
    The PS2 code below moves 256 words whatever the CLUT holds, which is the
    right order only for 256 32-bit entries; for a 16-entry or 16-bit CLUT
@@ -1058,34 +1001,6 @@ static void tex_convertClutCSM2ToCSM1(Tim2Picture *pic)
     }
 }
 
-#else
-
-static void tex_convertClutCSM2ToCSM1(Tim2Picture *pic)
-{
-    int buf[8][2][2][8];
-    int *clut = (int *)((char *)pic + pic->headerSize + pic->imageSize);
-    int *top = clut;
-    int i, j, k, l;
-
-    if ((pic->clutType >> 7) != 0) {
-        for (i = 0; i < 8; i++) {
-            for (j = 0; j < 2; j++) {
-                for (k = 0; k < 2; k++) {
-                    for (l = 0; l < 8; l++) {
-                        buf[i][k][j][l] = *clut++;
-                    }
-                }
-            }
-        }
-        clut = top;
-        for (i = 0; i < 256; i++) {
-            *clut++ = ((int *)buf)[i];
-        }
-    }
-}
-
-#endif
-
 /* graph016 takes short parameters; declared that way, tex_convertImage's frame
  * grows by 16 bytes and its registers move, so this file declares int ones
  * and libgraph.h leaves the call out. */
@@ -1093,8 +1008,6 @@ extern int sceGsSetDefStoreImage(sceGsStoreImage *img, int sbp, int sbw, int sps
                                  int ssay, int rrw, int rrh);
 
 /* "FALSE" */
-
-#ifdef ICO_HOST
 
 /* PC port: the GS load/store round trip (PSMT8/4 stored back as PSMCT32,
    the VRAM order) has no host counterpart, and nothing reaches it:
@@ -1111,49 +1024,6 @@ static void tex_convertImage(void *dst, void *src, short fmt, short w, short h)
     }
     malloc_MemCpy(dst, src, psmTable[fmt].psm == 20 ? w * h / 2 : w * h);
 }
-
-#else
-
-static void tex_convertImage(void *dst, void *src, short fmt, short w, short h)
-{
-    sceGsLoadImage limg;
-    sceGsStoreImage simg;
-    int w2 = w;
-
-    sceGsSyncPath(0, 0);
-    sceGsSetDefLoadImage(&limg, 0x2800, w >> 6, psmTable[fmt].psm, 0, 0, w2, h);
-    FlushCache(0);
-    if (sceGsExecLoadImage(&limg, src)) {
-        debug_assert("src/Texture.c", 1246);
-        __assert("src/Texture.c", 1246, "FALSE");
-    }
-    sceGsSyncPath(0, 0);
-    switch (psmTable[fmt].psm) {
-    case 19:
-        w2 = w >> 2;
-        break;
-    case 20:
-        w2 = w >> 3;
-        break;
-    default:
-        debug_assert("src/Texture.c", 1251);
-        __assert("src/Texture.c", 1251, "FALSE");
-        break;
-    }
-    if (32767 < w * h >> 4) {
-        debug_assert("src/Texture.c", 1254);
-        __assert("src/Texture.c", 1254, "FALSE");
-    }
-    sceGsSetDefStoreImage(&simg, 0x2800, w2 >> 6, 0, 0, 0, w2, h);
-    FlushCache(0);
-    if (sceGsExecStoreImage(&simg, dst)) {
-        debug_assert("src/Texture.c", 1259);
-        __assert("src/Texture.c", 1259, "FALSE");
-    }
-    sceGsSyncPath(0, 0);
-}
-
-#endif
 
 static void tex_makeCopyImage(Tim2Picture *pic, TexData *t, char *src, int convert)
 {
@@ -2026,11 +1896,7 @@ static void tex_printTexture(int id)
 
 /* the record printed with %s: the record opens with its name, which the PS2
    code passes as the record's address in an int */
-#ifdef ICO_HOST
 #define TEX_NAME_ARG(t) ((t)->name) /* port */
-#else
-#define TEX_NAME_ARG(t) ((int)(t)) /* port */
-#endif
 
 /* The texture tool's menu table, one row per tunable. `type` picks how `var`
  * is read back: 0 an int, 1 a float, 2 a short. */
@@ -2043,8 +1909,6 @@ typedef struct TexToolRow { /* field names derived */
     void *var;
     int _18;
 } TexToolRow; /* derived name */
-
-#ifdef ICO_HOST
 
 /* One print per row type (was a nested function; m and col are passed in) */
 static inline void printInt(int i, TexToolRow *m, unsigned int *col) /* derived name */
@@ -2061,8 +1925,6 @@ static inline void printFloat(int i, TexToolRow *m, unsigned int *col) /* derive
 {
     debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%f", m[i].label, *(float *)m[i].var);
 }
-
-#endif
 
 static int tex_Tool(int *tno)
 {
@@ -2088,27 +1950,6 @@ static int tex_Tool(int *tno)
     /* the step multiplier the shoulder button scales by ten at a time */
     static int stepScale = 1; /* derived name */
     unsigned int col[2] = {0xFFFFFF00, 0xFFC0C000};
-#ifndef ICO_HOST
-
-    /* One print per row type, int, short and float, as nested inline
-     * functions. */
-    inline void printInt(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label, *(int *)m[i].var);
-    }
-
-    inline void printShort(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%d", m[i].label,
-                          *(short *)m[i].var);
-    }
-
-    inline void printFloat(int i) /* derived name */
-    {
-        debug_PrintfDummy(10, i * 9 + 46, col[i == toolRow], "%s:%f", m[i].label,
-                          *(float *)m[i].var);
-    }
-#endif
 
     int cnt = 0;
     int chg = 0;
@@ -2136,11 +1977,7 @@ static int tex_Tool(int *tno)
     if (rec->clut.vramSize != 0) {
         tex_dispClut((unsigned char *)rec->clut.addr + 0x20, rec->clut.vramSize < 4);
     }
-#ifdef ICO_HOST
     debug_PrintfDummy(0x90, 0x2E, col[0], "/%d Name:%s x:x%d", cnt, TEX_NAME_ARG(rec), stepScale);
-#else
-    debug_PrintfDummy(0x90, 0x2E, col[0], "/%d Name:%s x:x%d", cnt, (int)rec, stepScale);
-#endif
     switch (m[toolRow].type) {
     case 0:
     case 2:
@@ -2232,7 +2069,6 @@ static int tex_Tool(int *tno)
         for (i = 0; i < 17; i++) {
             switch (m[i].type) {
             case 0:
-#ifdef ICO_HOST
                 printInt(i, m, col);
                 break;
             case 1:
@@ -2240,15 +2076,6 @@ static int tex_Tool(int *tno)
                 break;
             case 2:
                 printShort(i, m, col);
-#else
-                printInt(i);
-                break;
-            case 1:
-                printFloat(i);
-                break;
-            case 2:
-                printShort(i);
-#endif
                 break;
             }
         }
@@ -2364,7 +2191,6 @@ int tex_ListTool(void)
 
         if (i == listTexNo) {
             debug_PrintfDummy(10, row * 8 + 50, 0xFF808000, "%03d%18s%7d:%1d/%1d:%s:%s:%s",
-#ifdef ICO_HOST
                               listTexNo, TEX_NAME_ARG(t), sum,
                               texTable[listTexNo].rec.ext.level + 1, t->levelNum,
                               imageTypeName[t->pic.imageType], clutTypeName[t->pic.clutType & 0x3F],
@@ -2372,14 +2198,6 @@ int tex_ListTool(void)
         } else {
             debug_PrintfDummy(10, row * 8 + 50, 0xFFFFFF00, "%03d%18s%7d:%1d/%1d:%s:%s:%s", i,
                               TEX_NAME_ARG(t), sum, texTable[i].rec.ext.level + 1, t->levelNum,
-#else
-                              listTexNo, (int)t, sum, texTable[listTexNo].rec.ext.level + 1,
-                              t->levelNum, imageTypeName[t->pic.imageType],
-                              clutTypeName[t->pic.clutType & 0x3F], headerName[t->ext.animated]);
-        } else {
-            debug_PrintfDummy(10, row * 8 + 50, 0xFFFFFF00, "%03d%18s%7d:%1d/%1d:%s:%s:%s", i,
-                              (int)t, sum, texTable[i].rec.ext.level + 1, t->levelNum,
-#endif
                               imageTypeName[t->pic.imageType], clutTypeName[t->pic.clutType & 0x3F],
                               headerName[t->ext.animated]);
         }

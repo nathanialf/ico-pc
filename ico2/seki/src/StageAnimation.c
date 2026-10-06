@@ -118,11 +118,7 @@ static void stage_MakeGObj(int *dat, int no)
     g->word24 = 0;
     e->obj[e->flags.b.count] = g;
     d = CSVSYSTEM_InitDObj(kind, &init);
-#ifdef ICO_HOST
     g->dobj = d;
-#else
-    *(int *)&g->dobj = (int)d;
-#endif
     d->colPerNode = 1;
     e->data[e->flags.b.count] = dat;
     w = (e->flags.i & ~0x3FF) | ((e->flags.b.count + 1) & 0x3FF);
@@ -178,11 +174,7 @@ void stage_ApplyData(char *name, char *data)
 /* stage_Init reaches the table's records through a pointer */
 #define STG ((StageAnim *)stageAnimTable) /* derived name */
 /* an animated object's DObj, its 0x15C word read through AnimWord */
-#ifdef ICO_HOST
 #define STG_SUB(o) (((GObj *)(o))->dobj)
-#else
-#define STG_SUB(o) ((Sub15C *)((AnimWord *)((char *)(o) + 0x15C))->i) /* derived name */
-#endif
 
 /* The stage animation TTY trace, built only when DEBUG is defined; the
    retail build leaves the helper without a body. */
@@ -315,11 +307,7 @@ int stage_Init(void)
                 r = (char *)e->entry1;
                 no = -1;
                 if (r != 0) {
-#ifdef ICO_HOST
                     no = (r - (char *)stageTable) / sizeof(StageAnimDef);
-#else
-                    no = (r - (char *)stageTable) / 0x5CU;
-#endif
                 }
                 bga_ApplyDObject(a, e->obj, e->flags.b.count, no);
             }
@@ -585,20 +573,11 @@ void stage_CalcAnimationNoParent(void)
                 int k;
 
                 for (k = 0; k < e->flags.b.count; k++) {
-#ifdef ICO_HOST
                     char *o = (char *)e->obj[k];
-#else
-                    char *objs = (char *)e->obj;
-                    char *o = *(char **)(objs + (k << 2));
-#endif
 
                     GOBJ_SUB(o)->disp = 0;
                     if (GOBJ_SUB(o)->nodeNum != 0) {
-#ifdef ICO_HOST
                         *(int *)GOBJ_SUB(o)->nodeMtx = 0;
-#else
-                        *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
-#endif
                     }
                 }
                 break;
@@ -666,19 +645,10 @@ void stage_CalcAnimationParent(void)
             int k;
 
             for (k = 0; k < e->flags.b.count; k++) {
-#ifdef ICO_HOST
                 char *o = (char *)e->obj[k];
-#else
-                char *objs = (char *)e->obj;
-                char *o = *(char **)(objs + (k << 2));
-#endif
                 GOBJ_SUB(o)->disp = 0;
                 if (GOBJ_SUB(o)->nodeNum != 0) {
-#ifdef ICO_HOST
                     *(int *)GOBJ_SUB(o)->nodeMtx = 0;
-#else
-                    *(int *)((int *)*(int *)(o + 0x15C))[0xC / 4] = 0;
-#endif
                 }
             }
             break;
@@ -728,12 +698,7 @@ void stage_DispAnimation(void)
             continue;
         }
         for (k = 0; k < e->flags.b.count; k++) {
-#ifdef ICO_HOST
             Sub15C *d = e->obj[k]->dobj;
-#else
-            char *objs = (char *)e->obj;
-            Sub15C *d = ((GObj *)*(char **)(objs + (k << 2)))->dobj;
-#endif
 
             if (d->disp != 0) {
                 reg_DispObj(d);
@@ -752,21 +717,12 @@ inline void stage_SetLoopFlag(int key, int loop)
         /* one int pointer reads the record and then the count; with a record
            pointer and a direct count read the key test becomes a
            branch-likely (measured) */
-#ifdef ICO_HOST
         /* the row's no and loop by name (StageAnimDef's layout is the ELF
            table's only once package 5 freezes it) */
         if (key == e->entry1->no) {
             e->entry1->loop = loop;
             count = *(volatile int *)&stageAnimCount;
         }
-#else
-        int *p = (int *)e->entry1;
-        if (key == p[0x58 / 4]) {
-            p[0x50 / 4] = loop;
-            p = &(*((volatile int *)(&stageAnimCount)));
-            count = *p;
-        }
-#endif
     }
 }
 
@@ -795,14 +751,10 @@ inline void stage_SetParentOfGObj(int key, void *parent)
     StageAnim *e = stageAnimTable;
     for (i = 0; i < stageAnimCount; i++) {
         if (key == e->entry1->no) {
-#ifdef ICO_HOST
             /* the parent link is an object and its node (script.c's
                ParentLink), which the EE moves as one doubleword */
             BGA_ANIM(e->entry2)->obj = (struct BgaAnimObj *)((ObjNode *)parent)->obj;
             BGA_ANIM(e->entry2)->idx = ((ObjNode *)parent)->node;
-#else
-            *(Blob8 *)&e->entry2->anim->obj = *(Blob8 *)parent;
-#endif
             BGA_ANIM(e->entry2)->root = one;
         }
         e++;
@@ -815,14 +767,10 @@ inline void stage_SetParentOfGObjWithLocalRotationFlag(int key, void *parent, in
     StageAnim *e = stageAnimTable;
     for (i = 0; i < stageAnimCount; i++) {
         if (key == e->entry1->no) {
-#ifdef ICO_HOST
             /* the parent link is an object and its node (script.c's
                ParentLink), which the EE moves as one doubleword */
             BGA_ANIM(e->entry2)->obj = (struct BgaAnimObj *)((ObjNode *)parent)->obj;
             BGA_ANIM(e->entry2)->idx = ((ObjNode *)parent)->node;
-#else
-            *(Blob8 *)&e->entry2->anim->obj = *(Blob8 *)parent;
-#endif
             BGA_ANIM(e->entry2)->root = localRotation;
         }
         e++;
@@ -900,13 +848,7 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
         CopyQuaternion(BGA_ANIM(e->entry2)->quat, q);
         bga_SetFrame(e->entry2, (int)r, 1, e->entry1->loop);
         for (k = 0; k < e->flags.b.count; k++) {
-#ifdef ICO_HOST
             GOBJ_SUB(e->obj[k])->disp = 1;
-#else
-            char *objs = (char *)e->obj;
-
-            *(int *)(*(int *)(*(char **)(objs + (k << 2)) + 0x15C) + 0x74) = 1;
-#endif
         }
         if (systemStatus[0x14 / 4] != 0) {
             break;
@@ -931,12 +873,7 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
             continue;
         }
         for (k = 0; k < e->flags.b.count; k++) {
-#ifdef ICO_HOST
             Sub15C *d = e->obj[k]->dobj;
-#else
-            char *objs = (char *)e->obj;
-            Sub15C *d = ((GObj *)*(char **)(objs + (k << 2)))->dobj;
-#endif
 
             reg_DispObj(d);
             d->disp = 0;

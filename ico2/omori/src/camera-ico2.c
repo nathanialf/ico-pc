@@ -20,16 +20,11 @@
 #include "gv.h"
 #include <assert.h>
 
-#ifdef ICO_HOST
-
 /* PC port (renderer R7d, docs/port/RENDER_API.md "Frame rate and interpolation"): a camera
    group whose kind differs from the current one re-initialises the monitor
    camera, a hard cut for the presenter's interpolation
    (port/game/video_options.c; a counter no game state reads) */
 extern void ico_video_camera_cut(void);
-
-#endif
-
 static void *ReadCameraSet(struct CamSetFile *f, int stage);
 
 /* a loaded camera set: the file header, then the group records */
@@ -87,11 +82,7 @@ static float groupProbePos[36]; /* derived name */
    EE each lies in its own 16-byte slot of .bss and the fourth word lands in
    the slot's padding.  The host gives them that fourth word (package 2I,
    ASan global-buffer-overflow). */
-#ifdef ICO_HOST
 #define CAM_PREV_WORDS 4
-#else
-#define CAM_PREV_WORDS 3
-#endif
 
 static float targetAPrev[CAM_PREV_WORDS]; /* derived name */
 
@@ -142,8 +133,6 @@ typedef struct CamItemV2 { /* 0x50 */ /* field names derived */
     unsigned char pin[80];            /* a version-2 pin record */
 } CamItemV2;                          /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: an old camera set's pin records are copied whole over the head of
@@ -154,8 +143,6 @@ _Static_assert(sizeof(CamItemV0) == __builtin_offsetof(PinRec, eyeRate), "CamIte
 _Static_assert(sizeof(CamItemV1) == __builtin_offsetof(PinRec, limitP), "CamItemV1 over PinRec");
 
 _Static_assert(sizeof(CamItemV2) == __builtin_offsetof(PinRec, ofsB), "CamItemV2 over PinRec");
-
-#endif
 
 inline void SetCameraZoomOffsetRatio(float val)
 {
@@ -780,18 +767,11 @@ void InitIco2Camera(void)
 
 /* the target offset the smoothing test measures the new one against, reset
    whenever the actor asks for no offset */
-#ifdef ICO_HOST
 
 /* sceVu0AddVector below stores all four lanes (the EE's sqc2 writes the 4
    bytes after the array, whatever the linker put there); the host gives the
    fourth lane its own room */
 static float lastTargetOffset[4] = {0.0f, 0.0f, 0.0f}; /* derived name */
-
-#else
-
-static float lastTargetOffset[3] = {0.0f, 0.0f, 0.0f}; /* derived name */
-
-#endif
 
 static void GetTargetOffset(GObj *gobj, float *v, unsigned char flag)
 {
@@ -923,9 +903,7 @@ void SetCameraMatrix_Ico2(int flag)
                           ((CamGroup *)cameraSetGroups)[group].kind !=
                               ((CamGroup *)cameraSetGroups)[cameraGroupCurrent].kind)) {
             initMonitorCamera(1);
-#ifdef ICO_HOST
             ico_video_camera_cut();
-#endif
             f8 = 1;
         }
         memset(vA, 0, 16);
@@ -1010,8 +988,6 @@ inline void InitPluralCameraSet(void)
     pluralCameraSetNum = 0;
 }
 
-#ifdef ICO_HOST
-
 /* the sizes allocCameraSet, GetSizeOfCameraSetBinary and the group walks
    spell as 16, 76 and 92: the frozen disc records (eeword.h keeps
    CamGroup.items a 32-bit word) */
@@ -1020,8 +996,6 @@ _Static_assert(sizeof(CamSetFile) == 16, "CamSetFile is the 16-byte .gcm head");
 _Static_assert(sizeof(CamGroup) == 76, "CamGroup is the 76-byte .gcm group");
 
 _Static_assert(sizeof(PinRec) == 92, "PinRec is the 92-byte .gcm pin");
-
-#endif
 
 /* the camera-set reallocator: a block sized for the set's groups and items,
    for ReadCameraSet's four call sites */

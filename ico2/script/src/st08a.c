@@ -20,13 +20,8 @@
 #include "script.h"
 
 /* GObj.drawMask (0x50): cleared so no camera draws the object */
-#ifdef ICO_HOST
 #define SCP_CLEAR_DRAWMASK(id) (scpSearchGobj(id)->drawMask = 0)
 #define SCP_SET_DRAWMASK(id) (scpSearchGobj(id)->drawMask = 0xFFFFFFFF)
-#else
-#define SCP_CLEAR_DRAWMASK(id) (((int *)scpSearchGobj(id))[80 / 4] = 0)
-#define SCP_SET_DRAWMASK(id) (((unsigned int *)scpSearchGobj(id))[80 / 4] = 0xFFFFFFFF)
-#endif
 
 static void actSt08aDoorUpSub(GObj *volatile self);
 static void actSt08aGirlPosChk(GObj *volatile self);

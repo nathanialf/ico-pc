@@ -75,18 +75,8 @@ static float savedMatrix200[16]; /* derived name */
 
 static float savedMatrix340[16]; /* derived name */
 
-#ifdef ICO_HOST
-
-/* the C library's memset: the EE's declaration (#else) passes the size as
-   an int where the host's definition reads a size_t */
+/* the C library's memset (the original declared it with an int size) */
 #include <string.h>
-
-#else
-
-/* declared here with a void return; string.h is not included */
-extern void memset(void *p, int c, int n);
-
-#endif
 
 void PuddleGeo(GObj *self);
 void EntryRippleToPuddle(GObj *self, void *vec);
@@ -462,22 +452,12 @@ inline void PuddleGeo(GObj *self)
     int i;
 
     p = GOBJ_SUB(self)->work;
-#ifdef ICO_HOST
     for (i = 0; i < 6; i++) {
         if (((PuddleWork *)p)->rip[i].t < 200.0f) {
             ((PuddleWork *)p)->rip[i].t +=
                 60.0f / (float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) * 2.0f;
         }
     }
-#else
-    for (i = 0; i < 6; i++) {
-        if (*(float *)(p + 0x20) < 200.0f) {
-            *(float *)(p + 0x20) +=
-                60.0f / (float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) * 2.0f;
-        }
-        p += 0x20;
-    }
-#endif
 }
 
 inline void EntryRippleToPuddle(GObj *self, void *vec)

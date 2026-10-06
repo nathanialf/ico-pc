@@ -34,13 +34,7 @@ int kanbanCommonRead = 0;
 static KanbanCol kanbanStartCol = {{0x80, 0x80, 0x80, 0}}; /* derived name */
 
 /* texProperty's texNo column, &texProperty[0].texNo */
-#ifdef ICO_HOST
 #define D_0030D014 ((char *)&texProperty[0].texNo)
-#else
-
-extern char D_0030D014[];
-
-#endif
 
 /* a file static, as are the functions of the same name in
    ico2/fumi/src/jimaku and ico2/common/src/layout_texture */
@@ -54,35 +48,15 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 
-#ifdef ICO_HOST
-
 /* PC port (P3): the menu text hook (port/ui/layout_ext.h) */
 #include "layout_ext.h"
 
-#endif
 /* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
    definition reads them on hosts that pass them on the stack
    (layout_texture.c says more) */
-#ifdef ICO_HOST
 
 extern void gif_SpriteSensitive(int *r, long long z, int *uv, unsigned char *col, int prim);
-
-#else
-
-extern void gif_SpriteSensitive(int *r, unsigned int z, int *uv, unsigned char *col, int prim);
-
-#endif
-#ifdef ICO_HOST
-
 extern void gif_SpriteSensitiveOffset(int *r, long long z, int *uv, unsigned char *col, int prim);
-
-#else
-
-extern void gif_SpriteSensitiveOffset(int *r, unsigned int z, int *uv, unsigned char *col,
-                                      int prim);
-
-#endif
-
 extern void gif_PointOffset(int *v, long long z, unsigned char *col, int prim);
 extern void gif_StartPacketPri(int pri);
 
@@ -94,12 +68,8 @@ static void init_textures_of_specified_property(int first, int last);
 
 static inline char *get_texture_base_name(char *src) /* derived name */
 {
-#ifdef ICO_HOST
     /* the result points into it, so on the host it outlives the call */
     static char buf[256];
-#else
-    char buf[256];
-#endif
     char *p;
     char *t;
 
@@ -296,16 +266,10 @@ static void init_textures_of_specified_property(int first, int last)
     for (i = first; i < last; i++) {
         debug_StdPrintfDummy("propertyId %d\n", i);
         no = get_texture_no_of_property(i);
-#ifdef ICO_HOST
         /* the EE's stride and texData-before-texNo offset are 32-bit only */
         texProperty[i].texNo = no;
         texProperty[i].texData = tex_GetTextureData(no);
         tex_SetSamplingType(texProperty[i].texData, 1, 1);
-#else
-        *(int *)(D_0030D014 + i * 0x70) = no;
-        *(void **)(D_0030D014 + i * 0x70 - 4) = tex_GetTextureData(no);
-        tex_SetSamplingType(*(void **)(D_0030D014 + i * 0x70 - 4), 1, 1);
-#endif
     }
 }
 
@@ -363,7 +327,6 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         r[3] -= 8;
         uv[3] -= 8;
 
-#ifdef ICO_HOST
         /* PC port (P3): a menu text row (the boot screens' prompts, Yes /
            No, the language names) is drawn with the port font where the
            sprite would be, its texture transferred as before
@@ -371,7 +334,6 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         if (lt_ext_IsTextRow(e)) {
             lt_ext_DrawTextRow(e, r, uv, (const unsigned char *)col->b, 0);
         } else
-#endif
             gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
         gif_SetZWrite(1);
         gif_EndPacket();

@@ -5,7 +5,7 @@ The port's gameplay options live in one module, `port/game/options.c` and
 that asks (`ico_config_get_bool`) and can be changed at run time with
 `ico_opt_set_*`, which is what the Settings menu uses. `ico_opt_reload()`
 forgets the run-time values. Every default is the original game's
-behaviour, and the game code reads an option only under `#ifdef ICO_HOST`.
+behaviour, and the game code reads an option only through its getter.
 
 | key | default | getter / setter | read by |
 |---|---|---|---|
@@ -51,7 +51,7 @@ value at once. `ico_audio_set_mirror` / `ico_audio_mirror` and
 
 The option is for a less stressful game: the shadow creatures never target
 or carry off Yorda in free play. The hook is `ico_opt_yorda_safe()`,
-declared `extern` in each game file under `#ifdef ICO_HOST`. The sites:
+declared `extern` in each game file that calls it. The sites:
 
 | site | what it does when on |
 |---|---|

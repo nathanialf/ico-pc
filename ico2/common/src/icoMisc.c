@@ -83,17 +83,9 @@ extern void gif_EndPacket(void);
 /* ICO_HOST: GifPacket.c's parameter types, so arguments land where the
    definition reads them on hosts that pass them on the stack
    (layout_texture.c says more) */
-#ifdef ICO_HOST
 
 extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, long long z, MiscColor *col,
                                     int prim);
-
-#else
-
-extern void gif_MakeSpriteNoTexture(int x, int y, int w, int h, unsigned int z, MiscColor *col,
-                                    int prim);
-
-#endif
 
 /* .bss: the line buffer the memory report is printed through */
 static char printBuf[128]; /* derived name */
@@ -177,11 +169,7 @@ static void disp_memory_partition_bar(void)
             do {
                 used += e->size << 4;
                 e = e->free_next;
-#ifdef ICO_HOST
                 if (e != 0 && !ico_arena_contains(e, 0)) {
-#else
-                if ((unsigned int)e > 0x1FEFFF0) {
-#endif
                     sprintf(
                         buf,
                         "DISP_MEMORY_PARTITION_BAR():\n\tINVALID MEMORY FREE AREA INDICATED IN PARTITION \"%s\"\n\tMALLOCED MEMORY'S NEXT_FREE: %p\n",

@@ -273,8 +273,6 @@ static WVTObj wayWorkClear = {{0}, {0}, {0}, 0,   0,   0, 0,
 static WayStep wayStepClear = {
     {0.0f, 0.0f, 0.0f, 0.0f}, 0, 3.4028235e38f, 3.4028235e38f}; /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: ACTWayMove_NextDetail clears the actor's way step by copying
    wayStepClear over Act from wayNodeX: dir over wayNodeX..pad3EC, state over
    wayFlags, dist over wayGoalDist, dy over wayGoalHeight; the host layouts
@@ -290,8 +288,6 @@ ICO_LAYOUT_AT_FROM(WayStep, dy, Act, wayNodeX, wayGoalHeight);
 _Static_assert(sizeof(WayStep) ==
                    __builtin_offsetof(Act, wayLast) - __builtin_offsetof(Act, wayNodeX),
                "WayStep is not Act's wayNodeX to wayLast");
-
-#endif
 
 /* this TU's uses of the gv distance helpers do not fit the void returns gv.h
    carries, and its GetRootProjectionPosOfGObj / IsThisBoxTruck call forms do
@@ -464,12 +460,8 @@ int ACTWayMove_NextDetail(GObj *self, float *node, float *goal, unsigned char d,
         }
         if (stage_no == 8 || chk != 0) {
             if (self == girlGObj && wallGObj_ACTCheckCollis_WAY != 0 &&
-#ifdef ICO_HOST
                 ICO_RAW(int, wallGObj_ACTCheckCollis_WAY, 0xC,
                         ((GObj *)wallGObj_ACTCheckCollis_WAY)->kind) == 17 &&
-#else
-                *(int *)((char *)wallGObj_ACTCheckCollis_WAY + 0xC) == 17 &&
-#endif
                 IsThisBoxTruck(wallGObj_ACTCheckCollis_WAY) != 7 &&
                 _DistSqGV(goal, test_CURRENTROOT(wallGObj_ACTCheckCollis_WAY)) < 40000.0f &&
                 _DistxzSqGV(pos, test_CURRENTROOT(wallGObj_ACTCheckCollis_WAY)) < 40000.0f) {
@@ -526,8 +518,6 @@ done:
     return 1;
 }
 
-#ifdef ICO_HOST
-
 static unsigned char way_flag(int flags, int mask) /* derived name */
 {
     if (flags & mask) {
@@ -538,19 +528,6 @@ static unsigned char way_flag(int flags, int mask) /* derived name */
 
 int ACTWayExec_Position(GObj *self, ICO_WORD tgt, float *dir, float speed, int flags)
 {
-#else
-int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
-{
-    /* an inline function nested in the body: whether flags has the mask's bits */
-    inline unsigned char way_flag(int mask) /* derived name */
-    {
-        if (flags & mask) {
-            return 1;
-        }
-        return 0;
-    }
-
-#endif
     Act *w = GOBJ_ACT(self);
     char *node;
     float d2[4];
@@ -559,24 +536,15 @@ int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
     float pos[4];
     float f;
 
-#ifdef ICO_HOST
     if (way_flag(flags, 1)) {
-#else
-    if (way_flag(1)) {
-#endif
         sceVu0ScaleVector(v, dir, -1.0f);
     } else {
         v[0] = dir[0];
         v[1] = dir[1];
         v[2] = dir[2];
     }
-#ifdef ICO_HOST
     if (way_flag(flags, 4)) {
         GetRootProjectionPosOfGObj(pos, (GObj *)tgt);
-#else
-    if (way_flag(4)) {
-        GetRootProjectionPosOfGObj(pos, tgt);
-#endif
         if (WayMove_CheckCollis(pos, v, 0, 0)) {
             v[0] = pos[0];
             v[1] = pos[1];
@@ -608,11 +576,7 @@ int ACTWayExec_Position(GObj *self, int tgt, float *dir, float speed, int flags)
                 return 1;
             }
         }
-#ifdef ICO_HOST
         if (f < 200.0f || way_flag(flags, 2)) {
-#else
-        if (f < 200.0f || way_flag(2)) {
-#endif
             w->stick.mag = 0.5f;
         } else {
             w->stick.mag = 1.0f;

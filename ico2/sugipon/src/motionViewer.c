@@ -119,8 +119,6 @@ static void setMotionSpeed(float ratio)
    debug_SelectCsvWindowWithLine takes its rows as void * */
 extern MotionDef motionKind[];
 
-#ifdef ICO_HOST
-
 /* was a nested function of dispMotFrameProgress */
 static void dispProgressBar(int s, int e, int n, float c, GifColor *col)
 {
@@ -161,47 +159,6 @@ static void dispProgressBar(int s, int e, int n, float c, GifColor *col)
 
 static void dispMotFrameProgress(int obj, float cur)
 {
-#else
-static void dispMotFrameProgress(int obj, float cur)
-{
-    /* a nested function: dispMotFrameProgress passes it a static chain */
-    void dispProgressBar(int s, int e, int n, float c, GifColor *col)
-    {
-        float r0 = (float)s / (float)n;
-        float r1 = (float)e / (float)n;
-        float rc = c / (float)n;
-
-        gif_StartPacketPri(11);
-        gif_SetZTest(0);
-        gif_SetZWrite(0);
-        gif_SetAlpha(1, 5, 128);
-        if (r0 < rc && rc <= r1) {
-            GifColor dark = {col->r / 2, col->g / 2, col->b / 2, 0x80};
-            GifRect ra = {(int)((-(ScreenWidth << 4) / 2 + (ScreenWidth << 4) * r0) * 8 / 10),
-                          ((ScreenHeight << 4) * 6 / 20) & ~15,
-                          (int)(((ScreenWidth << 4) * (rc - r0)) * 8 / 10),
-                          (((ScreenHeight << 4) / 100) & ~15) + 24};
-            GifRect rb = {(int)((-(ScreenWidth << 4) / 2 + (ScreenWidth << 4) * rc) * 8 / 10), ra.y,
-                          (int)(((ScreenWidth << 4) * (r1 - rc)) * 8 / 10), ra.h};
-            gif_SpriteSensitiveOrg(&ra, 0, 0, col, 1);
-            gif_SpriteSensitiveOrg(&rb, 0, 0, &dark, 1);
-        } else {
-            GifRect rc2 = {(int)((-(ScreenWidth << 4) / 2 + (ScreenWidth << 4) * r0) * 8 / 10),
-                           ((ScreenHeight << 4) * 6 / 20) & ~15,
-                           (int)(((ScreenWidth << 4) * (r1 - r0)) * 8 / 10),
-                           (((ScreenHeight << 4) / 100) & ~15) + 24};
-            if (rc <= r0) {
-                GifColor dark = {col->r / 2, col->g / 2, col->b / 2, 0x80};
-                gif_SpriteSensitiveOrg(&rc2, 0, 0, &dark, 1);
-            } else {
-                gif_SpriteSensitiveOrg(&rc2, 0, 0, col, 1);
-            }
-        }
-        gif_SetZTest(1);
-        gif_SetZWrite(1);
-        gif_EndPacket();
-    }
-#endif
     GifColor colA = {52, 84, 192, 128};
     GifColor colB = {192, 84, 52, 128};
     float f1 = motionKind[obj].shiftStart;
@@ -347,8 +304,6 @@ static int motKindMenuProc(void)
 
 static int lastOriSel = -1; /* derived name */
 
-#ifdef ICO_HOST
-
 /* a nested function of motOriMenuProc, expanded at both of its call sites */
 static inline void initOrient(MvMenuEnt *ent) /* derived name */
 {
@@ -356,8 +311,6 @@ static inline void initOrient(MvMenuEnt *ent) /* derived name */
     InitMotionOrient(viewObj, motSel + ent->oriFrom, motSel + ent->oriTo, -1, -1,
                      motSel + ent->motFirst);
 }
-
-#endif
 
 static int motOriMenuProc(void)
 {
@@ -371,16 +324,6 @@ static int motOriMenuProc(void)
     int i;
     MotionOrientEntry *ori;
 
-#ifndef ICO_HOST
-    /* a nested function, expanded at both of its call sites */
-    inline void initOrient(void) /* derived name */
-    {
-        DisableMotionOrientUpdate(viewObj);
-        InitMotionOrient(viewObj, motSel + ent->oriFrom, motSel + ent->oriTo, -1, -1,
-                         motSel + ent->motFirst);
-    }
-
-#endif
     dispMotFrameProgress(mot, ForMotionViewer_GetCurrentAnimationFrame(viewObj));
     if (motionKindCount != 0) {
         sprintf(buf, "ORIENT for \"%s\" Frame: %1.1f/%d", motionKind[cur].name,
@@ -388,11 +331,7 @@ static int motOriMenuProc(void)
         ret = debug_SelectCsvWindow(buf, 10, 50, 11, oriCsv.rows, 8, 0, 1, motionKindCount,
                                     &oriCsv.sel);
         if (oriCsv.sel != lastOriSel) {
-#ifdef ICO_HOST
             initOrient(ent);
-#else
-            initOrient();
-#endif
         }
         lastOriSel = oriCsv.sel;
         m = cur;
@@ -418,11 +357,7 @@ static int motOriMenuProc(void)
         ret = (pad[0].flags & 0x40) ? -1 : 0;
     }
     if (pad[0].flags & 0x10) {
-#ifdef ICO_HOST
         initOrient(ent);
-#else
-        initOrient();
-#endif
     }
     if (ret == 1) {
         EnableMotionOrientUpdate(viewObj);

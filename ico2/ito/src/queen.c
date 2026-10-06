@@ -1257,17 +1257,10 @@ void subQueenBrainMain(volatile ICO_WORD g)
             case 1077:
             case 1078:
                 GetRootPosition(target.v, boyGObj);
-#ifdef ICO_HOST
                 GOBJ_SUB(g)->root.lookPos[0] = target.v[0];
                 GOBJ_SUB(g)->root.lookPos[1] = target.v[1];
                 GOBJ_SUB(g)->root.lookPos[2] = target.v[2];
                 GOBJ_SUB(g)->root.lookMode = 1;
-#else
-                ((QueenLookAt *)((char *)GOBJ_SUB(g) + 0x380))->pos.f[0] = target.v[0];
-                ((QueenLookAt *)((char *)GOBJ_SUB(g) + 0x380))->pos.f[1] = target.v[1];
-                ((QueenLookAt *)((char *)GOBJ_SUB(g) + 0x380))->pos.f[2] = target.v[2];
-                ((QueenLookAt *)((char *)GOBJ_SUB(g) + 0x380))->on.i = 1;
-#endif
             }
 
             switch (GOBJ_SUB(g)->ctrl.motion) {

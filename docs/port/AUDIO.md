@@ -20,7 +20,7 @@
 | `spu2_tables.c` | the Gaussian interpolation table, the reverb resampling FIR, the reverb presets (transcribed from psx-spx) |
 | `spu2_internal.h` | tables and the envelope step, shared with the tests |
 | `spu2_sd.h`, `spu2_sd.c` | libsd's calls (`sceSdSetParam`, `SetSwitch`, `SetAddr`, `SetCoreAttr`, `SetEffectAttr`, `VoiceTrans`, `Init`) with libsd's encodings, as register writes |
-| `sce/libsndn2/sound.c`, `sound.h` (repository root) | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, the decomp's clean-room reconstruction, MIT), with host seams under `ICO_HOST` |
+| `sce/libsndn2/sound.c`, `sound.h` (repository root) | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, the decomp's clean-room reconstruction, MIT), with the host seams made in place |
 | `sndn2_host.h`, `sndn2_host.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
 | `stream.c`, `sndn2_internal.h` | the ADPCM stream engine (records, event queue, refill scheduler) and the PCM mixer |
 | `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device (window build), `volume.c` the output volume |
@@ -163,10 +163,8 @@ preset's address registers (PS1 units of 8 bytes) are written as halfwords
 ## The sequencer on the host
 
 The sequencer's source is `sce/libsndn2/sound.c` and `sound.h`, the
-decomp's own (upstream), which the host build compiles with `ICO_HOST`
-defined and the decomp's EE build compiles with it undefined, byte-matched.
-Every host change is an `#ifdef ICO_HOST` arm whose `#else` is the EE text,
-or the macro `SG_HEAD_T`, which spells the EE's own `int`.
+decomp's reconstruction with the host changes made in place (the head
+context's type is the macro `SG_HEAD_T`, where the EE had `int`).
 
 `port/compat/sound.h` includes `sce/libsndn2/sound.h` (the host view: `long long` for
 the EE's 64-bit `long` in `SgStPcmBufMode`, and the `SgSetSePitchDirect`

@@ -19,40 +19,32 @@ in `LOADERS.md`.
 
 ## Conventions in `ico2/`
 
-`ico2/` is the decomp's code (the `upstream` remote) and the port's copy
-equals it; host edits are made there, and the decomp's byte-match gate
-(its `./build.sh` and `tools/check_elf.py`) is what admits them. So every
-host-only edit leaves the period compiler's objects as they were
-(`tools/ee_identity.sh` checks a file before it goes upstream; see
-`docs/BUILDING.md`). These are the ways to do that:
+`ico2/` is the port's own source, compiled only for the host
+(`docs/BUILDING.md`, "The game code"): a host fix is made directly in the
+code, with no `ICO_HOST` conditional and no PS2 spelling kept beside it.
+These are the forms such a fix takes:
 
-- **A field instead of an offset.** Where naming the field compiles to the
-  same EE code, the code names the field.
-- **`ICO_RAW` and `ICO_RAWP`** (`ico2/fumi/include/ee_view.h`). Where the
-  ee-gcc 2.9 output depends on how an access is spelled (its scheduling and
-  its `MEM_IN_STRUCT` bit do), `ICO_RAW(T, p, off, field)` expands to the
-  original `*(T *)((char *)p + off)` on the EE and to `field` on the host;
-  `ICO_RAWP` is the address form.
-- **`#ifdef ICO_HOST`** with the original statement in `#else`, where a
-  whole statement needs a host spelling.
-- **Nested functions.** clang has no GNU nested functions, so the host
-  compiles a file-scope static with the captured variables passed as
-  parameters (written captures by pointer). The static is in an
-  `#ifdef ICO_HOST` arm and the nested original stays in `#else`; a call
-  site whose arguments changed is gated the same way. This holds even where
-  the lifted form happens to compile to the same EE bytes, so the EE text is
-  the decomp's.
-- **Pointer-wide words with EE types.** A word that holds an object but is
-  `int` on the EE becomes `ICO_WORD` (host `intptr_t`) or
-  `ICO_WORD_PTR(T)` (host `T`), both `int` on the EE
+- **A field instead of an offset.** The code names the field.
+- **`ICO_RAW` and `ICO_RAWP`** (`ico2/fumi/include/ee_view.h`).
+  `ICO_RAW(T, p, off, field)` is `field`, with the original
+  `*(T *)((char *)p + off)` kept in the text as its arguments so the offset
+  audit can check that `field` is the one at EE offset `off`; `ICO_RAWP` is
+  the address form. Most of these sites date from when the tree also had to
+  compile for the EE; a plain field is as good where no audit is wanted.
+- **Nested functions.** clang has no GNU nested functions, so the code has
+  a file-scope static with the captured variables passed as parameters
+  (written captures by pointer).
+- **Pointer-wide words.** A word that holds an object but was `int` in the
+  original becomes `ICO_WORD` (a pointer-wide integer, `intptr_t`) or
+  `ICO_WORD_PTR(T)` (the pointer type `T`)
   (`ico2/common/include/typedef.h`). Message rings and their receive
   variables are `IosMsgWord` (`fumi/include/message.h`). Words inside
   frozen disc records stay four bytes and hold arena offsets
   (`ICO_EEWORD`, `ICO_EEW`, `ICO_EEPTR`, `ico2/common/include/eeword.h`;
   `LOADERS.md`).
 - **Sizes.** A literal allocation size for a record that is wider on the
-  host becomes `sizeof(T)` under `ICO_HOST`, or `ICO_MAX_SIZE(T, lit)`
-  (`ee_view.h`: the literal on the EE, the larger of the two on the host).
+  host becomes `sizeof(T)`, or `ICO_MAX_SIZE(T, lit)` (`ee_view.h`: the
+  larger of the literal and `sizeof(T)`).
   Pointer tables are sized with `sizeof(T *)`.
 
 The records whose host layout departs from the EE's early are the ones the
@@ -190,9 +182,9 @@ for Windows x64 (32-bit `long`) found no `long` holding a pointer.
 
 ### Where the host spelling differs
 
-Each site keeps the EE spelling (`ICO_RAW`/`ICO_RAWP`, or `#ifdef ICO_HOST`
-with the original in `#else`). The third column is what the EE spelling
-reads or writes when compiled for the host.
+The third column is what the original (EE) spelling read or wrote when
+compiled for the host; the code has the fourth (some sites keep the EE
+offset in the text through `ICO_RAW`/`ICO_RAWP`).
 
 | file | EE offset | the EE spelling on the host | host spelling |
 | --- | --- | --- | --- |
@@ -314,8 +306,7 @@ the member m: `*(MotOriReq *)&GOBJ_SUB(self)->root.wall` is `MotOriReq` over
   that only moves bytes (a union, a single member, 64-bit words only:
   `ICO_QW`, `Blob64`, `DObjBlk40`) on either side needs the size only.
   `ico2/fumi/include/ee_view.h` spells them: `ICO_LAYOUT_AT(T, tm, U, um)`,
-  `ICO_LAYOUT_AT_FROM(T, tm, U, base, um)`, `ICO_LAYOUT_SIZE(T, U)`; all
-  under `ICO_HOST`, so the EE objects do not change;
+  `ICO_LAYOUT_AT_FROM(T, tm, U, base, um)`, `ICO_LAYOUT_SIZE(T, U)`;
 - **UNREGISTERED**: a registration is missing (the members without one are
   named);
 - **MISMATCH**: the audit's own host probe differs: a member T and U share
@@ -350,8 +341,6 @@ placed:
 | `script/src/st04a.c` `finishCallBackFunc` | each node's `MotIk` (4-byte aligned, heap) | an `Mtx44` (`aligned(16)`) store; right only because `iosMalloc` returns 16-byte aligned blocks | `__builtin_memcpy` of the same 64 bytes |
 
 ### Registrations
-
-All under `ICO_HOST`:
 
 | file | copy | registered |
 | --- | --- | --- |
@@ -430,8 +419,8 @@ Records with pointers use `sizeof` or `ICO_MAX_SIZE` (for example
 `BgaPlayNode`; the way tool's cursor `Act`). The literal sizes that remain
 are records without pointers (the same on every host), raw byte buffers
 (DMA, packet and stream buffers, the 8 KB inflate block), the `.gcm` disc
-records (`CamSetFile` 16, `CamGroup` 76, `PinRec` 92, asserted), EE-only
-`#else` branches, and the partition sizes in `fumi/ios/ios.c`, which the
+records (`CamSetFile` 16, `CamGroup` 76, `PinRec` 92, asserted), and the
+partition sizes in `fumi/ios/ios.c`, which the
 host enlarges (PLATFORM.md, "Heap").
 
 Open items are in `docs/TODO.md` (Game code).

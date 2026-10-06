@@ -170,13 +170,8 @@ typedef struct BgaHeader { /* field names derived */
 /* The header's words as pointers: the animation record, and root i of the
    root list (null after the last).  BGA_W(p) is the word stored for p. */
 #define BGA_ANIM(h) ICO_EEPTR(BgaAnim *, (h)->anim)
-#ifdef ICO_HOST
 #define BGA_ROOT(h, i) ICO_EEPTR(struct BgaDObjEnt *, ICO_EEPTR(IcoEEWord *, (h)->roots)[i])
 #define BGA_W(p) ((IcoEEWord)ico_eew(p))
-#else
-#define BGA_ROOT(h, i) ((h)->roots[i])
-#define BGA_W(p) (p)
-#endif
 
 /* set when an animation's camera cut restarts the global timer; the stream
    motion player resynchronises on it and clears it */

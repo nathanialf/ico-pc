@@ -13,12 +13,8 @@
 #include "main.h"
 #include <assert.h>
 
-#ifdef ICO_HOST
-
 /* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
 extern int ico_opt_yorda_safe(void);
-
-#endif
 
 int eBrainBoyChaseCount;
 
@@ -148,7 +144,6 @@ void eBrainProcess(void)
 
     girlTargetNum = 0;
     boyTargetNum = 0;
-#ifdef ICO_HOST
     /* With the boy or the girl not in the stage (a stage entered without
        her), the loop below still subtracts bpos or gpos, which the EE takes
        as its stack left them: a word that is a number there, a NaN or Inf
@@ -157,7 +152,6 @@ void eBrainProcess(void)
        D15). */
     memset(bpos, 0, sizeof(bpos));
     memset(gpos, 0, sizeof(gpos));
-#endif
 
     if (boyGObj == 0) {
         if (girlGObj == 0)
@@ -319,13 +313,11 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 1);
         break;
     case 2:
-#ifdef ICO_HOST
         /* yorda_safe: no enemy takes the girl as its target */
         if (ico_opt_yorda_safe()) {
             eBrainSetStatus(p, 1);
             break;
         }
-#endif
         eBrainSetStatus(p, 2);
         break;
     case 3:
@@ -335,11 +327,9 @@ EBSlot *eBrainGetTarget(GObj *gop)
         eBrainSetStatus(p, 0);
         break;
     case 6:
-#ifdef ICO_HOST
         if (ico_opt_yorda_safe()) {
             break;
         }
-#endif
         if (girlGObj != 0) {
             eBrainSetStatus(p, 3);
         }
@@ -420,11 +410,9 @@ EBSlot *eBrainGetTarget(GObj *gop)
                             break;
                         }
                     } else {
-#ifdef ICO_HOST
                         if (ico_opt_yorda_safe()) {
                             continue;
                         }
-#endif
                         if (eBrainCanSeeTarget(gop, girlGObj)) {
                             eBrainSetStatus(p, 2);
                             break;
@@ -433,7 +421,6 @@ EBSlot *eBrainGetTarget(GObj *gop)
                 }
             }
             if (p->status != 0) {
-#ifdef ICO_HOST
                 /* PC port: one of the two indices is -1 here (the enemy chases
                    the one it found). The EE stores to the word before the
                    array (ebrain.o 0x9fc and 0xa08, .bss girlTargets at 0x400
@@ -451,9 +438,6 @@ EBSlot *eBrainGetTarget(GObj *gop)
                 } else {
                     ebrainSlots[31].owner = 0;
                 }
-#else
-                boyTargets[boyIdx] = girlTargets[girlIdx] = 0;
-#endif
                 changed = 1;
             }
             break;
@@ -461,11 +445,9 @@ EBSlot *eBrainGetTarget(GObj *gop)
         case 1:
             p->target = boyGObj;
             if (p->chaseFrames >= 181) {
-#ifdef ICO_HOST
                 if (ico_opt_yorda_safe()) {
                     break;
                 }
-#endif
                 if (p->dist[1] < p->dist[0] + 250000.0f) {
                     if (eBrainCanSeeTarget(gop, girlGObj)) {
                         eBrainSetStatus(p, 2);

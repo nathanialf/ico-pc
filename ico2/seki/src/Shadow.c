@@ -546,15 +546,11 @@ static void shadow_getShadowVectorAverage(void *dir, Sub15C *o)
  * one lq/sq pair per vertex */
 typedef ICO_QW Qw128; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: the accumulator reset copies a zero VECTOR into each Qw128 slot;
    the sizes must agree (tools/template_audit.py) */
 ICO_LAYOUT_SIZE(VECTOR, Qw128);
-
-#endif
 
 /* one weighted vertex of a cluster run: the vertex it moves and the weight it
  * moves it by */
@@ -579,7 +575,6 @@ typedef struct ClusterPoly {         /* field names derived */
  * the vnop runs placed around the multiply and the accumulate. */
 static inline void applyWeightedVtx(void *dst, void *src, float w) /* derived name */
 {
-#ifdef ICO_HOST
     /* dst.xyz += (current matrix applied to (src.xyz, 1)).xyz * w; dst.w kept */
     float v[4];
     float *d = dst;
@@ -588,31 +583,6 @@ static inline void applyWeightedVtx(void *dst, void *src, float w) /* derived na
     d[0] = d[0] + v[0] * w;
     d[1] = d[1] + v[1] * w;
     d[2] = d[2] + v[2] * w;
-#else
-    __asm__ __volatile__("lqc2 $vf8, 0(%1)\n\t"
-                         "lqc2 $vf9, 0(%0)\n\t"
-                         "mfc1 $8, %2\n\t"
-                         "qmtc2.ni $8, $vf11\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                         "vmaddaz.xyzw ACC, $vf6, $vf8z\n\t"
-                         "vmaddw.xyzw $vf10, $vf7, $vf0w\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vmulx.xyz $vf10, $vf10, $vf11x\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vadd.xyz $vf9, $vf9, $vf10\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "sqc2 $vf9, 0(%0)"
-                         :
-                         : "r"(dst), "r"(src), "f"(w)
-                         : "$8");
-#endif
 }
 
 static void shadow_EntryClusterShadow(Sub15C *o, float len)
@@ -638,17 +608,9 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
         _GetCurrentMatrix(clusterMatrix + i * 0x40);
     }
 
-#ifdef ICO_HOST
-#else
-    __asm__ __volatile__("lq $8, 0(%0)" : : "r"(&zero) : "$8");
-#endif
     for (i = 0, p = x->parts; i < x->partCount; i++, p++) {
         for (k = 0; k < p->vtxCount; k++) {
-#ifdef ICO_HOST
             __builtin_memcpy((Qw128 *)p->vtxSave + k, &zero, 16);
-#else
-            __asm__ __volatile__("sq $8, 0(%0)" : : "r"((Qw128 *)p->vtxSave + k) : "$8");
-#endif
         }
     }
 
@@ -698,24 +660,7 @@ static void shadow_EntryClusterShadow(Sub15C *o, float len)
  * operands. */
 static inline void applyCurrentMatrixV(void *dst, void *src) /* derived name */
 {
-#ifdef ICO_HOST
     ico_apply_matrix_w1((float *)dst, (const float (*)[4])ico_current_matrix, (const float *)src);
-#else
-    __asm__ __volatile__("lqc2 $vf8, 0(%1)\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf8x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf8y\n\t"
-                         "vmaddaz.xyzw ACC, $vf6, $vf8z\n\t"
-                         "vmaddw.xyzw $vf9, $vf7, $vf0w\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "sqc2 $vf9, 0(%0)"
-                         :
-                         : "r"(dst), "r"(src));
-#endif
 }
 
 static void shadow_EntryNormalShadow(Sub15C *o, int idx, float len)
@@ -777,8 +722,6 @@ static VECTOR screenOrigin = {2048.0f, 2048.0f, 0.0f, 0.0f}; /* derived name */
  * shares the face with the one that computed it */
 static float stripFaceZ[10]; /* derived name */
 
-#ifdef ICO_HOST
-
 /* The VU0 registers the shadow volume helpers below share on the PS2,
  * kept as data: vf1 (the shadow direction), vf10-vf15 (the strip's last
  * three top and bottom vertices) and vf20-vf25 (their projections). The
@@ -790,35 +733,20 @@ static struct {
     float proj[6][4];
 } shadowVolumeRegs; /* derived name */
 
-#endif
-
 /* the projection matrix and the shadow direction into the VU0
  * register file, where the edge projector below leaves them for the whole
  * mesh walk */
 static inline void loadVolumeMatrix(void *dir) /* derived name */
 {
-#ifdef ICO_HOST
     /* the projection matrix becomes the current matrix, as on the PS2 */
     _SetCurrentMatrix(matrixptr + 0xC0);
     __builtin_memcpy(shadowVolumeRegs.dir, dir, 16);
-#else
-    char *m = matrixptr + 0xC0;
-
-    __asm__ __volatile__("lqc2 $vf4, 0x0(%0)\n\t"
-                         "lqc2 $vf5, 0x10(%0)\n\t"
-                         "lqc2 $vf6, 0x20(%0)\n\t"
-                         "lqc2 $vf7, 0x30(%0)\n\t"
-                         "lqc2 $vf1, 0x0(%1)"
-                         :
-                         : "r"(m), "r"(dir));
-#endif
 }
 
 /* the six strip vertices out of the VU register file as integer
  * screen coordinates */
 static inline void storeVolumeVerts(void *dst) /* derived name */
 {
-#ifdef ICO_HOST
     int v[6][4];
     int n;
     int k;
@@ -829,22 +757,6 @@ static inline void storeVolumeVerts(void *dst) /* derived name */
         }
     }
     __builtin_memcpy(dst, v, sizeof v);
-#else
-    __asm__ __volatile__("vftoi4.xyzw $vf26, $vf20\n\t"
-                         "vftoi4.xyzw $vf27, $vf21\n\t"
-                         "vftoi4.xyzw $vf28, $vf22\n\t"
-                         "vftoi4.xyzw $vf29, $vf23\n\t"
-                         "vftoi4.xyzw $vf30, $vf24\n\t"
-                         "vftoi4.xyzw $vf31, $vf25\n\t"
-                         "sqc2 $vf26, 0x0(%0)\n\t"
-                         "sqc2 $vf27, 0x10(%0)\n\t"
-                         "sqc2 $vf28, 0x20(%0)\n\t"
-                         "sqc2 $vf29, 0x30(%0)\n\t"
-                         "sqc2 $vf30, 0x40(%0)\n\t"
-                         "sqc2 $vf31, 0x50(%0)"
-                         :
-                         : "r"(dst));
-#endif
 }
 
 /* Project one silhouette edge and clip the projected segment
@@ -866,7 +778,6 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
     float dot;
     float fw, fh, t0, t1, t;
 
-#ifdef ICO_HOST
     {
         /* roll the strip down one place, load the new edge, project both
            ends (w taken as 1, then all four fields times 1/w), take the
@@ -916,63 +827,6 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
             ((float *)&ob)[k] = pr[5][k] - ((float *)&screenOrigin)[k];
         }
     }
-#else
-    __asm__ __volatile__("vmove.xyzw $vf10, $vf11\n\t"
-                         "vmove.xyzw $vf13, $vf14\n\t"
-                         "vmove.xyzw $vf20, $vf21\n\t"
-                         "vmove.xyzw $vf23, $vf24\n\t"
-                         "vmove.xyzw $vf11, $vf12\n\t"
-                         "vmove.xyzw $vf14, $vf15\n\t"
-                         "vmove.xyzw $vf21, $vf22\n\t"
-                         "vmove.xyzw $vf24, $vf25\n\t"
-                         "lqc2 $vf12, 0x0(%1)\n\t"
-                         "lqc2 $vf15, 0x0(%2)\n\t"
-                         "vnop\n\t"
-                         "vsub.xyz $vf8, $vf10, $vf11\n\t"
-                         "vsub.xyz $vf9, $vf12, $vf11\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf12x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf12y\n\t"
-                         "vmaddaz.xyzw ACC, $vf6, $vf12z\n\t"
-                         "vmaddw.xyzw $vf22, $vf7, $vf0w\n\t"
-                         "vdiv Q, $vf0w, $vf22w\n\t"
-                         "vwaitq\n\t"
-                         "vmulq.xyzw $vf22, $vf22, Q\n\t"
-                         "vopmula.xyz ACC, $vf8, $vf9\n\t"
-                         "vopmsub.xyz $vf2, $vf9, $vf8\n\t"
-                         "vaddw.x $vf3, $vf0, $vf0w\n\t"
-                         "vmulax.xyzw ACC, $vf4, $vf15x\n\t"
-                         "vmadday.xyzw ACC, $vf5, $vf15y\n\t"
-                         "vmaddaz.xyzw ACC, $vf6, $vf15z\n\t"
-                         "vmaddw.xyzw $vf25, $vf7, $vf0w\n\t"
-                         "vdiv Q, $vf0w, $vf25w\n\t"
-                         "vwaitq\n\t"
-                         "vmulq.xyzw $vf25, $vf25, Q\n\t"
-                         "vmul.xyz $vf2, $vf1, $vf2\n\t"
-                         "vmove.w $vf12, $vf0\n\t"
-                         "vmove.w $vf15, $vf0\n\t"
-                         "vnop\n\t"
-                         "vaddax.x ACC, $vf0, $vf2x\n\t"
-                         "vmadday.x ACC, $vf3, $vf2y\n\t"
-                         "vmaddz.x $vf2, $vf3, $vf2z\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "qmfc2.ni $7, $vf2\n\t"
-                         "mtc1 $7, %0\n\t"
-                         "lqc2 $vf8, 0x0(%5)\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "vsub.xyzw $vf18, $vf22, $vf8\n\t"
-                         "vsub.xyzw $vf19, $vf25, $vf8\n\t"
-                         "vnop\n\t"
-                         "vnop\n\t"
-                         "sqc2 $vf18, 0x0(%3)\n\t"
-                         "sqc2 $vf19, 0x0(%4)"
-                         : "=f"(dot)
-                         : "r"(pa), "r"(pb), "r"(&oa), "r"(&ob), "r"(&screenOrigin)
-                         : "$7");
-#endif
 
     rate[0] = rate[1] = 1.0f;
     /* a wholly visible edge returns at once */
@@ -1048,7 +902,6 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
     /* slide each end of the projected edge to the clip parameter found for
      * it */
     if (0.0f < rate[0] && rate[0] < 1.0f) {
-#ifdef ICO_HOST
         {
             /* the projected end moved to rate 0 along the edge, back in
                screen coordinates; w gains the origin's w */
@@ -1065,27 +918,8 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
                 o[k] = o[k] + org[k];
             }
         }
-#else
-        __asm__ __volatile__("mfc1 $8, %0\n\t"
-                             "qmtc2.ni $8, $vf8\n\t"
-                             "vsubx.w $vf8, $vf0, $vf8x\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vmulaw.xyz ACC, $vf19, $vf8w\n\t"
-                             "vmaddx.xyz $vf22, $vf18, $vf8x\n\t"
-                             "lqc2 $vf8, 0x0(%1)\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vadd.xyzw $vf22, $vf22, $vf8"
-                             :
-                             : "f"(rate[0]), "r"(&screenOrigin)
-                             : "$8");
-#endif
     }
     if (0.0f < rate[1] && rate[1] < 1.0f) {
-#ifdef ICO_HOST
         {
             /* the projected end moved to rate 1 along the edge, back in
                screen coordinates; w gains the origin's w */
@@ -1102,24 +936,6 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
                 o[k] = o[k] + org[k];
             }
         }
-#else
-        __asm__ __volatile__("mfc1 $8, %0\n\t"
-                             "qmtc2.ni $8, $vf8\n\t"
-                             "vsubx.w $vf8, $vf0, $vf8x\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vmulaw.xyz ACC, $vf18, $vf8w\n\t"
-                             "vmaddx.xyz $vf25, $vf19, $vf8x\n\t"
-                             "lqc2 $vf8, 0x0(%1)\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vnop\n\t"
-                             "vadd.xyzw $vf25, $vf25, $vf8"
-                             :
-                             : "f"(rate[1]), "r"(&screenOrigin)
-                             : "$8");
-#endif
     }
     return dot * sgn;
 }
@@ -1141,10 +957,6 @@ static inline int clipVolumeHead(VECTOR *ta, VECTOR *ba, VECTOR *tb, VECTOR *bb,
     return state;
 }
 
-#define VOLUME_EDGE(a, b, c) /* derived name */                                                    \
-    VU0_REG("vsub.xy $vf8, $vf" #a ", $vf" #b "\n\t"                                               \
-            "vsub.xy $vf9, $vf" #c ", $vf" #b)
-
 /* the facing z of the strip position i. The three positions that share a face
  * with the position two before them read the facing that one measured back
  * out of stripFaceZ instead of taking the cross product again. The cross
@@ -1152,9 +964,8 @@ static inline int clipVolumeHead(VECTOR *ta, VECTOR *ba, VECTOR *tb, VECTOR *bb,
  * table. */
 static inline float volumeStripFaceZ(int i) /* derived name */
 {
-#ifdef ICO_HOST
     /* the z of (A - B) x (C - B) over x and y, with A, B and C the projected
-       strip vertices VOLUME_EDGE names (vf20-vf25 = proj[0..5]) */
+       strip vertices (vf20-vf25 on the EE = proj[0..5]) */
     const float (*p)[4] = shadowVolumeRegs.proj;
     const float *a = p[0];
     const float *b = p[0];
@@ -1193,43 +1004,6 @@ static inline float volumeStripFaceZ(int i) /* derived name */
     e9y = c[1] - b[1];
     stripFaceZ[i] = e8x * e9y - e9x * e8y;
     return stripFaceZ[i];
-#else
-    switch (i) {
-    case 0:
-    case 1:
-        return 1.0f;
-    case 2:
-        VOLUME_EDGE(20, 21, 23);
-        break;
-    case 3:
-        return -stripFaceZ[2];
-    case 4:
-        VOLUME_EDGE(23, 24, 25);
-        break;
-    case 5:
-        VOLUME_EDGE(24, 25, 21);
-        break;
-    case 6:
-        return -stripFaceZ[5];
-    case 7:
-        VOLUME_EDGE(21, 22, 20);
-        break;
-    case 8:
-        VOLUME_EDGE(22, 20, 25);
-        break;
-    case 9:
-        return -stripFaceZ[8];
-    }
-    __asm__ __volatile__("vopmula.xyz ACC, $vf8, $vf9\n\t"
-                         "vopmsub.xyz $vf2, $vf9, $vf8\n\t"
-                         "vaddz.x $vf2, $vf0, $vf2z\n\t"
-                         "qmfc2.ni $7, $vf2\n\t"
-                         "mtc1 $7, %0"
-                         : "=f"(stripFaceZ[i])
-                         :
-                         : "$7");
-    return stripFaceZ[i];
-#endif
 }
 
 /* the strip is dropped whole if any of its six vertices left
@@ -1547,13 +1321,9 @@ typedef struct ShadowPoly {      /* field names derived */
     int _C;
 } __attribute__((aligned(16))) ShadowPoly; /* derived name */
 
-#ifdef ICO_HOST
-
 _Static_assert(sizeof(ShadowPoly) == 16, "ShadowPoly is the file's 0x10-byte entry");
 
 _Static_assert(sizeof(ClusterPoly) == 16, "ClusterPoly is the file's 0x10-byte entry");
-
-#endif
 
 void shadow_MakeObjectData(PObjModel *mdl)
 {
@@ -1589,12 +1359,8 @@ void shadow_MakeObjectData(PObjModel *mdl)
                 while (ICO_EEPTR(ShadowVtx *, r[j].pts)[m]._0 != -1) {
                     m++;
                 }
-#ifdef ICO_HOST
                 t = (ShadowVtx *)mallocseki((m + 1) * 16);
                 r[j].pts = ICO_EEW(t);
-#else
-                t = r[j].pts = (ShadowVtx *)mallocseki((m + 1) * 16);
-#endif
                 for (l = 0; l < m + 1; l++) {
                     *t++ = ICO_EEPTR(ShadowVtx *, ((ShadowPoly *)p->polys)[j].pts)[l];
                 }

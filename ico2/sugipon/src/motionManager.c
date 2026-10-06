@@ -19,13 +19,7 @@
 #include "fieldCollision.h"
 #include "motionManager.h"
 #include "DisplayP2O.h"
-
-#ifdef ICO_HOST
-
 #include "GifPacket.h"
-
-#endif
-
 #include <libvu0.h>
 #include <assert.h>
 
@@ -449,14 +443,10 @@ static void checkWallState(int flag)
 
                 SubVectorXYZ(v, p->pt[2], p);
                 skelMotCtrl->wallDist = FSqrt(sceVu0InnerProduct(v, v));
-#ifdef ICO_HOST
                 /* PC port: a ray that hits the wall at its own start point
                    gives wallDist 0; the EE's div.s makes 1 / 0 +Fmax, IEEE
                    makes Inf (DIVERGENCES.md F5) */
                 sceVu0ScaleVector(skelMotCtrl->wallDir, v, ps2_div(1.0f, skelMotCtrl->wallDist));
-#else
-                sceVu0ScaleVector(skelMotCtrl->wallDir, v, 1.0f / skelMotCtrl->wallDist);
-#endif
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x20;
                 skelMotCtrl->pureWallAttr = skelMotCtrl->wallAttr = GetWallAttribute(p);
                 /* The hit count reaches GetOrientOfWall as a pointer-typed
@@ -1079,14 +1069,10 @@ void GetMatrixOfMotion(GObj *self, char *tbl, void *ofs)
     skelRoot = &GOBJ_SUB(self)->root;
     skelMotCtrl = &GOBJ_SUB(self)->ctrl;
     skelNodeNum = GOBJ_SUB(self)->skelNodeNum;
-#ifdef ICO_HOST
     /* PC port: GObj+8 is labelId and the row is a GenGeo (0x4C bytes and
        kind at 0x46 on the EE only; a 64-bit host has wider pointers in
        both records) */
     skelGeoType = ((GenGeo *)objLayout)[self->labelId].kind;
-#else
-    skelGeoType = objLayout[*(GenGeoKind *)(((char *)self) + 8) * 76 + 70];
-#endif
     skelGObj = (ICO_WORD)self;
     MatrixDrive_PushMatrix();
     PushQuaternion();

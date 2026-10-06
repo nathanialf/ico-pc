@@ -52,12 +52,8 @@ void sndInit(int idx)
     soundSeKindBuild();
     adpcmPauseRequest(0);
     attrOff = 0x18C;
-#ifdef ICO_HOST
     /* the EE's record offset of the reverb depth; StgPre is larger on the
        host (docs/port/OFFSET_AUDIT.md), so the field by name */
     (void)attrOff;
     soundReverbDepthSet(stageData[idx].reverbDepth);
-#else
-    soundReverbDepthSet(*(unsigned short *)((char *)&stageData[idx] + attrOff));
-#endif
 }

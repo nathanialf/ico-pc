@@ -10,8 +10,8 @@ records, per routine, what the assembly did that is not obvious from the
 routine's name, so the C can be audited against it.
 
 Sources: `docs/research/float-semantics.md` (the float semantics and the
-R-register vectors), the assembly in the game sources (each host body sits
-next to it under `#ifdef ICO_HOST`), and this repository's
+R-register vectors), the assembly in the decompilation's game sources
+(the port's `ico2/` has only the C bodies), and this repository's
 `sce/libvu0/libvu0.c` for the sceVu0 sequences.
 
 ## Layout
@@ -19,7 +19,7 @@ next to it under `#ifdef ICO_HOST`), and this repository's
 | file | contents |
 | --- | --- |
 | `port/math/ps2float.h`, `ps2float.c` | the PS2 float behaviours plain C would get wrong: `ps2_add`, `ps2_sub`, `ps2_mul`, `ps2_div`, `ps2_sqrt`, `ps2_rsqrt`, `ps2_ftoi`, `ps2_ftoi4`, `ps2_itof`, `ps2_max`, `ps2_min` |
-| `port/math/ico_math.h` | the current matrix (`ico_current_matrix`), `ico_apply_matrix`, the R register accessors, the quaternion helpers the game's host branches call; included by `ico2/common/include/typedef.h` under `ICO_HOST` |
+| `port/math/ico_math.h` | the current matrix (`ico_current_matrix`), `ico_apply_matrix`, the R register accessors, the quaternion helpers the game's host branches call; included by `ico2/common/include/typedef.h` |
 | `port/math/vector_inline.h` | static inline helpers for the header/inline asm in `sugiCommon.h` and `clothAnimation.c` |
 | `port/math/matrix_stack.c` | `seki/src/Matrix.c`'s current-matrix routines and its push stack, `ico_vu0_registers_push/pop` |
 | `port/math/matrix.c` | the rest of `Matrix.c` (vectors, matrices, `_Sqrt`, R-register random numbers, `_RemakeNormal`) |
@@ -30,15 +30,11 @@ next to it under `#ifdef ICO_HOST`), and this repository's
 | `port/math/newlib/` | newlib's `rand`, `qsort` and float libm, renamed `ico_*` (below) |
 | `port/math/test/` | `math_test`, `newlib_test` (ctest `math`, `newlib`) |
 
-In the game sources, a routine whose body is all assembly is wrapped in
-`#ifndef ICO_HOST` (the host gets it from `port/math`); a routine that mixes
-C and assembly gets an `#ifdef ICO_HOST` branch next to the assembly, so the
-period compiler's objects do not change. In
-`typedef.h`, the host branch of the VU0 macro block includes `ico_math.h`,
-maps `SYNC()` to a fence and `DI()`/`EI()` to nothing, and turns every other
-VU0/R5900 wrapper (`VU0_*`, `QCOPY16`) into a `_Static_assert` failure, so
-assembly that reaches the host build is a compile error rather than a silent
-gap.
+In the game sources, a routine whose body was all assembly is gone (the
+host gets it from `port/math`), and a routine that mixed C and assembly has
+the C body in place of the assembly. `typedef.h` includes `ico_math.h`; the
+VU0/R5900 opcode wrappers (`VU0_*`, `QCOPY16`, `SYNC`, `DI`, `EI`) are not
+defined, so assembly that reaches the host build fails to compile.
 
 ## Float semantics
 
@@ -215,7 +211,7 @@ left it out of the operation and stored the loaded register whole.
 
 | site | notes |
 | --- | --- |
-| `sugipon/src/motionManager2.c` `CopyMotionWithNodeHrc` | not VU0: its GNU nested function `copyMotionWithNodeHrc` has an `ICO_HOST` file-scope version with the captures as parameters (same recursion order), so clang compiles the file; the EE object is unchanged |
+| `sugipon/src/motionManager2.c` `CopyMotionWithNodeHrc` | not VU0: its GNU nested function `copyMotionWithNodeHrc` is a file-scope function with the captures as parameters (same recursion order), so clang compiles the file |
 | `sugipon/src/motionManager2.c` `motSqrtStart/End` | the root travels in VU0's Q between the two calls; the host keeps it in a file static |
 | `ito/src/itou_sub.c` `apply_matrix_w1` | apply(m, (v.xyz, 1)) (row 3 times `vf0.w`), all four fields |
 | `sugipon/src/stormTest.c` `StormStoreI4` | `_FTOI4Vector` |
@@ -314,8 +310,8 @@ F6). This is not handled yet (docs/TODO.md).
 The recommended handling, in order (float-semantics.md): (1) `port/math/softdouble.c` written
 from the integer algorithm of `sce/libgcc/dp-bit.c`, with the double
 expressions in those functions rewritten as calls (`ico_dmul`, `ico_dsub`,
-`ico_ddiv`, `ico_dcmp`, `ico_i2d`, `ico_d2i`, `ico_d2f`, `ico_f2d`) under
-`ICO_HOST`, bit-identical by construction; (2) if source edits are refused,
+`ico_ddiv`, `ico_dcmp`, `ico_i2d`, `ico_d2i`, `ico_d2f`, `ico_f2d`),
+bit-identical by construction; (2) if source edits are refused,
 a scoped helper that switches the FP environment to round-to-nearest with
 FTZ/DAZ off around each double section, which leaves only dp-bit's
 denormal-input flush and truncating denormal output as differences. Most of

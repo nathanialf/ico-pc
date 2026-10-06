@@ -416,11 +416,7 @@ void MallocStreamMotionBuffer(void)
 {
     ringBuf = iosMallocDebug(ios_partition_sugipon, 163840, "src/streamMotionManager.c", 602);
     readBufRaw = iosMallocDebug(ios_partition_sugipon, 163904, "src/streamMotionManager.c", 604);
-#ifdef ICO_HOST
     readBuf = (char *)((ICO_WORD)(readBufRaw + 63) & ~(ICO_WORD)63);
-#else
-    readBuf = (char *)((int)(readBufRaw + 63) & 0xFFFFFFC0);
-#endif
     if (ringBuf == 0 || readBuf == 0) {
         /* "could not allocate the stream buffer memory" */
         debug_StdPrintfDummy("ストリーム用のバッファメモリが確保できませんでした\n");

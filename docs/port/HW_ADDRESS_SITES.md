@@ -1,13 +1,13 @@
 # Hardware address sites
 
 Places in `ico2/` that touch EE hardware or fixed link addresses, and what
-the host build does at each. `ICO_HOST` is the host build's define. The
-register macros come from `port/compat/eeregs.h` on the host (the EE build
-uses `sce/libkernl/eeregs.h`); the register pages are plain memory
+the host build does at each. The register macros come from
+`port/compat/eeregs.h` (the decompilation's EE build uses
+`sce/libkernl/eeregs.h`); the register pages are plain memory
 (`port/platform/hwregs.c`), and the EE timer counters in them advance in
 simulated time (`port/platform/clock.c`; PLATFORM.md, "EE timers").
 
-## Guarded under `ICO_HOST`
+## Changed for the host
 
 | site | what | host behaviour |
 | --- | --- | --- |

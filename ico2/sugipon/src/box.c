@@ -90,14 +90,10 @@ typedef struct BoxWork { /* field names derived */
     float moveDir[4];                  /* 0x190, the direction of the last push */
 } __attribute__((aligned(8))) BoxWork; /* derived name */
 
-#ifdef ICO_HOST
-
 /* colData holds Sub15C.colData across ReInitBoxGeo: it must keep the
    pointer's width (DIVERGENCES.md D10) */
 _Static_assert(sizeof(((BoxWork *)0)->colData) == sizeof(((Sub15C *)0)->colData),
                "BoxWork.colData is narrower than Sub15C.colData");
-
-#endif
 
 static void landingSE(GObj *self)
 {
@@ -255,11 +251,7 @@ static int execNormalMove(GObj *self, int stop)
     float pos[4];
     ClipWork work;
     float wn[4];
-#ifdef ICO_HOST
     WallCfg wnCfg;
-#else
-    BoxWallRec wn2;
-#endif
     float plTop[4];
     float plSide[4];
     float up[4];
@@ -295,23 +287,13 @@ static int execNormalMove(GObj *self, int stop)
         if (stop == 0) {
             checkBoxWallHit(self, &work, wn, pos, 0);
             if (work.wall.elem != 0) {
-#ifdef ICO_HOST
                 wnCfg = work.wall;
-#else
-                wn2.pt = *(BoxWallPt *)&work.wall.o;
-                wn2.hit = (int)work.wall.elem;
-                *(BoxWallRec *)wn = wn2;
-#endif
 
                 hw = (p->scaleX < p->scaleZ ? p->scaleX : p->scaleZ) * 50.0f;
 
                 CopyVector(up, pos);
                 up[1] += 50.0f;
-#ifdef ICO_HOST
                 GetPureVerticalPlane(plTop, plSide, 0, &wnCfg, 0);
-#else
-                GetPureVerticalPlane(plTop, plSide, 0, (WallCfg *)wn, 0);
-#endif
 
                 d = plane_distance(up, plSide);
 
@@ -523,18 +505,9 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
 
         /* the sub-object handle at 0x15C read through the file's IntFloat
            union, as the wheel-float stores are */
-#ifdef ICO_HOST
         ((IntFloat *)&w->wheelHeight)->f = accessary[self->dobj->accessary].pivot[0];
         ((IntFloat *)&w->wheelFront)->f = accessary[self->dobj->accessary].pivot[1];
         ((IntFloat *)&w->wheelRear)->f = accessary[self->dobj->accessary].pivot[2];
-#else
-        ((IntFloat *)&w->wheelHeight)->f =
-            accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[0];
-        ((IntFloat *)&w->wheelFront)->f =
-            accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[1];
-        ((IntFloat *)&w->wheelRear)->f =
-            accessary[*(int *)(((IntFloat *)&self->dobj)->i + 0x844)].pivot[2];
-#endif
     }
 }
 
@@ -1044,15 +1017,9 @@ static inline void execBoxFall(GObj *self) /* derived name */
     float v[4];
 
     GetRootPosition(v, self);
-#ifdef ICO_HOST
     GOBJ_SUB(self)->root.move[1] +=
         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-    ((IntFloat *)(*(char **)(((char *)self) + 0x15C) + 0x134))->f +=
-        60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
-        (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
     AddVectorXYZ(v, v, GOBJ_SUB(self)->root.move);
     SetRootPosition(self, v);
     if (LimitExistGeometry(v, GOBJ_SUB(self)->root.move) != 0) {
@@ -1336,8 +1303,6 @@ static void initFloating(GObj *self)
     execFloating(self);
 }
 
-#ifdef ICO_HOST
-
 /* the range test, the range an integer converted at each compare (a nested
    inline in _checkItemBreak and _checkItemCollision) */
 static inline int isNearItem(float *v, int r) /* derived name */
@@ -1349,26 +1314,11 @@ static inline int isNearItem(float *v, int r) /* derived name */
     return 0;
 }
 
-#endif
-
 static int _checkItemBreak(void *pos)
 {
     float p[4];
     float d[4];
     GObj *o;
-#ifndef ICO_HOST
-
-    /* a nested inline: the range test, the range an integer converted at
-       each compare */
-    inline int isNearItem(float *v, int r) /* derived name */
-    {
-        if ((v[0] < 0.0f ? -v[0] : v[0]) < r && (v[1] < 0.0f ? -v[1] : v[1]) < r &&
-            (v[2] < 0.0f ? -v[2] : v[2]) < r) {
-            return 1;
-        }
-        return 0;
-    }
-#endif
 
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
@@ -1843,18 +1793,6 @@ static int _checkItemCollision(void *pos)
     float d[4];
     GObj *o;
 
-#ifndef ICO_HOST
-    /* the same nested range test as _checkItemBreak's */
-    inline int isNearItem(float *v, int r) /* derived name */
-    {
-        if ((v[0] < 0.0f ? -v[0] : v[0]) < r && (v[1] < 0.0f ? -v[1] : v[1]) < r &&
-            (v[2] < 0.0f ? -v[2] : v[2]) < r) {
-            return 1;
-        }
-        return 0;
-    }
-
-#endif
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
         if (CheckItemDead(o) != 0) {

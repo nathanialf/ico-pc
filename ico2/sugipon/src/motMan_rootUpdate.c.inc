@@ -186,13 +186,11 @@ static inline int clipFieldWallAndReset(struct MotRoot *cur, float *last) /* der
     }
     CopyVector(w.pt[1], cur->pos);
     w.filter = InitialColInfo;
-#ifdef ICO_HOST
     /* PC port (X4, DIVERGENCES.md F16): the original never sets the radius
        here; inlined into rootUpdateStepSolution, its record shares the stack
        slot clipFuchiWallAndReact just stored rad * skelScale in (sp+0x250,
        0x1EA808), so the EE clips with the fuchi probe's radius. */
     w.radius = cur->radius * skelScale;
-#endif
     ClipWallField(&w);
     if (w.wall.elem != 0 && CompareAttribute(w.attr, 0x10000) != 0) {
         _wallHitReaction(&w, cur->pos, last, 0);
@@ -1354,16 +1352,10 @@ static int avoidSideAdjustWall(void)
 {
     float mtx[16];
     /* a 0xD0-byte block, cleared to the clip request's 0xC0 */
-#ifdef ICO_HOST
     ClipWork wk;
     char *w = (char *)&wk;
 
     memset(w, 0, sizeof(ClipWork));
-#else
-    char w[208];
-
-    memset(w, 0, 0xC0);
-#endif
     GetMatrixFromQuaternionPos(mtx, skelRoot->quat, skelRoot->pos);
     _ApplyMatrix(w, mtx, avoidLeft);
     _ApplyMatrix(w + 0x10, mtx, avoidRight);
@@ -1603,13 +1595,9 @@ static ObjNode rootUpdateDirectPlay(int mode)
     p[1] = p[1] - skelMotDef->rootOffset[1];
     p[2] = p[2] + skelMotDef->rootOffset[2];
     if (kind == 14) {
-#ifdef ICO_HOST
         /* PC port: a zero skeleton scale from the motion data: +Fmax on
            the EE, Inf under IEEE (DIVERGENCES.md F5) */
         s = ps2_div(1.0f, skelScale);
-#else
-        s = 1.0f / skelScale;
-#endif
         p[0] = p[0] * -s;
         p[1] = p[1] * s;
         p[2] = p[2] * -s;
@@ -1626,8 +1614,6 @@ static ObjNode rootUpdateDirectPlay(int mode)
     CopyVector(skelRoot->delta, rootDelta);
     return InitialObjPointer;
 }
-
-#ifdef ICO_HOST
 
 /* a nested function in rootUpdateNodeFix, called once */
 static void keepVerticalZWithQ(void *q)
@@ -1653,32 +1639,6 @@ static void keepVerticalZWithQ(void *q)
 
 static ObjNode rootUpdateNodeFix(void)
 {
-#else
-static ObjNode rootUpdateNodeFix(void)
-{
-    /* a nested function, called once with the parent's static chain */
-    void keepVerticalZWithQ(void *q)
-    {
-        float mtx[16];
-        Vec16 v;
-
-        GetMatrixFromQuaternion(mtx, q);
-        sceVu0ApplyMatrix(&v, mtx, ZUnitVector);
-        v.f[1] = 0.0f;
-        sceVu0Normalize(&v, &v);
-        SetIdentityQuaternion(skelRoot->quat);
-        RotQuaternionY(skelRoot->quat, -GetTableArcTan2(v.f[0], -v.f[2]));
-        MultiQuaternion(skelRoot->quat, skelRoot->quat, skelRoot->fixQuat);
-        CopyMatrix((void *)MatrixDrive_GetMatrix(),
-                   (char *)GOBJ_SUB(skelRoot->fixObj)->nodeMtx + skelRoot->fixNode * 64);
-        MatrixDrive_TransMatrixV(skelRoot->fixPos);
-        UnitRotation(MatrixDrive_GetMatrix());
-        MultiMatrixByQuaternion(skelRoot->quat);
-        MatrixDrive_TransMatrix(rootMove[0], rootMove[1], rootMove[2]);
-        CopyVector(skelRoot->pos, MatrixDrive_GetMatrix()[3]);
-    }
-
-#endif
     Vec16 rq;
     Vec16 va;
     Vec16 vb;

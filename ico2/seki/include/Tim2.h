@@ -11,11 +11,7 @@
 
 #ifndef TIM2_H
 #define TIM2_H
-#ifdef ICO_HOST
 #define TIM2_U64 unsigned long long __attribute__((aligned(8)))
-#else
-#define TIM2_U64 unsigned long long
-#endif
 
 /* the TIM2 picture header, the 0x30 bytes after the 16-byte file header.
  * The fields Texture.c reads off it are clutColors at 0x0E, clutType at

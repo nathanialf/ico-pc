@@ -54,13 +54,8 @@ typedef struct CamGroup { /* field names derived */
 
 /* CamGroup.items as a pointer, and its store (eeword.h): the field is a
  * 32-bit word on the host, so the record keeps its 76-byte stride. */
-#ifdef ICO_HOST
 #define CAMGROUP_ITEMS(g) ICO_EEPTR(PinRec *, (g)->items)
 #define CAMGROUP_SET_ITEMS(g, p) ((g)->items = (IcoEEWord)ICO_EEW(p))
-#else
-#define CAMGROUP_ITEMS(g) ((g)->items)
-#define CAMGROUP_SET_ITEMS(g, p) ((g)->items = (p))
-#endif
 
 /* The head of a camera-set file (.gcm), 16 bytes: the magic, the file
  * version (0 to 3; ReadCameraSet converts the older three), the group count
@@ -81,12 +76,8 @@ extern unsigned char exit_f;
 /* A menu of the camera editor: its thread record, then the menu that opened
    it, which it wakes and hands back to on exit, and the menu's argument. */
 typedef struct MenuThread { /* field names derived */
-#ifdef ICO_HOST
     /* an IOSThread is 152 bytes on the host, 112 on the EE */
     char thread[160] __attribute__((aligned(8)));
-#else
-    char thread[112];
-#endif
     char *parent; /* 0x70 */
     int arg;      /* 0x74 */
 } MenuThread; /* derived name */

@@ -2,9 +2,9 @@
 # tools/host_syntax_check.sh [-v] [--strict] [FILE.c...]
 #
 # Front-end check of ico2/**/*.c with the host gcc (32-bit, signed char, no
-# strict aliasing) and ICO_HOST defined. Mirrors the include search order of
-# tools/compile_c.sh (programmer's own include dir first, then the siblings,
-# then sce/<archive>). Prints one line per failing file with its error count;
+# strict aliasing) and ICO_HOST defined. Mirrors the period build's include
+# search order (programmer's own include dir first, then the siblings, then
+# sce/<archive>). Prints one line per failing file with its error count;
 # -v also prints the diagnostics. Exit 1 if any file fails.
 # Inline asm bodies are not checked here (package 1A rewrites them).
 set -u

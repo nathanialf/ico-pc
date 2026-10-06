@@ -11,14 +11,10 @@
 #include "debug_exception.h"
 #include "memory.h"
 #include <assert.h>
-
-#ifdef ICO_HOST
-
 /* memset (pac_makeBoundingBox) and strcmp (pac_hostStripEntry) in every
    host build, the headless one too */
 #include <string.h>
 
-#endif
 #ifdef ICO_RD
 
 #include <stdlib.h>
@@ -182,15 +178,9 @@ typedef union { /* field names derived */
 
 /* A packet address held as a word: unsigned int on the EE, and pointer-wide
    on the host, where the packet builder's addresses are host pointers. */
-#ifdef ICO_HOST
 
 typedef __UINTPTR_TYPE__ PacAddr;
 
-#else
-
-typedef unsigned int PacAddr;
-
-#endif
 #define PAC_PTR(T, a) ((T)(ICO_WORD)(a))
 
 /* The work area's layout.  The cursor is a union of packet pointers, and
@@ -309,17 +299,7 @@ void pac_DumpPac(PacHeader *pac)
 
 inline void pac_DispVu1Memory(int idx, int n, int size)
 {
-#ifdef ICO_HOST
     /* 0x1100C000 is VU1 data memory, which has no host address */
-#else
-    char *p = (char *)0x1100C000 + (idx << 4);
-    int i;
-    for (i = 0; i < n; i++) {
-        char *q = p;
-        p += 0x10;
-        pac_DispQW(q, size);
-    }
-#endif
 }
 
 /* grows the context's bounding box by one vertex (the strip builders inline
@@ -395,8 +375,6 @@ static void pac_error(char *name, int type)
     __assert("src/Packet.c", 684, "0");
 }
 
-#ifdef ICO_HOST
-
 /* PC port: the title logo's "M" of the TM (model "O": one 12-vertex strip
    around the letter's outline, position indices 163..174) is stored in an
    order that zig-zags across the concave outline, so four of its ten
@@ -422,8 +400,6 @@ static short *pac_hostStripEntry(short *strip, int num, int i)
     return strip + k * 8;
 }
 
-#endif
-
 static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
 {
     char buf[256];
@@ -445,9 +421,7 @@ static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
     ctx = &pacWork;
     *(int *)(strip - 6) = (ICO_PHYS(ctx->cursor.addr)) - ctx->dmaTag;
     for (i = 0, v = strip; i < num; i++, v += 8) {
-#ifdef ICO_HOST
         v = pac_hostStripEntry(strip, num, i);
-#endif
         PacWork *ctx = &pacWork;
 
         pac_growBounds(ctx, vtx, v[2]);
@@ -502,12 +476,8 @@ static int pac_getWeight(PacWeight *w, PObjPart *obj, char *shp, int num)
     for (j = 0; j < 4; j++) { w[j].weight = 0.0f; w[j].no = 0; }
 
     for (j = 0; j < obj->polyCount; j++) {
-#ifdef ICO_HOST
         /* ObjEnt.p is an EE word; the entries are walked as bytes */
         bone = ICO_EEPTR(char *, ((ObjEnt *)((char *)obj->polys + j * 16))->p);
-#else
-        bone = *(char **)(j * 16 + (int)obj->polys);
-#endif
 
         for (; *(int *)(i * 16 + (ICO_WORD)bone) >= 0;) {
             if ((id = *(int *)(i * 16 + (ICO_WORD)bone)) == *(short *)(shp + 4)) {
@@ -633,15 +603,9 @@ static void pac_openDmaTag(ICO_WORD buf)
     PacWork *ctx = &pacWork;
     float f0 = 16777215.0f;
     float f1 = -16777215.0f;
-#ifdef ICO_HOST
     ctx->dmaTag = ICO_PHYS(buf);
     ctx->vifCode = ICO_PHYS(buf + 0x8);
     ctx->gifTag = ICO_PHYS(buf + 0x10);
-#else
-    ctx->dmaTag = buf & mask;
-    ctx->vifCode = (buf + 0x8) & mask;
-    ctx->gifTag = (buf + 0x10) & mask;
-#endif
     ctx->cursor.addr = buf + 0x20;
     ctx->boxMin[2].f = f0;
     ctx->boxMin[1].f = f0;
@@ -649,11 +613,7 @@ static void pac_openDmaTag(ICO_WORD buf)
     ctx->boxMax[2].f = f1;
     ctx->boxMax[1].f = f1;
     ctx->boxMax[0].f = f1;
-#ifdef ICO_HOST
     debug_StdPrintfDummy("DMAOPEN   :%p\n", ICO_PHYS(buf));
-#else
-    debug_StdPrintfDummy("DMAOPEN   :%p\n", buf & mask);
-#endif
 }
 
 static void pac_setVifCode(int num)
@@ -1000,11 +960,7 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
             dst = pac_moveToSeki(ICO_PHYS(pkt), size);
             iosFree((void *)ICO_PHYS(pkt));
         } else {
-#ifdef ICO_HOST
             dst = (ICO_WORD)reallocseki((void *)ICO_PHYS(pkt), size);
-#else
-            dst = reallocseki(ICO_PHYS(pkt), size);
-#endif
         }
     } else {
         iosFree((void *)ICO_PHYS(pkt));
@@ -1127,15 +1083,11 @@ typedef struct MatLine {        /* field names derived */
     short texCount;             /* 0x0E */
 } MatLine;                      /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: RegistPacket.c's reg_dispPointLineObj reads a line part's
    record through PObjGroup (grp->packets), so the line set must sit where
    the packets do, as both sit at 0x08 on the EE */
 _Static_assert(__builtin_offsetof(MatLine, lineSet) == __builtin_offsetof(PObjGroup, packets),
                "MatLine.lineSet is not at PObjGroup.packets");
-
-#endif
 
 static void pac_makeMaterialTableLine(MatLine *out, PObjPart *obj, int variant, int blend,
                                       unsigned int mode)

@@ -41,8 +41,6 @@ static struct SemaParam cdLockSemaParam; /* derived name */
 
 static struct SemaParam sndLockSemaParam; /* derived name */
 
-#ifdef ICO_HOST
-
 /* port/platform/arena.c: the host address of an EE physical address in the
    simulated 32 MB of EE RAM */
 __UINTPTR_TYPE__ ico_arena_ee_addr(unsigned int ee);
@@ -65,9 +63,6 @@ __UINTPTR_TYPE__ ico_arena_ee_addr(unsigned int ee);
      ICO_HOST_S2MOTION_EXTRA)
 /* a partition's size: the EE's, plus the host's extra */
 #define ICO_PART_SIZE(ee, extra) ((ee) + (extra))
-#else
-#define ICO_PART_SIZE(ee, extra) (ee)
-#endif
 
 /* keyInput.h is not included */
 extern void InitKeyInput(int unused);
@@ -106,7 +101,6 @@ void iosInitialize(void)
 {
     debug_StdPrintfDummy("iosInitialize()\n");
     iosThreadInit();
-#ifdef ICO_HOST
     /* the same range, inside the host's EE RAM arena, ending
        ICO_HOST_HEAP_EXTRA further for the partitions' extra; the root keeps
        the EE's start, and its addresses are pointer-wide (IosMemAddr), so
@@ -115,9 +109,6 @@ void iosInitialize(void)
        EE's start and the others move up. */
     ios_partition_root = iosMallocInitPartition(ico_arena_ee_addr(0x760000),
                                                 ico_arena_ee_addr(0x1FEFFF0 + ICO_HOST_HEAP_EXTRA));
-#else
-    ios_partition_root = iosMallocInitPartition(0x760000, 0x1FEFFF0);
-#endif
     ios_partition_common = iosMallocSetPartition(ios_partition_root,
                                                  ICO_PART_SIZE(4227072, ICO_HOST_COMMON_EXTRA), 16);
     ios_partition_smotion = iosMallocSetPartition(

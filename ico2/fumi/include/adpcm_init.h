@@ -51,9 +51,6 @@ typedef struct AdpcmStreamTag { /* field names derived */
     int loopStart;              /* 0x20 */
     int dataSize;               /* 0x24 */
     struct CdvdBgReq *bg;       /* 0x28, 8 bytes on a 64-bit host, which then has no pad2C */
-#ifndef ICO_HOST
-    char pad2C[4];
-#endif
     long long mask;  /* 0x30 */
     int chAttr;      /* 0x38 */
     short volL[2];   /* 0x3C */

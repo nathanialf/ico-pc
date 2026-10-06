@@ -23,12 +23,7 @@
 #include "main.h"
 #include "script.h"
 #include "staffroll.h"
-
-#ifdef ICO_HOST
-
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
-
-#endif
 
 static void actEndingSave(GObj *volatile self);
 
@@ -1707,9 +1702,7 @@ void actEndDemo14Chk(GObj *volatile self)
 
 static void actEndingSave(GObj *volatile self)
 {
-#ifdef ICO_HOST
     ico_gs_signal(ICO_GS_EV_ENDING, gFlagGameClear);
-#endif
     if (gFlagGameClear == 0) {
         int save;
 

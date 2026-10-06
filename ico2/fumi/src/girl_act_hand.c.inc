@@ -83,12 +83,7 @@ void HandMgr_Print(void)
     }
 }
 
-#ifdef ICO_HOST
-
 void HandMgr_Speed(GObj *self, float f)
-#else
-void HandMgr_Speed(float f)
-#endif
 {
     float lim = 1.5f;
     int m;

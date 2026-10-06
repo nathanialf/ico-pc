@@ -28,21 +28,10 @@
  *       offsets by tools/dump_all_struct_shapes.py; only add a field with a
  *       verified access.
  *
- *   (c) the R5900 and VU0 macro-mode opcode wrappers.  PLACEMENT BY INCLUDE
- *       PATTERN, NOT BY LISTING ROWS: every one of their expansions is
- *       attributed by SRCFILE.TXT to the .c line that invokes it, which is
- *       what a macro expansion looks like and is therefore consistent with
- *       any header home, including one the listing cannot see.  They are
- *       used across seki (Matrix, BgAnimation, GifPacket), sugipon
- *       (clothAnimation, matrixDrive, quaternion, motionManager2, stormTest,
- *       sugiCommon.h) and ito (itou_sub, lightning, mpeg/mv_disp,
- *       mpeg/mv_vobuf), so no single programmer's header can own them and
- *       this one can.  The macro NAMES are ours; none is a disc fact.
- *       Wrappers used by exactly one TU are NOT here, they live in that TU:
- *       QCOPY64_PARALLEL in seki/src/Matrix.c, and QCOPY64_SERIAL /
- *       LQ16_FROM / SQ16_TO / MAP_A0_TO_SPR in sugipon/src/matrixDrive.c.
- *       The sce/ archives get their own per-member definitions: their uses
- *       stand for Sony-internal headers this tree cannot name.
+ *   (c) the decompilation's R5900 and VU0 macro-mode opcode wrappers are
+ *       not in the port: the VU0 maths they spelled is C in port/math
+ *       (docs/port/MATH.md), included below, and the host's quadword,
+ *       address and word types are the port's definitions.
  *
  * Nothing here is a typedef lifted out of a leaked or SDK header.
  */
@@ -77,38 +66,32 @@ static inline float absf(float x)
 }
 
 /* ------------------------------------------------------------------ *
- * Host-port seams (ICO_HOST is defined by the native build; the PS2
- * build leaves it undefined and gets the original arithmetic).
+ * Host seams: where the original code held an EE address or quadword in
+ * a form a 64-bit host cannot, it goes through one of these.
  *
- * ICO_QW / ICO_UQW   the 128-bit quadword type.  ee-gcc spells it
- *                    mode(TI); the host has no such mode under -m32, so
- *                    it is a 16-byte-aligned pair of 64-bit halves.
- * ICO_ADDR(p)        a pointer as the EE code held it, an int address
- *                    (a cast there, the pointer itself on the host).
+ * ICO_QW / ICO_UQW   the 128-bit quadword, a 16-byte-aligned pair of
+ *                    64-bit halves.
+ * ICO_ADDR(p)        a pointer where the original held an int address:
+ *                    the pointer itself.
  * ICO_PHYS(p)        the physical address of a cached or uncached EE
- *                    address: `p & 0x0FFFFFFF`.
- * ICO_UNCACHED(p)    the uncached alias of an address: `p | 0x20000000`.
- * ICO_UNCACHED_ACCEL(p)  the uncached-accelerated alias: `p | 0x30000000`.
- *                    The host has a flat address space, so the three
- *                    address macros leave their operand unchanged, and its type, so a
- *                    pointer stays a pointer.  The EE forms take an int
- *                    operand; pass pointers through ICO_ADDR.
+ * ICO_UNCACHED(p)    address, its uncached alias and its uncached-
+ * ICO_UNCACHED_ACCEL(p)  accelerated alias: the host has a flat address
+ *                    space, so all three leave their operand and its type
+ *                    unchanged and a pointer stays a pointer.
  * ICO_INVALID_PTR    the all-ones pointer the scripts use as "none".
  * ICO_POSTINC(T, p)  `((T)(p))++`, the cast-as-lvalue post-increment.
- * ICO_BREAK()       the EE debug trap (`break`); __builtin_trap() on the host.
- * ICO_WORD           a struct field the EE code holds an address in as an int
- *                    ("held as a word"): `int` on the EE, whose code
- *                    generation depends on the int type, and a pointer-wide
- *                    integer (intptr_t) on the host, so the address survives
- *                    a 64-bit build and the integer arithmetic the code does
- *                    on it (byte offsets, masks) means the same.
+ * ICO_BREAK()        the original's debug trap: __builtin_trap().
+ * ICO_WORD           a struct field the original code holds an address in
+ *                    as an int ("held as a word"): a pointer-wide integer
+ *                    (intptr_t), so the address survives a 64-bit build and
+ *                    the integer arithmetic the code does on it (byte
+ *                    offsets, masks) means the same.
  * ICO_WORD_PTR(T)    the same for a word only ever converted to a pointer:
- *                    `int` on the EE, the pointer type T on the host.
+ *                    the pointer type T.
  * ICO_SPR_ADDR(off)  the address `off` bytes into the 16 KB scratchpad
- *                    (0x70000000 on the EE); the host points it at
- *                    ico_scratchpad, defined in seki/src/Basic.c.
+ *                    (0x70000000 on the PS2): into ico_scratchpad, defined
+ *                    in seki/src/Basic.c.
  * ------------------------------------------------------------------ */
-#ifdef ICO_HOST
 
 typedef struct ICO_QW {
     unsigned long long lo, hi;
@@ -137,22 +120,6 @@ extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
         (p) = (void *)((char *)(p) + sizeof(*ico_old_));                                           \
         ico_old_;                                                                                  \
     })
-#else
-
-typedef int ICO_QW __attribute__((mode(TI)));
-typedef unsigned int ICO_UQW __attribute__((mode(TI)));
-
-#define ICO_ADDR(p) ((int)(p))
-#define ICO_PHYS(p) ((p) & 0x0FFFFFFF)
-#define ICO_UNCACHED(p) ((p) | 0x20000000)
-#define ICO_UNCACHED_ACCEL(p) ((p) | 0x30000000)
-#define ICO_INVALID_PTR ((void *)0xFFFFFFFF)
-#define ICO_SPR_ADDR(off) (0x70000000 | (off))
-#define ICO_BREAK() __asm__ __volatile__("break")
-#define ICO_WORD int
-#define ICO_WORD_PTR(T) int
-#define ICO_POSTINC(T, p) ((T)(p))++
-#endif
 
 /*
  * RECONSTRUCTION.  Every shape below was read back out of the binary's own
@@ -183,11 +150,7 @@ typedef unsigned int ICO_UQW __attribute__((mode(TI)));
  * matching byte-for-byte WITHOUT the per-function int-typed-reload hacks
  * (COOKBOOK section 8.22). Pointer-chain users still match (no aliasing trigger).
  * Use this accessor for 0x15C; keep dobj in the struct for layout only. */
-#ifdef ICO_HOST
 #define GOBJ_SUB(o) (((GObj *)(o))->dobj)
-#else
-#define GOBJ_SUB(o) ((Sub15C *)*(int *)&((GObj *)(o))->dobj)
-#endif
 /* The 0x164 actor slot, the companion of GOBJ_SUB: the action-state object the
  * per-object functions run their state machines out of. */
 #define GOBJ_ACT(o) ((Act *)((GObj *)(o))->act)
@@ -706,218 +669,10 @@ typedef struct { /* field names derived */
  */
 typedef int sceVu0IVECTOR[4] __attribute__((aligned(16)));
 
-#ifdef ICO_HOST
-
-/* The host build: the VU0 and R5900 wrappers below have no host meaning.
- * The VU0 maths is C in port/math (docs/port/MATH.md); the game sources that
- * used these wrappers keep the assembly under `#ifndef ICO_HOST` and call
- * port/math instead. ico_math.h is included here so every game TU sees the
- * current matrix, the PS2 float helpers (ps2float.h) and the small vector
- * routines (vector_inline.h). */
+/* The VU0 maths is C in port/math (docs/port/MATH.md). ico_math.h is
+ * included here so every game TU sees the current matrix, the PS2 float
+ * helpers (ps2float.h) and the small vector routines (vector_inline.h). */
 #include "../../../port/math/ico_math.h"
-
-/* Memory barrier: a full fence. */
-#define SYNC() __atomic_thread_fence(__ATOMIC_SEQ_CST)
-/* No interrupts to mask: the game's threads are cooperative on the host. */
-#define DI() ((void)0)
-#define EI() ((void)0)
-/* Any other use is a compile error: assembly that reached the host build
- * has not been rewritten in C yet. */
-#define ICO_ASM_NOT_PORTED()                                                                       \
-    _Static_assert(0, "R5900/VU0 inline assembly in the host build: rewrite it in C over "         \
-                      "port/math (docs/port/MATH.md)")
-#define QCOPY16(scratch) ICO_ASM_NOT_PORTED()
-#define VU0_MEM(insn) ICO_ASM_NOT_PORTED()
-#define VU0_REG(insn) ICO_ASM_NOT_PORTED()
-#define VU0_LSV(mnem, vf, off, base) ICO_ASM_NOT_PORTED()
-#define VU0_LSGP(mnem, gp, off, base) ICO_ASM_NOT_PORTED()
-#define VU0_LSV_R(mnem, vf, off, base) ICO_ASM_NOT_PORTED()
-#define VU0_V2OP(mnem, d, a) ICO_ASM_NOT_PORTED()
-#define VU0_V3OP(mnem, d, a, b) ICO_ASM_NOT_PORTED()
-#define VU0_V3OP_BC(mnem, d, a, b, bc) ICO_ASM_NOT_PORTED()
-#define VU0_V3OP_ACC(mnem, a, b) ICO_ASM_NOT_PORTED()
-#define VU0_V3OP_ACC_BC(mnem, a, b, bc) ICO_ASM_NOT_PORTED()
-#define VU0_MFC1(gp, fp) ICO_ASM_NOT_PORTED()
-#define VU0_MTC1(gp, fp) ICO_ASM_NOT_PORTED()
-#define VU0_QMFC2_NI(gp, vf) ICO_ASM_NOT_PORTED()
-#define VU0_QMTC2_NI(gp, vf) ICO_ASM_NOT_PORTED()
-#define VU0_CFC2_NI(gp, vi) ICO_ASM_NOT_PORTED()
-#define VU0_WAIT() ICO_ASM_NOT_PORTED()
-#define VU0_WORD(w) ICO_ASM_NOT_PORTED()
-#define VU0_NOREORDER_BEGIN() ICO_ASM_NOT_PORTED()
-#define VU0_NOREORDER_END() ICO_ASM_NOT_PORTED()
-#else /* !ICO_HOST */
-
-/* ------------------------------------------------------------------ *
- * (c) R5900 opcodes with no C spelling.
- *
- * Each emits exactly one instruction inside a volatile inline-asm block.
- * ------------------------------------------------------------------ */
-
-/* Memory sync barrier, stalls the CPU until pending stores commit.
- * Used as a fence between a write and an external observer (GS, IPU,
- * VU0/1, DMAC).  ico2 sites: ito/mpeg/mv_disp, ito/mpeg/mv_vobuf. */
-#define SYNC() __asm__ __volatile__("sync" : : : "memory")
-/* Disable / enable interrupts (COP0 DI, EI).  Encodings 0x42000039 and
- * 0x42000038; the period ee-as has no mnemonic for either.  ico2 sites:
- * seki/src/Matrix (the VU0 register push/pop pair), ito/mpeg/mv_disp,
- * ito/mpeg/mv_vobuf. */
-#define DI() __asm__ __volatile__(".word 0x42000039" : : : "memory")
-#define EI() __asm__ __volatile__(".word 0x42000038" : : : "memory")
-/* Quadword copy, one 128-bit lq/sq pair through a scratch GPR (the nop in
- * the return slot after it is the toolchain's own).  The scratch register
- * differs per call site ($8 in seki/src/Matrix, $6 in
- * sugipon/src/matrixDrive), so it is a macro argument.  dst/src are
- * implicit in $4/$5: the macro is the BODY of a two-pointer wrapper. */
-#define QCOPY16(scratch)                                                                           \
-    __asm__ __volatile__("lq " scratch ", 0($5)" : : : "memory");                                  \
-    __asm__ __volatile__("sq " scratch ", 0($4)" : : : "memory")
-
-/* ------------------------------------------------------------------ *
- * (c) VU0 / COP2 macro-mode opcodes.
- *
- * The R5900's VU0 macro mode exposes ~120 distinct instruction variants
- * (broadcast + dest-mask combinations).  A unique macro per variant would
- * multiply the surface without buying any analysis power, since the
- * assembler already parses the asm text embedded in each one.  Instead
- * there is ONE macro per side-effect class.  Each emits exactly one
- * instruction inside its own __asm__ block, with a "memory" clobber only
- * on the loads and stores that observe caller-visible state.
- * ------------------------------------------------------------------ */
-
-/* ===========================================================
- *  TYPED MACROS, preferred form.  Pass operands as tokens; the
- *  macro builds the asm string via stringify-and-paste.
- * ===========================================================
- *
- *  Naming: VU0_<SHAPE>(<mnem-with-mask>, <operands...>)
- *
- *  The mnemonic (including mask, e.g. `vmul.xyzw`, and any
- *  broadcast prefix in the mnemonic, e.g. `vaddz`) is passed as
- *  a SINGLE token; operands are unprefixed register numbers
- *  (e.g. `13` for `$vf13`, `8` for `$8`, `f12` for `$f12`).
- *
- *  Memory loads/stores
- *  -------------------
- *    VU0_LSV(mnem, vf, off, base)   -> "<mnem> $vf<vf>, <off>($<base>)"
- *      Use for: lqc2, sqc2, vlqd, vsqi.
- *    VU0_LSGP(mnem, gp, off, base)  -> "<mnem> $<gp>, <off>($<base>)"
- *      Use for: lq, sq, ld, sd.
- *
- *  VU compute (register-only)
- *  --------------------------
- *    VU0_V2OP(mnem, d, a)         -> "<mnem> $vfd, $vfa"
- *      Use for: vmove, vmr32, vftoi0/4/12/15, vsqrt-style 2-arg.
- *    VU0_V3OP(mnem, d, a, b)      -> "<mnem> $vfd, $vfa, $vfb"
- *      Use for: vmul.MASK / vsub.MASK / vadd.MASK with no broadcast.
- *    VU0_V3OP_BC(mnem, d, a, b, bc)
- *                                 -> "<mnem> $vfd, $vfa, $vfb<bc>"
- *      Use for: vmulx.MASK / vaddy.MASK / vmaddw.MASK style ops where
- *      the broadcast letter is part of the mnemonic AND appears as a
- *      register suffix on the b operand.
- *    VU0_V3OP_ACC(mnem, a, b)     -> "<mnem> ACC, $vfa, $vfb"
- *      Use for: vopmula.MASK, vopmsub.MASK destination=ACC.
- *    VU0_V3OP_ACC_BC(mnem, a, b, bc)
- *                                 -> "<mnem> ACC, $vfa, $vfb<bc>"
- *      Use for: vmulax/vmadday/vmaddaz.MASK style.
- *
- *  EE<->VU transfer
- *  ----------------
- *    VU0_MFC1(gp, fp)        -> "mfc1 $<gp>, $f<fp>"
- *    VU0_MTC1(gp, fp)        -> "mtc1 $<gp>, $f<fp>"
- *    VU0_QMFC2_NI(gp, vf)    -> "qmfc2.ni $<gp>, $vf<vf>"
- *    VU0_QMTC2_NI(gp, vf)    -> "qmtc2.ni $<gp>, $vf<vf>"
- *    VU0_CFC2_NI(gp, vi)     -> "cfc2.ni $<gp>, $vi<vi>"
- *
- *  Escape hatches (pass full asm string)
- *  -------------------------------------
- *    VU0_MEM(insn), caller-visible load/store; "memory" clobber.
- *    VU0_REG(insn), register-only; no clobber.
- *
- *  Use the escape hatches only when no typed macro fits, e.g. for
- *  `vrnext`, `vrxor`, `vrsqrt`, `vdiv`, `viaddi`, `vmulq`, or any
- *  rare opcode without a typed shape above.  When the same shape
- *  shows up in 3+ functions, lift it into a new typed macro here.
- */
-
-/* Escape-hatch macros (raw asm string).  Use sparingly.
- *
- * RECONSTRUCTION, like the whole R5900 and VU0 wrapper set below and above it:
- * the opcodes are what the ROM's instructions decode to, the wrapper around
- * them is this repository's reconstruction of how the source reached them, and
- * every macro name here is ours rather than the developers', a macro leaves
- * no symbol and the disc's maps name none of them.  They sit in this header BY
- * INCLUDE PATTERN, NOT BY LISTING ROWS: SRCFILE.TXT attributes each expansion
- * to the .c line that invokes it, which is consistent with any header home, so
- * what places them here is that seki, sugipon and ito all use them and this is
- * the one attested header all three trees reach.
- *
- * Both bodies assemble with reordering off.  The game tree's VU0 opcodes are
- * hand-scheduled against the COP2 pipeline, so the assembler must leave them
- * where they are written; the visible consequence is the return of a VU0 leaf,
- * where ee-as would otherwise swap the closing `sqc2` into the `jr $31` delay
- * slot and the ROM has a `nop` there instead (69 sites in six objects).  The
- * SDK's own copy of these macros in sce/libvu0/libvu0.c is deliberately not
- * spelled this way: the ROM carries `sqc2` in 26 of that archive's return
- * slots, so the two trees were built from differently spelled templates. */
-#define VU0_MEM(insn)                                                                              \
-    __asm__ __volatile__(".set noreorder\n\t" insn "\n\t.set reorder" : : : "memory")
-#define VU0_REG(insn) __asm__ __volatile__(".set noreorder\n\t" insn "\n\t.set reorder")
-/* Memory load/store: typed forms. */
-#define VU0_LSV(mnem, vf, off, base) VU0_MEM(#mnem " $vf" #vf ", " #off "($" #base ")")
-#define VU0_LSGP(mnem, gp, off, base) VU0_MEM(#mnem " $" #gp ", " #off "($" #base ")")
-/* Like VU0_LSV but the base address is a C expression bound via an "r"
- * constraint, so gcc sees the data dependency on `base`. Use when the
- * base is a function argument/local that must stay in a callee-saved reg
- * across calls: the explicit dependency makes the scheduler emit the
- * base-setup move just before the load (filling the prologue's ra-save
- * gap) instead of greedily up front. */
-#define VU0_LSV_R(mnem, vf, off, base)                                                             \
-    __asm__ __volatile__(#mnem " $vf" #vf ", " #off "(%0)" : : "r"(base) : "memory")
-/* VU compute: 2-operand register-to-register (vmove, vmr32, vftoi*). */
-#define VU0_V2OP(mnem, d, a) VU0_REG(#mnem " $vf" #d ", $vf" #a)
-/* VU compute: 3-operand register-to-register. */
-#define VU0_V3OP(mnem, d, a, b) VU0_REG(#mnem " $vf" #d ", $vf" #a ", $vf" #b)
-/* Same with broadcast on b operand (mnemonic has broadcast letter,
- * b operand has matching register suffix). */
-#define VU0_V3OP_BC(mnem, d, a, b, bc) VU0_REG(#mnem " $vf" #d ", $vf" #a ", $vf" #b #bc)
-/* VU compute to ACC. */
-#define VU0_V3OP_ACC(mnem, a, b) VU0_REG(#mnem " ACC, $vf" #a ", $vf" #b)
-#define VU0_V3OP_ACC_BC(mnem, a, b, bc) VU0_REG(#mnem " ACC, $vf" #a ", $vf" #b #bc)
-/* EE<->VU transfer ops. */
-#define VU0_MFC1(gp, fp) VU0_REG("mfc1 $" #gp ", $f" #fp)
-#define VU0_MTC1(gp, fp) VU0_REG("mtc1 $" #gp ", $f" #fp)
-#define VU0_QMFC2_NI(gp, vf) VU0_REG("qmfc2.ni $" #gp ", $vf" #vf)
-#define VU0_QMTC2_NI(gp, vf) VU0_REG("qmtc2.ni $" #gp ", $vf" #vf)
-#define VU0_CFC2_NI(gp, vi) VU0_REG("cfc2.ni $" #gp ", $vi" #vi)
-
-/* VU0_NOP() (an explicit `nop` before a VU0 leaf's return) was retired 2026-09-05:
-   the return-slot nop after an inline-asm block is the assembler's, and
-   tools/compile_c.sh reproduces it (docs/NOTES.md "Return-slot padding"). */
-
-/* Wait-for-Q-pipeline barrier (vwaitq).  No memory effect but
- * sequences subsequent VU0 ops with prior compute. */
-#define VU0_WAIT() __asm__ __volatile__("vwaitq")
-/* Raw 32-bit word emission for COP2 ops without a gas mnemonic
- * (e.g., `vsqrt Q, $vfNx` -> .word 0x4A0X03BD). */
-#define VU0_WORD(w) __asm__ __volatile__(".word " #w)
-/* Hazard-pair scheduler barriers.
- *
- * Several R5900 COP2 transfer pairs have intrinsic load-delay or
- * Q-pipeline interlocks that gas's default `.set reorder` mode
- * "fixes" by inserting a `nop` between them.  The original ICO
- * codegen does NOT have those nops -- the bytes are tight.  Wrap
- * the affected pair in VU0_NOREORDER_BEGIN/END to suppress gas's
- * auto-fill.
- *
- * Example: `mfc1 $tN, $fM` followed by `qmtc2.ni $tN, $vfK` has a
- * 1-cycle GPR load-delay.  In `.set reorder` gas inserts a nop
- * between them; in `.set noreorder` gas leaves the bytes untouched
- * (the EE pipeline is forwarding-correct already).
- */
-#define VU0_NOREORDER_BEGIN() __asm__ __volatile__(".set noreorder")
-#define VU0_NOREORDER_END() __asm__ __volatile__(".set reorder")
-#endif /* !ICO_HOST */
 
 /* the stage's display setting: the lights, fog, shadow, post effects and camera limits */
 typedef struct StageSetting { /* field names derived */
@@ -1284,50 +1039,10 @@ typedef union { /* field names derived */
     long long d[2];
 } __attribute__((aligned(16))) ConstVec; /* derived name */
 
-/* the object record (GObj) as a view of plain words.  No game code reads
- * this view (it is kept for the EE build's type set); on the host the
- * record has one definition, GObj, and PObjGObj names it (docs/port/LOADERS.md). */
-#ifdef ICO_HOST
+/* PObjGObj, the decompilation's view of the object record as plain words,
+ * names GObj: the record has one definition (docs/port/LOADERS.md). */
 
 typedef struct GObj PObjGObj;
-
-#else
-
-typedef struct PObjGObj { /* field names derived */
-    ICO_WORD self;        /* 0x000, the object itself while in use */
-    int labelType;        /* 0x004, 1 for a stage layout object */
-    int labelId;          /* 0x008, the layout row */
-    int kind;             /* 0x00C, the object-kind id, -1 when the object has none */
-    ICO_WORD next;        /* 0x010 */
-    ICO_WORD prev;        /* 0x014 */
-    unsigned char linkId; /* 0x018 */
-    char pad19[3];
-    unsigned int key; /* 0x01C */
-    char pad20[8];
-    ICO_WORD fn;            /* 0x028 */
-    struct GProc *procHead; /* 0x02C, head of the object's process list */
-    struct GProc *procTail; /* 0x030, tail of the same list */
-    char pad34[8];
-    ICO_WORD kindNext; /* 0x03C */
-    int dlLinkId;      /* 0x040, the display list the object is linked into */
-    char pad44[4];
-    ICO_WORD dl;      /* 0x048, the display function */
-    int word4C;       /* 0x04C, read only by GobjProc.c's CreateGObj, through an ObjKindEnt row */
-    int drawMask;     /* 0x050, ANDed with a camera's mask */
-    int mailQueue;    /* 0x054, the mail box (GObj's view) */
-    int mailNum;      /* 0x058 */
-    int mailType;     /* 0x05C */
-    ICO_WORD mailArg; /* 0x060 */
-    char pad64[248];
-    ICO_WORD sub; /* 0x15C, the sub-object GObj's own view types as Sub15C * */
-    char pad160[4];
-    ICO_WORD act; /* 0x164, the actor/action-state object */
-    char pad168[4];
-    int active;      /* 0x16C */
-    int pauseExempt; /* 0x170 */
-} PObjGObj;          /* derived name */
-
-#endif
 
 /* Act + 0x438: the way-state word, one 64-bit flag word whose low two bytes
    are also the way walker's two status bytes; bit 16 asks for the detailed
@@ -1494,9 +1209,6 @@ typedef struct Act {         /* field names derived */
 
     union {
         unsigned long long ll;
-#ifndef ICO_HOST
-        void (*afterProc)(GObj *);
-#endif
     } flags18; /* 0x18, a 64-bit word: the after-proc in the low word
                   (commonact.c stores actAfterForceRope, afterCommonRopeCliff,
                   actAfterDown and actAfterRopeJump there), the state flags
@@ -1681,19 +1393,13 @@ typedef struct Act {         /* field names derived */
     char flyClip[0x1C0]
         __attribute__((aligned(16))); /* 0x690, the flyer's ClipColReq (commonact.c); the
                                   record is 0x850 bytes in all */
-#ifdef ICO_HOST
     void (*afterProcHost)(GObj *); /* host only: flags18's after-proc (docs/port/LOADERS.md) */
-#endif
 } Act; /* derived name */
 
 /* ACT_AFTER_PROC(a): the actor's after-proc as an lvalue, the low word of
  * flags18 on the EE, afterProcHost on the host (8-byte pointers).  The flag
  * bits stay in flags18.ll on every build. */
-#ifdef ICO_HOST
 #define ACT_AFTER_PROC(a) (((Act *)(a))->afterProcHost)
-#else
-#define ACT_AFTER_PROC(a) (((Act *)(a))->flags18.afterProc)
-#endif
 
 /* obj-layout: one placed object of a stage, 0x4C bytes, indexed by the
  * object's GObj labelId.  sceneManager.c creates the object from it; the
@@ -1809,8 +1515,6 @@ typedef struct McMgr {       /* field names derived */
     long long mask;          /* 0x9C0 */
 } __attribute__((aligned(64))) McMgr; /* derived name */
 
-#ifdef ICO_HOST
-
 /* PC port: the actors file an orient request over the root block from its
    wall record, `*(MotOriReq *)&GOBJ_SUB(self)->root.wall = req` (act-env.c,
    act-game.c, girl_act.c, act_bird.c, queen.c, motionManager.c,
@@ -1839,5 +1543,4 @@ _Static_assert(sizeof(MotOriReq) <= __builtin_offsetof(struct MotRoot, aheadWall
                    sizeof(((MotOriReq *)0)->a) == sizeof(((struct MotRoot *)0)->wall),
                "MotOriReq runs past MotRoot.cliffWallCount");
 
-#endif
 #endif /* TYPEDEF_H */

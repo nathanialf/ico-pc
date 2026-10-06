@@ -69,7 +69,6 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     a[0] = a[0] + f;
     _RotTransPersCurrentMatrix(b, a);
     scale = b[0] - *(float *)p->screenPos;
-#ifdef ICO_HOST
     {
         /* On the first update after InitPointBlur (dirty) the trail's
            second entry has not been written: it holds whatever the stage
@@ -88,9 +87,6 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
         }
         _SubVector(c, t, p->screenPos);
     }
-#else
-    _SubVector(c, (char *)p->screenPos + 0x10, p->screenPos);
-#endif
     c[2] = 0.0f;
     _OuterProduct(c, c, ZUnitVector);
     _NormalizeVector(c, c);
@@ -231,11 +227,7 @@ EnemyFootPrintHead *InitEnemyFootPrint(int num)
         p->dobj->nodes[i].flags.ll &= ~4;
         p->dobj->nodes[i].fade = 0;
         p->dobj->nodes[i].alpha = 1.0f;
-#ifdef ICO_HOST
         *(short *)((char *)&p->dobj->nodes[i].flags + 2) = 0;
-#else
-        *(short *)(i * 0x50 + (int)*(char **)((char *)p->dobj + 0x870) + 0x3A) = 0;
-#endif
         p->dobj->nodes[i].scale[0] = 1.0f;
         p->dobj->nodes[i].scale[1] = 1.0f;
         p->dobj->nodes[i].scale[2] = 1.0f;

@@ -130,7 +130,7 @@ or says it differs from the hardware, the choice is recorded here.
    busy-waits on a flag set by an interrupt or another thread, without a
    kernel call, would hang a fiber; the only such loops are in the PS2 movie
    player (`ito/mpeg`, not compiled on the host) and `FileManager.c`'s IOP
-   reboot loops (left out under `ICO_HOST`, DATA.md).
+   reboot loops (left out on the host, DATA.md).
 
 Other kernel calls: `SetAlarm` returns -1 (only the PS2 movie player used
 alarms); DMAC handlers are recorded but never raised; `scePrintf` prints

@@ -33,7 +33,7 @@ the host loop but cannot stop them.
   - every `stage_no` change, and every change of `kanbanBoot.c`'s
     `bootStep` / `mcCheckStep`.
 
-  The game-side hooks are `ICO_HOST` lines in `common/src/main.c`,
+  The game-side hooks are port lines in `common/src/main.c`,
   `fumi/ios/thread.c` (`ico_host_thread_func`) and
   `common/src/kanbanBoot.c` (`ico_host_kanban_step`).
 - **Heartbeat**, every 2 s of wall time: vsyncs and Main ticks,

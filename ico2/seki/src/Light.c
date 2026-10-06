@@ -56,8 +56,6 @@ typedef struct AmbientVolume { /* field names derived */
     struct AmbientVolume *prev; /* 0x98 */
 } AmbientVolume;                /* derived name */
 
-#ifdef ICO_HOST
-
 /* BgAnimation.c writes a volume's colour, shells and size through its
    BgaLightEnv view at these offsets (bga_initLightEnvelope, bga_CalcObject);
    no pointer precedes them, so they are the EE's on every host */
@@ -68,8 +66,6 @@ _Static_assert(__builtin_offsetof(AmbientVolume, inner) == 0x50, "AmbientVolume.
 _Static_assert(__builtin_offsetof(AmbientVolume, outer) == 0x60, "AmbientVolume.outer at 0x60");
 
 _Static_assert(__builtin_offsetof(AmbientVolume, size) == 0x70, "AmbientVolume.size at 0x70");
-
-#endif
 
 /* The cursor debug view's two pad angles, the newest light and the newest ambient volume
    (each list is walked back through prev), and the light count the retail

@@ -92,7 +92,7 @@ build the VU1 programs are the `vu_*.hlsl` shaders (VU1_PROGRAMS.md).
 
 ## Game sources changed for the host
 
-Each is `#ifdef ICO_HOST` with the EE path unchanged:
+Each replaces the EE code in place:
 
 | file | change |
 | --- | --- |

@@ -5,10 +5,10 @@ describes every tool.
 
 | file | what it is |
 | --- | --- |
-| [`BUILDING.md`](BUILDING.md) | the host build: quickstart, toolchains, presets and options, compilers, the rules for shared code, hooks, tests, CI, packages, and the maintainers' EE identity check |
+| [`BUILDING.md`](BUILDING.md) | the host build: quickstart, toolchains, presets and options, compilers, the rules for shared code, the game code and the decompilation, hooks, tests, CI, packages, and the maintainers' base ELF step |
 | [`LEGAL.md`](LEGAL.md) | what the repository may and may not contain, why the data tables are loaded from the player's disc at run time and never committed, and which references were used. Read it before contributing |
 | [`HEADERS.md`](HEADERS.md) | which headers the disc attests, the code includes, where the other declarations live, and the derived-name tokens |
-| [`PORT.md`](PORT.md) | how the port relates to the decompilation: `ico2/` and `sce/` are its code, what goes upstream, what stays here, how to merge |
+| [`PORT.md`](PORT.md) | how the port relates to the decompilation: `ico2/` is the port's own source, reconstruction fixes go to the decompilation first and are applied here, what only the port has |
 | [`TODO.md`](TODO.md) | work wanted but not done, and facts not yet verified, with where each would go |
 
 ## Port notes (`port/`)

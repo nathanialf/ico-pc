@@ -91,11 +91,7 @@ typedef struct {             /* field names derived */
 } ChainRecord; /* derived name */
 
 /* an address in a chain's node array, byte offset first as the ROM adds them */
-#ifdef ICO_HOST
 #define CHAIN_NODE_ADDR(T, cw, off) ((T)((char *)(cw)->node + (off)))
-#else
-#define CHAIN_NODE_ADDR(T, cw, off) ((T)((off) + (int)(cw)->node))
-#endif
 
 static int UpdateRootPosition(GObj *gobj)
 {
@@ -233,12 +229,10 @@ static inline void ChainPendulumSwing(float *dst, ChainRecord *cw, float *orient
     v[0] = 0.0f;
     v[1] = len;
     v[2] = 0.0f;
-#ifdef ICO_HOST
     /* the EE left v[3] as the stack word it found: the matrix's translation
        row is zero, so the product is 0 whatever the word; a host NaN or Inf
        pattern there would poison the nodes (docs/port/DIVERGENCES.md) */
     v[3] = 0.0f;
-#endif
 
     sceVu0UnitMatrix(m1);
     sceVu0RotMatrixX(m2, m1, ang * 3.1415927f / 180.0f);
@@ -425,11 +419,7 @@ static void chain_simulate_term_down(GObj *gobj)
     sceVu0AddVector(w, &cw->node[cw->holdNode], v);
     chain_sub_pendulum(cw->node, cw->holdNode, w);
     if (cw->holdNode + 1 <= cw->nodes - 1) {
-#ifdef ICO_HOST
         nd = CHAIN_NODE_ADDR(ChainNode *, cw, cw->holdNode << 5);
-#else
-        nd = (ChainNode *)((cw->holdNode << 5) + (int)cw->node);
-#endif
         next = nd + 1;
         next->x = nd->x;
         next->y = nd->y + 50.0f;
@@ -660,16 +650,12 @@ typedef struct { /* field names derived */
     long long words[8];
 } ChainPendTemplate; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: the pendulum is reset by moving chainPendulumDefault through this
    block, which must cover the whole record on the host too
    (tools/template_audit.py) */
 ICO_LAYOUT_SIZE(ChainPendTemplate, ChainPendulum);
-
-#endif
 
 /* the gobj extension pointer */
 typedef union { /* field names derived */
@@ -699,12 +685,8 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
 
     cw = iosMallocDebug(ios_partition_sugipon, (n << 5) + sizeof(ChainRecord), __FILE__, 1181);
 
-#ifdef ICO_HOST
     /* the record is wider here (8-byte pointers): copy the typed template */
     *cw = chainRecordDefault;
-#else
-    *(ChainRecTemplate *)cw = *(ChainRecTemplate *)&chainRecordDefault;
-#endif
 
     cw->nodes = n;
     cw->node = (ChainNode *)(cw + 1);
@@ -724,7 +706,6 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
         sceVu0FVECTOR p0 = {0.0f, 0.0f, -25.0f, 1.0f};
         sceVu0FVECTOR p1 = {0.0f, 0.0f, 25.0f, 1.0f};
         ClipWork w;
-#ifdef ICO_HOST
         /* PC port (X2, DIVERGENCES.md F15): the original sets only the two
            points, so _Clip reads the radius and the skip filter from
            whatever the stack holds, and the wall it picks (climb.wall,
@@ -732,7 +713,6 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
            garbage. The host starts from radius 0 and no filter: the wall
            the segment crosses behind the chain. */
         memset(&w, 0, sizeof(w));
-#endif
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(req->pos[0], req->pos[1] + 10.0f, req->pos[2]);
         MatrixDrive_RotMatrixY((short)(req->wallDir * 32768.0f / 3.1415927f));
@@ -834,11 +814,7 @@ static void chain_set_charachara(GObj *gobj, float amp)
     v[2] = s;
     _ApplyRyGV(v, (float)deg * 3.1415927f / 180.0f);
 
-#ifdef ICO_HOST
     p = CHAIN_NODE_ADDR(char *, cw, idx << 5);
-#else
-    p = (char *)((idx << 5) + (int)cw->node);
-#endif
     *(float *)p = *(float *)(p - 32) + v[0];
 
     *(float *)(p + 8) = *(float *)(p - 24) + v[2];
@@ -925,11 +901,7 @@ static inline unsigned char isChainHitByHand(GObj *gobj, float *p, float *v, flo
     v[1] = 0.0f;
 
     for (i = 2; i <= cw->nodes - 1; i++) {
-#ifdef ICO_HOST
         ChainNode *nd = CHAIN_NODE_ADDR(ChainNode *, cw, i << 5);
-#else
-        ChainNode *nd = (ChainNode *)((i << 5) + (int)cw->node);
-#endif
 
         if (nd->y < p[1] && p[1] < nd->y + 50.0f) {
             float t;
@@ -1071,11 +1043,7 @@ void ChainGeo(GObj *gobj)
             break;
         case 2:
             if (act != 0) {
-#ifdef ICO_HOST
                 float *nd = CHAIN_NODE_ADDR(float *, cw, cw->holdNode << 5);
-#else
-                float *nd = (float *)((cw->holdNode << 5) + (int)cw->node);
-#endif
                 float h;
 
                 ((ChainExtPtr *)&boyGObj->dobj)->sub->root.move[0] = 0.0f;
@@ -1169,13 +1137,9 @@ static inline void ChainNodeSpan(ChainRecord *cw, float *pos, int *i0, int *i1) 
 {
     ChainNode *nd = cw->node;
 
-#ifdef ICO_HOST
     /* the EE's cvt.w.s saturates an out-of-range position; the host's
        cvttss2si gives INT_MIN instead (docs/port/DIVERGENCES.md) */
     *i0 = ps2_ftoi((pos[1] - nd[0].y) / 50.0f);
-#else
-    *i0 = (int)((pos[1] - nd[0].y) / 50.0f);
-#endif
     *i1 = *i0 + 1;
     *i0 = *i0 < 2 ? 2 : (cw->nodes - 1 < *i0 ? cw->nodes - 1 : *i0);
     *i1 = *i1 < 2 ? 2 : (cw->nodes - 1 < *i1 ? cw->nodes - 1 : *i1);
@@ -1260,13 +1224,9 @@ typedef struct { /* field names derived */
 
 /* the climb work's storage, twelve words reached through ChainClimbWork
  * casts; the mode word at 0x28 starts at -1 */
-#ifdef ICO_HOST
 /* ChainClimbWork holds 16-byte aligned vectors; the EE placed the array on a
    quadword, the host must say so (a 32-bit host would not) */
 #define CHAIN_CLIMB_ALIGN __attribute__((aligned(16)))
-#else
-#define CHAIN_CLIMB_ALIGN
-#endif
 
 static int chainClimb[12] CHAIN_CLIMB_ALIGN = {
     /* derived name */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0};
@@ -1305,7 +1265,6 @@ static inline float *PushChainClimbRoot(GObj *obj, float *pos, float *out, float
  * file scope.  This region keeps its line layout and is fenced from
  * clang-format.
  */
-#ifdef ICO_HOST
 
 /* GetChainClimbMode was nested in TestChainUpDown; the captured boy is a parameter. */
 static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
@@ -1334,34 +1293,6 @@ static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
 
 static void TestChainUpDown(GObj *gobj, GObj *boy)
 {
-#else
-static void TestChainUpDown(GObj *gobj, GObj *boy)
-{
-    inline int GetChainClimbMode(int motion) /* derived name */
-    {
-        int mode = -1;
-        switch (motion) {
-        case 119:
-            mode = 4; if (GOBJ_ACT(boy)->actMode != 63) {
-                mode = 0;
-            }
-
-            break;
-        case 120:
-            mode = 1;
-            break;
-
-        case 121:
-            mode = 2;
-            break;
-        case 122:
-            mode = 3;
-            break;
-        }
-        return mode;
-    }
-
-#endif
     float v[4], org[4], w[4], d[4], hw[4], hd[4];
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     /* the boy's action record, whose chain field names the chain the boy hangs on */
@@ -1372,11 +1303,7 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
      * ChainExtPtr union as in the node-point helper.
      */
 
-#ifdef ICO_HOST
     int mode = GetChainClimbMode(boy, GOBJ_SUB(boy)->ctrl.motion);
-#else
-    int mode = GetChainClimbMode(GOBJ_SUB(boy)->ctrl.motion);
-#endif
 
     switch (mode) {
     case 4: {
@@ -1774,11 +1701,7 @@ int GetChainNearestNodePosition(float *out, GObj *gobj, float *p)
         float d = _DistSqGV(p, &cw->node[i]);
 
         if (d < best) {
-#ifdef ICO_HOST
             float *e = CHAIN_NODE_ADDR(float *, cw, i * 32);
-#else
-            float *e = (float *)(i * 32 + (int)cw->node);
-#endif
             out[0] = e[0];
             out[1] = e[1];
             out[2] = e[2];

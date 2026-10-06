@@ -210,10 +210,10 @@ so a long option or a longer language stays in its column. Link fields
 (`up`/`down`/`left`/`right`, the item links, `link`) may name game or port
 indices freely.
 
-**Fall-through sites** (`ico2/common/src/layout_texture.c`, under
-`ICO_HOST`; the file stays ASCII). `LT_LAYOUT(i)` and `LT_PROP(i)` are
-`(*lt_ext_Layout(i))` and `(*lt_ext_Prop(i))` on the host and the plain
-array accesses otherwise, used at every index in
+**Fall-through sites** (`ico2/common/src/layout_texture.c`; the file stays
+ASCII). `LT_LAYOUT(i)` and `LT_PROP(i)` are `(*lt_ext_Layout(i))` and
+`(*lt_ext_Prop(i))` in place of the plain array accesses, used at every
+index in
 `display_texture_fade_cancel_chk`, `lt_draw_layout`,
 `default_item_select`, `lt_reset_property_chain`, `texture_fading`,
 `display_texture` (the selected-row test),
@@ -229,7 +229,7 @@ dereferenced). `layout_action.c` only touches constant game indices,
 `kanban.c` its own layouts' rows and `jimaku.c` rows 434 and 435, so none
 of them ever sees a port index.
 
-**The draw hook** (`display_texture`, under `ICO_HOST`). For a port row,
+**The draw hook** (`display_texture`). For a port row,
 `tex_TransTexture` is skipped and `lt_ext_DrawRow(e, box, colour, 0)`
 replaces the textured `gif_SpriteSensitiveOffset`. Everything around it is
 the game's code: the packet state (Z test off, Z write off, ALPHA 0x44,
@@ -246,7 +246,7 @@ grid lines up with the game's rows. The label is aligned left at `dispX`
 (or centred or right, `LtExtText.align`); `centerX` centres the box as
 for a texture row.
 
-**Chained-row selection** (`display_texture`, under `ICO_HOST`). A port
+**Chained-row selection** (`display_texture`). A port
 row drawn from a layout with no cursor of its own (`curItem` < 0) takes
 its selection and dimming from the current layout's cursor (`LT_CUR_NO`:
 `current_layout_id` in place of the drawn layout in the `sel` and
@@ -258,7 +258,7 @@ and port rows of a layout with a cursor are unchanged.
 ## Settings menu
 
 `port/ui/settings.c` builds the menu once the game's tables are loaded:
-`init_layout_texture` calls `ui_SettingsInstall()` (under `ICO_HOST`),
+`init_layout_texture` calls `ui_SettingsInstall()`,
 which builds the port layouts the first time and repoints the game's rows
 each time. Installing is idempotent and happens only when the loaded
 tables look like the PAL ones (layout 58 is rows 297..333, 325's up item is
@@ -373,8 +373,8 @@ progress binds it instead, as it binds any press.
 two ways: `default_item_select` follows the selected row's `left` link on
 0x10 (the Options rows 300 to 330 to 57, the Settings entry row to 57, the
 memory card screens' Back rows to 21 or 28), and the `la_*` procs test
-0x10 themselves (the table in DIVERGENCES.md, "Optional features"). Under
-`ICO_HOST` both test `lt_ext_BackButtons()` instead (`LT_BACK_BUTTONS` in
+0x10 themselves (the table in DIVERGENCES.md, "Optional features"). In the
+port both test `lt_ext_BackButtons()` instead (`LT_BACK_BUTTONS` in
 `layout_texture.c`, `LA_BACK` in `layout_action.c`): 0x30 while
 `[game] circle_back` is on (the default), 0x10 when it is off, which is
 the PS2's test. Checked against the PAL tables (`texLayout` at 0x00533FE8
@@ -433,8 +433,8 @@ the textures at run time.
 | --- | --- |
 | `port/ui/menu_text.c`, `menu_text.h` | the table (texel rectangle, string, metrics per text rectangle; texProperty row to rectangle), `ui_MenuTextItemOf`, `ui_MenuTextDraw`, the classic switch |
 | `port/ui/layout_ext.c` | `lt_ext_IsTextRow` (a port row or a table row), `lt_ext_DrawTextRow` (dispatch to `lt_ext_DrawRow` or `ui_MenuTextDraw`) |
-| `ico2/common/src/layout_texture.c` | `display_texture` and `lt_glow_sprite` (`ICO_HOST`): a text row's sprite is replaced by `lt_ext_DrawTextRow`; `tex_TransTexture` still runs for every game row |
-| `ico2/common/src/kanban.c` | `display_texture` (`ICO_HOST`): the same for the boot screens' signs (the card prompts, Yes / No, the language and 50 / 60 Hz screens); an ASCII-only patch of the EUC-JP file |
+| `ico2/common/src/layout_texture.c` | `display_texture` and `lt_glow_sprite`: a text row's sprite is replaced by `lt_ext_DrawTextRow`; `tex_TransTexture` still runs for every game row |
+| `ico2/common/src/kanban.c` | `display_texture`: the same for the boot screens' signs (the card prompts, Yes / No, the language and 50 / 60 Hz screens); an ASCII-only patch of the EUC-JP file |
 | `port/game/options.c`, `.h` | `ico_opt_classic_menu_text` (`[game] classic_menu_text`, default false) |
 
 **Where the text comes from.** The sheets are

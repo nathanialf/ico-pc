@@ -88,7 +88,7 @@ Thumbs.db
 .env.local
 config/local.*
 
-# --- Local toolchain (tools/setup.sh: the period compilers and binutils) ---
+# --- Local toolchain (a period compiler tree left from an older checkout) ---
 tools/cc/
 tools/ghidra/
 # The host build's toolchains (tools/fetch_toolchain.sh) and build trees

@@ -39,17 +39,12 @@ static float bgaParticlePos[4] = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
    the word is an arena offset (eeword.h), except for bgaDummyLight, a static
    outside the arena that light objects take while the stage is not lit
    through Light.c: it has a word of its own, BGA_DUMMY_WORD. */
-#ifdef ICO_HOST
 
 static IcoEEWord bga_objWord(void *p);
 static void *bga_objPtr(IcoEEWord w);
 
 #define BGA_OBJ(T, w) ((T)bga_objPtr(w))
 #define BGA_OBJW(p) bga_objWord(p)
-#else
-#define BGA_OBJ(T, w) ((T)(w))
-#define BGA_OBJW(p) (p)
-#endif
 
 /* The six words the file's functions share.  bgaStreamSync is read and
    cleared by streamMotionManager.c (_infoUpdate), so it is global. */
@@ -258,13 +253,8 @@ typedef struct BgaGObj { /* field names derived */
 /* an object's display object and the two fields read from it: by name on
    the host (GObj.dobj, Sub15C.nodeNum and the model, whose name opens it),
    through the two views above on the EE */
-#ifdef ICO_HOST
 #define BGA_GOBJ_GEOM(o) (((GObj *)(o))->dobj)
 #define BGA_GEOM_NAME(g) ((char *)(g)->model)
-#else
-#define BGA_GOBJ_GEOM(o) ((BgaGeom *)((BgaGObj *)(o))->geom)
-#define BGA_GEOM_NAME(g) ((g)->name)
-#endif
 
 /* The particle entry's word at +0x20 packs three fields: the loop flag in
    bits 0-1, the effect handle in bits 2-16 and the particle id in bits
@@ -296,13 +286,9 @@ typedef struct BgaLightEnv { /* field names derived */
     /* 0x40 */ float col2[4];
     /* 0x50 */ float inner[4];
     /* 0x60 */ float outer[3];
-#ifdef ICO_HOST
     /* 0x6C */ char pad6C[4];
     /* 0x70 */ float size[3]; /* BgaObj's rscale, at the volume's 0x70 (bga_CalcObject) */
-#endif
-} BgaLightEnv; /* derived name */
-
-#ifdef ICO_HOST
+} BgaLightEnv;                /* derived name */
 
 /* Light.c asserts AmbientVolume's col, inner, outer and size at these */
 _Static_assert(__builtin_offsetof(BgaLightEnv, col2) == 0x40, "BgaLightEnv.col2 at 0x40");
@@ -312,8 +298,6 @@ _Static_assert(__builtin_offsetof(BgaLightEnv, inner) == 0x50, "BgaLightEnv.inne
 _Static_assert(__builtin_offsetof(BgaLightEnv, outer) == 0x60, "BgaLightEnv.outer at 0x60");
 
 _Static_assert(__builtin_offsetof(BgaLightEnv, size) == 0x70, "BgaLightEnv.size at 0x70");
-
-#endif
 
 static void bga_initLightEnvelope(BgaDObjEnt *p)
 {
@@ -533,9 +517,7 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
     BgaPtKey *k1;
-#ifdef ICO_HOST
     BgaPtKey lastKey;
-#endif
     float f;
     float u;
     float s0;
@@ -571,7 +553,6 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
-#ifdef ICO_HOST
     /* At the last key (f reaches its time once the PAL frame is scaled by
        1.2075409) the EE takes k1 from the record after the keys. With
        u = 0 its values drop out (times 0); they are finite on the EE but
@@ -590,12 +571,6 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
         d = k1->time - k->time;
         u = f / (float)d;
     }
-#else
-    k1 = k + 1;
-    f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
-#endif
 
     if (k1->linear == 0) {
         float h00;
@@ -692,9 +667,7 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
 {
     BgaPtKey *k;
     BgaPtKey *k1;
-#ifdef ICO_HOST
     BgaPtKey lastKey;
-#endif
     float f;
     float u;
     float s0;
@@ -731,7 +704,6 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
-#ifdef ICO_HOST
     /* At the last key (f reaches its time once the PAL frame is scaled by
        1.2075409) the EE takes k1 from the record after the keys. With
        u = 0 its values drop out (times 0); they are finite on the EE but
@@ -750,12 +722,6 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
         d = k1->time - k->time;
         u = f / (float)d;
     }
-#else
-    k1 = k + 1;
-    f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
-#endif
 
     {
         float *q = &w[0][0];
@@ -865,9 +831,7 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
 {
     BgaPtKey *k;
     BgaPtKey *k1;
-#ifdef ICO_HOST
     BgaPtKey lastKey;
-#endif
     float f;
     float u;
     float s0;
@@ -903,7 +867,6 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
     s0 = 0.0f;
     s1 = 0.0f;
     k = &k[bga_findPtKey(k, m->n, f)];
-#ifdef ICO_HOST
     /* At the last key (f reaches its time once the PAL frame is scaled by
        1.2075409) the EE takes k1 from the record after the keys. With
        u = 0 its values drop out (times 0); they are finite on the EE but
@@ -922,12 +885,6 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
         d = k1->time - k->time;
         u = f / (float)d;
     }
-#else
-    k1 = k + 1;
-    f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
-#endif
 
     if (k1->linear == 0) {
         float h00;
@@ -1052,9 +1009,7 @@ static float bga_GetExtMotion(BgaExtMotion *m)
 {
     BgaExtKey *k;
     BgaExtKey *k1;
-#ifdef ICO_HOST
     BgaExtKey lastKey;
-#endif
     float f;
     float s0;
     float s1;
@@ -1076,7 +1031,6 @@ static float bga_GetExtMotion(BgaExtMotion *m)
     k = ICO_EEPTR(BgaExtKey *, m->key);
     i = bga_findExtKey(k, m->n, f);
     k = &k[i];
-#ifdef ICO_HOST
     /* At the last key (f reaches its time once the PAL frame is scaled by
        1.2075409) the EE takes k1 from the record after the keys. With
        u = 0 its values drop out (times 0); they are finite on the EE but
@@ -1095,12 +1049,6 @@ static float bga_GetExtMotion(BgaExtMotion *m)
         d = k1->time - k->time;
         u = f / (float)d;
     }
-#else
-    k1 = k + 1;
-    f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
-#endif
     dv = k1->value - k->value;
 
     if (k1->linear == 0) {
@@ -1146,9 +1094,7 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
 {
     BgaKey *k;
     BgaKey *k1;
-#ifdef ICO_HOST
     BgaKey lastKey;
-#endif
     float f;
     float u;
     float s0;
@@ -1178,7 +1124,6 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
     s1 = 0.0f;
     i = bga_findKey(k, m->n, f);
     k = &k[i];
-#ifdef ICO_HOST
     /* At the last key (f reaches its time once the PAL frame is scaled by
        1.2075409) the EE takes k1 from the record after the keys. With
        u = 0 its values drop out (times 0); they are finite on the EE but
@@ -1197,12 +1142,6 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
         d = k1->time - k->time;
         u = f / (float)d;
     }
-#else
-    k1 = k + 1;
-    f -= (float)k->time;
-    d = k1->time - k->time;
-    u = f / (float)d;
-#endif
 
     if (k1->linear == 0) {
         float h00;
@@ -1285,7 +1224,6 @@ static int bgaRot[4]; /* derived name */
 
 static BgaLight bgaDummyLight; /* derived name */
 
-#ifdef ICO_HOST
 /* an EE address no heap block has (the EE heap starts at 0x760000) */
 #define BGA_DUMMY_WORD 0x10u
 
@@ -1298,8 +1236,6 @@ static void *bga_objPtr(IcoEEWord w)
 {
     return w == BGA_DUMMY_WORD ? (void *)&bgaDummyLight : ico_eeptr(w);
 }
-
-#endif
 
 /* a word read either as an int or as a float, the form this programmer
    gives such words (StageAnimation.c's AnimWord, Packet.c's PacketFloat) */
@@ -1442,7 +1378,6 @@ static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
     sy = SIGNF(rot[1]) * _Sqrt(1.0f - cy * cy);
     sz = SIGNF(rot[2]) * _Sqrt(1.0f - cz * cz);
 
-#ifdef ICO_HOST
     /* translate by t, then rotate about Y, X and Z: each rotation is built
        in full and multiplied on the right (docs/port/MATH.md) */
     {
@@ -1464,111 +1399,6 @@ static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
         _MulCurrentMatrixR(rx);
         _MulCurrentMatrixR(rz);
     }
-#else
-    /* The rotation pairs go into $vf21..$vf26 while the vmr32 chain builds
-       the identity rows in $vf14..$vf17.  The sequence is one asm block
-       because it is ordered by hand: every mfc1 is separated from the qmtc2
-       that consumes its GPR, and the three vmr32 sit in those gaps. */
-    __asm__ __volatile__("vmove.xyzw $vf17, $vf0\n\t"
-                         "lqc2 $vf8, 0(%6)\n\t"
-                         "mfc1 $4, %0\n\t"
-                         "mfc1 $5, %1\n\t"
-                         "vmr32.xyzw $vf16, $vf17\n\t"
-                         "mfc1 $6, %2\n\t"
-                         "mfc1 $7, %3\n\t"
-                         "mfc1 $8, %4\n\t"
-                         "vmr32.xyzw $vf15, $vf16\n\t"
-                         "mfc1 $9, %5\n\t"
-                         "qmtc2.ni $4, $vf21\n\t"
-                         "qmtc2.ni $5, $vf22\n\t"
-                         "vmr32.xyzw $vf14, $vf15\n\t"
-                         "qmtc2.ni $6, $vf23\n\t"
-                         "qmtc2.ni $7, $vf24\n\t"
-                         "qmtc2.ni $8, $vf25\n\t"
-                         "qmtc2.ni $9, $vf26"
-                         :
-                         : "f"(cy), "f"(sy), "f"(cx), "f"(sx), "f"(cz), "f"(sz), "r"(t)
-                         : "$4", "$5", "$6", "$7", "$8", "$9", "memory");
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 8, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 8, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 8, z);
-    VU0_V2OP(vmove.xyzw, 27, 14);
-    VU0_V2OP(vmove.xyzw, 29, 16);
-    VU0_V3OP_BC(vaddx.x, 14, 0, 21, x);
-    VU0_V3OP_BC(vaddx.x, 16, 0, 22, x);
-    VU0_V3OP_BC(vmaddw.xyzw, 7, 7, 8, w);
-    VU0_V2OP(vmove.xyzw, 28, 15);
-    VU0_V3OP_BC(vsubx.z, 14, 0, 22, x);
-    VU0_V3OP_BC(vaddx.z, 16, 0, 21, x);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 14, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 14, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 14, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 10, 7, 14, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 15, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 15, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 15, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 11, 7, 15, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 16, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 16, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 16, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 12, 7, 16, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 17, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 17, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 17, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 13, 7, 17, w);
-    VU0_V2OP(vmove.xyzw, 15, 28);
-    VU0_V2OP(vmove.xyzw, 16, 29);
-    VU0_V2OP(vmove.xyzw, 14, 27);
-    VU0_V2OP(vmove.xyzw, 17, 0);
-    VU0_V3OP_BC(vaddx.y, 15, 0, 23, x);
-    VU0_V3OP_BC(vsubx.y, 16, 0, 24, x);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 10, 14, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 11, 14, y);
-    VU0_V3OP_BC(vaddx.z, 15, 0, 24, x);
-    VU0_V3OP_BC(vaddx.z, 16, 0, 23, x);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 12, 14, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 4, 13, 14, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 10, 15, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 11, 15, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 12, 15, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 5, 13, 15, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 10, 16, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 11, 16, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 12, 16, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 6, 13, 16, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 10, 17, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 11, 17, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 12, 17, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 7, 13, 17, w);
-    VU0_V2OP(vmove.xyzw, 14, 27);
-    VU0_V2OP(vmove.xyzw, 15, 28);
-    VU0_V2OP(vmove.xyzw, 16, 29);
-    VU0_V2OP(vmove.xyzw, 17, 0);
-    VU0_V3OP_BC(vaddx.x, 14, 0, 25, x);
-    VU0_V3OP_BC(vsubx.x, 15, 0, 26, x);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 16, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 16, y);
-    VU0_V3OP_BC(vaddx.y, 14, 0, 26, x);
-    VU0_V3OP_BC(vaddx.y, 15, 0, 25, x);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 16, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 12, 7, 16, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 14, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 14, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 14, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 10, 7, 14, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 15, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 15, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 15, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 11, 7, 15, w);
-    VU0_V3OP_ACC_BC(vmulax.xyzw, 4, 17, x);
-    VU0_V3OP_ACC_BC(vmadday.xyzw, 5, 17, y);
-    VU0_V3OP_ACC_BC(vmaddaz.xyzw, 6, 17, z);
-    VU0_V3OP_BC(vmaddw.xyzw, 13, 7, 17, w);
-    VU0_V2OP(vmove.xyzw, 4, 10);
-    VU0_V2OP(vmove.xyzw, 5, 11);
-    VU0_V2OP(vmove.xyzw, 6, 12);
-    VU0_V2OP(vmove.xyzw, 7, 13);
-#endif
 }
 
 /* Externs and record views bga_CalcObject uses.  BgaNodeBits is typedef.h's
@@ -1614,15 +1444,9 @@ typedef struct BgaObj { /* field names derived */
    (rscale, 0x70) does not on the host, where BgaObj's mtx and quat pointers
    move rscale to 0x7C: bga_CalcObject writes it through BgaLightEnv's size,
    at the volume's 0x70 (Light.c's AmbientVolume). */
-#ifdef ICO_HOST
 #define BGA_GEOM_MTX(w) ((float (*)[16])BGA_OBJ(Sub15C *, w)->nodeMtx)
 #define BGA_GEOM_QUAT(w) ((float (*)[4])BGA_OBJ(Sub15C *, w)->nodeQuat)
 #define BGA_GEOM_WORK(w) ((BgaNodeBits *)BGA_OBJ(Sub15C *, w)->nodes)
-#else
-#define BGA_GEOM_MTX(w) (BGA_OBJ(BgaObj *, w)->mtx)
-#define BGA_GEOM_QUAT(w) (BGA_OBJ(BgaObj *, w)->quat)
-#define BGA_GEOM_WORK(w) (BGA_OBJ(BgaObj *, w)->work)
-#endif
 
 /* The lightning record bga_addLightning allocates: ten of lightning.h's
    0x20-byte nodes, the live node count, the two flags, the frame, the
@@ -1744,17 +1568,11 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
     case 8:
     case 9:
         if (d->u.obj != 0) {
-#ifdef ICO_HOST
             /* the volume's size at its 0x70, which BgaObj's rscale misses on
                the host (see BGA_GEOM_MTX) */
             BGA_OBJ(BgaLightEnv *, d->u.obj)->size[0] = 1.0f / bgaScale[0];
             BGA_OBJ(BgaLightEnv *, d->u.obj)->size[1] = 1.0f / bgaScale[1];
             BGA_OBJ(BgaLightEnv *, d->u.obj)->size[2] = 1.0f / bgaScale[2];
-#else
-            BGA_OBJ(BgaObj *, d->u.obj)->rscale[0] = 1.0f / bgaScale[0];
-            BGA_OBJ(BgaObj *, d->u.obj)->rscale[1] = 1.0f / bgaScale[1];
-            BGA_OBJ(BgaObj *, d->u.obj)->rscale[2] = 1.0f / bgaScale[2];
-#endif
             _GetCurrentMatrix(BGA_OBJ(void *, d->u.obj));
         }
         break;
@@ -1985,15 +1803,9 @@ typedef struct BgaAnimObj { /* field names derived */
    BGA_AOBJ_GOBJ is the parent as the GObj geometryManager.c's root
    accessors take: a cast on the host, the bare operand on the EE (whose
    call passes the view pointer as it is) */
-#ifdef ICO_HOST
 #define BGA_AOBJ_MTX(o) ((float (*)[4][4])((GObj *)(o))->dobj->nodeMtx)
 #define BGA_AOBJ_QUAT(o) ((float (*)[4])((GObj *)(o))->dobj->nodeQuat)
 #define BGA_AOBJ_GOBJ(o) ((GObj *)(o))
-#else
-#define BGA_AOBJ_MTX(o) ((o)->geom->mtx)
-#define BGA_AOBJ_QUAT(o) ((o)->geom->quat)
-#define BGA_AOBJ_GOBJ(o) o
-#endif
 
 void bga_CalcAnimation(BgaHeader *p, int loop, int reset)
 {
@@ -2207,14 +2019,10 @@ static void bga_addLightning(int kind, BgaLightningDef *def, float *vec, int id,
             }
         }
     }
-#ifdef ICO_HOST
     /* the EE allocates 352 bytes for the 0x158-byte record; a 64-bit host's
        record is larger */
     p = iosMallocDebug(ios_partition_seki, sizeof(BgaLightning) > 352 ? sizeof(BgaLightning) : 352,
                        __FILE__, 2968);
-#else
-    p = iosMallocDebug(ios_partition_seki, 352, __FILE__, 2968);
-#endif
     p->next = bgaLightningList;
     p->id = id;
     p->n = 1;

@@ -12,41 +12,15 @@
 #include "rd_mesh.h"
 
 #endif
-#ifndef ICO_HOST
 
-/* The five VU1 microprograms this table hands to the DMA, from cluster.o,
-   mesh.o, normal_c.o, normal_l.o and particle.o (the PS2 build only: the
-   host's table below holds none of them). */
-extern void ClusterMicroProgram();
-extern void MeshMicroProgram();
-extern void NormalCMicroProgram();
-extern void NormalLMicroProgram();
-extern void ParticleMicroProgram();
-
-#endif
 /* Indexed by the microprogram id the mesh and shadow paths pass around;
    slots 0 and 6 are unused. */
-#ifdef ICO_HOST
 
 /* The host has no VU1 microprograms (ico2/vusrc is assembled only by the PS2
    build) and a function address does not fit an int on 64-bit hosts; the
    addresses only reach DMA tags, which nothing consumes headless
    (port/null/gfx_null.c).  The renderer replaces the programs with shaders. */
 int MicroCodeAddress[7] = {0};
-
-#else
-
-int MicroCodeAddress[7] = {
-    0,
-    (int)NormalCMicroProgram,
-    (int)NormalLMicroProgram,
-    (int)ClusterMicroProgram,
-    (int)MeshMicroProgram,
-    (int)ParticleMicroProgram,
-    0,
-};
-
-#endif
 
 /* The count of microprogram uploads
    this frame, and the program currently resident in each of the 13 VU1
@@ -134,14 +108,10 @@ inline void mc_TransMicroCode(int id, int mask)
                 mcUploadCount++;
                 mc_setBaseOffset(id, i);
                 dl_SetDLPriority(i);
-#ifdef ICO_HOST
                 /* no microprogram image on the host: the DMA tag keeps the
                    EE's address word, 0 (MicroCodeAddress above) */
                 (void)q;
                 dl_OpenDma(5, 0, 0);
-#else
-                dl_OpenDma(5, *q, 0);
-#endif
                 dl_CloseDma();
 #ifdef ICO_RD
                 /* R3ab: the program resident in this list from here on */

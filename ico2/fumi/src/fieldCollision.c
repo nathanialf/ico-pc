@@ -22,7 +22,6 @@
 /* The collision file's head (fieldCollision.h's FcColl).  The EE reads its
    relocated words through this typed view; the host keeps them as EE
    address words (eeword.h) and reads them through the FUZIO_ accessors. */
-#ifdef ICO_HOST
 
 typedef FcColl FuzioCtx; /* derived name */
 
@@ -31,23 +30,6 @@ typedef FcColl FuzioCtx; /* derived name */
 #define FUZIO_WBLK(c, i) ICO_EEPTR(short *, ICO_EEPTR(int *, (c)->wblk)[i])
 #define FUZIO_FBLK(c, i) ICO_EEPTR(short *, ICO_EEPTR(int *, (c)->fblk)[i])
 #define FUZIO_OFS(c) ICO_EEPTR(float *, (c)->ofs)
-#else
-
-typedef struct { /* field names derived */
-    char pad0[16];
-    FcWallEnt *walls; /* 0x10 */
-    FcFloorEnt *fcl;  /* 0x14, the floor list (charFileManager.c's names) */
-    short **wblk;     /* 0x18, per block, the walls' indices, ended by a negative one */
-    short **fblk;     /* 0x1C, per block, the floors' indices */
-    float *ofs;       /* 0x20, the origin the blocks are counted from */
-} FuzioCtx;           /* derived name */
-
-#define FUZIO_WALLS(c) ((c)->walls)
-#define FUZIO_FLOORS(c) ((c)->fcl)
-#define FUZIO_WBLK(c, i) ((c)->wblk[i])
-#define FUZIO_FBLK(c, i) ((c)->fblk[i])
-#define FUZIO_OFS(c) ((c)->ofs)
-#endif
 
 /* One line colour of the collision display: red, green, blue, alpha. */
 typedef struct { /* field names derived */
@@ -60,13 +42,8 @@ typedef int (*FcFunc)(void *work, int mode);
    included, and cvt.w.s saturates; plain C on the host gives Inf/NaN and
    0x80000000 (docs/port/MATH.md, DIVERGENCES.md F5). The EE build keeps the
    plain operators. */
-#ifdef ICO_HOST
 #define FC_DIV(a, b) ps2_div((a), (b)) /* derived name */
 #define FC_FTOI(x) ps2_ftoi(x)         /* derived name */
-#else
-#define FC_DIV(a, b) ((a) / (b))
-#define FC_FTOI(x) ((int)(x))
-#endif
 /* The ray-plane arithmetic as the EE's multiplier and adder compute it, and
    the rays' VU0 transforms into and out of each object's frame
    (port/math/ps2float.h: PCSX2 PR #12001's PS2Float model). IEEE round
@@ -74,20 +51,12 @@ typedef int (*FcFunc)(void *work, int mode);
    floors meet that picks the other floor (DIVERGENCES.md F19). FC_MUL's
    operands are in the instruction's order (fs, ft), which here is the
    source's. The EE build keeps the plain operators and calls. */
-#ifdef ICO_HOST
 #define FC_MUL(a, b) ps2_mul((a), (b)) /* derived name */
 #define FC_ADD(a, b) ps2_add((a), (b)) /* derived name */
 #define FC_SUB(a, b) ps2_sub((a), (b)) /* derived name */
 #define FC_APPLY(d, m, v)                                                                          \
     ico_apply_matrix_ps2((float *)(d), (const float (*)[4])(m), (const float *)(v))
 #define FC_SET_TRANSPOSE(d, s) ico_set_transpose_matrix_ps2((float *)(d), (const float *)(s))
-#else
-#define FC_MUL(a, b) ((a) * (b))
-#define FC_ADD(a, b) ((a) + (b))
-#define FC_SUB(a, b) ((a) - (b))
-#define FC_APPLY(d, m, v) _ApplyMatrix((d), (m), (v))
-#define FC_SET_TRANSPOSE(d, s) MatrixDrive_SetTransposeMatrix((d), (s))
-#endif
 
 /* fieldCollision.o's .sbss and .bss.  .sbss: the number of objects in the
    collision list, the nine collision statistics DispCollisionPC prints (a
@@ -475,11 +444,7 @@ inline void ResetCollisionPC(void)
 {
     int tmp;
     pcWall0 = 0;
-#ifdef ICO_HOST
     tmp = 0; /* no EE timer 0 on the host */
-#else
-    tmp = *T0_COUNT;
-#endif
     pcWallR0 = 0;
     pcTime = tmp;
 
@@ -496,11 +461,7 @@ void DispCollisionPC(void)
     if (game_pause == 0) {
         return;
     }
-#ifdef ICO_HOST
     pcTime = 0 - pcTime; /* no EE timer 0 on the host */
-#else
-    pcTime = *T0_COUNT - pcTime;
-#endif
     sprintf(pcLine, "W :%4d %2d", pcWall0, pcWall1);
     if (debug_font_flag & 1) {
         debug_Printf(ScreenWidth / 2, ScreenHeight / 2, 0xFFFFFF00, pcLine);
@@ -1058,7 +1019,6 @@ static void _Clip(ClipWork *self, int mode)
             do {
                 m = (char *)clipMatrix;
                 sub = obj->dobj;
-#ifdef ICO_HOST
                 /* PC port: the list is the previous Main tick's
                    (MakeCollisionDependGObjList), so during a stage's
                    InitIcoMisc it still names the last stage's objects, and a
@@ -1068,9 +1028,6 @@ static void _Clip(ClipWork *self, int mode)
                    the host reads the slot as one that does not display
                    (DIVERGENCES.md D11) */
                 if (sub != 0 && sub->disp != 0) {
-#else
-                if (sub->disp != 0) {
-#endif
                     if (x != 0) {
                         if (obj == self->filter.o.obj) {
                             if (self->filter.o.node < 0) {
@@ -1468,24 +1425,11 @@ typedef struct { /* field names derived */
 } FcWallObj;        /* derived name */
 
 /* the collision file's head again (fieldCollision.h's FcColl) */
-#ifdef ICO_HOST
 
 typedef FcColl FcWallSet; /* derived name */
 
 #define FCWS_NWALL(c) ((c)->count)
 #define FCWS_WALLS(c) ICO_EEPTR(char *, (c)->wcl)
-#else
-
-typedef struct { /* field names derived */
-    char pad0[8];
-    int nwall; /* 0x8  */
-    char padC[4];
-    char *walls; /* 0x10 */
-} FcWallSet;     /* derived name */
-
-#define FCWS_NWALL(c) ((c)->nwall)
-#define FCWS_WALLS(c) ((c)->walls)
-#endif
 
 void DrawGObjWallCollision(GObj *gobj, int col)
 {
@@ -1501,39 +1445,19 @@ void DrawGObjWallCollision(GObj *gobj, int col)
 
     wallDrawCnt = wallDrawCnt + 1;
     n = 1;
-#ifdef ICO_HOST
     if (GOBJ_SUB(gobj)->colPerNode != 0) {
         n = GOBJ_SUB(gobj)->nodeNum;
     }
-#else
-    if (g->sub->multi != 0) {
-        n = g->sub->nobj;
-    }
-#endif
-#ifdef ICO_HOST
     cd = (FcWallSet *)GOBJ_SUB(gobj)->colData;
-#else
-    cd = (FcWallSet *)g->sub->coll;
-#endif
     gif_StartPacketPri(11);
     MatrixDrive_PushMatrix();
     gif_SetAlpha(1, 5, 0);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
     for (i = 0; i < n; i++) {
-#ifdef ICO_HOST
         CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + (i << 6));
-#else
-        CopyMatrix(MatrixDrive_GetMatrix(), g->sub->mtx + (i << 6));
-#endif
-#ifdef ICO_HOST
         if (GOBJ_SUB(gobj)->colRotate == 0) {
             UnitRotation(MatrixDrive_GetMatrix());
         }
-#else
-        if (g->sub->norot == 0) {
-            UnitRotation(MatrixDrive_GetMatrix());
-        }
-#endif
         for (j = 0; j < FCWS_NWALL(cd); j++) {
             e = FCWS_WALLS(cd) + j * 0x50;
             c0 = &wallEdgeColor;

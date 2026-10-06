@@ -14,11 +14,11 @@ the layout classes are in `LAYOUT.md`; raw offsets into runtime records
 
 **(a) Frozen record, EE address words.** The file's records keep the EE
 layout (class `overlay`, asserted on every preset). A field that holds an
-address is declared `ICO_EEWORD(T)`: `T` on the EE, a 32-bit word on the
-host. The loader's arithmetic is unchanged except for the conversions
+address is declared `ICO_EEWORD(T)` (where the original had `T`), a 32-bit
+word. The loader's arithmetic is the original's except for the conversions
 (`ico2/common/include/eeword.h`):
 
-| macro | EE | host |
+| macro | original | port |
 | --- | --- | --- |
 | `ICO_EEWORD(T)` | `T` | `unsigned int` |
 | `ICO_EEW(p)` | `(int)(p)` | `p`'s offset in the EE RAM arena; 0 for null; traps for a pointer outside the arena |
@@ -37,9 +37,7 @@ soon as the loader returns and the game keeps a copy of a record, the copy
 is a runtime record (natural host layout, real pointers) that the loader
 fills field by field from the frozen file record.
 
-Each format below says which pattern it uses. Every edit keeps the EE
-build's tokens: either `#ifdef ICO_HOST` with the original in `#else`, or a
-macro whose EE expansion is the original cast.
+Each format below says which pattern it uses.
 
 ## Formats
 
@@ -169,7 +167,7 @@ Pattern (a). Files: `ico2/sugipon/src/motionFileManager.c`,
   facial table and its entries, every node-list slot, the word inside
   format 2/5 nodes and `nTable`/`lastTable` inside format 3/6 nodes, each
   an EE word (the host versions of `pursueNodeList`, `relocFacialTable` and
-  `relocMotionFile`; the EE's in `#else`).
+  `relocMotionFile`).
 - Every reader of those words (`_getMotion` for all six formats,
   `getMotionRootPos`, `getShapeMotion`, `getShapeGeometry`,
   `CheckMotionIncludeFacialData`, `assertMotionNodeCount`) goes through
@@ -244,8 +242,7 @@ word, state flags in bits 32-63. An 8-byte function pointer there would
 overwrite the flags. On the host the union holds only the flags and the
 after-proc is `afterProcHost`, appended at the end of `Act` so no member
 moves. Every store, test and call of the after-proc goes through
-`ACT_AFTER_PROC(a)` (an lvalue, next to `Act` in `typedef.h`); the raw
-`+ 0x18` forms stay in the EE's `#else` branches. No code writes the whole
+`ACT_AFTER_PROC(a)` (an lvalue, next to `Act` in `typedef.h`). No code writes the whole
 doubleword to set or clear the after-proc (every `ll` assignment masks or
 ORs the old value), so the split is not observable. The flag bits are read
 through `flags18.ll` / `flags20.ll` on the host.

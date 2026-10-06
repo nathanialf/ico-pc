@@ -62,8 +62,8 @@ ico2/          the game: one directory per programmer, each with src/ and
                include/ (common, fumi, ito, omori, script, seki, sugipon)
 ico2/vusrc/    the five VU1 microprograms, the renderer's shaders' reference
 sce/           Sony's runtime libraries, newlib and libgcc as the game linked
-               them: the reference for the optional EE identity check, not
-               part of any host build
+               them: the SDK headers the game includes and the Sg sequencer
+               (sce/libsndn2/sound.c); the rest is not part of any host build
 port/          the platform layer, renderer, audio, input, data and the rest
                of the port
 cmake/         the host build's toolchain files and source lists
@@ -78,11 +78,12 @@ build-host/    local only, gitignored: build output
 
 ## The decompilation
 
-This repository is a fork of the decompilation, which stays the byte-matched
-reference and is the one source of the game code: `ico2/` and `sce/` here
-equal its `main`, host changes included (gated so the PS2 build is
-unchanged). Names, types, fixes and host changes land there first and come
-into the port with `git merge upstream/main`. [`docs/PORT.md`](docs/PORT.md) describes the relationship.
+The game code started as a fork of the decompilation, which stays the
+byte-matched reference. `ico2/` here is the port's own source, compiled only
+for the host; platform changes are made directly in it. Reconstruction fixes
+(a wrong type, field or operand, names, layouts) are verified against the
+ROM and committed in the decompilation first, then applied here.
+[`docs/PORT.md`](docs/PORT.md) describes the relationship.
 
 ## Legal and licence
 

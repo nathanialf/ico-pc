@@ -169,14 +169,10 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
         w->spin = 0;
     }
     span = (float)pkg->life * (pkg->lifeRand * sugiSignedRandom() + 1.0f);
-#ifdef ICO_HOST
     /* span is 0 when a package's life and lifeRand make it so (stage 5's
        torches): the EE's div gives Fmax; the host's Inf times the zero
        below would be NaN (docs/port/DIVERGENCES.md) */
     w->alphaStep = ps2_div(w->alpha, span);
-#else
-    w->alphaStep = w->alpha / span;
-#endif
     if ((float)w->life < span) {
         w->alpha = w->alpha - (span - (float)w->life) * w->alphaStep;
     }
@@ -194,13 +190,9 @@ static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
 
     if (geo->clip != 0) {
         sceVu0ApplyMatrix(v, matrixptr + 0x100, geo->pos);
-#ifdef ICO_HOST
         /* PC port: w is 0 for an origin on the camera plane (seen at
            stage 7, Main tick 115 of a start_stage boot; DIVERGENCES.md F5) */
         sceVu0ScaleVectorXYZ(v, v, ps2_div(1.0f, v[3]));
-#else
-        sceVu0ScaleVectorXYZ(v, v, 1.0f / v[3]);
-#endif
         if (v[2] < 0.0f || v[0] < 0.0f || 4095.0f < v[0] || v[1] < 0.0f || 4095.0f < v[1]) {
             return 1;
         }
@@ -682,12 +674,10 @@ void SetParticleEffectPackage(int no, int *data, int size)
         debug_StdPrintfDummy("\033[36mThis is old version(%d) file. May be an error occur.\033[m\n",
                              *data);
     }
-#ifdef ICO_HOST
     /* a .pef longer than its 160-byte slot would run into the next package */
     if (size > 160) {
         size = 160;
     }
-#endif
     memcpy(((unsigned char *)particleParams + no * 160), data, size);
 }
 

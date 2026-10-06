@@ -71,14 +71,6 @@ static unsigned int fadeLength; /* derived name */
 
 static unsigned int fadeCount; /* derived name */
 
-/* memset with an int count, which this TU's calls pin over <string.h>'s
-   unsigned one */
-#ifndef ICO_HOST
-
-extern void *memset(void *dst, int c, int n);
-
-#endif
-
 #include "Texture.h"
 
 /* PC port (Phase 6, 6B): the rows past the game's tables.  texLayout[80] and
@@ -87,7 +79,6 @@ extern void *memset(void *dst, int c, int n);
    ends (port/ui/layout_ext.h), which this file's lookups fall through to.
    The texture initialisation below walks the stages' layout ranges, which
    never reach an extension index, and keeps the plain arrays. */
-#ifdef ICO_HOST
 
 #include "layout_ext.h"
 
@@ -101,11 +92,6 @@ void ui_SettingsInstall(void);
    [game] circle_back on, Circle does too (layout_ext.h lt_ext_BackButtons;
    0x10 alone when it is off) */
 #define LT_BACK_BUTTONS lt_ext_BackButtons()
-#else
-#define LT_LAYOUT(i) texLayout[i]
-#define LT_PROP(i) texProperty[i]
-#define LT_BACK_BUTTONS 0x10
-#endif
 
 static void default_item_select(int no);
 
@@ -449,9 +435,6 @@ extern void gif_StartPacketPri(int pri);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
-
-#ifdef ICO_HOST
-
 /* The host passes z as GifPacket.c defines it: on the EE each argument has
    its own 64-bit register, so the narrower declaration only changed how the
    constant was loaded; on a host that passes arguments on the stack (i386)
@@ -460,28 +443,14 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_SpriteSensitive(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
 extern void gif_EndPacket(void);
 extern void gif_SpriteSensitiveOffset(SprRect *r, long long z, SprRect *uv, SprCol *col, int prim);
-
-#else
-
-extern void gif_SpriteSensitive(SprRect *r, unsigned int z, SprRect *uv, SprCol *col, int prim);
-extern void gif_EndPacket(void);
-extern void gif_SpriteSensitiveOffset(SprRect *r, unsigned int z, SprRect *uv, SprCol *col,
-                                      int prim);
-
-#endif
-
 extern void gif_PointOffset(int *v, long long z, SprCol *col, int prim);
 extern void gif_SetGsReg(long long reg, long long data);
-
-#ifdef ICO_HOST
 
 /* PC port (6B): the port row display_texture is drawing, whose glow is its
    label stretched like the texture sprite (port/ui/layout_ext.h); since P3
    also a game row whose texture is menu text drawn with the port font
    (port/ui/menu_text.h) */
 static LtProperty *ltHostTextRow;
-
-#endif
 
 /* the pulsing highlight sprite, inlined three times by display_texture */
 static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int b, float t, int dx,
@@ -499,13 +468,11 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
     rr.w = rr.w + s * dx * 2;
     rr.h = rr.h + s * dy * 2;
     gif_SetAlpha(1, 5, 0);
-#ifdef ICO_HOST
     if (ltHostTextRow != 0) {
         lt_ext_DrawTextRow(ltHostTextRow, (const int *)&rr, (const int *)ofs,
                            (const unsigned char *)&c, 1);
         return;
     }
-#endif
     gif_SpriteSensitiveOffset(&rr, 0xFFFFFF9B, ofs, &c, 1);
 }
 
@@ -522,16 +489,12 @@ static void display_texture(int no, LtProperty *e)
 
     int sel;
     int i;
-#ifdef ICO_HOST
     /* PC port (6C): a port row in a layout chained after the current one
        with no cursor of its own (the Settings entry rows after the Options
        and title rows) is selected and dimmed by the current layout's
        cursor, which the item links move onto it */
     int curNo = lt_ext_IsPortProp(e) && LT_LAYOUT(no).curItem < 0 ? current_layout_id : no;
 #define LT_CUR_NO curNo
-#else
-#define LT_CUR_NO no
-#endif
 
     ofs.x = (e->texU << 4) + 8;
     ofs.y = (e->texV << 4) + 8;
@@ -574,14 +537,12 @@ static void display_texture(int no, LtProperty *e)
 
         flag = (e->upItem >= 0 || e->downItem >= 0 || e->leftItem >= 0 || e->rightItem >= 0 ||
                 e->right >= 0 || e->left >= 0 || e->down >= 0 || e->up >= 0);
-#ifdef ICO_HOST
         /* PC port (6B): a port row has no texture; its label is drawn where
            the sprite would be, with the same colour.  P3: a game menu text
            row is drawn the same way, its texture still transferred so the
            VRAM and packets are the texture path's */
         ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
         if (!lt_ext_IsPortProp(e))
-#endif
             tex_TransTexture(e->texNo, 11);
 
         gif_StartPacketPri(11);
@@ -628,12 +589,10 @@ static void display_texture(int no, LtProperty *e)
             }
         }
         LT_HOST_KEY(e, 0);
-#ifdef ICO_HOST
         if (ltHostTextRow != 0) {
             lt_ext_DrawTextRow(e, (const int *)&box, (const int *)&ofs,
                                (const unsigned char *)&u.col, 0);
         } else
-#endif
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
         LT_HOST_KEY(e, 1); /* the glow sprites */
 
@@ -646,9 +605,7 @@ static void display_texture(int no, LtProperty *e)
         } else if (e->selectable != 0 && sel != 0 && glowOn != 0) {
             lt_glow_sprite(&box, &ofs, 54, 80, 115, (float)glowCount / (float)glowLength, 32, 32);
         }
-#ifdef ICO_HOST
         ltHostTextRow = 0;
-#endif
         LT_HOST_KEY(0, 0);
         gif_SetZWrite(1);
         gif_EndPacket();
@@ -787,25 +744,15 @@ void exec_layout_texture(void)
 /* init_textures_of_specified_property is a file static, as is
    ico2/common/src/kanban's function of the same name */
 /* texProperty's texNo column, &texProperty[0].texNo */
-#ifdef ICO_HOST
 #define D_0030D014 ((char *)&texProperty[0].texNo)
-#else
-
-extern char D_0030D014[];
-
-#endif
 
 /* sce/'s string.h does not declare it */
 extern char *strtok(char *s, const char *sep);
 
 static inline char *lt_texture_base_name(char *src) /* derived name */
 {
-#ifdef ICO_HOST
     /* the result points into it, so on the host it outlives the call */
     static char buf[256];
-#else
-    char buf[256];
-#endif
     char *p;
     char *t;
 
@@ -854,16 +801,10 @@ static void init_textures_of_specified_property(int first, int last)
 
     for (i = first; i < last; i++) {
         no = lt_texture_no_of_property(i);
-#ifdef ICO_HOST
         /* the EE's stride and texData-before-texNo offset are 32-bit only */
         texProperty[i].texNo = no;
         texProperty[i].texData = tex_GetTextureData(no);
         tex_SetSamplingType(texProperty[i].texData, 1, 1);
-#else
-        *(int *)(D_0030D014 + i * 0x70) = no;
-        *(void **)(D_0030D014 + i * 0x70 - 4) = tex_GetTextureData(no);
-        tex_SetSamplingType(*(void **)(D_0030D014 + i * 0x70 - 4), 1, 1);
-#endif
     }
 }
 
@@ -880,9 +821,7 @@ static inline void lt_init_stage_textures(int stage) /* derived name */
 
 void init_layout_texture(int stage)
 {
-#ifdef ICO_HOST
     ui_SettingsInstall();
-#endif
     fadeCallback = 0;
     if (stage == 1) {
         gflagInit();

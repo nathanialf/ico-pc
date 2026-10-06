@@ -370,11 +370,7 @@ void brainAddLevelGop(GObj *gobj, float lv)
 }
 
 /* the target list's address: Brain + 0x28 on the EE, the field on the host */
-#ifdef ICO_HOST
 #define BRAIN_TGT_ADDR(b) ((b)->tgt)
-#else
-#define BRAIN_TGT_ADDR(b) ((b) + 0x28)
-#endif
 
 /* brainSubLevelGop, brainSetLevelGop and brainDecTargetTimer walk the
    targets from an int address; brainGirl.tgt[i] or a BrainTarget pointer

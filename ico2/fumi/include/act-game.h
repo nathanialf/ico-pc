@@ -13,7 +13,6 @@
 
 struct GObj;
 
-#ifdef ICO_HOST
 /* The pair of hand-link wall probes the debug overlay draws, mirrored into
    the actor work area at +0x540 (act-game.c). */
 typedef struct HandClInfo { /* field names derived */
@@ -38,7 +37,6 @@ typedef struct ActEffRec {
     int kind;     /* 0x28 */
     char pad2C[4];
 } ActEffRec;
-#endif
 
 /* The actor's character work, the record at Act+0x688 (held there as a
  * word, like the object's own actor slot): the boy's, the girl's and the
@@ -132,7 +130,6 @@ typedef struct ActWork { /* field names derived */
     int basePosSet;          /* 0x4D0 */
     char pad4D4[12];
     float basePos[4]; /* 0x4E0, the position the enemy guards when basePosSet */
-#ifdef ICO_HOST
     unsigned char
         boxSideSet; /* 0x4F0, set when the cliff edge is at a box side (ACTGetEnvironment) */
     char pad4F1[15];
@@ -144,35 +141,15 @@ typedef struct ActWork { /* field names derived */
     char pad52C[4];
     float boxDir[4];   /* 0x530, the direction a box is pushed and pulled in (actCommonBox) */
     HandClInfo handCl; /* 0x540, the hand-link wall probes the debug overlay draws */
-#else
-    unsigned char boxSideSet; /* 0x4F0, set when the cliff edge is at a box side (ACTGetEnvironment) */
-    char pad4F1[15];
-    float boxSidePos[4]; /* 0x500, where the actor stands at that box side */
-    float boyOrient[4]; /* 0x510, the girl's direction to the boy (ACTGetEnvironment) */
-    float hintPosX;     /* 0x520 */
-    float hintPosY;     /* 0x524 */
-    float hintPosZ;     /* 0x528 */
-    char pad52C[4];
-    float boxDir[4]; /* 0x530, the direction a box is pushed and pulled in (actCommonBox) */
-    char pad540[64];
-#endif
     WayRequest wayReq; /* 0x580, the way search RequestWayBegin hands to the way system manager */
     char pad638[232];
     ClipColReq view; /* 0x720, the clip ACTGameView_Loop runs to the object it looks at */
-#ifdef ICO_HOST
     int viewState;   /* 0x800 */
     char pad804[12];
     ActEffRec effRec[3]; /* 0x810, 0x840, 0x870 */
     float emgPosX;       /* 0x8A0 */
     float emgPosY;       /* 0x8A4 */
     float emgPosZ;       /* 0x8A8 */
-#else
-    int viewState; /* 0x800 */
-    char pad804[156];
-    float emgPosX; /* 0x8A0 */
-    float emgPosY; /* 0x8A4 */
-    float emgPosZ; /* 0x8A8 */
-#endif
     char pad8AC[4];
     MotOriReq intrReq; /* 0x8B0, the orient request of the interrupt motion
                           act_check_intr_list started; the hang and climb acts
@@ -238,15 +215,7 @@ int ACTGameViewSimple_Check(struct GObj *self, struct GObj *obj);
 int ACTGame_GetMotOrientFromWeapon(struct GObj *weapon);
 unsigned char ACTGame_NoWeapon(struct GObj *self);
 
-#ifdef ICO_HOST
-
 inline int ACTGame_isWeaponCombustible(GObj *self);
-
-#else
-
-inline int ACTGame_isWeaponCombustible(void);
-
-#endif
 
 struct GObj *ACTGame_GetNearestGObj(float *pos, int kind);
 void ACTLookTarget_Init(struct GObj *self);

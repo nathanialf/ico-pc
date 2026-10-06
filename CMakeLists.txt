@@ -1,6 +1,6 @@
 # The PC port's host build: compiles the game for Linux and Windows hosts. Presets
 # are in CMakePresets.json; docs/BUILDING.md describes them. (The PS2 ELF build
-# is gone; tools/ee_identity.sh keeps the period compiler as a developer check.)
+# is the decompilation's, not this repository's.)
 cmake_minimum_required(VERSION 3.25)
 project(ico_pc LANGUAGES C)
 
@@ -54,9 +54,9 @@ if(ICO_FPTRAP)
     set(ICO_FPTRAP_DEFINITION ICO_FPTRAP=1)
 endif()
 
-# The include path of a programmer's sources, as tools/compile_c.sh gives
-# it: its own include directory first, then the others in the order the
-# period build searched them, then the SDK headers (here port/compat).
+# The include path of a programmer's sources, as the period build gave it:
+# its own include directory first, then the others in the order the period
+# build searched them, then the SDK headers (here port/compat).
 function(ico_include_dirs prog out)
     set(dirs "")
     foreach(p ${prog} sugipon omori common ito fumi seki script)
@@ -94,7 +94,7 @@ foreach(prog ${ICO_PROGRAMMERS})
     endif()
     target_compile_definitions(ico_${prog} PRIVATE ${ICO_GAME_DEFINITIONS})
     # __FILE__ reads as the period build spelled it (src/main.c, ios/pad.c):
-    # tools/compile_c.sh compiled from inside the programmer's directory.
+    # the period build compiled from inside the programmer's directory.
     target_compile_options(ico_${prog} PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS}
                            "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/ico2/${prog}/=")

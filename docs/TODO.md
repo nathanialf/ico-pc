@@ -186,13 +186,13 @@ pointer to this file.
   `skelRoot->plane` after `getFieldCollision(&w)` whether or not the ray hit,
   and `w` is not initialised, so on a miss the plane may be a stale stack
   value (the same class as DIVERGENCES F15 and F16). Settle from the ROM
-  what the EE's frame holds there, then zero or seed `w` under `ICO_HOST`.
+  what the EE's frame holds there, then zero or seed `w`.
 - **`template_audit.py` cannot follow `void *` data.** It does not see
   whole-record views through `void *` mail data
   (`ActSendMail_WithAdditionalData` to `Act.intrData` to `ClimbEndRec`) or
   `void *` work tables; DIVERGENCES D8 was found only by a replay. Teach
   `tools/template_audit.py` the mail-data senders and readers, or give the
-  copy a type through an `ICO_HOST` accessor.
+  copy a type through an accessor.
 - **`offset_audit.py` blind spots.** It does not see raw variable-stride
   offsets (`base + j * 0x50`), `void *` table views or static initialisers,
   and neither audit pass sees calls through unprototyped declarations, which
@@ -202,7 +202,7 @@ pointer to this file.
 - **`st13c.c` stops an SE handle nobody wrote.** `script/src/st13c.c`
   `actSt13cSekizoChk` calls `soundSeDefStop(se)` with `volatile int se` never
   written, reading stack garbage on the PS2 and the host alike. Decide the
-  PS2's effective value and pass it under `ICO_HOST` (-1 if none).
+  PS2's effective value and pass it (-1 if none).
 - **`stageSEProc.c` keeps a hand copy of `SeSlot`.** Its `SEObj` copies the
   private `SeSlot` host layout of `fumi/sound/s_init.c` field for field and
   breaks silently if `SeSlot` changes. Export `SeSlot` from
@@ -224,8 +224,8 @@ pointer to this file.
   nearest); the host uses SSE doubles under the simulation's
   round-toward-zero mode, which can change frame-count scaling and camera
   and chain physics. Write `port/math/softdouble.c` from
-  `sce/libgcc/dp-bit.c` and route those expressions through it under
-  `ICO_HOST` (docs/port/MATH.md, "Doubles").
+  `sce/libgcc/dp-bit.c` and route those expressions through it
+  (docs/port/MATH.md, "Doubles").
 - **Register side effects (F10).** 15 candidate call sequences where a
   routine clobbers vf4 to vf7 between setting and reading the current matrix
   are not triaged (list in docs/port/MATH.md, "Register side effects").
@@ -364,10 +364,6 @@ pointer to this file.
 
 ## From the final code review
 
-- **A host-identifier gate for `ico2/`.** Fail CI when `ps2_*`, `ico_*`,
-  `rd_*`, `_Static_assert` or `ICO_LAYOUT_*` appear outside `ICO_HOST` /
-  `ICO_RD` in `ico2/` (two EE breaks, `particleEffect.c` `ps2_div` and
-  `chain.c` `ps2_ftoi`, got in without one).
 - **Partial clears in the audits.** Extend `tools/offset_audit.py` or
   `template_audit.py` to flag `memset`/`memcpy` with a literal size over a
   record, or over a span from a field, whose host size differs (the review
@@ -403,8 +399,8 @@ pointer to this file.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
 - **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`
-  packet words and 8-byte alignment of `sgComContext` under `ICO_HOST`
-  (a decomp change: its byte-match gate decides).
+  packet words and 8-byte alignment of `sgComContext` (a host change, made
+  here).
 - **`vu1ref_Particle` bounds.** Pass the input's qword count and clamp the
   particle count to it (`rd_mesh.c` `rd_DrawVuParticles`).
 - **BGA last key (F12).** Log when the host's last-key path runs with

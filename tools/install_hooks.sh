@@ -25,6 +25,8 @@ cat > "$HOOK" <<'EOF'
 #        tools/gen_layout_asserts.py --check  the 64-bit layout asserts
 #        tools/gen_sources.py --check         cmake/IcoSources.cmake
 #      Regenerate with the same script without --check.
+#   4. tools/strip_host_gates.py --check   no ICO_HOST conditional in ico2/,
+#                                          sce/, vusrc/
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -48,6 +50,12 @@ for gen in gen_data_desc gen_layout_asserts gen_sources; do
         exit 1
     }
 done
+
+"$PY" "$ROOT/tools/strip_host_gates.py" --check >/dev/null || {
+    "$PY" "$ROOT/tools/strip_host_gates.py" --check
+    echo "pre-commit: ico2/ is host code: write the host form, not an ICO_HOST conditional" >&2
+    exit 1
+}
 EOF
 chmod +x "$HOOK"
 echo "Installed pre-commit hook at $HOOK"

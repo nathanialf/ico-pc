@@ -48,8 +48,6 @@ typedef struct {    /* field names derived */
     int pad48[2];   /* 0x48 */
 } BgaAnimeState;    /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: a slot is reset by copying this state through BgaDisp, which is
@@ -71,12 +69,6 @@ ICO_LAYOUT_AT(BgaDisp, kind, BgaAnimeState, kind);
 ICO_LAYOUT_AT(BgaDisp, stay, BgaAnimeState, stay);
 
 ICO_LAYOUT_SIZE(BgaDisp, BgaAnimeState);
-
-#else
-
-extern BgaAnimeState InitialBgaMultiAnimeState;
-
-#endif
 
 void DispMultiBgaManager(BgaDisp *base, int n);
 

@@ -56,9 +56,6 @@ static int wayKidnap; /* derived name */
 extern void SetInfoSpKidnapGenerator(short *info);
 /* this TU passes an int *; generator.h declares a short * */
 extern void SetInfoSpKidnapEnemy(int *work);
-
-#ifdef ICO_HOST
-
 /* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
 extern int ico_opt_yorda_safe(void);
 
@@ -126,8 +123,6 @@ static GObj *bsSaveWordToGObj(int w) /* port */
     }
     return ICO_EEPTR(GObj *, w);
 }
-
-#endif
 
 inline void backStageProcessInit(void)
 {
@@ -259,13 +254,11 @@ void backStageProcessMain(void)
     GamesysObjInfo *g2;
 
     gamesysAnotherStageTsuresari = 0;
-#ifdef ICO_HOST
     /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
        shadows never take her while the boy is in another room */
     if (ico_opt_yorda_safe()) {
         return;
     }
-#endif
     if (gflagChk(390) != 0) {
         return;
     }
@@ -477,13 +470,9 @@ void backStageProcessInStage(float arg)
 
 void backStageSave(GamesysMemCursor *h)
 {
-#ifdef ICO_HOST
     int word = bsGObjToSaveWord(backStageGirlTargetEnemyGop);
 
     gamesysMemoryHandlerWrite(h, &word, 4);
-#else
-    gamesysMemoryHandlerWrite(h, &backStageGirlTargetEnemyGop, 4);
-#endif
     gamesysMemoryHandlerWrite(h, &kidnapState, 4);
     gamesysMemoryHandlerWrite(h, &kidnapTime, 4);
     gamesysMemoryHandlerWrite(h, &carryTime, 4);
@@ -496,14 +485,10 @@ void backStageSave(GamesysMemCursor *h)
 
 void backStageLoad(GamesysMemCursor *h)
 {
-#ifdef ICO_HOST
     int word;
 
     gamesysMemoryHandlerRead(h, &word, 4);
     backStageGirlTargetEnemyGop = bsSaveWordToGObj(word);
-#else
-    gamesysMemoryHandlerRead(h, &backStageGirlTargetEnemyGop, 4);
-#endif
     gamesysMemoryHandlerRead(h, &kidnapState, 4);
     gamesysMemoryHandlerRead(h, &kidnapTime, 4);
     gamesysMemoryHandlerRead(h, &carryTime, 4);

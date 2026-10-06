@@ -38,11 +38,7 @@ void actAfterForceRope(struct GObj *volatile self);
 void actAfterForceRopeSwing(struct GObj *volatile self);
 void afterCommonBar(struct GObj *volatile self);
 void afterCommonOneWall(int x);
-#ifdef ICO_HOST
 void afterCommonRevive(ICO_WORD_PTR(GObj *) volatile self);
-#else
-void afterCommonRevive(volatile unsigned int self);
-#endif
 void afterCommonRope(struct GObj *volatile self);
 void afterCommonStone(struct GObj *volatile self);
 void afterCommonTruckLever(struct GObj *volatile self);

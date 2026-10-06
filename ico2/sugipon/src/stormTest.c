@@ -27,13 +27,7 @@ typedef struct StormPackage { /* field names derived */
 
 static __inline__ void StormStoreI4(void *dst, void *src) /* derived name */
 {
-#ifdef ICO_HOST
     _FTOI4Vector(dst, src);
-#else
-    VU0_LSV_R(lqc2, 4, 0x0, src);
-    VU0_V2OP(vftoi4.xyzw, 5, 4);
-    VU0_LSV_R(sqc2, 5, 0x0, dst);
-#endif
 }
 
 static __inline__ void StormPerspective(void *dst, void *src) /* derived name */

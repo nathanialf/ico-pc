@@ -29,16 +29,11 @@
 #include "isys.h"
 #include "Matrix.h"
 
-#ifdef ICO_HOST
-
 /* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
 extern int ico_opt_yorda_safe(void);
 
 /* port/game/gamestate.c: achievement signals, docs/port/ACHIEVEMENTS.md */
 #include "ico_gamestate.h"
-
-#endif
-
 #include "GifPacket.h"
 #include "debug_exception.h"
 #include "enemy-control.h"
@@ -96,27 +91,7 @@ EnemyBrainMode brainModeTable[] = {
    start from it. */
 static const BrainModeTarget brainTargetNone = {0}; /* derived name */
 
-#ifdef ICO_HOST
 #define BOSS_EFFECT_PARTS(self, i) (&GOBJ_ACT(self)->enemy->boss[i]) /* derived name */
-#ifndef ICO_HOST
-#define BOSS_START_WORK(self) ((int)GOBJ_ACT(self)->enemy) /* derived name */
-#endif
-#else
-#define BOSS_START_WORK(self) ((int)GOBJ_ACT(self)->enemy) /* derived name */
-
-typedef struct { /* field names derived */
-    char pad00[20];
-    int id;
-    int timer;
-    char busy;
-    char alive;
-    char pad1E[2];
-} BossPart; /* derived name */
-
-#define BOSS_EFFECT_WORK(self) ((char *)GOBJ_ACT(self)->enemy) /* derived name */
-#define BOSS_EFFECT_PARTS(self, i)                                                                 \
-    ((BossPart *)((i) * 0x20 + BOSS_EFFECT_WORK(self) + 0x360)) /* derived name */
-#endif
 
 /* motionOrientManager.h declares none of the motion tables */
 extern MotionDef motionKind[];
@@ -261,8 +236,6 @@ static void setBattleStatus(GObj *self)
     }
 }
 
-#ifdef ICO_HOST
-
 inline void boss_effect_callback(int id)
 {
     GObj *g;
@@ -282,29 +255,6 @@ inline void boss_effect_callback(int id)
     }
 }
 
-#else
-
-inline void boss_effect_callback(int id)
-{
-    GObj *g;
-    int i;
-    char *p;
-    for (g = isysGObjSearchFromObjKindID_begin(4); g != 0;
-         g = isysGObjSearchFromObjKindID_next(g)) {
-        if (GOBJ_ACT(g)->enemy->liftKind == 3) {
-            for (i = 0; i < 5; i++) {
-                p = (char *)(i * 0x20 + (int)GOBJ_ACT(g)->enemy + 0x360);
-                if (p[0x1D] != 0 && *(int *)(p + 0x10) == id) {
-                    p[0x1C] = 0;
-                    return;
-                }
-            }
-        }
-    }
-}
-
-#endif
-
 /* a static inline, inlined by both boss_effect_start and
    boss_effect_process */
 static inline void bossEffectSetNodePos(GObj *self, float *dst, int idx) /* derived name */
@@ -314,9 +264,6 @@ static inline void bossEffectSetNodePos(GObj *self, float *dst, int idx) /* deri
     sceVu0CopyVector(dst, (float *)((char *)g->nodeMtx + idx * 0x40 + 0x30));
     dst[3] = 1.0f;
 }
-
-#ifdef ICO_HOST
-#ifdef ICO_HOST
 
 static void boss_effect_start(GObj *self, int id)
 {
@@ -340,72 +287,12 @@ static void boss_effect_start(GObj *self, int id)
     ReviveEnemyParticle(self, id);
 }
 
-#else
-
-static void boss_effect_start(GObj *self, int id)
-{
-    int i;
-
-    for (i = 0; i < 5; i++) {
-        if (*(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37D) == 0) {
-            float buf[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-
-            bossEffectSetNodePos(self, (float *)(i * 0x20 + BOSS_START_WORK(self) + 0x360), id);
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x370) =
-                GatherEffect_Set(12, (char *)BOSS_START_WORK(self) + (i * 0x20 + 0x360), buf,
-                                 (char *)BOSS_START_WORK(self) + (i * 0x20 + 0x360), 1.0f,
-                                 (void *)boss_effect_callback);
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x374) = id;
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x378) =
-                (60 - systemStatus[0] * 10) / systemStatus[1];
-            *(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37C) = 1;
-            *(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37D) = 1;
-            return;
-        }
-    }
-    ReviveEnemyParticle(self, id);
-}
-
-#endif
-
 static void boss_effect_check_parts(GObj *self, int id)
 {
     BossPart *p = GOBJ_ACT(self)->enemy->boss;
     int i;
     for (i = 0; i < 5; i++, p++) {
         if (p->alive != 0 && p->id == id) {
-#else
-static void boss_effect_start(GObj *self, int id)
-{
-    int i;
-
-    for (i = 0; i < 5; i++) {
-        if (*(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37D) == 0) {
-            float buf[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-
-            bossEffectSetNodePos(self, (float *)(i * 0x20 + BOSS_START_WORK(self) + 0x360), id);
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x370) =
-                GatherEffect_Set(12, (char *)BOSS_START_WORK(self) + (i * 0x20 + 0x360), buf,
-                                 (char *)BOSS_START_WORK(self) + (i * 0x20 + 0x360), 1.0f,
-                                 (void *)boss_effect_callback);
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x374) = id;
-            *(int *)(i * 0x20 + BOSS_START_WORK(self) + 0x378) =
-                (60 - systemStatus[0] * 10) / systemStatus[1];
-            *(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37C) = 1;
-            *(char *)(i * 0x20 + BOSS_START_WORK(self) + 0x37D) = 1;
-            return;
-        }
-    }
-    ReviveEnemyParticle(self, id);
-}
-
-static void boss_effect_check_parts(GObj *self, int id)
-{
-    char *p = (char *)GOBJ_ACT(self)->enemy + 0x360;
-    int i;
-    for (i = 0; i < 5; i++, p += 0x20) {
-        if (p[0x1D] != 0 && *(int *)(p + 0x14) == id) {
-#endif
             return;
         }
     }
@@ -430,12 +317,7 @@ static void boss_effect_process(GObj *self)
         }
         if (BOSS_EFFECT_PARTS(self, i)->busy != 0) {
             bossEffectSetNodePos(self, tmp, BOSS_EFFECT_PARTS(self, i)->id);
-#ifdef ICO_HOST
             GatherEffect_SetGoal(BOSS_EFFECT_PARTS(self, i)->effect, tmp);
-#else
-            GatherEffect_SetGoal(*(int *)((char *)(i * 0x20 + BOSS_EFFECT_WORK(self)) + 0x370),
-                                 tmp);
-#endif
         }
         if (BOSS_EFFECT_PARTS(self, i)->timer == 0) {
             ReviveEnemyParticle(self, BOSS_EFFECT_PARTS(self, i)->id);
@@ -941,12 +823,7 @@ inline int actEnemy_isNormalEnemy(GObj *self)
     return GOBJ_ACT(self)->enemy->sizeClass == 1;
 }
 
-#ifdef ICO_HOST
-
 inline ICO_WORD_PTR(GObj *) actEnemy_GetClingTarget(GObj *self)
-#else
-inline int actEnemy_GetClingTarget(GObj *self)
-#endif
 {
     Act *b = GOBJ_ACT(self);
     EnemyBattleWork *e = b->enemy;
@@ -1039,8 +916,6 @@ void actEnemyRestart(GObj *self, float *pos, float *dir, int kind, GObj *mother)
     _BrainMode_SetDirect(self, 0, 0);
 }
 
-#ifdef ICO_HOST
-
 static void PairSetGeometry(void *me, void *pair, float dist)
 {
     float p0[4];
@@ -1068,36 +943,6 @@ static void PairSetGeometry(void *me, void *pair, float dist)
 
 static int actEnemyForceSwitchToCarry(void *self)
 {
-#else
-/* PairSetGeometry is a GNU nested function, reading its parent's frame
-   through the static chain. */
-static int actEnemyForceSwitchToCarry(void *self)
-{
-    void PairSetGeometry(void *me, void *pair, float dist)
-    {
-        float p0[4];
-        float p1[4];
-        float dir[4];
-        float ofs[4];
-
-        p0[0] = test_CURRENTROOT(me)[0];
-        p0[1] = test_CURRENTROOT(me)[1];
-        p0[2] = test_CURRENTROOT(me)[2];
-        p1[0] = test_CURRENTROOT(pair)[0];
-        p1[1] = test_CURRENTROOT(pair)[1];
-        p1[2] = test_CURRENTROOT(pair)[2];
-        _OrientXZGV(dir, p1, p0);
-        sceVu0ScaleVector(ofs, dir, dist);
-        sceVu0AddVector(p1, p0, ofs);
-        SetDirectRootPositionNoFitting(pair, (char *)p1);
-        GOBJ_ACT(me)->dir[0] = dir[0];
-        GOBJ_ACT(me)->dir[1] = dir[1];
-        GOBJ_ACT(me)->dir[2] = dir[2];
-        sceVu0ScaleVector((float *)((char *)GOBJ_ACT(pair) + 0x120), dir, -1.0f);
-        SetMotionDirection(me, (float *)((char *)GOBJ_ACT(me) + 0x120));
-        SetMotionDirection(pair, (float *)((char *)GOBJ_ACT(pair) + 0x120));
-    }
-#endif
     float q[4];
     Act *sub = GOBJ_ACT(self);
 
@@ -1118,9 +963,7 @@ static int actEnemyForceSwitchToCarry(void *self)
                                   0.0f, 0.0f, 1.0f);
     sub->carried = girlGObj;
     GOBJ_ACT(girlGObj)->carrier = self;
-#ifdef ICO_HOST
     ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, ((GObj *)self)->labelId);
-#endif
     eBrainSendMes(self, 9);
     eBrainSendMes(self, 7);
     if ((60 - systemStatus[0] * 10) / systemStatus[1] * 2 < sub->frame &&
@@ -1331,12 +1174,10 @@ static inline int enemyKidnapCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
-#ifdef ICO_HOST
     /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
     if (ico_opt_yorda_safe()) {
         return 0;
     }
-#endif
     if (_ACTGame_SearchGObj(self, girlGObj, 60.0f, 100.0f, 45, buf) != 0) {
         ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
         ang = (ang < 0) ? -ang : ang;
@@ -1561,12 +1402,10 @@ static inline int enemyPickupCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
-#ifdef ICO_HOST
     /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
     if (ico_opt_yorda_safe()) {
         return 0;
     }
-#endif
     if (_ACTGame_SearchGObj(self, girlGObj, 170.0f, 100.0f, 45, buf) != 0) {
         ang = _RotyGV(buf, test_CURRENTORIENT((girlGObj)));
         ang = (ang < 0) ? -ang : ang;
@@ -1712,8 +1551,6 @@ static inline void _BrainMode_Set(GObj *self, int mode, BrainModeTarget *tgt) /*
     _BrainMode_SetDirect(self, mode, tgt);
 }
 
-#ifdef ICO_HOST
-
 static void BrainMode_Requset(void *self, int req, ICO_WORD_PTR(GObj *) arg)
 {
     switch (req) {
@@ -1755,62 +1592,12 @@ static void BrainMode_Requset(void *self, int req, ICO_WORD_PTR(GObj *) arg)
     }
 }
 
-#endif
-
 void subEnemyBrainMain(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
     int mode;
-#ifdef ICO_HOST
     ICO_WORD_PTR(GObj *) data;
     int i;
-#else
-    int data;
-    int i;
-
-    /* BrainMode_Requset is a GNU nested function: it reads self out of
-       subEnemyBrainMain's frame through the static chain. */
-    void BrainMode_Requset(int req, int arg)
-    {
-        switch (req) {
-        case 0:
-            _BrainMode_Set(self, 1, 0);
-            break;
-        case -2:
-            _BrainMode_Set(self, 1, 0);
-            break;
-        case 1:
-            _BrainMode_Set(self, 3, 0);
-            break;
-        case 2:
-            _BrainMode_Set(self, 4, 0);
-            break;
-        case 3:
-            _BrainMode_Set(self, 6, 0);
-            break;
-        case -3:
-        case -1:
-        case 7:
-            _BrainMode_Set(self, 13, 0);
-            break;
-        case 5:
-            _BrainMode_Set(self, 7, &arg);
-            break;
-        case 4:
-        case 6:
-            _BrainMode_Set(self, 5, &arg);
-            break;
-        case 8:
-            _BrainMode_SetDirect(self, 2, &arg);
-            break;
-        default:
-            debug_StdPrintfDummy("undefined mode [%d]\n", req);
-            debug_assert("src/enemy_act.c", 3102);
-            __assert("src/enemy_act.c", 3102, "0");
-            break;
-        }
-    }
-#endif
 
     GOBJ_ACT(self)->enemy->reqMode = GOBJ_ACT(self)->enemy->mode = 0;
     GOBJ_ACT(self)->enemy->waitCount = 2;
@@ -1866,11 +1653,7 @@ void subEnemyBrainMain(GObj *volatile self)
             ACTSendMailCorrect((void *)self, 0x1D);
         }
         CheckEnemyBrainMode((char *)self, &mode, &data);
-#ifdef ICO_HOST
         BrainMode_Requset(self, mode, data);
-#else
-        BrainMode_Requset(mode, data);
-#endif
         if (GOBJ_ACT(self)->enemy->reqMode != GOBJ_ACT(self)->enemy->mode ||
             (((int)(sub->flags20.ll >> 9)) & 1) != 0) {
             sub->flags20.ll &= ~0x200LL;
@@ -2251,12 +2034,7 @@ inline void EnemyUtil_TurnToBoy(GObj *self, GObj *tgt, int smooze)
     }
 }
 
-#ifdef ICO_HOST
-
 inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode)
-#else
-inline int EnemyUtil_isOtherStatus(GObj *self, int mode)
-#endif
 {
     GObj *g;
     for (g = isysGObjSearchFromObjKindID_begin(4); g != 0;
@@ -2432,8 +2210,6 @@ static inline int isNearestEnemyToBoy(GObj *self, GObj *boy, float *pos) /* deri
     return self == found;
 }
 
-#ifdef ICO_HOST
-
 static void ChangeBrain_ToAttack(GObj *self)
 {
     if (isLiftBoyEnable() != 0) {
@@ -2458,8 +2234,6 @@ static void ChangeBrain_ToAttack(GObj *self)
     }
 }
 
-#endif
-
 void subEnemyBrain_ToBoy(GObj *volatile self)
 {
     float v[4];
@@ -2472,32 +2246,6 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
     int r;
     unsigned char ret;
 
-#ifndef ICO_HOST
-    void ChangeBrain_ToAttack(void)
-    {
-        if (isLiftBoyEnable() != 0) {
-            if (GOBJ_ACT(self)->enemy->sizeClass == 2) {
-                BrainModeTarget *tgt = &brainTarget;
-
-                /* the default target, then the boy; the same shape sits in
-                   the other four arms (here and in ChangeBrain_ToKidnap) */
-                brainTarget = brainTargetNone;
-                brainTarget.gobj = boyGObj;
-                if ((int)(random_unit() * 10.0f) % 100 < GOBJ_ACT(self)->enemy->attackChance2) {
-                    _BrainMode_SetDirect(self, 12, tgt);
-                } else {
-                    _BrainMode_SetDirect(self, 9, tgt);
-                }
-            } else {
-                /* the default target first, see the kind == 2 arm above */
-                brainTarget = brainTargetNone;
-                brainTarget.gobj = boyGObj;
-                _BrainMode_SetDirect(self, 9, &brainTarget);
-            }
-        }
-    }
-
-#endif
     while (1) {
         mode = 0;
         r = (int)(random_unit() * 10.0f) % 100;
@@ -2594,20 +2342,12 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
             break;
         case 3:
             if (isNearestEnemyToBoy(self, boyGObj, w) && EnemyUtil_isOtherStatus(self, 0) == 0) {
-#ifdef ICO_HOST
                 ChangeBrain_ToAttack(self);
-#else
-                ChangeBrain_ToAttack();
-#endif
             }
             break;
         case 4:
             if (EnemyUtil_isOtherStatus(self, 0) == 0) {
-#ifdef ICO_HOST
                 ChangeBrain_ToAttack(self);
-#else
-                ChangeBrain_ToAttack();
-#endif
             }
         }
         sub->stick.mag = 0.0f;
@@ -2617,11 +2357,7 @@ void subEnemyBrain_ToBoy(GObj *volatile self)
         for (j = 0; j < (60 - systemStatus[0] * 10) / systemStatus[1] * 90 / 60; j++) {
             if (mode == 5) {
                 if (EnemyUtil_isOtherStatus(self, 0) == 0) {
-#ifdef ICO_HOST
                     ChangeBrain_ToAttack(self);
-#else
-                    ChangeBrain_ToAttack();
-#endif
                 }
             }
             _DoAwait(self);
@@ -2649,7 +2385,6 @@ inline void subEnemyBrain_BodyGuard(GObj *volatile self)
                 _ACTWait(30);
             }
             sub->stick.mag = 0;
-#ifdef ICO_HOST
             ((int *)sub->dir)[0] = 0;
             ((int *)sub->dir)[1] = 0;
             ((int *)sub->dir)[2] = 0;
@@ -2677,13 +2412,6 @@ static void ChangeBrain_ToKidnap(GObj *self)
         brainTarget.gobj = girlGObj;
         _BrainMode_SetDirect(self, 10, &brainTarget);
         break;
-#else
-            *(int *)((char *)sub + 0x120) = 0;
-            *(int *)((char *)sub + 0x124) = 0;
-            *(int *)((char *)sub + 0x128) = 0;
-            _ACTWait(60);
-        }
-#endif
     }
 }
 
@@ -2695,30 +2423,6 @@ void subEnemyBrain_ToGirl(GObj *volatile self)
     int i;
     int found;
 
-#ifndef ICO_HOST
-    void ChangeBrain_ToKidnap(void)
-    {
-        switch (GOBJ_ACT(self)->enemy->sizeClass) {
-        case 0:
-            /* the default target first, see ChangeBrain_ToAttack */
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 8, &brainTarget);
-            break;
-        case 2:
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 11, &brainTarget);
-            break;
-        default:
-            brainTarget = brainTargetNone;
-            brainTarget.gobj = girlGObj;
-            _BrainMode_SetDirect(self, 10, &brainTarget);
-            break;
-        }
-    }
-
-#endif
     GObj *girl = girlGObj;
 
     sub->stick.mag = 0.0f;
@@ -2748,11 +2452,7 @@ void subEnemyBrain_ToGirl(GObj *volatile self)
     }
     while (1) {
         debug_StdPrintfDummy("change to kidnap");
-#ifdef ICO_HOST
         ChangeBrain_ToKidnap(self);
-#else
-        ChangeBrain_ToKidnap();
-#endif
         _ACTWait(1);
     }
 }
@@ -3005,28 +2705,17 @@ inline GObj *GetMotherGeneratorGObjAskEnemy(GObj *enemy)
  * is one chained assignment */
 void actEnemyStart(GObj *self)
 {
-#ifdef ICO_HOST
     Act *act;
-#else
-    char *act;
-#endif
     int alive;
     float life;
 
     debug_StdPrintfDummy("actEnemyStart:%p\n", self);
     act = actInitialize(self);
     actInitialize_ext_charcter(self);
-#ifdef ICO_HOST
     actInitialize_only_charcter((char *)self);
     actInitialize_geo(self);
     if (ICO_RAW(int, self, 8, ((GObj *)self)->labelId) == 3757) {
         act->flags20.ll = act->flags20.ll | 0x40000000;
-#else
-    actInitialize_only_charcter(self);
-    actInitialize_geo(self);
-    if (*(int *)((char *)self + 8) == 3757) {
-        *(long long *)(act + 0x20) = *(long long *)(act + 0x20) | 0x40000000;
-#endif
     }
     ACTGame_LwsEffectInit(self);
     ACTParaStatus_Init(self);
@@ -3048,15 +2737,10 @@ void actEnemyStart(GObj *self)
         GOBJ_ACT(self)->enemy->clingNode = p[1].clingNode;
         GOBJ_ACT(self)->enemy->attackChance = p[1].attackChance;
         GOBJ_ACT(self)->enemy->attackChance2 = p[1].attackChance2;
-#ifdef ICO_HOST
         act->maxLife = p[1].maxLife;
-#else
-        *(float *)(act + 0x1E4) = p[1].maxLife;
-#endif
         GOBJ_ACT(self)->enemy->bodyslamMail = (int)p[1].bodyslamMail;
         GOBJ_ACT(self)->enemy->bossLife = 3;
         bit = p[1].noGuard;
-#ifdef ICO_HOST
         act->flags18.ll = (act->flags18.ll & ~(1ULL << 51)) | ((bit & 1) << 51);
     }
     if (GOBJ_ACT(self)->enemy->liftKind == 3) {
@@ -3068,16 +2752,6 @@ void actEnemyStart(GObj *self)
                 0x464, GOBJ_SUB(self)->root.ikRate1) = 0.05f;
         ICO_RAW(float, (ICO_RAWP(EnemySubSlot *, self, 0x15C, (EnemySubSlot *)&self->dobj))->p,
                 0x468, GOBJ_SUB(self)->root.ikRate2) = 0.05f;
-#else
-        ((ActStatusWord *)(act + 0x18))->q =
-            (((ActStatusWord *)(act + 0x18))->q & ~(1ULL << 51)) | ((bit & 1) << 51);
-    }
-    if (GOBJ_ACT(self)->enemy->liftKind == 3) {
-        *(float *)(((EnemySubSlot *)((char *)self + 0x15C))->p + 0x45C) = 0.05f;
-        *(float *)(((EnemySubSlot *)((char *)self + 0x15C))->p + 0x460) = 0.05f;
-        *(float *)(((EnemySubSlot *)((char *)self + 0x15C))->p + 0x464) = 0.05f;
-        *(float *)(((EnemySubSlot *)((char *)self + 0x15C))->p + 0x468) = 0.05f;
-#endif
     }
     GOBJ_ACT(self)->enemy->battleType = debug_enemy_battle_type;
     setBattleStatus(self);
@@ -3086,35 +2760,22 @@ void actEnemyStart(GObj *self)
         alive = 1;
     }
     if (alive != 0) {
-#ifdef ICO_HOST
         act->flags18.ll = act->flags18.ll & ~(1LL << 32);
         act->flags18.ll = act->flags18.ll & ~(1LL << 33);
     }
     _ACTWait(1);
     GOBJ_WORK(self)->motherLabel =
         GetMotherGenerator(ICO_RAW(int, self, 8, ((GObj *)self)->labelId));
-#else
-        *(long long *)(act + 0x18) = *(long long *)(act + 0x18) & ~(1LL << 32);
-        *(long long *)(act + 0x18) = *(long long *)(act + 0x18) & ~(1LL << 33);
-    }
-    _ACTWait(1);
-    GOBJ_WORK(self)->motherLabel = GetMotherGenerator(*(int *)((char *)self + 8));
-#endif
     if (GOBJ_WORK(self)->motherLabel != -1) {
         GOBJ_WORK(self)->motherGObj = isysGObjSearchFromObjLayoutID(GOBJ_WORK(self)->motherLabel);
     }
-#ifdef ICO_HOST
     act->mainMail = (ActMail *)&actIntrList[74];
-#else
-    *(IntrMail **)(act + 0xD0) = &actIntrList[74];
-#endif
     if (debug_brain_flag != 0) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
     actCreateSubThread((void *)subEnemyCollision, 21);
     actCreateSubThread((void *)subCommonIdle, 21);
-#ifdef ICO_HOST
     act->mail = (ActMail *)&actIntrList[79];
     *(ActKind *)&act->actKind = ACT_KIND_ENEMY;
     life = getEnemyRestartLife(self);
@@ -3123,16 +2784,6 @@ void actEnemyStart(GObj *self)
         act->life = act->maxLife = 10.0f;
     }
     act->wayMode = 0;
-#else
-    *(IntrMail **)(act + 0xD4) = &actIntrList[79];
-    *(ActKind *)(act + 0x48) = ACT_KIND_ENEMY;
-    life = getEnemyRestartLife(self);
-    *(float *)(act + 0x1E0) = *(float *)(act + 0x1E4) = life;
-    if (life < 10.0f) {
-        *(float *)(act + 0x1E0) = *(float *)(act + 0x1E4) = 10.0f;
-    }
-    *(int *)(act + 0x350) = 0;
-#endif
     ACTSendMailCorrect(self, 199);
     if (alive != 0) {
         actEnemyHyde(self);
@@ -3144,13 +2795,9 @@ inline void subEnemyBrain_Irregular(GObj *volatile self)
 {
     EnemyBrainWork *sub = (EnemyBrainWork *)self->act;
 
-#ifdef ICO_HOST
     /* EnemyBrainWork's flags at 0x20 is Act.flags20 */
     (void)sub;
     GOBJ_ACT(self)->flags20.ll &= ~(1LL << 34);
-#else
-    sub->flags &= ~(1LL << 34);
-#endif
     eBrainSendMes(self, 4);
     if (isEnemyCarriedByGirl(self)) {
         afterCommonCarry(self);

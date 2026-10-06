@@ -2,13 +2,8 @@
 #include "obj_manager.h"
 #include "debug_exception.h"
 #include <assert.h>
-
-#ifdef ICO_HOST
-
 #include "memory.h"
 #include "ios.h"
-
-#endif
 
 /* Two static helpers, one sending the mail and returning its index or -1,
  * the other asserting the actor has a work block and returning its
@@ -85,13 +80,11 @@ inline void *GetMailAdditionalData(GObj *gop, int mail)
 
 void InitMailAdditionalData(GObj *gop, struct MailAdditionalData *table)
 {
-#ifdef ICO_HOST
     /* The EE keeps the table in the first 84 bytes of the enemy work the
        caller passes, which holds the table's 4-byte data pointers.  The host's
        entries are 16 bytes, so the table would overrun that record: it gets
        its own block, from the partition (and lifetime) the enemy work has. */
     table = iosMallocDebug(ios_partition_seki, sizeof(MailAdditionalData), __FILE__, 79);
-#endif
     GOBJ_ACT(gop)->mailAddData = table;
     ClearMailAdditionalData(gop);
 }

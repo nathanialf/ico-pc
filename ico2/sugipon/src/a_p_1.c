@@ -593,15 +593,9 @@ static int rolling(GObj *self)
     if (GOBJ_SUB(self)->parent.obj != 0) {
         UnlinkParentOfDObj(self);
     }
-#ifdef ICO_HOST
     GOBJ_SUB(self)->root.move[1] +=
         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#else
-    ((AP1Val *)((char *)GOBJ_SUB(self) + 0x134))->f +=
-        60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
-        (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
-#endif
     _AddVectorXYZ(GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.move);
     {
         ClipWork *col = &ap1RollClip;

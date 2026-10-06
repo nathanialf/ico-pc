@@ -39,8 +39,8 @@ data tables"), so records such as `SeDef`, `GenGeo` or `ObjKindEnt` hold
 
 `tools/gen_layout_asserts.py` reads every header under `ico2/` (not
 `ico2/vusrc/`; `sugipon/include/girlForceField.h` is skipped because it does
-not compile on its own and holds no commented struct), with the host
-build's view of `#ifdef ICO_HOST`, and writes `port/test/layout_asserts.c`:
+not compile on its own and holds no commented struct), and writes
+`port/test/layout_asserts.c`:
 
 - `OFF(T, member, 0xNN)`, an `offsetof` `_Static_assert`, for each struct
   member with an offset comment (a trailing `int a; /* 0x10 */` or a
@@ -76,12 +76,10 @@ words) is the one disc record that is not.
 
 ## Pointer-width types (`common/include/typedef.h`)
 
-The EE objects must not change (`tools/ee_identity.sh` compares them), and
-the EE's code generation depends on the declared types of the game's words.
-The host types therefore come from macros whose EE expansion is the
-original `int`:
+Where the original code holds an address in an `int` field, the port
+declares the field with a macro that names the intent:
 
-| macro | EE | host |
+| macro | was | is |
 | --- | --- | --- |
 | `ICO_WORD` | `int` | `__INTPTR_TYPE__`: a pointer-wide integer, so integer arithmetic on the field (byte offsets, masks) means the same |
 | `ICO_WORD_PTR(T)` | `int` | `T`: for a word only ever converted to a pointer |

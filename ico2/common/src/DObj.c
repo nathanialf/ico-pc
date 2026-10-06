@@ -1,11 +1,5 @@
 #include "charFileManager.h"
-
-#ifdef ICO_HOST
-
 #include <string.h>
-
-#endif
-
 #include "debug.h"
 #include "fieldCollision.h"
 #include "memory.h"
@@ -31,22 +25,10 @@ typedef union { /* field names derived */
     float f;
 } DObjWord; /* derived name */
 
-#ifdef ICO_HOST
-
 /* the stand-in is a real GObj on the host (its dobj is not at 0x15C there) */
 typedef GObj DObjGObj;
 
 #define DOBJ_D(p) ((p)->dobj)
-#else
-
-typedef struct { /* field names derived */
-    char pad[348];
-    DObjWord data;
-    char pad2[32];
-} DObjGObj; /* derived name */
-
-#define DOBJ_D(p) ((p)->data.d)
-#endif
 
 typedef union { /* field names derived */
     int i[8];
@@ -91,14 +73,6 @@ typedef struct { /* field names derived */
     long long pad848[7];
 } DObjRecord; /* derived name */
 
-#ifndef ICO_HOST
-
-static DObjRecord emptyDObj = {
-    {0, -1}, {0}, 0, 1, 1, 1, 0, 1552, {0}, 0, -1, {0},
-}; /* derived name */
-
-#endif
-
 /* One entry of the rotation element array at 0x80c: a zero vector then
    three identity quaternions. */
 static DObjBlk40 initialRotElem = {{
@@ -123,8 +97,6 @@ static DObjBlk40 initialBlendRot = {{
     {0.0f, 0.0f, 0.0f, 1.0f},
 }}; /* derived name */
 
-#ifdef ICO_HOST
-
 #include "ee_view.h"
 
 /* PC port: CSVSYSTEM_InitDObj moves these blocks whole over each node's
@@ -139,8 +111,6 @@ _Static_assert(sizeof(DObjBlk40) == sizeof(*((Sub15C *)0)->blendRot),
 _Static_assert(sizeof(DObjBlk20) ==
                    __builtin_offsetof(Sub15C, motion) - __builtin_offsetof(Sub15C, streamScale),
                "DObjBlk20 is not Sub15C's streamScale to motion");
-
-#endif
 
 static inline void initGeometryScaleRatio(Sub15C *d) /* derived name */
 {
@@ -256,16 +226,11 @@ static void initMatrixDObj(Sub15C *self, SObjSimpleSetting *lay)
 
 typedef struct DObjNode DObjNode; /* derived name */
 
-#ifdef ICO_HOST
-
 /* the node records are 80 bytes on every host (no pointers); the node is
    addressed by index instead of an int sum */
 _Static_assert(sizeof(struct DObjNode) == 80, "DObjNode is 80 bytes");
 
 #define DOBJ_NODE_AT(self, i) (&(self)->nodes[i])
-#else
-#define DOBJ_NODE_AT(self, i) ((DObjNode *)((i) * 80 + (int)(self)->nodes))
-#endif
 
 /* A block's node is addressed as an int sum, the index first: the ROM adds
    in that order, and &nodes[i] or nodes + i put the base first (measured). */
@@ -465,7 +430,6 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 {
     Sub15C *d;
 
-#ifdef ICO_HOST
     /* the record is a runtime Sub15C here (wider than the EE's 0x880): the
        same all-zero start with the template's non-zero words by name */
     d = iosMallocDebug(ios_partition_seki, sizeof(Sub15C), __FILE__, 463);
@@ -476,10 +440,6 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
     d->cylinderOn = 1;
     d->modelId = 1552;
     d->accessary = -1;
-#else
-    d = iosMallocDebug(ios_partition_seki, sizeof(DObjRecord), __FILE__, 463);
-    *(DObjRecord *)d = emptyDObj;
-#endif
     if (id != 1552) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }

@@ -152,8 +152,8 @@ language screen (`common/src/kanbanBoot.c` step 101: item 26 for English,
 and the game stores the choice in the global `NonLinearCameraMove`
 (misnamed; 2 EN, 3 FR, 4 DE, 5 IT, 6 ES; step 102).
 
-The port skips that screen and the 50/60 Hz one (`kanbanBoot.c` under
-`ICO_HOST`), because the Settings menu holds both choices:
+The port skips that screen and the 50/60 Hz one (`kanbanBoot.c`),
+because the Settings menu holds both choices:
 
 - step 101 stores what step 102 would have: `sceScfGetLanguage()` mapped as
   the screen maps its cursor (1 EN to 2, 2 FR to 3, 4 DE to 4, 5 IT to 5,
@@ -232,8 +232,8 @@ Nothing gameplay-visible depends on the timers:
 | site | what | host build |
 | --- | --- | --- |
 | `common/src/main.c` `Main` | `*T0_COUNT = 0` once at the start | a store; nothing reads it back |
-| `common/src/debug.c` `debug_Init`, `debug_BeginTimer`, `debug_GetTimerSec`, `debug_GetTimerCount`, `debug_CallbackGsFinish`, `debug_SetBar`, `debug_SetBar2`, `debug_ResetBar` | the profiler bars and on-screen timers of the debug menu | `debug_Init` and `debug_BeginTimer` start timers 0 and 1 and `debug_ResetBar` clears timer 0 each Main tick, but the `ICO_HOST` branches of the readers return -1 or store 0, and no DMA handler latches `drawTimerCount` |
-| `fumi/src/fieldCollision.c` `ResetCollisionPC`, `DispCollisionPC` | `pcTime`, printed in the collision counters shown while paused with the debug font on | the `ICO_HOST` branches read 0 |
+| `common/src/debug.c` `debug_Init`, `debug_BeginTimer`, `debug_GetTimerSec`, `debug_GetTimerCount`, `debug_CallbackGsFinish`, `debug_SetBar`, `debug_SetBar2`, `debug_ResetBar` | the profiler bars and on-screen timers of the debug menu | `debug_Init` and `debug_BeginTimer` start timers 0 and 1 and `debug_ResetBar` clears timer 0 each Main tick, but on the host the readers return -1 or store 0, and no DMA handler latches `drawTimerCount` |
+| `fumi/src/fieldCollision.c` `ResetCollisionPC`, `DispCollisionPC` | `pcTime`, printed in the collision counters shown while paused with the debug font on | on the host they read 0 |
 
 `drawTimerCount` and `pcTime` are only written and shown; no game logic
 branches on them, so the host guards are correct whether or not the
