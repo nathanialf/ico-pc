@@ -34,11 +34,6 @@ pointer to this file.
   dark-volume composite is off by up to 52 LSB on a one-pixel rim). A manual
   four-tap filter with TEXA per texel, as `fx_sprite_ps` does, would fix it
   (`port/shaders/sprite.hlsl`, `vu_common.hlsli`).
-- **Ad blend modes 8 to 11.** Modes 8 to 10 draw at half strength (Ad/255
-  instead of Ad/128) and mode 11 leaves Cd unchanged. They are reachable
-  only through a stage's BGA lightning record; survey the disc's lightning
-  records and, if any uses them, add an exact path with a destination
-  snapshot in `rd_replay.c`.
 
 ## Interpolation (`port/render/rd_interp.c`)
 

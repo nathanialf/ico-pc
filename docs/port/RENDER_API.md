@@ -146,7 +146,8 @@ Mode 3's table entry is {1, 2, 2, 0} (A Cd, B 0, C FIX, D Cs), register
 
 Two sites pass a variable mode. `lightning.c` passes `c`, the short at +0x2E
 of the stage's BGA lightning record (`BgAnimation.c`): disc data, so any of
-the twelve modes is possible, and all twelve pipelines exist. On the PS2 a
+the twelve modes is possible, and all twelve pipelines exist. The PAL disc's
+records carry only modes 0 and 1 (section 21). On the PS2 a
 value outside 0..11 indexes past the table; the host path draws mode 0 there
 and reports the value once (`lightningHostMode`). `enemyParts.c` passes
 `PointBlur.alpha`, initialised to 5 from `pointBlurTemplate` and never
@@ -186,8 +187,8 @@ ALWAYS with write enabled (the GS manual calls ZTE 0 a prohibited setting).
 | Factor above 0x80 in `Cs·F + Cd`, `Cd − Cs·F` (modes 0, 1, 5, 6) | `DF_PREMUL`: the shader writes the GS term `min((Cs·F) >> 7, 255)` and the pipeline adds it (ONE, ONE) or reverse-subtracts it. Exact for F up to 0xFF. Used for these four modes always, since As can always reach 0xFF. |
 | Factor above 0x80 in a LERP (modes 2, 4, 7) | Not representable (the GS weight on Cd goes negative). FIX is clamped to 0x80 (the draw writes Cs); the hardware clamps As the same way. These are ordinary draws into SCENE, not feedback passes. |
 | `Cd·FIX + Cs` (mode 3) | Destination factor `SRC1_COLOR`; FIX above 0x80 clamped to 0x80. |
-| Ad factors (modes 8 to 10) | `RHI_BF_DST_ALPHA`, which reads Ad/255 rather than Ad/128: half strength. Disc data only and not known to be used. |
-| `Cd·As + Cd` (mode 11) | Needs a factor above 1.0 on Cd; the draw leaves Cd unchanged and logs once. |
+| Ad factors (modes 8 to 10) | `RHI_BF_DST_ALPHA`, which reads Ad/255 rather than Ad/128: half strength. Disc data only; no lightning record on the PAL disc uses it (section 21). |
+| `Cd·As + Cd` (mode 11) | Needs a factor above 1.0 on Cd; the draw leaves Cd unchanged and logs once. Unused on the PAL disc (section 21). |
 | AFAIL FB_ONLY (0x5140D) | Two draws: alpha above the reference with depth write, then the rest with depth write off. Self-overlap inside one strip can order differently. |
 | AFAIL RGB_ONLY with ATST NEVER | Colour mask RGB, depth write off, no alpha test. |
 | DATE | A screen draw with TEST.DATE first takes an R8 snapshot of its target's alpha MSB (`date_snap_ps`, `dateSnapshot` in `rd_replay.c`); `sprite_ps` reads it and discards where the MSB differs from DATM. The snapshot is retaken when the target changes or anything since may have written alpha, so consecutive DATE draws see each other's writes as on the GS; overlapping primitives inside one draw see the snapshot. |
@@ -2155,3 +2156,22 @@ Approximations kept in the code and described with their feature:
 PRIM.AA1 (section 4, "PRIM.AA1": PCSX2's software model, with the line
 ends, the fringe corners, on-edge sample points and the fringe order of a
 Z-writing strip left approximate; sprites and points unaffected).
+
+The Ad blend modes 8 to 10 (Ad/255 where the GS reads Ad/128) and mode 11
+(Cd left unchanged) stay approximate because no disc data reaches them. The
+only variable blend mode is the short at +0x2E of a BGA lightning record
+(`BgaLightningDef` in `ico2/seki/src/BgAnimation.c`), which
+`bga_DispLightning` passes to `DrawLightningN` and `gif_SetAlpha`. The
+records are the data of a BGA node's envelope of type 8 or 9
+(`bga_calcEnvelope` stores it in the node's object word, which the
+lightning nodes 14 and 15 hand to `bga_addLightning`). A survey of
+`baserom/Ico_PAL.iso` (2026-10-06) walked every pack in DFDATAS/DATA.DF (68
+`.DF` packs, inflated as `tools/tm2_sheets.py` reads them; the 124 other
+members hold no BGA file): 2225 BGA files, 360 type 8 or 9 envelope records
+in 55 of them, 147 of those on lightning nodes 14 and 15 in 39 packs. Every
+record's +0x2E is 0 or 1: mode 1 (`Cd − Cs·FIX`) on the 28 records of
+`obj_com01/anim/devil_lightning.bga` and `queen_lightning.bga` (seven
+packs: STGST04A, STGST24B, STGST25A, STG4A2ND, STG13A2, STG13B3,
+STG25A4D), mode 0 on all others. No record uses modes 8 to 11 or a value
+outside 0..11, so neither the approximate Ad modes nor `lightningHostMode`'s
+fallback (DIVERGENCES.md D4) is reached on this disc.
