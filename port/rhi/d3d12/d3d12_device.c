@@ -557,5 +557,10 @@ bool rhi_PresentMailbox(void)
     return false;
 }
 
+void rhi_SetPipelineCachePath(const char *path)
+{
+    (void)path; /* the driver keeps its own shader cache */
+}
+
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
 RHI_BACKEND_DEFINE(rhi_backend_d3d12, "d3d12");

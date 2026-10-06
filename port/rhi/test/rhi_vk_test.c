@@ -1,5 +1,8 @@
 /* rhi_vk_test.c: the exact-texel RHI checks (rhi_test_common.c) on the
- * Vulkan backend, headless, then a hazard-tracking cell.
+ * Vulkan backend, headless, then a hazard-tracking cell and the pipeline
+ * cache file (rhi_SetPipelineCachePath: written at shutdown with a version
+ * one header, read back at the next init, a file of another device or of
+ * garbage ignored and replaced).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -7,7 +10,9 @@
 #include "rhi.h"
 #include "rhi_test_common.h"
 #include "vk/rhi_vk.h"
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* The barriers one render pass adds to a list, read from RhiStats. */
 static uint64_t passBarriers(RhiCommandList cl, RhiTexture target)
@@ -74,6 +79,55 @@ static int hazardCell(void)
     return failures;
 }
 
+/* the cache file's header words (size, version), 0 0 when unreadable */
+static void cacheHeader(const char *path, uint32_t h[2])
+{
+    h[0] = h[1] = 0;
+    FILE *fp = fopen(path, "rb");
+    if (fp) {
+        if (fread(h, 4, 2, fp) != 2) {
+            h[0] = h[1] = 0;
+        }
+        fclose(fp);
+    }
+}
+
+static int cacheCell(void)
+{
+    static const char *path = "rhi_vk_test.vkcache";
+    int failures = 0;
+    remove(path);
+    rhi_SetPipelineCachePath(path);
+    for (int pass = 0; pass < 3; pass++) {
+        if (pass == 2) {
+            /* garbage (another device's file reads the same): ignored */
+            FILE *fp = fopen(path, "wb");
+            if (fp) {
+                static const uint8_t junk[64] = {32, 0, 0, 0, 1, 0, 0, 0, 0xAB};
+                fwrite(junk, 1, sizeof(junk), fp);
+                fclose(fp);
+            }
+        }
+        RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache"};
+        if (!rhi_CreateBackend("vulkan") || !rhi_Init(&dd)) {
+            rhi_test_Log("FAIL cache cell: init %d\n", pass);
+            failures++;
+            break;
+        }
+        rhi_Shutdown();
+        uint32_t h[2];
+        cacheHeader(path, h);
+        rhi_test_Log("cache cell: pass %d: header size %u version %u\n", pass, h[0], h[1]);
+        if (h[0] < 32 || h[1] != 1) {
+            rhi_test_Log("FAIL cache cell: pass %d: no version one header\n", pass);
+            failures++;
+        }
+    }
+    rhi_SetPipelineCachePath(NULL);
+    remove(path);
+    return failures + (int)rhi_vk_ValidationErrorCount();
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_ValidationErrorCount};
@@ -81,5 +135,5 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-    return hazardCell() ? 1 : 0;
+    return (hazardCell() || cacheCell()) ? 1 : 0;
 }

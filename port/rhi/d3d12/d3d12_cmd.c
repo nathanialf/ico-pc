@@ -444,8 +444,10 @@ static void dx_Flush(DxCmdList *c)
         if (!(c->groupDirty & (1u << g))) {
             continue;
         }
-        /* a group the caller has not bound gets null views, so no root
-         * parameter is left unset at a draw */
+        /* a group the caller has not bound gets null views, so no
+         * descriptor table is left unset at a draw; its root CBVs (a
+         * dynamic group's, below) are: a null group has none to give, and
+         * no pipeline reads a cbuffer whose group it leaves unbound */
         uint32_t id = c->groups[g] ? c->groups[g] : dx_NullBindGroup(r->layoutIds[g]);
         DxBindGroup *bg = id ? dx_GetBindGroup(id) : NULL;
         if (!bg) {

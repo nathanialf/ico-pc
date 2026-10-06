@@ -334,11 +334,13 @@ static uint32_t hashBytes(const void *p, uint32_t n, uint32_t h)
  * ring at offset 0 with the block's size, and each draw passes its block's
  * ring offset when it binds the group (rd__BindUniform).  So the frame and
  * draw layouts have one group per replay (per ring buffer, which does not
- * change within one), whatever the number of draws. */
-#define RD_DYN_GROUPS 4
+ * change within one, and per block size), whatever the number of draws. */
+#define RD_DYN_GROUPS 6
 
+/* keyed by the binding's size too: the CRT pass binds IcoCrtCB through the
+ * draw layout, so one layout can carry blocks of two sizes in one replay */
 typedef struct DynEntry {
-    uint32_t epoch, layout, buffer;
+    uint32_t epoch, layout, buffer, size;
     RhiBindGroup group;
 } DynEntry;
 
@@ -350,7 +352,8 @@ static RhiBindGroup dynamicGroup(RhiBindGroupLayout layout, uint32_t slot, uint3
     DynEntry *free = NULL;
     for (int i = 0; i < RD_DYN_GROUPS; i++) {
         DynEntry *e = &s_dynGroups[i];
-        if (e->epoch == s_bindEpoch && e->layout == layout.id && e->buffer == ring.id) {
+        if (e->epoch == s_bindEpoch && e->layout == layout.id && e->buffer == ring.id &&
+            e->size == size) {
             return e->group;
         }
         if (!free && e->epoch != s_bindEpoch) {
@@ -369,6 +372,7 @@ static RhiBindGroup dynamicGroup(RhiBindGroupLayout layout, uint32_t slot, uint3
         free->epoch = s_bindEpoch;
         free->layout = layout.id;
         free->buffer = ring.id;
+        free->size = size;
         free->group = g;
     }
     return g;

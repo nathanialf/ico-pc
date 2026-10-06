@@ -114,8 +114,10 @@ void rd__PerfBegin(const RdFrame *f, int keep, bool present)
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
 void rd__PerfCollectGpu(void)
 {
-    /* called inside replay s_replay (rd__PerfBegin has counted it): its slot
-       held the record of replay s_replay - RHI_FRAMES_IN_FLIGHT */
+    /* called inside a replay, after rd__WaitFrame waited on the slot's
+       fence: the record pending in this RHI frame slot (rhi_FrameSlot) is
+       the one rd__PerfEnd left there the last time the slot was used,
+       RHI_FRAMES_IN_FLIGHT frames ago */
     const uint32_t slot = rhi_FrameSlot();
     if (!s_pendingValid[slot]) {
         return;

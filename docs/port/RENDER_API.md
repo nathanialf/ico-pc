@@ -223,13 +223,18 @@ them), as are the STQ keys of the WORLD triangle passes.
 `rd__EnumerateReachable` lists every key the game's state set can reach
 (the screen and post programs, the VU program families, shadows, fog,
 water and the effect sprites); the tests hold it under
-`RD_PIPELINE_REACHABLE_MAX` (256) and check that every pipeline they create
+`RD_PIPELINE_REACHABLE_MAX` (512) and check that every pipeline they create
 is enumerated. `rd_PrecreatePipelines`, called after `rd_Init`, compiles the
 whole set at start-up so that no replay compiles a pipeline (on a GPU
 driver without a warm cache a compile takes tens of milliseconds, a
-visible hitch).
+visible hitch). The window build keeps a Vulkan pipeline cache across runs
+(`rhi_SetPipelineCachePath`, `pipelines.vkcache` in the per-user folder):
+loaded at `rhi_Init` when its header names the device and driver
+(vendor, device, `pipelineCacheUUID`), written back at `rhi_Shutdown`, so
+a later start-up's compiles are cache hits on a driver without a disk
+cache of its own; the tests run without a file. D3D12 ignores it.
 
-The runtime cache holds `RD_PIPELINE_CACHE_MAX` (1024) keys and is looked
+The runtime cache holds `RD_PIPELINE_CACHE_MAX` (2048) keys and is looked
 up by hash. There is no assert on it (the build never defines `NDEBUG`, so
 an assert would abort a release build): a key past it is logged once and
 its draws are skipped. A key whose `rhi_CreatePipeline` failed is
@@ -1226,9 +1231,13 @@ then the overlay, last, then the window's transition to PRESENT. A pass
 inserted there draws on `out` (in RENDER_TARGET at that point) with
 `rd__FrameGroup(s_outW, s_outH, ...)` as `blit()` does; the overlay stays
 above it. With the CRT filter on (package CRT2) the order is: the
-overlay into the grid layer, the filter's passes, the capture; the filter
-is the last pass that draws, there is no deferred text, and nothing is
-drawn above the tube.
+overlay into the grid layer, the filter's passes; the filter is the last
+pass that draws, there is no deferred text, and nothing is drawn above
+the tube. A present with a capture armed and overlay prims in the grid
+runs the filter twice: once without the overlay, then the capture, then
+once with it. If the filter cannot draw (`rd__CrtRecord` false), the box
+blit runs and the grid's overlay prims are drawn on the output, their
+grid frame scaled into the box (`drawBatchesAt`), so no popup is lost.
 
 **What it fixes.** The popups were recorded into list 12 of the game's
 frame: drawn at the scene's resolution and halved by the reduction,
@@ -1389,8 +1398,9 @@ the Enhanced scene at 1x whatever `sceneScale` or `sceneWidth` x
 `sceneHeight` ask (the aspect's width kept), so DISPLAY is the grid;
 `rd__OverlayCollect` collects no deferred text (the rows draw as quads
 into the scene, as in Original) and gives the overlay callback the grid
-layer for its context; nothing draws after the filter but the capture's
-copy.
+layer for its context; nothing draws after the filter (the capture's copy
+of a present with UI in the grid comes from an extra filter pass without
+it, see "Ordering").
 
 **The source grid.** `rd__CrtGrid`: DISPLAY's GS width divided by
 `g_rd.wideX` (512 at 4:3, 683 at 16:9) by its GS height, doubled with the
@@ -1444,18 +1454,25 @@ stripes are taken at f + 1/3 (the second row of dots one stripe over:
 half a triad rounded down to whole stripes, so at r 3 they stay on whole
 pixels). gap is the mode's mask strength. The gains keep each triad's
 light: `rd__CrtTriadGain` (C, no curvature) and `triadGain` (HLSL, each
-neighbour column warped as the pixel is) are 1 over the mean of a
+neighbour column warped as the pixel is; only under x curvature) are 1 over the mean of a
 channel's stripe weight over the output columns of the pixel's row whose
 positions fall in the same source pixel (2 or 3 at r 2.81: a triad short
 of a stripe is not tinted, as one gain for the box would tint them in
 bands), the mean floored at 0.1; `rd__CrtRowGain` (`c_pass.y`) is 1 over
 the slot bridges' mean over a line (1 / (1 - gap / 3); 1 for the other
 masks). The light is kept before the final clamp (a lit stripe of a
-bright colour exceeds 1 and clips).
+bright colour exceeds 1 and clips). Without x curvature (`c_glow.y` 0)
+`crt_ps` loops over no neighbours: `stripeGainFlat` takes a column's
+stripe and each stripe's column count from the same column edges,
+ceil(u + sx r - 0.5) for each boundary u of the stripes, the gap and the
+source pixel (whose edges are those of sx and sx + 1), so a column on an
+edge is counted in the stripe it lights, and the pixel's source column is
+the one whose edges hold it (a float floor can miss by one on an edge).
 
-**Constants.** `IcoCrtCB` (`shader_consts.h`) is DrawCB's size and is bound
-in its slot with the draw layout (`rd__CrtGroup`), so no layout or dynamic
-group is added; group 0 gets a FrameCB (unused by the shader) and group 2
+**Constants.** `IcoCrtCB` (`shader_consts.h`) is bound in DrawCB's slot
+with the draw layout (`rd__CrtGroup`), so no layout is added; the
+layout's dynamic group is cached per block size (`dynamicGroup`), so the
+two blocks need not be the same size; group 0 gets a FrameCB (unused by the shader) and group 2
 `rd__TexGroupDate` with t2 the glow (the dummy for the glow passes).
 `c_beam.w` is the gap columns, `c_mask` the type, the mask strength, the box-height fade
 (`rd__CrtMaskFade(box h)`: 1 from 1080, 0 at 720 and below) and the
@@ -1853,20 +1870,15 @@ swapchain image, both with copy-source usage) into a texture of its format
 after the box blit and the deferred text, before the overlay
 (`captureRecord`), so the picture has the preset and the Enhanced menu
 text, and neither the popups nor photo mode's HUD; with the CRT filter on
-the copy is taken after the filter, which has the overlay inside it, so
-the photo has the filter and the HUD (package CRT2); after
+and overlay prims in the grid the copy is taken after an extra pass of the
+filter without the overlay, before the pass with it (the shown picture),
+so the photo has the filter and not the HUD; after
 the submit `rd__CaptureFinish` reads it back (BGRA swapped), writes an RGB
 PNG of outputWidth × outputHeight (`rd_WritePng`) and logs `rd: photo:
 capture WxH written to <path>`. `rd_CaptureResult` returns 1 or -1 once
 with the path; the window turns it into a popup. `rd_present_test`
-checks the PNG against the present without the overlay with CRT off, and
-against the present with it under Consumer TV.
-
-**Depth of field.** `[photo] dof` is not implemented: a present-time blur
-weighted by |depth − focus| from SCENE's depth needs the depth at the
-output's resolution after the reduction and the box, which the presenter
-does not have (DISPLAY holds colour only), so it would have to run before
-the reduction as a scene pass. The key is read and logged.
+checks the PNG against the present without the overlay, with CRT off and
+under Consumer TV.
 
 ## 17. Mirror mode
 
@@ -2238,7 +2250,7 @@ and op and marks the quads `text-quads`.
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
 | `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides, the gap columns, the leak and the gains (every triad's light, numerically integrated over its columns and line, is 1); on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %; the phosphors, glow and curvature off: at a 1440×1080 box under white every box pixel is one channel, the one `rd__CrtMaskWeight` gives, each source pixel's columns R, G, B in order; at 1536×1152 a red pixel lights only its first column (Trinitron), a white one R, G, B columns (Trinitron, PVM), the shadow mask's second row of dots one stripe over, Scanlines without columns (the geometry at mask strength 1); at the modes' own strengths Consumer TV's bridges darker by 1 - strength and staggered half a line, each stripe leaking 1 - strength of the other channels (Consumer TV, Trinitron), and at 1440×1080 every triad's light within 4 % of its pixel's |
-| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); the overlay under the CRT filter (the callback's box is the grid, its red rectangle comes out as R phosphors); photo mode's capture at 800×600: CRT off the PNG is the present without the overlay, under Consumer TV the present with it, byte for byte |
+| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); the overlay under the CRT filter (the callback's box is the grid, its red rectangle comes out as R phosphors); photo mode's capture at 800×600: CRT off and under Consumer TV the PNG is the present without the overlay, byte for byte |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; photo mode (`rd__PhotoFrame`: a mesh's matrices through the override against the reference transform, the scissor clip mode, the shadow volume untouched, the UI dropped under the flag and kept without it, the game's camera changing nothing; the pin surviving three keep frames with its temporary target, replaced by the next full frame, freed and a cut on leaving) |

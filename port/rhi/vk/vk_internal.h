@@ -212,6 +212,9 @@ typedef struct VkrState {
     /* one-shot command pool for readback */
     VkCommandPool oneShotPool;
 
+    /* every pipeline is created through it (vkr_PipelineCacheInit) */
+    VkPipelineCache pipelineCache;
+
     /* package P1: counters (rhi_GetStats), timestamps, the mailbox option */
     RhiStats stats;
     bool timestamps;        /* the queue writes timestamps */
@@ -262,6 +265,11 @@ uint32_t vkr_RegisterSwapchainImage(VkImage image, VkFormat fmt, RhiFormat rf, u
 
 void vkr_ReleaseSwapchainImage(uint32_t id);
 void vkr_ReleaseAllObjects(void);
+/* vk_pipeline.c: the pipeline cache (rhi_SetPipelineCachePath): created
+ * after the device, from the file when its header names this device;
+ * saved to the file and destroyed before the device goes */
+void vkr_PipelineCacheInit(void);
+void vkr_PipelineCacheShutdown(void);
 /* vk_pipeline.c */
 VkDescriptorSet vkr_GetBindGroup(RhiBindGroup bg);
 /* The number of dynamic uniform slots of a bind group's layout (package PA). */

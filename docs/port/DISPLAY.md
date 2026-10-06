@@ -180,8 +180,10 @@ preset's sharp port text, "Menu text" above, is not used), and the port's
 own popups, hint lines and photo mode's help lines are drawn into the
 PS2's pixel grid at the PS2's scale before the filter, so they get the
 same phosphors, scanlines and curve as the picture. Nothing is drawn on top
-of the tube. A picture saved in photo mode therefore has the filter and,
-if it was on screen, the help lines or a popup. The movies (the opening
+of the tube. A picture saved in photo mode has the filter but not the
+help lines or a popup: it is taken from a pass of the filter without
+them. If the filter cannot draw, the picture is shown unfiltered with the
+popups over it. The movies (the opening
 and the ending) are drawn by their own path and are shown without the
 filter.
 
@@ -234,8 +236,9 @@ The mouse moves the right stick as it does in play (Settings > Controls,
 **Pictures.** Cross saves the picture as shown, at the window's own
 resolution (the whole window, black bars included), with the preset, the
 CRT filter and the Enhanced menu text as they are, but without the help
-lines or any popup (with the CRT filter on, the help lines and any popup
-on screen are part of the filtered picture and are in the saved one too): `ico-<date>-<time>.png` in the `screenshots` folder of
+lines or any popup, with the CRT filter on as well (there the help lines
+and popups are part of the filtered picture on screen; the saved picture
+is filtered without them): `ico-<date>-<time>.png` in the `screenshots` folder of
 the per-user folder (CONFIG.md says where; `[photo] png_dir` names another
 folder there). A popup names the file. The picture is saved at the next
 picture drawn after the press. F12 is unchanged (a frame dump and the

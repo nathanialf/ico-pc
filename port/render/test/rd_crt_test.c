@@ -417,13 +417,14 @@ static const char *const kModeName[RD_CRT_MODE_COUNT] = {"off",       "scanlines
 
 /* The presents of the rich frame through each mode (llvmpipe, LLVM 19.1.7,
  * this file's frame; package CRT2's phosphors per output pixel, FIX0's leak
- * and per-triad gain): [mode - 1][0]
+ * and per-triad gain; FIXB's flat face counted by column edges, which moved
+ * PVM's columns on a stripe's edge at 1920 x 1440): [mode - 1][0]
  * 960 x 720, [1] 1920 x 1440 */
 static const uint64_t kGold[RD_CRT_MODE_COUNT - 1][2] = {
     {0xb63d6f980571913bull, 0x06ebfa2d69b427ceull}, /* scanlines */
     {0xe8f8c1f74162712aull, 0xcc091535d9b3bdfcull}, /* consumer */
     {0xf69cf28414987833ull, 0x4482b83647d616ceull}, /* trinitron */
-    {0xe5dcb80cb41b8402ull, 0x70ac35d4c4ec372cull}, /* pvm */
+    {0xe5dcb80cb41b8402ull, 0x72acd2a47561ac92ull}, /* pvm */
     {0x633134534e10b694ull, 0x16355a63829491f3ull}, /* shadow */
 };
 

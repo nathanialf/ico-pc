@@ -603,6 +603,13 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
 static void textCollect(const RdFrame *f, int keep)
 {
     s_text.n = 0;
+    s_text.f = NULL;
+    /* no item, nothing to walk for: most presents (rd_DeferredText counts
+     * them; an interpolated frame adds prev's it inserts, rd__LoadFrame
+     * counts a dump's, a pinned frame copies the count) */
+    if (!f->textItems) {
+        return;
+    }
     s_text.f = f;
     RdStateBlock st = f->startState;
     rd__Walk(f, keep, &st, textWalk, NULL);
@@ -698,12 +705,41 @@ uint64_t rd__OverlayRingBytes(void)
     return total;
 }
 
-/* batches [from, to) in one load-preserving pass on out (fmt, ow x oh: the
- * output, or package CRT2's grid layer) */
-static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t ow, uint32_t oh,
-                        uint32_t from, uint32_t to)
+/* a region of the overlay's own frame (ctx.outW x outH) scaled into dst,
+ * rounded outwards */
+static RhiRect scaleRect(RhiRect r, const RhiRect *dst)
 {
-    if (from >= to || s_ov.ctx.outW != ow || s_ov.ctx.outH != oh) {
+    const uint64_t ow = s_ov.ctx.outW, oh = s_ov.ctx.outH;
+    if (r.x < 0) {
+        r.w = (uint32_t)-r.x < r.w ? r.w + (uint32_t)r.x : 0;
+        r.x = 0;
+    }
+    if (r.y < 0) {
+        r.h = (uint32_t)-r.y < r.h ? r.h + (uint32_t)r.y : 0;
+        r.y = 0;
+    }
+    const uint32_t x0 = (uint32_t)((uint64_t)r.x * dst->w / ow);
+    const uint32_t y0 = (uint32_t)((uint64_t)r.y * dst->h / oh);
+    uint32_t x1 = (uint32_t)((((uint64_t)r.x + r.w) * dst->w + ow - 1) / ow);
+    uint32_t y1 = (uint32_t)((((uint64_t)r.y + r.h) * dst->h + oh - 1) / oh);
+    x1 = x1 > dst->w ? dst->w : x1;
+    y1 = y1 > dst->h ? dst->h : y1;
+    x1 = x1 < x0 ? x0 : x1;
+    y1 = y1 < y0 ? y0 : y1;
+    return (RhiRect){dst->x + (int32_t)x0, dst->y + (int32_t)y0, x1 - x0, y1 - y0};
+}
+
+/* batches [from, to) in one load-preserving pass on out (fmt, tw x th: the
+ * output, or package CRT2's grid layer).  dst NULL: the overlay's frame is
+ * out's, 1:1; else its frame is scaled into dst of out (the grid-mode
+ * overlay on the output when the CRT pass could not draw it, see
+ * overlayRecord) */
+static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t tw,
+                          uint32_t th, const RhiRect *dst, uint32_t from, uint32_t to)
+{
+    const uint32_t ow = s_ov.ctx.outW, oh = s_ov.ctx.outH;
+    if (from >= to || !ow || !oh || (!dst && (ow != tw || oh != th)) ||
+        (dst && (!dst->w || !dst->h))) {
         return;
     }
     RhiRenderPassDesc p;
@@ -711,13 +747,15 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32
     p.color[0].texture = out;
     p.color[0].load = RHI_LOAD_LOAD;
     p.colorCount = 1;
-    p.width = ow;
-    p.height = oh;
+    p.width = tw;
+    p.height = th;
     rhi_CmdBeginRenderPass(cl, &p);
-    RhiViewport vp = {0.0f, 0.0f, (float)ow, (float)oh, 0.0f, 1.0f};
+    const RhiRect all = {0, 0, ow, oh};
+    const RhiRect area = dst ? *dst : all;
+    RhiViewport vp = {(float)area.x, (float)area.y, (float)area.w, (float)area.h, 0.0f, 1.0f};
     rhi_CmdSetViewport(cl, &vp);
-    RhiRect cur = {0, 0, ow, oh};
-    rhi_CmdSetScissor(cl, &cur);
+    RhiRect cur = all;
+    rhi_CmdSetScissor(cl, dst ? &area : &cur);
     /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
      * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
     const RdUniform frame = rd__FrameGroup(ow, oh, 0.5f, 0.5f);
@@ -726,11 +764,22 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32
         /* package DEF: the deferred text's batches carry their regions */
         if (memcmp(&b->sc, &cur, sizeof(cur)) != 0) {
             cur = b->sc;
-            rhi_CmdSetScissor(cl, &cur);
+            if (dst) {
+                const RhiRect sc = scaleRect(cur, dst);
+                rhi_CmdSetScissor(cl, &sc);
+            } else {
+                rhi_CmdSetScissor(cl, &cur);
+            }
         }
         rd__OverlayDraw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
     }
     rhi_CmdEndRenderPass(cl);
+}
+
+static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t ow, uint32_t oh,
+                        uint32_t from, uint32_t to)
+{
+    drawBatchesAt(cl, out, fmt, ow, oh, NULL, from, to);
 }
 
 /* package DEF: the deferred text, at the insertion point */
@@ -742,11 +791,16 @@ static void textRecord(RhiCommandList cl, RhiTexture out)
 }
 
 /* the overlay on the output; under the CRT filter (package CRT2) it was
- * drawn into the filter's grid, and this only forgets it */
-static void overlayRecord(RhiCommandList cl, RhiTexture out)
+ * drawn into the filter's grid (inPicture), and this only forgets it.  A
+ * grid-mode overlay the filter did not draw (rd__CrtRecord failed, or the
+ * capture's pass left it out and the second pass failed) is drawn on the
+ * output, its grid frame scaled into box, so the popups do not vanish */
+static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box, bool inPicture)
 {
     if (!s_ov.grid) {
         drawBatches(cl, out, s_outFormat, s_outW, s_outH, s_ov.textBatches, s_ov.bCount);
+    } else if (!inPicture) {
+        drawBatchesAt(cl, out, s_outFormat, s_outW, s_outH, box, s_ov.textBatches, s_ov.bCount);
     }
     s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
     s_ov.grid = 0;
@@ -884,10 +938,26 @@ void rd__PresentRecord(RhiCommandList cl)
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
     const int mirror = pr->mirror && rd__MirrorOn();
-    bool filtered = false;
+    bool filtered = false, uiInPicture = false;
     if (rd__CrtOn()) {
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-        filtered = rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror);
+        const bool ui = rd__OverlayGridPending();
+        bool capOk = true;
+        if (ui && rd__CaptureArmed()) {
+            /* package PHOTO: a capture never carries the port's UI; under
+             * the CRT filter that UI is inside the filtered picture, so the
+             * capture takes a pass without it and the shown picture a
+             * second pass with it */
+            capOk = rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, false);
+            if (capOk) {
+                captureRecord(cl, out, outState);
+            }
+        }
+        /* a failed capture pass: the box blit below, the capture before the
+         * overlay as without the filter */
+        filtered =
+            capOk && rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
+        uiInPicture = filtered && ui;
     }
     /* the full-height scene: DISPLAY already has every line */
     if (!filtered && pr->lineDouble && !(pr->fullHeight && g_rd.fullHeight)) {
@@ -935,10 +1005,10 @@ void rd__PresentRecord(RhiCommandList cl)
      * ======================================================================= */
     /* package PHOTO: a capture takes the picture as shown, without the
      * port's own UI on the overlay (the popups, the photo HUD); under the
-     * CRT filter that UI is part of the filtered picture and is captured
-     * with it (package CRT2) */
+     * CRT filter with UI in the grid it was taken above, from a pass
+     * without that UI (a no-op here then) */
     captureRecord(cl, out, outState);
-    overlayRecord(cl, out);
+    overlayRecord(cl, out, &box, uiInPicture);
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
     }

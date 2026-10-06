@@ -405,3 +405,8 @@ bool rhi_PresentMailbox(void)
 {
     return be()->PresentMailbox();
 }
+
+void rhi_SetPipelineCachePath(const char *path)
+{
+    be()->SetPipelineCachePath(path);
+}

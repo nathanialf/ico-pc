@@ -2477,12 +2477,28 @@ static RdCmd stateCmd(uint8_t type)
     return c;
 }
 
-/* the state commands that take a to b into out (16 at most); false when
- * b cannot be reached so (another target, a derived field) */
+/* the state commands stateDiff can emit: one per kind it checks (TEST,
+ * BLEND, the five bytes, FILTER, WRAP, TEXTURE, TEXTURE_OFF, UVOFFSET,
+ * COLORMASK, SCISSOR, SHADE, AA1); out holds this many */
+#define RD_STATE_DIFF_MAX 16
+
+/* the state commands that take a to b into out (RD_STATE_DIFF_MAX at
+ * most); false when b cannot be reached so (another target, a derived
+ * field) */
 static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, uint32_t *n)
 {
     const RdDrawState *x = &a->ds, *y = &b->ds;
     uint32_t k = 0;
+    *n = 0;
+/* at most RD_STATE_DIFF_MAX commands (one per kind below); past it the
+ * difference is not expressed and the draw is held */
+#define EMIT(cmd)                                                                                  \
+    do {                                                                                           \
+        if (k >= RD_STATE_DIFF_MAX) {                                                              \
+            return false;                                                                          \
+        }                                                                                          \
+        out[k++] = (cmd);                                                                          \
+    } while (0)
     if (a->color != b->color || a->depth != b->depth || a->gsW != b->gsW || a->gsH != b->gsH ||
         a->useOffset != b->useOffset) {
         return false;
@@ -2496,14 +2512,14 @@ static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, 
         c.b[4] = y->test.date;
         c.b[5] = y->test.zte;
         c.b[6] = y->test.ztst;
-        out[k++] = c;
+        EMIT(c);
     }
     if (x->blend != y->blend || x->blendFix != y->blendFix || x->abe != y->abe) {
         RdCmd c = stateCmd(RDC_BLEND);
         c.b[0] = y->blend;
         c.b[1] = y->blendFix;
         c.b[2] = y->abe;
-        out[k++] = c;
+        EMIT(c);
     }
 
     static const struct {
@@ -2521,20 +2537,20 @@ static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, 
         if (u != v) {
             RdCmd c = stateCmd(bytes[i].type);
             c.b[0] = v;
-            out[k++] = c;
+            EMIT(c);
         }
     }
     if (x->magFilter != y->magFilter || x->minFilter != y->minFilter) {
         RdCmd c = stateCmd(RDC_FILTER);
         c.b[0] = y->magFilter;
         c.b[1] = y->minFilter;
-        out[k++] = c;
+        EMIT(c);
     }
     if (x->wrap.s != y->wrap.s || x->wrap.t != y->wrap.t) {
         RdCmd c = stateCmd(RDC_WRAP);
         c.b[0] = y->wrap.s;
         c.b[1] = y->wrap.t;
-        out[k++] = c;
+        EMIT(c);
     }
     bool texOn = false;
     if (a->tex != b->tex || x->texFn != y->texFn || x->tcc != y->tcc ||
@@ -2543,45 +2559,46 @@ static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, 
         c.u[0] = b->tex;
         c.b[0] = y->texFn;
         c.b[1] = y->tcc;
-        out[k++] = c;
+        EMIT(c);
         texOn = true;
     }
     if (!y->texEnabled && (x->texEnabled || texOn)) {
-        out[k++] = stateCmd(RDC_TEXTURE_OFF); /* RDC_TEXTURE above turned it on */
+        EMIT(stateCmd(RDC_TEXTURE_OFF)); /* RDC_TEXTURE above turned it on */
     }
     if (memcmp(a->uvOffset, b->uvOffset, sizeof(a->uvOffset)) != 0) {
         RdCmd c = stateCmd(RDC_UVOFFSET);
         c.f[0] = b->uvOffset[0];
         c.f[1] = b->uvOffset[1];
-        out[k++] = c;
+        EMIT(c);
     }
     if (x->fbmsk != y->fbmsk || x->colorMask != y->colorMask) {
         RdCmd c = stateCmd(RDC_COLORMASK);
         c.u[0] = y->fbmsk;
-        out[k++] = c;
+        EMIT(c);
     }
     if (memcmp(a->scissor, b->scissor, sizeof(a->scissor)) != 0) {
         RdCmd c = stateCmd(RDC_SCISSOR);
         for (int i = 0; i < 4; i++) {
             c.u[i] = (uint32_t)b->scissor[i];
         }
-        out[k++] = c;
+        EMIT(c);
     }
     if (a->gouraud != b->gouraud) {
         RdCmd c = stateCmd(RDC_SHADE);
         c.b[0] = (uint8_t)b->gouraud;
-        out[k++] = c;
+        EMIT(c);
     }
     if (a->aa1 != b->aa1) {
         RdCmd c = stateCmd(RDC_AA1);
         c.b[0] = (uint8_t)b->aa1;
-        out[k++] = c;
+        EMIT(c);
     }
     /* the commands must give b exactly (colorMask is derived from FBMSK) */
     RdStateBlock s = *a;
     for (uint32_t i = 0; i < k; i++) {
         rd__ApplyState(&s, &out[i]);
     }
+#undef EMIT
     *n = k;
     return memcmp(&s, b, sizeof(s)) == 0;
 }
@@ -2767,7 +2784,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
         const RdCmd *pc = &prev->lists[in.list].cmds[s_nodes[in.node].index];
         in.want = want[i];
         in.have = have[i];
-        RdCmd tmp[16];
+        RdCmd tmp[RD_STATE_DIFF_MAX];
         uint32_t n0 = 0, n1 = 0;
         if (!stateDiff(&have[i], &in.want, tmp, &n0) || !stateDiff(&in.want, &have[i], tmp, &n1)) {
             s_umHeld++;
@@ -2838,7 +2855,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 s_umCmds[o++] = cl->cmds[src++];
             }
             /* prev's state for the draw, then cur's again (checked above) */
-            RdCmd pre[16], post[16];
+            RdCmd pre[RD_STATE_DIFF_MAX], post[RD_STATE_DIFF_MAX];
             uint32_t n0 = 0, n1 = 0;
             (void)stateDiff(&in->have, &in->want, pre, &n0);
             (void)stateDiff(&in->want, &in->have, post, &n1);
@@ -2851,6 +2868,9 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 c.u[1] = in->seq;
             }
             s_umCmds[o++] = c;
+            if (c.type == RDC_OVERLAY_TEXT && c.b[0] == RD_OTEXT_ITEM) {
+                s_out.textItems++; /* rd_present.c textCollect skips a frame with none */
+            }
             memcpy(&s_umCmds[o], post, n1 * sizeof(RdCmd));
             o += n1;
         }

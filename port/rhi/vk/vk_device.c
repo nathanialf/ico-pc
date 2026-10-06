@@ -603,6 +603,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
         return false;
     }
     vkr_FillLimits();
+    vkr_PipelineCacheInit();
     if (!vkr_PoolInit(&g_vkr.buffers, "buffer", 4096, sizeof(VkrBuffer)) ||
         !vkr_PoolInit(&g_vkr.textures, "texture", 8192, sizeof(VkrTexture)) ||
         !vkr_PoolInit(&g_vkr.samplers, "sampler", 256, sizeof(VkSampler)) ||
@@ -646,6 +647,7 @@ void rhi_Shutdown(void)
         if (g_vkr.timeline) {
             vkDestroySemaphore(g_vkr.device, g_vkr.timeline, NULL);
         }
+        vkr_PipelineCacheShutdown();
         vkDestroyDevice(g_vkr.device, NULL);
     }
     vkr_PoolFree(&g_vkr.buffers);

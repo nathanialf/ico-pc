@@ -222,6 +222,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        the host FP mode, not on the game's 256 KB fiber stacks
        (docs/port/PLATFORM.md "Fiber stacks and host calls") */
     rd_SetHostCall(ico_sched_call_on_host);
+    /* the Vulkan pipeline cache in the per-user folder: a later start
+       creates the renderer's pipelines from it (rhi_SetPipelineCachePath;
+       D3D12 ignores it) */
+    {
+        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 32];
+
+        ico_host_pref_dir(pref, sizeof(pref));
+        snprintf(cache, sizeof(cache), "%s/pipelines.vkcache", pref);
+        rhi_SetPipelineCachePath(cache);
+    }
     {
         IcoVideoOptions o;
 

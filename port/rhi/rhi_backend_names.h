@@ -74,6 +74,7 @@
 #define rhi_ReadTimestamps      RHI__NAME(ReadTimestamps)
 #define rhi_PreferMailbox       RHI__NAME(PreferMailbox)
 #define rhi_PresentMailbox      RHI__NAME(PresentMailbox)
+#define rhi_SetPipelineCachePath RHI__NAME(SetPipelineCachePath)
 /* clang-format on */
 
 #endif /* RHI_BACKEND_PREFIX */

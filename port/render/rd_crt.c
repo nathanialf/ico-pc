@@ -368,7 +368,7 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
 }
 
 bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror)
+                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
 {
     RdCrtParams p;
     if (!rd__CrtResolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
@@ -398,7 +398,7 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
     /* 0. the overlay into the grid: the source line-doubled (and flipped by
      * the mirror mode) into the layer of the frame's lines, the prims over
      * it, the layer reduced back; the grid is then the shown orientation */
-    if (rd__OverlayGridPending()) {
+    if (overlay && rd__OverlayGridPending()) {
         const uint32_t lh = g_rd.gsH ? g_rd.gsH : 2 * vh;
         if (!ensure(&s_layer, vw, lh, RHI_FMT_RGBA8_UNORM, "rd crt overlay layer")) {
             return false;

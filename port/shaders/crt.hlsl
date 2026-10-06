@@ -148,13 +148,19 @@ float3 stripeOf(float f, float v)
     return float3(ch == 0 ? 1.0 : leak, ch == 1 ? 1.0 : leak, ch == 2 ? 1.0 : leak);
 }
 
+// the slot's bridge: 1 - the leak over the last third of the line, half a
+// line later in odd columns; 1 elsewhere and in the other masks
+float slotOf(float v, int odd)
+{
+    if (c_mask.x > 1.5 && c_mask.x < 2.5 && frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
+        return 1.0 - c_mask.y;
+    }
+    return 1.0;
+}
+
 float3 maskOf(float f, float v, int odd)
 {
-    float dim = 1.0;
-    if (c_mask.x > 1.5 && c_mask.x < 2.5 && frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
-        dim = 1.0 - c_mask.y;
-    }
-    return stripeOf(f, v) * dim;
+    return stripeOf(f, v) * slotOf(v, odd);
 }
 
 // The box pixel px warped by the curvature (crt-lottes' warp: x scaled by
@@ -170,7 +176,80 @@ float2 warpOf(float2 px)
 // 1 over the mean stripe weight, per channel, over the box pixels of px's
 // row whose warped positions fall in source pixel sx (rd_crt.c
 // rd__CrtTriadGain; the mean floored at 0.1): each triad keeps its own
-// pixel's light whether its stripes are 1 or 2 output pixels wide
+// pixel's light whether its stripes are 1 or 2 output pixels wide. Only
+// under x curvature (the flat face counts, stripeGainFlat).
+// The flat face (no x curvature: c_glow.y 0), without the loop. Output
+// column j (centre j + 0.5) lies at u = j + 0.5 - sx r across source pixel
+// sx, r = c_box.x / c_src.x output pixels wide. Every stripe, the gap and
+// the source pixel itself are intervals of u, so each one's columns are
+// those from one edge, ceil(u + sx r - 0.5), to the next: the pixel's own
+// stripe and the count of each stripe's columns (the mean weight a
+// channel has over the source pixel, (own + leak (n - own)) / n) come
+// from the same edges, so a column on a boundary is counted where it is
+// lit. The source pixel's edges are those of sx and sx + 1, so the pixels
+// partition the columns exactly.
+struct FlatCols
+{
+    float e0, e1; // the source pixel's first column and the next one's
+    float o, r;
+};
+
+FlatCols flatCols(int sx)
+{
+    FlatCols c;
+    c.r = c_box.x * c_src.z;
+    c.o = float(sx) * c.r;
+    c.e0 = ceil(c.o - 0.5);
+    c.e1 = ceil(float(sx + 1) * c.r - 0.5);
+    return c;
+}
+
+float edgeAt(FlatCols c, float u)
+{
+    if (u <= 0.0) {
+        return c.e0;
+    }
+    if (u >= c.r) {
+        return c.e1;
+    }
+    return clamp(ceil(u + c.o - 0.5), c.e0, c.e1);
+}
+
+// the columns of [lo, hi) of u' = u + d (wrapped at r) and whether j is one
+float2 colsOf(FlatCols c, float lo, float hi, float d, float j)
+{
+    float a = lo - d, b = hi - d;
+    float2 e = float2(0.0, 0.0), e2 = float2(0.0, 0.0);
+    if (a >= 0.0) {
+        e = float2(edgeAt(c, a), edgeAt(c, b));
+    } else if (b <= 0.0) {
+        e = float2(edgeAt(c, a + c.r), edgeAt(c, b + c.r));
+    } else {
+        e = float2(edgeAt(c, 0.0), edgeAt(c, b));
+        e2 = float2(edgeAt(c, a + c.r), edgeAt(c, c.r));
+    }
+    float n = (e.y - e.x) + (e2.y - e2.x);
+    float hit = ((j >= e.x && j < e.y) || (j >= e2.x && j < e2.y)) ? 1.0 : 0.0;
+    return float2(n, hit);
+}
+
+// the stripe weights of column j in source pixel sx times the gain that
+// keeps the pixel's light (stripeOf and triadGain on the flat face)
+float3 stripeGainFlat(float j, int sx, float v)
+{
+    FlatCols c = flatCols(sx);
+    float g = c_beam.w, leak = 1.0 - c_mask.y;
+    float d = (c_mask.x > 2.5 && v >= 0.5) ? c.r / 3.0 : 0.0;
+    float t = (c.r - g) / 3.0;
+    float2 k0 = colsOf(c, 0.0, t, d, j), k1 = colsOf(c, t, 2.0 * t, d, j),
+           k2 = colsOf(c, 2.0 * t, c.r - g, d, j);
+    float n = c.e1 - c.e0;
+    float3 own = float3(k0.x, k1.x, k2.x);
+    float3 mean = n > 0.0 ? (own + leak * (n - own)) / n : float3(1.0, 1.0, 1.0);
+    float3 w = lerp(float3(leak, leak, leak), float3(1.0, 1.0, 1.0), float3(k0.y, k1.y, k2.y));
+    return w / max(mean, float3(0.1, 0.1, 0.1));
+}
+
 float3 triadGain(float2 px, int sx, float v)
 {
     int k0 = int(ceil(c_box.x * c_src.z)) + 1;
@@ -212,6 +291,18 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
     float2 s = clamp(w, 0.0, 0.99999) * c_src.xy;
     int2 sp = int2(floor(s));
     float f = s.x - float(sp.x), v = s.y - float(sp.y);
+    // the flat face: the source pixel whose column edges hold this column
+    // (stripeGainFlat), which a float floor can miss by one on an edge
+    bool flat = c_glow.y == 0.0;
+    float j = floor(px.x);
+    if (flat) {
+        FlatCols fc = flatCols(sp.x);
+        if (j < fc.e0 && sp.x > 0) {
+            sp.x -= 1;
+        } else if (j >= fc.e1 && sp.x < int(c_src.x) - 1) {
+            sp.x += 1;
+        }
+    }
     int2 src = int2(mirror > 0.5 ? int(c_src.x) - 1 - sp.x : sp.x, sp.y);
 
     // the beam of the line at v, and the spill of the lines above and below
@@ -226,7 +317,9 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
     // triad's light (triadGain across, c_pass.y the slot's rows), faded in
     // by the box
     if (c_mask.x > 0.5 && c_mask.z > 0.0) {
-        float3 m = maskOf(f, v, sp.x & 1) * triadGain(px, sp.x, v) * c_pass.y;
+        float3 m = flat ? stripeGainFlat(j, sp.x, v) * slotOf(v, sp.x & 1)
+                        : maskOf(f, v, sp.x & 1) * triadGain(px, sp.x, v);
+        m *= c_pass.y;
         col *= lerp(float3(1.0, 1.0, 1.0), m, c_mask.z);
     }
     col = lerp(p, col, st);

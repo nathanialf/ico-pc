@@ -1,10 +1,125 @@
 /* vk_pipeline.c: bind group layouts, transient bind groups and graphics
  * pipelines for the Vulkan backend. */
 #include "vk_internal.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define VKR_H(x) ((uint64_t)(x))
+
+/* ------------------------------------------------------ the pipeline cache
+ * rhi_SetPipelineCachePath (rhi.h).  Kept across rhi_Init, which clears
+ * g_vkr. */
+static char s_cachePath[1024];
+
+void rhi_SetPipelineCachePath(const char *path)
+{
+    s_cachePath[0] = '\0';
+    if (path && strlen(path) + 5 < sizeof(s_cachePath)) {
+        strcpy(s_cachePath, path);
+    }
+}
+
+/* the file's blob when its header (VkPipelineCacheHeaderVersionOne: header
+ * size, version, vendor id, device id, UUID) names this device; NULL else */
+static void *vkr_CacheLoad(size_t *size)
+{
+    *size = 0;
+    FILE *fp = s_cachePath[0] ? fopen(s_cachePath, "rb") : NULL;
+    if (!fp) {
+        return NULL;
+    }
+    void *blob = NULL;
+    long n = -1;
+    if (fseek(fp, 0, SEEK_END) == 0) {
+        n = ftell(fp);
+    }
+    if (n >= 32 && n <= (64l << 20) && fseek(fp, 0, SEEK_SET) == 0) {
+        blob = malloc((size_t)n);
+        if (blob && fread(blob, 1, (size_t)n, fp) != (size_t)n) {
+            free(blob);
+            blob = NULL;
+        }
+    }
+    fclose(fp);
+    if (!blob) {
+        return NULL;
+    }
+    uint32_t h[4];
+    memcpy(h, blob, sizeof(h));
+    const uint8_t *uuid = (const uint8_t *)blob + 16;
+    if (h[0] < 32 || h[0] > (uint32_t)n || h[1] != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
+        h[2] != g_vkr.props.vendorID || h[3] != g_vkr.props.deviceID ||
+        memcmp(uuid, g_vkr.props.pipelineCacheUUID, VK_UUID_SIZE) != 0) {
+        VKR_LOG("pipeline cache %s is for another device or driver: starting empty", s_cachePath);
+        free(blob);
+        return NULL;
+    }
+    *size = (size_t)n;
+    return blob;
+}
+
+void vkr_PipelineCacheInit(void)
+{
+    size_t size = 0;
+    void *blob = vkr_CacheLoad(&size);
+    VkPipelineCacheCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .initialDataSize = size,
+        .pInitialData = blob,
+    };
+    if (vkCreatePipelineCache(g_vkr.device, &ci, NULL, &g_vkr.pipelineCache) != VK_SUCCESS) {
+        g_vkr.pipelineCache = VK_NULL_HANDLE;
+        if (blob) { /* the driver refused the data: start empty */
+            ci.initialDataSize = 0;
+            ci.pInitialData = NULL;
+            if (vkCreatePipelineCache(g_vkr.device, &ci, NULL, &g_vkr.pipelineCache) !=
+                VK_SUCCESS) {
+                g_vkr.pipelineCache = VK_NULL_HANDLE;
+            }
+        }
+    } else if (blob) {
+        VKR_LOG("pipeline cache: %zu bytes from %s", size, s_cachePath);
+    }
+    free(blob);
+}
+
+void vkr_PipelineCacheShutdown(void)
+{
+    if (!g_vkr.pipelineCache) {
+        return;
+    }
+    size_t size = 0;
+    void *blob = NULL;
+    if (s_cachePath[0] && !g_vkr.deviceLost &&
+        vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) == VK_SUCCESS &&
+        size >= 32) {
+        blob = malloc(size);
+        if (blob &&
+            vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, blob) != VK_SUCCESS) {
+            free(blob);
+            blob = NULL;
+        }
+    }
+    if (blob) {
+        char tmp[sizeof(s_cachePath) + 8];
+        snprintf(tmp, sizeof(tmp), "%s.tmp", s_cachePath);
+        FILE *fp = fopen(tmp, "wb");
+        bool ok = fp && fwrite(blob, 1, size, fp) == size;
+        if (fp) {
+            ok = fclose(fp) == 0 && ok;
+        }
+        /* rename does not replace an existing file on Windows */
+        remove(s_cachePath);
+        if (!ok || rename(tmp, s_cachePath) != 0) {
+            remove(tmp);
+            VKR_LOG("pipeline cache: could not write %s", s_cachePath);
+        }
+        free(blob);
+    }
+    vkDestroyPipelineCache(g_vkr.device, g_vkr.pipelineCache, NULL);
+    g_vkr.pipelineCache = VK_NULL_HANDLE;
+}
 
 static VkShaderStageFlags vkr_Stages(uint32_t rhiStages)
 {
@@ -491,8 +606,8 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         .pDynamicState = &dy,
         .layout = p->layout,
     };
-    if (!VKR_CHECK(
-            vkCreateGraphicsPipelines(g_vkr.device, VK_NULL_HANDLE, 1, &ci, NULL, &p->pipeline))) {
+    if (!VKR_CHECK(vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &ci, NULL,
+                                             &p->pipeline))) {
         vkDestroyPipelineLayout(g_vkr.device, p->layout, NULL);
         vkr_PoolRelease(&g_vkr.pipelines, id);
         return out;

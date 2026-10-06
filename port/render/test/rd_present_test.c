@@ -51,10 +51,11 @@
  *             rectangle each block's R column red, its G column dark
  *   capture   package PHOTO, rd_CapturePresented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
- *             Consumer TV: the PNG is 800 x 600 RGB; CRT off it holds
- *             exactly the present without the overlay, under the CRT filter
- *             (package CRT2) exactly the present with it (the overlay is
- *             inside the filtered picture); rd_CaptureResult reports it once
+ *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
+ *             present without the overlay, under the CRT filter too (the
+ *             shown picture has the overlay inside it, package CRT2; the
+ *             capture takes a filter pass without it); rd_CaptureResult
+ *             reports it once
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -1690,18 +1691,13 @@ static void checkCaptureAt(const char *dir, int crt)
             diffPlain += memcmp(rgb + i * 3, plain + i * 4, 3) != 0;
             diffOver += memcmp(rgb + i * 3, over + i * 4, 3) != 0;
         }
-        if (crt) {
-            /* package CRT2: the overlay is inside the filtered picture */
-            CHECK(diffOver == 0 && diffPlain > 0,
-                  "capture (crt): the present with the overlay (%zu pixels differ; %zu from the "
-                  "one without it)",
-                  diffOver, diffPlain);
-        } else {
-            CHECK(diffPlain == 0 && diffOver > 0,
-                  "capture (crt %d): the present without the overlay (%zu pixels differ; %zu "
-                  "from the one with it)",
-                  crt, diffPlain, diffOver);
-        }
+        /* under the CRT filter too: the overlay is inside the filtered
+         * picture shown (package CRT2), and the capture takes a pass of the
+         * filter without it */
+        CHECK(diffPlain == 0 && diffOver > 0,
+              "capture (crt %d): the present without the overlay (%zu pixels differ; %zu "
+              "from the one with it)",
+              crt, diffPlain, diffOver);
     }
     free(rgb);
     free(plain);

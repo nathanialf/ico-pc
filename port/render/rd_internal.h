@@ -704,10 +704,12 @@ void rd__CrtGrid(uint32_t *vw, uint32_t *vh);
  * the box blit: disp (SHADER_READ), with the overlay drawn into the source
  * grid (rd__OverlayGridDraw), through the glow passes, then the composite
  * (the phosphors per output pixel) into box of out (cleared outside it),
- * out left in RENDER_TARGET.  False when it could not draw (no pipeline): the
- * caller falls back to the box blit. */
+ * out left in RENDER_TARGET.  overlay false: the grid without the overlay
+ * (the photo capture's pass, package PHOTO).  False when it could not draw
+ * (no pipeline): the caller falls back to the box blit and draws the
+ * overlay on the output. */
 bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror);
+                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay);
 /* The textures the filter keeps (the source, the overlay's layer, the glow
  * targets) */
 void rd__CrtShutdown(void);
@@ -1115,7 +1117,8 @@ void rd__OverlayCollect(const RdFrame *f, int keep);
  * frame's lines, the box the whole of it, the frame's 1x scale) and
  * collects no deferred text; rd__CrtRecord then draws the prims into that
  * layer (t, of fmt, w x h, RENDER_TARGET) with rd__OverlayGridDraw, and the
- * present draws no overlay above the filter.  rd__OverlayGridPending: there
+ * present draws no overlay above the filter (unless the filter could not
+ * draw: then the grid's prims are scaled into the box on the output).  rd__OverlayGridPending: there
  * are prims for the layer. */
 bool rd__OverlayGridPending(void);
 void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h);
@@ -1170,7 +1173,8 @@ bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4]);
 /* DrawCB (group 1). */
 RdUniform rd__DrawGroup(const void *drawCB);
 /* Package CRT: crt.hlsl's CrtCB (IcoCrtCB) in DrawCB's dynamic slot and
- * layout: the same size, so the same group (rd_replay.c uniformGroup). */
+ * layout; the layout's dynamic group is cached per block size, so the two
+ * sizes need not match (rd_replay.c dynamicGroup). */
 RdUniform rd__CrtGroup(const void *crtCB);
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s);
 /* The same with t2 (sprite_ps's DATE snapshot) bound to date; rd__TexGroup binds

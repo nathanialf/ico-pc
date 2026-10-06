@@ -630,6 +630,16 @@ uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
 void rhi_PreferMailbox(bool on);
 bool rhi_PresentMailbox(void);
 
+/* A pipeline cache kept across runs (FIXB): Vulkan loads a VkPipelineCache
+ * blob from path at rhi_Init when its header names this device (header
+ * version one, vendor and device ids, pipelineCacheUUID; anything else
+ * starts empty), creates every pipeline through it, and writes it back at
+ * rhi_Shutdown (path.tmp, then renamed over path), so a later start compiles
+ * nothing a driver without its own disk cache already compiled.  NULL or ""
+ * (the default; the tests): no file.  Call before rhi_Init; the path is
+ * copied.  D3D12: ignored (its drivers keep their own shader cache). */
+void rhi_SetPipelineCachePath(const char *path);
+
 /* --------------------------------------------------- backend selection
  * (renderer wave 6, R6c.)  rhi_CreateBackend selects the backend every call
  * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the

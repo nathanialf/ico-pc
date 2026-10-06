@@ -39,18 +39,22 @@ typedef struct IcoDrawCB {
 } IcoDrawCB;
 
 /* Package CRT: crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
- * bound in DrawCB's place: the same 112 bytes, so it shares the draw
- * layout's dynamic group (port/render/rd_crt.c; docs/port/DISPLAY.md "CRT
- * filter").  All in pixels of the box or of the virtual source (the PS2
- * picture's grid, 512 wide at 4:3) unless said. */
+ * bound in DrawCB's place through the draw layout, whose dynamic group is
+ * cached per block size (rd_replay.c dynamicGroup), so the two sizes need
+ * not match (port/render/rd_crt.c; docs/port/DISPLAY.md "CRT filter").
+ * All in pixels of the box or of the virtual source (the PS2 picture's
+ * grid, 512 wide at 4:3) unless said. */
 typedef struct IcoCrtCB {
     float src[4];  /* the virtual source: w, h, 1 / w, 1 / h */
     float box[4];  /* the box: w, h, x, y in output pixels */
-    float beam[4]; /* scanline strength, beam width min, max (lines, FWHM), horizontal blur (px) */
-    float mask[4]; /* type (RdCrtMask), strength (after the box-height fade), pitch, halation */
+    float beam[4]; /* scanline strength, beam width min, max (lines, FWHM), gap columns a
+                    * source pixel */
+    float mask[4]; /* type (RdCrtMask: 0 none, 1 grille, 2 slot, 3 dots), strength (1 - the
+                    * leak), fade (rd__CrtMaskFade), halation */
     float glow[4]; /* bloom, curvature x, curvature y, corner radius (of the box height) */
     float tone[4]; /* vignette, gamma in, gamma out, strength */
-    float pass[4]; /* x mirror, y 0, zw the step of the pass's source texels (1 / size) */
+    float pass[4]; /* x mirror, y the slot bridges' row gain (rd__CrtRowGain), zw 1 / the
+                    * blurred target's size */
 } IcoCrtCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */

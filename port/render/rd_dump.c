@@ -397,7 +397,12 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     }
     for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; ok && i < out->lists[l].count; i++) {
-            ok = cmdValid(out, &out->lists[l].cmds[i]);
+            const RdCmd *c = &out->lists[l].cmds[i];
+            ok = cmdValid(out, c);
+            /* package DEF: the count is not dumped; textCollect needs it */
+            if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
+                out->textItems++;
+            }
         }
     }
     /* textures: images now, target views after the temp targets exist */
