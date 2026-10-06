@@ -192,7 +192,9 @@ texel for pixel and sampled at their texel centres. The blend is
 `ui_DrawText`'s (0x44, `UI_ADDITIVE` 0x48); there are no draw keys, the
 state flags are ignored and nothing is mirrored. `ui_SetScale` meanwhile
 sets the scale restored afterwards. Measuring in overlay mode uses the
-overlay's scale, so a panel fits its text.
+overlay's scale, so a panel fits its text. The deferred menu text ("Menu
+text", package DEF) is drawn through the same mode, from the renderer
+`ui_InstallDeferredText` registers with `rd`.
 
 Before each recording the game build runs `gif_HostFlush` (the record hook
 `ui_host.c` installs): the register decoder emits what it still batches
@@ -593,6 +595,75 @@ load).
 steps it, sets the key and the switch, and is saved when the screen is
 left.
 
+**At the output's resolution (package DEF).** Drawn into list 11 as glyph
+quads, a row lands in SCENE at the scene's resolution, is halved by the
+reduction and scaled into the presentation box, so in the Enhanced preset
+the text was soft (three pixels between background and ink on an edge at
+1080p, `font_edge`). Now each text line the hook draws, game row or port
+row, goes through `ui_DrawTextDeferred` (`font.h`): it records, in place in
+the list, an item (`rd_DeferredText`, an `RDC_OVERLAY_TEXT` command: the
+string, the grid anchor, the size, the flags with the halo and, for the
+glow pass, `UI_ADDITIVE`, the glow's stretch, and the colour after the
+row's fade and dimming), then the same glyph quads as before, marked as
+that item's (`rd_DeferredTextQuads`). What a present does with them is
+decided when it replays (RENDER_API.md "The deferred text pass"):
+
+- Enhanced, with the renderer installed (`ui_InstallDeferredText(1)`,
+  `ui_host.c` at start-up; the replay tool and the tests install it too):
+  the quads are skipped and, after the box blit, `font.c` lays each item out
+  on the output through its overlay mode, rasterised at the box's scale and
+  every glyph's corner on a whole output pixel, so the glyphs are drawn a
+  texel a pixel (at most one pixel between background and ink on an edge,
+  at 1080p and 2160p). The item keeps its place in the frame's order: the
+  row's scissor, the reduction's border crop, and the passes recorded after
+  it in lists 11 and 12 apply to it (a fade to black darkens it with the
+  scene, the demo letterbox cuts it in its bands, the brightness step lifts
+  it, a KEEP drops it, the reduction's stage tint colours it, as each did
+  to the quads). The glow pass is an
+  additive item with the stretch; the white panel's dark prompts are plain
+  items. The mirror mode does not move it: the quads are pre-flipped and the
+  present flips them back, the item is drawn unflipped where the quads end
+  up.
+- Original, classic menu text, no renderer, or a replay without a present:
+  the items are ignored and the quads draw exactly as before (the Original
+  present of a frame with an item is byte-identical to the frame without
+  one, `font_edge`; the corpus's Original and mirror renders are unchanged).
+
+`[game] classic_menu_text` therefore also keeps the Settings rows (port
+rows, which have no texture) on the quad path: classic is the PS2's look
+throughout. The interpolation blends an item's anchor, stretch and colour
+between ticks by its key, as the quads' (RENDER_API.md "Frame rate and
+interpolation").
+
+What the deferred order cannot reproduce, and why it is accepted:
+
+- **A tint above 1.0 that clamps.** The reduction multiplies the picture by
+  the stage's tint (149 / 128 on the title) and the GS clamps the result.
+  Where a text pixel is only partly covered (its edge, the halo, a dimmed
+  row) over a scene bright enough to clamp, the quads' pixel was the tinted
+  blend, clamped, and the deferred one is the clamped scene blended with
+  the tinted text: a little darker. Fully covered pixels match.
+- **Draws after the text in lists 11 and 12.** An item is drawn after the
+  whole picture, so a draw recorded after it that overlaps it (the film
+  noise of a cleared game, the cursor sparkle of `kanban.c`'s boot signs,
+  the loading bar and the developer overlay in list 12) is now under the
+  text instead of over it. The fade, letterbox, brightness and keep passes
+  are applied to the item (above); the others are small (the sparkle's
+  points), faint (the grain at its alpha) or seldom share the screen with a
+  menu row (the loading bar, the developer overlay), and the text staying
+  readable above them is no loss.
+- **Reads of DISPLAY.** DISPLAY no longer holds the text: the motion blur,
+  which feeds DISPLAY back into SCENE, leaves no trail of a menu row over
+  gameplay, and a keep frame's retained picture (the stage load, the card
+  checks) no longer shows the last full frame's rows, darkened, under the
+  live ones (the overlay fixed the same for the popups). An F12 screenshot
+  of DISPLAY (`rd_DumpOnDemand`) has no menu text in Enhanced.
+
+Settings > Display > "Menu text: Classic" brings back the quads, and with
+them the PS2's order, for anyone who wants it. The subtitles and the staff
+roll still draw quads; `ui_DrawTextDeferred` is the call that moves them
+(TODO.md, "Port font everywhere").
+
 ## Strings
 
 `ui_Str(id)` returns the current language's UTF-8 string, `ui_StrIn(lang,
@@ -705,7 +776,23 @@ one.
   device): `settings_test.c` built with `SETTINGS_RENDER`, the menu run
   through `rd`; each screen's SCENE written as `settings_<screen>.png`,
   including the quit screen and the Settings and Display screens at
-  Enhanced 4x full height; no undecoded register write.
+  Enhanced 4x full height; no undecoded register write; package DEF: every
+  screen (Settings, Display, Audio, Controls, Gameplay, Achievements,
+  Extras, the mirror and quit screens) presented at Enhanced 1920 x 1080,
+  16:9, with the menu text deferred (`settings_<screen>_1080.png`, items
+  recorded) and classic (`settings_<screen>_1080_classic.png`, no item: the
+  toggle switches the path).
+- `font_edge_test` (ctest `font_edge`, package DEF, exit 77 without a
+  Vulkan device): a deferred "H" and an overlay "H" presented at Enhanced
+  1920 x 1080 and 3840 x 2160: on rows through the stems every edge has at
+  most one pixel between background and ink (the quad path has three);
+  the mirror leaves the deferred text in place; the Original present of a
+  frame with a deferred row and a popup is byte-identical to the frame
+  drawn with plain quads and to the frame with no renderer; a fade at 0x80
+  hides a row and at 0x40 halves it, the letterbox cuts it at its band, a
+  KEEP after it drops it and a keep frame's row after its KEEP is drawn.
+  Writes `font_edge_<lines>.png`, `font_edge_<lines>_quads.png`,
+  `font_edge_original.png` and `font_edge_letterbox.png`.
 - `menu_text_test` (ctest `menu_text`, exit 77 without a Vulkan device
   after the CPU checks): the table's integrity in every language; with the
   disc image (`ICO_DISC_IMAGE`), every row's rectangle against the boot
@@ -713,7 +800,12 @@ one.
   `layout_texture.c`, New Game and Continue drawn as text and the
   copyright line as a texture, classic mode drawing only textures, a row
   whose rectangle differs keeping its texture, and a port row lining up
-  vertex for vertex with the game's OK row; on the device, the title's New
+  vertex for vertex with the game's OK row; package DEF: each text row an
+  `RDC_OVERLAY_TEXT` item before its glyph quads, all of them marked as
+  the item's, the present laying the items out with the quads' glyphs at
+  1920 x 1080, a fade after the rows an op after the items, a keep frame's
+  rows before its KEEP laying out nothing, classic mode no item and no op;
+  on the device, the title's New
   Game row painted inside its rectangle and rim only
   (`menu_text_scene.png`).
 

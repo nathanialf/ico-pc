@@ -1013,6 +1013,99 @@ void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char
     ui_DrawTextXf(x, y, size, rgba, utf8, flags, NULL);
 }
 
+/* ------------------------------------------- deferred text (package DEF) */
+
+#ifdef ICO_RD
+/* the key of an item: the quads' (textKey) with a page no atlas has */
+#define DEFER_KEY_PAGE 0x7FFF
+
+void ui_DrawTextDeferred(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                         unsigned flags, const UiXform *xf)
+{
+    if (!utf8 || !*utf8 || !ui_FontInit()) {
+        return;
+    }
+    if (s_ov.active) {
+        ui_DrawTextXf(x, y, size, rgba, utf8, flags, xf);
+        return;
+    }
+    /* what the decoder still holds belongs before the item, as before the
+       quads (setState) */
+    if (s_font.recordHook && s_font.suppress <= 0) {
+        s_font.recordHook();
+    }
+    RdTextItem it;
+    memset(&it, 0, sizeof(it));
+    size_t n = strlen(utf8);
+    if (n > RD_TEXT_BYTES - 1) {
+        n = RD_TEXT_BYTES - 1;
+        while (n > 0 && ((unsigned char)utf8[n] & 0xC0) == 0x80) {
+            n--; /* not inside a code point */
+        }
+    }
+    memcpy(it.utf8, utf8, n);
+    it.x = x;
+    it.y = y;
+    it.size = size;
+    it.flags = flags & ~(unsigned)UI_KEEP_STATE;
+    memcpy(it.rgba, rgba, 4);
+    it.additive = (flags & UI_ADDITIVE) ? 1 : 0;
+    if (xf) {
+        it.hasXf = 1;
+        it.xf[0] = xf->originX;
+        it.xf[1] = xf->originY;
+        it.xf[2] = xf->scaleX;
+        it.xf[3] = xf->scaleY;
+        it.xf[4] = xf->offsetX;
+        it.xf[5] = xf->offsetY;
+    }
+    rd_DeferredText(&it, textKey(it.utf8, flags, DEFER_KEY_PAGE));
+    rd_DeferredTextQuads(1);
+    ui_DrawTextXf(x, y, size, rgba, utf8, flags, xf);
+    rd_DeferredTextQuads(0);
+}
+
+/* the renderer rd calls at a present, once per item and region: the item
+   through overlay mode, which rasterises it at the box's scale and puts each
+   glyph's corner on a whole output pixel */
+static void deferredDraw(const RdOverlayCtx *ctx, const RdTextItem *item, void *user)
+{
+    (void)user;
+    ui_BeginOverlay(ctx);
+    if (!s_ov.active) {
+        return;
+    }
+    UiXform xf;
+    if (item->hasXf) {
+        xf.originX = item->xf[0];
+        xf.originY = item->xf[1];
+        xf.scaleX = item->xf[2];
+        xf.scaleY = item->xf[3];
+        xf.offsetX = item->xf[4];
+        xf.offsetY = item->xf[5];
+    }
+    ui_DrawTextXf(item->x, item->y, item->size, item->rgba, item->utf8, item->flags,
+                  item->hasXf ? &xf : NULL);
+    ui_EndOverlay();
+}
+
+void ui_InstallDeferredText(int on)
+{
+    rd_SetDeferredTextFn(on ? deferredDraw : NULL, NULL);
+}
+#else
+void ui_DrawTextDeferred(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                         unsigned flags, const UiXform *xf)
+{
+    ui_DrawTextXf(x, y, size, rgba, utf8, flags, xf);
+}
+
+void ui_InstallDeferredText(int on)
+{
+    (void)on;
+}
+#endif
+
 static void drawHalo(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                      unsigned flags, const UiXform *xf)
 {

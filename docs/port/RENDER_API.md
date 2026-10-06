@@ -1091,8 +1091,9 @@ so at the sides of a 16:9 frame a puddle shows its reflection's clamped
 edge; a world-projected prim
 drawn as a sprite spanning the whole width is taken for a fill and
 stretched. The port's menu text draws in list 11 in UI space, so it sits in
-the 4:3 box at the scene's resolution; the popups are on the presentation
-overlay (below), at the output's resolution in the same 4:3 picture.
+the 4:3 box at the scene's resolution in the Original preset; in Enhanced it
+is drawn deferred (below), at the output's resolution in the same 4:3
+picture, as the popups on the presentation overlay are.
 
 **Presentation.** Original: DISPLAY into the 4:3 box, each line doubled,
 bilinear horizontally. Enhanced: the box of the aspect option; with
@@ -1164,10 +1165,10 @@ no depth, both fragment shaders) are in `rd__EnumerateReachableScreen`, so
 `rd_PrecreatePipelines` makes them at start-up.
 
 **Ordering.** In `rd__PresentRecord`: DISPLAY to the line-doubled target,
-the box blit, then the presentation passes of later packages (the plan's
-"deferred text" and "CRT" passes; a marked insertion point in
-`rd_present.c` says where), then the overlay, last, then the window's
-transition to PRESENT. A pass inserted there draws on `out` (in
+the box blit, the deferred text (`textRecord`, below), then the
+presentation passes of later packages (the plan's "CRT" pass; a marked
+insertion point in `rd_present.c` says where), then the overlay, last, then
+the window's transition to PRESENT. A pass inserted there draws on `out` (in
 RENDER_TARGET at that point) with `rd__FrameGroup(s_outW, s_outH, ...)` as
 `blit()` does; the overlay stays above it.
 
@@ -1189,6 +1190,114 @@ output. The window build presents the swapchain image and keeps no copy,
 so there it returns false; a photo mode wants a copy of `out` taken at the
 end of `rd__PresentRecord` (the swapchain is created with transfer-source
 usage), which is where one would go.
+
+### The deferred text pass
+
+`rd.h` `rd_DeferredText`, `rd_DeferredTextQuads`, `rd_SetDeferredTextFn`,
+`rd_DeferredTextActive`; `rd_core.c` (recording, `rd__DeferredTextOp`),
+`rd_post.c` (`textOp`), `rd_present.c` (`textCollect`, `textRecord`),
+`rd_replay.c` (`doScreen`), `rd_interp.c` (`blendText`); `port/ui/font.c`
+(`ui_DrawTextDeferred`, the renderer); UI.md "Menu text". Package DEF.
+
+The game's menu rows are text the port draws (UI.md "Menu text"). Drawn as
+glyph quads into list 11 they are rasterised at the scene's resolution,
+halved by the reduction and scaled by the box blit, which in Enhanced
+leaves three pixels between background and ink on a glyph's edge at 1080p.
+Drawn on the output after the box blit they are rasterised at the shown
+size and composited a texel a pixel, but the frame's later passes, which
+changed the quads' pixels, must then be applied to them by other means.
+
+**Recording.** A text line is recorded twice, in place in its list: first
+an `RDC_OVERLAY_TEXT` item (`RD_OTEXT_ITEM`, an `RdTextItem` in the
+payload: the UTF-8 string up to 255 bytes, the layout-grid anchor, the size
+in grid y units, port/ui's flags (alignment, halo, `UI_ADDITIVE`), the
+glow's stretch (`xf`, `hasXf`), the colour after the row's fade and
+dimming, and `additive`; keyed like the quads), then the glyph quads, each
+`RDC_SCREEN` marked `RD_SCREEN_TEXT_QUADS` in `b[3]` (between
+`rd_DeferredTextQuads(1)` and `(0)`). The state commands between are the
+quad path's, so the state the frame leaks is the same either way. Once a
+frame has an item, `rd_Post` adds an `RD_OTEXT_OP` (`RdTextOp`) after the
+sprites of a FADE, LETTERBOX, BRIGHTNESS, KEEP or REDUCTION pass, keyed
+as the fade and letterbox sprites are; a frame without text records none, so the post
+passes' command streams are unchanged.
+
+**The gate is the replay's.** A replay that presents to an output in the
+Enhanced preset with a renderer registered (`rd_SetDeferredTextFn`;
+`port/ui/ui_host.c`, `rd_replay_tool` unless `--quad-text`, the tests)
+draws the items deferred: `rd__OverlayCollect` sets `g_rd.deferText`,
+`doScreen` skips every marked quad, and the items are drawn on the output.
+Every other replay (Original, no renderer, no output, a replay that does
+not present, such as the replay tool's DISPLAY or SCENE PNGs) ignores the
+items and draws the quads, so its bytes are those of a frame recorded
+without items (`font_edge`: the Original present of a frame with a
+deferred row and a popup is byte-identical to the plain quads'). Classic
+menu text (`[game] classic_menu_text`) is decided at recording: port/ui
+records no item then. Deciding at replay lets a preset change apply at the
+next present, and lets one dump render both presets: the corpus renders
+each dump in Original and Enhanced.
+
+**Collection.** Before the replay (as the overlay's callback, so the font's
+atlas pages are created and uploaded with the frame and the ring has room),
+`textCollect` walks the replayed lists (11 and 12 of a keep frame) with the
+state they replay under. An item takes the scissor in force and the size
+of the target it is drawn into. An op changes the items before it as its
+pass changed the pixels they were drawn into:
+
+| pass | what it does to the scene | the items before it |
+| --- | --- | --- |
+| FADE | lerp to the fade colour by its alpha / 128 | a lerp item's shown colour (the GS colour times 255 / 128, the atlas being white) lerped the same way, its alpha kept; an additive item's colour times (1 − k) |
+| BRIGHTNESS | lerp to white by the step / 128 (`LERP_AS_ALT`) | the same, toward white |
+| LETTERBOX | lerp the two `lines`-line bands to black by FIX / 128 | cut by scene line into segments; the segments inside a band folded toward black |
+| KEEP | DISPLAY drawn over the whole scene without blending | dropped (their quads would be drawn over) |
+| REDUCTION | SCENE into DISPLAY times the stage's tint / 128 | either kind's colour times the tint |
+
+Each of the first three is d' = d (1 − k) + C k, affine in the destination,
+so text blended over the scene and then lerped equals the lerped scene with
+the text blended over it in the lerped colour: the fold is exact up to the
+8-bit rounding of the stored colour. The reduction's tint is linear too,
+but it can exceed 1.0 (149 / 128 on the title) and the GS clamps the
+tinted pixel: where the scene behind a partly covered text pixel (an edge,
+the halo, a dimmed row) is bright enough to clamp, the deferred pixel is
+the clamped scene blended with the tinted text, a little darker than the
+quad path's. Fully covered pixels are exact. Then for each item and segment the
+renderer is called with the item as folded and a region: the item's
+scissor mapped onto the output (a side at the target's edge to the box's
+edge, as `rd__WideScissor` keeps it; the others through the 4:3 picture the
+UI is in), the reduction's border crop (2 of 512 columns, 8 of 256 lines;
+2 below a 512-line scene) and the segment's lines, in whole output pixels.
+port/ui's renderer lays the item out through font.c's overlay mode, so the
+prims are rasterised at the box's scale with each glyph's corner on a whole
+output pixel; `rd_OverlayPrims` gives them the region as their batch's
+scissor.
+
+**Drawing.** `textRecord` draws the items' batches in one load-preserving
+pass on the output after the box blit, before any later presentation pass
+and the overlay, through the overlay's path (`rd__OverlayDraw`, the same
+pipelines, so `rd__EnumerateReachableScreen` needs no new key), setting
+the scissor when a batch's region differs from the last.
+
+**Ordering it cannot keep.** An item is drawn after the whole picture: a
+draw recorded after it in lists 11 and 12 that overlaps it (film noise, the
+boot signs' cursor sparkle, the loading bar, the developer overlay) is now
+under it, and DISPLAY no longer holds the text, so the motion blur's
+feedback, a keep frame's retained picture and an F12 DISPLAY screenshot
+show no menu text. UI.md "Menu text" gives the cases and why they are
+accepted.
+
+**Mirror.** Nothing is flipped: the quads are pre-flipped at replay and the
+present flips them back, so on the output they read normally at their
+recorded place, which is where the unflipped item is drawn (`font_edge`:
+the mirrored present equals the unmirrored one). Mirroring the anchor and
+swapping the alignment, as the plan proposed, would have put the text on
+the other side.
+
+**Interpolation.** Items and ops are keyed draws (section 16): an item
+blends its anchor, stretch and colour, and snaps when its string, size or
+flags differ or its anchor moved more than `RD_INTERP_JUMP_SCREEN` grid
+units; an op blends its colour and level, so a fading row and the fade it
+is under move together. An item of one tick only fades in or out with its
+alpha, cur's in place and prev's inserted (I1's `unmatchedPass`), as the
+quads it stands for do.
 
 ## 16. Frame rate and interpolation
 
@@ -1251,6 +1360,7 @@ frame, the n-th occurrence matching the n-th:
 | `RDC_PARTICLES` | the VU block; each particle's position and size | header, UV, grey, alpha |
 | `RDC_SCREEN` | XY, Z and RGBA of every vertex; unmatched, the alpha (below) | STQ, prim, space |
 | `RDC_SHADOW_STRIP` | the volume's prisms (below); unmatched, drawn on the nearer tick's side | |
+| `RDC_OVERLAY_TEXT` | an item's anchor, glow stretch and colour; an op's colour and level | the string, size and flags (which must match) |
 | frame camera, VU common block | one rigid camera for the frame (below) | `cut` |
 
 Blends are `(1 − t) p + t c`, exact at both ends; a bit-identical pair, or
@@ -1379,6 +1489,7 @@ version, in the tick's own replay too.
 | subtitles | the subtitle's block, a part per row | `jimaku.c` |
 | `font_Print` | FNV-1a of the string (`gif_HostDrawKeyText`) | `DisplayFont.c` |
 | the port's text and rects | FNV-1a of the string, the alignment, the atlas page and the owner (`ui_SetDrawKey`); rects only under an owner | `port/ui/font.c`, `layout_ext.c` |
+| deferred text items, their ops | the quads' key with a page no atlas has; the post kind | `port/ui/font.c` `ui_DrawTextDeferred`, `rd_post.c` |
 
 Glyphs match within a draw by order, so a string that moves or fades blends
 glyph for glyph, and a changed string is a new key. The menu sparkle,
@@ -1510,7 +1621,9 @@ flipped picture. With the mirror off nothing changes: the GS's 0.75 stays.
 
 **The overlay.** The presentation overlay (section 15) is drawn after the
 flip and is never flipped: the popups read normally without a pre-flip and
-stay at the right of the picture.
+stay at the right of the picture. The deferred text is not flipped either:
+it is drawn where the pre-flipped and present-flipped quads would show
+(section 15, "The deferred text pass").
 
 **FMV.** `rd_video.c` draws the film mirrored exactly when the mirror is on;
 the audio pan follows the mirror mode too (AUDIO.md, FMV.md).
@@ -1650,9 +1763,16 @@ overlay; without it the tool registers no overlay), and `--no-aa1` (every
 `RDC_AA1` dropped: the frame as `rd` drew it before PRIM.AA1 was decoded,
 for a before/after pair from one dump).
 
-Dumps carry `RD_DUMP_VERSION` (`rd_internal.h`), 4 since package AA1
-(`RDC_AA1` and `RdStateBlock.aa1`); `rd__LoadFrame` also reads version 3
-dumps, with AA1 off.
+Dumps carry `RD_DUMP_VERSION` (`rd_internal.h`), 5 since package DEF
+(`RDC_OVERLAY_TEXT` items and ops with their `RdTextItem` and `RdTextOp`
+payloads, and `RDC_SCREEN`'s `RD_SCREEN_TEXT_QUADS`; no new section), 4
+before (package AA1: `RDC_AA1` and `RdStateBlock.aa1`); `rd__LoadFrame`
+also reads version 4 dumps (no items: they replay as before in every
+preset) and version 3 dumps, with AA1 off. A dump holds the items, not the
+font: the replay tool links `port/ui/font.c` and installs its renderer, so
+an Enhanced `--present` draws them deferred (`--quad-text` draws the quads
+instead, a before/after pair from one dump), and `--list` prints each item
+and op and marks the quads `text-quads`.
 
 ## 20. Tests
 
@@ -1672,7 +1792,8 @@ dumps, with AA1 off.
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
-| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback |
+| `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
+| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays |
 | `rd_replay_tool` | the tool on a test dump |

@@ -266,6 +266,7 @@ void rd__FrameReset(RdFrame *f)
     f->headValid = 0; /* R2c */
     f->cut = 0;       /* R7b */
     f->fade = 0;
+    f->textItems = 0; /* package DEF */
     f->closed = 0;
     f->keep = 0;
     f->number = 0;
@@ -1607,8 +1608,53 @@ void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace s
     c->b[2] = uvFixed == RD_UV_FIXED_CONTINUOUS ? RD_UV_FIXED_CONTINUOUS : (uvFixed ? 1 : 0);
     c->u[0] = off;
     c->u[1] = count;
+    c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* package DEF */
     setKey(c, key);
     g_rd.stats.draws++;
+}
+
+/* ------------------------------------------- deferred text (package DEF) */
+
+void rd_DeferredText(const RdTextItem *item, RdKey key)
+{
+    RdFrame *f = rd__RecFrame();
+    if (!item || !f) {
+        if (item) {
+            rd__Push(RDC_OVERLAY_TEXT); /* reports once */
+        }
+        return;
+    }
+    RdTextItem it = *item;
+    it.utf8[RD_TEXT_BYTES - 1] = '\0';
+    it.pad[0] = it.pad[1] = 0;
+    const uint32_t off = rd__FramePayload(f, &it, (uint32_t)sizeof(it));
+    RdCmd *c = rd__Push(RDC_OVERLAY_TEXT);
+    c->b[0] = RD_OTEXT_ITEM;
+    c->u[1] = off;
+    c->u[2] = (uint32_t)sizeof(it);
+    setKey(c, key);
+    f->textItems++;
+}
+
+void rd_DeferredTextQuads(int on)
+{
+    g_rd.textQuads = on ? 1 : 0;
+}
+
+/* rd_post.c: a post pass after deferred text in this frame (RdTextOp) */
+void rd__DeferredTextOp(uint8_t kind, const RdTextOp *op, RdKey key)
+{
+    RdFrame *f = rd__RecFrame();
+    if (!f || !f->textItems || !op) {
+        return;
+    }
+    const uint32_t off = rd__FramePayload(f, op, (uint32_t)sizeof(*op));
+    RdCmd *c = rd__Push(RDC_OVERLAY_TEXT);
+    c->b[0] = RD_OTEXT_OP;
+    c->b[1] = kind;
+    c->u[1] = off;
+    c->u[2] = (uint32_t)sizeof(*op);
+    setKey(c, key);
 }
 
 int rd_SetSpaceOverride(int space)

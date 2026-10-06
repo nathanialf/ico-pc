@@ -214,7 +214,12 @@ pointer to this file.
   signs (`kanban.c`), the staff roll, the save and load screens' values,
   the game over and Continue? prompts, the subtitles. Route each through
   `port/ui/menu_text.c`'s path with the same classic fallback, so one
-  typeface covers the whole game at every scale.
+  typeface covers the whole game at every scale. The menu rows are drawn
+  at the output's resolution in Enhanced since package DEF (UI.md "Menu
+  text", RENDER_API.md "The deferred text pass"): text drawn through
+  `ui_DrawTextDeferred` (`port/ui/font.h`) is composited after the box
+  blit, texel for pixel, in its list order. Package TXT routes the
+  subtitles (`jimaku.c`) and the staff roll through that call.
 - **Native-speaker review of the French, German, Italian and Spanish port
   strings.** The port's own strings in `port/ui/strings_{fr,de,it,es}.c`
   (Settings, notes, achievements, popups) are the author's translations.

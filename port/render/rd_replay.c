@@ -1491,6 +1491,9 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
+    if (g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) {
+        return; /* package DEF: the item is drawn on the output instead */
+    }
     if (rd__WrapApplies(&r->st)) {
         if (r->st.aa1 && aa1Prim(c->b[0])) {
             rd__LogOnce(RD_ONCE_AA1_WRAP, "PRIM.AA1 under COLCLAMP 0: drawn without edge coverage");
@@ -3451,8 +3454,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     s_ringOff = 0;
+    g_rd.deferText = false;
     if (present) {
-        rd__OverlayCollect(); /* package OV: before the ring and the uploads */
+        /* package OV: before the ring and the uploads; package DEF: the
+         * deferred text first (sets g_rd.deferText) */
+        rd__OverlayCollect(f, keep);
     }
     if (!ensureRing(estimateRing(f, keep) + rd__OverlayRingBytes())) {
         rd__Log("could not allocate the upload ring");
@@ -3491,6 +3497,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             }
             switch (c->type) {
             case RDC_NOP:
+            case RDC_OVERLAY_TEXT: /* package DEF: collected by the present */
                 break;
             case RDC_CLEAR:
                 doClear(&r, c);
@@ -3555,6 +3562,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     }
     g_rdPerf.presentMs = rd__NowMs() - t;
     g_rd.stats.pipelines = rd__PipelineCount();
+    g_rd.deferText = false;
     return true;
 }
 

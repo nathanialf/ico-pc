@@ -127,19 +127,22 @@ if(NOT TARGET ico_render)
     return()
 endif()
 
-# rd_present_test's overlay check (package OV, port/render/CMakeLists.txt)
-# draws a glyph through font.c's overlay mode: font.c and the embedded font
-# alone, with ICO_RD
-if(TARGET rd_present_test)
-    add_library(ico_ui_font_rd OBJECT font.c "${_ui_font_c}")
-    target_include_directories(ico_ui_font_rd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
-                               PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
-    target_compile_definitions(ico_ui_font_rd PRIVATE ICO_HOST=1 ICO_RD=1)
-    target_compile_options(ico_ui_font_rd PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-    target_link_libraries(ico_ui_font_rd PUBLIC ico_render)
-    target_sources(rd_present_test PRIVATE $<TARGET_OBJECTS:ico_ui_font_rd>)
-    target_include_directories(rd_present_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-endif()
+# font.c and the embedded font alone, with ICO_RD: rd_present_test's overlay
+# check (package OV, port/render/CMakeLists.txt) draws a glyph through its
+# overlay mode; rd_replay_tool (package DEF) installs its deferred text
+# renderer; font_edge_test (below) draws both
+add_library(ico_ui_font_rd OBJECT font.c "${_ui_font_c}")
+target_include_directories(ico_ui_font_rd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                           PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+target_compile_definitions(ico_ui_font_rd PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(ico_ui_font_rd PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_ui_font_rd PUBLIC ico_render)
+foreach(_t rd_present_test rd_replay_tool)
+    if(TARGET ${_t})
+        target_sources(${_t} PRIVATE $<TARGET_OBJECTS:ico_ui_font_rd>)
+        target_include_directories(${_t} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+endforeach()
 
 # --- Tests ----------------------------------------------------------------------
 # ui_test: the atlas and glyph metrics, UTF-8, measuring, the string tables,
@@ -201,6 +204,22 @@ target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
+# font_edge_test (package DEF): a deferred menu row and an overlay line of
+# text presented at Enhanced 1920 x 1080 and 3840 x 2160, each glyph edge at
+# most one pixel between background and ink; the Original present with a
+# deferred row and a popup recorded byte-identical to the plain quads
+add_executable(font_edge_test test/font_edge_test.c $<TARGET_OBJECTS:ico_ui_font_rd>)
+target_include_directories(font_edge_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(font_edge_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(font_edge_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(font_edge_test PRIVATE ico_render)
+if(WIN32 AND SDL3_FOUND)
+    add_custom_command(TARGET font_edge_test POST_BUILD
+                       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                               "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:font_edge_test>"
+                       VERBATIM)
+endif()
 if(WIN32 AND SDL3_FOUND)
     add_custom_command(TARGET ui_test POST_BUILD
                        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -221,11 +240,15 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME font_edge COMMAND font_edge_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(font_edge PROPERTIES SKIP_RETURN_CODE 77)
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
         set_tests_properties(ui PROPERTIES ENVIRONMENT
                              "VK_ADD_LAYER_PATH=${_ico_vvl};ICO_VK_VALIDATION=1")
         set_tests_properties(menu_text PROPERTIES ENVIRONMENT
+                             "VK_ADD_LAYER_PATH=${_ico_vvl};ICO_VK_VALIDATION=1")
+        set_tests_properties(font_edge PROPERTIES ENVIRONMENT
                              "VK_ADD_LAYER_PATH=${_ico_vvl};ICO_VK_VALIDATION=1")
     endif()
 endif()

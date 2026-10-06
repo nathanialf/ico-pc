@@ -141,6 +141,20 @@ static int32_t win(int32_t px16, uint32_t w)
     return 0x8000 - (int32_t)(w / 2) * 16 + px16;
 }
 
+/* Package DEF: the op the present folds into the deferred text before this
+ * pass (rd_core.c rd__DeferredTextOp; nothing without such text) */
+static void textOp(RdPostKind kind, const uint8_t rgba[4], uint8_t fix, uint32_t lines, RdKey key)
+{
+    RdTextOp op;
+    memset(&op, 0, sizeof(op));
+    if (rgba) {
+        memcpy(op.rgba, rgba, 4);
+    }
+    op.fix = fix;
+    op.lines = lines;
+    rd__DeferredTextOp((uint8_t)kind, &op, key);
+}
+
 /* One reduction sprite (R-POST): an RdPostRec of kind RD_POST_REDUCTION,
  * drawn by rd_replay.c's doBlurSprite through fx_sprite_ps in the GS
  * integer arithmetic (rd_blur.c), with the state block in force: corners
@@ -225,6 +239,7 @@ static void postReduction(const RdPostParams *p)
     /* UV 0.5 .. W+0.5, 0.5 .. H+0.5 */
     reductionSprite(x0, y0, x1, y1, tint, 8, 8, W * 16 + 8, H * 16 + 8, 1);
     rd__RecScissor(0, 0, W, H);
+    textOp(RD_POST_REDUCTION, tint, 0, 0, POST_KEY(RD_POST_REDUCTION, 0));
 }
 
 static void postKeep(const RdPostParams *p)
@@ -249,6 +264,7 @@ static void postKeep(const RdPostParams *p)
      * r1 = {8, 8, W*16, H/2*16} */
     const int32_t x0 = -(W / 2) * 16 - 12 + 0x8000, y0 = -(H / 2) * 16 - 12 + 0x8000;
     sprite(x0, y0, x0 + W * 16 + 32, y0 + H * 16 + 32, 0, col, 8, 8, 8 + W * 16, 8 + H / 2 * 16);
+    textOp(RD_POST_KEEP, NULL, 0, 0, 0);
 }
 
 /* gif_SetDrawEnviroment(0x800, 0, W, H, 1, 0): FRAME (FBMSK 0), SCISSOR,
@@ -278,6 +294,7 @@ static void postFade(const RdPostParams *p)
     s_spriteKey = POST_KEY(RD_POST_FADE, 0);
     sprite(x0, y0, x0 + W * 16, y0 + H * 16, 0xFFFFFFFFu, p->rgba, 0, 0, 0, 0);
     s_spriteKey = 0;
+    textOp(RD_POST_FADE, p->rgba, 0, 0, POST_KEY(RD_POST_FADE, 0));
 }
 
 static void postLetterbox(const RdPostParams *p)
@@ -300,6 +317,7 @@ static void postLetterbox(const RdPostParams *p)
     s_spriteKey = POST_KEY(RD_POST_LETTERBOX, 1);
     sprite(x0, yBot, x0 + W * 16, yBot + lines * 16, 0xFFFFFFFFu, kBar, 0, 0, 0, 0);
     s_spriteKey = 0;
+    textOp(RD_POST_LETTERBOX, kBar, p->fix, (uint32_t)lines, POST_KEY(RD_POST_LETTERBOX, 0));
 }
 
 /* gsb_controlBrightness passes gif_MakeSpriteNoTexture corners that are
@@ -333,6 +351,7 @@ static void postBrightness(const RdPostParams *p)
     spriteRaw((int32_t)(a & 0xFFFF), (int32_t)((a >> 16) & 0xFFFF), (uint32_t)(a >> 32),
               (int32_t)(b & 0xFFFF), (int32_t)((b >> 16) & 0xFFFF), (uint32_t)(b >> 32), col, 0, 0,
               0, 0);
+    textOp(RD_POST_BRIGHTNESS, col, 0, 0, POST_KEY(RD_POST_BRIGHTNESS, 0));
 }
 
 /* gif_MakeSprite(x, y, w, h, 0, uv, col, prim) as gif_SpriteSensitiveOrg

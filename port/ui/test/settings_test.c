@@ -23,7 +23,11 @@
  * Built a second time with SETTINGS_RENDER (settings_render): the same
  * menu run through rd on a Vulkan device (lavapipe here; exit 77 without
  * one) with the window build's GifPacket.c, DisplayList.c and DmaPacket.c,
- * and each screen's SCENE written as a PNG beside the test for a look
+ * and each screen's SCENE written as a PNG beside the test for a look;
+ * package DEF: then each screen presented at Enhanced 1920 x 1080 with the
+ * menu text deferred (settings_<screen>_1080.png) and classic
+ * (settings_<screen>_1080_classic.png), the classic toggle switching the
+ * RDC_OVERLAY_TEXT items off
  * (settings_<screen>.png): no game data, the backdrop over a flat colour.
  */
 #include <stdio.h>
@@ -454,6 +458,9 @@ static void fakeTables(void)
 /* a mid-tone like the fogged title, under the layout's dark backdrop */
 static const uint8_t kBg[4] = {150, 140, 120, 0x80};
 
+/* package DEF: the frames end with the reduction, so a present shows them */
+static int s_reduce;
+
 #endif
 
 static void frame(int flags)
@@ -466,6 +473,13 @@ static void frame(int flags)
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
     exec_layout_texture();
+    if (s_reduce) {
+        RdPostParams pp;
+        memset(&pp, 0, sizeof(pp));
+        pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+        dl_SetDLPriority(12);
+        rd_Post(RD_POST_REDUCTION, &pp);
+    }
     dl_Swap();
 #else
     exec_layout_texture();
@@ -2093,6 +2107,49 @@ static void snap4(const char *name)
     free(out);
 }
 
+/* package DEF: the RDC_OVERLAY_TEXT items of the last frame */
+static int textItems(void)
+{
+    const RdFrame *f = rd__LastFrame();
+    int n = 0;
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            n += f->lists[l].cmds[i].type == RDC_OVERLAY_TEXT &&
+                 f->lists[l].cmds[i].b[0] == RD_OTEXT_ITEM;
+        }
+    }
+    return n;
+}
+
+/* package DEF: the screen presented at Enhanced 1920 x 1080 (16:9) twice:
+   with the menu text deferred (name_1080.png: drawn on the output at its
+   resolution) and with classic menu text (name_1080_classic.png: the quads
+   in SCENE, reduced and scaled, as before) */
+static void snap1080(const char *name)
+{
+    const uint32_t w = 1920, h = 1080;
+    uint8_t *px = malloc((size_t)w * h * 4);
+    char file[256], p[1400];
+    for (int classic = 0; px && classic < 2; classic++) {
+        ui_MenuTextSetClassic(classic);
+        frame(0);
+        const int items = textItems();
+        CHECK(classic ? items == 0 : items > 0, "%s: %d deferred items with classic text %s", name,
+              items, classic ? "on (none)" : "off (some)");
+        uint32_t ow = 0, oh = 0;
+        if (!rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
+            CHECK(0, "%s: the presented output", name);
+            break;
+        }
+        snprintf(file, sizeof(file), "%s_1080%s.png", name, classic ? "_classic" : "");
+        path(p, sizeof(p), file);
+        rd_WritePng(p, px, w, h, w * 4, 0);
+        printf("settings_render: %s (%d items)\n", p, items);
+    }
+    ui_MenuTextSetClassic(0);
+    free(px);
+}
+
 static int render(void)
 {
     RdSettings st;
@@ -2253,6 +2310,61 @@ static int render(void)
         press(0x4000);
         frame(0);
         snap4("settings_extras_4x.png");
+    }
+    /* package DEF: every screen presented at Enhanced 1080p, deferred and
+       classic (snap1080) */
+    {
+        RdSettings e = *rd_GetSettings();
+        e.preset = RD_PRESET_ENHANCED;
+        e.sceneScale = 0.0f;
+        e.sceneWidth = e.sceneHeight = 0;
+        e.aspect = 16.0f / 9.0f;
+        e.fullHeightScene = 0;
+        e.outputWidth = 1920;
+        e.outputHeight = 1080;
+        rd_SetSettings(&e);
+        ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+        ui_InstallDeferredText(1);
+        s_reduce = 1;
+        int ml[16];
+        ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        lt_switch_layout(mainL);
+        CHECK(settle(mainL, 60), "the menu at 1080p");
+        lt_ext_Layout(mainL)->curItem = ml[4];
+        frame(0);
+        snap1080("settings_main");
+
+        static const struct {
+            int row, downs;
+            const char *name;
+        } pg[] = {{0, 0, "settings_display"},      {1, 0, "settings_audio"},
+                  {2, 1, "settings_controls"},     {3, 0, "settings_gameplay"},
+                  {5, 0, "settings_achievements"}, {6, 2, "settings_extras"}};
+
+        for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
+            lt_ext_Layout(mainL)->curItem = ml[pg[i].row];
+            press(0x40);
+            for (int k = 0; k < 30; k++) {
+                frame(0);
+            }
+            for (int k = 0; k < pg[i].downs; k++) {
+                press(0x4000);
+            }
+            snap1080(pg[i].name);
+            press(0x10);
+            CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
+        }
+        int mir = ui_MirrorScreenEnter();
+        lt_switch_layout(mir);
+        CHECK(settle(mir, 60), "the mirror screen at 1080p");
+        snap1080("settings_mirror_screen");
+        int ql = ui_QuitScreenLayout();
+        lt_switch_layout(ql);
+        CHECK(settle(ql, 60), "the quit screen at 1080p");
+        press(0x8000);
+        snap1080("settings_quit_screen");
+        s_reduce = 0;
+        ui_InstallDeferredText(0);
     }
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);

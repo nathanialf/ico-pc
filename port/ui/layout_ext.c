@@ -267,8 +267,15 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
        the glow), so a row that moves or fades blends between ticks */
     const uint64_t owner =
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
+    /* package DEF: at the output's resolution where the present can
+       (font.h ui_DrawTextDeferred), unless the menus are classic */
+    const int defer = !ui_MenuTextClassic();
     if (!glow) {
-        ui_DrawText(x, y, size, rgba, text, flags | UI_HALO);
+        if (defer) {
+            ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_HALO, NULL);
+        } else {
+            ui_DrawText(x, y, size, rgba, text, flags | UI_HALO);
+        }
         ui_SetDrawKey(owner);
         return;
     }
@@ -280,7 +287,12 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.scaleY = bh > 0.0f ? ((float)box[3] / 8.0f) / bh : 1.0f;
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
-    ui_DrawTextXf(x, y, size, rgba, text, flags, &xf);
+    if (defer) {
+        /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
+        ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_ADDITIVE, &xf);
+    } else {
+        ui_DrawTextXf(x, y, size, rgba, text, flags, &xf);
+    }
     ui_SetDrawKey(owner);
 }
 

@@ -543,6 +543,58 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
 
+/* ---------------------------------------- deferred text (package DEF)
+ * docs/port/RENDER_API.md "The deferred text pass".  Text the game shows in
+ * lists 11 and 12 (the layout's menu rows, through port/ui) recorded twice:
+ * as an item that says what to write, and as the glyph quads that write it
+ * into SCENE.  A present of the Enhanced preset with a renderer registered
+ * draws the items on the output after the box blit, at the output's
+ * resolution (glyphs rasterised at the shown size, a texel a pixel), and
+ * skips the quads; every other replay (Original, no present, no renderer)
+ * draws the quads and ignores the items, so its bytes are what they were.
+ *
+ * rd_DeferredText        records an RDC_OVERLAY_TEXT item into the current
+ *                        list, in place (the scissor and the post passes
+ *                        that follow it in the lists apply to it at the
+ *                        present).  key as for a draw (0: never blended)
+ * rd_DeferredTextQuads   on != 0: the RDC_SCREEN draws recorded until it is
+ *                        called with 0 are the last item's quads, skipped
+ *                        when the item is drawn deferred.  The state
+ *                        commands between are kept either way
+ * rd_SetDeferredTextFn   registers the renderer (NULL: none, the quads are
+ *                        drawn).  Called once per deferred item and region
+ *                        at a present, before the replay (as the overlay's
+ *                        callback), with the item as the present sees it:
+ *                        blended between ticks, the colour folded through
+ *                        the fades, letterbox and brightness after it.
+ *                        Inside it rd_OverlayPrims adds prims to the
+ *                        deferred layer, clipped to the region (the row's
+ *                        scissor, the reduction's border crop, a letterbox
+ *                        band), drawn before the overlay's.  The
+ *                        registration survives rd_Shutdown / rd_Init
+ * rd_DeferredTextActive  whether the replay in progress draws items
+ *                        deferred (inside the renderer: true) */
+#define RD_TEXT_BYTES 256
+
+typedef struct RdTextItem {
+    char utf8[RD_TEXT_BYTES]; /* NUL-terminated */
+    float x, y;               /* the anchor, layout grid (port/ui/font.h) */
+    float size;               /* the em, grid y units */
+    float xf[6];              /* originX, originY, scaleX, scaleY, offsetX, offsetY (UiXform) */
+    uint32_t flags;           /* the font's flags (port/ui/font.h UI_*); opaque to rd */
+    uint8_t rgba[4];          /* GS colour, 0x80 = 1.0, after the row's fade and dimming */
+    uint8_t additive;         /* blend Cs * As + Cd (the glow pass), else the lerp */
+    uint8_t hasXf;            /* xf applies */
+    uint8_t pad[2];
+} RdTextItem;
+
+typedef void (*RdDeferredTextFn)(const RdOverlayCtx *ctx, const RdTextItem *item, void *user);
+
+void rd_DeferredText(const RdTextItem *item, RdKey key);
+void rd_DeferredTextQuads(int on);
+void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user);
+bool rd_DeferredTextActive(void);
+
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */

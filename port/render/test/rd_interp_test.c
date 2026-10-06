@@ -31,6 +31,10 @@
  *             way (the alpha 0x80 -> 0 text at 0x40); another string is
  *             another key and is the current; the same string twice matches
  *             in order
+ *   deferred  (package DEF) RDC_OVERLAY_TEXT items: the anchor, alpha and
+ *             glow stretch blend half way; a jump past the screen threshold
+ *             and a changed size are the current item; the fade op after
+ *             them blends; alpha 0 and 1 are the two ticks' items
  *   morph     (R7d) a morphing part as RegistPacket.c draws it: two meshes
  *             of one layout drawn in alternate frames under one key, the
  *             older rewritten (rd_UpdateVuMesh) while the next frame
@@ -1006,6 +1010,107 @@ static void testText(void)
               memcmp(f->payload + nc->u[0], cur->payload + ncc->u[0], 16 * sizeof(RdScreenVtx)) ==
                   0,
           "text: a new label is the current frame's");
+}
+
+/* ---------------------------------------- deferred text (package DEF) */
+
+static void deferredItem(const char *str, float x, float y, uint8_t alpha, RdKey key)
+{
+    RdTextItem it;
+    memset(&it, 0, sizeof(it));
+    snprintf(it.utf8, sizeof(it.utf8), "%s", str);
+    it.x = x;
+    it.y = y;
+    it.size = 27.0f;
+    it.flags = 1 | 4; /* centred, capitals' middle (font.h) */
+    it.rgba[0] = it.rgba[1] = it.rgba[2] = 0x80;
+    it.rgba[3] = alpha;
+    it.hasXf = 1;
+    it.xf[2] = it.xf[3] = 1.0f + (alpha == 0x80 ? 0.0f : 0.5f); /* the glow's stretch */
+    rd_DeferredText(&it, key);
+}
+
+/* "New Game" sliding 20 grid units right and fading out with its glow
+ * stretching; "Options" jumping 400 units (snaps); "Load" with a different
+ * size in the second frame (mismatch); a fade op after them in both */
+static void recordDeferred(int second)
+{
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(11);
+    deferredItem("New Game", 300.0f + (second ? 20.0f : 0.0f), 200.0f, second ? 0x00 : 0x80,
+                 RD_KEY(&kObjD, 1, 0));
+    deferredItem("Options", second ? 500.0f : 100.0f, 240.0f, 0x80, RD_KEY(&kObjD, 2, 0));
+    RdTextItem it;
+    memset(&it, 0, sizeof(it));
+    snprintf(it.utf8, sizeof(it.utf8), "Load");
+    it.size = second ? 20.0f : 27.0f;
+    it.rgba[3] = 0x80;
+    rd_DeferredText(&it, RD_KEY(&kObjD, 3, 0));
+    /* a row of one tick only each */
+    deferredItem(second ? "Extra" : "Gone", 320.0f, 280.0f, 0x80,
+                 RD_KEY(&kObjD, second ? 4 : 5, 0));
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[3] = second ? 0x40 : 0x00;
+    rd_Post(RD_POST_FADE, &pp);
+    rd_EndFrame(0);
+}
+
+static const RdTextItem *itemOf(const RdFrame *f, RdKey k)
+{
+    const RdCmd *c = findKey(f, 11, k, 0);
+    return c && c->type == RDC_OVERLAY_TEXT
+               ? (const RdTextItem *)(const void *)(f->payload + c->u[1])
+               : NULL;
+}
+
+static void testDeferredText(void)
+{
+    recordDeferred(0);
+    recordDeferred(1);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->lerped >= 2 && st->jump >= 1 && st->mismatch >= 1,
+          "deferred: items blend, a jump snaps, a changed size mismatches (lerped %u jump %u "
+          "mismatch %u)",
+          st->lerped, st->jump, st->mismatch);
+    const RdFrame *f = built(0.5f), *cur = rd__LastFrame(), *prev = rd__PrevFrame();
+    const RdTextItem *a = itemOf(f, RD_KEY(&kObjD, 1, 0));
+    CHECK(a && a->x == 310.0f && a->y == 200.0f && a->rgba[3] == 0x40 && a->xf[2] == 1.25f &&
+              strcmp(a->utf8, "New Game") == 0,
+          "deferred: the anchor half way (x %.2f, 310), alpha 0x80 -> 0 at %u (0x40), the "
+          "stretch at %.3f (1.25)",
+          a ? a->x : -1.0f, a ? a->rgba[3] : 0, a ? a->xf[2] : 0.0f);
+    const RdTextItem *o = itemOf(f, RD_KEY(&kObjD, 2, 0));
+    CHECK(o && o->x == 500.0f, "deferred: a 400-unit jump is the current item (x %.1f)",
+          o ? o->x : -1.0f);
+    const RdTextItem *l = itemOf(f, RD_KEY(&kObjD, 3, 0));
+    CHECK(l && l->size == 20.0f, "deferred: another size is the current item (%.1f)",
+          l ? l->size : -1.0f);
+    /* I1: an item of one tick only fades with t, as its quads */
+    const RdTextItem *ex = itemOf(f, RD_KEY(&kObjD, 4, 0)), *gone = itemOf(f, RD_KEY(&kObjD, 5, 0));
+    CHECK(ex && ex->rgba[3] == 0x40 && gone && gone->rgba[3] == 0x40,
+          "deferred: cur's new row at alpha %d, prev's gone row inserted at %d (0x40, 0x40)",
+          ex ? ex->rgba[3] : -1, gone ? gone->rgba[3] : -1);
+    /* the fade op after the items blends as the fade sprite does */
+    const RdCmd *oc = NULL;
+    for (uint32_t i = 0; i < f->lists[11].count; i++) {
+        const RdCmd *c = &f->lists[11].cmds[i];
+        if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_OP) {
+            oc = c;
+        }
+    }
+    const RdTextOp *op = oc ? (const RdTextOp *)(const void *)(f->payload + oc->u[1]) : NULL;
+    CHECK(op && oc->b[1] == RD_POST_FADE && op->rgba[3] == 0x20,
+          "deferred: the fade op at 0x20 half way (%u)", op ? op->rgba[3] : 0);
+    const RdFrame *f0 = built(0.0f);
+    const RdTextItem *a0 = itemOf(f0, RD_KEY(&kObjD, 1, 0)),
+                     *ap = itemOf(prev, RD_KEY(&kObjD, 1, 0));
+    CHECK(a0 && ap && memcmp(a0, ap, sizeof(*a0)) == 0, "deferred: alpha 0 is the previous item");
+    const RdFrame *f1 = built(1.0f);
+    const RdTextItem *a1 = itemOf(f1, RD_KEY(&kObjD, 1, 0)),
+                     *ac = itemOf(cur, RD_KEY(&kObjD, 1, 0));
+    CHECK(a1 && ac && memcmp(a1, ac, sizeof(*a1)) == 0, "deferred: alpha 1 is the current item");
 }
 
 /* ------------------------------------------------- morphing meshes (R7d) */
@@ -2101,6 +2206,7 @@ static void runCpu(void)
     testFade();
     testFeedback();
     testText();
+    testDeferredText();
     testMorph();
     testUnmatched();
     testParticleOrder();

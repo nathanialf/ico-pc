@@ -100,6 +100,12 @@ typedef enum RdCmdType {
      * so a version 3 dump's command numbers keep their meaning
      * (rd__CmdIsState) */
     RDC_AA1, /* b[0] PRIM.AA1 */
+    /* package DEF (dump version 5): an action replay draws nothing for; the
+     * present collects it (rd_present.c, RENDER_API.md "The deferred text
+     * pass").  b[0] RD_OTEXT_ITEM: u[1] payload offset of an RdTextItem
+     * (rd.h), u[2] its size; b[0] RD_OTEXT_OP: a post pass after text (b[1]
+     * RdPostKind), u[1] offset of an RdTextOp, u[2] its size.  Keyed */
+    RDC_OVERLAY_TEXT,
     RDC_COUNT
 } RdCmdType;
 
@@ -112,6 +118,28 @@ typedef struct RdCmd {
 } RdCmd;
 
 _Static_assert(sizeof(RdCmd) == 40, "RdCmd is dumped as raw bytes");
+
+/* RDC_OVERLAY_TEXT's b[0] (package DEF). */
+enum { RD_OTEXT_ITEM = 0, RD_OTEXT_OP = 1 };
+
+/* RDC_SCREEN's b[3] (package DEF): the draw is the glyph quads of the last
+ * RDC_OVERLAY_TEXT item (rd.h rd_DeferredTextQuads), skipped by a replay that
+ * draws the items deferred; 0 in every other draw and every older dump. */
+#define RD_SCREEN_TEXT_QUADS 1
+
+/* A post pass recorded after deferred text (rd_post.c), as the present folds
+ * it into the items before it: FADE and BRIGHTNESS lerp the whole frame to
+ * rgb by rgba[3] / 128, LETTERBOX lerps two bands of `lines` lines to black
+ * by fix / 128, KEEP replaces the scene (the items before it are gone),
+ * REDUCTION scales it by rgba / 128 (the tint). */
+typedef struct RdTextOp {
+    uint8_t rgba[4];
+    uint8_t fix, pad[3];
+    uint32_t lines;
+} RdTextOp;
+
+_Static_assert(sizeof(RdTextItem) == 304, "RdTextItem is dumped as raw bytes");
+_Static_assert(sizeof(RdTextOp) == 12, "RdTextOp is dumped as raw bytes");
 
 /* Whether a command is a state delta (rd__ApplyState) rather than an action. */
 static inline int rd__CmdIsState(uint8_t type)
@@ -233,6 +261,9 @@ typedef struct RdFrame {
      * fade rd_Post(RD_POST_FADE) recorded, 1 + its alpha (0: none) */
     uint32_t cut;
     uint32_t fade;
+    /* package DEF; not dumped: RDC_OVERLAY_TEXT items recorded so far (the
+     * post passes record their ops only after one) */
+    uint32_t textItems;
 } RdFrame;
 
 void rd__FrameReset(RdFrame *f);
@@ -767,6 +798,11 @@ typedef struct RdContext {
     RhiTexture presentLines, presentOut;
     RhiState presentLinesState, presentOutState;
     uint32_t presentLinesW, presentLinesH, presentOutW, presentOutH;
+    /* package DEF: recording, rd_DeferredTextQuads is on (RDC_SCREEN gets
+     * RD_SCREEN_TEXT_QUADS); replaying, the present draws the deferred text
+     * (rd__OverlayCollect) and doScreen skips the quads */
+    uint8_t textQuads;
+    bool deferText;
     /* wave 7 (R7a): the Enhanced display options as applied (rd_present.c
      * rd__ApplyDisplay from settings): the scene-class targets' scale, the
      * fixed work buffers' scale, the wide x factor (4/3) / aspect for draws
@@ -928,8 +964,17 @@ typedef struct RdUniform {
  * after the box blit.  rd__OverlayDraw (rd_replay.c) draws one batch into
  * the pass open on an output of format fmt, FrameCB bound by the caller;
  * rd__OverlayState (rd_pipeline.c) is the synthetic state block it plans
- * with, which rd__EnumerateReachableScreen enumerates too. */
-void rd__OverlayCollect(void);
+ * with, which rd__EnumerateReachableScreen enumerates too.
+ * Package DEF: rd__OverlayCollect(f, keep) first collects the frame's
+ * deferred text (rd.h rd_DeferredText) when the present draws it deferred
+ * (the Enhanced preset, a renderer registered, an output), which sets
+ * g_rd.deferText for the replay (doScreen then skips the items' quads); the
+ * items' prims are drawn before the overlay's, each batch in its region. */
+void rd__OverlayCollect(const RdFrame *f, int keep);
+/* rd_core.c, from rd_Post (package DEF): records the RD_OTEXT_OP of a post
+ * pass of kind (FADE, LETTERBOX, BRIGHTNESS, KEEP, REDUCTION) when the frame being
+ * recorded has deferred text already; nothing otherwise */
+void rd__DeferredTextOp(uint8_t kind, const RdTextOp *op, RdKey key);
 uint64_t rd__OverlayRingBytes(void);
 void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t prim,
                      const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend);
@@ -997,8 +1042,9 @@ bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
 #define RD_DUMP_VERSION                                                                            \
-    4u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
-          RDC_AA1, RdStateBlock.aa1 (package AA1).  rd__LoadFrame reads 3 and 4 */
+    5u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
+          RDC_AA1, RdStateBlock.aa1 (package AA1); 5: RDC_OVERLAY_TEXT and RDC_SCREEN's       \
+          RD_SCREEN_TEXT_QUADS (package DEF).  rd__LoadFrame reads 3, 4 and 5 */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

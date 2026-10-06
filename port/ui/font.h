@@ -171,6 +171,30 @@ void ui_EndOverlay(void);
 int ui_OverlayActive(void);
 void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
 
+/* Package DEF: deferred text (port/render/rd.h rd_DeferredText;
+   docs/port/UI.md "Menu text", docs/port/RENDER_API.md "The deferred text
+   pass").  ui_DrawTextDeferred draws as ui_DrawTextXf does (the glyph quads
+   into the current rd list, the halo included) and records, in place before
+   them, an item saying what was drawn: the string (at most 255 bytes, cut at
+   a code point), the anchor, size, flags (UI_ADDITIVE: the item is the
+   additive glow; give it when the caller's blend state is the glow's, as
+   with UI_KEEP_STATE), the colour and xf.  A present that draws deferred
+   text (the Enhanced preset with the renderer installed) skips the quads and
+   lays the item out on the output instead, at the output's resolution, in
+   the place font.h's overlay mode maps the grid to, clipped to the scissor
+   and folded through the fades, letterbox and brightness that follow it in
+   the lists; every other replay draws the quads.  Keyed like the quads (the
+   string, the alignment and the owner).  Outside ICO_RD or in overlay mode,
+   ui_DrawTextXf.  This is the entry point for any game text that should be
+   shown at the output's resolution: the layout's menu rows (menu_text.c,
+   layout_ext.c) today, the subtitles and the staff roll next.
+   ui_InstallDeferredText(1) registers font.c's renderer with rd
+   (rd_SetDeferredTextFn; the window build's ui_host.c, the replay tool, the
+   tests); 0 removes it. */
+void ui_DrawTextDeferred(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                         unsigned flags, const UiXform *xf);
+void ui_InstallDeferredText(int on);
+
 /* The next code point of a UTF-8 string, advancing *s; U+FFFD for a
    malformed or overlong sequence or a surrogate (one byte consumed), 0 at
    the terminator (not advanced). */

@@ -14,7 +14,12 @@
  *     drawn as atlas text and a row not in the table (the copyright line)
  *     as its texture sprite; every row's texture is still transferred;
  *     classic mode draws the textures; a row whose rectangle differs from
- *     the table's (tables that are not the PAL ones) keeps its texture.
+ *     the table's (tables that are not the PAL ones) keeps its texture;
+ *   - package DEF: each text row records an RDC_OVERLAY_TEXT item before its
+ *     glyph quads, which carry RD_SCREEN_TEXT_QUADS; the present's deferred
+ *     renderer lays the items out at 1920 x 1080; a fade after the rows
+ *     records an op after the items; a keep frame's rows before its KEEP
+ *     give nothing; classic mode records neither items nor ops.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): the title's
  * "New Game" row through exec_layout_texture into SCENE: the text covers
  * pixels only inside the row's rectangle (with the rim's margin), none
@@ -556,6 +561,182 @@ static void countSprites(int *text, int *texture)
     free(w);
 }
 
+/* ------------------------------------------- deferred text (package DEF) */
+
+typedef struct TextWalk {
+    int items, ops, tagged, taggedVerts, untaggedAtlas, opAfterItems;
+    int opKind;
+    RdTextItem item[8];
+} TextWalk;
+
+static int isAtlas(uint32_t tex)
+{
+    for (int px = 1; px < 64; px++) {
+        for (int pg = 0; pg < 4; pg++) {
+            const uint32_t t = ui_FontPageTex(px, pg);
+            if (t != 0 && t == tex) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
+{
+    TextWalk *w = user;
+    const RdFrame *f = rd__LastFrame();
+    (void)index;
+    if (list != 11) {
+        return;
+    }
+    if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
+        if (w->items < 8) {
+            memcpy(&w->item[w->items], f->payload + c->u[1], sizeof(RdTextItem));
+        }
+        w->items++;
+    } else if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_OP) {
+        w->ops++;
+        w->opKind = c->b[1];
+        w->opAfterItems = w->items;
+    } else if (c->type == RDC_SCREEN && s->ds.texEnabled && isAtlas(s->tex)) {
+        if (c->b[3] == RD_SCREEN_TEXT_QUADS) {
+            w->tagged++;
+            w->taggedVerts += (int)c->u[1];
+        } else {
+            w->untaggedAtlas++;
+        }
+    }
+}
+
+static void walkText(TextWalk *w)
+{
+    memset(w, 0, sizeof(*w));
+    const RdFrame *f = rd__LastFrame();
+    RdStateBlock s = f->startState;
+    rd__Walk(f, f->keep, &s, textWalk, w);
+}
+
+/* the layout frame with a fade (alpha a) after it in list 11, as
+   gsb_PostEffect appends it; keep: KEEP after the rows and a keep frame */
+static void layoutFrameWithPosts(int fade, int keep)
+{
+    fbKeep = keep;
+    dl_SetDLPriority(0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    exec_layout_texture();
+    dl_SetDLPriority(11);
+    RdPostParams pp;
+    if (keep) {
+        memset(&pp, 0, sizeof(pp));
+        rd_Post(RD_POST_KEEP, &pp);
+    }
+    if (fade) {
+        memset(&pp, 0, sizeof(pp));
+        pp.rgba[3] = (uint8_t)fade;
+        rd_Post(RD_POST_FADE, &pp);
+    }
+    dl_Swap();
+    fbKeep = 0;
+}
+
+static int s_sinkPrims;
+
+static void countSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    (void)type;
+    (void)v;
+    (void)tex;
+    (void)blend;
+    s_sinkPrims += (int)n;
+}
+
+/* the prims the deferred renderer gives for the last frame at an Enhanced
+   1920 x 1080 present (rd__OverlayCollect, its callback into font.c's
+   overlay mode, the prims caught before rd_OverlayPrims) */
+static int collectPrims(void)
+{
+    const RdSettings saved = g_rd.settings;
+    g_rd.settings.preset = RD_PRESET_ENHANCED;
+    g_rd.settings.outputWidth = 1920;
+    g_rd.settings.outputHeight = 1080;
+    s_sinkPrims = 0;
+    ui_InstallDeferredText(1);
+    ui__SetOverlaySink(countSink);
+    const RdFrame *f = rd__LastFrame();
+    rd__OverlayCollect(f, (int)f->keep);
+    const int active = rd_DeferredTextActive();
+    ui__SetOverlaySink(NULL);
+    ui_InstallDeferredText(0);
+    rd__OverlayCollect(NULL, 0); /* forget the batches */
+    g_rd.settings = saved;
+    return active ? s_sinkPrims : -1;
+}
+
+/* Package DEF: every text row records, in place before its glyph quads, an
+   RDC_OVERLAY_TEXT item with its string, anchor, size and colour, and its
+   quads carry RD_SCREEN_TEXT_QUADS (an Enhanced present skips them and
+   draws the item on the output); classic mode records neither; a fade after
+   the rows records an op after the items, and none without text; a keep
+   frame's rows before its KEEP give the present nothing, as their quads
+   are drawn over */
+static void testDeferred(void)
+{
+    ui_MenuTextSetClassic(0);
+    buildTitle(1); /* the copyright line (a texture), Continue, New Game */
+    layoutFrame();
+    TextWalk w;
+    walkText(&w);
+    CHECK(w.items == 2, "two text rows: %d items (2)", w.items);
+    CHECK(w.tagged == 2 * 9 && w.untaggedAtlas == 0,
+          "every glyph batch is an item's quads: %d tagged, %d not (18, 0)", w.tagged,
+          w.untaggedAtlas);
+    CHECK(w.ops == 0, "no post pass, no op (%d)", w.ops);
+    int haveNew = 0, haveCont = 0;
+    for (int i = 0; i < w.items && i < 8; i++) {
+        const RdTextItem *it = &w.item[i];
+        haveNew |= strcmp(it->utf8, "New Game") == 0;
+        haveCont |= strcmp(it->utf8, "Continue") == 0;
+        CHECK((it->flags & UI_HALO) && (it->flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
+                  !it->additive && it->size > 1.0f && it->rgba[3] > 0,
+              "item %d (\"%s\"): halo, centred, lerp, size %.1f, alpha %u", i, it->utf8, it->size,
+              it->rgba[3]);
+    }
+    CHECK(haveNew && haveCont, "the items are New Game and Continue");
+    const int prims = collectPrims();
+    /* the same glyphs (the eight halo copies and the letters, a sprite a
+       glyph) as the quads */
+    CHECK(prims == w.taggedVerts && prims > 0,
+          "the present lays both items out: %d vertices (the quads have %d)", prims, w.taggedVerts);
+
+    /* a fade after the rows: an op after both items */
+    layoutFrameWithPosts(0x40, 0);
+    walkText(&w);
+    CHECK(w.ops == 1 && w.opKind == RD_POST_FADE && w.opAfterItems == 2,
+          "a fade after the rows: %d op(s) of kind %d after %d items (1, %d, 2)", w.ops, w.opKind,
+          w.opAfterItems, RD_POST_FADE);
+
+    /* a keep frame: the rows, then KEEP (gsb_PostEffect's order): the
+       present lays nothing out (the quads are drawn over too) */
+    layoutFrameWithPosts(0, 1);
+    walkText(&w);
+    CHECK(rd__LastFrame()->keep && w.items == 2 && w.ops == 1 && w.opKind == RD_POST_KEEP,
+          "a keep frame: %d items, then KEEP (%d ops, kind %d)", w.items, w.ops, w.opKind);
+    const int keptPrims = collectPrims();
+    CHECK(keptPrims == 0, "a keep frame's rows before its KEEP give no prims (%d)", keptPrims);
+
+    /* classic: no items, no tagged quads, no ops */
+    ui_MenuTextSetClassic(1);
+    layoutFrameWithPosts(0x40, 0);
+    walkText(&w);
+    CHECK(w.items == 0 && w.tagged == 0 && w.ops == 0,
+          "classic: %d items, %d tagged batches, %d ops (0, 0, 0)", w.items, w.tagged, w.ops);
+    ui_MenuTextSetClassic(0);
+    printf("menu_text_test: deferred: 2 items before 18 tagged batches, %d vertices laid out at "
+           "1920x1080; fade op after the items; keep frame 0; classic none\n",
+           prims);
+}
+
 static void testHook(void)
 {
     CHECK(itemOfRow(50) && itemOfRow(49) && !itemOfRow(48),
@@ -608,6 +789,7 @@ static void testHook(void)
     layoutFrame();
     countSprites(&text, &texture);
     CHECK(text == 9 && texture == 2, "one text row, two textures (%d, %d)", text, texture);
+    testDeferred();
     testPortRowAnchor();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);

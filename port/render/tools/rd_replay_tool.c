@@ -26,6 +26,13 @@
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode (R7c, section 21): UI prims
  *                         flipped at replay, the present flipped (any preset)
+ *   --quad-text           (package DEF) registers no deferred text renderer:
+ *                         an Enhanced present draws the menu rows' glyph
+ *                         quads into SCENE as the Original preset does,
+ *                         instead of their RDC_OVERLAY_TEXT items on the
+ *                         output (a before/after pair from one dump).  By
+ *                         default the tool installs port/ui/font.c's
+ *                         renderer (ui_InstallDeferredText)
  *   --overlay-test        (with --present) registers a presentation overlay
  *                         (package OV, rd.h rd_SetPresentOverlay) drawing a
  *                         test pattern after the box blit: a one-pixel white
@@ -74,6 +81,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "font.h" /* port/ui: the deferred text renderer (package DEF) */
 
 static const char *const kNames[] = {
     "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2", "WORK0",     "WORK1",    "WORK2",
@@ -85,7 +93,7 @@ static const char *const kCmdNames[RDC_COUNT] = {
     "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
     "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
     "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
-    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1"};
+    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1",       "OVERLAY_TEXT"};
 
 static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
                                          "tristrip", "trifan", "sprites"};
@@ -124,8 +132,9 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
             v0 = tt < v0 ? tt : v0;
             v1 = tt > v1 ? tt : v1;
         }
-        printf(" %s space %u n %u xy (%.2f,%.2f)-(%.2f,%.2f)",
-               c->b[0] < 7 ? kPrimNames[c->b[0]] : "?", c->b[1], c->u[1], x0, y0, x1, y1);
+        printf(" %s space %u n %u xy (%.2f,%.2f)-(%.2f,%.2f)%s",
+               c->b[0] < 7 ? kPrimNames[c->b[0]] : "?", c->b[1], c->u[1], x0, y0, x1, y1,
+               c->b[3] == RD_SCREEN_TEXT_QUADS ? " text-quads" : "");
         if (st->aa1) {
             printf(" aa1");
         }
@@ -134,6 +143,27 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
                    t ? t->h : 0, c->b[2] ? "uv" : "stq", u0, v0, u1, v1, st->ds.magFilter,
                    st->ds.minFilter);
         }
+    } else if (c->type == RDC_OVERLAY_TEXT && c->u[1] <= f->payloadSize &&
+               c->u[2] <= f->payloadSize - c->u[1]) {
+        if (c->b[0] == RD_OTEXT_ITEM && c->u[2] == sizeof(RdTextItem)) {
+            RdTextItem it;
+            memcpy(&it, f->payload + c->u[1], sizeof(it));
+            it.utf8[RD_TEXT_BYTES - 1] = '\0';
+            printf(" item \"%s\" at (%.2f,%.2f) size %.1f flags %x rgba %u,%u,%u,%u%s%s", it.utf8,
+                   it.x, it.y, it.size, it.flags, it.rgba[0], it.rgba[1], it.rgba[2], it.rgba[3],
+                   it.additive ? " additive" : "", it.hasXf ? " xf" : "");
+        } else if (c->b[0] == RD_OTEXT_OP && c->u[2] == sizeof(RdTextOp)) {
+            RdTextOp op;
+            memcpy(&op, f->payload + c->u[1], sizeof(op));
+            printf(" op post %u rgba %u,%u,%u,%u fix %u lines %u", c->b[1], op.rgba[0], op.rgba[1],
+                   op.rgba[2], op.rgba[3], op.fix, op.lines);
+        }
+    } else if (c->type == RDC_POST_STUB && c->u[1] <= f->payloadSize &&
+               sizeof(RdPostRec) <= f->payloadSize - c->u[1]) {
+        RdPostRec r;
+        memcpy(&r, f->payload + c->u[1], sizeof(r));
+        printf(" post %u rgba %u,%u,%u,%u fix %u", c->b[0], r.rgba[0], r.rgba[1], r.rgba[2],
+               r.rgba[3], r.fix);
     } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
         const RdMeshRec *m = rd__MeshRec(c->u[0]);
         if (m) {
@@ -263,12 +293,13 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr,
-                "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
-                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
-                "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n",
-                argv[0]);
+        fprintf(
+            stderr,
+            "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
+            "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
+            "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
+            "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n",
+            argv[0]);
         return 1;
     }
     const char *dump = argv[1], *png = argv[2];
@@ -276,7 +307,7 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
-    bool list = false, overlay = false, noAa1 = false, stats = false;
+    bool list = false, overlay = false, noAa1 = false, stats = false, quadText = false;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
 
@@ -352,6 +383,8 @@ int main(int argc, char **argv)
                 return 1;
             }
             interpPrev = argv[++i];
+        } else if (strcmp(argv[i], "--quad-text") == 0) {
+            quadText = true;
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
@@ -401,6 +434,9 @@ int main(int argc, char **argv)
     if (overlay) {
         rd_SetPresentOverlay(overlayTest, NULL);
     }
+    /* package DEF: the menu rows' items at the output's resolution in an
+       Enhanced present */
+    ui_InstallDeferredText(!quadText);
     RdFrame pf, f;
     memset(&pf, 0, sizeof(pf));
     if (interpPrev && !rd__LoadFrame(interpPrev, &pf)) {

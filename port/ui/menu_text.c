@@ -452,6 +452,12 @@ void ui_MenuTextDraw(const LtProperty *e, const int box[4], const int uv[4],
     if (!glow && !it->dark) {
         flags |= UI_HALO;
     }
+    if (glow) {
+        /* lt_glow_sprite's blend (ALPHA 0x48), which the packet holds:
+           the quads keep the state (UI_KEEP_STATE), the deferred item
+           needs it said */
+        flags |= UI_ADDITIVE;
+    }
     /* the glow sprite stretches the row's box: the same map for the text */
     UiXform xf;
     if (glow) {
@@ -467,7 +473,9 @@ void ui_MenuTextDraw(const LtProperty *e, const int box[4], const int uv[4],
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
     for (int i = 0; i < n; i++) {
         const float y = oy + (it->y[lang] + (float)i * it->pitch) * sy;
-        ui_DrawTextXf(x, y, size, col, lines[i], flags, glow ? &xf : NULL);
+        /* package DEF: drawn at the output's resolution where the present
+           can (font.h ui_DrawTextDeferred); classic mode never gets here */
+        ui_DrawTextDeferred(x, y, size, col, lines[i], flags, glow ? &xf : NULL);
     }
     ui_SetDrawKey(owner);
 }

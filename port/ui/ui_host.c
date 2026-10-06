@@ -92,6 +92,8 @@ void ui_HostInit(void)
     ui__SetRecordHook(gif_HostFlush);
     rd_SetPresentOverlay(hostOverlay, NULL);
 #endif
+    /* package DEF: the menu rows at the output's resolution (Enhanced) */
+    ui_InstallDeferredText(1);
     ui_PopupSetDevTest(truthy(getenv("ICO_UI_POPUP_TEST")));
 #ifdef ICO_UI_HAVE_SDL
     ui_SettingsSetQuitHandler(hostQuit);
@@ -109,6 +111,7 @@ void ui_HostShutdown(void)
 #ifdef ICO_RD
     rd_SetPresentOverlay(NULL, NULL);
 #endif
+    ui_InstallDeferredText(0);
 #ifdef ICO_UI_HAVE_SDL
     ui_SettingsSetQuitHandler(NULL);
 #endif

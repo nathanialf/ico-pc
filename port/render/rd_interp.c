@@ -34,9 +34,13 @@
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
  *   RDC_SHADOW_STRIP        XY and Z of each vertex; since V3 Shadow.c's
  *                           volumes prism by prism (blendPrisms)
+ *   RDC_OVERLAY_TEXT        package DEF: an item's anchor, glow stretch and
+ *                           colour (string, size and flags must be equal);
+ *                           an op's colour and level (blendText)
  * Since I1 the RDC_SCREEN and RDC_SHADOW_STRIP draws of one tick only fade
  * in or out with t, or switch at t = 0.5 (unmatchedPass); prev's are
- * inserted into the output.
+ * inserted into the output.  Package DEF: so do the RDC_OVERLAY_TEXT items
+ * (their alpha), as the quads they stand for.
  * Matrices blend element by element, except (package S2) a normal
  * program's model matrices and a skinned draw's bones, which blend as a
  * slerped rotation and a lerped stretch about a pivot (rotateModel,
@@ -1140,6 +1144,7 @@ static bool isKeyedDraw(const RdCmd *c)
     case RDC_GRID:
     case RDC_PARTICLES:
     case RDC_SHADOW_STRIP:
+    case RDC_OVERLAY_TEXT: /* package DEF */
         return true;
     default:
         return false;
@@ -1460,6 +1465,53 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
             o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
         }
     }
+    return R_LERP;
+}
+
+/* Package DEF: a deferred text item or op.  An item blends its anchor (grid
+ * units: a jump beyond RD_INTERP_JUMP_SCREEN of them snaps, about the screen
+ * prims' limit), its glow stretch and its colour; its string, size and flags
+ * stay cur's and must match prev's.  An op blends its colour and level, as
+ * the fade and letterbox sprites do. */
+static int blendText(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
+{
+    if (pc->b[0] != cc->b[0] || pc->b[1] != cc->b[1] || pc->u[2] != cc->u[2]) {
+        return mismatch(RD_MISMATCH_STATE);
+    }
+    const uint8_t *p = payloadAt(prev, pc->u[1], pc->u[2]);
+    if (!p) {
+        return mismatch(RD_MISMATCH_SIZE);
+    }
+    if (cc->b[0] == RD_OTEXT_OP) {
+        RdTextOp a, o;
+        memcpy(&a, p, sizeof(a));
+        memcpy(&o, op, sizeof(o));
+        for (int k = 0; k < 4; k++) {
+            o.rgba[k] = lerpB(a.rgba[k], o.rgba[k], t);
+        }
+        o.fix = lerpB(a.fix, o.fix, t);
+        memcpy(op, &o, sizeof(o));
+        return R_LERP;
+    }
+    RdTextItem a, o;
+    memcpy(&a, p, sizeof(a));
+    memcpy(&o, op, sizeof(o));
+    if (strncmp(a.utf8, o.utf8, RD_TEXT_BYTES) != 0 || !sameBits(a.size, o.size) ||
+        a.flags != o.flags || a.additive != o.additive || a.hasXf != o.hasXf) {
+        return mismatch(RD_MISMATCH_HEADER);
+    }
+    if (fabsf(a.x - o.x) > RD_INTERP_JUMP_SCREEN || fabsf(a.y - o.y) > RD_INTERP_JUMP_SCREEN) {
+        return R_JUMP;
+    }
+    o.x = lerpF(a.x, o.x, t);
+    o.y = lerpF(a.y, o.y, t);
+    if (o.hasXf) {
+        lerpFloats(o.xf, a.xf, o.xf, 6, t);
+    }
+    for (int k = 0; k < 4; k++) {
+        o.rgba[k] = lerpB(a.rgba[k], o.rgba[k], t);
+    }
+    memcpy(op, &o, sizeof(o));
     return R_LERP;
 }
 
@@ -2334,9 +2386,20 @@ static void umFree(void)
     s_umCmdsCap = 0;
 }
 
-static bool isProjected(uint8_t type)
+static bool isProjected(const RdCmd *c)
 {
-    return type == RDC_SCREEN || type == RDC_SHADOW_STRIP;
+    /* package DEF: a deferred text item fades as its quads do (its alpha) */
+    return c->type == RDC_SCREEN || c->type == RDC_SHADOW_STRIP ||
+           (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM);
+}
+
+/* package DEF: an item's alpha times w (the colour and the rest kept) */
+static void scaleItemAlpha(uint8_t *payload, float w)
+{
+    RdTextItem it;
+    memcpy(&it, payload, sizeof(it));
+    it.rgba[3] = (uint8_t)lrintf((float)it.rgba[3] * w);
+    memcpy(payload, &it, sizeof(it));
 }
 
 /* a keyed draw of cur with no match in prev (RDC_SCREEN, RDC_SHADOW_STRIP) */
@@ -2603,7 +2666,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
     uint32_t cand = 0;
     for (uint32_t k = 0; k < s_nodeCount; k++) {
         const Node *nd = &s_nodes[k];
-        cand += nd->out < 0 && isProjected(prev->lists[nd->list].cmds[nd->index].type);
+        cand += nd->out < 0 && isProjected(&prev->lists[nd->list].cmds[nd->index]);
     }
     if (cand == 0 && s_umCurN == 0) {
         return;
@@ -2633,8 +2696,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 lastOut = nd->out;
                 continue;
             }
-            const uint8_t type = prev->lists[nd->list].cmds[nd->index].type;
-            if (!isProjected(type)) {
+            if (!isProjected(&prev->lists[nd->list].cmds[nd->index])) {
                 continue;
             }
             const uint32_t pos = umPlace(prev, k, lastOut);
@@ -2687,6 +2749,12 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 scaleAlpha(v, c->u[1], t);
             }
             s_umFadeIn++;
+        } else if (c->type == RDC_OVERLAY_TEXT) {
+            uint8_t *p = outPayload(c);
+            if (p && c->u[2] == sizeof(RdTextItem)) {
+                scaleItemAlpha(p, t);
+            }
+            s_umFadeIn++;
         } else if (t < 0.5f) {
             c->type = RDC_NOP;
             s_umHalfIn++;
@@ -2705,7 +2773,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
             s_umHeld++;
             continue;
         }
-        if (pc->type == RDC_SCREEN && alphaFades(&in.want)) {
+        if ((pc->type == RDC_SCREEN && alphaFades(&in.want)) || pc->type == RDC_OVERLAY_TEXT) {
             in.weight = 1.0f - t;
             s_umFadeOut++;
         } else if (t < 0.5f) {
@@ -2727,6 +2795,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
         const RdCmd *pc = &prev->lists[in->list].cmds[s_nodes[in->node].index];
         const uint32_t from = pc->type == RDC_SCREEN ? pc->u[0] : pc->u[1];
         const uint32_t size = pc->type == RDC_SCREEN ? pc->u[1] * (uint32_t)sizeof(RdScreenVtx)
+                              : pc->type == RDC_OVERLAY_TEXT ? pc->u[2]
                               : pc->b[0] == RD_SHADOW_TRIS
                                   ? (pc->u[0] + pc->u[3]) * (uint32_t)sizeof(RdScreenVtx)
                                   : pc->u[0] * 16u;
@@ -2740,6 +2809,9 @@ static void unmatchedPass(const RdFrame *prev, float t)
         memcpy(dst, src, size);
         if (pc->type == RDC_SCREEN && in->weight < 1.0f) {
             scaleAlpha((RdScreenVtx *)(void *)dst, pc->u[1], in->weight);
+        }
+        if (pc->type == RDC_OVERLAY_TEXT && size == sizeof(RdTextItem)) {
+            scaleItemAlpha(dst, in->weight);
         }
         in->seq = off; /* now the payload offset */
     }
@@ -3144,7 +3216,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                 if (!pc || !op) {
                     st.missing++;
                     camCurDraw(c);
-                    if (!pc && isProjected(c->type)) {
+                    if (!pc && isProjected(c)) {
                         umCurOnly((uint32_t)l, i); /* I1: faded in, or from half way */
                     }
                     if (s_track) {
@@ -3161,6 +3233,9 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                     break;
                 case RDC_SHADOW_STRIP:
                     r = blendShadow(op, prev, pc, c, t);
+                    break;
+                case RDC_OVERLAY_TEXT:
+                    r = blendText(op, prev, pc, c, t);
                     break;
                 default:
                     r = blendVu(op, prev, pc, c, t);

@@ -20,6 +20,9 @@
  *            package R8; 0 RGBA8 in every older dump), and its texels are
  *            w*h*4 RGBA8 bytes or w*h R8 bytes
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
+ *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
+ *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
+ *   dump has none, so it replays as before in every preset)
  *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
@@ -312,6 +315,10 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
     }
     case RDC_WORLD_PRIMS:
         return payloadRange(psz, c->u[1], c->u[2]);
+    case RDC_OVERLAY_TEXT: /* package DEF: an item or an op, as recorded */
+        return payloadRange(psz, c->u[1], c->u[2]) &&
+               ((c->b[0] == RD_OTEXT_ITEM && c->u[2] == sizeof(RdTextItem)) ||
+                (c->b[0] == RD_OTEXT_OP && c->u[2] == sizeof(RdTextOp)));
     default:
         return c->type < RDC_COUNT;
     }
@@ -359,12 +366,12 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     /* package AA1: version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
      * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes */
     bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
-              (ver == RD_DUMP_VERSION || ver == 3u) && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
-              r32(fp, &szState) &&
+              (ver == RD_DUMP_VERSION || ver == 3u || ver == 4u) && r32(fp, &szCmd) &&
+              szCmd == sizeof(RdCmd) && r32(fp, &szState) &&
               szState == (ver == 3u ? RD_STATE_BLOCK_V3_SIZE : sizeof(RdStateBlock)) &&
               r32(fp, &szVtx) && szVtx == sizeof(RdScreenVtx);
     if (!ok) {
-        rd__Log("load: %s is not an rd dump of version 3 or %u", path, RD_DUMP_VERSION);
+        rd__Log("load: %s is not an rd dump of version 3, 4 or %u", path, RD_DUMP_VERSION);
         fclose(fp);
         return false;
     }

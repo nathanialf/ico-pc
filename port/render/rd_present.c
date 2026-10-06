@@ -44,7 +44,16 @@
  * the textures it touches upload with the frame; only the drawing is here.
  * With no callback registered nothing below step 2 runs, and the output is
  * byte for byte what it was before the overlay existed.
+ *
+ * Deferred text (package DEF, rd.h rd_DeferredText; RENDER_API.md "The
+ * deferred text pass"): in the Enhanced preset with a renderer registered,
+ * rd__OverlayCollect first walks the frame's RDC_OVERLAY_TEXT items and the
+ * post passes after them, and has the renderer lay each item out on the
+ * output (font.c's overlay mode) in its region; the replay skips the items'
+ * glyph quads, and textRecord draws the prims after step 2, before the
+ * overlay.  In the Original preset nothing is collected and the quads draw.
  */
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
@@ -284,6 +293,7 @@ typedef struct OverlayBatch {
     uint32_t first, count; /* in s_ov.v */
     uint32_t tex;          /* RdTex id, 0 untextured */
     uint8_t prim, blend;
+    RhiRect sc; /* package DEF: the region (the whole output for the overlay's) */
 } OverlayBatch;
 
 /* outside g_rd: the registration outlives rd_Shutdown / rd_Init (port/ui
@@ -291,12 +301,16 @@ typedef struct OverlayBatch {
 static struct {
     RdOverlayFn fn;
     void *user;
-    int inside; /* in fn: rd_OverlayPrims keeps prims */
+    RdDeferredTextFn textFn; /* package DEF */
+    void *textUser;
+    int inside; /* in fn or textFn: rd_OverlayPrims keeps prims */
+    RhiRect sc; /* the region rd_OverlayPrims gives its batch */
     RdOverlayCtx ctx;
     RdScreenVtx *v;
     uint32_t vCount, vCap;
     OverlayBatch *b;
     uint32_t bCount, bCap;
+    uint32_t textBatches; /* package DEF: b[0, textBatches) are the deferred text's */
 } s_ov;
 
 /* a present's prims at most (a popup is a few hundred) */
@@ -306,7 +320,19 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user)
 {
     s_ov.fn = fn;
     s_ov.user = fn ? user : NULL;
-    s_ov.vCount = s_ov.bCount = 0;
+    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+}
+
+void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user)
+{
+    s_ov.textFn = fn;
+    s_ov.textUser = fn ? user : NULL;
+    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+}
+
+bool rd_DeferredTextActive(void)
+{
+    return g_rd.deferText;
 }
 
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
@@ -343,14 +369,256 @@ void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, R
     b->tex = tex.id;
     b->prim = (uint8_t)type;
     b->blend = (uint8_t)blend;
+    b->sc = s_ov.sc;
     s_ov.vCount += n;
 }
 
-void rd__OverlayCollect(void)
+/* ------------------------------------------- deferred text (package DEF)
+ * RENDER_API.md "The deferred text pass".  The frame's RDC_OVERLAY_TEXT
+ * commands are walked in replay order with the state they replay under: an
+ * item takes the scissor in force; an op (a post pass recorded after text)
+ * changes the items before it as the pass changed the pixels they had been
+ * drawn into.  FADE, BRIGHTNESS and the LETTERBOX are lerps of the
+ * destination toward a colour, d' = d (1 - k) + C k, affine in d, so a text
+ * pixel blended over the scene and then lerped is the lerped scene with the
+ * text blended over it in the lerped colour: a lerp item's colour becomes
+ * c (1 - k) + C k with its alpha kept, an additive item's (Cs As + Cd) c (1
+ * - k).  The letterbox does that inside its two bands only, so an item is
+ * cut into segments by scene line.  KEEP draws DISPLAY over the whole scene
+ * without blending: the items before it are gone, as their quads would be.
+ * The REDUCTION's tint scales the colour of either kind (linear; where the
+ * GS clamps a tint above 1.0 behind a partly covered pixel, the fold is a
+ * little darker).
+ * Then each item is drawn once per segment, clipped to the segment, its
+ * scissor and the reduction's border crop (output pixels). */
+
+typedef struct TextSeg {
+    float y0, y1; /* scene lines */
+    float rgb[3]; /* the shown colour, 0..255 (the GS colour modulated by a white texel) */
+} TextSeg;
+
+#define TEXT_SEGS 5
+
+typedef struct TextPending {
+    const RdTextItem *it; /* in the frame's payload */
+    int32_t sc[4];        /* the scissor, GS pixels inclusive */
+    uint32_t gsW, gsH;    /* of the target it was drawn into */
+    uint32_t nSeg;
+    TextSeg seg[TEXT_SEGS];
+} TextPending;
+
+static struct {
+    TextPending *p;
+    uint32_t n, cap;
+    const RdFrame *f;
+} s_text;
+
+static float shownOf(uint8_t c)
 {
-    s_ov.vCount = s_ov.bCount = 0;
+    const float v = (float)c * 255.0f / 128.0f;
+    return v > 255.0f ? 255.0f : v;
+}
+
+static void textFold(TextSeg *g, float k, const uint8_t rgb[3], int additive)
+{
+    for (int i = 0; i < 3; i++) {
+        g->rgb[i] = g->rgb[i] * (1.0f - k) + (additive ? 0.0f : (float)rgb[i] * k);
+    }
+}
+
+/* the letterbox: segments split at the band edges, the parts in a band
+ * folded toward black */
+static void textBands(TextPending *t, float k, uint32_t lines)
+{
+    static const uint8_t black[3] = {0, 0, 0};
+    const float edges[2] = {(float)lines, (float)t->gsH - (float)lines};
+    for (int e = 0; e < 2; e++) {
+        for (uint32_t i = 0; i < t->nSeg && t->nSeg < TEXT_SEGS; i++) {
+            TextSeg *g = &t->seg[i];
+            if (g->y0 < edges[e] && edges[e] < g->y1) {
+                memmove(&t->seg[i + 2], &t->seg[i + 1], (t->nSeg - i - 1) * sizeof(TextSeg));
+                t->seg[i + 1] = *g;
+                t->seg[i + 1].y0 = edges[e];
+                g->y1 = edges[e];
+                t->nSeg++;
+                i++;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < t->nSeg; i++) {
+        TextSeg *g = &t->seg[i];
+        if (g->y1 <= edges[0] || g->y0 >= edges[1]) {
+            textFold(g, k, black, t->it->additive);
+        }
+    }
+}
+
+static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
+{
+    (void)user;
+    (void)list;
+    (void)index;
+    if (c->type != RDC_OVERLAY_TEXT) {
+        return;
+    }
+    const RdFrame *f = s_text.f;
+    if (c->u[1] > f->payloadSize || c->u[2] > f->payloadSize - c->u[1]) {
+        return;
+    }
+    if (c->b[0] == RD_OTEXT_ITEM) {
+        if (c->u[2] != sizeof(RdTextItem)) {
+            return;
+        }
+        if (s_text.n == s_text.cap) {
+            const uint32_t cap = s_text.cap ? s_text.cap * 2 : 64;
+            TextPending *p = realloc(s_text.p, (size_t)cap * sizeof(*p));
+            if (!p) {
+                return;
+            }
+            s_text.p = p;
+            s_text.cap = cap;
+        }
+        TextPending *t = &s_text.p[s_text.n++];
+        memset(t, 0, sizeof(*t));
+        t->it = (const RdTextItem *)(const void *)(f->payload + c->u[1]);
+        memcpy(t->sc, st->scissor, sizeof(t->sc));
+        t->gsW = st->gsW ? st->gsW : g_rd.gsW;
+        t->gsH = st->gsH ? st->gsH : g_rd.gsH;
+        t->nSeg = 1;
+        t->seg[0].y0 = -1e9f;
+        t->seg[0].y1 = 1e9f;
+        for (int i = 0; i < 3; i++) {
+            t->seg[0].rgb[i] = shownOf(t->it->rgba[i]);
+        }
+        return;
+    }
+    if (c->b[0] != RD_OTEXT_OP || c->u[2] != sizeof(RdTextOp)) {
+        return;
+    }
+    RdTextOp op;
+    memcpy(&op, f->payload + c->u[1], sizeof(op));
+    switch (c->b[1]) {
+    case RD_POST_KEEP:
+        s_text.n = 0;
+        break;
+    case RD_POST_FADE:
+    case RD_POST_BRIGHTNESS: {
+        const float k = (op.rgba[3] > 128 ? 128.0f : (float)op.rgba[3]) / 128.0f;
+        for (uint32_t i = 0; i < s_text.n; i++) {
+            for (uint32_t g = 0; g < s_text.p[i].nSeg; g++) {
+                textFold(&s_text.p[i].seg[g], k, op.rgba, s_text.p[i].it->additive);
+            }
+        }
+        break;
+    }
+    case RD_POST_REDUCTION: {
+        /* SCENE into DISPLAY modulated by the tint (0x80 = 1.0): linear in
+           the destination, so the colour of either kind of item scales */
+        for (uint32_t i = 0; i < s_text.n; i++) {
+            for (uint32_t g = 0; g < s_text.p[i].nSeg; g++) {
+                for (int k = 0; k < 3; k++) {
+                    s_text.p[i].seg[g].rgb[k] *= (float)op.rgba[k] / 128.0f;
+                }
+            }
+        }
+        break;
+    }
+    case RD_POST_LETTERBOX: {
+        const float k = (op.fix > 128 ? 128.0f : (float)op.fix) / 128.0f;
+        for (uint32_t i = 0; i < s_text.n; i++) {
+            textBands(&s_text.p[i], k, op.lines);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static int32_t roundPx(float v)
+{
+    return (int32_t)floorf(v + 0.5f);
+}
+
+/* the region of segment g of t on the output: its scissor, its lines and
+ * the reduction's crop, inside the box; false when empty */
+static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
+{
+    const RdRect *b = &s_ov.ctx.box;
+    const float bx = (float)b->x, by = (float)b->y, bw = (float)b->w, bh = (float)b->h;
+    const float W = (float)t->gsW, H = (float)t->gsH;
+    /* the 4:3 picture the UI is drawn in (font.h ui_BeginOverlay) */
+    const float w43 = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
+    const float left = bx + (bw - w43) * 0.5f;
+    /* the scissor: a side at the target's edge stays at the box's edge
+     * (rd__WideScissor), the others move with the UI */
+    float x0 = t->sc[0] <= 0 ? bx : left + (float)t->sc[0] * w43 / W;
+    float x1 = t->sc[2] >= (int32_t)t->gsW - 1 ? bx + bw : left + (float)(t->sc[2] + 1) * w43 / W;
+    float y0 = by + (float)t->sc[1] * bh / H;
+    float y1 = by + (float)(t->sc[3] + 1) * bh / H;
+    /* the reduction's crop (rd_post.c postReduction): 2 pixels left and
+     * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512) */
+    const float crop = t->gsH >= 512 ? 8.0f : 2.0f, half = H * 0.5f;
+    x0 = fmaxf(x0, bx + bw * 2.0f / W);
+    x1 = fminf(x1, bx + bw * (W - 2.0f) / W);
+    y0 = fmaxf(y0, by + bh * crop / half);
+    y1 = fminf(y1, by + bh * (half - crop) / half);
+    /* the segment */
+    y0 = fmaxf(y0, by + g->y0 * bh / H);
+    y1 = fminf(y1, by + g->y1 * bh / H);
+    int32_t ix0 = roundPx(x0), iy0 = roundPx(y0), ix1 = roundPx(x1), iy1 = roundPx(y1);
+    ix0 = ix0 < 0 ? 0 : ix0;
+    iy0 = iy0 < 0 ? 0 : iy0;
+    ix1 = ix1 > (int32_t)s_ov.ctx.outW ? (int32_t)s_ov.ctx.outW : ix1;
+    iy1 = iy1 > (int32_t)s_ov.ctx.outH ? (int32_t)s_ov.ctx.outH : iy1;
+    if (ix1 <= ix0 || iy1 <= iy0) {
+        return false;
+    }
+    *out = (RhiRect){ix0, iy0, (uint32_t)(ix1 - ix0), (uint32_t)(iy1 - iy0)};
+    return true;
+}
+
+static void textCollect(const RdFrame *f, int keep)
+{
+    s_text.n = 0;
+    s_text.f = f;
+    RdStateBlock st = f->startState;
+    rd__Walk(f, keep, &st, textWalk, NULL);
+    for (uint32_t i = 0; i < s_text.n; i++) {
+        const TextPending *t = &s_text.p[i];
+        if (t->it->rgba[3] == 0 || !t->it->utf8[0]) {
+            continue;
+        }
+        for (uint32_t g = 0; g < t->nSeg; g++) {
+            RhiRect r;
+            if (!textRegion(t, &t->seg[g], &r)) {
+                continue;
+            }
+            RdTextItem it = *t->it;
+            it.utf8[RD_TEXT_BYTES - 1] = '\0';
+            for (int k = 0; k < 3; k++) {
+                const float c = t->seg[g].rgb[k] * 128.0f / 255.0f;
+                it.rgba[k] = (uint8_t)(c >= 255.0f ? 255 : (c <= 0.0f ? 0 : (int)(c + 0.5f)));
+            }
+            if (it.additive && !(it.rgba[0] | it.rgba[1] | it.rgba[2])) {
+                continue; /* adds nothing */
+            }
+            s_ov.sc = r;
+            s_ov.inside = 1;
+            s_ov.textFn(&s_ov.ctx, &it, s_ov.textUser);
+            s_ov.inside = 0;
+        }
+    }
+    s_text.n = 0;
+    s_text.f = NULL;
+}
+
+void rd__OverlayCollect(const RdFrame *f, int keep)
+{
+    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    g_rd.deferText = false;
     const uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
-    if (!s_ov.fn || !w || !h) {
+    if ((!s_ov.fn && !s_ov.textFn) || !w || !h) {
         return;
     }
     /* the output and box rd__PresentRecord will use: both come from
@@ -364,9 +632,18 @@ void rd__OverlayCollect(void)
     c->box = (RdRect){box.x, box.y, box.w, box.h};
     c->boxScale = (float)box.h / 448.0f;
     c->mirror = pr->mirror && rd__MirrorOn();
-    s_ov.inside = 1;
-    s_ov.fn(c, s_ov.user);
-    s_ov.inside = 0;
+    /* package DEF: the deferred text first, so the overlay draws above it */
+    if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED) {
+        g_rd.deferText = true;
+        textCollect(f, keep);
+    }
+    s_ov.textBatches = s_ov.bCount;
+    if (s_ov.fn) {
+        s_ov.sc = (RhiRect){0, 0, w, h};
+        s_ov.inside = 1;
+        s_ov.fn(c, s_ov.user);
+        s_ov.inside = 0;
+    }
 }
 
 uint64_t rd__OverlayRingBytes(void)
@@ -383,9 +660,10 @@ uint64_t rd__OverlayRingBytes(void)
     return total;
 }
 
-static void overlayRecord(RhiCommandList cl, RhiTexture out)
+/* batches [from, to) in one load-preserving pass on the output */
+static void drawBatches(RhiCommandList cl, RhiTexture out, uint32_t from, uint32_t to)
 {
-    if (!s_ov.bCount || s_ov.ctx.outW != s_outW || s_ov.ctx.outH != s_outH) {
+    if (from >= to || s_ov.ctx.outW != s_outW || s_ov.ctx.outH != s_outH) {
         return;
     }
     RhiRenderPassDesc p;
@@ -398,18 +676,34 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out)
     rhi_CmdBeginRenderPass(cl, &p);
     RhiViewport vp = {0.0f, 0.0f, (float)s_outW, (float)s_outH, 0.0f, 1.0f};
     rhi_CmdSetViewport(cl, &vp);
-    const RhiRect full = {0, 0, s_outW, s_outH};
-    rhi_CmdSetScissor(cl, &full);
+    RhiRect cur = {0, 0, s_outW, s_outH};
+    rhi_CmdSetScissor(cl, &cur);
     /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
      * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
     const RdUniform frame = rd__FrameGroup(s_outW, s_outH, 0.5f, 0.5f);
-    for (uint32_t i = 0; i < s_ov.bCount; i++) {
+    for (uint32_t i = from; i < to; i++) {
         const OverlayBatch *b = &s_ov.b[i];
+        /* package DEF: the deferred text's batches carry their regions */
+        if (memcmp(&b->sc, &cur, sizeof(cur)) != 0) {
+            cur = b->sc;
+            rhi_CmdSetScissor(cl, &cur);
+        }
         rd__OverlayDraw(cl, s_outFormat, frame, b->prim, s_ov.v + b->first, b->count, b->tex,
                         b->blend);
     }
     rhi_CmdEndRenderPass(cl);
-    s_ov.vCount = s_ov.bCount = 0;
+}
+
+/* package DEF: the deferred text, at the insertion point */
+static void textRecord(RhiCommandList cl, RhiTexture out)
+{
+    drawBatches(cl, out, 0, s_ov.textBatches);
+}
+
+static void overlayRecord(RhiCommandList cl, RhiTexture out)
+{
+    drawBatches(cl, out, s_ov.textBatches, s_ov.bCount);
+    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
 }
 
 void rd__PresentRecord(RhiCommandList cl)
@@ -453,10 +747,14 @@ void rd__PresentRecord(RhiCommandList cl)
     rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
     blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, pr->scaleFilter,
          pr->mirror && rd__MirrorOn());
+    /* package DEF: the deferred text, drawn in list order with the regions
+     * and colours the passes after it gave it (RENDER_API.md "The deferred
+     * text pass"); part of the game's picture, so before any pass below */
+    textRecord(cl, out);
     /* ==== INSERTION POINT for later presentation passes ====================
-     * The plan's "deferred text" and "CRT" packages draw here: after the box
-     * blit (they read or write the boxed picture) and before the overlay
-     * (the port's UI stays sharp and unfiltered above them).  Each one is a
+     * The plan's "CRT" package draws here: after the box blit and the
+     * deferred text (it reads or writes the boxed picture) and before the
+     * overlay (the port's UI stays sharp and unfiltered above it).  Each one is a
      * pass on `out` (RHI_STATE_RENDER_TARGET at this point; a pass that
      * samples the picture copies it first or blits from `src`, `box`)
      * with rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit()
@@ -485,12 +783,15 @@ void rd__PresentShutdown(void)
         rhi_DestroyTexture(g_rd.presentOut);
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
-    /* the overlay's prims (the registration stays) */
+    /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
     free(s_ov.b);
+    free(s_text.p);
+    s_text.p = NULL;
+    s_text.n = s_text.cap = 0;
     s_ov.v = NULL;
     s_ov.b = NULL;
-    s_ov.vCount = s_ov.vCap = s_ov.bCount = s_ov.bCap = 0;
+    s_ov.vCount = s_ov.vCap = s_ov.bCount = s_ov.bCap = s_ov.textBatches = 0;
 }
 
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h)
