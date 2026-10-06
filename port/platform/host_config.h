@@ -48,16 +48,27 @@ typedef struct IcoIni {
 /* The executable's folder, without a trailing separator. 0, or -1 (then
    out is "."). */
 int ico_host_exe_dir(char *out, size_t size);
-/* dir + separator + name. A name that is already absolute is copied. */
-void ico_path_join(char *out, size_t size, const char *dir, const char *name);
+/* dir + separator + name. A name that is already absolute is copied. 0, or
+   -1 when the result does not fit in size: out is then "" (never a cut-off
+   path), so a file is not created under another name. Check it where a file
+   is created or written. */
+int ico_path_join(char *out, size_t size, const char *dir, const char *name);
 int ico_path_is_absolute(const char *path);
 int ico_file_exists(const char *path);
 /* Creates a folder; 0 if it exists afterwards. */
 int ico_make_dir(const char *path);
 /* Parses ini text (NUL-terminated) into *ini (cleared first). */
 void ico_ini_parse(IcoIni *ini, const char *text);
-/* Loads a file; 0, or -1 if it cannot be read (*ini is then empty). */
+/* Loads a file; 0, or -1 if it cannot be read (*ini is then empty). For the
+   executable's own ini this is ico_ini_load_layered and then ico_ini_export:
+   called once, at start-up (main_host.c). */
 int ico_ini_load(IcoIni *ini, const char *path);
+/* The layered read alone (ini > config.toml), with no side effect: no
+   environment variable set, no folder made. 0, or -1 as ico_ini_load. */
+int ico_ini_load_layered(IcoIni *ini, const char *path);
+/* The side effects of ico_ini_load for an ini read from path with result r:
+   the environment exports (ICO_*) and the dump and log folders. */
+void ico_ini_export(const IcoIni *ini, const char *path, int r);
 /* The value of key, or NULL. */
 const char *ico_ini_get(const IcoIni *ini, const char *key);
 /* Sets key=value in the file at path, keeping its other lines (the first
@@ -89,8 +100,8 @@ const char *ico_config_ini_key(const char *toml_path);
    user run does not count), else false. */
 int ico_host_fixed_clock(const IcoIni *ini);
 /* The memory card folder: saves= in ico-pc.ini (a relative path is taken
-   from the executable's folder), else <pref dir>/memcard. Not created. 0, or
-   -1 (then out is "memcard"). */
+   from the executable's folder), else <pref dir>/memcard. Not created; a pure
+   read (ico_ini_load_layered). 0, or -1 (then out is "memcard"). */
 int ico_host_saves_dir(char *out, size_t size);
 
 /* config.toml: a small TOML subset, enough for [sections] and key = value

@@ -32,6 +32,9 @@ are answered from these files and from the host.
   executable is used when the pref folder has none.
 - Logs, the trace and the `dumps/` folder are written in the executable's
   folder.
+- A path that does not fit in `ICO_PATH_MAX` (1024) is an error, not a cut-off
+  name: `ico_path_join` returns -1 and leaves `""`, and the log, trace, dump,
+  screenshot, config and archive writers log it and do not write.
 - A relative path in either file (`iso`, `saves`, `pad_script`, `dump_dir`,
   `audio_dump`, `trace`, `input_record`) is taken from the executable's
   folder, not the pref folder.
@@ -44,7 +47,10 @@ the built-in default.
 For a key that has an ini name (the table below), the ini wins when it has
 the key with a non-empty value. When `ico_ini_load` loads the executable's
 own ini (`ico_host_ini_path`), it fills the keys the ini lacks from the
-toml, so `main_host.c`, which reads only the ini, sees the layered result; a
+toml (`ico_ini_load_layered`, a pure read; the environment exports and the
+dump and log folders are `ico_ini_export`, called once from `ico_ini_load`
+at start-up, so a later lookup such as `ico_host_saves_dir` has no side
+effect), so `main_host.c`, which reads only the ini, sees the layered result; a
 toml `true` or `false` reads as `1` or `0` there. Keys with no ini name
 (most of `[video]`, `[game]`, `[input]`, `[gameplay]`, `audio.volume`,
 `version`) come from the toml alone. `ico_config_get_*` applies the same
@@ -99,6 +105,7 @@ user-facing switch.
 | `[dev] pad_script` | `pad_script` | none (headless: `pad-script.txt` beside the executable if present) | a scripted pad that replaces the live controller. The window build loads one only when this key names it, so a stray `pad-script.txt` beside a player's executable is ignored |
 | `[dev] verify` | `verify` | `true` | `false` skips the disc image SHA-1 when `use_iso` is on; the first-run extraction always verifies |
 | `[dev] use_iso` | `use_iso` | `true` headless, `false` window build | `true` mounts the disc image directly; `false` mounts the extracted `ico.o2r`, extracting it from the image on the first run (docs/port/DATA.md) |
+| `[dev] write_config` | `write_config` | `true` window build, `false` headless | write `config.toml` with its defaults when there is none (below) |
 | `[dev] headless` | `headless` | `false` | marks a run for traces and tests, which fixes the clock (below). The headless build is headless regardless |
 | `[dev] fixed_clock` | `fixed_clock` | see "Clock" | whether the disc clock is fixed or real |
 | `[dev] start_stage` | `start_stage` | none | the stage Main starts in instead of stage 1 (boot, language, title), 1 to 105 in `stageData` order (e.g. 34 st13a ELEVATOR, 15 st09a WINDMILL, 37 st25a QUEEN). Handed over as `ICO_START_STAGE` to `debug_TryToGetStartStage` (`common/src/debug.c`), the hook the development build's start-stage file fed. It skips the boot and title flow, so the game flags are those of a fresh boot; Main then sets `systemStatus[0]` from `[video] video_mode` (`ico_boot_video_mode`) as the skipped boot would have |
@@ -109,9 +116,22 @@ user-facing switch.
 `ico_config_save()` writes `version`, `[paths] iso`, `[video]`, `[audio]`
 and `[game] language` when they are absent, and the `[dev]` and `[input]`
 keys only when they are set. The Settings menu calls it (or
-`ico_video_save`) when a screen is left after a change. Nothing calls it at
-startup, so a first run that never opens the Settings menu does not create
-the file.
+`ico_video_save`) when a screen is left after a change. The first run writes
+the file itself (below).
+
+## The file is written on the first run
+
+After the ini loads, `main_host.c` calls `ico_config_write_first_run()`
+(`port/config/config.c`). When `<pref folder>/config.toml` does not exist it
+is written, through `config.toml.tmp` and a rename, with `version`, `[paths]
+iso`, `[video]`, `[audio]` and `[game] language` at their defaults (the keys
+`ico_config_save` adds) and a comment line per section, so a player who
+never opens Settings has a file to edit. An existing file is never touched,
+not even an empty one. The write is a window-build default only: the
+headless build, whose pref folder is the build tree, writes it only with
+`[dev] write_config = true` (`write_config=1` in the ini), so test runs leave
+no file. Settings, `ico_video_save` and `ico_config_save` rewrite only the
+lines they change, so the template's comments stay.
 
 ## The writer
 

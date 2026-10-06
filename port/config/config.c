@@ -6,6 +6,7 @@
  */
 #include "config.h"
 #include "host_config.h"
+#include "host_fs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +40,9 @@ static void ensure(void)
         snprintf(toml_file, sizeof(toml_file), "%s", want_toml);
     } else {
         ico_host_pref_dir(dir, sizeof(dir));
-        ico_path_join(toml_file, sizeof(toml_file), dir, "config.toml");
+        if (ico_path_join(toml_file, sizeof(toml_file), dir, "config.toml") != 0) {
+            fprintf(stderr, "config: the per-user folder's path is too long for config.toml\n");
+        }
     }
     if (want_ini[0] != '\0') {
         snprintf(ini_file, sizeof(ini_file), "%s", want_ini);
@@ -202,5 +205,70 @@ int ico_config_save(void)
         fprintf(stderr, "config: cannot write %s\n", toml_file);
         return -1;
     }
+    return 0;
+}
+
+/* the file a first run leaves: every key ico_config_save adds, at its
+   default, and a line per section (docs/port/CONFIG.md has the rest) */
+static const char first_run_text[] =
+    "# ico-pc settings. Every key below is at its default; edit and restart.\n"
+    "# The Settings menu rewrites only the lines it changes, so comments and\n"
+    "# keys of your own stay. Keys not listed here are in docs/port/CONFIG.md.\n"
+    "\n"
+    "version = 1\n"
+    "\n"
+    "[paths]\n"
+    "# The disc image; empty asks on the first start.\n"
+    "iso = \"\"\n"
+    "\n"
+    "[video]\n"
+    "# \"original\" or \"enhanced\".\n"
+    "preset = \"original\"\n"
+    "vsync = true\n"
+    "fullscreen = false\n"
+    "\n"
+    "[audio]\n"
+    "# volume is 0.0 to 1.0.\n"
+    "enabled = true\n"
+    "volume = 1.0\n"
+    "\n"
+    "[game]\n"
+    "# \"auto\" follows the system; or en, fr, de, it, es.\n"
+    "language = \"auto\"\n";
+
+int ico_config_write_first_run(void)
+{
+    char tmp[ICO_PATH_MAX + 8];
+    FILE *f;
+    size_t n = sizeof(first_run_text) - 1;
+    int ok;
+
+    ensure();
+    if (toml_file[0] == '\0') {
+        return -1;
+    }
+    if (ico_file_exists(toml_file)) {
+        return 1;
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", toml_file);
+    f = ico_fopen(tmp, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "config: cannot write %s\n", toml_file);
+        return -1;
+    }
+    ok = fwrite(first_run_text, 1, n, f) == n;
+    ok = ico_fsync(f) == 0 && ok;
+    ok = fclose(f) == 0 && ok;
+    /* a file that appeared meanwhile is the player's: not replaced */
+    if (ok && ico_file_exists(toml_file)) {
+        ico_remove(tmp);
+        return 1;
+    }
+    if (!ok || ico_rename_replace(tmp, toml_file) != 0) {
+        ico_remove(tmp);
+        fprintf(stderr, "config: cannot write %s\n", toml_file);
+        return -1;
+    }
+    fprintf(stderr, "config: wrote %s (first run)\n", toml_file);
     return 0;
 }

@@ -11,7 +11,9 @@ The card folder is `<pref folder>/memcard` by default (`ico_host_saves_dir`
 in `port/platform/host_config.c`; the pref folder is described in
 docs/port/CONFIG.md). `[paths] saves` in `config.toml`, or `saves=` in
 `ico-pc.ini`, moves it; a relative path is taken from the executable's
-folder. The folder is resolved once, at the first `sceMcInit`, and is not
+folder. The lookup is a pure read of the ini over `config.toml` (no
+environment variable set, no folder made); a path too long for the card's
+name buffers logs once and falls back to `memcard`. The folder is resolved once, at the first `sceMcInit`, and is not
 created by looking at the card: the game's first save (`sceMcMkdir`) makes
 it and any missing parent, so a boot with no save writes nothing.
 
@@ -52,7 +54,9 @@ Writes are atomic per file. A handle opened for writing works on a copy,
 `<dir>/.<name>.tmp` (the file's bytes copied in unless `SCE_TRUNC`; hidden
 from `sceMcGetDir` like every dot file), and `sceMcClose` moves it over the
 file (`ico_rename_replace`: `rename(2)`, or `MoveFileExW` with
-`MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`). A crash, a full disk
+`MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`; on POSIX the card
+folder is fsynced after the rename, so the new name survives a power cut; a
+failed move on Windows sets errno from `GetLastError()`). A crash, a full disk
 or a failed write during a save leaves the previous file whole; in that
 case `sceMcClose` returns `sceMcResFullDevice` and logs it. A file created
 by the open exists, empty, from the open, as on the card.

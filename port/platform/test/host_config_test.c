@@ -5,6 +5,7 @@
  * path joining (port/platform/host_config.c).
  */
 #include "host_config.h"
+#include "host_fs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -138,10 +139,90 @@ static void test_paths(void)
     remove("host_config_test_dir"); /* rmdir on POSIX; left behind on Windows */
 }
 
+/* a join that does not fit is an error and leaves "", never a cut-off path */
+static void test_join_overflow(void)
+{
+    char small[16], out[ICO_PATH_MAX];
+
+    CHECK(ico_path_join(small, sizeof(small), "/opt/ico", "logs") == 0);
+    CHECK(strlen(small) == strlen("/opt/ico/logs"));
+    CHECK(ico_path_join(small, sizeof(small), "/opt/ico", "a-name-too-long.txt") == -1);
+    CHECK(small[0] == '\0');
+    CHECK(ico_path_join(small, sizeof(small), "/opt/ico", "/an/absolute/path/too/long") == -1);
+    CHECK(small[0] == '\0');
+    CHECK(ico_path_join(small, sizeof(small), "", "exactly-15-chars") == -1); /* needs 17 */
+    CHECK(ico_path_join(small, sizeof(small), "", "fourteen-chars") == 0);
+    CHECK(ico_path_join(small, 0, "a", "b") == -1);
+    memset(out, 'x', sizeof(out) - 1);
+    out[sizeof(out) - 1] = '\0';
+    CHECK(ico_path_join(small, sizeof(small), out, "n") == -1 && small[0] == '\0');
+}
+
+/* ico_host_saves_dir is a pure read: it sets no environment variable and
+   makes no folder, whatever dump and audio keys the ini holds */
+static void test_saves_dir_pure(void)
+{
+    char ini_path[ICO_PATH_MAX], exe[ICO_PATH_MAX], dumps[ICO_PATH_MAX], logs[ICO_PATH_MAX];
+    char out[ICO_PATH_MAX];
+    FILE *f;
+
+    ico_host_ini_path(ini_path, sizeof(ini_path));
+    ico_host_exe_dir(exe, sizeof(exe));
+    ico_path_join(dumps, sizeof(dumps), exe, "pure-dumps");
+    ico_path_join(logs, sizeof(logs), exe, "logs");
+    if (ico_file_exists(ini_path) || ico_path_kind(dumps, NULL, NULL) >= 0 ||
+        ico_path_kind(logs, NULL, NULL) >= 0) {
+        fprintf(stderr, "host_config_test: %s, %s or %s exists; purity not tested\n", ini_path,
+                dumps, logs);
+        return;
+    }
+#ifdef _WIN32
+    _putenv_s("ICO_RD_DUMP_EVERY", "");
+    _putenv_s("ICO_AUDIO_DUMP", "");
+    _putenv_s("ICO_FIXED_CLOCK", "");
+#else
+    unsetenv("ICO_RD_DUMP_EVERY");
+    unsetenv("ICO_AUDIO_DUMP");
+    unsetenv("ICO_FIXED_CLOCK");
+#endif
+    f = fopen(ini_path, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("saves=pure-cards\ndump_every=5\ndump_dir=pure-dumps\naudio_dump=1\n", f);
+    fclose(f);
+    CHECK(ico_host_saves_dir(out, sizeof(out)) == 0);
+    CHECK(strstr(out, "pure-cards") != NULL);
+    CHECK(ico_path_kind(dumps, NULL, NULL) < 0);
+    CHECK(ico_path_kind(logs, NULL, NULL) < 0);
+    CHECK(getenv("ICO_RD_DUMP_EVERY") == NULL || getenv("ICO_RD_DUMP_EVERY")[0] == '\0');
+    CHECK(getenv("ICO_AUDIO_DUMP") == NULL || getenv("ICO_AUDIO_DUMP")[0] == '\0');
+    CHECK(getenv("ICO_FIXED_CLOCK") == NULL || getenv("ICO_FIXED_CLOCK")[0] == '\0');
+    /* the layered read alone is as pure */
+    {
+        IcoIni ini;
+
+        CHECK(ico_ini_load_layered(&ini, ini_path) == 0);
+        CHECK(ico_ini_get(&ini, "dump_every") != NULL);
+        CHECK(getenv("ICO_RD_DUMP_EVERY") == NULL || getenv("ICO_RD_DUMP_EVERY")[0] == '\0');
+        CHECK(ico_path_kind(dumps, NULL, NULL) < 0);
+        /* the full load is the one that exports */
+        CHECK(ico_ini_load(&ini, ini_path) == 0);
+        CHECK(getenv("ICO_RD_DUMP_EVERY") != NULL && strcmp(getenv("ICO_RD_DUMP_EVERY"), "5") == 0);
+        CHECK(ico_path_kind(dumps, NULL, NULL) == 1);
+    }
+    remove(ini_path);
+    remove(dumps);
+    remove(logs);
+}
+
 int main(void)
 {
     test_sha1();
     test_ini();
+    test_join_overflow();
+    test_saves_dir_pure();
     test_paths();
     printf("host_config_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

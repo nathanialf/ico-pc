@@ -6,6 +6,7 @@
 #include "host_fs.h"
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #ifdef _WIN32
@@ -99,20 +100,55 @@ int ico_fsync(FILE *f)
     return _commit(_fileno(f)) == 0 ? 0 : -1;
 }
 
+/* GetLastError() as an errno value, for the codes a move over a file meets */
+static int ico_errno_from_win32(DWORD e)
+{
+    switch (e) {
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+        return ENOENT;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_WRITE_PROTECT:
+        return EACCES;
+    case ERROR_ALREADY_EXISTS:
+    case ERROR_FILE_EXISTS:
+        return EEXIST;
+    case ERROR_SHARING_VIOLATION:
+    case ERROR_LOCK_VIOLATION:
+        return EBUSY;
+    case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_OUTOFMEMORY:
+        return ENOMEM;
+    case ERROR_DISK_FULL:
+    case ERROR_HANDLE_DISK_FULL:
+        return ENOSPC;
+    default:
+        return EIO;
+    }
+}
+
 int ico_rename_replace(const char *from, const char *to)
 {
     wchar_t *wf = ico_widen(from);
     wchar_t *wt = ico_widen(to);
     int ok;
+    DWORD err = 0;
 
     if (wf != NULL && wt != NULL) {
         ok = MoveFileExW(wf, wt, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
     } else {
         ok = MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
     }
+    if (!ok) {
+        err = GetLastError();
+    }
     free(wf);
     free(wt);
-    return ok ? 0 : -1;
+    if (!ok) {
+        errno = ico_errno_from_win32(err);
+        return -1;
+    }
+    return 0;
 }
 
 int ico_path_kind(const char *path, unsigned long long *size, long long *mtime)
@@ -136,6 +172,7 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime)
 
 #else
 
+#include <fcntl.h>
 #include <unistd.h>
 
 FILE *ico_fopen(const char *path, const char *mode)
@@ -158,9 +195,38 @@ int ico_remove(const char *path)
     return remove(path);
 }
 
+/* the folder holding path, synced so the new name is on the disk */
+static void sync_parent(const char *path)
+{
+    char dir[4096];
+    const char *slash = strrchr(path, '/');
+    size_t n = slash != NULL ? (size_t)(slash - path) : 0;
+    int fd;
+
+    if (slash == NULL) {
+        strcpy(dir, ".");
+    } else if (n == 0) {
+        strcpy(dir, "/");
+    } else if (n < sizeof(dir)) {
+        memcpy(dir, path, n);
+        dir[n] = '\0';
+    } else {
+        return;
+    }
+    fd = open(dir, O_RDONLY);
+    if (fd >= 0) {
+        (void)fsync(fd);
+        close(fd);
+    }
+}
+
 int ico_rename_replace(const char *from, const char *to)
 {
-    return rename(from, to);
+    if (rename(from, to) != 0) {
+        return -1;
+    }
+    sync_parent(to);
+    return 0;
 }
 
 int ico_fsync(FILE *f)

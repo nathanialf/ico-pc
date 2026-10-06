@@ -468,7 +468,10 @@ int sceMcInit(void)
     mc.active = 0;
     mc.dirNext = 0;
     if (!mc.rootSet) {
-        ico_host_saves_dir(mc.root, sizeof(mc.root));
+        if (ico_host_saves_dir(mc.root, sizeof(mc.root)) != 0) {
+            fprintf(stderr, "mc: no usable card folder path (too long, or no folder); using %s\n",
+                    mc.root);
+        }
         mc.rootSet = 1;
     }
     if (!mc.hooked && ico_host_on_vsync_register(vsync, NULL) == 0) {

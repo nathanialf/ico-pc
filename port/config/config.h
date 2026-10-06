@@ -31,6 +31,12 @@ int ico_config_set_float(const char *path, double value);
    [audio], [game] language, [paths] iso) are added when absent. 0, or -1. */
 int ico_config_save(void);
 
+/* The first run: when config.toml does not exist, writes it with the keys
+   ico_config_save adds at their defaults and a comment per section. Never
+   replaces an existing file. 0 written, 1 it exists already, -1 it cannot be
+   written (the log says why). */
+int ico_config_write_first_run(void);
+
 /* The two files in use (after the first read). */
 const char *ico_config_toml_path(void);
 const char *ico_config_ini_path(void);

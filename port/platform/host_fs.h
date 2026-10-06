@@ -28,7 +28,11 @@ int ico_rmdir(const char *path);
 int ico_remove(const char *path);
 /* rename from over to, replacing to when it exists (MoveFileExW with
    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH on Windows, rename(2)
-   elsewhere, atomic on one volume): 0 or -1 */
+   elsewhere, atomic on one volume): 0 or -1 with errno. On POSIX the
+   containing folder is fsynced afterwards, so the new name survives a power
+   cut (a failure of that sync alone is not reported: the move happened). On
+   Windows a failure maps GetLastError() to errno (ENOENT, EACCES, EEXIST,
+   EBUSY for a sharing violation, else EIO). */
 int ico_rename_replace(const char *from, const char *to);
 /* fflush, then the file's bytes onto the disk (_commit, i.e. FlushFileBuffers,
    on Windows; fsync elsewhere), for a file about to be moved over another

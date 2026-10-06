@@ -339,6 +339,6 @@ depend on that option.
 | `ios_chain` | thread.c, message.c and memory.c on the scheduler: vsync, vblank handler, event thread, a scheduler loop like main.c's, Main every second vsync, an actor process at 0x13 that ends at 0x22 and is destroyed |
 | `diag` | the crash handler and the log lines (BOOT_DIAG.md) |
 | `hotkeys` | the window build's hot keys |
-| `host_fs` | `host_fs.h` on a UTF-8 path with Latin, Greek and Japanese characters: mkdir, write, rename over, kind and size, remove, rmdir |
+| `host_fs` | `host_fs.h` on a UTF-8 path with Latin, Greek and Japanese characters: mkdir, write, rename over (twice, and a failed one sets errno), kind and size, remove, rmdir |
 | `host_config` | the ini, SHA-1 and path helpers (built from `port/null/CMakeLists.txt`) |
 | `config` | config.toml reader and writer (round trip, atomic save), ini over toml precedence, `sceScfGetLanguage`, the BCD clock, the EE timers (`port/config/test`) |

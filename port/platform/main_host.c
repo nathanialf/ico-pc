@@ -376,13 +376,19 @@ static void record_open(const IcoIni *ini, const char *exe_dir, const char *logs
         return;
     }
     if (v != NULL && v[0] != '\0' && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
-        ico_path_join(path, sizeof(path), exe_dir, v);
+        if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
+            fprintf(stderr, "ico_pc: input_record: the path is too long; no recording\n");
+            return;
+        }
     } else {
         char name[64];
 
         timestamp(stamp, sizeof(stamp), "%Y%m%d-%H%M%S");
         snprintf(name, sizeof(name), "input-%s.txt", stamp);
-        ico_path_join(path, sizeof(path), logs_dir, name);
+        if (ico_path_join(path, sizeof(path), logs_dir, name) != 0) {
+            fprintf(stderr, "ico_pc: input_record: the logs folder's path is too long\n");
+            return;
+        }
     }
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     record_header(header, sizeof(header), stamp);
@@ -517,7 +523,9 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
     }
     v = ico_ini_get(ini, "iso");
     if (v != NULL && v[0] != '\0') {
-        ico_path_join(iso, ICO_PATH_MAX, exe_dir, v);
+        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, v) != 0) {
+            fprintf(stderr, "ico_pc: iso= in ico-pc.ini: the path is too long\n");
+        }
         fprintf(stderr, "ico_pc: disc image from ico-pc.ini: %s\n", iso);
         return;
     }
@@ -771,8 +779,13 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     int picked, i, r;
 
     ico_host_pref_dir(pref, sizeof(pref));
-    ico_path_join(cand[0], sizeof(cand[0]), pref, ICO_ARCHIVE_NAME);
-    ico_path_join(cand[1], sizeof(cand[1]), exe_dir, ICO_ARCHIVE_NAME);
+    /* cand[0] is also where the first run writes */
+    if (ico_path_join(cand[0], sizeof(cand[0]), pref, ICO_ARCHIVE_NAME) != 0) {
+        ico_host_fatal(log_file(), "The folder %s is too deep to hold %s.", pref, ICO_ARCHIVE_NAME);
+    }
+    if (ico_path_join(cand[1], sizeof(cand[1]), exe_dir, ICO_ARCHIVE_NAME) != 0) {
+        cand[1][0] = '\0'; /* read only: not a candidate */
+    }
     for (i = 0; i < 2; i++) {
         if ((i == 1 && strcmp(cand[0], cand[1]) == 0) || !ico_file_exists(cand[i])) {
             continue;
@@ -866,8 +879,11 @@ int main(int argc, char **argv)
 
     /* the log first, so everything after it is recorded */
     ico_host_exe_dir(exe_dir, sizeof(exe_dir));
-    ico_path_join(logs_dir, sizeof(logs_dir), exe_dir, "logs");
-    ico_path_join(log_path, sizeof(log_path), logs_dir, "ico-pc.log");
+    if (ico_path_join(logs_dir, sizeof(logs_dir), exe_dir, "logs") != 0 ||
+        ico_path_join(log_path, sizeof(log_path), logs_dir, "ico-pc.log") != 0) {
+        logs_dir[0] = '\0';
+        log_path[0] = '\0';
+    }
     if (a.console && !have_console) {
         ico_host_message_box("--console: there is no console to log to (start ico_pc from a "
                              "command prompt); the log goes to logs\\ico-pc.log instead",
@@ -876,7 +892,8 @@ int main(int argc, char **argv)
     }
     if (a.console) {
         log_path[0] = '\0';
-    } else if (ico_make_dir(logs_dir) != 0 || ico_host_redirect_output(log_path) != 0) {
+    } else if (log_path[0] == '\0' || ico_make_dir(logs_dir) != 0 ||
+               ico_host_redirect_output(log_path) != 0) {
         fprintf(stderr, "ico_pc: cannot write %s; logging to the console\n", log_path);
         log_path[0] = '\0';
     }
@@ -889,11 +906,32 @@ int main(int argc, char **argv)
         fprintf(stderr, "ico_pc: argument %s\n", argv[r]);
     }
 
-    ico_path_join(ini_path, sizeof(ini_path), exe_dir, "ico-pc.ini");
+    if (ico_path_join(ini_path, sizeof(ini_path), exe_dir, "ico-pc.ini") != 0) {
+        ico_host_fatal(log_file(), "The folder %s is too deep to hold ico-pc.ini.", exe_dir);
+    }
     if (ico_ini_load(&ini, ini_path) == 0) {
         fprintf(stderr, "ico_pc: settings from %s (%d keys)\n", ini_path, ini.count);
     } else {
         fprintf(stderr, "ico_pc: no %s; defaults\n", ini_path);
+    }
+
+    /* config.toml on the first run, so there is a file to edit; the window
+       build by default, the headless one (whose per-user folder is the
+       build's) only with write_config=1 */
+    {
+        const char *wc = ico_ini_get(&ini, "write_config");
+#ifdef ICO_HEADLESS
+        int write_config = 0;
+#else
+        int write_config = 1;
+#endif
+
+        if (wc != NULL && wc[0] != '\0') {
+            write_config = strcmp(wc, "0") != 0 && strcmp(wc, "false") != 0;
+        }
+        if (write_config) {
+            ico_config_write_first_run();
+        }
     }
 
     /* the disc goes in before boot, so a missing image fails here rather
@@ -940,7 +978,9 @@ int main(int argc, char **argv)
     if (a.pad_script != NULL) {
         snprintf(path, sizeof(path), "%s", a.pad_script);
     } else if (v != NULL && v[0] != '\0') {
-        ico_path_join(path, sizeof(path), exe_dir, v);
+        if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
+            fprintf(stderr, "ico_pc: pad_script: the path is too long\n");
+        }
     } else {
         path[0] = '\0';
 #ifdef ICO_HEADLESS
@@ -982,15 +1022,19 @@ int main(int argc, char **argv)
         if (a.trace != NULL) {
             snprintf(path, sizeof(path), "%s", a.trace);
         } else if (v != NULL && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
-            ico_path_join(path, sizeof(path), exe_dir, v);
+            if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
+                path[0] = '\0';
+            }
         } else {
             char name[64];
 
             timestamp(stamp, sizeof(stamp), "%Y%m%d-%H%M%S");
             snprintf(name, sizeof(name), "trace-%s.txt", stamp);
-            ico_path_join(path, sizeof(path), logs_dir, name);
+            if (ico_path_join(path, sizeof(path), logs_dir, name) != 0) {
+                path[0] = '\0';
+            }
         }
-        if (ico_trace_open(path) == 0) {
+        if (path[0] != '\0' && ico_trace_open(path) == 0) {
             fprintf(stderr, "ico_pc: trace %s\n", path);
         } else {
             fprintf(stderr, "ico_pc: running without a trace\n");

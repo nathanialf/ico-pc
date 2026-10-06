@@ -79,6 +79,16 @@ int main(int argc, char **argv)
     CHECK(ico_path_kind(a, NULL, NULL) == -1);
     CHECK(read_text(b, got, sizeof(got)) == 0 && strcmp(got, "new contents") == 0);
 
+    /* a move from nothing fails with errno set (ENOENT on POSIX; the Windows
+       table maps ERROR_FILE_NOT_FOUND to the same) and leaves the target */
+    errno = 0;
+    CHECK(ico_rename_replace(a, b) == -1 && errno == ENOENT);
+    CHECK(read_text(b, got, sizeof(got)) == 0 && strcmp(got, "new contents") == 0);
+    /* and a second round: write a new temp, move it over, read the new text */
+    CHECK(write_text(a, "again") == 0);
+    CHECK(ico_rename_replace(a, b) == 0);
+    CHECK(read_text(b, got, sizeof(got)) == 0 && strcmp(got, "again") == 0);
+
     CHECK(ico_remove(b) == 0);
     CHECK(ico_path_kind(b, NULL, NULL) == -1);
     CHECK(ico_rmdir(dir) == 0);

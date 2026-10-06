@@ -335,8 +335,10 @@ static void frame_dump(void)
         snprintf(stamp, sizeof(stamp), "unknown");
     }
     ico_host_pref_dir(pref, sizeof(pref));
-    ico_path_join(dir, sizeof(dir), pref, "dumps");
-    ico_make_dir(dir);
+    if (ico_path_join(dir, sizeof(dir), pref, "dumps") != 0 || ico_make_dir(dir) != 0) {
+        fprintf(stderr, "window: F12: no usable dumps folder under %s\n", pref);
+        return;
+    }
     ico_frame_dump_paths(dir, stamp, ico_host_vsync_count(), dump, sizeof(dump), png, sizeof(png));
     const int ok = rd_DumpOnDemand(dump, png);
     /* the recording up to this moment, for the same report */
@@ -431,8 +433,11 @@ static void perf_csv_open(void)
         return;
     }
     ico_host_exe_dir(dir, sizeof(dir));
-    ico_path_join(logs, sizeof(logs), dir, "logs");
-    ico_path_join(path, sizeof(path), logs, "ico-pc-perf.csv");
+    if (ico_path_join(logs, sizeof(logs), dir, "logs") != 0 ||
+        ico_path_join(path, sizeof(path), logs, "ico-pc-perf.csv") != 0) {
+        fprintf(stderr, "window: perf_log: the path is too long\n");
+        return;
+    }
     s_perf.csv = ico_fopen(path, "w"); /* a UTF-8 path (host_fs.h) */
     if (s_perf.csv == NULL) {
         fprintf(stderr, "window: perf_log: cannot write %s\n", path);

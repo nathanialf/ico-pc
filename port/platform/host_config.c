@@ -107,20 +107,29 @@ int ico_path_is_absolute(const char *path)
     return 0;
 }
 
-void ico_path_join(char *out, size_t size, const char *dir, const char *name)
+int ico_path_join(char *out, size_t size, const char *dir, const char *name)
 {
     size_t n;
+    int len;
 
+    if (size == 0) {
+        return -1;
+    }
     if (ico_path_is_absolute(name) || dir == NULL || dir[0] == '\0') {
-        copy(out, size, name);
-        return;
-    }
-    n = strlen(dir);
-    if (n > 0 && (dir[n - 1] == '/' || dir[n - 1] == '\\')) {
-        snprintf(out, size, "%s%s", dir, name);
+        len = snprintf(out, size, "%s", name);
     } else {
-        snprintf(out, size, "%s%c%s", dir, SEP, name);
+        n = strlen(dir);
+        if (n > 0 && (dir[n - 1] == '/' || dir[n - 1] == '\\')) {
+            len = snprintf(out, size, "%s%s", dir, name);
+        } else {
+            len = snprintf(out, size, "%s%c%s", dir, SEP, name);
+        }
     }
+    if (len < 0 || (size_t)len >= size) {
+        out[0] = '\0'; /* never a cut-off path that names another file */
+        return -1;
+    }
+    return 0;
 }
 
 int ico_file_exists(const char *path)
@@ -278,8 +287,11 @@ static void export_dump_keys(const IcoIni *ini, const char *path)
     }
     memcpy(base, slash != NULL ? path : ".", n);
     base[n] = '\0';
-    ico_path_join(full, sizeof(full), base, dir != NULL ? dir : "dumps");
-    ico_make_dir(full);
+    if (ico_path_join(full, sizeof(full), base, dir != NULL ? dir : "dumps") != 0 ||
+        ico_make_dir(full) != 0) {
+        fprintf(stderr, "ico_pc: dump_dir: no usable folder; no dumps\n");
+        return;
+    }
     if (interp != NULL && (strcmp(interp, "1") == 0 || strcmp(interp, "true") == 0 ||
                            strcmp(interp, "on") == 0 || strcmp(interp, "yes") == 0)) {
         interpOn = "1";
@@ -333,11 +345,14 @@ static void export_audio_keys(const IcoIni *ini, const char *path)
     if (strcmp(dump, "1") == 0) {
         char logs[ICO_PATH_MAX];
 
-        ico_path_join(logs, sizeof(logs), base, "logs");
-        ico_make_dir(logs);
-        ico_path_join(full, sizeof(full), logs, "audio.wav");
-    } else {
-        ico_path_join(full, sizeof(full), base, dump);
+        if (ico_path_join(logs, sizeof(logs), base, "logs") != 0 || ico_make_dir(logs) != 0 ||
+            ico_path_join(full, sizeof(full), logs, "audio.wav") != 0) {
+            fprintf(stderr, "ico_pc: audio_dump: cannot use the logs folder; no dump\n");
+            return;
+        }
+    } else if (ico_path_join(full, sizeof(full), base, dump) != 0) {
+        fprintf(stderr, "ico_pc: audio_dump: the path is too long; no dump\n");
+        return;
     }
 #ifdef _WIN32
     _putenv_s("ICO_AUDIO_DUMP", full);
@@ -397,6 +412,9 @@ static const struct {
     /* 1: mount the disc image directly instead of the extracted ico.o2r
        (main_host.c; default 1 headless, 0 in the window build) */
     {"dev.use_iso", "use_iso"},
+    /* 1: write config.toml with its defaults when there is none (main_host.c;
+       default 1 in the window build, 0 headless, so test runs leave no file) */
+    {"dev.write_config", "write_config"},
     /* the stage Main starts in (developer key, renderer wave 5, R5b) */
     {"dev.start_stage", "start_stage"},
     /* one forced stage change: the stage, and the Main tick from which it
@@ -452,21 +470,23 @@ int ico_host_fixed_clock(const IcoIni *ini)
 #endif
 }
 
-int ico_ini_load(IcoIni *ini, const char *path)
+/* the executable's own ini over config.toml: the file's keys, the missing
+   ones filled from the toml (ini > toml). No environment, no folders. */
+int ico_ini_load_layered(IcoIni *ini, const char *path)
 {
     char own[ICO_PATH_MAX];
     int r = ico_ini_load_file(ini, path);
 
     ico_host_ini_path(own, sizeof(own));
     if (strcmp(own, path) == 0) {
-        /* the executable's own ini: the layer over config.toml */
         char dir[ICO_PATH_MAX], toml_path[ICO_PATH_MAX];
-        IcoToml *t;
+        IcoToml *t = NULL;
         size_t i;
 
         ico_host_pref_dir(dir, sizeof(dir));
-        ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml");
-        t = ico_toml_load(toml_path);
+        if (ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
+            t = ico_toml_load(toml_path);
+        }
         for (i = 0; t != NULL && i < sizeof(ini_map) / sizeof(ini_map[0]); i++) {
             const char *v = ico_toml_get(t, ini_map[i].toml);
 
@@ -476,6 +496,26 @@ int ico_ini_load(IcoIni *ini, const char *path)
                         : strcmp(v, "false") == 0 ? "0"
                                                   : v);
             }
+        }
+        ico_toml_free(t);
+    }
+    return r;
+}
+
+/* The keys other libraries read from the environment, and the folders they
+   write into (dumps, logs); once, at start-up (main_host.c), and for the
+   executable's own ini only. */
+void ico_ini_export(const IcoIni *ini, const char *path, int r)
+{
+    char own[ICO_PATH_MAX], dir[ICO_PATH_MAX], toml_path[ICO_PATH_MAX];
+
+    ico_host_ini_path(own, sizeof(own));
+    if (strcmp(own, path) == 0) {
+        IcoToml *t = NULL;
+
+        ico_host_pref_dir(dir, sizeof(dir));
+        if (ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
+            t = ico_toml_load(toml_path);
         }
         if (t != NULL && ico_toml_get(t, "audio.volume") != NULL) {
             put_env("ICO_AUDIO_VOLUME", ico_toml_get(t, "audio.volume"));
@@ -509,6 +549,13 @@ int ico_ini_load(IcoIni *ini, const char *path)
             put_env("ICO_UI_POPUP_TEST", ico_ini_get(ini, "popup_test"));
         }
     }
+}
+
+int ico_ini_load(IcoIni *ini, const char *path)
+{
+    int r = ico_ini_load_layered(ini, path);
+
+    ico_ini_export(ini, path, r);
     return r;
 }
 
@@ -1628,10 +1675,15 @@ int ico_host_ini_path(char *out, size_t size)
     char dir[ICO_PATH_MAX];
     int r = ico_host_exe_dir(dir, sizeof(dir));
 
-    ico_path_join(out, size, dir, "ico-pc.ini");
+    if (ico_path_join(out, size, dir, "ico-pc.ini") != 0) {
+        return -1;
+    }
     return r;
 }
 
+/* A read of ico-pc.ini over config.toml and nothing else: no environment
+   variable is set and no folder made, so it can be called from the game
+   fiber (sceMcInit). */
 int ico_host_saves_dir(char *out, size_t size)
 {
     char dir[ICO_PATH_MAX];
@@ -1640,20 +1692,25 @@ int ico_host_saves_dir(char *out, size_t size)
     const char *v;
     int r = 0;
 
-    if (ini == NULL || ico_host_exe_dir(dir, sizeof(dir)) != 0) {
+    if (ini == NULL || ico_host_exe_dir(dir, sizeof(dir)) != 0 ||
+        ico_path_join(ini_path, sizeof(ini_path), dir, "ico-pc.ini") != 0) {
         free(ini);
         copy(out, size, "memcard");
         return -1;
     }
-    ico_path_join(ini_path, sizeof(ini_path), dir, "ico-pc.ini");
-    ico_ini_load(ini, ini_path);
+    ico_ini_load_layered(ini, ini_path);
     v = ico_ini_get(ini, "saves");
     if (v != NULL && v[0] != '\0') {
-        ico_path_join(out, size, dir, v);
+        r = ico_path_join(out, size, dir, v);
     } else {
         r = ico_host_pref_dir(dir, sizeof(dir));
-        ico_path_join(out, size, dir, "memcard");
+        if (ico_path_join(out, size, dir, "memcard") != 0) {
+            r = -1;
+        }
     }
     free(ini);
+    if (r != 0 && out[0] == '\0') {
+        copy(out, size, "memcard");
+    }
     return r;
 }

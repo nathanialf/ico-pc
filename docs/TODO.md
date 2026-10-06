@@ -294,10 +294,6 @@ pointer to this file.
   the game over and Continue? prompts, the subtitles. Route each through
   `port/ui/menu_text.c`'s path with the same classic fallback, so one
   typeface covers the whole game at every scale.
-- **Write `config.toml` on the first run.** `ico_config_save` is called only
-  by the Settings menu, so a player who never opens Settings has no file to
-  edit by hand. Save it (perhaps with a commented template) after the ini
-  loads in `port/platform/main_host.c`, and document it in CONFIG.md.
 - **Native-speaker review of the French, German, Italian and Spanish port
   strings.** The port's own strings in `port/ui/strings_{fr,de,it,es}.c`
   (Settings, notes, achievements, popups) are the author's translations.
@@ -367,13 +363,6 @@ pointer to this file.
   cannot grow; keep a fixed overflow array.
 - **D3D12 buffer copy states.** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
-- **Side-effect-free saves lookup.** `ico_host_saves_dir` re-runs
-  `ico_ini_load` (env exports, mkdir) on the game fiber from `sceMcInit`;
-  split a pure layered read from the one-time export in `main_host.c`.
-- **Checked path joins.** `ico_path_join` (`host_config.c`) truncates
-  silently; return an error and check it where files are created.
-- **Directory sync and Windows errno.** After `ico_rename_replace`, fsync the
-  directory on POSIX; on Windows map `GetLastError()` to errno there.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
 - **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`

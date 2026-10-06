@@ -376,6 +376,51 @@ static void test_ini_layer(void)
     }
 }
 
+/* the first run: config.toml appears once, with the defaults, and is never
+   replaced */
+static void test_first_run(void)
+{
+    char toml[ICO_PATH_MAX];
+    char *text;
+
+    path_in(toml, "first-run.toml");
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    text = read_file(toml);
+    CHECK(text != NULL && strstr(text, "[video]") != NULL && strstr(text, "# ") != NULL);
+    /* the file reads back as the defaults ico_config_save would add */
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_get_int("version", 0) == ICO_CONFIG_VERSION);
+    CHECK_STR(ico_config_get_string("video.preset", "?"), "original");
+    CHECK(ico_config_get_bool("video.vsync", 0) == 1);
+    CHECK(ico_config_get_bool("video.fullscreen", 1) == 0);
+    CHECK(ico_config_get_bool("audio.enabled", 0) == 1);
+    CHECK(ico_config_get_float("audio.volume", 0.0) == 1.0);
+    CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
+    CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
+    /* a second run does nothing, and a player's edited file is kept */
+    write_file(toml, "# mine\n[video]\npreset = \"enhanced\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 1);
+    free(text);
+    text = read_file(toml);
+    CHECK(text != NULL && strcmp(text, "# mine\n[video]\npreset = \"enhanced\"\n") == 0);
+    free(text);
+    /* saving after the first run keeps its comments */
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    ico_config_set_string("video.preset", "enhanced");
+    CHECK(ico_config_save() == 0);
+    text = read_file(toml);
+    CHECK(text != NULL && strstr(text, "preset = \"enhanced\"") != NULL &&
+          strstr(text, "# \"original\" or") != NULL);
+    free(text);
+    remove(toml);
+}
+
 /* dump_interp (R7d): handed to the renderer as ICO_RD_DUMP_INTERP with
    dump_every, so the ini or config.toml decides, 0 when absent */
 static void test_dump_interp(void)
@@ -635,6 +680,7 @@ int main(int argc, char **argv)
     test_save();
     test_precedence();
     test_ini_layer();
+    test_first_run();
     test_dump_interp();
     test_fixed_clock_rule();
     test_language();
