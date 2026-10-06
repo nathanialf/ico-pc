@@ -130,6 +130,11 @@ void rhi_WaitFrame(void)
     dx_RecycleFrame(dx_CurFrame());
 }
 
+uint32_t rhi_FrameSlot(void)
+{
+    return (uint32_t)(g_dx.frameIndex % RHI_FRAMES_IN_FLIGHT);
+}
+
 void rhi_WaitIdle(void)
 {
     dx_WaitFence(dx_Signal());

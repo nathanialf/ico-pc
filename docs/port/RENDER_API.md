@@ -1839,7 +1839,8 @@ it is drawn where the pre-flipped and present-flipped quads would show
 (section 15, "The deferred text pass").
 
 **FMV.** `rd_video.c` draws the film mirrored exactly when the mirror is on;
-the audio pan follows the mirror mode too (AUDIO.md, FMV.md).
+the audio pan follows the mirror mode too (AUDIO.md, FMV.md). Its upload
+buffer is chosen by `rhi_FrameSlot()`, the slot `rd__WaitFrame` just waited for.
 
 ## 18. Performance
 
@@ -1858,7 +1859,7 @@ DATE snapshots, exact blends, pipelines created, ring bytes, uniform and
 texture bind groups), and GPU
 timestamps at the start, after the uploads, after each of the 13 lists and
 after the present, read `RHI_FRAMES_IN_FLIGHT` replays later without
-waiting. `rd_PerfPop` hands the records out. Every 10 s the window logs a
+waiting; the records wait in the slot `rhi_FrameSlot()` returns. `rd_PerfPop` hands the records out. Every 10 s the window logs a
 `window:` presents line, the phase and GPU averages, the simulation step,
 and the counts. `[dev] perf_log = true` writes every record to
 `logs/ico-pc-perf.csv` (including `start_ms`, `alpha` and `first_of_tick`).

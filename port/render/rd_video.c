@@ -40,7 +40,6 @@ static struct {
     RhiBuffer upload[RHI_FRAMES_IN_FLIGHT];
     uint8_t *uploadMap[RHI_FRAMES_IN_FLIGHT];
     uint64_t uploadCap[RHI_FRAMES_IN_FLIGHT];
-    uint32_t counter;
     uint32_t dispW, dispH;
     float clear[4];
 } s_v = {.dispW = 720, .dispH = 576, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
@@ -210,7 +209,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
         return -1;
     }
     rd__WaitFrame();
-    const int slot = (int)(s_v.counter++ % RHI_FRAMES_IN_FLIGHT);
+    const int slot = (int)rhi_FrameSlot();
     const RhiLimits *lim = rhi_Limits();
     const uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;
     const uint32_t tw = 2 * cw, th = h + ch;

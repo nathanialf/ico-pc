@@ -20,7 +20,7 @@ static RdPerfRecord s_queue[RD_PERF_QUEUE];
 
 static uint32_t s_head, s_count;
 
-/* the records waiting for their timestamps, by replay % RHI_FRAMES_IN_FLIGHT */
+/* the records waiting for their timestamps, by rhi_FrameSlot */
 static RdPerfRecord s_pending[RHI_FRAMES_IN_FLIGHT];
 
 static bool s_pendingValid[RHI_FRAMES_IN_FLIGHT];
@@ -116,7 +116,7 @@ void rd__PerfCollectGpu(void)
 {
     /* called inside replay s_replay (rd__PerfBegin has counted it): its slot
        held the record of replay s_replay - RHI_FRAMES_IN_FLIGHT */
-    const uint32_t slot = s_replay % RHI_FRAMES_IN_FLIGHT;
+    const uint32_t slot = rhi_FrameSlot();
     if (!s_pendingValid[slot]) {
         return;
     }
@@ -176,7 +176,7 @@ void rd__PerfEnd(void)
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
         s_last = s;
     }
-    const uint32_t slot = r->replay % RHI_FRAMES_IN_FLIGHT;
+    const uint32_t slot = rhi_FrameSlot();
     if (s_pendingValid[slot]) {
         push(&s_pending[slot]); /* its timestamps never came: queued without */
     }

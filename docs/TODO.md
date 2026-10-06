@@ -28,11 +28,6 @@ pointer to this file.
 
 ## Renderer
 
-- **FMV upload slot counter.** `presentVideo` in `port/render/rd_video.c`
-  picks its upload buffer with its own `s_v.counter++ % RHI_FRAMES_IN_FLIGHT`,
-  independent of the RHI frame slot `rd__WaitFrame` waits for, so a movie
-  present can write an upload buffer the GPU may still be reading. Index by
-  the RHI's current frame slot.
 - **TEXA before filtering for RGB24 and RGBA16 textures.** `sprite_ps` and
   `vu_ps` expand TEXA after the sampler filters, where the GS expands before.
   With AEM, bilinear edges between texels of different alpha differ (the
@@ -210,8 +205,6 @@ pointer to this file.
   list start; settle with one debug-layer run over a stage load.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
-- **Small cleanups.** `rd_perf` GPU records keyed by RHI frame index.
-
 ## Checks that need a PS2 or a play-through
 
 These cannot be settled in code. Each needs a capture from a PS2 or a

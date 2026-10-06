@@ -252,6 +252,11 @@ void rhi_WaitFrame(void)
     be()->WaitFrame();
 }
 
+uint32_t rhi_FrameSlot(void)
+{
+    return be()->FrameSlot();
+}
+
 void rhi_WaitIdle(void)
 {
     be()->WaitIdle();

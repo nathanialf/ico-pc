@@ -519,6 +519,11 @@ void rhi_Submit(RhiCommandList cl);
  * bind groups of the frame that used the same slot are recycled.  Call it
  * once per frame, before recording. */
 void rhi_WaitFrame(void);
+/* The frame-in-flight slot (0 .. RHI_FRAMES_IN_FLIGHT - 1) of the frame
+ * rhi_WaitFrame last started: the slot whose previous use the GPU has
+ * finished.  Per-frame resources outside the RHI (upload buffers, query
+ * results) are keyed by it, not by a counter of their own. */
+uint32_t rhi_FrameSlot(void);
 /* Full GPU idle, for shutdown, resize and verification readbacks. */
 void rhi_WaitIdle(void);
 

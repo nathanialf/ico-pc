@@ -159,6 +159,11 @@ void rhi_WaitFrame(void)
     vkr_RecycleFrame(vkr_CurFrame());
 }
 
+uint32_t rhi_FrameSlot(void)
+{
+    return (uint32_t)(g_vkr.frameIndex % RHI_FRAMES_IN_FLIGHT);
+}
+
 void rhi_WaitIdle(void)
 {
     const uint64_t t0 = vkr_NowNs();

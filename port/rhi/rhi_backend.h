@@ -48,6 +48,7 @@
     X(EndCommands)                                                                                 \
     X(Submit)                                                                                      \
     X(WaitFrame)                                                                                   \
+    X(FrameSlot)                                                                                   \
     X(WaitIdle)                                                                                    \
     X(CmdBarrier)                                                                                  \
     X(CmdBeginRenderPass)                                                                          \

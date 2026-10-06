@@ -45,6 +45,7 @@
 #define rhi_EndCommands         RHI__NAME(EndCommands)
 #define rhi_Submit              RHI__NAME(Submit)
 #define rhi_WaitFrame           RHI__NAME(WaitFrame)
+#define rhi_FrameSlot           RHI__NAME(FrameSlot)
 #define rhi_WaitIdle            RHI__NAME(WaitIdle)
 #define rhi_CmdBarrier          RHI__NAME(CmdBarrier)
 #define rhi_CmdBeginRenderPass  RHI__NAME(CmdBeginRenderPass)
