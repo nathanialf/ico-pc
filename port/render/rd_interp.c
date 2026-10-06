@@ -3202,14 +3202,8 @@ static void feedback(float dt, int firstOfTick)
     memset(r, 0, sizeof(*r));
     r->w = t ? t->w : 128u;
     r->h = t ? t->h : 128u;
-    if (cl->count + 1 > cl->cap) {
-        const uint32_t cap = cl->count + 16;
-        RdCmd *p = realloc(cl->cmds, (size_t)cap * sizeof(RdCmd));
-        if (!p) {
-            return;
-        }
-        cl->cmds = p;
-        cl->cap = cap;
+    if (!growTo((void **)&cl->cmds, &cl->cap, cl->count + 1, sizeof(RdCmd))) {
+        return;
     }
     memmove(&cl->cmds[1], &cl->cmds[0], (size_t)cl->count * sizeof(RdCmd));
     cl->count++;
