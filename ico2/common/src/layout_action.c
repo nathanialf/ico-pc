@@ -132,7 +132,7 @@ void POSITIVE_SE(void)
     soundSeDefPlay(412, 0xFFFFFFFE, 0, 0);
 }
 
-void NEGATIVE_SE()
+void NEGATIVE_SE(void)
 {
     soundSeDefPlay(413, 0xFFFFFFFE, 0, 0);
 }
@@ -2690,7 +2690,7 @@ inline int la_game_pause(int first)
     }
     if (((pad[0].flags & 0x40) && lt_current_property_item() == 0x127) ||
         (pad[0].flags & (0x800 | LA_BACK))) {
-        NEGATIVE_SE(0);
+        NEGATIVE_SE();
         adpcmPauseRequest(0);
         lt_set_item_select_func(0);
         actionStarted = 0;

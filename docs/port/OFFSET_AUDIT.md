@@ -68,8 +68,8 @@ Every `ico2/` unit of the game libraries in a configured build's
 `compile_commands.json` is preprocessed with its own host flags and
 `-DICO_OFFSET_AUDIT=1`. With that define `ee_view.h` makes `ICO_RAW` and
 `ICO_RAWP` leave a marker holding their EE offset (the define is never used
-to build the game). In each function body of an `ico2/` source the audit
-finds:
+to build the game). In each function body of an `ico2/` source, and in the
+initialiser of each file-scope declaration, the audit finds:
 
 | kind | spelling | host access offset |
 | --- | --- | --- |
@@ -80,10 +80,29 @@ finds:
 | `storage` | `(ClipColReq *)act->flyClip`: a record kept whole in a byte buffer | only `sizeof(V) <= sizeof(buffer)` |
 | `ico_raw` | `ICO_RAW(T, p, off, field)`, `ICO_RAWP` | the field's host offset; the field must be the one at EE `off` from `p` |
 | `pad` | a `pad<HEX>` or `unk<HEX>` member read or written (not copied whole) | NOFIELD: give it a name |
+| `clear` | `memset`, `memcpy`, `memmove`, `bzero`, `bcopy` (and the builtins) whose size is made of literals, over a record, a span from a member (`&s->bits58`) or a whole array of pointers | the host span of what the EE span covered (below) |
+| `unproto` | a call with arguments through a `()` declaration | the gnu23 pass (below) |
 
 An index may be spelled as a constant expression, a byte offset over the
 element size (`q[0x500 / 4]`, `((float *)x)[0x10 / 4]`): the bracket
-parser (`bracket_const`) takes a literal, `N / M` or `N * M`.
+parser (`bracket_const`) takes a literal, `N / M` or `N * M`. An offset or
+index with a variable stride (`(char *)x + j * 0x50 + 0x10`,
+`f[i * 20 + 9]`, `i << 4`) is checked at its first step, every variable
+at 1 (`var_terms`, `bracket_linear`), as an `ICO_RAW` offset in one index
+variable is: a stride that is the EE size of a record lands on element 1
+of the array, whose host offset is one host `sizeof` on.
+
+A clear or copy with a literal size N from EE offset S of a record covers
+the EE span S..S+N. On the host the same N must reach the end of the last
+member that span covers and stop before the next member (or the record's
+end); short of it is **PARTIAL**, past the next member's start is
+**OVERRUN**. A span ending inside a member (a pad, a doubleword) is taken
+at the same byte when that member's host size is its EE size. N a whole
+number of records from a record's start covers that many host records. For
+an array of pointers named whole (`memset(wpA, 0, 8)` over `WayPoint
+*wpA[2]`) the EE size is 4 bytes an element, so N equal to it must be the
+host `sizeof`. A size spelled with `sizeof`, `offsetof` or `ICO_MAX_SIZE`
+is the host's own and is not a site.
 
 For each site the compiler gives the operand's type: the operand is wrapped
 in a statement expression that initialises a `struct __icoA_<k> *` from it,
@@ -91,7 +110,11 @@ and gcc's diagnostic names the type. A `char *`, `float *` or `int` operand
 is followed back to its assignments in the function (or, for a parameter, to
 the arguments of every call in the unit). Two untyped words take their
 pointee from the game's macros: `GObj.act` is an `Act` (`GOBJ_ACT`),
-`Act.work` an `ActWork` (`GOBJ_WORK`).
+`Act.work` an `ActWork` (`GOBJ_WORK`). A `void *` table element or member
+(`sys[2]`, `w->obj`, not a call's result) that the function casts to
+exactly one record type elsewhere (`(ChainNode *)sys[2]`) is a view of that
+record. An operand in a file-scope initialiser (where gcc takes no statement
+expression) is typed in a function appended to the unit.
 
 The record's EE layout is read from the headers' and the `.c` files' offset
 comments with `gen_layout_asserts.py`'s parser; a member without a comment
@@ -112,10 +135,14 @@ each site is classified:
   with no EE layout, an `ICO_RAW` field it cannot parse);
 - **NARROW**: a pointer-wide value converted to 32 bits or fewer (the
   `narrow` pass, below);
+- **PARTIAL** / **OVERRUN**: a constant-size clear or copy whose host span
+  stops short of the members the EE span covered / runs into the next one;
+- **UNPROTO**: a call through an unprototyped declaration that passes a
+  pointer, a pointer-wide integer or a float (the `unproto` pass, below);
 - **OK** / **SKIP**: the access is the named field on the host / not a view
   of a record (a vector's lanes, a matrix row, an EE word table).
 
-Any of the first five fails the run (exit 1).
+Any of the first eight fails the run (exit 1).
 
 ```sh
 cmake --preset linux-x64 -B build-host/<dir>                 # compile_commands.json
@@ -128,9 +155,12 @@ tools/offset_audit.py --build build-host/<dir> --no-narrow   # skip the narrow p
 ```
 
 ctest runs it as `offset_audit` on native builds (`port/test/CMakeLists.txt`;
-about 30 s with the `narrow` pass). Its work files go to
-`<build>/offset_audit/`. The tree audits about 18,000 sites in 214 units
-with no finding.
+about 40 s with the `narrow` and `unproto` passes). Its work files go to
+`<build>/offset_audit/`. The tree audits about 18,400 sites in 214 units
+with no finding: among them 23 variable strides and 27 constant-size clears
+and copies over records or pointer arrays (87 more are over vectors and
+byte buffers), 12 calls through `()` declarations, and no raw offset in a
+static initialiser.
 
 ### Pointer-wide values in 32 bits (the `narrow` pass)
 
@@ -156,27 +186,72 @@ known defects put back (`box.c`'s `InitBoxGeo` store into
 `BoxWork.colData`, `cdvd.c`'s `(int)p < (int)limit`) the pass reports
 exactly those sites.
 
-What neither pass sees: a pointer read through a 4-byte view
-(`*(int *)&p`; the offset checks' MISMATCH covers the common forms), and a
-call through an unprototyped declaration (`-Wstrict-prototypes` lists about
-1,450), which passes the full pointer to a callee that may read an `int`.
-A `-flto -Wlto-type-mismatch` link of the Linux build lists the
-declarations that disagree with their definitions; none of them passes a
-pointer where an `int` is read. A `-Wconversion -Wpointer-to-int-cast` build
-for Windows x64 (32-bit `long`) found no `long` holding a pointer.
+What the `narrow` pass does not see: a pointer read through a 4-byte view
+(`*(int *)&p`; the offset checks' MISMATCH covers the common forms). A
+`-flto -Wlto-type-mismatch` link of the Linux build lists the declarations
+that disagree with their definitions; none of them passes a pointer where
+an `int` is read. A `-Wconversion -Wpointer-to-int-cast` build for Windows
+x64 (32-bit `long`) found no `long` holding a pointer.
+
+### Calls through unprototyped declarations (the `unproto` pass)
+
+A declaration `T f()` or a slot `T (*fn)()` takes any arguments, after the
+default promotions: a pointer goes as 8 bytes, an `int` as 4, a `float` as
+a `double`. On the EE an `int` and a pointer are the same 4 bytes, so a
+callee that reads an `int` where the caller passed a pointer (or the
+reverse) worked there and reads other bytes here. `-Wstrict-prototypes`
+warns at the declarations (2,756 warnings at 966 lines in a full build's
+log, nearly all function-pointer slots in `typedef.h`, `act.h`,
+`gobj_process.h` and the generated data tables), not at the calls. C23 reads `()` as `(void)`, so the pass compiles each unit again
+as gnu23 (gcc 14; gcc 13's gnu2x, after a probe that the diagnostic is
+there) and every call with arguments through such a declaration is a "too
+many arguments" error. The audit probes those calls' argument types: a
+call whose arguments are all `int`-sized integers cannot pass a pointer or
+a float and is OK; any other must be listed in `UNPROTO_OK` in the script
+with what its callees read, or it is UNPROTO. A listed entry that matches
+no call fails the run. The pass needs gcc; on another compiler it says it
+did not run (the ctest fails on gcc builds when it does not).
+
+The tree has 12 such calls. The six `GsBase.c` debug-menu calls pass an
+`int`. The other six are listed: the memory-card debug menu (`debug.c`
+`fn(&mc)`: three handlers read the `McMgr *`, `debug_mcFormat` and
+`debug_mcUnformat` take an `int` port they never read), the memory-card
+segment handlers (`mcard.c` `e->save`, `e->load`: pointers), the thread and
+process bodies (`thread.c` `obj->func(arg)`, `obj_manager.c`
+`p->func(g2)`: the bodies read a `GObj *`, a `void *` or an `ICO_WORD`;
+those declared with an `int`, `subBoyBrainMain`, `subAP1Control`,
+`actSt07aChanWay1`/`2`, `actSt07aGirlWay`, `actSt10rGirlWay`, never read
+it) and the stage SE procs (`s_init.c` `self->proc(self)`: a `SeSlot *`,
+an `int *`, an `ICO_WORD` or nothing). Four declarations whose callees agree were given
+prototypes instead: `layout_action.c` `NEGATIVE_SE(void)` (one call passed
+a 0 it never read), `girl_act.c` `GirlBrainClearTarget(void *, void *)`
+and `motionManager.c` `dispSkelton(GObj *)` (arguments not read), and
+`frameDependSequence.c` `fireFDSSlot`'s `int (*fn)(int, void *)`, with
+`execWeaponLightOff` taking the two arguments it does not read.
 
 ### Limits
 
-- A view through a table of `void *` (`rope.c`'s `w->chains[2]`) carries
-  no type: the audit cannot see that the `void *` is a `ChainNode`. A view
-  of a record with no EE layout is reported as UNRESOLVED.
-- Offsets with a variable stride (`base + j * 0x50`) are checked only where
-  `ICO_RAW` spells them; raw ones are not seen.
+- A view through a `void *` table is typed only by a cast of the same
+  expression in the same function: before its fix `rope.c`'s `HoldRope`
+  read `(char *)sys[2] + w1 * 0x50` with nothing naming `sys[2]` a
+  `ChainNode`, which the audit would not see. A call's result is never
+  typed this way (`BgAnimation.c`'s `bga_objPtr` returns a different record
+  per object type), and a cast in one `case` types the same expression in
+  the other cases of the switch. A view of a record with no EE layout is
+  reported as UNRESOLVED.
+- A variable stride is checked at its first step only; a stride in a
+  parenthesised sum with a non-literal term (`(w1 * 0x50 +
+  ROPE_EX_OFS)`) is not a site.
+- A constant-size clear over a record with no EE layout (a local union,
+  a struct of vectors), or over a byte or vector buffer, is not checked;
+  of pointer-sized data only a whole array of pointers is.
 - The EE layout of a member without a comment comes from its type's EE
   size; a typedef the audit does not know (bit-fields after the first
   word, some libvu0 and libgraph types) stops the layout until the next
   comment.
-- Only function bodies are scanned; static initialisers are not.
+- `UNPROTO_OK` says what the callees of a listed slot read; a new callee
+  stored in a listed slot (a thread body taking an `int` it reads) is not
+  seen, only a new call site is.
 - The pointee table (`GObj.act`, `Act.work`) is the only type knowledge not
   read from the code.
 
@@ -246,6 +321,9 @@ offset in the text through `ICO_RAW`/`ICO_RAWP`).
 | `omori/src/camera-ico2.c` `targetAPrev`, `targetBPrev` | `float[3]` written by a 16-byte `sceVu0ScaleVector` | the fourth word overran the next global (on the EE each sits in its own 16-byte `.bss` slot) | four words |
 | `fumi/sound/s_init.c` `soundSeEnvNotUseClose` | StgPre 0x110, 0x114, by the EE's 0x194 stride (`D_005F5E60[a * 404]`) | `StgPre` is larger on the host (`endproc` and `initproc` are pointers), so for any stage but 0 the SE environment range came from the wrong record: a garbage range, and a SIGSEGV there (`StageManager`, `exit_stage`) on 14 of 167 stage transitions (package X5) | `stageData[a].seEnvFirst`, `.seEnvLast` |
 | `fumi/sound/soundManager.c` `sndInit` | StgPre 0x18C (`*(unsigned short *)((char *)&stageData[idx] + 0x18C)`) | 8 bytes short of the host's record (two pointers precede it): the low half of `handCameraRate`, not the reverb depth | `stageData[idx].reverbDepth` |
+| `fumi/src/act-game.c` `_ACTCharStatus_Clear` | Act 0x58..0x90 | `memset(&s->bits58, 0, 0x38)` cleared a short prefix of the host's wider span: `gobj80`, `gobj84` and `statusObj` kept stale objects the EE clears (the final review; the `clear` check reports it) | `offsetof(Act, paraStatus) - offsetof(Act, bits58)` |
+| `fumi/src/act-env.c` `ditchProbe`, `act-game.c` `ACTCheckCollis_CI`, `commonact.c` `getLandOffset`, `actCommonEdgeHang` | ClipWork 0xC0 | the EE size of a 240-byte host record: its tail stayed stack garbage (the final review; the `clear` check reports them) | `ICO_MAX_SIZE(ClipWork, 0xC0)` |
+| `fumi/src/way_util.c` `set_bridge` | `WayPoint *wpA[2]`, `*wpB[2]`, cleared with 8 bytes | the first pointer only: when one end found a single candidate its second stayed stack garbage, and when both ends' nearest points coincide that garbage is tested against 0 and dereferenced as the bridge's way point (found by the `clear` check) | `sizeof(wpA)`, `sizeof(wpB)` |
 | `seki/src/BgAnimation.c` `bga_CalcObject`, types 8 and 9 (the ambient volumes) | `BgaObj.rscale`, 0x70 | `BgaObj`'s `mtx` and `quat` pointers put `rscale` at 0x7C on the host, so `1 / scale` went into the volume's `size[3]`, `lightScale` and padding and `size` (0x70) was never written: every ambient volume's extent was whatever the heap held (zero on a cold boot, so every point was inside the first volume; the last stage's words after a stage change, a NaN in `light_getAmbientLight` on stages 27 and 49, package X5) | `BgaLightEnv.size` (0x70, asserted against `AmbientVolume.size` in `Light.c`) |
 
 Fields that were pads and are named because code reads them: `Act.bits60`
@@ -314,9 +392,11 @@ the member m: `*(MotOriReq *)&GOBJ_SUB(self)->root.wall` is `MotOriReq` over
   member), or a 16-byte aligned T (the host compiler copies it with aligned
   SSE moves, `movaps`) over a variable or a type with less alignment.
 
-MISMATCH and UNREGISTERED fail the run (exit 1). ctest runs it as
-`template_audit` next to `offset_audit` on native builds (about 15 s). The
-tree has about 200 record copies, all OK, SAME or RAW.
+MISMATCH and UNREGISTERED fail the run (exit 1), as do the findings of
+the `void *` views below. ctest runs it as `template_audit` next to
+`offset_audit` on native builds (about 20 s). The tree has about 200 record
+copies, all OK, SAME or RAW, and 10 views through `void *`, all OK or
+SAME.
 
 ```sh
 tools/template_audit.py --build build-host/<dir>          # findings, exit 1 on any
@@ -360,6 +440,59 @@ placed:
 | `sugipon/src/clothAnimation.c` | `ClothHangCfg` rows over `ClothPoint` through `Blob64` | 9 members (`node` in the pad at 0x10, `posX/posY/posW` at `pos[0]/[1]/[3]`), sizes |
 | `sugipon/include/multiBgaManager.h` | `InitialBgaMultiAnimeState` over `BgaDisp` slots (2) | 6 members, size, alignment |
 
+### Views through `void *`
+
+A record handed on through a `void *` has no type the copy checks can
+read: the climb mail passes `&enemy->climbOrient` to
+`ActSendMail_WithAdditionalData`, and `actCommonRopeClimbEnd1` reads
+`Act.intrData` whole as a `ClimbEndRec` (DIVERGENCES.md D8, found only by
+a replay). The audit treats each such `void *` as a channel and pairs its
+writers with its readers across all the units:
+
+- **The mail data.** A writer is the data argument of
+  `ActSendMail_WithAdditionalData` (`MAIL_SENDERS`, with its mail number
+  when it is a literal); a reader is a cast to a record of `Act.intrData`
+  or of `GetMailAdditionalData()`'s result, or of a local assigned from
+  them, under the `case N:` of mail N when it has one.
+- **A `void *` member** R.m: `x->m = E` writes, `(T *)x->m` reads. A
+  member written with more than one record type (an actor's work in
+  `Sub15C.work`, one per object kind) cannot be paired by type and is left
+  out.
+
+A writer's storage is its argument's static type: a record (`&rec`, a
+`T *`) or a record from a member (`&x->f`, an array member `x->f`, which
+is R from f); a `void *` or `char *` local is followed to its assignments,
+and a `void *` the function casts to one record elsewhere
+(`(MotOriTarget *)s->addData`) has that type. Data that is not a record (a
+`float`, `void **`) is left out. A mail reader under `case N:` reads mail
+N's writers; any other reader is paired with the writers whose storage
+holds the reader's record on the EE: element by element (arrays split),
+each of the reader's elements over one of the writer's at the same EE
+offset, of the same size and a kind the EE stores the same way (a 4-byte
+`int` over a pointer is such a pair; a `float` over a pointer is not; the
+writer's pads take any element; a union needs one member that holds).
+Each pair is then checked on the host: every element at the host offset of
+its partner less the writer's member offset, of the same host size, the
+record within the storage, and a 16-byte aligned record on a 16-byte
+boundary. A difference is MISMATCH. A mail reader that no writer holds is
+UNPAIRED and a mail writer whose storage cannot be typed UNTYPED, unless
+`tools/template_audit_allow.txt` lists the site with a reason (a line
+matching no site is STALE); the list is empty.
+
+| reader | writers | pair |
+| --- | --- | --- |
+| `commonact.c` `actCommonRopeClimbEnd1`: `ClimbEndRec` | `commonact.c` chain and cage climbs: `&enemy->climbOrient` | `EnemyBattleWork` from `climbOrient`, 12 elements; with `climbOrient`'s `aligned(16)` removed it is a MISMATCH (the quadword alignment, `climbCol` and `obj` 4 bytes off) |
+| `boyact.c` `actBoyReadyMove`: `BoyMoveOrder` | `act-game.c` mails 263 to 265: `&effRec[0..2]` | `ActWork` from `effRec[k]` (`ActEffRec`; `_2C` over its pad) |
+| `commonact.c` `ACTGetOrientFromIntrK` mail 298: `MotOriTarget` | `act-game.c` flyer mail 298: `s->addData`, cast to `MotOriTarget` there | SAME |
+| `commonact.c` `ACTGetOrientFromIntrK` mail 54: `MotOriTarget` | `boyact.c` sofa mail 0x36: `&sofaWallHit` | `WallCfg`, as the union's `wall` |
+| `Shadow.c`: `ClusterPoly` | `Shadow.c`: `ShadowPoly *` into the `void *` `polys` | 4 elements |
+
+The commonact.c assertions of the D8 view stay (`ClimbEndRec` from
+`climbOrient`, the quadword offset). The pairing also found a dead view:
+`enemy_act.c` `subEnemyBrain_Irregular` cast `GObj.act` (written only with
+an `Act`) to an `EnemyBrainWork` whose `flags` at 0x20 is `Act.flags20` on
+the EE but not on the host; the view was never read and is removed.
+
 ### Copies the audit cannot see, asserted in place
 
 - `sugipon/src/rope.c`: `ropeChainInit` (`RopeTemplate`) goes to
@@ -370,15 +503,6 @@ placed:
   kept in `long long boyInfo[24]`; asserted that the template covers the
   whole host record (96 bytes), that the pointers start at 0x20, and that
   `BoyKidnapWork` is the character packet's size.
-- `fumi/src/commonact.c`: `actCommonRopeClimbEnd1` reads the climb mail's
-  data, `&enemy->climbOrient` (sent by the chain and cage climbs through
-  `ActSendMail_WithAdditionalData`), whole as a `ClimbEndRec` through the
-  `void *` `Act.intrData`, so the audit sees no record type on the source
-  side. `EnemyBattleWork.climbOrient` must sit at a 16-byte boundary as on
-  the EE (0x330) or `obj` is read across `climbCol`'s padding
-  (DIVERGENCES.md D8); it is `aligned(16)` on the host (`enemy_act.h`),
-  and `commonact.c` asserts `v1`, `climbCol`, `obj` and the quadword
-  offset.
 
 Not a layout fault: `sugipon/src/clothAnimation.c` copies a texture's
 `TexData` into the cloth through `TexBlob` (89 doublewords, the EE size); on
@@ -397,9 +521,10 @@ per record.
 
 ### Limits
 
-- A copy through a `void *` parameter or table (`InitChains`, a `void *`
-  work pointer, mail data read through `Act.intrData`) carries no record
-  type; such storage is RAW or not seen.
+- A copy through a `void *` parameter (`InitChains`) carries no record
+  type; such storage is RAW or not seen. A `void *` member written with
+  several record types (`Sub15C.work`) is not paired, and mail data sent by
+  another function than `ActSendMail_WithAdditionalData` is not a writer.
 - An implicit conversion between record pointers at a call
   (`-Wincompatible-pointer-types`) followed by a whole copy in the callee is
   not seen: the callee's copy is of its own parameter type.

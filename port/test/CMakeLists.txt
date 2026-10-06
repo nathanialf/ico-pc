@@ -29,21 +29,32 @@ if(Python3_FOUND)
 endif()
 
 # offset_audit (docs/port/OFFSET_AUDIT.md): every raw EE-offset access the host
-# compiles (ICO_RAW/ICO_RAWP, (char *)x + 0xNN, ((int *)x)[N], scalar and record
-# views of a record, pad<HEX> members) checked against the named field at that
-# EE offset, through host offsetof probes. It preprocesses and probes the game
-# units of this build's compile_commands.json with the build's own compiler, so
-# it runs on native builds only.
+# compiles (ICO_RAW/ICO_RAWP, (char *)x + 0xNN, ((int *)x)[N], variable
+# strides, scalar and record views of a record, pad<HEX> members, static
+# initialisers) checked against the named field at that EE offset, through
+# host offsetof probes; constant-size clears and copies against the host
+# span; pointers held in 32 bits; calls through unprototyped declarations.
+# It preprocesses and probes the game units of this build's
+# compile_commands.json with the build's own compiler, so it runs on native
+# builds only.
 if(Python3_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME offset_audit
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/offset_audit.py"
                      --build "${CMAKE_BINARY_DIR}")
     set_tests_properties(offset_audit PROPERTIES TIMEOUT 900)
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        # the unprototyped-call pass reads gcc's gnu23 diagnostics: on gcc it
+        # must run
+        set_tests_properties(offset_audit PROPERTIES
+            FAIL_REGULAR_EXPRESSION "unprototyped-call pass did not run")
+    endif()
     # template_audit (docs/port/OFFSET_AUDIT.md, "Whole-record copies"): every
     # record copied whole over storage of another record type (a template
     # moved through a view, memcpy between two record types) must have its
     # layout registered with static assertions in its unit; unregistered
-    # copies and host layout differences fail.
+    # copies and host layout differences fail. Records passed through a
+    # `void *` (the mail data, `void *` members) are paired writer to reader
+    # and checked the same way.
     add_test(NAME template_audit
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/template_audit.py"
                      --build "${CMAKE_BINARY_DIR}")

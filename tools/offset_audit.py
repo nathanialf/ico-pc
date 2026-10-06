@@ -32,7 +32,17 @@ Method:
      - ICO_RAW / ICO_RAWP markers: the field must be the one at the EE offset
        (counted from p, which can itself point into the record);
      - `pad<HEX>` / `unk<HEX>` members (named by their EE offset), unless
-       copied or cleared whole (memcpy, memset, sizeof).
+       copied or cleared whole (memcpy, memset, sizeof);
+     - a variable stride (`base + j * 0x50 + 0x10`, `q[i * 20 + 9]`):
+       checked at its first step, every variable at 1;
+     - memset / memcpy / memmove / bzero / bcopy with a size made of
+       literals over a record, a span from a member, or a whole array of
+       pointers: the EE span must be the host's (PARTIAL when it stops short
+       of the members the EE cleared, OVERRUN when it runs into the next);
+     - the initialisers of file-scope declarations as well as function
+       bodies;
+     - a `void *` table element or member (`sys[2]`, `w->obj`) the function
+       casts to exactly one record type elsewhere: viewed as that record.
 3. The operand's type comes from the compiler: each operand is wrapped in a
    statement expression that initialises a `struct __icoA_<k> *` from it, and
    gcc's diagnostic names the operand's type. Two untyped words have their
@@ -48,6 +58,10 @@ Method:
    the named field's host offset, NOFIELD when no named field is at that EE
    offset (a gap without a comment, or a pad), TRUNC when a pointer goes
    through `int`.
+6. Two passes compile each unit again: at -O1 for gcc's SSA dump (NARROW, a
+   pointer-wide value in 32 bits) and as gnu23, where `()` means `(void)`,
+   for the calls through unprototyped declarations (UNPROTO unless every
+   argument is an int or UNPROTO_OK says what the callees read).
 
 Usage:
     tools/offset_audit.py --build build-host/<preset>    # report, exit 1 on findings
@@ -166,6 +180,7 @@ class Unit:
         self.match = self._match()
         self.typedefs = self._typedefs()
         self.funcs = self._funcs()
+        self.inits = self._inits()
 
     def _match(self):
         m = {}
@@ -237,6 +252,44 @@ class Unit:
                 depth += 1
             elif t.s == "}":
                 depth -= 1
+        return out
+
+    def _inits(self):
+        """[start, end] token index pairs of the initialisers of file-scope
+        declarations (`T x = { ... };`), outside every function body."""
+        out = []
+        toks = self.toks
+        n = len(toks)
+        bodies = {a: b for a, b in self.funcs}
+        depth = 0
+        i = 0
+        while i < n:
+            t = toks[i]
+            if i in bodies:
+                i = bodies[i] + 1
+                continue
+            if t.k == "punct":
+                if t.s in "{([":
+                    depth += 1
+                elif t.s in "})]":
+                    depth -= 1
+                elif t.s == "=" and depth == 0:
+                    j = i + 1
+                    d = 0
+                    while j < n:
+                        s = toks[j].s
+                        if s in "{([":
+                            d += 1
+                        elif s in "})]":
+                            d -= 1
+                        elif d == 0 and s in (";", ","):
+                            break
+                        j += 1
+                    if j > i + 1:
+                        out.append((i + 1, j - 1))
+                    i = j
+                    continue
+            i += 1
         return out
 
     def func_of(self, i):
@@ -375,6 +428,92 @@ def const_terms(u, j):
         end += 2
         seen = True
     return (total, end) if seen else (None, j)
+
+
+def linear(u, k, signed):
+    """Terms `[+-] t [+-] t ...` from token k (with signed, toks[k] is the
+    first sign; else the first term has none). A term is a constant or a
+    variable scaled by one (`i * S`, `S * i`, `(e) * S`, `i << K`). Returns
+    (the sum with every variable at 1, end index, whether a variable term
+    was seen); end is k - 1 when nothing was read."""
+    toks = u.toks
+    n = len(toks)
+
+    def operand(q):
+        if q >= n:
+            return None, None
+        if toks[q].k == "id" and toks[q].s not in TYPE_WORDS and toks[q].s not in (
+                "sizeof", "__builtin_offsetof", "__alignof__", "_Alignof"):
+            e = u.postfix_end(q)
+            if e is not None and e < n:
+                return e, "var"
+        if toks[q].s == "(" and u.match.get(q) is not None and u.cast_at(q) is None:
+            return u.match[q], "var"
+        if toks[q].k == "num" and num_value(toks[q].s) is not None:
+            return q, "num"
+        return None, None
+
+    total = 0
+    end = k - 1
+    var = False
+    q = k
+    first = True
+    while True:
+        if signed or not first:
+            if q + 1 >= n or toks[q].s not in ("+", "-"):
+                break
+            sign = 1 if toks[q].s == "+" else -1
+            q += 1
+        else:
+            sign = 1
+        first = False
+        e1, k1 = operand(q)
+        if e1 is None:
+            break
+        if e1 + 2 < n and toks[e1 + 1].s in ("*", "<<"):
+            e2, k2 = operand(e1 + 2)
+            if e2 is None or k1 == k2 or (toks[e1 + 1].s == "<<" and (k1, k2) != ("var", "num")):
+                break
+            c = num_value(toks[e1 + 2].s if k2 == "num" else toks[q].s)
+            v = (1 << c) if toks[e1 + 1].s == "<<" else c
+            vterm = True
+            te = e2
+        elif k1 == "num":
+            v = num_value(toks[q].s)
+            vterm = False
+            te = e1
+        else:
+            break
+        if te + 1 < n and toks[te + 1].s in ("*", "/", "%", "<<", ">>", "[", "(", ".", "->", "&",
+                                              "|", "^"):
+            break
+        total += sign * v
+        var = var or vterm
+        end = te
+        q = te + 1
+    return total, end, var
+
+
+def var_terms(u, j):
+    """`+ N + i * S ...` after token j with at least one variable term: (the
+    sum at 1, end index), else (None, j). A variable stride is checked at its
+    first step, as ICO_RAW's index offsets are."""
+    v, e, var = linear(u, j + 1, True)
+    if e + 1 < len(u.toks) and u.toks[e + 1].s in ("+", "-"):
+        return None, j  # a term it cannot read follows: not the whole offset
+    return (v, e) if var and e > j else (None, j)
+
+
+def bracket_linear(u, k):
+    """`[ i * S + N ]` from the `[` at token k: (the index at i = 1, the
+    `]`), or (None, k)."""
+    c = u.match.get(k)
+    if c is None:
+        return None, k
+    v, e, var = linear(u, k + 1, False)
+    if not var or e != c - 1:
+        return None, k
+    return v, c
 
 
 def bracket_const(toks, k):
@@ -972,18 +1111,55 @@ def find_sites(u):
         s.func = func
         return s
 
-    for fa, fb in u.funcs:
-        func = (fa, fb)
-        has_game = any(in_game(toks[k]) for k in range(fa, min(fb, fa + 2)))
-        if not has_game and not in_game(toks[fb]):
-            continue
-        views, bumps = scan_func_locals(u, fa, fb)
-        u.locals[func] = (views, bumps)
+    # function bodies, then the initialisers of file-scope declarations (a
+    # static initialiser can hold an address computed from an EE offset)
+    regions = [(fa, fb, (fa, fb)) for fa, fb in u.funcs]
+    regions += [(a - 1, b + 1, None) for a, b in u.inits]
+    for fa, fb, func in regions:
+        if func is not None:
+            has_game = any(in_game(toks[k]) for k in range(fa, min(fb, fa + 2)))
+            if not has_game and not in_game(toks[fb]):
+                continue
+            views, bumps = scan_func_locals(u, fa, fb)
+            u.locals[func] = (views, bumps)
+        else:
+            if not in_game(toks[fa + 1]):
+                continue
+            views, bumps = {}, set()
         firsts = {}
         for i in range(fa + 1, fb):
             t = toks[i]
             if not in_game(t):
                 continue
+            # memset / memcpy / memmove with a constant size over a record or
+            # a span from a member: the size is the EE's
+            if t.k == "id" and t.s in CLEAR_FUNCS and toks[i + 1].s == "(" and \
+                    toks[i - 1].s not in (".", "->"):
+                ptrs, si = CLEAR_FUNCS[t.s]
+                args = []
+                c = u.match.get(i + 1)
+                depth = 0
+                st = i + 2
+                for k in range(i + 2, c):
+                    s_ = toks[k].s
+                    if s_ in "([{":
+                        depth += 1
+                    elif s_ in ")]}":
+                        depth -= 1
+                    elif s_ == "," and depth == 0:
+                        args.append((st, k - 1))
+                        st = k + 1
+                args.append((st, c - 1))
+                if len(args) > max(ptrs + (si,)):
+                    n_ = const_expr(u, *args[si])
+                    if n_ is not None and n_ > 0:
+                        for pi in ptrs:
+                            a_, b_ = strip_parens(u, *args[pi])
+                            s = mk("clear", i, i, c, func)
+                            s.operand = (a_, b_)
+                            s.size = n_
+                            s.call = t.s
+                            sites.append(s)
             # ICO_RAW / ICO_RAWP markers: __ico_audit_raw ( p , off ) , [&] ( field )
             if t.s == "__ico_audit_raw" and toks[i + 1].s == "(":
                 c = u.match.get(i + 1)
@@ -1024,7 +1200,7 @@ def find_sites(u):
                 sites.append(s)
                 continue
             # pad / unk members, named by their EE offset
-            if t.k == "id" and toks[i - 1].s in ("->", ".") and (
+            if t.k == "id" and toks[i - 1].s in ("->", ".") and toks[i - 2].s not in ("{", ",") and (
                     re.match(r"^_?pad[0-9A-Fa-f]+$", t.s) or re.match(r"^unk[0-9A-Fa-f]+$", t.s)):
                 bstart = u.postfix_start(i - 2)
                 s = mk("pad", i, bstart, i, func)
@@ -1052,17 +1228,28 @@ def find_sites(u):
             if t.k == "id" and t.s in views and toks[i - 1].s not in (".", "->"):
                 nxt = toks[i + 1].s
                 v = None
+                stride = False
                 if nxt == "[" and bracket_const(toks, i + 1)[0] is not None:
                     v, end = bracket_const(toks, i + 1)
                     kind = "view_index"
+                elif nxt == "[" and bracket_linear(u, i + 1)[0] is not None:
+                    v, end = bracket_linear(u, i + 1)
+                    kind = "view_index"
+                    stride = True
                 elif nxt in ("+", "-") and i + 2 < n and toks[i + 2].k == "num" and \
                         toks[i - 1].s not in BAD_PREV:
                     v, end = const_terms(u, i)
                     kind = "view_plus"
+                elif nxt in ("+", "-") and toks[i - 1].s not in BAD_PREV and \
+                        var_terms(u, i)[0] is not None:
+                    v, end = var_terms(u, i)
+                    kind = "view_plus"
+                    stride = True
                 if v is not None:
                     s = mk(kind, i, i, end, func)
                     s.operand = (i, i)
                     s.const = v
+                    s.stride = stride
                     sites.append(s)
                     continue
                 # IDENT->member, IDENT a local of a record type assigned another
@@ -1141,15 +1328,19 @@ def find_sites(u):
                 continue
             scale = 1 if (not ptr or base in CHARLIKE) else SCALAR.get(base, 1)
             # ((T *)x)[N]
-            if ptr and grouped and oe + 2 < n and toks[oe + 2].s == "[" and \
-                    bracket_const(toks, oe + 2)[0] is not None:
+            if ptr and grouped and oe + 2 < n and toks[oe + 2].s == "[" and (
+                    bracket_const(toks, oe + 2)[0] is not None or
+                    bracket_linear(u, oe + 2)[0] is not None):
                 v, be = bracket_const(toks, oe + 2)
-                if v is not None:
-                    s = mk("index", i, i - 1, be, func)
-                    s.operand = (ce + 1, oe)
-                    s.const = v * scale
-                    s.cast = ctype
-                    sites.append(s)
+                stride = v is None
+                if v is None:
+                    v, be = bracket_linear(u, oe + 2)
+                s = mk("index", i, i - 1, be, func)
+                s.operand = (ce + 1, oe)
+                s.const = v * scale
+                s.cast = ctype
+                s.stride = stride
+                sites.append(s)
                 continue
             if prev == "*" and scalar and (toks[i - 2].k != "id" or toks[i - 2].s in (
                     "return", "case", "else", "do")) and toks[i - 2].s not in (")", "]") and \
@@ -1164,14 +1355,56 @@ def find_sites(u):
             if prev in BAD_PREV:
                 continue
             v, end = const_terms(u, oe)
+            stride = False
+            if v is None:
+                v, end = var_terms(u, oe)
+                stride = True
             if v is None:
                 continue
             s = mk(kind, i, i, end, func)
             s.operand = (ce + 1, oe)
             s.const = v * scale
             s.cast = ctype
+            s.stride = stride
             sites.append(s)
     return sites
+
+
+# the clears and copies whose constant size is checked against the record's
+# span: name -> (pointer arguments, size argument)
+CLEAR_FUNCS = {"memset": ((0,), 2), "memcpy": ((0, 1), 2), "memmove": ((0, 1), 2),
+               "__builtin_memset": ((0,), 2), "__builtin_memcpy": ((0, 1), 2),
+               "__builtin_memmove": ((0, 1), 2), "bzero": ((0,), 1), "bcopy": ((0, 1), 2)}
+
+
+def const_expr(u, a, b):
+    """The value of [a, b] when it is an integer constant expression of
+    literals only (`0x38`, `16 * 4`), else None: a `sizeof`, an offsetof or
+    a variable makes the size the host's own."""
+    txt = []
+    k = a
+    while k <= b:
+        t = u.toks[k]
+        if t.s == "(" and u.cast_at(k) is not None:
+            ct = strip_cv(u.cast_at(k)[0])
+            if ct not in INTCAST and ct not in SCALAR:
+                return None
+            k = u.cast_at(k)[1] + 1  # (size_t)0x38: the integer cast drops out
+            continue
+        if t.k == "num":
+            v = num_value(t.s)
+            if v is None:
+                return None
+            txt.append(str(v))
+        elif t.k == "punct" and t.s in ("+", "-", "*", "/", "(", ")", "<<", ">>", "|", "&"):
+            txt.append("//" if t.s == "/" else t.s)
+        else:
+            return None
+        k += 1
+    try:
+        return int(eval("".join(txt), {"__builtins__": {}}))
+    except Exception:
+        return None
 
 
 def strip_parens(u, a, b):
@@ -1244,15 +1477,29 @@ def run(cmd, cwd=None, inp=None):
                           encoding="latin-1")
 
 
-def probe_types(u, spans, workdir):
+PROBE_PRE_ADDR = "({ __auto_type __icov = &("
+PROBE_POST_ADDR = "); struct __icoA_%d *__icoa = __icov; (void)__icoa; *__icov; })"
+
+
+def probe_types(u, spans, workdir, addr=False):
     """{span: type string}; a span with no diagnostic converts to a struct
-    pointer silently, so it is `void *`."""
+    pointer silently, so it is `void *`. With addr, the type of the span's
+    address (`T *(*)[2]` for an array of two pointers)."""
+    pre, post = (PROBE_PRE_ADDR, PROBE_POST_ADDR) if addr else (PROBE_PRE, PROBE_POST)
     spans = sorted(set(spans))
     inserts = []
+    tail = []
     for pid, (a, b) in enumerate(spans):
+        if u.func_of(a) is None:
+            # a file-scope initialiser: no statement expression there, so the
+            # operand (which names only file-scope objects) is typed in a
+            # function appended to the unit
+            tail.append("void __icoT_%d(void) { struct __icoA_%d *__icoa = (%s); (void)__icoa; }" % (
+                pid, pid, u.text_of(a, b)))
+            continue
         ln = u.toks[b].b - u.toks[a].a
-        inserts.append((u.toks[a].a, 1, -ln, PROBE_PRE))
-        inserts.append((u.toks[b].b, 0, ln, PROBE_POST % pid))
+        inserts.append((u.toks[a].a, 1, -ln, pre))
+        inserts.append((u.toks[b].b, 0, ln, post % pid))
     inserts.sort()
     out = []
     last = 0
@@ -1261,6 +1508,8 @@ def probe_types(u, spans, workdir):
         out.append(txt)
         last = pos
     out.append(u.text[last:])
+    if tail:
+        out.append("\n" + "\n".join(tail) + "\n")
     path = os.path.join(workdir, "%s.%d.probe.i" % (os.path.basename(u.src), threading.get_ident()))
     with open(path, "w", encoding="latin-1") as f:
         f.write("".join(out))
@@ -1560,6 +1809,8 @@ class Resolver:
                     return self.addr(ce + 1, b, func, depth + 1)
                 if oe is not None and oe < b:
                     v, end = const_terms(u, oe)
+                    if v is None or end != b:
+                        v, end = var_terms(u, oe)  # a variable stride: its first step
                     if v is not None and end == b:
                         ct = c[0]
                         if ct.endswith("*"):
@@ -1587,6 +1838,8 @@ class Resolver:
         oe = u.unary_end(a)
         if oe is not None and oe < b:
             v, end = const_terms(u, oe)
+            if v is None or end != b:
+                v, end = var_terms(u, oe)
             if v is not None and end == b:
                 sc = self.elem_of(a, oe)
                 if sc is None:
@@ -1648,7 +1901,9 @@ class Resolver:
                         return Addr(pt, prec, "", 0, "%s.%s" % (rec.name, path))
             ty = self.type(a, b)
             rec, tn = self.record(ty)
-            return Addr(tn, rec) if rec is not None else None
+            if rec is None:
+                return self.cast_view(a, b, ty, func)
+            return Addr(tn, rec)
         if a == b and toks[a].k == "id":
             ty = self.type(a, b)
             rec, tn = self.record(ty)
@@ -1676,7 +1931,59 @@ class Resolver:
             return got
         ty = self.type(a, b)
         rec, tn = self.record(ty)
-        return Addr(tn, rec) if rec is not None else None
+        if rec is None:
+            return self.cast_view(a, b, ty, func)
+        return Addr(tn, rec)
+
+    def cast_view(self, a, b, ty, func):
+        """A `void *` (or byte pointer) that the function casts to exactly
+        one record type with an EE layout (`(ChainNode *)w->chains[k]`): that
+        record, the type the table's element is known by."""
+        if func is None or ptr_target(ty) is None or strip_cv(ptr_target(ty)) not in CHARLIKE:
+            return None
+        u = self.u
+        toks = u.toks
+        # a table element or member (`sys[2]`, `w->obj`), not a call's result
+        # (a call can return a different record each time: bga_objPtr)
+        if any(toks[k].k == "id" and toks[k + 1].s == "(" for k in range(a, b)):
+            return None
+        key = (func, "".join(t.s for t in toks[a:b + 1]))
+        cache = self.__dict__.setdefault("_cv", {})
+        if key not in cache:
+            got = set()
+            fa, fb = func
+            for k in range(fa + 1, fb):
+                if toks[k].s != "(":
+                    continue
+                c = u.cast_at(k)
+                if not c or not c[0].endswith("*") or c[0].endswith("* *"):
+                    continue
+                e = u.unary_end(c[1] + 1)
+                if e is None:
+                    continue
+                x, y = strip_parens(u, c[1] + 1, e)
+                while True:
+                    cc = u.cast_at(x)
+                    if cc and cc[0].endswith("*") and strip_cv(cc[0][:-1]) in CHARLIKE and \
+                            u.unary_end(cc[1] + 1) == y:
+                        x, y = strip_parens(u, cc[1] + 1, y)
+                        continue
+                    break
+                if "".join(t.s for t in toks[x:y + 1]) != key[1]:
+                    continue
+                vt = strip_cv(c[0][:-1])
+                if vt in CHARLIKE or vt in SCALAR:
+                    continue
+                got.add(vt)
+            cache[key] = got
+        got = cache[key]
+        if len(got) != 1:
+            return None
+        vt = next(iter(got))
+        rec = self.db.lookup(vt, self.files)
+        if rec is None:
+            return None
+        return Addr(vt, rec, "", 0, "a void * cast to %s in the function" % vt)
 
     def param(self, name, func, depth):
         """A parameter that views a record: the record every call in the unit
@@ -1752,6 +2059,14 @@ class Resolver:
             return None
         return Addr(got.tname, got.rec, got.path, got.extra, "parameter %s of %s" % (name, fname))
 
+    def type_addr(self, a, b):
+        """The type of &[a, b] (an array keeps its bounds)."""
+        sp = (a, b, "addr")
+        if sp in self.types:
+            return self.types[sp]
+        self.need.add(sp)
+        raise Pending()
+
     def elem_of(self, a, b):
         ty = strip_cv(self.type(a, b))
         pt = ptr_target(ty)
@@ -1786,6 +2101,8 @@ def audit_unit(src, fl, db, workdir):
         """Fill s.plan = (Addr of the record start view, EE offset, host access
         offset expression or None for a raw offset) or a verdict."""
         toks = u.toks
+        if s.kind == "clear":
+            return plan_clear(s)
         if s.kind == "pad":
             (a, b), name, op = s.field
             ty = rv.type(a, b)
@@ -2084,6 +2401,112 @@ def audit_unit(src, fl, db, workdir):
             s.addr = ad
         finish(s)
 
+    def plan_clear(s):
+        """A constant-size clear or copy over a record: the EE span it
+        covers, and the host bounds that span must fall between (the end of
+        the last member it covers, the start of the next)."""
+        toks = u.toks
+        a, b = s.operand
+        ad = rv.addr(a, b, s.func)
+        if ad is None or ad.rec is None:
+            # a whole array of pointers (`WayPoint *wpA[2]`): 4 bytes an
+            # element on the EE
+            x, y = a, b
+            while True:
+                x, y = strip_parens(u, x, y)
+                c = u.cast_at(x)
+                if c is not None and u.unary_end(c[1] + 1) == y:
+                    x = c[1] + 1
+                    continue
+                break
+            if toks[x].s == "&" and y == x + 1:
+                x += 1
+            if x == y and toks[x].k == "id":
+                at = rv.type_addr(x, y)
+                m = re.match(r"^(.*\*)\s*\(\*\)((?:\[\d+\])+)$", strip_cv(at))
+                if m:
+                    n = 1
+                    for d in re.findall(r"\[(\d+)\]", m.group(2)):
+                        n *= int(d)
+                    s.ee = 0
+                    s.addr = Addr(m.group(1) + " " + m.group(2), None)
+                    s.arr = (n, toks[x].s, m.group(1).strip())
+                    s.span_start = None
+                    s.span_lo = s.span_hi = need("%d * sizeof(void *)" % n)
+                    s.span_what = "%s, %d pointers (%d bytes on the EE)" % (toks[x].s, n, 4 * n)
+                    s.verdict = "SPAN" if s.size == 4 * n else "SKIP"
+                    if s.verdict == "SKIP":
+                        s.detail = "%s of %d bytes over %s, %d pointers: not the EE size" % (
+                            s.call, s.size, toks[x].s, n)
+                    return
+            s.verdict = "SKIP"
+            s.detail = "%s of %d bytes: not a view of a record with an EE layout (%s)" % (
+                s.call, s.size, rv.type(a, b))
+            return
+        rec, T = ad.rec, ad.tname
+        base = ee_offset_of(rec, ad.path)
+        if base is None:
+            s.verdict = "SKIP"
+            s.detail = "%s.%s has no EE offset" % (T, ad.path)
+            return
+        ee0 = base + ad.extra
+        ee1 = ee0 + s.size
+        s.ee = ee0
+        s.addr = ad
+        s.span_start = need("__builtin_offsetof(%s, %s)" % (T, ad.path)) if ad.path else None
+        size = rec.size
+        if size and not ad.path and not ad.extra and ee1 > size and s.size % size == 0:
+            n = s.size // size
+            s.span_lo = need("%d * sizeof(%s)" % (n, T))
+            s.span_hi = s.span_lo
+            s.span_what = "%d %s records" % (n, T)
+            s.verdict = "SPAN"
+            return
+        if size and ee1 > size:
+            s.verdict = "NOFIELD"
+            s.detail = "%s of 0x%X bytes from %s EE 0x%X: past the record's EE size 0x%X" % (
+                s.call, s.size, T, ee0, size)
+            return
+        ents = [e for e in rec.entries if e[4] in ("field", "pad")]
+        last = [e for e in ents if e[6] and e[1] < ee1 and e[1] + e[6] == ee1 and e[1] >= ee0]
+        nxt = [e for e in ents if e[1] == ee1]
+        if last:
+            f = min(last, key=lambda e: e[3])
+            s.span_lo = need("__builtin_offsetof(%s, %s) + sizeof(((%s *)0)->%s)" % (T, f[0], T, f[0]))
+            s.span_what = "to the end of %s" % f[0]
+            if size and ee1 == size:
+                s.span_hi = need("sizeof(%s)" % T)
+            elif nxt:
+                g = min(nxt, key=lambda e: e[3])
+                s.span_hi = need("__builtin_offsetof(%s, %s)" % (T, g[0]))
+                s.span_what += ", before %s" % g[0]
+            else:
+                s.span_hi = None
+            s.verdict = "SPAN"
+            return
+        tgt = resolve(rec, ee1)
+        if tgt[0] and tgt[1] == 0:
+            s.span_lo = need("__builtin_offsetof(%s, %s)" % (T, tgt[0]))
+            s.span_hi = s.span_lo
+            s.span_what = "to %s" % tgt[0]
+            s.verdict = "SPAN"
+            return
+        # the end inside a member (a pad, a doubleword): the same byte on the
+        # host when the member's host size is its EE size
+        inside = [e for e in ents if e[6] and e[1] < ee1 < e[1] + e[6]]
+        if inside:
+            f = max(inside, key=lambda e: e[3])
+            d = ee1 - f[1]
+            s.span_lo = need("__builtin_offsetof(%s, %s) + %d" % (T, f[0], d))
+            s.span_hi = s.span_lo
+            s.span_guard = (need("sizeof(((%s *)0)->%s)" % (T, f[0])), f[6])
+            s.span_what = "to %s+0x%X" % (f[0], d)
+            s.verdict = "SPAN"
+            return
+        s.verdict = "UNRESOLVED"
+        s.detail = "%s of 0x%X bytes from %s EE 0x%X ends inside a member (EE 0x%X: %s)" % (
+            s.call, s.size, T, ee0, ee1, tgt[1] if tgt[0] is None else tgt[0])
+
     def finish(s):
         ad = s.addr
         if ad.rec is None:
@@ -2114,7 +2537,12 @@ def audit_unit(src, fl, db, workdir):
         new = {sp for sp in rv.need if sp not in rv.types}
         if not new:
             break
-        rv.types.update(probe_types(u, new, workdir))
+        plain = {sp for sp in new if len(sp) == 2}
+        if plain:
+            rv.types.update(probe_types(u, plain, workdir))
+        addrs = {sp[:2] for sp in new if len(sp) == 3}
+        if addrs:
+            rv.types.update({sp + ("addr",): t for sp, t in probe_types(u, addrs, workdir, True).items()})
         todo = later
     for s in sites:
         if s.verdict is None and not hasattr(s, "ee"):
@@ -2155,6 +2583,40 @@ def audit_unit(src, fl, db, workdir):
             got.update(probe_values(global_unit(fl, workdir), miss, workdir))
     else:
         got = {}
+    for s in sites:
+        if s.verdict != "SPAN":
+            continue
+        T = s.addr.tname
+        st = 0 if s.span_start is None else got.get(s.span_start)
+        lo = got.get(s.span_lo)
+        hi = got.get(s.span_hi) if s.span_hi is not None else None
+        if getattr(s, "arr", None):
+            what = "%s of 0x%X bytes over %s" % (s.call, s.size, s.span_what)
+        else:
+            what = "%s of 0x%X bytes from %s%s (EE 0x%X..0x%X, %s)" % (
+                s.call, s.size, T, "." + s.addr.path if s.addr.path else "", s.ee, s.ee + s.size,
+                s.span_what)
+        if st is None or lo is None or (s.span_hi is not None and hi is None):
+            s.verdict = "UNRESOLVED"
+            s.detail = what + ": the host probe failed"
+            continue
+        st += s.addr.extra
+        end = st + s.size
+        g = getattr(s, "span_guard", None)
+        if g is not None and got.get(g[0]) != g[1]:
+            s.verdict = "UNRESOLVED"
+            s.detail = what + ": the member it ends in is 0x%s bytes on the host, 0x%X on the EE" % (
+                "%X" % got[g[0]] if got.get(g[0]) is not None else "?", g[1])
+            continue
+        if end < lo:
+            s.verdict = "PARTIAL"
+            s.detail = what + ": the host span is 0x%X bytes" % (lo - st)
+        elif hi is not None and end > hi:
+            s.verdict = "OVERRUN"
+            s.detail = what + ": the host span is 0x%X bytes" % (hi - st)
+        else:
+            s.verdict = "OK"
+            s.detail = what
     for s in sites:
         if s.verdict == "STORE":
             vs, ms = (got.get(x) for x in s.store)
@@ -2213,6 +2675,8 @@ def audit_unit(src, fl, db, workdir):
         s.host = host
         s.host_target = tg
         via = (" via " + s.addr.note) if s.addr.note else ""
+        if getattr(s, "stride", False):
+            via += " (a variable stride, at its first step)"
         acc = None
         if s.kind in ("index", "deref") and s.cast and s.cast.endswith("*"):
             acc = SCALAR.get(s.cast[:-1].strip())
@@ -2230,7 +2694,12 @@ def audit_unit(src, fl, db, workdir):
             s.verdict = "MISMATCH"
             s.detail = "%s EE 0x%X = %s: host 0x%X, the access uses 0x%X%s" % (
                 T, s.ee, name, tg, host, via)
+    if UNPROTO_PASS[0]:
+        sites.extend(unproto_sites(u, workdir))
     return sites
+
+
+UNPROTO_PASS = [None]  # set by main: the -std= of the unprototyped-call pass
 
 
 
@@ -2285,6 +2754,126 @@ def narrow_ok(rel, srcline):
             return why
     return None
 
+
+
+# --- Calls through unprototyped declarations ------------------------------
+# A declaration `T f()` or `T (*fn)()` takes any arguments: the call passes
+# them after the default promotions, a pointer as 8 bytes, an int as 4, a
+# float as a double. On the EE an int and a pointer are the same 4 bytes, so a
+# callee that reads an int where the caller passed a pointer (or the reverse)
+# worked there and reads the wrong bytes here. C23 reads `()` as `(void)`, so
+# compiling the unit as gnu23 makes every such call with arguments an error
+# ("too many arguments"). A call whose arguments are all int-sized integers
+# cannot pass a pointer or a float and is OK; any other must be in
+# UNPROTO_OK, which says what the callees read, or it is UNPROTO.
+UNPROTO_RE = re.compile(r"^(.+?):(\d+):\d+: error: too many arguments to function '([^']+)'")
+# reviewed: (file, the called expression) -> what the callees read
+UNPROTO_OK = {
+    ("ico2/common/src/debug.c", "fn"):
+        "the memory-card menu passes &mc: debug_mcLoadMainBlock, SaveMainBlock and DeleteFile read "
+        "the McMgr *, debug_mcFormat and debug_mcUnformat take an int port they never read, "
+        "debug_mcTest takes nothing",
+    ("ico2/fumi/ios/mcard.c", "e->save"):
+        "iOSMcSaveList's writers take (McMgr *, const IconFile * or void *) or (McMgr *): pointers",
+    ("ico2/fumi/ios/mcard.c", "e->load"):
+        "iOSMcSaveList's readers take (McMgr *) or (McMgr *, void *): pointers",
+    ("ico2/fumi/ios/thread.c", "obj->func"):
+        "a thread's body gets its void * argument (a process's GObj): the bodies read a pointer or "
+        "an ICO_WORD; those declared with an int (subBoyBrainMain, subAP1Control, actSt07aChanWay1/2, "
+        "actSt07aGirlWay, actSt10rGirlWay, the IntrMail motion slots' int) never read it",
+    ("ico2/fumi/isys/obj_manager.c", "p->func"):
+        "a thread-less process's body gets its GObj: the same bodies as obj->func in thread.c",
+    ("ico2/fumi/sound/s_init.c", "self->proc"):
+        "the stageSEProc.c procs take the slot as a SeSlot *, an int * or an ICO_WORD, or nothing",
+}
+
+
+def unproto_sites(u, workdir):
+    """UNPROTO / OK sites of the unit's calls through `()` declarations."""
+    path = os.path.join(workdir, "%s.%d.c23.i" % (os.path.basename(u.src), threading.get_ident()))
+    with open(path, "w", encoding="latin-1") as f:
+        f.write(u.text)
+    opts = [UNPROTO_PASS[0] if o.startswith("-std=") else o for o in u.flags["opts"]]
+    if UNPROTO_PASS[0] not in opts:
+        opts.append(UNPROTO_PASS[0])
+    r = run([u.flags["cc"], "-x", "cpp-output", "-fsyntax-only", "-w", "-fmax-errors=0"] + opts + [path])
+    toks = u.toks
+    calls = []
+    seen = set()
+    for line in r.stderr.splitlines():
+        m = UNPROTO_RE.match(line)
+        if not m:
+            continue
+        f, ln, callee = m.group(1), int(m.group(2)), m.group(3)
+        if callee == "__ico_audit_raw":
+            continue  # the audit's own ICO_RAW marker (ee_view.h)
+        key = (f, ln, callee)
+        if key in seen:
+            continue
+        seen.add(key)
+        last = re.findall(r"[A-Za-z_]\w*", callee)[-1]
+        for k, t in enumerate(toks):
+            if t.ln == ln and t.f == f and t.s == last and toks[k + 1].s == "(":
+                rel = os.path.relpath(os.path.realpath(os.path.join(u.flags["dir"], f)), ROOT)
+                calls.append((rel, ln, callee, k))
+                break
+    if not calls:
+        return []
+    spans = {}
+    for rel, ln, callee, k in calls:
+        c = u.match[k + 1]
+        args = []
+        st = k + 2
+        depth = 0
+        for q in range(k + 2, c):
+            s_ = toks[q].s
+            if s_ in "([{":
+                depth += 1
+            elif s_ in ")]}":
+                depth -= 1
+            elif s_ == "," and depth == 0:
+                args.append((st, q - 1))
+                st = q + 1
+        args.append((st, c - 1))
+        spans[k] = args
+    types = probe_types(u, [sp for a in spans.values() for sp in a], workdir)
+    out = []
+    for rel, ln, callee, k in calls:
+        tys = [strip_cv(types[sp]) for sp in spans[k]]
+        risky = [t for t in tys if "*" in t or "[" in t or t in ("float", "double") or
+                 t in INTCAST and t not in ("int", "unsigned int", "u_int", "unsigned", "s32", "u32")]
+        snippet = re.sub(r"\s+", " ", u.text_of(k, u.match[k + 1]))[:160]
+        s = Site(None, "unproto", 0, os.path.join(ROOT, rel), ln, snippet)
+        why = UNPROTO_OK.get((rel, callee))
+        if not risky:
+            s.verdict = "OK"
+            s.detail = "%s() through a () declaration: int arguments only (%s)" % (callee, ", ".join(tys))
+        elif why:
+            s.verdict = "OK"
+            s.detail = "%s(%s) through a () declaration; %s" % (callee, ", ".join(tys), why)
+            s.reviewed = (rel, callee)
+        else:
+            s.verdict = "UNPROTO"
+            s.detail = "%s(%s) through a () declaration: a pointer, long or float argument the callee " \
+                       "may read with another width" % (callee, ", ".join(tys))
+        out.append(s)
+    return out
+
+
+def gnu23(tus):
+    """The -std= under which the build's gcc reads `()` as `(void)` and says
+    so in the diagnostic the pass reads (gnu23, gcc 13's gnu2x), else None."""
+    for fl in tus.values():
+        for std in ("-std=gnu23", "-std=gnu2x"):
+            r = run([fl["cc"], std, "-dM", "-E", "-x", "c", "/dev/null"])
+            if r.returncode != 0 or "__clang__" in r.stdout or "#define __GNUC__" not in r.stdout:
+                continue
+            r = run([fl["cc"], std, "-fsyntax-only", "-x", "c", "-"],
+                    inp="void f();\nvoid g(void) { f(1); }\n")
+            if any(UNPROTO_RE.match(x.replace("<stdin>", "s.c")) for x in r.stderr.splitlines()):
+                return std
+        return None
+    return None
 
 
 def lp64(tus):
@@ -2393,6 +2982,7 @@ def main():
     # the narrowing pass needs an LP64 host: there ICO_WORD is `long`
     # (port/test/CMakeLists.txt runs it on the native Linux build)
     narrow = not args.no_narrow and lp64(tus)
+    UNPROTO_PASS[0] = gnu23(tus)
     os.makedirs(os.path.join(args.build, "offset_audit"), exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="work.", dir=os.path.join(args.build, "offset_audit")) as work:
         _GLOBAL.clear()
@@ -2413,7 +3003,7 @@ def main():
     counts = {}
     for s in sites:
         counts[s.verdict] = counts.get(s.verdict, 0) + 1
-    bad = ("MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "NARROW")
+    bad = ("MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "NARROW", "PARTIAL", "OVERRUN", "UNPROTO")
     for s in sites:
         if s.verdict in bad or args.all or (args.skipped and s.verdict == "SKIP"):
             print("%-10s %s:%d [%s] %s\n           %s" % (s.verdict, os.path.relpath(s.file, ROOT)
@@ -2426,9 +3016,18 @@ def main():
         len(tus), len(sites), ", ".join("%s %d" % kv for kv in sorted(kinds.items()))))
     print("offset_audit: " + ", ".join("%s %d" % (k, counts.get(k, 0)) for k in
                                        ("OK", "MISMATCH", "NOFIELD", "TRUNC", "UNRESOLVED", "NARROW",
-                                        "SKIP")))
+                                        "PARTIAL", "OVERRUN", "UNPROTO", "SKIP")))
     if not narrow:
         print("offset_audit: the narrowing pass did not run (not an LP64 host, or --no-narrow)")
+    if not UNPROTO_PASS[0]:
+        print("offset_audit: the unprototyped-call pass did not run (needs gcc 13 or later)")
+    elif not args.files:
+        used = {getattr(s, "reviewed", None) for s in sites}
+        stale = [k for k in UNPROTO_OK if k not in used]
+        for k in stale:
+            print("STALE      %s: UNPROTO_OK entry %r matches no call" % (k[0], k[1]))
+        if stale:
+            return 1
     return 1 if any(counts.get(k, 0) for k in bad) else 0
 
 

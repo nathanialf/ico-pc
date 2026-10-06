@@ -17,7 +17,7 @@ static int checkWaterDepth(struct GObj *gobj, int depth);
 static int checkModelDataID(struct GObj *gobj, int id);
 static int checkWeaponType(struct GObj *gobj, int kind);
 static int execVib(int no, void *entry);
-static int execWeaponLightOff(void);
+static int execWeaponLightOff(int no, void *entry);
 extern GsysObjInfo seDef[];
 /* int (int, unsigned int, int, int) here, int (int, int, int, int) in s_init.h */
 extern int soundSeDefPlay(int se, unsigned int owner, ICO_WORD_PTR(float *) pos, int playMode);
@@ -308,7 +308,7 @@ static void execVibCondition(int no, int *entry)
 extern const MotionDef motionKind[];
 
 static inline void fireFDSSlot(float t, int no, void *entry, int *done,
-                               int (*fn)()) /* derived name */
+                               int (*fn)(int, void *)) /* derived name */
 {
     if (t < 0.0f) {
         return;
@@ -541,7 +541,9 @@ static inline int execVib(int no, void *entry)
     return 1;
 }
 
-static inline int execWeaponLightOff(void)
+/* a frame slot's handler: fireFDSSlot passes the slot's number and entry,
+   which it does not read */
+static inline int execWeaponLightOff(int no, void *entry)
 {
     Sub15C *p;
     GObj *q;

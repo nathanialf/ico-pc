@@ -147,18 +147,6 @@ pointer to this file.
   and `w` is not initialised, so on a miss the plane may be a stale stack
   value (the same class as DIVERGENCES F15 and F16). Settle from the ROM
   what the EE's frame holds there, then zero or seed `w`.
-- **`template_audit.py` cannot follow `void *` data.** It does not see
-  whole-record views through `void *` mail data
-  (`ActSendMail_WithAdditionalData` to `Act.intrData` to `ClimbEndRec`) or
-  `void *` work tables; DIVERGENCES D8 was found only by a replay. Teach
-  `tools/template_audit.py` the mail-data senders and readers, or give the
-  copy a type through an accessor.
-- **`offset_audit.py` blind spots.** It does not see raw variable-stride
-  offsets (`base + j * 0x50`), `void *` table views or static initialisers,
-  and neither audit pass sees calls through unprototyped declarations, which
-  could pass a full pointer to a callee that reads an `int`. Prototype the
-  declarations in the headers (the count under `-Wstrict-prototypes` is in
-  the build log), or extend `tools/offset_audit.py`.
 - **`st13c.c` stops an SE handle nobody wrote.** `script/src/st13c.c`
   `actSt13cSekizoChk` calls `soundSeDefStop(se)` with `volatile int se` never
   written, reading stack garbage on the PS2 and the host alike. Decide the
@@ -288,10 +276,6 @@ pointer to this file.
 
 ## From the final code review
 
-- **Partial clears in the audits.** Extend `tools/offset_audit.py` or
-  `template_audit.py` to flag `memset`/`memcpy` with a literal size over a
-  record, or over a span from a field, whose host size differs (the review
-  found `_ACTCharStatus_Clear`'s 0x38 and four `ClipWork` 0xC0 clears).
 - **Warnings as errors in `port/`.** Add `-Werror` to `ICO_PORT_WARNINGS`
   (`cmake/IcoFlags.cmake`) once the game headers that port TUs include
   (`typedef.h`, `thread.h`, `act.h`, `s_init.h`, `debug.h`) stop raising

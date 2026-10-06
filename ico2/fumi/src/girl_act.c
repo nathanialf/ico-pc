@@ -304,9 +304,9 @@ held:
     }
 }
 
-/* actGirlHand passes two arguments here, so the definition is unprototyped
-   and not `(void)`. */
-static void GirlBrainClearTarget()
+/* actGirlHand and the attract brain pass the girl and a target here, which
+   it does not read (the EE's definition declared no prototype). */
+static void GirlBrainClearTarget(void *self, void *target)
 {
     brainClsTargetLevel(&brainGirl);
 }

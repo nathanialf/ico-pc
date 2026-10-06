@@ -39,7 +39,12 @@ flags, gcc's diagnostics for the operand types):
    variable or type with less). A difference is a MISMATCH (also when
    registered; a registered layout difference does not compile).
 
-MISMATCH and UNREGISTERED fail the run (exit 1).
+5. Views through `void *` (the mail data, `void *` members): the writers'
+   storage and the readers' record types are paired across the units and
+   each pair's host layout is checked against the EE's (the section
+   "views through `void *`" below).
+
+MISMATCH, UNREGISTERED, UNTYPED, UNPAIRED and STALE fail the run (exit 1).
 
 Usage:
     tools/template_audit.py --build build-host/<preset>   # report, exit 1 on findings
@@ -473,6 +478,11 @@ def probe_exprs(u, exprs, workdir):
 def audit_unit(src, fl, workdir):
     text = oa.preprocess(src, fl, audit=False)
     u = oa.Unit(src, text, fl)
+    events = channel_events(u, workdir)
+    return audit_copies(u, workdir), events
+
+
+def audit_copies(u, workdir):
     found = find_sites(u)
     if not found:
         return []
@@ -668,6 +678,622 @@ def audit_unit(src, fl, workdir):
     return out
 
 
+# --- views through `void *`: the mail data and `void *` members --------------------
+# A `void *` carries no record type, so a record written through it and read
+# back as another record type is invisible to the copy checks above: the climb
+# mail hands `&enemy->climbOrient` to ActSendMail_WithAdditionalData and
+# actCommonRopeClimbEnd1 reads `Act.intrData` whole as a ClimbEndRec
+# (DIVERGENCES.md D8). Each such `void *` is a channel:
+#   - the mail data: the data argument of a sender (MAIL_SENDERS) is written,
+#     a cast of `Act.intrData` or of a getter's result (MAIL_GETTERS) reads;
+#   - a `void *` member R.m: `x->m = E` writes, `(T *)x->m` reads.
+# A writer's storage is E's static type: a record (`&rec`, a `T *`), or a
+# record from a member (`&x->f`, an array member `x->f`: R from f); a `void *`
+# or `char *` local is followed to its assignments, and a `void *` that the
+# function casts to one record type elsewhere (`(MotOriTarget *)s->addData`)
+# has that type. Writers of scalar data (`float *`, `void **`) are not
+# records and are left out.
+# Pairs: a mail reader under `case N:` reads mail N's writers; any other
+# reader, and every reader of a member channel, pairs with the writers whose
+# record T's EE layout matches from the writer's offset (each member of T at
+# the same EE offset and size: the view the EE code relied on). Each pair is
+# checked on the host: every member of T at the offset of the writer's
+# matching field (less the writer's member offset), T within the storage,
+# and a 16-byte aligned T on a 16-byte boundary. A mail reader with no
+# matching writer, and a mail writer or reader whose type is unknown, is a
+# finding unless tools/template_audit_allow.txt lists it with a reason.
+
+MAIL_SENDERS = {"ActSendMail_WithAdditionalData": (1, 3)}  # name: (mail argument, data argument)
+MAIL_GETTERS = {"GetMailAdditionalData"}
+MAIL_FIELDS = {("Act", "intrData")}
+ALLOW_PATH = os.path.join(ROOT, "tools", "template_audit_allow.txt")
+
+
+class ChanEvent:
+    def __init__(self, role, file, line, snippet, src):
+        self.role, self.file, self.line, self.snippet, self.src = role, file, line, snippet, src
+        self.chan = None  # "mail" or ("member", R, m)
+        self.T = None  # reader: the record read
+        self.U = None  # writer: (record, member path) of the storage
+        self.mail = None
+        self.untyped = None  # why the type is not known
+
+
+def call_args(u, i):
+    """Argument spans of the call whose name is at token i."""
+    toks = u.toks
+    cl = u.match.get(i + 1)
+    if cl is None:
+        return []
+    args = []
+    st = i + 2
+    depth = 0
+    for k in range(i + 2, cl):
+        s = toks[k].s
+        if s in "([{":
+            depth += 1
+        elif s in ")]}":
+            depth -= 1
+        elif s == "," and depth == 0:
+            args.append((st, k - 1))
+            st = k + 1
+    if st <= cl - 1:
+        args.append((st, cl - 1))
+    return args
+
+
+def strip_byte_casts(u, a, b):
+    """[a, b] without parentheses and casts to `void *` / `char *`."""
+    while True:
+        a, b = oa.strip_parens(u, a, b)
+        c = u.cast_at(a)
+        if c and c[0].endswith("*") and not c[0].endswith("* *") and \
+                oa.strip_cv(c[0][:-1]) in oa.CHARLIKE and u.unary_end(c[1] + 1) == b:
+            a = c[1] + 1
+            continue
+        return a, b
+
+
+def span_text(u, a, b):
+    return "".join(t.s for t in u.toks[a:b + 1])
+
+
+def is_record_name(t):
+    t = oa.strip_cv(t or "")
+    return bool(t) and t not in oa.CHARLIKE and t not in oa.SCALAR and "*" not in t and \
+        "(" not in t and "[" not in t and t not in oa.INTCAST
+
+
+def case_label(u, i, fa):
+    """N of the `case N:` the statement at token i is under, else None."""
+    toks = u.toks
+    k = i - 1
+    while k > fa:
+        s = toks[k].s
+        if s in ("break", "return", "goto") or (s == "{" and toks[k - 1].s == ")" and
+                                                toks[u.match.get(k - 1, k) - 1].s == "switch"):
+            return None
+        if s == "case" and toks[k + 1].k == "num" and toks[k + 2].s == ":":
+            return oa.num_value(toks[k + 1].s)
+        k -= 1
+    return None
+
+
+class Pending(Exception):
+    pass
+
+
+def channel_events(u, workdir):
+    """The channel writers and readers of a unit (ChanEvent list)."""
+    toks = u.toks
+    raw = []  # (role, i0, func, data)
+    for fa, fb in u.funcs:
+        for i in range(fa + 1, fb):
+            t = toks[i]
+            if not oa.in_game(t):
+                continue
+            if t.k == "id" and t.s in MAIL_SENDERS and toks[i + 1].s == "(" and \
+                    toks[i - 1].s not in (".", "->"):
+                mi, di = MAIL_SENDERS[t.s]
+                args = call_args(u, i)
+                if len(args) > max(mi, di):
+                    ma, mb = oa.strip_parens(u, *args[mi])
+                    mail = oa.num_value(toks[ma].s) if ma == mb and toks[ma].k == "num" else None
+                    raw.append(("w", i, (fa, fb), ("mail", strip_byte_casts(u, *args[di]), mail,
+                                                    u.match[i + 1])))
+                continue
+            if t.s == "(":
+                c = u.cast_at(i)
+                if not c or not c[0].endswith("*") or c[0].endswith("* *"):
+                    continue
+                T = c[0][:-1].strip()
+                if not is_record_name(T):
+                    continue
+                e = u.unary_end(c[1] + 1)
+                if e is None or e >= fb:
+                    continue
+                a, b = strip_byte_casts(u, c[1] + 1, e)
+                if toks[a].s in MAIL_GETTERS and toks[a + 1].s == "(" and u.match.get(a + 1) == b:
+                    raw.append(("r", i, (fa, fb), ("mail", T, None, e)))
+                elif oa.field_split(u, a, b) is not None or (a == b and toks[a].k == "id"):
+                    raw.append(("r", i, (fa, fb), ("expr", T, (a, b), e)))
+                continue
+            if t.s == "=" and t.k == "punct":
+                ls = u.postfix_start(i - 1, casts=False)
+                fs = oa.field_split(u, ls, i - 1)
+                if fs is None or toks[ls - 1].s not in (";", "{", "}", ")", ",", "else"):
+                    continue
+                j = i + 1
+                depth = 0
+                while j < fb:
+                    s = toks[j].s
+                    if s in "([{":
+                        depth += 1
+                    elif s in ")]}":
+                        if depth == 0:
+                            break
+                        depth -= 1
+                    elif depth == 0 and s in (";", ","):
+                        break
+                    j += 1
+                if j > i + 1:
+                    raw.append(("w", i, (fa, fb), ("member", (ls, i - 1), strip_byte_casts(u, i + 1, j - 1),
+                                                    j - 1)))
+    if not raw:
+        return []
+    types = {}
+    need = set()
+    local_cache = {}
+
+    def ty(a, b):
+        if (a, b) in types:
+            return types[(a, b)]
+        need.add((a, b))
+        raise Pending()
+
+    def locals_of(func):
+        if func not in local_cache:
+            local_cache[func] = oa.scan_func_locals(u, *func)
+        return local_cache[func]
+
+    def rec_of(base, op):
+        """The record a member access's base names ('struct X *' with ->)."""
+        t = ty(*base)
+        r = oa.ptr_target(t) if op == "->" else oa.strip_cv(t)
+        return bare(r) if r and is_record_name(r) else None
+
+    def chan_of(a, b, func, depth=0):
+        """The channel the `void *` expression [a, b] reads, or None."""
+        a, b = strip_byte_casts(u, a, b)
+        if toks[a].s in MAIL_GETTERS and toks[a + 1].s == "(" and u.match.get(a + 1) == b:
+            return "mail"
+        fs = oa.field_split(u, a, b)
+        if fs is not None:
+            (ba, bb), path, op = fs
+            if norm_type(ty(a, b)) != "void *":
+                return None
+            r = rec_of((ba, bb), op)
+            if r is None:
+                return None
+            return "mail" if (r, path) in MAIL_FIELDS else ("member", r, path)
+        if a == b and toks[a].k == "id" and depth < 3:
+            views, bumps = locals_of(func)
+            if toks[a].s in bumps or toks[a].s not in views:
+                return None
+            got = set()
+            for ra, rb in views[toks[a].s]:
+                got.add(chan_of(ra, rb, func, depth + 1))
+            return got.pop() if len(got) == 1 else None
+        return None
+
+    def cast_at_use(a, b, func):
+        """Records the function casts the expression [a, b] to."""
+        txt = span_text(u, a, b)
+        out = set()
+        fa, fb = func
+        for k in range(fa + 1, fb):
+            if toks[k].s != "(":
+                continue
+            c = u.cast_at(k)
+            if not c or not c[0].endswith("*") or c[0].endswith("* *"):
+                continue
+            e = u.unary_end(c[1] + 1)
+            if e is None:
+                continue
+            x, y = strip_byte_casts(u, c[1] + 1, e)
+            if span_text(u, x, y) == txt and is_record_name(c[0][:-1].strip()):
+                out.add(bare(c[0][:-1].strip()))
+        return out
+
+    def storage(a, b, func, depth=0):
+        """(record, member path) the data expression [a, b] points into;
+        ("", why) for a non-record; (None, why) when not known."""
+        a, b = strip_byte_casts(u, a, b)
+        if toks[a].s == "&":
+            fs = oa.field_split(u, a + 1, b)
+            if fs is not None:
+                (ba, bb), path, op = fs
+                r = rec_of((ba, bb), op)
+                if r is not None:
+                    return r, path
+            t = oa.ptr_target(ty(a, b))
+            if t and is_record_name(t):
+                return bare(t), ""
+            return "", "the address of %s" % (t or "?")
+        t = norm_type(ty(a, b))
+        pt = oa.ptr_target(t)
+        fs = oa.field_split(u, a, b)
+        if fs is not None and pt and not is_record_name(pt) and oa.strip_cv(pt) not in ("void", "char"):
+            # an array member decays to its first element: the record from there
+            (ba, bb), path, op = fs
+            r = rec_of((ba, bb), op)
+            if r is not None:
+                return r, "@" + path  # resolved against the EE layout: array or pointer
+        if pt and is_record_name(pt):
+            return bare(pt), ""
+        if pt and oa.strip_cv(pt) in ("void", "char", "unsigned char"):
+            if a == b and toks[a].k == "id" and depth < 3:
+                views, bumps = locals_of(func)
+                if toks[a].s not in bumps and toks[a].s in views:
+                    got = {storage(ra, rb, func, depth + 1) for ra, rb in views[toks[a].s]}
+                    if len(got) == 1:
+                        return got.pop()
+            casts = cast_at_use(a, b, func)
+            if len(casts) == 1:
+                return casts.pop(), ""
+            if chan_of(a, b, func) is not None:
+                return "", "another channel"
+            return None, "a %s the function does not cast to one record" % t
+        if toks[a].k == "num" and oa.num_value(toks[a].s) == 0 and a == b:
+            return "", "null"
+        return "", t
+
+    events = []
+    for rnd in range(8):
+        need = set()
+        events = []
+        for role, i0, func, data in raw:
+            t0 = toks[i0]
+            f = os.path.normpath(t0.f) if os.path.isabs(t0.f) else t0.f
+            try:
+                if role == "r":
+                    kind, T, sp, end = data
+                    if kind == "mail":
+                        chan = "mail"
+                    else:
+                        chan = chan_of(sp[0], sp[1], func)
+                    if chan is None:
+                        continue
+                    ev = ChanEvent("reader", f, t0.ln, re.sub(r"\s+", " ", u.text_of(i0, end))[:160], u.src)
+                    ev.chan, ev.T = chan, bare(T)
+                    if chan == "mail":
+                        ev.mail = case_label(u, i0, func[0])
+                    events.append(ev)
+                    continue
+                kind = data[0]
+                if kind == "mail":
+                    _, (a, b), mail, end = data
+                    chan = "mail"
+                else:
+                    _, (la, lb), (a, b), end = data
+                    fs = oa.field_split(u, la, lb)
+                    if norm_type(ty(la, lb)) != "void *":
+                        continue
+                    r = rec_of(fs[0], fs[2])
+                    if r is None:
+                        continue
+                    chan = "mail" if (r, fs[1]) in MAIL_FIELDS else ("member", r, fs[1])
+                    mail = None
+                st = storage(a, b, func)
+                if st[0] == "" or (chan != "mail" and st[0] is None):
+                    continue
+                ev = ChanEvent("writer", f, t0.ln, re.sub(r"\s+", " ", u.text_of(i0, end))[:160], u.src)
+                ev.chan, ev.mail = chan, mail
+                if st[0] is None:
+                    ev.untyped = st[1]
+                else:
+                    ev.U = st
+                events.append(ev)
+            except Pending:
+                pass
+        new = {sp for sp in need if sp not in types}
+        if not new:
+            break
+        types.update(oa.probe_types(u, new, workdir))
+    return events
+
+
+def load_allow():
+    """[(file, snippet text, reason)] of tools/template_audit_allow.txt."""
+    out = []
+    if not os.path.exists(ALLOW_PATH):
+        return out
+    with open(ALLOW_PATH, encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 3 or not parts[2].strip():
+                raise SystemExit("%s: want <file> TAB <snippet> TAB <reason>: %r" % (ALLOW_PATH, line))
+            out.append(tuple(p.strip() for p in parts))
+    return out
+
+
+PTR_WORDS = {"ICO_WORD", "ICO_WORD_PTR", "IosMsgWord", "IosMemAddr", "intptr_t", "uintptr_t"}
+
+
+def ee_elements(rec):
+    """{top-level member: [(EE offset, size, kind, host path)]} of a record's
+    scalar elements (arrays split), from the offset audit's EE layout. kind is
+    'ptr' (a pointer or a pointer-wide word: 4 bytes on the EE), 'float',
+    'int' or 'blob' (a member whose type the layout does not open)."""
+    ents = [e for e in rec.entries if e[4] == "field"]
+    paths = {e[0] for e in ents}
+    out = {}
+    for e in ents:
+        p = e[0]
+        if any(q.startswith(p + ".") or q.startswith(p + "[") for q in paths if q != p):
+            continue  # not a leaf
+        top = re.split(r"[.\[]", p)[0]
+        mt = e[2]
+        if mt is None:
+            out.setdefault(top, []).append((e[1], e[6] or 4, "int", p))
+            continue
+        words, ptr, dims = mt
+        key = " ".join(w for w in words if w != "signed")
+        if ptr or (words and words[-1] in PTR_WORDS):
+            esz, kind = 4, "ptr"
+        elif key in ("float", "double"):
+            esz, kind = (4 if key == "float" else 8), "float"
+        else:
+            esz = oa.scalar_elem(mt)
+            kind = "int"
+        if esz is None or not dims or None in dims:
+            if dims and None in dims or e[6] is None:
+                return None
+            if esz is None:
+                out.setdefault(top, []).append((e[1], e[6], "blob", p))
+            else:
+                out.setdefault(top, []).append((e[1], esz, kind, p))
+            continue
+        n = 1
+        for d in dims:
+            n *= d
+        if n > 4096:
+            return None
+        for k in range(n):
+            idx = []
+            rest = k
+            for j in range(len(dims)):
+                inner = 1
+                for d in dims[j + 1:]:
+                    inner *= d
+                idx.append(rest // inner)
+                rest %= inner
+            out.setdefault(top, []).append((e[1] + k * esz, esz, kind, p + "".join("[%d]" % x for x in idx)))
+    return out
+
+
+def kinds_agree(a, b):
+    return a == b or {a, b} == {"int", "ptr"} or "blob" in (a, b)
+
+
+def ee_match(db, T, Tfiles, U, path, Ufiles):
+    """T laid at U's member path, element by element on the EE: (pairs, why)
+    with pairs [(T element path, U element path)] when the EE code's view
+    holds (each element of T over one of U at the same EE offset, of the same
+    size and a kind that the EE stores the same way: a 4-byte int over a
+    pointer is one; a union needs one member that holds), else (None, why)."""
+    tr = db.lookup(T, Tfiles)
+    ur = db.lookup(U, Ufiles)
+    if tr is None:
+        return None, "%s has no EE layout" % T
+    if ur is None:
+        return None, "%s has no EE layout" % U
+    base = oa.ee_offset_of(ur, path)
+    if base is None:
+        return None, "%s.%s has no EE offset" % (U, path)
+    te, ue = ee_elements(tr), ee_elements(ur)
+    if not te or ue is None:
+        return None, "the EE layout of %s is not complete" % (T if not te else U)
+    uat = {}
+    for els in ue.values():
+        for o, sz, kind, p in els:
+            uat.setdefault(o, []).append((sz, kind, p))
+    # U's pads: the bytes a whole copy carries; a T element there reads them
+    pads = [(e[1], e[6], e[0]) for e in ur.entries if e[4] == "pad" and e[6]]
+    groups = {}
+    why = ""
+    for top, els in te.items():
+        got = []
+        for o, sz, kind, p in els:
+            c = [x for x in uat.get(base + o, []) if x[0] == sz and kinds_agree(kind, x[1])]
+            if not c:
+                pc = [x for x in pads if x[0] <= base + o and base + o + sz <= x[0] + x[1]]
+                if pc:
+                    got.append((p, "%s[%d]" % (pc[0][2], base + o - pc[0][0]), False))
+                    continue
+                why = "no %s element of %d bytes like %s.%s (%s) at EE 0x%X" % (U, sz, T, p, kind, base + o)
+                got = None
+                break
+            got.append((p, min(c, key=lambda x: (x[2].count("."), x[2]))[2], True))
+        groups[top] = got
+    spans = sorted((min(x[0] for x in els), max(x[0] + x[1] for x in els), top) for top, els in te.items())
+    union = any(spans[k + 1][0] < spans[k][1] for k in range(len(spans) - 1))
+    if union:
+        ok = [g for g in groups.values() if g]
+        if not ok:
+            return None, why
+        return [x for g in ok for x in g], ""
+    if any(g is None for g in groups.values()):
+        return None, why
+    return [x for g in groups.values() for x in g], ""
+
+
+def host_check(units, T, U, path, pairs, workdir):
+    """Differences of T's host layout from U's from path."""
+    ex = {0: "sizeof(%s)" % T, 1: "__alignof__(%s)" % T, 2: "sizeof(%s)" % U,
+          3: "__builtin_offsetof(%s, %s)" % (U, path) if path else "0"}
+    for k, (tm, um, _) in enumerate(pairs):
+        ex[4 + 4 * k] = "__builtin_offsetof(%s, %s)" % (T, tm)
+        ex[5 + 4 * k] = "__builtin_offsetof(%s, %s)" % (U, um)
+        ex[6 + 4 * k] = "sizeof(((%s *)0)->%s)" % (T, tm)
+        ex[7 + 4 * k] = "sizeof(((%s *)0)->%s)" % (U, um)
+    got = {}
+    for un in units:
+        miss = {k: v for k, v in ex.items() if k not in got}
+        if not miss:
+            break
+        got.update(oa.probe_values(un, miss, workdir))
+    if any(k not in got for k in ex):
+        return ["the host probe failed (%s)" % ", ".join(ex[k] for k in sorted(ex) if k not in got)[:200]]
+    bad = []
+    base = got[3]
+    if got[0] > got[2] - base:
+        bad.append("size %d past the end (%d left)" % (got[0], got[2] - base))
+    if got[1] >= 16 and base % got[1]:
+        bad.append("%s at host 0x%X, not on %s's %d-byte alignment" % (path or U, base, T, got[1]))
+    for k, (tm, um, sized) in enumerate(pairs):
+        to, uo, ts, us = (got[4 + 4 * k + x] for x in range(4))
+        if to != uo - base:
+            bad.append("%s %d/%d (%s)" % (tm, to, uo - base, um))
+        elif sized and ts != us:
+            bad.append("%s %d bytes over %d (%s)" % (tm, ts, us, um))
+    return bad
+
+
+def check_channels(events, tus, workdir):
+    """Pair the channel writers and readers of every unit; returns Sites."""
+    db = oa.LayoutDB()
+    allow = load_allow()
+    used = set()
+    out = []
+
+    def files_of(ev):
+        f = os.path.realpath(ev.file if os.path.isabs(ev.file) else os.path.join(ROOT, ev.file))
+        src = ev.src
+        fl = []
+        for p in (src, f):
+            if p.startswith(oa.ICO2) and os.path.exists(p):
+                db.add_source(p)
+                fl.append(os.path.relpath(p, ROOT))
+        return fl
+
+    def allowed(ev):
+        rel = os.path.relpath(ev.file, ROOT) if os.path.isabs(ev.file) else ev.file
+        for k, (f, snip, why) in enumerate(allow):
+            if f == rel and snip in ev.snippet:
+                used.add(k)
+                return why
+        return None
+
+    def rel(f):
+        return os.path.relpath(f, ROOT) if os.path.isabs(f) else f
+
+    def site(ev, verdict, detail):
+        s = Site(ev.file, ev.line, "mail" if ev.chan == "mail" else "vptr", ev.snippet)
+        s.verdict, s.detail = verdict, detail
+        s.key = lambda: (s.file, s.line, s.snippet, s.detail)  # one per writer
+        out.append(s)
+
+    unit_cache = {}
+
+    def unit(src):
+        if src not in unit_cache:
+            fl = tus[src]
+            unit_cache[src] = oa.Unit.__new__(oa.Unit)
+            unit_cache[src].src = src
+            unit_cache[src].text = oa.preprocess(src, fl, audit=False)
+            unit_cache[src].flags = fl
+        return unit_cache[src]
+
+    def resolve_path(U, path, files):
+        """'@f': an array member f is storage from f; a pointer member is not
+        U's storage (None)."""
+        if not path.startswith("@"):
+            return path
+        r = db.lookup(U, files)
+        e = oa.find_entry(r, path[1:]) if r else None
+        if e is None or e[2] is None or e[2][1] or not e[2][2]:
+            return None
+        return path[1:]
+
+    chans = {}
+    for ev in events:
+        chans.setdefault(ev.chan, []).append(ev)
+    checked = {}
+    for chan, evs in sorted(chans.items(), key=lambda kv: str(kv[0])):
+        writers = []
+        for w in (e for e in evs if e.role == "writer"):
+            if w.untyped:
+                if chan == "mail":
+                    why = allowed(w)
+                    site(w, "LISTED" if why else "UNTYPED", "mail data: %s%s" % (
+                        w.untyped, ("; " + why) if why else ""))
+                continue
+            fl = files_of(w)
+            p = resolve_path(w.U[0], w.U[1], fl)
+            if p is None:
+                continue
+            writers.append((w, w.U[0], p, fl))
+        readers = [e for e in evs if e.role == "reader"]
+        numbered = {r.mail for r in readers if r.mail is not None}
+        if chan != "mail" and len({(w[1], w[2]) for w in writers}) != 1:
+            # a `void *` member written with several record types (an actor's
+            # work, Sub15C.work) holds one per object: its readers cannot be
+            # paired by type
+            continue
+        for r in readers:
+            rf = files_of(r)
+            if chan == "mail" and r.mail is not None:
+                cands = [w for w in writers if w[0].mail == r.mail]
+                forced = True
+            else:
+                cands = [w for w in writers if not (chan == "mail" and w[0].mail in numbered)]
+                forced = False
+            matched = 0
+            for w, U, path, wf in cands:
+                if U == r.T and not path:
+                    matched += 1
+                    if chan == "mail":
+                        site(r, "SAME", "%s, written at %s:%d" % (r.T, rel(w.file), w.line))
+                    continue
+                pairs, why = ee_match(db, r.T, rf, U, path, wf)
+                if pairs is None:
+                    if forced:
+                        site(r, "MISMATCH", "mail %s: %s over %s%s, written at %s:%d: %s" % (
+                            r.mail, r.T, U, "." + path if path else "", rel(w.file), w.line, why))
+                        matched += 1
+                    continue
+                matched += 1
+                key = (r.T, U, path, r.src)
+                if key not in checked:
+                    checked[key] = host_check([unit(r.src), unit(w.src),
+                                               oa.global_unit(tus[r.src], workdir)],
+                                              r.T, U, path, pairs, workdir)
+                bad = checked[key]
+                where = "%s over %s%s (written at %s:%d)" % (r.T, U, " from ." + path if path else "",
+                                                             rel(w.file), w.line)
+                if bad:
+                    site(r, "MISMATCH", "%s, host view/storage: %s" % (where, ", ".join(bad[:8])))
+                else:
+                    site(r, "OK", "%s: %d elements at their EE offsets" % (where, len(pairs)))
+            if chan == "mail" and not matched:
+                if r.mail is not None:
+                    site(r, "LISTED", "mail %d: no sender in the tree" % r.mail)
+                    continue
+                why = allowed(r)
+                site(r, "LISTED" if why else "UNPAIRED", "mail data read as %s: no sender's storage "
+                     "matches its EE layout%s" % (r.T, ("; " + why) if why else ""))
+    for k, (f, snip, why) in enumerate(allow):
+        if k not in used:
+            s = Site(f, 0, "allow", snip)
+            s.verdict, s.detail = "STALE", "allowlist line matches no site: " + why
+            out.append(s)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--build", required=True, help="a configured build folder (compile_commands.json)")
@@ -685,13 +1311,19 @@ def main():
     with tempfile.TemporaryDirectory(prefix="work.", dir=wd) as work:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.j) as ex:
             futs = [ex.submit(audit_unit, src, fl, work) for src, fl in sorted(tus.items())]
+            events = []
             for f in concurrent.futures.as_completed(futs):
-                results.extend(f.result())
+                copies, ev = f.result()
+                results.extend(copies)
+                events.extend(ev)
+        # the pairs need every unit's writers: with a FILE list, the readers
+        # and writers of the units named
+        results.extend(check_channels(events, tus, work))
     seen = {}
     for s in results:
         seen.setdefault(s.key(), s)
     sites = sorted(seen.values(), key=lambda s: (s.file, s.line, s.snippet))
-    bad = ("MISMATCH", "UNREGISTERED")
+    bad = ("MISMATCH", "UNREGISTERED", "UNTYPED", "UNPAIRED", "STALE")
     counts = {}
     for s in sites:
         counts[s.verdict] = counts.get(s.verdict, 0) + 1
@@ -699,9 +1331,12 @@ def main():
             f = os.path.relpath(s.file, ROOT) if os.path.isabs(s.file) else s.file
             print("%-12s %s:%d [%s] %s\n             %s" % (s.verdict, f, s.line, s.kind, s.detail,
                                                           s.snippet))
-    print("template_audit: %d units, %d record copies" % (len(tus), len(sites)))
+    nch = sum(1 for s in sites if s.kind in ("mail", "vptr"))
+    print("template_audit: %d units, %d record copies, %d views through void *" % (
+        len(tus), len(sites) - nch, nch))
     print("template_audit: " + ", ".join("%s %d" % (k, counts.get(k, 0)) for k in
-                                         ("OK", "MISMATCH", "UNREGISTERED", "SAME", "RAW")))
+                                         ("OK", "MISMATCH", "UNREGISTERED", "UNTYPED", "UNPAIRED",
+                                          "STALE", "SAME", "RAW", "LISTED")))
     return 1 if any(counts.get(k, 0) for k in bad) else 0
 
 

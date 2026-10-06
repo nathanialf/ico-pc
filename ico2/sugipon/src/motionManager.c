@@ -1205,9 +1205,9 @@ static void getInitialMatrix(Sub15C *obj, int idx)
     }
 }
 
-/* K&R definition: it declares no prototype, so SkelTest and SkelTestGeo
- * below call it with one argument. */
-static void dispSkelton()
+/* SkelTest and SkelTestGeo below pass their object, which it does not
+ * read (the EE's definition declared no prototype). */
+static void dispSkelton(GObj *self)
 {
     float (*v)[4];
     gif_StartPacketPri(11);
