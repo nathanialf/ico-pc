@@ -731,8 +731,21 @@ void rd__CrtGrid(uint32_t *vw, uint32_t *vh);
  * overlay on the output. */
 bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay);
+/* Package C1: the films under the filter.  rd__CrtFilmGrid is a film's
+ * grid: the game's tube (its 512 triads across the 4:3 box: GS width) and
+ * the film's field lines in its PS2 display area (dispH / 2, every line
+ * with full_height, as the game's).  rd__CrtRecordFilm: pic (pw x ph, the
+ * film in its display area, already mirrored, SHADER_READ), box-reduced
+ * to the grid vw x vh, then as rd__CrtRecord from step 1 (no overlay: the
+ * films draw none).  rd__CrtLastPass: the composites drawn so far and the
+ * last one's grid (the tests). */
+void rd__CrtFilmGrid(uint32_t dispH, uint32_t *vw, uint32_t *vh);
+bool rd__CrtRecordFilm(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_t ph, uint32_t vw,
+                       uint32_t vh, RhiTexture out, RhiFormat outFmt, uint32_t outW, uint32_t outH,
+                       const RhiRect *box);
+uint32_t rd__CrtLastPass(uint32_t *vw, uint32_t *vh);
 /* The textures the filter keeps (the source, the overlay's layer, the glow
- * targets) */
+ * targets, the films' own) */
 void rd__CrtShutdown(void);
 /* rd_blur.c: records the sprite (rd_Post's wave-5 kinds, and since R-POST
  * the reduction's two sprites, rd_post.c). */
@@ -1161,6 +1174,12 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
  * the camera probe): also starts a new epoch of the bind group caches
  * (rd_replay.c, package P1), since bind groups live one frame slot. */
 void rd__WaitFrame(void);
+/* Package C1: a frame of the renderer's own outside a replay (the films,
+ * rd_video.c): rd__WaitFrame, then the next slot of the upload ring (at
+ * least ringBytes) as a replay takes it, so the ring's slot keeps pace
+ * with the RHI's frames and rd__FrameGroup, rd__CrtGroup and the like
+ * work.  False when the ring cannot be had. */
+bool rd__BeginOwnFrame(uint64_t ringBytes);
 /* Ring allocation for the frame being replayed. */
 uint64_t rd__RingAlloc(uint64_t size, uint64_t align);
 /* Binds u at group index `group` with its offset (rhi_CmdSetBindGroupOffsets). */

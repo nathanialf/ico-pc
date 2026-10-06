@@ -15,6 +15,14 @@
  * 480); a w x h picture sits in it at ((dispW - w) / 2, (dispH - h) / 2),
  * the offsets mv_videodec.c's dispSetTags used, scaled with the area.
  *
+ * Under the CRT filter (package C1) the films go through it as the game's
+ * frames do: the picture is drawn into a target of the PS2 display area
+ * (dispW x dispH, the clear colour around the picture, mirrored as shown),
+ * and rd__CrtRecordFilm draws that through the tube into the same box,
+ * on the film's grid (rd__CrtFilmGrid: the game's 512 triads, the film's
+ * field lines).  The clear frames (rd_VideoClear) take the same road, so
+ * the tube shows them as it shows the film.
+ *
  * GPU objects: its own two shaders and pipeline (one per output format)
  * over rd's bind group layouts (group 0 FrameCB, group 1 DrawCB, group 2
  * t1/s1/t2), one R8 plane texture, and per frame in flight an upload buffer
@@ -42,6 +50,9 @@ static struct {
     uint64_t uploadCap[RHI_FRAMES_IN_FLIGHT];
     uint32_t dispW, dispH;
     float clear[4];
+    RhiTexture area; /* C1: the display area under the CRT filter */
+    RhiState areaState;
+    uint32_t areaW, areaH;
 } s_v = {.dispW = 720, .dispH = 576, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
 
 void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH)
@@ -201,6 +212,86 @@ static bool acquireOut(VideoOut *o)
     return o->tex.id != 0;
 }
 
+/* C1: the display area's target (dispW x dispH, RGBA8) */
+static bool ensureArea(void)
+{
+    if (s_v.area.id && s_v.areaW == s_v.dispW && s_v.areaH == s_v.dispH) {
+        return true;
+    }
+    if (s_v.area.id) {
+        rhi_DestroyTexture(s_v.area);
+    }
+    s_v.area = rhi_CreateTexture(&(RhiTextureDesc){s_v.dispW, s_v.dispH, 1, RHI_FMT_RGBA8_UNORM,
+                                                   RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                   "rd video area"});
+    s_v.areaState = RHI_STATE_UNDEFINED;
+    s_v.areaW = s_v.dispW;
+    s_v.areaH = s_v.dispH;
+    return s_v.area.id != 0;
+}
+
+/* One pass on dst (dw x dh, RENDER_TARGET): cleared to the clear colour,
+ * the picture (when there is one) drawn into box as the PS2 placed it in
+ * its display area, the rectangle mirrored with the mirror mode. */
+static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32_t dw, uint32_t dh,
+                        const RhiRect *box, bool picture, uint32_t w, uint32_t h, bool mirror,
+                        RhiBuffer buf, uint64_t cbOff, uint64_t dcOff)
+{
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = dst;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    memcpy(p.color[0].clear, s_v.clear, sizeof(s_v.clear));
+    p.colorCount = 1;
+    p.width = dw;
+    p.height = dh;
+    rhi_CmdBeginRenderPass(cl, &p);
+    if (picture) {
+        /* the picture's rectangle in the box, from its place in the PS2
+           display area (integer offsets as mv_videodec.c computed them) */
+        const int32_t ox = ((int32_t)s_v.dispW - (int32_t)w) >> 1;
+        const int32_t oy = ((int32_t)s_v.dispH - (int32_t)h) >> 1;
+        const float sx = (float)box->w / (float)s_v.dispW, sy = (float)box->h / (float)s_v.dispH;
+        RhiViewport vp = {(float)box->x + (float)ox * sx,
+                          (float)box->y + (float)oy * sy,
+                          (float)w * sx,
+                          (float)h * sy,
+                          0.0f,
+                          1.0f};
+        if (mirror) {
+            vp.x =
+                (float)box->x + (float)box->w - (float)ox * sx - vp.w; /* the rectangle mirrored */
+        }
+        RhiRect sc = *box;
+        rhi_CmdSetViewport(cl, &vp);
+        rhi_CmdSetScissor(cl, &sc);
+        RhiPipeline pipe = pipelineFor(fmt);
+        if (pipe.id) {
+            RhiBinding tb[3];
+            memset(tb, 0, sizeof(tb));
+            tb[0].slot = 1;
+            tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+            tb[0].texture = s_v.planes;
+            tb[1].slot = 1;
+            tb[1].type = RHI_BIND_SAMPLER;
+            tb[1].sampler =
+                rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+            tb[2].slot = 2;
+            tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
+            tb[2].texture = g_rd.dummy;
+            rhi_CmdSetPipeline(cl, pipe);
+            rhi_CmdSetBindGroup(
+                cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
+            rhi_CmdSetBindGroup(
+                cl, 1, uniformGroup(g_rd.layoutDraw, 1, buf, dcOff, (uint32_t)sizeof(IcoDrawCB)));
+            rhi_CmdSetBindGroup(cl, 2,
+                                rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, tb, 3}));
+            rhi_CmdDraw(cl, 3, 0, 1);
+        }
+    }
+    rhi_CmdEndRenderPass(cl);
+}
+
 /* One present: the picture (planes != NULL) or the clear colour alone. */
 static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
                         const uint32_t pitch[3], uint32_t w, uint32_t h, const uint8_t rgba[4])
@@ -208,7 +299,11 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (!ensureInit()) {
         return -1;
     }
-    rd__WaitFrame();
+    /* the ring for the CRT pass's uniforms (and the slot kept in step with
+       the replays' either way) */
+    if (!rd__BeginOwnFrame(64u * 1024u)) {
+        return -1;
+    }
     const int slot = (int)rhi_FrameSlot();
     const RhiLimits *lim = rhi_Limits();
     const uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;
@@ -292,69 +387,37 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
                                    (RhiRect){0, 0, tw, th});
         rd__Transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_SHADER_READ);
     }
-    rd__Transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
-
     RhiRect box;
     box43(out.w, out.h, &box);
-    RhiRenderPassDesc p;
-    memset(&p, 0, sizeof(p));
-    p.color[0].texture = out.tex;
-    p.color[0].load = RHI_LOAD_CLEAR;
     if (rgba != NULL) {
         /* dispClear's colour: what the PS2 showed around the picture (the
-           whole screen there; the whole output here, bars included) */
+           whole screen there; the whole output here, bars included, or the
+           whole display area under the CRT filter) */
         for (int i = 0; i < 3; i++) {
             s_v.clear[i] = (float)rgba[i] / 255.0f;
         }
     }
-    memcpy(p.color[0].clear, s_v.clear, sizeof(s_v.clear));
-    p.colorCount = 1;
-    p.width = out.w;
-    p.height = out.h;
-    rhi_CmdBeginRenderPass(cl, &p);
-    if (picture) {
-        /* the picture's rectangle in the box, from its place in the PS2
-           display area (integer offsets as mv_videodec.c computed them) */
-        const int32_t ox = ((int32_t)s_v.dispW - (int32_t)w) >> 1;
-        const int32_t oy = ((int32_t)s_v.dispH - (int32_t)h) >> 1;
-        const float sx = (float)box.w / (float)s_v.dispW, sy = (float)box.h / (float)s_v.dispH;
-        RhiViewport vp = {(float)box.x + (float)ox * sx,
-                          (float)box.y + (float)oy * sy,
-                          (float)w * sx,
-                          (float)h * sy,
-                          0.0f,
-                          1.0f};
-        if (dcb.param[0] != 0.0f) {
-            vp.x = (float)box.x + (float)box.w - (float)ox * sx - vp.w; /* the rectangle mirrored */
-        }
-        RhiRect sc = box;
-        rhi_CmdSetViewport(cl, &vp);
-        rhi_CmdSetScissor(cl, &sc);
-        RhiPipeline pipe = pipelineFor(out.fmt);
-        if (pipe.id) {
-            RhiBinding tb[3];
-            memset(tb, 0, sizeof(tb));
-            tb[0].slot = 1;
-            tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
-            tb[0].texture = s_v.planes;
-            tb[1].slot = 1;
-            tb[1].type = RHI_BIND_SAMPLER;
-            tb[1].sampler =
-                rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-            tb[2].slot = 2;
-            tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
-            tb[2].texture = g_rd.dummy;
-            rhi_CmdSetPipeline(cl, pipe);
-            rhi_CmdSetBindGroup(
-                cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
-            rhi_CmdSetBindGroup(
-                cl, 1, uniformGroup(g_rd.layoutDraw, 1, buf, dcOff, (uint32_t)sizeof(IcoDrawCB)));
-            rhi_CmdSetBindGroup(cl, 2,
-                                rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, tb, 3}));
-            rhi_CmdDraw(cl, 3, 0, 1);
-        }
+    const bool mirror = dcb.param[0] != 0.0f;
+    bool filtered = false;
+    if (rd__CrtOn() && ensureArea()) {
+        /* C1: the display area 1:1 (the picture at its PS2 offsets), then
+           the tube over it into the box */
+        rd__Transition(cl, s_v.area, &s_v.areaState, RHI_STATE_RENDER_TARGET);
+        const RhiRect all = {0, 0, s_v.dispW, s_v.dispH};
+        drawPicture(cl, s_v.area, RHI_FMT_RGBA8_UNORM, s_v.dispW, s_v.dispH, &all, picture, w, h,
+                    mirror, buf, cbOff, dcOff);
+        rd__Transition(cl, s_v.area, &s_v.areaState, RHI_STATE_SHADER_READ);
+        uint32_t vw, vh;
+        rd__CrtFilmGrid(s_v.dispH, &vw, &vh);
+        rd__Transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
+        filtered = rd__CrtRecordFilm(cl, s_v.area, s_v.dispW, s_v.dispH, vw, vh, out.tex, out.fmt,
+                                     out.w, out.h, &box);
     }
-    rhi_CmdEndRenderPass(cl);
+    if (!filtered) {
+        rd__Transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
+        drawPicture(cl, out.tex, out.fmt, out.w, out.h, &box, picture, w, h, mirror, buf, cbOff,
+                    dcOff);
+    }
     if (out.window) {
         rd__Transition(cl, out.tex, out.state, RHI_STATE_PRESENT);
     }
@@ -432,6 +495,11 @@ void rd_VideoShutdown(void)
     }
     s_v.planes = (RhiTexture){0};
     s_v.planesW = s_v.planesH = 0;
+    if (s_v.area.id) {
+        rhi_DestroyTexture(s_v.area);
+    }
+    s_v.area = (RhiTexture){0};
+    s_v.areaW = s_v.areaH = 0;
     if (s_v.vs.id) {
         rhi_DestroyShader(s_v.vs);
     }

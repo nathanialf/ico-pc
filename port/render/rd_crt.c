@@ -367,6 +367,12 @@ typedef struct CrtTex {
 } CrtTex;
 
 static CrtTex s_src, s_layer, s_comp, s_glowA, s_glowB;
+/* the films' own (rd__CrtRecordFilm): their grid is not the game's, so
+ * the game's targets are not resized at every film's start and end */
+static CrtTex s_filmSrc, s_filmGlowA, s_filmGlowB;
+
+/* the tests' view of the last composite (rd__CrtLastPass) */
+static uint32_t s_passes, s_lastW, s_lastH;
 
 static bool ensure(CrtTex *c, uint32_t w, uint32_t h, RhiFormat fmt, const char *name)
 {
@@ -387,8 +393,9 @@ static bool ensure(CrtTex *c, uint32_t w, uint32_t h, RhiFormat fmt, const char 
 
 void rd__CrtShutdown(void)
 {
-    CrtTex *all[5] = {&s_src, &s_layer, &s_comp, &s_glowA, &s_glowB};
-    for (int i = 0; i < 5; i++) {
+    CrtTex *all[8] = {&s_src,   &s_layer,   &s_comp,      &s_glowA,
+                      &s_glowB, &s_filmSrc, &s_filmGlowA, &s_filmGlowB};
+    for (int i = 0; i < 8; i++) {
         if (all[i]->t.id) {
             rhi_DestroyTexture(all[i]->t);
         }
@@ -456,19 +463,87 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     return true;
 }
 
-bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
+/* steps 1 to 3: src (vw x vh, the grid, SHADER_READ) through the glow
+ * targets ga and gb into box of out, black around it */
+static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, uint32_t vw,
+                    uint32_t vh, CrtTex *ga, CrtTex *gb, RhiTexture out, RhiFormat outFmt,
+                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror)
 {
-    RdCrtParams p;
-    if (!rd__CrtResolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
-        return false;
-    }
+    const RdCrtParams p = *pp;
     const RdPipeKeyInt kBloom = rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F);
     const RdPipeKeyInt kBlur = rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F);
     const RdPipeKeyInt kCrt = rd__PostKey(RD_VS_CRT, RD_FS_CRT, outFmt);
     const RhiPipeline pBloom = rd__GetPipeline(&kBloom), pBlur = rd__GetPipeline(&kBlur),
                       pCrt = rd__GetPipeline(&kCrt);
     if (!pBloom.id || !pBlur.id || !pCrt.id) {
+        return false;
+    }
+    const uint32_t gw = (vw + 1) / 2, gh = (vh + 1) / 2;
+    /* output pixels a source pixel across */
+    const float r = (float)box->w / (float)vw;
+    if (!ensure(ga, gw, gh, RHI_FMT_RGBA16F, "rd crt glow A") ||
+        !ensure(gb, gw, gh, RHI_FMT_RGBA16F, "rd crt glow B")) {
+        return false;
+    }
+    IcoCrtCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.src[0] = (float)vw;
+    cb.src[1] = (float)vh;
+    cb.src[2] = 1.0f / (float)vw;
+    cb.src[3] = 1.0f / (float)vh;
+    cb.box[0] = (float)box->w;
+    cb.box[1] = (float)box->h;
+    cb.box[2] = (float)box->x;
+    cb.box[3] = (float)box->y;
+    cb.beam[0] = p.scanline;
+    cb.beam[1] = p.beamMin;
+    cb.beam[2] = p.beamMax;
+    cb.beam[3] = (float)rd__CrtGapColumns(r);
+    cb.mask[0] = (float)p.mask;
+    cb.mask[1] = unit(p.maskStrength);
+    cb.mask[2] = p.mask != RD_CRT_MASK_NONE ? rd__CrtMaskFade(box->h) : 0.0f;
+    cb.mask[3] = p.halation;
+    cb.glow[0] = p.bloom;
+    cb.glow[1] = p.curvX;
+    cb.glow[2] = p.curvY;
+    cb.glow[3] = p.corner;
+    cb.tone[0] = p.vignette;
+    cb.tone[1] = p.gammaIn;
+    cb.tone[2] = p.gammaOut > 0.1f ? p.gammaOut : 2.2f;
+    cb.tone[3] = unit(g_rd.settings.crtStrength);
+    cb.pass[0] = mirror ? 1.0f : 0.0f;
+
+    /* 1. the horizontal glow, 2. the vertical */
+    const RhiRect glowArea = {0, 0, gw, gh};
+    rd__Transition(cl, ga->t, &ga->state, RHI_STATE_RENDER_TARGET);
+    beginPass(cl, ga->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
+    crtPass(cl, pBloom, gw, gh, &cb, src, (RhiTexture){0});
+    rhi_CmdEndRenderPass(cl);
+    rd__Transition(cl, ga->t, &ga->state, RHI_STATE_SHADER_READ);
+    cb.pass[2] = 1.0f / (float)gw;
+    cb.pass[3] = 1.0f / (float)gh;
+    rd__Transition(cl, gb->t, &gb->state, RHI_STATE_RENDER_TARGET);
+    beginPass(cl, gb->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
+    crtPass(cl, pBlur, gw, gh, &cb, ga->t, (RhiTexture){0});
+    rhi_CmdEndRenderPass(cl);
+    rd__Transition(cl, gb->t, &gb->state, RHI_STATE_SHADER_READ);
+
+    /* 3. the composite into the box, black around it (the caller left out
+     * in RENDER_TARGET): t1 the grid, t2 the glow */
+    beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
+    crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
+    rhi_CmdEndRenderPass(cl);
+    s_passes++;
+    s_lastW = vw;
+    s_lastH = vh;
+    return true;
+}
+
+bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
+                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
+{
+    RdCrtParams p;
+    if (!rd__CrtResolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
         return false;
     }
     /* the source grid: DISPLAY's GS width widened with the aspect, its
@@ -509,60 +584,43 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
         }
         mirror = 0;
     }
-    const uint32_t gw = (vw + 1) / 2, gh = (vh + 1) / 2;
-    /* output pixels a source pixel across */
-    const float r = (float)box->w / (float)vw;
-    if (!ensure(&s_glowA, gw, gh, RHI_FMT_RGBA16F, "rd crt glow A") ||
-        !ensure(&s_glowB, gw, gh, RHI_FMT_RGBA16F, "rd crt glow B")) {
+    return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, mirror);
+}
+
+void rd__CrtFilmGrid(uint32_t dispH, uint32_t *vw, uint32_t *vh)
+{
+    const uint32_t lines = dispH ? dispH : 576;
+    *vw = g_rd.gsW ? g_rd.gsW : 512;
+    *vh = g_rd.fullHeight ? lines : (lines + 1) / 2;
+}
+
+bool rd__CrtRecordFilm(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_t ph, uint32_t vw,
+                       uint32_t vh, RhiTexture out, RhiFormat outFmt, uint32_t outW, uint32_t outH,
+                       const RhiRect *box)
+{
+    RdCrtParams p;
+    if (!rd__CrtResolve(&g_rd.settings, &p) || !pic.id || !vw || !vh) {
         return false;
     }
-    IcoCrtCB cb;
-    memset(&cb, 0, sizeof(cb));
-    cb.src[0] = (float)vw;
-    cb.src[1] = (float)vh;
-    cb.src[2] = 1.0f / (float)vw;
-    cb.src[3] = 1.0f / (float)vh;
-    cb.box[0] = (float)box->w;
-    cb.box[1] = (float)box->h;
-    cb.box[2] = (float)box->x;
-    cb.box[3] = (float)box->y;
-    cb.beam[0] = p.scanline;
-    cb.beam[1] = p.beamMin;
-    cb.beam[2] = p.beamMax;
-    cb.beam[3] = (float)rd__CrtGapColumns(r);
-    cb.mask[0] = (float)p.mask;
-    cb.mask[1] = unit(p.maskStrength);
-    cb.mask[2] = p.mask != RD_CRT_MASK_NONE ? rd__CrtMaskFade(box->h) : 0.0f;
-    cb.mask[3] = p.halation;
-    cb.glow[0] = p.bloom;
-    cb.glow[1] = p.curvX;
-    cb.glow[2] = p.curvY;
-    cb.glow[3] = p.corner;
-    cb.tone[0] = p.vignette;
-    cb.tone[1] = p.gammaIn;
-    cb.tone[2] = p.gammaOut > 0.1f ? p.gammaOut : 2.2f;
-    cb.tone[3] = unit(g_rd.settings.crtStrength);
-    cb.pass[0] = mirror ? 1.0f : 0.0f;
+    RhiTexture src = pic;
+    if (pw != vw || ph != vh) {
+        if (!ensure(&s_filmSrc, vw, vh, RHI_FMT_RGBA8_UNORM, "rd crt film grid") ||
+            !boxReduce(cl, pic, pw, ph, &s_filmSrc)) {
+            return false;
+        }
+        src = s_filmSrc.t;
+    }
+    return compose(cl, &p, src, vw, vh, &s_filmGlowA, &s_filmGlowB, out, outFmt, outW, outH, box,
+                   0);
+}
 
-    /* 1. the horizontal glow, 2. the vertical */
-    const RhiRect glowArea = {0, 0, gw, gh};
-    rd__Transition(cl, s_glowA.t, &s_glowA.state, RHI_STATE_RENDER_TARGET);
-    beginPass(cl, s_glowA.t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
-    crtPass(cl, pBloom, gw, gh, &cb, src, (RhiTexture){0});
-    rhi_CmdEndRenderPass(cl);
-    rd__Transition(cl, s_glowA.t, &s_glowA.state, RHI_STATE_SHADER_READ);
-    cb.pass[2] = 1.0f / (float)gw;
-    cb.pass[3] = 1.0f / (float)gh;
-    rd__Transition(cl, s_glowB.t, &s_glowB.state, RHI_STATE_RENDER_TARGET);
-    beginPass(cl, s_glowB.t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
-    crtPass(cl, pBlur, gw, gh, &cb, s_glowA.t, (RhiTexture){0});
-    rhi_CmdEndRenderPass(cl);
-    rd__Transition(cl, s_glowB.t, &s_glowB.state, RHI_STATE_SHADER_READ);
-
-    /* 3. the composite into the box, black around it (the caller left out
-     * in RENDER_TARGET): t1 the grid, t2 the glow */
-    beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
-    crtPass(cl, pCrt, outW, outH, &cb, src, s_glowB.t);
-    rhi_CmdEndRenderPass(cl);
-    return true;
+uint32_t rd__CrtLastPass(uint32_t *vw, uint32_t *vh)
+{
+    if (vw) {
+        *vw = s_lastW;
+    }
+    if (vh) {
+        *vh = s_lastH;
+    }
+    return s_passes;
 }

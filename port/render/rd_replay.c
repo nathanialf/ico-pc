@@ -3451,6 +3451,15 @@ static bool ensureRing(uint64_t need)
     return g_rd.ringMap[s_slot] != NULL;
 }
 
+bool rd__BeginOwnFrame(uint64_t ringBytes)
+{
+    rd__WaitFrame();
+    s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
+    g_rd.replayCounter++;
+    s_ringOff = 0;
+    return ensureRing(ringBytes);
+}
+
 /* R7a: levels 1.. of a game texture: 2x2 box filtered from the base
  * (rdtex_BuildMipChain), alpha coverage kept (rdtex_KeepAlphaCoverage),
  * each level copied into the ring and onto its subresource. */

@@ -12,9 +12,16 @@
  *            chroma), bit for bit
  *   mirror   the same picture with the mirror mode on: flipped with the FMV
  *            toggle on, unflipped with it off
+ *   crt      (package C1) a 720 x 576 film at an 800 x 480 output: with the
+ *            CRT filter off no CRT pass is drawn and the box is the flat
+ *            picture; on (scanlines), each frame and each clear frame is
+ *            one CRT pass on the film's grid (512 triads, 288 field lines),
+ *            the box shows the beam's lines, keeps the picture's light and
+ *            stays black around it; off again, the plain picture
  *
  * Exit 77 without a device.
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,6 +182,116 @@ static void testMirror(void)
     }
 }
 
+/* ------------------------------------------- the CRT filter (package C1) */
+
+#define CW 800
+#define CH 480
+
+static uint8_t s_big[CW * CH * 4];
+
+static void setCrt(RdCrtMode mode, uint32_t w, uint32_t h)
+{
+    RdSettings s = *rd_GetSettings();
+    rd_CrtSettings(&s, mode, 1.0f);
+    s.outputWidth = w;
+    s.outputHeight = h;
+    rd_SetSettings(&s);
+    rd_BeginFrame(); /* settings apply at the next frame */
+    rd_DiscardFrame();
+}
+
+/* the box's (640 x 480 at x 80) mean luma, its rows' spread (the largest
+ * row mean less the smallest) and the lit pixels outside it */
+static int measure(double *mean, double *spread, int *outside)
+{
+    uint32_t w = 0, h = 0;
+    if (!rd__ReadPresent(s_big, sizeof(s_big), &w, &h) || w != CW || h != CH) {
+        printf("FAIL: crt readback (%u x %u)\n", w, h);
+        failures++;
+        return -1;
+    }
+    double sum = 0.0, lo = 1e9, hi = -1.0;
+    *outside = 0;
+    for (int y = 0; y < CH; y++) {
+        double row = 0.0;
+        for (int x = 0; x < CW; x++) {
+            const uint8_t *p = s_big + (y * CW + x) * 4;
+            const double l = 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+            if (x >= 80 && x < 720) {
+                row += l;
+            } else if (p[0] | p[1] | p[2]) {
+                (*outside)++;
+            }
+        }
+        row /= 640.0;
+        sum += row;
+        /* away from the tube's rounded corners and the edge's lines */
+        if (y >= 40 && y < CH - 40) {
+            lo = row < lo ? row : lo;
+            hi = row > hi ? row : hi;
+        }
+    }
+    *mean = sum / CH;
+    *spread = hi - lo;
+    return 0;
+}
+
+static void testCrt(void)
+{
+    enum { W = 720, H = 576 };
+
+    static uint8_t y[W * H], u[(W / 2) * (H / 2)], v[(W / 2) * (H / 2)];
+    const uint32_t pitch[3] = {W, W / 2, W / 2};
+    const uint8_t black[4] = {0, 0, 0, 0x80};
+    memset(y, 160, sizeof(y));
+    memset(u, 128, sizeof(u));
+    memset(v, 128, sizeof(v));
+    rd_VideoSetDisplay(W, H);
+
+    /* off: no pass, a flat box */
+    setCrt(RD_CRT_OFF, CW, CH);
+    const uint32_t n0 = rd__CrtLastPass(NULL, NULL);
+    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt off: frame");
+    double offMean = 0.0, spread = 0.0;
+    int outside = 0;
+    if (measure(&offMean, &spread, &outside) == 0) {
+        printf("crt off: box luma %.1f, rows' spread %.2f, %d lit outside\n", offMean, spread,
+               outside);
+        CHECK(rd__CrtLastPass(NULL, NULL) == n0, "crt off: no CRT pass drawn");
+        CHECK(spread < 0.01 && outside == 0, "crt off: the plain picture in the box");
+    }
+
+    /* on: one pass a frame, the film's grid, scanlines in the box */
+    setCrt(RD_CRT_SCANLINES, CW, CH);
+    CHECK(rd_VideoClear(black) == 0, "crt on: clear");
+    uint32_t vw = 0, vh = 0;
+    CHECK(rd__CrtLastPass(&vw, &vh) == n0 + 1, "crt on: the clear frame drawn through the filter");
+    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt on: frame");
+    CHECK(rd__CrtLastPass(&vw, &vh) == n0 + 2, "crt on: the film frame drawn through the filter");
+    CHECK(vw == 512 && vh == H / 2, "crt on: the film's grid %u x %u (want 512 x %u)", vw, vh,
+          H / 2);
+    double crtMean = 0.0;
+    if (measure(&crtMean, &spread, &outside) == 0) {
+        printf("crt on: box luma %.1f, rows' spread %.2f, %d lit outside\n", crtMean, spread,
+               outside);
+        CHECK(spread > 8.0, "crt on: the beam's lines in the box (spread %.2f)", spread);
+        CHECK(crtMean > offMean * 0.85 && crtMean < offMean * 1.05,
+              "crt on: the picture keeps its light (%.1f against %.1f)", crtMean, offMean);
+        CHECK(outside == 0, "crt on: black around the box (%d lit)", outside);
+    }
+
+    /* off again */
+    setCrt(RD_CRT_OFF, CW, CH);
+    const uint32_t n1 = rd__CrtLastPass(NULL, NULL);
+    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt off again: frame");
+    double again = 0.0;
+    if (measure(&again, &spread, &outside) == 0) {
+        CHECK(rd__CrtLastPass(NULL, NULL) == n1 && spread < 0.01 && fabs(again - offMean) < 0.01,
+              "crt off again: the plain picture, no pass");
+    }
+    setCrt(RD_CRT_OFF, OW, OH);
+}
+
 int main(void)
 {
     RdSettings s;
@@ -191,6 +308,7 @@ int main(void)
     testFlat();
     testRamp();
     testMirror();
+    testCrt();
     rd_VideoShutdown();
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%u validation errors", verr);
