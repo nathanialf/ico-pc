@@ -315,7 +315,14 @@ present (docs/BUILDING.md); `gallery` exits 77 without one.
 Settings > Extras > Music and plays one entry of each group through
 `ICO_GALLERY_PLAY`, then checks the log and the dump
 (docs/port/MUSIC.md, "Testing"). It needs the disc image (77 without),
-runs serially and takes about ten seconds. The Windows presets build the test executables
+runs serially and takes about ten seconds. `credits_headless` runs it twice
+the same way (`port/ui/credits_headless/`): a short boot with the Credits
+row locked, then one with `unlock_credits=1` that opens Settings > Extras >
+Credits and plays the ending's staff scenes back to the title, checking the
+log's `credits:` and `staff roll:` lines in order, the title running on
+after it, and the saves folder unchanged (docs/port/EXTRAS.md, "Credits").
+It needs the disc image (77 without), runs serially and takes about a
+minute. The Windows presets build the test executables
 without running them.
 
 ## The model viewer run

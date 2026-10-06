@@ -184,6 +184,14 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
                          "${CMAKE_CURRENT_BINARY_DIR}/gallery_headless")
         set_tests_properties(gallery_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                              TIMEOUT 300)
+        # Extras > Credits in the headless game (credits_headless.py, package
+        # CRED): the ending's staff scenes from the title and back, no save
+        add_test(NAME credits_headless
+                 COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/credits_headless.py"
+                         "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
+                         "${CMAKE_CURRENT_BINARY_DIR}/credits_headless")
+        set_tests_properties(credits_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
+                             TIMEOUT 600)
     endif()
 endif()
 

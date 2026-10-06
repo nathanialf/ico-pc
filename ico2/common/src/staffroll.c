@@ -5,6 +5,7 @@
 #include "main.h"
 #include "debug_exception.h"
 #include <assert.h>
+#include "ico_credits.h" /* PC port (package CRED): the roll's port credit */
 
 #ifdef ICO_RD
 
@@ -72,6 +73,7 @@ void staffRollStart(float t, int alpha)
     staffRollCenterOffsetX = staffRollCenterOffsetXDest = rollOffset;
     staffRollArea[0] = 1280;
     memset(rollLines, 0, sizeof(rollLines));
+    ico_roll_started(staffRollNameDataNum); /* PC port (package CRED): a log line */
 }
 
 /* The scroll loop walks the 300-entry table by byte offset and spells the
@@ -146,14 +148,21 @@ static int staffRollNameOut(void)
     found:
 
         e = &rollLines[i];
-        s = &staffRollNameData[rollNameIdx++];
+        /* PC port (package CRED; docs/port/UI.md "Staff roll"): past the
+           disc's lines, the port credit's (port/game/credits.c) */
+        if (rollNameIdx >= staffRollNameDataNum) {
+            s = ico_roll_port_line(rollNameIdx++ - staffRollNameDataNum);
+        } else {
+            s = &staffRollNameData[rollNameIdx++];
+        }
         if (*s != 0)
             e->str = s;
 
         e->y = (float)(font_GetHeight() + 449);
         e->align = font_CheckAlign(&e->col, *e->str);
     }
-    return rollNameIdx >= staffRollNameDataNum;
+    /* PC port (package CRED): the roll ends after the port credit's lines */
+    return rollNameIdx >= staffRollNameDataNum + ico_roll_port_count();
 }
 
 /* the roll's colour; only its alpha byte is read and written, fading toward

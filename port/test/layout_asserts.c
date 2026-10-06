@@ -1287,7 +1287,7 @@ OFF(AdpcmStream, remain, 0x50);
 OFF(AdpcmStream, pad54, 0x54);
 #endif
 
-/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:92 */
+/* AdpcmDataRec: overlay, ico2/fumi/include/adpcm_init.h:95 */
 OFF(AdpcmDataRec, path, 0x0);
 OFF(AdpcmDataRec, loopStart, 0x30);
 OFF(AdpcmDataRec, sectors, 0x34);

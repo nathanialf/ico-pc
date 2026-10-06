@@ -73,6 +73,9 @@ void AdpcmFadeCloseAll(short step);
 int AdpcmUseAreaGet(void);
 int AdpcmFreeAreaGet(void);
 void AdpcmInterStereoVolumeSetAll(void);
+/* PC port (package CRED): the next open of stream `no` starts `bytes` in
+   (adpcm_init.c; docs/port/EXTRAS.md, "Credits") */
+void ico_adpcm_set_start(int no, int bytes);
 short AdpcmInterLeaveVolumeGet(struct SqEntry *self, int idx);
 inline short AdpcmVolumeGet(struct SqEntry *self);
 inline int adpcmTickProc(struct CdvdBgReq *self, struct SqEntry *obj);

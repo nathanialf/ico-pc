@@ -44,6 +44,7 @@
 #include "font.h"
 #include "gallery.h"
 #include "host_config.h"
+#include "ico_credits.h"
 #include "input.h"
 #include "layout_ext.h"
 #include "audio_host.h"
@@ -1836,6 +1837,66 @@ static int fakeModels(void)
     return ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
 }
 
+/* package CRED: the Credits row unlocked by [dev] unlock_credits (the
+   ending achievement is the player's way; credits_test and achievements_test
+   check those), its locked look gone, and Cross with an engine that starts:
+   the menu leaves for the game's empty layout (55) with the flag on and the
+   title's cursor kept on Settings; with no engine, a failed start stays. */
+static int s_fakeBegins;
+
+static int fakeCreditsBegin(void)
+{
+    s_fakeBegins++;
+    ico_credits_set_active(1);
+    return 0;
+}
+
+static void testCredits(int mainL, int exL)
+{
+    static const IcoCreditsEngine kFake = {fakeCreditsBegin};
+    char log[512];
+    int el[8], eo[8], ev[8];
+
+    useConfig("version = 1\n[dev]\nunlock_credits = true\n");
+    press(0x40);
+    CHECK(settle(exL, 60), "Extras, unlocked");
+    ui_SettingsPageRows(UI_PAGE_EXTRAS, el, eo, ev, 8);
+    lt_ext_Layout(exL)->curItem = el[2];
+    frame(0);
+    int note = rowWithText(UI_PAGE_EXTRAS, "Finish the game to unlock");
+    CHECK(ev[2] >= 0 && strcmp(lt_ext_RowText(ev[2]), "") == 0 && lt_ext_RowDim(el[2]) == 0 &&
+              lt_ext_RowDim(ev[2]) == 0,
+          "Credits unlocked: value \"%s\", not greyed", ev[2] >= 0 ? lt_ext_RowText(ev[2]) : "-");
+    CHECK(note >= 0 && lt_ext_Prop(note)->masked == 1, "no locked note on the unlocked Credits");
+    /* no engine (this program has none): a failed start, the page stays */
+    ico_credits_set_engine(NULL);
+    errCapture();
+    press(0x40);
+    errRelease(log, sizeof(log));
+    CHECK(strstr(log, "credits: enter") == NULL && strstr(log, "credits: failed") != NULL &&
+              current_layout_id == exL && !ico_credits_active(),
+          "Credits with no engine: fails and stays (\"%s\")", log);
+    /* an engine: the playback starts and the menu leaves for layout 55 (the
+       game's empty layout; here an empty one shaped like 54) */
+    setLayout(55, 292, 292, -1, -1);
+    texLayout[55].fadeInTime = 0.0f;
+    texLayout[55].fadeOutTime = 0.0f;
+    ico_credits_set_engine(&kFake);
+    s_fakeBegins = 0;
+    errCapture();
+    press(0x40);
+    errRelease(log, sizeof(log));
+    CHECK(s_fakeBegins == 1 && strstr(log, "credits: enter") != NULL && ico_credits_active(),
+          "Credits starts the playback (\"%s\")", log);
+    CHECK(settle(55, 60), "the menu leaves for the game's empty layout (%d)", current_layout_id);
+    CHECK(texLayout[13].defaultItem == ui_SettingsEntryRow(13),
+          "the title comes back on Settings (%d)", texLayout[13].defaultItem);
+    ico_credits_set_engine(NULL);
+    ico_credits_set_active(0);
+    useConfig("version = 1\n");
+    (void)mainL;
+}
+
 /* Settings > Extras: a row of the main page after Achievements, from the
    title only; Music, Models, Credits and Back; the entries are placeholders
    that log; Credits shows the locked style. */
@@ -1905,7 +1966,7 @@ static void testExtras(void)
         press(0x10);
         CHECK(settle(exL, 60) && lt_ext_Layout(exL)->curItem == el[0],
               "Triangle: back on the Music row");
-        /* the others only log, and stay on the page */
+        /* Models only logs, and stays on the page; Credits (locked) too */
         const char *want[3] = {"music", "models", "credits"};
         for (int k = 1; k < 3; k++) {
             lt_ext_Layout(exL)->curItem = el[k];
@@ -1917,6 +1978,8 @@ static void testExtras(void)
             snprintf(line, sizeof(line), "extras: %s not available yet", want[k]);
             CHECK(strstr(log, line) != NULL && current_layout_id == exL,
                   "Cross on %s logs and stays (\"%s\")", want[k], log);
+            CHECK(k != 2 || (strstr(log, "credits: locked") != NULL && !ico_credits_active()),
+                  "Cross on the locked Credits: \"%s\"", log);
         }
         /* package MV: with the model viewer's handler (port/game/
            model_viewer.c registers its list), Models opens the layout it
@@ -1944,6 +2007,7 @@ static void testExtras(void)
         CHECK(settle(exL, 60), "Extras again");
         press(0x10);
         CHECK(settle(mainL, 60), "Triangle: the menu");
+        testCredits(mainL, exL);
     }
 
     /* the strings, five languages */

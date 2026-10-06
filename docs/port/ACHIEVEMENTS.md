@@ -159,7 +159,7 @@ the retail tables.
 | `queen` | The Queen | stage 37, st25a (QUEEN) | `stage_no` |
 | `queen_defeated` | The Queen Falls | gflag 338 on | `actSt25aQueenDeadChk` in `st25a.c` sets 338 and 5 |
 | `shore` | The Shore | stage 39, st27a (BEACH) | `stage_no` |
-| `finish` | Ico | the ending | ENDING |
+| `finish` | Ico | the ending; also unlocks Settings > Extras > Credits, as does a clear count above 0 (docs/port/EXTRAS.md, "Credits") | ENDING |
 | `finish_again` | Once More | the ending with `gFlagGameClear` 1 (a game continued from a cleared save) | ENDING arg |
 | `first_shadow` | Shadow Banisher | 1 enemy defeated (all time) | ENEMY_KILLED |
 | `shadows_25` | Shadow Hunter | 25 | ENEMY_KILLED |
@@ -201,7 +201,9 @@ inference from these numbers and draw functions (docs/TODO.md).
 ## Suspension
 
 Achievements are **suspended** while developer mode or `[dev] start_stage`
-is on, and for the rest of the run in which either was:
+is on, or while Settings > Extras > Credits plays the ending
+(`ico_credits_active`, docs/port/EXTRAS.md "Credits"), and for the rest of
+the run in which any was:
 `ico_gs_run_suspended` is set at any tick where
 `ico_gs_achievements_suspended` is true and cleared when the run resets at
 the title or a new game. While suspended no counter advances (enemies, hand
@@ -302,8 +304,9 @@ What an `rc_client` integration would need from this interface:
   challenges); every id has a title and description in all five languages;
 - suspension: in developer mode nothing unlocks, no counter advances and no
   popup is pushed; it stays suspended after switching it off within the
-  run; progress resumes in a new run with one record; a start stage
-  suspends the same way; `yorda_safe` counts normally;
+  run; progress resumes in a new run with one record; the Extras credits'
+  flag and a start stage suspend the same way; `yorda_safe` counts
+  normally; `finish` unlocks the Extras credits (`ico_credits_unlocked`);
 - the file: stats, states, times (with a fixed clock) and play times
   survive a write and `ico_ach_init`; an unlocked achievement gives no
   second record or popup; a missing file reads as empty;

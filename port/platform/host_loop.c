@@ -26,6 +26,9 @@ extern int stage_no;
 extern int data_loading;
 /* port/ui/gallery_play.c: the music gallery's engine (docs/port/MUSIC.md) */
 void gallery_EngineInstall(void);
+/* port/game/credits_live.c: the Extras credits' engine (docs/port/EXTRAS.md) */
+void ico_credits_engine_install(void);
+void ico_credits_host_poll(void);
 
 static unsigned int vsyncs;
 
@@ -59,6 +62,7 @@ void ico_host_init(void)
     /* the SPU2 and the SNDN2DRV host, before the game binds to it */
     ico_audio_host_init();
     gallery_EngineInstall();
+    ico_credits_engine_install();
     /* the EE timers follow the video mode (50 or 60 Hz vsyncs) */
     ico_clock_set_mode_word(systemStatus);
     ico_sched_reset();
@@ -109,6 +113,10 @@ void ico_host_step(void)
     /* the port's achievements (docs/port/ACHIEVEMENTS.md): once per new Main
        tick, after the threads have run; reads game state, writes none */
     ico_ach_host_poll(ico_host_main_ticks());
+    /* the Extras credits' playback (docs/port/EXTRAS.md): nothing unless
+       one is running; then it watches the stage and puts the game flags
+       back at the title */
+    ico_credits_host_poll();
     profile.achMs = ms_since(&t);
     profile.totalMs = (double)(t - start) / 1e6;
     profile.switches = ico_sched_switch_count() - switches;

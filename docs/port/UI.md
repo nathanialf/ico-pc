@@ -392,8 +392,12 @@ stop at the ends and the proc scrolls, wrapping at the ends of the list.
 **Extras** (`UI_PAGE_EXTRAS`, docs/port/EXTRAS.md). Each entry is an
 `UI_OPT_EXTRAS_*` row whose Cross calls a hook in `settings.c` (`extrasMusic`,
 `extrasModels`, `extrasCredits`) that returns the layout to open, or -1 for
-"not there yet" (logged as `extras: <entry> not available yet`;
-`extrasCredits` is marked for package CRED). `extrasModels` calls the
+"not there yet" (logged as `extras: <entry> not available yet`).
+`extrasCredits` returns -1 while `creditsUnlocked()` (`ico_credits_unlocked`)
+is false; unlocked, it saves the menu, starts the playback
+(`ico_credits_start`, `port/game/credits.c`) and returns the game's empty
+layout, 55, with the title's cursor kept on Settings (docs/port/EXTRAS.md,
+"Credits"). `extrasModels` calls the
 handler `ui_SettingsSetModelsHandler` registers: the model viewer
 (`port/game/model_viewer.c`, docs/port/EXTRAS.md "Models") registers
 `ico_mv_models_enter` on its first tick, which builds its two layouts on
@@ -822,12 +826,29 @@ under the owner `RD_KEY(&slot[i], 0, 0)`, so two lines with the same name
 (the roll repeats names under several headings) move and fade
 independently.
 
-**For the Extras credits (package CRED).** The roll takes its lines from
-`staffRollNameData[rollNameIdx++]` in `staffRollNameOut` until
-`staffRollNameDataNum`, keeping a `char **` to the entry in `rollLines[i].str`
-(so an appended line needs storage that lives as long as the roll); the
-lines it draws reach `lt_ext_DrawRollLine` whatever their source, and in
-classic mode `font_Print` (ASCII only: the bitmap font has no other cells).
+**The port credit (package CRED).** Every roll ends with a section the
+port adds after the disc's lines, so nothing from the disc changes:
+`staffRollNameOut` (an ASCII-only patch of the EUC-JP file) posts
+`staffRollNameData[rollNameIdx]` while `rollNameIdx` is below
+`staffRollNameDataNum` (962: the 964 entries less the two NULLs), then
+`ico_roll_port_line(rollNameIdx - staffRollNameDataNum)`
+(`port/game/credits.c`), and the roll's end test is `rollNameIdx >=
+staffRollNameDataNum + ico_roll_port_count()`, in the real ending and in the
+Extras playback alike (docs/port/EXTRAS.md, "Credits"). The 18 lines are in
+the roll's own forms, read from the PAL table: twelve blank lines (`" "`,
+the gap the roll leaves between a name and the next heading, as between
+"Fumito Ueda" and "< Planners >"), the heading `{R}< Decompilation and PC
+Port > ` (a section heading is `{R}< Game Design > `), four blank lines (a
+heading's gap to its name) and `{R}Nathanial Fine ` (a name is `{R}Fumito
+Ueda `). The colour code `{#FFFFFF80}` comes once, on the first line, and
+holds; `{R}` sets the right alignment again after the closing lines'
+`{C}`. The lines are static arrays, so the `char **` the roll keeps in
+`rollLines[i].str` stays valid; they are ASCII, so the classic path's
+`font_Print` draws them too, and the port font draws them through
+`lt_ext_DrawRollLine` as any other line. They add about 4 s to the roll.
+`staffRollStart` logs `staff roll: start, 962 lines from the disc and 18 of
+the port's (...)` and posting the heading logs `staff roll: the port credit
+is posted (...)`.
 
 ## Save screens
 
@@ -1048,5 +1069,10 @@ one.
   `layout_texture.c`; on the device, the title's New
   Game row painted inside its rectangle and rim only
   (`menu_text_scene.png`).
+- `credits_test` (ctest `credits`, CPU; `port/game/test/`): the game's
+  `staffroll.c` run to its end over a short table in the disc's forms, the
+  port credit's lines posted after the disc's, the heading then the name
+  last and right aligned, the roll ending after them (docs/port/EXTRAS.md,
+  "Credits").
 
 Open items for the UI are in docs/TODO.md.

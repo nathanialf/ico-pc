@@ -10,11 +10,7 @@ galleries take over the stage and the pause menu has no stage to give.
 | --- | --- | --- |
 | Music | the music gallery: the soundtrack (the streamed music, with the album's titles), the scene sounds, the ambiences, the voices and the sound effects by bank, played through the game's own engines | live; docs/port/MUSIC.md |
 | Models | a viewer for the game's character and object models (below) | live |
-| Credits | the staff roll, locked until the ending has been reached ("Finish the game to unlock") | coming in package CRED |
-
-Until its package lands, selecting Credits does nothing and
-writes `extras: credits not available yet` to the log. Credits already has its
-locked look: greyed, with the value "Locked" and the note.
+| Credits | the ending from the scene where the staff roll starts to the end of the roll, then the title; locked until the ending has been reached ("Finish the game to unlock") | live; "Credits" below |
 
 The page is built in `port/ui/settings.c` (`UI_PAGE_EXTRAS`, the `extras*`
 hooks) on the shared list code in `port/ui/ui_list.c` for the galleries'
@@ -157,3 +153,119 @@ The game never names its shadows: theirs follow the word each model's own
 file name is built on (wing, horn, bull, caterpillar, butterfly, sea slug,
 bone; the plain one is "boy"). The animations column is what the host stage
 holds of the model's block, as the viewer counts it.
+
+## Credits
+
+**What plays.** Credits plays the ending from the scene where the staff
+roll starts: the three staff scenes (stageData 60 STAFF1 on st13b, 61
+STAFF2 on st04a, 62 STAFF3 on st13c) with the roll over them, as the real
+ending shows them, and returns to the title when the roll ends. The real
+ending goes on from there to the beach (39), the logo (63) and the clear
+save; the playback does not.
+
+**How it starts.** The real ending reaches STAFF1 from its last scene,
+`actConte14_13` on 26b4demo2 (stage 56), through `RequestStageChange(6,
+...)`: exit 216. The stage's own objects run `actStaff1` (the roll's
+layout), `actStaff1Chk`, then `actStaff1Demo`, which calls
+`staffRollStart(1.0f, 255)`; STAFF1 to 3 chain on through their own exits
+(`ico2/script/src/end.c`). So the playback is a stage change from the title
+to STAFF1, done the way the title's Load leaves for a save's stage
+(`layout_action.c`, `la_load_processing`): the title theme's fade step, the
+stage's environment sounds closed, `stgmgrForceSwitchWithFade(60, 8.0f,
+4.0f)` and `ACTGame_SetActors_Debug(60, 0)`; then the boy's record is put at
+exit 216's entrance (`ACTGame_StageChangeGObjID(54, 1, 216)`), where the
+real ending puts him (the first exit into stage 60, which
+`ACTGame_SetActors_Debug` uses, is exit 26, elsewhere). No script entry is
+changed: STAFF1's objects start the scenes as in the real ending. The menu
+closes on the game's empty layout (55) and the title will come back with the
+cursor on Settings. The engine is `port/game/credits_live.c`; the flag,
+the lock and the start are `port/game/credits.c` (`ico_credits.h`).
+
+**The music.** The ending's song, "ICO -You were there-" (`adpcmFile` 47,
+`event/39_8.int`, 265.6 s), starts in `actEndDemo06Chk`, six scenes before
+the roll. Run headless from 13b4demo3 (stage 47, where `actEndDemo06` is)
+with the flags of the scenes before it set, the real ending opened it at
+Main tick 122 and started the roll at Main tick 3899: 151.1 s into the song
+at PAL's 25 Hz Main tick. The playback requests it in `actStaff1Chk` (under
+the flag) to open 151.2 s in (the 80 ms are the two ticks the script
+daemon takes to open it), so the roll starts on the same bar; the song's
+last 12 s overlap STAFF3's own piece (stream 49, "Castle in the Mist"), as in
+the real ending. A stream opened part way in is a port hook in
+`fumi/sound/adpcm_init.c` (`ico_adpcm_set_start`): the next open of that
+stream fills its ring from the given byte (a 2 KB sector, which keeps the
+0x400-byte channel interleave), the ring's next read follows it and the
+skipped bytes count as played. It is unset except for this one request.
+
+**How it ends.** Under the flag `actStaff3RollChk`, which waits for the roll
+to end, fades every stream (`AdpcmFadeCloseAll(80)`, as it fades `ed6`) and
+changes to the title, stage 1, with `RequestStageChangeSimple(1, 16.0f,
+8.0f, 0, 0, 0)`: the roll's own fade out (16) and the fade in the real
+ending's way into the title uses (`actEndingSave`, 8). The title comes back
+in the mode it was left in (`opDemoMode` 1: the logo and menu), and its
+theme starts again from its start, requested by `actTitleShortCut` as on
+any return to the title.
+
+**Nothing is kept.** Before the stage change the engine takes everything a
+save holds, with the game's own `gamesysMemorySave` into a buffer of its own
+(the flags, the object records that place the boy and Yorda in a stage, the
+generators, the hints, the character record, the back stage, the second
+flag set), the checkpoint image `gameSysMainSaveBuff`, `gFlagGameClear` and
+`systemStatus[2..4]`. As stage 1 is entered again (`StageManager.c`,
+`start_stage_Load_thread`, after `exit_stage` and before the stage's
+objects are built) it puts them back with `gamesysMemoryLoad`, as the
+title's Load does, and the flags bit by bit after it (the load sets flag
+394). The staff scenes move the boy's record to each staff stage; without
+the restore the title came back with no boy, and its camera, falling back
+to him when the title's animation ended, read through a null object. No
+save is written: the playback never reaches `actEndingSave` (which, under
+the flag, would skip the ending signal and the save) or a save screen.
+While the flag is on, achievements are suspended as in developer mode, for
+the rest of that run (docs/port/ACHIEVEMENTS.md, "Suspension"). The log
+has `credits: enter`, `credits: stage 60 up`, the song's request and start,
+`staff roll: start ... (Extras > Credits)`, `staff roll: the port credit is
+posted`, and `credits: back at the title ..., the game's state put back`.
+
+**No skip.** Triangle and Start do nothing during the playback, as in the
+real ending (its staff scenes switch to the empty layout, 55, and the
+pause belongs to the in-game layout's `la_game_loop`).
+It lasts about four minutes (6,030 Main ticks from the Cross to the title
+in the headless run: STAFF1 and 2 about 100 s, STAFF3 to the end of the roll
+about 138 s). Leaving early would mean stopping the roll, the streams and
+the scene scripts part way through, which the game never does.
+
+**The lock.** Credits is unlocked once the port has recorded the ending:
+the ending achievement `finish` unlocked, or the achievements file's clear
+count (`[stats] clears`) above 0 (docs/port/ACHIEVEMENTS.md). Both are
+written at the ending's `ICO_GS_EV_ENDING` signal in `actEndingSave`,
+whether or not the clear save is then made. The card's own clear state (a
+save with flag 395) is not read: it exists only when the player saved at the
+end, and reading it means opening every save file. An ending reached while
+the achievements were suspended (developer mode, a start stage) does not
+unlock it. Locked, the row is greyed with the value "Locked" and, with the
+cursor on it, the note "Finish the game to unlock" (`UI_STR_EXTRAS_LOCKED_NOTE`,
+five languages); Cross writes `credits: locked ...` to the log. The developer
+key `[dev] unlock_credits = true` (ini `unlock_credits=1`) unlocks it for
+tests (docs/port/CONFIG.md).
+
+**The port credit.** Every staff roll, the real ending's and this one,
+ends with a port section after the disc's last line (the copyright line):
+twelve blank lines, the heading `{R}< Decompilation and PC Port > `, four
+blank lines and the name `{R}Nathanial Fine `, in the roll's own heading and
+name forms (docs/port/UI.md, "Staff roll"). The disc's table is not
+changed.
+
+**Tests.** `credits` (CPU, `port/game/test/credits_test.c`): the game's
+`staffroll.c` over a short table in the disc's forms, the port lines last,
+heading then name, the roll's end after them; the lock with and without
+the key; a start with no engine. `settings` (`settings_test`): the locked
+row, the unlocked row with the key, a failed start staying on the page, and
+a start through a fake engine leaving for layout 55 with the title's
+cursor on Settings. `achievements`: `finish` unlocks Credits; the playback's
+flag suspends. `credits_headless` (the headless game and the disc image;
+RUN_SERIAL, 600 s, 77 without the image; `port/ui/test/credits_headless.py`):
+a run with the row locked (no playback, `credits: locked`), then one with
+`unlock_credits=1` from the title through Settings > Extras > Credits: the
+log lines above in order, `stage_no 62 -> 1`, no beach or achievement
+unlock, 1,500 ticks of title after the return (exit code 0), Triangle and
+Start pressed during the roll changing nothing, and the saves folder the
+same as after the locked run.

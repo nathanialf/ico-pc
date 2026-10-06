@@ -422,6 +422,9 @@ static const struct {
        ico_dev_switch_stage) */
     {"dev.switch_to", "switch_to"},
     {"dev.switch_at", "switch_at"},
+    /* Settings > Extras > Credits unlocked whatever the achievements say
+       (package CRED; port/game/credits.c, docs/port/EXTRAS.md) */
+    {"dev.unlock_credits", "unlock_credits"},
     /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
     /* the renderer backend of the window build, "vulkan" (default) or "d3d12"

@@ -31,6 +31,23 @@ static AdpcmStream adpcmStream[2]; /* derived name */
 
 static int adpcmSpuSlot[4]; /* derived name */
 
+/* PC port (package CRED; docs/port/EXTRAS.md, "Credits"): one stream opened
+   part way in.  After ico_adpcm_set_start(no, bytes), the next open of
+   stream `no` reads from `bytes` (rounded down to a 2 KB sector, which keeps
+   the 0x400-byte channel interleave) instead of from its start: AdpcmOpen
+   seeks the first fill of the ring there, AdpcmOpenSync seeks the next
+   fill past it and counts the skipped bytes as played.  Nothing differs
+   while it is unset (-1); only the Extras credits set it. */
+static int adpcmStartNo = -1;
+
+static int adpcmStartBytes;
+
+void ico_adpcm_set_start(int no, int bytes)
+{
+    adpcmStartNo = no;
+    adpcmStartBytes = bytes > 0 ? bytes & ~0x7FF : 0;
+}
+
 void AdpcmStreamFree(void)
 {
     sceSifFreeIopHeap(adpcmIopHeap);
@@ -227,6 +244,9 @@ void AdpcmOpen(AdpcmOpenReq *self, int no, int ch, int loopNum)
     req = (no & 0xFFFF) | 0x110000;
     if (soundDataAreaSearch(&req) != 0) {
         self->bg = 0;
+        if (no == adpcmStartNo) {
+            adpcmStartNo = -1; /* PC port (CRED): already open, not kept */
+        }
         return;
     }
     self->ch = ch;
@@ -235,8 +255,14 @@ void AdpcmOpen(AdpcmOpenReq *self, int no, int ch, int loopNum)
     if (self->iopBuf != 0) {
         self->bg = iosCdvdBackGroundMgrAdd((char *)&adpcmFile[no], adpcmOpenProc, self,
                                            adpcmOpenDiskNotReady, 0, self, 0, 0);
+        if (no == adpcmStartNo) {
+            iosCdvdBackGroundMgrSeek(self->bg, adpcmStartBytes); /* PC port (CRED) */
+        }
     } else {
         self->bg = 0;
+        if (no == adpcmStartNo) {
+            adpcmStartNo = -1; /* PC port (CRED): not opened, not kept */
+        }
         debug_StdPrintfDummy("%s\n", (char *)&adpcmFile[no]);
     }
     self->loopNum = loopNum;
@@ -415,6 +441,13 @@ body:
     debug_StdPrintfDummy("AdpcmOpensync done\n");
     iosCdvdBackGroundMgrDelete(self->bg);
     r = adpcmDataSet(0, self->id, 0x11, self->ch, 0, self->iopBuf, self->loopNum);
+    if (self->id == adpcmStartNo) {
+        /* PC port (CRED): the ring holds the stream from adpcmStartBytes */
+        iosCdvdBackGroundMgrSeek(r->stream->bg, adpcmStartBytes + 0x5C000);
+        r->stream->remain -= adpcmStartBytes;
+        adpcmStartNo = -1;
+        return r;
+    }
     iosCdvdBackGroundMgrSeek(r->stream->bg, 0x5C000);
     return r;
 }

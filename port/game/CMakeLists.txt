@@ -39,6 +39,12 @@ endif()
 # include path and record layout), and without it into the test (a synthetic
 # sampler). achievements.c is port code: the table, the checks, the file and
 # the popups (port/ui's strings and queue, which ico_pc holds).
+# credits.c (package CRED, docs/port/EXTRAS.md "Credits"): the Extras
+# credits' flag, lock and start, and the staff roll's port credit lines, in
+# the same library (gamestate.c suspends the achievements on its flag);
+# credits_live.c, the playback's engine, reads and writes the game's state,
+# so it is built into the program with the game's include path, as
+# gamestate.c is.
 set(_ico_gs_include "${CMAKE_SOURCE_DIR}/port/include")
 foreach(_p common fumi script sugipon)
     if(TARGET ico_${_p})
@@ -46,7 +52,7 @@ foreach(_p common fumi script sugipon)
     endif()
 endforeach()
 
-add_library(ico_achievements STATIC achievements.c)
+add_library(ico_achievements STATIC achievements.c credits.c)
 target_include_directories(ico_achievements
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${_ico_gs_include}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
@@ -68,6 +74,12 @@ if(TARGET ico_pc)
     target_compile_options(ico_gamestate_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_gamestate_live>)
+    add_library(ico_credits_live OBJECT credits_live.c)
+    target_include_directories(ico_credits_live PRIVATE "${_ico_gs_include}" ${_ico_gs_game_incs})
+    target_compile_definitions(ico_credits_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_credits_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_credits_live>)
     target_link_libraries(ico_pc PRIVATE ico_achievements)
 endif()
 
@@ -121,4 +133,26 @@ if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCO
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_headless.cmake")
     set_tests_properties(model_viewer_headless PROPERTIES RUN_SERIAL TRUE TIMEOUT 300
                          SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
+endif()
+
+# credits_test (package CRED; docs/port/EXTRAS.md "Credits", UI.md "Staff
+# roll"): the game's staffroll.c (the classic path) over a short table in the
+# disc's forms, with the font stubbed to record the posted lines: the port
+# credit's lines come after the disc's, the heading then the name in the
+# roll's forms, and the roll ends after them; then the lock ([dev]
+# unlock_credits through the ini) and a start with no engine. CPU only.
+ico_include_dirs(common _ico_credits_incs)
+add_executable(credits_test test/credits_test.c credits.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/staffroll.c" ../platform/host_config.c)
+target_include_directories(credits_test PRIVATE ${_ico_credits_incs} "${_ico_gs_include}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(credits_test PRIVATE ICO_HOST=1)
+target_compile_options(credits_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(credits_test PRIVATE ico_config ico_platform)
+if(WIN32)
+    target_link_libraries(credits_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME credits COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()

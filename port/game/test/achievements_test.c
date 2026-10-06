@@ -14,6 +14,7 @@
 
 #include "achievements.h"
 #include "config.h"
+#include "ico_credits.h"
 #include "ico_gamestate.h"
 #include "options.h"
 #include "popup.h"
@@ -519,8 +520,11 @@ static void test_each(void)
     ticks(1);
     ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
     ticks(1);
+    /* Extras > Credits (package CRED) opens once "finish" is unlocked */
+    CHECK(!ico_credits_unlocked());
     ending(0, 4 * 3600);
     CHECK(st("finish") == ICO_ACH_UNLOCKED);
+    CHECK(ico_credits_unlocked());
     CHECK(st("never_taken") == ICO_ACH_LOCKED);
     CHECK(st("unbroken") == ICO_ACH_LOCKED);
     CHECK(st("swift") == ICO_ACH_LOCKED);
@@ -585,6 +589,19 @@ static void test_suspended(void)
     CHECK(st("windmill") == ICO_ACH_UNLOCKED && st("first_shadow") == ICO_ACH_UNLOCKED);
     CHECK(stats().enemies == 1 && file_count("[unlocked.windmill]") == 1);
     CHECK(s_pushes == 1 && strstr(s_last_body, "Assisted") == NULL);
+    /* the Extras credits' playback of the ending suspends too (package
+       CRED), for the rest of the run, as developer mode does */
+    new_game();
+    ico_credits_set_active(1);
+    stage(39);
+    CHECK(st("shore") == ICO_ACH_LOCKED);
+    ico_credits_set_active(0);
+    stage(38);
+    stage(39);
+    CHECK(st("shore") == ICO_ACH_LOCKED);
+    new_game();
+    stage(39);
+    CHECK(st("shore") == ICO_ACH_UNLOCKED);
     /* start_stage suspends too */
 #ifndef _WIN32
     new_game();

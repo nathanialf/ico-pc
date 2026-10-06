@@ -70,6 +70,7 @@ static IOSThread initIcoMiscThread; /* derived name; wider than 28 words here (p
 #include <libdma.h>
 #include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_credits.h"   /* port: Extras > Credits, docs/port/EXTRAS.md */
 
 extern void ico_video_camera_cut(void); /* port (renderer R7b): port/game/video_options.c */
 
@@ -179,7 +180,8 @@ static void start_stage_Load_thread(int stage)
     before_stage_no = stage_no;
     stage_no = stage;
     ico_gs_signal(ICO_GS_EV_STAGE_ENTER, stage);
-    ico_video_camera_cut(); /* port (R7b): a stage change is a cut for the presenter */
+    ico_credits_stage_enter(stage); /* port (CRED): the title after the credits */
+    ico_video_camera_cut();         /* port (R7b): a stage change is a cut for the presenter */
     gsb_SetBGColor(&db, 1, 1, 1);
     sceGsSyncPath(0, 0);
     stageManagerFreeResourceFlag = 1;

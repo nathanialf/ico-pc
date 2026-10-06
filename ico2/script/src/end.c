@@ -24,6 +24,7 @@
 #include "script.h"
 #include "staffroll.h"
 #include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_credits.h"   /* port: Extras > Credits, docs/port/EXTRAS.md */
 
 static void actEndingSave(GObj *volatile self);
 
@@ -1651,6 +1652,12 @@ void actEndDemo13Chk(GObj *volatile self)
 
 void actStaff1Chk(GObj *volatile self)
 {
+    /* PC port (package CRED): the Extras credits start here, with the
+       ending's song where the real ending has it when the roll starts (it
+       began in actEndDemo06Chk, several scenes earlier) */
+    if (ico_credits_active()) {
+        scpAdpcmPlayRequestFunc(ico_credits_song_start(), &sea, 0, 1, 1);
+    }
     actCreateSubThread(actStaff1Demo, 21);
 }
 
@@ -1686,6 +1693,14 @@ void actStaff3RollChk(GObj *volatile self)
         _ACTWait(1);
     }
 
+    /* PC port (package CRED): the Extras credits end at the title, with
+       every stream faded as this fades ed6, and no beach, logo or save */
+    if (ico_credits_active()) {
+        AdpcmFadeCloseAll(80);
+        RequestStageChangeSimple(ICO_CREDITS_TITLE_STAGE, 16.0f, 8.0f, 0, 0, 0);
+        return;
+    }
+
     if (ed6 != 0) {
         scpAdpcmFadeCloseFunc(&ed6, 80);
     }
@@ -1702,6 +1717,12 @@ void actEndDemo14Chk(GObj *volatile self)
 
 static void actEndingSave(GObj *volatile self)
 {
+    /* PC port (package CRED): the Extras credits never get here (they end
+       at actStaff3RollChk); if they did, no ending signal and no save */
+    if (ico_credits_active()) {
+        RequestStageChange(1, boyGObj, 0, 255.0f, 8.0f);
+        return;
+    }
     ico_gs_signal(ICO_GS_EV_ENDING, gFlagGameClear);
     if (gFlagGameClear == 0) {
         int save;

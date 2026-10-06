@@ -170,7 +170,8 @@ int ico_gs_stick_fix(void);
 /* [dev] start_stage put the game somewhere other than the boot */
 int ico_gs_start_stage_used(void);
 /* developer mode or start_stage is on, or the model viewer is up
-   (options.h ico_mv_active): achievements are suspended (no counter
+   (options.h ico_mv_active), or the Extras credits are playing the ending
+   (ico_credits.h): achievements are suspended (no counter
    advances, nothing unlocks).  yorda_safe, the stick fix and mirror
    mode do not suspend them. */
 int ico_gs_achievements_suspended(void);

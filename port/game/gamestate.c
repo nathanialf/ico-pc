@@ -10,6 +10,7 @@
  * which install a synthetic sampler.  Nothing here writes game memory.
  */
 #include "ico_gamestate.h"
+#include "ico_credits.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -476,8 +477,10 @@ int ico_gs_start_stage_used(void)
 
 int ico_gs_achievements_suspended(void)
 {
-    /* package MV: the model viewer's stages are not play */
-    return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active;
+    /* package MV: the model viewer's stages are not play; package CRED: nor
+       the Extras credits' playback of the ending (docs/port/EXTRAS.md) */
+    return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
+           ico_credits_active();
 }
 
 /* --- retail addresses ---------------------------------------------------- */

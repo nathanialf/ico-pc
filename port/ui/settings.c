@@ -20,6 +20,7 @@
 #include "config.h"
 #include "font.h"
 #include "gallery.h"
+#include "ico_credits.h"
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
@@ -413,10 +414,12 @@ static int isExtrasOpt(int opt)
            opt == UI_OPT_EXTRAS_CREDITS;
 }
 
-/* package CRED: true once the ending has been reached (the save's flag) */
+/* package CRED: true once the ending has been reached: the port's ending
+   achievement or its clear count, or [dev] unlock_credits (credits.c,
+   ico_credits_unlocked; docs/port/EXTRAS.md, "Credits") */
 static int creditsUnlocked(void)
 {
-    return 0;
+    return ico_credits_unlocked();
 }
 
 /* the music gallery's page (gallery.h, docs/port/MUSIC.md) */
@@ -443,11 +446,30 @@ static int extrasModels(void)
     return s_modelsEnter != NULL ? s_modelsEnter() : -1;
 }
 
-/* package CRED: the credits' layout (the staff roll); only reachable while
-   creditsUnlocked() */
+/* package CRED: the credits: the ending from the staff roll's first scene
+   (ico_credits.h; docs/port/EXTRAS.md, "Credits").  The menu closes on the
+   game's empty layout while the stage changes, as leaving it saves first;
+   the title comes back with the cursor on Settings.  Locked: nothing. */
+static void titleCursorOn(int to, int row);
+
 static int extrasCredits(void)
 {
-    return -1;
+    if (!creditsUnlocked()) {
+        fprintf(stderr, "credits: locked (the ending has not been reached)\n");
+        return -1;
+    }
+    if (!onTitle()) {
+        return -1;
+    }
+    ui_SettingsSave();
+    int to = ico_credits_start();
+    if (to < 0) {
+        return -1;
+    }
+    la_host_leave();
+    titleCursorOn(s_origin,
+                  s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+    return to;
 }
 
 static int extrasOpen(int opt)

@@ -132,13 +132,15 @@ while the gallery plays and comes back on leaving). docs/port/MUSIC.md
 describes it. **Models** opens the model viewer's list: pick a character or
 object to see it alone, turn round it, zoom and play its animations
 (docs/port/EXTRAS.md, "Models", has the controls); Triangle on the list goes
-back here, and from a model back to the title. Credits is not available yet:
-Cross on it does nothing but write `extras: credits not available yet` to
-the log. Credits
-shows the locked style, its label and its value ("Locked") greyed and, with
-the cursor on it, the note "Finish the game to unlock"; it stays locked until
-the ending has been reached. docs/port/EXTRAS.md says what each entry will be
-and which package adds it.
+back here, and from a model back to the title. **Credits** plays the
+ending from the scene where the staff roll starts, the roll's scenes and
+music included, and returns to the title when the roll ends; it saves
+nothing, changes no game flag and suspends achievements while it plays, and
+it cannot be skipped (as the real ending's roll cannot). Until the ending
+has been reached it shows the locked style, its label and its value
+("Locked") greyed and, with the cursor on it, the note "Finish the game to
+unlock", and Cross does nothing. docs/port/EXTRAS.md says what each entry
+is, how Credits plays and what unlocks it.
 
 ## Mirror mode
 
