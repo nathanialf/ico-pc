@@ -549,6 +549,9 @@ static void vkr_FillLimits(void)
      * vkCmdCopyBufferToImage takes the level (vk_resource.c, vk_cmd.c) */
     o->textureMips = true;
     o->maxAnisotropy = g_vkr.anisotropy ? l->maxSamplerAnisotropy : 1.0f;
+    /* package PA */
+    o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
+    o->maxStorageRange = l->maxStorageBufferRange;
 }
 
 /* ------------------------------------------------------------- lifecycle */

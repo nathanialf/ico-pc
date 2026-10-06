@@ -49,6 +49,11 @@
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
  *                         texture as grey, its byte in each channel)
+ *   --stats               (package PA) prints the replay's counts from its
+ *                         performance record (rd.h RdPerfRecord): draws,
+ *                         passes, bind groups created (rd's uniform and
+ *                         texture groups apart), bind group and pipeline
+ *                         binds, ring bytes
  *   --no-aa1              (package AA1) replays with PRIM.AA1 off: every
  *                         RDC_AA1 a NOP and the start state's bit clear, the
  *                         frame as the renderer drew it before AA1 was
@@ -253,7 +258,7 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1]\n",
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats]\n",
                 argv[0]);
         return 1;
     }
@@ -262,7 +267,7 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
-    bool list = false, overlay = false, noAa1 = false;
+    bool list = false, overlay = false, noAa1 = false, stats = false;
     const char *texDir = NULL, *meshName = NULL;
 
     struct {
@@ -325,6 +330,8 @@ int main(int argc, char **argv)
                                                             : RD_FILTER_UPGRADE_OFF;
         } else if (strcmp(argv[i], "--overlay-test") == 0) {
             overlay = true;
+        } else if (strcmp(argv[i], "--stats") == 0) {
+            stats = true;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
         } else if (strcmp(argv[i], "--list") == 0) {
@@ -410,7 +417,18 @@ int main(int argc, char **argv)
         listMesh(meshName);
     }
     int rc = 1;
-    if (rd__ReplayFrame(&f, (int)f.keep, pw != 0)) {
+    const bool replayed = rd__ReplayFrame(&f, (int)f.keep, pw != 0);
+    if (replayed && stats) {
+        /* the record rd__PerfEnd just closed (rd_PerfPop hands it out only
+         * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
+        const RdPerfRecord *pr = &g_rdPerf;
+        printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
+               "group binds, %u pipeline binds, %llu ring bytes\n",
+               dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
+               pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
+               (unsigned long long)pr->uploadBytes);
+    }
+    if (replayed) {
         uint32_t w = 0, h = 0;
         size_t cap = pw ? (size_t)pw * ph * 4 : (size_t)4096 * 4096 * 4;
         uint8_t *px = malloc(cap);

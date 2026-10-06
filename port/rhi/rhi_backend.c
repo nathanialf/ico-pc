@@ -292,6 +292,12 @@ void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
     be()->CmdSetBindGroup(cl, group, bg);
 }
 
+void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                const uint32_t *offsets, uint32_t count)
+{
+    be()->CmdSetBindGroupOffsets(cl, group, bg, offsets, count);
+}
+
 void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset)
 {
     be()->CmdSetVertexBuffer(cl, binding, b, offset);

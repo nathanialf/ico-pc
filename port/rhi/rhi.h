@@ -210,8 +210,20 @@ typedef enum RhiBindType {
     RHI_BIND_STORAGE_BUFFER,
     RHI_BIND_SAMPLED_TEXTURE,
     RHI_BIND_SAMPLER,
+    /* Package PA: a uniform buffer whose offset is given when the group is
+     * bound (rhi_CmdSetBindGroupOffsets), so one group serves every draw
+     * that reads a block of the same size from the same buffer.  The
+     * binding's offset is the base and its size (required) the range each
+     * draw sees; base + bind-time offset + size must lie in the buffer.
+     * Vulkan: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC.  D3D12: a root CBV
+     * per slot (port/rhi/d3d12/README.md "Descriptors").  Same b register
+     * class as RHI_BIND_UNIFORM_BUFFER: the shader does not change. */
+    RHI_BIND_UNIFORM_BUFFER_DYNAMIC,
     RHI_BIND_COUNT
 } RhiBindType;
+
+/* Dynamic uniform slots in one bind group layout, at most. */
+#define RHI_MAX_DYNAMIC_OFFSETS 4
 
 typedef struct RhiBindSlot {
     uint32_t slot;
@@ -229,7 +241,8 @@ typedef struct RhiBinding {
     uint32_t slot;
     RhiBindType type;
     RhiBuffer buffer;      /* for buffer types */
-    uint64_t offset, size; /* buffer range; uniform ranges respect rhi_Limits().uniformAlign */
+    uint64_t offset, size; /* buffer range; uniform ranges respect rhi_Limits().uniformAlign;
+                            * a dynamic uniform's base and per-draw range */
     RhiTexture texture;    /* for sampled textures */
     RhiViewAspect aspect;
     RhiSampler sampler; /* for samplers */
@@ -421,6 +434,16 @@ typedef struct RhiLimits {
      * textureMips false gets one level per texture from rd. */
     bool textureMips;
     float maxAnisotropy;
+    /* Package PA.  uniformAlign above is also the alignment of every
+     * dynamic offset (Vulkan minUniformBufferOffsetAlignment, D3D12 256).
+     * maxDynamicUniforms: the RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots one
+     * pipeline's layouts may have together (Vulkan
+     * maxDescriptorSetUniformBuffersDynamic, at least 8; D3D12 8, a budget
+     * of the 64-DWORD root signature).  maxStorageRange: the largest range
+     * of an RHI_BIND_STORAGE_BUFFER binding (Vulkan maxStorageBufferRange,
+     * at least 2^27; D3D12 2^27 elements of 16 bytes). */
+    uint32_t maxDynamicUniforms;
+    uint64_t maxStorageRange;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {
@@ -506,6 +529,14 @@ void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *vp);
 void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *rect);
 void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p);
 void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
+/* Package PA: binds a group with the offsets of its layout's
+ * RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots, one per such slot in ascending slot
+ * order (count = their number), each a multiple of rhi_Limits()->uniformAlign
+ * and added to the binding's base offset.  rhi_CmdSetBindGroup is this call
+ * with every offset 0.  Binding the group already bound with the same
+ * offsets records nothing. */
+void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                const uint32_t *offsets, uint32_t count);
 void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
 void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
 void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref);

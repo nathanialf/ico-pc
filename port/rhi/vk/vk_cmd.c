@@ -58,6 +58,7 @@ void vkr_FramesShutdown(void)
         vkr_DestroyGarbage(f);
         free(f->garbage);
         free(f->sets);
+        free(f->setDynamic);
         for (uint32_t j = 0; j < f->descPoolCount; j++) {
             vkDestroyDescriptorPool(g_vkr.device, f->descPools[j], NULL);
         }
@@ -524,7 +525,8 @@ void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
     }
 }
 
-void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                const uint32_t *offsets, uint32_t count)
 {
     VkrCmdList *c = vkr_GetCmd(cl);
     if (!c || group >= RHI_MAX_BIND_SLOTS) {
@@ -534,11 +536,31 @@ void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
     if (!s && bg.id) {
         VKR_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
     }
-    if (c->groups[group] != s) {
-        /* package P1: the set already bound is not bound again */
+    /* package PA: the layout's dynamic slots take the given offsets, the
+     * missing ones 0 (rhi_CmdSetBindGroup) */
+    const uint32_t dyn = s ? vkr_BindGroupDynamicCount(bg) : 0;
+    if (count > dyn) {
+        VKR_LOG("rhi_CmdSetBindGroupOffsets: %u offsets for %u dynamic slots", count, dyn);
+        count = dyn;
+    }
+    uint32_t off[RHI_MAX_DYNAMIC_OFFSETS] = {0};
+    for (uint32_t i = 0; i < count && offsets; i++) {
+        off[i] = offsets[i];
+    }
+    /* package P1: the set already bound (PA: with the same offsets) is not
+     * bound again */
+    if (c->groups[group] != s || c->dynCount[group] != dyn ||
+        memcmp(c->offsets[group], off, dyn * sizeof(off[0])) != 0) {
         c->groups[group] = s;
+        c->dynCount[group] = dyn;
+        memcpy(c->offsets[group], off, sizeof(off));
         c->groupDirty |= 1u << group;
     }
+}
+
+void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+{
+    rhi_CmdSetBindGroupOffsets(cl, group, bg, NULL, 0);
 }
 
 /* Binds the dirty groups against the current pipeline's layout. */
@@ -550,7 +572,7 @@ static void vkr_FlushBindGroups(VkrCmdList *c)
     for (uint32_t g = 0; g < c->pipeline->layoutCount; g++) {
         if ((c->groupDirty & (1u << g)) && c->groups[g]) {
             vkCmdBindDescriptorSets(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipeline->layout, g,
-                                    1, &c->groups[g], 0, NULL);
+                                    1, &c->groups[g], c->dynCount[g], c->offsets[g]);
             g_vkr.stats.bindGroupBinds++;
         }
     }

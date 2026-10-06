@@ -75,7 +75,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     }
     DxRootSig *r = &g_dx.roots[g_dx.rootCount];
     memset(r, 0, sizeof(*r));
-    uint32_t np = d3dp_RootParams(ls, count, r->resParam, r->smpParam);
+    uint32_t np = d3dp_RootParams(ls, count, r->resParam, r->smpParam, r->dynParam);
 
     D3D12_ROOT_PARAMETER params[2 * RHI_MAX_BIND_SLOTS];
     D3D12_DESCRIPTOR_RANGE ranges[RHI_MAX_BIND_SLOTS][D3DP_MAX_SLOTS];
@@ -86,6 +86,17 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
         D3D12_DESCRIPTOR_RANGE *rr[2] = {&ranges[g][0], &ranges[g][l->resCount]};
         for (uint32_t i = 0; i < l->slotCount; i++) {
             const RhiBindSlot *s = &l->slots[i];
+            if (l->table[i] == D3DP_ROOT_CBV) {
+                /* package PA: a root CBV; its address comes at bind time */
+                D3D12_ROOT_PARAMETER *p = &params[r->dynParam[g] + l->offset[i]];
+                p->ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                p->Descriptor.ShaderRegister = s->slot;
+                p->Descriptor.RegisterSpace = g;
+                p->ShaderVisibility = dx_Visibility(
+                    s->stages ? s->stages
+                              : ((1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT)));
+                continue;
+            }
             D3D12_DESCRIPTOR_RANGE *dr = &rr[l->table[i]][nr[l->table[i]]++];
             memset(dr, 0, sizeof(*dr));
             switch (s->type) {
@@ -147,6 +158,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     r->layoutCount = count;
     for (uint32_t g = 0; g < count; g++) {
         r->layoutIds[g] = layouts[g].id;
+        r->dynCount[g] = (uint8_t)ls[g]->dynCount;
     }
     g_dx.rootCount++;
     return r;
@@ -333,9 +345,23 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
         DX_LOG("sampler descriptor ring full for this frame (%u)", f->smpRing.size);
         return out;
     }
+    bg.dynCount = l->dynCount;
     for (uint32_t i = 0; i < l->slotCount; i++) {
         const RhiBindSlot *s = &l->slots[i];
         const RhiBinding *b = dx_FindBinding(desc, s);
+        if (l->table[i] == D3DP_ROOT_CBV) {
+            /* package PA: the base address; a root CBV has no size and no
+             * null form, so a missing or bad binding leaves 0, which the
+             * shader must not read (rd_core binds every one) */
+            DxBuffer *buf = b ? dx_GetBuffer(b->buffer) : NULL;
+            if (buf && (b->offset & 255u) == 0 && b->size && b->size <= 65536u &&
+                b->offset + b->size <= buf->size) {
+                bg.dyn[l->offset[i]] = buf->gpu + b->offset;
+            } else if (!quiet) {
+                DX_LOG("bind group: b%u: invalid dynamic uniform buffer or range", s->slot);
+            }
+            continue;
+        }
         if (l->table[i] == D3DP_TABLE_SAMPLER) {
             DxSampler *smp = b ? d3dp_PoolGet(&g_dx.samplers, b->sampler.id) : NULL;
             if (!smp || smp->dead) {

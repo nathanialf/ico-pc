@@ -36,7 +36,10 @@ Dependencies come from `tools/fetch_deps.sh` (versions and licences in
   Scores: discrete 1000, integrated 500, virtual 200, CPU (lavapipe) 100,
   +10 for 1.3. `ICO_VK_DEVICE=<index or name substring>` forces a device.
 - Limits: `uniformAlign` = max(min uniform, min storage offset alignment,
-  16); `copyRowPitchAlign` 1, `copyOffsetAlign` 4.
+  16), also the alignment of dynamic offsets; `copyRowPitchAlign` 1,
+  `copyOffsetAlign` 4; `maxDynamicUniforms` =
+  `maxDescriptorSetUniformBuffersDynamic`, `maxStorageRange` =
+  `maxStorageBufferRange` (package PA).
 
 ## Handles
 
@@ -81,6 +84,7 @@ per register class (`vkr_bindTypeMap`):
 | RHI bind type | HLSL register | Vulkan descriptor | binding |
 | --- | --- | --- | --- |
 | `RHI_BIND_UNIFORM_BUFFER` | `bN` | `UNIFORM_BUFFER` | N |
+| `RHI_BIND_UNIFORM_BUFFER_DYNAMIC` | `bN` | `UNIFORM_BUFFER_DYNAMIC` | N |
 | `RHI_BIND_STORAGE_BUFFER` | `tN` | `STORAGE_BUFFER` | 16 + N |
 | `RHI_BIND_SAMPLED_TEXTURE` | `tN` | `SAMPLED_IMAGE` | 16 + N |
 | `RHI_BIND_SAMPLER` | `sN` | `SAMPLER` | 32 + N |
@@ -101,15 +105,26 @@ for DXIL.
 
 Bind groups are transient (rhi.h: valid for the current frame). Each frame
 slot owns a chain of descriptor pools (8192 sets, 8192 uniform buffers,
-2048 storage buffers, 8192 sampled images, 8192 samplers each; up to 16
-pools); `rhi_CreateBindGroup` allocates from the current pool, opens the
-next on exhaustion, and writes the descriptors at once. The whole chain is
-reset when the slot is reused. No push descriptors, no descriptor indexing,
-no dynamic offsets: one set per group per draw, written once.
+1024 dynamic uniform buffers, 2048 storage buffers, 8192 sampled images,
+8192 samplers each; up to 16 pools); `rhi_CreateBindGroup` allocates from
+the current pool, opens the next on exhaustion, and writes the descriptors
+at once. The whole chain is reset when the slot is reused. No push
+descriptors, no descriptor indexing.
 
-`rhi_CmdSetBindGroup` records the set; the bind happens at the next draw
-against the bound pipeline's layout, and a pipeline with a different layout
-rebinds every group.
+Dynamic offsets (package PA): an `RHI_BIND_UNIFORM_BUFFER_DYNAMIC` slot is a
+`UNIFORM_BUFFER_DYNAMIC` descriptor whose binding gives the base offset and
+the range; `rhi_CmdSetBindGroupOffsets` gives one offset per such slot in
+ascending slot order, which is Vulkan's binding order for
+`pDynamicOffsets` (the slots are all in the `b` class). A layout has at
+most `RHI_MAX_DYNAMIC_OFFSETS` (4) of them; each set remembers its layout's
+count, and `rhi_CmdSetBindGroup` binds with zeros. `rd_core` writes every
+uniform block into its ring and binds one set per layout and replay at the
+block's offset, instead of one set per block.
+
+`rhi_CmdSetBindGroup` and `rhi_CmdSetBindGroupOffsets` record the set and
+its offsets; the bind happens at the next draw against the bound pipeline's
+layout, a pipeline with a different layout rebinds every group, and the
+set already bound with the same offsets is not bound again.
 
 ## Pipelines
 

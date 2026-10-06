@@ -71,11 +71,13 @@ uniforms and storage (bones, the VU vertex stream), group 2 textures and
 samplers. Uniform ranges are aligned to `RhiLimits.uniformAlign` (256 on
 D3D12). The RHI has buffers (device, upload ring, readback), textures
 (RGBA8 unorm and uint, R8, RGBA16F, D32F, D32F with stencil), samplers,
-shaders, bind group layouts, transient bind groups, pipelines (dual-source
+shaders, bind group layouts, transient bind groups, dynamic uniform offsets
+(`RHI_BIND_UNIFORM_BUFFER_DYNAMIC`, `rhi_CmdSetBindGroupOffsets`: Vulkan
+`UNIFORM_BUFFER_DYNAMIC`, D3D12 root CBVs; section 18), pipelines (dual-source
 blend, stencil wrap), render passes with load operations, copies, barriers,
 timestamps and readback. It has no compute, no input attachments, no
 framebuffer feedback loops and no push constants: per-draw uniforms live in
-the upload ring. Anything that needs to read the target it writes (DATE,
+the upload ring and are bound by offset. Anything that needs to read the target it writes (DATE,
 exact blends, the effect sprites) copies the target first.
 
 **Selection.** A Windows build links both backends;
@@ -1469,7 +1471,8 @@ the frame `RHI_FRAMES_IN_FLIGHT` replays ago), `uploadMs`, `acquireMs`,
 `presentMs`, `readbackMs`, `fenceWaitMs`, the `RhiStats` deltas (resources
 created and destroyed, bind groups, binds, draws, passes, barriers, copies,
 waits, readbacks), rd's own counts (texture and mesh uploads, target clears,
-DATE snapshots, exact blends, pipelines created, ring bytes), and GPU
+DATE snapshots, exact blends, pipelines created, ring bytes, uniform and
+texture bind groups), and GPU
 timestamps at the start, after the uploads, after each of the 13 lists and
 after the present, read `RHI_FRAMES_IN_FLIGHT` replays later without
 waiting. `rd_PerfPop` hands the records out. Every 10 s the window logs a
@@ -1496,10 +1499,43 @@ stats lines to every second for 30 s.
 - No reads of the ring: on NVIDIA with resizable BAR the ring is
   write-combined device memory, where reads are uncached, so vertices are
   built in local scratch and copied in whole.
-- Bind groups are cached per replay by content (uniform groups) and by
-  (texture, sampler, DATE snapshot), and the Vulkan backend skips re-binding
-  a set already bound; the pipeline lookup is a hash. VU draws still create
-  one set each, since their VuCB is per object.
+- One uniform bind group per layout and replay (package PA). FrameCB,
+  DrawCB, VuCB and VuBoneCB are `RHI_BIND_UNIFORM_BUFFER_DYNAMIC` slots
+  (Vulkan `UNIFORM_BUFFER_DYNAMIC`, D3D12 root CBVs): each block is written
+  into the ring at a `uniformAlign` offset, as before, and the draw binds its
+  layout's one group with that offset (`rd__BindUniform`,
+  `rhi_CmdSetBindGroupOffsets`); a DrawCB repeated within a replay is still
+  written once (cached by content). The VU group also binds the stream's
+  whole buffer at t0 and the draw finds its stream through `vu_draw.x` (its
+  first qword in that buffer), so it is one group per stream buffer: the
+  mesh arena chunk, and the ring for the streams drawn from it (particles,
+  grids, a mesh with no device copy). A stream past `maxStorageRange` falls
+  back to a group of its own at the stream's offset. Texture groups stay
+  cached per (texture, sampler, DATE snapshot). The Vulkan backend skips
+  re-binding a set already bound with the same offsets; the pipeline lookup
+  is a hash. `RdPerfRecord.uniformGroups` and `textureGroups` count the two
+  kinds; `rd_perf` checks that its synthetic frame (frame, draw and VU
+  layouts, meshes in one arena chunk) creates exactly 3 uniform groups a
+  replay, and `rd_replay_tool --stats` prints a dump's counts.
+
+  Bind groups created per replay on the dump corpus (`rd_perf_test --dump`,
+  Original preset, before on main at 1e2ebd4a, after with package PA; the
+  renders of all 75 corpus PNGs are byte-identical between the two):
+
+  | dump | before | after (uniform + texture) |
+  | --- | --- | --- |
+  | boot 200, 400, 600 | 589, 373, 818 | 70, 65, 80 (4 + 66, 61, 76) |
+  | lightning 200, 300 | 2264, 2193 | 85, 82 (4 + 81, 78) |
+  | plain 200, 300 | 1396, 1521 | 72, 98 (4 + 68, 94) |
+  | puddle 200, 300 | 597, 595 | 81, 81 (4 + 77) |
+  | queen 200, 300 | 1662, 1661 | 53, 53 (4 + 49) |
+  | the load frames (100) | 15 | 7 (2 + 5) |
+
+  Gameplay frames make 4 uniform groups: frame, draw and two VU groups (the
+  arena chunk and the ring); the load frames only frame and draw. On
+  lavapipe the bind phase of lightning 200 went from 7.9 ms to 0.37 ms a
+  replay (mean of 30). Bind group binds are unchanged (a draw still binds
+  its group with its own offsets).
 - The texture upload walk runs only while a texture is dirty or the filter
   changed (`RdContext.texDirtyCount`). A texture uploaded on 60 replays in a
   row is named in the log (in the game, only the title's sea, a CLUT

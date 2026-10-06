@@ -76,6 +76,8 @@ typedef struct DxRootSig {
     uint32_t layoutCount;
     uint32_t layoutIds[RHI_MAX_BIND_SLOTS];
     int8_t resParam[RHI_MAX_BIND_SLOTS], smpParam[RHI_MAX_BIND_SLOTS];
+    int8_t dynParam[RHI_MAX_BIND_SLOTS]; /* first root CBV of the group (package PA) */
+    uint8_t dynCount[RHI_MAX_BIND_SLOTS];
 } DxRootSig;
 
 typedef struct DxPipeline {
@@ -91,6 +93,10 @@ typedef struct DxBindGroup {
     uint32_t layoutId;
     D3D12_GPU_DESCRIPTOR_HANDLE res, smp;
     bool hasRes, hasSmp;
+    /* package PA: the base address of each root CBV (dynamic uniform), in
+     * ascending slot order; the bind-time offsets are added to it */
+    uint32_t dynCount;
+    D3D12_GPU_VIRTUAL_ADDRESS dyn[RHI_MAX_DYNAMIC_OFFSETS];
 } DxBindGroup;
 
 /* --------------------------------------------------------- per frame slot */
@@ -114,7 +120,8 @@ typedef struct DxCmdList {
     DxPipeline *pipeline;
     ID3D12RootSignature *rootSet;
     D3D_PRIMITIVE_TOPOLOGY topoSet;
-    uint32_t groups[RHI_MAX_BIND_SLOTS]; /* bind group ids */
+    uint32_t groups[RHI_MAX_BIND_SLOTS];                           /* bind group ids */
+    uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS]; /* package PA */
     uint32_t groupDirty;
     D3D12_GPU_VIRTUAL_ADDRESS vbAddr[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbSize[RHI_MAX_VERTEX_ATTRS];

@@ -53,6 +53,7 @@
 #define rhi_CmdSetScissor       RHI__NAME(CmdSetScissor)
 #define rhi_CmdSetPipeline      RHI__NAME(CmdSetPipeline)
 #define rhi_CmdSetBindGroup     RHI__NAME(CmdSetBindGroup)
+#define rhi_CmdSetBindGroupOffsets RHI__NAME(CmdSetBindGroupOffsets)
 #define rhi_CmdSetVertexBuffer  RHI__NAME(CmdSetVertexBuffer)
 #define rhi_CmdSetIndexBuffer   RHI__NAME(CmdSetIndexBuffer)
 #define rhi_CmdSetStencilRef    RHI__NAME(CmdSetStencilRef)

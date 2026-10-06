@@ -13,7 +13,10 @@
  *             or destroyed, no bind or fence wait-idle happens, no texture
  *             or static mesh is uploaded again, and the mean CPU time of a
  *             replay without its wait for the GPU (rhi_WaitFrame: on
- *             lavapipe that is the rasterisation) is under 20 ms;
+ *             lavapipe that is the rasterisation) is under 20 ms; and
+ *             (package PA) every replay, here and below, creates one
+ *             uniform bind group per uniform layout (frame, draw, VU),
+ *             however many draws;
  *   record    200 frames recorded and closed as the game does (rd_EndFrame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
@@ -256,6 +259,10 @@ typedef struct Sum {
     double total, wait, upload, walk, bind, submit, present, gpu;
     double minTotal;
     uint64_t created, destroyed, allocs, waitIdles, texUploads, meshUploads, meshBytes, draws;
+    /* package PA: bind groups created, per replay: all, and rd's uniform
+     * and texture groups (the least and most of the uniform ones) */
+    uint64_t groups, uniformGroups, textureGroups;
+    uint32_t uniformMin, uniformMax;
 } Sum;
 
 static void add(Sum *s, const RdPerfRecord *r)
@@ -280,6 +287,15 @@ static void add(Sum *s, const RdPerfRecord *r)
     s->meshUploads += r->meshUploads;
     s->meshBytes += r->meshUploadBytes;
     s->draws += r->draws;
+    if (s->n == 1 || r->uniformGroups < s->uniformMin) {
+        s->uniformMin = r->uniformGroups;
+    }
+    if (s->n == 1 || r->uniformGroups > s->uniformMax) {
+        s->uniformMax = r->uniformGroups;
+    }
+    s->groups += r->bindGroups;
+    s->uniformGroups += r->uniformGroups;
+    s->textureGroups += r->textureGroups;
 }
 
 static void print(const char *what, const Sum *s)
@@ -294,6 +310,9 @@ static void print(const char *what, const Sum *s)
            (double)s->texUploads / n, (double)s->meshUploads / n, (double)s->meshBytes / n / 1024.0,
            (unsigned long long)s->created, (unsigned long long)s->destroyed,
            (unsigned long long)s->allocs, (unsigned long long)s->waitIdles);
+    printf("%s: bind groups per replay %.2f: uniform %.2f (%u..%u), texture %.2f\n", what,
+           (double)s->groups / n, (double)s->uniformGroups / n, s->uniformMin, s->uniformMax,
+           (double)s->textureGroups / n);
 }
 
 /* every finished record into first (the first `skip`) or rest */
@@ -329,6 +348,24 @@ static void samePixels(const char *what, const uint8_t *a, const uint8_t *b)
         }
         CHECK(diff == 0, "%s: %zu bytes of DISPLAY differ from the first replay's", what, diff);
     }
+}
+
+/* Package PA: the uniform blocks take dynamic offsets, so every replay
+ * creates one group per uniform layout it uses, whatever its draw count:
+ * the frame (FrameCB), draw (DrawCB) and VU (DrawCB, VuCB, VuBoneCB over
+ * the stream's buffer) layouts, all three in this frame, whose meshes live
+ * in one arena chunk.  The other groups are texture groups, one per
+ * (texture, sampler, DATE snapshot). */
+#define UNIFORM_LAYOUTS 3
+
+static void checkGroups(const char *what, const Sum *s)
+{
+    CHECK(s->n > 0 && s->uniformMin == UNIFORM_LAYOUTS && s->uniformMax == UNIFORM_LAYOUTS,
+          "%s: %u..%u uniform bind groups a replay, %d expected (one per layout)", what,
+          s->uniformMin, s->uniformMax, UNIFORM_LAYOUTS);
+    CHECK(s->groups == s->uniformGroups + s->textureGroups,
+          "%s: %llu bind groups, %llu uniform + %llu texture", what, (unsigned long long)s->groups,
+          (unsigned long long)s->uniformGroups, (unsigned long long)s->textureGroups);
 }
 
 static int synthetic(void)
@@ -389,6 +426,7 @@ static int synthetic(void)
     CHECK(rest.n > 0 && (rest.total - rest.wait) / rest.n < 20.0,
           "replay: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
+    checkGroups("replay", &rest);
 
     /* record: 200 frames as the game makes them */
     memset(&first, 0, sizeof(first));
@@ -425,6 +463,7 @@ static int synthetic(void)
     CHECK(rest.n > 0 && (rest.total - rest.wait) / rest.n < 20.0,
           "record: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
+    checkGroups("record", &rest);
     rd_Shutdown();
     return 0;
 }
@@ -508,11 +547,13 @@ static int dumpMode(int argc, char **argv)
     printf("%s (frame %u, %ux%u):\n", path, f.number, f.gsW, f.gsH);
     print("  first replay", &first);
     print("  steady", &rest);
-    printf("  last: %u draws, %u passes, %u pipeline binds, %u bind group binds, %u bind groups, "
+    printf("  last: %u draws, %u passes, %u pipeline binds, %u bind group binds, %u bind groups "
+           "(%u uniform, %u texture), "
            "%u barriers, %u copies, %llu KB uploaded (%llu KB meshes), %u DATE snapshots, %u "
            "fence waits (%.3f ms)\n",
            last.draws, last.renderPasses, last.pipelineBinds, last.bindGroupBinds, last.bindGroups,
-           last.barriers, last.copies, (unsigned long long)(last.uploadBytes / 1024),
+           last.uniformGroups, last.textureGroups, last.barriers, last.copies,
+           (unsigned long long)(last.uploadBytes / 1024),
            (unsigned long long)(last.meshUploadBytes / 1024), last.dateSnapshots, last.fenceWaits,
            last.fenceWaitMs);
     if (last.gpuValid) {

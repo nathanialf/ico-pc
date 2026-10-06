@@ -201,8 +201,10 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     const uint32_t ua = lim->uniformAlign;
 
     Ctx c;
-    static const RhiBindSlot s0[1] = {
-        {0, RHI_BIND_UNIFORM_BUFFER, (1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT)}};
+    /* package PA: TestCB is a dynamic uniform, one group bound at three
+     * offsets (the game's FrameCB and DrawCB are too) */
+    static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC,
+                                       (1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT)}};
     static const RhiBindSlot s2[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, 1u << RHI_STAGE_FRAGMENT},
                                       {1, RHI_BIND_SAMPLER, 1u << RHI_STAGE_FRAGMENT}};
     RhiBindGroupLayoutDesc ld0 = {s0, 1, "group0"};
@@ -392,18 +394,18 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
             {{0.0f, 0.0f, 0.0f, 0.5f}, {0, 0, 0, 0}},
             {{0.0f, 0.0f, 0.0f, 0.0f}, {7, 128, 250, 255}},
         };
-        RhiBindGroup g0[3];
         for (int i = 0; i < 3; i++) {
             memcpy(map + offUbo + (uint64_t)i * ua, &cbs[i], sizeof(TestCB));
-            RhiBinding b = {0};
-            b.slot = 0;
-            b.type = RHI_BIND_UNIFORM_BUFFER;
-            b.buffer = ring;
-            b.offset = offUbo + (uint64_t)i * ua;
-            b.size = sizeof(TestCB);
-            RhiBindGroupDesc bd = {c.l0, &b, 1};
-            g0[i] = rhi_CreateBindGroup(&bd);
         }
+        RhiBinding b0 = {0};
+        b0.slot = 0;
+        b0.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+        b0.buffer = ring;
+        b0.offset = offUbo;
+        b0.size = sizeof(TestCB);
+        RhiBindGroupDesc bd0 = {c.l0, &b0, 1};
+        const RhiBindGroup g0 = rhi_CreateBindGroup(&bd0);
+        const uint32_t cbOff[3] = {0, ua, 2 * ua};
         RhiBinding tb[2] = {{0}, {0}};
         tb[0].slot = 1;
         tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
@@ -413,7 +415,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         tb[1].sampler = smp;
         RhiBindGroupDesc tbd = {c.l2, tb, 2};
         RhiBindGroup g2 = rhi_CreateBindGroup(&tbd);
-        if (!g0[0].id || !g0[1].id || !g0[2].id || !g2.id) {
+        if (!g0.id || !g2.id) {
             rhi_test_Log("FAIL bind groups\n");
             failures++;
             break;
@@ -462,10 +464,10 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         rhi_CmdSetVertexBuffer(cl, 0, vbuf, 0);
 
         rhi_CmdSetPipeline(cl, pDualColor);
-        rhi_CmdSetBindGroup(cl, 0, g0[0]);
+        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[0], 1);
         rhi_CmdDraw(cl, 6, Q_DUAL_COLOR * 6, 1);
         rhi_CmdSetPipeline(cl, pDualAlpha);
-        rhi_CmdSetBindGroup(cl, 0, g0[1]);
+        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[1], 1);
         rhi_CmdDraw(cl, 6, Q_DUAL_ALPHA * 6, 1);
 
         rhi_CmdSetPipeline(cl, pDecr);
@@ -508,7 +510,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         up2.height = 4;
         rhi_CmdBeginRenderPass(cl, &up2);
         rhi_CmdSetPipeline(cl, pUint);
-        rhi_CmdSetBindGroup(cl, 0, g0[2]);
+        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[2], 1);
         rhi_CmdSetVertexBuffer(cl, 0, vbuf, 0);
         rhi_CmdDraw(cl, 6, Q_UINT * 6, 1);
         rhi_CmdEndRenderPass(cl);

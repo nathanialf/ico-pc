@@ -109,12 +109,35 @@ Every buffer and texture is a committed resource.
 One root signature per distinct list of bind group layouts (cached, at most
 64): group *g* is HLSL register space *g*, as up to two descriptor tables, a
 resource table (the group's `b` and `t` registers: CBVs, SRVs) and a sampler
-table (its `s` registers), in group order. Each slot is one descriptor at a
-fixed offset in its table (`d3dp_LayoutBuild`, `d3dp_RootParams`). Table
-visibility is vertex, pixel or all from the slots' stage masks. Root
-signature version 1.0 (descriptors and data volatile). No root constants or
-root descriptors: everything goes through tables, so a bind group is two
-GPU handles.
+table (its `s` registers), then one root CBV per dynamic uniform slot, in
+group order. Each table slot is one descriptor at a fixed offset in its
+table (`d3dp_LayoutBuild`, `d3dp_RootParams`). Table visibility is vertex,
+pixel or all from the slots' stage masks. Root signature version 1.0
+(descriptors and data volatile). No root constants; a bind group is two GPU
+handles and its root CBVs' base addresses.
+
+Dynamic uniforms (package PA; **compiled, not yet run on Windows**): an
+`RHI_BIND_UNIFORM_BUFFER_DYNAMIC` slot is a root CBV
+(`D3D12_ROOT_PARAMETER_TYPE_CBV`, register `bN` in space *g*, visibility
+from the slot's stages), not a table entry; a layout's root CBVs follow its
+tables in ascending slot order, the order of the offsets
+`rhi_CmdSetBindGroupOffsets` takes (`D3dpLayout.dynSlot`, checked by
+`rhi_d3d12_plan`). `rhi_CreateBindGroup` keeps each one's GPU virtual
+address (the buffer's plus the binding's base offset, which must be
+256-aligned, with a size of at most 64 KiB inside the buffer) and writes no
+descriptor; the flush before a draw sets
+`SetGraphicsRootConstantBufferView(base + offset)` for each. A root CBV has
+no size and no null form: a missing or invalid binding is logged and left
+unset, and the shader must not read it (rd_core binds every one). Each costs
+2 of the root signature's 64 DWORDs, so `maxDynamicUniforms` is 8 (rd_core
+uses at most 4 per pipeline: FrameCB, and DrawCB, VuCB, VuBoneCB in the VU
+group), at most `RHI_MAX_DYNAMIC_OFFSETS` (4) per layout. Root CBVs are the
+D3D12 counterpart of Vulkan's `UNIFORM_BUFFER_DYNAMIC`: the bind groups
+`rd_core` makes per draw shrink to one per layout and replay, and a CBV/SRV
+heap region per frame is no longer spent on uniform views.
+`maxStorageRange` is 2^27 16-byte elements (the structured-buffer SRV
+limit, `D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP`): rd binds the VU
+stream's whole buffer and indexes it from `vu_draw.x`.
 
 Two shader-visible heaps, set once per command list:
 
@@ -369,3 +392,6 @@ and llvm-mingw clang; `rhi_d3d12_plan` runs; the rest waits for
 5. The `rd_*` GPU tests call `rhi_vk_ValidationErrorCount`, which stays 0
    on D3D12; run on D3D12 they count no debug-layer errors (the log shows
    them).
+6. Root CBVs for dynamic uniforms (package PA) are compiled only: the first
+   Windows run of `rhi_d3d12_test.exe` (its TestCB is a dynamic uniform at
+   three offsets) and of the `rd_*` tests on D3D12 checks them.

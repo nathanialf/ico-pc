@@ -237,30 +237,51 @@ static void testRings(void)
 static void testLayouts(void)
 {
     const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
-    /* rd_core's layouts (rd_replay.c rd__GpuInit) */
-    const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
-    const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
+    /* rd_core's layouts (rd_replay.c rd__GpuInit; package PA: the uniforms
+     * are dynamic, root CBVs) */
+    const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
+    const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                {1, RHI_BIND_SAMPLER, FS},
                                {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
+    /* the VU group with its dynamic slots out of order: the root CBVs
+     * still go in ascending slot order */
     const RhiBindSlot s4[4] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
-                               {1, RHI_BIND_UNIFORM_BUFFER, VS | FS},
-                               {2, RHI_BIND_UNIFORM_BUFFER, VS},
-                               {3, RHI_BIND_UNIFORM_BUFFER, VS}};
+                               {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                               {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
+                               {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
     D3dpLayout l0, l1, l2, l4, empty;
-    CHECK(d3dp_LayoutBuild(s0, 1, &l0) && l0.resCount == 1 && l0.smpCount == 0, "frame");
-    CHECK(d3dp_LayoutBuild(s1, 1, &l1), "draw");
+    CHECK(d3dp_LayoutBuild(s0, 1, &l0) && l0.resCount == 0 && l0.smpCount == 0 &&
+              l0.dynCount == 1 && l0.table[0] == D3DP_ROOT_CBV && l0.offset[0] == 0 &&
+              l0.dynSlot[0] == 0,
+          "frame");
+    CHECK(d3dp_LayoutBuild(s1, 1, &l1) && l1.dynCount == 1, "draw");
     CHECK(d3dp_LayoutBuild(s2, 3, &l2) && l2.resCount == 2 && l2.smpCount == 1, "tex");
     CHECK(l2.table[0] == D3DP_TABLE_RESOURCE && l2.offset[0] == 0 &&
               l2.table[1] == D3DP_TABLE_SAMPLER && l2.offset[1] == 0 &&
               l2.table[2] == D3DP_TABLE_RESOURCE && l2.offset[2] == 1,
           "tex table offsets");
     CHECK(l2.resStages == FS && l2.smpStages == FS, "pixel-only visibility");
-    CHECK(d3dp_LayoutBuild(s4, 4, &l4) && l4.resCount == 4 && l4.resStages == (VS | FS), "vu");
+    CHECK(d3dp_LayoutBuild(s4, 4, &l4) && l4.resCount == 1 && l4.resStages == VS &&
+              l4.dynCount == 3,
+          "vu");
+    CHECK(l4.dynSlot[0] == 2 && l4.dynSlot[1] == 3 && l4.dynSlot[2] == 1 && l4.offset[2] == 0 &&
+              l4.offset[3] == 1 && l4.offset[1] == 2,
+          "vu root CBVs in slot order (b1, b2, b3)");
     CHECK(d3dp_LayoutFind(&l4, 0, RHI_BIND_STORAGE_BUFFER) == 0 &&
-              d3dp_LayoutFind(&l4, 3, RHI_BIND_UNIFORM_BUFFER) == 3 &&
-              d3dp_LayoutFind(&l4, 0, RHI_BIND_UNIFORM_BUFFER) == -1,
+              d3dp_LayoutFind(&l4, 3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC) == 1 &&
+              d3dp_LayoutFind(&l4, 0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC) == -1,
           "find");
+    const RhiBindSlot dynDup[2] = {{1, RHI_BIND_UNIFORM_BUFFER, VS},
+                                   {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
+    D3dpLayout bad0;
+    CHECK(!d3dp_LayoutBuild(dynDup, 2, &bad0), "b1 static and dynamic is rejected");
+    const RhiBindSlot dyn5[5] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                 {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                 {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                 {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                                 {4, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
+    CHECK(!d3dp_LayoutBuild(dyn5, 5, &bad0), "more than RHI_MAX_DYNAMIC_OFFSETS");
     CHECK(d3dp_LayoutBuild(NULL, 0, &empty) && empty.resCount == 0 && empty.smpCount == 0,
           "empty layout");
     const RhiBindSlot dup[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
@@ -273,15 +294,30 @@ static void testLayouts(void)
     const RhiBindSlot badType[1] = {{0, RHI_BIND_COUNT, FS}};
     CHECK(!d3dp_LayoutBuild(badType, 1, &bad), "bad type");
 
-    int8_t rp[RHI_MAX_BIND_SLOTS], sp[RHI_MAX_BIND_SLOTS];
+    int8_t rp[RHI_MAX_BIND_SLOTS], sp[RHI_MAX_BIND_SLOTS], dp[RHI_MAX_BIND_SLOTS];
     const D3dpLayout *screen[3] = {&l0, &l1, &l2};
-    CHECK(d3dp_RootParams(screen, 3, rp, sp) == 4 && rp[0] == 0 && rp[1] == 1 && rp[2] == 2 &&
-              sp[2] == 3 && sp[0] == -1 && rp[3] == -1,
+    CHECK(d3dp_RootParams(screen, 3, rp, sp, dp) == 4 && dp[0] == 0 && dp[1] == 1 && rp[0] == -1 &&
+              rp[1] == -1 && rp[2] == 2 && sp[2] == 3 && sp[0] == -1 && rp[3] == -1 &&
+              dp[2] == -1 && dp[3] == -1,
           "screen pipeline root parameters");
+    const D3dpLayout *vu[3] = {&l0, &l4, &l2};
+    CHECK(d3dp_RootParams(vu, 3, rp, sp, dp) == 7 && dp[0] == 0 && rp[1] == 1 && sp[1] == -1 &&
+              dp[1] == 2 && rp[2] == 5 && sp[2] == 6,
+          "VU pipeline root parameters: t0's table, then b1, b2, b3");
+    /* rhi_test_common.c's layouts: TestCB dynamic, no group 1 */
     const D3dpLayout *test[3] = {&l0, &empty, &l2};
-    CHECK(d3dp_RootParams(test, 3, rp, sp) == 3 && rp[0] == 0 && rp[1] == -1 && sp[1] == -1 &&
-              rp[2] == 1 && sp[2] == 2,
+    CHECK(d3dp_RootParams(test, 3, rp, sp, dp) == 3 && rp[0] == -1 && dp[0] == 0 && rp[1] == -1 &&
+              sp[1] == -1 && dp[1] == -1 && rp[2] == 1 && sp[2] == 2,
           "rhi_test_common.c's layouts");
+    /* a static uniform stays in the resource table */
+    const RhiBindSlot st0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
+    D3dpLayout ls0;
+    CHECK(d3dp_LayoutBuild(st0, 1, &ls0) && ls0.resCount == 1 && ls0.dynCount == 0 &&
+              ls0.table[0] == D3DP_TABLE_RESOURCE,
+          "static");
+    const D3dpLayout *stat[1] = {&ls0};
+    CHECK(d3dp_RootParams(stat, 1, rp, sp, dp) == 1 && rp[0] == 0 && dp[0] == -1,
+          "static uniform root parameters");
 }
 
 /* ----------------------------------------------------------- small maths */

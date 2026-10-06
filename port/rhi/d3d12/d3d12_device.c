@@ -336,6 +336,12 @@ static void dx_FillLimits(void)
      * d3d12_resource.c); 16x anisotropy at every feature level */
     o->textureMips = true;
     o->maxAnisotropy = (float)D3D12_MAX_MAXANISOTROPY;
+    /* package PA: root CBVs cost 2 of the root signature's 64 DWORDs each;
+     * 8 of them leave room for every group's tables */
+    o->maxDynamicUniforms = 8;
+    /* a structured-buffer SRV of 16-byte elements:
+     * D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP (27) elements */
+    o->maxStorageRange = (uint64_t)16u << 27;
 }
 
 /* ------------------------------------------------------------- lifecycle */

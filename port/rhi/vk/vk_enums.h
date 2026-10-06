@@ -161,6 +161,9 @@ static const VkrBindTypeMap vkr_bindTypeMap[RHI_BIND_COUNT] = {
     [RHI_BIND_STORAGE_BUFFER] = {true, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VKR_SHIFT_T},
     [RHI_BIND_SAMPLED_TEXTURE] = {true, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKR_SHIFT_T},
     [RHI_BIND_SAMPLER] = {true, VK_DESCRIPTOR_TYPE_SAMPLER, VKR_SHIFT_S},
+    /* package PA: offsets at bind time (vkCmdBindDescriptorSets) */
+    [RHI_BIND_UNIFORM_BUFFER_DYNAMIC] = {true, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                                         VKR_SHIFT_B},
 };
 
 /* Resource states: the image layout, and the pipeline stages and accesses

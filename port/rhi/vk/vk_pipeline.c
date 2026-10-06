@@ -44,6 +44,15 @@ RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
             .stageFlags = vkr_Stages(s->stages),
         };
         l->slots[i] = *s;
+        if (s->type == RHI_BIND_UNIFORM_BUFFER_DYNAMIC) {
+            l->dynamicCount++;
+        }
+    }
+    if (l->dynamicCount > RHI_MAX_DYNAMIC_OFFSETS) {
+        VKR_LOG("bind group layout %s: %u dynamic uniforms (at most %d)",
+                desc->debugName ? desc->debugName : "?", l->dynamicCount, RHI_MAX_DYNAMIC_OFFSETS);
+        vkr_PoolRelease(&g_vkr.layouts, id);
+        return out;
     }
     l->slotCount = desc->slotCount;
     VkDescriptorSetLayoutCreateInfo ci = {
@@ -82,6 +91,8 @@ static bool vkr_NewDescriptorPool(VkrFrame *f)
     }
     const VkDescriptorPoolSize sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8192},
+        /* package PA: rd_core makes a few dynamic groups a frame */
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2048},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 8192},
         {VK_DESCRIPTOR_TYPE_SAMPLER, 8192},
@@ -115,6 +126,16 @@ VkDescriptorSet vkr_GetBindGroup(RhiBindGroup bg)
     return f->sets[idx - 1];
 }
 
+uint32_t vkr_BindGroupDynamicCount(RhiBindGroup bg)
+{
+    VkrFrame *f = vkr_CurFrame();
+    uint32_t idx = bg.id & VKR_INDEX_MASK;
+    if (idx == 0 || idx > f->setCount || (bg.id >> VKR_GEN_SHIFT) != vkr_FrameTag()) {
+        return 0;
+    }
+    return f->setDynamic[idx - 1];
+}
+
 static VkImageLayout vkr_SampledLayout(const VkrTexture *t)
 {
     return vkr_StateLayout(RHI_STATE_SHADER_READ, t->rhiFormat);
@@ -135,6 +156,11 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
             return out;
         }
         f->sets = s;
+        uint8_t *d = realloc(f->setDynamic, cap);
+        if (!d) {
+            return out;
+        }
+        f->setDynamic = d;
         f->setCap = cap;
     }
     if (f->setCount >= VKR_INDEX_MASK) {
@@ -186,10 +212,16 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
         };
         switch (b->type) {
         case RHI_BIND_UNIFORM_BUFFER:
+        case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
         case RHI_BIND_STORAGE_BUFFER: {
             VkrBuffer *buf = vkr_GetBuffer(b->buffer);
             if (!buf) {
                 VKR_LOG("bind group: slot %u: invalid buffer", b->slot);
+                continue;
+            }
+            if (b->type == RHI_BIND_UNIFORM_BUFFER_DYNAMIC && !b->size) {
+                /* the range is static and every dynamic offset adds to it */
+                VKR_LOG("bind group: slot %u: a dynamic uniform needs a size", b->slot);
                 continue;
             }
             bi[n] =
@@ -227,6 +259,7 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
     if (n) {
         vkUpdateDescriptorSets(g_vkr.device, n, w, 0, NULL);
     }
+    f->setDynamic[f->setCount] = (uint8_t)l->dynamicCount;
     f->sets[f->setCount++] = set;
     g_vkr.stats.bindGroups++;
     out.id = (vkr_FrameTag() << VKR_GEN_SHIFT) | f->setCount;

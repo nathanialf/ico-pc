@@ -50,10 +50,14 @@
 #include "shaders_gen.h"
 
 static const char *const s_vsNames[RD_VS_COUNT] = {
-    "sprite_ui_vs",     "sprite_world_vs",    "blit_vs",          "blend_int_vs",
-    "vu_prelit_vs",     "vu_lit_vs",          "vu_lit_spec_vs",   "vu_reflect_vs",
-    "vu_skin_vs",       "vu_skin_spec_vs",    "vu_skin_debug_vs", "vu_grid_vs",
-    "vu_grid_lit_vs",   "vu_grid_spec_vs",    "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */,
+    "sprite_ui_vs",     "sprite_world_vs",
+    "blit_vs",          "blend_int_vs",
+    "vu_prelit_vs",     "vu_lit_vs",
+    "vu_lit_spec_vs",   "vu_reflect_vs",
+    "vu_skin_vs",       "vu_skin_spec_vs",
+    "vu_skin_debug_vs", "vu_grid_vs",
+    "vu_grid_lit_vs",   "vu_grid_spec_vs",
+    "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */,
     "sprite_aa1_ui_vs", "sprite_aa1_world_vs" /* package AA1 */,
     "sprite_stq_ui_vs", "sprite_stq_world_vs" /* package RSMALL */};
 
@@ -118,8 +122,15 @@ bool rd__GpuInit(void *sdlWindow)
         return false;
     }
     const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
-    const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
-    const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
+    /* package PA: FrameCB, DrawCB, VuCB and VuBoneCB take dynamic offsets
+     * into the ring, so each of these layouts has one group a replay
+     * (uniformGroup, vuGroup) */
+    if (lim->maxDynamicUniforms < 4) {
+        rd__Log("device has %u dynamic uniform buffers, 4 needed", lim->maxDynamicUniforms);
+        return false;
+    }
+    const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
+    const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     /* t2: sprite_ps's DATE snapshot (wave 2) */
     const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                {1, RHI_BIND_SAMPLER, FS},
@@ -132,9 +143,9 @@ bool rd__GpuInit(void *sdlWindow)
     g_rd.layoutInt = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s3, 2, "rd int"});
     /* wave 3 (R3ab): the VU programs' group 1 (vu_common.hlsli, SHADERS.md) */
     const RhiBindSlot s4[4] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
-                               {1, RHI_BIND_UNIFORM_BUFFER, VS | FS},
-                               {2, RHI_BIND_UNIFORM_BUFFER, VS},
-                               {3, RHI_BIND_UNIFORM_BUFFER, VS}};
+                               {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
+                               {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+                               {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
     g_rd.layoutVu = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s4, 4, "rd vu"});
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id &&
               g_rd.layoutVu.id;
@@ -250,12 +261,19 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
 }
 
 /* Package P1: every transient bind group of the replay goes through here,
- * timed into the record's bind phase. */
+ * timed into the record's bind phase (PA: and counted by kind). */
 static RhiBindGroup bindGroup(RhiBindGroupLayout layout, const RhiBinding *b, uint32_t n)
 {
     const double t0 = rd__NowMs();
     const RhiBindGroup g = rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, b, n});
     g_rdPerf.bindMs += rd__NowMs() - t0;
+    if (g.id) {
+        if (layout.id == g_rd.layoutTex.id || layout.id == g_rd.layoutInt.id) {
+            g_rdPerf.textureGroups++;
+        } else {
+            g_rdPerf.uniformGroups++;
+        }
+    }
     return g;
 }
 
@@ -292,63 +310,102 @@ static uint32_t hashBytes(const void *p, uint32_t n, uint32_t h)
     return h;
 }
 
-/* uniform groups by content: the same DrawCB or FrameCB in one replay is
- * written once and bound by one group (and rhi_CmdSetBindGroup skips a
- * group already bound) */
+/* Package PA: the uniform layouts' groups.  FrameCB, DrawCB, VuCB and
+ * VuBoneCB are RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots: a group binds the
+ * ring at offset 0 with the block's size, and each draw passes its block's
+ * ring offset when it binds the group (rd__BindUniform).  So the frame and
+ * draw layouts have one group per replay (per ring buffer, which does not
+ * change within one), whatever the number of draws. */
+#define RD_DYN_GROUPS 4
+
+typedef struct DynEntry {
+    uint32_t epoch, layout, buffer;
+    RhiBindGroup group;
+} DynEntry;
+
+static DynEntry s_dynGroups[RD_DYN_GROUPS];
+
+static RhiBindGroup dynamicGroup(RhiBindGroupLayout layout, uint32_t slot, uint32_t size)
+{
+    const RhiBuffer ring = g_rd.ring[s_slot];
+    DynEntry *free = NULL;
+    for (int i = 0; i < RD_DYN_GROUPS; i++) {
+        DynEntry *e = &s_dynGroups[i];
+        if (e->epoch == s_bindEpoch && e->layout == layout.id && e->buffer == ring.id) {
+            return e->group;
+        }
+        if (!free && e->epoch != s_bindEpoch) {
+            free = e;
+        }
+    }
+    RhiBinding b;
+    memset(&b, 0, sizeof(b));
+    b.slot = slot;
+    b.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+    b.buffer = ring;
+    b.offset = 0;
+    b.size = size;
+    const RhiBindGroup g = bindGroup(layout, &b, 1);
+    if (g.id && free) {
+        free->epoch = s_bindEpoch;
+        free->layout = layout.id;
+        free->buffer = ring.id;
+        free->group = g;
+    }
+    return g;
+}
+
+void rd__BindUniform(RhiCommandList cl, uint32_t group, RdUniform u)
+{
+    rhi_CmdSetBindGroupOffsets(cl, group, u.group, &u.offset, 1);
+}
+
+/* uniform blocks by content: the same DrawCB in one replay is written once
+ * (and binding the group with the offset already bound records nothing) */
 #define RD_UNIFORM_CACHE 512
 #define RD_UNIFORM_CACHE_BYTES 256
 
 typedef struct UniformEntry {
     uint32_t epoch, hash, layout, size;
-    RhiBindGroup group;
+    uint32_t offset; /* in the ring */
     uint8_t data[RD_UNIFORM_CACHE_BYTES];
 } UniformEntry;
 
 static UniformEntry s_uniformCache[RD_UNIFORM_CACHE];
 
-static RhiBindGroup uniformGroupNew(RhiBindGroupLayout layout, uint32_t slot, const void *data,
-                                    uint32_t size);
-
-static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
-                                 uint32_t size)
+static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
+                              uint32_t size)
 {
-    if (size > RD_UNIFORM_CACHE_BYTES) {
-        return uniformGroupNew(layout, slot, data, size);
+    RdUniform u = {dynamicGroup(layout, slot, size), 0};
+    if (!u.group.id) {
+        return u;
     }
-    const uint32_t h = hashBytes(data, size, 2166136261u ^ layout.id);
-    UniformEntry *e = &s_uniformCache[h % RD_UNIFORM_CACHE];
-    if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
-        memcmp(e->data, data, size) == 0) {
-        return e->group;
+    UniformEntry *e = NULL;
+    uint32_t h = 0;
+    if (size <= RD_UNIFORM_CACHE_BYTES) {
+        h = hashBytes(data, size, 2166136261u ^ layout.id);
+        e = &s_uniformCache[h % RD_UNIFORM_CACHE];
+        if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
+            memcmp(e->data, data, size) == 0) {
+            u.offset = e->offset;
+            return u;
+        }
     }
-    const RhiBindGroup g = uniformGroupNew(layout, slot, data, size);
-    if (g.id) {
+    const uint64_t off = rd__RingAlloc(size, rhi_Limits()->uniformAlign);
+    if (off == ~0ull) {
+        return (RdUniform){{0}, 0};
+    }
+    memcpy(g_rd.ringMap[s_slot] + off, data, size);
+    u.offset = (uint32_t)off;
+    if (e) {
         e->epoch = s_bindEpoch;
         e->hash = h;
         e->layout = layout.id;
         e->size = size;
-        e->group = g;
+        e->offset = u.offset;
         memcpy(e->data, data, size);
     }
-    return g;
-}
-
-static RhiBindGroup uniformGroupNew(RhiBindGroupLayout layout, uint32_t slot, const void *data,
-                                    uint32_t size)
-{
-    uint64_t off = rd__RingAlloc(size, rhi_Limits()->uniformAlign);
-    if (off == ~0ull) {
-        return (RhiBindGroup){0};
-    }
-    memcpy(g_rd.ringMap[s_slot] + off, data, size);
-    RhiBinding b;
-    memset(&b, 0, sizeof(b));
-    b.slot = slot;
-    b.type = RHI_BIND_UNIFORM_BUFFER;
-    b.buffer = g_rd.ring[s_slot];
-    b.offset = off;
-    b.size = size;
-    return bindGroup(layout, &b, 1);
+    return u;
 }
 
 /* The camera of the frame being replayed (R2c): the frame's own, else the
@@ -366,19 +423,19 @@ void rd__SetReplayCamera(const RdCamera *cam)
     }
 }
 
-RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY)
+RdUniform rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY)
 {
     return rd__FrameGroupZ(targetW, targetH, originX, originY, 1.0f / 16777216.0f);
 }
 
-RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
-                             float zScale)
+RdUniform rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                          float zScale)
 {
     return rd__FrameGroupEx(targetW, targetH, originX, originY, zScale, 1.0f, 1.0f, 1.0f);
 }
 
-RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
-                              float zScale, float spaceX, float scaleX, float scaleY)
+RdUniform rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                           float zScale, float spaceX, float scaleX, float scaleY)
 {
     IcoFrameCB cb;
     memset(&cb, 0, sizeof(cb));
@@ -416,7 +473,7 @@ RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX,
     return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
 }
 
-RhiBindGroup rd__DrawGroup(const void *drawCB)
+RdUniform rd__DrawGroup(const void *drawCB)
 {
     return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
 }
@@ -490,11 +547,11 @@ typedef struct Replay {
     RdStateBlock st;
     int passOpen;
     uint32_t passColor, passDepth;
-    RhiBindGroup frameBG;
+    RdUniform frameBG;
     uint32_t frameKey[6]; /* colour, gsW, gsH, useOffset, pass serial, full-screen (R7a) */
     int stretch;          /* R7a: the draw being bound is full-screen (no wide x scale) */
     int mirror;           /* R7c: the draw being bound is a flipped UI draw (scissor too) */
-    int uiPrim;           /* the draw being bound is a UI-space screen prim (RSMALL: its scissor takes the wide scale) */
+    int uiPrim; /* the draw being bound is a UI-space screen prim (RSMALL: its scissor takes the wide scale) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
@@ -586,7 +643,7 @@ static void convVtx(const RdScreenVtx *s, int uvFixed, float tw, float th, const
         float q = s->q != 0.0f ? s->q : 1.0f;
         if (q != 1.0f) {
             rd__LogOnce(RD_ONCE_STQ, "screen prim with Q != 1 (divided per pixel when it is a "
-                                    "textured triangle command, else per vertex)");
+                                     "textured triangle command, else per vertex)");
         }
         o->u = s->s / q * tw;
         o->v = s->t / q * th;
@@ -930,7 +987,8 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
     *w = src->w;
     *h = src->h;
     *textured = 1;
-    if (s_shadowRedFor && t->target == s_shadowRedFor && s_shadowRed.id && t->target != drawTargetId) {
+    if (s_shadowRedFor && t->target == s_shadowRedFor && s_shadowRed.id &&
+        t->target != drawTargetId) {
         return s_shadowRed; /* package RSMALL: the shadow count at the GS size */
     }
     if (t->target == drawTargetId && src == drawTarget) {
@@ -1005,8 +1063,8 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
         cb.tex[2] = 1.0f / (float)tc->tw;
         cb.tex[3] = 1.0f / (float)tc->th;
         rhi_CmdSetPipeline(s_cl, pipe);
-        rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
-        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(
             s_cl, 2,
             rd__TexGroup(tc->color, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP,
@@ -1532,8 +1590,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         IcoDrawCB cb;
         fillDrawCB(r, &dp[i], &ds, &cb);
         rhi_CmdSetPipeline(s_cl, p);
-        rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(s_cl, 0, r->frameBG);
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         if (!aa1 || nFirst == nDraw) {
             rhi_CmdDraw(s_cl, nDraw, 0, 1);
@@ -1548,8 +1606,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
             RhiPipeline pe = rd__GetPipeline(&ek);
             if (pe.id) {
                 rhi_CmdSetPipeline(s_cl, pe);
-                rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-                rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+                rd__BindUniform(s_cl, 0, r->frameBG);
+                rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
                 rhi_CmdSetBindGroup(s_cl, 2, g2);
                 rhi_CmdDraw(s_cl, nDraw - nFirst, nFirst, 1);
             }
@@ -1567,7 +1625,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
  * output has no GS pixel grid), never mirrored, drawn with sprite_ui_vs /
  * sprite_ps under rd__OverlayState's block: the blend given, no Z, no
  * alpha test, no DATE, MODULATE with TCC RGBA when textured. */
-void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8_t prim,
+void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t prim,
                      const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend)
 {
     RhiTexture t = g_rd.dummy;
@@ -1629,8 +1687,8 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8
         cb.tex[2] = 1.0f / (float)tw;
         cb.tex[3] = 1.0f / (float)th;
         rhi_CmdSetPipeline(cl, p);
-        rhi_CmdSetBindGroup(cl, 0, frame);
-        rhi_CmdSetBindGroup(cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(cl, 0, frame);
+        rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(cl, 2, g2);
         rhi_CmdDraw(cl, nv, 0, 1);
     }
@@ -1922,10 +1980,10 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
                                 (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped);
     rhi_CmdSetPipeline(s_cl, pa);
-    rhi_CmdSetBindGroup(s_cl, 0,
-                        rd__FrameGroupEx(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId),
-                                         wideFor(tc, r->stretch), tc->sx, tc->sy));
-    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rd__BindUniform(s_cl, 0,
+                    rd__FrameGroupEx(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId),
+                                     wideFor(tc, r->stretch), tc->sx, tc->sy));
+    rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
     rhi_CmdSetBindGroup(s_cl, 2, rd__TexGroup(ds.tex, smp));
     rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], vOff);
     rhi_CmdDraw(s_cl, nv, 0, 1);
@@ -1938,8 +1996,8 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     IcoDrawCB rb;
     memset(&rb, 0, sizeof(rb));
     rhi_CmdSetPipeline(s_cl, pr);
-    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f));
-    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&rb));
+    rd__BindUniform(s_cl, 0, rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f));
+    rd__BindUniform(s_cl, 1, rd__DrawGroup(&rb));
     rhi_CmdSetBindGroup(s_cl, 2,
                         rd__TexGroupDate(s_wrapAcc,
                                          rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
@@ -1975,15 +2033,25 @@ static uint64_t ringCopy(const void *data, uint64_t size, uint64_t align)
     return off;
 }
 
-static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t streamOff, uint64_t streamSize,
-                            const IcoDrawCB *dcb, const IcoVuCB *vcb, uint64_t bonesOff)
+/* Package PA: the VU layout's group binds the stream's whole buffer (the
+ * mesh arena chunk or the ring) at t0 and the ring at offset 0 for the
+ * three dynamic uniforms, so it is made once per stream buffer and replay;
+ * a draw selects its stream through VuCB's vu_draw.x (the qword index of
+ * its first batch, vu_common.hlsli) and its blocks through the bind-time
+ * offsets.  A stream whose end lies past the device's largest storage range
+ * gets a group of its own bound at its offset, vu_draw.x 0, as before. */
+#define RD_VU_GROUPS (RD_MESH_CHUNKS + 2) /* every arena chunk and the ring */
+
+typedef struct VuEntry {
+    uint32_t epoch, buffer;
+    uint64_t range;
+    RhiBindGroup group;
+} VuEntry;
+
+static VuEntry s_vuGroups[RD_VU_GROUPS];
+
+static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_t streamSize)
 {
-    const uint64_t ua = rhi_Limits()->uniformAlign;
-    const uint64_t dOff = ringCopy(dcb, sizeof(*dcb), ua);
-    const uint64_t vOff = ringCopy(vcb, sizeof(*vcb), ua);
-    if (dOff == ~0ull || vOff == ~0ull) {
-        return (RhiBindGroup){0};
-    }
     RhiBinding b[4];
     memset(b, 0, sizeof(b));
     b[0].slot = 0;
@@ -1991,22 +2059,52 @@ static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t streamOff, uint64_t st
     b[0].buffer = streamBuf; /* P1: the mesh arena, or the ring */
     b[0].offset = streamOff;
     b[0].size = streamSize ? streamSize : 16;
-    b[1].slot = 1;
-    b[1].type = RHI_BIND_UNIFORM_BUFFER;
-    b[1].buffer = g_rd.ring[s_slot];
-    b[1].offset = dOff;
-    b[1].size = sizeof(IcoDrawCB);
-    b[2].slot = 2;
-    b[2].type = RHI_BIND_UNIFORM_BUFFER;
-    b[2].buffer = g_rd.ring[s_slot];
-    b[2].offset = vOff;
-    b[2].size = sizeof(IcoVuCB);
-    b[3].slot = 3;
-    b[3].type = RHI_BIND_UNIFORM_BUFFER;
-    b[3].buffer = g_rd.ring[s_slot];
-    b[3].offset = bonesOff;
-    b[3].size = sizeof(IcoVuBoneCB);
+    static const uint32_t slot[3] = {1, 2, 3};
+    static const uint32_t size[3] = {sizeof(IcoDrawCB), sizeof(IcoVuCB), sizeof(IcoVuBoneCB)};
+    for (int i = 0; i < 3; i++) {
+        b[1 + i].slot = slot[i];
+        b[1 + i].type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+        b[1 + i].buffer = g_rd.ring[s_slot];
+        b[1 + i].offset = 0;
+        b[1 + i].size = size[i];
+    }
     return bindGroup(g_rd.layoutVu, b, 4);
+}
+
+/* The group for a stream at streamOff of streamBuf (bufSize bytes); *base
+ * receives the stream's first qword in the bound range (vu_draw.x). */
+static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t bufSize, uint64_t streamOff,
+                            uint64_t streamSize, uint32_t *base)
+{
+    uint64_t range = bufSize;
+    const uint64_t maxRange = rhi_Limits()->maxStorageRange;
+    if (maxRange && range > maxRange) {
+        range = maxRange & ~(uint64_t)15u;
+    }
+    if (streamOff + (streamSize ? streamSize : 16) > range || (streamOff & 15u) ||
+        streamOff / 16u > UINT32_MAX) {
+        *base = 0;
+        return vuGroupMake(streamBuf, streamOff, streamSize);
+    }
+    *base = (uint32_t)(streamOff / 16u);
+    VuEntry *free = NULL;
+    for (int i = 0; i < RD_VU_GROUPS; i++) {
+        VuEntry *e = &s_vuGroups[i];
+        if (e->epoch == s_bindEpoch && e->buffer == streamBuf.id && e->range == range) {
+            return e->group;
+        }
+        if (!free && e->epoch != s_bindEpoch) {
+            free = e;
+        }
+    }
+    const RhiBindGroup g = vuGroupMake(streamBuf, 0, range);
+    if (g.id && free) {
+        free->epoch = s_bindEpoch;
+        free->buffer = streamBuf.id;
+        free->range = range;
+        free->group = g;
+    }
+    return g;
 }
 
 /* The VU vertex shader of a recorded (RdProg, code). */
@@ -2036,13 +2134,23 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
 
 /* One VU draw call under the planned passes of state s. */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
-                   uint8_t prog, uint8_t vs, RhiBuffer streamBuf, uint64_t streamOff,
-                   uint64_t streamSize, const IcoVuCB *vcb, uint64_t bonesOff, int indexed,
-                   uint32_t first, uint32_t count)
+                   uint8_t prog, uint8_t vs, RhiBuffer streamBuf, uint64_t streamBufSize,
+                   uint64_t streamOff, uint64_t streamSize, const IcoVuCB *vcb0, uint64_t bonesOff,
+                   int indexed, uint32_t first, uint32_t count)
 {
     if (count == 0) {
         return;
     }
+    /* package PA: one group per stream buffer; the stream's place in it
+     * goes into vu_draw.x */
+    IcoVuCB vcbAt = *vcb0;
+    const IcoVuCB *vcb = &vcbAt;
+    const RhiBindGroup g1 =
+        vuGroup(streamBuf, streamBufSize, streamOff, streamSize, &vcbAt.draw[0]);
+    if (!g1.id) {
+        return;
+    }
+    const uint64_t ua = rhi_Limits()->uniformAlign;
     RdDrawPass dp[2];
     const int np =
         rd__PlanScreenDraw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format, ds->depthFmt, dp);
@@ -2058,13 +2166,15 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
         IcoDrawCB cb;
         fillDrawCB(r, &dp[i], ds, &cb);
-        RhiBindGroup g1 = vuGroup(streamBuf, streamOff, streamSize, &cb, vcb, bonesOff);
-        if (!g1.id) {
+        const uint64_t dOff = ringCopy(&cb, sizeof(cb), ua);
+        const uint64_t vOff = ringCopy(vcb, sizeof(*vcb), ua);
+        if (dOff == ~0ull || vOff == ~0ull) {
             continue;
         }
+        const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)bonesOff};
         rhi_CmdSetPipeline(s_cl, p);
-        rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-        rhi_CmdSetBindGroup(s_cl, 1, g1);
+        rd__BindUniform(s_cl, 0, r->frameBG);
+        rhi_CmdSetBindGroupOffsets(s_cl, 1, g1, offs, 3);
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         if (indexed) {
             rhi_CmdDrawIndexed(s_cl, count, first, 0, 1);
@@ -2122,9 +2232,11 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     uint64_t streamOff, streamSize, indexOff = 0;
     RhiBuffer streamBuf = g_rd.ring[s_slot], indexBuf = g_rd.ring[s_slot];
+    uint64_t streamBufSize = g_rd.ringCap[s_slot];
     if (m && m->gpuChunk && !m->gpuDirty && !m->transient) {
         /* P1: the device copy uploadMeshes keeps */
         streamBuf = indexBuf = rd__MeshGpuBuffer(m->gpuChunk);
+        streamBufSize = rd__MeshGpuBufferSize(m->gpuChunk);
         streamOff = m->gpuOff;
         streamSize = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
         indexOff = m->gpuIndexOff;
@@ -2180,8 +2292,8 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         rhi_CmdSetIndexBuffer(s_cl, g_rd.ring[s_slot], iOff, true);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 1,
-               0, ni);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+               &vcb, bonesOff, 1, 0, ni);
         return;
     }
     if (c->type == RDC_PARTICLES) {
@@ -2189,8 +2301,8 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 0,
-               0, 6 * p.vertsPerBatch);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+               &vcb, bonesOff, 0, 0, 6 * p.vertsPerBatch);
         return;
     }
     /* static and skinned meshes */
@@ -2205,8 +2317,8 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     if (p.clip != RD_VU_CLIP_SCISSOR) {
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &vcb, bonesOff, 1,
-               b0->firstIndex, b1->firstIndex + b1->indexCount - b0->firstIndex);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+               &vcb, bonesOff, 1, b0->firstIndex, b1->firstIndex + b1->indexCount - b0->firstIndex);
         return;
     }
     IcoVuCB cut = vcb, kick = vcb;
@@ -2216,10 +2328,10 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     fan.ds.abe = 1; /* the fans' PRIM is the common block's 0x5D: ABE on */
     for (uint32_t b = p.firstBatch; b < last; b++) {
         const RdVuBatchRec *br = &m->batches[b];
-        vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &cut, bonesOff, 1,
-               br->firstIndex, br->indexCount);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamOff, streamSize, &kick, bonesOff, 1,
-               br->firstIndex, br->indexCount);
+        vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize, &cut,
+               bonesOff, 1, br->firstIndex, br->indexCount);
+        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+               &kick, bonesOff, 1, br->firstIndex, br->indexCount);
     }
 }
 
@@ -2290,8 +2402,8 @@ static void doExact(Replay *r, const RdCmd *c)
     b[1].texture = cd->tex;
     if (pipe.id) {
         rhi_CmdSetPipeline(s_cl, pipe);
-        rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
-        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(s_cl, 0, rd__FrameGroup(w, h, 0.0f, 0.0f));
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, bindGroup(g_rd.layoutInt, b, 2));
         rhi_CmdDraw(s_cl, 3, 0, 1);
     }
@@ -2459,7 +2571,7 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
     cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
-    RhiBindGroup g1 = rd__DrawGroup(&cb);
+    RdUniform g1 = rd__DrawGroup(&cb);
     uint32_t first = 0;
     for (int decr = 0; decr < 2; decr++) {
         if (count[decr] == 0) {
@@ -2469,8 +2581,8 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
         RhiPipeline p = rd__GetPipeline(&k);
         if (p.id) {
             rhi_CmdSetPipeline(s_cl, p);
-            rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-            rhi_CmdSetBindGroup(s_cl, 1, g1);
+            rd__BindUniform(s_cl, 0, r->frameBG);
+            rd__BindUniform(s_cl, 1, g1);
             rhi_CmdSetBindGroup(s_cl, 2, g2);
             rhi_CmdSetStencilRef(s_cl, 0);
             rhi_CmdDraw(s_cl, count[decr], first, 1);
@@ -2506,9 +2618,9 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
         if (s_shadowRed.id) {
             rhi_DestroyTexture(s_shadowRed);
         }
-        s_shadowRed = rhi_CreateTexture(&(RhiTextureDesc){
-            tc->w, tc->h, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
-            "rd shadow count reduced"});
+        s_shadowRed = rhi_CreateTexture(&(RhiTextureDesc){tc->w, tc->h, 1, RHI_FMT_RGBA8_UNORM,
+                                                          RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                          "rd shadow count reduced"});
         s_shadowRedState = RHI_STATE_UNDEFINED;
         s_shadowRedW = tc->w;
         s_shadowRedH = tc->h;
@@ -2542,8 +2654,8 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     cb.param[2] = (float)tc->tw;
     cb.param[3] = (float)tc->th;
     rhi_CmdSetPipeline(s_cl, pipe);
-    rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f));
-    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rd__BindUniform(s_cl, 0, rd__FrameGroup(tc->w, tc->h, 0.0f, 0.0f));
+    rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
     rhi_CmdSetBindGroup(s_cl, 2,
                         rd__TexGroup(tc->color, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                             RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
@@ -2565,7 +2677,7 @@ static void doShadowResolve(Replay *r)
     beginPass(r, tc, td, r->st.color, r->st.depth, RHI_LOAD_CLEAR, zero, RHI_LOAD_LOAD, 0.0f);
     const RhiRect all = {0, 0, tc->tw, tc->th};
     rhi_CmdSetScissor(s_cl, &all);
-    RhiBindGroup g0 = rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f);
+    RdUniform g0 = rd__FrameGroup(tc->tw, tc->th, 0.0f, 0.0f);
     RhiBindGroup g2 = rd__TexGroup(g_rd.dummy, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                            RD_WRAP_CLAMP, RD_WRAP_CLAMP));
     for (int pass = 0; pass < RD_SHADOW_RESOLVE_PASSES; pass++) {
@@ -2584,8 +2696,8 @@ static void doShadowResolve(Replay *r)
         cb.uvRect[2] = cb.uvRect[3] = 1.0f;
         cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
         rhi_CmdSetPipeline(s_cl, p);
-        rhi_CmdSetBindGroup(s_cl, 0, g0);
-        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(s_cl, 0, g0);
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         rhi_CmdSetStencilRef(s_cl, pass < 6 ? (uint8_t)(1u << pass) : 0);
         rhi_CmdDraw(s_cl, 3, 0, 1);
@@ -2753,8 +2865,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         cb.scale[0] = tz->sx; /* R7a: the depth copy's texels per GS pixel */
         cb.scale[1] = tz->sy;
         rhi_CmdSetPipeline(s_cl, pipe);
-        rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-        rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(s_cl, 0, r->frameBG);
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         rhi_CmdDraw(s_cl, nv, 0, 1);
         g_rd.stats.draws++;
@@ -2944,8 +3056,8 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.scale[1] = ssy;
     memcpy(cb.param, p.rect, sizeof(cb.param));
     rhi_CmdSetPipeline(s_cl, pipe);
-    rhi_CmdSetBindGroup(s_cl, 0, r->frameBG);
-    rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+    rd__BindUniform(s_cl, 0, r->frameBG);
+    rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
     rhi_CmdSetBindGroup(s_cl, 2, g2);
     rhi_CmdDraw(s_cl, 3, 0, 1);
     g_rd.stats.draws++;
@@ -3581,8 +3693,8 @@ bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4])
             cb.uvRect[2] = cb.uvRect[3] = 1.0f;
             cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
             rhi_CmdSetPipeline(s_cl, pipe);
-            rhi_CmdSetBindGroup(s_cl, 0, rd__FrameGroup(PW, PH, 0.0f, 0.0f));
-            rhi_CmdSetBindGroup(s_cl, 1, rd__DrawGroup(&cb));
+            rd__BindUniform(s_cl, 0, rd__FrameGroup(PW, PH, 0.0f, 0.0f));
+            rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
             rhi_CmdSetBindGroup(
                 s_cl, 2,
                 rd__TexGroup(g_rd.dummy, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,

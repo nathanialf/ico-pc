@@ -389,18 +389,35 @@ void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
     }
 }
 
-void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                const uint32_t *offsets, uint32_t count)
 {
     DxCmdList *c = dx_GetCmd(cl);
     if (!c || group >= RHI_MAX_BIND_SLOTS) {
         return;
     }
-    if (bg.id && !dx_GetBindGroup(bg.id)) {
+    DxBindGroup *g = bg.id ? dx_GetBindGroup(bg.id) : NULL;
+    if (bg.id && !g) {
         DX_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
         bg.id = 0;
     }
+    /* package PA: the offsets of the group's root CBVs, the missing ones 0 */
+    const uint32_t dyn = g ? g->dynCount : 0;
+    if (count > dyn) {
+        DX_LOG("rhi_CmdSetBindGroupOffsets: %u offsets for %u dynamic slots", count, dyn);
+        count = dyn;
+    }
+    memset(c->offsets[group], 0, sizeof(c->offsets[group]));
+    for (uint32_t i = 0; i < count && offsets; i++) {
+        c->offsets[group][i] = offsets[i];
+    }
     c->groups[group] = bg.id;
     c->groupDirty |= 1u << group;
+}
+
+void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+{
+    rhi_CmdSetBindGroupOffsets(cl, group, bg, NULL, 0);
 }
 
 /* Root signature, topology, dirty bind groups and vertex buffers before a
@@ -436,6 +453,14 @@ static void dx_Flush(DxCmdList *c)
         if (r->smpParam[g] >= 0 && bg->hasSmp) {
             ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(c->cl, (UINT)r->smpParam[g],
                                                                      bg->smp);
+        }
+        /* package PA: the root CBVs at base + bind-time offset (a null group
+         * has none: an unbound dynamic group leaves them unset) */
+        for (uint32_t k = 0; r->dynParam[g] >= 0 && k < r->dynCount[g] && k < bg->dynCount; k++) {
+            if (bg->dyn[k]) {
+                ID3D12GraphicsCommandList_SetGraphicsRootConstantBufferView(
+                    c->cl, (UINT)(r->dynParam[g] + (int)k), bg->dyn[k] + c->offsets[g][k]);
+            }
         }
     }
     c->groupDirty = 0;

@@ -260,7 +260,8 @@ D3D12, in order:
 `rd_replay_tool` also takes `--target NAME`, `--present WxH`, the display
 options (`--enhanced`, `--aspect`, `--resolution`, `--full-height`,
 `--filter`, `--mirror`) and inspection switches (`--list`, `--nop`,
-`--mesh`, `--dump-textures`); its usage is at the top of
+`--mesh`, `--dump-textures`, `--stats`: the replay's draw, pass and bind
+group counts); its usage is at the top of
 `port/render/tools/rd_replay_tool.c`.
 
 The renderer's own tests (`rd_*`, `rhi_*`, `shaders_pixel`, `vu1`) run on

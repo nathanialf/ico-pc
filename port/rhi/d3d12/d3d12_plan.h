@@ -112,6 +112,10 @@ void d3dp_RingReset(D3dpRing *r);
 #define D3DP_MAX_SLOTS 16
 #define D3DP_TABLE_RESOURCE 0
 #define D3DP_TABLE_SAMPLER 1
+/* package PA: an RHI_BIND_UNIFORM_BUFFER_DYNAMIC slot is no table entry but
+ * a root CBV of its own; its offset is its rank among the layout's dynamic
+ * slots in ascending slot order (the order of the bind-time offsets) */
+#define D3DP_ROOT_CBV 2
 
 typedef enum D3dpRegClass { D3DP_REG_B = 0, D3DP_REG_T = 1, D3DP_REG_S = 2 } D3dpRegClass;
 
@@ -121,22 +125,28 @@ typedef struct D3dpLayout {
     uint8_t table[D3DP_MAX_SLOTS];  /* D3DP_TABLE_* */
     uint8_t offset[D3DP_MAX_SLOTS]; /* descriptor offset in that table */
     uint32_t resCount, smpCount;
-    uint32_t resStages, smpStages; /* union of the slots' (1 << RhiShaderStage) */
+    uint32_t resStages, smpStages;            /* union of the slots' (1 << RhiShaderStage) */
+    uint32_t dynCount;                        /* root CBVs (package PA) */
+    uint8_t dynSlot[RHI_MAX_DYNAMIC_OFFSETS]; /* the layout entry of root CBV k */
 } D3dpLayout;
 
 D3dpRegClass d3dp_RegClass(RhiBindType t);
-/* False for an invalid layout: a bad type, more than D3DP_MAX_SLOTS, or two
- * slots on one register (t1 as a texture and a storage buffer). */
+/* False for an invalid layout: a bad type, more than D3DP_MAX_SLOTS, more
+ * than RHI_MAX_DYNAMIC_OFFSETS dynamic uniforms, or two slots on one
+ * register (t1 as a texture and a storage buffer). */
 bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out);
 /* The layout entry for (slot, type), or -1. */
 int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type);
 
 /* Root parameters of a pipeline whose group g uses layouts[g] (NULL for a
- * group without a layout): in group order, the resource table then the
- * sampler table of each group that has them.  resParam[g] / smpParam[g]
- * receive the parameter index or -1.  Returns the parameter count. */
+ * group without a layout): in group order, the resource table, the sampler
+ * table and the root CBVs (package PA) of each group that has them.
+ * resParam[g] / smpParam[g] receive the parameter index or -1, dynParam[g]
+ * the index of the group's first root CBV (the others follow it in
+ * D3dpLayout.dynSlot order) or -1.  Returns the parameter count. */
 uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
-                         int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS]);
+                         int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
+                         int8_t dynParam[RHI_MAX_BIND_SLOTS]);
 
 /* ------------------------------------------------------------- small maths */
 static inline uint64_t d3dp_AlignUp(uint64_t v, uint64_t a)

@@ -971,6 +971,12 @@ typedef struct RdPerfRecord {
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
     uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
     uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */
+    /* Package PA: of bindGroups, rd's own by kind.  uniformGroups: the
+     * frame, draw and VU layouts' groups, whose uniforms take dynamic
+     * offsets, so one group per layout and buffer serves the replay (the VU
+     * layout's stream buffer is the mesh arena chunk or the ring);
+     * textureGroups: one per (texture, sampler, DATE snapshot) set. */
+    uint32_t uniformGroups, textureGroups;
     uint64_t uploadBytes;     /* everything written into the upload ring */
     uint64_t meshUploadBytes; /* of which mesh streams and indices */
     double gpuMs;             /* first timestamp to last */

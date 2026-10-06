@@ -424,6 +424,8 @@ RdMeshRec *rd__MeshRec(uint32_t id);
 #define RD_MESH_CHUNKS 32
 bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes, uint64_t align);
 RhiBuffer rd__MeshGpuBuffer(uint32_t chunk);
+/* Its size in bytes (package PA: the VU stream binds it whole). */
+uint64_t rd__MeshGpuBufferSize(uint32_t chunk);
 /* destroys the arena's buffers; every mesh loses its device copy */
 void rd__MeshGpuShutdown(void);
 /* Creates a VU mesh record from a stream and index list already in the
@@ -484,7 +486,7 @@ typedef enum RdFsId {
     RD_FS_FONT,         /* package R8: font_ps, screen prims sampling an R8 coverage texture */
     RD_FS_SPRITE_AA1,   /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
     RD_FS_BOX_REDUCE,   /* package RSMALL: box_reduce_ps, the shadow count at the GS size */
-    RD_FS_SPRITE_STQ,   /* package RSMALL: sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
+    RD_FS_SPRITE_STQ, /* package RSMALL: sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
     RD_FS_COUNT
 } RdFsId;
 
@@ -909,6 +911,15 @@ void rd__TargetScaleOf(RdTargetRec *t, int named);
 bool rd__PresentAcquire(void);
 void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
+
+/* Package PA: a uniform block in the ring and the group that reads it: the
+ * group is its layout's one group of the replay (a dynamic uniform slot),
+ * offset the block's ring offset, passed when the group is bound. */
+typedef struct RdUniform {
+    RhiBindGroup group;
+    uint32_t offset;
+} RdUniform;
+
 /* Package OV, the presentation overlay (rd.h rd_SetPresentOverlay;
  * rd_present.c).  rd__OverlayCollect runs the registered callback for the
  * present about to be replayed (replayFrame, before the ring is sized and
@@ -920,7 +931,7 @@ void rd__PresentShutdown(void);
  * with, which rd__EnumerateReachableScreen enumerates too. */
 void rd__OverlayCollect(void);
 uint64_t rd__OverlayRingBytes(void);
-void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RhiBindGroup frame, uint8_t prim,
+void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t prim,
                      const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend);
 void rd__OverlayState(RdStateBlock *s, uint8_t blend);
 /* Moves a texture to a state with a barrier when needed (outside passes). */
@@ -931,16 +942,18 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
 void rd__WaitFrame(void);
 /* Ring allocation for the frame being replayed. */
 uint64_t rd__RingAlloc(uint64_t size, uint64_t align);
-/* Per-frame uniform bind groups for the presenter and posts. */
-RhiBindGroup rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY);
+/* Binds u at group index `group` with its offset (rhi_CmdSetBindGroupOffsets). */
+void rd__BindUniform(RhiCommandList cl, uint32_t group, RdUniform u);
+/* FrameCB for the presenter and posts (group 0). */
+RdUniform rd__FrameGroup(uint32_t targetW, uint32_t targetH, float originX, float originY);
 /* The same with the GS Z scale of the bound depth buffer (R2c); rd__FrameGroup
  * uses 2^-24 (no depth bound). */
-RhiBindGroup rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
-                             float zScale);
+RdUniform rd__FrameGroupZ(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                          float zScale);
 /* Wave 7 (R7a): FrameCB with the wide x scale spaceX in both g_space slots
  * and the target's texels per GS pixel in g_z.yz. */
-RhiBindGroup rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
-                              float zScale, float spaceX, float scaleX, float scaleY);
+RdUniform rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, float originY,
+                           float zScale, float spaceX, float scaleX, float scaleY);
 
 /* ------------------------------------------------- frame head and camera
  * rd_frame.c (wave 2, R2c). */
@@ -957,7 +970,8 @@ void rd__SetReplayCamera(const RdCamera *cam);
  * GPU and returns them in out[0..2] (bit patterns read back).  False without
  * a device. */
 bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4]);
-RhiBindGroup rd__DrawGroup(const void *drawCB);
+/* DrawCB (group 1). */
+RdUniform rd__DrawGroup(const void *drawCB);
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s);
 /* The same with t2 (sprite_ps's DATE snapshot) bound to date; rd__TexGroup binds
  * the 1x1 dummy there (sprite_ps reads t2 only under DF_DATE). */

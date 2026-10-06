@@ -68,6 +68,7 @@ typedef struct VkrLayout {
     VkDescriptorSetLayout layout;
     uint32_t slotCount;
     RhiBindSlot slots[16];
+    uint32_t dynamicCount; /* RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots (package PA) */
 } VkrLayout;
 
 typedef struct VkrPipeline {
@@ -106,6 +107,9 @@ typedef struct VkrCmdList {
     /* draw-time state */
     VkrPipeline *pipeline;
     VkDescriptorSet groups[RHI_MAX_BIND_SLOTS];
+    /* package PA: each bound group's dynamic offsets, in binding order */
+    uint32_t dynCount[RHI_MAX_BIND_SLOTS];
+    uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
     uint32_t groupDirty; /* bit per group */
     bool inPass;
 } VkrCmdList;
@@ -119,6 +123,7 @@ typedef struct VkrFrame {
     uint32_t descPoolCount; /* pools created */
     uint32_t descPoolCur;   /* pool being allocated from */
     VkDescriptorSet *sets;  /* transient bind groups of this frame */
+    uint8_t *setDynamic;    /* per set: its layout's dynamic slots (package PA) */
     uint32_t setCount, setCap;
     VkrGarbage *garbage;
     uint32_t garbageCount, garbageCap;
@@ -226,6 +231,8 @@ void vkr_ReleaseSwapchainImage(uint32_t id);
 void vkr_ReleaseAllObjects(void);
 /* vk_pipeline.c */
 VkDescriptorSet vkr_GetBindGroup(RhiBindGroup bg);
+/* The number of dynamic uniform slots of a bind group's layout (package PA). */
+uint32_t vkr_BindGroupDynamicCount(RhiBindGroup bg);
 /* vk_cmd.c */
 bool vkr_FramesInit(void);
 /* Empty submit after the frame's work that signals the image's present

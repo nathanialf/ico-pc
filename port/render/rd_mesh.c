@@ -199,6 +199,11 @@ RhiBuffer rd__MeshGpuBuffer(uint32_t chunk)
     return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].buf : (RhiBuffer){0};
 }
 
+uint64_t rd__MeshGpuBufferSize(uint32_t chunk)
+{
+    return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].size : 0;
+}
+
 void rd__MeshGpuShutdown(void)
 {
     for (uint32_t i = 0; i < RD_MESH_CHUNKS; i++) {

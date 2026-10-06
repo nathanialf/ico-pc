@@ -269,8 +269,8 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
         cb.tex[2] = 1.0f / (float)sw;
         cb.tex[3] = 1.0f / (float)sh;
         rhi_CmdSetPipeline(cl, pipe);
-        rhi_CmdSetBindGroup(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
-        rhi_CmdSetBindGroup(cl, 1, rd__DrawGroup(&cb));
+        rd__BindUniform(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
+        rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(
             cl, 2, rd__TexGroup(src, rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
         rhi_CmdDraw(cl, 3, 0, 1);
@@ -402,7 +402,7 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out)
     rhi_CmdSetScissor(cl, &full);
     /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
      * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
-    const RhiBindGroup frame = rd__FrameGroup(s_outW, s_outH, 0.5f, 0.5f);
+    const RdUniform frame = rd__FrameGroup(s_outW, s_outH, 0.5f, 0.5f);
     for (uint32_t i = 0; i < s_ov.bCount; i++) {
         const OverlayBatch *b = &s_ov.b[i];
         rd__OverlayDraw(cl, s_outFormat, frame, b->prim, s_ov.v + b->first, b->count, b->tex,

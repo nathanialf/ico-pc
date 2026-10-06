@@ -56,6 +56,7 @@
     X(CmdSetScissor)                                                                               \
     X(CmdSetPipeline)                                                                              \
     X(CmdSetBindGroup)                                                                             \
+    X(CmdSetBindGroupOffsets)                                                                      \
     X(CmdSetVertexBuffer)                                                                          \
     X(CmdSetIndexBuffer)                                                                           \
     X(CmdSetStencilRef)                                                                            \

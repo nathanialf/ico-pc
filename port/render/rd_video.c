@@ -142,7 +142,10 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t bindSlot, R
     RhiBinding b;
     memset(&b, 0, sizeof(b));
     b.slot = bindSlot;
-    b.type = RHI_BIND_UNIFORM_BUFFER;
+    /* package PA: rd's frame and draw layouts take a dynamic uniform; the
+     * movie's two blocks are the group's base, bound with offset 0 (one
+     * draw a frame: no group to share) */
+    b.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
     b.buffer = buf;
     b.offset = off;
     b.size = size;

@@ -95,9 +95,7 @@ pointer to this file.
   only through a stage's BGA lightning record; survey the disc's lightning
   records and, if any uses them, add an exact path with a destination
   snapshot in `rd_replay.c`.
-- **Performance.** Each VU draw creates its own bind group; dynamic uniform
-  offsets (Vulkan `UNIFORM_BUFFER_DYNAMIC`, D3D12 root CBVs) would make it one
-  set per layout per frame. `vkr_OrderWrites` (`port/rhi/vk/vk_cmd.c`) puts
+- **Performance.** `vkr_OrderWrites` (`port/rhi/vk/vk_cmd.c`) puts
   a global barrier before every render pass and copy, about 100 per frame
   in a typical stage; per-target hazard tracking would remove most. Runs of
   screen-prim commands under the same state are one draw each; merging them

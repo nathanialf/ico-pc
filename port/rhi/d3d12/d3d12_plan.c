@@ -119,6 +119,7 @@ D3dpRegClass d3dp_RegClass(RhiBindType t)
 {
     switch (t) {
     case RHI_BIND_UNIFORM_BUFFER:
+    case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
         return D3DP_REG_B;
     case RHI_BIND_SAMPLER:
         return D3DP_REG_S;
@@ -149,7 +150,13 @@ bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
         uint32_t stages =
             s->stages ? s->stages : ((1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT));
         out->slots[i] = *s;
-        if (s->type == RHI_BIND_SAMPLER) {
+        if (s->type == RHI_BIND_UNIFORM_BUFFER_DYNAMIC) {
+            if (out->dynCount == RHI_MAX_DYNAMIC_OFFSETS) {
+                return false;
+            }
+            out->table[i] = D3DP_ROOT_CBV;
+            out->dynSlot[out->dynCount++] = (uint8_t)i;
+        } else if (s->type == RHI_BIND_SAMPLER) {
             out->table[i] = D3DP_TABLE_SAMPLER;
             out->offset[i] = (uint8_t)out->smpCount++;
             out->smpStages |= stages;
@@ -160,6 +167,20 @@ bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
         }
     }
     out->slotCount = count;
+    /* root CBVs in ascending slot order, the order of the bind-time offsets
+     * (rhi_CmdSetBindGroupOffsets); offset[] is the rank */
+    for (uint32_t a = 1; a < out->dynCount; a++) {
+        for (uint32_t b = a;
+             b > 0 && out->slots[out->dynSlot[b - 1]].slot > out->slots[out->dynSlot[b]].slot;
+             b--) {
+            const uint8_t t = out->dynSlot[b];
+            out->dynSlot[b] = out->dynSlot[b - 1];
+            out->dynSlot[b - 1] = t;
+        }
+    }
+    for (uint32_t k = 0; k < out->dynCount; k++) {
+        out->offset[out->dynSlot[k]] = (uint8_t)k;
+    }
     return true;
 }
 
@@ -174,12 +195,14 @@ int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type)
 }
 
 uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
-                         int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS])
+                         int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
+                         int8_t dynParam[RHI_MAX_BIND_SLOTS])
 {
     uint32_t n = 0;
     for (uint32_t g = 0; g < RHI_MAX_BIND_SLOTS; g++) {
         resParam[g] = -1;
         smpParam[g] = -1;
+        dynParam[g] = -1;
         if (g >= count || !layouts[g]) {
             continue;
         }
@@ -188,6 +211,10 @@ uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
         }
         if (layouts[g]->smpCount) {
             smpParam[g] = (int8_t)n++;
+        }
+        if (layouts[g]->dynCount) {
+            dynParam[g] = (int8_t)n;
+            n += layouts[g]->dynCount;
         }
     }
     return n;
