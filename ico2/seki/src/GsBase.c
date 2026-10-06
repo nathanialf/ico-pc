@@ -1458,9 +1458,10 @@ void gsb_SetVSMatrix(int w, int h, float d)
    matrices +0x80 and +0xC0 (IsPointIsInScreen and the screen tests) never
    change.  puddle.c and pool.c call gsb_SetVSMatrix for their reflection
    views too, so the reflections' cull widens by the same factor: it only
-   ever adds objects to a reflection, whose own projection (+0xC0, the
-   render-to-texture target) stays 4:3.  At 1 the matrix is left exactly as
-   computed. */
+   ever adds objects to a reflection, whose +0xC0 stays 4:3 as well; the
+   renderer widens the render-to-texture block and its draws (rd_core.c
+   rd__TargetScaleOf), so those objects show at the sides of a wide frame.
+   At 1 the matrix is left exactly as computed. */
 static float gsbHostWideX(void)
 {
     return ico_video_wide_x();

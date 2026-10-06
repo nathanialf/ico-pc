@@ -300,6 +300,13 @@ typedef struct RdTargetRec {
     uint32_t tw, th;
     float sx, sy;
     uint8_t wide; /* scene-class: draws other than full-screen ones take the wide x scale */
+    /* Widescreen reflections: a render-to-texture block with its own depth
+     * buffer (rd_BlockTarget, the decoder's blocks) widened by the display
+     * aspect: tw = w / f texels for f = (4/3) / aspect, wide set, so its 3D
+     * view shows what the wide scene shows; the draws that sample it scale
+     * their x addressing by f (fillDrawCB, DrawCB.g_scale.zw).  0 at 4:3
+     * and in Original (RENDER_API.md "Render-to-texture surfaces") */
+    uint8_t wideBlock;
     RhiFormat format;
     RhiTexture color, depth;
     RhiState colorState, depthState;

@@ -594,6 +594,7 @@ typedef struct Replay {
     int stretch;          /* R7a: the draw being bound is full-screen (no wide x scale) */
     int mirror;           /* R7c: the draw being bound is a flipped UI draw (scissor too) */
     int uiPrim; /* the draw being bound is a UI-space screen prim (RSMALL: its scissor takes the wide scale) */
+    float blockCs; /* a stretched draw's u at the target's centre (blockCentre) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
@@ -1251,16 +1252,57 @@ typedef struct DrawSetup {
     uint32_t tw, th, tfmt;
     int textured;
     int mipmapped; /* R7a: the image texture has generated mips */
+    int wideBlock; /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
 } DrawSetup;
+
+/* Widescreen reflections: whether the draw samples a block that
+ * rd__TargetScaleOf widened by the display aspect. */
+static int samplesWideBlock(const Replay *r, const DrawSetup *ds)
+{
+    if (!ds->textured || !r->st.ds.texEnabled) {
+        return 0;
+    }
+    const RdTexRec *t = rd__TexRec(r->st.tex);
+    if (!t || t->kind == RD_TEXKIND_IMAGE) {
+        return 0;
+    }
+    const RdTargetRec *src = rd__TargetRec(t->target);
+    return src && src->wideBlock;
+}
+
+/* The u (normalised) a stretched draw that samples a widened block has at
+ * the target's centre: the vertices furthest left and right, interpolated
+ * (exact for the full-width sprite puddle.c's copy draws).  0.5 otherwise,
+ * where fillDrawCB does not need it. */
+static void blockCentre(Replay *r, const DrawSetup *ds, const IcoSpriteVertex *o, uint32_t n)
+{
+    r->blockCs = 0.5f;
+    if (!ds->wideBlock || !r->stretch || n == 0 || ds->tw == 0) {
+        return;
+    }
+    uint32_t lo = 0, hi = 0;
+    for (uint32_t i = 1; i < n; i++) {
+        lo = o[i].x < o[lo].x ? i : lo;
+        hi = o[i].x > o[hi].x ? i : hi;
+    }
+    if (o[hi].x > o[lo].x) {
+        /* the centre in 12.4 window coordinates: ox + w / 2, ox as bindDraw */
+        const float xc =
+            16.0f * (float)(2048 - (int32_t)(r->st.gsW >> 1)) + 8.0f * (float)ds->tc->w;
+        const float t = (xc - (float)o[lo].x) / (float)(o[hi].x - o[lo].x);
+        r->blockCs = (o[lo].u + t * (o[hi].u - o[lo].u)) / (float)ds->tw;
+    }
+}
 
 /* The target, the DATE snapshot and the texture (each may end the open
  * pass: they run before the draw's pass begins). */
 static bool prepareDraw(Replay *r, DrawSetup *ds)
 {
     memset(ds, 0, sizeof(*ds));
-    r->stretch = 0; /* R7a: doScreen decides for screen prims after this */
-    r->mirror = 0;  /* R7c: likewise */
-    r->uiPrim = 0;  /* doScreen and doScreenWrap set it */
+    r->stretch = 0;    /* R7a: doScreen decides for screen prims after this */
+    r->mirror = 0;     /* R7c: likewise */
+    r->uiPrim = 0;     /* doScreen and doScreenWrap set it */
+    r->blockCs = 0.5f; /* likewise (blockCentre) */
     ds->tc = rd__TargetRec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
@@ -1277,6 +1319,7 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
     ds->depthFmt = td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
+    ds->wideBlock = samplesWideBlock(r, ds);
     return true;
 }
 
@@ -1353,6 +1396,22 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     cb->tex[1] = (float)ds->th;
     cb->tex[2] = 1.0f / (float)ds->tw;
     cb->tex[3] = 1.0f / (float)ds->th;
+    if (ds->wideBlock) {
+        /* Widescreen reflections: the block holds its 4:3 picture
+         * compressed about its centre by f.  The game computed the draw's
+         * u for the 4:3 block, at the 4:3 position of what the pixel
+         * shows; that position is the pixel's for a draw that is itself
+         * compressed (fd = f on a wide target, or any draw on a target
+         * that is not wide), and c + (u - c) / f about the draw's u at the
+         * centre c for one stretched across a wide target (fd = 1).  So
+         * u' = 0.5 + f (u_4:3 - 0.5) = z u + w (sprite_ps, vu_ps). */
+        const float f = g_rd.wideX;
+        const float fd = wideFor(ds->tc, r->stretch);
+        const float ft = ds->tc->wide ? f : 1.0f;
+        const float z = f * fd / ft, c = r->blockCs;
+        cb->scale[2] = z;
+        cb->scale[3] = 0.5f + f * (c - 0.5f) - z * c;
+    }
 }
 
 /* ------------------------------------------------ PRIM.AA1 (package AA1)
@@ -1642,6 +1701,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (nv == 0) {
         return;
     }
+    blockCentre(r, &ds, out, nv);
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, ds.tc, out, nv, topo); /* R7c */
     }
@@ -2089,6 +2149,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (nv == 0) {
         return;
     }
+    blockCentre(r, &ds, out, nv);
     if (mirrorUi(r, c->b[1])) {
         mirrorDraw(r, tc, out, nv, topo); /* R7c */
     }

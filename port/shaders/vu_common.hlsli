@@ -379,7 +379,7 @@ DualOut vu_pixel(VuVSOut i)
     }
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        float2 uv = i.stq.xy / i.stq.z;
+        float2 uv = gs_block_uv(i.stq.xy / i.stq.z); // widescreen reflections: the pool's grids
         uint4 t = uint4(floor(g_texture.Sample(g_sampler, uv) * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);

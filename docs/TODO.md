@@ -46,12 +46,6 @@ pointer to this file.
   against the 50 Hz value. Dump one climb-top (`[dev] dump_from`) and look at
   the half-way frames; compare the phase step in both video modes.
 
-## Widescreen and mirror
-
-- **Reflections at 16:9.** The reflections' render-to-texture targets stay
-  4:3, so a puddle at the side of a 16:9 frame shows its reflection's
-  clamped edge (`rd_water.c`, `puddle.c`, `pool.c`).
-
 ## Game code and 64-bit safety
 
 - **Test stages 88 and 91 under ASan.** After the all-stage boot sweep every

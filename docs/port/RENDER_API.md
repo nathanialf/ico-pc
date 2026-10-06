@@ -861,6 +861,33 @@ weights (1 LSB from the centre sample, 0 outside that range).
 The ripple strips carry PRIM.AA1 (0xD4): their triangles get the edge
 fringes of section 4, "PRIM.AA1".
 
+**Widescreen.** Wider than 4:3 (Enhanced, f = (4/3) / aspect, section 15),
+a temporary target with its own depth buffer that is not the scene's size
+(the puddle's and the pool's 256×256 block; the decoder's render-to-texture
+blocks, `GifPacket.c` `gsAliasTarget`) is a 3D view drawn through a screen
+matrix centred on it, and `rd__TargetScaleOf` widens it the way SCENE is
+widened at 1x: the GS size stays 256×256, the texture is 256 / f texels
+across (341 at 16:9) and `RdTargetRec.wide` gives the draws into it the
+wide x scale. The reflection then covers the angle the wide scene shows
+(`gsbHostWidenCull` already widens the reflection views' cull; the camera
+scopes need nothing more, `rd__FillCameraCB` widens every camera's
+`g_proj` by f). The game's u for the block are 4:3 ones, so a draw that
+samples a widened block (`RdTargetRec.wideBlock`) maps them, u' = z u + w
+in `DrawCB.g_scale.zw` (`fillDrawCB`; `gs_block_uv` in `sprite_ps`,
+`sprite_colour`, `wrap_acc_ps` and `vu_ps`): a draw that is compressed
+itself (the pool's grids, the ripple strips) takes u' = 0.5 + f (u − 0.5);
+one stretched across a wide target (the puddle's full-width copy sprite)
+first has its stretch taken out about its u at the target's centre c
+(`blockCentre`), which leaves z = 1, w = (1 − f)(0.5 − c). The queen's
+barrier block (512×256, no depth buffer) is not widened. At 4:3 and in
+Original f = 1: no block is widened, `g_scale.zw` stay 0 and `gs_block_uv`
+returns u as it is. `rd_water` checks it at 16:9: the puddle's block
+against the reflection's double-precision projection compressed by f
+(the clear reaching past the 4:3 picture), the copy registered with the
+scene, and the pool's refracting grid against the 4:3 render at the same
+picture position (within 3 LSB; without the u mapping a pixel d from the
+centre would read the copy d / f from it).
+
 ## 14. Full-screen effects and the raw packet builders
 
 ### staticBlur.c: motion blur, depth of field, flare, glow, eye blur, aura
@@ -1012,7 +1039,7 @@ scissor, copies, snapshots and readbacks change.
 | DISPLAY | the scene's, sy doubled with `full_height` |
 | WORK0, WORK1, WORK3, AA0, AA1, FEED128, AURA_TAP, WORK2_PAD | `rd_WorkTargetScale`: sy clamped to [1, 2], so blur radii, which are GS distances, stay the same fraction of the screen at finer sampling |
 | SHADOW0..2 | the PS2 sizes at every scale (section 11) |
-| other temporary targets (reflections, render-to-texture blocks) | 1 |
+| other temporary targets (render-to-texture blocks) | 1; a block with its own depth buffer (the reflections) 1 / f across when wider than 4:3 (section 13) |
 
 On a scaled target `g_origin.zw = 0.5 / s`, which puts a GS integer
 coordinate on the top-left edge of its s×s block. Sprites have their
@@ -1040,7 +1067,8 @@ headless run exercises it, and traces with and without 16:9 are
 byte-identical. `+0x80`, `+0xC0` and `+0x100` are untouched, so every
 screen test the game makes (`IsPointIsInScreen` and the rest) still uses the
 4:3 frame. The renderer multiplies NDC x by f about the target's centre for
-draws into the wide targets (SCENE, WORK2, AURA_WORK, the shadow count):
+draws into the wide targets (SCENE, WORK2, AURA_WORK, the shadow count, the
+reflections' blocks of section 13):
 meshes, shadow volumes and screen prims, so CPU-projected prims follow the
 3D and the 2D layer sits in a centred 4:3 box. Full-screen draws stretch
 (f = 1): `RD_SPACE_FULLSCREEN` prims (the post passes, the fog sprite, the
@@ -1087,9 +1115,8 @@ card messages, save, format, Resume Game / End Game), 56 and 57 (pause), 58
 (Options), 59 (button configuration), 60 (Brightness), 61 (End Game
 question), 62 and 64 (game over "Continue?").
 
-What does not widen: the reflections' render-to-texture targets keep 4:3,
-so at the sides of a 16:9 frame a puddle shows its reflection's clamped
-edge; a world-projected prim
+The reflections widen with the scene: their blocks and the draws that
+sample them (section 13). What does not widen: a world-projected prim
 drawn as a sprite spanning the whole width is taken for a fill and
 stretched. The port's menu text draws in list 11 in UI space, so it sits in
 the 4:3 box at the scene's resolution in the Original preset; in Enhanced it
@@ -2129,7 +2156,7 @@ and op and marks the quads `text-quads`.
 | `rd_mesh` | VU programs drawn against the CPU reference (0 LSB) |
 | `rd_shadow` | the stencil count, levels, composites, tags; at scale 4 the level 1 integral independent of the volume's sub-pixel position |
 | `rd_fog` | the Z byte model, the CLUT, the fog pixels |
-| `rd_water` | puddle, pool, barrier, water drops, cloth |
+| `rd_water` | puddle, pool, barrier, water drops, cloth; puddle and pool at 16:9 |
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |

@@ -63,7 +63,9 @@ cbuffer FrameCB : register(b0, space0)
 //   g_param  kind-specific: blend_int source offset in pixels (xy);
 //            fog_lut strength (x)
 //   g_scale  xy t1 texels per GS texel: 1 for images and unscaled targets,
-//            the target's scale for a scaled one (R7a); zw reserved
+//            the target's scale for a scaled one (R7a); zw the x addressing
+//            of a widened render-to-texture block, u' = u * z + w (0, 0:
+//            none; gs_block_uv)
 cbuffer DrawCB : register(b1, space1)
 {
     uint4 g_col;
@@ -74,6 +76,15 @@ cbuffer DrawCB : register(b1, space1)
     float4 g_param;
     float4 g_scale;
 };
+
+// Widescreen reflections (RENDER_API.md "Render-to-texture surfaces"): a
+// draw that samples a render-to-texture block widened by the display aspect
+// maps its 4:3 u into the block (rd_replay.c fillDrawCB). z = 0 everywhere
+// else, which returns uv as it is.
+float2 gs_block_uv(float2 uv)
+{
+    return g_scale.z != 0.0 ? float2(uv.x * g_scale.z + g_scale.w, uv.y) : uv;
+}
 
 #define DF_TEXTURED 1u   // PRIM.TME
 #define DF_DECAL 2u      // TFX DECAL (else MODULATE)

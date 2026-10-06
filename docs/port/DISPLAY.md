@@ -231,6 +231,9 @@ stays in the 4:3 frame in the middle, at the size it has at 4:3 (at
 | The movies | the middle 4:3 frame, black at the sides |
 | Developer overlays (debug text, memory bars) | the middle 4:3 frame |
 
+The world itself, reflections in puddles and pools included, simply shows
+more at the sides.
+
 ## Smooth motion (`framerate`)
 
 The game still updates 25 times a second (30 in 60 Hz mode); nothing about

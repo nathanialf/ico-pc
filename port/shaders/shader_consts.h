@@ -34,7 +34,8 @@ typedef struct IcoDrawCB {
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
     float param[4];    /* kind specific */
     float scale[4];    /* R7a: xy t1 texels per GS texel (1, or a scaled target's
-                        * scale), zw reserved */
+                        * scale); zw a widened block's x addressing, u' = u z + w
+                        * (0 0: none; common.hlsli gs_block_uv) */
 } IcoDrawCB;
 
 /* Package CRT: crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),

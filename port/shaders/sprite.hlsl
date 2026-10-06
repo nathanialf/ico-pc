@@ -72,7 +72,7 @@ DualOut sprite_ps(SpriteVSOut i)
     }
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = uint4(floor(g_texture.Sample(g_sampler, i.uv) * 255.0 + 0.5));
+        uint4 t = uint4(floor(g_texture.Sample(g_sampler, gs_block_uv(i.uv)) * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);
     }
@@ -96,7 +96,7 @@ uint4 sprite_colour(float4 pos, float4 vcol, float2 uv)
     }
     uint4 col = uint4(floor(vcol + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = uint4(floor(g_texture.Sample(g_sampler, uv) * 255.0 + 0.5));
+        uint4 t = uint4(floor(g_texture.Sample(g_sampler, gs_block_uv(uv)) * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);
     }

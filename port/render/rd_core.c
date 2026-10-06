@@ -484,11 +484,24 @@ void rd__TargetScaleOf(RdTargetRec *t, int named)
     } else if (named >= 0 && g_rd.workScale > 1.0f && !shadowLevel(named)) {
         sx = sy = g_rd.workScale;
     }
+    /* Widescreen reflections: a temporary target of another size with its
+     * own depth buffer is a render-to-texture block that a 3D view is drawn
+     * into through a screen matrix centred on it (puddle.c, pool.c; the
+     * decoder's blocks, GifPacket.c gsAliasTarget).  Wider than 4:3 it gets
+     * 1 / f times the texels across and the wide x scale, as SCENE does at
+     * 1x, so the reflection covers what the wide scene shows instead of
+     * ending at the 4:3 frame's edge.  f = 1 (4:3, Original): untouched. */
+    const float f = g_rd.wideX;
+    const int block = named < 0 && !scene && t->withDepth && f > 0.0f && f < 1.0f;
+    if (block) {
+        sx = 1.0f / f;
+    }
     t->sx = sx;
     t->sy = sy;
     t->tw = sx == 1.0f ? t->w : scaled(t->w, sx);
     t->th = sy == 1.0f ? t->h : scaled(t->h, sy);
-    t->wide = scene && named != RD_TARGET_DISPLAY && named != RD_TARGET_DATE_SNAPSHOT;
+    t->wide = (scene && named != RD_TARGET_DISPLAY && named != RD_TARGET_DATE_SNAPSHOT) || block;
+    t->wideBlock = (uint8_t)block;
 }
 
 float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight)

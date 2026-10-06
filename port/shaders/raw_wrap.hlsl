@@ -43,7 +43,7 @@ float4 wrap_acc_ps(WrapAccIn i) : SV_Target0
 {
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = uint4(floor(g_texture.Sample(g_sampler, i.uv) * 255.0 + 0.5));
+        uint4 t = uint4(floor(g_texture.Sample(g_sampler, gs_block_uv(i.uv)) * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);
     }
