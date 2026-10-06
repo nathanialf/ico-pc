@@ -5,7 +5,7 @@
 # build-host/pkg-linux-wt (no baserom, no uncommitted work), preset
 # linux-x64 with the window build (-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON),
 # staged under dist/stage/linux/ and archived as dist/ico-pc-<label>-linux.tar.gz
-# (root dir ico-pc-<label>/), with tools/mc_import and README.md. Quiet; the log is build-host/pkg-linux-<label>.log.
+# (root dir ico-pc-<label>/), with tools/mc_import, README.md and VERSION.txt. Quiet; the log is build-host/pkg-linux-<label>.log.
 # Safe to re-run. Builds only: it never runs the game.
 #
 # ICO_PKG_FILES="path ..." copies those working-tree files over the HEAD
@@ -138,6 +138,7 @@ watchdog=30
 INI
 # the player README, from the same commit
 cp "$wt/README.md" "$stage/README.md"
+printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted.
 # The files staged above and nothing else: the stage folder is also where
@@ -147,7 +148,7 @@ rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
 mkdir -p "$pkgroot/ico-pc-$label/tools"
-for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md tools/mc_import; do
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
 if [[ -f "$stage/ico_pc.map" ]]; then

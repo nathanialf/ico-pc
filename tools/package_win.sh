@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # tools/package_win.sh <label>
 #
-# Builds the Windows test package for HEAD: a clean worktree of HEAD under
+# Builds the Windows package for HEAD: a clean worktree of HEAD under
 # build-host/pkg-wt, win-x64 with the window build and
 # -DICO_LINK_EXE=ON, staged under dist/stage/x64/ and zipped as
-# dist/ico-pc-<label>-win.zip (root dir ico-pc-<label>/). Quiet; the log is
+# dist/ico-pc-<label>-win.zip (root dir ico-pc-<label>/, with VERSION.txt). Quiet; the log is
 # build-host/pkg-<label>.log. Safe to re-run. Needs no baserom (the binary holds
 # no disc data). ICO_PKG_FILES="path ..." overlays working-tree files on HEAD.
 set -euo pipefail
@@ -86,6 +86,18 @@ for a in x64; do
     rm -rf "$d/tools"; mkdir -p "$d/tools"
     cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
     cp "$wt/port/rhi/test/compare_png.ps1" "$d/tools/"
+    cat > "$d/tools/README.txt" <<'TXT'
+Developer tools; playing the game needs none of them. mc_import.exe copies
+ICO's save out of a PS2 memory card image or save archive into the game's
+save folder (README.md, "Importing a PS2 save"). rhi_d3d12_test.exe checks
+the Direct3D 12 renderer against exact expected pixels and ends with a
+message box giving the verdict (log: rhi_d3d12_test.log). rd_replay_tool.exe
+renders a frame dump (F12 in the game writes one to dumps\) to a PNG, and
+compare_backends.cmd, with compare_png.ps1, renders every dump in dumps\ on
+Vulkan and on Direct3D 12 and compares the pictures (log:
+compare_backends.log). SDL3.dll is the library these tools need beside them.
+TXT
+    sed -i 's/$/\r/' "$d/tools/README.txt"
     # the repository stores the .cmd with LF (it has no labels or goto, so
     # cmd.exe runs it either way); the package gets CRLF, what Notepad and
     # cmd.exe expect of a batch file
@@ -100,8 +112,8 @@ for a in x64; do
     # developer tool (port/input/pad-boot.txt) and would play the game by itself
     rm -f "$d/pad-script.txt"
     cat > "$d/ico-pc.ini" <<INI
-# ico-pc.ini: settings for the $label test build (a window).
-# Lines are key=value; lines starting with # or ; are comments.
+# ico-pc.ini: optional settings, key=value; lines starting with # or ; are
+# comments. Everything works without editing this file.
 #
 # iso: the full path of your PAL disc image (SCES-50760), for example
 # iso=C:\\Games\\Ico_PAL.iso . Leave it empty and the program asks for it
@@ -117,17 +129,13 @@ iso=${iso[$a]}
 # report of where it is stuck to logs\\ico-pc.log and stops. 0 turns it off.
 watchdog=30
 
-# trace=1 writes a developer trace to logs\\trace-<date>-<time>.txt: one
-# line a game tick (about 150 bytes), which lets a session be compared tick
-# by tick with a replay of its input recording. It also fixes the game's
-# clock (saves are dated 2002-01-01). Set trace=0 to turn it off. Port
-# settings (display, input bindings, gameplay options) live in config.toml
-# in the pref folder; the in-game Settings menu edits them.
-trace=1
+# Port settings (display, input bindings, gameplay options) live in
+# config.toml in the pref folder; the in-game Options menu edits them.
 INI
 done
 # the player README, from the same commit
 cp "$wt/README.md" "$stage/README.md"
+printf 'ico-pc %s\r\nbuilt %s\r\ncommit %s\r\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"
 
 # zip, root dir ico-pc-<label>/. The files staged above and nothing else
 # (not linux/ or a retired x86/): the stage folder is also where the build
@@ -138,11 +146,12 @@ pkgroot="$root/build-host/tmp/zip-$label"
 rm -rf "$pkgroot"
 mkdir -p "$pkgroot/ico-pc-$label"
 cp -a "$stage/README.md" "$pkgroot/ico-pc-$label/README.md"
+cp -a "$stage/VERSION.txt" "$pkgroot/ico-pc-$label/VERSION.txt"
 for a in x64; do
     mkdir -p "$pkgroot/ico-pc-$label/$a/tools"
     for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \
         tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/mc_import.exe tools/SDL3.dll tools/compare_png.ps1 \
-        tools/compare_backends.cmd; do
+        tools/compare_backends.cmd tools/README.txt; do
         cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
     done
 done
