@@ -108,7 +108,7 @@ endif()
 # trip and the popup rate limit. CPU only.
 add_executable(achievements_test test/achievements_test.c gamestate.c
     ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
-    ../ui/strings_it.c ../ui/strings_es.c ../ui/subtitles.c ../platform/host_config.c)
+    ../ui/strings_it.c ../ui/strings_es.c ../platform/host_config.c)
 target_include_directories(achievements_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")
@@ -156,8 +156,8 @@ if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCO
 endif()
 
 # credits_test (package CRED; docs/port/EXTRAS.md "Credits", UI.md "Staff
-# roll"): the game's staffroll.c (the classic path) over a short table in the
-# disc's forms, with the font stubbed to record the posted lines: the port
+# roll"): the game's staffroll.c over a short table in the disc's forms,
+# with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
 # roll's forms, and the roll ends after them; then the lock ([dev]
 # unlock_credits through the ini) and a start with no engine. CPU only.

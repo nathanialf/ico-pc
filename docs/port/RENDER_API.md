@@ -1140,7 +1140,7 @@ question), 62 and 64 (game over "Continue?").
 The reflections widen with the scene: their blocks and the draws that
 sample them (section 13). What does not widen: a world-projected prim
 drawn as a sprite spanning the whole width is taken for a fill and
-stretched. The port's menu text draws in list 11 in UI space, so it sits in
+stretched. The port's own text draws in list 11 in UI space, so it sits in
 the 4:3 box at the scene's resolution in the Original preset; in Enhanced it
 is drawn deferred (below), at the output's resolution in the same 4:3
 picture, as the popups on the presentation overlay are.
@@ -1257,9 +1257,12 @@ overlay is drawn.
 `rd_replay.c` (`doScreen`), `rd_interp.c` (`blendText`); `port/ui/font.c`
 (`ui_DrawTextDeferred`, the renderer); UI.md "Menu text". Package DEF.
 
-The game's menu rows, its subtitles (list 11) and the staff roll (list 12)
-are text the port draws (UI.md "Menu text", "Subtitles", "Staff roll").
-Drawn as glyph quads into list 11 they are rasterised at the scene's resolution,
+The pass serves the port's text only: its layout rows (the Settings and
+Extras pages, the hints, the viewer rows) in list 11. The game's own words
+(its menu sprites, the subtitles, the staff roll's bitmap font) are never
+text items: they are textures and scale with the scene (package TXT2;
+UI.md "Menu text"). Drawn as glyph quads into list 11 the port's rows are
+rasterised at the scene's resolution,
 halved by the reduction and scaled by the box blit, which in Enhanced
 leaves three pixels between background and ink on a glyph's edge at 1080p.
 Drawn on the output after the box blit they are rasterised at the shown
@@ -1291,9 +1294,8 @@ Every other replay (Original, the CRT filter on, no renderer, no output, a
 replay that does not present, such as the replay tool's DISPLAY or SCENE PNGs) ignores the
 items and draws the quads, so its bytes are those of a frame recorded
 without items (`font_edge`: the Original present of a frame with a
-deferred row and a popup is byte-identical to the plain quads'). Classic
-menu text (`[game] classic_menu_text`) is decided at recording: port/ui
-records no item then. Deciding at replay lets a preset change apply at the
+deferred row and a popup is byte-identical to the plain quads'). Deciding
+at replay lets a preset change apply at the
 next present, and lets one dump render both presets: the corpus renders
 each dump in Original and Enhanced.
 
@@ -1341,10 +1343,9 @@ the scissor when a batch's region differs from the last.
 
 **Ordering it cannot keep.** An item is drawn after the whole picture: a
 draw recorded after it in lists 11 and 12 that overlaps it (film noise, the
-boot signs' cursor sparkle, the loading bar, the developer overlay) is now
-under it, and DISPLAY no longer holds the text, so the motion blur's
-feedback, a keep frame's retained picture and an F12 DISPLAY screenshot
-show no menu text. UI.md "Menu text" gives the cases and why they are
+loading bar, the developer overlay) is now under it, and DISPLAY no longer
+holds the text, so the motion blur's feedback and an F12 DISPLAY
+screenshot show no port text. UI.md "Menu text" gives the cases and why they are
 accepted.
 
 **Mirror.** Nothing is flipped: the quads are pre-flipped at replay and the
@@ -1675,9 +1676,9 @@ version, in the tick's own replay too.
 | fade, letterbox | the post kind | `rd_post.c` |
 | the decoder's 2D | `gif_HostDrawKey(obj, part, ordinal)` keys every primitive decoded after it | `GifPacket.c`, `GifHost.h` |
 | layout rows | the row's `texProperty` entry; part 0 the sprite, part 1 its glow | `layout_texture.c` |
-| boot signs | the row's `texProperty` entry (the sprite; a text row also as a layout row's text); the backdrop by its packet | `kanban.c` |
-| subtitles | the subtitle's ring group, a part per row; as text, the group and the line as the owner | `jimaku.c`, `port/ui/game_text.c` |
-| staff roll | the line's slot in `rollLines` as the owner (two lines with the same name are two keys); classic: FNV-1a of the string | `staffroll.c`, `port/ui/game_text.c`; `DisplayFont.c` |
+| boot signs | the row's `texProperty` entry (the sprite); the backdrop by its packet | `kanban.c` |
+| subtitles | the subtitle's ring group, a part per row | `jimaku.c` |
+| staff roll | `font_Print`'s key, FNV-1a of the string (two lines with the same name share a key; package TXT2 removed the slot keys of the port-font path) | `staffroll.c`, `DisplayFont.c` |
 | `font_Print` | FNV-1a of the string (`gif_HostDrawKeyText`) | `DisplayFont.c` |
 | the port's text and rects | FNV-1a of the string, the alignment, the atlas page and the owner (`ui_SetDrawKey`); rects only under an owner | `port/ui/font.c`, `layout_ext.c` |
 | deferred text items, their ops | the quads' key with a page no atlas has; the post kind | `port/ui/font.c` `ui_DrawTextDeferred`, `rd_post.c` |
@@ -2233,7 +2234,7 @@ and op and marks the quads `text-quads`.
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); the overlay under the CRT filter (the callback's box is the grid, its red rectangle comes out as R phosphors); photo mode's capture at 800×600: CRT off the PNG is the present without the overlay, under Consumer TV the present with it, byte for byte |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |
-| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own; photo mode (`rd__PhotoFrame`: a mesh's matrices through the override against the reference transform, the scissor clip mode, the shadow volume untouched, the UI dropped under the flag and kept without it, the game's camera changing nothing; the pin surviving three keep frames with its temporary target, replaced by the next full frame, freed and a cut on leaving) |
+| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; photo mode (`rd__PhotoFrame`: a mesh's matrices through the override against the reference transform, the scissor clip mode, the shadow volume untouched, the UI dropped under the flag and kept without it, the game's camera changing nothing; the pin surviving three keep frames with its temporary target, replaced by the next full frame, freed and a cut on leaving) |
 | `photo`, `settings` (port/game, port/ui) | photo mode's camera (orbit, elevation clamp, zoom, the subject's pivot, the keys) and the Options row (only while a stage runs; the photo layout's proc) |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays; uniform groups, barriers and screen-prim draws (85 one per command, 66 merged) per replay |

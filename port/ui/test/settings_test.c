@@ -24,11 +24,12 @@
  * menu run through rd on a Vulkan device (lavapipe here; exit 77 without
  * one) with the window build's GifPacket.c, DisplayList.c and DmaPacket.c,
  * and each screen's SCENE written as a PNG beside the test for a look;
- * package DEF: then each screen presented at Enhanced 1920 x 1080 with the
- * menu text deferred (settings_<screen>_1080.png) and classic
- * (settings_<screen>_1080_classic.png), the classic toggle switching the
- * RDC_OVERLAY_TEXT items off
- * (settings_<screen>.png): no game data, the backdrop over a flat colour.
+ * (settings_<screen>.png): no game data, the backdrop over a flat colour;
+ * package DEF: then each screen presented at Enhanced 1920 x 1080
+ * (settings_<screen>_1080.png), the port's rows deferred (RDC_OVERLAY_TEXT
+ * items, drawn on the output) and the game's rows their texture sprites
+ * (package TXT2: a screen of game rows alone, the save preview, records no
+ * item).
  */
 #include <math.h>
 #include <stdio.h>
@@ -56,7 +57,6 @@
 #include "photo_ui.h"
 #include "settings.h"
 #include "strings.h"
-#include "subtitles.h"
 #include "sysconf.h"
 #include "ui_hint.h"
 #include "ui_list.h"
@@ -503,10 +503,6 @@ static int s_reduce;
 
 #endif
 
-#ifdef SETTINGS_RENDER
-static void (*s_frameText)(void);
-#endif
-
 static void frame(int flags)
 {
     frame_count++;
@@ -516,11 +512,7 @@ static void frame(int flags)
     dl_SetDLPriority(0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
-    if (s_frameText) {
-        s_frameText(); /* GFONT: game text drawn by its hooks, no layout */
-    } else {
-        exec_layout_texture();
-    }
+    exec_layout_texture();
     if (s_reduce) {
         RdPostParams pp;
         memset(&pp, 0, sizeof(pp));
@@ -613,15 +605,11 @@ static void testBuild(void)
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
                                    UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
-                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_MENU_TEXT,
-                                   UI_OPT_FONT,         UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
-                                   UI_STR_OPT_VSYNC,       UI_STR_OPT_FILTERING,
-                                   UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_CRT,         UI_STR_OPT_CRT_STRENGTH,
-                                   UI_STR_OPT_VIDEO_MODE,  UI_STR_OPT_MENU_TEXT,
-                                   UI_STR_OPT_FONT,        UI_STR_BACK};
+                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
+        UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -649,7 +637,7 @@ static void testBuild(void)
                                          UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
@@ -677,31 +665,17 @@ static void testBuild(void)
     /* the Gameplay page holds the stick fix beside Yorda's */
     CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
     CHECK(ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) < 0, "not on Controls");
-    /* P3: the menu text row: the port font by default, Classic restores the
-       textures (port/ui/menu_text.h) and is written as [game]
-       classic_menu_text */
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MENU_TEXT), "Port font") == 0 && !ui_MenuTextClassic(),
-          "menu text: Port font (%s)", ui_SettingsValueText(UI_OPT_MENU_TEXT));
-    ui_SettingsStep(UI_OPT_MENU_TEXT, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MENU_TEXT), "Classic") == 0 && ui_MenuTextClassic() &&
-              ico_config_get_bool("game.classic_menu_text", 0) == 1,
-          "menu text: Classic");
-    ui_SettingsStep(UI_OPT_MENU_TEXT, -1);
-    CHECK(!ui_MenuTextClassic() && ico_config_get_bool("game.classic_menu_text", 1) == 0,
-          "menu text: Port font again");
-    /* GFONT: the font row: the game's lettering by default, Arimo written as
-       [game] port_font = "arimo" and handed to the font */
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FONT), "Game") == 0 && ui_GetFace() == UI_FACE_GAME,
-          "font: Game (%s)", ui_SettingsValueText(UI_OPT_FONT));
-    ui_SettingsStep(UI_OPT_FONT, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FONT), "Arimo") == 0 &&
-              ui_GetFace() == UI_FACE_ARIMO &&
-              strcmp(ico_config_get_string("game.port_font", ""), "arimo") == 0,
-          "font: Arimo");
-    ui_SettingsStep(UI_OPT_FONT, -1);
-    CHECK(ui_GetFace() == UI_FACE_GAME &&
-              strcmp(ico_config_get_string("game.port_font", ""), "game") == 0,
-          "font: Game again");
+    /* package TXT2: no Menu text or Font row (one behaviour: the game's
+       words keep their texels, the port's text is the game face) */
+    {
+        int rows[16];
+        const int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, rows, NULL, NULL, 16);
+        for (int k = 0; k < n; k++) {
+            CHECK(strcmp(lt_ext_RowText(rows[k]), "Menu text") != 0 &&
+                      strcmp(lt_ext_RowText(rows[k]), "Font") != 0,
+                  "Display row %d: \"%s\"", k, lt_ext_RowText(rows[k]));
+        }
+    }
     /* the New Game screen */
     int ml = ui_MirrorScreenLayout();
     CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "mirror screen layout");
@@ -718,7 +692,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
@@ -920,7 +894,8 @@ static void testPlacement(void)
           "Options: the row at %d, the labels' pitch from 324 (%d)", o->dispY, r324->dispY);
     /* display_texture's box: x from dispX + 1/4 (its inset), dispW - 1
        wide; the game row's letters end at dispX - 1/4 + the item's right
-       anchor (menu_text.c ui_MenuTextDraw: the half-texel uv inset) */
+       anchor (menu_text.c: where the sheet's lettering ends in the sprite,
+       less the half-texel uv inset) */
     const UiMenuTextItem *it = NULL;
     for (int i = 0; i < ui_menu_text_row_count; i++) {
         if (ui_menu_text_rows[i].row == 324) {
@@ -2779,41 +2754,39 @@ static int textItems(void)
     return n;
 }
 
-/* package DEF: the screen presented at Enhanced 1920 x 1080 (16:9) twice:
-   with the menu text deferred (name_1080.png: drawn on the output at its
-   resolution) and with classic menu text (name_1080_classic.png: the quads
-   in SCENE, reduced and scaled, as before) */
-static void snap1080(const char *name)
+/* package DEF: the screen presented at Enhanced 1920 x 1080 (16:9) to
+   name_1080.png: the port's rows deferred (drawn on the output at its
+   resolution), the game's rows their texture sprites.  wantItems: whether
+   the screen has port text (some RDC_OVERLAY_TEXT items) or game rows
+   alone (none: package TXT2, the game's words are never text) */
+static void snap1080(const char *name, int wantItems)
 {
     const uint32_t w = 1920, h = 1080;
     uint8_t *px = malloc((size_t)w * h * 4);
     char file[256], p[1400];
-    for (int classic = 0; px && classic < 2; classic++) {
-        ui_MenuTextSetClassic(classic);
-        frame(0);
-        const int items = textItems();
-        CHECK(classic ? items == 0 : items > 0, "%s: %d deferred items with classic text %s", name,
-              items, classic ? "on (none)" : "off (some)");
-        uint32_t ow = 0, oh = 0;
-        if (!rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
-            CHECK(0, "%s: the presented output", name);
-            break;
-        }
-        snprintf(file, sizeof(file), "%s_1080%s.png", name, classic ? "_classic" : "");
-        path(p, sizeof(p), file);
-        rd_WritePng(p, px, w, h, w * 4, 0);
-        printf("settings_render: %s (%d items)\n", p, items);
+    frame(0);
+    const int items = textItems();
+    CHECK(wantItems ? items > 0 : items == 0, "%s: %d deferred items (%s)", name, items,
+          wantItems ? "some" : "none");
+    uint32_t ow = 0, oh = 0;
+    if (!px || !rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
+        CHECK(0, "%s: the presented output", name);
+        free(px);
+        return;
     }
-    ui_MenuTextSetClassic(0);
+    snprintf(file, sizeof(file), "%s_1080.png", name);
+    path(p, sizeof(p), file);
+    rd_WritePng(p, px, w, h, w * 4, 0);
+    printf("settings_render: %s (%d items)\n", p, items);
     free(px);
 }
 
-/* package TXT: the save screen's values (docs/port/UI.md "Save screens"):
-   layout 14's slot numbers (files 1, 2 and 5 used: black; the others empty:
-   grey) and layout 15's play time "12:34:56" (white), at the PAL rows'
-   places, their texel rectangles the menu text table's, everything else of
-   the two layouts masked; the save panel's white backing is a texture the
-   fake tables do not have, so the black figures stand on the mid-tone */
+/* the save screen's values (docs/port/UI.md "Save screens"): layout 14's
+   slot numbers (files 1, 2 and 5 used, the others empty) and layout 15's
+   play time "12:34:56", at the PAL rows' places, their texel rectangles the
+   menu text table's, everything else of the two layouts masked.  Package
+   TXT2: game rows, so their texture sprites and no text item (the fake
+   tables have no sheet for them: the shot shows nothing of the figures) */
 static void fakeSaveRows(void)
 {
     for (int r = 52; r < 176; r++) {
@@ -2887,59 +2860,6 @@ static void loadGameFace(void)
     }
     free(blob);
     fclose(f);
-}
-
-/* GFONT: a subtitle and the staff roll through their hooks (game_text.c),
-   as jimaku.c and staffroll.c call them: English block 1 (two lines) in
-   row 434's box, and roll lines in font_Print's places */
-static void drawSubtitleAndRoll(void)
-{
-    int dst[4], src[4];
-    src[0] = 8;
-    src[1] = 8;
-    src[2] = 256 << 4;
-    src[3] = 48 << 4;
-    dst[2] = src[2];
-    dst[3] = (src[3] >> 1) * 2;
-    dst[0] = (64 - 320) << 4;
-    dst[1] = (144 - 112) << 4;
-    static const int ring[2];
-    const unsigned char col[4] = {0x80, 0x80, 0x80, 0x80};
-    const UiSubtitle *two = ui_SubtitleFind(UI_LANG_EN, 0, 1);
-    dl_SetDLPriority(11);
-    if (two) {
-        lt_ext_DrawSubtitle(two, &ring[0], dst, src, col);
-    }
-    const unsigned char white[4] = {255, 255, 255, 128};
-    dl_SetDLPriority(12);
-    lt_ext_DrawRollLine(0, "{#FFFFFF80}{R}< Game Design > ", 0.0f, 40.0f, 2, white,
-                        0x80u | 0x70707000u);
-    lt_ext_DrawRollLine(1, "{R}Fumito Ueda ", 0.0f, 70.0f, 2, white, 0x80u | 0x70707000u);
-    lt_ext_DrawRollLine(2, "{R}< Decompilation and PC Port > ", 0.0f, 110.0f, 2, white,
-                        0x80u | 0x70707000u);
-    lt_ext_DrawRollLine(3, "{R}Nathanial Fine ", 0.0f, 140.0f, 2, white, 0x80u | 0x70707000u);
-    lt_ext_DrawRollLine(4, "{C}@ 2001 Sony Computer Entertainment Inc.", 0.0f, 200.0f, 0, white,
-                        0x80u | 0x70707000u);
-    dl_SetDLPriority(0);
-}
-
-/* the presented 1920 x 1080 output to name.png, once (no classic pass) */
-static void snapOnce1080(const char *name)
-{
-    const uint32_t w = 1920, h = 1080;
-    uint8_t *px = malloc((size_t)w * h * 4);
-    char p[1400];
-    frame(0);
-    uint32_t ow = 0, oh = 0;
-    if (!px || !rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
-        CHECK(0, "%s: the presented output", name);
-        free(px);
-        return;
-    }
-    path(p, sizeof(p), name);
-    rd_WritePng(p, px, w, h, w * 4, 0);
-    printf("settings_render: %s (%d items)\n", p, textItems());
-    free(px);
 }
 
 static int render(void)
@@ -3120,8 +3040,7 @@ static int render(void)
         CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
         gallery_SetEngine(NULL);
     }
-    /* package DEF: every screen presented at Enhanced 1080p, deferred and
-       classic (snap1080) */
+    /* package DEF: every screen presented at Enhanced 1080p (snap1080) */
     {
         RdSettings e = *rd_GetSettings();
         e.preset = RD_PRESET_ENHANCED;
@@ -3141,7 +3060,7 @@ static int render(void)
         CHECK(settle(mainL, 60), "the menu at 1080p");
         lt_ext_Layout(mainL)->curItem = ml[4];
         frame(0);
-        snap1080("settings_main");
+        snap1080("settings_main", 1);
 
         static const struct {
             int row, downs;
@@ -3159,19 +3078,19 @@ static int render(void)
             for (int k = 0; k < pg[i].downs; k++) {
                 press(0x4000);
             }
-            snap1080(pg[i].name);
+            snap1080(pg[i].name, 1);
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
         }
         int mir = ui_MirrorScreenEnter();
         lt_switch_layout(mir);
         CHECK(settle(mir, 60), "the mirror screen at 1080p");
-        snap1080("settings_mirror_screen");
+        snap1080("settings_mirror_screen", 1);
         int ql = ui_QuitScreenLayout();
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");
         press(0x8000);
-        snap1080("settings_quit_screen");
+        snap1080("settings_quit_screen", 1);
         /* the music gallery with a stream playing (the fake engine: 42 s
            of 4:25), its bar and transport; then the model viewer's rows
            and prompts */
@@ -3192,38 +3111,20 @@ static int render(void)
             int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
             CHECK(settle(galL, 60), "the gallery at 1080p");
             press(0x40);
-            snap1080("settings_music");
+            snap1080("settings_music", 1);
             press(0x10);
             CHECK(settle(exL, 60), "back to Extras at 1080p");
             gallery_SetEngine(NULL);
             int vl = viewerLayout();
             lt_switch_layout(vl);
             CHECK(settle(vl, 60), "the viewer's rows at 1080p");
-            snap1080("settings_viewer");
+            snap1080("settings_viewer", 1);
         }
         /* package TXT: the save screen's slot numbers and play time */
         fakeSaveRows();
         lt_switch_layout(14);
         CHECK(settle(14, 60), "the save screen at 1080p");
-        snap1080("settings_save_preview");
-        /* GFONT: a subtitle and the roll at 1080p, the game face and Arimo;
-           the main page in Arimo beside its game-face shot */
-        s_frameText = drawSubtitleAndRoll;
-        snapOnce1080("settings_subtitle_roll_1080.png");
-        if (ui_GameFaceLoaded()) {
-            ui_SetFace(UI_FACE_ARIMO);
-            snapOnce1080("settings_subtitle_roll_1080_arimo.png");
-            ui_SetFace(UI_FACE_GAME);
-        }
-        s_frameText = NULL;
-        if (ui_GameFaceLoaded()) {
-            lt_switch_layout(mainL);
-            CHECK(settle(mainL, 60), "the menu at 1080p, Arimo");
-            lt_ext_Layout(mainL)->curItem = ml[4];
-            ui_SetFace(UI_FACE_ARIMO);
-            snapOnce1080("settings_main_1080_arimo.png");
-            ui_SetFace(UI_FACE_GAME);
-        }
+        snap1080("settings_save_preview", 0);
         s_reduce = 0;
         ui_InstallDeferredText(0);
     }

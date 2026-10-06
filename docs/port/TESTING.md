@@ -311,14 +311,18 @@ needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
 `tables_loader` and `tables_manifest` are built only when a base ELF is
 present (docs/BUILDING.md); `gallery` exits 77 without one.
 `font_coverage` (CPU, no device) checks that every code point of the five
-languages' tables and subtitles, the port's roll lines and the font corpus,
-and with the base ELF the staff roll's lines and the sound names, is drawn by
-a face; with the base ELF and the disc image it first builds the game face
+languages' tables, the subtitle transcriptions (test data,
+`port/ui/test/subtitles.c`), the port's roll lines and the font corpus, and
+with the base ELF the staff roll's lines and the sound names, is drawn by a
+face; with the base ELF and the disc image it first builds the game face
 from the disc's menu sheets (as the first run does), reports per character
 which face serves it (and for the game face, the sheet it was cut from), and
 writes the face to `port/ui/gamefont.bin` of the build directory for the
 tests after it (fixture `gamefont`: `settings_render` and `menu_text` draw
-with it; without it they draw Arimo). `game_font` (CPU) runs the face's
+the port's text with it; without it they draw Arimo). `menu_text` checks
+that the game's rows draw their texture sprites and record no text item
+while the port's rows are deferred text (docs/port/UI.md, "Menu text").
+`game_font` (CPU) runs the face's
 builder on a synthetic sheet (the letters segmented and matched, a touching
 pair split, the advances and the space, the rim cell, the blob read back and
 refused when malformed). `font_audit` (Python, no build needed) checks the

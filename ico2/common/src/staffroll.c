@@ -7,18 +7,6 @@
 #include <assert.h>
 #include "ico_credits.h" /* PC port (package CRED): the roll's port credit */
 
-#ifdef ICO_RD
-
-/* PC port (package TXT): the port font's hook (port/ui/layout_ext.h) and
-   what font_Print calls around its glyphs */
-#include "layout_ext.h"
-#include "Texture.h"
-
-extern void gif_StartPacketPriPath1(int pri);
-extern void gif_EndPacketPath1(void);
-
-#endif
-
 /* staffroll.o's whole .data run: the roll's display area, centred on the
    origin, {x, y, width, height}.  Only the first word is read here, as the
    running scroll position. */
@@ -107,21 +95,8 @@ static int staffRollScroll(void)
             a = 128;
         }
         if ((float)(-(font_GetHeight() + 449)) < SROLL(i)->y) {
-#ifdef ICO_RD
-            /* PC port (package TXT; docs/port/UI.md "Staff roll"): the line
-               through the port font, keyed by its slot, unless classic menu
-               text is on; the font texture is transferred as font_Print
-               does */
-            if (lt_ext_PortText()) {
-                texturetranssize += tex_TransTexture(tex_GetTextureNo("font"), 12);
-                gif_StartPacketPriPath1(12);
-                lt_ext_DrawRollLine(i / 16, (const char *)*SROLL(i)->str, (float)rollWidth,
-                                    SROLL(i)->y, SROLL(i)->align, SROLL(i)->col.f, a | 0x70707000);
-                gif_EndPacketPath1();
-            } else
-#endif
-                font_Print(a | 0x70707000, *SROLL(i)->str, (float)rollWidth, SROLL(i)->y,
-                           SROLL(i)->align, SROLL(i)->col);
+            font_Print(a | 0x70707000, *SROLL(i)->str, (float)rollWidth, SROLL(i)->y,
+                       SROLL(i)->align, SROLL(i)->col);
         } else {
             SROLL(i)->str = 0;
         }

@@ -172,12 +172,6 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Desbloqueado",
     [UI_STR_MIRROR_SCREEN] =
         "Toda la partida se juega invertida de izquierda a derecha. Cada partida guardada conserva la elección.",
-    [UI_STR_OPT_MENU_TEXT] = "Texto de los menús",
-    [UI_STR_VAL_PORT_FONT] = "Fuente del port",
-    [UI_STR_VAL_CLASSIC] = "Clásico",
-    [UI_STR_OPT_FONT] = "Fuente",
-    [UI_STR_VAL_FONT_GAME] = "Juego",
-    [UI_STR_VAL_FONT_ARIMO] = "Arimo",
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidad CRT",
     [UI_STR_VAL_CRT_SCANLINES] = "Líneas de barrido",
@@ -190,7 +184,8 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Círculo para volver",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Círculo (B en el mando) también sale de los menús del juego, como Triángulo.",
-    /* the game's menu text (P3), as the PAL sheets have it */
+    /* the game's menu words (P3), as the PAL sheets have them: never drawn, the
+       game face is cut from the sheets by matching them (menu_text.h) */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
     [UI_STR_MT_LANG_DEUTSCH] = "DEUTSCH",

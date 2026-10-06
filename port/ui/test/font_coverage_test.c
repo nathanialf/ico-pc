@@ -1,15 +1,17 @@
-/* font_coverage_test.c: every character the game can draw has a glyph in
- * the embedded Arimo subset (docs/port/UI.md, "The font").
+/* font_coverage_test.c: every character of the five languages has a glyph
+ * in the port's faces (docs/port/UI.md, "The font").
  *
  * CPU only: font.c's cmap, no device.  Walks
- *   - ui_StringsForEach: every entry of every language's table and every
- *     subtitle of both sets;
+ *   - ui_StringsForEach: every entry of every language's table;
+ *   - the subtitle transcriptions of both sets (test/subtitles.h, test data:
+ *     the game draws its subtitles as pictures, their words stand for the
+ *     languages' characters);
  *   - the staff roll's port lines (ico_roll_port_line, the lines the roll
- *     draws after the disc's);
+ *     draws after the disc's, with its bitmap font: ASCII only);
  *   - font_corpus/<lang>.txt: the in-game text that is not a string (save
  *     screen values, the gallery's asset names, the roll's '@' and '\' signs);
- *   - with a base ELF: staffRollNameData (the lines as game_text.c draws
- *     them) and the seDef and adpcmFile names the gallery shows.
+ *   - with a base ELF: staffRollNameData (as text, its codes skipped) and
+ *     the seDef and adpcmFile names the gallery shows.
  * It fails on a code point with no glyph, U+FFFD or malformed UTF-8, a C0 or
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
@@ -33,6 +35,7 @@
 #include "achievements.h"
 #include "ico_credits.h"
 #include "strings.h"
+#include "subtitles.h"
 
 /* credits.c's reads of the achievements (the roll lines need none) */
 int ico_ach_find(const char *id)
@@ -111,9 +114,9 @@ static void visit(UiLang lang, const char *utf8, void *user)
     checkText((int)lang, utf8, "string");
 }
 
-/* the roll's text as game_text.c draws it: the {..} codes skipped, '@' the
-   copyright sign, '\' the yen sign, other bytes a space (here a failure: the
-   roll's lines are ASCII) */
+/* the roll's line as text: the {..} codes skipped, '@' the copyright sign,
+   '\' the yen sign (the bitmap font's cells), any byte outside ASCII a
+   failure (the bitmap font has no cell for it) */
 static void checkRollLine(const char *str, const char *what, int idx)
 {
     char text[512];
@@ -378,6 +381,19 @@ int main(int argc, char **argv)
     ui_StringsForEach(visit, NULL);
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         CHECK(s_visits[l] > 100, "%s: only %d strings visited", kLangs[l], s_visits[l]);
+    }
+    /* the subtitle transcriptions, both sets of each language */
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        int subs = 0;
+        for (int set = 0; set < 2; set++) {
+            int n = 0;
+            const UiSubtitle *t = ui_SubtitleTable((UiLang)l, set, &n);
+            for (int i = 0; t && i < n; i++) {
+                checkText(l, t[i].text, "subtitle");
+            }
+            subs += n;
+        }
+        CHECK(subs > 60, "%s: only %d subtitles", kLangs[l], subs);
     }
 
     /* every table entry of every language is present (ui_StringsForEach skips

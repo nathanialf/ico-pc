@@ -3,10 +3,13 @@
 The port draws its own text, in the game's own lettering (cut from the
 player's disc on the first run) with Arimo, a typeface embedded in the
 program, for the characters the game never shows, drawn through the
-renderer (`rd`) inside the game's own layout system. That text serves the Settings menu (the player's
-view is docs/port/SETTINGS.md), the achievement popups, and, by default,
-the words of the game's own menus, its subtitles, the staff roll and the
-save screens' figures.
+renderer (`rd`) inside the game's own layout system. That text serves the
+text the port adds and only that: the Settings and Extras pages (the
+player's view is docs/port/SETTINGS.md), the popups, the button hints, the
+photo HUD, the model viewer's rows, the achievements. The game's own words
+(its menu sprites, its subtitles, the staff roll, the save screens'
+figures, the signs) always keep their texels: they are drawn as the game
+draws them, and no option changes that ("Menu text" below).
 
 | file | what |
 | --- | --- |
@@ -19,9 +22,8 @@ save screens' figures.
 | `port/ui/settings.c`, `settings.h` | the Settings menu: its port layouts, the entry rows and repoints, the screens' procs, the title layout, the quit and mirror-mode screens |
 | `port/ui/ui_hint.c`, `ui_hint.h` | lines of button prompts: the game's button glyphs beside port words ("Button glyphs" below) |
 | `port/ui/ui_list.c`, `ui_list.h` | the scrolling list pages ("Lists" below): the slots, the refresh from the page's items, headings the cursor skips, the scrolling; the achievements and remap pages use it |
-| `port/ui/menu_text.c`, `menu_text.h` | the game's menu text drawn with the port font ("Menu text" below) |
-| `port/ui/subtitles.c`, `subtitles.h` | the subtitles' words per language and set, transcribed, and the faces' metrics ("Subtitles" below) |
-| `port/ui/game_text.c` | the subtitle and staff roll hooks (`lt_ext_SubtitleFind`, `lt_ext_DrawSubtitle`, `lt_ext_DrawRollLine`, `lt_ext_PortText`) |
+| `port/ui/menu_text.c`, `menu_text.h` | the table of the game's menu words: rectangles, transcribed strings, metrics; the game face's source, never drawn ("Menu text" below) |
+| `port/ui/test/subtitles.c`, `subtitles.h` | the subtitles' words per language and set, transcribed: test data for the font coverage corpus ("Subtitles" below) |
 | `port/ui/embed_font.cmake` | turns the font file into a C array at build time |
 | `port/ui/test/ui_test.c`, `settings_test.c`, `menu_text_test.c`, `font_edge_test.c`, `font_coverage_test.c`, `game_font_test.c` | the tests (below) |
 | `tools/tm2_sheets.py` | decodes the disc's text sheets and subtitle pictures to PNGs for transcription (tools/README.md) |
@@ -32,17 +34,19 @@ save screens' figures.
 
 The port's text has two faces (`port/ui/font.h`, `UiFace`):
 
-- **the game face** (the default): the game's own lettering. The PAL menu
-  screens draw their words from pre-rendered sheets ("Menu text" below);
-  the port cuts the letters out of those words on the player's machine, from
-  the player's disc, and composes every text it draws from them: its
-  Settings and Extras pages, the popups, the hints, and (unless
-  `classic_menu_text` is on) the game's menu rows, subtitles, staff roll and
-  save figures. Nothing of the disc is in the repository.
+- **the game face**: the game's own lettering. The PAL menu screens draw
+  their words from pre-rendered sheets ("Menu text" below); the port cuts
+  the letters out of those words on the player's machine, from the player's
+  disc, and composes the text it adds from them: its Settings and Extras
+  pages, the popups, the hints, the photo HUD, the viewer rows, the
+  achievements, the values' suffixes ("(title only)") and the pad names.
+  The game's own words are never redrawn with it: where the game has texels
+  for a word, the word is its texels. Nothing of the disc is in the
+  repository.
 - **Arimo** (SIL OFL 1.1, embedded): the fallback, per character, for the
   characters the sheets never show (X, ß, ñ, %, the quotes, …), and the whole
-  text when `[game] port_font = "arimo"` (Settings > Display, "Font: Game /
-  Arimo"; docs/port/CONFIG.md) or when the game face could not be made.
+  text when the game face could not be made (no disc). There is no option
+  choosing the face (package TXT2 removed `[game] port_font`).
 
 `ui_DrawText`, `ui_DrawTextXf`, `ui_DrawTextDeferred`, the overlay mode and
 `ui_MeasureText` pick the face per character: the game face's glyph when it
@@ -188,8 +192,8 @@ title sheet's own "New Game" sprite, both dimmed over a light grey: the
 ink peaks at 204 levels in both, the darkest rim texel is 64 in the sprite
 and 58 from the atlas, the mean 157.6 and 159.1. What differs is where the
 letters sit (the sprite's own spacing, the atlas's fitted one) and the
-plateau far from the letters (fitted). Seen enlarged (a subtitle at 1.2
-times the menu size, 1080p), the cells of letters cut from different rows
+plateau far from the letters (fitted). Seen enlarged (a line at 1.2 times
+the menu size, 1080p), the cells of letters cut from different rows
 can show their rows' slightly different rim darkness as soft blocks behind
 a word.
 
@@ -208,7 +212,8 @@ port/gamefont-1.bin from <archive>` on later starts.
 rows' 13.5-texel em, `UI_MENU_TEXT_SIZE`) a texel of the sheet is an x unit
 wide and two y units high, exactly as the PS2's sprite drew it, and the
 baseline and each line's start are put on the sheets' texel grid, so the
-Original preset draws a menu row texel for texel (`menu_text_scene.png`).
+Original preset draws a 27-unit port row texel for texel
+(`menu_text_scene.png`).
 Any other size is the same bitmap scaled by size / 27 (a glyph from another
 class by its own factor too), and the Enhanced output scales it bilinearly:
 on a 1080-line output the 27-unit rows are about 4.8 times their texels
@@ -232,8 +237,8 @@ letters' fitted glow, then their alpha, in black at the text's alpha
 (0x44); their light added in the text's colour (0x48; under
 `UI_KEEP_STATE` the blend is set for that pass and put back); then Arimo's
 letters. `UI_ADDITIVE` (the glow pass of a selected row: an additive
-sprite of the sheet, `col L A`) draws the light added. Without either (the
-white panel's black prompts, the roll, the save figures) the ink cells.
+sprite of the sheet, `col L A`) draws the light added. Without either (a
+plain line) the ink cells.
 Each pass is one `rd_ScreenPrims` per texture, keyed by the pass, so it
 interpolates as Arimo's pages do.
 
@@ -305,16 +310,19 @@ holds all of them), and two tests keep it so.
 asks which face draws each code point (`ui_FontFaceOf`; a failure only when
 neither does) of:
 
-- `ui_StringsForEach`: every entry of the five languages' tables and both
-  subtitle sets (the model names and the kanban sign rows are table
-  strings), and each table entry again by id, so an empty one fails;
+- `ui_StringsForEach`: every entry of the five languages' tables (the
+  model names and the transcribed menu words are table strings), and each
+  table entry again by id, so an empty one fails;
+- the subtitle transcriptions of both sets (`port/ui/test/subtitles.c`,
+  test data: the game draws its subtitles as pictures, their words stand
+  for the characters the five languages need);
 - the port's staff roll lines (`ico_roll_port_line`);
 - the corpus, `port/ui/test/font_corpus/<lang>.txt`;
 - with the base ELF (`ICO_BASE_ELF`, as `tables_loader`; without it the walk
-  is left out): `staffRollNameData` as `game_text.c` draws it (the `{...}`
-  codes skipped, `@` the copyright sign, `\` the yen sign, any other byte
-  outside ASCII a failure), the `adpcmFile` paths and the `seDef` names the
-  Music gallery shows.
+  is left out): `staffRollNameData` as text (the `{...}` codes skipped, `@`
+  the copyright sign, `\` the yen sign as the bitmap font's cells show them,
+  any other byte outside ASCII a failure), the `adpcmFile` paths and the
+  `seDef` names the Music gallery shows.
 
 It fails on a code point without a glyph, U+FFFD or malformed UTF-8, a C0 or
 C1 control other than `\n`, an empty table entry and a language without a
@@ -344,7 +352,7 @@ screen's digits and `: / . -`, the gallery's asset-name characters
 all five files when new text that is not a string appears.
 
 `font_audit` (`tools/font_audit.py`, stdlib, a ctest) needs no build: it
-reads the string literals of `strings_*.c`, `subtitles.c` and
+reads the string literals of `strings_*.c`, `test/subtitles.c` and
 `model_viewer_table.c` and the corpus, and compares each code point with the
 ranges on the `# subset:` line of `port/ui/embed_font.cmake` (UI.md's recipe
 above must list the same ranges; it fails if they differ). It names the
@@ -631,8 +639,8 @@ copyright line, the port rows' capitals end up 3 to 12 output pixels apart
 at 960 x 720 and touch. The copyright line cannot simply move down either:
 its sprite (rim and descenders included) leaves the picture more than 5
 field lines below 195. So the port lays the whole title out on one pitch
-(`placeTitle`, called at each install so the game's textures and the
-classic menu text get the same places). In the loaded table (the disc is
+(`placeTitle`, called at each install so the game's textures and the port
+rows share the pitch). In the loaded table (the disc is
 not changed) Continue moves to 119, New Game (50 and 51) to 139, Settings
 sits at 159, Quit at 179 and the copyright line at 198: one 20-field-line
 pitch (the Options screen's), with the copyright 19 lines below Quit
@@ -829,8 +837,7 @@ it: at em `size` it is the game's sprite times size / 27.
 second glyph for a pair such as L1 R1, none for a word alone such as "Left
 stick: turn", and a string id): each glyph a glyph row, each word a port row
 (so the words are the Settings rows' text: the light letters with the rim,
-deferred at the output's resolution in Enhanced, quads under classic menu
-text), 5 pixels from glyph to word and 24 between items at the words' size,
+deferred at the output's resolution in Enhanced), 5 pixels from glyph to word and 24 between items at the words' size,
 the line centred across the screen and its glyphs' middles on the words'
 capitals. `ui_HintLayout` measures the words in the current language each
 time it runs, and a line wider than 600 pixels is set smaller to fit, glyphs
@@ -845,24 +852,33 @@ and the existing Back, Loop, Animation and Models, in the five languages.
 ## Menu text
 
 The game's own menus draw every word as a sprite cut from a pre-rendered
-sheet. By default the port draws those words as text instead, in the port
-font (the game face composed from those same sheets' letters, "The font"),
-at the place, size, colour and fade the sprite had, so the game's menus and the
-Settings menu read alike and change language at once; the logo, the
-copyright line, the backgrounds, the button glyphs and the other artwork
-stay the original textures. `[game] classic_menu_text = true` (Settings >
-Display, "Menu text: Port font / Classic"; docs/port/CONFIG.md) restores
-the textures at run time.
+sheet, and the port draws those sprites as the game does, always: the title,
+vibration, pause, Options, key config and adjust screens, Yes / No, OK,
+Back, the save and load screens with their figures, the card prompts, game
+over and "Continue ?", and the boot screens' signs (`kanban.c`) keep their
+texels. Only the text the port adds is drawn as text, in the game face
+("The font"). One behaviour, no option: this is the user's decision after
+playing (package TXT2): where the game has texels for a word the word is
+its texels, and the extracted lettering serves the port's new text only.
+
+From package P3 to package GFONT the port could draw the game's rows, its
+subtitles, the staff roll and the save figures as text instead
+(`[game] classic_menu_text`, Settings > Display "Menu text", and
+`[game] port_font`, "Font"). Package TXT2 removed both rows, both keys and
+the code behind them (`ui_MenuTextDraw`, `port/ui/game_text.c`, the hooks in
+`jimaku.c`, `staffroll.c` and `kanban.c`). A `config.toml` that still holds
+either key loads as before; the key is kept in the file and logged once a
+load as ignored (`config: game.classic_menu_text is no longer used;
+ignored`, docs/port/CONFIG.md).
 
 | file | what |
 | --- | --- |
-| `port/ui/menu_text.c`, `menu_text.h` | the table (texel rectangle, string, metrics per text rectangle; texProperty row to rectangle), `ui_MenuTextItemOf`, `ui_MenuTextDraw`, the classic switch |
-| `port/ui/layout_ext.c` | `lt_ext_IsTextRow` (a port row or a table row), `lt_ext_DrawTextRow` (dispatch to `lt_ext_DrawRow` or `ui_MenuTextDraw`) |
-| `ico2/common/src/layout_texture.c` | `display_texture` and `lt_glow_sprite`: a text row's sprite is replaced by `lt_ext_DrawTextRow`; `tex_TransTexture` still runs for every game row |
-| `ico2/common/src/kanban.c` | `display_texture`: the same for the boot screens' signs (the card prompts, Yes / No, the language and 50 / 60 Hz screens); an ASCII-only patch of the EUC-JP file |
-| `port/game/options.c`, `.h` | `ico_opt_classic_menu_text` (`[game] classic_menu_text`, default false) |
+| `port/ui/menu_text.c`, `menu_text.h` | the table (texel rectangle, string, metrics per text rectangle; texProperty row to rectangle): the game face's source (`game_font_disc.c` cuts the letters from these rectangles by matching them to the strings), never drawn |
+| `port/ui/layout_ext.c` | `lt_ext_IsTextRow`: a port row (a game row never is), `lt_ext_DrawRow` its label |
+| `ico2/common/src/layout_texture.c` | `display_texture` and `lt_glow_sprite`: a port row's label where its sprite would be; every game row its texture, as on the PS2 |
+| `ico2/common/src/kanban.c` | `display_texture`: the boot screens' signs, their sprites keyed by their row for the interpolation (an ASCII-only patch of the EUC-JP file) |
 
-**Where the text comes from.** The sheets are
+**Where the words come from.** The sheets are
 `text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_01..04.tm2` and `scei.tm2` (one
 set per language, packed in `STGTTL.DF` and `STGLOG.DF`),
 `text/title.tm2` (one for all languages, in `COMMON.DF`) and
@@ -883,7 +899,7 @@ repository: the table holds rectangles, sizes and positions measured on
 the sheets, and the transcribed words.
 
 **The table (`menu_text.c`).** 125 text rectangles, drawn by 215
-`texProperty` rows (several rows draw one rectangle: Yes / No on six
+`texProperty` rows as their sprites (several rows draw one rectangle: Yes / No on six
 prompts, Back on the save screens, a figure at each place of the play
 time). Per rectangle: the string, the alignment, the ink (`UiMenuTextInk`:
 light letters with the dark rim; black letters without a rim, on the white
@@ -915,7 +931,7 @@ CARD slot 1 / 2".
 | adjust screen (60) | 6: Brightness, the hint, Dark, Light, OK, Default |
 | end confirm (61) and game over (62) | 6: "The game will end. Is this okay?", Yes, No, "Continue ?", Yes, No |
 
-Left as textures, with the reason (the full list is the comment at the top
+Not in the table, with the reason (the full list is the comment at the top
 of `menu_text.c`): the ICO logo (31, 37); the LANGUAGE and TV headers (25,
 32: lettering inside the swash artwork); the 50 / 60 Hz notes (35, 36:
 text inside speech-bubble artwork); "Sony Computer Entertainment Europe
@@ -925,50 +941,26 @@ key config screen (outlined button labels, like the button glyphs); `buttons.tm2
 backdrops, the brightness markers and ruler, 1 x 1 placeholders, the
 preview location rows whose rectangle is blank on every sheet, a stray
 bubble corner (433) and the subtitle rows (434, 435, drawn by `jimaku.c`,
-"Subtitles" below). Package TXT moved the slot numbers, the preview's
+"Subtitles" below). Package TXT added the slot numbers, the preview's
 figures and colons (52..71, 74..135) and the Options value tiles (303..307,
-321, 322, 328, 329) into the table ("Save screens" below); the preview's
-cleared mark (136, a symbol) and the Options arrows stay textures.
+321, 322, 328, 329) to the table ("Save screens" below); the preview's
+cleared mark (136, a symbol) and the Options arrows are not in it. In or
+out of the table, every one of these rows draws its texture.
 
 **The hook.** `display_texture` (`layout_texture.c`) sets `ltHostTextRow`
-for `lt_ext_IsTextRow(e)`: a port row, or a game row for which
-`ui_MenuTextItemOf(e)` finds an item (not in classic mode; the row's index
-is in the table; its texel rectangle is the one the table was measured on,
-so tables that are not the PAL ones keep their textures). For a game row
-`tex_TransTexture` runs as before, so the VRAM and packet bookkeeping is
-the texture path's; only `gif_SpriteSensitiveOffset` is replaced by
-`lt_ext_DrawTextRow(e, box, ofs, colour, 0)`, and `lt_glow_sprite` passes
-its stretched box the same way. Everything around it is the game's (the
-packet state, the colour and fade, the cursor sparkle, the glow).
-`kanban.c`'s `display_texture` does the same with its own box and inset.
-`ui_MenuTextDraw` maps the item's texel coordinates through the sprite's
-box and texel rectangle (so either caller's half-texel inset is
-honoured): each line goes at the item's anchor and capital middle,
-`UI_VALIGN_MIDDLE`, aligned left, centred or right, at the em times the
-vertical scale rounded to whole y units (one atlas per size). A line
-longer than the room its anchor leaves in the rectangle is set smaller to
-fit, down to 60 %, as the Settings rows are (Arimo is about 1.3 times wider
-than the sheets' lettering at the same capital height; the game face is the
-sheets' own width, so its words fit where the sprites did). Light rows
-draw with `UI_HALO` in the sprite's colour (the game face: the glyphs' own
-rim); dark rows draw black (the colour's RGB zeroed, its alpha kept) without
-a rim and skip the additive glow. The draws are keyed by the row and the pass for the presenter's
-interpolation, as the port rows are. The language is `ui_GetLanguage()`,
-which follows `NonLinearCameraMove`, so a language change in Settings
-shows in the game's menus at once (the textures follow only at their next
-load).
-
-**Classic.** `ui_SettingsInstall` hands `ico_opt_classic_menu_text` to
-`ui_MenuTextSetClassic` before the first layout draws; the Display row
-steps it, sets the key and the switch, and is saved when the screen is
-left.
+for `lt_ext_IsTextRow(e)`, true for a port row only (a port glyph row with
+no texture draws nothing). For it, `gif_SpriteSensitiveOffset` is replaced
+by `lt_ext_DrawRow(e, box, colour, 0)`, and `lt_glow_sprite` passes its
+stretched box the same way; everything around it is the game's (the packet
+state, the colour and fade, the cursor sparkle, the glow). A game row runs
+the texture path unchanged: `tex_TransTexture`, then its sprite.
 
 **At the output's resolution (package DEF).** Drawn into list 11 as glyph
 quads, a row lands in SCENE at the scene's resolution, is halved by the
 reduction and scaled into the presentation box, so in the Enhanced preset
 the text was soft (three pixels between background and ink on an edge at
-1080p, `font_edge`). Now each text line the hook draws, game row or port
-row, goes through `ui_DrawTextDeferred` (`font.h`): it records, in place in
+1080p, `font_edge`). Now each line a port row draws goes through
+`ui_DrawTextDeferred` (`font.h`): it records, in place in
 the list, an item (`rd_DeferredText`, an `RDC_OVERLAY_TEXT` command: the
 string, the grid anchor, the size, the flags with the halo and, for the
 glow pass, `UI_ADDITIVE`, the glow's stretch, and the colour after the
@@ -996,16 +988,15 @@ decided when it replays (RENDER_API.md "The deferred text pass"):
   "glow"); the white panel's dark prompts are plain items. The mirror mode does not move it: the quads are pre-flipped and the
   present flips them back, the item is drawn unflipped where the quads end
   up.
-- Original, classic menu text, no renderer, or a replay without a present:
+- Original, the CRT filter, no renderer, or a replay without a present:
   the items are ignored and the quads draw exactly as before (the Original
   present of a frame with an item is byte-identical to the frame without
-  one, `font_edge`; the corpus's Original and mirror renders are unchanged).
+  one, `font_edge`).
 
-`[game] classic_menu_text` therefore also keeps the Settings rows (port
-rows, which have no texture) on the quad path: classic is the PS2's look
-throughout. The interpolation blends an item's anchor, stretch and colour
-between ticks by its key, as the quads' (RENDER_API.md "Frame rate and
-interpolation").
+The game's rows record no item: they are sprites, scaled with the scene as
+every texture is. The interpolation blends an item's anchor, stretch and
+colour between ticks by its key, as the quads' (RENDER_API.md "Frame rate
+and interpolation").
 
 What the deferred order cannot reproduce, and why it is accepted:
 
@@ -1017,23 +1008,17 @@ What the deferred order cannot reproduce, and why it is accepted:
   the tinted text: a little darker. Fully covered pixels match.
 - **Draws after the text in lists 11 and 12.** An item is drawn after the
   whole picture, so a draw recorded after it that overlaps it (the film
-  noise of a cleared game, the cursor sparkle of `kanban.c`'s boot signs,
-  the loading bar and the developer overlay in list 12) is now under the
-  text instead of over it. The fade, letterbox, brightness and keep passes
-  are applied to the item (above); the others are small (the sparkle's
-  points), faint (the grain at its alpha) or seldom share the screen with a
-  menu row (the loading bar, the developer overlay), and the text staying
-  readable above them is no loss.
+  noise of a cleared game, the loading bar and the developer overlay in
+  list 12) is now under the port's text instead of over it. The fade,
+  letterbox, brightness and keep passes are applied to the item (above);
+  the others are faint (the grain at its alpha) or seldom share the screen
+  with a port row (the loading bar, the developer overlay), and the text
+  staying readable above them is no loss.
 - **Reads of DISPLAY.** DISPLAY no longer holds the text: the motion blur,
-  which feeds DISPLAY back into SCENE, leaves no trail of a menu row over
-  gameplay, and a keep frame's retained picture (the stage load, the card
-  checks) no longer shows the last full frame's rows, darkened, under the
-  live ones (the overlay fixed the same for the popups). An F12 screenshot
-  of DISPLAY (`rd_DumpOnDemand`) has no menu text in Enhanced.
-
-Settings > Display > "Menu text: Classic" brings back the quads, and with
-them the PS2's order, for anyone who wants it. The subtitles and the staff
-roll go through `ui_DrawTextDeferred` the same way (below).
+  which feeds DISPLAY back into SCENE, leaves no trail of a port row over
+  gameplay (the overlay fixed the same for the popups). An F12 screenshot
+  of DISPLAY (`rd_DumpOnDemand`) has no port text in Enhanced; the game's
+  own words, sprites, are in it.
 
 ## Subtitles
 
@@ -1047,7 +1032,14 @@ two 256 x 48 rectangles: `texProperty` row 434 draws texels (0, 0)-(256, 48)
 from x 64 and row 435 texels (0, 48)-(256, 96) from x 320, both from `dispY`
 144, a field line a texel. Together they show one 512 x 48 strip across x
 64..576. The scripts pick the block (`jimakuJump`), and `jimakuDisp` draws
-the group whose picture is current.
+the group whose picture is current. The port draws that picture as the game
+does, always (package TXT2): the subtitles keep their texels, two sprites
+keyed by the ring group for the interpolation (`JIM_HOST_KEY`). The words
+below are transcriptions kept as test data (`port/ui/test/subtitles.c`): the
+font coverage test walks them as the characters the five languages need,
+and `menu_text_test` checks the tables. Package TXT drew them as text
+in place of the picture; package TXT2 removed that path (`lt_ext_SubtitleFind`,
+`lt_ext_DrawSubtitle`).
 
 **Where the words come from.** `tools/tm2_sheets.py` decodes every block of
 the ten files from the user's disc to PNGs under `build/sheets/jim/`
@@ -1076,7 +1068,7 @@ shows. Every transcription's line count was checked against the ink of the
 strip's upper slot (all agree), and a second pass re-read each one, block by
 block, against its picture with the transcription typeset beneath it and
 its spaces marked; it found nothing to correct. Yorda's script and the
-Japanese placeholders have no transcription: those blocks keep the picture.
+Japanese placeholders have no transcription.
 
 | set | file | texts |
 | --- | --- | --- |
@@ -1086,7 +1078,7 @@ Japanese placeholders have no transcription: those blocks keep the picture.
 | Italian | `data_IT01.jim` / `data_IT02.jim` | 35 / 43 |
 | Spanish | `data_SP01.jim` / `data_SP02.jim` | 35 / 43 |
 
-389 entries (`port/ui/subtitles.c`, `UiSubtitle {block, x[2], text}`, one
+389 entries (`port/ui/test/subtitles.c`, `UiSubtitle {block, x[2], text}`, one
 table per language and set, sorted by block). Nothing of the disc is in the
 repository: the words, and numbers measured on the pictures.
 
@@ -1107,44 +1099,10 @@ and the two slots' capital middles give `UiSubtitleFace`:
 | French, Italian, Spanish | 12.21 | 16.7 | 13.9 | 33.9 |
 
 (the em is the capital height less 0.7 texel of antialiasing over Arimo's
-0.688, as for the menu rows).
+0.688, as for the menu rows). These placed TXT's text on the strip; they
+stay in the data, unused by the port.
 
-**The hook** (`jimaku.c`, an ASCII-only patch, `ICO_RD` only). `jimakuDisp`
-asks `lt_ext_SubtitleFind(set, g->block)` for the current group's block,
-where the set is the file `jimakuMgrBegin` opened (`st & 1`) and the
-language is the port's current one (`ui_GetLanguage`, which follows the
-Language setting at once; the block numbers are the same in the five
-files). With an entry and classic menu text off, `display_texture` runs as
-before for rows 434 and 435 (the texture is transferred, the packet state
-set) but draws no sprite: for row 434 it calls `lt_ext_DrawSubtitle` with
-the sprite's rectangle and texels, which maps the strip through them (grid
-x = 63.5 + strip x, y = 289 + 2 strip y for the PAL rows) and draws each
-line with `ui_DrawTextDeferred`: centred on its x, the capitals' middle on
-its slot, at the face's em times the vertical scale (32 y units in English)
-rounded to whole units, set smaller to fit when a line is wider than the
-strip plus 32 texels either side (down to 60 %, one size for both lines),
-in the sprite's colour (`~reductionCol`, alpha 0x80) with `UI_HALO` for the
-sheets' dark rim. Line n is keyed under the owner `RD_KEY(group, n, 0)`, so a
-subtitle blends between ticks; in Enhanced it is laid out at the output's
-resolution after the box blit. Without an entry, in classic mode and in the
-headless build the two sprites are drawn as before.
 
-**Checked on runs** (package TXT, PAL disc, the window build offscreen on
-lavapipe). The proof corpus's plain run (start stage 11, docs/port/TESTING.md
-"The dump corpus") shows block 25 at frame 300 ("Regardez, la porte est
-ouverte !" / "Maintenant, on peut sortir d'ici !", the system language
-giving French); the opening from start stage 41 shows block 0 ("Prenez
-l'épée.") from tick 2260 to 2350. Recorded with this build, every Original
-and mirror render of the corpus's boot and plain dumps is byte-identical to
-the corpus (main's replay tool and this one render the same dumps
-identically) except plain frame 300, where the text replaces the picture;
-recorded with `classic_menu_text = true`, that frame is byte-identical to
-the corpus too. The headless traces of both runs and of the opening are
-byte-identical to the stored ones (and to the window build's). At Enhanced
-1920 x 1080 the subtitle is drawn on the output: the capitals are the
-picture's height, Arimo's letters about 1.9 times as wide as the sheets'
-lettering, which the picture stretches to twice its height (a texel is a
-field line).
 
 ## Staff roll
 
@@ -1152,28 +1110,11 @@ field line).
 964-entry table of strings: names, "< Planners >"-style headings, `{L}` / `{R}` / `{C}`
 alignment codes and one `{#rrggbbaa}` colour code, read by
 `font_CheckAlign`) and prints each with `DisplayFont.c`'s `font_Print`, a
-20 x 20 bitmap font (`Font/font.tm2`, in COMMON.DF). The hook (an ASCII-only
-patch of the EUC-JP file, `ICO_RD` only): with `lt_ext_PortText()` (classic
-menu text off) `staffRollScroll` transfers the font texture and opens the
-list-12 packet as `font_Print` does, then calls
-`lt_ext_DrawRollLine(i, str, x, y, align, col, color)` for line slot i with
-`font_Print`'s arguments; in classic mode it calls `font_Print`.
-
-`lt_ext_DrawRollLine` (`game_text.c`) skips the `{...}` codes, maps the
-cells that do not show their ASCII code (`@` is the copyright sign in the
-bitmap font, `\` the yen sign; a byte without a cell is a space), and lays
-the line out where `font_Print` puts it: GS x = 2048 - ScreenWidth / 2 +
-cx and y = 2048 - ScreenHeight / 4 + y into the grid (font.h), centred on
-x + 320, or 4 GS pixels in from the left or right edge; the capitals'
-middle 12.3 GS lines below y (the font's "H" fills cell rows 2.5 to 17.2 at
-half coverage, the cell `font_GetWidth() * 640 / ScreenWidth` GS lines tall),
-and the em from that capital height (22 y units at ScreenWidth and
-ScreenHeight 512). The colour is `font_Print`'s: the packed colour's
-channels scaled by `font_CheckAlign`'s colour, alpha (a × A) >> 7. No rim:
-the bitmap font has none. A blank line draws nothing. Each line is keyed
-under the owner `RD_KEY(&slot[i], 0, 0)`, so two lines with the same name
-(the roll repeats names under several headings) move and fade
-independently.
+20 x 20 bitmap font (`Font/font.tm2`, in COMMON.DF), always: the roll keeps
+its own font (package TXT2). `font_Print` keys a line's glyphs by its
+string (R7d), so a line that moves or fades blends between ticks. Package
+TXT drew the lines with the port font, keyed by line slot
+(`lt_ext_DrawRollLine`); package TXT2 removed it with its slot keys.
 
 **The port credit (package CRED).** Every roll ends with a section the
 port adds after the disc's lines, so nothing from the disc changes:
@@ -1192,9 +1133,9 @@ heading's gap to its name) and `{R}Nathanial Fine ` (a name is `{R}Fumito
 Ueda `). The colour code `{#FFFFFF80}` comes once, on the first line, and
 holds; `{R}` sets the right alignment again after the closing lines'
 `{C}`. The lines are static arrays, so the `char **` the roll keeps in
-`rollLines[i].str` stays valid; they are ASCII, so the classic path's
-`font_Print` draws them too, and the port font draws them through
-`lt_ext_DrawRollLine` as any other line. They add about 4 s to the roll.
+`rollLines[i].str` stays valid; they are ASCII, so `font_Print`'s bitmap
+font draws them as any other line (`credits_test` checks both are printed).
+They add about 4 s to the roll.
 `staffRollStart` logs `staff roll: start, 962 lines from the disc and 18 of
 the port's (...)` and posting the heading logs `staff roll: the port credit
 is posted (...)`.
@@ -1206,11 +1147,12 @@ to 10 (`texProperty` 52..61 grey for an empty file, 62..71 black for a used
 one; `layout_action.c` masks one or the other), the preview's play time
 (rows 74 and 75 the colons; 76..135 the six places, one row per figure
 `_la_set_preview_info` unmasks) and the Options values (the film effect's
-0..4, the hold type's A / B, 1 / 2 players). The tiles are the same glyphs
-on the five sheets. They are menu text table entries (`menu_text.c`, the
-strings `UI_STR_MT_DIGIT_0..10`, `UI_STR_MT_COLON`, `UI_STR_MT_VAL_A`,
-`UI_STR_MT_VAL_B`), drawn by the same hook as the menu rows, in an ink per
-kind:
+0..4, the hold type's A / B, 1 / 2 players). The port draws them as the
+game does, always: each figure is its tile's sprite (package TXT2). The
+tiles are the same glyphs on the five sheets and are entries of the menu
+text table (`menu_text.c`, the strings `UI_STR_MT_DIGIT_0..10`,
+`UI_STR_MT_COLON`, `UI_STR_MT_VAL_A`, `UI_STR_MT_VAL_B`), so the game face
+cuts its figures from them; their measured inks:
 
 | tiles | ink | em (texels) | capital middle | anchor |
 | --- | --- | --- | --- | --- |
@@ -1220,9 +1162,8 @@ kind:
 | Options values (303..307, 321, 322, 328, 329) | light with the rim (`UI_INK_LIGHT`) | 18.0 | 10.0 | centre 20.0 to 20.5 |
 
 (measured at half coverage on the 20 x 15 and 40 x 20 tiles; the single
-figures share the column's centre, since Arimo's figures are tabular and
-the sheets' "1" sits off its cell's middle). The preview's cleared mark
-(136) is a symbol and stays a texture.
+figures share the column's centre). The preview's cleared mark (136) is a
+symbol and not in the table.
 
 ## Strings
 
@@ -1259,11 +1200,11 @@ animation and frame on the presentation overlay with a panel of its own, in
 other colours and without the rim; that path (`model_overlay.c`) is gone.
 
 `ui_StringsForEach(fn, user)` calls `fn(lang, utf8, user)` for every
-non-empty entry of every language's table and then for every subtitle of
-both sets of every language (`subtitles.c`), for the font coverage test. A
+non-empty entry of every language's table, for the font coverage test. A
 missing translation is not visited (`ui_StrIn` gives the English one, which
-is visited under English); the staff roll's lines are the game's data, not
-a port table.
+is visited under English); the subtitles (`port/ui/test/subtitles.c`, walked
+by the test itself) and the staff roll's lines are the game's pictures and
+data, not port tables.
 
 ## Popups
 
@@ -1371,20 +1312,15 @@ one.
   Enhanced 4x full height; no undecoded register write; package DEF: every
   screen (Settings, Display, Audio, Controls, Gameplay, Achievements,
   Extras, the mirror and quit screens) presented at Enhanced 1920 x 1080,
-  16:9, with the menu text deferred (`settings_<screen>_1080.png`, items
-  recorded) and classic (`settings_<screen>_1080_classic.png`, no item: the
-  toggle switches the path); package TXT: the save screen's slot numbers
-  (used black, empty grey) and play time over fake rows at the PAL places,
-  the same two ways (`settings_save_preview_1080.png`,
-  `settings_save_preview_1080_classic.png`); the music gallery with a
+  16:9 (`settings_<screen>_1080.png`): the port's rows deferred (items
+  recorded), the game's rows their sprites; the music gallery with a
   stream playing (its bar and transport, `settings_music_1080.png`) and the
   model viewer's rows and prompts as model_viewer.c lays them out
-  (`settings_viewer_1080.png`), the same two ways. Package GFONT: with
-  `gamefont.bin` (font_coverage's, from the disc) every screen is drawn in
-  the game face; then a subtitle (English block 1) and staff roll lines
-  through their hooks (`settings_subtitle_roll_1080.png`), and that frame
-  and the Settings page with `port_font = "arimo"` beside them
-  (`settings_subtitle_roll_1080_arimo.png`, `settings_main_1080_arimo.png`). The button glyphs there
+  (`settings_viewer_1080.png`); package TXT2: the save screen's slot numbers
+  and play time over fake rows at the PAL places, game rows alone, record
+  no item (`settings_save_preview_1080.png`). Package GFONT: with
+  `gamefont.bin` (font_coverage's, from the disc) the port's text is drawn
+  in the game face. The button glyphs there
   are drawn stand-ins of the real sheets (no disc data in the test), bound
   through a TEX0 resolver at the glyphs' rectangles.
 - `font_edge_test` (ctest `font_edge`, package DEF, exit 77 without a
@@ -1415,8 +1351,9 @@ one.
   the same way, every texel within two of the ink within 2 levels (0); through font.c, "HILT" measuring the drawn word, a junction
   the drawn two texels and the space the drawn gap less the bearings; H
   and the space from the game face, x from Arimo (logged once), U+4E2D
-  from neither; `[game] port_font = "arimo"` serving H from Arimo; a blob
-  of another version or cut short refused.
+  from neither; with the face unloaded (no disc) H from Arimo, and from
+  the game face again once reloaded; a blob of another version or cut short
+  refused.
 - `font_coverage_test` (ctest `font_coverage`, CPU): "Coverage" above; with
   the disc it builds the game face and writes it for the tests after it
   (fixture `gamefont`).
@@ -1424,37 +1361,29 @@ one.
   after the CPU checks): the table's integrity in every language; with the
   disc image (`ICO_DISC_IMAGE`), every row's rectangle against the boot
   ELF's `texProperty`; every string drawable; through the real
-  `layout_texture.c`, New Game and Continue drawn as text and the
-  copyright line as a texture, classic mode drawing only textures, a row
-  whose rectangle differs keeping its texture, and a port row lining up
-  vertex for vertex with the game's OK row; package DEF: each text row an
+  `layout_texture.c`, every game row (New Game and Continue, in the table,
+  and the copyright line, not) its texture sprite with its texture
+  transferred, no text batch, and with two port rows linked those as text
+  beside the game rows' three sprites; package DEF: each port row an
   `RDC_OVERLAY_TEXT` item before its glyph quads, all of them marked as
   the item's, the present laying the items out with the quads' glyphs at
   1920 x 1080, a fade after the rows an op after the items, a keep frame's
-  rows before its KEEP laying out nothing, classic mode no item and no op;
-  package TXT: the subtitle tables (sorted, one or two lines, every code
-  point drawable, the centres on the strip, the lookup of each entry) and
-  the lookup by language, set and block (English block 9 a picture on the
-  first run and the Queen's words after the clear, French block 91 a
-  picture after the clear and German text, no entry for an empty or
-  out-of-range block, classic none); `ui_StringsForEach` reaching the
-  tables and both sets; a two-line and a one-line subtitle drawn from
-  jimaku.c's row 434 rectangle (three items, placed on the strip's slots
-  and centres, one size a subtitle, the halo, a key per group and line); the
-  staff roll hook (codes skipped, "@" the copyright sign, right, centre and
-  left placement and the capitals' middle as `font_Print` places them, its
-  colours, size 22 without a rim, a blank line nothing, the same name on
-  two slots two keys, classic no item and 0); a slot number grey, a used
-  one black and a play-time figure white without a rim through the real
-  `layout_texture.c`; on the device, the title's New
-  Game row painted inside its rectangle and rim only
-  (`menu_text_scene.png`; with `gamefont.bin` in the game face at the
-  sheet's own size, its rim's reach of 7 texels allowed round the
-  rectangle).
+  rows before its KEEP laying out nothing, the game rows alone no item and
+  no op; a port row on the game's OK row's box with its capitals where the
+  sheet's lettering has them; the save screens' figures (an empty and a
+  used slot number, a play-time figure) their sprites, no item; the
+  subtitle transcriptions (sorted, one or two lines, every code point
+  drawable, the centres on the strip, the lookup of each entry and by
+  language, set and block); `ui_StringsForEach` reaching the tables and not
+  the subtitles; on the device, a port row "New Game" in the title's New
+  Game box painted inside its rectangle and rim only
+  (`menu_text_scene.png`; with `gamefont.bin` in the game face, its rim's
+  reach of 7 texels allowed round the rectangle).
 - `credits_test` (ctest `credits`, CPU; `port/game/test/`): the game's
   `staffroll.c` run to its end over a short table in the disc's forms, the
   port credit's lines posted after the disc's, the heading then the name
-  last and right aligned, the roll ending after them (docs/port/EXTRAS.md,
+  last and right aligned, every line (the port's included) printed by
+  `font_Print`, the roll ending after them (docs/port/EXTRAS.md,
   "Credits").
 
 Open items for the UI are in docs/TODO.md.

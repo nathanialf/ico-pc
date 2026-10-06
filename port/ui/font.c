@@ -128,7 +128,6 @@ typedef struct GKern {
 
 static struct {
     int loaded;
-    UiFace face;
     int w, h;
     float em, cap, space;
     GGlyph *g;
@@ -139,7 +138,7 @@ static struct {
     int nsheets;
     uint8_t *cov;
     uint32_t tex;
-} s_game = {.face = UI_FACE_GAME};
+} s_game;
 
 static int gameActive(void);
 static float gameMeasure(float size, const char *utf8);
@@ -966,9 +965,7 @@ void ui_GameFaceUnload(void)
     free(s_game.k);
     free(s_game.sheets);
     free(s_game.cov);
-    const UiFace face = s_game.face;
     memset(&s_game, 0, sizeof(s_game));
-    s_game.face = face;
 }
 
 bool ui_GameFaceLoad(const void *blob, size_t size)
@@ -1082,19 +1079,9 @@ bool ui_GameFaceLoaded(void)
     return s_game.loaded != 0;
 }
 
-void ui_SetFace(UiFace face)
-{
-    s_game.face = face == UI_FACE_ARIMO ? UI_FACE_ARIMO : UI_FACE_GAME;
-}
-
-UiFace ui_GetFace(void)
-{
-    return s_game.face;
-}
-
 static int gameActive(void)
 {
-    return s_game.loaded && s_game.face == UI_FACE_GAME;
+    return s_game.loaded;
 }
 
 static const GGlyph *gameGlyph(uint32_t cp)

@@ -1,8 +1,10 @@
 /*
- * port/ui/subtitles.h
+ * port/ui/test/subtitles.h
  *
  * The game's subtitles as text (package TXT; docs/port/UI.md,
- * "Subtitles").
+ * "Subtitles"): test data, never drawn.  The game draws its subtitles as
+ * the pictures they are; the transcriptions are part of the font coverage
+ * corpus (font_coverage_test.c) and are checked by menu_text_test.c.
  *
  * The PS2 game streams its subtitles as pictures: DATA.DF's
  * data_<LL><SS>.jim (jimaku.c's jimakuFileName[]: five languages, SS 01 for
@@ -15,7 +17,7 @@
  * (tools/tm2_sheets.py; nothing of the disc is kept), with each line's
  * centre measured on the strip.  Blocks in Yorda's script, the Japanese
  * placeholders the PAL files carry where the English one is blank, and
- * empty blocks have no entry: they keep the picture.
+ * empty blocks have no entry.
  *
  * A text has one or two lines ('\n'): a single line sits in the strip's
  * lower slot, two lines fill both.  The slots' capital middles and the em

@@ -28,6 +28,21 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
     snprintf(want_ini, sizeof(want_ini), "%s", ini_path != NULL ? ini_path : "");
 }
 
+/* Keys a former version read and this one does not: kept in the file (as
+   any unknown key is) and logged once a load.  [game] classic_menu_text and
+   [game] port_font chose how the game's own words were drawn; they always
+   keep their texels now (docs/port/UI.md, "Menu text"). */
+static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font"};
+
+static void log_retired(void)
+{
+    for (size_t i = 0; i < sizeof(retired_keys) / sizeof(retired_keys[0]); i++) {
+        if (ico_toml_has(toml, retired_keys[i])) {
+            fprintf(stderr, "config: %s is no longer used; ignored\n", retired_keys[i]);
+        }
+    }
+}
+
 static void ensure(void)
 {
     char dir[ICO_PATH_MAX];
@@ -61,6 +76,7 @@ static void ensure(void)
         if (v > ICO_CONFIG_VERSION) {
             fprintf(stderr, "config: written by a newer version; unknown keys are kept\n");
         }
+        log_retired();
     }
 }
 

@@ -20,7 +20,7 @@
  * next heading (twelve between "Fumito Ueda" and "< Planners >").  The
  * colour code ({#FFFFFF80}) is set once by the first line and holds; {R}
  * sets the right alignment again after the closing lines' {C}.  ASCII only:
- * the classic path draws with font_Print's bitmap font. */
+ * the roll draws with font_Print's bitmap font. */
 static char s_blank[] = " ";
 static char s_heading[] = "{R}< Decompilation and PC Port > ";
 static char s_name[] = "{R}Nathanial Fine ";

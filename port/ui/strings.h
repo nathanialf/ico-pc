@@ -204,14 +204,6 @@ typedef enum UiStrId {
     UI_STR_ACH_STATE_UNLOCKED,
     /* mirror mode (renderer wave 7, R7c) */
     UI_STR_MIRROR_SCREEN, /* the New Game screen's explanation */
-    /* P3: Settings > Display, "Menu text" ([game] classic_menu_text) */
-    UI_STR_OPT_MENU_TEXT,
-    UI_STR_VAL_PORT_FONT,
-    UI_STR_VAL_CLASSIC,
-    /* GFONT: Settings > Display, "Font" ([game] port_font) */
-    UI_STR_OPT_FONT,
-    UI_STR_VAL_FONT_GAME,
-    UI_STR_VAL_FONT_ARIMO,
     /* package CRT: Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,
@@ -228,7 +220,9 @@ typedef enum UiStrId {
     UI_STR_CIRCLE_BACK_NOTE,
     /* P3: the game's menu text, transcribed from the PAL sheets
        (text/menu_PAL_xx, scei.tm2, title.tm2) with their wording and
-       capitalisation; menu_text.c maps the texProperty rows to them */
+       capitalisation; menu_text.c maps the texProperty rows to them.  Never
+       drawn (the game's rows draw their textures): the game face's builder
+       cuts its letters from the sheets by matching these words */
     UI_STR_MT_LANG_ENGLISH,
     UI_STR_MT_LANG_FRANCAIS,
     UI_STR_MT_LANG_DEUTSCH,
@@ -417,10 +411,10 @@ const char *ui_StrIn(UiLang lang, UiStrId id);
 /* Every string the port draws from a table, for the font coverage test:
    fn(lang, utf8, user) once for each non-empty entry of each language's
    table (the Settings menu, notes, Extras, achievements, popups, the menu
-   words UI_STR_MT_*), then for each subtitle of both sets of each language
-   (subtitles.h).  A missing translation is not visited (ui_StrIn would give
-   the English one, which is visited under UI_LANG_EN).  The staff roll's
-   lines are the game's data (staffroll.c), not a port table. */
+   words UI_STR_MT_*).  A missing translation is not visited (ui_StrIn
+   would give the English one, which is visited under UI_LANG_EN).  The
+   subtitles (port/ui/test/subtitles.h) and the staff roll's lines are the
+   game's pictures and data, not port tables. */
 typedef void (*UiStringFn)(UiLang lang, const char *utf8, void *user);
 void ui_StringsForEach(UiStringFn fn, void *user);
 

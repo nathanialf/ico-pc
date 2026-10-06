@@ -173,12 +173,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Débloqué",
     [UI_STR_MIRROR_SCREEN] =
         "Toute la partie est inversée de gauche à droite. Chaque sauvegarde garde ce choix.",
-    [UI_STR_OPT_MENU_TEXT] = "Texte des menus",
-    [UI_STR_VAL_PORT_FONT] = "Police du portage",
-    [UI_STR_VAL_CLASSIC] = "Classique",
-    [UI_STR_OPT_FONT] = "Police",
-    [UI_STR_VAL_FONT_GAME] = "Jeu",
-    [UI_STR_VAL_FONT_ARIMO] = "Arimo",
     [UI_STR_OPT_CRT] = "Filtre CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensité CRT",
     [UI_STR_VAL_CRT_SCANLINES] = "Lignes de balayage",
@@ -191,7 +185,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Rond pour revenir",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Rond (B sur la manette) quitte aussi les menus du jeu, comme Triangle.",
-    /* the game's menu text (P3), as the PAL sheets have it */
+    /* the game's menu words (P3), as the PAL sheets have them: never drawn, the
+       game face is cut from the sheets by matching them (menu_text.h) */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
     [UI_STR_MT_LANG_DEUTSCH] = "DEUTSCH",

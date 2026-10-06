@@ -3,7 +3,7 @@
 ranges the embedded font subset was built with (docs/port/UI.md, "The font").
 
 Collects the code points of the string literals of port/ui/strings_*.c,
-port/ui/subtitles.c and port/game/model_viewer_table.c, and of the corpus
+port/ui/test/subtitles.c and port/game/model_viewer_table.c, and of the corpus
 (port/ui/test/font_corpus/*.txt, '#' lines are provenance), and compares them
 with the ranges recorded in port/ui/embed_font.cmake ("# subset:" line).
 UI.md's recipe must list the same ranges.  The check on the font's own cmap
@@ -122,7 +122,7 @@ def main():
             where.setdefault(ord(ch), name)
 
     files = sorted(glob.glob(os.path.join(ROOT, "port/ui/strings_*.c")))
-    files += [os.path.join(ROOT, "port/ui/subtitles.c"),
+    files += [os.path.join(ROOT, "port/ui/test/subtitles.c"),
               os.path.join(ROOT, "port/game/model_viewer_table.c")]
     for p in files:
         for lit in literals(p):

@@ -8,8 +8,8 @@
  * Each option is read once from config.toml ([gameplay], via
  * ico_config_get_bool) the first time it is asked for, and can be set at run
  * time. Every default is the original game's behaviour, except
- * classic_menu_text and circle_back (default-on port behaviour,
- * docs/port/DIVERGENCES.md "Optional features").
+ * circle_back (default-on port behaviour, docs/port/DIVERGENCES.md
+ * "Optional features").
  *
  *   [gameplay] stick_fix   false  the stick fix (docs/port/INPUT.md)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
@@ -17,13 +17,6 @@
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options (docs/port/DEVELOPER_MODE.md)
- *   [game] classic_menu_text
- *                          false  the menus' text drawn from the PS2's
- *                                 pre-rendered sheets instead of the port
- *                                 font (docs/port/UI.md, "Menu text")
- *   [game] port_font       "game" the port's text in the game's own lettering
- *                                 ("arimo": Arimo alone; docs/port/UI.md,
- *                                 "The font")
  *   [game] circle_back     true   Circle backs out of the game's menus as
  *                                 Triangle does (docs/port/SETTINGS.md);
  *                                 false is the PS2's behaviour
@@ -90,18 +83,6 @@ void ico_opt_set_developer_mode(int on);
    load <pref>/dev/thisIsYourDebugOption, the file the Debug Mode page's
    TRIANGLE writes. */
 int ico_opt_debug_option(void);
-/* [game] classic_menu_text (package P3): 1 draws the game's menu text from
-   its textures, 0 (the default) with the port font.  The Settings module
-   hands the value to port/ui (ui_MenuTextSetClassic) at install and on a
-   change. */
-int ico_opt_classic_menu_text(void);
-void ico_opt_set_classic_menu_text(int on);
-/* [game] port_font (package GFONT): "game" (the default) draws the port's text
-   in the game's own lettering (port/ui/game_font.h), "arimo" in Arimo alone.
-   1 for "arimo".  The Settings module hands it to port/ui (ui_SetFace) at
-   install and on a change. */
-int ico_opt_port_font_arimo(void);
-void ico_opt_set_port_font_arimo(int on);
 /* [game] circle_back (package Q2): 1 (the default) makes Circle an alias of
    the game menus' Triangle back action (common/src/layout_action.c,
    layout_texture.c default_item_select, through port/ui/layout_ext.h

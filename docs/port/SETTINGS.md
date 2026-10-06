@@ -78,8 +78,6 @@ with the values in use the next time you save.
 | CRT filter | Off, Scanlines, Consumer TV, Trinitron, PVM, Shadow mask (translated: Lignes de balayage, Téléviseur, Masque perforé; Bildzeilen, Fernseher, Lochmaske; Linee di scansione, Televisore, Maschera forata; Líneas de barrido, Televisor, Máscara perforada) | (both presets) the picture through a simulated cathode-ray tube, each PS2 pixel its own red, green and blue phosphors, each mode a different kind of screen (docs/port/DISPLAY.md, "CRT filter"); the menus and popups are shown through it too. One row for `[video] crt` (Off) and `crt_mode` (the others); Right steps in the order listed and wraps. Changes at the next picture |
 | CRT strength | 0 % to 100 % in tens | how far the filter is eased in (the phosphors, glow, curve, vignette and gamma together); 0 % is the plain picture; saved as `[video] crt_strength`. Stops at 0 and 100 % |
 | Video mode | PAL 50 Hz, 60 Hz | the boot screen's choice. The game runs at 25 updates a second in PAL 50 Hz and 30 in 60 Hz, as on the console; switching resets the picture the way the boot screen did. It changes only when Settings was opened from the title screen (the tick rate arms the game's timers): opened from the pause menu the row shows the value followed by "(title only)" ("titre seul", "nur Titel", "solo titolo", "solo título") and Left and Right do nothing |
-| Menu text | Port font, Classic | how the game draws its words: its menus (title, Options, pause, save and load with their figures, game over, the boot screens), the subtitles and the end credits. Port font (the default) writes them in the same typeface as this Settings menu (the Font row below), at the same places and sizes; Classic shows the PlayStation 2's original lettering. The logo, the copyright line, the button symbols and the pictures are the originals either way. Changes at the next frame; saved as `[game] classic_menu_text` |
-| Font | Game, Arimo (translated: Police: Jeu; Schrift: Spiel; Carattere: Gioco; Fuente: Juego) | the typeface of everything the port writes: this menu, the popups, and (with Menu text on Port font) the game's menus, subtitles and credits. Game (the default) is the game's own lettering, the letters of its menu screens cut from your disc on the first run, drawn at their own size and scaled softly on larger screens, with their dark rim; a character those screens never show (X, ß, ñ, %, …) is written in Arimo at the same height. Arimo writes everything in Arimo, a clean sans with the same metrics as Arial. Changes at the next frame; saved as `[game] port_font` (`"game"`, `"arimo"`) |
 
 **Audio**
 
@@ -113,9 +111,9 @@ Mirror mode is not a Settings line: it is chosen when you start a New Game
 (below). The films follow it.
 
 **Language**: English, Français, Deutsch, Italiano, Español. The Settings
-menu changes at once, and so do the game's menu text and subtitles with Menu
-text set to Port font; with Classic, the game's own subtitle and menu pictures
-follow the next time the game loads them (the next room, the next menu). The row works
+menu changes at once; the game's own words, its pictures (menus,
+subtitles), follow the next time the game loads them (the next room, the
+next menu). The row works
 from the title and from the pause menu; a change mid-run chooses
 language-dependent objects at once, where the PS2 could set the language only
 at boot (docs/port/DIVERGENCES.md, A23).

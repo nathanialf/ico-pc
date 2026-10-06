@@ -8,7 +8,6 @@
 #include <string.h>
 
 #include "font.h"
-#include "menu_text.h"
 #include "strings.h"
 #include "ui_internal.h"
 
@@ -452,14 +451,9 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     const uint64_t owner =
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
     /* package DEF: at the output's resolution where the present can
-       (font.h ui_DrawTextDeferred), unless the menus are classic */
-    const int defer = !ui_MenuTextClassic();
+       (font.h ui_DrawTextDeferred) */
     if (!glow) {
-        if (defer) {
-            ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_HALO, NULL);
-        } else {
-            ui_DrawText(x, y, size, rgba, text, flags | UI_HALO);
-        }
+        ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_HALO, NULL);
         ui_SetDrawKey(owner);
         return;
     }
@@ -471,12 +465,8 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.scaleY = bh > 0.0f ? ((float)box[3] / 8.0f) / bh : 1.0f;
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
-    if (defer) {
-        /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
-        ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_ADDITIVE, &xf);
-    } else {
-        ui_DrawTextXf(x, y, size, rgba, text, flags, &xf);
-    }
+    /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
+    ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_ADDITIVE, &xf);
     ui_SetDrawKey(owner);
 }
 
@@ -485,17 +475,7 @@ int lt_ext_IsTextRow(const LtProperty *e)
     if (lt_ext_IsGlyphRow(e)) {
         return lt_ext_GlyphTexNo(e) < 0;
     }
-    return lt_ext_IsPortProp(e) || ui_MenuTextItemOf(e) != NULL;
-}
-
-void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
-                        const unsigned char rgba[4], int glow)
-{
-    if (lt_ext_IsPortProp(e)) {
-        lt_ext_DrawRow(e, box, rgba, glow);
-    } else {
-        ui_MenuTextDraw(e, box, uv, rgba, glow);
-    }
+    return lt_ext_IsPortProp(e);
 }
 
 int lt_ext_BackButtons(void)

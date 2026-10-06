@@ -95,19 +95,6 @@ extern void gif_EndPacket(void);
 extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
 
 #define JIM_HOST_KEY(obj, part) gif_HostDrawKey((obj), (part), 0)
-
-/* PC port (package TXT; docs/port/UI.md "Subtitles"): the subtitle drawn
-   with the port font where the block has a transcription and classic menu
-   text is off (port/ui/layout_ext.h); the set (0 the first run, 1 after the
-   game is cleared) is the file jimakuMgrBegin opened */
-#include "layout_ext.h"
-
-static int jimakuHostSet; /* port */
-
-static const struct UiSubtitle *jimakuHostSub; /* port */
-
-static const void *jimakuHostKey; /* port */
-
 #else
 #define JIM_HOST_KEY(obj, part) ((void)0)
 #endif
@@ -143,18 +130,7 @@ static void display_texture(LtProperty *t)
     col.r = ~GlobalStageSetting.reductionCol[0];
     col.g = ~GlobalStageSetting.reductionCol[1];
     col.b = ~GlobalStageSetting.reductionCol[2];
-#ifdef ICO_RD
-    /* PC port (package TXT): the text in place of both halves of the
-       strip, drawn once from row 434's rectangle; the texture is still
-       transferred */
-    if (jimakuHostSub != 0) {
-        if (t == &texProperty[434]) {
-            lt_ext_DrawSubtitle(jimakuHostSub, jimakuHostKey, dst, src,
-                                (const unsigned char *)&col);
-        }
-    } else
-#endif
-        gif_SpriteSensitiveOffset(dst, 0xFFFFFF9B, src, &col, 1);
+    gif_SpriteSensitiveOffset(dst, 0xFFFFFF9B, src, &col, 1);
     gif_SetZWrite(1);
     gif_SetZTest(1);
     gif_EndPacket();
@@ -253,9 +229,6 @@ static void jimakuMgrBegin(JimakuArg *p)
     if (gFlagGameClear != 0) {
         st = st + 1;
     }
-#ifdef ICO_RD
-    jimakuHostSet = st & 1;
-#endif
     sub->bg =
         (void *)iosCdvdBackGroundMgrAdd(jimakuFileName[st].path, jimakuHandler, p, 0, 0, 0, 0, 0);
     {
@@ -455,18 +428,11 @@ void jimakuDisp(JimakuArg *msg)
             return;
         }
         if (jimakuOn != 0) {
-#ifdef ICO_RD
-            jimakuHostSub = lt_ext_SubtitleFind(jimakuHostSet, g->block);
-            jimakuHostKey = g;
-#endif
             JIM_HOST_KEY(g, 0);
             display_texture(&texProperty[434]);
             JIM_HOST_KEY(g, 1);
             display_texture(&texProperty[435]);
             JIM_HOST_KEY(0, 0);
-#ifdef ICO_RD
-            jimakuHostSub = 0;
-#endif
         }
     }
 }

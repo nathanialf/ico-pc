@@ -172,12 +172,6 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Sbloccato",
     [UI_STR_MIRROR_SCREEN] =
         "L'intera partita è ribaltata da sinistra a destra. Ogni salvataggio conserva la scelta.",
-    [UI_STR_OPT_MENU_TEXT] = "Testo dei menu",
-    [UI_STR_VAL_PORT_FONT] = "Carattere del port",
-    [UI_STR_VAL_CLASSIC] = "Classico",
-    [UI_STR_OPT_FONT] = "Carattere",
-    [UI_STR_VAL_FONT_GAME] = "Gioco",
-    [UI_STR_VAL_FONT_ARIMO] = "Arimo",
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensità CRT",
     [UI_STR_VAL_CRT_SCANLINES] = "Linee di scansione",
@@ -190,7 +184,8 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Cerchio per tornare indietro",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Cerchio (B sul gamepad) esce anche dai menu del gioco, come Triangolo.",
-    /* the game's menu text (P3), as the PAL sheets have it */
+    /* the game's menu words (P3), as the PAL sheets have them: never drawn, the
+       game face is cut from the sheets by matching them (menu_text.h) */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
     [UI_STR_MT_LANG_DEUTSCH] = "DEUTSCH",

@@ -447,9 +447,8 @@ extern void gif_PointOffset(int *v, long long z, SprCol *col, int prim);
 extern void gif_SetGsReg(long long reg, long long data);
 
 /* PC port (6B): the port row display_texture is drawing, whose glow is its
-   label stretched like the texture sprite (port/ui/layout_ext.h); since P3
-   also a game row whose texture is menu text drawn with the port font
-   (port/ui/menu_text.h) */
+   label stretched like the texture sprite (port/ui/layout_ext.h); the
+   game's own rows always draw their texture */
 static LtProperty *ltHostTextRow;
 
 /* the pulsing highlight sprite, inlined three times by display_texture */
@@ -470,8 +469,7 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
     rr.h = rr.h + s * dy * 2;
     gif_SetAlpha(1, 5, 0);
     if (ltHostTextRow != 0) {
-        lt_ext_DrawTextRow(ltHostTextRow, (const int *)&rr, (const int *)ofs,
-                           (const unsigned char *)&c, 1);
+        lt_ext_DrawRow(ltHostTextRow, (const int *)&rr, (const unsigned char *)&c, 1);
         return;
     }
     gif_SpriteSensitiveOffset(&rr, 0xFFFFFF9B, ofs, &c, 1);
@@ -539,10 +537,10 @@ static void display_texture(int no, LtProperty *e)
         flag = (e->upItem >= 0 || e->downItem >= 0 || e->leftItem >= 0 || e->rightItem >= 0 ||
                 e->right >= 0 || e->left >= 0 || e->down >= 0 || e->up >= 0);
         /* PC port (6B): a port row has no texture; its label is drawn where
-           the sprite would be, with the same colour.  P3: a game menu text
-           row is drawn the same way, its texture still transferred so the
-           VRAM and packets are the texture path's.  A port glyph row is the
-           exception: it draws a game texture as the game's rows do */
+           the sprite would be, with the same colour.  A port glyph row is
+           the exception: it draws a game texture as the game's rows do.
+           The game's rows draw their textures (docs/port/UI.md, "Menu
+           text") */
         ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
         if (!lt_ext_IsPortProp(e))
             tex_TransTexture(e->texNo, 11);
@@ -596,8 +594,7 @@ static void display_texture(int no, LtProperty *e)
         }
         LT_HOST_KEY(e, 0);
         if (ltHostTextRow != 0) {
-            lt_ext_DrawTextRow(e, (const int *)&box, (const int *)&ofs,
-                               (const unsigned char *)&u.col, 0);
+            lt_ext_DrawRow(e, (const int *)&box, (const unsigned char *)&u.col, 0);
         } else
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
         LT_HOST_KEY(e, 1); /* the glow sprites */

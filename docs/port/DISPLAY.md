@@ -43,7 +43,7 @@ crt_strength = 1.0          # 0.0 to 1.0
 | key | what it does |
 | --- | --- |
 | `preset` | `"original"`: the PS2 picture. `"enhanced"`: the options below apply. |
-| `resolution` | How sharp the 3D scene is (Enhanced). `"window"`: as many pixels as the frame has on screen. `"2x"`: twice the PS2's resolution in each direction (widened with the aspect). `"1920x1440"`: that many pixels. At least the PS2's resolution, at most 4K (3840 x 2160). With the CRT filter on the scene is drawn at 1x whatever this says (the value is kept and applies again with the filter off; "CRT filter" below). Effects such as blur and glow keep their size on screen. The menu text does not depend on it: in Enhanced the game's menu rows and the port's own menus are drawn last, at the window's own pixel size, one font pixel to one screen pixel ("Menu text" below). |
+| `resolution` | How sharp the 3D scene is (Enhanced). `"window"`: as many pixels as the frame has on screen. `"2x"`: twice the PS2's resolution in each direction (widened with the aspect). `"1920x1440"`: that many pixels. At least the PS2's resolution, at most 4K (3840 x 2160). With the CRT filter on the scene is drawn at 1x whatever this says (the value is kept and applies again with the filter off; "CRT filter" below). Effects such as blur and glow keep their size on screen. The port's own text does not depend on it: in Enhanced the port's menus are drawn last, at the window's own pixel size ("Menu text" below); the game's own words are its textures and scale with the scene. |
 | `aspect` | The shape of the picture (Enhanced). `"16:9"` and `"16:10"` show more of the world to the left and right; the menus, subtitles and the title text stay in a 4:3 frame in the middle; full-screen fades, the cinema bars, the black bands of the pause and memory card menus and the film grain stretch across ("Wide pictures" below). `"auto"` follows the window, between 4:3 and 16:9. The movies stay 4:3 with bars at the sides. |
 | `fullscreen` | Borderless fullscreen at the desktop's resolution. Alt+Enter switches while playing. |
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
@@ -55,20 +55,19 @@ crt_strength = 1.0          # 0.0 to 1.0
 
 ## Menu text
 
-With the Enhanced preset, the words of the game's menus (title, pause,
-Options, the memory card screens and prompts) and of the port's Settings
-menu are drawn after the picture is scaled to the window, at the window's
-own resolution: each letter is made at the size it is shown and placed on
-whole screen pixels, so the text is as sharp as the screen allows whatever
-`resolution` says. It still fades with the picture, is cut by the cinema
-bars and sits where the menu puts it, in the middle 4:3 frame. The
-Original preset draws it into the PS2-sized picture as before, and
-Settings > Display > "Menu text: Classic" (`[game] classic_menu_text`)
-brings back the PS2's own lettering and drawing order in both presets.
-With the CRT filter on, the menu text is drawn into the PS2-sized picture
-as in Original, so that it goes through the filter ("CRT filter" below). The
-subtitles, the end credits and the memory card screens' figures are drawn
-the same way; the subtitles in Yorda's script stay the game's pictures.
+The game's own words (its menus, the memory card screens and prompts, the
+subtitles, the end credits, the save screens' figures, the signs) are the
+PS2's own lettering, its texels, in both presets: they are scaled with the
+picture as every texture is, and there is no option to redraw them. The
+text the port adds (the Settings and Extras pages, the popups, the hints)
+is written in the game's own lettering, cut from the disc's menu sheets
+(docs/port/UI.md, "The font"). With the Enhanced preset that text is drawn
+after the picture is scaled to the window, at the window's own resolution,
+so it is as sharp as the screen allows whatever `resolution` says. It still
+fades with the picture, is cut by the cinema bars and sits where the menu
+puts it, in the middle 4:3 frame. The Original preset draws it into the
+PS2-sized picture; with the CRT filter on it is drawn there too, so that it
+goes through the filter ("CRT filter" below).
 
 ## CRT filter
 
@@ -168,7 +167,7 @@ pixel).
 **The UI under the filter.** With the filter on, everything on screen goes
 through it: the game's menus and the port's Settings menu are drawn into
 the PS2-sized picture as the Original preset draws them (the Enhanced
-preset's sharp menu text, "Menu text" above, is not used), and the port's
+preset's sharp port text, "Menu text" above, is not used), and the port's
 own popups, hint lines and photo mode's help lines are drawn into the
 PS2's pixel grid at the PS2's scale before the filter, so they get the
 same phosphors, scanlines and curve as the picture. Nothing is drawn on top

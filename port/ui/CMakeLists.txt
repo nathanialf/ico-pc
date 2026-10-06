@@ -27,7 +27,6 @@ add_custom_command(
 set(_ui_sources
     font.c
     game_font_build.c
-    game_text.c
     layout_ext.c
     menu_text.c
     popup.c
@@ -37,13 +36,12 @@ set(_ui_sources
     strings_de.c
     strings_it.c
     strings_es.c
-    subtitles.c
     "${_ui_font_c}")
 
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c ui_hint.c
+set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c ui_hint.c
                             gallery.c photo_ui.c game_font_disc.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
@@ -63,10 +61,8 @@ function(ico_ui_library name rd)
     endif()
 endfunction()
 
-# the game's layout_texture.c reads its tables through layout_ext.h;
-# jimaku.c (fumi) and staffroll.c (common) draw through its text hooks
+# the game's layout_texture.c reads its tables through layout_ext.h
 target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_include_directories(ico_fumi PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # the Settings menu's view of the port's option modules (includes only; the
 # programs link the libraries)
@@ -157,7 +153,7 @@ endif()
 # listed bank in a pack. Exit 77 without the ELF.
 set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
 add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
-    strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c "${_ui_font_c}"
+    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}"
     "${_gal_data}/tables.c"
     "${_gal_data}/gen/table_defs.c" "${_gal_data}/gen/table_desc.c"
     "${_gal_data}/gen/ee_symbols.c")
@@ -222,7 +218,7 @@ endif()
 # glyph for every character in the port font. CPU only.
 add_executable(model_viewer_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_test.c"
     "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c" font.c strings.c strings_en.c
-    strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c "${_ui_font_c}")
+    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}")
 target_include_directories(model_viewer_test PRIVATE "${CMAKE_SOURCE_DIR}/port/game"
                            "${CMAKE_SOURCE_DIR}/port/third_party/stb")
 # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
@@ -317,17 +313,19 @@ target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
                       ico_platform)
-# menu_text_test (P3): the menu text table (against the disc's texProperty
-# when the image is there), the strings, the hook through the real
-# layout_texture.c (text for a table row, the texture for another, classic
-# mode) on the recording, then a title row into SCENE on a Vulkan device
-# (exit 77 without one)
-add_executable(menu_text_test test/menu_text_test.c $<TARGET_OBJECTS:ico_ui_rd>
+# menu_text_test (P3, TXT2): the menu text table (against the disc's
+# texProperty when the image is there), the strings, the subtitle
+# transcriptions (test/subtitles.c, test data), the hook through the real
+# layout_texture.c (every game row its texture sprite, the port rows
+# deferred text) on the recording, then a port row into SCENE on a Vulkan
+# device (exit 77 without one)
+add_executable(menu_text_test test/menu_text_test.c test/subtitles.c $<TARGET_OBJECTS:ico_ui_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
-target_include_directories(menu_text_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_ui_game_incs}
+target_include_directories(menu_text_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_ui_game_incs}
                            ${_ico_ui_seki_incs} "${CMAKE_SOURCE_DIR}/port/shaders"
                            "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
@@ -343,10 +341,10 @@ target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
 ico_include_dirs(common _ico_cov_incs)
 ico_include_dirs(sugipon _ico_cov_data_incs)
 add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
-    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c
+    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c test/subtitles.c
     "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-                           ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"
+                           "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"
                            "${CMAKE_SOURCE_DIR}/port/game" "${CMAKE_SOURCE_DIR}/port/platform")
 set_source_files_properties(test/font_coverage_test.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")

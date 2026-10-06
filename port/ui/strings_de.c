@@ -173,12 +173,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Freigeschaltet",
     [UI_STR_MIRROR_SCREEN] =
         "Das ganze Spiel wird seitenverkehrt gespielt. Jeder Spielstand behält die Wahl.",
-    [UI_STR_OPT_MENU_TEXT] = "Menütext",
-    [UI_STR_VAL_PORT_FONT] = "Port-Schrift",
-    [UI_STR_VAL_CLASSIC] = "Klassisch",
-    [UI_STR_OPT_FONT] = "Schrift",
-    [UI_STR_VAL_FONT_GAME] = "Spiel",
-    [UI_STR_VAL_FONT_ARIMO] = "Arimo",
     [UI_STR_OPT_CRT] = "CRT-Filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT-Stärke",
     [UI_STR_VAL_CRT_SCANLINES] = "Bildzeilen",
@@ -191,7 +185,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Kreis für Zurück",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Kreis (B am Gamepad) verlässt auch die Menüs des Spiels, wie Dreieck.",
-    /* the game's menu text (P3), as the PAL sheets have it */
+    /* the game's menu words (P3), as the PAL sheets have them: never drawn, the
+       game face is cut from the sheets by matching them (menu_text.h) */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
     [UI_STR_MT_LANG_DEUTSCH] = "DEUTSCH",

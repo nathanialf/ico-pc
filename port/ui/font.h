@@ -196,8 +196,9 @@ void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
    the lists; every other replay draws the quads.  Keyed like the quads (the
    string, the alignment and the owner).  Outside ICO_RD or in overlay mode,
    ui_DrawTextXf.  This is the entry point for any game text that should be
-   shown at the output's resolution: the layout's menu rows (menu_text.c,
-   layout_ext.c), the subtitles and the staff roll (game_text.c).
+   shown at the output's resolution: the port's text only (its layout rows,
+   layout_ext.c; its popups and pages); the game's own words are its
+   textures and are never deferred.
    ui_InstallDeferredText(1) registers font.c's renderer with rd
    (rd_SetDeferredTextFn; the window build's ui_host.c, the replay tool, the
    tests); 0 removes it. */
@@ -207,7 +208,9 @@ void ui_InstallDeferredText(int on);
 
 /* ------------------------------------------- the faces (package GFONT) */
 
-/* The port's text has two faces (docs/port/UI.md, "The font"):
+/* The port's text has two faces (docs/port/UI.md, "The font"); the game's
+   own words (its menu sprites, subtitles, staff roll) are never drawn with
+   either: they keep their textures and bitmap font.
    - UI_FACE_GAME, the game's own lettering: the letters of the PAL menu
      sheets, extracted on the player's machine from the player's disc
      (game_font.h) into one atlas at the sheets' size (the menu rows' 13.5
@@ -217,22 +220,19 @@ void ui_InstallDeferredText(int on);
      sheets', measured.  UI_HALO draws the glyphs' own rim (black, under
      the letters) instead of the eight offset copies.
    - UI_FACE_ARIMO, the embedded Arimo: the whole text when the game face is
-     not loaded or [game] port_font = "arimo", and otherwise per character
+     not loaded (no disc to cut it from), and otherwise per character
      for those the sheets never show, at the size that gives its capitals the
      game glyphs' height; it keeps the halo, so a fallback letter sits in the
      same dark rim.
-   The game face is used when it is loaded (ui_GameFaceLoad) and preferred
-   (ui_SetFace, the default); with it, ui_FontMetrics gives its capital
-   height, and the line pitch stays Arimo's. */
+   The game face is used whenever it is loaded (ui_GameFaceLoad); with it,
+   ui_FontMetrics gives its capital height, and the line pitch stays
+   Arimo's. */
 typedef enum UiFace { UI_FACE_ARIMO = 0, UI_FACE_GAME = 1 } UiFace;
 
 /* the blob game_font.h describes (copied); false if it does not parse */
 bool ui_GameFaceLoad(const void *blob, size_t size);
 void ui_GameFaceUnload(void);
 bool ui_GameFaceLoaded(void);
-/* [game] port_font: the preferred face (UI_FACE_GAME by default) */
-void ui_SetFace(UiFace face);
-UiFace ui_GetFace(void);
 /* which face draws cp now: UI_FACE_GAME, UI_FACE_ARIMO, or -1 when neither
    has it (it is then drawn as Arimo's '?') */
 int ui_FontFaceOf(uint32_t cp);

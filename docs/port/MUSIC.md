@@ -69,8 +69,8 @@ pages' sizes: 24 for the entries, 21 for the column), then the status line
 (168: the group, the asset (the stream's file, or the bank's file with the
 effect's program and tone) and Playing, Paused or Stopped), the progress
 bar and the transport. Every word is a port row drawn like the Settings
-rows (the light letters with the dark rim, deferred at the output's
-resolution in Enhanced, quads under classic menu text).
+rows (the game's lettering with its dark rim, deferred at the output's
+resolution in Enhanced).
 
 **The progress bar** (188, x 150 to 490) is three rect rows of the layout
 extension (UI.md, "Layout extension"): a dark rim, the track, and the fill

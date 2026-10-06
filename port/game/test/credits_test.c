@@ -4,14 +4,16 @@
  * The staff roll's port credit and the Extras credits' lock (package CRED;
  * docs/port/EXTRAS.md "Credits", docs/port/UI.md "Staff roll"), CPU only.
  *
- * The game's staffroll.c (the classic path: no ICO_RD) runs over a short
- * table in the disc's forms (the PAL ELF's staffRollNameData opens with
+ * The game's staffroll.c (its only path: every line, the port's included,
+ * through font_Print's bitmap font) runs over a short table in the disc's
+ * forms (the PAL ELF's staffRollNameData opens with
  * "{#FFFFFF80}{R} ICO Staff  ", its headings are "{R}< Game Design > ", its
  * names "{R}Fumito Ueda ", and it closes centred), with font_CheckAlign
  * recording each line the roll posts.  Checked: every disc line is posted,
  * then the port's, the heading and the name last, in the roll's heading and
- * name forms and right aligned; the roll ends (staffRollStartFlag 0) only
- * after them; the port lines are ASCII and outside the range NULL.  Then
+ * name forms and right aligned; every line, the port's heading and name
+ * included, is drawn by font_Print; the roll ends (staffRollStartFlag 0)
+ * only after them; the port lines are ASCII and outside the range NULL.  Then
  * the lock: locked with no achievement and no key, unlocked with
  * unlock_credits=1 in the ini.
  */
@@ -95,14 +97,22 @@ int font_CheckAlign(SprCol *col, unsigned char *str)
     return s_fontAlign;
 }
 
+/* the lines font_Print drew: the port's heading and name among them */
+static int s_printed, s_printedHeading, s_printedName, s_printedDisc;
+
 void font_Print(unsigned int color, unsigned char *str, float x, float y, int align, SprCol col)
 {
+    const char *s = (const char *)str;
+
     (void)color;
-    (void)str;
     (void)x;
     (void)y;
     (void)align;
     (void)col;
+    s_printed++;
+    s_printedHeading |= strcmp(s, "{R}< Decompilation and PC Port > ") == 0;
+    s_printedName |= strcmp(s, "{R}Nathanial Fine ") == 0;
+    s_printedDisc |= strcmp(s, "{R}Fumito Ueda ") == 0;
 }
 
 void debug_StdPrintfDummy(const char *fmt, ...)
@@ -202,6 +212,10 @@ static void test_roll(void)
     CHECK(ICO_ROLL_PORT_NAME - ICO_ROLL_PORT_HEADING == 5);
     /* the copyright line, centred by the disc's {C}, stays as it was */
     CHECK(s_align[n - 1] == 0);
+    /* every line is drawn by the roll's own bitmap font (package TXT2): the
+       disc's and the port's */
+    printf("roll: %d font_Print calls\n", s_printed);
+    CHECK(s_printed > 0 && s_printedDisc && s_printedHeading && s_printedName);
 }
 
 static void test_lock(const char *dir)

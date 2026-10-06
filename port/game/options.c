@@ -22,10 +22,6 @@ static int s_mirror = -1;
 
 static int s_developer_mode = -1;
 
-static int s_classic_menu_text = -1;
-
-static int s_port_font_arimo = -1;
-
 static int s_circle_back = -1;
 
 static int get(int *v, const char *path)
@@ -142,29 +138,6 @@ void ico_opt_set_developer_mode(int on)
     s_developer_mode = on != 0;
 }
 
-int ico_opt_classic_menu_text(void)
-{
-    return get(&s_classic_menu_text, "game.classic_menu_text");
-}
-
-void ico_opt_set_classic_menu_text(int on)
-{
-    s_classic_menu_text = on != 0;
-}
-
-int ico_opt_port_font_arimo(void)
-{
-    if (s_port_font_arimo < 0) {
-        s_port_font_arimo = strcmp(ico_config_get_string("game.port_font", "game"), "arimo") == 0;
-    }
-    return s_port_font_arimo;
-}
-
-void ico_opt_set_port_font_arimo(int on)
-{
-    s_port_font_arimo = on != 0;
-}
-
 int ico_opt_circle_back(void)
 {
     if (s_circle_back < 0) {
@@ -246,7 +219,6 @@ void ico_opt_output_toggled(int mode)
 
 void ico_opt_reload(void)
 {
-    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_classic_menu_text = s_circle_back =
-        s_port_font_arimo = -1;
+    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_circle_back = -1;
     s_output = -2;
 }

@@ -118,8 +118,6 @@ typedef enum UiSettingsOpt {
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row (package CRT) */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
     UI_OPT_VIDEO_MODE,
-    UI_OPT_MENU_TEXT, /* [game] classic_menu_text (P3) */
-    UI_OPT_FONT,      /* [game] port_font (GFONT): the game's lettering or Arimo */
     /* Audio */
     UI_OPT_VOLUME,
     UI_OPT_MUSIC,   /* [audio] music (port/audio/mix_gain.h) */

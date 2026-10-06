@@ -43,7 +43,8 @@ and its frame, "Frame F / N"; at the bottom the prompts, "Left stick: turn",
 "Right stick: zoom" and a line of the game's own button glyphs with their
 words (Cross Play, Square Loop, L1 R1 Animation, Triangle Models; the model
 list's Cross View, Triangle Back or Title screen). All of it is rows of the
-viewer's layouts in the port font, styled as the Settings rows
+viewer's layouts in the port's text (the game's lettering, Arimo for the
+characters it lacks), styled as the Settings rows
 (docs/port/UI.md, "Button glyphs"). An object with no animations shows
 "No animations", only Triangle among the buttons, and can still be turned
 and zoomed.
@@ -261,7 +262,8 @@ changed.
 
 **Tests.** `credits` (CPU, `port/game/test/credits_test.c`): the game's
 `staffroll.c` over a short table in the disc's forms, the port lines last,
-heading then name, the roll's end after them; the lock with and without
+heading then name, every line printed by the roll's bitmap font
+(`font_Print`), the roll's end after them; the lock with and without
 the key; a start with no engine. `settings` (`settings_test`): the locked
 row, the unlocked row with the key, a failed start staying on the page, and
 a start through a fake engine leaving for layout 55 with the title's

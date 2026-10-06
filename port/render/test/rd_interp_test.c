@@ -1113,49 +1113,6 @@ static void testDeferredText(void)
     CHECK(a1 && ac && memcmp(a1, ac, sizeof(*a1)) == 0, "deferred: alpha 1 is the current item");
 }
 
-/* package TXT: two staff roll lines with the same name, each keyed by its
- * line slot (port/ui/game_text.c lt_ext_DrawRollLine: the string's key
- * under the owner RD_KEY(slot)), climbing at different speeds and recorded
- * in the other order in the second tick: each blends to its own half way */
-static void recordRoll(int second)
-{
-    rd_BeginFrame();
-    frameHead();
-    rd_SelectList(12);
-    const RdKey k1 = RD_KEY(&kObjD, 10, 0), k2 = RD_KEY(&kObjD, 11, 0);
-    if (second) {
-        deferredItem("Kei Kuwabara", 320.0f, 196.0f, 0x80, k2);
-        deferredItem("Kei Kuwabara", 320.0f, 298.0f, 0x80, k1);
-    } else {
-        deferredItem("Kei Kuwabara", 320.0f, 300.0f, 0x80, k1);
-        deferredItem("Kei Kuwabara", 320.0f, 200.0f, 0x80, k2);
-    }
-    rd_EndFrame(0);
-}
-
-static const RdTextItem *itemIn(const RdFrame *f, int list, RdKey k)
-{
-    const RdCmd *c = findKey(f, list, k, 0);
-    return c && c->type == RDC_OVERLAY_TEXT
-               ? (const RdTextItem *)(const void *)(f->payload + c->u[1])
-               : NULL;
-}
-
-static void testRollLines(void)
-{
-    recordRoll(0);
-    recordRoll(1);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
-    CHECK(st->snap == RD_SNAP_NONE && st->lerped >= 2, "roll: both lines blend (lerped %u)",
-          st->lerped);
-    const RdFrame *f = built(0.5f);
-    const RdTextItem *a = itemIn(f, 12, RD_KEY(&kObjD, 10, 0)),
-                     *b = itemIn(f, 12, RD_KEY(&kObjD, 11, 0));
-    CHECK(a && b && a->y == 299.0f && b->y == 198.0f && strcmp(a->utf8, b->utf8) == 0,
-          "roll: the same name on two lines, each half way on its own (%.1f, 299; %.1f, 198)",
-          a ? a->y : -1.0f, b ? b->y : -1.0f);
-}
-
 /* ------------------------------------------------- morphing meshes (R7d) */
 
 /* the creation stream of a 3-vertex prelit batch with vertex 1 at x */
@@ -2430,7 +2387,6 @@ static void runCpu(void)
     testFeedback();
     testText();
     testDeferredText();
-    testRollLines();
     testMorph();
     testUnmatched();
     testParticleOrder();

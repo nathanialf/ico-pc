@@ -1,32 +1,34 @@
-/* menu_text_test.c: the game's menu text drawn with the port font (package
- * P3; docs/port/UI.md, "Menu text").
+/* menu_text_test.c: the game's menu words keep their texels; the port's
+ * rows are text (packages P3, TXT2; docs/port/UI.md, "Menu text").
  *
  * Without a device:
- *   - the table: every row a texProperty index with a non-empty texel
- *     rectangle, every item used, the anchors inside their rectangles;
+ *   - the table (the game face's source, menu_text.h): every row a
+ *     texProperty index with a non-empty texel rectangle, every item used,
+ *     the anchors inside their rectangles;
  *   - with the user's disc (argv[1], the PAL image; skipped when absent):
  *     every table row is the texProperty row of the boot ELF with that
  *     rectangle, on a text sheet;
  *   - every string id exists in all five languages and is drawable;
+ *   - the subtitle transcriptions (test/subtitles.h, test data for the font
+ *     coverage corpus): sorted, one or two lines, drawable, the lookup;
  *   - the hook through the real layout_texture.c (GifPacket.c,
  *     DisplayList.c, DmaPacket.c as the window build has them, the rest of
- *     the game stubbed, rows shaped like the PAL title's): a table row is
- *     drawn as atlas text and a row not in the table (the copyright line)
- *     as its texture sprite; every row's texture is still transferred;
- *     classic mode draws the textures; a row whose rectangle differs from
- *     the table's (tables that are not the PAL ones) keeps its texture;
- *   - package DEF: each text row records an RDC_OVERLAY_TEXT item before its
+ *     the game stubbed, rows shaped like the PAL title's): every game row,
+ *     in the table or not, is its texture sprite and records no text item;
+ *     every row's texture is transferred; the save screens' figures too;
+ *   - a port row on a game row's box puts its capitals where the sheet's
+ *     lettering has them;
+ *   - package DEF: each port row records an RDC_OVERLAY_TEXT item before its
  *     glyph quads, which carry RD_SCREEN_TEXT_QUADS; the present's deferred
  *     renderer lays the items out at 1920 x 1080; a fade after the rows
  *     records an op after the items; a keep frame's rows before its KEEP
- *     give nothing; classic mode records neither items nor ops.
- * Then on a Vulkan device (exit 77 without one; lavapipe here): the title's
- * "New Game" row through exec_layout_texture into SCENE: the text covers
- * pixels only inside the row's rectangle (with the rim's margin), none
- * elsewhere.  Writes menu_text_scene.png beside itself.  With gamefont.bin
- * beside it (font_coverage writes it from the disc; package GFONT) the row
- * is drawn in the game's own lettering, at the sheet's size: a texel of the
- * sheet a texel of the frame, as the PS2's sprite was.
+ *     give nothing; the game rows alone record neither items nor ops.
+ * Then on a Vulkan device (exit 77 without one; lavapipe here): a port row
+ * "New Game" in the title's place through exec_layout_texture into SCENE:
+ * the text covers pixels only inside the row's rectangle (with the rim's
+ * margin), none elsewhere.  Writes menu_text_scene.png beside itself.  With
+ * gamefont.bin beside it (font_coverage writes it from the disc; package
+ * GFONT) the row is drawn in the game's own lettering.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU checks).
  */
@@ -455,89 +457,49 @@ static void layoutFrame(void)
     dl_Swap();
 }
 
-/* the frame's atlas text batches in list 11, in draw order */
-static int textBatches(const RdCmd **cmd, int max)
+/* a port row (layout_ext.c) with label text at (dispX, dispY) in a dispW x
+   dispH box (centred when centerX), selectable */
+static int addPortRow(const char *text, int dispX, int dispY, int dispW, int dispH, int centerX,
+                      int align)
 {
-    const RdFrame *f = rd__LastFrame();
-    Walk *w = calloc(1, sizeof(Walk));
-    RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, w);
-    int n = 0;
-    for (int i = 0; i < w->n && n < max; i++) {
-        for (int px = 1; px < 64; px++) {
-            if (w->st[i].tex == ui_FontPageTex(px, 0) && w->st[i].tex != 0) {
-                cmd[n++] = w->cmd[i];
-                break;
-            }
-        }
-    }
-    free(w);
-    return n;
-}
-
-/* A port row (layout_ext.c) placed where a game menu row is, with the same
-   label and size, draws its letters at the same height: OK (181, a
-   20-texel row whose capitals sit at texel 9.0) and a port row "OK" at
-   size 27 in the same 20-field-line box, drawn by one layout and its
-   link.  Before the fix the port row centred the capitals in the box, a
-   field line (2 y units) lower than the game's rows (docs/port/UI.md, open
-   item 10). */
-static void testPortRowAnchor(void)
-{
-    memset(texLayout, 0, sizeof(texLayout));
-    lt_ext_Reset();
-    setRow(181, 270, 100, 40, 0);
     LtProperty pr;
     memset(&pr, 0, sizeof(pr));
     pr.word0 = -1;
     pr.ownerItem = -1;
     pr.up = pr.down = pr.left = pr.right = -1;
     pr.rightItem = pr.leftItem = pr.upItem = pr.downItem = -1;
-    pr.dispX = 270;
-    pr.dispY = 100;
-    pr.dispW = 100;
-    pr.dispH = 40;
+    pr.dispX = dispX;
+    pr.dispY = dispY;
+    pr.dispW = dispW;
+    pr.dispH = dispH;
+    pr.centerX = centerX;
     pr.selectable = 1;
-    LtExtText t = {0, "OK", UI_MENU_TEXT_SIZE, UI_ALIGN_LEFT};
-    const int port = lt_ext_AddProperty(&pr, &t);
+    LtExtText t = {0, text, UI_MENU_TEXT_SIZE, align};
+    return lt_ext_AddProperty(&pr, &t);
+}
+
+/* rows first..last (port indices) as a layout without a cursor, linked
+   after the title layout so the title draws them */
+static void linkPortRows(int first, int last)
+{
     LtProp pl;
     memset(&pl, 0, sizeof(pl));
-    pl.first = port;
-    pl.last = port + 1;
+    pl.first = first;
+    pl.last = last + 1;
     pl.defaultItem = pl.curItem = -1;
     pl.link = -1;
-    LtProp *l = &texLayout[TITLE_LAYOUT];
-    l->first = 181;
-    l->last = 182;
-    l->defaultItem = l->curItem = 181;
-    l->link = lt_ext_AddLayout(&pl);
-    current_layout_id = TITLE_LAYOUT;
-    layoutFrame();
-    const RdCmd *cmd[32];
-    const int n = textBatches(cmd, 32);
-    CHECK(n == 18, "two text rows: %d atlas batches, expected 18", n);
-    if (n != 18) {
-        return;
-    }
-    /* the halo copies and the letters, batch by batch: the same glyphs at
-       the same y (x differs: the game row's lettering starts 7 texels in) */
-    const RdFrame *f = rd__LastFrame();
-    int same = 1;
-    float worst = 0.0f;
-    for (int b = 0; b < 9; b++) {
-        const RdScreenVtx *g = (const RdScreenVtx *)(f->payload + cmd[b]->u[0]);
-        const RdScreenVtx *p = (const RdScreenVtx *)(f->payload + cmd[9 + b]->u[0]);
-        same = same && cmd[b]->u[1] == cmd[9 + b]->u[1];
-        for (uint32_t k = 0; same && k < cmd[b]->u[1]; k++) {
-            const float d = fabsf((float)p[k].y - (float)g[k].y) / 16.0f;
-            worst = d > worst ? d : worst;
-        }
-    }
-    CHECK(same && worst <= 1.0f / 16.0f,
-          "the port row's letters at the game row's height (worst %.3f GS pixels)", worst);
-    printf("menu_text_test: port row vs game row OK: %d batches each, worst y difference %.3f\n",
-           n / 2, worst);
+    texLayout[TITLE_LAYOUT].link = lt_ext_AddLayout(&pl);
+}
+
+/* the title's game rows and, below New Game, two port rows on the title's
+   pitch (as settings.c placeTitle adds Settings and Quit to desktop) */
+static void buildTitleWithPortRows(int withCopyright)
+{
     lt_ext_Reset();
+    buildTitle(withCopyright);
+    const int a = addPortRow("Settings", 0, 185, 0, 40, 1, UI_ALIGN_CENTER);
+    const int b = addPortRow("Quit to desktop", 0, 205, 0, 40, 1, UI_ALIGN_CENTER);
+    linkPortRows(a, b);
 }
 
 /* the text and the texture sprites of list 11, the backdrop left out */
@@ -687,36 +649,35 @@ static int collectPrims(void)
     return collectPrimsCrt(0);
 }
 
-/* Package DEF: every text row records, in place before its glyph quads, an
+/* Package DEF: every port row records, in place before its glyph quads, an
    RDC_OVERLAY_TEXT item with its string, anchor, size and colour, and its
    quads carry RD_SCREEN_TEXT_QUADS (an Enhanced present skips them and
-   draws the item on the output); classic mode records neither; a fade after
-   the rows records an op after the items, and none without text; a keep
-   frame's rows before its KEEP give the present nothing, as their quads
-   are drawn over */
+   draws the item on the output); the game's rows record neither (package
+   TXT2: their textures); a fade after the rows records an op after the
+   items, and none without text; a keep frame's rows before its KEEP give
+   the present nothing, as their quads are drawn over */
 static void testDeferred(void)
 {
-    ui_MenuTextSetClassic(0);
-    buildTitle(1); /* the copyright line (a texture), Continue, New Game */
+    buildTitleWithPortRows(1); /* the copyright line, Continue, New Game; two port rows */
     layoutFrame();
     TextWalk w;
     walkText(&w);
-    CHECK(w.items == 2, "two text rows: %d items (2)", w.items);
+    CHECK(w.items == 2, "two port rows: %d items (2)", w.items);
     CHECK(w.tagged == 2 * 9 && w.untaggedAtlas == 0,
           "every glyph batch is an item's quads: %d tagged, %d not (18, 0)", w.tagged,
           w.untaggedAtlas);
     CHECK(w.ops == 0, "no post pass, no op (%d)", w.ops);
-    int haveNew = 0, haveCont = 0;
+    int haveSet = 0, haveQuit = 0;
     for (int i = 0; i < w.items && i < 8; i++) {
         const RdTextItem *it = &w.item[i];
-        haveNew |= strcmp(it->utf8, "New Game") == 0;
-        haveCont |= strcmp(it->utf8, "Continue") == 0;
+        haveSet |= strcmp(it->utf8, "Settings") == 0;
+        haveQuit |= strcmp(it->utf8, "Quit to desktop") == 0;
         CHECK((it->flags & UI_HALO) && (it->flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
                   !it->additive && it->size > 1.0f && it->rgba[3] > 0,
               "item %d (\"%s\"): halo, centred, lerp, size %.1f, alpha %u", i, it->utf8, it->size,
               it->rgba[3]);
     }
-    CHECK(haveNew && haveCont, "the items are New Game and Continue");
+    CHECK(haveSet && haveQuit, "the items are the port rows, not New Game or Continue");
     const int prims = collectPrims();
     /* the same glyphs (the eight halo copies and the letters, a sprite a
        glyph) as the quads */
@@ -743,19 +704,20 @@ static void testDeferred(void)
     const int keptPrims = collectPrims();
     CHECK(keptPrims == 0, "a keep frame's rows before its KEEP give no prims (%d)", keptPrims);
 
-    /* classic: no items, no tagged quads, no ops */
-    ui_MenuTextSetClassic(1);
+    /* the game's rows alone: no items, no tagged quads, no ops */
+    lt_ext_Reset();
+    buildTitle(1);
     layoutFrameWithPosts(0x40, 0);
     walkText(&w);
     CHECK(w.items == 0 && w.tagged == 0 && w.ops == 0,
-          "classic: %d items, %d tagged batches, %d ops (0, 0, 0)", w.items, w.tagged, w.ops);
-    ui_MenuTextSetClassic(0);
-    printf("menu_text_test: deferred: 2 items before 18 tagged batches, %d vertices laid out at "
-           "1920x1080; fade op after the items; keep frame 0; classic none\n",
+          "game rows alone: %d items, %d tagged batches, %d ops (0, 0, 0)", w.items, w.tagged,
+          w.ops);
+    printf("menu_text_test: deferred: 2 port items before 18 tagged batches, %d vertices laid out "
+           "at 1920x1080; fade op after the items; keep frame 0; game rows none\n",
            prims);
 }
 
-/* ------------------------------------------- package TXT: the game's text */
+/* ------------------------------------- the subtitles and the save figures */
 
 /* every RDC_OVERLAY_TEXT item of the last frame in list `list`, with its key */
 typedef struct ItemWalk {
@@ -830,13 +792,14 @@ static void testSubtitleTables(void)
     CHECK(a && strcmp(a->text, "Get the sword.") == 0, "English block 0");
     /* block 9 is Yorda's script on the first run, the Queen's words once
        the game is cleared */
-    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 9) == NULL, "English first run block 9 keeps its picture");
+    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 9) == NULL,
+          "English first run block 9: no entry (Yorda's script)");
     a = ui_SubtitleFind(UI_LANG_EN, 1, 9);
     CHECK(a && strcmp(a->text, "Who are you ?\nHow did you get in here ?") == 0,
           "English after the clear, block 9");
     /* the French file keeps block 91 in Yorda's script after the clear */
     CHECK(ui_SubtitleFind(UI_LANG_FR, 1, 91) == NULL && ui_SubtitleFind(UI_LANG_DE, 1, 91),
-          "block 91 after the clear: French picture, German text");
+          "block 91 after the clear: no French entry, German text");
     a = ui_SubtitleFind(UI_LANG_ES, 0, 2);
     CHECK(a && strcmp(a->text, "\xC2\xBFHay alguien ah\xC3\xAD? \xC2\xBFQui\xC3\xA9n eres?") == 0,
           "Spanish block 2");
@@ -844,18 +807,11 @@ static void testSubtitleTables(void)
               ui_SubtitleFind(UI_LANG_EN, 0, 115) == NULL &&
               ui_SubtitleFind(UI_LANG_EN, 2, 0) == NULL,
           "no entry: an empty block, out of range, a third set");
-    /* the hook's lookup follows the language and the classic switch */
-    ui_SetLanguage(UI_LANG_DE);
-    a = lt_ext_SubtitleFind(1, 112);
-    CHECK(a && strcmp(a->text, "Auf Wiedersehen.") == 0, "German block 112 after the clear");
-    ui_MenuTextSetClassic(1);
-    CHECK(lt_ext_SubtitleFind(0, 0) == NULL && !lt_ext_PortText(), "classic: no subtitle text");
-    ui_MenuTextSetClassic(0);
-    ui_SetLanguage(UI_LANG_EN);
     printf("menu_text_test: %d subtitles over 5 languages and 2 sets\n", total);
 }
 
-/* the strings visitor reaches the menu words and the subtitles */
+/* the strings visitor reaches the menu words; the subtitles are not port
+   strings (TXT2: test data) */
 static int s_visits, s_visitSub;
 
 static void visit(UiLang lang, const char *s, void *user)
@@ -865,132 +821,12 @@ static void visit(UiLang lang, const char *s, void *user)
     s_visitSub += lang == UI_LANG_IT && strcmp(s, "Prendi la spada") == 0;
 }
 
-/* jimaku.c's display_texture for row 434 (dispX 64, dispY 144, the strip's
-   left 256 x 48 texels): the rectangle and texels it gives the sprite */
-static void jimakuBox(int dst[4], int src[4])
-{
-    src[0] = (0 << 4) + 8;
-    src[1] = (0 << 4) + 8;
-    src[2] = 256 << 4;
-    src[3] = 48 << 4;
-    dst[2] = src[2];
-    dst[3] = (src[3] >> 1) * 2;
-    dst[0] = (64 - 320) << 4;
-    dst[1] = (144 - 112) << 4;
-}
-
-static void testSubtitleDraw(void)
-{
-    int dst[4], src[4];
-    jimakuBox(dst, src);
-    const unsigned char col[4] = {0x80, 0x80, 0x80, 0x80};
-    static const int ring[2]; /* stands for jimaku.c's ring groups */
-    ui_SetLanguage(UI_LANG_EN);
-    const UiSubtitle *one = ui_SubtitleFind(UI_LANG_EN, 0, 0),
-                     *two = ui_SubtitleFind(UI_LANG_EN, 0, 1);
-    CHECK(one && two, "blocks 0 and 1");
-    if (!one || !two) {
-        return;
-    }
-    dl_SetDLPriority(11);
-    lt_ext_DrawSubtitle(two, &ring[0], dst, src, col);
-    lt_ext_DrawSubtitle(one, &ring[1], dst, src, col);
-    dl_Swap();
-    ItemWalk w;
-    itemWalk(&w, 11);
-    CHECK(w.n == 3, "a two-line and a one-line subtitle: %d items (3)", w.n);
-    if (w.n == 3) {
-        const UiSubtitleFace *fc = ui_SubtitleFace(UI_LANG_EN);
-        /* the strip's texel (x, y) is grid (63.5 + x, 289 + 2 y): row 434's
-           box from x 64, y 290 (dispY 144 - 112 field lines below the
-           centre), a field line a texel, the sprite's half-texel inset */
-        CHECK(strcmp(w.item[0].utf8, "Do not be angry with us.") == 0 &&
-                  strcmp(w.item[1].utf8, "This is for the good of the village.") == 0 &&
-                  strcmp(w.item[2].utf8, "Get the sword.") == 0,
-              "the lines: \"%s\" \"%s\" \"%s\"", w.item[0].utf8, w.item[1].utf8, w.item[2].utf8);
-        CHECK(fabsf(w.item[0].x - (63.5f + two->x[0])) < 0.01f &&
-                  fabsf(w.item[0].y - (289.0f + 2.0f * fc->y[0])) < 0.01f &&
-                  fabsf(w.item[1].y - (289.0f + 2.0f * fc->y[1])) < 0.01f &&
-                  fabsf(w.item[2].x - (63.5f + one->x[0])) < 0.01f &&
-                  fabsf(w.item[2].y - (289.0f + 2.0f * fc->y[1])) < 0.01f,
-              "placed on the strip: (%.2f %.2f) (%.2f %.2f) (%.2f %.2f)", w.item[0].x, w.item[0].y,
-              w.item[1].x, w.item[1].y, w.item[2].x, w.item[2].y);
-        CHECK(w.item[2].size == 32.0f && w.item[0].size <= 32.0f && w.item[0].size >= 19.0f,
-              "the em, 16 texels at 2 y units a texel: %g, %g", w.item[2].size, w.item[0].size);
-        CHECK(w.item[0].size == w.item[1].size, "one size a subtitle");
-        CHECK((w.item[0].flags & UI_HALO) && (w.item[0].flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
-                  (w.item[0].flags & UI_VALIGN_MASK) == UI_VALIGN_MIDDLE &&
-                  w.item[0].rgba[3] == 0x80,
-              "halo, centred, middle of the capitals, the sprite's alpha");
-        CHECK(w.key[0] != w.key[1] && w.key[0] != w.key[2] && w.key[0] && w.key[2],
-              "keyed per group and line");
-    }
-    printf("menu_text_test: subtitles: %d items from two blocks\n", w.n);
-}
-
-/* the staff roll's line hook: the codes skipped, the bitmap font's signs
-   mapped, font_Print's place, alignment and colour, a key per line slot;
-   blank lines draw nothing, classic draws nothing and returns 0 */
-static void testRollLine(void)
-{
-    const unsigned char white[4] = {255, 255, 255, 128};
-    const unsigned char plain[4] = {128, 128, 128, 128};
-    dl_SetDLPriority(12);
-    int r1 = lt_ext_DrawRollLine(3, "{#FFFFFF80}{R} ICO Staff  ", 0.0f, 112.0f, 2, white,
-                                 0x80u | 0x70707000u);
-    int r2 = lt_ext_DrawRollLine(7, "@ 2002 Sony Computer Entertainment Inc.", 0.0f, 300.0f, 0,
-                                 plain, 0x40u | 0x70707000u);
-    int r3 = lt_ext_DrawRollLine(8, " ", 0.0f, 200.0f, 0, plain, 0x80u | 0x70707000u);
-    /* the same name on two lines: two keys */
-    int r4 = lt_ext_DrawRollLine(10, "Kei Kuwabara ", 0.0f, 150.0f, 1, plain, 0x80u | 0x70707000u);
-    int r5 = lt_ext_DrawRollLine(11, "Kei Kuwabara ", 0.0f, 170.0f, 1, plain, 0x80u | 0x70707000u);
-    dl_Swap();
-    CHECK(r1 && r2 && r3 && r4 && r5, "drawn by the port font");
-    ItemWalk w;
-    itemWalk(&w, 12);
-    CHECK(w.n == 4, "four items, the blank line none: %d", w.n);
-    if (w.n == 4) {
-        CHECK(strcmp(w.item[0].utf8, " ICO Staff  ") == 0 &&
-                  strcmp(w.item[1].utf8, "\xC2\xA9 2002 Sony Computer Entertainment Inc.") == 0,
-              "codes skipped, '@' the copyright sign: \"%s\", \"%s\"", w.item[0].utf8,
-              w.item[1].utf8);
-        /* 512 x 512 GS frame: right-aligned 4 GS pixels (5 x units) in
-           from the right edge; centred on x + 320; capitals' middle 12.3 GS
-           lines below y, y 128 the centre line: grid 226 + (y + 12.3 - 128)
-           x 0.875 */
-        CHECK((w.item[0].flags & UI_ALIGN_MASK) == UI_ALIGN_RIGHT &&
-                  fabsf(w.item[0].x - 635.0f) < 0.01f &&
-                  fabsf(w.item[0].y - (226.0f + (112.0f + 12.3125f - 128.0f) * 0.875f)) < 0.01f,
-              "right edge %.2f, middle %.2f", w.item[0].x, w.item[0].y);
-        CHECK((w.item[1].flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
-                  fabsf(w.item[1].x - 320.0f) < 0.01f &&
-                  (w.item[2].flags & UI_ALIGN_MASK) == UI_ALIGN_LEFT &&
-                  fabsf(w.item[2].x - 5.0f) < 0.01f,
-              "centre %.2f, left %.2f", w.item[1].x, w.item[2].x);
-        CHECK(w.item[0].rgba[0] == 0x70 && w.item[0].rgba[3] == 0x80 && w.item[1].rgba[0] == 0x38 &&
-                  w.item[1].rgba[3] == 0x40,
-              "font_Print's colours: %u/%u, %u/%u", w.item[0].rgba[0], w.item[0].rgba[3],
-              w.item[1].rgba[0], w.item[1].rgba[3]);
-        CHECK(w.item[0].size == 22.0f && !(w.item[0].flags & UI_HALO),
-              "the bitmap font's capitals: size %g, no rim", w.item[0].size);
-        CHECK(strcmp(w.item[2].utf8, w.item[3].utf8) == 0 && w.key[2] != w.key[3] && w.key[2],
-              "the same name on two lines, two keys");
-    }
-    ui_MenuTextSetClassic(1);
-    dl_SetDLPriority(12);
-    const int rc = lt_ext_DrawRollLine(3, "Fumito Ueda ", 0.0f, 112.0f, 2, white, 0x80u);
-    dl_Swap();
-    itemWalk(&w, 12);
-    CHECK(rc == 0 && w.n == 0, "classic: font_Print's turn (%d), no item (%d)", rc, w.n);
-    ui_MenuTextSetClassic(0);
-    printf("menu_text_test: staff roll: 4 lines, keyed per slot; classic none\n");
-}
-
-/* the save screens' values through the menu text path: a play-time digit
-   (row 76, white without a rim), an empty file's slot number (52, grey) and
-   a used file's (62, black) */
+/* the save screens' values (package TXT2): a play-time digit (row 76), an
+   empty file's slot number (52) and a used file's (62), all in the menu
+   text table, are their texture sprites and record no text item */
 static void testDigits(void)
 {
+    lt_ext_Reset();
     memset(texLayout, 0, sizeof(texLayout));
     setRow(52, 210, 70, 30, 0);
     setRow(62, 210, 90, 30, 0);
@@ -1008,26 +844,68 @@ static void testDigits(void)
             texProperty[r].masked = 1;
         }
     }
+    for (int r = 52; r < 77; r++) {
+        texProperty[r].defaultMask = texProperty[r].masked; /* kept by a layout switch */
+    }
     current_layout_id = TITLE_LAYOUT;
+    s_texTransfers = 0;
     layoutFrame();
     ItemWalk w;
     itemWalk(&w, 11);
-    CHECK(w.n == 3, "three digit rows: %d items", w.n);
-    if (w.n == 3) {
-        CHECK(strcmp(w.item[0].utf8, "1") == 0 && strcmp(w.item[1].utf8, "1") == 0 &&
-                  strcmp(w.item[2].utf8, "1") == 0,
-              "the figure 1 three times");
-        /* grey: 151 / 255 of the sprite's colour, no rim; black; white,
-           no rim */
-        CHECK(!(w.item[0].flags & UI_HALO) && w.item[0].rgba[0] < w.item[2].rgba[0] &&
-                  w.item[0].rgba[0] > 0 && w.item[1].rgba[0] == 0 && !(w.item[2].flags & UI_HALO),
-              "inks: grey %u, black %u, white %u", w.item[0].rgba[0], w.item[1].rgba[0],
-              w.item[2].rgba[0]);
-    }
+    int text = 0, texture = 0;
+    countSprites(&text, &texture);
+    CHECK(itemOfRow(52) && itemOfRow(62) && itemOfRow(76), "the three rows are in the table");
+    CHECK(w.n == 0 && text == 0 && texture == 3 && s_texTransfers == 3,
+          "three digit rows: %d items, %d text batches, %d texture sprites, %d transfers "
+          "(0, 0, 3, 3)",
+          w.n, text, texture, s_texTransfers);
     for (int r = 52; r < 77; r++) {
-        texProperty[r].masked = 0;
+        texProperty[r].masked = texProperty[r].defaultMask = 0;
     }
-    printf("menu_text_test: digits: %d items\n", w.n);
+    printf("menu_text_test: digits: %d texture sprites, %d items\n", texture, w.n);
+}
+
+/* A port row placed on a game menu row's box, with the same label and
+   size, puts its capitals where the sheet's lettering has them: OK (181, a
+   20-texel row whose capitals sit at texel 9.0) and a port row "OK" at size
+   27 in the same 20-field-line box.  The game row is its texture; the
+   sheet's capital middle is mapped through the sprite's box and texels as
+   display_texture draws them (docs/port/UI.md, open item 10). */
+static void testPortRowAnchor(void)
+{
+    memset(texLayout, 0, sizeof(texLayout));
+    lt_ext_Reset();
+    setRow(181, 270, 100, 40, 0);
+    LtProp *l = &texLayout[TITLE_LAYOUT];
+    l->first = 181;
+    l->last = 182;
+    l->defaultItem = l->curItem = 181;
+    l->link = -1;
+    current_layout_id = TITLE_LAYOUT;
+    const int port = addPortRow("OK", 270, 100, 100, 40, 0, UI_ALIGN_LEFT);
+    linkPortRows(port, port);
+    layoutFrame();
+    ItemWalk w;
+    itemWalk(&w, 11);
+    const UiMenuTextItem *it = itemOfRow(181);
+    CHECK(w.n == 1 && it, "one item (the port row): %d", w.n);
+    if (w.n != 1 || !it) {
+        lt_ext_Reset();
+        return;
+    }
+    /* display_texture's sprite: box y (dispY - 113) * 16 + 4, h dispH * 8 - 16
+       (1/16 field line); texels v * 16 + 8, h * 16 - 16 (1/16 texel) */
+    const LtProperty *e = &texProperty[181];
+    const float by = (float)((e->dispY - 113) * 16 + 4) / 8.0f + UI_GRID_CY;
+    const float bh = (float)(e->dispH * 8 - 16) / 8.0f;
+    const float sy = bh * 16.0f / (float)(e->texH * 16 - 16);
+    const float oy = by - 8.0f / 16.0f * sy;
+    const float gameY = oy + it->y[UI_LANG_EN] * sy;
+    CHECK(fabsf(w.item[0].y - gameY) < 0.01f && strcmp(w.item[0].utf8, "OK") == 0,
+          "the port row's capitals at y %.3f, the sheet's at %.3f", w.item[0].y, gameY);
+    printf("menu_text_test: port row vs the sheet: capitals at %.3f and %.3f\n", w.item[0].y,
+           gameY);
+    lt_ext_Reset();
 }
 
 static void testHook(void)
@@ -1047,45 +925,31 @@ static void testHook(void)
     pad[0].ana[2] = pad[0].ana[3] = 128;
     pad[0].flags = 0;
 
-    ui_MenuTextSetClassic(0);
+    /* package TXT2: every game row is its texture, in the table or not */
     buildTitle(1);
-    CHECK(lt_ext_IsTextRow(&texProperty[50]) && !lt_ext_IsTextRow(&texProperty[48]),
-          "the hook's test: New Game is text, the copyright line a texture");
+    CHECK(!lt_ext_IsTextRow(&texProperty[50]) && !lt_ext_IsTextRow(&texProperty[48]),
+          "New Game and the copyright line are not text rows");
     s_texTransfers = 0;
     layoutFrame();
     int text = 0, texture = 0;
     countSprites(&text, &texture);
     CHECK(s_texTransfers == 3, "every row's texture transferred (%d of 3)", s_texTransfers);
-    /* per text row: eight halo copies and the letters */
-    CHECK(text == 2 * 9, "two text rows: %d atlas batches, expected 18", text);
-    CHECK(texture == 1, "one texture sprite (the copyright line): %d", texture);
-    printf("menu_text_test: port font: %d text batches, %d texture sprites, %d transfers\n", text,
+    CHECK(text == 0 && texture == 3, "game rows: %d text batches, %d texture sprites (0, 3)", text,
+          texture);
+    printf("menu_text_test: game rows: %d text batches, %d texture sprites, %d transfers\n", text,
            texture, s_texTransfers);
 
-    /* classic: the textures again */
-    ui_MenuTextSetClassic(1);
-    CHECK(!lt_ext_IsTextRow(&texProperty[50]) && ui_MenuTextItemOf(&texProperty[50]) == NULL,
-          "classic: no text row");
+    /* with two port rows linked: those are text (per row eight halo copies
+       and the letters), the game rows still their textures */
+    buildTitleWithPortRows(1);
     s_texTransfers = 0;
     layoutFrame();
     countSprites(&text, &texture);
-    CHECK(s_texTransfers == 3 && text == 0 && texture == 3,
-          "classic: %d transfers, %d text batches, %d texture sprites (3, 0, 3)", s_texTransfers,
-          text, texture);
-    ui_MenuTextSetClassic(0);
-
-    /* tables that are not the PAL ones: a row whose rectangle differs keeps
-       its texture */
-    buildTitle(1);
-    texProperty[50].texV += 1;
-    CHECK(ui_MenuTextItemOf(&texProperty[50]) == NULL, "a moved rectangle is not menu text");
-    layoutFrame();
-    countSprites(&text, &texture);
-    CHECK(text == 9 && texture == 2, "one text row, two textures (%d, %d)", text, texture);
+    CHECK(s_texTransfers == 3 && text == 2 * 9 && texture == 3,
+          "with port rows: %d transfers, %d text batches, %d texture sprites (3, 18, 3)",
+          s_texTransfers, text, texture);
     testDeferred();
     testPortRowAnchor();
-    testSubtitleDraw();
-    testRollLine();
     testDigits();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);
@@ -1113,7 +977,16 @@ static void testPixels(void)
 {
     ui__SetRecordHook(gif_HostFlush);
     dl_Init();
+    /* a port row "New Game" in the title's New Game box (row 50 itself is a
+       texture, which the stubbed tex_TransTexture leaves unbound) */
+    lt_ext_Reset();
     buildTitle(0);
+    texProperty[50].masked = texProperty[50].defaultMask = 1;
+    {
+        const int r = addPortRow("New Game", 0, texProperty[50].dispY, texProperty[50].texW,
+                                 texProperty[50].dispH, 1, UI_ALIGN_CENTER);
+        linkPortRows(r, r);
+    }
     /* the frame: SCENE cleared in list 0, the layout in list 11 */
     rd_SelectList(0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
@@ -1128,7 +1001,7 @@ static void testPixels(void)
         return;
     }
     rd_WritePng("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
-    /* the row's sprite rectangle (display_texture: centred, 172 texels
+    /* the row's box (display_texture: centred, New Game's 172 texels
        wide, 20 field lines from dispY 165), plus the rim's reach: Arimo's
        halo 1.5 y units; the game face's rim (GFONT) its glow, 6 texels round
        the letters (6 x units, 12 y units), as the sheet's own glow reaches
@@ -1160,6 +1033,8 @@ static void testPixels(void)
     printf("menu_text_test: New Game in %d,%d-%d,%d: %d pixels (%d near white), %d outside\n", x0,
            y0, x1, y1, inside, bright, outside);
     free(px);
+    texProperty[50].masked = texProperty[50].defaultMask = 0;
+    lt_ext_Reset();
     ui__SetRecordHook(NULL);
 }
 
@@ -1189,9 +1064,8 @@ int main(int argc, char **argv)
     testStrings();
     testSubtitleTables();
     ui_StringsForEach(visit, NULL);
-    CHECK(s_visits > 5 * 300 && s_visitSub == 2,
-          "ui_StringsForEach: %d strings, Italian \"Prendi la spada\" in both sets (%d)", s_visits,
-          s_visitSub);
+    CHECK(s_visits > 5 * 300 && s_visitSub == 0,
+          "ui_StringsForEach: %d strings, the subtitles not among them (%d)", s_visits, s_visitSub);
     testDiscRows(argc > 1 ? argv[1] : NULL);
     testHook();
     if (failures) {

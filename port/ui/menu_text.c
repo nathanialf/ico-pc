@@ -1,12 +1,15 @@
 /*
  * port/ui/menu_text.c
  *
- * The game's menu text rows drawn with the port font (menu_text.h;
- * docs/port/UI.md, "Menu text").
+ * The table of the game's menu words (menu_text.h; docs/port/UI.md, "Menu
+ * text" and "The font").  Nothing draws from it: the game's rows always
+ * draw their textures.  It is the source the game face is cut from
+ * (game_font_disc.c): each item names a word rectangle of the sheets, its
+ * transcribed words and where the lettering sits in it.
  *
- * The table.  Each item is one texel rectangle of a sheet that holds text;
- * every texProperty row that draws that rectangle is drawn from it (several
- * rows share one: Yes / No on five prompts, Back on the save screens).  The
+ * Each item is one texel rectangle of a sheet that holds text; the rows
+ * list every texProperty row that draws that rectangle (several rows share
+ * one: Yes / No on five prompts, Back on the save screens).  The
  * values were measured on the five PAL sheets (decoded from STGTTL.DF and
  * COMMON.DF on the user's disc; nothing of the disc is kept here): the
  * letters' fill (light grey with a dark rim, or black on the white panel),
@@ -26,7 +29,8 @@
  * A / B, 1 / 2 players; light with the rim).  Their em, anchor and capital
  * middle were measured the same way, per ink (UiMenuTextInk).
  *
- * Rows left as textures (not in the table), and why:
+ * Rows not in the table (no lettering to cut, or lettering in another
+ * style), and why:
  *   0..24      the stage's preload rows (layout 6, never drawn)
  *   25, 32     the LANGUAGE and TV headers: lettering inside the swash
  *              artwork
@@ -58,14 +62,8 @@
  */
 #include "menu_text.h"
 
-#include <stdint.h>
-#include <string.h>
-
 #include "font.h"
 #include "strings.h"
-#include "ui_internal.h"
-
-#define LT_GAME_ROWS 436
 
 /* clang-format off */
 /* {u, v, w, h, string, align, ink, em, x, pitch, {y EN, FR, DE, IT, ES}}, the
@@ -419,201 +417,3 @@ const UiMenuTextRow ui_menu_text_rows[] = {
 };
 const int ui_menu_text_row_count = (int)(sizeof(ui_menu_text_rows) / sizeof(ui_menu_text_rows[0]));
 /* clang-format on */
-
-static int s_classic;
-
-/* the row -> item map, built on first use: -1 for a row not in the table */
-static short s_itemOf[LT_GAME_ROWS];
-static int s_mapBuilt;
-
-/* the last plain box of each row (the glow maps from it) */
-static int s_base[LT_GAME_ROWS][4];
-static unsigned char s_hasBase[LT_GAME_ROWS];
-
-void ui_MenuTextSetClassic(int on)
-{
-    s_classic = on != 0;
-}
-
-int ui_MenuTextClassic(void)
-{
-    return s_classic;
-}
-
-static void buildMap(void)
-{
-    for (int i = 0; i < LT_GAME_ROWS; i++) {
-        s_itemOf[i] = -1;
-    }
-    for (int i = 0; i < ui_menu_text_row_count; i++) {
-        const UiMenuTextRow *r = &ui_menu_text_rows[i];
-        if (r->row >= 0 && r->row < LT_GAME_ROWS) {
-            s_itemOf[r->row] = r->item;
-        }
-    }
-    s_mapBuilt = 1;
-}
-
-static int rowIndex(const LtProperty *e)
-{
-    if (e < texProperty || e >= texProperty + LT_GAME_ROWS) {
-        return -1;
-    }
-    return (int)(e - texProperty);
-}
-
-const UiMenuTextItem *ui_MenuTextItemOf(const LtProperty *e)
-{
-    if (s_classic || !e) {
-        return NULL;
-    }
-    const int row = rowIndex(e);
-    if (row < 0) {
-        return NULL;
-    }
-    if (!s_mapBuilt) {
-        buildMap();
-    }
-    const int i = s_itemOf[row];
-    if (i < 0) {
-        return NULL;
-    }
-    const UiMenuTextItem *it = &ui_menu_text_items[i];
-    if (e->texU != it->u || e->texV != it->v || e->texW != it->w || e->texH != it->h) {
-        return NULL;
-    }
-    return it;
-}
-
-#define MAX_LINES 6
-#define LINE_BYTES 96
-
-/* splits s at '\n' into lines; returns the count */
-static int splitLines(const char *s, char lines[MAX_LINES][LINE_BYTES])
-{
-    int n = 0;
-    while (n < MAX_LINES) {
-        const char *nl = strchr(s, '\n');
-        size_t len = nl ? (size_t)(nl - s) : strlen(s);
-        if (len >= LINE_BYTES) {
-            len = LINE_BYTES - 1;
-        }
-        memcpy(lines[n], s, len);
-        lines[n][len] = '\0';
-        n++;
-        if (!nl) {
-            break;
-        }
-        s = nl + 1;
-    }
-    return n;
-}
-
-void ui_MenuTextDraw(const LtProperty *e, const int box[4], const int uv[4],
-                     const unsigned char rgba[4], int glow)
-{
-    const UiMenuTextItem *it = ui_MenuTextItemOf(e);
-    if (!it || uv[2] <= 0 || uv[3] <= 0) {
-        return;
-    }
-    const int row = rowIndex(e);
-    ui__Sync();
-    if (!glow || !s_hasBase[row]) {
-        memcpy(s_base[row], box, sizeof(s_base[row]));
-        s_hasBase[row] = 1;
-    }
-    const int *b = s_base[row];
-    /* the sprite's box in the grid: x 1/16 px from the centre, y 1/16 field
-       line from the centre (two y units a field line) */
-    const float bx = (float)b[0] / 16.0f + UI_GRID_CX;
-    const float by = (float)b[1] / 8.0f + UI_GRID_CY;
-    const float bw = (float)b[2] / 16.0f;
-    const float bh = (float)b[3] / 8.0f;
-    /* grid units per texel, and the grid point of the rectangle's corner:
-       the box spans the texels uv names (1/16 texel), which the caller's
-       inset may start half a texel in */
-    const float sx = bw * 16.0f / (float)uv[2];
-    const float sy = bh * 16.0f / (float)uv[3];
-    const float ox = bx + ((float)it->u * 16.0f - (float)uv[0]) / 16.0f * sx;
-    const float oy = by + ((float)it->v * 16.0f - (float)uv[1]) / 16.0f * sy;
-
-    char lines[MAX_LINES][LINE_BYTES];
-    const int n = splitLines(ui_Str((UiStrId)it->str), lines);
-    float size = it->em * sy;
-    /* the room the anchor leaves in the rectangle; a longer line (Arimo is
-       wider than the sheets' lettering at the same capitals) is set
-       smaller to fit, down to 60 %, as the Settings rows are */
-    float room;
-    switch (it->align) {
-    case UI_ALIGN_LEFT:
-        room = ((float)it->w - it->x) * sx;
-        break;
-    case UI_ALIGN_RIGHT:
-        room = it->x * sx;
-        break;
-    default:
-        room = 2.0f * (it->x < (float)it->w - it->x ? it->x : (float)it->w - it->x) * sx;
-        break;
-    }
-    float widest = 0.0f;
-    for (int i = 0; i < n; i++) {
-        float w = ui_MeasureText(size, lines[i]);
-        widest = w > widest ? w : widest;
-    }
-    if (room > 0.0f && widest > room) {
-        float k = room / widest;
-        size *= k < 0.6f ? 0.6f : k;
-    }
-    /* whole y units: one atlas per size, and the atlases are bounded */
-    size = (float)(int)(size + 0.5f);
-    if (size < 1.0f) {
-        size = 1.0f;
-    }
-
-    unsigned char col[4] = {rgba[0], rgba[1], rgba[2], rgba[3]};
-    if (it->ink == UI_INK_DARK) {
-        if (glow) {
-            return; /* black letters add nothing to the additive glow */
-        }
-        col[0] = col[1] = col[2] = 0;
-    } else if (it->ink == UI_INK_GREY) {
-        for (int c = 0; c < 3; c++) {
-            col[c] = (unsigned char)((col[c] * 151 + 127) / 255);
-        }
-    }
-    UiLang lang = ui_GetLanguage();
-    if ((int)lang < 0 || lang >= UI_LANG_COUNT) {
-        lang = UI_LANG_EN;
-    }
-    const float x = ox + it->x * sx;
-    unsigned flags = UI_KEEP_STATE | UI_VALIGN_MIDDLE | it->align;
-    if (!glow && it->ink == UI_INK_LIGHT) {
-        flags |= UI_HALO;
-    }
-    if (glow) {
-        /* lt_glow_sprite's blend (ALPHA 0x48), which the packet holds:
-           the quads keep the state (UI_KEEP_STATE), the deferred item
-           needs it said */
-        flags |= UI_ADDITIVE;
-    }
-    /* the glow sprite stretches the row's box: the same map for the text */
-    UiXform xf;
-    if (glow) {
-        xf.originX = bx;
-        xf.originY = by;
-        xf.scaleX = bw > 0.0f ? ((float)box[2] / 16.0f) / bw : 1.0f;
-        xf.scaleY = bh > 0.0f ? ((float)box[3] / 8.0f) / bh : 1.0f;
-        xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
-        xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
-    }
-    /* R7d: keyed by the row and the pass, as the port rows are */
-    const uint64_t owner =
-        ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
-    for (int i = 0; i < n; i++) {
-        const float y = oy + (it->y[lang] + (float)i * it->pitch) * sy;
-        /* package DEF: drawn at the output's resolution where the present
-           can (font.h ui_DrawTextDeferred); classic mode never gets here */
-        ui_DrawTextDeferred(x, y, size, col, lines[i], flags, glow ? &xf : NULL);
-    }
-    ui_SetDrawKey(owner);
-}

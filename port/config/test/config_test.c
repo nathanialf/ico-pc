@@ -311,6 +311,17 @@ static void test_save(void)
         free(a);
         free(b);
     }
+    /* the retired [game] classic_menu_text and port_font (package TXT2):
+       read without complaint, logged once, kept by a save */
+    write_file(toml, "version = 1\n[game]\nclassic_menu_text = true\nport_font = \"arimo\"\n"
+                     "language = \"fr\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK_STR(ico_config_get_string("game.language", "auto"), "fr");
+    CHECK(ico_config_save() == 0);
+    text = read_file(toml);
+    CHECK(text != NULL && strstr(text, "classic_menu_text = true\n") != NULL &&
+          strstr(text, "port_font = \"arimo\"\n") != NULL);
+    free(text);
     /* a failed save leaves the old file alone */
     {
         char *a = read_file(toml);

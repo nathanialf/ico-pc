@@ -1,7 +1,10 @@
 /*
- * port/ui/subtitles.c
+ * port/ui/test/subtitles.c
  *
- * The subtitle texts (subtitles.h; docs/port/UI.md, "Subtitles"), UTF-8.
+ * The subtitle texts (subtitles.h; docs/port/UI.md, "Subtitles"), UTF-8:
+ * test data.  The game draws its subtitles as the pictures they are; these
+ * words are part of the font coverage corpus (font_coverage_test.c), the
+ * characters the five languages need.
  *
  * Transcribed by eye from the pictures of DATA.DF's ten data_<LL><SS>.jim
  * files, decoded by tools/tm2_sheets.py from the user's disc (kept outside

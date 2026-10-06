@@ -437,9 +437,11 @@ int main(void)
         ui_MeasureText(27.0f, "xx");
         CHECK(ui_FontFallbackSeen(NULL, 0) == 1, "not twice");
     }
-    ui_SetFace(UI_FACE_ARIMO);
-    CHECK(ui_FontFaceOf('H') == UI_FACE_ARIMO, "port_font = arimo: H from Arimo");
-    ui_SetFace(UI_FACE_GAME);
+    /* no game face (no disc to cut it from): Arimo alone */
+    ui_GameFaceUnload();
+    CHECK(ui_FontFaceOf('H') == UI_FACE_ARIMO, "no game face: H from Arimo");
+    CHECK(ui_GameFaceLoad(blob, size) && ui_FontFaceOf('H') == UI_FACE_GAME,
+          "loaded again: H from the game face");
     /* refused blobs */
     {
         uint8_t *bad = malloc(size);
