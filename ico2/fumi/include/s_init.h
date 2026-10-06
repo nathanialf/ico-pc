@@ -22,14 +22,14 @@ struct AdpcmOpenReq;
  * other directories hold it as the handle the Set and Open calls return.
  * At 0x18 a VAB or sequence keeps its SPU buffer and an ADPCM stream
  * its SPU channel mask. Owner: ico2/fumi/include/s_init.h. */
-typedef struct SqEntry { /* field names derived */
-    unsigned short num;  /* 0x00, the bank's row */
-    unsigned short bank; /* 0x02, 10 BGM, 11 SE, 17 ADPCM */
-    unsigned short mode; /* 0x04, 0 a VAB, 1 a sequence, 2 a stream */
-    unsigned short seg;  /* 0x06, the SPU buffer segment */
+typedef struct SqEntry {     /* field names derived */
+    unsigned short num;      /* 0x00, the bank's row */
+    unsigned short bank;     /* 0x02, 10 BGM, 11 SE, 17 ADPCM */
+    unsigned short mode;     /* 0x04, 0 a VAB, 1 a sequence, 2 a stream */
+    unsigned short seg;      /* 0x06, the SPU buffer segment */
     ICO_WORD_PTR(void *) bd; /* 0x08, the VAB body's EE address */
-    void *hd;            /* 0x0C, the VAB header */
-    void *sq;            /* 0x10, the sequence */
+    void *hd;                /* 0x0C, the VAB header */
+    void *sq;                /* 0x10, the sequence */
     char pad14[4];
 
     union {
@@ -44,7 +44,7 @@ typedef struct SqEntry { /* field names derived */
     unsigned long long seMask;     /* 0x20, the SE slots playing from it */
     int vab;                       /* 0x28, the VAB handle, -1 while closed */
     struct AdpcmStreamTag *stream; /* 0x2C */
-} SqEntry; /* derived name */
+} SqEntry;                         /* derived name */
 
 /* s_init.c's `inline` functions, in the order of their definitions'
    out-of-line copies at the end of the object (first-declaration order), from
@@ -60,7 +60,10 @@ SqEntry *soundDataAreaGet(int no, int bank, int mode, int seg);
 SqEntry *soundHDDataSet(void *hd, int no, int bank, int mode, int seg);
 SqEntry *soundSQDataSet(void *sq, int no, int bank, int mode, int seg);
 int soundSeDefPlay(int kind, unsigned int owner, float *pos, int playMode);
-int soundSeDefPlayWithVolumeRate(int kind, unsigned int owner, float *pos, int playMode, float rate);
+
+int soundSeDefPlayWithVolumeRate(int kind, unsigned int owner, float *pos, int playMode,
+                                 float rate);
+
 float soundSeDefVolumeRateGet(int id);
 void soundSeDefVolumeRateSet(int id, float rate);
 void soundSeGroupStop(int arg);
@@ -136,6 +139,53 @@ typedef struct SeEnvDef { /* field names derived */
 } SeEnvDef; /* derived name */
 
 extern const SeEnvDef seEnv[];
+
+/* se-slot: one playing stage or event sound, 0x40 bytes on the EE (a host
+ * record: its pointers are native). Owner: this header; ico2/script/src/
+ * stageSEProc.c's routines are handed it. */
+/* The slot's 0x04 status word, written both as a whole and bit by bit. */
+typedef union SeFlag { /* field names derived */
+    unsigned int all;
+
+    struct {        /* field names derived */
+        short vol1; /* the second volume, which level1 is panned to */
+        unsigned int playMode
+            : 8; /* soundSeDefPlay's fourth argument, what soundSePlayModeStop stops by */
+        unsigned int audible : 1;       /* the sound is placed at its position */
+        unsigned int placed : 1;        /* set once a position has given the volume */
+        unsigned int levelHeight : 1;   /* the distance is taken at the camera's height */
+        unsigned int stereo : 1;        /* panned by the angle to the camera */
+        unsigned int rearFade : 1;      /* quieter the further it lies behind the camera */
+        unsigned int soloMute : 1;      /* silenced while another slot plays solo */
+        unsigned int maxVolumeType : 1; /* the curve past maxVolumeRange */
+        unsigned int : 1;
+    } bit;
+} SeFlag; /* derived name */
+
+typedef struct SeSlot { /* field names derived */
+    unsigned short num; /* 0x00, bumped on each release: the handle's top byte */
+    short vol0;         /* 0x02, the first volume SgSetSeVolDirect is given */
+    SeFlag flag;        /* 0x04 */
+    unsigned int owner; /* 0x08, soundSeDefPlay's second argument, -1 for a
+                            stage environment sound */
+    int padAct;         /* 0x0C, the iosPadActRequest handle */
+    short handle;       /* 0x10, the SgSePlay or SgBgmOpen handle */
+    short level0;       /* 0x12, the panned level vol0 follows */
+    short level1;       /* 0x14, the panned level flag.bit.vol1 follows */
+    char pad16[2];
+    float volumeRate;     /* 0x18, the labels are debug_DispSEInfo's */
+    float stereoRate;     /* 0x1C */
+    float attenuator;     /* 0x20 */
+    float maxVolumeRange; /* 0x24 */
+    float volumeLength;   /* 0x28 */
+    int (*proc)();        /* 0x2C, the environment row's proc */
+    SqEntry *req;         /* 0x30, the data area it plays from */
+    float *pos;           /* 0x34, a position vector: every reader passes it to
+                            sceVu0CopyVector and soundSeEnvPlay stores an
+                            allocated block in it */
+    SeDef *src;           /* 0x38 */
+    const SeEnvDef *env;  /* 0x3C, the sound-environment row the slot plays */
+} SeSlot;                 /* derived name */
 
 /* sefile: one sound bank, 0x64 bytes, the rows a stage's seSegFirst..
  * seSegLast covers. Reader: ico2/fumi/sound/s_init.c (soundSeEnvNotUseClose:

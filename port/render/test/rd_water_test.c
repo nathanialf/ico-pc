@@ -322,6 +322,8 @@ int gsb_ClipBox(float *p)
 
 static unsigned char s_arena[1 << 16] __attribute__((aligned(16)));
 
+unsigned char *ico_arena_cached_base = s_arena;
+
 unsigned char *ico_arena_base(void)
 {
     return s_arena;

@@ -217,7 +217,7 @@ void dl_Debug(void)
     debug_StdPrintfDummy("dldma %d\n", count - 1);
 }
 
-inline void dl_OpenDma(int id, void *addr, int qwc)
+inline void dl_OpenDma(int id, const void *addr, int qwc)
 {
     DlEntry *entry = &dlEntries[dlPriority];
     ICO_WORD old;

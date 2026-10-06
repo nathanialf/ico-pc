@@ -513,6 +513,29 @@ static inline int bga_findPtKey(BgaPtKey *k, int n, float f) /* derived name */
     return 0;
 }
 
+/* The last-key path below takes the EE's result for u = 0 (DIVERGENCES.md
+   F12). That holds while f has not passed the key's time and the record after
+   the keys does not change which curve k1 selects (its linear flag): the
+   host logs the first time either is not so, once each. */
+static void bga_noteLastKey(const char *fn, float f, int linear, const int *nextLinear)
+{
+    static int reportedF;
+    static int reportedLinear;
+
+    if (f > 0.0f && !reportedF) {
+        reportedF = 1;
+        fprintf(stderr, "bga: %s at the last key with f %g past its time; reported once\n", fn,
+                (double)f);
+    }
+    if (!reportedLinear && ico_arena_contains(nextLinear, sizeof(int)) && *nextLinear != linear) {
+        reportedLinear = 1;
+        fprintf(stderr, "bga: %s at the last key, linear %d, the next record's %d; reported once\n",
+                fn, linear, *nextLinear);
+    }
+}
+
+#define BGA_NOTE_LAST_KEY(fn, k, f) bga_noteLastKey((fn), (f), (k)->linear, &((k) + 1)->linear)
+
 static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
@@ -562,6 +585,7 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
     k1 = k + 1;
     f -= (float)k->time;
     if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetMotion", k, f);
         lastKey = *k;
         lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
         k1 = &lastKey;
@@ -713,6 +737,7 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
     k1 = k + 1;
     f -= (float)k->time;
     if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetMotionParticle", k, f);
         lastKey = *k;
         lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
         k1 = &lastKey;
@@ -876,6 +901,7 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
     k1 = k + 1;
     f -= (float)k->time;
     if (k1 == ICO_EEPTR(BgaPtKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetMotionLightning", k, f);
         lastKey = *k;
         lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
         k1 = &lastKey;
@@ -1040,6 +1066,7 @@ static float bga_GetExtMotion(BgaExtMotion *m)
     k1 = k + 1;
     f -= (float)k->time;
     if (k1 == ICO_EEPTR(BgaExtKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetExtMotion", k, f);
         lastKey = *k;
         lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
         k1 = &lastKey;
@@ -1133,6 +1160,7 @@ static void bga_GetGizmoMotion(BgaMotion *m, float *dst)
     k1 = k + 1;
     f -= (float)k->time;
     if (k1 == ICO_EEPTR(BgaKey *, m->key) + m->n) {
+        BGA_NOTE_LAST_KEY("bga_GetGizmoMotion", k, f);
         lastKey = *k;
         lastKey.time = (int)m->len > k->time ? (int)m->len : k->time + 1;
         k1 = &lastKey;

@@ -12,7 +12,7 @@
  * out-of-line copies at the end of the object (first-declaration order). */
 void dl_Out(void);
 void dl_SetDLPriority(int pri);
-void dl_OpenDma(int id, void *addr, int qwc);
+void dl_OpenDma(int id, const void *addr, int qwc);
 int dl_GetPri(void);
 void dl_CloseDma(void);
 void dl_Init(void);

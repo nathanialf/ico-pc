@@ -1693,7 +1693,7 @@ OFF(SqEntry, stream, 0x2C);
 SIZE(SqEntry, 0x30); /* comment */
 #endif
 
-/* SeDef: runtime, ico2/fumi/include/s_init.h:100 */
+/* SeDef: runtime, ico2/fumi/include/s_init.h:103 */
 #if ICO_LAYOUT_EE
 OFF(SeDef, name, 0x0);
 OFF(SeDef, kind, 0x20);
@@ -1706,7 +1706,7 @@ OFF(SeDef, shock, 0x36);
 SIZE(SeDef, 0x3C); /* comment */
 #endif
 
-/* SeEnvDef: runtime, ico2/fumi/include/s_init.h:123 */
+/* SeEnvDef: runtime, ico2/fumi/include/s_init.h:126 */
 #if ICO_LAYOUT_EE
 OFF(SeEnvDef, se, 0x0);
 OFF(SeEnvDef, proc, 0x4);
@@ -1717,12 +1717,35 @@ OFF(SeEnvDef, volumeLength, 0x14);
 SIZE(SeEnvDef, 0x1C); /* comment */
 #endif
 
-/* SeBank: overlay, ico2/fumi/include/s_init.h:144 */
+/* SeSlot: runtime, ico2/fumi/include/s_init.h:165 */
+#if ICO_LAYOUT_EE
+OFF(SeSlot, num, 0x0);
+OFF(SeSlot, vol0, 0x2);
+OFF(SeSlot, flag, 0x4);
+OFF(SeSlot, owner, 0x8);
+OFF(SeSlot, padAct, 0xC);
+OFF(SeSlot, handle, 0x10);
+OFF(SeSlot, level0, 0x12);
+OFF(SeSlot, level1, 0x14);
+OFF(SeSlot, pad16, 0x16);
+OFF(SeSlot, volumeRate, 0x18);
+OFF(SeSlot, stereoRate, 0x1C);
+OFF(SeSlot, attenuator, 0x20);
+OFF(SeSlot, maxVolumeRange, 0x24);
+OFF(SeSlot, volumeLength, 0x28);
+OFF(SeSlot, proc, 0x2C);
+OFF(SeSlot, req, 0x30);
+OFF(SeSlot, pos, 0x34);
+OFF(SeSlot, src, 0x38);
+OFF(SeSlot, env, 0x3C);
+#endif
+
+/* SeBank: overlay, ico2/fumi/include/s_init.h:194 */
 OFF(SeBank, hdPath, 0x0);
 OFF(SeBank, bdPath, 0x30);
 SIZE(SeBank, 0x64); /* comment */
 
-/* SeKind: overlay, ico2/fumi/include/s_init.h:155 */
+/* SeKind: overlay, ico2/fumi/include/s_init.h:205 */
 OFF(SeKind, num, 0x0);
 OFF(SeKind, prog, 0x2);
 OFF(SeKind, tone, 0x4);

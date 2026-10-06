@@ -129,6 +129,7 @@ PadActDef            overlay   # ELF shocklist
 SqEntry              runtime   # soundDataTbl rows hold EE addresses as int (R4 s.5)
 SeDef                runtime   # ELF sedef, filled by the table loader (port/data/tables.c, 5B); EE layout asserted by port/data/gen/table_desc.c. check is a function pointer (R4 s.4)
 SeEnvDef             runtime   # ELF se-env, filled by the table loader (port/data/tables.c, 5B); EE layout asserted by port/data/gen/table_desc.c. proc is a function pointer (R4 s.4)
+SeSlot               runtime   # seSlotTbl rows (fumi/sound/s_init.c), filled at run time; req, pos, src and env are real pointers, so the host row is larger than the EE's 0x40
 SeBank               overlay   # ELF sefile
 SeKind               overlay   # ELF selist
 # --- fumi/include/shockdriver.h ----------------------------------------------

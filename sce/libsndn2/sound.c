@@ -60,7 +60,7 @@ static unsigned char sgSlotContext[48][88]; /* derived name */
 
 static unsigned char sgSeqContext[48][84]; /* derived name */
 
-static int sgComContext[20]; /* derived name */
+static int sgComContext[20] __attribute__((aligned(8))); /* derived name */
 
 static unsigned char sgPacketContext[2 * 4096] __attribute__((aligned(64))); /* derived name */
 
@@ -1209,8 +1209,10 @@ int _SgIntoKeyOn(int count, int note, int key)
 
 int _SgPitchTableVag(int slot, int step, int note, int fine, int bend, int range, int pitch)
 {
-    _SgSetPkAdd(4, slot, (step << 24) | (note << 16) | ((fine & 0xFF) << 8) | bend,
-                (range << 24) | pitch);
+    _SgSetPkAdd(4, slot,
+                ((unsigned int)step << 24) | ((unsigned int)note << 16) | ((fine & 0xFF) << 8) |
+                    bend,
+                ((unsigned int)range << 24) | pitch);
     return 0;
 }
 
@@ -2079,7 +2081,7 @@ void _SgDmaCommon(int cmd, unsigned int iop, unsigned int spu, unsigned int size
     com[0x48 / 4] = com[0x48 / 4] + 1;
     w3 = (spu << 24) | (size & 0xFFFFFF);
     w2 = (iop << 16) | ((spu >> 8) & 0xFFFF);
-    w1 = (com[0x48 / 4] << 8) | ((iop >> 16) & 0xFF);
+    w1 = ((unsigned int)com[0x48 / 4] << 8) | ((iop >> 16) & 0xFF);
     _SgSetPkAdd(cmd, w1, w2, w3);
 }
 
@@ -2793,9 +2795,10 @@ int SgStAdpcmOpen(void *req)
     v10 = *(int *)(p + 0x10);
     v14 = *(int *)(p + 0x14);
     v8 = *(int *)(p + 8);
-    w3 = (c << 24) | (v8 & 0xFFFFFF);
-    w2 = (v10 << 16) | (((unsigned int)c >> 8) & 0xFFFF);
-    w1 = (b0 << 24) | (v4 & 0xFF0000) | (v14 & 0xFF00) | (((unsigned int)v10 & 0xFF0000) >> 16);
+    w3 = ((unsigned int)c << 24) | (v8 & 0xFFFFFF);
+    w2 = ((unsigned int)v10 << 16) | (((unsigned int)c >> 8) & 0xFFFF);
+    w1 = ((unsigned int)b0 << 24) | (v4 & 0xFF0000) | (v14 & 0xFF00) |
+         (((unsigned int)v10 & 0xFF0000) >> 16);
     _SgSetPkAdd(0x3E, w1, w2, w3);
     return 0;
 }
@@ -2887,7 +2890,7 @@ int SgStPcmOpen(int *req)
         goto done;
     if (v < 0x10) {
         v2 = req[1];
-        _SgSetPkAdd(0x48, (v << 24) | v2, n1, n2);
+        _SgSetPkAdd(0x48, ((unsigned int)v << 24) | v2, n1, n2);
         ret = 0;
     }
 done:

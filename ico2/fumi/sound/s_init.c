@@ -21,50 +21,6 @@
 #include <assert.h>
 #include <sound.h>
 
-/* The slot's 0x04 status word, written both as a whole and bit by bit. */
-typedef union SeFlag { /* field names derived */
-    unsigned int all;
-
-    struct {        /* field names derived */
-        short vol1; /* the second volume, which level1 is panned to */
-        unsigned int playMode
-            : 8; /* soundSeDefPlay's fourth argument, what soundSePlayModeStop stops by */
-        unsigned int audible : 1;       /* the sound is placed at its position */
-        unsigned int placed : 1;        /* set once a position has given the volume */
-        unsigned int levelHeight : 1;   /* the distance is taken at the camera's height */
-        unsigned int stereo : 1;        /* panned by the angle to the camera */
-        unsigned int rearFade : 1;      /* quieter the further it lies behind the camera */
-        unsigned int soloMute : 1;      /* silenced while another slot plays solo */
-        unsigned int maxVolumeType : 1; /* the curve past maxVolumeRange */
-        unsigned int : 1;
-    } bit;
-} SeFlag; /* derived name */
-
-typedef struct SeSlot { /* field names derived */
-    unsigned short num; /* 0x00, bumped on each release: the handle's top byte */
-    short vol0;         /* 0x02, the first volume SgSetSeVolDirect is given */
-    SeFlag flag;        /* 0x04 */
-    unsigned int owner; /* 0x08, soundSeDefPlay's second argument, -1 for a
-                            stage environment sound */
-    int padAct;         /* 0x0C, the iosPadActRequest handle */
-    short handle;       /* 0x10, the SgSePlay or SgBgmOpen handle */
-    short level0;       /* 0x12, the panned level vol0 follows */
-    short level1;       /* 0x14, the panned level flag.bit.vol1 follows */
-    char pad16[2];
-    float volumeRate;     /* 0x18, the labels are debug_DispSEInfo's */
-    float stereoRate;     /* 0x1C */
-    float attenuator;     /* 0x20 */
-    float maxVolumeRange; /* 0x24 */
-    float volumeLength;   /* 0x28 */
-    int (*proc)();        /* 0x2C, the environment row's proc */
-    SqEntry *req;         /* 0x30, the data area it plays from */
-    float *pos;           /* 0x34, a position vector: every reader passes it to
-                            sceVu0CopyVector and soundSeEnvPlay stores an
-                            allocated block in it */
-    SeDef *src;           /* 0x38 */
-    const SeEnvDef *env;  /* 0x3C, the sound-environment row the slot plays */
-} SeSlot;                 /* derived name */
-
 /* The TU's own .sbss and .bss, tentative definitions: the SPU buffer
    segments' next free addresses, the ADPCM and SE channel masks, the 16
    sound data areas and the 48 SE slots. */

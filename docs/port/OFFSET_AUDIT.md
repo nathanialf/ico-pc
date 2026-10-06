@@ -240,7 +240,7 @@ offset in the text through `ICO_RAW`/`ICO_RAWP`).
 | `common/src/sceneManager.c` | `*(int *)&gobj->dobj = (int)dobj`; the parent link at `GOBJ_SUB(self) + 0/4` | truncated stores | direct stores; `ICO_WORD_PTR(GObj *)` |
 | `common/src/icoMisc.c` | `(unsigned int)e > 0x1FEFFF0` | an EE address test | `!ico_arena_contains(e, 0)` |
 | `script/src/st04a.c` | `ActSt04A`, `PObjGObjSt04A` pad views of `Act` and `GObj` | the torch actor's words in the wrong places | `Act.torchAnim`, `Act.doorCamera` (unused by this actor), `wish0.w[0]` (where the EE keeps it) |
-| `script/src/stageSEProc.c` | `SEObj`, a pad view of `s_init.c`'s `SeSlot` | wrong for a record with pointers | a field-for-field copy of `SeSlot`'s host layout; it must follow `SeSlot` (see TODO.md) |
+| `script/src/stageSEProc.c` | `SEObj`, a pad view of `s_init.c`'s `SeSlot` | wrong for a record with pointers | `SeSlot` itself, exported from `fumi/include/s_init.h` |
 | `ito/src/itou_boss.c` `itou_boss_gflag_init` | one `memset` over `gflag[16]` and `capsule[53]` | assumes the EE linker's order: ran 3,392 bytes past `gflag` | two `memset`s |
 | `fumi/ios/shockdriver.c` `Init_Shock` | `ShockDriver` is `int[4]` used as a `ShockMgr` | too small (24 bytes on the host) | a static `ShockMgr` |
 | `omori/src/camera-ico2.c` `targetAPrev`, `targetBPrev` | `float[3]` written by a 16-byte `sceVu0ScaleVector` | the fourth word overran the next global (on the EE each sits in its own 16-byte `.bss` slot) | four words |

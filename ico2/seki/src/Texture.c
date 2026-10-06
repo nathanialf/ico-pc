@@ -282,7 +282,7 @@ static int tex_loadImage(ICO_WORD addr, TexData *tex, int idx, short dbp, short 
 }
 
 /* the exponent of the smallest power of two at least size, -1 past 1024,
- * which tex_setTexReg and tex_TransTextureDefocus inline */
+ * which tex_setTexReg inline */
 static inline int getTWTH(int size) /* derived name */
 {
     int ret = -1;
@@ -325,8 +325,7 @@ static inline int getTWTH(int size) /* derived name */
 
 typedef struct TexHostBind { /* port */
     unsigned long long key;
-    int id;    /* the table index, or -1 for tex */
-    RdTex tex; /* a render-target alias (tex_TransTextureDefocus) */
+    int id; /* the table index */
     int used;
 } TexHostBind;
 
@@ -426,9 +425,8 @@ static void texHostEnsure(TexData *t)
     texHostTexture((int)((TexEntry *)((char *)t - __builtin_offsetof(TexEntry, rec)) - texTable));
 }
 
-/* tex_setTexReg wrote tex0 for the texture t (or, with t null, the alias
-   tex) into list pri */
-static void texHostBind(int pri, unsigned long long tex0, TexData *t, RdTex tex)
+/* tex_setTexReg wrote tex0 for the texture t into list pri */
+static void texHostBind(int pri, unsigned long long tex0, TexData *t)
 {
     unsigned long long key = TEX_HOST_KEY(tex0);
     TexHostBind *b;
@@ -449,9 +447,7 @@ static void texHostBind(int pri, unsigned long long tex0, TexData *t, RdTex tex)
     }
     b[i].key = key;
     b[i].used = 1;
-    b[i].id =
-        t != 0 ? (int)((TexEntry *)((char *)t - __builtin_offsetof(TexEntry, rec)) - texTable) : -1;
-    b[i].tex = tex;
+    b[i].id = (int)((TexEntry *)((char *)t - __builtin_offsetof(TexEntry, rec)) - texTable);
 }
 
 static RdTex texHostLookup(const TexHostBind *b, unsigned long long key)
@@ -460,7 +456,7 @@ static RdTex texHostLookup(const TexHostBind *b, unsigned long long key)
 
     for (i = 0; i < TEX_HOST_BINDS; i++) {
         if (b[i].used && b[i].key == key) {
-            return b[i].id >= 0 ? texHostTexture(b[i].id) : b[i].tex;
+            return texHostTexture(b[i].id);
         }
     }
     return (RdTex){0};
@@ -584,7 +580,7 @@ static void tex_setTexReg(Tim2Picture *pic, TexData *t, int levels, int lv, int 
 #ifdef ICO_RD
     /* the TEX0 just written; the cache samples one level, so MIPTBP1/2 are
        not written */
-    texHostBind(dl_GetPri(), (unsigned long long)PacketBufferStruct.ptr.d[-2], t, (RdTex){0});
+    texHostBind(dl_GetPri(), (unsigned long long)PacketBufferStruct.ptr.d[-2], t);
 #else
     if (2 <= levels) {
         setGsReg(0x34, (long long)t->lv[TEXLV(lv + 1)].tbp[dl_GetPri()] |
@@ -1358,8 +1354,7 @@ int tex_TransTexture(int id, int ret)
     return ret;
 }
 
-/* a texture record by index, which tex_TransTextureDefocus and
- * tex_SetUVScroll inline */
+/* a texture record by index, which tex_SetUVScroll inlines */
 static inline TexData *getTextureData(int idx) /* derived name */
 {
     return &texTable[idx].rec;
@@ -1372,110 +1367,6 @@ typedef struct TexColor { /* field names derived */
     unsigned char a;
 } TexColor; /* derived name */
 
-/* as in GifPacket.h, which this TU does not include */
-extern void gif_SetZTest(int on);
-/* as in GifPacket.h, which this TU does not include */
-extern void gif_SetZWrite(int on);
-/* as in GifPacket.h, which this TU does not include */
-extern void gif_SetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
-                                  unsigned int h, int useoffset, int clear);
-/* this file's one use passes the depth as a 32-bit 0xFFFFFFFF: void (int *,
- * unsigned int, int *, TexColor *, int) here, void (GifRect *, long long,
- * GifRect *, GifColor *, int) in GifPacket.h */
-extern void gif_SpriteSensitiveOrg(int *r, unsigned int z, int *uv, TexColor *col, int prim);
-
-#ifdef ICO_RD
-
-/* R2b: no caller in the game.  The PS2 draws the texture at 1/2^lv into a
-   block of the bump allocator and binds that block; on rd the block is a
-   temporary render target, drawn and bound the same way, and noted as the
-   texture of that TEX0 for the decoder. */
-static void tex_TransTextureDefocus(int id, int lv)
-{
-    TexData *p;
-    int w;
-    int h;
-    int tbp;
-    int rect[4];
-    RdTarget tt;
-    unsigned long long tex0;
-
-    tex_TransTexture(id, dl_GetPri());
-
-    p = getTextureData(id);
-    w = p->pic.imageWidth >> lv;
-    h = p->pic.imageHeight >> lv;
-
-    tbp = tex_AllocVramAuto(0, w * h / 64);
-    tt = rd_TempTarget(w, h, 0, 0);
-
-    gif_StartPacketPri(dl_GetPri());
-    rect[0] = -w * 8 - 4;
-    rect[1] = -h * 8 - 4;
-    rect[2] = w * 16;
-    rect[3] = h * 16;
-    {
-        int uv[4] = {8, 8, p->pic.imageWidth * 16, p->pic.imageHeight * 16};
-        TexColor col = {128, 128, 128, 128};
-        gif_SetZTest(0);
-        gif_SetZWrite(0);
-        gif_HostFlush();
-        rd_SetTarget(tt, (RdTarget){0}, w, h, 0);
-        gif_SpriteSensitiveOrg(rect, 0xFFFFFFFF, uv, &col, 0);
-        gif_SetZWrite(1);
-        gif_SetZTest(1);
-
-        tex0 = tbp | ((long long)(w < 64 ? 1 : w / 64) << 14) | ((long long)getTWTH(w) << 26) |
-               ((long long)getTWTH(h) << 30) | ((long long)1 << 34);
-        texHostBind(dl_GetPri(), tex0, 0, rd_TargetTexture(tt, RD_VIEW_RGBA));
-        gif_SetGsReg(6, tex0);
-        gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, 1, 0);
-        gif_EndPacket();
-    }
-}
-
-#else
-
-static void tex_TransTextureDefocus(int id, int lv)
-{
-    TexData *p;
-    int w;
-    int h;
-    int tbp;
-    int rect[4];
-
-    tex_TransTexture(id, dl_GetPri());
-
-    p = getTextureData(id);
-    w = p->pic.imageWidth >> lv;
-    h = p->pic.imageHeight >> lv;
-
-    tbp = tex_AllocVramAuto(0, w * h / 64);
-
-    gif_StartPacketPri(dl_GetPri());
-    rect[0] = -w * 8 - 4;
-    rect[1] = -h * 8 - 4;
-    rect[2] = w * 16;
-    rect[3] = h * 16;
-    {
-        int uv[4] = {8, 8, p->pic.imageWidth * 16, p->pic.imageHeight * 16};
-        TexColor col = {128, 128, 128, 128};
-        gif_SetZTest(0);
-        gif_SetZWrite(0);
-        gif_SetDrawEnviroment(tbp, 0, w, h, 0, 0);
-        gif_SpriteSensitiveOrg(rect, 0xFFFFFFFF, uv, &col, 0);
-        gif_SetZWrite(1);
-        gif_SetZTest(1);
-
-        gif_SetGsReg(6, tbp | ((long long)(w < 64 ? 1 : w / 64) << 14) |
-                            ((long long)getTWTH(w) << 26) | ((long long)getTWTH(h) << 30) |
-                            ((long long)1 << 34));
-        gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, 1, 0);
-        gif_EndPacket();
-    }
-}
-
-#endif
 /* A 256-entry CLUT is held in CSM1 order, the two halves of every other
  * 16-entry block swapped, so an entry index is swizzled before the entry is
  * touched. A 16-entry CLUT is held straight. tex_dispClut walks the same
@@ -1687,6 +1578,19 @@ int tex_FreeTexture(int id)
        still draw it) */
     rdtex_Drop((unsigned int)id);
     texHost.serial[id] = 0;
+    {
+        /* no list keeps the freed id as the texture a TEX0 means */
+        int l;
+        int j;
+
+        for (l = 0; l < 13; l++) {
+            for (j = 0; j < TEX_HOST_BINDS; j++) {
+                if (texHost.bind[l][j].used && texHost.bind[l][j].id == id) {
+                    texHost.bind[l][j].used = 0;
+                }
+            }
+        }
+    }
 #endif
 
     if (t->clut.addr != 0) {

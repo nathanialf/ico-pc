@@ -195,6 +195,8 @@ void *isysGObjGetExist_next(void *o)
 /* the EE word arena (eeword.h) */
 static unsigned char s_arena[1 << 12] __attribute__((aligned(16)));
 
+unsigned char *ico_arena_cached_base = s_arena;
+
 unsigned char *ico_arena_base(void)
 {
     return s_arena;

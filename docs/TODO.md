@@ -163,19 +163,12 @@ pointer to this file.
   `actSt13cSekizoChk` calls `soundSeDefStop(se)` with `volatile int se` never
   written, reading stack garbage on the PS2 and the host alike. Decide the
   PS2's effective value and pass it (-1 if none).
-- **`stageSEProc.c` keeps a hand copy of `SeSlot`.** Its `SEObj` copies the
-  private `SeSlot` host layout of `fumi/sound/s_init.c` field for field and
-  breaks silently if `SeSlot` changes. Export `SeSlot` from
-  `fumi/include/s_init.h` and drop the copy.
 - **Freed model images.** Whether anything reads a model image's tables
   after the loader frees the image is not settled
   (docs/research/loader-census.md). The decoded tables live outside the
   arena, so the `asan` preset covers them; the image itself is in the arena
   and only `ICO_HEAP_ASAN` with reads instrumented would see it, which the
   documented recipe turns off.
-- **Arena base lookups.** Every EE-word read calls `ico_arena_base()`
-  (`common/include/eeword.h`). Caching the base in a global read inline
-  would remove a call from a hot path.
 
 ## Floating point
 
@@ -318,16 +311,7 @@ pointer to this file.
   list start; settle with one debug-layer run over a stage load.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
-- **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`
-  packet words and 8-byte alignment of `sgComContext` (a host change, made
-  here).
-- **BGA last key (F12).** Log when the host's last-key path runs with
-  `f > k->time` or with `linear` differing from the next record, then amend
-  F12.
-- **Small cleanups.** `dl_OpenDma(int, const void *, int)`; clear
-  `texHost.bind` for a freed id in `tex_FreeTexture`; drop the dead `ICO_RD`
-  `tex_TransTextureDefocus`; share
-  `vsel()`; `rd_perf` GPU records keyed by RHI frame index.
+- **Small cleanups.** `rd_perf` GPU records keyed by RHI frame index.
 
 ## Checks that need a PS2 or a play-through
 

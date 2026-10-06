@@ -4,6 +4,7 @@
  * The simulated EE main RAM (arena.h) and the heap statistics.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "arena.h"
@@ -18,6 +19,10 @@
 #endif
 
 static unsigned char *arena;
+
+/* eeword.h reads the base through this, without a call. It is set where the
+   arena is created and must never change afterwards (ico_arena_init checks). */
+unsigned char *ico_arena_cached_base;
 
 int ico_arena_init(void)
 {
@@ -45,6 +50,11 @@ int ico_arena_init(void)
 #endif
     p = ((uintptr_t)m + ICO_ARENA_ALIGN - 1) & ~(uintptr_t)(ICO_ARENA_ALIGN - 1);
     arena = (unsigned char *)p;
+    if (ico_arena_cached_base != NULL && ico_arena_cached_base != arena) {
+        fprintf(stderr, "arena: the base changed\n");
+        abort();
+    }
+    ico_arena_cached_base = arena;
     return 0;
 }
 

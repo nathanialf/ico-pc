@@ -34,6 +34,10 @@
 /* port/platform/arena.h; declared here so game headers need not reach the
    platform's include directory */
 unsigned char *ico_arena_base(void);
+/* The arena's base, set once when the arena is created and never changed
+   (port/platform/arena.c); every EE-word read takes it from here instead of
+   calling ico_arena_base(). NULL before the arena exists. */
+extern unsigned char *ico_arena_cached_base;
 int ico_arena_contains(const void *p, __SIZE_TYPE__ n);
 
 typedef unsigned int IcoEEWord;
@@ -48,15 +52,14 @@ static __inline__ IcoEEWord ico_eew(const void *p)
     if (!ico_arena_contains(p, 0)) {
         __builtin_trap();
     }
-    return (IcoEEWord)((const unsigned char *)p - ico_arena_base());
+    return (IcoEEWord)((const unsigned char *)p - ico_arena_cached_base);
 }
 
 static __inline__ void *ico_eeptr(IcoEEWord w)
 {
-    return w == 0 ? (void *)0 : (void *)(ico_arena_base() + w);
+    return w == 0 ? (void *)0 : (void *)(ico_arena_cached_base + w);
 }
 
 #define ICO_EEW(p) ((int)ico_eew(p))
 #define ICO_EEPTR(T, w) ((T)ico_eeptr((IcoEEWord)(w)))
-
 #endif /* EEWORD_H */

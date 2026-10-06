@@ -13,7 +13,7 @@
 #include "stageSEProc.h"
 #include "main.h"
 
-/* where a stage sound plays from, the three floats SEObj.pos points at */
+/* where a stage sound plays from, the three floats SeSlot.pos points at */
 typedef struct { /* field names derived */
     float x;
     float y;
@@ -73,39 +73,8 @@ static inline int se10lInStrongBox(float *pos) /* derived name */
     return scpTriggerPosBox(pos, (float *)&center, (float *)&size);
 }
 
-typedef union { /* field names derived */
-    int i;
-    float f;
-} SEVal; /* derived name */
-
 /* the stage sound object each stageSE routine is handed: the sound slot
-   (fumi/sound/s_init.c's SeSlot, 0x40 bytes on the EE) */
-
-/* SeSlot is a runtime record with pointers, so on the host its fields are not at
-   the EE's offsets; this is its natural layout, field for field.  It must follow
-   SeSlot; the slot should be exported from s_init.h and this copy dropped
-   (docs/TODO.md; docs/port/OFFSET_AUDIT.md, "Conventions in ico2/"). */
-typedef struct { /* field names derived */
-    unsigned short num;
-    short vol0;
-    SEVal flags;        /* 0x04 */
-    unsigned int owner; /* 0x08 */
-    int padAct;         /* 0x0C */
-    short handle;       /* 0x10 */
-    short level0;       /* 0x12 */
-    short level1;       /* 0x14 */
-    char pad16[2];
-    SEVal vol;            /* 0x18, the volume */
-    SEVal pitch;          /* 0x1C */
-    float attenuator;     /* 0x20 */
-    float maxVolumeRange; /* 0x24 */
-    float volumeLength;   /* 0x28 */
-    int (*proc)();        /* 0x2C */
-    void *req;            /* 0x30 */
-    float *pos;           /* 0x34, where the sound plays from */
-    void *src;            /* 0x38 */
-    int *mail;            /* 0x3C, the environment row (SeEnvDef): its first word is read */
-} SEObj;                  /* derived name */
+   (fumi/include/s_init.h's SeSlot, 0x40 bytes on the EE) */
 
 /* The wind-speed cache the strong-wind routines share: the last value of
    GetRegularizedWindSpeed and the frame_count it was read on, both in .sdata
@@ -114,7 +83,7 @@ static float windCache = 0.0f; /* derived name */
 
 static int windCacheFrame = 0; /* derived name */
 
-int stageSEtaimatsu(SEObj *self)
+int stageSEtaimatsu(SeSlot *self)
 {
     Blk16 v;
     Blk16 d;
@@ -130,7 +99,7 @@ int stageSEtaimatsu(SEObj *self)
         return 0;
     }
     campos = (float *)GetCameraPos();
-    self->pitch.f = 0.5f;
+    self->stereoRate = 0.5f;
     if (boyGObj != 0) {
         GObj *w = GetBoyWeaponGObj();
 
@@ -148,7 +117,7 @@ int stageSEtaimatsu(SEObj *self)
         if (g == torch) {
             continue;
         }
-        id = *self->mail;
+        id = self->env->se;
         if ((i & 1) == 0) {
             id -= 426;
         } else {
@@ -184,21 +153,21 @@ static float river06aLevel; /* derived name */
 
 /* the river fade-out, inlined into stageSE04eriver (twice) and
  * stageSE06ariver */
-static inline int SEFadeOut(SEObj *self, float *lvl) /* derived name */
+static inline int SEFadeOut(SeSlot *self, float *lvl) /* derived name */
 {
     float v = *lvl - riverFadeSpeed;
 
     *lvl = v;
-    self->vol.f = v;
+    self->volumeRate = v;
     if (0.0f < v) {
         return 1;
     }
-    self->vol.f = 0.0f;
+    self->volumeRate = 0.0f;
     *lvl = 0.0f;
     return 0;
 }
 
-int stageSE04eriver(SEObj *self)
+int stageSE04eriver(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
     float z = p[2];
@@ -223,7 +192,7 @@ int stageSE04eriver(SEObj *self)
         } else {
             r = (z - -5500.0f) / 3500.0f;
         }
-        self->vol.f = 1.0f - r;
+        self->volumeRate = 1.0f - r;
     } else {
         if (z < -5750.0f) {
             r = 0.0f;
@@ -232,15 +201,15 @@ int stageSE04eriver(SEObj *self)
         } else {
             r = (z - -5750.0f) / 250.0f;
         }
-        self->vol.f = r;
+        self->volumeRate = r;
     }
-    if (self->vol.f < 0.5f && p[1] < -1000.0f && -6500.0f < p[2]) {
-        self->vol.f = 0.5f;
+    if (self->volumeRate < 0.5f && p[1] < -1000.0f && -6500.0f < p[2]) {
+        self->volumeRate = 0.5f;
     }
     return -1;
 }
 
-int stageSE06ariver(SEObj *self)
+int stageSE06ariver(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
 
@@ -250,26 +219,26 @@ int stageSE06ariver(SEObj *self)
     river06aLevel = 1.0f;
     if (p[0] < 300.0f && 848.0f < p[2]) {
         if (gflagChk(107) == 0) {
-            self->vol.f = 0.05f;
+            self->volumeRate = 0.05f;
         } else {
-            self->vol.f = 0.4f;
+            self->volumeRate = 0.4f;
         }
-        self->pitch.f = 0.1f;
+        self->stereoRate = 0.1f;
         self->pos[0] = -490.0f;
         self->pos[1] = -757.0f;
         self->pos[2] = 759.0f;
         return 1;
     }
-    self->vol.f = 0.7f;
-    self->flags.i &= 0xEFFFFFFF;
-    self->pitch.f = 0.75f;
+    self->volumeRate = 0.7f;
+    self->flag.all &= 0xEFFFFFFF;
+    self->stereoRate = 0.75f;
     self->pos[0] = 740.0f;
     self->pos[1] = p[1];
     self->pos[2] = p[2];
     return 1;
 }
 
-int stageSE10lstrong2(SEObj *self)
+int stageSE10lstrong2(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
     float f;
@@ -282,9 +251,9 @@ int stageSE10lstrong2(SEObj *self)
     } else {
         f = (p[1] - 227.0f) / 773.0f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     if (f < 0.2f) {
-        self->vol.f = 0.2f;
+        self->volumeRate = 0.2f;
     }
     if (windCacheFrame == frame_count) {
         w = windCache;
@@ -296,9 +265,9 @@ int stageSE10lstrong2(SEObj *self)
         windCache = e;
         w = e;
     }
-    self->vol.f = self->vol.f * w;
+    self->volumeRate = self->volumeRate * w;
     if (se10lInStrongBox(p) != 0) {
-        self->vol.f = self->vol.f * 0.5f;
+        self->volumeRate = self->volumeRate * 0.5f;
     }
     return -1;
 }
@@ -334,7 +303,7 @@ typedef struct { /* field names derived */
     float w;
 } __attribute__((aligned(16))) SEVec; /* derived name */
 
-int stageSE19ataki(SEObj *self)
+int stageSE19ataki(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
     SEVec pts[6] = {
@@ -342,8 +311,8 @@ int stageSE19ataki(SEObj *self)
         {114.0f, p[1], -1526.0f}, {114.0f, p[1], -1526.0f},  {-987.0f, p[1], -2788.0f},
     };
 
-    self->pitch.f = 0.8f;
-    self->flags.i &= 0xEFFFFFFF;
+    self->stereoRate = 0.8f;
+    self->flag.all &= 0xEFFFFFFF;
     sceVu0CopyVector(self->pos, SENearestPoint((Blk16 *)pts, 6));
     return 1;
 }
@@ -352,7 +321,7 @@ int stageSE19ataki(SEObj *self)
    (0.005f, or 1000.0f to cut the river at once) */
 float riverFadeSpeed = 0.0f; /* derived name */
 
-int stageSE02astrong(SEObj *self)
+int stageSE02astrong(SeSlot *self)
 {
     Blk32 v;
     float w;
@@ -367,31 +336,31 @@ int stageSE02astrong(SEObj *self)
         w = w * 0.5f + 0.5f;
         windCache = w;
     }
-    self->vol.f = w;
+    self->volumeRate = w;
     return 1;
 }
 
-int stageSE02ataki(SEObj *self)
+int stageSE02ataki(SeSlot *self)
 {
     float *p = self->pos;
     p[0] = 785.0f;
     p[2] = 482.0f;
-    self->pitch.f = 0.5f;
+    self->stereoRate = 0.5f;
     if (gflagChk(106)) {
-        self->vol.i = 0;
+        self->volumeRate = 0.0f;
     }
     return 1;
 }
 
-int stageSE02atakib(SEObj *self)
+int stageSE02atakib(SeSlot *self)
 {
     float *p = self->pos;
     p[0] = 785.0f;
     p[1] = 1786.0f;
     p[2] = 482.0f;
-    self->pitch.f = 0.5f;
+    self->stereoRate = 0.5f;
     if (gflagChk(106)) {
-        self->vol.i = 0;
+        self->volumeRate = 0.0f;
     }
     return 1;
 }
@@ -415,7 +384,7 @@ int stageSE03tnotSuiro(void)
     return -1;
 }
 
-int stageSE04agate(SEObj *self)
+int stageSE04agate(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[2];
     float ratio = 1.0f;
@@ -437,11 +406,11 @@ int stageSE04agate(SEObj *self)
         w = w * 0.5f + 0.5f;
         windCache = w;
     }
-    self->vol.f = ratio * w;
+    self->volumeRate = ratio * w;
     return -1;
 }
 
-int stageSE04bstrong(SEObj *self)
+int stageSE04bstrong(SeSlot *self)
 {
     float v;
     if (windCacheFrame == frame_count) {
@@ -451,11 +420,11 @@ int stageSE04bstrong(SEObj *self)
         v = GetRegularizedWindSpeed((void *)GetCameraPos()) * 0.5f + 0.5f;
         windCache = v;
     }
-    self->vol.f = v;
+    self->volumeRate = v;
     return -1;
 }
 
-int stageSE04ewind(SEObj *self)
+int stageSE04ewind(SeSlot *self)
 {
     float x = ((float *)GetCameraPos())[2];
     float f;
@@ -466,11 +435,11 @@ int stageSE04ewind(SEObj *self)
     } else {
         f = (x - -5770.0f) / 870.0f;
     }
-    self->vol.f = 1.0f - f;
+    self->volumeRate = 1.0f - f;
     return -1;
 }
 
-int stageSE04eriverDown(SEObj *self)
+int stageSE04eriverDown(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[2];
     float f;
@@ -490,11 +459,11 @@ int stageSE04eriverDown(SEObj *self)
     } else {
         f = (x - -5770.0f) / 2090.0f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return -1;
 }
 
-int stageSE06astrong(SEObj *self)
+int stageSE06astrong(SeSlot *self)
 {
     float *p = (float *)GetCameraPos(self);
     float f;
@@ -508,14 +477,14 @@ int stageSE06astrong(SEObj *self)
             f = (p[0] - -1753.0f) / 608.0f;
         }
         v = (1.0f - f) * 0.3f;
-        self->vol.f = v;
+        self->volumeRate = v;
         if (v < 0.05f) {
-            self->vol.f = 0.05f;
+            self->volumeRate = 0.05f;
         }
         return -1;
     } else {
         float *q = self->pos;
-        self->vol.f = 1.0f;
+        self->volumeRate = 1.0f;
         q[0] = -2400.0f;
         q[1] = p[1];
         q[2] = p[2];
@@ -546,13 +515,13 @@ int stageSE06ataimatsu(int *self)
     float *p = (float *)GetCameraPos((ICO_WORD)self);
     if (p[0] < 300.0f) {
         if (848.0f < p[2]) {
-            return stageSEtaimatsu((SEObj *)self);
+            return stageSEtaimatsu(self);
         }
     }
     return 0;
 }
 
-int stageSE08astrong(SEObj *self)
+int stageSE08astrong(SeSlot *self)
 {
     float f;
     if (windCacheFrame == frame_count) {
@@ -566,14 +535,14 @@ int stageSE08astrong(SEObj *self)
         f = e;
     }
     if (se08aInStrongBox() == 0) {
-        self->vol.f = f;
+        self->volumeRate = f;
     } else {
-        self->vol.f = f * 0.05f;
+        self->volumeRate = f * 0.05f;
     }
     return -1;
 }
 
-int stageSE08astrong2(SEObj *self)
+int stageSE08astrong2(SeSlot *self)
 {
     float f;
     float w;
@@ -589,19 +558,19 @@ int stageSE08astrong2(SEObj *self)
     }
     f = 1.0f - w;
     if (se08aInStrongBox() == 0) {
-        self->vol.f = f;
+        self->volumeRate = f;
     } else {
-        self->vol.f = f * 0.05f;
+        self->volumeRate = f * 0.05f;
     }
     return -1;
 }
 
-int stageSE08anoise3(SEObj *self)
+int stageSE08anoise3(SeSlot *self)
 {
     if (se08aInStrongBox() == 0) {
-        self->vol.f = 1.0f;
+        self->volumeRate = 1.0f;
     } else {
-        self->vol.f = 0.2f;
+        self->volumeRate = 0.2f;
     }
     return -1;
 }
@@ -611,10 +580,10 @@ int stageSE08ataimatsu(ICO_WORD self)
     if (se08aInStrongBox() == 0) {
         return 0;
     }
-    return stageSEtaimatsu((SEObj *)self);
+    return stageSEtaimatsu(self);
 }
 
-int stageSE08bcrane(SEObj *self)
+int stageSE08bcrane(SeSlot *self)
 {
     SEPos *p = (SEPos *)self->pos;
     float f;
@@ -629,11 +598,11 @@ int stageSE08bcrane(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return 1;
 }
 
-int stageSE08brail(SEObj *self)
+int stageSE08brail(SeSlot *self)
 {
     SEPos *p = (SEPos *)self->pos;
     float f;
@@ -648,21 +617,21 @@ int stageSE08brail(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return 1;
 }
 
-int stageSE09asea(SEObj *self)
+int stageSE09asea(SeSlot *self)
 {
     SEPos *p = (SEPos *)self->pos;
     p->x = 1800.0f;
     p->y = 585.0f;
     p->z = -5000.0f;
-    self->vol.f = 1.0f;
+    self->volumeRate = 1.0f;
     return 1;
 }
 
-int stageSE10lstrong(SEObj *self)
+int stageSE10lstrong(SeSlot *self)
 {
     float *p = (float *)GetCameraPos();
     float f;
@@ -684,14 +653,14 @@ int stageSE10lstrong(SEObj *self)
         windCache = e;
         w = e;
     }
-    self->vol.f = (1.0f - f) * w;
+    self->volumeRate = (1.0f - f) * w;
     if (se10lInStrongBox(p) != 0) {
-        self->vol.f = self->vol.f * 0.5f;
+        self->volumeRate = self->volumeRate * 0.5f;
     }
     return -1;
 }
 
-int stageSE10rstrong(SEObj *self)
+int stageSE10rstrong(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[2];
     float f;
@@ -702,11 +671,11 @@ int stageSE10rstrong(SEObj *self)
     } else {
         f = (x - -300.0f) / 700.0f;
     }
-    self->vol.f = f * 0.3f;
+    self->volumeRate = f * 0.3f;
     return -1;
 }
 
-int stageSE10rstrong2(SEObj *self)
+int stageSE10rstrong2(SeSlot *self)
 {
     float f;
     if (windCacheFrame == frame_count) {
@@ -717,21 +686,21 @@ int stageSE10rstrong2(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return -1;
 }
 
-int stageSE13arain(SEObj *self)
+int stageSE13arain(SeSlot *self)
 {
     float *v1 = self->pos;
     v1[0] = 118.0f;
     v1[1] = -192.0f;
     v1[2] = -46.0f;
-    self->pitch.f = 0.5f;
+    self->stereoRate = 0.5f;
     return 1;
 }
 
-int stageSE13cNoise(SEObj *self)
+int stageSE13cNoise(SeSlot *self)
 {
     float *v1 = self->pos;
 
@@ -759,7 +728,7 @@ static inline int stageSE13dterrace_(void) /* derived name */
     return -1;
 }
 
-int stageSE13dstrong(SEObj *self)
+int stageSE13dstrong(SeSlot *self)
 {
     int r = stageSE13dterrace_();
     float f;
@@ -773,14 +742,14 @@ int stageSE13dstrong(SEObj *self)
         windCache = e;
         f = e;
     }
-    self->vol.f = 1.0f - f * 0.5f;
+    self->volumeRate = 1.0f - f * 0.5f;
     if (r == -1) {
         soundReverbDepthSet(20);
     }
     return r;
 }
 
-int stageSE17astrong(SEObj *self)
+int stageSE17astrong(SeSlot *self)
 {
     float f;
     GetCameraPos(self);
@@ -792,11 +761,11 @@ int stageSE17astrong(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return -1;
 }
 
-int stageSE18awind(SEObj *self)
+int stageSE18awind(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[0];
     float f;
@@ -807,11 +776,11 @@ int stageSE18awind(SEObj *self)
     } else {
         f = (x - -1000.0f) / 2125.0f;
     }
-    self->vol.f = f * 0.7f;
+    self->volumeRate = f * 0.7f;
     return -1;
 }
 
-int stageSE17brain(SEObj *self)
+int stageSE17brain(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[0];
     float f;
@@ -822,11 +791,11 @@ int stageSE17brain(SEObj *self)
     } else {
         f = (x - -5500.0f) / 1700.0f;
     }
-    self->vol.f = 1.0f - f;
+    self->volumeRate = 1.0f - f;
     return -1;
 }
 
-int stageSE17bstrong(SEObj *self)
+int stageSE17bstrong(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[0];
     float f;
@@ -838,7 +807,7 @@ int stageSE17bstrong(SEObj *self)
     } else {
         f = (x - -5500.0f) / 1700.0f;
     }
-    self->vol.f = 1.0f - f;
+    self->volumeRate = 1.0f - f;
     if (windCacheFrame == frame_count) {
         w = windCache;
     } else {
@@ -849,11 +818,11 @@ int stageSE17bstrong(SEObj *self)
         windCache = e;
         w = e;
     }
-    self->vol.f = self->vol.f * w;
+    self->volumeRate = self->volumeRate * w;
     return -1;
 }
 
-int stageSE17btaki(SEObj *self)
+int stageSE17btaki(SeSlot *self)
 {
     float a, b;
     float *p = self->pos;
@@ -864,7 +833,7 @@ int stageSE17btaki(SEObj *self)
     return 1;
 }
 
-int stageSE19astrong(SEObj *self)
+int stageSE19astrong(SeSlot *self)
 {
     float *p = self->pos;
     float f;
@@ -878,11 +847,11 @@ int stageSE19astrong(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return 1;
 }
 
-int stageSE19arain(SEObj *self)
+int stageSE19arain(SeSlot *self)
 {
     float *p = self->pos;
     register float a = 3190.0f;
@@ -894,7 +863,7 @@ int stageSE19arain(SEObj *self)
     return 1;
 }
 
-int stageSE20astrong(SEObj *self)
+int stageSE20astrong(SeSlot *self)
 {
     float *p = self->pos;
     float f;
@@ -910,11 +879,11 @@ int stageSE20astrong(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return 1;
 }
 
-int stageSE20astrong2(SEObj *self)
+int stageSE20astrong2(SeSlot *self)
 {
     float f;
     if (windCacheFrame == frame_count) {
@@ -925,11 +894,11 @@ int stageSE20astrong2(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return -1;
 }
 
-int stageSE22astrong(SEObj *self)
+int stageSE22astrong(SeSlot *self)
 {
     float f;
     if (windCacheFrame == frame_count) {
@@ -942,11 +911,11 @@ int stageSE22astrong(SEObj *self)
         windCache = e;
         f = e;
     }
-    self->vol.f = 1.0f - f * 0.5f;
+    self->volumeRate = 1.0f - f * 0.5f;
     return -1;
 }
 
-int stageSE22arain(SEObj *self)
+int stageSE22arain(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[2];
     float f;
@@ -957,14 +926,14 @@ int stageSE22arain(SEObj *self)
     } else {
         f = (x - -8000.0f) / 6645.0f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     if (f < 0.3f) {
-        self->vol.f = 0.3f;
+        self->volumeRate = 0.3f;
     }
     return -1;
 }
 
-int stageSE24astrong(SEObj *self)
+int stageSE24astrong(SeSlot *self)
 {
     float f;
     if (windCacheFrame == frame_count) {
@@ -975,20 +944,20 @@ int stageSE24astrong(SEObj *self)
         f = f * 0.5f + 0.5f;
         windCache = f;
     }
-    self->vol.f = f;
+    self->volumeRate = f;
     return -1;
 }
 
-unsigned int stageSE24arain(SEObj *self)
+unsigned int stageSE24arain(SeSlot *self)
 {
     SEPos *p = (SEPos *)self->pos;
     p->x = 1771.0f;
     p->z = -4949.0f;
-    self->pitch.f = 0.5f;
+    self->stereoRate = 0.5f;
     return 1;
 }
 
-int stageSE24ariver(SEObj *self)
+int stageSE24ariver(SeSlot *self)
 {
     float a, b;
     float *p = self->pos;
@@ -999,7 +968,7 @@ int stageSE24ariver(SEObj *self)
     return 1;
 }
 
-int stageSE47anoise(SEObj *self)
+int stageSE47anoise(SeSlot *self)
 {
     float x = ((float *)GetCameraPos(self))[1];
     float f;
@@ -1010,6 +979,6 @@ int stageSE47anoise(SEObj *self)
     } else {
         f = (x - -3422.0f) / 3300.0f;
     }
-    self->vol.f = 1.0f - f;
+    self->volumeRate = 1.0f - f;
     return -1;
 }
