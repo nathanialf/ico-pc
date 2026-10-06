@@ -133,6 +133,8 @@ unsigned int ico_host_main_ticks(void);
 void ico_diag_milestone(const char *fmt, ...);
 /* port/game/model_viewer.h: the model viewer's tick (package MV) */
 void ico_mv_tick(void);
+/* port/game/title_logo.h: the title logo's hidden state (package L1) */
+void ico_title_logo_update(void);
 /* script/include/script.h, which this file does not include */
 int RequestStageChange(int no, GObj *g, GObj *girl, float speed, float wait);
 
@@ -334,6 +336,9 @@ void Main(void)
            and before the layouts and the objects (port/game/model_viewer.h) */
         ico_mv_tick();
         ExecIcoMisc();
+        /* PC port (package L1): whether the title's logo is drawn this
+           tick, after the layouts ran and before the objects are drawn */
+        ico_title_logo_update();
         if (graphics_ready == 0) {
             stage_ResetAnimation();
             stage_CalcAnimationNoParent();

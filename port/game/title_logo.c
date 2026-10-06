@@ -41,15 +41,20 @@ int ico_title_logo_step(int *hidden, int stage, int layout, int covered)
     return *hidden;
 }
 
-int ico_title_logo_skip(const char *model)
+static int s_hidden;
+
+void ico_title_logo_update(void)
 {
-    static int hidden;
-    /* every object steps the state, so a stage without the logo clears it */
+    /* every Main tick, so a stage without the logo clears the state */
     int covered = 0;
     if (stage_no == TITLE_STAGE) {
         const int list = ico_mv_title_list_layout();
         covered = ui_SettingsCoversTitle() || (list >= 0 && current_layout_id == list);
     }
-    return ico_title_logo_step(&hidden, stage_no, current_layout_id, covered) &&
-           ico_title_logo_model(model);
+    ico_title_logo_step(&s_hidden, stage_no, current_layout_id, covered);
+}
+
+int ico_title_logo_skip(const char *model)
+{
+    return s_hidden && ico_title_logo_model(model);
 }

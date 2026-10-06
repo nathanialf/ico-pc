@@ -22,8 +22,13 @@
 extern "C" {
 #endif
 
+/* common/src/main.c, once a Main tick after the layouts ran (ExecIcoMisc)
+   and before the objects are drawn: the hidden state for this tick. */
+void ico_title_logo_update(void);
+
 /* seki/src/RegistPacket.c reg_DispObj, for every object it draws: nonzero
-   when the object's model (its name) is the logo's and the logo is hidden. */
+   when the object's model (its name) is the logo's and the logo is hidden
+   (as the tick's ico_title_logo_update left it). */
 int ico_title_logo_skip(const char *model);
 
 /* The parts, for the test: whether `model` names one of the logo's nine

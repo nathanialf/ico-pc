@@ -60,6 +60,7 @@ static void frame(int stage, int layout, int covers)
     stage_no = stage;
     current_layout_id = layout;
     s_covers = covers;
+    ico_title_logo_update();
     s_castleShown = !ico_title_logo_skip("st26a_p1");
     s_logoShown = !ico_title_logo_skip("I");
 }
