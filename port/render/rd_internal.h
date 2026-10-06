@@ -651,19 +651,17 @@ uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n);
  * Package CRT; DISPLAY.md "CRT filter", RENDER_API.md "The CRT pass". */
 typedef enum RdCrtMask {
     RD_CRT_MASK_NONE = 0,
-    RD_CRT_MASK_GRILLE = 1, /* aperture grille: RGB stripes */
-    RD_CRT_MASK_SLOT = 2,   /* slot mask: stripes cut every 2 pitch lines, staggered */
-    RD_CRT_MASK_DOTS = 3    /* dot triads: rows shifted half a triad */
+    RD_CRT_MASK_GRILLE = 1, /* aperture grille: R, G, B stripes down the block */
+    RD_CRT_MASK_SLOT = 2, /* slot mask: the stripes in slots, alternate blocks half a block lower */
+    RD_CRT_MASK_DOTS = 3  /* shadow mask: two rows of R, G, B dots half a triad apart */
 } RdCrtMask;
 
 /* A mode's look (the presets' table in rd_crt.c, DISPLAY.md's table) */
 typedef struct RdCrtParams {
     float scanline;         /* 0..1: the beam profile against the plain lines */
     float beamMin, beamMax; /* the beam's full width at half maximum, dark to bright, in lines */
-    float sharpness;        /* the horizontal Gaussian's width, source pixels (bigger: softer) */
     int mask;               /* RdCrtMask */
-    float maskStrength;     /* 0..1 */
-    float maskPitch;        /* output pixels a triad */
+    float maskStrength;     /* 0..1: the darkness of the gaps between the phosphors */
     float halation, bloom;  /* 0..1 */
     float curvX, curvY;     /* the barrel warp per axis */
     float corner;           /* the corners' radius, of the box height */
@@ -676,20 +674,35 @@ bool rd__CrtPreset(RdCrtMode mode, RdCrtParams *p);
 /* The parameters s asks for: the mode's, with s's overrides. */
 bool rd__CrtResolve(const RdSettings *s, RdCrtParams *p);
 /* The mask's strength factor for a box boxH output pixels high: 1 from
- * 1080, 0 at 720 and below, linear between (a 3 pixel triad over the
- * picture's 512 source pixels needs about 1440 box pixels across, a 4:3
- * box 1080 high). */
+ * 1080, 0 at 720 and below, linear between. */
 float rd__CrtMaskFade(uint32_t boxH);
+/* The phosphor mask, per output pixel (crt.hlsl maskOf is the same
+ * function).  A source pixel is r output pixels wide (box width / grid
+ * width); f is the output pixel's position across it and v across its line
+ * (0..1, the pixel's centre), odd whether its source column is odd, gap the
+ * gaps' darkness (RdCrtParams.maskStrength).  Returns channel ch's weight:
+ * 1 lit, 0 not, 1 - gap in a gap.  rd__CrtGapColumns is the gap columns a
+ * source pixel has room for (1 from r 4, 2 from r 6); rd__CrtMaskGain is
+ * 1 over the mask's mean weight for a channel (the light it keeps). */
+uint32_t rd__CrtGapColumns(float r);
+float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd, int ch);
+float rd__CrtMaskGain(int mask, float r, float gap);
 /* True when the present draws the CRT filter (a mode, strength > 0). */
 bool rd__CrtOn(void);
+/* The filter's source grid: the PS2 picture's pixels, vw across (512 at
+ * 4:3, wider with the aspect) and vh lines (DISPLAY's, 512 with
+ * full_height); the overlay's layer is vw x gsH (the frame's lines). */
+void rd__CrtGrid(uint32_t *vw, uint32_t *vh);
 /* Package CRT, from rd__PresentRecord in place of the line doubling and
- * the box blit: disp (SHADER_READ) through the glow passes, then the
- * composite into box of out (cleared outside it), out left in
- * RENDER_TARGET.  False when it could not draw (no pipeline): the caller
- * falls back to the box blit. */
+ * the box blit: disp (SHADER_READ), with the overlay drawn into the source
+ * grid (rd__OverlayGridDraw), through the glow passes, then the composite
+ * (the phosphors per output pixel) into box of out (cleared outside it),
+ * out left in RENDER_TARGET.  False when it could not draw (no pipeline): the
+ * caller falls back to the box blit. */
 bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror);
-/* The textures the filter keeps (the virtual source, the glow targets) */
+/* The textures the filter keeps (the source, the overlay's layer, the glow
+ * targets) */
 void rd__CrtShutdown(void);
 /* rd_blur.c: records the sprite (rd_Post's wave-5 kinds, and since R-POST
  * the reduction's two sprites, rd_post.c). */
@@ -1090,6 +1103,19 @@ typedef struct RdUniform {
  * g_rd.deferText for the replay (doScreen then skips the items' quads); the
  * items' prims are drawn before the overlay's, each batch in its region. */
 void rd__OverlayCollect(const RdFrame *f, int keep);
+/* Package CRT2: with the CRT filter on, rd__OverlayCollect gives the
+ * overlay a context of the filter's source grid (rd__CrtGrid's vw x the
+ * frame's lines, the box the whole of it, the frame's 1x scale) and
+ * collects no deferred text; rd__CrtRecord then draws the prims into that
+ * layer (t, of fmt, w x h, RENDER_TARGET) with rd__OverlayGridDraw, and the
+ * present draws no overlay above the filter.  rd__OverlayGridPending: there
+ * are prims for the layer. */
+bool rd__OverlayGridPending(void);
+void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h);
+/* rd_present.c's blit: src (sw x sh) into box of dst, filter, x flipped */
+void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
+                     RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
+                     RdFilter filter, int mirror);
 /* rd_core.c, from rd_Post (package DEF): records the RD_OTEXT_OP of a post
  * pass of kind (FADE, LETTERBOX, BRIGHTNESS, KEEP, REDUCTION) when the frame being
  * recorded has deferred text already; nothing otherwise */

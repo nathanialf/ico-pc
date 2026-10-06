@@ -179,6 +179,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_CRT_CONSUMER] = "Consumer TV",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
     [UI_STR_VAL_CRT_PVM] = "PVM",
+    [UI_STR_VAL_CRT_SHADOW] = "Shadow mask",
     [UI_STR_QUIT_DESKTOP] = "Quit to desktop",
     [UI_STR_QUIT_CONFIRM] = "Quit to desktop?",
     [UI_STR_OPT_CIRCLE_BACK] = "Circle goes back",

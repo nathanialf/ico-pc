@@ -16,7 +16,8 @@
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *   [video] crt             false       the CRT filter (package CRT, both presets)
- *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm"
+ *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm" |
+ *                                       "shadow"
  *   [video] crt_strength    1.0         0..1
  *   [video] crt_scanlines, crt_mask, crt_halation, crt_bloom, crt_curvature
  *                           -1          config only: the mode's value when < 0
@@ -68,9 +69,15 @@ typedef struct IcoVideoOptions {
 } IcoVideoOptions;
 
 /* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
-enum { ICO_CRT_SCANLINES = 0, ICO_CRT_CONSUMER = 1, ICO_CRT_TRINITRON = 2, ICO_CRT_PVM = 3 };
+enum {
+    ICO_CRT_SCANLINES = 0,
+    ICO_CRT_CONSUMER = 1,
+    ICO_CRT_TRINITRON = 2,
+    ICO_CRT_PVM = 3,
+    ICO_CRT_SHADOW = 4 /* package CRT2 */
+};
 
-#define ICO_CRT_MODES 4
+#define ICO_CRT_MODES 5
 
 /* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
@@ -123,7 +130,7 @@ const char *ico_video_framerate_name(int framerate, char *buf, unsigned size);
 int ico_video_parse_aspect(const char *s, int *aspect);
 int ico_video_parse_filter(const char *s, int *filter);
 const char *ico_video_aspect_name(int aspect);
-/* package CRT: "scanlines", "consumer", "trinitron", "pvm" */
+/* package CRT: "scanlines", "consumer", "trinitron", "pvm", "shadow" */
 int ico_video_parse_crt_mode(const char *s, int *mode);
 const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);

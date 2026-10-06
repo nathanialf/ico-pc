@@ -1417,14 +1417,15 @@ static void testValues(void)
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VSYNC), "Off") != NULL, "vsync Off");
 
     /* package CRT: the CRT filter row cycles Off, Scanlines, Consumer TV,
-       Trinitron, PVM and around, setting [video] crt and crt_mode together;
-       the strength steps in tens, clamped at 0 and 100 % */
+       Trinitron, PVM, (CRT2) Shadow mask and around, setting [video] crt and
+       crt_mode together; the strength steps in tens, clamped at 0 and 100 % */
     {
-        static const char *const names[6] = {"Off",       "Scanlines", "Consumer TV",
-                                             "Trinitron", "PVM",       "Off"};
-        static const int modes[6] = {
-            -1, ICO_CRT_SCANLINES, ICO_CRT_CONSUMER, ICO_CRT_TRINITRON, ICO_CRT_PVM, -1};
-        for (int i = 0; i < 6; i++) {
+        static const char *const names[7] = {"Off", "Scanlines",   "Consumer TV", "Trinitron",
+                                             "PVM", "Shadow mask", "Off"};
+        static const int modes[7] = {
+            -1, ICO_CRT_SCANLINES, ICO_CRT_CONSUMER, ICO_CRT_TRINITRON, ICO_CRT_PVM, ICO_CRT_SHADOW,
+            -1};
+        for (int i = 0; i < 7; i++) {
             ico_video_get(&o);
             CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT), names[i]) == 0 &&
                       o.crt == (modes[i] >= 0) && (modes[i] < 0 || o.crtMode == modes[i]),
@@ -1433,11 +1434,16 @@ static void testValues(void)
             ui_SettingsStep(UI_OPT_CRT, 1);
         }
         ui_SettingsStep(UI_OPT_CRT, -1); /* back from Scanlines to Off */
-        ui_SettingsStep(UI_OPT_CRT, -1); /* around to PVM */
+        ui_SettingsStep(UI_OPT_CRT, -1); /* around to Shadow mask */
+        ico_video_get(&o);
+        CHECK(o.crt == 1 && o.crtMode == ICO_CRT_SHADOW &&
+                  strcmp(ui_SettingsValueText(UI_OPT_CRT), "Shadow mask") == 0,
+              "crt row: Left wraps to Shadow mask");
+        ui_SettingsStep(UI_OPT_CRT, -1); /* to PVM */
         ico_video_get(&o);
         CHECK(o.crt == 1 && o.crtMode == ICO_CRT_PVM &&
                   strcmp(ui_SettingsValueText(UI_OPT_CRT), "PVM") == 0,
-              "crt row: Left wraps to PVM");
+              "crt row: Left again to PVM");
         CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT_STRENGTH), "100 %") == 0,
               "crt strength 100 %% (%s)", ui_SettingsValueText(UI_OPT_CRT_STRENGTH));
         ui_SettingsStep(UI_OPT_CRT_STRENGTH, 1);
@@ -1456,6 +1462,32 @@ static void testValues(void)
         for (int i = 0; i < 7; i++) {
             ui_SettingsStep(UI_OPT_CRT_STRENGTH, 1);
         }
+
+        /* package CRT2: under the filter the Resolution row reads "1x (CRT)"
+           and does not step; the file's 4x is kept and back with it off */
+        CHECK(strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "1x (CRT)") == 0,
+              "resolution under the CRT filter: \"%s\"", ui_SettingsValueText(UI_OPT_RESOLUTION));
+        ui_SettingsStep(UI_OPT_RESOLUTION, 1);
+        ui_SettingsStep(UI_OPT_RESOLUTION, -1);
+        ui_SettingsStep(UI_OPT_RESOLUTION, -1);
+        ico_video_get(&o);
+        CHECK(o.resScale == 4 && o.resW == 0, "resolution locked under the CRT filter (%d)",
+              o.resScale);
+        ui_SettingsStep(UI_OPT_CRT, 1); /* Shadow mask */
+        ui_SettingsStep(UI_OPT_CRT, 1); /* Off */
+        ico_video_get(&o);
+        CHECK(o.crt == 0 && strstr(ui_SettingsValueText(UI_OPT_RESOLUTION), "4x") != NULL,
+              "resolution back to 4x with the filter off (\"%s\")",
+              ui_SettingsValueText(UI_OPT_RESOLUTION));
+        ui_SettingsStep(UI_OPT_RESOLUTION, 1);
+        ico_video_get(&o);
+        CHECK(o.resScale == 0, "resolution steps again with the filter off (%d)", o.resScale);
+        ui_SettingsStep(UI_OPT_RESOLUTION, -1);
+        ui_SettingsStep(UI_OPT_CRT, -1); /* Shadow mask */
+        ui_SettingsStep(UI_OPT_CRT, -1); /* PVM */
+        ico_video_get(&o);
+        CHECK(o.crt == 1 && o.crtMode == ICO_CRT_PVM && o.resScale == 4,
+              "crt back on, PVM; resolution 4x kept");
     }
 
     systemStatus[0] = 1;

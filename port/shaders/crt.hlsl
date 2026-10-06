@@ -1,27 +1,31 @@
-// crt.hlsl: the CRT filter (package CRT; docs/port/DISPLAY.md "CRT filter",
-// docs/port/RENDER_API.md "The CRT pass"; port/render/rd_crt.c drives it).
+// crt.hlsl: the CRT filter (packages CRT and CRT2; docs/port/DISPLAY.md
+// "CRT filter", docs/port/RENDER_API.md "The CRT pass"; port/render/rd_crt.c
+// drives it).
 //
-// Written for ico-pc. The maths reference for the Gaussian beam and the
-// phosphor mask patterns is Timothy Lottes' crt-lottes shader, which he
-// placed in the public domain; no code was taken from it, and no GPL CRT
-// shader (CRT-Royale, crt-guest and the like) was used as a source.
+// Written for ico-pc. The maths reference for the Gaussian beam is Timothy
+// Lottes' crt-lottes shader, which he placed in the public domain; no code
+// was taken from it, and no GPL CRT shader (CRT-Royale, crt-guest and the
+// like) was used as a source.
 //
-//   crt_vs        the fullscreen triangle over the viewport; t 0..1 across it
-//   crt_bloom_ps  the virtual source (the PS2 picture's pixel grid) into a
-//                 target of half its size: linear light, a 9-tap horizontal
-//                 Gaussian (sigma 2 taps of 2 source pixels)
-//   crt_blur_ps   the same target size, the 9-tap Gaussian vertically
-//   crt_ps        the box of the output: curvature, the beam of the two
-//                 nearest source lines, the phosphor mask, halation and
-//                 bloom from the blurred target, vignette, rounded corners
+//   crt_vs           the fullscreen triangle over the viewport; t 0..1 across it
+//   crt_bloom_ps     the source grid (the PS2 picture's pixels) into a target
+//                    of half its size: linear light, a 9-tap horizontal
+//                    Gaussian (sigma 2 taps of 2 source pixels)
+//   crt_blur_ps      the same target size, the 9-tap Gaussian vertically
+//   crt_ps           the box of the output, per output pixel: curvature,
+//                    the source pixel and line the warped position falls
+//                    in, the phosphor its column lands on passing that one
+//                    channel (maskOf) under the beam of the line at its
+//                    height, halation and bloom from the blurred target,
+//                    vignette, rounded corners, gamma
 //
 // Bindings: CrtCB (b1, space1: the DrawCB slot, and the same 112 bytes, so
 // the passes run under the post pipelines' layouts; shader_consts.h
-// IcoCrtCB), t1 the source (the virtual source, or for crt_blur_ps the
-// horizontal pass's target), t2 the blurred target (crt_ps), s1 bilinear and
-// clamped. No FrameCB: the passes compute everything from the viewport.
-// This file does not include common.hlsli, whose DrawCB sits in the same
-// register.
+// IcoCrtCB), t1 the source (the grid; for crt_blur_ps the horizontal pass's
+// target), t2 the blurred target (crt_ps),
+// s1 bilinear and clamped. No FrameCB: the passes compute everything from
+// the viewport. This file does not include common.hlsli, whose DrawCB sits
+// in the same register.
 
 #ifdef __spirv__
 #define VK_LOC(n) [[vk::location(n)]]
@@ -31,13 +35,13 @@
 
 cbuffer CrtCB : register(b1, space1)
 {
-    float4 c_src;  // the virtual source: w, h in pixels, 1 / w, 1 / h
+    float4 c_src;  // the source grid: w, h in pixels, 1 / w, 1 / h
     float4 c_box;  // the box: w, h, x, y in output pixels
-    float4 c_beam; // scanline strength, beam width min, max (lines), horizontal blur (pixels)
-    float4 c_mask; // type (0 none, 1 grille, 2 slot, 3 dots), strength, pitch (px), halation
+    float4 c_beam; // scanline strength, beam width min, max (lines), gap columns a source pixel
+    float4 c_mask; // type (0 none, 1 grille, 2 slot, 3 dots), gap darkness, fade, halation
     float4 c_glow; // bloom, curvature x, curvature y, corner radius (of the box height)
     float4 c_tone; // vignette, gamma in, gamma out, strength
-    float4 c_pass; // x mirror, y 0, zw 1 / the blurred target's size (crt_ps) or the pass's step
+    float4 c_pass; // x mirror, y the mask's gain, zw 1 / the blurred target's size
 };
 
 Texture2D<float4> g_texture : register(t1, space2);
@@ -102,25 +106,11 @@ float4 crt_blur_ps(CrtVSOut i) : SV_Target0
     return float4(c, 1.0);
 }
 
-// One source line in linear light at x (source pixels, centres at k + 0.5):
-// a Gaussian of c_beam.w / 2 pixels over the four nearest pixels, normalised
-float3 lineColour(float ln, float x)
+// The source pixel p in linear light (clamped to the grid)
+float3 linearLoad(int2 p)
 {
-    float sx = x - 0.5;
-    float x0 = floor(sx);
-    float f = sx - x0;
-    float sig = max(0.5 * c_beam.w, 0.05);
-    float k = -0.5 / (sig * sig);
-    float v = (ln + 0.5) * c_src.w;
-    float3 c = float3(0.0, 0.0, 0.0);
-    float wsum = 0.0;
-    [unroll] for (int j = -1; j <= 2; j++) {
-        float d = f - float(j);
-        float w = exp(k * d * d);
-        c += w * linearAt(float2((x0 + float(j) + 0.5) * c_src.z, v));
-        wsum += w;
-    }
-    return c / wsum;
+    int2 hi = int2(c_src.xy) - int2(1, 1);
+    return powp(g_texture.Load(int3(clamp(p, int2(0, 0), hi), 0)).rgb, c_tone.y);
 }
 
 // The beam of a line of colour c at distance d (lines): a Gaussian whose
@@ -134,47 +124,35 @@ float3 beamOf(float3 c, float d)
     return c * exp(-0.5 * (d * d) / (sig * sig)) / (sig * 2.5066283);
 }
 
-// The phosphor mask at output pixel p (box-relative, integer): the lit
-// channels 1.5, the dark ones 0.5 (crt-lottes' maskLight and maskDark)
-float3 maskOf(float2 p)
+// The phosphor mask of an output pixel at f across its source pixel and v
+// down its line (0..1), odd its source column's parity (rd_crt.c
+// rd__CrtMaskWeight is the same function): per channel 1 lit, 0 not, 1 -
+// gap in a gap. A source pixel is r output pixels wide; its last g pixels
+// are a gap, the rest three stripes, R, G, B from the left. Slot: a bridge
+// over the last third of the line, half a line later in odd columns. Dots:
+// the line's second half a second row of dots one stripe over (half a triad
+// rounded down to whole stripes).
+float3 maskOf(float f, float v, int odd)
 {
-    const float hi = 1.5, lo = 0.5;
-    float type = c_mask.x, pitch = c_mask.z;
-    float3 m = float3(lo, lo, lo);
-    float x = p.x;
+    float type = c_mask.x, gap = c_mask.y;
+    float r = c_box.x * c_src.z, g = c_beam.w;
+    float dim = 1.0;
     if (type > 2.5) {
-        // dot triads: rows of 2/3 pitch, every other row shifted half a triad
-        float rowH = max(1.0, floor(pitch * 2.0 / 3.0 + 0.5));
-        if (fmod(floor(p.y / rowH), 2.0) > 0.5) {
-            x += pitch * 0.5;
+        if (v >= 0.5) {
+            f = frac(f + 1.0 / 3.0);
         }
     } else if (type > 1.5) {
-        // slot mask: a dark line every 2 pitch lines, offset half that in
-        // every other triad column
-        float slotH = 2.0 * pitch;
-        float yy = p.y + (fmod(floor(p.x / pitch), 2.0) > 0.5 ? floor(slotH * 0.5) : 0.0);
-        if (fmod(yy, slotH) < 1.0) {
-            return m;
+        if (frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
+            dim = 1.0 - gap;
         }
     }
-    if (pitch < 2.5) {
-        // two pixels a triad: magenta and green
-        if (fmod(floor(x), 2.0) < 0.5) {
-            m.rb = float2(hi, hi);
-        } else {
-            m.g = hi;
-        }
-        return m;
+    float u = f * r;
+    if (u >= r - g) {
+        float k = (1.0 - gap) * dim;
+        return float3(k, k, k);
     }
-    float ph = floor(frac(floor(x) / pitch + 1e-4) * 3.0);
-    if (ph < 0.5) {
-        m.r = hi;
-    } else if (ph < 1.5) {
-        m.g = hi;
-    } else {
-        m.b = hi;
-    }
-    return m;
+    int ch = min(int(u * 3.0 / (r - g)), 2);
+    return float3(ch == 0 ? dim : 0.0, ch == 1 ? dim : 0.0, ch == 2 ? dim : 0.0);
 }
 
 float4 crt_ps(CrtVSOut i) : SV_Target0
@@ -182,44 +160,46 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
     float2 px = i.pos.xy - c_box.zw; // box pixels, centres at k + 0.5
     float2 q = px / c_box.xy;
     float mirror = c_pass.x;
-
-    // the plain picture (what the box blit shows: each line doubled, the
-    // pixels bilinear across), for the strength
-    float2 qm = float2(mirror > 0.5 ? 1.0 - q.x : q.x, q.y);
-    float4 plain = g_texture.SampleLevel(
-        g_sampler, float2(qm.x, (floor(q.y * c_src.y) + 0.5) * c_src.w), 0.0);
+    float st = c_tone.w; // the strength scales every effect
 
     // curvature: x scaled by 1 + y^2 cx, y by 1 + x^2 cy (crt-lottes' warp)
     float2 c = q * 2.0 - 1.0;
-    c *= float2(1.0 + c.y * c.y * c_glow.y, 1.0 + c.x * c.x * c_glow.z);
+    c *= float2(1.0 + c.y * c.y * c_glow.y * st, 1.0 + c.x * c.x * c_glow.z * st);
     float2 w = c * 0.5 + 0.5;
 
     // rounded corners and the warped edge, antialiased over a pixel
     float2 hb = c_box.xy * 0.5;
-    float r = c_glow.w * c_box.y;
+    float r = c_glow.w * st * c_box.y;
     float2 e = abs((w - 0.5) * c_box.xy) - (hb - r);
     float sdf = length(max(e, float2(0.0, 0.0))) + min(max(e.x, e.y), 0.0) - r;
     float edge = saturate(0.5 - sdf);
 
-    float2 wm = float2(mirror > 0.5 ? 1.0 - w.x : w.x, w.y);
-    float2 s = wm * c_src.xy; // source pixels and lines
+    // the source pixel and line the warped point falls in (on the screen:
+    // the mirror takes the pixel from the other side, the stripes keep
+    // their order), f and v the point's position across them
+    float2 s = clamp(w, 0.0, 0.99999) * c_src.xy;
+    int2 sp = int2(floor(s));
+    float f = s.x - float(sp.x), v = s.y - float(sp.y);
+    int2 src = int2(mirror > 0.5 ? int(c_src.x) - 1 - sp.x : sp.x, sp.y);
 
-    // the beam: the two nearest source lines
-    float sy = s.y - 0.5;
-    float l0 = floor(sy);
-    float f = sy - l0;
-    float3 c0 = lineColour(l0, s.x);
-    float3 c1 = lineColour(l0 + 1.0, s.x);
-    float3 even = lerp(c0, c1, f);
-    float3 beam = beamOf(c0, f) + beamOf(c1, 1.0 - f);
-    float3 col = lerp(even, beam, c_beam.x);
+    // the beam of the line at v, and the spill of the lines above and below
+    float3 p = linearLoad(src);
+    float d = v - 0.5;
+    float3 beam = beamOf(p, d) + beamOf(linearLoad(src - int2(0, 1)), d + 1.0) +
+                  beamOf(linearLoad(src + int2(0, 1)), 1.0 - d);
+    float3 col = lerp(p, beam, c_beam.x);
 
-    // the phosphor mask, in output pixels
-    if (c_mask.x > 0.5 && c_mask.y > 0.0) {
-        col *= lerp(float3(1.0, 1.0, 1.0), maskOf(floor(px)), c_mask.y);
+    // the phosphor of this output pixel: one channel of the source pixel,
+    // times the mask's gain (the light the mask keeps), faded in by the box
+    if (c_mask.x > 0.5 && c_mask.z > 0.0) {
+        float3 m = maskOf(f, v, sp.x & 1) * c_pass.y;
+        col *= lerp(float3(1.0, 1.0, 1.0), m, c_mask.z);
     }
+    col = lerp(p, col, st);
 
-    // halation (wide, all light) and bloom (narrower, the bright parts)
+    // halation (wide, all light) and bloom (narrower, the bright parts),
+    // from the glow of the grid
+    float2 wm = float2(mirror > 0.5 ? 1.0 - w.x : w.x, w.y);
     float3 b = g_bloom.SampleLevel(g_sampler, wm, 0.0).rgb;
     if (c_mask.w > 0.0) {
         float2 dx = float2(4.0 * c_pass.z, 0.0), dy = float2(0.0, 4.0 * c_pass.w);
@@ -227,17 +207,17 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
                       g_bloom.SampleLevel(g_sampler, wm - dx, 0.0).rgb +
                       g_bloom.SampleLevel(g_sampler, wm + dy, 0.0).rgb +
                       g_bloom.SampleLevel(g_sampler, wm - dy, 0.0).rgb;
-        col += c_mask.w * halo * 0.2;
+        col += st * c_mask.w * halo * 0.2;
     }
-    col += c_glow.x * b * smoothstep(0.2, 1.0, luma(b));
+    col += st * c_glow.x * b * smoothstep(0.2, 1.0, luma(b));
 
     // vignette
     if (c_tone.x > 0.0) {
-        float v = 16.0 * w.x * w.y * (1.0 - w.x) * (1.0 - w.y);
-        col *= exp2(log2(max(v, 1e-6)) * c_tone.x);
+        float vg = 16.0 * w.x * w.y * (1.0 - w.x) * (1.0 - w.y);
+        col *= exp2(log2(max(vg, 1e-6)) * c_tone.x * st);
     }
     col *= edge;
 
-    float3 crt = powp(saturate(col), 1.0 / c_tone.z);
-    return float4(lerp(plain.rgb, crt, c_tone.w), plain.a);
+    float gout = lerp(c_tone.y, c_tone.z, st);
+    return float4(powp(saturate(col), 1.0 / gout), 1.0);
 }

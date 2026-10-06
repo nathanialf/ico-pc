@@ -36,14 +36,14 @@ full_height = false
 framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 backend = "vulkan"          # Windows: "vulkan" or "d3d12"
 crt = false                 # the CRT filter ("CRT filter" below)
-crt_mode = "consumer"       # "scanlines", "consumer", "trinitron" or "pvm"
+crt_mode = "consumer"       # "scanlines", "consumer", "trinitron", "pvm" or "shadow"
 crt_strength = 1.0          # 0.0 to 1.0
 ```
 
 | key | what it does |
 | --- | --- |
 | `preset` | `"original"`: the PS2 picture. `"enhanced"`: the options below apply. |
-| `resolution` | How sharp the 3D scene is (Enhanced). `"window"`: as many pixels as the frame has on screen. `"2x"`: twice the PS2's resolution in each direction (widened with the aspect). `"1920x1440"`: that many pixels. At least the PS2's resolution, at most 4K (3840 x 2160). Effects such as blur and glow keep their size on screen. The menu text does not depend on it: in Enhanced the game's menu rows and the port's own menus are drawn last, at the window's own pixel size, one font pixel to one screen pixel ("Menu text" below). |
+| `resolution` | How sharp the 3D scene is (Enhanced). `"window"`: as many pixels as the frame has on screen. `"2x"`: twice the PS2's resolution in each direction (widened with the aspect). `"1920x1440"`: that many pixels. At least the PS2's resolution, at most 4K (3840 x 2160). With the CRT filter on the scene is drawn at 1x whatever this says (the value is kept and applies again with the filter off; "CRT filter" below). Effects such as blur and glow keep their size on screen. The menu text does not depend on it: in Enhanced the game's menu rows and the port's own menus are drawn last, at the window's own pixel size, one font pixel to one screen pixel ("Menu text" below). |
 | `aspect` | The shape of the picture (Enhanced). `"16:9"` and `"16:10"` show more of the world to the left and right; the menus, subtitles and the title text stay in a 4:3 frame in the middle; full-screen fades, the cinema bars, the black bands of the pause and memory card menus and the film grain stretch across ("Wide pictures" below). `"auto"` follows the window, between 4:3 and 16:9. The movies stay 4:3 with bars at the sides. |
 | `fullscreen` | Borderless fullscreen at the desktop's resolution. Alt+Enter switches while playing. |
 | `vsync` | Wait for the screen's refresh: no tearing. Off lets frames show as soon as they are ready. |
@@ -64,95 +64,140 @@ whole screen pixels, so the text is as sharp as the screen allows whatever
 bars and sits where the menu puts it, in the middle 4:3 frame. The
 Original preset draws it into the PS2-sized picture as before, and
 Settings > Display > "Menu text: Classic" (`[game] classic_menu_text`)
-brings back the PS2's own lettering and drawing order in both presets. The
+brings back the PS2's own lettering and drawing order in both presets.
+With the CRT filter on, the menu text is drawn into the PS2-sized picture
+as in Original, so that it goes through the filter ("CRT filter" below). The
 subtitles, the end credits and the memory card screens' figures are drawn
 the same way; the subtitles in Yorda's script stay the game's pictures.
 
 ## CRT filter
 
 `crt = true` shows the picture through a simulated cathode-ray tube, in
-either preset: the PS2's lines become glowing scanlines, a phosphor mask
-covers the screen, bright parts bloom, and (in two modes) the glass curves
-and darkens toward its corners. Settings > Display > "CRT filter" picks the
-mode (Off, Scanlines, Consumer TV, Trinitron, PVM) and "CRT strength" mixes
-it with the plain picture, 0 to 100 % in tens.
+either preset. Each of the PS2's pixels lights its own little patch of
+phosphors: red, green and blue stripes (or dots) side by side, each glowing
+with its own colour of that pixel only, under a beam that is brightest in
+the middle of the PS2's line and fades toward the next. Bright parts
+bloom, and in some modes the glass curves and darkens toward its corners.
+Settings > Display > "CRT filter" picks the mode (Off, Scanlines, Consumer
+TV, Trinitron, PVM, Shadow mask) and "CRT strength" eases it in, 0 to
+100 % in tens.
 
-| mode (`crt_mode`) | imitates | what you see |
-| --- | --- | --- |
-| Scanlines (`"scanlines"`) | the scanline structure alone | each line of the PS2's picture a soft horizontal beam with dark gaps between, brighter lines thicker; no mask, no glow, the picture flat and as wide as without the filter |
-| Consumer TV (`"consumer"`, the default) | a period living-room television | a soft, slightly blurred picture with faint scanlines and a fine slot-mask grid, a glow around bright areas that spills a little into the black borders, a gently curved face with rounded corners and darker edges, and deeper shadows (gamma 2.4 in, 2.2 out) |
-| Trinitron (`"trinitron"`) | an aperture-grille set | crisper than Consumer TV, visible vertical red-green-blue stripes and clearer scanlines; the face curves left to right only (flat vertically, as a Trinitron's cylinder), a slight vignette |
-| PVM (`"pvm"`) | a studio (broadcast) monitor | the sharpest: pronounced scanlines with distinct dark gaps, a fine two-pixel grille, almost no glow, a flat face |
+| mode (`crt_mode`) | imitates | the phosphors of one PS2 pixel | the rest |
+| --- | --- | --- | --- |
+| Scanlines (`"scanlines"`) | the scanline structure alone | no mask: the pixel's colour across the whole patch | each PS2 line a soft horizontal beam with dark gaps between, brighter lines thicker; no glow, flat |
+| Consumer TV (`"consumer"`, the default) | a period living-room television (slot mask) | red, green and blue stripes cut into slots by a dark bridge over the last third of each line; every other pixel's slots sit half a line lower, so the bridges make a brick pattern | soft beam, a glow that spills a little into the black borders, a gently curved face with rounded corners and darker edges, deeper shadows (gamma 2.4 in, 2.2 out) |
+| Trinitron (`"trinitron"`) | an aperture-grille set | red, green and blue stripes running unbroken from the top of the pixel to the bottom | clearer scanlines, a slight glow; the face curves left to right only (flat vertically, as a Trinitron's cylinder), a slight vignette |
+| PVM (`"pvm"`) | a studio (broadcast) monitor | the same aperture grille, with darker gaps between the stripes where the screen has room for them | the sharpest beam, pronounced scanlines with distinct dark gaps, almost no glow, a flat face |
+| Shadow mask (`"shadow"`) | a dot-triad (delta) shadow-mask set | dots instead of stripes: a row of red, green and blue dots in the upper half of the line and a second row shifted one stripe sideways in the lower half | a soft beam and glow, a gently curved face |
 
 The parameters each mode uses (`port/render/rd_crt.c`; the shader is
 `port/shaders/crt.hlsl`):
 
-| parameter | Scanlines | Consumer TV | Trinitron | PVM |
-| --- | --- | --- | --- | --- |
-| scanline strength | 0.50 | 0.35 | 0.45 | 0.60 |
-| beam width, dark to bright (lines) | 0.6 to 1.0 | 0.7 to 1.2 | 0.5 to 1.0 | 0.4 to 0.9 |
-| horizontal blur (source pixels) | 1.0 | 1.4 | 1.0 | 0.7 |
-| mask | none | slot, 0.35 | aperture grille, 0.50 | aperture grille, 0.30 |
-| mask pitch (screen pixels) | | 3 | 3 | 2 |
-| halation | 0 | 0.12 | 0.05 | 0.03 |
-| bloom | 0 | 0.15 | 0.10 | 0.05 |
-| curvature x, y | 0, 0 | 0.030, 0.045 | 0.030, 0 | 0, 0 |
-| corner radius (of the height) | 0 | 0.03 | 0.02 | 0.01 |
-| vignette | 0 | 0.15 | 0.08 | 0.05 |
-| gamma in, out | 2.2, 2.2 | 2.4, 2.2 | 2.2, 2.2 | 2.2, 2.2 |
+| parameter | Scanlines | Consumer TV | Trinitron | PVM | Shadow mask |
+| --- | --- | --- | --- | --- | --- |
+| scanline strength | 0.50 | 0.35 | 0.45 | 0.60 | 0.40 |
+| beam width, dark to bright (lines) | 0.6 to 1.0 | 0.7 to 1.2 | 0.5 to 1.0 | 0.4 to 0.9 | 0.6 to 1.1 |
+| mask | none | slot | aperture grille | aperture grille | dot triads |
+| mask strength (darkness of the gaps) | | 0.60 | 0.50 | 0.80 | 0.60 |
+| halation | 0 | 0.12 | 0.05 | 0.03 | 0.08 |
+| bloom | 0 | 0.15 | 0.10 | 0.05 | 0.10 |
+| curvature x, y | 0, 0 | 0.030, 0.045 | 0.030, 0 | 0, 0 | 0.020, 0.030 |
+| corner radius (of the height) | 0 | 0.03 | 0.02 | 0.01 | 0.02 |
+| vignette | 0 | 0.15 | 0.08 | 0.05 | 0.10 |
+| gamma in, out | 2.2, 2.2 | 2.4, 2.2 | 2.2, 2.2 | 2.2, 2.2 | 2.2, 2.2 |
 
-The mean brightness stays that of the plain picture (within 3 % on the
-test frames in Scanlines, Trinitron and PVM; Consumer TV is 6 to 19 %
-darker, from its gamma, more in dark scenes).
+**How it works.** The filter draws the 4:3 box (or the wide one) itself,
+in place of the usual scaling, from the PS2's own pixel grid: 512 pixels
+across (683 at 16:9: the grid is widened with the aspect) by the PS2's 256
+lines (512 with `full_height`). Each line is not doubled: the scanlines
+are the PS2's own lines. Every screen pixel of the box is worked out on
+its own: its position (bent by the curve in the curved modes) falls in one
+PS2 pixel and one PS2 line, and
 
-How it works: the filter draws the 4:3 box (or the wide one) itself, in
-place of the usual scaling. It takes the picture at the PS2's resolution:
-512 pixels across (more with a wide `aspect`) and the PS2's 256 lines (512
-with `full_height`). Each line is not doubled: the scanlines are the PS2's
-own lines, one beam each, a Gaussian whose width grows with the colour's
-brightness. Horizontally each line is a Gaussian blend of its four nearest
-pixels. The mask is laid out in screen pixels. Halation (a wide, faint
-glow of all the light) and bloom (a narrower glow of the bright parts)
-come from a half-size blurred copy of the picture. With the Enhanced
-preset at a higher `resolution` the picture is first averaged down to the
-PS2's size: a CRT of the time showed the PS2's pixels, whatever the scene
-was rendered at.
+- across the PS2 pixel it lands on one phosphor. The pixel's width on the
+  screen is split into three equal stripes, red, green and blue from the
+  left, and the screen pixel shows only that stripe's colour of the PS2
+  pixel: a pure red PS2 pixel lights only its red stripe, a white one all
+  three. Nothing is scaled afterwards, so every screen pixel of the
+  picture is exactly one colour channel of one PS2 pixel (before the glow
+  is added). When a PS2 pixel is 4 or more screen pixels wide its last
+  screen column is a dark gap between triads, from 6 the last two;
+- down the PS2 line it gets the beam: the line seen at that height (and a
+  little of the lines above and below, which a wide bright beam reaches),
+  a bell curve whose width grows with the colour's brightness;
+- the mask strength is the darkness of the gaps between phosphors: of a
+  gap column, of the slot mask's bridges. The phosphors keep the PS2
+  pixel's light on average (a lit stripe is three times as bright as the
+  pixel), so bright colours reach the stripes' limit and look a little
+  dimmer than without the filter.
 
-**The mask needs pixels.** A phosphor triad 3 pixels wide, over the
-picture's 512 source pixels, needs about 1440 pixels across, a 4:3 box
-1080 lines high. Below that the mask would beat against the screen's own
-pixels (moiré), so its strength fades from full at a 1080-line box to
-nothing at 720 lines and below. The scanlines and the glow stay at any
-size, though with fewer than about 3 screen lines per PS2 line (a box under
-768 lines) the scanlines lose their shape.
+Halation (a wide, faint glow of all the light) and bloom (a narrower glow
+of the bright parts) come from a half-size blurred copy of the picture and
+are added on top; the corners are darkened and the output gamma applied.
 
-**What stays sharp.** The filter is part of the picture, so everything the
-PS2 drew is filtered, including the Original preset's menu text. With the
-Enhanced preset the menu text drawn at the window's resolution ("Menu
-text" above) is drawn after the filter, unfiltered and not curved, and so
-are the port's own menus and popups: they stay readable. With a curved mode
-that text sits where the flat picture would have it, a few pixels inside
-the curved edge near the corners. The movies (the opening and the
-ending) are drawn by their own path and are shown without the filter.
+**The 1x rule.** A CRT of the time showed the PS2's pixels, so while the
+filter is on the 3D scene is drawn at the PS2's resolution (1x) in the
+Enhanced preset whatever `resolution` says. Settings > Display >
+"Resolution" then reads "1x (CRT)", is greyed and does not change; the
+`resolution` in `config.toml` is left as it was and applies again when the
+filter is turned off (or its strength set to 0 %).
+
+**Stripe widths.** A PS2 pixel is the box's width divided by the grid's
+width screen pixels across, rarely a whole number:
+
+| window | box (4:3) | screen pixels a PS2 pixel | stripes |
+| --- | --- | --- | --- |
+| 1280 x 720 | 960 x 720 | 1.88 | the mask faded out (below) |
+| 1920 x 1080 | 1440 x 1080 | 2.81 | 1 or 2 pixels wide, each pure |
+| 2048 x 1536 | 2048 x 1536 | 4 | 1 pixel each and a gap column |
+| 2560 x 1440 | 1920 x 1440 | 3.75 | 1 or 2 pixels wide |
+| 3840 x 2160 | 2880 x 2160 | 5.63 | 1 or 2 pixels and a gap column |
+
+Where the width is not a whole number some stripes are one screen pixel
+wider than the others, in a pattern that repeats across the picture; each
+stripe is still one pure colour. At exact multiples (a 1536- or 2048-wide
+box) every triad is the same. Below a 1080-line box the stripes would be
+under a screen pixel each, so the mask fades from full at a 1080-line box
+to nothing at 720 lines and below (the beam and the glow stay). The slot
+mask's bridge covers the last third of each PS2 line (half a line later in
+every other column); the shadow mask's second row of dots, the lower half
+of each line, is shifted by one stripe (half a triad, rounded down to a
+whole stripe so the dots stay on whole screen pixels at 3 pixels a PS2
+pixel).
+
+**The UI under the filter.** With the filter on, everything on screen goes
+through it: the game's menus and the port's Settings menu are drawn into
+the PS2-sized picture as the Original preset draws them (the Enhanced
+preset's sharp menu text, "Menu text" above, is not used), and the port's
+own popups, hint lines and photo mode's help lines are drawn into the
+PS2's pixel grid at the PS2's scale before the filter, so they get the
+same phosphors, scanlines and curve as the picture. Nothing is drawn on top
+of the tube. A picture saved in photo mode therefore has the filter and,
+if it was on screen, the help lines or a popup. The movies (the opening
+and the ending) are drawn by their own path and are shown without the
+filter.
 
 **What it does not change.** The filter happens when the picture is shown:
 the game's frames, F12 screenshots of DISPLAY, frame dumps and the replay
-tool's DISPLAY and SCENE images are the same with it on or off, and with it
-off (or at 0 % strength) the shown picture is byte for byte what it was
-without the option.
+tool's DISPLAY and SCENE images are the same with it on or off (except
+that the scene is drawn at 1x while it is on), and with it off (or at 0 %
+strength) the shown picture is byte for byte what it was without the
+option. The strength eases every part in together: the phosphors, the
+glow, the curve, the vignette and the gamma.
 
 **Cost.** Three small passes at half the PS2's size (the glow) and one
-pass over the box: per screen pixel 8 samples for the beam, 5 for the glow
-and 1 for the plain picture. At 1440 x 1080 that is about 22 million
-texture samples a picture, a small part of a picture's work on a desktop
-GPU; it has not been timed on hardware.
+pass over the box: per screen pixel three reads of the PS2 picture (the
+line and its neighbours) and five of the glow. At 1440 x 1080 that is
+about 12 million reads a picture, a small part of a picture's work on a
+desktop GPU; it has not been timed on hardware.
 
 **Overrides.** `config.toml` also takes, under `[video]`, `crt_scanlines`,
 `crt_mask`, `crt_halation`, `crt_bloom` (each 0 to 1) and `crt_curvature`
-(0 to 0.25): each replaces that parameter of the mode (`crt_curvature` is
-the x curvature, y being 1.5 times it except on the Trinitron's flat
-vertical; `crt_mask` on the Scanlines mode adds an aperture grille). A
-negative value, or no key, keeps the mode's own. They have no Settings row.
+(0 to 0.25): each replaces that parameter of the mode (`crt_mask` is the
+gaps' darkness, and on the Scanlines mode adds an aperture grille;
+`crt_curvature` is the x curvature, y being 1.5 times it except on the
+Trinitron's flat vertical). A negative value, or no key, keeps the mode's
+own. They have no Settings row.
 
 ## Photo mode
 
@@ -180,7 +225,8 @@ The mouse moves the right stick as it does in play (Settings > Controls,
 **Pictures.** Cross saves the picture as shown, at the window's own
 resolution (the whole window, black bars included), with the preset, the
 CRT filter and the Enhanced menu text as they are, but without the help
-lines or any popup: `ico-<date>-<time>.png` in the `screenshots` folder of
+lines or any popup (with the CRT filter on, the help lines and any popup
+on screen are part of the filtered picture and are in the saved one too): `ico-<date>-<time>.png` in the `screenshots` folder of
 the per-user folder (CONFIG.md says where; `[photo] png_dir` names another
 folder there). A popup names the file. The picture is saved at the next
 picture drawn after the press. F12 is unchanged (a frame dump and the

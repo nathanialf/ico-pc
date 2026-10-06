@@ -1170,7 +1170,8 @@ the textures.
 (`rd__OverlayDraw`), `rd_pipeline.c` (`rd__OverlayState`). The port's own
 UI that does not belong to the game's picture, today the popups
 (UI.md "Popups"), is drawn on the output after the box blit, at the
-output's resolution.
+output's resolution; under the CRT filter it is drawn into the filter's
+source grid instead, at the frame's 1x scale ("The CRT pass" below).
 
 **Contract.** One callback is registered at a time (`port/ui/ui_host.c`
 registers the popups' at start-up; the registration survives `rd_Shutdown`
@@ -1179,7 +1180,10 @@ and `rd_Init`). It is called once per present that reaches an output:
 `--present`; not for the movie picture (`rd_video.c`). It gets an
 `RdOverlayCtx`: the output's size, the box DISPLAY was blitted into,
 `boxScale` = box height / 448 (output pixels per line of the 448-line
-frame) and whether the blit was mirrored. Inside it, and only there,
+frame) and whether the blit was mirrored. With the CRT filter on the
+"output" is the filter's grid layer: the grid's width (512 at 4:3, 683 at
+16:9) by the frame's lines (`gsH`, 512), the box all of it, `boxScale`
+512 / 448; callbacks lay out from the context and need no other change. Inside it, and only there,
 `rd_OverlayPrims(prim, v, n, tex, blend)` adds prims:
 
 - XY in 12.4 output pixels from the output's top-left corner, an integer
@@ -1214,15 +1218,17 @@ texture bound. The overlay's pipelines (LERP and additive, RGBA8 and BGRA8,
 no depth, both fragment shaders) are in `rd__EnumerateReachableScreen`, so
 `rd_PrecreatePipelines` makes them at start-up.
 
-**Ordering.** In `rd__PresentRecord`: DISPLAY to the line-doubled target
-and the box blit, or in their place the CRT filter ("The CRT pass" below),
-then the deferred text (`textRecord`, below), then the presentation passes
-of later packages (a marked insertion point in `rd_present.c` says where),
-then the overlay, last, then the window's transition to PRESENT. The
-filter is the picture's; the deferred text and the overlay are drawn
-above it, unfiltered. A pass inserted there draws on `out` (in
-RENDER_TARGET at that point) with `rd__FrameGroup(s_outW, s_outH, ...)` as
-`blit()` does; the overlay stays above it.
+**Ordering.** In `rd__PresentRecord`, without the CRT filter: DISPLAY to
+the line-doubled target and the box blit, then the deferred text
+(`textRecord`, below), then the presentation passes of later packages (a
+marked insertion point in `rd_present.c` says where), then the capture,
+then the overlay, last, then the window's transition to PRESENT. A pass
+inserted there draws on `out` (in RENDER_TARGET at that point) with
+`rd__FrameGroup(s_outW, s_outH, ...)` as `blit()` does; the overlay stays
+above it. With the CRT filter on (package CRT2) the order is: the
+overlay into the grid layer, the filter's passes, the capture; the filter
+is the last pass that draws, there is no deferred text, and nothing is
+drawn above the tube.
 
 **What it fixes.** The popups were recorded into list 12 of the game's
 frame: drawn at the scene's resolution and halved by the reduction,
@@ -1276,11 +1282,13 @@ passes' command streams are unchanged.
 
 **The gate is the replay's.** A replay that presents to an output in the
 Enhanced preset with a renderer registered (`rd_SetDeferredTextFn`;
-`port/ui/ui_host.c`, `rd_replay_tool` unless `--quad-text`, the tests)
+`port/ui/ui_host.c`, `rd_replay_tool` unless `--quad-text`, the tests),
+the CRT filter off (package CRT2: under the filter the rows are part of
+the picture the tube shows, so they draw as quads, as in Original),
 draws the items deferred: `rd__OverlayCollect` sets `g_rd.deferText`,
 `doScreen` skips every marked quad, and the items are drawn on the output.
-Every other replay (Original, no renderer, no output, a replay that does
-not present, such as the replay tool's DISPLAY or SCENE PNGs) ignores the
+Every other replay (Original, the CRT filter on, no renderer, no output, a
+replay that does not present, such as the replay tool's DISPLAY or SCENE PNGs) ignores the
 items and draws the quads, so its bytes are those of a frame recorded
 without items (`font_edge`: the Original present of a frame with a
 deferred row and a popup is byte-identical to the plain quads'). Classic
@@ -1357,65 +1365,98 @@ quads it stands for do.
 ### The CRT pass
 
 `port/render/rd_crt.c` (`rd__CrtRecord`, `rd__CrtResolve`, the modes'
-table), `port/shaders/crt.hlsl`, `rd.h` `RdSettings.crtMode` ...
-`crtCurvature` and `rd_CrtSettings`; `port/game/video_options.c` (the
-`[video] crt*` keys), `port/ui/settings.c` (the two rows). DISPLAY.md "CRT
-filter" is the user's description and holds the parameter table. Package
-CRT.
+table, `rd__CrtMaskWeight`, `rd__CrtMaskGain`), `port/shaders/crt.hlsl`,
+`rd.h` `RdSettings.crtMode` ... `crtCurvature` and `rd_CrtSettings`;
+`rd_present.c` (`rd__ApplyDisplay`'s 1x rule, the overlay's grid);
+`port/game/video_options.c` (the `[video] crt*` keys), `port/ui/settings.c`
+(the two rows, the Resolution row's lock). DISPLAY.md "CRT filter" is the
+user's description and holds the parameter table. Packages CRT and CRT2.
 
 **Where.** With `RdSettings.crtMode` not `RD_CRT_OFF` and `crtStrength`
 above 0 (`rd__CrtOn`), `rd__PresentRecord` calls `rd__CrtRecord` with
 DISPLAY (SHADER_READ), the output (RENDER_TARGET) and the box, instead of
 the line doubling and the box blit; if it cannot draw (a pipeline missing)
-it returns false and the blit runs. Off, no command is recorded that was
-not before: the present is byte-identical (`rd_crt`: rd_present's hash),
-and so is a mode at strength 0. Either preset; nothing in SCENE or DISPLAY
-changes, so dumps, `rd_ReadDisplay`, the replay tool's target PNGs and the
-deferred text's collection do not depend on it.
+it returns false and the blit runs (the overlay is then lost for that
+present: it was laid out on the grid). Off, no command is recorded that
+was not before: the present is byte-identical (`rd_crt`: rd_present's
+hash), and so is a mode at strength 0. Either preset; nothing in SCENE or
+DISPLAY changes, so dumps, `rd_ReadDisplay` and the replay tool's target
+PNGs do not depend on it.
 
-**The virtual source.** The filter's grid is the PS2's: DISPLAY's GS width
-divided by `g_rd.wideX` (512 at 4:3, 683 at 16:9) by its GS height, doubled
-with the full-height scene. DISPLAY's own lines are the scanlines: the line
-doubling is skipped. When DISPLAY's texture is larger (an Enhanced scene
-scale), `box_reduce_ps` (the shadow family's key) averages it to the
-virtual size into "rd crt source" first; in Original DISPLAY is used as it
-is.
+**Around it.** While it is on (package CRT2): `rd__ApplyDisplay` renders
+the Enhanced scene at 1x whatever `sceneScale` or `sceneWidth` x
+`sceneHeight` ask (the aspect's width kept), so DISPLAY is the grid;
+`rd__OverlayCollect` collects no deferred text (the rows draw as quads
+into the scene, as in Original) and gives the overlay callback the grid
+layer for its context; nothing draws after the filter but the capture's
+copy.
 
-**Passes.** (1) `crt_bloom_ps` into "rd crt glow A", RGBA16F, half the
-virtual size rounded up (256 x 128 in Original): linear light (`gamma in`),
-a 9-tap Gaussian across, taps 2 source pixels apart, each a bilinear
-sample of 2 x 2 source pixels. (2) `crt_blur_ps` into "glow B": the same
-vertically. (3) `crt_ps` into the box of the output, cleared black around
-it (the pass's clear, as the blit's): the box-relative position is warped
-(x by 1 + y^2 cx, y by 1 + x^2 cy, crt-lottes' warp), a rounded-box signed
-distance (the corner radius, antialiased over a pixel) cuts the corners and
-what the warp pushed outside; the mirror flips the warped x; the two
-nearest source lines are each a Gaussian of 4 pixels across (sigma half
-the horizontal blur), and each line's beam a Gaussian across the lines of
-unit area whose full width at half maximum goes from beam min to beam max
-with the channel's value, mixed with the plain linear interpolation by the
-scanline strength; the mask (lit channels 1.5, dark 0.5, lerped toward 1
-by its strength) by output pixel; halation (glow B at the point and 4
-glow texels around, a fifth of each) and bloom (glow B weighted by
-smoothstep(0.2, 1, luma)) added; the vignette (16 x y (1 - x)(1 - y))^v;
-gamma out; finally a lerp by the strength against the plain picture (DISPLAY
-bilinear across, nearest down, as the blit shows it), alpha DISPLAY's.
+**The source grid.** `rd__CrtGrid`: DISPLAY's GS width divided by
+`g_rd.wideX` (512 at 4:3, 683 at 16:9) by its GS height, doubled with the
+full-height scene. DISPLAY's own lines are the scanlines: the line
+doubling is skipped. When DISPLAY's texture is larger (not with the 1x
+rule, but kept), `box_reduce_ps` averages it to the grid into "rd crt
+source" first.
+
+**Passes.** (0) When the overlay has prims: the grid line-doubled (nearest,
+x flipped by the mirror mode: `rd__PresentBlit`) into "rd crt overlay
+layer", RGBA8, the grid's width by `gsH`; the overlay's batches drawn into
+it (`rd__OverlayGridDraw`: the overlay's own pass, viewport the layer);
+`box_reduce_ps` averages its line pairs back into "rd crt grid" (with the
+full-height scene the layer is the grid). From here the grid is in the
+shown orientation and the mirror is off. (1) `crt_bloom_ps` into "rd crt
+glow A", RGBA16F, half the grid rounded up (256 x 128 at 4:3): linear
+light (`gamma in`), a 9-tap Gaussian across, taps 2 source pixels apart,
+each a bilinear sample of 2 x 2 source pixels. (2) `crt_blur_ps` into
+"glow B": the same vertically. (3) `crt_ps` into the box of the output,
+cleared black around it (the pass's clear, as the blit's), per output
+pixel: the box-relative position is warped (x by 1 + y^2 cx, y by 1 + x^2
+cy, crt-lottes' warp; the mask follows the curve), a rounded-box signed
+distance (the corner radius, antialiased over a pixel) cuts the corners
+and what the warp pushed outside; the warped point times the grid's size
+gives the source pixel and line it falls in (the pixel taken from the
+other side under the mirror) and f, v, its position across them; the
+pixel in linear light, the beam of its line at distance v - 0.5 lines
+plus the beams of the lines above and below (each a Gaussian across the
+lines of unit area whose full width at half maximum goes from beam min to
+beam max with the channel's value), mixed with the flat pixel by the
+scanline strength; times `maskOf(f, v, column odd)` x the mask's gain,
+lerped from 1 by the box-height fade; the whole lerped from the flat
+pixel by the strength; halation (glow B at the point and 4 glow texels
+around, a fifth of each) and bloom (glow B weighted by smoothstep(0.2, 1,
+luma)) added; the vignette (16 x y (1 - x)(1 - y))^v; gamma out; alpha 1.
+Nothing resamples the mask: with the glow off each output pixel is one
+channel of one source pixel. The strength scales the curvature, the
+corner, the glow, the vignette and moves gamma out toward gamma in, so
+the picture eases into the filter as it rises.
+
+**The mask.** `rd__CrtMaskWeight` (C) and `maskOf` (HLSL) are the same
+function of (f, v) and r, the output pixels a source pixel is wide (box
+width / grid width): with u = f r, the last g = `rd__CrtGapColumns(r)`
+pixels (1 from r 4, 2 from r 6) are a gap passing all three channels at 1
+- gap; the rest is three equal stripes, R, G, B from the left, each
+passing only its own channel. Grille: the stripes run down the line.
+Slot: a bridge at 1 - gap over v in [2/3, 1), half a line later in the
+odd source columns (the slots staggered). Dots: for v from 1/2 the
+stripes are taken at f + 1/3 (the second row of dots one stripe over:
+half a triad rounded down to whole stripes, so at r 3 they stay on whole
+pixels). gap is the mode's mask strength. The gain (`rd__CrtMaskGain`,
+`c_pass.y`) is 1 over the mask's mean weight for a channel (3 for a
+grille without gaps), so the mask keeps the pixel's light before the
+final clamp (a lit stripe of a bright colour exceeds 1 and clips).
 
 **Constants.** `IcoCrtCB` (`shader_consts.h`) is DrawCB's size and is bound
 in its slot with the draw layout (`rd__CrtGroup`), so no layout or dynamic
 group is added; group 0 gets a FrameCB (unused by the shader) and group 2
-`rd__TexGroupDate` with t2 the glow (the dummy for the glow passes). The
-mask strength is multiplied by `rd__CrtMaskFade(box h)`: 1 from 1080, 0 at
-720 and below (DISPLAY.md says why).
+`rd__TexGroupDate` with t2 the glow (the dummy for the glow passes).
+`c_beam.w` is the gap columns, `c_mask` the type, the gap darkness, the box-height fade
+(`rd__CrtMaskFade(box h)`: 1 from 1080, 0 at 720 and below) and the
+halation, `c_pass` the mirror, the gain and the glow's texel step.
 
 **Pipelines.** Four keys, `rd__EnumerateReachableCrt`: the two RGBA16F
 glow passes and `crt_ps` on RGBA8 (headless) and BGRA8 (the swapchain), so
-`rd_PrecreatePipelines` makes them at start-up.
-
-**Ordering.** The deferred text and the overlay draw after it, unfiltered:
-the Enhanced preset's menu text stays sharp and is not curved (in a curved
-mode it sits where the flat picture has it). The Original preset's menu
-text is in DISPLAY and is filtered with the picture.
+`rd_PrecreatePipelines` makes them at start-up; the layer's blit and box
+reduction and the overlay's prims on RGBA8 are already reachable.
 
 ### The draw filter
 
@@ -1801,14 +1842,17 @@ before, the capture records nothing unless armed.
 **The capture.** `rd_CapturePresented(png)` arms; the next present that
 reaches an output copies `out` (the headless RGBA8 output or the BGRA8
 swapchain image, both with copy-source usage) into a texture of its format
-after the box blit or the CRT filter and the deferred text, before the
-overlay (`captureRecord`), so the picture has the preset, the CRT filter and
-the Enhanced menu text, and neither the popups nor photo mode's HUD; after
+after the box blit and the deferred text, before the overlay
+(`captureRecord`), so the picture has the preset and the Enhanced menu
+text, and neither the popups nor photo mode's HUD; with the CRT filter on
+the copy is taken after the filter, which has the overlay inside it, so
+the photo has the filter and the HUD (package CRT2); after
 the submit `rd__CaptureFinish` reads it back (BGRA swapped), writes an RGB
 PNG of outputWidth × outputHeight (`rd_WritePng`) and logs `rd: photo:
 capture WxH written to <path>`. `rd_CaptureResult` returns 1 or -1 once
 with the path; the window turns it into a popup. `rd_present_test`
-checks the PNG against the present without the overlay, CRT off and on.
+checks the PNG against the present without the overlay with CRT off, and
+against the present with it under Consumer TV.
 
 **Depth of field.** `[photo] dof` is not implemented: a present-time blur
 weighted by |depth − focus| from SCENE's depth needs the depth at the
@@ -2154,8 +2198,8 @@ inputs; an R8 texture is written as a grey image), `--enhanced`, `--aspect`, `--
 overlay; without it the tool registers no overlay), `--no-aa1` (every
 `RDC_AA1` dropped: the frame as `rd` drew it before PRIM.AA1 was decoded,
 for a before/after pair from one dump), and `--crt MODE` with
-`--present` (the CRT filter in `scanlines`, `consumer`, `trinitron` or
-`pvm` at full strength; `--crt-strength K` after it sets the strength).
+`--present` (the CRT filter in `scanlines`, `consumer`, `trinitron`,
+`pvm` or `shadow` at full strength; `--crt-strength K` after it sets the strength).
 
 Dumps carry `RD_DUMP_VERSION` (`rd_internal.h`), 5 since package DEF
 (`RDC_OVERLAY_TEXT` items and ops with their `RdTextItem` and `RdTextOp`
@@ -2185,8 +2229,8 @@ and op and marks the quads `text-quads`.
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
-| `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides; on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %, a white frame's mask period equal to the pitch at 1920×1440 (Trinitron 3, PVM 2) and no mask in a 720-line box |
-| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); photo mode's capture at 800×600, CRT off and Consumer TV: the PNG is the present without the overlay, byte for byte |
+| `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides, the gap columns and the mask's gain (checked against the mask's numerically integrated mean); on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %; the phosphors, glow and curvature off: at a 1440×1080 box under white every box pixel is one channel, the one `rd__CrtMaskWeight` gives, each source pixel's columns R, G, B in order; at 1536×1152 a red pixel lights only its first column (Trinitron), a white one R, G, B columns (Trinitron, PVM), Consumer TV's bridges dark and staggered half a line, the shadow mask's second row of dots one stripe over, Scanlines without columns |
+| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); the overlay under the CRT filter (the callback's box is the grid, its red rectangle comes out as R phosphors); photo mode's capture at 800×600: CRT off the PNG is the present without the overlay, under Consumer TV the present with it, byte for byte |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own; photo mode (`rd__PhotoFrame`: a mesh's matrices through the override against the reference transform, the scissor clip mode, the shadow volume untouched, the UI dropped under the flag and kept without it, the game's camera changing nothing; the pin surviving three keep frames with its temporary target, replaced by the next full frame, freed and a cut on leaving) |

@@ -181,6 +181,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_CRT_CONSUMER] = "Televisore",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
     [UI_STR_VAL_CRT_PVM] = "PVM",
+    [UI_STR_VAL_CRT_SHADOW] = "Maschera forata",
     [UI_STR_QUIT_DESKTOP] = "Esci al desktop",
     [UI_STR_QUIT_CONFIRM] = "Uscire al desktop?",
     [UI_STR_OPT_CIRCLE_BACK] = "Cerchio per tornare indietro",

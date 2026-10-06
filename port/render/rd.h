@@ -367,7 +367,8 @@ typedef enum RdCrtMode {
     RD_CRT_SCANLINES = 1, /* scanlines alone: no mask, no glow, flat */
     RD_CRT_CONSUMER = 2,  /* a consumer television: slot mask, glow, curved */
     RD_CRT_TRINITRON = 3, /* an aperture grille set: stripes, cylindrical */
-    RD_CRT_PVM = 4,       /* a studio monitor: fine grille, sharp, flat */
+    RD_CRT_PVM = 4,       /* a studio monitor: grille, dark gaps, sharp, flat */
+    RD_CRT_SHADOW = 5,    /* a shadow-mask set: dot triads in a delta (package CRT2) */
     RD_CRT_MODE_COUNT
 } RdCrtMode;
 

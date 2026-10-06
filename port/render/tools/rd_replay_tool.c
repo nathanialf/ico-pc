@@ -34,7 +34,7 @@
  *                         default the tool installs port/ui/font.c's
  *                         renderer (ui_InstallDeferredText)
  *   --crt MODE            (with --present; package CRT) the CRT filter in
- *                         MODE (scanlines, consumer, trinitron, pvm) at
+ *                         MODE (scanlines, consumer, trinitron, pvm, shadow) at
  *                         full strength, the modes' own parameters
  *                         (DISPLAY.md "CRT filter"); --crt-strength K (0..1,
  *                         after it) sets the strength
@@ -44,7 +44,10 @@
  *                         outline on the box's edge and a 32 x 32 square,
  *                         opaque red, 16 pixels in from the box's top-left
  *                         corner, plus a half-transparent white one beside
- *                         it.  Without it the tool registers no overlay
+ *                         it, and (package CRT2) a popup: a dark panel
+ *                         with two rows of text ("Continue", "Quit Game")
+ *                         through font.c's overlay mode.  Without it the
+ *                         tool registers no overlay
  *
  * Inspection (P2):
  *   --list                prints every command of the replayed lists: the
@@ -295,6 +298,15 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
     overlaySprite(x1 - 1, y0, x1, y1, white);
     overlaySprite(x0 + 16, y0 + 16, x0 + 48, y0 + 48, red);
     overlaySprite(x0 + 64, y0 + 16, x0 + 96, y0 + 48, half);
+    /* package CRT2: a popup as port/ui draws one (a dark panel, two rows of
+     * text through font.c's overlay mode), to see the UI under the filter */
+    static const uint8_t panel[4] = {0x10, 0x10, 0x18, 0x60}, row[4] = {0xFF, 0xFF, 0xFF, 0x80},
+                         dim[4] = {0xA0, 0xA0, 0xA0, 0x80};
+    ui_BeginOverlay(ctx);
+    ui_DrawRect(200.0f, 170.0f, 440.0f, 282.0f, panel);
+    ui_DrawText(320.0f, 214.0f, 27.0f, row, "Continue", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_DrawText(320.0f, 254.0f, 27.0f, dim, "Quit Game", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_EndOverlay();
 }
 
 int main(int argc, char **argv)
@@ -306,7 +318,7 @@ int main(int argc, char **argv)
             "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
             "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
             "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n"
-            "       [--crt scanlines|consumer|trinitron|pvm [--crt-strength K]]\n",
+            "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
             argv[0]);
         return 1;
     }
@@ -395,16 +407,17 @@ int main(int argc, char **argv)
             quadText = true;
         } else if (strcmp(argv[i], "--crt") == 0 && i + 1 < argc) {
             /* package CRT: the CRT filter's mode, at full strength */
-            static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm"};
+            static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm",
+                                                "shadow"};
             const char *v = argv[++i];
             int m = -1;
-            for (int k = 0; k < 4; k++) {
+            for (int k = 0; k < 5; k++) {
                 if (strcmp(v, modes[k]) == 0) {
                     m = k;
                 }
             }
             if (m < 0) {
-                fprintf(stderr, "bad --crt (scanlines, consumer, trinitron or pvm)\n");
+                fprintf(stderr, "bad --crt (scanlines, consumer, trinitron, pvm or shadow)\n");
                 return 1;
             }
             rd_CrtSettings(&s, (RdCrtMode)(m + 1), s.crtMode ? s.crtStrength : 1.0f);

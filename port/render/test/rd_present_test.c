@@ -44,11 +44,17 @@
  *             overlay; with the mirror on the all-UI box shows the same
  *             picture (within 1 LSB) and the overlay is not flipped;
  *             unregistered, the present hashes as before
+ *   overlay under the CRT filter (package CRT2): Trinitron at 1536 x
+ *             1152 (k 3), the glow and curvature off: the callback sees the
+ *             filter's grid (box 0, 0, 512 x 512, scale 512 / 448), and its
+ *             red rectangle comes out of the filter as phosphors: in the
+ *             rectangle each block's R column red, its G column dark
  *   capture   package PHOTO, rd_CapturePresented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
- *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
- *             present without the overlay (the CRT applied, the overlay
- *             not), rd_CaptureResult reports it once
+ *             Consumer TV: the PNG is 800 x 600 RGB; CRT off it holds
+ *             exactly the present without the overlay, under the CRT filter
+ *             (package CRT2) exactly the present with it (the overlay is
+ *             inside the filtered picture); rd_CaptureResult reports it once
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -1516,6 +1522,57 @@ static void checkOverlay(uint64_t presentNoOverlay)
     }
 }
 
+/* package CRT2: the overlay drawn into the CRT filter's grid */
+static void checkOverlayCrt(void)
+{
+    const uint32_t w = 1536, h = 1152;
+    uint8_t *px = malloc((size_t)w * h * 4);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    rd_CrtSettings(&s, RD_CRT_TRINITRON, 1.0f);
+    s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    if (!px || !rd_Init(512, 512, &s, NULL)) {
+        free(px);
+        return;
+    }
+    memset(&s_ovt, 0, sizeof(s_ovt));
+    s_ovt.rects = 1;
+    rd_SetPresentOverlay(ovCallback, &s_ovt);
+    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(t, 1);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd_ReadPresented(px, &ow, &oh) && ow == w && oh == h;
+    rd_SetPresentOverlay(NULL, NULL);
+    ui_FontShutdown();
+    rd_DestroyTexture(t);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay crt: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    CHECK(ok && s_ovt.calls == 1, "overlay crt: one callback, the present read");
+    CHECK(s_ovt.box.x == 0 && s_ovt.box.y == 0 && s_ovt.box.w == 512 && s_ovt.box.h == 512 &&
+              fabsf(s_ovt.boxScale - 512.0f / 448.0f) < 1e-6f,
+          "overlay crt: the callback's box is the grid (%d, %d, %u x %u, scale %.3f)", s_ovt.box.x,
+          s_ovt.box.y, s_ovt.box.w, s_ovt.box.h, s_ovt.boxScale);
+    if (ok) {
+        /* the rectangle: grid x 100..140, frame lines 50..71 (DISPLAY lines
+         * 25..35): output columns 300..420, rows about 112..160 */
+        const uint32_t y = 136;
+        int phosphors = 1;
+        for (uint32_t gx = 104; gx < 136; gx++) {
+            const uint8_t *r = &px[((size_t)y * w + gx * 3) * 4];
+            const uint8_t *g = &px[((size_t)y * w + gx * 3 + 1) * 4];
+            phosphors &= r[0] > 100 && r[1] < 30 && r[2] < 30 && g[0] < 30 && g[1] < 30;
+        }
+        const uint8_t *r = &px[((size_t)y * w + 360) * 4];
+        printf("  overlay crt: red rectangle at (360, %u): R column %u %u %u, G column %u %u %u\n",
+               y, r[0], r[1], r[2], r[4], r[5], r[6]);
+        CHECK(phosphors, "overlay crt: the overlay's red is the R phosphors of its blocks");
+    }
+    free(px);
+}
+
 /* ------------------------------------------------- capture (package PHOTO) */
 
 static uint32_t be32At(const uint8_t *p)
@@ -1632,10 +1689,18 @@ static void checkCaptureAt(const char *dir, int crt)
             diffPlain += memcmp(rgb + i * 3, plain + i * 4, 3) != 0;
             diffOver += memcmp(rgb + i * 3, over + i * 4, 3) != 0;
         }
-        CHECK(diffPlain == 0 && diffOver > 0,
-              "capture (crt %d): the present without the overlay (%zu pixels differ; %zu from "
-              "the one with it)",
-              crt, diffPlain, diffOver);
+        if (crt) {
+            /* package CRT2: the overlay is inside the filtered picture */
+            CHECK(diffOver == 0 && diffPlain > 0,
+                  "capture (crt): the present with the overlay (%zu pixels differ; %zu from the "
+                  "one without it)",
+                  diffOver, diffPlain);
+        } else {
+            CHECK(diffPlain == 0 && diffOver > 0,
+                  "capture (crt %d): the present without the overlay (%zu pixels differ; %zu "
+                  "from the one with it)",
+                  crt, diffPlain, diffOver);
+        }
     }
     free(rgb);
     free(plain);
@@ -1682,6 +1747,7 @@ int main(int argc, char **argv)
     checkWide169();
     checkMips();
     checkOverlay(s_presentOriginal);
+    checkOverlayCrt();
     checkCapture(dir);
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);

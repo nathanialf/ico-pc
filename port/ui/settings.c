@@ -284,7 +284,17 @@ static int stepFramerate(int fr, int dir)
 
 /* package CRT: the CRT filter row's names of the modes (ICO_CRT_* order) */
 static const int kCrtStr[ICO_CRT_MODES] = {UI_STR_VAL_CRT_SCANLINES, UI_STR_VAL_CRT_CONSUMER,
-                                           UI_STR_VAL_CRT_TRINITRON, UI_STR_VAL_CRT_PVM};
+                                           UI_STR_VAL_CRT_TRINITRON, UI_STR_VAL_CRT_PVM,
+                                           UI_STR_VAL_CRT_SHADOW};
+
+/* package CRT2: the CRT filter in force (a mode at a strength above 0, as
+   rd__CrtOn sees it): the scene renders at 1x, and the Resolution row reads
+   "1x (CRT)" and does not step; the file's resolution is kept and is in
+   force again with the filter off (docs/port/DISPLAY.md "CRT filter") */
+static int crtForcesNative(const IcoVideoOptions *o)
+{
+    return o->crt && o->crtStrength > 0.0f;
+}
 
 static IcoBindings *liveBindings(void)
 {
@@ -510,6 +520,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_PRESET:
         return ui_Str(o.preset == ICO_VIDEO_ENHANCED ? UI_STR_VAL_ENHANCED : UI_STR_VAL_ORIGINAL);
     case UI_OPT_RESOLUTION:
+        if (crtForcesNative(&o)) {
+            return "1x (CRT)";
+        }
         if (resolutionIndex(&o) == 0) {
             return ui_Str(UI_STR_VAL_WINDOW);
         }
@@ -603,10 +616,19 @@ static int steppable(int opt)
     return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER;
 }
 
-/* a press changes the option now: the video mode only from the title */
+static int resolutionLocked(void)
+{
+    IcoVideoOptions o;
+    ico_video_get(&o);
+    return crtForcesNative(&o);
+}
+
+/* a press changes the option now: the video mode only from the title, the
+   resolution not under the CRT filter */
 static int canStep(int opt)
 {
-    return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle());
+    return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle()) &&
+           (opt != UI_OPT_RESOLUTION || !resolutionLocked());
 }
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
@@ -627,6 +649,9 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     case UI_OPT_RESOLUTION: {
+        if (crtForcesNative(&o)) {
+            return; /* package CRT2: 1x while the CRT filter is on */
+        }
         int i = resolutionIndex(&o);
         i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 5, dir);
         o.resW = o.resH = 0;
@@ -659,7 +684,8 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     case UI_OPT_CRT: {
-        /* package CRT: Off, Scanlines, Consumer TV, Trinitron, PVM, around */
+        /* package CRT: Off, Scanlines, Consumer TV, Trinitron, PVM, (CRT2)
+           Shadow mask, around */
         int i = o.crt ? o.crtMode + 1 : 0;
         i = stepIndex(i, ICO_CRT_MODES + 1, dir);
         o.crt = i != 0;
@@ -2158,6 +2184,9 @@ static const UiListDef kGalDef = {galCount, galFill, galHeading, galInput, galDe
 /* the locked style (a row greyed, with a note while the cursor is on it) */
 static int rowLocked(const Row *r)
 {
+    if (r->opt == UI_OPT_RESOLUTION) {
+        return resolutionLocked(); /* package CRT2 */
+    }
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
@@ -2209,7 +2238,7 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->value >= 0) {
             lt_ext_SetText(r->value, ui_SettingsValueText((UiSettingsOpt)r->opt));
         }
-        if (isExtrasOpt(r->opt)) {
+        if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION) {
             /* the locked style: the label and its value greyed */
             lt_ext_SetDim(r->label, locked);
             if (r->value >= 0) {

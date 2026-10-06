@@ -20,11 +20,17 @@
  *             every pixel outside the box black, in every mode
  *   luma      the scanlines mode's mean luminance in the box within 20 %
  *             of the plain present's
- *   mask      a flat white frame in the Trinitron mode (grille, pitch 3)
- *             and the PVM mode (pitch 2) at 1920 x 1440, scanlines,
- *             curvature and the glow overridden to 0, the mask to 1: along the middle row the red
- *             channel repeats with the pitch and changes inside it; at
- *             960 x 720 the mask has faded out and the row is flat
+ *   phosphors (package CRT2) the mask per output pixel, glow and
+ *             curvature off: at a 1440 x 1080 box (2.81 output pixels a
+ *             source pixel) under a white frame every box pixel is one
+ *             channel only, the one rd__CrtMaskWeight gives its position,
+ *             and each source pixel's columns run R, G, B in order; at a
+ *             1536 x 1152 box (3 a pixel) a red frame in Trinitron lights
+ *             only each pixel's first column, a white one R, G, B columns;
+ *             Consumer TV's slot bridges are dark and the odd columns' half
+ *             a line off the even ones'; the shadow mask's second row of
+ *             dots is half a triad over; the scanlines mode has no column
+ *             structure; the gap columns and the mask's gain
  *
  * Usage: rd_crt_test [dir]  (dir: where the scratch config goes)
  */
@@ -156,14 +162,48 @@ static void checkResolve(void)
     CHECK(rd__CrtPreset(RD_CRT_SCANLINES, &p) && p.mask == RD_CRT_MASK_NONE &&
               p.scanline == 0.50f && p.curvX == 0.0f && p.halation == 0.0f,
           "resolve: scanlines: no mask, flat, no glow");
-    CHECK(rd__CrtPreset(RD_CRT_CONSUMER, &p) && p.mask == RD_CRT_MASK_SLOT && p.maskPitch == 3.0f &&
-              p.curvX > 0.0f && p.curvY > p.curvX && p.gammaIn > p.gammaOut,
+    CHECK(rd__CrtPreset(RD_CRT_CONSUMER, &p) && p.mask == RD_CRT_MASK_SLOT && p.curvX > 0.0f &&
+              p.curvY > p.curvX && p.gammaIn > p.gammaOut,
           "resolve: consumer: slot mask, curved, gamma 2.4 in");
     CHECK(rd__CrtPreset(RD_CRT_TRINITRON, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvY == 0.0f,
           "resolve: trinitron: grille, cylindrical");
-    CHECK(rd__CrtPreset(RD_CRT_PVM, &p) && p.mask == RD_CRT_MASK_GRILLE && p.maskPitch == 2.0f &&
-              p.curvX == 0.0f && p.sharpness < 1.0f,
-          "resolve: pvm: fine grille, flat, sharp");
+    RdCrtParams t;
+    CHECK(rd__CrtPreset(RD_CRT_PVM, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvX == 0.0f &&
+              rd__CrtPreset(RD_CRT_TRINITRON, &t) && p.maskStrength > t.maskStrength &&
+              p.beamMin < t.beamMin,
+          "resolve: pvm: grille with darker gaps than the Trinitron's, flat, sharper beam");
+    CHECK(rd__CrtPreset(RD_CRT_SHADOW, &p) && p.mask == RD_CRT_MASK_DOTS,
+          "resolve: shadow: dot triads");
+    CHECK(rd__CrtGapColumns(2.8125f) == 0 && rd__CrtGapColumns(3.0f) == 0 &&
+              rd__CrtGapColumns(4.0f) == 1 && rd__CrtGapColumns(5.625f) == 1 &&
+              rd__CrtGapColumns(6.0f) == 2,
+          "resolve: a gap column from 4 output pixels a source pixel, two from 6");
+    CHECK(fabsf(rd__CrtMaskGain(RD_CRT_MASK_GRILLE, 3.0f, 0.5f) - 3.0f) < 1e-5f &&
+              rd__CrtMaskGain(RD_CRT_MASK_NONE, 3.0f, 0.5f) == 1.0f &&
+              fabsf(rd__CrtMaskGain(RD_CRT_MASK_GRILLE, 4.0f, 1.0f) - 4.0f) < 1e-5f &&
+              fabsf(rd__CrtMaskGain(RD_CRT_MASK_SLOT, 3.0f, 0.5f) - 3.6f) < 1e-5f,
+          "resolve: the mask's gain keeps the pixel's light");
+    {
+        /* the gain is 1 over the mean weight: integrate the weight over a
+           source pixel and line numerically, for each mask and a few r */
+        static const float rs[4] = {2.8125f, 3.0f, 4.5f, 6.0f};
+        int ok = 1;
+        for (int m = RD_CRT_MASK_GRILLE; m <= RD_CRT_MASK_DOTS; m++) {
+            for (int i = 0; i < 4; i++) {
+                double sum = 0.0;
+                const int n = 600;
+                for (int y = 0; y < n; y++) {
+                    for (int x = 0; x < n; x++) {
+                        sum += rd__CrtMaskWeight(m, rs[i], 0.6f, (x + 0.5f) / n, (y + 0.5f) / n,
+                                                 (x + y) & 1, 0);
+                    }
+                }
+                const double mean = sum / ((double)n * n);
+                ok &= fabs(mean * rd__CrtMaskGain(m, rs[i], 0.6f) - 1.0) < 0.01;
+            }
+        }
+        CHECK(ok, "resolve: the gain is 1 over the mask's mean weight");
+    }
 
     RdSettings s;
     memset(&s, 0, sizeof(s));
@@ -245,10 +285,13 @@ static void makeNoiseScene(void)
     }
 }
 
-static void makeWhiteScene(void)
+/* a flat frame of one colour (0..255 a channel) */
+static void makeFlatScene(uint8_t r, uint8_t g, uint8_t b)
 {
-    memset(s_scene, 0xFF, sizeof(s_scene));
     for (int i = 0; i < 512 * 512; i++) {
+        s_scene[i * 4 + 0] = r;
+        s_scene[i * 4 + 1] = g;
+        s_scene[i * 4 + 2] = b;
         s_scene[i * 4 + 3] = 0x80;
     }
 }
@@ -337,16 +380,18 @@ static bool s_llvmpipe;
 /* rd_present_test.c GOLD_PRESENT: the rich frame's 960 x 720 present */
 #define GOLD_OFF 0xedb088b74a237351ull
 
-static const char *const kModeName[RD_CRT_MODE_COUNT] = {"off", "scanlines", "consumer",
-                                                         "trinitron", "pvm"};
+static const char *const kModeName[RD_CRT_MODE_COUNT] = {"off",       "scanlines", "consumer",
+                                                         "trinitron", "pvm",       "shadow"};
 
 /* The presents of the rich frame through each mode (llvmpipe, LLVM 19.1.7,
- * this file's frame): [mode - 1][0] 960 x 720, [1] 1920 x 1440 */
+ * this file's frame; package CRT2's phosphors per output pixel): [mode - 1][0]
+ * 960 x 720, [1] 1920 x 1440 */
 static const uint64_t kGold[RD_CRT_MODE_COUNT - 1][2] = {
-    {0xe814222b6af18702ull, 0x208efc87ef0e702aull}, /* scanlines */
-    {0x51ffb3949776bfa8ull, 0xbce9880ea0a1e1d0ull}, /* consumer */
-    {0xb661e2021ab5b546ull, 0xc1e358e27c0b4ed6ull}, /* trinitron */
-    {0x41c554ab54d21888ull, 0x40249955dcf58fc9ull}, /* pvm */
+    {0xb63d6f980571913bull, 0x06ebfa2d69b427ceull}, /* scanlines */
+    {0xe8f8c1f74162712aull, 0x392c0f886cce4e79ull}, /* consumer */
+    {0xf69cf28414987833ull, 0x8b4aad59b0f7d077ull}, /* trinitron */
+    {0xe5dcb80cb41b8402ull, 0x329832c383f89a92ull}, /* pvm */
+    {0x633134534e10b694ull, 0x31285f28668b2d43ull}, /* shadow */
 };
 
 static double boxLuma(uint32_t w, uint32_t h)
@@ -472,65 +517,222 @@ static void checkLuma(void)
     }
 }
 
-/* the red channel along the middle row of the box of a flat white frame */
-static void maskRow(RdCrtMode mode, uint32_t w, uint32_t h, uint8_t *row, uint32_t *rowX)
+/* ------------------------------------------ the phosphors (package CRT2) */
+
+static uint32_t s_w, s_h; /* the last present's output */
+static RhiRect s_box;
+
+/* a flat frame (r, g, b) through mode at a w x h output, the glow, the
+ * curvature (and so the corners) off; scan the beam's profile too when
+ * flat is set (crt_scanlines 0) */
+static bool phosphors(RdCrtMode mode, uint32_t w, uint32_t h, uint8_t r, uint8_t g, uint8_t b,
+                      int flat)
 {
+    makeFlatScene(r, g, b);
     RdSettings s = outputSettings(w, h);
     rd_CrtSettings(&s, mode, 1.0f);
-    /* the plain lines and no glow: only the mask varies along a row; the
-     * mask at full strength */
-    s.crtScanlines = s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
-    s.crtMask = 1.0f;
-    if (!present(&s, 0)) {
-        return;
+    s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    if (flat) {
+        s.crtScanlines = 0.0f;
     }
-    RhiRect b;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &b);
-    *rowX = (uint32_t)b.x;
-    const uint32_t y = (uint32_t)b.y + b.h / 2;
-    for (uint32_t x = 0; x < b.w; x++) {
-        row[x] = s_out[((size_t)y * w + b.x + x) * 4];
-    }
+    s_w = w;
+    s_h = h;
+    rd__PresentBox(w, h, 4.0f / 3.0f, &s_box);
+    return present(&s, 0);
 }
 
-static void checkMask(void)
+static const uint8_t *at(uint32_t bx, uint32_t by)
 {
-    static uint8_t row[1920];
-    makeWhiteScene();
+    return &s_out[((size_t)(s_box.y + by) * s_w + s_box.x + bx) * 4];
+}
 
-    static const struct {
-        RdCrtMode mode;
-        uint32_t pitch;
-    } kCases[2] = {{RD_CRT_TRINITRON, 3}, {RD_CRT_PVM, 2}};
+/* the box pixel (bx, by)'s position in its source pixel and line, as
+ * crt_ps computes it (curvature off): source x, f, v, the column's parity */
+static void posOf(uint32_t bx, uint32_t by, float *f, float *v, int *odd)
+{
+    const float sx = ((float)bx + 0.5f) / (float)s_box.w * 512.0f;
+    const float sy = ((float)by + 0.5f) / (float)s_box.h * 256.0f;
+    *f = sx - floorf(sx);
+    *v = sy - floorf(sy);
+    *odd = (int)floorf(sx) & 1;
+}
 
-    for (int c = 0; c < 2; c++) {
-        uint32_t x0 = 0;
-        memset(row, 0, sizeof(row));
-        maskRow(kCases[c].mode, 1920, 1440, row, &x0);
-        const uint32_t p = kCases[c].pitch;
-        int repeats = 1, varies = 0;
-        /* the middle third of the row (the vignette is flat there) */
-        for (uint32_t x = 640; x + p < 1280; x++) {
-            if (abs((int)row[x] - (int)row[x + p]) > 3) {
-                repeats = 0;
-            }
-            if (abs((int)row[x] - (int)row[x + 1]) > 20) {
-                varies = 1;
+/* the channel the mask lights at a box pixel (0..2), -1 in a gap or a
+ * slot's bridge, -2 too near a stripe's edge to tell (float rounding) */
+static int litChannel(RdCrtParams *p, uint32_t bx, uint32_t by)
+{
+    float f, v;
+    int odd;
+    posOf(bx, by, &f, &v, &odd);
+    const float r = (float)s_box.w / 512.0f;
+    const float u =
+        (p->mask == RD_CRT_MASK_DOTS && v >= 0.5f ? f + 1.0f / 3.0f - floorf(f + 1.0f / 3.0f) : f) *
+        3.0f;
+    if (fabsf(u - roundf(u)) < 1e-3f || fabsf(v - 0.5f) < 1e-3f) {
+        return -2;
+    }
+    int lit = -1;
+    for (int c = 0; c < 3; c++) {
+        if (rd__CrtMaskWeight(p->mask, r, p->maskStrength, f, v, odd, c) == 1.0f) {
+            lit = c;
+        }
+    }
+    return lit;
+}
+
+static void checkPhosphors(void)
+{
+    RdCrtParams p;
+    /* 1440 x 1080 (1920 x 1080), Trinitron, white: every box pixel one
+       channel, the expected one, each source pixel's columns R, G, B in
+       order */
+    if (phosphors(RD_CRT_TRINITRON, 1920, 1080, 0xFF, 0xFF, 0xFF, 0)) {
+        rd__CrtPreset(RD_CRT_TRINITRON, &p);
+        uint32_t impure = 0, wrong = 0, order = 0, checked = 0;
+        /* away from the rounded corners (0.02 of the height) */
+        for (uint32_t y = 30; y + 30 < s_box.h; y += 7) {
+            int prevCh = -1, prevSx = -1;
+            for (uint32_t x = 0; x < s_box.w; x++) {
+                const uint8_t *c = at(x, y);
+                int n = 0, ch = -1;
+                for (int k = 0; k < 3; k++) {
+                    if (c[k] > 1) {
+                        n++;
+                        ch = k;
+                    }
+                }
+                impure += n > 1;
+                const int want = litChannel(&p, x, y);
+                const int sx = (int)(((float)x + 0.5f) / (float)s_box.w * 512.0f);
+                /* the reduction's 2-pixel black border is no phosphor */
+                if (want >= -1 && sx >= 3 && sx < 509) {
+                    wrong += n != 1 || ch != want;
+                    checked++;
+                }
+                if (n == 1) {
+                    order += sx == prevSx && ch <= prevCh;
+                    prevCh = ch;
+                    prevSx = sx;
+                }
             }
         }
-        printf("  mask: %s red %u %u %u %u %u %u\n", kModeName[kCases[c].mode], row[960], row[961],
-               row[962], row[963], row[964], row[965]);
-        CHECK(repeats && varies, "mask: %s: the period is the pitch, %u pixels",
-              kModeName[kCases[c].mode], p);
-        /* 960 x 720: a 720-line box, the mask faded out */
-        maskRow(kCases[c].mode, 960, 720, row, &x0);
+        printf("  phosphors: 1440x1080 trinitron white: %u pixels checked, %u impure, %u not the "
+               "expected channel, %u out of R, G, B order\n",
+               checked, impure, wrong, order);
+        CHECK(impure == 0 && wrong == 0 && order == 0 && checked > 100000,
+              "phosphors: 1440x1080: every box pixel one channel of its source pixel, in order");
+    }
+    /* 1536 x 1152, Trinitron, red: only each pixel's first column lights */
+    if (phosphors(RD_CRT_TRINITRON, 1536, 1152, 0xFF, 0, 0, 0)) {
+        int pure = 1;
+        for (uint32_t y = 300; y < 340; y++) {
+            for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
+                const uint8_t *c = at(x, y);
+                pure &= x % 3 == 0 ? c[0] > 100 && c[1] <= 1 && c[2] <= 1
+                                   : c[0] <= 1 && c[1] <= 1 && c[2] <= 1;
+            }
+        }
+        CHECK(pure, "phosphors: 1536x1152 trinitron: a red pixel lights only its R column");
+    }
+    /* 1536 x 1152, Trinitron and PVM, white: columns R, G, B */
+    for (int m = RD_CRT_TRINITRON; m <= RD_CRT_PVM; m++) {
+        if (!phosphors((RdCrtMode)m, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
+            continue;
+        }
+        int stripes = 1;
+        for (uint32_t y = 300; y < 340; y++) {
+            for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
+                const uint8_t *c = at(x, y);
+                for (int k = 0; k < 3; k++) {
+                    stripes &= (int)(x % 3) == k ? c[k] > 100 : c[k] <= 1;
+                }
+            }
+        }
+        CHECK(stripes, "phosphors: 1536x1152 %s: a white pixel lights R, G, B columns",
+              kModeName[m]);
+    }
+    /* Consumer TV, a mid grey (no clipping), the beam flat: the bridges
+       (the last third of a line, half a line later in odd columns) are
+       darker than the slots by (1 - strength) in linear light, at the
+       expected rows; the stripes R, G, B */
+    if (phosphors(RD_CRT_CONSUMER, 1536, 1152, 0x60, 0x60, 0x60, 1)) {
+        rd__CrtPreset(RD_CRT_CONSUMER, &p);
+        uint32_t bad = 0, bridges = 0, n = 0;
+        for (uint32_t y = 300; y < 360; y++) {
+            for (uint32_t x = 3 * 200; x < 3 * 204; x++) {
+                float f, v;
+                int odd;
+                posOf(x, y, &f, &v, &odd);
+                const float vv = v + (odd ? 0.5f : 0.0f) - floorf(v + (odd ? 0.5f : 0.0f));
+                if (fabsf(vv - 2.0f / 3.0f) < 0.05f || vv > 0.97f || vv < 0.03f) {
+                    continue; /* a row on a bridge's edge */
+                }
+                const int k = (int)(x % 3);
+                const uint8_t lit = at(x - x % 3 + (uint32_t)k, y)[k];
+                /* the same stripe in the other parity's column: the
+                   neighbour source pixel, 3 output pixels over */
+                const int bridge = vv >= 2.0f / 3.0f;
+                const uint8_t other = at(x + 3, y)[k];
+                float fo, vo;
+                int oddo;
+                posOf(x + 3, y, &fo, &vo, &oddo);
+                const float vvo = vo + (oddo ? 0.5f : 0.0f) - floorf(vo + (oddo ? 0.5f : 0.0f));
+                if (fabsf(vvo - 2.0f / 3.0f) < 0.05f || vvo > 0.97f || vvo < 0.03f) {
+                    continue;
+                }
+                const int bridgeO = vvo >= 2.0f / 3.0f;
+                n++;
+                bridges += bridge;
+                if (bridge != bridgeO) {
+                    /* one in a bridge, one in a slot: the bridge darker by
+                       about (1 - 0.6)^(1 / 2.2) = 0.66 */
+                    const float ratio =
+                        bridge ? (float)lit / (float)other : (float)other / (float)lit;
+                    bad += !(ratio > 0.58f && ratio < 0.74f);
+                } else {
+                    bad += abs((int)lit - (int)other) > 3;
+                }
+                bad += at(x, y)[(k + 1) % 3] > 1;
+            }
+        }
+        printf("  phosphors: consumer: %u pixels, %u in bridges, %u off\n", n, bridges, bad);
+        CHECK(bad == 0 && bridges > n / 5 && bridges < n / 2,
+              "phosphors: consumer: dark bridges, staggered half a line between columns");
+    }
+    /* Shadow mask, white: the first half of a line R, G, B; the second the
+       row of dots half a triad over (the expected channel everywhere) */
+    if (phosphors(RD_CRT_SHADOW, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
+        rd__CrtPreset(RD_CRT_SHADOW, &p);
+        uint32_t wrong = 0, shifted = 0;
+        for (uint32_t y = 300; y < 340; y++) {
+            for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
+                const int want = litChannel(&p, x, y);
+                if (want < 0) {
+                    continue;
+                }
+                const uint8_t *c = at(x, y);
+                for (int k = 0; k < 3; k++) {
+                    wrong += k == want ? c[k] <= 100 : c[k] > 1;
+                }
+                shifted += want != (int)(x % 3);
+            }
+        }
+        CHECK(wrong == 0 && shifted > 0,
+              "phosphors: shadow: two rows of dots, the second half a triad over (%u wrong, %u "
+              "shifted)",
+              wrong, shifted);
+    }
+    /* Scanlines: no mask: every pixel of a row of a flat frame the same
+       grey; the beam brightest mid-line */
+    if (phosphors(RD_CRT_SCANLINES, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
         int flat = 1;
-        for (uint32_t x = 320; x + 1 < 640; x++) {
-            if (abs((int)row[x] - (int)row[x + 1]) > 2) {
-                flat = 0;
+        for (uint32_t y = 300; y < 340; y++) {
+            for (uint32_t x = 600; x < 660; x++) {
+                const uint8_t *c = at(x, y), *c0 = at(600, y);
+                flat &= c[0] == c0[0] && c[1] == c0[1] && c[2] == c0[2] && c[0] == c[1];
             }
         }
-        CHECK(flat, "mask: %s: no mask in a 720-line box", kModeName[kCases[c].mode]);
+        CHECK(flat, "phosphors: scanlines: no column structure");
     }
 }
 
@@ -557,7 +759,7 @@ int main(int argc, char **argv)
     checkModes();
     checkOutside();
     checkLuma();
-    checkMask();
+    checkPhosphors();
     if (failures) {
         printf("rd_crt_test: %d failures\n", failures);
         return 1;

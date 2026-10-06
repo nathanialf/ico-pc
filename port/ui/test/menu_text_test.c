@@ -659,12 +659,13 @@ static void countSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, 
 /* the prims the deferred renderer gives for the last frame at an Enhanced
    1920 x 1080 present (rd__OverlayCollect, its callback into font.c's
    overlay mode, the prims caught before rd_OverlayPrims) */
-static int collectPrims(void)
+static int collectPrimsCrt(int crt)
 {
     const RdSettings saved = g_rd.settings;
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.settings.outputWidth = 1920;
     g_rd.settings.outputHeight = 1080;
+    rd_CrtSettings(&g_rd.settings, crt ? RD_CRT_TRINITRON : RD_CRT_OFF, 1.0f);
     s_sinkPrims = 0;
     ui_InstallDeferredText(1);
     ui__SetOverlaySink(countSink);
@@ -676,6 +677,11 @@ static int collectPrims(void)
     rd__OverlayCollect(NULL, 0); /* forget the batches */
     g_rd.settings = saved;
     return active ? s_sinkPrims : -1;
+}
+
+static int collectPrims(void)
+{
+    return collectPrimsCrt(0);
 }
 
 /* Package DEF: every text row records, in place before its glyph quads, an
@@ -713,6 +719,10 @@ static void testDeferred(void)
        glyph) as the quads */
     CHECK(prims == w.taggedVerts && prims > 0,
           "the present lays both items out: %d vertices (the quads have %d)", prims, w.taggedVerts);
+    /* package CRT2: under the CRT filter nothing is deferred (the quads
+       draw into the scene and go through the filter) */
+    const int crtPrims = collectPrimsCrt(1);
+    CHECK(crtPrims == -1, "the CRT filter on: no deferred text (%d)", crtPrims);
 
     /* a fade after the rows: an op after both items */
     layoutFrameWithPosts(0x40, 0);

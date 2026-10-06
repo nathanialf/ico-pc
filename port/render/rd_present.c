@@ -53,11 +53,14 @@
  * glyph quads, and textRecord draws the prims after step 2, before the
  * overlay.  In the Original preset nothing is collected and the quads draw.
  *
- * The CRT filter (package CRT, rd_crt.c; DISPLAY.md "CRT filter"): with
- * RdSettings.crtMode set and a strength above 0, rd__CrtRecord draws the
- * box from DISPLAY in place of steps 1 and 2 (no line doubling: the
- * scanlines are DISPLAY's own lines); the deferred text and the overlay
- * then draw above it, unfiltered.  Off, this file presents as before.
+ * The CRT filter (packages CRT and CRT2, rd_crt.c; DISPLAY.md "CRT
+ * filter"): with RdSettings.crtMode set and a strength above 0, the scene
+ * renders at 1x (rd__ApplyDisplay), no text is deferred (the rows draw as
+ * quads into the scene, as in the Original preset), the overlay's prims are
+ * laid out on the filter's source grid and drawn into it, and rd__CrtRecord
+ * draws the box from DISPLAY in place of steps 1 and 2 (no line doubling:
+ * the scanlines are DISPLAY's own lines).  The filter is the present's last
+ * pass: nothing draws above it.  Off, this file presents as before.
  */
 #include <math.h>
 #include <stdio.h>
@@ -145,9 +148,13 @@ bool rd__ApplyDisplay(void)
         wide = RD_ASPECT_43 / aspect;
         const float gw = (float)g_rd.gsW, gh = (float)g_rd.gsH;
         float w, h;
-        if (st->sceneScale > 0.0f) {
-            h = gh * st->sceneScale;
-            w = gw * st->sceneScale * aspect / RD_ASPECT_43;
+        /* package CRT2: the CRT filter shows the PS2's pixels, so the scene
+         * renders at 1x while it is on, whatever the resolution asks (which
+         * takes effect again with the filter off) */
+        const float scale = rd__CrtOn() ? 1.0f : st->sceneScale;
+        if (scale > 0.0f) {
+            h = gh * scale;
+            w = gw * scale * aspect / RD_ASPECT_43;
         } else if (st->sceneWidth && st->sceneHeight) {
             w = (float)st->sceneWidth;
             h = (float)st->sceneHeight;
@@ -294,6 +301,13 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     rhi_CmdEndRenderPass(cl);
 }
 
+void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
+                     RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
+                     RdFilter filter, int mirror)
+{
+    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror);
+}
+
 /* --------------------------------------------- the overlay (package OV) */
 
 typedef struct OverlayBatch {
@@ -318,6 +332,7 @@ static struct {
     OverlayBatch *b;
     uint32_t bCount, bCap;
     uint32_t textBatches; /* package DEF: b[0, textBatches) are the deferred text's */
+    int grid;             /* package CRT2: the prims are on the CRT filter's source grid */
 } s_ov;
 
 /* a present's prims at most (a popup is a few hundred) */
@@ -623,8 +638,9 @@ static void textCollect(const RdFrame *f, int keep)
 void rd__OverlayCollect(const RdFrame *f, int keep)
 {
     s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    s_ov.grid = 0;
     g_rd.deferText = false;
-    const uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
+    uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
     if ((!s_ov.fn && !s_ov.textFn) || !w || !h) {
         return;
     }
@@ -633,14 +649,29 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     const RdPresentPreset *pr = activePreset();
     RhiRect box;
     outputBox(pr, w, h, &box);
+    /* package CRT2: under the CRT filter the overlay is part of the
+     * picture: its context is the filter's source grid at the frame's
+     * lines (the 1x frame the game's own UI is drawn in), the box all of
+     * it, and rd__CrtRecord draws the prims into that grid */
+    const bool crt = rd__CrtOn();
+    if (crt) {
+        uint32_t vw, vh;
+        rd__CrtGrid(&vw, &vh);
+        w = vw;
+        h = g_rd.gsH ? g_rd.gsH : 2 * vh;
+        box = (RhiRect){0, 0, w, h};
+        s_ov.grid = 1;
+    }
     RdOverlayCtx *c = &s_ov.ctx;
     c->outW = w;
     c->outH = h;
     c->box = (RdRect){box.x, box.y, box.w, box.h};
     c->boxScale = (float)box.h / 448.0f;
     c->mirror = pr->mirror && rd__MirrorOn();
-    /* package DEF: the deferred text first, so the overlay draws above it */
-    if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED) {
+    /* package DEF: the deferred text first, so the overlay draws above it;
+     * package CRT2: none under the CRT filter (the rows draw as quads into
+     * the scene, as in the Original preset, and go through the filter) */
+    if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt) {
         g_rd.deferText = true;
         textCollect(f, keep);
     }
@@ -667,10 +698,12 @@ uint64_t rd__OverlayRingBytes(void)
     return total;
 }
 
-/* batches [from, to) in one load-preserving pass on the output */
-static void drawBatches(RhiCommandList cl, RhiTexture out, uint32_t from, uint32_t to)
+/* batches [from, to) in one load-preserving pass on out (fmt, ow x oh: the
+ * output, or package CRT2's grid layer) */
+static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t ow, uint32_t oh,
+                        uint32_t from, uint32_t to)
 {
-    if (from >= to || s_ov.ctx.outW != s_outW || s_ov.ctx.outH != s_outH) {
+    if (from >= to || s_ov.ctx.outW != ow || s_ov.ctx.outH != oh) {
         return;
     }
     RhiRenderPassDesc p;
@@ -678,16 +711,16 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, uint32_t from, uint32
     p.color[0].texture = out;
     p.color[0].load = RHI_LOAD_LOAD;
     p.colorCount = 1;
-    p.width = s_outW;
-    p.height = s_outH;
+    p.width = ow;
+    p.height = oh;
     rhi_CmdBeginRenderPass(cl, &p);
-    RhiViewport vp = {0.0f, 0.0f, (float)s_outW, (float)s_outH, 0.0f, 1.0f};
+    RhiViewport vp = {0.0f, 0.0f, (float)ow, (float)oh, 0.0f, 1.0f};
     rhi_CmdSetViewport(cl, &vp);
-    RhiRect cur = {0, 0, s_outW, s_outH};
+    RhiRect cur = {0, 0, ow, oh};
     rhi_CmdSetScissor(cl, &cur);
     /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
      * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
-    const RdUniform frame = rd__FrameGroup(s_outW, s_outH, 0.5f, 0.5f);
+    const RdUniform frame = rd__FrameGroup(ow, oh, 0.5f, 0.5f);
     for (uint32_t i = from; i < to; i++) {
         const OverlayBatch *b = &s_ov.b[i];
         /* package DEF: the deferred text's batches carry their regions */
@@ -695,8 +728,7 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, uint32_t from, uint32
             cur = b->sc;
             rhi_CmdSetScissor(cl, &cur);
         }
-        rd__OverlayDraw(cl, s_outFormat, frame, b->prim, s_ov.v + b->first, b->count, b->tex,
-                        b->blend);
+        rd__OverlayDraw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
     }
     rhi_CmdEndRenderPass(cl);
 }
@@ -704,13 +736,32 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, uint32_t from, uint32
 /* package DEF: the deferred text, at the insertion point */
 static void textRecord(RhiCommandList cl, RhiTexture out)
 {
-    drawBatches(cl, out, 0, s_ov.textBatches);
+    if (!s_ov.grid) {
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, 0, s_ov.textBatches);
+    }
 }
 
+/* the overlay on the output; under the CRT filter (package CRT2) it was
+ * drawn into the filter's grid, and this only forgets it */
 static void overlayRecord(RhiCommandList cl, RhiTexture out)
 {
-    drawBatches(cl, out, s_ov.textBatches, s_ov.bCount);
+    if (!s_ov.grid) {
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, s_ov.textBatches, s_ov.bCount);
+    }
     s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    s_ov.grid = 0;
+}
+
+bool rd__OverlayGridPending(void)
+{
+    return s_ov.grid && s_ov.bCount > s_ov.textBatches;
+}
+
+void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h)
+{
+    if (s_ov.grid) {
+        drawBatches(cl, t, fmt, w, h, s_ov.textBatches, s_ov.bCount);
+    }
 }
 
 /* ------------------------------------------- the capture (package PHOTO)
@@ -868,22 +919,24 @@ void rd__PresentRecord(RhiCommandList cl)
     }
     /* package DEF: the deferred text, drawn in list order with the regions
      * and colours the passes after it gave it (RENDER_API.md "The deferred
-     * text pass").  Package CRT: above the CRT filter, unfiltered: the
-     * filter is the picture's; the menu text the Enhanced preset draws on
-     * the output stays sharp, as the overlay does (DISPLAY.md "CRT filter") */
+     * text pass").  Package CRT2: none under the CRT filter (the rows are
+     * in the scene, filtered with it) */
     textRecord(cl, out);
     /* ==== INSERTION POINT for later presentation passes ====================
-     * After the box (the blit, or package CRT's filter in its place) and the
-     * deferred text, before the overlay (the port's UI stays sharp and
-     * unfiltered above it).  Each one is a pass on `out`
+     * After the box (the blit) and the deferred text, before the overlay
+     * (the port's UI stays sharp above it).  Each one is a pass on `out`
      * (RHI_STATE_RENDER_TARGET at this point; a pass that samples the
      * picture copies it first or blits from `src`, `box`) with
      * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
-     * Keep the overlay last.  (RENDER_API.md "The presentation overlay",
-     * "Ordering".)
+     * Keep the overlay last.  Under the CRT filter (packages CRT, CRT2) the
+     * filter is the last pass: the overlay is already inside it, and a pass
+     * here would draw over the tube.  (RENDER_API.md "The presentation
+     * overlay", "Ordering".)
      * ======================================================================= */
     /* package PHOTO: a capture takes the picture as shown, without the
-     * port's own UI on the overlay (the popups, the photo HUD) */
+     * port's own UI on the overlay (the popups, the photo HUD); under the
+     * CRT filter that UI is part of the filtered picture and is captured
+     * with it (package CRT2) */
     captureRecord(cl, out, outState);
     overlayRecord(cl, out);
     if (s_window) {

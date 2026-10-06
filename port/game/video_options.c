@@ -76,7 +76,8 @@ static const char *const kAspect[] = {"4:3", "16:10", "16:9", "auto"};
 
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
 
-static const char *const kCrtMode[ICO_CRT_MODES] = {"scanlines", "consumer", "trinitron", "pvm"};
+static const char *const kCrtMode[ICO_CRT_MODES] = {"scanlines", "consumer", "trinitron", "pvm",
+                                                    "shadow"};
 
 int ico_video_parse_crt_mode(const char *s, int *mode)
 {
