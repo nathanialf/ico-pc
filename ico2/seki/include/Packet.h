@@ -89,7 +89,26 @@ void pac_Init(void);
 void pac_DispVu1Memory(int idx, int n, int size);
 void pac_MakePacket(Sub15C *o);
 
+/* PC port: the title logo's strips drawn in another order of their own
+   entries (Packet.c, pac_hostStripEntry): the model, the entry count and
+   the position indices of the disc's order (bad) and of the order drawn
+   (good). */
+typedef struct PacHostStrip {
+    const char *model;
+    int num;
+    const short *bad;
+    const short *good;
+} PacHostStrip;
+
+/* the table, and *count its rows */
+const PacHostStrip *pac_HostStrips(int *count);
+/* The entry (0..num-1) drawn as vertex i of a strip of num entries of
+   model `model` whose position indices are index[k * stride]: i, unless
+   the strip is one of the table's. */
+int pac_HostStripOrder(const char *model, const short *index, int stride, int num, int i);
+
 #ifdef ICO_RD
+
 /* PC port (renderer wave 3, R3ab): the id of the rd mesh (RdMesh.id,
    rd_mesh.h) of a packet pac_makePacket built (its vertex batches), made at
    load and again whenever rd evicted it; 0 for a packet without batches.
@@ -97,6 +116,6 @@ void pac_MakePacket(Sub15C *o);
    packet's vertex quadwords after reg_setShape rewrote them. */
 unsigned int pac_HostMesh(PacHeader *pk);
 void pac_HostRefresh(PacHeader *pk);
-#endif
 
+#endif
 #endif /* PACKET_H */

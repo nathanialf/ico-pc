@@ -11,7 +11,7 @@
 #include "debug_exception.h"
 #include "memory.h"
 #include <assert.h>
-/* memset (pac_makeBoundingBox) and strcmp (pac_hostStripEntry) in every
+/* memset (pac_makeBoundingBox) and strcmp (pac_HostStripOrder) in every
    host build, the headless one too */
 #include <string.h>
 
@@ -375,29 +375,104 @@ static void pac_error(char *name, int type)
     __assert("src/Packet.c", 684, "0");
 }
 
-/* PC port: the title logo's "M" of the TM (model "O": one 12-vertex strip
-   around the letter's outline, position indices 163..174) is stored in an
-   order that zig-zags across the concave outline, so four of its ten
-   triangles fill the notch above the V and the gap below it; the PS2 draws
-   the disc data the same way. The same twelve entries taken in tmGood's
-   order make ten triangles that all lie inside the letter. Returns the
-   entry pac_makeNormalStrip reads as vertex i. */
-static short *pac_hostStripEntry(short *strip, int num, int i)
+/* PC port: strips of the title logo's letters that the disc data stores in
+   an order folding across their own outline.  Each is authored as a
+   zig-zag between two edges of a letter part; where an edge is concave the
+   zig-zag's triangles fold over one another and over the notch outside it,
+   so a sliver beside the letter is drawn and some of the letter is drawn
+   twice, which the logo's additive blend (Cs*FIX+Cd) brightens wherever the
+   second draw passes the depth test; the PS2 draws the disc data the same
+   way.  The same entries taken in `good`'s order make a strip of triangles
+   that all wind one way and tile the outline the zig-zag bounds, each
+   point once (the I's and the O's keep the disc's winding; nothing culls,
+   so the TM's turning over is harmless).  A strip is matched by the
+   model's name, the entry count and the exact sequence of position
+   indices; anything else keeps the disc's order.  Checked against the
+   disc's positions by rd_mesh_test (its "strip order" case).
+     O, 12 entries: the M of the TM (four of its ten triangles in the notch
+       above the V and the gap below it)
+     I, 32 entries: the I's head and serifs (folded at both serifs' inner
+       corners: a bright band from the right serif's corner up the stem)
+     O, 20 / 32 / 32 entries: the ring's lower right, its upper left and
+       its right side (each folded where its inner edge curves away)
+   Three strips fold with no such order of their own entries: the I's tip
+   and two of the O (below the hole, left of the TM's T, and the upper
+   right beside the stem); they keep the disc's order. */
+static const short pacStripTmBad[12] = {165, 164, 166, 163, 167, 174, 168, 173, 169, 172, 170, 171};
+
+static const short pacStripTmGood[12] = {163, 164, 174, 165, 173, 166,
+                                         172, 167, 171, 168, 170, 169};
+
+static const short pacStripIBad[32] = {2,  1,  3,  0,  4,  56, 5,  55, 6,  54, 7,
+                                       53, 8,  52, 9,  51, 10, 50, 11, 49, 12, 48,
+                                       13, 47, 14, 46, 15, 45, 16, 44, 17, 43};
+
+static const short pacStripIGood[32] = {55, 54, 56, 53, 0,  52, 1,  51, 2,  50, 3,
+                                        49, 4,  48, 5,  47, 6,  46, 7,  45, 8,  44,
+                                        9,  43, 10, 17, 11, 16, 12, 15, 13, 14};
+
+static const short pacStripOLowRightBad[20] = {108, 127, 109, 126, 110, 125, 111, 124, 112, 123,
+                                               113, 122, 114, 121, 115, 120, 116, 119, 117, 118};
+
+static const short pacStripOLowRightGood[20] = {111, 110, 112, 109, 113, 108, 114, 127, 115, 126,
+                                                116, 125, 117, 124, 118, 123, 119, 122, 120, 121};
+
+static const short pacStripOUpLeftBad[32] = {2,  1,  3,  0,  4,  78, 5,  77, 6,  76, 7,
+                                             75, 8,  74, 9,  73, 10, 72, 11, 71, 12, 70,
+                                             13, 69, 14, 68, 15, 67, 16, 66, 17, 65};
+
+static const short pacStripOUpLeftGood[32] = {3,  2,  4,  1,  5,  0,  6,  78, 7,  77, 8,
+                                              76, 9,  75, 10, 74, 11, 73, 12, 72, 13, 71,
+                                              14, 70, 15, 69, 16, 68, 17, 67, 65, 66};
+
+static const short pacStripORightBad[32] = {95,  142, 96,  141, 97,  140, 98,  139, 99,  138, 100,
+                                            137, 101, 136, 102, 135, 103, 134, 104, 133, 105, 132,
+                                            106, 131, 40,  130, 41,  129, 107, 128, 108, 127};
+
+static const short pacStripORightGood[32] = {40,  106, 41,  105, 107, 104, 108, 103, 127, 102, 128,
+                                             101, 129, 100, 130, 99,  131, 98,  132, 97,  133, 96,
+                                             134, 95,  135, 142, 136, 141, 137, 140, 138, 139};
+
+static const PacHostStrip pacHostStrips[] = {
+    {"O", 12, pacStripTmBad, pacStripTmGood},
+    {"I", 32, pacStripIBad, pacStripIGood},
+    {"O", 20, pacStripOLowRightBad, pacStripOLowRightGood},
+    {"O", 32, pacStripOUpLeftBad, pacStripOUpLeftGood},
+    {"O", 32, pacStripORightBad, pacStripORightGood},
+};
+
+const PacHostStrip *pac_HostStrips(int *count)
 {
-    static const short tmBad[12] = {165, 164, 166, 163, 167, 174, 168, 173, 169, 172, 170, 171};
-    static const short tmGood[12] = {163, 164, 174, 165, 173, 166, 172, 167, 171, 168, 170, 169};
+    *count = (int)(sizeof(pacHostStrips) / sizeof(pacHostStrips[0]));
+    return pacHostStrips;
+}
+
+int pac_HostStripOrder(const char *model, const short *index, int stride, int num, int i)
+{
+    int n;
+    int s;
     int k;
 
-    if (num != 12 || strcmp(pacWork.name, "O") != 0) {
-        return strip + i * 8;
-    }
-    for (k = 0; k < 12; k++) {
-        if (strip[k * 8 + 2] != tmBad[k]) {
-            return strip + i * 8;
+    for (s = 0; s < (int)(sizeof(pacHostStrips) / sizeof(pacHostStrips[0])); s++) {
+        const PacHostStrip *h = &pacHostStrips[s];
+
+        if (num != h->num || strcmp(model, h->model) != 0) {
+            continue;
         }
+        for (k = 0; k < num && index[k * stride] == h->bad[k]; k++) {}
+        if (k < num) {
+            continue;
+        }
+        for (n = 0; n < num && h->bad[n] != h->good[i]; n++) {}
+        return n;
     }
-    for (k = 0; k < 12 && tmBad[k] != tmGood[i]; k++) {}
-    return strip + k * 8;
+    return i;
+}
+
+/* the entry pac_makeNormalStrip reads as vertex i */
+static short *pac_hostStripEntry(short *strip, int num, int i)
+{
+    return strip + pac_HostStripOrder(pacWork.name, strip + 2, 8, num, i) * 8;
 }
 
 static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)

@@ -5,7 +5,8 @@
  * compiled as the window build has them (ICO_HOST, ICO_RD); the rest of the
  * game is stubbed below (the texture module by a stand-in that writes the
  * TEX1/TEX0 packet and the UV offset packet tex_TransTexture writes).  The
- * models are synthetic p2o-decoded parts built here; no disc data.
+ * models are synthetic p2o-decoded parts built here; the strip order case
+ * alone reads the disc image, at run time.
  *
  * Cases:
  *   prelit   a normal_c model (four strips, two VU batches, a strip restart
@@ -18,6 +19,10 @@
  *            prim_DispMesh3D (mesh code 20)
  *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
  *            batch keyed by its emitter (package I1)
+ *   strip order  the title logo's strips Packet.c draws in another order of
+ *            their entries (pac_HostStrips): the table, the I's through
+ *            p2o_MakePacket, and with the disc image given as the argument
+ *            their geometry (below, "strip order"); recording only
  *
  * Checks on the recording (no device needed): the mesh built from the
  * packet (vertex count, batches, the index list against vu1ref_StaticKicks);
@@ -56,6 +61,9 @@
 #include "Packet.h"
 #include "Primitive.h"
 #include "RegistPacket.h"
+/* the disc (the strip order case) */
+#include "df_pack.h"
+#include "vfs.h"
 
 static int failures;
 
@@ -1208,6 +1216,308 @@ static void refClusterA(void)
     refCluster(packetB());
 }
 
+/* -------------------------------------------------------- strip order */
+/* Packet.c's table of the title logo's strips drawn in another order of
+ * their own entries (pac_HostStrips, pac_HostStripOrder):
+ *   - every row's good order holds the bad order's indices once each, and
+ *     pac_HostStripOrder reads them in it only for that model, that count
+ *     and exactly that index sequence
+ *   - the I's row through p2o_MakePacket: the mesh's vertices come in the
+ *     good order (a strip one index off keeps the disc's)
+ *   - with the disc image: each row's strip is found in its model (the
+ *     st26a/model p2o file, ObjHdr and ObjRec, DisplayP2O.h) by count and
+ *     index sequence, in a plane of constant z, and in the disc's order its triangles
+ *     overlap; in the good order they wind one way, none overlaps another,
+ *     and they cover the outline the disc's zig-zag bounds (even entries
+ *     out, odd entries back) exactly: the sum of their areas is the
+ *     outline's area.  Without the image that part is skipped. */
+
+#define STRIP_MAX 64
+
+static void stripTableChecks(void)
+{
+    int count;
+    const PacHostStrip *t = pac_HostStrips(&count);
+    CHECK(count >= 2, "%d rows in the strip table", count);
+    for (int r = 0; r < count; r++) {
+        const PacHostStrip *h = &t[r];
+        short other[STRIP_MAX];
+        CHECK(h->num > 2 && h->num <= STRIP_MAX, "row %d: %d entries", r, h->num);
+        for (int i = 0; i < h->num; i++) {
+            int inBad = 0, inGood = 0;
+            for (int k = 0; k < h->num; k++) {
+                inBad += h->bad[k] == h->bad[i];
+                inGood += h->good[k] == h->bad[i];
+            }
+            CHECK(inBad == 1 && inGood == 1, "row %d: index %d once in each order (%d, %d)", r,
+                  h->bad[i], inBad, inGood);
+            int e = pac_HostStripOrder(h->model, h->bad, 1, h->num, i);
+            CHECK(e >= 0 && e < h->num && h->bad[e] == h->good[i],
+                  "row %d (%s, %d): vertex %d reads entry %d", r, h->model, h->num, i, e);
+        }
+        memcpy(other, h->bad, (size_t)h->num * sizeof(short));
+        other[h->num / 2]++;
+        for (int i = 0; i < h->num; i++) {
+            CHECK(pac_HostStripOrder(h->model, other, 1, h->num, i) == i,
+                  "row %d: a strip one index off keeps its order", r);
+            CHECK(pac_HostStripOrder("Q", h->bad, 1, h->num, i) == i,
+                  "row %d: another model keeps its order", r);
+        }
+    }
+}
+
+/* the I's row through the packet path: a model "I" of one strip */
+static Model s_modelS;
+static Sub15C s_objS;
+
+static void stripPacketCheck(const char *name, const short *index, const short *expect, int num)
+{
+    makeModel(&s_modelS, &s_objS, 0, 1);
+    short *p = s_modelS.strip;
+    p[0] = (short)num;
+    p += 8;
+    for (int k = 0; k < num; k++, p += 8) {
+        p[2] = p[3] = p[4] = p[5] = index[k];
+        p[6] = p[7] = 0;
+    }
+    p[0] = -1;
+    snprintf(s_modelS.mdl.name, sizeof(s_modelS.mdl.name), "%s", name);
+    p2o_MakePacket(&s_objS);
+    PacHeader *pk = (PacHeader *)s_modelS.mdl.groups->packets;
+    const RdMeshRec *r = pk ? rd__MeshRec(pac_HostMesh(pk)) : NULL;
+    CHECK(r && r->vertexCount == (uint32_t)num, "strip model %s: a mesh of %d vertices", name, num);
+    for (int i = 0; r && i < num; i++) {
+        const float *v = r->stream[(size_t)i * r->qwPerVertex];
+        CHECK(memcmp(v, s_modelS.vtx[expect[i]], 16) == 0, "strip model %s: vertex %d is index %d",
+              name, i, expect[i]);
+    }
+}
+
+static void stripPacketChecks(void)
+{
+    int count;
+    const PacHostStrip *t = pac_HostStrips(&count);
+    for (int r = 0; r < count; r++) {
+        if (strcmp(t[r].model, "I") != 0) {
+            continue;
+        }
+        short other[STRIP_MAX];
+        memcpy(other, t[r].bad, (size_t)t[r].num * sizeof(short));
+        other[0] = other[1];
+        other[1] = t[r].bad[0];
+        stripPacketCheck("I", t[r].bad, t[r].good, t[r].num);
+        stripPacketCheck("I", other, other, t[r].num);
+        return;
+    }
+    CHECK(0, "the strip table has the I's row");
+}
+
+/* ---- the geometry, from the disc */
+
+typedef struct Pt {
+    double x, y;
+} Pt;
+
+static double triArea(Pt a, Pt b, Pt c)
+{
+    return 0.5 * ((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y));
+}
+
+/* the area two triangles share: one clipped by the other's three edges */
+static double triOverlap(Pt a0, Pt a1, Pt a2, Pt b0, Pt b1, Pt b2)
+{
+    Pt poly[16], out[16];
+    Pt A[3] = {a0, a1, a2}, B[3] = {b0, b1, b2};
+    if (triArea(a0, a1, a2) < 0) {
+        A[1] = a2;
+        A[2] = a1;
+    }
+    if (triArea(b0, b1, b2) < 0) {
+        B[1] = b2;
+        B[2] = b1;
+    }
+    int n = 3;
+    memcpy(poly, A, sizeof(A));
+    for (int e = 0; e < 3 && n > 0; e++) {
+        Pt p0 = B[e], p1 = B[(e + 1) % 3];
+        int m = 0;
+        for (int i = 0; i < n; i++) {
+            Pt p = poly[i], q = poly[(i + 1) % n];
+            double sp = (p1.x - p0.x) * (p.y - p0.y) - (p1.y - p0.y) * (p.x - p0.x);
+            double sq = (p1.x - p0.x) * (q.y - p0.y) - (p1.y - p0.y) * (q.x - p0.x);
+            if (sp >= 0) {
+                out[m++] = p;
+            }
+            if ((sp >= 0) != (sq >= 0)) {
+                double f = sp / (sp - sq);
+                out[m++] = (Pt){p.x + f * (q.x - p.x), p.y + f * (q.y - p.y)};
+            }
+        }
+        n = m;
+        memcpy(poly, out, (size_t)m * sizeof(Pt));
+    }
+    double s = 0;
+    for (int i = 0; i < n; i++) {
+        s += poly[i].x * poly[(i + 1) % n].y - poly[(i + 1) % n].x * poly[i].y;
+    }
+    return fabs(0.5 * s);
+}
+
+typedef struct StripGeo {
+    double area;    /* the triangles' areas */
+    double overlap; /* the areas they share, pair by pair */
+    int folds;      /* triangles winding against the strip's first */
+} StripGeo;
+
+static StripGeo stripGeo(const Pt *p, int n)
+{
+    StripGeo g = {0, 0, 0};
+    double first = 0;
+    for (int k = 0; k + 2 < n; k++) {
+        double a = triArea(p[k], p[k + 1], p[k + 2]) * (k & 1 ? -1 : 1);
+        if (k == 0) {
+            first = a;
+        }
+        g.area += fabs(a);
+        g.folds += a * first <= 0;
+        for (int j = k + 1; j + 2 < n; j++) {
+            g.overlap += triOverlap(p[k], p[k + 1], p[k + 2], p[j], p[j + 1], p[j + 2]);
+        }
+    }
+    return g;
+}
+
+static uint32_t rd32(const unsigned char *f, uint32_t at)
+{
+    uint32_t v;
+    memcpy(&v, f + at, 4);
+    return v;
+}
+
+static int16_t rd16(const unsigned char *f, uint32_t at)
+{
+    int16_t v;
+    memcpy(&v, f + at, 2);
+    return v;
+}
+
+/* Row h's strip in the model file f (size bytes): its position indices in
+ * the disc's order matched, the vertex table's x, y of each entry in out
+ * (the disc's order); 0, or -1 with no such strip.  *found counts the
+ * strips that match. */
+static int findStrip(const unsigned char *f, uint32_t size, const PacHostStrip *h, Pt *out,
+                     int *found)
+{
+    *found = 0;
+    if (size < 0x18 || memcmp(f, "PS2O", 4) != 0) {
+        return -1;
+    }
+    const uint32_t tbl = rd32(f, 4), objNum = rd32(f, 8);
+    for (uint32_t o = 0; o < objNum && tbl + o * 4 + 4 <= size; o++) {
+        const uint32_t rec = rd32(f, tbl + o * 4);
+        if (rec + 0x180 > size || memcmp(f + rec + 0x80, "OBJH", 4) != 0) {
+            return -1;
+        }
+        const uint32_t vtx = rd32(f, rec + 0x90), vtxCount = rd32(f, rec + 0x94);
+        const uint32_t strips = rd32(f, rec + 0x100), stripCount = rd32(f, rec + 0x104);
+        for (uint32_t s = 0; s < stripCount && strips + s * 4 + 4 <= size; s++) {
+            /* head records (the count first), each followed by its vertex
+               records; a count of -1 ends the list */
+            uint32_t at = rd32(f, strips + s * 4);
+            while (at + 16 <= size && rd16(f, at) != -1) {
+                const int n = rd16(f, at);
+                int k = 0;
+                while (k < n && n == h->num && at + 16 + (uint32_t)k * 16 + 16 <= size &&
+                       rd16(f, at + 16 + (uint32_t)k * 16 + 4) == h->bad[k]) {
+                    k++;
+                }
+                if (n == h->num && k == n) {
+                    float z = 0;
+                    (*found)++;
+                    for (k = 0; k < n; k++) {
+                        const uint32_t v = vtx + (uint32_t)h->bad[k] * 16;
+                        float q[4];
+                        if ((uint32_t)h->bad[k] >= vtxCount || v + 16 > size) {
+                            return -1;
+                        }
+                        memcpy(q, f + v, 16);
+                        z = k == 0 ? q[2] : z;
+                        CHECK(q[2] == z && q[3] == 1.0f,
+                              "%s: index %d in the strip's plane (%g, %g)", h->model, h->bad[k],
+                              q[2], q[3]);
+                        out[k] = (Pt){q[0], q[1]};
+                    }
+                }
+                at += 16 + (uint32_t)(n > 0 ? n : 0) * 16;
+            }
+        }
+    }
+    return *found ? 0 : -1;
+}
+
+static void stripDiscChecks(const char *disc)
+{
+    IcoVfs *vfs = disc ? ico_vfs_mount(&ico_vfs_iso9660, disc) : NULL;
+    if (!vfs) {
+        printf("  strip order: SKIP the disc's geometry (no disc image)\n");
+        return;
+    }
+    int count;
+    const PacHostStrip *t = pac_HostStrips(&count);
+    for (int r = 0; r < count; r++) {
+        const PacHostStrip *h = &t[r];
+        char path[64];
+        IcoDfMember m;
+        unsigned char *f = NULL;
+        snprintf(path, sizeof(path), "object/sdf/st26a/model/%s.p2o", h->model);
+        if (ico_df_find_member(vfs, path, &m) != 0 || !(f = malloc(m.size)) ||
+            ico_df_read_member(vfs, &m, f) != 0) {
+            CHECK(0, "row %d: %s from the disc", r, path);
+            free(f);
+            continue;
+        }
+        Pt bad[STRIP_MAX], good[STRIP_MAX], outline[STRIP_MAX];
+        int found;
+        if (findStrip(f, m.size, h, bad, &found) != 0 || found != 1) {
+            CHECK(0, "row %d: one strip of %d entries in %s with the table's indices (%d)", r,
+                  h->num, path, found);
+            free(f);
+            continue;
+        }
+        free(f);
+        const int n = h->num;
+        for (int i = 0; i < n; i++) {
+            good[i] = bad[pac_HostStripOrder(h->model, h->bad, 1, n, i)];
+        }
+        /* the outline the zig-zag bounds: the even entries, then the odd
+           ones back */
+        int o = 0;
+        for (int i = 0; i < n; i += 2) {
+            outline[o++] = bad[i];
+        }
+        for (int i = (n - 1) | 1; i > 0; i -= 2) {
+            if (i < n) {
+                outline[o++] = bad[i];
+            }
+        }
+        double shoe = 0;
+        for (int i = 0; i < n; i++) {
+            shoe += outline[i].x * outline[(i + 1) % n].y - outline[(i + 1) % n].x * outline[i].y;
+        }
+        shoe = fabs(0.5 * shoe);
+        const StripGeo gb = stripGeo(bad, n), gg = stripGeo(good, n);
+        printf("  strip order: %s, %d entries: outline %.6f; disc order area %.6f overlap %.6f, "
+               "%d folded; drawn order area %.6f overlap %.8f, %d folded\n",
+               h->model, n, shoe, gb.area, gb.overlap, gb.folds, gg.area, gg.overlap, gg.folds);
+        CHECK(gb.overlap > 1e-4 * shoe, "row %d: the disc's order overlaps", r);
+        CHECK(gg.overlap <= 1e-6 * shoe, "row %d: the drawn order overlaps %g", r, gg.overlap);
+        CHECK(gg.folds == 0, "row %d: %d triangles of the drawn order fold", r, gg.folds);
+        CHECK(fabs(gg.area - shoe) <= 1e-5 * shoe, "row %d: the drawn order covers %g of %g", r,
+              gg.area, shoe);
+    }
+    ico_vfs_unmount(vfs);
+}
+
 /* ----------------------------------------------------------- the setup */
 
 static void setup(void)
@@ -1248,9 +1558,11 @@ static void recordingChecks(void)
     checkGridRecording();
     recordParticles();
     checkParticleRecording();
+    stripTableChecks();
+    stripPacketChecks();
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     if (!rd__InitRecordOnly(512, 512)) {
         printf("FAIL rd__InitRecordOnly\n");
@@ -1260,6 +1572,7 @@ int main(void)
     setup();
     buildModels();
     recordingChecks();
+    stripDiscChecks(argc > 1 ? argv[1] : NULL);
     rd_Shutdown();
     if (failures) {
         printf("rd_mesh_test: %d failures\n", failures);

@@ -212,7 +212,8 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # as the window build has them, fed synthetic p2o-decoded models, a grid and
 # a particle batch: the meshes, the recorded draws and VuCB, the GS state;
 # on a device each case against the VU reference drawn as sprites (77
-# without one).
+# without one); the title logo's strips Packet.c draws in another order,
+# their geometry from the disc image when there is one.
 add_executable(rd_mesh_test test/rd_mesh_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/Packet.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/RegistPacket.c"
@@ -229,7 +230,9 @@ target_include_directories(rd_mesh_test PRIVATE ${_ico_seki_incs}
 target_compile_definitions(rd_mesh_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math)
+# the strip order case reads the title logo's models from the disc image
+# (df_pack.h); without it that part is skipped
+target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math ico_port_data)
 
 # rd_shadow_test (wave 4, R4b): the shadow count on the stencil.  Shadow.c
 # with the 2D layer and Matrix.c, as the window build has them, the rest of
@@ -406,7 +409,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
-    add_test(NAME rd_mesh COMMAND rd_mesh_test)
+    add_test(NAME rd_mesh COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_shadow COMMAND rd_shadow_test)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
