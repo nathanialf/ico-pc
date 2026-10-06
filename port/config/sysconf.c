@@ -175,11 +175,6 @@ int ico_game_to_scf_language(int game)
     }
 }
 
-int ico_sysconf_language_explicit(void)
-{
-    return ico_scf_language_from_name(ico_config_get_string("game.language", "auto"));
-}
-
 void ico_sysconf_set_language(int scf)
 {
     size_t i;
@@ -220,25 +215,11 @@ int ico_boot_language(void)
     return ico_scf_to_game_language(sceScfGetLanguage());
 }
 
-int ico_boot_video_mode(int current)
+int ico_boot_video_mode(void)
 {
     int v = ico_sysconf_video_mode();
 
-    return v >= 0 ? v : current;
-}
-
-int ico_boot_card_language(int card)
-{
-    int v = ico_sysconf_language_explicit();
-
-    return v >= 0 ? ico_scf_to_game_language(v) : card;
-}
-
-int ico_boot_card_video_mode(int card)
-{
-    int v = ico_sysconf_video_mode();
-
-    return v >= 0 ? v : card;
+    return v >= 0 ? v : 0;
 }
 
 /* minutes east of GMT; the clock sceCdReadClock reports is already local */

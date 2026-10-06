@@ -121,8 +121,10 @@ void ico_host_milestone(const char *what);
 void ico_host_name_func(void *func, const char *name);
 /* port/game/options.h: developer mode (renderer wave 6, R6a) */
 int ico_opt_developer_mode(void);
-/* port/config/sysconf.c: [video] video_mode, else current */
-int ico_boot_video_mode(int current);
+/* port/config/sysconf.c: [video] video_mode, else 60 Hz (0); [game]
+   language, else the system's, as the game's 2..6 */
+int ico_boot_video_mode(void);
+int ico_boot_language(void);
 /* common/src/debug.c; debug.h declares only debug_Menu_off */
 void debug_Menu(void);
 /* port/platform/trace_host.h: Main ticks done */
@@ -254,15 +256,15 @@ void Main(void)
     if (thisIsYourStartStage <= 0) {
         thisIsYourStartStage = 1;
     }
-    /* PC port: a start stage ([dev] start_stage) skips kanbanBoot, whose
-       step 200 applies [video] video_mode (kanbanBoot.c), so systemStatus[0]
-       would stay the PAL default whatever the setting: apply it here the
-       same way. This runs before gsb_InitGSSystem below, so the GS starts in
-       that mode and step 200's gsResetFunc is not needed. Stage 1 runs the
-       boot, which applies it again. */
-    if (n > 0) {
-        systemStatus[0] = ico_boot_video_mode(systemStatus[0]);
-    }
+    /* PC port: the boot's language and 50/60 Hz screens are skipped
+       (kanbanBoot.c): the values they stored are set here, on every boot,
+       before stage 1 loads (ReadTextureFile, charFileManager.c, keeps the
+       language textures of NonLinearCameraMove's language only) and before
+       gsb_InitGSSystem starts the GS in the mode, so the boot needs no
+       reload and no gsResetFunc. [game] language, else the system's;
+       [video] video_mode, else 60 Hz. */
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
     debug_VariableInit();
     InitDelayFree();
     debug_StdPrintfDummy("Main() in\n");

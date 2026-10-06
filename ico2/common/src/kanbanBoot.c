@@ -54,13 +54,15 @@ static int bootVideoMode; /* derived name */ /* the video mode in force when the
 extern void iosMcChdirProduct(McMgr *mp);
 extern int iosMcSync(McMgr *mp);
 extern void iosMcLoadProductBlock(McMgr *mp);
-/* PC port (Phase 6, 6C): the language and 50/60 Hz screens are skipped; the
-   values they stored come from the port's config (port/config/sysconf.h,
-   docs/port/SETTINGS.md), and the Settings menu changes them later */
-int ico_boot_language(void);
-int ico_boot_video_mode(int current);
-int ico_boot_card_language(int card);
-int ico_boot_card_video_mode(int card);
+
+/* PC port: the language and 50/60 Hz screens are skipped, and so is all
+   that followed them: main.c sets both values before stage 1 loads and the
+   GS starts (port/config/sysconf.h ico_boot_language, ico_boot_video_mode),
+   and the Settings menu changes them later. Steps 96 and 101 below go to
+   the end of the check, so steps 102 and 190 to 202 never run: no reload
+   of stage 1 for the language's textures, no gsResetFunc, no second card
+   check. On the PS2 the signs' black backdrop covered those frames; the
+   host draws no sign there, and they showed as flashes. */
 
 static int kanbanBootMcCheck(void)
 {
@@ -134,13 +136,16 @@ static int kanbanBootMcCheck(void)
             mcCheckStep = 100;
             break;
         }
+        /* PC port: the card's language and video mode are not applied: the
+           ones main.c set stay (the config's, which the Settings menu
+           writes), with no gsResetFunc and no reload (step 97 -> 190); on
+           to the end through step 100's wait */
+        mcCheckStep = 100;
+        break;
         mcCheckStep++;
         r = &IosMcProductFile[mc->port];
         NonLinearCameraMove = r->cameraMove;
         systemStatus[0] = r->palMode;
-        /* an explicit config value (the Settings menu's) wins over the card */
-        NonLinearCameraMove = ico_boot_card_language(NonLinearCameraMove);
-        systemStatus[0] = ico_boot_card_video_mode(systemStatus[0]);
         gsResetFunc(0);
         break;
     case 97:
@@ -156,18 +161,17 @@ static int kanbanBootMcCheck(void)
         mcCheckStep = 101;
         break;
     case 101:
+        /* PC port: no language screen (main.c set the language), so no
+           reload of stage 1 and no second card check (step 200 -> 202 ->
+           1): straight to the end, with the card's state this check found */
+        bootKanbanDone = 1;
+        mcCheckStep = 300;
+        break;
         if (bootKanbanDone != 0) {
             mcCheckStep = 300;
             break;
         }
         mcKanbanId = -1;
-        /* no language screen: what step 102 would have stored, from the
-           config or the host's locale (sceScfGetLanguage, as the screen's
-           cursor) */
-        NonLinearCameraMove = ico_boot_language();
-        mcCheckStep = 190;
-        bootKanbanDone = 1;
-        break;
         lang = sceScfGetLanguage();
         lp = &texLayout[0].defaultItem;
         switch (lang) {
@@ -238,17 +242,6 @@ static int kanbanBootMcCheck(void)
         isysGObjActiveLink(0, 1);
         break;
     case 200:
-        /* no 50/60 Hz screen: [video] video_mode, else the screen's default
-           item (50 Hz, the value in force), with step 201's reset on a
-           change */
-        bootVideoMode = systemStatus[0];
-        systemStatus[0] = ico_boot_video_mode(systemStatus[0]);
-        if (bootVideoMode != systemStatus[0]) {
-            bootVideoMode = systemStatus[0];
-            gsResetFunc(0);
-        }
-        mcCheckStep = 202;
-        break;
         bootKanban = kanbanReqAdd(1, 2);
         bootVideoMode = systemStatus[0];
         mcCheckStep++;

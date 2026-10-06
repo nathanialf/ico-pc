@@ -49,32 +49,24 @@ void ico_sysconf_reset(void);
 int ico_scf_to_game_language(int scf);
 /* The inverse (2..6 to libscf); English for anything else. */
 int ico_game_to_scf_language(int game);
-/* [game] language when it names a language ("en" .. "es"), as a libscf code;
-   -1 for "auto", absent or invalid. Does not touch sceScfGetLanguage's cache
-   or the EE timers. */
-int ico_sysconf_language_explicit(void);
 /* The Settings menu's language: sceScfGetLanguage answers scf from now on
    and [game] language is set to its name (saved by ico_config_save). */
 void ico_sysconf_set_language(int scf);
 
-/* [video] video_mode: "pal50" (systemStatus[0] = 1, the PAL game's default)
-   or "60hz" (0), the boot screen's 50/60 Hz choice (kanbanBoot.c step
-   201: item 33 sets 1, item 34 sets 0). Returns 1 or 0, or -1 when the key
-   is absent or not one of the two. */
+/* [video] video_mode: "pal50" (systemStatus[0] = 1, the PAL game's own
+   default) or "60hz" (0, the port's default: ico_boot_video_mode), the boot
+   screen's 50/60 Hz choice (kanbanBoot.c step 201: item 33 sets 1, item 34
+   sets 0). Returns 1 or 0, or -1 when the key is absent or not one of the
+   two. */
 int ico_sysconf_video_mode(void);
 /* Sets [video] video_mode from a systemStatus[0] value. */
 void ico_sysconf_set_video_mode(int pal);
-/* The boot skip (kanbanBoot.c under ICO_HOST): the value the skipped screen
-   would have stored. Language: sceScfGetLanguage mapped to 2..6. Video
-   mode: [video] video_mode, else current (the screen's default item keeps
-   it: 1, 50 Hz). */
+/* The boot screens' values, which common/src/main.c sets on every boot
+   before stage 1 loads and the GS starts (kanbanBoot.c skips the screens,
+   and the card's saved values are not applied). Language: sceScfGetLanguage
+   ([game] language, else the system's) mapped to 2..6. Video mode:
+   [video] video_mode, else 0 (60 Hz). */
 int ico_boot_language(void);
-int ico_boot_video_mode(int current);
-/* After the card's system file is loaded (kanbanBoot.c step 96): an
-   explicit config value wins over the card's (the Settings menu writes it;
-   the card is written with the in-memory values at the next save, as
-   before); "auto" or absent keeps the card's. */
-int ico_boot_card_language(int card);
-int ico_boot_card_video_mode(int card);
+int ico_boot_video_mode(void);
 
 #endif /* ICO_CONFIG_SYSCONF_H */

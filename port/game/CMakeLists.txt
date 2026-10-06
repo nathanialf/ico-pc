@@ -51,6 +51,25 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled
+# into the test) for a first and a later boot: no reload of stage 1, no
+# gsResetFunc, no second card check, and the language and 60 Hz main.c sets
+# from the config in force throughout. CPU only.
+add_executable(kanban_boot_test test/kanban_boot_test.c ../platform/host_config.c)
+ico_include_dirs(common _ico_kanban_boot_incs)
+target_include_directories(kanban_boot_test PRIVATE ${_ico_kanban_boot_incs}
+    "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(kanban_boot_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(kanban_boot_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(kanban_boot_test PRIVATE ico_config)
+if(WIN32)
+    target_link_libraries(kanban_boot_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # --- Achievements (Phase 6E, docs/port/ACHIEVEMENTS.md) -----------------------
 # ico_gamestate.h (port/include) is the read-only game-state view and the
 # signal queue; the game's one-line hooks (ICO_HOST) include it from common,

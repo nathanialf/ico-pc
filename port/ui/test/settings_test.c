@@ -1897,11 +1897,9 @@ static void testBootSkip(void)
     }
     useConfig("[game]\nlanguage = \"de\"\n[video]\nvideo_mode = \"60hz\"\n");
     CHECK(ico_boot_language() == 4, "language de -> 4");
-    CHECK(ico_boot_video_mode(1) == 0, "video_mode 60hz -> 0");
-    CHECK(ico_boot_card_language(3) == 4 && ico_boot_card_video_mode(1) == 0,
-          "explicit values over the card's");
+    CHECK(ico_boot_video_mode() == 0, "video_mode 60hz -> 0");
     useConfig("[game]\nlanguage = \"it\"\n[video]\nvideo_mode = \"pal50\"\n");
-    CHECK(ico_boot_language() == 5 && ico_boot_video_mode(0) == 1, "it, pal50");
+    CHECK(ico_boot_language() == 5 && ico_boot_video_mode() == 1, "it, pal50");
     useConfig("[game]\nlanguage = \"auto\"\n");
     setEnv("LC_ALL", "es_ES.UTF-8");
     /* the host's locale (SDL's preferred locales in the window build, the
@@ -1909,17 +1907,14 @@ static void testBootSkip(void)
     CHECK(ico_boot_language() == ico_scf_to_game_language(ico_sysconf_host_language()),
           "auto: the host's locale");
     CHECK(ico_scf_to_game_language(ico_scf_language_from_locale("es_ES.UTF-8")) == 6, "es_ES -> 6");
-    CHECK(ico_boot_video_mode(1) == 1 && ico_boot_video_mode(0) == 0,
-          "no video_mode: the value in force");
-    CHECK(ico_boot_card_language(5) == 5 && ico_boot_card_video_mode(0) == 0,
-          "auto / absent: the card's");
+    CHECK(ico_boot_video_mode() == 0, "no video_mode: 60 Hz");
     setEnv("LC_ALL", "ja_JP.UTF-8");
     ico_sysconf_reset();
     CHECK(ico_scf_to_game_language(ico_scf_language_from_locale("ja_JP.UTF-8")) == 2,
           "a language the game lacks: English (2)");
     setEnv("LC_ALL", NULL);
     useConfig("[video]\nvideo_mode = \"pal\"\n");
-    CHECK(ico_boot_video_mode(1) == 1 && ico_boot_video_mode(0) == 0, "an invalid value: ignored");
+    CHECK(ico_boot_video_mode() == 0, "an invalid value: ignored (60 Hz)");
     ico_sysconf_set_language(ICO_SCF_LANGUAGE_FRENCH);
     CHECK(sceScfGetLanguage() == ICO_SCF_LANGUAGE_FRENCH &&
               strcmp(ico_config_get_string("game.language", ""), "fr") == 0,
