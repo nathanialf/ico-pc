@@ -1724,6 +1724,17 @@ static void testValues(void)
 
 /* Settings > Audio: the music and effects gains, the output mode against
    the game's own (the card's, the Options row's), the device list */
+/* config.toml's [audio] output as the file holds it ("-" without one) */
+static void outputOnDisk(char *out, size_t n)
+{
+    char p[1024];
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    const char *v = t ? ico_toml_get(t, "audio.output") : NULL;
+    snprintf(out, n, "%s", v ? v : "-");
+    ico_toml_free(t);
+}
+
 static void testAudio(void)
 {
     char p[1100];
@@ -1785,6 +1796,8 @@ static void testAudio(void)
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Mono)") == 0, "Auto (Mono)");
     CHECK(strcmp(ico_config_get_string("audio.output", "auto"), "auto") == 0,
           "auto: the Options row leaves the key");
+    char outFile0[32], outFile[32];
+    outputOnDisk(outFile0, sizeof(outFile0));
     ui_SettingsStep(UI_OPT_OUTPUT, 1);
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Stereo") == 0 && s_outputMode == 0 &&
               strcmp(ico_config_get_string("audio.output", ""), "stereo") == 0,
@@ -1792,6 +1805,10 @@ static void testAudio(void)
     ui_SettingsStep(UI_OPT_OUTPUT, 1);
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Mono") == 0 && s_outputMode == 1,
           "output Mono");
+    outputOnDisk(outFile, sizeof(outFile));
+    CHECK(strcmp(outFile, outFile0) == 0,
+          "Stereo and Mono steps leave config.toml to the save on leaving (%s, was %s)", outFile,
+          outFile0);
     ui_SettingsStep(UI_OPT_OUTPUT, -1);
     ui_SettingsStep(UI_OPT_OUTPUT, -1);
     CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 0 &&

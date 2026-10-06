@@ -204,10 +204,15 @@ int ico_opt_output_card(int card_mode)
     return ico_opt_output_resolve(card_mode);
 }
 
-void ico_opt_output_toggled(int mode)
+void ico_opt_output_record(int mode)
 {
     s_game_output = mode;
     s_game_known = 1;
+}
+
+void ico_opt_output_toggled(int mode)
+{
+    ico_opt_output_record(mode);
     if (ico_opt_output_mode() != ICO_OUTPUT_AUTO) {
         ico_opt_set_output_mode(mode);
         if (ico_config_set_string("audio.output", ico_opt_output_name(s_output)) != 0 ||

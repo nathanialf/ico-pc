@@ -798,8 +798,10 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         if (m != ICO_OUTPUT_AUTO) {
             /* S1: the rest of what the Options screen's Sound row (308)
                did (applyOutputMode set the mode): the game's own mode, the
-               one its saves write and Auto shows, is this one too */
-            ico_opt_output_toggled(m);
+               one its saves write and Auto shows, is this one too.  The
+               key is saved with the page's others on leaving, not at each
+               step (ico_opt_output_toggled's save) */
+            ico_opt_output_record(m);
         }
         s_dirtyConfig = 1;
         break;

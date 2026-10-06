@@ -117,6 +117,10 @@ int ico_opt_output_card(int card_mode);
    key follows it and config.toml is saved at once, so the file and the
    card (which the game writes from soundOutputModeGet) never disagree. */
 void ico_opt_output_toggled(int mode);
+/* What ico_opt_output_toggled does to the game's state, without the key
+   or the save: Settings > Audio > Output's Stereo and Mono, which set the
+   key themselves and save it on leaving the page with the rest. */
+void ico_opt_output_record(int mode);
 /* Forget the run-time values: each option is read from the config again on
    its next use. */
 void ico_opt_reload(void);
