@@ -2285,7 +2285,7 @@ records are the data of a BGA node's envelope of type 8 or 9
 (`bga_calcEnvelope` stores it in the node's object word, which the
 lightning nodes 14 and 15 hand to `bga_addLightning`). A survey of
 `baserom/Ico_PAL.iso` (2026-10-06) walked every pack in DFDATAS/DATA.DF (68
-`.DF` packs, inflated as `tools/tm2_sheets.py` reads them; the 124 other
+`.DF` packs, inflated with the DATA.DF reader in `port/data/df_pack.c`; the 124 other
 members hold no BGA file): 2225 BGA files, 360 type 8 or 9 envelope records
 in 55 of them, 147 of those on lightning nodes 14 and 15 in 39 packs. Every
 record's +0x2E is 0 or 1: mode 1 (`Cd − Cs·FIX`) on the 28 records of
