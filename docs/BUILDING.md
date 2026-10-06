@@ -111,9 +111,10 @@ right, and the game's results depend on that order at some call sites
 source list (nothing links with it). It holds the `ico2/` C sources, one
 list per programmer directory, the data-only members, and
 `ICO_EE_ONLY_SOURCES`: the PS2's FMV player under `ito/mpeg/`, which
-`port/fmv` replaces. The build never compiles `sce/` or `ico2/vusrc/`; they
-stay in the tree as the reference for the identity check below and for the
-renderer's shaders. Configure warns when the generated list is stale; rerun
+`port/fmv` replaces. Of `sce/` the build compiles only
+`sce/libsndn2/sound.c`, the Sg sequencer (`port/audio`); the rest of `sce/`
+and `ico2/vusrc/` stay in the tree as the decomp's sources, the SDK headers
+the game includes, and the reference for the renderer's shaders. Configure warns when the generated list is stale; rerun
 the script after changing the link order.
 
 Each programmer directory is one object library with the include path
@@ -240,10 +241,22 @@ running the Linux one.
 
 ## Appendix, maintainers: EE identity check
 
-The port changes `ico2/` freely, but a change that should not alter what the
-PS2 compiler emits (a type sweep, a rename, a host-only `#ifdef`) can be
-checked against the period compiler with `tools/ee_identity.sh`. It is
-optional and is not part of the build or of CI.
+`ico2/` and `sce/` are the decomp's code
+([ico](https://github.com/nathanialf/ico), the `upstream` remote): the port's
+copy equals `upstream/main` there, and a change to them is made in the decomp
+and merged here. A host change has to leave the EE objects as they are: it
+is spelled so the period compiler sees the same tokens (`ICO_WORD`,
+`ICO_RAW`, `ICO_MAX_SIZE`, [`port/OFFSET_AUDIT.md`](port/OFFSET_AUDIT.md)
+"Conventions in `ico2/`"), or it goes under `#ifdef ICO_HOST` with the
+decomp's text in `#else` (the file-scope versions of GNU nested functions,
+which clang lacks, are all gated this way). The gate is the decomp's: its
+`./build.sh` rebuilds the PAL ELF and `tools/check_elf.py` checks it
+byte-identical, and nothing lands there that fails it.
+
+`tools/ee_identity.sh` is the quick check of a change before it goes to the
+decomp: it compiles the given files with the period compiler and compares
+the objects. It is optional and is not part of the build or of CI. A decomp
+checkout's toolchain serves as well: `ln -s /path/to/ico/tools/cc tools/cc`.
 
 ```sh
 sudo dpkg --add-architecture i386 && sudo apt-get update
@@ -268,7 +281,7 @@ What stays in the tree for it, and why:
 | --- | --- |
 | `tools/compile_c.sh`, `tools/period_env.sh`, `tools/period_obstack.c` | the compile step (the preload library restores the obstack chunk size the original build had; ee-as's short-loop padding depends on it) |
 | `tools/setup.sh`'s compiler fetch (ee-gcc 2.9-991111 and 2.96 into `tools/cc/`) | the compilers `compile_c.sh` runs; the 2.96 tree is only its SCE assembler, for `sce/` sources |
-| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources, and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Not part of any host target |
+| `sce/`, `ico2/vusrc/` | the identity check compiles `sce/`'s sources, and the game includes its headers under the SDK names; the VU1 sources are the shaders' reference. Only `sce/libsndn2/sound.c` is in a host target (`ico_sndn2`) |
 | `config/link_order.pal.txt`, `config/data_*.pal.txt`, `config/link.pal.ld` | the source list `gen_sources.py` reads, the data members' schema, and the retail link script as a record of the PS2 layout. Nothing links with them |
 | `tools/extract_elf.sh`, `tools/extract_elf.py` | the maintainer step below |
 

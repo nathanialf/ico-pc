@@ -12,6 +12,8 @@
 
 static void connectToTarget(struct GObj *obj, HandRec *hw, int na, int nb, int nc);
 
+#ifdef ICO_HOST
+
 /* getBone was a nested function inside connectToTarget. */
 static void getBone(float *out, GObj *o)
 {
@@ -46,8 +48,48 @@ static void getBone(float *out, GObj *o)
     out[1] = c;
 }
 
+#else
+/* getBone is defined as a nested function inside connectToTarget below. */
+#endif
+
 static void connectToTarget(GObj *obj, HandRec *hw, int na, int nb, int nc)
 {
+#ifndef ICO_HOST
+    /* getBone reads connectToTarget's frame through the static chain, which
+     * its prologue saves at 0(sp). */
+    void getBone(float *out, GObj *o)
+    {
+        Sub15C *sub = GOBJ_SUB(o);
+        float scale = sub->nodes->scale[0];
+        SkelNode *nodes = sub->skel;
+        float a;
+        float b;
+        float c;
+
+        a = nodes[nodes[GetSkeltonFocusNode(o, 19)].child].pos[0];
+        if (a < 0.0f) {
+            a = -a;
+        }
+        a *= scale;
+        out[0] = a;
+
+        a = nodes[nodes[GetSkeltonFocusNode(o, 20)].child].pos[0];
+        if (a < 0.0f) {
+            a = -a;
+        }
+        out[1] = a;
+
+        a = nodes[nodes[GetSkeltonFocusNode(o, 22)].child].pos[0];
+        b = out[1];
+        if (a < 0.0f) {
+            c = b - a;
+        } else {
+            c = b + a;
+        }
+        c *= scale;
+        out[1] = c;
+    }
+#endif
     float b0[4];
     float b1[4];
     float d[4];

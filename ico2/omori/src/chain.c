@@ -425,7 +425,11 @@ static void chain_simulate_term_down(GObj *gobj)
     sceVu0AddVector(w, &cw->node[cw->holdNode], v);
     chain_sub_pendulum(cw->node, cw->holdNode, w);
     if (cw->holdNode + 1 <= cw->nodes - 1) {
+#ifdef ICO_HOST
         nd = CHAIN_NODE_ADDR(ChainNode *, cw, cw->holdNode << 5);
+#else
+        nd = (ChainNode *)((cw->holdNode << 5) + (int)cw->node);
+#endif
         next = nd + 1;
         next->x = nd->x;
         next->y = nd->y + 50.0f;
@@ -830,7 +834,11 @@ static void chain_set_charachara(GObj *gobj, float amp)
     v[2] = s;
     _ApplyRyGV(v, (float)deg * 3.1415927f / 180.0f);
 
+#ifdef ICO_HOST
     p = CHAIN_NODE_ADDR(char *, cw, idx << 5);
+#else
+    p = (char *)((idx << 5) + (int)cw->node);
+#endif
     *(float *)p = *(float *)(p - 32) + v[0];
 
     *(float *)(p + 8) = *(float *)(p - 24) + v[2];
@@ -917,7 +925,11 @@ static inline unsigned char isChainHitByHand(GObj *gobj, float *p, float *v, flo
     v[1] = 0.0f;
 
     for (i = 2; i <= cw->nodes - 1; i++) {
+#ifdef ICO_HOST
         ChainNode *nd = CHAIN_NODE_ADDR(ChainNode *, cw, i << 5);
+#else
+        ChainNode *nd = (ChainNode *)((i << 5) + (int)cw->node);
+#endif
 
         if (nd->y < p[1] && p[1] < nd->y + 50.0f) {
             float t;
@@ -1059,7 +1071,11 @@ void ChainGeo(GObj *gobj)
             break;
         case 2:
             if (act != 0) {
+#ifdef ICO_HOST
                 float *nd = CHAIN_NODE_ADDR(float *, cw, cw->holdNode << 5);
+#else
+                float *nd = (float *)((cw->holdNode << 5) + (int)cw->node);
+#endif
                 float h;
 
                 ((ChainExtPtr *)&boyGObj->dobj)->sub->root.move[0] = 0.0f;
@@ -1289,6 +1305,8 @@ static inline float *PushChainClimbRoot(GObj *obj, float *pos, float *out, float
  * file scope.  This region keeps its line layout and is fenced from
  * clang-format.
  */
+#ifdef ICO_HOST
+
 /* GetChainClimbMode was nested in TestChainUpDown; the captured boy is a parameter. */
 static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
 {
@@ -1316,6 +1334,34 @@ static inline int GetChainClimbMode(GObj *boy, int motion) /* derived name */
 
 static void TestChainUpDown(GObj *gobj, GObj *boy)
 {
+#else
+static void TestChainUpDown(GObj *gobj, GObj *boy)
+{
+    inline int GetChainClimbMode(int motion) /* derived name */
+    {
+        int mode = -1;
+        switch (motion) {
+        case 119:
+            mode = 4; if (GOBJ_ACT(boy)->actMode != 63) {
+                mode = 0;
+            }
+
+            break;
+        case 120:
+            mode = 1;
+            break;
+
+        case 121:
+            mode = 2;
+            break;
+        case 122:
+            mode = 3;
+            break;
+        }
+        return mode;
+    }
+
+#endif
     float v[4], org[4], w[4], d[4], hw[4], hd[4];
     ChainRecord *cw = GOBJ_SUB(gobj)->work;
     /* the boy's action record, whose chain field names the chain the boy hangs on */
@@ -1326,7 +1372,11 @@ static void TestChainUpDown(GObj *gobj, GObj *boy)
      * ChainExtPtr union as in the node-point helper.
      */
 
+#ifdef ICO_HOST
     int mode = GetChainClimbMode(boy, GOBJ_SUB(boy)->ctrl.motion);
+#else
+    int mode = GetChainClimbMode(GOBJ_SUB(boy)->ctrl.motion);
+#endif
 
     switch (mode) {
     case 4: {
@@ -1724,7 +1774,11 @@ int GetChainNearestNodePosition(float *out, GObj *gobj, float *p)
         float d = _DistSqGV(p, &cw->node[i]);
 
         if (d < best) {
+#ifdef ICO_HOST
             float *e = CHAIN_NODE_ADDR(float *, cw, i * 32);
+#else
+            float *e = (float *)(i * 32 + (int)cw->node);
+#endif
             out[0] = e[0];
             out[1] = e[1];
             out[2] = e[2];

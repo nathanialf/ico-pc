@@ -19,9 +19,12 @@ in `LOADERS.md`.
 
 ## Conventions in `ico2/`
 
-Every host-only edit keeps the EE's tokens, so the period compiler still
-produces the same objects (`tools/ee_identity.sh` compares them; see
-`docs/BUILDING.md`). There are four ways to do that:
+`ico2/` is the decomp's code (the `upstream` remote) and the port's copy
+equals it; host edits are made there, and the decomp's byte-match gate
+(its `./build.sh` and `tools/check_elf.py`) is what admits them. So every
+host-only edit leaves the period compiler's objects as they were
+(`tools/ee_identity.sh` checks a file before it goes upstream; see
+`docs/BUILDING.md`). These are the ways to do that:
 
 - **A field instead of an offset.** Where naming the field compiles to the
   same EE code, the code names the field.
@@ -32,6 +35,13 @@ produces the same objects (`tools/ee_identity.sh` compares them; see
   `ICO_RAWP` is the address form.
 - **`#ifdef ICO_HOST`** with the original statement in `#else`, where a
   whole statement needs a host spelling.
+- **Nested functions.** clang has no GNU nested functions, so the host
+  compiles a file-scope static with the captured variables passed as
+  parameters (written captures by pointer). The static is in an
+  `#ifdef ICO_HOST` arm and the nested original stays in `#else`; a call
+  site whose arguments changed is gated the same way. This holds even where
+  the lifted form happens to compile to the same EE bytes, so the EE text is
+  the decomp's.
 - **Pointer-wide words with EE types.** A word that holds an object but is
   `int` on the EE becomes `ICO_WORD` (host `intptr_t`) or
   `ICO_WORD_PTR(T)` (host `T`), both `int` on the EE

@@ -216,7 +216,7 @@ image starts after the host-sized header.
 image's address to the sound library. On the PS2 `SgVabOpenFakeBody`
 relocates header words 0x10 and 0x18-0x24 into the slots at 0x30 and
 0x38-0x44, and `SgBgmOpen` keeps the sequence's address. The host sound
-library (`port/audio/sg/sound.c`, AUDIO.md) keeps its own record of these
+library (`sce/libsndn2/sound.c`, AUDIO.md) keeps its own record of these
 addresses (pattern (b)) and never writes an 8-byte address into the
 header's 4-byte slots; the game side needs no change. The `.bd` buffer and
 the ADPCM sources go to `soundBDDataSet`, `adpcmDataSet` and `Ee2Iop` as

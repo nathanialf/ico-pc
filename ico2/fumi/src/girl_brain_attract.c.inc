@@ -176,6 +176,8 @@ static GirlAttractParam attractSofaParam = {0, {0}, {0}, 68, 267, 50.0f, 100.0f,
 
 static GirlAttractParam attractBoyParam = {0, {0}, {0}, 0, 338, 100.0f, 70.0f}; /* derived name */
 
+#ifdef ICO_HOST
+
 /* former nested helpers of subGirlBrain_Attract; they read cnt, sub and cur
    through the static chain, which are now passed explicitly */
 static __inline__ void setMode(int *cnt, Act *sub, int mode) /* derived name */
@@ -202,11 +204,14 @@ static __inline__ int getKind(void *cur) /* derived name */
     return 3;
 }
 
+#endif
+
 /* The actor entry parameter is volatile: the actor scheduler writes the
  * caller's home slot while this thread is parked in _ACTWait. */
 void subGirlBrain_Attract(GObj *volatile self)
 {
     Act *sub = GOBJ_ACT(self);
+#ifdef ICO_HOST
 
     float mypos[4];
 
@@ -234,18 +239,60 @@ void subGirlBrain_Attract(GObj *volatile self)
 
     int hintCnt = 0;
 
+#else
+    float mypos[4];
+    float last[4];
+    GirlAttractParam tgt;
+    int cnt;
+    void *cur = brain_val.lastTarget;
+    int type = 0;
+    int kind;
+    GObj *param = 0;
+    int dbg = 0; /* local debug switch, see the rate block below */
+    int fr = (60 - systemStatus[0] * 10) / systemStatus[1];
+    int fr3 = fr + (60 - systemStatus[0] * 10) / systemStatus[1] * 2;
+    int turnCnt = 0;
+    int hintCnt = 0;
+
+    /* two nested helpers, which read cnt, sub and cur through the static chain */
+    __inline__ void setMode(int mode) /* derived name */
+    {
+        cnt = 0;
+        sub->wayMode = mode;
+    }
+    __inline__ int getKind(void) /* derived name */
+    {
+        if (cur == (void *)boyGObj && GOBJ_ACT(boyGObj)->actMode == 45) {
+            return 0;
+        } else if (*(int *)((char *)cur + 0xC) == 16) {
+            return 1;
+        } else if (GOBJ_ACT(boyGObj)->actMode == 49 &&
+                   *(int *)GOBJ_SUB(girlGObj) == (int)GOBJ_ACT(boyGObj)->box) {
+            return 2;
+        }
+        return 3;
+    }
+#endif
     float root[4];
 
 restart:
+#ifdef ICO_HOST
     setMode(&cnt, sub, 0);
 
+#else
+    setMode(0);
+#endif
     if (cur == 0) {
         debug_assert(__FILE__, 279);
         __assert(__FILE__, 279, "0");
     }
+#ifdef ICO_HOST
 
     kind = getKind(cur);
 
+#else
+    kind = getKind();
+#endif
     switch (kind) {
     case 0:
         type = 1;
@@ -354,7 +401,11 @@ restart:
         if (0 < brain_val.status31Timer) {
             _ACTCharStatus_Set((void *)self, 31, -1.0f, 0);
         }
+#ifdef ICO_HOST
         if (kind != getKind(cur)) {
+#else
+        if (kind != getKind()) {
+#endif
             goto restart;
         }
         type2 = girlBrainGetTargetType((void *)self);
@@ -417,7 +468,11 @@ restart:
         }
         if (sub->wayMode == 3) {
             if (girlBrainGetTypeRatio(type2) == 0.0f) {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 0);
+#else
+                setMode(0);
+#endif
             }
         }
         {
@@ -446,7 +501,11 @@ restart:
             if (sub->wayMode == 7) {
                 if (!(_DistSqGV(test_CURRENTROOT(boyGObj), test_CURRENTROOT(girlGObj)) <
                       10000.0f)) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 1);
+#else
+                    setMode(1);
+#endif
                 }
             }
         }
@@ -454,7 +513,11 @@ restart:
         case 0:
             _ACTLookTarget_Set((void *)self, 0, 0, 6, 1);
             sub->stick.mag = 0.0f;
+#ifdef ICO_HOST
             setMode(&cnt, sub, 6);
+#else
+            setMode(6);
+#endif
             break;
         case 1: {
             int p = ACTWayMove_BeginDetail((void *)self, mypos, tgt.pos, tgt.obj, 0, 0);
@@ -463,14 +526,22 @@ restart:
                 sub->wayState.bits.wayDetail = 1;
             }
             if (p != 0) {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 3);
+#else
+                setMode(3);
+#endif
                 last[0] = tgt.pos[0];
                 last[1] = tgt.pos[1];
                 last[2] = tgt.pos[2];
                 turnCnt = 0;
                 hintCnt = 0;
             } else {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 2);
+#else
+                setMode(2);
+#endif
             }
             break;
         }
@@ -480,27 +551,47 @@ restart:
 
             if (GOBJ_ACT(self)->actMode == 45) {
                 if (type == 1) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 4);
+#else
+                    setMode(4);
+#endif
                     break;
                 }
             } else if (type == 1) {
                 if (tgt.obj != (void *)boyGObj && GOBJ_WORK(self)->sofaRestTimer != 0) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 8);
+#else
+                    setMode(8);
+#endif
                     sub->stick.mag = 0.0f;
                     break;
                 }
                 if (type == 1 && ((int)(sub->flags20.ll >> 12) & 1) &&
                     _DistSqGV(test_CURRENTROOT((void *)self), tgt.pos) < 40000.0f) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 2);
+#else
+                    setMode(2);
+#endif
                     break;
                 }
             }
             if (p == 0) {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 2);
             } else if ((int)((unsigned long long)sub->wayFlags >> 17) & 1) {
                 setMode(&cnt, sub, 2);
             } else if (hint) {
                 setMode(&cnt, sub, 2);
+#else
+                setMode(2);
+            } else if ((int)((unsigned long long)sub->wayFlags >> 17) & 1) {
+                setMode(2);
+            } else if (hint) {
+                setMode(2);
+#endif
             } else {
                 if (!noTurn) {
                     margin = 100.0f;
@@ -514,7 +605,11 @@ restart:
                 sub->dir[2] = sub->wayNodeZ;
                 if (waterHit) {
                     if (sub->wayGoalDist < 50.0f && sub->wayGoalHeight < tgt.goalHeight) {
+#ifdef ICO_HOST
                         setMode(&cnt, sub, 4);
+#else
+                        setMode(4);
+#endif
                         sub->stick.mag = 0.0f;
                     } else if (sub->wayGoalDist < 300.0f) {
                         girlBrainSetWalkRatio((void *)self, 0.5f);
@@ -532,7 +627,11 @@ restart:
                             }
                         }
                         if (noTurn) {
+#ifdef ICO_HOST
                             setMode(&cnt, sub, 4);
+#else
+                            setMode(4);
+#endif
                         } else {
                             sub->stick.mag = 0.0f;
                         }
@@ -564,7 +663,11 @@ restart:
                     break;
                 }
                 if ((60 - systemStatus[0] * 10) / systemStatus[1] * 15 < turnCnt) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 2);
+#else
+                    setMode(2);
+#endif
                 }
             }
             if (tgt.obj != 0 && IsTopHint(tgt.obj) &&
@@ -574,7 +677,11 @@ restart:
                     sub->stick.mag = 0.0f;
                 }
                 if ((60 - systemStatus[0] * 10) / systemStatus[1] * 5 < hintCnt) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 2);
+#else
+                    setMode(2);
+#endif
                 }
             }
             break;
@@ -582,7 +689,11 @@ restart:
         case 6:
             if (fr < cnt || brain_val.lookHold != 0) {
                 if (girlBrainGetTypeRatio(type2) != 0.0f) {
+#ifdef ICO_HOST
                     setMode(&cnt, sub, 1);
+#else
+                    setMode(1);
+#endif
                 }
             }
             /* fallthrough */
@@ -610,7 +721,11 @@ restart:
                 }
             } else {
                 _ACTLookTarget_Set((void *)self, 0, 0, 6, 1);
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 8);
+#else
+                setMode(8);
+#endif
             }
             if (((int)(sub->flags18.ll >> 63) & 1) || (sub->flags20.i[0] & 1)) {
                 sub->flags20.ll |= 2;
@@ -618,9 +733,15 @@ restart:
             break;
         case 4:
             if (tgt.kind == 0 && (tgt.obj == 0 || !IsTopHint(tgt.obj))) {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 7);
             } else {
                 setMode(&cnt, sub, 5);
+#else
+                setMode(7);
+            } else {
+                setMode(5);
+#endif
             }
             break;
         case 5:
@@ -639,7 +760,11 @@ restart:
                     ACTSendMailCorrect((void *)self, tgt.mail);
                 }
             } else {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 8);
+#else
+                setMode(8);
+#endif
             }
             break;
         case 8:
@@ -648,7 +773,11 @@ restart:
                 GirlBrainClearTarget((void *)self, &tgt);
             }
             if ((60 - systemStatus[0] * 10) / systemStatus[1] < cnt) {
+#ifdef ICO_HOST
                 setMode(&cnt, sub, 0);
+#else
+                setMode(0);
+#endif
             }
             break;
         }

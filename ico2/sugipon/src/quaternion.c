@@ -130,6 +130,8 @@ void GetMatrixFromQuaternion(void *mtx, void *q)
 /* the file's `nxt` permutation table */
 static int nxt[3] = {1, 2, 0}; /* derived name */
 
+#ifdef ICO_HOST
+
 /* GetQuaternionFromMatrix's helper, a GNU nested function in the original
    (it captured nothing), at file scope so clang compiles it */
 static void getQuaternionFromMatrix(float *q, float (*m)[4])
@@ -168,10 +170,53 @@ static void getQuaternionFromMatrix(float *q, float (*m)[4])
     }
 }
 
+#endif
+
 /* no caller; void as sugipon's output-parameter getters */
 void GetQuaternionFromMatrix(void *q, void *mtx)
 {
+#ifdef ICO_HOST
     char local[64];
+#else
+    auto void getQuaternionFromMatrix(float *q, float (*m)[4]);
+    char local[64];
+
+    void getQuaternionFromMatrix(float *q, float (*m)[4])
+    {
+        float tr;
+        float s;
+        float t;
+        int i;
+        int j;
+        int k;
+
+        tr = m[0][0] + m[1][1] + m[2][2];
+        if (tr > 0.0f) {
+            s = _Sqrt(tr + 1.0f);
+            q[3] = s * 0.5f;
+            t = 0.5f / s;
+            q[0] = (m[1][2] - m[2][1]) * t;
+            q[1] = (m[2][0] - m[0][2]) * t;
+            q[2] = (m[0][1] - m[1][0]) * t;
+        } else {
+            i = 0;
+            if (m[1][1] > m[0][0]) {
+                i = 1;
+            }
+            if (m[2][2] > m[i][i]) {
+                i = 2;
+            }
+            j = nxt[i];
+            k = nxt[j];
+            s = _Sqrt(m[i][i] - (m[j][j] + m[k][k]) + 1.0f);
+            q[i] = s * 0.5f;
+            t = (s != 0.0f) ? 0.5f / s : 0.0f;
+            q[3] = (m[j][k] - m[k][j]) * t;
+            q[j] = (m[i][j] + m[j][i]) * t;
+            q[k] = (m[i][k] + m[k][i]) * t;
+        }
+    }
+#endif
 
     _TransposeMatrix(local, mtx);
     getQuaternionFromMatrix((float *)q, (float (*)[4])local);

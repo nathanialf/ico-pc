@@ -121,6 +121,7 @@ int font_CheckAlign(SprCol *col, unsigned char *str)
     return fontAlign;
 }
 
+#ifdef ICO_HOST
 #ifdef ICO_RD
 /* PC port (R2a; the names here are the port's): the glyph sprites of one font_Print, collected and drawn
    with one gif_HostScreenPrims (rd_ScreenPrims) call.  The corners are the
@@ -212,6 +213,8 @@ static inline int measure(unsigned char *s, unsigned char *d) /* derived name */
     return width;
 }
 
+#endif
+
 void font_Print(unsigned int color, unsigned char *str, float x, float y, int align, SprCol col)
 {
     unsigned char buf[256];
@@ -224,6 +227,61 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
     float cy;
     float fw;
 
+#ifndef ICO_HOST
+    inline float drawOne(float px, float py, int u, int v, int cw, int dp1,
+                         int fontw) /* derived name */
+    {
+        float fcw = (float)cw, fh = (float)(fontw * 640 / ScreenWidth);
+        int gsofs = 0x8000;
+        int uv[4] = {u * 16, v * 16, (u + dp1 + 1) * 16, (v + 20) * 16}, iv[4];
+        float pos[4] = {px, py, fcw, fh};
+        int ofs[4] = {-ScreenWidth / 2 * 16, -ScreenHeight / 4 * 16, 0, 0};
+
+        _FTOI4Vector(iv, pos);
+        gif_SetGsReg(0, 0x156);
+        gif_SetGsReg(3, uv[0] | ((long long)uv[1] << 16));
+        /* clang-format off */
+        gif_SetGsReg(5, (ofs[0] + (iv[0] + gsofs)) | ((long long)(ofs[1] + (iv[1] + gsofs)) << 16) | ((long long)-1 << 32));
+        gif_SetGsReg(3, uv[2] | ((long long)uv[3] << 16));
+        gif_SetGsReg(5, (ofs[0] + (iv[0] + gsofs) + iv[2]) | ((long long)(ofs[1] + (iv[1] + gsofs) + iv[3]) << 16) | ((long long)-1 << 32));
+        /* clang-format on */
+        return px + fcw + 1.0f;
+    }
+
+    inline int measure(unsigned char *s, unsigned char *d) /* derived name */
+    {
+        int brace = 0;
+        int width = 0;
+        int ch;
+
+        while ((ch = *s++) != 0) {
+            if (ch == '{') {
+                brace = 1;
+            } else if (ch == '}') {
+                brace = 0;
+            } else if (brace == 0) {
+                int ca = fontKerning[ch][0];
+                int cb = fontKerning[ch][1];
+                int w = cb - ca;
+
+                int cw = w + 1;
+
+                if (cw < 7) {
+                    cw = w + 3;
+                }
+                if (ca == 0 && cb == 0) {
+                    width += 8;
+                } else {
+                    width += 1 + cw;
+                }
+                *d++ = ch;
+            }
+        }
+        *d++ = 0;
+        return width;
+    }
+
+#endif
     texturetranssize += tex_TransTexture(tex_GetTextureNo("font"), 12);
     gif_StartPacketPriPath1(12);
 

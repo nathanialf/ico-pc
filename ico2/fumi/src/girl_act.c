@@ -354,10 +354,16 @@ typedef struct GirlBrainWork { /* field names derived */
     float boyPos[4];      /* 0x5850 the boy's GetRootProjectionPosOfGObj */
     WayPoint *lastWay;    /* 0x5860, the way point GetWay_next last returned */
     char pad5864[12];
+#ifdef ICO_HOST
     WVTObj hideWay;     /* 0x5870, the way the girl tries to the hide point */
     unsigned char warn; /* 0x58F0 a brain state asks the main loop to checkWarning */
     unsigned char
         inWarningCheck; /* 0x58F1 set by girlBrainMain_CheckWarningMode, cleared each frame, never read */
+#else
+    WVTObj hideWay;        /* 0x5870, the way the girl tries to the hide point */
+    unsigned char warn;    /* 0x58F0 a brain state asks the main loop to checkWarning */
+    unsigned char pad58F1; /* 0x58F1 cleared each frame, never read */
+#endif
     unsigned char modeChanged; /* 0x58F2 set on the frame the mode changes */
     unsigned char lookHold;    /* 0x58F3 3 s after flags18 bit 62 while she faced the boy */
     int markerPulse;           /* 0x58F4 the runaway goal marker's pulse */
@@ -644,6 +650,8 @@ static inline int girlListPick(GirlListEnt *src, GirlListEnt *dst, int n,
     return cnt;
 }
 
+#ifdef ICO_HOST
+
 static void sort_list(float *list, int n)
 {
     GirlSortEnt t;
@@ -679,9 +687,47 @@ static void sort_list(float *list, int n)
     }
 }
 
+#endif
+
 static void girlBrainMain_MakeOthersList(void)
 {
     /* a GNU nested function */
+#ifndef ICO_HOST
+    void sort_list(float *list, int n)
+    {
+        GirlSortEnt t;
+        int i;
+        int j;
+
+        for (i = 0; i < n; i++) {
+            sortList[i].idx = i;
+            sortList[i].dist = _DistSqGV(list + i * 4, brain_val.girlRoot);
+        }
+        for (i = 0; i < n; i++) {
+            for (j = n - 1; i < j; j--) {
+                if (sortList[j].dist < sortList[j - 1].dist) {
+                    t = sortList[j];
+                    sortList[j] = sortList[j - 1];
+                    sortList[j - 1] = t;
+                }
+            }
+        }
+        for (i = 0; i < n; i++) {
+            float *d = sortPos[i];
+
+            d[0] = list[i * 4 + 0];
+            d[1] = list[i * 4 + 1];
+            d[2] = list[i * 4 + 2];
+        }
+        for (i = 0; i < n; i++) {
+            float *e = sortPos[sortList[i].idx];
+
+            list[i * 4 + 0] = e[0];
+            list[i * 4 + 1] = e[1];
+            list[i * 4 + 2] = e[2];
+        }
+    }
+#endif
     float d;
     int seen;
     int i;
@@ -798,7 +844,12 @@ static void girlBrainMain_MakeOthersList(void)
 static char *groupRelationName[4] = {"FALSE", "OTHERGROUP", "SAMEGROUP",
                                      "DIRECT"}; /* derived name */
 
+#ifdef ICO_HOST
+
 static int girlBrainHideCheckIntercept(float *from, float *to, GirlListEnt *list, int n)
+#else
+static int girlBrainHideCheckIntercept(float *from, float *to, char *list, int n)
+#endif
 {
     float d[4];
     float m[16];
@@ -813,9 +864,16 @@ static int girlBrainHideCheckIntercept(float *from, float *to, GirlListEnt *list
     GetMatrixDirectionToZ(m, d);
     dist = FSqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     for (i = 0; i < n; i++) {
+#ifdef ICO_HOST
         flag = GOBJ_ACT(list[i].obj)->actMode == 6 ? 1.0f : 0.0f;
         dy = list[i].pos[1] - from[1] < 0.0f ? -(list[i].pos[1] - from[1])
                                              : list[i].pos[1] - from[1];
+#else
+        flag = *(int *)(*(char **)(*(char **)(list + i * 0x30) + 0x164) + 0x34) == 6 ? 1.0f : 0.0f;
+        dy = *(float *)(list + i * 0x30 + 0x14) - from[1] < 0.0f
+                 ? -(*(float *)(list + i * 0x30 + 0x14) - from[1])
+                 : *(float *)(list + i * 0x30 + 0x14) - from[1];
+#endif
 
         if (flag != 0.0f) {
             if (80.0f < dy) {
@@ -826,7 +884,11 @@ static int girlBrainHideCheckIntercept(float *from, float *to, GirlListEnt *list
                 continue;
             }
         }
+#ifdef ICO_HOST
         sceVu0SubVector(v, list[i].pos, to);
+#else
+        sceVu0SubVector(v, list + i * 0x30 + 0x10, to);
+#endif
         v[1] = 0.0f;
         v[3] = 0.0f;
         sceVu0ApplyMatrix(v, m, v);
@@ -902,6 +964,7 @@ static int girlBrainMain_CheckWarningMode(unsigned char check)
 {
     float hit[4];
     int mode;
+#ifdef ICO_HOST
 
     brain_val.inWarningCheck = 1;
     if (brain_val.listBNear != 0) {
@@ -917,6 +980,27 @@ static int girlBrainMain_CheckWarningMode(unsigned char check)
         dispWayMarker(brain_val.hidePoint);
         if (girlBrainHide_TryWay(brain_val.hidePoint, &brain_val.hideWay, brain_val.girlPos, hit) !=
             3) {
+#else
+    char *w = (char *)&brain_val;
+
+    w[0x58F1] = 1;
+    if (((unsigned char *)w)[0] != 0) {
+        mode = 2;
+    } else {
+        mode = ((unsigned char *)w)[1] != 0 ? 4 : 0;
+    }
+    {
+        char *g = (char *)&brain_val;
+
+        if (*(int *)(g + 0x3230) == 0 ||
+            (check != 0 && ACTGameView_Check(girlGObj, boyGObj) == 0)) {
+            goto out;
+        }
+        _girlBrainHide_MakeHidePoint((float *)(g + 0x5800), 200.0f);
+        dispWayMarker((float *)(g + 0x5800));
+        if (girlBrainHide_TryWay((float *)(g + 0x5800), &brain_val.hideWay, (float *)(g + 0x5830),
+                                 hit) != 3) {
+#endif
             goto out;
         }
     }
@@ -1006,6 +1090,8 @@ static inline float girlBrainGetTypeRatio(int type) /* derived name */
     return r;
 }
 
+#ifdef ICO_HOST
+
 static __inline void setNext(int *next, int m)
 {
     if (girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
@@ -1023,9 +1109,28 @@ static __inline void checkWarning(int *next, unsigned char c)
     }
 }
 
+#endif
+
 static int girlBrainMain_DecideMode(int mode, int *next)
 {
     /* two nested helpers, reading `next` through the static chain */
+#ifndef ICO_HOST
+    __inline void setNext(int m)
+    {
+        if ((void *)girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
+            return;
+        }
+        *next = m;
+    }
+    __inline void checkWarning(unsigned char c)
+    {
+        int m = girlBrainMain_CheckWarningMode(c);
+
+        if (0 <= m) {
+            setNext(m);
+        }
+    }
+#endif
     float gpos[4];
     float opos[4];
     void *o;
@@ -1043,7 +1148,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
     gpos[2] = test_CURRENTROOT(self)[2];
 
     if (sub->actMode == 0x6F) {
+#ifdef ICO_HOST
         setNext(next, 5);
+#else
+        setNext(5);
+#endif
         return 0;
     }
     brain_val.target = girlBrainGetTarget();
@@ -1067,9 +1176,15 @@ static int girlBrainMain_DecideMode(int mode, int *next)
     case 1:
     case 7:
         if (brain_val.lastTarget != 0) {
+#ifdef ICO_HOST
             setNext(next, 1);
         } else {
             setNext(next, 0);
+#else
+            setNext(1);
+        } else {
+            setNext(0);
+#endif
         }
         if (brain_val.hide.num == 0) {
             break;
@@ -1086,7 +1201,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
                     seen = 1;
                 }
                 if (ACTGameView_Check(self, o) != 0 || seen != 0) {
+#ifdef ICO_HOST
                     checkWarning(next, 0);
+#else
+                    checkWarning(0);
+#endif
                     break;
                 }
             }
@@ -1095,7 +1214,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
 
     case 2:
         if (brain_val.warn != 0) {
+#ifdef ICO_HOST
             checkWarning(next, 1);
+#else
+            checkWarning(1);
+#endif
             brain_val.warn = 0;
         }
         if (pad[0].now & 8) {
@@ -1105,19 +1228,31 @@ static int girlBrainMain_DecideMode(int mode, int *next)
 
     case 3:
         if (brain_val.hideAdvWait == 0 && isEnterHideadv() != 0) {
+#ifdef ICO_HOST
             setNext(next, 9);
+#else
+            setNext(9);
+#endif
             break;
         }
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 10 < brain_val.unseenFrames &&
             (60 - systemStatus[0] * 10) / systemStatus[1] * 10 < brain_val.modeFrames) {
+#ifdef ICO_HOST
             setNext(next, 0);
+#else
+            setNext(0);
+#endif
             break;
         }
         /* fall through */
 
     case 4:
         if (brain_val.warn != 0) {
+#ifdef ICO_HOST
             checkWarning(next, 0);
+#else
+            checkWarning(0);
+#endif
 
             warned = 1;
             brain_val.warn = 0;
@@ -1125,7 +1260,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
         break;
 
     case 5:
+#ifdef ICO_HOST
         setNext(next, 6);
+#else
+        setNext(6);
+#endif
         break;
 
     case 6:
@@ -1135,7 +1274,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
         /* fall through */
 
     case 8:
+#ifdef ICO_HOST
         setNext(next, 0);
+#else
+        setNext(0);
+#endif
         brain_val.warn = 0;
         break;
 
@@ -1143,7 +1286,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
         if (isEnterHideadv() != 0) {
             break;
         }
+#ifdef ICO_HOST
         setNext(next, 3);
+#else
+        setNext(3);
+#endif
         break;
     }
     if (PAIR_IsStatus_BOY_WAIT() != 0 &&
@@ -1153,7 +1300,11 @@ static int girlBrainMain_DecideMode(int mode, int *next)
     }
     if (*next != 2 && PAIR_IsStatus_BOY_WAIT() != 0) {
         if (*next != 4 || near != 0) {
+#ifdef ICO_HOST
             setNext(next, 7);
+#else
+            setNext(7);
+#endif
             return 0;
         }
     }
@@ -1208,6 +1359,8 @@ static inline unsigned char isBoyPushBoxTruck(void) /* derived name */
     return 0;
 }
 
+#ifdef ICO_HOST
+
 static void ChangeRunMode(int mode)
 {
     int n;
@@ -1227,11 +1380,33 @@ static void ChangeRunMode(int mode)
     brain_val.limit = lo + rand() % (hi - lo);
 }
 
+#endif
+
 /* The actor entry parameter is volatile: the actor scheduler writes the
    caller's home slot while this thread is parked in _ACTWait. */
 void subGirlBrainMain(GObj *volatile self)
 {
     /* ChangeRunMode, a GNU nested function */
+#ifndef ICO_HOST
+    void ChangeRunMode(int mode)
+    {
+        int n;
+        int t;
+        int lo;
+        int hi;
+
+        brain_val.runMode = mode;
+        brain_val.timer = 0;
+        brain_val.wait = rand() % 3;
+        n = (int)brainGirl.threshold;
+        n = n / 3;
+        n = (n < 0) ? 0 : ((n < 4) ? n : 3);
+        t = runModeTable[n][0];
+        lo = *(int *)(t * 16 + mode * 8 + paramEscapeRun);
+        hi = *(int *)(paramEscapeRun + (t * 16 + mode * 8) + 4);
+        brain_val.limit = lo + rand() % (hi - lo);
+    }
+#endif
     float sk[4];
     Act *act = GOBJ_ACT(self);
     int mode = 0;
@@ -1300,9 +1475,15 @@ void subGirlBrainMain(GObj *volatile self)
         } else {
             brain_val.lookHold = 0;
         }
+#ifdef ICO_HOST
         ((ActStatus *)&act->flags18.ll)->ll &= ~(1LL << 54);
         ACTGameView_Loop((void *)self);
         brain_val.inWarningCheck = 0;
+#else
+        ((ActStatus *)((char *)act + 0x18))->ll &= ~(1LL << 54);
+        ACTGameView_Loop((void *)self);
+        brain_val.pad58F1 = 0;
+#endif
         brain_val.modeChanged = 0;
         girlBrainMain_PositionUpdate();
         girlBrainMain_MakeOthersList();
@@ -1467,14 +1648,25 @@ void subGirlBrainMain(GObj *volatile self)
         }
         {
             int tbl[5][2] = {{1633, 1634}, {1631, 1632}, {2024, 2025}, {2022, 2023}, {-1, 0}};
+#ifdef ICO_HOST
             GObj *ent;
+#else
+            char *ent;
+#endif
             void *g;
             int i;
 
+#ifdef ICO_HOST
             ent = GOBJ_SUB(self)->parent.obj;
             if (ent && ((int *)boyGObj) && GOBJ_ACT(((int *)boyGObj))->actMode == 51) {
                 for (i = 0; tbl[i][0] != -1; i++) {
                     if (ent->labelId == tbl[i][0]) {
+#else
+            ent = *(char **)GOBJ_SUB(self);
+            if (ent && ((int *)boyGObj) && GOBJ_ACT(((int *)boyGObj))->actMode == 51) {
+                for (i = 0; tbl[i][0] != -1; i++) {
+                    if (*(int *)(ent + 0x8) == tbl[i][0]) {
+#endif
                         g = isysGObjSearchFromObjLayoutID(tbl[i][1]);
                         if (g) {
                             mode = 8;
@@ -1924,6 +2116,8 @@ static inline void girlBrainSetMoveDir(float *d) /* derived name */
     s->dir[2] = d[2];
 }
 
+#ifdef ICO_HOST
+
 static int isHideRecheck(float *from, float *to, float *root, float *rad)
 {
     float v0[4];
@@ -1952,6 +2146,8 @@ static int isHideRecheck(float *from, float *to, float *root, float *rad)
     return 0;
 }
 
+#endif
+
 void subGirlBrain_Hide(GObj *volatile self)
 {
     float hp[4];
@@ -1965,6 +2161,36 @@ void subGirlBrain_Hide(GObj *volatile self)
 
     /* isHideRecheck, a GNU nested function: it writes the enclosing `rad`
        through the static chain. */
+#ifndef ICO_HOST
+    int isHideRecheck(float *from, float *to, float *root)
+    {
+        float v0[4];
+        float v1[4];
+        float v2[4];
+        int i;
+        int r;
+
+        sceVu0SubVector(v0, from, root);
+        sceVu0SubVector(v1, to, root);
+        for (i = 0; i < brain_val.listB.num; i++) {
+            sceVu0SubVector(v2, brain_val.listB.ent[i].pos, root);
+            r = _RotyGV(v0, v2);
+            if ((r < 0 ? -r : r) < 45) {
+                rad = 80.0f;
+                return 1;
+            }
+        }
+        r = _RotyGV(v0, v1);
+        if (!((r < 0 ? -r : r) < 46)) {
+            return 1;
+        }
+        if (_DistxzSqGV(from, root) < _DistxzSqGV(to, root) &&
+            !(_DistxzSqGV(from, to) < 25600.0f)) {
+            return 1;
+        }
+        return 0;
+    }
+#endif
 
     float dir[4];
 
@@ -1978,7 +2204,11 @@ void subGirlBrain_Hide(GObj *volatile self)
             brain_val.warn = 1;
         }
         _girlBrainHide_MakeHidePoint(cand, rad);
+#ifdef ICO_HOST
         if (isHideRecheck(hp, cand, test_CURRENTROOT((boyGObj)), &rad)) {
+#else
+        if (isHideRecheck(hp, cand, test_CURRENTROOT((boyGObj)))) {
+#endif
             rad = _DistxzGV(test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
             rad = (rad < 200.0f) ? 200.0f : ((800.0f < rad) ? 800.0f : rad);
             _girlBrainHide_MakeHidePoint(hp, rad);
@@ -2086,6 +2316,8 @@ static inline unsigned char isRunawayPointClear(float *p, float *girl) /* derive
     return 1;
 }
 
+#ifdef ICO_HOST
+
 static int CorrectList(float (*list)[4], float *p, int n)
 {
     int i;
@@ -2112,11 +2344,40 @@ static int CorrectList(float (*list)[4], float *p, int n)
     return num;
 }
 
+#endif
+
 static int girlBrainRunawaySearchPoint(float *goal, float *out, float *p)
 {
     /* CorrectList, a GNU nested function placed inside its parent's body.  It
        reads nothing of the parent's frame (its scratch list is a file
        static). */
+#ifndef ICO_HOST
+    int CorrectList(float (*list)[4], float *p, int n)
+    {
+        int i;
+        int num;
+
+        num = 0;
+        for (i = 0; i < n; i++) {
+            if (!isNearPoint(p, list[i])) {
+                float *d = correctListWork[num];
+
+                d[0] = list[i][0];
+                d[1] = list[i][1];
+                d[2] = list[i][2];
+                num++;
+            }
+        }
+        for (i = 0; i < num; i++) {
+            float *s = correctListWork[i];
+
+            list[i][0] = s[0];
+            list[i][1] = s[1];
+            list[i][2] = s[2];
+        }
+        return num;
+    }
+#endif
 
     GObj *g;
     Act *sub;
@@ -2491,6 +2752,8 @@ inline void subGirlBrain_DangerEnv(GObj *volatile self)
     _ACTWait(0);
 }
 
+#ifdef ICO_HOST
+
 static int Danger_Bomb_GetSafePosition(float rad, float *dst, float *center, float *cur,
                                        ICO_WORD ok)
 {
@@ -2528,12 +2791,51 @@ static int Danger_Bomb_GetSafePosition(float rad, float *dst, float *center, flo
     return found;
 }
 
+#endif
+
 static void Danger_Bomb(GObj *self)
 {
     /* GetSafePosition, a GNU nested function; each Danger_* parent carries
      * its own copy.  The float radius is the first parameter, and the last
      * parameter, the boy position the callers hand in and this copy never
      * reads, is reused as the collision flag. */
+#ifndef ICO_HOST
+    int GetSafePosition(float rad, float *dst, float *center, float *cur, int ok)
+    {
+        float dir[4];
+        float pos[4];
+        float best;
+        float d;
+        int found;
+        int i;
+
+        best = 0.0f;
+        found = 0;
+        for (i = 0; i < 8; i++) {
+            memset(dir, 0, 0x10);
+            dir[2] = rad;
+            _ApplyRyGV(dir, (float)(i * 45 - 180) * 3.1415927f / 180.0f);
+            sceVu0AddVector(pos, center, dir);
+            ok = ACTCheckCollis_SAFE(200.0f, center, pos, 0, pos, 40);
+            if (ok) {
+                d = _DistGV(center, pos);
+                if (best < d) {
+                    best = d;
+                    dst[0] = pos[0];
+                    dst[1] = pos[1];
+                    dst[2] = pos[2];
+                    found = 1;
+                }
+            }
+        }
+        if (found && _DistSqGV(dst, center) < _DistSqGV(cur, center)) {
+            dst[0] = cur[0];
+            dst[1] = cur[1];
+            dst[2] = cur[2];
+        }
+        return found;
+    }
+#endif
     float goal[4];
     float girl[4];
     float obj[4];
@@ -2560,8 +2862,13 @@ retry:
         obj[2] = test_CURRENTROOT(bomb)[2];
         GetRootProjectionPosOfGObj(base, bomb);
         _ACTWait(1);
+#ifdef ICO_HOST
         Danger_Bomb_GetSafePosition(500.0f, goal, test_CURRENTROOT(bomb), girl,
                                     (ICO_WORD)test_CURRENTROOT((boyGObj)));
+#else
+        GetSafePosition(500.0f, goal, test_CURRENTROOT(bomb), girl,
+                        (int)test_CURRENTROOT((boyGObj)));
+#endif
         _ACTWait(1);
         p = ACTWayMove_BeginDetail(self, girl, goal, 0, 0, 0);
         r = p;
@@ -2606,6 +2913,8 @@ retry:
     }
 }
 
+#ifdef ICO_HOST
+
 static int Danger_Gondola_GetSafePosition(float rad, float *dst, float *center, float *cur,
                                           ICO_WORD ok)
 {
@@ -2648,11 +2957,55 @@ static int Danger_Gondola_GetSafePosition(float rad, float *dst, float *center, 
     return found;
 }
 
+#endif
+
 static void Danger_Gondola(GObj *self)
 {
     /* Danger_Gondola's own copy of the nested GetSafePosition: the candidate
      * is tested from 70 below the current position at the current height,
      * and ranked by the XZ distance from the centre. */
+#ifndef ICO_HOST
+    int GetSafePosition(float rad, float *dst, float *center, float *cur, int ok)
+    {
+        float dir[4];
+        float pos[4];
+        float base[4];
+        float best;
+        float d;
+        int found;
+        int i;
+
+        best = 0.0f;
+        found = 0;
+        for (i = 0; i < 8; i++) {
+            memset(dir, 0, 0x10);
+            dir[2] = rad;
+            _ApplyRyGV(dir, (float)(i * 45 - 180) * 3.1415927f / 180.0f);
+            sceVu0AddVector(pos, center, dir);
+            pos[1] = cur[1];
+            base[0] = cur[0];
+            base[2] = cur[2];
+            base[1] = cur[1] - 70.0f;
+            ok = ACTCheckCollis_SAFE(200.0f, base, pos, 0, pos, 40);
+            if (ok) {
+                d = _DistxzSqGV(center, pos);
+                if (best < d) {
+                    best = d;
+                    dst[0] = pos[0];
+                    dst[1] = pos[1];
+                    dst[2] = pos[2];
+                    found = 1;
+                }
+            }
+        }
+        if (found && _DistSqGV(dst, center) < _DistSqGV(cur, center)) {
+            dst[0] = cur[0];
+            dst[1] = cur[1];
+            dst[2] = cur[2];
+        }
+        return found;
+    }
+#endif
     float goal[4];
     float girl[4];
     float obj[4];
@@ -2678,8 +3031,13 @@ retry:
         obj[2] = test_CURRENTROOT(gondola)[2];
         GetRootProjectionPosOfGObj(base, gondola);
         _ACTWait(1);
+#ifdef ICO_HOST
         Danger_Gondola_GetSafePosition(300.0f, goal, test_CURRENTROOT(gondola), girl,
                                        (ICO_WORD)test_CURRENTROOT((boyGObj)));
+#else
+        GetSafePosition(300.0f, goal, test_CURRENTROOT(gondola), girl,
+                        (int)test_CURRENTROOT((boyGObj)));
+#endif
         _ACTWait(1);
         p = ACTWayMove_BeginDetail(self, girl, goal, 0, 0, 0);
         r = p;
@@ -2730,6 +3088,8 @@ retry:
 
 /* the three escape angles Danger_Box's safe-position search tries */
 static int dangerEscapeAngle[3] = {0, -90, 90}; /* derived name */
+
+#ifdef ICO_HOST
 
 static int Danger_Box_GetSafePosition(float *dst, float *way, float *center, float rad, ICO_WORD ok,
                                       int mode, float *girl)
@@ -2797,12 +3157,81 @@ static int Danger_Box_GetSafePosition(float *dst, float *way, float *center, flo
     return found;
 }
 
+#endif
+
 static void Danger_Box(GObj *self)
 {
     /* GetSafePosition, a GNU nested function; see Danger_Bomb for the
      * parameter-order note.  This copy takes six integer parameters; the
      * fifth (the boy root the callers hand in) is never read and is reused
      * as the collision flag. */
+#ifndef ICO_HOST
+    int GetSafePosition(float *dst, float *way, float *center, float rad, int ok, int mode,
+                        float *girl)
+    {
+        float dir[4];
+        float pos[4];
+        float from[4];
+        float best;
+        float d;
+        int found;
+        int i;
+        int ang;
+
+        best = 0.0f;
+        found = 0;
+        for (i = 0; i < 3; i++) {
+            memset(dir, 0, 0x10);
+            dir[2] = rad;
+            if (i == 0 && !isBoyPushBoxTruck()) {
+                continue;
+            }
+            ang = (int)(_GetDirection(test_CURRENTORIENT((boyGObj))) / 3.1415927f * 180.0f) +
+                  dangerEscapeAngle[i];
+            if (ang >= 181) {
+                ang -= 360;
+            }
+            if (ang <= -181) {
+                ang += 360;
+            }
+            _ApplyRyGV(dir, (float)ang * 3.1415927f / 180.0f);
+            sceVu0AddVector(pos, center, dir);
+            pos[1] = center[1];
+            from[0] = center[0];
+            from[2] = center[2];
+            from[1] = center[1] - 70.0f;
+            ok = ACTCheckCollis_SAFE(200.0f, from, pos, 0, pos, 40);
+            if (ok) {
+                d = _DistxzSqGV(way, pos);
+                if (mode != 1) {
+                    if (_DistxzSqGV(pos, way) < _DistxzSqGV(way, center)) {
+                        continue;
+                    }
+                }
+                if (_DistxzSqGV(pos, girl) < 3600.0f) {
+                    continue;
+                }
+                if (best < d) {
+                    best = d;
+                    dst[0] = pos[0];
+                    dst[1] = pos[1];
+                    dst[2] = pos[2];
+                    found = 1;
+                }
+            }
+        }
+        if (found) {
+            /* both calls are evaluated and the comparison dropped: the body of
+             * this test is empty in the shipped build */
+            if (_DistSqGV(dst, way) < _DistSqGV(center, way)) {}
+        } else {
+            dst[0] = center[0];
+            dst[1] = center[1];
+            dst[2] = center[2];
+        }
+        return found;
+    }
+#endif
     float goal[4];
     float girl[4];
     float objp[4];
@@ -2856,11 +3285,17 @@ static void Danger_Box(GObj *self)
         way[2] = sideB[2];
     }
     _ACTWait(1);
+#ifdef ICO_HOST
     if (!Danger_Box_GetSafePosition(goal, way, girl, rad, (ICO_WORD)test_CURRENTROOT((boyGObj)), 0,
                                     girl)) {
         GetRootProjectionPosOfGObj(cur, box);
         if (!Danger_Box_GetSafePosition(goal, way, cur, rad, (ICO_WORD)test_CURRENTROOT((boyGObj)),
                                         1, girl)) {
+#else
+    if (!GetSafePosition(goal, way, girl, rad, (int)test_CURRENTROOT((boyGObj)), 0, girl)) {
+        GetRootProjectionPosOfGObj(cur, box);
+        if (!GetSafePosition(goal, way, cur, rad, (int)test_CURRENTROOT((boyGObj)), 1, girl)) {
+#endif
             debug_StdPrintfDummy("box escape position not found");
             goal[0] = girl[0];
             goal[1] = girl[1];
@@ -2908,6 +3343,8 @@ static void Danger_Box(GObj *self)
     }
 }
 
+#ifdef ICO_HOST
+
 static int Danger_Rotobject_GetSafePosition(float rad, float *dst, float *center, float *girl,
                                             ICO_WORD ok)
 {
@@ -2949,10 +3386,53 @@ static int Danger_Rotobject_GetSafePosition(float rad, float *dst, float *center
     return found;
 }
 
+#endif
+
 static void Danger_Rotobject(GObj *self)
 {
     /* GetSafePosition, a GNU nested function; see Danger_Bomb for the
      * parameter-order note. */
+#ifndef ICO_HOST
+    int GetSafePosition(float rad, float *dst, float *center, float *girl, int ok)
+    {
+        float boy[4];
+        float dir[4];
+        float pos[4];
+        float from[4];
+        float best;
+        float d;
+        int found;
+        int i;
+
+        boy[0] = test_CURRENTROOT((boyGObj))[0];
+        boy[1] = test_CURRENTROOT((boyGObj))[1];
+        boy[2] = test_CURRENTROOT((boyGObj))[2];
+        best = 0.0f;
+        found = 0;
+        for (i = 0; i < 4; i++) {
+            memset(dir, 0, 0x10);
+            dir[2] = rad;
+            _ApplyRyGV(dir, (float)(i * 90 - 135) * 3.1415927f / 180.0f);
+            sceVu0AddVector(pos, center, dir);
+            pos[1] = girl[1];
+            from[0] = girl[0];
+            from[1] = girl[1] - 70.0f;
+            from[2] = girl[2];
+            ok = ACTCheckCollis_SAFE(200.0f, from, pos, 0, pos, 30);
+            if (ok) {
+                d = _DistxzSqGV(boy, pos);
+                if (best < d) {
+                    best = d;
+                    dst[0] = pos[0];
+                    dst[1] = pos[1];
+                    dst[2] = pos[2];
+                    found = 1;
+                }
+            }
+        }
+        return found;
+    }
+#endif
     float goal[4];
     float girl[4];
     float objp[4];
@@ -2973,8 +3453,13 @@ static void Danger_Rotobject(GObj *self)
     objp[2] = test_CURRENTROOT(obj)[2];
     GetRootProjectionPosOfGObj(base, obj);
     _ACTWait(1);
+#ifdef ICO_HOST
     if (!Danger_Rotobject_GetSafePosition(300.0f, goal, test_CURRENTROOT(obj), girl,
                                           (ICO_WORD)test_CURRENTROOT((boyGObj)))) {
+#else
+    if (!GetSafePosition(300.0f, goal, test_CURRENTROOT(obj), girl,
+                         (int)test_CURRENTROOT((boyGObj)))) {
+#endif
         while (1) {
             sub->stick.mag = 0.0f;
             _ACTWait(1);
@@ -3665,6 +4150,8 @@ inline void afterGirlHand(ICO_WORD_PTR(GObj *) self)
    stays in .data */
 GirlStand handmgr = {0};
 
+#ifdef ICO_HOST
+
 #include "girl_act_hand.c.inc"
 
 static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
@@ -3695,9 +4182,75 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
             *mode = 2;
             break;
         case 2:
+#else
+void actGirlHand(GObj *volatile self)
+{
+#include "girl_act_hand.c.inc"
+    void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
+    {
+        MotionDef *rec;
+        *mode = ((int *)((int *)boyGObj)[0x59])[0xD];
+        *p1 = 0;
+        *p2 = 0;
+        *p3 = 0;
+        switch (*mode) {
+        case 14:
+            *mode = 1;
+            break;
+        case 15:
+            *mode = 1;
+            break;
+        case 8:
+            *mode = 1;
+            break;
+        case 2:
+        case 3:
+            if (((int *)((int *)boyGObj)[0x59])[0x55] != 0) {
+                *mode = 2;
+            }
+            rec = motionKind + ((int *)((int *)boyGObj)[0x57])[0x128];
+            switch ((rec->modeBits.word >> 22) & 3) {
+            case 1:
+                *mode = 2;
+                break;
+            case 2:
+                *mode = 3;
+                break;
+            }
+            if (*mode == 3) {
+                unsigned long long f =
+                    *(unsigned long long *)((char *)((int *)((int *)boyGObj)[0x59])[0x1A2] + 0x448);
+                if ((int)(f >> 33) & 1) {
+                    *mode = 1;
+                } else if ((int)(f >> 32) & 1) {
+                    *mode = 2;
+                }
+            }
+            if (*mode == 2) {
+                unsigned long long f =
+                    *(unsigned long long *)((char *)((int *)((int *)boyGObj)[0x59])[0x1A2] + 0x448);
+                if ((int)(f >> 33) & 1) {
+                    *mode = 1;
+                }
+            }
+            break;
+        case 36:
+            if (((int *)((int *)boyGObj)[0x59])[0xF] == 0x5E) {
+                *p2 = 1;
+            } else {
+                *mode = 1;
+            }
+            break;
+        case 5:
+        case 13:
+        case 17:
+        case 18:
+        case 68:
+#endif
             *mode = 3;
             break;
         }
+#ifdef ICO_HOST
         if (*mode == 3) {
             unsigned long long f = ICO_RAW(unsigned long long, GOBJ_WORK(boyGObj), 0x448,
                                            ((ActStatusWord *)&GOBJ_WORK(boyGObj)->stopFrames)->q);
@@ -3734,6 +4287,9 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
 
 void actGirlHand(GObj *volatile self)
 {
+#else
+    }
+#endif
     float look[4];
     float d[4];
     float dir[4];
@@ -3970,7 +4526,11 @@ void actGirlHand(GObj *volatile self)
             case 1: {
                 float speed = (dist - 80.0f) / 80.0f + 0.6f;
                 sub->motReq = SetMotionRequest((void *)self, 0xE, sub->env.motOriReq);
+#ifdef ICO_HOST
                 HandMgr_Speed(self, speed);
+#else
+                HandMgr_Speed(speed);
+#endif
                 if (mode == st || p1 != 0) {
                     if (dist < 80.0f) {
                         st = 0;
@@ -3985,8 +4545,13 @@ void actGirlHand(GObj *volatile self)
             case 2: {
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 0x10, sub->env.motOriReq);
+#ifdef ICO_HOST
                 ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x100000;
                 HandMgr_Speed(self, speed);
+#else
+                *(long long *)((char *)sub + 0x20) |= 0x100000;
+                HandMgr_Speed(speed);
+#endif
                 if (mode == 1) {
                     st = 3;
                     if (v >= 0x33) {
@@ -4007,8 +4572,13 @@ void actGirlHand(GObj *volatile self)
                 break;
             }
         }
+#ifdef ICO_HOST
         flag =
             handmgr.far100 && (box = (unsigned char *)&GOBJ_WORK(girlGObj)->handCl)[1] && box[0x20];
+#else
+        flag = handmgr.far100 && (box = (unsigned char *)GOBJ_ACT(girlGObj)->work + 0x540)[1] &&
+               box[0x20];
+#endif
         if (flag) {
             cnt2++;
         } else {

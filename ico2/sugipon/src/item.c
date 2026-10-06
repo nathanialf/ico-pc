@@ -392,6 +392,8 @@ static inline int breakItemOnFloorHit(GObj *gobj, float len, float *pos,
     return 0;
 }
 
+#ifdef ICO_HOST
+
 static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
 {
     ClipWork w;
@@ -418,6 +420,8 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     }
 }
 
+#endif
+
 static void uncarriedItemGeo(GObj *gobj)
 {
     ObjNode link;  /* 0x00 */
@@ -425,6 +429,34 @@ static void uncarriedItemGeo(GObj *gobj)
     float npos[4]; /* 0x20 */
     float vel[4];  /* 0x30 */
     ItemWork *p;   /* 0x40 */
+#ifndef ICO_HOST
+
+    void floatGeo(float t)
+    {
+        ClipWork w;
+
+        _ScaleVector(vel, vel, t);
+        _AddVectorXYZ(vel, vel, p->drain);
+        GetSlerpQuaternion(GOBJ_SUB(gobj)->root.itemQuat, GOBJ_SUB(gobj)->root.itemQuat,
+                           IdentityQuaternion, t);
+        RegularizeQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
+        CopyVector(w.pt[0], pos);
+        CopyVector(w.pt[1], w.pt[0]);
+        w.radius = 200.0f;
+        ClipWallWaveForce(&w);
+        if (w.wall.elem != 0) {
+            float d = GetDistanceFromPlane(w.normal.f, w.pt[0]);
+
+            d += w.radius;
+            if (0.0f < d) {
+                float k = 1.0f / (d + 50.0f);
+
+                vel[0] += w.normal.f[0] * 100.0f * k;
+                vel[2] += w.normal.f[2] * 100.0f * k;
+            }
+        }
+    }
+#endif
 
     float q[4];  /* 0x50 */
     ClipWork cw; /* 0x60 */
@@ -449,7 +481,11 @@ static void uncarriedItemGeo(GObj *gobj)
             float r = (d + 20.0f) / 40.0f;
 
             vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f * r;
+#ifdef ICO_HOST
             floatGeo(1.0f - r * 0.08f, gobj, vel, p, pos);
+#else
+            floatGeo(1.0f - r * 0.08f);
+#endif
             if (p->wave == 0) {
                 CopyVector(q, pos);
                 q[1] = GOBJ_SUB(gobj)->ctrl.waterY;
@@ -457,7 +493,11 @@ static void uncarriedItemGeo(GObj *gobj)
             }
         } else if (0.0f < d) {
             vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f;
+#ifdef ICO_HOST
             floatGeo(0.92f, gobj, vel, p, pos);
+#else
+            floatGeo(0.92f);
+#endif
         }
         vel[1] += GetTableSin(p->wave) * 0.1f;
         p->wave += 1024;

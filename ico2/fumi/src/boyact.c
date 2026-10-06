@@ -698,6 +698,8 @@ float test_rope_velo[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
 float add_rope_vec[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
+#ifdef ICO_HOST
+
 static void UpdateGeo(void *self, BgaEntry *p)
 {
     float dir[4];
@@ -724,6 +726,35 @@ static void UpdateGeo(void *self, BgaEntry *p)
 
 static void BoyBgaManager(void *self, int id, void *dst)
 {
+#else
+static void BoyBgaManager(void *self, int id, void *dst)
+{
+    /* UpdateGeo is a GNU nested function: it reads `self` out of
+       BoyBgaManager's frame through the static chain. */
+    void UpdateGeo(BgaEntry * p)
+    {
+        float dir[4];
+        float tmp[4];
+        void *obj;
+
+        if (p->b0F != 0) {
+            dir[0] = test_CURRENTORIENT(self)[0];
+            dir[1] = test_CURRENTORIENT(self)[1];
+            dir[2] = test_CURRENTORIENT(self)[2];
+        } else {
+            obj = isysGObjSearchFromObjKindID_begin(47);
+            _OrientXZGV(dir, test_CURRENTROOT(obj), test_CURRENTROOT(self));
+        }
+        sceVu0ScaleVector(dir, dir, p->f10);
+        ActGame_GetOrientQ(p->f30, dir, 0);
+        sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f08);
+        sceVu0AddVector(p->f20, test_CURRENTROOT(self), tmp);
+        sceVu0ScaleVector(tmp, test_CURRENTORIENT(self), p->f04);
+        _ApplyRyGV(tmp, 1.5707964f);
+        sceVu0AddVector(p->f20, p->f20, tmp);
+        p->f20[1] += (float)p->b0D;
+    }
+#endif
     BgaEntry *p;
     int i;
     int v;
@@ -744,11 +775,19 @@ found:
         return;
     }
     if (p->b0C != 0) {
+#ifdef ICO_HOST
         UpdateGeo(self, p);
+#else
+        UpdateGeo(p);
+#endif
         goto reload;
     }
     if (v == 0) {
+#ifdef ICO_HOST
         UpdateGeo(self, p);
+#else
+        UpdateGeo(p);
+#endif
     reload:
         v = *(int *)dst;
     }
@@ -1889,6 +1928,8 @@ static __inline__ void boyCamDebugDisp(int camOn, int looking) /* derived name *
 #endif
 }
 
+#ifdef ICO_HOST
+
 static void *searchWeapon(void) /* derived name */
 {
     void *g;
@@ -1901,6 +1942,8 @@ static void *searchWeapon(void) /* derived name */
     }
     return 0;
 }
+
+#endif
 
 void subBoyCollision(GObj *volatile self)
 {
@@ -2218,6 +2261,22 @@ void subBoyCollision(GObj *volatile self)
             }
             ACTParaStatus_Exec((void *)self);
             {
+#ifndef ICO_HOST
+                /* the weapon search, defined here and inlined into the test
+                   below */
+                inline void *searchWeapon(void) /* derived name */
+                {
+                    void *g;
+
+                    for (g = isysGObjSearchFromObjKindID_begin(0xE); g != 0;
+                         g = isysGObjSearchFromObjKindID_next(g)) {
+                        if (CheckWeaponKind(g) == 5) {
+                            return g;
+                        }
+                    }
+                    return 0;
+                }
+#endif
                 void *w;
 
                 if (girlGObj == 0 && (w = searchWeapon()) != 0) {
@@ -2381,14 +2440,22 @@ void actBoySwim(GObj *volatile self)
     Act *sub = GOBJ_ACT(self);
     int padReq = 0;
 
+#ifdef ICO_HOST
     BOY_EXT_F(self, holdBox, word2C0) = 0;
     sub->after = (void *)afterBoySwim;
     while (1) {
         GObj *box = BOY_EXT_F(self, box, holdObj);
+#else
+    BOY_EXT(self)->holdBox = 0;
+    sub->after = (void *)afterBoySwim;
+    while (1) {
+        GObj *box = BOY_EXT(self)->box;
+#endif
 
         if (sub->curMot == 0xAD) {
             sub->flags20.ll |= 0x800000000ULL;
         }
+#ifdef ICO_HOST
         if (BOY_EXT_F(self, holdBox, word2C0)) {
             RequestChangeHandMode(self, 0, 3, 1, box, 0, BOY_EXT_F(self, grip, holdPoint));
             BOY_EXT_F(self, grip, holdPoint)[3] = 1.0f;
@@ -2417,6 +2484,23 @@ void actBoySwim(GObj *volatile self)
             GOBJ_SUB(self)->root.filter.elem = 0;
 #else
             ((S12 *)&GOBJ_SUB(self)->root.filter)->c = 0;
+#endif
+#else
+        if (BOY_EXT(self)->holdBox) {
+            RequestChangeHandMode(self, 0, 3, 1, box, 0, BOY_EXT(self)->grip);
+            BOY_EXT(self)->grip[3] = 1.0f;
+            sceVu0ApplyMatrix(pos, *(void **)(GOBJ_SUBSLOT(box) + 0xC), BOY_EXT(self)->grip);
+            debug_NMarker(pos, 0xFF, 0, 0, 100.0f);
+            MoveFloatingBox(box, self,
+                            *(char **)(GOBJ_SUBSLOT(self) + 0xC) +
+                                GetSkeltonFocusNode(self, 0x13) * 0x40 + 0x30,
+                            BOY_EXT(self)->grip, 30.0f);
+            if (!(_DistSqGV(test_CURRENTROOT((void *)self), pos) < 4e+04f)) {
+                BOY_EXT(self)->holdBox = 0;
+            }
+            ((S12 *)(GOBJ_SUBSLOT(self) + 0x1C0))->a = (int)box;
+            ((S12 *)(GOBJ_SUBSLOT(self) + 0x1C0))->b = -1;
+            ((S12 *)(GOBJ_SUBSLOT(self) + 0x1C0))->c = 0;
 #endif
             if (!padReq) {
                 iosPadActRequest(boyPad, 6);
@@ -2767,6 +2851,7 @@ static int ditch_check_heroin_position(void)
     Act *s = GOBJ_ACT(boyGObj);
 
     sceVu0SubVector(buf, test_CURRENTROOT(girlGObj), test_CURRENTROOT(boyGObj));
+#ifdef ICO_HOST
     if (0.0f < sceVu0InnerProduct(buf, (float *)s->env.cliffOrient) &&
         _DistxzGV((char *)s->env.ditchPos, test_CURRENTROOT(girlGObj)) < 31.0f &&
         (girlGObj == 0 || boyGObj == 0 ||
@@ -2785,6 +2870,12 @@ static unsigned char isGirlWithinPullupHeight(void) /* derived name */
     GetRootProjectionPosOfGObj(girl, girlGObj);
     if (GOBJ_ACT(girlGObj)->actMode == 0x26 ||
         (boy[1] - girl[1] < 0.0f ? -(boy[1] - girl[1]) : boy[1] - girl[1]) < 50.0f) {
+#else
+    if (0.0f < sceVu0InnerProduct(buf, (float *)((char *)s + 0x4C0)) &&
+        _DistxzGV((char *)s + 0x510, test_CURRENTROOT(girlGObj)) < 31.0f &&
+        (girlGObj == 0 || boyGObj == 0 ||
+         !(test_CURRENTROOT(girlGObj)[1] > test_CURRENTROOT(boyGObj)[1] + 200.0f))) {
+#endif
         return 1;
     }
     return 0;
@@ -2794,10 +2885,30 @@ void actBoyPullupReady(GObj *volatile self)
 {
     float mv[4];
 
+#ifdef ICO_HOST
     Act *sub = GOBJ_ACT(self);
 
     ACTAdjustPlane(
         self, ICO_RAWP(char *, BOY_WALL(self), 0x8C0, (char *)&GOBJ_WORK(self)->intrReq.b.wall));
+#else
+    /* the helper is defined here and inlined at the pull-up test */
+    inline unsigned char isGirlWithinPullupHeight(void) /* derived name */
+    {
+        float boy[4];
+        float girl[4];
+
+        GetRootProjectionPosOfGObj(boy, boyGObj);
+        GetRootProjectionPosOfGObj(girl, girlGObj);
+        if (GOBJ_ACT(girlGObj)->actMode == 0x26 ||
+            (boy[1] - girl[1] < 0.0f ? -(boy[1] - girl[1]) : boy[1] - girl[1]) < 50.0f) {
+            return 1;
+        }
+        return 0;
+    }
+    Act *sub = GOBJ_ACT(self);
+
+    ACTAdjustPlane(self, BOY_WALL(self) + 0x8C0);
+#endif
     while (1) {
         if (GOBJ_WORK(self)->boxSideSet && motionKind[GOBJ_SUB(self)->ctrl.motion].playMode != 1) {
             _MoveGV(mv, test_CURRENTROOT(self), GOBJ_WORK(self)->boxSidePos, 3.0f);
@@ -2878,9 +2989,15 @@ void actBoyBelift(GObj *volatile self)
         ratio = 0.2f;
     }
     mode = GOBJ_ACT(girl)->enemy->liftKind == 3 ? 0 : 2;
+#ifdef ICO_HOST
     BOY_EXT_F(self, liftObj, liftedObj) = girl;
     beliftGirl = girl;
     BOY_EXT_F(self, liftLevel, liftLevel) = 10;
+#else
+    BOY_EXT(self)->liftObj = girl;
+    beliftGirl = girl;
+    BOY_EXT(self)->liftLevel = 10;
+#endif
     if (GOBJ_ACT(girl)->enemy->liftKind == 3) {
         RotQuaternionX(q.f, 0x4000);
     }
@@ -2891,7 +3008,11 @@ void actBoyBelift(GObj *volatile self)
     _ACTWait(1);
     while (1) {
         if (GOBJ_ACT(girl)->enemy->liftKind == 3 && (unsigned int)GOBJ_ACT(girl)->actMode == 0x61) {
+#ifdef ICO_HOST
             lv = BOY_EXT_F(self, liftLevel, liftLevel);
+#else
+            lv = BOY_EXT(self)->liftLevel;
+#endif
             lv = lv < 0 ? 0 : (10.0f < lv ? 10.0f : lv);
             lv = lv * 0.5f;
             dist = lv * 100.0f + 500.0f;

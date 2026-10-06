@@ -91,6 +91,8 @@ void actTitleCamera2(GObj *volatile self)
 void actTitleReadTimeDemo0(GObj *volatile self);
 void actTitleShortCut(GObj *volatile self);
 
+#ifdef ICO_HOST
+
 /* The timer countdown (tick) was a GNU nested function: it reads and writes
    the parent's `t`, now passed by pointer, and is inlined at both of
    its calls.  The tail after each demo (the thread priority and the fade out)
@@ -109,11 +111,34 @@ static inline int tick(int *pt) /* derived name */
     return 0;
 }
 
+#else
+/* The timer countdown is a GNU nested function declared inline at the head
+   of the body: it reads and writes the parent's `t` and is inlined at both of
+   its calls.  The tail after each demo (the thread priority and the fade out)
+   is written out in case 0 and again in case 1. */
+#endif
+
 void actOpDemo01(GObj *volatile self)
 {
     GObj *x = self;
     GProc *th;
     int t = (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
+#ifndef ICO_HOST
+
+    inline int tick(void) /* derived name */
+    {
+        if ((current_layout_id == 12 || current_layout_id == 13) && lt_continue_selected == 0) {
+            t--;
+        } else {
+            t = (60 - systemStatus[0] * 10) / systemStatus[1] * 10;
+        }
+        if (t < 0) {
+            current_layout_id = 55;
+            return 1;
+        }
+        return 0;
+    }
+#endif
 
     actInitialize(self);
     _ACTWait(1);
@@ -177,7 +202,11 @@ void actOpDemo01(GObj *volatile self)
                         opDemoNextMode = 2;
                         break;
                     }
+#ifdef ICO_HOST
                 } else if (tick(&t)) {
+#else
+                } else if (tick()) {
+#endif
                     opDemoMode = 2;
                     break;
                 }
@@ -200,7 +229,11 @@ void actOpDemo01(GObj *volatile self)
 
             while (1) {
                 _ACTWait(1);
+#ifdef ICO_HOST
                 if (titleSubEnd != 0 && tick(&t)) {
+#else
+                if (titleSubEnd != 0 && tick()) {
+#endif
                     lt_switch_layout(55);
                     opDemoMode = opDemoNextMode;
                     break;

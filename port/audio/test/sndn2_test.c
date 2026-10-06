@@ -2,7 +2,7 @@
  * port/audio/test/sndn2_test.c
  *
  * The SNDN2DRV host (sndn2_host.c, stream.c) and the Sg sequencer on the
- * host (sg/sound.c), checked against docs/research/sndn2drv.md (R1):
+ * host (sce/libsndn2/sound.c), checked against docs/research/sndn2drv.md (R1):
  *
  *   - transport: the init call (0x65) and tick calls (0x64) through the
  *     host SIF, the two alternating reply pages, the transfer counter at

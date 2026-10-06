@@ -1070,7 +1070,7 @@ OFF(McMgr, mask, 0x9C0);
 SIZE(McMgr, 0xA00); /* comment */
 #endif
 
-/* HandClInfo: runtime, ico2/fumi/include/act-game.h:18 */
+/* HandClInfo: runtime, ico2/fumi/include/act-game.h:19 */
 #if ICO_LAYOUT_EE
 OFF(HandClInfo, on, 0x0);
 OFF(HandClInfo, hit, 0x1);
@@ -1083,7 +1083,7 @@ OFF(HandClInfo, pad22, 0x22);
 OFF(HandClInfo, orient2, 0x30);
 #endif
 
-/* ActEffRec: runtime, ico2/fumi/include/act-game.h:32 */
+/* ActEffRec: runtime, ico2/fumi/include/act-game.h:33 */
 #if ICO_LAYOUT_EE
 OFF(ActEffRec, pos, 0x0);
 OFF(ActEffRec, dir, 0x10);
@@ -1093,7 +1093,7 @@ OFF(ActEffRec, kind, 0x28);
 OFF(ActEffRec, pad2C, 0x2C);
 #endif
 
-/* ActWork: runtime, ico2/fumi/include/act-game.h:44 */
+/* ActWork: runtime, ico2/fumi/include/act-game.h:46 */
 #if ICO_LAYOUT_EE
 OFF(ActWork, paraTbl, 0x0);
 OFF(ActWork, pad158, 0x158);
@@ -1213,7 +1213,7 @@ OFF(ActWork, frameHist, 0x928);
 OFF(ActWork, prevHist, 0x950);
 #endif
 
-/* LookTarget: overlay, ico2/fumi/include/act-game.h:289 */
+/* LookTarget: overlay, ico2/fumi/include/act-game.h:312 */
 OFF(LookTarget, kind, 0x0);
 SIZE(LookTarget, 0xC); /* comment */
 
@@ -1318,11 +1318,11 @@ OFF(PackKind, func, 0x20);
 SIZE(PackKind, 0x24); /* comment */
 #endif
 
-/* IdlingDef: overlay, ico2/fumi/include/commonact.h:54 */
+/* IdlingDef: overlay, ico2/fumi/include/commonact.h:58 */
 OFF(IdlingDef, motion, 0x0);
 SIZE(IdlingDef, 0xC); /* comment */
 
-/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:62 */
+/* IdleRangeRec: overlay, ico2/fumi/include/commonact.h:66 */
 OFF(IdleRangeRec, idleMotion, 0x0);
 OFF(IdleRangeRec, orientRow, 0x4);
 OFF(IdleRangeRec, orientRow2, 0x8);
@@ -1330,7 +1330,7 @@ OFF(IdleRangeRec, orientFirst, 0xC);
 OFF(IdleRangeRec, orientEnd, 0x10);
 SIZE(IdleRangeRec, 0x14); /* comment */
 
-/* ClingRec: overlay, ico2/fumi/include/commonact.h:74 */
+/* ClingRec: overlay, ico2/fumi/include/commonact.h:78 */
 OFF(ClingRec, rot, 0x0);
 OFF(ClingRec, pos, 0xC);
 OFF(ClingRec, mode, 0x18);
@@ -1338,12 +1338,12 @@ OFF(ClingRec, motion, 0x1C);
 OFF(ClingRec, node, 0x20);
 SIZE(ClingRec, 0x24); /* comment */
 
-/* BecPair: overlay, ico2/fumi/include/commonact.h:85 */
+/* BecPair: overlay, ico2/fumi/include/commonact.h:89 */
 OFF(BecPair, mot, 0x0);
 OFF(BecPair, req, 0x4);
 SIZE(BecPair, 0x8); /* comment */
 
-/* BossPart: runtime, ico2/fumi/include/enemy_act.h:43 */
+/* BossPart: runtime, ico2/fumi/include/enemy_act.h:44 */
 #if ICO_LAYOUT_EE
 OFF(BossPart, pos, 0x0);
 OFF(BossPart, effect, 0x10);
@@ -1355,7 +1355,7 @@ OFF(BossPart, pad1E, 0x1E);
 SIZE(BossPart, 0x20); /* comment */
 #endif
 
-/* EnemyBattleWork: runtime, ico2/fumi/include/enemy_act.h:56 */
+/* EnemyBattleWork: runtime, ico2/fumi/include/enemy_act.h:58 */
 #if ICO_LAYOUT_EE
 OFF(EnemyBattleWork, pad0, 0x0);
 OFF(EnemyBattleWork, speedRatioPri, 0x54);
@@ -3114,7 +3114,7 @@ OFF(FumbleRow, rotX, 0x10);
 OFF(FumbleRow, rotZ, 0x14);
 SIZE(FumbleRow, 0x18); /* comment */
 
-/* HandModeCmd: runtime, ico2/fumi/include/enemy_act.h:37 */
+/* HandModeCmd: runtime, ico2/fumi/include/enemy_act.h:38 */
 #if ICO_LAYOUT_EE
 SIZE(HandModeCmd, 0x8); /* config */
 #endif

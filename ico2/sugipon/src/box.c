@@ -1336,6 +1336,8 @@ static void initFloating(GObj *self)
     execFloating(self);
 }
 
+#ifdef ICO_HOST
+
 /* the range test, the range an integer converted at each compare (a nested
    inline in _checkItemBreak and _checkItemCollision) */
 static inline int isNearItem(float *v, int r) /* derived name */
@@ -1347,11 +1349,26 @@ static inline int isNearItem(float *v, int r) /* derived name */
     return 0;
 }
 
+#endif
+
 static int _checkItemBreak(void *pos)
 {
     float p[4];
     float d[4];
     GObj *o;
+#ifndef ICO_HOST
+
+    /* a nested inline: the range test, the range an integer converted at
+       each compare */
+    inline int isNearItem(float *v, int r) /* derived name */
+    {
+        if ((v[0] < 0.0f ? -v[0] : v[0]) < r && (v[1] < 0.0f ? -v[1] : v[1]) < r &&
+            (v[2] < 0.0f ? -v[2] : v[2]) < r) {
+            return 1;
+        }
+        return 0;
+    }
+#endif
 
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
@@ -1826,6 +1843,18 @@ static int _checkItemCollision(void *pos)
     float d[4];
     GObj *o;
 
+#ifndef ICO_HOST
+    /* the same nested range test as _checkItemBreak's */
+    inline int isNearItem(float *v, int r) /* derived name */
+    {
+        if ((v[0] < 0.0f ? -v[0] : v[0]) < r && (v[1] < 0.0f ? -v[1] : v[1]) < r &&
+            (v[2] < 0.0f ? -v[2] : v[2]) < r) {
+            return 1;
+        }
+        return 0;
+    }
+
+#endif
     for (o = isysGObjSearchFromObjKindID_begin(19); o != 0;
          o = isysGObjSearchFromObjKindID_next(o)) {
         if (CheckItemDead(o) != 0) {

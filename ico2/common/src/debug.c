@@ -1164,6 +1164,7 @@ inline float debug_GetTimerSec(void)
 inline float debug_GetTimerCount(void)
 {
 #ifdef ICO_HOST
+#ifdef ICO_HOST
     return -1.0f; /* no EE timer 1 on the host */
 #else
     if ((*T1_MODE) & 0x800) {
@@ -1178,6 +1179,12 @@ static void loadReport(char **dst, char *name, int size)
     debug_StdPrintfDummy(
         "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)", name,
         *dst, size);
+#else
+    if ((*T1_MODE) & 0x800) {
+        return -1.0f;
+    }
+    return (float)(*(volatile unsigned int *)T1_COUNT);
+#endif
 }
 
 int debug_Load(char **dst, char *name, int kind)
@@ -1197,66 +1204,118 @@ int debug_Load(char **dst, char *name, int kind)
     sceLseek(fd, 0, 0);
     sz = (size / 16 + 1) * 16;
     {
+#ifdef ICO_HOST
         /* the iosMallocDebug calls pass the source's own line numbers */
+#else
+        /* the line every arm prints once it has the file's address, a nested
+           function that reads dst, name and size from the enclosing frame;
+           the iosMallocDebug calls pass the source's own line numbers */
+        inline void loadReport(void)
+        {
+            debug_StdPrintfDummy(
+                "loading:\"\033[33m%s\033[m\"\n\t(address:\033[35m%p\033[m/size:\033[35m%d\033[m)",
+                name, *dst, size);
+        }
+#endif
         switch (kind) {
         case 0:
         default:
             *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c", 1958);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
             break;
         case 1:
             *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c", 1965);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
             *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c", 1973);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
             *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c", 1982);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
                                  (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
             break;
         case 5:
             *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c", 1991);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
                                  (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
             break;
         case 6:
             *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c", 2000);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
             *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c", 2007);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
             *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c", 2014);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
             *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c", 2019);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
             *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 2024);
+#ifdef ICO_HOST
             loadReport(dst, name, size);
+#else
+            loadReport();
+#endif
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
         }
@@ -1709,6 +1768,8 @@ static DbgCol brainColHigh[1] = {{0xFF, 0x40, 0x40, 0xFF}}; /* derived name */
 
 static DbgCol brainColMax[1] = {{0xFF, 0xFF, 0xFF, 0xFF}}; /* derived name */
 
+#ifdef ICO_HOST
+
 static void draw_batsu(DbgPos *p)
 {
     DbgCol col = markCol[0];
@@ -1733,6 +1794,30 @@ static void draw_shikaku(DbgPos *p)
 
 static void debug_brainBar(void)
 {
+#else
+static void debug_brainBar(void)
+{
+    void draw_batsu(DbgPos * p)
+    {
+        DbgCol col = markCol[0];
+        DbgVtx v[4];
+
+        make_mark_points(v, p, 3);
+        gif_Line(&v[0].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+        gif_Line(&v[1].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    }
+    void draw_shikaku(DbgPos * p)
+    {
+        DbgCol col = markCol[0];
+        DbgVtx v[4];
+
+        make_mark_points(v, p, 3);
+        gif_Line(&v[0].x, &v[1].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+        gif_Line(&v[1].x, &v[3].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+        gif_Line(&v[3].x, &v[2].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+        gif_Line(&v[2].x, &v[0].x, 0xFFFFFFFFU, 0xFFFFFFFFU, &col, 1);
+    }
+#endif
     DbgCol c0 = brainColLow[0];
     DbgCol c1 = brainColMid[0];
     DbgCol c2 = brainColHigh[0];
@@ -1855,8 +1940,12 @@ static DbgCol barScaleCol[1] = {{0xA0, 0xA0, 0xA0, 0xA0}}; /* derived name */
 static DbgCol barLabelCol[1] = {{0x80, 0x80, 0x80, 0x60}}; /* derived name */
 
 /* clang-format off */
+#ifdef ICO_HOST
+
 /* the time stamp of bar i, read by both bar loops */
 static int barTime(int i) { return debugBars[i].count; } /* derived name */
+
+#endif
 
 static void debug_DrawBar(void)
 {
@@ -1873,6 +1962,9 @@ static void debug_DrawBar(void)
     int i;
     int w;
     int len;
+#ifndef ICO_HOST
+    inline int barTime(void) { return debugBars[i].count; } /* derived name */ /* the time stamp of bar i, read by both bar loops */
+#endif
 
 
     flip = 0;
@@ -1921,7 +2013,11 @@ static void debug_DrawBar(void)
 
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
 
+#ifdef ICO_HOST
         int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#else
+        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#endif
 
         long long alpha;
 
@@ -2013,7 +2109,11 @@ static void debug_DrawBar(void)
 
     flip = 0;
     for (i = debug_debug_bar_start_item; i < debugBarCount && x < 320; i++) {
+#ifdef ICO_HOST
         int t = barTime(i) - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#else
+        int t = barTime() - (debug_debug_bar_start_item != 0 ? debugBars[debug_debug_bar_start_item - 1].count : 0);
+#endif
 
         int dpct;
         int pct;
@@ -2147,6 +2247,7 @@ inline void debug_ResetBar(void)
     debugBarCount = 0;
 }
 
+#ifdef ICO_HOST
 #ifndef ICO_HOST /* EE addresses as int (the snapshot's EE path) */
 
 static unsigned int *spix(int src, int px)
@@ -2199,6 +2300,57 @@ static void debug_ResizeSnapShot(int dst, int src, int w, int h)
 }
 
 #endif /* !ICO_HOST */
+#else
+
+/* Halves a 32-bit snapshot with a 2x2 box filter; the clamp and the
+   destination helper are nested functions. */
+static void debug_ResizeSnapShot(int dst, int src, int w, int h)
+{
+    int r, g, b, a;
+    int x, y, i, j;
+    int row;
+    unsigned char *p;
+
+    inline unsigned int *spix(int px)
+    {
+        return (unsigned int *)(px * 4 + src);
+    }
+    inline int clip(int v)
+    {
+        return v < 256 ? (v > -1 ? v : 0) : 255;
+    }
+    inline unsigned int *dpix(int px, int py)
+    {
+        return (unsigned int *)((py * ScreenWidth / 2 + px) * 4 + dst);
+    }
+
+    for (y = 0; y < h; y += 2) {
+        for (x = 0; x < w; x += 2) {
+            /* clang-format off */
+            r = 0; g = 0; b = 0; a = 0;
+            /* clang-format on */
+            for (i = 0; i < 2; i++) {
+                /* clang-format off */
+                for (j = 0, row = (y + i) * ScreenWidth, p = (unsigned char *)(spix(x) + row); j < 2; j++) {
+                    /* clang-format on */
+                    r = r + p[0] * 0.25f;
+                    g = g + p[1] * 0.25f;
+                    b = b + p[2] * 0.25f;
+                    a = a + p[3] * 0.25f;
+                    p += 4;
+                }
+            }
+            r = clip(r);
+            g = clip(g);
+            b = clip(b);
+            a = clip(a);
+            *dpix(x / 2, y / 2) = (a << 24) | (b << 16) | (g << 8) | r;
+        }
+    }
+    FlushCache(0);
+}
+
+#endif
 
 static inline void debug_WriteTim2(int fd, int *img, int w, int h) /* derived name */
 {
@@ -3290,14 +3442,22 @@ inline int debug_mcFormat(int port)
         if (r != 1) {
             return r;
         }
+#ifdef ICO_HOST
         iosMcFormat(DEBUG_MC_PORT);
+#else
+        iosMcFormat(port);
+#endif
         formatState++;
         break;
     case 1:
         if (formatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now formatting");
         }
+#ifdef ICO_HOST
         if (iosMcSync(DEBUG_MC_PORT) != 0) {
+#else
+        if (iosMcSync(port) != 0) {
+#endif
             formatState++;
         }
         break;
@@ -3321,14 +3481,22 @@ inline int debug_mcUnformat(int port)
         if (r != 1) {
             return r;
         }
+#ifdef ICO_HOST
         iosMcUnformat(DEBUG_MC_PORT);
+#else
+        iosMcUnformat(port);
+#endif
         unformatState++;
         break;
     case 1:
         if (unformatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now unformatting");
         }
+#ifdef ICO_HOST
         if (iosMcSync(DEBUG_MC_PORT) != 0) {
+#else
+        if (iosMcSync(port) != 0) {
+#endif
             unformatState++;
         }
         break;

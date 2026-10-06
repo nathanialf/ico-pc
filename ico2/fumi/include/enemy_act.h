@@ -32,6 +32,7 @@ typedef union { /* field names derived */
     } w;
 } EnemyStatusFlags; /* derived name */
 
+#ifdef ICO_HOST
 /* The pending hand-mode command record (act-game.c's RequestChangeHandMode):
    one for connecting and one for disconnecting, in the enemy work. */
 typedef struct HandModeCmd { /* field names derived */
@@ -49,6 +50,7 @@ typedef struct BossPart {
     char alive;   /* 0x1D */
     char pad1E[2];
 } BossPart;
+#endif
 
 /* The enemy work at sub+0x680: the running brain mode (+0x204) and the one
    _BrainMode_SetDirect requests (+0x208), the requested target inside the
@@ -158,6 +160,7 @@ typedef struct EnemyBattleWork { /* field names derived */
     char pad2E4[12];
     float rescueBoyPos[4];  /* 0x2F0, where the boy stands to pull the girl up, 60 short of her */
     float rescueGirlPos[4]; /* 0x300, the girl's position, 50 up: [1] is the height she is set to */
+#ifdef ICO_HOST
     int boxBarSound;        /* 0x310 */
     HandModeCmd handConnect;    /* 0x314 */
     HandModeCmd handDisconnect; /* 0x31C */
@@ -176,6 +179,15 @@ typedef struct EnemyBattleWork { /* field names derived */
     struct GObj *climbObj; /* 0x35C the chain or cage climbed */
     BossPart boss[5];      /* 0x360 the boss's gathering effect parts; the work is 0x400 bytes */
 } EnemyBattleWork;         /* derived name */
+#else
+    int boxBarSound; /* 0x310 */
+    char pad314[28];
+    float climbOrient[4]; /* 0x330 the orient of the chain or wall climbed */
+    float climbPos[4];    /* 0x340 the climb's position */
+    ClimbCol climbCol;    /* 0x350 the wall the climb holds, as GetChainClimbCollision fills it */
+    struct GObj *climbObj; /* 0x35C the chain or cage climbed */
+} EnemyBattleWork;   /* derived name */
+#endif
 
 /* enemy_act.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
@@ -228,7 +240,11 @@ void motEnemyStand(GObj *volatile self);
 void motEnemyWalk(GObj *volatile self);
 void motEnemyRun(GObj *volatile self);
 void actEnemyJump(GObj *volatile self);
+#ifdef ICO_HOST
 inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode);
+#else
+inline int EnemyUtil_isOtherStatus(GObj *self, int mode);
+#endif
 int isEnemyHyde(GObj *self);
 
 inline int _ApproachTarget(GObj *self, void *tgt, void *pos, void *fn, float range,

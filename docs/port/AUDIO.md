@@ -20,7 +20,7 @@
 | `spu2_tables.c` | the Gaussian interpolation table, the reverb resampling FIR, the reverb presets (transcribed from psx-spx) |
 | `spu2_internal.h` | tables and the envelope step, shared with the tests |
 | `spu2_sd.h`, `spu2_sd.c` | libsd's calls (`sceSdSetParam`, `SetSwitch`, `SetAddr`, `SetCoreAttr`, `SetEffectAttr`, `VoiceTrans`, `Init`) with libsd's encodings, as register writes |
-| `sg/sound.c`, `sg/sound.h` | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, this project's clean-room reconstruction, MIT), with host seams under `ICO_HOST` |
+| `sce/libsndn2/sound.c`, `sound.h` (repository root) | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, the decomp's clean-room reconstruction, MIT), with host seams under `ICO_HOST` |
 | `sndn2_host.h`, `sndn2_host.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
 | `stream.c`, `sndn2_internal.h` | the ADPCM stream engine (records, event queue, refill scheduler) and the PCM mixer |
 | `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device (window build), `volume.c` the output volume |
@@ -162,19 +162,18 @@ preset's address registers (PS1 units of 8 bytes) are written as halfwords
 
 ## The sequencer on the host
 
-The sequencer's source is `port/audio/sg/sound.c` and `sound.h`.
-`sce/libsndn2/sound.c` keeps a one-line include of it at its link-order
-path for the EE identity check, which compiles the same text with
-`ICO_HOST` undefined. Every host change is an `#ifdef ICO_HOST` arm whose
-`#else` is the EE text, or the macro `SG_HEAD_T`, which spells the EE's own
-`int`.
+The sequencer's source is `sce/libsndn2/sound.c` and `sound.h`, the
+decomp's own (upstream), which the host build compiles with `ICO_HOST`
+defined and the decomp's EE build compiles with it undefined, byte-matched.
+Every host change is an `#ifdef ICO_HOST` arm whose `#else` is the EE text,
+or the macro `SG_HEAD_T`, which spells the EE's own `int`.
 
-`port/compat/sound.h` includes `sg/sound.h` (the host view: `long long` for
+`port/compat/sound.h` includes `sce/libsndn2/sound.h` (the host view: `long long` for
 the EE's 64-bit `long` in `SgStPcmBufMode`, and the `SgSetSePitchDirect`
 prototype the EE header leaves out). None of the game's `soundSe*`,
 `Adpcm*` or raw `Sg*` call sites change.
 
-The seams (the comment at the top of `sg/sound.c` has the details):
+The seams (the comment at the top of `sound.c` has the details):
 
 | EE | host |
 |---|---|
@@ -477,7 +476,7 @@ read for the SPU2, and nothing was copied from any implementation.
 | SPU2 register layout (offsets of every register used here, the 0x760 block, address pairs) | ps2sdk `common/include/spu2_mmio_hwport.h`, https://github.com/ps2dev/ps2sdk (AFL-2.0; layout read, no code taken) |
 | libsd encodings and behaviour: `libsd-common.h`; `sceSdInit`, `sceSdSetParam`, `sceSdSetCoreAttr`, `sceSdSetEffectAttr` (preset order, ESA and address scaling), `sceSdVoiceTransStatus` | ps2sdk `common/include/libsd-common.h`, `iop/sound/libsd/src/freesd.c`, `effect.c`, `voice.c` (commit ac92a9f6); read for behaviour only |
 | SPU2 is two cores x 24 voices, 48 kHz, 2 MB; write-back areas (voice 1/3, core 0 output, dry/wet mixes) at halfword addresses 0x400-0x1FFF; free-running voices; IRQ on reverb accesses | PCSX2 wiki, "PCSX2 Documentation/SPU2 is more than just sound!" (prose article by Jake Stine), https://wiki.pcsx2.net/PCSX2_Documentation/SPU2_is_more_than_just_sound! (read via web.archive.org) |
-| What SNDN2DRV writes: VOLL/VOLR (raw words, sweep possible when a tone's byte at slot +0x2E is non-zero, see `sound.c`), ADSR, PITCH, KON/KOFF, VMIXEL/R, NON, noise clock, EVOL, MVOL, EEA, effect mode 4 (studio 3) on both cores, MMIX 0xFF0/0xFFC and the FMV values, AutoDMA PCM layout, ENVX/NAX polling | docs/research/sndn2drv.md, `port/audio/sg/sound.c` |
+| What SNDN2DRV writes: VOLL/VOLR (raw words, sweep possible when a tone's byte at slot +0x2E is non-zero, see `sound.c`), ADSR, PITCH, KON/KOFF, VMIXEL/R, NON, noise clock, EVOL, MVOL, EEA, effect mode 4 (studio 3) on both cores, MMIX 0xFF0/0xFFC and the FMV values, AutoDMA PCM layout, ENVX/NAX polling | docs/research/sndn2drv.md, `sce/libsndn2/sound.c` |
 | MMIX bit meanings | docs/research/sndn2drv.md ("PCM streams"), which read them from PCSX2 for behaviour; consistent with libsd's defaults 0xFF0/0xFFC |
 | every command's libsd calls, the packet layouts, the reply page, the stream records, event queue, refill scheduler, FILL flag patching and PCM mixer, the pitch formula and table location | docs/research/sndn2drv.md (from the user's `SNDN2DRV.IRX`) |
 | the SDL3 audio stream calls and their thread safety | SDL 3.4.18's `include/SDL3/SDL_audio.h` and `SDL_hints.h` (zlib) |

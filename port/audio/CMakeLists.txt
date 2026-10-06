@@ -34,23 +34,23 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
 endif()
 
 # --- Phase 4B: the Sg sequencer, the SNDN2DRV host and the output ------------
-# sg/sound.c is the EE sequencer the game calls (moved from sce/libsndn2/,
-# whose path keeps a one-line include of it for the PS2 build); it is
-# decomp-shaped game code, so it takes the game's warning set and ICO_HOST.
+# sce/libsndn2/sound.c is the EE sequencer the game calls (the decomp's
+# libsndn2.a(sound.o) with its ICO_HOST seams, kept upstream like ico2/); it
+# is decomp-shaped game code, so it takes the game's warning set and ICO_HOST.
 # sndn2_host.c and stream.c are the IOP driver behind its RPC; audio_host.c
 # renders the SPU2 once per vsync into the sinks (wav.c, and out_sdl.c in
 # the window build when SDL3 is there).
 add_library(ico_sndn2 STATIC
-    sg/sound.c
+    "${CMAKE_SOURCE_DIR}/sce/libsndn2/sound.c"
     sndn2_host.c
     stream.c
     audio_host.c
     wav.c)
 target_include_directories(ico_sndn2
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/sg" "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+    PRIVATE "${CMAKE_SOURCE_DIR}/sce/libsndn2" "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(ico_sndn2 PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-set_source_files_properties(sg/sound.c PROPERTIES
+set_source_files_properties("${CMAKE_SOURCE_DIR}/sce/libsndn2/sound.c" PROPERTIES
     COMPILE_DEFINITIONS "ICO_HOST=1"
     COMPILE_OPTIONS "${ICO_GAME_WARNINGS};-Wno-sign-compare;-Wno-unused-parameter;-Wno-unused-variable;-Wno-unused-but-set-variable;-Wno-pointer-sign")
 target_link_libraries(ico_sndn2 PUBLIC ico_audio ico_port_data ico_platform ico_options)

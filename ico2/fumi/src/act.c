@@ -209,6 +209,7 @@ inline void actInitialize_geo(void *self) {}
 void actInitialize_ext_charcter(GObj *self)
 {
     Act *g = GOBJ_ACT(self);
+#ifdef ICO_HOST
     char *p = (char *)iosMallocDebug(ios_partition_seki, sizeof(EnemyBattleWork), __FILE__, 885);
 
     memset(p, 0, sizeof(EnemyBattleWork));
@@ -220,6 +221,19 @@ void actInitialize_ext_charcter(GObj *self)
     GOBJ_ACT(self)->enemy->stoneHitWeapon = -1;
     GOBJ_ACT(self)->enemy->word2B0 = -1;
     InitMailAdditionalData(self, (struct MailAdditionalData *)GOBJ_ACT(self)->enemy);
+#else
+    char *p = (char *)iosMallocDebug(ios_partition_seki, 0x400, __FILE__, 885);
+
+    memset(p, 0, 0x400);
+    *(char **)((char *)g + 0x680) = p;
+    *(float *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x58) = 1.0f;
+    GOBJ_ACT(self)->enemy->stonePair = -1;
+    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2A4) = -1;
+    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2A8) = -1;
+    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2AC) = -1;
+    *(int *)(*(char **)((int)GOBJ_ACT(self) + 0x680) + 0x2B0) = -1;
+    InitMailAdditionalData(self, *(char **)((int)GOBJ_ACT(self) + 0x680));
+#endif
 }
 
 /* The actor object: only the work pointer at +0x164 matters here. */
@@ -604,8 +618,14 @@ typedef struct { /* field names derived */
 void BeforeFunc(GObj *self)
 {
     Act *w = GOBJ_ACT(self);
+#ifdef ICO_HOST
     char *mb = (char *)&((struct GObj *)self)->mailBox;
     IntrMail *intr;
+#else
+    char *mb = (char *)self + 0x54;
+    IntrMail *intr;
+    char *g;
+#endif
     void *act;
     IntrEnt *ent;
     int i;

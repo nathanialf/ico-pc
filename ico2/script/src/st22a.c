@@ -26,6 +26,8 @@ struct SqEntry *lightning = 0;
 
 static int lightningAnims[2] = {758, 759}; /* derived name */
 
+#ifdef ICO_HOST
+
 /* the lightning's volume for height y */
 static inline float getVolume(float y) /* derived name */
 {
@@ -41,6 +43,22 @@ static inline float getVolume(float y) /* derived name */
 
 void actSt22aLightningVolime(GObj *volatile self)
 {
+#else
+void actSt22aLightningVolime(GObj *volatile self)
+{
+    /* the lightning's volume for height y, nested in this function */
+    inline float getVolume(float y) /* derived name */
+    {
+        float lo = -8000.0f, hi = -1355.0f;
+
+        if (y < lo) {
+            return 0.0f;
+        } else if (hi < y) {
+            return 1.0f;
+        }
+        return (y - lo) / (hi - lo);
+    }
+#endif
     float *pos;
     float v;
 

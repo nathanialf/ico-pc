@@ -317,15 +317,6 @@ pointer to this file.
 
 ## From the final code review
 
-- **EE identity policy for `ico2/`.** Commit 4324315c lifted the GNU nested
-  functions to file-scope statics outside `ICO_HOST`, so the EE objects and
-  link change (LAYOUT.md "The EE objects must not change" and MATH.md's
-  gated pattern disagree with BUILDING.md's "The port changes `ico2/`
-  freely"). Either re-gate the lifts (`#ifdef ICO_HOST` lift, `#else` the
-  nested original, as `motionManager2.c`) or state that only `ICO_HOST`
-  edits after a named revision must be EE-neutral, and run
-  `tools/ee_identity.sh` with `tools/cc` over 83cb591a, d20be3fe, 718d1cc2,
-  6f50fa17 and the review's `ico2/` edits.
 - **A host-identifier gate for `ico2/`.** Fail CI when `ps2_*`, `ico_*`,
   `rd_*`, `_Static_assert` or `ICO_LAYOUT_*` appear outside `ICO_HOST` /
   `ICO_RD` in `ico2/` (two EE breaks, `particleEffect.c` `ps2_div` and
@@ -364,9 +355,9 @@ pointer to this file.
   to the title.
 - **m2v resolution change.** On `IVD_RES_CHANGED`, reset the decoder and
   reallocate the planes (`port/fmv/m2v.c`).
-- **`sg/sound.c` host UB.** Unsigned spellings for the `<< 24` packet words
-  and 8-byte alignment of `sgComContext` under `ICO_HOST` (needs an EE
-  identity check).
+- **`sce/libsndn2/sound.c` host UB.** Unsigned spellings for the `<< 24`
+  packet words and 8-byte alignment of `sgComContext` under `ICO_HOST`
+  (a decomp change: its byte-match gate decides).
 - **`vu1ref_Particle` bounds.** Pass the input's qword count and clamp the
   particle count to it (`rd_mesh.c` `rd_DrawVuParticles`).
 - **BGA last key (F12).** Log when the host's last-key path runs with

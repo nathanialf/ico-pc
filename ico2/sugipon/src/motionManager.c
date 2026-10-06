@@ -19,7 +19,13 @@
 #include "fieldCollision.h"
 #include "motionManager.h"
 #include "DisplayP2O.h"
+
+#ifdef ICO_HOST
+
 #include "GifPacket.h"
+
+#endif
+
 #include <libvu0.h>
 #include <assert.h>
 
