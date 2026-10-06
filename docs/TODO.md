@@ -139,6 +139,13 @@ editor's second pad, the two research items (freed model images,
 
 ## Follow-ups from the final code review
 
+- **Release workflow (left for a later version; no hardware needed).** CI only
+  builds and tests; releases are made by hand with `gh release create`. A
+  workflow on a `v*` tag should build the Windows and Linux packages on the
+  runner (`tools/package_win.sh`, `tools/package_linux.sh`), attach them and
+  publish the release with the notes, so a green tag releases itself.
+
+
 Each was filed by the review or by a package and not done; what each needs
 is in its title.
 
