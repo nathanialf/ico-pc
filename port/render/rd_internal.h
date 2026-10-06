@@ -773,6 +773,47 @@ int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);
 const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
                                int firstOfTick, RdInterpStats *stats);
 void rd__InterpShutdown(void);
+
+/* Package PHOTO (rd_photo.c, rd_interp.c; rd.h rd_SetPhotoCamera).
+ * rd__PhotoFrame builds, into rd_interp.c's output frame, pin replayed
+ * through ov: the frame's camera and VU common block are ov's, every VU
+ * draw through pin's camera is re-based onto it (E = Vc^-1 Vov, L = Pov
+ * Pc^-1, camRebase), CPU-projected draws are left as recorded, and with
+ * RD_PHOTO_HIDE_UI the UI-space and full-screen RDC_SCREEN draws and the
+ * RDC_OVERLAY_TEXT items and ops of lists 11 and 12 become RDC_NOP.  The
+ * motion blur's feedback stands for 4 ticks (the trail of the camera's
+ * moves dies at once) and the aura's FEED128 writes run only when
+ * firstOfTick.  Returns NULL when the copy fails. */
+typedef struct RdPhotoStats {
+    uint32_t rebased;    /* VU draws re-based onto ov */
+    uint32_t keptCamera; /* VU draws through another camera (CAM_NONE): kept */
+    uint32_t dropped;    /* UI draws dropped (RD_PHOTO_HIDE_UI) */
+} RdPhotoStats;
+
+const RdFrame *rd__PhotoFrame(const RdFrame *pin, const RdCamera *ov, uint32_t flags,
+                              int firstOfTick, RdPhotoStats *stats);
+/* rd_photo.c: the override's state and the pin.  rd__PhotoOn: the override
+ * is on; rd__PhotoPin: rd_EndFrame's hook for a closed frame (kept when it
+ * is not a keep frame and the override is on); rd__PhotoPinned: the pinned
+ * copy (NULL: none); rd__PhotoPinBytes: its lists and payload, bytes;
+ * rd__PhotoPresentFrame: the frame a present replays instead of the ring's
+ * (NULL: the override is off or nothing is pinned), firstOfTick from the
+ * pin's number; rd__PhotoAdoptTemp: rd__FrameReset's hook, true when the
+ * pin still refers to temporary target id, which it then frees itself
+ * when it lets the frame go; rd__PhotoShutdown: rd_Shutdown's. */
+bool rd__PhotoOn(void);
+void rd__PhotoPin(const RdFrame *f);
+const RdFrame *rd__PhotoPinned(void);
+size_t rd__PhotoPinBytes(void);
+const RdFrame *rd__PhotoPresentFrame(void);
+bool rd__PhotoAdoptTemp(uint32_t id);
+void rd__PhotoShutdown(void);
+/* rd_present.c's capture (rd.h rd_CapturePresented): whether one is armed;
+ * rd__CaptureRecord copies the output into the capture texture (from
+ * rd__PresentRecord, before the overlay); rd__CaptureFinish reads it back
+ * and writes the PNG (after the submit). */
+bool rd__CaptureArmed(void);
+void rd__CaptureFinish(void);
 /* The thresholds (world units are the game's centimetres) */
 #define RD_INTERP_JUMP_WORLD 300.0f  /* an object's or bone's origin, per tick */
 #define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */
@@ -1097,6 +1138,10 @@ const RdFrame *rd__PrevFrame(void);
 bool rd__ReadTarget(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* package PHOTO: a synchronous readback of an RHI texture (RGBA8 or BGRA8,
+ * w x h, tightly packed), leaving it in COPY_SRC (*state follows) */
+bool rd__ReadRhiTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
+                        size_t dstSize);
 /* Package R8: reads an image texture's level 0 back from the GPU as its
  * format holds it (tightly packed, w * h * rd__TexelBytes bytes); false
  * before its first upload. */

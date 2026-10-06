@@ -1189,9 +1189,9 @@ recorded ones (`rd_present`'s hash).
 **Reading the output.** `rd_ReadPresented` reads the last presented output
 (RGBA8, outputWidth × outputHeight), overlay included, from the headless
 output. The window build presents the swapchain image and keeps no copy,
-so there it returns false; a photo mode wants a copy of `out` taken at the
-end of `rd__PresentRecord` (the swapchain is created with transfer-source
-usage), which is where one would go.
+so there it returns false. Photo mode's capture (`rd_CapturePresented`,
+section 16, "Photo mode") copies `out` in either build, just before the
+overlay is drawn.
 
 ### The deferred text pass
 
@@ -1648,6 +1648,121 @@ more times.
 rigid camera, the prism blend, the unquantised positions and the present
 clock, for A/B comparison.
 
+### Photo mode
+
+`rd.h` `rd_SetPhotoCamera`, `rd_PhotoActive`, `rd_PhotoSceneCamera`,
+`rd_CapturePresented`, `rd_CaptureResult`; `rd_photo.c` (the override, the
+pin), `rd_interp.c` (`rd__PhotoFrame`, `camSetupOverride`, `camPhotoDraw`),
+`rd_present.c` (the capture); the state and the camera are
+`port/game/photo_mode.c`, the screen `port/ui/photo_ui.c`, the bridge
+`port/platform/window_host.c` (`photo_pump`). DISPLAY.md "Photo mode" is the
+player's description. Package PHOTO.
+
+**What the game does.** Photo mode is entered from the pause menu's Options
+screen, so the game is in its pause: the actors, particles, texture
+animations and camera do not advance (`systemStatus[5]`), but every tick
+still records and closes a full frame (lists 0 to 12) of the frozen scene
+with the pause screen's UI in list 11. The pause is not a keep frame:
+`fbKeep` is set only by stage changes, the boot signs and the ending
+(`StageManager.c`, `kanbanBoot.c`, `end.c`); in a window run of st04a
+(stage 11) 79 full frames were closed and pinned in 78 photo presents.
+Photo mode's own layout (`photo_ui.c`) has one masked row and no dimming
+(`colA` 0), so those frames hold the scene alone. Nothing of photo mode is
+game state: the layout proc writes `port/game/photo_mode.c` only, and a
+headless run with photo mode gives the same trace as the same pause
+without it.
+
+**The override.** The window turns photo mode's state into an `RdCamera` at
+every pump (`ico_photo_camera` over `rd_PhotoSceneCamera`, the game camera
+of the pinned frame) and passes it to `rd_SetPhotoCamera(ov,
+RD_PHOTO_HIDE_UI)`; NULL turns it off and calls `rd_CameraCut`, so the first
+game picture after it is not blended from the photo one. While it is on:
+
+- `rd_EndFrame` pins every frame it closes that is not a keep frame
+  (`rd__PhotoPin`: a deep copy of the lists and payload into buffers reused
+  from pin to pin; on the first call, the last such frame in the ring), so
+  the scene outlives the three-frame ring through any run of keep frames.
+  The copy names the source frame's temporary targets (reflections,
+  render-to-texture blocks) by id; when the ring reuses the source slot,
+  `rd__FrameReset` hands a target the pin still names to the pin
+  (`rd__PhotoAdoptTemp`) instead of freeing it, and the pin frees it when it
+  lets the frame go. In st04a the pin was 692 112 bytes (2 286 commands,
+  600 672 payload bytes); `rd: photo:` log
+  lines give the size at entry and the largest at exit.
+- Every present replays the pin through `rd__PhotoFrame` instead of the
+  ring's frame: `rd_EndFrame`'s own present with `framerate = "original"`,
+  each `rd_Present` otherwise, keep frames or not.
+
+**`rd__PhotoFrame`.** The output frame is a copy of the pin (as
+`rd__InterpFrame`'s) with:
+
+- the camera: `camSetupOverride` fills the interpolation's `CamBlend` with
+  Vt = the override's view, Ec = Vc⁻¹ Vt (Vc the pin's view) and, when the
+  projections differ, Lc = Pov Pc⁻¹. The frame's `RdCamera` (FrameCB's
+  `g_view`, `g_proj`, `g_viewProj`, the eye) is the override, and the VU
+  common block's world to screen and inverse view are re-based as section
+  16's camera blend re-bases them;
+- every VU draw (`RDC_MESH`, `RDC_SKINNED`, `RDC_GRID`, `RDC_PARTICLES`)
+  whose block is through the pin's camera (`camOf`) re-based onto the
+  override (`camRebase`: qw 4..7, 12..15 and the model matrices, the
+  projection's change on qw 4..7 and 16..19 when the block's world to
+  screen is the pin's projection times its view). A block through another
+  camera (`camOf` CAM_NONE: a puddle's or pool's reflection, drawn through
+  `rd_PushCamera`'s mirrored view) keeps the game camera: the reflection
+  shows what the game camera saw, wherever the override is;
+- the clipping: a re-based `normal_c` or `normal_l` draw (`RD_PROG_PRELIT`,
+  `RD_PROG_LIT`) is drawn with the scissor program's clip mode
+  (`RD_VU_CLIP_SCISSOR`, code 36's), its model to clip matrix (qw 20..23,
+  written with qw 16..19 by every SET_NORMAL_MATRIX, re-based with them)
+  scaled by the override's zoom. The game chose the no-test program (34)
+  for a mesh wholly in its view and the region program (32) for one inside
+  its guard band; through another camera the first wraps X and Y (a window
+  run's first orbit showed the courtyard's ground as stretched streaks) and
+  the second drops every triangle with a corner behind the eye. The
+  cluster, grid, particle, reflection and specular programs have no scissor
+  variant and keep the region test: a character or grid triangle that
+  leaves the GS window or passes behind the eye is not drawn;
+- CPU-projected draws left as recorded: `RDC_SHADOW_STRIP` (the cast
+  shadows, which `Shadow.c` projects for the game camera at simulation
+  time: the user's decision is that they stay frozen as drawn) and the
+  world-space `RDC_SCREEN` prims (lightning, the dark volume);
+- with `RD_PHOTO_HIDE_UI`, lists 11 and 12's `RDC_SCREEN` draws whose space
+  is UI or full-screen (the menus, their dimming and bands, subtitles, the
+  debug font) and their `RDC_OVERLAY_TEXT` items and ops become `RDC_NOP`;
+  the post passes (fade, letterbox, brightness, film noise, the reduction)
+  stay;
+- the morph streams as `rd__InterpFrame`'s unblended draws take them (R7d),
+  the motion blur's feedback standing for 4 ticks (`feedback(4)`: a trail of
+  the override's moves would smear the picture; it is gone after one
+  present) and the aura's FEED128 writes in the first present of a pinned
+  frame only.
+
+The fog reads SCENE's depth of this replay, so it follows the new camera;
+depth of field, glow and the other full-screen passes likewise. Objects the
+game culled for its own camera are not in the frame and cannot appear.
+
+**Off.** With the override off nothing above runs: `rd__PhotoPin` and
+`rd__PhotoPresentFrame` return at once, `rd__PhotoAdoptTemp` frees as
+before, the capture records nothing unless armed.
+
+**The capture.** `rd_CapturePresented(png)` arms; the next present that
+reaches an output copies `out` (the headless RGBA8 output or the BGRA8
+swapchain image, both with copy-source usage) into a texture of its format
+after the box blit or the CRT filter and the deferred text, before the
+overlay (`captureRecord`), so the picture has the preset, the CRT filter and
+the Enhanced menu text, and neither the popups nor photo mode's HUD; after
+the submit `rd__CaptureFinish` reads it back (BGRA swapped), writes an RGB
+PNG of outputWidth × outputHeight (`rd_WritePng`) and logs `rd: photo:
+capture WxH written to <path>`. `rd_CaptureResult` returns 1 or -1 once
+with the path; the window turns it into a popup. `rd_present_test`
+checks the PNG against the present without the overlay, CRT off and on.
+
+**Depth of field.** `[photo] dof` is not implemented: a present-time blur
+weighted by |depth − focus| from SCENE's depth needs the depth at the
+output's resolution after the reduction and the box, which the presenter
+does not have (DISPLAY holds colour only), so it would have to run before
+the reduction as a scene pass. The key is read and logged.
+
 ## 17. Mirror mode
 
 `rd_present.c` (the flip), `rd_replay.c` (`mirrorDraw`, the scissor),
@@ -2017,10 +2132,11 @@ and op and marks the quads `text-quads`.
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
 | `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides; on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %, a white frame's mask period equal to the pitch at 1920×1440 (Trinitron 3, PVM 2) and no mask in a 720-line box |
-| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
+| `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); photo mode's capture at 800×600, CRT off and Consumer TV: the PNG is the present without the overlay, byte for byte |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |
-| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own |
+| `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own; photo mode (`rd__PhotoFrame`: a mesh's matrices through the override against the reference transform, the scissor clip mode, the shadow volume untouched, the UI dropped under the flag and kept without it, the game's camera changing nothing; the pin surviving three keep frames with its temporary target, replaced by the next full frame, freed and a cut on leaving) |
+| `photo`, `settings` (port/game, port/ui) | photo mode's camera (orbit, elevation clamp, zoom, the subject's pivot, the keys) and the Options row (only while a stage runs; the photo layout's proc) |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays; uniform groups, barriers and screen-prim draws (85 one per command, 66 merged) per replay |
 | `rd_replay_tool` | the tool on a test dump |

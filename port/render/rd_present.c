@@ -60,6 +60,7 @@
  * then draw above it, unfiltered.  Off, this file presents as before.
  */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
@@ -712,6 +713,107 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out)
     s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
 }
 
+/* ------------------------------------------- the capture (package PHOTO)
+ * rd.h rd_CapturePresented: the output of the next present, copied before
+ * the overlay into a texture of the output's format and read back after the
+ * submit.  The headless output and the swapchain image both allow copies
+ * (RHI_TEX_COPY_SRC; Vulkan's swapchain is created with transfer-source
+ * usage), so the window build needs no offscreen present of its own. */
+static struct {
+    int armed, copied;
+    char path[1024];
+    RhiTexture tex;
+    RhiState state;
+    uint32_t w, h;
+    RhiFormat fmt;
+    int result; /* 1 written, -1 failed, 0 none since the last rd_CaptureResult */
+    char done[1024];
+} s_cap;
+
+bool rd_CapturePresented(const char *png)
+{
+    if (!g_rd.hasDevice || !png || !png[0] || strlen(png) >= sizeof(s_cap.path)) {
+        return false;
+    }
+    strcpy(s_cap.path, png);
+    s_cap.armed = 1;
+    s_cap.result = 0;
+    return true;
+}
+
+bool rd__CaptureArmed(void)
+{
+    return s_cap.armed != 0;
+}
+
+int rd_CaptureResult(char *path, uint32_t pathSize)
+{
+    const int r = s_cap.result;
+    if (r != 0 && path && pathSize) {
+        strncpy(path, s_cap.done, pathSize - 1);
+        path[pathSize - 1] = '\0';
+    }
+    s_cap.result = 0;
+    return r;
+}
+
+/* the output, out (RENDER_TARGET), into the capture texture; out goes back
+ * to RENDER_TARGET for the overlay */
+static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
+{
+    if (!s_cap.armed) {
+        return;
+    }
+    s_cap.armed = 0;
+    if (!s_cap.tex.id || s_cap.w != s_outW || s_cap.h != s_outH || s_cap.fmt != s_outFormat) {
+        if (s_cap.tex.id) {
+            rhi_DestroyTexture(s_cap.tex);
+        }
+        s_cap.tex = rhi_CreateTexture(&(RhiTextureDesc){s_outW, s_outH, 1, s_outFormat,
+                                                        RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
+                                                        "rd photo capture"});
+        s_cap.state = RHI_STATE_UNDEFINED;
+        s_cap.w = s_outW;
+        s_cap.h = s_outH;
+        s_cap.fmt = s_outFormat;
+    }
+    if (!s_cap.tex.id) {
+        rd__Log("photo: capture %s: no texture for %ux%u", s_cap.path, s_outW, s_outH);
+        snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
+        s_cap.result = -1;
+        return;
+    }
+    rd__Transition(cl, out, outState, RHI_STATE_COPY_SRC);
+    rd__Transition(cl, s_cap.tex, &s_cap.state, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(cl, out, (RhiRect){0, 0, s_outW, s_outH}, s_cap.tex, 0, 0);
+    rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    s_cap.copied = 1;
+}
+
+void rd__CaptureFinish(void)
+{
+    if (!s_cap.copied) {
+        return;
+    }
+    s_cap.copied = 0;
+    const size_t n = (size_t)s_cap.w * s_cap.h * 4;
+    uint8_t *px = malloc(n);
+    bool ok = px && rd__ReadRhiTexture(s_cap.tex, &s_cap.state, s_cap.w, s_cap.h, px, n);
+    if (ok && s_cap.fmt == RHI_FMT_BGRA8_UNORM) {
+        for (size_t i = 0; i < n; i += 4) {
+            const uint8_t b = px[i];
+            px[i] = px[i + 2];
+            px[i + 2] = b;
+        }
+    }
+    ok = ok && rd_WritePng(s_cap.path, px, s_cap.w, s_cap.h, s_cap.w * 4, 0);
+    free(px);
+    rd__Log("photo: capture %ux%u %s %s", s_cap.w, s_cap.h,
+            ok ? "written to" : "failed:", s_cap.path);
+    snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
+    s_cap.result = ok ? 1 : -1;
+}
+
 void rd__PresentRecord(RhiCommandList cl)
 {
     RdTargetRec *disp = rd__TargetRec(RD_TARGET_DISPLAY + 1);
@@ -780,6 +882,9 @@ void rd__PresentRecord(RhiCommandList cl)
      * Keep the overlay last.  (RENDER_API.md "The presentation overlay",
      * "Ordering".)
      * ======================================================================= */
+    /* package PHOTO: a capture takes the picture as shown, without the
+     * port's own UI on the overlay (the popups, the photo HUD) */
+    captureRecord(cl, out, outState);
     overlayRecord(cl, out);
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
@@ -802,6 +907,10 @@ void rd__PresentShutdown(void)
         rhi_DestroyTexture(g_rd.presentOut);
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
+    if (s_cap.tex.id) {
+        rhi_DestroyTexture(s_cap.tex); /* package PHOTO */
+    }
+    memset(&s_cap, 0, sizeof(s_cap));
     rd__CrtShutdown(); /* package CRT */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);

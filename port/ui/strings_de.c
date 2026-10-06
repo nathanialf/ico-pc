@@ -340,4 +340,13 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_MV_SWORD] = "Schwert",
     [UI_STR_MV_MAGIC_SWORD] = "Zauberschwert",
     [UI_STR_MV_COUCH] = "Steinbank",
+    [UI_STR_PHOTO_MODE] = "Fotomodus",
+    [UI_STR_PHOTO_HUD_MOVE] =
+        "Linker Stick: umkreisen    Rechter Stick: heranfahren und verschieben",
+    [UI_STR_PHOTO_HUD_LENS] =
+        "L1 R1: rollen    L2 R2, oben unten: Bildwinkel    Select: zurücksetzen",
+    [UI_STR_PHOTO_HUD_KEYS] = "Kreuz: Bild speichern    Quadrat: ausblenden    Dreieck: zurück",
+    [UI_STR_PHOTO_FOV] = "Bildwinkel %d°",
+    [UI_STR_PHOTO_SAVED] = "Bild gespeichert",
+    [UI_STR_PHOTO_FAILED] = "Bild nicht gespeichert",
 };

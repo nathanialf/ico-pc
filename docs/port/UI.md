@@ -303,9 +303,21 @@ item links are repointed at it:
 
 | from | repointed | the row |
 | --- | --- | --- |
-| Options 58 | `325.downItem` and `300.upItem` (both were 300 / 325, the wrap) to the row; `58.link` to the row layout (was -1) | up 325, down 300, `right` the Settings layout, `left` 57 (Triangle back to the pause menu, as every Options row). y 165 (325's) in place of 325, which `lt_property_visible` hides until the game is cleared, and one Options pitch (20 field lines) below it, 185, once it shows (the entry proc sets it from the loaded rows). Right-aligned ending at x 357 (`OPTIONS_LABELS_END`), where the Options labels' letters end |
+| Options 58 | `325.downItem` and `300.upItem` (both were 300 / 325, the wrap) to the row (`300.upItem` to the Photo mode row instead while a stage runs, below); `58.link` to the row layout (was -1) | up 325, down 300 (the Photo mode row while a stage runs), `right` the Settings layout, `left` 57 (Triangle back to the pause menu, as every Options row). y 165 (325's) in place of 325, which `lt_property_visible` hides until the game is cleared, and one Options pitch (20 field lines) below it, 185, once it shows (the entry proc sets it from the loaded rows). Right-aligned ending at x 357 (`OPTIONS_LABELS_END`), where the Options labels' letters end |
 | Title 12 "Continue / New Game" | `50.downItem` to the row (was -1); `12.link` to the row layout, which links on to 11 (was 11) | up 50, down the "Quit to desktop" row; centred, at the game rows' size (27) and box height in a 400-pixel box, on the title's pitch below New Game; masked by default as 49 to 51 are |
 | Title 13 "New Game" | `51.downItem` to the row (was -1); `13.link` to the row layout, then 11 (was 11) | up 51; the same place |
+
+**Photo mode (package PHOTO).** The Options row layout has a second row,
+"Photo mode", one Options pitch under Settings, right-aligned as it is,
+`left` 57, `right` photo mode's layout (`port/ui/photo_ui.c`: one masked
+row, `colA` 0, its proc feeding `port/game/photo_mode.c`). It is shown only
+while a stage runs (`ui_PhotoAvailable`: `stage_no` above 1); otherwise it
+is masked and the item links step over it as before it existed (Settings
+down to 300, 300 up to Settings), since the visibility skip does not look
+at masks (`photoLinks`, from the repoint and the entry proc). Shown, the
+order is ..., 324, Settings, Photo mode, 308. Leaving photo mode puts the
+cursor back on the row (`texLayout[58].defaultItem`). DISPLAY.md "Photo
+mode" has the controls.
 
 `lt_property_visible`'s skip (it follows `downItem` and `upItem` past the
 hidden 300 and 325 before the game is cleared) gives the Options order

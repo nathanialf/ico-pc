@@ -337,4 +337,13 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_MV_SWORD] = "Spada",
     [UI_STR_MV_MAGIC_SWORD] = "Spada magica",
     [UI_STR_MV_COUCH] = "Panca di pietra",
+    [UI_STR_PHOTO_MODE] = "Modalità foto",
+    [UI_STR_PHOTO_HUD_MOVE] = "Levetta sinistra: orbita    Levetta destra: avvicina e sposta",
+    [UI_STR_PHOTO_HUD_LENS] =
+        "L1 R1: rotazione    L2 R2, su giù: campo visivo    Select: ripristina",
+    [UI_STR_PHOTO_HUD_KEYS] =
+        "Croce: salva un'immagine    Quadrato: nascondi    Triangolo: indietro",
+    [UI_STR_PHOTO_FOV] = "Campo visivo %d°",
+    [UI_STR_PHOTO_SAVED] = "Immagine salvata",
+    [UI_STR_PHOTO_FAILED] = "Immagine non salvata",
 };

@@ -26,6 +26,7 @@
 #include "menu_text.h"
 #include "mix_gain.h"
 #include "options.h"
+#include "photo_ui.h"
 #include "strings.h"
 #include "sysconf.h"
 #include "ui_list.h"
@@ -157,6 +158,10 @@ static int s_warned;
 static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1};
 static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1}; /* Q2: the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
+/* package PHOTO: "Photo mode" under the Options screen's Settings row, in
+   the same port layout; opens photo_ui.c's layout (only while a stage runs:
+   entryProc) */
+static int s_photoRow = -1;
 static int s_origin = LAYOUT_PAUSE_OPTIONS; /* the game layout the menu returns to */
 
 /* The video mode arms the tick rate (the game's timers are armed at the
@@ -1177,6 +1182,17 @@ static void buildEntries(void)
         }
         s_entryRow[e] = row;
         s_quitRow[e] = -1;
+        if (!title) {
+            /* package PHOTO: one Options pitch below Settings (entryProc
+               sets the y with Settings'); Triangle back to the pause menu */
+            int ph = ui_SettingsAddRow(OPTIONS_LABELS_END - LABEL_W, texProperty[325].dispY + 20,
+                                       LABEL_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
+                                       UI_ALIGN_RIGHT);
+            P(ph)->left = 57;
+            P(ph)->upItem = row;
+            P(row)->downItem = ph;
+            s_photoRow = ph;
+        }
         if (title) {
             /* Q2: "Quit to desktop" under Settings, in the same layout (the
                rows are contiguous); Cross opens the confirmation */
@@ -1192,7 +1208,8 @@ static void buildEntries(void)
         LtProp l;
         memset(&l, 0, sizeof(l));
         l.first = row;
-        l.last = (s_quitRow[e] >= 0 ? s_quitRow[e] : row) + 1;
+        l.last =
+            (s_quitRow[e] >= 0 ? s_quitRow[e] : (!title && s_photoRow >= 0 ? s_photoRow : row)) + 1;
         l.proc = entryProc;
         l.procFirst = 1;
         l.defaultItem = -1;
@@ -1285,6 +1302,9 @@ static void build(void)
     }
     buildQuitScreen();
     buildEntries();
+    if (s_photoRow >= 0) {
+        P(s_photoRow)->right = ui_PhotoBuild(s_photoRow);
+    }
     buildMirrorScreen();
     if (ico_opt_developer_mode()) {
         /* the layout extension's budget (layout_ext.h): what Settings and
@@ -1495,6 +1515,25 @@ static void placeTitle(void)
     }
 }
 
+/* Package PHOTO: the "Photo mode" row under Settings while a stage runs
+   (ui_PhotoAvailable); otherwise masked and stepped over through the item
+   links (layout_texture.c's visibility skip does not look at masks):
+   Settings -> 300 and 300 -> Settings as before the row existed. */
+static void photoLinks(void)
+{
+    const int s58 = s_entryRow[ENTRY_OPTIONS];
+    if (s_photoRow < 0 || s58 < 0) {
+        return;
+    }
+    const int on = ui_PhotoAvailable();
+    P(s_photoRow)->defaultMask = on ? 0 : 1;
+    lt_mask_property(s_photoRow, on ? 0 : 1);
+    P(s_photoRow)->upItem = s58;
+    P(s_photoRow)->downItem = 300;
+    P(s58)->downItem = on ? s_photoRow : 300;
+    texProperty[300].upItem = on ? s_photoRow : s58;
+}
+
 /* The game's rows, pointed at the entry rows.  Checked against the loaded
    tables first: a table that does not look like the PAL data is left
    alone (logged once). */
@@ -1518,6 +1557,7 @@ static void repoint(void)
     r300->upItem = s58;
     P(s58)->upItem = 325;
     P(s58)->downItem = 300;
+    photoLinks();
     if (texLayout[58].link != s_entryLayout[ENTRY_OPTIONS]) {
         lt_ext_Layout(s_entryLayout[ENTRY_OPTIONS])->link = texLayout[58].link;
         texLayout[58].link = s_entryLayout[ENTRY_OPTIONS];
@@ -1572,6 +1612,8 @@ void ui_SettingsReset(void)
     for (int e = 0; e < ENTRY_COUNT; e++) {
         s_entryRow[e] = s_entryLayout[e] = s_quitRow[e] = -1;
     }
+    s_photoRow = -1;
+    ui_PhotoReset();
     memset(s_pages, 0, sizeof(s_pages));
     /* the wrapped notes are set again on the rebuilt rows */
     memset(s_noteStr, 0, sizeof(s_noteStr));
@@ -1622,6 +1664,11 @@ int ui_SettingsQuitRow(int gameLayout)
         }
     }
     return -1;
+}
+
+int ui_SettingsPhotoRow(void)
+{
+    return s_photoRow;
 }
 
 int ui_SettingsEntryLayout(int gameLayout)
@@ -1706,6 +1753,11 @@ static int entryProc(int first, int item)
         const LtProperty *r324 = &texProperty[324], *r325 = &texProperty[325];
         P(s_entryRow[ENTRY_OPTIONS])->dispY =
             r325->dispY + (gFlagGameClear ? r325->dispY - r324->dispY : 0);
+        if (s_photoRow >= 0) {
+            P(s_photoRow)->dispY =
+                P(s_entryRow[ENTRY_OPTIONS])->dispY + (r325->dispY - r324->dispY);
+            photoLinks();
+        }
     }
     if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
         /* the cursor came back to the Settings row; the title's own

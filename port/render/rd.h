@@ -568,6 +568,51 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
 
+/* ------------------------------------------------ photo mode (package PHOTO)
+ * docs/port/RENDER_API.md "Photo mode".  A free camera over the paused
+ * picture: the game keeps its pause state (the simulation is frozen and
+ * reads nothing of this), and every present replays the last full scene
+ * frame through another camera.
+ *
+ * rd_SetPhotoCamera     ov != NULL turns the override on (or moves it): from
+ *                       then on rd_EndFrame keeps a pinned deep copy of each
+ *                       frame it closes that is not a keep frame (on the
+ *                       first call, of the last such frame in the ring), and
+ *                       every present (rd_EndFrame's with framerate
+ *                       "original", each rd_Present otherwise) replays that
+ *                       pinned frame with ov's view and projection: every VU
+ *                       draw through the frame's camera is re-based onto ov
+ *                       (draws through another camera, the reflections', keep
+ *                       the game's); CPU-projected draws (shadow volumes,
+ *                       world-space screen prims) stay where the game drew
+ *                       them.  flags RD_PHOTO_HIDE_UI drops the UI-space and
+ *                       full-screen screen prims and the deferred text items
+ *                       of lists 11 and 12.  ov == NULL turns it off, frees
+ *                       the pin and cuts (rd_CameraCut), so the next picture
+ *                       is not blended across the change.  Off (the default)
+ *                       nothing differs from a build without it
+ * rd_PhotoActive        whether the override is on
+ * rd_PhotoSceneCamera   the game camera of the pinned frame (else of the last
+ *                       closed frame that is not a keep frame), the one
+ *                       ov is built from; false when there is none
+ * rd_CapturePresented   the next present that reaches an output (either
+ *                       build: the headless output or the swapchain image)
+ *                       copies the output before the presentation overlay
+ *                       (the CRT filter and the deferred text applied, the
+ *                       port's popups and photo HUD not) and writes it to
+ *                       png (RGB, outputWidth x outputHeight) after the
+ *                       submit.  false: no device or no path
+ * rd_CaptureResult      1 (written) or -1 (failed) once for the last
+ *                       capture, with its path in path; 0 while it is
+ *                       pending or when there is none */
+#define RD_PHOTO_HIDE_UI 1u
+
+void rd_SetPhotoCamera(const RdCamera *ov, uint32_t flags);
+bool rd_PhotoActive(void);
+bool rd_PhotoSceneCamera(RdCamera *out);
+bool rd_CapturePresented(const char *png);
+int rd_CaptureResult(char *path, uint32_t pathSize);
+
 /* ---------------------------------------- deferred text (package DEF)
  * docs/port/RENDER_API.md "The deferred text pass".  Text the game shows in
  * lists 11 and 12 (the layout's menu rows, through port/ui) recorded twice:

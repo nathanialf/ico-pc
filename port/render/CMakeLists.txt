@@ -35,6 +35,7 @@ add_library(ico_render STATIC
     rd_interp.c # wave 7 (R7b): interpolation between the retained frames
     rd_mesh.c
     rd_perf.c # package P1: per-replay performance records
+    rd_photo.c # package PHOTO: the camera override and its pinned frame
     rd_pipeline.c
     rd_png.c
     rd_post.c

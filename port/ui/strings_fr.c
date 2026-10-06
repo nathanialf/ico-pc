@@ -339,4 +339,13 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_MV_SWORD] = "Épée",
     [UI_STR_MV_MAGIC_SWORD] = "Épée magique",
     [UI_STR_MV_COUCH] = "Banc de pierre",
+    [UI_STR_PHOTO_MODE] = "Mode photo",
+    [UI_STR_PHOTO_HUD_MOVE] = "Stick gauche : orbite    Stick droit : avancer et décaler",
+    [UI_STR_PHOTO_HUD_LENS] =
+        "L1 R1 : rotation    L2 R2, haut bas : champ de vision    Select : réinitialiser",
+    [UI_STR_PHOTO_HUD_KEYS] =
+        "Croix : enregistrer une image    Carré : masquer    Triangle : retour",
+    [UI_STR_PHOTO_FOV] = "Champ de vision %d°",
+    [UI_STR_PHOTO_SAVED] = "Image enregistrée",
+    [UI_STR_PHOTO_FAILED] = "Image non enregistrée",
 };

@@ -147,6 +147,10 @@ typedef enum UiSettingsOpt {
 /* The entry rows and the menu's layouts (-1 before ui_SettingsInstall). */
 int ui_SettingsEntryRow(int gameLayout); /* 58, 12 or 13 */
 int ui_SettingsEntryLayout(int gameLayout);
+/* Package PHOTO: the Options screen's "Photo mode" row (under Settings,
+   in the same port layout; masked and stepped over unless a stage runs,
+   photo_ui.h ui_PhotoAvailable), -1 before the build. */
+int ui_SettingsPhotoRow(void);
 int ui_SettingsPageLayout(UiSettingsPage page);
 /* A page's navigable rows in order: the label row of each, its option, its
    value row (-1 for none).  Returns the count. */

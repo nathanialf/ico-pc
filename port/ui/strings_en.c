@@ -333,4 +333,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_MV_SWORD] = "Sword",
     [UI_STR_MV_MAGIC_SWORD] = "Magic sword",
     [UI_STR_MV_COUCH] = "Stone couch",
+    [UI_STR_PHOTO_MODE] = "Photo mode",
+    [UI_STR_PHOTO_HUD_MOVE] = "Left stick: orbit    Right stick: dolly and pan",
+    [UI_STR_PHOTO_HUD_LENS] = "L1 R1: roll    L2 R2, Up Down: field of view    Select: reset",
+    [UI_STR_PHOTO_HUD_KEYS] = "Cross: save a picture    Square: hide this    Triangle: back",
+    [UI_STR_PHOTO_FOV] = "Field of view %d°",
+    [UI_STR_PHOTO_SAVED] = "Picture saved",
+    [UI_STR_PHOTO_FAILED] = "Picture not saved",
 };

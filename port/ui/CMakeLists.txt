@@ -42,7 +42,8 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c gallery.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(game_text.c layout_ext.c menu_text.c settings.c ui_list.c gallery.c
+                            photo_ui.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -70,7 +71,7 @@ target_include_directories(ico_fumi PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    target_sources(${name} PRIVATE settings.c ui_list.c gallery.c)
+    target_sources(${name} PRIVATE settings.c ui_list.c gallery.c photo_ui.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)

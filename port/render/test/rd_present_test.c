@@ -44,6 +44,11 @@
  *             overlay; with the mirror on the all-UI box shows the same
  *             picture (within 1 LSB) and the overlay is not flipped;
  *             unregistered, the present hashes as before
+ *   capture   package PHOTO, rd_CapturePresented: the rich frame at 800 x
+ *             600 with the overlay's rectangles registered, CRT off and
+ *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
+ *             present without the overlay (the CRT applied, the overlay
+ *             not), rd_CaptureResult reports it once
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -1511,6 +1516,138 @@ static void checkOverlay(uint64_t presentNoOverlay)
     }
 }
 
+/* ------------------------------------------------- capture (package PHOTO) */
+
+static uint32_t be32At(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/* rd_png.c's PNG back to RGB (one IDAT, stored deflate blocks, filter 0) */
+static uint8_t *readPng(const char *path, uint32_t *w, uint32_t *h)
+{
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        return NULL;
+    }
+    fseek(fp, 0, SEEK_END);
+    const long n = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    uint8_t *f = n > 0 ? malloc((size_t)n) : NULL;
+    const bool got = f && fread(f, 1, (size_t)n, fp) == (size_t)n;
+    fclose(fp);
+    if (!got || n < 33 || memcmp(f + 12, "IHDR", 4) != 0 || f[24] != 8 || f[25] != 2) {
+        free(f);
+        return NULL;
+    }
+    *w = be32At(f + 16);
+    *h = be32At(f + 20);
+    const size_t row = (size_t)*w * 3 + 1, raw = row * *h;
+    uint8_t *scan = malloc(raw), *rgb = malloc((size_t)*w * *h * 3);
+    size_t at = 33, have = 0;
+    while (scan && rgb && at + 8 <= (size_t)n && have < raw) {
+        const uint32_t len = be32At(f + at);
+        if (memcmp(f + at + 4, "IDAT", 4) == 0) {
+            size_t o = at + 8 + 2; /* the zlib header */
+            while (have < raw && o + 5 <= at + 8 + len) {
+                const size_t bl = (size_t)f[o + 1] | ((size_t)f[o + 2] << 8);
+                memcpy(scan + have, f + o + 5, bl);
+                have += bl;
+                o += 5 + bl;
+            }
+        }
+        at += 12 + len;
+    }
+    free(f);
+    if (have != raw) {
+        free(scan);
+        free(rgb);
+        return NULL;
+    }
+    for (uint32_t y = 0; y < *h; y++) {
+        memcpy(rgb + (size_t)y * *w * 3, scan + y * row + 1, (size_t)*w * 3);
+    }
+    free(scan);
+    return rgb;
+}
+
+static void checkCaptureAt(const char *dir, int crt)
+{
+    const uint32_t w = 800, h = 600;
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *plain = malloc(n), *over = malloc(n);
+    char png[1100];
+    snprintf(png, sizeof(png), "%s/rd_present_capture_%d.png", dir, crt);
+    remove(png);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (crt) {
+        rd_CrtSettings(&s, RD_CRT_CONSUMER, 1.0f);
+    }
+    bool ok = plain && over;
+    /* the present without the overlay */
+    if (ok && rd_Init(512, 512, &s, NULL)) {
+        RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+        recordRichFrame(t, 1);
+        uint32_t ow = 0, oh = 0;
+        ok = rd_ReadPresented(plain, &ow, &oh) && ow == w && oh == h;
+        rd_DestroyTexture(t);
+        rd_Shutdown();
+    } else {
+        ok = false;
+    }
+    /* again with the overlay's rectangles and a capture armed */
+    if (ok && rd_Init(512, 512, &s, NULL)) {
+        memset(&s_ovt, 0, sizeof(s_ovt));
+        s_ovt.rects = 1;
+        rd_SetPresentOverlay(ovCallback, &s_ovt);
+        RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+        char done[1100];
+        CHECK(rd_CaptureResult(done, sizeof(done)) == 0, "capture: nothing before");
+        CHECK(rd_CapturePresented(png), "capture: armed");
+        recordRichFrame(t, 1);
+        CHECK(rd_CaptureResult(done, sizeof(done)) == 1 && strcmp(done, png) == 0,
+              "capture: written (%s)", png);
+        CHECK(rd_CaptureResult(done, sizeof(done)) == 0, "capture: reported once");
+        uint32_t ow = 0, oh = 0;
+        ok = rd_ReadPresented(over, &ow, &oh);
+        rd_SetPresentOverlay(NULL, NULL);
+        ui_FontShutdown();
+        rd_DestroyTexture(t);
+        CHECK(rhi_vk_ValidationErrorCount() == 0, "capture: %u validation errors",
+              rhi_vk_ValidationErrorCount());
+        rd_Shutdown();
+    } else {
+        ok = false;
+    }
+    CHECK(ok, "capture (crt %d): the two presents", crt);
+    uint32_t pw = 0, ph = 0;
+    uint8_t *rgb = ok ? readPng(png, &pw, &ph) : NULL;
+    CHECK(rgb && pw == w && ph == h, "capture (crt %d): a %ux%u PNG (%ux%u)", crt, w, h, pw, ph);
+    if (rgb && pw == w && ph == h) {
+        size_t diffPlain = 0, diffOver = 0;
+        for (size_t i = 0; i < (size_t)w * h; i++) {
+            diffPlain += memcmp(rgb + i * 3, plain + i * 4, 3) != 0;
+            diffOver += memcmp(rgb + i * 3, over + i * 4, 3) != 0;
+        }
+        CHECK(diffPlain == 0 && diffOver > 0,
+              "capture (crt %d): the present without the overlay (%zu pixels differ; %zu from "
+              "the one with it)",
+              crt, diffPlain, diffOver);
+    }
+    free(rgb);
+    free(plain);
+    free(over);
+}
+
+static void checkCapture(const char *dir)
+{
+    checkCaptureAt(dir, 0);
+    checkCaptureAt(dir, 1);
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char **argv)
@@ -1545,6 +1682,7 @@ int main(int argc, char **argv)
     checkWide169();
     checkMips();
     checkOverlay(s_presentOriginal);
+    checkCapture(dir);
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);
         return 1;

@@ -15,6 +15,18 @@ closed.
   "Settings" (below the last option) and press Cross. Triangle or Circle
   goes back to Options.
 
+## Photo mode
+
+During play the Options screen has one more line under "Settings":
+"Photo mode" (Mode photo, Fotomodus, Modalità foto, Modo foto). Cross on it
+keeps the game paused and lets you move a camera around the paused scene
+and save pictures; Triangle, Circle or START comes back to Options with the
+cursor on the line. The line is there only while a stage is running: the
+title screen's Settings has no Photo mode. The controls, what the pictures
+hold and what stays as the game drew it are in docs/port/DISPLAY.md
+("Photo mode"); `[photo]` in `config.toml` has its options
+(docs/port/CONFIG.md).
+
 The menu works like the game's own Options screen: up and down move the
 cursor, left and right change the value on the selected line, Cross opens a
 section or confirms, Triangle or Circle goes back (on a gamepad Circle is

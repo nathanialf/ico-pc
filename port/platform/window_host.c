@@ -17,6 +17,8 @@
 #include "hotkeys.h"
 #include "input_record.h"
 #include "input_sdl.h"
+#include "photo_mode.h"
+#include "photo_ui.h"
 #include "rd.h"
 #include "rd_tex.h"
 #include "rhi.h"
@@ -356,6 +358,80 @@ static void frame_dump(void)
             ok ? "wrote" : "could not write all of", dump, png);
 }
 
+/* Package PHOTO (docs/port/DISPLAY.md "Photo mode"): Cross in photo mode,
+   the picture shown at the next present into
+   <pref>/<[photo] png_dir>/ico-<time>.png (rd_CapturePresented); the
+   result comes back at a later pump (photo_pump) */
+static void photo_capture(void)
+{
+    static char lastName[64];
+    static int seq;
+    char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], path[ICO_PATH_MAX], name[64];
+    const time_t now = time(NULL);
+    const struct tm *tm = localtime(&now);
+    struct tm zero;
+
+    if (tm == NULL) {
+        memset(&zero, 0, sizeof(zero));
+        tm = &zero;
+    }
+    ico_photo_file_name(name, sizeof(name), tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                        tm->tm_hour, tm->tm_min, tm->tm_sec, 1);
+    /* two captures in one second: -2, -3, ... */
+    if (strcmp(name, lastName) == 0) {
+        snprintf(lastName, sizeof(lastName), "%s", name);
+        ico_photo_file_name(name, sizeof(name), tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                            tm->tm_hour, tm->tm_min, tm->tm_sec, ++seq);
+    } else {
+        snprintf(lastName, sizeof(lastName), "%s", name);
+        seq = 1;
+    }
+    ico_host_pref_dir(pref, sizeof(pref));
+    if (ico_path_join(dir, sizeof(dir), pref, ico_photo_png_dir()) != 0 || ico_make_dir(dir) != 0 ||
+        ico_path_join(path, sizeof(path), dir, name) != 0) {
+        fprintf(stderr, "photo: no usable folder %s under %s\n", ico_photo_png_dir(), pref);
+        ui_PhotoCaptureDone(0, name);
+        return;
+    }
+    if (!rd_CapturePresented(path)) {
+        fprintf(stderr, "photo: the capture could not be armed (%s)\n", path);
+        ui_PhotoCaptureDone(0, name);
+    }
+}
+
+/* Package PHOTO: the renderer's camera override follows photo mode's state
+   (port/game/photo_mode.h) every vsync; the captures' results become a
+   popup */
+static void photo_pump(void)
+{
+    if (ico_photo_active()) {
+        RdCamera game, ov;
+
+        if (rd_PhotoSceneCamera(&game) && ico_photo_camera(&ov, &game)) {
+            rd_SetPhotoCamera(&ov, RD_PHOTO_HIDE_UI);
+        }
+        while (ico_photo_take_capture()) {
+            photo_capture();
+        }
+    } else if (rd_PhotoActive()) {
+        rd_SetPhotoCamera(NULL, 0);
+    }
+    {
+        char path[ICO_PATH_MAX];
+        const int r = rd_CaptureResult(path, sizeof(path));
+
+        if (r != 0) {
+            const char *base = strrchr(path, '/');
+#ifdef _WIN32
+            const char *b2 = strrchr(path, '\\');
+
+            base = b2 != NULL && (base == NULL || b2 > base) ? b2 : base;
+#endif
+            ui_PhotoCaptureDone(r > 0, base != NULL ? base + 1 : path);
+        }
+    }
+}
+
 /* Q1: F11, the stats lines every second for 30 s */
 static void stats_fast_toggle(void)
 {
@@ -426,6 +502,7 @@ int ico_window_pump(void)
         s_pres.cutSerial = ico_video_cut_serial();
         rd_CameraCut();
     }
+    photo_pump(); /* package PHOTO */
     set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
                 game_pause == 0 && data_loading == 0);
     ico_input_sdl_update();

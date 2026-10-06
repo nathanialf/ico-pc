@@ -3756,6 +3756,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     t = t1;
     if (doPresent) {
         rd__PresentFinish();
+        rd__CaptureFinish(); /* package PHOTO: a capture this present copied */
     }
     g_rdPerf.presentMs = rd__NowMs() - t;
     g_rd.stats.pipelines = rd__PipelineCount();
@@ -3801,6 +3802,12 @@ static bool readTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, v
                         size_t dstSize)
 {
     return readTextureBpp(t, state, w, h, 4, dst, dstSize);
+}
+
+bool rd__ReadRhiTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
+                        size_t dstSize)
+{
+    return readTexture(t, state, w, h, dst, dstSize);
 }
 
 bool rd__ReadTexture(RdTex tex, void *dst, size_t dstSize, uint32_t *w, uint32_t *h)

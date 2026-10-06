@@ -338,4 +338,12 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_MV_SWORD] = "Espada",
     [UI_STR_MV_MAGIC_SWORD] = "Espada mágica",
     [UI_STR_MV_COUCH] = "Banco de piedra",
+    [UI_STR_PHOTO_MODE] = "Modo foto",
+    [UI_STR_PHOTO_HUD_MOVE] = "Stick izquierdo: orbitar    Stick derecho: acercar y desplazar",
+    [UI_STR_PHOTO_HUD_LENS] =
+        "L1 R1: girar    L2 R2, arriba abajo: campo de visión    Select: restablecer",
+    [UI_STR_PHOTO_HUD_KEYS] = "Equis: guardar una imagen    Cuadrado: ocultar    Triángulo: volver",
+    [UI_STR_PHOTO_FOV] = "Campo de visión %d°",
+    [UI_STR_PHOTO_SAVED] = "Imagen guardada",
+    [UI_STR_PHOTO_FAILED] = "Imagen no guardada",
 };

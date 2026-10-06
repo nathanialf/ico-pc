@@ -154,6 +154,63 @@ the x curvature, y being 1.5 times it except on the Trinitron's flat
 vertical; `crt_mask` on the Scanlines mode adds an aperture grille). A
 negative value, or no key, keeps the mode's own. They have no Settings row.
 
+## Photo mode
+
+Pause the game (START), choose Options, then "Photo mode" (under
+"Settings"; the row is there only while a stage is running). The game
+stays paused: nothing moves and nothing in the game changes, and the
+picture is the paused scene seen through a camera you move. The game's
+menus, subtitles and other text are hidden while photo mode is on.
+
+| control | what it does |
+| --- | --- |
+| Left stick | orbit: turn around the point the game camera was looking at, left and right, and up and down (never past 85 degrees above or below the horizontal). That point is on the game camera's line of sight, as far ahead as the character the camera follows (4 m ahead when it follows none) |
+| Right stick | up and down: move closer or further (dolly, from a twentieth to ten times the game camera's distance); left and right: slide sideways (pan) |
+| L1, R1 | roll the camera |
+| R2 or Up, L2 or Down | narrow (zoom in) or widen the field of view, between 10 and 100 degrees vertically |
+| Select | back to the game's camera |
+| Square | hide or show the help lines at the bottom left |
+| Cross | save a picture |
+| Triangle, Circle or START | leave photo mode (back to Options) |
+
+The mouse moves the right stick as it does in play (Settings > Controls,
+"Mouse sensitivity"). `[photo] stick_speed` scales the sticks' speeds and
+`[photo] invert_y` swaps the left stick's up and down (CONFIG.md).
+
+**Pictures.** Cross saves the picture as shown, at the window's own
+resolution (the whole window, black bars included), with the preset, the
+CRT filter and the Enhanced menu text as they are, but without the help
+lines or any popup: `ico-<date>-<time>.png` in the `screenshots` folder of
+the per-user folder (CONFIG.md says where; `[photo] png_dir` names another
+folder there). A popup names the file. The picture is saved at the next
+picture drawn after the press. F12 is unchanged (a frame dump and the
+DISPLAY picture, for bug reports).
+
+**What stays as the game drew it.** The game draws some things for its
+own camera only, on the processor, and those cannot be seen from another
+camera:
+
+- the shadows that characters and objects cast (the dark shapes on the
+  ground and walls) stay where they were drawn for the game camera, as
+  flat shapes on the screen: move the camera far and they no longer sit
+  under what casts them;
+- lightning and the other effects drawn as flat shapes on the screen;
+- reflections (puddles, pools) keep the game camera's view of the
+  reflected scene;
+- objects the game did not draw because its camera could not see them
+  stay missing (turning the camera around shows the background colour where the
+  game skipped them);
+- with the camera very close to a character, a triangle of the character
+  that reaches far off the picture or behind the camera is left out, as
+  the PlayStation 2's programs leave it out.
+
+Everything else (the castle, the characters, the plants, the water's
+surface, the fog, the glow and blur effects) is drawn again for the new
+camera. The motion blur's trail is not kept while the camera moves.
+
+**Depth of field** (`[photo] dof`) is not implemented: the key is read and
+logged, and the picture stays sharp.
+
 ## Wide pictures: what stretches and what stays in the middle
 
 With `aspect` wider than 4:3, anything that covers the whole picture

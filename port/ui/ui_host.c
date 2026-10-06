@@ -18,6 +18,7 @@
 #endif
 
 #include "font.h"
+#include "photo_ui.h"
 #include "popup.h"
 #include "settings.h"
 #include "strings.h"
@@ -49,6 +50,7 @@ static void hostOverlay(const RdOverlayCtx *ctx, void *user)
     if (s_viewerOverlay != NULL) {
         s_viewerOverlay(ctx);
     }
+    ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
 }
 #endif

@@ -4,8 +4,12 @@
 # the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
 # port/config's; host_config.c is compiled by ico_pc and the tests.
 # video_options.c: the display options (renderer wave 7, R7a; docs/port/DISPLAY.md)
-add_library(ico_options STATIC options.c video_options.c)
-target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+# photo_mode.c: photo mode's state and camera (package PHOTO; DISPLAY.md
+# "Photo mode"); it uses rd.h's RdCamera struct only, so port/render is on
+# the include path of the headless build too (nothing of rd is linked)
+add_library(ico_options STATIC options.c video_options.c photo_mode.c)
+target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_options PUBLIC ico_config)
 if(TARGET ico_pc)
@@ -29,6 +33,22 @@ if(WIN32)
 endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# Photo mode's state and camera (package PHOTO): the orbit, the clamps, the
+# zoom, the keys, the capture's name. CPU only.
+add_executable(photo_test test/photo_test.c ../platform/host_config.c)
+target_include_directories(photo_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(photo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(photo_test PRIVATE ico_options)
+if(NOT WIN32)
+    target_link_libraries(photo_test PRIVATE m)
+endif()
+if(WIN32)
+    target_link_libraries(photo_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # --- Achievements (Phase 6E, docs/port/ACHIEVEMENTS.md) -----------------------

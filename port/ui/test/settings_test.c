@@ -51,6 +51,8 @@
 #include "menu_text.h"
 #include "mix_gain.h"
 #include "options.h"
+#include "photo_mode.h"
+#include "photo_ui.h"
 #include "settings.h"
 #include "strings.h"
 #include "sysconf.h"
@@ -115,6 +117,17 @@ PadState pad[16];
 StageSetting GlobalStageSetting;
 
 int gFlagGameClear;
+
+int stage_no; /* package PHOTO: 0 here, a stage number in testPhoto */
+
+/* package PHOTO: photo mode's pivot (photo_ui.c): no camera target here */
+void *default_cameratarget_gobj;
+
+void GetRootPosition(void *pos, void *obj)
+{
+    (void)obj;
+    memset(pos, 0, 16);
+}
 
 int systemStatus[12] = {1, 2};
 
@@ -978,6 +991,82 @@ static void testNavigation(void)
     CHECK(ico_config_get_string("input.kb.circle", NULL) == NULL, "unchanged rows not written");
     ico_input_reload_bindings(b);
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
+}
+
+/* Package PHOTO: the Options screen's "Photo mode" row exists only while a
+ * stage runs (masked and stepped over on stage 0 or 1, the title's); with
+ * one, it sits one Options pitch under Settings, Cross opens the photo
+ * layout (no dimming, the row masked), whose proc turns the left stick into
+ * an orbit, Cross into a capture, Square into the HUD's toggle, and
+ * Triangle back to Options with the cursor on the row. */
+static void testPhoto(void)
+{
+    useConfig("version = 1\n[photo]\nstick_speed = 2.0\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ico_photo_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    gFlagGameClear = 0;
+    stage_no = 1; /* the title's stage */
+    init_layout_texture(2);
+    const int s58 = ui_SettingsEntryRow(58), ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
+    CHECK(ph > s58 && pl >= LT_GAME_LAYOUT_COUNT && lt_ext_Prop(ph)->right == pl,
+          "the row (%d) after Settings (%d), opening the photo layout (%d)", ph, s58, pl);
+    CHECK(strcmp(lt_ext_RowText(ph), ui_Str(UI_STR_PHOTO_MODE)) == 0, "labelled \"%s\"",
+          lt_ext_RowText(ph));
+    settle(54, 4);
+    lt_switch_layout(58);
+    CHECK(settle(58, 40), "the Options screen");
+    CHECK(lt_ext_Prop(ph)->masked && lt_ext_Prop(s58)->downItem == 300 &&
+              texProperty[300].upItem == s58,
+          "no stage: masked and stepped over");
+    texLayout[58].curItem = s58;
+    press(0x4000);
+    CHECK(texLayout[58].curItem == 308, "no stage: down from Settings is 308 (%d)",
+          texLayout[58].curItem);
+    stage_no = 11; /* st04a: a stage runs */
+    frame(0);
+    CHECK(!lt_ext_Prop(ph)->masked && lt_ext_Prop(s58)->downItem == ph &&
+              lt_ext_Prop(ph)->upItem == s58 && lt_ext_Prop(ph)->downItem == 300 &&
+              texProperty[300].upItem == ph,
+          "a stage: shown under Settings");
+    CHECK(lt_ext_Prop(ph)->dispY ==
+              lt_ext_Prop(s58)->dispY + texProperty[325].dispY - texProperty[324].dispY,
+          "one Options pitch below Settings (%d, %d)", lt_ext_Prop(ph)->dispY,
+          lt_ext_Prop(s58)->dispY);
+    texLayout[58].curItem = s58;
+    press(0x4000);
+    CHECK(texLayout[58].curItem == ph, "down from Settings: the row (%d)", texLayout[58].curItem);
+    press(0x4000);
+    CHECK(texLayout[58].curItem == 308, "down from the row: 308 (%d)", texLayout[58].curItem);
+    press(0x1000);
+    CHECK(texLayout[58].curItem == ph, "up from 308: the row (%d)", texLayout[58].curItem);
+    press(0x40);
+    CHECK(settle(pl, 60) && ico_photo_active(), "Cross: photo mode (%d)", current_layout_id);
+    CHECK(lt_ext_Layout(pl)->colA == 0.0f && lt_ext_Prop(lt_ext_Layout(pl)->first)->masked,
+          "no dimming, nothing drawn");
+    pad[0].ana[2] = 255; /* the left stick right */
+    for (int i = 0; i < 25; i++) {
+        frame(0);
+    }
+    pad[0].ana[2] = 128;
+    IcoPhotoState st;
+    ico_photo_get(&st);
+    /* a second at full deflection past the dead zone: 90 x 2 degrees */
+    CHECK(st.yaw > 3.0f && st.yaw < 3.3f && st.pitch == 0.0f, "orbit: yaw %.3f, pitch %.3f",
+          (double)st.yaw, (double)st.pitch);
+    press(0x40);
+    CHECK(ico_photo_take_capture() == 1 && ico_photo_take_capture() == 0 && current_layout_id == pl,
+          "Cross: one capture, the mode stays");
+    CHECK(ico_photo_hud(), "the HUD shown");
+    press(0x80);
+    CHECK(!ico_photo_hud() && ico_photo_active(), "Square: the HUD hidden");
+    press(0x10);
+    CHECK(settle(58, 60) && !ico_photo_active(), "Triangle: Options again (%d)", current_layout_id);
+    CHECK(texLayout[58].curItem == ph, "the cursor on the row (%d)", texLayout[58].curItem);
+    stage_no = 0;
 }
 
 /* R7c: the New Game "Mirror mode" screen, run by the real layout code: the
@@ -2729,6 +2818,7 @@ int main(int argc, char **argv)
     testRepoint();
     testPlacement();
     testNavigation();
+    testPhoto();
     testMirrorScreen();
     testQuit();
     testCirclePortScreens();

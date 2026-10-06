@@ -1795,6 +1795,185 @@ static void testCameraBlend(void)
           "still camera: nothing re-based, the unmatched mesh is the tick's (%u)", st->rebased);
 }
 
+/* ------------------------------------------- package PHOTO: photo mode */
+
+static const char kObjPh;
+
+static void volume(int x0, RdKey key);
+
+/* the scene photo mode pins: mesh A through the camera at 0 degrees, a
+ * shadow volume in list 3, and in list 11 a UI sprite, a full-screen sprite
+ * (the pause menu's dimming) and a world-space screen prim (lightning);
+ * *tempId the frame's temporary target */
+static void photoScene(RdMesh mesh, uint32_t *tempId)
+{
+    static const uint8_t grey[4] = {90, 90, 90, 0x80};
+    double wa[16];
+    rd_BeginFrame();
+    frameHead();
+    double eye[3], v[16], p[16];
+    s6OrbitEye(0.0, eye);
+    s6View(0.0, eye, v);
+    s6Proj(p);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int k = 0; k < 16; k++) {
+        cam.view[k] = (float)v[k];
+        cam.proj43[k] = (float)p[k];
+    }
+    cam.zoom = 500.0f;
+    rd_SetCamera(&cam);
+    s6Translate(wa, 0.0, 0.0, 0.0);
+    s6Draw(mesh, v, wa, RD_KEY(&kObjPh, 0, 32));
+    if (tempId) {
+        *tempId = rd_TempTarget(64, 64, 0, 0).id;
+    }
+    rd_SelectList(3);
+    rd_ShadowReset();
+    volume(10, RD_KEY(&kObjPh, 1, 0));
+    rd_ShadowResolve();
+    rd_SelectList(11);
+    sprite(0, 0, 10, 10, grey, RD_KEY(&kObjPh, 2, 0)); /* UI */
+    RdScreenVtx w[2];
+    memset(w, 0, sizeof(w));
+    w[1].x = OX + TW * 16;
+    w[1].y = OY + TH * 16;
+    w[0].q = w[1].q = 1.0f;
+    memcpy(w[0].rgba, grey, 4);
+    memcpy(w[1].rgba, grey, 4);
+    rd_ScreenPrims(RD_PRIM_SPRITES, w, 2, RD_SPACE_FULLSCREEN, 0, 0);
+    w[1].x = OX + 20 * 16;
+    rd_ScreenPrims(RD_PRIM_SPRITES, w, 2, RD_SPACE_WORLD, 0, 0);
+    rd_EndFrame(0);
+}
+
+static int countType(const RdFrame *f, int l, uint8_t type, uint8_t space)
+{
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        const RdCmd *c = &f->lists[l].cmds[i];
+        n += c->type == type && (type != RDC_SCREEN || c->b[1] == space);
+    }
+    return n;
+}
+
+static void testPhoto(void)
+{
+    RdMesh mesh = makeMesh();
+    uint32_t temp = 0;
+    double wa[16];
+    s6Translate(wa, 0.0, 0.0, 0.0);
+    photoScene(mesh, &temp);
+    const RdFrame *pin = rd__LastFrame();
+    /* the override: the camera turned 28 degrees about the origin and
+     * zoomed (focal length 600) */
+    double eye[3], v[16], p[16], s[16], m[16], want[2], got[2];
+    s6OrbitEye(28.0, eye);
+    s6View(28.0, eye, v);
+    s6Focal = 600.0;
+    s6Proj(p);
+    s6Focal = 500.0;
+    RdCamera ov = pin->camera;
+    for (int k = 0; k < 16; k++) {
+        ov.view[k] = (float)v[k];
+        ov.proj43[k] = (float)p[k];
+    }
+    ov.zoom = 600.0f;
+    RdPhotoStats st;
+    const RdFrame *f = rd__PhotoFrame(pin, &ov, RD_PHOTO_HIDE_UI, 1, &st);
+    const float (*mo)[4] = f ? vuBlock(f, findKey(f, 0, RD_KEY(&kObjPh, 0, 32), 0)) : NULL;
+    CHECK(f && mo && st.rebased == 1 && st.keptCamera == 0, "photo: the mesh re-based (%u, %u)",
+          f ? st.rebased : 0u, f ? st.keptCamera : 0u);
+    if (mo) {
+        mul4(p, v, s);
+        mul4(s, wa, m);
+        s6Project(m, kS6PointA, want);
+        s6ProjectF(mo, kS6PointA, got);
+        CHECK(hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
+              "photo: the point through the override (%.3f, %.3f; want %.3f, %.3f)", got[0], got[1],
+              want[0], want[1]);
+        /* the world to screen (qw 4..7) is ov's, the inverse view its eye */
+        double sw[16];
+        for (int c = 0; c < 4; c++) {
+            for (int r = 0; r < 4; r++) {
+                sw[c * 4 + r] = mo[4 + c][r];
+            }
+        }
+        s6Project(sw, kS6PointA, got);
+        CHECK(hypot(got[0] - want[0], got[1] - want[1]) < 0.01 && fabs(mo[15][0] - eye[0]) < 1e-2 &&
+                  fabs(mo[15][2] - eye[2]) < 1e-2,
+              "photo: qw 4..7 and the eye are the override's (%.3f, eye %.2f %.2f)", got[0],
+              (double)mo[15][0], (double)mo[15][2]);
+        const RdCmd *mc = findKey(f, 0, RD_KEY(&kObjPh, 0, 32), 0);
+        CHECK(mc && mc->b[2] == RD_VU_CLIP_SCISSOR &&
+                  ((const RdVuPayload *)(const void *)(f->payload + mc->u[1]))->clip ==
+                      RD_VU_CLIP_SCISSOR,
+              "photo: the prelit mesh drawn with the scissor program's clipping");
+        CHECK(memcmp(f->camera.view, ov.view, sizeof(ov.view)) == 0 &&
+                  memcmp(f->camera.proj43, ov.proj43, sizeof(ov.proj43)) == 0,
+              "photo: the frame's camera is the override");
+    }
+    /* the shadow volume as recorded; the UI and full-screen prims of list
+     * 11 dropped, the world-space one kept */
+    const RdCmd *sc = findKey(f, 3, RD_KEY(&kObjPh, 1, 0), 0);
+    const RdCmd *sp = findKey(pin, 3, RD_KEY(&kObjPh, 1, 0), 0);
+    CHECK(sc && sp && sc->u[0] == sp->u[0] && sc->u[3] == sp->u[3] &&
+              memcmp(f->payload + sc->u[1], pin->payload + sp->u[1],
+                     (sp->u[0] + sp->u[3]) * sizeof(RdScreenVtx)) == 0,
+          "photo: the shadow volume untouched");
+    CHECK(countType(f, 11, RDC_SCREEN, RD_SPACE_UI) == 0 &&
+              countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 0 &&
+              countType(f, 11, RDC_SCREEN, RD_SPACE_WORLD) == 1 && st.dropped == 2,
+          "photo: the UI dropped, the world prim kept (%u dropped)", st.dropped);
+    f = rd__PhotoFrame(pin, &ov, 0, 1, &st);
+    CHECK(countType(f, 11, RDC_SCREEN, RD_SPACE_UI) == 1 &&
+              countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 1 && st.dropped == 0,
+          "photo: without RD_PHOTO_HIDE_UI the UI stays");
+    /* the override at the game's own camera: the pin, payload byte for byte */
+    f = rd__PhotoFrame(pin, &pin->camera, 0, 1, &st);
+    CHECK(f && f->payloadSize == pin->payloadSize &&
+              memcmp(f->payload, pin->payload, pin->payloadSize) == 0 && st.rebased == 0,
+          "photo: the game's camera changes nothing");
+
+    /* the pin: taken from the ring when the override turns on, it survives
+     * three keep frames (the ring's slots all reused), and so does the
+     * temporary target it names; the next full frame replaces it; off,
+     * it is freed and the next frame is a cut */
+    const uint32_t number = pin->number;
+    rd_SetPhotoCamera(&ov, RD_PHOTO_HIDE_UI);
+    const RdFrame *pinned = rd__PhotoPinned();
+    CHECK(rd_PhotoActive() && pinned && pinned->number == number, "photo: pinned frame %u (%u)",
+          pinned ? pinned->number : 0u, number);
+    const size_t bytes = rd__PhotoPinBytes();
+    uint8_t *copy = malloc(pinned ? pinned->payloadSize : 1);
+    if (copy && pinned) {
+        memcpy(copy, pinned->payload, pinned->payloadSize);
+    }
+    for (int k = 0; k < 3; k++) {
+        rd_BeginFrame();
+        rd_SelectList(11);
+        rd_EndFrame(1);
+    }
+    pinned = rd__PhotoPinned();
+    CHECK(pinned && pinned->number == number && rd__PhotoPinBytes() == bytes && copy &&
+              memcmp(copy, pinned->payload, pinned->payloadSize) == 0,
+          "photo: the pin survives three keep frames");
+    CHECK(rd__TargetRec(temp) != NULL, "photo: the pin keeps its temporary target alive");
+    CHECK(rd__PhotoPresentFrame() != NULL, "photo: a present replays the pin");
+    free(copy);
+    photoScene(mesh, NULL);
+    pinned = rd__PhotoPinned();
+    CHECK(pinned && pinned->number == rd__LastFrame()->number,
+          "photo: the next full frame is pinned");
+    CHECK(rd__TargetRec(temp) == NULL, "photo: the old pin's temporary target freed");
+    rd_SetPhotoCamera(NULL, 0);
+    CHECK(!rd_PhotoActive() && rd__PhotoPinned() == NULL, "photo: off, nothing pinned");
+    rd_BeginFrame();
+    CHECK(rd__RecFrame() && rd__RecFrame()->cut, "photo: leaving is a camera cut");
+    rd_EndFrame(0);
+    rd_DestroyVuMesh(mesh);
+}
+
 /* ------------------------------------------------- S2: the present clock */
 
 static void testPresentClock(void)
@@ -2240,6 +2419,7 @@ static void runCpu(void)
     testRotationBlend();
     testRotationDraws();
     testCameraBlend();
+    testPhoto();
     testPresentClock();
     testSprites();
     testSpriteSnaps();

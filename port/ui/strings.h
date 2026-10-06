@@ -376,6 +376,16 @@ typedef enum UiStrId {
     UI_STR_MV_SWORD,
     UI_STR_MV_MAGIC_SWORD,
     UI_STR_MV_COUCH,
+    /* Options > Photo mode (package PHOTO; docs/port/DISPLAY.md "Photo
+       mode"): the row, the HUD's lines, the capture's popup; FOV takes the
+       vertical field of view in degrees (%d) */
+    UI_STR_PHOTO_MODE,
+    UI_STR_PHOTO_HUD_MOVE,
+    UI_STR_PHOTO_HUD_LENS,
+    UI_STR_PHOTO_HUD_KEYS,
+    UI_STR_PHOTO_FOV,
+    UI_STR_PHOTO_SAVED,
+    UI_STR_PHOTO_FAILED,
     UI_STR_COUNT
 } UiStrId;
 
