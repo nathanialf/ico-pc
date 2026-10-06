@@ -781,8 +781,10 @@ uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
  * frame it owns, the current frame cur with every keyed draw's data blended
  * from its match in prev by alpha (0 = prev's data, 1 = cur's), and the
  * feedback passes set up for a present that stands for dt ticks
- * (motion blur's FIX through rd__BlurFeedbackFix; the aura's FEED128
- * writes dropped unless firstOfTick).  prev NULL, or a frame-level snap
+ * (motion blur's FIX through rd__BlurFeedbackFix; a frame that writes
+ * FEED128 copies it into FEED_HELD at its head when firstOfTick, and back
+ * from FEED_HELD otherwise, so every present of a tick starts from the same
+ * FEED128).  prev NULL, or a frame-level snap
  * (rd__InterpSnap), copies cur's data.  The result is valid until the next
  * call; it owns no temporary targets (cur's are used). */
 enum {
@@ -855,8 +857,8 @@ void rd__InterpShutdown(void);
  * RD_PHOTO_HIDE_UI the UI-space and full-screen RDC_SCREEN draws and the
  * RDC_OVERLAY_TEXT items and ops of lists 11 and 12 become RDC_NOP.  The
  * motion blur's feedback stands for 4 ticks (the trail of the camera's
- * moves dies at once) and the aura's FEED128 writes run only when
- * firstOfTick.  Returns NULL when the copy fails. */
+ * moves dies at once) and FEED128 is kept or put back as in
+ * rd__InterpFrame, by firstOfTick.  Returns NULL when the copy fails. */
 typedef struct RdPhotoStats {
     uint32_t rebased;    /* VU draws re-based onto ov */
     uint32_t keptCamera; /* VU draws through another camera (CAM_NONE): kept */

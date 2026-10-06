@@ -189,6 +189,10 @@ typedef enum RdTargetId {
     RD_TARGET_AURA_WORK, /* TBP 0x2A00 TBW 8: scene-sized aura buffer (list 8), SCENE's Z */
     RD_TARGET_AURA_TAP,  /* TBP 0x2800 TBW 2: 128 x 128 aura tap buffer */
     RD_TARGET_WORK2_PAD, /* TBP 0x2E00 + W H / 64: fillWork2's 256 x 64 band (never read) */
+    /* host only, no GS address: FEED128 as a tick's first present found it,
+     * put back at the head of the tick's later presents (rd_interp.c
+     * feedback) */
+    RD_TARGET_FEED_HELD,
     RD_TARGET_COUNT
 } RdTargetId;
 

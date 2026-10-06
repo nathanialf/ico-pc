@@ -6,7 +6,7 @@
  *                  [--backend vulkan|d3d12]
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
- * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD).  --present renders the Original presenter into a
+ * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD, FEED_HELD).  --present renders the Original presenter into a
  * W x H output and writes that instead.  Commands of later waves (meshes,
  * fog, ...) are skipped with a message instead of stopping.
  *
@@ -98,9 +98,10 @@
 #include "rd_mesh.h"
 #include "font.h" /* port/ui: the deferred text renderer (package DEF) */
 
-static const char *const kNames[] = {
-    "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2", "WORK0",     "WORK1",    "WORK2",
-    "WORK3", "AA0",     "AA1",     "FEED128", "",        "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
+static const char *const kNames[] = {"SCENE",     "DISPLAY",  "SHADOW0", "SHADOW1",   "SHADOW2",
+                                     "WORK0",     "WORK1",    "WORK2",   "WORK3",     "AA0",
+                                     "AA1",       "FEED128",  "",        "AURA_WORK", "AURA_TAP",
+                                     "WORK2_PAD", "FEED_HELD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
     "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",

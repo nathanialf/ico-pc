@@ -417,6 +417,7 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         break;
     case RD_TARGET_AA1:
     case RD_TARGET_FEED128:
+    case RD_TARGET_FEED_HELD:
     case RD_TARGET_AURA_TAP:
         *w = *h = 128;
         break;
@@ -514,9 +515,9 @@ float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight)
 }
 
 static const char *const s_targetNames[RD_TARGET_COUNT] = {
-    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",  "SHADOW2", "WORK0",
-    "WORK1",         "WORK2",     "WORK3",    "AA0",      "AA1",     "FEED128",
-    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
+    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",  "WORK0",
+    "WORK1",         "WORK2",     "WORK3",    "AA0",       "AA1",      "FEED128",
+    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD"};
 
 RdTargetRec *rd__TargetRec(uint32_t id)
 {

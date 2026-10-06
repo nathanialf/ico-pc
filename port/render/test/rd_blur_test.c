@@ -33,7 +33,12 @@
  *      FIX 0x40 on noise, FIX 0x70 with cuts (RENDER_API.md "Blend
  *      exactness under feedback"'s cases);
  *   a  600 frames of the aura feedback through FEED128, 200 each of modes
- *      1 (aura), 2 (mirage) and 3 (aura v2), blurCol alpha 0x20 then 0x40.
+ *      1 (aura), 2 (mirage) and 3 (aura v2), blurCol alpha 0x20 then 0x40;
+ *   c  mirage ticks at alpha 128, one of them a camera cut (GlobalTimer),
+ *      each replayed as the interpolating presenter does, as a tick's first
+ *      present and as a later one: both draw the same SCENE and leave the
+ *      same FEED128 (the later present of the cut drew black before
+ *      FEED_HELD).
  * Tolerance 0 everywhere.  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -280,8 +285,9 @@ static int named(uint32_t id)
 }
 
 static const char *const kTargetNames[RD_TARGET_COUNT] = {
-    "SCENE", "DISPLAY", "SHADOW0", "SHADOW1", "SHADOW2",   "WORK0",     "WORK1",    "WORK2",
-    "WORK3", "AA0",     "AA1",     "FEED128", "DATE_SNAP", "AURA_WORK", "AURA_TAP", "WORK2_PAD"};
+    "SCENE",     "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",  "WORK0",
+    "WORK1",     "WORK2",     "WORK3",    "AA0",       "AA1",      "FEED128",
+    "DATE_SNAP", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD"};
 
 static const char *tname(uint32_t id)
 {
@@ -816,6 +822,32 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
         cpuSprite(s, &r);
         return;
     }
+    if (c->type == RDC_COPY) {
+        /* the presenter's FEED128 <-> FEED_HELD copy (rd_interp.c
+         * feedback): targets of one size and scale */
+        CpuT *src = cpuT(c->u[0]), *dst = cpuT(c->u[1]);
+        RdCopyRec r;
+        memcpy(&r, f->payload + c->u[2], sizeof(r));
+        if (!src || !dst || src == dst || r.srcX < 0 || r.srcY < 0 || r.dstX < 0 || r.dstY < 0) {
+            s_unexpected++;
+            return;
+        }
+        for (int y = 0; y < (int)r.h; y++) {
+            const int sy = r.srcY + y, dy = r.dstY + y;
+            if (sy >= src->h || dy >= dst->h) {
+                break;
+            }
+            for (int x = 0; x < (int)r.w; x++) {
+                const int sx = r.srcX + x, dx = r.dstX + x;
+                if (sx >= src->w || dx >= dst->w) {
+                    break;
+                }
+                memcpy(&dst->c[((size_t)dy * dst->w + dx) * 4],
+                       &src->c[((size_t)sy * src->w + sx) * 4], 4);
+            }
+        }
+        return;
+    }
     s_unexpected++;
 }
 
@@ -829,10 +861,10 @@ static uint8_t s_gpu[W * H * 4];
 
 /* the targets the effects touch, GPU against the CPU model; returns the
  * largest difference */
-static const int kCompared[] = {RD_TARGET_SCENE,    RD_TARGET_DISPLAY,   RD_TARGET_WORK0,
-                                RD_TARGET_WORK1,    RD_TARGET_WORK2,     RD_TARGET_WORK3,
-                                RD_TARGET_FEED128,  RD_TARGET_AURA_WORK, RD_TARGET_AURA_TAP,
-                                RD_TARGET_WORK2_PAD};
+static const int kCompared[] = {RD_TARGET_SCENE,     RD_TARGET_DISPLAY,   RD_TARGET_WORK0,
+                                RD_TARGET_WORK1,     RD_TARGET_WORK2,     RD_TARGET_WORK3,
+                                RD_TARGET_FEED128,   RD_TARGET_AURA_WORK, RD_TARGET_AURA_TAP,
+                                RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD};
 
 static int compareAll(const char *what, int verbose)
 {
@@ -1160,6 +1192,88 @@ static void checkAura(void)
            worst);
 }
 
+/* ================================ (c) the presents of a camera cut's tick
+ *
+ * With interpolation every present of a tick replays the whole frame.  A
+ * mirage (feedback mode 2) frame on a camera cut (GlobalTimer 1) ends by
+ * filling FEED128 with black at alpha 128 (auraInspireAfter's reset), and
+ * pastes FEED128 over the screen before that at blurCol's alpha (128 here,
+ * as in most stages).  Each tick is presented twice: as its first present
+ * and as a later one (rd__InterpFrame's firstOfTick 0).  Both must draw
+ * the same picture and leave the same FEED128; before the presenter kept
+ * FEED128's input (FEED_HELD), the later present of the cut pasted the
+ * black reset over the whole screen. */
+
+static uint8_t s_firstScene[W * H * 4], s_firstFeed[128 * 128 * 4];
+
+static int presentTick(const char *what, int first, uint8_t *scene, uint8_t *feed)
+{
+    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 1.0f, 1.0f, first, NULL);
+    if (!f || !rd__ReplayFrame(f, 0, false)) {
+        CHECK(0, "%s: build and replay the present", what);
+        return 0;
+    }
+    rhi_WaitIdle();
+    s_unexpected = 0;
+    cpuFrame(f);
+    CHECK(s_unexpected == 0, "%s: %d commands the CPU model does not know", what, s_unexpected);
+    const int d = compareAll(what, failures < 10);
+    uint32_t w, h;
+    CHECK(rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene, W * H * 4, &w, &h) && w == W && h == H,
+          "%s: read SCENE", what);
+    CHECK(rd__ReadTarget(rd_Target(RD_TARGET_FEED128), feed, 128 * 128 * 4, &w, &h) && w == 128 &&
+              h == 128,
+          "%s: read FEED128", what);
+    return d;
+}
+
+static void checkCutPresents(void)
+{
+    static uint8_t scene[W * H * 4], feed[128 * 128 * 4];
+    const uint8_t interpolate = g_rd.settings.interpolate;
+    g_rd.settings.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
+    clearAll();
+    int worst = 0, black = 0;
+    for (int n = 0; n < 8; n++) {
+        setStage(0, 2, 0x80);
+        GlobalTimer = n == 5; /* the cut */
+        makeImage((uint32_t)(40 + n), 0);
+        rd_UpdateTexture(s_imgTex, s_img);
+        putScene();
+        FullScreenEffectBefore();
+        dl_SetDLPriority(8);
+        putImage(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, H, 120 + n * 10,
+                 220 + n * 10, 0, 0);
+        FullScreenEffectAfter();
+        dl_Swap();
+        char what[64];
+        snprintf(what, sizeof(what), "(c) tick %d%s, first present", n, n == 5 ? " (cut)" : "");
+        int d = presentTick(what, 1, s_firstScene, s_firstFeed);
+        worst = d > worst ? d : worst;
+        snprintf(what, sizeof(what), "(c) tick %d%s, later present", n, n == 5 ? " (cut)" : "");
+        d = presentTick(what, 0, scene, feed);
+        worst = d > worst ? d : worst;
+        int differ = 0, dark = 0;
+        for (int i = 0; i < W * H; i++) {
+            differ += memcmp(&scene[i * 4], &s_firstScene[i * 4], 3) != 0;
+            dark += (scene[i * 4] | scene[i * 4 + 1] | scene[i * 4 + 2]) == 0;
+        }
+        CHECK(differ == 0,
+              "(c) tick %d%s: the later present's SCENE equals the first's (%d pixels "
+              "differ, %d black)",
+              n, n == 5 ? " (cut)" : "", differ, dark);
+        CHECK(memcmp(feed, s_firstFeed, sizeof(feed)) == 0,
+              "(c) tick %d: both presents leave the same FEED128", n);
+        black = dark > black ? dark : black;
+    }
+    GlobalTimer = 0;
+    g_rd.settings.interpolate = interpolate;
+    CHECK(black < W * H / 2, "(c) no present is black (%d black pixels at most)", black);
+    printf("  (c) 8 mirage ticks (a cut at the sixth), two presents each: max difference %d LSB, "
+           "at most %d black pixels\n",
+           worst, black);
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
@@ -1258,6 +1372,7 @@ int main(void)
     checkDump();
     checkMotionBlur();
     checkAura();
+    checkCutPresents();
 
     checkPipelines();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",

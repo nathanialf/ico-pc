@@ -76,9 +76,10 @@
  * updated in place), the rand-driven draws (the menu sparkle, lightning:
  * world prims and particles' screen packets with key 0), the dissolve FIX
  * (an ALPHA state command), film noise (an unkeyed post sprite), and the
- * aura's feedback through FEED128: its sprites that write FEED128 run in
- * the first present of a tick only, so the buffer advances once per tick
- * as on the PS2 and the other presents paste the held buffer.
+ * aura's input from FEED128: the first present of a tick keeps FEED128 in
+ * FEED_HELD and the later presents start from it again (feedback), so
+ * every present of a tick draws the same feedback and FEED128 advances once
+ * per tick as on the PS2.
  *
  * Feedback per present: the motion blur's sprite (DISPLAY back into SCENE
  * with LERP FIX) runs at every present.  On the PS2 DISPLAY keeps a =
@@ -3139,29 +3140,87 @@ static void lerpCamera(RdCamera *o, const RdCamera *p, const RdCamera *c, float 
     lerpFloats(&o->farZ, &p->farZ, &c->farZ, 1, t);
 }
 
+/* Does c, under the state st, write the target id? */
+static int writesTarget(const RdCmd *c, const RdStateBlock *st, uint32_t id)
+{
+    switch (c->type) {
+    case RDC_NOP:
+    case RDC_OVERLAY_TEXT:
+        return 0;
+    case RDC_CLEAR:
+        return c->u[0] == id;
+    case RDC_COPY:
+        return c->u[1] == id;
+    default:
+        return st->color == id;
+    }
+}
+
 /* The feedback passes for a present standing for dt ticks: the motion
- * blur's FIX, and the aura's FEED128 writes only in a tick's first present. */
+ * blur's FIX, and FEED128's input.  A frame that writes FEED128 reads what
+ * the frame before left there (the aura's feedback), and every present of
+ * a tick replays all of its passes, so every present must start from the
+ * FEED128 the tick's first present started from: the first copies FEED128
+ * into FEED_HELD at its head, the later ones copy FEED_HELD back into
+ * FEED128 at theirs.  Every present then draws the same picture and leaves
+ * FEED128 in the tick's final state, which the next tick reads, as on the
+ * PS2.  (Dropping a later present's FEED128 writes instead, while its
+ * reads still ran, pasted the tick's final FEED128 over the screen: after
+ * the black reset of a camera cut, auraInspireAfter's GlobalTimer fill, a
+ * black frame.) */
 static void feedback(float dt, int firstOfTick)
 {
     const uint32_t feed = rd_Target(RD_TARGET_FEED128).id;
+    const uint32_t held = rd_Target(RD_TARGET_FEED_HELD).id;
+    const int head = rd__FirstList((int)s_out.keep);
+    int fed = 0;
     RdStateBlock st = s_out.startState;
-    for (int l = rd__FirstList((int)s_out.keep); l < RD_LIST_COUNT; l++) {
+    for (int l = head; l < RD_LIST_COUNT; l++) {
         RdCmdList *cl = &s_out.lists[l];
         for (uint32_t i = 0; i < cl->count; i++) {
             RdCmd *c = &cl->cmds[i];
-            if (rd__ApplyState(&st, c) || c->type != RDC_POST_STUB) {
+            if (rd__ApplyState(&st, c)) {
                 continue;
             }
-            if (c->b[0] == RD_POST_MOTION_BLUR) {
+            fed |= feed && writesTarget(c, &st, feed);
+            if (c->type == RDC_POST_STUB && c->b[0] == RD_POST_MOTION_BLUR) {
                 RdPostRec *r = (RdPostRec *)payloadAt(&s_out, c->u[1], sizeof(RdPostRec));
                 if (r) {
                     r->scalar[2] = dt;
                 }
-            } else if (c->b[0] == RD_POST_AURA && !firstOfTick && st.color == feed) {
-                c->type = RDC_NOP;
             }
         }
     }
+    if (!fed || !held) {
+        return;
+    }
+    RdCmdList *cl = &s_out.lists[head];
+    uint32_t off;
+    RdCopyRec *r = (RdCopyRec *)(void *)outAppend(sizeof(RdCopyRec), &off);
+    if (!r) {
+        return;
+    }
+    const RdTargetRec *t = rd__TargetRec(feed);
+    memset(r, 0, sizeof(*r));
+    r->w = t ? t->w : 128u;
+    r->h = t ? t->h : 128u;
+    if (cl->count + 1 > cl->cap) {
+        const uint32_t cap = cl->count + 16;
+        RdCmd *p = realloc(cl->cmds, (size_t)cap * sizeof(RdCmd));
+        if (!p) {
+            return;
+        }
+        cl->cmds = p;
+        cl->cap = cap;
+    }
+    memmove(&cl->cmds[1], &cl->cmds[0], (size_t)cl->count * sizeof(RdCmd));
+    cl->count++;
+    RdCmd *c = &cl->cmds[0];
+    memset(c, 0, sizeof(*c));
+    c->type = RDC_COPY;
+    c->u[0] = firstOfTick ? feed : held;
+    c->u[1] = firstOfTick ? held : feed;
+    c->u[2] = off;
 }
 
 const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
@@ -3477,8 +3536,8 @@ const RdFrame *rd__PhotoFrame(const RdFrame *pin, const RdCamera *ov, uint32_t f
         }
     }
     /* the motion blur's feedback stands for the longest present (4 ticks:
-     * the trail of the camera's moves fades at once); FEED128 advances once
-     * a pinned frame */
+     * the trail of the camera's moves fades at once); every present of the
+     * pin starts from the FEED128 its first present found */
     feedback(4.0f, firstOfTick);
     if (stats) {
         *stats = st;

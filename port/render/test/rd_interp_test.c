@@ -45,8 +45,10 @@
  *             same; the replays use the kept streams
  *   feedback  rd__BlurFeedbackFix at dt 0.5: the LERP retention is a^0.5 (to
  *             the FIX's rounding), additive FIX x 0.5; the motion blur
- *             sprite of an interpolated frame carries dt; the aura's FEED128
- *             writes are dropped except in a tick's first present
+ *             sprite of an interpolated frame carries dt; a frame that
+ *             writes FEED128 keeps every aura sprite in every present, and
+ *             its head copies FEED128 into FEED_HELD in a tick's first
+ *             present and back in the later ones (none without a write)
  * On a device (skipped without one):
  *   pixels    replays of the blended frame at alpha 0 and 1 equal the
  *             previous and current frames' replays byte for byte; at 0.5 the
@@ -823,8 +825,52 @@ static void testFeedback(void)
             }
         }
         CHECK(dt == 0.5f, "the motion blur sprite stands for dt 0.5 (%g)", dt);
-        CHECK(aura == (first ? 2 : 1), "%s present: %d aura sprites (FEED128's %s)",
-              first ? "a tick's first" : "a later", aura, first ? "kept" : "dropped");
+        CHECK(aura == 2, "%s present: %d aura sprites (FEED128's kept)",
+              first ? "a tick's first" : "a later", aura);
+        /* the head of the first list: FEED128 kept in FEED_HELD by the
+         * first present, put back from it by the later ones */
+        const uint32_t feed = rd_Target(RD_TARGET_FEED128).id;
+        const uint32_t held = rd_Target(RD_TARGET_FEED_HELD).id;
+        const RdCmd *h = f->lists[0].count ? &f->lists[0].cmds[0] : NULL;
+        int copies = 0;
+        for (int l = 0; l < RD_LIST_COUNT; l++) {
+            for (uint32_t i = 0; i < f->lists[l].count; i++) {
+                copies += f->lists[l].cmds[i].type == RDC_COPY;
+            }
+        }
+        CHECK(h && h->type == RDC_COPY && h->u[0] == (first ? feed : held) &&
+                  h->u[1] == (first ? held : feed) && copies == 1,
+              "%s present: the head copies %s (%d copies)", first ? "a tick's first" : "a later",
+              first ? "FEED128 into FEED_HELD" : "FEED_HELD back into FEED128", copies);
+        if (h && h->type == RDC_COPY) {
+            RdCopyRec r;
+            memcpy(&r, f->payload + h->u[2], sizeof(r));
+            CHECK(r.srcX == 0 && r.srcY == 0 && r.dstX == 0 && r.dstY == 0 && r.w == 128 &&
+                      r.h == 128,
+                  "the copy is all of FEED128 (%u x %u)", r.w, r.h);
+        }
+    }
+    /* a frame that does not write FEED128 gets no copy */
+    for (int k = 0; k < 2; k++) {
+        rd_BeginFrame();
+        frameHead();
+        rd_SelectList(8);
+        RdPostParams pp;
+        memset(&pp, 0, sizeof(pp));
+        rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
+        rd_Post(RD_POST_AURA, &pp);
+        rd_EndFrame(0);
+    }
+    for (int first = 1; first >= 0; first--) {
+        const RdFrame *f =
+            rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 0.5f, 0.5f, first, NULL);
+        int copies = 0;
+        for (int l = 0; l < RD_LIST_COUNT; l++) {
+            for (uint32_t i = 0; i < f->lists[l].count; i++) {
+                copies += f->lists[l].cmds[i].type == RDC_COPY;
+            }
+        }
+        CHECK(copies == 0, "no FEED128 write, no copy (%d)", copies);
     }
 }
 
