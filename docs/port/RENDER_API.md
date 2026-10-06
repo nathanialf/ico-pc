@@ -1366,7 +1366,7 @@ quads it stands for do.
 ### The CRT pass
 
 `port/render/rd_crt.c` (`rd__CrtRecord`, `rd__CrtResolve`, the modes'
-table, `rd__CrtMaskWeight`, `rd__CrtMaskGain`), `port/shaders/crt.hlsl`,
+table, `rd__CrtMaskWeight`, `rd__CrtTriadGain`, `rd__CrtRowGain`), `port/shaders/crt.hlsl`,
 `rd.h` `RdSettings.crtMode` ... `crtCurvature` and `rd_CrtSettings`;
 `rd_present.c` (`rd__ApplyDisplay`'s 1x rule, the overlay's grid);
 `port/game/video_options.c` (the `[video] crt*` keys), `port/ui/settings.c`
@@ -1421,13 +1421,13 @@ pixel in linear light, the beam of its line at distance v - 0.5 lines
 plus the beams of the lines above and below (each a Gaussian across the
 lines of unit area whose full width at half maximum goes from beam min to
 beam max with the channel's value), mixed with the flat pixel by the
-scanline strength; times `maskOf(f, v, column odd)` x the mask's gain,
+scanline strength; times `maskOf(f, v, column odd)` x `triadGain` x the slot's row gain,
 lerped from 1 by the box-height fade; the whole lerped from the flat
 pixel by the strength; halation (glow B at the point and 4 glow texels
 around, a fifth of each) and bloom (glow B weighted by smoothstep(0.2, 1,
 luma)) added; the vignette (16 x y (1 - x)(1 - y))^v; gamma out; alpha 1.
 Nothing resamples the mask: with the glow off each output pixel is one
-channel of one source pixel. The strength scales the curvature, the
+source pixel through one phosphor (one channel of it at mask strength 1). The strength scales the curvature, the
 corner, the glow, the vignette and moves gamma out toward gamma in, so
 the picture eases into the filter as it rises.
 
@@ -1436,23 +1436,30 @@ function of (f, v) and r, the output pixels a source pixel is wide (box
 width / grid width): with u = f r, the last g = `rd__CrtGapColumns(r)`
 pixels (1 from r 4, 2 from r 6) are a gap passing all three channels at 1
 - gap; the rest is three equal stripes, R, G, B from the left, each
-passing only its own channel. Grille: the stripes run down the line.
+passing its own channel in full and the other two at 1 - gap (the leak;
+at gap 1 its own channel only). Grille: the stripes run down the line.
 Slot: a bridge at 1 - gap over v in [2/3, 1), half a line later in the
 odd source columns (the slots staggered). Dots: for v from 1/2 the
 stripes are taken at f + 1/3 (the second row of dots one stripe over:
 half a triad rounded down to whole stripes, so at r 3 they stay on whole
-pixels). gap is the mode's mask strength. The gain (`rd__CrtMaskGain`,
-`c_pass.y`) is 1 over the mask's mean weight for a channel (3 for a
-grille without gaps), so the mask keeps the pixel's light before the
-final clamp (a lit stripe of a bright colour exceeds 1 and clips).
+pixels). gap is the mode's mask strength. The gains keep each triad's
+light: `rd__CrtTriadGain` (C, no curvature) and `triadGain` (HLSL, each
+neighbour column warped as the pixel is) are 1 over the mean of a
+channel's stripe weight over the output columns of the pixel's row whose
+positions fall in the same source pixel (2 or 3 at r 2.81: a triad short
+of a stripe is not tinted, as one gain for the box would tint them in
+bands), the mean floored at 0.1; `rd__CrtRowGain` (`c_pass.y`) is 1 over
+the slot bridges' mean over a line (1 / (1 - gap / 3); 1 for the other
+masks). The light is kept before the final clamp (a lit stripe of a
+bright colour exceeds 1 and clips).
 
 **Constants.** `IcoCrtCB` (`shader_consts.h`) is DrawCB's size and is bound
 in its slot with the draw layout (`rd__CrtGroup`), so no layout or dynamic
 group is added; group 0 gets a FrameCB (unused by the shader) and group 2
 `rd__TexGroupDate` with t2 the glow (the dummy for the glow passes).
-`c_beam.w` is the gap columns, `c_mask` the type, the gap darkness, the box-height fade
+`c_beam.w` is the gap columns, `c_mask` the type, the mask strength, the box-height fade
 (`rd__CrtMaskFade(box h)`: 1 from 1080, 0 at 720 and below) and the
-halation, `c_pass` the mirror, the gain and the glow's texel step.
+halation, `c_pass` the mirror, the slot's row gain and the glow's texel step.
 
 **Pipelines.** Four keys, `rd__EnumerateReachableCrt`: the two RGBA16F
 glow passes and `crt_ps` on RGBA8 (headless) and BGRA8 (the swapchain), so
@@ -2230,7 +2237,7 @@ and op and marks the quads `text-quads`.
 | `rd_blur` | every staticBlur effect against the sprite model, feedback over 600 frames through the real reduction |
 | `rd_raw` | dark volume, lightning, particles, lines, the wrap path, FBMSK's extent; which lines the decoder records with AA1 |
 | `rd_debug` | the debug font and menu; the developer overlay (text, font window, menu) under the mirror mode is the exact flip of the unmirrored one in SCENE and in DISPLAY, Original and 2x |
-| `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides, the gap columns and the mask's gain (checked against the mask's numerically integrated mean); on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %; the phosphors, glow and curvature off: at a 1440×1080 box under white every box pixel is one channel, the one `rd__CrtMaskWeight` gives, each source pixel's columns R, G, B in order; at 1536×1152 a red pixel lights only its first column (Trinitron), a white one R, G, B columns (Trinitron, PVM), Consumer TV's bridges dark and staggered half a line, the shadow mask's second row of dots one stripe over, Scanlines without columns |
+| `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides, the gap columns, the leak and the gains (every triad's light, numerically integrated over its columns and line, is 1); on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %; the phosphors, glow and curvature off: at a 1440×1080 box under white every box pixel is one channel, the one `rd__CrtMaskWeight` gives, each source pixel's columns R, G, B in order; at 1536×1152 a red pixel lights only its first column (Trinitron), a white one R, G, B columns (Trinitron, PVM), the shadow mask's second row of dots one stripe over, Scanlines without columns (the geometry at mask strength 1); at the modes' own strengths Consumer TV's bridges darker by 1 - strength and staggered half a line, each stripe leaking 1 - strength of the other channels (Consumer TV, Trinitron), and at 1440×1080 every triad's light within 4 % of its pixel's |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched); the overlay under the CRT filter (the callback's box is the grid, its red rectangle comes out as R phosphors); photo mode's capture at 800×600: CRT off the PNG is the present without the overlay, under Consumer TV the present with it, byte for byte |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |

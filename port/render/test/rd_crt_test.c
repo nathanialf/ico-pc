@@ -30,7 +30,11 @@
  *             Consumer TV's slot bridges are dark and the odd columns' half
  *             a line off the even ones'; the shadow mask's second row of
  *             dots is half a triad over; the scanlines mode has no column
- *             structure; the gap columns and the mask's gain
+ *             structure (the geometry at mask strength 1: pure stripes);
+ *             at the modes' own strengths each stripe leaks (1 - strength)
+ *             of the other channels (Trinitron, Consumer TV) and at 1440 x
+ *             1080 every triad keeps its pixel's light; the gap columns,
+ *             the leak and the gains (each triad's light integrated)
  *
  * Usage: rd_crt_test [dir]  (dir: where the scratch config goes)
  */
@@ -178,31 +182,59 @@ static void checkResolve(void)
               rd__CrtGapColumns(4.0f) == 1 && rd__CrtGapColumns(5.625f) == 1 &&
               rd__CrtGapColumns(6.0f) == 2,
           "resolve: a gap column from 4 output pixels a source pixel, two from 6");
-    CHECK(fabsf(rd__CrtMaskGain(RD_CRT_MASK_GRILLE, 3.0f, 0.5f) - 3.0f) < 1e-5f &&
-              rd__CrtMaskGain(RD_CRT_MASK_NONE, 3.0f, 0.5f) == 1.0f &&
-              fabsf(rd__CrtMaskGain(RD_CRT_MASK_GRILLE, 4.0f, 1.0f) - 4.0f) < 1e-5f &&
-              fabsf(rd__CrtMaskGain(RD_CRT_MASK_SLOT, 3.0f, 0.5f) - 3.6f) < 1e-5f,
-          "resolve: the mask's gain keeps the pixel's light");
+    CHECK(fabsf(rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 0.5f, 0.5f, 0, 0)) < 1e-6f &&
+              fabsf(rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 0) - 0.6f) <
+                  1e-6f &&
+              rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 1) == 1.0f,
+          "resolve: a stripe passes its own channel and leaks 1 - strength of the others");
+    CHECK(
+        fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 3.0f, 0.5f, 10, 0.25f, 0) - 1.5f) < 1e-5f &&
+            rd__CrtTriadGain(RD_CRT_MASK_NONE, 3.0f, 0.5f, 10, 0.25f, 0) == 1.0f &&
+            fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 10, 0.25f, 1) - 3.0f) < 1e-5f &&
+            fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 4.0f, 1.0f, 10, 0.25f, 2) - 4.0f) < 1e-5f &&
+            fabsf(rd__CrtRowGain(RD_CRT_MASK_SLOT, 0.5f) - 1.2f) < 1e-5f &&
+            rd__CrtRowGain(RD_CRT_MASK_GRILLE, 0.5f) == 1.0f,
+        "resolve: the gains keep the pixel's light");
     {
-        /* the gain is 1 over the mean weight: integrate the weight over a
-           source pixel and line numerically, for each mask and a few r */
+        /* each triad keeps its pixel's light: a channel's weight times the
+           gains, averaged over the output columns its source pixel has and
+           over the line, is 1 for every source pixel (at r 2.8125 they have
+           2 or 3 columns), each mask, a few r and strengths */
         static const float rs[4] = {2.8125f, 3.0f, 4.5f, 6.0f};
-        int ok = 1;
+        static const float gaps[2] = {0.4f, 0.6f};
+        double worst = 0.0;
         for (int m = RD_CRT_MASK_GRILLE; m <= RD_CRT_MASK_DOTS; m++) {
             for (int i = 0; i < 4; i++) {
-                double sum = 0.0;
-                const int n = 600;
-                for (int y = 0; y < n; y++) {
-                    for (int x = 0; x < n; x++) {
-                        sum += rd__CrtMaskWeight(m, rs[i], 0.6f, (x + 0.5f) / n, (y + 0.5f) / n,
-                                                 (x + y) & 1, 0);
+                for (int gi = 0; gi < 2; gi++) {
+                    for (int sx = 0; sx < 32; sx++) {
+                        for (int ch = 0; ch < 3; ch++) {
+                            double sum = 0.0;
+                            int cnt = 0;
+                            const int n = 600;
+                            for (int y = 0; y < n; y++) {
+                                const float v = (y + 0.5f) / n;
+                                const float g = rd__CrtTriadGain(m, rs[i], gaps[gi], sx, v, ch) *
+                                                rd__CrtRowGain(m, gaps[gi]);
+                                for (int x = (int)(sx * rs[i]) - 1;
+                                     x <= (int)((sx + 1) * rs[i]) + 1; x++) {
+                                    const float px = (x + 0.5f) / rs[i];
+                                    if (x < 0 || (int)floorf(px) != sx) {
+                                        continue;
+                                    }
+                                    sum += rd__CrtMaskWeight(m, rs[i], gaps[gi], px - (float)sx, v,
+                                                             sx & 1, ch) *
+                                           g;
+                                    cnt++;
+                                }
+                            }
+                            const double e = fabs(sum / cnt - 1.0);
+                            worst = e > worst ? e : worst;
+                        }
                     }
                 }
-                const double mean = sum / ((double)n * n);
-                ok &= fabs(mean * rd__CrtMaskGain(m, rs[i], 0.6f) - 1.0) < 0.01;
             }
         }
-        CHECK(ok, "resolve: the gain is 1 over the mask's mean weight");
+        CHECK(worst < 0.01, "resolve: every triad keeps its pixel's light (worst %.4f)", worst);
     }
 
     RdSettings s;
@@ -384,14 +416,15 @@ static const char *const kModeName[RD_CRT_MODE_COUNT] = {"off",       "scanlines
                                                          "trinitron", "pvm",       "shadow"};
 
 /* The presents of the rich frame through each mode (llvmpipe, LLVM 19.1.7,
- * this file's frame; package CRT2's phosphors per output pixel): [mode - 1][0]
+ * this file's frame; package CRT2's phosphors per output pixel, FIX0's leak
+ * and per-triad gain): [mode - 1][0]
  * 960 x 720, [1] 1920 x 1440 */
 static const uint64_t kGold[RD_CRT_MODE_COUNT - 1][2] = {
     {0xb63d6f980571913bull, 0x06ebfa2d69b427ceull}, /* scanlines */
-    {0xe8f8c1f74162712aull, 0x392c0f886cce4e79ull}, /* consumer */
-    {0xf69cf28414987833ull, 0x8b4aad59b0f7d077ull}, /* trinitron */
-    {0xe5dcb80cb41b8402ull, 0x329832c383f89a92ull}, /* pvm */
-    {0x633134534e10b694ull, 0x31285f28668b2d43ull}, /* shadow */
+    {0xe8f8c1f74162712aull, 0xcc091535d9b3bdfcull}, /* consumer */
+    {0xf69cf28414987833ull, 0x4482b83647d616ceull}, /* trinitron */
+    {0xe5dcb80cb41b8402ull, 0x70ac35d4c4ec372cull}, /* pvm */
+    {0x633134534e10b694ull, 0x16355a63829491f3ull}, /* shadow */
 };
 
 static double boxLuma(uint32_t w, uint32_t h)
@@ -519,24 +552,24 @@ static void checkLuma(void)
 
 /* ------------------------------------------ the phosphors (package CRT2) */
 
-static uint32_t s_w, s_h; /* the last present's output */
+static uint32_t s_w; /* the last present's output width */
 static RhiRect s_box;
 
 /* a flat frame (r, g, b) through mode at a w x h output, the glow, the
- * curvature (and so the corners) off; scan the beam's profile too when
- * flat is set (crt_scanlines 0) */
+ * curvature (and so the corners) off, the mask at strength mask (< 0: the
+ * mode's); the beam flat when flat is set (crt_scanlines 0) */
 static bool phosphors(RdCrtMode mode, uint32_t w, uint32_t h, uint8_t r, uint8_t g, uint8_t b,
-                      int flat)
+                      int flat, float mask)
 {
     makeFlatScene(r, g, b);
     RdSettings s = outputSettings(w, h);
     rd_CrtSettings(&s, mode, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    s.crtMask = mask; /* < 0: the mode's own strength */
     if (flat) {
         s.crtScanlines = 0.0f;
     }
     s_w = w;
-    s_h = h;
     rd__PresentBox(w, h, 4.0f / 3.0f, &s_box);
     return present(&s, 0);
 }
@@ -586,8 +619,9 @@ static void checkPhosphors(void)
     /* 1440 x 1080 (1920 x 1080), Trinitron, white: every box pixel one
        channel, the expected one, each source pixel's columns R, G, B in
        order */
-    if (phosphors(RD_CRT_TRINITRON, 1920, 1080, 0xFF, 0xFF, 0xFF, 0)) {
+    if (phosphors(RD_CRT_TRINITRON, 1920, 1080, 0xFF, 0xFF, 0xFF, 0, 1.0f)) {
         rd__CrtPreset(RD_CRT_TRINITRON, &p);
+        p.maskStrength = 1.0f;
         uint32_t impure = 0, wrong = 0, order = 0, checked = 0;
         /* away from the rounded corners (0.02 of the height) */
         for (uint32_t y = 30; y + 30 < s_box.h; y += 7) {
@@ -623,7 +657,7 @@ static void checkPhosphors(void)
               "phosphors: 1440x1080: every box pixel one channel of its source pixel, in order");
     }
     /* 1536 x 1152, Trinitron, red: only each pixel's first column lights */
-    if (phosphors(RD_CRT_TRINITRON, 1536, 1152, 0xFF, 0, 0, 0)) {
+    if (phosphors(RD_CRT_TRINITRON, 1536, 1152, 0xFF, 0, 0, 0, 1.0f)) {
         int pure = 1;
         for (uint32_t y = 300; y < 340; y++) {
             for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
@@ -636,7 +670,7 @@ static void checkPhosphors(void)
     }
     /* 1536 x 1152, Trinitron and PVM, white: columns R, G, B */
     for (int m = RD_CRT_TRINITRON; m <= RD_CRT_PVM; m++) {
-        if (!phosphors((RdCrtMode)m, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
+        if (!phosphors((RdCrtMode)m, 1536, 1152, 0xFF, 0xFF, 0xFF, 0, 1.0f)) {
             continue;
         }
         int stripes = 1;
@@ -651,12 +685,14 @@ static void checkPhosphors(void)
         CHECK(stripes, "phosphors: 1536x1152 %s: a white pixel lights R, G, B columns",
               kModeName[m]);
     }
-    /* Consumer TV, a mid grey (no clipping), the beam flat: the bridges
-       (the last third of a line, half a line later in odd columns) are
-       darker than the slots by (1 - strength) in linear light, at the
-       expected rows; the stripes R, G, B */
-    if (phosphors(RD_CRT_CONSUMER, 1536, 1152, 0x60, 0x60, 0x60, 1)) {
+    /* Consumer TV at its own strength, a mid grey (no clipping), the beam
+       flat: the bridges (the last third of a line, half a line later in odd
+       columns) are darker than the slots by (1 - strength) in linear light,
+       at the expected rows; each stripe its channel in full and the other
+       two leaking (1 - strength) */
+    if (phosphors(RD_CRT_CONSUMER, 1536, 1152, 0x60, 0x60, 0x60, 1, -1.0f)) {
         rd__CrtPreset(RD_CRT_CONSUMER, &p);
+        const float want = powf(1.0f - p.maskStrength, 1.0f / 2.2f);
         uint32_t bad = 0, bridges = 0, n = 0;
         for (uint32_t y = 300; y < 360; y++) {
             for (uint32_t x = 3 * 200; x < 3 * 204; x++) {
@@ -685,24 +721,94 @@ static void checkPhosphors(void)
                 bridges += bridge;
                 if (bridge != bridgeO) {
                     /* one in a bridge, one in a slot: the bridge darker by
-                       about (1 - 0.6)^(1 / 2.2) = 0.66 */
+                       (1 - strength)^(1 / 2.2) */
                     const float ratio =
                         bridge ? (float)lit / (float)other : (float)other / (float)lit;
-                    bad += !(ratio > 0.58f && ratio < 0.74f);
+                    bad += fabsf(ratio - want) > 0.05f;
                 } else {
                     bad += abs((int)lit - (int)other) > 3;
                 }
-                bad += at(x, y)[(k + 1) % 3] > 1;
+                /* the next stripe's channel leaks through this stripe */
+                const float leak = (float)at(x, y)[(k + 1) % 3] / (float)at(x, y)[k];
+                bad += fabsf(leak - want) > 0.05f;
             }
         }
         printf("  phosphors: consumer: %u pixels, %u in bridges, %u off\n", n, bridges, bad);
         CHECK(bad == 0 && bridges > n / 5 && bridges < n / 2,
               "phosphors: consumer: dark bridges, staggered half a line between columns");
     }
+    /* Trinitron at its own strength (the leak), a mid grey, the beam flat,
+       at 1536 x 1152 (3 output pixels a source pixel): each stripe shows
+       its channel in full and the other two at (1 - strength) of it in
+       linear light */
+    if (phosphors(RD_CRT_TRINITRON, 1536, 1152, 0x60, 0x60, 0x60, 1, -1.0f)) {
+        rd__CrtPreset(RD_CRT_TRINITRON, &p);
+        const float want = powf(1.0f - p.maskStrength, 1.0f / 2.2f);
+        float lo = 9.0f, hi = 0.0f;
+        uint32_t own = 0;
+        for (uint32_t y = 300; y < 340; y++) {
+            for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
+                const uint8_t *c = at(x, y);
+                const int k = (int)(x % 3);
+                own += c[k] < c[(k + 1) % 3] || c[k] < c[(k + 2) % 3];
+                for (int j = 1; j < 3; j++) {
+                    const float ratio = (float)c[(k + j) % 3] / (float)c[k];
+                    lo = ratio < lo ? ratio : lo;
+                    hi = ratio > hi ? ratio : hi;
+                }
+            }
+        }
+        printf("  phosphors: trinitron at strength %.2f: the leak %.3f..%.3f (want %.3f)\n",
+               p.maskStrength, lo, hi, want);
+        CHECK(own == 0 && fabsf(lo - want) < 0.03f && fabsf(hi - want) < 0.03f,
+              "phosphors: trinitron at its own strength: the other channels leak (1 - strength)");
+    }
+    /* Trinitron at its own strength at 1440 x 1080 (2.81 output pixels a
+       source pixel: triads of 2 and 3 columns), a mid grey, the beam flat:
+       every source pixel's columns keep its light, channel by channel, so
+       the triads short of a stripe do not tint in bands */
+    if (phosphors(RD_CRT_TRINITRON, 1920, 1080, 0x60, 0x60, 0x60, 1, -1.0f)) {
+        const double in = pow(0x60 / 255.0, 2.2);
+        double worst = 0.0;
+        for (uint32_t y = 500; y < 580; y += 3) {
+            double sum[3] = {0, 0, 0};
+            int cnt = 0, cur = -1;
+            /* whole source pixels only: from the first one starting after
+               column 520 */
+            const int first = (int)((520.5f) / (float)s_box.w * 512.0f) + 1;
+            for (uint32_t x = 520; x < 920; x++) {
+                const int sx = (int)(((float)x + 0.5f) / (float)s_box.w * 512.0f);
+                if (sx < first) {
+                    continue;
+                }
+                if (sx != cur) {
+                    if (cnt > 0) {
+                        for (int k = 0; k < 3; k++) {
+                            const double e = fabs(sum[k] / cnt / in - 1.0);
+                            worst = e > worst ? e : worst;
+                        }
+                    }
+                    sum[0] = sum[1] = sum[2] = 0.0;
+                    cnt = 0;
+                    cur = sx;
+                }
+                const uint8_t *c = at(x, y);
+                for (int k = 0; k < 3; k++) {
+                    sum[k] += pow(c[k] / 255.0, 2.2);
+                }
+                cnt++;
+            }
+        }
+        printf("  phosphors: 1440x1080 trinitron: each triad's light within %.1f %%\n",
+               100.0 * worst);
+        CHECK(worst < 0.04, "phosphors: 1440x1080: every triad keeps its pixel's light (%.3f)",
+              worst);
+    }
     /* Shadow mask, white: the first half of a line R, G, B; the second the
        row of dots half a triad over (the expected channel everywhere) */
-    if (phosphors(RD_CRT_SHADOW, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
+    if (phosphors(RD_CRT_SHADOW, 1536, 1152, 0xFF, 0xFF, 0xFF, 0, 1.0f)) {
         rd__CrtPreset(RD_CRT_SHADOW, &p);
+        p.maskStrength = 1.0f;
         uint32_t wrong = 0, shifted = 0;
         for (uint32_t y = 300; y < 340; y++) {
             for (uint32_t x = 3 * 200; x < 3 * 220; x++) {
@@ -724,7 +830,7 @@ static void checkPhosphors(void)
     }
     /* Scanlines: no mask: every pixel of a row of a flat frame the same
        grey; the beam brightest mid-line */
-    if (phosphors(RD_CRT_SCANLINES, 1536, 1152, 0xFF, 0xFF, 0xFF, 0)) {
+    if (phosphors(RD_CRT_SCANLINES, 1536, 1152, 0xFF, 0xFF, 0xFF, 0, -1.0f)) {
         int flat = 1;
         for (uint32_t y = 300; y < 340; y++) {
             for (uint32_t x = 600; x < 660; x++) {

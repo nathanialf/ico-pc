@@ -661,7 +661,7 @@ typedef struct RdCrtParams {
     float scanline;         /* 0..1: the beam profile against the plain lines */
     float beamMin, beamMax; /* the beam's full width at half maximum, dark to bright, in lines */
     int mask;               /* RdCrtMask */
-    float maskStrength;     /* 0..1: the darkness of the gaps between the phosphors */
+    float maskStrength;     /* 0..1: 1 - the stripes' leak, the gaps' darkness */
     float halation, bloom;  /* 0..1 */
     float curvX, curvY;     /* the barrel warp per axis */
     float corner;           /* the corners' radius, of the box height */
@@ -680,13 +680,20 @@ float rd__CrtMaskFade(uint32_t boxH);
  * function).  A source pixel is r output pixels wide (box width / grid
  * width); f is the output pixel's position across it and v across its line
  * (0..1, the pixel's centre), odd whether its source column is odd, gap the
- * gaps' darkness (RdCrtParams.maskStrength).  Returns channel ch's weight:
- * 1 lit, 0 not, 1 - gap in a gap.  rd__CrtGapColumns is the gap columns a
- * source pixel has room for (1 from r 4, 2 from r 6); rd__CrtMaskGain is
- * 1 over the mask's mean weight for a channel (the light it keeps). */
+ * mask strength (RdCrtParams.maskStrength).  Returns channel ch's weight:
+ * 1 in its own stripe, 1 - gap (the leak) in the other two stripes and in a
+ * gap, times 1 - gap on a slot's bridge.  rd__CrtGapColumns is the gap
+ * columns a source pixel has room for (1 from r 4, 2 from r 6).
+ * rd__CrtTriadGain (crt.hlsl triadGain) is 1 over the mean of channel ch's
+ * stripe weight over the output columns whose centres fall in source pixel
+ * sx (no curvature; the shader follows the curve), the mean floored at
+ * RD_CRT_MEAN_MIN; rd__CrtRowGain is 1 over the slot bridges' mean over a
+ * line (1 for the other masks): together the light each triad keeps. */
+#define RD_CRT_MEAN_MIN 0.1f
 uint32_t rd__CrtGapColumns(float r);
 float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd, int ch);
-float rd__CrtMaskGain(int mask, float r, float gap);
+float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch);
+float rd__CrtRowGain(int mask, float gap);
 /* True when the present draws the CRT filter (a mode, strength > 0). */
 bool rd__CrtOn(void);
 /* The filter's source grid: the PS2 picture's pixels, vw across (512 at

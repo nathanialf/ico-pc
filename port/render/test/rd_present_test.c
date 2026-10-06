@@ -1533,6 +1533,7 @@ static void checkOverlayCrt(void)
     s.outputHeight = h;
     rd_CrtSettings(&s, RD_CRT_TRINITRON, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    s.crtMask = 1.0f; /* pure stripes: the R column passes red alone */
     if (!px || !rd_Init(512, 512, &s, NULL)) {
         free(px);
         return;

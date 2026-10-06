@@ -74,7 +74,8 @@ goes through the filter ("CRT filter" below).
 `crt = true` shows the picture through a simulated cathode-ray tube, in
 either preset. Each of the PS2's pixels lights its own little patch of
 phosphors: red, green and blue stripes (or dots) side by side, each glowing
-with its own colour of that pixel only, under a beam that is brightest in
+with its own colour of that pixel and letting some of the other two
+through (how much is the mode's mask strength), under a beam that is brightest in
 the middle of the PS2's line and fades toward the next. Bright parts
 bloom, and in some modes the glass curves and darkens toward its corners.
 Settings > Display > "CRT filter" picks the mode (Off, Scanlines, Consumer
@@ -97,7 +98,7 @@ The parameters each mode uses (`port/render/rd_crt.c`; the shader is
 | scanline strength | 0.50 | 0.35 | 0.45 | 0.60 | 0.40 |
 | beam width, dark to bright (lines) | 0.6 to 1.0 | 0.7 to 1.2 | 0.5 to 1.0 | 0.4 to 0.9 | 0.6 to 1.1 |
 | mask | none | slot | aperture grille | aperture grille | dot triads |
-| mask strength (darkness of the gaps) | | 0.60 | 0.50 | 0.80 | 0.60 |
+| mask strength (how much of the other two colours a stripe holds back; 1 = pure stripes) | | 0.40 | 0.50 | 0.60 | 0.45 |
 | halation | 0 | 0.12 | 0.05 | 0.03 | 0.08 |
 | bloom | 0 | 0.15 | 0.10 | 0.05 | 0.10 |
 | curvature x, y | 0, 0 | 0.030, 0.045 | 0.030, 0 | 0, 0 | 0.020, 0.030 |
@@ -115,20 +116,27 @@ PS2 pixel and one PS2 line, and
 
 - across the PS2 pixel it lands on one phosphor. The pixel's width on the
   screen is split into three equal stripes, red, green and blue from the
-  left, and the screen pixel shows only that stripe's colour of the PS2
-  pixel: a pure red PS2 pixel lights only its red stripe, a white one all
-  three. Nothing is scaled afterwards, so every screen pixel of the
-  picture is exactly one colour channel of one PS2 pixel (before the glow
-  is added). When a PS2 pixel is 4 or more screen pixels wide its last
-  screen column is a dark gap between triads, from 6 the last two;
+  left, and the screen pixel shows that stripe's colour of the PS2 pixel in
+  full and the other two at 1 - the mask strength of theirs (at Consumer
+  TV's 0.40 a red stripe of a white pixel is full red with 60 % green and
+  blue). At mask strength 1 the stripes are pure: a pure red PS2 pixel
+  lights only its red stripe, a white one all three, and every screen pixel
+  is exactly one colour channel of one PS2 pixel. Nothing is scaled
+  afterwards: every screen pixel is one PS2 pixel seen through one
+  phosphor (before the glow is added). When a PS2 pixel is 4 or more screen
+  pixels wide its last screen column is a gap between triads (at the same
+  1 - strength), from 6 the last two;
 - down the PS2 line it gets the beam: the line seen at that height (and a
   little of the lines above and below, which a wide bright beam reaches),
   a bell curve whose width grows with the colour's brightness;
-- the mask strength is the darkness of the gaps between phosphors: of a
-  gap column, of the slot mask's bridges. The phosphors keep the PS2
-  pixel's light on average (a lit stripe is three times as bright as the
-  pixel), so bright colours reach the stripes' limit and look a little
-  dimmer than without the filter.
+- the mask strength is also the darkness of the gaps between phosphors:
+  of a gap column, of the slot mask's bridges. Each triad keeps its own PS2
+  pixel's light, colour by colour: the stripes are brightened by what the
+  mask takes away, worked out from the screen columns that PS2 pixel
+  actually has (2 or 3 at 1440 x 1080, so a triad short of a stripe is not
+  tinted), so bright colours can reach the stripes' limit and look a
+  little dimmer than without the filter. The beam is mixed with the flat
+  pixel by the mode's scanline strength, as before.
 
 Halation (a wide, faint glow of all the light) and bloom (a narrower glow
 of the bright parts) come from a half-size blurred copy of the picture and
@@ -147,14 +155,15 @@ width screen pixels across, rarely a whole number:
 | window | box (4:3) | screen pixels a PS2 pixel | stripes |
 | --- | --- | --- | --- |
 | 1280 x 720 | 960 x 720 | 1.88 | the mask faded out (below) |
-| 1920 x 1080 | 1440 x 1080 | 2.81 | 1 or 2 pixels wide, each pure |
+| 1920 x 1080 | 1440 x 1080 | 2.81 | 1 or 2 pixels wide |
 | 2048 x 1536 | 2048 x 1536 | 4 | 1 pixel each and a gap column |
 | 2560 x 1440 | 1920 x 1440 | 3.75 | 1 or 2 pixels wide |
 | 3840 x 2160 | 2880 x 2160 | 5.63 | 1 or 2 pixels and a gap column |
 
 Where the width is not a whole number some stripes are one screen pixel
-wider than the others, in a pattern that repeats across the picture; each
-stripe is still one pure colour. At exact multiples (a 1536- or 2048-wide
+wider than the others (and some triads have only two of their stripes),
+in a pattern that repeats across the picture; each triad still keeps its
+pixel's colour. At exact multiples (a 1536- or 2048-wide
 box) every triad is the same. Below a 1080-line box the stripes would be
 under a screen pixel each, so the mask fades from full at a 1080-line box
 to nothing at 720 lines and below (the beam and the glow stay). The slot
@@ -193,7 +202,8 @@ desktop GPU; it has not been timed on hardware.
 **Overrides.** `config.toml` also takes, under `[video]`, `crt_scanlines`,
 `crt_mask`, `crt_halation`, `crt_bloom` (each 0 to 1) and `crt_curvature`
 (0 to 0.25): each replaces that parameter of the mode (`crt_mask` is the
-gaps' darkness, and on the Scanlines mode adds an aperture grille;
+mask strength (1 for pure stripes), and on the Scanlines mode adds an
+aperture grille;
 `crt_curvature` is the x curvature, y being 1.5 times it except on the
 Trinitron's flat vertical). A negative value, or no key, keeps the mode's
 own. They have no Settings row.

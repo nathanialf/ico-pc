@@ -25,12 +25,13 @@
  *                    output pixel: the curvature warps its position, which
  *                    falls in one source pixel and line; the phosphor of
  *                    its column (the stripe or dot its position across the
- *                    source pixel lands in) passes that one channel of that
- *                    pixel, under the beam of its line at its height
+ *                    source pixel lands in) passes that channel of that
+ *                    pixel in full and the other two dimmed by the mask
+ *                    strength, under the beam of its line at its height
  *                    (rd__CrtMaskWeight); halation and bloom from B,
  *                    vignette, rounded corners, gamma.  Nothing resamples
- *                    the mask: each output pixel is one channel of one
- *                    source pixel.
+ *                    the mask: each output pixel is one source pixel seen
+ *                    through one phosphor.
  */
 #include <math.h>
 #include <string.h>
@@ -54,7 +55,7 @@ static const RdCrtParams s_modes[RD_CRT_MODE_COUNT] = {
      .beamMin = 0.7f,
      .beamMax = 1.2f,
      .mask = RD_CRT_MASK_SLOT,
-     .maskStrength = 0.60f,
+     .maskStrength = 0.40f,
      .halation = 0.12f,
      .bloom = 0.15f,
      .curvX = 0.030f,
@@ -82,7 +83,7 @@ static const RdCrtParams s_modes[RD_CRT_MODE_COUNT] = {
      .beamMin = 0.4f,
      .beamMax = 0.9f,
      .mask = RD_CRT_MASK_GRILLE,
-     .maskStrength = 0.80f,
+     .maskStrength = 0.60f,
      .halation = 0.03f,
      .bloom = 0.05f,
      .corner = 0.01f,
@@ -94,7 +95,7 @@ static const RdCrtParams s_modes[RD_CRT_MODE_COUNT] = {
      .beamMin = 0.6f,
      .beamMax = 1.1f,
      .mask = RD_CRT_MASK_DOTS,
-     .maskStrength = 0.60f,
+     .maskStrength = 0.45f,
      .halation = 0.08f,
      .bloom = 0.10f,
      .curvX = 0.020f,
@@ -171,7 +172,15 @@ float rd__CrtMaskFade(uint32_t boxH)
 /* The geometry, per output pixel (crt.hlsl maskOf is the same).  Across a
  * source pixel of r output pixels, u = f r: the last g = rd__CrtGapColumns(r)
  * pixels are a gap (all three channels at 1 - gap), the rest three equal
- * stripes, R, G, B from the left, each passing its own channel only.
+ * stripes, R, G, B from the left, each passing its own channel in full and
+ * the other two at 1 - gap (the mask strength: the leak between the
+ * phosphors; at 1 each stripe passes its own channel only).
+ * The light is kept per triad: the stripes' weights of a channel over the
+ * output columns its source pixel actually has (2 or 3 at 1440 x 1080, the
+ * stripes 1 or 2 pixels wide) average to 1 after rd__CrtTriadGain, and the
+ * slot's bridges over the line after rd__CrtRowGain, so every source
+ * pixel keeps its own colour and light before the final clamp (with one
+ * gain for the whole box the triads short of a stripe would tint in bands).
  *   grille: the stripes run down the whole line;
  *   slot:   a bridge (all at 1 - gap) over the last third of the line,
  *           half a line later in the odd source columns (the slots
@@ -190,39 +199,56 @@ static float fract(float x)
     return x - floorf(x);
 }
 
+/* the column part of the weight: the stripes (the dots' second row
+ * shifted), without the slot's bridge */
+static float stripeWeight(int mask, float r, float gap, float f, float v, int ch)
+{
+    if (mask == RD_CRT_MASK_DOTS && v >= 0.5f) {
+        f = fract(f + 1.0f / 3.0f);
+    }
+    const float g = (float)rd__CrtGapColumns(r), u = f * r, leak = 1.0f - gap;
+    if (u >= r - g) {
+        return leak;
+    }
+    int s = (int)(u * 3.0f / (r - g));
+    s = s > 2 ? 2 : s;
+    return s == ch ? 1.0f : leak;
+}
+
 float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd, int ch)
 {
     if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
         return 1.0f;
     }
     float dim = 1.0f;
-    if (mask == RD_CRT_MASK_DOTS) {
-        if (v >= 0.5f) {
-            f = fract(f + 1.0f / 3.0f);
-        }
-    } else if (mask == RD_CRT_MASK_SLOT) {
-        if (fract(v + (odd ? 0.5f : 0.0f)) >= 2.0f / 3.0f) {
-            dim = 1.0f - gap;
-        }
+    if (mask == RD_CRT_MASK_SLOT && fract(v + (odd ? 0.5f : 0.0f)) >= 2.0f / 3.0f) {
+        dim = 1.0f - gap;
     }
-    const float g = (float)rd__CrtGapColumns(r), u = f * r;
-    if (u >= r - g) {
-        return (1.0f - gap) * dim;
-    }
-    int s = (int)(u * 3.0f / (r - g));
-    s = s > 2 ? 2 : s;
-    return s == ch ? dim : 0.0f;
+    return stripeWeight(mask, r, gap, f, v, ch) * dim;
 }
 
-float rd__CrtMaskGain(int mask, float r, float gap)
+float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch)
 {
     if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
         return 1.0f;
     }
-    const float gf = (float)rd__CrtGapColumns(r) / r;
-    const float cols = (1.0f - gf) / 3.0f + gf * (1.0f - gap);
-    const float rows = mask == RD_CRT_MASK_SLOT ? 1.0f - gap / 3.0f : 1.0f;
-    return cols * rows > 0.0f ? 1.0f / (cols * rows) : 1.0f;
+    /* the output columns whose centres fall in source pixel sx */
+    float sum = 0.0f;
+    int n = 0;
+    for (int x = (int)floorf((float)sx * r) - 1; x <= (int)ceilf((float)(sx + 1) * r) + 1; x++) {
+        const float px = ((float)x + 0.5f) / r;
+        if (x >= 0 && (int)floorf(px) == sx) {
+            sum += stripeWeight(mask, r, gap, px - (float)sx, v, ch);
+            n++;
+        }
+    }
+    const float mean = n ? sum / (float)n : 1.0f;
+    return 1.0f / (mean > RD_CRT_MEAN_MIN ? mean : RD_CRT_MEAN_MIN);
+}
+
+float rd__CrtRowGain(int mask, float gap)
+{
+    return mask == RD_CRT_MASK_SLOT && gap < 1.0f ? 1.0f / (1.0f - gap / 3.0f) : 1.0f;
 }
 
 void rd__CrtGrid(uint32_t *vw, uint32_t *vh)
@@ -428,7 +454,7 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
     cb.tone[2] = p.gammaOut > 0.1f ? p.gammaOut : 2.2f;
     cb.tone[3] = unit(g_rd.settings.crtStrength);
     cb.pass[0] = mirror ? 1.0f : 0.0f;
-    cb.pass[1] = rd__CrtMaskGain(p.mask, r, unit(p.maskStrength));
+    cb.pass[1] = rd__CrtRowGain(p.mask, unit(p.maskStrength));
 
     /* 1. the horizontal glow, 2. the vertical */
     const RhiRect glowArea = {0, 0, gw, gh};

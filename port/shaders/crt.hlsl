@@ -14,8 +14,9 @@
 //   crt_blur_ps      the same target size, the 9-tap Gaussian vertically
 //   crt_ps           the box of the output, per output pixel: curvature,
 //                    the source pixel and line the warped position falls
-//                    in, the phosphor its column lands on passing that one
-//                    channel (maskOf) under the beam of the line at its
+//                    in, the phosphor its column lands on passing its
+//                    channel and leaking the other two (maskOf) under the
+//                    beam of the line at its
 //                    height, halation and bloom from the blurred target,
 //                    vignette, rounded corners, gamma
 //
@@ -38,10 +39,10 @@ cbuffer CrtCB : register(b1, space1)
     float4 c_src;  // the source grid: w, h in pixels, 1 / w, 1 / h
     float4 c_box;  // the box: w, h, x, y in output pixels
     float4 c_beam; // scanline strength, beam width min, max (lines), gap columns a source pixel
-    float4 c_mask; // type (0 none, 1 grille, 2 slot, 3 dots), gap darkness, fade, halation
+    float4 c_mask; // type (0 none, 1 grille, 2 slot, 3 dots), strength (1 - the leak), fade, halation
     float4 c_glow; // bloom, curvature x, curvature y, corner radius (of the box height)
     float4 c_tone; // vignette, gamma in, gamma out, strength
-    float4 c_pass; // x mirror, y the mask's gain, zw 1 / the blurred target's size
+    float4 c_pass; // x mirror, y the slot bridges' row gain, zw 1 / the blurred target's size
 };
 
 Texture2D<float4> g_texture : register(t1, space2);
@@ -126,46 +127,77 @@ float3 beamOf(float3 c, float d)
 
 // The phosphor mask of an output pixel at f across its source pixel and v
 // down its line (0..1), odd its source column's parity (rd_crt.c
-// rd__CrtMaskWeight is the same function): per channel 1 lit, 0 not, 1 -
-// gap in a gap. A source pixel is r output pixels wide; its last g pixels
-// are a gap, the rest three stripes, R, G, B from the left. Slot: a bridge
-// over the last third of the line, half a line later in odd columns. Dots:
-// the line's second half a second row of dots one stripe over (half a triad
-// rounded down to whole stripes).
-float3 maskOf(float f, float v, int odd)
+// rd__CrtMaskWeight is the same function): per channel 1 its own stripe,
+// 1 - gap (the mask strength's leak) the other two and a gap. A source
+// pixel is r output pixels wide; its last g pixels are a gap, the rest
+// three stripes, R, G, B from the left. Slot: a bridge over the last third
+// of the line, half a line later in odd columns. Dots: the line's second
+// half a second row of dots one stripe over (half a triad rounded down to
+// whole stripes).
+float3 stripeOf(float f, float v)
 {
-    float type = c_mask.x, gap = c_mask.y;
-    float r = c_box.x * c_src.z, g = c_beam.w;
-    float dim = 1.0;
-    if (type > 2.5) {
-        if (v >= 0.5) {
-            f = frac(f + 1.0 / 3.0);
-        }
-    } else if (type > 1.5) {
-        if (frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
-            dim = 1.0 - gap;
-        }
+    float r = c_box.x * c_src.z, g = c_beam.w, leak = 1.0 - c_mask.y;
+    if (c_mask.x > 2.5 && v >= 0.5) {
+        f = frac(f + 1.0 / 3.0);
     }
     float u = f * r;
     if (u >= r - g) {
-        float k = (1.0 - gap) * dim;
-        return float3(k, k, k);
+        return float3(leak, leak, leak);
     }
     int ch = min(int(u * 3.0 / (r - g)), 2);
-    return float3(ch == 0 ? dim : 0.0, ch == 1 ? dim : 0.0, ch == 2 ? dim : 0.0);
+    return float3(ch == 0 ? 1.0 : leak, ch == 1 ? 1.0 : leak, ch == 2 ? 1.0 : leak);
+}
+
+float3 maskOf(float f, float v, int odd)
+{
+    float dim = 1.0;
+    if (c_mask.x > 1.5 && c_mask.x < 2.5 && frac(v + (odd != 0 ? 0.5 : 0.0)) >= 2.0 / 3.0) {
+        dim = 1.0 - c_mask.y;
+    }
+    return stripeOf(f, v) * dim;
+}
+
+// The box pixel px warped by the curvature (crt-lottes' warp: x scaled by
+// 1 + y^2 cx, y by 1 + x^2 cy), 0..1 across the box
+float2 warpOf(float2 px)
+{
+    float st = c_tone.w;
+    float2 c = (px / c_box.xy) * 2.0 - 1.0;
+    c *= float2(1.0 + c.y * c.y * c_glow.y * st, 1.0 + c.x * c.x * c_glow.z * st);
+    return c * 0.5 + 0.5;
+}
+
+// 1 over the mean stripe weight, per channel, over the box pixels of px's
+// row whose warped positions fall in source pixel sx (rd_crt.c
+// rd__CrtTriadGain; the mean floored at 0.1): each triad keeps its own
+// pixel's light whether its stripes are 1 or 2 output pixels wide
+float3 triadGain(float2 px, int sx, float v)
+{
+    int k0 = int(ceil(c_box.x * c_src.z)) + 1;
+    float3 sum = float3(0.0, 0.0, 0.0);
+    float n = 0.0;
+    [loop] for (int k = -k0; k <= k0; k++) {
+        float x = px.x + float(k);
+        if (x >= 0.0 && x < c_box.x) {
+            float s = clamp(warpOf(float2(x, px.y)).x, 0.0, 0.99999) * c_src.x;
+            if (int(floor(s)) == sx) {
+                sum += stripeOf(s - floor(s), v);
+                n += 1.0;
+            }
+        }
+    }
+    float3 mean = n > 0.0 ? sum / n : float3(1.0, 1.0, 1.0);
+    return 1.0 / max(mean, float3(0.1, 0.1, 0.1));
 }
 
 float4 crt_ps(CrtVSOut i) : SV_Target0
 {
     float2 px = i.pos.xy - c_box.zw; // box pixels, centres at k + 0.5
-    float2 q = px / c_box.xy;
     float mirror = c_pass.x;
     float st = c_tone.w; // the strength scales every effect
 
-    // curvature: x scaled by 1 + y^2 cx, y by 1 + x^2 cy (crt-lottes' warp)
-    float2 c = q * 2.0 - 1.0;
-    c *= float2(1.0 + c.y * c.y * c_glow.y * st, 1.0 + c.x * c.x * c_glow.z * st);
-    float2 w = c * 0.5 + 0.5;
+    // curvature
+    float2 w = warpOf(px);
 
     // rounded corners and the warped edge, antialiased over a pixel
     float2 hb = c_box.xy * 0.5;
@@ -189,10 +221,12 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
                   beamOf(linearLoad(src + int2(0, 1)), 1.0 - d);
     float3 col = lerp(p, beam, c_beam.x);
 
-    // the phosphor of this output pixel: one channel of the source pixel,
-    // times the mask's gain (the light the mask keeps), faded in by the box
+    // the phosphor of this output pixel: its channel of the source pixel,
+    // the other two leaking through, times the gains that keep each
+    // triad's light (triadGain across, c_pass.y the slot's rows), faded in
+    // by the box
     if (c_mask.x > 0.5 && c_mask.z > 0.0) {
-        float3 m = maskOf(f, v, sp.x & 1) * c_pass.y;
+        float3 m = maskOf(f, v, sp.x & 1) * triadGain(px, sp.x, v) * c_pass.y;
         col *= lerp(float3(1.0, 1.0, 1.0), m, c_mask.z);
     }
     col = lerp(p, col, st);

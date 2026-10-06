@@ -1640,10 +1640,13 @@ int ui_GfBuilderFinish(UiGfBuilder *b, float mainEm, uint8_t **blobOut, size_t *
                             if (kind == 0) {
                                 sx = sx < 0 ? 0 : sx >= src->vw ? src->vw - 1 : sx;
                             }
-                            float wgt = sy >= 0 && sy < src->vh && sx >= 0 && sx < src->vw
-                                            ? src->vn[sy * src->vw + sx]
-                                            : 0.0f;
-                            if (kind == 0 && ((openL && cx < mid) || (openR && cx >= mid))) {
+                            /* rows past the source's line band (the glow's
+                               reach above and below it) have no sheet texels:
+                               every array indexed by (sx, sy) is read inside */
+                            const int inside = sy >= 0 && sy < src->vh && sx >= 0 && sx < src->vw;
+                            float wgt = inside ? src->vn[sy * src->vw + sx] : 0.0f;
+                            if (inside && kind == 0 &&
+                                ((openL && cx < mid) || (openR && cx >= mid))) {
                                 wgt = ownNear(in, cx, cy);
                             }
                             if (wgt > 0.0f) {

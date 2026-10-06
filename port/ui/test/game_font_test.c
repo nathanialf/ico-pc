@@ -21,6 +21,9 @@
  *     at the sheet's size, drawn dimmed as the sprite is (the alpha in black,
  *     the light added: MODULATE) against the sheet's sprite drawn the same
  *     way: within 2 levels on every texel within two of the letters' ink;
+ *   - letters at the sheet's very top and bottom, in rectangles of their
+ *     capitals' rows alone (the fitted glow reaching past them): built
+ *     without reading outside the sheet's texels (run under ASan);
  *   - the blob loads (ui_GameFaceLoad), the face serves H I L T and falls
  *     back to Arimo for the rest, and a blob with a wrong version or size is
  *     refused.
@@ -300,6 +303,53 @@ static int checkSpriteExact(const uint8_t *sheet, int sw, int sh)
     return best;
 }
 
+/* Letters at the sheet's top and bottom edges, each in a rectangle of its
+   capitals' rows alone: the fitted glow reaches rows past the rectangle,
+   where the sheet has no texels to keep (the builder must not read them).
+   Returns the glyphs built, -1 on a failed build. */
+static int checkEdges(void)
+{
+    static uint8_t edge[SW * SH * 4];
+    static const int close[] = {2, 2, 2, 2};
+    memset(s_ink, 0, sizeof(s_ink));
+    drawWord("HILT", 10, CAP, close); /* rows 0..CAP-1 */
+    drawWord("HILT", 10, SH, close);  /* the last CAP rows */
+    makeSheet(edge);
+    UiGfBuilder *b = ui_GfBuilderNew();
+    if (!b) {
+        return -1;
+    }
+    const int id = ui_GfBuilderSheet(b, "edges.tm2");
+    for (int r = 0; r < 2; r++) {
+        UiGfSource s;
+        memset(&s, 0, sizeof(s));
+        s.rgba = edge;
+        s.sheetW = SW;
+        s.sheetH = SH;
+        s.v = r ? SH - CAP : 0;
+        s.w = 200;
+        s.h = CAP;
+        s.em = 13.5f;
+        s.capMid = 0.5f * CAP;
+        s.pitch = 15.5f;
+        s.text = "HILT";
+        s.sheet = id;
+        CHECK(ui_GfBuilderAdd(b, &s) == 0, "edges: rectangle %d", r);
+    }
+    uint8_t *blob = NULL;
+    size_t size = 0;
+    UiGfStats st;
+    memset(&st, 0, sizeof(st));
+    const int ok = ui_GfBuilderFinish(b, 13.5f, &blob, &size, &st) == 0;
+    ui_GfBuilderFree(b);
+    free(blob);
+    printf("game_font_test: letters at the sheet's top and bottom edges: %s, %d lines "
+           "(%d unaligned), %d glyphs\n",
+           ok ? "built" : "FAILED", st.lines, st.unaligned, st.glyphs);
+    CHECK(ok && st.lines == 2 && st.unaligned == 0, "edges: both lines aligned and built");
+    return ok ? st.glyphs : -1;
+}
+
 int main(void)
 {
     static uint8_t sheet[SW * SH * 4];
@@ -331,6 +381,15 @@ int main(void)
         drawWord("HILT", 10, 75, close);
         makeSheet(sheet);
     }
+
+    CHECK(checkEdges() == 4, "edges: the four characters");
+    /* the four-rectangle sheet again */
+    memset(s_ink, 0, sizeof(s_ink));
+    drawWord("H I L T", 10, 15, spaced);
+    drawWord("HILT", 10, 35, close);
+    drawWord("LITH", 10, 55, touch);
+    drawWord("HILT", 10, 75, close);
+    makeSheet(sheet);
 
     UiGfBuilder *b = ui_GfBuilderNew();
     CHECK(b != NULL, "builder");
