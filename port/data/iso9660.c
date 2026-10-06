@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "host_fs.h"
+#include "../include/ico_endian.h"
 
 #define PVD_FIRST_LSN 16
 #define PVD_SCAN_MAX 64           /* descriptors examined before giving up */
@@ -35,16 +36,6 @@ typedef struct {
     uint32_t root_size;
     uint8_t root_date[7];
 } Iso;
-
-static uint16_t le16(const unsigned char *p)
-{
-    return (uint16_t)(p[0] | p[1] << 8);
-}
-
-static uint32_t le32(const unsigned char *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
 
 static int seek64(FILE *fp, uint64_t off)
 {
@@ -91,12 +82,12 @@ static int iso_mount(void **state, const char *location)
         if (d[0] == 1 && d[6] == 1) {
             const unsigned char *root = d + 156;
 
-            if (le16(d + 128) != ICO_VFS_SECTOR || root[0] < DIR_REC_MIN) {
+            if (ico_le16(d + 128) != ICO_VFS_SECTOR || root[0] < DIR_REC_MIN) {
                 break;
             }
-            iso->volume_sectors = le32(d + 80);
-            iso->root_lsn = le32(root + 2);
-            iso->root_size = le32(root + 10);
+            iso->volume_sectors = ico_le32(d + 80);
+            iso->root_lsn = ico_le32(root + 2);
+            iso->root_size = ico_le32(root + 10);
             memcpy(iso->root_date, root + 18, 7);
             *state = iso;
             return 0;
@@ -153,8 +144,8 @@ static void fill_entry(IcoVfsEntry *out, const unsigned char *rec)
     unsigned nlen = rec[32];
 
     memset(out, 0, sizeof(*out));
-    out->lsn = le32(rec + 2);
-    out->size = le32(rec + 10);
+    out->lsn = ico_le32(rec + 2);
+    out->size = ico_le32(rec + 10);
     memcpy(out->date, rec + 18, 7);
     out->is_dir = (rec[25] & 2) != 0;
     if (nlen >= sizeof(out->name)) {

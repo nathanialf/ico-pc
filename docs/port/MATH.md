@@ -258,7 +258,9 @@ vf4-vf7, where `Matrix.c` keeps the current matrix. The host routines touch
 only their arguments. The two differ only where the EE reads the current
 matrix after such a write without loading it again (DIVERGENCES.md F10).
 
-`tools/vu0_clobber_scan.py` decides that on the EE's code: it disassembles
+`tools/vu0_clobber_scan.py` (in the history: added by commit 714862d7,
+removed once the triage was done; `git show 714862d7:tools/vu0_clobber_scan.py`)
+decided that on the EE's code: it disassembles
 the retail ELF's `.text` (checked equal to the decomp's symbol build) with
 `mips-linux-gnu-objdump -m mips:5900` and runs a per-function dataflow over
 the control-flow graph (delay slots, jump tables from `.rodata`, callee

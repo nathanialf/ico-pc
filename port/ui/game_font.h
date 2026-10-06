@@ -13,9 +13,10 @@
  *     sheet's pixels, a word rectangle, its transcribed string, the line
  *     metrics), one blob out;
  *   - the disc side (game_font_disc.c): the sources from the disc's sheets
- *     and the game's texProperty / texFile tables, and the archive item
- *     (ico.o2r, UI_GF_ENTRY), extracted on the first run and again when the
- *     item's version changes;
+ *     and the game's texProperty / texFile tables, and the blob kept as a
+ *     file in the per-user folder beside ico.o2r (UI_GF_FILE_FMT), extracted
+ *     on the first start and again when the format version or the disc
+ *     changes (both are in the file's name) or the file does not load;
  *   - the face (font.c ui_GameFaceLoad): the blob read back.
  *
  * Nothing of the disc is in the repository: the blob is made on the
@@ -72,11 +73,14 @@ extern "C" {
 #endif
 
 #define UI_GF_MAGIC "ICGF"
-/* bump when the segmentation, the measurements or the format change: an
-   archive holding an older item extracts this item again (the name carries
-   the version, so the old entry is simply not read) */
+/* bump when the segmentation, the measurements or the format change: the
+   file's name carries the version, so an older file is simply not read */
 #define UI_GF_VERSION 1
-#define UI_GF_ENTRY "port/gamefont-1.bin"
+/* the file in the per-user folder: printf'd with UI_GF_VERSION and the disc
+   image's SHA-1 (40 hex digits, as the archive's meta.json records it) */
+#define UI_GF_FILE_FMT "gamefont-%d-%s.bin"
+/* a larger file is not read (the blob is about 1.6 MB) */
+#define UI_GF_FILE_MAX (64L * 1024 * 1024)
 #define UI_GF_HEADER 36
 #define UI_GF_GLYPH 132
 #define UI_GF_KERN 12
@@ -112,7 +116,8 @@ typedef struct UiGfBuilder UiGfBuilder;
 
 UiGfBuilder *ui_GfBuilderNew(void);
 void ui_GfBuilderFree(UiGfBuilder *b);
-/* names a sheet (reported per glyph); returns its index */
+/* names a sheet (reported per glyph); returns its index, or -1 when out of
+   memory */
 int ui_GfBuilderSheet(UiGfBuilder *b, const char *name);
 /* adds a rectangle (its pixels are copied); 0, or -1 when out of memory or
    the rectangle is outside the sheet */
@@ -133,13 +138,17 @@ struct IcoVfs;
 int ui_GameFontBuild(struct IcoVfs *vfs, uint8_t **blob, size_t *size, UiGfStats *stats, char *why,
                      size_t whysize);
 /* The start-up step (window build, after the tables are loaded): reads the
-   item from the archive at archivePath when it holds the current version,
-   else builds it from the mounted disc and, with an archive, adds it there
-   (the extractor's step for this item); then hands it to the font
-   (ui_GameFaceLoad).  archivePath NULL: the image is read directly, the face
-   is built in memory each start.  0, or -1 (logged; the port font is then
-   Arimo alone). */
-int ui_GameFontPrepare(const char *archivePath);
+   blob from cachePath (the per-user folder's UI_GF_FILE_FMT) when it loads,
+   else builds it from the mounted disc and writes it there (a temporary file
+   moved over the old one, so an interrupted write leaves the old file or
+   none); then hands it to the font (ui_GameFaceLoad).  cachePath NULL (the
+   disc unidentified: use_iso with the SHA-1 check skipped): built in memory
+   each start.  0, or -1 (logged; the port font is then Arimo alone). */
+int ui_GameFontPrepare(const char *cachePath);
+/* The write step: blob to path through path.tmp, flushed to disk and moved
+   over path.  0, or -1 with the reason in why (path.tmp removed). */
+int ui_GameFontWriteFile(const char *path, const void *blob, size_t size, char *why,
+                         size_t whysize);
 
 #ifdef __cplusplus
 }

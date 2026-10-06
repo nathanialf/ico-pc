@@ -80,7 +80,9 @@ is used.
 ## Importing saves
 
 `mc_import` (`tools/mc_import.c` over `port/save/mc_import.c`; a CMake
-target of the host build, beside `ico_pc` in the build folder) takes ICO's
+target of the host build, `port/save/mc_import` in the build folder; both
+packages carry it, `tools\mc_import.exe` in the Windows one and
+`tools/mc_import` in the Linux one) takes ICO's
 save out of a PS2 card image or a save archive and writes it into a card
 folder in the layout above:
 

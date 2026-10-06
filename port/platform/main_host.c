@@ -860,7 +860,8 @@ int main(int argc, char **argv)
     char exe_dir[ICO_PATH_MAX];
     char logs_dir[ICO_PATH_MAX];
     char ini_path[ICO_PATH_MAX];
-    char iso[ICO_PATH_MAX];
+    char source[ICO_PATH_MAX]; /* the disc image (use_iso) or the archive */
+    char disc_sha1[41] = "";   /* the image's SHA-1, when known */
     char path[ICO_PATH_MAX];
     char stamp[32];
     const char *v;
@@ -941,25 +942,26 @@ int main(int argc, char **argv)
        than leaving the game at file_Init's disc wait (docs/port/DATA.md) */
     if (use_iso_mode(&ini)) {
         fprintf(stderr, "ico_pc: use_iso: the disc image is read directly\n");
-        find_iso(&a, &ini, exe_dir, iso, &picked);
+        find_iso(&a, &ini, exe_dir, source, &picked);
         v = ico_ini_get(&ini, "verify");
         if (a.no_verify || (v != NULL && strcmp(v, "0") == 0)) {
             fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
         } else {
-            verify_iso(iso);
+            verify_iso(source);
+            copy_path(disc_sha1, sizeof(disc_sha1), ICO_ISO_SHA1);
         }
         if (picked) {
-            if (ico_ini_store(ini_path, "iso", iso) == 0) {
-                fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+            if (ico_ini_store(ini_path, "iso", source) == 0) {
+                fprintf(stderr, "ico_pc: saved iso=%s in %s\n", source, ini_path);
             } else {
                 fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
             }
         }
-        if (ico_cdvd_host_mount_iso(iso) != 0) {
-            ico_host_fatal(log_file(), "Cannot open the disc image %s.", iso);
+        if (ico_cdvd_host_mount_iso(source) != 0) {
+            ico_host_fatal(log_file(), "Cannot open the disc image %s.", source);
         }
     } else {
-        mount_game_data(&a, &ini, exe_dir, ini_path, iso, sizeof(iso));
+        mount_game_data(&a, &ini, exe_dir, ini_path, source, sizeof(source));
     }
     /* the data tables, from the disc's boot ELF, before anything reads one
        (port/data/tables.h) */
@@ -967,7 +969,8 @@ int main(int argc, char **argv)
         char why[512];
 
         if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
-            ico_host_fatal(log_file(), "Cannot load the game's data tables from %s.\n%s", iso, why);
+            ico_host_fatal(log_file(), "Cannot load the game's data tables from %s.\n%s", source,
+                           why);
         }
         fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
                 (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
@@ -975,10 +978,29 @@ int main(int argc, char **argv)
     }
 #ifndef ICO_HEADLESS
     /* the game's own lettering as the port's font (port/ui/game_font.h): read
-       from the archive, or extracted from the disc's menu sheets with the
-       tables just loaded and added to it (the first run, or an older item);
-       with use_iso, built each start.  A failure leaves Arimo. */
-    ui_GameFontPrepare(use_iso_mode(&ini) ? NULL : iso);
+       from the per-user folder's gamefont-<version>-<disc SHA-1>.bin, or
+       extracted from the disc's menu sheets with the tables just loaded and
+       written there (the first start, a new format version or another disc);
+       with use_iso and the SHA-1 check skipped the disc is unidentified and
+       the face is built each start.  A failure leaves Arimo. */
+    {
+        char pref[ICO_PATH_MAX], name[96];
+        IcoArchiveInfo info;
+        char why[512];
+
+        if (!use_iso_mode(&ini) && ico_archive_read_info(source, &info, why, sizeof(why)) == 0) {
+            copy_path(disc_sha1, sizeof(disc_sha1), info.iso_sha1);
+        }
+        path[0] = '\0';
+        if (strlen(disc_sha1) == 40 && ico_host_pref_dir(pref, sizeof(pref)) == 0 &&
+            ico_make_dir(pref) == 0) {
+            snprintf(name, sizeof(name), UI_GF_FILE_FMT, UI_GF_VERSION, disc_sha1);
+            if (ico_path_join(path, sizeof(path), pref, name) != 0) {
+                path[0] = '\0';
+            }
+        }
+        ui_GameFontPrepare(path[0] != '\0' ? path : NULL);
+    }
 #endif
 
     /* the pad */

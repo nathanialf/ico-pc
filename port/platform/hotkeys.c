@@ -32,8 +32,8 @@ unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long l
     return now < fast_until ? 0 : now + ICO_STATS_FAST_SPAN_NS;
 }
 
-void ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
-                          size_t dump_size, char *png, size_t png_size)
+int ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
+                         size_t dump_size, char *png, size_t png_size)
 {
     const size_t n = strlen(dir);
 #ifdef _WIN32
@@ -42,6 +42,17 @@ void ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync
     const char *sep = n > 0 && dir[n - 1] == '/' ? "" : "/";
 #endif
 
-    snprintf(dump, dump_size, "%s%sframe-%s-v%u.rddump", dir, sep, stamp, vsync);
-    snprintf(png, png_size, "%s%sframe-%s-v%u.png", dir, sep, stamp, vsync);
+    const int a = snprintf(dump, dump_size, "%s%sframe-%s-v%u.rddump", dir, sep, stamp, vsync);
+    const int b = snprintf(png, png_size, "%s%sframe-%s-v%u.png", dir, sep, stamp, vsync);
+
+    if (a < 0 || (size_t)a >= dump_size || b < 0 || (size_t)b >= png_size) {
+        if (dump_size > 0) {
+            dump[0] = '\0';
+        }
+        if (png_size > 0) {
+            png[0] = '\0';
+        }
+        return -1;
+    }
+    return 0;
 }

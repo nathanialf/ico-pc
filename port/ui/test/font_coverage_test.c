@@ -3,15 +3,13 @@
  *
  * CPU only: font.c's cmap, no device.  Walks
  *   - ui_StringsForEach: every entry of every language's table;
- *   - the subtitle transcriptions of both sets (test/subtitles.h, test data:
- *     the game draws its subtitles as pictures, their words stand for the
- *     languages' characters);
  *   - the staff roll's port lines (ico_roll_port_line, the lines the roll
  *     draws after the disc's, with its bitmap font: ASCII only);
  *   - font_corpus/<lang>.txt: the in-game text that is not a string (save
  *     screen values, the gallery's asset names, the roll's '@' and '\' signs);
- *   - with a base ELF: staffRollNameData (as text, its codes skipped) and
- *     the seDef and adpcmFile names the gallery shows.
+ *   - with a base ELF: the seDef and adpcmFile names the gallery shows.
+ * Only the text the port draws with its font: the game's own text (its
+ * subtitles, the disc's roll lines, its menu words) keeps its texels.
  * It fails on a code point with no glyph, U+FFFD or malformed UTF-8, a C0 or
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
@@ -35,7 +33,6 @@
 #include "achievements.h"
 #include "ico_credits.h"
 #include "strings.h"
-#include "subtitles.h"
 
 /* credits.c's reads of the achievements (the roll lines need none) */
 int ico_ach_find(const char *id)
@@ -186,7 +183,6 @@ static void checkCorpus(const char *dir)
 #include "vfs.h"
 #include "adpcm_init.h"
 #include "s_init.h"
-#include "staffroll.h"
 #include "tables.h"
 
 extern SeDef seDef[];
@@ -195,7 +191,7 @@ static int checkElf(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (!f) {
-        printf("font_coverage: no base ELF (%s): staff roll and sound names skipped\n", path);
+        printf("font_coverage: no base ELF (%s): sound names skipped\n", path);
         return 77;
     }
     fseek(f, 0, SEEK_END);
@@ -207,14 +203,7 @@ static int checkElf(const char *path)
     fclose(f);
     CHECK(ico_tables_load_elf(elf, (size_t)size, err, sizeof(err)) == 0, "load tables: %s", err);
     free(elf);
-    int roll = 0, names = 0;
-    for (int i = 0; i < staffRollNameDataNum; i++) {
-        CHECK(staffRollNameData[i] != NULL, "staffRollNameData[%d] is NULL", i);
-        if (staffRollNameData[i]) {
-            checkRollLine(staffRollNameData[i], "staffRollNameData", i);
-            roll++;
-        }
-    }
+    int names = 0;
     for (int i = 0; i < 105; i++) {
         CHECK(memchr(adpcmFile[i].path, 0, sizeof(adpcmFile[i].path)) != NULL,
               "adpcmFile[%d].path is not terminated", i);
@@ -227,8 +216,52 @@ static int checkElf(const char *path)
             names++;
         }
     }
-    printf("font_coverage: ELF: %d staff roll lines, %d sound names\n", roll, names);
+    printf("font_coverage: ELF: %d sound names\n", names);
     return 0;
+}
+
+static long fileSize(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    long n = -1;
+    if (f) {
+        if (fseek(f, 0, SEEK_END) == 0) {
+            n = ftell(f);
+        }
+        fclose(f);
+    }
+    return n;
+}
+
+/* the start-up step's file (ui_GameFontPrepare, the per-user folder's
+   gamefont-<V>-<SHA-1>.bin): absent, it is built and written (no temporary
+   left); present, it is read; corrupt, it is built and replaced */
+static void checkSidecar(IcoVfs *vfs, const uint8_t *blob, size_t size)
+{
+    const char *tmpdir = getenv("TMPDIR");
+    char path[1024], tmp[1100];
+    snprintf(path, sizeof(path), "%s/font_coverage-gamefont-%ld.bin",
+             tmpdir && *tmpdir ? tmpdir : ".", (long)size);
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    remove(path);
+    ico_vfs_set_disc(vfs);
+    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: built when absent");
+    CHECK(fileSize(path) == (long)size, "sidecar: written, %ld bytes", fileSize(path));
+    CHECK(fileSize(tmp) < 0, "sidecar: no temporary file left");
+    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: read back");
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        fputs("ICGF, but not a game face", f);
+        fclose(f);
+    }
+    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: a corrupt file is built again");
+    CHECK(fileSize(path) == (long)size, "sidecar: the corrupt file replaced");
+    char why[256];
+    CHECK(ui_GameFontWriteFile("/nonexistent-dir/x/gamefont.bin", blob, size, why, sizeof(why)) !=
+              0,
+          "sidecar: an unwritable folder is reported");
+    ico_vfs_set_disc(NULL);
+    remove(path);
 }
 
 /* the game face from the disc image, after the tables (texProperty, texFile) */
@@ -244,6 +277,9 @@ static int buildGameFace(const char *iso)
     UiGfStats st;
     char why[256];
     CHECK(ui_GameFontBuild(vfs, &blob, &size, &st, why, sizeof(why)) == 0, "game face: %s", why);
+    if (blob) {
+        checkSidecar(vfs, blob, size);
+    }
     ico_vfs_unmount(vfs);
     if (!blob) {
         return 0;
@@ -291,8 +327,8 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* per face, the characters the five languages draw (tables, subtitles, roll,
-   corpus) that it serves; for the game face, per sheet */
+/* per face, the characters the five languages draw (tables, the roll's port
+   lines, corpus) that it serves; for the game face, per sheet */
 static void reportFaces(void)
 {
     static char line[8192];
@@ -382,20 +418,6 @@ int main(int argc, char **argv)
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         CHECK(s_visits[l] > 100, "%s: only %d strings visited", kLangs[l], s_visits[l]);
     }
-    /* the subtitle transcriptions, both sets of each language */
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        int subs = 0;
-        for (int set = 0; set < 2; set++) {
-            int n = 0;
-            const UiSubtitle *t = ui_SubtitleTable((UiLang)l, set, &n);
-            for (int i = 0; t && i < n; i++) {
-                checkText(l, t[i].text, "subtitle");
-            }
-            subs += n;
-        }
-        CHECK(subs > 60, "%s: only %d subtitles", kLangs[l], subs);
-    }
-
     /* every table entry of every language is present (ui_StringsForEach skips
        an empty one, so a hole would pass the walk) */
     for (int l = 0; l < UI_LANG_COUNT; l++) {

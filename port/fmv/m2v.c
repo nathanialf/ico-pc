@@ -276,7 +276,11 @@ static IV_API_CALL_STATUS_T decode_call(IcoM2v *d, const uint8_t *p, size_t len,
     return api(d, &ip, op);
 }
 
-int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
+/* the resets one unit may take: one is all a size change needs; a unit that
+   reports another change after it is an error, not another round */
+#define M2V_MAX_RESETS 1
+
+static int decode_unit(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out, int resets)
 {
     ivd_video_decode_op_t op;
     IV_API_CALL_STATUS_T r;
@@ -313,6 +317,10 @@ int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
         ivd_ctl_reset_ip_t rip;
         ivd_ctl_reset_op_t rop;
 
+        if (resets >= M2V_MAX_RESETS) {
+            d->errors++;
+            return -1;
+        }
         memset(&rip, 0, sizeof(rip));
         memset(&rop, 0, sizeof(rop));
         rip.e_cmd = IVD_CMD_VIDEO_CTL;
@@ -327,7 +335,7 @@ int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
         d->flushing = 0;
         d->resets++;
         set_mode(d, IVD_DECODE_HEADER);
-        return ico_m2v_decode(d, au, len, out);
+        return decode_unit(d, au, len, out, resets + 1);
     }
     if (r != IV_SUCCESS && !op.u4_output_present) {
         d->errors++;
@@ -338,6 +346,11 @@ int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
         return 1;
     }
     return 0;
+}
+
+int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
+{
+    return decode_unit(d, au, len, out, 0);
 }
 
 int ico_m2v_flush(IcoM2v *d, IcoM2vFrame *out)

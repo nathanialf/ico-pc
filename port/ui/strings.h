@@ -413,8 +413,8 @@ const char *ui_StrIn(UiLang lang, UiStrId id);
    table (the Settings menu, notes, Extras, achievements, popups, the menu
    words UI_STR_MT_*).  A missing translation is not visited (ui_StrIn
    would give the English one, which is visited under UI_LANG_EN).  The
-   subtitles (port/ui/test/subtitles.h) and the staff roll's lines are the
-   game's pictures and data, not port tables. */
+   subtitles and the staff roll's lines are the game's pictures and data,
+   not port tables. */
 typedef void (*UiStringFn)(UiLang lang, const char *utf8, void *user);
 void ui_StringsForEach(UiStringFn fn, void *user);
 

@@ -359,7 +359,11 @@ static void frame_dump(void)
         fprintf(stderr, "window: F12: no usable dumps folder under %s\n", pref);
         return;
     }
-    ico_frame_dump_paths(dir, stamp, ico_host_vsync_count(), dump, sizeof(dump), png, sizeof(png));
+    if (ico_frame_dump_paths(dir, stamp, ico_host_vsync_count(), dump, sizeof(dump), png,
+                             sizeof(png)) != 0) {
+        fprintf(stderr, "window: F12: the dumps folder %s is too deep for the file names\n", dir);
+        return;
+    }
     const int ok = rd_DumpOnDemand(dump, png);
     /* the recording up to this moment, for the same report */
     ico_input_record_flush();

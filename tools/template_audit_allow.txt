@@ -1,4 +1,0 @@
-# tools/template_audit.py: views through `void *` whose writer or reader the audit
-# cannot pair or type (docs/port/OFFSET_AUDIT.md, "Views through void *").
-# One line per site: <file> TAB <text in the site's snippet> TAB <reason>.
-# A line that matches no site fails the audit (STALE).

@@ -26,7 +26,7 @@ SCUS-*
 SCES-*
 SCPS-*
 baserom/
-# the same as symlinks (git worktrees link them; tools/worktree.sh)
+# the same as symlinks (a git worktree may link them)
 /baserom
 baseelf*
 # The PAL disc's reference files (tools/extract_elf.py copies them to baserom/pal/)

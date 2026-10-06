@@ -12,6 +12,7 @@
 
 #include "tables.h"
 #include "port/data/gen/table_desc.h"
+#include "../include/ico_endian.h"
 
 #if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error "the table loader copies the EE's little-endian words as they are"
@@ -45,16 +46,6 @@ uint32_t ico_tables_crc32(const uint8_t *p, size_t n)
     return c ^ 0xFFFFFFFFu;
 }
 
-static uint32_t rd32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
-static uint16_t rd16(const uint8_t *p)
-{
-    return (uint16_t)(p[0] | p[1] << 8);
-}
-
 /* A section of the ELF: its address, and its bytes in the image. */
 typedef struct Section {
     uint32_t addr, size;
@@ -66,22 +57,22 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
     uint32_t shoff, shentsize, shnum, shstrndx, stroff, strsize, i;
     int k;
 
-    if (size < 52 || memcmp(elf, "\177ELF\001\001", 6) != 0 || rd16(elf + 0x12) != 8) {
+    if (size < 52 || memcmp(elf, "\177ELF\001\001", 6) != 0 || ico_le16(elf + 0x12) != 8) {
         snprintf(err, errsz, "tables: %s is not a 32-bit little-endian MIPS ELF",
                  ICO_TABLES_BOOT_ELF);
         return -1;
     }
-    shoff = rd32(elf + 0x20);
-    shentsize = rd16(elf + 0x2E);
-    shnum = rd16(elf + 0x30);
-    shstrndx = rd16(elf + 0x32);
+    shoff = ico_le32(elf + 0x20);
+    shentsize = ico_le16(elf + 0x2E);
+    shnum = ico_le16(elf + 0x30);
+    shstrndx = ico_le16(elf + 0x32);
     if (shentsize < 40 || shstrndx >= shnum || shoff > size ||
         (uint64_t)shnum * shentsize > size - shoff) {
         snprintf(err, errsz, "tables: %s has no readable section headers", ICO_TABLES_BOOT_ELF);
         return -1;
     }
-    stroff = rd32(elf + shoff + shstrndx * shentsize + 0x10);
-    strsize = rd32(elf + shoff + shstrndx * shentsize + 0x14);
+    stroff = ico_le32(elf + shoff + shstrndx * shentsize + 0x10);
+    strsize = ico_le32(elf + shoff + shstrndx * shentsize + 0x14);
     if (stroff > size || strsize > size - stroff) {
         snprintf(err, errsz, "tables: %s's section names lie outside it", ICO_TABLES_BOOT_ELF);
         return -1;
@@ -89,9 +80,9 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
     memset(out, 0, 3 * sizeof(*out));
     for (i = 0; i < shnum; i++) {
         const uint8_t *sh = elf + shoff + i * shentsize;
-        uint32_t name = rd32(sh);
-        uint32_t off = rd32(sh + 0x10);
-        uint32_t sz = rd32(sh + 0x14);
+        uint32_t name = ico_le32(sh);
+        uint32_t off = ico_le32(sh + 0x10);
+        uint32_t sz = ico_le32(sh + 0x14);
 
         if (name >= strsize) {
             continue;
@@ -101,12 +92,12 @@ static int find_sections(const uint8_t *elf, size_t size, Section out[3], char *
 
             if (name + len < strsize &&
                 memcmp(elf + stroff + name, section_names[k], len + 1) == 0) {
-                if (rd32(sh + 4) != 1 /* SHT_PROGBITS */ || off > size || sz > size - off) {
+                if (ico_le32(sh + 4) != 1 /* SHT_PROGBITS */ || off > size || sz > size - off) {
                     snprintf(err, errsz, "tables: %s's %s section is not readable",
                              ICO_TABLES_BOOT_ELF, section_names[k]);
                     return -1;
                 }
-                out[k].addr = rd32(sh + 0x0C);
+                out[k].addr = ico_le32(sh + 0x0C);
                 out[k].size = sz;
                 out[k].bytes = elf + off;
             }
@@ -207,7 +198,9 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
             memcpy(dst, src, (size_t)f->ee_size * f->count);
             break;
         case ICO_TF_BITS: {
-            uint32_t unit = f->ee_size == 4 ? rd32(src) : f->ee_size == 2 ? rd16(src) : src[0];
+            uint32_t unit = f->ee_size == 4   ? ico_le32(src)
+                            : f->ee_size == 2 ? ico_le16(src)
+                                              : src[0];
             uint32_t mask = f->width >= 32 ? 0xFFFFFFFFu : (1u << f->width) - 1;
 
             v = unit >> f->bit & mask;
@@ -220,7 +213,7 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
         case ICO_TF_FUNC: {
             void (*fn)(void) = NULL;
 
-            v = rd32(src);
+            v = ico_le32(src);
             if (v != 0) {
                 const IcoEeFunc *e = find_func(v);
 
@@ -241,7 +234,7 @@ static int decode_record(const IcoTableRow *row, uint32_t index, const uint8_t *
         case ICO_TF_DATA: {
             void *p = NULL;
 
-            v = rd32(src);
+            v = ico_le32(src);
             if (v != 0) {
                 p = resolve_data(row, v);
                 if (p == NULL) {

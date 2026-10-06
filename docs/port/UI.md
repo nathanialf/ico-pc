@@ -23,10 +23,8 @@ draws them, and no option changes that ("Menu text" below).
 | `port/ui/ui_hint.c`, `ui_hint.h` | lines of button prompts: the game's button glyphs beside port words ("Button glyphs" below) |
 | `port/ui/ui_list.c`, `ui_list.h` | the scrolling list pages ("Lists" below): the slots, the refresh from the page's items, headings the cursor skips, the scrolling; the achievements and remap pages use it |
 | `port/ui/menu_text.c`, `menu_text.h` | the table of the game's menu words: rectangles, transcribed strings, metrics; the game face's source, never drawn ("Menu text" below) |
-| `port/ui/test/subtitles.c`, `subtitles.h` | the subtitles' words per language and set, transcribed: test data for the font coverage corpus ("Subtitles" below) |
 | `port/ui/embed_font.cmake` | turns the font file into a C array at build time |
 | `port/ui/test/ui_test.c`, `settings_test.c`, `menu_text_test.c`, `font_edge_test.c`, `font_coverage_test.c`, `game_font_test.c` | the tests (below) |
-| `tools/tm2_sheets.py` | decodes the disc's text sheets and subtitle pictures to PNGs for transcription (tools/README.md) |
 | `port/assets/fonts/` | `Arimo-Regular.ttf`, `OFL.txt` (Arimo's licence) |
 | `port/third_party/stb/` | `stb_truetype.h` v1.26, `LICENSE` |
 
@@ -58,8 +56,8 @@ is logged once: `ui: the game's lettering has no U+0058; drawn with Arimo`
 ### The game face
 
 **The sheets.** `text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_01..04.tm2` and
-`scei.tm2` (one set per language) and `text/title.tm2` (one for all), the
-same sheets `tools/tm2_sheets.py` decodes. Each is 4-bit with a 16-colour
+`scei.tm2` (one set per language) and `text/title.tm2` (one for all). Each
+is 4-bit with a 16-colour
 palette that mixes the light letters (white, or grey 151 for the empty slot
 numbers), black letters (the white panel's prompts), the letters'
 antialiasing and a soft dark rim (black on the English and German sheets,
@@ -197,16 +195,20 @@ the menu size, 1080p), the cells of letters cut from different rows
 can show their rows' slightly different rim darkness as soft blocks behind
 a word.
 
-**The archive item.** The blob (`game_font.h`) is the item
-`port/gamefont-1.bin` of `ico.o2r` (docs/port/DATA.md, "The port's items"):
-made once, the first start after the extraction, as `main_host.c` calls
-`ui_GameFontPrepare` after the tables load; an archive without it, or with
-an older version (the version is in the name), gets it the same way without
-re-extracting anything else. With `use_iso` it is built in memory each start
-(about a second). Logged: `ui: the game's lettering: 625 rectangles, 717
-lines (...), 91 characters, 20 kerning pairs, 1608928 bytes, ... s` and `ui:
-port/gamefont-1.bin added to <archive>`, or `ui: the game's lettering:
-port/gamefont-1.bin from <archive>` on later starts.
+**The file.** The blob (`game_font.h`) is kept in the per-user folder
+beside `ico.o2r` as `gamefont-<version>-<disc SHA-1>.bin` (docs/port/DATA.md,
+"The port's files"): made once, the first start after the extraction, as
+`main_host.c` calls `ui_GameFontPrepare` after the tables load, and again
+when the format version or the disc changes (both are in the name) or the
+file does not load (a corrupt file is replaced). It is written to a
+temporary file and moved over the old one, so an interrupted write leaves
+the old file or none; the archive is never written after the extraction.
+With `use_iso` the disc's SHA-1 is the verified image's; with the check
+skipped (`verify=0`, `--no-verify`) the disc is unidentified and the face is
+built in memory each start (about a second). Logged: `ui: the game's
+lettering: 625 rectangles, 717 lines (...), 91 characters, 20 kerning pairs,
+1608928 bytes, ... s` and `ui: the game's lettering written to <file>`, or
+`ui: the game's lettering from <file> (<n> bytes)` on later starts.
 
 **Sizes.** The atlas is at the sheets' own size: at 27 y units (the menu
 rows' 13.5-texel em, `UI_MENU_TEXT_SIZE`) a texel of the sheet is an x unit
@@ -313,32 +315,31 @@ neither does) of:
 - `ui_StringsForEach`: every entry of the five languages' tables (the
   model names and the transcribed menu words are table strings), and each
   table entry again by id, so an empty one fails;
-- the subtitle transcriptions of both sets (`port/ui/test/subtitles.c`,
-  test data: the game draws its subtitles as pictures, their words stand
-  for the characters the five languages need);
 - the port's staff roll lines (`ico_roll_port_line`);
 - the corpus, `port/ui/test/font_corpus/<lang>.txt`;
 - with the base ELF (`ICO_BASE_ELF`, as `tables_loader`; without it the walk
-  is left out): `staffRollNameData` as text (the `{...}` codes skipped, `@`
-  the copyright sign, `\` the yen sign as the bitmap font's cells show them,
-  any other byte outside ASCII a failure), the `adpcmFile` paths and the
-  `seDef` names the Music gallery shows.
+  is left out): the `adpcmFile` paths and the `seDef` names the Music
+  gallery shows.
+
+Only the text the port draws with its font is walked: the game's own text
+(its subtitles, the disc's roll lines, its menu words) keeps its texels.
 
 It fails on a code point without a glyph, U+FFFD or malformed UTF-8, a C0 or
 C1 control other than `\n`, an empty table entry and a language without a
 corpus file. Last it draws a code point outside the subset (U+4E2D) and
-checks the fallback below. With the 1.0 tables it checks 93,019 code points
-and 962 roll lines and 1,531 sound names from the ELF; the distinct code
-points a language draws (tables, subtitles and corpus) are 93 English
-(the roll's lines are counted here), 95 French, 90 German, 97 Italian and 94
-Spanish, all inside the subset: it was not widened.
+checks the fallback below. With the 1.0 tables, the base ELF and the disc
+it checks 75,349 code points (the 1,531 sound names from the ELF among
+them; 459 distinct code points summed over the five languages), all inside
+the subset: it was not widened.
 
 With the base ELF and the disc image (`ICO_DISC_IMAGE`) it first builds the
 game face from the disc as the first run does (`ui_GameFontBuild`; every
-line must align) and loads it, so the walk checks the two faces together, and
+line must align), checks the start-up step's file (`ui_GameFontPrepare` on a
+file under `TMPDIR`: written when absent with no temporary left, read back, a
+corrupt one built again and replaced) and loads the face, so the walk checks the two faces together, and
 it prints per face the characters the five languages draw that it serves:
 for the game face grouped by the sheet each was cut from (the table in "The
-game face"), for Arimo the fallbacks (91 from the game's lettering, 20 from
+game face"), for Arimo the fallbacks (91 from the game's lettering, 14 from
 Arimo). With `ICO_GAME_FONT_OUT` set (ctest sets it to
 `port/ui/gamefont.bin` of the build directory, fixture `gamefont`) it writes
 the face there for `settings_render`, `menu_text` and
@@ -352,8 +353,8 @@ screen's digits and `: / . -`, the gallery's asset-name characters
 all five files when new text that is not a string appears.
 
 `font_audit` (`tools/font_audit.py`, stdlib, a ctest) needs no build: it
-reads the string literals of `strings_*.c`, `test/subtitles.c` and
-`model_viewer_table.c` and the corpus, and compares each code point with the
+reads the string literals of `strings_*.c` and `model_viewer_table.c` and
+the corpus, and compares each code point with the
 ranges on the `# subset:` line of `port/ui/embed_font.cmake` (UI.md's recipe
 above must list the same ranges; it fails if they differ). It names the
 first file using each code point that is outside. To widen the subset, add
@@ -832,8 +833,8 @@ Square (32, 0), Circle (0, 30), Cross (32, 30); the key config screen draws
 its L1 / R1 / L2 / R2 labels from `menu_PAL_02` (40 x 15 at v 240: R1 u 340,
 R2 380, L1 420, L2 460, the same in the five languages), and the Options
 values sit between two arrows from `menu_PAL_01` (20 x 20 at u 490, v 130
-and 150). The sheets were decoded with `tools/tm2_sheets.py` and the rows
-read from the boot ELF's `texProperty`: the save prompts place Cross (row
+and 150). The sheets were decoded (TIM2, as `game_font_disc.c` decodes them)
+and the rows read from the boot ELF's `texProperty`: the save prompts place Cross (row
 182, x 180, y 204) before OK (181, x 212) and Triangle (184, x 364) before
 Back (183, x 396), each glyph a 32-pixel-wide sprite 30 y units high
 (`dispH` 30) beside 27-unit words, its middle on the words' capitals; the
@@ -1050,75 +1051,13 @@ from x 64 and row 435 texels (0, 48)-(256, 96) from x 320, both from `dispY`
 64..576. The scripts pick the block (`jimakuJump`), and `jimakuDisp` draws
 the group whose picture is current. The port draws that picture as the game
 does, always (package TXT2): the subtitles keep their texels, two sprites
-keyed by the ring group for the interpolation (`JIM_HOST_KEY`). The words
-below are transcriptions kept as test data (`port/ui/test/subtitles.c`): the
-font coverage test walks them as the characters the five languages need,
-and `menu_text_test` checks the tables. Package TXT drew them as text
-in place of the picture; package TXT2 removed that path (`lt_ext_SubtitleFind`,
-`lt_ext_DrawSubtitle`).
-
-**Where the words come from.** `tools/tm2_sheets.py` decodes every block of
-the ten files from the user's disc to PNGs under `build/sheets/jim/`
-(gitignored; tools/README.md). Of the 116 blocks, English has 78 with ink
-and the other four languages 113:
-
-- 44 blocks are pixel-identical in all five languages: Yorda's and the
-  Queen's lines in Yorda's script (43) and "? ?" (block 10);
-- 35 blocks, blank in the English files, hold Japanese placeholder lines in
-  the French, German, Italian and Spanish files (identical in the four;
-  unused text left from the Japanese script);
-- 34 blocks per language are the translated lines;
-- a file 02 differs from its file 01 in 8 blocks (9, 29, 31, 48, 49, 86, 91,
-  112: Yorda's and the Queen's words translated once the game is cleared),
-  7 in French, where block 91 stays in Yorda's script.
-
-The 34 translated blocks, "? ?" and the changed blocks of each set were
-transcribed by eye from the PNGs, the strip shown at 1.75 times its size: the
-wording, capitalisation, accents, punctuation (the English and French space
-before "?" and "!", the Spanish "¿" and "¡", "..." as three full stops),
-doubled spaces where the sheet has a gap of 10 to 13 texels against 4 to 7
-for a single space (English blocks 2 and 97, French 34, German 7), and the
-line breaks are the sheets'. Italian block 6 reads "Loro hahanno": the
-picture overprints "ha" and "hanno", and the transcription keeps what it
-shows. Every transcription's line count was checked against the ink of the
-strip's upper slot (all agree), and a second pass re-read each one, block by
-block, against its picture with the transcription typeset beneath it and
-its spaces marked; it found nothing to correct. Yorda's script and the
-Japanese placeholders have no transcription.
-
-| set | file | texts |
-| --- | --- | --- |
-| English, first run / cleared | `data_EG01.jim` / `data_EG02.jim` | 35 / 43 |
-| French | `data_FR01.jim` / `data_FR02.jim` | 35 / 42 |
-| German | `data_GR01.jim` / `data_GR02.jim` | 35 / 43 |
-| Italian | `data_IT01.jim` / `data_IT02.jim` | 35 / 43 |
-| Spanish | `data_SP01.jim` / `data_SP02.jim` | 35 / 43 |
-
-389 entries (`port/ui/test/subtitles.c`, `UiSubtitle {block, x[2], text}`, one
-table per language and set, sorted by block). Nothing of the disc is in the
-repository: the words, and numbers measured on the pictures.
-
-**The measurements.** Lines are centred: each line's x is the middle of its
-ink on the strip (255 to 257 texels for most; a few French, Italian and
-Spanish lines sit up to 31 texels off centre, and the table keeps their
-place). A text of one line sits in the strip's lower slot, two lines fill
-both. The sheets use three faces: a hand-lettered one in English, another
-in German, a bold italic sans in French, Italian and Spanish. Per face, the
-capital height at half coverage, averaged over every line that starts with
-a flat-topped capital (the luminance of the letters, which carry a dark rim),
-and the two slots' capital middles give `UiSubtitleFace`:
-
-| face | capitals (texels) | em (texels) | upper slot | lower slot |
-| --- | --- | --- | --- | --- |
-| English | 11.73 (40 lines) | 16.0 | 12.9 | 34.0 |
-| German | 12.65 | 17.4 | 12.9 | 34.2 |
-| French, Italian, Spanish | 12.21 | 16.7 | 13.9 | 33.9 |
-
-(the em is the capital height less 0.7 texel of antialiasing over Arimo's
-0.688, as for the menu rows). These placed TXT's text on the strip; they
-stay in the data, unused by the port.
-
-
+keyed by the ring group for the interpolation (`JIM_HOST_KEY`). Package
+TXT drew transcriptions of the words as text in place of the picture;
+package TXT2 removed that path (`lt_ext_SubtitleFind`,
+`lt_ext_DrawSubtitle`), and the transcriptions, kept a while as test data
+for the font coverage test, were removed with the decoder that served them
+(`tools/tm2_sheets.py`) once the port no longer drew any subtitle: the
+font coverage test walks only the text the port draws.
 
 ## Staff roll
 
@@ -1218,9 +1157,8 @@ other colours and without the rim; that path (`model_overlay.c`) is gone.
 `ui_StringsForEach(fn, user)` calls `fn(lang, utf8, user)` for every
 non-empty entry of every language's table, for the font coverage test. A
 missing translation is not visited (`ui_StrIn` gives the English one, which
-is visited under English); the subtitles (`port/ui/test/subtitles.c`, walked
-by the test itself) and the staff roll's lines are the game's pictures and
-data, not port tables.
+is visited under English); the subtitles and the staff roll's lines are the
+game's pictures and data, not port tables.
 
 ## Popups
 
@@ -1387,11 +1325,8 @@ one.
   rows before its KEEP laying out nothing, the game rows alone no item and
   no op; a port row on the game's OK row's box with its capitals where the
   sheet's lettering has them; the save screens' figures (an empty and a
-  used slot number, a play-time figure) their sprites, no item; the
-  subtitle transcriptions (sorted, one or two lines, every code point
-  drawable, the centres on the strip, the lookup of each entry and by
-  language, set and block); `ui_StringsForEach` reaching the tables and not
-  the subtitles; on the device, a port row "New Game" in the title's New
+  used slot number, a play-time figure) their sprites, no item;
+  `ui_StringsForEach` reaching the tables and not a subtitle's words; on the device, a port row "New Game" in the title's New
   Game box painted inside its rectangle and rim only
   (`menu_text_scene.png`; with `gamefont.bin` in the game face, its rim's
   reach of 7 texels allowed round the rectangle).

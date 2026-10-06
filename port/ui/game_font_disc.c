@@ -5,8 +5,9 @@
  * font", and docs/port/DATA.md, "Backend 2: the archive"): the menu sheets
  * read from DATA.DF's packs (df_pack.h) and decoded (TIM2), the word
  * rectangles of the menu text table handed to the builder with their
- * transcribed words in the five languages, and the result kept in the
- * extracted archive as the item UI_GF_ENTRY.
+ * transcribed words in the five languages, and the result kept beside the
+ * extracted archive in the per-user folder (UI_GF_FILE_FMT: the format
+ * version and the disc's SHA-1 in the name).
  *
  * Which sheet a rectangle is on: the table's first texProperty row that draws
  * it names a texFile row (its texFileNo); that path's language folder
@@ -21,28 +22,19 @@
 #include <string.h>
 #include <time.h>
 
-#include "archive.h"
 #include "charFileManager.h" /* texFile */
 #include "df_pack.h"
-#include "extract.h"
 #include "font.h"
+#include "host_fs.h"
 #include "menu_text.h"
 #include "strings.h"
+#include "gen/table_desc.h"
 #include "vfs.h"
+#include "../include/ico_endian.h"
 
 static const char *const s_langDir[5] = {"EG", "FR", "GR", "IT", "SP"};
 
 /* ------------------------------------------------------------- TIM2 */
-
-static uint32_t le32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-
-static unsigned le16(const uint8_t *p)
-{
-    return (unsigned)p[0] | ((unsigned)p[1] << 8);
-}
 
 /* GS alpha (0x80 opaque) to 0..255 */
 static uint8_t gsAlpha(unsigned a)
@@ -65,7 +57,7 @@ static void clutColour(const uint8_t *raw, size_t rawSize, unsigned i, int bits,
         out[2] = raw[i * 3 + 2];
         out[3] = 255;
     } else if (bits == 16 && (size_t)i * 2 + 2 <= rawSize) {
-        const unsigned v = le16(raw + i * 2);
+        const unsigned v = ico_le16(raw + i * 2);
         out[0] = (uint8_t)((v & 31u) << 3);
         out[1] = (uint8_t)(((v >> 5) & 31u) << 3);
         out[2] = (uint8_t)(((v >> 10) & 31u) << 3);
@@ -73,9 +65,9 @@ static void clutColour(const uint8_t *raw, size_t rawSize, unsigned i, int bits,
     }
 }
 
-/* The first picture of a TIM2 file as RGBA8 (malloc'd), as
-   tools/tm2_sheets.py decodes it: PSMT4 / PSMT8 with a 16-, 24- or 32-bit
-   CLUT (CSM1 blocks swapped for 8-bit), or direct 16 / 24 / 32-bit. */
+/* The first picture of a TIM2 file as RGBA8 (malloc'd): PSMT4 / PSMT8 with a
+   16-, 24- or 32-bit CLUT (CSM1 blocks swapped for 8-bit), or direct 16 / 24
+   / 32-bit. */
 static uint8_t *tim2Decode(const uint8_t *d, size_t n, int *w, int *h)
 {
     if (n < 0x10 + 0x30 || memcmp(d, "TIM2", 4) != 0) {
@@ -86,12 +78,12 @@ static uint8_t *tim2Decode(const uint8_t *d, size_t n, int *w, int *h)
         return NULL;
     }
     const uint8_t *hd = d + p;
-    const uint32_t clutSize = le32(hd + 4), imageSize = le32(hd + 8);
-    const unsigned headerSize = le16(hd + 12), clutColours = le16(hd + 14);
+    const uint32_t clutSize = ico_le32(hd + 4), imageSize = ico_le32(hd + 8);
+    const unsigned headerSize = ico_le16(hd + 12), clutColours = ico_le16(hd + 14);
     /* {total, clutSize, imageSize, headerSize, clutColours, format, mips,
        clutType, imageType, width, height} */
     const unsigned clutType = hd[18], imageType = hd[19];
-    const int pw = (int)le16(hd + 20), ph = (int)le16(hd + 22);
+    const int pw = (int)ico_le16(hd + 20), ph = (int)ico_le16(hd + 22);
     if (pw <= 0 || ph <= 0 || pw > 4096 || ph > 4096 ||
         p + headerSize + (size_t)imageSize + (size_t)clutSize > n) {
         return NULL;
@@ -190,6 +182,12 @@ static Sheet *sheetFor(IcoVfs *vfs, UiGfBuilder *b, Sheet *sh, int *nsh, const c
         return NULL;
     }
     s->id = ui_GfBuilderSheet(b, name);
+    if (s->id < 0) {
+        free(s->rgba);
+        s->rgba = NULL;
+        fprintf(stderr, "ui: game font: out of memory naming %s\n", name);
+        return NULL;
+    }
     return s;
 }
 
@@ -207,6 +205,19 @@ static void sheetName(const char *path, int lang, char *out, size_t size)
     }
 }
 
+/* texFile's rows (the table descriptor's count: the array is defined in
+   port/data/gen/table_defs.c, its size unknown here) */
+static int texFileCount(void)
+{
+    for (uint32_t i = 0; i < ico_table_row_count; i++) {
+        const IcoTableRow *r = &ico_table_rows[i];
+        if (r->host == (void *)texFile && r->record) {
+            return (int)r->count;
+        }
+    }
+    return 0;
+}
+
 int ui_GameFontBuild(IcoVfs *vfs, uint8_t **blob, size_t *size, UiGfStats *stats, char *why,
                      size_t whysize)
 {
@@ -218,6 +229,7 @@ int ui_GameFontBuild(IcoVfs *vfs, uint8_t **blob, size_t *size, UiGfStats *stats
         ui_GfBuilderFree(b);
         return -1;
     }
+    const int texFiles = texFileCount();
     for (int i = 0; i < ui_menu_text_item_count; i++) {
         const UiMenuTextItem *it = &ui_menu_text_items[i];
         const LtProperty *e = NULL;
@@ -227,7 +239,7 @@ int ui_GameFontBuild(IcoVfs *vfs, uint8_t **blob, size_t *size, UiGfStats *stats
             }
         }
         if (!e || e->texU != it->u || e->texV != it->v || e->texW != it->w || e->texH != it->h ||
-            e->texFileNo < 0 || e->texFileNo >= 74) {
+            e->texFileNo < 0 || e->texFileNo >= texFiles) {
             continue;
         }
         const char *path = texFile[e->texFileNo].path;
@@ -273,25 +285,74 @@ int ui_GameFontBuild(IcoVfs *vfs, uint8_t **blob, size_t *size, UiGfStats *stats
     return rc;
 }
 
-int ui_GameFontPrepare(const char *archivePath)
+/* the sidecar's bytes (malloc'd), or NULL */
+static uint8_t *readFile(const char *path, size_t *size)
 {
-    char why[512];
-    if (archivePath) {
-        void *item = NULL;
+    FILE *f = ico_fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    uint8_t *buf = NULL;
+    long n = -1;
+    if (fseek(f, 0, SEEK_END) == 0 && (n = ftell(f)) > 0 && n <= UI_GF_FILE_MAX &&
+        fseek(f, 0, SEEK_SET) == 0) {
+        buf = malloc((size_t)n);
+        if (buf && fread(buf, 1, (size_t)n, f) != (size_t)n) {
+            free(buf);
+            buf = NULL;
+        }
+    }
+    fclose(f);
+    *size = buf ? (size_t)n : 0;
+    return buf;
+}
+
+int ui_GameFontWriteFile(const char *path, const void *blob, size_t size, char *why, size_t whysize)
+{
+    char tmp[1100];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) {
+        snprintf(why, whysize, "the path is too long");
+        return -1;
+    }
+    FILE *f = ico_fopen(tmp, "wb");
+    if (!f) {
+        snprintf(why, whysize, "cannot create %s", tmp);
+        return -1;
+    }
+    const bool wrote = fwrite(blob, 1, size, f) == size;
+    const bool synced = wrote && ico_fsync(f) == 0;
+    if (fclose(f) != 0 || !synced) {
+        ico_remove(tmp);
+        snprintf(why, whysize, "cannot write %s", tmp);
+        return -1;
+    }
+    if (ico_rename_replace(tmp, path) != 0) {
+        ico_remove(tmp);
+        snprintf(why, whysize, "cannot move %s over %s", tmp, path);
+        return -1;
+    }
+    return 0;
+}
+
+int ui_GameFontPrepare(const char *cachePath)
+{
+    char why[1200];
+    if (cachePath) {
         size_t n = 0;
-        const int r = ico_archive_read_item(archivePath, UI_GF_ENTRY, &item, &n);
-        if (r == 0) {
+        uint8_t *item = readFile(cachePath, &n);
+        if (item) {
             const bool ok = ui_GameFaceLoad(item, n);
-            ico_archive_free_item(item);
+            free(item);
             if (ok) {
-                fprintf(stderr, "ui: the game's lettering: %s from %s (%zu bytes)\n", UI_GF_ENTRY,
-                        archivePath, n);
+                fprintf(stderr, "ui: the game's lettering from %s (%zu bytes)\n", cachePath, n);
                 return 0;
             }
+            fprintf(stderr, "ui: %s does not load: extracting the game's lettering again\n",
+                    cachePath);
+        } else {
+            fprintf(stderr, "ui: no %s: extracting the game's lettering from the disc\n",
+                    cachePath);
         }
-        fprintf(stderr,
-                "ui: %s holds no usable %s: extracting the game's lettering from the disc\n",
-                archivePath, UI_GF_ENTRY);
     }
     uint8_t *blob = NULL;
     size_t size = 0;
@@ -310,12 +371,14 @@ int ui_GameFontPrepare(const char *archivePath)
             st.sources, st.lines, st.exact, st.aligned, st.splits, st.unaligned, st.instances,
             st.glyphs, st.kerns, size, (double)(clock() - t0) / CLOCKS_PER_SEC);
     const bool ok = ui_GameFaceLoad(blob, size);
-    if (ok && archivePath) {
-        if (ico_extract_add_item(archivePath, UI_GF_ENTRY, blob, size, why, sizeof(why)) == 0) {
-            fprintf(stderr, "ui: %s added to %s\n", UI_GF_ENTRY, archivePath);
+    if (ok && cachePath) {
+        if (ui_GameFontWriteFile(cachePath, blob, size, why, sizeof(why)) == 0) {
+            fprintf(stderr, "ui: the game's lettering written to %s\n", cachePath);
         } else {
-            fprintf(stderr, "ui: %s not added to %s (%s); it is extracted again next time\n",
-                    UI_GF_ENTRY, archivePath, why);
+            fprintf(stderr,
+                    "ui: the game's lettering not kept (%s); it is extracted again next "
+                    "time\n",
+                    why);
         }
     }
     free(blob);

@@ -69,7 +69,8 @@ int main(void)
     CHECK(ico_stats_fast_toggle(140 * s, until) == 170 * s);
 
     /* F12's files */
-    ico_frame_dump_paths("/p/dumps", "20261005-073732", 1234, dump, sizeof(dump), png, sizeof(png));
+    CHECK(ico_frame_dump_paths("/p/dumps", "20261005-073732", 1234, dump, sizeof(dump), png,
+                               sizeof(png)) == 0);
 #ifdef _WIN32
     CHECK(strcmp(dump, "/p/dumps\\frame-20261005-073732-v1234.rddump") == 0);
 #else
@@ -78,6 +79,14 @@ int main(void)
 #endif
     ico_frame_dump_paths("/p/dumps/", "x", 1, dump, sizeof(dump), png, sizeof(png));
     CHECK(strcmp(dump, "/p/dumps/frame-x-v1.rddump") == 0);
+    /* a path that does not fit: refused, both empty, not cut short */
+    {
+        char small[24];
+
+        CHECK(ico_frame_dump_paths("/p/dumps", "x", 1, small, sizeof(small), png, sizeof(png)) ==
+              -1);
+        CHECK(small[0] == '\0' && png[0] == '\0');
+    }
 
     printf("hotkeys_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;

@@ -41,8 +41,9 @@ unsigned long long ico_stats_period_ns(unsigned long long now, unsigned long lon
 /* F11: the new fast_until (now + the span, or 0 when it was running). */
 unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long long fast_until);
 
-/* F12's two files in dir: frame-<stamp>-v<vsync>.rddump and .png. */
-void ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
-                          size_t dump_size, char *png, size_t png_size);
+/* F12's two files in dir: frame-<stamp>-v<vsync>.rddump and .png. 0, or -1
+   when either path does not fit (both then ""). */
+int ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
+                         size_t dump_size, char *png, size_t png_size);
 
 #endif /* ICO_PLATFORM_HOTKEYS_H */

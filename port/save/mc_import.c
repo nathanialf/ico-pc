@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../include/ico_endian.h"
 
 #define NAME_MAX_ 31
 #define MAX_FILES 64
@@ -54,16 +55,6 @@ typedef struct {
     int nfile;
     int found; /* the game's directory was in the source */
 } Job;
-
-static uint16_t le16(const unsigned char *p)
-{
-    return (uint16_t)(p[0] | (p[1] << 8));
-}
-
-static uint32_t le32(const unsigned char *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
 
 static int fail(Job *j, const char *msg, const char *arg)
 {
@@ -220,11 +211,11 @@ static int fat_entry(const Card *c, uint32_t n, uint32_t *value, unsigned char *
     if (dbl >= 32 || read_cluster(c, c->ifc[dbl], tmp) != 0) {
         return -1;
     }
-    fatCluster = le32(tmp + 4 * (indirect % per));
+    fatCluster = ico_le32(tmp + 4 * (indirect % per));
     if (read_cluster(c, fatCluster, tmp) != 0) {
         return -1;
     }
-    *value = le32(tmp + 4 * (n % per));
+    *value = ico_le32(tmp + 4 * (n % per));
     return 0;
 }
 
@@ -232,13 +223,23 @@ static int fat_entry(const Card *c, uint32_t n, uint32_t *value, unsigned char *
    the chain is broken or short (why set) */
 static unsigned char *read_chain(Job *j, const Card *c, uint32_t first, uint32_t len)
 {
-    unsigned char *out = malloc(len > 0 ? len : 1);
-    unsigned char *tmp = malloc(c->clusterSize);
-    unsigned char *cl = malloc(c->clusterSize);
+    unsigned char *out;
+    unsigned char *tmp;
+    unsigned char *cl;
     uint32_t done = 0;
     uint32_t cur = first;
     uint32_t steps = 0;
 
+    /* no file is larger than the card (whose clusters read_raw matched to
+       the image's size, at most IMAGE_MAX): a damaged length is refused
+       before it sizes an allocation */
+    if ((uint64_t)len > (uint64_t)c->clusters * c->clusterSize) {
+        fail(j, "the card image names a file larger than the card%s", NULL);
+        return NULL;
+    }
+    out = malloc(len > 0 ? len : 1);
+    tmp = malloc(c->clusterSize);
+    cl = malloc(c->clusterSize);
     if (out == NULL || tmp == NULL || cl == NULL) {
         fail(j, "out of memory%s", NULL);
         goto bad;
@@ -282,7 +283,7 @@ static unsigned char *read_dir(Job *j, const Card *c, uint32_t first, uint32_t *
     if (head == NULL) {
         return NULL;
     }
-    n = le32(head + 4);
+    n = ico_le32(head + 4);
     free(head);
     if (n < 2 || n > c->clusters * (c->clusterSize / 512)) {
         fail(j, "the card image has a damaged directory%s", NULL);
@@ -295,7 +296,7 @@ static unsigned char *read_dir(Job *j, const Card *c, uint32_t first, uint32_t *
 static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
 {
     uint32_t count;
-    unsigned char *ents = read_dir(j, c, le32(dirent + 0x10), &count);
+    unsigned char *ents = read_dir(j, c, ico_le32(dirent + 0x10), &count);
     uint32_t i;
     int r = 0;
 
@@ -305,7 +306,7 @@ static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
     j->found = 1;
     for (i = 2; i < count && r == 0; i++) {
         const unsigned char *e = ents + (size_t)i * 512;
-        uint16_t mode = le16(e);
+        uint16_t mode = ico_le16(e);
         char name[NAME_MAX_ + 2];
         unsigned char *data;
 
@@ -320,8 +321,8 @@ static int import_save_dir(Job *j, const Card *c, const unsigned char *dirent)
             skip(j, full);
             continue;
         }
-        data = read_chain(j, c, le32(e + 0x10), le32(e + 4));
-        r = data != NULL ? add_file(j, name, data, le32(e + 4)) : -1;
+        data = read_chain(j, c, ico_le32(e + 0x10), ico_le32(e + 4));
+        r = data != NULL ? add_file(j, name, data, ico_le32(e + 4)) : -1;
     }
     free(ents);
     return r;
@@ -342,13 +343,13 @@ static int read_raw(Job *j, const unsigned char *img, size_t size)
     if (size < 0x154) {
         return fail(j, "the card image is too short%s", NULL);
     }
-    c.pageLen = le16(img + 0x28);
-    c.pagesPerCluster = le16(img + 0x2A);
-    c.clusters = le32(img + 0x30);
-    c.allocOffset = le32(img + 0x34);
-    c.rootCluster = le32(img + 0x3C);
+    c.pageLen = ico_le16(img + 0x28);
+    c.pagesPerCluster = ico_le16(img + 0x2A);
+    c.clusters = ico_le32(img + 0x30);
+    c.allocOffset = ico_le32(img + 0x34);
+    c.rootCluster = ico_le32(img + 0x3C);
     for (i = 0; i < 32; i++) {
-        c.ifc[i] = le32(img + 0x50 + 4 * i);
+        c.ifc[i] = ico_le32(img + 0x50 + 4 * i);
     }
     if ((c.pageLen != 512 && c.pageLen != 1024) || c.pagesPerCluster == 0 ||
         c.pagesPerCluster > 16 || c.clusters == 0 || c.clusters > (1u << 20) ||
@@ -372,11 +373,11 @@ static int read_raw(Job *j, const unsigned char *img, size_t size)
         const unsigned char *e = root + (size_t)i * 512;
         char name[NAME_MAX_ + 2];
 
-        if ((le16(e) & DF_EXISTS) == 0) {
+        if ((ico_le16(e) & DF_EXISTS) == 0) {
             continue;
         }
         entry_name(e, name);
-        if ((le16(e) & DF_DIR) != 0 && strcmp(name, ICO_MC_SAVE_DIR) == 0) {
+        if ((ico_le16(e) & DF_DIR) != 0 && strcmp(name, ICO_MC_SAVE_DIR) == 0) {
             r = import_save_dir(j, &c, e);
         } else {
             skip(j, name);
@@ -395,11 +396,11 @@ static int read_psu(Job *j, const unsigned char *p, size_t size)
     uint32_t i;
     size_t off = 512;
 
-    if (size < 3 * 512 || (le16(p) & (DF_DIR | DF_EXISTS)) != (DF_DIR | DF_EXISTS)) {
+    if (size < 3 * 512 || (ico_le16(p) & (DF_DIR | DF_EXISTS)) != (DF_DIR | DF_EXISTS)) {
         return fail(j, "the .psu file does not start with a directory%s", NULL);
     }
     entry_name(p, name);
-    count = le32(p + 4);
+    count = ico_le32(p + 4);
     if (count < 2 || count > MAX_FILES + 2) {
         return fail(j, "the .psu file's directory entry is damaged%s", NULL);
     }
@@ -419,7 +420,7 @@ static int read_psu(Job *j, const unsigned char *p, size_t size)
         }
         e = p + off;
         off += 512;
-        mode = le16(e);
+        mode = ico_le16(e);
         entry_name(e, name);
         if ((mode & DF_DIR) != 0) {
             if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
@@ -427,7 +428,7 @@ static int read_psu(Job *j, const unsigned char *p, size_t size)
             }
             return fail(j, "the .psu file holds a subdirectory, \"%s\"", name);
         }
-        len = le32(e + 4);
+        len = ico_le32(e + 4);
         if (len > size - off) {
             return fail(j, "the .psu file is cut short in \"%s\"", name);
         }
@@ -460,8 +461,8 @@ static int detect(const unsigned char *p, size_t n)
     if (n >= 4 && memcmp(p, "CFU", 4) == 0) {
         return ICO_MC_FMT_CBS;
     }
-    if (n >= 1024 && (le16(p) & (DF_DIR | DF_EXISTS)) == (DF_DIR | DF_EXISTS) &&
-        (le16(p + 512) & DF_DIR) != 0 && p[512 + 0x40] == '.' && p[512 + 0x41] == '\0') {
+    if (n >= 1024 && (ico_le16(p) & (DF_DIR | DF_EXISTS)) == (DF_DIR | DF_EXISTS) &&
+        (ico_le16(p + 512) & DF_DIR) != 0 && p[512 + 0x40] == '.' && p[512 + 0x41] == '\0') {
         return ICO_MC_FMT_PSU;
     }
     return ICO_MC_FMT_UNKNOWN;

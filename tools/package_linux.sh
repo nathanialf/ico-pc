@@ -5,7 +5,7 @@
 # build-host/pkg-linux-wt (no baserom, no uncommitted work), preset
 # linux-x64 with the window build (-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON),
 # staged under dist/stage/linux/ and archived as dist/ico-pc-<label>-linux.tar.gz
-# (root dir ico-pc-<label>/). Quiet; the log is build-host/pkg-linux-<label>.log.
+# (root dir ico-pc-<label>/), with tools/mc_import (docs/port/SAVES.md). Quiet; the log is build-host/pkg-linux-<label>.log.
 # Safe to re-run. Builds only: it never runs the game. See docs/port/TESTING.md
 # and docs/port/STEAMDECK.md.
 #
@@ -77,9 +77,10 @@ cd "$wt"
 # run path (the toolchain's absolute lib dir) is left out of the binary.
 run "$cmake" --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
     -DCMAKE_SKIP_BUILD_RPATH=ON "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN'"
-run "$cmake" --build build-host/linux-x64 --target ico_pc
+run "$cmake" --build build-host/linux-x64 --target ico_pc mc_import
 b="$wt/build-host/linux-x64"
 [[ -f "$b/ico_pc" ]] || fail "linux-x64 did not produce ico_pc"
+[[ -f "$b/port/save/mc_import" ]] || fail "linux-x64 did not produce mc_import"
 cd "$root"
 
 # the binary must need only SDL3 and system libraries, and find SDL3 beside itself
@@ -101,8 +102,14 @@ commit8="${commit:0:8}"
 date_str="$(date +%Y-%m-%d)"
 mkdir -p "$stage"
 rm -f "$stage"/ico_pc "$stage"/ico_pc.map "$stage"/libSDL3.so* "$stage"/README.txt
+rm -rf "$stage/tools"
 cp "$b/ico_pc" "$stage/ico_pc"
 chmod 755 "$stage/ico_pc"
+# the save importer (C and the C library only), as the Windows package's
+# tools\mc_import.exe
+mkdir -p "$stage/tools"
+cp "$b/port/save/mc_import" "$stage/tools/mc_import"
+chmod 755 "$stage/tools/mc_import"
 [[ -f "$b/ico_pc.map" ]] && cp "$b/ico_pc.map" "$stage/ico_pc.map"
 sdl="$root/tools/toolchain/deps/sdl3/linux-x64/lib"
 cp -L "$sdl/libSDL3.so.0" "$stage/libSDL3.so.0"
@@ -150,6 +157,11 @@ Keep ico_pc and libSDL3.so.0 together. Unpack where you can write (not
 
 ico_pc.map maps crash addresses to function names; send it with logs/.
 
+tools/mc_import (optional) copies ICO's save out of a PS2 memory card image
+(.ps2 / .bin) or a .psu into the saves folder:
+  tools/mc_import --to ~/.local/share/ico-pc/ico-pc/memcard FILE
+(docs/port/SAVES.md, "Importing saves").
+
 LICENSE is the port's licence (MIT); NOTICES.txt holds the licences of the
 third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype,
 the Arimo font, minicoro, newlib).
@@ -162,7 +174,8 @@ TXT
 rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
-for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.txt; do
+mkdir -p "$pkgroot/ico-pc-$label/tools"
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.txt tools/mc_import; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
 if [[ -f "$stage/ico_pc.map" ]]; then

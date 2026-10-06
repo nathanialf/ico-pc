@@ -33,13 +33,12 @@ Exit 77 without the disc image.
 """
 
 import os
-import array
 import re
-import shutil
-import struct
 import subprocess
 import sys
 import time
+
+from headless_common import PadScript, fresh_work, rms_after
 
 DWELL = 95          # seconds a stream may play (longer ones are cut there)
 SE_DWELL = 10       # an effect's
@@ -47,62 +46,25 @@ BANKS = 68          # the sound effects' bank sections on the PAL disc
 NOT_ON_DISC = {2, 3, 4, 5}
 END_TOL = 0.35      # seconds the end line may fall short of the total
 RING_PAD = 0x5C000  # the bytes each .int carries past its table's sectors
-BOOT_LAST = 440
-PAGE_OPEN = 785     # Main tick of the Cross on Music (as gallery_headless)
+PAGE_OPEN = 785     # Main tick of the Cross on Music
 FIRST = PAGE_OPEN + 50
 TPS = 25
+# one entry of each group the streams and banks above do not reach: an
+# ambience, a com_v voice, an effect from a bank the title does not hold;
+# with the streams' 47 (soundtrack), 87 (scene) and 101 (voice), every group
+# is checked to play under its group's name, with its engine line and sound
+GROUP_PLAY = ["env:61", "se:130", "se:1167"]
+GROUPS = [("soundtrack", 47), ("scene", 87), ("voice", 101), ("ambience", 437), ("voice", 130),
+          ("se", 1167)]
 
 
 def pad_script(src):
-    lines = []
-    for ln in open(src):
-        f = ln.split("#")[0].split()
-        if f and f[0].isdigit() and int(f[0]) <= BOOT_LAST:
-            lines.append("%s %s" % (f[0], f[1]))
-    t = 560
-    out = []
-
-    def press(b, gap=15, at=None):
-        nonlocal t
-        if at is not None:
-            t = at
-        out.append("%d %s" % (t, b))
-        out.append("%d 0000" % (t + 3))
-        t += gap
-
-    press("4000", 25)          # Settings
-    press("0040", 45)          # open it
-    for _ in range(6):
-        press("4000")          # to Extras
-    press("0040", 55)          # Extras
-    press("0040")              # Music (tick 785)
-    press("0008", at=FIRST + 3 * TPS)   # R1 while stream 47 plays
-    press("0004", at=FIRST + 6 * TPS)   # L1 while the next one plays
-    return "\n".join(lines + out) + "\n", FIRST + 3 * TPS, FIRST + 6 * TPS
-
-
-def rms_after(wav, frame, seconds=4.0, win=4800):
-    """The largest RMS of a 0.1 s window in [frame, frame + seconds) of the
-    dump (16-bit stereo, the left channel every fourth frame; read past its
-    44-byte header, which the run patches every second)."""
-    try:
-        f = open(wav, "rb")
-    except OSError:
-        return 0.0
-    with f:
-        f.seek(44 + frame * 4)
-        data = f.read(int(seconds * 48000) * 4)
-    a = array.array("h")
-    a.frombytes(data[:len(data) // 2 * 2])
-    if sys.byteorder != "little":
-        a.byteswap()
-    left = a[::8]  # every fourth frame's left sample
-    step = win // 4
-    best = 0.0
-    for i in range(0, len(left) - step + 1, step):
-        s = left[i:i + step]
-        best = max(best, (sum(v * v for v in s) / len(s)) ** 0.5)
-    return best
+    pad = PadScript(src)
+    pad.to_extras()
+    pad.press("0040")                         # Music (tick 785)
+    pad.press("0008", at=FIRST + 3 * TPS)     # R1 while stream 47 plays
+    pad.press("0004", at=FIRST + 6 * TPS)     # L1 while the next one plays
+    return pad.text(), FIRST + 3 * TPS, FIRST + 6 * TPS
 
 
 class Item:
@@ -266,10 +228,7 @@ def main():
         return judge(work, True, 0, report, keep=True)
     src = os.path.dirname(os.path.abspath(__file__))
     root = os.path.normpath(os.path.join(src, "..", "..", ".."))
-    if os.path.isdir(work):
-        shutil.rmtree(work)
-    os.makedirs(os.path.join(work, "saves"))
-    shutil.copy2(exe, os.path.join(work, os.path.basename(exe)))
+    exe_copy = fresh_work(exe, work)
     pad, _, _ = pad_script(os.path.join(root, "port", "input", "pad-boot.txt"))
     with open(os.path.join(work, "pad.txt"), "w") as f:
         f.write(pad)
@@ -277,12 +236,14 @@ def main():
     play += ["stream:%d" % n for n in range(1, 105)]
     play += ["dwell:%d" % SE_DWELL]
     play += ["bank:%d.%d" % (k, j) for k in range(BANKS) for j in range(3)]
+    play += GROUP_PLAY
     play += ["leave:0"]
     if only:
         play = ["stream:47", "dwell:%d" % DWELL] + only + ["leave:0"]
     # an upper bound: every stream its dwell and every effect its dwell, with
     # the opening's seconds; the run is stopped once the page has left
-    ticks = FIRST + 8 * TPS + (104 * (DWELL + 4) + 3 * BANKS * (SE_DWELL + 3) + 60) * TPS
+    ticks = FIRST + 8 * TPS + (104 * (DWELL + 4) + (3 * BANKS + len(GROUP_PLAY)) * (SE_DWELL + 3) +
+                               60) * TPS
     with open(os.path.join(work, "ico-pc.ini"), "w") as f:
         f.write("iso=%s\nsaves=%s\nticks=%d\ntrace=0\nwatchdog=120\npad_script=%s\naudio_dump=%s\n" %
                 (os.path.abspath(iso), os.path.join(work, "saves"), ticks,
@@ -290,7 +251,7 @@ def main():
     env = dict(os.environ, ICO_GALLERY_PLAY=",".join(play))
     logp = os.path.join(work, "logs", "ico-pc.log")
     t0 = time.time()
-    proc = subprocess.Popen([os.path.join(work, os.path.basename(exe))], cwd=work, env=env,
+    proc = subprocess.Popen([exe_copy], cwd=work, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     stopped = False
     seen = None
@@ -395,6 +356,18 @@ def judge(work, stopped, rc, report, keep):
                                                          "-" if obs is None else "%.1f s %s" % (obs, "end" if it.end is not None else "cut"),
                                                          "yes" if ok else "NO", note or ("loops" if it.cut is not None else "")))
         fails += ["effect %d: %s" % (it.key, f) for f in it.fails]
+    for group, key in GROUPS:
+        hit = [it for it in items if it.group == group and it.key == key]
+        if not hit:
+            fails.append("no 'gallery: playing %s %d'" % (group, key))
+        elif hit[-1].frame is None:
+            fails.append("%s %d: no engine line (stream opened / effect keyed)" % (group, key))
+        elif hit[-1].level < 30:
+            fails.append("%s %d: silent after frame %d (RMS %.0f)" % (group, key, hit[-1].frame,
+                                                                    hit[-1].level))
+        else:
+            print("%-10s %5d: started at audio frame %d, peak RMS %.0f" % (group, key, hit[-1].frame,
+                                                                          hit[-1].level))
     for want in ("gallery: the title theme has faded out", "gallery: script done",
                  "gallery: the title's stage banks are back",
                  "gallery: the title theme is requested again"):

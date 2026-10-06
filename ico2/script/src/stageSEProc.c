@@ -510,7 +510,7 @@ int stageSE06abirdOut(int *self)
     return -1;
 }
 
-int stageSE06ataimatsu(int *self)
+int stageSE06ataimatsu(SeSlot *self)
 {
     float *p = (float *)GetCameraPos((ICO_WORD)self);
     if (p[0] < 300.0f) {
@@ -575,7 +575,7 @@ int stageSE08anoise3(SeSlot *self)
     return -1;
 }
 
-int stageSE08ataimatsu(ICO_WORD self)
+int stageSE08ataimatsu(SeSlot *self)
 {
     if (se08aInStrongBox() == 0) {
         return 0;

@@ -62,9 +62,10 @@
  *      on the 17 black-rimmed rectangles' texels further than 2.5 from any
  *      ink, each word's glow the alpha blend of its letters' (as they are
  *      drawn: the transmittances multiply): squared error 0.0066 per texel;
- * *  10. the atlas: ink and rim cells, shelf-packed 256 texels wide, two texels
- *      apart, each with a zero border; its height is never a power of two (no
- *      mip chain, font.c's PAGE_TRIM).
+ *  10. the atlas: ink and rim cells, shelf-packed 512 texels wide (ATLAS_W),
+ *      two texels apart, each with a zero border (a cell wider than the
+ *      atlas fails the build); its height is never a power of two (no mip
+ *      chain, font.c's PAGE_TRIM).
  */
 #include "game_font.h"
 
@@ -72,6 +73,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "font.h" /* ui_Utf8Next */
 
 #define MAX_LINES 8
 #define MAX_CHARS 128 /* per line */
@@ -162,42 +165,6 @@ static int grow(void **p, int *cap, int need, size_t elem)
     return 0;
 }
 
-static uint32_t utf8Next(const char **sp)
-{
-    const unsigned char *s = (const unsigned char *)*sp;
-    uint32_t c = s[0];
-    int n = 0;
-    if (!c) {
-        return 0;
-    }
-    if (c < 0x80) {
-        *sp += 1;
-        return c;
-    }
-    if ((c & 0xE0) == 0xC0) {
-        n = 1;
-        c &= 0x1F;
-    } else if ((c & 0xF0) == 0xE0) {
-        n = 2;
-        c &= 0x0F;
-    } else if ((c & 0xF8) == 0xF0) {
-        n = 3;
-        c &= 0x07;
-    } else {
-        *sp += 1;
-        return 0xFFFD;
-    }
-    for (int i = 1; i <= n; i++) {
-        if ((s[i] & 0xC0) != 0x80) {
-            *sp += 1;
-            return 0xFFFD;
-        }
-        c = (c << 6) | (s[i] & 0x3Fu);
-    }
-    *sp += n + 1;
-    return c;
-}
-
 static int cmpFloat(const void *a, const void *b)
 {
     const float x = *(const float *)a, y = *(const float *)b;
@@ -283,7 +250,7 @@ int ui_GfBuilderSheet(UiGfBuilder *b, const char *name)
         }
     }
     if (grow((void **)&b->sheets, &b->capsheets, b->nsheets + 1, sizeof(b->sheets[0])) != 0) {
-        return 0;
+        return -1;
     }
     memset(b->sheets[b->nsheets], 0, UI_GF_SHEET_NAME);
     strncpy(b->sheets[b->nsheets], name, UI_GF_SHEET_NAME - 1);
@@ -606,7 +573,7 @@ static void segment(UiGfBuilder *b, const Src *sr)
         memset(nchars, 0, sizeof(nchars));
         memset(spaceAfter, 0, sizeof(spaceAfter));
         uint32_t cp;
-        while ((cp = utf8Next(&s)) != 0) {
+        while ((cp = ui_Utf8Next(&s)) != 0) {
             if (cp == '\n') {
                 if (++nl >= MAX_LINES) {
                     goto done;
@@ -880,7 +847,14 @@ static void segment(UiGfBuilder *b, const Src *sr)
                     in.va = calloc((size_t)in.vw * (size_t)in.vh, sizeof(float));
                     in.vp = calloc((size_t)in.vw * (size_t)in.vh, sizeof(float));
                     in.vn = calloc((size_t)in.vw * (size_t)in.vh, sizeof(float));
-                    for (int y = 0; in.va && in.vp && in.vn && y < in.vh; y++) {
+                    if (!in.va || !in.vp || !in.vn) {
+                        /* all three or none: the users test va alone */
+                        free(in.va);
+                        free(in.vp);
+                        free(in.vn);
+                        in.va = in.vp = in.vn = NULL;
+                    }
+                    for (int y = 0; in.va && y < in.vh; y++) {
                         for (int x = 0; x < in.vw; x++) {
                             const int i = (band0 + y) * w + (vl + x);
                             in.va[y * in.vw + x] = sr->A[i];
@@ -1201,7 +1175,6 @@ int ui_GfBuilderFinish(UiGfBuilder *b, float mainEm, uint8_t **blobOut, size_t *
     b->mainEm = mainEm;
     /* two passes: the second with the first's expected widths */
     for (int pass = 0; pass < 2; pass++) {
-        const UiGfStats keep = b->st;
         clearInstances(b);
         b->st.lines = b->st.exact = b->st.aligned = b->st.splits = b->st.unaligned = 0;
         b->st.instances = 0;
@@ -1209,7 +1182,6 @@ int ui_GfBuilderFinish(UiGfBuilder *b, float mainEm, uint8_t **blobOut, size_t *
             segment(b, &b->src[i]);
         }
         if (pass == 0) {
-            (void)keep;
             /* the expected widths: per character, the median width over its
                capitals */
             free(b->expect);
@@ -1719,6 +1691,13 @@ int ui_GfBuilderFinish(UiGfBuilder *b, float mainEm, uint8_t **blobOut, size_t *
         }
     }
     qsort(cells, (size_t)ncell, sizeof(Cell), cmpCellH);
+    for (int i = 0; i < ncell; i++) {
+        if (cells[i].w + 2 * CELL_GAP > ATLAS_W) {
+            /* a cell wider than a shelf: no packing places it */
+            free(kerns);
+            goto out;
+        }
+    }
     int sx = CELL_GAP, sy = CELL_GAP, shelf = 0;
     for (int i = 0; i < ncell; i++) {
         Cell *cl = &cells[i];

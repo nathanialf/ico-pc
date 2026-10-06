@@ -77,7 +77,7 @@ them.
 The environment variable `ICO_GALLERY_PLAY` (developer only) gives the
 music gallery a list of entries to play when its page opens, one every 8 s
 or, after a `dwell:S` entry, each until it ends (at most S seconds), for
-headless renders and the `gallery_headless` and `gallery_sweep` tests
+headless renders and the `gallery_sweep` test
 (docs/port/MUSIC.md, "Testing"): `stream:N`, `env:I`, `se:D`, `bank:K.J`,
 `pause:0`, `dwell:S`, `leave:0`, comma separated.
 
@@ -310,12 +310,13 @@ needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
 77 without one, which ctest reports as skipped and counts as a pass.
 `tables_loader` and `tables_manifest` are built only when a base ELF is
 present (docs/BUILDING.md); `gallery` exits 77 without one.
-`font_coverage` (CPU, no device) checks that every code point of the five
-languages' tables, the subtitle transcriptions (test data,
-`port/ui/test/subtitles.c`), the port's roll lines and the font corpus, and
-with the base ELF the staff roll's lines and the sound names, is drawn by a
-face; with the base ELF and the disc image it first builds the game face
-from the disc's menu sheets (as the first run does), reports per character
+`font_coverage` (CPU, no device) checks that every code point of the text
+the port draws (the five languages' tables, the port's roll lines and the
+font corpus, and with the base ELF the sound names) is drawn by a face; with
+the base ELF and the disc image it first builds the game face from the
+disc's menu sheets (as the first run does), checks the per-user file the
+start-up step keeps it in (written when absent with no temporary left, read
+back, a corrupt one built again and replaced), reports per character
 which face serves it (and for the game face, the sheet it was cut from), and
 writes the face to `port/ui/gamefont.bin` of the build directory for the
 tests after it (fixture `gamefont`: `settings_render` and `menu_text` draw
@@ -327,30 +328,30 @@ builder on a synthetic sheet (the letters segmented and matched, a touching
 pair split, the advances and the space, the rim cell, the blob read back and
 refused when malformed). `font_audit` (Python, no build needed) checks the
 same sources against Arimo's subset ranges (docs/port/UI.md, "The font").
-`gallery_headless` runs the headless game itself (a copy of `ico_pc` in
-`port/ui/gallery_headless/` of the build directory, with its own
-`ico-pc.ini`, pad script and WAV dump): it boots to the title, opens
-Settings > Extras > Music and plays one entry of each group through
-`ICO_GALLERY_PLAY`, then checks the log and the dump
-(docs/port/MUSIC.md, "Testing"). It needs the disc image (77 without),
-runs serially and takes about ten seconds. `credits_headless` runs it twice
-the same way (`port/ui/credits_headless/`): a short boot with the Credits
+`credits_headless` runs the headless game itself, twice (a copy of
+`ico_pc` in `port/ui/credits_headless/` of the build directory, with its
+own `ico-pc.ini` and pad script): a short boot with the Credits
 row locked, then one with `unlock_credits=1` that opens Settings > Extras >
 Credits and plays the ending's staff scenes back to the title, checking the
 log's `credits:` and `staff roll:` lines in order, the title running on
 after it, and the saves folder unchanged (docs/port/EXTRAS.md, "Credits").
 It needs the disc image (77 without), runs serially and takes about a
 minute. `gallery_sweep` runs it once more
-(`port/ui/gallery_sweep/`) for every stream: each of the 100 on the disc
-played through the gallery until it ends (at most 95 s), then three effects
-of every bank, R1 and L1 while a stream plays, and the page's leave; it
-fails on a stream that does not play once to its end with its total, or
-plays past it or wraps, on an effect not keyed, or on any `gallery: failed`,
+(`port/ui/gallery_sweep/`, with a WAV dump) for every stream: each of the
+100 on the disc played through the gallery until it ends (at most 95 s),
+then three effects of every bank, one entry of each group the streams and
+banks do not reach (an ambience, a com_v voice, an effect from a bank the
+title does not hold), R1 and L1 while a stream plays, and the page's leave;
+it fails on a stream that does not play once to its end with its total, or
+plays past it or wraps, on an effect not keyed, on a group's entry not
+played under its group's name or silent after its start, or on any
+`gallery: failed`,
 and writes the table of every stream to `table.md` there (docs/port/
 MUSIC.md, "Findings" and "Testing"). It needs the disc image (77 without),
 runs serially and takes about three minutes; the 750 MB WAV dump is
-deleted when it passes. The Windows presets build the test executables
-without running them.
+deleted when it passes. The two scripts share the pad script's boot and
+the dump's level (`port/ui/test/headless_common.py`). The Windows presets
+build the test executables without running them.
 
 ## The model viewer run
 
@@ -414,9 +415,8 @@ exit 77 and are reported as skipped. docs/BUILDING.md lists the steps.
 
 On `asan`, the Vulkan tests run with `ASAN_OPTIONS=detect_leaks=0` (the
 driver's allocations at `vkDestroyInstance`, port/rhi/CMakeLists.txt). With
-the disc present, the four tests that run the headless game
-(`model_viewer_headless`, `gallery_headless`, `gallery_sweep`,
-`credits_headless`) fail on
+the disc present, the three tests that run the headless game
+(`model_viewer_headless`, `gallery_sweep`, `credits_headless`) fail on
 `asan` at `fumi/isys/gobj.c`'s pointer arithmetic on a null table
 ([`BOOT_DIAG.md`](BOOT_DIAG.md), "ICO_HEAP_ASAN"); without the disc, as in CI,
 they skip.

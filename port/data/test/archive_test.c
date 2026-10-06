@@ -349,37 +349,6 @@ static int run_synth(const char *dir)
                               sizeof(why)) == 0);
     CHECK(ico_archive_read_info(ar_path, &info, why, sizeof(why)) == 0);
 
-    /* 7. an item the port adds (the game face, port/ui/game_font.h): absent,
-       added after the disc's files, read back, a second add leaves it, the
-       archive still mounts and reads the disc's sectors */
-    {
-        static const char item[] = "the game's lettering, as bytes";
-        void *got = NULL;
-        size_t n = 0;
-
-        CHECK(ico_archive_read_item(ar_path, "port/test-1.bin", &got, &n) == 1);
-        CHECK(ico_extract_add_item(ar_path, "port/test-1.bin", item, sizeof(item), why,
-                                   sizeof(why)) == 0);
-        CHECK(ico_archive_read_item(ar_path, "port/test-1.bin", &got, &n) == 0 &&
-              n == sizeof(item) && memcmp(got, item, n) == 0);
-        ico_archive_free_item(got);
-        CHECK(ico_extract_add_item(ar_path, "port/test-1.bin", "other", 5, why, sizeof(why)) == 0);
-        CHECK(ico_archive_read_item(ar_path, "port/test-1.bin", &got, &n) == 0 &&
-              n == sizeof(item));
-        ico_archive_free_item(got);
-        CHECK(ico_archive_read_info(ar_path, &info, why, sizeof(why)) == 0);
-        ar = ico_vfs_mount_archive(ar_path);
-        CHECK(ar != NULL);
-        if (ar != NULL) {
-            iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
-            CHECK(iso != NULL && same_sectors(iso, ar, SYN_CNF, 3));
-            if (iso != NULL) {
-                ico_vfs_unmount(iso);
-            }
-            ico_vfs_unmount(ar);
-        }
-    }
-
     remove(ar_path);
     remove(iso_path);
     printf("archive_test synth: %s\n", failures ? "FAILED" : "ok");

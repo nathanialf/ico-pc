@@ -181,19 +181,14 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     endif()
     add_test(NAME gallery COMMAND gallery_test "${ICO_BASE_ELF}" "${ICO_DISC_IMAGE}")
     set_tests_properties(gallery PROPERTIES SKIP_RETURN_CODE 77)
-    # the gallery in the headless game (gallery_headless.py): needs the
-    # disc image and the headless program
+    # the gallery in the headless game: needs the disc image and the
+    # headless program
     if(TARGET ico_pc AND ICO_HEADLESS AND Python3_EXECUTABLE)
-        add_test(NAME gallery_headless
-                 COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/gallery_headless.py"
-                         "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
-                         "${CMAKE_CURRENT_BINARY_DIR}/gallery_headless")
-        set_tests_properties(gallery_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
-                             TIMEOUT 300)
-        # every stream and three effects of every bank through the gallery in
-        # one headless run (gallery_sweep.py, package MUS3): each stream once
-        # to its end with its total, R1 and L1, the title restored; the table
-        # in gallery_sweep/table.md
+        # every stream, three effects of every bank and one entry of each
+        # group through the gallery in one headless run (gallery_sweep.py,
+        # package MUS3; headless_common.py): each stream once to its end with
+        # its total, R1 and L1, each group under its name and sounding, the
+        # title restored; the table in gallery_sweep/table.md
         add_test(NAME gallery_sweep
                  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/gallery_sweep.py"
                          "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
@@ -314,12 +309,11 @@ target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
 target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
                       ico_platform)
 # menu_text_test (P3, TXT2): the menu text table (against the disc's
-# texProperty when the image is there), the strings, the subtitle
-# transcriptions (test/subtitles.c, test data), the hook through the real
+# texProperty when the image is there), the strings, the hook through the real
 # layout_texture.c (every game row its texture sprite, the port rows
 # deferred text) on the recording, then a port row into SCENE on a Vulkan
 # device (exit 77 without one)
-add_executable(menu_text_test test/menu_text_test.c test/subtitles.c $<TARGET_OBJECTS:ico_ui_rd>
+add_executable(menu_text_test test/menu_text_test.c $<TARGET_OBJECTS:ico_ui_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
@@ -333,15 +327,16 @@ target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
 # font_coverage_test (docs/port/UI.md, "The font"): every character of the
-# five languages' tables and subtitles, the port's roll lines and the corpus
-# (test/font_corpus) has a glyph in the embedded subset; with the base ELF,
-# the staff roll's lines and the sound names too. CPU only. The strings and
+# text the port draws (the five languages' tables, the port's roll lines and
+# the corpus, test/font_corpus) has a glyph in the embedded subset; with the
+# base ELF, the sound names too; with the disc, the game face and its
+# per-user file (ui_GameFontPrepare). CPU only. The strings and
 # the font are compiled again here (font.c from ico_ui_font_rd) so the test
 # needs nothing of the game but the ELF's table loader.
 ico_include_dirs(common _ico_cov_incs)
 ico_include_dirs(sugipon _ico_cov_data_incs)
 add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
-    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c test/subtitles.c
+    strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
     "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"

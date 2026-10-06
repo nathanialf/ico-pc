@@ -288,20 +288,6 @@ that builds one more preset.
 
 Run the same steps locally before pushing.
 
-## Worktrees
-
-`tools/worktree.sh add <id>` creates `/primary/dev/ico-pc-wt/<id>` on a new
-branch `pkg/<id>` from `main` and symlinks the untracked inputs a fresh
-worktree needs from the main checkout: `baserom`, `tools/toolchain` (compilers
-and dependencies), `.venv` and `build-host/tmp` (the build and game-run locks,
-scratch). Nothing else untracked is needed: the generated sources are
-tracked. `.gitignore` ignores the links (`/baserom`, `/.venv`, `/tools/toolchain`
-besides the directory forms), so `git status` stays clean. `add` refuses an
-existing path or branch. Where `/tmp` is a small tmpfs, export
-`TMPDIR=/primary/dev/ico-pc/build-host/tmp` for every build, `ctest` and game run. Build in `<worktree>/build-host/<dir>`.
-`tools/worktree.sh drop <id>` removes the worktree and deletes `pkg/<id>`
-only if it is merged into `main`; otherwise it keeps the branch and says so.
-
 ## Packages
 
 `tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build

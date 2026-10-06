@@ -15,16 +15,7 @@
 
 #include "spu2_internal.h"
 #include "vfs.h"
-
-static uint32_t rd16(const uint8_t *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8;
-}
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return rd16(p) | rd16(p + 2) << 16;
-}
+#include "../include/ico_endian.h"
 
 /* The file offset of `len` bytes at module address `addr` in .data, or -1. */
 static long data_off(uint32_t sh_addr, uint32_t sh_off, uint32_t sh_size, uint32_t addr,
@@ -48,26 +39,26 @@ const char *ico_libsd_parse(const uint8_t *irx, size_t len, IcoLibsdValues *out)
     memset(out, 0, sizeof *out);
     if (len < 0x34 || memcmp(irx, elf_magic, 4) != 0 || irx[4] != 1 || irx[5] != 1)
         return "not a 32-bit little-endian ELF";
-    shoff = rd32(irx + 0x20);
-    shentsize = rd16(irx + 0x2E);
-    shnum = rd16(irx + 0x30);
-    shstrndx = rd16(irx + 0x32);
+    shoff = ico_le32(irx + 0x20);
+    shentsize = ico_le16(irx + 0x2E);
+    shnum = ico_le16(irx + 0x30);
+    shstrndx = ico_le16(irx + 0x32);
     if (shentsize < 0x28 || shstrndx >= shnum || shoff > len ||
         (uint64_t)shnum * shentsize > len - shoff)
         return "bad section headers";
-    str_off = rd32(irx + shoff + shstrndx * shentsize + 0x10);
-    str_size = rd32(irx + shoff + shstrndx * shentsize + 0x14);
+    str_off = ico_le32(irx + shoff + shstrndx * shentsize + 0x10);
+    str_size = ico_le32(irx + shoff + shstrndx * shentsize + 0x14);
     if (str_off > len || str_size > len - str_off)
         return "bad section name table";
     for (i = 0; i < shnum; i++) {
         const uint8_t *sh = irx + shoff + i * shentsize;
-        uint32_t name = rd32(sh);
+        uint32_t name = ico_le32(sh);
 
         if (name < str_size && str_size - name >= 6 &&
             memcmp(irx + str_off + name, ".data", 6) == 0) {
-            d_addr = rd32(sh + 0x0C);
-            d_off = rd32(sh + 0x10);
-            d_size = rd32(sh + 0x14);
+            d_addr = ico_le32(sh + 0x0C);
+            d_off = ico_le32(sh + 0x10);
+            d_size = ico_le32(sh + 0x14);
             found = 1;
             break;
         }
@@ -86,16 +77,16 @@ const char *ico_libsd_parse(const uint8_t *irx, size_t len, IcoLibsdValues *out)
     for (m = 0; m < SPU2_REVERB_MODES; m++) {
         const uint8_t *p = irx + o_presets + (long)ICO_LIBSD_PRESET_BYTES * m;
         spu2_reverb_preset *r = &out->presets[m];
-        uint32_t units = rd32(irx + o_sizes + 4 * m);
+        uint32_t units = ico_le32(irx + o_sizes + 4 * m);
         uint32_t top = 0;
         int k;
 
         if (units == 0 || units > (SPU2_RAM_SIZE >> 3))
             return "a work area size is out of range";
         r->size = units << 3;
-        out->flags[m] = rd32(p);
+        out->flags[m] = ico_le32(p);
         for (k = 0; k < 32; k++)
-            r->regs[k] = (uint16_t)rd16(p + 4 + 2 * k);
+            r->regs[k] = (uint16_t)ico_le16(p + 4 + 2 * k);
         for (k = 10; k < 30; k++)
             top = r->regs[k] > top ? r->regs[k] : top;
         if (out->flags[m] != 0)

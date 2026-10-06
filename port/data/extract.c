@@ -21,6 +21,7 @@
 #include "host_config.h"
 #include "host_fs.h"
 #include "miniz.h"
+#include "../include/ico_endian.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -203,11 +204,6 @@ static int close_synced(FILE *fp)
     return err;
 }
 
-static uint32_t le32(const unsigned char *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
 static void sha1_hex(IcoSha1 *s, char hex[41])
 {
     unsigned char d[20];
@@ -307,7 +303,7 @@ static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
         say(why, whysize, DF_PATH ": cannot read its directory");
         return -1;
     }
-    df->count = le32(hdr);
+    df->count = ico_le32(hdr);
     if (df->count == 0 || df->count > DF_MEMBERS_MAX || 4u + 40u * (uint64_t)df->count > df->size) {
         say(why, whysize, DF_PATH ": not a member directory (count %u)", (unsigned)df->count);
         return -1;
@@ -321,8 +317,8 @@ static int df_begin(DfState *df, IcoVfs *iso, char *why, size_t whysize)
         return -1;
     }
     for (i = 0; i < df->count; i++) {
-        df->m[i].offset = le32(dir + 4 + 40 * i + 32);
-        df->m[i].size = le32(dir + 4 + 40 * i + 36);
+        df->m[i].offset = ico_le32(dir + 4 + 40 * i + 32);
+        df->m[i].size = ico_le32(dir + 4 + 40 * i + 36);
         if ((uint64_t)df->m[i].offset + df->m[i].size > df->size) {
             free(dir);
             say(why, whysize, DF_PATH ": member %u lies outside the file", (unsigned)i);
@@ -1045,93 +1041,5 @@ done:
     free(x.df.m);
     free(tails);
     free(meta.p);
-    return ok ? 0 : -1;
-}
-
-/* --- items the port adds (extract.h ico_extract_add_item) ----------------- */
-
-typedef struct AddIo {
-    FILE *fp;
-    int err;
-} AddIo;
-
-static size_t add_read(void *opaque, mz_uint64 ofs, void *buf, size_t n)
-{
-    AddIo *io = opaque;
-
-    if (ico_archive_seek(io->fp, ofs) != 0) {
-        return 0;
-    }
-    return fread(buf, 1, n, io->fp);
-}
-
-static size_t add_write(void *opaque, mz_uint64 ofs, const void *buf, size_t n)
-{
-    AddIo *io = opaque;
-    size_t w;
-
-    if (ico_archive_seek(io->fp, ofs) != 0) {
-        io->err = errno ? errno : EIO;
-        return 0;
-    }
-    w = fwrite(buf, 1, n, io->fp);
-    if (w != n) {
-        io->err = errno ? errno : ENOSPC;
-    }
-    return w;
-}
-
-int ico_extract_add_item(const char *archive_path, const char *name, const void *data, size_t size,
-                         char *why, size_t whysize)
-{
-    mz_zip_archive zip;
-    AddIo io;
-    int64_t end;
-    int ok;
-
-    memset(&io, 0, sizeof(io));
-    io.fp = ico_archive_fopen(archive_path, "r+b");
-    if (io.fp == NULL) {
-        say(why, whysize, "cannot open %s for writing: %s", archive_path, strerror(errno));
-        return -1;
-    }
-    if (fseek(io.fp, 0, SEEK_END) != 0 || (end = ico_archive_tell(io.fp)) < 0) {
-        say(why, whysize, "cannot size %s", archive_path);
-        fclose(io.fp);
-        return -1;
-    }
-    memset(&zip, 0, sizeof(zip));
-    zip.m_pRead = add_read;
-    zip.m_pWrite = add_write;
-    zip.m_pIO_opaque = &io;
-    if (!mz_zip_reader_init(&zip, (mz_uint64)end, 0)) {
-        say(why, whysize, "%s is not a ZIP archive", archive_path);
-        fclose(io.fp);
-        return -1;
-    }
-    if (mz_zip_reader_locate_file(&zip, name, NULL, 0) >= 0) {
-        /* already there (another run added it): nothing to do */
-        mz_zip_reader_end(&zip);
-        fclose(io.fp);
-        return 0;
-    }
-    /* the new entry goes where the central directory was, and the directory
-       is written again after it: the stored files' bytes are not touched */
-    ok = mz_zip_writer_init_from_reader_v2(&zip, NULL, 0) &&
-         mz_zip_writer_add_mem_ex(&zip, name, data, size, NULL, 0, MZ_NO_COMPRESSION, 0, 0) &&
-         mz_zip_writer_finalize_archive(&zip);
-    if (!ok) {
-        say(why, whysize, "cannot add %s to %s: %s", name, archive_path,
-            io.err ? strerror(io.err) : mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
-    }
-    mz_zip_writer_end(&zip);
-    {
-        const int e = close_synced(io.fp);
-
-        if (e != 0 && ok) {
-            say(why, whysize, "cannot write %s: %s", archive_path, strerror(e));
-            ok = 0;
-        }
-    }
     return ok ? 0 : -1;
 }

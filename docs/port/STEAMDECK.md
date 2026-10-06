@@ -16,6 +16,7 @@ a Deck ([`docs/TODO.md`](../TODO.md)).
 | `libSDL3.so.0` | SDL 3.4.18 (zlib licence), the window, input and audio library. The binary finds it beside itself (`RUNPATH $ORIGIN`) |
 | `ico-pc.ini` | optional settings: `iso=` (the disc image path) and `watchdog=30` |
 | `ico_pc.map` | link map, to turn a crash address into a function name |
+| `tools/mc_import` | optional: copies ICO's save out of a PS2 memory card image or a `.psu` into the saves folder (docs/port/SAVES.md, "Importing saves") |
 | `README.txt`, `LICENSE`, `NOTICES.txt`, `THIRD_PARTY.md` | the short run guide, the port's MIT licence, the third-party licence texts and the dependency list |
 
 No game data is in it. `tools/package_linux.sh` builds a clean worktree of

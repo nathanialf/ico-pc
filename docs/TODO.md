@@ -3,9 +3,12 @@
 Work that is wanted but not done, and facts that are not yet verified. Each
 entry says what, why it matters, and where it would go. Finished work is not
 listed here; `git log` has it. The other documents keep at most a one-line
-pointer to this file. What is left needs something the code cannot give:
-Windows or Steam Deck hardware, a PS2 capture, a play-through, a native
-speaker, or it is a follow-up a package filed (marked "follow-up" below).
+pointer to this file. Most of what is left needs something the code cannot
+give: Windows or Steam Deck hardware, a PS2 capture, a play-through, a
+native speaker. The rest needs no hardware and is left for a later version
+(marked so below): F1's exact adder, the ADPCM filter scan, the camera
+editor's second pad, the two research items (freed model images,
+`IosMcLock`), and the follow-ups the packages and the final review filed.
 
 ## Platforms
 
@@ -40,7 +43,7 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 ## Game code and 64-bit safety
 
-- **Freed model images (research).** Whether anything reads a model image's tables
+- **Freed model images (research; left for a later version, no hardware needed).** Whether anything reads a model image's tables
   after the loader frees the image is not settled
   (docs/research/loader-census.md). The decoded tables live outside the
   arena, so the `asan` preset covers them; the image itself is in the arena
@@ -51,7 +54,7 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 - **VU0 R register (F7; needs a PS2).** The LFSR uses PCSX2's taps 4 and 22, not checked
   on hardware; the random sequences depend on it (`port/math/matrix.c`).
-- **Exact adder (F1, optional; follow-up, no hardware needed).** An exact model of the PS2 adder in
+- **Exact adder (F1, optional; left for a later version, no hardware needed).** An exact model of the PS2 adder in
   `port/math/ps2float.h` would close the 1-ulp difference in effective
   subtraction.
 
@@ -69,7 +72,7 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 - **Driver details (A4, A8, A19; need a PS2).** Measure the SPU2 DMA
   rate (uploads take one frame on the host, which can shift load timing),
   and capture the exponential-decrease envelope's rounding on hardware.
-- **ADPCM filters 5 to 7 on the disc (A3; follow-up filed by package AU1, a disc scan).** Scan the disc's VAG bodies and
+- **ADPCM filters 5 to 7 on the disc (A3; filed by package AU1; left for a later version: a disc scan, no hardware needed).** Scan the disc's VAG bodies and
   `.int` streams for blocks whose filter nibble is 5 to 7 or whose shift is
   13 to 15 (a static read of the data, no hardware needed); none found
   means A3 never applies.
@@ -97,7 +100,7 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
   Import a real PCSX2 `.ps2`, a plain `.bin` dump and a uLaunchELF `.psu`
   holding ICO's save, and load the save in the game. `.max` (LZARI) and
   `.cbs` are refused; decode them once sample files are at hand.
-- **`IosMcLock` signalling (research; needs libmc's disassembly).** The host signals it once per vsync so
+- **`IosMcLock` signalling (research; left for a later version: needs libmc's disassembly, no hardware).** The host signals it once per vsync so
   `iosMcMgrSync` progresses; whether libmc or the IOP does this on the PS2
   is unknown and affects how fast card requests poll. Settle it from libmc's
   disassembly and note it in SAVES.md and DIVERGENCES.md.
@@ -122,7 +125,7 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
   (`east_and_west`) are inferred from the code. A wrong guess gives an
   achievement a trigger that never fires; confirm in play and fix
   `port/game/achievements.c` if needed.
-- **Camera editor needs a second pad (a defect found by the DEV package; needs a code change and a second pad to check).** The Developer menu's Camera Editor
+- **Camera editor needs a second pad (a defect found by the DEV package; left for a later version: a code change, checked with a pad script).** The Developer menu's Camera Editor
   (`omori/src/camera-editor.c`) reads only `pad[1]`, which the host never
   connects (`port/input/pad_host.c`: port 0 slot 0), so it opens but cannot
   be driven or left: every control, including the exit (`menu` thread,
@@ -136,10 +139,32 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 ## Follow-ups from the final code review
 
-None of these needs hardware; each was filed and not done.
+Each was filed by the review or by a package and not done; what each needs
+is in its title.
 
 - **D3D12 buffer copy states (needs Windows hardware).** `d3dp_BufferBeginCopyDst` assumes COMMON at
   list start; settle with one debug-layer run over a stage load.
+- **The Queen's barrier block at 16:9 (left for a later version; no hardware needed).** The
+  widescreen reflections widen the puddle's and the pool's blocks by 1 / f
+  and map the game's 4:3 u for draws that sample them
+  (docs/port/RENDER_API.md, section 13, `RdTargetRec.wideBlock`,
+  `gs_block_uv`), but the barrier's 512x256 block, which has no depth
+  buffer, is not widened. At 16:9 the barrier's refraction therefore samples
+  a 4:3 block under a widened scene: its picture is stretched across the
+  wider screen. Widen the block as the others are (or show it needs no
+  widening) and add the barrier at 16:9 to `rd_water`, which checks the
+  puddle and the pool only.
+- **A near-white Enhanced frame on the Music page (unverified; left for a later version, no hardware needed).**
+  Package UIFIX reported one frame drawn nearly white in the Enhanced
+  preset at Main tick 1000 with Settings > Extras > Music open; it was not
+  reproduced or explained. Repro: the window build, `[video] preset =
+  "enhanced"`, a pad script with `port/input/pad-boot.txt`'s presses up to
+  tick 440 then Down (4000) at 560, Cross (0040) at 585, Down six times from
+  630 every 15 ticks, Cross at 720 and Cross at 775 (Music opens at 785:
+  `port/ui/test/headless_common.py` `PadScript.to_extras`, as
+  `gallery_sweep.py` writes it), `ticks=1010`, `dump_every=1`,
+  `dump_from=990`; replay the dumps around tick 1000 with `rd_replay_tool`
+  and compare them with the frames before and after.
 
 ## Checks that need a PS2 or a play-through
 

@@ -409,22 +409,17 @@ frame F` (F is `spu2_time()`, the WAV dump's frame). After the last,
   left out, every listed bank found in a pack, every listed effect's
   program and tone in its bank's header, every stream's file its pass plus
   0x5C000 bytes, and no end block inside a pass but event/40's at 0x93000.
-- `gallery_headless` (the headless build and the disc image; RUN_SERIAL,
-  300 s, 77 without the image): `port/ui/test/gallery_headless.py` boots to
-  the title with `pad-boot.txt`'s presses, opens Settings > Extras > Music
-  and plays one entry of each group (stream 47, stream 87, the ambience of
-  `seEnv` 61, stream 101, effect 130 of com_v, effect 1167 of `st25a_b-g`,
-  which needs the bank load), then presses Triangle. It checks each
-  `gallery: playing` line, the engine's line after it, that the WAV dump
-  sounds within 4 s of each start, the theme's fade and restore, the banks'
-  restore, and no `gallery: failed`.
 - `gallery_sweep` (the headless build and the disc image; RUN_SERIAL,
   3600 s, 77 without the image; about three minutes, the headless game
-  running faster than real time): `port/ui/test/gallery_sweep.py` boots as
-  `gallery_headless` does and plays `stream:47` (R1 at 3 s and L1 at 6 s:
+  running faster than real time): `port/ui/test/gallery_sweep.py` boots to
+  the title with `pad-boot.txt`'s presses (`headless_common.py`), opens
+  Settings > Extras > Music and plays `stream:47` (R1 at 3 s and L1 at 6 s:
   the next and previous entries play), `dwell:95`, `stream:1` to
   `stream:104`, `dwell:10`, `bank:K.J` for 68 sections and J 0 to 2 (the
-  sections past the last answer "no such entry"), `leave:0`, and stops the
+  sections past the last answer "no such entry"), one entry of each group
+  the streams and banks do not reach (`env:61`, the ambience of `seEnv` 61;
+  `se:130`, a com_v voice; `se:1167` of `st25a_b-g`, which needs the bank
+  load), `leave:0`, and stops the
   run 10 s after the page has left. From the log and the WAV dump it prints
   the two tables of "Findings" (into `port/ui/gallery_sweep/table.md` of
   the build directory) and fails when a listed stream does not open, is
@@ -432,7 +427,10 @@ frame F` (F is `spu2_time()`, the WAV dump's frame). After the last,
   than 0.35 s before its total, goes past it or back, shows a total other
   than its file's (or its blank's), or, cut at the dwell, did not move one
   second a second; when an effect is not keyed; when R1 or L1 opens nothing;
-  when the e3/ streams are listed; when the theme and banks are not
+  when the e3/ streams are listed; when an entry of a group (streams 47,
+  87 and 101 as soundtrack, scene and voice, and the three above) is not
+  played under its group's name, has no engine line or is silent within its
+  dwell after its start; when the theme and banks are not
   restored; or on any other `gallery: failed`. `--reread` judges a finished
   run's folder again, and `--play LIST` (no checks) runs some entries only.
 - `settings` and `settings_render`: the Music row opens the page and

@@ -122,7 +122,6 @@ packs are compressed already. Entries:
 | `disc/<PATH>` | the disc file `PATH` byte for byte: `SYSTEM.CNF`, `SCES_507.60` (the boot file BOOT2 names; 5,515,680 bytes, read whole by the table loader), every root `*.IRX` (`SNDN2DRV.IRX` for the pitch table and `LIBSD.IRX` for the reverb presets, their work area sizes and the idle voice block, docs/port/AUDIO.md; the others are small and kept for later checks), `DUMMY.TXT`, and everything under `DFDATAS/` (`DFDATAS/DATA.DF` whole, 867,184,640 bytes) |
 | `tail/<PATH>` | the bytes after `PATH`'s end to the end of its last sector, only when any is nonzero (the PAL disc has none: every selected file's tail is zero), so a sector read returns what the disc held |
 | `meta.json` | below |
-| `port/gamefont-<V>.bin` | the game face (port/ui/game_font.h): the menu sheets' letters as a glyph atlas and its metrics, made from this disc on the first run (below, "The port's items"); not listed in `meta.json` |
 
 On the PAL image: 13 files, 872,906,360 bytes, archive 872,910,571 bytes
 (4,211 bytes of ZIP headers, directory and meta.json).
@@ -235,30 +234,30 @@ directories, then
    `ico.o2r`. `main_host.c` reports a failure with `ico_host_fatal`: the log
    line and, on Windows, the message box naming the log; no console.
 
-**The port's items.** Some data the port derives from the disc is kept in
-the archive beside the disc's files, so it is made once. Each is a stored
-ZIP entry under `port/`, versioned in its name, and `meta.json` does not list
-it (the backend answers disc look-ups from `meta.json` only, so a disc path
-can never name one). `ico_extract_add_item(archive, name, data, size)` adds
-one: miniz converts the archive's reader into a writer in place
-(`mz_zip_writer_init_from_reader_v2` over the file opened `r+b`), the entry
-is written where the central directory was and the directory is written
-again after it, then the file is synced; the disc's stored bytes are never
-touched, and a name already present is left as it is. Interrupted, the
-directory may be missing: the archive then fails its next mount and is
-extracted again. `ico_archive_read_item` reads one back (1 when absent).
-The only item is the game face, `port/gamefont-1.bin` (about 1.6 MB;
-docs/port/UI.md, "The font"). It needs the game's tables (texProperty
-names each word rectangle's sheet), so it is made after them: on every start
-the window build's `main_host.c` calls `ui_GameFontPrepare(archive)` once
-the tables are loaded, which reads the item when the archive holds the
-current version and otherwise builds it from the mounted disc (under a
-second) and adds it. So the first run adds it right after the extraction,
-and an archive from an older build (no item, or an item of an older version:
-`UI_GF_VERSION` is in the name, and the old entry is simply not read) gets
-this item alone, without the disc image and without extracting the rest
-again. With `use_iso` the face is built in memory at each start and nothing
-is written. The headless build draws no text and makes none.
+**The port's files.** Data the port derives from the disc is kept as a file
+beside the archive in the per-user folder, so it is made once; the archive
+itself is never written after the extraction. The only one is the game
+face, `gamefont-<V>-<SHA-1>.bin` (about 1.6 MB; docs/port/UI.md, "The
+font"): `<V>` is `UI_GF_VERSION` and `<SHA-1>` the disc image's, as
+`meta.json` records it (`iso_sha1`). It needs the game's tables
+(texProperty names each word rectangle's sheet), so it is made after them:
+on every start the window build's `main_host.c` calls
+`ui_GameFontPrepare(file)` once the tables are loaded, which reads the file
+when it loads and otherwise builds the face from the mounted disc (under a
+second) and writes it as the archive is written: `<file>.tmp`, flushed to
+the disk, moved over `<file>` (`ico_rename_replace`), the `.tmp` removed on
+any failure. So the first start writes it right after the extraction; a
+build with a new format version, or another disc, reads its own name and
+makes its own file; a corrupt or truncated file does not load and is
+replaced; an interrupted write leaves the old file or none, never the
+archive damaged. A folder that cannot be written is logged and the face is
+built again at the next start. Older files (another version or disc) are
+left in the folder. With `use_iso` the name takes the verified image's
+SHA-1; with the check skipped the disc is unidentified, the face is built in
+memory at each start and nothing is written. The headless build draws no
+text and makes none. An archive from an earlier build may hold the item
+`port/gamefont-1.bin`, which that build added in place; nothing reads it
+now, and `meta.json` never listed it, so the archive mounts as before.
 
 Progress goes to the log in tenths ("first run: 40% (680 of 1698 MB)",
 the image hash and the copy counted together). The window build also opens

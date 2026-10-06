@@ -1696,9 +1696,11 @@ int ico_host_ini_path(char *out, size_t size)
     return r;
 }
 
-/* A read of ico-pc.ini over config.toml and nothing else: no environment
-   variable is set and no folder made, so it can be called from the game
-   fiber (sceMcInit). */
+/* ico_host_saves2_dir and ico_host_saves_dir (below) are a read of
+   ico-pc.ini over config.toml and nothing else: no environment variable is
+   set and no folder made, so they can be called from the game fiber
+   (sceMcInit). */
+
 /* The folder a card path key names: relative paths from the executable's
    folder. 1 when the key is set, 0 when it is absent or empty, -1 when the
    path does not fit. */

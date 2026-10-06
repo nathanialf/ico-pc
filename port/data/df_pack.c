@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "miniz_tinfl.h"
+#include "../include/ico_endian.h"
 
 #define DF_PATH "DFDATAS/DATA.DF"
 #define DF_ENTRY 40
@@ -53,11 +54,6 @@ void ico_df_reset(void)
     s_vfs = NULL;
 }
 
-static uint32_t le32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
 static int nameEq(const char *a, const char *b)
 {
     for (; *a && *b; a++, b++) {
@@ -85,7 +81,7 @@ static int loadDir(IcoVfs *vfs, IcoVfsFile *df)
     if (ico_vfs_read(df, 0, w, 4) != 4) {
         return -1;
     }
-    uint32_t n = le32(w);
+    uint32_t n = ico_le32(w);
     if (n == 0 || n > 4096) {
         return -1;
     }
@@ -102,8 +98,8 @@ static int loadDir(IcoVfs *vfs, IcoVfsFile *df)
         const uint8_t *e = raw + (size_t)i * DF_ENTRY;
         memcpy(s_dir[i].name, e, 32);
         s_dir[i].name[32] = '\0';
-        s_dir[i].off = le32(e + 32);
-        s_dir[i].size = le32(e + 36);
+        s_dir[i].off = ico_le32(e + 32);
+        s_dir[i].size = ico_le32(e + 36);
     }
     free(raw);
     s_dirCount = (int)n;
@@ -322,7 +318,7 @@ static int buildIndex(const IcoVfsFile *df)
             fprintf(stderr, "df_pack: %s: cannot inflate the header\n", s_dir[i].name);
             continue;
         }
-        uint32_t n = le32(hdr);
+        uint32_t n = ico_le32(hdr);
         if (n == 0 || n > 20000) {
             continue;
         }
@@ -341,9 +337,9 @@ static int buildIndex(const IcoVfsFile *df)
             IcoDfMember m;
             m.pack = i;
             m.off = (uint32_t)pos;
-            m.size = le32(e + 12);
-            m.id = (int)le32(e + 0);
-            m.kind = (int)le32(e + 4);
+            m.size = ico_le32(e + 12);
+            m.id = (int)ico_le32(e + 0);
+            m.kind = (int)ico_le32(e + 4);
             if (addMember(name, &m) != 0) {
                 free(ent);
                 free(f);

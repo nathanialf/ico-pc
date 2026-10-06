@@ -9,8 +9,6 @@
  *     every table row is the texProperty row of the boot ELF with that
  *     rectangle, on a text sheet;
  *   - every string id exists in all five languages and is drawable;
- *   - the subtitle transcriptions (test/subtitles.h, test data for the font
- *     coverage corpus): sorted, one or two lines, drawable, the lookup;
  *   - the hook through the real layout_texture.c (GifPacket.c,
  *     DisplayList.c, DmaPacket.c as the window build has them, the rest of
  *     the game stubbed, rows shaped like the PAL title's): every game row,
@@ -55,7 +53,6 @@
 #include "layout_ext.h"
 #include "menu_text.h"
 #include "strings.h"
-#include "subtitles.h"
 #include "ui_internal.h"
 
 static int failures;
@@ -742,76 +739,8 @@ static void itemWalk(ItemWalk *w, int list)
     }
 }
 
-static int validUtf8Drawable(const char *s)
-{
-    uint32_t cp;
-    while ((cp = ui_Utf8Next(&s)) != 0) {
-        if (cp != '\n' && (cp == 0xFFFD || !ui_FontHasGlyph(cp))) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-/* the subtitle tables: sorted, one or two lines, every code point drawable,
-   the centres on the strip; the lookup by language, set and block, with
-   the picture kept (NULL) for Yorda's script and empty blocks */
-static void testSubtitleTables(void)
-{
-    int total = 0;
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        for (int set = 0; set < 2; set++) {
-            int n = 0;
-            const UiSubtitle *t = ui_SubtitleTable((UiLang)l, set, &n);
-            CHECK(t && n >= 30, "language %d set %d: %d subtitles", l, set, n);
-            for (int i = 0; t && i < n; i++) {
-                int lines = 1;
-                for (const char *p = t[i].text; *p; p++) {
-                    lines += *p == '\n';
-                }
-                CHECK(i == 0 || t[i].block > t[i - 1].block, "language %d set %d: sorted at %d", l,
-                      set, t[i].block);
-                CHECK(t[i].block >= 0 && t[i].block < UI_SUB_BLOCKS && lines <= 2 && t[i].text[0] &&
-                          validUtf8Drawable(t[i].text),
-                      "language %d set %d block %d: \"%s\"", l, set, t[i].block, t[i].text);
-                for (int k = 0; k < lines; k++) {
-                    CHECK(t[i].x[k] > 32.0f && t[i].x[k] < UI_SUB_STRIP_W - 32.0f,
-                          "language %d set %d block %d line %d: centre %g", l, set, t[i].block, k,
-                          t[i].x[k]);
-                }
-                CHECK(ui_SubtitleFind((UiLang)l, set, t[i].block) == &t[i], "lookup of block %d",
-                      t[i].block);
-            }
-            total += n;
-        }
-        const UiSubtitleFace *fc = ui_SubtitleFace((UiLang)l);
-        CHECK(fc->em > 12.0f && fc->em < 20.0f && fc->y[0] < fc->y[1] && fc->y[1] < UI_SUB_STRIP_H,
-              "language %d: face em %g, slots %g %g", l, fc->em, fc->y[0], fc->y[1]);
-    }
-    const UiSubtitle *a = ui_SubtitleFind(UI_LANG_EN, 0, 0);
-    CHECK(a && strcmp(a->text, "Get the sword.") == 0, "English block 0");
-    /* block 9 is Yorda's script on the first run, the Queen's words once
-       the game is cleared */
-    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 9) == NULL,
-          "English first run block 9: no entry (Yorda's script)");
-    a = ui_SubtitleFind(UI_LANG_EN, 1, 9);
-    CHECK(a && strcmp(a->text, "Who are you ?\nHow did you get in here ?") == 0,
-          "English after the clear, block 9");
-    /* the French file keeps block 91 in Yorda's script after the clear */
-    CHECK(ui_SubtitleFind(UI_LANG_FR, 1, 91) == NULL && ui_SubtitleFind(UI_LANG_DE, 1, 91),
-          "block 91 after the clear: no French entry, German text");
-    a = ui_SubtitleFind(UI_LANG_ES, 0, 2);
-    CHECK(a && strcmp(a->text, "\xC2\xBFHay alguien ah\xC3\xAD? \xC2\xBFQui\xC3\xA9n eres?") == 0,
-          "Spanish block 2");
-    CHECK(ui_SubtitleFind(UI_LANG_EN, 0, 3) == NULL && ui_SubtitleFind(UI_LANG_EN, 0, -1) == NULL &&
-              ui_SubtitleFind(UI_LANG_EN, 0, 115) == NULL &&
-              ui_SubtitleFind(UI_LANG_EN, 2, 0) == NULL,
-          "no entry: an empty block, out of range, a third set");
-    printf("menu_text_test: %d subtitles over 5 languages and 2 sets\n", total);
-}
-
 /* the strings visitor reaches the menu words; the subtitles are not port
-   strings (TXT2: test data) */
+   strings (the game draws them as its pictures) */
 static int s_visits, s_visitSub;
 
 static void visit(UiLang lang, const char *s, void *user)
@@ -1062,7 +991,6 @@ int main(int argc, char **argv)
     ui_SetLanguage(UI_LANG_EN);
     testTable();
     testStrings();
-    testSubtitleTables();
     ui_StringsForEach(visit, NULL);
     CHECK(s_visits > 5 * 300 && s_visitSub == 0,
           "ui_StringsForEach: %d strings, the subtitles not among them (%d)", s_visits, s_visitSub);

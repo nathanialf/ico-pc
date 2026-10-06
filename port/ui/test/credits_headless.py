@@ -28,14 +28,14 @@ Exit 77 without the disc image.
 
 import hashlib
 import os
-import shutil
 import subprocess
 import sys
 
+from headless_common import PadScript, fresh_work
+
 # the boot: port/input/pad-boot.txt's presses up to the opening demo's skip
 # (the title shows at Main tick 439), then Down to Settings, Cross, Down six
-# times to Extras, Cross, Down twice to Credits, Cross (as gallery_headless)
-BOOT_LAST = 440
+# times to Extras, Cross, Down twice to Credits, Cross (headless_common.py)
 # the roll takes about 5,900 Main ticks from the STAFF1 stage; the title is
 # back about 6,000 ticks after the Cross (Main tick 6,840), and the run goes
 # on for 1,500 ticks of title
@@ -43,34 +43,16 @@ TICKS = 8400
 
 
 def pad_script(src):
-    lines = []
-    for ln in open(src):
-        f = ln.split("#")[0].split()
-        if f and f[0].isdigit() and int(f[0]) <= BOOT_LAST:
-            lines.append("%s %s" % (f[0], f[1]))
-    t = 560
-    out = []
-
-    def press(b, gap=15):
-        nonlocal t
-        out.append("%d %s" % (t, b))
-        out.append("%d 0000" % (t + 3))
-        t += gap
-
-    press("4000", 25)          # Settings
-    press("0040", 45)          # open it
-    for _ in range(6):
-        press("4000")          # to Extras
-    press("0040", 55)          # Extras
-    press("4000")              # Models
-    press("4000")              # Credits
-    press("0040")              # Credits (tick 815)
+    pad = PadScript(src)
+    pad.to_extras()
+    pad.press("4000")          # Models
+    pad.press("4000")          # Credits
+    pad.press("0040")          # Credits (tick 815)
     # Triangle and Start during the roll: the playback has no skip, as the
     # real ending has none, so these must change nothing
-    t = 3000
-    press("0010")
-    press("0800")
-    return "\n".join(lines + out) + "\n"
+    pad.press("0010", at=3000)
+    pad.press("0800")
+    return pad.text()
 
 
 def listing(folder):
@@ -84,17 +66,14 @@ def listing(folder):
 
 
 def run(exe, iso, work, ticks, pad, unlock):
-    if os.path.isdir(work):
-        shutil.rmtree(work)
-    os.makedirs(os.path.join(work, "saves"))
-    shutil.copy2(exe, os.path.join(work, os.path.basename(exe)))
+    exe_copy = fresh_work(exe, work)
     with open(os.path.join(work, "pad.txt"), "w") as f:
         f.write(pad)
     with open(os.path.join(work, "ico-pc.ini"), "w") as f:
         f.write("iso=%s\nsaves=%s\nticks=%d\ntrace=0\npad_script=%s\n%s" %
                 (os.path.abspath(iso), os.path.join(work, "saves"), ticks,
                  os.path.join(work, "pad.txt"), "unlock_credits=1\n" if unlock else ""))
-    r = subprocess.run([os.path.join(work, os.path.basename(exe))], cwd=work,
+    r = subprocess.run([exe_copy], cwd=work,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=270)
     log = open(os.path.join(work, "logs", "ico-pc.log"), errors="replace").read()
     return r.returncode, log, listing(os.path.join(work, "saves"))

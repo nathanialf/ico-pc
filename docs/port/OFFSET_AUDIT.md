@@ -477,7 +477,9 @@ record within the storage, and a 16-byte aligned record on a 16-byte
 boundary. A difference is MISMATCH. A mail reader that no writer holds is
 UNPAIRED and a mail writer whose storage cannot be typed UNTYPED, unless
 `tools/template_audit_allow.txt` lists the site with a reason (a line
-matching no site is STALE); the list is empty.
+matching no site is STALE). No site needs one, so the file does not exist:
+create it when needed (one line per site, `<file> TAB <snippet text> TAB
+<reason>`; `#` lines are comments).
 
 | reader | writers | pair |
 | --- | --- | --- |
