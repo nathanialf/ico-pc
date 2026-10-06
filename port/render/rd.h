@@ -348,7 +348,32 @@ typedef struct RdSettings {
     /* > 0: the scene's texture is this factor of the GS size instead
      * (vertically; horizontally times aspect / (4/3)), e.g. 2 */
     float sceneScale;
+    /* Package CRT (rd_crt.c; DISPLAY.md "CRT filter"): the CRT filter, a
+     * present-time pass in either preset that replaces the box blit and
+     * never touches SCENE or DISPLAY.  crtMode RD_CRT_OFF (0, a zeroed
+     * RdSettings) presents as before, byte for byte; crtStrength 0..1 lerps
+     * the filtered picture against the plain one (0 presents as off).  The
+     * five overrides are the config-only crt_* keys, each < 0 for the
+     * mode's own value (rd_CrtSettings sets them so). */
+    uint8_t crtMode;
+    uint8_t _crtPad[3];
+    float crtStrength;
+    float crtScanlines, crtMask, crtHalation, crtBloom, crtCurvature;
 } RdSettings;
+
+/* RdSettings.crtMode (package CRT): what each imitates, DISPLAY.md */
+typedef enum RdCrtMode {
+    RD_CRT_OFF = 0,
+    RD_CRT_SCANLINES = 1, /* scanlines alone: no mask, no glow, flat */
+    RD_CRT_CONSUMER = 2,  /* a consumer television: slot mask, glow, curved */
+    RD_CRT_TRINITRON = 3, /* an aperture grille set: stripes, cylindrical */
+    RD_CRT_PVM = 4,       /* a studio monitor: fine grille, sharp, flat */
+    RD_CRT_MODE_COUNT
+} RdCrtMode;
+
+/* Sets s's CRT fields: the mode, the strength (clamped to 0..1) and every
+ * override to "the mode's own" (-1). */
+void rd_CrtSettings(RdSettings *s, RdCrtMode mode, float strength);
 
 /* RdSettings.filterUpgrade (wave 7, R7a) */
 typedef enum RdFilterUpgrade {

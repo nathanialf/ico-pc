@@ -150,7 +150,10 @@ ico_include_dirs(sugipon _ico_gal_incs)
 target_include_directories(gallery_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gal_incs}
                            "${_gal_data}" "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/audio"
                            "${CMAKE_SOURCE_DIR}/port/third_party/stb")
-target_compile_definitions(gallery_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_HOST=1)
+# CPU only: the window build's ICO_RD would pull rd.h into font.c
+set(_gal_defs ${ICO_GAME_DEFINITIONS})
+list(REMOVE_ITEM _gal_defs ICO_RD=1)
+target_compile_definitions(gallery_test PRIVATE ${_gal_defs} ICO_HOST=1)
 set_source_files_properties("${_gal_data}/gen/ee_symbols.c" TARGET_DIRECTORY gallery_test
                             PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
 target_compile_options(gallery_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}

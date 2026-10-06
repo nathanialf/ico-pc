@@ -15,6 +15,11 @@
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
+ *   [video] crt             false       the CRT filter (package CRT, both presets)
+ *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm"
+ *   [video] crt_strength    1.0         0..1
+ *   [video] crt_scanlines, crt_mask, crt_halation, crt_bloom, crt_curvature
+ *                           -1          config only: the mode's value when < 0
  *
  * The Original preset is the PS2 picture whatever resolution, aspect,
  * texture_filter and full_height say; the Enhanced preset applies them,
@@ -53,13 +58,26 @@ typedef struct IcoVideoOptions {
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
     int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second (R7b) */
+    /* package CRT (DISPLAY.md "CRT filter"): applied in both presets */
+    int crt;           /* the filter on */
+    int crtMode;       /* ICO_CRT_* */
+    float crtStrength; /* 0..1 */
+    /* the config-only overrides, -1 = the mode's own: scanline strength,
+       mask strength, halation, bloom (0..1), curvature (0..0.25) */
+    float crtScanlines, crtMask, crtHalation, crtBloom, crtCurvature;
 } IcoVideoOptions;
+
+/* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
+enum { ICO_CRT_SCANLINES = 0, ICO_CRT_CONSUMER = 1, ICO_CRT_TRINITRON = 2, ICO_CRT_PVM = 3 };
+
+#define ICO_CRT_MODES 4
 
 /* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
 /* The defaults: Original, window, 4:3, windowed, vsync on, original filter,
-   half height, framerate uncapped (both presets). */
+   half height, framerate uncapped (both presets), the CRT filter off (its
+   mode Consumer TV at full strength, no overrides). */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -105,6 +123,9 @@ const char *ico_video_framerate_name(int framerate, char *buf, unsigned size);
 int ico_video_parse_aspect(const char *s, int *aspect);
 int ico_video_parse_filter(const char *s, int *filter);
 const char *ico_video_aspect_name(int aspect);
+/* package CRT: "scanlines", "consumer", "trinitron", "pvm" */
+int ico_video_parse_crt_mode(const char *s, int *mode);
+const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);
 /* "window", "WxH" or "Nx" into buf (at least 24 bytes). */
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size);

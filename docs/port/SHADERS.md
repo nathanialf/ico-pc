@@ -52,7 +52,8 @@ re-signing with Microsoft's `dxil.dll` on Windows.
 ### Adding a shader
 
 1. Write the entries in an `.hlsl` under `port/shaders/` that includes
-   `common.hlsli`.
+   `common.hlsli` (`crt.hlsl`, whose group-1 block is not DrawCB, declares
+   its own bindings instead).
 2. Add one line per entry to `port/shaders/CMakeLists.txt`:
    `ico_add_shader(<name> <file.hlsl> <entry> <vertex|fragment>)`. The name
    is the table key; by convention it equals the entry.
@@ -126,6 +127,18 @@ GPU, which agree with the C products to 1e-5 relative and with
 | 64 | `float4 g_tex` | t1 size in texels (xy), 1/size (zw) |
 | 80 | `float4 g_param` | kind-specific: `blend_int` pixel offset; `fog_lut_ps` the GS Z scale of the depth it reads; `fx_sprite_ps` the sprite's 12.4 corners; `yuv_ps` x 1 to mirror |
 | 96 | `float4 g_scale` | t1 texels per GS texel (xy): 1 for images and in Original, a scaled target's scale in Enhanced; `fx_sprite_ps` and `fog_lut_ps` address t1 with it |
+
+`crt.hlsl` binds `CrtCB` (`IcoCrtCB`, package CRT) in DrawCB's register
+instead: the same 112 bytes, so it shares the draw layout's dynamic group
+(`rd__CrtGroup`), and the file does not include `common.hlsli`, whose
+DrawCB would collide with it. Seven float4: the virtual source's size and
+its reciprocal; the box (w, h, x, y); scanline strength, beam width min
+and max, horizontal blur; mask type, strength, pitch, halation; bloom,
+curvature x and y, corner radius; vignette, gamma in and out, strength; x
+the mirror, zw the pass's source step. t1 the source, t2 the blurred glow
+(`crt_ps`), s1 bilinear clamp. The Gaussian beam and mask follow the maths
+of Timothy Lottes' public-domain crt-lottes shader; no code was taken from
+it or from any GPL CRT shader.
 
 Flags: `DF_TEXTURED` 1 (TME), `DF_DECAL` 2 (else MODULATE), `DF_TCC_RGBA` 4,
 `DF_FBA` 8, `DF_PABE` 16, `DF_FIX_FACTOR` 32 (blend factor from FIX, not
@@ -211,6 +224,9 @@ clamp (RENDER_API.md section 4).
 | `fx_sprite_ps` | fx_sprite.hlsl | fragment | one `staticBlur.c` sprite in the GS's integer arithmetic (RENDER_API.md section 14): coverage from the 12.4 corners, the UV stepped in 12.4 integers, nearest or the 4-bit bilinear of `Load`ed texels with CLAMP or REPEAT and TEXA before filtering, TFX MODULATE, DECAL, HIGHLIGHT and HIGHLIGHT2, the alpha test with AFAIL, DATE and `gs_blend_int` against t2 (a copy of the target taken before the sprite), PABE, FBA, COLCLAMP; writes k / 255 with no hardware blending. Flags `FXF_*` in `g_mode.x` (`RD_FXF_*` in `rd_internal.h`) |
 | `wrap_acc_ps` | raw_wrap.hlsl | fragment | COLCLAMP 0: each fragment adds its GS blend term, reduced to −128..127, into an RGBA16F accumulator and writes alpha As + 1 |
 | `wrap_resolve_ps` | raw_wrap.hlsl | fragment | `(Cd + acc) mod 256` per channel, Cd from a copy of the target, A from the accumulator where a fragment landed |
+| `crt_vs` | crt.hlsl | vertex | package CRT: the fullscreen triangle, 0..1 across the viewport; no constant block |
+| `crt_bloom_ps`, `crt_blur_ps` | crt.hlsl | fragment | the CRT filter's glow: the virtual source in linear light at half size with a 9-tap horizontal Gaussian, then the vertical one (RGBA16F) |
+| `crt_ps` | crt.hlsl | fragment | the CRT filter into the output's box: curvature and rounded corners, a Gaussian beam per source line (width with brightness), the phosphor mask in output pixels, halation and bloom, vignette, the strength against the plain picture (docs/port/DISPLAY.md "CRT filter"; RENDER_API.md "The CRT pass") |
 | `yuv_vs`, `yuv_ps` | yuv.hlsl | vertex, fragment | the FMV picture: 4:2:0 planes in one R8 texture to RGB with the PS2 IPU's conversion (BT.601 limited range, coefficients in 1/64 units, chroma per 2×2 block), then bilinear between converted samples to the output (FMV.md) |
 
 Shadows add no shader. The volumes are `sprite_world_vs` on the

@@ -110,7 +110,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_VSYNC,
     UI_OPT_FILTER,
     UI_OPT_FULL_HEIGHT,
-    UI_OPT_FRAMERATE, /* [video] framerate (R7b; stepped since R7d) */
+    UI_OPT_FRAMERATE,    /* [video] framerate (R7b; stepped since R7d) */
+    UI_OPT_CRT,          /* [video] crt and crt_mode in one row (package CRT) */
+    UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
     UI_OPT_VIDEO_MODE,
     UI_OPT_MENU_TEXT, /* [game] classic_menu_text (P3) */
     /* Audio */

@@ -135,6 +135,13 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
+    /* package CRT: the filter in either preset (rd_crt.c) */
+    rd_CrtSettings(rs, o.crt ? (RdCrtMode)(o.crtMode + 1) : RD_CRT_OFF, o.crtStrength);
+    rs->crtScanlines = o.crtScanlines;
+    rs->crtMask = o.crtMask;
+    rs->crtHalation = o.crtHalation;
+    rs->crtBloom = o.crtBloom;
+    rs->crtCurvature = o.crtCurvature;
     /* R7b: rd presents between ticks, in both presets (F2) */
     {
         const char *e = getenv("ICO_RD_S2_LEGACY");

@@ -496,6 +496,7 @@ typedef enum RdVsId {
     /* package RSMALL: IcoSpriteStqVertex, screen prims with Q != 1 (sprite_stq_*_vs) */
     RD_VS_SPRITE_STQ_UI,
     RD_VS_SPRITE_STQ_WORLD,
+    RD_VS_CRT, /* package CRT: crt_vs, the fullscreen triangle with 0..1 across the viewport */
     RD_VS_COUNT
 } RdVsId;
 
@@ -518,6 +519,10 @@ typedef enum RdFsId {
     RD_FS_SPRITE_AA1,   /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
     RD_FS_BOX_REDUCE,   /* package RSMALL: box_reduce_ps, the shadow count at the GS size */
     RD_FS_SPRITE_STQ, /* package RSMALL: sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
+    /* package CRT (rd_crt.c): CrtCB in DrawCB's slot */
+    RD_FS_CRT_BLOOM, /* crt_bloom_ps: half size, linear, horizontal Gaussian (RGBA16F) */
+    RD_FS_CRT_BLUR,  /* crt_blur_ps: the vertical Gaussian (RGBA16F) */
+    RD_FS_CRT,       /* crt_ps: the box of the output */
     RD_FS_COUNT
 } RdFsId;
 
@@ -621,6 +626,54 @@ void rd__ShadowShutdown(void); /* package RSMALL: the reduced shadow count */
 RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
                          int *useDepth);
 uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* Package CRT: the CRT filter's pipelines (the two RGBA16F glow passes, the
+ * composite on the headless output and the swapchain) */
+uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+
+/* ------------------------------------------------- the CRT filter (rd_crt.c)
+ * Package CRT; DISPLAY.md "CRT filter", RENDER_API.md "The CRT pass". */
+typedef enum RdCrtMask {
+    RD_CRT_MASK_NONE = 0,
+    RD_CRT_MASK_GRILLE = 1, /* aperture grille: RGB stripes */
+    RD_CRT_MASK_SLOT = 2,   /* slot mask: stripes cut every 2 pitch lines, staggered */
+    RD_CRT_MASK_DOTS = 3    /* dot triads: rows shifted half a triad */
+} RdCrtMask;
+
+/* A mode's look (the presets' table in rd_crt.c, DISPLAY.md's table) */
+typedef struct RdCrtParams {
+    float scanline;         /* 0..1: the beam profile against the plain lines */
+    float beamMin, beamMax; /* the beam's full width at half maximum, dark to bright, in lines */
+    float sharpness;        /* the horizontal Gaussian's width, source pixels (bigger: softer) */
+    int mask;               /* RdCrtMask */
+    float maskStrength;     /* 0..1 */
+    float maskPitch;        /* output pixels a triad */
+    float halation, bloom;  /* 0..1 */
+    float curvX, curvY;     /* the barrel warp per axis */
+    float corner;           /* the corners' radius, of the box height */
+    float vignette;         /* the vignette's exponent */
+    float gammaIn, gammaOut;
+} RdCrtParams;
+
+/* The mode's own parameters; false for RD_CRT_OFF or an unknown mode. */
+bool rd__CrtPreset(RdCrtMode mode, RdCrtParams *p);
+/* The parameters s asks for: the mode's, with s's overrides. */
+bool rd__CrtResolve(const RdSettings *s, RdCrtParams *p);
+/* The mask's strength factor for a box boxH output pixels high: 1 from
+ * 1080, 0 at 720 and below, linear between (a 3 pixel triad over the
+ * picture's 512 source pixels needs about 1440 box pixels across, a 4:3
+ * box 1080 high). */
+float rd__CrtMaskFade(uint32_t boxH);
+/* True when the present draws the CRT filter (a mode, strength > 0). */
+bool rd__CrtOn(void);
+/* Package CRT, from rd__PresentRecord in place of the line doubling and
+ * the box blit: disp (SHADER_READ) through the glow passes, then the
+ * composite into box of out (cleared outside it), out left in
+ * RENDER_TARGET.  False when it could not draw (no pipeline): the caller
+ * falls back to the box blit. */
+bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
+                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror);
+/* The textures the filter keeps (the virtual source, the glow targets) */
+void rd__CrtShutdown(void);
 /* rd_blur.c: records the sprite (rd_Post's wave-5 kinds, and since R-POST
  * the reduction's two sprites, rd_post.c). */
 void rd__PostBlur(RdPostKind kind, const RdPostParams *p);
@@ -1017,6 +1070,9 @@ void rd__SetReplayCamera(const RdCamera *cam);
 bool rd__CameraProbe(const RdCamera *cam, const float p[4], float out[3][4]);
 /* DrawCB (group 1). */
 RdUniform rd__DrawGroup(const void *drawCB);
+/* Package CRT: crt.hlsl's CrtCB (IcoCrtCB) in DrawCB's dynamic slot and
+ * layout: the same size, so the same group (rd_replay.c uniformGroup). */
+RdUniform rd__CrtGroup(const void *crtCB);
 RhiBindGroup rd__TexGroup(RhiTexture t, RhiSampler s);
 /* The same with t2 (sprite_ps's DATE snapshot) bound to date; rd__TexGroup binds
  * the 1x1 dummy there (sprite_ps reads t2 only under DF_DATE). */

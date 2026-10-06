@@ -37,6 +37,21 @@ typedef struct IcoDrawCB {
                         * scale), zw reserved */
 } IcoDrawCB;
 
+/* Package CRT: crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
+ * bound in DrawCB's place: the same 112 bytes, so it shares the draw
+ * layout's dynamic group (port/render/rd_crt.c; docs/port/DISPLAY.md "CRT
+ * filter").  All in pixels of the box or of the virtual source (the PS2
+ * picture's grid, 512 wide at 4:3) unless said. */
+typedef struct IcoCrtCB {
+    float src[4];  /* the virtual source: w, h, 1 / w, 1 / h */
+    float box[4];  /* the box: w, h, x, y in output pixels */
+    float beam[4]; /* scanline strength, beam width min, max (lines, FWHM), horizontal blur (px) */
+    float mask[4]; /* type (RdCrtMask), strength (after the box-height fade), pitch, halation */
+    float glow[4]; /* bloom, curvature x, curvature y, corner radius (of the box height) */
+    float tone[4]; /* vignette, gamma in, gamma out, strength */
+    float pass[4]; /* x mirror, y 0, zw the step of the pass's source texels (1 / size) */
+} IcoCrtCB;
+
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */
 enum {
     ICO_DF_TEXTURED = 1,
@@ -124,6 +139,10 @@ _Static_assert(offsetof(IcoDrawCB, param) == 80, "param");
 _Static_assert(offsetof(IcoDrawCB, scale) == 96, "scale");
 
 _Static_assert(sizeof(IcoDrawCB) == 112, "DrawCB size");
+
+_Static_assert(sizeof(IcoCrtCB) == sizeof(IcoDrawCB), "CrtCB shares DrawCB's slot and size");
+
+_Static_assert(offsetof(IcoCrtCB, pass) == 96, "CrtCB pass");
 
 _Static_assert(offsetof(IcoSpriteVertex, z) == 4, "vertex z");
 

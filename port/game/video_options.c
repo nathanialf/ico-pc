@@ -27,6 +27,10 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->vsync = 1;
     o->filter = ICO_FILTER_ORIGINAL;
     o->framerate = ICO_FRAMERATE_UNCAPPED; /* R7b: the plan's default */
+    o->crt = 0;
+    o->crtMode = ICO_CRT_CONSUMER;
+    o->crtStrength = 1.0f;
+    o->crtScanlines = o->crtMask = o->crtHalation = o->crtBloom = o->crtCurvature = -1.0f;
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -71,6 +75,33 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
 static const char *const kAspect[] = {"4:3", "16:10", "16:9", "auto"};
 
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
+
+static const char *const kCrtMode[ICO_CRT_MODES] = {"scanlines", "consumer", "trinitron", "pvm"};
+
+int ico_video_parse_crt_mode(const char *s, int *mode)
+{
+    for (int i = 0; s && i < ICO_CRT_MODES; i++) {
+        if (lower_eq(s, kCrtMode[i])) {
+            *mode = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *ico_video_crt_mode_name(int mode)
+{
+    return mode >= 0 && mode < ICO_CRT_MODES ? kCrtMode[mode] : kCrtMode[ICO_CRT_CONSUMER];
+}
+
+/* an override: < 0 (or not a number) is "the mode's", else at most hi */
+static float crt_override(float v, float hi)
+{
+    if (!(v >= 0.0f)) {
+        return -1.0f;
+    }
+    return v > hi ? hi : v;
+}
 
 int ico_video_parse_aspect(const char *s, int *aspect)
 {
@@ -178,6 +209,20 @@ static void sanitize(IcoVideoOptions *o)
         (o->framerate < FRAMERATE_MIN || o->framerate > FRAMERATE_MAX)) {
         o->framerate = d.framerate;
     }
+    o->crt = o->crt != 0;
+    if (o->crtMode < 0 || o->crtMode >= ICO_CRT_MODES) {
+        o->crtMode = d.crtMode;
+    }
+    if (!(o->crtStrength >= 0.0f)) {
+        o->crtStrength = 0.0f;
+    } else if (o->crtStrength > 1.0f) {
+        o->crtStrength = 1.0f;
+    }
+    o->crtScanlines = crt_override(o->crtScanlines, 1.0f);
+    o->crtMask = crt_override(o->crtMask, 1.0f);
+    o->crtHalation = crt_override(o->crtHalation, 1.0f);
+    o->crtBloom = crt_override(o->crtBloom, 1.0f);
+    o->crtCurvature = crt_override(o->crtCurvature, 0.25f);
 }
 
 static void read_config(void)
@@ -205,6 +250,18 @@ static void read_config(void)
                                   &o.framerate) != 0) {
         fprintf(stderr, "video: framerate not understood; \"uncapped\" used\n");
     }
+    /* package CRT */
+    o.crt = ico_config_get_bool("video.crt", 0) != 0;
+    if (ico_video_parse_crt_mode(ico_config_get_string("video.crt_mode", "consumer"), &o.crtMode) !=
+        0) {
+        fprintf(stderr, "video: crt_mode not understood; \"consumer\" used\n");
+    }
+    o.crtStrength = (float)ico_config_get_float("video.crt_strength", 1.0);
+    o.crtScanlines = (float)ico_config_get_float("video.crt_scanlines", -1.0);
+    o.crtMask = (float)ico_config_get_float("video.crt_mask", -1.0);
+    o.crtHalation = (float)ico_config_get_float("video.crt_halation", -1.0);
+    o.crtBloom = (float)ico_config_get_float("video.crt_bloom", -1.0);
+    o.crtCurvature = (float)ico_config_get_float("video.crt_curvature", -1.0);
     sanitize(&o);
     s_opt = o;
     s_read = 1;
@@ -262,6 +319,23 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.full_height", o.fullHeight);
     r |= ico_config_set_string("video.framerate",
                                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
+    r |= ico_config_set_bool("video.crt", o.crt);
+    r |= ico_config_set_string("video.crt_mode", ico_video_crt_mode_name(o.crtMode));
+    /* in tenths, as the Settings row steps it, without float noise */
+    r |= ico_config_set_float("video.crt_strength",
+                              (double)(int)(o.crtStrength * 100.0f + 0.5f) / 100.0);
+    /* the overrides only when set: an absent key is the mode's value */
+    {
+        static const char *const keys[5] = {"video.crt_scanlines", "video.crt_mask",
+                                            "video.crt_halation", "video.crt_bloom",
+                                            "video.crt_curvature"};
+        const float v[5] = {o.crtScanlines, o.crtMask, o.crtHalation, o.crtBloom, o.crtCurvature};
+        for (int i = 0; i < 5; i++) {
+            if (v[i] >= 0.0f) {
+                r |= ico_config_set_float(keys[i], (double)v[i]);
+            }
+        }
+    }
     return r != 0 ? -1 : ico_config_save();
 }
 

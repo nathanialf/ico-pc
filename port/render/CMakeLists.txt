@@ -29,6 +29,7 @@ endif()
 add_library(ico_render STATIC
     rd_blur.c # wave 5 (R5a): staticBlur.c's sprites
     rd_core.c
+    rd_crt.c # package CRT: the CRT filter at present time
     rd_dump.c
     rd_frame.c
     rd_interp.c # wave 7 (R7b): interpolation between the retained frames
@@ -157,6 +158,19 @@ target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
 target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 if(WIN32)
     target_link_libraries(rd_present_test PRIVATE comdlg32 user32)
+endif()
+
+# rd_crt_test (package CRT): the CRT filter (rd_crt.c, crt.hlsl): its [video]
+# options with their config (host_config.c), the modes and overrides, and on
+# a device the presents: off is rd_present's bytes, each mode's recorded hash,
+# black outside the box, the brightness, the mask's period and its fade.
+add_executable(rd_crt_test test/rd_crt_test.c "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(rd_crt_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(rd_crt_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_crt_test PRIVATE ico_render ico_options)
+if(WIN32)
+    target_link_libraries(rd_crt_test PRIVATE comdlg32 user32)
 endif()
 
 # rd_interp_test (wave 7, R7b): the presenter's interpolation between the
@@ -367,7 +381,7 @@ target_link_libraries(rd_mip_test PRIVATE ico_render)
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test)
+              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -408,6 +422,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_debug PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_present COMMAND rd_present_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_present PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_crt COMMAND rd_crt_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_interp COMMAND rd_interp_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
@@ -425,7 +441,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog rd_blur rd_raw rd_present rd_interp rd_mirror PROPERTIES ENVIRONMENT
+                             rd_fog rd_blur rd_raw rd_present rd_crt rd_interp rd_mirror PROPERTIES ENVIRONMENT
                                                                            "${_env}")
     endif()
 endif()

@@ -650,7 +650,23 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
     n = rd__EnumerateReachableShadow(out, max, n);  /* wave 4 (R4b) */
     n = rd__EnumerateReachableFog(out, max, n);     /* wave 4 (R4c) */
     n = rd__EnumerateReachableWater(out, max, n);   /* wave 5 (R5b) */
+    n = rd__EnumerateReachableCrt(out, max, n);     /* package CRT */
     return rd__EnumerateReachableBlur(out, max, n); /* wave 5 (R5a) */
+}
+
+/* package CRT (rd_crt.c): the glow passes into RGBA16F, the composite on
+ * the headless output (RGBA8) and the swapchain (BGRA8); the virtual
+ * source's box reduction is the shadow family's key */
+uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    const RdPipeKeyInt keys[4] = {rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F),
+                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F),
+                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_RGBA8_UNORM),
+                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_BGRA8_UNORM)};
+    for (int i = 0; i < 4; i++) {
+        n = addKey(out, max, n, &keys[i]);
+    }
+    return n;
 }
 
 /* ----------------------------------------------------- fog (wave 4, R4c) */

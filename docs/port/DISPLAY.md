@@ -9,7 +9,7 @@ the Settings menu changes the same values while the game runs.
 **Original** (the default) shows the game as the PlayStation 2 showed it:
 the 512-line picture, halved to 256 lines and shown with every line twice,
 in a 4:3 frame, textures filtered exactly as the game asked. Nothing below
-except `fullscreen`, `vsync` and `framerate` changes it (`framerate` only
+except `fullscreen`, `vsync`, `framerate` and the CRT filter changes it (`framerate` only
 adds blended pictures between the game's updates; each update's picture
 stays the PS2's). In a window that is not 4:3 the
 picture gets black bars on the sides (or top and bottom).
@@ -35,6 +35,9 @@ texture_filter = "original" # "original", "trilinear" or "anisotropic"
 full_height = false
 framerate = "uncapped"      # "original", "uncapped" or a number (30 to 1000)
 backend = "vulkan"          # Windows: "vulkan" or "d3d12"
+crt = false                 # the CRT filter ("CRT filter" below)
+crt_mode = "consumer"       # "scanlines", "consumer", "trinitron" or "pvm"
+crt_strength = 1.0          # 0.0 to 1.0
 ```
 
 | key | what it does |
@@ -47,6 +50,7 @@ backend = "vulkan"          # Windows: "vulkan" or "d3d12"
 | `texture_filter` | (Enhanced) `"trilinear"` gives textures smaller versions for distant surfaces, so the ground and walls do not shimmer; `"anisotropic"` also keeps them sharp at grazing angles. Textures the game draws unfiltered (pixel-sharp) stay that way. Fences and leaves with see-through parts keep their thickness in the distance. |
 | `full_height` | (Enhanced) Keep all 512 lines of the scene instead of halving them, so the picture is not line-doubled. |
 | `backend` | The graphics API on Windows: `"vulkan"` (the default) or `"d3d12"`. Linux has Vulkan only. Read at start-up. The Direct3D 12 renderer has not yet been tested on real hardware. |
+| `crt`, `crt_mode`, `crt_strength` | (Both presets) The CRT filter: the picture shown as a television or monitor of the PS2's time would show it ("CRT filter" below). |
 | `framerate` | (Both presets) How often the picture is redrawn. `"original"`: once for each of the game's 25 (PAL) or 30 updates a second, as on the PS2. `"uncapped"`: as often as the screen refreshes (with `vsync`) or as fast as the computer can (without), drawing in-between pictures so movement is smooth. A number such as `"60"` or `"144"`: at most that many pictures a second. |
 
 ## Menu text
@@ -62,6 +66,92 @@ Original preset draws it into the PS2-sized picture as before, and
 Settings > Display > "Menu text: Classic" (`[game] classic_menu_text`)
 brings back the PS2's own lettering and drawing order in both presets. The
 subtitles and the end credits are not yet drawn this way.
+
+## CRT filter
+
+`crt = true` shows the picture through a simulated cathode-ray tube, in
+either preset: the PS2's lines become glowing scanlines, a phosphor mask
+covers the screen, bright parts bloom, and (in two modes) the glass curves
+and darkens toward its corners. Settings > Display > "CRT filter" picks the
+mode (Off, Scanlines, Consumer TV, Trinitron, PVM) and "CRT strength" mixes
+it with the plain picture, 0 to 100 % in tens.
+
+| mode (`crt_mode`) | imitates | what you see |
+| --- | --- | --- |
+| Scanlines (`"scanlines"`) | the scanline structure alone | each line of the PS2's picture a soft horizontal beam with dark gaps between, brighter lines thicker; no mask, no glow, the picture flat and as wide as without the filter |
+| Consumer TV (`"consumer"`, the default) | a period living-room television | a soft, slightly blurred picture with faint scanlines and a fine slot-mask grid, a glow around bright areas that spills a little into the black borders, a gently curved face with rounded corners and darker edges, and deeper shadows (gamma 2.4 in, 2.2 out) |
+| Trinitron (`"trinitron"`) | an aperture-grille set | crisper than Consumer TV, visible vertical red-green-blue stripes and clearer scanlines; the face curves left to right only (flat vertically, as a Trinitron's cylinder), a slight vignette |
+| PVM (`"pvm"`) | a studio (broadcast) monitor | the sharpest: pronounced scanlines with distinct dark gaps, a fine two-pixel grille, almost no glow, a flat face |
+
+The parameters each mode uses (`port/render/rd_crt.c`; the shader is
+`port/shaders/crt.hlsl`):
+
+| parameter | Scanlines | Consumer TV | Trinitron | PVM |
+| --- | --- | --- | --- | --- |
+| scanline strength | 0.50 | 0.35 | 0.45 | 0.60 |
+| beam width, dark to bright (lines) | 0.6 to 1.0 | 0.7 to 1.2 | 0.5 to 1.0 | 0.4 to 0.9 |
+| horizontal blur (source pixels) | 1.0 | 1.4 | 1.0 | 0.7 |
+| mask | none | slot, 0.35 | aperture grille, 0.50 | aperture grille, 0.30 |
+| mask pitch (screen pixels) | | 3 | 3 | 2 |
+| halation | 0 | 0.12 | 0.05 | 0.03 |
+| bloom | 0 | 0.15 | 0.10 | 0.05 |
+| curvature x, y | 0, 0 | 0.030, 0.045 | 0.030, 0 | 0, 0 |
+| corner radius (of the height) | 0 | 0.03 | 0.02 | 0.01 |
+| vignette | 0 | 0.15 | 0.08 | 0.05 |
+| gamma in, out | 2.2, 2.2 | 2.4, 2.2 | 2.2, 2.2 | 2.2, 2.2 |
+
+The mean brightness stays that of the plain picture (within 3 % on the
+test frames in Scanlines, Trinitron and PVM; Consumer TV is 6 to 19 %
+darker, from its gamma, more in dark scenes).
+
+How it works: the filter draws the 4:3 box (or the wide one) itself, in
+place of the usual scaling. It takes the picture at the PS2's resolution:
+512 pixels across (more with a wide `aspect`) and the PS2's 256 lines (512
+with `full_height`). Each line is not doubled: the scanlines are the PS2's
+own lines, one beam each, a Gaussian whose width grows with the colour's
+brightness. Horizontally each line is a Gaussian blend of its four nearest
+pixels. The mask is laid out in screen pixels. Halation (a wide, faint
+glow of all the light) and bloom (a narrower glow of the bright parts)
+come from a half-size blurred copy of the picture. With the Enhanced
+preset at a higher `resolution` the picture is first averaged down to the
+PS2's size: a CRT of the time showed the PS2's pixels, whatever the scene
+was rendered at.
+
+**The mask needs pixels.** A phosphor triad 3 pixels wide, over the
+picture's 512 source pixels, needs about 1440 pixels across, a 4:3 box
+1080 lines high. Below that the mask would beat against the screen's own
+pixels (moiré), so its strength fades from full at a 1080-line box to
+nothing at 720 lines and below. The scanlines and the glow stay at any
+size, though with fewer than about 3 screen lines per PS2 line (a box under
+768 lines) the scanlines lose their shape.
+
+**What stays sharp.** The filter is part of the picture, so everything the
+PS2 drew is filtered, including the Original preset's menu text. With the
+Enhanced preset the menu text drawn at the window's resolution ("Menu
+text" above) is drawn after the filter, unfiltered and not curved, and so
+are the port's own menus and popups: they stay readable. With a curved mode
+that text sits where the flat picture would have it, a few pixels inside
+the curved edge near the corners. The movies (the opening and the
+ending) are drawn by their own path and are shown without the filter.
+
+**What it does not change.** The filter happens when the picture is shown:
+the game's frames, F12 screenshots of DISPLAY, frame dumps and the replay
+tool's DISPLAY and SCENE images are the same with it on or off, and with it
+off (or at 0 % strength) the shown picture is byte for byte what it was
+without the option.
+
+**Cost.** Three small passes at half the PS2's size (the glow) and one
+pass over the box: per screen pixel 8 samples for the beam, 5 for the glow
+and 1 for the plain picture. At 1440 x 1080 that is about 22 million
+texture samples a picture, a small part of a picture's work on a desktop
+GPU; it has not been timed on hardware.
+
+**Overrides.** `config.toml` also takes, under `[video]`, `crt_scanlines`,
+`crt_mask`, `crt_halation`, `crt_bloom` (each 0 to 1) and `crt_curvature`
+(0 to 0.25): each replaces that parameter of the mode (`crt_curvature` is
+the x curvature, y being 1.5 times it except on the Trinitron's flat
+vertical; `crt_mask` on the Scanlines mode adds an aperture grille). A
+negative value, or no key, keeps the mode's own. They have no Settings row.
 
 ## Wide pictures: what stretches and what stays in the middle
 

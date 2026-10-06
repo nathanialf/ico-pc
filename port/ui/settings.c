@@ -273,6 +273,10 @@ static int stepFramerate(int fr, int dir)
     return ICO_FRAMERATE_UNCAPPED;
 }
 
+/* package CRT: the CRT filter row's names of the modes (ICO_CRT_* order) */
+static const int kCrtStr[ICO_CRT_MODES] = {UI_STR_VAL_CRT_SCANLINES, UI_STR_VAL_CRT_CONSUMER,
+                                           UI_STR_VAL_CRT_TRINITRON, UI_STR_VAL_CRT_PVM};
+
 static IcoBindings *liveBindings(void)
 {
     IcoBindings *b = ico_input_live_bindings();
@@ -495,6 +499,15 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         }
         snprintf(buf, size, "%d %s", o.framerate, ui_Str(UI_STR_FPS_UNIT));
         return buf;
+    case UI_OPT_CRT:
+        /* package CRT: [video] crt and crt_mode as one value */
+        return ui_Str(
+            !o.crt ? UI_STR_OFF
+                   : kCrtStr[o.crtMode >= 0 && o.crtMode < ICO_CRT_MODES ? o.crtMode
+                                                                         : ICO_CRT_CONSUMER]);
+    case UI_OPT_CRT_STRENGTH:
+        snprintf(buf, size, "%d %%", (int)(o.crtStrength * 100.0f + 0.5f));
+        return buf;
     case UI_OPT_VIDEO_MODE:
         if (!onTitle()) {
             snprintf(buf, size, "%s (%s)",
@@ -605,6 +618,21 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_FRAMERATE:
         o.framerate = stepFramerate(o.framerate, dir);
+        video = 1;
+        break;
+    case UI_OPT_CRT: {
+        /* package CRT: Off, Scanlines, Consumer TV, Trinitron, PVM, around */
+        int i = o.crt ? o.crtMode + 1 : 0;
+        i = stepIndex(i, ICO_CRT_MODES + 1, dir);
+        o.crt = i != 0;
+        if (i) {
+            o.crtMode = i - 1;
+        }
+        video = 1;
+        break;
+    }
+    case UI_OPT_CRT_STRENGTH:
+        o.crtStrength = (float)stepTenth(o.crtStrength, dir);
         video = 1;
         break;
     case UI_OPT_VIDEO_MODE:
@@ -919,9 +947,10 @@ static void titleCursorOn(int to, int row);
 static int rowY(int page, int i)
 {
     if (page == UI_PAGE_DISPLAY) {
-        /* P3: eleven rows (Menu text joined Video mode): 17 field lines
-           apart from 36, so Back still ends inside the 226 lines */
-        return 36 + 17 * i;
+        /* thirteen rows (P3: Menu text joined Video mode; package CRT: the
+           CRT filter and its strength): 14 field lines apart from 36, so
+           Back still ends inside the 226 lines */
+        return 36 + 14 * i;
     }
     return page == UI_PAGE_MAIN ? 40 + 19 * i : 40 + 18 * i;
 }
@@ -1167,7 +1196,7 @@ static void build(void)
                                      UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
                                      UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
-    int dispOpts[12], dispStrs[12], nd = 0;
+    int dispOpts[16], dispStrs[16], nd = 0;
     static const int dispAll[][2] = {{UI_OPT_PRESET, UI_STR_OPT_PRESET},
                                      {UI_OPT_RESOLUTION, UI_STR_OPT_RESOLUTION},
                                      {UI_OPT_ASPECT, UI_STR_OPT_ASPECT},
@@ -1176,6 +1205,8 @@ static void build(void)
                                      {UI_OPT_FILTER, UI_STR_OPT_FILTERING},
                                      {UI_OPT_FULL_HEIGHT, UI_STR_OPT_FULL_HEIGHT},
                                      {UI_OPT_FRAMERATE, UI_STR_OPT_FRAMERATE},
+                                     {UI_OPT_CRT, UI_STR_OPT_CRT},
+                                     {UI_OPT_CRT_STRENGTH, UI_STR_OPT_CRT_STRENGTH},
                                      {UI_OPT_VIDEO_MODE, UI_STR_OPT_VIDEO_MODE},
                                      {UI_OPT_MENU_TEXT, UI_STR_OPT_MENU_TEXT},
                                      {UI_OPT_BACK, UI_STR_BACK}};

@@ -52,6 +52,12 @@
  * output (font.c's overlay mode) in its region; the replay skips the items'
  * glyph quads, and textRecord draws the prims after step 2, before the
  * overlay.  In the Original preset nothing is collected and the quads draw.
+ *
+ * The CRT filter (package CRT, rd_crt.c; DISPLAY.md "CRT filter"): with
+ * RdSettings.crtMode set and a strength above 0, rd__CrtRecord draws the
+ * box from DISPLAY in place of steps 1 and 2 (no line doubling: the
+ * scanlines are DISPLAY's own lines); the deferred text and the overlay
+ * then draw above it, unfiltered.  Off, this file presents as before.
  */
 #include <math.h>
 #include <stdlib.h>
@@ -719,8 +725,19 @@ void rd__PresentRecord(RhiCommandList cl)
     RhiTexture src = disp->color;
     uint32_t sw = disp->tw, sh = disp->th;
     rd__Transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
+    RhiRect box;
+    outputBox(pr, s_outW, s_outH, &box);
+    /* package CRT: the filter draws the box from DISPLAY's own lines (its
+     * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
+     * or when it cannot draw, nothing below changes */
+    const int mirror = pr->mirror && rd__MirrorOn();
+    bool filtered = false;
+    if (rd__CrtOn()) {
+        rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        filtered = rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror);
+    }
     /* the full-height scene: DISPLAY already has every line */
-    if (pr->lineDouble && !(pr->fullHeight && g_rd.fullHeight)) {
+    if (!filtered && pr->lineDouble && !(pr->fullHeight && g_rd.fullHeight)) {
         const uint32_t lw = disp->tw, lh = disp->th * 2;
         if (!g_rd.presentLines.id || g_rd.presentLinesW != lw || g_rd.presentLinesH != lh) {
             if (g_rd.presentLines.id) {
@@ -742,24 +759,26 @@ void rd__PresentRecord(RhiCommandList cl)
         sw = lw;
         sh = lh;
     }
-    RhiRect box;
-    outputBox(pr, s_outW, s_outH, &box);
-    rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-    blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, pr->scaleFilter,
-         pr->mirror && rd__MirrorOn());
+    if (!filtered) {
+        rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
+             pr->scaleFilter, mirror);
+    }
     /* package DEF: the deferred text, drawn in list order with the regions
      * and colours the passes after it gave it (RENDER_API.md "The deferred
-     * text pass"); part of the game's picture, so before any pass below */
+     * text pass").  Package CRT: above the CRT filter, unfiltered: the
+     * filter is the picture's; the menu text the Enhanced preset draws on
+     * the output stays sharp, as the overlay does (DISPLAY.md "CRT filter") */
     textRecord(cl, out);
     /* ==== INSERTION POINT for later presentation passes ====================
-     * The plan's "CRT" package draws here: after the box blit and the
-     * deferred text (it reads or writes the boxed picture) and before the
-     * overlay (the port's UI stays sharp and unfiltered above it).  Each one is a
-     * pass on `out` (RHI_STATE_RENDER_TARGET at this point; a pass that
-     * samples the picture copies it first or blits from `src`, `box`)
-     * with rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit()
-     * does.  Keep the overlay last.  (RENDER_API.md "The presentation
-     * overlay", "Ordering".)
+     * After the box (the blit, or package CRT's filter in its place) and the
+     * deferred text, before the overlay (the port's UI stays sharp and
+     * unfiltered above it).  Each one is a pass on `out`
+     * (RHI_STATE_RENDER_TARGET at this point; a pass that samples the
+     * picture copies it first or blits from `src`, `box`) with
+     * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
+     * Keep the overlay last.  (RENDER_API.md "The presentation overlay",
+     * "Ordering".)
      * ======================================================================= */
     overlayRecord(cl, out);
     if (s_window) {
@@ -783,6 +802,7 @@ void rd__PresentShutdown(void)
         rhi_DestroyTexture(g_rd.presentOut);
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
+    rd__CrtShutdown(); /* package CRT */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
     free(s_ov.b);

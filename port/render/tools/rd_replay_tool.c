@@ -33,6 +33,11 @@
  *                         output (a before/after pair from one dump).  By
  *                         default the tool installs port/ui/font.c's
  *                         renderer (ui_InstallDeferredText)
+ *   --crt MODE            (with --present; package CRT) the CRT filter in
+ *                         MODE (scanlines, consumer, trinitron, pvm) at
+ *                         full strength, the modes' own parameters
+ *                         (DISPLAY.md "CRT filter"); --crt-strength K (0..1,
+ *                         after it) sets the strength
  *   --overlay-test        (with --present) registers a presentation overlay
  *                         (package OV, rd.h rd_SetPresentOverlay) drawing a
  *                         test pattern after the box blit: a one-pixel white
@@ -298,7 +303,8 @@ int main(int argc, char **argv)
             "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
             "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
             "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-            "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n",
+            "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n"
+            "       [--crt scanlines|consumer|trinitron|pvm [--crt-strength K]]\n",
             argv[0]);
         return 1;
     }
@@ -385,6 +391,29 @@ int main(int argc, char **argv)
             interpPrev = argv[++i];
         } else if (strcmp(argv[i], "--quad-text") == 0) {
             quadText = true;
+        } else if (strcmp(argv[i], "--crt") == 0 && i + 1 < argc) {
+            /* package CRT: the CRT filter's mode, at full strength */
+            static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm"};
+            const char *v = argv[++i];
+            int m = -1;
+            for (int k = 0; k < 4; k++) {
+                if (strcmp(v, modes[k]) == 0) {
+                    m = k;
+                }
+            }
+            if (m < 0) {
+                fprintf(stderr, "bad --crt (scanlines, consumer, trinitron or pvm)\n");
+                return 1;
+            }
+            rd_CrtSettings(&s, (RdCrtMode)(m + 1), s.crtMode ? s.crtStrength : 1.0f);
+        } else if (strcmp(argv[i], "--crt-strength") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const float k = strtof(argv[++i], &end);
+            if (!end || *end != '\0' || !(k >= 0.0f && k <= 1.0f) || !s.crtMode) {
+                fprintf(stderr, "bad --crt-strength (0..1, after --crt)\n");
+                return 1;
+            }
+            s.crtStrength = k;
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {

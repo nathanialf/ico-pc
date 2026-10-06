@@ -49,17 +49,27 @@
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
-static const char *const s_vsNames[RD_VS_COUNT] = {
-    "sprite_ui_vs",     "sprite_world_vs",
-    "blit_vs",          "blend_int_vs",
-    "vu_prelit_vs",     "vu_lit_vs",
-    "vu_lit_spec_vs",   "vu_reflect_vs",
-    "vu_skin_vs",       "vu_skin_spec_vs",
-    "vu_skin_debug_vs", "vu_grid_vs",
-    "vu_grid_lit_vs",   "vu_grid_spec_vs",
-    "vu_particle_vs",   "fx_rect_vs" /* wave 5 (R5a) */,
-    "sprite_aa1_ui_vs", "sprite_aa1_world_vs" /* package AA1 */,
-    "sprite_stq_ui_vs", "sprite_stq_world_vs" /* package RSMALL */};
+static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs",
+                                                   "sprite_world_vs",
+                                                   "blit_vs",
+                                                   "blend_int_vs",
+                                                   "vu_prelit_vs",
+                                                   "vu_lit_vs",
+                                                   "vu_lit_spec_vs",
+                                                   "vu_reflect_vs",
+                                                   "vu_skin_vs",
+                                                   "vu_skin_spec_vs",
+                                                   "vu_skin_debug_vs",
+                                                   "vu_grid_vs",
+                                                   "vu_grid_lit_vs",
+                                                   "vu_grid_spec_vs",
+                                                   "vu_particle_vs",
+                                                   "fx_rect_vs" /* wave 5 (R5a) */,
+                                                   "sprite_aa1_ui_vs",
+                                                   "sprite_aa1_world_vs" /* package AA1 */,
+                                                   "sprite_stq_ui_vs",
+                                                   "sprite_stq_world_vs" /* package RSMALL */,
+                                                   "crt_vs" /* package CRT */};
 
 static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "blit_ps",
@@ -74,7 +84,10 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "font_ps" /* package R8 */,
                                                    "sprite_aa1_ps" /* package AA1 */,
                                                    "box_reduce_ps" /* package RSMALL */,
-                                                   "sprite_stq_ps" /* package RSMALL */};
+                                                   "sprite_stq_ps" /* package RSMALL */,
+                                                   "crt_bloom_ps",
+                                                   "crt_blur_ps",
+                                                   "crt_ps" /* package CRT */};
 
 /* ------------------------------------------------------------------ init */
 
@@ -476,6 +489,11 @@ RdUniform rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, fl
 RdUniform rd__DrawGroup(const void *drawCB)
 {
     return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
+}
+
+RdUniform rd__CrtGroup(const void *crtCB)
+{
+    return uniformGroup(g_rd.layoutDraw, 1, crtCB, sizeof(IcoCrtCB));
 }
 
 /* Package P1: texture groups by (texture, sampler, DATE snapshot) */

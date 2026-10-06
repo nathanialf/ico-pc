@@ -208,6 +208,13 @@ typedef enum UiStrId {
     UI_STR_OPT_MENU_TEXT,
     UI_STR_VAL_PORT_FONT,
     UI_STR_VAL_CLASSIC,
+    /* package CRT: Settings > Display, "CRT filter" and "CRT strength" */
+    UI_STR_OPT_CRT,
+    UI_STR_OPT_CRT_STRENGTH,
+    UI_STR_VAL_CRT_SCANLINES,
+    UI_STR_VAL_CRT_CONSUMER,
+    UI_STR_VAL_CRT_TRINITRON,
+    UI_STR_VAL_CRT_PVM,
     /* Q2: the title's "Quit to desktop" row and its confirmation, and
        Settings > Controls, "Circle goes back" ([game] circle_back) */
     UI_STR_QUIT_DESKTOP,

@@ -564,21 +564,16 @@ static void testBuild(void)
         UI_STR_SECTION_DISPLAY,  UI_STR_SECTION_AUDIO,      UI_STR_SECTION_CONTROLS,
         UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,   UI_STR_SECTION_ACHIEVEMENTS,
         UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE, UI_STR_BACK};
-    static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
-                                   UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,      UI_OPT_FILTER,
-                                   UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,  UI_OPT_VIDEO_MODE,
-                                   UI_OPT_MENU_TEXT,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,
-                                   UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_FULLSCREEN,
-                                   UI_STR_OPT_VSYNC,
-                                   UI_STR_OPT_FILTERING,
-                                   UI_STR_OPT_FULL_HEIGHT,
-                                   UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,
-                                   UI_STR_OPT_MENU_TEXT,
-                                   UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,  UI_OPT_CRT,
+                                   UI_OPT_CRT_STRENGTH, UI_OPT_VIDEO_MODE, UI_OPT_MENU_TEXT,
+                                   UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET, UI_STR_OPT_RESOLUTION,   UI_STR_OPT_ASPECT,      UI_STR_OPT_FULLSCREEN,
+        UI_STR_OPT_VSYNC,  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_HEIGHT, UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_CRT,    UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_VIDEO_MODE,  UI_STR_OPT_MENU_TEXT,
+        UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -606,7 +601,7 @@ static void testBuild(void)
                                          UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
@@ -662,7 +657,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
@@ -1308,6 +1303,48 @@ static void testValues(void)
     CHECK(o.fullscreen == 1 && o.vsync == 0 && o.fullHeight == 1, "the three toggles");
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VSYNC), "Off") != NULL, "vsync Off");
 
+    /* package CRT: the CRT filter row cycles Off, Scanlines, Consumer TV,
+       Trinitron, PVM and around, setting [video] crt and crt_mode together;
+       the strength steps in tens, clamped at 0 and 100 % */
+    {
+        static const char *const names[6] = {"Off",       "Scanlines", "Consumer TV",
+                                             "Trinitron", "PVM",       "Off"};
+        static const int modes[6] = {
+            -1, ICO_CRT_SCANLINES, ICO_CRT_CONSUMER, ICO_CRT_TRINITRON, ICO_CRT_PVM, -1};
+        for (int i = 0; i < 6; i++) {
+            ico_video_get(&o);
+            CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT), names[i]) == 0 &&
+                      o.crt == (modes[i] >= 0) && (modes[i] < 0 || o.crtMode == modes[i]),
+                  "crt row %d: \"%s\" (crt %d mode %d)", i, ui_SettingsValueText(UI_OPT_CRT), o.crt,
+                  o.crtMode);
+            ui_SettingsStep(UI_OPT_CRT, 1);
+        }
+        ui_SettingsStep(UI_OPT_CRT, -1); /* back from Scanlines to Off */
+        ui_SettingsStep(UI_OPT_CRT, -1); /* around to PVM */
+        ico_video_get(&o);
+        CHECK(o.crt == 1 && o.crtMode == ICO_CRT_PVM &&
+                  strcmp(ui_SettingsValueText(UI_OPT_CRT), "PVM") == 0,
+              "crt row: Left wraps to PVM");
+        CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT_STRENGTH), "100 %") == 0,
+              "crt strength 100 %% (%s)", ui_SettingsValueText(UI_OPT_CRT_STRENGTH));
+        ui_SettingsStep(UI_OPT_CRT_STRENGTH, 1);
+        ui_SettingsStep(UI_OPT_CRT_STRENGTH, -1);
+        ui_SettingsStep(UI_OPT_CRT_STRENGTH, -1);
+        ico_video_get(&o);
+        CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT_STRENGTH), "80 %") == 0 &&
+                  o.crtStrength > 0.79f && o.crtStrength < 0.81f,
+              "crt strength clamps at 100 %%, steps to 80 %% (%s)",
+              ui_SettingsValueText(UI_OPT_CRT_STRENGTH));
+        for (int i = 0; i < 12; i++) {
+            ui_SettingsStep(UI_OPT_CRT_STRENGTH, -1);
+        }
+        CHECK(strcmp(ui_SettingsValueText(UI_OPT_CRT_STRENGTH), "0 %") == 0,
+              "crt strength clamps at 0 %%");
+        for (int i = 0; i < 7; i++) {
+            ui_SettingsStep(UI_OPT_CRT_STRENGTH, 1);
+        }
+    }
+
     systemStatus[0] = 1;
     int resets = s_resets;
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VIDEO_MODE), "PAL 50 Hz") != NULL, "PAL 50 Hz");
@@ -1371,6 +1408,12 @@ static void testValues(void)
         CHECK(strcmp(ico_toml_get(t, "video.video_mode") ? ico_toml_get(t, "video.video_mode") : "",
                      "pal50") == 0,
               "[video] video_mode");
+        CHECK(ico_toml_get_bool(t, "video.crt", 0) == 1 &&
+                  strcmp(ico_toml_get(t, "video.crt_mode") ? ico_toml_get(t, "video.crt_mode") : "",
+                         "pvm") == 0 &&
+                  ico_toml_get_float(t, "video.crt_strength", 0) > 0.69 &&
+                  ico_toml_get_float(t, "video.crt_strength", 0) < 0.71,
+              "[video] crt, crt_mode, crt_strength");
         ico_toml_free(t);
     }
 }
