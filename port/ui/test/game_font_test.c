@@ -1,5 +1,5 @@
 /* game_font_test.c: the game face's builder on a synthetic sheet (package
- * GFONT; docs/port/UI.md, "The font").  CPU only, no disc.
+ * GFONT).  CPU only, no disc.
  *
  * A sheet is drawn with four block letters of known shapes (H, I, L, T at a
  * 10-texel capital height, the menu rows' 13.5-texel em), light ink with a

@@ -2,7 +2,7 @@
  * port/math/test/math_test.c
  *
  * Unit tests for port/math: the PS2 float helpers checked bit for bit, the R
- * register against the vectors in docs/research/float-semantics.md, and the
+ * register against known vectors, and the
  * matrix, vector and quaternion routines against double-precision
  * references (tight tolerance) or exact results where the answer is unique
  * (identity, quarter-turn rotations, pure copies).
@@ -135,7 +135,7 @@ static void check_mat(const float (*got)[4], const float (*a)[4], const float (*
 static void test_helpers(void)
 {
     /* volatile: keep the compiler from folding these at build time (it
-       folds with round-to-nearest; docs/port/DIVERGENCES.md F4) */
+       folds with round-to-nearest) */
     volatile float denorm = ps2_bits_float(0x00000123u);
     volatile float one = 1.0f;
     volatile float three = 3.0f;
@@ -150,7 +150,7 @@ static void test_helpers(void)
     check_bits(ps2_div(2.0f, denorm), 0x7F7FFFFFu, "div by a denormal = Fmax");
     /* the divider, the multiplier and the root: PCSX2 PR #12001's PS2Float
        model (head 0392a64e); every expected word below is that code's
-       output, compiled from the PR (docs/port/DIVERGENCES.md F19) */
+       output, compiled from the PR */
     check_bits(ps2_div(one, three), 0x3EAAAAABu,
                "div 1/3: the divider gives T + 1 (IEEE RTZ 0x3EAAAAAA)");
     check_bits(ps2_div(2.0f, three), 0x3F2AAAABu, "div 2/3: T + 1");
@@ -219,7 +219,7 @@ static void test_helpers(void)
     check_bits(denorm + 0.0f, 0x00000000u, "a denormal input reads as zero");
 }
 
-/* A stale w lane (X4, DIVERGENCES.md F13/F14): callers that write only x,
+/* A stale w lane: callers that write only x,
    y and z leave w a leftover word, 0xFFFFFFFF in the rope climb's case.
    VU0 reads it as -Fmax, so with a zero translation row the product is the
    rotation alone; with a translation the result saturates but stays a
@@ -625,7 +625,7 @@ static void test_inverse_and_projection(void)
 }
 
 /* _RemakeNormal: triangle normal against double; the quad and pentagon
-   forms keep the PS2's use of the squared edge (MATH.md), checked against
+   forms keep the PS2's use of the squared edge, checked against
    the same formula written out. */
 static void test_normals(void)
 {
@@ -650,7 +650,7 @@ static void test_normals(void)
 /* The collision rays' transforms (ico_apply_matrix_ps2,
    ico_set_transpose_matrix_ps2): 1.0 * x in the multiplier usually drops one
    ulp, so even an identity apply moves a point. Expected words from the
-   PS2Float model (DIVERGENCES.md F19); the stage 6 bridge's ray. */
+   PS2Float model; the stage 6 bridge's ray. */
 static void test_apply_ps2(void)
 {
     static const float id[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};

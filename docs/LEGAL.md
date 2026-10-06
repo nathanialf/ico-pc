@@ -63,7 +63,7 @@ values are never committed, as C, as assembly or in any other form.
 
 The host binary holds none of their bytes. It defines each of the 73 tables
 as an empty array (`port/data/gen/table_defs.c`), and at start-up the
-runtime loader (`port/data/tables.c`, docs/port/DATA.md, "The data tables")
+runtime loader (`port/data/tables.c`)
 fills them from the boot ELF on the user's own disc, checked against the
 committed manifest of CRCs (`config/tables_manifest.txt`). The committed
 descriptors under `port/data/gen/` (`tools/gen_data_desc.py`), the schema
@@ -90,8 +90,7 @@ are allowed, each for the reason given. Nothing else is exempt.
 ### The loader's address registry, `port/data/gen/ee_symbols.c`
 
 The PC program compiles in a table of 914 entries (913 functions, one
-object), each `{EE address, host symbol, name string}`, sorted by address
-(docs/port/DATA.md, "The data tables"). The "no bulk symbol tables" rule
+object), each `{EE address, host symbol, name string}`, sorted by address. The "no bulk symbol tables" rule
 above (and "Identifiers as references") does not apply to it, for these
 reasons:
 
@@ -266,7 +265,7 @@ You must legally own a copy of *ICO* for the PlayStation 2 and supply the
 PAL disc image yourself. The build needs no disc data. On its first run the
 program checks the image's SHA-1 (or, for a re-dump, the boot ELF's SHA-1
 and the manifest of the data file) and refuses any other file before it
-extracts the game's data into a local archive (`docs/port/DATA.md`); the
+extracts the game's data into a local archive (``); the
 maintainers' ELF extraction checks `config/sha1sums.txt`. A SHA-1 is a
 fingerprint, not a copy of the work; the disc image and the ELF remain the
 property of their rightsholders.

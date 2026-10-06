@@ -1,7 +1,7 @@
 /*
  * port/game/video_options.c
  *
- * The display options (video_options.h, docs/port/DISPLAY.md).
+ * The display options (video_options.h).
  */
 #include "video_options.h"
 #include <stdio.h>

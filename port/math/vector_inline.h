@@ -5,7 +5,7 @@
  * inline functions over VU0 inline assembly (sugipon/include/sugiCommon.h,
  * sugipon/src/clothAnimation.c). Their ICO_HOST bodies call these. Sums are
  * in the assembly's order (x, then y, then z); fields the assembly does not
- * write are copied from the source it loaded. docs/port/MATH.md.
+ * write are copied from the source it loaded.
  */
 #ifndef ICO_MATH_VECTOR_INLINE_H
 #define ICO_MATH_VECTOR_INLINE_H

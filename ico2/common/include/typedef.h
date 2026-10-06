@@ -3,8 +3,7 @@
  *
  * PROVENANCE.  Dev path `common/include/typedef.h`, reached from `fumi/` as
  * `../common/include/typedef.h`.  `baserom/pal/SRCFILE.TXT` attributes
- * instructions to exactly one of its lines (census:
- * docs/pal_source_tree.md, section `fumi/../common/include/typedef.h`):
+ * instructions to exactly one of its lines (census of `fumi/../common/include/typedef.h`):
  *
  *   line 74, avoid_obstacle2 (src/way_sys, 0x0017DA50), 3 rows / 2 expansions
  *
@@ -29,8 +28,7 @@
  *       verified access.
  *
  *   (c) the decompilation's R5900 and VU0 macro-mode opcode wrappers are
- *       not in the port: the VU0 maths they spelled is C in port/math
- *       (docs/port/MATH.md), included below, and the host's quadword,
+ *       not in the port: the VU0 maths they spelled is C in port/math, included below, and the host's quadword,
  *       address and word types are the port's definitions.
  *
  * Nothing here is a typedef lifted out of a leaked or SDK header.
@@ -147,8 +145,8 @@ extern char ico_scratchpad[16 * 1024] __attribute__((aligned(16)));
 /* The 0x15C sub-object slot is an INT handle the engine casts to a pointer at
  * use, not a clean Sub15C*. Reading it int-typed reproduces the developer's
  * TBAA: it may-alias adjacent int writes, so the load reloads (not hoisted),
- * matching byte-for-byte WITHOUT the per-function int-typed-reload hacks
- * (COOKBOOK section 8.22). Pointer-chain users still match (no aliasing trigger).
+ * matching byte-for-byte WITHOUT the per-function int-typed-reload hacks.
+ * Pointer-chain users still match (no aliasing trigger).
  * Use this accessor for 0x15C; keep dobj in the struct for layout only. */
 #define GOBJ_SUB(o) (((GObj *)(o))->dobj)
 /* The 0x164 actor slot, the companion of GOBJ_SUB: the action-state object the
@@ -200,7 +198,7 @@ typedef struct IosMailBox { /* field names derived */
 /* GObj and PObjGObj below are two views of ONE record: the game object.  GObj
  * types the run-list links, the display object pointer and the run function;
  * PObjGObj carries them as words.  The names are this repository's.  On the
- * host PObjGObj is GObj itself (docs/port/LOADERS.md). */
+ * host PObjGObj is GObj itself. */
 struct GObj {   /* field names derived */
     GObj *self; /* 0x0, the object itself while its table entry is
                                in use, 0 when free (gobj.c) */
@@ -669,7 +667,7 @@ typedef struct { /* field names derived */
  */
 typedef int sceVu0IVECTOR[4] __attribute__((aligned(16)));
 
-/* The VU0 maths is C in port/math (docs/port/MATH.md). ico_math.h is
+/* The VU0 maths is C in port/math. ico_math.h is
  * included here so every game TU sees the current matrix, the PS2 float
  * helpers (ps2float.h) and the small vector routines (vector_inline.h). */
 #include "../../../port/math/ico_math.h"
@@ -1043,7 +1041,7 @@ typedef union { /* field names derived */
 } __attribute__((aligned(16))) ConstVec; /* derived name */
 
 /* PObjGObj, the decompilation's view of the object record as plain words,
- * names GObj: the record has one definition (docs/port/LOADERS.md). */
+ * names GObj: the record has one definition. */
 
 typedef struct GObj PObjGObj;
 
@@ -1396,7 +1394,7 @@ typedef struct Act {         /* field names derived */
     char flyClip[0x1C0]
         __attribute__((aligned(16))); /* 0x690, the flyer's ClipColReq (commonact.c); the
                                   record is 0x850 bytes in all */
-    void (*afterProcHost)(GObj *); /* host only: flags18's after-proc (docs/port/LOADERS.md) */
+    void (*afterProcHost)(GObj *); /* host only: flags18's after-proc */
 } Act; /* derived name */
 
 /* ACT_AFTER_PROC(a): the actor's after-proc as an lvalue, the low word of
@@ -1523,7 +1521,7 @@ typedef struct McMgr {       /* field names derived */
    act-game.c, girl_act.c, act_bird.c, queen.c, motionManager.c,
    motionOrientManager.c, motionViewer.c): a lands on wall, aw on wallCount,
    b on cliffWall and bw on cliffWallCount, all before aheadWall.  The host
-   layouts must keep that (tools/template_audit.py, docs/port/OFFSET_AUDIT.md). */
+   layouts must keep that (tools/template_audit.py). */
 _Static_assert(__builtin_offsetof(MotOriReq, a) == __builtin_offsetof(struct MotRoot, wall) -
                                                        __builtin_offsetof(struct MotRoot, wall),
                "MotOriReq.a is not at MotRoot.wall");

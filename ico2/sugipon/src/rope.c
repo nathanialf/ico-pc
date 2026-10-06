@@ -65,7 +65,7 @@ typedef struct { /* field names derived */
    through a void *, so the template must have ChainCfg's host layout, which
    is its EE one (num, node at 0x10, step 0x14, root 0x20, weight 0x40, 0x50
    bytes; port/test/layout_asserts.c checks ChainParam's).  The audit cannot
-   see a copy through a void * (docs/port/OFFSET_AUDIT.md). */
+   see a copy through a void *. */
 _Static_assert(__builtin_offsetof(RopeTemplate, node) == 0x10 &&
                    __builtin_offsetof(RopeTemplate, step) == 0x14 &&
                    __builtin_offsetof(RopeTemplate, root) == 0x20 &&
@@ -123,7 +123,7 @@ void *InitRopeGeo(GObj *o, const float *p)
         sceVu0FVECTOR v1 = {0.0f, 0.0f, 10.0f, 1.0f};
         ClipWork cw;
 
-        /* PC port (X4, DIVERGENCES.md F16): the original sets only the two
+        /* PC port (X4): the original sets only the two
            points, so ClipWall's radius was a stale stack word; the host
            starts from radius 0 (a segment test) and no filter */
         memset(&cw, 0, sizeof(cw));

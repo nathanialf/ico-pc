@@ -968,7 +968,7 @@ static void actSt13cSekizoChk(GObj *volatile self)
 
     gflagOn(31);
 
-    /* PC port (G2, DIVERGENCES.md F21): the original stops `volatile int
+    /* PC port (G2): the original stops `volatile int
        se`, which nothing writes (st07a's twin stores soundSeDefPlay(1217)
        there first; this one has no play). On the EE it is 4(sp) of the
        96-byte frame (0x24BE14 lw a0,4(sp); the only store near it, 0x24BC14

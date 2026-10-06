@@ -1,8 +1,7 @@
 /*
  * port/game/credits.c
  *
- * Extras > Credits and the staff roll's port credit (ico_credits.h;
- * docs/port/EXTRAS.md, "Credits"; docs/port/UI.md, "Staff roll").  Port
+ * Extras > Credits and the staff roll's port credit (ico_credits.h).  Port
  * code only: the game's side of the playback is the engine in
  * credits_live.c, installed by the program.
  */

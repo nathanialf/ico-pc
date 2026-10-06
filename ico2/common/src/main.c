@@ -29,7 +29,7 @@
 #include "libgraph.h"
 #include <stdlib.h>
 #include <string.h>
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 
 /* main.c's .data globals, each with an initialiser. systemStatus starts in PAL mode (word 0)
    at a frame step of 2 (word 1). db is the GS double buffer (libgraph's
@@ -156,9 +156,9 @@ static int ico_dev_number(const char *s)
 }
 
 /* PC port (X5): [dev] switch_to = N and [dev] switch_at = T (developer
-   keys, docs/port/CONFIG.md; host_config.c hands them over as
+   keys; host_config.c hands them over as
    ICO_SWITCH_TO and ICO_SWITCH_AT) force one stage change, for the
-   transition sweep (docs/port/TESTING.md, "Booting every stage").  At the
+   transition sweep.  At the
    first Main tick at or after T on which the stage is up (systemStatus[6]
    clear, what StageManager waits for), the current stage's exit that leads
    to N is taken the way the boy's exit floor takes it (fumi/src/boyact.c,
@@ -319,7 +319,7 @@ void Main(void)
         MakeCollisionDependGObjList();
         MakeCharGObjList();
         ExecKeyInput();
-        /* PC port (R6a): developer mode (docs/port/DEVELOPER_MODE.md)
+        /* PC port (R6a): developer mode
            restores the development build's debug menu call, here after the
            pad is read and before ExecIcoMisc's layout code can clear
            pad[0].flags.  SELECT opens the menu; until then debug_Menu only

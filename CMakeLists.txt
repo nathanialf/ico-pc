@@ -11,7 +11,7 @@ include(cmake/IcoExclusions.cmake)
 # ICO_HEADLESS=OFF (the default) is the windowed ico_pc: the seki layer
 # draws through port/render (ICO_RD) into an SDL3 window. ON is the headless
 # build of the trace and test runs: the original packet code, no window, no
-# Vulkan (docs/port/HEADLESS_STUBS.md). CMakePresets.json keeps the Linux
+# Vulkan. CMakePresets.json keeps the Linux
 # presets headless and builds the Windows presets windowed.
 option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
@@ -117,11 +117,11 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # (port/data/gen/ee_symbols.c). Those files hold only types, offsets, sizes,
 # names and the CRCs of config/tables_manifest.txt; tools/gen_data_desc.py
 # writes them and the data_desc_fresh test keeps them current. Configuring
-# and building need no ELF (docs/port/DATA.md, "The data tables").
+# and building need no ELF.
 #
 # No table is const on the host: the loader writes them all, and the game
 # writes three of the PS2 build's const .rodata tables (stageTable,
-# motionLimitDef, seDef: docs/port/DATA.md), which worked on the EE (no page
+# motionLimitDef, seDef) which worked on the EE (no page
 # protection). The generated definitions rename a header's `extern const`
 # declaration around the #includes; no header changes.
 set(ICO_DATA_GEN_DIR "${CMAKE_SOURCE_DIR}/port/data/gen")
@@ -149,8 +149,7 @@ add_library(ico_platform STATIC
     port/platform/fpenv.c
     port/platform/hwregs.c)
 target_include_directories(ico_platform PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
-# host_fs.c: file calls on UTF-8 paths (wide on Windows; docs/port/DATA.md,
-# "Paths"). Its own library because host_config.c, its main user, is
+# host_fs.c: file calls on UTF-8 paths (wide on Windows). Its own library because host_config.c, its main user, is
 # compiled into many tests that do not link ico_platform (linked to each of
 # them at the end of this file).
 add_library(ico_host_fs STATIC port/platform/host_fs.c)
@@ -174,7 +173,7 @@ if(ICO_LINK_EXE)
     # directory, ico-pc.ini, the ISO check, the log and the Windows dialogs.
     add_executable(ico_pc port/platform/main_host.c port/platform/trace_host.c
                           port/platform/host_config.c)
-    # The hardware floor (docs/port/HEADLESS_STUBS.md): libgraph's vsync
+    # The hardware floor: libgraph's vsync
     # wait, libdma, and libgcc's fptodp. Both builds: the window build draws
     # through rd above it. In the program itself rather than a library, since
     # they call back into the game. debug.c and debug_exception.c are game
@@ -196,7 +195,7 @@ if(ICO_LINK_EXE)
         target_link_options(ico_pc PRIVATE -mwindows)
         target_link_libraries(ico_pc PRIVATE comdlg32 user32)
         # The application manifest (port/platform/win/ico_pc.manifest): the
-        # UTF-8 active code page for paths (docs/port/DATA.md, "Paths"),
+        # UTF-8 active code page for paths,
         # compiled by the toolchain's windres.
         enable_language(RC)
         target_sources(ico_pc PRIVATE port/platform/win/ico_pc.rc)

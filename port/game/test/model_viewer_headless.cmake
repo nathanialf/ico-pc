@@ -1,5 +1,5 @@
 # port/game/test/model_viewer_headless.cmake: the model_viewer_headless test
-# (package MV, docs/port/TESTING.md "The model viewer run"), run as
+# (package MV), run as
 #   cmake -DICO_PC=<headless ico_pc> -DISO=<disc image> -DPAD=<pad script>
 #         -DDIR=<work folder> -P model_viewer_headless.cmake
 # The headless program is copied into an empty folder (its ico-pc.ini, logs

@@ -1,7 +1,7 @@
 /*
  * port/ui/gallery.h
  *
- * Settings > Extras > Music, the music gallery (docs/port/MUSIC.md): a list
+ * Settings > Extras > Music, the music gallery: a list
  * of everything the game's sound system plays, built at run time from the
  * game's own tables, each entry played on demand through the game's own
  * engines.
@@ -23,7 +23,7 @@
  * then Back.  Headings are shown, never selected (ui_list.h).  The PAL disc
  * has no sequenced music: no stage keeps a BGM bank (stageData seSegData1
  * and 2 are 0 everywhere) and no pack holds a .sq, so there is no sequence
- * group (MUSIC.md, "Sequences").
+ * group.
  *
  * Playback (gallery_play.c, the game side; GalleryEngine): streams through
  * scpAdpcmPlayRequestFunc after the title theme's fade, effects through
@@ -90,7 +90,7 @@ typedef struct GalleryTables {
     /* whether bank b's header has program prog, tone tone (the sound
        library's SgSePlay refuses one it has not, gallery_HdHas): 1, 0, or
        -1 when unknown; NULL: every row plays.  An effect whose row the
-       header lacks is left out (MUSIC.md, "The list"). */
+       header lacks is left out. */
     int (*seInBank)(int bank, int prog, int tone);
 } GalleryTables;
 
@@ -117,7 +117,7 @@ typedef struct GalleryEngine {
     int (*position)(float *elapsed, float *total);
 } GalleryEngine;
 
-/* A stream's time (docs/port/MUSIC.md, "Position"), no game code, so the
+/* A stream's time, no game code, so the
    gallery test checks it on synthetic records.  An .int is `channels`
    channels of SPU ADPCM interleaved by sector (0x800 / channels bytes of
    each), 16 bytes for 28 samples a channel, at `pitch` Hz; one pass is the
@@ -203,7 +203,7 @@ int gallery_GroupStr(int group);
 
 /* The page (settings.c): enter builds the list the first time and tells the
    engine; play / stop / leave go to the engine; tick runs it and the
-   ICO_GALLERY_PLAY script (MUSIC.md, "Testing"). */
+   ICO_GALLERY_PLAY script. */
 void gallery_Enter(void);
 void gallery_Leave(void);
 int gallery_Play(int i);
@@ -214,7 +214,7 @@ void gallery_Tick(void);
 int gallery_ScriptLeave(void);
 /* the item sounding or paused, -1 */
 int gallery_Playing(void);
-/* Cross on item i (MUSIC.md, "Buttons"): i sounding pauses it (an effect,
+/* Cross on item i: i sounding pauses it (an effect,
    which the engine cannot pause, is stopped and held: Cross plays it again
    from its start); i paused resumes it; any other item plays.  0, -1. */
 int gallery_Toggle(int i);

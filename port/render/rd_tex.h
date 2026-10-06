@@ -37,8 +37,7 @@
  * each entry also keeps a CPU mip chain (rdtex_BuildMipChain) for the RHI to
  * upload once it has mipmapped textures.  Not exposed in settings yet.
  *
- * All calls from the game fiber, like the rest of rd.  See
- * docs/port/RENDER_API.md "Textures (wave 2, R2b)".
+ * All calls from the game fiber, like the rest of rd.
  */
 #ifndef PORT_RENDER_RD_TEX_H
 #define PORT_RENDER_RD_TEX_H

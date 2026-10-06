@@ -59,7 +59,7 @@ static Uint64 s_deadline;
 static int s_open;
 
 /* renderer wave 7 (R7a): the display options last applied
-   (port/game/video_options.h, docs/port/DISPLAY.md) */
+   (port/game/video_options.h) */
 static unsigned s_videoSerial;
 
 static int s_fullscreen;
@@ -103,8 +103,7 @@ static struct {
 
 /* P1: the renderer's per-replay records (rd.h RdPerfRecord): summed over
    the 10 s block for the window's second line, and with [dev] perf_log =
-   true written one line each into logs/ico-pc-perf.csv
-   (docs/port/RENDER_API.md "Performance") */
+   true written one line each into logs/ico-pc-perf.csv */
 static struct {
     int csvTried;
     FILE *csv;
@@ -154,7 +153,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* P1: presenting between ticks with vsync on, the swapchain prefers the
        mailbox mode: no tearing, and a present never waits for the display,
-       so it cannot hold the simulation back (DISPLAY.md) */
+       so it cannot hold the simulation back */
     s_pres.mailbox = rs->vsync && rs->interpolate;
     rhi_PreferMailbox(s_pres.mailbox != 0);
 }
@@ -219,8 +218,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         return -1;
     }
     /* the replay, the present and the FMV picture run on the host stack in
-       the host FP mode, not on the game's 256 KB fiber stacks
-       (docs/port/PLATFORM.md "Fiber stacks and host calls") */
+       the host FP mode, not on the game's 256 KB fiber stacks */
     rd_SetHostCall(ico_sched_call_on_host);
     /* the Vulkan pipeline cache in the per-user folder: a later start
        creates the renderer's pipelines from it (rhi_SetPipelineCachePath;
@@ -283,7 +281,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         }
     }
     s_pres.cutSerial = ico_video_cut_serial();
-    /* Q1: [dev] slow_step_ms (default 8; 0 off), docs/port/CONFIG.md */
+    /* Q1: [dev] slow_step_ms (default 8; 0 off) */
     s_pres.slowMs = ico_config_get_float("dev.slow_step_ms", 8.0);
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
@@ -343,7 +341,7 @@ static int device_lost_quit(void)
 }
 
 /* Q1: F12, the frame on the screen as an rd dump and a PNG in
-   <pref>/dumps, for a bug report (docs/port/TESTING.md) */
+   <pref>/dumps, for a bug report */
 static void frame_dump(void)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX];
@@ -372,7 +370,7 @@ static void frame_dump(void)
             ok ? "wrote" : "could not write all of", dump, png);
 }
 
-/* Package PHOTO (docs/port/DISPLAY.md "Photo mode"): Cross in photo mode,
+/* Package PHOTO: Cross in photo mode,
    the picture shown at the next present into
    <pref>/<[photo] png_dir>/ico-<time>.png (rd_CapturePresented); the
    result comes back at a later pump (photo_pump) */

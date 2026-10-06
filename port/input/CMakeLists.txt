@@ -1,4 +1,4 @@
-# port/input: the input layers (Phase 4C, docs/port/INPUT.md): the libpad
+# port/input: the input layers (Phase 4C): the libpad
 # subset (pad_host.c), the pad script reader (pad_script.c, the headless and
 # test source), the virtual pad's arithmetic (vpad.c) and the binding layer
 # (bindings.c, input_config.c). The SDL3 device layer (input_sdl.c) is part

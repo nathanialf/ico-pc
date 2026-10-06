@@ -11,7 +11,7 @@
 #include <libvu0.h>
 #include "typedef.h"
 #include "main.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 
 /* actDeja installs actDejaChk as the actor's next mail handler. */
 

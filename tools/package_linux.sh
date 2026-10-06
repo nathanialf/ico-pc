@@ -5,9 +5,8 @@
 # build-host/pkg-linux-wt (no baserom, no uncommitted work), preset
 # linux-x64 with the window build (-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON),
 # staged under dist/stage/linux/ and archived as dist/ico-pc-<label>-linux.tar.gz
-# (root dir ico-pc-<label>/), with tools/mc_import (docs/port/SAVES.md). Quiet; the log is build-host/pkg-linux-<label>.log.
-# Safe to re-run. Builds only: it never runs the game. See docs/port/TESTING.md
-# and docs/port/STEAMDECK.md.
+# (root dir ico-pc-<label>/), with tools/mc_import and README.md. Quiet; the log is build-host/pkg-linux-<label>.log.
+# Safe to re-run. Builds only: it never runs the game.
 #
 # ICO_PKG_FILES="path ..." copies those working-tree files over the HEAD
 # worktree before the build, to try a change before it is committed (the
@@ -15,7 +14,7 @@
 #
 # SDL3 ships as a shared library (libSDL3.so.0) beside the program, found
 # through an $ORIGIN run path, so the archive runs wherever it is unpacked.
-# libvulkan and the C library are the host's (docs/port/STEAMDECK.md).
+# libvulkan and the C library are the host's.
 set -euo pipefail
 
 label="${1:-}"
@@ -101,7 +100,7 @@ fi
 commit8="${commit:0:8}"
 date_str="$(date +%Y-%m-%d)"
 mkdir -p "$stage"
-rm -f "$stage"/ico_pc "$stage"/ico_pc.map "$stage"/libSDL3.so* "$stage"/README.txt
+rm -f "$stage"/ico_pc "$stage"/ico_pc.map "$stage"/libSDL3.so* "$stage"/README.txt "$stage"/README.md
 rm -rf "$stage/tools"
 cp "$b/ico_pc" "$stage/ico_pc"
 chmod 755 "$stage/ico_pc"
@@ -120,7 +119,7 @@ chmod 755 "$stage/libSDL3.so.0"
 rm -f "$stage/NOTICES.txt"
 cp "$wt/LICENSE" "$stage/LICENSE"
 run python3 "$wt/tools/gen_notices.py" --platform linux --root "$wt" --out "$stage/NOTICES.txt"
-cp "$wt/docs/port/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
+cp "$wt/docs/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
 cat > "$stage/ico-pc.ini" <<INI
 # ico-pc.ini: optional settings, key=value; lines starting with # or ; are
 # comments. Everything works without editing this file.
@@ -137,35 +136,8 @@ iso=$iso
 # to logs/ico-pc.log and stops. 0 turns it off.
 watchdog=30
 INI
-cat > "$stage/README.txt" <<TXT
-ICO PC port ($label, $date_str, commit $commit8)
-
-Nothing from the game's disc is included. You need your own PAL disc image
-of ICO (SCES-50760) as an .iso file, and a Vulkan driver (Mesa RADV on the
-Steam Deck, or the NVIDIA / AMD / Intel driver on a desktop).
-
-Run:  ./ico_pc        (no options; or add it to Steam as a non-Steam game)
-
-The first run asks for the .iso (or reads iso= in ico-pc.ini, or finds
-Ico_PAL.iso next to ico_pc), checks it, extracts the game data once (about
-870 MB, ~/.local/share/ico-pc/ico-pc/ico.o2r) and starts the game.
-Settings: ~/.local/share/ico-pc/ico-pc/config.toml. Saves:
-~/.local/share/ico-pc/ico-pc/memcard/. Logs: logs/ico-pc.log beside ico_pc.
-
-Keep ico_pc and libSDL3.so.0 together. Unpack where you can write (not
-/usr). See docs/port/STEAMDECK.md in the source tree for the details.
-
-ico_pc.map maps crash addresses to function names; send it with logs/.
-
-tools/mc_import (optional) copies ICO's save out of a PS2 memory card image
-(.ps2 / .bin) or a .psu into the saves folder:
-  tools/mc_import --to ~/.local/share/ico-pc/ico-pc/memcard FILE
-(docs/port/SAVES.md, "Importing saves").
-
-LICENSE is the port's licence (MIT); NOTICES.txt holds the licences of the
-third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype,
-the Arimo font, minicoro, newlib).
-TXT
+# the player README, from the same commit
+cp "$wt/README.md" "$stage/README.md"
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted.
 # The files staged above and nothing else: the stage folder is also where
@@ -175,7 +147,7 @@ rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
 mkdir -p "$pkgroot/ico-pc-$label/tools"
-for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.txt tools/mc_import; do
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md tools/mc_import; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
 if [[ -f "$stage/ico_pc.map" ]]; then

@@ -1,5 +1,5 @@
 /* vu1_test.c: the VU1 program shaders (port/shaders/vu_*.hlsl) and their CPU
- * references (port/render/vu1_ref/), docs/port/VU1_PROGRAMS.md.
+ * references (port/render/vu1_ref/).
  *
  *   part a  hand traces: a few vertices per program followed through the
  *           .vsm instructions by hand (the traces are in the comments next to
@@ -17,8 +17,8 @@
  *           sprite_ps (rd_ScreenPrims' shaders); every pixel within 1 LSB.
  *           Scissor triangles that cross a Z plane go through GPU clipping
  *           and are measured and reported, not asserted.
- *   part c  RdVuCommon (rd.h) against RENDER_API.md's VU parameter block
- *           ("Frame lifecycle, camera and the post passes"): the qword map,
+ *   part c  RdVuCommon (rd.h) against the VU parameter block:
+ *           the qword map,
  *           and the VuCB mirror.
  *
  * Exit 0 on success, 1 on a mismatch, 77 when part a and c pass and there is
@@ -656,9 +656,8 @@ static void checkLayout(void)
         offsetof(RdVuCommon, zero) != 32 || offsetof(RdVuCommon, giftag) != 48 ||
         offsetof(RdVuCommon, screenView) != 64 || offsetof(RdVuCommon, viewport) != 128 ||
         offsetof(RdVuCommon, invView) != 192 || sizeof(RdVuCommon) != 256) {
-        FAILF(
-            "RdVuCommon does not match RENDER_API.md's VU parameter block (qw 0, 1, 2, 3, 4..7, 8..11, "
-            "12..15)\n");
+        FAILF("RdVuCommon does not match the VU parameter block (qw 0, 1, 2, 3, 4..7, 8..11, "
+              "12..15)\n");
     }
     /* the block as gsb_MakeCommonMatrix builds it, copied verbatim into the
      * first 16 qwords of VuCB and VU memory */

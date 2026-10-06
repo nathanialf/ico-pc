@@ -1,6 +1,6 @@
 # config/tables_manifest.txt -- the runtime table loader's check list.
 # Written by tools/gen_data_desc.py --manifest from the user's base ELF;
-# holds no disc bytes (docs/LEGAL.md, docs/port/DATA.md):
+# holds no disc bytes (docs/LEGAL.md):
 #   row <member> <section> <lo> <hi> crc32=<crc>
 #       the CRC-32 (zlib) of the ELF's bytes [lo, hi) of the row: the loader
 #       refuses an ELF whose table bytes differ (a wrong or modified disc)

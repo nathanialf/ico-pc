@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party components in the shipped program, one entry each, with where its licence text comes from. tools/gen_notices.py turns this into NOTICES.txt for a package (docs/port/THIRD_PARTY.md, 'Binary-release obligations'). A text is a file ('file'), the first existing of several ('any_of'), or the lines of a source comment from the line holding 'from' to the line holding 'to', with the comment's leading ' * ' removed ('extract'). A missing file is an error. 'platforms' limits an entry to linux or windows packages.",
+  "comment": "Third-party components in the shipped program, one entry each, with where its licence text comes from. tools/gen_notices.py turns this into NOTICES.txt for a package (docs/THIRD_PARTY.md, 'Binary-release obligations'). A text is a file ('file'), the first existing of several ('any_of'), or the lines of a source comment from the line holding 'from' to the line holding 'to', with the comment's leading ' * ' removed ('extract'). A missing file is an error. 'platforms' limits an entry to linux or windows packages.",
   "components": [
     {
       "name": "SDL3",

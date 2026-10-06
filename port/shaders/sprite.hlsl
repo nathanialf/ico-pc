@@ -11,8 +11,7 @@
 // slot they apply; sprite_ps serves both.
 //
 // Package AA1: sprite_aa1_ui_vs, sprite_aa1_world_vs and sprite_aa1_ps draw
-// the lines and triangles PRIM.AA1 antialiases (RENDER_API.md "GS to
-// pipeline mapping"). Their vertex (IcoSpriteAa1Vertex, 24 bytes) adds
+// the lines and triangles PRIM.AA1 antialiases. Their vertex (IcoSpriteAa1Vertex, 24 bytes) adds
 //   loc 4  RHI_VTX_F32x1        the coverage: 0..1 on the geometry
 //                               rd_replay.c adds along an edge, interpolated
 //                               without perspective; ICO_AA1_INTERIOR (2.0)
@@ -163,7 +162,7 @@ SpriteAa1VSOut sprite_aa1_world_vs(SpriteAa1VSIn i)
     return sprite_aa1_vertex(i, SPACE_WORLD);
 }
 
-// The coverage alpha (RENDER_API.md "PRIM.AA1"): a = the coverage on the
+// The coverage alpha: a = the coverage on the
 // 0x80 scale for an edge pixel (16-bit coverage >> 9, so 0..0x7F), 0x80 for
 // an interior one. With PRIM.ABE 0 (DF_AA1_FULL) a replaces the fragment's
 // alpha; with ABE 1 it replaces it only where that alpha is exactly 0x80.
@@ -193,8 +192,7 @@ DualOut sprite_aa1_ps(SpriteAa1VSOut i)
 // texture size, not divided by Q). The GS interpolates S, T and Q in screen
 // space and divides per pixel: the vertex shader passes (s, t, q) without
 // perspective, sprite_stq_ps divides. Colour stays screen-space linear as
-// everywhere. Drawn only for the screen prims whose Q is not 1
-// (RENDER_API.md "STQ on screen prims"); every other prim keeps sprite_ps.
+// everywhere. Drawn only for the screen prims whose Q is not 1; every other prim keeps sprite_ps.
 struct SpriteStqVSIn
 {
     VK_LOC(0) uint2 xy : POSITION;

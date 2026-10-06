@@ -11,7 +11,7 @@
  *   RDC_EXACT_BLEND  blend_int on RGBA8_UINT copies of source and
  *                    destination, written to a third RGBA8_UINT texture and
  *                    copied back into the destination (the exact GS blend
- *                    for feedback passes, RENDER_API.md "Blend exactness under feedback")
+ *                    for feedback passes)
  *   RDC_COPY         texture copy (gif_MoveImage)
  *   RDC_MESH, RDC_SKINNED, RDC_GRID, RDC_PARTICLES
  *                    the VU1 program shaders (wave 3, R3ab; doVu below)
@@ -34,8 +34,7 @@
  * the texture size.
  *
  * Consecutive RDC_SCREEN commands that bind the same things are one draw
- * (package PC: doScreen, joinsRun, flushScreenRun; RENDER_API.md
- * "Performance").
+ * (package PC: doScreen, joinsRun, flushScreenRun).
  *
  * Render passes stay open across draws to the same colour/depth pair and
  * are closed by a target change, a clear, a copy, or a draw that samples a
@@ -160,7 +159,7 @@ bool rd__GpuInit(void *sdlWindow)
     g_rd.layoutDraw = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 1, "rd draw"});
     g_rd.layoutTex = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2, 3, "rd tex"});
     g_rd.layoutInt = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s3, 2, "rd int"});
-    /* wave 3 (R3ab): the VU programs' group 1 (vu_common.hlsli, SHADERS.md) */
+    /* wave 3 (R3ab): the VU programs' group 1 (vu_common.hlsli) */
     const RhiBindSlot s4[4] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
@@ -572,7 +571,7 @@ static RhiSampler texSampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t, int
 /* ---------------------------------------------------------------- passes */
 
 /* Package PC: consecutive screen-prim commands that bind the same things
- * are one draw (doScreen; RENDER_API.md "Performance").  A command whose
+ * are one draw (doScreen).  A command whose
  * plan is one draw opens a run or joins the open one; the run's vertices
  * are staged in s_runVx and drawn by flushScreenRun, which every action
  * that records anything calls first (endPass, replayFrame, doScreen). */
@@ -774,7 +773,7 @@ static void setUvShift(float sx, float sy)
     s_uvShiftY = sy > 1.0f ? (sy - 1.0f) / (2.0f * sy) : 0.0f;
 }
 
-/* Wave 7 (R7c): the mirror mode's UI flip (RENDER_API.md "Mirror mode").  The
+/* Wave 7 (R7c): the mirror mode's UI flip.  The
  * presenter flips the whole picture (rd_present.c step 2), so an
  * RD_SPACE_UI prim drawn into SCENE or DISPLAY (the targets the present
  * shows) is flipped here about the target's centre and reads normally
@@ -1219,7 +1218,7 @@ static float wideFor(const RdTargetRec *tc, int stretch)
  * grid); "the whole width" allows one pixel short at either edge, as the
  * layout's screen bands are drawn: the pause and End Game menus' black bars
  * (layout_texture.c, gif_SpriteSensitiveOffset) run from 1792.25 to
- * 2303.44, pixels 1..511 of 512 (W3, RENDER_API.md "Presets and display options"). */
+ * 2303.44, pixels 1..511 of 512. */
 static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t n,
                          uint8_t prim, uint8_t space)
 {
@@ -1353,8 +1352,7 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
                             r->st.useOffset, r->passSerial, (uint32_t)r->stretch};
     if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
         /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
-         * when useOffset; zero in Original, RENDER_API.md "Frame lifecycle,
-         * camera and the post passes") */
+         * when useOffset; zero in Original) */
         float ox = 2048.0f - (float)(r->st.gsW >> 1);
         float oy = 2048.0f - (float)(r->st.gsH >> 1);
         if (r->st.useOffset & RD_TARGET_HALF_Y) {
@@ -1434,7 +1432,7 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
 }
 
 /* ------------------------------------------------ PRIM.AA1 (package AA1)
- * The model (RENDER_API.md "PRIM.AA1"), PCSX2's software renderer's
+ * The model is PCSX2's software renderer's
  * (GSRasterizer.cpp DrawEdgeLine / DrawEdgeTriangle, GSDrawScanline.cpp):
  * a line or triangle with PRIM.AA1 has edge pixels, which carry a coverage
  * and write no Z; sprite_aa1_ps turns the coverage into the alpha.
@@ -1973,8 +1971,7 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t 
  * clamping it (COLCLAMP 0) under an equation that adds or subtracts a term of
  * the source alone, Cs * F + Cd or Cd - Cs * F (ALPHA modes 0, 5 and 1, 6):
  * the result is Cd plus the sum of the fragments' terms, modulo 256, whatever
- * their order.  darkVolume.c's count buffer is the user (RENDER_API.md
- * "Full-screen effects and the raw packet builders"; Shadow.c's count has its own stencil path).
+ * their order.  darkVolume.c's count buffer is the user (Shadow.c's count has its own stencil path).
  * Two passes:
  *
  *   1. the prims through the state's vertex shader and wrap_acc_ps into an
@@ -2292,8 +2289,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
  * mesh's stream and index list, copied into the ring once per replay.
  * Scissor batches (code 36) are two draws per batch: the triangles
  * SCISSOR_COMMON clips (ICO_VU_CUT_ONLY) with PRIM.ABE forced on, as the
- * fans' PRIM 0x5D has it, then the strip's own kicks (ICO_VU_KICK_ONLY)
- * (VU1_PROGRAMS.md findings 1 and 2). */
+ * fans' PRIM 0x5D has it, then the strip's own kicks (ICO_VU_KICK_ONLY). */
 
 static uint32_t s_zeroBonesFor; /* replay counter of s_zeroBones */
 
@@ -2742,8 +2738,7 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
 }
 
 /* ------------------------------------------------- shadows (wave 4, R4b)
- * rd_shadow.c says what the three commands stand for (RENDER_API.md
- * "Shadows").  All three work on the state block's colour target and the
+ * rd_shadow.c says what the three commands stand for.  All three work on the state block's colour target and the
  * depth-stencil of its depth target, which must have the colour's size
  * (shadow_Reset binds the per-frame count target with SCENE's). */
 
@@ -2986,7 +2981,7 @@ static void doShadowResolve(Replay *r)
 }
 
 /* --------------------------------------------------- fog (wave 4, R4c)
- * RD_POST_FOG (fog_DrawFog, ZFog.c; RENDER_API.md "Depth fog").  The GS
+ * RD_POST_FOG (fog_DrawFog, ZFog.c).  The GS
  * copies the Z buffer to 0x2800, copies byte 2 of every word into byte 3
  * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
  * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:

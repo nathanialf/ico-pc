@@ -1,6 +1,6 @@
 /* rd_present.c: DISPLAY to the output.
  *
- * Original preset (RENDER_API.md "Presets and display options"): the reduced DISPLAY frame
+ * Original preset: the reduced DISPLAY frame
  * (512 x H/2) is shown in a centred 4:3 rectangle of the output, each line
  * doubled (field-line doubling, nearest vertically) and filtered bilinearly
  * horizontally.  Two blits:
@@ -31,13 +31,12 @@
  * The scene resolution needs nothing here: DISPLAY's texture is whatever
  * size rd__ApplyDisplay gave it, and both steps sample it normalised.
  * rd__ApplyDisplay (below) turns RdSettings into the scales and factors the
- * targets and the replay use (RENDER_API.md "Presets and display options").
+ * targets and the replay use.
  * Field parity is not a present-time effect: the PS2 shifts the scene's
  * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
  * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
  *
- * The overlay (package OV, rd.h rd_SetPresentOverlay; RENDER_API.md "The
- * presentation overlay"): after step 2, the prims the registered callback
+ * The overlay (package OV, rd.h rd_SetPresentOverlay): after step 2, the prims the registered callback
  * gave for this present are drawn on the output in a load-preserving pass,
  * one 12.4 unit a sixteenth of an output pixel, unflipped.  The callback
  * runs before the frame's replay (rd__OverlayCollect, from replayFrame) so
@@ -45,16 +44,14 @@
  * With no callback registered nothing below step 2 runs, and the output is
  * byte for byte what it was before the overlay existed.
  *
- * Deferred text (package DEF, rd.h rd_DeferredText; RENDER_API.md "The
- * deferred text pass"): in the Enhanced preset with a renderer registered,
+ * Deferred text (package DEF, rd.h rd_DeferredText): in the Enhanced preset with a renderer registered,
  * rd__OverlayCollect first walks the frame's RDC_OVERLAY_TEXT items and the
  * post passes after them, and has the renderer lay each item out on the
  * output (font.c's overlay mode) in its region; the replay skips the items'
  * glyph quads, and textRecord draws the prims after step 2, before the
  * overlay.  In the Original preset nothing is collected and the quads draw.
  *
- * The CRT filter (packages CRT and CRT2, rd_crt.c; DISPLAY.md "CRT
- * filter"): with RdSettings.crtMode set and a strength above 0, the scene
+ * The CRT filter (packages CRT and CRT2, rd_crt.c): with RdSettings.crtMode set and a strength above 0, the scene
  * renders at 1x (rd__ApplyDisplay), no text is deferred (the rows draw as
  * quads into the scene, as in the Original preset), the overlay's prims are
  * laid out on the filter's source grid and drawn into it, and rd__CrtRecord
@@ -395,8 +392,7 @@ void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, R
     s_ov.vCount += n;
 }
 
-/* ------------------------------------------- deferred text (package DEF)
- * RENDER_API.md "The deferred text pass".  The frame's RDC_OVERLAY_TEXT
+/* ------------------------------------------- deferred text (package DEF).  The frame's RDC_OVERLAY_TEXT
  * commands are walked in replay order with the state they replay under: an
  * item takes the scissor in force; an op (a post pass recorded after text)
  * changes the items before it as the pass changed the pixels they had been
@@ -988,8 +984,7 @@ void rd__PresentRecord(RhiCommandList cl)
              pr->scaleFilter, mirror);
     }
     /* package DEF: the deferred text, drawn in list order with the regions
-     * and colours the passes after it gave it (RENDER_API.md "The deferred
-     * text pass").  Package CRT2: none under the CRT filter (the rows are
+     * and colours the passes after it gave it.  Package CRT2: none under the CRT filter (the rows are
      * in the scene, filtered with it) */
     textRecord(cl, out);
     /* ==== INSERTION POINT for later presentation passes ====================
@@ -1000,8 +995,7 @@ void rd__PresentRecord(RhiCommandList cl)
      * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
      * Keep the overlay last.  Under the CRT filter (packages CRT, CRT2) the
      * filter is the last pass: the overlay is already inside it, and a pass
-     * here would draw over the tube.  (RENDER_API.md "The presentation
-     * overlay", "Ordering".)
+     * here would draw over the tube.
      * ======================================================================= */
     /* package PHOTO: a capture takes the picture as shown, without the
      * port's own UI on the overlay (the popups, the photo HUD); under the

@@ -2,7 +2,7 @@
  * port/fmv/m2v.h
  *
  * The MPEG-2 video decoder behind the FMV player: a thin wrapper over
- * Ittiam libmpeg2 (tools/fetch_deps.sh, Apache-2.0; docs/port/FMV.md).  It
+ * Ittiam libmpeg2 (tools/fetch_deps.sh, Apache-2.0).  It
  * takes one access unit at a time (pss.h's ico_pss_es_unit_end cuts them:
  * the sequence and GOP headers that precede a picture travel with it) and
  * hands back decoded pictures in display order as 4:2:0 planes, as the

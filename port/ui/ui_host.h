@@ -4,7 +4,7 @@
  * port/ui in the window build (ui_host.c, linked into ico_pc only): the
  * game's GS frame, language and the rd scale fed to the text, the decoder
  * flush around port draws, and the popups' per-vsync step.  window_host.c
- * calls these (docs/port/UI.md, "Popups").
+ * calls these.
  *
  *   ui_HostInit()            after rd_Init: the font, the hooks, the
  *                            presentation overlay that draws the popups

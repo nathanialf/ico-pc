@@ -139,7 +139,7 @@ inline void afterCommonTruckLever(GObj *volatile self);
 #include "st25a.h"
 #include <string.h>
 #include "gamesys.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 #include "generator.h"
 #include "debug_exception.h"
 #include "gv.h"
@@ -1333,7 +1333,7 @@ static inline unsigned char ropeSpecialWallHit(RsVec4 *p1, ClimbCol *hit) /* der
     int i;
 
     /* the original sets only the two points; ClipWall reads the radius
-       from the stack word (DIVERGENCES.md F16): zero here */
+       from the stack word: zero here */
     memset(&work, 0, sizeof(work));
     for (i = 0; i < 4; i++) {
         sceVu0UnitMatrix((void *)MatrixDrive_GetMatrix());

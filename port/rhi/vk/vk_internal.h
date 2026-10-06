@@ -1,5 +1,4 @@
-/* vk_internal.h: shared state of the Vulkan backend of port/rhi/rhi.h.
- * port/rhi/vk/README.md describes the design. */
+/* vk_internal.h: shared state of the Vulkan backend of port/rhi/rhi.h. */
 #ifndef PORT_RHI_VK_VK_INTERNAL_H
 #define PORT_RHI_VK_VK_INTERNAL_H
 

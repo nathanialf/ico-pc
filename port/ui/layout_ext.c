@@ -22,7 +22,7 @@
    9.0 of 20 (menu_text.c's anchors: Options, pause, vibration, Continue,
    New Game outside English), a texel (2 y units) above the centre of the
    box display_texture draws, so a port row placed on the game's grid lines
-   up with the game's rows (docs/port/UI.md, "Layout extension"). */
+   up with the game's rows. */
 #define ROW_CAPS_ABOVE_CENTRE 2.0f
 
 enum { ROW_TEXT = 0, ROW_GLYPH, ROW_RECT };
@@ -477,7 +477,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     float size = r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
     /* 6C: a label wider than its box (a long option, another language) is
-       set smaller to fit, down to 60 % (docs/port/UI.md, open item 7);
+       set smaller to fit, down to 60 %;
        the widest line of a multi-line label counts */
     if (bw > 0.0f) {
         float w = ui_MeasureText(size, text);

@@ -1,6 +1,5 @@
 # port/rhi/CMakeLists.txt: the render hardware interface's backends and
-# their tests. port/rhi/vk/README.md and port/rhi/d3d12/README.md describe
-# the backends.
+# their tests.
 #
 # Libraries:
 #   ico_rhi_vulkan  the Vulkan backend (option ICO_RHI_VULKAN, default ON)

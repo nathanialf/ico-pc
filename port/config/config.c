@@ -31,7 +31,7 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
 /* Keys a former version read and this one does not: kept in the file (as
    any unknown key is) and logged once a load.  [game] classic_menu_text and
    [game] port_font chose how the game's own words were drawn; they always
-   keep their texels now (docs/port/UI.md, "Menu text"). */
+   keep their texels now. */
 static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font"};
 
 static void log_retired(void)
@@ -237,11 +237,11 @@ int ico_config_save(void)
 }
 
 /* the file a first run leaves: every key ico_config_save adds, at its
-   default, and a line per section (docs/port/CONFIG.md has the rest) */
+   default, and a line per section */
 static const char first_run_text[] =
     "# ico-pc settings. Every key below is at its default; edit and restart.\n"
     "# The Settings menu rewrites only the lines it changes, so comments and\n"
-    "# keys of your own stay. Keys not listed here are in docs/port/CONFIG.md.\n"
+    "# keys of your own stay. Keys not listed here keep their defaults.\n"
     "\n"
     "version = 1\n"
     "\n"

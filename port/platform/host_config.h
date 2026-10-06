@@ -27,7 +27,7 @@
  *   audio_dump=PATH  write the mixed 48 kHz audio to PATH (beside the ini)
  *                    as a WAV; audio_dump=1 is logs/audio.wav
  *   audio=0          window build: no audio device (the driver still runs)
- *   saves=PATH       the memory card folder (port/save, docs/port/SAVES.md):
+ *   saves=PATH       the memory card folder (port/save):
  *                    the game's files are PATH/BESCES-50760ico/; default
  *                    memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or

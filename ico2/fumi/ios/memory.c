@@ -16,7 +16,7 @@ void ico_heap_stats_free(const void *part, unsigned int bytes);
 
 #endif
 #ifdef ICO_HEAP_ASAN
-/* A diagnostic build (docs/port/BOOT_DIAG.md, "ICO_HEAP_ASAN"): with
+/* A diagnostic build: with
  * AddressSanitizer, every block header, the slack after each block's
  * requested size and every free area are poisoned while the game runs, so
  * the first write past a block's end reports the writer. The allocator works
@@ -57,7 +57,7 @@ static void heapAsanReq(void *node, unsigned int bytes);
 #endif
 /* The allocator's record sizes, in bytes and in quadwords. The original
  * spells them as literals; the port derives them from the records, which
- * gives pointer-wide headers on a 64-bit host (docs/port/LAYOUT.md) and the
+ * gives pointer-wide headers on a 64-bit host and the
  * EE's values where pointers are 4 bytes (checked below):
  *   NODE_SIZE   the block header in front of every allocation (IosMemNode)
  *   PART_SIZE   the partition record at the head of a partition, rounded to
@@ -836,7 +836,7 @@ static int heapAsanDepth;
 
 /* ICO_HEAP_ASAN_FREE=1 in the environment also poisons free areas' bodies;
    off by default, since the EE code writes into free memory on purpose in
-   places (seki/src/Packet.c's line list end mark, BOOT_DIAG.md) */
+   places (seki/src/Packet.c's line list end mark) */
 static int heapAsanFree = -1;
 
 /* each block's requested bytes + 1, by (node - root) / 16; 0 = unknown */

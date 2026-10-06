@@ -197,7 +197,7 @@ static void test_stick_fix(void)
     unsigned i;
     float x, y;
 
-    /* the table of docs/port/INPUT.md: scale = 1 + 0.2 * d / 45 */
+    /* the stick fix table: scale = 1 + 0.2 * d / 45 */
     for (i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
         float s = ico_input_stick_fix_scale(1.0f, t[i].ratio);
 

@@ -1,8 +1,8 @@
 /*
  * port/game/video_options.h
  *
- * The display options (renderer wave 7, R7a; docs/port/DISPLAY.md, the
- * [video] keys of docs/port/CONFIG.md): one place that holds them, so the
+ * The display options (renderer wave 7, R7a, the
+ * [video] keys): one place that holds them, so the
  * window (port/platform/window_host.c), the game's widescreen hook
  * (ico2/seki/src/GsBase.c gsbHostWideX, under ICO_HOST) and the Settings
  * menu (package 6C) read and write the same values.
@@ -59,7 +59,7 @@ typedef struct IcoVideoOptions {
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
     int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second (R7b) */
-    /* package CRT (DISPLAY.md "CRT filter"): applied in both presets */
+    /* package CRT: applied in both presets */
     int crt;           /* the filter on */
     int crtMode;       /* ICO_CRT_* */
     float crtStrength; /* 0..1 */

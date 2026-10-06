@@ -216,7 +216,7 @@ typedef enum RhiBindType {
      * binding's offset is the base and its size (required) the range each
      * draw sees; base + bind-time offset + size must lie in the buffer.
      * Vulkan: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC.  D3D12: a root CBV
-     * per slot (port/rhi/d3d12/README.md "Descriptors").  Same b register
+     * per slot.  Same b register
      * class as RHI_BIND_UNIFORM_BUFFER: the shader does not change. */
     RHI_BIND_UNIFORM_BUFFER_DYNAMIC,
     RHI_BIND_COUNT
@@ -586,7 +586,7 @@ bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t d
 
 /* ------------------------------------------------- performance (package P1)
  * Counters since rhi_Init, cumulative: the caller takes differences
- * (rd_core's per-replay records, docs/port/RENDER_API.md "Performance").  The
+ * (rd_core's per-replay records).  The
  * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
  * completion (rhi_WaitFrame, rhi_WaitIdle, readbacks), acquireNs in the
  * swapchain acquire, presentNs in the present call. */

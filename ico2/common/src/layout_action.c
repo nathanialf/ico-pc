@@ -166,8 +166,7 @@ void la_TESTFUNCTION(void)
 
 /* The keep/restore loops read twenty words from keepFlagNo: the five ids, then
    keyConfigCode and the first seven keyConfigSlot, which follow it in the EE's
-   .data (so a load also keeps those game flag ids and the key-config slots;
-   docs/research/compiler-semantics.md s.6).  The host holds the three as one
+   .data (so a load also keeps those game flag ids and the key-config slots).  The host holds the three as one
    array so the walk is in bounds and reads the same words. */
 static int keepWords[21] = {388, 384, 383, 385, 382, 16, 128, 32, 64, 8, 2,
                             1,   4,   1,   2,   3,   4,  5,   0,  0,  0};
@@ -259,8 +258,7 @@ static int fileMask = 0; /* derived name */
 
 static int actionStarted = 0; /* derived name */
 
-/* PC port (Phase 6, 6C): the Settings menu (port/ui/settings.h,
-   docs/port/SETTINGS.md).  Its entry rows are chained after the title's
+/* PC port (Phase 6, 6C): the Settings menu (port/ui/settings.h).  Its entry rows are chained after the title's
    rows; the title procs leave Cross/START on them to default_item_select,
    which opens the menu through the row's right link, and mask them with
    their own rows while the memory card check runs. */
@@ -269,7 +267,7 @@ void ui_SettingsTitleMask(int masked);
 
 #define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
 
-/* PC port (Q2, docs/port/SETTINGS.md "Circle goes back"): the bits of the
+/* PC port (Q2): the bits of the
    procs' Triangle cancels.  With [game] circle_back on (the default) Circle
    is an alias of Triangle there (port/ui/layout_ext.h lt_ext_BackButtons);
    off, 0x10 alone, the PS2's checks.  Not used where Triangle is not a
@@ -281,8 +279,7 @@ int lt_ext_BackButtons(void);
 
 /* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
    the vibration choice (port/ui/settings.h ui_MirrorScreen*) and kept per
-   save slot in the port config (port/game/options.h ico_mirror_slot_*;
-   docs/port/SAVES.md, "Mirror mode"). */
+   save slot in the port config (port/game/options.h ico_mirror_slot_*). */
 int ui_MirrorScreenEnter(void);
 int ui_MirrorScreenLayout(void);
 int ico_mirror_slot_saved(int slot, unsigned int sum);

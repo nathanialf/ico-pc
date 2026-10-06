@@ -7,7 +7,7 @@
  * 480, 36, 12, mono, mpegPlayInitColor), then ret = movie_proc(
  * movie_abort_check), ret == 1 marking the demo skipped).
  *
- * What the PS2 player did and what this one keeps (docs/port/FMV.md):
+ * What the PS2 player did and what this one keeps:
  *
  *   file     strFileOpen -> iosCdvdDirectStOpen: "DFDATAS/<base name>"
  *            looked up in DATA.DF's directory, streamed with libcdvd's

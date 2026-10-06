@@ -5,9 +5,8 @@
 # build without DXC.
 #
 # The -fvk-*-shift flags are the register-to-binding mapping the Vulkan
-# backend expects (port/rhi/vk/README.md, "Descriptor scheme"). DXIL is
-# signed by the libdxil.so beside dxc (docs/port/SHADERS.md, "DXIL
-# signing"); the [[vk::...]] attributes are ignored there, hence
+# backend expects (register number = RHI slot). DXIL is
+# signed by the libdxil.so beside dxc; the [[vk::...]] attributes are ignored there, hence
 # -Wno-ignored-attributes.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

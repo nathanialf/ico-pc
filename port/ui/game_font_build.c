@@ -1,7 +1,7 @@
 /*
  * port/ui/game_font_build.c
  *
- * The game face's builder (game_font.h; docs/port/UI.md, "The font"): the
+ * The game face's builder (game_font.h): the
  * letters of the menu sheets' word rectangles, segmented, matched to the
  * transcribed words, measured and packed.  No game or disc code: the
  * sources come from the caller (game_font_disc.c, or a test's synthetic

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """font_audit.py: every code point the port's text uses is inside the unicode
-ranges the embedded font subset was built with (docs/port/UI.md, "The font").
+ranges the embedded font subset was built with.
 
 Collects the code points of the string literals of port/ui/strings_*.c and
 port/game/model_viewer_table.c, and of the corpus
 (port/ui/test/font_corpus/*.txt, '#' lines are provenance), and compares them
 with the ranges recorded in port/ui/embed_font.cmake ("# subset:" line).
-UI.md's recipe must list the same ranges.  The check on the font's own cmap
+The check on the font's own cmap
 is font_coverage (it asks the embedded font for each code point); this one
-runs without a build and names the code points to add to the recipe.
+runs without a build and names the code points to add to the subset.
 
 Exit 0 when every code point is covered, 1 otherwise, 2 for a bad setup.
 """
@@ -92,25 +92,11 @@ def cmake_ranges(path):
     return lines[0].split(":", 1)[1].strip()
 
 
-def doc_ranges(path):
-    """The recipe's populate(unicodes=parse_unicodes("..." "...")) string."""
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    m = re.search(r'parse_unicodes\(\s*((?:"[^"]*"\s*)+)\)', src)
-    if not m:
-        raise ValueError("%s: the recipe's parse_unicodes is missing" % path)
-    return "".join(re.findall(r'"([^"]*)"', m.group(1)))
-
-
 def main():
     cmake = os.path.join(ROOT, "port/ui/embed_font.cmake")
-    doc = os.path.join(ROOT, "docs/port/UI.md")
     try:
         ranges = cmake_ranges(cmake)
         covered = parse_ranges(ranges)
-        if parse_ranges(doc_ranges(doc)) != covered:
-            print("font_audit: UI.md's recipe ranges differ from embed_font.cmake's")
-            return 1
     except (ValueError, OSError) as e:
         print("font_audit: %s" % e)
         return 2

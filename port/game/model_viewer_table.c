@@ -3,7 +3,7 @@
  *
  * The models of Extras > Models (model_viewer.h) and the motion-kind blocks
  * their animations come from.  Read from a survey of every stage with data
- * (1 to 63, 88, 91, 103 to 105; docs/port/EXTRAS.md, "The table"): each
+ * (1 to 63, 88, 91, 103 to 105): each
  * stage was booted, and once it was up every object it had built was
  * listed with its kind, model, layout row, whether it was active, its
  * motion-orient rows and how many of the motions those rows reach the

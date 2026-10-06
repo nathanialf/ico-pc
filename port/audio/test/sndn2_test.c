@@ -2,7 +2,7 @@
  * port/audio/test/sndn2_test.c
  *
  * The SNDN2DRV host (sndn2_host.c, stream.c) and the Sg sequencer on the
- * host (sce/libsndn2/sound.c), checked against docs/research/sndn2drv.md (R1):
+ * host (sce/libsndn2/sound.c), checked against R1's reading of the IRX:
  *
  *   - transport: the init call (0x65) and tick calls (0x64) through the
  *     host SIF, the two alternating reply pages, the transfer counter at
@@ -317,7 +317,7 @@ static void test_pitch(const char *iso)
     CHECK(ico_sndn2_pitch_clamps() == c0 + 1);
 
     /* the disc's table: 32 entries differ from the formula, 30 by one and
-       two (64, 172) by 75 and 256: hand-made data (AUDIO.md) */
+       two (64, 172) by 75 and 256: hand-made data */
     disc = iso != NULL ? ico_vfs_mount(&ico_vfs_iso9660, iso) : NULL;
     if (disc == NULL) {
         printf("sndn2_test: no disc image; the disc's pitch table is not checked\n");
@@ -348,7 +348,7 @@ static void test_pitch(const char *iso)
         CHECK(differ == 32);
         CHECK(t[64] == 2360 && t[172] == 3340);
     }
-    /* the disc's libsd values (AUDIO.md, "libsd values"): the presets and
+    /* the disc's libsd values: the presets and
        sizes are ps2sdk's; against the built-in psx-spx table they differ in
        modes 0 (off), 1 (room), 7 (echo) and 8 (delay) only, and the idle
        block is ps2sdk's */
@@ -540,7 +540,7 @@ static void test_adpcm_wrap(void)
     ico_iop_heap_free(ring);
 }
 
-/* 0x248C, the stream cancel (docs/research/sndn2drv.md, "Stream cancel"):
+/* 0x248C, the stream cancel:
    a stop in the tick of its play takes the voice's bit out of the queued
    KEYON (for a core 0 voice the same-numbered core 1 voice's bit too), and
    a stop forgets the pending fill, so the read offset stays at 0. */

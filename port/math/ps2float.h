@@ -6,7 +6,7 @@
  * round-toward-zero and flush-to-zero/denormals-are-zero
  * (port/platform/fpenv.c), and the build uses -ffp-contract=off, so
  * `a * b + c` rounds the product and then the sum, as VU0's multiply-add
- * does (docs/research/float-semantics.md, "VU0 (macro mode)").
+ * does.
  *
  * What plain C would get wrong, and these helpers fix:
  *   - division by zero: IEEE gives Inf or NaN; the EE FPU and VU0 give
@@ -16,7 +16,7 @@
  *     both signs; the PS2 saturates by sign.
  * Overflow needs no helper: under round-toward-zero an overflowing result is
  * already FLT_MAX (0x7F7FFFFF), the port's Fmax (the hardware's 0x7FFFFFFF
- * is not a host float: docs/port/DIVERGENCES.md F3).
+ * is not a host float).
  *
  * The zero tests look at the exponent bits, so a denormal divisor counts as
  * zero even where DAZ is off (unit tests, other threads), as on the PS2.
@@ -56,7 +56,7 @@ static inline float ps2_fmax_signed(float a, float b)
 /* An operand as the PS2 reads it: the FPU and VU0 have no Inf or NaN, an
    exponent of 255 is an ordinary exponent (about 2^128), so such a bit
    pattern becomes +-Fmax on the host (the hardware's value is not a host
-   float: DIVERGENCES.md F3). Only for values that can come from raw memory,
+   float). Only for values that can come from raw memory,
    such as the allocator's 0xFFFFFFFF fill of freed blocks. */
 static inline float ps2_operand(float x)
 {
@@ -76,8 +76,7 @@ float ps2_div_nonzero(uint32_t a, uint32_t b);
    0/0 included. Otherwise the divider's own quotient (PCSX2 PR #12001's
    hardware-derived PS2Float::Div, a radix-2 SRT divider with a carry-save
    remainder): the truncated quotient T or T + 1, depending on the bits, so
-   neither IEEE round toward zero nor round to nearest (DIVERGENCES.md F2,
-   F19). A zero or denormal dividend gives a zero with the sign of a XOR b. */
+   neither IEEE round toward zero nor round to nearest. A zero or denormal dividend gives a zero with the sign of a XOR b. */
 static inline float ps2_div(float a, float b)
 {
     uint32_t ua = ps2_float_bits(a);
@@ -176,9 +175,8 @@ static inline float ps2_mul(float fa, float fb)
     return ps2_bits_float(sign | ((uint32_t)e << 23) | (m & 0x7FFFFFu));
 }
 
-/* a + b and a - b as the EE adder computes them (DIVERGENCES.md F1), after
-   PCSX2's hardware-derived PS2Float::Add/Sub/DoAdd (PR #12001,
-   docs/research/float-semantics.md): the operand with the smaller exponent
+/* a + b and a - b as the EE adder computes them, after
+   PCSX2's hardware-derived PS2Float::Add/Sub/DoAdd (PR #12001): the operand with the smaller exponent
    keeps one bit below its alignment shift (its lower bits are masked off),
    the mantissas are summed as integers with six extra low bits, and the sum
    is truncated. An effective subtraction can therefore come out one ulp
@@ -186,7 +184,7 @@ static inline float ps2_mul(float fa, float fb)
    more binades below the other drops entirely (1.0f - 2^-30 is 0x3F800000
    on the PS2, 0x3F7FFFFF under IEEE RTZ). A zero or denormal operand reads
    as zero, as under DAZ. Not used for ordinary game arithmetic, which stays
-   plain C under round toward zero (F1); see MATH.md for where it is. */
+   plain C under round toward zero. */
 static inline float ps2_add_aligned(uint32_t a, uint32_t b)
 {
     int ea = (int)((a >> 23) & 0xFFu);
@@ -260,7 +258,7 @@ static inline float ps2_sub(float a, float b)
 float ps2_sqrt(float x);
 
 /* VU0 `vrsqrt`: a / sqrt(|b|), rounded in two steps (the hardware's single
-   iterative step can differ in the last bit: DIVERGENCES.md F2). b == 0
+   iterative step can differ in the last bit). b == 0
    gives +-Fmax, or +-0 when a is also 0. port/math/ps2float.c. */
 float ps2_rsqrt(float a, float b);
 

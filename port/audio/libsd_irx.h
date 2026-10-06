@@ -3,8 +3,7 @@
  *
  * The libsd values the software SPU2 takes from the user's disc: the ten
  * reverb presets with their work area sizes, and the idle voice block
- * sceSdInit writes, read out of LIBSD.IRX's .data (docs/port/AUDIO.md,
- * "libsd values").  No byte of the module is in the repository; without
+ * sceSdInit writes, read out of LIBSD.IRX's .data.  No byte of the module is in the repository; without
  * the file the built-in values stay (spu2_tables.c, spu2_sd.c).
  */
 #ifndef ICO_PORT_AUDIO_LIBSD_IRX_H

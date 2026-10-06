@@ -141,7 +141,7 @@ static int listRowOf(int bank, int idx)
     return -1;
 }
 
-/* a stream's time on synthetic records (gallery.h, MUSIC.md "Position") */
+/* a stream's time on synthetic records (gallery.h) */
 /* a stream of sectors that play below s_blankFrom and are blank (0xFF,
    the end flag) from it */
 static long long s_blankFrom;

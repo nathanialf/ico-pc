@@ -1,7 +1,7 @@
 /*
  * port/ui/font.c
  *
- * Runtime text on rd (font.h; docs/port/UI.md): the embedded Arimo Regular
+ * Runtime text on rd (font.h): the embedded Arimo Regular
  * through stb_truetype into per-size R8 atlases, drawn as GS sprites.
  */
 #include "font.h"
@@ -1277,7 +1277,7 @@ static float arimoSizeFor(float size)
     return gameCapY(size) / arimoCap;
 }
 
-/* The game face's passes (UI.md "The font"): the ink (text drawn without
+/* The game face's passes: the ink (text drawn without
    the rim: its light fill, blend 0x44); the sheets' alpha in black (0x44)
    and then their light added in the text's colour (0x48), which together
    are the sprite's MODULATE blend of the sheet's texels; Arimo's halo
@@ -1703,7 +1703,7 @@ static void gameDrawPass(const MLayout *lay, float x, float y, float size, const
 #endif
 }
 
-/* the game face's draw (UI.md "The font"):
+/* the game face's draw:
    - with UI_HALO: Arimo's fallback letters' eight dark copies; the game
      letters' fitted glow in black (each letter's whole reach, overlapping),
      their sheet alpha in black (the text's alpha) and their sheet light

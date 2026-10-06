@@ -5,7 +5,7 @@
 // ST, colour (pac_makeClusterStrip). Bones: VuBoneCB = VU memory 16..255
 // (SET_CLUSTER_MATRIX); world to GS screen = vu_mem[4..7]; L1, L2 in
 // vu_mem[28..35] (SET_CLUSTER_LIGHT's vf13..vf20). Always the region test
-// against vu_mem[0] and vu_mem[1]. docs/port/VU1_PROGRAMS.md "cluster".
+// against vu_mem[0] and vu_mem[1].
 #include "vu_common.hlsli"
 
 cbuffer VuBoneCB : register(b3, space1)

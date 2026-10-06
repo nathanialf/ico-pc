@@ -445,7 +445,7 @@ static void checkWallState(int flag)
                 skelMotCtrl->wallDist = FSqrt(sceVu0InnerProduct(v, v));
                 /* PC port: a ray that hits the wall at its own start point
                    gives wallDist 0; the EE's div.s makes 1 / 0 +Fmax, IEEE
-                   makes Inf (DIVERGENCES.md F5) */
+                   makes Inf */
                 sceVu0ScaleVector(skelMotCtrl->wallDir, v, ps2_div(1.0f, skelMotCtrl->wallDist));
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x20;
                 skelMotCtrl->pureWallAttr = skelMotCtrl->wallAttr = GetWallAttribute(p);

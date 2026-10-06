@@ -1,7 +1,7 @@
 /*
  * port/input/input.h
  *
- * The input layers (docs/port/INPUT.md):
+ * The input layers:
  *
  *   device      SDL3 events: keyboard, mouse, gamepads (input_sdl.c)
  *   bindings    raw device state -> a virtual PS2 pad (bindings.c)
@@ -36,7 +36,7 @@ unsigned char ico_input_quantise(float v);
 /* A radial dead zone with rescaling: a vector shorter than dz becomes zero,
    the rest is stretched so the edge of the zone is the new zero. */
 void ico_input_deadzone(float *x, float *y, float dz);
-/* The stick fix (docs/port/INPUT.md): scale the vector by
+/* The stick fix: scale the vector by
    1 + 0.2 * d / 45, d the angle in degrees to the nearest axis (0..45), so
    iosPadNormalizeStick's divisor (fumi/ios/pad.c) cancels. Never shrinks;
    capped so neither component leaves -1..+1 (the direction is kept). */
@@ -184,7 +184,7 @@ typedef struct IcoBindings {
     float mouse_x, mouse_y; /* the mouse's stick, state between steps */
 } IcoBindings;
 
-/* The defaults (docs/port/INPUT.md). */
+/* The defaults. */
 void ico_bindings_defaults(IcoBindings *b);
 /* The default bindings as config text, for documentation and tests. */
 const char *ico_bindings_default_text(void);

@@ -1,6 +1,6 @@
 // vu_common.hlsli: what the VU1 program shaders (vu_*.hlsl) share. The
 // programs are ico2/vusrc/{normal_c,normal_l,cluster,mesh,particle}.vsm,
-// described in docs/port/VU1_PROGRAMS.md; port/render/vu1_ref/ holds the CPU
+// described; port/render/vu1_ref/ holds the CPU
 // references the shaders are tested against (port/shaders/test/vu1_test.c).
 // Byte layouts are mirrored in shader_consts.h (IcoVuCB, IcoVuBoneCB).
 //
@@ -25,8 +25,7 @@
 #include "common.hlsli"
 
 // VuCB.vu_mem: VU1 data memory 0..35 as the program reads it.
-//   0..15   the common block (RdVuCommon, RENDER_API.md "Frame lifecycle, camera and the post
-//   passes"): 0 =
+//   0..15   the common block (RdVuCommon): 0 =
 //           (0,0,0,1), 1 = (4095,4095,0,16777215), 2 = UV offset in xy
 //           (SET_UVOFFSET) and the cluster fade alpha in w, 3 = GIF tag,
 //           4..7 world to GS screen, 8..11 viewport, 12..15 inverse view
@@ -271,8 +270,7 @@ VuVSOut vu_out_init()
     return o;
 }
 
-// The triangle k-2, k-1, k: what the GS draws of it (see VU1_PROGRAMS.md,
-// "What reaches the GS"). me is the corner this invocation outputs.
+// The triangle k-2, k-1, k: what the GS draws of it. me is the corner this invocation outputs.
 // mode: VU_CLIP_*; the programs without a scissor or no-test variant pass
 // VU_CLIP_REGION whatever vu_draw.z says.
 VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)

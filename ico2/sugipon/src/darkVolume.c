@@ -309,7 +309,7 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
     }
 #ifdef ICO_RD
 
-/* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders").  The
+/* PC port (wave 5, R5c).  The
    packets below are VU1 SET_GSREGISTER packets (VIF UNPACK V4-32 of the GIF
    tag and its A+D pairs to TOP, MSCALF 0) and the spheres are raw GIF writes
    (gif_SetGsReg); both reach the GS register decoder as on the PS2, the

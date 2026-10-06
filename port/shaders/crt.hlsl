@@ -1,5 +1,4 @@
-// crt.hlsl: the CRT filter (packages CRT and CRT2; docs/port/DISPLAY.md
-// "CRT filter", docs/port/RENDER_API.md "The CRT pass"; port/render/rd_crt.c
+// crt.hlsl: the CRT filter (packages CRT and CRT2; port/render/rd_crt.c
 // drives it).
 //
 // Written for ico-pc. The maths reference for the Gaussian beam is Timothy

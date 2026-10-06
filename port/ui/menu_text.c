@@ -1,8 +1,7 @@
 /*
  * port/ui/menu_text.c
  *
- * The table of the game's menu words (menu_text.h; docs/port/UI.md, "Menu
- * text" and "The font").  Nothing draws from it: the game's rows always
+ * The table of the game's menu words (menu_text.h).  Nothing draws from it: the game's rows always
  * draw their textures.  It is the source the game face is cut from
  * (game_font_disc.c): each item names a word rectangle of the sheets, its
  * transcribed words and where the lettering sits in it.

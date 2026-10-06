@@ -19,7 +19,7 @@ typedef struct PktHdr { /* field names derived */
     int kind; /* 0xF0 */
 } PktHdr;     /* derived name */
 
-/* The host has one definition of each record (docs/port/LOADERS.md): the
+/* The host has one definition of each record: the
  * display object MakePacket allocates is typedef.h's Sub15C, a part is
  * DisplayP2O.h's PObjPart (decoded from the file's ObjRec, below), and the
  * model is DisplayP2O.h's PObjModel, which this file's PObj view must match
@@ -241,7 +241,7 @@ static __inline__ void SetPObjVector(Vec v, float x, float y, float z) /* derive
 
 /* ObjHdr, ObjEnt and ObjRec, the file records, are in DisplayP2O.h. */
 
-/* The host's AllocPObj (docs/port/LOADERS.md, p2o).  It relocates the file
+/* The host's AllocPObj (p2o).  It relocates the file
  * image exactly as the EE does, every relocated word an EE word (eeword.h),
  * so the image's bytes are the EE's on a 32-bit host.  Each part record is
  * then decoded into the model's PObjPart (a runtime record with real

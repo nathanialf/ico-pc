@@ -13,7 +13,7 @@
  * sample = clamp16((nibble << 12 >> shift) + ((old*f0 + older*f1 + 32) >> 6))
  * with (f0, f1) one of the five SPU filter pairs (0,0) (60,0) (115,-52)
  * (98,-55) (122,-60).  Source: psx-spx, "SPU ADPCM Samples" and "CDROM
- * XA-ADPCM decode_28_nibbles" (docs/port/AUDIO.md, "Sources").  Integer math
+ * XA-ADPCM decode_28_nibbles".  Integer math
  * only: every host decodes the same bits.
  */
 #ifndef ICO_PORT_AUDIO_ADPCM_H
@@ -36,7 +36,7 @@ typedef struct adpcm_hist {
 } adpcm_hist;
 
 /* The filter pair a header selects.  Filters 5-7 are not documented; they
-   decode as filter 0 here (docs/port/DIVERGENCES.md, A3). */
+   decode as filter 0 here. */
 void adpcm_filter(int filter, int *f0, int *f1);
 
 /* Decode one block into out[28], updating h.  Returns the block's flag

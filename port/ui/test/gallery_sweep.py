@@ -2,7 +2,7 @@
 """port/ui/test/gallery_sweep.py: every stream and a sample of every bank's
 effects through the music gallery, in one headless run.
 
-ctest gallery_sweep (docs/port/TESTING.md, docs/port/MUSIC.md "Testing").
+ctest gallery_sweep.
 Copies the headless ico_pc into a fresh folder with an ico-pc.ini and a pad
 script and runs it on the disc image: the boot to the title, Settings >
 Extras > Music, then the ICO_GALLERY_PLAY script:
@@ -341,7 +341,7 @@ def judge(work, stopped, rc, report, keep):
         note = "; ".join(it.fails) if it.fails else ""
         if not ok:
             fails.append("effect %d (%s): never keyed %s" % (it.key, it.label, note))
-        # one pass (docs/port/MUSIC.md): a looping sample stops after its
+        # one pass: a looping sample stops after its
         # length, so an effect's bar never wraps, and one stopped so ends
         # rather than being cut at the dwell when it is shorter
         if it.wraps:

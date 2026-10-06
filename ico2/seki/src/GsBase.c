@@ -1291,7 +1291,7 @@ void gsb_ResetGSSystem(void)
 
 /* PC port: the zoom vs[0] is 0 before the first stage sets the view scale
    (vsync 6); the EE's div.s gives +-Fmax there, IEEE gives Inf and then NaN
-   in 0 * Inf (DIVERGENCES.md F5, F11). */
+   in 0 * Inf. */
 #define VS_DIV(a, b) ps2_div((a), (b))
 
 /* the 1500 unit screen the projection proj is scaled to */

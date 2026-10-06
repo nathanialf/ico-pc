@@ -1,5 +1,4 @@
-/* rd_interp.c: presentation between simulation ticks (renderer wave 7, R7b;
- * docs/port/RENDER_API.md "Frame rate and interpolation").
+/* rd_interp.c: presentation between simulation ticks (renderer wave 7, R7b).
  *
  * The game draws one frame per tick (25 Hz PAL, 30 Hz NTSC at the frame
  * step 2).  With RdSettings.interpolate in the Enhanced preset, rd_EndFrame
@@ -658,8 +657,7 @@ static bool rotateBone(float (*o)[4], const float (*p)[4], const float (*c)[4], 
 
 /* Package I1: a lit program's light matrix L1 (qw 28..31) follows the
  * object's turn.  normal_l computes l = max0(L1 n) from the model-space
- * normal n (n.w the ambient weight) and c = max0(L2 l) (VU1_PROGRAMS.md
- * "normal_l"): L1's rows 0..2 are the three lights' directions in model
+ * normal n (n.w the ambient weight) and c = max0(L2 l): L1's rows 0..2 are the three lights' directions in model
  * space, row 3 (0, 0, 0, 1) carries n.w into l.w; L2 (qw 32..35) holds the
  * lights' colours in columns 0..2 and the ambient colour in column 3.
  * RegistPacket.c builds L1 = Ln N: Light.c's normal light matrix
@@ -2307,7 +2305,7 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
  *
  *   any other screen prim, and every shadow volume, is drawn on the nearer
  *   tick's side of t = 0.5 (prev's below it, cur's from it), whole.  A
- *   shadow volume only counts the stencil (RENDER_API.md "Shadows": each
+ *   shadow volume only counts the stencil (each
  *   triangle +1 or -1, then RDC_SHADOW_RESOLVE darkens every pixel whose
  *   count is not 0 by one shadow colour for all the volumes), so it has no
  *   alpha to fade and a partial volume would leave the count unbalanced:

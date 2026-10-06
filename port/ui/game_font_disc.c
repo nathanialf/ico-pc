@@ -1,8 +1,7 @@
 /*
  * port/ui/game_font_disc.c
  *
- * The game face from the player's disc (game_font.h; docs/port/UI.md, "The
- * font", and docs/port/DATA.md, "Backend 2: the archive"): the menu sheets
+ * The game face from the player's disc (game_font.h): the menu sheets
  * read from DATA.DF's packs (df_pack.h) and decoded (TIM2), the word
  * rectangles of the menu text table handed to the builder with their
  * transcribed words in the five languages, and the result kept beside the

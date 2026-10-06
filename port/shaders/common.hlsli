@@ -1,7 +1,7 @@
 // common.hlsli: what every ICO shader shares. The byte layouts below are
 // mirrored by port/shaders/shader_consts.h (C); change both together.
 //
-// Binding scheme (port/rhi/vk/README.md "Descriptor scheme"): the register
+// Binding scheme: the register
 // space is the RHI bind group, the register number is the RHI slot. DXC is
 // run with -fvk-b-shift 0, -fvk-t-shift 16, -fvk-s-shift 32 so Vulkan
 // bindings come out as slot + 0 / 16 / 32.
@@ -77,7 +77,7 @@ cbuffer DrawCB : register(b1, space1)
     float4 g_scale;
 };
 
-// Widescreen reflections (RENDER_API.md "Render-to-texture surfaces"): a
+// Widescreen reflections: a
 // draw that samples a render-to-texture block widened by the display aspect
 // maps its 4:3 u into the block (rd_replay.c fillDrawCB). z = 0 everywhere
 // else, which returns uv as it is.
@@ -153,8 +153,7 @@ uint4 gs_texa_expand(uint4 t, uint mode, uint fmt)
     return uint4(t.rgb, gs_texa_alpha(t.r, t.g, t.b, t.a, mode, fmt));
 }
 
-// TEXA before filtering (sprite_texa_ps, vu_texa_ps; RENDER_API.md
-// "Textures"): the texel of a PSMCT24 or PSMCT16 texture (or one with a
+// TEXA before filtering (sprite_texa_ps, vu_texa_ps): the texel of a PSMCT24 or PSMCT16 texture (or one with a
 // 24- or 16-bit CLUT) under TEXA with AEM, filtered as the GS filters it.
 // The GS expands TEXA per texel and then filters; the sampler would filter
 // RGB and the A bit first, so where texels of different alpha meet (AEM's
@@ -246,7 +245,7 @@ bool gs_alpha_discard(uint flagsZ, uint aref, uint a)
 //
 // A factor above 1.0 (As or FIX above 0x80) does not survive the hardware
 // blender: for UNORM targets the factor is clamped to 0..1 (measured on
-// llvmpipe, docs/port/SHADERS.md; the Vulkan spec clamps fixed-point blend
+// llvmpipe; the Vulkan spec clamps fixed-point blend
 // inputs). DF_PREMUL moves the multiply into the shader for the additive and
 // subtractive forms (Cs*F + Cd, Cd - Cs*F): c0.rgb = min((Cs * f) >> 7, 255),
 // exactly the GS term, and the pipeline blends with src factor ONE.

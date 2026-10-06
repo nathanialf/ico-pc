@@ -24,9 +24,9 @@ extern int systemStatus[];
 /* the step profile's context (common/src/main.c) */
 extern int stage_no;
 extern int data_loading;
-/* port/ui/gallery_play.c: the music gallery's engine (docs/port/MUSIC.md) */
+/* port/ui/gallery_play.c: the music gallery's engine */
 void gallery_EngineInstall(void);
-/* port/game/credits_live.c: the Extras credits' engine (docs/port/EXTRAS.md) */
+/* port/game/credits_live.c: the Extras credits' engine */
 void ico_credits_engine_install(void);
 void ico_credits_host_poll(void);
 
@@ -92,7 +92,7 @@ void ico_host_step(void)
     /* the simulation's FP mode again: the host's work between steps (the
        window, SDL, the GPU driver) runs in the host mode and may leave
        anything in MXCSR or FPCR, and the fiber switch does not save it
-       (fiber.h; docs/port/PLATFORM.md "FP mode") */
+       (fiber.h) */
     ico_fpenv_sim_enter();
     ico_sched_vsync_advance();
     vsyncs++;
@@ -103,17 +103,17 @@ void ico_host_step(void)
     profile.hooksMs = ms_since(&t);
     /* this vsync's audio from the SPU2 state the last sound tick left; the
        sound thread the vsync woke ticks in ico_sched_run below, and its
-       writes take effect from the next block (docs/port/AUDIO.md) */
+       writes take effect from the next block */
     ico_audio_host_vsync(ico_host_vsync_hz());
     profile.audioMs = ms_since(&t);
     /* the audio push is an SDL call */
     ico_fpenv_sim_enter();
     ico_sched_run();
     profile.threadsMs = ms_since(&t);
-    /* the port's achievements (docs/port/ACHIEVEMENTS.md): once per new Main
+    /* the port's achievements: once per new Main
        tick, after the threads have run; reads game state, writes none */
     ico_ach_host_poll(ico_host_main_ticks());
-    /* the Extras credits' playback (docs/port/EXTRAS.md): nothing unless
+    /* the Extras credits' playback: nothing unless
        one is running; then it watches the stage and puts the game flags
        back at the title */
     ico_credits_host_poll();

@@ -1,5 +1,5 @@
 # port/input/pad-boot-mirror.txt: pad-boot.txt with Mirror mode On picked at
-# New Game (renderer wave 7, R7c; docs/port/SETTINGS.md "Mirror mode").
+# New Game (renderer wave 7, R7c).
 #
 # Derived from port/input/pad-boot.txt; its notes on the format and on each
 # boot screen apply here. Since R7c the vibration screen (layout 9,

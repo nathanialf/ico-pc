@@ -20,7 +20,7 @@
 #include "camera-ico2.h"
 #include "poly-flat.h"
 
-/* PC port (renderer R7b, docs/port/RENDER_API.md "Frame rate and interpolation"): the hard
+/* PC port (renderer R7b): the hard
    camera cuts, for the presenter's interpolation (port/game/video_options.c;
    a counter no game state reads) */
 extern void ico_video_camera_cut(void);
@@ -751,7 +751,7 @@ void SetCameraMatrix(GObj *self)
             debug_zoom_per = (float)debug_zoom_per * (1.0f - zoomBlend) + (float)target * zoomBlend;
         }
         /* PC port: the range is empty (max == min) on some stages; the EE's
-           div.s gives +-Fmax there, IEEE gives Inf or NaN (DIVERGENCES.md F5) */
+           div.s gives +-Fmax there, IEEE gives Inf or NaN */
         SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
                                                 (float)(zoomRangeMax - zoomRangeMin)));
     }

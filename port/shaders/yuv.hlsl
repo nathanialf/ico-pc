@@ -1,6 +1,6 @@
 // yuv.hlsl: the FMV picture, 4:2:0 planes to RGB with the PS2 IPU's colour
 // space conversion, drawn into the viewport (the picture's rectangle in the
-// presenter's output box). port/render/rd_video.c, docs/port/FMV.md.
+// presenter's output box). port/render/rd_video.c.
 //
 // t1 (space2) is one R8 texture holding the three planes: Y in rows
 // [0, h), Cb in rows [h, h + ch) columns [0, cw), Cr in the same rows from

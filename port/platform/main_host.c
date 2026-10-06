@@ -36,7 +36,7 @@
  *                            in ico-pc.ini. With use_iso its SHA-1 is
  *                            checked against the SCES-50760 image's (ini
  *                            verify=0 skips it); the extractor always
- *                            verifies (docs/port/DATA.md)
+ *                            verifies
  *   pad script               ini pad_script= ([dev] pad_script); the
  *                            headless build also takes pad-script.txt beside
  *                            the executable if present; else the live pad
@@ -93,8 +93,7 @@
 #include "window_host.h"
 
 #endif
-/* The PAL disc image's SHA-1 (docs/port/DATA.md, "Facts about the PAL disc
-   relied on"). */
+/* The PAL disc image's SHA-1. */
 #define ICO_ISO_SHA1 ICO_DISC_ISO_SHA1
 /* Vsyncs without a Main tick after which the loop warns once (the game's
    tick hook may be missing, and then ticks= never ends). */
@@ -939,7 +938,7 @@ int main(int argc, char **argv)
     }
 
     /* the disc goes in before boot, so a missing image fails here rather
-       than leaving the game at file_Init's disc wait (docs/port/DATA.md) */
+       than leaving the game at file_Init's disc wait */
     if (use_iso_mode(&ini)) {
         fprintf(stderr, "ico_pc: use_iso: the disc image is read directly\n");
         find_iso(&a, &ini, exe_dir, source, &picked);
@@ -1137,7 +1136,7 @@ int main(int argc, char **argv)
         ico_host_log_flush();
 #ifndef ICO_HEADLESS
         /* the window, SDL and the renderer in the host FP mode; the next
-           ico_host_step puts the simulation's back (A8, PLATFORM.md) */
+           ico_host_step puts the simulation's back */
         ico_fpenv_host_enter();
         if (!ico_window_pump()) {
             exit_reason = "the window was closed";

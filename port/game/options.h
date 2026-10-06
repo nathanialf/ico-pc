@@ -1,24 +1,23 @@
 /*
  * port/game/options.h
  *
- * The port's gameplay options (docs/port/OPTIONS.md): one place that holds
+ * The port's gameplay options: one place that holds
  * them, so that the game hooks, the input layer, the audio layer and the
  * Settings menu (package 6B) all read and write the same values.
  *
  * Each option is read once from config.toml ([gameplay], via
  * ico_config_get_bool) the first time it is asked for, and can be set at run
  * time. Every default is the original game's behaviour, except
- * circle_back (default-on port behaviour, docs/port/DIVERGENCES.md
- * "Optional features").
+ * circle_back (default-on port behaviour).
  *
- *   [gameplay] stick_fix   false  the stick fix (docs/port/INPUT.md)
+ *   [gameplay] stick_fix   false  the stick fix
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
  *   [gameplay] mirror      false  mirrored play (negated stick X, swapped pan)
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
- *                                 debug options (docs/port/DEVELOPER_MODE.md)
+ *                                 debug options
  *   [game] circle_back     true   Circle backs out of the game's menus as
- *                                 Triangle does (docs/port/SETTINGS.md);
+ *                                 Triangle does;
  *                                 false is the PS2's behaviour
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
@@ -55,8 +54,7 @@ void ico_opt_set_mirror_listener(void (*fn)(int on));
    value goes back to [gameplay] mirror (default false). */
 void ico_opt_mirror_reset(void);
 
-/* The mirror flag of each save slot (R7c, docs/port/SAVES.md "Mirror
-   mode"), kept in config.toml, never in the card files:
+/* The mirror flag of each save slot (R7c), kept in config.toml, never in the card files:
      [mirror] slot_N = true/false     the run's flag when slot N was saved
               slot_N_sum = <uint32>   that save's game-block checksum
    N is the save file's number (game.00N, 0..9).  The checksum ties the
@@ -90,7 +88,7 @@ int ico_opt_debug_option(void);
    the value to port/ui (lt_ext_SetCircleBack) at install and on a change. */
 int ico_opt_circle_back(void);
 void ico_opt_set_circle_back(int on);
-/* [audio] output (docs/port/AUDIO.md, "Gains and output mode"): the
+/* [audio] output: the
    PS2's stereo or mono choice, the game's soundOutputModeGet value (0
    stereo, 1 mono), which the memory card's system file keeps and the
    Options screen's Stereo/Mono row toggles.  "auto" (ICO_OUTPUT_AUTO, the

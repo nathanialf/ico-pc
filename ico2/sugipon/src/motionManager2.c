@@ -520,7 +520,7 @@ typedef struct {     /* field names derived */
    member at MotRoot's member of the same name (or the one at its EE offset:
    rot is quat, nextPos move, fieldPos footPos), the words MotRoot keeps as
    pads (0x10C to 0x11F, 0x1E0 to 0x1FF) inside those pads, and the same size
-   (tools/template_audit.py, docs/port/OFFSET_AUDIT.md). */
+   (tools/template_audit.py). */
 /* clang-format off */
 #define MGI_FIELDS(X) /* derived name */ \
     X(pos) X(trans) X(baseQuat) X(motionQuat) X(twist) X(twistRate) X(up) X(savePos) X(hitObj) \
@@ -699,7 +699,7 @@ static MotionGeoInfo motionGeoInfoTemplate = {
    bytes where MotCtrl's float[4] has 4, and MotCtrl's pickedWeapon is a
    pointer: with the EE spelling every field from dir on landed 4 bytes
    late (floorFit took orientKind's 0, so no actor fitted the root to the
-   floor in a direct-move motion; docs/port/DIVERGENCES.md).  The host
+   floor in a direct-move motion).  The host
    spells those members with MotCtrl's alignment and width; the asserts
    after InitMotionStateInfo check every offset. */
 

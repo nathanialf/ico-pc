@@ -5,7 +5,7 @@
  * 13818-1 pack headers and PES packets) whose video is one MPEG-2 elementary
  * stream (stream id 0xE0) and whose audio is PCM in private stream 1 (0xBD)
  * in Sony's own framing.  What the game's three PSS files hold
- * (docs/port/FMV.md, "Streams"; measured on the PAL disc):
+ * (measured on the PAL disc):
  *
  *   - 16384-byte packs, MPEG-2 pack headers; a system header (0xBB) in the
  *     first pack, padding packets (0xBE), the end code 0x000001B9 last;

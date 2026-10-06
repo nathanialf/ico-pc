@@ -1,7 +1,7 @@
 /*
  * port/game/options.c
  *
- * The port's gameplay options (options.h, docs/port/OPTIONS.md).
+ * The port's gameplay options (options.h).
  */
 #include "options.h"
 

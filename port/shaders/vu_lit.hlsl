@@ -1,7 +1,7 @@
 // vu_lit.hlsl: normal_l. vu_lit_vs = codes 32 (region test) and 36
 // (scissor) by vu_draw.z's clip mode (RD_PROG_LIT); vu_lit_spec_vs = code
 // 34 (RD_PROG_LIT_SPEC); vu_reflect_vs = code 38 (RD_PROG_REFLECT).
-// Vertex: pos, normal, ST, colour. docs/port/VU1_PROGRAMS.md "normal_l".
+// Vertex: pos, normal, ST, colour.
 #include "vu_common.hlsli"
 
 #define VU_LIT 0u

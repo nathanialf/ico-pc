@@ -1,5 +1,4 @@
-/* rd_blur.c: staticBlur.c's sprites (renderer wave 5, R5a;
- * docs/port/RENDER_API.md "Full-screen effects and the raw packet builders").
+/* rd_blur.c: staticBlur.c's sprites (renderer wave 5, R5a).
  *
  * staticBlur.c's host path (ICO_RD) records every register write of its
  * packets as rd state, in packet order, and every gif_SpriteSensitiveOrg
@@ -34,8 +33,7 @@
  * The destination is read from a copy taken just before the sprite (the
  * target's snapshot), so overlapping sprites of one record cannot happen
  * (one sprite per record) and the result is the GS integer arithmetic of
- * every pass, feedback or not.  That is the exactness of RENDER_API.md
- * "Blend exactness under feedback" (blend_int's RGBA8_UINT ping-pong) without the UINT copies:
+ * every pass, feedback or not.  That is the exactness of blend_int's RGBA8_UINT ping-pong, without the UINT copies:
  * UNORM8 holds k / 255 exactly and a Load of it gives k back.
  */
 #include <math.h>

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """port/ui/test/credits_headless.py: Extras > Credits in the headless game.
 
-ctest credits_headless (docs/port/TESTING.md, docs/port/EXTRAS.md
-"Credits").  Copies the headless ico_pc into a fresh folder with an
+ctest credits_headless.  Copies the headless ico_pc into a fresh folder with an
 ico-pc.ini (unlock_credits=1, the developer key that unlocks the row) and a
 pad script, and runs it on the disc image: the boot to the title, then
 Settings > Extras > Credits.  The ending plays from the staff roll's first

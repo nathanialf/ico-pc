@@ -1,7 +1,7 @@
 /*
  * port/ui/ui_list.h
  *
- * The scrolling list pages of the port's menus (docs/port/UI.md, "Lists"):
+ * The scrolling list pages of the port's menus:
  * a window of UI_LIST_SLOTS rows over a list of N items.  The Settings
  * achievements and remap pages use it, and the Extras galleries will.
  *

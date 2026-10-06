@@ -1,8 +1,7 @@
 /*
  * port/ui/settings.h
  *
- * The port's Settings menu (Phase 6, package 6C; docs/port/SETTINGS.md for
- * the player, docs/port/UI.md "Settings menu" for how it is built).
+ * The port's Settings menu (Phase 6, package 6C).
  *
  * Every screen is a port layout in the layout extension (layout_ext.h),
  * drawn, navigated and faded by the game's own layout code
@@ -44,8 +43,7 @@ int ui_SettingsEntryItem(int item);
 /* The title procs: masked while their own rows are (the card check). */
 void ui_SettingsTitleMask(int masked);
 
-/* The New Game "Mirror mode" screen (renderer wave 7, R7c; docs/port/
-   SETTINGS.md "Mirror mode"): la_vibe_select (common/src/layout_action.c,
+/* The New Game "Mirror mode" screen (renderer wave 7, R7c): la_vibe_select (common/src/layout_action.c,
    ICO_HOST) switches to it after the vibration choice; Cross or START on
    "Off" or "On" sets the run's mirror mode (ico_opt_set_mirror) and calls
    la_host_new_game_go (gflagOn(382), what the vibration screen did);
@@ -58,7 +56,7 @@ int ui_MirrorScreenLayout(void);
 /* the "Off" (on = 0) and "On" (on = 1) rows */
 int ui_MirrorScreenRow(int on);
 
-/* "Quit to desktop" (package Q2; docs/port/SETTINGS.md "Quitting"): a port
+/* "Quit to desktop" (package Q2): a port
    row under the title's Settings row (layouts 12 and 13, in the same
    chained entry layout) whose Cross opens a confirmation screen, "Quit to
    desktop?" with Yes and No (the cursor on No).  Cross on Yes writes what
@@ -137,7 +135,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_BACK,
     /* list rows (achievements, remap targets) */
     UI_OPT_LIST,
-    /* Extras (docs/port/EXTRAS.md): entries that open a gallery */
+    /* Extras: entries that open a gallery */
     UI_OPT_EXTRAS_MUSIC,
     UI_OPT_EXTRAS_MODELS,
     UI_OPT_EXTRAS_CREDITS /* locked until the ending has been reached */

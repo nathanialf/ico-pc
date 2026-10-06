@@ -32,7 +32,7 @@ PROGRAMMERS = ["common", "fumi", "ito", "omori", "script", "seki", "sugipon"]
 
 # Sources the host build never compiles because port/ replaces them for good
 # (they stay in the PS2 build): the ito/mpeg movie player, replaced by
-# port/fmv (Phase 4E, docs/port/FMV.md). Listed in ICO_EE_ONLY_SOURCES so the
+# port/fmv (Phase 4E). Listed in ICO_EE_ONLY_SOURCES so the
 # inventory stays complete.
 EE_ONLY_DIRS = ("ico2/ito/mpeg/",)
 

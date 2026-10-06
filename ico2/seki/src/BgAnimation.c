@@ -513,8 +513,7 @@ static inline int bga_findPtKey(BgaPtKey *k, int n, float f) /* derived name */
     return 0;
 }
 
-/* The last-key path below takes the EE's result for u = 0 (DIVERGENCES.md
-   F12). That holds while f has not passed the key's time and the record after
+/* The last-key path below takes the EE's result for u = 0. That holds while f has not passed the key's time and the record after
    the keys does not change which curve k1 selects (its linear flag): the
    host logs the first time either is not so, once each. */
 static void bga_noteLastKey(const char *fn, float f, int linear, const int *nextLinear)
@@ -1407,7 +1406,7 @@ static void _RotTransCurrentMatrixYXZ(void *t, int *rot)
     sz = SIGNF(rot[2]) * _Sqrt(1.0f - cz * cz);
 
     /* translate by t, then rotate about Y, X and Z: each rotation is built
-       in full and multiplied on the right (docs/port/MATH.md) */
+       in full and multiplied on the right */
     {
         float ry[4][4] = {{cy, 0.0f, 0.0f - sy, 0.0f},
                           {0.0f, 1.0f, 0.0f, 0.0f},

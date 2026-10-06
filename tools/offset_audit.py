@@ -7,7 +7,7 @@ stores used: `*(T *)((char *)p + 0x230)`, `((int *)p)[9]`, `f[81]` over a
 offsets are the records' layout. On a 64-bit host every pointer field before
 the offset moves what follows, so a raw offset can land on another field. The
 2D-2F sweeps fixed what the boot ran; this audit looks at every site the host
-compiles, whether it runs or not (docs/port/OFFSET_AUDIT.md).
+compiles, whether it runs or not.
 
 Method:
 
@@ -2707,8 +2707,7 @@ UNPROTO_PASS = [None]  # set by main: the -std= of the unprototyped-call pass
 # --- Pointer-wide values held in 32 bits (package X4) ----------------------
 # A pointer, an ICO_WORD (intptr_t) or a pointer-wide integer converted to
 # int, unsigned int or narrower loses its upper 32 bits on x64; on the EE
-# both are 32 bits wide, so nothing in the source marks it (BoxWork.colData,
-# DIVERGENCES.md D10). gcc's early SSA dump (-fdump-tree-ssa-lineno) spells
+# both are 32 bits wide, so nothing in the source marks it (BoxWork.colData). gcc's early SSA dump (-fdump-tree-ssa-lineno) spells
 # every conversion, implicit or cast, with its operand's type; on an LP64
 # host ICO_WORD is `long int`, the EE's doublewords `long long int`, so the
 # two do not mix. Reported: a conversion to a 32-bit-or-narrower integer of

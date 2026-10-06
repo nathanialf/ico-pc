@@ -29,10 +29,10 @@
 #include "isys.h"
 #include "Matrix.h"
 
-/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+/* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);
 
-/* port/game/gamestate.c: achievement signals, docs/port/ACHIEVEMENTS.md */
+/* port/game/gamestate.c: achievement signals */
 #include "ico_gamestate.h"
 #include "GifPacket.h"
 #include "debug_exception.h"
@@ -1171,7 +1171,7 @@ static inline int enemyKidnapCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
-    /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
+    /* yorda_safe: a shadow never grabs her */
     if (ico_opt_yorda_safe()) {
         return 0;
     }
@@ -1399,7 +1399,7 @@ static inline int enemyPickupCheckGirl(GObj *self) /* derived name */
     int ang;
     int mode;
 
-    /* yorda_safe: a shadow never grabs her (docs/port/OPTIONS.md) */
+    /* yorda_safe: a shadow never grabs her */
     if (ico_opt_yorda_safe()) {
         return 0;
     }

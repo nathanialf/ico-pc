@@ -1,5 +1,5 @@
 # port/ui: the port's runtime text, layout extension, strings and popups
-# (Phase 6, package 6B; docs/port/UI.md).
+# (Phase 6, package 6B).
 #
 #   ico_ui       the game's copy, compiled into ico_pc: ICO_RD in the window
 #                build (draws through port/render), measure-only headless;
@@ -119,7 +119,7 @@ endif()
 # run by the real layout_texture.c (measure-only text, the gif calls
 # stubbed): the rows of each page, value cycling into the setters and the
 # texts, the remap capture, the boot-skip mapping over a synthetic config,
-# and the navigation repoint. docs/port/UI.md, "Settings menu".
+# and the navigation repoint.
 ico_ui_library(ico_ui_cpu OFF)
 ico_ui_settings(ico_ui_cpu)
 ico_include_dirs(common _ico_ui_settings_incs)
@@ -146,7 +146,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
 endif()
 
 # --- gallery_test (CPU) --------------------------------------------------------
-# The music gallery's list (gallery.c, docs/port/MUSIC.md) built from the
+# The music gallery's list (gallery.c) built from the
 # PAL base ELF's tables as the game loads them (port/data/tables.c, as
 # tables_test does): keys, group order and headings, duplicates, the asset
 # names, the glyphs; with the disc image, the streams on the disc and every
@@ -326,7 +326,7 @@ target_compile_definitions(menu_text_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(menu_text_test PRIVATE ico_render ico_math)
-# font_coverage_test (docs/port/UI.md, "The font"): every character of the
+# font_coverage_test: every character of the
 # text the port draws (the five languages' tables, the port's roll lines and
 # the corpus, test/font_corpus) has a glyph in the embedded subset; with the
 # base ELF, the sound names too; with the disc, the game face and its

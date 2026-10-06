@@ -7,7 +7,7 @@ version, licence, what it is used for and its full licence text(s). The
 program's own licence is LICENSE, shipped next to it.
 
 Fails (exit 1) if any text the manifest names is missing, so a package
-cannot ship without a notice. docs/port/THIRD_PARTY.md lists the
+cannot ship without a notice. docs/THIRD_PARTY.md lists the
 components and why each is there.
 """
 

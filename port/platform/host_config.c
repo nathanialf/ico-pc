@@ -4,7 +4,7 @@
  * The executable's folder, ico-pc.ini, SHA-1, the file dialog and the error
  * box (host_config.h). Windows needs user32 (MessageBoxW) and comdlg32
  * (GetOpenFileNameW). Paths are UTF-8 throughout and reach the file system
- * through host_fs.h's wide helpers (docs/port/DATA.md, "Paths").
+ * through host_fs.h's wide helpers.
  */
 #include "host_config.h"
 #include "host_fs.h"
@@ -384,7 +384,7 @@ int ico_ini_load_file(IcoIni *ini, const char *path)
 }
 
 /* config.toml paths and the ini keys they stand for; the ini wins when it has
-   the key (docs/port/CONFIG.md, "Precedence") */
+   the key */
 static const struct {
     const char *toml;
     const char *ini;
@@ -425,7 +425,7 @@ static const struct {
     {"dev.switch_to", "switch_to"},
     {"dev.switch_at", "switch_at"},
     /* Settings > Extras > Credits unlocked whatever the achievements say
-       (package CRED; port/game/credits.c, docs/port/EXTRAS.md) */
+       (package CRED; port/game/credits.c) */
     {"dev.unlock_credits", "unlock_credits"},
     /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},

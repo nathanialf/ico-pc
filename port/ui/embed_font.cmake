@@ -3,9 +3,8 @@
 #   cmake -DIN=<font.ttf> -DOUT=<font_data.c> -P embed_font.cmake
 # Writes `const unsigned char ui_font_ttf[]` and `ui_font_ttf_size`.
 #
-# The font's subset (docs/port/UI.md, "The font file": the recipe that made
-# Arimo-Regular.ttf) holds these code points; tools/font_audit.py checks the
-# port's text against this line and UI.md's recipe against it:
+# The font's subset (the recipe that made Arimo-Regular.ttf) holds these
+# code points; tools/font_audit.py checks the port's text against this line:
 # subset: U+0020-007E,U+00A0-017F,U+0192,U+02C6,U+02DC,U+2013-2014,U+2018-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+20AC,U+2122
 if(NOT IN OR NOT OUT)
     message(FATAL_ERROR "embed_font.cmake: IN and OUT are required")

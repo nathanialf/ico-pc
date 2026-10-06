@@ -91,7 +91,7 @@ typedef struct BoxWork { /* field names derived */
 } __attribute__((aligned(8))) BoxWork; /* derived name */
 
 /* colData holds Sub15C.colData across ReInitBoxGeo: it must keep the
-   pointer's width (DIVERGENCES.md D10) */
+   pointer's width */
 _Static_assert(sizeof(((BoxWork *)0)->colData) == sizeof(((Sub15C *)0)->colData),
                "BoxWork.colData is narrower than Sub15C.colData");
 

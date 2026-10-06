@@ -1031,7 +1031,7 @@ static void getMotionGeometry(void *self)
            update's sceVu0ApplyMatrix multiplies it by the zero translation
            row, so rootMove's x, y and z are the rotation alone; a host NaN
            there gave NaN in all three (a shadow carrying the girl, stage 4).
-           Read it as the PS2 does (DIVERGENCES.md F14). */
+           Read it as the PS2 does. */
         v.f[3] = ps2_operand(v.f[3]);
         if (w->animFrame < w->lastFrame) {
             CopyVector(mo->step, ZeroVector);
@@ -1122,7 +1122,7 @@ static void getMotionGeometry(void *self)
                    shift shorter than one frame at this rate; the guard
                    then passes only with blendCount 0 (a record not yet
                    shifted), where 0 / 0 is +Fmax on the EE and NaN under
-                   IEEE (DIVERGENCES.md F5) */
+                   IEEE */
                 float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
 
                 GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, (StreamElem *)mot, v.f,

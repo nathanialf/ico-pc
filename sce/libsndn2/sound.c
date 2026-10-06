@@ -9,8 +9,7 @@
 #include <sifrpc.h>
 #include <string.h>
 #include "sound.h"
-/* Host seams for the PC port (its docs/port/AUDIO.md, "The sequencer on
- * the host").
+/* Host seams for the PC port.
  *
  * The EE keeps addresses in 32-bit words of its context blocks and of the
  * .hd header the game loaded.  A 64-bit host cannot, so:
@@ -24,8 +23,7 @@
  *   - the five header slots SgVabOpenFakeBody relocates (0x30, 0x38, 0x3C,
  *     0x40, 0x44: header + the offsets at 0x10, 0x18-0x24) are kept in
  *     sgHdRel, a record per open vab keyed by the header's address, and
- *     the host never writes them into the header (docs/port/LOADERS.md,
- *     "hd and sq").
+ *     the host never writes them into the header.
  * The IOP to EE page is cached memory read through its uncached alias on
  * the EE; on the host ICO_UNCACHED is the identity.  The DMA-status wait
  * yields the fiber a vsync at a time (the reply that ends it arrives with

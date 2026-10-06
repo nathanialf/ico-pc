@@ -8,7 +8,6 @@
 // (vf05..vf08). Drawn non-indexed, six vertices per particle: a GS sprite
 // (PRIM 0xD6: TME, ABE, AA1) between the two corners, ST from (u, v) to
 // (u + du, v + dv) with Q = 1, flat colour.
-// docs/port/VU1_PROGRAMS.md "particle".
 #include "vu_common.hlsli"
 
 struct VuSprite

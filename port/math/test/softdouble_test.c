@@ -15,8 +15,7 @@
  * ties, the float denormal range).
  *
  * The test also counts how often the host's own round-to-nearest double
- * arithmetic would have differed (the "switch the rounding mode" option in
- * docs/research/float-semantics.md); that count is printed, not checked.
+ * arithmetic would have differed (the "switch the rounding mode" option); that count is printed, not checked.
  */
 #include <stdint.h>
 #include <stdio.h>

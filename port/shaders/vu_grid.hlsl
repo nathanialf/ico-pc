@@ -8,7 +8,6 @@
 // vertices per batch. The
 // matrix is vu_mem[16..19] (SET_MESH_MATRIX's vf01..vf04), the lights
 // vu_mem[28..35] (SET_MESH_LIGHT). Always the region test.
-// docs/port/VU1_PROGRAMS.md "mesh".
 #include "vu_common.hlsli"
 
 #define VU_GRID 0u

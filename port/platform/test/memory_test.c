@@ -13,7 +13,7 @@
  * (partition_layout below) for the host's record sizes, and the same
  * function with the EE's sizes is checked against the addresses worked out
  * by hand for the EE (the 32-bit oracle's values, retired with it at
- * Phase 2 exit, 36a1d73e; docs/port/PLATFORM.md, "Heap").
+ * Phase 2 exit, 36a1d73e).
  */
 #include <stdarg.h>
 #include <stdint.h>

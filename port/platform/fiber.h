@@ -21,8 +21,7 @@
  * minicoro's Windows fiber path (other Windows targets) creates fibers with
  * FIBER_FLAG_FLOAT_SWITCH (minicoro.h, _mco_create_context), which gives
  * each fiber an FP state of its own. The scheduler therefore runs a start
- * hook (the simulation's FP mode, fpenv.c) at the top of every fiber; see
- * docs/port/PLATFORM.md.
+ * hook (the simulation's FP mode, fpenv.c) at the top of every fiber.
  */
 #ifndef ICO_PLATFORM_FIBER_H
 #define ICO_PLATFORM_FIBER_H

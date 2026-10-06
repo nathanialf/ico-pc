@@ -1,7 +1,6 @@
 /* rd_state.h: the finite GS state the game actually uses.
  *
- * Everything here was enumerated from the sources (grep -a over ico2/, see
- * docs/port/RENDER_API.md "GS state the game uses" for the counts).  The
+ * Everything here was enumerated from the sources (grep -a over ico2/).  The
  * renderer builds pipelines from these enumerations, not from the full GS
  * register space.  Where the game can only reach a state through disc data
  * (the BGA lightning blend mode) the whole table is kept and the value is
@@ -71,7 +70,7 @@ typedef enum RdAlphaTest {
 
 typedef enum RdAFail {
     RD_AFAIL_KEEP = 0,    /* discard the fragment */
-    RD_AFAIL_FB_ONLY = 1, /* write colour, not depth (two-draw split, see RENDER_API.md) */
+    RD_AFAIL_FB_ONLY = 1, /* write colour, not depth (two-draw split) */
     RD_AFAIL_ZB_ONLY = 2, /* not used by the game */
     RD_AFAIL_RGB_ONLY = 3 /* write RGB, not alpha, not depth */
 } RdAFail;
@@ -251,7 +250,7 @@ typedef struct RdPipelineKey {
     uint8_t targetFmt; /* RdTargetFormat (rd.h) */
     uint8_t prim;      /* RdPrim topology (rd.h) */
     uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
-                    coverage (RENDER_API.md "GS to pipeline mapping") */
+                    coverage */
     uint8_t _pad[2];
 } RdPipelineKey;
 

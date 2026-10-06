@@ -69,8 +69,8 @@ static IOSThread initIcoMiscThread; /* derived name; wider than 28 words here (p
 #include <eekernel.h>
 #include <libdma.h>
 #include <string.h>
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
-#include "ico_credits.h"   /* port: Extras > Credits, docs/port/EXTRAS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
+#include "ico_credits.h"   /* port: Extras > Credits */
 
 extern void ico_video_camera_cut(void); /* port (renderer R7b): port/game/video_options.c */
 

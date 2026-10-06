@@ -4,11 +4,10 @@
  * The host's libvu0: the sceVu0* entry points behind the signatures of
  * port/compat/libvu0.h, written in C from the instruction sequences of this
  * repository's clean-room reconstruction (sce/libvu0/libvu0.c, MIT).
- * docs/port/MATH.md has the notes per routine.
  *
  * On the PS2 these routines used VU0 registers vf4-vf9, which are also where
  * seki/src/Matrix.c keeps its current matrix; on the host they touch nothing
- * but their arguments (MATH.md, "Register side effects").
+ * but their arguments.
  */
 #include <string.h>
 

@@ -539,8 +539,7 @@ static void display_texture(int no, LtProperty *e)
         /* PC port (6B): a port row has no texture; its label is drawn where
            the sprite would be, with the same colour.  A port glyph row is
            the exception: it draws a game texture as the game's rows do.
-           The game's rows draw their textures (docs/port/UI.md, "Menu
-           text") */
+           The game's rows draw their textures */
         ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
         if (!lt_ext_IsPortProp(e))
             tex_TransTexture(e->texNo, 11);

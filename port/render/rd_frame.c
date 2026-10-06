@@ -1,8 +1,7 @@
 /* rd_frame.c: the frame lifecycle pieces of wave 2 (package R2c).
  *
  *   rd_FrameHead / rd_FrameFlip   the flip's draw environment and clear
- *                                 (rd.h; docs/port/RENDER_API.md "Frame lifecycle, camera and the
- *                                 post passes")
+ *                                 (rd.h)
  *   rd_SetTargetZFormat           per-target GS Z to depth scale
  *   rd_SetVuCommon                gsb_MakeCommonMatrix's VU1 parameter block
  *   rd__FillCameraCB              RdCamera into FrameCB

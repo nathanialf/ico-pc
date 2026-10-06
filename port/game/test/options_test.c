@@ -1,7 +1,7 @@
 /*
  * port/game/test/options_test.c
  *
- * The gameplay options on the CPU (docs/port/OPTIONS.md): the defaults are
+ * The gameplay options on the CPU: the defaults are
  * the original game's, the config and run-time setters, and eBrainGetTarget
  * (ico2/omori/src/ebrain.c, compiled in below so its statics are in reach)
  * with yorda_safe off and on, on a synthetic slot set.

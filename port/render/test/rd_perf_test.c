@@ -1,4 +1,4 @@
-/* rd_perf_test (package P1, docs/port/RENDER_API.md "Performance"): the
+/* rd_perf_test (package P1): the
  * renderer's CPU cost per replay and its steady state.
  *
  * A synthetic frame shaped like a game frame: SCENE cleared with its depth,
@@ -397,8 +397,7 @@ static void checkGroups(const char *what, const Sum *s)
 }
 
 /* Package PB: the pipeline barriers of a steady replay.  The Vulkan backend
- * orders same-state writes per resource (port/rhi/vk/README.md, "Hazard
- * tracking"): one list-opening barrier and one per pass or copy whose target
+ * orders same-state writes per resource: one list-opening barrier and one per pass or copy whose target
  * has a write pending, instead of a global barrier before every pass and
  * copy (ICO_VK_GLOBAL_BARRIERS=1, the _GLOBAL counts).  A backend
  * without counters (D3D12) reads 0 and is not checked. */

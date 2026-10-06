@@ -26,7 +26,7 @@
 #include "rd_mesh.h"
 
 /* ===================================================================== *
- * PC port (renderer wave 3, R3ab; docs/port/RENDER_API.md "The mesh path").
+ * PC port (renderer wave 3, R3ab).
  *
  * Every DMA this file chains for VU1 (matrix, light, material, texture,
  * dissolve, specular and reflection packets, the point and line packets)
@@ -47,7 +47,7 @@ static inline void regHostDma(int id, void *addr, int qwc)
 
 #define dl_OpenDma(id, addr, qwc) regHostDma((id), (void *)(addr), (qwc))
 
-/* R7d (docs/port/RENDER_API.md "Frame rate and interpolation", "Keys"): a mesh draw's RdKey is
+/* R7d: a mesh draw's RdKey is
  * the object, the part and the packet's place in the part's chain with the
  * pass (0 the material, 1 the specular, 2 the reflection pass), so the same
  * draw has the same key in every frame.  The packet pointer alone is not:

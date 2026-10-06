@@ -305,7 +305,7 @@ int main(void)
     }
     /* sinTable's last entry (sugipon/src/tableSin.c makeSinTable, i =
        16384): 1 - 4.7e-9 in __kernel_cosf is 1.0 on the EE adder, 0x3f7fffff
-       under IEEE RTZ (DIVERGENCES.md F18). */
+       under IEEE RTZ. */
     {
         volatile float m = 1.5707964f;
         volatile float d = 16385.0f;

@@ -1,7 +1,7 @@
 /*
  * port/audio/audio_host.h
  *
- * The audio half of the host loop (docs/port/AUDIO.md, "Output"): once per
+ * The audio half of the host loop: once per
  * simulated vsync the SPU2 renders the vsync's 48 kHz frames (960 at 50 Hz,
  * 800.8 on average at 59.94 Hz) and hands them to the sinks: the SDL3
  * device (window build, out_sdl.c), a WAV file (ini audio_dump=), or
@@ -79,7 +79,7 @@ int ico_audio_sdl_open(void);
 void ico_audio_sdl_push(const int16_t *frames, int count);
 void ico_audio_sdl_close(void);
 
-/* The output device ([audio] device; docs/port/AUDIO.md "Output device").
+/* The output device ([audio] device).
    Without the SDL output (headless) these are stubs: no devices, reopen
    fails, removal does nothing. */
 #define ICO_AUDIO_DEVICE_NAME_MAX 128

@@ -1,8 +1,7 @@
 /*
  * port/audio/mix_gain.h
  *
- * The music and effects gains (docs/port/AUDIO.md, "Gains and output
- * mode"): the SPU2 renders one stereo mix, so the port scales the voices'
+ * The music and effects gains: the SPU2 renders one stereo mix, so the port scales the voices'
  * own volume registers by the category of sound each voice is playing.
  *
  *   - Each of the 48 voice slots carries a category tag, set where the game

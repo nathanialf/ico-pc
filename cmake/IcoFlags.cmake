@@ -12,7 +12,7 @@
 #                           port/math, never by the compiler.
 #   -fsigned-char           ee-gcc's MIPS default is signed char. Package 0C
 #                           verifies this against the period compiler's
-#                           specs (docs/research/); until then it is assumed.
+#                           specs; until then it is assumed.
 #   -fno-common             the game was built -fno-common.
 #   -fgnu89-inline          ee-gcc 2.9's `inline`: a plain `inline` function
 #                           definition is also the external one (script.h
@@ -30,7 +30,7 @@ set(ICO_SEMANTIC_OPTIONS
     -fgnu89-inline
 )
 
-# Record layout of the game and data TUs only (package 0C, docs/research/).
+# Record layout of the game and data TUs only (package 0C).
 # port/ code keeps the platform ABI, since SDL's and the Windows SDK's
 # structs assume it. A record the game and port/ both read must not depend
 # on either option.

@@ -13,7 +13,7 @@
 #include "main.h"
 #include <assert.h>
 
-/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+/* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);
 
 int eBrainBoyChaseCount;
@@ -148,8 +148,7 @@ void eBrainProcess(void)
        her), the loop below still subtracts bpos or gpos, which the EE takes
        as its stack left them: a word that is a number there, a NaN or Inf
        bit pattern here (a float trap in the fptrap build, a run-to-run
-       difference otherwise).  The host starts both at 0 (DIVERGENCES.md
-       D15). */
+       difference otherwise).  The host starts both at 0. */
     memset(bpos, 0, sizeof(bpos));
     memset(gpos, 0, sizeof(gpos));
 
@@ -427,7 +426,7 @@ EBSlot *eBrainGetTarget(GObj *gop)
                    and boyTargets at 0x380 after ebrainSlots[32]):
                    girlTargets[-1] is boyTargets[31] and boyTargets[-1] is
                    ebrainSlots[31].owner. The host's statics are not laid out
-                   so; it clears those two (DIVERGENCES.md D13) */
+                   so; it clears those two */
                 if (girlIdx >= 0) {
                     girlTargets[girlIdx] = 0;
                 } else {

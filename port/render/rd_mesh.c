@@ -17,7 +17,7 @@
  *   the pipelines       the (program, code) table and the VU families of
  *                       the reachable pipeline set.
  *
- * The particle end-tag quirk (VU1_PROGRAMS.md finding 4): a particle batch
+ * The particle end-tag quirk: a particle batch
  * that stores no sprite writes its EOP tag through an earlier program's vi04,
  * which after a normal or mesh loop is VU memory 0, and the cluster region
  * test then rejects every skinned triangle of the list until the next common
@@ -361,7 +361,7 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
         free(br);
         return (RdMesh){0};
     }
-    /* the strip flag is ST.w < 1 (VU1_PROGRAMS.md section 4); ST is the
+    /* the strip flag is ST.w < 1; ST is the
      * second-last quadword of a vertex in normal_c, normal_l and cluster */
     const uint32_t stAt = d->qwPerVertex >= 3 ? d->qwPerVertex - 2 : 0;
     uint32_t v = 0, ni = 0;

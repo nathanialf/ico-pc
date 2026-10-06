@@ -1,8 +1,7 @@
 /*
  * port/platform/hotkeys.h
  *
- * The window build's diagnostic keys (package Q1, docs/port/TESTING.md
- * "Reporting a visual bug"), kept free of SDL so a unit test checks them:
+ * The window build's diagnostic keys (package Q1), kept free of SDL so a unit test checks them:
  *
  *   F12   the frame shown: an rd dump of the last closed frame and a PNG of
  *         the picture, <pref>/dumps/frame-<time>-v<vsync>.rddump and .png,

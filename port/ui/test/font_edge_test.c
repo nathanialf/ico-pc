@@ -1,6 +1,4 @@
-/* font_edge_test.c: deferred text at the output's resolution (package DEF;
- * docs/port/RENDER_API.md "The deferred text pass", docs/port/UI.md "Menu
- * text").
+/* font_edge_test.c: deferred text at the output's resolution (package DEF).
  *
  * port/ui's font.c and rd on a Vulkan device (lavapipe here; exit 77 without
  * one).  A frame of black SCENE with a row of text recorded in list 11 as

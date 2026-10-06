@@ -24,7 +24,7 @@ static int vu0PushDepth = 0; /* derived name */
 
 void _PushVu0Registers(void)
 {
-    /* vf1-vf31 hold only the current matrix on the host (docs/port/MATH.md) */
+    /* vf1-vf31 hold only the current matrix on the host */
     ico_vu0_registers_push();
 
     if (++vu0PushDepth >= 6) {

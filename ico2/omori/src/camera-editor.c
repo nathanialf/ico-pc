@@ -152,7 +152,7 @@ static void saveEditedDataBinary(char *name, ICO_WORD boxes, int count)
    then the groups' address) followed on the EE by the groups and the pin blocks
    (0xE27E0 bytes: 0x70 + 100 * 76 + 100 * 9200).  The addresses lie outside the
    32 MB the host simulates, so there the sets are static records and each box's
-   pin block is a heap block (docs/port/LOADERS.md, "gcm (camera sets)"); CS_COUNT and CS_ITEMS
+   pin block is a heap block; CS_COUNT and CS_ITEMS
    read a set's two words. */
 #define CAMSET_T CamMgr
 #define CS_COUNT(set) ((set)->count)

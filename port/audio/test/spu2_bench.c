@@ -1,8 +1,7 @@
 /*
  * port/audio/test/spu2_bench.c
  *
- * The SPU2 render's cost and its bit-exactness (docs/port/AUDIO.md,
- * "Render cost"):
+ * The SPU2 render's cost and its bit-exactness:
  *
  *   spu2_bench --check   renders five 10 s scenes and compares a CRC-32 of
  *                        everything observable (the output, the registers
@@ -10,7 +9,7 @@
  *                        and their times, the final sound RAM) with golden
  *                        values taken from the frame-by-frame renderer
  *                        (before S3's optimisation; retaken for the disc's
- *                        sceSdInit, AUDIO.md "libsd values"); then renders 24 random
+ *                        sceSdInit); then renders 24 random
  *                        2 s scenes both chunked and frame by frame
  *                        (spu2_set_exact) and compares those.  ctest
  *                        `spu2_render_crc`.
@@ -330,7 +329,7 @@ static const char *const scene_name[SCENES] = {"idle", "game", "hazard", "full48
 /* Golden CRCs, from the frame-by-frame renderer (`--print`).  First taken
    before S3 (commit a0a98982's spu2.c and adpcm.c); retaken when
    spu2_sd_init became the disc's sceSdInit (the idle block 16 x 0x07, the
-   cold-init ESA; DIVERGENCES.md A14) and the hazard scene gained a voice
+   cold-init ESA) and the hazard scene gained a voice
    across the end of sound RAM. */
 static const uint32_t scene_golden[SCENES] = {0xA5FB1B1Eu, 0x094C4593u, 0x280007F3u, 0xA8917D9Eu,
                                               0x10541E04u};

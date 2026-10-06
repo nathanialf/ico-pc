@@ -2,8 +2,7 @@
  * port/platform/diag_host.h
  *
  * Diagnostics that make a failed test run explain itself, on by default
- * and cheap enough to stay on (docs/port/BOOT_DIAG.md, "What the log
- * contains"):
+ * and cheap enough to stay on:
  *
  *   - crash handlers: an access violation, illegal instruction, divide
  *     error, stack overflow (Windows: a vectored handler for faults in the
@@ -88,8 +87,7 @@ double ico_diag_uptime(void);
    for timing the host's work; its zero is arbitrary. */
 unsigned long long ico_diag_now_ns(void);
 
-/* --- The game's hooks (#ifdef ICO_HOST calls in ico2/, listed in
-   docs/port/BOOT_DIAG.md) ------------------------------------------------ */
+/* --- The game's hooks (#ifdef ICO_HOST calls in ico2/) ------------------------------------------------ */
 
 /* common/src/main.c: boot milestones and its static thread functions. */
 void ico_host_milestone(const char *what);

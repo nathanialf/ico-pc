@@ -1,7 +1,7 @@
 /*
  * port/game/test/achievements_test.c
  *
- * The achievements on the CPU (docs/port/ACHIEVEMENTS.md): the game-state
+ * The achievements on the CPU: the game-state
  * view over a synthetic snapshot, the signals, every achievement's
  * condition through crafted transitions (unlocked once, suspended in developer
  * mode, yorda_safe counting), the achievements.toml round trip, the

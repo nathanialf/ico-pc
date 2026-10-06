@@ -1,5 +1,4 @@
-/* rd_fog_test.c: the depth fog of fog_DrawFog (renderer wave 4, R4c;
- * docs/port/RENDER_API.md "Depth fog").
+/* rd_fog_test.c: the depth fog of fog_DrawFog (renderer wave 4, R4c).
  *
  * ZFog.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c),
  * compiled as the window build has them (ICO_HOST, ICO_RD); the rest of the

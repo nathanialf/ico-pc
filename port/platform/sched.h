@@ -20,8 +20,8 @@
  *
  * The EE kernel itself is not public. The rules follow Play!'s EE kernel
  * HLE (Source/ee/PS2OS.cpp, BSD-2-Clause, read for its semantics only) and
- * the game's own use; docs/port/PLATFORM.md lists each rule's source and the
- * cases where the EE's behaviour is not known.
+ * the game's own use; the cases where the EE's behaviour is not known
+ * are noted where they apply.
  *
  * Contexts. Code runs either on a fiber (a game thread) or on the host
  * context (ico_sched_run's caller, the vsync and other "interrupt" code). A
@@ -104,7 +104,7 @@ void ico_sched_set_fiber_start_hook(void (*hook)(void));
    call and resumes the same thread at once (no other thread runs in
    between); from the host context fn is called directly. For host work too
    deep for a fiber's stack (the GPU driver: replay, pipeline creation,
-   present; docs/port/PLATFORM.md "Fiber stacks and host calls"). fn must
+   present). fn must
    not make kernel calls. */
 void ico_sched_call_on_host(void (*fn)(void *arg), void *arg);
 /* Creates and starts the program's first thread (the EE's main thread, id

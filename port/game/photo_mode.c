@@ -1,8 +1,7 @@
 /*
  * port/game/photo_mode.c
  *
- * Photo mode's state and camera (photo_mode.h; docs/port/DISPLAY.md
- * "Photo mode").  Port state only: the game never reads it.
+ * Photo mode's state and camera (photo_mode.h).  Port state only: the game never reads it.
  */
 #include "photo_mode.h"
 

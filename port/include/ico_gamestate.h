@@ -2,11 +2,11 @@
  * port/include/ico_gamestate.h
  *
  * A typed, read-only view of the game state the port's achievements need
- * (Phase 6, package 6E; docs/port/ACHIEVEMENTS.md), and the event signals a
+ * (Phase 6, package 6E), and the event signals a
  * handful of game sites raise under ICO_HOST.  Nothing here writes game
  * state: the view is a snapshot taken once per Main tick, and a signal only
  * appends to a port-side queue.  This is the interface an rcheevos client
- * could sit behind later (docs/research/retroachievements.md, section 6):
+ * could sit behind later:
  * named queries, plus ico_gs_peek for the few fixed retail globals.
  *
  * Use:
@@ -29,8 +29,7 @@ extern "C" {
 
 /* --- signals ------------------------------------------------------------ */
 
-/* Raised by the game (one-line hooks under ICO_HOST, listed in
-   docs/port/ACHIEVEMENTS.md, "Signals") or derived by ico_gs_tick from
+/* Raised by the game (one-line hooks under ICO_HOST) or derived by ico_gs_tick from
    the snapshot ("polled"). */
 typedef enum IcoGsEvent {
     ICO_GS_EV_NONE = 0,
@@ -138,8 +137,7 @@ int ico_gs_tick_hz(void);
 /* the game is paused (systemStatus[5]) */
 int ico_gs_paused(void);
 int ico_gs_current_layout(void);
-/* the boy's weapon: 0 bare hands or not known; kinds per weaponKind[10]
-   (docs/port/ACHIEVEMENTS.md, "Weapons") */
+/* the boy's weapon: 0 bare hands or not known; kinds per weaponKind[10] */
 int ico_gs_weapon_kind(void);
 int ico_gs_held_item(void);
 int ico_gs_yorda_present(void);
@@ -199,7 +197,7 @@ int ico_gs_achievements_suspended(void);
 
 /* Reads size (1, 2 or 4) bytes at the retail PAL EE address addr into *out
    (little endian, as the EE), from this tick's snapshot: the fixed globals
-   listed in docs/port/ACHIEVEMENTS.md ("EE address peek").  0, or -1 for an
+   listed there.  0, or -1 for an
    address outside them (heap objects, pointers, anything else: not
    addressable).  For a future rcheevos memory callback. */
 int ico_gs_peek(unsigned int addr, unsigned int size, unsigned int *out);

@@ -1,5 +1,4 @@
-/* rd_raw_test.c: the raw packet builders outside seki (renderer wave 5, R5c;
- * docs/port/RENDER_API.md "Full-screen effects and the raw packet builders").
+/* rd_raw_test.c: the raw packet builders outside seki (renderer wave 5, R5c).
  *
  * darkVolume.c, particleEffect.c, lineManager.c and lightning.c with the
  * VU1 chain reader (MicroCode.c), Primitive.c, matrixDrive.c, the 2D layer

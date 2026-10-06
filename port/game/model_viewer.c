@@ -1,8 +1,7 @@
 /*
  * port/game/model_viewer.c
  *
- * Settings > Extras > Models, the game side (model_viewer.h; docs/port/
- * EXTRAS.md, "Models").  Built from the development build's Motion Viewer
+ * Settings > Extras > Models, the game side (model_viewer.h).  Built from the development build's Motion Viewer
  * (sugipon/src/motionViewer.c) without calling it: MotionViewer() runs on the
  * debug CSV windows, pad 1 and the debug font.  What is taken from it:
  *

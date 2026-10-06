@@ -2,7 +2,7 @@
  * port/game/gamestate.c
  *
  * The read-only game-state view and the signal queue (port/include/
- * ico_gamestate.h, docs/port/ACHIEVEMENTS.md).
+ * ico_gamestate.h).
  *
  * Built twice: with ICO_GS_LIVE for the program (the sampler reads the
  * game's globals and, when they are safe to follow, the boy's and girl's
@@ -205,7 +205,7 @@ static int flag_in(const IcoGsSnapshot *s, int n)
     return (s->gflags[n >> 3] >> (n & 7)) & 1;
 }
 
-/* layout ids (texLayout procs in the retail tables; docs/port/ACHIEVEMENTS.md) */
+/* layout ids (texLayout procs in the retail tables) */
 #define LAYOUT_LOAD_PROCESSING 25 /* la_load_processing */
 #define LAYOUT_SAVE_COMPLETE 41   /* la_save_confirm_complete, la_save_processing's success */
 #define GFLAG_NEW_GAME 382        /* gflagOn(382), layout_action.c:738 */
@@ -513,7 +513,7 @@ int ico_gs_start_stage_used(void)
 int ico_gs_achievements_suspended(void)
 {
     /* package MV: the model viewer's stages are not play; package CRED: nor
-       the Extras credits' playback of the ending (docs/port/EXTRAS.md) */
+       the Extras credits' playback of the ending */
     return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
            ico_credits_active();
 }
@@ -521,8 +521,7 @@ int ico_gs_achievements_suspended(void)
 /* --- retail addresses ---------------------------------------------------- */
 
 /* Each entry: the retail PAL address and size, and where this tick's copy
-   sits in the snapshot.  Sources (docs/port/ACHIEVEMENTS.md, "EE address
-   peek"): config/symbol_addrs.pal.data.txt for the main.c and gamesys.c
+   sits in the snapshot.  Sources: config/symbol_addrs.pal.data.txt for the main.c and gamesys.c
    globals; for the rest the retail code's own address arithmetic. */
 typedef struct PeekRow {
     IcoGsPeekEntry e;

@@ -77,7 +77,7 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
            that one), so c, the normal and the strip saturate; on the host
            it is a NaN. Read it as the PS2 does (+-Fmax), which saturates
            the same way; the trail is reset to the first point below, so
-           the strip is degenerate either way. DIVERGENCES.md F5. */
+           the strip is degenerate either way. */
         const float *s1 = (const float *)p->screenPos + 4;
         float t[4];
         int k;

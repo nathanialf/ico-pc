@@ -23,8 +23,8 @@
 #include "main.h"
 #include "script.h"
 #include "staffroll.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
-#include "ico_credits.h"   /* port: Extras > Credits, docs/port/EXTRAS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
+#include "ico_credits.h"   /* port: Extras > Credits */
 
 static void actEndingSave(GObj *volatile self);
 

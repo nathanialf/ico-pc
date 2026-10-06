@@ -3,7 +3,6 @@
  *
  * Imports ICO's save from a PS2 memory card image or a save archive into a
  * card folder (mc_host.c's layout: <saves>/BESCES-50760ico/...).
- * docs/port/SAVES.md, "Importing saves".
  */
 #ifndef ICO_SAVE_MC_IMPORT_H
 #define ICO_SAVE_MC_IMPORT_H

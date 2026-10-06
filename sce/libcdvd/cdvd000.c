@@ -302,8 +302,7 @@ void cdvd_exit(void)
            cmd_sem_init's store access it: the callback thread waits on it.
            Both accesses volatile, the load stays behind the -1 store
            (alias.c true_dependence) and out of the call's slot at reorg;
-           SCE's 2.10 assembler fills the slot with it (docs/NOTES.md
-           "Assembler per archive"). */
+           SCE's 2.10 assembler fills the slot with it. */
         SignalSema(*(volatile int *)&cb_semid);
     }
     DeleteSema(_sceCd_ncmd_semid);

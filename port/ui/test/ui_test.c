@@ -1,4 +1,4 @@
-/* ui_test.c: the port's runtime text (Phase 6, 6B; docs/port/UI.md).
+/* ui_test.c: the port's runtime text (Phase 6, 6B).
  *
  * Without a device:
  *   - the embedded font parses; glyph bitmaps land in the atlas with the
@@ -1211,7 +1211,7 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
         }
         for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
             for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
-                /* rd's convention on a scaled target (RENDER_API.md "Presets and display options"):
+                /* rd's convention on a scaled target:
                  * texel i of a GS pixel's block samples at GS
                    p + (i mod s) / s, as the GS samples pixel p at p */
                 const float cx = (float)x, cy = (float)y;

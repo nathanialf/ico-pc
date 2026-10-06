@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include "MicroCode.h"
 
-/* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders").  The
+/* PC port (wave 5, R5c).  The
    strip packet below is a VIF DIRECT block (path 2) of GIF REGLIST packets:
    mc_HostDma reads it as the GIF would and the GS register decoder draws it,
    in order after the gif_* state packet.  The blend mode c comes from the
@@ -156,7 +156,7 @@ static void set_vertex(LightningVtx *dir, LightningVtx *pos, float u, int *col, 
         apply_matrix_w1(&pt, matrixptr + 0xC0, &e[i]);
         /* div.s: a bolt vertex on the camera plane (view z 0, so w 0; the
            stage 47 bolts after the stage 54 exit) gives Fmax on the EE, not
-           Inf (DIVERGENCES.md F5) */
+           Inf */
         q = ps2_div(1.0f, pt.f[3]);
         sceVu0ScaleVectorXYZ(&pt, &pt, q);
         sceVu0ScaleVectorXYZ(&t, &uv[i], q);
@@ -431,7 +431,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         sceVu0Normalize(&a, &a);
         sceVu0OuterProduct(&b, &dir, &a);
         /* div.s: a zero-length segment (two nodes at one place) gives Fmax on
-           the EE, not Inf (DIVERGENCES.md F5) */
+           the EE, not Inf */
         s += ps2_div(random_range(stepMin, stepMax), _GetLength(&v[seg + 1], &v[seg]));
         seg = lightningSeg(s, num);
         f = s - (float)seg;
@@ -441,7 +441,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         } else if (lim <= s) {
             /* cvt.w.s: past a zero-length segment s is Fmax (above), the
                product overflows (-Fmax on the EE, -Inf here) and the
-               conversion saturates to 0x80000000 (DIVERGENCES.md F5) */
+               conversion saturates to 0x80000000 */
             sc = GetTableSin((short)ps2_ftoi((1.0f - (s - lim) * two) * 1.5707964f * 10430.378f));
         } else {
             sc = 1.0f;

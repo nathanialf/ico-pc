@@ -13,7 +13,7 @@
  *
  * This is a pure CPU program:  cc -O2 -o gs_blend_test gs_blend_test.c
  * It prints the maximum and final drift per case; the renderer decision
- * that follows from the numbers is recorded in docs/port/RENDER_API.md.
+ * follows from the numbers.
  */
 #include <math.h>
 #include <stdint.h>

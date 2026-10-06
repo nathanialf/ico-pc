@@ -1362,7 +1362,7 @@ static int gsSpace(void)
            icoMisc.c's memory bar).  The layout, subtitles, staff roll and
            font come through the UI helpers above and gif_HostScreenPrims.
            UI and WORLD replay alike except under the mirror mode, which
-           flips UI prims (RENDER_API.md "Mirror mode") */
+           flips UI prims */
         return rd_CurrentList() >= 12 ? RD_SPACE_UI : RD_SPACE_WORLD;
     }
 }

@@ -1,6 +1,6 @@
 // rhi_test.hlsl: the shaders of port/rhi/test/rhi_vk_test.c, compiled by
 // gen_shaders.sh with DXC to SPIR-V (rhi_test_spv.h). Register spaces are
-// RHI bind groups; port/rhi/vk/README.md gives the DXC flags that map
+// RHI bind groups; gen_shaders.sh gives the DXC flags that map
 // registers to Vulkan bindings.
 
 struct VSIn {

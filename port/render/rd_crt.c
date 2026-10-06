@@ -1,5 +1,4 @@
-/* rd_crt.c: the CRT filter (packages CRT and CRT2; docs/port/DISPLAY.md
- * "CRT filter", RENDER_API.md "The CRT pass"; the shader is
+/* rd_crt.c: the CRT filter (packages CRT and CRT2; the shader is
  * port/shaders/crt.hlsl).
  *
  * A present-time pass in place of the line doubling and the box blit of
@@ -40,8 +39,7 @@
 #include "rd_internal.h"
 #include "shader_consts.h"
 
-/* The modes (RdCrtMode order, DISPLAY.md "CRT filter" holds the same table
- * and says what each imitates) */
+/* The modes, in RdCrtMode order */
 static const RdCrtParams s_modes[RD_CRT_MODE_COUNT] = {
     /* RD_CRT_OFF: unused */
     {0},
@@ -137,7 +135,7 @@ bool rd__CrtResolve(const RdSettings *s, RdCrtParams *p)
     if (!rd__CrtPreset((RdCrtMode)s->crtMode, p)) {
         return false;
     }
-    /* the config-only overrides (CONFIG.md [video] crt_*), < 0 = the mode's */
+    /* the config-only overrides ([video] crt_*), < 0 = the mode's */
     if (s->crtScanlines >= 0.0f) {
         p->scanline = unit(s->crtScanlines);
     }

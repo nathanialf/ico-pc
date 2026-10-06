@@ -6,7 +6,6 @@
  * branches. ico2/common/include/typedef.h includes it (and ps2float.h) for
  * the host build, so every game TU sees it.
  *
- * docs/port/MATH.md describes each routine against the assembly it replaces.
  */
 #ifndef ICO_MATH_ICO_MATH_H
 #define ICO_MATH_ICO_MATH_H
@@ -42,7 +41,7 @@ void ico_apply_matrix_w1(float *out, const float (*m)[4], const float *v);
    ACC += m[1] * y, ACC += m[2] * z, out = ACC + m[3] * w, every product
    truncated before its sum, the matrix field the multiplicand (fs) and the
    vector field the broadcast (ft). About 75 times the cost of
-   ico_apply_matrix, so only the collision rays use it (DIVERGENCES.md F19).
+   ico_apply_matrix, so only the collision rays use it.
    matrix_stack.c. */
 void ico_apply_matrix_ps2(float *out, const float (*m)[4], const float *v);
 

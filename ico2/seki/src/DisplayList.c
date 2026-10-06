@@ -59,7 +59,7 @@ static const int dlBufferSize[13] = {
     81920, 14336, 30720, 4096, 16384, 65536, 40960, 12288, 26624, 14336, 4096, 28672, 86016,
 };
 
-/* PC port (DIVERGENCES.md D16): each list buffer gets DL_HOST_PAD bytes past
+/* PC port: each list buffer gets DL_HOST_PAD bytes past
    the EE's size. Nothing checks the fill on the EE (dl_CheckDLOverflow is
    compiled out, DL_DEBUG): the test stage 88 (STGBOSS_TEST) fills list 10
    (4096 bytes; the shadows' eyes, DispEnemyEye) and its next tags land on

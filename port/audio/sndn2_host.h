@@ -2,8 +2,7 @@
  * port/audio/sndn2_host.h
  *
  * The host replacement for SNDN2DRV.IRX, the IOP sound driver behind the
- * Sg sequencer's RPC (docs/research/sndn2drv.md, "R1"; docs/port/AUDIO.md,
- * "The SNDN2DRV host").  It is a host SIF server (port/data/sif_host.h)
+ * Sg sequencer's RPC.  It is a host SIF server (port/data/sif_host.h)
  * under the IRX's server id: RPC 0x65 runs one packet (the init), RPC 0x64
  * runs a tick (a page of 16-byte packets, then the ADPCM stream scheduler
  * and event queue, then the 0x200-byte reply page).  Every packet becomes
@@ -50,8 +49,7 @@ const uint8_t *ico_sndn2_host_last_reply(void);
    608 u16 in 1/16-semitone steps, T[208] = 0x1000.  It is data in the
    user's SNDN2DRV.IRX (file offset 0x3900, 0x4C0 bytes) and is read from
    the disc at registration; without it the driver uses floor(4096 *
-   2^((i - 208) / 192)), which R1 found 1 low or high in 32 entries
-   (docs/port/DIVERGENCES.md A15). */
+   2^((i - 208) / 192)), which R1 found 1 low or high in 32 entries. */
 #define ICO_SNDN2_PITCH_IRX 1
 #define ICO_SNDN2_PITCH_FORMULA 2
 

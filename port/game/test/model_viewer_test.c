@@ -1,5 +1,5 @@
 /* model_viewer_test.c: the model viewer's table and words (package MV;
- * port/game/model_viewer.h, docs/port/EXTRAS.md "Models"), on the CPU:
+ * port/game/model_viewer.h), on the CPU:
  *   - the motion-kind blocks are ordered, apart, inside the motion-kind and
  *     motion-orient tables;
  *   - each model's motions [motFirst, motLast) lie inside one block, with

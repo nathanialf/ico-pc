@@ -27,7 +27,7 @@
 #   deps/libmpeg2/         Ittiam libmpeg2 (Apache-2.0) source tree, the FMV
 #                          decoder; compiled by port/fmv/CMakeLists.txt
 #
-# docs/port/THIRD_PARTY.md records the versions and licences.
+# docs/THIRD_PARTY.md records the versions and licences.
 #
 # Overrides:
 #   VULKAN_SDK_TAG, VULKAN_HEADERS_SHA256, VOLK_SHA256
@@ -183,7 +183,7 @@ else
         )
         unpack_debs "$X11DEV" "${X11_DEBS[@]}"
     fi
-    # Audio backend headers (Phase 4B, docs/port/AUDIO.md "Output"): SDL
+    # Audio backend headers (Phase 4B): SDL
     # builds a backend only when its headers are found and dlopens the
     # library by soname at run time. ALSA is the one this port needs (it
     # also reaches PulseAudio and PipeWire through their ALSA plugins);
@@ -331,7 +331,7 @@ fi
 # tree with fixed mtimes; taken 2026-10-05). The source tree is installed;
 # port/fmv/CMakeLists.txt compiles it as a static library with each
 # preset's own compiler (linux-x64, win-x64 mingw, asan), generic C only.
-# docs/port/THIRD_PARTY.md and docs/port/FMV.md.
+# docs/THIRD_PARTY.md has the versions.
 LIBMPEG2_TAG="${LIBMPEG2_TAG:-android-16.0.0_r4}"
 LIBMPEG2_COMMIT="${LIBMPEG2_COMMIT:-a97c2a1f0a796dc32bed80d3353c69c5fc07c750}"
 LIBMPEG2_TAR_SHA256="${LIBMPEG2_TAR_SHA256:-3a8a3028cc5e0c8177d9c81e687318c3eb81c2a9fd3219d50c94eabf1a8f3ea1}"

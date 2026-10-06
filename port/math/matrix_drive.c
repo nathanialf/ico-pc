@@ -2,7 +2,6 @@
  * port/math/matrix_drive.c
  *
  * sugipon/src/matrixDrive.c's VU0 and quadword-copy routines.
- * docs/port/MATH.md has the notes per routine.
  */
 #include <string.h>
 

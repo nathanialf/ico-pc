@@ -1,8 +1,7 @@
 /*
  * port/ui/photo_ui.h
  *
- * Photo mode's screen (package PHOTO; docs/port/DISPLAY.md "Photo mode",
- * docs/port/SETTINGS.md): the port layout the pause menu's Options >
+ * Photo mode's screen (package PHOTO): the port layout the pause menu's Options >
  * "Photo mode" row opens.  It has one row, masked, so the game's layout
  * code draws nothing of it and no cursor; its proc runs once a Main tick
  * and hands the pad to port/game/photo_mode.h, which the window turns into

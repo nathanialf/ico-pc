@@ -25,7 +25,7 @@ void InitMotionMemorySize(void);
 /* The .mob motion file (charFileManager.c's ReadMotionFile loads it,
  * InitMotionFile relocates it in place and motionManager2.c's _getMotion and
  * kin read it).  Every relocated word stays 4 bytes: an address on the EE,
- * an EE address word on the host (eeword.h, docs/port/LOADERS.md). */
+ * an EE address word on the host (eeword.h). */
 
 /* a node of formats 3 and 6: the per-frame tables of its first and last
    element, which _getMotion indexes by frame (relocated words) */

@@ -1,8 +1,7 @@
 /*
  * port/input/input_record.h
  *
- * The pad recording (package Q1, docs/port/TESTING.md "Reporting a visual
- * bug"): what the game read from the pad, written as a pad script
+ * The pad recording (package Q1): what the game read from the pad, written as a pad script
  * (pad_script.h), so the headless build replays a player's session with
  * pad_script=<the file>.
  *

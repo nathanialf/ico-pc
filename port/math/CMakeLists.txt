@@ -1,4 +1,4 @@
-# port/math: the VU0 maths in C (docs/port/MATH.md) and the newlib copies.
+# port/math: the VU0 maths in C and the newlib copies.
 # Compiled with the game's semantics options (-ffp-contract=off and the rest,
 # cmake/IcoFlags.cmake) and the port warning set; port/compat is not on the
 # include path, so the host libm here is the host's own.
@@ -85,7 +85,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     endif()
 endif()
 
-# softdouble_gate (docs/port/MATH.md, "Doubles"): the game functions that did
+# softdouble_gate: the game functions that did
 # double arithmetic through the EE's soft float contain no `double` and no
 # double constant outside ICO_D(), and compile without a float-to-double
 # promotion (-Wdouble-promotion, through this build's compile_commands.json).

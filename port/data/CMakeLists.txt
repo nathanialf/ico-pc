@@ -1,8 +1,8 @@
 # port/data: the disc VFS (vfs.c) and its ISO9660 backend, the libcdvd host
 # layer the game's fumi/ios/cdvd.c and seki/src/FileManager.c call, the SIF
 # host layer (no IOP reboot, no IRX modules, RPC to host servers) and the
-# IOP RAM stand-in. docs/port/DATA.md describes the design.
-# miniz (MIT, port/third_party/miniz, docs/port/THIRD_PARTY.md): the ZIP
+# IOP RAM stand-in.
+# miniz (MIT, port/third_party/miniz, docs/THIRD_PARTY.md): the ZIP
 # reader and writer behind the extracted archive (archive.c, extract.c).
 # Third-party code: upstream's split sources as released (plus the
 # miniz_export.h its build would generate), warnings off; the
@@ -58,7 +58,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     set_tests_properties(vfs_disc PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
-# The archive (docs/port/DATA.md, "Backend 2: the archive"): extraction into
+# The archive: extraction into
 # a temporary archive and mount, compared with the ISO backend. `synth` uses
 # vfs_test's synthetic image and runs everywhere; `disc` reads the user's
 # image and is skipped (77) without it.
@@ -77,7 +77,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endif()
 
-# --- The data tables' runtime loader (docs/port/DATA.md, "The data tables") --
+# --- The data tables' runtime loader --
 # The game's copy (port/data/tables.c and port/data/gen/) is compiled into
 # ico_game by the top-level CMakeLists.txt. Here: its tests.
 include("${CMAKE_CURRENT_SOURCE_DIR}/gen/tables.cmake")

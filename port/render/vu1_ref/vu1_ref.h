@@ -5,9 +5,8 @@
  * (the quadwords the VIF UNPACK put at TOP: a GIF tag, then the vertices)
  * and returns what the program writes to the GS: per vertex the PACKED ST,
  * RGBAQ and XYZ2 quadwords, with the ADC bit, in output order. They are test
- * oracles for port/shaders/vu_*.hlsl and the mesh path's software fallback
- * for verification; docs/port/VU1_PROGRAMS.md is the description, with the
- * instruction line references the code below cites.
+ * oracles for port/shaders/vu_*.hlsl and the mesh path's software fallback.
+ * The code below cites the VU1 instruction lines it follows.
  *
  * Float semantics: plain C float arithmetic in the caller's rounding mode
  * (the simulation thread runs round toward zero, port/platform/fpenv.c),
@@ -111,7 +110,7 @@ typedef struct VuParticleOut {
 
 void vu1ref_Init(Vu1Ref *r);
 /* gsb_MakeCommonMatrix's UNPACK of 16 qwords to VU memory 0..15
- * (RdVuCommon, docs/port/RENDER_API.md "Frame lifecycle, camera and the post passes"). */
+ * (RdVuCommon). */
 void vu1ref_LoadCommon(Vu1Ref *r, const float qw[16][4]);
 /* Code 2, SET_UVOFFSET (vu1_common.h:57): mem[2].xy = qw.xy. */
 void vu1ref_SetUVOffset(Vu1Ref *r, const float qw[4]);

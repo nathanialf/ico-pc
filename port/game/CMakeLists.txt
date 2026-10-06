@@ -1,11 +1,10 @@
-# port/game: the port's gameplay options (Phase 6A, docs/port/OPTIONS.md) and
+# port/game: the port's gameplay options (Phase 6A) and
 # achievements (6E, below).
 # One module holds stick_fix, yorda_safe and mirror; ico_input, ico_sndn2 and
 # the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
 # port/config's; host_config.c is compiled by ico_pc and the tests.
-# video_options.c: the display options (renderer wave 7, R7a; docs/port/DISPLAY.md)
-# photo_mode.c: photo mode's state and camera (package PHOTO; DISPLAY.md
-# "Photo mode"); it uses rd.h's RdCamera struct only, so port/render is on
+# video_options.c: the display options (renderer wave 7, R7a)
+# photo_mode.c: photo mode's state and camera (package PHOTO); it uses rd.h's RdCamera struct only, so port/render is on
 # the include path of the headless build too (nothing of rd is linked)
 add_library(ico_options STATIC options.c video_options.c photo_mode.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -70,7 +69,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# --- Achievements (Phase 6E, docs/port/ACHIEVEMENTS.md) -----------------------
+# --- Achievements (Phase 6E) -----------------------
 # ico_gamestate.h (port/include) is the read-only game-state view and the
 # signal queue; the game's one-line hooks (ICO_HOST) include it from common,
 # fumi, script and sugipon. gamestate.c is built twice: with ICO_GS_LIVE into
@@ -78,7 +77,7 @@ endif()
 # include path and record layout), and without it into the test (a synthetic
 # sampler). achievements.c is port code: the table, the checks, the file and
 # the popups (port/ui's strings and queue, which ico_pc holds).
-# credits.c (package CRED, docs/port/EXTRAS.md "Credits"): the Extras
+# credits.c (package CRED): the Extras
 # credits' flag, lock and start, and the staff roll's port credit lines, in
 # the same library (gamestate.c suspends the achievements on its flag);
 # credits_live.c, the playback's engine, reads and writes the game's state,
@@ -139,7 +138,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# --- The model viewer (package MV, docs/port/EXTRAS.md) -----------------------
+# --- The model viewer (package MV) -----------------------
 if(TARGET ico_pc)
     add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_table.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
@@ -157,7 +156,7 @@ if(TARGET ico_pc)
 endif()
 # model_viewer_headless: the headless program from the boot through
 # Settings > Extras > Models to the first model and back to the title, its
-# log checked (test/model_viewer_headless.cmake; docs/port/TESTING.md). The
+# log checked (test/model_viewer_headless.cmake). The
 # disc image is needed (skipped without it); one game run, so alone.
 if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
                                        OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME))
@@ -174,8 +173,7 @@ if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCO
                          SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
 endif()
 
-# credits_test (package CRED; docs/port/EXTRAS.md "Credits", UI.md "Staff
-# roll"): the game's staffroll.c over a short table in the disc's forms,
+# credits_test (package CRED): the game's staffroll.c over a short table in the disc's forms,
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
 # roll's forms, and the roll ends after them; then the lock ([dev]

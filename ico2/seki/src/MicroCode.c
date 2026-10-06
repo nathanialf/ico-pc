@@ -297,7 +297,7 @@ inline void mc_Reset(void)
 
 /* ===================================================================== *
  * PC port (renderer wave 3, R3ab): the VU1 side of the DMA chains the seki
- * layer builds for path 1 (docs/port/RENDER_API.md "The mesh path").
+ * layer builds for path 1.
  *
  * On the PS2 the VIF unpacks these chains into VU1 memory and starts the
  * resident microprogram at an MSCAL/MSCALF code.  The host reads the VIF

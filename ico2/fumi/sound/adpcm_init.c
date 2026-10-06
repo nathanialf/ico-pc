@@ -31,7 +31,7 @@ static AdpcmStream adpcmStream[2]; /* derived name */
 
 static int adpcmSpuSlot[4]; /* derived name */
 
-/* PC port (package CRED; docs/port/EXTRAS.md, "Credits"): one stream opened
+/* PC port (package CRED): one stream opened
    part way in.  After ico_adpcm_set_start(no, bytes), the next open of
    stream `no` reads from `bytes` (rounded down to a 2 KB sector, which keeps
    the 0x400-byte channel interleave) instead of from its start: AdpcmOpen

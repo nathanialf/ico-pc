@@ -543,7 +543,7 @@ segments:
       # tools/assemble_vu0.py). The whole 0x50E0-byte section is byte-identical
       # across aug6, ntsc (USA retail) and pal, normal_l included (measured
       # 2026-09-04). Labels follow the DVP assembler names the PAL disc's
-      # listing preserves — see docs/MATCH_VU.md.
+      # listing preserves.
       - [0x189BD0, hasm, ico2/cluster]        # ClusterMicroProgram
       - [0x18A990, hasm, ico2/mesh]           # MeshMicroProgram
       - [0x18B380, hasm, ico2/normal_c]       # NormalCMicroProgram
@@ -552,7 +552,7 @@ segments:
       - [0x18ECB0, textbin, cod/18ECB0]  # .reginfo + pad (all zeros in rom)
       - [0x18ED00, .data, sce/libkernl/klib]  # syms: __ps2_klibinfo__  klib.o's .data (= MAIN.MAP 0x10): the library stamp "PsIIlibkernl2240" in klib.s, VMA 0x28ED00..0x28ED10
       - [0x18ED10, .data, sce/libkernl/intr]  # intr.o's .data (= MAIN.MAP 0x7A0): the alarm handler words, its entry stub and the syscall table as statics, VMA 0x28ED10..0x28F4B0
-      # --- per-TU .data carves (PAL phase 2; see docs/carve_ledger.md).
+      # --- per-TU .data carves (PAL phase 2).
       - [0x18F4B0, .data, sce/libkernl/thread]  # syms: kernEventThreadId  the member's one .data word (data pass 3), VMA 0x28F4B0..0x28F4B4, 4 B
       - [0x18F4B4, .data, sce/libkernl/kprintf]  # kprintf.o's .data (= MAIN.MAP 0x8): deci2Putchar's fill count and the character sink _printf writes through as statics, VMA 0x28F4B4..0x28F4BC, then 4 B of fill to main.o's 16-aligned run
       - [0x18F4C0, .data, ico2/common/src/main]  # syms: systemStatus db GlobalStageSetting pad stageMgrMsg SchedulerMsgQ  the TU's whole .data run as source (finishing pass P1-3), VMA 0x28F4C0..0x28FEB8, 0x9F8 B: the six MAIN.MAP main.o .data globals in map order (GlobalStageSetting is 0x1D0 here against the January map's 0x130), global per the map
@@ -730,7 +730,7 @@ segments:
       - [0x44D6F8, .rodata, ico2/sugipon/src/delayFreeManager]  # the TU's whole .rodata run as source (data pass 1: literals at the use sites, role-named statics, first-use order), VMA 0x54D6F8..0x54D850, 344 B
       - [0x44D750, .rodata, ico2/sugipon/src/geometryManager]  # the TU's whole .rodata run as source (completeness pass 5), VMA 0x54D750..0x54D7F8, 166 B emitted
       - [0x44D7F8, .rodata, ico2/sugipon/src/keyInput]  # the TU's whole .rodata run as source (data pass 1: literals at the use sites, role-named statics, first-use order), VMA 0x54D7F8..0x54D850, 88 B
-      # --- per-TU .rodata carves (PAL phase 2; see docs/carve_ledger.md).
+      # --- per-TU .rodata carves (PAL phase 2).
       - [0x44D850, .rodata, ico2/sugipon/src/motionManager2]  # the TU's whole .rodata run as source (data pass 5): the constant run, the EUC-JP strings and the switch table in one row, VMA 0x54D850..0x54DA48, VMA 0x54D850..0x54DA48, 504 B
       - [0x44DA48, .rodata, ico2/sugipon/src/pool]  # the TU's whole .rodata run as source (VMA 0x54DA48..0x54DA80, 0x38 B: 8 B of alignment fill as MAIN.MAP shows before pool.o's 16-aligned .rodata, then the work rect, the file-name literal and the screen origin; chain 3 pass 132), quaternion's row follows directly
       - [0x44DA80, .rodata, ico2/sugipon/src/quaternion]  # the TU's whole .rodata run as source (data pass 1: literals at the use sites, role-named statics, first-use order), VMA 0x54DA80..0x54DB10, 144 B
@@ -986,8 +986,7 @@ segments:
       - [0x5389C0, .rodata, sce/libc/stdlib/strtod]  # syms: 0x006389C0  _strtod_r's 46-arm jump table then its three rounding doubles; VMA 0x6389C0..0x638A90
       - [0x538A90, .rodata, sce/libc/s_infconst]  # libc.a member s_infconst.o: no code, the one double __infinity (MAIN.MAP line 6785, .rodata 0x8), VMA 0x638A90..0x638A98; .lit4 starts on main.o's 256-byte alignment at 0x638B00
       - [0x538B00, .lit4, ico2/common/src/main]  # the TU's one pool word, the random seed 1.2345678f Main passes (completeness pass 36), VMA 0x638B00, 256-aligned as the section head
-      # --- per-TU .lit4 constant-pool carves (see docs/NOTES.md ".lit4 pools",
-      # docs/carve_ledger.md "PAL phase 1").  A TU that writes its float
+      # --- per-TU .lit4 constant-pool carves (PAL phase 1).  A TU that writes its float
       # constants as INLINE LITERALS makes ee-as intern them into that TU's own
       # anonymous `.lit4`; a dot-form subsegment here anchors that pool at its
       # shipped VMA.  The WHOLE carved run must be produced by the TU's object.

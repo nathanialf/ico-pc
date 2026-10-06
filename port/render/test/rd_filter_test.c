@@ -1,5 +1,4 @@
-/* rd_filter_test.c: the draw filter (package MV; rd.h rd_SetDrawFilter,
- * RENDER_API.md "The draw filter") on synthetic keys, recorded without a
+/* rd_filter_test.c: the draw filter (package MV; rd.h rd_SetDrawFilter) on synthetic keys, recorded without a
  * device (rd__InitRecordOnly):
  *   - off (the default and after rd_SetDrawFilter(false, ...)): every draw
  *     is recorded;

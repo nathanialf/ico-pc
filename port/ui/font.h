@@ -1,7 +1,7 @@
 /*
  * port/ui/font.h
  *
- * The port's own text (Phase 6, package 6B; docs/port/UI.md): Arimo
+ * The port's own text (Phase 6, package 6B): Arimo
  * Regular (SIL OFL 1.1, port/assets/fonts/; 6C replaced EB Garamond), embedded in the program,
  * rasterised at run time by stb_truetype into glyph atlases and drawn
  * through rd as GS sprites in UI space.
@@ -24,7 +24,7 @@
  * page is 512 x 512, kept as R8 coverage on the CPU and uploaded as an
  * RGBA8 texture (white, alpha = coverage in GS units, 0x80 = 1.0) so the
  * game's sprite path draws it: rd has no R8 texture entry point and no way
- * to select font.hlsl (docs/port/UI.md, "Requested rd API").
+ * to select font.hlsl.
  *
  * Drawing: ui_DrawText records GS sprites with uvFixed texels into the
  * current rd list (the caller selects it), RD_SPACE_UI, MODULATE with TCC
@@ -56,7 +56,7 @@ extern "C" {
    capitals (1409 / 2048 = 0.688 em) at the height of the menu lettering of
    the Options and vibration screens (texFile 21, 20-texel rows shown 20
    field lines tall): about 18.7 y units, measured on the title frame of a
-   run (docs/port/UI.md, "Coordinates and metrics"). 27 gives 18.6. */
+   run. 27 gives 18.6. */
 #define UI_MENU_TEXT_SIZE 27.0f
 /* package GHOST: atlas pixels per grid y unit of a glow (UI_ADDITIVE) in
    overlay mode: the menu sheets' texel density (a 20-texel row is 40 y
@@ -140,7 +140,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
 /* one untextured sprite (the popup panel), x0, y0, x1, y1 in the grid; the
    blend is 0x44 with the state set as ui_DrawText sets it */
 void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
-/* Renderer R7d (docs/port/RENDER_API.md "Frame rate and interpolation", "Keys"): the owner the
+/* Renderer R7d: the owner the
    next draws are keyed by, so the presenter blends them between two ticks.
    A string's draw is keyed by a hash of the string, its alignment flags,
    its atlas page and the owner (0: the string alone); the n-th draw of one
@@ -150,7 +150,7 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
 uint64_t ui_SetDrawKey(uint64_t owner);
 
 /* Package OV: the presentation overlay (port/render/rd.h
-   rd_SetPresentOverlay; docs/port/UI.md "Popups").  Between
+   rd_SetPresentOverlay).  Between
    ui_BeginOverlay(ctx) and ui_EndOverlay(), inside an rd overlay callback,
    ui_DrawText, ui_DrawTextXf and ui_DrawRect draw on the output through
    rd_OverlayPrims instead of recording into the current rd list:
@@ -181,9 +181,7 @@ void ui_EndOverlay(void);
 int ui_OverlayActive(void);
 void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
 
-/* Package DEF: deferred text (port/render/rd.h rd_DeferredText;
-   docs/port/UI.md "Menu text", docs/port/RENDER_API.md "The deferred text
-   pass").  ui_DrawTextDeferred draws as ui_DrawTextXf does (the glyph quads
+/* Package DEF: deferred text (port/render/rd.h rd_DeferredText).  ui_DrawTextDeferred draws as ui_DrawTextXf does (the glyph quads
    into the current rd list, the halo included) and records, in place before
    them, an item saying what was drawn: the string (at most 255 bytes, cut at
    a code point), the anchor, size, flags (UI_ADDITIVE: the item is the
@@ -208,7 +206,7 @@ void ui_InstallDeferredText(int on);
 
 /* ------------------------------------------- the faces (package GFONT) */
 
-/* The port's text has two faces (docs/port/UI.md, "The font"); the game's
+/* The port's text has two faces; the game's
    own words (its menu sprites, subtitles, staff roll) are never drawn with
    either: they keep their textures and bitmap font.
    - UI_FACE_GAME, the game's own lettering: the letters of the PAL menu

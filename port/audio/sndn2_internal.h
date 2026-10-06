@@ -2,8 +2,8 @@
  * port/audio/sndn2_internal.h
  *
  * What sndn2_host.c (the packet dispatcher and the reply page) and
- * stream.c (the ADPCM and PCM stream engines) share.  Packet words are as
- * docs/research/sndn2drv.md lays them out.
+ * stream.c (the ADPCM and PCM stream engines) share.  Packet words follow the SNDN2DRV.IRX's
+ * packet layout.
  */
 #ifndef ICO_PORT_AUDIO_SNDN2_INTERNAL_H
 #define ICO_PORT_AUDIO_SNDN2_INTERNAL_H

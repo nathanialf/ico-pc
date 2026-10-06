@@ -1,5 +1,5 @@
 /* photo_test.c: photo mode's state and camera (port/game/photo_mode.c,
- * package PHOTO; docs/port/DISPLAY.md "Photo mode").  CPU only.
+ * package PHOTO).  CPU only.
  *
  *   identity  nothing moved: the override is the game camera, byte for byte
  *   orbit     a second of the left stick right at stick_speed 1: 90 degrees

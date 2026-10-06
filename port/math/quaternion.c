@@ -2,7 +2,7 @@
  * port/math/quaternion.c
  *
  * sugipon/src/quaternion.c's VU0 routines. Quaternions are (x, y, z, w)
- * with w the scalar part. docs/port/MATH.md has the notes per routine.
+ * with w the scalar part.
  */
 #include <string.h>
 

@@ -1,7 +1,7 @@
 /*
  * port/ui/settings.c
  *
- * The Settings menu (settings.h; docs/port/SETTINGS.md, docs/port/UI.md).
+ * The Settings menu (settings.h).
  * Port layouts in the layout extension, run by the game's layout code; this
  * file builds them, repoints the game's rows at the entry rows, and holds
  * the screens' procs: the value texts, left/right on a value, Cross on an
@@ -116,9 +116,8 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE_OPTIONS, LAYOUT_TITLE_C
    data has Continue at 135, New Game at 165 and the copyright line at 195,
    the next step below New Game, which left no room for the port rows.
    Where the block can go was measured on window runs' titles (960 x 720
-   Original, 1920 x 1440 Enhanced at full height; docs/port/UI.md, "Title
-   rows (V2)"): the copyright line's sprite, its rim and descenders
-   included, ends 17 pixels above the picture's end at 195 (5 field
+   Original, 1920 x 1440 Enhanced at full height): the copyright line's sprite, its rim and
+   descenders included, ends 17 pixels above the picture's end at 195 (5 field
    lines), and the logo ends 384 pixels down; Continue at 119 and the
    copyright line at 198 leave about 6 pixels at either end. */
 #define TITLE_PITCH 20
@@ -289,7 +288,7 @@ static const int kCrtStr[ICO_CRT_MODES] = {UI_STR_VAL_CRT_SCANLINES, UI_STR_VAL_
 /* package CRT2: the CRT filter in force (a mode at a strength above 0, as
    rd__CrtOn sees it): the scene renders at 1x, and the Resolution row reads
    "1x (CRT)" and does not step; the file's resolution is kept and is in
-   force again with the filter off (docs/port/DISPLAY.md "CRT filter") */
+   force again with the filter off */
 static int crtForcesNative(const IcoVideoOptions *o)
 {
     return o->crt && o->crtStrength > 0.0f;
@@ -419,7 +418,7 @@ static int resolutionIndex(const IcoVideoOptions *o)
 }
 
 /* ------------------------------------------------------------- Extras
- * Settings > Extras (docs/port/EXTRAS.md), shown from the title only: the
+ * Settings > Extras, shown from the title only: the
  * galleries leave the stage, and the pause menu has no Extras row (it is
  * masked and skipped by the cursor).  Music, Models and Credits: each row's
  * hook returns the layout to open, or -1 when it cannot open (not built,
@@ -433,13 +432,13 @@ static int isExtrasOpt(int opt)
 
 /* package CRED: true once the ending has been reached: the port's ending
    achievement or its clear count, or [dev] unlock_credits (credits.c,
-   ico_credits_unlocked; docs/port/EXTRAS.md, "Credits") */
+   ico_credits_unlocked) */
 static int creditsUnlocked(void)
 {
     return ico_credits_unlocked();
 }
 
-/* the music gallery's page (gallery.h, docs/port/MUSIC.md) */
+/* the music gallery's page (gallery.h) */
 static int extrasMusic(void)
 {
     if (!s_built || s_pages[UI_PAGE_MUSIC].layout < 0) {
@@ -450,7 +449,7 @@ static int extrasMusic(void)
 }
 
 /* package MV: the model viewer's list (port/game/model_viewer.c registers
-   it; docs/port/EXTRAS.md, "Models"), -1 without one */
+   it), -1 without one */
 static int (*s_modelsEnter)(void);
 
 void ui_SettingsSetModelsHandler(int (*fn)(void))
@@ -464,7 +463,7 @@ static int extrasModels(void)
 }
 
 /* package CRED: the credits: the ending from the staff roll's first scene
-   (ico_credits.h; docs/port/EXTRAS.md, "Credits").  The menu closes on the
+   (ico_credits.h).  The menu closes on the
    game's empty layout while the stage changes, as leaving it saves first;
    the title comes back with the cursor on Settings.  Locked: nothing. */
 static void titleCursorOn(int to, int row);
@@ -1011,7 +1010,7 @@ static void buildQuitScreen(void);
 static int s_quitLayout = -1;
 static void titleCursorOn(int to, int row);
 
-/* the music gallery's page (docs/port/MUSIC.md, "The page"), in field
+/* the music gallery's page, in field
    lines: the list, the status line, the progress bar (its rim, the track
    inside it, the times beside it) and the transport */
 #define GAL_LIST_Y 38
@@ -1239,7 +1238,7 @@ static void buildEntries(void)
         if (title) {
             P(row)->centerX = 1;
             /* hidden unless the title's proc shows it, as New Game (49 to
-               51 are masked by default; open item 9) */
+               51 are masked by default) */
             P(row)->defaultMask = 1;
         }
         P(row)->right = s_pages[UI_PAGE_MAIN].layout;

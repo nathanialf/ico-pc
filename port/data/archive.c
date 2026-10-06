@@ -1,8 +1,7 @@
 /*
  * port/data/archive.c
  *
- * The VFS backend over `ico.o2r` (archive.h, docs/port/DATA.md "Backend 2:
- * the archive"). At mount, miniz reads the ZIP's central directory over this
+ * The VFS backend over `ico.o2r` (archive.h). At mount, miniz reads the ZIP's central directory over this
  * file's own read callback, meta.json is parsed, and every stored entry's
  * data offset is found from its local header; from then on sector reads are
  * plain fseek/fread on the archive file.

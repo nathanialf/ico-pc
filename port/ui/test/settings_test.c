@@ -1,5 +1,4 @@
-/* settings_test.c: the Settings menu (Phase 6, 6C; docs/port/UI.md
- * "Settings menu", docs/port/SETTINGS.md).  CPU only.
+/* settings_test.c: the Settings menu (Phase 6, 6C).  CPU only.
  *
  *   - the menu builds over fake game tables shaped like the PAL ones: the
  *     pages and their rows, in order, with the expected labels;
@@ -914,8 +913,7 @@ static void testRepoint(void)
    960 x 720 on a window run's title, in y units (720 / 448 pixels each) */
 #define COPYRIGHT_CAPS 15.5f
 
-/* The entry rows on the game's grid (docs/port/UI.md, open items 9 and 10,
-   "Title rows (V2)"): the title laid out by the port, Continue (49), New
+/* The entry rows on the game's grid: the title laid out by the port, Continue (49), New
    Game (50, and 51 at the same y), Settings and "Quit to desktop" one pitch
    apart, the same space between their capitals, and between Quit's and
    the copyright line's (48; its capitals 15.5 y units, measured; the
@@ -2944,7 +2942,7 @@ static void snap1080(const char *name, int wantItems)
     free(px);
 }
 
-/* the save screen's values (docs/port/UI.md "Save screens"): layout 14's
+/* the save screen's values: layout 14's
    slot numbers (files 1, 2 and 5 used, the others empty) and layout 15's
    play time "12:34:56", at the PAL rows' places, their texel rectangles the
    menu text table's, everything else of the two layouts masked.  Package

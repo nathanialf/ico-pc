@@ -56,7 +56,7 @@ static int wayKidnap; /* derived name */
 extern void SetInfoSpKidnapGenerator(short *info);
 /* this TU passes an int *; generator.h declares a short * */
 extern void SetInfoSpKidnapEnemy(int *work);
-/* port/game/options.c: [gameplay] yorda_safe, docs/port/OPTIONS.md */
+/* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);
 
 #include "eeword.h"
@@ -64,7 +64,7 @@ extern int ico_opt_yorda_safe(void);
 #include "memory.h"
 #include <stdio.h>
 
-/* Port (docs/port/LOADERS.md, "The back-stage save word").  backStageSave
+/* Port.  backStageSave
  * writes the carrier, a GObj *, into the save image as 4 bytes: on the PS2
  * the EE address of its entry in the GObj table (gobj.c), 0x174 bytes an
  * entry.  The table is the first block allocated in the stage partition

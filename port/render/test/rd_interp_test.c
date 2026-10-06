@@ -1,5 +1,4 @@
-/* rd_interp_test.c: presentation between ticks (renderer wave 7, R7b;
- * docs/port/RENDER_API.md "Frame rate and interpolation").
+/* rd_interp_test.c: presentation between ticks (renderer wave 7, R7b).
  *
  * Two synthetic frames with keyed draws, blended by rd__InterpFrame.
  * Without a device (recording only):

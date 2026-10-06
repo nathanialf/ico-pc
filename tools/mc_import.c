@@ -5,8 +5,7 @@
  *
  * Imports ICO's save (BESCES-50760ico) from each PS2 memory card image
  * (.ps2, .bin) or .psu archive into the card folder SAVES, the folder
- * [paths] saves (or saves2) names (port/save/mc_import.c; docs/port/SAVES.md,
- * "Importing saves"). Other games' entries are listed and left alone.
+ * [paths] saves (or saves2) names (port/save/mc_import.c). Other games' entries are listed and left alone.
  * Exit 0 when every file gave a save, 1 when one held none, 2 on an error.
  */
 #include "mc_import.h"

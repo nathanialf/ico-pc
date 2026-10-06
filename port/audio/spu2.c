@@ -16,11 +16,10 @@
  *
  * That is the reference renderer.  spu2_render gets the same bits faster by
  * running stretches of up to 256 frames voice by voice ("Chunked
- * rendering" below; AUDIO.md, "Render cost").
+ * rendering" below).
  *
  * Every behaviour is from psx-spx's SPU description unless a comment says
- * otherwise; docs/port/AUDIO.md lists the sources and the approximations
- * (DIVERGENCES.md rows A1..).
+ * otherwise.
  */
 #include "spu2.h"
 
@@ -826,7 +825,7 @@ static void wb(uint32_t base, int32_t v, int irq)
         irq_check(a, 1);
 }
 
-/* Steps 3-6 of a frame for core ci (AUDIO.md, "One frame"), after its
+/* Steps 3-6 of a frame for core ci, after its
    voices: `bus` the four voice buses (dry L, dry R, wet L, wet R) before
    saturation, v1 and v3 voice 1's and 3's outputs for the write-back, `p`
    the reverb plan (NULL: built here), `irq` whether a write-back can raise

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """tools/softdouble_gate.py [--root DIR] [--build BUILD_DIR]
 
-The gate for docs/port/MATH.md, "Doubles": the game functions that did
-`double` arithmetic through the EE's soft float (the object census in
-docs/research/float-semantics.md, 33 functions, and the two static inline
-helpers expanded into them) must do it through port/math/softdouble.h, so
+The gate for the soft doubles: the game functions that did
+`double` arithmetic through the EE's soft float (33 functions, and the two
+static inline helpers expanded into them) must do it through port/math/softdouble.h, so
 that no host double arithmetic, under whatever rounding mode, reaches them
 again.
 

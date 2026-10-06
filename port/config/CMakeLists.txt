@@ -3,7 +3,6 @@
 # [game] language or the host's locale). The parsing, writing and ini layering
 # are port/platform/host_config.c, which ico_pc and the tests compile
 # themselves; the clocks (platform/clock.c) are ico_platform's.
-# docs/port/CONFIG.md describes them.
 add_library(ico_config STATIC config.c sysconf.c)
 target_include_directories(ico_config
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"

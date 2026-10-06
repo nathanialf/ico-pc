@@ -1,7 +1,7 @@
 /*
  * port/input/pad_host.c
  *
- * libpad for the host build (docs/port/INPUT.md): one DualShock 2 in port 0
+ * libpad for the host build: one DualShock 2 in port 0
  * slot 0 when something feeds it, nothing otherwise.
  *
  * Feeds, in priority order: the pad script (port/input/pad_script.h, the
@@ -87,7 +87,7 @@ void ico_input_set_vpad(const IcoVirtualPad *v)
     s_vpad = *v;
 }
 
-/* stick fix and mirror live in port/game/options.c (docs/port/OPTIONS.md) */
+/* stick fix and mirror live in port/game/options.c */
 void ico_input_set_stick_fix(int on)
 {
     ico_opt_set_stick_fix(on);

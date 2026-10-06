@@ -1,5 +1,4 @@
-/* rd_present_test.c: the display options (renderer wave 7, R7a;
- * docs/port/RENDER_API.md "Presets and display options", docs/port/DISPLAY.md).
+/* rd_present_test.c: the display options (renderer wave 7, R7a).
  *
  * GsBase.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
  * window build compiles them (as rd_gsbase_test does), the display options
@@ -607,8 +606,7 @@ static RdSettings originalSettings(void)
 
 /* What the renderer before R7a produced for the rich frame on llvmpipe:
  * rd_replay_tool (pre-R7a build) on rd_pixel_test's dump of this frame,
- * DISPLAY, SCENE and --present 960x720 (RENDER_API.md "Presets and display
- * options").  R-POST moved the reduction onto the GS sprite model (the GS
+ * DISPLAY, SCENE and --present 960x720.  R-POST moved the reduction onto the GS sprite model (the GS
  * integer bilinear instead of the hardware's, at most 1 LSB apart;
  * rd_pixel_test checks it exactly), so DISPLAY and the present are that
  * build's values for those two (0xde837c63a5e63c88, 0xbc970416f934e0c1
@@ -1468,8 +1466,7 @@ static void checkOverlayAt(uint32_t w, uint32_t h)
         /* the rich frame is all UI: the replay's flip and the present's
          * cancel, and since R-POST the reduction samples the mirror image
          * too, so the box shows the same picture, exactly where the box's
-         * horizontal scale gives mirrored bilinear weights equal ones
-         * (RENDER_API.md "Mirror mode"), else within 1 LSB */
+         * horizontal scale gives mirrored bilinear weights equal ones, else within 1 LSB */
         int maxd = 0;
         for (size_t i = 0; i < n; i++) {
             const int d = abs((int)plain[i] - (int)plainM[i]);

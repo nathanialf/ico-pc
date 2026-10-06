@@ -1,5 +1,4 @@
 /* d3d12_internal.h: shared state of the D3D12 backend of port/rhi/rhi.h.
- * port/rhi/d3d12/README.md describes the design.
  *
  * C through the COM C interfaces (COBJMACROS: ID3D12Device_CreateX(dev,
  * ...)); WIDL_C_INLINE_WRAPPERS gives the methods that return structures

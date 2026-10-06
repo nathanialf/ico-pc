@@ -2,7 +2,7 @@
  * port/save/mc_import.c
  *
  * ICO's save out of a PS2 memory card image or a save archive, into the card
- * folder mc_host.c reads (docs/port/SAVES.md, "Importing saves"):
+ * folder mc_host.c reads:
  *
  *   raw images (.ps2, .bin): the card's own file system. A superblock at
  *     page 0 ("Sony PS2 Memory Card Format "), a FAT reached through the

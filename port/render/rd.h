@@ -123,8 +123,7 @@ typedef enum RdProg {
     RD_PROG_COUNT
 } RdProg;
 
-/* Mode 3 (code 18) is particle's BEGIN_PARTICLE, RD_PROG_PARTICLE (RENDER_API.md
- * "The mesh path", item 1). */
+/* Mode 3 (code 18) is particle's BEGIN_PARTICLE, RD_PROG_PARTICLE. */
 
 typedef enum RdPrim {
     RD_PRIM_POINTS = 0,     /* GS PRIM 0 */
@@ -148,8 +147,7 @@ typedef enum RdStencilMode {
     RD_STENCIL_DECR,         /* shadow strip, sign < 0 */
     RD_STENCIL_TEST_NONZERO, /* shadow resolve */
     /* Wave 4 (R4b): the resolve's bit passes, RD_STENCIL_RESOLVE_BIT0 + k
-     * for count bit k (0..5): stencil EQUAL with read mask 1 << k
-     * (RENDER_API.md "Shadows") */
+     * for count bit k (0..5): stencil EQUAL with read mask 1 << k */
     RD_STENCIL_RESOLVE_BIT0
 } RdStencilMode;
 
@@ -161,7 +159,7 @@ typedef enum RdTargetFormat {
 } RdTargetFormat;
 
 /* Named targets that stand in for fixed GS VRAM regions.  Sizes are in GS
- * pixels; the preset scales them (RENDER_API.md "Buffers"). */
+ * pixels; the preset scales them. */
 typedef enum RdTargetId {
     RD_TARGET_SCENE =
         0, /* FBP 0x40 / TBP 0x800: 512 x 512 (PAL) or 512 x 448 (NTSC), with depth+stencil */
@@ -172,8 +170,7 @@ typedef enum RdTargetId {
     RD_TARGET_SHADOW1, /* FBP 0x1E2 / TBP 0x3C40: blur level 2, 128 x 128 */
     RD_TARGET_SHADOW2, /* FBP 0x1EA / TBP 0x3D40: blur level 3, 64 x 64 */
     /* Wave 5 (R5a): staticBlur.c's work buffers after FullScreenEffectBefore
-     * (workBase 0x2800, 0x2A00, 0x2E00, 0x3000; RENDER_API.md "Full-screen effects and the raw
-     * packet builders").
+     * (workBase 0x2800, 0x2A00, 0x2E00, 0x3000).
      * GifPacket.c's decoder still maps FBP 0x160 / TBP 0x2C00 to WORK1 and
      * FBP 0x180 / TBP 0x3000 to WORK2, from wave 2; staticBlur.c no longer
      * goes through it. */
@@ -346,13 +343,13 @@ typedef struct RdSettings {
     uint8_t _pad[3];
     /* Wave 7 (R7a): the internal scene resolution in Enhanced, in texels:
      * the scene's texture is sceneWidth x sceneHeight (GS coordinates
-     * unchanged, RENDER_API.md "Presets and display options"); 0 x 0 = the output's: the
+     * unchanged); 0 x 0 = the output's: the
      * presentation box in the window. */
     uint32_t sceneWidth, sceneHeight;
     /* > 0: the scene's texture is this factor of the GS size instead
      * (vertically; horizontally times aspect / (4/3)), e.g. 2 */
     float sceneScale;
-    /* Package CRT (rd_crt.c; DISPLAY.md "CRT filter"): the CRT filter, a
+    /* Package CRT (rd_crt.c): the CRT filter, a
      * present-time pass in either preset that replaces the box blit and
      * never touches SCENE or DISPLAY.  crtMode RD_CRT_OFF (0, a zeroed
      * RdSettings) presents as before, byte for byte; crtStrength 0..1 lerps
@@ -365,7 +362,7 @@ typedef struct RdSettings {
     float crtScanlines, crtMask, crtHalation, crtBloom, crtCurvature;
 } RdSettings;
 
-/* RdSettings.crtMode (package CRT): what each imitates, DISPLAY.md */
+/* RdSettings.crtMode (package CRT): what each imitates */
 typedef enum RdCrtMode {
     RD_CRT_OFF = 0,
     RD_CRT_SCANLINES = 1, /* scanlines alone: no mask, no glow, flat */
@@ -409,8 +406,7 @@ void rd_BeginFrame(void);
 void rd_EndFrame(int keep);
 /* Where the GPU work the game's calls cause runs (rd_EndFrame's replay and
  * present in the Original preset, rd_BeginFrame's target re-creation, the
- * FMV picture's present; docs/port/PLATFORM.md "Fiber stacks and host
- * calls").  The game calls rd from a fiber with a 256 KB stack; the driver
+ * FMV picture's present).  The game calls rd from a fiber with a 256 KB stack; the driver
  * (pipeline creation, present) may need far more.  The window build sets
  * call to ico_sched_call_on_host, which runs fn(arg) on the host stack in
  * the host FP mode and returns; NULL (the default, tests and tools) calls
@@ -449,8 +445,7 @@ void rd_ResizeOutput(uint32_t width, uint32_t height);
  * the view's inverse (w = cut), g_clip = near, far, zoom, aspect. */
 void rd_SetCamera(const RdCamera *cam);
 
-/* ------------------------------------------ interpolation (wave 7, R7b)
- * docs/port/RENDER_API.md "Frame rate and interpolation".  The simulation keeps its tick; with
+/* ------------------------------------------ interpolation (wave 7, R7b).  The simulation keeps its tick; with
  * RdSettings.interpolate in the Enhanced preset rd_EndFrame only closes the
  * frame, and the host presents as often as it likes with rd_Present(alpha):
  * the last closed frame replayed with every keyed draw blended from the
@@ -498,8 +493,7 @@ typedef struct RdPresentClock {
 float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
                            double nominalMs);
 
-/* ------------------------------------------- mirror mode (wave 7, R7c)
- * docs/port/RENDER_API.md "Mirror mode".  The game's mirror mode (chosen at New
+/* ------------------------------------------- mirror mode (wave 7, R7c).  The game's mirror mode (chosen at New
  * Game, port/game/options.h ico_opt_mirror) flips the presented picture
  * horizontally: the presenter's step 2 samples DISPLAY right to left, so
  * every present (Original, Enhanced, interpolated) is mirrored; RD_SPACE_UI
@@ -513,8 +507,7 @@ float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, dou
 void rd_SetMirror(int on);
 bool rd_MirrorActive(void);
 
-/* ---------------------------------- presentation overlay (package OV)
- * docs/port/RENDER_API.md "The presentation overlay".  The port's own UI
+/* ---------------------------------- presentation overlay (package OV).  The port's own UI
  * (port/ui's popups) drawn on the output itself, after the presenter's box
  * blit (rd_present.c rd__PresentRecord), at the output's resolution:
  * outside the game's frame, so it is never reduced, never in DISPLAY's
@@ -573,8 +566,7 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
 
-/* ------------------------------------------------ photo mode (package PHOTO)
- * docs/port/RENDER_API.md "Photo mode".  A free camera over the paused
+/* ------------------------------------------------ photo mode (package PHOTO).  A free camera over the paused
  * picture: the game keeps its pause state (the simulation is frozen and
  * reads nothing of this), and every present replays the last full scene
  * frame through another camera.
@@ -618,8 +610,7 @@ bool rd_PhotoSceneCamera(RdCamera *out);
 bool rd_CapturePresented(const char *png);
 int rd_CaptureResult(char *path, uint32_t pathSize);
 
-/* ---------------------------------------- deferred text (package DEF)
- * docs/port/RENDER_API.md "The deferred text pass".  Text the game shows in
+/* ---------------------------------------- deferred text (package DEF).  Text the game shows in
  * lists 11 and 12 (the layout's menu rows, through port/ui) recorded twice:
  * as an item that says what to write, and as the glyph quads that write it
  * into SCENE.  A present of the Enhanced preset with a renderer registered
@@ -670,8 +661,7 @@ void rd_DeferredTextQuads(int on);
 void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user);
 bool rd_DeferredTextActive(void);
 
-/* ------------------------------------- the draw filter (package MV)
- * docs/port/RENDER_API.md "The draw filter".  The model viewer
+/* ------------------------------------- the draw filter (package MV).  The model viewer
  * (port/game/model_viewer.c) shows one object of a loaded stage on its own:
  * every other world draw is left out of the frame where it is recorded.
  *
@@ -752,7 +742,7 @@ void rd_SamplerWrap(RdWrap s, RdWrap t);
 void rd_Gouraud(int iip);
 /* Package AA1: PRIM.AA1, the GS's edge antialiasing (0 = off, the default).
  * It acts on lines and triangles only: their edge pixels take the coverage
- * as As and write no Z (RENDER_API.md "GS to pipeline mapping"); points and
+ * as As and write no Z; points and
  * sprites ignore it.  GifPacket.c sets it from PRIM and returns it to 0 at
  * the end of the packet, so the state never leaks into another list. */
 void rd_AA1(int aa1);
@@ -774,8 +764,7 @@ void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, in
 /* Note (wave 1, from GifPacket.c gif_SetDrawEnviroment): the GS always
  * centres XYOFFSET at (2048 - w/2, 2048 - h/2); useOffset adds the
  * screenOffsetX/Y field offset on top, which the preset supplies (zero in
- * Original; the field parity's half line is RD_TARGET_HALF_Y, RENDER_API.md
- * "Frame lifecycle, camera and the post passes").  depth names the
+ * Original; the field parity's half line is RD_TARGET_HALF_Y).  depth names the
  * target whose depth buffer is bound (pass the colour target again for
  * SCENE; id 0 = none).  The call also resets the scissor to gsW x gsH, as
  * gif_SetDrawEnviroment writes SCISSOR_1. */
@@ -809,7 +798,7 @@ RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc sr
 void rd_UpdateTexture(RdTex t, const void *rgba8);
 void rd_DestroyTexture(RdTex t);
 
-/* Package R8 (docs/port/RENDER_API.md "Textures"): a one-channel coverage
+/* Package R8: a one-channel coverage
  * texture, w * h bytes (null: zero), the port's font atlas pages.  A byte
  * is the coverage in GS alpha units (0x80 = full, as an RGBA8 texture's
  * alpha byte) and stands for a white texel with that alpha: screen prims
@@ -829,7 +818,7 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
 /* -------------------------------------------------------------- meshes */
 
 /* Wave 3 (R3ab): the mesh path is rd_mesh.h's (the VU1 program shaders on
- * the packets the game builds, docs/port/RENDER_API.md "The mesh path").  The
+ * the packets the game builds).  The
  * four semantic draw calls below are kept for an Enhanced path and record
  * nothing; rd_CreateMesh keeps a record without geometry. */
 
@@ -861,7 +850,7 @@ void rd_DrawParticles(const RdParticleBatch *batch, RdKey key);
 /* T1 (port UI text): uvFixed = RD_UV_FIXED_CONTINUOUS is uvFixed 1 for
  * sprites that are not PS2 content (port/ui's glyph quads): on a scaled
  * target they rasterise continuously, without the GS-pixel snapping and the
- * UV shift of RENDER_API.md "Presets and display options".  At scale 1 it is uvFixed 1. */
+ * UV shift.  At scale 1 it is uvFixed 1. */
 #define RD_UV_FIXED_CONTINUOUS 2
 void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
                     RdKey key);
@@ -882,7 +871,7 @@ void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
  * Shadow.c uses the exact form below. */
 
 /* ------------------------------------------------- shadows (wave 4, R4b)
- * Shadow.c's count (docs/port/RENDER_API.md "Shadows").  The PS2 adds each
+ * Shadow.c's count.  The PS2 adds each
  * volume face into FBP 0x142 with ALPHA 0x68 FIX 0x80 and COLCLAMP 0, the
  * face colour 0x04 or 0xFC by its facing, so a pixel ends at 4 n mod 256
  * for n the net count of the faces in front of the scene.  rd keeps n mod
@@ -919,7 +908,7 @@ void rd_ShadowResolve(void);
  * register decoder (GifPacket.c) maps that block to the named AA0 target,
  * which has no depth buffer and is 256 x 256 (the queen barrier's block is
  * 512 x 256).  These calls let the game files bind a per-frame target of the
- * block's own size in its place (docs/port/RENDER_API.md "Render-to-texture surfaces"):
+ * block's own size in its place:
  *
  * rd_GsNamedBlock  the named target GifPacket.c's decoder maps a FRAME at
  *                  block tbp (FBP = tbp / 32) of gsW x gsH to (its
@@ -961,7 +950,7 @@ void rd_PopCamera(void);
  * gif_MoveImage: fullscreen or rectangle passes between targets.  Recorded
  * into the current list like any draw. */
 void rd_Post(RdPostKind kind, const RdPostParams *params);
-/* Wave 4 (R4c), RD_POST_FOG (fog_DrawFog, docs/port/RENDER_API.md "Depth fog"): the fog sprite
+/* Wave 4 (R4c), RD_POST_FOG (fog_DrawFog): the fog sprite
  * alone, drawn with the state in force (the caller
  * records ZFog.c's register writes as rd state first: the colour target,
  * TEX0 as rd_TargetTexture(SCENE, RD_VIEW_DEPTH) with MODULATE and TCC RGBA,
@@ -976,8 +965,7 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  *   rect     the two XYZ2 corners as the GS gets them, 12.4 window
  *            coordinates: x0, y0, x1, y1
  *   uv       the two UVs, 12.4 texels: u0, v0, u1, v1 */
-/* Wave 5 (R5a), RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR (staticBlur.c,
- * docs/port/RENDER_API.md "Full-screen effects and the raw packet builders"): one GS sprite, PRIM
+/* Wave 5 (R5a), RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR (staticBlur.c): one GS sprite, PRIM
  * 0x116 or 0x406
  * with ABE as gif_SpriteSensitiveOrg sends it, drawn with the state in force
  * (target, depth, texture, TEX1, CLAMP, TEXA, ALPHA, ABE, PABE, FBA, TEST,
@@ -1003,8 +991,7 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  * literal PS2 sizes); in Enhanced outputHeight / 448, at least 1 and at
  * most 2, so blur radii stay a constant fraction of the screen.  Target
  * allocation reads it; no setting selects Enhanced yet, and the replay of
- * scaled work buffers is not implemented (RENDER_API.md "Full-screen effects and the raw packet
- * builders"). */
+ * scaled work buffers is not implemented. */
 float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight);
 
 /* ------------------------------------- frame lifecycle and camera (R2c) */
@@ -1063,8 +1050,7 @@ float rd_TargetZScale(RdTarget t);
  * referenced from the current position of every one of the 13 lists each
  * time it is built.  Matrices are column-major float[16] as the scratchpad
  * holds them (matrixptr offsets in parentheses).  Nothing consumes it before
- * wave 3; rd keeps the last one recorded in the open frame
- * (docs/port/RENDER_API.md "VU parameter block"). */
+ * wave 3; rd keeps the last one recorded in the open frame. */
 typedef struct RdVuCommon {
     float unitW[4];       /* qw 0: 0, 0, 0, 1 */
     float clip[4];        /* qw 1: 4095, 4095, 0, 16777215 */
@@ -1102,7 +1088,7 @@ typedef struct RdStats {
 const RdStats *rd_GetStats(void);
 
 /* Package P1: one record per replay (rd_EndFrame's, rd_Present's, the
- * replay tool's), docs/port/RENDER_API.md "Performance".  CPU phases in ms:
+ * replay tool's).  CPU phases in ms:
  * interp (rd__InterpFrame building the blended copy), wait (rhi_WaitFrame:
  * the GPU finishing the frame RHI_FRAMES_IN_FLIGHT replays ago), acquire
  * (the swapchain image), upload (textures, meshes, temporary target clears

@@ -2,7 +2,7 @@
  *
  * What is pipeline state and what is not
  * --------------------------------------
- * The shaders (port/shaders, docs/port/SHADERS.md) take the alpha test
+ * The shaders (port/shaders) take the alpha test
  * (ATST, AREF, the AFAIL split pass), the texture function, TCC, TEXA, FBA,
  * PABE and the blend factor source as DrawCB uniforms.  So the pipeline key
  * (RdPipelineKey, rd_state.h) is normalised: atst is always ALWAYS, pabe and
@@ -13,8 +13,7 @@
  * DF_DATE/DF_DATM, sprite_ps tests the R8 snapshot rd_replay.c binds at t2),
  * so date stays 0 in the key.
  *
- * Blend paths (RENDER_API.md "GS to pipeline mapping", SHADERS.md "Dual-source factor
- * above 1.0"): on UNORM targets fixed-point blend factors clamp to 1.0, so
+ * Blend paths: on UNORM targets fixed-point blend factors clamp to 1.0, so
  *   Cs*F + Cd and Cd - Cs*F (modes 0, 1, 5, 6) use DF_PREMUL: the shader
  *     writes min((Cs*F) >> 7, 255), the GS term, exact for F up to 255, and
  *     the blender adds or reverse-subtracts with factor ONE;
@@ -24,7 +23,7 @@
  *   Cd*FIX + Cs (mode 3) uses SRC1 as the destination factor, FIX clamped to
  *     0x80;
  *   the Ad modes (8-10, disc data only) use DST_ALPHA, which reads Ad/255,
- *     not Ad/128: half strength, untested (RENDER_API.md "GS to pipeline mapping");
+ *     not Ad/128: half strength, untested;
  *   Cd*As + Cd (mode 11, disc data only) needs a factor above 1.0 on Cd and
  *     is not representable: the draw leaves Cd unchanged (reported once).
  * The feedback passes do not use the hardware blender at all: RDC_EXACT_BLEND
@@ -294,11 +293,11 @@ int rd__TexaPerTexel(const RdStateBlock *s)
 }
 
 /* Package RSMALL: a planned screen pass for a command whose prims carry
- * Q != 1 (RENDER_API.md "STQ on screen prims"): the STQ vertex shader of its
+ * Q != 1: the STQ vertex shader of its
  * space and sprite_stq_ps.  Only the plain sprite pass converts (an R8
  * font texture and PRIM.AA1 keep their shaders); returns whether it did.
  * Package TEXA: a sprite_texa_ps pass converts too, and sprite_stq_ps
- * expands TEXA after the sampler (RENDER_API.md "Textures"). */
+ * expands TEXA after the sampler. */
 int rd__StqPass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
@@ -409,7 +408,7 @@ static RhiCompare depthCompare(uint8_t ztst)
     }
 }
 
-/* Wave 4 (R4b): the stencil of the shadow count (RENDER_API.md "Shadows").
+/* Wave 4 (R4b): the stencil of the shadow count.
  * Volumes: both faces INCR_WRAP or DECR_WRAP where the depth test passes,
  * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
  * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
@@ -630,7 +629,7 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   jimaku.c, DisplayFont.c, the GsBase.c post sprites): TEST 0x30000 (20
  *   sites, "2D, post"), 0x3000C, 0x30815 (flare), 0 (one site); ZBUF on and
  *   off (the list defaults and gif_SetZWrite); ALPHA off or modes 0, 1, 2,
- *   4, 5, 6, 7 (the gif_SetAlpha literals, RENDER_API.md "GS state the game uses"); sprites
+ *   4, 5, 6, 7 (the gif_SetAlpha literals); sprites
  *   and strips (triangles) and lines; SCENE (with depth) or a target
  *   without depth (DISPLAY, WORK, AA, FEED128, temporaries).
  *   WORLD screen prims (CPU-projected 2D: points and lines of list 2,

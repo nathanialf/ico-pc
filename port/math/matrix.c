@@ -5,7 +5,6 @@
  * current matrix (matrix_stack.c has those), and VU0's R-register random
  * numbers. Each body follows the assembly's order of operations; the
  * comments say where a field is left alone or comes out as a constant.
- * docs/port/MATH.md has the notes per routine.
  */
 #include <string.h>
 
@@ -343,7 +342,7 @@ void _MakeLightColorMatrix(void *dst, void *s0, void *s1, void *s2, void *s3)
  * A 23-bit LFSR read as a float in [1, 2): bits 0x3F800000 | state.
  * Advance: take bits 4 and 22, shift left one, XOR the two into bit 0
  * (float-semantics.md, "The R register"; the polynomial is PCSX2's and is
- * unverified on hardware: DIVERGENCES.md F7). */
+ * unverified on hardware). */
 static uint32_t vu0R = 0x3F800000u;
 
 static uint32_t r_bits(uint32_t x)

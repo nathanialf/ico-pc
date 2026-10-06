@@ -1,7 +1,7 @@
 /*
  * port/game/model_viewer.h
  *
- * Settings > Extras > Models (package MV, docs/port/EXTRAS.md): a viewer
+ * Settings > Extras > Models (package MV): a viewer
  * for the game's character and object models, on the game's own motion
  * system.
  *
@@ -14,7 +14,7 @@
  * [oriFrom, oriTo) as the development build's Motion Viewer plays them
  * (sugipon/src/motionViewer.c, objMenu).  An object with no motions has
  * motFirst == motLast.  The numbers were read from a survey of every stage
- * with data (docs/port/EXTRAS.md, "The table"); nothing from the disc is
+ * with data; nothing from the disc is
  * in the file but the numbers.
  *
  * The viewer (model_viewer.c, the game side, in ico_pc only): picking a

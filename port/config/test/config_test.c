@@ -3,7 +3,7 @@
  *
  * config.toml: the reader, the writer (render and atomic save), round trips,
  * the ini > config.toml > default precedence; the language sceScfGetLanguage
- * answers; the wall clock and the EE timers (docs/port/CONFIG.md).
+ * answers; the wall clock and the EE timers.
  *
  * Usage: config_test [scratch folder]
  */
@@ -263,8 +263,7 @@ static void test_save(void)
     CHECK_STR(ico_toml_get(t, "game.language"), "de");
     ico_toml_free(t);
 
-    /* the sound options round trip (docs/port/AUDIO.md, "Gains and output
-       mode", "Output device") */
+    /* the sound options round trip */
     ico_config_reset(toml, "no-such.ini");
     CHECK(ico_config_get_float("audio.music", 0.0) == 1.0);
     CHECK(ico_config_get_float("audio.effects", 0.0) == 1.0);

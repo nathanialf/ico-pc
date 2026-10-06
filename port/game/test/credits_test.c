@@ -1,8 +1,7 @@
 /*
  * port/game/test/credits_test.c
  *
- * The staff roll's port credit and the Extras credits' lock (package CRED;
- * docs/port/EXTRAS.md "Credits", docs/port/UI.md "Staff roll"), CPU only.
+ * The staff roll's port credit and the Extras credits' lock (package CRED), CPU only.
  *
  * The game's staffroll.c (its only path: every line, the port's included,
  * through font_Print's bitmap font) runs over a short table in the disc's

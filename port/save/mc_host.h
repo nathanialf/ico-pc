@@ -2,7 +2,6 @@
  * port/save/mc_host.h
  *
  * Controls of the host memory card (mc_host.c): libmc over a folder.
- * docs/port/SAVES.md describes the layout and the result codes.
  */
 #ifndef ICO_SAVE_MC_HOST_H
 #define ICO_SAVE_MC_HOST_H

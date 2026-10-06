@@ -8,8 +8,7 @@ a `struct MotRoot`). On the EE the two layouts coincide; on a 64-bit host they
 differ as soon as one side has a pointer where the other has an `int`, a
 `Vec4` (8-byte aligned through its `long long` view) where the other has a
 `float[4]`, or other padding. The offset audit (tools/offset_audit.py) checks
-member accesses, not whole copies, so it cannot see this class
-(docs/port/OFFSET_AUDIT.md, "Whole-record copies").
+member accesses, not whole copies, so it cannot see this class.
 
 Method (the unit handling is offset_audit's: compile_commands.json, the host
 flags, gcc's diagnostics for the operand types):
@@ -682,8 +681,7 @@ def audit_copies(u, workdir):
 # A `void *` carries no record type, so a record written through it and read
 # back as another record type is invisible to the copy checks above: the climb
 # mail hands `&enemy->climbOrient` to ActSendMail_WithAdditionalData and
-# actCommonRopeClimbEnd1 reads `Act.intrData` whole as a ClimbEndRec
-# (DIVERGENCES.md D8). Each such `void *` is a channel:
+# actCommonRopeClimbEnd1 reads `Act.intrData` whole as a ClimbEndRec. Each such `void *` is a channel:
 #   - the mail data: the data argument of a sender (MAIL_SENDERS) is written,
 #     a cast of `Act.intrData` or of a getter's result (MAIL_GETTERS) reads;
 #   - a `void *` member R.m: `x->m = E` writes, `(T *)x->m` reads.

@@ -1,8 +1,7 @@
 /*
  * port/data/tables.h
  *
- * The runtime loader of the game's 73 data tables (docs/port/DATA.md,
- * "The data tables").  The host binary defines the tables as empty arrays
+ * The runtime loader of the game's 73 data tables.  The host binary defines the tables as empty arrays
  * (port/data/gen/table_defs.c); before the game starts, the loader reads the
  * boot ELF from the user's disc and decodes every record field by field into
  * the host layout, as port/data/gen/table_desc.c describes it:

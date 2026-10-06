@@ -1,7 +1,7 @@
 /*
  * port/config/config.h
  *
- * The port's settings (docs/port/CONFIG.md): config.toml in the per-user
+ * The port's settings: config.toml in the per-user
  * folder, with the ico-pc.ini beside the executable as an override layer.
  * Paths are "section.key" ("audio.volume", "game.language").
  *

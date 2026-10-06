@@ -1,7 +1,7 @@
 /*
  * port/data/extract.h
  *
- * The first-run extractor (docs/port/DATA.md, "Backend 2: the archive"):
+ * The first-run extractor:
  * reads the user's disc image once and writes `ico.o2r` (archive.h).
  *
  * What it stores: SYSTEM.CNF, the boot file its BOOT2 line names,

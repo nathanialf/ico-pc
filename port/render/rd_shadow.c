@@ -1,5 +1,5 @@
 /* rd_shadow.c: the shadow count of Shadow.c on the stencil (renderer wave 4,
- * package R4b; docs/port/RENDER_API.md "Shadows").
+ * package R4b).
  *
  * What the PS2 does
  * -----------------
@@ -37,8 +37,7 @@
  * the alpha the GS stored (As = 0x80 wherever a face was drawn); nothing
  * reads FBP 0x142 as 32 bits, and baking the expansion lets the chain's
  * bilinear filter work on expanded texels as the GS filter does (chosen
- * when rd's shader still expanded TEXA after the sampler had filtered;
- * RENDER_API.md "Textures").
+ * when rd's shader still expanded TEXA after the sampler had filtered).
  *
  * Package V3: every vertex carries the place its triangle had in the call
  * (rd__SetShadowTag, in rgba: the volume draw writes no colour), so

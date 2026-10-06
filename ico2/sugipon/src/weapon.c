@@ -27,7 +27,7 @@
 #include "ios.h"
 #include "sceneManager.h"
 #include "DObj.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 
 static void calcDynamicGeometry(struct GObj *g);
 
@@ -572,8 +572,7 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
 
     for (i = 0; i < 1; i++) {
         /* PC port: a division by the literal 0: 0 / 0 for the only sword,
-           which the EE's div.s makes +Fmax and IEEE makes NaN
-           (DIVERGENCES.md F5) */
+           which the EE's div.s makes +Fmax and IEEE makes NaN */
         queenSwordOfs[2] = ps2_div(weaponKind[w->kind].length * (float)i, 0.0f);
         o = CreateLayoutedGObj(10, 75, -1, i == 0, &r, -1, 7, 0);
         LinkParentOfDObj(o, &lnk);

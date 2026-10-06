@@ -6,7 +6,7 @@
 # -DICO_LINK_EXE=ON, staged under dist/stage/x64/ and zipped as
 # dist/ico-pc-<label>-win.zip (root dir ico-pc-<label>/). Quiet; the log is
 # build-host/pkg-<label>.log. Safe to re-run. Needs no baserom (the binary holds
-# no disc data). ICO_PKG_FILES="path ..." overlays working-tree files on HEAD. See docs/port/TESTING.md.
+# no disc data). ICO_PKG_FILES="path ..." overlays working-tree files on HEAD.
 set -euo pipefail
 
 label="${1:-}"
@@ -82,8 +82,7 @@ for a in x64; do
     cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
     cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
     cp "$b/SDL3.dll" "$d/SDL3.dll"
-    # the R6c backend checks (docs/port/TESTING.md, "The renderer backends"),
-    # in their own folder with the SDL3.dll they need beside them
+    # the Direct3D 12 backend checks, in their own folder with the SDL3.dll they need beside them
     rm -rf "$d/tools"; mkdir -p "$d/tools"
     cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
     cp "$wt/port/rhi/test/compare_png.ps1" "$d/tools/"
@@ -93,7 +92,7 @@ for a in x64; do
     sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
     # licences: the program's (LICENSE, MIT) and every third-party
     # component's notice (NOTICES.txt, tools/gen_notices.py from
-    # tools/notices/manifest.json; docs/port/THIRD_PARTY.md)
+    # tools/notices/manifest.json; docs/THIRD_PARTY.md)
     cp "$wt/LICENSE" "$d/LICENSE.txt"
     run "$root/.venv/bin/python" "$wt/tools/gen_notices.py" --platform windows \
         --root "$wt" --out "$d/NOTICES.txt"
@@ -127,99 +126,8 @@ watchdog=30
 trace=1
 INI
 done
-{
-    echo "# ICO PC port: test build $label ($date_str, commit ${commit:0:8})"
-    echo
-    cat <<'TESTMD'
-This is a playable build. It opens a window and runs the game in real
-time at 50 frames of game time per second (PAL), as the PS2 does, with
-sound, a controller or the keyboard and mouse, saves, the movies and the
-new Settings menu. Nothing from the disc is included: the first run asks
-for your PAL disc image of ICO (SCES-50760, `.iso`), checks it and
-extracts it once (about 15 seconds) into `ico.o2r` in
-`%APPDATA%\ico-pc\ico-pc\`, where the config, saves and achievements
-also live. You need a graphics driver with Vulkan (any current NVIDIA, AMD
-or Intel driver on Windows 10/11 has it).
-
-## Run it
-
-1. Unzip anywhere. There is one folder, `x64`, with the exe, `.map`
-   file, `SDL3.dll`, `ico-pc.ini` and the licence files. Keep its files together.
-2. Double-click `x64\ico_pc_x64.exe`. The first run opens a file dialog
-   for the ISO (or set `iso=` in `ico-pc.ini`, or put `Ico_PAL.iso` next to
-   the exe), shows a small progress window while it extracts, then opens
-   the game window (960 x 720, 4:3).
-3. Play. Gamepad: any pad SDL recognises, PS2 buttons by position (South =
-   Cross). Keyboard: WASD move (Shift walks), Space = Cross, E = Circle,
-   Q = Square, R = Triangle, Enter = Start, Backspace = Select, arrows =
-   D-pad, IJKL = right stick, the mouse pans the camera. Alt+Enter toggles
-   fullscreen; Escape quits.
-4. **Settings** is a row on the title screen and on the pause menu's
-   Options page: display preset (Original = PS2-exact; Enhanced unlocks
-   resolution, aspect, filtering, full height, frame rate), audio volume,
-   controls (remap, stick fix, mouse sensitivity), gameplay (the Yorda
-   option), language, achievements, developer mode. Mirror mode is asked
-   at New Game.
-5. When something looks or sounds wrong compared with the PS2, note where
-   (a screenshot is best) and keep the `logs` folder (`x64\logs\`).
-
-## What the log will say
-
-`logs\ico-pc.log` now also has lines starting `window:` (the window size and
-the graphics card it used), `rd:` (the renderer), `gif:` (2D drawing the
-port does not handle yet; each kind is listed once) and `tex:` (a texture
-the port could not decode, or an image the game reads from a place that is
-not a texture yet; each listed once). Then, as before:
-
-- **It worked:** the last lines say `exit: the window was closed`.
-- **No window, a message box about Vulkan:** the log's `rhi_vk:` lines say
-  why (no Vulkan driver, or the card lacks a feature). Send the log.
-- **It crashed:** a block starting `CRASH:` names the error and where, and
-  a message box appears. Send the log; the `.map` files let me find the
-  place.
-- **It froze:** after 30 seconds without progress, a block starting
-  `WATCHDOG:` says where it is stuck.
-
-## Files
-
-| file | what |
-| --- | --- |
-| `ico_pc_x64.exe` | the game with a window; they need `SDL3.dll` beside them and Windows' Vulkan driver |
-| `SDL3.dll` | the window and input library (SDL 3, zlib licence) |
-| `ico_pc_x64.map` | link maps for turning crash addresses into function names |
-| `ico-pc.ini` | `iso=` (disc image path), `watchdog=30`; no `ticks=`, so it runs until you close it |
-| `LICENSE.txt` | the port's licence (MIT) |
-| `NOTICES.txt` | the licences of the third-party code in the program (SDL3, volk, libmpeg2, miniz, stb_truetype, the Arimo font, minicoro, newlib, the MinGW-w64 runtime) |
-| `tools\rhi_d3d12_test.exe` | optional: the Direct3D 12 backend's own tests (below) |
-| `tools\rd_replay_tool.exe`, `tools\compare_backends.cmd`, `tools\compare_png.ps1` | optional: render frame dumps on Vulkan and D3D12 and compare them (below) |
-| `tools\mc_import.exe` | optional: copies ICO's save out of a PS2 memory card image or a `.psu` into the saves folder (docs/port/SAVES.md, "Importing saves") |
-| `tools\SDL3.dll` | a copy for the two `.exe` files in `tools\` |
-| `logs\ico-pc.log` | written by each run (replaced on the next run) |
-| `logs\trace-*.txt` | one line per game tick (`trace=1` in `ico-pc.ini`, on in this build): send it with the recording |
-
-## Backend checks (optional, `x64\tools\`)
-
-The Direct3D 12 backend has not run on Windows yet; these check it. Each
-step is independent of the game and needs no disc image.
-
-1. Double-click `tools\rhi_d3d12_test.exe`. It runs the renderer's pixel
-   cells on D3D12 (the WARP software adapter, then the GPU), a swapchain on
-   a hidden window, and Vulkan for comparison, writes
-   `rhi_d3d12_test.log` beside itself and ends with a message box (PASSED, or
-   which cell failed). Send back the log. "skipped" lines are not failures.
-2. To use D3D12 in the game, set `backend=d3d12` in `ico-pc.ini` (the
-   default and the fallback are Vulkan); `logs\ico-pc.log` then says
-   `D3D12 on <adapter>`.
-3. To compare the two backends on the same frames: add `dump_every=N`
-   (say 100) to `ico-pc.ini`, run the game, close it, and copy the `dumps\`
-   folder it made into `tools\`. Double-click `tools\compare_backends.cmd`:
-   it renders each dump on both backends with `rd_replay_tool.exe` and
-   compares the PNGs with `compare_png.ps1` (PowerShell), writes
-   `compare_backends.log` (opened in Notepad) and the images in
-   `compare_out\`. Send back the log. Dumps hold pictures from your disc:
-   do not share them.
-TESTMD
-} > "$stage/TEST.md"
+# the player README, from the same commit
+cp "$wt/README.md" "$stage/README.md"
 
 # zip, root dir ico-pc-<label>/. The files staged above and nothing else
 # (not linux/ or a retired x86/): the stage folder is also where the build
@@ -229,7 +137,7 @@ rm -f "$zip"
 pkgroot="$root/build-host/tmp/zip-$label"
 rm -rf "$pkgroot"
 mkdir -p "$pkgroot/ico-pc-$label"
-cp -a "$stage/TEST.md" "$pkgroot/ico-pc-$label/TEST.md"
+cp -a "$stage/README.md" "$pkgroot/ico-pc-$label/README.md"
 for a in x64; do
     mkdir -p "$pkgroot/ico-pc-$label/$a/tools"
     for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \

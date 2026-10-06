@@ -48,7 +48,7 @@ build/
 assets/
 # port-owned, openly licensed assets (not disc data)
 !port/assets/
-# the port's extracted game archive (docs/port/DATA.md, "Backend 2: the archive")
+# the port's extracted game archive
 *.o2r
 *.o2r.tmp
 
@@ -100,7 +100,7 @@ tools/ghidra/
 tools/toolchain/
 /tools/toolchain
 build-host/
-# test checkpoint packages (docs/port/TESTING.md)
+# test checkpoint packages
 dist/
 
 # --- Agent guidance / local-only ---
@@ -113,15 +113,6 @@ CLAUDE.md
 build.ninja
 .ninja_log
 .ninja_deps
-
-# --- The matching era's working notes: local-only, not part of the repository ---
-# Cookbook, notes and matching guides kept on the maintainer's machine and
-# shared by the three branches' working trees. docs/README.md lists them.
-docs/COOKBOOK.md
-docs/NOTES.md
-docs/ARCHIVE_retired_notes.md
-docs/MATCH_VU.md
-docs/MATCHING_NOTES.md
 
 # PAL listing-derived source-structure census (docs/pal_source_tree.*): local-only,
 # derived from the disc's listing in baserom/pal/; bulk metadata stays out of git.

@@ -11,7 +11,7 @@
  * helpers convert to UTF-16 and call the wide functions, so a name outside
  * the ANSI code page works on every Windows the port runs on; a path that
  * is not valid UTF-8 falls back to the narrow call. Elsewhere they are the
- * plain POSIX calls. docs/port/DATA.md, "Paths".
+ * plain POSIX calls.
  */
 #ifndef ICO_PLATFORM_HOST_FS_H
 #define ICO_PLATFORM_HOST_FS_H

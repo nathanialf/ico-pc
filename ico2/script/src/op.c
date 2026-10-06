@@ -16,7 +16,7 @@
 #include "gobj_process.h"
 #include "main.h"
 #include "script.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 
 /* .sbss: titleSubEnd and demoSubEnd are the flags a title or demo sub-thread
    raises when it is done and its parent waits on, titleSubAdpcm and demoAdpcm

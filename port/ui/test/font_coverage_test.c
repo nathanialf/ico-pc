@@ -1,5 +1,5 @@
 /* font_coverage_test.c: every character of the five languages has a glyph
- * in the port's faces (docs/port/UI.md, "The font").
+ * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
  *   - ui_StringsForEach: every entry of every language's table;

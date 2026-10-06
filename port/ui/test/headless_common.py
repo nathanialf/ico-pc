@@ -1,5 +1,5 @@
 """port/ui/test/headless_common.py: what the headless-game tests share
-(gallery_sweep.py, credits_headless.py; docs/port/TESTING.md).
+(gallery_sweep.py, credits_headless.py).
 
   PadScript    the boot's presses from port/input/pad-boot.txt up to the
                title (BOOT_LAST), then presses from Main tick 560;

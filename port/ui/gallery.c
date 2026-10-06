@@ -1,7 +1,7 @@
 /*
  * port/ui/gallery.c
  *
- * The music gallery's list (gallery.h; docs/port/MUSIC.md): built from the
+ * The music gallery's list (gallery.h): built from the
  * game's tables, each entry named by its asset, and the page's calls into
  * the engine (gallery_play.c in the game build).
  */

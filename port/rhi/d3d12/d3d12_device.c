@@ -520,8 +520,7 @@ bool rhi_DeviceLost(void)
 /* Package P1's performance entry points (rhi.h).  Not implemented on D3D12
  * yet: the counters read zero, timestamps are unsupported (nothing is
  * written, nothing read back) and there is no mailbox mode (DXGI's flip
- * model with sync interval 1 is FIFO).  docs/port/RENDER_API.md "Performance"
- * lists them. */
+ * model with sync interval 1 is FIFO). */
 void rhi_GetStats(RhiStats *out)
 {
     if (out) {

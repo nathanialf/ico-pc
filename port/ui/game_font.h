@@ -1,7 +1,7 @@
 /*
  * port/ui/game_font.h
  *
- * The game's own lettering as the port's font (docs/port/UI.md, "The font"):
+ * The game's own lettering as the port's font:
  * the letters of the PAL menu sheets (text/menu_PAL_{EG,FR,GR,IT,SP}/
  * menu_PAL_01..04.tm2, scei.tm2, title.tm2), segmented out of the word
  * rectangles the menu text table names (menu_text.c), measured, and packed

@@ -4670,8 +4670,7 @@ void actGirlHintPoint(GObj *volatile self)
 
     /* intrData is the mail's additional data, the address of the target
        (attractMailData, girl_brain_attract.c.inc): the target is the
-       pointer stored there, as the EE's load through it reads
-       (DIVERGENCES.md D14) */
+       pointer stored there, as the EE's load through it reads */
     tgt = *(void **)GOBJ_ACT(self)->intrData;
     s = GOBJ_ACT(self);
     ACT_AFTER_PROC(s) = (void (*)(GObj *))afterGirlHintPoint;

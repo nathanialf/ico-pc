@@ -97,7 +97,7 @@ void rd__LogOnce(int bit, const char *fmt, ...)
 void rd__NotImplemented(const char *what)
 {
     s_notImplementedCount++;
-    fprintf(stderr, "rd: replay of %s is not implemented yet (docs/port/RENDER_API.md)\n", what);
+    fprintf(stderr, "rd: replay of %s is not implemented yet\n", what);
     if (s_notImplementedFatal) {
         assert(!"rd: command not implemented in this wave");
         abort();
@@ -455,7 +455,7 @@ static int sceneClass(int id)
  * and 64 texels over the screen, composited back with bilinear
  * magnification), so levels at the work scale halved the penumbra: at 4x
  * the softest level needed a further Gaussian of about 4 GS pixels to match
- * the Original preset's (RENDER_API.md, package V3). */
+ * the Original preset's (package V3). */
 static int shadowLevel(int id)
 {
     return id == RD_TARGET_SHADOW0 || id == RD_TARGET_SHADOW1 || id == RD_TARGET_SHADOW2;

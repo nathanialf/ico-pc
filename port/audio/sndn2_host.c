@@ -3,8 +3,8 @@
  *
  * SNDN2DRV.IRX on the host (sndn2_host.h): the RPC entry points, the packet
  * dispatcher, the reply page and the pitch table.  Every command and its
- * libsd calls follow docs/research/sndn2drv.md (R1, read off the user's
- * own IRX; the handler addresses in the comments below are R1's), turned
+ * libsd calls are as R1 read them off the user's
+ * own IRX (the handler addresses in the comments below are R1's), turned
  * into calls on the software SPU2's libsd front end (spu2_sd.h).  The
  * stream engines are in stream.c.  Clean-room: no code from the IRX, no
  * emulator code.
@@ -116,7 +116,7 @@ int ico_sndn2_pitch_load(void)
         why = IRX_PATH " cannot be read";
     } else {
         /* not checked for order: the disc's table has two entries below
-           their predecessors (64 and 172, docs/port/AUDIO.md) */
+           their predecessors (64 and 172) */
         for (i = 0; i < ICO_SNDN2_PITCH_ENTRIES; i++) {
             t[i] = (uint16_t)(raw[2 * i] | raw[2 * i + 1] << 8);
         }
@@ -128,7 +128,7 @@ int ico_sndn2_pitch_load(void)
         ico_sndn2_pitch_set(NULL);
         fprintf(stderr,
                 "sndn2: pitch table: %s; using the formula floor(4096 * 2^((i - 208) / 192)) "
-                "(DIVERGENCES.md A15)\n",
+                "\n",
                 why);
         return H.pitch_source;
     }

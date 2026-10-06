@@ -1,8 +1,7 @@
 /*
  * port/audio/stream.c
  *
- * SNDN2DRV's two stream engines on the host (docs/research/sndn2drv.md,
- * "ADPCM streams" and "PCM streams"; the handler addresses in the comments
+ * SNDN2DRV's two stream engines on the host (the handler addresses in the comments
  * are R1's).  Both read their data where the game put it, in the IOP RAM
  * stand-in (port/data/iop_ram.h): the ADPCM `.int` rings the game fills
  * with sceCdReadIOPm through its background reader (fumi/sound/
@@ -97,7 +96,7 @@ static void enqueue(const StEvent *e)
     q_write++;
 }
 
-/* 0x248C (docs/research/sndn2drv.md, "Stream cancel"), for the voice
+/* 0x248C, for the voice
    `core`, `voice`: a pending fill of that voice is forgotten, so the read
    offset does not advance for the transfer in flight; every queued FILL of
    the voice is zeroed; a queued KEYON keeps its place but loses the voice's

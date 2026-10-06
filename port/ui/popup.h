@@ -3,11 +3,10 @@
  *
  * Notification popups (achievements from package 6E; a developer test
  * now): a queue of (title, body) shown one at a time, sliding in from the
- * right edge of the 4:3 picture, held, and sliding out, timed in vsyncs
- * (docs/port/UI.md, "Popups").
+ * right edge of the 4:3 picture, held, and sliding out, timed in vsyncs.
  *
  * Where they are drawn (package OV).  On the presentation overlay
- * (port/render/rd.h rd_SetPresentOverlay; docs/port/UI.md "Popups"): the
+ * (port/render/rd.h rd_SetPresentOverlay): the
  * presenter calls ui_host.c's overlay function at every present, which
  * calls ui_PopupDrawOverlay, so the popup is drawn on the output after the
  * box blit, at the output's resolution, outside the game's frame (never

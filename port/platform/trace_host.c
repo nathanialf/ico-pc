@@ -101,7 +101,7 @@ int ico_trace_open(const char *path)
         fprintf(stderr, "trace: cannot create %s\n", path);
         return -1;
     }
-    /* developer mode (docs/port/DEVELOPER_MODE.md) as the run starts: the
+    /* developer mode as the run starts: the
        menu and option table it opens can change the simulation, so a trace
        says which kind of run it is.  Comparisons skip '#' lines. */
     fprintf(trace, "# developer_mode %d\n", ico_opt_developer_mode() ? 1 : 0);

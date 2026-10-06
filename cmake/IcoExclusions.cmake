@@ -6,8 +6,7 @@
 #
 # Reasons:
 #   vu0-asm     R5900/VU0 inline assembly: none left in the non-renderer
-#               sources (package 1A rewrote it in C over port/math/,
-#               docs/port/MATH.md); typedef.h makes any new use a compile
+#               sources (package 1A rewrote it in C over port/math/); typedef.h makes any new use a compile
 #               error on the host.
 #   nested-fn   GNU C nested functions, which clang does not implement (gcc
 #               does); the game's were rewritten as file-scope functions.

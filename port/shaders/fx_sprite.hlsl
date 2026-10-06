@@ -1,7 +1,6 @@
 // fx_sprite.hlsl: one GS sprite in the GS integer arithmetic (renderer wave
 // 5, R5a): staticBlur.c's passes, RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR
-// (port/render/rd_blur.c says what is modelled; docs/port/RENDER_API.md
-// "Full-screen effects and the raw packet builders").
+// (port/render/rd_blur.c says what is modelled).
 //
 //   fx_rect_vs   fullscreen triangle at the sprite's depth (no vertex input;
 //                the scissor and fx_sprite_ps's coverage test bound it)
@@ -26,7 +25,7 @@
 // with the half-line offset), g_z.x the GS Z scale of its depth, g_z.yz the
 // bound target's texels per GS pixel (R7a; 1 in Original).
 //
-// Scaled targets (renderer wave 7, R7a; RENDER_API.md "Presets and display options"): a texel
+// Scaled targets (renderer wave 7, R7a): a texel
 // stands for the GS pixel coordinate its centre falls on, (pos / s - 0.5)
 // in 12.4, and the texture coordinates address t1 at its own scale (UV
 // times g_scale), so every sum below is the GS's at scale 1 (bit-exact) and

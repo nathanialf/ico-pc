@@ -1,4 +1,4 @@
-# port/audio: the software SPU2 (Phase 4A, docs/port/AUDIO.md). Integer-only
+# port/audio: the software SPU2 (Phase 4A). Integer-only
 # code with no platform dependencies; Phase 4B adds the sndn2 host and the
 # SDL output on top (ico_sndn2, below).
 add_library(ico_audio STATIC
@@ -88,7 +88,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
 endif()
 
 # libsd_irx_test: the LIBSD.IRX reader on a synthetic module and its
-# fallback (AUDIO.md, "libsd values"); the real module is sndn2_test's
+# fallback; the real module is sndn2_test's
 add_executable(libsd_irx_test test/libsd_irx_test.c)
 target_compile_options(libsd_irx_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(libsd_irx_test PRIVATE ico_sndn2)
@@ -110,7 +110,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     add_test(NAME audio_pan COMMAND pan_test)
 endif()
 
-# spu2_bench (package S3, AUDIO.md "Render cost"): `--check` is the 10 s
+# spu2_bench (package S3): `--check` is the 10 s
 # render CRC test of four scenes against the frame-by-frame renderer's
 # golden values; without arguments it times the render per vsync.
 # spu2_prof is the same harness over a copy of the SPU2 built with

@@ -10,10 +10,10 @@
  * The port does the same at the presenter's level: a frame goes straight to
  * the output in the presenter's 4:3 box (pillarboxed in a wider window),
  * converted from the decoder's 4:2:0 planes by yuv.hlsl with the IPU's
- * integer CSC (docs/port/FMV.md, "Colour").  The picture sits in the PS2
+ * integer CSC.  The picture sits in the PS2
  * display area as mv_videodec.c placed it: centred, (dispW - w) / 2 and
  * (dispH - h) / 2, the display area filling the 4:3 box.  The box stays
- * 4:3 whatever the display options (renderer wave 7, docs/port/DISPLAY.md):
+ * 4:3 whatever the display options (renderer wave 7):
  * a widescreen presentation pillarboxes the movies.
  *
  * Mirror: drawn unmirrored unless the renderer's mirror mode is on

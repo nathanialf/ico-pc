@@ -1,8 +1,7 @@
 /*
  * port/include/ico_credits.h
  *
- * Settings > Extras > Credits and the staff roll's port credit
- * (docs/port/EXTRAS.md, "Credits"; docs/port/UI.md, "Staff roll").
+ * Settings > Extras > Credits and the staff roll's port credit.
  *
  * The playback: Credits starts the ending's first staff roll stage (stage
  * 60, STAFF1) from the title, the stage the real ending enters from its

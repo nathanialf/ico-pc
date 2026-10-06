@@ -10,7 +10,7 @@
  *
  * The sifdev file calls (sceOpen and the rest) are sifdev_host.c's since
  * renderer wave 6 (R6a): host0: paths map to <pref>/dev/ for developer
- * mode (docs/port/DEVELOPER_MODE.md).
+ * mode.
  */
 #include "sif_host.h"
 #include "iop_ram.h"

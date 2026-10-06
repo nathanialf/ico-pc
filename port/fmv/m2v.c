@@ -11,8 +11,7 @@
  *
  * Choices:
  *   - deinterlace off (u4_deinterlace 0): the IPU hands frame pictures out
- *     as they are coded, and the game's streams are frame pictures
- *     (docs/port/FMV.md, "Streams");
+ *     as they are coded, and the game's streams are frame pictures;
  *   - shared display buffers off: the library copies each output picture
  *     into the three planes this file owns (IV_YUV_420P);
  *   - one core, threads not kept (ithread_single.c).

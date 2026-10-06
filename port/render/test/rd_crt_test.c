@@ -1,5 +1,5 @@
 /* rd_crt_test.c: the CRT filter (package CRT; port/render/rd_crt.c,
- * port/shaders/crt.hlsl, docs/port/DISPLAY.md "CRT filter").
+ * port/shaders/crt.hlsl).
  *
  * Without a device:
  *   options   [video] crt, crt_mode, crt_strength and the five overrides

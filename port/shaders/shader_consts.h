@@ -2,7 +2,7 @@
  * rd_core fills these; the static asserts pin each offset to the HLSL
  * cbuffer packing (every member is a 16-byte register or a 64-byte matrix,
  * so there is no packing ambiguity). Change this file and common.hlsli
- * together, and docs/port/SHADERS.md. */
+ * together. */
 #ifndef PORT_SHADERS_SHADER_CONSTS_H
 #define PORT_SHADERS_SHADER_CONSTS_H
 
@@ -41,7 +41,7 @@ typedef struct IcoDrawCB {
 /* Package CRT: crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
  * bound in DrawCB's place through the draw layout, whose dynamic group is
  * cached per block size (rd_replay.c dynamicGroup), so the two sizes need
- * not match (port/render/rd_crt.c; docs/port/DISPLAY.md "CRT filter").
+ * not match (port/render/rd_crt.c).
  * All in pixels of the box or of the virtual source (the PS2 picture's
  * grid, 512 wide at 4:3) unless said. */
 typedef struct IcoCrtCB {
@@ -105,7 +105,7 @@ typedef struct IcoSpriteAa1Vertex {
 
 #define ICO_AA1_INTERIOR 2.0f
 
-/* Perspective-correct STQ (RENDER_API.md "STQ on screen prims"): the vertex
+/* Perspective-correct STQ: the vertex
  * of sprite_stq_*_vs, 24 bytes: IcoSpriteVertex and, at loc 4
  * (RHI_VTX_F32x1), the GS Q.  u and v are S and T in texels of t1 (S times
  * the texture size, the UV offset added times Q), not divided: the shader
@@ -169,8 +169,7 @@ _Static_assert(offsetof(IcoSpriteStqVertex, q) == 20, "STQ vertex q");
 _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
 
 /* ---------------------------------------------------------------- VU1
- * Wave 3 (R3c): the VU1 program shaders (vu_common.hlsli,
- * docs/port/VU1_PROGRAMS.md). Group 1: t0 = the vertex stream (float4
+ * Wave 3 (R3c): the VU1 program shaders (vu_common.hlsli). Group 1: t0 = the vertex stream (float4
  * quadwords as the VIF unpacked them), b2 = IcoVuCB, b3 = IcoVuBoneCB
  * (cluster only). */
 

@@ -231,7 +231,7 @@ static inline void ChainPendulumSwing(float *dst, ChainRecord *cw, float *orient
     v[2] = 0.0f;
     /* the EE left v[3] as the stack word it found: the matrix's translation
        row is zero, so the product is 0 whatever the word; a host NaN or Inf
-       pattern there would poison the nodes (docs/port/DIVERGENCES.md) */
+       pattern there would poison the nodes */
     v[3] = 0.0f;
 
     sceVu0UnitMatrix(m1);
@@ -721,7 +721,7 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
         sceVu0FVECTOR p0 = {0.0f, 0.0f, -25.0f, 1.0f};
         sceVu0FVECTOR p1 = {0.0f, 0.0f, 25.0f, 1.0f};
         ClipWork w;
-        /* PC port (X2, DIVERGENCES.md F15): the original sets only the two
+        /* PC port (X2): the original sets only the two
            points, so _Clip reads the radius and the skip filter from
            whatever the stack holds, and the wall it picks (climb.wall,
            wallOrient: the climb-off's wall plane) followed the host's
@@ -1153,7 +1153,7 @@ static inline void ChainNodeSpan(ChainRecord *cw, float *pos, int *i0, int *i1) 
     ChainNode *nd = cw->node;
 
     /* the EE's cvt.w.s saturates an out-of-range position; the host's
-       cvttss2si gives INT_MIN instead (docs/port/DIVERGENCES.md) */
+       cvttss2si gives INT_MIN instead */
     *i0 = ps2_ftoi((pos[1] - nd[0].y) / 50.0f);
     *i1 = *i0 + 1;
     *i0 = *i0 < 2 ? 2 : (cw->nodes - 1 < *i0 ? cw->nodes - 1 : *i0);

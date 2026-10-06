@@ -1,7 +1,7 @@
 /*
  * port/save/mc_host.c
  *
- * libmc over a host folder (docs/port/SAVES.md). Port 0 is a formatted 8 MB
+ * libmc over a host folder. Port 0 is a formatted 8 MB
  * card whose root is the card folder; port 1 is a second card on its own
  * folder when [paths] saves2 names one, else empty. The files are
  * stored as the card holds them, byte for byte, in the folder layout PCSX2's
@@ -16,7 +16,7 @@
  * so each poll happens once per vsync.
  *
  * Result codes and the conventions the game relies on are in libmc.h's
- * sceMcRes* and docs/port/SAVES.md.
+ * sceMcRes*.
  */
 #include "mc_host.h"
 #include <eekernel.h>
@@ -53,7 +53,7 @@ extern int IosMcLock;
 /* A handle open for writing works on a copy, <dir>/.<name>.tmp (hidden from
    the card's listing), synced to the disk and moved over the file at
    sceMcClose: a crash, a power cut or a full disk during a save leaves the
-   previous file whole (docs/port/SAVES.md). */
+   previous file whole. */
 typedef struct McHandle {
     FILE *fp;
     int canRead;

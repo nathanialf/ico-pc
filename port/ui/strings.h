@@ -1,12 +1,11 @@
 /*
  * port/ui/strings.h
  *
- * The port's own UI strings in the game's five languages (Phase 6, 6B;
- * docs/port/UI.md, "Strings").  One table per language,
+ * The port's own UI strings in the game's five languages (Phase 6, 6B).  One table per language,
  * port/ui/strings_<lang>.c, indexed by UiStrId; UTF-8.  Only what the
  * Settings menu (6C) and the popups need: the plan's Settings sections
  * (Display, Controls, Gameplay, Language, Developer mode), the gameplay
- * options of docs/port/OPTIONS.md (stick_fix, yorda_safe, mirror) and the rd
+ * options (stick_fix, yorda_safe, mirror) and the rd
  * settings; 6C renames or adds ids as it needs.
  */
 #ifndef PORT_UI_STRINGS_H
@@ -61,8 +60,8 @@ typedef enum UiStrId {
     UI_STR_OPT_VIBRATION,
     /* Gameplay */
     UI_STR_OPT_STICK_FIX,
-    UI_STR_OPT_YORDA,      /* [gameplay] yorda_safe (docs/port/OPTIONS.md) */
-    UI_STR_OPT_YORDA_NOTE, /* its explanation, as OPTIONS.md asks for */
+    UI_STR_OPT_YORDA,      /* [gameplay] yorda_safe */
+    UI_STR_OPT_YORDA_NOTE, /* its explanation */
     /* Language: each language's own name, the same in every table */
     UI_STR_LANG_EN,
     UI_STR_LANG_FR,
@@ -77,7 +76,7 @@ typedef enum UiStrId {
     UI_STR_POPUP_TEST_TITLE,
     UI_STR_POPUP_TEST_BODY,
     UI_STR_ACHIEVEMENT_UNLOCKED,
-    /* achievements (package 6E, docs/port/ACHIEVEMENTS.md): title and
+    /* achievements (package 6E): title and
        description of each, in port/game/achievements.c's order */
     UI_STR_ACH_OPENING,
     UI_STR_ACH_OPENING_DESC,
@@ -139,7 +138,7 @@ typedef enum UiStrId {
     UI_STR_ACH_FAST_DESC,
     UI_STR_ACH_SECRET,
     UI_STR_ACH_SECRET_DESC,
-    /* the Settings menu (6C, docs/port/SETTINGS.md) */
+    /* the Settings menu (6C) */
     UI_STR_SECTION_AUDIO,
     UI_STR_SECTION_ACHIEVEMENTS,
     UI_STR_OPT_VOLUME,
@@ -323,7 +322,7 @@ typedef enum UiStrId {
     UI_STR_EXTRAS_MODELS,
     UI_STR_EXTRAS_CREDITS,
     UI_STR_EXTRAS_LOCKED_NOTE,
-    /* Settings > Audio (docs/port/SETTINGS.md); Stereo and Mono are the
+    /* Settings > Audio; Stereo and Mono are the
        game's own words (UI_STR_MT_STEREO, UI_STR_MT_MONO) */
     UI_STR_OPT_MUSIC_VOL,
     UI_STR_OPT_EFFECTS_VOL,
@@ -332,7 +331,7 @@ typedef enum UiStrId {
     UI_STR_VAL_MONO,
     UI_STR_OPT_DEVICE,
     UI_STR_VAL_DEFAULT_DEVICE,
-    /* Settings > Extras > Music, the music gallery (docs/port/MUSIC.md) */
+    /* Settings > Extras > Music, the music gallery */
     UI_STR_GAL_SOUNDTRACK,
     UI_STR_GAL_SCENE,
     UI_STR_GAL_AMBIENCE,
@@ -349,7 +348,7 @@ typedef enum UiStrId {
     UI_STR_HINT_PREV,
     UI_STR_HINT_NEXT,
     UI_STR_HINT_SECTION,
-    /* Extras > Models (package MV, docs/port/EXTRAS.md): the viewer's words,
+    /* Extras > Models (package MV): the viewer's words,
        then the model names (port/game/model_viewer_table.c) */
     UI_STR_MV_ANIMATION,
     UI_STR_MV_LOOP,
@@ -385,8 +384,7 @@ typedef enum UiStrId {
     UI_STR_MV_SWORD,
     UI_STR_MV_MAGIC_SWORD,
     UI_STR_MV_COUCH,
-    /* Options > Photo mode (package PHOTO; docs/port/DISPLAY.md "Photo
-       mode"): the row, the HUD's lines, the capture's popup; FOV takes the
+    /* Options > Photo mode (package PHOTO): the row, the HUD's lines, the capture's popup; FOV takes the
        vertical field of view in degrees (%d) */
     UI_STR_PHOTO_MODE,
     UI_STR_PHOTO_HUD_MOVE,

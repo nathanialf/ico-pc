@@ -1,7 +1,7 @@
 /*
  * port/fmv/test/fmv_test.c
  *
- * The FMV player's parts without the game (docs/port/FMV.md, "Tests"):
+ * The FMV player's parts without the game:
  *
  *   pss      a synthetic PSS built here (MPEG-2 packs, a system header,
  *            video PES with PTS/DTS, Sony audio PES with the FF A0 00 00
@@ -667,7 +667,7 @@ static void test_disc(const char *iso)
     FILE *f = iso != NULL ? fopen(iso, "rb") : NULL;
     uint8_t hdr[4];
     uint32_t count, i, lsn = 0, size = 0;
-    const uint32_t dfLsn = 19771; /* DATA.DF on the PAL disc (docs/port/DATA.md) */
+    const uint32_t dfLsn = 19771; /* DATA.DF on the PAL disc */
     uint8_t *buf;
     size_t pos = 0, n;
     Buf es = {0}, aud = {0};

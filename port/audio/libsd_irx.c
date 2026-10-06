@@ -4,8 +4,7 @@
  * The disc's libsd values (libsd_irx.h): LIBSD.IRX's reverb presets, their
  * work area sizes and sceSdInit's idle voice block, read at start from the
  * mounted disc like SNDN2DRV.IRX's pitch table (sndn2_host.c).  The table
- * addresses come from reading the module's code (docs/port/AUDIO.md,
- * "libsd values"); nothing of the module is committed.
+ * addresses come from reading the module's code; nothing of the module is committed.
  */
 #include "libsd_irx.h"
 
@@ -160,7 +159,7 @@ int ico_libsd_load(void)
         ico_libsd_apply(NULL);
         fprintf(stderr,
                 "libsd: %s; using the built-in reverb presets (psx-spx) and idle block "
-                "(ps2sdk) (DIVERGENCES.md A9, A14)\n",
+                "(ps2sdk)\n",
                 why);
         return ICO_LIBSD_BUILTIN;
     }

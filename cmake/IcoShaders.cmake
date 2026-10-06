@@ -1,4 +1,4 @@
-# cmake/IcoShaders.cmake: the build-time shader toolchain (docs/port/SHADERS.md).
+# cmake/IcoShaders.cmake: the build-time shader toolchain.
 #
 # One HLSL source per shader family, one DXC invocation per entry and target:
 # SPIR-V for Vulkan, signed DXIL for D3D12. The blobs are embedded as C
@@ -33,7 +33,8 @@ set(ICO_DXC_EXE "${_ico_dxc}")
 set(ICO_SHADER_DIR "${CMAKE_SOURCE_DIR}/port/shaders")
 set(ICO_SHADER_OUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
-# The flags that make the Vulkan bindings match port/rhi/vk/README.md.
+# The flags that map HLSL registers to the Vulkan backend's bindings: b0.. at
+# 0, t at 16, s at 32, u at 48 (the register number is the RHI slot).
 set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.2
     -fvk-b-shift 0 all -fvk-t-shift 16 all -fvk-s-shift 32 all -fvk-u-shift 48 all)
 # -WX: a shader warning fails the build. -Zi is not used: no debug info in the

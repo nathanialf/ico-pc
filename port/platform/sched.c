@@ -1,8 +1,7 @@
 /*
  * port/platform/sched.c
  *
- * The EE thread scheduler over fibers. sched.h states the rules;
- * docs/port/PLATFORM.md gives their sources and the open cases.
+ * The EE thread scheduler over fibers. sched.h states the rules and their sources.
  *
  * Every switch goes through ico_sched_run (the dispatcher): a thread that
  * must give up the CPU yields to it, and it resumes the highest-priority
@@ -580,7 +579,7 @@ int ico_sched_signal_sema(int id, int from_interrupt)
         sema_release_first(s, id);
         reschedule(from_interrupt);
     } else {
-        /* no maximum check (docs/port/PLATFORM.md, open case) */
+        /* no maximum check (open case) */
         s->count++;
     }
     return id;

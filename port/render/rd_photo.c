@@ -1,5 +1,5 @@
 /* rd_photo.c: photo mode's camera override and its pinned frame (package
- * PHOTO; rd.h rd_SetPhotoCamera, docs/port/RENDER_API.md "Photo mode").
+ * PHOTO; rd.h rd_SetPhotoCamera).
  *
  * While the override is on, every frame rd_EndFrame closes that is not a
  * keep frame is copied here (its lists and payload, deep), so the scene the

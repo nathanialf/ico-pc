@@ -171,7 +171,7 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
     span = (float)pkg->life * (pkg->lifeRand * sugiSignedRandom() + 1.0f);
     /* span is 0 when a package's life and lifeRand make it so (stage 5's
        torches): the EE's div gives Fmax; the host's Inf times the zero
-       below would be NaN (docs/port/DIVERGENCES.md) */
+       below would be NaN */
     w->alphaStep = ps2_div(w->alpha, span);
     if ((float)w->life < span) {
         w->alpha = w->alpha - (span - (float)w->life) * w->alphaStep;
@@ -191,7 +191,7 @@ static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
     if (geo->clip != 0) {
         sceVu0ApplyMatrix(v, matrixptr + 0x100, geo->pos);
         /* PC port: w is 0 for an origin on the camera plane (seen at
-           stage 7, Main tick 115 of a start_stage boot; DIVERGENCES.md F5) */
+           stage 7, Main tick 115 of a start_stage boot) */
         sceVu0ScaleVectorXYZ(v, v, ps2_div(1.0f, v[3]));
         if (v[2] < 0.0f || v[0] < 0.0f || 4095.0f < v[0] || v[1] < 0.0f || 4095.0f < v[1]) {
             return 1;
@@ -463,7 +463,7 @@ static void dispParticleEffect(PEGeo *geo)
     dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
     dl_CloseDma();
 #ifdef ICO_RD
-    /* PC port (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders"): the
+    /* PC port (wave 5, R5c): the
        packet is a VU1 SET_GSREGISTER packet (PABE 0 and the effect's ALPHA,
        mode 5, 6 or 4 by alphaMode); mc_HostDma hands its A+D pairs to the GS
        register decoder ahead of the batch prim_DispParticle chains (already

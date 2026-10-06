@@ -44,8 +44,7 @@
 #include "Texture.h"
 #include "debug_exception.h"
 #include <assert.h>
-/* PC port (renderer wave 6, R6a): debug.c is compiled on the host
-   (docs/port/DEVELOPER_MODE.md).  Its EE-only parts have ICO_HOST bodies:
+/* PC port (renderer wave 6, R6a): debug.c is compiled on the host.  Its EE-only parts have ICO_HOST bodies:
    varargs through va_list, the VU1 register dumps, the snapshot (an rd
    readback to PNG), host0: files under <pref>/dev/, the csv windows' record
    layouts, and the debug font's VU1 routine (debugHostFont*, ICO_RD). */
@@ -881,8 +880,7 @@ inline void debug_SaveStartStageFile(int stage)
 
 inline int debug_TryToGetStartStage(void)
 {
-    /* PC port (renderer wave 5, R5b): the developer key [dev] start_stage
-       (docs/port/CONFIG.md), which host_config.c hands over as
+    /* PC port (renderer wave 5, R5b): the developer key [dev] start_stage, which host_config.c hands over as
        ICO_START_STAGE, takes the place of the development build's
        start-stage file: Main (common/src/main.c) clamps the value to 1..105
        and switches to that stage instead of stage 1.  Unset or not a number:
@@ -1238,7 +1236,7 @@ static GifTag debugFontTag = {0x2000400000008000LL, 0x51}; /* derived name */
    in the stage partition.  On the PS2 debug_Init (every stage_initialize,
    common/src/StageManager.c) allocated them from ios_partition_seki, the
    "stage" partition; the host's partition holds pointer-wide block headers
-   and records (docs/port/LAYOUT.md) and is fuller than the EE's, and the
+   and records and is fuller than the EE's, and the
    extra 256 blocks exhausted it in stage 42 of the boot run.  Until R6a the
    host never allocated them (debug_Init was port/null's empty stub), so the
    game heap stays as it was.  The packets are rebuilt identically on every
@@ -1369,8 +1367,7 @@ static void debug_makeBackImage(void)
                             then SPACE_DEBUG_FONT
      SPACE_DEBUG_FONT (12)  cursor.xy += advance.xy
    The host reads the same glyph packets (debug_MakeFont's) and hands the
-   GIF packet the VU builds to the GS register decoder (gif_HostWriteRegs,
-   docs/port/RENDER_API.md "The seki layer on rd"), in order with the list's other
+   GIF packet the VU builds to the GS register decoder (gif_HostWriteRegs), in order with the list's other
    writes.  The packets and the display list chain are still built as on the
    PS2. */
 static struct { /* port */

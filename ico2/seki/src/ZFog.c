@@ -195,7 +195,7 @@ void fog_MakeFogClut(void)
 #ifdef ICO_RD
 
 /* ===================================================================== *
- * PC port (renderer wave 4, R4c; docs/port/RENDER_API.md "Depth fog").
+ * PC port (renderer wave 4, R4c).
  *
  * fog_DrawFog's two packets (the CLUT upload, then the Z copy, its PSMT4
  * byte copy and the fog sprite) are DIRECT GIF packets the host does not

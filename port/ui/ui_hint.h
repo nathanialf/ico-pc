@@ -1,8 +1,7 @@
 /*
  * port/ui/ui_hint.h
  *
- * A line of button prompts on a port page (docs/port/UI.md, "Button
- * glyphs"): each item the game's own button glyph (layout_ext.h
+ * A line of button prompts on a port page: each item the game's own button glyph (layout_ext.h
  * LtExtGlyph; two for a pair such as L1 / R1, none for a word alone such as
  * "Left stick: turn") followed by its word, the line centred across the
  * screen.  The words are port rows like every Settings label (the port

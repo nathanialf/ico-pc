@@ -2,12 +2,10 @@
  * interface). Implemented by package R3ab in rd_mesh.c (recording, the
  * mesh registry, the per-list VU state) and rd_replay.c (the draws), called
  * from Packet.c / RegistPacket.c / MicroCode.c (static and skinned objects)
- * and Primitive.c (grids and particles); docs/port/RENDER_API.md "The mesh path".
+ * and Primitive.c (grids and particles).
  *
- * The VU1 programs and what each computes: docs/port/VU1_PROGRAMS.md. The
- * shaders: port/shaders/vu_*.hlsl, binding and constant layouts in
- * docs/port/SHADERS.md ("VU1 programs") and shader_consts.h (IcoVuCB,
- * IcoVuBoneCB). CPU references (test oracle, software fallback):
+ * The shaders are port/shaders/vu_*.hlsl; the binding and constant
+ * layouts are in shader_consts.h (IcoVuCB, IcoVuBoneCB). CPU references (test oracle, software fallback):
  * port/render/vu1_ref/vu1_ref.h.
  *
  * Principle: the GPU gets what the VU got. The vertex stream is the VIF
@@ -27,7 +25,7 @@
  * two full 4 x 4 matrices (the light matrix's fourth column meets n.w).
  * The functions below are the exact path; R3a/R3b call them from the seki
  * sites and either drop the five semantic declarations or keep them for an
- * Enhanced path (a RENDER_API.md note either way). No edit to rd.h is
+ * Enhanced path (a note either way). No edit to rd.h is
  * needed for this header. */
 #ifndef PORT_RENDER_RD_MESH_H
 #define PORT_RENDER_RD_MESH_H
@@ -141,8 +139,7 @@ bool rd_VuMeshValid(RdMesh m);
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map
  * in vu_common.hlsli. Filled by the seki sites from the packets they build:
  *   0..15  the RdVuCommon block in force at the draw's list position
- *          (rd_GetVuCommon; RENDER_API.md "Frame lifecycle, camera and the post passes", open
- *          question 1)
+ *          (rd_GetVuCommon)
  *          with qw 2 as SET_UVOFFSET left it (xy: the bound texture's
  *          t->uv scroll or clearUVOffset's zero; it persists in VU memory
  *          until the next SET_UVOFFSET or common block, so a draw without
@@ -198,9 +195,7 @@ void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
  * current position of all 13 lists (and gsb_SetGsDefault at their heads),
  * and each object chains its own matrix and light packets into every list
  * it draws in. So rd keeps, at record time, one VU image per list, as the
- * chains recorded into that list so far leave it (RENDER_API.md "Frame lifecycle, camera and the
- * post passes"
- * open question 1): the common block (rd_SetVuCommon updates all 13), the
+ * chains recorded into that list so far leave it: the common block (rd_SetVuCommon updates all 13), the
  * SET_* uploads, the UV offset (SET_UVOFFSET, which persists until the next
  * one or the next common block), the resident program (mc_TransMicroCode)
  * and the BEGIN code of the last MSCALF. A draw takes its VuCB from the

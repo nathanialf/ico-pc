@@ -13,7 +13,7 @@
    GS (VIF1 DIRECT packets of its own, debug_exception_screen.c.inc), and
    loops on the pad.  debug_assert and debug_assertMessage hang.  The host
    has no EE exceptions to trap: a fault is the host crash handler's
-   (port/platform/diag_host.c, docs/port/BOOT_DIAG.md), which writes the log
+   (port/platform/diag_host.c), which writes the log
    and, on Windows, a message box.  So the screen and its handler are not
    compiled here; what the game calls keeps its meaning:
 

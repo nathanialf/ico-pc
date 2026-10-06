@@ -123,7 +123,7 @@ static int staffRollNameOut(void)
     found:
 
         e = &rollLines[i];
-        /* PC port (package CRED; docs/port/UI.md "Staff roll"): past the
+        /* PC port (package CRED): past the
            disc's lines, the port credit's (port/game/credits.c) */
         if (rollNameIdx >= staffRollNameDataNum) {
             s = ico_roll_port_line(rollNameIdx++ - staffRollNameDataNum);

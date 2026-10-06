@@ -1,4 +1,4 @@
-# port/fmv: the FMV player (Phase 4E, docs/port/FMV.md). The ito/mpeg player
+# port/fmv: the FMV player (Phase 4E). The ito/mpeg player
 # stays in the PS2 build; on the host movie_init/movie_proc/movie_end are
 # movie.c's, on a PSS demuxer (pss.c) and Ittiam libmpeg2 (m2v.c).
 #
@@ -89,7 +89,7 @@ if(TARGET ico_pc)
     # own definitions carry ICO_HEADLESS only (the game's ICO_RD is in
     # ICO_GAME_DEFINITIONS, on the game libraries), so the window build
     # names it here; without it the film played its sound and showed no
-    # picture (package V1, docs/port/FMV.md "Display").
+    # picture (package V1).
     if(NOT ICO_HEADLESS)
         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/movie.c" TARGET_DIRECTORY ico_pc
                                     PROPERTIES COMPILE_DEFINITIONS ICO_RD=1)

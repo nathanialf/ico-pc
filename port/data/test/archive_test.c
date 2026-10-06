@@ -2,7 +2,7 @@
  * port/data/test/archive_test.c
  *
  * The archive backend and the first-run extractor (port/data/archive.c,
- * extract.c; docs/port/DATA.md "Backend 2: the archive").
+ * extract.c).
  *
  *   archive_test synth <dir>         vfs_test's synthetic ISO9660 image,
  *                                    extracted into <dir> and compared with

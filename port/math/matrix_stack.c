@@ -8,8 +8,7 @@
  * Every routine that combines the current matrix with another matrix does
  * what the assembly did: it builds the other matrix in full (zeros and ones
  * included) and runs the four-term multiply-add on it, so the rounding and
- * the order of operations are the PS2's. docs/port/MATH.md has the
- * routine-by-routine notes.
+ * the order of operations are the PS2's.
  */
 #include <string.h>
 
@@ -35,8 +34,7 @@ void ico_apply_matrix(float *out, const float (*m)[4], const float *v)
     /* VU0 reads an exponent-255 word as a number (+-Fmax; no Inf or NaN).
        Callers often write only x, y and z, leaving w a stale word (the
        chain sway, the blended motion root): times a zero translation row
-       the PS2 gets 0, the host would get NaN. Read w as VU0 does
-       (docs/port/DIVERGENCES.md F13, F14). */
+       the PS2 gets 0, the host would get NaN. Read w as VU0 does. */
     float w = ps2_operand(v[3]);
     int i;
 

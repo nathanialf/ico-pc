@@ -9,7 +9,7 @@
  * denormals-are-zero (MXCSR on x86 and x86-64, FPCR on arm64). It does not
  * give the EE's other differences (no infinities or NaNs, clamped results,
  * its own division and square root); those are package 1A's helpers
- * (port/math/) and are recorded in docs/port/DIVERGENCES.md.
+ * (port/math/) and are recorded.
  *
  * ico_fpenv_host_enter() puts back the host defaults (round to nearest,
  * denormals kept, every exception masked) for host code: the platform layer,

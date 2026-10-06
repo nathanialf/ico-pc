@@ -101,8 +101,7 @@ typedef enum RdCmdType {
      * (rd__CmdIsState) */
     RDC_AA1, /* b[0] PRIM.AA1 */
     /* package DEF (dump version 5): an action replay draws nothing for; the
-     * present collects it (rd_present.c, RENDER_API.md "The deferred text
-     * pass").  b[0] RD_OTEXT_ITEM: u[1] payload offset of an RdTextItem
+     * present collects it (rd_present.c).  b[0] RD_OTEXT_ITEM: u[1] payload offset of an RdTextItem
      * (rd.h), u[2] its size; b[0] RD_OTEXT_OP: a post pass after text (b[1]
      * RdPostKind), u[1] offset of an RdTextOp, u[2] its size.  Keyed */
     RDC_OVERLAY_TEXT,
@@ -149,8 +148,7 @@ static inline int rd__CmdIsState(uint8_t type)
 
 /* RDC_SHADOW_STRIP's b[0] (wave 4, R4b). */
 #define RD_SHADOW_TRIS 1
-/* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps
- * (RENDER_API.md "Shadows"). */
+/* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps. */
 #define RD_SHADOW_STENCIL_MASK 0x3Fu
 /* Package V3: rd_ShadowTris tags every vertex with the place (1-based) its
  * triangle had in the call, in RdScreenVtx.rgba (little-endian; the volume
@@ -296,7 +294,7 @@ typedef struct RdTargetRec {
     /* Wave 7 (R7a): the texture's size and its texels per GS pixel
      * (tw = w * sx rounded, th = h * sy); tw == w, th == h, sx == sy == 1
      * in Original and for every target the Enhanced resolution does not
-     * scale (rd__TargetScaleOf, RENDER_API.md "Presets and display options") */
+     * scale (rd__TargetScaleOf) */
     uint32_t tw, th;
     float sx, sy;
     uint8_t wide; /* scene-class: draws other than full-screen ones take the wide x scale */
@@ -305,7 +303,7 @@ typedef struct RdTargetRec {
      * aspect: tw = w / f texels for f = (4/3) / aspect, wide set, so its 3D
      * view shows what the wide scene shows; the draws that sample it scale
      * their x addressing by f (fillDrawCB, DrawCB.g_scale.zw).  0 at 4:3
-     * and in Original (RENDER_API.md "Render-to-texture surfaces") */
+     * and in Original */
     uint8_t wideBlock;
     RhiFormat format;
     RhiTexture color, depth;
@@ -537,7 +535,7 @@ typedef enum RdFsId {
     RD_FS_COUNT
 } RdFsId;
 
-/* How an RdBlend equation reaches the hardware (RENDER_API.md "GS to pipeline mapping"). */
+/* How an RdBlend equation reaches the hardware. */
 typedef enum RdBlendPath {
     RD_BP_NONE = 0,      /* ABE off */
     RD_BP_LERP,          /* modes 2, 4, 7: SRC1 / 1-SRC1, factor As/128 or FIX/128 (<= 1) */
@@ -587,7 +585,7 @@ int rd__StqPass(RdDrawPass *dp);
  * PSMCT16 texture (or one with a 24- or 16-bit CLUT: RdTexRec.src not
  * RGBA32) under a TEXA with AEM through a linear MAG or MIN filter, the
  * draws whose bilinear edges depend on TEXA coming before the filter; the
- * planners give them sprite_texa_ps / vu_texa_ps (RENDER_API.md "Textures"). */
+ * planners give them sprite_texa_ps / vu_texa_ps. */
 int rd__TexaPerTexel(const RdStateBlock *s);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
@@ -608,7 +606,7 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
  * shader and the clip mode; false without a row. */
 bool rd__VuRow(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);
 bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
-/* Wave 4 (R4b), the shadow count (rd_shadow.c, RENDER_API.md "Shadows"):
+/* Wave 4 (R4b), the shadow count (rd_shadow.c):
  * the volume pipeline under state s (sprite_world_vs / sprite_ps, colour
  * mask 0, the state's Z test without Z write, stencil INCR_WRAP or, with
  * decr, DECR_WRAP under write mask RD_SHADOW_STENCIL_MASK, on a D32F_S8
@@ -622,7 +620,7 @@ RdPipeKeyInt rd__ShadowReduceKey(void); /* package RSMALL */
 /* The shadow families above under the states the game draws them with
  * (Shadow.c: TEST 0x50000); appends to out[0..n). */
 uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* Wave 4 (R4c), the depth fog (RENDER_API.md "Depth fog"): the draws of an
+/* Wave 4 (R4c), the depth fog: the draws of an
  * RD_POST_FOG under state s, as rd__PlanScreenDraw plans a fullscreen
  * sprite without a depth attachment (fog_lut_ps does the Z test against the
  * depth it reads), with fog_lut_ps as the fragment shader. */
@@ -634,8 +632,7 @@ uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 void rd__FogShutdown(void);
 void rd__WideScissor(int32_t *x0, int32_t *x1, int32_t w, float f); /* package RSMALL */
 void rd__ShadowShutdown(void); /* package RSMALL: the reduced shadow count */
-/* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c, RENDER_API.md "Full-screen effects and the
- * raw packet builders"): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
+/* Wave 5 (R5a), staticBlur.c's sprites (rd_blur.c): the pipeline of an RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR sprite
  * under state s (fx_rect_vs / fx_sprite_ps, no hardware blending, the
  * state's colour mask; with a depth format the state's Z test and Z write,
  * else none), whether it binds the depth target (*useDepth), and the
@@ -648,7 +645,7 @@ uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 
 /* ------------------------------------------------- the CRT filter (rd_crt.c)
- * Package CRT; DISPLAY.md "CRT filter", RENDER_API.md "The CRT pass". */
+ * Package CRT. */
 typedef enum RdCrtMask {
     RD_CRT_MASK_NONE = 0,
     RD_CRT_MASK_GRILLE = 1, /* aperture grille: R, G, B stripes down the block */
@@ -656,7 +653,7 @@ typedef enum RdCrtMask {
     RD_CRT_MASK_DOTS = 3  /* shadow mask: two rows of R, G, B dots half a triad apart */
 } RdCrtMask;
 
-/* A mode's look (the presets' table in rd_crt.c, DISPLAY.md's table) */
+/* A mode's look (the presets' table in rd_crt.c) */
 typedef struct RdCrtParams {
     float scanline;         /* 0..1: the beam profile against the plain lines */
     float beamMin, beamMax; /* the beam's full width at half maximum, dark to bright, in lines */
@@ -777,7 +774,7 @@ static inline bool rd__IsBlurKind(uint32_t kind)
 uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
 
 /* ---------------------------------------------- interpolation (wave 7, R7b)
- * rd_interp.c (RENDER_API.md "Frame rate and interpolation").  rd__InterpFrame builds, into a
+ * rd_interp.c.  rd__InterpFrame builds, into a
  * frame it owns, the current frame cur with every keyed draw's data blended
  * from its match in prev by alpha (0 = prev's data, 1 = cur's), and the
  * feedback passes set up for a present that stands for dt ticks
@@ -1057,7 +1054,7 @@ void rd__NotImplemented(const char *what);
 void rd__SetNotImplementedFatal(bool fatal);
 
 /* Package PC: merging consecutive screen-prim commands into one draw
- * (rd_replay.c doScreen, RENDER_API.md "Performance"); on by default, off
+ * (rd_replay.c doScreen); on by default, off
  * for the tests that compare a merged run with sequential draws. */
 void rd__SetScreenMerge(bool on);
 uint32_t rd__NotImplementedCount(void);
@@ -1277,7 +1274,7 @@ uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes);
  * leave out (rd__EnumerateReachable adds them) */
 uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 
-/* rd_replay.c (wave 5, R5c; RENDER_API.md "Full-screen effects and the raw packet builders"): a
+/* rd_replay.c (wave 5, R5c): a
  * screen-prim command
  * under COLCLAMP 0 with an additive or subtractive equation (ALPHA modes 0,
  * 1, 5, 6, ABE on) wraps modulo 256 per channel as on the GS instead of

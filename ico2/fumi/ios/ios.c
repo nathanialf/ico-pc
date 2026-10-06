@@ -51,7 +51,7 @@ __UINTPTR_TYPE__ ico_arena_ee_addr(unsigned int ee);
    larger, so a partition holds less than the EE's does: the plaza (stage
    16) ran out of the stage partition in InitIcoMisc, about 5300 blocks in,
    idle boots of stages 12, 17, 23 and 42 came within 300 KB of its end, and
-   "stat mot" peaked at 94% and "common" at 98% (DIVERGENCES.md D12). The
+   "stat mot" peaked at 94% and "common" at 98%. The
    stage partition gets 4 MB and the others the same share of their size
    (4 MB / 15,826,944 bytes, rounded up to 64 KB). */
 #define ICO_HOST_STAGE_EXTRA 0x400000

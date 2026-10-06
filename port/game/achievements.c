@@ -1,7 +1,7 @@
 /*
  * port/game/achievements.c
  *
- * The built-in achievements (achievements.h, docs/port/ACHIEVEMENTS.md).
+ * The built-in achievements (achievements.h).
  */
 #include "achievements.h"
 
@@ -21,7 +21,7 @@
  * Each returns nonzero when its achievement's condition holds.  They read
  * only the game-state view and the counters below. */
 
-/* stages (stageData order; the names are the game's, docs/port/ACHIEVEMENTS.md) */
+/* stages (stageData order; the names are the game's) */
 #define ST_GATE 11       /* st04a (GATE_1ST) */
 #define ST_GRAVE 13      /* st18a (GRAVE) */
 #define ST_WINDMILL 15   /* st09a (WINDMILL) */
@@ -39,7 +39,7 @@
 #define GF_QUEEN_DEAD 338   /* actSt25aQueenDeadChk, st25a.c:565 */
 #define GF_BEACH_SECRET 354 /* actSt27aEndChk, end.c:1061: item kind 3 held */
 
-/* weapon kinds (weaponKind[10]; docs/port/ACHIEVEMENTS.md, "Weapons") */
+/* weapon kinds (weaponKind[10]) */
 #define WK_SWORD 4
 #define WK_QUEEN_SWORD 5
 #define WK_LIGHT_A 8
@@ -356,8 +356,7 @@ static long long parse_time(const char *s)
  *   version = 2
  *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
  *            stages (128-bit hex)
- *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>
- * (docs/port/ACHIEVEMENTS.md, "The file"). Unknown keys are ignored.
+ *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>. Unknown keys are ignored.
  */
 
 static void sofa_list(const int *set, int n, char *out, size_t size)
@@ -790,7 +789,7 @@ static void unlock(int i)
 }
 
 /* Breaks text into lines of at most POPUP_LINE code points at spaces (the
-   popup does not wrap; docs/port/UI.md, open item 7). */
+   popup does not wrap). */
 #define POPUP_LINE 44
 
 static void wrap(const char *in, char *out, size_t size)

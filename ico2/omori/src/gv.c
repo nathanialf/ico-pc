@@ -145,7 +145,7 @@ void _ApplyRyGV(float *vec, float ang)
     sceVu0RotMatrixY(m1, m0, ang);
     /* PC port: callers such as chain.c's climb sway set only x, y and z, so
        w is a stale stack word; the host's sceVu0ApplyMatrix reads it as VU0
-       does (port/math/matrix_stack.c ico_apply_matrix, DIVERGENCES.md F13) */
+       does (port/math/matrix_stack.c ico_apply_matrix) */
     sceVu0ApplyMatrix(v, m1, vec);
     vec[0] = v[0];
     vec[1] = v[1];

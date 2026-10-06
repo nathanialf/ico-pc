@@ -169,7 +169,7 @@ void ico_audio_sdl_device_removed(uint32_t which)
 }
 #endif
 
-/* Mirror mode (Phase 6A, docs/port/OPTIONS.md): the option lives in
+/* Mirror mode (Phase 6A): the option lives in
    port/game/options.c; ico_audio_host_vsync swaps the channels of each
    rendered block while it is on (renderer wave 7, R7c). */
 void ico_audio_pan_mirror(int16_t *frames, int count, int mirror)

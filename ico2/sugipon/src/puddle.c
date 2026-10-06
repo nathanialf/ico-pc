@@ -114,7 +114,7 @@ PuddleWork *InitPuddleGeo(GObj *self, SObjSimpleSetting *setting)
 
 #ifdef ICO_RD
 
-/* PC port (renderer wave 5, R5b; docs/port/RENDER_API.md "Render-to-texture surfaces").  The
+/* PC port (renderer wave 5, R5b).  The
    work block drawAreaSetup allocates right after tex_ResetVramPri(4) is TBP
    0x2800, which the GS register decoder takes for the named AA0 target (no
    depth buffer); on the GS the reflection draws there with work1Vram as its

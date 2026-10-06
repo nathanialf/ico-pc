@@ -98,9 +98,8 @@
 #   CROSS in play is a game action. Once a trace shows the tick where
 #   gf11 bit 30 (0x40000000, flag 382) sets, delete every line after it.
 #
-# Host devices on the way: every disc read finishes at the next vsync
-# (docs/port/DATA.md, "Timing"); the sound driver is the SNDN2DRV host over
-# the emulated SPU2, so streams advance as the IOP's would (docs/port/AUDIO.md);
+# Host devices on the way: every disc read finishes at the next vsync; the sound driver is the SNDN2DRV host over
+# the emulated SPU2, so streams advance as the IOP's would;
 # the memory card is port/save/mc_host.c: port 0 is the saves folder (a
 # formatted card, empty on a first run), port 1 has no card. Screens 4 and
 # 7 below were written when both ports reported no card (the earlier null

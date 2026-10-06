@@ -89,7 +89,7 @@ void ResetCharFileManager(void)
 /* PObj.c has no header; the definition is (int, int, int) */
 extern PObjModel *InitPObj(void *buf, ICO_WORD name, int id);
 /* PObj.c (port): frees the strip and morph tables decoded from the model
-   image just freed (docs/port/LOADERS.md) */
+   image just freed */
 void PObj_FreeImageTables(void);
 
 /* "Illegal Model ID number: %d (\"%s\")\n" / "ReadModelFile:Already loaded. (id:%d)%s\n" / "ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n" / sprintf above belong to ReadModelFile. */

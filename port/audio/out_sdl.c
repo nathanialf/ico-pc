@@ -19,7 +19,7 @@
  * (0..256 in 1/256 steps) just before it is queued, so a change from the
  * Settings menu is heard within two vsyncs.
  *
- * Device ([audio] device, docs/port/AUDIO.md "Output device"): the stream
+ * Device ([audio] device): the stream
  * is opened on the playback device with that name, or on SDL's default
  * device (which follows the system's default) when the name is empty or no
  * device has it.  The Settings menu reopens it on another device; when the

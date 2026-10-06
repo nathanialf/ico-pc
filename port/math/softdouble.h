@@ -4,12 +4,12 @@
  * `double` arithmetic as the PS2 did it. The EE has no double hardware:
  * ee-gcc turned every double operation into a call to libgcc's soft float
  * (sce/libgcc/dp-bit.c, fp-bit.c), so the game's few double expressions
- * (docs/port/MATH.md, "Doubles": 33 functions in 20 files) rounded to
+ * (33 functions in 20 files) rounded to
  * nearest, read denormal inputs as zero and truncated a tiny result into a
  * denormal. On the host they would be SSE doubles under the simulation
  * thread's round-toward-zero mode. These functions compute the EE's results
  * with integer arithmetic only, so the host's rounding mode and DAZ/FTZ do
- * not reach them (docs/port/DIVERGENCES.md F6).
+ * not reach them.
  *
  * Values are the IEEE-754 bit patterns: uint64_t for a double, uint32_t or
  * float for a float. ICO_D(lit) gives the bits of a double literal (the

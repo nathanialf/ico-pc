@@ -27,8 +27,7 @@
  *                            layer that the decoder does not turn into rd
  *                            state (each is also logged once).
  *
- * The decoder itself (the plan's rd_gs_shim.c) is GifPacket.c's host path:
- * docs/port/RENDER_API.md "GS register decoding (wave 2)".
+ * The decoder itself (the plan's rd_gs_shim.c) is GifPacket.c's host path.
  */
 #ifndef GIFHOST_H
 #define GIFHOST_H
@@ -59,7 +58,7 @@ void gif_HostFrameReset(void);
    (since R3ab) draws into a temporary target for the rest of the frame,
    and a TEX0 with that block's TBP samples it. */
 void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n);
-/* Renderer R7d (docs/port/RENDER_API.md "Frame rate and interpolation", "Keys"): the RdKey of
+/* Renderer R7d: the RdKey of
    the 2D primitives decoded from here, RD_KEY(obj, part, ordinal), so the
    presenter can blend a layout row, a subtitle or a font string between
    two ticks; (0, 0, 0) ends it (unkeyed, as before).  A different key emits

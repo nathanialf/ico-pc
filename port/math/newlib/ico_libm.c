@@ -45,7 +45,7 @@
  * large-argument path), atanf, atan2f, acosf and asinf goes through
  * ps2_add/ps2_sub (port/math/ps2float.h), the EE adder, which drops the
  * smaller operand's bits below one guard bit; IEEE round toward zero does
- * not (DIVERGENCES.md F18). sinf's table argument just under pi/2 is the
+ * not. sinf's table argument just under pi/2 is the
  * case that shows it: 1 - 4.7e-9 is 1.0 on the EE and 0x3F7FFFFF under IEEE
  * RTZ. Left as IEEE: __kernel_rem_pio2f and floorf (sinf's arguments above
  * 2^7 * pi/2 only, which the game never passes), fmodf (exact).
@@ -1015,7 +1015,7 @@ static const float ico_acos_qS4 = 7.7038154006e-02f;
  * stop in the leg IK, motMan_getFinalMatrix.c.inc:1008, x = 0x3f8007a8 at
  * a stage 6 boot). The wrappers return 0.0f for |x| > 1 whatever the core
  * gives, so this value reaches a caller only for an exponent-255 pattern
- * (ico_isnanf), where it is the EE's +Fmax (DIVERGENCES.md F5). */
+ * (ico_isnanf), where it is the EE's +Fmax. */
 static float ico_domain_error(float x)
 {
     float d = ps2_operand(x) - ps2_operand(x);

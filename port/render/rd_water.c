@@ -1,6 +1,5 @@
 /* rd_water.c: the render-to-texture surfaces of renderer wave 5 (R5b):
- * puddle.c, pool.c and queen_barrier_disp.c (docs/port/RENDER_API.md
- * "Render-to-texture surfaces").
+ * puddle.c, pool.c and queen_barrier_disp.c.
  *
  * Recording only.  Three things the GS register decoder cannot know:
  *

@@ -92,7 +92,7 @@ uint16_t ico_audio_gain_apply(int slot, uint16_t vol)
         logged_sweep = 1;
         fprintf(stderr,
                 "audio: slot %d volume 0x%04X is a sweep: written unscaled by the music/effects "
-                "gain (docs/port/AUDIO.md, \"Gains and output mode\")\n",
+                "gain\n",
                 slot, vol);
     }
     return ico_audio_gain_scale(vol, q);

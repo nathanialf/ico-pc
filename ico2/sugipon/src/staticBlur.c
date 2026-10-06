@@ -65,7 +65,7 @@ extern void gif_StartPacketPri(int pri);
 
 #ifdef ICO_RD
 
-/* PC port (wave 5, R5a; RENDER_API.md "Full-screen effects and the raw packet builders"): the
+/* PC port (wave 5, R5a): the
  * window build records this file's packets on rd itself instead of through
  * GifPacket.c's register decoder, whose generic mapping of the work buffers
  * cannot be right here (the same TBP is a 256 x 128, a 256 x 256 and a
@@ -1247,7 +1247,7 @@ static void calcSun(void)
     _ApplyMatrix(buf, matrixptr + 256, buf);
     /* PC port: the view matrix is still zero on the stage's first tick, so
        buf[3] is 0; the EE's division gives Fmax, and Fmax * 0 is 0, where
-       IEEE gives Inf * 0 = NaN (DIVERGENCES.md F5). */
+       IEEE gives Inf * 0 = NaN. */
     _ScaleVectorXYZ(buf, buf, ps2_div(1.0f, buf[3]));
     _AddVectorXYZ(buf, buf, sunScreenOffset);
     _FTOI0Vector(sunScreen, buf);

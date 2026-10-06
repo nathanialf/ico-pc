@@ -5,7 +5,7 @@
  * sce/libsndn2/sound.h (the decomp's, MIT), in its host view (pointer-sized
  * and 64-bit types host-correct, the SgSetSePitchDirect prototype the EE
  * header leaves out).  The sequencer itself, sce/libsndn2/sound.c, is in
- * the host build since Phase 4B (docs/port/AUDIO.md).
+ * the host build since Phase 4B.
  */
 #ifndef ICO_COMPAT_SOUND_H
 #define ICO_COMPAT_SOUND_H

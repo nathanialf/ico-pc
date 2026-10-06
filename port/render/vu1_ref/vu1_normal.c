@@ -3,7 +3,7 @@
  * runs while vertex k is stored); the references process one vertex at a
  * time in the order of the dependent values, which gives the same results
  * because every pipelined value is read after the instruction that writes it
- * for the vertex it belongs to (docs/port/VU1_PROGRAMS.md, "Pipelining").
+ * for the vertex it belongs to.
  * Line numbers are ico2/vusrc/normal_c.vsm and normal_l.vsm. */
 #include "vu1_ref_internal.h"
 

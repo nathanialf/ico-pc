@@ -15,8 +15,6 @@
  * VU1 microprogram table is empty on the host: ico2/vusrc is assembled only
  * by the PS2 build.)
  *
- * docs/port/HEADLESS_STUBS.md lists every stub and why; the renderer waves
- * replace this file.
  */
 #include <eeregs.h>
 #include <libdma.h>

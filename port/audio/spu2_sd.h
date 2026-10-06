@@ -2,7 +2,7 @@
  * port/audio/spu2_sd.h
  *
  * A libsd-shaped front end on the software SPU2: the calls SNDN2DRV.IRX
- * makes (docs/research/sndn2drv.md, "Imports" and recommendation 2), with
+ * makes, with
  * libsd's argument encodings, turned into SPU2 register writes.  Phase 4B's
  * sndn2 host drives the SPU2 through these.
  *
@@ -11,8 +11,8 @@
  * common/include/libsd-common.h spells it; the values are restated here
  * so the port does not depend on the ps2sdk headers.  Behaviour follows
  * R1 where it read the IRX and ps2sdk's clean-room libsd (freesd.c,
- * effect.c, voice.c) elsewhere; docs/port/AUDIO.md lists which is which
- * and what is still to check against the disc's LIBSD.IRX.
+ * effect.c, voice.c) elsewhere; what is still to check against the disc's
+ * LIBSD.IRX is noted where it applies.
  *
  * Every write is stamped with the time set by spu2_sd_set_time() (an SPU2
  * frame number, spu2_time() by default when it is behind), so a host that
@@ -117,7 +117,7 @@ uint16_t spu2_sd_get_core_attr(uint16_t entry);
 
 /* sceSdSetEffectAttr: loads the mode's preset (spu2_reverb_get_preset),
    sets EVOL to the depths and ESA from the core's EEA.  Returns -1 for a
-   mode above 9.  delay and feedback are ignored (DIVERGENCES.md A9). */
+   mode above 9.  delay and feedback are ignored. */
 int spu2_sd_set_effect_attr(int core, const spu2_sd_effect_attr *attr);
 void spu2_sd_get_effect_attr(int core, spu2_sd_effect_attr *attr);
 

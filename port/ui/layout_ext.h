@@ -1,8 +1,7 @@
 /*
  * port/ui/layout_ext.h
  *
- * Port-owned rows in the game's layout system (Phase 6, 6B;
- * docs/port/UI.md, "Layout extension").
+ * Port-owned rows in the game's layout system (Phase 6, 6B).
  *
  * The game's tables are runtime-loaded arrays of fixed size
  * (port/data/gen/table_defs.c): texLayout[80] and texProperty[436].  Every
@@ -77,8 +76,7 @@ const char *lt_ext_RowText(int index);
    if index is not a port row */
 float lt_ext_RowSize(int index);
 
-/* The game's button glyphs on a port row (docs/port/UI.md, "Button
-   glyphs").  A glyph row draws one of the game's own sprites, the texture
+/* The game's button glyphs on a port row.  A glyph row draws one of the game's own sprites, the texture
    path of display_texture unchanged: the texture is the one a game row of
    the PAL tables draws the glyph from (its texNo, which the stage's texture
    set-up fills for every stage, since every stage's layout range covers
@@ -149,11 +147,10 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
 
 /* Whether display_texture draws e as text: a port row (a glyph row only
    when it has no texture: it then draws nothing).  The game's own rows are
-   never text: they draw their textures, the PS2's lettering
-   (docs/port/UI.md, "Menu text"). */
+   never text: they draw their textures, the PS2's lettering. */
 int lt_ext_IsTextRow(const LtProperty *e);
 
-/* Q2 (docs/port/SETTINGS.md, "Circle goes back"): the pad bits that take
+/* Q2: the pad bits that take
    the game menus' back action, where the game checks Triangle for it
    (default_item_select's left link in layout_texture.c, the la_* procs'
    cancels in layout_action.c, both under ICO_HOST).  Triangle (0x10), plus

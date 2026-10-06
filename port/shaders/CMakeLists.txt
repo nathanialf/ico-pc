@@ -1,6 +1,5 @@
 # port/shaders/CMakeLists.txt: the HLSL shaders, compiled by DXC at build
-# time (cmake/IcoShaders.cmake) and embedded in ico_shaders. docs/port/SHADERS.md
-# says how to add one. Tests are in test/.
+# time (cmake/IcoShaders.cmake) and embedded in ico_shaders. Tests are in test/.
 include(${CMAKE_SOURCE_DIR}/cmake/IcoShaders.cmake)
 
 # name, file, entry, stage
@@ -10,7 +9,7 @@ ico_add_shader(sprite_ps sprite.hlsl sprite_ps fragment)
 # package TEXA: TEXA per texel before the bilinear filter (24- and 16-bit textures under AEM)
 ico_add_shader(sprite_texa_ps sprite.hlsl sprite_texa_ps fragment)
 ico_add_shader(date_snap_ps sprite.hlsl date_snap_ps fragment)
-# package AA1: PRIM.AA1 lines and triangles (docs/port/RENDER_API.md "GS to pipeline mapping")
+# package AA1: PRIM.AA1 lines and triangles
 ico_add_shader(sprite_aa1_ui_vs sprite.hlsl sprite_aa1_ui_vs vertex)
 ico_add_shader(sprite_aa1_world_vs sprite.hlsl sprite_aa1_world_vs vertex)
 ico_add_shader(sprite_aa1_ps sprite.hlsl sprite_aa1_ps fragment)
@@ -28,7 +27,7 @@ ico_add_shader(fog_lut_vs fog_lut.hlsl fog_lut_vs vertex)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
 # package R8: R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
-# wave 3 (R3c): the VU1 microprograms (docs/port/VU1_PROGRAMS.md)
+# wave 3 (R3c): the VU1 microprograms
 ico_add_shader(vu_prelit_vs vu_prelit.hlsl vu_prelit_vs vertex)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment)
@@ -42,22 +41,21 @@ ico_add_shader(vu_grid_vs vu_grid.hlsl vu_grid_vs vertex)
 ico_add_shader(vu_grid_lit_vs vu_grid.hlsl vu_grid_lit_vs vertex)
 ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
-# Phase 4E: the FMV picture (port/render/rd_video.c, docs/port/FMV.md)
+# Phase 4E: the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
 # wave 5 (R5a): staticBlur.c's sprites in the GS integer arithmetic
-# (port/render/rd_blur.c, docs/port/RENDER_API.md "Render-to-texture surfaces")
+# (port/render/rd_blur.c)
 ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)
 ico_add_shader(fx_sprite_ps fx_sprite.hlsl fx_sprite_ps fragment)
-# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c), RENDER_API.md "Full-screen effects and the
-# raw packet builders"
+# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c)
 ico_add_shader(wrap_acc_ps raw_wrap.hlsl wrap_acc_ps fragment)
 ico_add_shader(wrap_resolve_ps raw_wrap.hlsl wrap_resolve_ps fragment)
-# package RSMALL: perspective-correct STQ on screen prims (docs/port/RENDER_API.md "STQ on screen prims")
+# package RSMALL: perspective-correct STQ on screen prims
 ico_add_shader(sprite_stq_ui_vs sprite.hlsl sprite_stq_ui_vs vertex)
 ico_add_shader(sprite_stq_world_vs sprite.hlsl sprite_stq_world_vs vertex)
 ico_add_shader(sprite_stq_ps sprite.hlsl sprite_stq_ps fragment)
-# package CRT: the CRT filter (port/render/rd_crt.c, docs/port/DISPLAY.md "CRT filter")
+# package CRT: the CRT filter (port/render/rd_crt.c)
 ico_add_shader(crt_vs crt.hlsl crt_vs vertex)
 ico_add_shader(crt_bloom_ps crt.hlsl crt_bloom_ps fragment)
 ico_add_shader(crt_blur_ps crt.hlsl crt_blur_ps fragment)

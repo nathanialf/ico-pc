@@ -1,8 +1,7 @@
 /*
  * port/game/credits_live.c
  *
- * The Extras credits' engine (ico_credits.h; docs/port/EXTRAS.md,
- * "Credits"): the game's side of the playback, in the program only.
+ * The Extras credits' engine (ico_credits.h): the game's side of the playback, in the program only.
  *
  * Start (from the Settings menu's proc on the title, stage 1): the game's
  * state is kept (below), the title theme fades and the stage changes to

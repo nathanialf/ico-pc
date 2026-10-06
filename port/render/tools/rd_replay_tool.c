@@ -12,10 +12,9 @@
  *
  * --backend picks the RHI backend (renderer wave 6, R6c; default: the
  * build's default, port/rhi/rhi.h rhi_CreateBackend), so the same dump can
- * be rendered on Vulkan and D3D12 and the PNGs compared
- * (docs/port/TESTING.md).
+ * be rendered on Vulkan and D3D12 and the PNGs compared.
  *
- * The display options (renderer wave 7, R7a; RENDER_API.md "Presets and display options"): a
+ * The display options (renderer wave 7, R7a): a
  * dump does not carry them, so the replay takes them here, the Original
  * preset by default:
  *   --enhanced            the Enhanced preset (needed by the four below)
@@ -40,8 +39,7 @@
  *                         recorded the dump drew it.  Without it, Arimo
  *   --crt MODE            (with --present; package CRT) the CRT filter in
  *                         MODE (scanlines, consumer, trinitron, pvm, shadow) at
- *                         full strength, the modes' own parameters
- *                         (DISPLAY.md "CRT filter"); --crt-strength K (0..1,
+ *                         full strength, the modes' own parameters; --crt-strength K (0..1,
  *                         after it) sets the strength
  *   --overlay-test        (with --present) registers a presentation overlay
  *                         (package OV, rd.h rd_SetPresentOverlay) drawing a
@@ -81,7 +79,7 @@
  *                         frame as the renderer drew it before AA1 was
  *                         decoded (a before/after pair from one dump)
  *
- * Interpolation (package I1; RENDER_API.md "Frame rate and interpolation"):
+ * Interpolation (package I1):
  *   --interp T PREV       replays the frame the presenter builds between the
  *                         dump PREV (the tick before, e.g. the game's
  *                         rd-NNNNN-prev.rddump) and <dump> at alpha T (0..1)

@@ -1,12 +1,10 @@
-# port/render: the native draw API (rd.h) on the RHI. README.md lists the
-# files; docs/port/RENDER_API.md is the design.
+# port/render: the native draw API (rd.h) on the RHI.
 #
 # ico_render needs the shader table (ico_shaders, DXC) and an RHI backend
 # (ico_rhi_vk); without either it is left out with a status message, like
 # the other fetched dependencies.
 
-# ico_vu1_ref (wave 3, R3c): CPU references of the five VU1 microprograms
-# (docs/port/VU1_PROGRAMS.md), the oracle of port/shaders/test/vu1_test.c.
+# ico_vu1_ref (wave 3, R3c): CPU references of the five VU1 microprograms, the oracle of port/shaders/test/vu1_test.c.
 # Plain C on port/math's ps2float helpers; built in every configuration.
 add_library(ico_vu1_ref STATIC
     vu1_ref/vu1_ref.c
@@ -203,7 +201,7 @@ target_link_libraries(rd_mirror_test PRIVATE ico_render)
 # times and recorded 200 times: no resource is created or destroyed and no
 # texture or static mesh uploaded again in steady state, and the CPU time of
 # a replay stays under 20 ms on lavapipe; with --dump FILE it times a dump's
-# replay phase by phase (docs/port/RENDER_API.md "Performance").
+# replay phase by phase.
 add_executable(rd_perf_test test/rd_perf_test.c)
 target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")

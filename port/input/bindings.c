@@ -1,7 +1,7 @@
 /*
  * port/input/bindings.c
  *
- * Raw device state to the virtual pad (input.h, docs/port/INPUT.md): the
+ * Raw device state to the virtual pad (input.h): the
  * binding tables, their defaults and config syntax, and the per-vsync step.
  */
 #include <ctype.h>

@@ -14,7 +14,7 @@
  *                     port/data/iso9660.c)
  *   ico_vfs_archive   the archive the first-run extractor writes (ico.o2r,
  *                     port/data/archive.c); it keeps each file's disc LSN
- *                     and size (docs/port/DATA.md)
+ *                     and size
  *
  * Path spellings accepted everywhere a path is taken (case-insensitive):
  *   DFDATAS/DATA.DF        DFDATAS\DATA.DF;1      \DFDATAS\DATA.DF;1

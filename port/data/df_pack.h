@@ -10,8 +10,7 @@
  * size (fumi/ios/cdvd.c, unifile_read_func).  The entries named *.DF are
  * packs: a raw deflate stream whose output is a 16-byte header (the member
  * count first), the 0x224-byte member entries (id, kind, word08, size, the
- * name) and the members back to back (cdvd.c, iosCdvdMgrPackLoad;
- * docs/research/loader-census.md, "The pack container").  The other entries
+ * name) and the members back to back (cdvd.c, iosCdvdMgrPackLoad).  The other entries
  * are loose files (the .int streams, .smb, .pss, .jim).
  *
  * The index of the packs' members is built once per volume, the first time

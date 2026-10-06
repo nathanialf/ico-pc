@@ -1,5 +1,4 @@
-/* rd_video.c: the FMV picture on the output (Phase 4E; port/fmv/rd_video.h,
- * docs/port/FMV.md).
+/* rd_video.c: the FMV picture on the output (Phase 4E; port/fmv/rd_video.h).
  *
  * The PS2 movie player did not draw through the game's display: it set up
  * its own 720-wide interlaced display environment and sent each picture

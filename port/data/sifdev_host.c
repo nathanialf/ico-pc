@@ -7,7 +7,7 @@
  * (way_tool.c's way data, camera-editor.c's camera sets, effectTool.c's
  * particle files, GsBase.c's stage settings, debug.c's option table, start
  * stage and snapshots).  Here a host0: path is a file under <pref>/dev/
- * (ico_host_pref_dir; docs/port/DEVELOPER_MODE.md):
+ * (ico_host_pref_dir):
  *
  *   host0:object/stagesetting/st04a.ssb  ->  <pref>/dev/object/stagesetting/st04a.ssb
  *

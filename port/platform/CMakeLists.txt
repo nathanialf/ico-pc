@@ -1,7 +1,6 @@
 # port/platform/CMakeLists.txt: package 1B's part of the platform layer (the
 # fiber scheduler, the EE kernel calls, the EE RAM arena, the host loop and
-# the headless graphics seam) and its tests. docs/port/PLATFORM.md describes
-# them.
+# the headless graphics seam) and its tests.
 
 target_sources(ico_platform PRIVATE
     arena.c
@@ -16,7 +15,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(ico_platform PUBLIC Threads::Threads)
 if(TARGET ico_pc)
     # A link map beside the program, shipped with test builds, to turn the
-    # crash report's executable offsets into symbols (docs/port/BOOT_DIAG.md).
+    # crash report's executable offsets into symbols.
     target_link_options(ico_pc PRIVATE "LINKER:-Map=$<TARGET_FILE_DIR:ico_pc>/ico_pc.map")
 endif()
 # host_loop.c calls into the game (its main, ico_vsync, systemStatus), so it

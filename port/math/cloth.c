@@ -4,7 +4,6 @@
  * The VU0 routines sugipon/src/clothAnimation.c defines with external
  * linkage. None has a caller outside that file (its own code uses the
  * static inline copies), but the symbols are the game's.
- * docs/port/MATH.md.
  */
 #include "ico_math.h"
 #include "vector_inline.h"

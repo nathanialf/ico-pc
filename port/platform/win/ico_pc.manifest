@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!-- port/platform/win/ico_pc.manifest: ico_pc.exe's application manifest,
-     embedded by ico_pc.rc (docs/port/DATA.md, "Paths"; docs/port/PLATFORM.md).
+     embedded by ico_pc.rc.
      activeCodePage UTF-8 (Windows 10 1903 and later): the C library's and the
      A Win32 calls read paths as UTF-8, so the UTF-8 paths SDL_GetPrefPath and
      the ini give work even where a call was not routed through

@@ -26,7 +26,7 @@ extern int MicroCodeAddress[];
 void mc_HostDma(int id, const void *addr, int qwc);
 /* Package I1: the emitter (prim_DispParticle's PrimParticle) whose particle
    batches the next mc_HostDma calls draw, keyed by it for the presenter's
-   matching (docs/port/RENDER_API.md "Keys"); 0 when its chain is done (a
+   matching; 0 when its chain is done (a
    batch from elsewhere takes rd_mesh.c's list key). */
 void mc_HostParticleKey(const void *emitter);
 #endif

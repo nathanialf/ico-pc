@@ -1,5 +1,5 @@
 /* menu_text_test.c: the game's menu words keep their texels; the port's
- * rows are text (packages P3, TXT2; docs/port/UI.md, "Menu text").
+ * rows are text (packages P3, TXT2).
  *
  * Without a device:
  *   - the table (the game face's source, menu_text.h): every row a
@@ -799,7 +799,7 @@ static void testDigits(void)
    20-texel row whose capitals sit at texel 9.0) and a port row "OK" at size
    27 in the same 20-field-line box.  The game row is its texture; the
    sheet's capital middle is mapped through the sprite's box and texels as
-   display_texture draws them (docs/port/UI.md, open item 10). */
+   display_texture draws them */
 static void testPortRowAnchor(void)
 {
     memset(texLayout, 0, sizeof(texLayout));

@@ -1,7 +1,7 @@
 /*
  * port/game/photo_mode.h
  *
- * Photo mode's state (package PHOTO; docs/port/DISPLAY.md "Photo mode"): a
+ * Photo mode's state (package PHOTO): a
  * free camera over the paused picture.  The pause menu's Options > "Photo
  * mode" row opens a port layout (port/ui/photo_ui.c) whose proc calls
  * ico_photo_enter, then ico_photo_update once a Main tick with the pad, and

@@ -40,7 +40,7 @@ typedef int (*FcFunc)(void *work, int mode);
 
 /* The EE's div.s gives +-Fmax for a zero (or denormal) divisor, 0/0
    included, and cvt.w.s saturates; plain C on the host gives Inf/NaN and
-   0x80000000 (docs/port/MATH.md, DIVERGENCES.md F5). The EE build keeps the
+   0x80000000. The EE build keeps the
    plain operators. */
 #define FC_DIV(a, b) ps2_div((a), (b)) /* derived name */
 #define FC_FTOI(x) ps2_ftoi(x)         /* derived name */
@@ -48,7 +48,7 @@ typedef int (*FcFunc)(void *work, int mode);
    the rays' VU0 transforms into and out of each object's frame
    (port/math/ps2float.h: PCSX2 PR #12001's PS2Float model). IEEE round
    toward zero puts some hits one ulp off the EE's, and where two coplanar
-   floors meet that picks the other floor (DIVERGENCES.md F19). FC_MUL's
+   floors meet that picks the other floor. FC_MUL's
    operands are in the instruction's order (fs, ft), which here is the
    source's. The EE build keeps the plain operators and calls. */
 #define FC_MUL(a, b) ps2_mul((a), (b)) /* derived name */
@@ -1025,8 +1025,7 @@ static void _Clip(ClipWork *self, int mode)
                    slot may already hold a new object whose dobj is not set yet
                    (stage 49 -> 56, the first InitMotionGeoInfo floor clip).
                    The EE reads disp at address 0x74, below the game's memory;
-                   the host reads the slot as one that does not display
-                   (DIVERGENCES.md D11) */
+                   the host reads the slot as one that does not display */
                 if (sub != 0 && sub->disp != 0) {
                     if (x != 0) {
                         if (obj == self->filter.o.obj) {

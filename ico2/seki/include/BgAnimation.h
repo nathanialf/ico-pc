@@ -24,7 +24,7 @@ struct BgaLightEnv;
  * drives, the tree links).  On the host such a word holds the address's
  * offset in the EE RAM arena (eeword.h): the records keep their disc layout
  * on every host, and the code reads the words through ICO_EEPTR and the
- * macros below.  docs/port/LOADERS.md. */
+ * macros below. */
 
 /* one envelope of a node, 8 bytes, the list ending at a null data word: what
    the envelope drives and its motion record (or, for types 7 to 9, its data) */

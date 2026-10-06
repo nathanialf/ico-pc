@@ -7,8 +7,7 @@
  * public hardware notes (psx-spx for the voice, envelope, interpolation and
  * reverb units, which the SPU2 cores share with the PS1 SPU; the ps2sdk
  * register layout and libsd encodings for the SPU2 register map).  No
- * emulator code.  docs/port/AUDIO.md has the design, the sources and the
- * list of approximations.
+ * emulator code.
  *
  * Units:
  *   - "SPU addresses" (SSA, LSAX, NAX, ESA, IRQA, TSA and the reverb
@@ -133,7 +132,7 @@
 #define SPU2_ATTR_IRQ 0x0040    /* IRQ enable */
 #define SPU2_ATTR_NOISE_SHIFT 8 /* bits 8-13: noise clock */
 
-/* MMIX bits (docs/research/sndn2drv.md, "PCM streams"). */
+/* MMIX bits. */
 #define SPU2_MMIX_SIN_WET_R 0x001
 #define SPU2_MMIX_SIN_WET_L 0x002
 #define SPU2_MMIX_SIN_DRY_R 0x004
@@ -162,7 +161,7 @@ typedef struct spu2_reverb_preset {
 #define SPU2_REVERB_MODES 10 /* libsd SD_EFFECT_MODE_OFF .. _PIPE */
 
 /* The preset of a libsd mode (0..9), or NULL.  The built-in values are the
-   psx-spx ones (AUDIO.md); spu2_reverb_set_preset replaces one, e.g. with
+   psx-spx ones; spu2_reverb_set_preset replaces one, e.g. with
    the table read from the user's LIBSD.IRX. */
 const spu2_reverb_preset *spu2_reverb_get_preset(int mode);
 void spu2_reverb_set_preset(int mode, const spu2_reverb_preset *p);
@@ -208,7 +207,7 @@ void spu2_render(int16_t *out, int frames);
    (around timed writes, transfers and callbacks, with an IRQ armed, or
    after a hazard), and hazards (a voice reading sound RAM that the chunk's
    frames write: a write-back or reverb work area).  The output is the same
-   either way (docs/port/AUDIO.md, "Render cost"). */
+   either way. */
 typedef struct spu2_stats {
     uint64_t chunks;
     uint64_t chunked_frames;

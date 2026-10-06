@@ -1,8 +1,8 @@
 /*
  * port/platform/clock.h
  *
- * The host's clocks (docs/port/CONFIG.md): the wall clock sceCdReadClock
- * reports, and the EE timers T0..T3 (docs/port/PLATFORM.md, "EE timers").
+ * The host's clocks: the wall clock sceCdReadClock
+ * reports, and the EE timers T0..T3.
  */
 #ifndef ICO_PLATFORM_CLOCK_H
 #define ICO_PLATFORM_CLOCK_H

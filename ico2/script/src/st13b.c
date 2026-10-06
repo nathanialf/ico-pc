@@ -20,7 +20,7 @@
 #include "typedef.h"
 #include "main.h"
 #include "script.h"
-#include "ico_gamestate.h" /* port: achievement signals, docs/port/ACHIEVEMENTS.md */
+#include "ico_gamestate.h" /* port: achievement signals */
 
 static void actSt13bDoorUpSub(GObj *volatile self);
 static void actSt13bElev2CharaChk(GObj *volatile self);

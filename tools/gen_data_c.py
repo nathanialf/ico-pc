@@ -39,7 +39,7 @@ config/symbol_addrs.pal.data.txt), the data members' own symbols
 (config/data_members.pal.txt) and SUPPLEMENT below, plus any
 --extra-symbols FILE, so a host build can write the tables without the
 period toolchain's layout link. Over the 73 members it writes the same C as
---layout does (tools/README.md says how that was compared).
+--layout does.
 
 --c also takes --writable NAME (repeatable; host build only). A symbol the
 member defines in .rodata is written `const`, as the developers compiled it,

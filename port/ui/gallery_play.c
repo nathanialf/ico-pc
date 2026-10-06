@@ -1,8 +1,7 @@
 /*
  * port/ui/gallery_play.c
  *
- * The music gallery's engine (gallery.h GalleryEngine; docs/port/MUSIC.md,
- * "Playback"): the game's own stream and effect calls, made from the
+ * The music gallery's engine (gallery.h GalleryEngine): the game's own stream and effect calls, made from the
  * gallery page's layout proc on the simulation thread, while the title is
  * up.
  *
@@ -38,7 +37,7 @@
  * voice's pitch to 0 and stops the disc reader's accounting until
  * adpcmPauseRequest(0).  An effect cannot pause (the page stops it).
  *
- * Streams play one pass (docs/port/MUSIC.md, "One pass"): requested with
+ * Streams play one pass: requested with
  * loopNum 2, so the engine's own close (when the reads, which run ahead of
  * the voice by the SPU ring, have gone round loopNum times) never comes,
  * and closed here when the voice has played the pass.  While the page is
@@ -189,8 +188,7 @@ static int seInBank(int b, int prog, int tone)
 
 /* The bytes of stream `no` that play: its pass (sectors * 2048), or less
    when the disc's file is blank (blocks with the end flag) from a sector
-   inside it to the pass's end (only event/40.int, blank from byte 0x93000:
-   MUSIC.md, "Findings").  Found once per stream, at its first play, from
+   inside it to the pass's end (only event/40.int, blank from byte 0x93000).  Found once per stream, at its first play, from
    the pass's last sector back (gallery_StreamBlankFrom: a dozen sector
    reads, not the file). */
 static int readSector(void *user, uint64_t off, uint8_t *buf)
@@ -728,7 +726,7 @@ static void streamFailed(const char *why)
     stopAll();
 }
 
-/* An effect plays once (docs/port/MUSIC.md, "One pass"): a sample whose
+/* An effect plays once: a sample whose
    end block loops is stopped when its length has played, so the bar never
    wraps (within the Main tick this is polled on) */
 static void effectTick(void)

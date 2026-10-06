@@ -4,8 +4,7 @@
  * the barrier plan, buffer state tracking for copies, same-state copy
  * ordering, the descriptor heap rings, bind group layouts as descriptor
  * tables and root parameters, constant buffer view sizes, the DXBC input
- * signature reader, and the handle pools.  port/rhi/d3d12/README.md
- * describes the design.
+ * signature reader, and the handle pools.
  *
  * The D3DP_STATE_* values are D3D12_RESOURCE_STATES bit for bit;
  * d3d12_enums.h static-asserts that against d3d12.h. */
