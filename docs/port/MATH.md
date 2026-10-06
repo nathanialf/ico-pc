@@ -18,7 +18,7 @@ next to it under `#ifdef ICO_HOST`), and this repository's
 
 | file | contents |
 | --- | --- |
-| `port/math/ps2float.h`, `ps2float.c` | the PS2 float behaviours plain C would get wrong: `ps2_div`, `ps2_sqrt`, `ps2_rsqrt`, `ps2_ftoi`, `ps2_ftoi4`, `ps2_itof`, `ps2_max`, `ps2_min` |
+| `port/math/ps2float.h`, `ps2float.c` | the PS2 float behaviours plain C would get wrong: `ps2_add`, `ps2_sub`, `ps2_mul`, `ps2_div`, `ps2_sqrt`, `ps2_rsqrt`, `ps2_ftoi`, `ps2_ftoi4`, `ps2_itof`, `ps2_max`, `ps2_min` |
 | `port/math/ico_math.h` | the current matrix (`ico_current_matrix`), `ico_apply_matrix`, the R register accessors, the quaternion helpers the game's host branches call; included by `ico2/common/include/typedef.h` under `ICO_HOST` |
 | `port/math/vector_inline.h` | static inline helpers for the header/inline asm in `sugiCommon.h` and `clothAnimation.c` |
 | `port/math/matrix_stack.c` | `seki/src/Matrix.c`'s current-matrix routines and its push stack, `ico_vu0_registers_push/pop` |
@@ -57,13 +57,30 @@ only the cases below need code. The helpers cover what remains:
   larger in magnitude than IEEE round toward zero, and an operand 25 or
   more binades smaller drops. Integer arithmetic, so the host's rounding
   mode does not reach it. Used in the newlib copies (`port/math/newlib`,
-  DIVERGENCES.md F18); game code stays plain C (F1).
+  DIVERGENCES.md F18) and the collision arithmetic (F19); the rest of the
+  game code stays plain C (F1).
+- `ps2_mul(a, b)`: the multiplier (PR #12001's `PS2Float::Mul`, its Booth
+  partial products summed with the low 15 bits discarded): at most one ulp
+  below IEEE round toward zero, and not commutative, so the operands go in
+  the instruction's order (fs, ft). `1.0f * x` with 1.0 as fs is usually one
+  ulp below x. Used in the collision arithmetic only (F19).
 - `ps2_div(a, b)`: a divisor with a zero exponent (zero or denormal) gives
-  +-Fmax with the sign of `a ^ b`, 0/0 included (VU0 `vdiv`, EE `div.s`).
-- `ps2_sqrt(x)`: `sqrt(|x|)`; zero or denormal gives +0 (VU0 `vsqrt`).
-- `ps2_rsqrt(a, b)`: `a / sqrt(|b|)` in two rounded steps; `b` zero gives
-  +-Fmax, or a signed zero when `a` is also zero (PCSX2's rule,
-  float-semantics.md open question 5).
+  +-Fmax with the sign of `a ^ b`, 0/0 included (VU0 `vdiv`, EE `div.s`);
+  a zero dividend gives a signed zero; otherwise the SRT divider of PR
+  #12001 (`PS2Float::Div`, `ps2float.c`): the truncated quotient or one ulp
+  above it, as the hardware picks (1/3 is 0x3EAAAAAB; DIVERGENCES.md F2).
+- `ps2_sqrt(x)`: `sqrt(|x|)` by PR #12001's SRT root (`PS2Float::Sqrt`);
+  zero or denormal gives +0 (VU0 `vsqrt`).
+- `ps2_rsqrt(a, b)`: `ps2_div(a, ps2_sqrt(b))`, as PR #12001's `Rsqrt`;
+  `b` zero gives +-Fmax, or a signed zero when `a` is also zero (PCSX2's
+  rule, float-semantics.md open question 5).
+- `ico_apply_matrix_ps2`, `ico_set_transpose_matrix_ps2` (`matrix_stack.c`,
+  `matrix_drive.c`): `_ApplyMatrix` and `MatrixDrive_SetTransposeMatrix`
+  with every VU0 product through `ps2_mul` and every sum through `ps2_add`
+  (`vmulax`, then `vmadda*` as a truncated product followed by the adder).
+  About 75 times the cost of `ico_apply_matrix` (427 ns against 5.6 ns an
+  apply), so only `fumi/src/fieldCollision.c`'s rays use them (F19); every
+  other apply stays plain C.
 - `ps2_ftoi`, `ps2_ftoi4`: truncate, saturate at +-2^31 by sign (x86 gives
   0x80000000 for both signs); an exponent-255 pattern saturates by its sign
   like `cvt.w.s`.

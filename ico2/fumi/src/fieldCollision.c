@@ -67,6 +67,27 @@ typedef int (*FcFunc)(void *work, int mode);
 #define FC_DIV(a, b) ((a) / (b))
 #define FC_FTOI(x) ((int)(x))
 #endif
+/* The ray-plane arithmetic as the EE's multiplier and adder compute it, and
+   the rays' VU0 transforms into and out of each object's frame
+   (port/math/ps2float.h: PCSX2 PR #12001's PS2Float model). IEEE round
+   toward zero puts some hits one ulp off the EE's, and where two coplanar
+   floors meet that picks the other floor (DIVERGENCES.md F19). FC_MUL's
+   operands are in the instruction's order (fs, ft), which here is the
+   source's. The EE build keeps the plain operators and calls. */
+#ifdef ICO_HOST
+#define FC_MUL(a, b) ps2_mul((a), (b)) /* derived name */
+#define FC_ADD(a, b) ps2_add((a), (b)) /* derived name */
+#define FC_SUB(a, b) ps2_sub((a), (b)) /* derived name */
+#define FC_APPLY(d, m, v)                                                                          \
+    ico_apply_matrix_ps2((float *)(d), (const float (*)[4])(m), (const float *)(v))
+#define FC_SET_TRANSPOSE(d, s) ico_set_transpose_matrix_ps2((float *)(d), (const float *)(s))
+#else
+#define FC_MUL(a, b) ((a) * (b))
+#define FC_ADD(a, b) ((a) + (b))
+#define FC_SUB(a, b) ((a) - (b))
+#define FC_APPLY(d, m, v) _ApplyMatrix((d), (m), (v))
+#define FC_SET_TRANSPOSE(d, s) MatrixDrive_SetTransposeMatrix((d), (s))
+#endif
 
 /* fieldCollision.o's .sbss and .bss.  .sbss: the number of objects in the
    collision list, the nine collision statistics DispCollisionPC prints (a
@@ -231,7 +252,7 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
         h = ray->radius;
     }
     lo = -h;
-    hi = wall->height + h;
+    hi = FC_ADD(wall->height, h);
     n = FC_WALL_NORMAL(wall);
     nx = n[0];
     nz = n[1];
@@ -239,27 +260,27 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
 
     sceVu0CopyVector((int *)out, (int *)ray->pt[2]);
 
-    d[0] = out[0] - wall->pt[0][0];
+    d[0] = FC_SUB(out[0], wall->pt[0][0]);
     d[1] = out[1];
-    d[2] = out[2] - wall->pt[0][2];
-    pb[2] = d[0] * nx + d[2] * nz;
+    d[2] = FC_SUB(out[2], wall->pt[0][2]);
+    pb[2] = FC_ADD(FC_MUL(d[0], nx), FC_MUL(d[2], nz));
     if (flip) {
         pb[2] = -pb[2];
     }
     if (ray->radius < pb[2]) {
         return 0;
     }
-    pb[0] = d[0] * nz - d[2] * nx;
+    pb[0] = FC_SUB(FC_MUL(d[0], nz), FC_MUL(d[2], nx));
     pb[1] = d[1];
     /* the start point reads the wall through a pointer of its own */
     e = wall;
-    d[0] = ray->pt[0][0] - e->pt[0][0];
+    d[0] = FC_SUB(ray->pt[0][0], e->pt[0][0]);
     d[1] = ray->pt[0][1];
-    d[2] = ray->pt[0][2] - e->pt[0][2];
+    d[2] = FC_SUB(ray->pt[0][2], e->pt[0][2]);
     /* the wall origin is taken after the subtraction that reads it */
     ex = e->pt[0][0];
     ez = e->pt[0][2];
-    pa[2] = d[0] * nx + d[2] * nz;
+    pa[2] = FC_ADD(FC_MUL(d[0], nx), FC_MUL(d[2], nz));
     if (flip) {
         pa[2] = -pa[2];
     }
@@ -267,7 +288,7 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     if (ds <= 0.0f) {
         return 0;
     }
-    pa[0] = d[0] * nz - d[2] * nx;
+    pa[0] = FC_SUB(FC_MUL(d[0], nz), FC_MUL(d[2], nx));
     pa[1] = d[1];
     if (pa[0] < lo && pb[0] < lo) {
         return 0;
@@ -277,31 +298,35 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     if (hi < pa[0] && hi < pb[0]) {
         return 0;
     }
-    if (FcAbsF(pb[2] - sz) < 1.0f) {
+    if (FcAbsF(FC_SUB(pb[2], sz)) < 1.0f) {
         if (ray->slideCount > 0) {
             pc[0] = pb[0];
             pc[1] = pb[1];
-            pb[2] = ray->radius + 1.0f;
+            pb[2] = FC_ADD(ray->radius, 1.0f);
         } else if (pa[0] < 0.0f) {
             pc[0] = lo;
-            if (FcAbsF(pb[0] - pa[0]) < 5.0f) {
+            if (FcAbsF(FC_SUB(pb[0], pa[0])) < 5.0f) {
                 pc[1] = pa[1];
             } else {
-                pc[1] = (pb[1] - pa[1]) * (lo - pa[0]) / (pb[0] - pa[0]) + pa[1];
+                pc[1] = FC_ADD(
+                    FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(lo, pa[0])), FC_SUB(pb[0], pa[0])),
+                    pa[1]);
             }
             pb[2] = sz;
         } else if (e->height < pa[0]) {
             pc[0] = hi;
-            if (FcAbsF(pb[0] - pa[0]) < 5.0f) {
+            if (FcAbsF(FC_SUB(pb[0], pa[0])) < 5.0f) {
                 pc[1] = pa[1];
             } else {
-                pc[1] = (pb[1] - pa[1]) * (hi - pa[0]) / (pb[0] - pa[0]) + pa[1];
+                pc[1] = FC_ADD(
+                    FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(hi, pa[0])), FC_SUB(pb[0], pa[0])),
+                    pa[1]);
             }
             pb[2] = sz;
         } else {
             pc[0] = pa[0];
             pc[1] = pa[1];
-            pb[2] = ray->radius + 1.0f;
+            pb[2] = FC_ADD(ray->radius, 1.0f);
         }
         pb[0] = pc[0];
         pb[1] = pc[1];
@@ -315,7 +340,9 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
             hh = ray->radius;
         }
         if (pa[0] != pb[0] && far != 0) {
-            pc[0] = (pb[0] - pa[0]) * (ds - hh) / FcAbsF(pb[2] - sz) + pa[0];
+            pc[0] = FC_ADD(
+                FC_DIV(FC_MUL(FC_SUB(pb[0], pa[0]), FC_SUB(ds, hh)), FcAbsF(FC_SUB(pb[2], sz))),
+                pa[0]);
         } else {
             pc[0] = pa[0];
         }
@@ -323,13 +350,15 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
             return 0;
         }
         if (pa[1] != pb[1] && far != 0) {
-            pc[1] = (pb[1] - pa[1]) * (ds - hh) / FcAbsF(pb[2] - sz) + pa[1];
+            pc[1] = FC_ADD(
+                FC_DIV(FC_MUL(FC_SUB(pb[1], pa[1]), FC_SUB(ds, hh)), FcAbsF(FC_SUB(pb[2], sz))),
+                pa[1]);
         } else {
             pc[1] = pa[1];
         }
         pb[0] = pc[0];
         pb[1] = pc[1];
-        pb[2] = ray->radius + 1.0f;
+        pb[2] = FC_ADD(ray->radius, 1.0f);
     }
     if (pb[1] < e->pt[0][1] && pb[1] < e->pt[1][1]) {
         return 0;
@@ -337,20 +366,22 @@ static int clip_wall_1(ClipWork *ray, FcWallEnt *wall, int flip, int useh)
     if (e->pt[2][1] < pb[1] && e->pt[3][1] < pb[1]) {
         return 0;
     }
-    if (pb[1] < FC_DIV((e->pt[1][1] - e->pt[0][1]) * pb[0], e->height) + e->pt[0][1]) {
+    if (pb[1] <
+        FC_ADD(FC_DIV(FC_MUL(FC_SUB(e->pt[1][1], e->pt[0][1]), pb[0]), e->height), e->pt[0][1])) {
         return 0;
     }
-    if (FC_DIV((e->pt[3][1] - e->pt[2][1]) * pb[0], e->height) + e->pt[2][1] < pb[1]) {
+    if (FC_ADD(FC_DIV(FC_MUL(FC_SUB(e->pt[3][1], e->pt[2][1]), pb[0]), e->height), e->pt[2][1]) <
+        pb[1]) {
         return 0;
     }
     if (flip) {
         pb[2] = -pb[2];
     }
-    t2 = pb[0] * nz - pb[2] * mx;
+    t2 = FC_SUB(FC_MUL(pb[0], nz), FC_MUL(pb[2], mx));
     out[1] = pb[1];
-    t1 = pb[0] * mx + pb[2] * nz;
-    out[0] = t2 + ex;
-    out[2] = t1 + ez;
+    t1 = FC_ADD(FC_MUL(pb[0], mx), FC_MUL(pb[2], nz));
+    out[0] = FC_ADD(t2, ex);
+    out[2] = FC_ADD(t1, ez);
     sceVu0CopyVector((int *)ray->pt[2], (int *)out);
     return 1;
 }
@@ -374,7 +405,9 @@ static __inline__ int FloorPointInside(FcFloorEnt *e, float *pt) /* derived name
         vx = v->x;
         if ((vx < pt[0] && pt[0] <= p2->x) || (p2->x < pt[0] && pt[0] <= vx)) {
             cp[0] = pt[0];
-            cp[2] = FC_DIV((v->z - p2->z) * (pt[0] - p2->x), vx - p2->x) + p2->z;
+            cp[2] =
+                FC_ADD(FC_DIV(FC_MUL(FC_SUB(v->z, p2->z), FC_SUB(pt[0], p2->x)), FC_SUB(vx, p2->x)),
+                       p2->z);
             if (pt[2] < cp[2]) {
                 cross++;
             } else if (cp[0] == pt[0] && cp[2] == pt[2]) {
@@ -404,7 +437,7 @@ static int clip_floor_1(ClipWork *ray, FcFloorEnt *e, int backFace)
     float ds;
     float t;
 
-    de = nx * ex + ny * ey + nz * ez + pd;
+    de = FC_ADD(FC_ADD(FC_ADD(FC_MUL(nx, ex), FC_MUL(ny, ey)), FC_MUL(nz, ez)), pd);
     if (backFace != 0) {
         if (de < 0.0f) {
             return 0;
@@ -417,7 +450,7 @@ static int clip_floor_1(ClipWork *ray, FcFloorEnt *e, int backFace)
     sx = ray->pt[0][0];
     sy = ray->pt[0][1];
     sz = ray->pt[0][2];
-    ds = nx * sx + ny * sy + nz * sz + pd;
+    ds = FC_ADD(FC_ADD(FC_ADD(FC_MUL(nx, sx), FC_MUL(ny, sy)), FC_MUL(nz, sz)), pd);
     if (backFace != 0) {
         if (ds >= 0.0f) {
             return 0;
@@ -427,10 +460,10 @@ static int clip_floor_1(ClipWork *ray, FcFloorEnt *e, int backFace)
             return 0;
         }
     }
-    t = FC_DIV(1.0f, ds - de);
-    hit[0] = (ex * ds - sx * de) * t;
-    hit[1] = (ey * ds - sy * de) * t;
-    hit[2] = (ez * ds - sz * de) * t;
+    t = FC_DIV(1.0f, FC_SUB(ds, de));
+    hit[0] = FC_MUL(FC_SUB(FC_MUL(ex, ds), FC_MUL(sx, de)), t);
+    hit[1] = FC_MUL(FC_SUB(FC_MUL(ey, ds), FC_MUL(sy, de)), t);
+    hit[2] = FC_MUL(FC_SUB(FC_MUL(ez, ds), FC_MUL(sz, de)), t);
     if (FloorPointInside(e, hit) == 0) {
         return 0;
     }
@@ -1071,14 +1104,14 @@ static void _Clip(ClipWork *self, int mode)
                         } else {
                             m = (char *)obj->dobj->nodeMtx + (i << 6);
                         }
-                        MatrixDrive_SetTransposeMatrix(m0, m);
+                        FC_SET_TRANSPOSE(m0, m);
                         self->pt[0][3] = self->pt[2][3] = 1.0f;
-                        _ApplyMatrix(self->pt[0], m0, self->pt[0]);
-                        _ApplyMatrix(self->pt[2], m0, self->pt[2]);
+                        FC_APPLY(self->pt[0], m0, self->pt[0]);
+                        FC_APPLY(self->pt[2], m0, self->pt[2]);
                         makeCollisionBlockTable(self->pt[0]);
                         if (func(self, obj, i)) {
                             self->pt[2][3] = 1.0f;
-                            _ApplyMatrix(self->pt[2], m, self->pt[2]);
+                            FC_APPLY(self->pt[2], m, self->pt[2]);
                         } else {
                             CopyVector(self->pt[2], keep);
                         }
@@ -1299,17 +1332,18 @@ inline void *ClipWallVector(float *start, float *end)
 
 inline float GetYProjectionOfPlane(float *plane, float *pos)
 {
-    return FC_DIV(-(plane[0] * pos[0] + plane[2] * pos[2] + plane[3]), plane[1]);
+    return FC_DIV(-FC_ADD(FC_ADD(FC_MUL(plane[0], pos[0]), FC_MUL(plane[2], pos[2])), plane[3]),
+                  plane[1]);
 }
 
 inline float GetDistanceFromPlane(void *plane, void *pos)
 {
-    return sceVu0InnerProduct(plane, pos) + ((float *)plane)[3];
+    return FC_ADD(sceVu0InnerProduct(plane, pos), ((float *)plane)[3]);
 }
 
 inline float GetYDistanceFromPlane(float *plane, float *pos)
 {
-    return pos[1] - GetYProjectionOfPlane(plane, pos);
+    return FC_SUB(pos[1], GetYProjectionOfPlane(plane, pos));
 }
 
 typedef union { /* field names derived */
@@ -1361,10 +1395,10 @@ inline int ClipPlane(ClipWork *work)
             return 0;
         }
     }
-    d = t1 - t0;
-    p[8] = FC_DIV(p[4] * t1 - p[0] * t0, d);
-    p[9] = FC_DIV(p[5] * t1 - p[1] * t0, d);
-    p[10] = FC_DIV(p[6] * t1 - p[2] * t0, d);
+    d = FC_SUB(t1, t0);
+    p[8] = FC_DIV(FC_SUB(FC_MUL(p[4], t1), FC_MUL(p[0], t0)), d);
+    p[9] = FC_DIV(FC_SUB(FC_MUL(p[5], t1), FC_MUL(p[1], t0)), d);
+    p[10] = FC_DIV(FC_SUB(FC_MUL(p[6], t1), FC_MUL(p[2], t0)), d);
     return 1;
 }
 

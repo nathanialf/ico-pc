@@ -36,6 +36,20 @@ void ico_apply_matrix(float *out, const float (*m)[4], const float *v);
    by vf0.w). */
 void ico_apply_matrix_w1(float *out, const float (*m)[4], const float *v);
 
+/* As ico_apply_matrix, with each step as VU0's multiplier and adder compute
+   it (ps2_mul, ps2_add: PCSX2 PR #12001's PS2Float model): ACC = m[0] * x,
+   ACC += m[1] * y, ACC += m[2] * z, out = ACC + m[3] * w, every product
+   truncated before its sum, the matrix field the multiplicand (fs) and the
+   vector field the broadcast (ft). About 75 times the cost of
+   ico_apply_matrix, so only the collision rays use it (DIVERGENCES.md F19).
+   matrix_stack.c. */
+void ico_apply_matrix_ps2(float *out, const float (*m)[4], const float *v);
+
+/* MatrixDrive_SetTransposeMatrix (sugipon/src/matrixDrive.c) with its
+   sceVu0ApplyMatrix as ico_apply_matrix_ps2: dst = the transpose of src's
+   rotation, its translation -t carried through it. matrix_drive.c. */
+void ico_set_transpose_matrix_ps2(float *dst, const float *src);
+
 /* Rows 0-2 of the rotation matrix of quaternion q (w column 0); row 3 is
    left alone. sugipon/src/quaternion.c's GetMatrixFromQuaternion* bodies.
    port/math/quaternion.c. */

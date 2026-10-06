@@ -25,6 +25,24 @@ void CopyMatrix(void *dst, void *src)
     memmove(dst, src, 64);
 }
 
+void ico_set_transpose_matrix_ps2(float *dst, const float *src)
+{
+    float t[4][4];
+    float v[4] = {-src[12], -src[13], -src[14], 0.0f};
+    int i;
+    int j;
+
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < 4; j++) {
+            t[i][j] = src[j * 4 + i];
+        }
+    }
+    t[0][3] = t[1][3] = t[2][3] = 0.0f;
+    ico_apply_matrix_ps2(t[3], (const float (*)[4])t, v);
+    t[3][3] = 1.0f;
+    memcpy(dst, t, sizeof t);
+}
+
 /* The PS2 wrote through the uncached alias of dst (dst | 0x20000000);
    the host has one memory view. */
 void CopyMatrixUncached(void *dst, void *src)

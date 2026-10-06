@@ -303,7 +303,8 @@ and checked with an assert at every `ico_vsync`:
 - **Constant folding (inference, measured on ee-gcc).** ee-gcc folds float
   literal expressions at compile time with round-to-nearest, even through
   inlined calls: `1.0f/3.0f` and an inlined `d(1.0f, 3.0f)` both give
-  0x3EAAAAAB. At run time, on the PS2, the same division gives 0x3EAAAAAA.
+  0x3EAAAAAB. At run time IEEE round toward zero gives 0x3EAAAAAA (PCSX2
+  PR #12001's hardware-derived divider gives 0x3EAAAAAB: DIVERGENCES.md F2).
   Clang without `-frounding-math` also folds with round-to-nearest, so
   literal folding agrees. The leftover risk is expressions clang can fold
   but ee-gcc evaluated at run time (more aggressive propagation,

@@ -45,6 +45,22 @@ void ico_apply_matrix(float *out, const float (*m)[4], const float *v)
     }
 }
 
+void ico_apply_matrix_ps2(float *out, const float (*m)[4], const float *v)
+{
+    float x = v[0];
+    float y = v[1];
+    float z = v[2];
+    float w = ps2_operand(v[3]);
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        float acc = ps2_mul(m[0][i], x);            /* vmulax */
+        acc = ps2_add(acc, ps2_mul(m[1][i], y));    /* vmadday */
+        acc = ps2_add(acc, ps2_mul(m[2][i], z));    /* vmaddaz */
+        out[i] = ps2_add(acc, ps2_mul(m[3][i], w)); /* vmaddw */
+    }
+}
+
 void ico_apply_matrix_w1(float *out, const float (*m)[4], const float *v)
 {
     static const float one = 1.0f;

@@ -148,7 +148,33 @@ static void test_helpers(void)
     check_bits(ps2_div(0.0f, 0.0f), 0x7F7FFFFFu, "div 0/0 = +Fmax");
     check_bits(ps2_div(-0.0f, 0.0f), 0xFF7FFFFFu, "div -0/+0 = -Fmax");
     check_bits(ps2_div(2.0f, denorm), 0x7F7FFFFFu, "div by a denormal = Fmax");
-    check_bits(ps2_div(one, three), 0x3EAAAAAAu, "div 1/3 rounds toward zero");
+    /* the divider, the multiplier and the root: PCSX2 PR #12001's PS2Float
+       model (head 0392a64e); every expected word below is that code's
+       output, compiled from the PR (docs/port/DIVERGENCES.md F19) */
+    check_bits(ps2_div(one, three), 0x3EAAAAABu,
+               "div 1/3: the divider gives T + 1 (IEEE RTZ 0x3EAAAAAA)");
+    check_bits(ps2_div(2.0f, three), 0x3F2AAAABu, "div 2/3: T + 1");
+    check_bits(ps2_div(one, ps2_bits_float(0x474381FEu)), 0x37A79AC6u,
+               "div 1/0x474381FE: T + 1 (stage 6 bridge)");
+    check_bits(ps2_div(one, ps2_bits_float(0x474381FFu)), 0x37A79AC5u, "div 1/0x474381FF: T");
+    check_bits(ps2_div(one, one), 0x3F800000u, "div 1/1 exact");
+    check_bits(ps2_div(-0.0f, three), 0x80000000u, "div -0/3 = -0");
+    check_bits(ps2_div(ps2_bits_float(0x7F000000u), ps2_bits_float(0x00800000u)), 0x7F7FFFFFu,
+               "div overflow = Fmax");
+    check_bits(ps2_mul(ps2_bits_float(0xBF800000u), ps2_bits_float(0x473B384Du)), 0xC73B384Cu,
+               "mul -1 * x: the multiplier drops one ulp (a = -1.0)");
+    check_bits(ps2_mul(ps2_bits_float(0x473B384Du), ps2_bits_float(0xBF800000u)), 0xC73B384Du,
+               "mul x * -1 exact: the operands are not interchangeable");
+    check_bits(ps2_mul(one, one), 0x3F800000u, "mul 1 * 1");
+    check_bits(ps2_mul(three, three), 0x41100000u, "mul 3 * 3");
+    check_bits(ps2_mul(ps2_bits_float(0xCCBEECF3u), ps2_bits_float(0x37A79AC6u)), 0xC4FA0001u,
+               "mul 0xCCBEECF3 * 0x37A79AC6 (stage 6 bridge)");
+    check_bits(ps2_mul(ps2_bits_float(0x7F000000u), ps2_bits_float(0x7F000000u)), 0x7F7FFFFFu,
+               "mul overflow = Fmax");
+    check_bits(ps2_mul(ps2_bits_float(0x00800000u), ps2_bits_float(0x00800000u)), 0x00000000u,
+               "mul underflow = 0");
+    check_bits(ps2_mul(-2.0f, denorm), 0x80000000u, "mul by a denormal = signed 0");
+    check_bits(ps2_sqrt(three), 0x3FDDB3D7u, "sqrt(3)");
     /* the EE adder (PCSX2 PR #12001's PS2Float model): the smaller operand
        keeps one bit below its alignment shift, then the sum truncates */
     check_bits(ps2_sub(1.0f, ps2_bits_float(0x30800000u)), 0x3F800000u,
@@ -164,7 +190,7 @@ static void test_helpers(void)
     check_bits(ps2_sqrt(-4.0f), 0x40000000u, "sqrt(-4) = 2");
     check_bits(ps2_sqrt(denorm), 0x00000000u, "sqrt(denormal) = +0");
     check_bits(ps2_sqrt(-0.0f), 0x00000000u, "sqrt(-0) = +0");
-    check_bits(ps2_sqrt(2.0f), 0x3FB504F3u, "sqrt(2) rounds toward zero");
+    check_bits(ps2_sqrt(2.0f), 0x3FB504F3u, "sqrt(2)");
     check_bits(ps2_rsqrt(1.0f, 4.0f), 0x3F000000u, "rsqrt 1/sqrt(4)");
     check_bits(ps2_rsqrt(1.0f, -4.0f), 0x3F000000u, "rsqrt of a negative uses |b|");
     check_bits(ps2_rsqrt(1.0f, 0.0f), 0x7F7FFFFFu, "rsqrt 1/sqrt(0) = Fmax");
@@ -588,7 +614,9 @@ static void test_inverse_and_projection(void)
         sceVu0RotTransPers(r, pm, p, 0);
         check(r[0] == ps2_ftoi4(o[0]) && r[3] == 48, "sceVu0RotTransPers ftoi4");
         sceVu0RotTransPers(r, pm, p, 1);
-        check(r[2] == 1 && r[3] == 3, "sceVu0RotTransPers mode 1: integer z and w");
+        /* 6 * (1/3): the divider's 1/3 is 0x3EAAAAAB, one ulp above the
+           truncated quotient, so z is just above 2 */
+        check(r[2] == 2 && r[3] == 3, "sceVu0RotTransPers mode 1: integer z and w");
         pm[3][3] = 0.0f;
         _SetCurrentMatrix(pm);
         _RotTransPersCurrentMatrix(o, p);
@@ -619,10 +647,34 @@ static void test_normals(void)
     }
 }
 
+/* The collision rays' transforms (ico_apply_matrix_ps2,
+   ico_set_transpose_matrix_ps2): 1.0 * x in the multiplier usually drops one
+   ulp, so even an identity apply moves a point. Expected words from the
+   PS2Float model (DIVERGENCES.md F19); the stage 6 bridge's ray. */
+static void test_apply_ps2(void)
+{
+    static const float id[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};
+    static const float br[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3650.0f, -2000.0f, 1100.0f, 1};
+    float v[4] = {ps2_bits_float(0x456D5A65u), ps2_bits_float(0xC4FA0002u),
+                  ps2_bits_float(0x44899285u), 1.0f};
+    float o[4];
+    float t[16];
+
+    ico_apply_matrix_ps2(o, id, v);
+    check(ps2_float_bits(o[0]) == 0x456D5A64u && ps2_float_bits(o[1]) == 0xC4FA0001u &&
+              ps2_float_bits(o[2]) == 0x44899284u && o[3] == 1.0f,
+          "apply_ps2 identity: x, y, z each one ulp lower in magnitude");
+    ico_set_transpose_matrix_ps2(t, br);
+    check(ps2_float_bits(t[12]) == 0xC5642000u && ps2_float_bits(t[13]) == 0x44FA0000u &&
+              ps2_float_bits(t[14]) == 0xC4897FFFu && t[15] == 1.0f && t[0] == 1.0f && t[3] == 0.0f,
+          "set_transpose_ps2: translation -t through the rotation (1100 -> 0xC4897FFF)");
+}
+
 int main(void)
 {
     ico_fpenv_sim_enter();
     test_helpers();
+    test_apply_ps2();
     test_madd_not_fused();
     test_random();
     test_matrices();

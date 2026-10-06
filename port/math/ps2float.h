@@ -68,14 +68,112 @@ static inline float ps2_operand(float x)
     return x;
 }
 
+/* The quotient of two nonzero operands as the divider computes it
+   (port/math/ps2float.c). */
+float ps2_div_nonzero(uint32_t a, uint32_t b);
+
 /* a / b: VU0 `vdiv` and the EE's `div.s`. A zero divisor gives +-Fmax,
-   0/0 included. */
+   0/0 included. Otherwise the divider's own quotient (PCSX2 PR #12001's
+   hardware-derived PS2Float::Div, a radix-2 SRT divider with a carry-save
+   remainder): the truncated quotient T or T + 1, depending on the bits, so
+   neither IEEE round toward zero nor round to nearest (DIVERGENCES.md F2,
+   F19). A zero or denormal dividend gives a zero with the sign of a XOR b. */
 static inline float ps2_div(float a, float b)
 {
+    uint32_t ua = ps2_float_bits(a);
+    uint32_t ub = ps2_float_bits(b);
+
     if (ps2_is_zero(b)) {
         return ps2_fmax_signed(a, b);
     }
-    return a / b;
+    if (ps2_is_zero(a)) {
+        return ps2_bits_float((ua ^ ub) & 0x80000000u);
+    }
+    return ps2_div_nonzero(ua, ub);
+}
+
+/* The 24 x 24-bit mantissa product as the multiplier forms it (PCSX2 PR
+   #12001's MulMantissa, from hardware tests): eight radix-4 Booth partial
+   products of a, recoded from b, summed in a carry-save tree whose low 15
+   bits are discarded before the final add; bit 15 of that sum replaces bit
+   15 of the exact product, borrowing from the bits above. So the product is
+   at most one unit of bit 15 below the exact one, and the operands are not
+   interchangeable: 1.0 * x (a = 1.0) usually comes out one ulp below x,
+   x * 1.0 never does. */
+static inline uint64_t ps2_mul_mantissa(uint32_t a, uint32_t b)
+{
+    uint64_t full = (uint64_t)a * b;
+    uint32_t data[8];
+    uint32_t negate[8];
+    uint32_t s0, c0, s1, c1, s2, c2, s3, c3, s4, c4, s5, c5, u, lo;
+    int k;
+
+    for (k = 0; k < 8; k++) {
+        uint32_t test = (k != 0 ? b >> (k * 2 - 1) : b << 1) & 7u;
+        uint32_t m = a << (k * 2);
+        uint32_t neg = (test >= 4u && test <= 6u) ? ~0u : 0u;
+        uint32_t pos = 1u << (k * 2);
+
+        m += (test == 3u || test == 4u) ? m : 0u;
+        m ^= neg & (0u - pos);
+        m &= (test >= 1u && test <= 6u) ? ~0u : 0u;
+        data[k] = m;
+        negate[k] = neg & pos;
+    }
+#define PS2_ADD3(s, c, x, y, z)                                                                    \
+    do {                                                                                           \
+        u = (x) ^ (y);                                                                             \
+        s = u ^ (z);                                                                               \
+        c = ((u & (z)) | ((x) & (y))) << 1;                                                        \
+    } while (0)
+    PS2_ADD3(s0, c0, data[1], data[2], data[3]);
+    PS2_ADD3(s1, c1, data[4] & ~0x7FFu, data[5] & ~0xFFFu, data[6]);
+    c1 |= negate[6] | (data[5] & 0x800u);
+    data[7] |= (data[5] & 0x400u) + negate[5];
+    PS2_ADD3(s2, c2, data[0], s0, c0);
+    PS2_ADD3(s3, c3, data[7], s1, c1);
+    PS2_ADD3(s4, c4, c2, s3, c3);
+    PS2_ADD3(s5, c5, s2, s4, c4);
+#undef PS2_ADD3
+    c5 += negate[7];
+    s5 &= ~0x7FFFu;
+    c5 &= ~0x7FFFu;
+    lo = s5 + c5;
+    return full - ((lo ^ full) & 0x8000u);
+}
+
+/* a * b as the multiplier computes it: EE `mul.s` (fs = a, ft = b) and the
+   multiply of VU0 `vmul`/`vmadd`/`vmsub` (fs = a, ft = b, the broadcast
+   field), after PCSX2 PR #12001's PS2Float::Mul/DoMul: the product above
+   truncated to 24 bits. Not commutative (ps2_mul_mantissa); pass the
+   operands in the instruction's order. A zero or denormal operand gives a
+   zero with the sign of a XOR b; an overflow gives +-Fmax (0x7F7FFFFF, F3),
+   an underflow a signed zero. */
+static inline float ps2_mul(float fa, float fb)
+{
+    uint32_t a = ps2_float_bits(fa);
+    uint32_t b = ps2_float_bits(fb);
+    uint32_t sign = (a ^ b) & 0x80000000u;
+    int e;
+    uint32_t m;
+
+    if ((a & 0x7F800000u) == 0 || (b & 0x7F800000u) == 0) {
+        return ps2_bits_float(sign);
+    }
+    e = (int)((a >> 23) & 0xFFu) + (int)((b >> 23) & 0xFFu) - 127;
+    m = (uint32_t)(ps2_mul_mantissa((a & 0x7FFFFFu) | 0x800000u, (b & 0x7FFFFFu) | 0x800000u) >>
+                   23);
+    if (m > 0xFFFFFFu) {
+        m >>= 1;
+        e++;
+    }
+    if (e > 254) {
+        return ps2_bits_float(sign | 0x7F7FFFFFu);
+    }
+    if (e < 1) {
+        return ps2_bits_float(sign);
+    }
+    return ps2_bits_float(sign | ((uint32_t)e << 23) | (m & 0x7FFFFFu));
 }
 
 /* a + b and a - b as the EE adder computes them (DIVERGENCES.md F1), after
