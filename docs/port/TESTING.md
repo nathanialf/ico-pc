@@ -195,6 +195,31 @@ of a fresh boot, so a stage that expects earlier progress may behave
 differently from a play-through. Achievements are suspended in such runs
 ([`ACHIEVEMENTS.md`](ACHIEVEMENTS.md)).
 
+A cold boot does not exercise a stage change. During one the old stage's
+lists, static state and heap contents are still there while the new stage
+initialises (`common/src/StageManager.c`, `start_stage_Load_thread`;
+`common/src/icoMisc.c`, `InitIcoMisc`), and the new stage's allocations land
+on the old stage's bytes, where a cold boot's are zero. `[dev] switch_to` and
+`[dev] switch_at` ([`CONFIG.md`](CONFIG.md)) force one change: from Main
+tick `switch_at` the start stage's exit to `switch_to` is taken through the
+call the boy's exit floor makes, and the log gets `dev: switch_to N at tick
+T` and then `dev: stage N up at tick T`. The transition sweep boots
+`start_stage = from`, `switch_to = to`, `switch_at = 300`, `ticks = 900`,
+`watchdog = 120` for each (from, to) pair the exit tables define for
+stages 1 to 63 (`stageData[].ent` through `exitData[].nextStage`: 240 exits,
+167 distinct pairs), in the `fptrap` build at 60 Hz (the heap-ASan build
+and 50 Hz are the same driver with another build or `video_mode`). A run
+passes when it reaches 900 ticks with `dev:
+stage N up` in the log and no crash, trap or ASan report. Stage 1's one exit
+(to 41) is taken by the opening, after the title: forced at tick 300 it
+lands on the boot signs and fails a texture assertion, so that pair is
+checked by replaying a recording that plays from the boot into stage 41 and
+on (`pad_script`). The forced switches do not cover the door and exit
+animations, the boy's walk into the exit, the girl following him (the
+switch takes the boy alone, as an exit taken without her), the exits that
+only a script takes at a point in its own sequence, nor a play-through's
+game flags; a play-through or a recording covers those.
+
 ## The renderer backends
 
 The renderer has a Vulkan backend and a Direct3D 12 backend

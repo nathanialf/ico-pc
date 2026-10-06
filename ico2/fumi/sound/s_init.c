@@ -1406,10 +1406,10 @@ void soundSeEnvPlay(void)
     }
 }
 
-/* &stageData[0].seEnvFirst, the range soundSeEnvNotUseClose walks */
-#ifdef ICO_HOST
-#define D_005F5E60 ((char *)&stageData[0].seEnvFirst)
-#else
+/* &stageData[0].seEnvFirst, the range soundSeEnvNotUseClose walks by the
+   EE's 0x194-byte stride; the host names the fields (StgPre is larger on
+   the host, docs/port/OFFSET_AUDIT.md) */
+#ifndef ICO_HOST
 
 extern char D_005F5E60[];
 
@@ -1470,9 +1470,17 @@ void soundSeEnvNotUseClose(int a, int b)
     for (m = 0; m < 48; m++) {
         e = &seSlotTbl[m];
         req = e->req;
+#ifdef ICO_HOST
+        first = (int *)&stageData[a].seEnvFirst;
+#else
         first = (int *)&D_005F5E60[a * 404];
+#endif
         if (req != 0 && req->mode == 0 && e->owner == 0xFFFFFFFF) {
+#ifdef ICO_HOST
+            for (j = *first; j < stageData[a].seEnvLast; j++) {
+#else
             for (j = *first; j < *(int *)&D_005F5E60[a * 404 + 4]; j++) {
+#endif
                 if (e->src == &seDef[seEnv[j].se]) {
                     if (ok == 0 || seFile[seList[seKind[e->src->kind]].num].loaded != 1) {
                         goto next;

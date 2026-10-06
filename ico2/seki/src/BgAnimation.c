@@ -296,7 +296,24 @@ typedef struct BgaLightEnv { /* field names derived */
     /* 0x40 */ float col2[4];
     /* 0x50 */ float inner[4];
     /* 0x60 */ float outer[3];
+#ifdef ICO_HOST
+    /* 0x6C */ char pad6C[4];
+    /* 0x70 */ float size[3]; /* BgaObj's rscale, at the volume's 0x70 (bga_CalcObject) */
+#endif
 } BgaLightEnv; /* derived name */
+
+#ifdef ICO_HOST
+
+/* Light.c asserts AmbientVolume's col, inner, outer and size at these */
+_Static_assert(__builtin_offsetof(BgaLightEnv, col2) == 0x40, "BgaLightEnv.col2 at 0x40");
+
+_Static_assert(__builtin_offsetof(BgaLightEnv, inner) == 0x50, "BgaLightEnv.inner at 0x50");
+
+_Static_assert(__builtin_offsetof(BgaLightEnv, outer) == 0x60, "BgaLightEnv.outer at 0x60");
+
+_Static_assert(__builtin_offsetof(BgaLightEnv, size) == 0x70, "BgaLightEnv.size at 0x70");
+
+#endif
 
 static void bga_initLightEnvelope(BgaDObjEnt *p)
 {
@@ -1592,9 +1609,11 @@ typedef struct BgaObj { /* field names derived */
 /* a geometry object's node matrices, node quaternions and node records: by
    name on the host (Sub15C.nodeMtx, nodeQuat, nodes), through BgaObj on the
    EE.  The node record (DObjNode) has no pointers, so BgaNodeBits fits it on
-   every host.  The light and lightning objects keep the BgaObj view: their
-   rscale (an ambient volume's size, 0x70) and id lie before any pointer of
-   the record they view. */
+   every host.  The lightning objects keep the BgaObj view: their id lies
+   before any pointer of the record it views.  An ambient volume's size
+   (rscale, 0x70) does not on the host, where BgaObj's mtx and quat pointers
+   move rscale to 0x7C: bga_CalcObject writes it through BgaLightEnv's size,
+   at the volume's 0x70 (Light.c's AmbientVolume). */
 #ifdef ICO_HOST
 #define BGA_GEOM_MTX(w) ((float (*)[16])BGA_OBJ(Sub15C *, w)->nodeMtx)
 #define BGA_GEOM_QUAT(w) ((float (*)[4])BGA_OBJ(Sub15C *, w)->nodeQuat)
@@ -1725,9 +1744,17 @@ static void bga_CalcObject(BgaDObjEnt *d, float dt, float frame, int cut, int pl
     case 8:
     case 9:
         if (d->u.obj != 0) {
+#ifdef ICO_HOST
+            /* the volume's size at its 0x70, which BgaObj's rscale misses on
+               the host (see BGA_GEOM_MTX) */
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[0] = 1.0f / bgaScale[0];
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[1] = 1.0f / bgaScale[1];
+            BGA_OBJ(BgaLightEnv *, d->u.obj)->size[2] = 1.0f / bgaScale[2];
+#else
             BGA_OBJ(BgaObj *, d->u.obj)->rscale[0] = 1.0f / bgaScale[0];
             BGA_OBJ(BgaObj *, d->u.obj)->rscale[1] = 1.0f / bgaScale[1];
             BGA_OBJ(BgaObj *, d->u.obj)->rscale[2] = 1.0f / bgaScale[2];
+#endif
             _GetCurrentMatrix(BGA_OBJ(void *, d->u.obj));
         }
         break;

@@ -132,6 +132,93 @@ int ico_opt_developer_mode(void);
 int ico_boot_video_mode(int current);
 /* common/src/debug.c; debug.h declares only debug_Menu_off */
 void debug_Menu(void);
+/* port/platform/trace_host.h: Main ticks done */
+unsigned int ico_host_main_ticks(void);
+/* port/platform/diag_host.h: a milestone line in the log */
+void ico_diag_milestone(const char *fmt, ...);
+/* script/include/script.h, which this file does not include */
+int RequestStageChange(int no, GObj *g, GObj *girl, float speed, float wait);
+
+/* a developer key's decimal value, 0 to 100000000; -1 when unset, empty
+   or not a number */
+static int ico_dev_number(const char *s)
+{
+    int n = 0;
+    int i;
+
+    if (s == NULL || s[0] == '\0') {
+        return -1;
+    }
+    for (i = 0; s[i] != '\0'; i++) {
+        if (s[i] < '0' || s[i] > '9' || n > 10000000) {
+            return -1;
+        }
+        n = n * 10 + (s[i] - '0');
+    }
+    return n;
+}
+
+/* PC port (X5): [dev] switch_to = N and [dev] switch_at = T (developer
+   keys, docs/port/CONFIG.md; host_config.c hands them over as
+   ICO_SWITCH_TO and ICO_SWITCH_AT) force one stage change, for the
+   transition sweep (docs/port/TESTING.md, "Booting every stage").  At the
+   first Main tick at or after T on which the stage is up (systemStatus[6]
+   clear, what StageManager waits for), the current stage's exit that leads
+   to N is taken the way the boy's exit floor takes it (fumi/src/boyact.c,
+   the floor attribute loop: RequestStageChange(i, boyGObj, 0, 1.0f, 8.0f),
+   which records the boy at that exit's entrance in N and fades through
+   StageManager).  With no exit to N, stgmgrForceSwitchWithFade(N, 1.0f,
+   8.0f): the same fade, no entrance.  It fires once, and logs again when
+   stage N is up (stage_no N, systemStatus[6] clear); with switch_to unset
+   it never does. */
+static void ico_dev_switch_stage(void)
+{
+    static int state = -1; /* -1: keys not read, 0: off or done, 1: armed,
+                              2: taken, waiting for stage N */
+    static int to;
+    static unsigned int at;
+    int i;
+    int ret;
+
+    if (state < 0) {
+        const char *v = getenv("ICO_SWITCH_TO");
+        const char *w = getenv("ICO_SWITCH_AT");
+        int n = ico_dev_number(v);
+        int t = ico_dev_number(w);
+
+        state = 0;
+        if (n <= 0 || n > 105 || (w != NULL && w[0] != '\0' && t < 0)) {
+            return;
+        }
+        to = n;
+        at = t > 0 ? (unsigned int)t : 0;
+        state = 1;
+    }
+    if (state == 2 && stage_no == to && systemStatus[6] == 0) {
+        ico_diag_milestone("dev: stage %d up at tick %u", to, ico_host_main_ticks());
+        state = 0;
+    }
+    if (state != 1 || ico_host_main_ticks() < at || systemStatus[6] != 0) {
+        return;
+    }
+    state = 2;
+    for (i = 1; i <= 15; i++) {
+        int e = stageData[stage_no].ent[i - 1];
+
+        if (e != 0 && exitData[e].nextStage == to) {
+            break;
+        }
+    }
+    if (i <= 15) {
+        ret = RequestStageChange(i, boyGObj, 0, 1.0f, 8.0f);
+        ico_diag_milestone("dev: switch_to %d at tick %u: stage %d exit %d%s", to,
+                           ico_host_main_ticks(), stage_no, i, ret ? "" : " refused");
+    } else {
+        stgmgrForceSwitchWithFade(to, 1.0f, 8.0f);
+        ico_diag_milestone("dev: switch_to %d at tick %u: stage %d has no exit there, forced", to,
+                           ico_host_main_ticks(), stage_no);
+    }
+}
 
 #endif
 
@@ -241,6 +328,9 @@ void Main(void)
         if (ico_opt_developer_mode()) {
             debug_Menu();
         }
+        /* [dev] switch_to (above): the exit taken here, after the pad is
+           read, as a script or the boy's exit floor would in this tick */
+        ico_dev_switch_stage();
 #endif
         ExecIcoMisc();
         if (graphics_ready == 0) {

@@ -148,6 +148,16 @@ void eBrainProcess(void)
 
     girlTargetNum = 0;
     boyTargetNum = 0;
+#ifdef ICO_HOST
+    /* With the boy or the girl not in the stage (a stage entered without
+       her), the loop below still subtracts bpos or gpos, which the EE takes
+       as its stack left them: a word that is a number there, a NaN or Inf
+       bit pattern here (a float trap in the fptrap build, a run-to-run
+       difference otherwise).  The host starts both at 0 (DIVERGENCES.md
+       D15). */
+    memset(bpos, 0, sizeof(bpos));
+    memset(gpos, 0, sizeof(gpos));
+#endif
 
     if (boyGObj == 0) {
         if (girlGObj == 0)

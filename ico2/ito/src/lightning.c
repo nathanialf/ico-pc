@@ -179,7 +179,14 @@ static void set_vertex(LightningVtx *dir, LightningVtx *pos, float u, int *col, 
 
     for (i = 0; i < 2; i++) {
         apply_matrix_w1(&pt, matrixptr + 0xC0, &e[i]);
+#ifdef ICO_HOST
+        /* div.s: a bolt vertex on the camera plane (view z 0, so w 0; the
+           stage 47 bolts after the stage 54 exit) gives Fmax on the EE, not
+           Inf (DIVERGENCES.md F5) */
+        q = ps2_div(1.0f, pt.f[3]);
+#else
         q = 1.0f / pt.f[3];
+#endif
         sceVu0ScaleVectorXYZ(&pt, &pt, q);
         sceVu0ScaleVectorXYZ(&t, &uv[i], q);
         sceVu0FTOI4Vector(&xyz, &pt);

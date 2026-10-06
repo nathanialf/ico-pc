@@ -399,6 +399,11 @@ static const struct {
     {"dev.use_iso", "use_iso"},
     /* the stage Main starts in (developer key, renderer wave 5, R5b) */
     {"dev.start_stage", "start_stage"},
+    /* one forced stage change: the stage, and the Main tick from which it
+       is taken (developer keys, package X5; common/src/main.c,
+       ico_dev_switch_stage) */
+    {"dev.switch_to", "switch_to"},
+    {"dev.switch_at", "switch_at"},
     /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
     /* the renderer backend of the window build, "vulkan" (default) or "d3d12"
@@ -486,6 +491,16 @@ int ico_ini_load(IcoIni *ini, const char *path)
            (port/null/debug_null.c), which reads ICO_START_STAGE */
         if (ico_ini_get(ini, "start_stage") != NULL) {
             put_env("ICO_START_STAGE", ico_ini_get(ini, "start_stage"));
+        }
+        /* switch_to=N, switch_at=T (developer keys, package X5): one
+           forced stage change to N from Main tick T, through an exit of the
+           current stage (common/src/main.c, ico_dev_switch_stage, which
+           reads ICO_SWITCH_TO and ICO_SWITCH_AT) */
+        if (ico_ini_get(ini, "switch_to") != NULL) {
+            put_env("ICO_SWITCH_TO", ico_ini_get(ini, "switch_to"));
+        }
+        if (ico_ini_get(ini, "switch_at") != NULL) {
+            put_env("ICO_SWITCH_AT", ico_ini_get(ini, "switch_at"));
         }
         /* popup_test=true (developer key, Phase 6 6B): port/ui/ui_host.c
            queues a test popup at Main tick 100 and every 150 ticks after;
