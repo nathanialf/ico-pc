@@ -2128,8 +2128,15 @@ void reg_DispMultiPri(Sub15C *o, int pri)
     }
 }
 
+/* PC port (package L1): the title's logo is not drawn while a Settings or
+   Extras page opened from the title covers it (port/game/title_logo.c) */
+extern int ico_title_logo_skip(const char *model);
+
 void reg_DispObj(Sub15C *o)
 {
+    if (ico_title_logo_skip(o->model->name)) {
+        return;
+    }
     if (o->dispType == 2) {
         unsigned short type = o->model->mode.bits >> 16;
 

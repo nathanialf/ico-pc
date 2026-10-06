@@ -280,6 +280,14 @@ unsigned char *ico_arena_base(void)
     return s_arena;
 }
 
+/* port/game/title_logo.c: RegistPacket.c's reg_DispObj asks it; no title
+   here */
+int ico_title_logo_skip(const char *model)
+{
+    (void)model;
+    return 0;
+}
+
 int ico_arena_contains(const void *p, __SIZE_TYPE__ n)
 {
     const unsigned char *c = p;

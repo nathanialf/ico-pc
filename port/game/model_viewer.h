@@ -68,6 +68,9 @@ void ico_mv_tick(void);
 /* Settings > Extras > Models (port/ui/settings.c): the model list's layout,
    built on first use, or -1 */
 int ico_mv_models_enter(void);
+/* The model list's layout while it is opened from the title (the viewer
+   off), or -1 (port/game/title_logo.c hides the logo under it) */
+int ico_mv_title_list_layout(void);
 
 #ifdef __cplusplus
 }

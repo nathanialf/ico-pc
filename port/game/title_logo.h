@@ -1,0 +1,39 @@
+/*
+ * port/game/title_logo.h
+ *
+ * The title's logo under the port's menus (package L1).  The logo (the
+ * models I, C and O, their glows I_f, C_f and O_f and their shadows I_sd,
+ * C_sd and O_sd, stage animations of the title's stage, stage 1) stays on
+ * the stage behind the layouts; while a Settings or Extras page opened from
+ * the title is up (settings.h ui_SettingsCoversTitle, and the model list
+ * the Extras page opens: model_viewer.h ico_mv_title_list_layout) it is not
+ * drawn.  Its animation runs on (op.c's actTitleCamera2 waits on
+ * opTitleLogoMode), so back on the title it shows settled, with no intro.
+ *
+ * Once hidden it stays hidden until the title's own menu (layout 12 or 13)
+ * is back or the stage changes, so Extras > Credits and a model's stage
+ * load do not show it again while the title fades out.  The pause menu's
+ * Settings (any other stage) never hides anything.
+ */
+#ifndef PORT_GAME_TITLE_LOGO_H
+#define PORT_GAME_TITLE_LOGO_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* seki/src/RegistPacket.c reg_DispObj, for every object it draws: nonzero
+   when the object's model (its name) is the logo's and the logo is hidden. */
+int ico_title_logo_skip(const char *model);
+
+/* The parts, for the test: whether `model` names one of the logo's nine
+   models, and one step of the hidden state (*hidden) for the stage, the
+   current layout and whether a menu covers the title; returns *hidden. */
+int ico_title_logo_model(const char *model);
+int ico_title_logo_step(int *hidden, int stage, int layout, int covered);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PORT_GAME_TITLE_LOGO_H */

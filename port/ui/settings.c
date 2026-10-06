@@ -2461,3 +2461,9 @@ static int settingsProc(int first, int item)
     }
     return -1;
 }
+
+/* package L1: settings.h */
+int ui_SettingsCoversTitle(void)
+{
+    return s_built && onTitle() && pageOfLayout(current_layout_id, NULL) != NULL;
+}

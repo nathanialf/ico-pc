@@ -428,6 +428,11 @@ int ico_mv_models_enter(void)
     return s_listLayout;
 }
 
+int ico_mv_title_list_layout(void)
+{
+    return s_state == MV_OFF && built() ? s_listLayout : -1;
+}
+
 /* --- the viewer ------------------------------------------------------------ */
 
 static void freeAnims(void)

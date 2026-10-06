@@ -3027,6 +3027,40 @@ static void testList(void)
     CHECK(l.offset == off && lay.curItem == cur, "Cross does not scroll");
 }
 
+/* package L1: ui_SettingsCoversTitle, which hides the title's logo
+   (port/game/title_logo.c): every page opened from the title, Extras and
+   its Music page among them; not the title's own layouts, the mirror or
+   quit screens, nor any page opened from the pause menu */
+static void testCoversTitle(void)
+{
+    for (int title = 0; title < 2; title++) {
+        int mainL = enterMain(title);
+        CHECK(ui_SettingsCoversTitle() == title, "title %d: the main page", title);
+        for (int p = 0; p < UI_PAGE_COUNT; p++) {
+            int l = ui_SettingsPageLayout((UiSettingsPage)p);
+            CHECK(l >= 0, "page %d has a layout", p);
+            lt_switch_layout(l);
+            CHECK(settle(l, 60), "page %d up", p);
+            CHECK(ui_SettingsCoversTitle() == title, "title %d: page %d covers %d", title, p,
+                  ui_SettingsCoversTitle());
+        }
+        int others[3] = {title ? 13 : 57, ui_QuitScreenLayout(), ui_MirrorScreenLayout()};
+        for (int k = 0; k < 3; k++) {
+            if (others[k] < 0) {
+                continue;
+            }
+            lt_switch_layout(others[k]);
+            CHECK(settle(others[k], 60), "layout %d up", others[k]);
+            CHECK(!ui_SettingsCoversTitle(), "title %d: layout %d does not cover", title,
+                  others[k]);
+        }
+        /* the menu again from where it was entered: covering again */
+        lt_switch_layout(mainL);
+        CHECK(settle(mainL, 60) && ui_SettingsCoversTitle() == title, "title %d: the menu again",
+              title);
+    }
+}
+
 #ifdef SETTINGS_RENDER
 
 /* SCENE (512 x 512 for the 640 x 448 grid) to a PNG at 4:3, 683 x 512 */
@@ -3645,6 +3679,7 @@ int main(int argc, char **argv)
     testGallery();
     testList();
     testGameOptions();
+    testCoversTitle();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

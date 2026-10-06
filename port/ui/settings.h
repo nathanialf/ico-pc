@@ -49,6 +49,10 @@ void ui_SettingsInstall(void);
 int ui_SettingsEntryItem(int item);
 /* The title procs: masked while their own rows are (the card check). */
 void ui_SettingsTitleMask(int masked);
+/* A Settings page opened from the title is the current layout (Extras and
+   its Music page, Achievements and the remap list among them); not from
+   the pause menu (port/game/title_logo.c hides the title's logo under it). */
+int ui_SettingsCoversTitle(void);
 
 /* The New Game "Mirror mode" screen (renderer wave 7, R7c): la_vibe_select (common/src/layout_action.c,
    ICO_HOST) switches to it after the vibration choice; Cross or START on

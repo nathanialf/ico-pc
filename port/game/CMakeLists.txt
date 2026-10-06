@@ -140,7 +140,9 @@ endif()
 
 # --- The model viewer (package MV) -----------------------
 if(TARGET ico_pc)
-    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_table.c)
+    # title_logo.c (package L1): the title's logo hidden under Settings and
+    # Extras, asked by seki/src/RegistPacket.c
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                ${_ico_mv_game_incs})
@@ -154,6 +156,18 @@ if(TARGET ico_pc)
                            -iquote "${CMAKE_SOURCE_DIR}/port/ui")
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_model_viewer_live>)
 endif()
+# title_logo_test (package L1): the title's logo hidden under Settings and
+# Extras from the title, never by the pause menu's, and shown again on the
+# title's menu; the game's globals and the menus' answers stubbed. CPU only.
+add_executable(title_logo_test test/title_logo_test.c title_logo.c)
+target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+# port/ui's "settings.h" by -iquote, so <strings.h> stays the C library's
+target_compile_options(title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME title_logo COMMAND title_logo_test)
+endif()
+
 # model_viewer_headless: the headless program from the boot through
 # Settings > Extras > Models to the first model and back to the title, its
 # log checked (test/model_viewer_headless.cmake). The
