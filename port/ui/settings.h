@@ -93,6 +93,7 @@ typedef enum UiSettingsPage {
     UI_PAGE_ACHIEVEMENTS,
     UI_PAGE_REMAP,
     UI_PAGE_EXTRAS, /* Music, Models, Credits (from the title only) */
+    UI_PAGE_MUSIC,  /* Extras > Music, the music gallery (gallery.h) */
     UI_PAGE_COUNT
 } UiSettingsPage;
 

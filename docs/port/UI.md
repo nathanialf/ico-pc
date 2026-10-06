@@ -367,6 +367,7 @@ rows right-aligned ending at x 344 and value rows from x 364:
 | --- | --- |
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Extras (opens its page; from the title only), Developer mode (value), Back; notes under Language and Developer mode. With the Extras row there are nine rows on a 17-line pitch from line 40 (the notes sit at 196); from the pause menu the row is masked (`defaultMask`), the eight left keep the 19-line pitch, and `layoutMain` relinks the rows' up and down items past it each tick, because `lt_property_visible` does not look at masks |
 | Extras | Music, Models, Credits, Back; a note under Credits while it is locked |
+| Music | the music gallery (docs/port/MUSIC.md): a scrolling list of 8 slots over the groups' headings (drawn at x 24, skipped by the cursor) and entries (x 40: the album's title or the file; column A at x 420, right-aligned: the in-game file), a status line at 184 (group, asset, Playing or Stopped) and a hint line at 204 |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode (changes only when Settings was opened from the title; from the pause menu its value reads "PAL 50 Hz (title only)" and Left and Right do nothing), Menu text, Back; 17 field lines apart from line 36 |
 | Audio | Volume, Music volume, Effects volume, Sound output, Output device (the name cut with "…" where it would not fit the value box at the 60 % shrink), Back |
 | Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
@@ -386,9 +387,12 @@ stop at the ends and the proc scrolls, wrapping at the ends of the list.
 
 **Extras** (`UI_PAGE_EXTRAS`, docs/port/EXTRAS.md). Each entry is an
 `UI_OPT_EXTRAS_*` row whose Cross calls a hook in `settings.c` (`extrasMusic`,
-`extrasModels`, `extrasCredits`, marked for packages MUS, MV and CRED) that
-returns the layout to open, or -1 for "not there yet" (logged as `extras:
-<entry> not available yet`). The locked style is `rowLocked` (Credits while
+`extrasModels`, `extrasCredits`) that returns the layout to open, or -1 for
+"not there yet" (logged as `extras: <entry> not available yet`;
+`extrasModels` and `extrasCredits` are marked for packages MV and CRED).
+`extrasMusic` opens the music gallery's page (`UI_PAGE_MUSIC`, a list page
+over `kGalDef`; `gallery.h`, docs/port/MUSIC.md); leaving it puts the cursor
+back on the Music row. The locked style is `rowLocked` (Credits while
 `creditsUnlocked()` is false): `lt_ext_SetDim` greys the label and the value
 row (the colour at half, whatever the cursor does; `lt_ext_RowDim` reads it
 back), the value shows `UI_STR_ACH_LOCKED`, and the note
@@ -411,7 +415,9 @@ happens on the next tick; the window scrolls to show the item), then
 `input`, then the scrolling (at the first or last slot the window moves by one,
 wrapping at the ends). The achievements and remap pages are `kAchDef` and
 `kRemapDef` in `settings.c`; their snapshots did not change when the code moved
-out of `settings.c` (`settings_render`). The Extras galleries will use the same API.
+out of `settings.c` (`settings_render`). The music gallery (`kGalDef`) uses
+`heading` for its group headings and `input` for Cross, Square and the
+Left and Right group jumps.
 
 **Buttons**, as the game's menus have them (`la_game_option`,
 `default_item_select`): up and down move the cursor on the item links
@@ -681,7 +687,10 @@ French, German, Italian and Spanish strings of the port's own text are the
 author's translations (docs/TODO.md). Gamepad source names on the remap
 screen are `UI_STR_PAD_*` (position names: South, East, West, North, L1 to
 R3, "D-pad Up", "L-stick Left"), "Uncapped" and "fps" are
-`UI_STR_VAL_UNCAPPED` and `UI_STR_FPS_UNIT`.
+`UI_STR_VAL_UNCAPPED` and `UI_STR_FPS_UNIT`. The music gallery's group
+names, hint line, Playing and Stopped and its "tables not loaded" status are
+`UI_STR_GAL_*`; its entries' labels are the game's own names (files,
+`seDef` names) and the album's titles, in every language.
 
 ## Popups
 

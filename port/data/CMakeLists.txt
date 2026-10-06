@@ -20,6 +20,7 @@ target_compile_options(ico_miniz PRIVATE -w)
 add_library(ico_port_data STATIC
     archive.c
     cdvd_host.c
+    df_pack.c
     extract.c
     iop_ram.c
     iso9660.c

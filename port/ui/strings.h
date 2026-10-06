@@ -310,6 +310,16 @@ typedef enum UiStrId {
     UI_STR_VAL_MONO,
     UI_STR_OPT_DEVICE,
     UI_STR_VAL_DEFAULT_DEVICE,
+    /* Settings > Extras > Music, the music gallery (docs/port/MUSIC.md) */
+    UI_STR_GAL_SOUNDTRACK,
+    UI_STR_GAL_SCENE,
+    UI_STR_GAL_AMBIENCE,
+    UI_STR_GAL_VOICE,
+    UI_STR_GAL_SE,
+    UI_STR_GAL_HINT,
+    UI_STR_GAL_PLAYING,
+    UI_STR_GAL_STOPPED,
+    UI_STR_GAL_EMPTY,
     UI_STR_COUNT
 } UiStrId;
 

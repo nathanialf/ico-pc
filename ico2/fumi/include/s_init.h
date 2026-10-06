@@ -88,6 +88,8 @@ void soundReverbDepthSet(int depth);
 void soundSeDefStop(int id);
 void soundSeDefStopNoRelease(int id);
 void soundSeEnvNotUseClose(int a, int b);
+/* port (ICO_HOST): stops every slot playing from req */
+void soundSeReqStop(SqEntry *req);
 /* s_init.o's .sdata globals */
 extern float soundSeEnvMasterVolRate;
 extern int seEnvForceClose;

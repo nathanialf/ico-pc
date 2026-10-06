@@ -39,7 +39,7 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c gallery.c PROPERTIES COMPILE_OPTIONS
                             "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -65,7 +65,7 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    target_sources(${name} PRIVATE settings.c ui_list.c)
+    target_sources(${name} PRIVATE settings.c ui_list.c gallery.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -87,6 +87,18 @@ if(TARGET ico_pc)
     endif()
     ico_ui_settings(ico_ui)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_ui>)
+    # the music gallery's engine (gallery_play.c): the game's sound calls, so
+    # the game's include path, definitions and record layout
+    add_library(ico_gallery_live OBJECT gallery_play.c)
+    ico_include_dirs(common _ico_gallery_incs)
+    target_include_directories(ico_gallery_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               ${_ico_gallery_incs}
+                               $<TARGET_PROPERTY:ico_audio,INTERFACE_INCLUDE_DIRECTORIES>
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(ico_gallery_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_gallery_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_gallery_live>)
     target_include_directories(ico_pc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
     target_link_libraries(ico_pc PRIVATE ${_ui_settings_deps})
 endif()
@@ -120,6 +132,51 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME settings COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# --- gallery_test (CPU) --------------------------------------------------------
+# The music gallery's list (gallery.c, docs/port/MUSIC.md) built from the
+# PAL base ELF's tables as the game loads them (port/data/tables.c, as
+# tables_test does): keys, group order and headings, duplicates, the name
+# table, the glyphs; with the disc image, the streams on the disc and every
+# listed bank in a pack. Exit 77 without the ELF.
+set(_gal_data "${CMAKE_SOURCE_DIR}/port/data")
+add_executable(gallery_test test/gallery_test.c gallery.c font.c strings.c strings_en.c
+    strings_fr.c strings_de.c strings_it.c strings_es.c "${_ui_font_c}"
+    "${CMAKE_SOURCE_DIR}/port/audio/track_names.c" "${_gal_data}/tables.c"
+    "${_gal_data}/gen/table_defs.c" "${_gal_data}/gen/table_desc.c"
+    "${_gal_data}/gen/ee_symbols.c")
+ico_include_dirs(sugipon _ico_gal_incs)
+target_include_directories(gallery_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gal_incs}
+                           "${_gal_data}" "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/audio"
+                           "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+target_compile_definitions(gallery_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_HOST=1)
+set_source_files_properties("${_gal_data}/gen/ee_symbols.c" TARGET_DIRECTORY gallery_test
+                            PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+target_compile_options(gallery_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(gallery_test PRIVATE ico_port_data)
+if(NOT WIN32)
+    target_link_libraries(gallery_test PRIVATE m)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    add_test(NAME gallery COMMAND gallery_test "${ICO_BASE_ELF}" "${ICO_DISC_IMAGE}")
+    set_tests_properties(gallery PROPERTIES SKIP_RETURN_CODE 77)
+    # the gallery in the headless game (gallery_headless.py): needs the
+    # disc image and the headless program
+    if(TARGET ico_pc AND ICO_HEADLESS AND Python3_EXECUTABLE)
+        add_test(NAME gallery_headless
+                 COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/gallery_headless.py"
+                         "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
+                         "${CMAKE_CURRENT_BINARY_DIR}/gallery_headless")
+        set_tests_properties(gallery_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
+                             TIMEOUT 300)
+    endif()
 endif()
 
 if(NOT TARGET ico_render)

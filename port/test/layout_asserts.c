@@ -1693,7 +1693,7 @@ OFF(SqEntry, stream, 0x2C);
 SIZE(SqEntry, 0x30); /* comment */
 #endif
 
-/* SeDef: runtime, ico2/fumi/include/s_init.h:103 */
+/* SeDef: runtime, ico2/fumi/include/s_init.h:105 */
 #if ICO_LAYOUT_EE
 OFF(SeDef, name, 0x0);
 OFF(SeDef, kind, 0x20);
@@ -1706,7 +1706,7 @@ OFF(SeDef, shock, 0x36);
 SIZE(SeDef, 0x3C); /* comment */
 #endif
 
-/* SeEnvDef: runtime, ico2/fumi/include/s_init.h:126 */
+/* SeEnvDef: runtime, ico2/fumi/include/s_init.h:128 */
 #if ICO_LAYOUT_EE
 OFF(SeEnvDef, se, 0x0);
 OFF(SeEnvDef, proc, 0x4);
@@ -1717,7 +1717,7 @@ OFF(SeEnvDef, volumeLength, 0x14);
 SIZE(SeEnvDef, 0x1C); /* comment */
 #endif
 
-/* SeSlot: runtime, ico2/fumi/include/s_init.h:165 */
+/* SeSlot: runtime, ico2/fumi/include/s_init.h:167 */
 #if ICO_LAYOUT_EE
 OFF(SeSlot, num, 0x0);
 OFF(SeSlot, vol0, 0x2);
@@ -1740,12 +1740,12 @@ OFF(SeSlot, src, 0x38);
 OFF(SeSlot, env, 0x3C);
 #endif
 
-/* SeBank: overlay, ico2/fumi/include/s_init.h:194 */
+/* SeBank: overlay, ico2/fumi/include/s_init.h:196 */
 OFF(SeBank, hdPath, 0x0);
 OFF(SeBank, bdPath, 0x30);
 SIZE(SeBank, 0x64); /* comment */
 
-/* SeKind: overlay, ico2/fumi/include/s_init.h:205 */
+/* SeKind: overlay, ico2/fumi/include/s_init.h:207 */
 OFF(SeKind, num, 0x0);
 OFF(SeKind, prog, 0x2);
 OFF(SeKind, tone, 0x4);

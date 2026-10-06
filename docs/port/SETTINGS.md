@@ -122,8 +122,13 @@ opens it) and suspends achievements while it is on (docs/port/DEVELOPER_MODE.md)
 
 Settings > Extras (title only; the galleries leave the stage, and the title
 menu has no room for more rows) opens a page with **Music**, **Models**,
-**Credits** and Back. The three entries are not available yet: Cross on one
-does nothing but write `extras: <entry> not available yet` to the log. Credits
+**Credits** and Back. **Music** opens the music gallery: a list of the
+game's music, scene sounds, ambiences, voices and sound effects, each played
+on Cross through the game's own sound engines (Square stops, Left and Right
+jump between the groups, Triangle goes back; the title's music fades out
+while the gallery plays and comes back on leaving). docs/port/MUSIC.md
+describes it. Models and Credits are not available yet: Cross on one does
+nothing but write `extras: <entry> not available yet` to the log. Credits
 shows the locked style, its label and its value ("Locked") greyed and, with
 the cursor on it, the note "Finish the game to unlock"; it stays locked until
 the ending has been reached. docs/port/EXTRAS.md says what each entry will be

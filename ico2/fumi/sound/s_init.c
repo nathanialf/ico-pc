@@ -1440,6 +1440,18 @@ void soundDataSegNextStageNotUseClose(int mode, int stage)
     }
 }
 
+/* port: the music gallery (port/ui/gallery_play.c) stops what plays from a
+   bank before it closes the bank; the slots are this file's */
+void soundSeReqStop(SqEntry *req)
+{
+    int i;
+    for (i = 0; i < 48; i++) {
+        if (seSlotTbl[i].req == req && req->mode == 0) {
+            soundSeDefStop(((int)seSlotTbl[i].num << 8) | i);
+        }
+    }
+}
+
 inline int debug_req(void)
 {
     SeSlot *e = seSlotTbl;

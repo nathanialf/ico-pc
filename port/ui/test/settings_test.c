@@ -42,6 +42,7 @@
 #include <libscf.h>
 #include "config.h"
 #include "font.h"
+#include "gallery.h"
 #include "host_config.h"
 #include "input.h"
 #include "layout_ext.h"
@@ -226,12 +227,13 @@ void tex_SetSamplingType(void *t, int mag, int min)
     (void)min;
 }
 
-void soundSeDefPlay(int no, unsigned int a, int b, int c)
+int soundSeDefPlay(int no, unsigned int a, float *b, int c)
 {
     (void)no;
     (void)a;
     (void)b;
     (void)c;
+    return -1;
 }
 
 void gflagInit(void) {}
@@ -1842,9 +1844,18 @@ static void testExtras(void)
         press(0x4000);
         CHECK(lt_ext_Layout(exL)->curItem == el[2], "on Credits");
         CHECK(note >= 0 && lt_ext_Prop(note)->masked == 0, "the note on Credits");
-        /* every entry only logs, and stays on the page */
+        /* Music opens the gallery (testGallery has the page itself) */
+        lt_ext_Layout(exL)->curItem = el[0];
+        frame(0);
+        press(0x40);
+        int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+        CHECK(galL >= 0 && settle(galL, 60), "Cross on Music opens the gallery");
+        press(0x10);
+        CHECK(settle(exL, 60) && lt_ext_Layout(exL)->curItem == el[0],
+              "Triangle: back on the Music row");
+        /* the others only log, and stay on the page */
         const char *want[3] = {"music", "models", "credits"};
-        for (int k = 0; k < 3; k++) {
+        for (int k = 1; k < 3; k++) {
             lt_ext_Layout(exL)->curItem = el[k];
             frame(0);
             errCapture();
@@ -1958,6 +1969,123 @@ static void listStep(UiList *l, LtProp *lay, int flags)
         }
     }
     ui_ListRefresh(l, lay->curItem);
+}
+
+/* ----------------------------------------------------------- the gallery
+ * Settings > Extras > Music (gallery.h) over a fake engine: a few streams
+ * in each group, the heading skip, Cross / Square / Left / Right and leaving.
+ * The list from the PAL tables is gallery_test's. */
+
+static AdpcmDataRec s_fakeAdpcm[105];
+static int s_galPlays, s_galStops, s_galLeaves, s_galLastKey = -1;
+static const GalleryItem *s_galCur;
+
+static int galTables(GalleryTables *t)
+{
+    static const struct {
+        int no;
+        const char *path;
+    } kRows[] = {{1, "sound/ICO_ADPCM/battle.int"},
+                 {6, "sound/ICO_ADPCM/event/01.int"},
+                 {60, "sound/ICO_ADPCM/event2/54.int"},
+                 {61, "sound/ICO_ADPCM/event2/55.int"},
+                 {101, "sound/ICO_ADPCM/event2/hint1_1.int"}};
+
+    for (unsigned i = 0; i < sizeof(kRows) / sizeof(kRows[0]); i++) {
+        snprintf(s_fakeAdpcm[kRows[i].no].path, sizeof(s_fakeAdpcm[0].path), "%s", kRows[i].path);
+        s_fakeAdpcm[kRows[i].no].channels = 2;
+        s_fakeAdpcm[kRows[i].no].pitch = 44100;
+    }
+    memset(t, 0, sizeof(*t));
+    t->adpcm = s_fakeAdpcm;
+    t->adpcmCount = 105;
+    return 0;
+}
+
+static int galPlay(const GalleryItem *it)
+{
+    s_galPlays++;
+    s_galLastKey = it->key;
+    s_galCur = it;
+    return 0;
+}
+
+static void galStop(void)
+{
+    s_galStops++;
+    s_galCur = NULL;
+}
+
+static void galLeaveHook(void)
+{
+    s_galLeaves++;
+    s_galCur = NULL;
+}
+
+static const GalleryItem *galPlaying(void)
+{
+    return s_galCur;
+}
+
+static const GalleryEngine kFakeEngine = {galTables, NULL, galLeaveHook, galPlay,
+                                          galStop,   NULL, galPlaying};
+
+static void testGallery(void)
+{
+    gallery_SetEngine(&kFakeEngine);
+    int mainL = enterMain(1);
+    int ml[16];
+    ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+    lt_ext_Layout(mainL)->curItem = ml[6];
+    press(0x40);
+    int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+    CHECK(settle(exL, 60), "gallery: Extras");
+    lt_ext_Layout(exL)->curItem = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+    frame(0);
+    press(0x40);
+    int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+    CHECK(settle(galL, 60), "gallery: the page");
+    frame(0);
+    int lab[16], opts[16];
+    ui_SettingsPageRows(UI_PAGE_MUSIC, lab, opts, NULL, 16);
+    /* Soundtrack, darkness (stream 1, the album's), event/01.int (prologue),
+       Scene sounds, event2/54.int, event2/55.int, Ambience, Voice */
+    CHECK(strcmp(lt_ext_RowText(lab[0]), "Soundtrack") == 0 &&
+              strcmp(lt_ext_RowText(lab[1]), "darkness") == 0 &&
+              strcmp(lt_ext_RowText(lab[2]), "prologue") == 0 &&
+              strcmp(lt_ext_RowText(lab[3]), "Scene sounds") == 0 &&
+              strcmp(lt_ext_RowText(lab[4]), "event2/54.int") == 0,
+          "gallery rows: \"%s\" \"%s\" \"%s\" \"%s\" \"%s\"", lt_ext_RowText(lab[0]),
+          lt_ext_RowText(lab[1]), lt_ext_RowText(lab[2]), lt_ext_RowText(lab[3]),
+          lt_ext_RowText(lab[4]));
+    CHECK(strcmp(lt_ext_RowText(lab[1] + 1), "battle.int") == 0,
+          "the album's title, the file in the column (\"%s\")", lt_ext_RowText(lab[1] + 1));
+    CHECK(lt_ext_Prop(lab[0])->dispX < lt_ext_Prop(lab[1])->dispX, "headings stand out");
+    LtProp *l = lt_ext_Layout(galL);
+    CHECK(l->curItem == lab[1], "the cursor skips the heading onto darkness");
+    press(0x40);
+    CHECK(s_galPlays == 1 && s_galLastKey == 1, "Cross plays stream 1");
+    frame(0);
+    CHECK(rowWithText(UI_PAGE_MUSIC, "Soundtrack  \xC2\xB7  battle.int  \xC2\xB7  Playing") >= 0,
+          "the status: group, file, Playing");
+    press(0x80);
+    CHECK(s_galStops == 1, "Square stops");
+    press(0x4000);
+    press(0x4000);
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54.int") == 0,
+          "Down skips the Scene sounds heading");
+    press(0x8000);
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "darkness") == 0,
+          "Left: back to the soundtrack's first entry");
+    press(0x2000);
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/54.int") == 0,
+          "Right: the scene sounds' first entry (\"%s\")", lt_ext_RowText(l->curItem));
+    press(0x2000);
+    CHECK(strcmp(lt_ext_RowText(l->curItem), "event2/hint1_1.int") == 0,
+          "Right: over the empty Ambience to the voices (\"%s\")", lt_ext_RowText(l->curItem));
+    press(0x10);
+    CHECK(settle(exL, 60) && s_galLeaves == 1, "Triangle leaves the gallery");
+    gallery_SetEngine(NULL);
 }
 
 static void testList(void)
@@ -2310,6 +2438,19 @@ static int render(void)
         press(0x4000);
         frame(0);
         snap4("settings_extras_4x.png");
+        /* the music gallery over the fake engine, the cursor on an entry
+           that plays */
+        gallery_SetEngine(&kFakeEngine);
+        lt_ext_Layout(exL)->curItem = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+        frame(0);
+        press(0x40);
+        int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+        CHECK(settle(galL, 60), "the gallery at 4x");
+        press(0x40);
+        frame(0);
+        snap4("settings_music_4x.png");
+        press(0x10);
+        gallery_SetEngine(NULL);
     }
     /* package DEF: every screen presented at Enhanced 1080p, deferred and
        classic (snap1080) */
@@ -2403,6 +2544,7 @@ int main(int argc, char **argv)
     testCapture();
     testBootSkip();
     testExtras();
+    testGallery();
     testList();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);

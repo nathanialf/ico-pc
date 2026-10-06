@@ -275,4 +275,14 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_MONO] = "Mono",
     [UI_STR_OPT_DEVICE] = "Dispositivo de salida",
     [UI_STR_VAL_DEFAULT_DEVICE] = "Predeterminado",
+    [UI_STR_GAL_SOUNDTRACK] = "Banda sonora",
+    [UI_STR_GAL_SCENE] = "Sonidos de escena",
+    [UI_STR_GAL_AMBIENCE] = "Ambientes",
+    [UI_STR_GAL_VOICE] = "Voz",
+    [UI_STR_GAL_SE] = "Efectos de sonido",
+    [UI_STR_GAL_HINT] =
+        "Equis: reproducir    Cuadrado: detener    Izquierda/Derecha: sección    Triángulo: volver",
+    [UI_STR_GAL_PLAYING] = "Reproduciendo",
+    [UI_STR_GAL_STOPPED] = "Detenido",
+    [UI_STR_GAL_EMPTY] = "Las tablas de sonido del juego no están cargadas",
 };

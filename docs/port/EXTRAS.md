@@ -8,12 +8,12 @@ galleries take over the stage and the pause menu has no stage to give.
 
 | entry | what it will be | status |
 | --- | --- | --- |
-| Music | a list of the game's music tracks to listen to | coming in package MUS |
+| Music | the music gallery: the soundtrack (the streamed music, with the album's titles), the scene sounds, the ambiences, the voices and the sound effects by bank, played through the game's own engines | live; docs/port/MUSIC.md |
 | Models | a viewer for the game's character and object models | coming in package MV |
 | Credits | the staff roll, locked until the ending has been reached ("Finish the game to unlock") | coming in package CRED |
 
-Until the packages land, selecting an entry does nothing and writes
-`extras: <entry> not available yet` to the log. Credits already has its
+Until their packages land, selecting Models or Credits does nothing and
+writes `extras: <entry> not available yet` to the log. Credits already has its
 locked look: greyed, with the value "Locked" and the note.
 
 The page is built in `port/ui/settings.c` (`UI_PAGE_EXTRAS`, the `extras*`

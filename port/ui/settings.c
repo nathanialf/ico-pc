@@ -19,6 +19,7 @@
 #include "audio_host.h"
 #include "config.h"
 #include "font.h"
+#include "gallery.h"
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
@@ -414,10 +415,14 @@ static int creditsUnlocked(void)
     return 0;
 }
 
-/* package MUS: the music gallery's layout */
+/* the music gallery's page (gallery.h, docs/port/MUSIC.md) */
 static int extrasMusic(void)
 {
-    return -1;
+    if (!s_built || s_pages[UI_PAGE_MUSIC].layout < 0) {
+        return -1;
+    }
+    gallery_Enter();
+    return s_pages[UI_PAGE_MUSIC].layout;
 }
 
 /* package MV: the model viewer's layout */
@@ -903,7 +908,8 @@ static void setNote(int row, int strId)
 /* ------------------------------------------------------------ building */
 
 static int settingsProc(int first, int item);
-static const UiListDef kAchDef, kRemapDef;
+static const UiListDef kAchDef, kRemapDef, kGalDef;
+static int s_galHint = -1; /* the music gallery's hint line */
 static int entryProc(int first, int item);
 static void buildMirrorScreen(void);
 static void buildQuitScreen(void);
@@ -1056,6 +1062,13 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.colA = (UiListCol){230, 180, 21.0f, UI_ALIGN_LEFT};
         st.colB = (UiListCol){420, 190, 21.0f, UI_ALIGN_LEFT};
         st.statusY = 198;
+    } else if (id == UI_PAGE_MUSIC) {
+        /* the label (the album's title or the file), the in-game file at
+           the right; the status and the hint below */
+        st.y0 = 40;
+        st.label = (UiListCol){40, 380, 22.0f, UI_ALIGN_LEFT};
+        st.colA = (UiListCol){420, 180, 19.0f, UI_ALIGN_RIGHT};
+        st.statusY = 184;
     } else {
         st.y0 = 40;
         st.label = (UiListCol){40, 400, 24.0f, UI_ALIGN_LEFT};
@@ -1063,6 +1076,10 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.statusY = NOTE_Y;
     }
     ui_ListBuild(&pg->list, def, NULL, &st);
+    if (id == UI_PAGE_MUSIC) {
+        s_galHint = ui_SettingsAddRow(20, 204, 600, 26, 0, -1, 0, " ", 16.0f, UI_ALIGN_CENTER);
+        P(s_galHint)->centerX = 1;
+    }
     for (int i = 0; i < UI_LIST_SLOTS; i++) {
         Row *r = &pg->rows[i];
         r->opt = UI_OPT_LIST;
@@ -1195,6 +1212,7 @@ static void build(void)
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, NULL, 4, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
+    buildListPage(UI_PAGE_MUSIC, UI_STR_EXTRAS_MUSIC, &kGalDef, UI_PAGE_EXTRAS);
     /* the section rows open their pages */
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         for (int i = 0; i < s_pages[p].count; i++) {
@@ -1826,6 +1844,108 @@ static int remapInput(void *user, int d, int flags)
 
 static const UiListDef kRemapDef = {remapCount, remapFill, NULL, remapInput, remapDecorate};
 
+/* --- the music gallery (gallery.h): its items, the play keys, and the
+   engine's tick while the page is up */
+
+static int galCount(void *user)
+{
+    (void)user;
+    return gallery_Count();
+}
+
+static void galFill(void *user, int d, UiListSlot *out)
+{
+    (void)user;
+    static char lab[UI_LIST_SLOTS][96], col[UI_LIST_SLOTS][96];
+    static int k;
+    k = (k + 1) % UI_LIST_SLOTS;
+    out->label = gallery_Label(d, lab[k], sizeof(lab[k]));
+    out->colA = gallery_ColA(d, col[k], sizeof(col[k]));
+}
+
+static int galHeading(void *user, int d)
+{
+    (void)user;
+    const GalleryItem *it = gallery_Item(d);
+    return it != NULL && it->kind == GAL_K_HEADING;
+}
+
+/* headings stand out to the left; the status line: the group, the file and
+   whether the entry under the cursor plays */
+static void galDecorate(void *user, int d)
+{
+    (void)user;
+    Page *pg = &s_pages[UI_PAGE_MUSIC];
+    for (int s = 0; s < UI_LIST_SLOTS; s++) {
+        int item = ui_ListItemAt(&pg->list, s);
+        P(pg->list.label[s])->dispX = galHeading(NULL, item) ? 24 : 40;
+    }
+    const GalleryItem *it = gallery_Item(d);
+    char asset[128];
+    if (gallery_Tables() == NULL) {
+        lt_ext_SetText(pg->list.status, ui_Str(UI_STR_GAL_EMPTY));
+    } else if (it == NULL || it->kind == GAL_K_BACK) {
+        lt_ext_SetText(pg->list.status, "");
+    } else if (it->kind == GAL_K_HEADING) {
+        snprintf(s_text, sizeof(s_text), "%s", gallery_Asset(d, asset, sizeof(asset)));
+        lt_ext_SetText(pg->list.status, s_text);
+    } else {
+        snprintf(s_text, sizeof(s_text), "%s  \xC2\xB7  %s  \xC2\xB7  %s",
+                 ui_Str((UiStrId)gallery_GroupStr(it->group)),
+                 gallery_Asset(d, asset, sizeof(asset)),
+                 ui_Str(gallery_Playing() == d ? UI_STR_GAL_PLAYING : UI_STR_GAL_STOPPED));
+        lt_ext_SetText(pg->list.status, s_text);
+    }
+    if (s_galHint >= 0) {
+        setNote(s_galHint, UI_STR_GAL_HINT);
+    }
+}
+
+static int galLeave(void)
+{
+    gallery_Leave();
+    int to = leaveTo(UI_PAGE_MUSIC, parentLayout(&s_pages[UI_PAGE_MUSIC]));
+    /* back on the Music row */
+    int row = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+    if (to == s_pages[UI_PAGE_EXTRAS].layout && row >= 0) {
+        lt_ext_Layout(to)->defaultItem = row;
+    }
+    return to;
+}
+
+static int galInput(void *user, int d, int flags)
+{
+    (void)user;
+    Page *pg = &s_pages[UI_PAGE_MUSIC];
+    const GalleryItem *it = gallery_Item(d);
+    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && it != NULL && it->kind == GAL_K_BACK)) {
+        return galLeave();
+    }
+    if ((flags & PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
+        gallery_Play(d);
+        return -1;
+    }
+    if (flags & PAD_SQUARE) {
+        gallery_Stop();
+        return -1;
+    }
+    if ((flags & (PAD_LEFT | PAD_RIGHT)) && d >= 0) {
+        /* the next or previous group, at the top of the window */
+        int k = gallery_JumpGroup(d, (flags & PAD_LEFT) ? -1 : 1);
+        int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
+        if (k >= 0) {
+            int head = k > 0 && galHeading(NULL, k - 1) ? k - 1 : k;
+            pg->list.offset = head > n - shown ? n - shown : head;
+            lt_ext_Layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
+            CUR_SE();
+        }
+        return -1;
+    }
+    return UI_LIST_PASS;
+}
+
+static const UiListDef kGalDef = {galCount, galFill, galHeading, galInput, galDecorate};
+
 /* the locked style (a row greyed, with a note while the cursor is on it) */
 static int rowLocked(const Row *r)
 {
@@ -1907,6 +2027,9 @@ static int settingsProc(int first, int item)
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    if (id == UI_PAGE_MUSIC) {
+        gallery_Tick(); /* the engine, once a Main tick while the page is up */
+    }
     if (first) {
         if (pg->isList) {
             ui_ListReset(&pg->list);

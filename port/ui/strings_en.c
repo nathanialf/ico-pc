@@ -272,4 +272,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_MONO] = "Mono",
     [UI_STR_OPT_DEVICE] = "Output device",
     [UI_STR_VAL_DEFAULT_DEVICE] = "Default",
+    [UI_STR_GAL_SOUNDTRACK] = "Soundtrack",
+    [UI_STR_GAL_SCENE] = "Scene sounds",
+    [UI_STR_GAL_AMBIENCE] = "Ambience",
+    [UI_STR_GAL_VOICE] = "Voice",
+    [UI_STR_GAL_SE] = "Sound effects",
+    [UI_STR_GAL_HINT] = "Cross: play    Square: stop    Left/Right: section    Triangle: back",
+    [UI_STR_GAL_PLAYING] = "Playing",
+    [UI_STR_GAL_STOPPED] = "Stopped",
+    [UI_STR_GAL_EMPTY] = "The game's sound tables are not loaded",
 };

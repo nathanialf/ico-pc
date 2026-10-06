@@ -274,4 +274,14 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_MONO] = "Mono",
     [UI_STR_OPT_DEVICE] = "Dispositivo di uscita",
     [UI_STR_VAL_DEFAULT_DEVICE] = "Predefinito",
+    [UI_STR_GAL_SOUNDTRACK] = "Colonna sonora",
+    [UI_STR_GAL_SCENE] = "Suoni di scena",
+    [UI_STR_GAL_AMBIENCE] = "Ambienti",
+    [UI_STR_GAL_VOICE] = "Voce",
+    [UI_STR_GAL_SE] = "Effetti sonori",
+    [UI_STR_GAL_HINT] =
+        "Croce: ascolta    Quadrato: ferma    Sinistra/Destra: sezione    Triangolo: indietro",
+    [UI_STR_GAL_PLAYING] = "In riproduzione",
+    [UI_STR_GAL_STOPPED] = "Fermo",
+    [UI_STR_GAL_EMPTY] = "Le tabelle dei suoni del gioco non sono caricate",
 };

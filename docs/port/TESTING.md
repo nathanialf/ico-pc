@@ -74,6 +74,12 @@ win over every file: `--iso PATH`, `--pad-script FILE`, `--trace FILE|none`,
 stderr on the console instead of the log) and `--help`. A player never needs
 them.
 
+The environment variable `ICO_GALLERY_PLAY` (developer only) gives the
+music gallery a list of entries to play when its page opens, one every 8 s,
+for headless renders and the `gallery_headless` test
+(docs/port/MUSIC.md, "Testing"): `stream:N`, `env:I`, `se:D`, comma
+separated.
+
 ## Game data on the first run
 
 Without `use_iso`, a run looks for `ico.o2r` in the per-user folder, then
@@ -302,7 +308,14 @@ audits (`offset_audit`, `template_audit`), and the renderer. A test that
 needs the disc image (`vfs_disc`, `archive_disc`) or a Vulkan device exits
 77 without one, which ctest reports as skipped and counts as a pass.
 `tables_loader` and `tables_manifest` are built only when a base ELF is
-present (docs/BUILDING.md). The Windows presets build the test executables
+present (docs/BUILDING.md); `gallery` exits 77 without one.
+`gallery_headless` runs the headless game itself (a copy of `ico_pc` in
+`port/ui/gallery_headless/` of the build directory, with its own
+`ico-pc.ini`, pad script and WAV dump): it boots to the title, opens
+Settings > Extras > Music and plays one entry of each group through
+`ICO_GALLERY_PLAY`, then checks the log and the dump
+(docs/port/MUSIC.md, "Testing"). It needs the disc image (77 without),
+runs serially and takes about ten seconds. The Windows presets build the test executables
 without running them.
 
 ## Packages

@@ -68,6 +68,15 @@ resolves in `cdvd.c`'s own directory cache from DATA.DF's directory and
 never reaches the VFS by name; a name missing from that cache falls through
 to `sceCdSearchFile`, which fails on this disc exactly as on the PS2.
 
+The port's own screens read DATA.DF without the game's cdvd thread through
+`port/data/df_pack.h`: `ico_df_has` looks a name up in DATA.DF's directory,
+and `ico_df_find_member` / `ico_df_read_member` find a member of the stage
+packs (the `*.DF` entries, each a raw deflate stream of a header, the
+0x224-byte member entries and the members, loader-census.md section 2) and
+inflate it with miniz's tinfl. The index of the 68 packs' 22,808 members is
+built at the first look-up by inflating each pack's header and directory.
+The music gallery uses it for its sound banks (docs/port/MUSIC.md).
+
 ### Backend table
 
 ```c
