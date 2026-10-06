@@ -203,6 +203,12 @@ pointer to this file.
 
 ## Audio
 
+- **Sound options.** Settings has no audio page: wanted are master, music
+  and effects volumes, the stereo/mono choice the PS2's system menu
+  offered, and an output-device choice, as config keys under `[audio]`
+  (docs/port/CONFIG.md) with rows in `port/ui/settings.c`; the mixer in
+  `port/audio/audio_host.c` applies the gains after the SPU2's own
+  volumes so the game's mix is unchanged at the defaults.
 - **Windows audio push cost.** A Windows window-build log showed the
   per-vsync `audio` phase at 6 to 11 ms, while the SPU2 render itself takes
   under 1 ms; the phase also covers `ico_audio_sdl_push` (SDL's stream lock,
@@ -265,6 +271,13 @@ pointer to this file.
 
 ## Configuration and text
 
+- **The port font everywhere.** The 124 menu rows use the port font
+  (`[game] classic_menu_text` off), but the remaining in-game text still
+  comes from the disc's textures or `DisplayFont.c`'s bitmap font: the
+  signs (`kanban.c`), the staff roll, the save and load screens' values,
+  the game over and Continue? prompts, the subtitles. Route each through
+  `port/ui/menu_text.c`'s path with the same classic fallback, so one
+  typeface covers the whole game at every scale.
 - **Write `config.toml` on the first run.** `ico_config_save` is called only
   by the Settings menu, so a player who never opens Settings has no file to
   edit by hand. Save it (perhaps with a commented template) after the ini
