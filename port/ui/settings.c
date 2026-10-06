@@ -429,10 +429,18 @@ static int extrasMusic(void)
     return s_pages[UI_PAGE_MUSIC].layout;
 }
 
-/* package MV: the model viewer's layout */
+/* package MV: the model viewer's list (port/game/model_viewer.c registers
+   it; docs/port/EXTRAS.md, "Models"), -1 without one */
+static int (*s_modelsEnter)(void);
+
+void ui_SettingsSetModelsHandler(int (*fn)(void))
+{
+    s_modelsEnter = fn;
+}
+
 static int extrasModels(void)
 {
-    return -1;
+    return s_modelsEnter != NULL ? s_modelsEnter() : -1;
 }
 
 /* package CRED: the credits' layout (the staff roll); only reachable while

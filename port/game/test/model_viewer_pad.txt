@@ -1,0 +1,124 @@
+# port/game/test/model_viewer_pad.txt: the model_viewer_headless test's pad
+# (package MV, docs/port/TESTING.md "The model viewer run"). Format:
+# port/input/pad_script.h. Buttons: CROSS 0040, TRIANGLE 0010, START 0800,
+# DOWN 4000, LEFT 8000.
+#
+# Ticks 8..477: the boot signs, as port/input/pad-boot.txt's first phase
+# (LEFT, CROSS, START every 40 ticks), up to the title. Measured on the
+# headless build with an empty card folder: the title (layout 12) is up at
+# tick 438 and turns to "New Game" only (layout 13) at tick 501.
+# Then, a press every 12 ticks or more, each after the screen's fade-in:
+#   545  DOWN     the title's cursor from New Game to Settings
+#   565  CROSS    Settings (its main page, up at tick 586)
+#   605..665      DOWN six times: Display, Audio, Controls, Gameplay,
+#                 Language, Achievements to Extras
+#   685  CROSS    Extras (Music, Models, Credits, Back)
+#   715  DOWN     Models
+#   735  CROSS    the model list
+#   765  CROSS    the first model (Ico): his host stage loads (up at tick
+#                 872) and the viewer shows him
+#   1000 CROSS    play the selected animation
+#   1060 TRIANGLE back to the model list
+#   1100 TRIANGLE back to the title (up again at tick 1182)
+8 8000    # LEFT
+11 0000
+21 0040    # CROSS
+24 0000
+34 0800    # START
+37 0000
+48 8000    # LEFT
+51 0000
+61 0040    # CROSS
+64 0000
+74 0800    # START
+77 0000
+88 8000    # LEFT
+91 0000
+101 0040    # CROSS
+104 0000
+114 0800    # START
+117 0000
+128 8000    # LEFT
+131 0000
+141 0040    # CROSS
+144 0000
+154 0800    # START
+157 0000
+168 8000    # LEFT
+171 0000
+181 0040    # CROSS
+184 0000
+194 0800    # START
+197 0000
+208 8000    # LEFT
+211 0000
+221 0040    # CROSS
+224 0000
+234 0800    # START
+237 0000
+248 8000    # LEFT
+251 0000
+261 0040    # CROSS
+264 0000
+274 0800    # START
+277 0000
+288 8000    # LEFT
+291 0000
+301 0040    # CROSS
+304 0000
+314 0800    # START
+317 0000
+328 8000    # LEFT
+331 0000
+341 0040    # CROSS
+344 0000
+354 0800    # START
+357 0000
+368 8000    # LEFT
+371 0000
+381 0040    # CROSS
+384 0000
+394 0800    # START
+397 0000
+408 8000    # LEFT
+411 0000
+421 0040    # CROSS
+424 0000
+434 0800    # START
+437 0000
+448 8000    # LEFT
+451 0000
+461 0040    # CROSS
+464 0000
+474 0800    # START
+477 0000
+545 4000
+548 0000
+565 0040
+568 0000
+605 4000
+608 0000
+617 4000
+620 0000
+629 4000
+632 0000
+641 4000
+644 0000
+653 4000
+656 0000
+665 4000
+668 0000
+685 0040
+688 0000
+715 4000
+718 0000
+735 0040
+738 0000
+765 0040
+768 0000
+1000 0040
+1003 0000
+1060 0010
+1063 0000
+1100 0010
+1103 0000

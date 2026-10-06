@@ -71,6 +71,10 @@ int ui_MirrorScreenRow(int on);
    handler (the headless build) the request calls exit(0), which runs the
    same atexit handlers.  NULL restores that. */
 void ui_SettingsSetQuitHandler(void (*fn)(void));
+/* Package MV: Settings > Extras > Models opens the layout fn returns
+   (port/game/model_viewer.c's model list), or nothing when it returns -1 or
+   none is set ("extras: models not available yet" in the log). */
+void ui_SettingsSetModelsHandler(int (*fn)(void));
 int ui_QuitScreenLayout(void);
 /* the "Yes" (yes = 1) and "No" (yes = 0) rows */
 int ui_QuitScreenRow(int yes);

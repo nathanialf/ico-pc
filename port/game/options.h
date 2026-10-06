@@ -33,6 +33,12 @@
 #ifndef ICO_PORT_GAME_OPTIONS_H
 #define ICO_PORT_GAME_OPTIONS_H
 
+/* Package MV: the model viewer is up (port/game/model_viewer.h), from the
+   model's choice until the title is back.  While it is set, a loading
+   stage other than the title starts no script (common/src/sceneManager.c)
+   and the achievements are suspended (gamestate.c); nothing else reads it. */
+extern int ico_mv_active;
+
 int ico_opt_stick_fix(void);
 void ico_opt_set_stick_fix(int on);
 int ico_opt_yorda_safe(void);

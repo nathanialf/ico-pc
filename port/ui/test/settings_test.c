@@ -1827,6 +1827,15 @@ static int enterMain(int title)
     return mainL;
 }
 
+/* package MV: a stand-in for the model viewer's list (ui_SettingsSetModelsHandler) */
+static int s_modelsCalls;
+
+static int fakeModels(void)
+{
+    s_modelsCalls++;
+    return ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
+}
+
 /* Settings > Extras: a row of the main page after Achievements, from the
    title only; Music, Models, Credits and Back; the entries are placeholders
    that log; Credits shows the locked style. */
@@ -1909,6 +1918,23 @@ static void testExtras(void)
             CHECK(strstr(log, line) != NULL && current_layout_id == exL,
                   "Cross on %s logs and stays (\"%s\")", want[k], log);
         }
+        /* package MV: with the model viewer's handler (port/game/
+           model_viewer.c registers its list), Models opens the layout it
+           returns; here the achievements page stands in for the list */
+        s_modelsCalls = 0;
+        ui_SettingsSetModelsHandler(fakeModels);
+        lt_ext_Layout(exL)->curItem = el[1];
+        frame(0);
+        press(0x40);
+        CHECK(s_modelsCalls == 1 && settle(ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS), 60),
+              "Models opens the handler's layout (%d calls)", s_modelsCalls);
+        ui_SettingsSetModelsHandler(NULL);
+        press(0x10);
+        CHECK(settle(mainL, 60), "back from the handler's layout");
+        lt_ext_Layout(mainL)->curItem = ex;
+        frame(0);
+        press(0x40);
+        CHECK(settle(exL, 60), "Extras after the handler's layout");
         /* Back and Triangle return to the main page, the cursor on Extras */
         lt_ext_Layout(exL)->curItem = el[3];
         press(0x40);

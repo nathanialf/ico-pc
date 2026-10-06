@@ -173,6 +173,13 @@ if(WIN32)
     target_link_libraries(rd_crt_test PRIVATE comdlg32 user32)
 endif()
 
+# rd_filter_test (package MV): the draw filter (rd.h rd_SetDrawFilter) on
+# synthetic keys, recorded without a device.
+add_executable(rd_filter_test test/rd_filter_test.c)
+target_compile_options(rd_filter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_filter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_filter_test PRIVATE ico_render)
+
 # rd_interp_test (wave 7, R7b): the presenter's interpolation between the
 # retained frames (rd_interp.c): keyed draws blend by alpha, the snap rules,
 # the feedback FIX at dt; on a device the replays at alpha 0 and 1 against
@@ -424,6 +431,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_present PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_crt COMMAND rd_crt_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_filter COMMAND rd_filter_test)
     add_test(NAME rd_interp COMMAND rd_interp_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)

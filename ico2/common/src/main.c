@@ -129,6 +129,8 @@ void debug_Menu(void);
 unsigned int ico_host_main_ticks(void);
 /* port/platform/diag_host.h: a milestone line in the log */
 void ico_diag_milestone(const char *fmt, ...);
+/* port/game/model_viewer.h: the model viewer's tick (package MV) */
+void ico_mv_tick(void);
 /* script/include/script.h, which this file does not include */
 int RequestStageChange(int no, GObj *g, GObj *girl, float speed, float wait);
 
@@ -326,6 +328,9 @@ void Main(void)
         /* [dev] switch_to (above): the exit taken here, after the pad is
            read, as a script or the boy's exit floor would in this tick */
         ico_dev_switch_stage();
+        /* PC port (package MV): the model viewer's tick, after the pad read
+           and before the layouts and the objects (port/game/model_viewer.h) */
+        ico_mv_tick();
         ExecIcoMisc();
         if (graphics_ready == 0) {
             stage_ResetAnimation();

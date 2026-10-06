@@ -393,7 +393,13 @@ stop at the ends and the proc scrolls, wrapping at the ends of the list.
 `UI_OPT_EXTRAS_*` row whose Cross calls a hook in `settings.c` (`extrasMusic`,
 `extrasModels`, `extrasCredits`) that returns the layout to open, or -1 for
 "not there yet" (logged as `extras: <entry> not available yet`;
-`extrasModels` and `extrasCredits` are marked for packages MV and CRED).
+`extrasCredits` is marked for package CRED). `extrasModels` calls the
+handler `ui_SettingsSetModelsHandler` registers: the model viewer
+(`port/game/model_viewer.c`, docs/port/EXTRAS.md "Models") registers
+`ico_mv_models_enter` on its first tick, which builds its two layouts on
+first use (the model list, a list page like the achievements', and the
+viewer's animation list with its hint and the headless rows) after the
+Settings pages, 38 properties and 2 layouts, and returns the list's.
 `extrasMusic` opens the music gallery's page (`UI_PAGE_MUSIC`, a list page
 over `kGalDef`; `gallery.h`, docs/port/MUSIC.md); leaving it puts the cursor
 back on the Music row. The locked style is `rowLocked` (Credits while
@@ -868,7 +874,18 @@ R3, "D-pad Up", "L-stick Left"), "Uncapped" and "fps" are
 `UI_STR_VAL_UNCAPPED` and `UI_STR_FPS_UNIT`. The music gallery's group
 names, hint line, Playing and Stopped and its "tables not loaded" status are
 `UI_STR_GAL_*`; its entries' labels are the game's own names (files,
-`seDef` names) and the album's titles, in every language.
+`seDef` names) and the album's titles, in every language. The model viewer's
+(docs/port/EXTRAS.md, "Models") are `UI_STR_MV_*`: its words (Animation,
+Loop, Frame, No animations), its hint lines (the list's, from the title and
+from a model, and the viewer's, with and without animations) and the 23
+model names: the game's own where its text names them (Ico, Yorda, the
+Queen), plain descriptive words otherwise, in the five languages.
+
+**The model viewer's overlay** (`model_overlay.c`, `ui_ModelOverlayDraw`):
+the model's name (26 y units, warm white), the animation and the frame (19,
+grey) on a dark translucent panel (as the popup's) 16 units in from the top
+left of the 4:3 picture, sized to the text; drawn on the presentation
+overlay through `ui_host.c` (`ui_HostSetViewerOverlay`, under the popups).
 
 `ui_StringsForEach(fn, user)` calls `fn(lang, utf8, user)` for every
 non-empty entry of every language's table and then for every subtitle of
@@ -950,8 +967,18 @@ one.
   glyphs five rectangle updates and no whole-page update, known glyphs
   none); a popup on the overlay of a
   1920 x 1080 present (at the picture's right, text in the panel, nothing
-  changed outside it). It writes `ui_test_scene.png`, `ui_test_scene4x.png`,
-  `ui_test_scene4x_plain.png` and `ui_test_popup.png` beside itself.
+  changed outside it), and the model viewer's overlay panel on a 1920 x
+  1080 Enhanced 16:9 present (at the 4:3 picture's top left, text in the
+  panel, nothing changed outside it). It writes `ui_test_scene.png`,
+  `ui_test_scene4x.png`, `ui_test_scene4x_plain.png`, `ui_test_popup.png`
+  and `ui_test_model_overlay.png` beside itself.
+- `model_viewer` (ctest, CPU; port/game/test): the model viewer's table
+  against its motion blocks (ordered, apart, inside the motion-kind and
+  motion-orient tables; each model's motions inside one block with its
+  orient rows; host stages with data, kinds, models and layout rows inside
+  the game's tables), and every model name and viewer word non-empty in the
+  five languages, each model's different from the others', every character
+  with a glyph in the port font.
   `rd_present` (port/render) draws a glyph through overlay mode on a real
   present too.
 - `settings_test` (ctest `settings`, CPU): the menu built over fake tables
@@ -965,7 +992,9 @@ one.
   pitch, equal spacing between capitals, the copyright within 5 field
   lines of 195, the Options row's right edge); the quit flow; Circle on
   every port screen and, with `circle_back` on and off, in the Options
-  layout; the boot-skip language and video-mode mapping.
+  layout; the boot-skip language and video-mode mapping; Extras' Models
+  row logging without a handler and, with one registered
+  (`ui_SettingsSetModelsHandler`), opening the layout it returns.
 - `settings_render` (ctest `settings_render`, exit 77 without a Vulkan
   device): `settings_test.c` built with `SETTINGS_RENDER`, the menu run
   through `rd`; each screen's SCENE written as `settings_<screen>.png`,

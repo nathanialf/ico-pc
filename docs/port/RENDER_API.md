@@ -1365,6 +1365,36 @@ the Enhanced preset's menu text stays sharp and is not curved (in a curved
 mode it sits where the flat picture has it). The Original preset's menu
 text is in DISPLAY and is filtered with the picture.
 
+### The draw filter
+
+`rd.h` `rd_SetDrawFilter`, `rd_DrawFilterOpen`, `rd_DrawFilterKeeps`;
+`rd_core.c` (`rd__DrawFilterPass`). Extras > Models (EXTRAS.md, "Models")
+shows one object of a loaded stage on its own: the stage's geometry, the
+other objects, their shadows and particles are left out of the frame where
+they are recorded, so nothing about the replay changes.
+
+**What is filtered.** While the filter is on, a world draw is recorded only
+when its key's object is in the filter's set. The world draws are
+`rd_DrawVuMesh` (meshes and skinned meshes), `rd_DrawVuGrid`,
+`rd_DrawVuParticles`, `rd_WorldPrims`, `rd_ShadowStrip`, `rd_ShadowTris` and
+`rd_ScreenPrims` whose space, after any space override, is
+`RD_SPACE_WORLD`. A key's object is RD_KEY's `objptr`, the key shifted
+right by 16, so every part and ordinal of an object pass together; key 0
+never matches. UI and full-screen screen prims (the layouts, the fades, the
+viewer's backdrop), post passes, state, targets and the overlay are never
+filtered.
+
+**The set.** `rd_SetDrawFilter(on, objs, n)` starts it from `objs` (at most
+`RD_DRAW_FILTER_MAX`, 64): the viewer passes the object's display object,
+the key `RegistPacket.c` gives its meshes. An object can draw under more
+keys than that: the boy's head and body are display objects of their own,
+his cloth grids are keyed by their meshes. So `rd_DrawFilterOpen(true)`
+around the object's own display list (the viewer wraps the object's `dl`)
+records every world draw and adds each non-zero key's object to the set,
+and those keep passing after the window closes. Off (the default),
+everything is recorded and the set is empty. `rd_DrawFilterKeeps(key)`
+answers without learning (`rd_filter`).
+
 ## 16. Frame rate and interpolation
 
 `port/render/rd_interp.c`, `rd_core.c`, `port/platform/window_host.c`,
@@ -1989,6 +2019,7 @@ and op and marks the quads `text-quads`.
 | `rd_crt` | the CRT filter: the `[video] crt*` options and their save; the modes and overrides; on a device the rich frame's present with the filter off is rd_present's hash and a mode at strength 0 the same bytes, each mode's hash at 960×720 and 1920×1440 (llvmpipe), black outside the box at 1280×720, the Scanlines mode's mean luminance within 20 %, a white frame's mask period equal to the pitch at 1920×1440 (Trinitron 3, PVM 2) and no mask in a 720-line box |
 | `rd_present` | presets, scales, widescreen, mips; Original byte-identical; the presentation overlay at 960×720 and 1920×1080 (rects at their pixels, a glyph texel for pixel, unflipped under the mirror, nothing else touched) |
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
+| `rd_filter` | the draw filter on synthetic keys: off records everything; on, every kind of world draw kept for the set's objects (any part and ordinal) and left out for others and key 0, UI and full-screen prims kept, a UI prim under a world space override left out; the open window's learning; `rd_SetDrawFilter` empties the set and closes the window |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops; two staff roll lines with the same name, keyed by their slots, each blended on its own |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
 | `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays; uniform groups, barriers and screen-prim draws (85 one per command, 66 merged) per replay |

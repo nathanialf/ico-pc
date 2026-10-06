@@ -620,6 +620,34 @@ void rd_DeferredTextQuads(int on);
 void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user);
 bool rd_DeferredTextActive(void);
 
+/* ------------------------------------- the draw filter (package MV)
+ * docs/port/RENDER_API.md "The draw filter".  The model viewer
+ * (port/game/model_viewer.c) shows one object of a loaded stage on its own:
+ * every other world draw is left out of the frame where it is recorded.
+ *
+ * rd_SetDrawFilter     on: from now on a world draw (rd_DrawVuMesh,
+ *                      rd_DrawVuGrid, rd_DrawVuParticles, rd_WorldPrims,
+ *                      rd_ShadowStrip, rd_ShadowTris, and rd_ScreenPrims in
+ *                      RD_SPACE_WORLD after any space override) is recorded
+ *                      only when its key's object (RD_KEY's objptr: the key
+ *                      shifted right by 16) is one of the set's, which
+ *                      starts as objs[0..n) (at most RD_DRAW_FILTER_MAX).
+ *                      UI and full-screen screen prims, post passes, state
+ *                      and targets are never filtered.  off (the default):
+ *                      every draw is recorded; the set is emptied
+ * rd_DrawFilterOpen    while open (and the filter on), every world draw is
+ *                      recorded and a non-zero key's object joins the set,
+ *                      so an object whose draws are keyed by several
+ *                      display objects (the boy's head, body, cloth) is
+ *                      learned from its own display list.  Closed by
+ *                      rd_SetDrawFilter
+ * rd_DrawFilterKeeps   whether a world draw with this key is recorded now
+ *                      (no learning; tests) */
+#define RD_DRAW_FILTER_MAX 64
+void rd_SetDrawFilter(bool on, const void *const *objs, uint32_t n);
+void rd_DrawFilterOpen(bool open);
+bool rd_DrawFilterKeeps(RdKey key);
+
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */

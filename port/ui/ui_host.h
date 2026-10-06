@@ -26,6 +26,10 @@ extern "C" {
 void ui_HostInit(void);
 void ui_HostVsync(unsigned int mainTick);
 void ui_HostShutdown(void);
+/* Package MV: fn draws on the presentation overlay before the popups, at
+   every present (port/game/model_viewer.c's name and frame); NULL: none */
+struct RdOverlayCtx;
+void ui_HostSetViewerOverlay(void (*fn)(const struct RdOverlayCtx *ctx));
 
 #ifdef __cplusplus
 }

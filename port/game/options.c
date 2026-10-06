@@ -11,6 +11,9 @@
 #include "config.h"
 
 /* -1: not read yet; 0 or 1 */
+/* package MV (options.h): the model viewer is up */
+int ico_mv_active;
+
 static int s_stick_fix = -1;
 
 static int s_yorda_safe = -1;

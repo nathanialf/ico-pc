@@ -87,3 +87,38 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
+
+# --- The model viewer (package MV, docs/port/EXTRAS.md) -----------------------
+if(TARGET ico_pc)
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_table.c)
+    ico_include_dirs(sugipon _ico_mv_game_incs)
+    target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               ${_ico_mv_game_incs})
+    if(NOT ICO_HEADLESS)
+        target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+    endif()
+    target_compile_definitions(ico_model_viewer_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
+    target_compile_options(ico_model_viewer_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes
+                           -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_model_viewer_live>)
+endif()
+# model_viewer_headless: the headless program from the boot through
+# Settings > Extras > Models to the first model and back to the title, its
+# log checked (test/model_viewer_headless.cmake; docs/port/TESTING.md). The
+# disc image is needed (skipped without it); one game run, so alone.
+if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+                                       OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME))
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    add_test(NAME model_viewer_headless
+             COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
+                     "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_pad.txt"
+                     "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/model_viewer_run"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_headless.cmake")
+    set_tests_properties(model_viewer_headless PROPERTIES RUN_SERIAL TRUE TIMEOUT 300
+                         SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
+endif()

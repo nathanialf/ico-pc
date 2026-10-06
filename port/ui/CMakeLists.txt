@@ -28,6 +28,7 @@ set(_ui_sources
     game_text.c
     layout_ext.c
     menu_text.c
+    model_overlay.c
     popup.c
     strings.c
     strings_en.c
@@ -184,6 +185,26 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
         set_tests_properties(gallery_headless PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                              TIMEOUT 300)
     endif()
+endif()
+
+# model_viewer_test (package MV, port/game/test): the model viewer's table
+# (port/game/model_viewer_table.c) against its motion-kind blocks and the
+# game's table sizes, and its names and words in the five languages with a
+# glyph for every character in the port font. CPU only.
+add_executable(model_viewer_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_test.c"
+    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c" font.c strings.c strings_en.c
+    strings_fr.c strings_de.c strings_it.c strings_es.c subtitles.c "${_ui_font_c}")
+target_include_directories(model_viewer_test PRIVATE "${CMAKE_SOURCE_DIR}/port/game"
+                           "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+# port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
+target_compile_options(model_viewer_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT WIN32)
+    target_link_libraries(model_viewer_test PRIVATE m)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME model_viewer COMMAND model_viewer_test)
 endif()
 
 if(NOT TARGET ico_render)

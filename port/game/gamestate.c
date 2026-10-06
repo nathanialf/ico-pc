@@ -476,7 +476,8 @@ int ico_gs_start_stage_used(void)
 
 int ico_gs_achievements_suspended(void)
 {
-    return ico_gs_developer_mode() || ico_gs_start_stage_used();
+    /* package MV: the model viewer's stages are not play */
+    return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active;
 }
 
 /* --- retail addresses ---------------------------------------------------- */

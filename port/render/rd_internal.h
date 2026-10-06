@@ -952,6 +952,9 @@ void rd__RecScissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
 void rd__RecABE(int abe);
 void rd__RecFilter(RdFilter mag, RdFilter min);
 RdCmd *rd__Push(uint8_t type);
+/* package MV: the draw filter's test for one world draw (rd.h
+   rd_SetDrawFilter); learns the key's object while the filter is open */
+bool rd__DrawFilterPass(RdKey key);
 RdFrame *rd__RecFrame(void);
 
 /* ---------------------------------------------------- replay / present */

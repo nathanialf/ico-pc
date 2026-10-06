@@ -768,7 +768,7 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
 void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 {
     RdMeshRec *m = rd__MeshRec(mesh.id);
-    if (!m || !m->vu || !d) {
+    if (!m || !m->vu || !d || !rd__DrawFilterPass(key)) {
         return;
     }
     uint32_t first = d->firstBatch, n = d->batchCount;
@@ -802,7 +802,7 @@ void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 
 void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key)
 {
-    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3) {
+    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3 || !rd__DrawFilterPass(key)) {
         return;
     }
     RdVuPayload p;
@@ -831,7 +831,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
     if (key == 0) {
         key = RD_KEY(&kParticleKeyTag, rd_CurrentList(), 18);
     }
-    if (!d || !d->qw || d->count == 0) {
+    if (!d || !d->qw || d->count == 0 || !rd__DrawFilterPass(key)) {
         return;
     }
     const uint32_t count = d->count > 80 ? 80 : d->count;

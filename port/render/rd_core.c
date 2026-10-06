@@ -1589,10 +1589,73 @@ void rd_AA1(int aa1)
 
 /* ------------------------------------------------------------------ draws */
 
+/* --------------------------------------------- the draw filter (package MV)
+ * rd.h rd_SetDrawFilter: a set of object words (RD_KEY's objptr, the key
+ * shifted right by 16), searched linearly (a few dozen at most). */
+static struct {
+    bool on, open;
+    uint32_t n;
+    uint64_t obj[RD_DRAW_FILTER_MAX];
+} s_filter;
+
+static bool filterHas(uint64_t o)
+{
+    for (uint32_t i = 0; i < s_filter.n; i++) {
+        if (s_filter.obj[i] == o) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void filterAdd(uint64_t o)
+{
+    if (!filterHas(o) && s_filter.n < RD_DRAW_FILTER_MAX) {
+        s_filter.obj[s_filter.n++] = o;
+    }
+}
+
+void rd_SetDrawFilter(bool on, const void *const *objs, uint32_t n)
+{
+    memset(&s_filter, 0, sizeof(s_filter));
+    s_filter.on = on;
+    for (uint32_t i = 0; on && objs && i < n; i++) {
+        filterAdd(RD_KEY(objs[i], 0, 0) >> 16);
+    }
+}
+
+void rd_DrawFilterOpen(bool open)
+{
+    s_filter.open = s_filter.on && open;
+}
+
+bool rd_DrawFilterKeeps(RdKey key)
+{
+    return !s_filter.on || s_filter.open || (key != 0 && filterHas(key >> 16));
+}
+
+bool rd__DrawFilterPass(RdKey key)
+{
+    if (!s_filter.on) {
+        return true;
+    }
+    if (s_filter.open) {
+        if (key != 0) {
+            filterAdd(key >> 16);
+        }
+        return true;
+    }
+    return key != 0 && filterHas(key >> 16);
+}
+
 void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
                     RdKey key)
 {
     if (!v || count == 0 || (unsigned)type > RD_PRIM_SPRITES) {
+        return;
+    }
+    if ((g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space) == RD_SPACE_WORLD &&
+        !rd__DrawFilterPass(key)) {
         return;
     }
     RdFrame *f = rd__RecFrame();
@@ -1668,6 +1731,9 @@ int rd_SetSpaceOverride(int space)
 static RdCmd *pushStub(uint8_t type, RdKey key, const void *const *parts, const uint32_t *sizes,
                        int n)
 {
+    if (!rd__DrawFilterPass(key)) {
+        return NULL; /* rd_WorldPrims, rd_ShadowStrip: world draws */
+    }
     RdFrame *f = rd__RecFrame();
     if (!f) {
         rd__Push(type);

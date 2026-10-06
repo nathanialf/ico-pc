@@ -32,11 +32,23 @@ extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
 #ifdef ICO_RD
 extern void gif_HostFlush(void); /* GifHost.h */
 
+/* package MV: the model viewer's overlay (ui_host.h) */
+static void (*s_viewerOverlay)(const struct RdOverlayCtx *ctx);
+
+void ui_HostSetViewerOverlay(void (*fn)(const struct RdOverlayCtx *ctx))
+{
+    s_viewerOverlay = fn;
+}
+
 /* package OV: the presenter's overlay, at every present (rd.h
    rd_SetPresentOverlay): the popup on the output */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
+    /* package MV: the model viewer's text, under the popups */
+    if (s_viewerOverlay != NULL) {
+        s_viewerOverlay(ctx);
+    }
     ui_PopupDrawOverlay(ctx);
 }
 #endif

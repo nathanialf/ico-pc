@@ -3066,6 +3066,28 @@ void la_host_leave(void)
     actionStarted = 0;
 }
 
+/* PC port (package MV): the model viewer leaves the title as a new game
+   does, the title music fading (la_host_new_game_go), and comes back to it
+   the way la_end_confirm's Yes ends a game */
+void la_host_title_music_fade(void)
+{
+    if (titleAdpcm != 0) {
+        titleAdpcm->stream->fadeStep = 0x80;
+    }
+    titleAdpcm = 0;
+}
+
+void la_host_end_game(void)
+{
+    optionScreenMode = 0;
+    gflagInit();
+    fightSoundProcessRequestPause();
+    fightSoundClose();
+    soundDataSegAllClose(0, 2);
+    nextStage = 1;
+    stgmgrForceSwitchWithFade(1, 0.025f, 4.0f);
+}
+
 unsigned int stage_after_skipping_demo = 0;
 
 int layoutActPushStartNew = 0;

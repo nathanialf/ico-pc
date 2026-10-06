@@ -318,6 +318,24 @@ Settings > Extras > Music and plays one entry of each group through
 runs serially and takes about ten seconds. The Windows presets build the test executables
 without running them.
 
+## The model viewer run
+
+`model_viewer_headless` (ctest, headless build only, `RUN_SERIAL`, 300 s;
+skipped without the disc image at `ICO_DISC_IMAGE`) plays Extras > Models
+end to end: `port/game/test/model_viewer_headless.cmake` copies the headless
+program into an empty folder under the build directory
+(`port/game/model_viewer_run/`, with its own `ico-pc.ini`, card folder and
+`logs/`) and runs 1300 ticks of `port/game/test/model_viewer_pad.txt`: the
+boot signs, the title (up at tick 438 with an empty card folder), Settings,
+six Downs to Extras, Models, Cross on the first model (Ico, stage 8), Cross
+to play an animation, and 60 ticks later Triangle to the list and Triangle
+to the title. The log must hold `model_viewer: stage S loaded id N "name"`,
+a `model_viewer: motion "name" frame F/N` line with F above 0,
+`model_viewer: the title is back`, no `model_viewer: failed`, and the run's
+`exit: ticks= reached`. The script's comments give each press's tick and
+the screen it lands on; a change to the boot's or the title's timing moves
+them.
+
 ## Packages
 
 **Windows: `tools/package_win.sh <label>`.** Builds HEAD in a clean

@@ -82,7 +82,7 @@ void rd_ShadowResolve(void)
 void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key)
 {
     RdFrame *f = rd__RecFrame();
-    if (!v || !sign || triCount == 0) {
+    if (!v || !sign || triCount == 0 || !rd__DrawFilterPass(key)) {
         return;
     }
     if (!f) {

@@ -55,6 +55,7 @@
 /* port/ui */
 #include "font.h"
 #include "layout_ext.h"
+#include "model_overlay.h"
 #include "popup.h"
 #include "strings.h"
 #include "ui_internal.h"
@@ -899,6 +900,106 @@ static void testPopupPixels(void)
     ui_PopupReset();
 }
 
+/* Package MV: the model viewer's text panel (model_overlay.h) on the
+   overlay of a 1920 x 1080 Enhanced 16:9 present, as ui_host.c draws it,
+   over a grey frame: at the 4:3 picture's top left, text in the panel,
+   nothing changed outside it (ui_test_model_overlay.png, the panel and a
+   margin, for the eye). */
+static const char *const kMvLines[3] = {"Ico", "Animation: BOY STAND  \xC2\xB7  Loop",
+                                        "Frame 117 / 299"};
+
+static void modelOverlay(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    ui_ModelOverlayDraw(ctx, kMvLines[0], kMvLines[1], kMvLines[2]);
+}
+
+static bool modelPresent(int on, uint8_t *dst)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.aspect = 16.0f / 9.0f;
+    st.outputWidth = 1920;
+    st.outputHeight = 1080;
+    if (!rd_Init(512, 512, &st, NULL)) {
+        return false;
+    }
+    ui_FontForgetTextures();
+    rd_SetPresentOverlay(on ? modelOverlay : NULL, NULL);
+    static const uint8_t grey[4] = {78, 78, 80, 0x80};
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_DISPLAY), grey, 0, 0);
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    const bool ok = rd_ReadPresented(dst, &w, &h) && w == 1920 && h == 1080;
+    CHECK(ok, "model overlay: the presented output");
+    rd_SetPresentOverlay(NULL, NULL);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "model overlay: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    ui_FontShutdown();
+    rd_Shutdown();
+    return ok;
+}
+
+static void testModelOverlayPixels(void)
+{
+    const size_t n = (size_t)1920 * 1080 * 4;
+    uint8_t *plain = malloc(n), *with = malloc(n);
+    if (!plain || !with || !modelPresent(0, plain) || !modelPresent(1, with)) {
+        CHECK(0, "model overlay: the presents");
+        free(plain);
+        free(with);
+        return;
+    }
+    /* the panel's grid rectangle on the output (the overlay's mapping) */
+    RdOverlayCtx c;
+    memset(&c, 0, sizeof(c));
+    c.outW = 1920;
+    c.outH = 1080;
+    c.box.x = 0;
+    c.box.y = 0;
+    c.box.w = 1920;
+    c.box.h = 1080;
+    c.boxScale = 1080.0f / 448.0f;
+    float r[4], x0, y0, x1, y1;
+    ui_FontInit();
+    ui_BeginOverlay(&c);
+    ui_ModelOverlayPanel(kMvLines[0], kMvLines[1], kMvLines[2], r);
+    ui_OverlayMap(r[0], r[1], &x0, &y0);
+    ui_OverlayMap(r[2], r[3], &x1, &y1);
+    ui_EndOverlay();
+    ui_FontShutdown();
+    const int px0 = (int)lrintf(x0 / 16.0f), py0 = (int)lrintf(y0 / 16.0f);
+    const int px1 = (int)lrintf(x1 / 16.0f), py1 = (int)lrintf(y1 / 16.0f);
+    int outside = 0, bright = 0;
+    for (int y = 0; y < 1080; y++) {
+        for (int x = 0; x < 1920; x++) {
+            const size_t i = ((size_t)y * 1920 + (size_t)x) * 4;
+            if (x >= px0 && x < px1 && y >= py0 && y < py1) {
+                bright += with[i] > 180 && with[i + 1] > 180;
+            } else {
+                outside += memcmp(&with[i], &plain[i], 3) != 0;
+            }
+        }
+    }
+    printf("ui_test: model overlay panel %d,%d .. %d,%d on 1920 x 1080 Enhanced 16:9, %d bright "
+           "text pixels\n",
+           px0, py0, px1, py1, bright);
+    /* the 4:3 picture's left edge is (1920 - 1440) / 2; 16 x units in */
+    CHECK(px0 >= 240 + 30 && px0 <= 240 + 40 && py0 > 0 && py0 < 60 && px1 > px0 + 200,
+          "model overlay: the panel at the picture's top left");
+    CHECK(outside == 0, "model overlay: %d pixels changed outside the panel", outside);
+    CHECK(bright > 300, "model overlay: %d bright text pixels", bright);
+    const int cx0 = px0 - 8 < 0 ? 0 : px0 - 8, cy0 = py0 - 8 < 0 ? 0 : py0 - 8;
+    const int cx1 = px1 + 8 > 1920 ? 1920 : px1 + 8, cy1 = py1 + 8 > 1080 ? 1080 : py1 + 8;
+    rd_WritePng("ui_test_model_overlay.png", with + ((size_t)cy0 * 1920 + (size_t)cx0) * 4,
+                (uint32_t)(cx1 - cx0), (uint32_t)(cy1 - cy0), 1920 * 4, 0);
+    free(plain);
+    free(with);
+}
+
 /* --------------------------------------------------------------- pixels */
 
 static const uint8_t kBg[4] = {20, 40, 60, 0x80};
@@ -1332,6 +1433,7 @@ int main(void)
     ui_FontShutdown();
     rd_Shutdown();
     testPopupPixels();
+    testModelOverlayPixels();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;
