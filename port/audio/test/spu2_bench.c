@@ -9,12 +9,14 @@
  *                        the driver reads after every vsync, the callbacks
  *                        and their times, the final sound RAM) with golden
  *                        values taken from the frame-by-frame renderer
- *                        before S3's optimisation; then renders 24 random
+ *                        (before S3's optimisation; retaken for the disc's
+ *                        sceSdInit, AUDIO.md "libsd values"); then renders 24 random
  *                        2 s scenes both chunked and frame by frame
  *                        (spu2_set_exact) and compares those.  ctest
  *                        `spu2_render_crc`.
  *   spu2_bench --print   prints the CRCs of all of them (to compare with
- *                        another build of the SPU2).
+ *                        another build of the SPU2), and the named scenes'
+ *                        frame-by-frame CRCs (new goldens come from those).
  *   spu2_bench --trace-crc <scene | seed>
  *                        prints, after every vsync of one scene (a name, or
  *                        a random scene's seed), the harness PRNG state, the
@@ -325,10 +327,13 @@ enum { SCENE_IDLE, SCENE_GAME, SCENE_HAZARD, SCENE_FULL48, SCENE_FULL24, SCENES 
 
 static const char *const scene_name[SCENES] = {"idle", "game", "hazard", "full48", "full24"};
 
-/* Golden CRCs, taken from the frame-by-frame renderer before S3 (commit
-   a0a98982's spu2.c and adpcm.c). */
-static const uint32_t scene_golden[SCENES] = {0x56AEEA19u, 0xDFAE210Eu, 0x7D9023DEu, 0x5BC48C99u,
-                                              0xE301EF03u};
+/* Golden CRCs, from the frame-by-frame renderer (`--print`).  First taken
+   before S3 (commit a0a98982's spu2.c and adpcm.c); retaken when
+   spu2_sd_init became the disc's sceSdInit (the idle block 16 x 0x07, the
+   cold-init ESA; DIVERGENCES.md A14) and the hazard scene gained a voice
+   across the end of sound RAM. */
+static const uint32_t scene_golden[SCENES] = {0xA5FB1B1Eu, 0x094C4593u, 0x280007F3u, 0xA8917D9Eu,
+                                              0x10541E04u};
 
 /* The random scenes of the differential check (--check): a seed picks
    everything, the scene renders 2 s with the chunked renderer and again
@@ -543,6 +548,14 @@ static void scene_setup(int scene)
         spu2_sd_set_addr(SPU2_SD_VADDR_SSA | VSEL(1, 3), 0x1D8000);
         key(0, 1u << 1, 1);
         key(1, 1u << 3, 1);
+        /* a looping one-block sound across the end of sound RAM (bytes
+           0x1FFFF4-0x1FFFFF and 0-3): its block wraps to address 0 */
+        make_sound(blk, 1, 0, 0, 0);
+        spu2_dma_write(0x1FFFF4, blk, 12);
+        spu2_dma_write(0, blk + 12, 4);
+        voice_start(0, 5, 0, 1);
+        spu2_sd_set_addr(SPU2_SD_VADDR_SSA | VSEL(0, 5), 0x1FFFF4);
+        key(0, 1u << 5, 1);
         spu2_set_dma_rate(48);
         callbacks_write = 1;
     }
@@ -786,6 +799,12 @@ int main(int argc, char **argv)
             uint32_t got = scene_run(s, 0, NULL, NULL, NULL);
 
             printf("%-8s crc 0x%08X", scene_name[s], (unsigned)got);
+            if (print) {
+                /* the frame-by-frame renderer's, where goldens come from */
+                spu2_set_exact(1);
+                printf("  frame by frame 0x%08X", (unsigned)scene_run(s, 0, NULL, NULL, NULL));
+                spu2_set_exact(0);
+            }
             if (check && got != scene_golden[s]) {
                 printf("  FAIL: want 0x%08X", (unsigned)scene_golden[s]);
                 failures++;

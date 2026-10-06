@@ -43,6 +43,7 @@ endif()
 add_library(ico_sndn2 STATIC
     "${CMAKE_SOURCE_DIR}/sce/libsndn2/sound.c"
     sndn2_host.c
+    libsd_irx.c
     stream.c
     audio_host.c
     wav.c)
@@ -75,6 +76,15 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
         "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME sndn2 COMMAND sndn2_test "${ICO_DISC_IMAGE}")
+endif()
+
+# libsd_irx_test: the LIBSD.IRX reader on a synthetic module and its
+# fallback (AUDIO.md, "libsd values"); the real module is sndn2_test's
+add_executable(libsd_irx_test test/libsd_irx_test.c)
+target_compile_options(libsd_irx_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(libsd_irx_test PRIVATE ico_sndn2)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME libsd_irx COMMAND libsd_irx_test)
 endif()
 
 # pan_test (renderer wave 7, R7c): the mirror mode's left/right swap of the

@@ -110,7 +110,7 @@ packs are compressed already. Entries:
 
 | entry | holds |
 | --- | --- |
-| `disc/<PATH>` | the disc file `PATH` byte for byte: `SYSTEM.CNF`, `SCES_507.60` (the boot file BOOT2 names; 5,515,680 bytes, read whole by the table loader), every root `*.IRX` (`SNDN2DRV.IRX` for the pitch table, docs/port/AUDIO.md; `LIBSD.IRX` and the others are small and kept for later checks), `DUMMY.TXT`, and everything under `DFDATAS/` (`DFDATAS/DATA.DF` whole, 867,184,640 bytes) |
+| `disc/<PATH>` | the disc file `PATH` byte for byte: `SYSTEM.CNF`, `SCES_507.60` (the boot file BOOT2 names; 5,515,680 bytes, read whole by the table loader), every root `*.IRX` (`SNDN2DRV.IRX` for the pitch table and `LIBSD.IRX` for the reverb presets, their work area sizes and the idle voice block, docs/port/AUDIO.md; the others are small and kept for later checks), `DUMMY.TXT`, and everything under `DFDATAS/` (`DFDATAS/DATA.DF` whole, 867,184,640 bytes) |
 | `tail/<PATH>` | the bytes after `PATH`'s end to the end of its last sector, only when any is nonzero (the PAL disc has none: every selected file's tail is zero), so a sector read returns what the disc held |
 | `meta.json` | below |
 
@@ -172,7 +172,8 @@ foreign file fails the mount. Then:
    has no caller in `ico2/`.
 
 The loader (`tables.c`), the libcdvd layer, `sndn2_host.c`'s pitch table
-(`ico_vfs_open(ico_vfs_disc(), "SNDN2DRV.IRX")`) and the rest read through
+(`ico_vfs_open(ico_vfs_disc(), "SNDN2DRV.IRX")`), `libsd_irx.c`'s libsd
+values (`"LIBSD.IRX"`) and the rest read through
 `ico_vfs_disc()` and need no change.
 
 **First run** (`port/platform/main_host.c`, `mount_game_data`):
@@ -393,7 +394,7 @@ reader above; sector numbers and sizes only.
 | `SCES_507.60;1` | LSN 762, 5,515,680 bytes; read through the VFS it hashes to `da3644c5...` (`config/sha1sums.txt`, `baseelf.elf`) |
 | `DATA.DF;1` | LSN 19,771, 867,184,640 bytes, one extent |
 | DATA.DF directory | 193 entries, every one sector-aligned and inside DATA.DF. With DATA.DF's own entry that is 194 of the 200 slots in `iosCdvdSrhBuff`, which `unifile_read_func` fills without a bound |
-| `IOPRP224.IMG`, `SIO2MAN.IRX`, `PADMAN.IRX`, `MCMAN.IRX`, `MCSERV.IRX`, `LIBSD.IRX`, `SNDN2DRV.IRX` | present in the root (not read on the host, except `SNDN2DRV.IRX` for its pitch table) |
+| `IOPRP224.IMG`, `SIO2MAN.IRX`, `PADMAN.IRX`, `MCMAN.IRX`, `MCSERV.IRX`, `LIBSD.IRX`, `SNDN2DRV.IRX` | present in the root (not read on the host, except `SNDN2DRV.IRX` for its pitch table and `LIBSD.IRX` for its reverb presets and idle voice block) |
 
 ## The data tables (`port/data/tables.c`)
 

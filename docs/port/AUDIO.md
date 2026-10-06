@@ -17,11 +17,12 @@
 |---|---|
 | `adpcm.h`, `adpcm.c` | the SPU ("VAG") ADPCM block decoder: 16-byte blocks, 28 samples, five filter pairs, loop flags; also used for the `.int` streams |
 | `spu2.h`, `spu2.c` | the SPU2: 2 cores x 24 voices, 2 MB sound RAM, envelopes, volumes and sweeps, noise, mixing, reverb, transfers, AutoDMA input, IRQ |
-| `spu2_tables.c` | the Gaussian interpolation table, the reverb resampling FIR, the reverb presets (transcribed from psx-spx) |
+| `spu2_tables.c` | the Gaussian interpolation table, the reverb resampling FIR, the built-in reverb presets (transcribed from psx-spx; the disc's replace them at start) |
 | `spu2_internal.h` | tables and the envelope step, shared with the tests |
 | `spu2_sd.h`, `spu2_sd.c` | libsd's calls (`sceSdSetParam`, `SetSwitch`, `SetAddr`, `SetCoreAttr`, `SetEffectAttr`, `VoiceTrans`, `Init`) with libsd's encodings, as register writes |
 | `sce/libsndn2/sound.c`, `sound.h` (repository root) | the EE Sg sequencer the game calls (`libsndn2.a(sound.o)`, the decomp's clean-room reconstruction, MIT), with the host seams made in place |
 | `sndn2_host.h`, `sndn2_host.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
+| `libsd_irx.h`, `libsd_irx.c` | the disc's libsd values: `LIBSD.IRX`'s reverb presets, work area sizes and idle voice block, read at start |
 | `stream.c`, `sndn2_internal.h` | the ADPCM stream engine (records, event queue, refill scheduler) and the PCM mixer |
 | `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device (window build), `volume.c` the output volume |
 | `test/` | the unit tests and the render benchmark (below) |
@@ -116,15 +117,17 @@ capture buffers, and `sceSdProcBatch` (SNDN2DRV does not use it).
 set by `spu2_sd_set_time()`. The argument encodings are libsd's ABI as
 ps2sdk's `libsd-common.h` spells them (voice selector `core | voice << 1`,
 `SD_VPARAM_*`, `SD_PARAM_*`, `SD_SWITCH_*`, `SD_ADDR_*` byte addresses,
-`SD_CORE_*`). Behaviour and init values follow ps2sdk's clean-room libsd
-(`freesd.c`, `effect.c`, `voice.c`), which the driver research marked as
-usable but not authoritative. Where it matters:
+`SD_CORE_*`). Behaviour follows ps2sdk's clean-room libsd (`freesd.c`,
+`effect.c`, `voice.c`), checked against the disc's `LIBSD.IRX` where it
+matters (next section):
 
-- `sceSdInit`'s register values (`spu2_sd_init`; DIVERGENCES A14);
-- the effect preset table and work area sizes (A9). The psx-spx presets'
-  sizes are exactly libsd's `EffectSizes << 4` for all ten modes, which is
-  how the mode order (off, room, studio 1-3 = small/medium/large, hall,
-  space, echo, delay, pipe = half echo) was matched;
+- `sceSdInit`'s register writes (`spu2_sd_init`; DIVERGENCES A14), read
+  off the disc's code;
+- the effect preset table and work area sizes (A9), read from the disc's
+  data at start; the built-in fallback is psx-spx's presets, whose sizes
+  are exactly libsd's for all ten modes, which is how the mode order (off,
+  room, studio 1-3 = small/medium/large, hall, space, echo, delay, pipe =
+  half echo) was matched;
 - `sceSdSetEffectAttr` with a stale `delay`/`feedback`, which is ignored
   here; the game never sends them;
 - `sceSdVoiceTrans`'s busy check: refused while the channel has a transfer
@@ -134,6 +137,66 @@ usable but not authoritative. Where it matters:
 - size + 2 bytes, where the end address is `EEA << 17 | 0x1FFFF`; the
 preset's address registers (PS1 units of 8 bytes) are written as halfwords
 (x4), so byte offsets are the PS1 ones.
+
+### libsd values (`libsd_irx.c`)
+
+`LIBSD.IRX` (`/LIBSD.IRX;1`, 26,285 bytes, SHA-1
+`49bbaf50d622b04c02dd645fde1b33972b16567f`) was disassembled with
+`mips-linux-gnu-objdump -d -r -m mips:3000` (the module is linked at 0;
+`.text` at file offset 0xB0, `.data` at 0x4240 for address 0x4190). The
+export table at the start of `.text` gives the entry points by ordinal
+(4 `sceSdInit` 0x1420, 23 `sceSdSetEffectAttr` 0x900). Unlike SNDN2DRV it
+is compiled with optimisation.
+
+**Data, read at start.** `ico_sndn2_host_register` calls `ico_libsd_load`
+after the pitch table: it reads `LIBSD.IRX` from the mounted disc (the
+image, or the archive, which holds every root `*.IRX`), finds `.data` by
+its section name, and takes three tables by module address, each
+identified by the code that reads it:
+
+| address (file offset) | what | identified by |
+|---|---|---|
+| 0x41C8 (0x4278) | 10 x u32: each mode's work area size in 8-byte units | `sceSdSetEffectAttr` (0x9B8-0x9D4): `ESA = end - (sizes[mode] * 8 - 2)`; `sceSdInit`'s cold path (0x1384) with mode 0 |
+| 0x41F0 (0x42A0) | 10 x 0x44 bytes: a u32 (0 for every mode; ps2sdk's `mode_flags`) then the 32 registers in psx-spx's order | `sceSdSetEffectAttr` (0x9E4-0xA08) copies 0x44 bytes from `0x41F0 + mode * 0x44` |
+| 0x4A60 (0x4B10) | the idle voice block, 16 bytes | `InitVoices` (0x3BA0) writes 16 halfwords from it to the data port at TSA 0x2800 (byte 0x5000) |
+
+The values are installed with `spu2_reverb_set_preset` (size = units x 8)
+and `spu2_sd_set_idle_block`. Checks before they are used: `.data` holds
+the three tables; every flags word is 0; every preset's address
+registers (x8) lie inside its work area; modes 1-9 have vLIN = vRIN =
+0x8000; the idle block's flag byte loops on itself (end and repeat).
+Anything else, no disc, a missing file or another size keeps the built-in
+values and logs one line (`libsd: ...; using the built-in ...`); the log
+also names the modes in which the disc's values differ from the built-in
+ones.
+
+**What the disc holds.** The presets and sizes equal ps2sdk's `effect.c`
+`EffectParams` and `EffectSizes << 4` bit for bit for all ten modes. Against
+the built-in psx-spx table they differ in modes 0 (off: unused address
+words), 1 (room: comb 3/4 and diffusion addresses), 7 (echo) and 8 (delay:
+APF sizes and most addresses); studio 1-3, hall, space and pipe are
+identical, and so is STUDIO_3, the only mode the game selects. The idle
+block is 16 bytes of 0x07 (shift 7, filter 0, flags loop start + repeat +
+end, every nibble 7), ps2sdk's `VoiceDataInit`; `InitVoices` writes 16
+halfwords from it, so the 16 bytes after it in memory (the start of
+`.bss`, zero at the first `sceSdInit`) go to byte 0x5010.
+
+**Code, transcribed.** `sceSdInit(flag)` (0x1420), the order the host
+follows (`spu2_sd_init`): with `flag & 0xF` = 0 (the game's `SgInit`),
+`ResetAll` (0x1A00): every voice keyed off (KOFF 0xFFFF in both halves),
+PMON and NON cleared on core 1 only (the loop does not step the register
+base), then each core's ESA set to mode 0's area below the end address the
+core has at that moment (before `InitCoreVolume` writes EEA); then
+`InitVoices` (0x3BA0): the idle block, every voice's VOLL/VOLR 0, PITCH
+0x3FFF, ADSR 0, SSA byte 0x5000, KON then KOFF of all 24 voices on both
+cores, ENDX of core 0 only cleared; then `InitCoreVolume(flag & 0xF)`
+(0xE8C): ATTR 0xC000/0xC001 (0xC080/0xC081 with a non-zero flag), VMIXL,
+VMIXR, VMIXEL, VMIXER all on, MMIX 0xFF0/0xFFC, and with flag 0 MVOL and
+EVOL 0 and EEA 0xE/0xF; AVOL 0 on core 0 and 0x7FFF on core 1; BVOL 0.
+This is ps2sdk's `sceSdInit` write for write. Not modelled: the SPDIF,
+SSBUS and DMA control registers, the transient ATTR writes and STATX waits
+of the manual transfer, the writes at 0xBF900B60 (outside the modelled
+register file), and the delays between the KON and KOFF writes.
 
 ### Interface
 
@@ -156,7 +219,9 @@ preset's address registers (PS1 units of 8 bytes) are written as halfwords
   `sceSdBlockTransStatus(1, 0) & 0x01000000`. BVOL and MMIX come through
   `spu2_sd_set_param`.
 - Reverb presets: `spu2_reverb_set_preset(mode, p)` replaces a built-in
-  preset, for example with values read from the user's `LIBSD.IRX`.
+  preset (`ico_libsd_load` does so with the disc's); `spu2_reset` restores
+  the built-in ones. `spu2_sd_set_idle_block` sets the block `spu2_sd_init`
+  writes.
 - The 608-entry pitch table belongs to the driver host, not the SPU2: the
   SPU2 takes the PITCH word the driver computes.
 
@@ -278,8 +343,13 @@ read offset it polls. The host engine follows the IRX:
   start. A chunk outside IOP RAM is zero-filled and logged once (a
   4-channel stream reads past its ring; IOP RAM continues there on the
   host as on the PS2).
-- 0x43 cancels the voices' queued FILLs, clears their records' state and
-  keys them off; 0x3F cancels and clears.
+- 0x43 cancels each voice (0x248C, docs/research/sndn2drv.md, "Stream
+  cancel"), clears its record's state and keys it off; 0x3F cancels and
+  clears. A cancel forgets the voice's pending fill (the read offset does
+  not advance for it), zeroes its queued FILLs and clears its bit in any
+  queued KEYON; for a core 0 voice the IRX also clears the same bit in the
+  KEYON's core 1 mask (a missing `break`), which the host reproduces.
+- A full queue (128 events) drops the new event, as the IRX's enqueue does.
 
 ### PCM streams (film audio)
 
@@ -426,7 +496,10 @@ and 24 random 2-second scenes (random PMON, NON, VMIX, MMIX, AVOL/BVOL,
 reverb modes, transfer rates, IRQ, AutoDMA, NAX/LSAX/ADSR/ENVX/pitch writes
 inside the block, sample uploads under playing voices) are rendered
 chunked and with `spu2_set_exact(1)` and must agree. `spu2_bench --print`
-lists all 29 CRCs.
+lists all 29 CRCs and the five scenes' frame-by-frame CRCs, from which the
+goldens are taken. They were retaken once since S3, for the disc's
+`sceSdInit` (DIVERGENCES A14) and the hazard scene's voice across the end
+of RAM.
 
 The harness must produce the same random scenes under every compiler. C
 leaves the evaluation order of function arguments and of most operands
@@ -450,7 +523,7 @@ and times each `spu2_render` call (one vsync) with `clock_gettime`
 |---|---|
 | idle | `spu2_sd_init` only, reverb on both cores (studio large, hall): the boot state |
 | game | 24 voices keyed over time, key offs, pitch changes, sweeps, ENVX writes on ended voices, noise, PMON, AutoDMA input, transfers, writes inside the block, effect enable toggling; 800/801 frames per vsync |
-| hazard | the game scene plus an armed IRQ on a played block and voices playing from the write-back area and from core 1's reverb work area (renders mostly frame by frame by design) |
+| hazard | the game scene plus an armed IRQ on a played block and voices playing from the write-back area, from core 1's reverb work area and from a one-block loop across the end of sound RAM (renders mostly frame by frame by design) |
 | full48 | 48 looping voices (pitch 0x0400-0x3BFF), reverb on both cores, a pitch change and a retrigger per vsync, 960 frames per vsync |
 | full24 | the same with 24 voices |
 
@@ -491,7 +564,8 @@ wiki article is prose. No GPL code is in or behind the audio path
   property). psx-spx shows that no cosine series short of fifteen terms
   reproduces it, so the table is kept literal rather than generated.
 - Reverb FIR: psx-spx's 39 taps (sum 0x7FFE, unity within 2 LSB).
-- Reverb presets: psx-spx's ten examples in libsd's mode order. Compared
+- Reverb presets (the built-in fallback; the disc's are used when present,
+  "libsd values"): psx-spx's ten examples in libsd's mode order. Compared
   word by word with ps2sdk's `EffectParams`: studio 1-3, hall, space and
   pipe are identical; off differs in unused address words, room in its
   same/different-side and comb 3/4 addresses; echo and delay differ in
@@ -513,14 +587,14 @@ Each is a row in docs/port/DIVERGENCES.md ("Platform"):
 | A6 | key on: no latency; histories zeroed; LSAX not reset |
 | A7 | NAX position within a block |
 | A8 | transfer duration (one frame, or a set rate) |
-| A9 | reverb presets from psx-spx, delay/feedback ignored |
+| A9 | reverb presets from the disc (psx-spx's without it), delay/feedback ignored |
 | A10 | ATTR mute / SPU-on bits ignored |
 | A11 | AutoDMA input from a host ring, not sound RAM |
 | A12 | no IRQ from reverb buffer accesses |
 | A13 | reverb disabled: the whole chain is still read |
-| A14 | `spu2_sd_init` values from ps2sdk, not the disc |
+| A14 | `spu2_sd_init`: the disc's writes; SPDIF/SSBUS/DMA control and delays not modelled |
 | A15 | pitch table: the formula when the disc's IRX cannot be read |
-| A16 | stream cancel leaves queued KEYON events |
+| A16 | stream cancel: fixed, as the IRX (kept for the record) |
 | A17 | driver writes take effect at the next vsync block; ENVX/NAX read at a block's end |
 | A18 | a channel-1 ADPCM fill does not run the PCM mix callback |
 | A19 | sample transfers complete one frame after they start |
@@ -530,7 +604,7 @@ Each is a row in docs/port/DIVERGENCES.md ("Platform"):
 
 A4, A5, A6 and A7 can reach the EE: the sequencer frees a voice when ENVX
 drops below 2, and the stream scheduler reads NAX once per tick. A tick is
-960 frames at 50 Hz, so these matter only near a tick boundary. A16, A17
+960 frames at 50 Hz, so these matter only near a tick boundary. A17
 and A19 can reach the EE the same way (slot release, stream read offsets,
 the DMA-status wait). In particular, the real driver keys a stream on in
 its third tick and reports the read offset a tick after each DMA, so
@@ -560,8 +634,14 @@ All in `port/audio/test/`, registered in `port/audio/CMakeLists.txt`:
   `SNDN2DRV.IRX`, its 32 differences from the formula and the two
   outliers), a synthetic stereo `.int` stream through fills, key on,
   refills and stop, a mono stream at 4x pitch wrapping its read offset,
-  the PCM mixer, and the sequencer end to end from a synthetic `.hd`
+  the stream cancel (a queued KEYON losing the stopped voice's bit, the
+  core 0 fall-through into the core 1 mask, the pending fill forgotten),
+  the PCM mixer, with the disc image the libsd values from `LIBSD.IRX`, and the sequencer end to end from a synthetic `.hd`
   through `SgSePlay`, `SgCalledTickProc`, `SgSeStop` and `SgVabClose`.
+- `libsd_irx`: the `LIBSD.IRX` reader on a synthetic ELF (made-up tables
+  at the disc module's addresses): parsing, every refusal, the values
+  reaching the presets, the idle block at byte 0x5000 and the cold-init
+  ESA, and the fallback to the built-in values without a disc.
 - `volume`: the output volume scaling.
 - `audio_pan`: the mirror-mode channel swap.
 - `spu2_render_crc`: the chunked renderer against the reference (above).

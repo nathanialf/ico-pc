@@ -257,7 +257,7 @@ Stream voice record (36 bytes at 0x7148 + 36 × slot):
 | 0x3C | `SgStAdpcmInit` | – | `memset` the 48 stream records, the 128-entry event queue **and the 16 PCM channel records** (0x190C) |
 | 0x3D | `SgStAdpcmQuit` | – | nothing (0x1950) |
 | 0x3E | `SgStAdpcmOpen` | above | fill the record for slot `w1 >> 24`; `sceSdSetAddr(V(SD_VADDR_SSA)|0x40, spuAddr)`; `SetParam(V(ADSR1), 0x8080)`, `SetParam(V(ADSR2), 0x808A)` (0x1958) |
-| 0x3F | `SgStAdpcmClose` | id = slot | cancel the slot's queued events (0x248C) and clear its record (0x1CD0) |
+| 0x3F | `SgStAdpcmClose` | id = slot | cancel the slot's queued events and pending fill (0x248C, below) and clear its record (0x1CD0) |
 | 0x40 | `SgStAdpcmChannelVolume` | id = slot mask core 0 (24 bits), w2 = core 1, w3 = `left << 16 | right` | for every set bit: `SetParam(V(VOLL), w3 >> 16)`, `SetParam(V(VOLR), w3 & 0xFFFF)` (0x1DB4) |
 | 0x41 | `SgStAdpcmChannelPitch` | masks as 0x40, w3 = sample rate in Hz (0..192000) | for every set bit: `SetParam(V(PITCH), (w3 << 12) / 48000)` (signed divide by multiply-high, 0x1EEC) |
 | 0x42 | `SgStAdpcmPlay` | masks | for every set bit: enqueue `FILL(slot, half=2, n, src = iopStart + readOff, dst = spuStart, len = spuSize/2)`; then enqueue `KEYON(mask0, mask1)` (0x2008) |
@@ -289,6 +289,39 @@ Event queue runner (0x2A54), once per tick, only while
      event.
    - a cancelled (zeroed) entry: skip, continue.
 3. Free the entry and advance the read index.
+
+Enqueue (0x3334) refuses an event when the queue already holds 128
+(`write - read >= 128`): the new event is dropped and -1 returned, which no
+caller checks. An entry is 7 words (type, then the six arguments): FILL is
+type 18 with `+4 = core << 8 | voice`, KEYON type 19 with `+4` = core 0
+mask, `+8` = core 1 mask.
+
+**Stream cancel (0x248C)**, `cancel(core, voice)`, called by 0x3F (0x1D4C,
+with `core = slot / 24`, `voice = slot % 24` by multiply-high) and by 0x43
+for every set bit (0x22C4). Read off the code (added after the first pass;
+the questions it settles are DIVERGENCES.md A16):
+
+1. If the pending fill (0x3D30) names the voice (`(p >> 8) & 0xFF == core`
+   and `p & 0xFF == voice`), it is cleared: the read-offset advance for the
+   transfer in flight never happens.
+2. For each of the 128 entries (all of them, not only those between the
+   indices):
+   - type 18 (FILL) whose `+4 >> 8` is `core` and `+4 & 0xFF` is `voice`:
+     `memset(entry, 0, 32)`;
+   - type 19 (KEYON): `switch (core)`: case 0 clears bit `voice` of the core
+     0 mask (`+4`) if set; case 1 clears bit `voice` of the core 1 mask
+     (`+8`). There is no `break` after case 0 (0x2620 falls into 0x26A8), so
+     a core 0 cancel also clears bit `voice` of the core 1 mask. The entry
+     stays queued; with empty masks it keys nothing on and marks nothing
+     active.
+
+So a stream stopped or closed before its KEYON runs is never keyed on, and
+for a core 0 voice the core 1 voice of the same number loses a queued
+key-on too. The fall-through matters only when a core 1 stream voice with
+the same number has a key-on queued at the moment a core 0 stream is
+stopped or closed; the game's four stream slots come from
+`SgGetSpuSlotMalloc(1)` at `AdpcmStreamInit` (`adpcm_init.c`), so which
+voices they are depends on the sequencer's allocation.
 
 Consequences the host must reproduce: one stream DMA per tick at most; a
 stereo `Play` keys on no earlier than the third tick after the packet (fill
@@ -436,8 +469,10 @@ whether it ever does.
 1. Sony libsd details the host must match: `sceSdInit(1)` (hot) versus
    `sceSdInit(0)`; `sceSdSetEffectAttr` with the stale stack fields; the
    effect area sizes and preset registers of mode 4; the busy behaviour of
-   `sceSdVoiceTrans`. Answer by disassembling the disc's `LIBSD.IRX` (same
-   method; not done in this time box).
+   `sceSdVoiceTrans`. **Partly answered** (docs/port/AUDIO.md, "libsd
+   values"): `sceSdInit`'s writes for both flags, the preset table and the
+   effect area sizes were read off the disc's `LIBSD.IRX` and equal
+   ps2sdk's; the stale-field and busy questions remain.
 2. Does anything run ADPCM streams while the PCM ring is active (FMV)? Both
    use the staging buffer at 0x5140: a FILL during a movie would overwrite
    the AutoDMA ring, and the PCM callback zeroes half of it under a pending

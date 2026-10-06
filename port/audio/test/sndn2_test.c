@@ -32,6 +32,7 @@
 
 #include "adpcm.h"
 #include "iop_ram.h"
+#include "libsd_irx.h"
 #include "sif_host.h"
 #include "sndn2_host.h"
 #include "spu2.h"
@@ -347,6 +348,28 @@ static void test_pitch(const char *iso)
         CHECK(differ == 32);
         CHECK(t[64] == 2360 && t[172] == 3340);
     }
+    /* the disc's libsd values (AUDIO.md, "libsd values"): the presets and
+       sizes are ps2sdk's; against the built-in psx-spx table they differ in
+       modes 0 (off), 1 (room), 7 (echo) and 8 (delay) only, and the idle
+       block is ps2sdk's */
+    CHECK(ico_libsd_load() == ICO_LIBSD_DISC);
+    {
+        const spu2_reverb_preset *p = spu2_reverb_get_preset(SPU2_SD_EFFECT_MODE_STUDIO_3);
+        int m;
+
+        CHECK(p->size == 0x6FE0 && p->regs[0] == 0x00E3 && p->regs[31] == 0x8000);
+        CHECK(memcmp(spu2_sd_idle_block(), "\a\a\a\a\a\a\a\a\a\a\a\a\a\a\a\a", 16) == 0);
+        for (m = 0; m < SPU2_REVERB_MODES; m++) {
+            static const uint32_t sizes[SPU2_REVERB_MODES] = {
+                0x10, 0x26C0, 0x1F40, 0x4840, 0x6FE0, 0xADE0, 0xF6C0, 0x18040, 0x18040, 0x3C00,
+            };
+
+            CHECK(spu2_reverb_get_preset(m)->size == sizes[m]);
+        }
+        /* room's comb 3/4 and diffusion addresses: ps2sdk's, not psx-spx's */
+        CHECK(spu2_reverb_get_preset(1)->regs[18] == 0x0335);
+    }
+    ico_libsd_apply(NULL);
     ico_vfs_set_disc(NULL);
     ico_vfs_unmount(disc);
 }
@@ -514,6 +537,79 @@ static void test_adpcm_wrap(void)
         prev = stream_off(2);
     }
     CHECK(wrapped);
+    ico_iop_heap_free(ring);
+}
+
+/* 0x248C, the stream cancel (docs/research/sndn2drv.md, "Stream cancel"):
+   a stop in the tick of its play takes the voice's bit out of the queued
+   KEYON (for a core 0 voice the same-numbered core 1 voice's bit too), and
+   a stop forgets the pending fill, so the read offset stays at 0. */
+static void open_mono(uint32_t ring, int slot, uint32_t spu)
+{
+    pk(0x3E, (uint32_t)slot << 24 | 0x10000 | (SPU_RING & 0xFF00) | (spu >> 16 & 0xFF),
+       spu << 16 | (RING >> 8), RING << 24 | (ring & 0xFFFFFF));
+    pk(0x40, slot < 24 ? 1u << slot : 0, slot < 24 ? 0 : 1u << (slot - 24), 0x3FFFu << 16 | 0x3FFF);
+    pk(0x41, slot < 24 ? 1u << slot : 0, slot < 24 ? 0 : 1u << (slot - 24), 48000);
+}
+
+static uint32_t envx(int slot)
+{
+    return rd32(reply + ICO_SNDN2_REPLY_ENVX + 4 * slot);
+}
+
+static void test_adpcm_cancel(void)
+{
+    uint32_t ring = ico_iop_heap_alloc(RING);
+    int t;
+
+    CHECK(ring != 0);
+    make_int(ico_iop_ptr(ring));
+
+    /* core 1 stop: core 0's voice 0 still keys on */
+    start();
+    pk(0x1E, 0, 0, 0);
+    pk(0x3C, 0, 0, 0);
+    open_mono(ring, 0, 0x1E0000);
+    open_mono(ring, 24, 0x1E4000);
+    pk(0x42, 1, 1, 0);
+    pk(0x43, 0, 1, 0);
+    tick();
+    for (t = 0; t < 4; t++) {
+        vsync();
+    }
+    CHECK(envx(0) > 0);
+    CHECK(envx(24) == 0);
+
+    /* core 0 stop: voice 0 of core 1, not stopped, loses its key-on too */
+    start();
+    pk(0x1E, 0, 0, 0);
+    pk(0x3C, 0, 0, 0);
+    open_mono(ring, 0, 0x1E0000);
+    open_mono(ring, 24, 0x1E4000);
+    pk(0x42, 1, 1, 0);
+    pk(0x43, 1, 0, 0);
+    tick();
+    for (t = 0; t < 4; t++) {
+        vsync();
+    }
+    CHECK(envx(0) == 0);
+    CHECK(envx(24) == 0);
+    /* its FILL ran: the offset moved once, then nothing (not active) */
+    CHECK(stream_off(24) == SPU_RING / 2);
+
+    /* a stop while the voice's fill is in flight: no advance afterwards */
+    start();
+    pk(0x1E, 0, 0, 0);
+    pk(0x3C, 0, 0, 0);
+    open_mono(ring, 2, 0x1E8000);
+    pk(0x42, 4, 0, 0);
+    tick(); /* the FILL starts; pending */
+    render(960);
+    pk(0x43, 4, 0, 0);
+    tick();
+    CHECK(stream_off(2) == 0);
+    vsync();
+    CHECK(stream_off(2) == 0);
     ico_iop_heap_free(ring);
 }
 
@@ -714,6 +810,7 @@ int main(int argc, char **argv)
     test_pitch(iso);
     test_adpcm_stream();
     test_adpcm_wrap();
+    test_adpcm_cancel();
     test_pcm();
     test_sequencer();
     printf("sndn2_test: %d checks, %s\n", checks, failures ? "FAILED" : "ok");

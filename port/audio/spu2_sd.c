@@ -4,20 +4,25 @@
  * libsd's register-level behaviour on the software SPU2 (spu2_sd.h).
  * Register offsets and init values follow ps2sdk's clean-room libsd
  * (iop/sound/libsd/src/freesd.c, effect.c, voice.c; AFL-2.0, read for
- * behaviour, no code taken) except where R1 (docs/research/sndn2drv.md)
- * read the disc's IRX; AUDIO.md, "libsd front end", lists the points to
- * confirm against the disc's LIBSD.IRX.
+ * behaviour, no code taken), checked against the disc's LIBSD.IRX
+ * (AUDIO.md, "libsd values"): sceSdInit's register writes are its code's,
+ * and the reverb presets and the idle block are its data, read at start
+ * by libsd_irx.c.
  */
 #include "spu2_sd.h"
 
 #include <string.h>
 
-#include "adpcm.h"
 #include "spu2.h"
 #include "spu2_internal.h"
 
 static uint64_t sd_time;
 static spu2_sd_effect_attr effect_attr[2];
+/* InitVoices' block (spu2_sd_set_idle_block): ps2sdk's VoiceDataInit, the
+   same 16 bytes as the disc's LIBSD.IRX */
+static uint8_t idle_block[SPU2_SD_IDLE_BLOCK_BYTES] = {
+    0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+};
 
 static uint64_t T(void)
 {
@@ -276,18 +281,58 @@ int spu2_sd_voice_trans_status(int chan, int flag)
     return spu2_voice_trans_busy(chan) ? 0 : 1;
 }
 
+void spu2_sd_set_idle_block(const uint8_t *block)
+{
+    if (block != NULL)
+        memcpy(idle_block, block, sizeof idle_block);
+    else
+        memset(idle_block, 0x07, sizeof idle_block);
+}
+
+const uint8_t *spu2_sd_idle_block(void)
+{
+    return idle_block;
+}
+
+/* The disc's LIBSD.IRX sceSdInit (0x1420), read off its code
+   (docs/port/AUDIO.md, "libsd values"); ps2sdk's freesd.c does the same. */
 void spu2_sd_init(int hot)
 {
-    /* a silent looping block for idle voices (ps2sdk InitVoices puts its
-       idle block at byte 0x5000; AUDIO.md, "libsd front end") */
-    static const uint8_t idle[16] = {0x00, ADPCM_FLAG_LOOP_START | ADPCM_FLAG_LOOP_REPEAT |
-                                               ADPCM_FLAG_LOOP_END};
+    uint8_t block[2 * SPU2_SD_IDLE_BLOCK_BYTES];
     int core;
     int v;
 
     hot &= 1;
     memset(effect_attr, 0, sizeof effect_attr);
-    spu2_dma_write(0x5000, idle, sizeof idle);
+
+    if (!hot) {
+        /* ResetAll (0x1A00): every voice keyed off; PMON and NON cleared
+           on core 1 only (the loop over the cores never steps the
+           register base) */
+        for (core = 0; core < 2; core++) {
+            wr(core, SPU2_R_KOFF, 0xFFFF);
+            wr(core, SPU2_R_KOFF + 2, 0xFFFF);
+        }
+        wr(1, SPU2_R_PMON, 0);
+        wr(1, SPU2_R_PMON + 2, 0);
+        wr(1, SPU2_R_NON, 0);
+        wr(1, SPU2_R_NON + 2, 0);
+        /* the effect area of mode 0 below the end address the core has
+           before InitCoreVolume sets EEA (0x1210: ESA = end - (size - 2)) */
+        for (core = 0; core < 2; core++) {
+            uint32_t end = (uint32_t)(spu2_shadow(core, SPU2_R_EEA) & 0xF) << 17 | 0x1FFFFu;
+            uint32_t size = spu2_reverb_get_preset(SPU2_SD_EFFECT_MODE_OFF)->size;
+
+            wr_pair(core, SPU2_R_ESA, (end - (size - 2u)) >> 1);
+        }
+    }
+
+    /* InitVoices (0x3BA0): the idle block goes to byte 0x5000 through the
+       data port, 16 halfwords: the module's 16 bytes and the 16 that follow
+       them in memory, the start of .bss, zero at the first sceSdInit */
+    memcpy(block, idle_block, SPU2_SD_IDLE_BLOCK_BYTES);
+    memset(block + SPU2_SD_IDLE_BLOCK_BYTES, 0, SPU2_SD_IDLE_BLOCK_BYTES);
+    spu2_dma_write(0x5000, block, sizeof block);
 
     for (core = 0; core < 2; core++) {
         for (v = 0; v < 24; v++) {
@@ -306,11 +351,12 @@ void spu2_sd_init(int hot)
     for (core = 0; core < 2; core++) {
         wr(core, SPU2_R_KOFF, 0xFFFF);
         wr(core, SPU2_R_KOFF + 2, 0xFF);
-        wr(core, SPU2_R_ENDX, 0);
-        wr(core, SPU2_R_ENDX + 2, 0);
     }
+    /* ENDX of core 0 only */
+    wr(0, SPU2_R_ENDX + 2, 0);
+    wr(0, SPU2_R_ENDX, 0);
 
-    /* ps2sdk InitCoreVolume */
+    /* InitCoreVolume (0xE8C) */
     wr(0, SPU2_R_ATTR, (uint16_t)(0xC000 | (hot ? 0x80 : 0)));
     wr(1, SPU2_R_ATTR, (uint16_t)(0xC001 | (hot ? 0x80 : 0)));
     for (core = 0; core < 2; core++) {

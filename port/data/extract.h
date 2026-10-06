@@ -6,7 +6,8 @@
  *
  * What it stores: SYSTEM.CNF, the boot file its BOOT2 line names,
  * SCES_507.60, every *.IRX module in the root (the port reads SNDN2DRV.IRX's
- * pitch table; the rest are small and kept for later checks), and every file
+ * pitch table and LIBSD.IRX's reverb presets and idle voice block; the rest
+ * are small and kept for later checks), and every file
  * under DFDATAS/ (DATA.DF whole). meta.json also lists the root and DFDATAS
  * directories, so look-ups of them answer as on the disc.
  *

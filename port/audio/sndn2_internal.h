@@ -10,9 +10,17 @@
 
 #include <stdint.h>
 
+#include "spu2_sd.h"
+
 #define SNDN2_SLOTS 48 /* core * 24 + voice */
 #define SNDN2_PCM_CHANNELS 16
 #define SNDN2_STAGING_SIZE 0x2000
+
+/* libsd's voice selector for a slot (R1's V(x)): `param | core | voice << 1`. */
+static inline uint16_t vsel(uint32_t slot, uint16_t param)
+{
+    return (uint16_t)(param | SPU2_SD_VOICE(slot / 24, slot % 24));
+}
 
 /* The IRX's .bss staging buffer at 0x5140. */
 uint8_t *sndn2_staging_buf(void);

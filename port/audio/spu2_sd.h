@@ -98,6 +98,14 @@ void spu2_sd_set_time(uint64_t time);
    volumes and the effect end addresses. */
 void spu2_sd_init(int hot);
 
+/* The 16-byte ADPCM block sceSdInit writes at byte 0x5000 for the idle
+   voices (LIBSD.IRX .data 0x4A60).  NULL restores the built-in one,
+   ps2sdk's VoiceDataInit (16 x 0x07, the same as the disc's); it is kept
+   across spu2_reset and applies from the next spu2_sd_init. */
+#define SPU2_SD_IDLE_BLOCK_BYTES 16
+void spu2_sd_set_idle_block(const uint8_t *block);
+const uint8_t *spu2_sd_idle_block(void);
+
 void spu2_sd_set_param(uint16_t entry, uint16_t value);
 uint16_t spu2_sd_get_param(uint16_t entry);
 void spu2_sd_set_switch(uint16_t entry, uint32_t value);

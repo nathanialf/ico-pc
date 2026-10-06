@@ -214,20 +214,13 @@ pointer to this file.
 - **Output latency.** The 50 to 70 ms key-on-to-device figure is computed
   from the queue target in `out_sdl.c`, not measured. A loopback measurement
   on Windows and the Steam Deck would confirm or retune it.
-- **Block loads at the end of sound RAM.** `voice_load_block` and
-  `chunk_load_block` in `port/audio/spu2.c` decode 16 bytes at
-  `&S.ram[addr * 2]` without wrapping, so a voice at halfword 0xFFFF9 to
-  0xFFFFF reads past `ram[]`. Wrap or copy at the end of RAM, and re-check
-  `spu2_render_crc`'s golden values.
-- **libsd values from the disc (A9, A14).** The reverb presets and the
-  `sceSdInit` register values come from ps2sdk and psx-spx rather than the
-  disc's `LIBSD.IRX`. Read them from the player's disc at extraction
-  (`spu2_reverb_set_preset` exists for this).
-- **Driver details to settle (A3, A4, A8, A16, A19).** Read SNDN2DRV at 0x248C
-  to settle whether a stream cancel touches a queued KEYON; measure the SPU2
-  DMA rate (uploads take one frame on the host, which can shift load timing);
-  check whether any VAG on the disc uses ADPCM filters 5 to 7; capture the
-  exponential-decrease envelope's rounding on hardware.
+- **Driver details that need a PS2 (A4, A8, A19).** Measure the SPU2 DMA
+  rate (uploads take one frame on the host, which can shift load timing),
+  and capture the exponential-decrease envelope's rounding on hardware.
+- **ADPCM filters 5 to 7 on the disc (A3).** Scan the disc's VAG bodies and
+  `.int` streams for blocks whose filter nibble is 5 to 7 or whose shift is
+  13 to 15 (a static read of the data, no hardware needed); none found
+  means A3 never applies.
 - **A low-frequency offset after loud events.** A WAV dump of the boot run
   shows a sub-5 Hz offset of up to -5300 on the right channel for about 6 s
   after the loud cut into the opening. An offline reverb test rules out the

@@ -79,36 +79,50 @@ static uint32_t pending; /* 0x3D30: (core << 8 | voice) + 0x10000, 0 when none *
 
 static int logged_overflow, logged_iop;
 
-static uint16_t vsel(uint32_t slot, uint16_t param)
-{
-    return (uint16_t)(param | SPU2_SD_VOICE(slot / 24, slot % 24));
-}
-
 /* Every slot whose bit is set in the core 0 / core 1 masks. */
 #define FOR_MASKED(slot, m0, m1)                                                                   \
     for ((slot) = 0; (slot) < SNDN2_SLOTS; (slot)++)                                               \
         if ((((slot) < 24 ? (m0) >> (slot) : (m1) >> ((slot) - 24)) & 1u) != 0)
 
+/* 0x3334: a full queue (128 entries ahead of the reader) refuses the new
+   event, which is lost; the IRX returns -1 and no caller checks it. */
 static void enqueue(const StEvent *e)
 {
     if (q_write - q_read >= QUEUE) {
-        sndn2_log_once(&logged_overflow, "ADPCM stream event queue full: an entry is overwritten");
+        sndn2_log_once(&logged_overflow, "ADPCM stream event queue full: the new event is dropped");
+        return;
     }
     queue[q_write & (QUEUE - 1)] = *e;
     q_write++;
 }
 
-/* 0x248C: zero the slot's queued FILLs (a KEYON names voices by mask and is
-   left alone, docs/port/DIVERGENCES.md A16). */
+/* 0x248C (docs/research/sndn2drv.md, "Stream cancel"), for the voice
+   `core`, `voice`: a pending fill of that voice is forgotten, so the read
+   offset does not advance for the transfer in flight; every queued FILL of
+   the voice is zeroed; a queued KEYON keeps its place but loses the voice's
+   bit.  For a core 0 voice the IRX clears bit `voice` in both masks (its
+   switch on the core falls from case 0 into case 1), so the core 1 voice
+   with the same number loses a queued key-on too.  The IRX walks all 128
+   entries; consumed ones are zero. */
 static void cancel(uint32_t slot)
 {
+    uint32_t core = slot / 24;
+    uint32_t voice = slot % 24;
     uint32_t i;
 
-    for (i = q_read; i != q_write; i++) {
-        StEvent *e = &queue[i & (QUEUE - 1)];
+    if (((pending >> 8) & 0xFF) == core && (pending & 0xFF) == voice) {
+        pending = 0;
+    }
+    for (i = 0; i < QUEUE; i++) {
+        StEvent *e = &queue[i];
 
         if (e->kind == EV_FILL && e->slot == slot) {
             memset(e, 0, sizeof(*e));
+        } else if (e->kind == EV_KEYON) {
+            if (core == 0) {
+                e->mask[0] &= ~(1u << voice);
+            }
+            e->mask[1] &= ~(1u << voice);
         }
     }
 }

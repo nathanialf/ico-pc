@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "iop_ram.h"
+#include "libsd_irx.h"
 #include "sif_host.h"
 #include "sndn2_internal.h"
 #include "spu2.h"
@@ -71,12 +72,6 @@ static void wr32(uint8_t *p, uint32_t v)
     p[1] = (uint8_t)(v >> 8);
     p[2] = (uint8_t)(v >> 16);
     p[3] = (uint8_t)(v >> 24);
-}
-
-/* libsd's voice selector for a slot (R1's V(x)). */
-static uint16_t vsel(uint32_t slot, uint16_t param)
-{
-    return (uint16_t)(param | SPU2_SD_VOICE(slot / 24, slot % 24));
 }
 
 /* --- Pitch ----------------------------------------------------------------- */
@@ -472,6 +467,7 @@ const uint8_t *ico_sndn2_staging(void)
 void ico_sndn2_host_reset(void)
 {
     spu2_reset();
+    ico_libsd_apply(NULL); /* the idle block too, like the presets */
     memset(&H, 0, sizeof(H));
     st_adpcm_reset();
     logged_cmd = logged_iop = logged_clamp = logged_sub = 0;
@@ -482,6 +478,7 @@ void ico_sndn2_host_register(void)
     if (!H.registered) {
         ico_sndn2_host_reset();
         ico_sndn2_pitch_load();
+        ico_libsd_load();
         H.registered = 1;
     }
     ico_sif_register_server(ICO_SNDN2_SERVER_ID, ico_sndn2_host_serve);
