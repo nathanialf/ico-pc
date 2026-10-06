@@ -18,6 +18,7 @@
 
 #include "iop_ram.h"
 #include "libsd_irx.h"
+#include "mix_gain.h"
 #include "sif_host.h"
 #include "sndn2_internal.h"
 #include "spu2.h"
@@ -246,8 +247,9 @@ static void dispatch(const uint8_t *pk)
     /* voices */
     case 0x01:
         if (id < SNDN2_SLOTS) {
-            spu2_sd_set_param(vsel(id, SPU2_SD_VPARAM_VOLL), (uint16_t)w2);
-            spu2_sd_set_param(vsel(id, SPU2_SD_VPARAM_VOLR), (uint16_t)w3);
+            /* VOLL, VOLR; scaled by the slot's music or effects gain, the
+               raw words at 100 % (mix_gain.h) */
+            ico_audio_gain_voice((int)id, (uint16_t)w2, (uint16_t)w3);
         }
         break;
     case 0x02:
@@ -309,6 +311,7 @@ static void dispatch(const uint8_t *pk)
         break;
     case 0x1E: /* 0x1100 */
         spu2_sd_init((int)(id & 1));
+        ico_audio_gain_forget(); /* the init's volumes are not the game's */
         spu2_sd_set_switch(SPU2_SD_SWITCH_VMIXEL | 0, 0);
         spu2_sd_set_switch(SPU2_SD_SWITCH_VMIXER | 0, 0);
         spu2_sd_set_switch(SPU2_SD_SWITCH_VMIXEL | 1, 0);
@@ -470,6 +473,7 @@ void ico_sndn2_host_reset(void)
     ico_libsd_apply(NULL); /* the idle block too, like the presets */
     memset(&H, 0, sizeof(H));
     st_adpcm_reset();
+    ico_audio_gain_forget();
     logged_cmd = logged_iop = logged_clamp = logged_sub = 0;
 }
 

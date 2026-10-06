@@ -6,6 +6,7 @@
 #include "options.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 
@@ -166,8 +167,68 @@ int ico_opt_debug_option(void)
     return v < -0x7FFFFFFF || v > 0x7FFFFFFF ? 0 : (int)v;
 }
 
+/* [audio] output (options.h): -2 not read yet, else ICO_OUTPUT_* */
+static int s_output = -2;
+/* the game's own mode (the card's, the Options row's), kept as the game
+   set it; s_game_known 0 until it is */
+static int s_game_output;
+static int s_game_known;
+
+int ico_opt_output_mode(void)
+{
+    if (s_output == -2) {
+        const char *v = ico_config_get_string("audio.output", "auto");
+        s_output = strcmp(v, "stereo") == 0 ? ICO_OUTPUT_STEREO
+                   : strcmp(v, "mono") == 0 ? ICO_OUTPUT_MONO
+                                            : ICO_OUTPUT_AUTO;
+    }
+    return s_output;
+}
+
+void ico_opt_set_output_mode(int mode)
+{
+    s_output = mode < 0 ? ICO_OUTPUT_AUTO : mode == 0 ? ICO_OUTPUT_STEREO : ICO_OUTPUT_MONO;
+}
+
+const char *ico_opt_output_name(int mode)
+{
+    return mode < 0 ? "auto" : mode == 0 ? "stereo" : "mono";
+}
+
+int ico_opt_output_resolve(int current)
+{
+    int m = ico_opt_output_mode();
+
+    if (!s_game_known) {
+        s_game_output = current;
+        s_game_known = 1;
+    }
+    return m != ICO_OUTPUT_AUTO ? m : s_game_output;
+}
+
+int ico_opt_output_card(int card_mode)
+{
+    s_game_output = card_mode;
+    s_game_known = 1;
+    return ico_opt_output_resolve(card_mode);
+}
+
+void ico_opt_output_toggled(int mode)
+{
+    s_game_output = mode;
+    s_game_known = 1;
+    if (ico_opt_output_mode() != ICO_OUTPUT_AUTO) {
+        ico_opt_set_output_mode(mode);
+        if (ico_config_set_string("audio.output", ico_opt_output_name(s_output)) != 0 ||
+            ico_config_save() != 0) {
+            fprintf(stderr, "options: cannot write [audio] output\n");
+        }
+    }
+}
+
 void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_classic_menu_text = s_circle_back =
         -1;
+    s_output = -2;
 }

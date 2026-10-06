@@ -168,12 +168,6 @@ pointer to this file.
 
 ## Audio
 
-- **Sound options.** Settings has no audio page: wanted are master, music
-  and effects volumes, the stereo/mono choice the PS2's system menu
-  offered, and an output-device choice, as config keys under `[audio]`
-  (docs/port/CONFIG.md) with rows in `port/ui/settings.c`; the mixer in
-  `port/audio/audio_host.c` applies the gains after the SPU2's own
-  volumes so the game's mix is unchanged at the defaults.
 - **Windows audio push cost.** A Windows window-build log showed the
   per-vsync `audio` phase at 6 to 11 ms, while the SPU2 render itself takes
   under 1 ms; the phase also covers `ico_audio_sdl_push` (SDL's stream lock,

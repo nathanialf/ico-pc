@@ -12,6 +12,9 @@
 #include "message.h"
 #include "typedef.h"
 
+/* port/game/options.h: [audio] output wins over the card's mode */
+extern int ico_opt_output_card(int card_mode);
+
 /* the semaphore descriptor the card lock is created from, then the manager
    queue's 16-slot message ring */
 static struct SemaParam mcLockSemaParam;
@@ -185,6 +188,7 @@ static inline int gameblock_read(McMgr *self, void *buf)
     iosMcHandlerRead(self, buf, 25588);
     systemStatus[11] = (IosMcProductFile + self->port)->soundMode;
     soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
+    soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
     iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
     optionControlType = (IosMcProductFile + self->port)->controlType;
     *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;

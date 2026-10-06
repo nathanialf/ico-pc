@@ -366,7 +366,7 @@ rows right-aligned ending at x 344 and value rows from x 364:
 | Settings | Display, Audio, Controls, Gameplay (open their screens), Language (value), Achievements (opens the list), Extras (opens its page; from the title only), Developer mode (value), Back; notes under Language and Developer mode. With the Extras row there are nine rows on a 17-line pitch from line 40 (the notes sit at 196); from the pause menu the row is masked (`defaultMask`), the eight left keep the 19-line pitch, and `layoutMain` relinks the rows' up and down items past it each tick, because `lt_property_visible` does not look at masks |
 | Extras | Music, Models, Credits, Back; a note under Credits while it is locked |
 | Display | Preset, Resolution, Aspect ratio, Fullscreen, Vertical sync, Texture filtering, Full-height picture, Frame rate, Video mode (changes only when Settings was opened from the title; from the pause menu its value reads "PAL 50 Hz (title only)" and Left and Right do nothing), Menu text, Back; 17 field lines apart from line 36 |
-| Audio | Volume, Back |
+| Audio | Volume, Music volume, Effects volume, Sound output, Output device (the name cut with "…" where it would not fit the value box at the 60 % shrink), Back |
 | Controls | Remap controls (opens the remap screen), Mouse sensitivity, Circle goes back (with a note), Back |
 | Gameplay | Shadows never take Yorda (with OPTIONS.md's explanation as a note), Analogue stick fix, Back |
 | Achievements | a scrolling list of 8 slots over the 30 entries and Back: title (hidden and locked: "???") and state (Unlocked, Locked); the selected one's description below; the header counts the unlocked |
@@ -455,8 +455,11 @@ boot's step 102 stores it, sets the port strings' language at once
 (`ui_SetLanguage`) and `[game] language` (`ico_sysconf_set_language`).
 The stick fix, Shadows never take Yorda and developer mode go through
 `ico_opt_set_*` and their `[gameplay]` keys; mouse sensitivity through the
-live binding table (`ico_input_live_bindings`); volume as
-`[audio] volume`. Frame rate steps through Original, Uncapped, 60, 120,
+live binding table (`ico_input_live_bindings`); volume, music and effects
+as `[audio] volume`, `music` and `effects` (the gains live, through
+`ico_audio_set_volume` and `ico_audio_set_gain`); Sound output through
+`ico_opt_set_output_mode`, `[audio] output` and `soundOutputModeSet`;
+Output device through `[audio] device` and `ico_audio_sdl_reopen`. Frame rate steps through Original, Uncapped, 60, 120,
 144 and 240; a cap from the file that is not listed steps to the nearest
 listed value in the direction pressed. Leaving any screen saves what
 changed (`ui_SettingsSave`): `ico_input_write_bindings` for the bindings,

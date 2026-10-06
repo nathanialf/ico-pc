@@ -22,6 +22,7 @@
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
+#include "mix_gain.h"
 #include "options.h"
 #include "strings.h"
 #include "sysconf.h"
@@ -43,6 +44,9 @@ extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
+/* fumi/sound/s_init.c: the PS2's stereo (0) or mono (1) output */
+extern int soundOutputModeGet(void);
+extern void soundOutputModeSet(int mode);
 /* layout_action.c (ICO_HOST, R7c): what la_vibe_select's confirm did after
    the vibration choice, gflagOn(382): the new game starts */
 extern void la_host_new_game_go(void);
@@ -165,7 +169,7 @@ static int s_restoreTitle = -1; /* a title layout whose defaultItem to restore *
 static int s_restoreDefault;
 static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
 static UiRemapCapture s_capture;
-static char s_text[128];
+static char s_text[256];
 
 /* the remap screen's order: the face buttons first, as a pad is read */
 static const int kRemapOrder[ICO_T_COUNT] = {
@@ -278,16 +282,93 @@ static IcoBindings *liveBindings(void)
     return b;
 }
 
-/* [audio] volume clamped to 0..1 as the output applies it (NaN as 0,
-   port/audio/volume.c): a value outside it in the file would overflow the
-   int conversions below */
-static double volume01(void)
+/* [audio] volume, music or effects clamped to 0..1 as the output applies
+   them (NaN as 0, port/audio/volume.c, mix_gain.c): a value outside it in
+   the file would overflow the int conversions below */
+static double unit01(const char *path)
 {
-    double v = ico_config_get_float("audio.volume", 1.0);
+    double v = ico_config_get_float(path, 1.0);
     if (!(v > 0.0)) {
         return 0.0;
     }
     return v < 1.0 ? v : 1.0;
+}
+
+/* a 0..1 setting stepped by a tenth, clamped */
+static double stepTenth(double v, int dir)
+{
+    int t = (int)(v * 10.0 + 0.5) + dir;
+    return (t < 0 ? 0 : t > 10 ? 10 : t) / 10.0;
+}
+
+/* [audio] output (port/game/options.h) in force: the game's mode set from
+   an explicit key; with `restore` (the row stepped to Auto) the game's own
+   mode back.  Install passes 0, so with Auto the game's mode is never
+   touched there; nothing is sent when the mode is the game's already. */
+static void applyOutputMode(int restore)
+{
+    int cur = soundOutputModeGet();
+    int m = ico_opt_output_resolve(cur);
+    if (m != cur && (restore || ico_opt_output_mode() != ICO_OUTPUT_AUTO)) {
+        soundOutputModeSet(m);
+    }
+}
+
+/* the value box's text for [audio] device: Default, or the name, cut with
+   an ellipsis where even the shrink to fit (down to 60 %, layout_ext.c)
+   would leave it wider than the box (less a margin before the arrow) */
+static const char *deviceText(char *buf, unsigned size)
+{
+    const char *name = ico_config_get_string("audio.device", "");
+    if (name[0] == '\0') {
+        return ui_Str(UI_STR_VAL_DEFAULT_DEVICE);
+    }
+    /* n bytes of the name, on a character's first byte, and "…" after a cut */
+    const size_t len = strlen(name);
+    size_t n = len;
+    if (size < 8) {
+        return "";
+    }
+    if (n > size - 4) {
+        n = size - 4;
+        while (n > 0 && ((unsigned char)name[n] & 0xC0u) == 0x80u) {
+            n--;
+        }
+    }
+    for (;;) {
+        snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
+        if (n == 0 || ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
+            break;
+        }
+        do {
+            n--;
+        } while (n > 0 && ((unsigned char)name[n] & 0xC0u) == 0x80u);
+    }
+    return buf;
+}
+
+/* Settings > Audio > Output device: Default ("") and the devices' names,
+   the config's name stepped to the next; a name the list lacks (a device
+   unplugged) counts as Default */
+static void stepDevice(int dir)
+{
+    static char names[16][ICO_AUDIO_DEVICE_NAME_MAX];
+    int n = ico_audio_sdl_devices(names, 16);
+    const char *cur = ico_config_get_string("audio.device", "");
+    int i = 0;
+    for (int k = 0; k < n; k++) {
+        if (strcmp(names[k], cur) == 0) {
+            i = k + 1;
+        }
+    }
+    i = stepIndex(i, n + 1, dir);
+    const char *to = i == 0 ? "" : names[i - 1];
+    if (strcmp(to, cur) == 0) {
+        return;
+    }
+    ico_config_set_string("audio.device", to);
+    ico_audio_sdl_reopen(to); /* the stream moves now; -1 without an output */
+    s_dirtyConfig = 1;
 }
 
 static const char *onOff(int v)
@@ -420,9 +501,27 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_MENU_TEXT:
         return ui_Str(ico_opt_classic_menu_text() ? UI_STR_VAL_CLASSIC : UI_STR_VAL_PORT_FONT);
     case UI_OPT_VOLUME: {
-        snprintf(buf, size, "%d %%", (int)(volume01() * 100.0 + 0.5));
+        snprintf(buf, size, "%d %%", (int)(unit01("audio.volume") * 100.0 + 0.5));
         return buf;
     }
+    case UI_OPT_MUSIC:
+    case UI_OPT_EFFECTS:
+        snprintf(
+            buf, size, "%d %%",
+            (int)(unit01(opt == UI_OPT_MUSIC ? "audio.music" : "audio.effects") * 100.0 + 0.5));
+        return buf;
+    case UI_OPT_OUTPUT: {
+        /* Auto shows the game's mode in force */
+        int live = soundOutputModeGet() == 1 ? UI_STR_VAL_MONO : UI_STR_VAL_STEREO;
+        if (ico_opt_output_mode() == ICO_OUTPUT_AUTO) {
+            snprintf(buf, size, "%s (%s)", ui_Str(UI_STR_VAL_AUTO), ui_Str((UiStrId)live));
+            return buf;
+        }
+        return ui_Str(ico_opt_output_mode() == ICO_OUTPUT_MONO ? UI_STR_VAL_MONO
+                                                               : UI_STR_VAL_STEREO);
+    }
+    case UI_OPT_DEVICE:
+        return deviceText(buf, size);
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_MOUSE_SENS:
@@ -456,7 +555,7 @@ static int canStep(int opt)
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
 {
-    char raw[64];
+    char raw[sizeof(s_text)];
     snprintf(s_text, sizeof(s_text), "%s", rawValue(opt, raw, sizeof(raw)));
     return s_text;
 }
@@ -519,13 +618,34 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         break;
     case UI_OPT_VOLUME: {
-        int v = (int)(volume01() * 10.0 + 0.5) + dir;
-        v = v < 0 ? 0 : v > 10 ? 10 : v;
-        ico_config_set_float("audio.volume", v / 10.0);
-        ico_audio_set_volume(v / 10.0); /* live; the SDL output reads it per block */
+        double v = stepTenth(unit01("audio.volume"), dir);
+        ico_config_set_float("audio.volume", v);
+        ico_audio_set_volume(v); /* live; the SDL output reads it per block */
         s_dirtyConfig = 1;
         break;
     }
+    case UI_OPT_MUSIC:
+    case UI_OPT_EFFECTS: {
+        const char *key = opt == UI_OPT_MUSIC ? "audio.music" : "audio.effects";
+        double v = stepTenth(unit01(key), dir);
+        ico_config_set_float(key, v);
+        /* live: the voices' volumes are re-issued (mix_gain.h) */
+        ico_audio_set_gain(opt == UI_OPT_MUSIC ? ICO_AUDIO_CAT_MUSIC : ICO_AUDIO_CAT_EFFECTS, v);
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_OUTPUT: {
+        /* Auto, Stereo, Mono; the game's mode follows at once */
+        int m = stepIndex(ico_opt_output_mode() + 1, 3, dir) - 1;
+        ico_opt_set_output_mode(m);
+        ico_config_set_string("audio.output", ico_opt_output_name(m));
+        applyOutputMode(1);
+        s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_DEVICE:
+        stepDevice(dir);
+        break;
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
         ico_config_set_bool("gameplay.stick_fix", ico_opt_stick_fix());
@@ -1048,8 +1168,10 @@ static void build(void)
         dispOpts[nd] = dispAll[i][0];
         dispStrs[nd++] = dispAll[i][1];
     }
-    static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
-    static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
+    static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
+                                    UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
+    static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
+                                    UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
                                   UI_STR_BACK};
@@ -1064,7 +1186,7 @@ static void build(void)
     buildOptionPage(UI_PAGE_MAIN, UI_STR_SETTINGS, mainOpts, mainStrs, mainLinks, 9, -1);
     buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL, nd,
                     UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 2,
+    buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL, 6,
                     UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks, 4,
                     UI_PAGE_MAIN);
@@ -1347,6 +1469,9 @@ void ui_SettingsInstall(void)
     ui_MenuTextSetClassic(ico_opt_classic_menu_text());
     /* Q2: [game] circle_back, before the game's menus read a press */
     lt_ext_SetCircleBack(ico_opt_circle_back());
+    /* [audio] output: an explicit stereo or mono is the game's from the
+       start (the card's system file is read later: fumi/ios/mcard.c's hook) */
+    applyOutputMode(0);
     if (!s_built) {
         build();
         s_built = 1;

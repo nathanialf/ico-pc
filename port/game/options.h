@@ -94,6 +94,34 @@ void ico_opt_set_classic_menu_text(int on);
    the value to port/ui (lt_ext_SetCircleBack) at install and on a change. */
 int ico_opt_circle_back(void);
 void ico_opt_set_circle_back(int on);
+/* [audio] output (docs/port/AUDIO.md, "Gains and output mode"): the
+   PS2's stereo or mono choice, the game's soundOutputModeGet value (0
+   stereo, 1 mono), which the memory card's system file keeps and the
+   Options screen's Stereo/Mono row toggles.  "auto" (ICO_OUTPUT_AUTO, the
+   default) leaves it to the game as on the PS2; "stereo" or "mono" wins
+   over the card's value.  Unknown text reads as auto. */
+#define ICO_OUTPUT_AUTO (-1)
+#define ICO_OUTPUT_STEREO 0
+#define ICO_OUTPUT_MONO 1
+int ico_opt_output_mode(void);
+void ico_opt_set_output_mode(int mode);
+/* "auto", "stereo", "mono": the key's text */
+const char *ico_opt_output_name(int mode);
+/* The game's mode to set, given the game's `current` one: the explicit
+   key, else the game's own value (the card's or the Options row's, or
+   `current` the first time, which is then recorded as the game's).
+   ui_SettingsInstall and the Settings row apply it with soundOutputModeSet
+   when it differs from current. */
+int ico_opt_output_resolve(int current);
+/* The memory card hook (fumi/ios/mcard.c, after the system file's mode is
+   set): records the card's mode as the game's own and returns the mode in
+   force (the key's when explicit). */
+int ico_opt_output_card(int card_mode);
+/* The Options screen hook (common/src/layout_action.c, the Stereo/Mono
+   row): records the new mode as the game's own; with an explicit key the
+   key follows it and config.toml is saved at once, so the file and the
+   card (which the game writes from soundOutputModeGet) never disagree. */
+void ico_opt_output_toggled(int mode);
 /* Forget the run-time values: each option is read from the config again on
    its next use. */
 void ico_opt_reload(void);

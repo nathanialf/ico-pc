@@ -41,7 +41,9 @@
 #include "host_config.h"
 #include "input.h"
 #include "layout_ext.h"
+#include "audio_host.h"
 #include "menu_text.h"
+#include "mix_gain.h"
 #include "options.h"
 #include "settings.h"
 #include "strings.h"
@@ -152,6 +154,42 @@ void la_host_leave(void)
 }
 
 static int s_newGames;
+
+/* fumi/sound/s_init.c: the game's stereo (0) or mono (1) output */
+static int s_outputMode, s_outputSets;
+
+int soundOutputModeGet(void)
+{
+    return s_outputMode;
+}
+
+void soundOutputModeSet(int mode)
+{
+    s_outputMode = mode;
+    s_outputSets++;
+}
+
+/* port/audio/out_sdl.c's device list and reopen (the window build's) */
+static int s_devCount;
+static const char *s_devNames[3];
+static char s_reopened[ICO_AUDIO_DEVICE_NAME_MAX];
+static int s_reopens;
+
+int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)
+{
+    int n = s_devCount < max ? s_devCount : max;
+    for (int i = 0; i < n; i++) {
+        snprintf(names[i], ICO_AUDIO_DEVICE_NAME_MAX, "%s", s_devNames[i]);
+    }
+    return n;
+}
+
+int ico_audio_sdl_reopen(const char *name)
+{
+    snprintf(s_reopened, sizeof(s_reopened), "%s", name ? name : "");
+    s_reopens++;
+    return 0;
+}
 
 /* layout_action.c (R7c): the mirror screen's confirm starts the game */
 void la_host_new_game_go(void)
@@ -525,8 +563,10 @@ static void testBuild(void)
                                    UI_STR_OPT_VIDEO_MODE,
                                    UI_STR_OPT_MENU_TEXT,
                                    UI_STR_BACK};
-    static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_BACK};
-    static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_BACK};
+    static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
+                                    UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
+    static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
+                                    UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     static const int ctlOpts[] = {UI_OPT_LINK, UI_OPT_MOUSE_SENS, UI_OPT_CIRCLE_BACK, UI_OPT_BACK};
     static const int ctlStrs[] = {UI_STR_OPT_REMAP, UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,
                                   UI_STR_BACK};
@@ -552,7 +592,7 @@ static void testBuild(void)
     }
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
           "display rows (Frame rate without a framerate key)");
-    CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 2), "audio rows");
+    CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 4), "controls rows");
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 3), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
@@ -1319,6 +1359,182 @@ static void testValues(void)
     }
 }
 
+/* Settings > Audio: the music and effects gains, the output mode against
+   the game's own (the card's, the Options row's), the device list */
+static void testAudio(void)
+{
+    char p[1100];
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_SetLanguage(UI_LANG_EN);
+    ico_audio_gain_reset();
+    s_outputMode = 0;
+    s_outputSets = 0;
+    ui_SettingsInstall();
+    CHECK(s_outputSets == 0, "auto: install leaves the game's mode alone");
+    /* every audio row steps (the steppable range) */
+    for (int o = UI_OPT_VOLUME; o <= UI_OPT_DEVICE; o++) {
+        int row = ui_SettingsRowOf(UI_PAGE_AUDIO, (UiSettingsOpt)o);
+        int labels[16], values[16];
+        int n = ui_SettingsPageRows(UI_PAGE_AUDIO, labels, NULL, values, 16);
+        int has = 0;
+        for (int i = 0; i < n; i++) {
+            has |= labels[i] == row && values[i] >= 0;
+        }
+        CHECK(row >= 0 && has, "audio opt %d has a value box", o);
+    }
+
+    /* music and effects: 0 % to 100 % in tens, live */
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MUSIC), "100 %") == 0, "music 100 %% (%s)",
+          ui_SettingsValueText(UI_OPT_MUSIC));
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECTS), "100 %") == 0, "effects 100 %%");
+    ui_SettingsStep(UI_OPT_MUSIC, -1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MUSIC), "90 %") == 0, "music 90 %%");
+    CHECK(ico_audio_gain_q12(ICO_AUDIO_CAT_MUSIC) == 3686, "music gain 0.9 live (%d)",
+          ico_audio_gain_q12(ICO_AUDIO_CAT_MUSIC));
+    CHECK(ico_audio_gain_q12(ICO_AUDIO_CAT_EFFECTS) == 4096, "effects untouched");
+    ui_SettingsStep(UI_OPT_MUSIC, 1);
+    ui_SettingsStep(UI_OPT_MUSIC, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MUSIC), "100 %") == 0 &&
+              ico_audio_gain_q12(ICO_AUDIO_CAT_MUSIC) == 4096,
+          "music clamps at 100 %%");
+    for (int i = 0; i < 12; i++) {
+        ui_SettingsStep(UI_OPT_EFFECTS, -1);
+    }
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECTS), "0 %") == 0 &&
+              ico_audio_gain_q12(ICO_AUDIO_CAT_EFFECTS) == 0,
+          "effects clamps at 0 %%");
+    ui_SettingsStep(UI_OPT_EFFECTS, 1);
+    ui_SettingsStep(UI_OPT_EFFECTS, 1);
+    ui_SettingsStep(UI_OPT_EFFECTS, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECTS), "30 %") == 0, "effects 30 %% (%s)",
+          ui_SettingsValueText(UI_OPT_EFFECTS));
+
+    /* output: Auto shows the game's mode; Stereo and Mono set it; Auto
+       gives the game's own back */
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Stereo)") == 0, "output Auto (%s)",
+          ui_SettingsValueText(UI_OPT_OUTPUT));
+    s_outputMode = 1; /* the game's Options row: Mono */
+    ico_opt_output_toggled(1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Mono)") == 0, "Auto (Mono)");
+    CHECK(strcmp(ico_config_get_string("audio.output", "auto"), "auto") == 0,
+          "auto: the Options row leaves the key");
+    ui_SettingsStep(UI_OPT_OUTPUT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Stereo") == 0 && s_outputMode == 0 &&
+              strcmp(ico_config_get_string("audio.output", ""), "stereo") == 0,
+          "output Stereo, the game's mode set");
+    ui_SettingsStep(UI_OPT_OUTPUT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Mono") == 0 && s_outputMode == 1,
+          "output Mono");
+    ui_SettingsStep(UI_OPT_OUTPUT, -1);
+    ui_SettingsStep(UI_OPT_OUTPUT, -1);
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 1 &&
+              strcmp(ico_config_get_string("audio.output", ""), "auto") == 0,
+          "Auto again: the game's own mode (Mono) back");
+    ui_SettingsStep(UI_OPT_OUTPUT, -1);
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_MONO, "Left from Auto wraps to Mono");
+    /* explicit: the card's mode does not win, the Options row's change is
+       written back */
+    s_outputMode = 0; /* the card's system file: Stereo */
+    soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
+    CHECK(s_outputMode == 1, "mono wins over the card's stereo");
+    s_outputMode = 0; /* the Options row: Stereo */
+    ico_opt_output_toggled(0);
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_STEREO &&
+              strcmp(ico_config_get_string("audio.output", ""), "stereo") == 0,
+          "the Options row's Stereo written back");
+    path(p, sizeof(p), "settings_test.toml");
+    {
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL && ico_toml_get(t, "audio.output") != NULL &&
+                  strcmp(ico_toml_get(t, "audio.output"), "stereo") == 0,
+              "and saved at once");
+        ico_toml_free(t);
+    }
+    /* auto: the card's value is the game's */
+    ui_SettingsStep(UI_OPT_OUTPUT, -1);
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO, "auto");
+    s_outputMode = 1;
+    soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
+    CHECK(s_outputMode == 1, "auto: the card's mono kept");
+    /* an explicit key is the game's from install on */
+    useConfig("[audio]\noutput = \"mono\"\n");
+    s_outputMode = 0;
+    ui_SettingsInstall();
+    CHECK(s_outputMode == 1, "output = mono at install");
+
+    /* the device: Default, then each device; a long name cut to fit */
+    useConfig("version = 1\n");
+    s_devCount = 2;
+    s_devNames[0] = "Speakers (Realtek High Definition Audio)";
+    s_devNames[1] = "A very long name for a USB audio interface with eight outputs and more";
+    s_reopens = 0;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_DEVICE), "Default") == 0, "device Default (%s)",
+          ui_SettingsValueText(UI_OPT_DEVICE));
+    ui_SettingsStep(UI_OPT_DEVICE, 1);
+    CHECK(s_reopens == 1 && strcmp(s_reopened, s_devNames[0]) == 0 &&
+              strcmp(ico_config_get_string("audio.device", ""), s_devNames[0]) == 0,
+          "device: the first, reopened");
+    {
+        const char *v = ui_SettingsValueText(UI_OPT_DEVICE);
+        CHECK(ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f, "the name fits (%s)", v);
+    }
+    ui_SettingsStep(UI_OPT_DEVICE, 1);
+    {
+        const char *v = ui_SettingsValueText(UI_OPT_DEVICE);
+        size_t n = strlen(v);
+        CHECK(n > 3 && strcmp(v + n - 3, "\xE2\x80\xA6") == 0 &&
+                  strncmp(v, s_devNames[1], 10) == 0 &&
+                  ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f,
+              "the long name cut with an ellipsis (%s)", v);
+    }
+    ui_SettingsStep(UI_OPT_DEVICE, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_DEVICE), "Default") == 0 && s_reopened[0] == '\0' &&
+              s_reopens == 3,
+          "device wraps to Default");
+    ui_SettingsStep(UI_OPT_DEVICE, -1);
+    CHECK(strcmp(s_reopened, s_devNames[1]) == 0, "Left from Default: the last device");
+    /* a device no longer there counts as Default */
+    useConfig("[audio]\ndevice = \"Gone\"\n");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_DEVICE), "Gone") == 0, "the name as set");
+    ui_SettingsStep(UI_OPT_DEVICE, 1);
+    CHECK(strcmp(s_reopened, s_devNames[0]) == 0, "unknown steps from Default");
+    /* no devices (headless): Default only, nothing reopened */
+    s_devCount = 0;
+    useConfig("version = 1\n");
+    s_reopens = 0;
+    ui_SettingsStep(UI_OPT_DEVICE, 1);
+    CHECK(s_reopens == 0 && strcmp(ui_SettingsValueText(UI_OPT_DEVICE), "Default") == 0,
+          "no devices: Default");
+    /* other languages */
+    s_outputMode = 0;
+    ui_SetLanguage(UI_LANG_DE);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_DEVICE), "Standard") == 0, "Standard");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Automatisch (Stereo)") == 0,
+          "Automatisch (Stereo) (%s)", ui_SettingsValueText(UI_OPT_OUTPUT));
+    ui_SetLanguage(UI_LANG_EN);
+
+    /* the save */
+    useConfig("version = 1\n");
+    ui_SettingsStep(UI_OPT_MUSIC, -1);
+    ui_SettingsStep(UI_OPT_OUTPUT, 1);
+    CHECK(ui_SettingsSave() == 0, "save");
+    {
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL && ico_toml_get_float(t, "audio.music", 0) > 0.89 &&
+                  ico_toml_get_float(t, "audio.music", 0) < 0.91 &&
+                  strcmp(ico_toml_get(t, "audio.output") ? ico_toml_get(t, "audio.output") : "",
+                         "stereo") == 0 &&
+                  ico_toml_get_float(t, "audio.effects", 0) == 1.0,
+              "[audio] music, output, effects in the file");
+        ico_toml_free(t);
+    }
+    ico_audio_gain_reset();
+    s_outputMode = 0;
+}
+
 static void testCapture(void)
 {
     IcoBindings b;
@@ -1937,6 +2153,27 @@ static int render(void)
         press(0x10);
         CHECK(settle(mainL, 60), "back to the menu from %s", pages[i].name);
     }
+    /* Audio with a device name too long for its box (cut with an
+       ellipsis) and Mono set, the cursor on the device row */
+    ico_config_set_string("audio.device",
+                          "Speakers (USB Audio Interface with a very long product name)");
+    ico_config_set_string("audio.output", "mono");
+    ico_opt_reload();
+    lt_ext_Layout(mainL)->curItem = labels[1];
+    press(0x40);
+    for (int k = 0; k < 30; k++) {
+        frame(0);
+    }
+    for (int k = 0; k < 4; k++) {
+        press(0x4000);
+    }
+    frame(0);
+    snap("settings_audio_device.png");
+    press(0x10);
+    CHECK(settle(mainL, 60), "back to the menu from Audio");
+    ico_config_set_string("audio.device", "");
+    ico_config_set_string("audio.output", "auto");
+    ico_opt_reload();
     /* Controls -> Remap, then a capture in progress */
     lt_ext_Layout(mainL)->curItem = labels[2];
     press(0x40);
@@ -2048,6 +2285,7 @@ int main(int argc, char **argv)
     testCirclePortScreens();
     testCircleGameMenu();
     testValues();
+    testAudio();
     testVideoGate();
     testFramerate();
     testCapture();

@@ -30,9 +30,12 @@
  * the EE; on the host ICO_UNCACHED is the identity.  The DMA-status wait
  * yields the fiber a vsync at a time (the reply that ends it arrives with
  * the sound thread's next tick), and SgSndn2RemoteInit registers the host
- * IOP server (sndn2_host.c) before binding to it. */
+ * IOP server (sndn2_host.c) before binding to it.  _SgSeqSeVolume tags the
+ * voice music or effects for the port's gains (port/audio/mix_gain.h);
+ * the packets are the EE's. */
 #include <stdint.h>
 #include "sched.h"
+#include "mix_gain.h"
 #include "sndn2_host.h"
 
 #ifndef ICO_UNCACHED
@@ -1248,6 +1251,14 @@ int _SgSeqSeVolume(int voice, int *seq)
     if (*(unsigned short *)(slot + 0x2E) != 0) {
         l = (*(unsigned short *)(slot + 0x2E) << 8) | (l >> 7);
         r = (*(unsigned short *)(slot + 0x2E) << 8) | (r >> 7);
+    }
+    /* the port's music and effects gains (port/audio/mix_gain.h): the
+       voice's category from the sequence's kind, read as
+       _SgSetRealtimeVolume reads it (1 BGM, 4 SE); the packet is unchanged */
+    if ((*(volatile int *)seq & 5) == 1) {
+        ico_audio_tag_slot(voice, ICO_AUDIO_CAT_MUSIC);
+    } else if ((*(volatile int *)seq & 5) == 4) {
+        ico_audio_tag_slot(voice, ICO_AUDIO_CAT_EFFECTS);
     }
     _SgSetPkAdd(1, voice, l, r);
     return 0;

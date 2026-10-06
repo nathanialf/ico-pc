@@ -8,6 +8,9 @@
 #include <assert.h>
 #include <sound.h>
 
+/* port/audio/mix_gain.h: the voices of stream `no` are music, or effects for
+   Yorda's hint voice (101 to 104), for the port's gains */
+extern void ico_audio_tag_stream(int slot, int no);
 static inline void adpcmDiskNotReady(void);
 static inline void adpcmDiskReturnReady(void);
 static inline int adpcmOpenProc(CdvdBgReq *bg, AdpcmOpenReq *open);
@@ -146,6 +149,7 @@ found:
     for (j = 0; j < p->n; j++) {
         req.spuAddr = soundBufAdpcmChAlloc(obj, &req.ch);
         p->ch[j] = req.ch = adpcmSpuSlot[req.ch];
+        ico_audio_tag_stream(p->ch[j], no);
         req.attr = p->chAttr | 2;
         req.iopAddr = iopBuf + (0x800 / p->n) * j;
         req.iopSize = 0x5C000;

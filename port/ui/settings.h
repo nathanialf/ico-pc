@@ -114,6 +114,10 @@ typedef enum UiSettingsOpt {
     UI_OPT_MENU_TEXT, /* [game] classic_menu_text (P3) */
     /* Audio */
     UI_OPT_VOLUME,
+    UI_OPT_MUSIC,   /* [audio] music (port/audio/mix_gain.h) */
+    UI_OPT_EFFECTS, /* [audio] effects */
+    UI_OPT_OUTPUT,  /* [audio] output: Auto, Stereo, Mono (port/game/options.h) */
+    UI_OPT_DEVICE,  /* [audio] device: Default or a device name (audio_host.h) */
     /* Controls */
     UI_OPT_MOUSE_SENS,
     UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */

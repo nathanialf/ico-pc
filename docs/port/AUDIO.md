@@ -24,7 +24,8 @@
 | `sndn2_host.h`, `sndn2_host.c` | the SNDN2DRV host: RPC entry points, packet dispatcher, reply pages, pitch table |
 | `libsd_irx.h`, `libsd_irx.c` | the disc's libsd values: `LIBSD.IRX`'s reverb presets, work area sizes and idle voice block, read at start |
 | `stream.c`, `sndn2_internal.h` | the ADPCM stream engine (records, event queue, refill scheduler) and the PCM mixer |
-| `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device (window build), `volume.c` the output volume |
+| `audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; `wav.c` is the dump writer, `out_sdl.c` the SDL3 device and its choice (window build), `volume.c` the output volume |
+| `mix_gain.h`, `mix_gain.c` | the music, effects and film gains on the voices' volume registers and the PCM mixer, with each voice slot's category |
 | `test/` | the unit tests and the render benchmark (below) |
 
 The build has two static libraries: `ico_audio` (the SPU2) and `ico_sndn2`
@@ -421,6 +422,91 @@ unpacked into the build's scratch tree; `libpulse-dev` is unpacked too,
 and SDL enables that backend when the build host has `libpulse.so.0`. The
 stamp is `SDL3-<version>+audio`. The Windows prebuilt uses WASAPI.
 
+## Gains and output mode
+
+The SPU2 renders one stereo mix, so the music and effects volumes
+(`[audio] music`, `[audio] effects`, Settings > Audio) cannot scale a
+music bus after the fact. `mix_gain.c` scales the voices' own volume
+registers instead, by what each of the 48 voice slots (core * 24 + voice)
+is playing:
+
+- **Tags.** The sequencer's volume packet, `_SgSeqSeVolume`
+  (`sce/libsndn2/sound.c`), tags its voice music when the sequence is a
+  BGM (`(status & 5) == 1`, set by `SgBgmOpen`) and effects when it is an
+  SE (`== 4`), the test `_SgSetRealtimeVolume` makes. An ADPCM stream's
+  open, `adpcmDataSet` (`fumi/sound/adpcm_init.c`, which both
+  `AdpcmOpenSync` and `ReadSoundAdpcmFile` go through), tags each of its
+  voices by the stream's number: 101 to 104 are
+  `sound/ICO_ADPCM/event2/hint1_1.int` to `hint2_2.int`, Yorda's hint
+  voice, which counts as effects; 1 to 100 (`battle.int`, `e3/*`,
+  `event/*`, `event2/*`) are music. The names are the `adpcmFile` table's
+  in the PAL `SCES_507.60` (0x69 records of 0x40 bytes). A slot no tag has
+  reached is left alone. Sequenced voices and streams share the pool, so
+  a slot's tag is whatever last played on it.
+- **Apply.** The driver's two voice volume writes, packet 0x01 (the
+  sequencer's) and packet 0x40 (a stream's), call `ico_audio_gain_voice`:
+  the raw VOLL and VOLR are kept per slot and written scaled by the slot's
+  gain, `floor((level * q + 2048) / 4096)` on the word's low 15 bits as a
+  signed level, with `q` the gain in 1/4096 steps. At 100 % the written
+  word is the packet's word bit for bit, so the default mix, the `sndn2`
+  and `spu2_render_crc` goldens and the WAV dump are unchanged (a boot run's
+  dump at the default gains is byte-identical to one from before the
+  gains). A word in sweep mode (bit 15) is written unscaled and logged
+  once when a gain is below 100 %; the game sends only fixed levels
+  (`_SgSeqSeVolume`'s words have bit 15 clear unless the slot's +0x2E
+  attenuation byte has its top bit set; streams send levels below 0x4000).
+- **Live.** A gain change re-issues the kept volumes of that category's
+  slots at once. The driver's init (0x1E) and reset forget them.
+- **Film.** A film's sound is the PCM mixer's (`stream.c`, "PCM
+  streams"); a film gain scales its channel volumes there, the identity at
+  100 %. No setting changes it: a film's track mixes music and effects, so
+  films follow the master volume alone.
+
+The two gains are exported as `ICO_AUDIO_MUSIC` and `ICO_AUDIO_EFFECTS`
+and set in `ico_audio_host_init`; the Settings rows call
+`ico_audio_set_gain`.
+
+A boot run (the corpus's `pad-boot.txt`: boot, title, New Game; 1500
+ticks, 60 s of audio) was dumped at the defaults and at music 0.5, music 0,
+effects 0 and effects 0.5, and compared second by second. Where a run at
+effects 0 is byte-identical to the default (only music sounds: seconds 15
+to 20), music 0.5 is at 0.50 of the default's RMS and effects 0.5 is
+byte-identical; where a run at music 0 is byte-identical to the default
+(only effects: seconds 43 to 60), music 0.5 is byte-identical and effects
+0.5 is at 0.50. Seconds 21 to 28 mix both (music 0.5 keeps 0.88 to 1.00
+of the RMS, effects 0.5 0.53 to 0.69), and 29 to 42 are music over a
+faint effect (music 0.5 at 0.50, effects 0.5 byte-identical). The game's
+trace is the same in every run: the gains change only what is heard.
+
+**Output mode.** The PS2's stereo or mono choice is the game's
+(`soundOutputModeSet`, `fumi/sound/s_init.c`): in mono `_SgSeqSeVolume`
+gives both sides the larger level (the common context's 0x38 word, set by
+`SgSetOutputMode`), `AdpcmInterStereoVolumeSet` sends both of a stereo
+stream's channels to both sides, and the film player is opened mono
+(`common/src/main.c`). `[audio] output` (`"auto"`, `"stereo"`, `"mono"`;
+docs/port/OPTIONS.md, "Sound output") chooses it over the memory card's
+value; Auto leaves it to the game.
+
+## Output device
+
+`[audio] device` names the playback device (window build). The name is
+SDL's (`SDL_GetAudioDeviceName`); `out_sdl.c` opens the stream on the
+playback device with that name, or on SDL's default device
+(`SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, which follows the system's default)
+when the name is empty or no device has it (one log line). The key is
+exported as `ICO_AUDIO_DEVICE` and read in `ico_audio_sdl_open`.
+
+- `ico_audio_sdl_devices` lists the playback devices' names;
+  Settings > Audio > Output device steps through Default and them.
+- `ico_audio_sdl_reopen(name)` destroys the stream and opens it again on
+  the new device, playing; the queue refills with the next vsync's silence
+  as after a stall.
+- `SDL_EVENT_AUDIO_DEVICE_REMOVED` (`port/platform/window_host.c`) for the
+  device the stream plays on reopens it on the default device; the key is
+  kept for the next start.
+- The headless build has no devices: the functions are stubs in
+  `audio_host.c` (no devices, reopen fails).
+
 ## Render cost
 
 `spu2_render` runs on the simulation path (`host_loop.c` calls
@@ -643,6 +729,12 @@ All in `port/audio/test/`, registered in `port/audio/CMakeLists.txt`:
   reaching the presets, the idle block at byte 0x5000 and the cold-init
   ESA, and the fallback to the built-in values without a disc.
 - `volume`: the output volume scaling.
+- `mix_gain`: the gains (`mix_gain.h`): every fixed volume word unchanged
+  at 100 % (and every word of 0..0xFFFF through a music, effects and
+  untagged slot), the signed 15-bit scaling and its rounding, sweep words
+  passed through, the stream numbers' tags, the kept volumes written to
+  the SPU2's registers and re-issued on a change (only the changed
+  category's), forget, the film word.
 - `audio_pan`: the mirror-mode channel swap.
 - `spu2_render_crc`: the chunked renderer against the reference (above).
 

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "mix_gain.h"
 #include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
@@ -72,6 +73,8 @@ void ico_audio_host_init(void)
     const char *dump = getenv("ICO_AUDIO_DUMP");
     const char *enable = getenv("ICO_AUDIO");
     const char *vol = getenv("ICO_AUDIO_VOLUME");
+    const char *music = getenv("ICO_AUDIO_MUSIC");
+    const char *effects = getenv("ICO_AUDIO_EFFECTS");
 
     if (started) {
         return;
@@ -79,6 +82,13 @@ void ico_audio_host_init(void)
     started = 1;
     if (vol != NULL && vol[0] != '\0') {
         ico_audio_set_volume(strtod(vol, NULL));
+    }
+    /* [audio] music and effects (mix_gain.h), handed over by host_config.c */
+    if (music != NULL && music[0] != '\0') {
+        ico_audio_set_gain(ICO_AUDIO_CAT_MUSIC, strtod(music, NULL));
+    }
+    if (effects != NULL && effects[0] != '\0') {
+        ico_audio_set_gain(ICO_AUDIO_CAT_EFFECTS, strtod(effects, NULL));
     }
     ico_sndn2_host_register();
     if (dump != NULL && dump[0] != '\0') {
@@ -136,6 +146,28 @@ void ico_audio_host_vsync(int hz)
 #endif
     vsync_index++;
 }
+
+#ifndef ICO_AUDIO_SDL
+/* No SDL output (the headless build): no devices to choose from
+   (audio_host.h). */
+int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)
+{
+    (void)names;
+    (void)max;
+    return 0;
+}
+
+int ico_audio_sdl_reopen(const char *name)
+{
+    (void)name;
+    return -1;
+}
+
+void ico_audio_sdl_device_removed(uint32_t which)
+{
+    (void)which;
+}
+#endif
 
 /* Mirror mode (Phase 6A, docs/port/OPTIONS.md): the option lives in
    port/game/options.c; ico_audio_host_vsync swaps the channels of each

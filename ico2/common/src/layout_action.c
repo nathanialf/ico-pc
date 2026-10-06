@@ -288,6 +288,8 @@ int ui_MirrorScreenLayout(void);
 int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
 void ico_opt_mirror_reset(void);
+/* port/game/options.h: the Stereo/Mono row's choice, for [audio] output */
+void ico_opt_output_toggled(int mode);
 void la_host_new_game_go(void);
 
 /* la_vibe_select's confirm: the mirror screen in place of the start, which
@@ -2950,6 +2952,7 @@ int la_game_option(void)
                     mode = 1;
                 }
                 soundOutputModeSet(mode);
+                ico_opt_output_toggled(mode);
                 CUR_SE();
             }
             break;

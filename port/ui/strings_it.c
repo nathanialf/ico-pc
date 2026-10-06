@@ -267,4 +267,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_EXTRAS_MODELS] = "Modelli",
     [UI_STR_EXTRAS_CREDITS] = "Crediti",
     [UI_STR_EXTRAS_LOCKED_NOTE] = "Completa il gioco per sbloccare",
+    [UI_STR_OPT_MUSIC_VOL] = "Volume musica",
+    [UI_STR_OPT_EFFECTS_VOL] = "Volume effetti",
+    [UI_STR_OPT_OUTPUT] = "Uscita audio",
+    [UI_STR_VAL_STEREO] = "Stereo",
+    [UI_STR_VAL_MONO] = "Mono",
+    [UI_STR_OPT_DEVICE] = "Dispositivo di uscita",
+    [UI_STR_VAL_DEFAULT_DEVICE] = "Predefinito",
 };

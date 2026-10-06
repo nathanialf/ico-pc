@@ -1,6 +1,7 @@
 # port/save: the memory card (Phase 4D, docs/port/SAVES.md): libmc over a
 # host folder (mc_host.c), replacing port/null's empty card. The game's own
-# fumi/ios/mcard.c runs on it unchanged.
+# fumi/ios/mcard.c runs on it unchanged but for one ICO_HOST line, the
+# [audio] output hook (port/game/options.h ico_opt_output_card).
 add_library(ico_save STATIC mc_host.c)
 # host_config.h (saves=) and host_loop.h (the vsync callback list)
 target_include_directories(ico_save
@@ -16,7 +17,8 @@ if(TARGET ico_pc)
 endif()
 
 # libmc's calls as mcard.c issues them, then mcard.c itself (compiled
-# unchanged, with the game's options) on the scheduler over the card folder.
+# with the game's options; ico_options for its [audio] output hook) on the
+# scheduler over the card folder.
 add_executable(save_test
     test/save_test.c
     ../platform/host_config.c
@@ -29,7 +31,7 @@ target_include_directories(save_test PRIVATE ${_ico_save_incs} "${CMAKE_SOURCE_D
 target_compile_definitions(save_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(save_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(save_test PRIVATE ico_save ico_platform)
+target_link_libraries(save_test PRIVATE ico_save ico_platform ico_options)
 if(WIN32)
     target_link_libraries(save_test PRIVATE comdlg32 user32)
 endif()

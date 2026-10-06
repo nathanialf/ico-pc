@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "audio_host.h"
 #include "config.h"
 #include "host_config.h"
 #include "host_fs.h"
@@ -388,6 +389,12 @@ int ico_window_pump(void)
                 }
             } else {
                 ico_input_sdl_event(&e);
+            }
+            break;
+        case SDL_EVENT_AUDIO_DEVICE_REMOVED:
+            /* [audio] device: the chosen device unplugged (out_sdl.c) */
+            if (!e.adevice.recording) {
+                ico_audio_sdl_device_removed(e.adevice.which);
             }
             break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:

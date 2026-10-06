@@ -252,7 +252,8 @@ static void test_save(void)
         CHECK(strstr(text, "version = 1\n") != NULL);
         CHECK(strstr(text, "[video]\npreset = \"original\"\nvsync = true\nfullscreen = false\n") !=
               NULL);
-        CHECK(strstr(text, "[audio]\nenabled = true\nvolume = 1.0\n") != NULL);
+        CHECK(strstr(text, "[audio]\nenabled = true\nvolume = 1.0\nmusic = 1.0\neffects = 1.0\n"
+                           "output = \"auto\"\ndevice = \"\"\n") != NULL);
         CHECK(strstr(text, "[game]\nlanguage = \"de\"\n") != NULL);
         CHECK(strstr(text, "[paths]\niso = \"\"\n") != NULL);
         free(text);
@@ -261,6 +262,26 @@ static void test_save(void)
     CHECK(ico_toml_get_int(t, "version", 0) == ICO_CONFIG_VERSION);
     CHECK_STR(ico_toml_get(t, "game.language"), "de");
     ico_toml_free(t);
+
+    /* the sound options round trip (docs/port/AUDIO.md, "Gains and output
+       mode", "Output device") */
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_get_float("audio.music", 0.0) == 1.0);
+    CHECK(ico_config_get_float("audio.effects", 0.0) == 1.0);
+    CHECK_STR(ico_config_get_string("audio.output", "?"), "auto");
+    CHECK_STR(ico_config_get_string("audio.device", "?"), "");
+    CHECK(ico_config_set_float("audio.music", 0.3) == 0);
+    CHECK(ico_config_set_float("audio.effects", 0.7) == 0);
+    CHECK(ico_config_set_string("audio.output", "mono") == 0);
+    CHECK(ico_config_set_string("audio.device", "USB Audio \"Headset\" #2") == 0);
+    CHECK(ico_config_save() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_get_float("audio.music", 0.0) > 0.2999 &&
+          ico_config_get_float("audio.music", 0.0) < 0.3001);
+    CHECK(ico_config_get_float("audio.effects", 0.0) > 0.6999 &&
+          ico_config_get_float("audio.effects", 0.0) < 0.7001);
+    CHECK_STR(ico_config_get_string("audio.output", "?"), "mono");
+    CHECK_STR(ico_config_get_string("audio.device", "?"), "USB Audio \"Headset\" #2");
 
     /* a hand-edited file: comments, an unknown key, 4C's bindings survive a
        save that changes one value */
@@ -397,6 +418,10 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("video.fullscreen", 1) == 0);
     CHECK(ico_config_get_bool("audio.enabled", 0) == 1);
     CHECK(ico_config_get_float("audio.volume", 0.0) == 1.0);
+    CHECK(ico_config_get_float("audio.music", 0.0) == 1.0);
+    CHECK(ico_config_get_float("audio.effects", 0.0) == 1.0);
+    CHECK_STR(ico_config_get_string("audio.output", "?"), "auto");
+    CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
     /* a second run does nothing, and a player's edited file is kept */

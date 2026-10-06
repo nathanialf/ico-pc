@@ -71,6 +71,13 @@ with the values in use the next time you save.
 | line | values | what it does |
 | --- | --- | --- |
 | Volume | 0 % to 100 % | saved as `[audio] volume` and applied at once: the SDL output scales its blocks by it (docs/port/AUDIO.md, "Output") |
+| Music volume | 0 % to 100 % | the music: the background music and the streamed music and scene audio. Saved as `[audio] music` and heard at once (docs/port/AUDIO.md, "Gains and output mode") |
+| Effects volume | 0 % to 100 % | the sound effects and Yorda's hint voice. Saved as `[audio] effects`, heard at once |
+| Sound output | Auto, Stereo, Mono | the PS2's stereo or mono choice. Auto (the default) is the game's own setting, which the pause menu's Options screen changes and the memory card keeps; the row then reads "Auto (Stereo)" or "Auto (Mono)". Stereo or Mono wins over the card's choice. Saved as `[audio] output` |
+| Output device | Default, then each playback device by name | where the sound plays; Default follows the system's default device. Changes at once; saved as `[audio] device`. A long name is cut with "…". When the chosen device is unplugged the sound moves to the default device (the setting stays). Only the window build has devices to choose from |
+
+Films follow the Volume row only: their sound track mixes music and
+effects.
 
 **Controls**
 

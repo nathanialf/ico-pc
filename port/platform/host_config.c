@@ -517,8 +517,18 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
         if (ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
             t = ico_toml_load(toml_path);
         }
+        /* the audio host's gains and device (port/audio/audio_host.h) */
         if (t != NULL && ico_toml_get(t, "audio.volume") != NULL) {
             put_env("ICO_AUDIO_VOLUME", ico_toml_get(t, "audio.volume"));
+        }
+        if (t != NULL && ico_toml_get(t, "audio.music") != NULL) {
+            put_env("ICO_AUDIO_MUSIC", ico_toml_get(t, "audio.music"));
+        }
+        if (t != NULL && ico_toml_get(t, "audio.effects") != NULL) {
+            put_env("ICO_AUDIO_EFFECTS", ico_toml_get(t, "audio.effects"));
+        }
+        if (t != NULL && ico_toml_get(t, "audio.device") != NULL) {
+            put_env("ICO_AUDIO_DEVICE", ico_toml_get(t, "audio.device"));
         }
         ico_toml_free(t);
         put_env("ICO_FIXED_CLOCK", ico_host_fixed_clock(ini) ? "1" : "0");

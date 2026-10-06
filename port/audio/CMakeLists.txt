@@ -6,7 +6,8 @@ add_library(ico_audio STATIC
     spu2.c
     spu2_sd.c
     spu2_tables.c
-    volume.c)
+    volume.c
+    mix_gain.c)
 target_include_directories(ico_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(ico_audio PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
@@ -27,8 +28,16 @@ add_executable(volume_test test/volume_test.c)
 target_compile_options(volume_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(volume_test PRIVATE ico_audio)
 
+# mix_gain_test: the music, effects and film gains on the voice volume
+# words (mix_gain.h): the identity at 100 %, the scaling, sweep words, the
+# cache and its re-issue
+add_executable(mix_gain_test test/mix_gain_test.c)
+target_compile_options(mix_gain_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(mix_gain_test PRIVATE ico_audio)
+
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME volume COMMAND volume_test)
+    add_test(NAME mix_gain COMMAND mix_gain_test)
     add_test(NAME adpcm COMMAND adpcm_test)
     add_test(NAME spu2 COMMAND spu2_test)
 endif()

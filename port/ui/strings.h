@@ -301,6 +301,15 @@ typedef enum UiStrId {
     UI_STR_EXTRAS_MODELS,
     UI_STR_EXTRAS_CREDITS,
     UI_STR_EXTRAS_LOCKED_NOTE,
+    /* Settings > Audio (docs/port/SETTINGS.md); Stereo and Mono are the
+       game's own words (UI_STR_MT_STEREO, UI_STR_MT_MONO) */
+    UI_STR_OPT_MUSIC_VOL,
+    UI_STR_OPT_EFFECTS_VOL,
+    UI_STR_OPT_OUTPUT,
+    UI_STR_VAL_STEREO,
+    UI_STR_VAL_MONO,
+    UI_STR_OPT_DEVICE,
+    UI_STR_VAL_DEFAULT_DEVICE,
     UI_STR_COUNT
 } UiStrId;
 

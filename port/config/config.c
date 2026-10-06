@@ -198,6 +198,18 @@ int ico_config_save(void)
     if (!ico_toml_has(toml, "audio.volume")) {
         r |= ico_toml_set_float(toml, "audio.volume", 1.0);
     }
+    if (!ico_toml_has(toml, "audio.music")) {
+        r |= ico_toml_set_float(toml, "audio.music", 1.0);
+    }
+    if (!ico_toml_has(toml, "audio.effects")) {
+        r |= ico_toml_set_float(toml, "audio.effects", 1.0);
+    }
+    if (!ico_toml_has(toml, "audio.output")) {
+        r |= ico_toml_set_string(toml, "audio.output", "auto");
+    }
+    if (!ico_toml_has(toml, "audio.device")) {
+        r |= ico_toml_set_string(toml, "audio.device", "");
+    }
     if (!ico_toml_has(toml, "game.language")) {
         r |= ico_toml_set_string(toml, "game.language", "auto");
     }
@@ -228,9 +240,15 @@ static const char first_run_text[] =
     "fullscreen = false\n"
     "\n"
     "[audio]\n"
-    "# volume is 0.0 to 1.0.\n"
+    "# volume, music and effects are 0.0 to 1.0; output is \"auto\" (the memory\n"
+    "# card's choice), \"stereo\" or \"mono\"; device is a device name, empty for\n"
+    "# the system's default.\n"
     "enabled = true\n"
     "volume = 1.0\n"
+    "music = 1.0\n"
+    "effects = 1.0\n"
+    "output = \"auto\"\n"
+    "device = \"\"\n"
     "\n"
     "[game]\n"
     "# \"auto\" follows the system; or en, fr, de, it, es.\n"

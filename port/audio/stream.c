@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "iop_ram.h"
+#include "mix_gain.h"
 #include "sndn2_internal.h"
 #include "spu2.h"
 #include "spu2_sd.h"
@@ -179,8 +180,8 @@ void st_adpcm_volume(uint32_t m0, uint32_t m1, uint32_t w3) /* 0x1DB4 */
 
     FOR_MASKED(slot, m0, m1)
     {
-        spu2_sd_set_param(vsel(slot, SPU2_SD_VPARAM_VOLL), (uint16_t)(w3 >> 16));
-        spu2_sd_set_param(vsel(slot, SPU2_SD_VPARAM_VOLR), (uint16_t)(w3 & 0xFFFF));
+        /* scaled by the stream's music or effects gain (mix_gain.h) */
+        ico_audio_gain_voice((int)slot, (uint16_t)(w3 >> 16), (uint16_t)(w3 & 0xFFFF));
     }
 }
 
@@ -389,6 +390,9 @@ static void pcm_mix(uint8_t *half)
     for (ch = 0; ch < SNDN2_PCM_CHANNELS; ch++) {
         StPcm *c = &pcm[ch];
         uint32_t shift = c->ctl >> 16;
+        /* the film gain (mix_gain.h), the channel's own words at 100 % */
+        uint32_t vol_l = ico_audio_gain_pcm(c->vol_l);
+        uint32_t vol_r = ico_audio_gain_pcm(c->vol_r);
         const uint8_t *src;
         int i;
 
@@ -416,8 +420,8 @@ static void pcm_mix(uint8_t *half)
             /* mult (its low word), srl 15, add, sh: the low 16 bits,
                wrapping; unsigned, so a volume word the EE sent out of range
                wraps as on the IOP instead of overflowing */
-            lv = (uint16_t)(lv + ((c->vol_l * (uint32_t)x) >> 15));
-            rv = (uint16_t)(rv + ((c->vol_r * (uint32_t)x) >> 15));
+            lv = (uint16_t)(lv + ((vol_l * (uint32_t)x) >> 15));
+            rv = (uint16_t)(rv + ((vol_r * (uint32_t)x) >> 15));
             l[0] = (uint8_t)lv;
             l[1] = (uint8_t)(lv >> 8);
             r[0] = (uint8_t)rv;

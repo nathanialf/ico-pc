@@ -53,14 +53,15 @@ at start-up, so a later lookup such as `ico_host_saves_dir` has no side
 effect), so `main_host.c`, which reads only the ini, sees the layered result; a
 toml `true` or `false` reads as `1` or `0` there. Keys with no ini name
 (most of `[video]`, `[game]`, `[input]`, `[gameplay]`, `audio.volume`,
-`version`) come from the toml alone. `ico_config_get_*` applies the same
+`audio.music`, `audio.effects`, `audio.output`, `audio.device`, `version`) come from the toml alone. `ico_config_get_*` applies the same
 order. `ico_config_set_*` changes the toml copy only, so a key the ini
 overrides reads back as the ini's value. Loading any other ini path with
 `ico_ini_load` gives the plain ini.
 
 The command-line options of `ico_pc` (`--iso`, `--ticks`, ...) sit above
 both. The environment variables other libraries read (`ICO_ISO`,
-`ICO_AUDIO`, `ICO_AUDIO_DUMP`, `ICO_AUDIO_VOLUME`, `ICO_FIXED_CLOCK`,
+`ICO_AUDIO`, `ICO_AUDIO_DUMP`, `ICO_AUDIO_VOLUME`, `ICO_AUDIO_MUSIC`,
+`ICO_AUDIO_EFFECTS`, `ICO_AUDIO_DEVICE`, `ICO_FIXED_CLOCK`,
 `ICO_START_STAGE`, `ICO_UI_POPUP_TEST`, `ICO_RD_DUMP_*`) are exported from
 the layered result at ini load; they are an internal hand-over, not a
 user-facing switch.
@@ -84,6 +85,10 @@ user-facing switch.
 | `[video] video_mode` | | `"pal50"` | the answer to the boot 50/60 Hz screen, which the port skips: `"pal50"` (`systemStatus[0]` = 1, the PAL default) or `"60hz"` (0). When absent the game's own value is used (50 Hz, or the memory card's); an explicit value wins over the card's system file. The Settings menu sets it (docs/port/SETTINGS.md) |
 | `[audio] enabled` | `audio` | `true` | `false` (`audio=0`) opens no audio device; the sound driver still runs |
 | `[audio] volume` | | `1.0` | exported as `ICO_AUDIO_VOLUME`; the SDL output scales its blocks by it, live (docs/port/AUDIO.md, "Output") |
+| `[audio] music` | | `1.0` | 0.0 to 1.0, the music's gain on the voices' volumes (background music sequences and the streams other than Yorda's hint voice); exported as `ICO_AUDIO_MUSIC`. The Settings menu steps it live (docs/port/AUDIO.md, "Gains and output mode") |
+| `[audio] effects` | | `1.0` | 0.0 to 1.0, the sound effects' and Yorda's hint voice's gain; exported as `ICO_AUDIO_EFFECTS` |
+| `[audio] output` | | `"auto"` | `"auto"` (the game's own stereo or mono choice, from the memory card and the Options screen), `"stereo"` or `"mono"` (wins over the card's; the Options screen's toggle is written back here). Read by `ico_opt_output_mode` (docs/port/OPTIONS.md, "Sound output") |
+| `[audio] device` | | `""` | the playback device's name as SDL reports it; empty, or a name no device has (logged once), is the system's default. Exported as `ICO_AUDIO_DEVICE`; the window build only (docs/port/AUDIO.md, "Output device") |
 | `[input]` and `[input.*]` | | | the bindings, dead zones and mouse settings (docs/port/INPUT.md); the Settings menu's remap screen writes `[input.kb]`, `[input.mouse]`, `[input.pad]` and `mouse_sensitivity` |
 | `[gameplay] stick_fix`, `yorda_safe`, `mirror` | | `false` | the gameplay options (docs/port/OPTIONS.md). `mirror` is only the value before a run starts and at the title; a run's value comes from the New Game screen or the loaded slot |
 | `[gameplay] developer_mode` | | `false` | the debug menu and option table (docs/port/DEVELOPER_MODE.md) |

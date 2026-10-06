@@ -13,6 +13,7 @@ behaviour, and the game code reads an option only through its getter.
 | `[gameplay] yorda_safe` | `false` | `ico_opt_yorda_safe` / `ico_opt_set_yorda_safe` | the hook sites below |
 | `[gameplay] mirror` | `false` | `ico_opt_mirror` / `ico_opt_set_mirror` (also `ico_opt_set_mirror_listener`, `ico_opt_mirror_reset`, `ico_mirror_slot_*`) | the run's value, chosen at New Game (below): `ico_input_frame` negates stick X through `ico_input_vpad_to_frame`; `port/audio/audio_host.c` swaps left and right; the renderer flips through the listener (`rd_SetMirror`) |
 | `[gameplay] developer_mode` | `false` | `ico_opt_developer_mode` / `ico_opt_set_developer_mode` | `Main` (`common/src/main.c`) calls `debug_Menu`; `debug_PrintfDummy` draws; `debugSceOpen` uses `host0:` (`<pref>/dev/`); `debug_VariableInit` may load the saved option table; the trace's first line records it (`port/platform/trace_host.c`); achievements are suspended while it is on and for the rest of the run (docs/port/DEVELOPER_MODE.md, docs/port/ACHIEVEMENTS.md) |
+| `[audio] output` | `"auto"` | `ico_opt_output_mode` / `ico_opt_set_output_mode` (also `ico_opt_output_resolve`, `ico_opt_output_card`, `ico_opt_output_toggled`) | the Settings menu's Sound output row and install, the memory card hook in `fumi/ios/mcard.c`, the Options screen hook in `common/src/layout_action.c` ("Sound output" below) |
 | `[dev] debug_option` (int) | `0` | `ico_opt_debug_option` (read on each call, no setter) | `debug_VariableInit` in developer mode: a value other than 0 loads `<pref>/dev/thisIsYourDebugOption` |
 
 ## Mirror mode
@@ -107,6 +108,35 @@ make the story fail with the option on, since no script waits for them.
 The flags a capture sets (`gflagChk(390)`, `391`, `394`, `0x189`) are read
 in `backStage.c` and `enemy_act.c`. The option's behaviour in play is
 listed in docs/TODO.md.
+
+## Sound output (`[audio] output`)
+
+`ico_opt_output_mode` reads `[audio] output`: `"auto"` (`ICO_OUTPUT_AUTO`,
+the default), `"stereo"` or `"mono"` (the game's `soundOutputModeGet`
+values 0 and 1); any other text reads as auto. The game's own mode lives in
+`fumi/sound/s_init.c` (`outputMode`); the memory card's system file keeps
+it (`McProductFile.outputMode`, written by `product_write` from
+`soundOutputModeGet`, read back by `gameblock_read`,
+`fumi/ios/mcard.c`), and the pause menu's Options screen toggles it
+(`la_game_option`, row 308, `common/src/layout_action.c`). The port keeps
+the key and the card from disagreeing:
+
+- Auto: nothing changes. The card's value and the Options row act as on
+  the PS2; the port only records the game's value (`ico_opt_output_card`,
+  `ico_opt_output_toggled`) so that stepping Settings back to Auto can
+  restore it.
+- Stereo or Mono: the value is the game's from the Settings menu's install
+  on (`ui_SettingsInstall`), and the hook after the card's system file is
+  read (`soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()))`,
+  one line in `gameblock_read`) puts it back over the card's. The next save
+  then writes it to the card. When the player toggles the Options row the
+  key follows the new value and `config.toml` is saved at once
+  (`ico_opt_output_toggled`), rather than when the screen is left, since
+  Triangle and Circle leave that screen through the layout's own link,
+  which runs no port code.
+
+docs/port/AUDIO.md, "Gains and output mode", has what the mode does to
+the sound.
 
 ## Tests
 
