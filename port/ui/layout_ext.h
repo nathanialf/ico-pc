@@ -82,7 +82,7 @@ float lt_ext_RowSize(int index);
    set-up fills for every stage, since every stage's layout range covers
    the menus), the texel rectangle that row's.  The face buttons are
    text/buttons.tm2's four (the save prompts' OK and Back, the key config
-   screen's columns), L1 and R1 the key config screen's labels
+   screen's columns), L1, R1, L2 and R2 the key config screen's labels
    (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01).
    When the loaded tables are not the PAL ones (the row's rectangle
    differs) the glyph draws nothing. */
@@ -93,6 +93,8 @@ typedef enum LtExtGlyph {
     LT_GLYPH_TRIANGLE,
     LT_GLYPH_L1,
     LT_GLYPH_R1,
+    LT_GLYPH_L2,
+    LT_GLYPH_R2,
     LT_GLYPH_LEFT,
     LT_GLYPH_RIGHT,
     LT_GLYPH_COUNT

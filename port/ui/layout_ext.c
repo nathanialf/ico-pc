@@ -196,7 +196,7 @@ float lt_ext_RowSize(int index)
 /* The glyphs' sources in the PAL tables (texProperty rows, checked against
    the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
    Triangle beside OK (181) and Back (183), 343 and 344 the key config
-   screen's Square and Circle, 349 and 346 its L1 and R1 labels, 301 and 302
+   screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2 labels, 301 and 302
    the Options screen's value arrows) and the height each has beside the
    game's 27-unit labels (dispH, y units; the width is the rectangle's, a
    pixel a texel). */
@@ -209,6 +209,8 @@ static const struct {
     {184, 0, 0, 32, 30, 30},     /* Triangle */
     {349, 420, 240, 40, 15, 30}, /* L1, menu_PAL_02 */
     {346, 340, 240, 40, 15, 30}, /* R1 */
+    {348, 460, 240, 40, 15, 30}, /* L2 */
+    {347, 380, 240, 40, 15, 30}, /* R2 */
     {301, 490, 130, 20, 20, 40}, /* Left, menu_PAL_01 */
     {302, 490, 150, 20, 20, 40}, /* Right */
 };

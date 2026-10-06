@@ -513,7 +513,7 @@ static void fakeTables(void)
         texProperty[r].texV = uv[1];
         texProperty[r].texW = uv[2];
         texProperty[r].texH = uv[3];
-        texProperty[r].texNo = g <= LT_GLYPH_TRIANGLE ? 1 : g <= LT_GLYPH_R1 ? 2 : 3;
+        texProperty[r].texNo = g <= LT_GLYPH_TRIANGLE ? 1 : g <= LT_GLYPH_R2 ? 2 : 3;
     }
 }
 
@@ -2521,6 +2521,40 @@ static int fillRow(UiSettingsPage page)
     return last;
 }
 
+/* every glyph's source row and texel rectangle, as the PAL texProperty
+   table holds them (the boot ELF's rows: 182/344/343/184 the face buttons on
+   buttons.tm2, 349/346/348/347 L1 R1 L2 R2 on menu_PAL_02 at v 240, 301/302
+   the arrows on menu_PAL_01), and the box each draws beside a 27-unit label */
+static void testGlyphSources(void)
+{
+    static const struct {
+        int glyph, row, u, v, w, h, boxW, boxH;
+    } k[] = {
+        {LT_GLYPH_CROSS, 182, 32, 30, 32, 30, 32, 30},
+        {LT_GLYPH_CIRCLE, 344, 0, 30, 32, 30, 32, 30},
+        {LT_GLYPH_SQUARE, 343, 32, 0, 32, 30, 32, 30},
+        {LT_GLYPH_TRIANGLE, 184, 0, 0, 32, 30, 32, 30},
+        {LT_GLYPH_L1, 349, 420, 240, 40, 15, 40, 30},
+        {LT_GLYPH_R1, 346, 340, 240, 40, 15, 40, 30},
+        {LT_GLYPH_L2, 348, 460, 240, 40, 15, 40, 30},
+        {LT_GLYPH_R2, 347, 380, 240, 40, 15, 40, 30},
+        {LT_GLYPH_LEFT, 301, 490, 130, 20, 20, 20, 40},
+        {LT_GLYPH_RIGHT, 302, 490, 150, 20, 20, 20, 40},
+    };
+
+    CHECK(sizeof(k) / sizeof(k[0]) == LT_GLYPH_COUNT, "a source listed for every glyph");
+    for (unsigned i = 0; i < sizeof(k) / sizeof(k[0]); i++) {
+        int uvwh[4], bw = 0, bh = 0;
+        int row = lt_ext_GlyphSource(k[i].glyph, uvwh);
+        lt_ext_GlyphBox(k[i].glyph, UI_MENU_TEXT_SIZE, &bw, &bh);
+        CHECK(row == k[i].row && uvwh[0] == k[i].u && uvwh[1] == k[i].v && uvwh[2] == k[i].w &&
+                  uvwh[3] == k[i].h,
+              "glyph %d: row %d (%d,%d %dx%d)", k[i].glyph, row, uvwh[0], uvwh[1], uvwh[2],
+              uvwh[3]);
+        CHECK(bw == k[i].boxW && bh == k[i].boxH, "glyph %d: box %dx%d", k[i].glyph, bw, bh);
+    }
+}
+
 static void testGallery(void)
 {
     gallery_SetEngine(&kFakeEngine);
@@ -3607,6 +3641,7 @@ int main(int argc, char **argv)
     testCapture();
     testBootSkip();
     testExtras();
+    testGlyphSources();
     testGallery();
     testList();
     testGameOptions();
