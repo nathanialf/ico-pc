@@ -27,6 +27,11 @@
  *            FEED128 equal the GS integer formula exactly every frame
  *   dump     a frame replayed, dumped, loaded and replayed again gives the
  *            same DISPLAY bytes; the dump is left for rd_replay_tool
+ *   runs     (package PC) consecutive screen-prim commands under one state
+ *            are one draw: six overlapping, differently coloured blended
+ *            sprites drawn merged give the bytes of six sequential draws;
+ *            two DATE sprites (the second retakes the snapshot), an AFAIL
+ *            split and a scissor change each end a run (draws counted)
  *   aa1      PRIM.AA1 (package AA1) against a CPU coverage reference, in
  *            GS pixels at the integer sample points, As on the 0x80 scale
  *            (grey 0x80 LERPed over black writes As itself): a line with
@@ -202,6 +207,110 @@ static void testDateFlat(void)
     CHECK(l1[1] == 200 && r1[1] == 20, "DATM 0 draws where it is clear (%u, %u)", l1[1], r1[1]);
     CHECK(tri[0] == 0 && tri[1] == 0 && tri[2] == 200, "flat triangle %u,%u,%u", tri[0], tri[1],
           tri[2]);
+}
+
+/* ------------------------------------------------------- screen-prim runs */
+
+/* Package PC: consecutive screen-prim commands under the same state are one
+ * draw (rd_replay.c doScreen).  The frame is replayed merged and with
+ * merging off (rd__SetScreenMerge); WORK0 must be the same bytes, and the
+ * draws are counted (RdPerfRecord screenCmds, screenDraws). */
+static void runReplay(const RdFrame *f, bool merge, uint8_t *dst, uint32_t *cmds, uint32_t *draws)
+{
+    rd__SetScreenMerge(merge);
+    rd__ReplayFrame(f, 0, false);
+    rd__SetScreenMerge(true);
+    *cmds = g_rdPerf.screenCmds;
+    *draws = g_rdPerf.screenDraws;
+    uint32_t w, h;
+    const uint8_t *img = readTarget(RD_TARGET_WORK0, &w, &h);
+    if (img) {
+        memcpy(dst, img, (size_t)256 * 128 * 4);
+    }
+}
+
+static void checkRun(const char *what, uint32_t wantCmds, uint32_t wantDraws)
+{
+    static uint8_t merged[256 * 128 * 4], seq[256 * 128 * 4];
+    uint32_t c0, d0, c1, d1;
+    memset(merged, 0, sizeof(merged));
+    memset(seq, 0xFF, sizeof(seq));
+    const RdFrame *f = rd__LastFrame();
+    CHECK(f != NULL, "%s: no closed frame", what);
+    if (!f) {
+        return;
+    }
+    runReplay(f, true, merged, &c0, &d0);
+    runReplay(f, false, seq, &c1, &d1);
+    size_t diff = 0;
+    for (size_t i = 0; i < sizeof(merged); i++) {
+        diff += merged[i] != seq[i];
+    }
+    printf("  %s: %u screen-prim draws one per command, %u merged; %zu bytes differ\n", what, c0,
+           d0, diff);
+    CHECK(diff == 0, "%s: the merged replay differs from the sequential one in %zu bytes", what,
+          diff);
+    CHECK(c0 == wantCmds && d0 == wantDraws, "%s: %u draws merged into %u, expected %u into %u",
+          what, c0, d0, wantCmds, wantDraws);
+    CHECK(c1 == wantCmds && d1 == wantCmds, "%s: unmerged %u draws, %u recorded, expected %u", what,
+          c1, d1, wantCmds);
+}
+
+/* a sprite of colour i (rgb from the index, alpha a) */
+static void runSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t i, uint8_t a)
+{
+    const uint8_t c[4] = {(uint8_t)(40 + 70 * (i % 3)), (uint8_t)(30 + 50 * (i % 5)),
+                          (uint8_t)(220 - 35 * (i % 6)), a};
+    sprite(256, 128, x0 * 16, y0 * 16, x1 * 16, y1 * 16, c, 0, 0, 0, 0);
+}
+
+static void testScreenRuns(void)
+{
+    static const uint8_t black[4] = {0, 0, 0, 0};
+    /* overlapping, differently coloured sprites under one state, blended
+     * (LERP As: the result depends on the order), alpha above and below
+     * 0x80: one run, one draw, the bytes of six draws */
+    rd_BeginFrame();
+    rd_SelectList(5);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    opaque2D();
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_TextureOff();
+    for (uint32_t i = 0; i < 6; i++) {
+        runSprite(10 + (int32_t)i * 17, 8 + (int32_t)i * 9, 90 + (int32_t)i * 19,
+                  70 + (int32_t)i * 7, i, (uint8_t)(0x30 + i * 0x18));
+    }
+    rd_EndFrame(0);
+    checkRun("overlapping run", 6, 1);
+
+    /* the boundaries: a run of two; two DATE sprites under the same state
+     * (the first writes alpha, so the second retakes the snapshot); two
+     * AFAIL FB_ONLY sprites (two passes each, never merged); two sprites,
+     * a scissor change, two more */
+    rd_BeginFrame();
+    rd_SelectList(5);
+    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    opaque2D();
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_TextureOff();
+    runSprite(0, 0, 120, 60, 0, 0x90);
+    runSprite(60, 20, 200, 100, 1, 0x20);
+    rd_TestGs(RD_TEST_DATE0);
+    runSprite(20, 10, 160, 90, 2, 0xA0);
+    runSprite(40, 30, 240, 120, 3, 0x50);
+    rd_TestGs(RD_TEST_AT_GT64_FBONLY);
+    runSprite(5, 40, 150, 110, 4, 0x60);
+    runSprite(80, 0, 250, 80, 5, 0x70);
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    runSprite(0, 50, 100, 128, 0, 0x40);
+    runSprite(30, 70, 130, 128, 1, 0x88);
+    rd_Scissor(16, 8, 200, 100);
+    runSprite(0, 0, 256, 128, 2, 0x30);
+    runSprite(50, 30, 220, 110, 3, 0x58);
+    rd_EndFrame(0);
+    checkRun("run boundaries", 2 + 2 + 4 + 4, 1 + 2 + 4 + 2);
 }
 
 /* -------------------------------------------------------------------- AA1 */
@@ -951,9 +1060,8 @@ static void testPipelines(void)
             RdDrawPass dp[2];
             const RhiFormat depth = dz ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
             for (int prim = 0; prim < 2; prim++) {
-                const int np = rd__PlanScreenDraw(
-                    &s, prim ? RD_PRIM_LINES : RD_PRIM_TRIANGLES, RD_SPACE_UI,
-                    RHI_FMT_RGBA8_UNORM, depth, dp);
+                const int np = rd__PlanScreenDraw(&s, prim ? RD_PRIM_LINES : RD_PRIM_TRIANGLES,
+                                                  RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, depth, dp);
                 for (int i = 0; i < np; i++) {
                     int found = 0;
                     for (uint32_t j = 0; j < ns; j++) {
@@ -967,8 +1075,8 @@ static void testPipelines(void)
                     for (uint32_t j = 0; j < ns; j++) {
                         found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
                     }
-                    CHECK(prim || found, "font draw under colour mask 7 (depth %d) is not enumerated",
-                          dz);
+                    CHECK(prim || found,
+                          "font draw under colour mask 7 (depth %d) is not enumerated", dz);
                 }
             }
             s.ds.colorMask = 0xF;
@@ -1020,6 +1128,7 @@ int main(int argc, char **argv)
     printf("rd_pixel_test: adapter %s\n", rhi_AdapterName());
     testOrder();
     testDateFlat();
+    testScreenRuns();
     testSprites();
     testFont(dir);
     testStq();

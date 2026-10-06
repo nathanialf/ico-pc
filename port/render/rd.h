@@ -1054,6 +1054,10 @@ typedef struct RdPerfRecord {
      * layout's stream buffer is the mesh arena chunk or the ring);
      * textureGroups: one per (texture, sampler, DATE snapshot) set. */
     uint32_t uniformGroups, textureGroups;
+    /* Package PC: screen-prim draws.  screenCmds: the draws the screen-prim
+     * commands make one by one (a command's passes); screenDraws: the draws
+     * recorded after consecutive commands under the same state are merged */
+    uint32_t screenCmds, screenDraws;
     uint64_t uploadBytes;     /* everything written into the upload ring */
     uint64_t meshUploadBytes; /* of which mesh streams and indices */
     double gpuMs;             /* first timestamp to last */

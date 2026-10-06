@@ -1829,6 +1829,84 @@ stats lines to every second for 30 s.
   check same-target render passes under dynamic rendering in this version:
   for those the barrier counts above and `rd_perf`'s are the check.
 
+- Consecutive screen-prim commands under the same state are one draw
+  (package PC; `doScreen`, `joinsRun`, `flushScreenRun` in `rd_replay.c`).
+  A command whose plan is one draw (one pass, not the AFAIL split; with
+  PRIM.AA1 not the split interior and fringe draws) opens a run or joins
+  the open one when the run's draw would bind exactly what the command's
+  would: the same render pass, prim type (`RD_PRIM_*`) and vertex format
+  (sprite, STQ or AA1 vertex), the same pipeline key (which holds the
+  AA1, STQ and font bits), FrameCB (the target, the stretch), DrawCB
+  bytes, texture, sampler and DATE snapshot (the texture group), the same
+  scissor rectangle after the mirror and wide adjustments, the same state
+  block, and a write serial that only the run's own draws changed. The
+  vertices are staged locally and go into the ring whole when the run is
+  drawn, in command order. A run is drawn (and ended) by anything that
+  records: every other action (`replayFrame` before it dispatches one),
+  `endPass` (so a new pass, a DATE snapshot, the copy a draw that samples
+  its own target takes, or a target transition all draw it first), the end
+  of a command list (its timestamp), a deferred text item skipped
+  (`RD_SCREEN_TEXT_QUADS`), the COLCLAMP 0 wrap path, the effect sprites'
+  hardware fallback (one sprite, one run), and a command that does not
+  match. A DATE draw that writes alpha makes the next DATE draw retake the
+  snapshot, which ends the run, so consecutive DATE draws still see each
+  other's writes; an AFAIL split command is drawn on its own as before
+  (merged, its second pass would follow the next command's first). Within
+  the merged draw the primitives are rasterised in vertex order, the
+  recorded GS order, and draw results land in primitive order across and
+  within draws alike: the Vulkan specification orders primitives by
+  submission and then, within a draw, by vertex index ("Primitive Order",
+  docs.vulkan.org/spec/latest/chapters/drawing.html), and the depth and
+  stencil tests, blending and colour writes "adhere to rasterization
+  order" ("Fragment Operations", chapters/fragops.html), which primitive
+  order defines; the pipelines use `VK_POLYGON_MODE_FILL` and never the
+  relaxed `VK_AMD_rasterization_order`. That holds for the triangle and
+  line lists the screen prims become. Direct3D's equivalent is the "fixed
+  order of graphics pipeline results" its rasterizer-ordered views
+  documentation contrasts UAVs with (learn.microsoft.com,
+  direct3d12/rasterizer-order-views); the D3D12 backend has not been run.
+  `RdPerfRecord.screenCmds` counts the draws the commands make one by
+  one, `screenDraws` the draws recorded; `rd_replay_tool --stats` and
+  `rd_perf_test --dump` print both. `rd__SetScreenMerge(false)` turns
+  merging off (tests). `rd_perf` checks its synthetic frame: 85 one per
+  command, 66 merged (its 20 world strips are one draw; its UI sprites
+  change texture every sprite and each DATE sprite writes alpha). `rd_pixel`
+  checks six overlapping, differently coloured blended sprites merged into
+  one draw against the six draws byte for byte, and that a DATE snapshot
+  retake, an AFAIL split and a scissor change each end a run.
+
+  Draws per replay on the dump corpus (`rd_replay_tool --stats`, Original
+  at 640x480 and Enhanced 16:9 at 1920x1080; main at d0e0e0f3 and with the
+  runs; the 75 corpus PNGs, Original, mirror, Enhanced 16:9, 4x and the
+  display target, are byte-identical to main's, rendered by main's own
+  tool built from a scratch worktree):
+
+  | dump | Original: draws, main / runs | screen prims (commands / draws) | Enhanced 16:9: draws, main / runs | screen prims (commands / draws) |
+  | --- | --- | --- | --- | --- |
+  | boot 200 | 476 / 474 | 15 / 13 | 477 / 475 | 16 / 14 |
+  | boot 400 | 267 / 266 | 12 / 11 | 268 / 267 | 13 / 12 |
+  | boot 600 | 730 / 696 | 47 / 13 | 731 / 697 | 48 / 14 |
+  | lightning 100 | 5 / 5 | 1 / 1 | 5 / 5 | 2 / 2 |
+  | lightning 200 | 2184 / 2183 | 17 / 16 | 2185 / 2184 | 18 / 17 |
+  | lightning 300 | 2114 / 2113 | 13 / 12 | 2115 / 2114 | 14 / 13 |
+  | plain 100 | 5 / 5 | 1 / 1 | 5 / 5 | 2 / 2 |
+  | plain 200 | 1307 / 1306 | 10 / 9 | 1308 / 1307 | 11 / 10 |
+  | plain 300 | 1413 / 1411 | 12 / 10 | 1414 / 1412 | 13 / 11 |
+  | puddle 100 | 5 / 5 | 1 / 1 | 5 / 5 | 2 / 2 |
+  | puddle 200 | 470 / 470 | 10 / 10 | 471 / 471 | 11 / 11 |
+  | puddle 300 | 468 / 468 | 10 / 10 | 469 / 469 | 11 / 11 |
+  | queen 100 | 5 / 5 | 1 / 1 | 5 / 5 | 2 / 2 |
+  | queen 200 | 1592 / 1591 | 13 / 12 | 1593 / 1592 | 14 / 13 |
+  | queen 300 | 1590 / 1590 | 11 / 11 | 1591 / 1591 | 12 / 12 |
+
+  The frames' draws are mostly the VU meshes (the screen prims are 1 to 48
+  draws a frame), and few consecutive screen-prim commands share their
+  state; the large gain is boot 600's (47 screen-prim draws, 13 after).
+  The total falls by exactly the screen-prim draws saved. The
+  ring bytes drop by the unused tail each command's worst-case vertex
+  allocation left. Pipeline and bind group binds do not change: the
+  backend already skipped re-binding the same pipeline and groups.
+
 **Logging cost.** On Windows stdout and stderr are fully buffered and the
 host loop calls `ico_host_log_flush` once per vsync, after the step. The
 mingw build's msvcrt has no line buffering, and an unbuffered stream to a
@@ -1893,7 +1971,7 @@ and op and marks the quads `text-quads`.
 | ctest | what |
 |---|---|
 | `rd_state` | pipeline keys, the reachable set (under 150 screen and post keys), normalisation; the wide scissor; the AA1 bit through a dump, a version 3 dump, the AA1 plans |
-| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; a receding STQ strip (Q 1 to 0.25) perspective-correct against the analytic U, a strip with Q 1 affine; the enumeration holding the colour mask 7 and STQ keys; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump; an AA1 line and triangle edge against a CPU coverage reference (0 LSB of As on lavapipe) |
+| `rd_pixel` | screen prims, blends, DATE, AFAIL against CPU references; screen-prim runs (six overlapping blended sprites merged into one draw byte-identical to six draws; a DATE snapshot retake, an AFAIL split and a scissor change each ending a run); a receding STQ strip (Q 1 to 0.25) perspective-correct against the analytic U, a strip with Q 1 affine; the enumeration holding the colour mask 7 and STQ keys; an R8 atlas through `font_ps` byte-identical to the same texels as RGBA8, 1:1 and magnified, and through a dump; an AA1 line and triangle edge against a CPU coverage reference (0 LSB of As on lavapipe) |
 | `rd_tex` | TIM2 decode, CLUTs, TEXA, the cache; R8 textures and rectangle updates (the union uploaded alone, read back from the GPU) |
 | `rd_mip` | the mip chain size and alpha coverage |
 | `rd_gsbase` | `GsBase.c`, `GifPacket.c`, `DisplayList.c`, `DmaPacket.c` compiled as the window build does: the frame head, keep, parity, camera, depth scale, post passes, FBMSK's extent |
@@ -1910,7 +1988,7 @@ and op and marks the quads `text-quads`.
 | `font_edge` (port/ui) | the deferred text: edges at 1080p and 2160p, the mirror, the Original present unchanged, the fold of fade, letterbox and keep (UI.md "Tests") |
 | `rd_interp` | the blend, snaps, keys, rotations, camera, prisms, feedback; deferred text items and ops |
 | `rd_mirror` | the present flip, the UI flip, the mirrored reduction |
-| `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays |
+| `rd_perf` | nothing created or uploaded in the steady state; DISPLAY unchanged over 200 replays; uniform groups, barriers and screen-prim draws (85 one per command, 66 merged) per replay |
 | `rd_replay_tool` | the tool on a test dump |
 | `rhi_vk`, `rhi_vk_enum`, `rhi_vk_swapchain`, `rhi_d3d12`, `rhi_d3d12_plan` | the backends |
 

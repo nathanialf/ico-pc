@@ -939,6 +939,11 @@ void rd__LogOnce(int bit, const char *fmt, ...);
  * aborts unless rd__SetNotImplementedFatal(false) (tests). */
 void rd__NotImplemented(const char *what);
 void rd__SetNotImplementedFatal(bool fatal);
+
+/* Package PC: merging consecutive screen-prim commands into one draw
+ * (rd_replay.c doScreen, RENDER_API.md "Performance"); on by default, off
+ * for the tests that compare a merged run with sequential draws. */
+void rd__SetScreenMerge(bool on);
 uint32_t rd__NotImplementedCount(void);
 
 /* Recording helpers rd_post.c uses for the GS writes that have no public

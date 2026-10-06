@@ -18,7 +18,8 @@
  *             uniform bind group per uniform layout (frame, draw, VU),
  *             however many draws; (package PB) a steady replay records
  *             exactly BARRIERS_REPLAY pipeline barriers (BARRIERS_RECORD
- *             below);
+ *             below); (package PC) the screen-prim commands make
+ *             SCREEN_CMDS draws one by one and SCREEN_DRAWS merged;
  *   record    200 frames recorded and closed as the game does (rd_EndFrame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
@@ -267,6 +268,9 @@ typedef struct Sum {
     uint32_t uniformMin, uniformMax;
     /* package PB: pipeline barriers recorded per replay (least, most) */
     uint32_t barrierMin, barrierMax;
+    /* package PC: screen-prim draws per replay, one per command and merged
+     * (least, most) */
+    uint32_t screenCmdMin, screenCmdMax, screenDrawMin, screenDrawMax;
 } Sum;
 
 static void add(Sum *s, const RdPerfRecord *r)
@@ -303,6 +307,18 @@ static void add(Sum *s, const RdPerfRecord *r)
     if (s->n == 1 || r->barriers > s->barrierMax) {
         s->barrierMax = r->barriers;
     }
+    if (s->n == 1 || r->screenCmds < s->screenCmdMin) {
+        s->screenCmdMin = r->screenCmds;
+    }
+    if (s->n == 1 || r->screenCmds > s->screenCmdMax) {
+        s->screenCmdMax = r->screenCmds;
+    }
+    if (s->n == 1 || r->screenDraws < s->screenDrawMin) {
+        s->screenDrawMin = r->screenDraws;
+    }
+    if (s->n == 1 || r->screenDraws > s->screenDrawMax) {
+        s->screenDrawMax = r->screenDraws;
+    }
     s->groups += r->bindGroups;
     s->uniformGroups += r->uniformGroups;
     s->textureGroups += r->textureGroups;
@@ -321,9 +337,10 @@ static void print(const char *what, const Sum *s)
            (unsigned long long)s->created, (unsigned long long)s->destroyed,
            (unsigned long long)s->allocs, (unsigned long long)s->waitIdles);
     printf("%s: bind groups per replay %.2f: uniform %.2f (%u..%u), texture %.2f; barriers "
-           "%u..%u\n",
+           "%u..%u; screen-prim draws %u..%u one per command, %u..%u merged\n",
            what, (double)s->groups / n, (double)s->uniformGroups / n, s->uniformMin, s->uniformMax,
-           (double)s->textureGroups / n, s->barrierMin, s->barrierMax);
+           (double)s->textureGroups / n, s->barrierMin, s->barrierMax, s->screenCmdMin,
+           s->screenCmdMax, s->screenDrawMin, s->screenDrawMax);
 }
 
 /* every finished record into first (the first `skip`) or rest */
@@ -403,6 +420,25 @@ static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint
           want);
 }
 
+/* Package PC: the screen-prim draws of a replay.  One per command: the 20
+ * world strips, the 60 UI sprites, the 4 DATE sprites and the reflection
+ * sprite, 85.  Merged (rd_replay.c doScreen: consecutive commands under the
+ * same state, pipeline, texture, scissor and DATE snapshot): the strips are
+ * one draw; the UI sprites change texture every sprite and stay 60; each
+ * DATE sprite writes alpha, so the next retakes the snapshot, 4; 66. */
+#define SCREEN_CMDS 85
+#define SCREEN_DRAWS 66
+
+static void checkScreen(const char *what, const Sum *s)
+{
+    CHECK(s->n > 0 && s->screenCmdMin == SCREEN_CMDS && s->screenCmdMax == SCREEN_CMDS,
+          "%s: %u..%u screen-prim draws one per command, %d expected", what, s->screenCmdMin,
+          s->screenCmdMax, SCREEN_CMDS);
+    CHECK(s->n > 0 && s->screenDrawMin == SCREEN_DRAWS && s->screenDrawMax == SCREEN_DRAWS,
+          "%s: %u..%u screen-prim draws merged, %d expected", what, s->screenDrawMin,
+          s->screenDrawMax, SCREEN_DRAWS);
+}
+
 static int synthetic(void)
 {
     RdSettings st;
@@ -463,6 +499,7 @@ static int synthetic(void)
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     checkGroups("replay", &rest);
     checkBarriers("replay", &rest, BARRIERS_REPLAY, BARRIERS_REPLAY_GLOBAL);
+    checkScreen("replay", &rest);
 
     /* record: 200 frames as the game makes them */
     memset(&first, 0, sizeof(first));
@@ -501,6 +538,7 @@ static int synthetic(void)
           rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     checkGroups("record", &rest);
     checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
+    checkScreen("record", &rest);
     rd_Shutdown();
     return 0;
 }
@@ -587,12 +625,12 @@ static int dumpMode(int argc, char **argv)
     printf("  last: %u draws, %u passes, %u pipeline binds, %u bind group binds, %u bind groups "
            "(%u uniform, %u texture), "
            "%u barriers, %u copies, %llu KB uploaded (%llu KB meshes), %u DATE snapshots, %u "
-           "fence waits (%.3f ms)\n",
+           "fence waits (%.3f ms), screen prims %u draws merged into %u\n",
            last.draws, last.renderPasses, last.pipelineBinds, last.bindGroupBinds, last.bindGroups,
            last.uniformGroups, last.textureGroups, last.barriers, last.copies,
            (unsigned long long)(last.uploadBytes / 1024),
            (unsigned long long)(last.meshUploadBytes / 1024), last.dateSnapshots, last.fenceWaits,
-           last.fenceWaitMs);
+           last.fenceWaitMs, last.screenCmds, last.screenDraws);
     if (last.gpuValid) {
         printf("  GPU %.3f ms: uploads %.3f, lists", last.gpuMs, last.gpuUploadMs);
         for (int l = 0; l < 13; l++) {

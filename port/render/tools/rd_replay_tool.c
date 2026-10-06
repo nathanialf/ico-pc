@@ -66,7 +66,8 @@
  *                         passes, bind groups created (rd's uniform and
  *                         texture groups apart), bind group and pipeline
  *                         binds, ring bytes, (package PB) pipeline
- *                         barriers and copies
+ *                         barriers and copies, (package PC) the
+ *                         screen-prim draws one per command and merged
  *   --no-aa1              (package AA1) replays with PRIM.AA1 off: every
  *                         RDC_AA1 a NOP and the start state's bit clear, the
  *                         frame as the renderer drew it before AA1 was
@@ -530,10 +531,12 @@ int main(int argc, char **argv)
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
-               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies\n",
+               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies; screen "
+               "prims %u draws merged into %u\n",
                dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
-               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies);
+               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
+               pr->screenDraws);
     }
     if (replayed) {
         uint32_t w = 0, h = 0;

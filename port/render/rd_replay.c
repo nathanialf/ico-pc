@@ -33,6 +33,10 @@
  * data.  Texel centres are at i + 0.5 on both, so UVs only need dividing by
  * the texture size.
  *
+ * Consecutive RDC_SCREEN commands that bind the same things are one draw
+ * (package PC: doScreen, joinsRun, flushScreenRun; RENDER_API.md
+ * "Performance").
+ *
  * Render passes stay open across draws to the same colour/depth pair and
  * are closed by a target change, a clear, a copy, or a draw that samples a
  * target whose state must change.  rd tracks every texture's RhiState
@@ -561,6 +565,26 @@ static RhiSampler texSampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t, int
 
 /* ---------------------------------------------------------------- passes */
 
+/* Package PC: consecutive screen-prim commands that bind the same things
+ * are one draw (doScreen; RENDER_API.md "Performance").  A command whose
+ * plan is one draw opens a run or joins the open one; the run's vertices
+ * are staged in s_runVx and drawn by flushScreenRun, which every action
+ * that records anything calls first (endPass, replayFrame, doScreen). */
+typedef struct ScreenRun {
+    uint32_t count;  /* vertices staged; 0: no run */
+    uint32_t stride; /* bytes per vertex (sprite, STQ or AA1 vertex) */
+    uint8_t prim;    /* the commands' RD_PRIM_* */
+    uint32_t passSerial, writeSerial, dateSerial, dateFor;
+    RhiPipeline pipe;
+    RdPipeKeyInt key;
+    RdUniform frame;
+    IcoDrawCB cb;
+    RhiBindGroup g2;
+    uint32_t tex, sampler, dateTex;
+    RhiRect sc;
+    RdStateBlock st;
+} ScreenRun;
+
 typedef struct Replay {
     RdStateBlock st;
     int passOpen;
@@ -574,10 +598,14 @@ typedef struct Replay {
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
     uint32_t dateSerial;  /* writeSerial when it was taken */
+    ScreenRun run;        /* package PC: the screen-prim run not drawn yet */
 } Replay;
+
+static void flushScreenRun(Replay *r);
 
 static void endPass(Replay *r)
 {
+    flushScreenRun(r); /* package PC: the run's draw goes before anything after it */
     if (r->passOpen) {
         rhi_CmdEndRenderPass(s_cl);
         r->passOpen = 0;
@@ -1253,8 +1281,10 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
 }
 
 /* The scissor, the pass and FrameCB; returns the texture group, id 0 when
- * the scissor leaves nothing to draw. */
-static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
+ * the scissor leaves nothing to draw.  Package PC: with scOut the scissor
+ * is returned (doScreen sets it when it draws) instead of set, and the
+ * sampler's id with it. */
+static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, uint32_t *smpOut)
 {
     RdTargetRec *tc = ds->tc;
     /* scissor (SCISSOR_1, inclusive) clipped to the target, in texels */
@@ -1285,8 +1315,18 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
                                       wideFor(tc, r->stretch), tc->sx, tc->sy);
         memcpy(r->frameKey, fk, sizeof(fk));
     }
-    rhi_CmdSetScissor(s_cl, &sc);
+    if (scOut) {
+        *scOut = sc;
+        *smpOut = smp.id;
+    } else {
+        rhi_CmdSetScissor(s_cl, &sc);
+    }
     return g2;
+}
+
+static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
+{
+    return bindDrawEx(r, ds, NULL, NULL);
 }
 
 /* DrawCB for one planned pass: sprite_ps and vu_ps read the same fields. */
@@ -1506,13 +1546,76 @@ static uint32_t qOrder(const RdScreenVtx *v, uint32_t n, uint8_t prim, float **q
 
 static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
 
+/* Package PC: the staged vertices of the open run and the STQ vertices of
+ * one command (local, copied into the ring whole: P1) */
+static uint8_t *s_runVx;
+
+static uint64_t s_runCap;
+
+static IcoSpriteStqVertex *s_sq;
+
+static uint32_t s_sqCap;
+
+static bool s_screenMerge = true;
+
+void rd__SetScreenMerge(bool on)
+{
+    s_screenMerge = on;
+}
+
+/* the open run's one draw, as doScreen drew each command before */
+static void flushScreenRun(Replay *r)
+{
+    ScreenRun *q = &r->run;
+    if (!q->count) {
+        return;
+    }
+    const uint64_t bytes = (uint64_t)q->count * q->stride;
+    const uint64_t off = rd__RingAlloc(bytes, 16);
+    if (off != ~0ull) {
+        memcpy(g_rd.ringMap[s_slot] + off, s_runVx, (size_t)bytes);
+        rhi_CmdSetScissor(s_cl, &q->sc);
+        rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], off);
+        rhi_CmdSetPipeline(s_cl, q->pipe);
+        rd__BindUniform(s_cl, 0, q->frame);
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&q->cb));
+        rhi_CmdSetBindGroup(s_cl, 2, q->g2);
+        rhi_CmdDraw(s_cl, q->count, 0, 1);
+        g_rdPerf.screenDraws++;
+    }
+    q->count = 0;
+}
+
+/* whether a command drawing with these bindings joins the open run: the
+ * same pass, prim type, vertex format, pipeline (key), FrameCB, DrawCB,
+ * texture, sampler and DATE snapshot, scissor and state block, and nothing
+ * but the run's own draws changed the write serial (a DATE draw after an
+ * alpha write in the run retook the snapshot, which flushed the run) */
+static bool joinsRun(const Replay *r, const ScreenRun *n)
+{
+    const ScreenRun *q = &r->run;
+    return q->count && s_screenMerge && r->passOpen && q->passSerial == r->passSerial &&
+           q->writeSerial == r->writeSerial && q->prim == n->prim && q->stride == n->stride &&
+           q->pipe.id == n->pipe.id && memcmp(&q->key, &n->key, sizeof(q->key)) == 0 &&
+           q->frame.group.id == n->frame.group.id && q->frame.offset == n->frame.offset &&
+           memcmp(&q->cb, &n->cb, sizeof(q->cb)) == 0 && q->g2.id == n->g2.id && q->tex == n->tex &&
+           q->sampler == n->sampler && q->dateTex == n->dateTex &&
+           (r->st.ds.test.date == RD_DATE_OFF ||
+            (q->dateSerial == r->dateSerial && q->dateFor == r->dateFor)) &&
+           memcmp(&q->sc, &n->sc, sizeof(q->sc)) == 0 && memcmp(&q->st, &r->st, sizeof(q->st)) == 0;
+}
+
+static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
+
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
     if (g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) {
-        return; /* package DEF: the item is drawn on the output instead */
+        flushScreenRun(r); /* package PC: a skipped text item ends the run */
+        return;            /* package DEF: the item is drawn on the output instead */
     }
     if (rd__WrapApplies(&r->st)) {
+        flushScreenRun(r);
         if (r->st.aa1 && aa1Prim(c->b[0])) {
             rd__LogOnce(RD_ONCE_AA1_WRAP, "PRIM.AA1 under COLCLAMP 0: drawn without edge coverage");
         }
@@ -1529,11 +1632,6 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
     r->uiPrim = c->b[1] == RD_SPACE_UI;
     setUvShift(ds.tc->sx * wideFor(ds.tc, r->stretch), ds.tc->sy);
-    const uint64_t maxBytes = (uint64_t)n * 6 * sizeof(IcoSpriteVertex);
-    const uint64_t vOff = rd__RingAlloc(maxBytes, 16);
-    if (vOff == ~0ull) {
-        return;
-    }
     uint8_t topo;
     IcoSpriteVertex *out = vxScratch((uint64_t)n * 6);
     if (!out) {
@@ -1549,17 +1647,17 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     /* package AA1: PRIM.AA1 on a line or triangle command */
     const int aa1 = r->st.aa1 && aa1Prim(c->b[0]);
-    if (!aa1) {
-        memcpy(g_rd.ringMap[s_slot] + vOff, out, (size_t)nv * sizeof(*out)); /* P1 */
-    }
     RdDrawPass dp[2];
     const int np = rd__PlanScreenDrawEx(&r->st, topo, aa1, c->b[1], ds.tc->format, ds.depthFmt, dp);
     if (np == 0) {
         return;
     }
+    /* the vertices the draw reads (P1: built locally, copied into the ring
+     * whole when drawn) */
+    const void *vb = out;
+    uint32_t stride = sizeof(IcoSpriteVertex);
     /* package RSMALL: a textured STQ triangle command with Q != 1 draws with
-     * the STQ shaders, its vertices rewritten into the ring slot (24 bytes
-     * each, at most 3 per source vertex: inside maxBytes) */
+     * the STQ shaders, its vertices rewritten (24 bytes each) */
     if (!aa1 && !c->b[2] && ds.textured) {
         float *qv;
         const uint32_t nq = qOrder(v, n, c->b[0], &qv);
@@ -1569,19 +1667,27 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         for (int i = 0; i < np && stq; i++) {
             stq = rd__StqPass(&sp[i]);
         }
+        if (stq && nv > s_sqCap) {
+            IcoSpriteStqVertex *p = realloc(s_sq, (size_t)nv * 2 * sizeof(*p));
+            if (!p) {
+                return;
+            }
+            s_sq = p;
+            s_sqCap = nv * 2;
+        }
         if (stq) {
             memcpy(dp, sp, sizeof(sp));
-            IcoSpriteStqVertex *sv = (IcoSpriteStqVertex *)(g_rd.ringMap[s_slot] + vOff);
             for (uint32_t i = 0; i < nv; i++) {
-                sv[i].v = out[i];
-                sv[i].v.u *= qv[i]; /* S and T, not divided: out holds S / Q */
-                sv[i].v.v *= qv[i];
-                sv[i].q = qv[i];
+                s_sq[i].v = out[i];
+                s_sq[i].v.u *= qv[i]; /* S and T, not divided: out holds S / Q */
+                s_sq[i].v.v *= qv[i];
+                s_sq[i].q = qv[i];
             }
+            vb = s_sq;
+            stride = sizeof(IcoSpriteStqVertex);
         }
     }
     uint32_t nDraw = nv, nFirst = nv;
-    uint64_t drawOff = vOff;
     if (aa1) {
         int split = 0;
         for (int i = 0; i < np; i++) {
@@ -1592,16 +1698,78 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         nDraw = aa1Expand(out, nv, topo, split, ax, &nFirst);
-        drawOff = nDraw ? rd__RingAlloc((uint64_t)nDraw * sizeof(*ax), 16) : ~0ull;
-        if (drawOff == ~0ull) {
+        if (nDraw == 0) {
             return;
         }
-        memcpy(g_rd.ringMap[s_slot] + drawOff, ax, (size_t)nDraw * sizeof(*ax));
+        vb = ax;
+        stride = sizeof(*ax);
     }
-    RhiBindGroup g2 = bindDraw(r, &ds);
-    if (!g2.id) {
+    ScreenRun nr;
+    nr.g2 = bindDrawEx(r, &ds, &nr.sc, &nr.sampler);
+    if (!nr.g2.id) {
         return;
     }
+
+    /* package PC: one pass drawn whole (the AFAIL split and AA1's split
+     * interior and fringes are two draws, which do not join a run: merged,
+     * the second pass of one command would follow the first pass of the
+     * next) */
+    if (np == 1 && (!aa1 || nFirst == nDraw || nFirst == 0)) {
+        RhiPipeline p = rd__GetPipeline(&dp[0].key);
+        nr.key = dp[0].key;
+        if (p.id && aa1 && nFirst == 0) {
+            /* AA1 lines: all fringe, drawn with Z write off */
+            nr.key.gs.zwrite = RD_ZWRITE_OFF;
+            p = rd__GetPipeline(&nr.key);
+        }
+        if (!p.id) {
+            return;
+        }
+        nr.count = nDraw;
+        nr.stride = stride;
+        nr.prim = c->b[0];
+        nr.pipe = p;
+        nr.frame = r->frameBG;
+        fillDrawCB(r, &dp[0], &ds, &nr.cb);
+        nr.tex = ds.tex.id;
+        nr.dateTex = ds.dateTex.id;
+        if (!joinsRun(r, &nr)) {
+            flushScreenRun(r);
+            nr.count = 0;
+            nr.passSerial = r->passSerial;
+            nr.dateSerial = r->dateSerial;
+            nr.dateFor = r->dateFor;
+            memcpy(&nr.st, &r->st, sizeof(nr.st));
+            r->run = nr;
+        }
+        ScreenRun *q = &r->run;
+        const uint64_t need = ((uint64_t)q->count + nDraw) * stride;
+        if (need > s_runCap) {
+            const uint64_t cap = need < 65536 ? 65536 : need * 2;
+            uint8_t *b = realloc(s_runVx, (size_t)cap);
+            if (!b) {
+                return;
+            }
+            s_runVx = b;
+            s_runCap = cap;
+        }
+        memcpy(s_runVx + (uint64_t)q->count * stride, vb, (size_t)nDraw * stride);
+        q->count += nDraw;
+        g_rdPerf.screenCmds++;
+        if (dp[0].key.gs.colorMask & 8) {
+            r->writeSerial++;
+        }
+        q->writeSerial = r->writeSerial;
+        return;
+    }
+
+    flushScreenRun(r);
+    const uint64_t drawOff = rd__RingAlloc((uint64_t)nDraw * stride, 16);
+    if (drawOff == ~0ull) {
+        return;
+    }
+    memcpy(g_rd.ringMap[s_slot] + drawOff, vb, (size_t)nDraw * stride);
+    rhi_CmdSetScissor(s_cl, &nr.sc);
     rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], drawOff);
     for (int i = 0; i < np; i++) {
         RhiPipeline p = rd__GetPipeline(&dp[i].key);
@@ -1613,14 +1781,18 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         rhi_CmdSetPipeline(s_cl, p);
         rd__BindUniform(s_cl, 0, r->frameBG);
         rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
-        rhi_CmdSetBindGroup(s_cl, 2, g2);
+        rhi_CmdSetBindGroup(s_cl, 2, nr.g2);
         if (!aa1 || nFirst == nDraw) {
             rhi_CmdDraw(s_cl, nDraw, 0, 1);
+            g_rdPerf.screenCmds++;
+            g_rdPerf.screenDraws++;
         } else {
             /* package AA1: the triangles with the pass's Z write, then
              * their fringes without (edge pixels write no Z) */
             if (nFirst) {
                 rhi_CmdDraw(s_cl, nFirst, 0, 1);
+                g_rdPerf.screenCmds++;
+                g_rdPerf.screenDraws++;
             }
             RdPipeKeyInt ek = dp[i].key;
             ek.gs.zwrite = RD_ZWRITE_OFF;
@@ -1629,8 +1801,10 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
                 rhi_CmdSetPipeline(s_cl, pe);
                 rd__BindUniform(s_cl, 0, r->frameBG);
                 rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
-                rhi_CmdSetBindGroup(s_cl, 2, g2);
+                rhi_CmdSetBindGroup(s_cl, 2, nr.g2);
                 rhi_CmdDraw(s_cl, nDraw - nFirst, nFirst, 1);
+                g_rdPerf.screenCmds++;
+                g_rdPerf.screenDraws++;
             }
         }
         if (dp[i].key.gs.colorMask & 8) {
@@ -2922,6 +3096,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         sc.u[0] = screenVtx;
         sc.u[1] = 2;
         doScreen(r, f, &sc);
+        flushScreenRun(r); /* package PC: the fallback sprite is a run of its own */
         return;
     }
     RdTargetRec *tc = rd__TargetRec(r->st.color);
@@ -3513,6 +3688,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             if (rd__ApplyState(&r.st, c)) {
                 continue;
             }
+            if (c->type != RDC_SCREEN && c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
+                flushScreenRun(&r); /* package PC: the run's draw before this action's */
+            }
             switch (c->type) {
             case RDC_NOP:
             case RDC_OVERLAY_TEXT: /* package DEF: collected by the present */
@@ -3562,6 +3740,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 break;
             }
         }
+        flushScreenRun(&r); /* package PC: a run does not cross a list (its timestamp) */
         rd__PerfStamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
     }
     endPass(&r);
