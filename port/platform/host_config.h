@@ -30,6 +30,8 @@
  *   saves=PATH       the memory card folder (port/save, docs/port/SAVES.md):
  *                    the game's files are PATH/BESCES-50760ico/; default
  *                    memcard beside the per-user folder
+ *   saves2=PATH      a second card folder, the card in port 1; absent or
+ *                    empty: port 1 has no card (the original behaviour)
  */
 #ifndef ICO_PLATFORM_HOST_CONFIG_H
 #define ICO_PLATFORM_HOST_CONFIG_H
@@ -103,6 +105,10 @@ int ico_host_fixed_clock(const IcoIni *ini);
    from the executable's folder), else <pref dir>/memcard. Not created; a pure
    read (ico_ini_load_layered). 0, or -1 (then out is "memcard"). */
 int ico_host_saves_dir(char *out, size_t size);
+/* The port-1 card folder: saves2= (relative to the executable's folder).
+   1 with out set, 0 when not configured (no card in port 1; out ""), -1 when
+   the path does not fit (out ""). A pure read, like ico_host_saves_dir. */
+int ico_host_saves2_dir(char *out, size_t size);
 
 /* config.toml: a small TOML subset, enough for [sections] and key = value
    lines. Section headers are `[name]` or `[a.b]`; a key's path is

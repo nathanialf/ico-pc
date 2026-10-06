@@ -25,7 +25,8 @@ are answered from these files and from the host.
   `ico_host_pref_dir` is the one function that decides.
 - The memory card folder (`ico_host_saves_dir`) defaults to
   `<pref folder>/memcard`, so the saves live with the config;
-  `[paths] saves` or `saves=` moves them.
+  `[paths] saves` or `saves=` moves them; `[paths] saves2` adds a second
+  card in port 1.
 - **ico-pc.ini** sits beside the executable (docs/port/TESTING.md).
 - **ico.o2r**, the extracted game data (docs/port/DATA.md), is
   `<pref folder>/ico.o2r`, written on the first run. One beside the
@@ -35,9 +36,9 @@ are answered from these files and from the host.
 - A path that does not fit in `ICO_PATH_MAX` (1024) is an error, not a cut-off
   name: `ico_path_join` returns -1 and leaves `""`, and the log, trace, dump,
   screenshot, config and archive writers log it and do not write.
-- A relative path in either file (`iso`, `saves`, `pad_script`, `dump_dir`,
-  `audio_dump`, `trace`, `input_record`) is taken from the executable's
-  folder, not the pref folder.
+- A relative path in either file (`iso`, `saves`, `saves2`, `pad_script`,
+  `dump_dir`, `audio_dump`, `trace`, `input_record`) is taken from the
+  executable's folder, not the pref folder.
 
 ## Precedence
 
@@ -73,6 +74,7 @@ user-facing switch.
 | `version` | | `1` | file format version; a file with a larger one is still read and its unknown keys kept |
 | `[paths] iso` | `iso` | `""` | the disc image |
 | `[paths] saves` | `saves` | `<pref>/memcard` | the memory card folder |
+| `[paths] saves2` | `saves2` | `""` | a second memory card folder, the card in port 1; empty: port 1 has no card, as on a PS2 with one card (docs/port/SAVES.md, "A second card") |
 | `[video] backend` | `backend` | `"vulkan"` | the window build's renderer backend, `"vulkan"` or `"d3d12"` where the build has it; an unknown or missing backend falls back to Vulkan (`ico_window_open`, `rhi_CreateBackend`) |
 | `[video] preset` | | `"original"` | `"original"` or `"enhanced"` (docs/port/DISPLAY.md) |
 | `[video] resolution` | | `"window"` | Enhanced: the scene's resolution, `"window"`, `"WxH"` or `"Nx"` (1 to 8) |

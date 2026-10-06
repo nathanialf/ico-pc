@@ -16,7 +16,19 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_save)
 endif()
 
-# libmc's calls as mcard.c issues them, then mcard.c itself (compiled
+# Package S1: ICO's save out of a raw card image (.ps2/.bin) or a .psu into a
+# card folder (docs/port/SAVES.md, "Importing saves"), and its command line,
+# tools/mc_import.c. Needs only the UTF-8 file calls.
+add_library(ico_save_import STATIC mc_import.c)
+target_include_directories(ico_save_import PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_save_import PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_save_import PUBLIC ico_host_fs)
+add_executable(mc_import "${CMAKE_SOURCE_DIR}/tools/mc_import.c")
+target_compile_options(mc_import PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(mc_import PRIVATE ico_save_import)
+
+# libmc's calls as mcard.c issues them, the import of synthetic card images
+# and .psu files, then mcard.c itself (compiled
 # with the game's options; ico_options for its [audio] output hook) on the
 # scheduler over the card folder.
 add_executable(save_test
@@ -31,10 +43,11 @@ target_include_directories(save_test PRIVATE ${_ico_save_incs} "${CMAKE_SOURCE_D
 target_compile_definitions(save_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(save_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(save_test PRIVATE ico_save ico_platform ico_options)
+target_link_libraries(save_test PRIVATE ico_save ico_save_import ico_platform ico_options)
 if(WIN32)
     target_link_libraries(save_test PRIVATE comdlg32 user32)
 endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
-    add_test(NAME save COMMAND save_test)
+    # the importer's command line, run by the test on its synthetic files
+    add_test(NAME save COMMAND save_test $<TARGET_FILE:mc_import>)
 endif()

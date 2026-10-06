@@ -391,6 +391,8 @@ static const struct {
 } ini_map[] = {
     {"paths.iso", "iso"},
     {"paths.saves", "saves"},
+    /* the port-1 card folder; empty or absent: no card in port 1 (package S1) */
+    {"paths.saves2", "saves2"},
     {"audio.enabled", "audio"},
     {"dev.ticks", "ticks"},
     {"dev.watchdog", "watchdog"},
@@ -1697,6 +1699,43 @@ int ico_host_ini_path(char *out, size_t size)
 /* A read of ico-pc.ini over config.toml and nothing else: no environment
    variable is set and no folder made, so it can be called from the game
    fiber (sceMcInit). */
+/* The folder a card path key names: relative paths from the executable's
+   folder. 1 when the key is set, 0 when it is absent or empty, -1 when the
+   path does not fit. */
+static int card_dir_key(const IcoIni *ini, const char *dir, const char *key, char *out, size_t size)
+{
+    const char *v = ico_ini_get(ini, key);
+
+    if (v == NULL || v[0] == '\0') {
+        return 0;
+    }
+    return ico_path_join(out, size, dir, v) == 0 ? 1 : -1;
+}
+
+int ico_host_saves2_dir(char *out, size_t size)
+{
+    char dir[ICO_PATH_MAX];
+    char ini_path[ICO_PATH_MAX];
+    IcoIni *ini = malloc(sizeof(*ini));
+    int r;
+
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    if (ini == NULL || ico_host_exe_dir(dir, sizeof(dir)) != 0 ||
+        ico_path_join(ini_path, sizeof(ini_path), dir, "ico-pc.ini") != 0) {
+        free(ini);
+        return -1;
+    }
+    ico_ini_load_layered(ini, ini_path);
+    r = card_dir_key(ini, dir, "saves2", out, size);
+    free(ini);
+    if (r < 0 && size > 0) {
+        out[0] = '\0';
+    }
+    return r;
+}
+
 int ico_host_saves_dir(char *out, size_t size)
 {
     char dir[ICO_PATH_MAX];
@@ -1714,7 +1753,7 @@ int ico_host_saves_dir(char *out, size_t size)
     ico_ini_load_layered(ini, ini_path);
     v = ico_ini_get(ini, "saves");
     if (v != NULL && v[0] != '\0') {
-        r = ico_path_join(out, size, dir, v);
+        r = card_dir_key(ini, dir, "saves", out, size) == 1 ? 0 : -1;
     } else {
         r = ico_host_pref_dir(dir, sizeof(dir));
         if (ico_path_join(out, size, dir, "memcard") != 0) {

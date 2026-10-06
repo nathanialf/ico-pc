@@ -366,14 +366,17 @@ static void test_ini_layer(void)
         fprintf(stderr, "config_test: %s or %s exists; layering not tested\n", ini_path, toml_path);
         return;
     }
-    write_file(toml_path, "[paths]\niso = \"t.iso\"\nsaves = \"cards\"\n[audio]\nenabled = false\n"
-                          "[dev]\nticks = 100\nwatchdog = 0\ntrace = false\nverify = false\n");
+    write_file(
+        toml_path,
+        "[paths]\niso = \"t.iso\"\nsaves = \"cards\"\nsaves2 = \"cards2\"\n[audio]\nenabled = false\n"
+        "[dev]\nticks = 100\nwatchdog = 0\ntrace = false\nverify = false\n");
     write_file(ini_path, "ticks=3\n");
     CHECK(ico_ini_load(&ini, ini_path) == 0);
     CHECK_STR(ico_ini_get(&ini, "ticks"), "3");   /* the ini wins */
     CHECK_STR(ico_ini_get(&ini, "iso"), "t.iso"); /* filled from toml */
     CHECK_STR(ico_ini_get(&ini, "saves"), "cards");
-    CHECK_STR(ico_ini_get(&ini, "audio"), "0"); /* false reads as 0 */
+    CHECK_STR(ico_ini_get(&ini, "saves2"), "cards2"); /* the port-1 card */
+    CHECK_STR(ico_ini_get(&ini, "audio"), "0");       /* false reads as 0 */
     CHECK_STR(ico_ini_get(&ini, "watchdog"), "0");
     CHECK_STR(ico_ini_get(&ini, "trace"), "0");
     CHECK_STR(ico_ini_get(&ini, "verify"), "0");

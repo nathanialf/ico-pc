@@ -191,9 +191,15 @@ static void test_saves_dir_pure(void)
         return;
     }
     fputs("saves=pure-cards\ndump_every=5\ndump_dir=pure-dumps\naudio_dump=1\n", f);
+    fflush(f);
+    /* no saves2: port 1 has no card */
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 0 && out[0] == '\0');
+    fputs("saves2=pure-cards-2\n", f);
     fclose(f);
     CHECK(ico_host_saves_dir(out, sizeof(out)) == 0);
     CHECK(strstr(out, "pure-cards") != NULL);
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 1);
+    CHECK(strstr(out, "pure-cards-2") != NULL);
     CHECK(ico_path_kind(dumps, NULL, NULL) < 0);
     CHECK(ico_path_kind(logs, NULL, NULL) < 0);
     CHECK(getenv("ICO_RD_DUMP_EVERY") == NULL || getenv("ICO_RD_DUMP_EVERY")[0] == '\0');

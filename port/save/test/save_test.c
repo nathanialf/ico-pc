@@ -8,6 +8,11 @@
  *      on a card with no save, the first save to slot 1, reload, re-save
  *      (the file is byte-identical), delete; and the result codes the game
  *      compares (libmc.h sceMcRes*).
+ *   C. the importer (port/save/mc_import.c) on synthetic card images, plain
+ *      and with ECC spares, and a synthetic .psu, all built here: the
+ *      game's files read back through the folder card byte for byte, other
+ *      games' entries skipped and named; tools/mc_import (argv[1]) on the
+ *      same files; and the second card in port 1.
  *   B. fumi/ios/mcard.c and fumi/ios/mcdata.c themselves, compiled unchanged
  *      with the game's options, on the fiber scheduler: the card manager
  *      thread, driven through the iosMc* entry points the way kanbanBoot.c
@@ -49,6 +54,7 @@
 #include "main.h"
 #include "cdvd.h"
 #include "mc_host.h"
+#include "mc_import.h"
 #include "mcard.h"
 #include "mcdata.h"
 #include "memory.h"
@@ -239,6 +245,10 @@ static void bg_manager(void)
 
 #define CARD_A "save_test_card_a"
 #define CARD_B "save_test_card_b"
+#define CARD_C "save_test_card_c" /* port 1 in part B */
+#define CARD_I "save_test_card_i" /* imports, part C */
+#define CARD_J "save_test_card_j"
+#define CARD_K "save_test_card_k"
 #define PRODUCT "BESCES-50760ico"
 
 static long file_size(const char *path)
@@ -263,8 +273,8 @@ static int slurp(const char *path, unsigned char *buf, size_t max)
 
 static void rm_card(const char *card)
 {
-    static const char *const files[] = {"icon.sys", "boy_blk.ico", PRODUCT, "game.000",
-                                        "game.001", "game.002",    "extra"};
+    static const char *const files[] = {"icon.sys", "boy_blk.ico", PRODUCT,    "game.000",
+                                        "game.001", "game.002",    "game.003", "extra"};
     char path[256];
     size_t i;
 
@@ -617,9 +627,9 @@ static uint32_t sum_bytes(const unsigned char *p, int n)
 
 /* the sequence layout_action.c's save runs (iosMcGetBlockSaveInfo, the icon
    block, the product block, the game block) */
-static void do_save(int fileNo, void *buf)
+static void do_save_on(int port, int fileNo, void *buf)
 {
-    req.port = 0;
+    req.port = port;
     req.slot = 0;
     strcpy(req.path, "game.");
     req.fileNo = fileNo;
@@ -634,6 +644,11 @@ static void do_save(int fileNo, void *buf)
     iosMcSaveGameBlock(&req, buf);
     wait_request();
     CHECK(req.result == 0);
+}
+
+static void do_save(int fileNo, void *buf)
+{
+    do_save_on(0, fileNo, buf);
 }
 
 static void driver(void *arg)
@@ -852,6 +867,46 @@ static void driver(void *arg)
     iosMcChdirProduct(&req);
     wait_request();
     CHECK(req.result == -9 && req.type == 0);
+
+    /* a second card (saves2): port 1 answers as a card of its own. The
+       boot check finds it formatted with no save (-14, type 2), a save to
+       it lands in its folder only, and each port's listing sees its own
+       slots, as layout_action.c lists the two cards (mcPortInfo[0], [1]) */
+    rm_card(CARD_C);
+    ico_mc_host_set_port_root(1, CARD_C);
+    req.port = 1;
+    req.flags.ll &= ~2;
+    iosMcChdirProduct(&req);
+    wait_request();
+    CHECK(req.result == -14 && req.type == 2 && req.format == 1 && req.free >= 360);
+    memset(buf, 0, sizeof(buf));
+    do_save_on(1, 4, buf);
+    CHECK(file_size(CARD_C "/" PRODUCT "/game.004") == 25600);
+    CHECK(file_size(CARD_C "/" PRODUCT "/" PRODUCT) == 500);
+    CHECK(file_size(CARD_B "/" PRODUCT "/game.004") < 0);
+    req.port = 1;
+    strcpy(req.path, "game.");
+    iosMcGetBlockSaveInfo(&req);
+    wait_request();
+    CHECK(req.result == 1 && req.dirCount == 1 && req.mask == (1 << 4));
+    req.port = 0;
+    strcpy(req.path, "game.");
+    iosMcGetBlockSaveInfo(&req);
+    wait_request();
+    CHECK(req.result == 0 && req.dirCount == 0 && req.mask == 0);
+    req.port = 1;
+    req.fileNo = 4;
+    iosMcLoadGameBlock(&req, back);
+    wait_request();
+    CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+    ico_mc_host_set_port_root(1, NULL);
+    {
+        char path[64];
+
+        snprintf(path, sizeof(path), CARD_C "/" PRODUCT "/game.004");
+        remove(path);
+    }
+    rm_card(CARD_C);
     req.port = 0;
 
     rm_card(CARD_B);
@@ -913,9 +968,421 @@ static void test_mcard(void)
     ico_sched_reset();
 }
 
-int main(void)
+/* --- part C: the importer and the second card --------------------------------------
+ *
+ * A synthetic 8 MB card laid out as a formatted PS2 card is: the superblock
+ * in cluster 0, the indirect FAT cluster 8 (ifc_list[0]), FAT clusters 9-40,
+ * the allocatable clusters from 41, the root directory at allocatable
+ * cluster 0. Chains take every other cluster, so no file is contiguous, and
+ * the game's directory sits past FAT entry 256 (the second FAT cluster). */
+
+#define IMG_CLUSTERS 8192
+#define IMG_ALLOC 41
+#define IMG_SIZE (IMG_CLUSTERS * 1024)
+#define IMG_ECC_SIZE (IMG_CLUSTERS * 2 * 528)
+#define OTHER "BASLUS-99999OTHER"
+
+typedef struct {
+    const char *name;
+    uint32_t len;
+} TFile;
+
+/* the game's directory: the shapes mcard.c writes, and an empty file */
+static const TFile tfiles[] = {{"icon.sys", 964},   {"boy_blk.ico", 3000}, {PRODUCT, 500},
+                               {"game.000", 25600}, {"game.003", 25600},   {"empty", 0}};
+
+#define NTF ((int)(sizeof(tfiles) / sizeof(tfiles[0])))
+
+static unsigned char *img;
+
+static uint32_t imgNext;
+
+static unsigned char tbyte(int f, uint32_t k)
+{
+    return (unsigned char)(k * 13u + (uint32_t)f * 71u + (k >> 9));
+}
+
+static void tfill(int f, unsigned char *out)
+{
+    uint32_t k;
+
+    for (k = 0; k < tfiles[f].len; k++) {
+        out[k] = tbyte(f, k);
+    }
+}
+
+static void le16(unsigned char *p, unsigned v)
+{
+    p[0] = (unsigned char)v;
+    p[1] = (unsigned char)(v >> 8);
+}
+
+static void img_fat(uint32_t n, uint32_t v)
+{
+    le32(img + (size_t)(9 + n / 256) * 1024 + (n % 256) * 4, v);
+}
+
+/* len bytes (at least one cluster) into a chain from imgNext; its first
+   allocatable cluster */
+static uint32_t img_alloc(const unsigned char *data, uint32_t len)
+{
+    uint32_t n = len == 0 ? 1 : (len + 1023) / 1024;
+    uint32_t first = imgNext;
+    uint32_t prev = 0;
+    uint32_t k;
+
+    for (k = 0; k < n; k++) {
+        uint32_t c = imgNext;
+        uint32_t take = len - k * 1024 < 1024 ? len - k * 1024 : 1024;
+
+        imgNext += 2;
+        if (len > 0) {
+            memcpy(img + (size_t)(IMG_ALLOC + c) * 1024, data + k * 1024, take);
+        }
+        if (k > 0) {
+            img_fat(prev, 0x80000000u | c);
+        }
+        prev = c;
+    }
+    img_fat(prev, 0xFFFFFFFFu);
+    return first;
+}
+
+static void dirent(unsigned char *e, unsigned mode, uint32_t len, uint32_t cluster,
+                   const char *name)
+{
+    memset(e, 0, 512);
+    le16(e, mode);
+    le32(e + 4, len);
+    le32(e + 0x10, cluster);
+    memcpy(e + 0x40, name, strlen(name));
+}
+
+static void build_image(void)
+{
+    static unsigned char file[26000];
+    static unsigned char dir[16 * 512];
+    static const char version[] = "1.2.0.0";
+    uint32_t cl[NTF];
+    uint32_t other;
+    uint32_t ico;
+    uint32_t i;
+    int f;
+
+    memset(img, 0xFF, IMG_SIZE);
+    memset(img, 0, 1024);
+    memcpy(img, "Sony PS2 Memory Card Format ", 28);
+    memcpy(img + 0x1C, version, sizeof(version));
+    le16(img + 0x28, 512);
+    le16(img + 0x2A, 2);
+    le16(img + 0x2C, 16);
+    le16(img + 0x2E, 0xFF00);
+    le32(img + 0x30, IMG_CLUSTERS);
+    le32(img + 0x34, IMG_ALLOC);
+    le32(img + 0x38, 8135);
+    le32(img + 0x3C, 0);
+    le32(img + 0x40, 1023);
+    le32(img + 0x44, 1022);
+    le32(img + 0x50, 8);
+    img[0x150] = 2;
+    img[0x151] = 0x52;
+    for (i = 0; i < 256; i++) {
+        le32(img + 8 * 1024 + i * 4, i < 32 ? 9 + i : 0xFFFFFFFFu);
+    }
+    for (i = 0; i < 32 * 256; i++) {
+        img_fat(i, 0x7FFFFFFFu);
+    }
+    /* another game's save (the root takes clusters 0, 2, 4) */
+    imgNext = 6;
+    memset(file, 0x5A, 700);
+    dirent(dir, 0x8427, 3, 0, ".");
+    dirent(dir + 512, 0x8427, 0, 0, "..");
+    dirent(dir + 1024, 0x8497, 700, img_alloc(file, 700), "data.bin");
+    other = img_alloc(dir, 3 * 512);
+    /* ICO's, past FAT entry 256: the files, then the directory with a
+       deleted entry among them */
+    imgNext = 301;
+    for (f = 0; f < NTF; f++) {
+        tfill(f, file);
+        cl[f] = tfiles[f].len > 0 ? img_alloc(file, tfiles[f].len) : 0xFFFFFFFFu;
+    }
+    dirent(dir, 0x8427, NTF + 3, 0, ".");
+    dirent(dir + 512, 0x8427, 0, 0, "..");
+    dirent(dir + 1024, 0x0497, 25600, cl[3], "game.001"); /* deleted */
+    for (f = 0; f < NTF; f++) {
+        dirent(dir + (3 + f) * 512, 0x8497, tfiles[f].len, cl[f], tfiles[f].name);
+    }
+    ico = img_alloc(dir, (NTF + 3) * 512);
+    /* the root: ".", "..", the other game, a deleted ICO entry, ICO's */
+    dirent(dir, 0x8427, 5, 0, ".");
+    dirent(dir + 512, 0x8427, 0, 0, "..");
+    dirent(dir + 1024, 0x8427, 3, other, OTHER);
+    dirent(dir + 1536, 0x0427, 3, other, PRODUCT);
+    dirent(dir + 2048, 0x8427, NTF + 3, ico, PRODUCT);
+    imgNext = 0;
+    CHECK(img_alloc(dir, 5 * 512) == 0);
+}
+
+static int write_blob(const char *path, const unsigned char *p, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    int ok;
+
+    if (f == NULL) {
+        return -1;
+    }
+    ok = fwrite(p, 1, n, f) == n;
+    ok = fclose(f) == 0 && ok;
+    return ok ? 0 : -1;
+}
+
+/* the image with a 16-byte spare after every 512-byte page, as PCSX2 and
+   mymc keep it (the ECC itself is not checked) */
+static int write_ecc(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    unsigned char spare[16];
+    uint32_t p;
+    int ok = 1;
+
+    if (f == NULL) {
+        return -1;
+    }
+    memset(spare, 0xFF, sizeof(spare));
+    for (p = 0; p < IMG_CLUSTERS * 2; p++) {
+        ok = ok && fwrite(img + (size_t)p * 512, 1, 512, f) == 512 && fwrite(spare, 1, 16, f) == 16;
+    }
+    ok = fclose(f) == 0 && ok;
+    return ok ? 0 : -1;
+}
+
+/* a .psu: the directory's entry, "." and "..", each file's entry and its
+   data padded to 1024 bytes */
+static int write_psu(const char *path, const char *dirname)
+{
+    static unsigned char file[26000];
+    unsigned char e[512];
+    unsigned char pad[1024];
+    FILE *fp = fopen(path, "wb");
+    int ok = 1;
+    int f;
+
+    if (fp == NULL) {
+        return -1;
+    }
+    memset(pad, 0, sizeof(pad));
+    dirent(e, 0x8427, NTF + 2, 0, dirname);
+    ok = ok && fwrite(e, 1, 512, fp) == 512;
+    dirent(e, 0x8427, 0, 0, ".");
+    ok = ok && fwrite(e, 1, 512, fp) == 512;
+    dirent(e, 0x8427, 0, 0, "..");
+    ok = ok && fwrite(e, 1, 512, fp) == 512;
+    for (f = 0; f < NTF; f++) {
+        uint32_t padded = (tfiles[f].len + 1023) / 1024 * 1024;
+
+        tfill(f, file);
+        dirent(e, 0x8497, tfiles[f].len, 0, tfiles[f].name);
+        ok = ok && fwrite(e, 1, 512, fp) == 512;
+        ok = ok && fwrite(file, 1, tfiles[f].len, fp) == tfiles[f].len;
+        ok = ok && fwrite(pad, 1, padded - tfiles[f].len, fp) == padded - tfiles[f].len;
+    }
+    ok = fclose(fp) == 0 && ok;
+    return ok ? 0 : -1;
+}
+
+static void rm_import(const char *card)
+{
+    char path[256];
+
+    snprintf(path, sizeof(path), "%s/" PRODUCT "/empty", card);
+    remove(path);
+    rm_card(card);
+}
+
+/* every file of the game's directory, on disk, is the synthetic bytes */
+static void check_folder(const char *card)
+{
+    static unsigned char want[26000];
+    static unsigned char got[26100];
+    char path[256];
+    int f;
+
+    for (f = 0; f < NTF; f++) {
+        int n;
+
+        snprintf(path, sizeof(path), "%s/" PRODUCT "/%s", card, tfiles[f].name);
+        tfill(f, want);
+        n = slurp(path, got, sizeof(got));
+        if (n != (int)tfiles[f].len || memcmp(got, want, tfiles[f].len) != 0) {
+            printf("FAIL %s: %d bytes, want %u, or other bytes\n", path, n,
+                   (unsigned)tfiles[f].len);
+            fails++;
+        }
+    }
+}
+
+/* every file read back through the folder card on port, byte for byte */
+static void check_card(int port)
+{
+    static unsigned char want[26000];
+    static unsigned char got[26100];
+    char path[64];
+    int f;
+
+    for (f = 0; f < NTF; f++) {
+        int fd;
+        int total = 0;
+        int n;
+
+        snprintf(path, sizeof(path), "/" PRODUCT "/%s", tfiles[f].name);
+        CHECK(sceMcOpen(port, 0, path, SCE_RDONLY) == 0);
+        fd = finish(sceMcFuncNoOpen);
+        CHECK(fd >= 0);
+        if (fd < 0) {
+            continue;
+        }
+        do {
+            CHECK(sceMcRead(fd, got + total, 1024) == 0);
+            n = finish(sceMcFuncNoRead);
+            total += n > 0 ? n : 0;
+        } while (n == 1024 && total + 1024 <= (int)sizeof(got));
+        CHECK(sceMcClose(fd) == 0);
+        CHECK(finish(sceMcFuncNoClose) == 0);
+        tfill(f, want);
+        if (total != (int)tfiles[f].len || memcmp(got, want, tfiles[f].len) != 0) {
+            printf("FAIL port %d %s: %d bytes read back, want %u, or other bytes\n", port, path,
+                   total, (unsigned)tfiles[f].len);
+            fails++;
+        }
+    }
+}
+
+static int run_cli(const char *exe, const char *args)
+{
+    char cmd[1024];
+    int r;
+
+    snprintf(cmd, sizeof(cmd), "\"%s\" %s", exe, args);
+    r = system(cmd);
+#ifndef _WIN32
+    if (r != -1 && (r & 0x7F) == 0) {
+        r = (r >> 8) & 0xFF;
+    }
+#endif
+    return r;
+}
+
+static void test_import(const char *cli)
+{
+    IcoMcImport res;
+    sceMcTblGetDir dir[20];
+    int type;
+    int freeCl;
+    int format;
+    int i;
+
+    img = malloc(IMG_SIZE);
+    CHECK(img != NULL);
+    if (img == NULL) {
+        return;
+    }
+    build_image();
+    CHECK(write_blob("save_test_card.ps2", img, IMG_SIZE) == 0);
+    CHECK(write_ecc("save_test_card_ecc.ps2") == 0);
+    CHECK(write_psu("save_test_save.psu", PRODUCT) == 0);
+    CHECK(write_psu("save_test_other.psu", OTHER) == 0);
+    CHECK(write_blob("save_test_save.max", (const unsigned char *)"Ps2PowerSave\0\0\0\0", 16) == 0);
+    free(img);
+    img = NULL;
+    rm_import(CARD_I);
+    rm_import(CARD_J);
+    rm_import(CARD_K);
+
+    CHECK(ico_mc_import_detect("save_test_card.ps2") == ICO_MC_FMT_RAW);
+    CHECK(ico_mc_import_detect("save_test_card_ecc.ps2") == ICO_MC_FMT_RAW);
+    CHECK(ico_mc_import_detect("save_test_save.psu") == ICO_MC_FMT_PSU);
+    CHECK(ico_mc_import_detect("save_test_save.max") == ICO_MC_FMT_MAX);
+
+    /* the plain image into card I: the game's six files, the other game's
+       directory skipped and named, the deleted entries ignored */
+    CHECK(ico_mc_import("save_test_card.ps2", CARD_I, 0, &res) == 0);
+    CHECK(res.format == ICO_MC_FMT_RAW && res.files == NTF);
+    CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
+    check_folder(CARD_I);
+    CHECK(file_size(CARD_I "/" PRODUCT "/game.001") < 0);
+    /* again: refused without overwrite, nothing changed; then replaced */
+    CHECK(ico_mc_import("save_test_card.ps2", CARD_I, 0, &res) == -1);
+    CHECK(strstr(res.why, "already holds") != NULL && res.files == 0);
+    CHECK(ico_mc_import("save_test_card.ps2", CARD_I, ICO_MC_IMPORT_OVERWRITE, &res) == 0);
+    CHECK(res.files == NTF);
+    check_folder(CARD_I);
+
+    /* the ECC image into card J */
+    CHECK(ico_mc_import("save_test_card_ecc.ps2", CARD_J, 0, &res) == 0);
+    CHECK(res.files == NTF && res.skipped == 1);
+    check_folder(CARD_J);
+
+    /* the .psu, and the refusals, through the command line */
+    if (cli != NULL) {
+        CHECK(run_cli(cli, "--to " CARD_K " save_test_save.psu") == 0);
+        check_folder(CARD_K);
+        CHECK(run_cli(cli, "--to " CARD_K " save_test_save.psu") == 2);
+        CHECK(run_cli(cli, "--overwrite --to " CARD_K " save_test_save.psu") == 0);
+        check_folder(CARD_K);
+        CHECK(run_cli(cli, "--to " CARD_K " save_test_other.psu") == 1);
+        CHECK(run_cli(cli, "--to " CARD_K " save_test_save.max") == 2);
+        CHECK(run_cli(cli, "save_test_save.psu") == 2); /* no --to */
+    } else {
+        printf("FAIL no mc_import path given (ctest passes it)\n");
+        fails++;
+    }
+    CHECK(ico_mc_import("save_test_other.psu", CARD_K, 0, &res) == 1);
+    CHECK(res.skipped == 1 && strcmp(res.skippedName[0], OTHER) == 0);
+    CHECK(ico_mc_import("save_test_save.max", CARD_K, 0, &res) == -1);
+    CHECK(res.format == ICO_MC_FMT_MAX);
+
+    /* two cards: card I in port 0, card J in port 1; both formatted PS2
+       cards with the same save, read back byte for byte through libmc */
+    ico_mc_host_set_port_root(0, CARD_I);
+    ico_mc_host_set_port_root(1, CARD_J);
+    CHECK(sceMcInit() == 0);
+    for (i = 0; i < 2; i++) {
+        CHECK(sceMcGetInfo(i, 0, &type, &freeCl, &format) == 0);
+        CHECK(finish(sceMcFuncNoCardInfo) == sceMcResChangedCard);
+        CHECK(type == 2 && format == 1 && freeCl > 360 && freeCl < ICO_MC_HOST_CLUSTERS);
+        check_card(i);
+        CHECK(sceMcChdir(i, 0, "/" PRODUCT, NULL) == 0);
+        CHECK(finish(sceMcFuncNoChDir) == 0);
+        CHECK(sceMcGetDir(i, 0, "game.*", 0, 20, dir) == 0);
+        CHECK(finish(sceMcFuncNoGetDir) == 2);
+        CHECK(strcmp((char *)dir[0].EntryName, "game.000") == 0);
+        CHECK(strcmp((char *)dir[1].EntryName, "game.003") == 0);
+    }
+    /* a write on port 1 lands in card J only */
+    CHECK(sceMcDelete(1, 0, "game.003") == 0);
+    CHECK(finish(sceMcFuncNoDelete) == 0);
+    CHECK(file_size(CARD_J "/" PRODUCT "/game.003") < 0);
+    CHECK(file_size(CARD_I "/" PRODUCT "/game.003") == 25600);
+    /* no folder for port 1: no card, as before */
+    ico_mc_host_set_port_root(1, NULL);
+    CHECK(sceMcGetInfo(1, 0, &type, &freeCl, &format) == 0);
+    CHECK(finish(sceMcFuncNoCardInfo) == sceMcResFailDetect2 && type == 0);
+    CHECK(strcmp(ico_mc_host_port_root(0), CARD_I) == 0 && ico_mc_host_port_root(1)[0] == '\0');
+
+    rm_import(CARD_I);
+    rm_import(CARD_J);
+    rm_import(CARD_K);
+    remove("save_test_card.ps2");
+    remove("save_test_card_ecc.ps2");
+    remove("save_test_save.psu");
+    remove("save_test_other.psu");
+    remove("save_test_save.max");
+}
+
+int main(int argc, char **argv)
 {
     test_libmc();
+    test_import(argc > 1 ? argv[1] : NULL);
     test_mcard();
     if (fails != 0) {
         printf("%d failure(s)\n", fails);

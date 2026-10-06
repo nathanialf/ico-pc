@@ -125,12 +125,12 @@ pointer to this file.
   `boyGObj != NULL && game_pause == 0 && data_loading == 0` in
   `port/platform/window_host.c`, derived from the sources, not observed. If
   it is wrong the cursor hides in a menu or the camera moves under it.
-- **Import card images and save archives.** `port/save/mc_host.c` reads only
-  folder cards; `.ps2`/`.bin` images and `.psu`/`.max`/`.cbs` archives must
-  be converted with another tool first. An importer in `tools/` or in the
-  first-run flow would unpack the game's save folder into the saves folder.
-- **A second card in port 1.** Port 1 always reports no card. A second
-  folder (`[paths] saves2`) in `mc_host.c` would let the game list both.
+- **The importer on real cards; `.max` and `.cbs`.** `mc_import`
+  (docs/port/SAVES.md, "Importing saves") is tested only on synthetic
+  `.ps2` images and `.psu` files built to the same description it reads.
+  Import a real PCSX2 `.ps2`, a plain `.bin` dump and a uLaunchELF `.psu`
+  holding ICO's save, and load the save in the game. `.max` (LZARI) and
+  `.cbs` are refused; decode them once sample files are at hand.
 - **`IosMcLock` signalling.** The host signals it once per vsync so
   `iosMcMgrSync` progresses; whether libmc or the IOP does this on the PS2
   is unknown and affects how fast card requests poll. Settle it from libmc's

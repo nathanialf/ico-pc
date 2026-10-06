@@ -2,7 +2,8 @@
  * port/save/mc_host.c
  *
  * libmc over a host folder (docs/port/SAVES.md). Port 0 is a formatted 8 MB
- * card whose root is the card folder; port 1 is empty. The files are
+ * card whose root is the card folder; port 1 is a second card on its own
+ * folder when [paths] saves2 names one, else empty. The files are
  * stored as the card holds them, byte for byte, in the folder layout PCSX2's
  * folder memory cards use: <card>/BESCES-50760ico/{icon.sys, boy_blk.ico,
  * BESCES-50760ico, game.000 ...}. Nothing else is written, and nothing at
@@ -64,11 +65,11 @@ typedef struct McHandle {
 static struct {
     int hooked;
     int rootSet;
-    char root[MC_ROOT_MAX];
-    int changed[MC_PORTS];          /* a "new card": sceMcGetInfo returns -1 once */
-    int unformatted[MC_PORTS];      /* after sceMcUnformat, until sceMcFormat */
-    char cwd[MC_PORTS][MC_REL_MAX]; /* the current directory, relative to the root */
-    int dirNext;                    /* sceMcGetDir's continuation index */
+    char root[MC_PORTS][MC_ROOT_MAX]; /* "" for port 1: no card */
+    int changed[MC_PORTS];            /* a "new card": sceMcGetInfo returns -1 once */
+    int unformatted[MC_PORTS];        /* after sceMcUnformat, until sceMcFormat */
+    char cwd[MC_PORTS][MC_REL_MAX];   /* the current directory, relative to the root */
+    int dirNext;                      /* sceMcGetDir's continuation index */
     McHandle handle[MC_HANDLES];
     int active; /* a request awaits its sceMcSync */
     int done;
@@ -157,12 +158,12 @@ static int resolve(int port, const char *name, char *rel, size_t size)
     return 0;
 }
 
-static void host_path(char *out, size_t size, const char *rel)
+static void host_path(int port, char *out, size_t size, const char *rel)
 {
     if (rel[0] != '\0') {
-        snprintf(out, size, "%s/%s", mc.root, rel);
+        snprintf(out, size, "%s/%s", mc.root[port], rel);
     } else {
-        snprintf(out, size, "%s", mc.root);
+        snprintf(out, size, "%s", mc.root[port]);
     }
 }
 
@@ -186,12 +187,12 @@ static int kind_of(const char *path, unsigned long *size, time_t *mtime)
 }
 
 /* Creates the card folder and any missing parent. */
-static int make_root(void)
+static int make_root(int port)
 {
     char path[MC_PATH_MAX];
     size_t i;
 
-    snprintf(path, sizeof(path), "%s", mc.root);
+    snprintf(path, sizeof(path), "%s", mc.root[port]);
     for (i = 1; path[i] != '\0'; i++) {
         if (path[i] == '/' || path[i] == '\\') {
             char c = path[i];
@@ -339,9 +340,10 @@ static void fill_entry(sceMcTblGetDir *e, const char *name, const char *path, in
 
 /* --- requests ---------------------------------------------------------------- */
 
+/* port 0 always holds a card; port 1 when a folder is configured for it */
 static int slot_ok(int port, int slot)
 {
-    return port == 0 && slot == 0;
+    return port >= 0 && port < MC_PORTS && slot == 0 && mc.root[port][0] != '\0';
 }
 
 static int begin(int cmd, int result)
@@ -366,13 +368,29 @@ static void vsync(void *user)
 
 void ico_mc_host_set_root(const char *dir)
 {
-    snprintf(mc.root, sizeof(mc.root), "%s", dir);
+    ico_mc_host_set_port_root(0, dir);
+}
+
+void ico_mc_host_set_port_root(int port, const char *dir)
+{
+    if (port < 0 || port >= MC_PORTS) {
+        return;
+    }
+    snprintf(mc.root[port], sizeof(mc.root[port]), "%s", dir != NULL ? dir : "");
+    if (port == 0 && mc.root[0][0] == '\0') {
+        snprintf(mc.root[0], sizeof(mc.root[0]), "memcard");
+    }
     mc.rootSet = 1;
 }
 
 const char *ico_mc_host_root(void)
 {
-    return mc.root;
+    return mc.root[0];
+}
+
+const char *ico_mc_host_port_root(int port)
+{
+    return port >= 0 && port < MC_PORTS ? mc.root[port] : "";
 }
 
 int ico_mc_host_pending(void)
@@ -468,9 +486,18 @@ int sceMcInit(void)
     mc.active = 0;
     mc.dirNext = 0;
     if (!mc.rootSet) {
-        if (ico_host_saves_dir(mc.root, sizeof(mc.root)) != 0) {
+        int r2;
+
+        if (ico_host_saves_dir(mc.root[0], sizeof(mc.root[0])) != 0) {
             fprintf(stderr, "mc: no usable card folder path (too long, or no folder); using %s\n",
-                    mc.root);
+                    mc.root[0]);
+        }
+        /* port 1: a card only when saves2 names a folder */
+        r2 = ico_host_saves2_dir(mc.root[1], sizeof(mc.root[1]));
+        if (r2 < 0) {
+            fprintf(stderr, "mc: the saves2 card folder path is too long; port 1 has no card\n");
+        } else if (r2 == 1) {
+            fprintf(stderr, "mc: two cards: port 0 %s, port 1 %s\n", mc.root[0], mc.root[1]);
         }
         mc.rootSet = 1;
     }
@@ -523,7 +550,7 @@ int sceMcGetInfo(int port, int slot, int *type, int *free, int *format)
     if (mc.unformatted[port]) {
         result = sceMcResNoFormat;
     } else {
-        used = used_clusters(mc.root, 0);
+        used = used_clusters(mc.root[port], 0);
         left = ICO_MC_HOST_CLUSTERS - used;
         if (free != NULL) {
             *free = left > 0 ? (int)left : 0;
@@ -582,7 +609,7 @@ int sceMcMkdir(int port, int slot, char *name)
     if (resolve(port, name, rel, sizeof(rel)) != 0 || rel[0] == '\0') {
         return begin(sceMcFuncNoMkdir, sceMcResNoEntry);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     if (kind_of(path, NULL, NULL) >= 0) {
         return begin(sceMcFuncNoMkdir, sceMcResNoEntry); /* it exists */
     }
@@ -590,14 +617,14 @@ int sceMcMkdir(int port, int slot, char *name)
     slash = strrchr(parent, '/');
     if (slash != NULL) {
         *slash = '\0';
-        host_path(path, sizeof(path), parent);
+        host_path(port, path, sizeof(path), parent);
         if (kind_of(path, NULL, NULL) != 1) {
             return begin(sceMcFuncNoMkdir, sceMcResNoEntry);
         }
-    } else if (make_root() != 0) {
+    } else if (make_root(port) != 0) {
         return begin(sceMcFuncNoMkdir, sceMcResFullDevice);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     return begin(sceMcFuncNoMkdir, HOST_MKDIR(path) == 0 ? 0 : sceMcResFullDevice);
 }
 
@@ -613,7 +640,7 @@ int sceMcChdir(int port, int slot, char *name, char *pwd)
     if (resolve(port, name, rel, sizeof(rel)) != 0) {
         return begin(sceMcFuncNoChDir, sceMcResNoEntry);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     if (rel[0] != '\0' && kind_of(path, NULL, NULL) != 1) {
         return begin(sceMcFuncNoChDir, sceMcResNoEntry);
     }
@@ -665,7 +692,7 @@ int sceMcGetDir(int port, int slot, char *name, int flags, int nblk, struct sceM
     if (resolve(port, dirpart, rel, sizeof(rel)) != 0) {
         return begin(sceMcFuncNoGetDir, sceMcResNoEntry);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     count = kind_of(path, NULL, NULL) == 1 ? list_dir(path, names, MC_DIR_MAX) : -1;
     if (count < 0) {
         /* a card folder that does not exist yet is an empty card */
@@ -718,7 +745,7 @@ int sceMcDelete(int port, int slot, char *name)
     if (resolve(port, name, rel, sizeof(rel)) != 0 || rel[0] == '\0') {
         return begin(sceMcFuncNoDelete, sceMcResNoEntry);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     k = kind_of(path, NULL, NULL);
     if (k < 0) {
         return begin(sceMcFuncNoDelete, sceMcResNoEntry);
@@ -761,7 +788,7 @@ int sceMcOpen(int port, int slot, char *name, int flags)
     if (fd == MC_HANDLES) {
         return begin(sceMcFuncNoOpen, sceMcResUpLimitHandle);
     }
-    host_path(path, sizeof(path), rel);
+    host_path(port, path, sizeof(path), rel);
     k = kind_of(path, NULL, NULL);
     if (k == 1) {
         return begin(sceMcFuncNoOpen, sceMcResDeniedPermit);
@@ -782,11 +809,11 @@ int sceMcOpen(int port, int slot, char *name, int flags)
         } else {
             parent[0] = '\0';
         }
-        host_path(path, sizeof(path), parent);
+        host_path(port, path, sizeof(path), parent);
         if (kind_of(path, NULL, NULL) != 1) {
             return begin(sceMcFuncNoOpen, sceMcResNoEntry);
         }
-        host_path(path, sizeof(path), rel);
+        host_path(port, path, sizeof(path), rel);
         fmode = "w+b";
     } else if (flags & SCE_TRUNC) {
         fmode = "w+b";

@@ -27,6 +27,7 @@ tracked.
 | `install_hooks.sh` | writes the pre-commit hook: `check_no_rom.sh`, `format.sh --check` on the staged C, the three `--check`s above and `strip_host_gates.py --check` |
 | `setup.sh` | idempotent: the venv from `requirements.txt`, a check for a MIPS objcopy (skip with `SKIP_TOOLCHAIN=1`), the git hooks |
 | `requirements.txt` | the venv's packages: pyelftools, pycdlib, ninja, clang-format |
+| `mc_import.c` | the `mc_import` program (a CMake target of the host build, built beside `ico_pc`; not in the packages): `mc_import [--overwrite] --to SAVES FILE...` writes ICO's save (`BESCES-50760ico`) from a raw PS2 card image (`.ps2`/`.bin`, with or without ECC spares) or a `.psu` into the card folder SAVES, and lists the other entries it skipped; `.max` and `.cbs` are recognised and refused. The reader is `port/save/mc_import.c`; docs/port/SAVES.md, "Importing saves" |
 | `host_syntax_check.sh` | package 0B's front-end check with a 32-bit host gcc over `ico2/` (`-m32`: the 32-bit presets are retired, so it needs a multilib gcc); the CMake presets supersede it |
 
 ### Maintainers: the base ELF

@@ -13,6 +13,12 @@
    folder is created by the game's first Mkdir, never before. */
 void ico_mc_host_set_root(const char *dir);
 const char *ico_mc_host_root(void);
+/* A port's card folder (0 as ico_mc_host_set_root). Port 1 holds a card only
+   when it has a folder: NULL or "" leaves it empty, the original behaviour.
+   Setting either port before sceMcInit stops sceMcInit reading the config
+   for both (saves=, saves2=). */
+void ico_mc_host_set_port_root(int port, const char *dir);
+const char *ico_mc_host_port_root(int port);
 /* 1 while a request has been issued and its sceMcSync has not returned it */
 int ico_mc_host_pending(void);
 
