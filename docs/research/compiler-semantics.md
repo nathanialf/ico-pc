@@ -307,6 +307,9 @@ out-of-range conversion to anything. `(unsigned)f` calls `fptoui`
    same caller frame)? If so, the guard in C12 could reproduce the actual
    value instead of "stop nothing". That needs an EE trace, which the plan
    does not have.
+   Answered (DIVERGENCES.md F21): no. The function is a thread's entry on
+   a heap stack nothing clears, so the slot holds the heap block's old
+   contents; the host passes a handle that stops nothing.
 2. Was the stack slot after `n[4]`/`out[4]` in `fieldCollision.c` live on
    the EE? Reading the period object's stack frame layout
    (`build/ico2/fumi/src/fieldCollision.s`) would answer it statically.

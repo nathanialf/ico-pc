@@ -1744,6 +1744,30 @@ static ObjNode rootUpdateY(void)
         }
     }
 
+    /* PC port (G2, DIVERGENCES.md F20): the plane is copied whether or not
+       the ray hit, and a miss leaves w.normal as the frame held it (_Clip
+       sets the normal only for a hit). On the EE w is at sp+240 of this
+       864-byte frame (0x1EB540 passes s8 = sp+240), so w.normal is the
+       caller's sp - 464 in _getGeometryOfMotion (frame 1232, the one call
+       at 0x1EC180). Nothing this function calls reaches above its own sp.
+       Before it, on every tick, _getGeometryOfMotion's pursueNaturalGeometry
+       walk writes x and y for a skeleton four or more levels deep: the
+       fifth level (96-byte frames, at the caller's sp - 480) saves s1 at
+       16(sp), and the fourth level's GetMatrixFromQuaternionPos (0x10DE98)
+       saves ra there: a small node index or 0x001E51A4 with a zero high
+       word, a denormal and +0 that the EE's FPU and VU0 read as zero. z and
+       w are written by nothing in that call but a floor hit at the same
+       address: this function's own w.normal or rootUpdateXZ_MotPos's (its
+       ClipWork at sp+16 of a 640-byte frame, 0x1E8C60). So on a miss the
+       EE's plane is 0, 0 and the z and w of the last normal stored there,
+       which for an actor's consecutive ticks in this mode is its own
+       skelRoot->plane's z and w. Other actors' frames and other code at
+       that depth between ticks can overwrite them; the host takes the
+       same-actor case. */
+    w.normal.f[0] = 0.0f;
+    w.normal.f[1] = 0.0f;
+    w.normal.f[2] = skelRoot->plane.f[2];
+    w.normal.f[3] = skelRoot->plane.f[3];
     getFieldCollision(&w);
     CopyVector(&skelRoot->plane, &w.normal);
     clipWallAhead(&cw);

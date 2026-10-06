@@ -50,16 +50,6 @@ speaker, or it is a follow-up a package filed (marked "follow-up" below).
 
 ## Game code and 64-bit safety
 
-- **`rootUpdateY` copies the floor normal on a miss (follow-up; needs the ROM's EE frame settled).**
-  `sugipon/src/motMan_rootUpdate.c.inc` `rootUpdateY` copies `w.normal` into
-  `skelRoot->plane` after `getFieldCollision(&w)` whether or not the ray hit,
-  and `w` is not initialised, so on a miss the plane may be a stale stack
-  value (the same class as DIVERGENCES F15 and F16). Settle from the ROM
-  what the EE's frame holds there, then zero or seed `w`.
-- **`st13c.c` stops an SE handle nobody wrote (follow-up; needs the PS2's effective value).** `script/src/st13c.c`
-  `actSt13cSekizoChk` calls `soundSeDefStop(se)` with `volatile int se` never
-  written, reading stack garbage on the PS2 and the host alike. Decide the
-  PS2's effective value and pass it (-1 if none).
 - **Freed model images (research).** Whether anything reads a model image's tables
   after the loader frees the image is not settled
   (docs/research/loader-census.md). The decoded tables live outside the

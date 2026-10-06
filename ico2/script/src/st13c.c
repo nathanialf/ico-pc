@@ -916,9 +916,6 @@ void actSt13cCageFallEffect(GObj *volatile self)
 
 static void actSt13cSekizoChk(GObj *volatile self)
 {
-    /* the SE handle, which the sound subsystem owns; here it is never
-       written before soundSeDefStop reads it back */
-    volatile int se;
     float dir[4];
 
     if (girlGObj == 0) {
@@ -971,7 +968,20 @@ static void actSt13cSekizoChk(GObj *volatile self)
 
     gflagOn(31);
 
-    soundSeDefStop(se);
+    /* PC port (G2, DIVERGENCES.md F21): the original stops `volatile int
+       se`, which nothing writes (st07a's twin stores soundSeDefPlay(1217)
+       there first; this one has no play). On the EE it is 4(sp) of the
+       96-byte frame (0x24BE14 lw a0,4(sp); the only store near it, 0x24BC14
+       sw a0,0(sp), is self). This function is a thread's entry (the mail's
+       main, isysGObjProcAdd, iosThreadCreateS over an iosMallocDebug stack
+       that nothing clears), entered from iosThreadMain's 32-byte frame
+       after only the GetThreadId syscall, so the word is whatever the heap
+       block held before: indeterminate. _soundSeDefStop stops a slot only
+       when (id >> 8) equals the slot's unsigned short num and its handle is
+       live, so any word but a still-live handle of this exact slot is a
+       no-op; the host passes -256 (slot 0, id >> 8 = -1, never a num), the
+       no-op without -1's read of seSlotTbl[255] past the 48 slots. */
+    soundSeDefStop(-256);
 
     while (stage_CheckAnimationFrame(77, 180, 0) == 0) {
         _ACTWait(1);
