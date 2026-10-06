@@ -1961,10 +1961,13 @@ static int entryProc(int first, int item)
     int cur = current_layout_id;
     if (cur == LAYOUT_PAUSE || cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
         s_origin = cur;
-        /* the menu opens on its first row each time, as Options did */
-        if (s_pages[UI_PAGE_MAIN].layout >= 0) {
-            LtProp *m = lt_ext_Layout(s_pages[UI_PAGE_MAIN].layout);
-            m->defaultItem = pageFirstNav(&s_pages[UI_PAGE_MAIN]);
+        /* the menu opens on its first row each time, as Options did, and so
+           does each page under it (a page's default can be left on a row
+           this entry hides, as Button configuration's OK leaves Controls') */
+        for (int p = 0; p < UI_PAGE_COUNT; p++) {
+            if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
+                lt_ext_Layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+            }
         }
     }
     if (cur == LAYOUT_PAUSE) {
@@ -2368,6 +2371,28 @@ static void layoutPage(Page *pg, int id)
         }
         P(r->label)->downItem = pg->rows[shown[(k + 1) % n]].label;
         P(r->label)->upItem = pg->rows[shown[(k + n - 1) % n]].label;
+    }
+    if (n == 0) {
+        return;
+    }
+    /* a hidden row is never the cursor's: its links lead to the shown rows
+       around it, and a cursor or default left on one (Button configuration's
+       OK from the pause menu, then the title) moves to the first shown row */
+    LtProp *lay = pg->layout >= 0 ? lt_ext_Layout(pg->layout) : NULL;
+    for (int i = 0, k = 0; i < pg->count; i++) {
+        Row *r = &pg->rows[i];
+        if (k < n && shown[k] == i) {
+            k++;
+            continue;
+        }
+        P(r->label)->downItem = pg->rows[shown[k % n]].label;
+        P(r->label)->upItem = pg->rows[shown[(k + n - 1) % n]].label;
+        if (lay && lay->curItem == r->label) {
+            lay->curItem = pg->rows[shown[0]].label;
+        }
+        if (lay && lay->defaultItem == r->label) {
+            lay->defaultItem = pg->rows[shown[0]].label;
+        }
     }
 }
 

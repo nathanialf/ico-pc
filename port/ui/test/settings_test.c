@@ -2894,6 +2894,50 @@ static void testGameOptions(void)
     press(0x10);
     CHECK(settle(57, 60) && texLayout[57].curItem == 294, "the menu: back to Options");
 
+    /* End Game, then the title's Settings > Controls: the cursor on Remap,
+       not on the Button configuration row the OK above left as Controls'
+       default (hidden from the title; its Cross would open 59) */
+    stage_no = 1;
+    lt_switch_layout(13);
+    CHECK(settle(13, 60), "End Game: the title");
+    texLayout[13].curItem = ui_SettingsEntryRow(13);
+    press(0x40);
+    CHECK(settle(mainL, 60), "the title's Settings");
+    openPage(mainL, 2, UI_PAGE_CONTROLS);
+    const int remap = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_LINK);
+    CHECK(lt_ext_Layout(ctlL)->curItem == remap, "title: Controls opens on Remap (%d, not %d)",
+          lt_ext_Layout(ctlL)->curItem, bc);
+    press(0x40);
+    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_REMAP), 60) && current_layout_id != 59,
+          "title: Cross opens Remap, not 59 (%d)", current_layout_id);
+    press(0x10);
+    CHECK(settle(ctlL, 60), "Remap: back");
+    /* a hidden row the cursor lands on anyway (a default set behind the
+       entry's back) moves to the first shown row; its links skip the
+       hidden rows */
+    press(0x10);
+    CHECK(settle(mainL, 60), "Controls: back");
+    lt_ext_Layout(ctlL)->defaultItem = bc;
+    openPage(mainL, 2, UI_PAGE_CONTROLS);
+    frame(0);
+    CHECK(lt_ext_Layout(ctlL)->curItem == remap && lt_ext_Layout(ctlL)->defaultItem == remap,
+          "title: off the hidden row (%d)", lt_ext_Layout(ctlL)->curItem);
+    CHECK(lt_ext_Prop(bc)->upItem == remap &&
+              lt_ext_Prop(bc)->downItem == ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_SENS),
+          "title: the hidden row's links lead to shown rows (%d, %d)", lt_ext_Prop(bc)->upItem,
+          lt_ext_Prop(bc)->downItem);
+    for (int i = 0; i < 12; i++) {
+        press(0x4000);
+        CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_LINK) &&
+                  !lt_ext_Prop(lt_ext_Layout(ctlL)->curItem)->defaultMask,
+              "title: Down %d on a shown row (%d)", i, lt_ext_Layout(ctlL)->curItem);
+    }
+    press(0x10);
+    CHECK(settle(mainL, 60), "Controls: back");
+    stage_no = 11;
+    lt_switch_layout(57);
+    CHECK(settle(57, 40), "the pause menu again");
+
     /* Brightness: 0..14 a step at a time, no wrap (la_adjust_screen) */
     systemStatus[11] = 7;
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_BRIGHTNESS), "7") == 0, "brightness 7");
