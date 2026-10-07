@@ -26,6 +26,9 @@
 #                          never linked or shipped
 #   deps/libmpeg2/         Ittiam libmpeg2 (Apache-2.0) source tree, the FMV
 #                          decoder; compiled by port/fmv/CMakeLists.txt
+#   deps/libchdr/          libchdr (BSD-3-Clause) source tree with its bundled
+#                          LZMA, miniz and zstd decoders, the .chd disc image
+#                          reader; compiled by port/data/CMakeLists.txt
 #
 # docs/THIRD_PARTY.md records the versions and licences.
 #
@@ -34,8 +37,9 @@
 #   SDL3_VERSION, SDL3_SRC_SHA256, SDL3_MINGW_SHA256
 #   DXC_VERSION, DXC_LINUX_FILE, DXC_LINUX_SHA256
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
+#   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1,
-#   SKIP_LIBMPEG2=1
+#   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -364,5 +368,54 @@ else
         MODULE_LICENSE_APACHE2 METADATA
     echo "$LIBMPEG2_COMMIT" > "$LIBMPEG2_DIR/.ico-release"
     echo "==> libmpeg2 ${LIBMPEG2_TAG} at $LIBMPEG2_DIR"
+fi
+# --- 6. libchdr (the .chd disc image reader, issue 2) ---------------------------
+#
+# rtissera/libchdr (BSD-3-Clause), tag v0.3.0 (2026-04-24) = commit
+# 93d8c239ff0d4e8d7722985992649fce12d2463b. Fetched and checked like
+# libmpeg2: the commit id, then the SHA-256 of `git archive --format=tar` of
+# it (taken 2026-10-07). The library bundles the decoders its codecs need
+# (deps/lzma-25.01, public domain; deps/miniz-3.1.1, MIT; deps/zstd-1.5.7,
+# BSD-3-Clause; include/dr_libs/dr_flac.h, public domain or MIT-0), so no
+# system zlib or zstd is linked. The zstd copy carries no licence file, so
+# zstd's LICENSE is taken from the same release's tag (facebook/zstd v1.5.7)
+# and checked. port/data/CMakeLists.txt compiles the tree as a static library
+# with each preset's own compiler. docs/THIRD_PARTY.md has the versions.
+LIBCHDR_TAG="${LIBCHDR_TAG:-v0.3.0}"
+LIBCHDR_COMMIT="${LIBCHDR_COMMIT:-93d8c239ff0d4e8d7722985992649fce12d2463b}"
+LIBCHDR_TAR_SHA256="${LIBCHDR_TAR_SHA256:-591863ddda6c4a90192e66ac682d9f535ac9af79f2385e7c180af0b3b46e1394}"
+ZSTD_LICENSE_SHA256="${ZSTD_LICENSE_SHA256:-7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8}"
+LIBCHDR_DIR="$DEST/libchdr"
+if [[ "${SKIP_LIBCHDR:-0}" == "1" ]]; then
+    echo "==> SKIP_LIBCHDR=1; not fetching libchdr"
+elif stamped "$LIBCHDR_DIR" "$LIBCHDR_COMMIT"; then
+    echo "==> libchdr ${LIBCHDR_TAG} already at $LIBCHDR_DIR"
+else
+    command -v git >/dev/null 2>&1 || {
+        echo "fetch_deps: git not found; cannot fetch libchdr" >&2
+        exit 1
+    }
+    echo "==> fetching libchdr ${LIBCHDR_TAG}"
+    git init -q "$TMP/libchdr.git"
+    git -C "$TMP/libchdr.git" fetch -q --depth 1 \
+        https://github.com/rtissera/libchdr "refs/tags/${LIBCHDR_TAG}"
+    got="$(git -C "$TMP/libchdr.git" rev-parse 'FETCH_HEAD^{commit}')"
+    if [[ "$got" != "$LIBCHDR_COMMIT" ]]; then
+        echo "fetch_deps: libchdr ${LIBCHDR_TAG} is $got, expected $LIBCHDR_COMMIT" >&2
+        exit 1
+    fi
+    git -C "$TMP/libchdr.git" archive --format=tar -o "$TMP/libchdr.tar" "$LIBCHDR_COMMIT"
+    echo "${LIBCHDR_TAR_SHA256}  $TMP/libchdr.tar" | sha256sum -c -
+    fetch "https://raw.githubusercontent.com/facebook/zstd/v1.5.7/LICENSE" \
+        "$ZSTD_LICENSE_SHA256" "$TMP/zstd-LICENSE"
+    rm -rf "$LIBCHDR_DIR"
+    mkdir -p "$LIBCHDR_DIR"
+    # the library's sources, headers and bundled decoders plus its licence
+    # and change log; not the CI files, the tests or the fuzzer
+    tar -C "$LIBCHDR_DIR" -xf "$TMP/libchdr.tar" src include deps LICENSE.txt README.md \
+        CHANGELOG.md
+    cp "$TMP/zstd-LICENSE" "$LIBCHDR_DIR/deps/zstd-1.5.7/LICENSE"
+    echo "$LIBCHDR_COMMIT" > "$LIBCHDR_DIR/.ico-release"
+    echo "==> libchdr ${LIBCHDR_TAG} at $LIBCHDR_DIR"
 fi
 echo "==> deps done: $DEST"

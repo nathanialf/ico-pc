@@ -817,36 +817,43 @@ static void write_meta(Buf *b, const Ex *x, const IcoExtractResult *res, const i
     buf_printf(b, "  ]\n}\n");
 }
 
-/* The image's SHA-1, with progress. */
-static int hash_image(Ex *x, const char *iso_path, IcoExtractResult *res, char *why, size_t whysize)
+/* The image's SHA-1 over its logical bytes (an .iso as it is, the ISO a
+   .chd holds), with progress when `x` is given. */
+static int hash_logical(Ex *x, const char *iso_path, IcoSha1 *s, char *why, size_t whysize)
 {
-    FILE *fp = ico_archive_fopen(iso_path, "rb");
+    IcoDiscImage *img = ico_disc_image_open(iso_path);
     unsigned char *buf;
-    IcoSha1 s;
-    size_t got;
-    int err;
+    uint64_t at = 0, total;
+    int err = 0;
 
-    if (fp == NULL) {
-        say(why, whysize, "cannot open %s: %s", iso_path, strerror(errno));
+    if (img == NULL) {
+        say(why, whysize, "cannot read the disc image %s", iso_path);
         return -1;
     }
     buf = malloc(HASH_CHUNK);
     if (buf == NULL) {
-        fclose(fp);
+        ico_disc_image_close(img);
         say(why, whysize, "out of memory");
         return -1;
     }
-    ico_sha1_init(&s);
-    while ((got = fread(buf, 1, HASH_CHUNK, fp)) != 0) {
-        ico_sha1_update(&s, buf, got);
-        if (tick(x, "hash", got)) {
+    total = ico_disc_image_bytes(img);
+    ico_sha1_init(s);
+    while (at < total) {
+        size_t got = total - at < HASH_CHUNK ? (size_t)(total - at) : HASH_CHUNK;
+
+        if (ico_disc_image_read(img, at, buf, got) != 0) {
+            err = 1;
+            break;
+        }
+        ico_sha1_update(s, buf, got);
+        at += got;
+        if (x != NULL && tick(x, "hash", got)) {
             break;
         }
     }
-    err = ferror(fp);
-    fclose(fp);
+    ico_disc_image_close(img);
     free(buf);
-    if (x->cancelled) {
+    if (x != NULL && x->cancelled) {
         say(why, whysize, "cancelled");
         return -1;
     }
@@ -854,8 +861,31 @@ static int hash_image(Ex *x, const char *iso_path, IcoExtractResult *res, char *
         say(why, whysize, "a read error in %s", iso_path);
         return -1;
     }
+    return 0;
+}
+
+static int hash_image(Ex *x, const char *iso_path, IcoExtractResult *res, char *why, size_t whysize)
+{
+    IcoSha1 s;
+
+    if (hash_logical(x, iso_path, &s, why, whysize) != 0) {
+        return -1;
+    }
     res->iso_size = s.length;
     sha1_hex(&s, res->iso_sha1);
+    return 0;
+}
+
+int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, char *why,
+                           size_t whysize)
+{
+    IcoSha1 s;
+
+    if (hash_logical(NULL, iso_path, &s, why, whysize) != 0) {
+        return -1;
+    }
+    *bytes = s.length;
+    sha1_hex(&s, hex);
     return 0;
 }
 
@@ -891,7 +921,10 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
 
     x.iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     if (x.iso == NULL) {
-        say(why, whysize, "%s is not a readable ISO9660 disc image", iso_path);
+        say(why, whysize,
+            "%s is not a disc image this program can read (an .iso, or a .chd made from "
+            "one); the log says why",
+            iso_path);
         return -1;
     }
     x.items = calloc(ITEMS_MAX, sizeof(*x.items));
@@ -923,16 +956,11 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         x.df.valid = 0;
     }
     {
-        FILE *fp = ico_archive_fopen(iso_path, "rb");
-        int64_t sz = -1;
+        /* the bytes the hash reads: the ISO's, whatever the container */
+        IcoDiscImage *img = ico_disc_image_open(iso_path);
 
-        if (fp != NULL && fseek(fp, 0, SEEK_END) == 0) {
-            sz = ico_archive_tell(fp);
-        }
-        if (fp != NULL) {
-            fclose(fp);
-        }
-        x.total = (sz > 0 ? (uint64_t)sz : 0) + res->bytes;
+        x.total = (img != NULL ? ico_disc_image_bytes(img) : 0) + res->bytes;
+        ico_disc_image_close(img);
     }
 
     /* 1. the image's SHA-1 */

@@ -10,7 +10,8 @@
  * every backend serves one flat LSN space with the disc's own numbering.
  *
  * Backends:
- *   ico_vfs_iso9660   the user's ISO image read in place (dev mode,
+ *   ico_vfs_iso9660   the user's disc image (.iso or .chd) read in place
+ *                     (dev mode, the first-run extractor;
  *                     port/data/iso9660.c)
  *   ico_vfs_archive   the archive the first-run extractor writes (ico.o2r,
  *                     port/data/archive.c); it keeps each file's disc LSN
@@ -59,8 +60,25 @@ typedef struct IcoVfsBackend {
 
 typedef struct IcoVfs IcoVfs;
 
-/* The ISO9660 backend (port/data/iso9660.c). */
+/* The ISO9660 backend (port/data/iso9660.c).  Its location is a disc
+   image: a plain .iso, or a .chd (MAME's compressed hunks, what PCSX2 users
+   keep) holding one, either a DVD CHD or a CD CHD whose first track is the
+   data track. */
 extern const IcoVfsBackend ico_vfs_iso9660;
+
+/* A disc image's logical bytes, whatever the container: an .iso file as it
+   is, or the ISO image a .chd holds (its SHA-1 and size are the ISO's).
+   The first-run hash and the start-up check read through this. */
+typedef struct IcoDiscImage IcoDiscImage;
+
+/* NULL on failure, the reason in the log (stderr). */
+IcoDiscImage *ico_disc_image_open(const char *path);
+void ico_disc_image_close(IcoDiscImage *img);
+/* the logical size in bytes */
+uint64_t ico_disc_image_bytes(const IcoDiscImage *img);
+/* read `len` bytes at `offset`; 0 on success, -1 if any byte lies past the
+   end or the read fails */
+int ico_disc_image_read(IcoDiscImage *img, uint64_t offset, void *dst, size_t len);
 
 /* Mount a volume with a backend; NULL on failure (the reason goes to
    stderr). */

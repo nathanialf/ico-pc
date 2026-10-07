@@ -115,10 +115,10 @@ TXT
 # ico-pc.ini: optional settings, key=value; lines starting with # or ; are
 # comments. Everything works without editing this file.
 #
-# iso: the full path of your PAL disc image (SCES-50760), for example
-# iso=C:\\Games\\Ico_PAL.iso . Leave it empty and the program asks for it
-# in a file dialog the first time, then saves your choice here. A file
-# named Ico_PAL.iso next to the .exe is also found.
+# iso: the full path of your PAL disc image (SCES-50760), a .iso or a .chd,
+# for example iso=C:\\Games\\Ico_PAL.iso . Leave it empty and the program
+# asks for it in a file dialog the first time, then saves your choice here.
+# A file named Ico_PAL.iso or Ico_PAL.chd next to the .exe is found first.
 iso=${iso[$a]}
 
 # There is no ticks= line: the game runs until you close the window

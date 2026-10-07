@@ -5,7 +5,9 @@
  * libcdvd host layer, the SIF host layer and IOP RAM.
  *
  *   vfs_test synth <dir>    builds a small ISO9660 image in <dir> and runs
- *                           everything against it (no disc needed)
+ *                           everything against it (no disc needed), then
+ *                           the same image wrapped in .chd files it writes
+ *                           (a DVD CHD and a CD CHD, plus refused ones)
  *   vfs_test disc <iso>     checks the user's PAL disc image at run time;
  *                           exits 77 (skipped) when the image is absent
  *
@@ -593,6 +595,269 @@ static void test_sif(void)
     ico_sif_host_reset();
 }
 
+/* --- .chd images around the synthetic ISO ---------------------------------- */
+
+/* No .chd is committed and the container has no chdman, so the test writes
+   CHD v5 files itself, uncompressed (every compressor "none"), from the
+   layout in libchdr's chd.h: the 124-byte header (big-endian), an optional
+   metadata entry (tag, flags and length, next offset, then the text), the
+   map (one 32-bit entry per hunk: the hunk's file offset / hunkbytes, or 0
+   for a hunk of zeros, which libchdr fills itself), then the hunks at
+   hunk-aligned offsets. */
+
+#define CHD_V5_HEADER 124u
+#define CHD_META_HEADER 16u
+#define CHD_CD_FRAME 2448u
+
+enum { CHD_PLAIN = 0, CHD_BAD_MAGIC = 1, CHD_WITH_PARENT = 2 };
+
+static uint32_t chdZeroHunks; /* the last write_chd's all-zero hunks */
+
+static void put_be32(unsigned char *p, uint32_t v)
+{
+    p[0] = (unsigned char)(v >> 24);
+    p[1] = (unsigned char)(v >> 16);
+    p[2] = (unsigned char)(v >> 8);
+    p[3] = (unsigned char)v;
+}
+
+static void put_be64(unsigned char *p, uint64_t v)
+{
+    put_be32(p, (uint32_t)(v >> 32));
+    put_be32(p + 4, (uint32_t)v);
+}
+
+static unsigned char *read_whole(const char *path, size_t *n)
+{
+    FILE *fp = fopen(path, "rb");
+    unsigned char *p = NULL;
+    long len;
+
+    *n = 0;
+    if (fp == NULL) {
+        return NULL;
+    }
+    if (fseek(fp, 0, SEEK_END) == 0 && (len = ftell(fp)) > 0 && fseek(fp, 0, SEEK_SET) == 0) {
+        p = malloc((size_t)len);
+        if (p != NULL && fread(p, 1, (size_t)len, fp) != (size_t)len) {
+            free(p);
+            p = NULL;
+        }
+        *n = p != NULL ? (size_t)len : 0;
+    }
+    fclose(fp);
+    return p;
+}
+
+/* Write `data` (n bytes, the CHD's logical bytes) as an uncompressed CHD
+   v5; `meta` is a CD track entry's text or NULL. 0 or -1. */
+static int write_chd(const char *path, const unsigned char *data, uint64_t n, uint32_t hunkbytes,
+                     uint32_t unitbytes, const char *meta, int variant)
+{
+    uint32_t hunks = (uint32_t)((n + hunkbytes - 1) / hunkbytes);
+    uint32_t metalen = meta != NULL ? (uint32_t)strlen(meta) + 1 : 0;
+    uint64_t metaoff = meta != NULL ? CHD_V5_HEADER : 0;
+    uint64_t mapoff = CHD_V5_HEADER + (meta != NULL ? CHD_META_HEADER + metalen : 0);
+    uint64_t first = (mapoff + 4ull * hunks + hunkbytes - 1) / hunkbytes; /* in hunks */
+    size_t total = (size_t)((first + hunks) * hunkbytes);
+    unsigned char *f = calloc(1, total);
+    uint32_t h;
+    FILE *fp;
+    int rc = 0;
+
+    chdZeroHunks = 0;
+    if (f == NULL) {
+        return -1;
+    }
+    memcpy(f, variant == CHD_BAD_MAGIC ? "MComprHX" : "MComprHD", 8);
+    put_be32(f + 8, CHD_V5_HEADER);
+    put_be32(f + 12, 5);
+    /* [16] compressors[4]: all 0, uncompressed */
+    put_be64(f + 32, n);
+    put_be64(f + 40, mapoff);
+    put_be64(f + 48, metaoff);
+    put_be32(f + 56, hunkbytes);
+    put_be32(f + 60, unitbytes);
+    if (variant == CHD_WITH_PARENT) {
+        f[104] = 0x5a; /* parentsha1 not zero: a diff against a parent */
+    }
+    if (meta != NULL) {
+        put_be32(f + metaoff, (uint32_t)'C' << 24 | (uint32_t)'H' << 16 | (uint32_t)'T' << 8 | '2');
+        put_be32(f + metaoff + 4, metalen); /* flags 0 in the top byte */
+        put_be64(f + metaoff + 8, 0);       /* no next entry */
+        memcpy(f + metaoff + CHD_META_HEADER, meta, metalen);
+    }
+    for (h = 0; h < hunks; h++) {
+        uint64_t at = (uint64_t)h * hunkbytes;
+        size_t k = n - at < hunkbytes ? (size_t)(n - at) : hunkbytes;
+        unsigned char *dst = f + (first + h) * hunkbytes;
+        size_t i;
+        int zero = 1;
+
+        for (i = 0; i < k; i++) {
+            zero &= data[at + i] == 0;
+        }
+        if (zero) {
+            put_be32(f + mapoff + 4u * h, 0);
+            chdZeroHunks++;
+            continue;
+        }
+        memcpy(dst, data + at, k);
+        put_be32(f + mapoff + 4u * h, (uint32_t)(first + h));
+    }
+    fp = fopen(path, "wb");
+    if (fp == NULL || fwrite(f, 1, total, fp) != total) {
+        rc = -1;
+    }
+    if (fp != NULL && fclose(fp) != 0) {
+        rc = -1;
+    }
+    free(f);
+    return rc;
+}
+
+/* The SHA-1 and size of an image's logical bytes, read in odd-sized pieces
+   so reads straddle hunks and frames. */
+static int image_sha1(const char *path, char hex[41], uint64_t *bytes)
+{
+    IcoDiscImage *img = ico_disc_image_open(path);
+    unsigned char buf[5000];
+    uint64_t at = 0;
+    Sha1 sha;
+
+    if (img == NULL) {
+        return -1;
+    }
+    *bytes = ico_disc_image_bytes(img);
+    sha1_init(&sha);
+    while (at < *bytes) {
+        size_t k = *bytes - at < sizeof(buf) ? (size_t)(*bytes - at) : sizeof(buf);
+
+        if (ico_disc_image_read(img, at, buf, k) != 0) {
+            ico_disc_image_close(img);
+            return -1;
+        }
+        sha1_update(&sha, buf, k);
+        at += k;
+    }
+    CHECK(ico_disc_image_read(img, *bytes - 1, buf, 2) != 0); /* past the end */
+    ico_disc_image_close(img);
+    sha1_final_hex(&sha, hex);
+    return 0;
+}
+
+/* Mount a .chd made from the synthetic ISO and compare it with the ISO. */
+static void check_chd_volume(const char *chd, const unsigned char *iso, size_t isosize,
+                             const char *isohex)
+{
+    unsigned char sec[2 * ICO_VFS_SECTOR];
+    char hex[41];
+    uint64_t bytes = 0;
+    uint32_t lsn;
+    IcoVfs *vfs = ico_vfs_mount(&ico_vfs_iso9660, chd);
+    int same = 1;
+
+    CHECK(vfs != NULL);
+    if (vfs == NULL) {
+        return;
+    }
+    test_vfs_synthetic(vfs);
+    CHECK(ico_vfs_volume_sectors(vfs) == SYN_SECTORS);
+    for (lsn = 0; lsn + 1 < SYN_SECTORS; lsn++) {
+        if (ico_vfs_read_sectors(vfs, lsn, 2, sec) != 0) {
+            same = 0;
+            break;
+        }
+        same &= memcmp(sec, iso + (size_t)lsn * ICO_VFS_SECTOR, sizeof(sec)) == 0;
+    }
+    CHECK(same);
+    ico_vfs_unmount(vfs);
+    CHECK(image_sha1(chd, hex, &bytes) == 0);
+    CHECK(bytes == isosize);
+    CHECK(strcmp(hex, isohex) == 0);
+}
+
+static void test_chd(const char *dir, const char *isopath)
+{
+    char chd[1024], isohex[41], hex[41], meta[160];
+    unsigned char *iso, *cd;
+    size_t isosize, i;
+    uint64_t bytes = 0;
+    uint32_t frames, s;
+    Sha1 sha;
+
+    iso = read_whole(isopath, &isosize);
+    CHECK(iso != NULL && isosize == (size_t)SYN_SECTORS * ICO_VFS_SECTOR);
+    if (iso == NULL) {
+        return;
+    }
+    /* the plain file's own SHA-1 is what both containers must give */
+    sha1_init(&sha);
+    sha1_update(&sha, iso, isosize);
+    sha1_final_hex(&sha, isohex);
+    CHECK(image_sha1(isopath, hex, &bytes) == 0 && bytes == isosize && strcmp(hex, isohex) == 0);
+    snprintf(chd, sizeof(chd), "%s/vfs_test_synthetic.chd", dir);
+
+    /* a DVD CHD (chdman createdvd): 2048-byte units; three sectors a hunk,
+       so the last hunk is partly past the end */
+    CHECK(write_chd(chd, iso, isosize, 3 * ICO_VFS_SECTOR, ICO_VFS_SECTOR, NULL, CHD_PLAIN) == 0);
+    CHECK(chdZeroHunks > 0); /* the system area: map entries of both kinds */
+    check_chd_volume(chd, iso, isosize, isohex);
+
+    /* the same bytes with the magic changed: not a CHD, and no ISO9660
+       volume either, so it is refused */
+    CHECK(write_chd(chd, iso, isosize, 3 * ICO_VFS_SECTOR, ICO_VFS_SECTOR, NULL, CHD_BAD_MAGIC) ==
+          0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, chd) == NULL);
+
+    /* a CHD that needs its parent is refused */
+    CHECK(write_chd(chd, iso, isosize, 3 * ICO_VFS_SECTOR, ICO_VFS_SECTOR, NULL, CHD_WITH_PARENT) ==
+          0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, chd) == NULL);
+    CHECK(ico_disc_image_open(chd) == NULL);
+
+    /* units that are neither a DVD sector nor a CD frame are refused */
+    CHECK(write_chd(chd, iso, isosize, 4 * 512, 512, NULL, CHD_PLAIN) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, chd) == NULL);
+
+    /* a CD CHD (chdman createcd): 2448-byte frames, raw mode 1 sectors
+       (sync, header, the 2048 user bytes at 16, EDC/ECC and subcode left
+       zero), eight frames a hunk, the track padded to four frames */
+    frames = (SYN_SECTORS + 3) / 4 * 4;
+    cd = calloc(frames, CHD_CD_FRAME);
+    CHECK(cd != NULL);
+    if (cd != NULL) {
+        for (s = 0; s < SYN_SECTORS; s++) {
+            unsigned char *fr = cd + (size_t)s * CHD_CD_FRAME;
+
+            for (i = 1; i < 11; i++) {
+                fr[i] = 0xff;
+            }
+            fr[15] = 1; /* mode 1 */
+            memcpy(fr + 16, iso + (size_t)s * ICO_VFS_SECTOR, ICO_VFS_SECTOR);
+        }
+        snprintf(meta, sizeof(meta),
+                 "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:%u PREGAP:0 PGTYPE:MODE1 PGSUB:RW "
+                 "POSTGAP:0",
+                 (unsigned)SYN_SECTORS);
+        CHECK(write_chd(chd, cd, (uint64_t)frames * CHD_CD_FRAME, 8 * CHD_CD_FRAME, CHD_CD_FRAME,
+                        meta, CHD_PLAIN) == 0);
+        check_chd_volume(chd, iso, isosize, isohex);
+
+        /* an audio first track holds no data */
+        snprintf(meta, sizeof(meta),
+                 "TRACK:1 TYPE:AUDIO SUBTYPE:NONE FRAMES:%u PREGAP:0 PGTYPE:MODE1 PGSUB:RW "
+                 "POSTGAP:0",
+                 (unsigned)SYN_SECTORS);
+        CHECK(write_chd(chd, cd, (uint64_t)frames * CHD_CD_FRAME, 8 * CHD_CD_FRAME, CHD_CD_FRAME,
+                        meta, CHD_PLAIN) == 0);
+        CHECK(ico_vfs_mount(&ico_vfs_iso9660, chd) == NULL);
+        free(cd);
+    }
+    remove(chd);
+    free(iso);
+}
+
 static int run_synthetic(const char *dir)
 {
     char path[1024];
@@ -617,6 +882,7 @@ static int run_synthetic(const char *dir)
     test_sif();
     ico_vfs_unmount(vfs);
     test_no_disc();
+    test_chd(dir, path);
     remove(path);
     printf("vfs_test synth: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

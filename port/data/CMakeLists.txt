@@ -14,6 +14,54 @@ target_include_directories(ico_miniz PUBLIC "${CMAKE_SOURCE_DIR}/port/third_part
 target_compile_definitions(ico_miniz PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES=1)
 target_compile_options(ico_miniz PRIVATE -w)
 
+# libchdr (BSD-3-Clause): reads .chd disc images, the compressed form
+# PCSX2 users keep their discs in (iso9660.c). tools/fetch_deps.sh installs
+# the source tree (tools/toolchain/deps/libchdr); it is compiled here with
+# each preset's own compiler, statically, with the decoders it bundles
+# (LZMA, miniz for Deflate, zstd, dr_flac), so the program needs no system
+# zlib or zstd (package_linux.sh's NEEDED allow-list has neither). Its
+# options are upstream's defaults (raw CD sectors and subcode decoded, block
+# CRCs checked). Its miniz is a second copy beside ico_miniz with the same
+# function names, so chdr_miniz_names.h, forced into every one of its
+# files, gives that copy's exported functions a chdr_ prefix; its LZMA is
+# already prefixed (CHDR_) and nothing else in the port defines zstd's or
+# libchdr's names.
+if(NOT DEFINED ICO_DEPS_DIR)
+    set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps")
+endif()
+set(ICO_LIBCHDR_DIR "${ICO_DEPS_DIR}/libchdr" CACHE PATH "libchdr source tree (tools/fetch_deps.sh)")
+if(NOT EXISTS "${ICO_LIBCHDR_DIR}/include/libchdr/chd.h")
+    message(FATAL_ERROR "port/data needs libchdr at ${ICO_LIBCHDR_DIR}: run tools/fetch_deps.sh")
+endif()
+set(_chdr "${ICO_LIBCHDR_DIR}")
+add_library(ico_libchdr STATIC
+    ${_chdr}/src/libchdr_bitstream.c
+    ${_chdr}/src/libchdr_cdrom.c
+    ${_chdr}/src/libchdr_chd.c
+    ${_chdr}/src/libchdr_codec_cdfl.c
+    ${_chdr}/src/libchdr_codec_cdlz.c
+    ${_chdr}/src/libchdr_codec_cdzl.c
+    ${_chdr}/src/libchdr_codec_cdzs.c
+    ${_chdr}/src/libchdr_codec_flac.c
+    ${_chdr}/src/libchdr_codec_huff.c
+    ${_chdr}/src/libchdr_codec_lzma.c
+    ${_chdr}/src/libchdr_codec_zlib.c
+    ${_chdr}/src/libchdr_codec_zstd.c
+    ${_chdr}/src/libchdr_flac.c
+    ${_chdr}/src/libchdr_huffman.c
+    ${_chdr}/deps/lzma-25.01/src/LzmaDec.c
+    ${_chdr}/deps/miniz-3.1.1/miniz.c
+    ${_chdr}/deps/zstd-1.5.7/zstddeclib.c)
+target_include_directories(ico_libchdr PUBLIC "${_chdr}/include")
+# miniz as upstream's deps/miniz-3.1.1/CMakeLists.txt builds it: inflate only
+target_compile_definitions(ico_libchdr PRIVATE MINIZ_NO_ARCHIVE_APIS MINIZ_NO_DEFLATE_APIS
+                                               MINIZ_NO_STDIO MINIZ_NO_TIME)
+target_compile_options(ico_libchdr PRIVATE
+    "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/chdr_miniz_names.h")
+# third-party code: its own warnings are not ours to fix
+target_compile_options(ico_libchdr PRIVATE -w)
+set_target_properties(ico_libchdr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # archive.c is the VFS backend over ico.o2r; extract.c the first-run
 # extractor that writes it (it calls host_config.c's SHA-1, which ico_pc and
 # archive_test compile).
@@ -37,6 +85,7 @@ target_compile_options(ico_port_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 # vsync themselves define ico_host_on_vsync_register and pull nothing from it.
 target_link_libraries(ico_port_data INTERFACE ico_platform)
 target_link_libraries(ico_port_data INTERFACE ico_miniz)
+target_link_libraries(ico_port_data PRIVATE ico_libchdr)
 target_include_directories(ico_port_data PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/miniz")
 target_compile_definitions(ico_port_data PRIVATE MINIZ_NO_ZLIB_COMPATIBLE_NAMES=1)
 

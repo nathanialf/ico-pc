@@ -35,6 +35,44 @@
       ]
     },
     {
+      "name": "libchdr",
+      "version": "v0.3.0 (93d8c239ff0d4e8d7722985992649fce12d2463b), unmodified",
+      "licence": "BSD-3-Clause",
+      "used_for": "reading .chd disc images, compiled into the program",
+      "texts": [
+        {"file": "tools/toolchain/deps/libchdr/LICENSE.txt"},
+        {"extract": {"file": "tools/toolchain/deps/libchdr/include/libchdr/chd.h", "from": "Copyright Aaron Giles", "to": "POSSIBILITY OF SUCH DAMAGE."}}
+      ]
+    },
+    {
+      "name": "Zstandard decoder (libchdr's bundled zstd)",
+      "version": "1.5.7 (zstddeclib.c), unmodified",
+      "licence": "BSD-3-Clause OR GPL-2.0; BSD-3-Clause chosen",
+      "used_for": "decompressing zstd-compressed .chd disc images, compiled into the program",
+      "texts": [{"file": "tools/toolchain/deps/libchdr/deps/zstd-1.5.7/LICENSE"}]
+    },
+    {
+      "name": "LZMA SDK decoder (libchdr's bundled LzmaDec)",
+      "version": "25.01, unmodified",
+      "licence": "public domain",
+      "used_for": "decompressing LZMA-compressed .chd disc images, compiled into the program; no notice is asked for, it is included anyway",
+      "texts": [{"file": "tools/toolchain/deps/libchdr/deps/lzma-25.01/LICENSE"}]
+    },
+    {
+      "name": "miniz (libchdr's bundled copy)",
+      "version": "3.1.1 (deps/miniz-3.1.1), inflate only, its function names given a chdr_ prefix at compile time",
+      "licence": "MIT",
+      "used_for": "decompressing Deflate-compressed .chd disc images, compiled into the program",
+      "texts": [{"file": "port/third_party/miniz/LICENSE"}]
+    },
+    {
+      "name": "dr_flac (libchdr's bundled copy)",
+      "version": "as bundled in libchdr v0.3.0, unmodified",
+      "licence": "public domain or MIT-0; MIT-0 chosen",
+      "used_for": "decompressing FLAC-compressed audio in .chd disc images, compiled into the program; MIT-0 asks for no notice, it is included anyway",
+      "texts": [{"extract": {"file": "tools/toolchain/deps/libchdr/include/dr_libs/dr_flac.h", "from": "Copyright 2023 David Reid", "to": "SOFTWARE."}}]
+    },
+    {
       "name": "miniz",
       "version": "3.1.2, unmodified",
       "licence": "MIT",

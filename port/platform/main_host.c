@@ -29,12 +29,15 @@
  *                            image directly instead: the default of the
  *                            headless build, so trace runs and tests read
  *                            the ISO as before
- *   disc image               Ico_PAL.iso beside the executable, else ini
- *                            iso=, else $ICO_ISO, else baserom/Ico_PAL.iso
- *                            under the working folder, else a (Windows: native; Linux window build: SDL3)
+ *   disc image               Ico_PAL.iso or Ico_PAL.chd beside the
+ *                            executable, else ini iso=, else $ICO_ISO, else
+ *                            baserom/Ico_PAL.iso or .chd under the working
+ *                            folder, else a (Windows: native; Linux window build: SDL3)
  *                            file-open dialog whose answer is saved as iso=
- *                            in ico-pc.ini. With use_iso its SHA-1 is
- *                            checked against the SCES-50760 image's (ini
+ *                            in ico-pc.ini. A .chd is read as the ISO it
+ *                            holds (port/data/iso9660.c). With use_iso its
+ *                            SHA-1 is checked against the SCES-50760
+ *                            image's (ini
  *                            verify=0 skips it); the extractor always
  *                            verifies
  *   pad script               ini pad_script= ([dev] pad_script); the
@@ -474,7 +477,7 @@ static void SDLCALL pick_done(void *user, const char *const *files, int filter)
 static int pick_iso_sdl(char *out, size_t size)
 {
     static const SDL_DialogFileFilter filters[] = {
-        {"ICO disc image (*.iso)", "iso"},
+        {"ICO disc image (*.iso, *.chd)", "iso;chd"},
         {"All files", "*"},
     };
     PickState st;
@@ -510,7 +513,10 @@ static int pick_iso_sdl(char *out, size_t size)
    came from the dialog (to be saved once verified). */
 static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
 {
+    /* the plain image first: of two copies, the one read without decoding */
+    static const char *const names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
     const char *v;
+    int i;
 
     *picked = 0;
     if (a->iso != NULL) {
@@ -518,10 +524,12 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         fprintf(stderr, "ico_pc: disc image from --iso: %s\n", iso);
         return;
     }
-    ico_path_join(iso, ICO_PATH_MAX, exe_dir, "Ico_PAL.iso");
-    if (ico_file_exists(iso)) {
-        fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
-        return;
+    for (i = 0; i < 2; i++) {
+        ico_path_join(iso, ICO_PATH_MAX, exe_dir, names[i]);
+        if (ico_file_exists(iso)) {
+            fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
+            return;
+        }
     }
     v = ico_ini_get(ini, "iso");
     if (v != NULL && v[0] != '\0') {
@@ -537,10 +545,12 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         fprintf(stderr, "ico_pc: disc image from ICO_ISO: %s\n", iso);
         return;
     }
-    if (ico_file_exists("baserom/Ico_PAL.iso")) {
-        snprintf(iso, ICO_PATH_MAX, "baserom/Ico_PAL.iso");
-        fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
-        return;
+    for (i = 0; i < 2; i++) {
+        snprintf(iso, ICO_PATH_MAX, "baserom/%s", names[i]);
+        if (ico_file_exists(iso)) {
+            fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
+            return;
+        }
     }
 #if !defined(ICO_HEADLESS) && !defined(_WIN32)
     if (pick_iso_sdl(iso, ICO_PATH_MAX) == 0) {
@@ -551,23 +561,26 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         *picked = 1;
         return;
     }
-    ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso next to "
-                               "ico_pc, or set iso=<path> in ico-pc.ini.");
+    ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
+                               "Ico_PAL.chd next to ico_pc, or set iso=<path> in ico-pc.ini.");
 }
 
 static void verify_iso(const char *iso)
 {
     char hex[41];
-    unsigned long long bytes = 0;
+    char why[256];
+    uint64_t bytes = 0;
     clock_t start = clock();
     double secs;
 
+    /* the ISO's bytes, also for a .chd (extract.h) */
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
-    if (ico_sha1_file(iso, hex, &bytes) != 0) {
+    if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
+        fprintf(stderr, "ico_pc: %s\n", why);
         ico_host_fatal(log_file(), "Cannot read the disc image %s.", iso);
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
-    fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, bytes, secs);
+    fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
     if (strcmp(hex, ICO_ISO_SHA1) != 0) {
         ico_host_fatal(log_file(),
                        "%s is not the expected ICO disc image (PAL, SCES-50760).\n"

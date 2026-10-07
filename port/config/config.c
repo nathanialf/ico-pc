@@ -246,7 +246,7 @@ static const char first_run_text[] =
     "version = 1\n"
     "\n"
     "[paths]\n"
-    "# The disc image; empty asks on the first start.\n"
+    "# The disc image, a .iso or a .chd; empty asks on the first start.\n"
     "iso = \"\"\n"
     "\n"
     "[video]\n"

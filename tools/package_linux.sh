@@ -124,10 +124,11 @@ cat > "$stage/ico-pc.ini" <<INI
 # ico-pc.ini: optional settings, key=value; lines starting with # or ; are
 # comments. Everything works without editing this file.
 #
-# iso: the full path of your PAL disc image (SCES-50760), for example
-# iso=/home/deck/Games/Ico_PAL.iso . Leave it empty and the program asks for
-# it in a file dialog the first run (it needs zenity), then saves your choice
-# here. A file named Ico_PAL.iso next to ico_pc is also found. The image is
+# iso: the full path of your PAL disc image (SCES-50760), a .iso or a .chd,
+# for example iso=/home/deck/Games/Ico_PAL.iso . Leave it empty and the
+# program asks for it in a file dialog the first run (it needs zenity), then
+# saves your choice here. A file named Ico_PAL.iso or Ico_PAL.chd next to
+# ico_pc is found first. The image is
 # read once, to extract the game's data into ico.o2r in the per-user folder
 # (~/.local/share/ico-pc/ico-pc/); later runs do not need it.
 iso=$iso
