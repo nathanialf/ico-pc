@@ -38,7 +38,10 @@
  *   packs    (texture packs) rdtex_CreateReplacement moves the image into
  *            the texture's pending upload with the box chain for an RGBA8
  *            image without mips, rdtex_ReplacementMips on a size that is
- *            not a power of two, BC refused without a device;
+ *            not a power of two; package P8: a replacement's chain is the
+ *            alpha-weighted box chain with no alpha coverage kept (a
+ *            lattice's level 1 alpha is the plain average, its colour the
+ *            wires'); BC refused without a device;
  *            rdtex_Replace installs it on the entry (a stale generation
  *            refused), a new store, rdtex_RevertReplacements and
  *            rdtex_Drop each give it up through the release hook, the old
@@ -866,6 +869,41 @@ static void replacementChecks(void)
               img.lv[3].h == 1 && img.bytes == rdtex_MipChainBytes(13, 5) + 13 * 5 * 4,
           "13x5 chain");
     CHECK(rdtex_ReplacementMips(&img) == -1, "a second chain refused");
+    texpack_FreeImage(&img);
+    /* package P8: a lattice (wires every 4th row and column, (200, 180,
+     * 160) alpha 0x80; holes black alpha 0): level 1 is the alpha-weighted
+     * box chain exactly, with no coverage boost (the boost would raise the
+     * 0x20 texels over 64) */
+    img = repImage(16, 16, 0);
+    {
+        uint8_t *p = (uint8_t *)img.lv[0].data;
+        for (int i = 0; i < 256; i++) {
+            const int wire = (i % 16) % 4 == 0 || (i / 16) % 4 == 0;
+            p[i * 4 + 0] = wire ? 200 : 0;
+            p[i * 4 + 1] = wire ? 180 : 0;
+            p[i * 4 + 2] = wire ? 160 : 0;
+            p[i * 4 + 3] = wire ? 0x80 : 0;
+        }
+        static uint8_t want[16 * 16 * 4];
+        const uint32_t wn = rdtex_BuildMipChain(p, 16, 16, want, 1);
+        CHECK(rdtex_ReplacementMips(&img) == 0 && img.levels == wn + 1 &&
+                  memcmp(img.lv[1].data, want, rdtex_MipChainBytes(16, 16)) == 0,
+              "a replacement's chain is the alpha-weighted box chain, no coverage kept");
+        const uint8_t *l1 = img.lv[1].data;
+        int over = 0, top = 0, dark = 0;
+        for (int i = 0; i < 64; i++) {
+            over += l1[i * 4 + 3] > 0x60;
+            top += l1[i * 4 + 3] == 0x60;
+            dark += l1[i * 4 + 3] && l1[i * 4] != 200;
+        }
+        /* level 1: 0x60 where both coordinates are even (three wire texels
+         * of four), 0x40 where one is, 0 where neither; a coverage boost
+         * at 64 would raise them (a quarter over 64, the base 7/16) */
+        CHECK(over == 0 && top == 16 && dark == 0,
+              "replacement lattice level 1: %d texels raised over 0x60, %d at 0x60 (16 "
+              "expected), %d off the wire colour",
+              over, top, dark);
+    }
     texpack_FreeImage(&img);
     /* a replacement destroyed before its upload frees its levels */
     img = repImage(8, 8, 0);

@@ -561,14 +561,6 @@ void rdtex_Reset(void)
 
 /* ------------------------------------------------------- texture packs */
 
-/* the alpha the coverage of the replacement's box chain keeps: alpha > 64,
-   the semi-transparent lists' default test (rd.h RdListDefault).  The
-   game's own Enhanced mips keep coverage only for textures their draws
-   alpha-test unblended, at the draws' reference (rd_replay.c mipBoost);
-   a replacement's chain is built on the loader thread before any draw, so
-   it keeps the list default */
-#define RDTEX_REPLACEMENT_COVERAGE_REF 64
-
 int rdtex_ReplacementMips(TexpackImage *img)
 {
     if (!img || !img->blob || img->fmt != RD_TEXEL_RGBA8 || img->levels != 1 || img->w == 0 ||
@@ -587,9 +579,10 @@ int rdtex_ReplacementMips(TexpackImage *img)
     }
     memcpy(blob, img->lv[0].data, base);
     /* the pack's alpha is raw GS alpha (RD_TEXSRC_RGBA32): colour weighted
-       by it, as the game's own Enhanced mips */
+       by it, as the game's own Enhanced mips.  No alpha coverage is kept:
+       PCSX2 keeps none for a pack's mips and the authors tune their alpha
+       for that */
     const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base, 1);
-    rdtex_KeepAlphaCoverage(blob, w, h, blob + base, n, RDTEX_REPLACEMENT_COVERAGE_REF);
     free(img->blob);
     img->blob = blob;
     img->bytes = base + chain;

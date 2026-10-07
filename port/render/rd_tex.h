@@ -209,8 +209,8 @@ struct TexpackImage; /* texpack.h */
  * the device takes, or it is empty. */
 RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
                               const char *debugName);
-/* The 2x2 box chain (rdtex_BuildMipChain, alpha coverage kept as the
- * Enhanced filter's mips) appended to a one-level RGBA8 image: img's blob
+/* The 2x2 box chain (rdtex_BuildMipChain, colour weighted by alpha; no
+ * alpha coverage kept, as PCSX2 keeps none for a pack) appended to a one-level RGBA8 image: img's blob
  * is replaced by one holding every level and img->levels set.  CPU only,
  * callable from any thread (the pack's loader thread may do it so the game
  * fiber does not).  0, or -1 (img unchanged: not a one-level RGBA8 image
