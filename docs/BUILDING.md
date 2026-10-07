@@ -39,7 +39,7 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 | `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
 | `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned |
-| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC and libmpeg2 | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
+| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2 and libchdr | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
 The Debian packages come from `deb.debian.org`, falling back to
 `snapshot.debian.org` once a version is superseded. `SKIP_MINGW_GCC=1` and

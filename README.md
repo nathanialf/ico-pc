@@ -15,7 +15,8 @@ remapping, achievements) that are off or neutral until you choose them.
 
 ## What you need
 
-- Your own image of the **PAL** disc, SCES-50760, as a plain `.iso` file.
+- Your own image of the **PAL** disc, SCES-50760, as a plain `.iso` file
+  or as a `.chd` (the compressed image PCSX2 and other emulators read).
   Other regions and editions are not supported.
 - A 64-bit PC with a Vulkan driver (current NVIDIA, AMD or Intel drivers on
   Windows 10/11 and Linux; Mesa RADV on the Steam Deck).
@@ -33,7 +34,7 @@ glibc 2.38 or later (SteamOS 3.5+, Debian 13, Ubuntu 24.04).
 **Steam Deck:** in Desktop Mode unpack the Linux package, then Steam >
 Add a Non-Steam Game > browse to `ico_pc`, with no launch options. Do the
 first launch in Desktop Mode (the disc image dialog needs `zenity`, or put
-the image beside `ico_pc` as `Ico_PAL.iso`), then play in Game Mode with the
+the image beside `ico_pc` as `Ico_PAL.iso` or `Ico_PAL.chd`), then play in Game Mode with the
 default gamepad layout. The Deck's controls work with no setup. In Game Mode
 the game is always shown full screen, whatever the Fullscreen row says.
 
@@ -43,14 +44,15 @@ There are no command-line options to learn: double-click or run it.
 
 The first run needs your disc image once. It looks for it, in order:
 
-1. `iso=` in `ico-pc.ini` beside the program;
-2. a file named `Ico_PAL.iso` beside the program;
+1. a file named `Ico_PAL.iso` or `Ico_PAL.chd` beside the program;
+2. `iso=` in `ico-pc.ini` beside the program (a `.iso` or a `.chd`);
 3. otherwise a file dialog opens and asks for it, and remembers the choice in
    `ico-pc.ini`. (On Linux the dialog needs `zenity`.)
 
 It then checks the image, shows a small progress window and extracts the
-game's data once (about 870 MB, into `ico.o2r`). Later runs use that file and
-never open the `.iso`, so you can move or delete the image afterwards.
+game's data once (about 870 MB, into `ico.o2r`). A `.chd` gives the same
+data as the `.iso` it was made from. Later runs use that file and never open
+the disc image, so you can move or delete the image afterwards.
 
 ## Controls
 
@@ -182,6 +184,9 @@ and window size. If something goes wrong it says why:
 - `rhi_vk:` lines: no usable Vulkan driver, or a missing feature.
 - A `CRASH:` block: send it with the `.map` file from the download.
 - A `WATCHDOG:` block: the game stopped making progress for 30 seconds.
+- `iso9660:` lines: why the disc image could not be read. A `.chd` must be
+  complete on its own: one made as a difference from another `.chd` is
+  refused, so use the full `.chd` or the `.iso`.
 
 Send that log with a problem report, and `config.toml` from the user folder
 described under Saves if asked. Press **F12** with a problem on screen to
