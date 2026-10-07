@@ -1,0 +1,109 @@
+/* window_video_test.c: ico_window_video_fullscreen (window_video.c) on SDL's
+ * offscreen video driver.
+ *
+ * This exercises the wrapper's readback and logging: what it returns is the
+ * window's flag after the request, and the size it reports is the window's
+ * pixel size then.  It does not exercise X11, KWin or gamescope (the
+ * offscreen driver has no window manager to refuse anything); the Deck is
+ * where that is checked, through the log lines this wrapper writes.
+ *
+ * Exit 77 (skipped) when SDL has no offscreen video driver. */
+#include "../window_video.h"
+#include <stdio.h>
+
+static int s_failures;
+
+#define CHECK(cond, ...)                                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL " __VA_ARGS__);                                                           \
+            printf("\n");                                                                          \
+            s_failures++;                                                                          \
+        }                                                                                          \
+    } while (0)
+
+/* Drains the queue; returns whether a fullscreen or pixel size event for w
+   was in it */
+static int drain_fullscreen_events(SDL_Window *w, int *entered, int *left, int *sized)
+{
+    SDL_Event e;
+    const SDL_WindowID id = SDL_GetWindowID(w);
+
+    *entered = *left = *sized = 0;
+    SDL_PumpEvents();
+    while (SDL_PollEvent(&e)) {
+        if (e.window.windowID != id) {
+            continue;
+        }
+        *entered |= e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN;
+        *left |= e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN;
+        *sized |= e.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+    }
+    return *entered || *left || *sized;
+}
+
+int main(void)
+{
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        printf("SKIP window_video_test: SDL_Init(offscreen): %s\n", SDL_GetError());
+        return 77;
+    }
+    SDL_Window *w = SDL_CreateWindow("window_video_test", 960, 720, SDL_WINDOW_RESIZABLE);
+    if (w == NULL) {
+        printf("SKIP window_video_test: SDL_CreateWindow: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 77;
+    }
+    const SDL_DisplayMode *desk = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(w));
+    if (desk == NULL) {
+        printf("SKIP window_video_test: no desktop mode: %s\n", SDL_GetError());
+        SDL_DestroyWindow(w);
+        SDL_Quit();
+        return 77;
+    }
+    printf("offscreen desktop mode %dx%d\n", desk->w, desk->h);
+    int entered, left, sized;
+    drain_fullscreen_events(w, &entered, &left, &sized);
+
+    /* on: the flag, the desktop's size, and the events window_host.c's pump
+       acts on */
+    int pw = -1, ph = -1;
+    int r = ico_window_video_fullscreen(w, 1, &pw, &ph);
+    CHECK(r == 1, "fullscreen on returned %d", r);
+    CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0, "fullscreen flag not set");
+    CHECK(pw == desk->w && ph == desk->h, "fullscreen size %dx%d, desktop %dx%d", pw, ph, desk->w,
+          desk->h);
+    {
+        int sw = 0, sh = 0;
+        SDL_GetWindowSizeInPixels(w, &sw, &sh);
+        CHECK(sw == pw && sh == ph, "reported %dx%d, the window is %dx%d", pw, ph, sw, sh);
+    }
+    drain_fullscreen_events(w, &entered, &left, &sized);
+    printf("fullscreen on: events enter %d, leave %d, pixel size %d\n", entered, left, sized);
+    CHECK(entered || sized, "no ENTER_FULLSCREEN or PIXEL_SIZE_CHANGED event after fullscreen on");
+    CHECK(!left, "LEAVE_FULLSCREEN after fullscreen on");
+
+    /* on again: nothing to do, the same answer */
+    r = ico_window_video_fullscreen(w, 1, NULL, NULL);
+    CHECK(r == 1, "fullscreen on again returned %d", r);
+
+    /* off: the flag clear and the window's own size back */
+    pw = ph = -1;
+    r = ico_window_video_fullscreen(w, 0, &pw, &ph);
+    CHECK(r == 0, "fullscreen off returned %d", r);
+    CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "fullscreen flag still set");
+    CHECK(pw == 960 && ph == 720, "windowed size %dx%d, want 960x720", pw, ph);
+    drain_fullscreen_events(w, &entered, &left, &sized);
+    printf("fullscreen off: events enter %d, leave %d, pixel size %d\n", entered, left, sized);
+    CHECK(left || sized, "no LEAVE_FULLSCREEN or PIXEL_SIZE_CHANGED event after fullscreen off");
+
+    SDL_DestroyWindow(w);
+    SDL_Quit();
+    if (s_failures) {
+        printf("window_video_test: %d failures\n", s_failures);
+        return 1;
+    }
+    printf("window_video_test: ok\n");
+    return 0;
+}

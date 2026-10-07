@@ -27,6 +27,7 @@
 #include "ui_host.h"
 #include "video_options.h"
 #include "window_host.h"
+#include "window_video.h"
 
 /* The window's first client size: 4:3, three times 320 x 240. */
 #define WINDOW_W 960
@@ -62,7 +63,14 @@ static int s_open;
    (port/game/video_options.h) */
 static unsigned s_videoSerial;
 
+/* the window's real fullscreen state (SDL_WINDOW_FULLSCREEN as last read),
+   not the option: the window manager can refuse a request or change it on
+   its own (v0.3.1, P3) */
 static int s_fullscreen;
+
+/* the options the last "display changed" line compared against (seeded
+   after the startup line) */
+static IcoVideoOptions s_videoLast;
 
 /* renderer wave 7 (R7b): the presentation loop (ico_window_pace) */
 static struct {
@@ -160,6 +168,70 @@ static void video_settings(RdSettings *rs, int w, int h)
     rhi_PreferMailbox(s_pres.mailbox != 0);
 }
 
+/* The window is fullscreen now (SDL's flag, which follows the window
+   manager's answer) */
+static int window_fullscreen(void)
+{
+    return s_window != NULL && (SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+static const char *video_preset_label(const IcoVideoOptions *o)
+{
+    const int p = ico_video_preset(o);
+
+    return p == ICO_VIDEO_ORIGINAL ? "Original" : (p == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom");
+}
+
+/* The CRT filter's state in one word: "off" or its mode */
+static const char *video_crt_label(const IcoVideoOptions *o)
+{
+    return o->crt ? ico_video_crt_mode_name(o->crtMode) : "off";
+}
+
+/* One field of the "display changed" line: ", name old -> new" */
+static void video_log_field(char *line, size_t size, const char *name, const char *was,
+                            const char *now)
+{
+    const size_t len = strlen(line);
+
+    if (strcmp(was, now) != 0 && len < size) {
+        snprintf(line + len, size - len, "%s%s %s -> %s", len ? ", " : "", name, was, now);
+    }
+}
+
+/* v0.3.1 (P3): one line per change of the display options after startup,
+   naming only the fields that differ, in the startup line's words; nothing
+   when nothing did (a resize's forced apply) */
+static void video_log_changes(const IcoVideoOptions *o)
+{
+    const IcoVideoOptions *p = &s_videoLast;
+    char line[512] = "", a[32], b[32];
+
+    video_log_field(line, sizeof(line), "preset", video_preset_label(p), video_preset_label(o));
+    video_log_field(line, sizeof(line), "resolution", ico_video_resolution_name(p, a, sizeof(a)),
+                    ico_video_resolution_name(o, b, sizeof(b)));
+    video_log_field(line, sizeof(line), "aspect", ico_video_aspect_name(p->aspect),
+                    ico_video_aspect_name(o->aspect));
+    video_log_field(line, sizeof(line), "fullscreen", p->fullscreen ? "on" : "off",
+                    o->fullscreen ? "on" : "off");
+    video_log_field(line, sizeof(line), "vsync", p->vsync ? "on" : "off", o->vsync ? "on" : "off");
+    video_log_field(line, sizeof(line), "texture filter", ico_video_filter_name(p->filter),
+                    ico_video_filter_name(o->filter));
+    video_log_field(line, sizeof(line), "height", p->fullHeight ? "full" : "half",
+                    o->fullHeight ? "full" : "half");
+    video_log_field(line, sizeof(line), "framerate",
+                    ico_video_framerate_name(p->framerate, a, sizeof(a)),
+                    ico_video_framerate_name(o->framerate, b, sizeof(b)));
+    video_log_field(line, sizeof(line), "crt", video_crt_label(p), video_crt_label(o));
+    snprintf(a, sizeof(a), "%.2f", (double)p->crtStrength);
+    snprintf(b, sizeof(b), "%.2f", (double)o->crtStrength);
+    video_log_field(line, sizeof(line), "crt strength", a, b);
+    if (line[0] != '\0') {
+        fprintf(stderr, "window: display changed: %s\n", line);
+    }
+    s_videoLast = *o;
+}
+
 /* Applies the options changed since the last call (the Settings menu's
    ico_video_set, Alt+Enter; force: a resize, for aspect "auto" and
    resolution "window"): fullscreen through SDL, the rest through
@@ -176,12 +248,22 @@ static void video_apply(int force)
     }
     s_videoSerial = ico_video_serial();
     ico_video_get(&o);
-    if (o.fullscreen != s_fullscreen) {
-        /* no mode set: SDL's borderless fullscreen at the desktop
-           resolution; the resize event follows */
-        SDL_SetWindowFullscreen(s_window, o.fullscreen != 0);
-        s_fullscreen = o.fullscreen;
+    /* compared against the window, not the last request: an option that
+       already matches what the window is asks for nothing (the write-backs
+       below and in ico_window_pump never request again) */
+    if ((o.fullscreen != 0) != window_fullscreen()) {
+        /* borderless fullscreen at the desktop resolution; the resize event
+           follows */
+        s_fullscreen = ico_window_video_fullscreen(s_window, o.fullscreen, NULL, NULL);
+        if (s_fullscreen != (o.fullscreen != 0)) {
+            /* refused (or not yet granted): the option follows the window,
+               so the menu and Alt+Enter start from the truth */
+            o.fullscreen = s_fullscreen;
+            ico_video_set(&o);
+            s_videoSerial = ico_video_serial();
+        }
     }
+    video_log_changes(&o);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     const int mailbox = s_pres.mailbox;
     video_settings(&rs, w, h);
@@ -211,9 +293,18 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr, "window: SDL_Init: %s\n", SDL_GetError());
         return -1;
     }
+    IcoVideoOptions start;
+
+    ico_video_get(&start);
+    s_videoSerial = ico_video_serial();
+    /* v0.3.1 (P3): fullscreen from the config is asked for at creation, not
+       after: SDL's X11 backend then writes _NET_WM_STATE before the window
+       is mapped, which KWin and gamescope honour (borderless at the desktop
+       resolution; no exclusive mode) */
     s_window = SDL_CreateWindow("ICO", WINDOW_W, WINDOW_H,
                                 (rhi_Backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0) |
-                                    SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                                    SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                    (start.fullscreen ? SDL_WINDOW_FULLSCREEN : 0));
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
         SDL_Quit();
@@ -232,16 +323,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         snprintf(cache, sizeof(cache), "%s/pipelines.vkcache", pref);
         rhi_SetPipelineCachePath(cache);
     }
-    {
-        IcoVideoOptions o;
-
-        ico_video_get(&o);
+    /* the window system's answer before the size is read */
+    SDL_SyncWindow(s_window);
+    s_fullscreen = window_fullscreen();
+    if (start.fullscreen && !s_fullscreen) {
+        /* not granted (yet): the option follows the window; an
+           ENTER_FULLSCREEN event later sets it back (ico_window_pump) */
+        fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
+        start.fullscreen = 0;
+        ico_video_set(&start);
         s_videoSerial = ico_video_serial();
-        if (o.fullscreen) {
-            SDL_SetWindowFullscreen(s_window, true);
-            SDL_SyncWindow(s_window);
-            s_fullscreen = 1;
-        }
     }
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     video_settings(&rs, w, h);
@@ -269,20 +360,17 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
                 "texture filter %s, %s height, framerate %s), vsync %s\n",
-                w, h, o.fullscreen ? " fullscreen" : "",
+                w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
-                ico_video_preset(&o) == ICO_VIDEO_ORIGINAL
-                    ? "Original"
-                    : (ico_video_preset(&o) == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom"),
-                ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
-                ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
+                video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
+                ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
+                o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off");
-        if (o.vsync) {
-            fprintf(stderr, "window: present mode %s\n",
-                    rhi_PresentMailbox() ? "mailbox (vsync without waiting on the display)"
-                                         : "fifo");
-        }
+        fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
+                rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
+        /* v0.3.1 (P3): later changes are logged against this */
+        s_videoLast = o;
     }
     s_pres.cutSerial = ico_video_cut_serial();
     /* Q1: [dev] slow_step_ms (default 8; 0 off) */
@@ -320,7 +408,9 @@ static void toggle_fullscreen(void)
     IcoVideoOptions o;
 
     ico_video_get(&o);
-    o.fullscreen = !s_fullscreen;
+    /* from what the window is, so a refused or WM-made change never needs
+       two presses */
+    o.fullscreen = !window_fullscreen();
     ico_video_set(&o);
     video_apply(0);
 }
@@ -456,6 +546,27 @@ static void stats_fast_toggle(void)
             s_pres.fastUntil ? "second for 30 s" : "10 s again");
 }
 
+/* v0.3.1 (P3): the window entered or left fullscreen, at our request, at
+   the window manager's (its own shortcut), or a request was refused.  The
+   state is read from the window, not the event (one queued before a later
+   request is stale); when the option disagrees it follows the window, so
+   the menu and Alt+Enter start from the truth.  video_apply then finds the
+   option matching the window and requests nothing. */
+static void window_fullscreen_event(int entered)
+{
+    IcoVideoOptions o;
+
+    s_fullscreen = window_fullscreen();
+    ico_video_get(&o);
+    fprintf(stderr, "window: %s fullscreen; the window is %s, the option says %s\n",
+            entered ? "entered" : "left", s_fullscreen ? "fullscreen" : "windowed",
+            o.fullscreen ? "fullscreen" : "windowed");
+    if ((o.fullscreen != 0) != s_fullscreen) {
+        o.fullscreen = s_fullscreen;
+        ico_video_set(&o);
+    }
+}
+
 int ico_window_pump(void)
 {
     SDL_Event e;
@@ -496,7 +607,14 @@ int ico_window_pump(void)
                 ico_audio_sdl_device_removed(e.adevice.which);
             }
             break;
+        case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+        case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+            window_fullscreen_event(e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN);
+            break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            fprintf(stderr, "window: %dx%d pixels, flags 0x%llx (fullscreen %s)\n", e.window.data1,
+                    e.window.data2, (unsigned long long)SDL_GetWindowFlags(s_window),
+                    window_fullscreen() ? "on" : "off");
             if (e.window.data1 > 0 && e.window.data2 > 0) {
                 rd_ResizeOutput((uint32_t)e.window.data1, (uint32_t)e.window.data2);
                 /* R7a: aspect "auto" and resolution "window" follow the size */
@@ -742,14 +860,26 @@ static void pace_log(Uint64 now)
     if (!rd_InterpolationActive()) {
         s_pres.statPresents = replays; /* one present per replay */
     }
+    /* v0.3.1 (P3): what the presents went to: the frame rate option, the
+       swapchain's present mode, the display's refresh and the window as it
+       is (the only record of them a player's log has) */
+    char fr[16];
+    const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
+    int pw = 0, ph = 0;
+
+    SDL_GetWindowSizeInPixels(s_window, &pw, &ph);
     fprintf(stderr,
             "window: %u presents and %u game frames (%u frame numbers) in %.1f s: %.1f "
             "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-            "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms\n",
+            "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms; framerate %s, present "
+            "%s, display %.1f Hz, window %dx%d%s\n",
             s_pres.statPresents, s_pres.statFrames, fn - s_pres.statFrameNo, sec,
             s_pres.statPresents / sec, s_pres.statFrames / sec, s_pres.statVsyncs,
             s_pres.statVsyncs / sec, s_pres.statResyncs, (double)s_pres.statDropped / 1e6, maxMs,
-            replays, s_pres.slowSteps, s_pres.slowMs);
+            replays, s_pres.slowSteps, s_pres.slowMs,
+            ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_PresentModeName(),
+            dm != NULL ? (double)dm->refresh_rate : 0.0, pw, ph,
+            window_fullscreen() ? " fullscreen" : "");
     perf_drain();
     perf_log();
     s_pres.statAt = now;

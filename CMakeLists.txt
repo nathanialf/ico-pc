@@ -249,7 +249,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                             "volk) and SDL3 for this target: run tools/fetch_deps.sh, or "
                             "configure with -DICO_HEADLESS=ON")
     endif()
-    target_sources(ico_pc PRIVATE port/platform/window_host.c)
+    target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_video.c)
     target_link_libraries(ico_pc PRIVATE ico_render SDL3::SDL3-shared)
     if(WIN32)
         # SDL3.dll beside the program

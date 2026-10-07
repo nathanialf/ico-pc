@@ -111,3 +111,30 @@ target_link_libraries(ios_chain_test PRIVATE ico_platform)
 if(_ico_run_tests)
     add_test(NAME ios_chain COMMAND ios_chain_test)
 endif()
+
+# v0.3.1 (P3): the fullscreen request's readback (window_video.c) on SDL's
+# offscreen video driver. SDL3 is found by port/rhi, configured after this
+# directory, so the test is defined once the top level is done; exit 77
+# (skipped) without the offscreen driver.
+function(_ico_window_video_test)
+    if(NOT TARGET SDL3::SDL3-shared)
+        return()
+    endif()
+    set(_dir "${CMAKE_SOURCE_DIR}/port/platform")
+    add_executable(window_video_test "${_dir}/test/window_video_test.c" "${_dir}/window_video.c")
+    target_compile_options(window_video_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(window_video_test PRIVATE SDL3::SDL3-shared)
+    if(WIN32)
+        add_custom_command(TARGET window_video_test POST_BUILD
+                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                                   "$<TARGET_FILE:SDL3::SDL3-shared>"
+                                   "$<TARGET_FILE_DIR:window_video_test>"
+                           VERBATIM)
+    endif()
+    if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+       OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+        add_test(NAME window_video COMMAND window_video_test)
+        set_tests_properties(window_video PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_window_video_test)
