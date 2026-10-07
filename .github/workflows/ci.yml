@@ -33,8 +33,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
+        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
+        # twice): a short step timeout and one retry instead of the job's 120
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
+          for try in 1 2; do
+            sudo apt-get update && break
+            sleep 30
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-14 curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
@@ -125,8 +131,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
+        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
+        # twice): a short step timeout and one retry instead of the job's 120
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
+          for try in 1 2; do
+            sudo apt-get update && break
+            sleep 30
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-14 curl xz-utils python3 python3-venv \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
