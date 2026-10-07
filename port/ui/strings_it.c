@@ -179,6 +179,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
     [UI_STR_VAL_CRT_PVM] = "PVM",
     [UI_STR_VAL_CRT_SHADOW] = "Maschera forata",
+    [UI_STR_VAL_CUSTOM] = "Personalizzata",
+    [UI_STR_RESOLUTION_CRT_NOTE] =
+        "Il filtro CRT mostra i pixel originali della PS2: l’immagine viene resa a 1x finché è attivo.",
+    [UI_STR_PRESET_NOTE] =
+        "Originale è l’immagine della PS2. Migliorata imposta le quattro voci qui sotto. Personalizzata se ne cambi una.",
     [UI_STR_QUIT_DESKTOP] = "Esci al desktop",
     [UI_STR_QUIT_CONFIRM] = "Uscire al desktop?",
     [UI_STR_OPT_CIRCLE_BACK] = "Cerchio per tornare indietro",

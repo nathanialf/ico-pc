@@ -487,6 +487,7 @@ static int extrasMusic(void)
 /* package MV: the model viewer's list (port/game/model_viewer.c registers
    it), -1 without one */
 static int (*s_modelsEnter)(void);
+static int (*s_fullscreenQuery)(void); /* the window's truth, when installed */
 
 void ui_SettingsSetModelsHandler(int (*fn)(void))
 {
@@ -552,10 +553,11 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     IcoVideoOptions o;
     ico_video_get(&o);
     switch (opt) {
-    case UI_OPT_PRESET:
-        /* P2: Custom */
-        return ui_Str(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? UI_STR_VAL_ORIGINAL
-                                                                 : UI_STR_VAL_ENHANCED);
+    case UI_OPT_PRESET: {
+        static const int presetStr[3] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_ENHANCED,
+                                         UI_STR_VAL_CUSTOM};
+        return ui_Str(presetStr[ico_video_preset(&o)]);
+    }
     case UI_OPT_RESOLUTION:
         if (crtForcesNative(&o)) {
             return "1x (CRT)";
@@ -568,7 +570,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return o.aspect == ICO_ASPECT_AUTO ? ui_Str(UI_STR_VAL_AUTO)
                                            : ico_video_aspect_name(o.aspect);
     case UI_OPT_FULLSCREEN:
-        return onOff(o.fullscreen);
+        /* the window's own answer when the host installed one */
+        return onOff(s_fullscreenQuery ? s_fullscreenQuery() : o.fullscreen);
     case UI_OPT_VSYNC:
         return onOff(o.vsync);
     case UI_OPT_FILTER:
@@ -723,9 +726,16 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     int video = 0;
     switch (opt) {
     case UI_OPT_PRESET:
-        /* the shortcut: the two named presets toggle, Custom goes Enhanced */
-        ico_video_set_preset(&o, ico_video_preset(&o) == ICO_VIDEO_ENHANCED ? ICO_VIDEO_ORIGINAL
-                                                                            : ICO_VIDEO_ENHANCED);
+        /* the shortcut: the two named presets toggle; Custom goes Enhanced on
+           Right and Original on Left.  It writes the four rows even while
+           the CRT filter locks Resolution (crtForcesNative) */
+        {
+            int cur = ico_video_preset(&o);
+            ico_video_set_preset(
+                &o, cur == ICO_VIDEO_CUSTOM
+                        ? (dir > 0 ? ICO_VIDEO_ENHANCED : ICO_VIDEO_ORIGINAL)
+                        : (cur == ICO_VIDEO_ENHANCED ? ICO_VIDEO_ORIGINAL : ICO_VIDEO_ENHANCED));
+        }
         video = 1;
         break;
     case UI_OPT_RESOLUTION: {
@@ -744,7 +754,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     case UI_OPT_FULLSCREEN:
-        o.fullscreen = !o.fullscreen;
+        o.fullscreen = !(s_fullscreenQuery ? s_fullscreenQuery() : o.fullscreen);
         video = 1;
         break;
     case UI_OPT_VSYNC:
@@ -1269,6 +1279,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         break;
     case UI_PAGE_DISPLAY:
+        addNote(pg, UI_OPT_PRESET, UI_STR_PRESET_NOTE);
+        addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
         break;
     case UI_PAGE_AUDIO:
         break;
@@ -1637,6 +1649,11 @@ static void buildQuitScreen(void)
     P(s_quitYesNo[0])->leftItem = s_quitYesNo[1];
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
     s_quitLayout = addLayout(first, last + 1, 0.6f, quitScreenProc, s_quitYesNo[0]);
+}
+
+void ui_SettingsSetFullscreenQuery(int (*fn)(void))
+{
+    s_fullscreenQuery = fn;
 }
 
 void ui_SettingsSetQuitHandler(void (*fn)(void))
@@ -2447,6 +2464,12 @@ static void layoutPage(Page *pg, int id)
     }
 }
 
+/* the notes shown only while their row is locked */
+static int lockedNote(const Row *r)
+{
+    return isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION;
+}
+
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
@@ -2469,7 +2492,7 @@ static void refreshPage(Page *pg, int id, int cur)
         }
         if (r->note >= 0) {
             setNote(r->note, r->noteStr);
-            if (cur == r->label && (!isExtrasOpt(r->opt) || locked)) {
+            if (cur == r->label && (!lockedNote(r) || locked)) {
                 lt_mask_property(r->note, 0);
             }
         }

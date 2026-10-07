@@ -180,6 +180,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
     [UI_STR_VAL_CRT_PVM] = "PVM",
     [UI_STR_VAL_CRT_SHADOW] = "Lochmaske",
+    [UI_STR_VAL_CUSTOM] = "Angepasst",
+    [UI_STR_RESOLUTION_CRT_NOTE] =
+        "Der CRT-Filter zeigt die eigenen Pixel der PS2: Das Bild wird in 1x gerendert, solange er aktiv ist.",
+    [UI_STR_PRESET_NOTE] =
+        "Original ist das Bild der PS2. Verbessert stellt die vier Zeilen darunter ein. Angepasst, sobald du eine änderst.",
     [UI_STR_QUIT_DESKTOP] = "Zum Desktop beenden",
     [UI_STR_QUIT_CONFIRM] = "Zum Desktop beenden?",
     [UI_STR_OPT_CIRCLE_BACK] = "Kreis für Zurück",

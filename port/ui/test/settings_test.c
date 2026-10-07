@@ -906,6 +906,134 @@ static void testFramerate(void)
     ico_toml_free(t);
 }
 
+/* P2: the Preset row reads Original, Enhanced or Custom, and its step is the
+   shortcut; the CRT note under Resolution; the Fullscreen row's query */
+static int enterMain(int title);
+static int openPage(int mainL, int mainRow, UiSettingsPage page);
+static int s_fsAnswer, s_fsAsked;
+
+static int fakeFullscreen(void)
+{
+    s_fsAsked++;
+    return s_fsAnswer;
+}
+
+static int rowWithPrefix(UiSettingsPage page, const char *prefix)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    for (int j = l->first; j < l->last; j++) {
+        if (strncmp(lt_ext_RowText(j), prefix, strlen(prefix)) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+static void checkSavedPreset(const char *want)
+{
+    char p[1100];
+    CHECK(ui_SettingsSave() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    const char *v = t ? ico_toml_get(t, "video.preset") : NULL;
+    CHECK(v != NULL && strcmp(v, want) == 0, "[video] preset = \"%s\" (%s)", want, v ? v : "none");
+    ico_toml_free(t);
+}
+
+static void testPreset(void)
+{
+    IcoVideoOptions o;
+
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ui_SetLanguage(UI_LANG_EN);
+    ui_SettingsInstall();
+    ico_video_get(&o);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Original") == 0 && o.resScale == 1 &&
+              o.resW == 0 && o.aspect == ICO_ASPECT_4_3 && o.filter == ICO_FILTER_ORIGINAL &&
+              !o.fullHeight,
+          "fresh: Original, 1x, 4:3, original filter, half height");
+    ui_SettingsStep(UI_OPT_PRESET, 1);
+    ico_video_get(&o);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Enhanced") == 0 && o.resScale == 0 &&
+              o.aspect == ICO_ASPECT_AUTO && o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight,
+          "Right: Enhanced, window, auto, anisotropic, full height");
+    checkSavedPreset("enhanced");
+    ui_SettingsStep(UI_OPT_ASPECT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Custom") == 0, "an edited row: Custom");
+    checkSavedPreset("enhanced"); /* Custom is stored as the four rows */
+    ui_SettingsStep(UI_OPT_PRESET, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Enhanced") == 0, "Custom, Right: Enhanced");
+    ui_SettingsStep(UI_OPT_PRESET, -1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Original") == 0, "Enhanced, Left: Original");
+    checkSavedPreset("original");
+    ui_SettingsStep(UI_OPT_ASPECT, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Custom") == 0, "Custom again");
+    ui_SettingsStep(UI_OPT_PRESET, -1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_PRESET), "Original") == 0, "Custom, Left: Original");
+
+    /* the shortcut writes the four rows while the CRT filter locks Resolution */
+    ui_SettingsStep(UI_OPT_CRT, 1);
+    ui_SettingsStep(UI_OPT_PRESET, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.crt == 1 &&
+              strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "1x (CRT)") == 0,
+          "Preset under the CRT filter: resolution kept for later, row still 1x (CRT)");
+    ui_SettingsStep(UI_OPT_CRT, -1);
+    ico_video_get(&o);
+    CHECK(o.crt == 0, "crt off again (%d)", o.crt);
+
+    /* the Fullscreen row follows the query when one is installed */
+    ico_video_get(&o);
+    o.fullscreen = 1;
+    ico_video_set(&o);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "On") == 0, "no query: the option");
+    s_fsAnswer = 0;
+    s_fsAsked = 0;
+    ui_SettingsSetFullscreenQuery(fakeFullscreen);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "Off") == 0, "the query says Off");
+    s_fsAsked = 0;
+    ui_SettingsStep(UI_OPT_FULLSCREEN, 1);
+    ico_video_get(&o);
+    CHECK(s_fsAsked > 0 && o.fullscreen == 1, "step: from the query's Off to On (%d, asked %d)",
+          o.fullscreen, s_fsAsked);
+    ui_SettingsSetFullscreenQuery(NULL);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "On") == 0, "uninstalled: the option");
+
+    /* the notes: Preset's on its row, the CRT one under Resolution only while locked */
+    for (int title = 1; title >= 0; title--) {
+        int mainL = enterMain(title);
+        int dispL = openPage(mainL, 0, UI_PAGE_DISPLAY);
+        int rows[16], n = ui_SettingsPageRows(UI_PAGE_DISPLAY, rows, NULL, NULL, 16);
+        int preset = n > 0 ? rows[0] : -1, res = n > 1 ? rows[1] : -1;
+        int pn = rowWithPrefix(UI_PAGE_DISPLAY, "Original is the PS2");
+        int cn = rowWithPrefix(UI_PAGE_DISPLAY, "The CRT");
+        CHECK(pn >= 0 && cn >= 0, "title %d: both notes exist", title);
+        lt_ext_Layout(dispL)->curItem = preset;
+        frame(0);
+        CHECK(pn >= 0 && lt_ext_Prop(pn)->masked == 0 && lt_ext_Prop(cn)->masked == 1,
+              "title %d: the cursor on Preset shows its note only", title);
+        lt_ext_Layout(dispL)->curItem = res;
+        frame(0);
+        CHECK(pn >= 0 && lt_ext_Prop(pn)->masked == 1 && lt_ext_Prop(cn)->masked == 1,
+              "title %d: CRT off, the cursor on Resolution: no note", title);
+        ico_video_get(&o);
+        o.crt = 1;
+        o.crtStrength = 1.0f;
+        ico_video_set(&o);
+        frame(0);
+        CHECK(cn >= 0 && lt_ext_Prop(cn)->masked == 0, "title %d: CRT on, on Resolution: the note",
+              title);
+        lt_ext_Layout(dispL)->curItem = preset;
+        frame(0);
+        CHECK(cn >= 0 && lt_ext_Prop(cn)->masked == 1, "title %d: CRT on, cursor elsewhere", title);
+        o.crt = 0;
+        ico_video_set(&o);
+    }
+}
+
 static void testRepoint(void)
 {
     useConfig("version = 1\n");
@@ -3837,6 +3965,7 @@ int main(int argc, char **argv)
     testAudio();
     testVideoGate();
     testFramerate();
+    testPreset();
     testCapture();
     testBootSkip();
     testExtras();

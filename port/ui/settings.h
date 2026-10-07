@@ -80,6 +80,11 @@ int ui_MirrorScreenRow(int on);
    handler (the headless build) the request calls exit(0), which runs the
    same atexit handlers.  NULL restores that. */
 void ui_SettingsSetQuitHandler(void (*fn)(void));
+/* The Fullscreen row shows, and steps from, fn's answer (1 while the window
+   is fullscreen) instead of the option when one is installed; the window
+   host installs it so the row follows F11 and the window manager.  NULL
+   removes it (headless, tests). */
+void ui_SettingsSetFullscreenQuery(int (*fn)(void));
 /* Package MV: Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
