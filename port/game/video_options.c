@@ -10,6 +10,8 @@
 
 #define ASPECT_4_3 (4.0f / 3.0f)
 #define ASPECT_16_9 (16.0f / 9.0f)
+#define ASPECT_21_9 (64.0f / 27.0f)
+#define ASPECT_32_9 (32.0f / 9.0f)
 
 static IcoVideoOptions s_opt;
 
@@ -70,7 +72,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
     return -1;
 }
 
-static const char *const kAspect[] = {"4:3", "16:10", "16:9", "auto"};
+static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "auto"};
 
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
 
@@ -104,7 +106,7 @@ static float crt_override(float v, float hi)
 
 int ico_video_parse_aspect(const char *s, int *aspect)
 {
-    for (int i = 0; s && i < 4; i++) {
+    for (int i = 0; s && i < ICO_ASPECT_COUNT; i++) {
         if (lower_eq(s, kAspect[i])) {
             *aspect = i;
             return 0;
@@ -164,7 +166,7 @@ const char *ico_video_framerate_name(int framerate, char *buf, unsigned size)
 
 const char *ico_video_aspect_name(int aspect)
 {
-    return aspect >= 0 && aspect < 4 ? kAspect[aspect] : kAspect[0];
+    return aspect >= 0 && aspect < ICO_ASPECT_COUNT ? kAspect[aspect] : kAspect[0];
 }
 
 const char *ico_video_filter_name(int filter)
@@ -229,7 +231,7 @@ static void sanitize(IcoVideoOptions *o)
     IcoVideoOptions d;
 
     ico_video_defaults(&d);
-    if (o->aspect < 0 || o->aspect > ICO_ASPECT_AUTO) {
+    if (o->aspect < 0 || o->aspect >= ICO_ASPECT_COUNT) {
         o->aspect = d.aspect;
     }
     if (o->filter < 0 || o->filter > ICO_FILTER_ANISOTROPIC) {
@@ -409,12 +411,16 @@ float ico_video_aspect(void)
         return 16.0f / 10.0f;
     case ICO_ASPECT_16_9:
         return ASPECT_16_9;
+    case ICO_ASPECT_21_9:
+        return ASPECT_21_9;
+    case ICO_ASPECT_32_9:
+        return ASPECT_32_9;
     case ICO_ASPECT_AUTO:
         if (s_winW <= 0 || s_winH <= 0) {
             return ASPECT_4_3;
         }
         a = (float)s_winW / (float)s_winH;
-        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ASPECT_16_9 ? ASPECT_16_9 : a);
+        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ASPECT_32_9 ? ASPECT_32_9 : a);
     default:
         return ASPECT_4_3;
     }

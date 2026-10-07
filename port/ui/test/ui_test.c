@@ -802,6 +802,7 @@ static void testOverlay(void)
     checkOverlayMap(1920, 1080, 4.0f / 3.0f);
     checkOverlayMap(3840, 2160, 4.0f / 3.0f);
     checkOverlayMap(1920, 1080, 16.0f / 9.0f);
+    checkOverlayMap(2560, 1080, 64.0f / 27.0f);
     rd_Shutdown();
     ui_FontForgetTextures();
     checkOverlayPopup();

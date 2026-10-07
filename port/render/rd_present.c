@@ -75,7 +75,7 @@ typedef struct RdPresentPreset {
 } RdPresentPreset;
 
 #define RD_ASPECT_43 (4.0f / 3.0f)
-#define RD_ASPECT_169 (16.0f / 9.0f)
+#define RD_ASPECT_MAX (32.0f / 9.0f)
 
 void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 {
@@ -121,7 +121,7 @@ static float clampAspect(float a)
     if (!(a > RD_ASPECT_43 + 1e-4f)) {
         return RD_ASPECT_43;
     }
-    return a > RD_ASPECT_169 ? RD_ASPECT_169 : a;
+    return a > RD_ASPECT_MAX ? RD_ASPECT_MAX : a;
 }
 
 bool rd__ApplyDisplay(void)

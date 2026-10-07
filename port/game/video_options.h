@@ -9,7 +9,7 @@
  *
  *   [video] preset          "original"  "original" | "enhanced" | "custom"
  *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8)
- *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "auto"
+ *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "auto"
  *   [video] fullscreen      false
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
@@ -52,7 +52,15 @@
 /* ico_video_preset: the preset the four rows add up to */
 enum { ICO_VIDEO_ORIGINAL = 0, ICO_VIDEO_ENHANCED = 1, ICO_VIDEO_CUSTOM = 2 };
 
-enum { ICO_ASPECT_4_3 = 0, ICO_ASPECT_16_10 = 1, ICO_ASPECT_16_9 = 2, ICO_ASPECT_AUTO = 3 };
+enum {
+    ICO_ASPECT_4_3 = 0,
+    ICO_ASPECT_16_10 = 1,
+    ICO_ASPECT_16_9 = 2,
+    ICO_ASPECT_21_9 = 3,
+    ICO_ASPECT_32_9 = 4,
+    ICO_ASPECT_AUTO = 5,
+    ICO_ASPECT_COUNT = 6
+};
 
 enum { ICO_FILTER_ORIGINAL = 0, ICO_FILTER_TRILINEAR = 1, ICO_FILTER_ANISOTROPIC = 2 };
 

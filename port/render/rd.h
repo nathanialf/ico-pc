@@ -339,7 +339,7 @@ typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPrese
 typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
-    float aspect;                       /* 4/3 .. 16/9 (0, a zeroed RdSettings: 4/3) */
+    float aspect;                       /* 4/3 .. 32/9 (0, a zeroed RdSettings: 4/3) */
     uint8_t interpolate;                /* uncapped presentation (rd_Present, R7b), any preset */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */

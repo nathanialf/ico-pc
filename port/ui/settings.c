@@ -750,7 +750,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_ASPECT:
-        o.aspect = stepIndex(o.aspect, 4, dir);
+        o.aspect = stepIndex(o.aspect, ICO_ASPECT_COUNT, dir);
         video = 1;
         break;
     case UI_OPT_FULLSCREEN:

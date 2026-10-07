@@ -736,6 +736,14 @@ static void checkOptions(const char *dir)
     p.aspect = ICO_ASPECT_16_10;
     ico_video_set(&p);
     CHECK(near(ico_video_wide_x(), 1.2f), "options: 16:10 widens by 1.2");
+    p.aspect = ICO_ASPECT_21_9;
+    ico_video_set(&p);
+    CHECK(near(ico_video_aspect(), 64.0f / 27.0f) && near(ico_video_wide_x(), 16.0f / 9.0f),
+          "options: 21:9 widens by 16/9");
+    p.aspect = ICO_ASPECT_32_9;
+    ico_video_set(&p);
+    CHECK(near(ico_video_aspect(), 32.0f / 9.0f) && near(ico_video_wide_x(), 8.0f / 3.0f),
+          "options: 32:9 widens by 8/3");
     p.aspect = ICO_ASPECT_AUTO;
     ico_video_set(&p);
     ico_video_set_window(0, 0);
@@ -743,7 +751,10 @@ static void checkOptions(const char *dir)
     ico_video_set_window(1920, 1080);
     CHECK(near(ico_video_aspect(), 16.0f / 9.0f), "options: auto in 1920x1080");
     ico_video_set_window(3440, 1440);
-    CHECK(near(ico_video_aspect(), 16.0f / 9.0f), "options: auto clamps at 16:9");
+    CHECK(near(ico_video_aspect(), 3440.0f / 1440.0f), "options: auto passes 3440x1440 through");
+    ico_video_set_window(5760, 1080);
+    CHECK(near(ico_video_aspect(), 32.0f / 9.0f), "options: auto clamps at 32:9");
+    CHECK(near(ico_video_wide_x(), 32.0f / 12.0f), "options: auto at 32:9 widens by 8/3");
     ico_video_set_window(1280, 1024);
     CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps at 4:3");
     ico_video_set_window(0, 0);
@@ -818,7 +829,9 @@ static void checkOptions(const char *dir)
           "options: bad resolutions rejected, value kept");
     int a = -1;
     CHECK(ico_video_parse_aspect("16:10", &a) == 0 && a == ICO_ASPECT_16_10 &&
-              ico_video_parse_aspect("21:9", &a) != 0,
+              ico_video_parse_aspect("21:9", &a) == 0 && a == ICO_ASPECT_21_9 &&
+              ico_video_parse_aspect("32:9", &a) == 0 && a == ICO_ASPECT_32_9 &&
+              ico_video_parse_aspect("21:10", &a) != 0,
           "options: aspect parser");
     char buf[32];
     CHECK(strcmp(ico_video_resolution_name(&q, buf, sizeof(buf)), "3840x2160") == 0,

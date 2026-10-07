@@ -94,14 +94,16 @@ on the PS2, not in `config.toml`.
   Enhanced sets the window's size, Auto aspect, anisotropic filtering and the
   full-height picture; the row reads Custom once you change any of them.
   Then resolution scale (1x to 4x or the window's size; fixed at 1x while the
-  CRT filter is on), aspect ratio (4:3, 16:10, 16:9, Auto), fullscreen (shows
-  what the window is; in Steam Deck Game Mode the game is always shown full
+  CRT filter is on), aspect ratio (4:3, 16:10, 16:9, 21:9, 32:9, Auto),
+  fullscreen (shows what the window is; in Steam Deck Game Mode the game is always shown full
   screen, so this row matters in Desktop Mode and on desktops), vertical sync
   (off never tears unless your desktop or the Deck's "Allow Tearing" permits
   it), texture filtering, full-height picture, frame rate (original, uncapped
   or a fixed cap up to 240 fps), a CRT filter with several tube styles and a
   strength, and the video mode (PAL 50 Hz or 60 Hz; the default is 60 Hz).
   The video mode can only be changed when Options is opened from the title.
+  On a wide screen the game's picture widens, while the menus, subtitles and
+  movies stay in the 4:3 middle.
 - **Audio:** master, music and effects volume, stereo or mono, and the output
   device.
 - **Controls:** remapping, mouse sensitivity, "Circle goes back" (Circle backs
