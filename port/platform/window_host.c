@@ -256,13 +256,10 @@ static void video_apply(int force)
         /* borderless fullscreen at the desktop resolution; the resize event
            follows */
         s_fullscreen = ico_window_video_fullscreen(s_window, o.fullscreen, NULL, NULL);
-        if (s_fullscreen != (o.fullscreen != 0)) {
-            /* refused (or not yet granted): the option follows the window,
-               so the menu and Alt+Enter start from the truth */
-            o.fullscreen = s_fullscreen;
-            ico_video_set(&o);
-            s_videoSerial = ico_video_serial();
-        }
+        /* refused, or not granted yet: the option stays what was asked (it
+           is what the file keeps); the ENTER/LEAVE events set it to what
+           the window becomes (ico_window_pump), and the Fullscreen row
+           shows the window's state meanwhile */
     }
     video_log_changes(&o);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
@@ -328,12 +325,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     SDL_SyncWindow(s_window);
     s_fullscreen = window_fullscreen();
     if (start.fullscreen && !s_fullscreen) {
-        /* not granted (yet): the option follows the window; an
-           ENTER_FULLSCREEN event later sets it back (ico_window_pump) */
+        /* not granted (yet): the option is left as the file says, so a
+           slow window manager never turns the setting off; an
+           ENTER_FULLSCREEN event later sets the window's state
+           (ico_window_pump) */
         fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
-        start.fullscreen = 0;
-        ico_video_set(&start);
-        s_videoSerial = ico_video_serial();
     }
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     video_settings(&rs, w, h);
