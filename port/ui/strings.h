@@ -420,6 +420,16 @@ typedef enum UiStrId {
     UI_STR_TEXTURE_PACK_NOTE,
     UI_STR_OPT_DUMP_TEXTURES,
     UI_STR_DUMP_TEXTURES_NOTE,
+    /* the pause menu's journey lines (settings.c pauseStats): the labels;
+       New Game+, Mirror mode, Achievements and the assists' names are the
+       options' own words, the values the port's figures and On / Off */
+    UI_STR_STATS_PLAY_TIME,
+    UI_STR_STATS_DEATHS,
+    UI_STR_STATS_CAPTURES,
+    UI_STR_STATS_SAVES,
+    UI_STR_STATS_ENEMIES,
+    UI_STR_STATS_ASSISTS,
+    UI_STR_STATS_AREA,
     UI_STR_COUNT
 } UiStrId;
 

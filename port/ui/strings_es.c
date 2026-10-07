@@ -373,4 +373,11 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Exportar texturas",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Guarda cada textura con su nombre de PCSX2 en textures/SCES-50760/dumps de la carpeta de usuario.",
+    [UI_STR_STATS_PLAY_TIME] = "Tiempo de juego",
+    [UI_STR_STATS_DEATHS] = "Muertes",
+    [UI_STR_STATS_CAPTURES] = "Yorda raptada",
+    [UI_STR_STATS_SAVES] = "Partidas guardadas en este viaje",
+    [UI_STR_STATS_ENEMIES] = "Enemigos derrotados en este viaje",
+    [UI_STR_STATS_ASSISTS] = "Ayudas",
+    [UI_STR_STATS_AREA] = "Lugar",
 };

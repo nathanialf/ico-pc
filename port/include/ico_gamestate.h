@@ -155,6 +155,11 @@ unsigned int ico_gs_endings(void);
 int ico_gs_run_fresh(void);
 unsigned int ico_gs_run_captures(void);
 unsigned int ico_gs_run_game_overs(void);
+/* the saves (SAVE_DONE) and enemies defeated (ENEMY_KILLED) in this run, as
+   ico_gs_saves and ico_gs_enemies_killed count the session's (the pause
+   menu's journey lines) */
+unsigned int ico_gs_run_saves(void);
+unsigned int ico_gs_run_enemies(void);
 /* a START skip of an opening part (op.c, st13b.c, deja.c) in this run */
 int ico_gs_run_opening_skipped(void);
 /* The opening's parts (DEMO_END's arg / 2, 1 to ICO_GS_OPENING_PARTS: op.c's
@@ -174,6 +179,8 @@ typedef struct {
     unsigned int opening_parts; /* ico_gs_run_opening_parts */
     int opening_skipped;
     int suspended;
+    unsigned int saves;   /* ico_gs_run_saves */
+    unsigned int enemies; /* ico_gs_run_enemies */
 } IcoGsRun;
 
 void ico_gs_run_get(IcoGsRun *out);

@@ -554,6 +554,10 @@ static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
             t, key, (long long)run->opening_parts | (run->opening_skipped ? RUN_SKIPPED_BIT : 0));
         run_key(slot, "_suspended", key, sizeof(key));
         ico_toml_set_bool(t, key, run->suspended);
+        run_key(slot, "_saves", key, sizeof(key));
+        ico_toml_set_int(t, key, run->saves);
+        run_key(slot, "_enemies", key, sizeof(key));
+        ico_toml_set_int(t, key, run->enemies);
     }
     rc = ico_toml_save(t, s_path);
     ico_toml_free(t);
@@ -573,6 +577,11 @@ void ico_ach_slot_saved(int slot, unsigned int sum)
         ico_ach_init(NULL);
     }
     ico_gs_run_get(&run);
+    /* this save: la_save_processing calls here before it shows "File
+       saved." (layout 41), and the tick counts the save when that layout
+       comes up, after the slot is written; a load of this slot then finds
+       the count the run has once the save is done */
+    run.saves++;
     run_slot_write(slot, &run, (long long)sum);
     s_run_slot = slot;
 }
@@ -619,6 +628,12 @@ int ico_ach_slot_loaded(int slot, unsigned int sum)
     run.opening_skipped = (v & RUN_SKIPPED_BIT) != 0;
     run_key(slot, "_suspended", key, sizeof(key));
     run.suspended = ico_toml_get_bool(t, key, 0) != 0;
+    run_key(slot, "_saves", key, sizeof(key));
+    v = ico_toml_get_int(t, key, 0);
+    run.saves = v < 0 || v > 0xFFFFFFFFLL ? 0u : (unsigned int)v;
+    run_key(slot, "_enemies", key, sizeof(key));
+    v = ico_toml_get_int(t, key, 0);
+    run.enemies = v < 0 || v > 0xFFFFFFFFLL ? 0u : (unsigned int)v;
     ico_toml_free(t);
     ico_gs_run_set(&run);
     return 1;

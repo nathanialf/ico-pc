@@ -848,6 +848,66 @@ static void test_run_slots(void)
     CHECK(st("never_taken") == ICO_ACH_UNLOCKED && st("unbroken") == ICO_ACH_UNLOCKED);
 }
 
+/* The journey's saves and enemies defeated (the pause menu's lines): counted
+   in the run as the session counts them, reset at the title and by a New
+   Game, written with the slot (the save that writes it included) and
+   restored by its load */
+static void test_run_counts(void)
+{
+    IcoGsRun r;
+
+    start("runcounts");
+    new_game();
+    g.stage_no = 11;
+    ticks(1);
+    kills(3);
+    CHECK(ico_gs_run_enemies() == 3 && ico_gs_enemies_killed() == 3);
+    CHECK(ico_gs_run_saves() == 0);
+    /* la_save_processing writes the slot, then "File saved." comes up */
+    save_slot(2, 11u);
+    save_on(329);
+    CHECK(ico_gs_run_saves() == 1 && ico_gs_saves() == 1);
+    CHECK(file_count("slot_2_saves = 1") == 1);
+    CHECK(file_count("slot_2_enemies = 3") == 1);
+    ico_gs_run_get(&r);
+    CHECK(r.saves == 1 && r.enemies == 3);
+    save_slot(2, 12u);
+    save_on(329);
+    CHECK(ico_gs_run_saves() == 2 && file_count("slot_2_saves = 2") == 1);
+
+    /* quit and continue: the load restores the slot's counts, play goes on
+       from them */
+    ico_ach_reset(s_path);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0);
+    CHECK(ico_ach_slot_loaded(2, 12u) == 1);
+    CHECK(ico_gs_run_saves() == 2 && ico_gs_run_enemies() == 3);
+    kills(1);
+    CHECK(ico_gs_run_enemies() == 4);
+
+    /* the title ends the run; the session's counts stay */
+    stage(1);
+    CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0);
+    CHECK(ico_gs_saves() == 0 && ico_gs_enemies_killed() == 1);
+    /* a New Game starts from nothing */
+    new_game();
+    g.stage_no = 11;
+    ticks(1);
+    kills(2);
+    save_on(331);
+    CHECK(ico_gs_run_saves() == 1 && ico_gs_run_enemies() == 2);
+    new_game();
+    CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0);
+
+    /* a run set without them has none */
+    memset(&r, 0, sizeof(r));
+    r.captures = 1;
+    ico_gs_run_set(&r);
+    CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0 && ico_gs_run_captures() == 1);
+}
+
 /* --- popups ---------------------------------------------------------------------- */
 
 static void test_popups(void)
@@ -943,6 +1003,7 @@ int main(int argc, char **argv)
     test_each();
     test_opening();
     test_run_slots();
+    test_run_counts();
     test_suspended();
     test_yorda_safe_counts();
     test_persistence();

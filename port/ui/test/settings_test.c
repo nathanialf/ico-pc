@@ -44,11 +44,13 @@
 #include "charFileManager.h"
 #include "StageManager.h"
 #include <libscf.h>
+#include "achievements.h"
 #include "config.h"
 #include "font.h"
 #include "gallery.h"
 #include "host_config.h"
 #include "ico_credits.h"
+#include "ico_gamestate.h"
 #include "input.h"
 #include "layout_ext.h"
 #include "audio_host.h"
@@ -1410,6 +1412,263 @@ static void testPhoto(void)
     CHECK(texLayout[57].defaultItem == 295, "the pause menu's own default again (%d)",
           texLayout[57].defaultItem);
     stage_no = 0;
+}
+
+/* P6: the journey's lines on the pause menu's right.  The game state comes
+ * through the view's sampler (ico_gamestate.h) as the program's comes from
+ * the game: twelve minutes 34 s of play, three game overs, a capture, five
+ * enemies defeated and a save in this run.  Shown while a stage runs, the
+ * labels from x 300 and every line between the black bars (field lines 38
+ * to 198), the values the port's figures; hidden on the title's stage and
+ * in photo mode; the assists' line only with one on; the area only where
+ * the save screen names one; the game's rows where they were. */
+static IcoGsSnapshot s_gs;
+
+static void gsSampler(IcoGsSnapshot *out)
+{
+    *out = s_gs;
+}
+
+/* the pause entry layout's label row with this text (shown or not), -1 */
+static int statLabel(const char *text)
+{
+    const LtProp *l = lt_ext_Layout(ui_SettingsEntryLayout(57));
+    for (int r = l->first; r < l->last; r++) {
+        const char *t = lt_ext_RowText(r);
+        if (r != ui_SettingsPhotoRow() && t && strcmp(t, text) == 0) {
+            return r;
+        }
+    }
+    return -1;
+}
+
+/* the value beside a shown label (its row follows the label's), NULL when
+   the line is hidden */
+static const char *statValue(int strId)
+{
+    const int r = statLabel(ui_Str((UiStrId)strId));
+    if (r < 0 || lt_ext_Prop(r)->masked || lt_ext_Prop(r + 1)->masked) {
+        return NULL;
+    }
+    return lt_ext_RowText(r + 1);
+}
+
+/* the shown stats rows (labels and values), and whether every one sits in
+   the panel's place */
+static int statsShown(int *placed)
+{
+    const LtProp *l = lt_ext_Layout(ui_SettingsEntryLayout(57));
+    int n = 0;
+    *placed = 1;
+    for (int r = ui_SettingsPhotoRow() + 1; r < l->last; r++) {
+        const LtProperty *e = lt_ext_Prop(r);
+        if (e->masked) {
+            continue;
+        }
+        n++;
+        /* y units are half field lines */
+        if (e->dispX < 290 || e->dispX + e->dispW > 620 || e->dispY < 38 ||
+            e->dispY + e->dispH / 2 > 198) {
+            printf("  stats row %d at x %d w %d, y %d h %d\n", r, e->dispX, e->dispW, e->dispY,
+                   e->dispH);
+            *placed = 0;
+        }
+    }
+    return n;
+}
+
+static void testPauseStats(void)
+{
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    ico_photo_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    gFlagGameClear = 0;
+    NonLinearCameraMove = 2;
+    ico_gs_reset();
+    ico_gs_set_sampler(gsSampler);
+    memset(&s_gs, 0, sizeof(s_gs));
+    s_gs.valid = 1;
+    s_gs.stage_no = 11;
+    s_gs.system_status[0] = 1; /* PAL: 50 frames a second of play time */
+    s_gs.system_status[1] = 2;
+    s_gs.layout = 54;
+    s_gs.mc_preview[2] = (12 * 60 + 34) * 50 + 49;
+    ico_gs_tick();
+    for (int i = 0; i < 3; i++) {
+        ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    }
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 0);
+    for (int i = 0; i < 5; i++) {
+        ico_gs_signal(ICO_GS_EV_ENEMY_KILLED, i);
+    }
+    ico_gs_tick();
+    s_gs.layout = 41; /* "File saved." */
+    ico_gs_tick();
+    s_gs.layout = 57;
+    ico_gs_tick();
+    CHECK(ico_gs_run_game_overs() == 3 && ico_gs_run_captures() == 1 && ico_gs_run_enemies() == 5 &&
+              ico_gs_run_saves() == 1,
+          "the run: %u game overs, %u captures, %u enemies, %u saves", ico_gs_run_game_overs(),
+          ico_gs_run_captures(), ico_gs_run_enemies(), ico_gs_run_saves());
+
+    stage_no = 1; /* the title's stage */
+    init_layout_texture(2);
+    const int ph = ui_SettingsPhotoRow();
+    const LtProp *el = lt_ext_Layout(ui_SettingsEntryLayout(57));
+    CHECK(el->first == ph && el->last > ph + 2 * 13, "the lines after Photo mode (%d .. %d)",
+          el->first, el->last);
+    for (int r = ph + 1; r < el->last; r++) {
+        CHECK(lt_ext_Prop(r)->defaultMask && !lt_ext_Prop(r)->selectable,
+              "row %d hidden by default, not selectable", r);
+    }
+    settle(54, 4);
+    lt_switch_layout(57);
+    CHECK(settle(57, 40), "the pause menu");
+    int placed;
+    CHECK(statsShown(&placed) == 0, "the title's stage: no line shown");
+    CHECK(statValue(UI_STR_STATS_DEATHS) == NULL, "the title's stage: Deaths hidden");
+
+    stage_no = 11; /* st04a: a stage runs (Main Gate on the save screen) */
+    frame(0);
+    const int shown = statsShown(&placed);
+    CHECK(shown > 0 && placed, "a stage: %d rows shown, all in the panel's place", shown);
+    const char *v;
+    v = statValue(UI_STR_STATS_PLAY_TIME);
+    CHECK(v && strcmp(v, "00:12:34") == 0, "Play time \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_STATS_DEATHS);
+    CHECK(v && strcmp(v, "3") == 0, "Deaths \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_STATS_CAPTURES);
+    CHECK(v && strcmp(v, "1") == 0, "Yorda captured \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_STATS_SAVES);
+    CHECK(v && strcmp(v, "1") == 0, "Saves \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_STATS_ENEMIES);
+    CHECK(v && strcmp(v, "5") == 0, "Enemies \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_OPT_NEWGAME_PLUS);
+    CHECK(v && strcmp(v, "Off") == 0, "New Game+ \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_OPT_MIRROR);
+    CHECK(v && strcmp(v, "Off") == 0, "Mirror mode \"%s\"", v ? v : "(hidden)");
+    char want[32];
+    snprintf(want, sizeof(want), "0 / %d", ico_ach_count());
+    v = statValue(UI_STR_SECTION_ACHIEVEMENTS);
+    CHECK(v && strcmp(v, want) == 0, "Achievements \"%s\" (want \"%s\")", v ? v : "(hidden)", want);
+    v = statValue(UI_STR_STATS_AREA);
+    CHECK(v && strcmp(v, ui_Str(UI_STR_MT_LOC_MAIN_GATE)) == 0, "Area \"%s\"", v ? v : "(hidden)");
+    CHECK(statValue(UI_STR_STATS_ASSISTS) == NULL, "no assist on: no Assists line");
+    /* the lines packed from the top, a pitch apart */
+    const int pt = statLabel(ui_Str(UI_STR_STATS_PLAY_TIME)),
+              de = statLabel(ui_Str(UI_STR_STATS_DEATHS)),
+              ar = statLabel(ui_Str(UI_STR_STATS_AREA)),
+              ac = statLabel(ui_Str(UI_STR_SECTION_ACHIEVEMENTS));
+    CHECK(lt_ext_Prop(pt)->dispX == 300 &&
+              lt_ext_Prop(pt + 1)->dispX + lt_ext_Prop(pt + 1)->dispW <= 610,
+          "from x 300 to 610");
+    CHECK(lt_ext_Prop(de)->dispY > lt_ext_Prop(pt)->dispY &&
+              lt_ext_Prop(ar)->dispY ==
+                  lt_ext_Prop(ac)->dispY + (lt_ext_Prop(de)->dispY - lt_ext_Prop(pt)->dispY),
+          "Area right under Achievements when no assist is on");
+    /* the Photo mode row's box ends before the lines; the game's rows
+       where they were */
+    CHECK(lt_ext_Prop(ph)->dispX + lt_ext_Prop(ph)->dispW < 300, "Photo mode's box ends at x %d",
+          lt_ext_Prop(ph)->dispX + lt_ext_Prop(ph)->dispW);
+    CHECK(texProperty[294].dispX == 40 && texProperty[294].dispY == 50 &&
+              texProperty[295].dispY == 90 && texProperty[296].dispY == 120,
+          "the pause rows at 50, 90, 120 (%d, %d, %d)", texProperty[294].dispY,
+          texProperty[295].dispY, texProperty[296].dispY);
+
+    /* the game moves on: the values follow each frame */
+    s_gs.mc_preview[2] = 100 * 3600 * 50;
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    ico_gs_tick();
+    gFlagGameClear = 1;
+    ico_opt_set_mirror(1);
+    frame(0);
+    v = statValue(UI_STR_STATS_PLAY_TIME);
+    CHECK(v && strcmp(v, "99:59:59") == 0, "Play time clamped as the save screen's: \"%s\"",
+          v ? v : "(hidden)");
+    v = statValue(UI_STR_STATS_DEATHS);
+    CHECK(v && strcmp(v, "4") == 0, "Deaths \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_OPT_NEWGAME_PLUS);
+    CHECK(v && strcmp(v, "On") == 0, "New Game+ \"%s\"", v ? v : "(hidden)");
+    v = statValue(UI_STR_OPT_MIRROR);
+    CHECK(v && strcmp(v, "On") == 0, "Mirror mode \"%s\"", v ? v : "(hidden)");
+
+    /* the assists: the line and one line for each on, nothing for those off */
+    ico_opt_set_yorda_safe(1);
+    ico_opt_set_developer_mode(1);
+    frame(0);
+    const int as = statLabel(ui_Str(UI_STR_STATS_ASSISTS));
+    CHECK(as >= 0 && !lt_ext_Prop(as)->masked, "an assist on: the Assists line");
+    if (as >= 0) {
+        CHECK(!lt_ext_Prop(as + 3)->masked &&
+                  strcmp(lt_ext_RowText(as + 3), ui_Str(UI_STR_OPT_YORDA)) == 0 &&
+                  !lt_ext_Prop(as + 5)->masked &&
+                  strcmp(lt_ext_RowText(as + 5), ui_Str(UI_STR_OPT_DEVELOPER_MODE)) == 0 &&
+                  lt_ext_Prop(as + 7)->masked,
+              "the two on, one a line (\"%s\", \"%s\")", lt_ext_RowText(as + 3),
+              lt_ext_RowText(as + 5));
+    }
+    statsShown(&placed);
+    CHECK(placed, "with the assists, every line between the bars");
+    ico_opt_set_stick_fix(1);
+    frame(0);
+    CHECK(statsShown(&placed) == 2 * 13 + 1 && placed,
+          "every line (the three assists and the area): still between the bars");
+    /* each language: a label and its value never overlap once the label is
+       set to fit its box (layout_ext.c: down to 60 %) */
+    for (int g = 2; g <= 6; g++) {
+        NonLinearCameraMove = g;
+        frame(0);
+        for (int r = ph + 2; r + 1 < el->last; r += 2) {
+            const LtProperty *lab = lt_ext_Prop(r), *val = lt_ext_Prop(r + 1);
+            if (lab->masked) {
+                continue;
+            }
+            const float lw = ui_MeasureText(lt_ext_RowSize(r), lt_ext_RowText(r));
+            const float vw = ui_MeasureText(lt_ext_RowSize(r + 1), lt_ext_RowText(r + 1));
+            /* each as drawn: its natural width, or its box's when set to fit */
+            const int blank = strcmp(lt_ext_RowText(r), " ") == 0;
+            const float lDrawn = blank ? 0.0f : lw < (float)lab->dispW ? lw : (float)lab->dispW;
+            const float vDrawn = vw < (float)val->dispW ? vw : (float)val->dispW;
+            CHECK((blank || lw * 0.6f <= (float)lab->dispW) && vw * 0.6f <= (float)val->dispW &&
+                      lDrawn + vDrawn <= (float)val->dispW,
+                  "language %d: \"%s\" (%.0f in %d) and \"%s\" (%.0f in %d)", g, lt_ext_RowText(r),
+                  (double)lw, lab->dispW, lt_ext_RowText(r + 1), (double)vw, val->dispW);
+        }
+    }
+    NonLinearCameraMove = 2;
+    ico_opt_set_yorda_safe(0);
+    ico_opt_set_developer_mode(0);
+    ico_opt_set_stick_fix(0);
+    ico_opt_set_mirror(0);
+    gFlagGameClear = 0;
+    frame(0);
+    CHECK(statValue(UI_STR_STATS_ASSISTS) == NULL && lt_ext_Prop(as + 3)->masked,
+          "the assists off again: hidden");
+
+    /* a stage the save screen has no name for: no Area line */
+    stage_no = 39;
+    frame(0);
+    CHECK(statValue(UI_STR_STATS_AREA) == NULL && statValue(UI_STR_STATS_DEATHS) != NULL,
+          "no name for the beach: the Area line left out");
+    stage_no = 11;
+    /* photo mode: hidden */
+    ico_photo_enter();
+    frame(0);
+    CHECK(statsShown(&placed) == 0, "photo mode: hidden");
+    ico_photo_exit();
+    frame(0);
+    CHECK(statsShown(&placed) > 0, "back from photo mode: shown");
+    /* back on the title's stage: hidden again */
+    stage_no = 1;
+    frame(0);
+    CHECK(statsShown(&placed) == 0, "the title's stage again: hidden");
+    stage_no = 0;
+    ico_gs_set_sampler(NULL);
+    ico_gs_reset();
 }
 
 /* R7c: the New Game screen, run by the real layout code: two rows, Mirror
@@ -4010,6 +4269,44 @@ static int render(void)
         snap1080("settings_new_game_screen", 1);
         press(0x4000);
         snap1080("settings_new_game_screen_ngp", 1);
+        /* P6: the pause menu with the journey's lines on its right (a
+           stage running, an assist on, New Game+ on), then in French (the
+           longest labels) */
+        {
+            ico_gs_reset();
+            ico_gs_set_sampler(gsSampler);
+            memset(&s_gs, 0, sizeof(s_gs));
+            s_gs.valid = 1;
+            s_gs.stage_no = 11;
+            s_gs.system_status[0] = 1;
+            s_gs.system_status[1] = 2;
+            s_gs.layout = 57;
+            s_gs.mc_preview[2] = (2 * 3600 + 12 * 60 + 34) * 50;
+            ico_gs_tick();
+            for (int i = 0; i < 3; i++) {
+                ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+            }
+            for (int i = 0; i < 41; i++) {
+                ico_gs_signal(ICO_GS_EV_ENEMY_KILLED, i);
+            }
+            ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 0);
+            ico_gs_tick();
+            stage_no = 11;
+            gFlagGameClear = 1;
+            ico_opt_set_yorda_safe(1);
+            lt_switch_layout(57);
+            CHECK(settle(57, 60), "the pause menu at 1080p");
+            snap1080("settings_pause_stats", 1);
+            NonLinearCameraMove = 3;
+            frame(0);
+            snap1080("settings_pause_stats_fr", 1);
+            NonLinearCameraMove = 2;
+            ico_opt_set_yorda_safe(0);
+            gFlagGameClear = 0;
+            stage_no = 0;
+            ico_gs_set_sampler(NULL);
+            ico_gs_reset();
+        }
         int ql = ui_QuitScreenLayout();
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");
@@ -4191,6 +4488,7 @@ int main(int argc, char **argv)
     testPlacement();
     testNavigation();
     testPhoto();
+    testPauseStats();
     testNewGameScreen();
     testQuit();
     testCirclePortScreens();

@@ -176,6 +176,8 @@ static struct {
     int opening_skipped;
     unsigned int opening_parts;
     int suspended;
+    unsigned int saves;   /* the session's saves, this run's share */
+    unsigned int enemies; /* the session's enemies defeated, this run's share */
 } s_run;
 
 void ico_gs_set_sampler(IcoGsSampler fn)
@@ -295,6 +297,8 @@ void ico_gs_tick(void)
     }
     s_run.opening_parts |= demo_watched;
     s_run.game_overs += (unsigned int)s_count[ICO_GS_EV_GAME_OVER];
+    s_run.saves += (unsigned int)s_count[ICO_GS_EV_SAVE_DONE];
+    s_run.enemies += (unsigned int)s_count[ICO_GS_EV_ENEMY_KILLED];
     if (ico_gs_achievements_suspended()) {
         s_run.suspended = 1;
     }
@@ -445,6 +449,16 @@ unsigned int ico_gs_run_game_overs(void)
     return s_run.game_overs;
 }
 
+unsigned int ico_gs_run_saves(void)
+{
+    return s_run.saves;
+}
+
+unsigned int ico_gs_run_enemies(void)
+{
+    return s_run.enemies;
+}
+
 int ico_gs_run_opening_skipped(void)
 {
     return s_run.opening_skipped;
@@ -468,6 +482,8 @@ void ico_gs_run_get(IcoGsRun *out)
     out->opening_parts = s_run.opening_parts;
     out->opening_skipped = s_run.opening_skipped;
     out->suspended = s_run.suspended;
+    out->saves = s_run.saves;
+    out->enemies = s_run.enemies;
 }
 
 void ico_gs_run_set(const IcoGsRun *in)
@@ -478,6 +494,8 @@ void ico_gs_run_set(const IcoGsRun *in)
     s_run.opening_parts = in->opening_parts & ((1u << ICO_GS_OPENING_PARTS) - 1u);
     s_run.opening_skipped = in->opening_skipped != 0;
     s_run.suspended = in->suspended != 0;
+    s_run.saves = in->saves;
+    s_run.enemies = in->enemies;
 }
 
 int ico_gs_developer_mode(void)

@@ -369,4 +369,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Dump textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Saves each texture under its PCSX2 name to textures/SCES-50760/dumps in the user folder.",
+    [UI_STR_STATS_PLAY_TIME] = "Play time",
+    [UI_STR_STATS_DEATHS] = "Deaths",
+    [UI_STR_STATS_CAPTURES] = "Yorda captured",
+    [UI_STR_STATS_SAVES] = "Saves this journey",
+    [UI_STR_STATS_ENEMIES] = "Enemies defeated this journey",
+    [UI_STR_STATS_ASSISTS] = "Assists",
+    [UI_STR_STATS_AREA] = "Area",
 };

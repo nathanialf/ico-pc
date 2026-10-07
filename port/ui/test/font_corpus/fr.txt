@@ -2,7 +2,8 @@
 # tools/font_audit.py read this file; '#' lines are provenance, the rest is
 # text, one code point per glyph drawn).
 # Provenance: port/ui/settings.c snprintf values and units ("%d %%", "%.2f",
-#   "%s (%s)", "(" ")" and U+2026 where a long audio device name is cut);
+#   "%s (%s)", "(" ")" and U+2026 where a long audio device name is cut;
+#   the pause menu's journey figures "12:34:56", "%u" and "%d / %d");
 #   port/ui/menu_text.c table value glyphs and the save screen's slot
 #   numbers and play time ("Menu text": digits, ':' '/' '.' '-');
 #   port/ui/gallery.c asset names from the boot ELF (sound/ICO_ADPCM/..,

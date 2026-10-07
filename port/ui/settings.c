@@ -21,10 +21,13 @@
 #include "font.h"
 #include "gallery.h"
 #include "ico_credits.h"
+#include "ico_gamestate.h"
 #include "input.h"
 #include "layout_ext.h"
+#include "menu_text.h"
 #include "mix_gain.h"
 #include "options.h"
+#include "photo_mode.h"
 #include "photo_ui.h"
 #include "strings.h"
 #include "sysconf.h"
@@ -42,6 +45,7 @@ extern PadState pad[16];
 extern int NonLinearCameraMove; /* the language, 2..6 */
 extern int systemStatus[12];    /* [0]: 1 PAL 50 Hz, 0 60 Hz */
 extern int gFlagGameClear;
+extern int stage_no;             /* common/src/main.c: the stage running, 1 the title */
 extern int gsResetFunc(int val); /* debug.c: gsb_Init, the boot screen's reset */
 extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
@@ -132,7 +136,9 @@ static const int kEntryGame[ENTRY_COUNT] = {LAYOUT_PAUSE, LAYOUT_TITLE_CONTINUE,
    rectangle at x 40; display_texture's box starts a quarter pixel in, the
    lettering a quarter before the anchor) */
 #define PAUSE_LETTERS_IN 6
-#define PAUSE_ROW_W 300
+/* ends at x 296, before the journey's lines (STATS_X); "Photo mode" is
+   short in every language */
+#define PAUSE_ROW_W 250
 /* the Options word's lettering in its rectangle (menu_text.c row 294): its
    left edge 7 texels in, left aligned on every sheet */
 #define OPTIONS_INK_LEFT 7.0f
@@ -192,6 +198,30 @@ static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
    port layout chained after 57; opens photo_ui.c's layout (only while a
    stage runs: placePause) */
 static int s_photoRow = -1;
+
+/* The journey's lines on the pause menu's right (pauseStats): a backdrop,
+   then a label and a value row per line, after the Photo mode row in its
+   layout; hidden by default */
+enum {
+    STAT_PLAY_TIME,
+    STAT_DEATHS,
+    STAT_CAPTURES,
+    STAT_SAVES,
+    STAT_ENEMIES,
+    STAT_NEWGAME_PLUS,
+    STAT_MIRROR,
+    STAT_ACHIEVEMENTS,
+    STAT_ASSISTS, /* the heading; the active assists one a line under it */
+    STAT_ASSIST_1,
+    STAT_ASSIST_2,
+    STAT_ASSIST_3,
+    STAT_AREA,
+    STAT_LINES
+};
+
+static int s_statsBuilt;
+static int s_statBack = -1;
+static int s_statLabel[STAT_LINES], s_statValue[STAT_LINES];
 static int s_origin = LAYOUT_PAUSE; /* the game layout the menu returns to */
 
 /* The video mode arms the tick rate (the game's timers are armed at the
@@ -1420,6 +1450,192 @@ static void addEntryLayout(int e, int first, int last)
     s_entryLayout[e] = lt_ext_AddLayout(&l);
 }
 
+/* --------------------------------------------- the journey's lines */
+
+/* The pause menu's right side: from x 300 to 610, inside the 4:3 picture's
+   free space right of the game's rows (x 40 .. 252) and between its two
+   black bars (field lines 0 .. 35 and 200 .. 230).  One line every
+   STATS_PITCH field lines from STATS_Y, the label left and the value right
+   in a box as tall as the pitch (y units are half field lines): thirteen
+   lines end at field line 197. */
+#define STATS_X 300
+#define STATS_W 310
+#define STATS_Y 41
+#define STATS_PITCH 12
+#define STATS_GAP 10 /* between a label and its value */
+#define STATS_BACK_MARGIN 8
+
+static const int kStatLabel[STAT_LINES] = {UI_STR_STATS_PLAY_TIME,
+                                           UI_STR_STATS_DEATHS,
+                                           UI_STR_STATS_CAPTURES,
+                                           UI_STR_STATS_SAVES,
+                                           UI_STR_STATS_ENEMIES,
+                                           UI_STR_OPT_NEWGAME_PLUS,
+                                           UI_STR_OPT_MIRROR,
+                                           UI_STR_SECTION_ACHIEVEMENTS,
+                                           UI_STR_STATS_ASSISTS,
+                                           0,
+                                           0,
+                                           0,
+                                           UI_STR_STATS_AREA};
+
+/* the backdrop, then each line's label and value; returns the last row */
+static int buildStats(void)
+{
+    /* the gallery rim's shade: the scene shows through */
+    static const unsigned char kBack[4] = {0, 0, 0, 0x50};
+    s_statBack = lt_ext_AddRect(STATS_X - STATS_BACK_MARGIN, STATS_Y,
+                                STATS_W + 2 * STATS_BACK_MARGIN, 2 * STATS_PITCH, kBack);
+    int last = s_statBack;
+    if (s_statBack >= 0) {
+        P(s_statBack)->defaultMask = 1;
+    }
+    for (int i = 0; i < STAT_LINES; i++) {
+        const int y = STATS_Y + i * STATS_PITCH;
+        s_statLabel[i] =
+            ui_SettingsAddRow(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, kStatLabel[i],
+                              kStatLabel[i] ? NULL : " ", NOTE_SIZE, UI_ALIGN_LEFT);
+        s_statValue[i] = ui_SettingsAddRow(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, 0, " ",
+                                           NOTE_SIZE, UI_ALIGN_RIGHT);
+        if (s_statLabel[i] < 0 || s_statValue[i] < 0) {
+            return -1;
+        }
+        P(s_statLabel[i])->defaultMask = P(s_statValue[i])->defaultMask = 1;
+        last = s_statValue[i];
+    }
+    s_statsBuilt = 1;
+    return last;
+}
+
+/* The play time as the save screen shows it: layout_action.c playTime's
+   frames over ((60 - s0 * 10) / s1) * s1, clamped to 99:59:59 */
+static void playTimeText(unsigned int frames, char *buf, size_t size)
+{
+    const int s1 = systemStatus[1] > 0 ? systemStatus[1] : 1;
+    const int fps = ((60 - systemStatus[0] * 10) / s1) * s1;
+    unsigned int h = 0, m = 0, sec = 0;
+    if (fps > 0) {
+        const unsigned int f = (unsigned int)fps;
+        sec = (frames / f) % 60;
+        m = (frames / (f * 60)) % 60;
+        h = frames / (f * 3600);
+    }
+    if (h >= 100) {
+        h = 99;
+        m = 59;
+        sec = 59;
+    }
+    snprintf(buf, size, "%02u:%02u:%02u", h, m, sec);
+}
+
+/* The couch's name the save screen shows for this stage
+   (layout_action.c _la_set_preview_info: row stage + 134), where its sheet
+   has one: the rows of stages 3 .. 38 (after row 172 the stage alone does
+   not pick the row: two are chosen by the couch's own id, the switch in
+   _la_set_preview_info, and from 176 they are the card slots' words);
+   NULL elsewhere, so the line is left out (the stages' own names are
+   developer labels, not for players) */
+static const char *areaName(int stage)
+{
+    if (stage == 63) {
+        stage = 38; /* as the save screen maps it */
+    }
+    if (stage < 3 || stage > 38) {
+        return NULL;
+    }
+    for (int i = 0; i < ui_menu_text_row_count; i++) {
+        if (ui_menu_text_rows[i].row == stage + 134) {
+            return ui_Str((UiStrId)ui_menu_text_items[ui_menu_text_rows[i].item].str);
+        }
+    }
+    return NULL;
+}
+
+/* Shows the lines (show) or hides them, each pause frame: the layout code
+   puts every row back to its defaultMask before the procs run, and the
+   default follows the last frame's choice so the lines fade with the menu.
+   Shown while a stage runs (not the title's stage 1) and photo mode is
+   off; the visible lines are packed from the top, the assists' only those
+   on, the area's only where the save screen names one. */
+static void pauseStats(int show)
+{
+    char text[STAT_LINES][96];
+    int on[STAT_LINES];
+    if (!s_statsBuilt) {
+        return;
+    }
+    if (show) {
+        ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+        int got = 0;
+        const int n = ico_ach_count();
+        for (int i = 0; i < n; i++) {
+            got += ico_ach_state(i) != ICO_ACH_LOCKED;
+        }
+        playTimeText(ico_gs_play_frames(), text[STAT_PLAY_TIME], sizeof(text[0]));
+        snprintf(text[STAT_DEATHS], sizeof(text[0]), "%u", ico_gs_run_game_overs());
+        snprintf(text[STAT_CAPTURES], sizeof(text[0]), "%u", ico_gs_run_captures());
+        snprintf(text[STAT_SAVES], sizeof(text[0]), "%u", ico_gs_run_saves());
+        snprintf(text[STAT_ENEMIES], sizeof(text[0]), "%u", ico_gs_run_enemies());
+        snprintf(text[STAT_NEWGAME_PLUS], sizeof(text[0]), "%s", onOff(gFlagGameClear != 0));
+        snprintf(text[STAT_MIRROR], sizeof(text[0]), "%s", onOff(ico_opt_mirror()));
+        snprintf(text[STAT_ACHIEVEMENTS], sizeof(text[0]), "%d / %d", got, n);
+        for (int i = 0; i < STAT_LINES; i++) {
+            on[i] = i < STAT_ASSISTS;
+        }
+        const int assist[3] = {ico_opt_yorda_safe(), ico_opt_stick_fix(), ico_opt_developer_mode()};
+        static const int kAssistStr[3] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX,
+                                          UI_STR_OPT_DEVELOPER_MODE};
+        int k = STAT_ASSIST_1;
+        for (int a = 0; a < 3; a++) {
+            if (assist[a]) {
+                snprintf(text[k], sizeof(text[0]), "%s", ui_Str((UiStrId)kAssistStr[a]));
+                on[k++] = 1;
+            }
+        }
+        on[STAT_ASSISTS] = k > STAT_ASSIST_1;
+        text[STAT_ASSISTS][0] = '\0';
+        const char *area = areaName(stage_no);
+        on[STAT_AREA] = area != NULL;
+        snprintf(text[STAT_AREA], sizeof(text[0]), "%s", area ? area : "");
+    } else {
+        memset(on, 0, sizeof(on));
+    }
+    int shown = 0;
+    for (int i = 0; i < STAT_LINES; i++) {
+        const int vis = on[i];
+        LtProperty *l = P(s_statLabel[i]), *v = P(s_statValue[i]);
+        l->defaultMask = v->defaultMask = vis ? 0 : 1;
+        lt_mask_property(s_statLabel[i], vis ? 0 : 1);
+        lt_mask_property(s_statValue[i], vis ? 0 : 1);
+        if (!vis) {
+            continue;
+        }
+        /* the value at the right; the label's box ends before it, so a long
+           label in another language is set smaller (layout_ext.c's fit)
+           instead of running into the value */
+        const int y = STATS_Y + shown * STATS_PITCH;
+        const float vw = text[i][0] ? ui_MeasureText(NOTE_SIZE, text[i]) : 0.0f;
+        int lw = STATS_W - (int)(vw + 0.999f) - (text[i][0] ? STATS_GAP : 0);
+        lw = lw < STATS_W / 3 ? STATS_W / 3 : lw;
+        l->dispY = v->dispY = y;
+        l->dispW = lw;
+        lt_ext_SetText(s_statValue[i], text[i][0] ? text[i] : " ");
+        if (kStatLabel[i]) {
+            lt_ext_SetStr(s_statLabel[i], kStatLabel[i]);
+        }
+        shown++;
+    }
+    if (s_statBack >= 0) {
+        LtProperty *b = P(s_statBack);
+        b->defaultMask = shown ? 0 : 1;
+        lt_mask_property(s_statBack, shown ? 0 : 1);
+        /* three field lines over the first line's box and one under the
+           last's: thirteen lines end at 198, above the lower bar (200) */
+        b->dispY = STATS_Y - 3;
+        b->dispH = 2 * (shown * STATS_PITCH + 4);
+    }
+}
+
 static void buildEntries(void)
 {
     /* the pause menu: the game's Options row opens the menu (repoint), and
@@ -1429,7 +1645,10 @@ static void buildEntries(void)
     s_quitRow[ENTRY_PAUSE] = -1;
     s_photoRow = ui_SettingsAddRow(0, 0, PAUSE_ROW_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
                                    UI_ALIGN_LEFT);
-    addEntryLayout(ENTRY_PAUSE, s_photoRow, s_photoRow);
+    /* the journey's lines in the same layout (the rows are contiguous),
+       placed and filled by pauseStats */
+    int last = buildStats();
+    addEntryLayout(ENTRY_PAUSE, s_photoRow, last >= 0 ? last : s_photoRow);
     for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
         /* "Options": the pause menu's word (row 294's texels, each
            language's sheet), a game row as Continue and New Game are (no
@@ -1986,6 +2205,11 @@ void ui_SettingsReset(void)
         s_entryRow[e] = s_entryLayout[e] = s_quitRow[e] = -1;
     }
     s_photoRow = -1;
+    s_statsBuilt = 0;
+    s_statBack = -1;
+    for (int i = 0; i < STAT_LINES; i++) {
+        s_statLabel[i] = s_statValue[i] = -1;
+    }
     ui_PhotoReset();
     memset(s_pages, 0, sizeof(s_pages));
     /* the wrapped notes are set again on the rebuilt rows */
@@ -2150,6 +2374,7 @@ static int entryProc(int first, int item)
     }
     if (cur == LAYOUT_PAUSE) {
         placePause();
+        pauseStats(ui_PhotoAvailable() && !ico_photo_active());
     }
     if (cur == LAYOUT_TITLE_CONTINUE || cur == LAYOUT_TITLE_NEW) {
         placeOptionsWord(); /* the language may have changed */

@@ -376,4 +376,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Speichert jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
+    [UI_STR_STATS_PLAY_TIME] = "Spielzeit",
+    [UI_STR_STATS_DEATHS] = "Tode",
+    [UI_STR_STATS_CAPTURES] = "Yorda entführt",
+    [UI_STR_STATS_SAVES] = "Speicherungen dieser Reise",
+    [UI_STR_STATS_ENEMIES] = "Besiegte Gegner dieser Reise",
+    [UI_STR_STATS_ASSISTS] = "Hilfen",
+    [UI_STR_STATS_AREA] = "Ort",
 };
