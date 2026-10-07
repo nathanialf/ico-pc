@@ -86,6 +86,10 @@ void ui_SettingsSetQuitHandler(void (*fn)(void));
    host installs it so the row follows F11 and the window manager.  NULL
    removes it (headless, tests). */
 void ui_SettingsSetFullscreenQuery(int (*fn)(void));
+/* v0.4.0: Display > Texture pack reads fn (texpack_Count, the replacements
+   found at start) to tell an installed pack from none ("None installed",
+   the row then does not step); NULL, or none installed, is none. */
+void ui_SettingsSetTexturePackCount(int (*fn)(void));
 /* Package MV: Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */

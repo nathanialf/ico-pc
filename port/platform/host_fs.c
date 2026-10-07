@@ -254,3 +254,129 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime)
 }
 
 #endif
+
+/* --- ico_dir_walk ------------------------------------------------------- */
+
+#include <dirent.h>
+
+static int walk_name_cmp(const void *a, const void *b)
+{
+    return strcmp(*(char *const *)a, *(char *const *)b);
+}
+
+/* The entries of dir except the hidden ones (".", "..", ".DS_Store"), as
+   malloc'd UTF-8 names in *out, sorted: the count, or -1 when dir cannot
+   be read. */
+static int walk_list(const char *dir, char ***out)
+{
+#ifdef _WIN32
+    wchar_t *wp = ico_widen(dir);
+    _WDIR *d = wp != NULL ? _wopendir(wp) : NULL;
+    struct _wdirent *e;
+#else
+    DIR *d = opendir(dir);
+    struct dirent *e;
+#endif
+    char **names = NULL;
+    int n = 0, cap = 0;
+
+#ifdef _WIN32
+    free(wp);
+#endif
+    *out = NULL;
+    if (d == NULL) {
+        return -1;
+    }
+    for (;;) {
+#ifdef _WIN32
+        char name[1024];
+
+        e = _wreaddir(d);
+        if (e == NULL) {
+            break;
+        }
+        if (ico_narrow(e->d_name, name, sizeof(name)) != 0) {
+            continue;
+        }
+#else
+        const char *name;
+
+        e = readdir(d);
+        if (e == NULL) {
+            break;
+        }
+        name = e->d_name;
+#endif
+        if (name[0] == '.') {
+            continue;
+        }
+        if (n == cap) {
+            int ncap = cap != 0 ? cap * 2 : 64;
+            char **g = realloc(names, (size_t)ncap * sizeof(*names));
+
+            if (g == NULL) {
+                break;
+            }
+            names = g;
+            cap = ncap;
+        }
+        names[n] = malloc(strlen(name) + 1);
+        if (names[n] == NULL) {
+            break;
+        }
+        strcpy(names[n], name);
+        n++;
+    }
+#ifdef _WIN32
+    _wclosedir(d);
+#else
+    closedir(d);
+#endif
+    if (n > 1) {
+        qsort(names, (size_t)n, sizeof(*names), walk_name_cmp);
+    }
+    *out = names;
+    return n;
+}
+
+static int walk_dir(const char *dir, int depth, IcoDirWalkFn fn, void *user, int *files)
+{
+    char **names;
+    int n = walk_list(dir, &names);
+    int stop = 0;
+
+    if (n < 0) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        size_t len = strlen(dir) + 1 + strlen(names[i]) + 1;
+        char *path = stop ? NULL : malloc(len);
+
+        if (path != NULL) {
+            int kind;
+
+            snprintf(path, len, "%s/%s", dir, names[i]);
+            kind = ico_path_kind(path, NULL, NULL);
+            if (kind == 0) {
+                (*files)++;
+                stop = fn(path, names[i], user) != 0;
+            } else if (kind == 1 && depth > 0) {
+                stop = walk_dir(path, depth - 1, fn, user, files) == 1;
+            }
+            free(path);
+        }
+        free(names[i]);
+    }
+    free(names);
+    return stop ? 1 : 0;
+}
+
+int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user)
+{
+    int files = 0;
+
+    if (dir == NULL || dir[0] == '\0' || fn == NULL || walk_dir(dir, depth, fn, user, &files) < 0) {
+        return -1;
+    }
+    return files;
+}

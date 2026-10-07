@@ -92,6 +92,7 @@ typedef struct TexpackConfig {
     uint32_t budgetMb;      /* video.texture_pack_budget_mb */
     int precache;           /* video.texture_pack_precache */
     int bcSupported;        /* RhiLimits.bcTextures, so BC files are refused up front */
+    int developer;          /* gameplay.developer_mode: a log line per replacement */
 } TexpackConfig;
 
 /* Walks the folders, builds the index, logs what it found ("textures: N
@@ -121,6 +122,37 @@ void texpack_Pump(void);
 void texpack_ResetDevice(void);
 /* Stops and joins the loader thread, frees the index and the RAM cache. */
 void texpack_Shutdown(void);
+
+struct RdTexImage; /* rd_tex.h */
+
+/* [video] dump_textures: writes the bound level of src (im, as the cache's
+   hook gave it to rdtex_Store) as PNGs under the names a pack would give
+   it at that level (one per TEXA mode when the name depends on TEXA), to
+   <user folder>/textures/<serial>/dumps/<name>.png; a file already there
+   is kept.  The texels are the decoded, padded RGBA8 with the GS alpha
+   raw (0x80 = 1.0), what a PCSX2 dump holds.  Works without a pack (after
+   texpack_Init); returns the files written. */
+int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const struct RdTexImage *im);
+
+/* What texpack_Init found and what the loader did since, for the log's
+   summary and the tests. */
+typedef struct TexpackStats {
+    uint32_t files;      /* "png"/"dds" files seen in the folders */
+    uint32_t indexed;    /* replacements indexed (texpack_Count) */
+    uint32_t duplicates; /* a name already indexed from an earlier file */
+    uint32_t regions;    /* region names: stored, never matched */
+    uint32_t mipFiles;   /* "-mipN" files: not indexed */
+    uint32_t malformed;  /* names that are not texture names */
+    uint32_t requested;  /* texpack_Request calls queued */
+    uint32_t cached;     /* files in the RAM cache */
+    uint64_t cacheBytes; /* their bytes */
+    uint32_t loadFailed; /* files that would not load */
+    uint32_t installed;  /* replacements put in place */
+    uint32_t discarded;  /* loads whose texture had changed or gone by the pump */
+    uint32_t declined;   /* refused by the budget */
+} TexpackStats;
+
+void texpack_GetStats(TexpackStats *out);
 
 /* ---------------------------------------------------------- the budget
  * GPU bytes of the live replacements, per rd texture.  rd_tex calls

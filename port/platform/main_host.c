@@ -93,6 +93,10 @@
 #ifndef ICO_HEADLESS
 
 #include <SDL3/SDL.h>
+#include "options.h"
+#include "rhi.h"
+#include "texpack.h" /* v0.4.0: PCSX2 texture packs */
+#include "video_options.h"
 #include "window_host.h"
 
 #endif
@@ -1139,6 +1143,28 @@ int main(int argc, char **argv)
                                    "The log names the reason; a Vulkan 1.2 driver is needed.");
     }
     atexit(ico_window_close);
+    /* v0.4.0: a PCSX2 texture pack in the user folder or beside the
+       program, indexed now (the game data is mounted, the device knows its
+       formats); its loader thread stops before the window closes */
+    {
+        IcoVideoOptions vo;
+        TexpackConfig tc;
+        char user[ICO_PATH_MAX];
+
+        ico_video_get(&vo);
+        ico_host_pref_dir(user, sizeof(user));
+        memset(&tc, 0, sizeof(tc));
+        tc.userDir = user;
+        tc.programDir = exe_dir;
+        tc.serial = "SCES-50760";
+        tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
+        /* read ahead only while the pack is in use */
+        tc.precache = vo.texturePackPrecache && vo.texturePack;
+        tc.bcSupported = rhi_Limits() != NULL && rhi_Limits()->bcTextures;
+        tc.developer = ico_opt_developer_mode();
+        texpack_Init(&tc);
+        atexit(texpack_Shutdown);
+    }
 #endif
     ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
     ico_diag_milestone("boot starts (ico_host_init)");

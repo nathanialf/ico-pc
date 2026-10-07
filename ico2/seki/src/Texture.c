@@ -21,6 +21,7 @@
 #include "GifHost.h"
 #include "MicroCode.h" /* R3ab: mc_HostDma */
 #include "rd_tex.h"
+#include "texpack.h" /* v0.4.0: PCSX2 texture packs */
 
 #endif
 
@@ -338,7 +339,77 @@ static struct { /* port */
     int unknownN;
     int failOnce;
     unsigned char clutSnap[1024];
-} texHost;
+    int packOn; /* v0.4.0: the pack or the dump in force last frame (-1 before the first) */
+} texHost = {.packOn = -1};
+
+/* v0.4.0 (T3): texture packs.  The texture just decoded for (id, gen) as
+   texpack_name.h's source (every level of the TIM2, the CLUT in CSM1
+   order), so the pack's replacement under the first of its candidate
+   names is queued for the loader (texpack_Pump installs it), and with
+   [video] dump_textures the level as drawn is written under its names.
+   Only with a pack indexed and the option on, or the dump on. */
+static void texHostPack(int id, TexData *t, int lv, unsigned int gen, const RdTexImage *im)
+{
+    static TexpackName names[TEXPACK_MAX_CANDIDATES];
+    const RdSettings *rs = rd_GetSettings();
+    TexpackSource src;
+    int pack;
+    int n;
+    int k;
+    int full;
+
+    pack = rs->texturePack && texpack_Count() > 0;
+    if (!pack && !rs->dumpTextures) {
+        return;
+    }
+    memset(&src, 0, sizeof(src));
+    src.psm = im->psm;
+    for (k = 0; k < t->levelNum && k < TEXPACK_MAX_LEVELS; k++) {
+        int tw = getTWTH(t->pic.imageWidth) - k;
+        int th = getTWTH(t->pic.imageHeight) - k;
+
+        if (t->lv[k].addr == 0 || tw < 0 || th < 0 || (t->pic.imageWidth >> k) == 0 ||
+            (t->pic.imageHeight >> k) == 0) {
+            break;
+        }
+        src.lv[k].tw = (unsigned char)tw;
+        src.lv[k].th = (unsigned char)th;
+        src.lv[k].w = (unsigned int)(t->pic.imageWidth >> k);
+        src.lv[k].h = (unsigned int)(t->pic.imageHeight >> k);
+        src.lv[k].tbw = (unsigned int)t->lv[k].dbw;
+        src.lv[k].pixels = (char *)t->lv[k].addr + 32;
+    }
+    src.levels = (unsigned int)k;
+    if (lv >= k) {
+        return;
+    }
+    if (im->clut != 0) {
+        /* a CLUT shorter than the format's (clutColors in the TIM2) has no
+           PCSX2 name: the GS reads the full 16 or 256 entries */
+        full = t->pic.imageType == 4 ? 16 : 256;
+        if ((int)im->clutColors != full) {
+            return;
+        }
+        src.cpsm = im->cpsm;
+        src.clutColors = im->clutColors;
+        src.clut = im->clut;
+    }
+    if (rs->dumpTextures) {
+        texpack_Dump(&src, (unsigned int)lv, im);
+    }
+    if (!pack) {
+        return;
+    }
+    n = texpack_Candidates(&src, (unsigned int)lv, names, TEXPACK_MAX_CANDIDATES);
+    for (k = 0; k < n; k++) {
+        int e = texpack_Lookup(&names[k]);
+
+        if (e >= 0) {
+            texpack_Request(e, (unsigned int)id, gen, RDTEX_TEXA_REPLAY, im->padW, im->padH);
+            return;
+        }
+    }
+}
 
 /* the rd texture of table entry id at its current generation, decoded on
    a miss */
@@ -402,6 +473,9 @@ static RdTex texHostTexture(int id)
     smp.wrapS = RD_WRAP_REPEAT;
     smp.wrapT = RD_WRAP_REPEAT;
     r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &im, &smp, t->name);
+    if (r.id != 0) {
+        texHostPack(id, t, lv, gen, &im);
+    }
     if (r.id == 0 && !texHost.failOnce) {
         texHost.failOnce = 1;
         fprintf(stderr,
@@ -1652,6 +1726,24 @@ void tex_ResetVram(void)
     /* R2b: once per frame; destroys the rd textures retired two frames
        ago */
     rdtex_FrameTick();
+    /* v0.4.0: the texture pack's finished loads go in; the pack (or the
+       dump) switched on gives every loaded texture a new generation, so
+       each is decoded again and looked up (switched off, rd_SetSettings
+       has put the originals back) */
+    texpack_Pump();
+    {
+        const RdSettings *rs = rd_GetSettings();
+        int on = (rs->texturePack && texpack_Count() > 0) || rs->dumpTextures;
+
+        if (texHost.packOn == 0 && on) {
+            for (i = 0; i < 200; i++) {
+                if (texHost.serial[i] != 0) {
+                    texHost.serial[i] = ++texHost.nextSerial;
+                }
+            }
+        }
+        texHost.packOn = on;
+    }
 #endif
 }
 

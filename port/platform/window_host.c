@@ -25,6 +25,7 @@
 #include "rhi.h"
 #include "sched.h"
 #include "settings.h"
+#include "texpack.h"
 #include "trace_host.h"
 #include "ui_host.h"
 #include "video_options.h"
@@ -158,6 +159,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->crtHalation = o.crtHalation;
     rs->crtBloom = o.crtBloom;
     rs->crtCurvature = o.crtCurvature;
+    /* v0.4.0: texture packs and the dump, in either preset */
+    rs->texturePack = (uint8_t)(o.texturePack != 0);
+    rs->dumpTextures = (uint8_t)(o.dumpTextures != 0);
     /* R7b: rd presents between ticks, in both presets (F2) */
     {
         const char *e = getenv("ICO_RD_S2_LEGACY");
@@ -384,6 +388,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* v0.3.1 (P3): the Fullscreen row shows what the window is, not the
        option (the window manager can refuse or change it) */
     ui_SettingsSetFullscreenQuery(window_fullscreen);
+    /* v0.4.0: Display > Texture pack says "None installed" without one */
+    ui_SettingsSetTexturePackCount(texpack_Count);
     {
         char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
@@ -1120,6 +1126,7 @@ void ico_window_close(void)
     set_capture(0);
     ico_input_sdl_shutdown();
     ui_SettingsSetFullscreenQuery(NULL);
+    ui_SettingsSetTexturePackCount(NULL);
     ui_HostShutdown();
     rd_SetHostCall(NULL);
     rd_Shutdown();

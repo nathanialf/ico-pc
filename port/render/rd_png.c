@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "host_fs.h"
 #include "rd_internal.h"
 
 static uint32_t s_crcTable[256];
@@ -119,7 +120,7 @@ bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, 
     ihdr[9] = withAlpha ? 6 : 2;        /* colour type: RGBA or RGB */
     ihdr[10] = ihdr[11] = ihdr[12] = 0; /* deflate, adaptive filtering, no interlace */
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
-    FILE *fp = fopen(path, "wb");
+    FILE *fp = ico_fopen(path, "wb"); /* a UTF-8 path on Windows too (texture dumps) */
     bool ok = fp != NULL;
     ok = ok && fwrite(sig, 1, 8, fp) == 8 && chunk(fp, "IHDR", ihdr, 13) &&
          chunk(fp, "IDAT", z, (uint32_t)o) && chunk(fp, "IEND", NULL, 0);

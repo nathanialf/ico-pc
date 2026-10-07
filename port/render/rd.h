@@ -347,9 +347,10 @@ typedef struct RdSettings {
     uint8_t vsync;
     /* Texture packs ([video] texture_pack, dump_textures): replacements
      * from the pack drawn in place of the game's textures (a true -> false
-     * edge in rd_SetSettings puts the originals back,
-     * rdtex_RevertReplacements), and each texture the game binds written
-     * as a PNG under its PCSX2 name.  Both 0 in a zeroed RdSettings. */
+     * edge set by rd_SetSettings puts the originals back when the next
+     * frame opens, rdtex_RevertReplacements), and each texture the game
+     * binds written as a PNG under its PCSX2 name.  Both 0 in a zeroed
+     * RdSettings. */
     uint8_t texturePack;
     uint8_t dumpTextures;
     uint8_t _pad[1];

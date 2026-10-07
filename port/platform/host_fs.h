@@ -43,6 +43,16 @@ int ico_fsync(FILE *f);
    seconds) when not NULL */
 int ico_path_kind(const char *path, unsigned long long *size, long long *mtime);
 
+/* The files under the folder dir and, depth levels down, its folders'
+   (0: dir's own files only), each folder's entries in byte order of their
+   names, hidden ones (a leading '.') left out: fn(the file's path, dir and
+   the names joined with '/', its name, user) for each, until fn returns
+   non-zero.  The number of files visited, or -1 when dir cannot be read (a
+   folder below it that cannot be read is skipped).  Symbolic links are
+   followed; depth bounds a loop of them. */
+typedef int (*IcoDirWalkFn)(const char *path, const char *name, void *user);
+int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user);
+
 #ifdef _WIN32
 
 #include <wchar.h>

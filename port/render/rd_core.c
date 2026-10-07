@@ -31,6 +31,7 @@
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_tex.h"
 #include "texpack.h"
 
 RdContext g_rd;
@@ -1310,8 +1311,14 @@ void rd_BeginFrame(void)
         rd__Log("rd_BeginFrame without rd_EndFrame: the open frame is discarded");
     }
     if (g_rd.settingsPending) {
+        /* v0.4.0: the texture pack switched off: the originals back (once
+         * per edge; rd_tex.h rdtex_RevertReplacements) */
+        const bool packOff = g_rd.settings.texturePack && !g_rd.pendingSettings.texturePack;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
+        if (packOff) {
+            rdtex_RevertReplacements();
+        }
         /* wave 7 (R7a): the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next
          * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
