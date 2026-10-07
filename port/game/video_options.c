@@ -31,6 +31,10 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->crtMode = ICO_CRT_CONSUMER;
     o->crtStrength = 1.0f;
     o->crtScanlines = o->crtMask = o->crtHalation = o->crtBloom = o->crtCurvature = -1.0f;
+    o->texturePack = 1;
+    o->dumpTextures = 0;
+    o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
+    o->texturePackPrecache = 1;
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -261,6 +265,14 @@ static void sanitize(IcoVideoOptions *o)
     o->crtHalation = crt_override(o->crtHalation, 1.0f);
     o->crtBloom = crt_override(o->crtBloom, 1.0f);
     o->crtCurvature = crt_override(o->crtCurvature, 0.25f);
+    o->texturePack = o->texturePack != 0;
+    o->dumpTextures = o->dumpTextures != 0;
+    if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
+        o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
+    } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
+        o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MAX;
+    }
+    o->texturePackPrecache = o->texturePackPrecache != 0;
 }
 
 static void read_config(void)
@@ -300,6 +312,20 @@ static void read_config(void)
     o.crtHalation = (float)ico_config_get_float("video.crt_halation", -1.0);
     o.crtBloom = (float)ico_config_get_float("video.crt_bloom", -1.0);
     o.crtCurvature = (float)ico_config_get_float("video.crt_curvature", -1.0);
+    /* texture packs */
+    o.texturePack = ico_config_get_bool("video.texture_pack", 1) != 0;
+    o.dumpTextures = ico_config_get_bool("video.dump_textures", 0) != 0;
+    {
+        long long mb =
+            ico_config_get_int("video.texture_pack_budget_mb", ICO_TEXPACK_BUDGET_DEFAULT);
+        if (mb < ICO_TEXPACK_BUDGET_MIN || mb > ICO_TEXPACK_BUDGET_MAX) {
+            fprintf(stderr, "video: texture_pack_budget_mb %lld outside %d..%d; clamped\n", mb,
+                    ICO_TEXPACK_BUDGET_MIN, ICO_TEXPACK_BUDGET_MAX);
+            mb = mb < ICO_TEXPACK_BUDGET_MIN ? ICO_TEXPACK_BUDGET_MIN : ICO_TEXPACK_BUDGET_MAX;
+        }
+        o.texturePackBudgetMb = (int)mb;
+    }
+    o.texturePackPrecache = ico_config_get_bool("video.texture_pack_precache", 1) != 0;
     /* the preset is a shortcut over the four rows: only "enhanced" and
        "custom" take them as written; "original", no key, or anything else
        (a misspelling) is the PS2 picture whatever they say */
@@ -385,6 +411,16 @@ int ico_video_save(void)
                 r |= ico_config_set_float(keys[i], (double)v[i]);
             }
         }
+    }
+    r |= ico_config_set_bool("video.texture_pack", o.texturePack);
+    r |= ico_config_set_bool("video.dump_textures", o.dumpTextures);
+    /* the config-only keys only when not at their defaults, as the CRT
+       overrides: an absent key is the default */
+    if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
+        r |= ico_config_set_int("video.texture_pack_budget_mb", o.texturePackBudgetMb);
+    }
+    if (!o.texturePackPrecache) {
+        r |= ico_config_set_bool("video.texture_pack_precache", 0);
     }
     return r != 0 ? -1 : ico_config_save();
 }

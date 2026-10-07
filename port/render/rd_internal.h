@@ -348,12 +348,68 @@ enum { RD_TEXKIND_IMAGE = 1, RD_TEXKIND_TARGET = 2 };
  * RGBA8: rd_CreateTexture/rd_CreateTextureSrc, 4 bytes a texel.  R8:
  * rd_CreateTextureR8, 1 byte (coverage in GS alpha units), drawn with font_ps
  * (rd__PlanScreenDraw selects RD_FS_FONT for it) and never given mips. */
-enum { RD_TEXEL_RGBA8 = 0, RD_TEXEL_R8 = 1, RD_TEXEL_COUNT };
+enum {
+    RD_TEXEL_RGBA8 = 0,
+    RD_TEXEL_R8 = 1,
+    /* Texture packs: a replacement's block-compressed texels as the DDS
+     * file holds them (4x4 blocks, RHI_FMT_BC*), uploaded from
+     * RdTexRec.pending and never kept in pixels, never dumped */
+    RD_TEXEL_BC1 = 2,
+    RD_TEXEL_BC2 = 3,
+    RD_TEXEL_BC3 = 4,
+    RD_TEXEL_BC7 = 5,
+    RD_TEXEL_COUNT
+};
 
+static inline int rd__TexelIsBlock(uint8_t format)
+{
+    return format >= RD_TEXEL_BC1 && format <= RD_TEXEL_BC7;
+}
+
+/* Bytes of one texel of an uncompressed format (RGBA8 4, R8 1).  Not
+ * meaningful for the BC formats: they use rd__TexelBlockBytes. */
 static inline uint32_t rd__TexelBytes(uint8_t format)
 {
     return format == RD_TEXEL_R8 ? 1u : 4u;
 }
+
+/* Texture packs: the side of a format's copy unit in texels (4 for the BC
+ * formats' 4x4 blocks, 1 otherwise) and the bytes of one unit (BC1 8,
+ * BC2/BC3/BC7 16, else rd__TexelBytes).  A row of a level w texels wide
+ * is ceil(w / blockW) * blockBytes bytes and covers blockW texel rows. */
+static inline uint32_t rd__TexelBlockW(uint8_t format)
+{
+    return rd__TexelIsBlock(format) ? 4u : 1u;
+}
+
+static inline uint32_t rd__TexelBlockBytes(uint8_t format)
+{
+    if (!rd__TexelIsBlock(format)) {
+        return rd__TexelBytes(format);
+    }
+    return format == RD_TEXEL_BC1 ? 8u : 16u;
+}
+
+/* The RHI format of an image texture of format (RD_TEXEL_*). */
+static inline RhiFormat rd__TexelRhiFormat(uint8_t format)
+{
+    switch (format) {
+    case RD_TEXEL_R8:
+        return RHI_FMT_R8_UNORM;
+    case RD_TEXEL_BC1:
+        return RHI_FMT_BC1_UNORM;
+    case RD_TEXEL_BC2:
+        return RHI_FMT_BC2_UNORM;
+    case RD_TEXEL_BC3:
+        return RHI_FMT_BC3_UNORM;
+    case RD_TEXEL_BC7:
+        return RHI_FMT_BC7_UNORM;
+    default:
+        return RHI_FMT_RGBA8_UNORM;
+    }
+}
+
+struct TexpackImage; /* texpack.h */
 
 typedef struct RdTexRec {
     uint32_t gen;
@@ -381,6 +437,18 @@ typedef struct RdTexRec {
     uint32_t lastUpload;
     uint16_t uploadStreak;
     uint8_t streakLogged;
+    /* Texture packs.  replacement: the texels came from a pack file
+     * (rdtex_CreateReplacement), not from the game's TIM2; the sampler
+     * treats it as mipmapped and it has no CPU copy in pixels.  uvW, uvH:
+     * the size the draw's UVs are normalised by, the GS size the game's
+     * texture had (2^TW x 2^TH), so a 4x replacement samples the same
+     * place; 0 = w, h (every texture that is not a replacement).
+     * pending: the replacement's levels as the file held them, owned
+     * here until uploadTextures copies every level to the RHI texture and
+     * frees it (null otherwise). */
+    uint8_t replacement;
+    uint32_t uvW, uvH;
+    struct TexpackImage *pending;
 } RdTexRec;
 
 RdTexRec *rd__TexRec(uint32_t id);

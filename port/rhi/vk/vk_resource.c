@@ -332,6 +332,9 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         desc->width == 0 || desc->height == 0) {
         return out;
     }
+    if (rhi_FormatIsBlock(desc->format) && !g_vkr.limits.bcTextures) {
+        return out; /* texture packs: BC needs the device feature (RhiLimits.bcTextures) */
+    }
     const VkrFormatMap *fm = &vkr_formatMap[desc->format];
     VkImageUsageFlags usage = 0;
     if (desc->usage & RHI_TEX_SAMPLED) {

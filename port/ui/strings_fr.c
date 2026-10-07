@@ -365,4 +365,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_PLAYERS_NOTE] = "2 : une deuxième manette dirige Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
         "La disposition des touches du jeu, gardée dans la sauvegarde. Configurer les touches règle clavier et manette.",
+    [UI_STR_OPT_TEXTURE_PACK] = "Pack de textures",
+    [UI_STR_VAL_NONE_INSTALLED] = "Aucun installé",
+    [UI_STR_TEXTURE_PACK_NOTE] =
+        "Packs PCSX2 : textures/SCES-50760/replacements à côté du programme ou dans le dossier utilisateur.",
+    [UI_STR_OPT_DUMP_TEXTURES] = "Extraire les textures",
+    [UI_STR_DUMP_TEXTURES_NOTE] =
+        "Enregistre chaque texture sous son nom PCSX2 dans textures/SCES-50760/dumps du dossier utilisateur.",
 };

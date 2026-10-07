@@ -517,6 +517,29 @@ void rdtex_Reset(void)
     memset(&s_tc.stats, 0, sizeof(s_tc.stats));
 }
 
+/* The texture pack contract (texpack.h): stubs until the pack loader and
+ * the RHI block formats fill them in. */
+RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
+                              const char *debugName)
+{
+    (void)img;
+    (void)uvW;
+    (void)uvH;
+    (void)debugName;
+    return (RdTex){0};
+}
+
+int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
+{
+    (void)id;
+    (void)gen;
+    (void)texa;
+    (void)rep;
+    return -1;
+}
+
+void rdtex_RevertReplacements(void) {}
+
 void rdtex_SetEnhancedMips(int on)
 {
     s_tc.enhancedMips = on != 0;

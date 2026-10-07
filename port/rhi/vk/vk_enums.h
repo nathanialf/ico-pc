@@ -15,7 +15,7 @@
 typedef struct VkrFormatMap {
     bool set;
     VkFormat vk;
-    uint32_t texelBytes;       /* bytes per texel of the copy aspect */
+    uint32_t texelBytes;       /* bytes per texel of the copy aspect (BC: per 4x4 block) */
     VkImageAspectFlags aspect; /* all aspects of the format */
     bool isInteger;            /* blending not allowed */
 } VkrFormatMap;
@@ -34,6 +34,10 @@ static const VkrFormatMap vkr_formatMap[RHI_FMT_COUNT] = {
     [RHI_FMT_D32F] = {true, VK_FORMAT_D32_SFLOAT, 4, VK_IMAGE_ASPECT_DEPTH_BIT, false},
     [RHI_FMT_D32F_S8] = {true, VK_FORMAT_D32_SFLOAT_S8_UINT, 4, VKR_DS, false},
     [RHI_FMT_BGRA8_UNORM] = {true, VK_FORMAT_B8G8R8A8_UNORM, 4, VKR_COLOR, false},
+    [RHI_FMT_BC1_UNORM] = {true, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 8, VKR_COLOR, false},
+    [RHI_FMT_BC2_UNORM] = {true, VK_FORMAT_BC2_UNORM_BLOCK, 16, VKR_COLOR, false},
+    [RHI_FMT_BC3_UNORM] = {true, VK_FORMAT_BC3_UNORM_BLOCK, 16, VKR_COLOR, false},
+    [RHI_FMT_BC7_UNORM] = {true, VK_FORMAT_BC7_UNORM_BLOCK, 16, VKR_COLOR, false},
 };
 
 typedef struct VkrVertexFormatMap {

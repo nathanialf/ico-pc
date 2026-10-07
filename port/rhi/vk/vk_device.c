@@ -552,6 +552,8 @@ static void vkr_FillLimits(void)
     /* package PA */
     o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
     o->maxStorageRange = l->maxStorageBufferRange;
+    /* texture packs: BC sampling and block uploads are not wired yet */
+    o->bcTextures = false;
 }
 
 /* ------------------------------------------------------------- lifecycle */

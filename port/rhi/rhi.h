@@ -91,8 +91,23 @@ typedef enum RhiFormat {
     RHI_FMT_D32F,        /* reversed-Z depth */
     RHI_FMT_D32F_S8,     /* reversed-Z depth + stencil (scene target) */
     RHI_FMT_BGRA8_UNORM, /* swapchain */
+    /* Texture packs: block-compressed sampled textures (4x4 texel blocks,
+     * 8 bytes a block for BC1, 16 for BC2/BC3/BC7), created only when
+     * RhiLimits.bcTextures is true (rhi_CreateTexture refuses them
+     * otherwise).  Copy-destination and sampled only, never targets. */
+    RHI_FMT_BC1_UNORM,
+    RHI_FMT_BC2_UNORM,
+    RHI_FMT_BC3_UNORM,
+    RHI_FMT_BC7_UNORM,
     RHI_FMT_COUNT
 } RhiFormat;
+
+/* The block-compressed formats above. */
+static inline bool rhi_FormatIsBlock(RhiFormat f)
+{
+    return f == RHI_FMT_BC1_UNORM || f == RHI_FMT_BC2_UNORM || f == RHI_FMT_BC3_UNORM ||
+           f == RHI_FMT_BC7_UNORM;
+}
 
 typedef enum RhiVertexFormat {
     RHI_VTX_F32x1,
@@ -444,6 +459,11 @@ typedef struct RhiLimits {
      * at least 2^27; D3D12 2^27 elements of 16 bytes). */
     uint32_t maxDynamicUniforms;
     uint64_t maxStorageRange;
+    /* Texture packs: rhi_CreateTexture takes the RHI_FMT_BC* formats
+     * (Vulkan textureCompressionBC, every D3D12 device).  Both backends
+     * report false until the block upload path lands, and refuse the
+     * formats while it is false. */
+    bool bcTextures;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {

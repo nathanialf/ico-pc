@@ -345,7 +345,14 @@ typedef struct RdSettings {
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     uint8_t vsync;
-    uint8_t _pad[3];
+    /* Texture packs ([video] texture_pack, dump_textures): replacements
+     * from the pack drawn in place of the game's textures (a true -> false
+     * edge in rd_SetSettings puts the originals back,
+     * rdtex_RevertReplacements), and each texture the game binds written
+     * as a PNG under its PCSX2 name.  Both 0 in a zeroed RdSettings. */
+    uint8_t texturePack;
+    uint8_t dumpTextures;
+    uint8_t _pad[1];
     /* Wave 7 (R7a): the internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

@@ -248,6 +248,9 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         desc->width == 0 || desc->height == 0) {
         return out;
     }
+    if (rhi_FormatIsBlock(desc->format) && !g_dx.limits.bcTextures) {
+        return out; /* texture packs: BC needs the device feature (RhiLimits.bcTextures) */
+    }
     const DxFormatMap *fm = &dx_formatMap[desc->format];
     DxTexture *t = NULL;
     uint32_t id = d3dp_PoolAlloc(&g_dx.textures, (void **)&t);

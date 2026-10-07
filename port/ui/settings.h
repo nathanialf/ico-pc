@@ -131,6 +131,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_FRAMERATE,    /* [video] framerate (R7b; stepped since R7d) */
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row (package CRT) */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
+    UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */
     UI_OPT_BRIGHTNESS,   /* S1: the game's brightness step, systemStatus[11] 0..14 */
     UI_OPT_VIDEO_MODE,
     /* Audio */
@@ -151,6 +152,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_PLAYERS,     /* S1: the game's girlControlMode, 1 or 2, once cleared */
     /* Main */
     UI_OPT_LANGUAGE,
+    UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

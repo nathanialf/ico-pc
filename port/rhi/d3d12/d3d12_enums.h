@@ -17,7 +17,7 @@ typedef struct DxFormatMap {
     DXGI_FORMAT resource; /* the format the resource is created with */
     DXGI_FORMAT view;     /* SRV / RTV format */
     DXGI_FORMAT dsv;      /* DSV format (depth formats) */
-    uint32_t texelBytes;  /* bytes per texel of the copy plane (depth: plane 0) */
+    uint32_t texelBytes;  /* bytes per texel of the copy plane (depth: plane 0; BC: per block) */
     bool depth, stencil;
     bool isInteger; /* blending not allowed */
 } DxFormatMap;
@@ -43,6 +43,14 @@ static const DxFormatMap dx_formatMap[RHI_FMT_COUNT] = {
                          DXGI_FORMAT_D32_FLOAT_S8X24_UINT, 4, true, true, false},
     [RHI_FMT_BGRA8_UNORM] = {true, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM,
                              DXGI_FORMAT_UNKNOWN, 4, false, false, false},
+    [RHI_FMT_BC1_UNORM] = {true, DXGI_FORMAT_BC1_TYPELESS, DXGI_FORMAT_BC1_UNORM,
+                           DXGI_FORMAT_UNKNOWN, 8, false, false, false},
+    [RHI_FMT_BC2_UNORM] = {true, DXGI_FORMAT_BC2_TYPELESS, DXGI_FORMAT_BC2_UNORM,
+                           DXGI_FORMAT_UNKNOWN, 16, false, false, false},
+    [RHI_FMT_BC3_UNORM] = {true, DXGI_FORMAT_BC3_TYPELESS, DXGI_FORMAT_BC3_UNORM,
+                           DXGI_FORMAT_UNKNOWN, 16, false, false, false},
+    [RHI_FMT_BC7_UNORM] = {true, DXGI_FORMAT_BC7_TYPELESS, DXGI_FORMAT_BC7_UNORM,
+                           DXGI_FORMAT_UNKNOWN, 16, false, false, false},
 };
 
 typedef struct DxVertexFormatMap {

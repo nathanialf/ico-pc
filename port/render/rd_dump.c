@@ -431,8 +431,9 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
             break;
         }
         if (h.kind == RD_TEXKIND_IMAGE) {
-            /* R8: an image's view word is its texel format */
-            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && h.view < RD_TEXEL_COUNT;
+            /* R8: an image's view word is its texel format (the uncompressed
+               ones: a pack's BC replacement is never dumped) */
+            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && h.view <= RD_TEXEL_R8;
             const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes((uint8_t)h.view);
             uint8_t *px = ok ? malloc(bytes) : NULL;
             ok = px && rraw(fp, px, bytes);

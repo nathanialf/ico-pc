@@ -409,6 +409,14 @@ typedef enum UiStrId {
     UI_STR_HOLD_TYPE_NOTE,
     UI_STR_PLAYERS_NOTE,
     UI_STR_BUTTON_CONFIG_NOTE,
+    /* texture packs: Settings > Display, "Texture pack" (On/Off, or "None
+       installed" without a pack) and its note; the developer row "Dump
+       textures" and its note */
+    UI_STR_OPT_TEXTURE_PACK,
+    UI_STR_VAL_NONE_INSTALLED,
+    UI_STR_TEXTURE_PACK_NOTE,
+    UI_STR_OPT_DUMP_TEXTURES,
+    UI_STR_DUMP_TEXTURES_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

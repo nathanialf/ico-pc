@@ -366,4 +366,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_PLAYERS_NOTE] = "2: Ein zweiter Controller steuert Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
         "Die Tastenbelegung des Spiels, im Spielstand gespeichert. Tastatur und Gamepad: unter Tastenbelegung.",
+    [UI_STR_OPT_TEXTURE_PACK] = "Texturpaket",
+    [UI_STR_VAL_NONE_INSTALLED] = "Keines installiert",
+    [UI_STR_TEXTURE_PACK_NOTE] =
+        "PCSX2-Pakete: textures/SCES-50760/replacements neben dem Programm oder im Benutzerordner.",
+    [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
+    [UI_STR_DUMP_TEXTURES_NOTE] =
+        "Speichert jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
 };

@@ -21,6 +21,12 @@
  *   [video] crt_strength    1.0         0..1
  *   [video] crt_scanlines, crt_mask, crt_halation, crt_bloom, crt_curvature
  *                           -1          config only: the mode's value when < 0
+ *   [video] texture_pack    true        load a PCSX2 texture pack when one is installed
+ *   [video] dump_textures   false       write each texture under its PCSX2 name (pack authors)
+ *   [video] texture_pack_budget_mb
+ *                           2048        config only: GPU memory for replacements, 128..65536
+ *   [video] texture_pack_precache
+ *                           true        config only: read the whole pack into memory at start
  *
  * Every option applies on its own.  preset is not an option but a
  * shortcut over four of them, read and written as such: "enhanced" or
@@ -30,7 +36,8 @@
  * (ico_video_preset): Original when all four are the PS2's, Enhanced when
  * they are window, auto, anisotropic and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.
- * fullscreen, vsync, framerate and the CRT keys are not part of it.
+ * fullscreen, vsync, framerate, the CRT keys and the texture pack keys are
+ * not part of it.
  * framerate (renderer wave 7, R7b): "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
@@ -80,7 +87,18 @@ typedef struct IcoVideoOptions {
     /* the config-only overrides, -1 = the mode's own: scanline strength,
        mask strength, halation, bloom (0..1), curvature (0..0.25) */
     float crtScanlines, crtMask, crtHalation, crtBloom, crtCurvature;
+    /* texture packs: applied whatever the preset */
+    int texturePack;         /* replacements from an installed pack drawn */
+    int dumpTextures;        /* each texture written under its PCSX2 name */
+    int texturePackBudgetMb; /* config only: the replacements' GPU memory */
+    int texturePackPrecache; /* config only: the pack read into memory at start */
 } IcoVideoOptions;
+
+/* IcoVideoOptions.texturePackBudgetMb: the default and the range a value
+   is clamped to */
+#define ICO_TEXPACK_BUDGET_DEFAULT 2048
+#define ICO_TEXPACK_BUDGET_MIN 128
+#define ICO_TEXPACK_BUDGET_MAX 65536
 
 /* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
 enum {
@@ -98,7 +116,8 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
 /* The defaults: the Original rows (1x, 4:3, original filter, half height),
    windowed, vsync on, framerate uncapped, the CRT filter off (its mode
-   Consumer TV at full strength, no overrides). */
+   Consumer TV at full strength, no overrides), texture packs on with
+   precache and a 2048 MB budget, no dump. */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);

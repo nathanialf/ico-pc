@@ -177,6 +177,38 @@ void rdtex_FrameTick(void);
 /* rd was shut down (and maybe started again): forget every entry without
  * destroying anything (rd_Shutdown destroyed them). */
 void rdtex_Reset(void);
+/* ------------------------------------------------------- texture packs
+ *
+ * A pack replacement (texpack.h) takes the place of a cache entry's
+ * texture: every later bind of (id, gen, texa) samples it.  It lasts as
+ * long as the entry: a new generation (a CLUT scroll re-store), rdtex_Drop
+ * or rdtex_Reset retire it with the entry. */
+
+struct TexpackImage; /* texpack.h */
+
+/* A replacement texture from a pack image: its levels (RGBA8 with raw GS
+ * alpha, or BC blocks as the file holds them) move into the texture's
+ * pending upload and *img is left empty, freed after the upload.  uvW,
+ * uvH: the GS size of the texture it replaces (2^TW x 2^TH, the original
+ * entry's padded size), which the draws' UVs keep being normalised by.
+ * {0} (img untouched) when rd is not initialised, the format is BC and
+ * the device has no BC (RhiLimits.bcTextures), or the image is empty.
+ * The texture pack contract: a stub returning {0} until the RHI block
+ * formats land. */
+RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
+                              const char *debugName);
+/* Install rep as the texture of the entry (id, gen, texa): the entry's
+ * current texture is retired, rep takes its place and the entry is marked
+ * replaced.  0, or -1 when there is no such entry (freed, or a newer
+ * generation stored since the request): the caller keeps rep and destroys
+ * it.  The texture pack contract: a stub returning -1. */
+int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep);
+/* The pack was switched off (rd_SetSettings on a texturePack true -> false
+ * edge): retire every replaced entry's texture and forget the entry, so
+ * the next bind decodes the game's original again.  The texture pack
+ * contract: a stub doing nothing. */
+void rdtex_RevertReplacements(void);
+
 /* The Enhanced hook (not in the settings yet): keep a CPU mip chain per
  * entry. */
 void rdtex_SetEnhancedMips(int on);

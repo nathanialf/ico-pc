@@ -363,4 +363,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_PLAYERS_NOTE] = "2: un secondo controller guida Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
         "La disposizione dei tasti del gioco, nel salvataggio. Configura i comandi regola tastiera e gamepad.",
+    [UI_STR_OPT_TEXTURE_PACK] = "Pacchetto texture",
+    [UI_STR_VAL_NONE_INSTALLED] = "Nessuno installato",
+    [UI_STR_TEXTURE_PACK_NOTE] =
+        "Pacchetti PCSX2: textures/SCES-50760/replacements accanto al programma o nella cartella utente.",
+    [UI_STR_OPT_DUMP_TEXTURES] = "Esporta texture",
+    [UI_STR_DUMP_TEXTURES_NOTE] =
+        "Salva ogni texture con il suo nome PCSX2 in textures/SCES-50760/dumps nella cartella utente.",
 };

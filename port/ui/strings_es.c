@@ -363,4 +363,11 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_PLAYERS_NOTE] = "2: un segundo mando controla a Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
         "La disposición de botones del juego, guardada en la partida. Configurar controles ajusta teclado y mando.",
+    [UI_STR_OPT_TEXTURE_PACK] = "Paquete de texturas",
+    [UI_STR_VAL_NONE_INSTALLED] = "Ninguno instalado",
+    [UI_STR_TEXTURE_PACK_NOTE] =
+        "Paquetes de PCSX2: textures/SCES-50760/replacements junto al programa o en la carpeta de usuario.",
+    [UI_STR_OPT_DUMP_TEXTURES] = "Exportar texturas",
+    [UI_STR_DUMP_TEXTURES_NOTE] =
+        "Guarda cada textura con su nombre de PCSX2 en textures/SCES-50760/dumps de la carpeta de usuario.",
 };
