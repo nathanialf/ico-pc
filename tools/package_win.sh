@@ -129,6 +129,9 @@ iso=${iso[$a]}
 # report of where it is stuck to logs\\ico-pc.log and stops. 0 turns it off.
 watchdog=30
 
+# Display settings live in Options > Display and in config.toml in the user folder.
+# With a problem report, send logs\\ico-pc.log from next to the program.
+
 # Port settings (display, input bindings, gameplay options) live in
 # config.toml in the pref folder; the in-game Options menu edits them.
 INI

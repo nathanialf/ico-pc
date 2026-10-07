@@ -135,6 +135,9 @@ iso=$iso
 # watchdog: seconds without game progress before the program writes a report
 # to logs/ico-pc.log and stops. 0 turns it off.
 watchdog=30
+
+# Display settings live in Options > Display and in config.toml in the user folder.
+# With a problem report, send logs/ico-pc.log from next to the program.
 INI
 # the player README, from the same commit
 cp "$wt/README.md" "$stage/README.md"

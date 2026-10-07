@@ -34,9 +34,8 @@ glibc 2.38 or later (SteamOS 3.5+, Debian 13, Ubuntu 24.04).
 Add a Non-Steam Game > browse to `ico_pc`, with no launch options. Do the
 first launch in Desktop Mode (the disc image dialog needs `zenity`, or put
 the image beside `ico_pc` as `Ico_PAL.iso`), then play in Game Mode with the
-default gamepad layout. The Deck's controls work with no setup. The Deck
-steps describe what the package is built to do; they have not been checked
-on a Deck yet.
+default gamepad layout. The Deck's controls work with no setup. In Game Mode
+the game is always shown full screen, whatever the Fullscreen row says.
 
 There are no command-line options to learn: double-click or run it.
 
@@ -80,7 +79,8 @@ rebound in Options > Controls > Remap controls.
 Open **Options** from the title screen, or press Start during play and
 choose **Options** there: both open the same menu. Up and Down move,
 Left and Right change a value, Cross opens or confirms, Triangle or Circle
-goes back. Changes apply at once and are saved to `config.toml`.
+goes back. Changes apply at once and are saved to `config.toml`. Every
+Display option applies on its own.
 
 The PS2 Options screen's settings are on these pages too, shown only when
 Options is opened from the pause menu: Brightness (Display; Square puts back
@@ -89,11 +89,17 @@ configuration, Vibration and Hold type (Controls); Film effect and Players
 (Gameplay, once you have finished the game). They are kept in your save, as
 on the PS2, not in `config.toml`.
 
-- **Display:** a Preset (Original is the PS2 picture; Enhanced turns on the
-  options below), resolution scale, aspect ratio (4:3, 16:10, 16:9, Auto),
-  fullscreen, vertical sync, texture filtering, full-height picture, frame
-  rate (original, uncapped or fixed up to 240 fps, which smooths motion
-  between the game's updates), a CRT filter with several tube styles and a
+- **Display:** a Preset, which is a shortcut: Original puts the four options
+  below back to the PS2 picture (1x, 4:3, original filtering, half height);
+  Enhanced sets the window's size, Auto aspect, anisotropic filtering and the
+  full-height picture; the row reads Custom once you change any of them.
+  Then resolution scale (1x to 4x or the window's size; fixed at 1x while the
+  CRT filter is on), aspect ratio (4:3, 16:10, 16:9, Auto), fullscreen (shows
+  what the window is; in Steam Deck Game Mode the game is always shown full
+  screen, so this row matters in Desktop Mode and on desktops), vertical sync
+  (off never tears unless your desktop or the Deck's "Allow Tearing" permits
+  it), texture filtering, full-height picture, frame rate (original, uncapped
+  or a fixed cap up to 240 fps), a CRT filter with several tube styles and a
   strength, and the video mode (PAL 50 Hz or 60 Hz; the default is 60 Hz).
   The video mode can only be changed when Options is opened from the title.
 - **Audio:** master, music and effects volume, stereo or mono, and the output
@@ -166,6 +172,14 @@ run). If something goes wrong it says why:
 Press **F12** with a problem on screen to save a frame dump and picture (a
 `dumps` folder) for a bug report. Dumps contain pictures from your disc, so
 do not share them publicly.
+
+## Reporting a problem
+
+Send `logs/ico-pc.log`, which sits beside `ico_pc` on Linux and beside the
+exe on Windows. It records your display options at start, every change you
+make in Options, and every 10 seconds the frame rate, present mode, refresh
+rate and window size. Say where your `config.toml` is if asked; it is in the
+user folder described under Saves.
 
 ## Differences from the PS2 you will notice
 
