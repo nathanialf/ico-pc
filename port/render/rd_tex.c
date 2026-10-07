@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "texpack.h"
 
 /* ------------------------------------------------------------ decoding */
 
@@ -321,6 +322,7 @@ typedef struct RdTexEntry {
     uint8_t used, src;
     uint32_t w, h; /* the rd texture's (padded) size */
     RdTex tex;
+    uint8_t replaced; /* texture packs: tex is a pack replacement (rdtex_Replace) */
     RdTexSampler smp;
     uint8_t *mips; /* the Enhanced CPU chain, or null */
 } RdTexEntry;
@@ -337,6 +339,8 @@ static struct {
     uint32_t tick;
     int enhancedMips;
     RdTexCacheStats stats;
+    RdTexReleaseFn release; /* texture packs: rdtex_SetReleaseHook */
+    int bcSingleLogged;     /* "a compressed replacement without mips", once */
 } s_tc;
 
 static RdTexEntry *entryOf(uint32_t id, int texa)
@@ -369,8 +373,21 @@ static void retire(RdTex t)
     s_tc.stats.retired++;
 }
 
+/* Texture packs: the entry gives up its texture (retired, or forgotten
+ * by rdtex_Reset); a replacement's accounts are settled. */
+static void releaseReplaced(RdTexEntry *e)
+{
+    if (e->replaced) {
+        e->replaced = 0;
+        if (s_tc.release && e->tex.id) {
+            s_tc.release(e->tex);
+        }
+    }
+}
+
 static void freeEntry(RdTexEntry *e)
 {
+    releaseReplaced(e);
     retire(e->tex);
     free(e->mips);
     memset(e, 0, sizeof(*e));
@@ -432,8 +449,8 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         e->texa = (uint16_t)texa;
         s_tc.stats.entries++;
     }
-    if (e->tex.id != 0 && rd__TexRec(e->tex.id) != NULL && e->w == pw && e->h == ph &&
-        e->src == (uint8_t)src) {
+    if (e->tex.id != 0 && !e->replaced && rd__TexRec(e->tex.id) != NULL && e->w == pw &&
+        e->h == ph && e->src == (uint8_t)src) {
         /* same shape: re-expand in place */
         rd_UpdateTexture(e->tex, px);
         s_tc.stats.updates++;
@@ -451,6 +468,9 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
             s_tc.stats.failures++;
             return (RdTex){0};
         }
+        /* a replaced entry's new generation gets a texture of the game's
+           own: the replacement was for the old one */
+        releaseReplaced(e);
         if (rd__TexRec(e->tex.id) != NULL) {
             retire(e->tex);
         }
@@ -510,6 +530,9 @@ void rdtex_FrameTick(void)
 void rdtex_Reset(void)
 {
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
+        if (s_tc.e[i].used) {
+            releaseReplaced(&s_tc.e[i]);
+        }
         free(s_tc.e[i].mips);
     }
     memset(s_tc.e, 0, sizeof(s_tc.e));
@@ -517,28 +540,130 @@ void rdtex_Reset(void)
     memset(&s_tc.stats, 0, sizeof(s_tc.stats));
 }
 
-/* The texture pack contract (texpack.h): stubs until the pack loader and
- * the RHI block formats fill them in. */
-RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
-                              const char *debugName)
+/* ------------------------------------------------------- texture packs */
+
+/* the alpha the coverage of the replacement's box chain keeps: as the
+   Enhanced mips (rd_replay.c RD_MIP_COVERAGE_REF, alpha > 64) */
+#define RDTEX_REPLACEMENT_COVERAGE_REF 64
+
+int rdtex_ReplacementMips(TexpackImage *img)
 {
-    (void)img;
-    (void)uvW;
-    (void)uvH;
-    (void)debugName;
-    return (RdTex){0};
+    if (!img || !img->blob || img->fmt != RD_TEXEL_RGBA8 || img->levels != 1 || img->w == 0 ||
+        img->h == 0 || img->lv[0].data == NULL || img->lv[0].pitch != img->w * 4u) {
+        return -1;
+    }
+    const uint32_t w = img->w, h = img->h;
+    const size_t base = (size_t)w * h * 4;
+    const size_t chain = rdtex_MipChainBytes(w, h);
+    if (chain == 0) {
+        return -1; /* 1 x 1: nothing to add */
+    }
+    uint8_t *blob = malloc(base + chain);
+    if (!blob) {
+        return -1;
+    }
+    memcpy(blob, img->lv[0].data, base);
+    const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base);
+    rdtex_KeepAlphaCoverage(blob, w, h, blob + base, n, RDTEX_REPLACEMENT_COVERAGE_REF);
+    free(img->blob);
+    img->blob = blob;
+    img->bytes = base + chain;
+    img->lv[0].data = blob;
+    const uint8_t *p = blob + base;
+    uint32_t lw = w, lh = h, levels = 1;
+    for (uint32_t l = 1; l <= n && levels < TEXPACK_IMAGE_LEVELS; l++) {
+        lw = lw > 1 ? lw / 2 : 1;
+        lh = lh > 1 ? lh / 2 : 1;
+        TexpackImageLevel *lv = &img->lv[levels++];
+        lv->data = p;
+        lv->w = lw;
+        lv->h = lh;
+        lv->pitch = lw * 4;
+        lv->size = (size_t)lw * lh * 4;
+        p += lv->size;
+    }
+    img->levels = levels;
+    return 0;
+}
+
+RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, const char *debugName)
+{
+    if (!g_rd.inited || !img || !img->blob || img->levels == 0 || img->w == 0 || img->h == 0) {
+        return (RdTex){0};
+    }
+    const int block = rd__TexelIsBlock(img->fmt);
+    if (!block && img->fmt != RD_TEXEL_RGBA8) {
+        return (RdTex){0};
+    }
+    if (block && (!g_rd.hasDevice || !rhi_Limits()->bcTextures)) {
+        return (RdTex){0};
+    }
+    if (g_rd.hasDevice &&
+        (img->w > rhi_Limits()->maxTextureSize || img->h > rhi_Limits()->maxTextureSize)) {
+        rd__Log("texture pack: \"%s\" is %ux%u, larger than this graphics card takes (%u)",
+                debugName ? debugName : "?", img->w, img->h, rhi_Limits()->maxTextureSize);
+        return (RdTex){0};
+    }
+    /* the levels the device gets: never more than the full chain */
+    uint32_t full = 1;
+    for (uint32_t m = img->w > img->h ? img->w : img->h; m > 1; m >>= 1) {
+        full++;
+    }
+    if (img->levels > full) {
+        img->levels = full;
+    }
+    if (img->levels == 1 && (img->w > 1 || img->h > 1)) {
+        if (!block) {
+            /* minified replacements need levels to sample from (the pack
+               is drawn mipmapped); a failure leaves one level */
+            rdtex_ReplacementMips(img);
+        } else if (!s_tc.bcSingleLogged) {
+            s_tc.bcSingleLogged = 1;
+            rd__Log("texture pack: compressed textures without mipmaps are drawn without them "
+                    "(\"%s\" is the first)",
+                    debugName ? debugName : "?");
+        }
+    }
+    return rd__CreateTextureReplacement(img, uvW, uvH, debugName);
 }
 
 int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
 {
-    (void)id;
-    (void)gen;
-    (void)texa;
-    (void)rep;
-    return -1;
+    RdTexEntry *e = entryOf(id, texa);
+
+    if (e == NULL || e->gen != gen || rep.id == 0 || rd__TexRec(rep.id) == NULL) {
+        return -1;
+    }
+    if (e->tex.id != rep.id) {
+        releaseReplaced(e); /* a replacement replaced again */
+        if (rd__TexRec(e->tex.id) != NULL) {
+            retire(e->tex);
+        }
+    }
+    e->tex = rep;
+    e->replaced = 1;
+    /* the Enhanced CPU chain was the original's */
+    free(e->mips);
+    e->mips = NULL;
+    s_tc.stats.replaced++;
+    return 0;
 }
 
-void rdtex_RevertReplacements(void) {}
+void rdtex_RevertReplacements(void)
+{
+    for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
+        if (s_tc.e[i].used && s_tc.e[i].replaced) {
+            /* forgotten: the next bind misses (rdtex_Find) and decodes the
+               game's texture again */
+            freeEntry(&s_tc.e[i]);
+        }
+    }
+}
+
+void rdtex_SetReleaseHook(RdTexReleaseFn fn)
+{
+    s_tc.release = fn;
+}
 
 void rdtex_SetEnhancedMips(int on)
 {

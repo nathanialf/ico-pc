@@ -35,6 +35,20 @@
  *            as created, and after two rectangle updates the GPU copy
  *            changed inside their union only (texels changed in the CPU
  *            copy outside it without an update stay as uploaded before).
+ *   packs    (texture packs) rdtex_CreateReplacement moves the image into
+ *            the texture's pending upload with the box chain for an RGBA8
+ *            image without mips, rdtex_ReplacementMips on a size that is
+ *            not a power of two, BC refused without a device;
+ *            rdtex_Replace installs it on the entry (a stale generation
+ *            refused), a new store, rdtex_RevertReplacements and
+ *            rdtex_Drop each give it up through the release hook, the old
+ *            textures are destroyed two ticks later, rd_UpdateTexture
+ *            leaves a replacement alone.  On the device a 2x RGBA8
+ *            replacement of the PSMT8 sprite's texture (uvW/uvH the GS
+ *            16x16) and a BC3 one of the PSMCT16 sprite's are drawn
+ *            through the same packets: the sprites show the replacements'
+ *            texels at the same place; a 1024x1024 replacement (over the
+ *            ring's 4 MB, its own upload buffer) reads back exactly.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -44,6 +58,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_tex.h"
+#include "texpack.h"
 #include "vk/rhi_vk.h"
 /* the game's side */
 #include "typedef.h"
@@ -698,6 +713,269 @@ static void cacheChecks(void)
     CHECK(rd__TexRec(d.id) == NULL && rd__TexRec(b.id) == NULL, "dropped textures destroyed");
 }
 
+/* ------------------------------------------------------- texture packs */
+
+static int s_released;
+static RdTex s_lastReleased;
+
+static void onRelease(RdTex t)
+{
+    s_released++;
+    s_lastReleased = t;
+}
+
+/* the 2x replacement's picture: texel (x, y) of a 16x16 pattern */
+static void repPattern(uint32_t x, uint32_t y, uint8_t *o)
+{
+    const uint32_t h = hash(y * 16 + x + 4242u);
+    o[0] = (uint8_t)h;
+    o[1] = (uint8_t)(h >> 8);
+    o[2] = (uint8_t)(h >> 16);
+    o[3] = 0x80;
+}
+
+/* an RGBA8 TexpackImage of w x h, one level, each 2x2 (scale) block one
+   pattern texel when scale is 2, else hashed texels */
+static TexpackImage repImage(uint32_t w, uint32_t h, uint32_t scale)
+{
+    TexpackImage img;
+    memset(&img, 0, sizeof(img));
+    uint8_t *p = malloc((size_t)w * h * 4);
+    for (uint32_t y = 0; p && y < h; y++) {
+        for (uint32_t x = 0; x < w; x++) {
+            uint8_t *o = p + ((size_t)y * w + x) * 4;
+            if (scale) {
+                repPattern(x / scale, y / scale, o);
+            } else {
+                const uint32_t v = hash(y * w + x + 77u);
+                memcpy(o, &v, 4);
+            }
+        }
+    }
+    img.fmt = RD_TEXEL_RGBA8;
+    img.w = w;
+    img.h = h;
+    img.levels = 1;
+    img.lv[0].data = p;
+    img.lv[0].w = w;
+    img.lv[0].h = h;
+    img.lv[0].pitch = w * 4;
+    img.lv[0].size = (size_t)w * h * 4;
+    img.blob = p;
+    img.bytes = img.lv[0].size;
+    return img;
+}
+
+static void replacementChecks(void)
+{
+    uint8_t px[8 * 8 * 4];
+    RdTexImage im;
+    for (int i = 0; i < (int)sizeof(px); i++) {
+        px[i] = (uint8_t)hash((uint32_t)i + 300);
+    }
+    memset(&im, 0, sizeof(im));
+    im.w = im.h = 8;
+    im.psm = RDTEX_PSMCT32;
+    im.pixels = px;
+    rdtex_SetReleaseHook(onRelease);
+    s_released = 0;
+
+    const RdTex a = rdtex_Store(2000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    TexpackImage img = repImage(16, 16, 2);
+    const RdTex r = rdtex_CreateReplacement(&img, 8, 8, "rep");
+    const RdTexRec *rr = rd__TexRec(r.id);
+    CHECK(r.id && rr && img.blob == NULL && img.levels == 0, "the image moved into the texture");
+    CHECK(rr && rr->replacement && rr->kind == RD_TEXKIND_IMAGE && rr->format == RD_TEXEL_RGBA8 &&
+              rr->src == RD_TEXSRC_RGBA32 && rr->pixels == NULL && rr->w == 16 && rr->h == 16 &&
+              rr->uvW == 8 && rr->uvH == 8 && rr->dirty && rr->pending &&
+              rr->pending->levels == 5 && rr->mipLevels == 5,
+          "replacement record (levels %u)", rr && rr->pending ? rr->pending->levels : 0);
+    if (rr && rr->pending && rr->pending->levels == 5) {
+        /* level 1 of a 2x2-block picture is the picture */
+        const TexpackImageLevel *l1 = &rr->pending->lv[1];
+        uint8_t want[4];
+        repPattern(5, 3, want);
+        CHECK(l1->w == 8 && l1->h == 8 && l1->pitch == 32 &&
+                  memcmp(l1->data + (3 * 8 + 5) * 4, want, 4) == 0,
+              "the box chain's level 1");
+    }
+    /* a stale generation is refused, the right one installs */
+    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r) == -1, "stale generation refused");
+    CHECK(rdtex_Replace(2001, 1, RDTEX_TEXA_REPLAY, r) == -1, "unknown id refused");
+    CHECK(rdtex_Replace(2000, 1, RDTEX_TEXA_REPLAY, r) == 0, "rdtex_Replace");
+    CHECK(rdtex_Find(2000, 1, RDTEX_TEXA_REPLAY).id == r.id, "the entry binds the replacement");
+    CHECK(rdtex_Stats()->replaced >= 1 && s_released == 0, "replaced, nothing released yet");
+    rd_UpdateTexture(r, px); /* no CPU texels: ignored */
+    CHECK(rd__TexRec(r.id) && rd__TexRec(r.id)->pixels == NULL, "rd_UpdateTexture leaves it");
+    rdtex_FrameTick();
+    rdtex_FrameTick();
+    CHECK(rd__TexRec(a.id) == NULL, "the game's texture destroyed two ticks later");
+
+    /* a new generation (a CLUT scroll) of the same shape: a new texture of
+       the game's own, the replacement released */
+    const RdTex b = rdtex_Store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    CHECK(b.id && b.id != r.id && s_released == 1 && s_lastReleased.id == r.id,
+          "a new store gives the replacement up (%d)", s_released);
+    CHECK(rd__TexRec(b.id) && rd__TexRec(b.id)->pixels &&
+              memcmp(rd__TexRec(b.id)->pixels, px, 16) == 0,
+          "the game's texels again");
+    rdtex_FrameTick();
+    rdtex_FrameTick();
+    CHECK(rd__TexRec(r.id) == NULL, "the replacement destroyed (pending freed with it)");
+
+    /* revert: the entry forgotten, the next bind misses */
+    img = repImage(16, 16, 2);
+    const RdTex r2 = rdtex_CreateReplacement(&img, 8, 8, "rep2");
+    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r2) == 0, "second replacement");
+    rdtex_RevertReplacements();
+    CHECK(s_released == 2 && s_lastReleased.id == r2.id, "revert releases it");
+    CHECK(rdtex_Find(2000, 2, RDTEX_TEXA_REPLAY).id == 0, "revert: the next bind decodes again");
+    const RdTex c = rdtex_Store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    CHECK(c.id && rdtex_Find(2000, 2, RDTEX_TEXA_REPLAY).id == c.id, "decoded again");
+
+    /* drop */
+    img = repImage(16, 16, 2);
+    const RdTex r3 = rdtex_CreateReplacement(&img, 8, 8, "rep3");
+    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r3) == 0, "third replacement");
+    rdtex_Drop(2000);
+    CHECK(s_released == 3 && s_lastReleased.id == r3.id, "drop releases it");
+    for (int i = 0; i < 3; i++) {
+        rdtex_FrameTick();
+    }
+    CHECK(rd__TexRec(r2.id) == NULL && rd__TexRec(r3.id) == NULL && rd__TexRec(b.id) == NULL &&
+              rd__TexRec(c.id) == NULL,
+          "everything retired is destroyed");
+
+    /* BC without a device: refused, the image untouched */
+    TexpackImage bc;
+    memset(&bc, 0, sizeof(bc));
+    uint8_t blocks[16];
+    memset(blocks, 0, sizeof(blocks));
+    bc.fmt = RD_TEXEL_BC1;
+    bc.w = bc.h = 4;
+    bc.levels = 1;
+    bc.lv[0] = (TexpackImageLevel){blocks, 4, 4, 8, 8};
+    bc.blob = blocks;
+    CHECK(rdtex_CreateReplacement(&bc, 4, 4, "bc").id == 0 && bc.blob == blocks,
+          "BC refused without a device, image untouched");
+
+    /* the chain of a size that is not a power of two: 13x5, 6x2, 3x1, 1x1 */
+    img = repImage(13, 5, 0);
+    CHECK(rdtex_ReplacementMips(&img) == 0 && img.levels == 4 && img.lv[1].w == 6 &&
+              img.lv[1].h == 2 && img.lv[2].w == 3 && img.lv[2].h == 1 && img.lv[3].w == 1 &&
+              img.lv[3].h == 1 && img.bytes == rdtex_MipChainBytes(13, 5) + 13 * 5 * 4,
+          "13x5 chain");
+    CHECK(rdtex_ReplacementMips(&img) == -1, "a second chain refused");
+    texpack_FreeImage(&img);
+    /* a replacement destroyed before its upload frees its levels */
+    img = repImage(8, 8, 0);
+    const RdTex r4 = rdtex_CreateReplacement(&img, 8, 8, "rep4");
+    CHECK(r4.id && rd__TexRec(r4.id)->pending, "pending");
+    rd_DestroyTexture(r4);
+    rdtex_SetReleaseHook(NULL);
+}
+
+static void recordFrame(void);
+
+/* the entry key (table index, generation) Texture.c stores a texture
+   under: the generation is serial * 8 + level, found by asking */
+static uint32_t entryGen(int idx)
+{
+    const uint32_t want = tex_HostTextureId(idx);
+    for (uint32_t gen = 1; gen < 8u * 4096u; gen++) {
+        if (rdtex_Find((uint32_t)idx, gen, RDTEX_TEXA_REPLAY).id == want) {
+            return gen;
+        }
+    }
+    return 0;
+}
+
+static void replacementPixels(void)
+{
+    /* the PSMT8 sprite: a 32x32 RGBA8 replacement of its 16x16 texture */
+    const uint32_t g8 = entryGen(s_t8.id);
+    TexpackImage img = repImage(32, 32, 2);
+    const RdTex r = rdtex_CreateReplacement(&img, 16, 16, "rep t8");
+    CHECK(g8 && r.id && rdtex_Replace((uint32_t)s_t8.id, g8, RDTEX_TEXA_REPLAY, r) == 0,
+          "replace the PSMT8 texture (gen %u)", g8);
+    /* the PSMCT16 sprite: a BC3 16x16, one colour, alpha 0x80 */
+    const uint32_t g16 = entryGen(s_c16.id);
+    TexpackImage bc;
+    memset(&bc, 0, sizeof(bc));
+    uint8_t *blocks = malloc(16 * 16);
+    for (int i = 0; i < 16; i++) {
+        uint8_t *o = blocks + i * 16;
+        memset(o, 0, 16);
+        o[0] = o[1] = 0x80;  /* alpha0 = alpha1 = 0x80, indices 0 */
+        o[8] = o[10] = 0x1F; /* colour0 = colour1 = 0x001F: blue */
+        o[9] = o[11] = 0x00;
+    }
+    bc.fmt = RD_TEXEL_BC3;
+    bc.w = bc.h = 16;
+    bc.levels = 1;
+    bc.lv[0] = (TexpackImageLevel){blocks, 16, 16, 64, 256};
+    bc.blob = blocks;
+    bc.bytes = 256;
+    const RdTex rb = rdtex_CreateReplacement(&bc, 16, 16, "rep c16");
+    CHECK(g16 && rb.id && rdtex_Replace((uint32_t)s_c16.id, g16, RDTEX_TEXA_REPLAY, rb) == 0,
+          "replace the PSMCT16 texture with BC3");
+    if (failures) {
+        return;
+    }
+    gif_HostFrameReset();
+    dl_Clear();
+    recordFrame();
+    uint32_t w = 0, h = 0;
+    uint8_t *px = malloc(512 * 512 * 4);
+    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+        CHECK(0, "SCENE readback");
+        free(px);
+        return;
+    }
+    int bad = 0;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            const uint8_t *g = &px[((256 + y) * 512 + 256 + x) * 4];
+            uint8_t e[4];
+            repPattern((uint32_t)x, (uint32_t)y, e);
+            if (memcmp(g, e, 4) != 0 && bad++ < 4) {
+                printf("  replaced PSMT8 pixel %d,%d: %u,%u,%u,%u expected %u,%u,%u,%u\n", x, y,
+                       g[0], g[1], g[2], g[3], e[0], e[1], e[2], e[3]);
+            }
+        }
+    }
+    CHECK(bad == 0, "the 2x replacement at the GS UVs: %d pixels differ", bad);
+    bad = 0;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            const uint8_t *g = &px[((256 + y) * 512 + 288 + x) * 4];
+            const uint8_t e[4] = {0, 0, 255, 0x80};
+            if (memcmp(g, e, 4) != 0 && bad++ < 4) {
+                printf("  replaced PSMCT16 pixel %d,%d: %u,%u,%u,%u expected 0,0,255,128\n", x, y,
+                       g[0], g[1], g[2], g[3]);
+            }
+        }
+    }
+    CHECK(bad == 0, "the BC3 replacement (no TEXA on pack texels): %d pixels differ", bad);
+    free(px);
+
+    /* over the ring's 4 MB: its own upload buffer */
+    img = repImage(1024, 1024, 0);
+    uint8_t *ref = malloc(img.lv[0].size), *got = malloc(img.lv[0].size);
+    memcpy(ref, img.lv[0].data, img.lv[0].size);
+    const RdTex big = rdtex_CreateReplacement(&img, 64, 64, "rep big");
+    rd_BeginFrame();
+    rd_EndFrame(0);
+    const RdTexRec *br = rd__TexRec(big.id);
+    CHECK(br && br->pending == NULL && br->mipLevels == 11, "the big replacement uploaded");
+    CHECK(rd__ReadTexture(big, got, 1024 * 1024 * 4, &w, &h) && w == 1024 &&
+              memcmp(got, ref, 1024 * 1024 * 4) == 0,
+          "the big replacement reads back");
+    rd_DestroyTexture(big);
+    free(ref);
+    free(got);
+}
+
 /* --------------------------------------------- the decoder and the frame */
 
 typedef struct Walk {
@@ -952,6 +1230,7 @@ int main(void)
     scrollChecks();
     cacheChecks();
     r8Checks();
+    replacementChecks();
     dl_Clear();
     recordFrame();
     {
@@ -982,6 +1261,7 @@ int main(void)
     recordFrame();
     checkPixels();
     r8Pixels();
+    replacementPixels();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     rd_Shutdown();

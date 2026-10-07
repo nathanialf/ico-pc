@@ -42,12 +42,17 @@ add_library(ico_render STATIC
     rd_shadow.c
     rd_tex.c
     rd_water.c # wave 5 (R5b): block targets, aliases, camera scopes
-    rd_video.c) # Phase 4E: the FMV picture (port/fmv/rd_video.h)
+    rd_video.c # Phase 4E: the FMV picture (port/fmv/rd_video.h)
+    texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
+    texpack_image.c
+    texpack_png.c)
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref)
+# texture packs: texpack_png.c inflates with miniz's tinfl
+target_link_libraries(ico_render PRIVATE ico_miniz)
 if(NOT WIN32)
     target_link_libraries(ico_render PUBLIC m)
 endif()
@@ -387,10 +392,20 @@ add_executable(rd_mip_test test/rd_mip_test.c)
 target_compile_options(rd_mip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_mip_test PRIVATE ico_render)
 
+# texpack_load_test (texture packs): the DDS and PNG loaders on files built
+# in memory (every DDS layout and BC format, truncated files, a BC size
+# that is not a multiple of 4; PNG colour types, depths, filters, Adam7,
+# tRNS), CPU only.  texpack_pack_files: the same binary on the files of a
+# real pack (ICO_TEXPACK_DIR, else build-host/tmp/texpack), 77 without one.
+add_executable(texpack_load_test test/texpack_load_test.c)
+target_compile_options(texpack_load_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(texpack_load_test PRIVATE ico_render ico_miniz)
+
 if(WIN32 AND SDL3_FOUND)
     foreach(t rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test)
+              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test
+              texpack_load_test)
         add_custom_command(TARGET ${t} POST_BUILD
                            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
@@ -439,6 +454,14 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME texpack_load COMMAND texpack_load_test)
+    if(DEFINED ENV{ICO_TEXPACK_DIR})
+        set(_ico_texpack_dir "$ENV{ICO_TEXPACK_DIR}")
+    else()
+        set(_ico_texpack_dir "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements")
+    endif()
+    add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${_ico_texpack_dir}")
+    set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")

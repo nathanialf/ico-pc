@@ -51,6 +51,7 @@
 #include "rd_tex.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
+#include "texpack.h"
 
 static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs",
                                                    "sprite_world_vs",
@@ -558,11 +559,23 @@ RhiSampler rd__Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
 /* Wave 7 (R7a): the sampler of a game texture.  With the Enhanced filter
  * on and the texture mipmapped, a linearly minified texture is sampled
  * trilinear (or anisotropic); textures authored nearest stay nearest, and
- * everything is the Original sampler otherwise. */
-static RhiSampler texSampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t, int mipmapped)
+ * everything is the Original sampler otherwise.  Texture packs: a
+ * replacement is drawn as PCSX2 draws a pack, minified linearly and
+ * trilinear between its levels even under the Original filter
+ * (anisotropic when the option says so); mag stays as TEX1 has it. */
+static int texSamplerUpgraded(RdFilter min, int mipmapped, int replacement)
 {
+    return mipmapped && (replacement || (min == RD_FILTER_LINEAR && g_rd.filterUpgrade));
+}
+
+static RhiSampler texSampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t, int mipmapped,
+                             int replacement)
+{
+    if (replacement) {
+        min = RD_FILTER_LINEAR;
+    }
     int i = (mag ? 1 : 0) | (min ? 2 : 0) | (s ? 4 : 0) | (t ? 8 : 0);
-    if (mipmapped && min == RD_FILTER_LINEAR && g_rd.filterUpgrade) {
+    if (texSamplerUpgraded(min, mipmapped, replacement)) {
         i += RD_SAMPLER_COUNT * (g_rd.filterUpgrade >= RD_FILTER_UPGRADE_ANISOTROPIC ? 2 : 1);
     }
     return g_rd.samplers[i];
@@ -1256,8 +1269,9 @@ typedef struct DrawSetup {
     RhiTexture tex, dateTex;
     uint32_t tw, th, tfmt;
     int textured;
-    int mipmapped; /* R7a: the image texture has generated mips */
-    int wideBlock; /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
+    int mipmapped;   /* R7a: the image texture has generated mips */
+    int wideBlock;   /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
+    int replacement; /* texture packs: the image texture is a pack replacement */
 } DrawSetup;
 
 /* Widescreen reflections: whether the draw samples a block that
@@ -1301,6 +1315,24 @@ static void blockCentre(Replay *r, const DrawSetup *ds, const IcoSpriteVertex *o
 
 /* The target, the DATE snapshot and the texture (each may end the open
  * pass: they run before the draw's pass begins). */
+/* Texture packs: a replacement's UVs are normalised by the GS size of the
+ * texture it replaces (RdTexRec.uvW/uvH), not by its own: the game's UVs
+ * address the original's texels, and a 4x replacement covers the same
+ * place.  The only use of uvW/uvH: everything else (levels, uploads,
+ * readbacks) is the replacement's own size. */
+static void replacementUv(uint32_t tex, DrawSetup *ds)
+{
+    const RdTexRec *t = ds->textured ? rd__TexRec(tex) : NULL;
+    if (!t || t->kind != RD_TEXKIND_IMAGE || !t->replacement || ds->tex.id != t->rhi.id) {
+        return;
+    }
+    ds->replacement = 1;
+    if (t->uvW && t->uvH) {
+        ds->tw = t->uvW;
+        ds->th = t->uvH;
+    }
+}
+
 static bool prepareDraw(Replay *r, DrawSetup *ds)
 {
     memset(ds, 0, sizeof(*ds));
@@ -1324,6 +1356,7 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
     ds->depthFmt = td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
+    replacementUv(r->st.tex, ds);
     ds->wideBlock = samplesWideBlock(r, ds);
     return true;
 }
@@ -1341,7 +1374,8 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
         return (RhiBindGroup){0};
     }
     RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds->mipmapped);
+                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds->mipmapped,
+                                ds->replacement);
     RhiBindGroup g2 = rd__TexGroupDate(ds->tex, smp, ds->dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId) {
@@ -1400,7 +1434,7 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
                        (d->minFilter == RD_FILTER_LINEAR ? ICO_DF_TEXA_MIN_LINEAR : 0u) |
                        (d->wrap.s != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S : 0u) |
                        (d->wrap.t != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
-        if (ds->mipmapped && d->minFilter == RD_FILTER_LINEAR && g_rd.filterUpgrade) {
+        if (texSamplerUpgraded((RdFilter)d->minFilter, ds->mipmapped, ds->replacement)) {
             cb->mode[0] |= ICO_DF_TEXA_MIN_SAMPLED;
         }
     }
@@ -2249,8 +2283,9 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     fillDrawCB(r, &dp[0], &ds, &cb);
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
-    RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped);
+    RhiSampler smp =
+        texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                   (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped, ds.replacement);
     rhi_CmdSetPipeline(s_cl, pa);
     rd__BindUniform(s_cl, 0,
                     rd__FrameGroupEx(tc->w, tc->h, ox, oy, rd__TargetZScale(ds.tdId),
@@ -3204,8 +3239,9 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         RdTexRec *t = rd__TexRec(r->st.tex);
         if (t && t->kind == RD_TEXKIND_IMAGE && t->rhi.id && t->state == RHI_STATE_SHADER_READ) {
             srcTex = t->rhi;
-            tw = t->w;
-            th = t->h;
+            /* texture packs: a replacement's UVs as replacementUv has them */
+            tw = t->replacement && t->uvW && t->uvH ? t->uvW : t->w;
+            th = t->replacement && t->uvW && t->uvH ? t->uvH : t->h;
             tfmt = t->src;
             textured = 1;
         } else if (t && t->kind == RD_TEXKIND_TARGET && t->view != RD_VIEW_DEPTH) {
@@ -3344,6 +3380,9 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
  * Enhanced filter on and power-of-two sides, else 1 (Original). */
 static uint8_t texLevels(const RdTexRec *t)
 {
+    if (t->replacement) {
+        return t->mipLevels; /* texture packs: the image's own levels, whatever the filter */
+    }
     if (!g_rd.filterUpgrade || t->format == RD_TEXEL_R8 || t->w < 2 || t->h < 2 ||
         (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
         return 1;
@@ -3358,6 +3397,41 @@ static uint8_t texLevels(const RdTexRec *t)
 /* The alpha the coverage of the Enhanced mips keeps: the semi-transparent
  * lists' default test, alpha > 64 (GS alpha, 0x80 = 1.0; rd.h RdListDefault) */
 #define RD_MIP_COVERAGE_REF 64
+
+/* Texture packs: a replacement's levels as uploadTextures lays them out,
+ * each row of texels (or of 4x4 blocks) padded to copyRowPitchAlign, each
+ * level at an offset aligned for the backend and the block.  Replacements
+ * of more than RD_REPLACEMENT_RING_MAX bytes bypass the ring (a 4096 x
+ * 4096 RGBA8 image with its chain is 85 MB; the ring of every frame slot
+ * would keep that size) through a buffer of their own. */
+#define RD_REPLACEMENT_RING_MAX (4ull << 20)
+
+static uint64_t replacementOffsetAlign(const RdTexRec *t)
+{
+    const uint64_t oa = rhi_Limits()->copyOffsetAlign ? rhi_Limits()->copyOffsetAlign : 1u;
+    const uint64_t bb = rd__TexelBlockBytes(t->format);
+    return oa > bb ? oa : bb; /* both powers of two: the larger is a multiple of the other */
+}
+
+static uint64_t replacementLevelPitch(const RdTexRec *t, uint32_t w)
+{
+    const uint64_t pa = rhi_Limits()->copyRowPitchAlign ? rhi_Limits()->copyRowPitchAlign : 1u;
+    const uint32_t bw = rd__TexelBlockW(t->format);
+    const uint64_t row = (uint64_t)((w + bw - 1) / bw) * rd__TexelBlockBytes(t->format);
+    return (row + pa - 1) / pa * pa;
+}
+
+static uint64_t replacementBytes(const RdTexRec *t)
+{
+    const TexpackImage *p = t->pending;
+    const uint64_t oa = replacementOffsetAlign(t);
+    const uint32_t bw = rd__TexelBlockW(t->format);
+    uint64_t total = 0;
+    for (uint32_t l = 0; p && l < p->levels; l++) {
+        total += replacementLevelPitch(t, p->lv[l].w) * ((p->lv[l].h + bw - 1) / bw) + oa;
+    }
+    return total;
+}
 
 static uint64_t estimateRing(const RdFrame *f, int keep)
 {
@@ -3412,6 +3486,12 @@ static uint64_t estimateRing(const RdFrame *f, int keep)
     const bool walk = g_rd.texDirtyCount != 0 || g_rd.texLevelsFilter != (int)g_rd.filterUpgrade;
     for (uint32_t i = 0; walk && i < RD_MAX_TEXTURES; i++) {
         const RdTexRec *t = &g_rd.textures[i];
+        if (t->live && t->kind == RD_TEXKIND_IMAGE && t->replacement) {
+            /* texture packs: only the small ones come through the ring */
+            const uint64_t b = t->dirty && t->pending ? replacementBytes(t) : 0;
+            total += b <= RD_REPLACEMENT_RING_MAX ? b : 0;
+            continue;
+        }
         if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
             uint64_t pitch =
                 ((uint64_t)t->w * rd__TexelBytes(t->format) + pitchA - 1) / pitchA * pitchA;
@@ -3489,6 +3569,85 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
     free(chain);
 }
 
+/* Texture packs: a replacement's RHI texture and every level of its
+ * pending image, through the ring when small, else through a buffer of
+ * its own (destroyed right after recording: rhi_DestroyBuffer waits for
+ * the frames in flight).  The pending image is freed once the copies are
+ * recorded.  Returns 0 when the upload must wait for the next replay (no
+ * room), 1 when the texture is done with (uploaded, or dropped because the
+ * device refused it: it then draws as an untextured placeholder, as an
+ * unready texture does). */
+static int uploadReplacement(RdTexRec *t)
+{
+    const TexpackImage *p = t->pending;
+    if (!p || p->levels == 0) {
+        return 1;
+    }
+    if (!t->rhi.id) {
+        t->rhi = rhi_CreateTexture(&(RhiTextureDesc){t->w, t->h, p->levels,
+                                                     rd__TexelRhiFormat(t->format),
+                                                     RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, t->name});
+        t->state = RHI_STATE_UNDEFINED;
+        t->mipLevels = (uint8_t)p->levels;
+        if (!t->rhi.id) {
+            rd__Log("texture pack: the graphics card refused \"%s\" (%ux%u); the game's "
+                    "texture is not shown for it",
+                    t->name, t->w, t->h);
+            rd__FreePending(t);
+            return 1;
+        }
+    }
+    const uint64_t bytes = replacementBytes(t);
+    const uint64_t oa = replacementOffsetAlign(t);
+    const uint32_t bw = rd__TexelBlockW(t->format);
+    RhiBuffer own = {0};
+    uint8_t *map = g_rd.ringMap[s_slot];
+    RhiBuffer src = g_rd.ring[s_slot];
+    uint64_t next = 0;
+    if (bytes > RD_REPLACEMENT_RING_MAX) {
+        own = rhi_CreateBuffer(
+            &(RhiBufferDesc){bytes, RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "rd replacement upload"});
+        map = own.id ? rhi_MapBuffer(own) : NULL;
+        if (!map) {
+            if (own.id) {
+                rhi_DestroyBuffer(own);
+            }
+            return 0;
+        }
+        src = own;
+    }
+    rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_COPY_DST);
+    for (uint32_t l = 0; l < p->levels; l++) {
+        const TexpackImageLevel *lv = &p->lv[l];
+        const uint64_t pitch = replacementLevelPitch(t, lv->w);
+        const uint32_t rows = (lv->h + bw - 1) / bw;
+        const size_t rowBytes = (size_t)((lv->w + bw - 1) / bw) * rd__TexelBlockBytes(t->format);
+        uint64_t off;
+        if (own.id) {
+            off = (next + oa - 1) / oa * oa;
+            next = off + pitch * rows;
+        } else {
+            off = rd__RingAlloc(pitch * rows, oa);
+            if (off == ~0ull) {
+                /* estimateRing counted it: only a level the image does not
+                   describe can get here; the texture stays as far as it got */
+                break;
+            }
+        }
+        for (uint32_t y = 0; y < rows; y++) {
+            memcpy(map + off + (uint64_t)y * pitch, lv->data + (size_t)y * lv->pitch, rowBytes);
+        }
+        rhi_CmdCopyBufferToTexture(s_cl, src, off, (uint32_t)pitch, t->rhi, l,
+                                   (RhiRect){0, 0, lv->w, lv->h});
+    }
+    rd__Transition(s_cl, t->rhi, &t->state, RHI_STATE_SHADER_READ);
+    if (own.id) {
+        rhi_DestroyBuffer(own);
+    }
+    rd__FreePending(t);
+    return 1;
+}
+
 static void uploadTextures(void)
 {
     const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
@@ -3512,6 +3671,17 @@ static void uploadTextures(void)
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
         if (!t->live || t->kind != RD_TEXKIND_IMAGE) {
+            continue;
+        }
+        if (t->replacement) {
+            /* texture packs: uploaded once, from the pending image */
+            stillDirty += t->dirty;
+            if (t->dirty && uploadReplacement(t)) {
+                t->dirty = 0;
+                stillDirty--;
+                g_rd.stats.textureUploads++;
+                g_rdPerf.textureUploads++;
+            }
             continue;
         }
         const uint8_t levels = texLevels(t);
@@ -3899,8 +4069,8 @@ bool rd__ReadTexture(RdTex tex, void *dst, size_t dstSize, uint32_t *w, uint32_t
 {
     RdTexRec *t = rd__TexRec(tex.id);
     if (!g_rd.hasDevice || !t || t->kind != RD_TEXKIND_IMAGE || !t->rhi.id ||
-        t->state == RHI_STATE_UNDEFINED) {
-        return false;
+        t->state == RHI_STATE_UNDEFINED || rd__TexelIsBlock(t->format)) {
+        return false; /* a pack's BC replacement has no texels to read back */
     }
     if (w) {
         *w = t->w;

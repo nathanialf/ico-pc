@@ -457,6 +457,15 @@ RdTexRec *rd__TexRec(uint32_t id);
  * rd_CreateTextureR8 are this, and the dump loader. */
 RdTex rd__CreateTextureFmt(uint32_t w, uint32_t h, const void *px, uint8_t format, RdTexSrc src,
                            const char *debugName);
+/* Texture packs: an image texture whose levels are img's (moved into
+ * pending, *img left empty), format img->fmt, src RD_TEXSRC_RGBA32,
+ * mipLevels img->levels, uvW x uvH the size draws normalise its UVs by.
+ * rdtex_CreateReplacement checks the image first; this only records it. */
+RdTex rd__CreateTextureReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
+                                   const char *debugName);
+/* Frees a replacement's pending levels (texpack_FreeImage) and the
+ * TexpackImage holding them; t->pending is null afterwards. */
+void rd__FreePending(RdTexRec *t);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c (wave 3, R3ab).  A VU mesh keeps its vertex stream (the

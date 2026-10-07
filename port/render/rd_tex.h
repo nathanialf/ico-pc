@@ -99,6 +99,7 @@ typedef struct RdTexCacheStats {
     uint32_t misses;   /* rdtex_Find misses */
     uint32_t retired;  /* rd textures queued for destruction */
     uint32_t failures; /* images that could not be decoded */
+    uint32_t replaced; /* texture packs: entries given a replacement (rdtex_Replace) */
 } RdTexCacheStats;
 
 /* ------------------------------------------------------------ decoding */
@@ -188,26 +189,49 @@ struct TexpackImage; /* texpack.h */
 
 /* A replacement texture from a pack image: its levels (RGBA8 with raw GS
  * alpha, or BC blocks as the file holds them) move into the texture's
- * pending upload and *img is left empty, freed after the upload.  uvW,
- * uvH: the GS size of the texture it replaces (2^TW x 2^TH, the original
- * entry's padded size), which the draws' UVs keep being normalised by.
+ * pending upload and *img is left empty; the next replay uploads every
+ * level and frees them (rd_DestroyTexture and rd_Shutdown free them when
+ * that never came).  uvW, uvH: the GS size of the texture it replaces
+ * (2^TW x 2^TH, the original entry's padded size), which the draws' UVs
+ * keep being normalised by.  The texture samples as RD_TEXSRC_RGBA32 (the
+ * pack's alpha is raw GS alpha, no TEXA) and as mipmapped: min filter
+ * linear, trilinear between its levels under the Original filter and
+ * anisotropic when the option says so.  An RGBA8 image without its own
+ * mips gets the box chain here (rdtex_ReplacementMips, unless the caller
+ * already did it); a BC image without mips stays one level (logged once).
  * {0} (img untouched) when rd is not initialised, the format is BC and
- * the device has no BC (RhiLimits.bcTextures), or the image is empty.
- * The texture pack contract: a stub returning {0} until the RHI block
- * formats land. */
+ * the device has no BC (RhiLimits.bcTextures), the image is larger than
+ * the device takes, or it is empty. */
 RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
                               const char *debugName);
+/* The 2x2 box chain (rdtex_BuildMipChain, alpha coverage kept as the
+ * Enhanced filter's mips) appended to a one-level RGBA8 image: img's blob
+ * is replaced by one holding every level and img->levels set.  CPU only,
+ * callable from any thread (the pack's loader thread may do it so the game
+ * fiber does not).  0, or -1 (img unchanged: not a one-level RGBA8 image
+ * with rows of w * 4 bytes, or no memory). */
+int rdtex_ReplacementMips(struct TexpackImage *img);
 /* Install rep as the texture of the entry (id, gen, texa): the entry's
  * current texture is retired, rep takes its place and the entry is marked
- * replaced.  0, or -1 when there is no such entry (freed, or a newer
- * generation stored since the request): the caller keeps rep and destroys
- * it.  The texture pack contract: a stub returning -1. */
+ * replaced (a later store of that entry, a CLUT scroll's new generation,
+ * makes a new texture of the game's own and retires rep).  0, or -1 when
+ * there is no such entry (freed, or a newer generation stored since the
+ * request) or rep is not a live texture: the caller keeps rep and
+ * destroys it. */
 int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep);
 /* The pack was switched off (rd_SetSettings on a texturePack true -> false
  * edge): retire every replaced entry's texture and forget the entry, so
- * the next bind decodes the game's original again.  The texture pack
- * contract: a stub doing nothing. */
+ * the next bind decodes the game's original again. */
 void rdtex_RevertReplacements(void);
+/* Called with each replacement texture the cache gives up: the entry was
+ * dropped (rdtex_Drop), stored again (a new generation), reverted
+ * (rdtex_RevertReplacements), replaced once more, or forgotten
+ * (rdtex_Reset).  The texture itself is destroyed two frame ticks later
+ * (or already was, after rd_Shutdown); the hook only settles accounts.
+ * texpack.c sets texpack_BudgetRelease here at texpack_Init and null at
+ * texpack_Shutdown; null (the default) calls nothing. */
+typedef void (*RdTexReleaseFn)(RdTex t);
+void rdtex_SetReleaseHook(RdTexReleaseFn fn);
 
 /* The Enhanced hook (not in the settings yet): keep a CPU mip chain per
  * entry. */

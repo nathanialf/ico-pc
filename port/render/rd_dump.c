@@ -175,6 +175,24 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
             continue;
         }
         const int image = t->kind == RD_TEXKIND_IMAGE;
+        if (image && t->replacement) {
+            /* texture packs: a replacement keeps no CPU texels (and BC ones
+               are no format the dump knows); it is written as a blank RGBA8
+               image of the size its draws' UVs address, so the replay
+               draws the same geometry without the pack's picture */
+            const uint32_t w = t->uvW && t->uvH ? t->uvW : t->w;
+            const uint32_t h = t->uvW && t->uvH ? t->uvH : t->h;
+            static const uint8_t zero[4096];
+            ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) &&
+                 w32(fp, t->bakedTexa) && w32(fp, w) && w32(fp, h) && w32(fp, t->target) &&
+                 w32(fp, RD_TEXEL_RGBA8);
+            for (size_t left = (size_t)w * h * 4; ok && left;) {
+                const size_t n = left < sizeof(zero) ? left : sizeof(zero);
+                ok = wraw(fp, zero, n);
+                left -= n;
+            }
+            continue;
+        }
         ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) && w32(fp, t->bakedTexa) &&
              w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) &&
              w32(fp, image ? t->format : t->view);

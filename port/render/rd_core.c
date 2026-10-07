@@ -31,6 +31,7 @@
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "texpack.h"
 
 RdContext g_rd;
 
@@ -856,6 +857,49 @@ RdTex rd__CreateTextureFmt(uint32_t w, uint32_t h, const void *px, uint8_t forma
     return (RdTex){id};
 }
 
+RdTex rd__CreateTextureReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
+                                   const char *debugName)
+{
+    if (!g_rd.inited || !img || !img->blob || img->levels == 0 || img->w == 0 || img->h == 0 ||
+        img->fmt >= RD_TEXEL_COUNT || img->fmt == RD_TEXEL_R8) {
+        return (RdTex){0};
+    }
+    TexpackImage *p = malloc(sizeof(*p));
+    if (!p) {
+        return (RdTex){0};
+    }
+    uint32_t id = texAlloc();
+    RdTexRec *t = rd__TexRec(id);
+    if (!t) {
+        free(p);
+        return (RdTex){0};
+    }
+    *p = *img;
+    memset(img, 0, sizeof(*img));
+    t->kind = RD_TEXKIND_IMAGE;
+    t->src = RD_TEXSRC_RGBA32; /* the pack's alpha is raw GS alpha: no TEXA */
+    t->format = p->fmt;
+    t->w = p->w;
+    t->h = p->h;
+    t->replacement = 1;
+    t->uvW = uvW;
+    t->uvH = uvH;
+    t->mipLevels = (uint8_t)p->levels;
+    t->pending = p;
+    texDirtyAll(t);
+    snprintf(t->name, sizeof(t->name), "%s", debugName ? debugName : "replacement");
+    return (RdTex){id};
+}
+
+void rd__FreePending(RdTexRec *t)
+{
+    if (t && t->pending) {
+        texpack_FreeImage(t->pending);
+        free(t->pending);
+        t->pending = NULL;
+    }
+}
+
 RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
                           const char *debugName)
 {
@@ -881,8 +925,8 @@ RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMod
 void rd_UpdateTexture(RdTex tex, const void *rgba8)
 {
     RdTexRec *t = rd__TexRec(tex.id);
-    if (!t || t->kind != RD_TEXKIND_IMAGE || !rgba8) {
-        return;
+    if (!t || t->kind != RD_TEXKIND_IMAGE || !rgba8 || !t->pixels) {
+        return; /* a pack replacement has no CPU texels to update */
     }
     const size_t bytes = (size_t)t->w * t->h * rd__TexelBytes(t->format);
     /* P1: an update that changes nothing (a page or CLUT re-expanded to the
@@ -898,7 +942,8 @@ void rd_UpdateTexture(RdTex tex, const void *rgba8)
 void rd_UpdateTextureRect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void *px)
 {
     RdTexRec *t = rd__TexRec(tex.id);
-    if (!t || t->kind != RD_TEXKIND_IMAGE || !px || x >= t->w || y >= t->h || !w || !h) {
+    if (!t || t->kind != RD_TEXKIND_IMAGE || !px || !t->pixels || x >= t->w || y >= t->h || !w ||
+        !h) {
         return;
     }
     const uint32_t bpp = rd__TexelBytes(t->format);
@@ -952,6 +997,7 @@ void rd_DestroyTexture(RdTex tex)
         g_rd.texDirtyCount--; /* P1 */
     }
     free(t->pixels);
+    rd__FreePending(t); /* a replacement destroyed before its upload */
     uint32_t gen = t->gen;
     memset(t, 0, sizeof(*t));
     t->gen = gen;
@@ -1134,6 +1180,7 @@ void rd_Shutdown(void)
                 rhi_DestroyTexture(t->rhi);
             }
             free(t->pixels);
+            rd__FreePending(t);
         }
     }
     if (g_rd.hasDevice) {
