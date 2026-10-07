@@ -172,6 +172,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Desbloqueado",
     [UI_STR_MIRROR_SCREEN] =
         "Toda la partida se juega invertida de izquierda a derecha. Cada partida guardada conserva la elección.",
+    [UI_STR_OPT_NEWGAME_PLUS] = "Nueva partida +",
+    [UI_STR_NEWGAME_PLUS_SCREEN] =
+        "Nueva partida + juega el segundo viaje: palabras de Yorda traducidas, final y objetos cambiados. Desactivado juega el primer viaje incluso tras terminar el juego.",
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidad CRT",
     [UI_STR_VAL_CRT_SCANLINES] = "Líneas de barrido",

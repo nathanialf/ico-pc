@@ -202,7 +202,10 @@ typedef enum UiStrId {
     UI_STR_ACH_LOCKED,
     UI_STR_ACH_STATE_UNLOCKED,
     /* mirror mode (renderer wave 7, R7c) */
-    UI_STR_MIRROR_SCREEN, /* the New Game screen's explanation */
+    UI_STR_MIRROR_SCREEN, /* the New Game screen's explanation of Mirror mode */
+    /* New Game+: the New Game screen's second row and its explanation */
+    UI_STR_OPT_NEWGAME_PLUS,
+    UI_STR_NEWGAME_PLUS_SCREEN,
     /* package CRT: Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,

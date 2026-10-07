@@ -173,6 +173,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Freigeschaltet",
     [UI_STR_MIRROR_SCREEN] =
         "Das ganze Spiel wird seitenverkehrt gespielt. Jeder Spielstand behält die Wahl.",
+    [UI_STR_OPT_NEWGAME_PLUS] = "Neues Spiel +",
+    [UI_STR_NEWGAME_PLUS_SCREEN] =
+        "Neues Spiel + spielt die zweite Reise: Yordas Worte übersetzt, Ende und Gegenstände verändert. Aus spielt die erste Reise, auch nach dem Durchspielen.",
     [UI_STR_OPT_CRT] = "CRT-Filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT-Stärke",
     [UI_STR_VAL_CRT_SCANLINES] = "Bildzeilen",

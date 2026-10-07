@@ -712,13 +712,33 @@ static void testBuild(void)
     /* the New Game screen */
     int ml = ui_NewGameScreenLayout();
     CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "New Game screen layout");
-    CHECK(ui_NewGameScreenRow(0, 0) >= 0 && ui_NewGameScreenRow(0, 1) >= 0 &&
-              strcmp(lt_ext_RowText(ui_NewGameScreenRow(0, 0)), "Off") == 0 &&
-              strcmp(lt_ext_RowText(ui_NewGameScreenRow(0, 1)), "On") == 0,
-          "New Game screen rows Off / On");
-    CHECK(lt_ext_Prop(ui_NewGameScreenRow(0, 0))->rightItem == ui_NewGameScreenRow(0, 1) &&
-              lt_ext_Prop(ui_NewGameScreenRow(0, 1))->leftItem == ui_NewGameScreenRow(0, 0),
-          "Off and On side by side");
+    static const char *const kNgLabel[2] = {"Mirror mode", "New Game+"};
+    for (int r = 0; r < 2; r++) {
+        const int off = ui_NewGameScreenRow(r, 0), on = ui_NewGameScreenRow(r, 1);
+        CHECK(off >= 0 && on >= 0 && strcmp(lt_ext_RowText(off - 1), kNgLabel[r]) == 0 &&
+                  strcmp(lt_ext_RowText(off), "Off") == 0 && strcmp(lt_ext_RowText(on), "On") == 0,
+              "New Game screen row %d: %s Off / On", r, kNgLabel[r]);
+        CHECK(lt_ext_Prop(off)->rightItem == on && lt_ext_Prop(on)->leftItem == off,
+              "row %d: Off and On side by side", r);
+        CHECK(lt_ext_Prop(off)->dispY == lt_ext_Prop(on)->dispY &&
+                  lt_ext_Prop(off - 1)->dispY == lt_ext_Prop(off)->dispY,
+              "row %d: the label, Off and On on one line", r);
+    }
+    CHECK(lt_ext_Prop(ui_NewGameScreenRow(1, 0))->dispY >
+              lt_ext_Prop(ui_NewGameScreenRow(0, 0))->dispY,
+          "New Game+ under Mirror mode");
+    CHECK(ui_NewGameScreenRow(2, 0) == -1 && ui_NewGameScreenRow(-1, 1) == -1, "no third row");
+    {
+        /* every row of the screen inside the layout, the note's bottom
+           at 212 at most */
+        const LtProp *l = lt_ext_Layout(ml);
+        for (int k = l->first; k < l->last; k++) {
+            CHECK(lt_ext_Prop(k)->dispY >= 100 &&
+                      lt_ext_Prop(k)->dispY + lt_ext_Prop(k)->dispH <= 212,
+                  "New Game screen row %d in 100..212 (%d+%d)", k, lt_ext_Prop(k)->dispY,
+                  lt_ext_Prop(k)->dispH);
+        }
+    }
 
     /* R7d: the Frame rate row in either preset, its value from the file */
     useConfig("[video]\npreset = \"enhanced\"\nframerate = \"144\"\n");
@@ -1384,10 +1404,15 @@ static void testPhoto(void)
     stage_no = 0;
 }
 
-/* R7c: the New Game screen, run by the real layout code: the
- * cursor starts on Off, Right moves to On, Cross sets the run's value and
- * starts the game once; a second Enter starts on Off again and Cross picks
- * Off; Triangle goes back to the vibration screen (layout 9). */
+/* R7c: the New Game screen, run by the real layout code: two rows, Mirror
+ * mode and New Game+.  The cursor starts on Mirror mode's Off, Right moves
+ * to On, Down to New Game+'s choice and Up back to Mirror mode's; each row
+ * keeps its own choice, the other row's choice stays lit, and the note
+ * follows the cursor's row.  New Game+ starts on when the game was
+ * finished (gFlagGameClear set: a finished save's new game), off
+ * otherwise; Cross or START writes both choices (the run's mirror mode,
+ * gFlagGameClear) and starts the game once; Triangle goes back to the
+ * vibration screen (layout 9). */
 static void testNewGameScreen(void)
 {
     useConfig("version = 1\n");
@@ -1397,47 +1422,101 @@ static void testNewGameScreen(void)
     memset(pad, 0, sizeof(pad));
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     NonLinearCameraMove = 2;
+    gFlagGameClear = 0;
     init_layout_texture(2);
     settle(54, 4);
     int ml = ui_NewGameScreenEnter();
-    int off = ui_NewGameScreenRow(0, 0), on = ui_NewGameScreenRow(0, 1);
+    const int mOff = ui_NewGameScreenRow(0, 0), mOn = ui_NewGameScreenRow(0, 1);
+    const int nOff = ui_NewGameScreenRow(1, 0), nOn = ui_NewGameScreenRow(1, 1);
+    const int note = lt_ext_Layout(ml)->last - 1;
     CHECK(ml >= 0, "the screen is there once installed");
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen (%d)", current_layout_id);
-    CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off");
+    LtProp *l = lt_ext_Layout(ml);
+    CHECK(l->curItem == mOff, "the cursor on Mirror mode's Off");
+    CHECK(lt_ext_Prop(nOff)->ownerItem == mOff && lt_ext_Prop(nOn)->ownerItem == -1,
+          "New Game+ Off lit (a plain New Game)");
+    CHECK(strncmp(lt_ext_RowText(note), "Plays the game flipped", 22) == 0,
+          "the note explains Mirror mode (%s)", lt_ext_RowText(note));
     press(0x2000); /* right */
-    CHECK(lt_ext_Layout(ml)->curItem == on, "right: On");
+    CHECK(l->curItem == mOn, "right: Mirror mode On");
+    CHECK(lt_ext_Prop(nOff)->ownerItem == mOn, "New Game+ Off still lit");
+    press(0x4000); /* down */
+    CHECK(l->curItem == nOff, "down: New Game+'s choice, Off");
+    CHECK(lt_ext_Prop(mOn)->ownerItem == nOff && lt_ext_Prop(mOff)->ownerItem == -1,
+          "Mirror mode On stays lit");
+    CHECK(lt_ext_Prop(nOff)->ownerItem == -1 && lt_ext_Prop(nOn)->ownerItem == -1,
+          "the cursor's row: the cursor alone");
+    CHECK(strncmp(lt_ext_RowText(note), "New Game+ plays", 15) == 0,
+          "the note explains New Game+ (%s)", lt_ext_RowText(note));
+    press(0x2000);
+    CHECK(l->curItem == nOn, "right: New Game+ On");
+    press(0x1000); /* up */
+    CHECK(l->curItem == mOn, "up: Mirror mode's choice, On, kept");
+    CHECK(lt_ext_Prop(nOn)->ownerItem == mOn, "New Game+ On lit");
+    press(0x4000);
+    CHECK(l->curItem == nOn, "down again: New Game+ On, kept");
+    press(0x4000); /* the rows in a loop */
+    CHECK(l->curItem == mOn, "down from the last row: Mirror mode's choice");
     int games = s_newGames;
     ico_opt_set_mirror(0);
     press(0x40); /* Cross */
-    CHECK(ico_opt_mirror() == 1, "Cross on On: the run is mirrored");
+    CHECK(ico_opt_mirror() == 1, "Cross: the run is mirrored");
+    CHECK(gFlagGameClear == 1, "Cross: New Game+ On sets the cleared flag");
     CHECK(s_newGames == games + 1, "the game starts (gflagOn(382))");
     press(0x40);
     press(0x800);
     CHECK(s_newGames == games + 1, "once");
 
-    /* again: the cursor back on Off, START picks it */
+    /* from a finished save (gFlagGameClear set): New Game+ starts On, and
+       Off chosen there clears the flag; START confirms */
     lt_switch_layout(54);
     settle(54, 60);
+    gFlagGameClear = 1;
     ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen again");
-    CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off again");
-    press(0x2000);
-    press(0x8000); /* left: back to Off */
-    CHECK(lt_ext_Layout(ml)->curItem == off, "left: Off");
+    CHECK(l->curItem == mOff, "the cursor on Mirror mode's Off again");
+    CHECK(lt_ext_Prop(nOn)->ownerItem == mOff && lt_ext_Prop(nOff)->ownerItem == -1,
+          "New Game+ On lit (a finished save)");
+    press(0x4000);
+    CHECK(l->curItem == nOn, "down: New Game+ On");
+    press(0x8000); /* left */
+    CHECK(l->curItem == nOff, "left: New Game+ Off");
+    press(0x1000);
+    CHECK(l->curItem == mOff, "up: Mirror mode Off, kept");
     press(0x800); /* START */
-    CHECK(ico_opt_mirror() == 0 && s_newGames == games + 2, "START on Off: not mirrored");
+    CHECK(ico_opt_mirror() == 0 && s_newGames == games + 2, "START: not mirrored, the game starts");
+    CHECK(gFlagGameClear == 0, "New Game+ Off: the first journey even after finishing");
 
-    /* Triangle: the vibration screen */
+    /* a plain New Game with New Game+ chosen On */
     lt_switch_layout(54);
     settle(54, 60);
+    gFlagGameClear = 0;
     ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen a third time");
+    press(0x4000);
+    CHECK(l->curItem == nOff, "a plain New Game: New Game+ Off");
+    press(0x2000);
+    press(0x40);
+    CHECK(gFlagGameClear == 1 && ico_opt_mirror() == 0 && s_newGames == games + 3,
+          "New Game+ On from a plain New Game");
+
+    /* Triangle: the vibration screen, the flag as it was */
+    lt_switch_layout(54);
+    settle(54, 60);
+    gFlagGameClear = 1;
+    ml = ui_NewGameScreenEnter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the New Game screen a fourth time");
+    press(0x4000);
+    press(0x8000);
     press(0x10);
     CHECK(settle(9, 60), "Triangle: the vibration screen (%d)", current_layout_id);
-    CHECK(s_newGames == games + 2, "no game started");
+    CHECK(s_newGames == games + 3, "no game started");
+    CHECK(gFlagGameClear == 1, "Triangle: the cleared flag untouched");
+    gFlagGameClear = 0;
 
     /* not built: -1 (la_vibe_select then starts the game itself) */
     ui_SettingsReset();
@@ -3758,13 +3837,23 @@ static int render(void)
     press(0x40);
     frame(0);
     snap("settings_remap_capture.png");
-    /* R7c: the New Game screen, the cursor on On */
+    /* R7c: the New Game screen, the cursor on Mirror mode's On, New Game+
+       Off lit; then the cursor on New Game+ (its note), Mirror mode On lit */
     int ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen");
     press(0x2000);
     frame(0);
     snap("settings_new_game_screen.png");
+    press(0x4000);
+    frame(0);
+    snap("settings_new_game_screen_ngp.png");
+    NonLinearCameraMove = 3; /* French: the longest note */
+    frame(0);
+    frame(0);
+    snap("settings_new_game_screen_ngp_fr.png");
+    NonLinearCameraMove = 2;
+    frame(0);
     /* Q2: the quit confirmation, the cursor on Yes */
     int ql = ui_QuitScreenLayout();
     lt_switch_layout(ql);
@@ -3897,6 +3986,8 @@ static int render(void)
         lt_switch_layout(mir);
         CHECK(settle(mir, 60), "the New Game screen at 1080p");
         snap1080("settings_new_game_screen", 1);
+        press(0x4000);
+        snap1080("settings_new_game_screen_ngp", 1);
         int ql = ui_QuitScreenLayout();
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");

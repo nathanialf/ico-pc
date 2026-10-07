@@ -88,7 +88,7 @@ The PS2 Options screen's settings are on these pages too, shown only when
 Options is opened from the pause menu: Brightness (Display; Square puts back
 the default, 7); Button
 configuration, Vibration and Hold type (Controls); Film effect and Players
-(Gameplay, once you have finished the game). They are kept in your save, as
+(Gameplay, on a New Game+ journey). They are kept in your save, as
 on the PS2, not in `config.toml`.
 
 - **Display:** a Preset, which is a shortcut: Original puts the four options
@@ -130,9 +130,22 @@ on the PS2, not in `config.toml`.
 - **Developer mode:** restores the development build's debug menu. Leave it
   off for normal play.
 
-**Mirror mode** is not in Options: when you start a New Game, the New Game
-screen after "Vibration" offers to play the whole game flipped left to right. The choice
-belongs to that save.
+**Mirror mode** and **New Game+** are not in Options: when you start a New
+Game, the New Game screen after "Vibration" has a row for each, Off or On.
+Up and down move between the rows, left and right pick, Cross starts.
+
+- **Mirror mode** plays the whole game flipped left to right.
+- **New Game+** plays the second journey, the one the PS2 gives you after
+  finishing the game: Yorda's words are translated, and the ending and some
+  items change. It starts On when you begin from a finished game's save and
+  Off otherwise, and you can change it either way. Off plays the first
+  journey even after you have finished the game.
+
+Two things follow from the New Game+ choice. On, in a game you have not
+finished, the ending does not offer to save a finished game, and finishing
+counts for the "Once More" achievement. Off, after finishing, Film effect
+and Players are not in Options for that journey. Both choices belong to
+that save.
 
 ## Saves
 
@@ -200,8 +213,8 @@ contain pictures from your disc, so do not share them publicly.
   The PS2's own Options screen's settings are pages of that menu.
 - The language and 50/60 Hz questions the PS2 asked at first start are
   skipped; both come from Options.
-- New Game has one extra screen after Vibration, the New Game screen, with
-  a **Mirror mode** row.
+- New Game has two extra rows after Vibration, on the New Game screen:
+  **Mirror mode** and **New Game+**.
 - The language can be switched mid-game, where the PS2 only chose it at
   boot: the menus change at once, the game's own text and subtitles at the
   next area load.

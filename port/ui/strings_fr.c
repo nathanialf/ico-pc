@@ -173,6 +173,9 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_ACH_STATE_UNLOCKED] = "Débloqué",
     [UI_STR_MIRROR_SCREEN] =
         "Toute la partie est inversée de gauche à droite. Chaque sauvegarde garde ce choix.",
+    [UI_STR_OPT_NEWGAME_PLUS] = "Nouvelle partie +",
+    [UI_STR_NEWGAME_PLUS_SCREEN] =
+        "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé, c’est le premier voyage, même après avoir fini le jeu.",
     [UI_STR_OPT_CRT] = "Filtre CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensité CRT",
     [UI_STR_VAL_CRT_SCANLINES] = "Lignes de balayage",
