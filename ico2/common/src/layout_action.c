@@ -280,10 +280,10 @@ int lt_ext_BackButtons(void);
 #define LA_BACK lt_ext_BackButtons()
 
 /* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
-   the vibration choice (port/ui/settings.h ui_MirrorScreen*) and kept per
+   the vibration choice (port/ui/settings.h ui_NewGameScreen*) and kept per
    save slot in the port config (port/game/options.h ico_mirror_slot_*). */
-int ui_MirrorScreenEnter(void);
-int ui_MirrorScreenLayout(void);
+int ui_NewGameScreenEnter(void);
+int ui_NewGameScreenLayout(void);
 int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
 /* port/game/achievements.h: the run state kept per save slot */
@@ -294,13 +294,13 @@ void ico_opt_mirror_reset(void);
 void ico_opt_output_toggled(int mode);
 void la_host_new_game_go(void);
 
-/* la_vibe_select's confirm: the mirror screen in place of the start, which
+/* la_vibe_select's confirm: the New Game screen in place of the start, which
    its confirm runs (la_host_new_game_go, after la_vibe_select) */
-static int la_host_mirror_screen(void)
+static int la_host_new_game_screen(void)
 {
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return ui_MirrorScreenEnter();
+    return ui_NewGameScreenEnter();
 }
 
 static int fightSoundStopped = 0; /* derived name */
@@ -731,8 +731,8 @@ int la_vibe_select(void)
             iosPadActRequestEnable = 0;
             break;
         }
-        if (ui_MirrorScreenLayout() >= 0) {
-            return la_host_mirror_screen(); /* R7c: the mirror screen, then the start */
+        if (ui_NewGameScreenLayout() >= 0) {
+            return la_host_new_game_screen(); /* R7c: the New Game screen, then the start */
         }
         if (titleAdpcm != 0) {
             titleAdpcm->stream->fadeStep = 0x80;
@@ -757,7 +757,7 @@ int la_vibe_select(void)
 }
 
 /* PC port (renderer wave 7, R7c): the start la_vibe_select's confirm made,
-   run by the mirror screen's confirm (port/ui/settings.c) once the player
+   run by the New Game screen's confirm (port/ui/settings.c) once the player
    has picked: the title music fades, the game flags and the key config are
    reset and gflag 382 starts the new game, at the same moment as each
    other, as on the PS2 */

@@ -216,7 +216,7 @@ int ico_audio_sdl_reopen(const char *name)
     return 0;
 }
 
-/* layout_action.c (R7c): the mirror screen's confirm starts the game */
+/* layout_action.c (R7c): the New Game screen's confirm starts the game */
 void la_host_new_game_go(void)
 {
     s_newGames++;
@@ -710,14 +710,14 @@ static void testBuild(void)
         }
     }
     /* the New Game screen */
-    int ml = ui_MirrorScreenLayout();
-    CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "mirror screen layout");
-    CHECK(ui_MirrorScreenRow(0) >= 0 && ui_MirrorScreenRow(1) >= 0 &&
-              strcmp(lt_ext_RowText(ui_MirrorScreenRow(0)), "Off") == 0 &&
-              strcmp(lt_ext_RowText(ui_MirrorScreenRow(1)), "On") == 0,
-          "mirror screen rows Off / On");
-    CHECK(lt_ext_Prop(ui_MirrorScreenRow(0))->rightItem == ui_MirrorScreenRow(1) &&
-              lt_ext_Prop(ui_MirrorScreenRow(1))->leftItem == ui_MirrorScreenRow(0),
+    int ml = ui_NewGameScreenLayout();
+    CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_Layout(ml)->proc != NULL, "New Game screen layout");
+    CHECK(ui_NewGameScreenRow(0, 0) >= 0 && ui_NewGameScreenRow(0, 1) >= 0 &&
+              strcmp(lt_ext_RowText(ui_NewGameScreenRow(0, 0)), "Off") == 0 &&
+              strcmp(lt_ext_RowText(ui_NewGameScreenRow(0, 1)), "On") == 0,
+          "New Game screen rows Off / On");
+    CHECK(lt_ext_Prop(ui_NewGameScreenRow(0, 0))->rightItem == ui_NewGameScreenRow(0, 1) &&
+              lt_ext_Prop(ui_NewGameScreenRow(0, 1))->leftItem == ui_NewGameScreenRow(0, 0),
           "Off and On side by side");
 
     /* R7d: the Frame rate row in either preset, its value from the file */
@@ -731,7 +731,7 @@ static void testBuild(void)
 }
 
 /* Review finding 1: Settings (its Music page and the photo, quit and
-   mirror screens included) and the model viewer's two screens built
+   New Game screens included) and the model viewer's two screens built
    together stay inside the layout extension, with room to spare, and no
    row or layout came back -1.  The viewer's rows are built as
    port/game/model_viewer.c build() builds them (a heading, a list of 8
@@ -1384,11 +1384,11 @@ static void testPhoto(void)
     stage_no = 0;
 }
 
-/* R7c: the New Game "Mirror mode" screen, run by the real layout code: the
+/* R7c: the New Game screen, run by the real layout code: the
  * cursor starts on Off, Right moves to On, Cross sets the run's value and
  * starts the game once; a second Enter starts on Off again and Cross picks
  * Off; Triangle goes back to the vibration screen (layout 9). */
-static void testMirrorScreen(void)
+static void testNewGameScreen(void)
 {
     useConfig("version = 1\n");
     fakeTables();
@@ -1399,11 +1399,11 @@ static void testMirrorScreen(void)
     NonLinearCameraMove = 2;
     init_layout_texture(2);
     settle(54, 4);
-    int ml = ui_MirrorScreenEnter();
-    int off = ui_MirrorScreenRow(0), on = ui_MirrorScreenRow(1);
+    int ml = ui_NewGameScreenEnter();
+    int off = ui_NewGameScreenRow(0, 0), on = ui_NewGameScreenRow(0, 1);
     CHECK(ml >= 0, "the screen is there once installed");
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the mirror screen (%d)", current_layout_id);
+    CHECK(settle(ml, 60), "the New Game screen (%d)", current_layout_id);
     CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off");
     press(0x2000); /* right */
     CHECK(lt_ext_Layout(ml)->curItem == on, "right: On");
@@ -1419,9 +1419,9 @@ static void testMirrorScreen(void)
     /* again: the cursor back on Off, START picks it */
     lt_switch_layout(54);
     settle(54, 60);
-    ml = ui_MirrorScreenEnter();
+    ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the mirror screen again");
+    CHECK(settle(ml, 60), "the New Game screen again");
     CHECK(lt_ext_Layout(ml)->curItem == off, "the cursor on Off again");
     press(0x2000);
     press(0x8000); /* left: back to Off */
@@ -1432,16 +1432,16 @@ static void testMirrorScreen(void)
     /* Triangle: the vibration screen */
     lt_switch_layout(54);
     settle(54, 60);
-    ml = ui_MirrorScreenEnter();
+    ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the mirror screen a third time");
+    CHECK(settle(ml, 60), "the New Game screen a third time");
     press(0x10);
     CHECK(settle(9, 60), "Triangle: the vibration screen (%d)", current_layout_id);
     CHECK(s_newGames == games + 2, "no game started");
 
     /* not built: -1 (la_vibe_select then starts the game itself) */
     ui_SettingsReset();
-    CHECK(ui_MirrorScreenEnter() == -1 && ui_MirrorScreenLayout() == -1, "not built: -1");
+    CHECK(ui_NewGameScreenEnter() == -1 && ui_NewGameScreenLayout() == -1, "not built: -1");
 }
 
 /* Q2: the title's "Quit to desktop" row under Settings (layouts 12 and 13,
@@ -1556,7 +1556,7 @@ static void testQuit(void)
 
 /* Q2: Circle leaves every port screen as Triangle does, even with the game
  * menus' alias off ([game] circle_back = false): the Settings pages, the
- * two lists, the menu itself (to the pause menu) and the mirror screen
+ * two lists, the menu itself (to the pause menu) and the New Game screen
  * (the quit screen: testQuit). */
 static void testCirclePortScreens(void)
 {
@@ -1609,12 +1609,12 @@ static void testCirclePortScreens(void)
     press(0x20);
     CHECK(settle(57, 60), "Circle: the menu back to the pause menu");
     CHECK(texLayout[57].curItem == 294, "on Options");
-    /* the mirror screen: Circle is Triangle there (the vibration screen) */
+    /* the New Game screen: Circle is Triangle there (the vibration screen) */
     lt_switch_layout(54);
     settle(54, 60);
-    int ml = ui_MirrorScreenEnter(), games = s_newGames;
+    int ml = ui_NewGameScreenEnter(), games = s_newGames;
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the mirror screen");
+    CHECK(settle(ml, 60), "the New Game screen");
     press(0x20);
     CHECK(settle(9, 60), "Circle: the vibration screen (%d)", current_layout_id);
     CHECK(s_newGames == games, "no game started");
@@ -3324,7 +3324,7 @@ static void testCoversTitle(void)
             CHECK(ui_SettingsCoversTitle() == title, "title %d: page %d covers %d", title, p,
                   ui_SettingsCoversTitle());
         }
-        int others[3] = {title ? 13 : 57, ui_QuitScreenLayout(), ui_MirrorScreenLayout()};
+        int others[3] = {title ? 13 : 57, ui_QuitScreenLayout(), ui_NewGameScreenLayout()};
         for (int k = 0; k < 3; k++) {
             if (others[k] < 0) {
                 continue;
@@ -3758,13 +3758,13 @@ static int render(void)
     press(0x40);
     frame(0);
     snap("settings_remap_capture.png");
-    /* R7c: the New Game mirror screen, the cursor on On */
-    int ml = ui_MirrorScreenEnter();
+    /* R7c: the New Game screen, the cursor on On */
+    int ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the mirror screen");
+    CHECK(settle(ml, 60), "the New Game screen");
     press(0x2000);
     frame(0);
-    snap("settings_mirror_screen.png");
+    snap("settings_new_game_screen.png");
     /* Q2: the quit confirmation, the cursor on Yes */
     int ql = ui_QuitScreenLayout();
     lt_switch_layout(ql);
@@ -3893,10 +3893,10 @@ static int render(void)
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
         }
-        int mir = ui_MirrorScreenEnter();
+        int mir = ui_NewGameScreenEnter();
         lt_switch_layout(mir);
-        CHECK(settle(mir, 60), "the mirror screen at 1080p");
-        snap1080("settings_mirror_screen", 1);
+        CHECK(settle(mir, 60), "the New Game screen at 1080p");
+        snap1080("settings_new_game_screen", 1);
         int ql = ui_QuitScreenLayout();
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");
@@ -3967,7 +3967,7 @@ int main(int argc, char **argv)
     testPlacement();
     testNavigation();
     testPhoto();
-    testMirrorScreen();
+    testNewGameScreen();
     testQuit();
     testCirclePortScreens();
     testCircleGameMenu();

@@ -1130,7 +1130,7 @@ static const UiListDef kAchDef, kRemapDef, kGalDef;
 static int s_galFill = -1, s_galTime = -1, s_galTotal = -1;
 static UiHint s_galHint;
 static int entryProc(int first, int item);
-static void buildMirrorScreen(void);
+static void buildNewGameScreen(void);
 static void buildQuitScreen(void);
 static int s_quitLayout = -1;
 
@@ -1527,7 +1527,7 @@ static void build(void)
     if (s_photoRow >= 0) {
         P(s_photoRow)->right = ui_PhotoBuild();
     }
-    buildMirrorScreen();
+    buildNewGameScreen();
     if (ico_opt_developer_mode()) {
         /* the layout extension's budget (layout_ext.h): what Settings and
            its screens use of the tables */
@@ -1537,82 +1537,82 @@ static void build(void)
     }
 }
 
-/* ------------------------------------------------- the mirror screen (R7c)
- * The New Game "Mirror mode" screen, between the vibration choice and the
- * start (settings.h ui_MirrorScreenEnter): the header, "Off" and "On" side
+/* ------------------------------------------------- the New Game screen (R7c)
+ * The New Game screen, between the vibration choice and the
+ * start (settings.h ui_NewGameScreenEnter): the header, "Off" and "On" side
  * by side (left/right through their item links, the cursor on "Off"), and
  * a line of explanation, in the lower half where the vibration screen has
  * its rows (the title stage's logo is above). */
 
-static int s_mirrorLayout = -1;
-static int s_mirrorRow[2] = {-1, -1};
-static int s_mirrorChosen;
+static int s_newGameLayout = -1;
+static int s_newGameRow[2][2] = {{-1, -1}, {-1, -1}}; /* [row][off, on] */
+static int s_newGameChosen;
 
 #define LAYOUT_VIBE_SELECT 9 /* la_vibe_select's screen */
 
-static int mirrorScreenProc(int first, int item);
+static int newGameScreenProc(int first, int item);
 
-static void buildMirrorScreen(void)
+static void buildNewGameScreen(void)
 {
     int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
     int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, UI_STR_OPT_MIRROR, NULL, HEADER_SIZE,
                               UI_ALIGN_CENTER);
     P(h)->centerX = 1;
-    s_mirrorRow[0] =
+    s_newGameRow[0][0] =
         ui_SettingsAddRow(200, 146, 110, 40, 1, -1, UI_STR_OFF, NULL, 0.0f, UI_ALIGN_CENTER);
-    s_mirrorRow[1] =
+    s_newGameRow[0][1] =
         ui_SettingsAddRow(330, 146, 110, 40, 1, -1, UI_STR_ON, NULL, 0.0f, UI_ALIGN_CENTER);
-    P(s_mirrorRow[0])->rightItem = s_mirrorRow[1];
-    P(s_mirrorRow[1])->leftItem = s_mirrorRow[0];
+    P(s_newGameRow[0][0])->rightItem = s_newGameRow[0][1];
+    P(s_newGameRow[0][1])->leftItem = s_newGameRow[0][0];
     int n = ui_SettingsAddRow(20, 182, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
     P(n)->centerX = 1;
     setNote(n, UI_STR_MIRROR_SCREEN);
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
-    s_mirrorLayout = addLayout(first, last + 1, 0.6f, mirrorScreenProc, s_mirrorRow[0]);
+    s_newGameLayout = addLayout(first, last + 1, 0.6f, newGameScreenProc, s_newGameRow[0][0]);
 }
 
-int ui_MirrorScreenEnter(void)
+int ui_NewGameScreenEnter(void)
 {
-    if (!s_built || s_mirrorLayout < 0) {
+    if (!s_built || s_newGameLayout < 0) {
         return -1;
     }
-    LtProp *l = lt_ext_Layout(s_mirrorLayout);
-    l->defaultItem = l->curItem = s_mirrorRow[0];
-    s_mirrorChosen = 0;
+    LtProp *l = lt_ext_Layout(s_newGameLayout);
+    l->defaultItem = l->curItem = s_newGameRow[0][0];
+    s_newGameChosen = 0;
     /* no run until the choice: a cleared save's new game (la_load_processing
        returns to the vibration screen) does not keep the loaded slot's flag
        on the title stage behind this screen */
     ico_opt_mirror_reset();
-    return s_mirrorLayout;
+    return s_newGameLayout;
 }
 
-int ui_MirrorScreenLayout(void)
+int ui_NewGameScreenLayout(void)
 {
-    return s_mirrorLayout;
+    return s_newGameLayout;
 }
 
-int ui_MirrorScreenRow(int on)
+int ui_NewGameScreenRow(int row, int on)
 {
-    return s_mirrorRow[on ? 1 : 0];
+    return row == 0 || row == 1 ? s_newGameRow[row][on ? 1 : 0] : -1;
 }
 
-static int mirrorScreenProc(int first, int item)
+static int newGameScreenProc(int first, int item)
 {
     (void)item;
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
     if (first) {
-        s_mirrorChosen = 0;
+        s_newGameChosen = 0;
     }
     /* as la_vibe_select: input only once faded in, and the choice once (the
        stage change stops the layout procs in the same tick) */
-    if (s_mirrorChosen || lt_fade_status() != 2) {
+    if (s_newGameChosen || lt_fade_status() != 2) {
         return -1;
     }
     int flags = pad[0].flags;
     if (flags & (PAD_CROSS | PAD_START)) {
-        s_mirrorChosen = 1;
+        s_newGameChosen = 1;
         POSITIVE_SE();
-        ico_opt_set_mirror(lt_ext_Layout(s_mirrorLayout)->curItem == s_mirrorRow[1]);
+        ico_opt_set_mirror(lt_ext_Layout(s_newGameLayout)->curItem == s_newGameRow[0][1]);
         la_host_new_game_go();
         return -1;
     }
@@ -1626,7 +1626,7 @@ static int mirrorScreenProc(int first, int item)
 /* ------------------------------------------------- the quit screen (Q2)
  * "Quit to desktop?" with Yes and No side by side (left/right through
  * their item links, the cursor on No), opened by the title's Quit row
- * (settings.h ui_SettingsSetQuitHandler), laid out as the mirror screen. */
+ * (settings.h ui_SettingsSetQuitHandler), laid out as the New Game screen. */
 
 static int s_quitYesNo[2] = {-1, -1}; /* No, Yes */
 static int s_quitChosen;
@@ -1879,8 +1879,9 @@ void ui_SettingsReset(void)
     /* the wrapped notes are set again on the rebuilt rows */
     memset(s_noteStr, 0, sizeof(s_noteStr));
     memset(s_noteLang, 0, sizeof(s_noteLang));
-    s_mirrorLayout = s_mirrorRow[0] = s_mirrorRow[1] = -1;
-    s_mirrorChosen = 0;
+    s_newGameLayout = -1;
+    s_newGameRow[0][0] = s_newGameRow[0][1] = s_newGameRow[1][0] = s_newGameRow[1][1] = -1;
+    s_newGameChosen = 0;
     s_quitLayout = s_quitYesNo[0] = s_quitYesNo[1] = -1;
     s_quitChosen = 0;
 }

@@ -3,7 +3,7 @@
 #
 # Derived from port/input/pad-boot.txt; its notes on the format and on each
 # boot screen apply here. Since R7c the vibration screen (layout 9,
-# la_vibe_select) is followed by the port's "Mirror mode" screen: "Off" and
+# la_vibe_select) is followed by the port's New Game screen: "Off" and
 # "On" side by side, the cursor on "Off"; RIGHT moves to "On", CROSS or START
 # confirms and starts the game (gflag 382, which the vibration screen set
 # before R7c). pad-boot.txt's cycle answers it unchanged: its next CROSS or
@@ -12,9 +12,9 @@
 #
 # Timing (measured, build-host/r7c-run-headless with the R7c build, and
 # 6c-run-headless before it): the CROSS at 581 confirms the vibration screen
-# (before R7c gflag 382 set there). The switch to the mirror screen is the
+# (before R7c gflag 382 set there). The switch to the New Game screen is the
 # vibration screen's fade out (texLayout[9].fadeOutTime 0.2 s = 5 ticks),
-# then the mirror screen's fade in (0.3 s = 7 ticks): it takes input from
+# then the New Game screen's fade in (0.3 s = 7 ticks): it takes input from
 # about tick 595. The START at 594 lands during the fade and is ignored; the
 # RIGHT at 608 moves the cursor; the CROSS at 621 confirms On. The game
 # starts at 621, 40 ticks later than before R7c, and every later line meets

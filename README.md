@@ -130,8 +130,8 @@ on the PS2, not in `config.toml`.
 - **Developer mode:** restores the development build's debug menu. Leave it
   off for normal play.
 
-**Mirror mode** is not in Options: when you start a New Game, a screen after
-"Vibration" offers to play the whole game flipped left to right. The choice
+**Mirror mode** is not in Options: when you start a New Game, the New Game
+screen after "Vibration" offers to play the whole game flipped left to right. The choice
 belongs to that save.
 
 ## Saves
@@ -200,7 +200,8 @@ contain pictures from your disc, so do not share them publicly.
   The PS2's own Options screen's settings are pages of that menu.
 - The language and 50/60 Hz questions the PS2 asked at first start are
   skipped; both come from Options.
-- New Game has one extra **Mirror mode** screen after Vibration.
+- New Game has one extra screen after Vibration, the New Game screen, with
+  a **Mirror mode** row.
 - The language can be switched mid-game, where the PS2 only chose it at
   boot: the menus change at once, the game's own text and subtitles at the
   next area load.

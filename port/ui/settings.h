@@ -54,7 +54,7 @@ void ui_SettingsTitleMask(int masked);
    the pause menu (port/game/title_logo.c hides the title's logo under it). */
 int ui_SettingsCoversTitle(void);
 
-/* The New Game "Mirror mode" screen (renderer wave 7, R7c): la_vibe_select (common/src/layout_action.c,
+/* The New Game screen (renderer wave 7, R7c): la_vibe_select (common/src/layout_action.c,
    ICO_HOST) switches to it after the vibration choice; Cross or START on
    "Off" or "On" sets the run's mirror mode (ico_opt_set_mirror) and calls
    la_host_new_game_go (gflagOn(382), what the vibration screen did);
@@ -62,10 +62,11 @@ int ui_SettingsCoversTitle(void);
    screen's layout with the cursor on "Off" and the run's value reset
    (ico_opt_mirror_reset), -1 when the menu is not built (the caller then
    starts the game as the original did). */
-int ui_MirrorScreenEnter(void);
-int ui_MirrorScreenLayout(void);
-/* the "Off" (on = 0) and "On" (on = 1) rows */
-int ui_MirrorScreenRow(int on);
+int ui_NewGameScreenEnter(void);
+int ui_NewGameScreenLayout(void);
+/* row 0 (Mirror mode): the "Off" (on = 0) and "On" (on = 1) items; -1
+   for a row the screen does not have */
+int ui_NewGameScreenRow(int row, int on);
 
 /* "Quit to desktop" (package Q2): a port
    row under the title's Settings row (layouts 12 and 13, in the same
