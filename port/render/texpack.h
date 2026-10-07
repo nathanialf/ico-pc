@@ -20,8 +20,10 @@
  *             game fiber's texpack_Pump (once a frame, beside
  *             rdtex_FrameTick) installs what finished.  With precache on,
  *             the thread also reads every indexed file into a RAM cache
- *             from startup (requests jump the queue), so a texture shown
- *             for one frame (the subtitles) is replaced from its first.
+ *             from startup (requests jump the queue); a request for a
+ *             cached file is installed at once, inside the hook, so a
+ *             texture shown for one frame (the subtitles) is replaced from
+ *             its first.
  *   budget    replacement textures live on the GPU only while their cache
  *             entry does; their bytes count against
  *             video.texture_pack_budget_mb, and a replacement that would
@@ -111,9 +113,12 @@ const char *texpack_EntryPath(int entry);
 /* Queue entry (from texpack_Lookup) for the cache entry (texId, gen, texa)
    of rd_tex; uvW, uvH the GS size of the texture it replaces.  The image
    is installed by a later texpack_Pump through rdtex_Replace if the cache
-   entry still has that generation then (else it is dropped).  0 queued,
-   1 already queued or installed, -1 refused (declined by the budget
-   before, or the file failed to load before). */
+   entry still has that generation then (else it is dropped).  An entry
+   already read into the RAM cache (precache) is installed at once instead
+   (rdtex_Replace before this returns, so the caller's rdtex_Find gives the
+   replacement).  0 queued, 1 already queued or installed, 2 installed now,
+   -1 refused (declined by the budget, now or before, the device refused
+   it, or the file failed to load before). */
 int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t uvW, uint32_t uvH);
 /* Once a frame on the game fiber (Texture.c tex_ResetVram, beside
    rdtex_FrameTick): installs the finished loads (rdtex_CreateReplacement,

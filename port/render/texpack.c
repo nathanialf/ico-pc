@@ -654,6 +654,8 @@ const char *texpack_EntryPath(int entry)
     return entry >= 0 && entry < s_tp.n ? s_tp.e[entry].path : NULL;
 }
 
+static void install(PackReq *r);
+
 static int wasDeclined(uint32_t texId, uint32_t gen)
 {
     for (int i = 0; i < s_tp.nDeclined; i++) {
@@ -707,17 +709,25 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
     r->uvW = uvW;
     r->uvH = uvH;
     if (state == ENTRY_CACHED) {
-        /* read ahead already: installed by the next pump (the cached image
-           is never written again, so it is copied without the lock) */
+        /* read ahead already: installed now, on the game fiber, so the draw
+           that asked for the texture already samples the replacement (a
+           subtitle shown for one frame, a CLUT scroll's new frame) and the
+           original never shows.  The upload still happens at replay, from
+           the copy (the cached image is never written again, so it is
+           copied without the lock, and stays for the next load). */
         if (copyImage(&e->cache, &r->img) != 0) {
             free(r);
             return -1;
         }
         lockTp();
-        pushDone(r);
         s_tp.stats.requested++;
         unlockTp();
-        return 0;
+        const uint32_t before = s_tp.stats.installed;
+        install(r);
+        const int done = s_tp.stats.installed != before;
+        texpack_FreeImage(&r->img);
+        free(r);
+        return done ? 2 : -1;
     }
     lockTp();
     /* requests go before the precache, oldest first */

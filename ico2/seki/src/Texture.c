@@ -474,7 +474,15 @@ static RdTex texHostTexture(int id)
     smp.wrapT = RD_WRAP_REPEAT;
     r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &im, &smp, t->name);
     if (r.id != 0) {
+        RdTex now;
+
         texHostPack(id, t, lv, gen, &im);
+        /* a replacement from the pack's RAM cache is in place already:
+           this draw samples it */
+        now = rdtex_Find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
+        if (now.id != 0) {
+            r = now;
+        }
     }
     if (r.id == 0 && !texHost.failOnce) {
         texHost.failOnce = 1;

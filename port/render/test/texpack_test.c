@@ -492,15 +492,25 @@ static void testPrecache(void)
     CHECK(s.cached == 6 && s.loadFailed == 1, "precache: 6 cached, the bad file failed (%u, %u)",
           s.cached, s.loadFailed);
     setCurrent(20, 4);
-    CHECK(texpack_Request(entryOf(N3), 20, 4, RDTEX_TEXA_REPLAY, 16, 16) == 0, "request (cached)");
-    texpack_Pump();
-    CHECK(s_tc.installed[20] != 0 && strcmp(s_tc.tag[20], "user-n3") == 0,
-          "a cached image goes in at the next pump");
+    const uint32_t installed = stats().installed;
+    CHECK(texpack_Request(entryOf(N3), 20, 4, RDTEX_TEXA_REPLAY, 16, 16) == 2,
+          "request (cached): installed now");
+    CHECK(s_tc.installed[20] != 0 && strcmp(s_tc.tag[20], "user-n3") == 0 && s_tc.uvW[20] == 16 &&
+              stats().installed == installed + 1,
+          "a cached image is in place before any pump");
     /* the cache keeps its copy: the texture loaded again gets it again */
     setCurrent(21, 4);
-    CHECK(texpack_Request(entryOf(N3), 21, 4, RDTEX_TEXA_REPLAY, 16, 16) == 0, "again");
-    texpack_Pump();
-    CHECK(s_tc.installed[21] != 0, "the cache kept it");
+    CHECK(texpack_Request(entryOf(N3), 21, 4, RDTEX_TEXA_REPLAY, 16, 16) == 2, "again");
+    CHECK(s_tc.installed[21] != 0 && strcmp(s_tc.tag[21], "user-n3") == 0 && stats().cached == 6,
+          "the cache kept it");
+    /* a stale generation (the texture changed since) is not installed */
+    setCurrent(23, 4);
+    s_tc.gen[23] = 5;
+    CHECK(texpack_Request(entryOf(N3), 23, 4, RDTEX_TEXA_REPLAY, 16, 16) == -1 &&
+              s_tc.installed[23] == 0,
+          "cached, stale generation: dropped");
+    CHECK(texpack_BudgetUsed() == 2 * 256, "the two installed now are charged (%llu)",
+          (unsigned long long)texpack_BudgetUsed());
     texpack_Shutdown();
 
     /* the memory limit: 1 MB; the precache stops at N5 (1.5 MB), and what
