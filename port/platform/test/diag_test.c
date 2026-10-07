@@ -12,6 +12,12 @@
  *               never runs again: the watchdog (1 s) stops the run with
  *               exit 4, samples where the main thread is and dumps the
  *               threads, and the heartbeat reported "no progress" before;
+ *   - progress: the Main tick stands still (a movie plays inside one) but
+ *               the progress count moves for longer than the later limit:
+ *               no fire; then both stop and the watchdog fires naming the
+ *               movie, and the heartbeat printed the count;
+ *   - stall:    the tick stands still and nothing else moves: the later
+ *               limit fires as before;
  *   - lines:    milestones and logs reach the file at once.
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
@@ -96,6 +102,45 @@ static void spin_thread(void *arg)
     while (spin_forever) {}
 }
 
+/* the child's own pace, on its main thread (POSIX only runs the children).
+   The watchdog's sample signals this thread and cuts a sleep short, so it
+   sleeps again until the time has passed. */
+static void pause_ms(unsigned int ms)
+{
+#if defined(_WIN32)
+    (void)ms;
+#else
+    const double end = ico_diag_uptime() + ms / 1000.0;
+    double now;
+    while ((now = ico_diag_uptime()) < end) {
+        usleep((useconds_t)((end - now) * 1e6) + 1u);
+    }
+#endif
+}
+
+/* A movie's shape (progress != 0): ticks stopped at 1, progress noted
+   every 50 ms for 2.5 s against a 1 s later limit, then nothing until the
+   watchdog ends the run (exit 4) or 5 s pass (exit 0: it never fired).
+   Without progress, only the stopped tick. */
+static void progress_child(int progress)
+{
+    int i;
+    fake_ticks = 1;
+    ico_diag_start(0, 1);
+    if (progress) {
+        ico_diag_set_movie(1);
+    }
+    for (i = 0; progress && i < 50; i++) {
+        pause_ms(50);
+        ico_diag_note_progress();
+    }
+    if (progress) {
+        ico_diag_log("test: progress kept it alive (%u)", ico_diag_progress());
+    }
+    pause_ms(5000);
+    exit(0);
+}
+
 static void run_child(const char *mode, const char *log)
 {
     int id;
@@ -116,6 +161,8 @@ static void run_child(const char *mode, const char *log)
     } else if (strcmp(mode, "watchdog") == 0) {
         fn = spin_thread;
         ico_diag_start(1, 2);
+    } else if (strcmp(mode, "progress") == 0 || strcmp(mode, "stall") == 0) {
+        progress_child(strcmp(mode, "progress") == 0 ? 1 : 0);
     } else {
         ico_diag_milestone("a milestone");
         exit(0);
@@ -224,6 +271,35 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "test: exit hook (watchdog)") != NULL);
     if (fails) {
         printf("--- watchdog log ---\n%s\n", s);
+    }
+
+    /* the second sign of life: 2.5 s of progress without a tick against a
+       1 s limit does not fire; the stop after it does, and says a movie was
+       playing */
+    r = run(argv[0], "progress", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "test: progress kept it alive (50)") != NULL);
+    CHECK(strstr(s, "WATCHDOG: a movie was playing and showed no new picture for 1 s (the last "
+                    "was tick 1, progress 50)") != NULL);
+    CHECK(strstr(s, "WATCHDOG:") != NULL &&
+          strstr(s, "test: progress kept it alive") < strstr(s, "WATCHDOG:"));
+    CHECK(strstr(s, "| progress ") != NULL);
+    CHECK(strstr(s, "(a movie is playing)") != NULL);
+    if (fails) {
+        printf("--- progress log ---\n%s\n", s);
+    }
+
+    /* without progress the tick alone counts, as before: it fires during
+       the 2.5 s the progress case survived */
+    r = run(argv[0], "stall", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s (the last was tick 1, progress 0)") !=
+          NULL);
+    CHECK(strstr(s, "a movie was playing") == NULL);
+    if (fails) {
+        printf("--- stall log ---\n%s\n", s);
     }
     remove(log);
     if (fails) {

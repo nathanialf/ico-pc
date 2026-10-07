@@ -711,6 +711,7 @@ int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, i
     env = getenv("ICO_FMV_DECODE");
     mv.decode = !(env != NULL && strcmp(env, "0") == 0);
     ico_movie_pace_init(&mv.pace);
+    mv.pace.on_show = ico_diag_note_progress;
 
     ReferThreadStatus(GetThreadId(), &st);
     mv.callerPri = st.currentPriority;
@@ -788,6 +789,11 @@ static int readMpeg(int (*poll)(void))
 {
     int abort = 0;
 
+    /* the whole movie runs inside this call, inside one Main tick: the
+       watchdog hears from it through the progress count instead (each
+       preroll vsync here, each shown picture through pace.on_show) */
+    ico_diag_set_movie(1);
+
     /* preroll: the ring full and the IOP buffer preset (no vsync passes
        on the host: the reads are immediate) */
     for (;;) {
@@ -802,6 +808,7 @@ static int readMpeg(int (*poll)(void))
             break;
         }
         next_vsync();
+        ico_diag_note_progress();
     }
     /* startDisplay(1): wait for a vblank that reports the even field */
     while (sceGsSyncV(0) == 1) {
@@ -841,6 +848,7 @@ static int readMpeg(int (*poll)(void))
     if (mv.sawAudio) {
         audio_reset();
     }
+    ico_diag_set_movie(0);
     return abort;
 }
 
@@ -855,14 +863,29 @@ int movie_proc(int (*poll)(void))
     int r = 0;
 
     if (mv.open) {
+        char presents[64] = "";
+#ifdef ICO_RD
+        uint32_t failed0, failed1;
+        const uint32_t presents0 = rd_VideoPresents(&failed0);
+#endif
         r = readMpeg(poll);
+#ifdef ICO_RD
+        {
+            /* what reached the window, beside the pictures the timing
+               showed: fewer presents than shown pictures means the screen
+               missed some (or decoding was off) */
+            const uint32_t presents1 = rd_VideoPresents(&failed1);
+            snprintf(presents, sizeof presents, ", %u movie presents (%u failed)",
+                     presents1 - presents0, failed1 - failed0);
+        }
+#endif
         ico_diag_log("fmv: movie_proc %s after %u vsyncs: %u pictures in the stream%s, %u "
                      "into the display ring, %u shown, %u decoded (%u decoder errors), %u PCM "
-                     "bytes sent",
+                     "bytes sent%s",
                      r ? "aborted" : "played", mv.vsyncs,
                      (unsigned)(mv.total >= 0 ? mv.total : (int64_t)mv.units),
                      mv.total >= 0 ? "" : " so far", mv.pace.decoded, mv.pace.shown,
-                     mv.decodedFrames, ico_m2v_errors(mv.dec), mv.pcmSent);
+                     mv.decodedFrames, ico_m2v_errors(mv.dec), mv.pcmSent, presents);
     } else {
         ico_diag_log("fmv: movie_proc without an open movie: returns 0");
     }

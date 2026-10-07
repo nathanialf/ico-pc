@@ -80,6 +80,11 @@ static IcoDiagStatusFn status_fn;
 
 static unsigned int (*ticks_fn)(void);
 static unsigned int (*vsyncs_fn)(void);
+/* ico_diag_note_progress and ico_diag_set_movie: written by the game's
+   thread, read by the watchdog's; a plain aligned word, as the tick count */
+static volatile unsigned int progress;
+
+static volatile int movie_playing;
 static void (*exit_hook)(const char *reason);
 
 static char failure[512];
@@ -364,6 +369,21 @@ void ico_diag_set_sources(IcoDiagStatusFn status, unsigned int (*main_ticks)(voi
     vsyncs_fn = vsyncs;
 }
 
+void ico_diag_note_progress(void)
+{
+    progress++;
+}
+
+unsigned int ico_diag_progress(void)
+{
+    return progress;
+}
+
+void ico_diag_set_movie(int playing)
+{
+    movie_playing = playing;
+}
+
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
 {
     exit_hook = fn;
@@ -576,6 +596,13 @@ static void heartbeat_body(char *out, size_t size)
     if (kanban_seen) {
         size_t n = strlen(out);
         snprintf(out + n, size - n, " | kanbanBoot step %d, card step %d", kanban_boot, kanban_mc);
+    }
+    {
+        /* the second sign of life (ico_diag_note_progress): a movie's
+           pictures move it while the tick stands still */
+        size_t n = strlen(out);
+        snprintf(out + n, size - n, " | progress %u%s", progress,
+                 movie_playing ? " (a movie is playing)" : "");
     }
 }
 
@@ -945,13 +972,15 @@ static void watchdog_loop(void)
 {
     double start = ico_diag_uptime();
     double last_beat = start;
-    double last_tick_time = start;
+    double last_alive = start;
     double last_poll = start;
     unsigned int last_ticks = 0;
+    unsigned int last_progress = progress;
     char reason[160];
     for (;;) {
         double now;
         unsigned int ticks;
+        unsigned int prog;
 #ifdef _WIN32
         if (WaitForSingleObject(crash_event, 250) == WAIT_OBJECT_0) {
             report_crash();
@@ -972,25 +1001,38 @@ static void watchdog_loop(void)
                stopped (a debugger, SIGSTOP). That time is not the game's, so
                neither limit counts it. */
             start += now - last_poll;
-            last_tick_time += now - last_poll;
+            last_alive += now - last_poll;
         }
         last_poll = now;
         if (now - last_beat >= HEARTBEAT_S) {
             last_beat = now;
             heartbeat(0);
         }
+        /* alive while either moves: a Main tick, or the progress a long
+           stretch inside one Main tick reports (a movie plays whole inside
+           one: the 137 s attract outlasted the later limit) */
         ticks = ticks_fn != NULL ? ticks_fn() : 0;
-        if (ticks != last_ticks) {
+        prog = progress;
+        if (ticks != last_ticks || prog != last_progress) {
             last_ticks = ticks;
-            last_tick_time = now;
+            last_progress = prog;
+            last_alive = now;
         }
         if (wd_first_s != 0 && ticks == 0 && now - start >= wd_first_s) {
             snprintf(reason, sizeof reason, "no Main tick %u s after boot started (watchdog=%u)",
                      wd_first_s, wd_first_s);
             watchdog_fire(reason);
-        } else if (wd_later_s != 0 && ticks > 0 && now - last_tick_time >= wd_later_s) {
-            snprintf(reason, sizeof reason, "no new Main tick for %u s (the last was tick %u)",
-                     wd_later_s, ticks);
+        } else if (wd_later_s != 0 && ticks > 0 && now - last_alive >= wd_later_s) {
+            if (movie_playing) {
+                snprintf(reason, sizeof reason,
+                         "a movie was playing and showed no new picture for %u s (the last "
+                         "was tick %u, progress %u)",
+                         wd_later_s, ticks, prog);
+            } else {
+                snprintf(reason, sizeof reason,
+                         "no new Main tick for %u s (the last was tick %u, progress %u)",
+                         wd_later_s, ticks, prog);
+            }
             watchdog_fire(reason);
         }
     }
@@ -1046,7 +1088,7 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
 #endif
     reporter_running = 1;
     ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; watchdog: first Main tick within "
-                 "%u s, then a new one within %u s (0 = off)",
+                 "%u s, then a new one or a movie picture within %u s (0 = off)",
                  HEARTBEAT_S, first_s, later_s);
 }
 

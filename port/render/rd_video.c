@@ -453,13 +453,34 @@ static int presentVideoOnHost(const uint8_t *y, const uint8_t *u, const uint8_t 
     return c.ret;
 }
 
+/* rd_VideoPresents: counted on the thread that calls rd_VideoFrame (the
+   game's), read by the window's statistics between vsyncs on the same one */
+static uint32_t s_presents;
+
+static uint32_t s_presentFails;
+
 int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
                   uint32_t w, uint32_t h)
 {
     if (!y || !u || !v || !pitch || w == 0 || h == 0) {
+        s_presentFails++;
         return -1;
     }
-    return presentVideoOnHost(y, u, v, pitch, w, h, NULL);
+    const int r = presentVideoOnHost(y, u, v, pitch, w, h, NULL);
+    if (r == 0) {
+        s_presents++;
+    } else {
+        s_presentFails++;
+    }
+    return r;
+}
+
+uint32_t rd_VideoPresents(uint32_t *failed)
+{
+    if (failed != NULL) {
+        *failed = s_presentFails;
+    }
+    return s_presents;
 }
 
 int rd_VideoClear(const uint8_t rgba[4])

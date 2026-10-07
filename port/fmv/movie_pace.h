@@ -40,6 +40,11 @@ typedef struct IcoMoviePace {
     uint32_t freed;    /* pictures shown whole and released */
     int abort_pending; /* poll() returned 1 */
     int ended;         /* 1 played out, 2 aborted */
+    /* called once per picture shown (ICO_PACE_SHOW), or NULL: movie.c
+       gives the watchdog its sign of life here (diag_host.h
+       ico_diag_note_progress), since the whole movie runs inside one Main
+       tick */
+    void (*on_show)(void);
 } IcoMoviePace;
 
 enum {
@@ -48,6 +53,7 @@ enum {
     ICO_PACE_FREE = 2  /* the shown picture's odd field went out; its slot is free */
 };
 
+/* Clears the state, on_show included. */
 void ico_movie_pace_init(IcoMoviePace *p);
 /* startDisplay: the display runs from the next vblank. */
 void ico_movie_pace_start(IcoMoviePace *p);

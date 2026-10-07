@@ -19,7 +19,8 @@
  *     game thread that spins without a kernel call cannot stop it), one
  *     line of progress, with "no progress" once it repeats unchanged;
  *   - a watchdog on the same thread: no Main tick `first` seconds after
- *     boot started, or no new one for `later` seconds, samples where the
+ *     boot started, or neither a new one nor other progress (a movie's
+ *     pictures, ico_diag_note_progress) for `later` seconds, samples where the
  *     main thread is (program counter and stack), dumps every thread and
  *     exits with code 4 (Windows: a message box first);
  *   - milestones and thread creation lines, timestamped with wall time,
@@ -60,13 +61,23 @@ const char *ico_diag_log_path(void);
 typedef void (*IcoDiagStatusFn)(char *out, size_t size);
 void ico_diag_set_sources(IcoDiagStatusFn status, unsigned int (*main_ticks)(void),
                           unsigned int (*vsyncs)(void));
+/* A second sign of life besides the Main ticks, for work that runs a long
+   time inside one Main tick: a movie plays whole inside one pass of Main's
+   loop (common/src/main.c), so port/fmv/movie.c notes each picture it shows
+   and each vsync of its preroll. The watchdog's later limit counts from
+   whichever moved last; the Main ticks themselves are untouched. */
+void ico_diag_note_progress(void);
+unsigned int ico_diag_progress(void);
+/* 1 while a movie plays, 0 after: the heartbeat and the watchdog's reason
+   say so. */
+void ico_diag_set_movie(int playing);
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
 
 /* Starts the heartbeat and watchdog thread. first_s: seconds from now
-   without any Main tick; later_s: seconds without a new Main tick after
-   the first. 0 turns a limit off. */
+   without any Main tick; later_s: seconds without a new Main tick or new
+   progress after the first tick. 0 turns a limit off. */
 void ico_diag_start(unsigned int first_s, unsigned int later_s);
 
 /* One line to the log, written at once (a newline is added). */

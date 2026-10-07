@@ -556,6 +556,15 @@ static void test_decode(void)
 
 /* --- pacing ---------------------------------------------------------------- */
 
+/* the progress hook's stub (movie.c gives the watchdog's
+   ico_diag_note_progress) */
+static uint32_t s_onShow;
+
+static void count_show(void)
+{
+    s_onShow++;
+}
+
 /* Runs the state machine like movie.c: returns the vsyncs from the display
    start to the end; *shown the pictures shown. abortAt: the vsync the poll
    returns 1 (0 = never). */
@@ -567,6 +576,8 @@ static uint32_t run_pace(int total, uint32_t abortAt, uint32_t *shown, uint32_t 
     int field = 0;
 
     ico_movie_pace_init(&p);
+    p.on_show = count_show;
+    s_onShow = 0;
     while (ico_movie_pace_room(&p) && (int)p.decoded < total) {
         ico_movie_pace_put(&p);
     }
@@ -577,7 +588,17 @@ static uint32_t run_pace(int total, uint32_t abortAt, uint32_t *shown, uint32_t 
         int ev;
         v++;
         field ^= 1; /* the display starts after an even field: the next is odd */
-        ev = ico_movie_pace_vblank(&p, field);
+        {
+            const uint32_t before = s_onShow;
+            ev = ico_movie_pace_vblank(&p, field);
+            /* the watchdog's sign of life: once per shown picture, never
+               on the vblanks that only free a slot or do nothing */
+            if (s_onShow - before != (ev == ICO_PACE_SHOW ? 1u : 0u)) {
+                printf("FAIL: vsync %u: progress hook called %u times for event %d\n", v,
+                       s_onShow - before, ev);
+                failures++;
+            }
+        }
         if (ev == ICO_PACE_SHOW) {
             if (*firstShow == 0) {
                 *firstShow = v;
@@ -609,6 +630,10 @@ static uint32_t run_pace(int total, uint32_t abortAt, uint32_t *shown, uint32_t 
         if (v > 100000) {
             break;
         }
+    }
+    if (s_onShow != p.shown) {
+        printf("FAIL: progress hook called %u times for %u shown pictures\n", s_onShow, p.shown);
+        failures++;
     }
     *shown = p.shown;
     *ended = p.ended;

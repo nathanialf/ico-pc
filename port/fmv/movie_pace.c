@@ -26,6 +26,9 @@ int ico_movie_pace_vblank(IcoMoviePace *p, int field)
     if (field == 0 && !p->head_shown) {
         p->head_shown = 1;
         p->shown++;
+        if (p->on_show != NULL) {
+            p->on_show();
+        }
         return ICO_PACE_SHOW;
     }
     if (field != 0 && p->head_shown) {

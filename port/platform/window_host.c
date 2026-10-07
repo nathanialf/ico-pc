@@ -21,6 +21,7 @@
 #include "photo_ui.h"
 #include "rd.h"
 #include "rd_tex.h"
+#include "../fmv/rd_video.h"
 #include "rhi.h"
 #include "sched.h"
 #include "settings.h"
@@ -91,6 +92,9 @@ static struct {
     unsigned statVsyncs, statResyncs;
     Uint64 statDropped;
     uint32_t statFrameNo; /* rd_FrameNumber() at the block's start */
+    /* v0.4.0: rd_VideoPresents at the block's start; a movie presents on
+       its own, outside the replays the line counts */
+    uint32_t statMovie, statMovieFail;
     /* P1: the simulation step's real time (from the end of one pace to the
        start of the next), for the 10 s line */
     Uint64 paceEnd;
@@ -856,6 +860,7 @@ static void pace_log(Uint64 now)
         s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
         s_pres.statDropped = 0;
         s_pres.statFrameNo = rd_FrameNumber();
+        s_pres.statMovie = rd_VideoPresents(&s_pres.statMovieFail);
         rd_ReplayTimeMax(1, &n);
         perf_drain();
         perf_reset();
@@ -868,6 +873,9 @@ static void pace_log(Uint64 now)
     uint32_t replays = 0;
     const double maxMs = rd_ReplayTimeMax(1, &replays);
     const uint32_t fn = rd_FrameNumber();
+    uint32_t movieFail;
+    const uint32_t movie = rd_VideoPresents(&movieFail);
+    char movieFailed[32] = "";
 
     if (!rd_InterpolationActive()) {
         s_pres.statPresents = replays; /* one present per replay */
@@ -880,15 +888,20 @@ static void pace_log(Uint64 now)
     int pw = 0, ph = 0;
 
     SDL_GetWindowSizeInPixels(s_window, &pw, &ph);
+    if (movieFail != s_pres.statMovieFail) {
+        snprintf(movieFailed, sizeof(movieFailed), " (%u failed)",
+                 movieFail - s_pres.statMovieFail);
+    }
     fprintf(stderr,
-            "window: %u presents and %u game frames (%u frame numbers) in %.1f s: %.1f "
+            "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
+            "%.1f s: %.1f "
             "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
             "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms; framerate %s, present "
             "%s, display %.1f Hz, window %dx%d%s\n",
-            s_pres.statPresents, s_pres.statFrames, fn - s_pres.statFrameNo, sec,
-            s_pres.statPresents / sec, s_pres.statFrames / sec, s_pres.statVsyncs,
-            s_pres.statVsyncs / sec, s_pres.statResyncs, (double)s_pres.statDropped / 1e6, maxMs,
-            replays, s_pres.slowSteps, s_pres.slowMs,
+            s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
+            fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
+            s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
+            (double)s_pres.statDropped / 1e6, maxMs, replays, s_pres.slowSteps, s_pres.slowMs,
             ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_PresentModeName(),
             dm != NULL ? (double)dm->refresh_rate : 0.0, pw, ph,
             window_fullscreen() ? " fullscreen" : "");
@@ -898,6 +911,8 @@ static void pace_log(Uint64 now)
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
     s_pres.statDropped = 0;
     s_pres.statFrameNo = fn;
+    s_pres.statMovie = movie;
+    s_pres.statMovieFail = movieFail;
     s_pres.slowSteps = s_pres.slowLogged = 0;
 }
 

@@ -37,6 +37,12 @@ void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH);
    Returns 0, or -1 without a device. */
 int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
                   uint32_t w, uint32_t h);
+/* The pictures rd_VideoFrame put on screen since the program started, and
+   in *failed (may be NULL) the ones it could not (no device, no swapchain
+   image).  The window's 10 s statistics line and movie_proc's summary take
+   differences: the only record in a player's log that a movie reached the
+   screen, since its presents are not the game's frames. */
+uint32_t rd_VideoPresents(uint32_t *failed);
 /* Shows the display area filled with one colour (mv_disp.c's dispClear;
    GS RGBA, alpha ignored). */
 int rd_VideoClear(const uint8_t rgba[4]);
