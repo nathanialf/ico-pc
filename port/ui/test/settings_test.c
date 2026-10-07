@@ -4377,6 +4377,31 @@ static int fakePackCount(void)
     return s_packCount;
 }
 
+/* the texture pack note sits on the Display page, whose notes must stay one
+   line to keep clear of Back: checked in all five languages */
+static void testTexturePackNoteLines(void)
+{
+    int mainL = enterMain(1);
+    int tn;
+    s_packCount = 883;
+    ui_SettingsSetTexturePackCount(fakePackCount);
+    openPage(mainL, 0, UI_PAGE_DISPLAY);
+    tn = rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:");
+    CHECK(tn >= 0, "the texture pack note on the Display page");
+    for (int lang = 0; lang < UI_LANG_COUNT && tn >= 0; lang++) {
+        const char *want = ui_StrIn((UiLang)lang, UI_STR_TEXTURE_PACK_NOTE);
+        NonLinearCameraMove = 2 + lang; /* the game's language: 2 EN .. 6 ES */
+        frame(0);
+        CHECK(strncmp(lt_ext_RowText(tn), want, 8) == 0, "lang %d: the note is %s (%s)", lang, want,
+              lt_ext_RowText(tn));
+        CHECK(strchr(lt_ext_RowText(tn), '\n') == NULL, "lang %d: the note is one line: %s", lang,
+              lt_ext_RowText(tn));
+    }
+    NonLinearCameraMove = 2;
+    ui_SetLanguage(UI_LANG_EN);
+    ui_SettingsSetTexturePackCount(NULL);
+}
+
 static void testTexturePack(void)
 {
     IcoVideoOptions o;
@@ -4408,9 +4433,19 @@ static void testTexturePack(void)
     ico_video_get(&o);
     CHECK(o.texturePack == 1 && strcmp(ui_SettingsValueText(UI_OPT_TEXTURE_PACK), "On") == 0,
           "Left: On");
-    CHECK(rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:") >= 0, "the Display note");
-    CHECK(rowWithPrefix(UI_PAGE_MAIN, "Saves each texture under its PCSX2 name") >= 0,
-          "the dump row's note");
+    {
+        /* the Display page's notes are one line, clear of Back (as the CRT
+           note); the main page's dump note at most two */
+        int tn = rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:");
+        int dn = rowWithPrefix(UI_PAGE_MAIN, "For pack makers:");
+        const char *nl;
+        CHECK(tn >= 0, "the Display note");
+        CHECK(tn >= 0 && strchr(lt_ext_RowText(tn), '\n') == NULL,
+              "the Display note is one line: %s", tn >= 0 ? lt_ext_RowText(tn) : "");
+        CHECK(dn >= 0, "the dump row's note");
+        nl = dn >= 0 ? strchr(lt_ext_RowText(dn), '\n') : NULL;
+        CHECK(nl == NULL || strchr(nl + 1, '\n') == NULL, "the dump note is at most two lines");
+    }
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_DUMP_TEXTURES), "Off") == 0, "dump: Off");
     ui_SettingsStep(UI_OPT_DUMP_TEXTURES, 1);
     ico_video_get(&o);
@@ -4508,6 +4543,7 @@ int main(int argc, char **argv)
     testGameOptions();
     testCoversTitle();
     testTexturePack();
+    testTexturePackNoteLines();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

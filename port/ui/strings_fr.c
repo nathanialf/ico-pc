@@ -370,11 +370,10 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "La disposition des touches du jeu, gardée dans la sauvegarde. Configurer les touches règle clavier et manette.",
     [UI_STR_OPT_TEXTURE_PACK] = "Pack de textures",
     [UI_STR_VAL_NONE_INSTALLED] = "Aucun installé",
-    [UI_STR_TEXTURE_PACK_NOTE] =
-        "Pour un pack de textures PCSX2, copiez son dossier SCES-50760 dans un dossier nommé textures, à côté du programme ou dans votre dossier utilisateur.",
+    [UI_STR_TEXTURE_PACK_NOTE] = "Packs PCSX2 : copiez SCES-50760 dans textures.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Extraire les textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Pour les créateurs de packs : enregistre chaque texture chargée, sous le nom que lui donne PCSX2, dans textures/SCES-50760/dumps du dossier utilisateur.",
+        "Pour les créateurs de packs : chaque texture sous son nom PCSX2, dans textures/SCES-50760/dumps du dossier utilisateur.",
     [UI_STR_STATS_PLAY_TIME] = "Temps de jeu",
     [UI_STR_STATS_DEATHS] = "Morts",
     [UI_STR_STATS_CAPTURES] = "Yorda enlevée",

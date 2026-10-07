@@ -364,11 +364,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "The game’s button layout, kept in your save. Remap controls sets the keys and pad buttons.",
     [UI_STR_OPT_TEXTURE_PACK] = "Texture pack",
     [UI_STR_VAL_NONE_INSTALLED] = "None installed",
-    [UI_STR_TEXTURE_PACK_NOTE] =
-        "For a PCSX2 texture pack, copy its SCES-50760 folder into a folder named textures beside the program or in your user folder.",
+    [UI_STR_TEXTURE_PACK_NOTE] = "PCSX2 packs: copy SCES-50760 into textures.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Dump textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "For texture pack makers: saves each texture the game loads, under the name PCSX2 gives it, to textures/SCES-50760/dumps in the user folder.",
+        "For pack makers: saves each texture under its PCSX2 name in textures/SCES-50760/dumps in the user folder.",
     [UI_STR_STATS_PLAY_TIME] = "Play time",
     [UI_STR_STATS_DEATHS] = "Deaths",
     [UI_STR_STATS_CAPTURES] = "Yorda captured",

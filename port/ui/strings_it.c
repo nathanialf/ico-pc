@@ -368,11 +368,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "La disposizione dei tasti del gioco, nel salvataggio. Configura i comandi regola tastiera e gamepad.",
     [UI_STR_OPT_TEXTURE_PACK] = "Pacchetto texture",
     [UI_STR_VAL_NONE_INSTALLED] = "Nessuno installato",
-    [UI_STR_TEXTURE_PACK_NOTE] =
-        "Per un pacchetto di texture PCSX2, copia la sua cartella SCES-50760 in una cartella chiamata textures, accanto al programma o nella tua cartella utente.",
+    [UI_STR_TEXTURE_PACK_NOTE] = "Pacchetti PCSX2: copia SCES-50760 in textures.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Esporta texture",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Per chi crea pacchetti: salva ogni texture caricata, con il nome che le dà PCSX2, in textures/SCES-50760/dumps nella cartella utente.",
+        "Per chi crea pacchetti: ogni texture col suo nome PCSX2 in textures/SCES-50760/dumps nella cartella utente.",
     [UI_STR_STATS_PLAY_TIME] = "Tempo di gioco",
     [UI_STR_STATS_DEATHS] = "Morti",
     [UI_STR_STATS_CAPTURES] = "Yorda rapita",

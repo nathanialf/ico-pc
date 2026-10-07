@@ -370,11 +370,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Die Tastenbelegung des Spiels, im Spielstand gespeichert. Tastatur und Gamepad: unter Tastenbelegung.",
     [UI_STR_OPT_TEXTURE_PACK] = "Texturpaket",
     [UI_STR_VAL_NONE_INSTALLED] = "Keines installiert",
-    [UI_STR_TEXTURE_PACK_NOTE] =
-        "Für ein PCSX2-Texturpaket den Ordner SCES-50760 des Pakets in einen Ordner namens textures kopieren, neben dem Programm oder im Benutzerordner.",
+    [UI_STR_TEXTURE_PACK_NOTE] = "PCSX2-Pakete: SCES-50760 nach textures kopieren.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Für Ersteller von Texturpaketen: speichert jede geladene Textur unter dem Namen, den PCSX2 ihr gibt, in textures/SCES-50760/dumps im Benutzerordner.",
+        "Für Paketersteller: jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
     [UI_STR_STATS_PLAY_TIME] = "Spielzeit",
     [UI_STR_STATS_DEATHS] = "Tode",
     [UI_STR_STATS_CAPTURES] = "Yorda entführt",
