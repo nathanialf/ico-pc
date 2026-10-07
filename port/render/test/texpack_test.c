@@ -683,7 +683,10 @@ static void testLinks(const char *dir)
     }
     snprintf(link, sizeof(link), "%s/textures/SCES-50760/replacements/a/up2", root);
     (void)remove(link);
-    (void)symlink("..", link);
+    if (symlink("..", link) != 0) {
+        printf("texpack_test: cannot make the second folder link; links not tested\n");
+        return;
+    }
     initPack(root, NULL, 0, 0);
     TexpackStats s = stats();
     CHECK(texpack_Count() == 1 && s.files == 1 && s.duplicates == 0,
