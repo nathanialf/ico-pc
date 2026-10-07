@@ -11,7 +11,13 @@
  *   stubs      later-wave draws and post kinds are recorded with payload
  *   scissor    (package RSMALL) rd__WideScissor: a UI scissor narrower than the
  *              target follows the wide x scale, outwards, edges stay
- *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw)
+ *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw);
+ *              package P8: the stair railings' state (TEST 0x5160D, ALPHA
+ *              0x44 with ABE, Z write) splits into two passes that differ
+ *              in Z write only (depth test GEQUAL in both, no stencil, no
+ *              DATE), as the VU path and its edge-clipped fans (ABE forced
+ *              on) draw them; the DATE snapshot and the shadow count write
+ *              no Z; PABE flags (DF_C1_DST for Cd*FIX + Cs only)
  *   dump       a frame with textures and a temp target survives dump/load;
  *              package AA1: RDC_AA1 and RdStateBlock.aa1 round-trip, and a
  *              version 3 dump (no aa1) still loads, with AA1 off
@@ -286,6 +292,64 @@ static void testPlans(void)
               dp[0].key.gs.ztst == RD_ZTST_GEQUAL,
           "AFAIL FB_ONLY: two passes, Z written by the passing one only");
 
+    /* package P8: the railing (tesri.tm2's TEST 0x5160D: ATE GREATER 0x60,
+     * AFAIL FB_ONLY, Z GEQUAL; ALPHA 0x44 with ABE; Z write on), with ABE
+     * as the material packet sets it and as doVu's scissor fans force it:
+     * the failing pass is the passing one's pipeline with Z write off, so
+     * a hole keeps the depth test and leaves the Z buffer to what is drawn
+     * behind it later */
+    for (int abe = 0; abe < 2; abe++) {
+        rd__ResetStateBlock(&s);
+        s.ds.test = rd_TestFromGs(0x5160D);
+        s.ds.zwrite = RD_ZWRITE_ON;
+        s.ds.abe = (uint8_t)abe;
+        s.ds.blend = RD_BLEND_LERP_AS;
+        n = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                               RHI_FMT_D32F_S8, dp);
+        RdPipeKeyInt k1 = dp[1].key;
+        k1.gs.zwrite = RD_ZWRITE_ON;
+        CHECK(n == 2 && s.ds.test.aref == 0x60 && s.ds.test.afail == RD_AFAIL_FB_ONLY &&
+                  dp[0].key.gs.zwrite == RD_ZWRITE_ON && dp[1].key.gs.zwrite == RD_ZWRITE_OFF &&
+                  rd__PipeKeyEqual(&k1, &dp[0].key) && dp[1].key.gs.ztst == RD_ZTST_GEQUAL &&
+                  dp[1].key.gs.stencil == RD_STENCIL_OFF && dp[1].key.gs.date == RD_DATE_OFF &&
+                  dp[1].key.gs.colorMask == 0xF && dp[0].flags == dp[1].flags &&
+                  !(dp[1].flags & ICO_DF_DATE) && dp[1].aref == 0x60 &&
+                  dp[1].modeZ == (RD_ATST_GREATER | 1u << 8 | 2u << 16) &&
+                  dp[1].key.gs.blend == (abe ? RD_BLEND_LERP_AS : RD_BLEND_COUNT),
+              "railing TEST 0x5160D ABE %d: the failing pass differs in Z write only", abe);
+    }
+    {
+        /* the passes that are not draws: no Z written, no split */
+        const RdPipeKeyInt snap = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
+        CHECK(snap.gs.zwrite == RD_ZWRITE_OFF && snap.depthFmt == RHI_FMT_UNKNOWN,
+              "the DATE snapshot writes no Z and binds no depth");
+        rd__ResetStateBlock(&s);
+        s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
+        s.ds.zwrite = RD_ZWRITE_ON;
+        for (int decr = 0; decr < 2; decr++) {
+            const RdPipeKeyInt v = rd__ShadowVolumeKey(&s, RHI_FMT_RGBA8_UNORM, decr);
+            CHECK(v.gs.zwrite == RD_ZWRITE_OFF && v.gs.colorMask == 0,
+                  "the shadow count writes no Z (decr %d)", decr);
+        }
+    }
+    /* PABE (package P8): a uniform; DF_C1_DST tells the shader the
+     * unblended c1 is 0 for Cd*FIX + Cs only */
+    rd__ResetStateBlock(&s);
+    s.ds.abe = 1;
+    s.ds.pabe = 1;
+    s.ds.blend = RD_BLEND_LERP_AS;
+    rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, RHI_FMT_UNKNOWN,
+                       dp);
+    CHECK((dp[0].flags & ICO_DF_PABE) && !(dp[0].flags & ICO_DF_C1_DST) && dp[0].key.gs.pabe == 0,
+          "PABE on a lerp: DF_PABE, no DF_C1_DST, normalised out of the key");
+    s.ds.blend = RD_BLEND_CD_FIX_ADD_CS;
+    rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, RHI_FMT_UNKNOWN,
+                       dp);
+    CHECK((dp[0].flags & (ICO_DF_PABE | ICO_DF_C1_DST)) == (ICO_DF_PABE | ICO_DF_C1_DST),
+          "PABE on Cd*FIX + Cs: DF_C1_DST");
+
+    rd__ResetStateBlock(&s);
+    s.ds.zwrite = RD_ZWRITE_ON;
     s.ds.test = rd_TestFromGs(RD_TEST_NEVER_RGBONLY);
     n = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8,
                            dp);

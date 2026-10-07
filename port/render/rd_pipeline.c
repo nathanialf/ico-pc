@@ -26,6 +26,12 @@
  *     not Ad/128: half strength, untested;
  *   Cd*As + Cd (mode 11, disc data only) needs a factor above 1.0 on Cd and
  *     is not representable: the draw leaves Cd unchanged (reported once).
+ * PABE: a pixel whose As has its MSB clear is written Cs, unblended
+ *   (gs_dual_out): c1 = 1.0 makes a lerp give Cs, c1 = 0 makes Cd*FIX + Cs
+ *   give Cs (DF_C1_DST, mode 3).  The premultiplied forms (ONE, ONE) and the
+ *   Ad modes cannot give Cs: those pixels blend (reported once; the game's
+ *   PABE draws are all lerps, gif_SetAlpha(0, 2 or 4, ...) and
+ *   queen_barrier_disp.c's ALPHA 0x44).
  * The feedback passes do not use the hardware blender at all: RDC_EXACT_BLEND
  * runs blend_int on RGBA8_UINT copies (rd_replay.c).
  *
@@ -218,6 +224,14 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     }
     if (d->pabe) {
         base.flags |= ICO_DF_PABE;
+        if (bp == RD_BP_PREMUL_ADD || bp == RD_BP_PREMUL_REVSUB || bp >= RD_BP_AD_ADD) {
+            rd__LogOnce(RD_ONCE_PABE, "PABE on an additive, subtractive or destination-alpha "
+                                      "blend: pixels with As below 0x80 blend instead of "
+                                      "writing Cs");
+        }
+    }
+    if (bp == RD_BP_DST_FIX) {
+        base.flags |= ICO_DF_C1_DST;
     }
     /* DATE (wave 2): a shader test against the R8 snapshot rd_replay.c binds
      * at t2; a uniform, so the key keeps date normalised to off */

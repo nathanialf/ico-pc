@@ -143,8 +143,13 @@ void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
 /* The Enhanced mip chain: successive 2x2 box levels of a w x h RGBA8 image
  * (both powers of two) written one after the other to out, which holds
  * rdtex_MipChainBytes(w, h) bytes.  Returns the number of levels written
- * after the base. */
-uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out);
+ * after the base.  alphaWeighted (package P8; for textures whose alpha
+ * byte is the alpha the draws see, RD_TEXSRC_RGBA32): RGB is the
+ * alpha-weighted average (premultiplied, divided back by the summed
+ * alpha; the plain average where all four alphas are 0), so transparent
+ * texels do not darken their neighbours; alpha is the plain average. */
+uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
+                             int alphaWeighted);
 /* The bytes rdtex_BuildMipChain writes for a w x h base: the sum of
  * max(w>>k,1) * max(h>>k,1) * 4 over the levels k >= 1.  w*h*4/3 is only
  * right for square images: a 128x4 chain is 764 bytes (its 1-high levels

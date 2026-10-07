@@ -449,7 +449,20 @@ typedef struct RdTexRec {
     uint8_t replacement;
     uint32_t uvW, uvH;
     struct TexpackImage *pending;
+    /* Package P8: what the draws of a game texture with Enhanced mips do
+     * with its alpha (RD_MIPUSE_*, seen at replay, sticky) and the highest
+     * alpha-test reference of its unblended alpha-tested draws (as "a >
+     * ref"); mipBuiltBoost and mipBuiltRef: the coverage the uploaded mips
+     * keep (uploadMips), a draw that changes it re-uploads the texture. */
+    uint8_t mipUse, mipRef;
+    uint8_t mipBuiltBoost, mipBuiltRef;
 } RdTexRec;
+
+/* Package P8: RdTexRec.mipUse bits */
+enum {
+    RD_MIPUSE_BLEND_AS = 1, /* a draw blends by As (PRIM.ABE, C = As): alpha is opacity */
+    RD_MIPUSE_TESTED = 2    /* an unblended draw alpha-tests it (AFAIL KEEP or ZB_ONLY) */
+};
 
 RdTexRec *rd__TexRec(uint32_t id);
 /* R8: an image texture of format (RD_TEXEL_*), texels copied from px
@@ -1120,7 +1133,9 @@ enum {
     /* package P1 */
     RD_ONCE_MESH_ARENA, /* the mesh arena is full: meshes past it drawn from the ring */
     /* package AA1 */
-    RD_ONCE_AA1_WRAP /* PRIM.AA1 under COLCLAMP 0: the wrap path draws without coverage */
+    RD_ONCE_AA1_WRAP, /* PRIM.AA1 under COLCLAMP 0: the wrap path draws without coverage */
+    /* package P8 */
+    RD_ONCE_PABE /* PABE on a premultiplied or Ad blend: As < 0x80 pixels blend anyway */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -1306,6 +1321,9 @@ const RdFrame *rd__LastFrame(void);
 const RdFrame *rd__PrevFrame(void);
 /* Reads a target's colour (RGBA8, tightly packed, w * h * 4 bytes). */
 bool rd__ReadTarget(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* Package P8: the depth buffer of a target with one, as floats (w * h,
+ * tests only). */
+bool rd__ReadTargetDepth(RdTarget t, float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* package PHOTO: a synchronous readback of an RHI texture (RGBA8 or BGRA8,

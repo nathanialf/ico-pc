@@ -75,7 +75,10 @@ enum {
     ICO_DF_TEXA_MIN_LINEAR = 2048,
     ICO_DF_TEXA_CLAMP_S = 4096,
     ICO_DF_TEXA_CLAMP_T = 8192,
-    ICO_DF_TEXA_MIN_SAMPLED = 16384 /* minified pixels: the bound (Enhanced, mipmapped) sampler */
+    ICO_DF_TEXA_MIN_SAMPLED = 16384, /* minified pixels: the bound (Enhanced, mipmapped) sampler */
+    /* the pipeline blends Cs + Cd * c1 (src ONE, dst SRC1: Cd*FIX + Cs): a
+     * PABE pixel left unblended outputs c1 = 0 */
+    ICO_DF_C1_DST = 32768
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */

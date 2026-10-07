@@ -4,11 +4,14 @@
  * same arithmetic the shaders use, so a shader that disagrees with the GS
  * formulas fails here.
  *
- *   pass 1  72x8 RGBA8 target, nine 8x8 cells drawn with sprite_*_vs and
+ *   pass 1  96x8 RGBA8 target, twelve 8x8 cells drawn with sprite_*_vs and
  *           sprite_ps: untextured, textured modulate, alpha test discard
  *           and pass, dual-source LERP_AS at As 0x80 / 0x40, additive with
  *           As 0xFF through DF_PREMUL (exact) and through the plain
- *           dual-source factor (measured, reported), additive with PABE
+ *           dual-source factor (measured, reported); PABE (package P8):
+ *           a lerp with As 0x7F writes Cs unblended, a LERP_FIX with As
+ *           0x90 blends by FIX, Cd*FIX + Cs with As 0x10 writes Cs; FBA: a
+ *           lerp with As 0x40 blends by 0x40 and stores alpha 0xC0
  *   pass 2  blit_ps: identity tint copy of pass 1 (exact), then tinted
  *   pass 3  blend_int_ps: three GS blends on RGBA8_UINT textures (exact)
  *
@@ -23,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define W 72
+#define W 96
 #define H 8
 #define CELL 8
 
@@ -144,6 +147,9 @@ enum {
     Q_ADD_FF,
     Q_PABE,
     Q_ADD_PLAIN,
+    Q_PABE_ON,
+    Q_FBA,
+    Q_PABE_DSTFIX,
     Q_COUNT
 };
 
@@ -206,8 +212,12 @@ int main(void)
                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD, 0xF};
     RhiPipeline pAddPremul =
         makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &addOne, "addPremul");
-    RhiPipeline pAddWorld =
-        makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &add, "addWorld");
+    RhiPipeline pLerpWorld =
+        makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerpWorld");
+    /* Cd*FIX + Cs (rd_pipeline.c RD_BP_DST_FIX) */
+    const RhiBlendState dstFix = {true,       RHI_BF_ONE,  RHI_BF_SRC1_COLOR, RHI_BO_ADD,
+                                  RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,        0xF};
+    RhiPipeline pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFix, "dstFix");
     RhiPipeline pBlit = makePipeline(bvs, bps, layA, 0, RHI_FMT_RGBA8_UNORM, &kOpaque, "blit");
     RhiPipeline pInt = makePipeline(nvs, nps, layB, 0, RHI_FMT_RGBA8_UINT, &kOpaque, "blendInt");
     if (failures) {
@@ -226,6 +236,9 @@ int main(void)
     cellQuad(&verts[Q_ADD_FF * 6], 6, 64, 64, 64, 0xFF, 0, 0);
     cellQuad(&verts[Q_PABE * 6], 7, 90, 90, 90, 0x7F, 0, 0);
     cellQuad(&verts[Q_ADD_PLAIN * 6], 8, 64, 64, 64, 0xFF, 0, 0);
+    cellQuad(&verts[Q_PABE_ON * 6], 9, 200, 100, 50, 0x90, 0, 0);
+    cellQuad(&verts[Q_FBA * 6], 10, 200, 100, 50, 0x40, 0, 0);
+    cellQuad(&verts[Q_PABE_DSTFIX * 6], 11, 90, 90, 90, 0x10, 0, 0);
 
     static const uint8_t texels[4][4] = {
         {200, 100, 50, 0xFF}, {10, 20, 30, 0x80}, {255, 255, 255, 0x40}, {0, 129, 127, 0}};
@@ -298,6 +311,9 @@ int main(void)
         D_ADD_FF,
         D_PABE,
         D_ADD_PLAIN,
+        D_PABE_ON,
+        D_FBA,
+        D_PABE_DSTFIX,
         D_BLIT_ID,
         D_BLIT_TINT,
         D_INT0,
@@ -318,6 +334,11 @@ int main(void)
     dcb[D_ATEST_PASS].mode[3] = 0x40;
     dcb[D_ADD_FF].mode[0] = ICO_DF_PREMUL;
     dcb[D_PABE].mode[0] = ICO_DF_PABE;
+    dcb[D_PABE_ON].mode[0] = ICO_DF_PABE | ICO_DF_FIX_FACTOR;
+    dcb[D_PABE_ON].blend[1] = 0x40;
+    dcb[D_FBA].mode[0] = ICO_DF_FBA;
+    dcb[D_PABE_DSTFIX].mode[0] = ICO_DF_PABE | ICO_DF_FIX_FACTOR | ICO_DF_C1_DST;
+    dcb[D_PABE_DSTFIX].blend[1] = 0x40;
     for (int i = D_BLIT_ID; i <= D_BLIT_TINT; i++) {
         setTex(&dcb[i], W, H);
         dcb[i].mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
@@ -432,11 +453,18 @@ int main(void)
             int q, d;
             RhiPipeline p;
         } draws[Q_COUNT] = {
-            {Q_UNTEX, D_UNTEX, pOpaque},           {Q_TEX, D_TEX, pOpaque},
-            {Q_ATEST_FAIL, D_ATEST_FAIL, pOpaque}, {Q_ATEST_PASS, D_ATEST_PASS, pOpaque},
-            {Q_LERP80, D_LERP80, pLerp},           {Q_LERP40, D_LERP40, pLerp},
-            {Q_ADD_FF, D_ADD_FF, pAddPremul},      {Q_PABE, D_PABE, pAddWorld},
+            {Q_UNTEX, D_UNTEX, pOpaque},
+            {Q_TEX, D_TEX, pOpaque},
+            {Q_ATEST_FAIL, D_ATEST_FAIL, pOpaque},
+            {Q_ATEST_PASS, D_ATEST_PASS, pOpaque},
+            {Q_LERP80, D_LERP80, pLerp},
+            {Q_LERP40, D_LERP40, pLerp},
+            {Q_ADD_FF, D_ADD_FF, pAddPremul},
+            {Q_PABE, D_PABE, pLerpWorld},
             {Q_ADD_PLAIN, D_ADD_PLAIN, pAdd},
+            {Q_PABE_ON, D_PABE_ON, pLerp},
+            {Q_FBA, D_FBA, pLerp},
+            {Q_PABE_DSTFIX, D_PABE_DSTFIX, pDstFix},
         };
 
         for (int i = 0; i < Q_COUNT; i++) {
@@ -530,7 +558,20 @@ int main(void)
                        want, p[0] == want ? "factor above 1.0 survives" : "factor clamped to 1.0");
             }
         }
-        expectCell("add with PABE, As MSB clear", imgA, pitch, 7, 64, 64, 64, 0x7F, 0);
+        /* PABE: the GS writes Cs where the MSB of As is clear (the blend
+         * is skipped, not made to give Cd), and blends where it is set */
+        expectCell("lerp with PABE, As MSB clear: Cs", imgA, pitch, 7, 90, 90, 90, 0x7F, 0);
+        expectCell("LERP_FIX 0x40 with PABE, As 0x90: blended", imgA, pitch, 9,
+                   gs_blend_reg_ch(0x64, 200, 64, 0x90, 0, 0x40, 1),
+                   gs_blend_reg_ch(0x64, 100, 64, 0x90, 0, 0x40, 1),
+                   gs_blend_reg_ch(0x64, 50, 64, 0x90, 0, 0x40, 1), 0x90, 1);
+        expectCell("Cd*FIX + Cs with PABE, As MSB clear: Cs", imgA, pitch, 11, 90, 90, 90, 0x10, 0);
+        /* FBA forces the stored alpha's MSB after the blend: the factor is
+         * still As 0x40 */
+        expectCell("lerp As=0x40 with FBA", imgA, pitch, 10,
+                   gs_blend_reg_ch(0x44, 200, 64, 0x40, 0, 0, 1),
+                   gs_blend_reg_ch(0x44, 100, 64, 0x40, 0, 0, 1),
+                   gs_blend_reg_ch(0x44, 50, 64, 0x40, 0, 0, 1), 0xC0, 1);
 
         /* blit identity: exact copy; tinted: the texture function */
         for (int y = 0; y < H; y++) {

@@ -233,7 +233,8 @@ size_t rdtex_MipChainBytes(uint32_t w, uint32_t h)
     return bytes;
 }
 
-uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out)
+uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
+                             int alphaWeighted)
 {
     const uint8_t *s = rgba;
     uint32_t levels = 0;
@@ -246,11 +247,29 @@ uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_
                 uint32_t x0 = x * 2, y0 = y * 2;
                 uint32_t x1 = w > 1 ? x0 + 1 : x0, y1 = h > 1 ? y0 + 1 : y0;
 
-                for (int c = 0; c < 4; c++) {
-                    uint32_t sum = s[(y0 * w + x0) * 4 + c] + s[(y0 * w + x1) * 4 + c] +
-                                   s[(y1 * w + x0) * 4 + c] + s[(y1 * w + x1) * 4 + c];
-                    out[(y * nw + x) * 4 + c] = (uint8_t)((sum + 2) / 4);
+                const uint8_t *q[4] = {s + (y0 * w + x0) * 4, s + (y0 * w + x1) * 4,
+                                       s + (y1 * w + x0) * 4, s + (y1 * w + x1) * 4};
+                const uint32_t asum = (uint32_t)q[0][3] + q[1][3] + q[2][3] + q[3][3];
+                uint8_t *o = out + (y * nw + x) * 4;
+
+                for (int c = 0; c < 3; c++) {
+                    if (alphaWeighted && asum > 0) {
+                        /* package P8: the premultiplied average, divided
+                           back by the alpha: a texel that is not there
+                           (alpha 0, often black) gives no colour, so a
+                           lattice's wires keep theirs in the distance */
+                        uint32_t sum = 0;
+                        for (int k = 0; k < 4; k++) {
+                            sum += (uint32_t)q[k][c] * q[k][3];
+                        }
+                        uint32_t v = (sum + asum / 2) / asum;
+                        o[c] = (uint8_t)(v > 255 ? 255 : v);
+                    } else {
+                        uint32_t sum = (uint32_t)q[0][c] + q[1][c] + q[2][c] + q[3][c];
+                        o[c] = (uint8_t)((sum + 2) / 4);
+                    }
                 }
+                o[3] = (uint8_t)((asum + 2) / 4);
             }
         }
         s = out;
@@ -489,7 +508,7 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
     if (s_tc.enhancedMips && (pw & (pw - 1)) == 0 && (ph & (ph - 1)) == 0) {
         e->mips = malloc(rdtex_MipChainBytes(pw, ph) + 4);
         if (e->mips) {
-            rdtex_BuildMipChain(px, pw, ph, e->mips);
+            rdtex_BuildMipChain(px, pw, ph, e->mips, src == RD_TEXSRC_RGBA32);
         }
     }
     free(px);
@@ -542,8 +561,12 @@ void rdtex_Reset(void)
 
 /* ------------------------------------------------------- texture packs */
 
-/* the alpha the coverage of the replacement's box chain keeps: as the
-   Enhanced mips (rd_replay.c RD_MIP_COVERAGE_REF, alpha > 64) */
+/* the alpha the coverage of the replacement's box chain keeps: alpha > 64,
+   the semi-transparent lists' default test (rd.h RdListDefault).  The
+   game's own Enhanced mips keep coverage only for textures their draws
+   alpha-test unblended, at the draws' reference (rd_replay.c mipBoost);
+   a replacement's chain is built on the loader thread before any draw, so
+   it keeps the list default */
 #define RDTEX_REPLACEMENT_COVERAGE_REF 64
 
 int rdtex_ReplacementMips(TexpackImage *img)
@@ -563,7 +586,9 @@ int rdtex_ReplacementMips(TexpackImage *img)
         return -1;
     }
     memcpy(blob, img->lv[0].data, base);
-    const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base);
+    /* the pack's alpha is raw GS alpha (RD_TEXSRC_RGBA32): colour weighted
+       by it, as the game's own Enhanced mips */
+    const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base, 1);
     rdtex_KeepAlphaCoverage(blob, w, h, blob + base, n, RDTEX_REPLACEMENT_COVERAGE_REF);
     free(img->blob);
     img->blob = blob;

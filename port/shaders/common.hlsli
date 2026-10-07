@@ -90,12 +90,13 @@ float2 gs_block_uv(float2 uv)
 #define DF_DECAL 2u      // TFX DECAL (else MODULATE)
 #define DF_TCC_RGBA 4u   // TCC: texture alpha used (else vertex alpha)
 #define DF_FBA 8u        // force the alpha MSB on write
-#define DF_PABE 16u      // blend only where As has its MSB set
+#define DF_PABE 16u      // blend only where As has its MSB set (else Cs unblended)
 #define DF_FIX_FACTOR 32u // dual-source factor is FIX / 128 instead of As / 128
 #define DF_PREMUL 64u    // colour output is (Cs * factor) >> 7, pipeline src factor ONE
 #define DF_DATE 128u     // TEST.DATE: destination alpha test against the snapshot in t2
 #define DF_DATM 256u     // TEST.DATM: with DF_DATE, pass where the MSB is 1 (else 0)
 #define DF_AA1_FULL 512u // sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha
+#define DF_C1_DST 32768u // the pipeline is Cs + Cd * c1 (dst factor SRC1): see gs_dual_out
 // sprite_texa_ps and vu_texa_ps only (gs_texa_texture): the sampler state
 // the four-tap filter reproduces. Other entries never read these bits.
 #define DF_TEXA_MAG_LINEAR 1024u  // TEX1.MMAG linear
@@ -249,6 +250,14 @@ bool gs_alpha_discard(uint flagsZ, uint aref, uint a)
 // inputs). DF_PREMUL moves the multiply into the shader for the additive and
 // subtractive forms (Cs*F + Cd, Cd - Cs*F): c0.rgb = min((Cs * f) >> 7, 255),
 // exactly the GS term, and the pipeline blends with src factor ONE.
+//
+// The factor is the fragment's own As: FBA only forces the MSB of the alpha
+// the GS stores, after the blend. PABE with the MSB of As clear writes Cs
+// unblended: c0 = Cs and the c1 that makes the pipeline's equation give Cs,
+// 1.0 for the lerp forms ((Cs - Cd) * 1 + Cd) and 0 where c1 scales Cd alone
+// (DF_C1_DST: Cd*FIX + Cs). The premultiplied forms (ONE, ONE) cannot drop
+// Cd: Cs + Cd or Cd - Cs there (rd_pipeline.c reports it; the game's PABE
+// draws are all lerps).
 struct DualOut
 {
     VK_DUAL(0, 0) float4 c0 : SV_Target0;
@@ -257,15 +266,19 @@ struct DualOut
 
 DualOut gs_dual_out(uint4 col, uint flags, uint fix)
 {
+    uint f = (flags & DF_FIX_FACTOR) != 0u ? fix : col.a;
+    const bool unblended = (flags & DF_PABE) != 0u && (col.a & 0x80u) == 0u;
     uint a = col.a;
     if ((flags & DF_FBA) != 0u) {
         a |= 0x80u;
     }
-    uint f = (flags & DF_FIX_FACTOR) != 0u ? fix : a;
-    if ((flags & DF_PABE) != 0u && (a & 0x80u) == 0u) {
-        f = 0u;
-    }
     DualOut o;
+    if (unblended) {
+        const float c1 = (flags & DF_C1_DST) != 0u ? 0.0 : 1.0;
+        o.c0 = float4(float3(col.rgb), float(a)) * (1.0 / 255.0);
+        o.c1 = float4(c1, c1, c1, c1);
+        return o;
+    }
     if ((flags & DF_PREMUL) != 0u) {
         uint3 p = min((col.rgb * f) >> 7, uint3(255, 255, 255));
         o.c0 = float4(float3(p), float(a)) * (1.0 / 255.0);

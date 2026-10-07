@@ -2,6 +2,12 @@
  *
  *   order    the same pixel drawn from list 5 (recorded first) and list 1:
  *            list 5 wins, it replays later
+ *   railing  (package P8) the stair railings' state, TEST 0x5160D (ATE
+ *            GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL) and ALPHA 0x44 with ABE
+ *            and Z write, on a lattice texture whose holes have alpha 0,
+ *            then an opaque sprite drawn later behind it (smaller GS Z):
+ *            the holes show the later sprite and hold its Z, the wires
+ *            keep their colour and their Z
  *   sprite   sprites in GS 12.4 window coordinates against the GS rule
  *            (pixel x covered when x0 <= x < x1, sampled at the integer):
  *            integer edges, half-pixel edges, the -4 corner nudge, a sprite
@@ -164,6 +170,112 @@ static void testOrder(void)
         CHECK(img[0] == 200 && img[2] == 0, "list 5 replays after list 1 (got %u,%u,%u)", img[0],
               img[1], img[2]);
     }
+}
+
+/* ---------------------------------------------------------------- railing */
+
+/* Package P8: issue 9's lattice.  On the GS a hole texel (alpha 0) fails
+ * the alpha test, FB_ONLY keeps its colour (blended to Cd by As = 0) and
+ * drops its Z, so geometry drawn later behind the railing passes the Z
+ * test there.  A Z write by the failing pass would leave the clear colour
+ * in every hole. */
+#define RAIL_Z 0x80000000u
+#define WALL_Z 0x40000000u
+
+static void testRailing(void)
+{
+    /* 16 x 16: wires (x % 4 == 0 or y % 4 == 0) white with alpha 0x80,
+     * holes black with alpha 0 */
+    static uint8_t lattice[16 * 16 * 4];
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            uint8_t *p = &lattice[(y * 16 + x) * 4];
+            const int wire = x % 4 == 0 || y % 4 == 0;
+            p[0] = p[1] = p[2] = wire ? 200 : 0;
+            p[3] = wire ? 0x80 : 0;
+        }
+    }
+    RdTex t = rd_CreateTexture(16, 16, lattice, RD_TEXA_80_80, "lattice");
+    static const uint8_t clr[4] = {0, 0, 0, 0}, grey[4] = {0x80, 0x80, 0x80, 0x80};
+    static const uint8_t wall[4] = {30, 160, 60, 0x80};
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    /* the railing: 16 x 16 texels (UVs in 1/16 texel) magnified 4x at
+     * (64, 64), in world space like the game's 3D sprites */
+    rd_SelectList(1);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(0x5160D);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    {
+        RdScreenVtx v[2] = {vtx(ox + 64 * 16, oy + 64 * 16, RAIL_Z, grey, 0.0f, 0.0f),
+                            vtx(ox + 128 * 16, oy + 128 * 16, RAIL_Z, grey, 256.0f, 256.0f)};
+        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    /* the wall behind it, drawn later: opaque, Z GEQUAL, Z write */
+    rd_SelectList(2);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(RD_TEST_Z_GEQUAL);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_TextureOff();
+    {
+        RdScreenVtx v[2] = {vtx(ox + 48 * 16, oy + 48 * 16, WALL_Z, wall, 0.0f, 0.0f),
+                            vtx(ox + 144 * 16, oy + 144 * 16, WALL_Z, wall, 0.0f, 0.0f)};
+        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_EndFrame(0);
+
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
+    static float depth[512 * 512];
+    uint32_t dw = 0, dh = 0;
+    const bool zOk =
+        rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), depth, sizeof(depth), &dw, &dh);
+    CHECK(zOk && dw == w && dh == h, "railing: depth readback");
+    if (!img || !zOk) {
+        rd_DestroyTexture(t);
+        return;
+    }
+    const float zScale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
+    const float railD = rd__GsDepth(RAIL_Z, zScale), wallD = rd__GsDepth(WALL_Z, zScale);
+    CHECK(railD < wallD, "railing: the wall is behind the railing (%g, %g)", (double)railD,
+          (double)wallD);
+    int holeBad = 0, wireBad = 0, holeZBad = 0, wireZBad = 0, holes = 0, wires = 0;
+    /* pixel centres of the railing, texel (tx, ty) = ((x - 64) / 4, (y - 64) / 4) */
+    for (uint32_t y = 64; y < 128; y++) {
+        for (uint32_t x = 64; x < 128; x++) {
+            const int tx = (int)(x - 64) / 4, ty = (int)(y - 64) / 4;
+            const int wire = tx % 4 == 0 || ty % 4 == 0;
+            const uint8_t *p = &img[(y * w + x) * 4];
+            const float d = depth[y * w + x];
+            if (wire) {
+                wires++;
+                wireBad += p[0] != 200 || p[1] != 200 || p[2] != 200;
+                wireZBad += d != railD;
+            } else {
+                holes++;
+                holeBad += p[0] != wall[0] || p[1] != wall[1] || p[2] != wall[2];
+                holeZBad += d != wallD;
+            }
+        }
+    }
+    printf("  railing: %d hole pixels, %d show something other than the wall, %d hold other "
+           "than its Z; %d wire pixels, %d off colour, %d off Z\n",
+           holes, holeBad, holeZBad, wires, wireBad, wireZBad);
+    CHECK(holeBad == 0, "railing: %d of %d hole pixels do not show the wall drawn behind", holeBad,
+          holes);
+    CHECK(holeZBad == 0, "railing: %d of %d hole pixels do not hold the wall's Z", holeZBad, holes);
+    CHECK(wireBad == 0 && wireZBad == 0, "railing: wires %d off colour, %d off Z", wireBad,
+          wireZBad);
+    rd_DestroyTexture(t);
 }
 
 /* ------------------------------------------------------------ DATE, flat */
@@ -1298,6 +1410,7 @@ int main(int argc, char **argv)
     }
     printf("rd_pixel_test: adapter %s\n", rhi_AdapterName());
     testOrder();
+    testRailing();
     testDateFlat();
     testScreenRuns();
     testSprites();

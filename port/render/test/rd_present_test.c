@@ -16,7 +16,10 @@
  *             Original flag, its zero-size fallback; 2x, WxH, the window's
  *             box, the 4K cap, the work buffers' scale, full height
  *   boxes     rd__PresentBox at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
- *   coverage  rdtex_KeepAlphaCoverage keeps an alpha-tested texture's share
+ *   coverage  rdtex_KeepAlphaCoverage keeps an alpha-tested texture's share;
+ *             package P8: a lattice (wires alpha 0x80, black holes alpha 0)
+ *             keeps its wire colour down the alpha-weighted chain and no
+ *             level's alpha rises above the base's
  * On a Vulkan device (77 without one):
  *   original  rd_pixel_test's rich frame (scene, additive quad, fade,
  *             letterbox, brightness, reduction) in the Original preset:
@@ -33,7 +36,12 @@
  *             band one pixel short at each side (the menus' bars) stretches,
  *             one two pixels short stays boxed
  *   mips      the trilinear filter: a mipmapped game texture, minified,
- *             samples its average
+ *             samples its average; package P8: a lattice drawn as the
+ *             railings are (TEST 0x5160D, ALPHA 0x44 with ABE) minified 8:1
+ *             blends its wire colour over the background by the average
+ *             alpha, unraised (no coverage kept for a texture blended by
+ *             As), and an unblended alpha-tested texture gets its mips
+ *             rebuilt with the coverage of its draw's AREF
  *   overlay   package OV, the presentation overlay (rd.h
  *             rd_SetPresentOverlay): the rich frame presented at 960 x 720
  *             and 1920 x 1080 with a callback drawing two rectangles (one
@@ -1132,7 +1140,7 @@ static void checkCoverage(void)
             p[3] = (x % 4 == 0 && y % 4 == 0) ? 0x80 : 0;
         }
     }
-    const uint32_t n = rdtex_BuildMipChain(img, 16, 16, chain);
+    const uint32_t n = rdtex_BuildMipChain(img, 16, 16, chain, 1);
     CHECK(n == 4, "coverage: 4 levels below 16x16");
     /* level 1 (8x8) box filtered: 0x20 at the dots, under the test */
     CHECK(chain[3] == 0x20, "coverage: the plain box filter thins it out");
@@ -1147,10 +1155,53 @@ static void checkCoverage(void)
     for (int i = 0; i < 256; i++) {
         img[i * 4 + 3] = 0x80;
     }
-    rdtex_BuildMipChain(img, 16, 16, chain);
+    rdtex_BuildMipChain(img, 16, 16, chain, 1);
     const uint64_t h0 = fnv(chain, sizeof(chain));
     rdtex_KeepAlphaCoverage(img, 16, 16, chain, n, 64);
     CHECK(fnv(chain, sizeof(chain)) == h0, "coverage: an opaque texture is untouched");
+
+    /* package P8: the railing's lattice, wires (x % 4 == 0 or y % 4 == 0,
+     * 7/16 of the texels) colour (200, 180, 160) alpha 0x80, holes black
+     * alpha 0.  Alpha-weighted, every level keeps the wire colour exactly
+     * (the box filter darkened it to 7/16 of itself) and the mean alpha
+     * stays at the base's 56 */
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            uint8_t *p = &img[(y * 16 + x) * 4];
+            const int wire = x % 4 == 0 || y % 4 == 0;
+            p[0] = wire ? 200 : 0;
+            p[1] = wire ? 180 : 0;
+            p[2] = wire ? 160 : 0;
+            p[3] = wire ? 0x80 : 0;
+        }
+    }
+    uint32_t base = 0;
+    for (int i = 0; i < 256; i++) {
+        base += img[i * 4 + 3];
+    }
+    const uint32_t ln = rdtex_BuildMipChain(img, 16, 16, chain, 1);
+    const uint8_t *lv = chain;
+    int dark = 0, high = 0;
+    for (uint32_t l = 1, lw = 8; l <= ln; l++, lw /= 2) {
+        uint32_t sum = 0;
+        for (uint32_t i = 0; i < lw * lw; i++) {
+            const uint8_t *p = &lv[i * 4];
+            sum += p[3];
+            high += p[3] > 0x80;
+            dark += p[3] && (abs(p[0] - 200) > 1 || abs(p[1] - 180) > 1 || abs(p[2] - 160) > 1);
+        }
+        CHECK(sum * 256 <= (base + 256) * lw * lw,
+              "lattice: level %u mean alpha %.1f above the base's %.1f", l, (double)sum / (lw * lw),
+              (double)base / 256.0);
+        lv += (size_t)lw * lw * 4;
+    }
+    CHECK(dark == 0, "lattice: %d texels of the alpha-weighted chain lost the wire colour", dark);
+    CHECK(high == 0, "lattice: %d texels above alpha 0x80", high);
+    rdtex_BuildMipChain(img, 16, 16, chain, 0);
+    /* level 1 texel (2, 1): one wire column over two hole rows */
+    CHECK(chain[(1 * 8 + 2) * 4] == 100,
+          "lattice: the plain box filter darkens the wires (%u), the weighted one does not",
+          chain[(1 * 8 + 2) * 4]);
 }
 
 /* -------------------------------------------------------- device checks */
@@ -1432,6 +1483,99 @@ static void checkMips(void)
     CHECK(worst <= 8, "mips: the minified checker samples its average");
     rd_DestroyTexture(t);
     CHECK(rhi_vk_ValidationErrorCount() == 0, "mips: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+}
+
+/* Package P8: issue 9's far railings.  A 64 x 64 lattice (wires every 4th
+ * row and column, 7/16 of the texels, colour (200, 200, 200) alpha 0x80;
+ * holes black alpha 0) drawn as the railings are, TEST 0x5160D and ALPHA
+ * 0x44 with ABE, minified 8:1 under the trilinear filter: level 3 is
+ * uniform, alpha 56 and the wire colour, so the pixel is the background
+ * lerped towards 200 by 56/128.  The box filter with the coverage kept at
+ * 64 gave colour 87 at alpha 65: a dark sheet over the background. */
+static void checkLatticeMips(void)
+{
+    RdSettings s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 1.0f;
+    s.filterUpgrade = RD_FILTER_UPGRADE_TRILINEAR;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        return;
+    }
+    if (!rhi_Limits()->textureMips) {
+        printf("  lattice mips: the backend has no mipmapped textures; skipped\n");
+        rd_Shutdown();
+        return;
+    }
+    static uint8_t img[64 * 64 * 4];
+    for (int y = 0; y < 64; y++) {
+        for (int x = 0; x < 64; x++) {
+            uint8_t *p = &img[(y * 64 + x) * 4];
+            const int wire = x % 4 == 0 || y % 4 == 0;
+            p[0] = p[1] = p[2] = wire ? 200 : 0;
+            p[3] = wire ? 0x80 : 0;
+        }
+    }
+    RdTex t = rd_CreateTexture(64, 64, img, RD_TEXA_80_80, "lattice");
+    /* dots: 1 texel in 16 alpha 0x80, drawn unblended with AFAIL KEEP and
+     * ATST GREATER 0x30 */
+    static uint8_t dots[64 * 64 * 4];
+    for (int i = 0; i < 64 * 64; i++) {
+        dots[i * 4 + 0] = dots[i * 4 + 1] = dots[i * 4 + 2] = 200;
+        dots[i * 4 + 3] = (i % 4 == 0 && (i / 64) % 4 == 0) ? 0x80 : 0;
+    }
+    RdTex td = rd_CreateTexture(64, 64, dots, RD_TEXA_80_80, "dots");
+    static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80}, bg[4] = {0, 160, 0, 0x80};
+    for (int frame = 0; frame < 2; frame++) {
+        rd_BeginFrame();
+        rd_SelectList(0);
+        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+        rd_SelectList(1);
+        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+        rd_TestGs(0x5160D);
+        rd_ZWrite(1);
+        rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+        rd_PABE(0);
+        rd_FBA(0);
+        rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        sprite(RD_SPACE_WORLD, 16 * 16, 16 * 16, 24 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
+        rd_TestGs(0x3030D); /* ATE GREATER 0x30, AFAIL KEEP, Z ALWAYS */
+        rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+        rd_Texture(td, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        sprite(RD_SPACE_WORLD, 48 * 16, 16 * 16, 56 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
+        rd_EndFrame(0);
+    }
+    const RdTexRec *tr = rd__TexRec(t.id), *trd = rd__TexRec(td.id);
+    CHECK(tr && tr->mipLevels == 7 && (tr->mipUse & RD_MIPUSE_BLEND_AS) && !tr->mipBuiltBoost,
+          "lattice mips: blended by As, no coverage kept (use %u boost %u)", tr ? tr->mipUse : 0,
+          tr ? tr->mipBuiltBoost : 0);
+    CHECK(trd && trd->mipUse == RD_MIPUSE_TESTED && trd->mipBuiltBoost && trd->mipBuiltRef == 0x30,
+          "lattice mips: the unblended alpha-tested texture keeps coverage at its AREF 0x30 "
+          "(use %u boost %u ref %u)",
+          trd ? trd->mipUse : 0, trd ? trd->mipBuiltBoost : 0, trd ? trd->mipBuiltRef : 0);
+    uint32_t w, h;
+    uint8_t *p = readTarget(RD_TARGET_SCENE, &w, &h);
+    /* (Cs - Cd) * 56 / 128 + Cd: R 87, G 177, B 87 */
+    const int want[3] = {(200 * 56) / 128, 160 + ((200 - 160) * 56) / 128, (200 * 56) / 128};
+    int worst = 0;
+    if (p) {
+        for (int y = 17; y < 23; y++) {
+            for (int x = 17; x < 23; x++) {
+                for (int c = 0; c < 3; c++) {
+                    const int e = abs((int)p[(y * w + x) * 4 + c] - want[c]);
+                    worst = e > worst ? e : worst;
+                }
+            }
+        }
+    }
+    printf("  lattice mips: minified railing within %d of the blend by its average alpha\n", worst);
+    CHECK(p && worst <= 6, "lattice mips: the minified lattice is off by %d", worst);
+    rd_DestroyTexture(t);
+    rd_DestroyTexture(td);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "lattice mips: %u validation errors",
           rhi_vk_ValidationErrorCount());
     rd_Shutdown();
 }
@@ -1883,6 +2027,7 @@ int main(int argc, char **argv)
     checkScale2();
     checkWide169();
     checkMips();
+    checkLatticeMips();
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
     checkCapture(dir);

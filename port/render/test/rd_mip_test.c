@@ -55,7 +55,7 @@ static void chain(uint32_t w, uint32_t h, size_t want, uint32_t wantLevels)
         base[i] = (uint8_t)(i * 7 + 3);
     }
     memset(buf + n, 0xA5, GUARD);
-    const uint32_t levels = rdtex_BuildMipChain(base, w, h, buf);
+    const uint32_t levels = rdtex_BuildMipChain(base, w, h, buf, 1);
     CHECK(levels == wantLevels, "%ux%u: %u levels, expected %u", w, h, levels, wantLevels);
     int intact = 1;
     for (size_t i = 0; i < GUARD; i++) {

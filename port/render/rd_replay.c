@@ -1009,6 +1009,79 @@ static uint32_t s_shadowRedW, s_shadowRedH;
 
 static uint32_t s_shadowRedFor; /* the count target (RdTarget id) s_shadowRed holds; 0 none */
 
+/* Package P8: whether a draw blends by As (PRIM.ABE with C = As): its
+ * texture's alpha is opacity, which the Enhanced mips must not raise. */
+static int blendsByAs(const RdDrawState *d)
+{
+    if (!d->abe) {
+        return 0;
+    }
+    switch (d->blend) {
+    case RD_BLEND_LERP_AS:
+    case RD_BLEND_LERP_AS_ALT:
+    case RD_BLEND_CS_AS_ADD_CD:
+    case RD_BLEND_CD_SUB_CS_AS:
+    case RD_BLEND_CD_AS_ADD_CD:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Package P8: the alpha coverage the Enhanced mips of t keep: on (with
+ * *ref) only for a texture that unblended draws alpha-test and no draw
+ * blends by As.  A blended cut-out (the stair railings' lattice: ALPHA
+ * 0x44, holes of alpha 0) fades out by its averaged alpha as the GS's own
+ * blend would; raising that alpha turned its distant holes into an opaque
+ * dark sheet. */
+static int mipBoost(const RdTexRec *t, uint8_t *ref)
+{
+    *ref = t->mipRef;
+    return (t->mipUse & RD_MIPUSE_TESTED) && !(t->mipUse & RD_MIPUSE_BLEND_AS);
+}
+
+/* Package P8: note what draw state d does with the alpha of t (a game
+ * texture with Enhanced mips); when that changes the coverage its mips
+ * should keep, t is uploaded again on the next replay (a few times per
+ * texture at most: the bits only accumulate and the reference only
+ * rises). */
+static void noteMipUse(RdTexRec *t, const RdDrawState *d)
+{
+    if (t->mipLevels < 2 || t->replacement || d->tcc != RD_TCC_RGBA) {
+        return;
+    }
+    uint8_t use = t->mipUse, ref = t->mipRef;
+    if (blendsByAs(d)) {
+        use |= RD_MIPUSE_BLEND_AS;
+    } else if (d->test.ate &&
+               (d->test.afail == RD_AFAIL_KEEP || d->test.afail == RD_AFAIL_ZB_ONLY) &&
+               (d->test.atst == RD_ATST_GREATER ||
+                (d->test.atst == RD_ATST_GEQUAL && d->test.aref > 0))) {
+        const uint8_t r = d->test.atst == RD_ATST_GEQUAL ? d->test.aref - 1 : d->test.aref;
+        if (!(use & RD_MIPUSE_TESTED) || r > ref) {
+            ref = r;
+        }
+        use |= RD_MIPUSE_TESTED;
+    }
+    if (use == t->mipUse && ref == t->mipRef) {
+        return;
+    }
+    t->mipUse = use;
+    t->mipRef = ref;
+    uint8_t want;
+    const int boost = mipBoost(t, &want);
+    if (boost == t->mipBuiltBoost && (!boost || want == t->mipBuiltRef)) {
+        return;
+    }
+    if (!t->dirty) {
+        g_rd.texDirtyCount++;
+    }
+    t->dirty = 1;
+    t->dirtyX0 = t->dirtyY0 = 0;
+    t->dirtyX1 = t->w;
+    t->dirtyY1 = t->h;
+}
+
 /* The texture a draw samples, after any state change it needs.  Returns the
  * RhiTexture and its size and TEXFMT; dummy when untextured. */
 static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t drawTargetId,
@@ -1036,6 +1109,7 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         *h = t->h;
         *textured = 1;
         *mipmapped = t->mipLevels > 1;
+        noteMipUse(t, &r->st.ds);
         return t->rhi;
     }
     RdTargetRec *src = rd__TargetRec(t->target);
@@ -3394,10 +3468,6 @@ static uint8_t texLevels(const RdTexRec *t)
     return n;
 }
 
-/* The alpha the coverage of the Enhanced mips keeps: the semi-transparent
- * lists' default test, alpha > 64 (GS alpha, 0x80 = 1.0; rd.h RdListDefault) */
-#define RD_MIP_COVERAGE_REF 64
-
 /* Texture packs: a replacement's levels as uploadTextures lays them out,
  * each row of texels (or of 4x4 blocks) padded to copyRowPitchAlign, each
  * level at an offset aligned for the backend and the block.  Replacements
@@ -3536,8 +3606,10 @@ bool rd__BeginOwnFrame(uint64_t ringBytes)
 }
 
 /* R7a: levels 1.. of a game texture: 2x2 box filtered from the base
- * (rdtex_BuildMipChain), alpha coverage kept (rdtex_KeepAlphaCoverage),
- * each level copied into the ring and onto its subresource. */
+ * (rdtex_BuildMipChain; package P8: colour weighted by alpha when the alpha
+ * byte is the draws' alpha), alpha coverage kept (rdtex_KeepAlphaCoverage)
+ * for the textures mipBoost names, at their draws' reference, each level
+ * copied into the ring and onto its subresource. */
 static void uploadMips(RdTexRec *t, uint8_t levels)
 {
     const uint32_t pitchA = rhi_Limits()->copyRowPitchAlign;
@@ -3546,8 +3618,14 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
     if (!chain) {
         return;
     }
-    const uint32_t n = rdtex_BuildMipChain(t->pixels, t->w, t->h, chain);
-    rdtex_KeepAlphaCoverage(t->pixels, t->w, t->h, chain, n, RD_MIP_COVERAGE_REF);
+    const uint32_t n =
+        rdtex_BuildMipChain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
+    uint8_t ref;
+    t->mipBuiltBoost = (uint8_t)mipBoost(t, &ref);
+    t->mipBuiltRef = ref;
+    if (t->mipBuiltBoost) {
+        rdtex_KeepAlphaCoverage(t->pixels, t->w, t->h, chain, n, ref);
+    }
     const uint8_t *src = chain;
     uint32_t w = t->w, h = t->h;
     for (uint32_t l = 1; l < levels && l <= n; l++) {
@@ -4105,6 +4183,36 @@ bool rd__ReadTarget(RdTarget target, void *dst, size_t dstSize, uint32_t *w, uin
         *h = t->th;
     }
     return readTexture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
+}
+
+/* Package P8: a target's depth buffer as floats (tests). */
+bool rd__ReadTargetDepth(RdTarget target, float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    RdTargetRec *t = rd__TargetRec(target.id);
+    if (!g_rd.hasDevice || !t || !t->withDepth || !t->depth.id ||
+        dstSize < (size_t)t->tw * t->th * sizeof(float)) {
+        return false;
+    }
+    if (w) {
+        *w = t->tw;
+    }
+    if (h) {
+        *h = t->th;
+    }
+    if (t->depthState != RHI_STATE_COPY_SRC) {
+        RhiCommandList cl = rhi_BeginCommands();
+        if (!cl.id) {
+            return false;
+        }
+        rd__Transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
+        rhi_EndCommands(cl);
+        rhi_Submit(cl);
+    }
+    uint32_t pitch = 0;
+    if (!rhi_ReadbackTexture(t->depth, RHI_ASPECT_DEPTH, dst, dstSize, &pitch)) {
+        return false;
+    }
+    return pitch == t->tw * sizeof(float);
 }
 
 /* ---------------------------------------------------------- camera probe */
