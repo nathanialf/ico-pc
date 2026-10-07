@@ -249,10 +249,11 @@ static void video_apply(int force)
     }
     s_videoSerial = ico_video_serial();
     ico_video_get(&o);
-    /* compared against the window, not the last request: an option that
-       already matches what the window is asks for nothing (the write-backs
-       below and in ico_window_pump never request again) */
-    if ((o.fullscreen != 0) != window_fullscreen()) {
+    /* on a change of the options only (never a resize's forced call: a
+       refused request would be made again at every size event), and
+       compared against the window, not the last request: an option that
+       already matches what the window is asks for nothing */
+    if (!force && (o.fullscreen != 0) != window_fullscreen()) {
         /* borderless fullscreen at the desktop resolution; the resize event
            follows */
         s_fullscreen = ico_window_video_fullscreen(s_window, o.fullscreen, NULL, NULL);

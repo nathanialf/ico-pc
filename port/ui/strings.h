@@ -213,7 +213,6 @@ typedef enum UiStrId {
     UI_STR_VAL_CRT_SHADOW, /* package CRT2 */
     UI_STR_VAL_CUSTOM,
     UI_STR_RESOLUTION_CRT_NOTE,
-    UI_STR_PRESET_NOTE,
     /* Q2: the title's "Quit to desktop" row and its confirmation, and
        Settings > Controls, "Circle goes back" ([game] circle_back) */
     UI_STR_QUIT_DESKTOP,

@@ -1279,7 +1279,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         break;
     case UI_PAGE_DISPLAY:
-        addNote(pg, UI_OPT_PRESET, UI_STR_PRESET_NOTE);
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
         break;
     case UI_PAGE_AUDIO:

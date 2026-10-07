@@ -1002,22 +1002,24 @@ static void testPreset(void)
     ui_SettingsSetFullscreenQuery(NULL);
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "On") == 0, "uninstalled: the option");
 
-    /* the notes: Preset's on its row, the CRT one under Resolution only while locked */
+    /* the note: the CRT one under Resolution, only while locked (one line,
+       clear of the Back row below) */
     for (int title = 1; title >= 0; title--) {
         int mainL = enterMain(title);
         int dispL = openPage(mainL, 0, UI_PAGE_DISPLAY);
         int rows[16], n = ui_SettingsPageRows(UI_PAGE_DISPLAY, rows, NULL, NULL, 16);
         int preset = n > 0 ? rows[0] : -1, res = n > 1 ? rows[1] : -1;
-        int pn = rowWithPrefix(UI_PAGE_DISPLAY, "Original is the PS2");
-        int cn = rowWithPrefix(UI_PAGE_DISPLAY, "The CRT");
-        CHECK(pn >= 0 && cn >= 0, "title %d: both notes exist", title);
+        int cn = rowWithPrefix(UI_PAGE_DISPLAY, "CRT filter:");
+        CHECK(cn >= 0, "title %d: the CRT note exists", title);
+        CHECK(cn >= 0 && strchr(lt_ext_RowText(cn), '\n') == NULL, "title %d: the note is one line",
+              title);
         lt_ext_Layout(dispL)->curItem = preset;
         frame(0);
-        CHECK(pn >= 0 && lt_ext_Prop(pn)->masked == 0 && lt_ext_Prop(cn)->masked == 1,
-              "title %d: the cursor on Preset shows its note only", title);
+        CHECK(cn >= 0 && lt_ext_Prop(cn)->masked == 1, "title %d: the cursor on Preset: no note",
+              title);
         lt_ext_Layout(dispL)->curItem = res;
         frame(0);
-        CHECK(pn >= 0 && lt_ext_Prop(pn)->masked == 1 && lt_ext_Prop(cn)->masked == 1,
+        CHECK(cn >= 0 && lt_ext_Prop(cn)->masked == 1,
               "title %d: CRT off, the cursor on Resolution: no note", title);
         ico_video_get(&o);
         o.crt = 1;
