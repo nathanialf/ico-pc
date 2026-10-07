@@ -106,6 +106,8 @@ int texpack_Init(const TexpackConfig *cfg);
 int texpack_Count(void);
 /* The index entry of a name (key: tex0Hash, clutHash, bits), or -1. */
 int texpack_Lookup(const TexpackName *name);
+/* The file of an index entry (the path the walk found), or null. */
+const char *texpack_EntryPath(int entry);
 /* Queue entry (from texpack_Lookup) for the cache entry (texId, gen, texa)
    of rd_tex; uvW, uvH the GS size of the texture it replaces.  The image
    is installed by a later texpack_Pump through rdtex_Replace if the cache

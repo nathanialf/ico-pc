@@ -19,8 +19,7 @@
  *           reset dropping the queue, shutdown joining a busy thread.
  *
  * The texture cache (rd_tex.h), the PNG writer and the file loaders are
- * fakes here, so nothing needs a device; until texpack_name.c is in the
- * tree (ICO_TEXPACK_HAVE_NAMES) the name parser is a local one.
+ * fakes here, so nothing needs a device; the names are texpack_name.c's.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -249,94 +248,6 @@ bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, 
     (void)withAlpha;
     return false;
 }
-
-/* ------------------------------------------------- names (before T1) */
-
-#if !ICO_TEXPACK_HAVE_NAMES
-static int hexRun(const char **p, uint64_t *v, int maxDigits)
-{
-    int n = 0;
-    *v = 0;
-    for (;; n++) {
-        char c = **p;
-        int d = c >= '0' && c <= '9'   ? c - '0'
-                : c >= 'a' && c <= 'f' ? c - 'a' + 10
-                : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                       : -1;
-        if (d < 0 || n == maxDigits) {
-            break;
-        }
-        *v = *v << 4 | (uint64_t)d;
-        (*p)++;
-    }
-    return n;
-}
-
-/* PCSX2's forms: hash-bits., hash-clut-bits., and either with -rWxH-
-   before the bits; the bits at most eight digits and a '.' after */
-int texpack_ParseName(const char *fileName, TexpackName *out)
-{
-    const char *p = fileName;
-    uint64_t v[3], rw = 0, rh = 0;
-    int n = 0, region = 0;
-
-    memset(out, 0, sizeof(*out));
-    if (strstr(fileName, "-mip")) {
-        return -1;
-    }
-    for (;;) {
-        if (*p == 'r' && n >= 1) {
-            p++;
-            if (!hexRun(&p, &rw, 8) || *p != 'x') {
-                return -1;
-            }
-            p++;
-            if (!hexRun(&p, &rh, 8) || *p != '-') {
-                return -1;
-            }
-            p++;
-            region = 1;
-            continue;
-        }
-        if (n == 3 || !hexRun(&p, &v[n], n == 2 ? 8 : 16)) {
-            return -1;
-        }
-        n++;
-        if (*p == '-') {
-            p++;
-            continue;
-        }
-        break;
-    }
-    if (*p != '.' || n < 2) {
-        return -1;
-    }
-    out->tex0Hash = v[0];
-    out->hasClut = n == 3;
-    out->clutHash = n == 3 ? v[1] : 0;
-    out->bits = (uint32_t)v[n - 1] & ~(1u << 14);
-    out->regionW = (uint32_t)rw;
-    out->regionH = (uint32_t)rh;
-    return region;
-}
-
-int texpack_Candidates(const TexpackSource *src, uint32_t boundLevel, TexpackName *out, int max)
-{
-    (void)src;
-    (void)boundLevel;
-    (void)out;
-    (void)max;
-    return -1;
-}
-
-int texpack_FormatName(const TexpackName *n, char *buf, size_t size)
-{
-    (void)n;
-    (void)buf;
-    (void)size;
-    return -1;
-}
-#endif
 
 /* ---------------------------------------------------------- the tree */
 

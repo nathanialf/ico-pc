@@ -649,6 +649,11 @@ int texpack_Lookup(const TexpackName *name)
     return findKey(name->tex0Hash, name->hasClut ? name->clutHash : 0, name->bits);
 }
 
+const char *texpack_EntryPath(int entry)
+{
+    return entry >= 0 && entry < s_tp.n ? s_tp.e[entry].path : NULL;
+}
+
 static int wasDeclined(uint32_t texId, uint32_t gen)
 {
     for (int i = 0; i < s_tp.nDeclined; i++) {

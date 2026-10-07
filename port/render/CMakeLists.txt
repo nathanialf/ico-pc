@@ -53,7 +53,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME texpack_name COMMAND texpack_name_test)
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(texpack_disc PROPERTIES SKIP_RETURN_CODE 77)
+    set_tests_properties(texpack_disc PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP texpack_names)
 endif()
 
 if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
@@ -103,16 +103,6 @@ if(TARGET SDL3::SDL3-shared)
     target_link_libraries(ico_render PUBLIC SDL3::SDL3-shared)
     set_source_files_properties(texpack.c TARGET_DIRECTORY ico_render
                                 PROPERTIES COMPILE_DEFINITIONS "ICO_TEXPACK_THREAD=1")
-endif()
-# The texture pack's names (texpack_name.c) land on their own; until they
-# are in the tree, test/texpack_pending_stubs.c stands in (no pack is then
-# indexed: every name is refused).  Removed with the integration.
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/texpack_name.c")
-    add_library(ico_texpack_pending STATIC test/texpack_pending_stubs.c)
-    target_include_directories(ico_texpack_pending PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_definitions(ico_texpack_pending PRIVATE ICO_TEXPACK_STUB_NAMES=1)
-    target_compile_options(ico_texpack_pending PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-    target_link_libraries(ico_render PUBLIC ico_texpack_pending)
 endif()
 
 # rd_replay_tool: a dump to a PNG, headless.
@@ -463,24 +453,29 @@ target_link_libraries(texpack_load_test PRIVATE ico_render ico_miniz)
 # files (both roots, the tolerant layouts, duplicates, -mip and region
 # files, malformed names) and the loader thread against a fake texture
 # cache (request, pump, a changed generation dropped, the RAM cache, the
-# budget, shutdown joining).  texpack.c on its own: the cache, the file
-# loaders and, until texpack_name.c lands, the name parser are the test's.
+# budget, shutdown joining).  texpack.c on its own with the real names
+# (ico_texpack_name); the cache and the file loaders are the test's.
 add_executable(texpack_test test/texpack_test.c texpack.c)
 target_include_directories(texpack_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(texpack_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(texpack_test PRIVATE ico_host_fs)
+target_link_libraries(texpack_test PRIVATE ico_host_fs ico_texpack_name)
 if(TARGET SDL3::SDL3-shared)
     target_link_libraries(texpack_test PRIVATE SDL3::SDL3-shared)
     target_compile_definitions(texpack_test PRIVATE ICO_TEXPACK_THREAD=1)
 endif()
-if(TARGET ico_texpack_name)
-    target_compile_definitions(texpack_test PRIVATE ICO_TEXPACK_HAVE_NAMES=1)
-    target_link_libraries(texpack_test PRIVATE ico_texpack_name)
-endif()
+
+# texpack_e2e_test (v0.4.0, T3 integration): the disc's names
+# (texpack_disc_test's texpack_names.txt) looked up in the index texpack_Init
+# builds from a real pack's folder, in the hook's order, and every file
+# reached read with the real loaders.  77 without the disc's names or the
+# pack (build-host/tmp/texpack, never committed).
+add_executable(texpack_e2e_test test/texpack_e2e_test.c)
+target_compile_options(texpack_e2e_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 
 if(WIN32 AND SDL3_FOUND)
-    foreach(t texpack_test rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
+    foreach(t texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
               rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
               rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test
               texpack_load_test)
@@ -500,6 +495,11 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     add_test(NAME texpack COMMAND texpack_test "${CMAKE_CURRENT_BINARY_DIR}")
+    get_filename_component(_ico_texpack_textures "${ICO_TEXPACK_DIR}/../.." ABSOLUTE)
+    add_test(NAME texpack_e2e
+             COMMAND texpack_e2e_test "${CMAKE_CURRENT_BINARY_DIR}/texpack_names.txt"
+                     "${_ico_texpack_textures}" "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(texpack_e2e PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED texpack_names)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
