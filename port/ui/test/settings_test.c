@@ -861,7 +861,7 @@ static void testFramerate(void)
     CHECK(o.framerate == 240, "Left from original wraps to 240");
     /* the preset is not changed by the row; the rate is in force in the
        Original preset too (F2) */
-    CHECK(o.preset == ICO_VIDEO_ORIGINAL && ico_video_framerate() == 240,
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && ico_video_framerate() == 240,
           "Original preset: the row's rate in force");
 
     /* a cap the list does not hold steps to its neighbours */
@@ -1545,7 +1545,8 @@ static void testValues(void)
 
     ui_SettingsStep(UI_OPT_PRESET, 1);
     ico_video_get(&o);
-    CHECK(o.preset == ICO_VIDEO_ENHANCED && strstr(ui_SettingsValueText(UI_OPT_PRESET), "Enhanced"),
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED &&
+              strstr(ui_SettingsValueText(UI_OPT_PRESET), "Enhanced"),
           "preset: Enhanced");
     CHECK(strstr(ui_SettingsValueText(UI_OPT_RESOLUTION), "Window") != NULL, "resolution: Window");
     ui_SettingsStep(UI_OPT_RESOLUTION, 1);
@@ -1558,6 +1559,8 @@ static void testValues(void)
     ui_SettingsStep(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
     CHECK(o.resScale == 4, "resolution wraps to 4x");
+    /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9 */
+    ui_SettingsStep(UI_OPT_ASPECT, 1);
     ui_SettingsStep(UI_OPT_ASPECT, 1);
     ui_SettingsStep(UI_OPT_ASPECT, 1);
     ico_video_get(&o);
@@ -1565,6 +1568,11 @@ static void testValues(void)
           "aspect 16:9");
     ui_SettingsStep(UI_OPT_ASPECT, 1);
     CHECK(strstr(ui_SettingsValueText(UI_OPT_ASPECT), "Auto") != NULL, "aspect Auto");
+    /* Enhanced's filter is anisotropic, its height full */
+    ui_SettingsStep(UI_OPT_FILTER, -1);
+    ico_video_get(&o);
+    CHECK(o.filter == ICO_FILTER_TRILINEAR, "filter steps back to trilinear");
+    ui_SettingsStep(UI_OPT_FILTER, -1);
     ui_SettingsStep(UI_OPT_FILTER, -1);
     ico_video_get(&o);
     CHECK(o.filter == ICO_FILTER_ANISOTROPIC, "filter wraps to anisotropic");
@@ -1572,7 +1580,7 @@ static void testValues(void)
     ui_SettingsStep(UI_OPT_VSYNC, 1);
     ui_SettingsStep(UI_OPT_FULL_HEIGHT, 1);
     ico_video_get(&o);
-    CHECK(o.fullscreen == 1 && o.vsync == 0 && o.fullHeight == 1, "the three toggles");
+    CHECK(o.fullscreen == 1 && o.vsync == 0 && o.fullHeight == 0, "the three toggles");
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VSYNC), "Off") != NULL, "vsync Off");
 
     /* package CRT: the CRT filter row cycles Off, Scanlines, Consumer TV,
@@ -1693,6 +1701,7 @@ static void testValues(void)
     IcoToml *t = ico_toml_load(p);
     CHECK(t != NULL, "the file");
     if (t) {
+        /* the rows were stepped off Enhanced: Custom, saved as "enhanced" */
         CHECK(strcmp(ico_toml_get(t, "video.preset") ? ico_toml_get(t, "video.preset") : "",
                      "enhanced") == 0,
               "[video] preset");

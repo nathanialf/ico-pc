@@ -15,22 +15,28 @@
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
- *   [video] crt             false       the CRT filter (package CRT, both presets)
+ *   [video] crt             false       the CRT filter (package CRT, any preset)
  *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm" |
  *                                       "shadow"
  *   [video] crt_strength    1.0         0..1
  *   [video] crt_scanlines, crt_mask, crt_halation, crt_bloom, crt_curvature
  *                           -1          config only: the mode's value when < 0
  *
- * The Original preset is the PS2 picture whatever resolution, aspect,
- * texture_filter and full_height say; the Enhanced preset applies them,
- * each on its own.  fullscreen, vsync and framerate apply in both.
+ * Every option applies on its own.  preset is not an option but a
+ * shortcut over four of them, read and written as such: "original" puts
+ * resolution, aspect, texture_filter and full_height at the PS2's values
+ * (1x, 4:3, original, half) whatever the file says; "enhanced" takes them as
+ * written.  The preset in force is derived from those four rows
+ * (ico_video_preset): Original when all four are the PS2's, Enhanced when
+ * they are window, auto, anisotropic and full, Custom otherwise; it is
+ * saved back as "original" when Original, else "enhanced" with the rows.
+ * fullscreen, vsync, framerate and the CRT keys are not part of it.
  * framerate (renderer wave 7, R7b): "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
  * interpolates between the last two ticks; N does the same at most N times
- * a second.  In both presets (package F2; before it the Original preset
- * was always "original"): each tick's picture is the preset's, the
+ * a second.  Whatever the preset (package F2; before it the Original
+ * preset was always "original"): each tick's picture is the options', the
  * in-between ones are blended from the last two.
  *
  * Read from config.toml through ico_config_get_* the first time any value
@@ -43,14 +49,14 @@
 #ifndef ICO_PORT_GAME_VIDEO_OPTIONS_H
 #define ICO_PORT_GAME_VIDEO_OPTIONS_H
 
-enum { ICO_VIDEO_ORIGINAL = 0, ICO_VIDEO_ENHANCED = 1 };
+/* ico_video_preset: the preset the four rows add up to */
+enum { ICO_VIDEO_ORIGINAL = 0, ICO_VIDEO_ENHANCED = 1, ICO_VIDEO_CUSTOM = 2 };
 
 enum { ICO_ASPECT_4_3 = 0, ICO_ASPECT_16_10 = 1, ICO_ASPECT_16_9 = 2, ICO_ASPECT_AUTO = 3 };
 
 enum { ICO_FILTER_ORIGINAL = 0, ICO_FILTER_TRILINEAR = 1, ICO_FILTER_ANISOTROPIC = 2 };
 
 typedef struct IcoVideoOptions {
-    int preset;     /* ICO_VIDEO_* */
     int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
     int resScale;   /* resolution "Nx": N (1..8); 0 otherwise */
     int aspect;     /* ICO_ASPECT_* */
@@ -59,7 +65,7 @@ typedef struct IcoVideoOptions {
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
     int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second (R7b) */
-    /* package CRT: applied in both presets */
+    /* package CRT: applied whatever the preset */
     int crt;           /* the filter on */
     int crtMode;       /* ICO_CRT_* */
     float crtStrength; /* 0..1 */
@@ -82,9 +88,9 @@ enum {
 /* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
-/* The defaults: Original, window, 4:3, windowed, vsync on, original filter,
-   half height, framerate uncapped (both presets), the CRT filter off (its
-   mode Consumer TV at full strength, no overrides). */
+/* The defaults: the Original rows (1x, 4:3, original filter, half height),
+   windowed, vsync on, framerate uncapped, the CRT filter off (its mode
+   Consumer TV at full strength, no overrides). */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -102,15 +108,14 @@ void ico_video_reload(void);
 /* The window's client size in pixels, for aspect "auto" (the window calls it
    on open and on every resize; 0 x 0, the headless build's, means 4:3). */
 void ico_video_set_window(int w, int h);
-/* The presentation aspect (width / height) in force: 4/3 in the Original
-   preset; in Enhanced the aspect option, "auto" being the window's clamped
-   to [4:3, 16:9]. */
+/* The presentation aspect (width / height) in force: the aspect option,
+   whatever the preset, "auto" being the window's clamped to [4:3, 16:9]. */
 float ico_video_aspect(void);
 /* How much wider than 4:3 the presentation is: ico_video_aspect() / (4/3),
-   1 in Original (GsBase.c gsbHostWideX). */
+   at least 1 (GsBase.c gsbHostWideX). */
 float ico_video_wide_x(void);
-/* The presentation rate in force (R7b): the framerate option, in both
-   presets. */
+/* The presentation rate in force (R7b): the framerate option, whatever
+   the preset. */
 int ico_video_framerate(void);
 /* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
    StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window
@@ -134,6 +139,16 @@ const char *ico_video_aspect_name(int aspect);
 int ico_video_parse_crt_mode(const char *s, int *mode);
 const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);
+/* The preset the four rows add up to: ICO_VIDEO_ORIGINAL when resolution,
+   aspect, texture filter and height are 1x, 4:3, original, half;
+   ICO_VIDEO_ENHANCED when window, auto, anisotropic, full; else
+   ICO_VIDEO_CUSTOM. */
+int ico_video_preset(const IcoVideoOptions *o);
+/* The shortcut: writes the four rows of ORIGINAL or ENHANCED into o, the
+   other options untouched.  CUSTOM (or anything else) changes nothing. */
+void ico_video_set_preset(IcoVideoOptions *o, int preset);
+/* "original", "enhanced" or "custom" */
+const char *ico_video_preset_name(int preset);
 /* "window", "WxH" or "Nx" into buf (at least 24 bytes). */
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size);
 

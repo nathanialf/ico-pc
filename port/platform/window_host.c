@@ -126,7 +126,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     ico_video_get(&o);
     ico_video_set_window(w, h);
     memset(rs, 0, sizeof(*rs));
-    rs->preset = o.preset == ICO_VIDEO_ENHANCED ? RD_PRESET_ENHANCED : RD_PRESET_ORIGINAL;
+    /* the renderer's flag: Original only when the four rows are the PS2's */
+    rs->preset =
+        ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
     rs->outputWidth = (uint32_t)(w > 0 ? w : WINDOW_W);
     rs->outputHeight = (uint32_t)(h > 0 ? h : WINDOW_H);
     rs->aspect = ico_video_aspect();
@@ -269,7 +271,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 "texture filter %s, %s height, framerate %s), vsync %s\n",
                 w, h, o.fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
-                o.preset == ICO_VIDEO_ENHANCED ? "Enhanced" : "Original",
+                ico_video_preset(&o) == ICO_VIDEO_ORIGINAL
+                    ? "Original"
+                    : (ico_video_preset(&o) == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom"),
                 ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
                 ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),

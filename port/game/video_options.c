@@ -22,10 +22,8 @@ static int s_winW, s_winH;
 void ico_video_defaults(IcoVideoOptions *o)
 {
     memset(o, 0, sizeof(*o));
-    o->preset = ICO_VIDEO_ORIGINAL;
-    o->aspect = ICO_ASPECT_4_3;
+    ico_video_set_preset(o, ICO_VIDEO_ORIGINAL);
     o->vsync = 1;
-    o->filter = ICO_FILTER_ORIGINAL;
     o->framerate = ICO_FRAMERATE_UNCAPPED; /* R7b: the plan's default */
     o->crt = 0;
     o->crtMode = ICO_CRT_CONSUMER;
@@ -174,6 +172,46 @@ const char *ico_video_filter_name(int filter)
     return filter >= 0 && filter < 3 ? kFilter[filter] : kFilter[0];
 }
 
+int ico_video_preset(const IcoVideoOptions *o)
+{
+    if (o->resW != 0 || o->resH != 0) {
+        return ICO_VIDEO_CUSTOM;
+    }
+    if (o->resScale == 1 && o->aspect == ICO_ASPECT_4_3 && o->filter == ICO_FILTER_ORIGINAL &&
+        !o->fullHeight) {
+        return ICO_VIDEO_ORIGINAL;
+    }
+    if (o->resScale == 0 && o->aspect == ICO_ASPECT_AUTO && o->filter == ICO_FILTER_ANISOTROPIC &&
+        o->fullHeight) {
+        return ICO_VIDEO_ENHANCED;
+    }
+    return ICO_VIDEO_CUSTOM;
+}
+
+void ico_video_set_preset(IcoVideoOptions *o, int preset)
+{
+    if (preset == ICO_VIDEO_ORIGINAL) {
+        /* the PS2 picture: 1x, 4:3, original filtering, half height */
+        o->resW = o->resH = 0;
+        o->resScale = 1;
+        o->aspect = ICO_ASPECT_4_3;
+        o->filter = ICO_FILTER_ORIGINAL;
+        o->fullHeight = 0;
+    } else if (preset == ICO_VIDEO_ENHANCED) {
+        /* the window's size, its aspect, anisotropic, full height */
+        o->resW = o->resH = o->resScale = 0;
+        o->aspect = ICO_ASPECT_AUTO;
+        o->filter = ICO_FILTER_ANISOTROPIC;
+        o->fullHeight = 1;
+    }
+}
+
+const char *ico_video_preset_name(int preset)
+{
+    return preset == ICO_VIDEO_ORIGINAL ? "original"
+                                        : (preset == ICO_VIDEO_ENHANCED ? "enhanced" : "custom");
+}
+
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size)
 {
     if (o->resScale > 0) {
@@ -191,9 +229,6 @@ static void sanitize(IcoVideoOptions *o)
     IcoVideoOptions d;
 
     ico_video_defaults(&d);
-    if (o->preset != ICO_VIDEO_ORIGINAL && o->preset != ICO_VIDEO_ENHANCED) {
-        o->preset = d.preset;
-    }
     if (o->aspect < 0 || o->aspect > ICO_ASPECT_AUTO) {
         o->aspect = d.aspect;
     }
@@ -230,10 +265,9 @@ static void read_config(void)
 {
     IcoVideoOptions o;
     const char *s;
+    int preset;
 
     ico_video_defaults(&o);
-    s = ico_config_get_string("video.preset", "original");
-    o.preset = s && lower_eq(s, "enhanced") ? ICO_VIDEO_ENHANCED : ICO_VIDEO_ORIGINAL;
     if (ico_video_parse_resolution(ico_config_get_string("video.resolution", "window"), &o) != 0) {
         fprintf(stderr, "video: resolution not understood; \"window\" used\n");
     }
@@ -263,16 +297,25 @@ static void read_config(void)
     o.crtHalation = (float)ico_config_get_float("video.crt_halation", -1.0);
     o.crtBloom = (float)ico_config_get_float("video.crt_bloom", -1.0);
     o.crtCurvature = (float)ico_config_get_float("video.crt_curvature", -1.0);
+    /* the preset is a shortcut over the four rows: "original" (or no key)
+       is the PS2 picture whatever they say, as every earlier build read it;
+       "enhanced", or anything else, takes them as written */
+    s = ico_config_get_string("video.preset", "original");
+    if (s == NULL || lower_eq(s, "original")) {
+        ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+    }
     sanitize(&o);
     s_opt = o;
     s_read = 1;
     s_serial++;
-    if (o.preset == ICO_VIDEO_ENHANCED) {
+    preset = ico_video_preset(&o);
+    if (preset != ICO_VIDEO_ORIGINAL) {
         char res[32], fr[16];
 
         fprintf(stderr,
-                "video: Enhanced preset: resolution %s, aspect %s, texture filter %s, %s "
+                "video: %s preset: resolution %s, aspect %s, texture filter %s, %s "
                 "height, framerate %s\n",
+                preset == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom",
                 ico_video_resolution_name(&o, res, sizeof(res)), ico_video_aspect_name(o.aspect),
                 ico_video_filter_name(o.filter), o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
@@ -310,8 +353,10 @@ int ico_video_save(void)
     int r = 0;
 
     ico_video_get(&o);
-    r |= ico_config_set_string("video.preset",
-                               o.preset == ICO_VIDEO_ENHANCED ? "enhanced" : "original");
+    /* "original" only when the rows are the PS2's (an older build reads the
+       rest as Enhanced with these rows: the same picture) */
+    r |= ico_config_set_string(
+        "video.preset", ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? "original" : "enhanced");
     r |= ico_config_set_string("video.resolution", ico_video_resolution_name(&o, res, sizeof(res)));
     r |= ico_config_set_string("video.aspect", ico_video_aspect_name(o.aspect));
     r |= ico_config_set_bool("video.fullscreen", o.fullscreen);
@@ -358,9 +403,6 @@ float ico_video_aspect(void)
     float a;
 
     ico_video_get(&o);
-    if (o.preset != ICO_VIDEO_ENHANCED) {
-        return ASPECT_4_3;
-    }
     switch (o.aspect) {
     case ICO_ASPECT_16_10:
         return 16.0f / 10.0f;
@@ -389,8 +431,8 @@ int ico_video_framerate(void)
     IcoVideoOptions o;
 
     ico_video_get(&o);
-    /* both presets (F2): the Original preset's picture is the PS2's per
-       tick, and "uncapped" presents it between ticks too */
+    /* whatever the preset (F2): the Original picture is the PS2's per tick,
+       and "uncapped" presents it between ticks too */
     return o.framerate;
 }
 

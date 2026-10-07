@@ -553,7 +553,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     ico_video_get(&o);
     switch (opt) {
     case UI_OPT_PRESET:
-        return ui_Str(o.preset == ICO_VIDEO_ENHANCED ? UI_STR_VAL_ENHANCED : UI_STR_VAL_ORIGINAL);
+        /* P2: Custom */
+        return ui_Str(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? UI_STR_VAL_ORIGINAL
+                                                                 : UI_STR_VAL_ENHANCED);
     case UI_OPT_RESOLUTION:
         if (crtForcesNative(&o)) {
             return "1x (CRT)";
@@ -721,7 +723,9 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     int video = 0;
     switch (opt) {
     case UI_OPT_PRESET:
-        o.preset = o.preset == ICO_VIDEO_ENHANCED ? ICO_VIDEO_ORIGINAL : ICO_VIDEO_ENHANCED;
+        /* the shortcut: the two named presets toggle, Custom goes Enhanced */
+        ico_video_set_preset(&o, ico_video_preset(&o) == ICO_VIDEO_ENHANCED ? ICO_VIDEO_ORIGINAL
+                                                                            : ICO_VIDEO_ENHANCED);
         video = 1;
         break;
     case UI_OPT_RESOLUTION: {

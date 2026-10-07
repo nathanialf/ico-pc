@@ -676,33 +676,61 @@ static void checkOptions(const char *dir)
     ico_video_reload();
     IcoVideoOptions o;
     ico_video_get(&o);
-    CHECK(o.preset == ICO_VIDEO_ORIGINAL && o.aspect == ICO_ASPECT_4_3 && o.resW == 0 &&
-              o.resH == 0 && o.resScale == 0 && o.fullscreen == 0 && o.vsync == 1 &&
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.aspect == ICO_ASPECT_4_3 && o.resW == 0 &&
+              o.resH == 0 && o.resScale == 1 && o.fullscreen == 0 && o.vsync == 1 &&
               o.filter == ICO_FILTER_ORIGINAL && o.fullHeight == 0,
-          "options: defaults");
+          "options: defaults (the Original rows)");
     CHECK(ico_video_wide_x() == 1.0f && ico_video_aspect() == 4.0f / 3.0f, "options: default 4:3");
 
-    /* every key */
+    /* every key: "enhanced" takes the rows as written; 1920x1440 is none of
+       the two presets' */
     writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"1920x1440\"\n"
                     "aspect = \"16:9\"\nfullscreen = true\nvsync = false\n"
                     "texture_filter = \"anisotropic\"\nfull_height = true\n");
     ico_config_reset(toml, ini);
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(o.preset == ICO_VIDEO_ENHANCED && o.resW == 1920 && o.resH == 1440 &&
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM && o.resW == 1920 && o.resH == 1440 &&
               o.aspect == ICO_ASPECT_16_9 && o.fullscreen == 1 && o.vsync == 0 &&
               o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight == 1,
-          "options: every key read");
+          "options: every key read, Custom");
     CHECK(near(ico_video_wide_x(), 4.0f / 3.0f), "options: 16:9 widens by 4/3");
 
-    /* Original ignores the aspect */
+    /* the Original shortcut: the four rows at the PS2's, the rest kept */
     IcoVideoOptions p = o;
-    p.preset = ICO_VIDEO_ORIGINAL;
+    ico_video_set_preset(&p, ICO_VIDEO_ORIGINAL);
     const unsigned serial = ico_video_serial();
     ico_video_set(&p);
     CHECK(ico_video_serial() != serial, "options: set bumps the serial");
-    CHECK(ico_video_wide_x() == 1.0f, "options: Original is 4:3 whatever the aspect");
-    p.preset = ICO_VIDEO_ENHANCED;
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1 && o.resW == 0 &&
+              o.resH == 0 && o.aspect == ICO_ASPECT_4_3 && o.filter == ICO_FILTER_ORIGINAL &&
+              o.fullHeight == 0 && o.fullscreen == 1 && o.vsync == 0,
+          "options: the Original shortcut is 1x, 4:3, original, half, the rest kept");
+    CHECK(ico_video_wide_x() == 1.0f, "options: Original is 4:3");
+    /* the aspect applies whatever the preset */
+    p.aspect = ICO_ASPECT_16_9;
+    ico_video_set(&p);
+    ico_video_get(&o);
+    CHECK(near(ico_video_wide_x(), 4.0f / 3.0f) && ico_video_preset(&o) == ICO_VIDEO_CUSTOM,
+          "options: 16:9 alone widens by 4/3 and reads Custom");
+    /* the Enhanced shortcut */
+    ico_video_set_preset(&p, ICO_VIDEO_ENHANCED);
+    ico_video_set(&p);
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED && o.resScale == 0 && o.resW == 0 &&
+              o.resH == 0 && o.aspect == ICO_ASPECT_AUTO && o.filter == ICO_FILTER_ANISOTROPIC &&
+              o.fullHeight == 1,
+          "options: the Enhanced shortcut is window, auto, anisotropic, full");
+    /* Custom is no shortcut */
+    p.filter = ICO_FILTER_TRILINEAR;
+    o = p;
+    ico_video_set_preset(&p, ICO_VIDEO_CUSTOM);
+    CHECK(memcmp(&o, &p, sizeof(o)) == 0, "options: the Custom shortcut changes nothing");
+    CHECK(strcmp(ico_video_preset_name(ICO_VIDEO_ORIGINAL), "original") == 0 &&
+              strcmp(ico_video_preset_name(ICO_VIDEO_ENHANCED), "enhanced") == 0 &&
+              strcmp(ico_video_preset_name(ICO_VIDEO_CUSTOM), "custom") == 0,
+          "options: the preset names");
     p.aspect = ICO_ASPECT_16_10;
     ico_video_set(&p);
     CHECK(near(ico_video_wide_x(), 1.2f), "options: 16:10 widens by 1.2");
@@ -717,6 +745,50 @@ static void checkOptions(const char *dir)
     ico_video_set_window(1280, 1024);
     CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps at 4:3");
     ico_video_set_window(0, 0);
+
+    /* earlier builds' files: "original" (or no key) is the PS2 picture
+       whatever the rows say */
+    writeFile(toml, "version = 1\n[video]\npreset = \"original\"\nresolution = \"2x\"\n"
+                    "aspect = \"16:9\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1 &&
+              o.aspect == ICO_ASPECT_4_3 && ico_video_wide_x() == 1.0f,
+          "options: an old \"original\" with rows is Original");
+    writeFile(toml, "version = 1\n[video]\nresolution = \"2x\"\ntexture_filter = \"trilinear\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1 &&
+              o.filter == ICO_FILTER_ORIGINAL,
+          "options: no preset key is Original");
+    /* an old "enhanced" without rows: window, 4:3, original, half, the
+       picture it had */
+    writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM && o.resScale == 0 && o.resW == 0 &&
+              o.aspect == ICO_ASPECT_4_3 && o.filter == ICO_FILTER_ORIGINAL && o.fullHeight == 0 &&
+              ico_video_wide_x() == 1.0f,
+          "options: an old \"enhanced\" alone is Custom (window, 4:3, original, half)");
+    writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"window\"\n"
+                    "aspect = \"auto\"\ntexture_filter = \"anisotropic\"\nfull_height = true\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED,
+          "options: the full Enhanced rows are Enhanced");
+    writeFile(toml, "version = 1\n[video]\npreset = \"custom\"\nresolution = \"3x\"\n"
+                    "aspect = \"16:10\"\ntexture_filter = \"trilinear\"\nfull_height = true\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM && o.resScale == 3 &&
+              o.aspect == ICO_ASPECT_16_10 && o.filter == ICO_FILTER_TRILINEAR &&
+              o.fullHeight == 1 && near(ico_video_wide_x(), 1.2f),
+          "options: \"custom\" takes the rows as written");
 
     /* parsers */
     IcoVideoOptions q;
@@ -738,7 +810,9 @@ static void checkOptions(const char *dir)
     CHECK(strcmp(ico_video_resolution_name(&q, buf, sizeof(buf)), "3840x2160") == 0,
           "options: resolution name");
 
-    /* save: the [video] keys land in config.toml */
+    /* save: the [video] keys land in config.toml; Custom is written as
+       "enhanced" with its rows (an older build shows the same picture) */
+    ico_video_get(&p);
     p.aspect = ICO_ASPECT_16_9;
     p.resW = p.resH = 0;
     p.resScale = 2;
@@ -751,7 +825,21 @@ static void checkOptions(const char *dir)
     ico_config_reset(toml, ini);
     ico_video_reload();
     ico_video_get(&q);
-    CHECK(q.resScale == 2 && q.aspect == ICO_ASPECT_16_9, "options: read back");
+    CHECK(q.resScale == 2 && q.aspect == ICO_ASPECT_16_9 &&
+              ico_video_preset(&q) == ICO_VIDEO_CUSTOM,
+          "options: Custom read back");
+    /* Original is written as "original" with its rows */
+    ico_video_set_preset(&p, ICO_VIDEO_ORIGINAL);
+    ico_video_set(&p);
+    CHECK(ico_video_save() == 0, "options: save Original");
+    text = readFile(toml);
+    CHECK(text && strstr(text, "preset = \"original\"") && strstr(text, "resolution = \"1x\""),
+          "options: Original saved keys");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&q);
+    CHECK(ico_video_preset(&q) == ICO_VIDEO_ORIGINAL && q.resScale == 1,
+          "options: Original read back");
 
     /* back to the defaults for the rest */
     ico_video_defaults(&q);
@@ -823,7 +911,6 @@ static void checkWide(void)
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     cameraMats(&a);
-    o.preset = ICO_VIDEO_ENHANCED;
     o.aspect = ICO_ASPECT_16_9;
     ico_video_set(&o);
     cameraMats(&b);
