@@ -173,8 +173,11 @@ in your save, as on the PS2, not in `config.toml`.
 right: play time, deaths, how often Yorda was captured, saves and enemies
 defeated on this journey, whether New Game+ and Mirror mode are on, and how
 many achievements you have. Any assists that are on (Shadows never take
-Yorda, the stick fix, Developer mode) are listed under Assists, and in the
-castle's early areas the panel names the area you are in.
+Yorda, the stick fix, Developer mode) are listed under Assists, and
+wherever the save screen has a name for the area you are in, the panel
+shows that name. A save made before v0.4.0 never counted its saves and
+enemies, so the panel leaves those two lines out until you start a New
+Game.
 
 ## Starting a New Game: Mirror mode and New Game+
 
@@ -211,7 +214,8 @@ your user folder (see [Saves](#saves)):
   `ico_pc` (on Windows, inside the `x64` folder);
 - or in your user folder: `%APPDATA%\ico-pc\ico-pc\textures\SCES-50760\...`
   on Windows, `~/.local/share/ico-pc/ico-pc/textures/SCES-50760/...` on
-  Linux.
+  Linux; in portable mode (see [Saves](#saves)) the user folder is
+  `userdata` beside the program, so `userdata\textures\SCES-50760\...`.
 
 A pack copied without its `SCES-50760` folder (`textures/replacements`) is
 found too. Start the game: `logs/ico-pc.log` has a line such as
@@ -227,20 +231,29 @@ of its pictures in a compressed form (DDS files with "BC" compression) that
 the graphics card unpacks. Every desktop graphics card and the Steam Deck can do this. If
 a card cannot, the log says so and those files are skipped.
 
-**Memory.** Two settings in `config.toml` (in your user folder, under
+**Memory.** Three settings in `config.toml` (in your user folder, under
 `[video]`; edit it while the game is closed) control how much a pack may
-use:
+use. They start with a `#`, which switches a line off: remove the `#` to
+change one. A `config.toml` from an older version does not have them; add
+the line under `[video]` yourself.
 
-- `texture_pack_budget_mb` is how much memory, in MB, the pack may take
-  (2048 by default). Textures past that limit stay the game's own, and the
-  log says when the limit was reached. Raise it if your graphics card has
-  more memory and the log shows the limit.
-- `texture_pack_precache` (`true` by default) reads the whole pack into
-  memory in the background from the start, as the pack's author
+- `texture_pack_budget_mb` is how much of the graphics card's memory, in
+  MB, the pack's textures may take (2048 by default). Textures past that
+  limit stay the game's own, and the log says when the limit was reached.
+  Raise it if your graphics card has more memory and the log shows the
+  limit.
+- `texture_pack_precache` (`true` by default) reads the pack into the
+  computer's memory in the background from the start, as the pack's author
   recommends: the game's subtitles are separate pictures, and without this
-  the original subtitle can flash up for a moment before the pack's. Set it
-  to `false` to read each texture only when the game first shows it, which
-  uses less memory.
+  the original subtitle can flash up for a moment before the pack's. The
+  subtitles and menus are read first. Set it to `false` to read each
+  texture only when the game first shows it, which uses less memory.
+- `texture_pack_cache_mb` is how much of the computer's memory, in MB, that
+  reading ahead may use. `0`, the default, allows up to half of the
+  computer's memory: all of Sad Origami's pack (about 4 GB) on a computer
+  with 16 GB, and on one with less, still the subtitles and menus. What does
+  not fit is read when the game first shows it, and the log says how many
+  textures that was.
 
 **For pack makers.** With Developer mode on, a **Dump textures** row
 appears under it in Options. While it is On, each texture is saved as a
@@ -346,8 +359,8 @@ See [`docs/BUILDING.md`](https://github.com/nathanialf/ico-pc/blob/main/docs/BUI
 
 ## Special thanks
 
-- Sad Origami, for the ICO PAL HD texture pack and for letting the port
-  carry it
+- Sad Origami, for the ICO PAL HD texture pack, and for the support and
+  blessing to test the port with it
   ([GBAtemp thread](https://gbatemp.net/threads/ps2-ico-pal-sces-50760-in-progress.671638/)).
 
 ## Legal and licence
