@@ -12,7 +12,8 @@
  *             IsPointIsInScreen and the screen tests are unchanged), +0x240
  *             x scale divided by 4/3 and +0x280 following it; the renderer's
  *             g_proj / g_viewProj x row compressed about 2048
- *   scales    rd__ApplyDisplay: Original 1; Enhanced 2x, WxH, the window's
+ *   scales    rd__ApplyDisplay: the Original rows 1, the options under the
+ *             Original flag, its zero-size fallback; 2x, WxH, the window's
  *             box, the 4K cap, the work buffers' scale, full height
  *   boxes     rd__PresentBox at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
  *   coverage  rdtex_KeepAlphaCoverage keeps an alpha-tested texture's share
@@ -597,6 +598,7 @@ static RdSettings originalSettings(void)
     RdSettings s;
     memset(&s, 0, sizeof(s));
     s.preset = RD_PRESET_ORIGINAL;
+    s.sceneScale = 1.0f; /* the host's Original rows (v0.3.1) */
     s.outputWidth = 960;
     s.outputHeight = 720;
     s.aspect = 4.0f / 3.0f;
@@ -988,13 +990,36 @@ static void checkScales(void)
 {
     const RdSettings saved = g_rd.settings;
     RdSettings s = originalSettings();
-    s.sceneScale = 3.0f; /* ignored in Original */
-    s.aspect = 16.0f / 9.0f;
     applyWith(&s);
     CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && g_rd.workScale == 1.0f &&
               g_rd.wideX == 1.0f && g_rd.outAspect == 4.0f / 3.0f && !g_rd.fullHeight &&
               !g_rd.filterUpgrade,
-          "scales: Original is 1 whatever the options");
+          "scales: the Original rows are 1");
+    /* v0.3.1: the options apply under the Original flag too */
+    s.sceneScale = 3.0f;
+    s.aspect = 16.0f / 9.0f;
+    applyWith(&s);
+    CHECK(g_rd.sceneSx == 4.0f && g_rd.sceneSy == 3.0f && g_rd.workScale == 2.0f &&
+              near(g_rd.wideX, 0.75f) && near(g_rd.outAspect, 16.0f / 9.0f),
+          "scales: 3x at 16:9 under the Original flag (%g, %g, work %g, wide %g)", g_rd.sceneSx,
+          g_rd.sceneSy, g_rd.workScale, g_rd.wideX);
+    {
+        RhiRect b;
+        rd__PresentBox(1920, 1080, g_rd.outAspect, &b);
+        CHECK(b.x == 0 && b.y == 0 && b.w == 1920 && b.h == 1080,
+              "scales: the Original flag's 16:9 box fills 1920x1080");
+    }
+    /* the fallback: scale 0 and no size is the GS size under the Original
+       flag (a zeroed RdSettings), the output's box only under Enhanced */
+    s.sceneScale = 0.0f;
+    s.aspect = 4.0f / 3.0f;
+    s.outputWidth = 1920;
+    s.outputHeight = 1080;
+    applyWith(&s);
+    CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && g_rd.workScale == 1.0f,
+          "scales: the Original flag with scale 0 and no size is 1x");
+    s.outputWidth = 960;
+    s.outputHeight = 720;
     s.preset = RD_PRESET_ENHANCED;
     s.aspect = 4.0f / 3.0f;
     s.sceneScale = 2.0f;
@@ -1128,14 +1153,16 @@ static void checkOriginal(void)
     } else {
         printf("  original: not llvmpipe, the recorded hashes are not compared\n");
     }
-    /* Enhanced with every option neutral: the same bytes */
+    /* the Enhanced flag with the Original rows: the same bytes (the flag
+       keeps only the deferred text, the UI scale and the zero-size
+       fallback; none touches this frame) */
     RdSettings e = s;
     e.preset = RD_PRESET_ENHANCED;
     e.sceneScale = 1.0f;
     FrameHashes g;
     if (richFrame(&e, &g)) {
         CHECK(g.display == h.display && g.scene == h.scene && g.present == h.present,
-              "original: Enhanced at 1x, 4:3, no filter, half height is the Original frame");
+              "original: the Enhanced flag at 1x, 4:3, no filter, half height is the same frame");
     }
 }
 

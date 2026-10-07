@@ -15,12 +15,14 @@
  * be rendered on Vulkan and D3D12 and the PNGs compared.
  *
  * The display options (renderer wave 7, R7a): a
- * dump does not carry them, so the replay takes them here, the Original
- * preset by default:
- *   --enhanced            the Enhanced preset (needed by the four below)
+ * dump does not carry them, so the replay takes them here, the PS2 picture
+ * by default:
+ *   --enhanced            the Enhanced flag: the deferred text and UI scale,
+ *                         and the --present box as the default resolution;
+ *                         the four options below apply without it
  *   --aspect A            4:3 (default), 16:10, 16:9 or a number (w / h)
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
- *                         --present box, else the GS size)
+ *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode (R7c, section 21): UI prims

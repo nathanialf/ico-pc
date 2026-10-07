@@ -330,21 +330,26 @@ typedef struct RdCamera {
 
 typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPreset;
 
+/* v0.3.1: every display field below applies whatever the preset; preset
+ * is a flag the host derives (RD_PRESET_ORIGINAL when the options are the
+ * PS2 picture) and keeps only the deferred text (rd_present.c), the UI
+ * scale (ui_ScaleFor) and the scene size for sceneScale 0 without a size
+ * (the output's box with the Enhanced flag, else the GS size, so a zeroed
+ * RdSettings is the PS2 picture). */
 typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
-    float aspect;                       /* 4/3 .. 16/9; Original forces 4/3 */
-    uint8_t interpolate;                /* uncapped presentation (rd_Present, R7b), both presets */
+    float aspect;                       /* 4/3 .. 16/9 (0, a zeroed RdSettings: 4/3) */
+    uint8_t interpolate;                /* uncapped presentation (rd_Present, R7b), any preset */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
-    uint8_t
-        filterUpgrade; /* RdFilterUpgrade: trilinear/anisotropic with generated mips (Enhanced) */
-    uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass (Enhanced) */
+    uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
+    uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     uint8_t vsync;
     uint8_t _pad[3];
-    /* Wave 7 (R7a): the internal scene resolution in Enhanced, in texels:
-     * the scene's texture is sceneWidth x sceneHeight (GS coordinates
-     * unchanged); 0 x 0 = the output's: the
-     * presentation box in the window. */
+    /* Wave 7 (R7a): the internal scene resolution, in texels: the scene's
+     * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
+     * with sceneScale 0 = the presentation box in the window under the
+     * Enhanced flag, else the GS size. */
     uint32_t sceneWidth, sceneHeight;
     /* > 0: the scene's texture is this factor of the GS size instead
      * (vertically; horizontally times aspect / (4/3)), e.g. 2 */
@@ -987,12 +992,12 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  *   exactInt 1 */
 
 /* Wave 5 (R5a): the resolution scale of the work buffers (WORK0..3,
- * AURA_*, AA0/1, FEED128, SHADOW0..2): 1 in the Original preset (the
- * literal PS2 sizes); in Enhanced outputHeight / 448, at least 1 and at
- * most 2, so blur radii stay a constant fraction of the screen.  Target
- * allocation reads it; no setting selects Enhanced yet, and the replay of
- * scaled work buffers is not implemented. */
-float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight);
+ * AURA_*, AA0/1, FEED128, SHADOW0..2) for a scene sceneHeight texels high
+ * (the 448-line frame at the scene's vertical scale): 1 at the GS height
+ * or below (the literal PS2 sizes), else sceneHeight / 448, at most 2, so
+ * blur radii stay a constant fraction of the screen.  rd__ApplyDisplay
+ * reads it, whatever the preset (v0.3.1). */
+float rd_WorkTargetScale(uint32_t sceneHeight);
 
 /* ------------------------------------- frame lifecycle and camera (R2c) */
 

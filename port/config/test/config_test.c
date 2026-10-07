@@ -454,7 +454,7 @@ static void test_first_run(void)
     CHECK(ico_config_save() == 0);
     text = read_file(toml);
     CHECK(text != NULL && strstr(text, "preset = \"enhanced\"") != NULL &&
-          strstr(text, "# \"original\" or") != NULL);
+          strstr(text, "# \"original\" is the PS2 picture") != NULL);
     free(text);
     remove(toml);
 }

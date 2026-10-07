@@ -505,12 +505,12 @@ void rd__TargetScaleOf(RdTargetRec *t, int named)
     t->wideBlock = (uint8_t)block;
 }
 
-float rd_WorkTargetScale(RdPreset preset, uint32_t outputHeight)
+float rd_WorkTargetScale(uint32_t sceneHeight)
 {
-    if (preset != RD_PRESET_ENHANCED || outputHeight == 0) {
-        return 1.0f; /* Original: the literal PS2 sizes */
+    if (sceneHeight <= 448) {
+        return 1.0f; /* the GS height (1x): the literal PS2 sizes */
     }
-    float k = (float)outputHeight / 448.0f;
+    float k = (float)sceneHeight / 448.0f;
     return k < 1.0f ? 1.0f : (k > 2.0f ? 2.0f : k);
 }
 
@@ -1269,6 +1269,8 @@ void rd_BeginFrame(void)
          * targets' scales recreates them (their content is lost: the next
          * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
         if (rd__ApplyDisplay() && g_rd.hasDevice) {
+            rd__Log("display: targets recreated at scene %gx%g, work %g", (double)g_rd.sceneSx,
+                    (double)g_rd.sceneSy, (double)g_rd.workScale);
             rd__OnHost(recreateTargets, NULL);
             /* R7b: the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */

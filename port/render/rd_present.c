@@ -1,33 +1,34 @@
 /* rd_present.c: DISPLAY to the output.
  *
- * Original preset: the reduced DISPLAY frame
+ * The PS2 picture: the reduced DISPLAY frame
  * (512 x H/2) is shown in a centred 4:3 rectangle of the output, each line
  * doubled (field-line doubling, nearest vertically) and filtered bilinearly
  * horizontally.  Two blits:
  *   1. DISPLAY -> lines target (512 x H), nearest: exact line doubling;
- *   2. lines target -> the 4:3 box of the output, bilinear, black outside.
+ *   2. lines target -> the aspect's box of the output, bilinear, black
+ *      outside.
  * The output is the swapchain backbuffer with a window, or a headless RGBA8
  * texture of RdSettings.outputWidth x outputHeight (tests, the replay tool;
  * none when either is 0).
  *
- * Presets (wave 2, R2c: hooks; wave 7, R7a: the display options).
- * RdPresentPreset holds everything a preset may change at present time (the
- * Enhanced preset's interpolation, R7b rd_interp.c, is not one: it presents
- * several times per tick through rd_Present with RdSettings.interpolate, each
- * present replaying the frame blended from the retained pair, and this step is
- * the same either way: it shows whatever DISPLAY the replay left):
- *   aspectFromSettings  R7a: the box takes the aspect option (g_rd.outAspect)
- *                 instead of 4:3; the projection side is rd_frame.c
- *                 rd__FillCameraCB, the replay's wide x scale and GsBase.c
- *                 gsbHostWideX
- *   mirror        R7c: step 2 may flip x (both presets: the mirror mode
- *                 is a gameplay option, not a display one); flipped when
+ * The display options (wave 2, R2c: hooks; wave 7, R7a; v0.3.1: each
+ * applies on its own, the preset is only the host's shortcut over them).
+ * RdPresentPreset holds the present's filters and its mirror (the
+ * interpolation, R7b rd_interp.c, is not one: it presents several times per
+ * tick through rd_Present with RdSettings.interpolate, each present
+ * replaying the frame blended from the retained pair, and this step is the
+ * same either way: it shows whatever DISPLAY the replay left):
+ *   mirror        R7c: step 2 may flip x (the mirror mode is a gameplay
+ *                 option, not a display one); flipped when
  *                 rd__MirrorOn (rd.h rd_SetMirror, RdSettings.mirror).  Every
  *                 present goes through here, the interpolated ones (R7b
  *                 rd_Present) included; UI prims were flipped at replay
  *                 (rd_replay.c mirrorUi) so they read normally
- *   fullHeight    R7a: with the full-height option DISPLAY's texture has the
- *                 scene's height (rd__TargetScaleOf) and step 1 is skipped
+ * The box takes the aspect option (g_rd.outAspect, 4:3 for a zeroed
+ * RdSettings); the projection side is rd_frame.c rd__FillCameraCB, the
+ * replay's wide x scale and GsBase.c gsbHostWideX.  With the full-height
+ * option DISPLAY's texture has the scene's height (rd__TargetScaleOf) and
+ * step 1 is skipped.
  * The scene resolution needs nothing here: DISPLAY's texture is whatever
  * size rd__ApplyDisplay gave it, and both steps sample it normalised.
  * rd__ApplyDisplay (below) turns RdSettings into the scales and factors the
@@ -69,11 +70,8 @@
 typedef struct RdPresentPreset {
     RdFilter doubleFilter; /* step 1 */
     RdFilter scaleFilter;  /* step 2 */
-    int lineDouble;
-    /* Enhanced fields */
-    int aspectFromSettings;
-    int mirror; /* R7c: step 2 flips x when the mirror mode is on */
-    int fullHeight;
+    int lineDouble;        /* step 1, unless the full-height option is on */
+    int mirror;            /* R7c: step 2 flips x when the mirror mode is on */
 } RdPresentPreset;
 
 #define RD_ASPECT_43 (4.0f / 3.0f)
@@ -108,23 +106,14 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
     box->h = h ? h : 1;
 }
 
-static const RdPresentPreset s_presets[2] = {
-    /* RD_PRESET_ORIGINAL */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 0, 1, 0},
-    /* RD_PRESET_ENHANCED: the aspect and full-height options (R7a), the
-     * mirror (R7c) */
-    {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1, 1, 1},
-};
-
-static const RdPresentPreset *activePreset(void)
-{
-    return &s_presets[g_rd.settings.preset == RD_PRESET_ENHANCED ? 1 : 0];
-}
+/* one for every preset: the options it used to gate apply on their own
+ * (rd__ApplyDisplay) */
+static const RdPresentPreset s_present = {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1};
 
 /* step 2's box in an outW x outH output */
-static void outputBox(const RdPresentPreset *pr, uint32_t outW, uint32_t outH, RhiRect *box)
+static void outputBox(uint32_t outW, uint32_t outH, RhiRect *box)
 {
-    rd__PresentBox(outW, outH, pr->aspectFromSettings ? g_rd.outAspect : RD_ASPECT_43, box);
+    rd__PresentBox(outW, outH, g_rd.outAspect, box);
 }
 
 static float clampAspect(float a)
@@ -138,52 +127,65 @@ static float clampAspect(float a)
 bool rd__ApplyDisplay(void)
 {
     const RdSettings *st = &g_rd.settings;
-    float sx = 1.0f, sy = 1.0f, work = 1.0f, wide = 1.0f, aspect = RD_ASPECT_43;
-    uint8_t filter = 0, full = 0;
-    if (st->preset == RD_PRESET_ENHANCED) {
-        aspect = clampAspect(st->aspect);
-        wide = RD_ASPECT_43 / aspect;
-        const float gw = (float)g_rd.gsW, gh = (float)g_rd.gsH;
-        float w, h;
-        /* package CRT2: the CRT filter shows the PS2's pixels, so the scene
-         * renders at 1x while it is on, whatever the resolution asks (which
-         * takes effect again with the filter off) */
-        const float scale = rd__CrtOn() ? 1.0f : st->sceneScale;
-        if (scale > 0.0f) {
-            h = gh * scale;
-            w = gw * scale * aspect / RD_ASPECT_43;
-        } else if (st->sceneWidth && st->sceneHeight) {
-            w = (float)st->sceneWidth;
-            h = (float)st->sceneHeight;
-        } else if (st->outputWidth && st->outputHeight) {
-            RhiRect b;
-            rd__PresentBox(st->outputWidth, st->outputHeight, aspect, &b);
-            w = (float)b.w;
-            h = (float)b.h;
-        } else {
-            w = gw;
-            h = gh;
-        }
-        /* from the GS size up to 4K (3840 x 2160) */
-        if (w > 3840.0f) {
-            h *= 3840.0f / w;
-            w = 3840.0f;
-        }
-        if (h > 2160.0f) {
-            w *= 2160.0f / h;
-            h = 2160.0f;
-        }
-        sx = w / gw < 1.0f ? 1.0f : w / gw;
-        sy = h / gh < 1.0f ? 1.0f : h / gh;
-        work = rd_WorkTargetScale(RD_PRESET_ENHANCED, (uint32_t)(sy * 448.0f + 0.5f));
-        filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
-        if (g_rd.hasDevice && !rhi_Limits()->textureMips) {
-            filter = 0;
-        }
-        full = st->fullHeightScene != 0;
+    /* v0.3.1: every option applies whatever the preset; a zeroed
+     * RdSettings is the PS2 picture (scale 0 and no size is the GS size
+     * unless the Enhanced flag asks for the output's box, below) */
+    const float aspect = clampAspect(st->aspect);
+    const float wide = RD_ASPECT_43 / aspect;
+    const float gw = (float)g_rd.gsW, gh = (float)g_rd.gsH;
+    float w, h;
+    /* package CRT2: the CRT filter shows the PS2's pixels, so the scene
+     * renders at 1x while it is on, whatever the resolution asks (which
+     * takes effect again with the filter off) */
+    const int crtLock = rd__CrtOn() && st->sceneScale != 1.0f;
+    const float scale = rd__CrtOn() ? 1.0f : st->sceneScale;
+    if (scale > 0.0f) {
+        h = gh * scale;
+        w = gw * scale * aspect / RD_ASPECT_43;
+    } else if (st->sceneWidth && st->sceneHeight) {
+        w = (float)st->sceneWidth;
+        h = (float)st->sceneHeight;
+    } else if (st->preset == RD_PRESET_ENHANCED && st->outputWidth && st->outputHeight) {
+        /* "window": the presentation box.  Only with the Enhanced flag, so
+         * a zeroed RdSettings (the tests', the replay tool's default) stays
+         * the GS size; the host sends scale 1 for the Original rows */
+        RhiRect b;
+        rd__PresentBox(st->outputWidth, st->outputHeight, aspect, &b);
+        w = (float)b.w;
+        h = (float)b.h;
+    } else {
+        w = gw;
+        h = gh;
     }
+    /* from the GS size up to 4K (3840 x 2160) */
+    if (w > 3840.0f) {
+        h *= 3840.0f / w;
+        w = 3840.0f;
+    }
+    if (h > 2160.0f) {
+        w *= 2160.0f / h;
+        h = 2160.0f;
+    }
+    const float sx = w / gw < 1.0f ? 1.0f : w / gw;
+    const float sy = h / gh < 1.0f ? 1.0f : h / gh;
+    const float work = rd_WorkTargetScale((uint32_t)(sy * 448.0f + 0.5f));
+    uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
+    if (g_rd.hasDevice && !rhi_Limits()->textureMips) {
+        filter = 0;
+    }
+    const uint8_t full = st->fullHeightScene != 0;
+    const uint32_t vs = st->vsync ? 2u : 1u;
     const bool changed = sx != g_rd.sceneSx || sy != g_rd.sceneSy || work != g_rd.workScale ||
                          full != g_rd.fullHeight;
+    /* one line when what the options give differs from what was in force:
+     * this runs on a settings change or a resize (rd_BeginFrame's
+     * settingsPending) and at init, never per frame */
+    if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
+        vs != g_rd.vsyncApplied) {
+        rd__Log("display: scene %gx%g%s, work %g, aspect %.3f, filter %u, %s height, vsync %s",
+                (double)sx, (double)sy, crtLock ? " (CRT: 1x)" : "", (double)work, (double)aspect,
+                (unsigned)filter, full ? "full" : "half", st->vsync ? "on" : "off");
+    }
     g_rd.sceneSx = sx;
     g_rd.sceneSy = sy;
     g_rd.workScale = work;
@@ -193,7 +195,6 @@ bool rd__ApplyDisplay(void)
     g_rd.fullHeight = full;
     /* vsync: the swapchain's present mode (Vulkan FIFO, else MAILBOX or
      * IMMEDIATE; D3D12 the sync interval) */
-    const uint32_t vs = st->vsync ? 2u : 1u;
     if (g_rd.vsyncApplied && g_rd.vsyncApplied != vs && g_rd.hasDevice &&
         rhi_SwapchainFormat() != RHI_FMT_UNKNOWN && st->outputWidth && st->outputHeight) {
         rhi_WaitIdle();
@@ -649,9 +650,9 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     }
     /* the output and box rd__PresentRecord will use: both come from
      * g_rd.settings, which does not change inside a replay */
-    const RdPresentPreset *pr = activePreset();
+    const RdPresentPreset *pr = &s_present;
     RhiRect box;
-    outputBox(pr, w, h, &box);
+    outputBox(w, h, &box);
     /* package CRT2: under the CRT filter the overlay is part of the
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
@@ -921,7 +922,7 @@ void rd__PresentRecord(RhiCommandList cl)
     if (!disp || !disp->color.id) {
         return;
     }
-    const RdPresentPreset *pr = activePreset();
+    const RdPresentPreset *pr = &s_present;
     RhiTexture out = s_window ? s_backbuffer : g_rd.presentOut;
     RhiState *outState = s_window ? &s_backbufferState : &g_rd.presentOutState;
 
@@ -929,7 +930,7 @@ void rd__PresentRecord(RhiCommandList cl)
     uint32_t sw = disp->tw, sh = disp->th;
     rd__Transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
     RhiRect box;
-    outputBox(pr, s_outW, s_outH, &box);
+    outputBox(s_outW, s_outH, &box);
     /* package CRT: the filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
@@ -956,7 +957,7 @@ void rd__PresentRecord(RhiCommandList cl)
         uiInPicture = filtered && ui;
     }
     /* the full-height scene: DISPLAY already has every line */
-    if (!filtered && pr->lineDouble && !(pr->fullHeight && g_rd.fullHeight)) {
+    if (!filtered && pr->lineDouble && !g_rd.fullHeight) {
         const uint32_t lw = disp->tw, lh = disp->th * 2;
         if (!g_rd.presentLines.id || g_rd.presentLinesW != lw || g_rd.presentLinesH != lh) {
             if (g_rd.presentLines.id) {
@@ -1064,8 +1065,9 @@ void rd_ResizeOutput(uint32_t width, uint32_t height)
     if (g_rd.hasDevice && rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
         rhi_ResizeSwapchain(width, height, g_rd.settings.vsync != 0);
     }
-    /* R7a: an Enhanced scene sized by the window follows it at the next
-     * rd_BeginFrame (rd__ApplyDisplay recreates the targets if their scale
-     * changed; Original never changes) */
+    /* R7a: a scene sized by the window (resolution "window", the
+     * Enhanced flag) follows it at the next rd_BeginFrame
+     * (rd__ApplyDisplay recreates the targets if their scale changed; a
+     * fixed scale or size never changes) */
     g_rd.settingsPending = true;
 }
