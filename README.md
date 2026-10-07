@@ -139,7 +139,9 @@ in your save, as on the PS2, not in `config.toml`.
   60 Hz; the default is 60 Hz). The video mode row is shown only when
   Options is opened from the title.
   On a wider screen you see more of the world to the sides, while the
-  menus, subtitles and movies stay in a 4:3 box in the middle.
+  menus, subtitles and movies stay in a 4:3 box in the middle. At the far
+  sides of a very wide picture, some things can appear a moment late, since
+  the game only expected a 4:3 view.
 - **Audio:** master, music and effects volume, stereo or mono, and the output
   device.
 - **Controls:** remapping, mouse sensitivity, "Circle goes back" (Circle backs
