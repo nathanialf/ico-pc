@@ -23,6 +23,7 @@
 #include "rd_tex.h"
 #include "rhi.h"
 #include "sched.h"
+#include "settings.h"
 #include "trace_host.h"
 #include "ui_host.h"
 #include "video_options.h"
@@ -379,6 +380,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     s_open = 1;
     /* Phase 6 (6B): the port's runtime text and popups (port/ui) */
     ui_HostInit();
+    /* v0.3.1 (P3): the Fullscreen row shows what the window is, not the
+       option (the window manager can refuse or change it) */
+    ui_SettingsSetFullscreenQuery(window_fullscreen);
     {
         char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
@@ -1092,6 +1096,7 @@ void ico_window_close(void)
     s_open = 0;
     set_capture(0);
     ico_input_sdl_shutdown();
+    ui_SettingsSetFullscreenQuery(NULL);
     ui_HostShutdown();
     rd_SetHostCall(NULL);
     rd_Shutdown();
