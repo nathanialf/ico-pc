@@ -640,7 +640,16 @@ void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOf
     memset(&dl, 0, sizeof(dl));
     sl.pResource = s->res;
     sl.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    sl.PlacedFootprint = dx_Footprint(t, 0, srcOffset, region.w, region.h, rowPitch);
+    /* texture packs: a BC footprint covers whole 4x4 blocks, so a level
+     * under 4 x 4 (or a block-aligned region's ragged edge) is rounded up
+     * to the block multiple; D3D12 treats a BC subresource as padded to
+     * its blocks, so the copy may end past the level's texel size */
+    uint32_t fw = region.w, fh = region.h;
+    if (rhi_FormatIsBlock(t->rhiFormat)) {
+        fw = (fw + 3u) & ~3u;
+        fh = (fh + 3u) & ~3u;
+    }
+    sl.PlacedFootprint = dx_Footprint(t, 0, srcOffset, fw, fh, rowPitch);
     dl.pResource = t->res;
     dl.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     dl.SubresourceIndex = d3dp_Subresource(mip, 0, t->mips);

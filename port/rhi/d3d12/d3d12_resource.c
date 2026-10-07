@@ -248,8 +248,12 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         desc->width == 0 || desc->height == 0) {
         return out;
     }
-    if (rhi_FormatIsBlock(desc->format) && !g_dx.limits.bcTextures) {
-        return out; /* texture packs: BC needs the device feature (RhiLimits.bcTextures) */
+    if (rhi_FormatIsBlock(desc->format) &&
+        (!g_dx.limits.bcTextures ||
+         (desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL)))) {
+        /* texture packs: BC needs the device feature (RhiLimits.bcTextures)
+         * and is sampled and copied into only, never drawn to */
+        return out;
     }
     const DxFormatMap *fm = &dx_formatMap[desc->format];
     DxTexture *t = NULL;

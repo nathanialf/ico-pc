@@ -177,6 +177,9 @@ typedef struct VkrState {
     PFN_vkCmdBeginRendering cmdBeginRendering;
     PFN_vkCmdEndRendering cmdEndRendering;
     bool anisotropy;
+    /* texture packs: textureCompressionBC enabled and the four BC formats
+     * sampleable and copyable (RhiLimits.bcTextures) */
+    bool bc;
     uint32_t validationErrors;
     bool deviceLost; /* a call returned VK_ERROR_DEVICE_LOST (rhi_DeviceLost) */
 

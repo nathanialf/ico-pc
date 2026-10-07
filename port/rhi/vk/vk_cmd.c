@@ -988,10 +988,15 @@ void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOf
     if (!c || !s || !t) {
         return;
     }
+    /* bufferRowLength is in texels; a BC row of blocks (rowPitch bytes)
+     * covers 4 texel columns per block.  The extent stays in texels: a BC
+     * level under 4 x 4 passes its real size (offset + extent may end at
+     * the level's edge instead of a block multiple) */
     uint32_t texel = vkr_formatMap[t->rhiFormat].texelBytes;
+    const uint32_t blockW = rhi_FormatIsBlock(t->rhiFormat) ? 4u : 1u;
     VkBufferImageCopy r = {
         .bufferOffset = srcOffset,
-        .bufferRowLength = texel ? rowPitch / texel : 0,
+        .bufferRowLength = texel ? rowPitch / texel * blockW : 0,
         .bufferImageHeight = 0,
         .imageSubresource = {vkr_CopyAspect(t, RHI_ASPECT_COLOR), mip, 0, 1},
         .imageOffset = {region.x, region.y, 0},

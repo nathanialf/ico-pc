@@ -446,6 +446,18 @@ static bool vkr_CreateDevice(void)
     VkPhysicalDeviceFeatures avail;
     vkGetPhysicalDeviceFeatures(g_vkr.phys, &avail);
     g_vkr.anisotropy = avail.samplerAnisotropy == VK_TRUE;
+    /* texture packs: BC1/2/3/7 come with textureCompressionBC (every
+     * desktop GPU, the Deck, lavapipe); the formats' sampled and copy
+     * features are checked too, so bcTextures promises what it says */
+    g_vkr.bc = avail.textureCompressionBC == VK_TRUE;
+    for (int f = RHI_FMT_BC1_UNORM; g_vkr.bc && f <= RHI_FMT_BC7_UNORM; f++) {
+        VkFormatProperties fp;
+        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_formatMap[f].vk, &fp);
+        const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                                          VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        g_vkr.bc = (fp.optimalTilingFeatures & need) == need;
+    }
 
     VkPhysicalDeviceDynamicRenderingFeatures dyn = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
@@ -463,6 +475,7 @@ static bool vkr_CreateDevice(void)
             {
                 .dualSrcBlend = VK_TRUE,
                 .samplerAnisotropy = g_vkr.anisotropy ? VK_TRUE : VK_FALSE,
+                .textureCompressionBC = g_vkr.bc ? VK_TRUE : VK_FALSE,
             },
     };
     float prio = 1.0f;
@@ -552,8 +565,8 @@ static void vkr_FillLimits(void)
     /* package PA */
     o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
     o->maxStorageRange = l->maxStorageBufferRange;
-    /* texture packs: BC sampling and block uploads are not wired yet */
-    o->bcTextures = false;
+    /* texture packs: the BC formats (vkr_CreateDevice enabled the feature) */
+    o->bcTextures = g_vkr.bc;
 }
 
 /* ------------------------------------------------------------- lifecycle */

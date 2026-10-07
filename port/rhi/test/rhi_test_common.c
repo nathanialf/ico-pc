@@ -174,6 +174,174 @@ static void expectCell(const uint8_t *img, uint32_t pitch, int cell, uint8_t r, 
     }
 }
 
+/* Texture packs: block-compressed textures.  A BC1 texture with a full
+ * chain (8x8, 4x4 and the levels under one block, 2x2 and 1x1, which copy
+ * their real size) and a BC3 4x4, uploaded by buffer copies at the
+ * backend's pitch and offset alignment, each level drawn into its own
+ * 16x16 cell through a nearest sampler pinned to it (minLod = maxLod) and
+ * read back exactly: every block is one solid colour, so the decode is
+ * exact on any implementation.  Skipped (not failed) on a device without
+ * BC. */
+static void bcBlock(uint8_t *o, uint16_t c565, int bc3, uint8_t alpha)
+{
+    if (bc3) {
+        /* alpha0 = alpha1 = alpha, every 3-bit index 0 */
+        memset(o, 0, 8);
+        o[0] = o[1] = alpha;
+        o += 8;
+    }
+    /* colour0 = colour1, every 2-bit index 0: colour0 */
+    o[0] = o[2] = (uint8_t)(c565 & 0xFF);
+    o[1] = o[3] = (uint8_t)(c565 >> 8);
+    o[4] = o[5] = o[6] = o[7] = 0;
+}
+
+static void bcCell(const Ctx *c)
+{
+    const RhiLimits *lim = rhi_Limits();
+    if (!lim->bcTextures) {
+        rhi_test_Log("SKIP %s: BC cell (no BC formats on this device)\n", s_label);
+        return;
+    }
+
+    enum { LEVELS = 4, BW = 5 * CELL, BH = CELL };
+
+    static const uint16_t colour[LEVELS + 1] = {0xF800, 0x07E0, 0x001F, 0xFFFF, 0xF81F};
+    static const uint8_t want[LEVELS + 1][4] = {{255, 0, 0, 255},
+                                                {0, 255, 0, 255},
+                                                {0, 0, 255, 255},
+                                                {255, 255, 255, 255},
+                                                {255, 0, 255, 128}};
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    const uint32_t pa = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1u;
+    uint32_t oa = lim->copyOffsetAlign ? lim->copyOffsetAlign : 1u;
+    oa = oa < 16u ? 16u : oa; /* and a whole block */
+
+    RhiTexture tgt = rhi_CreateTexture(
+        &(RhiTextureDesc){BW, BH, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "bc target"});
+    RhiTexture bc1 = rhi_CreateTexture(&(RhiTextureDesc){
+        8, 8, LEVELS, RHI_FMT_BC1_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "bc1"});
+    RhiTexture bc3 = rhi_CreateTexture(
+        &(RhiTextureDesc){4, 4, 1, RHI_FMT_BC3_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "bc3"});
+    /* a block texture is never a target */
+    RhiTexture bad = rhi_CreateTexture(
+        &(RhiTextureDesc){4, 4, 1, RHI_FMT_BC1_UNORM, RHI_TEX_RENDER_TARGET, "bc target?"});
+    RhiBuffer ring = rhi_CreateBuffer(
+        &(RhiBufferDesc){65536, RHI_BUF_VERTEX | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "bc ring"});
+    uint8_t *map = ring.id ? rhi_MapBuffer(ring) : NULL;
+    RhiBlendState opaque = {.writeMask = 0xF};
+    RhiPipeline pipe = makePipeline(c, c->psTex, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "bc");
+    RhiSampler smp[LEVELS];
+    int ok = tgt.id && bc1.id && bc3.id && map && pipe.id;
+    for (int l = 0; l < LEVELS; l++) {
+        RhiSamplerDesc sd = {RHI_FILTER_NEAREST,
+                             RHI_FILTER_NEAREST,
+                             RHI_FILTER_NEAREST,
+                             RHI_WRAP_CLAMP,
+                             RHI_WRAP_CLAMP,
+                             1.0f,
+                             0.0f,
+                             (float)l,
+                             (float)l};
+        smp[l] = rhi_CreateSampler(&sd);
+        ok = ok && smp[l].id;
+    }
+    if (bad.id) {
+        rhi_test_Log("FAIL %s: a BC render target was created\n", s_label);
+        failures++;
+        rhi_DestroyTexture(bad);
+    }
+    if (!ok) {
+        rhi_test_Log("FAIL %s: BC cell resources\n", s_label);
+        failures++;
+        return;
+    }
+
+    /* the quads, then the levels' blocks */
+    Vtx v[(LEVELS + 1) * 6];
+    for (int i = 0; i <= LEVELS; i++) {
+        quad(&v[i * 6], (float)(i * CELL), 0, (float)(i * CELL + CELL), CELL, BW, BH, 0.0f, 255,
+             255, 255, 255);
+    }
+    memcpy(map, v, sizeof(v));
+    uint64_t off = 4096;
+    RhiCommandList cl = rhi_BeginCommands();
+    RhiTextureBarrier up[3] = {{bc1, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
+                               {bc3, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
+                               {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET}};
+    rhi_CmdBarrier(cl, up, 3);
+    for (int l = 0; l <= LEVELS; l++) {
+        const int isBc3 = l == LEVELS;
+        const uint32_t w = isBc3 ? 4u : 8u >> l, h = w;
+        const uint32_t bb = isBc3 ? 16u : 8u;
+        const uint32_t bw = (w + 3u) / 4u, bh = (h + 3u) / 4u;
+        const uint32_t pitch = (bw * bb + pa - 1u) / pa * pa;
+        off = (off + oa - 1u) / oa * oa;
+        for (uint32_t by = 0; by < bh; by++) {
+            for (uint32_t bx = 0; bx < bw; bx++) {
+                bcBlock(map + off + (uint64_t)by * pitch + (uint64_t)bx * bb, colour[l], isBc3,
+                        0x80);
+            }
+        }
+        rhi_CmdCopyBufferToTexture(cl, ring, off, pitch, isBc3 ? bc3 : bc1,
+                                   isBc3 ? 0u : (uint32_t)l, (RhiRect){0, 0, w, h});
+        off += (uint64_t)pitch * bh;
+    }
+    RhiTextureBarrier rd[2] = {{bc1, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ},
+                               {bc3, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ}};
+    rhi_CmdBarrier(cl, rd, 2);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] = (RhiColorAttachment){tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}};
+    rp.colorCount = 1;
+    rp.width = BW;
+    rp.height = BH;
+    rhi_CmdBeginRenderPass(cl, &rp);
+    rhi_CmdSetPipeline(cl, pipe);
+    rhi_CmdSetVertexBuffer(cl, 0, ring, 0);
+    for (int i = 0; i <= LEVELS; i++) {
+        RhiBinding tb[2] = {{0}, {0}};
+        tb[0].slot = 1;
+        tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+        tb[0].texture = i == LEVELS ? bc3 : bc1;
+        tb[1].slot = 1;
+        tb[1].type = RHI_BIND_SAMPLER;
+        tb[1].sampler = smp[i == LEVELS ? 0 : i];
+        RhiBindGroupDesc tbd = {c->l2, tb, 2};
+        rhi_CmdSetBindGroup(cl, 2, rhi_CreateBindGroup(&tbd));
+        rhi_CmdDraw(cl, 6, (uint32_t)i * 6u, 1);
+    }
+    rhi_CmdEndRenderPass(cl);
+    RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+    rhi_CmdBarrier(cl, &post, 1);
+    rhi_EndCommands(cl);
+    rhi_Submit(cl);
+
+    static uint8_t img[BW * BH * 4];
+    uint32_t pitch = 0;
+    if (!rhi_ReadbackTexture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+        rhi_test_Log("FAIL %s: BC target readback\n", s_label);
+        failures++;
+    } else {
+        for (int i = 0; i <= LEVELS; i++) {
+            for (int k = 0; k < 3; k++) {
+                expectRGBA(img, pitch, i * CELL + 2 + k * 6, 2 + k * 6, want[i][0], want[i][1],
+                           want[i][2], want[i][3], 100 + i);
+            }
+        }
+    }
+    rhi_DestroyPipeline(pipe);
+    for (int l = 0; l < LEVELS; l++) {
+        rhi_DestroySampler(smp[l]);
+    }
+    rhi_DestroyTexture(bc1);
+    rhi_DestroyTexture(bc3);
+    rhi_DestroyTexture(tgt);
+    rhi_DestroyBuffer(ring);
+    if (!failures) {
+        rhi_test_Log("%s: BC cell passed (BC1 8x8 with 4 levels, BC3 4x4)\n", s_label);
+    }
+}
+
 int rhi_test_RunCells(const RhiTestConfig *cfg)
 {
     failures = 0;
@@ -611,6 +779,11 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         if (failures) {
             break;
         }
+    }
+
+    if (!failures) {
+        rhi_WaitFrame();
+        bcCell(&c);
     }
 
     /* destroys are deferred; the frames in flight retire them */

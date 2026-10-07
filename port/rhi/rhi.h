@@ -460,9 +460,14 @@ typedef struct RhiLimits {
     uint32_t maxDynamicUniforms;
     uint64_t maxStorageRange;
     /* Texture packs: rhi_CreateTexture takes the RHI_FMT_BC* formats
-     * (Vulkan textureCompressionBC, every D3D12 device).  Both backends
-     * report false until the block upload path lands, and refuse the
-     * formats while it is false. */
+     * (Vulkan textureCompressionBC with the formats' sampled and copy
+     * features, every D3D12 device) and refuses them while this is false.
+     * Their buffer-to-texture copies: rowPitch is the bytes of one row of
+     * 4x4 blocks (ceil(w / 4) * 8 or 16, rounded up to copyRowPitchAlign),
+     * srcOffset a multiple of the block bytes and of copyOffsetAlign, the
+     * region in texels with x, y multiples of 4 and w, h either multiples
+     * of 4 or reaching the level's edge (a level under 4 x 4 passes its
+     * real size). */
     bool bcTextures;
 } RhiLimits;
 

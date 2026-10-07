@@ -342,8 +342,9 @@ static void dx_FillLimits(void)
     /* a structured-buffer SRV of 16-byte elements:
      * D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP (27) elements */
     o->maxStorageRange = (uint64_t)16u << 27;
-    /* texture packs: BC sampling and block uploads are not wired yet */
-    o->bcTextures = false;
+    /* texture packs: BC1/2/3/7 are required of every D3D12 device
+     * (feature level 11_0) */
+    o->bcTextures = true;
 }
 
 /* ------------------------------------------------------------- lifecycle */
