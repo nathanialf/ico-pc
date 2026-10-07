@@ -969,6 +969,13 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_opt_set_developer_mode(!ico_opt_developer_mode());
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
         s_dirtyConfig = 1;
+        if (!ico_opt_developer_mode() && o.dumpTextures) {
+            /* v0.4.0: Dump textures lives under Developer mode; with its row
+               hidden it is switched off too, or the dumps would go on being
+               written on every start with no row to stop them */
+            o.dumpTextures = 0;
+            video = 1;
+        }
         break;
     default:
         break;

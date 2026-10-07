@@ -90,6 +90,10 @@ int ico_host_pref_dir(char *out, size_t size);
    (portable=0), -1 the folder decides (the start). Loading the executable's
    own ini sets it from the file, before the folder is first used. */
 void ico_host_set_portable(int setting);
+/* ico-pc.ini's portable= value as ico_host_set_portable takes it: -1 for
+   none or empty, 0 for "0", "false", "no" or "off" in any case (spaces
+   around ignored), 1 for anything else. */
+int ico_host_portable_value(const char *v);
 /* 1 when ico_host_pref_dir is the portable folder. */
 int ico_host_pref_is_portable(void);
 /* The ico-pc.ini beside the executable: the override layer. */

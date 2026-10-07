@@ -489,13 +489,7 @@ int ico_ini_load_layered(IcoIni *ini, const char *path)
         size_t i;
 
         /* before the first look at the user folder: portable= says where it is */
-        {
-            const char *pv = ico_ini_get(ini, "portable");
-
-            ico_host_set_portable(pv == NULL || pv[0] == '\0'
-                                      ? -1
-                                      : strcmp(pv, "0") != 0 && strcmp(pv, "false") != 0);
-        }
+        ico_host_set_portable(ico_host_portable_value(ico_ini_get(ini, "portable")));
         ico_host_pref_dir(dir, sizeof(dir));
         if (ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
             t = ico_toml_load(toml_path);
@@ -1669,10 +1663,38 @@ int ico_toml_save(const IcoToml *t, const char *path)
 
 /* portable mode: -1 the folder decides, 0 off (portable=0), 1 on */
 static int portable_setting = -1;
+/* the reason portable mode could not be used was logged */
+static int portable_logged;
+
+int ico_host_portable_value(const char *v)
+{
+    char w[8];
+    size_t n = 0;
+
+    if (v == NULL) {
+        return -1;
+    }
+    while (isspace((unsigned char)*v)) {
+        v++;
+    }
+    while (*v != '\0' && !isspace((unsigned char)*v)) {
+        if (n + 1 >= sizeof(w)) {
+            return 1; /* longer than any word for off */
+        }
+        w[n++] = (char)tolower((unsigned char)*v++);
+    }
+    w[n] = '\0';
+    if (n == 0) {
+        return -1;
+    }
+    return strcmp(w, "0") != 0 && strcmp(w, "false") != 0 && strcmp(w, "no") != 0 &&
+           strcmp(w, "off") != 0;
+}
 
 void ico_host_set_portable(int setting)
 {
     portable_setting = setting < 0 ? -1 : (setting != 0);
+    portable_logged = 0;
 }
 
 /* the userdata folder beside the program when portable mode is on (made if
@@ -1689,7 +1711,17 @@ static int portable_dir(char *out, size_t size)
         return 0;
     }
     if (ico_make_dir(dir) != 0) {
-        return 0; /* cannot be made: the user profile rather than no saves */
+        /* cannot be made: the user profile rather than no saves, and the
+           log says so once (a program folder the player may not write to,
+           such as Program Files) */
+        if (!portable_logged) {
+            portable_logged = 1;
+            fprintf(stderr,
+                    "ico_pc: portable mode is on, but the folder %s cannot be made (%s); "
+                    "using the user folder instead\n",
+                    dir, strerror(errno));
+        }
+        return 0;
     }
     copy(out, size, dir);
     return 1;

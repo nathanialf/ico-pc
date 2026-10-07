@@ -58,6 +58,14 @@ typedef struct IcoExtractResult {
     double hash_seconds;
     double extract_seconds;
     int cancelled;
+    /* why a refusal happened, for the message a player sees: unreadable,
+       the file is not a disc image this program reads (not an .iso or a
+       .chd made from one, a .bin, a .chd that needs its parent, a damaged
+       file); wrong_disc, it reads but is not the PAL disc (another region
+       or edition, or a modified image).  Both 0 for the other failures
+       (no space, a write error, a cancel). */
+    int unreadable;
+    int wrong_disc;
 } IcoExtractResult;
 
 /* Extracts iso_path into out_path. 0, or -1 with the reason in why. */

@@ -921,6 +921,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
 
     x.iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     if (x.iso == NULL) {
+        res->unreadable = 1;
         say(why, whysize,
             "%s is not a disc image this program can read (an .iso, or a .chd made from "
             "one); the log says why",
@@ -949,6 +950,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         }
     }
     if (res->files == 0) {
+        res->wrong_disc = 1; /* a disc, but not this game's */
         say(why, whysize, "%s holds none of the game's files", iso_path);
         goto done;
     }
@@ -967,6 +969,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     t0 = now_s();
     if (hash_image(&x, iso_path, res, why, whysize) != 0) {
         res->cancelled = x.cancelled;
+        res->unreadable = !x.cancelled; /* cut short or damaged */
         goto done;
     }
     t1 = now_s();
@@ -1009,6 +1012,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     } else if (flags & ICO_EXTRACT_NO_VERIFY) {
         snprintf(res->rule, sizeof(res->rule), "%s", ICO_RULE_UNVERIFIED);
     } else {
+        res->wrong_disc = 1;
         say(why, whysize,
             "%s is not the ICO PAL disc (" ICO_DISC_ID ").\n"
             "Image SHA-1 %s (expected " ICO_DISC_ISO_SHA1 ");\n"

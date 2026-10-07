@@ -4484,6 +4484,40 @@ static void testTexturePack(void)
     ico_video_get(&o);
     CHECK(o.texturePack && o.texturePackPrecache && o.texturePackBudgetMb == ICO_TEXPACK_BUDGET_MIN,
           "defaults on, a budget under the minimum clamped (%d)", o.texturePackBudgetMb);
+    CHECK(o.texturePackCacheMb == 0, "the RAM cache's limit automatic by default (%d)",
+          o.texturePackCacheMb);
+    /* the RAM cache's limit, its own key: 0 or 128..65536, saved when set */
+    useConfig("version = 1\n[video]\ntexture_pack_cache_mb = 5\n");
+    ico_video_get(&o);
+    CHECK(o.texturePackCacheMb == ICO_TEXPACK_CACHE_MIN && o.texturePackBudgetMb == 2048,
+          "a cache limit under the minimum clamped (%d), the budget its own (%d)",
+          o.texturePackCacheMb, o.texturePackBudgetMb);
+    useConfig("version = 1\n[video]\ntexture_pack_cache_mb = 3000\n");
+    ico_video_get(&o);
+    CHECK(o.texturePackCacheMb == 3000, "cache limit 3000 MB read (%d)", o.texturePackCacheMb);
+    o.texturePackCacheMb = 6000;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0, "save the cache limit");
+    t = ico_toml_load(p);
+    CHECK(t && ico_toml_get_int(t, "video.texture_pack_cache_mb", 0) == 6000 &&
+              !ico_toml_has(t, "video.texture_pack_budget_mb"),
+          "saved: 6000 MB of cache, no budget key");
+    ico_toml_free(t);
+
+    /* Developer mode off switches Dump textures off with it: its row hides,
+       and the dumps must not go on being written with no row to stop them */
+    useConfig("version = 1\n[video]\ndump_textures = true\n");
+    ico_opt_set_developer_mode(1);
+    ico_video_get(&o);
+    CHECK(o.dumpTextures == 1, "dump on from the file");
+    ui_SettingsStep(UI_OPT_DEVELOPER, 1);
+    ico_video_get(&o);
+    CHECK(!ico_opt_developer_mode() && o.dumpTextures == 0, "Developer off: the dump off too");
+    ui_SettingsStep(UI_OPT_DEVELOPER, 1);
+    ico_video_get(&o);
+    CHECK(ico_opt_developer_mode() && o.dumpTextures == 0,
+          "Developer on again: the dump stays off until chosen");
+    ico_opt_set_developer_mode(0);
 
     /* Dump textures is shown in developer mode only */
     int mainL = enterMain(1);

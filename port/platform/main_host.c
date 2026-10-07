@@ -849,6 +849,21 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     }
     if (r != 0) {
         fprintf(stderr, "ico_pc: first run: %s\n", why);
+        /* the box says what to do about it, in verify_iso's words */
+        if (res.wrong_disc) {
+            ico_host_fatal(log_file(),
+                           "%s is not the disc image this port needs.\n"
+                           "Use a complete, unmodified image of the PAL release of ICO "
+                           "(SCES-50760). Other regions and editions do not work.",
+                           iso);
+        }
+        if (res.unreadable) {
+            ico_host_fatal(log_file(),
+                           "Cannot read the disc image %s.\n"
+                           "Check that the file is complete and is a .iso or .chd copy of the PAL "
+                           "disc. The log says why.",
+                           iso);
+        }
         ico_host_fatal(log_file(),
                        "Could not extract the game's data from %s into %s.\n"
                        "Check that there is about 1 GB of free space and that the disc image "

@@ -17,6 +17,7 @@
 #include "hotkeys.h"
 #include "input_record.h"
 #include "input_sdl.h"
+#include "options.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
 #include "rd.h"
@@ -161,7 +162,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->crtCurvature = o.crtCurvature;
     /* v0.4.0: texture packs and the dump, in either preset */
     rs->texturePack = (uint8_t)(o.texturePack != 0);
-    rs->dumpTextures = (uint8_t)(o.dumpTextures != 0);
+    /* the dump is a Developer mode row: never in force without it (a
+       config.toml saved with it on and Developer mode turned off by hand) */
+    rs->dumpTextures = (uint8_t)(o.dumpTextures != 0 && ico_opt_developer_mode());
     /* R7b: rd presents between ticks, in both presets (F2) */
     {
         const char *e = getenv("ICO_RD_S2_LEGACY");
@@ -235,6 +238,10 @@ static void video_log_changes(const IcoVideoOptions *o)
     snprintf(a, sizeof(a), "%.2f", (double)p->crtStrength);
     snprintf(b, sizeof(b), "%.2f", (double)o->crtStrength);
     video_log_field(line, sizeof(line), "crt strength", a, b);
+    video_log_field(line, sizeof(line), "texture pack", p->texturePack ? "on" : "off",
+                    o->texturePack ? "on" : "off");
+    video_log_field(line, sizeof(line), "dump textures", p->dumpTextures ? "on" : "off",
+                    o->dumpTextures ? "on" : "off");
     if (line[0] != '\0') {
         fprintf(stderr, "window: display changed: %s\n", line);
     }
@@ -365,14 +372,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         ico_video_get(&o);
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
-                "texture filter %s, %s height, framerate %s), vsync %s\n",
+                "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
+                "dump textures %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
-                o.vsync ? "on" : "off");
+                o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
+                o.dumpTextures && ico_opt_developer_mode() ? "on" : "off");
         fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
         /* v0.3.1 (P3): later changes are logged against this */

@@ -207,6 +207,22 @@ static int run_synth(const char *dir)
     CHECK(strstr(why, "not the ICO PAL disc") != NULL);
     CHECK(!file_exists(ar_path) && !file_exists(tmp_path));
     CHECK(res.rule[0] == '\0' && !res.datadf_ok);
+    /* the reason, for the box the player sees: a disc, but the wrong one */
+    CHECK(res.wrong_disc && !res.unreadable && !res.cancelled);
+
+    /* 1b. not a disc image at all (a .bin's raw sectors, a damaged file):
+       unreadable, not the wrong disc */
+    fp = fopen(bad_path, "wb");
+    CHECK(fp != NULL);
+    if (fp != NULL) {
+        static const char junk[4096] = "not a disc image";
+        CHECK(fwrite(junk, 1, sizeof(junk), fp) == sizeof(junk));
+        fclose(fp);
+        CHECK(ico_extract_archive(bad_path, ar_path, 0, NULL, NULL, &res, why, sizeof(why)) != 0);
+        CHECK(res.unreadable && !res.wrong_disc);
+        CHECK(!file_exists(ar_path) && !file_exists(tmp_path));
+        remove(bad_path);
+    }
 
     /* 2. a cancel from the progress callback: nothing left behind */
     cancel_at = 3;

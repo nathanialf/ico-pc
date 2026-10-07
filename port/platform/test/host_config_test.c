@@ -225,6 +225,23 @@ static void test_saves_dir_pure(void)
 
 /* portable mode: portable=1 in the ini, or a userdata folder beside the
    program, makes the user folder <exe dir>/userdata; portable=0 turns it off */
+static void test_portable_value(void)
+{
+    /* the words for off, in any case; anything else on; nothing: the folder */
+    CHECK(ico_host_portable_value(NULL) == -1);
+    CHECK(ico_host_portable_value("") == -1);
+    CHECK(ico_host_portable_value("  ") == -1);
+    CHECK(ico_host_portable_value("0") == 0);
+    CHECK(ico_host_portable_value("false") == 0);
+    CHECK(ico_host_portable_value("No") == 0);
+    CHECK(ico_host_portable_value("OFF") == 0);
+    CHECK(ico_host_portable_value(" off ") == 0);
+    CHECK(ico_host_portable_value("1") == 1);
+    CHECK(ico_host_portable_value("true") == 1);
+    CHECK(ico_host_portable_value("yes") == 1);
+    CHECK(ico_host_portable_value("offline") == 1);
+}
+
 static void test_portable(void)
 {
     char exe[ICO_PATH_MAX], want[ICO_PATH_MAX], got[ICO_PATH_MAX], ini_path[ICO_PATH_MAX];
@@ -290,6 +307,7 @@ int main(void)
     test_join_overflow();
     test_saves_dir_pure();
     test_paths();
+    test_portable_value();
     test_portable();
     printf("host_config_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
