@@ -223,6 +223,9 @@ typedef struct VkrState {
     uint32_t tsCount; /* of the slot rhi_WaitFrame recycled last */
     bool mailbox;     /* the swapchain presents in mailbox mode (rhi_PreferMailbox) */
 
+    /* v0.3.1: the swapchain's present mode (rhi_PresentModeName) */
+    VkPresentModeKHR presentMode;
+
     /* package PB: hazard tracking (vk_cmd.c, "Hazards") */
     bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: main's global barrier path */
     uint64_t hzEpoch;    /* the last command list's epoch (one per rhi_BeginCommands) */
@@ -281,6 +284,15 @@ bool vkr_SubmitPresentSignal(void);
 void vkr_FramesShutdown(void);
 VkrCmdList *vkr_GetCmd(RhiCommandList cl);
 void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after);
+/* vk_present_mode.c: the present mode for a swapchain from the surface's
+ * modes[n]: with vsync, MAILBOX when preferMailbox and offered, else FIFO;
+ * without, IMMEDIATE when offered, else MAILBOX when offered, else FIFO.
+ * vkr_PresentModeName: "immediate", "mailbox", "fifo", "fifo_relaxed", or
+ * NULL for any other mode. */
+VkPresentModeKHR vkr_ChoosePresentMode(const VkPresentModeKHR *modes, uint32_t n, bool vsync,
+                                       bool preferMailbox);
+const char *vkr_PresentModeName(VkPresentModeKHR m);
+
 /* vk_swapchain.c */
 bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);
 void vkr_SwapchainDestroy(void);

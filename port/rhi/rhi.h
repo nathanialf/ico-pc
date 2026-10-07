@@ -629,6 +629,13 @@ uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
  * not offered (false). */
 void rhi_PreferMailbox(bool on);
 bool rhi_PresentMailbox(void);
+/* The current swapchain's present mode, for the logs (v0.3.1): "fifo",
+ * "mailbox", "immediate", "fifo_relaxed", or "none" without a swapchain.
+ * Vulkan: the mode it was created with (vsync off prefers immediate, then
+ * mailbox).  D3D12: "fifo" with vsync; without, "immediate" when DXGI
+ * allows tearing, else "mailbox" (a flip-model present at sync interval 0
+ * replaces the queued frame). */
+const char *rhi_PresentModeName(void);
 
 /* A pipeline cache kept across runs (FIXB): Vulkan loads a VkPipelineCache
  * blob from path at rhi_Init when its header names this device (header

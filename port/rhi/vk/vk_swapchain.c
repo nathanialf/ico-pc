@@ -38,43 +38,46 @@ void vkr_SwapchainDestroy(void)
 /* package P1 (rhi_PreferMailbox): kept across rhi_Init, which clears g_vkr */
 static bool s_preferMailbox;
 
-static VkPresentModeKHR vkr_PickPresentMode(bool vsync)
+/* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
+ * the query fails): every one, no cap */
+static VkPresentModeKHR *vkr_SurfacePresentModes(uint32_t *n)
 {
-    uint32_t n = 0;
-    if (vsync) {
-        /* FIFO is always available; mailbox when asked for and offered:
-         * still no tearing, but a present never waits for the display */
-        if (s_preferMailbox) {
-            VkPresentModeKHR modes[16];
-            vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, NULL);
-            if (n > 16) {
-                n = 16;
-            }
-            vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, modes);
-            for (uint32_t i = 0; i < n; i++) {
-                if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-                    return modes[i];
-                }
-            }
-        }
-        return VK_PRESENT_MODE_FIFO_KHR;
+    *n = 0;
+    if (vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, NULL) !=
+            VK_SUCCESS ||
+        *n == 0) {
+        *n = 0;
+        return NULL;
     }
-    vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, NULL);
-    VkPresentModeKHR modes[16];
-    if (n > 16) {
-        n = 16;
+    VkPresentModeKHR *modes = calloc(*n, sizeof(*modes));
+    if (!modes) {
+        *n = 0;
+        return NULL;
     }
-    vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, &n, modes);
-    VkPresentModeKHR pick = VK_PRESENT_MODE_FIFO_KHR;
-    for (uint32_t i = 0; i < n; i++) {
-        if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return modes[i];
-        }
-        if (modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-            pick = modes[i];
-        }
+    VkResult r = vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, modes);
+    if (r != VK_SUCCESS && r != VK_INCOMPLETE) {
+        *n = 0;
     }
-    return pick;
+    return modes;
+}
+
+/* "immediate mailbox fifo fifo_relaxed": the offered modes for the log */
+static void vkr_PresentModeList(char *out, size_t size, const VkPresentModeKHR *modes, uint32_t n)
+{
+    size_t len = 0;
+    out[0] = '\0';
+    for (uint32_t i = 0; i < n && len < size; i++) {
+        const char *name = vkr_PresentModeName(modes[i]);
+        int k = name ? snprintf(out + len, size - len, "%s%s", len ? " " : "", name)
+                     : snprintf(out + len, size - len, "%s%d", len ? " " : "", (int)modes[i]);
+        if (k < 0) {
+            break;
+        }
+        len += (size_t)k;
+    }
+    if (n == 0) {
+        snprintf(out, size, "none");
+    }
 }
 
 bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
@@ -166,6 +169,12 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
             }
         }
     }
+    /* the present mode (vk_present_mode.c) from the modes the surface
+     * offers, queried once per creation */
+    uint32_t nModes = 0;
+    VkPresentModeKHR *modes = vkr_SurfacePresentModes(&nModes);
+    char offered[128];
+    vkr_PresentModeList(offered, sizeof(offered), modes, nModes);
     VkSwapchainKHR old = g_vkr.swapchain;
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -180,13 +189,14 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = vkr_PickPresentMode(vsync),
+        .presentMode = vkr_ChoosePresentMode(modes, nModes, vsync, s_preferMailbox),
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
     if (!(caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)) {
         ci.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
     }
+    free(modes);
     VkSwapchainKHR sc;
     if (!VKR_CHECK(vkCreateSwapchainKHR(g_vkr.device, &ci, NULL, &sc))) {
         if (old) {
@@ -208,6 +218,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     }
     g_vkr.swapchain = sc;
     g_vkr.mailbox = vsync && ci.presentMode == VK_PRESENT_MODE_MAILBOX_KHR;
+    g_vkr.presentMode = ci.presentMode;
     g_vkr.swapWidth = w;
     g_vkr.swapHeight = h;
     g_vkr.vsync = vsync;
@@ -235,6 +246,10 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     g_vkr.swapImageCount = n;
     g_vkr.swapAcquired = false;
     g_vkr.acquireWaitPending = false;
+    /* one line per creation (startup, resize, a vsync or frame rate change) */
+    VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
+            vkr_PresentModeName(ci.presentMode), vsync ? "on" : "off",
+            vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
     return true;
 }
 
@@ -258,6 +273,12 @@ void rhi_PreferMailbox(bool on)
 bool rhi_PresentMailbox(void)
 {
     return g_vkr.swapchain && g_vkr.mailbox;
+}
+
+const char *rhi_PresentModeName(void)
+{
+    const char *name = g_vkr.swapchain ? vkr_PresentModeName(g_vkr.presentMode) : NULL;
+    return name ? name : "none";
 }
 
 RhiFormat rhi_SwapchainFormat(void)

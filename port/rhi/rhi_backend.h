@@ -77,6 +77,7 @@
     X(ReadTimestamps)                                                                              \
     X(PreferMailbox)                                                                               \
     X(PresentMailbox)                                                                              \
+    X(PresentModeName)                                                                             \
     X(SetPipelineCachePath)
 
 /* One function pointer per entry point, typed from rhi.h's declaration (in

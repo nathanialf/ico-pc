@@ -147,6 +147,19 @@ RhiTexture rhi_AcquireBackbuffer(void)
     return out;
 }
 
+/* rhi.h: what rhi_Present's sync interval and flags amount to, in the
+ * Vulkan backend's words (v0.3.1) */
+const char *rhi_PresentModeName(void)
+{
+    if (!g_dx.swapchain) {
+        return "none";
+    }
+    if (g_dx.vsync) {
+        return "fifo";
+    }
+    return g_dx.tearing ? "immediate" : "mailbox";
+}
+
 void rhi_Present(void)
 {
     if (!g_dx.swapchain || !g_dx.swapAcquired) {

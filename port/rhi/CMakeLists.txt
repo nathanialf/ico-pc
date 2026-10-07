@@ -142,8 +142,8 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources vk/vk_cmd.c vk/vk_device.c vk/vk_pipeline.c vk/vk_resource.c
-                        vk/vk_swapchain.c)
+    set(_ico_vk_sources vk/vk_cmd.c vk/vk_device.c vk/vk_pipeline.c vk/vk_present_mode.c
+                        vk/vk_resource.c vk/vk_swapchain.c)
     add_library(ico_rhi_vulkan STATIC ${_ico_vk_sources} "${ICO_VOLK_DIR}/volk.c")
     target_include_directories(ico_rhi_vulkan
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -215,6 +215,16 @@ if(_ico_have_vk)
     target_include_directories(rhi_vk_enum_test PRIVATE "${ICO_VULKAN_INCLUDE_DIR}")
     target_compile_options(rhi_vk_enum_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
+    # The swapchain's present-mode choice (vk/vk_present_mode.c) over the
+    # mode sets drivers offer; no device, no SDL.
+    add_executable(rhi_vk_present_mode_test test/rhi_vk_present_mode_test.c
+                   vk/vk_present_mode.c)
+    target_include_directories(rhi_vk_present_mode_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${ICO_VOLK_DIR}" "${ICO_VULKAN_INCLUDE_DIR}")
+    target_compile_definitions(rhi_vk_present_mode_test PRIVATE VK_NO_PROTOTYPES)
+    target_compile_options(rhi_vk_present_mode_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_PORT_WARNINGS})
+
     # Headless rendering on whatever device is present (lavapipe in the
     # container); exits 77 (skipped) when there is no Vulkan device.
     add_executable(rhi_vk_test test/rhi_vk_test.c ${_ico_rhi_test_common})
@@ -244,6 +254,7 @@ if(_ico_have_vk)
 
     if(_ico_rhi_run_tests)
         add_test(NAME rhi_vk_enum COMMAND rhi_vk_enum_test)
+        add_test(NAME rhi_vk_present_mode COMMAND rhi_vk_present_mode_test)
         add_test(NAME rhi_vk COMMAND rhi_vk_test)
         set_tests_properties(rhi_vk PROPERTIES SKIP_RETURN_CODE 77)
         # The validation layer tools/fetch_deps.sh unpacks, with
