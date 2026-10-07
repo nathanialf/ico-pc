@@ -559,6 +559,8 @@ static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
         ico_toml_set_int(t, key, run->saves);
         run_key(slot, "_enemies", key, sizeof(key));
         ico_toml_set_int(t, key, run->enemies);
+        run_key(slot, "_partial", key, sizeof(key));
+        ico_toml_set_bool(t, key, run->partial);
     }
     rc = ico_toml_save(t, s_path);
     ico_toml_free(t);
@@ -609,6 +611,10 @@ int ico_ach_slot_loaded(int slot, unsigned int sum)
     run_key(slot, "_sum", key, sizeof(key));
     if (ico_toml_get_int(t, key, RUN_NO_SUM) != (long long)sum) {
         ico_toml_free(t);
+        /* nothing kept for this save: its saves and enemies are not known */
+        ico_gs_run_get(&run);
+        run.partial = 1;
+        ico_gs_run_set(&run);
         return 0;
     }
     memset(&run, 0, sizeof(run));
@@ -635,6 +641,19 @@ int ico_ach_slot_loaded(int slot, unsigned int sum)
     run_key(slot, "_enemies", key, sizeof(key));
     v = ico_toml_get_int(t, key, 0);
     run.enemies = v < 0 || v > 0xFFFFFFFFLL ? 0u : (unsigned int)v;
+    /* a slot saved before v0.4.0 has no saves or enemies keys: those two
+       count from this load only, and stay marked so through later saves
+       until a New Game starts a journey counted from its start */
+    run_key(slot, "_partial", key, sizeof(key));
+    run.partial = ico_toml_get_bool(t, key, 0) != 0;
+    run_key(slot, "_saves", key, sizeof(key));
+    if (!ico_toml_has(t, key)) {
+        run.partial = 1;
+    }
+    run_key(slot, "_enemies", key, sizeof(key));
+    if (!ico_toml_has(t, key)) {
+        run.partial = 1;
+    }
     ico_toml_free(t);
     ico_gs_run_set(&run);
     return 1;

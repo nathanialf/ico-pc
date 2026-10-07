@@ -1589,6 +1589,11 @@ static void pauseStats(int show)
         for (int i = 0; i < STAT_LINES; i++) {
             on[i] = i < STAT_ASSISTS;
         }
+        if (ico_gs_run_partial()) {
+            /* a save from before v0.4.0 kept no count of these: hidden
+               rather than counted from the load, until a New Game */
+            on[STAT_SAVES] = on[STAT_ENEMIES] = 0;
+        }
         const int assist[3] = {ico_opt_yorda_safe(), ico_opt_stick_fix(), ico_opt_developer_mode()};
         static const int kAssistStr[3] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX,
                                           UI_STR_OPT_DEVELOPER_MODE};

@@ -1655,6 +1655,24 @@ static void testPauseStats(void)
     CHECK(statValue(UI_STR_STATS_AREA) == NULL && statValue(UI_STR_STATS_DEATHS) != NULL,
           "no name for the beach: the Area line left out");
     stage_no = 11;
+    /* a run from a save made before v0.4.0: Saves and Enemies hidden (their
+       counts would start at the load), the other lines stay */
+    {
+        IcoGsRun r;
+        ico_gs_run_get(&r);
+        r.partial = 1;
+        ico_gs_run_set(&r);
+        frame(0);
+        CHECK(statValue(UI_STR_STATS_SAVES) == NULL && statValue(UI_STR_STATS_ENEMIES) == NULL &&
+                  statValue(UI_STR_STATS_DEATHS) != NULL &&
+                  statValue(UI_STR_STATS_CAPTURES) != NULL,
+              "a partial run: Saves and Enemies hidden, Deaths and Yorda captured shown");
+        r.partial = 0;
+        ico_gs_run_set(&r);
+        frame(0);
+        CHECK(statValue(UI_STR_STATS_SAVES) != NULL && statValue(UI_STR_STATS_ENEMIES) != NULL,
+              "a whole run: both shown again");
+    }
     /* photo mode: hidden */
     ico_photo_enter();
     frame(0);

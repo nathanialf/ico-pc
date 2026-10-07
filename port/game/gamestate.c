@@ -176,8 +176,9 @@ static struct {
     int opening_skipped;
     unsigned int opening_parts;
     int suspended;
-    unsigned int saves;   /* the session's saves, this run's share */
-    unsigned int enemies; /* the session's enemies defeated, this run's share */
+    unsigned int saves;   /* saves done in this run (journey), restored with its slot */
+    unsigned int enemies; /* enemies defeated in this run, restored with its slot */
+    int partial;          /* saves and enemies count only from the slot's load */
 } s_run;
 
 void ico_gs_set_sampler(IcoGsSampler fn)
@@ -454,6 +455,11 @@ unsigned int ico_gs_run_saves(void)
     return s_run.saves;
 }
 
+int ico_gs_run_partial(void)
+{
+    return s_run.partial;
+}
+
 unsigned int ico_gs_run_enemies(void)
 {
     return s_run.enemies;
@@ -484,6 +490,7 @@ void ico_gs_run_get(IcoGsRun *out)
     out->suspended = s_run.suspended;
     out->saves = s_run.saves;
     out->enemies = s_run.enemies;
+    out->partial = s_run.partial;
 }
 
 void ico_gs_run_set(const IcoGsRun *in)
@@ -496,6 +503,7 @@ void ico_gs_run_set(const IcoGsRun *in)
     s_run.suspended = in->suspended != 0;
     s_run.saves = in->saves;
     s_run.enemies = in->enemies;
+    s_run.partial = in->partial != 0;
 }
 
 int ico_gs_developer_mode(void)

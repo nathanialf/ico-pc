@@ -14,6 +14,7 @@
 
 #include "achievements.h"
 #include "config.h"
+#include "host_config.h"
 #include "ico_credits.h"
 #include "ico_gamestate.h"
 #include "options.h"
@@ -906,6 +907,44 @@ static void test_run_counts(void)
     r.captures = 1;
     ico_gs_run_set(&r);
     CHECK(ico_gs_run_saves() == 0 && ico_gs_run_enemies() == 0 && ico_gs_run_captures() == 1);
+
+    CHECK(!ico_gs_run_partial());
+
+    /* a slot saved before v0.4.0 (no saves or enemies keys): the run is
+       partial, the flag kept across a save and its load, cleared by a New
+       Game */
+    {
+        IcoToml *t = ico_toml_load(s_path);
+        CHECK(t != NULL);
+        if (t != NULL) {
+            ico_toml_set_int(t, "run.slot_7_sum", 70);
+            ico_toml_set_int(t, "run.slot_7_captures", 2);
+            ico_toml_set_int(t, "run.slot_7_game_overs", 4);
+            CHECK(ico_toml_save(t, s_path) == 0);
+            ico_toml_free(t);
+        }
+        CHECK(ico_ach_slot_loaded(7, 70u) == 1);
+        CHECK(ico_gs_run_partial() && ico_gs_run_captures() == 2 && ico_gs_run_game_overs() == 4);
+        save_slot(7, 71u);
+        CHECK(file_count("slot_7_partial = true") == 1);
+        ico_ach_reset(s_path);
+        ico_gs_set_sampler(sampler);
+        fresh_world();
+        ticks(1);
+        CHECK(!ico_gs_run_partial());
+        CHECK(ico_ach_slot_loaded(7, 71u) == 1 && ico_gs_run_partial());
+        /* a save with no entry at all: nothing known, partial too */
+        memset(&r, 0, sizeof(r));
+        ico_gs_run_set(&r);
+        CHECK(ico_ach_slot_loaded(8, 5u) == 0 && ico_gs_run_partial());
+        CHECK(ico_ach_slot_loaded(7, 71u) == 1);
+        new_game();
+        CHECK(!ico_gs_run_partial());
+        g.stage_no = 11;
+        ticks(1);
+        save_slot(7, 72u);
+        CHECK(ico_ach_slot_loaded(7, 72u) == 1 && !ico_gs_run_partial());
+    }
 }
 
 /* --- popups ---------------------------------------------------------------------- */
