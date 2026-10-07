@@ -393,7 +393,11 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             const char *v = argv[++i];
-            if (sscanf(v, "%u:%u", &a, &b) == 2 && a && b) {
+            if (sscanf(v, "%u:%u", &a, &b) == 2 && a == 21 && b == 9) {
+                /* "21:9" is the game's 64:27 (2560x1080), as the Aspect
+                   option means it (video_options.c), not 2.333 */
+                s.aspect = 64.0f / 27.0f;
+            } else if (sscanf(v, "%u:%u", &a, &b) == 2 && a && b) {
                 s.aspect = (float)a / (float)b;
             } else if ((s.aspect = (float)atof(v)) <= 0.0f) {
                 fprintf(stderr, "bad --aspect\n");

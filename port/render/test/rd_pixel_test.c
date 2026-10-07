@@ -178,11 +178,12 @@ static void testOrder(void)
  * the alpha test, FB_ONLY keeps its colour (blended to Cd by As = 0) and
  * drops its Z, so geometry drawn later behind the railing passes the Z
  * test there.  A Z write by the failing pass would leave the clear colour
- * in every hole. */
+ * in every hole.  Run with FBA off and on: the game's materials set FBA
+ * (Packet.c), and the holes rest on the FB_ONLY pass with it. */
 #define RAIL_Z 0x80000000u
 #define WALL_Z 0x40000000u
 
-static void testRailing(void)
+static void testRailing(int fba)
 {
     /* 16 x 16: wires (x % 4 == 0 or y % 4 == 0) white with alpha 0x80,
      * holes black with alpha 0 */
@@ -211,7 +212,7 @@ static void testRailing(void)
     rd_ZWrite(1);
     rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
     rd_PABE(0);
-    rd_FBA(0);
+    rd_FBA(fba);
     rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     {
@@ -225,6 +226,7 @@ static void testRailing(void)
     rd_TestGs(RD_TEST_Z_GEQUAL);
     rd_ZWrite(1);
     rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_FBA(0);
     rd_TextureOff();
     {
         RdScreenVtx v[2] = {vtx(ox + 48 * 16, oy + 48 * 16, WALL_Z, wall, 0.0f, 0.0f),
@@ -267,14 +269,15 @@ static void testRailing(void)
             }
         }
     }
-    printf("  railing: %d hole pixels, %d show something other than the wall, %d hold other "
-           "than its Z; %d wire pixels, %d off colour, %d off Z\n",
-           holes, holeBad, holeZBad, wires, wireBad, wireZBad);
-    CHECK(holeBad == 0, "railing: %d of %d hole pixels do not show the wall drawn behind", holeBad,
-          holes);
-    CHECK(holeZBad == 0, "railing: %d of %d hole pixels do not hold the wall's Z", holeZBad, holes);
-    CHECK(wireBad == 0 && wireZBad == 0, "railing: wires %d off colour, %d off Z", wireBad,
-          wireZBad);
+    printf("  railing (FBA %d): %d hole pixels, %d show something other than the wall, %d hold "
+           "other than its Z; %d wire pixels, %d off colour, %d off Z\n",
+           fba, holes, holeBad, holeZBad, wires, wireBad, wireZBad);
+    CHECK(holeBad == 0, "railing (FBA %d): %d of %d hole pixels do not show the wall drawn behind",
+          fba, holeBad, holes);
+    CHECK(holeZBad == 0, "railing (FBA %d): %d of %d hole pixels do not hold the wall's Z", fba,
+          holeZBad, holes);
+    CHECK(wireBad == 0 && wireZBad == 0, "railing (FBA %d): wires %d off colour, %d off Z", fba,
+          wireBad, wireZBad);
     rd_DestroyTexture(t);
 }
 
@@ -1410,7 +1413,8 @@ int main(int argc, char **argv)
     }
     printf("rd_pixel_test: adapter %s\n", rhi_AdapterName());
     testOrder();
-    testRailing();
+    testRailing(0);
+    testRailing(1); /* as the game's materials draw it */
     testDateFlat();
     testScreenRuns();
     testSprites();

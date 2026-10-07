@@ -35,12 +35,13 @@ typedef enum RdBlend {
     RD_BLEND_LERP_FIX = 2, /* 0x64: (Cs-Cd)*FIX + Cd   mode 2; letterbox, motion blur, AA, fades */
     RD_BLEND_CD_FIX_ADD_CS = 3, /* 0x29: Cd*FIX + Cs        mode 3; disc data only */
     RD_BLEND_LERP_AS = 4,       /* 0x44: (Cs-Cd)*As + Cd    mode 4; default material */
-    RD_BLEND_CS_AS_ADD_CD = 5, /* 0x48: Cs*As + Cd         mode 5; additive, specular (with PABE) */
-    RD_BLEND_CD_SUB_CS_AS = 6, /* 0x42: Cd - Cs*As         mode 6; subtractive material */
-    RD_BLEND_LERP_AS_ALT = 7,  /* 0x44: same as mode 4     mode 7 */
-    RD_BLEND_CS_AD_ADD_CD = 8, /* 0x58: Cs*Ad + Cd         disc data only */
-    RD_BLEND_CD_SUB_CS_AD = 9, /* 0x52: Cd - Cs*Ad         disc data only */
-    RD_BLEND_LERP_AD = 10,     /* 0x54: (Cs-Cd)*Ad + Cd    disc data only */
+    RD_BLEND_CS_AS_ADD_CD =
+        5, /* 0x48: Cs*As + Cd         mode 5; additive, specular (PABE cannot give Cs here: the pixel blends, rd_pipeline.c) */
+    RD_BLEND_CD_SUB_CS_AS = 6,  /* 0x42: Cd - Cs*As         mode 6; subtractive material */
+    RD_BLEND_LERP_AS_ALT = 7,   /* 0x44: same as mode 4     mode 7 */
+    RD_BLEND_CS_AD_ADD_CD = 8,  /* 0x58: Cs*Ad + Cd         disc data only */
+    RD_BLEND_CD_SUB_CS_AD = 9,  /* 0x52: Cd - Cs*Ad         disc data only */
+    RD_BLEND_LERP_AD = 10,      /* 0x54: (Cs-Cd)*Ad + Cd    disc data only */
     RD_BLEND_CD_AS_ADD_CD = 11, /* 0x49: Cd*As + Cd         disc data only */
     RD_BLEND_COUNT = 12
 } RdBlend;

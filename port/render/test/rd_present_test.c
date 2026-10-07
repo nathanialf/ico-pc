@@ -1493,8 +1493,9 @@ static void checkMips(void)
  * 0x44 with ABE, minified 8:1 under the trilinear filter: level 3 is
  * uniform, alpha 56 and the wire colour, so the pixel is the background
  * lerped towards 200 by 56/128.  The box filter with the coverage kept at
- * 64 gave colour 87 at alpha 65: a dark sheet over the background. */
-static void checkLatticeMips(void)
+ * 64 gave colour 87 at alpha 65: a dark sheet over the background.  Run
+ * with FBA off and on (the game's materials set it, Packet.c). */
+static void checkLatticeMips(int fba)
 {
     RdSettings s = originalSettings();
     s.preset = RD_PRESET_ENHANCED;
@@ -1538,12 +1539,13 @@ static void checkLatticeMips(void)
         rd_ZWrite(1);
         rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
         rd_PABE(0);
-        rd_FBA(0);
+        rd_FBA(fba);
         rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
         rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(RD_SPACE_WORLD, 16 * 16, 16 * 16, 24 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
         rd_TestGs(0x3030D); /* ATE GREATER 0x30, AFAIL KEEP, Z ALWAYS */
         rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+        rd_FBA(0);
         rd_Texture(td, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(RD_SPACE_WORLD, 48 * 16, 16 * 16, 56 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
         rd_EndFrame(0);
@@ -1571,8 +1573,10 @@ static void checkLatticeMips(void)
             }
         }
     }
-    printf("  lattice mips: minified railing within %d of the blend by its average alpha\n", worst);
-    CHECK(p && worst <= 6, "lattice mips: the minified lattice is off by %d", worst);
+    printf("  lattice mips (FBA %d): minified railing within %d of the blend by its average "
+           "alpha\n",
+           fba, worst);
+    CHECK(p && worst <= 6, "lattice mips (FBA %d): the minified lattice is off by %d", fba, worst);
     rd_DestroyTexture(t);
     rd_DestroyTexture(td);
     CHECK(rhi_vk_ValidationErrorCount() == 0, "lattice mips: %u validation errors",
@@ -2027,7 +2031,8 @@ int main(int argc, char **argv)
     checkScale2();
     checkWide169();
     checkMips();
-    checkLatticeMips();
+    checkLatticeMips(0);
+    checkLatticeMips(1); /* as the game's materials draw it */
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
     checkCapture(dir);
