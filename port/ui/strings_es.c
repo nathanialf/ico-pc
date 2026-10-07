@@ -183,7 +183,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_RESOLUTION_CRT_NOTE] =
         "El filtro CRT muestra los píxeles propios de la PS2: la imagen se renderiza a 1x mientras está activo.",
     [UI_STR_PRESET_NOTE] =
-        "Original es la imagen de la PS2. Mejorado ajusta las cuatro filas de abajo. Personalizado si cambias una.",
+        "Original es la imagen de la PS2. Mejorado ajusta Resolución, Relación de aspecto, Filtrado de texturas e Imagen a altura completa. Personalizado si cambias una.",
     [UI_STR_QUIT_DESKTOP] = "Salir al escritorio",
     [UI_STR_QUIT_CONFIRM] = "¿Salir al escritorio?",
     [UI_STR_OPT_CIRCLE_BACK] = "Círculo para volver",

@@ -19,7 +19,9 @@
  * by default:
  *   --enhanced            the Enhanced flag: the deferred text and UI scale,
  *                         and the --present box as the default resolution;
- *                         the four options below apply without it
+ *                         the four options below apply without it, but a
+ *                         replay at a scale above 1x still wants it for the
+ *                         game's picture
  *   --aspect A            4:3 (default), 16:10, 16:9 or a number (w / h)
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)

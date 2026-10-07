@@ -246,10 +246,20 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     g_vkr.swapImageCount = n;
     g_vkr.swapAcquired = false;
     g_vkr.acquireWaitPending = false;
-    /* one line per creation (startup, resize, a vsync or frame rate change) */
-    VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
-            vkr_PresentModeName(ci.presentMode), vsync ? "on" : "off",
-            vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
+    /* a line when the present mode or the image count differs from the
+       last swapchain (always the first); a window-edge drag recreates it
+       on every size without either changing */
+    static VkPresentModeKHR s_loggedMode;
+    static uint32_t s_loggedCount;
+    static bool s_logged;
+    if (!s_logged || s_loggedMode != ci.presentMode || s_loggedCount != n) {
+        s_logged = true;
+        s_loggedMode = ci.presentMode;
+        s_loggedCount = n;
+        VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
+                vkr_PresentModeName(ci.presentMode), vsync ? "on" : "off",
+                vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
+    }
     return true;
 }
 

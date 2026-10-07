@@ -133,7 +133,7 @@ watchdog=30
 # With a problem report, send logs\\ico-pc.log from next to the program.
 
 # Port settings (display, input bindings, gameplay options) live in
-# config.toml in the pref folder; the in-game Options menu edits them.
+# config.toml in the user folder; the in-game Options menu edits them.
 INI
 done
 # the player README, from the same commit

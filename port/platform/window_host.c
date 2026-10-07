@@ -611,10 +611,21 @@ int ico_window_pump(void)
         case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
             window_fullscreen_event(e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN);
             break;
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            fprintf(stderr, "window: %dx%d pixels, flags 0x%llx (fullscreen %s)\n", e.window.data1,
-                    e.window.data2, (unsigned long long)SDL_GetWindowFlags(s_window),
-                    window_fullscreen() ? "on" : "off");
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+            /* a drag sends one per size: print when the fullscreen
+                   flag changed or a second has passed since the last line */
+            static int s_sizeFs = -1;
+            static Uint64 s_sizeAt;
+            int fs = window_fullscreen() ? 1 : 0;
+            Uint64 now = SDL_GetTicksNS();
+            if (fs != s_sizeFs || now - s_sizeAt >= 1000000000ull) {
+                s_sizeFs = fs;
+                s_sizeAt = now;
+                fprintf(stderr, "window: %dx%d pixels, flags 0x%llx (fullscreen %s)\n",
+                        e.window.data1, e.window.data2,
+                        (unsigned long long)SDL_GetWindowFlags(s_window), fs ? "on" : "off");
+            }
+        }
             if (e.window.data1 > 0 && e.window.data2 > 0) {
                 rd_ResizeOutput((uint32_t)e.window.data1, (uint32_t)e.window.data2);
                 /* R7a: aspect "auto" and resolution "window" follow the size */

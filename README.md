@@ -163,7 +163,7 @@ tried on a real card image yet, so check that the game lists the save.
 ## Logs and problems
 
 Each run writes `logs/ico-pc.log` beside the program (replaced on the next
-run). It records your display options at start, every change you make in
+run). It records your display options at start, every Display change you make in
 Options, and every 10 seconds the frame rate, present mode, refresh rate
 and window size. If something goes wrong it says why:
 
