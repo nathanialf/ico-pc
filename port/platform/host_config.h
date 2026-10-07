@@ -84,6 +84,14 @@ int ico_ini_store(const char *path, const char *key, const char *value);
    which have no SDL, the executable's folder, as does a failing
    SDL_GetPrefPath. No trailing separator. 0, or -1 (then out is "."). */
 int ico_host_pref_dir(char *out, size_t size);
+/* Portable mode: ico-pc.ini's portable=1 (or an existing "userdata" folder
+   beside the executable) makes ico_host_pref_dir that folder, created, so
+   everything per-user stays with the program. setting 1 on, 0 off
+   (portable=0), -1 the folder decides (the start). Loading the executable's
+   own ini sets it from the file, before the folder is first used. */
+void ico_host_set_portable(int setting);
+/* 1 when ico_host_pref_dir is the portable folder. */
+int ico_host_pref_is_portable(void);
 /* The ico-pc.ini beside the executable: the override layer. */
 int ico_host_ini_path(char *out, size_t size);
 /* ico_ini_load without the layering below: the file's own keys only. */

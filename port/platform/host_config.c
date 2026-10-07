@@ -488,6 +488,14 @@ int ico_ini_load_layered(IcoIni *ini, const char *path)
         IcoToml *t = NULL;
         size_t i;
 
+        /* before the first look at the user folder: portable= says where it is */
+        {
+            const char *pv = ico_ini_get(ini, "portable");
+
+            ico_host_set_portable(pv == NULL || pv[0] == '\0'
+                                      ? -1
+                                      : strcmp(pv, "0") != 0 && strcmp(pv, "false") != 0);
+        }
         ico_host_pref_dir(dir, sizeof(dir));
         if (ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
             t = ico_toml_load(toml_path);
@@ -1659,8 +1667,46 @@ int ico_toml_save(const IcoToml *t, const char *path)
     return 0;
 }
 
+/* portable mode: -1 the folder decides, 0 off (portable=0), 1 on */
+static int portable_setting = -1;
+
+void ico_host_set_portable(int setting)
+{
+    portable_setting = setting < 0 ? -1 : (setting != 0);
+}
+
+/* the userdata folder beside the program when portable mode is on (made if
+   missing), else 0 */
+static int portable_dir(char *out, size_t size)
+{
+    char exe[ICO_PATH_MAX], dir[ICO_PATH_MAX];
+
+    if (portable_setting == 0 || ico_host_exe_dir(exe, sizeof(exe)) != 0 ||
+        ico_path_join(dir, sizeof(dir), exe, "userdata") != 0) {
+        return 0;
+    }
+    if (portable_setting < 0 && ico_path_kind(dir, NULL, NULL) != 1) {
+        return 0;
+    }
+    if (ico_make_dir(dir) != 0) {
+        return 0; /* cannot be made: the user profile rather than no saves */
+    }
+    copy(out, size, dir);
+    return 1;
+}
+
+int ico_host_pref_is_portable(void)
+{
+    char dir[ICO_PATH_MAX];
+
+    return portable_dir(dir, sizeof(dir));
+}
+
 int ico_host_pref_dir(char *out, size_t size)
 {
+    if (portable_dir(out, size)) {
+        return 0;
+    }
 #ifdef ICO_HOST_SDL_PREFPATH
     static char cached[ICO_PATH_MAX];
 

@@ -918,6 +918,14 @@ int main(int argc, char **argv)
         fprintf(stderr, "ico_pc: no %s; defaults\n", ini_path);
     }
 
+    {
+        char user[ICO_PATH_MAX];
+
+        ico_host_pref_dir(user, sizeof(user));
+        fprintf(stderr, "ico_pc: user folder %s (%s)\n", user,
+                ico_host_pref_is_portable() ? "portable" : "user profile");
+    }
+
     /* config.toml on the first run, so there is a file to edit; the window
        build by default, the headless one (whose per-user folder is the
        build's) only with write_config=1 */

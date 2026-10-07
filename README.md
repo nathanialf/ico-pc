@@ -147,6 +147,16 @@ the game is closed), `ico.o2r` (the extracted data) and the achievements.
 Back up your saves by copying `memcard`. Uninstall by deleting the program
 folder and this folder.
 
+**Portable mode.** To keep everything beside the program instead, make a
+folder named `userdata` next to the program, or remove the `#` from the
+`# portable=1` line in `ico-pc.ini`. The program then keeps `memcard`,
+`config.toml`, `ico.o2r`, the achievements and the screenshots in `userdata`
+and says so in `logs/ico-pc.log` ("user folder ... (portable)"). To move an
+existing install, close the game and copy everything from the user folder
+above into `userdata` before the next start; the program does not copy it
+for you. Put `portable=0` in `ico-pc.ini` to use the user folder even when
+`userdata` exists.
+
 **Importing a PS2 save.** The package includes `tools\mc_import.exe`
 (`tools/mc_import` on Linux). It copies ICO's save out of a PS2 memory card
 image (`.ps2`, `.bin`) or a `.psu` file into the saves folder:

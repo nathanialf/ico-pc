@@ -223,6 +223,66 @@ static void test_saves_dir_pure(void)
     remove(logs);
 }
 
+/* portable mode: portable=1 in the ini, or a userdata folder beside the
+   program, makes the user folder <exe dir>/userdata; portable=0 turns it off */
+static void test_portable(void)
+{
+    char exe[ICO_PATH_MAX], want[ICO_PATH_MAX], got[ICO_PATH_MAX], ini_path[ICO_PATH_MAX];
+    char toml[ICO_PATH_MAX];
+    IcoIni ini;
+    FILE *f;
+
+    ico_host_exe_dir(exe, sizeof(exe));
+    ico_path_join(want, sizeof(want), exe, "userdata");
+    ico_host_ini_path(ini_path, sizeof(ini_path));
+    if (ico_path_kind(want, NULL, NULL) >= 0 || ico_file_exists(ini_path)) {
+        fprintf(stderr, "host_config_test: %s or %s exists; portable mode not tested\n", want,
+                ini_path);
+        return;
+    }
+    /* neither the key nor the folder: not portable */
+    ico_host_set_portable(-1);
+    CHECK(!ico_host_pref_is_portable());
+    CHECK(ico_path_kind(want, NULL, NULL) < 0);
+    /* the key through the setter makes and returns the folder */
+    ico_host_set_portable(1);
+    CHECK(ico_host_pref_is_portable());
+    CHECK(ico_host_pref_dir(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    CHECK(ico_path_kind(want, NULL, NULL) == 1);
+    /* the folder alone is enough; portable=0 overrides it */
+    ico_host_set_portable(-1);
+    CHECK(ico_host_pref_is_portable());
+    CHECK(ico_host_pref_dir(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    ico_host_set_portable(0);
+    CHECK(!ico_host_pref_is_portable());
+    ico_host_set_portable(-1);
+    /* a config.toml in the folder is read through the executable's own ini */
+    ico_path_join(toml, sizeof(toml), want, "config.toml");
+    f = fopen(toml, "wb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        fputs("[paths]\niso = \"portable.iso\"\n", f);
+        fclose(f);
+        f = fopen(ini_path, "wb");
+        CHECK(f != NULL);
+        if (f != NULL) {
+            fputs("portable=1\n", f);
+            fclose(f);
+            ico_host_set_portable(-1);
+            CHECK(ico_ini_load_layered(&ini, ini_path) == 0);
+            CHECK(ico_ini_get(&ini, "iso") != NULL &&
+                  strcmp(ico_ini_get(&ini, "iso"), "portable.iso") == 0);
+            CHECK(ico_host_pref_is_portable());
+            remove(ini_path);
+        }
+        remove(toml);
+    }
+    /* the folder gone and the key off again: the user profile */
+    remove(want); /* rmdir on POSIX; left behind on Windows */
+    ico_host_set_portable(-1);
+    CHECK(ico_path_kind(want, NULL, NULL) < 0 || ico_host_pref_is_portable());
+}
+
 int main(void)
 {
     test_sha1();
@@ -230,6 +290,7 @@ int main(void)
     test_join_overflow();
     test_saves_dir_pure();
     test_paths();
+    test_portable();
     printf("host_config_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

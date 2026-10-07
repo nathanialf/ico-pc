@@ -136,6 +136,13 @@ iso=$iso
 # to logs/ico-pc.log and stops. 0 turns it off.
 watchdog=30
 
+# portable: remove the # in front of the next line to keep your saves,
+# settings and the game's data in a folder named userdata next to the
+# program, instead of in your user folder. To move an existing install,
+# copy everything from the user folder into userdata first. Making an
+# empty userdata folder next to the program does the same.
+# portable=1
+
 # Display settings live in Options > Display and in config.toml in the user folder.
 # With a problem report, send logs/ico-pc.log from next to the program.
 INI
