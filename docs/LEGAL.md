@@ -31,11 +31,13 @@ respective owners.
 
 ## What is not in this repository, and must never be added
 
-- The ICO disc image (`.bin`, `.iso`, `.cue` or any other form), in whole or
-  in part.
+- The ICO disc image (`.bin`, `.iso`, `.cue`, `.chd` or any other form), in
+  whole or in part.
 - The boot ELF of any revision (`SCES_507.60`, `SCUS_971.13`, the
   prototypes), or any part of it.
-- Audio, images, textures, models, text or other assets from the disc.
+- Audio, images, textures, models, text or other assets from the disc, and
+  third-party texture packs or texture dumps (they are made from the disc's
+  textures; players install packs themselves, README "Texture packs").
 - The game's data tables (next section).
 - Symbol tables, map files or other identifier tables, and any debug string,
   asset or code blob, copied verbatim or in bulk out of the binary, the disc

@@ -566,7 +566,7 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
         return;
     }
     ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
-                               "Ico_PAL.chd next to ico_pc, or set iso=<path> in ico-pc.ini.");
+                               "Ico_PAL.chd next to the program, or set iso=<path> in ico-pc.ini.");
 }
 
 static void verify_iso(const char *iso)
@@ -581,15 +581,22 @@ static void verify_iso(const char *iso)
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s\n", why);
-        ico_host_fatal(log_file(), "Cannot read the disc image %s.", iso);
+        ico_host_fatal(log_file(),
+                       "Cannot read the disc image %s.\n"
+                       "Check that the file is complete and is a .iso or .chd copy of the PAL "
+                       "disc. The log says why.",
+                       iso);
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
     if (strcmp(hex, ICO_ISO_SHA1) != 0) {
+        /* the checksums are for the log; the box says what to use instead */
+        fprintf(stderr, "ico_pc: the image's SHA-1 is %s, expected %s\n", hex, ICO_ISO_SHA1);
         ico_host_fatal(log_file(),
-                       "%s is not the expected ICO disc image (PAL, SCES-50760).\n"
-                       "SHA-1 %s, expected %s.",
-                       iso, hex, ICO_ISO_SHA1);
+                       "%s is not the disc image this port needs.\n"
+                       "Use a complete, unmodified image of the PAL release of ICO "
+                       "(SCES-50760). Other regions and editions do not work.",
+                       iso);
     }
     fprintf(stderr, "ico_pc: disc image verified (SCES-50760)\n");
 }
@@ -800,7 +807,8 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     ico_host_pref_dir(pref, sizeof(pref));
     /* cand[0] is also where the first run writes */
     if (ico_path_join(cand[0], sizeof(cand[0]), pref, ICO_ARCHIVE_NAME) != 0) {
-        ico_host_fatal(log_file(), "The folder %s is too deep to hold %s.", pref, ICO_ARCHIVE_NAME);
+        ico_host_fatal(log_file(), "The path of the folder %s is too long to hold the game's data.",
+                       pref);
     }
     if (ico_path_join(cand[1], sizeof(cand[1]), exe_dir, ICO_ARCHIVE_NAME) != 0) {
         cand[1][0] = '\0'; /* read only: not a candidate */
@@ -821,7 +829,10 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
             ICO_ARCHIVE_NAME, pref);
     find_iso(a, ini, exe_dir, iso, &picked);
     if (ico_make_dir(pref) != 0) {
-        ico_host_fatal(log_file(), "Cannot create the folder %s for the game data.", pref);
+        ico_host_fatal(log_file(),
+                       "Cannot create the folder %s for the game's data.\n"
+                       "Check that you are allowed to write there.",
+                       pref);
     }
     memset(&prog, 0, sizeof(prog));
 #ifndef ICO_HEADLESS
@@ -837,8 +848,12 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         exit(0);
     }
     if (r != 0) {
-        ico_host_fatal(log_file(), "Could not prepare the game data from %s into %s.\n%s", iso,
-                       cand[0], why);
+        fprintf(stderr, "ico_pc: first run: %s\n", why);
+        ico_host_fatal(log_file(),
+                       "Could not extract the game's data from %s into %s.\n"
+                       "Check that there is about 1 GB of free space and that the disc image "
+                       "is complete. The log says why.",
+                       iso, cand[0]);
     }
     fprintf(stderr,
             "ico_pc: first run: disc image SHA-1 %s, %llu bytes; accepted by %s%s\n"
@@ -863,8 +878,11 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         }
     }
     if (mount_archive(cand[0], why, sizeof(why)) != 0) {
-        ico_host_fatal(log_file(), "The game data just written to %s cannot be used: %s", cand[0],
-                       why);
+        fprintf(stderr, "ico_pc: %s cannot be mounted: %s\n", cand[0], why);
+        ico_host_fatal(log_file(),
+                       "The game's data just written to %s cannot be read back.\n"
+                       "Delete that file and start the game again to extract it once more.",
+                       cand[0]);
     }
     copy_path(source, source_size, cand[0]);
 }
@@ -927,7 +945,10 @@ int main(int argc, char **argv)
     }
 
     if (ico_path_join(ini_path, sizeof(ini_path), exe_dir, "ico-pc.ini") != 0) {
-        ico_host_fatal(log_file(), "The folder %s is too deep to hold ico-pc.ini.", exe_dir);
+        ico_host_fatal(log_file(),
+                       "The path of the folder %s is too long. Move the game to a folder with "
+                       "a shorter path.",
+                       exe_dir);
     }
     if (ico_ini_load(&ini, ini_path) == 0) {
         fprintf(stderr, "ico_pc: settings from %s (%d keys)\n", ini_path, ini.count);
@@ -993,8 +1014,9 @@ int main(int argc, char **argv)
         char why[512];
 
         if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
-            ico_host_fatal(log_file(), "Cannot load the game's data tables from %s.\n%s", source,
-                           why);
+            fprintf(stderr, "ico_pc: the data tables: %s\n", why);
+            ico_host_fatal(log_file(), "Cannot read the game's data from %s.\nThe log says why.",
+                           source);
         }
         fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
                 (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
@@ -1139,8 +1161,10 @@ int main(int argc, char **argv)
        frame already records into rd.  512 x 512 is the PAL frame; gsb_Init
        resizes the scene targets if the game switches to 60 Hz. */
     if (ico_window_open(512, 512) != 0) {
-        ico_host_fatal(log_file(), "Could not open the game window or start Vulkan.\n"
-                                   "The log names the reason; a Vulkan 1.2 driver is needed.");
+        ico_host_fatal(log_file(), "Could not open the game window.\n"
+                                   "The game needs a graphics driver with Vulkan 1.2 or later. "
+                                   "Update your graphics driver and try again; the log says "
+                                   "why.");
     }
     atexit(ico_window_close);
     /* v0.4.0: a PCSX2 texture pack in the user folder or beside the

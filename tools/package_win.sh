@@ -112,35 +112,34 @@ TXT
     # developer tool (port/input/pad-boot.txt) and would play the game by itself
     rm -f "$d/pad-script.txt"
     cat > "$d/ico-pc.ini" <<INI
-# ico-pc.ini: optional settings, key=value; lines starting with # or ; are
-# comments. Everything works without editing this file.
+# ico-pc.ini: optional settings, one key=value per line; lines starting
+# with # or ; are notes. Everything works without editing this file.
 #
-# iso: the full path of your PAL disc image (SCES-50760), a .iso or a .chd,
-# for example iso=C:\\Games\\Ico_PAL.iso . Leave it empty and the program
-# asks for it in a file dialog the first time, then saves your choice here.
-# A file named Ico_PAL.iso or Ico_PAL.chd next to the .exe is found first.
+# iso: the full path of your disc image of the PAL release (SCES-50760), a
+# .iso or a .chd, for example iso=C:\\Games\\Ico_PAL.iso . A file named
+# Ico_PAL.iso or Ico_PAL.chd next to the program is used before this line.
+# Leave it empty and the first start asks for the image, then saves your
+# choice here. The image is read once, to copy the game's data into your
+# user folder (%APPDATA%\\ico-pc\\ico-pc); later starts do not need it.
 iso=${iso[$a]}
 
-# There is no ticks= line: the game runs until you close the window
-# (or press Escape).
-
-# watchdog: if no game tick has happened this many seconds after the game
-# starts booting, or none for twice as long later, the program writes a
-# report of where it is stuck to logs\\ico-pc.log and stops. 0 turns it off.
+# watchdog: if the game has not started this many seconds after launch, or
+# stops responding for twice as long later, the program writes what it was
+# doing to logs\\ico-pc.log and closes. 0 turns it off.
 watchdog=30
 
 # portable: remove the # in front of the next line to keep your saves,
 # settings and the game's data in a folder named userdata next to the
-# program, instead of in your user folder. To move an existing install,
-# copy everything from the user folder into userdata first. Making an
-# empty userdata folder next to the program does the same.
+# program, instead of in your user folder. Making an empty userdata folder
+# next to the program does the same, and portable=0 turns it off even when
+# that folder exists. To move an existing install, close the game and copy
+# everything from your user folder into userdata first.
 # portable=1
 
-# Display settings live in Options > Display and in config.toml in the user folder.
-# With a problem report, send logs\\ico-pc.log from next to the program.
-
-# Port settings (display, input bindings, gameplay options) live in
-# config.toml in the user folder; the in-game Options menu edits them.
+# Everything else (display, sound, controls, gameplay, texture packs) is in
+# the in-game Options menu, which saves it to config.toml in your user
+# folder. With a problem report, send logs\\ico-pc.log from next to the
+# program.
 INI
 done
 # the player README, from the same commit

@@ -250,9 +250,14 @@ then applies `tools/format_layout.py`'s top-level blank-line layout.
 
 `ctest` runs the unit tests on the Linux presets; the Windows presets build
 the test executables without running them. A test that needs the disc
-(`vfs_disc`, `archive_disc`) or a Vulkan device (the `rhi_vk*`, `rd_*`,
-`shaders_pixel` and `vu1` tests) exits 77 without one, and
-`SKIP_RETURN_CODE 77` makes ctest report it as skipped, which passes.
+(`vfs_disc`, `archive_disc`, `texpack_disc`) or a Vulkan device (the
+`rhi_vk*`, `rd_*`, `shaders_pixel` and `vu1` tests) exits 77 without one,
+and `SKIP_RETURN_CODE 77` makes ctest report it as skipped, which passes.
+The disc tests read `ICO_DISC_IMAGE` (default `baserom/Ico_PAL.iso`).
+`texpack_disc` also matches a PCSX2 texture pack's file names against the
+disc's textures when `ICO_TEXPACK_DIR` (default
+`build-host/tmp/texpack/SCES-50760/replacements`) exists; no pack file is
+ever committed.
 
 ## Continuous integration
 

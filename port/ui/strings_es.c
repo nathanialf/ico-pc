@@ -76,7 +76,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_ACH_CLEAR] = "Ico",
     [UI_STR_ACH_CLEAR_DESC] = "Termina el juego.",
     [UI_STR_ACH_CLEAR2] = "Una vez más",
-    [UI_STR_ACH_CLEAR2_DESC] = "Termina el juego de nuevo desde una partida completada.",
+    [UI_STR_ACH_CLEAR2_DESC] = "Termina el juego en Nueva partida +.",
     [UI_STR_ACH_FIRST_KILL] = "Desterrador de sombras",
     [UI_STR_ACH_FIRST_KILL_DESC] = "Derrota a una criatura de las sombras.",
     [UI_STR_ACH_KILLS_25] = "Cazador de sombras",
@@ -369,10 +369,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_TEXTURE_PACK] = "Paquete de texturas",
     [UI_STR_VAL_NONE_INSTALLED] = "Ninguno instalado",
     [UI_STR_TEXTURE_PACK_NOTE] =
-        "Paquetes de PCSX2: textures/SCES-50760/replacements junto al programa o en la carpeta de usuario.",
+        "Para un paquete de texturas de PCSX2, copia su carpeta SCES-50760 en una carpeta llamada textures, junto al programa o en tu carpeta de usuario.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Exportar texturas",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Guarda cada textura con su nombre de PCSX2 en textures/SCES-50760/dumps de la carpeta de usuario.",
+        "Para creadores de paquetes: guarda cada textura que carga el juego, con el nombre que le da PCSX2, en textures/SCES-50760/dumps de la carpeta de usuario.",
     [UI_STR_STATS_PLAY_TIME] = "Tiempo de juego",
     [UI_STR_STATS_DEATHS] = "Muertes",
     [UI_STR_STATS_CAPTURES] = "Yorda raptada",

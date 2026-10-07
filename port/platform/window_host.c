@@ -438,9 +438,9 @@ static int device_lost_quit(void)
     }
     fprintf(stderr, "window: the graphics device was lost; quitting\n");
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC",
-                             "The graphics device stopped responding (the driver was reset or "
-                             "the GPU was removed).\n\nThe game has to close. Your last save on "
-                             "the memory card is kept; logs/ico-pc.log names the reason.",
+                             "The graphics card stopped responding (its driver was reset or "
+                             "updated, or the card was removed).\n\nThe game has to close. "
+                             "Your last save is kept; logs/ico-pc.log says why.",
                              s_window);
     return 1;
 }

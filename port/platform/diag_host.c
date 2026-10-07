@@ -787,8 +787,8 @@ static void finish(const char *reason, const char *box_text, int code)
     {
         char box[1536];
         snprintf(box, sizeof box,
-                 "ICO PC stopped: %s\n\nThe details are in the log:\n%s\n\nPlease send the "
-                 "logs folder.",
+                 "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach "
+                 "the logs folder from beside the program. The log is:\n%s",
                  box_text, ico_diag_log_path());
         MessageBoxA(NULL, box, "ICO PC", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
     }
@@ -835,8 +835,8 @@ static void report_crash(void)
     }
     heartbeat(1);
     dump_threads();
-    snprintf(box, sizeof box, "%s at %s (thread %s)", crash.what, where,
-             thread_name(crash.thread, tmp, sizeof tmp));
+    /* the player's box says what to do; what and where are in the log */
+    snprintf(box, sizeof box, "ICO PC hit an error and had to close.");
     finish(crash.what, box, EXIT_CRASH);
 }
 
@@ -960,7 +960,8 @@ static void watchdog_fire(const char *reason)
     }
     heartbeat(1);
     dump_threads();
-    snprintf(box, sizeof box, "the watchdog stopped the run: %s", reason);
+    /* the reason is in the log; the box says what happened in plain words */
+    snprintf(box, sizeof box, "ICO PC stopped responding, so it was closed.");
     finish("watchdog", box, EXIT_WATCHDOG);
 }
 

@@ -76,8 +76,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ACH_CLEAR] = "Ico",
     [UI_STR_ACH_CLEAR_DESC] = "Schließe das Spiel ab.",
     [UI_STR_ACH_CLEAR2] = "Noch einmal",
-    [UI_STR_ACH_CLEAR2_DESC] =
-        "Schließe das Spiel erneut ab, von einem abgeschlossenen Spielstand aus.",
+    [UI_STR_ACH_CLEAR2_DESC] = "Schließe das Spiel mit Neues Spiel + ab.",
     [UI_STR_ACH_FIRST_KILL] = "Schattenbanner",
     [UI_STR_ACH_FIRST_KILL_DESC] = "Besiege eine Schattenkreatur.",
     [UI_STR_ACH_KILLS_25] = "Schattenjäger",
@@ -372,10 +371,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_TEXTURE_PACK] = "Texturpaket",
     [UI_STR_VAL_NONE_INSTALLED] = "Keines installiert",
     [UI_STR_TEXTURE_PACK_NOTE] =
-        "PCSX2-Pakete: textures/SCES-50760/replacements neben dem Programm oder im Benutzerordner.",
+        "Für ein PCSX2-Texturpaket den Ordner SCES-50760 des Pakets in einen Ordner namens textures kopieren, neben dem Programm oder im Benutzerordner.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Speichert jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
+        "Für Ersteller von Texturpaketen: speichert jede geladene Textur unter dem Namen, den PCSX2 ihr gibt, in textures/SCES-50760/dumps im Benutzerordner.",
     [UI_STR_STATS_PLAY_TIME] = "Spielzeit",
     [UI_STR_STATS_DEATHS] = "Tode",
     [UI_STR_STATS_CAPTURES] = "Yorda entführt",

@@ -76,7 +76,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_ACH_CLEAR] = "Ico",
     [UI_STR_ACH_CLEAR_DESC] = "Terminer le jeu.",
     [UI_STR_ACH_CLEAR2] = "Encore une fois",
-    [UI_STR_ACH_CLEAR2_DESC] = "Terminer à nouveau le jeu depuis une sauvegarde terminée.",
+    [UI_STR_ACH_CLEAR2_DESC] = "Terminer le jeu en Nouvelle partie +.",
     [UI_STR_ACH_FIRST_KILL] = "Bannisseur d’ombres",
     [UI_STR_ACH_FIRST_KILL_DESC] = "Vaincre une créature des ombres.",
     [UI_STR_ACH_KILLS_25] = "Chasseur d’ombres",
@@ -371,10 +371,10 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_TEXTURE_PACK] = "Pack de textures",
     [UI_STR_VAL_NONE_INSTALLED] = "Aucun installé",
     [UI_STR_TEXTURE_PACK_NOTE] =
-        "Packs PCSX2 : textures/SCES-50760/replacements à côté du programme ou dans le dossier utilisateur.",
+        "Pour un pack de textures PCSX2, copiez son dossier SCES-50760 dans un dossier nommé textures, à côté du programme ou dans votre dossier utilisateur.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Extraire les textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Enregistre chaque texture sous son nom PCSX2 dans textures/SCES-50760/dumps du dossier utilisateur.",
+        "Pour les créateurs de packs : enregistre chaque texture chargée, sous le nom que lui donne PCSX2, dans textures/SCES-50760/dumps du dossier utilisateur.",
     [UI_STR_STATS_PLAY_TIME] = "Temps de jeu",
     [UI_STR_STATS_DEATHS] = "Morts",
     [UI_STR_STATS_CAPTURES] = "Yorda enlevée",

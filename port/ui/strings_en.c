@@ -76,7 +76,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ACH_CLEAR] = "Ico",
     [UI_STR_ACH_CLEAR_DESC] = "Finish the game.",
     [UI_STR_ACH_CLEAR2] = "Once More",
-    [UI_STR_ACH_CLEAR2_DESC] = "Finish the game again from a cleared save.",
+    [UI_STR_ACH_CLEAR2_DESC] = "Finish the game on a New Game+ journey.",
     [UI_STR_ACH_FIRST_KILL] = "Shadow Banisher",
     [UI_STR_ACH_FIRST_KILL_DESC] = "Defeat a shadow creature.",
     [UI_STR_ACH_KILLS_25] = "Shadow Hunter",
@@ -365,10 +365,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_TEXTURE_PACK] = "Texture pack",
     [UI_STR_VAL_NONE_INSTALLED] = "None installed",
     [UI_STR_TEXTURE_PACK_NOTE] =
-        "PCSX2 packs: textures/SCES-50760/replacements beside the program or in the user folder.",
+        "For a PCSX2 texture pack, copy its SCES-50760 folder into a folder named textures beside the program or in your user folder.",
     [UI_STR_OPT_DUMP_TEXTURES] = "Dump textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
-        "Saves each texture under its PCSX2 name to textures/SCES-50760/dumps in the user folder.",
+        "For texture pack makers: saves each texture the game loads, under the name PCSX2 gives it, to textures/SCES-50760/dumps in the user folder.",
     [UI_STR_STATS_PLAY_TIME] = "Play time",
     [UI_STR_STATS_DEATHS] = "Deaths",
     [UI_STR_STATS_CAPTURES] = "Yorda captured",

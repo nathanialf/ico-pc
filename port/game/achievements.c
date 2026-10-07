@@ -144,8 +144,9 @@ static int c_clear(void)
 
 static int c_clear2(void)
 {
-    /* the ending of a game continued from a cleared save (gFlagGameClear 1
-       as the ending starts; actEndingSave only saves when it is 0) */
+    /* the ending of a New Game+ journey, from a cleared save or chosen on the
+       New Game screen (gFlagGameClear 1 as the ending starts; actEndingSave
+       only saves when it is 0) */
     return ico_gs_signaled(ICO_GS_EV_ENDING) && ico_gs_signal_arg(ICO_GS_EV_ENDING) != 0;
 }
 
