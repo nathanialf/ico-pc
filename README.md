@@ -162,24 +162,19 @@ tried on a real card image yet, so check that the game lists the save.
 
 ## Logs and problems
 
-Each run writes `logs\ico-pc.log` beside the program (replaced on the next
-run). If something goes wrong it says why:
+Each run writes `logs/ico-pc.log` beside the program (replaced on the next
+run). It records your display options at start, every change you make in
+Options, and every 10 seconds the frame rate, present mode, refresh rate
+and window size. If something goes wrong it says why:
 
 - `rhi_vk:` lines: no usable Vulkan driver, or a missing feature.
 - A `CRASH:` block: send it with the `.map` file from the download.
 - A `WATCHDOG:` block: the game stopped making progress for 30 seconds.
 
-Press **F12** with a problem on screen to save a frame dump and picture (a
-`dumps` folder) for a bug report. Dumps contain pictures from your disc, so
-do not share them publicly.
-
-## Reporting a problem
-
-Send `logs/ico-pc.log`, which sits beside `ico_pc` on Linux and beside the
-exe on Windows. It records your display options at start, every change you
-make in Options, and every 10 seconds the frame rate, present mode, refresh
-rate and window size. Say where your `config.toml` is if asked; it is in the
-user folder described under Saves.
+Send that log with a problem report, and `config.toml` from the user folder
+described under Saves if asked. Press **F12** with a problem on screen to
+save a frame dump and picture (a `dumps` folder) for a bug report. Dumps
+contain pictures from your disc, so do not share them publicly.
 
 ## Differences from the PS2 you will notice
 
