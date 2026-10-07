@@ -18,6 +18,44 @@ target_include_directories(ico_vu1_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vu1_r
 target_compile_options(ico_vu1_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_vu1_ref PUBLIC ico_math)
 
+# ico_texpack_name (v0.4.0, T1): the names PCSX2 gives textures
+# (texpack_name.h) and the XXH3-64 they are made with (xxh3.c, a
+# reimplementation of xxHash's algorithm, BSD-2-Clause, docs/THIRD_PARTY.md).
+# CPU only, built in every configuration.
+add_library(ico_texpack_name STATIC texpack_name.c xxh3.c)
+target_include_directories(ico_texpack_name PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_texpack_name PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
+# texpack_name_test: XXH3 against xxHash's sanity vectors, the block
+# swizzles against PCSX2's column writes, the CLUT orders, the expanded
+# bytes, the candidate list and the file names (CPU only).
+add_executable(texpack_name_test test/texpack_name_test.c)
+target_compile_options(texpack_name_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(texpack_name_test PRIVATE ico_texpack_name)
+
+# texpack_disc_test: every TIM2 of the disc named, written to
+# texpack_names.txt; with a PCSX2 replacements folder (ICO_TEXPACK_DIR) the
+# pack's files matched against those names.  Skipped (77) without the disc.
+add_executable(texpack_disc_test test/texpack_disc_test.c)
+target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
+
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    # a PCSX2 pack's replacements folder (never committed); the match is
+    # reported only when it exists
+    set(ICO_TEXPACK_DIR "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements"
+        CACHE PATH "A PCSX2 texture pack's replacements folder for texpack_disc_test")
+    add_test(NAME texpack_name COMMAND texpack_name_test)
+    add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(texpack_disc PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
     message(STATUS "ico: port/render not built (needs ico_shaders and ico_rhi_vk; run "
                    "tools/fetch_deps.sh)")
@@ -51,7 +89,7 @@ target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref)
+target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name)
 # texture packs: texpack_png.c inflates with miniz's tinfl
 target_link_libraries(ico_render PRIVATE ico_miniz)
 if(NOT WIN32)

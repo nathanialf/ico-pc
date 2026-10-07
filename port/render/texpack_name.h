@@ -53,9 +53,12 @@
  *             order (entry i is index i's colour).  CT32 CLUTs: the CSM1
  *             swizzle undone (entry i = memory entry rdtex_Csm1Index(i));
  *             a 16-entry CLUT is straight.  CT16/16S CLUTs: the same
- *             de-swizzle, then each entry expanded as the CT16 texel above
- *             with the TEXA in force (so a 16-bit CLUT's name depends on
- *             TEXA too, through the hash).  24-bit CLUTs are not GS CLUTs
+ *             de-swizzle, middle-run swap included (WriteCLUT_T16_I8_CSM1
+ *             reads the two CT16 blocks a 16x16 upload fills and lands
+ *             entry i on memory entry rdtex_Csm1Index(i), as the CT32 path
+ *             does; texpack_name_test runs both paths), then each entry
+ *             expanded as the CT16 texel above with the TEXA in force (so
+ *             a 16-bit CLUT's name depends on TEXA too, through the hash).  24-bit CLUTs are not GS CLUTs
  *             (TIM2 allows them): unsupported.  0 for direct formats.
  *   mips      PCSX2 with hardware mipmapping on hashes the bound level and
  *             the levels after it up to TEX1.MXL into one TEX0Hash; off
@@ -106,10 +109,16 @@ typedef struct TexpackSource {
     TexpackLevel lv[TEXPACK_MAX_LEVELS];
     uint32_t cpsm;       /* the CLUT's entries: RDTEX_PSMCT32, RDTEX_PSMCT16(S), or
                             RDTEX_PSMCT24 (unsupported); ignored for direct formats */
-    uint32_t clutColors; /* 16 or 256 for the palette formats, 0 otherwise */
-    const void *clut;    /* clutColors entries of cpsm in GS CSM1 memory order
-                            (rdtex_ClutToCsm1 applied when the TIM2 held them in
-                            index order), or null for direct formats */
+    uint32_t clutColors; /* 16 or 256 for the palette formats, 0 otherwise: the
+                            shape of the CLUT upload (tex_transVramClutTex: 8x2
+                            for a 16-entry TIM2 CLUT, 16x16 for any other), so
+                            a PSMT4 texture with a 256-entry CLUT passes 256 */
+    const void *clut;    /* clutColors entries of cpsm in GS CSM1 memory order, i.e.
+                            the uploaded image's texels in rows (rdtex_ClutToCsm1
+                            applied when the TIM2 held them in index order), or
+                            null for direct formats; a palette reading past them
+                            (PSMT8 with 16 entries) hashes zeros there and the
+                            name is unstable */
 } TexpackSource;
 
 /* A name, computed (texpack_ComputeName) or parsed (texpack_ParseName).
@@ -162,7 +171,8 @@ size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uin
    when mipChain) under texa (an RdTexA; ignored and stored as
    TEXPACK_TEXA_ANY when nothing depends on TEXA).  0, or -1 when the name
    cannot be made: a 24-bit CLUT, an unknown psm, startLevel >= levels or
-   levels > TEXPACK_MAX_LEVELS, a palette format without a CLUT. */
+   levels > TEXPACK_MAX_LEVELS, a palette format without a CLUT, a texa
+   outside the three RdTexA modes for a name that depends on it. */
 int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa, int mipChain,
                         TexpackName *out);
 

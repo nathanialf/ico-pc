@@ -44,6 +44,10 @@ int ico_df_has(IcoVfs *vfs, const char *name);
    "01.int"), or -1 when it has none or DATA.DF cannot be read. */
 int64_t ico_df_size(IcoVfs *vfs, const char *name);
 
+/* The name of DATA.DF's directory entry i (a pack or a loose file), or NULL
+   past the last one or when DATA.DF cannot be read. */
+const char *ico_df_entry_name(IcoVfs *vfs, int i);
+
 /* Reads up to n bytes of the loose file `name` from its byte `off`: the
    bytes read (0 past its end), or -1 when DATA.DF has no such entry or
    cannot be read. */
@@ -63,6 +67,9 @@ int ico_df_index_packs(void);
 int ico_df_index_members(void);
 /* The name of indexed member i (0 .. ico_df_index_members() - 1), NULL. */
 const char *ico_df_member_name(int i);
+/* Where indexed member i is (every member, also one whose name an earlier
+   pack has too): 0 and *out filled, or -1 for an i out of range. */
+int ico_df_member(int i, IcoDfMember *out);
 
 /* Forgets the index (a new volume; tests). */
 void ico_df_reset(void);

@@ -129,6 +129,15 @@
       ]
     },
     {
+      "name": "xxHash XXH3-64",
+      "version": "reimplementation of the algorithm from xxHash v0.8.2; port/render/xxh3.c",
+      "licence": "BSD-2-Clause (Yann Collet)",
+      "used_for": "naming replacement textures the way PCSX2 does",
+      "texts": [
+        {"extract": {"file": "port/render/xxh3.c", "from": "xxHash - Extremely Fast Hash algorithm", "to": "SUCH DAMAGE."}}
+      ]
+    },
+    {
       "name": "MinGW-w64 runtime",
       "version": "the win-x64 toolchain's (Debian mingw-w64 12.0.0), linked statically (-static, CMakeLists.txt)",
       "licence": "ZPL-2.1 and the notices below",

@@ -120,6 +120,15 @@ int ico_df_has(IcoVfs *vfs, const char *name)
     return 0;
 }
 
+const char *ico_df_entry_name(IcoVfs *vfs, int i)
+{
+    IcoVfsFile df;
+    if (loadDir(vfs, &df) != 0 || i < 0 || i >= s_dirCount) {
+        return NULL;
+    }
+    return s_dir[i].name;
+}
+
 int64_t ico_df_size(IcoVfs *vfs, const char *name)
 {
     IcoVfsFile df;
@@ -397,6 +406,15 @@ int ico_df_index_packs(void)
 const char *ico_df_member_name(int i)
 {
     return i >= 0 && i < s_memberCount ? s_pool + s_members[i].name : NULL;
+}
+
+int ico_df_member(int i, IcoDfMember *out)
+{
+    if (i < 0 || i >= s_memberCount || out == NULL) {
+        return -1;
+    }
+    *out = s_members[i].m;
+    return 0;
 }
 
 int ico_df_index_members(void)
