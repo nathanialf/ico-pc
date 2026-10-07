@@ -7,7 +7,7 @@
  * (ico2/seki/src/GsBase.c gsbHostWideX, under ICO_HOST) and the Settings
  * menu (package 6C) read and write the same values.
  *
- *   [video] preset          "original"  "original" | "enhanced"
+ *   [video] preset          "original"  "original" | "enhanced" | "custom"
  *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8)
  *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "auto"
  *   [video] fullscreen      false
@@ -23,10 +23,10 @@
  *                           -1          config only: the mode's value when < 0
  *
  * Every option applies on its own.  preset is not an option but a
- * shortcut over four of them, read and written as such: "original" puts
- * resolution, aspect, texture_filter and full_height at the PS2's values
- * (1x, 4:3, original, half) whatever the file says; "enhanced" takes them as
- * written.  The preset in force is derived from those four rows
+ * shortcut over four of them, read and written as such: "enhanced" or
+ * "custom" takes resolution, aspect, texture_filter and full_height as
+ * written; anything else ("original", no key, a misspelling) puts them at
+ * the PS2's values (1x, 4:3, original, half) whatever the file says.  The preset in force is derived from those four rows
  * (ico_video_preset): Original when all four are the PS2's, Enhanced when
  * they are window, auto, anisotropic and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.

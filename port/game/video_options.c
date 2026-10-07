@@ -269,6 +269,7 @@ static void read_config(void)
 
     ico_video_defaults(&o);
     if (ico_video_parse_resolution(ico_config_get_string("video.resolution", "window"), &o) != 0) {
+        o.resW = o.resH = o.resScale = 0;
         fprintf(stderr, "video: resolution not understood; \"window\" used\n");
     }
     if (ico_video_parse_aspect(ico_config_get_string("video.aspect", "4:3"), &o.aspect) != 0) {
@@ -297,11 +298,11 @@ static void read_config(void)
     o.crtHalation = (float)ico_config_get_float("video.crt_halation", -1.0);
     o.crtBloom = (float)ico_config_get_float("video.crt_bloom", -1.0);
     o.crtCurvature = (float)ico_config_get_float("video.crt_curvature", -1.0);
-    /* the preset is a shortcut over the four rows: "original" (or no key)
-       is the PS2 picture whatever they say, as every earlier build read it;
-       "enhanced", or anything else, takes them as written */
+    /* the preset is a shortcut over the four rows: only "enhanced" and
+       "custom" take them as written; "original", no key, or anything else
+       (a misspelling) is the PS2 picture whatever they say */
     s = ico_config_get_string("video.preset", "original");
-    if (s == NULL || lower_eq(s, "original")) {
+    if (s == NULL || !(lower_eq(s, "enhanced") || lower_eq(s, "custom"))) {
         ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
     }
     sanitize(&o);

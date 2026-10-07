@@ -765,6 +765,18 @@ static void checkOptions(const char *dir)
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1 &&
               o.filter == ICO_FILTER_ORIGINAL,
           "options: no preset key is Original");
+    writeFile(toml, "version = 1\n[video]\npreset = \"orignal\"\nresolution = \"2x\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1,
+          "options: a misspelt preset is Original");
+    writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"1080p\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.resW == 0 && o.resH == 0,
+          "options: an unparseable resolution is window, as logged");
     /* an old "enhanced" without rows: window, 4:3, original, half, the
        picture it had */
     writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\n");
