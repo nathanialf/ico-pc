@@ -10,8 +10,13 @@
  * texpack_Init walks as the game does.  Every texture's candidates are
  * looked up in that index in the hook's order (the first hit is the one
  * requested), and every file reached is read with the real loaders.
+ * Then the precache at its defaults (the RAM cache's automatic limit) is
+ * run over the whole pack: every PNG of the pack (its menus and subtitles)
+ * must be read ahead, whatever the DDS files take.  It holds the pack in
+ * memory (about 4 GB for Sad Origami's).
  * Exit 77 without the names file or the pack.  Fails when no texture
- * reaches a file or a reached file does not load.
+ * reaches a file, a reached file does not load, or a PNG is not read
+ * ahead.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -172,7 +177,43 @@ int main(int argc, char **argv)
     printf("texpack_e2e_test: %d textures (%d refused); %d reach a file (%d through a name other "
            "than the base level alone); %d of %d indexed files reached, %d loaded, %d failed\n",
            textures, refused, reached, firstNotSingle, entries, indexed, loaded, failed);
-    if (reached == 0 || failed > 0) {
+
+    /* the precache at its defaults: every PNG read ahead */
+    int precacheOk = 1;
+#ifndef _WIN32
+    int pngs = 0, pngsCached = 0, uiPngs = 0, uiCached = 0;
+    c.precache = 1;
+    c.cacheMb = 0;
+    texpack_Init(&c);
+    for (int waited = 0; waited < 1800 * 10; waited++) {
+        texpack_GetStats(&st);
+        if (st.precacheDone) {
+            break;
+        }
+        usleep(100 * 1000);
+    }
+    texpack_GetStats(&st);
+    for (int e = 0; e <= (int)st.files; e++) {
+        const char *path = texpack_EntryPath(e);
+        if (!path || !hasExt(path, ".png")) {
+            continue;
+        }
+        const int ui = strstr(path, "/04 - UI/") != NULL;
+        const int cached = texpack_EntryCached(e);
+        pngs++;
+        pngsCached += cached;
+        uiPngs += ui;
+        uiCached += ui && cached;
+    }
+    printf("texpack_e2e_test: precache (limit %llu MB): %u files read ahead, %llu MB, %u did not "
+           "fit, %u failed%s; PNG files read ahead: %d of %d (\"04 - UI\": %d of %d)\n",
+           (unsigned long long)(st.cacheLimit >> 20), st.cached,
+           (unsigned long long)(st.cacheBytes >> 20), st.skipped, st.loadFailed,
+           st.precacheDone ? "" : " (not finished)", pngsCached, pngs, uiCached, uiPngs);
+    precacheOk = st.precacheDone && pngsCached == pngs;
+    texpack_Shutdown();
+#endif
+    if (reached == 0 || failed > 0 || !precacheOk) {
         printf("texpack_e2e_test: FAIL\n");
         return 1;
     }

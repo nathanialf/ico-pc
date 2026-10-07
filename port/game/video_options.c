@@ -35,6 +35,7 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->dumpTextures = 0;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
+    o->texturePackCacheMb = 0;
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -273,6 +274,13 @@ static void sanitize(IcoVideoOptions *o)
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MAX;
     }
     o->texturePackPrecache = o->texturePackPrecache != 0;
+    if (o->texturePackCacheMb < 0) {
+        o->texturePackCacheMb = 0;
+    } else if (o->texturePackCacheMb > 0 && o->texturePackCacheMb < ICO_TEXPACK_CACHE_MIN) {
+        o->texturePackCacheMb = ICO_TEXPACK_CACHE_MIN;
+    } else if (o->texturePackCacheMb > ICO_TEXPACK_CACHE_MAX) {
+        o->texturePackCacheMb = ICO_TEXPACK_CACHE_MAX;
+    }
 }
 
 static void read_config(void)
@@ -326,6 +334,16 @@ static void read_config(void)
         o.texturePackBudgetMb = (int)mb;
     }
     o.texturePackPrecache = ico_config_get_bool("video.texture_pack_precache", 1) != 0;
+    {
+        /* 0: half the computer's memory (texpack.c) */
+        long long mb = ico_config_get_int("video.texture_pack_cache_mb", 0);
+        if (mb != 0 && (mb < ICO_TEXPACK_CACHE_MIN || mb > ICO_TEXPACK_CACHE_MAX)) {
+            fprintf(stderr, "video: texture_pack_cache_mb %lld is not 0 or %d..%d; clamped\n", mb,
+                    ICO_TEXPACK_CACHE_MIN, ICO_TEXPACK_CACHE_MAX);
+            mb = mb < ICO_TEXPACK_CACHE_MIN ? ICO_TEXPACK_CACHE_MIN : ICO_TEXPACK_CACHE_MAX;
+        }
+        o.texturePackCacheMb = (int)mb;
+    }
     /* the preset is a shortcut over the four rows: only "enhanced" and
        "custom" take them as written; "original", no key, or anything else
        (a misspelling) is the PS2 picture whatever they say */
@@ -421,6 +439,9 @@ int ico_video_save(void)
     }
     if (!o.texturePackPrecache) {
         r |= ico_config_set_bool("video.texture_pack_precache", 0);
+    }
+    if (o.texturePackCacheMb != 0) {
+        r |= ico_config_set_int("video.texture_pack_cache_mb", o.texturePackCacheMb);
     }
     return r != 0 ? -1 : ico_config_save();
 }

@@ -260,6 +260,10 @@ int texpack_LoadPng(const uint8_t *data, size_t size, const char *file, TexpackI
             pi.interlace = body[12];
             if (pi.w == 0 || pi.h == 0 || pi.w > PNG_MAX_SIDE || pi.h > PNG_MAX_SIDE) {
                 why = "the PNG size is out of range";
+            } else if (texpack_MaxSide() &&
+                       (pi.w > texpack_MaxSide() || pi.h > texpack_MaxSide())) {
+                /* before any row is allocated: a huge file costs nothing */
+                why = "the picture is larger than this graphics card can show";
             } else if (!validDepth(pi.colour, pi.depth) || body[10] != 0 || body[11] != 0 ||
                        pi.interlace > 1) {
                 why = "a PNG format this reader does not know";

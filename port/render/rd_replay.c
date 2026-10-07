@@ -3653,8 +3653,9 @@ static void uploadMips(RdTexRec *t, uint8_t levels)
  * the frames in flight).  The pending image is freed once the copies are
  * recorded.  Returns 0 when the upload must wait for the next replay (no
  * room), 1 when the texture is done with (uploaded, or dropped because the
- * device refused it: it then draws as an untextured placeholder, as an
- * unready texture does). */
+ * device refused it: marked refused, it draws as an untextured placeholder
+ * for the rest of this frame, and the next bind's rdtex_Find misses and
+ * decodes the game's own texture). */
 static int uploadReplacement(RdTexRec *t)
 {
     const TexpackImage *p = t->pending;
@@ -3668,9 +3669,10 @@ static int uploadReplacement(RdTexRec *t)
         t->state = RHI_STATE_UNDEFINED;
         t->mipLevels = (uint8_t)p->levels;
         if (!t->rhi.id) {
-            rd__Log("texture pack: the graphics card refused \"%s\" (%ux%u); the game's "
-                    "texture is not shown for it",
+            rd__Log("texture pack: the graphics card refused \"%s\" (%ux%u); the game's own "
+                    "texture is shown instead",
                     t->name, t->w, t->h);
+            t->refused = 1;
             rd__FreePending(t);
             return 1;
         }

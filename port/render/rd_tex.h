@@ -180,15 +180,19 @@ const RdTexSampler *rdtex_Sampler(uint32_t id, int texa);
 void rdtex_Drop(uint32_t id);
 /* Once per game frame: destroys the textures retired two calls ago. */
 void rdtex_FrameTick(void);
-/* rd was shut down (and maybe started again): forget every entry without
- * destroying anything (rd_Shutdown destroyed them). */
+/* rd was shut down and started again: forget every entry without
+ * destroying anything (rd_Shutdown destroyed them).  The game never does
+ * this (a lost device ends the run); the tests do, between renderers. */
 void rdtex_Reset(void);
 /* ------------------------------------------------------- texture packs
  *
  * A pack replacement (texpack.h) takes the place of a cache entry's
  * texture: every later bind of (id, gen, texa) samples it.  It lasts as
  * long as the entry: a new generation (a CLUT scroll re-store), rdtex_Drop
- * or rdtex_Reset retire it with the entry. */
+ * or rdtex_Reset retire it with the entry.  A replacement the graphics
+ * card refused when it was uploaded (rdtex_ReplacementRefused) is
+ * forgotten by the next rdtex_Find of its entry, which then misses, so the
+ * game's own texture is decoded again. */
 
 struct TexpackImage; /* texpack.h */
 
@@ -216,6 +220,13 @@ RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t u
  * fiber does not).  0, or -1 (img unchanged: not a one-level RGBA8 image
  * with rows of w * 4 bytes, or no memory). */
 int rdtex_ReplacementMips(struct TexpackImage *img);
+/* The same chain into a new image: *dst gets src's level 0 and the box
+ * chain in a blob of its own (src unchanged, so a shared cached image can
+ * be copied for the renderer with its levels in one pass).  0, or -1 with
+ * *dst untouched. */
+int rdtex_ReplacementMipsFrom(const struct TexpackImage *src, struct TexpackImage *dst);
+/* 1 when t is a pack replacement the graphics card refused to create. */
+int rdtex_ReplacementRefused(RdTex t);
 /* Install rep as the texture of the entry (id, gen, texa): the entry's
  * current texture is retired, rep takes its place and the entry is marked
  * replaced (a later store of that entry, a CLUT scroll's new generation,

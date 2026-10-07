@@ -1182,9 +1182,11 @@ int main(int argc, char **argv)
         tc.programDir = exe_dir;
         tc.serial = "SCES-50760";
         tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
+        tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
         /* read ahead only while the pack is in use */
         tc.precache = vo.texturePackPrecache && vo.texturePack;
         tc.bcSupported = rhi_Limits() != NULL && rhi_Limits()->bcTextures;
+        tc.maxTextureSize = rhi_Limits() != NULL ? rhi_Limits()->maxTextureSize : 0;
         tc.developer = ico_opt_developer_mode();
         texpack_Init(&tc);
         atexit(texpack_Shutdown);

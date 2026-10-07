@@ -14,9 +14,15 @@
  *           by a pump with the first root's file, a second request for the
  *           same texture refused as queued, a generation changed while the
  *           file loaded dropped, a file that fails remembered, the budget
- *           declining and remembering, the RAM cache installing at the
- *           next pump, the precache stopping at the memory limit, a device
- *           reset dropping the queue, shutdown joining a busy thread.
+ *           declining and remembering, the RAM cache installing at once,
+ *           the cache keeping images without their mip chain (the copy
+ *           installed gets it), the precache reading the PNGs first and
+ *           passing over a file that does not fit its own memory limit
+ *           (not the graphics budget) to cache the next, the pack switched
+ *           off with loads in flight (nothing goes in), a replacement the
+ *           graphics card refused not offered again, shutdown joining a
+ *           busy thread.
+ *   links   a folder link back up inside a pack is not followed.
  *
  * The texture cache (rd_tex.h), the PNG writer and the file loaders are
  * fakes here, so nothing needs a device; the names are texpack_name.c's.
@@ -32,6 +38,9 @@
 
 #if ICO_TEXPACK_THREAD
 #include <SDL3/SDL.h>
+#endif
+#ifndef _WIN32
+#include <unistd.h>
 #endif
 
 static int failures;
@@ -146,6 +155,26 @@ void texpack_FreeImage(TexpackImage *img)
     }
 }
 
+static uint32_t s_maxSide;
+
+void texpack_SetMaxSide(uint32_t side)
+{
+    s_maxSide = side;
+}
+
+uint32_t texpack_MaxSide(void)
+{
+    return s_maxSide;
+}
+
+/* the renderer's settings: the pack on unless a test turns it off */
+static RdSettings s_rs = {.texturePack = 1};
+
+const RdSettings *rd_GetSettings(void)
+{
+    return &s_rs;
+}
+
 /* -------------------------------------------------- fake texture cache */
 
 #define IDS 64
@@ -158,9 +187,12 @@ static struct {
     uint32_t installed[IDS]; /* the replacement's RdTex id */
     char tag[IDS][64];
     uint32_t uvW[IDS], uvH[IDS];
+    uint32_t levels[IDS]; /* the installed image's levels */
     uint32_t nextRep;
     int destroyed;
     char lastTag[64];
+    uint32_t lastLevels;
+    uint32_t refusedRep; /* the replacement the "card" refused */
 } s_tc;
 
 static void setCurrent(uint32_t id, uint32_t gen)
@@ -185,6 +217,7 @@ RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t u
         return (RdTex){0};
     }
     snprintf(s_tc.lastTag, sizeof(s_tc.lastTag), "%s", (const char *)img->blob);
+    s_tc.lastLevels = img->levels;
     texpack_FreeImage(img); /* moved into the texture */
     return (RdTex){++s_tc.nextRep};
 }
@@ -199,13 +232,45 @@ int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
     snprintf(s_tc.tag[id], sizeof(s_tc.tag[id]), "%s", s_tc.lastTag);
     s_tc.uvW[id] = s_lastUvW;
     s_tc.uvH[id] = s_lastUvH;
+    s_tc.levels[id] = s_tc.lastLevels;
+    return 0;
+}
+
+/* the fake chain: a second level as large as the first, so its bytes show
+   where a chain was added */
+int rdtex_ReplacementMipsFrom(const struct TexpackImage *src, struct TexpackImage *dst)
+{
+    if (!src || !src->blob || src->fmt != RD_TEXEL_RGBA8 || src->levels != 1) {
+        return -1;
+    }
+    uint8_t *blob = calloc(1, src->bytes * 2);
+    if (!blob) {
+        return -1;
+    }
+    memcpy(blob, src->blob, src->bytes);
+    *dst = *src;
+    dst->blob = blob;
+    dst->bytes = src->bytes * 2;
+    dst->lv[0].data = blob + (src->lv[0].data - (const uint8_t *)src->blob);
+    dst->lv[1] = dst->lv[0];
+    dst->levels = 2;
     return 0;
 }
 
 int rdtex_ReplacementMips(struct TexpackImage *img)
 {
-    (void)img;
-    return -1; /* the fake images stay one level */
+    TexpackImage out;
+    if (rdtex_ReplacementMipsFrom(img, &out) != 0) {
+        return -1;
+    }
+    free(img->blob);
+    *img = out;
+    return 0;
+}
+
+int rdtex_ReplacementRefused(RdTex t)
+{
+    return t.id != 0 && t.id == s_tc.refusedRep;
 }
 
 static RdTexReleaseFn s_releaseHook;
@@ -322,7 +387,8 @@ static int entryOf(const char *name)
     return texpack_Lookup(&tn);
 }
 
-static void initPack(const char *user, const char *prog, uint32_t budgetMb, int precache)
+static void initPackCache(const char *user, const char *prog, uint32_t budgetMb, int precache,
+                          uint32_t cacheMb)
 {
     TexpackConfig c;
     memset(&c, 0, sizeof(c));
@@ -330,9 +396,15 @@ static void initPack(const char *user, const char *prog, uint32_t budgetMb, int 
     c.programDir = prog;
     c.serial = "SCES-50760";
     c.budgetMb = budgetMb;
+    c.cacheMb = cacheMb;
     c.precache = precache;
     c.bcSupported = 1;
     texpack_Init(&c);
+}
+
+static void initPack(const char *user, const char *prog, uint32_t budgetMb, int precache)
+{
+    initPackCache(user, prog, budgetMb, precache, 0);
 }
 
 static TexpackStats stats(void)
@@ -433,18 +505,26 @@ static void testLoader(void)
     CHECK(stats().loadFailed == 1 && s_tc.installed[7] == 0, "the bad file failed");
     CHECK(texpack_Request(e4, 7, 9, RDTEX_TEXA_REPLAY, 8, 8) == -1, "and is not tried again");
 
-    /* a device reset forgets the queue: N2 is slow, N6 waits behind it */
+    /* the pack switched off with loads in flight: N2 is slow (loading
+       when the switch comes), N6 waits behind it; neither goes in, and both
+       count as discarded */
     setCurrent(30, 1);
     setCurrent(31, 1);
+    const uint32_t discarded = stats().discarded;
     CHECK(texpack_Request(e2, 30, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0 &&
               texpack_Request(e6, 31, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0,
           "two requests");
-    texpack_ResetDevice();
+    sleepMs(5);
+    s_rs.texturePack = 0;
+    WAIT_FOR(stats().discarded == discarded + 2);
     for (int i = 0; i < 100; i++) {
         texpack_Pump();
         sleepMs(1);
     }
-    CHECK(s_tc.installed[31] == 0, "the queued request was dropped by the reset");
+    CHECK(s_tc.installed[30] == 0 && s_tc.installed[31] == 0 && stats().discarded == discarded + 2,
+          "pack off: the load in flight and the queued one dropped (%u discarded)",
+          stats().discarded - discarded);
+    s_rs.texturePack = 1;
     texpack_Shutdown();
 
     /* the budget: 1 MB; N5 is 1.5 MB */
@@ -460,13 +540,27 @@ static void testLoader(void)
     setCurrent(9, 1);
     CHECK(texpack_Request(e1, 9, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0, "request (fits)");
     WAIT_FOR(s_tc.installed[9] != 0);
-    CHECK(s_tc.installed[9] != 0 && texpack_BudgetUsed() == 256, "charged 256 bytes (%llu)",
-          (unsigned long long)texpack_BudgetUsed());
+    CHECK(s_tc.installed[9] != 0 && texpack_BudgetUsed() == 512 && s_tc.levels[9] == 2,
+          "charged 512 bytes, the image with its chain (%llu, %u levels)",
+          (unsigned long long)texpack_BudgetUsed(), s_tc.levels[9]);
     CHECK(s_releaseHook == texpack_BudgetRelease, "the cache's release hook is the budget's");
     s_releaseHook((RdTex){s_tc.installed[9]}); /* the cache gives it up */
     CHECK(texpack_BudgetUsed() == 0, "released with its texture");
     texpack_BudgetRelease((RdTex){12345});
     CHECK(texpack_BudgetUsed() == 0, "releasing a texture never charged: nothing");
+
+    /* the graphics card refused a replacement: rdtex_Find forgets the
+       entry (the release hook), and the file is not offered again */
+    setCurrent(10, 1);
+    CHECK(texpack_Request(e3, 10, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0, "request (refused later)");
+    WAIT_FOR(s_tc.installed[10] != 0);
+    s_tc.refusedRep = s_tc.installed[10];
+    s_releaseHook((RdTex){s_tc.installed[10]});
+    CHECK(stats().refused == 1 && texpack_BudgetUsed() == 0, "refused: counted, released");
+    setCurrent(10, 2);
+    CHECK(texpack_Request(e3, 10, 2, RDTEX_TEXA_REPLAY, 8, 8) == -1,
+          "a refused file is not offered again");
+    s_tc.refusedRep = 0;
     texpack_Shutdown();
 
     /* shutdown joins a busy thread: ten slow loads queued */
@@ -487,10 +581,14 @@ static void testPrecache(void)
     /* everything read ahead: a request goes in at the next pump */
     memset(&s_tc, 0, sizeof(s_tc));
     initPack(s_user, s_prog, 0, 1);
-    WAIT_FOR(stats().cached + stats().loadFailed == 7);
+    WAIT_FOR(stats().precacheDone);
     TexpackStats s = stats();
-    CHECK(s.cached == 6 && s.loadFailed == 1, "precache: 6 cached, the bad file failed (%u, %u)",
-          s.cached, s.loadFailed);
+    CHECK(s.cached == 6 && s.loadFailed == 1 && s.skipped == 0,
+          "precache: 6 cached, the bad file failed (%u, %u, %u skipped)", s.cached, s.loadFailed,
+          s.skipped);
+    CHECK(s.cacheBytes == 5 * 256 + BIG_BYTES,
+          "the cache holds the files as loaded, no mip chain (%llu bytes)",
+          (unsigned long long)s.cacheBytes);
     setCurrent(20, 4);
     const uint32_t installed = stats().installed;
     CHECK(texpack_Request(entryOf(N3), 20, 4, RDTEX_TEXA_REPLAY, 16, 16) == 2,
@@ -498,6 +596,8 @@ static void testPrecache(void)
     CHECK(s_tc.installed[20] != 0 && strcmp(s_tc.tag[20], "user-n3") == 0 && s_tc.uvW[20] == 16 &&
               stats().installed == installed + 1,
           "a cached image is in place before any pump");
+    CHECK(s_tc.levels[20] == 2 && stats().cacheBytes == s.cacheBytes,
+          "the copy installed has its chain, the cache still none (%u levels)", s_tc.levels[20]);
     /* the cache keeps its copy: the texture loaded again gets it again */
     setCurrent(21, 4);
     CHECK(texpack_Request(entryOf(N3), 21, 4, RDTEX_TEXA_REPLAY, 16, 16) == 2, "again");
@@ -509,27 +609,87 @@ static void testPrecache(void)
     CHECK(texpack_Request(entryOf(N3), 23, 4, RDTEX_TEXA_REPLAY, 16, 16) == -1 &&
               s_tc.installed[23] == 0,
           "cached, stale generation: dropped");
-    CHECK(texpack_BudgetUsed() == 2 * 256, "the two installed now are charged (%llu)",
+    CHECK(texpack_BudgetUsed() == 2 * 512, "the two installed now are charged (%llu)",
           (unsigned long long)texpack_BudgetUsed());
     texpack_Shutdown();
 
-    /* the memory limit: 1 MB; the precache stops at N5 (1.5 MB), and what
-       is left loads on request */
+    /* the RAM cache's own limit, 1 MB, apart from the graphics budget
+       (none here): the precache passes over N5 (1.5 MB) and caches every
+       other file; N5 loads on request */
     memset(&s_tc, 0, sizeof(s_tc));
-    initPack(s_user, s_prog, 1, 1);
-    for (int i = 0; i < 300; i++) {
-        texpack_Pump();
-        sleepMs(1);
-    }
+    initPackCache(s_user, s_prog, 0, 1, 1);
+    WAIT_FOR(stats().precacheDone);
     s = stats();
-    CHECK(s.cached < 6 && s.cacheBytes <= (1u << 20), "precache within 1 MB: %u files, %llu bytes",
-          s.cached, (unsigned long long)s.cacheBytes);
+    CHECK(s.cacheLimit == 1u << 20 && texpack_BudgetLimit() == 0,
+          "the cache's limit is its own (%llu), the budget none", (unsigned long long)s.cacheLimit);
+    CHECK(s.cached == 5 && s.skipped == 1 && s.loadFailed == 1 && s.cacheBytes <= (1u << 20),
+          "precache within 1 MB: %u files, %u skipped, %llu bytes", s.cached, s.skipped,
+          (unsigned long long)s.cacheBytes);
+    CHECK(!texpack_EntryCached(entryOf(N5)) && texpack_EntryCached(entryOf(N6)),
+          "N5 left out, N6 (after it) cached");
     setCurrent(22, 1);
-    CHECK(texpack_Request(entryOf(N6), 22, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0, "request (N6)");
+    CHECK(texpack_Request(entryOf(N5), 22, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0, "request (N5)");
     WAIT_FOR(s_tc.installed[22] != 0);
-    CHECK(s_tc.installed[22] != 0 && strcmp(s_tc.tag[22], "prog-n6") == 0,
-          "past the limit: loaded on request");
+    CHECK(s_tc.installed[22] != 0 && strcmp(s_tc.tag[22], "user-n5-big") == 0 &&
+              s_tc.levels[22] == 2 && stats().cached == 5,
+          "past the limit: loaded on request, with its chain, not cached");
     texpack_Shutdown();
+}
+
+/* The precache's order and its limit on a pack of its own: three DDS
+   files in the standard layout (1.5 MB, 1.5 MB, 256 bytes) and a PNG in
+   the tolerant layout, so listed after every DDS file; a 2 MB cache.  The
+   PNG is read first, the second large DDS file does not fit and is passed
+   over, and the small one after it is still cached. */
+static void testPrecacheOrder(const char *dir)
+{
+    char root[1024];
+    snprintf(root, sizeof(root), "%s/texpack_order", dir);
+    (void)ico_mkdir(root);
+    put(root, "textures/SCES-50760/replacements/a/" N1 ".dds", "IMG:dds-a-big");
+    put(root, "textures/SCES-50760/replacements/b/" N3 ".dds", "IMG:dds-b-big");
+    put(root, "textures/SCES-50760/replacements/c/" N4 ".dds", "IMG:dds-c");
+    put(root, "textures/replacements/" N2 ".png", "IMG:png-p");
+    memset(&s_tc, 0, sizeof(s_tc));
+    initPackCache(root, NULL, 0, 1, 2);
+    WAIT_FOR(stats().precacheDone);
+    TexpackStats s = stats();
+    CHECK(texpack_Count() == 4, "4 replacements (%d)", texpack_Count());
+    CHECK(texpack_EntryCached(entryOf(N2)), "the PNG listed after the DDS files is cached");
+    CHECK(texpack_EntryCached(entryOf(N1)) && !texpack_EntryCached(entryOf(N3)) &&
+              texpack_EntryCached(entryOf(N4)),
+          "the DDS file that does not fit passed over, the next one cached");
+    CHECK(s.cached == 3 && s.skipped == 1 && s.cacheBytes == BIG_BYTES + 2 * 256,
+          "3 cached, 1 skipped, %llu bytes", (unsigned long long)s.cacheBytes);
+    texpack_Shutdown();
+}
+
+/* A folder link inside a pack that points back up is not followed: the
+   walk sees the pack's file once and ends. */
+static void testLinks(const char *dir)
+{
+#ifdef _WIN32
+    (void)dir;
+#else
+    char root[1024], link[1200];
+    snprintf(root, sizeof(root), "%s/texpack_links", dir);
+    (void)ico_mkdir(root);
+    put(root, "textures/SCES-50760/replacements/a/" N1 ".png", "IMG:one");
+    snprintf(link, sizeof(link), "%s/textures/SCES-50760/replacements/a/up", root);
+    (void)remove(link);
+    if (symlink("..", link) != 0) {
+        printf("texpack_test: cannot make a folder link; links not tested\n");
+        return;
+    }
+    snprintf(link, sizeof(link), "%s/textures/SCES-50760/replacements/a/up2", root);
+    (void)remove(link);
+    (void)symlink("..", link);
+    initPack(root, NULL, 0, 0);
+    TexpackStats s = stats();
+    CHECK(texpack_Count() == 1 && s.files == 1 && s.duplicates == 0,
+          "folder links not followed: 1 file seen (%u, %u duplicates)", s.files, s.duplicates);
+    texpack_Shutdown();
+#endif
 }
 
 int main(int argc, char **argv)
@@ -539,6 +699,8 @@ int main(int argc, char **argv)
     testIndex();
     testLoader();
     testPrecache();
+    testPrecacheOrder(dir);
+    testLinks(dir);
     if (failures) {
         printf("texpack_test: %d failure(s)\n", failures);
         return 1;

@@ -8,9 +8,11 @@
  *             tolerant layouts (textures/replacements, files directly
  *             under textures/) of both; walked recursively, "png" and
  *             "dds" in any case; the first file of a name wins, later ones
- *             are counted as duplicates; "-mipN" files are not indexed
- *             (read beside their base file); region names are counted,
- *             never matched.
+ *             are counted as duplicates; "-mipN" files are counted and
+ *             skipped (no loader reads them: an RGBA8 image gets its own
+ *             box chain); region names are counted, never matched.
+ *             Folder links inside a replacements folder are not followed
+ *             (a link back up would make the walk endless).
  *   formats   PNG (RGBA8 out, 0x80 alpha for sources without alpha, as
  *             PCSX2) and DDS: BC1, BC2, BC3, BC7 kept as blocks (only when
  *             the device has BC, RhiLimits.bcTextures) and the uncompressed
@@ -20,14 +22,20 @@
  *             game fiber's texpack_Pump (once a frame, beside
  *             rdtex_FrameTick) installs what finished.  With precache on,
  *             the thread also reads every indexed file into a RAM cache
- *             from startup (requests jump the queue); a request for a
- *             cached file is installed at once, inside the hook, so a
- *             texture shown for one frame (the subtitles) is replaced from
- *             its first.
+ *             from startup, the PNGs first (the subtitles and menus), then
+ *             the DDS files, up to video.texture_pack_cache_mb (0: half
+ *             the computer's memory); a file that does not fit is skipped
+ *             and the next one tried.  Requests jump the queue; a request
+ *             for a cached file is installed at once, inside the hook, so
+ *             a texture shown for one frame (the subtitles) is replaced
+ *             from its first.  The cache keeps each image as the file
+ *             holds it (no mip chain): the copy handed to the renderer
+ *             gets its levels.
  *   budget    replacement textures live on the GPU only while their cache
  *             entry does; their bytes count against
- *             video.texture_pack_budget_mb, and a replacement that would
- *             go over is declined (logged once), the game's texture kept.
+ *             video.texture_pack_budget_mb (graphics memory, apart from
+ *             the RAM cache's limit), and a replacement that would go over
+ *             is declined (logged once), the game's texture kept.
  *
  * Every function here is called from the game fiber; the loader thread
  * touches only its queues and the files.
@@ -62,8 +70,9 @@ typedef struct TexpackImageLevel {
 typedef struct TexpackImage {
     uint8_t fmt;     /* RD_TEXEL_RGBA8 or RD_TEXEL_BC1/BC2/BC3/BC7 (rd_internal.h) */
     uint32_t w, h;   /* level 0 */
-    uint32_t levels; /* lv[0 .. levels-1]: the file's own mips (DDS mip count,
-                        "-mipN" PNGs); 1 when it has none */
+    uint32_t levels; /* lv[0 .. levels-1]: the file's own mips (a DDS file's mip
+                        count), or the box chain rdtex_ReplacementMips adds; 1
+                        when it has none */
     TexpackImageLevel lv[TEXPACK_IMAGE_LEVELS];
     void *blob;   /* one allocation holding every level; texpack_FreeImage frees it */
     size_t bytes; /* the blob's size: what the image costs in RAM and on the GPU */
@@ -84,17 +93,27 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
                     TexpackImage *out);
 /* Frees img's blob and zeroes it (img may be null or empty). */
 void texpack_FreeImage(TexpackImage *img);
+/* The largest width or height the loaders accept (the graphics card's
+   largest texture, RhiLimits.maxTextureSize; 0: only the formats' own
+   limits).  A larger file is refused when its header is read, before any
+   memory is taken for its texels.  Set before the loader thread starts
+   (texpack_Init does). */
+void texpack_SetMaxSide(uint32_t side);
+uint32_t texpack_MaxSide(void);
 
 /* ------------------------------------------------------------ the pack */
 
 typedef struct TexpackConfig {
-    const char *userDir;    /* the user folder (ico_pref_dir), or null */
-    const char *programDir; /* the program's folder, or null */
-    const char *serial;     /* "SCES-50760" */
-    uint32_t budgetMb;      /* video.texture_pack_budget_mb */
-    int precache;           /* video.texture_pack_precache */
-    int bcSupported;        /* RhiLimits.bcTextures, so BC files are refused up front */
-    int developer;          /* gameplay.developer_mode: a log line per replacement */
+    const char *userDir;     /* the user folder (ico_pref_dir), or null */
+    const char *programDir;  /* the program's folder, or null */
+    const char *serial;      /* "SCES-50760" */
+    uint32_t budgetMb;       /* video.texture_pack_budget_mb: graphics memory */
+    uint32_t cacheMb;        /* video.texture_pack_cache_mb: the RAM cache (0: half the
+                               computer's memory) */
+    int precache;            /* video.texture_pack_precache */
+    int bcSupported;         /* RhiLimits.bcTextures, so BC files are refused up front */
+    uint32_t maxTextureSize; /* RhiLimits.maxTextureSize (0: none), texpack_SetMaxSide */
+    int developer;           /* gameplay.developer_mode: a log line per replacement */
 } TexpackConfig;
 
 /* Walks the folders, builds the index, logs what it found ("textures: N
@@ -117,18 +136,21 @@ const char *texpack_EntryPath(int entry);
    already read into the RAM cache (precache) is installed at once instead
    (rdtex_Replace before this returns, so the caller's rdtex_Find gives the
    replacement).  0 queued, 1 already queued or installed, 2 installed now,
-   -1 refused (declined by the budget, now or before, the device refused
-   it, or the file failed to load before). */
+   -1 refused (declined by the budget, now or before, the graphics card
+   refused it before, or the file failed to load before). */
 int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t uvW, uint32_t uvH);
 /* Once a frame on the game fiber (Texture.c tex_ResetVram, beside
    rdtex_FrameTick): installs the finished loads (rdtex_CreateReplacement,
-   rdtex_Replace), charging the budget. */
+   rdtex_Replace), charging the budget.  While the pack is switched off
+   (rd_GetSettings()->texturePack 0) the finished loads are dropped
+   (counted as discarded) and the queued requests forgotten, so nothing
+   goes in after the switch. */
 void texpack_Pump(void);
-/* The renderer restarted (rdtex_Reset): forget pending requests and what
-   the budget had charged; the RAM cache stays. */
-void texpack_ResetDevice(void);
 /* Stops and joins the loader thread, frees the index and the RAM cache. */
 void texpack_Shutdown(void);
+/* 1 when the entry's image is in the RAM cache (the precache's coverage,
+   for the tests), else 0. */
+int texpack_EntryCached(int entry);
 
 struct RdTexImage; /* rd_tex.h */
 
@@ -144,19 +166,23 @@ int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const struct RdT
 /* What texpack_Init found and what the loader did since, for the log's
    summary and the tests. */
 typedef struct TexpackStats {
-    uint32_t files;      /* "png"/"dds" files seen in the folders */
-    uint32_t indexed;    /* replacements indexed (texpack_Count) */
-    uint32_t duplicates; /* a name already indexed from an earlier file */
-    uint32_t regions;    /* region names: stored, never matched */
-    uint32_t mipFiles;   /* "-mipN" files: not indexed */
-    uint32_t malformed;  /* names that are not texture names */
-    uint32_t requested;  /* texpack_Request calls queued */
-    uint32_t cached;     /* files in the RAM cache */
-    uint64_t cacheBytes; /* their bytes */
-    uint32_t loadFailed; /* files that would not load */
-    uint32_t installed;  /* replacements put in place */
-    uint32_t discarded;  /* loads whose texture had changed or gone by the pump */
-    uint32_t declined;   /* refused by the budget */
+    uint32_t files;        /* "png"/"dds" files seen in the folders */
+    uint32_t indexed;      /* replacements indexed (texpack_Count) */
+    uint32_t duplicates;   /* a name already indexed from an earlier file */
+    uint32_t regions;      /* region names: stored, never matched */
+    uint32_t mipFiles;     /* "-mipN" files: not indexed */
+    uint32_t malformed;    /* names that are not texture names */
+    uint32_t requested;    /* texpack_Request calls queued */
+    uint32_t cached;       /* files in the RAM cache */
+    uint64_t cacheBytes;   /* their bytes */
+    uint64_t cacheLimit;   /* the RAM cache's limit in bytes */
+    uint32_t skipped;      /* files the precache left out: they did not fit */
+    uint32_t precacheDone; /* 1 once the precache has been through the index */
+    uint32_t loadFailed;   /* files that would not load */
+    uint32_t installed;    /* replacements put in place */
+    uint32_t discarded;    /* loads whose texture had changed or gone by the pump */
+    uint32_t declined;     /* refused by the budget */
+    uint32_t refused;      /* refused by the graphics card when uploaded: not tried again */
 } TexpackStats;
 
 void texpack_GetStats(TexpackStats *out);
@@ -164,7 +190,8 @@ void texpack_GetStats(TexpackStats *out);
 /* ---------------------------------------------------------- the budget
  * GPU bytes of the live replacements, per rd texture.  rd_tex calls
  * texpack_BudgetRelease when it retires a replacement (rdtex_Drop, a new
- * generation, rdtex_RevertReplacements, rdtex_Reset). */
+ * generation, rdtex_RevertReplacements, a replacement the graphics card
+ * refused, rdtex_Reset). */
 
 /* The limit in bytes (0: none).  texpack_Init sets it from budgetMb. */
 void texpack_BudgetSet(uint64_t bytes);
@@ -173,7 +200,9 @@ uint64_t texpack_BudgetUsed(void);
 /* Charge bytes for the replacement t: 0, or -1 when that would go over the
    limit (nothing charged; the first refusal is logged). */
 int texpack_BudgetCharge(RdTex t, uint64_t bytes);
-/* Give back what t was charged (nothing when it was not). */
+/* Give back what t was charged (nothing when it was not).  When the
+   graphics card refused t (rdtex_ReplacementRefused), its file is not
+   offered again this run. */
 void texpack_BudgetRelease(RdTex t);
 
 #ifdef __cplusplus

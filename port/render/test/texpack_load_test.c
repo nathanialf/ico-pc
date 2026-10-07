@@ -330,6 +330,14 @@ static void ddsChecks(void)
     CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "single level loads");
     checkBcLevels("single level", &img, 8, 8, 1, 8);
     texpack_FreeImage(&img);
+    /* larger than the graphics card takes: refused at the header */
+    texpack_SetMaxSide(4);
+    CHECK(texpack_LoadDds(b.p, b.n, 1, "big.dds", &img) == -1 && img.blob == NULL,
+          "a DDS wider than the card's largest texture refused");
+    texpack_SetMaxSide(8);
+    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "a DDS at the card's largest loads");
+    texpack_FreeImage(&img);
+    texpack_SetMaxSide(0);
     free(b.p);
     /* mip count 9, three stored, the third cut short: two */
     b = ddsBc(16, 16, FCC('D', 'X', 'T', '5'), 0, 0, 1, 9, 3, 16);
@@ -747,6 +755,14 @@ static void pngChecks(void)
               "a PNG cut in half refused");
         CHECK(texpack_LoadPng(b.p, b.n - 12, NULL, &img) == 0, "a PNG without IEND loads");
         texpack_FreeImage(&img);
+        /* larger than the graphics card takes: refused at the header */
+        texpack_SetMaxSide(16);
+        CHECK(texpack_LoadPng(b.p, b.n, "big.png", &img) == -1 && img.blob == NULL,
+              "a PNG wider than the card's largest texture refused");
+        texpack_SetMaxSide(32);
+        CHECK(texpack_LoadPng(b.p, b.n, NULL, &img) == 0, "a PNG at the card's largest loads");
+        texpack_FreeImage(&img);
+        texpack_SetMaxSide(0);
         b.p[8 + 8 + 3] ^= 1; /* IHDR's width: its CRC fails */
         CHECK(texpack_LoadPng(b.p, b.n, NULL, &img) == -1, "a bad IHDR checksum refused");
         b.p[8 + 8 + 3] ^= 1;

@@ -339,6 +339,32 @@ static int walk_list(const char *dir, char ***out)
     return n;
 }
 
+/* 1 when path is a symbolic link (on Windows, a symbolic link or a
+   junction; not the other reparse points, such as OneDrive's folders)
+   rather than a folder of its own */
+static int walk_is_link(const char *path)
+{
+#ifdef _WIN32
+    wchar_t *wp = ico_widen(path);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = wp != NULL ? FindFirstFileW(wp, &fd) : INVALID_HANDLE_VALUE;
+    int link = 0;
+
+    free(wp);
+    if (h != INVALID_HANDLE_VALUE) {
+        link = (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 &&
+               (fd.dwReserved0 == IO_REPARSE_TAG_SYMLINK ||
+                fd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT);
+        FindClose(h);
+    }
+    return link;
+#else
+    struct stat st;
+
+    return lstat(path, &st) == 0 && S_ISLNK(st.st_mode);
+#endif
+}
+
 static int walk_dir(const char *dir, int depth, IcoDirWalkFn fn, void *user, int *files)
 {
     char **names;
@@ -360,7 +386,10 @@ static int walk_dir(const char *dir, int depth, IcoDirWalkFn fn, void *user, int
             if (kind == 0) {
                 (*files)++;
                 stop = fn(path, names[i], user) != 0;
-            } else if (kind == 1 && depth > 0) {
+            } else if (kind == 1 && depth > 0 && !walk_is_link(path)) {
+                /* a folder link is not followed: one pointing back up would
+                   repeat the walk below it, twice for two such links, and so
+                   on at every level down */
                 stop = walk_dir(path, depth - 1, fn, user, files) == 1;
             }
             free(path);

@@ -27,6 +27,9 @@
  *                           2048        config only: GPU memory for replacements, 128..65536
  *   [video] texture_pack_precache
  *                           true        config only: read the whole pack into memory at start
+ *   [video] texture_pack_cache_mb
+ *                           0           config only: RAM for that read-ahead, 0 (half the
+ *                                       computer's memory) or 128..65536
  *
  * Every option applies on its own.  preset is not an option but a
  * shortcut over four of them, read and written as such: "enhanced" or
@@ -92,6 +95,8 @@ typedef struct IcoVideoOptions {
     int dumpTextures;        /* each texture written under its PCSX2 name */
     int texturePackBudgetMb; /* config only: the replacements' GPU memory */
     int texturePackPrecache; /* config only: the pack read into memory at start */
+    int texturePackCacheMb;  /* config only: the RAM that read-ahead may use (0: half the
+                                computer's memory) */
 } IcoVideoOptions;
 
 /* IcoVideoOptions.texturePackBudgetMb: the default and the range a value
@@ -99,6 +104,9 @@ typedef struct IcoVideoOptions {
 #define ICO_TEXPACK_BUDGET_DEFAULT 2048
 #define ICO_TEXPACK_BUDGET_MIN 128
 #define ICO_TEXPACK_BUDGET_MAX 65536
+/* IcoVideoOptions.texturePackCacheMb: 0 (automatic) or this range */
+#define ICO_TEXPACK_CACHE_MIN 128
+#define ICO_TEXPACK_CACHE_MAX 65536
 
 /* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
 enum {

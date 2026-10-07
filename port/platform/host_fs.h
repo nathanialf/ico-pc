@@ -48,8 +48,10 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime);
    names, hidden ones (a leading '.') left out: fn(the file's path, dir and
    the names joined with '/', its name, user) for each, until fn returns
    non-zero.  The number of files visited, or -1 when dir cannot be read (a
-   folder below it that cannot be read is skipped).  Symbolic links are
-   followed; depth bounds a loop of them. */
+   folder below it that cannot be read is skipped).  dir itself may be
+   reached through a link; below it, links to files are followed and links
+   to folders (symbolic links, Windows junctions) are not, so a link back
+   up cannot repeat the walk. */
 typedef int (*IcoDirWalkFn)(const char *path, const char *name, void *user);
 int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user);
 

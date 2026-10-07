@@ -175,6 +175,9 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
         height >= DDS_MAX_TEXTURE_SIZE) {
         return refuse(file, "the DDS size is out of range", out);
     }
+    if (texpack_MaxSide() && (width > texpack_MaxSide() || height > texpack_MaxSide())) {
+        return refuse(file, "the picture is larger than this graphics card can show", out);
+    }
     if (flags & DDS_HEADER_FLAGS_VOLUME) {
         return refuse(file, "a 3D DDS texture", out);
     }

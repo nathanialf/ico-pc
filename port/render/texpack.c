@@ -27,8 +27,12 @@
 #endif
 
 /* how deep under a replacements folder the walk goes (packs sort files
-   into a few levels of folders; this bounds a loop of links) */
+   into a few levels of folders; folder links are not followed, so no loop
+   of them can make the walk long) */
 #define TEXPACK_WALK_DEPTH 16
+/* a DDS file's header (magic, DDS_HEADER, DDS_HEADER_DXT10): what its size
+   holds beyond the texels */
+#define DDS_HEADER_MAX 148u
 /* (texId, gen) pairs the budget declined, remembered so the hook does not
    queue them again */
 #define TEXPACK_DECLINED_MAX 256
@@ -38,9 +42,10 @@ enum { ENTRY_NONE = 0, ENTRY_CACHED = 1, ENTRY_FAILED = 2 };
 typedef struct PackEntry {
     uint64_t tex0Hash, clutHash;
     uint32_t bits;
-    uint8_t kind;   /* TexpackKind */
-    uint8_t region; /* a region name: kept, never in the table */
-    uint8_t state;  /* ENTRY_*, under the lock */
+    uint8_t kind;    /* TexpackKind */
+    uint8_t region;  /* a region name: kept, never in the table */
+    uint8_t state;   /* ENTRY_*, under the lock */
+    uint8_t refused; /* the graphics card refused it (game fiber): not offered again */
     char *path;
     TexpackImage cache; /* ENTRY_CACHED: the image as loaded */
 } PackEntry;
@@ -58,6 +63,7 @@ typedef struct PackReq {
 typedef struct BudgetCharge {
     uint32_t id;
     uint64_t bytes;
+    int entry; /* the index entry it came from, -1 unknown */
 } BudgetCharge;
 
 static struct {
@@ -80,7 +86,9 @@ static struct {
     PackReq *reqHead, *reqTail;   /* for the thread, oldest first */
     PackReq *doneHead, *doneTail; /* for the pump */
     PackReq *busy;                /* the request the thread is loading */
-    int precacheNext;             /* the next entry the precache reads */
+    int *order;                   /* the entries in the precache's order: PNG, then DDS */
+    int nOrder;
+    int precacheNext; /* the next order[] the precache reads */
     int precacheDone;
     int quit;
     uint64_t cacheLimit;
@@ -386,13 +394,48 @@ static int loadEntry(const PackEntry *e, TexpackImage *img)
         r = texpack_LoadPng(data, size, e->path, img);
     }
     free(data);
-    /* an RGBA8 file without its own mips gets the box chain here, on the
-       loader thread, so the game fiber's rdtex_CreateReplacement does not
-       build it (a failure leaves one level, which it then tries again) */
-    if (r == 0 && img->fmt == RD_TEXEL_RGBA8 && img->levels == 1) {
+    return r;
+}
+
+static uint32_t be32(const uint8_t *p)
+{
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+
+/* What the entry's image takes in memory, from its header alone (no
+   decode), at least: a PNG's width x height x 4, a DDS file's size less
+   its header; 0 when unknown.  Lets the precache pass over a file that
+   cannot fit without reading it. */
+static uint64_t estimateBytes(const PackEntry *e)
+{
+    if (e->kind == TEXPACK_KIND_DDS) {
+        unsigned long long size = 0;
+        if (ico_path_kind(e->path, &size, NULL) != 0) {
+            return 0;
+        }
+        return size > DDS_HEADER_MAX ? size - DDS_HEADER_MAX : 0;
+    }
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    uint8_t h[24];
+    FILE *f = ico_fopen(e->path, "rb");
+    if (!f) {
+        return 0;
+    }
+    const size_t n = fread(h, 1, sizeof(h), f);
+    fclose(f);
+    if (n < sizeof(h) || memcmp(h, sig, 8) != 0 || memcmp(h + 12, "IHDR", 4) != 0) {
+        return 0;
+    }
+    return (uint64_t)be32(h + 16) * be32(h + 20) * 4u;
+}
+
+/* An RGBA8 image without its own mips gets the box chain (a failure leaves
+   one level, which rdtex_CreateReplacement then tries again). */
+static void addMips(TexpackImage *img)
+{
+    if (img->fmt == RD_TEXEL_RGBA8 && img->levels == 1) {
         (void)rdtex_ReplacementMips(img);
     }
-    return r;
 }
 
 /* a copy of src with its own blob */
@@ -412,6 +455,18 @@ static int copyImage(const TexpackImage *src, TexpackImage *dst)
         }
     }
     return 0;
+}
+
+/* The copy of a cached image the renderer gets: an RGBA8 image without
+   mips is copied with its box chain built in the same pass (the cache
+   keeps none, so it holds a quarter more files), anything else as it is */
+static int uploadCopy(const TexpackImage *src, TexpackImage *dst)
+{
+    if (src->fmt == RD_TEXEL_RGBA8 && src->levels == 1 &&
+        rdtex_ReplacementMipsFrom(src, dst) == 0) {
+        return 0;
+    }
+    return copyImage(src, dst);
 }
 
 static void pushDone(PackReq *r)
@@ -440,9 +495,29 @@ static int cacheImage(PackEntry *e, TexpackImage *img)
     return 1;
 }
 
+/* the precache has been through the index: one line for the log */
+static void precacheFinished(void)
+{
+    s_tp.precacheDone = 1;
+    s_tp.stats.precacheDone = 1;
+    if (s_tp.stats.skipped == 0) {
+        fprintf(stderr, "textures: %u replacements read into memory (%llu MB) in %.1f s\n",
+                s_tp.stats.cached, (unsigned long long)(s_tp.stats.cacheBytes >> 20),
+                (double)(nowMs() - s_tp.precacheStart) / 1000.0);
+    } else {
+        fprintf(stderr,
+                "textures: %u replacements read into memory (%llu MB) in %.1f s; %u more did "
+                "not fit in the %llu MB allowed (texture_pack_cache_mb) and load when the game "
+                "shows them\n",
+                s_tp.stats.cached, (unsigned long long)(s_tp.stats.cacheBytes >> 20),
+                (double)(nowMs() - s_tp.precacheStart) / 1000.0, s_tp.stats.skipped,
+                (unsigned long long)(s_tp.cacheLimit >> 20));
+    }
+}
+
 /* One unit of the loader's work (caller holds the lock; it is released
-   around the file reads): a request first, else one precache file.
-   0 when there was nothing to do. */
+   around the file reads and copies): a request first, else one precache
+   file.  0 when there was nothing to do. */
 static int loaderStep(void)
 {
     PackReq *r = s_tp.reqHead;
@@ -453,63 +528,66 @@ static int loaderStep(void)
         }
         s_tp.busy = r;
         PackEntry *e = &s_tp.e[r->entry];
-        int state = e->state;
+        const int state = e->state;
+        TexpackImage img;
+        memset(&img, 0, sizeof(img));
         unlockTp();
         int ok;
         if (state == ENTRY_CACHED) {
-            ok = copyImage(&e->cache, &r->img) == 0;
+            ok = uploadCopy(&e->cache, &r->img) == 0;
         } else {
-            ok = state != ENTRY_FAILED && loadEntry(e, &r->img) == 0;
+            ok = state != ENTRY_FAILED && loadEntry(e, &img) == 0;
         }
         lockTp();
-        s_tp.busy = NULL;
-        if (!ok) {
-            if (state != ENTRY_CACHED) {
-                e->state = ENTRY_FAILED;
-                s_tp.stats.loadFailed++;
+        if (!ok && state != ENTRY_CACHED) {
+            e->state = ENTRY_FAILED;
+            s_tp.stats.loadFailed++;
+        } else if (ok && state != ENTRY_CACHED) {
+            /* kept for the next time the game loads this texture, as the
+               file holds it; the request gets a copy with its levels */
+            const int kept = s_tp.precache && cacheImage(e, &img);
+            unlockTp();
+            if (kept) {
+                ok = uploadCopy(&e->cache, &r->img) == 0;
+            } else {
+                r->img = img;
+                addMips(&r->img);
             }
-            r->failed = 1;
-        } else if (state != ENTRY_CACHED && s_tp.precache) {
-            /* keep it for the next time the game loads this texture: the
-               request gets a copy */
-            TexpackImage copy;
-            if (copyImage(&r->img, &copy) == 0 && !cacheImage(e, &copy)) {
-                texpack_FreeImage(&copy);
-            }
+            lockTp();
         }
+        s_tp.busy = NULL;
+        r->failed = !ok;
         pushDone(r);
         return 1;
     }
     if (!s_tp.precache || s_tp.precacheDone) {
         return 0;
     }
-    while (s_tp.precacheNext < s_tp.n &&
-           (s_tp.e[s_tp.precacheNext].region || s_tp.e[s_tp.precacheNext].state != ENTRY_NONE)) {
+    while (s_tp.precacheNext < s_tp.nOrder &&
+           s_tp.e[s_tp.order[s_tp.precacheNext]].state != ENTRY_NONE) {
         s_tp.precacheNext++;
     }
-    if (s_tp.precacheNext >= s_tp.n) {
-        s_tp.precacheDone = 1;
-        fprintf(stderr, "textures: %u replacements read into memory (%llu MB) in %.1f s\n",
-                s_tp.stats.cached, (unsigned long long)(s_tp.stats.cacheBytes >> 20),
-                (double)(nowMs() - s_tp.precacheStart) / 1000.0);
+    if (s_tp.precacheNext >= s_tp.nOrder) {
+        precacheFinished();
         return 0;
     }
-    PackEntry *e = &s_tp.e[s_tp.precacheNext++];
+    PackEntry *e = &s_tp.e[s_tp.order[s_tp.precacheNext++]];
+    const uint64_t room = s_tp.cacheLimit - s_tp.stats.cacheBytes;
     unlockTp();
+    /* a file that cannot fit is passed over unread, and the next tried: a
+       smaller one may still fit */
     TexpackImage img;
-    int ok = loadEntry(e, &img) == 0;
+    const int fits = estimateBytes(e) <= room;
+    const int ok = fits && loadEntry(e, &img) == 0;
     lockTp();
-    if (!ok) {
+    if (!fits) {
+        s_tp.stats.skipped++;
+    } else if (!ok) {
         e->state = ENTRY_FAILED;
         s_tp.stats.loadFailed++;
     } else if (!cacheImage(e, &img)) {
-        /* the memory limit: what is left loads when the game asks */
         texpack_FreeImage(&img);
-        s_tp.precacheDone = 1;
-        fprintf(stderr,
-                "textures: %u replacements read into memory (%llu MB, the limit); the rest "
-                "load when the game shows them\n",
-                s_tp.stats.cached, (unsigned long long)(s_tp.stats.cacheBytes >> 20));
+        s_tp.stats.skipped++;
     }
     return 1;
 }
@@ -553,6 +631,9 @@ int texpack_Init(const TexpackConfig *cfg)
     snprintf(s_tp.userDir, sizeof(s_tp.userDir), "%s", cfg->userDir ? cfg->userDir : "");
     s_tp.bc = cfg->bcSupported != 0;
     s_tp.developer = cfg->developer != 0;
+    /* a file larger than the card takes is refused when its header is
+       read, before its texels take any memory */
+    texpack_SetMaxSide(cfg->maxTextureSize);
     s_tp.inited = 1;
     texpack_BudgetSet((uint64_t)cfg->budgetMb << 20);
     /* the cache tells the budget when it gives a replacement up */
@@ -609,7 +690,34 @@ int texpack_Init(const TexpackConfig *cfg)
                         "DDS files of that kind are skipped\n");
     }
     s_tp.precache = cfg->precache != 0;
-    s_tp.cacheLimit = s_tp.budgetLimit ? s_tp.budgetLimit : UINT64_MAX;
+    /* the RAM cache's limit, apart from the graphics budget: the setting,
+       else half the computer's memory (PCSX2 caches the whole pack; half
+       leaves the game and the system theirs) */
+    s_tp.cacheLimit = (uint64_t)cfg->cacheMb << 20;
+#if ICO_TEXPACK_THREAD
+    if (s_tp.cacheLimit == 0) {
+        const int ramMb = SDL_GetSystemRAM();
+        s_tp.cacheLimit = ramMb > 0 ? (uint64_t)ramMb << 19 : UINT64_MAX;
+    }
+#endif
+    if (s_tp.cacheLimit == 0) {
+        s_tp.cacheLimit = UINT64_MAX;
+    }
+    s_tp.stats.cacheLimit = s_tp.cacheLimit;
+    /* the precache's order: the PNGs first (the pack's subtitles and menus,
+       shown for a moment and so the ones the read-ahead is for), then the
+       DDS files, each in the index's order */
+    s_tp.order = malloc((size_t)s_tp.n * sizeof(*s_tp.order));
+    if (!s_tp.order) {
+        s_tp.precache = 0;
+    }
+    for (int kind = TEXPACK_KIND_PNG; s_tp.order && kind <= TEXPACK_KIND_DDS; kind++) {
+        for (int k = 0; k < s_tp.n; k++) {
+            if (!s_tp.e[k].region && s_tp.e[k].kind == kind) {
+                s_tp.order[s_tp.nOrder++] = k;
+            }
+        }
+    }
     s_tp.precacheStart = nowMs();
 #if ICO_TEXPACK_THREAD
     s_tp.lock = SDL_CreateMutex();
@@ -633,6 +741,11 @@ int texpack_Init(const TexpackConfig *cfg)
 #else
     s_tp.precache = 0; /* no thread to read ahead */
 #endif
+    if (s_tp.precache) {
+        fprintf(stderr,
+                "textures: reading the pack into memory in the background (up to %llu MB)\n",
+                (unsigned long long)(s_tp.cacheLimit >> 20));
+    }
     return s_tp.count;
 }
 
@@ -652,6 +765,17 @@ int texpack_Lookup(const TexpackName *name)
 const char *texpack_EntryPath(int entry)
 {
     return entry >= 0 && entry < s_tp.n ? s_tp.e[entry].path : NULL;
+}
+
+int texpack_EntryCached(int entry)
+{
+    if (entry < 0 || entry >= s_tp.n) {
+        return 0;
+    }
+    lockTp();
+    const int cached = s_tp.e[entry].state == ENTRY_CACHED;
+    unlockTp();
+    return cached;
 }
 
 static void install(PackReq *r);
@@ -678,7 +802,7 @@ static int inList(const PackReq *r, uint32_t texId, uint32_t gen, int texa)
 
 int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t uvW, uint32_t uvH)
 {
-    if (entry < 0 || entry >= s_tp.n || s_tp.e[entry].region) {
+    if (entry < 0 || entry >= s_tp.n || s_tp.e[entry].region || s_tp.e[entry].refused) {
         return -1;
     }
     if (wasDeclined(texId, gen)) {
@@ -715,7 +839,7 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
            original never shows.  The upload still happens at replay, from
            the copy (the cached image is never written again, so it is
            copied without the lock, and stays for the next load). */
-        if (copyImage(&e->cache, &r->img) != 0) {
+        if (uploadCopy(&e->cache, &r->img) != 0) {
             free(r);
             return -1;
         }
@@ -798,6 +922,11 @@ static void install(PackReq *r)
         remember(r->texId, r->gen);
         return;
     }
+    for (int i = 0; i < s_tp.nCharges; i++) {
+        if (s_tp.charges[i].id == rep.id) {
+            s_tp.charges[i].entry = r->entry; /* for a refusal by the card */
+        }
+    }
     if (rdtex_Replace(r->texId, r->gen, r->texa, rep) != 0) {
         texpack_BudgetRelease(rep);
         rd_DestroyTexture(rep);
@@ -825,15 +954,31 @@ void texpack_Pump(void)
 #endif
     PackReq *r = s_tp.doneHead;
     s_tp.doneHead = s_tp.doneTail = NULL;
+    /* the pack switched off: nothing goes in after the switch (the
+       replacements already in were reverted at its edge, rd_BeginFrame);
+       what is queued is forgotten, and a load in flight lands on the done
+       list and is dropped by a later pump while the pack stays off */
+    const int off = !rd_GetSettings()->texturePack;
+    PackReq *queued = NULL;
+    if (off) {
+        queued = s_tp.reqHead;
+        s_tp.reqHead = s_tp.reqTail = NULL;
+    }
     unlockTp();
-    while (r) {
-        PackReq *next = r->next;
-        if (!r->failed) {
-            install(r);
+    for (int list = 0; list < 2; list++) {
+        PackReq *q = list == 0 ? r : queued;
+        while (q) {
+            PackReq *next = q->next;
+            /* a failed load was counted when it failed (loadFailed) */
+            if (!q->failed && off) {
+                s_tp.stats.discarded++;
+            } else if (!q->failed) {
+                install(q);
+            }
+            texpack_FreeImage(&q->img);
+            free(q);
+            q = next;
         }
-        texpack_FreeImage(&r->img);
-        free(r);
-        r = next;
     }
 }
 
@@ -845,23 +990,6 @@ static void freeList(PackReq *r)
         free(r);
         r = next;
     }
-}
-
-void texpack_ResetDevice(void)
-{
-    lockTp();
-    freeList(s_tp.reqHead);
-    freeList(s_tp.doneHead);
-    s_tp.reqHead = s_tp.reqTail = NULL;
-    s_tp.doneHead = s_tp.doneTail = NULL;
-    unlockTp();
-    /* the request the thread is loading lands on the done list and is
-       dropped by the pump (its texture is gone) */
-    free(s_tp.charges);
-    s_tp.charges = NULL;
-    s_tp.nCharges = s_tp.capCharges = 0;
-    s_tp.budgetUsed = 0;
-    s_tp.nDeclined = s_tp.declinedNext = 0;
 }
 
 void texpack_Shutdown(void)
@@ -897,6 +1025,7 @@ void texpack_Shutdown(void)
     }
     free(s_tp.e);
     free(s_tp.table);
+    free(s_tp.order);
     free(s_tp.charges);
     memset(&s_tp, 0, sizeof(s_tp));
 }
@@ -951,6 +1080,7 @@ int texpack_BudgetCharge(RdTex t, uint64_t bytes)
     }
     s_tp.charges[s_tp.nCharges].id = t.id;
     s_tp.charges[s_tp.nCharges].bytes = bytes;
+    s_tp.charges[s_tp.nCharges].entry = -1;
     s_tp.nCharges++;
     s_tp.budgetUsed += bytes;
     return 0;
@@ -960,6 +1090,13 @@ void texpack_BudgetRelease(RdTex t)
 {
     for (int i = 0; i < s_tp.nCharges; i++) {
         if (s_tp.charges[i].id == t.id) {
+            const int entry = s_tp.charges[i].entry;
+            if (entry >= 0 && entry < s_tp.n && rdtex_ReplacementRefused(t)) {
+                /* the card would refuse it again: the game's own texture
+                   from now on (rdtex_Find decodes it) */
+                s_tp.e[entry].refused = 1;
+                s_tp.stats.refused++;
+            }
             s_tp.budgetUsed -= s_tp.charges[i].bytes;
             s_tp.charges[i] = s_tp.charges[--s_tp.nCharges];
             /* room again: a later replacement may fit */

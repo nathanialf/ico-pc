@@ -445,8 +445,11 @@ typedef struct RdTexRec {
      * place; 0 = w, h (every texture that is not a replacement).
      * pending: the replacement's levels as the file held them, owned
      * here until uploadTextures copies every level to the RHI texture and
-     * frees it (null otherwise). */
+     * frees it (null otherwise).  refused: the graphics card would not
+     * create it (uploadReplacement); rdtex_Find then misses, so the game's
+     * own texture is decoded again in its place. */
     uint8_t replacement;
+    uint8_t refused;
     uint32_t uvW, uvH;
     struct TexpackImage *pending;
     /* Package P8: what the draws of a game texture with Enhanced mips do

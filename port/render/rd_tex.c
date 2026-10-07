@@ -416,8 +416,16 @@ static void freeEntry(RdTexEntry *e)
 RdTex rdtex_Find(uint32_t id, uint32_t gen, int texa)
 {
     RdTexEntry *e = entryOf(id, texa);
+    const RdTexRec *r = e && e->gen == gen ? rd__TexRec(e->tex.id) : NULL;
 
-    if (e && e->gen == gen && rd__TexRec(e->tex.id) != NULL) {
+    if (r != NULL && e->replaced && r->refused) {
+        /* the graphics card refused the replacement: the entry is
+           forgotten (the release hook hears of it, so the pack does not
+           offer that file again) and the caller decodes the game's own */
+        freeEntry(e);
+        r = NULL;
+    }
+    if (r != NULL) {
         s_tc.stats.hits++;
         return e->tex;
     }
@@ -561,13 +569,13 @@ void rdtex_Reset(void)
 
 /* ------------------------------------------------------- texture packs */
 
-int rdtex_ReplacementMips(TexpackImage *img)
+int rdtex_ReplacementMipsFrom(const TexpackImage *src, TexpackImage *dst)
 {
-    if (!img || !img->blob || img->fmt != RD_TEXEL_RGBA8 || img->levels != 1 || img->w == 0 ||
-        img->h == 0 || img->lv[0].data == NULL || img->lv[0].pitch != img->w * 4u) {
+    if (!src || !dst || !src->blob || src->fmt != RD_TEXEL_RGBA8 || src->levels != 1 ||
+        src->w == 0 || src->h == 0 || src->lv[0].data == NULL || src->lv[0].pitch != src->w * 4u) {
         return -1;
     }
-    const uint32_t w = img->w, h = img->h;
+    const uint32_t w = src->w, h = src->h;
     const size_t base = (size_t)w * h * 4;
     const size_t chain = rdtex_MipChainBytes(w, h);
     if (chain == 0) {
@@ -577,13 +585,14 @@ int rdtex_ReplacementMips(TexpackImage *img)
     if (!blob) {
         return -1;
     }
-    memcpy(blob, img->lv[0].data, base);
+    memcpy(blob, src->lv[0].data, base);
     /* the pack's alpha is raw GS alpha (RD_TEXSRC_RGBA32): colour weighted
        by it, as the game's own Enhanced mips.  No alpha coverage is kept:
        PCSX2 keeps none for a pack's mips and the authors tune their alpha
        for that */
     const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base, 1);
-    free(img->blob);
+    TexpackImage *img = dst;
+    *img = *src;
     img->blob = blob;
     img->bytes = base + chain;
     img->lv[0].data = blob;
@@ -602,6 +611,25 @@ int rdtex_ReplacementMips(TexpackImage *img)
     }
     img->levels = levels;
     return 0;
+}
+
+int rdtex_ReplacementMips(TexpackImage *img)
+{
+    TexpackImage out;
+
+    if (rdtex_ReplacementMipsFrom(img, &out) != 0) {
+        return -1;
+    }
+    free(img->blob);
+    *img = out;
+    return 0;
+}
+
+int rdtex_ReplacementRefused(RdTex t)
+{
+    const RdTexRec *r = rd__TexRec(t.id);
+
+    return r != NULL && r->replacement && r->refused;
 }
 
 RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, const char *debugName)
