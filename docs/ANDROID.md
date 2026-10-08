@@ -3,9 +3,8 @@
 [Back to the front page](../README.md)
 
 > [!NOTE]
-> Android support is experimental in this version. It plays, but the
-> picture can be slow, the opening movie may glitch, and the touch layout
-> is a first draft. See
+> Android support is experimental in this version. It plays, but it can be
+> slower than on a PC, and the touch layout is a first draft. See
 > [Known limits](#known-limits).
 
 ## What you need
@@ -101,11 +100,11 @@ In that folder:
   it starts.
 - `models` is where a [model pack](MODEL_PACKS.md) goes:
   `models/SCES-50760/replacements`.
+- `screenshots` holds the pictures you take in photo mode.
+- `config.toml` holds your settings.
 
 The game makes the `textures` and `models` folders for you. Inside them,
 make the `SCES-50760/replacements` folders yourself.
-- `screenshots` holds the pictures you take in photo mode.
-- `config.toml` holds your settings.
 
 > [!WARNING]
 > Uninstalling the game deletes this whole folder, saves included. Copy
@@ -190,8 +189,9 @@ Options > Display > Aspect ratio decides how the picture fits:
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
   Options > Display. See [If the game stutters](#if-the-game-stutters).
-- The opening movie shows picture glitches on some phones. The game itself
-  is not affected.
+- The opening movies used to be cut off and off-centre after the phone
+  turned or a folding screen opened. This version fixes that. If you still
+  see it, please tell us which phone you have.
 - The on-screen buttons are a first layout. Their size and placement will
   change with feedback; Options > Controls lets you change the size now.
 

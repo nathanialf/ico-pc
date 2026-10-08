@@ -49,9 +49,19 @@ Pick a model from the list and press Cross.
 | Repeat the animation over and over, or stop repeating | Square |
 | Go back to the list | Triangle or Circle |
 
+If you opened the viewer from **Options > Extras > Characters**, Triangle
+takes you back to the title screen and that page instead.
+
 With Developer mode on, **Select** also saves the model's files for
 people who make model packs. A message tells you how many files it saved
 and where. [More about model packs](MODEL_PACKS.md#make-a-model-pack).
+
+## Change the colours of Ico and Yorda
+
+**Options > Extras > Characters** has a row for each part you can recolour.
+Left and Right pick a colour, and Square puts that row back to its
+original colour. On the title screen, Cross on a row shows the character in
+the model viewer, and Triangle brings you back. [All the rows](OPTIONS.md#characters).
 
 ## Take a photo
 

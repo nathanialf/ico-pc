@@ -135,35 +135,36 @@ Characters. In the pause menu's Options it has only Characters.
 ### Characters
 
 This page recolours Ico's skin, poncho, tunic and shorts, and Yorda's skin
-and dress. Ico's poncho has four colour groups, and each has a row of its
-own: navy, pink, light and dark.
+and dress. Ico's poncho has four colour groups, so it has four rows: navy,
+pink, light and dark. Every row starts at Original, the game's own colour.
 
-- **Left and Right:** pick the colour for the row. Original is the game's
-  own colour. The clothes have 24 named colours, from Red to Black. Skin
-  has twelve tones, from Tone 1 (the lightest) to Tone 12 (the darkest).
+- **Left and Right:** pick a colour for the row. Clothes have 24 named
+  colours, from Red to Black. Skin has twelve tones, from Tone 1 (the
+  lightest) to Tone 12 (the darkest).
 - **Square:** puts the row back to Original.
-- **Cross on a row:** from the title screen, shows that character in the
+- **Cross on a row:** on the title screen, shows that character in the
   model viewer so you can look at the colours. Triangle takes you back to
-  this page. Each preview loads the stage, so it takes a few seconds. From
-  the pause menu, Cross on a row does nothing; the game behind the menu
-  changes colour as you choose.
+  this page. Each preview loads the stage, so it takes a few seconds. In
+  the pause menu, Cross on a row does nothing, because the game behind the
+  menu changes colour as you choose.
 - **Randomize:** gives every row a random colour. The four poncho groups
   always get four different colours.
 - **Reset to original:** puts every row back to Original.
 
-Each row has a small square on its right showing the colour. It shows the
-colour as the picture holds it, before the game lights it. In the game Ico
-looks a little darker than the square and Yorda a little paler.
+Each row has a small square on its right showing the colour you picked. In
+the game, Ico looks a little darker than the square and Yorda a little
+paler, because the game lights them.
 
 A texture pack that has its own pictures of Ico and Yorda replaces these
-colours. The page says so while a pack is on.
+colours. The page tells you so while such a pack is on.
 
 Your choices are saved when you leave the page.
 
 ## Photo mode
 
 Photo mode is a row in the pause menu during play. The game stays paused
-while you move a camera around and save pictures.
+while you move a camera around and save pictures, and the picture is
+drawn from the camera with every effect the game has.
 [The photo mode controls](CONTROLS.md#take-a-photo).
 
 ## Developer mode

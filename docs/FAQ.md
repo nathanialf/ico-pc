@@ -76,8 +76,9 @@ the right one, the game says so when you start it.
 
 ## How do I take a photo?
 
-Press Start during play and choose **Photo mode**. Move the camera around,
-then press Cross to save a picture.
+Press Start during play and choose **Photo mode**. The game pauses, and you
+move the camera around and see the scene as the game would draw it from
+there, with all its effects. Press Cross to save a picture.
 [The photo mode controls](CONTROLS.md#take-a-photo).
 
 ## How do I close the game?
