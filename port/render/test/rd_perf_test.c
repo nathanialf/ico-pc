@@ -400,11 +400,13 @@ static void checkGroups(const char *what, const Sum *s)
  * orders same-state writes per resource: one list-opening barrier and one per pass or copy whose target
  * has a write pending, instead of a global barrier before every pass and
  * copy (ICO_VK_GLOBAL_BARRIERS=1, the _GLOBAL counts).  A backend
- * without counters (D3D12) reads 0 and is not checked. */
-#define BARRIERS_REPLAY 36
-#define BARRIERS_RECORD 39
-#define BARRIERS_REPLAY_GLOBAL 44
-#define BARRIERS_RECORD_GLOBAL 48
+ * without counters (D3D12) reads 0 and is not checked.  v0.4.2 (N2): two
+ * fewer in every mode (36, 39, 44, 48 before), the target clears now taken
+ * as the next pass's load op instead of passes of their own. */
+#define BARRIERS_REPLAY 34
+#define BARRIERS_RECORD 37
+#define BARRIERS_REPLAY_GLOBAL 42
+#define BARRIERS_RECORD_GLOBAL 46
 
 static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint32_t global)
 {
