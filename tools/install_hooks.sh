@@ -29,6 +29,8 @@ cat > "$HOOK" <<'EOF'
 #      Regenerate with the same script without --check.
 #   4. tools/strip_host_gates.py --check   no ICO_HOST conditional in ico2/,
 #                                          sce/, vusrc/
+#   5. tools/stack_overread_audit.py       no reliance on the PS2's stack
+#                                          layout in ico2/
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -56,6 +58,12 @@ done
 "$PY" "$ROOT/tools/strip_host_gates.py" --check >/dev/null || {
     "$PY" "$ROOT/tools/strip_host_gates.py" --check
     echo "pre-commit: ico2/ is host code: write the host form, not an ICO_HOST conditional" >&2
+    exit 1
+}
+
+"$PY" "$ROOT/tools/stack_overread_audit.py" >/dev/null || {
+    "$PY" "$ROOT/tools/stack_overread_audit.py"
+    echo "pre-commit: a local is read past its end or only written: see tools/stack_overread_audit.py" >&2
     exit 1
 }
 EOF

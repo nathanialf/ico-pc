@@ -241,7 +241,9 @@ hook that runs, in order:
    (`cmake/IcoSources.cmake`). Each needs pyelftools, so the hook uses
    `.venv/bin/python`. Regenerate with the same script without `--check`;
 4. `tools/strip_host_gates.py --check`: no `ICO_HOST` conditional in the
-   game sources ([The game code](#the-game-code)).
+   game sources ([The game code](#the-game-code));
+5. `tools/stack_overread_audit.py`: no game code that relies on the PS2's
+   stack layout (the CI table below says what it looks for).
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
 then applies `tools/format_layout.py`'s top-level blank-line layout.
@@ -274,6 +276,7 @@ that builds one more preset.
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/`, `sce/`, `vusrc/` |
+| `tools/stack_overread_audit.py` (`--selftest`, then the tree) | no game code in `ico2/` that relies on the PS2's stack layout: a matrix or vector call that reads or writes past the local it is given, or a local that is only written; checked exceptions are in `tools/stack_overread_allow.txt` |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
 | `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |

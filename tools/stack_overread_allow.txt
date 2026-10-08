@@ -1,0 +1,31 @@
+# tools/stack_overread_audit.py allow list: path:function:local:kind reason
+# Each entry is a hit checked by hand and found not to be a stack-layout
+# dependence. A write-only local here is a dead store the decompiled source
+# keeps from the original program; none is read through a neighbour's overread
+# (the audit finds no overread in the tree).
+
+ico2/common/src/StageManager.c:stgmgrNextStagePreLoad:ret:write-only a dead int store kept from the original; no call in the function reads past a neighbour into it.
+ico2/common/src/debug.c:debug_SnapShot:size:write-only a dead int store kept from the original; no call in the function reads past a neighbour into it.
+ico2/fumi/sound/s_init.c:soundDataOpenChk:off:write-only a dead int store kept from the original; no call in the function reads past a neighbour into it.
+ico2/fumi/src/act-env.c:ACTGetEnvironment:p60:write-only a dead GetRootPosition into a 16-byte vector kept from the original; it writes 16 bytes into 16.
+ico2/fumi/src/act-env.c:ACTGetEnvironment:p70:write-only a dead GetRootPosition into a 16-byte vector kept from the original; it writes 16 bytes into 16.
+ico2/fumi/src/commonact.c:actCommonLever:p:write-only p is filled from the pull position and the root height and never used; every call on it stays inside its 16 bytes.
+ico2/fumi/src/commonact.c:actCommonSlip:v2:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/fumi/src/commonact.c:actCommonSlip:v3:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/fumi/src/commonact.c:actCommonBackhand:frame:write-only a dead int store kept from the original; no call in the function reads past a neighbour into it.
+ico2/fumi/src/girl_act.c:actGirlDitch3mReady:now:write-only a dead GetRootPosition into a 16-byte vector kept from the original; it writes 16 bytes into 16.
+ico2/ito/src/act_bird.c:subBirdBrainMain:q:write-only q[1] = lim is a dead store the source already notes ("nothing reads `q` after this"); no call reads past q or its neighbours.
+ico2/ito/src/queen.c:QueenBarrierGeo:rootPos:write-only GetRootPosition writes the queen's root position and nothing uses it; the copies on its neighbours (pos into m1.w, m1, m3) stay inside their own locals.
+ico2/omori/src/camera-editor.c:DebugDispBox:m2:write-only a debug matrix built and never used; m2 is a full 4x4, so nothing reads past it.
+ico2/omori/src/camera-editor.c:DispCameraGroup:m2:write-only a debug matrix built and never used; m2 is a full 4x4, so nothing reads past it.
+ico2/omori/src/camera-ico2.c:monitorMonitorCamera:vDiff:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/omori/src/chain.c:PlumbPointUpdateChain:d:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/omori/src/chain.c:StartPendulum:d:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/omori/src/ebrain.c:eBrainCanSeeTarget:mypos:write-only a dead GetRootPosition into a 16-byte vector kept from the original; it writes 16 bytes into 16.
+ico2/omori/src/lws_kyomi.c:SetParamKyomiGObj:pos:write-only a dead GetRootPosition into a 16-byte vector kept from the original; it writes 16 bytes into 16.
+ico2/sugipon/src/box.c:onPathInitialize:ofs:write-only a dead float store kept from the original; no call in the function reads past a neighbour into it.
+ico2/sugipon/src/clothAnimation.c:TestDispChainAnimation:mid:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/sugipon/src/clothAnimation.c:GetClothAnimation:work:write-only the block-scoped work area with one word cleared that nothing reads (the source notes it); nothing reads past it.
+ico2/sugipon/src/geometryManager.c:SetDirectRootPositionNoFitting_i:tmp:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/sugipon/src/geometryManager.c:SetDirectRootPosition:tmp:write-only a dead vector store kept from the original; every call on it stays inside its 16 bytes.
+ico2/sugipon/src/motionManager2.c:dispPlane:buf:write-only buf[10] receives a copy of the plane that the debug drawing never reads; every call on buf stays inside its 192 bytes.
