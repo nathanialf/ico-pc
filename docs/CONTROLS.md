@@ -55,9 +55,9 @@ and where. [More about model packs](MODEL_PACKS.md#make-a-model-pack).
 
 ## Change the colours of Ico and Yorda
 
-**Options > Extras > Characters** has a row for each part you can recolour.
-On the title screen the character is shown beside the rows, and each
-colour you pick shows on the model at once.
+**Options > Extras > Character Customization** has a row for each part you
+can recolour. On the title screen the character is shown beside its own
+rows, and each colour you pick shows on the model at once.
 
 | To do this | Press |
 | --- | --- |
@@ -71,7 +71,7 @@ colour you pick shows on the model at once.
 
 From the title screen, going back returns you to the title screen with
 Options open on Extras. In the pause menu, the game behind the menu
-changes colour as you choose. [All the rows](OPTIONS.md#characters).
+changes colour as you choose. [All the rows](OPTIONS.md#character-customization).
 
 ## Take a photo
 

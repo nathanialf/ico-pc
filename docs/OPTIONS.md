@@ -127,37 +127,41 @@ on.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits and
-Characters. In the pause menu's Options it has only Characters.
+Character Customization. In the pause menu's Options it has only Character
+Customization.
 
 - **Music:** listen to the game's music and sound effects.
 - **Models:** the model viewer. Look closely at the characters and some
   objects, and play their animations. [The viewer's controls](CONTROLS.md#look-at-the-models).
 - **Credits:** watch the ending credits again. It unlocks once you have
   finished the game.
-- **Characters:** change the colours of Ico and Yorda. [Details below](#characters).
+- **Character Customization:** change the colours of Ico and Yorda. [Details below](#character-customization).
 
-### Characters
+### Character Customization
 
 This page recolours Ico's skin, poncho, tunic and shorts, and Yorda's skin
 and dress. Ico's poncho has four colour groups, so it has four rows: navy,
 pink, light and dark. Every row starts at Original, the game's own colour.
 
-On the title screen, the character is shown beside the rows. Ico comes
+On the title screen, the character is shown beside the rows, and only that
+character's rows are on the page: Ico's seven, or Yorda's two. Ico comes
 first; the screen takes a few seconds to load each character. Every colour
-you pick shows on the model at once.
+you pick shows on the model at once. In the pause menu, the page has the
+rows of both characters.
 
 - **Left and Right:** pick a colour for the row. Clothes have 24 named
   colours, from Red to Black. Skin has twelve tones, from Tone 1 (the
-  lightest) to Tone 12 (the darkest).
+  lightest) to Tone 12 (the darkest), and then the same 24 named colours.
 - **Square:** puts the row back to Original.
 - **Switch to Yorda / Switch to Ico** (title screen only), or **L1 / R1**:
-  shows the other character. The rows of both characters are always on the
-  page, so you can change Yorda's colours while Ico is shown.
+  shows the other character and its rows.
 - **Right stick, L2 / R2** (title screen only): turn the model, zoom out
   and in.
 - **Randomize:** gives every row a random colour. The four poncho groups
-  always get four different colours.
-- **Reset to original:** puts every row back to Original.
+  always get four different colours. On the title screen it changes only
+  the character shown; in the pause menu it changes both.
+- **Reset to original:** puts every row back to Original. On the title
+  screen it changes only the character shown; in the pause menu both.
 - **Triangle or Back:** on the title screen, takes you back to the title
   screen and opens Options on Extras again. In the pause menu, back to
   Extras.
@@ -260,12 +264,12 @@ Under `[video]`:
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
 
-Under `[characters]`, for the Characters page. A line that is missing means
+Under `[characters]`, for the Character Customization page. A line that is missing means
 Original:
 
 | Line | What it does |
 | --- | --- |
-| `ico_skin`, `yorda_skin` | `"original"` or a skin tone, `"tone1"` (lightest) to `"tone12"` (darkest). |
+| `ico_skin`, `yorda_skin` | `"original"`, a skin tone, `"tone1"` (lightest) to `"tone12"` (darkest), or one of the colour names in the next line. |
 | `ico_poncho_navy`, `ico_poncho_pink`, `ico_poncho_light`, `ico_poncho_dark`, `ico_tunic`, `ico_shorts`, `yorda_dress` | `"original"` or a colour name: `"red"`, `"crimson"`, `"rose"`, `"pink"`, `"magenta"`, `"plum"`, `"violet"`, `"indigo"`, `"navy"`, `"blue"`, `"sky"`, `"teal"`, `"cyan"`, `"green"`, `"moss"`, `"olive"`, `"gold"`, `"orange"`, `"rust"`, `"brown"`, `"sand"`, `"white"`, `"grey"` or `"black"`. |
 
 A value the game does not know counts as Original.
