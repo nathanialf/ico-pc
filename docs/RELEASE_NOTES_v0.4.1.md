@@ -12,5 +12,4 @@
 ## Fixed
 
 - The final fight: Ico's sword hits the Queen's shield again (issue 12).
-<!-- QUEEN: add "- The Queen's face no longer darkens in waves in the model viewer." only if the queen package lands; remove this comment either way. -->
-<!-- THANKS: no thanks line drafted; add one only if someone earned it this release; remove this comment either way. -->
+- The Queen's face no longer darkens in waves in the model viewer, and surfaces that sit very close together are drawn in the right order everywhere.
