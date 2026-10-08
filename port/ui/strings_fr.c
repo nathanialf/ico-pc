@@ -436,8 +436,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_CHAR_RANDOMIZE] = "Couleurs au hasard",
     [UI_STR_CHAR_RESET] = "Rétablir l’original",
     [UI_STR_CHAR_TONE] = "Teinte %d",
-    [UI_STR_CHAR_NOTE_TITLE] =
-        "Croix montre le personnage dans la visionneuse ; les couleurs s’appliquent aussitôt dans le jeu.",
+    [UI_STR_CHAR_NOTE_TITLE] = "Les couleurs s’appliquent aussitôt dans le jeu.",
     [UI_STR_CHAR_NOTE_PAUSE] = "Les couleurs changent derrière ce menu à chaque choix.",
     [UI_STR_CHAR_NOTE_PACK] =
         "Un pack de textures est actif ; s’il a des images d’Ico et de Yorda, elles remplacent ces couleurs.",
@@ -465,4 +464,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_COLOUR_WHITE] = "Blanc",
     [UI_STR_COLOUR_GREY] = "Gris",
     [UI_STR_COLOUR_BLACK] = "Noir",
+    [UI_STR_CHAR_SWITCH_YORDA] = "Passer à Yorda",
+    [UI_STR_CHAR_SWITCH_ICO] = "Passer à Ico",
+    [UI_STR_CHAR_HINT_COLOUR] = "Couleur",
+    [UI_STR_CHAR_HINT_CHARACTER] = "Personnage",
 };

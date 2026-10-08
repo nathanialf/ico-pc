@@ -529,6 +529,12 @@ typedef enum UiStrId {
     UI_STR_COLOUR_WHITE,
     UI_STR_COLOUR_GREY,
     UI_STR_COLOUR_BLACK,
+    /* v0.4.2: Characters inside the model viewer (title screen): the row
+       that loads the other character, and two of its button prompts */
+    UI_STR_CHAR_SWITCH_YORDA,
+    UI_STR_CHAR_SWITCH_ICO,
+    UI_STR_CHAR_HINT_COLOUR,
+    UI_STR_CHAR_HINT_CHARACTER,
     UI_STR_COUNT
 } UiStrId;
 

@@ -2,7 +2,7 @@
 
 - Photo mode shows the scene exactly as the game draws it from where you put the camera, with all of its effects. The help panel shows button pictures, or your keys when you play on the keyboard.
 - Menus: every menu, the game's and the port's own, now uses one clean font drawn in the original menus' style (light letters, soft dark outline, the same grain and glow), so all menus match in every language. The first start no longer reads the game's lettering from the disc.
-- Characters: Options > Extras > Characters recolours Ico's skin, poncho (four colour groups), tunic and shorts, and Yorda's skin and dress, or rolls random colours. From the title screen, Cross on a row shows the character in the viewer. In the pause menu, Extras has just this page.
+- Characters: Options > Extras > Characters recolours Ico's skin, poncho (four colour groups), tunic and shorts, and Yorda's skin and dress, or rolls random colours, with the character shown beside the rows on the title screen. In the pause menu, Extras has just this page.
 - Android: smoother play (fewer wasted frames), a Resolution setting, Auto, that lowers itself when the phone falls behind, and faster movie playback.
 - Android: the picture reaches into the notch and fills folding screens when they open.
 

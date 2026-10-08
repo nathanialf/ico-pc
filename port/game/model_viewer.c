@@ -50,12 +50,18 @@
  *   MV_LEAVING  until the title is up: then the filter is off and
  *               ico_mv_active clear
  *
- * v0.4.2: Settings > Extras > Characters opens the viewer on Ico or Yorda
- * (ico_mv_view_character) to show the colours chosen there.  Its Triangle,
- * in the viewer as in the list, goes straight back to the title, and back
- * in MV_OFF the viewer waits (RETURN_TIMEOUT_TICKS) for the title's menu
- * to be up and faded in, then opens Settings on Characters again
- * (ui_SettingsReopenPage).
+ * v0.4.2: Settings > Extras > Characters from the title runs in the viewer
+ * (s_chars; settings.h UiCharactersHost): Ico's model is loaded as picking
+ * it in the list does, and once it is up the Settings page of Characters is
+ * the layout shown, as a panel at the left (settings.c charactersPlace),
+ * the model right of it (MODEL_SHIFT_CHARS).  The page reads the pad (its
+ * rows, Left / Right, Square, L1 / R1); the viewer only turns and zooms
+ * the camera.  Every step bumps the colours' serial, so the model's
+ * textures are decoded again on the next frame (Texture.c tex_ResetVram).
+ * Switch (or L1 / R1) loads the other character's stage, the page staying
+ * up.  Triangle goes back to the title, and back in MV_OFF the viewer
+ * waits (RETURN_TIMEOUT_TICKS) for the title's menu to be up and faded in,
+ * then opens Settings on Extras again (ui_SettingsReopenPage).
  *
  * Nothing is saved and no game flag is set but what End Game resets.  The
  * viewer's own buffers are host memory (malloc), not the game's arena.
@@ -167,13 +173,16 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 #define CAM_FOV 40.0f
 /* how far the model sits left of the middle, in distances */
 #define MODEL_SHIFT 0.16f
+/* in Characters it sits right of the middle, clear of the panel at the
+   left (settings.c CV_*: the panel ends at x 348 of 640) */
+#define MODEL_SHIFT_CHARS -0.22f
 #define LOAD_TIMEOUT_TICKS 3000u
 /* the title's stage back after End Game (a few hundred ticks); past this
    the viewer lets go of the game anyway */
 #define LEAVE_TIMEOUT_TICKS 3000u
 #define LOG_EVERY_TICKS 25u
-/* v0.4.2: the title's menu after a Characters preview (10 s at 25 ticks a
-   second): past this Settings is not opened again (a log line) */
+/* v0.4.2: the title's menu after Characters (10 s at 25 ticks a second):
+   past this Settings is not opened again (a log line) */
 #define RETURN_TIMEOUT_TICKS 250u
 #define LAYOUT_TITLE_CONTINUE 12
 #define LAYOUT_TITLE_NEW 13
@@ -183,7 +192,8 @@ enum { MV_OFF, MV_LOADING, MV_VIEW, MV_LIST, MV_LEAVING };
 static int s_state = MV_OFF;
 static int s_pauseSaved = 1;    /* enable_game_pause on the title, put back there */
 static int s_model = -1;        /* the table row viewed or loading */
-static int s_returnChars;       /* v0.4.2: opened from Settings > Extras > Characters */
+static int s_chars;             /* v0.4.2: Settings > Extras > Characters runs here */
+static int s_returnExtras;      /* v0.4.2: back from Characters: Settings on Extras */
 static int s_sawChange;         /* the stage change has begun (systemStatus[6]) */
 static unsigned int s_since;    /* the Main tick the state began */
 static GObj *s_obj;             /* the object viewed */
@@ -445,10 +455,6 @@ static void refreshView(void)
     }
     /* Select, saving the model's files, with Developer mode on */
     ui_HintShow(&s_viewKeys, UI_HINT_MV_SAVE, saveAvailable());
-    /* Triangle: back to the title (and the Characters page) when the viewer
-       was opened from there, else to the models' list */
-    ui_HintSetStr(&s_viewKeys, UI_HINT_MV_BACK,
-                  s_returnChars ? UI_STR_MV_HINT_TITLE : UI_STR_EXTRAS_MODELS);
     ui_HintLayout(&s_viewSticks);
     ui_HintLayout(&s_viewKeys);
     lt_ext_SetText(s_rowName, s_ovName);
@@ -482,21 +488,39 @@ int ico_mv_title_list_layout(void)
     return s_state == MV_OFF && built() ? s_listLayout : -1;
 }
 
-int ico_mv_view_character(int row)
+int ico_mv_characters_enter(void)
 {
-    if (s_state != MV_OFF || row < 0 || row > 1 || row >= mv_modelCount) {
+    if (s_state != MV_OFF || mv_modelCount < 2) {
         return -1;
     }
-    if (!built()) {
-        build();
+    s_chars = 1;
+    s_returnExtras = 0;
+    fprintf(stderr, "model_viewer: characters\n");
+    mvStart(MV_ROW_ICO);
+    return 0;
+}
+
+int ico_mv_characters_shown(void)
+{
+    if (!s_chars) {
+        return -2;
     }
-    /* the list's cursor on the model, as listProc puts it on s_model */
-    LtProp *lay = lt_ext_Layout(s_listLayout);
-    s_list.offset = 0;
-    lay->defaultItem = lay->curItem = s_list.label[row];
-    s_returnChars = 1;
-    mvStart(row);
-    return s_listLayout;
+    return s_state == MV_VIEW ? s_model : -1;
+}
+
+void ico_mv_characters_switch(int character)
+{
+    if (s_chars && s_state == MV_VIEW && (character == MV_ROW_ICO || character == MV_ROW_YORDA) &&
+        character != s_model) {
+        mvStart(character);
+    }
+}
+
+void ico_mv_characters_leave(void)
+{
+    if (s_chars && s_state == MV_VIEW) {
+        mvToTitle();
+    }
 }
 
 /* --- the viewer ------------------------------------------------------------ */
@@ -567,11 +591,15 @@ static void mvLetGo(void)
     ico_mv_active = 0;
     enable_game_pause = s_pauseSaved;
     s_model = -1;
+    s_chars = 0;
     setState(MV_OFF);
 }
 
 static void mvToTitle(void)
 {
+    /* from Characters (Triangle there, or a failure): Settings on Extras
+       once the title is back */
+    s_returnExtras = s_chars;
     putBackShadow();
     freeAnims();
     s_obj = NULL;
@@ -750,7 +778,8 @@ static void placeCamera(void)
     float cp = cosf(s_cam.pitch), sp = sinf(s_cam.pitch);
     /* the model left of the picture's middle, clear of the list at the
        right: eye and target moved along the view's right */
-    float side = s_cam.dist * MODEL_SHIFT - s_cam.panX; /* panX: the model right */
+    float side = s_cam.dist * (s_chars ? MODEL_SHIFT_CHARS : MODEL_SHIFT) -
+                 s_cam.panX; /* panX: the model right */
     float rx = -cosf(s_cam.yaw) * side, rz = sinf(s_cam.yaw) * side;
     in.f[0] = t[0] + s_cam.dist * cp * sinf(s_cam.yaw) + rx;
     in.f[1] = t[1] - s_cam.dist * sp + s_cam.panY;
@@ -1012,19 +1041,19 @@ static void saveDone(int n)
 static void viewInput(void)
 {
     int flags = pad[0].flags;
+    if (s_chars) {
+        /* the Characters page reads the pad, the left stick its rows
+           (lt_analog2Pad): the camera only turns and zooms */
+        const unsigned char ana[4] = {pad[0].ana[0], pad[0].ana[1], 128, 128};
+        mv_CamStep(&s_cam, (unsigned)pad[0].now, ana);
+        return;
+    }
     mv_CamStep(&s_cam, (unsigned)pad[0].now, pad[0].ana);
     if (lt_fade_status() != 2 || current_layout_id != s_viewLayout) {
         return;
     }
     if (flags & PAD_BACK) {
         NEGATIVE_SE();
-        if (s_returnChars) {
-            /* v0.4.2: from Characters: straight back to the title (and
-               Settings), as the list's Triangle goes */
-            la_host_leave();
-            mvToTitle();
-            return;
-        }
         setState(MV_LIST);
         lt_switch_layout(s_listLayout);
         return;
@@ -1061,8 +1090,10 @@ static void viewTick(void)
 {
     int total = 0, frame = 0;
     if (s_state == MV_VIEW) {
-        if (current_layout_id != s_viewLayout && lt_fade_status() == 2) {
-            lt_switch_layout(s_viewLayout);
+        /* the viewer's layout, or in Characters the Settings page */
+        const int want = s_chars ? ui_SettingsPageLayout(UI_PAGE_CHARACTERS) : s_viewLayout;
+        if (want >= 0 && current_layout_id != want && lt_fade_status() == 2) {
+            lt_switch_layout(want);
         }
         viewInput();
 #ifdef ICO_RD
@@ -1116,25 +1147,27 @@ void ico_mv_tick(void)
     if (!hooked) {
         hooked = 1;
         ui_SettingsSetModelsHandler(ico_mv_models_enter);
-        ui_SettingsSetCharacterViewHandler(ico_mv_view_character);
+        static const UiCharactersHost host = {ico_mv_characters_enter, ico_mv_characters_shown,
+                                              ico_mv_characters_switch, ico_mv_characters_leave};
+        ui_SettingsSetCharactersHost(&host);
     }
     unsigned int now = ico_host_main_ticks();
     switch (s_state) {
     case MV_OFF:
-        if (s_returnChars) {
-            /* v0.4.2: back from a Characters preview: Settings on that page
-               once the title's menu is up and faded in (lt_switch_layout
-               works only then) */
+        if (s_returnExtras) {
+            /* v0.4.2: back from Characters: Settings on Extras (its
+               Characters row) once the title's menu is up and faded in
+               (lt_switch_layout works only then) */
             if (stage_no == TITLE_STAGE && lt_fade_status() == 2 &&
                 (current_layout_id == LAYOUT_TITLE_CONTINUE ||
                  current_layout_id == LAYOUT_TITLE_NEW)) {
-                s_returnChars = 0;
-                const int to = ui_SettingsReopenPage(UI_PAGE_CHARACTERS);
+                s_returnExtras = 0;
+                const int to = ui_SettingsReopenPage(UI_PAGE_EXTRAS);
                 if (to >= 0) {
                     lt_switch_layout(to);
                 }
             } else if (now - s_since > RETURN_TIMEOUT_TICKS) {
-                s_returnChars = 0;
+                s_returnExtras = 0;
                 fprintf(stderr,
                         "model_viewer: the title's menu did not come back; Settings not "
                         "reopened (stage %d, layout %d)\n",

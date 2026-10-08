@@ -435,8 +435,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_CHAR_RANDOMIZE] = "Colores al azar",
     [UI_STR_CHAR_RESET] = "Restablecer original",
     [UI_STR_CHAR_TONE] = "Tono %d",
-    [UI_STR_CHAR_NOTE_TITLE] =
-        "Equis muestra al personaje en el visor; los colores se aplican en el juego al momento.",
+    [UI_STR_CHAR_NOTE_TITLE] = "Los colores se aplican en el juego al momento.",
     [UI_STR_CHAR_NOTE_PAUSE] = "Los colores cambian detrás de este menú con cada elección.",
     [UI_STR_CHAR_NOTE_PACK] =
         "Hay un paquete de texturas activo; si tiene imágenes de Ico y Yorda, sustituyen estos colores.",
@@ -464,4 +463,8 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_COLOUR_WHITE] = "Blanco",
     [UI_STR_COLOUR_GREY] = "Gris",
     [UI_STR_COLOUR_BLACK] = "Negro",
+    [UI_STR_CHAR_SWITCH_YORDA] = "Cambiar a Yorda",
+    [UI_STR_CHAR_SWITCH_ICO] = "Cambiar a Ico",
+    [UI_STR_CHAR_HINT_COLOUR] = "Color",
+    [UI_STR_CHAR_HINT_CHARACTER] = "Personaje",
 };

@@ -3745,6 +3745,25 @@ static void testCoversTitle(void)
 
 #ifdef SETTINGS_RENDER
 
+/* package K-D: model_viewer.c's characters calls for the viewer's panel
+   (Ico on screen; the model itself needs the game) */
+static int renderCharsEnter(void)
+{
+    return 0;
+}
+
+static int renderCharsShown(void)
+{
+    return 0;
+}
+
+static void renderCharsSwitch(int character)
+{
+    (void)character;
+}
+
+static void renderCharsLeave(void) {}
+
 /* SCENE (512 x 512 for the 640 x 448 grid) to a PNG at 4:3, 683 x 512 */
 static void snap(const char *name)
 {
@@ -4566,9 +4585,27 @@ static int render(void)
                 frame(0); /* the page refreshes */
             }
             snap4("settings_characters_4x.png");
-            ico_appearance_reset();
             press(0x10);
             CHECK(settle(exL, 60), "back to Extras from Characters at 4x");
+            /* package K-D: the same page from the title inside the model
+               viewer, a panel at the left (the model, the game's, is not
+               drawn here: the flat colour shows where it stands) */
+            static const UiCharactersHost host = {renderCharsEnter, renderCharsShown,
+                                                  renderCharsSwitch, renderCharsLeave};
+            ui_SettingsSetCharactersHost(&host);
+            lt_ext_Layout(exL)->curItem = el[3];
+            frame(0);
+            press(0x40);
+            CHECK(settle(chL, 60), "Characters in the viewer at 4x");
+            lt_ext_Layout(chL)->curItem = cl[5];
+            for (int k = 0; k < 4; k++) {
+                frame(0);
+            }
+            snap4("settings_characters_viewer_4x.png");
+            ui_SettingsSetCharactersHost(NULL);
+            ico_appearance_reset();
+            lt_switch_layout(exL);
+            CHECK(settle(exL, 60), "back to Extras from the viewer's Characters at 4x");
         }
     }
     /* every screen presented at Enhanced 1080p (snap1080) */
@@ -4730,8 +4767,9 @@ static int fakePackCount(void)
 /* ------------------------------------------------------ Characters
  * v0.4.2 package K: Settings > Extras > Characters (port/game/appearance.h
  * under nine stepped rows with a swatch each, Randomize, Reset to original,
- * a note, Cross on a row from the title opening the model viewer), and
- * Extras on the pause menu with Characters and Back only. */
+ * a note), the title's Characters inside the model viewer (package K-D:
+ * a fake UiCharactersHost stands in for model_viewer.c), and Extras on the
+ * pause menu with Characters and Back only. */
 static const char *const kColourNames[ICO_APP_COLOURS] = {
     "Red",  "Crimson", "Rose", "Pink",  "Magenta", "Plum",  "Violet", "Indigo",
     "Navy", "Blue",    "Sky",  "Teal",  "Cyan",    "Green", "Moss",   "Olive",
@@ -4740,16 +4778,39 @@ static const char *const kCharKeys[ICO_APP_PART_COUNT] = {
     "ico_skin",  "ico_poncho_navy", "ico_poncho_pink", "ico_poncho_light", "ico_poncho_dark",
     "ico_tunic", "ico_shorts",      "yorda_skin",      "yorda_dress"};
 
-static int s_viewCalls, s_viewLast = -1;
+/* model_viewer.c's characters calls, faked: shown is what the test sets
+   (-2 off, -1 loading or leaving, 0 Ico, 1 Yorda) */
+static int s_hostEnters, s_hostFail, s_hostShown = -2, s_hostSwitch = -1, s_hostLeaves;
 
-/* model_viewer.c ico_mv_view_character's stand-in: the achievements page
-   stands in for the viewer's list */
-static int fakeView(int character)
+static int fakeCharsEnter(void)
 {
-    s_viewCalls++;
-    s_viewLast = character;
-    return ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
+    s_hostEnters++;
+    if (s_hostFail) {
+        return -1;
+    }
+    s_hostShown = -1; /* Ico's stage loading */
+    return 0;
 }
+
+static int fakeCharsShown(void)
+{
+    return s_hostShown;
+}
+
+static void fakeCharsSwitch(int character)
+{
+    s_hostSwitch = character;
+    s_hostShown = -1;
+}
+
+static void fakeCharsLeave(void)
+{
+    s_hostLeaves++;
+    s_hostShown = -1;
+}
+
+static const UiCharactersHost kFakeHost = {fakeCharsEnter, fakeCharsShown, fakeCharsSwitch,
+                                           fakeCharsLeave};
 
 /* Settings (title or pause menu) > Extras > Characters, settled */
 static int openCharacters(int title)
@@ -4807,32 +4868,49 @@ static const char *savedChar(IcoToml *t, int part)
 
 static void testCharacters(void)
 {
-    static const int opts[] = {
-        UI_OPT_CHAR_ICO_SKIN,         UI_OPT_CHAR_ICO_PONCHO_NAVY, UI_OPT_CHAR_ICO_PONCHO_PINK,
-        UI_OPT_CHAR_ICO_PONCHO_LIGHT, UI_OPT_CHAR_ICO_PONCHO_DARK, UI_OPT_CHAR_ICO_TUNIC,
-        UI_OPT_CHAR_ICO_SHORTS,       UI_OPT_CHAR_YORDA_SKIN,      UI_OPT_CHAR_YORDA_DRESS,
-        UI_OPT_CHAR_RANDOMIZE,        UI_OPT_CHAR_RESET,           UI_OPT_BACK};
-    static const int strs[] = {
-        UI_STR_CHAR_ICO_SKIN,         UI_STR_CHAR_ICO_PONCHO_NAVY, UI_STR_CHAR_ICO_PONCHO_PINK,
-        UI_STR_CHAR_ICO_PONCHO_LIGHT, UI_STR_CHAR_ICO_PONCHO_DARK, UI_STR_CHAR_ICO_TUNIC,
-        UI_STR_CHAR_ICO_SHORTS,       UI_STR_CHAR_YORDA_SKIN,      UI_STR_CHAR_YORDA_DRESS,
-        UI_STR_CHAR_RANDOMIZE,        UI_STR_CHAR_RESET,           UI_STR_BACK};
+    static const int opts[] = {UI_OPT_CHAR_ICO_SKIN,
+                               UI_OPT_CHAR_ICO_PONCHO_NAVY,
+                               UI_OPT_CHAR_ICO_PONCHO_PINK,
+                               UI_OPT_CHAR_ICO_PONCHO_LIGHT,
+                               UI_OPT_CHAR_ICO_PONCHO_DARK,
+                               UI_OPT_CHAR_ICO_TUNIC,
+                               UI_OPT_CHAR_ICO_SHORTS,
+                               UI_OPT_CHAR_YORDA_SKIN,
+                               UI_OPT_CHAR_YORDA_DRESS,
+                               UI_OPT_CHAR_SWITCH,
+                               UI_OPT_CHAR_RANDOMIZE,
+                               UI_OPT_CHAR_RESET,
+                               UI_OPT_BACK};
+    static const int strs[] = {UI_STR_CHAR_ICO_SKIN,
+                               UI_STR_CHAR_ICO_PONCHO_NAVY,
+                               UI_STR_CHAR_ICO_PONCHO_PINK,
+                               UI_STR_CHAR_ICO_PONCHO_LIGHT,
+                               UI_STR_CHAR_ICO_PONCHO_DARK,
+                               UI_STR_CHAR_ICO_TUNIC,
+                               UI_STR_CHAR_ICO_SHORTS,
+                               UI_STR_CHAR_YORDA_SKIN,
+                               UI_STR_CHAR_YORDA_DRESS,
+                               UI_STR_CHAR_SWITCH_YORDA,
+                               UI_STR_CHAR_RANDOMIZE,
+                               UI_STR_CHAR_RESET,
+                               UI_STR_BACK};
     char p[1100], want[32], log[256];
     int lb[16], lo[16], lv[16];
 
     path(p, sizeof(p), "settings_test.toml");
     ui_SettingsSetTexturePackCount(NULL);
-    ui_SettingsSetCharacterViewHandler(NULL);
+    ui_SettingsSetCharactersHost(NULL);
 
     for (int title = 1; title >= 0; title--) {
         const char *who = title ? "title" : "pause";
         const int l = openCharacters(title);
         const int n = ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
-        CHECK(labelsAre(UI_PAGE_CHARACTERS, opts, strs, 12), "%s: Characters rows", who);
-        CHECK(n == 12, "%s: twelve rows (%d)", who, n);
+        CHECK(labelsAre(UI_PAGE_CHARACTERS, opts, strs, 13), "%s: Characters rows", who);
+        CHECK(n == 13, "%s: thirteen rows (%d)", who, n);
         checkPageFits(UI_PAGE_CHARACTERS, title ? "Characters (title)" : "Characters (pause)");
-        CHECK(lt_ext_Prop(lb[11])->dispY == 40 + 13 * 11, "%s: Back at y %d", who,
-              lt_ext_Prop(lb[11])->dispY);
+        CHECK(lt_ext_Prop(lb[9])->defaultMask, "%s: Switch only inside the viewer", who);
+        CHECK(lt_ext_Prop(lb[12])->dispY == 40 + 13 * 11, "%s: Back at y %d", who,
+              lt_ext_Prop(lb[12])->dispY);
 
         /* every value starts Original, a swatch on each colour row, 9 apart
            from the label's top */
@@ -4912,8 +4990,8 @@ static void testCharacters(void)
         }
 
         /* the note: this entry's text; a texture pack's while one is on */
-        CHECK(noteStarting(UI_PAGE_CHARACTERS, title ? "Cross shows the" : "The colours change") >=
-                  0,
+        CHECK(noteStarting(UI_PAGE_CHARACTERS,
+                           title ? "The colours apply" : "The colours change") >= 0,
               "%s: the note", who);
         s_packCount = 3;
         ui_SettingsSetTexturePackCount(fakePackCount);
@@ -4926,8 +5004,8 @@ static void testCharacters(void)
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(noteStarting(UI_PAGE_CHARACTERS, title ? "Cross shows the" : "The colours change") >=
-                  0,
+        CHECK(noteStarting(UI_PAGE_CHARACTERS,
+                           title ? "The colours apply" : "The colours change") >= 0,
               "%s: no pack, no pack note", who);
         ui_SettingsSetTexturePackCount(NULL);
     }
@@ -4938,7 +5016,7 @@ static void testCharacters(void)
         const int l = openCharacters(title);
         ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
         charStep(l, lb[5], 1);
-        lt_ext_Layout(l)->curItem = lb[11];
+        lt_ext_Layout(l)->curItem = lb[12];
         frame(0);
         press(0x40);
         CHECK(settle(ui_SettingsPageLayout(UI_PAGE_EXTRAS), 60), "title %d: Back to Extras", title);
@@ -4959,7 +5037,7 @@ static void testCharacters(void)
         const int l = openCharacters(title);
         ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
         const unsigned serial = ico_appearance_serial();
-        lt_ext_Layout(l)->curItem = lb[9];
+        lt_ext_Layout(l)->curItem = lb[10];
         frame(0);
         press(0x40);
         int allSet = 1, distinct = 1;
@@ -4977,7 +5055,7 @@ static void testCharacters(void)
         CHECK(ico_appearance_serial() != serial, "%s: Randomize advances the serial", who);
         /* Reset */
         const unsigned serial2 = ico_appearance_serial();
-        lt_ext_Layout(l)->curItem = lb[10];
+        lt_ext_Layout(l)->curItem = lb[11];
         frame(0);
         press(0x40);
         int allOrig = 1;
@@ -4988,10 +5066,10 @@ static void testCharacters(void)
         CHECK(allOrig, "%s: Reset to original puts every part back", who);
         CHECK(ico_appearance_serial() != serial2, "%s: Reset advances the serial", who);
         /* Randomize again and leave: the nine keys are in the file */
-        lt_ext_Layout(l)->curItem = lb[9];
+        lt_ext_Layout(l)->curItem = lb[10];
         frame(0);
         press(0x40);
-        lt_ext_Layout(l)->curItem = lb[11];
+        lt_ext_Layout(l)->curItem = lb[12];
         frame(0);
         press(0x40);
         CHECK(settle(ui_SettingsPageLayout(UI_PAGE_EXTRAS), 60), "%s: Back to Extras", who);
@@ -5005,99 +5083,241 @@ static void testCharacters(void)
         ico_toml_free(t);
     }
 
-    /* Cross on a colour row: the viewer from the title, nothing from the
-       pause menu */
+    /* package K-D: Characters from the title inside the model viewer.
+       Extras' Characters row calls the host's enter and opens the page as
+       the viewer's panel; it takes no input while a model loads; Left /
+       Right, Square, Randomize and Reset as on the Options page; Switch
+       and L1 / R1 load the other character; Triangle and Back leave
+       through the host, the config written; the title then reopens
+       Settings on Extras.  From the pause menu nothing of this. */
     {
-        const int l = openCharacters(0);
-        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
-        ui_SettingsSetCharacterViewHandler(fakeView);
-        s_viewCalls = 0;
-        const int leaves = s_leaves;
-        lt_ext_Layout(l)->curItem = lb[0];
-        frame(0);
-        press(0x40);
-        CHECK(s_viewCalls == 0 && current_layout_id == l && s_leaves == leaves,
-              "pause: Cross on a colour row does nothing (%d calls)", s_viewCalls);
-        ui_SettingsSetCharacterViewHandler(NULL);
-    }
-    {
-        const int l = openCharacters(1);
-        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
-        const int achL = ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
-        const int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
-        const int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
-        int ml[16], el[8], ex = -1;
+        ui_SettingsSetCharactersHost(&kFakeHost);
+        s_hostEnters = s_hostLeaves = s_hostFail = 0;
+        s_hostShown = -2;
+        s_hostSwitch = -1;
+        const int mainL = enterMain(1);
+        const int exL = openPage(mainL, 7, UI_PAGE_EXTRAS);
+        const int l = ui_SettingsPageLayout(UI_PAGE_CHARACTERS);
+        int el[8], ml[16], ex = -1;
+        ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
         const int mn = ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
         for (int i = 0; i < mn; i++) {
             if (strcmp(lt_ext_RowText(ml[i]), "Extras") == 0) {
                 ex = ml[i];
             }
         }
-        ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
-
-        /* no handler: a log line, the page stays */
-        errCapture();
-        lt_ext_Layout(l)->curItem = lb[0];
+        lt_ext_Layout(exL)->curItem = el[3];
         frame(0);
+        CHECK(lt_ext_Prop(el[3])->right == -1,
+              "title with the viewer: the Characters row is not a plain link (%d)",
+              lt_ext_Prop(el[3])->right);
+        CHECK(!ui_SettingsCharactersInViewer(), "the viewer not running Characters yet");
+
+        /* the viewer cannot start: Extras stays, a log line */
+        s_hostFail = 1;
+        errCapture();
         press(0x40);
         errRelease(log, sizeof(log));
-        CHECK(current_layout_id == l && strstr(log, "characters:") != NULL,
-              "title, no handler: stays and logs (\"%s\")", log);
+        CHECK(s_hostEnters == 1 && current_layout_id == exL && strstr(log, "characters:") != NULL,
+              "enter fails: Extras stays and logs (\"%s\")", log);
+        s_hostFail = 0;
 
-        ui_SettingsSetCharacterViewHandler(fakeView);
-        s_viewCalls = 0;
-        s_viewLast = -1;
-        int leaves = s_leaves;
-        lt_ext_Layout(l)->curItem = lb[0];
+        /* Cross: the host's enter, the page as the viewer's panel */
+        const int leaves = s_leaves;
+        lt_ext_Layout(exL)->curItem = el[3];
         frame(0);
         press(0x40);
-        CHECK(s_viewCalls == 1 && s_viewLast == 0 && s_leaves == leaves + 1 && settle(achL, 60),
-              "title: Cross on an Ico row opens the viewer for 0 (%d calls, last %d)", s_viewCalls,
-              s_viewLast);
+        CHECK(s_hostEnters == 2 && s_leaves == leaves + 1 && settle(l, 60),
+              "Cross on Characters: the viewer's enter, then the page (%d enters, layout %d)",
+              s_hostEnters, current_layout_id);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        const int n = ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        CHECK(n == 13 && ui_SettingsCharactersInViewer(), "the viewer's Characters (%d rows)", n);
+        int shown = 0, prevY = -1, spaced = 1;
+        for (int i = 0; i < n; i++) {
+            const LtProperty *r = lt_ext_Prop(lb[i]);
+            if (!r->defaultMask) {
+                shown++;
+                spaced &= prevY < 0 || r->dispY == prevY + 11;
+                prevY = r->dispY;
+            }
+        }
+        CHECK(shown == 13 && spaced && lt_ext_Prop(lb[0])->dispY == 30 &&
+                  lt_ext_Prop(lb[12])->dispY == 30 + 11 * 12,
+              "in the viewer: thirteen rows 11 apart from 30 (%d shown, Back at %d)", shown,
+              lt_ext_Prop(lb[12])->dispY);
+        CHECK(lt_ext_Prop(lb[12])->dispY + lt_ext_Prop(lb[12])->dispH <= 226,
+              "in the viewer: Back's box ends at %d",
+              lt_ext_Prop(lb[12])->dispY + lt_ext_Prop(lb[12])->dispH);
+        /* the panel at the left: label, arrows, value and swatch end by x
+           348; no shade over the model */
+        {
+            unsigned char c[4];
+            const LtProperty *lab = lt_ext_Prop(lb[5]), *val = lt_ext_Prop(lv[5]);
+            int sw = -1;
+            for (int j = lt_ext_Layout(l)->first; j < lt_ext_Layout(l)->last; j++) {
+                /* on the letters' middle: 3 lines below the row's top */
+                if (lt_ext_RectColor(j, c) == 0 && lt_ext_Prop(j)->dispY == lab->dispY + 3) {
+                    sw = j;
+                }
+            }
+            const LtProperty *ar = lt_ext_Prop(lv[5] + 2);
+            CHECK(lab->dispX + lab->dispW <= val->dispX && val->dispX + val->dispW <= ar->dispX &&
+                      ar->dispX + ar->dispW <= 348,
+                  "in the viewer: the row in the panel (label %d+%d, value %d+%d, arrow %d+%d)",
+                  lab->dispX, lab->dispW, val->dispX, val->dispW, ar->dispX, ar->dispW);
+            CHECK(sw >= 0 && lt_ext_Prop(sw)->dispX >= ar->dispX + ar->dispW &&
+                      lt_ext_Prop(sw)->dispX + lt_ext_Prop(sw)->dispW <= 348,
+                  "in the viewer: the swatch beside the value (x %d, y %d)", lt_ext_Prop(sw)->dispX,
+                  lt_ext_Prop(sw)->dispY);
+            CHECK(lt_ext_Layout(l)->colA == 0.0f, "in the viewer: no shade (%g)",
+                  (double)lt_ext_Layout(l)->colA);
+        }
+        /* the prompts: six words and eight of the game's glyphs, shown */
+        {
+            const LtProp *lay = lt_ext_Layout(l);
+            int glyphs = 0, colour = 0;
+            for (int j = lay->first; j < lay->last; j++) {
+                const LtProperty *e = lt_ext_Prop(j);
+                if (e->defaultMask) {
+                    continue;
+                }
+                glyphs += lt_ext_IsGlyphRow(e) != 0;
+                colour += strcmp(lt_ext_RowText(j), "Colour") == 0 ||
+                          strcmp(lt_ext_RowText(j), "Right stick: turn") == 0;
+            }
+            CHECK(glyphs == 8 && colour == 2, "in the viewer: the prompts (%d glyphs, %d words)",
+                  glyphs, colour);
+        }
 
-        /* the viewer's way back: ui_SettingsReopenPage, only on the title
-           layouts */
-        CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == -1,
+        /* while the model loads: no input */
+        charStep(l, lb[5], 1);
+        press(0x10);
+        CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 0 && s_hostLeaves == 0 &&
+                  current_layout_id == l,
+              "loading: Right and Triangle do nothing (%d, %d leaves)",
+              ico_appearance_get(ICO_APP_ICO_TUNIC), s_hostLeaves);
+
+        /* Ico up: the Switch row names Yorda; a step changes the colour
+           at once (the serial the textures follow), Square puts it back */
+        s_hostShown = 0;
+        const unsigned serial = ico_appearance_serial();
+        charStep(l, lb[5], 1);
+        CHECK(strcmp(textNow(lb[9]), "Switch to Yorda") == 0, "Ico shown: \"%s\"",
+              lt_ext_RowText(lb[9]));
+        CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 1 && strcmp(textNow(lv[5]), "Red") == 0 &&
+                  ico_appearance_serial() != serial,
+              "in the viewer: Right on Tunic is Red at once (%d, \"%s\")",
+              ico_appearance_get(ICO_APP_ICO_TUNIC), lt_ext_RowText(lv[5]));
+        charStep(l, lb[0], -1);
+        CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == ICO_APP_TONES,
+              "in the viewer: Left on Skin wraps to Tone 12 (%d)",
+              ico_appearance_get(ICO_APP_ICO_SKIN));
+        lt_ext_Layout(l)->curItem = lb[0];
+        frame(0);
+        press(0x80);
+        CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == 0, "in the viewer: Square is Original");
+        lt_ext_Layout(l)->curItem = lb[10];
+        frame(0);
+        press(0x40);
+        CHECK(ico_appearance_get(ICO_APP_YORDA_DRESS) != 0, "in the viewer: Randomize");
+        lt_ext_Layout(l)->curItem = lb[11];
+        frame(0);
+        press(0x40);
+        CHECK(ico_appearance_get(ICO_APP_YORDA_DRESS) == 0 &&
+                  ico_appearance_get(ICO_APP_ICO_TUNIC) == 0,
+              "in the viewer: Reset to original");
+
+        /* R1: Yorda; then the row names Ico, and Cross on it loads Ico */
+        press(0x0008);
+        CHECK(s_hostSwitch == 1 && current_layout_id == l, "R1: the viewer loads Yorda (%d)",
+              s_hostSwitch);
+        s_hostShown = 1;
+        CHECK(strcmp(textNow(lb[9]), "Switch to Ico") == 0, "Yorda shown: \"%s\"",
+              lt_ext_RowText(lb[9]));
+        lt_ext_Layout(l)->curItem = lb[9];
+        frame(0);
+        press(0x40);
+        CHECK(s_hostSwitch == 0, "Cross on Switch: the viewer loads Ico (%d)", s_hostSwitch);
+        s_hostShown = 0;
+        press(0x0004);
+        CHECK(s_hostSwitch == 1, "L1: Yorda again (%d)", s_hostSwitch);
+        s_hostShown = 1;
+
+        /* Triangle: the host's leave, the colours in the file */
+        charStep(l, lb[8], 1);
+        press(0x10);
+        CHECK(s_hostLeaves == 1 && current_layout_id == l,
+              "Triangle: the viewer leaves to the title (%d)", s_hostLeaves);
+        {
+            IcoToml *t = ico_toml_load(p);
+            const char *v = savedChar(t, ICO_APP_YORDA_DRESS);
+            CHECK(v != NULL && strcmp(v, "red") == 0,
+                  "leaving the viewer writes [characters] yorda_dress = \"red\" (%s)",
+                  v ? v : "none");
+            ico_toml_free(t);
+        }
+        /* Cross on Back leaves too */
+        s_hostShown = 0;
+        lt_ext_Layout(l)->curItem = lb[12];
+        frame(0);
+        press(0x40);
+        CHECK(s_hostLeaves == 2, "Cross on Back: the viewer leaves (%d)", s_hostLeaves);
+
+        /* the title back: Settings on Extras, on its Characters row */
+        s_hostShown = -2;
+        CHECK(ui_SettingsReopenPage(UI_PAGE_EXTRAS) == -1,
               "Reopen from a layout that is not the title: -1");
         lt_switch_layout(13);
         CHECK(settle(13, 60), "the title again");
-        CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == l, "Reopen on the title: the page");
+        CHECK(ui_SettingsReopenPage(UI_PAGE_EXTRAS) == exL, "Reopen Extras on the title");
         CHECK(ui_SettingsReopenPage(-1) == -1 && ui_SettingsReopenPage(UI_PAGE_COUNT) == -1,
               "Reopen of a bad page: -1");
-        CHECK(lt_ext_Layout(mainL)->defaultItem == ex && lt_ext_Layout(exL)->defaultItem == el[3] &&
-                  lt_ext_Layout(l)->defaultItem == lb[0],
-              "Reopen: cursors Main on Extras (%d, want %d), Extras on Characters (%d), the page "
-              "on the row (%d, want %d)",
-              lt_ext_Layout(mainL)->defaultItem, ex, lt_ext_Layout(exL)->defaultItem,
-              lt_ext_Layout(l)->defaultItem, lb[0]);
-        lt_switch_layout(l);
-        CHECK(settle(l, 60) && lt_ext_Layout(l)->curItem == lb[0], "the page opens on the row");
-
-        /* a Yorda row: 1; the page reopens on that row */
-        s_viewCalls = 0;
-        leaves = s_leaves;
-        lt_ext_Layout(l)->curItem = lb[8];
-        frame(0);
-        press(0x40);
-        CHECK(s_viewCalls == 1 && s_viewLast == 1 && s_leaves == leaves + 1 && settle(achL, 60),
-              "title: Cross on a Yorda row opens the viewer for 1 (%d calls, last %d)", s_viewCalls,
-              s_viewLast);
+        CHECK(lt_ext_Layout(mainL)->defaultItem == ex && lt_ext_Layout(exL)->defaultItem == el[3],
+              "Reopen: Main on Extras (%d, want %d), Extras on Characters (%d, want %d)",
+              lt_ext_Layout(mainL)->defaultItem, ex, lt_ext_Layout(exL)->defaultItem, el[3]);
+        lt_switch_layout(exL);
+        CHECK(settle(exL, 60) && lt_ext_Layout(exL)->curItem == el[3],
+              "Extras opens on Characters");
+        /* Reopen on the Characters page: Extras on its Characters row */
+        CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == -1, "Reopen off the title layouts: -1");
         lt_switch_layout(13);
         CHECK(settle(13, 60) && ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == l &&
-                  lt_ext_Layout(l)->defaultItem == lb[8],
-              "Reopen again: the Yorda row (%d, want %d)", lt_ext_Layout(l)->defaultItem, lb[8]);
-        lt_switch_layout(l);
-        CHECK(settle(l, 60) && lt_ext_Layout(l)->curItem == lb[8], "the page on the Yorda row");
-        /* Back retraces the path: Extras on Characters, Main on Extras, the
-           title */
-        press(0x10);
-        CHECK(settle(exL, 60) && lt_ext_Layout(exL)->curItem == el[3],
-              "Triangle: Extras on Characters");
+                  lt_ext_Layout(exL)->defaultItem == el[3] &&
+                  lt_ext_Layout(l)->defaultItem == lb[0],
+              "Reopen Characters: Extras on Characters, the page on its first row");
+        lt_switch_layout(exL);
+        CHECK(settle(exL, 60), "Extras");
         press(0x10);
         CHECK(settle(mainL, 60) && lt_ext_Layout(mainL)->curItem == ex, "Triangle: Main on Extras");
         press(0x10);
         CHECK(settle(13, 60), "Triangle: the title");
-        ui_SettingsSetCharacterViewHandler(NULL);
+
+        /* the pause menu with the host set: the Options page as before */
+        const int enters = s_hostEnters;
+        const int pl = openCharacters(0);
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        CHECK(s_hostEnters == enters && pl == l && !ui_SettingsCharactersInViewer(),
+              "pause: Characters is the page, not the viewer (%d enters)", s_hostEnters);
+        {
+            int el2[8];
+            ui_SettingsPageRows(UI_PAGE_EXTRAS, el2, NULL, NULL, 8);
+            CHECK(lt_ext_Prop(el2[3])->right == l, "pause: the Characters row links the page");
+        }
+        CHECK(lt_ext_Prop(lb[9])->defaultMask && lt_ext_Prop(lb[0])->dispX == 44 &&
+                  lt_ext_Layout(l)->colA == 0.6f && lt_ext_Prop(lb[12])->dispY == 40 + 13 * 11,
+              "pause: the Options page's places (Switch hidden, label x %d, Back y %d)",
+              lt_ext_Prop(lb[0])->dispX, lt_ext_Prop(lb[12])->dispY);
+        press(0x0008);
+        CHECK(s_hostSwitch == 1 && current_layout_id == l, "pause: R1 does nothing");
+        lt_ext_Layout(l)->curItem = lb[0];
+        frame(0);
+        press(0x40);
+        CHECK(current_layout_id == l, "pause: Cross on a colour row does nothing");
+        ui_SettingsSetCharactersHost(NULL);
+        s_hostShown = -2;
     }
 
     /* Extras from the pause menu: Characters and Back only; the others

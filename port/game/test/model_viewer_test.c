@@ -7,6 +7,8 @@
  *   - its host stage is one with data on the PAL disc (1 to 63, 103 to
  *     105; 88 and 91 have data but are the ending's), not the title; its
  *     kind, model and layout row inside the game's tables;
+ *   - rows MV_ROW_ICO and MV_ROW_YORDA (Settings > Extras > Characters)
+ *     are the boy and the girl;
  *   - its name, and the viewer's words, are non-empty in the five
  *     languages, different from the other models' in each, and every
  *     character has a glyph in the port font (ui_FontHasGlyph).
@@ -170,12 +172,24 @@ int main(void)
         }
     }
 
+    /* v0.4.2: Characters loads the table's first two rows: Ico (the boy,
+       kind 1) and Yorda (the girl, kind 2), the numbers
+       ico_appearance_character gives (appearance.h) */
+    CHECK(mv_modelCount > MV_ROW_YORDA && mv_models[MV_ROW_ICO].nameStr == UI_STR_MV_ICO &&
+              mv_models[MV_ROW_ICO].kind == 1 &&
+              mv_models[MV_ROW_YORDA].nameStr == UI_STR_MV_YORDA &&
+              mv_models[MV_ROW_YORDA].kind == 2,
+          "rows %d and %d are Ico and Yorda", MV_ROW_ICO, MV_ROW_YORDA);
+
     /* the viewer's words */
     static const int kWords[] = {
-        UI_STR_MV_ANIMATION, UI_STR_MV_LOOP,       UI_STR_MV_FRAME,      UI_STR_MV_NO_ANIMATIONS,
-        UI_STR_MV_HINT_VIEW, UI_STR_MV_HINT_TITLE, UI_STR_MV_HINT_PLAY,  UI_STR_MV_HINT_TURN,
-        UI_STR_MV_HINT_ZOOM, UI_STR_MV_HINT_MOVE,  UI_STR_EXTRAS_MODELS, UI_STR_BACK,
-        UI_STR_MV_HINT_SAVE, UI_STR_MV_SAVED_FMT,  UI_STR_MV_SAVED_NONE};
+        UI_STR_MV_ANIMATION, UI_STR_MV_LOOP, UI_STR_MV_FRAME, UI_STR_MV_NO_ANIMATIONS,
+        UI_STR_MV_HINT_VIEW, UI_STR_MV_HINT_TITLE, UI_STR_MV_HINT_PLAY, UI_STR_MV_HINT_TURN,
+        UI_STR_MV_HINT_ZOOM, UI_STR_MV_HINT_MOVE, UI_STR_EXTRAS_MODELS, UI_STR_BACK,
+        UI_STR_MV_HINT_SAVE, UI_STR_MV_SAVED_FMT, UI_STR_MV_SAVED_NONE,
+        /* v0.4.2: Characters inside the viewer (its Switch row, prompts) */
+        UI_STR_CHAR_SWITCH_YORDA, UI_STR_CHAR_SWITCH_ICO, UI_STR_CHAR_HINT_COLOUR,
+        UI_STR_CHAR_HINT_CHARACTER, UI_STR_VAL_ORIGINAL};
     for (unsigned i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
         checkText(kWords[i], ui_StrIn(UI_LANG_EN, (UiStrId)kWords[i]));
     }

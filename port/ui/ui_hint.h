@@ -71,7 +71,21 @@ enum {
     UI_HINT_MV_KEYS_COUNT
 };
 
+/* v0.4.2: Characters inside the model viewer (settings.c): the right
+   stick turns, L2 / R2 zoom, Left / Right a colour, Square its Original,
+   L1 / R1 the other character, Triangle back */
+enum {
+    UI_HINT_CHAR_TURN,
+    UI_HINT_CHAR_ZOOM,
+    UI_HINT_CHAR_COLOUR,
+    UI_HINT_CHAR_ORIGINAL,
+    UI_HINT_CHAR_CHARACTER,
+    UI_HINT_CHAR_BACK,
+    UI_HINT_CHAR_COUNT
+};
+
 extern const UiHintItem ui_hint_gallery[UI_HINT_GAL_COUNT];
+extern const UiHintItem ui_hint_chars[UI_HINT_CHAR_COUNT];
 extern const UiHintItem ui_hint_mv_list[UI_HINT_MV_LIST_COUNT];
 extern const UiHintItem ui_hint_mv_sticks[UI_HINT_MV_STICKS_COUNT];
 extern const UiHintItem ui_hint_mv_keys[UI_HINT_MV_KEYS_COUNT];

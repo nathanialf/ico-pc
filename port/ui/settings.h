@@ -103,18 +103,38 @@ void ui_SettingsSetTouchQuery(int (*fn)(void));
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
 void ui_SettingsSetModelsHandler(int (*fn)(void));
-/* v0.4.2: Cross on a colour row of Extras > Characters, opened from the
-   title, shows that row's character in the model viewer: fn(0) Ico, fn(1)
-   Yorda (port/game/model_viewer.c ico_mv_view_character) returns the
-   layout to switch to, or -1 (nothing happens, a log line).  From the
-   pause menu the scene behind the menu shows the colours and Cross does
-   nothing.  NULL removes it. */
-void ui_SettingsSetCharacterViewHandler(int (*fn)(int character));
-/* v0.4.2: the way back from that preview: the menu opened again as if from
-   the title layout in force (current_layout_id, 12 or 13), its pages'
-   cursors on the path Main > Extras > page and the page's on the row last
-   used there (the colour row whose Cross opened the preview); returns the page's layout to switch to, -1 when the menu is not
-   built or the current layout is not a title's. */
+
+/* v0.4.2: Extras > Characters from the title runs inside the model viewer
+   (port/game/model_viewer.c ico_mv_characters_*): the page's rows on the
+   left, the character's model on the right, every change shown on the
+   model at once.  The viewer hands Settings these calls (NULL removes
+   them; then the title opens the page as the pause menu does):
+     enter     Cross on Extras' Characters row from the title: the viewer
+               loads Ico's model; 0, or -1 when it cannot (the page does
+               not open, a log line)
+     shown     the character on screen: 0 Ico, 1 Yorda; -1 while a model
+               loads or the viewer leaves (the page takes no input); -2
+               when the viewer is not running Characters (the page is the
+               Options page: the pause menu)
+     switchTo  the Switch row and L1 / R1: load the other character
+     leave     Triangle or Back: to the title, which then opens Settings
+               on Extras (ui_SettingsReopenPage) */
+typedef struct UiCharactersHost {
+    int (*enter)(void);
+    int (*shown)(void);
+    void (*switchTo)(int character);
+    void (*leave)(void);
+} UiCharactersHost;
+
+void ui_SettingsSetCharactersHost(const UiCharactersHost *host);
+/* whether the Characters page is the viewer's panel now (host->shown() is
+   not -2) */
+int ui_SettingsCharactersInViewer(void);
+/* v0.4.2: the way back from the viewer's Characters: the menu opened again
+   as if from the title layout in force (current_layout_id, 12 or 13), its
+   pages' cursors on the path Main > ... > page (Main on Extras, Extras on
+   its Characters row); returns the page's layout to switch to, -1 when
+   the menu is not built or the current layout is not a title's. */
 int ui_SettingsReopenPage(int page /* UiSettingsPage */);
 int ui_QuitScreenLayout(void);
 /* the "Yes" (yes = 1) and "No" (yes = 0) rows */
@@ -223,7 +243,9 @@ typedef enum UiSettingsOpt {
     /* v0.4.2: Extras > Characters' actions: every part a random colour
        (ico_appearance_randomize), every part Original */
     UI_OPT_CHAR_RANDOMIZE,
-    UI_OPT_CHAR_RESET
+    UI_OPT_CHAR_RESET,
+    /* v0.4.2: the viewer's Characters only: load the other character */
+    UI_OPT_CHAR_SWITCH
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_SettingsInstall):

@@ -432,8 +432,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_CHAR_RANDOMIZE] = "Randomize",
     [UI_STR_CHAR_RESET] = "Reset to original",
     [UI_STR_CHAR_TONE] = "Tone %d",
-    [UI_STR_CHAR_NOTE_TITLE] =
-        "Cross shows the character in the viewer; the colours apply in the game at once.",
+    [UI_STR_CHAR_NOTE_TITLE] = "The colours apply in the game at once.",
     [UI_STR_CHAR_NOTE_PAUSE] = "The colours change behind this menu as you choose.",
     [UI_STR_CHAR_NOTE_PACK] =
         "A texture pack is on; if it has pictures of Ico and Yorda, they replace these colours.",
@@ -461,4 +460,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_COLOUR_WHITE] = "White",
     [UI_STR_COLOUR_GREY] = "Grey",
     [UI_STR_COLOUR_BLACK] = "Black",
+    [UI_STR_CHAR_SWITCH_YORDA] = "Switch to Yorda",
+    [UI_STR_CHAR_SWITCH_ICO] = "Switch to Ico",
+    [UI_STR_CHAR_HINT_COLOUR] = "Colour",
+    [UI_STR_CHAR_HINT_CHARACTER] = "Character",
 };

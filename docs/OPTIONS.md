@@ -138,18 +138,27 @@ This page recolours Ico's skin, poncho, tunic and shorts, and Yorda's skin
 and dress. Ico's poncho has four colour groups, so it has four rows: navy,
 pink, light and dark. Every row starts at Original, the game's own colour.
 
+On the title screen, the character is shown beside the rows. Ico comes
+first; the screen takes a few seconds to load each character. Every colour
+you pick shows on the model at once.
+
 - **Left and Right:** pick a colour for the row. Clothes have 24 named
   colours, from Red to Black. Skin has twelve tones, from Tone 1 (the
   lightest) to Tone 12 (the darkest).
 - **Square:** puts the row back to Original.
-- **Cross on a row:** on the title screen, shows that character in the
-  model viewer so you can look at the colours. Triangle takes you back to
-  this page. Each preview loads the stage, so it takes a few seconds. In
-  the pause menu, Cross on a row does nothing, because the game behind the
-  menu changes colour as you choose.
+- **Switch to Yorda / Switch to Ico** (title screen only), or **L1 / R1**:
+  shows the other character. The rows of both characters are always on the
+  page, so you can change Yorda's colours while Ico is shown.
+- **Right stick, L2 / R2** (title screen only): turn the model, zoom out
+  and in.
 - **Randomize:** gives every row a random colour. The four poncho groups
   always get four different colours.
 - **Reset to original:** puts every row back to Original.
+- **Triangle or Back:** on the title screen, takes you back to the title
+  screen and opens Options on Extras again. In the pause menu, back to
+  Extras.
+
+In the pause menu, the game behind the menu changes colour as you choose.
 
 Each row has a small square on its right showing the colour you picked. In
 the game, Ico looks a little darker than the square and Yorda a little
