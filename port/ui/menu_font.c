@@ -64,8 +64,12 @@ enum { MF_LIGHT = 0, MF_PLAIN = 1, MF_CLASSES };
      steps  the white texels' alpha takes three steps between none and full
             (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
             0x5E then 0x7E): five levels, ICO_SHEET_LEVELS 5.
-   The first run of the comparison test on main may refine RX, RY and the
-   levels (ICO_MENU_LOOK_FIT=1). */
+   The first run of the comparison test on main kept them: its survey
+   re-measures these numbers within 0.1, and the fit (ICO_MENU_LOOK_FIT=1)
+   runs to the edges of its grid (rim 110, fill 205, 5 to 9 levels, a blurred
+   difference 24 to 27 where these give 26 to 28), lowering the contrast
+   only because the strips' letters sit beside the sheets' (Arimo is wider),
+   which no ink corrects. */
 static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
     {1, 24, 255, 1}, /* English */
     {1, 61, 255, 1}, /* French */

@@ -56,18 +56,48 @@
 #include "host_fs.h"
 
 /* ------------------------------------------------------------- limits */
-/* The limits of testCompareItems.  FIRST VALUES: they are to be fixed after
-   the first fitted run on main (the orchestrator runs ICO_MENU_LOOK_FIT=1
-   and the checks there and sets these from the measured numbers, once).  An
-   item outside any of them is listed and fails the test. */
-#define T_BLUR 8.0f       /* mean |diff| after a 3x3 box blur, per 255 */
-#define T_PLAIN 24.0f     /* mean |diff| as is (T2), per 255 */
-#define T_EDGE 1.0f       /* the ink box's edges, texels */
-#define T_EDGE_MULTI 2.0f /* the same for an item of several lines */
-#define T_LINE 0.5f       /* the first line's capital top and baseline, texels */
-#define T_AMOUNT_LO 0.9f  /* the ink amount, strip / sheet */
-#define T_AMOUNT_HI 1.1f
-#define T_SHARE 0.10f       /* rim / fill / edge shares, absolute */
+/* The limits of testCompareItems, set from the first run on main (v0.4.2,
+   the 100 items a language with ink on the sheet, 500 in all): each is the
+   95th percentile over the five languages plus 25 %, or the worst item plus
+   some room where that is further (named).  They hold the look as it is and
+   catch a regression; they are not a likeness bound.  The strips differ
+   from the sheets by the lettering's geometry, not by the ink: Arimo set at
+   the sheets' capitals is wider than their lettering (the ink box's width,
+   strip / sheet, median 1.12 on menu_PAL_01, 1.17 on 02, 1.22 on 03, 1.25
+   on 04) and about one row shorter (height 0.83 .. 0.92), so the letters
+   fall beside the sheet's and the differences below are that misregistration
+   (taking the rim off the rimless sheets 02, title and scei moves their
+   blur 37.5 to 36.7 only).  Measured, median / max per language EN FR DE IT
+   ES, the larger of the two backgrounds: */
+/* blur 27.8/55.1 31.9/56.2 31.2/56.0 29.8/56.2 31.5/56.2; p95 47.8; the worst
+   ESPAÑOL (title.tm2, row 30) */
+#define T_BLUR 60.0f
+/* plain 35.7/70.9 41.3/73.5 41.2/73.2 37.7/73.5 40.0/73.6; p95 64.2 */
+#define T_PLAIN 80.0f
+/* the ink box's worst edge, texels: 10/44 8/41 9/50 6/47 7/43; p95 31.2;
+   the long right-aligned Options rows of menu_PAL_03 run 40 to 50 texels
+   further left (rows 323 Config. botones / 340 Hand halten/Rufen and their
+   languages' words) */
+#define T_EDGE 56.0f
+/* the same for an item of several lines: 18/25 15/33 19/40 20/38 19/39; p95
+   38.9; the worst row 185 (the slot prompt, two lines) */
+#define T_EDGE_MULTI 49.0f
+/* the first line's capital top and baseline, rows: 0.95/2.07 1.00/2.08
+   0.92/2.03 0.94/2.08 1.00/2.33; p95 1.88 (the strip's capitals start about
+   a row lower: the em is the sheets' capitals less 0.7 texel) */
+#define T_LINE 2.5f
+/* the ink amount, strip / sheet: median 0.84 0.77 0.76 0.79 0.78, min 0.28
+   0.30 0.29 0.23 0.31, max 1.10 1.02 1.03 1.04 1.04; p5 0.57.  The low ones:
+   row 61's "10" (the sheet's digits fill the tile, Arimo's two are set at 60
+   % to fit) and row 414 in Italian (the sheet's dash is a thick outlined
+   bar, Arimo's a thin rule) */
+#define T_AMOUNT_LO 0.20f
+#define T_AMOUNT_HI 1.25f
+/* the rim / fill / edge shares, the worst of the three, absolute: median
+   0.21 0.07 0.16 0.08 0.12, max 0.77 0.76 0.80 0.62 0.77; p95 0.62; the
+   worst German menu_PAL_04 (rows 73 Accessing, 211 Loading, 249 Formatting:
+   the strip's halo where that sheet has little) */
+#define T_SHARE 0.90f
 #define MIN_INK_AMOUNT 6.0f /* a sheet rectangle with less ink than this is not compared */
 
 /* The survey's expectations (testSurvey): what the scratch survey measured on
@@ -281,7 +311,7 @@ static void survey(int lang, Survey *out)
                 int y0 = -1, y1 = -1;
                 for (int y = 0; y < h; y++) {
                     if (fill[y * w + x]) {
-                        y0 = y0 < 0 ? y : y;
+                        y0 = y0 < 0 ? y : y0;
                         y1 = y;
                     }
                 }
@@ -483,6 +513,7 @@ typedef struct Measures {
     float ink;                      /* the ink amount, texels */
     float left, right, top, bottom; /* the ink box, texels (fractional) */
     float capTop, baseline;         /* the first line's, rows */
+    int hasLine;                    /* a run of 4 rows or more (a colon's dots have none) */
     float shareRim, shareFill, shareEdge;
     int ok;
 } Measures;
@@ -578,8 +609,10 @@ static void inkMeasures(const uint8_t *grey, const uint8_t *alpha, int w, int h,
             m->bottom = hi;
         }
     }
-    /* the first line: from the first row with ink to the next empty row */
-    int y0 = -1, y1 = -1;
+    /* the first line: from the first row with ink to the next empty row; a
+       run of fewer than 4 rows before it (an accent standing apart, ESPAÑOL's
+       tilde) is not the line, unless no run is longer (a colon's dots) */
+    int y0 = -1, y1 = -1, f0 = -1, f1 = -1;
     for (int y = 0; y < h; y++) {
         if (amt[y] >= 0.5f) {
             if (y0 < 0) {
@@ -587,8 +620,20 @@ static void inkMeasures(const uint8_t *grey, const uint8_t *alpha, int w, int h,
             }
             y1 = y;
         } else if (y0 >= 0) {
-            break;
+            if (y1 - y0 + 1 >= 4) {
+                break;
+            }
+            if (f0 < 0) {
+                f0 = y0;
+                f1 = y1;
+            }
+            y0 = y1 = -1;
         }
+    }
+    m->hasLine = y0 >= 0;
+    if (y0 < 0) {
+        y0 = f0;
+        y1 = f1;
     }
     m->capTop = m->baseline = 0.0f;
     if (y0 >= 0) {
@@ -789,8 +834,9 @@ static void testCompareItems(const char *outDir)
                 NOTE(" box dL %.1f dR %.1f dT %.1f dB %.1f", mr.left - ms.left, mr.right - ms.right,
                      mr.top - ms.top, mr.bottom - ms.bottom);
             }
-            if (fabsf(mr.capTop - ms.capTop) > T_LINE ||
-                fabsf(mr.baseline - ms.baseline) > T_LINE) {
+            if (mr.hasLine && ms.hasLine &&
+                (fabsf(mr.capTop - ms.capTop) > T_LINE ||
+                 fabsf(mr.baseline - ms.baseline) > T_LINE)) {
                 NOTE(" cap %.1f base %.1f", mr.capTop - ms.capTop, mr.baseline - ms.baseline);
             }
             const float ratio = mr.ink / ms.ink;
@@ -916,8 +962,10 @@ static double fitScore(const FitItem *f, unsigned levels, unsigned rim, unsigned
 
 static void fit(void)
 {
-    static const unsigned kRims[] = {0, 16, 24, 32, 48, 56, 62, 72, 90};
-    static const unsigned kFills[] = {235, 245, 255};
+    /* the grid holds every language's current rim (24 56 61 62) and room
+       past the best the first run found (rim 90, fill 235, both its edges) */
+    static const unsigned kRims[] = {0, 16, 24, 32, 48, 56, 61, 62, 72, 90, 110, 130, 160};
+    static const unsigned kFills[] = {205, 215, 225, 235, 245, 255};
 
     enum { MAXI = 160 };
 
