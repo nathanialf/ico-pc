@@ -35,6 +35,9 @@
  *            as created, and after two rectangle updates the GPU copy
  *            changed inside their union only (texels changed in the CPU
  *            copy outside it without an update stay as uploaded before).
+ *            v0.4.2 (F-A): rd_CreateTextureSheet keeps w * h bytes, the
+ *            SHEET format (R8 on the device) and its style; rectangles as
+ *            R8; rd_SetTextureSheetStyle changes a sheet's style alone.
  *   packs    (texture packs) rdtex_CreateReplacement moves the image into
  *            the texture's pending upload with the box chain for an RGBA8
  *            image without mips, rdtex_ReplacementMips on a size that is
@@ -1206,6 +1209,55 @@ static void r8Checks(void)
               ur->pixels[(7 * 8 + 5) * 4] == 0,
           "RGBA8 rectangle");
     rd_DestroyTexture(u);
+
+    /* v0.4.2 (F-A): a sheet texture is one byte a texel, keeps its style
+     * (rimOn and dither as 0 or 1) and takes R8's rectangles */
+    const RdSheetStyle fr = {7, 62, 0xF0, 3};
+    RdTex sh = rd_CreateTextureSheet(W, H, cov, &fr, "sheet");
+    RdTexRec *sr = rd__TexRec(sh.id);
+    CHECK(sr && sr->kind == RD_TEXKIND_IMAGE && sr->format == RD_TEXEL_SHEET && sr->w == W &&
+              sr->h == H && memcmp(sr->pixels, cov, sizeof(cov)) == 0 &&
+              rd__TexelBytes(sr->format) == 1 && strcmp(sr->name, "sheet") == 0,
+          "sheet record");
+    CHECK(sr && sr->sheet[0] == 1 && sr->sheet[1] == 62 && sr->sheet[2] == 0xF0 &&
+              sr->sheet[3] == 1,
+          "sheet style kept");
+    CHECK(rd__TexelRhiFormat(RD_TEXEL_SHEET) == RHI_FMT_R8_UNORM &&
+              rd__TexelIsCoverage(RD_TEXEL_SHEET) && !rd__TexelIsBlock(RD_TEXEL_SHEET),
+          "sheet texels: R8, coverage");
+    if (sr) {
+        rd_UpdateTextureRect(sh, 2, 3, 4, 3, a);
+        rd_UpdateTextureRect(sh, 34, 21, 5, 5, b);
+        bad = 0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                uint8_t want = r8At(x, y);
+                if (x >= 2 && x < 6 && y >= 3 && y < 6) {
+                    want = 0xA5;
+                } else if (x >= 34 && y >= 21) {
+                    want = 0x3C;
+                }
+                bad += sr->pixels[y * W + x] != want;
+            }
+        }
+        CHECK(bad == 0 && sr->dirty && sr->dirtyX0 == 0 && sr->dirtyX1 == W,
+              "sheet rectangles: %d texels wrong (dirty whole since the create)", bad);
+        const RdSheetStyle en = {1, 0, 0xFF, 0};
+        rd_SetTextureSheetStyle(sh, &en);
+        CHECK(sr->sheet[0] == 1 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 0,
+              "rd_SetTextureSheetStyle");
+        rd_SetTextureSheetStyle(sh, NULL);
+        CHECK(sr->sheet[0] == 1 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
+              "the default sheet style");
+    }
+    rd_DestroyTexture(sh);
+    RdTex r8 = rd_CreateTextureR8(4, 4, NULL, "not a sheet");
+    const RdSheetStyle grey = {1, 62, 0xFF, 1};
+    rd_SetTextureSheetStyle(r8, &grey);
+    const RdTexRec *r8r = rd__TexRec(r8.id);
+    CHECK(r8r && r8r->format == RD_TEXEL_R8 && r8r->sheet[1] == 0,
+          "rd_SetTextureSheetStyle ignores an R8 texture");
+    rd_DestroyTexture(r8);
 }
 
 static void r8Pixels(void)

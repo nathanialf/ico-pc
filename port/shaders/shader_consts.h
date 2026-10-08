@@ -2,7 +2,8 @@
  * rd_core fills these; the static asserts pin each offset to the HLSL
  * cbuffer packing (every member is a 16-byte register or a 64-byte matrix,
  * so there is no packing ambiguity). Change this file and common.hlsli
- * together. */
+ * together; a constant mirrored from an .hlsli (ICO_SHEET_*: sheet_text.hlsli)
+ * holds the same value as its HLSL twin. */
 #ifndef PORT_SHADERS_SHADER_CONSTS_H
 #define PORT_SHADERS_SHADER_CONSTS_H
 
@@ -91,6 +92,21 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 
 #define ICO_SPACE_WORLD 0
 #define ICO_SPACE_UI 1
+
+/* v0.4.2 (package F-A): font_sheet_ps's constants, SHEET_* in
+ * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
+ * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
+ * The style reaches the shader in DrawCB.param: rimOn, rimLevel, fillLevel,
+ * dither (rd_replay.c, from RdTexRec.sheet). */
+#define ICO_SHEET_RX 1     /* rim: texels across */
+#define ICO_SHEET_RY 1     /* rim: texels (field lines) down */
+#define ICO_SHEET_LEVELS 4 /* opacity and rim-to-fill levels */
+/* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
+#define ICO_SHEET_BAYER_ROW0 0xA280
+#define ICO_SHEET_BAYER_ROW1 0x6E4C
+#define ICO_SHEET_BAYER_ROW2 0x91B3
+#define ICO_SHEET_BAYER_ROW3 0x5D7F
+#define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
 
 /* Vertex of sprite.hlsl and font.hlsl: 20 bytes.
  *   loc 0 RHI_VTX_U16x2_UINT, loc 1 RHI_VTX_U32x1, loc 2 RHI_VTX_U8x4_UINT,

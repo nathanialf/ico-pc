@@ -18,7 +18,10 @@
  *            target, view; then the texels for images.  An image has no
  *            view: its view word holds the texel format (RD_TEXEL_*,
  *            package R8; 0 RGBA8 in every older dump), and its texels are
- *            w*h*4 RGBA8 bytes or w*h R8 bytes
+ *            w*h*4 RGBA8 bytes or w*h R8 bytes.  Version 7 (v0.4.2,
+ *            package F-A): a sheet image (RD_TEXEL_SHEET, w*h coverage
+ *            bytes) has its style above the format byte: bit 8 rimOn, bit
+ *            9 dither, bits 16..23 rimLevel, 24..31 fillLevel (sheetView)
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
@@ -76,6 +79,18 @@ static int isTempOf(uint32_t targetId, uint32_t count)
 static int isTemp(uint32_t targetId)
 {
     return isTempOf(targetId, RD_TARGET_COUNT);
+}
+
+/* an image's view word: its texel format, and a sheet's style above it
+   (version 7, v0.4.2 package F-A; the header comment's layout) */
+static uint32_t sheetView(const RdTexRec *t)
+{
+    if (t->format != RD_TEXEL_SHEET) {
+        return t->format;
+    }
+    return (uint32_t)RD_TEXEL_SHEET | (uint32_t)(t->sheet[0] & 1u) << 8 |
+           (uint32_t)(t->sheet[3] & 1u) << 9 | (uint32_t)t->sheet[1] << 16 |
+           (uint32_t)t->sheet[2] << 24;
 }
 
 static void targetRef(IdSet *temps, uint32_t id)
@@ -195,7 +210,7 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
         }
         ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) && w32(fp, t->bakedTexa) &&
              w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) &&
-             w32(fp, image ? t->format : t->view);
+             w32(fp, image ? sheetView(t) : t->view);
         if (ok && image) {
             ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__TexelBytes(t->format));
         }
@@ -450,17 +465,26 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         }
         if (h.kind == RD_TEXKIND_IMAGE) {
             /* R8: an image's view word is its texel format (the uncompressed
-               ones: a pack's BC replacement is never dumped) */
-            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && h.view <= RD_TEXEL_R8;
-            const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes((uint8_t)h.view);
+               ones: a pack's BC replacement is never dumped); version 7 a
+               sheet's, with its style above the format byte */
+            const uint8_t fmt = (uint8_t)(h.view & 0xFFu);
+            const int sheet = ver >= 7u && fmt == RD_TEXEL_SHEET;
+            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 &&
+                 (sheet ? (h.view & 0xFC00u) == 0 : h.view <= RD_TEXEL_R8);
+            const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes(fmt);
             uint8_t *px = ok ? malloc(bytes) : NULL;
             ok = px && rraw(fp, px, bytes);
             if (ok) {
-                RdTex t =
-                    rd__CreateTextureFmt(h.w, h.h, px, (uint8_t)h.view, (RdTexSrc)h.src, "dump");
+                RdTex t = rd__CreateTextureFmt(h.w, h.h, px, fmt, (RdTexSrc)h.src, "dump");
                 RdTexRec *tr = rd__TexRec(t.id);
                 if (tr) {
                     tr->bakedTexa = (uint8_t)h.bakedTexa;
+                    if (sheet) {
+                        tr->sheet[0] = (uint8_t)((h.view >> 8) & 1u);
+                        tr->sheet[1] = (uint8_t)(h.view >> 16);
+                        tr->sheet[2] = (uint8_t)(h.view >> 24);
+                        tr->sheet[3] = (uint8_t)((h.view >> 9) & 1u);
+                    }
                 }
                 texMap.from[texMap.n] = h.id;
                 texMap.to[texMap.n++] = t.id;

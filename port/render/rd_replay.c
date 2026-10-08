@@ -86,6 +86,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "wrap_acc_ps",
                                                    "wrap_resolve_ps" /* wave 5 (R5c) */,
                                                    "font_ps" /* package R8 */,
+                                                   "font_sheet_ps" /* v0.4.2 (F-A) */,
                                                    "sprite_aa1_ps" /* package AA1 */,
                                                    "box_reduce_ps" /* package RSMALL */,
                                                    "sprite_stq_ps" /* package RSMALL */,
@@ -1589,6 +1590,18 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
     return bindDrawEx(r, ds, NULL, NULL);
 }
 
+/* v0.4.2 (package F-A): font_sheet_ps's style in DrawCB.param (rimOn,
+ * rimLevel, fillLevel, dither), the sheet texture's at replay time. */
+static void sheetParam(const RdTexRec *t, float param[4])
+{
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->format != RD_TEXEL_SHEET) {
+        return;
+    }
+    for (int k = 0; k < 4; k++) {
+        param[k] = (float)t->sheet[k];
+    }
+}
+
 /* DrawCB for one planned pass: sprite_ps and vu_ps read the same fields. */
 static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, IcoDrawCB *cb)
 {
@@ -1626,6 +1639,9 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     cb->tex[1] = (float)ds->th;
     cb->tex[2] = 1.0f / (float)ds->tw;
     cb->tex[3] = 1.0f / (float)ds->th;
+    if (dp->key.fs == RD_FS_FONT_SHEET) {
+        sheetParam(rd__TexRec(r->st.tex), cb->param);
+    }
     if (ds->wideBlock) {
         /* Widescreen reflections: the block holds its 4:3 picture
          * compressed about its centre by f.  The game computed the draw's
@@ -2209,6 +2225,9 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t 
         cb.tex[1] = (float)th;
         cb.tex[2] = 1.0f / (float)tw;
         cb.tex[3] = 1.0f / (float)th;
+        if (dp[i].key.fs == RD_FS_FONT_SHEET) {
+            sheetParam(rd__TexRec(tex), cb.param); /* v0.4.2 (F-A) */
+        }
         rhi_CmdSetPipeline(cl, p);
         rd__BindUniform(cl, 0, frame);
         rd__BindUniform(cl, 1, rd__DrawGroup(&cb));

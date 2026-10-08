@@ -26,6 +26,18 @@
  *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
+ *   sheet    (v0.4.2, package F-A) a coverage strip (rd_CreateTextureSheet)
+ *            through font_sheet_ps against sprite_ps drawing the CPU
+ *            reference's texels (sheet_ref.c sheetref_Texel) as RGBA8,
+ *            magnified, the grey (TCC RGB) and the alpha (TCC RGBA) within 1,
+ *            at scene scale 1 (Original) and 2, 3 (Enhanced); 1:1 at the
+ *            texel centres every pixel is sheetref_Texel's and the rim
+ *            texels hold the style's rim level (English black, then French
+ *            grey and no rim through rd_SetTextureSheetStyle); the strip
+ *            moved by whole pixels gives the same pixels (the grain is the
+ *            texel's); on the presentation overlay magnified 4x within 2;
+ *            the frame dumped and loaded keeps the format and the style and
+ *            replays to the same bytes
  *   stq      (package RSMALL) a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
@@ -64,7 +76,8 @@
  *   pipes    every pipeline created is in the enumerated reachable set,
  *            whose screen and post part has fewer than 250 keys (with package
  *            TEXA's sprite_texa_ps twins) and holds the colour
- *            mask 7 keys of the 2D draws under the dark volume's FBMSK and the
+ *            mask 7 keys of the 2D draws (font_ps and font_sheet_ps too)
+ *            under the dark volume's FBMSK and the
  *            STQ keys of the lightning (all of it,
  *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
  *            (package AN-E: the set with the two-pass fallback too, also
@@ -93,6 +106,7 @@
 #include "hlsl_shim.h"
 #include "gs_math.hlsli"
 #include "rd_internal.h"
+#include "sheet_ref.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -1013,6 +1027,356 @@ static void testFont(const char *dir)
     rd_DestroyTexture(t32);
 }
 
+/* ------------------------------------------------------------ sheet text
+ * v0.4.2 (package F-A): a coverage strip through font_sheet_ps against the
+ * CPU reference (sheet_ref.c).  The reference texels as an RGBA8 texture
+ * drawn by sprite_ps are what the sheet texture drawn by font_sheet_ps must
+ * give: the shader rebuilds the same texels and blends them as the sampler
+ * blends the RGBA8 ones.  The draws are port/ui/font.c's state (LERP with
+ * ABE, the font keys of the reachable set); TCC RGB writes the sampled grey
+ * itself (As is the vertex's 0x80), TCC RGBA the sampled alpha into A. */
+#define SHEET_W 40
+#define SHEET_H 20
+
+static uint8_t *readScaled(RdTargetId id, uint32_t *w, uint32_t *h, float *sx, float *sy);
+
+static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1};    /* the English sheets: black rim */
+static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1};   /* French, Italian, Spanish: grey */
+static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1}; /* the dark inks: no rim */
+
+/* a few shapes 3 texels or more inside the edges: a solid block, a soft
+ * diagonal edge, a thin stroke of partial coverage, a noisy patch */
+static uint8_t sheetCov(int x, int y)
+{
+    if (x < 3 || y < 3 || x >= SHEET_W - 3 || y >= SHEET_H - 3) {
+        return 0;
+    }
+    if (x >= 4 && x < 10 && y >= 4 && y < 16) {
+        return 0xFF;
+    }
+    if (x >= 12 && x < 22 && y >= 4 && y < 16) {
+        const int v = ((x - 12) * 2 - (y - 4)) * 40 + 128;
+        return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+    }
+    if (y >= 4 && y < 16 && (x == 24 || x == 25)) {
+        return x == 24 ? 160 : 60;
+    }
+    if (x >= 28 && x < 37 && y >= 5 && y < 15) {
+        return (uint8_t)hash((uint32_t)(y * 64 + x) + 77u);
+    }
+    return 0;
+}
+
+static uint8_t s_sheetCov[SHEET_W * SHEET_H];
+
+/* the reference texels of style st as an RGBA8 texture (white is not
+ * assumed: the grey is the texel's colour) */
+static RdTex sheetRefTexture(const RdSheetStyle *st)
+{
+    static uint8_t rgba[SHEET_W * SHEET_H * 4];
+    for (int y = 0; y < SHEET_H; y++) {
+        for (int x = 0; x < SHEET_W; x++) {
+            uint8_t g, a;
+            sheetref_Texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
+            uint8_t *p = &rgba[(y * SHEET_W + x) * 4];
+            p[0] = p[1] = p[2] = g;
+            p[3] = a;
+        }
+    }
+    return rd_CreateTexture(SHEET_W, SHEET_H, rgba, RD_TEXA_80_80, "sheet ref");
+}
+
+/* the strip at (x, y) GS pixels of SCENE, sw x sh pixels, the whole
+ * texture (nudge: the +8 UV nudge, each pixel at a texel centre when 1:1) */
+static void sheetDraw(RdTex t, RdTcc tcc, int x, int y, int sw, int sh, int nudge)
+{
+    static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
+    const int n = nudge ? 8 : 0;
+    rd_Texture(t, RD_TEXFN_MODULATE, tcc);
+    sprite(512, 512, x * 16, y * 16, (x + sw) * 16, (y + sh) * 16, grey, n, n, SHEET_W * 16 + n,
+           SHEET_H * 16 + n);
+}
+
+static void sheetFrameBegin(void)
+{
+    static const uint8_t clr[4] = {0, 0, 0, 0};
+    rd_BeginFrame();
+    rd_SelectList(1);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), (RdTarget){0}, 512, 512, 0);
+    fontState();
+}
+
+/* the worst channel difference between the sw x sh GS pixel rectangles at
+ * (ax, ay) and (bx, by) of img (s target pixels a GS pixel), channel c0..c1 */
+static int sheetWorst(const uint8_t *img, uint32_t w, int s, int ax, int ay, int bx, int by, int sw,
+                      int sh, int c0, int c1)
+{
+    int worst = 0;
+    for (int y = 0; y < sh * s; y++) {
+        for (int x = 0; x < sw * s; x++) {
+            const uint8_t *a = &img[((size_t)(ay * s + y) * w + (size_t)(ax * s + x)) * 4];
+            const uint8_t *b = &img[((size_t)(by * s + y) * w + (size_t)(bx * s + x)) * 4];
+            for (int c = c0; c <= c1; c++) {
+                const int d = abs((int)a[c] - (int)b[c]);
+                worst = d > worst ? d : worst;
+            }
+        }
+    }
+    return worst;
+}
+
+/* 1:1 at texel centres (scene scale 1): every pixel is sheetref_Texel's */
+static int sheetExact(const uint8_t *img, uint32_t w, int x0, int yRgb, int yA,
+                      const RdSheetStyle *st, int *rim)
+{
+    int bad = 0;
+    *rim = 0;
+    for (int y = 0; y < SHEET_H; y++) {
+        for (int x = 0; x < SHEET_W; x++) {
+            uint8_t g, a;
+            sheetref_Texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
+            const uint8_t *pc = &img[((size_t)(yRgb + y) * w + (size_t)(x0 + x)) * 4];
+            const uint8_t *pa = &img[((size_t)(yA + y) * w + (size_t)(x0 + x)) * 4];
+            if (pc[0] != g || pc[1] != g || pc[2] != g || pa[3] != a) {
+                const int want[4] = {g, g, g, a};
+                const uint8_t got[4] = {pc[0], pc[1], pc[2], pa[3]};
+                bad += pixFail("sheet 1:1 against sheetref_Texel", x, y, got, want);
+            }
+            /* a rim texel: no coverage of its own, some within the rim */
+            if (s_sheetCov[y * SHEET_W + x] == 0 && a != 0) {
+                (*rim)++;
+                if (g != st->rimLevel) {
+                    const int want[4] = {st->rimLevel, st->rimLevel, st->rimLevel, a};
+                    bad += pixFail("sheet rim texel at the style's rim level", x, y, pc, want);
+                }
+            }
+        }
+    }
+    return bad;
+}
+
+/* the overlay: the strip and its reference magnified 4x on the output */
+typedef struct SheetOv {
+    RdTex sheet, ref;
+    int calls;
+} SheetOv;
+
+#define SHEET_OV_X 20
+#define SHEET_OV_Y 20
+#define SHEET_OV_M 4
+
+static void sheetOvQuad(RdTex t, int x, int y)
+{
+    static const uint8_t c[4] = {0x40, 0x40, 0x40, 0x80}; /* half: Cs * As stays within 2 */
+    RdScreenVtx v[2] = {vtx(x * 16, y * 16, 0, c, 0.0f, 0.0f),
+                        vtx((x + SHEET_W * SHEET_OV_M) * 16, (y + SHEET_H * SHEET_OV_M) * 16, 0, c,
+                            (float)(SHEET_W * 16), (float)(SHEET_H * 16))};
+    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, t, RD_BLEND_LERP_AS);
+}
+
+static void sheetOvCallback(const RdOverlayCtx *ctx, void *user)
+{
+    SheetOv *o = user;
+    o->calls++;
+    sheetOvQuad(o->sheet, SHEET_OV_X, SHEET_OV_Y);
+    sheetOvQuad(o->ref, SHEET_OV_X, SHEET_OV_Y + SHEET_H * SHEET_OV_M + 10);
+}
+
+static void testSheetOverlay(RdTex sheet, RdTex ref)
+{
+    static SheetOv ov;
+    memset(&ov, 0, sizeof(ov));
+    ov.sheet = sheet;
+    ov.ref = ref;
+    rd_SetPresentOverlay(sheetOvCallback, &ov);
+    CHECK(rd_PresentBlank(), "sheet overlay: rd_PresentBlank");
+    static uint8_t out[640 * 480 * 4];
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd_ReadPresented(out, &ow, &oh) && ow == 640 && oh == 480;
+    rd_SetPresentOverlay(NULL, NULL);
+    CHECK(ok && ov.calls == 1, "sheet overlay: the presented output (%ux%u, %d calls)", ow, oh,
+          ov.calls);
+    if (!ok) {
+        return;
+    }
+    const int sw = SHEET_W * SHEET_OV_M, sh = SHEET_H * SHEET_OV_M;
+    const int worst = sheetWorst(out, ow, 1, SHEET_OV_X, SHEET_OV_Y, SHEET_OV_X,
+                                 SHEET_OV_Y + sh + 10, sw, sh, 0, 2);
+    int inked = 0;
+    for (int y = 0; y < sh; y++) {
+        for (int x = 0; x < sw; x++) {
+            inked += out[((size_t)(SHEET_OV_Y + y) * ow + (size_t)(SHEET_OV_X + x)) * 4] != 0;
+        }
+    }
+    printf("  sheet overlay: magnified %dx, worst %d off the RGBA8 reference, %d pixels inked\n",
+           SHEET_OV_M, worst, inked);
+    CHECK(worst <= 2, "sheet overlay magnified: worst %d off the RGBA8 reference (2 allowed)",
+          worst);
+    CHECK(inked > sw * sh / 4, "sheet overlay: %d pixels inked", inked);
+}
+
+/* scale: the scene's (1 in Original); dir: the dump's directory (scale 1) */
+static void testSheetText(const char *mode, int scale, const char *dir)
+{
+    for (int y = 0; y < SHEET_H; y++) {
+        for (int x = 0; x < SHEET_W; x++) {
+            s_sheetCov[y * SHEET_W + x] = sheetCov(x, y);
+        }
+    }
+    RdTex sheet = rd_CreateTextureSheet(SHEET_W, SHEET_H, s_sheetCov, &kSheetEn, "sheet");
+    RdTex ref = sheetRefTexture(&kSheetEn);
+    const RdTexRec *sr = rd__TexRec(sheet.id);
+    CHECK(sr && sr->format == RD_TEXEL_SHEET && sr->sheet[0] == 1 && sr->sheet[1] == 0 &&
+              sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
+          "%s: the sheet texture's record", mode);
+
+    /* magnified 3 x 4: sheet and reference side by side, TCC RGB (grey)
+     * on top, TCC RGBA (alpha) below; 1:1 at the texel centres; the strip
+     * magnified 2x twice, the second moved by whole pixels (96, 45) */
+    enum { MX = 3, MY = 4 };
+
+    sheetFrameBegin();
+    sheetDraw(sheet, RD_TCC_RGB, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(ref, RD_TCC_RGB, 136, 8, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 8, 96, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(ref, RD_TCC_RGBA, 136, 96, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 184, SHEET_W * 2, SHEET_H * 2, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0);
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float fsx = 1.0f, fsy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+    const int s = (int)lroundf(fsx);
+    CHECK(s == scale && (int)lroundf(fsy) == scale, "%s: SCENE at %gx%g, %d expected", mode,
+          (double)fsx, (double)fsy, scale);
+    if (img && s == scale) {
+        const int sw = SHEET_W * MX, sh = SHEET_H * MY;
+        const int wRgb = sheetWorst(img, w, s, 8, 8, 136, 8, sw, sh, 0, 2);
+        const int wA = sheetWorst(img, w, s, 8, 96, 136, 96, sw, sh, 3, 3);
+        const int moved =
+            sheetWorst(img, w, s, 264, 184, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0, 3);
+        int inked = 0;
+        for (int y = 0; y < sh * s; y++) {
+            for (int x = 0; x < sw * s; x++) {
+                inked += img[((size_t)(96 * s + y) * w + (size_t)(8 * s + x)) * 4 + 3] != 0;
+            }
+        }
+        printf("  sheet text (%s): magnified worst %d (grey) %d (alpha) off the RGBA8 "
+               "reference, %d pixels inked; moved by whole pixels %d off\n",
+               mode, wRgb, wA, inked, moved);
+        CHECK(wRgb <= 1 && wA <= 1,
+              "%s: the sheet magnified is %d (grey) %d (alpha) off sprite_ps on the reference "
+              "texels (1 allowed)",
+              mode, wRgb, wA);
+        CHECK(inked > sw * sh * s * s / 4, "%s: %d pixels inked", mode, inked);
+        CHECK(moved == 0,
+              "%s: the strip moved by whole pixels differs by %d (the grain must move "
+              "with it)",
+              mode, moved);
+        if (scale == 1) {
+            int rim = 0;
+            const int bad = sheetExact(img, w, 264, 8, 40, &kSheetEn, &rim);
+            CHECK(bad == 0 && rim > 0, "%s: 1:1 %d texels off sheetref_Texel, %d rim texels", mode,
+                  bad, rim);
+        }
+    }
+    free(img);
+
+    if (scale == 1) {
+        /* the style follows rd_SetTextureSheetStyle: the French rim level,
+         * then no rim (the rim texels go transparent) */
+        static const RdSheetStyle *const styles[2] = {&kSheetFr, &kSheetPlain};
+        for (int k = 0; k < 2; k++) {
+            rd_SetTextureSheetStyle(sheet, styles[k]);
+            sheetFrameBegin();
+            sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+            sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
+            rd_EndFrame(0);
+            img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+            if (img) {
+                int rim = 0;
+                const int bad = sheetExact(img, w, 264, 8, 40, styles[k], &rim);
+                CHECK(bad == 0 && (k ? rim == 0 : rim > 0),
+                      "%s: style %d: %d texels off sheetref_Texel, %d rim texels", mode, k, bad,
+                      rim);
+                printf("  sheet style %s: %d rim texels, 1:1 %d off\n", k ? "plain" : "French", rim,
+                       bad);
+            }
+            free(img);
+        }
+        rd_SetTextureSheetStyle(sheet, &kSheetEn);
+        rd_SetTextureSheetStyle(ref, &kSheetFr); /* not a sheet: ignored */
+        const RdTexRec *rr = rd__TexRec(ref.id);
+        CHECK(rr && rr->sheet[1] == 0, "rd_SetTextureSheetStyle ignores an RGBA8 texture");
+
+        testSheetOverlay(sheet, ref);
+
+        /* the dump keeps the format and the style: load, replay, the same
+         * bytes */
+        rd_SetTextureSheetStyle(sheet, &kSheetFr);
+        sheetFrameBegin();
+        sheetDraw(sheet, RD_TCC_RGBA, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
+        rd_EndFrame(0);
+        img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/rd_pixel_sheet.rddump", dir);
+        CHECK(rd_DumpFrame(path), "rd_DumpFrame (sheet)");
+        RdFrame f;
+        if (img && rd__LoadFrame(path, &f)) {
+            int sheets = 0;
+            for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+                const RdTexRec *t = &g_rd.textures[i];
+                sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
+                          t->w == SHEET_W && t->h == SHEET_H &&
+                          memcmp(t->pixels, s_sheetCov, sizeof(s_sheetCov)) == 0 &&
+                          t->sheet[0] == 1 && t->sheet[1] == 62 && t->sheet[2] == 0xFF &&
+                          t->sheet[3] == 1 && strcmp(t->name, "dump") == 0;
+            }
+            CHECK(sheets == 1, "the loaded dump has the sheet texture with its style (%d)", sheets);
+            static const uint8_t junk[4] = {1, 2, 3, 4};
+            rd_BeginFrame();
+            rd_SelectList(0);
+            rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 0, 0);
+            rd_EndFrame(0);
+            CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the loaded sheet frame");
+            uint32_t w2 = 0, h2 = 0;
+            uint8_t *again = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
+            CHECK(again && w2 == w && h2 == h && memcmp(again, img, (size_t)w * h * 4) == 0,
+                  "sheet dump -> load -> replay: the same SCENE");
+            free(again);
+            rd__FrameFree(&f);
+        } else {
+            CHECK(0, "rd__LoadFrame (sheet)");
+        }
+        free(img);
+    }
+    rd_DestroyTexture(sheet);
+    rd_DestroyTexture(ref);
+}
+
+/* the same at a scene scale of the Enhanced preset */
+static void testSheetTextAt(const char *mode, int scale)
+{
+    RdSettings s;
+    memset(&s, 0, sizeof(s));
+    s.preset = RD_PRESET_ENHANCED;
+    s.outputWidth = 640;
+    s.outputHeight = 480;
+    s.aspect = 4.0f / 3.0f;
+    s.sceneScale = (float)scale;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_Init (%s)", mode);
+        return;
+    }
+    testSheetText(mode, scale, NULL);
+    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    CHECK(verr == 0, "%s: %u validation errors", mode, verr);
+    rd_Shutdown();
+}
+
 /* ------------------------------------------------------------- reduction */
 
 static uint8_t s_scene[512 * 512 * 4];
@@ -1605,6 +1969,14 @@ static void testPipelines(void)
                     }
                     CHECK(prim || found,
                           "font draw under colour mask 7 (depth %d) is not enumerated", dz);
+                    /* v0.4.2 (F-A): the menus' sheet text in the same state */
+                    dp[i].key.fs = RD_FS_FONT_SHEET;
+                    found = 0;
+                    for (uint32_t j = 0; j < ns; j++) {
+                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                    }
+                    CHECK(prim || found,
+                          "sheet text draw under colour mask 7 (depth %d) is not enumerated", dz);
                 }
             }
             s.ds.colorMask = 0xF;
@@ -2004,6 +2376,7 @@ int main(int argc, char **argv)
     testSprites();
     testTexa();
     testFont(dir);
+    testSheetText("Original 1x", 1, dir); /* v0.4.2 (F-A) */
     testStq();
     testAa1();
     testReduction(dir);
@@ -2019,6 +2392,8 @@ int main(int argc, char **argv)
     rd_Shutdown();
     testAuraMaskAt("Enhanced 4x", 4.0f, 0);
     testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
+    testSheetTextAt("Enhanced 2x", 2); /* v0.4.2 (F-A) */
+    testSheetTextAt("Enhanced 3x", 3);
     if (failures) {
         printf("rd_pixel_test: %d failures\n", failures);
         return 1;

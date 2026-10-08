@@ -217,11 +217,14 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     k->colorFmt = (uint8_t)colorFmt;
     k->depthFmt = (uint8_t)depthFmt;
     /* package R8: an R8 coverage texture (rd_CreateTextureR8) is drawn by
-     * font_ps; the fragment shader is part of the key */
+     * font_ps; the fragment shader is part of the key.  v0.4.2 (F-A): a
+     * sheet texture (rd_CreateTextureSheet) by font_sheet_ps */
     if (d->texEnabled) {
         const RdTexRec *tr = rd__TexRec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
             k->fs = RD_FS_FONT;
+        } else if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_SHEET) {
+            k->fs = RD_FS_FONT_SHEET;
         }
     }
     /* package AA1 (not for an R8 texture: no AA1 draw samples one) */
@@ -398,6 +401,7 @@ bool rd__FsHasNoDual(uint8_t fs)
     case RD_FS_SPRITE_AA1:
     case RD_FS_SPRITE_STQ:
     case RD_FS_FONT:
+    case RD_FS_FONT_SHEET:
     case RD_FS_FOG:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
@@ -1058,6 +1062,10 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                 /* package R8: the font atlas on the overlay (font_ps) */
                 dp[i].key.fs = RD_FS_FONT;
                 n = addKey(out, max, n, &dp[i].key);
+                /* v0.4.2 (F-A): the popups' and the photo panel's sheet
+                 * text (font_sheet_ps) */
+                dp[i].key.fs = RD_FS_FONT_SHEET;
+                n = addKey(out, max, n, &dp[i].key);
             }
         }
     }
@@ -1077,10 +1085,15 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
                                               RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
             for (int i = 0; i < np; i++) {
-                dp[i].key.fs = RD_FS_FONT;
-                n = addKey(out, max, n, &dp[i].key);
-                dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */
-                n = addKey(out, max, n, &dp[i].key);
+                /* v0.4.2 (F-A): the menus' sheet text (font_sheet_ps) in the
+                 * same states */
+                for (int sh = 0; sh < 2; sh++) {
+                    dp[i].key.fs = sh ? RD_FS_FONT_SHEET : RD_FS_FONT;
+                    dp[i].key.gs.colorMask = 0xF;
+                    n = addKey(out, max, n, &dp[i].key);
+                    dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */
+                    n = addKey(out, max, n, &dp[i].key);
+                }
             }
         }
     }

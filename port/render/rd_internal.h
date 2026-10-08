@@ -639,8 +639,11 @@ typedef enum RdFsId {
     RD_FS_WRAP_ACC,     /* wrap_acc_ps: the blend terms into an RGBA16F accumulator */
     RD_FS_WRAP_RESOLVE, /* wrap_resolve_ps: (Cd + acc) mod 256 into the target */
     RD_FS_FONT,         /* package R8: font_ps, screen prims sampling an R8 coverage texture */
-    RD_FS_SPRITE_AA1,   /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
-    RD_FS_BOX_REDUCE,   /* package RSMALL: box_reduce_ps, the shadow count at the GS size */
+    /* v0.4.2 (package F-A): font_sheet_ps, screen and overlay prims sampling a
+     * sheet texture (RD_TEXEL_SHEET); DrawCB.param holds its style */
+    RD_FS_FONT_SHEET,
+    RD_FS_SPRITE_AA1, /* package AA1: sprite_aa1_ps, sprite_ps with the coverage as As */
+    RD_FS_BOX_REDUCE, /* package RSMALL: box_reduce_ps, the shadow count at the GS size */
     RD_FS_SPRITE_STQ, /* package RSMALL: sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
     /* package CRT (rd_crt.c): CrtCB in DrawCB's slot */
     RD_FS_CRT_BLOOM, /* crt_bloom_ps: half size, linear, horizontal Gaussian (RGBA16F) */
@@ -1399,10 +1402,11 @@ bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
 #define RD_DUMP_VERSION                                                                            \
-    6u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
+    7u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
           RDC_AA1, RdStateBlock.aa1 (package AA1); 5: RDC_OVERLAY_TEXT and RDC_SCREEN's       \
-          RD_SCREEN_TEXT_QUADS (package DEF); 6: RD_TARGET_FEED_HELD, a 17th fixed target.    \
-          rd__LoadFrame reads 3 to 6 */
+          RD_SCREEN_TEXT_QUADS (package DEF); 6: RD_TARGET_FEED_HELD, a 17th fixed target;    \
+          7: RD_TEXEL_SHEET images, the style in the view word (v0.4.2, F-A).                 \
+          rd__LoadFrame reads 3 to 7 */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

@@ -20,13 +20,14 @@ static const char *const expected[] = {
     "wrap_acc_ps",    "wrap_resolve_ps",  "sprite_aa1_ui_vs",    "sprite_aa1_world_vs",
     "sprite_aa1_ps",  "sprite_stq_ui_vs", "sprite_stq_world_vs", "sprite_stq_ps",
     "box_reduce_ps",  "crt_vs",           "crt_bloom_ps",        "crt_blur_ps",
-    "crt_ps",         "blit_depth_ps",
+    "crt_ps",         "blit_depth_ps",    "font_sheet_ps",
 };
 
 /* package AN-E: the gs_dual_out entries without the second output */
 static const char *const expectedNoDual[] = {
-    "sprite_ps_nodual",  "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual", "sprite_stq_ps_nodual",
-    "fog_lut_ps_nodual", "font_ps_nodual",        "vu_ps_nodual",         "vu_texa_ps_nodual",
+    "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
+    "sprite_stq_ps_nodual", "fog_lut_ps_nodual",     "font_ps_nodual",
+    "vu_ps_nodual",         "vu_texa_ps_nodual",     "font_sheet_ps_nodual",
 };
 
 int main(void)

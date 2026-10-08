@@ -32,7 +32,8 @@
  *              cannot take it keep their loads (rd__TakePendingClear)
  *   pipelines  the reachable screen and post set is under 250 keys (150
  *              before package TEXA's sprite_texa_ps twins), with
- *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
+ *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX;
+ *              font_sheet_ps (v0.4.2) has font_ps's 10 keys
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -657,6 +658,18 @@ static void testEnumeration(void)
                   keys[i].gs.afailSplit == 0 && keys[i].gs.date == 0,
               "key %u normalised", i);
     }
+    /* v0.4.2 (F-A): font_sheet_ps has font_ps's keys: the overlay's two
+     * blends on the two outputs and the frame's text, two blends, with and
+     * without depth, colour mask F and 7 (the overlay's RGBA8 keys are the
+     * frame's depthless mask F ones: 10 in all) */
+    uint32_t font = 0, sheet = 0;
+    for (uint32_t i = 0; i < n && i < 512; i++) {
+        font += keys[i].fs == RD_FS_FONT;
+        sheet += keys[i].fs == RD_FS_FONT_SHEET;
+    }
+    printf("  font_ps keys %u, font_sheet_ps keys %u\n", font, sheet);
+    CHECK(font == 10 && sheet == 10, "font_ps keys %u, font_sheet_ps keys %u (10 each)", font,
+          sheet);
 }
 
 /* Package RSMALL: a UI scissor narrower than the target follows the wide x

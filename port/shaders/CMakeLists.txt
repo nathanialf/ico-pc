@@ -29,6 +29,8 @@ ico_add_shader(fog_lut_vs fog_lut.hlsl fog_lut_vs vertex)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
 # package R8: R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
+# v0.4.2 (package F-A): sheet text, coverage strips drawn in the menu sheets' style
+ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment)
 # wave 3 (R3c): the VU1 microprograms
 ico_add_shader(vu_prelit_vs vu_prelit.hlsl vu_prelit_vs vertex)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment)
@@ -71,6 +73,7 @@ foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
 endforeach()
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 

@@ -18,6 +18,17 @@ target_include_directories(ico_vu1_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vu1_r
 target_compile_options(ico_vu1_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_vu1_ref PUBLIC ico_math)
 
+# ico_sheet_ref (v0.4.2, F-A): font_sheet_ps on the CPU (test/sheet_ref.h),
+# the oracle of rd_pixel_test's sheet text and the menu text comparisons.
+# Plain C; built in every configuration.
+add_library(ico_sheet_ref STATIC test/sheet_ref.c)
+target_include_directories(ico_sheet_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test"
+                           "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/shaders")
+target_compile_options(ico_sheet_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(ico_sheet_ref PUBLIC m) # floorf
+endif()
+
 # ico_texpack_name (v0.4.0, T1): the names PCSX2 gives textures
 # (texpack_name.h) and the XXH3-64 they are made with (xxh3.c, a
 # reimplementation of xxHash's algorithm, BSD-2-Clause, docs/THIRD_PARTY.md).
@@ -151,7 +162,7 @@ add_executable(rd_pixel_test test/rd_pixel_test.c)
 target_include_directories(rd_pixel_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders"
                            "${CMAKE_SOURCE_DIR}/port/shaders/test" "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_pixel_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(rd_pixel_test PRIVATE ico_render)
+target_link_libraries(rd_pixel_test PRIVATE ico_render ico_sheet_ref)
 
 # rd_layout_test: the seki layer's host path (GifPacket.c, DisplayList.c,
 # DmaPacket.c compiled with ICO_HOST and ICO_RD, as the window build has
