@@ -6,7 +6,10 @@
 # video_options.c: the display options (renderer wave 7, R7a)
 # photo_mode.c: photo mode's state and camera (package PHOTO); it uses rd.h's RdCamera struct only, so port/render is on
 # the include path of the headless build too (nothing of rd is linked)
-add_library(ico_options STATIC options.c video_options.c photo_mode.c)
+# appearance.c (v0.4.2, package K): the characters' colours, their
+# [characters] keys and the CLUT recolour Texture.c applies (ICO_RD); rd_tex.h
+# for its constants and CLUT order only (nothing of rd is linked)
+add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -49,6 +52,40 @@ if(WIN32)
 endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The characters' colours (v0.4.2, package K): the rule table over
+# synthetic CLUTs (Original is the identity, the coverage, b_mantle's masks,
+# the alpha, the formats, the anchors and the weights), the [characters]
+# keys, Randomize and Reset. CPU only.
+add_executable(appearance_test test/appearance_test.c ../platform/host_config.c)
+target_include_directories(appearance_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(appearance_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(appearance_test PRIVATE ico_options)
+if(NOT WIN32)
+    target_link_libraries(appearance_test PRIVATE m)
+endif()
+if(WIN32)
+    target_link_libraries(appearance_test PRIVATE comdlg32 user32)
+endif()
+# appearance_disc_test: the same rules against the disc's own CLUTs (the
+# anchors present, b_mantle's groups about 18/26/34/22 % of its texels).
+# Skipped (77) without the disc, as texpack_disc is.
+add_executable(appearance_disc_test test/appearance_disc_test.c ../platform/host_config.c)
+target_include_directories(appearance_disc_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(appearance_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(appearance_disc_test PRIVATE ico_options ico_port_data)
+if(WIN32)
+    target_link_libraries(appearance_disc_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME appearance COMMAND appearance_test "${CMAKE_CURRENT_BINARY_DIR}")
+    if(NOT DEFINED ICO_DISC_IMAGE)
+        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+            "The PAL disc image (SCES-50760) the disc tests read, never committed")
+    endif()
+    add_test(NAME appearance_disc COMMAND appearance_disc_test "${ICO_DISC_IMAGE}")
+    set_tests_properties(appearance_disc PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled

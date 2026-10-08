@@ -122,7 +122,7 @@ void ico_opt_output_toggled(int mode);
    key themselves and save it on leaving the page with the rest. */
 void ico_opt_output_record(int mode);
 /* Forget the run-time values: each option is read from the config again on
-   its next use. */
+   its next use (and the characters' colours, appearance.h). */
 void ico_opt_reload(void);
 
 #endif /* ICO_PORT_GAME_OPTIONS_H */

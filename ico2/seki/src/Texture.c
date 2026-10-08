@@ -23,6 +23,14 @@
 #include "rd_tex.h"
 #include "texpack.h" /* v0.4.0: PCSX2 texture packs */
 
+/* port/game/appearance.h (v0.4.2): the characters' colours, a recolour of
+   a copy of the CLUT before the decode; the serial moves when a colour
+   may have changed */
+extern int ico_appearance_recolour(const char *texName, const void *clut, unsigned int colors,
+                                   unsigned int cpsm, void *out);
+extern int ico_appearance_covers(const char *texName);
+extern unsigned int ico_appearance_serial(void);
+
 #endif
 
 /* One mipmap level of a texture record, 0x24 bytes: the address, the buffer
@@ -340,6 +348,7 @@ static struct { /* port */
     int failOnce;
     unsigned char clutSnap[1024];
     int packOn; /* v0.4.0: the pack or the dump in force last frame (-1 before the first) */
+    unsigned int appearanceSerial; /* v0.4.2: ico_appearance_serial() last frame */
 } texHost = {.packOn = -1};
 
 /* v0.4.0 (T3): texture packs.  The texture just decoded for (id, gen) as
@@ -417,6 +426,8 @@ static RdTex texHostTexture(int id)
 {
     TexData *t;
     RdTexImage im;
+    RdTexImage draw;
+    unsigned char clut2[1024];
     RdTexSampler smp;
     RdTex r;
     unsigned int gen;
@@ -472,7 +483,17 @@ static RdTex texHostTexture(int id)
     smp.min = mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST;
     smp.wrapS = RD_WRAP_REPEAT;
     smp.wrapT = RD_WRAP_REPEAT;
-    r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &im, &smp, t->name);
+    /* v0.4.2: the characters' colours decode from a recoloured copy of the
+       CLUT (appearance.h); rdtex_Store decodes before it returns
+       (rd_tex.c rdtex_Store -> rdtex_Decode), so the copy on the stack
+       is enough.  t->clut.addr is never written (texHostClutCheck and the
+       CLUT scroll compare it), and texHostPack names and dumps the
+       original */
+    draw = im;
+    if (im.clut != 0 && ico_appearance_recolour(t->name, im.clut, im.clutColors, im.cpsm, clut2)) {
+        draw.clut = clut2;
+    }
+    r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &draw, &smp, t->name);
     if (r.id != 0) {
         RdTex now;
 
@@ -1751,6 +1772,23 @@ void tex_ResetVram(void)
             }
         }
         texHost.packOn = on;
+    }
+    /* v0.4.2: a character colour changed (appearance.h): each loaded
+       texture it covers gets a new generation and is decoded again now,
+       as a load does; the same shape re-expands in place.  Runs while
+       paused too, so the menu's scene follows within a frame */
+    {
+        unsigned int as = ico_appearance_serial();
+
+        if (as != texHost.appearanceSerial) {
+            texHost.appearanceSerial = as;
+            for (i = 0; i < 200 && i < texCount; i++) {
+                if (texHost.serial[i] != 0 && ico_appearance_covers(texTable[i].rec.name)) {
+                    texHost.serial[i] = ++texHost.nextSerial;
+                    texHostTexture(i);
+                }
+            }
+        }
     }
 #endif
 }

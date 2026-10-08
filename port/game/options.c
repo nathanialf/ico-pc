@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "appearance.h"
 #include "config.h"
 
 /* -1: not read yet; 0 or 1 */
@@ -226,4 +227,6 @@ void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_circle_back = -1;
     s_output = -2;
+    /* v0.4.2: the characters' colours ([characters], appearance.h) */
+    ico_appearance_reload();
 }
