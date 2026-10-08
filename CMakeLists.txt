@@ -233,6 +233,12 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     endif()
 endif()
 
+# the release packages' textures folder staging and archive checks (no build, no game)
+find_program(ICO_BASH bash)
+if(ICO_BASH AND NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME package_textures COMMAND ${ICO_BASH} ${CMAKE_SOURCE_DIR}/tools/test/package_textures_test.sh)
+endif()
+
 # --- port/math: the VU0 maths in C and the newlib copies ---------------------
 add_subdirectory(port/math)
 

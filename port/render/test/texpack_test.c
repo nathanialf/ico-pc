@@ -365,6 +365,8 @@ static void buildTree(const char *dir)
         "IMG:nine");
     put(s_user, "textures/SCES-50760/replacements/c/" N1 " - copia.dds", "IMG:copia");
     put(s_user, "textures/SCES-50760/replacements/Mods/Instructions.txt", "read me");
+    /* the note the release packages ship in this folder */
+    put(s_prog, "textures/SCES-50760/replacements/README.txt", "where a texture pack goes\r\n");
     /* the program folder's: N1 again (the user folder's wins), N4 fails */
     put(s_prog, "textures/SCES-50760/replacements/" N1 ".png", "IMG:prog-n1");
     put(s_prog, "textures/SCES-50760/replacements/" N4 ".dds", "BAD");
@@ -434,6 +436,8 @@ static void testIndex(void)
     TexpackStats s = stats();
     CHECK(texpack_Count() == 7, "7 replacements (N1..N6 and the direct one), got %d",
           texpack_Count());
+    /* the .txt files (Instructions.txt, the packaged README.txt) are neither counted
+     * as files nor malformed */
     CHECK(s.files == 12, "12 png/dds files in the walked folders, got %u", s.files);
     CHECK(s.duplicates == 1, "the program folder's N1 a duplicate, got %u", s.duplicates);
     CHECK(s.mipFiles == 1 && s.regions == 1 && s.malformed == 2,

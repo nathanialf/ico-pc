@@ -73,6 +73,9 @@ for a in x64; do
 done
 cd "$root"
 
+# the textures folder's note and the archive checks
+. "$wt/tools/package_textures_lib.sh"
+
 # stage
 date_str="$(date +%Y-%m-%d)"
 for a in x64; do
@@ -102,6 +105,10 @@ TXT
     # cmd.exe runs it either way); the package gets CRLF, what Notepad and
     # cmd.exe expect of a batch file
     sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
+    # the textures folder, with a note in it (the zip keeps files, so the
+    # note is what keeps the folder)
+    rm -rf "$d/textures"
+    pkg_stage_textures_readme "$d" crlf
     # licences: the program's (LICENSE, MIT) and every third-party
     # component's notice (NOTICES.txt, tools/gen_notices.py from
     # tools/notices/manifest.json; docs/THIRD_PARTY.md)
@@ -136,6 +143,9 @@ watchdog=30
 # everything from your user folder into userdata first.
 # portable=1
 
+# texture packs: see textures\\SCES-50760\\replacements\\README.txt next to
+# the program.
+#
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
 # folder. With a problem report, send logs\\ico-pc.log from next to the
@@ -157,10 +167,10 @@ mkdir -p "$pkgroot/ico-pc-$label"
 cp -a "$stage/README.md" "$pkgroot/ico-pc-$label/README.md"
 cp -a "$stage/VERSION.txt" "$pkgroot/ico-pc-$label/VERSION.txt"
 for a in x64; do
-    mkdir -p "$pkgroot/ico-pc-$label/$a/tools"
+    mkdir -p "$pkgroot/ico-pc-$label/$a/tools" "$pkgroot/ico-pc-$label/$a/$pkg_textures_rel"
     for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \
         tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/mc_import.exe tools/SDL3.dll tools/compare_png.ps1 \
-        tools/compare_backends.cmd tools/README.txt; do
+        tools/compare_backends.cmd tools/README.txt "$pkg_textures_rel/README.txt"; do
         cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
     done
 done
@@ -174,6 +184,10 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
             z.write(p, os.path.relpath(p, base))
 PY
 rm -rf "$pkgroot"
+for a in x64; do
+    pkg_assert_zip_has "$zip" "ico-pc-$label/$a/$pkg_textures_rel/README.txt" \
+        || fail "the zip lacks $a/$pkg_textures_rel/README.txt"
+done
 
 echo "$zip"
 echo "built from $commit"

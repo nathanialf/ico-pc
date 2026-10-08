@@ -96,12 +96,15 @@ if readelf -d "$b/ico_pc" | grep -E 'RUNPATH|RPATH' | grep -q "$root"; then
     fail "the run path names the build tree"
 fi
 
+# the textures folder's note and the archive checks
+. "$wt/tools/package_textures_lib.sh"
+
 # stage
 commit8="${commit:0:8}"
 date_str="$(date +%Y-%m-%d)"
 mkdir -p "$stage"
 rm -f "$stage"/ico_pc "$stage"/ico_pc.map "$stage"/libSDL3.so* "$stage"/README.txt "$stage"/README.md
-rm -rf "$stage/tools"
+rm -rf "$stage/tools" "$stage/textures"
 cp "$b/ico_pc" "$stage/ico_pc"
 chmod 755 "$stage/ico_pc"
 # the save importer (C and the C library only), as the Windows package's
@@ -120,6 +123,8 @@ rm -f "$stage/NOTICES.txt"
 cp "$wt/LICENSE" "$stage/LICENSE"
 run python3 "$wt/tools/gen_notices.py" --platform linux --root "$wt" --out "$stage/NOTICES.txt"
 cp "$wt/docs/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
+# the textures folder, with a note in it
+pkg_stage_textures_readme "$stage" lf
 cat > "$stage/ico-pc.ini" <<INI
 # ico-pc.ini: optional settings, one key=value per line; lines starting
 # with # or ; are notes. Everything works without editing this file.
@@ -146,6 +151,9 @@ watchdog=30
 # everything from your user folder into userdata first.
 # portable=1
 
+# texture packs: see textures/SCES-50760/replacements/README.txt next to
+# ico_pc.
+#
 # Everything else (display, sound, controls, gameplay, texture packs) is in
 # the in-game Options menu, which saves it to config.toml in your user
 # folder. With a problem report, send logs/ico-pc.log from next to ico_pc.
@@ -161,8 +169,8 @@ printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$sta
 rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
-mkdir -p "$pkgroot/ico-pc-$label/tools"
-for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import; do
+mkdir -p "$pkgroot/ico-pc-$label/tools" "$pkgroot/ico-pc-$label/$pkg_textures_rel"
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import "$pkg_textures_rel/README.txt"; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
 if [[ -f "$stage/ico_pc.map" ]]; then
@@ -171,6 +179,8 @@ fi
 tar -C "$pkgroot" --sort=name --owner=0 --group=0 --numeric-owner \
     -czf "$tgz" "ico-pc-$label" >>"$log" 2>&1 || fail "tar"
 rm -rf "$pkgroot"
+pkg_assert_tar_has "$tgz" "ico-pc-$label/$pkg_textures_rel/README.txt" \
+    || fail "the archive lacks $pkg_textures_rel/README.txt"
 
 echo "$tgz"
 echo "built from $commit"
