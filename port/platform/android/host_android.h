@@ -37,6 +37,13 @@ int ico_android_log_mirror_start(const char *log_path);
 /* Everything written to fds 1 and 2 before the call is in the file when it
    returns (before _exit). A no-op without the mirror. */
 void ico_android_log_mirror_flush(void);
+/* v0.4.2: the same for the end of a crash (diag_host.h ico_diag_set_fatal_ui):
+   no stdio, and the mirror's lock only if it comes within half a second
+   (the crashing thread may be the reader). */
+void ico_android_log_mirror_try_flush(void);
+/* v0.4.2: the error box for the end of a crash or the watchdog (diag_host.h
+   ico_diag_set_fatal_ui): ico_android_message_box without stdio. */
+void ico_android_fatal_box(const char *text);
 
 /* A blocking message box (SDL_ShowSimpleMessageBox, which works before
    SDL_Init) titled ICO; the text also goes to logcat. */

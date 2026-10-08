@@ -1311,6 +1311,23 @@ static void perf_log(void)
             (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
             (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
             (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
+    {
+        /* v0.4.2: the graphics allocations against the device's limit (a
+           phone GPU allows 4096) and the process's memory (a phone ends a
+           process that holds too much without a word) */
+        RhiStats st;
+        long rss = -1, peak = -1;
+
+        rhi_GetStats(&st);
+        ico_diag_process_memory(&rss, &peak);
+        fprintf(stderr,
+                "window: memory: %llu graphics allocations alive (most %llu; the device allows "
+                "%llu), %.0f MB (most %.0f MB); the process holds %ld MB (most %ld MB)\n",
+                (unsigned long long)st.memoryLive, (unsigned long long)st.memoryPeak,
+                (unsigned long long)st.memoryLimit, (double)st.memoryLiveBytes / 1048576.0,
+                (double)st.memoryPeakBytes / 1048576.0, rss >= 0 ? rss / 1024 : -1L,
+                peak >= 0 ? peak / 1024 : -1L);
+    }
     perf_reset();
 }
 

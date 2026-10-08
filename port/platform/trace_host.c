@@ -32,6 +32,7 @@ extern int IosCdvdMgrSleep;              /* fumi/ios/cdvd.c:114 */
 extern int iosCdvdBackGroundMgrRunning;  /* fumi/ios/cdvd.c */
 extern int kanbanBootEnd;                /* common/src/kanbanBoot.c:25 */
 extern int game_pause;                   /* common/src/main.c */
+extern int current_layout_id;            /* common/src/layout_texture.c:34 */
 
 #define SAVE_BUFF_SIZE 25596 /* gameSysMainSaveBuff[25596], gamesys.c:79 */
 #define GFLAG_COUNT 400      /* gflags[50], script/src/gflag.c:14 */
@@ -45,6 +46,8 @@ static FILE *trace;
 
 static int logged_stage = -1;
 
+static int logged_layout = -1;
+
 void ico_host_main_tick(void)
 {
     if (main_ticks == 0) {
@@ -55,6 +58,14 @@ void ico_host_main_tick(void)
     if (stage_no != logged_stage) {
         ico_diag_milestone("stage_no %d -> %d", logged_stage, stage_no);
         logged_stage = stage_no;
+    }
+    /* v0.4.2: the menu screen (layout_action.c's numbers: 12 the title
+       with Continue, 20 the load's card check, 19 the file select, 25 the
+       load itself), so a log that ends after Continue says which step it
+       reached */
+    if (current_layout_id != logged_layout) {
+        ico_diag_milestone("menu screen %d -> %d", logged_layout, current_layout_id);
+        logged_layout = current_layout_id;
     }
 }
 

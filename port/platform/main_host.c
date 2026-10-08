@@ -1310,6 +1310,11 @@ static int host_main(int argc, char **argv)
     /* crash handlers and the unbuffered diagnostics writer, first thing;
        no log file when none was opened */
     ico_diag_init(log_file());
+#ifdef __ANDROID__
+    /* v0.4.2: a crash or the watchdog ends the run with a box and the C
+       library's last words in the log, not by the game just going */
+    ico_diag_set_fatal_ui(ico_android_fatal_box, ico_android_log_mirror_try_flush);
+#endif
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
 #ifdef __ANDROID__

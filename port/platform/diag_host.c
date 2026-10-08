@@ -111,6 +111,15 @@ static volatile unsigned long long present_done_ns;
 static volatile int effects_program;
 static void (*exit_hook)(const char *reason);
 
+#ifndef _WIN32
+/* v0.4.2 (Android): ico_diag_set_fatal_ui's box and flush, and the
+   requests the crashing thread leaves for the watchdog thread (fatal_ui_*) */
+static void (*fatal_box)(const char *text);
+static void (*fatal_flush)(void);
+static volatile sig_atomic_t ui_flush_req, ui_flush_done, ui_box_req, ui_box_done;
+static char ui_box_text[1536];
+#endif
+
 static char failure[512];
 
 static char thread_names[ICO_SCHED_MAX_THREADS][32];
@@ -284,6 +293,12 @@ static pthread_t main_thread;
 static uintptr_t main_stack_lo, main_stack_hi;
 
 static int reporter_running;
+
+#ifdef __ANDROID__
+/* the watchdog thread (ico_diag_start): the crash handler hands it the
+   player's box */
+static pthread_t reporter_thread;
+#endif
 
 static void raw_write(const char *s, size_t n)
 {
@@ -594,6 +609,187 @@ static void dump_threads(void)
     }
 }
 
+/* --- Process memory and the fatal end's player box (v0.4.2) --------------------- */
+
+void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void))
+{
+#ifdef _WIN32
+    /* Windows has its own box (finish) */
+    (void)box;
+    (void)flush;
+#else
+    fatal_box = box;
+    fatal_flush = flush;
+#endif
+}
+
+#ifndef _WIN32
+
+/* "Name:   1234 kB" in a /proc status text: the number, or -1 */
+static long status_kb(const char *text, const char *name)
+{
+    const char *p = text;
+    const size_t n = strlen(name);
+    while (*p != '\0') {
+        if (strncmp(p, name, n) == 0) {
+            long v = 0;
+            p += n;
+            while (*p == ' ' || *p == '\t') {
+                p++;
+            }
+            if (*p < '0' || *p > '9') {
+                return -1;
+            }
+            while (*p >= '0' && *p <= '9') {
+                v = v * 10 + (*p++ - '0');
+            }
+            return v;
+        }
+        while (*p != '\0' && *p != '\n') {
+            p++;
+        }
+        if (*p == '\n') {
+            p++;
+        }
+    }
+    return -1;
+}
+
+#endif
+
+int ico_diag_process_memory(long *rss_kb, long *peak_kb)
+{
+    *rss_kb = *peak_kb = -1;
+#ifdef _WIN32
+    return -1;
+#else
+    /* open and read only: callable from the crash handler */
+    char buf[4096];
+    ssize_t got = 0;
+    const int fd = open("/proc/self/status", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -1;
+    }
+    while (got < (ssize_t)sizeof buf - 1) {
+        const ssize_t r = read(fd, buf + got, sizeof buf - 1 - (size_t)got);
+        if (r <= 0) {
+            break;
+        }
+        got += r;
+    }
+    close(fd);
+    buf[got] = '\0';
+    *rss_kb = status_kb(buf, "VmRSS:");
+    *peak_kb = status_kb(buf, "VmHWM:");
+    return *rss_kb >= 0 ? 0 : -1;
+#endif
+}
+
+/* " | memory N MB (most M MB)", or "" where unknown */
+static void memory_note(char *out, size_t size)
+{
+    long rss, peak;
+    out[0] = '\0';
+    if (ico_diag_process_memory(&rss, &peak) == 0) {
+        snprintf(out, size, " | memory %ld MB (most %ld MB)", rss / 1024,
+                 (peak >= 0 ? peak : rss) / 1024);
+    }
+}
+
+#ifdef __ANDROID__
+
+static int on_reporter(void)
+{
+    return reporter_running && pthread_equal(pthread_self(), reporter_thread);
+}
+
+/* the crashing thread: waits up to ms for the watchdog thread to set *flag */
+static int ui_wait(volatile sig_atomic_t *flag, unsigned int ms)
+{
+    struct timespec ts = {0, 20 * 1000 * 1000};
+    unsigned int t;
+    for (t = 0; t < ms && !*flag; t += 20) {
+        nanosleep(&ts, NULL);
+    }
+    return *flag != 0;
+}
+
+/* What the process wrote to stderr just before the end (the C library's
+   abort message) into the log, ahead of the report: on the watchdog thread
+   at once, from another thread through it, waiting at most a second. */
+static void fatal_ui_flush(void)
+{
+    if (fatal_flush == NULL) {
+        return;
+    }
+    if (on_reporter()) {
+        fatal_flush();
+    } else if (reporter_running) {
+        ui_flush_done = 0;
+        ui_flush_req = 1;
+        ui_wait(&ui_flush_done, 1000);
+    }
+}
+
+/* The player's box: on the watchdog thread itself, else through it, the
+   crashing thread waiting until it is dismissed (at most two minutes) */
+static void fatal_ui_box(const char *text)
+{
+    size_t n;
+    if (fatal_box == NULL) {
+        return;
+    }
+    n = strlen(text);
+    if (n >= sizeof ui_box_text) {
+        n = sizeof ui_box_text - 1;
+    }
+    memcpy(ui_box_text, text, n);
+    ui_box_text[n] = '\0';
+    if (on_reporter()) {
+        fatal_box(ui_box_text);
+    } else if (reporter_running) {
+        ui_box_done = 0;
+        ui_box_req = 1;
+        ui_wait(&ui_box_done, 120000);
+    }
+}
+
+#endif
+
+#ifndef _WIN32
+
+/* the watchdog thread's side, at each poll */
+static void fatal_ui_serve(void)
+{
+    if (ui_flush_req && !ui_flush_done) {
+        if (fatal_flush != NULL) {
+            fatal_flush();
+        }
+        ui_flush_done = 1;
+    }
+    if (ui_box_req && !ui_box_done) {
+        if (fatal_box != NULL) {
+            fatal_box(ui_box_text);
+        }
+        ui_box_done = 1;
+    }
+}
+
+#endif
+
+#ifdef __ANDROID__
+
+/* the box's words: what happened, the saves, and the log to send */
+static void fatal_text(char *out, size_t size, const char *what)
+{
+    snprintf(out, size,
+             "%s\n\nYour saves are kept. To report it, send the file %s with a few words about "
+             "what you did just before.",
+             what, log_path_copy[0] != '\0' ? log_path_copy : "logs/ico-pc.log");
+}
+
+#endif
+
 /* --- Heartbeat ------------------------------------------------------------------ */
 
 /* The heartbeat's content without the time; 1 when it differs from the
@@ -648,6 +844,7 @@ static unsigned int same_beats;
 static void heartbeat(int fatal_path)
 {
     static char body[1024];
+    static char mem[64];
     heartbeat_body(body, sizeof body);
     if (strcmp(body, last_body) == 0) {
         same_beats++;
@@ -655,13 +852,17 @@ static void heartbeat(int fatal_path)
         same_beats = 0;
         memcpy(last_body, body, sizeof body);
     }
+    /* v0.4.2: the process's memory (a phone ends a process that holds too
+       much without a word), outside the comparison: it moves while the game
+       stands still */
+    memory_note(mem, sizeof mem);
     if (fatal_path) {
-        flog("ico_pc: heartbeat %.1f s | %s", ico_diag_uptime(), body);
+        flog("ico_pc: heartbeat %.1f s | %s%s", ico_diag_uptime(), body, mem);
     } else if (same_beats + 1 >= NO_PROGRESS_BEATS) {
-        ico_diag_log("ico_pc: heartbeat %.1f s | %s | no progress for %.0f s", ico_diag_uptime(),
-                     body, (double)same_beats * HEARTBEAT_S);
+        ico_diag_log("ico_pc: heartbeat %.1f s | %s%s | no progress for %.0f s", ico_diag_uptime(),
+                     body, mem, (double)same_beats * HEARTBEAT_S);
     } else {
-        ico_diag_log("ico_pc: heartbeat %.1f s | %s", ico_diag_uptime(), body);
+        ico_diag_log("ico_pc: heartbeat %.1f s | %s%s", ico_diag_uptime(), body, mem);
     }
 }
 
@@ -832,7 +1033,18 @@ static void finish(const char *reason, const char *box_text, int code)
     }
     TerminateProcess(GetCurrentProcess(), (UINT)code);
 #else
+#ifdef __ANDROID__
+    {
+        /* v0.4.2: the watchdog's end (a crash keeps the system's handlers,
+           crash_handler): the box, then the end */
+        static char box[1536];
+        fatal_ui_flush();
+        fatal_text(box, sizeof box, box_text);
+        fatal_ui_box(box);
+    }
+#else
     (void)box_text;
+#endif
     _exit(code);
 #endif
 }
@@ -1085,7 +1297,11 @@ static void watchdog_fire(const char *reason)
     heartbeat(1);
     dump_threads();
     /* the reason is in the log; the box says what happened in plain words */
+#ifdef __ANDROID__
+    snprintf(box, sizeof box, "ICO stopped responding, so it has to close.");
+#else
     snprintf(box, sizeof box, "ICO PC stopped responding, so it was closed.");
+#endif
     finish("watchdog", box, EXIT_WATCHDOG);
 }
 
@@ -1143,6 +1359,8 @@ static void watchdog_loop(void)
 #else
         struct timespec ts = {0, 250 * 1000 * 1000};
         nanosleep(&ts, NULL);
+        /* v0.4.2: a crashing thread's flush and box (fatal_ui_*) */
+        fatal_ui_serve();
 #endif
         if (fatal_once || !main_alive) {
             continue;
@@ -1244,6 +1462,9 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
             ico_diag_log("ico_pc: diagnostics: cannot start the watchdog thread");
             return;
         }
+#ifdef __ANDROID__
+        reporter_thread = t;
+#endif
         pthread_detach(t);
     }
 #endif
@@ -1495,10 +1716,20 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
     crash.thread = ico_sched_current();
     stack_bounds_here(crash.sp, &crash.stack_lo, &crash.stack_hi);
 #ifdef __ANDROID__
+    /* v0.4.2: the C library's last words first (abort, FORTIFY and the
+       stack protector write them to stderr, the log mirror's pipe) */
+    fatal_ui_flush();
     report_crash_block();
     flog("ico_pc: the run ended: %s", crash.what);
     if (exit_hook != NULL) {
         exit_hook(crash.what);
+    }
+    {
+        /* v0.4.2: a box instead of the game just going (the system shows
+           nothing), from the watchdog thread; this thread waits for it */
+        static char box[1536];
+        fatal_text(box, sizeof box, "ICO ran into a problem and has to close.");
+        fatal_ui_box(box);
     }
     flog("ico_pc: the system's crash report (tombstone) follows");
     /* the system's handlers back; a fault repeats when this returns, a

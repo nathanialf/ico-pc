@@ -74,6 +74,17 @@ void ico_diag_set_movie(int playing);
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
+/* v0.4.2 (Android): a crash or the watchdog there ends the run with no
+   window of its own, and the system shows nothing. box shows the player a
+   message and returns when it is dismissed; flush writes into the log what
+   the process wrote to stderr just before (the C library's abort message,
+   "FORTIFY: ..." or "stack corruption detected"), without waiting on a lock
+   for long. Both run on the watchdog thread (ico_diag_start), the crashing
+   thread waiting for them for a bounded time; either may be NULL. */
+void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void));
+/* The process's resident memory and its peak in KB (/proc/self/status:
+   Linux, Android); 0, or -1 where unknown. Async-signal-safe. */
+int ico_diag_process_memory(long *rss_kb, long *peak_kb);
 
 /* Package R2: the window's rd_Present is bracketed by these two. The time
    spent inside a present does not count towards either watchdog limit: a

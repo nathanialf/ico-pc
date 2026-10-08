@@ -287,7 +287,32 @@ void ico_android_log_mirror_flush(void)
     SDL_UnlockMutex(s_mirror_lock);
 }
 
+void ico_android_log_mirror_try_flush(void)
+{
+    int i;
+
+    if (s_pipe_r < 0 || s_mirror_lock == NULL) {
+        return;
+    }
+    for (i = 0; i < 50; i++) {
+        if (SDL_TryLockMutex(s_mirror_lock)) {
+            mirror_drain();
+            if (s_line_len > 0) {
+                logcat_line();
+            }
+            SDL_UnlockMutex(s_mirror_lock);
+            return;
+        }
+        SDL_Delay(10);
+    }
+}
+
 /* --- the message box and the version ------------------------------------ */
+
+void ico_android_fatal_box(const char *text)
+{
+    ico_android_message_box(text, 1);
+}
 
 void ico_android_message_box(const char *text, int error)
 {
