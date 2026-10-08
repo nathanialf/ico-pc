@@ -1349,43 +1349,51 @@ static void testSheetText(const char *mode, int scale, const char *dir)
         testSheetOverlay(sheet, ref);
 
         /* the dump keeps the format and the style: load, replay, the same
-         * bytes */
-        rd_SetTextureSheetStyle(sheet, &kSheetFr);
-        sheetFrameBegin();
-        sheetDraw(sheet, RD_TCC_RGBA, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
-        rd_EndFrame(0);
-        img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
-        char path[1024];
-        snprintf(path, sizeof(path), "%s/rd_pixel_sheet.rddump", dir);
-        CHECK(rd_DumpFrame(path), "rd_DumpFrame (sheet)");
-        RdFrame f;
-        if (img && rd__LoadFrame(path, &f)) {
-            int sheets = 0;
-            for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
-                const RdTexRec *t = &g_rd.textures[i];
-                sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
-                          t->w == SHEET_W && t->h == SHEET_H &&
-                          memcmp(t->pixels, s_sheetCov, sizeof(s_sheetCov)) == 0 &&
-                          t->sheet[0] == 64 && t->sheet[1] == 62 && t->sheet[2] == 0xFF &&
-                          t->sheet[3] == 1 && strcmp(t->name, "dump") == 0;
-            }
-            CHECK(sheets == 1, "the loaded dump has the sheet texture with its style (%d)", sheets);
-            static const uint8_t junk[4] = {1, 2, 3, 4};
-            rd_BeginFrame();
-            rd_SelectList(0);
-            rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 0, 0);
+         * bytes; the faint style's rim weight rides in the view word's bits
+         * 10..15, which the loader once rejected */
+        static const RdSheetStyle *const dumped[2] = {&kSheetFr, &kSheetFaint};
+        static const uint8_t dumpedWeight[2] = {64, 21};
+        for (int k = 0; k < 2; k++) {
+            rd_SetTextureSheetStyle(sheet, dumped[k]);
+            sheetFrameBegin();
+            sheetDraw(sheet, RD_TCC_RGBA, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
             rd_EndFrame(0);
-            CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the loaded sheet frame");
-            uint32_t w2 = 0, h2 = 0;
-            uint8_t *again = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
-            CHECK(again && w2 == w && h2 == h && memcmp(again, img, (size_t)w * h * 4) == 0,
-                  "sheet dump -> load -> replay: the same SCENE");
-            free(again);
-            rd__FrameFree(&f);
-        } else {
-            CHECK(0, "rd__LoadFrame (sheet)");
+            img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+            char path[1024];
+            snprintf(path, sizeof(path), "%s/rd_pixel_sheet%d.rddump", dir, k);
+            CHECK(rd_DumpFrame(path), "rd_DumpFrame (sheet style %d)", k);
+            RdFrame f;
+            if (img && rd__LoadFrame(path, &f)) {
+                int sheets = 0;
+                for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+                    const RdTexRec *t = &g_rd.textures[i];
+                    sheets += t->live && t->kind == RD_TEXKIND_IMAGE &&
+                              t->format == RD_TEXEL_SHEET && t->w == SHEET_W && t->h == SHEET_H &&
+                              memcmp(t->pixels, s_sheetCov, sizeof(s_sheetCov)) == 0 &&
+                              t->sheet[0] == dumpedWeight[k] && t->sheet[1] == 62 &&
+                              t->sheet[2] == 0xFF && t->sheet[3] == 1 &&
+                              strcmp(t->name, "dump") == 0;
+                }
+                CHECK(sheets == 1, "the loaded dump has the sheet texture with style %d (%d)", k,
+                      sheets);
+                static const uint8_t junk[4] = {1, 2, 3, 4};
+                rd_BeginFrame();
+                rd_SelectList(0);
+                rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 0, 0);
+                rd_EndFrame(0);
+                CHECK(rd__ReplayFrame(&f, (int)f.keep, false),
+                      "replay of the loaded sheet frame (style %d)", k);
+                uint32_t w2 = 0, h2 = 0;
+                uint8_t *again = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
+                CHECK(again && w2 == w && h2 == h && memcmp(again, img, (size_t)w * h * 4) == 0,
+                      "sheet dump -> load -> replay (style %d): the same SCENE", k);
+                free(again);
+                rd__FrameFree(&f);
+            } else {
+                CHECK(0, "rd__LoadFrame (sheet style %d)", k);
+            }
+            free(img);
         }
-        free(img);
     }
     rd_DestroyTexture(sheet);
     rd_DestroyTexture(ref);

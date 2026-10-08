@@ -471,8 +471,9 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
                sheet's, with its style above the format byte */
             const uint8_t fmt = (uint8_t)(h.view & 0xFFu);
             const int sheet = ver >= 7u && fmt == RD_TEXEL_SHEET;
-            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 &&
-                 (sheet ? (h.view & 0xFC00u) == 0 : h.view <= RD_TEXEL_R8);
+            /* a sheet's bits 10..15 are its rim weight (16 for the faint
+               class), so any value is valid there */
+            ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && (sheet || h.view <= RD_TEXEL_R8);
             const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes(fmt);
             uint8_t *px = ok ? malloc(bytes) : NULL;
             ok = px && rraw(fp, px, bytes);
