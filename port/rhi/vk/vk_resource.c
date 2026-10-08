@@ -340,6 +340,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         return out;
     }
     const VkrFormatMap *fm = &vkr_formatMap[desc->format];
+    const VkFormat vkFmt = vkr_VkFormat(desc->format);
     VkImageUsageFlags usage = 0;
     if (desc->usage & RHI_TEX_SAMPLED) {
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -368,7 +369,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     VkImageCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = fm->vk,
+        .format = vkFmt,
         .extent = {desc->width, desc->height, 1},
         .mipLevels = mips,
         .arrayLayers = 1,
@@ -388,7 +389,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         !VKR_CHECK(vkBindImageMemory(g_vkr.device, t->image, t->memory, 0))) {
         goto fail;
     }
-    t->format = fm->vk;
+    t->format = vkFmt;
     t->rhiFormat = desc->format;
     t->aspects = fm->aspect;
     t->width = desc->width;
@@ -397,12 +398,12 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     /* copy-only textures (staging, R8 copy targets) have no view: a view
      * needs a sampled or attachment usage */
     if ((desc->usage & (RHI_TEX_SAMPLED | RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL)) &&
-        !vkr_CreateView(t->image, fm->vk, fm->aspect, mips, &t->view)) {
+        !vkr_CreateView(t->image, vkFmt, fm->aspect, mips, &t->view)) {
         goto fail;
     }
     if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) && (desc->usage & RHI_TEX_SAMPLED)) {
         /* a depth-stencil view cannot be sampled; sampling sees depth only */
-        if (!vkr_CreateView(t->image, fm->vk, VK_IMAGE_ASPECT_DEPTH_BIT, mips, &t->depthView)) {
+        if (!vkr_CreateView(t->image, vkFmt, VK_IMAGE_ASPECT_DEPTH_BIT, mips, &t->depthView)) {
             goto fail;
         }
     } else {

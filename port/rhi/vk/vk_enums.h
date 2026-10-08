@@ -214,6 +214,16 @@ static const VkrStateMap vkr_stateMap[RHI_STATE_COUNT] = {
                            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0},
 };
 
+/* package AN-F: RHI_FMT_D32F_S8 is the logical scene depth-stencil format;
+ * the device backs it with D32_SFLOAT_S8_UINT or, where that is missing,
+ * D24_UNORM_S8_UINT (vkr_formatMap holds the D32 entry, ds the chosen one).
+ * Every Vulkan format read of an RhiFormat goes through vkr_VkFormat
+ * (vk_internal.h) or this. */
+static inline VkFormat vkr_VkFormatWith(RhiFormat f, VkFormat ds)
+{
+    return f == RHI_FMT_D32F_S8 ? ds : vkr_formatMap[f].vk;
+}
+
 static inline bool vkr_IsDepthFormat(RhiFormat f)
 {
     return f == RHI_FMT_D32F || f == RHI_FMT_D32F_S8;

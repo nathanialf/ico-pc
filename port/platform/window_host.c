@@ -373,7 +373,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
                 "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
-                "dump textures %s\n",
+                "dump textures %s, depth %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
@@ -381,7 +381,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 o.fullHeight ? "full" : "half",
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
-                o.dumpTextures && ico_opt_developer_mode() ? "on" : "off");
+                o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
+                rhi_Limits()->depthStencilFormatName);
         fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
         /* v0.3.1 (P3): later changes are logged against this */

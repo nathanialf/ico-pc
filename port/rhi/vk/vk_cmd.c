@@ -1083,6 +1083,9 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
     if (aspect == RHI_ASPECT_DEPTH && !(t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
         return false;
     }
+    if (aspect == RHI_ASPECT_DEPTH && t->format == VK_FORMAT_D24_UNORM_S8_UINT) {
+        return false; /* RhiLimits.depthReadback is false: no float depth to give */
+    }
     uint32_t texel = vkr_formatMap[t->rhiFormat].texelBytes;
     uint32_t pitch = t->width * texel;
     size_t size = (size_t)pitch * t->height;

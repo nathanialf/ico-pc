@@ -370,6 +370,12 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     /* package AN-E: dual-source blending is optional; without it cells 0
      * and 1 are not drawn and keep the clear colour */
     const bool dual = lim->dualSourceBlend;
+    const char *fakeD24 = getenv("ICO_VK_FAKE_D24S8"); /* rhi_vk_d24s8 */
+    if (fakeD24 && fakeD24[0] == '1' && rhi_Backend() == RHI_BACKEND_VULKAN &&
+        (lim->depthReadback || strcmp(lim->depthStencilFormatName, "D24S8") != 0)) {
+        rhi_test_Log("FAIL ICO_VK_FAKE_D24S8 set but %s reported\n", lim->depthStencilFormatName);
+        return 1;
+    }
     const char *fake = getenv("ICO_VK_FAKE_NO_DUAL"); /* rhi_vk_nodual */
     if (dual && fake && fake[0] && fake[0] != '0') {
         rhi_test_Log("FAIL ICO_VK_FAKE_NO_DUAL set but dualSourceBlend reported\n");
@@ -745,22 +751,29 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         }
 
         static float dep[W * H];
-        if (!rhi_ReadbackTexture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch) ||
-            pitch != W * 4) {
+        if (!lim->depthReadback) {
+            /* package AN-F: D24S8 gives no float depth; the readback must fail cleanly */
+            if (rhi_ReadbackTexture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch)) {
+                rhi_test_Log("FAIL depth readback succeeded without depthReadback\n");
+                failures++;
+            }
+        } else if (!rhi_ReadbackTexture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch) ||
+                   pitch != W * 4) {
             rhi_test_Log("FAIL depth readback\n");
             failures++;
             break;
-        }
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                int cell = (y / CELL) * 4 + x / CELL;
-                float want = cell == 4 ? 0.75f : 0.0f;
-                if (dep[y * W + x] != want) {
-                    rhi_test_Log("FAIL frame %d depth (%d,%d) = %.9g, expected %.9g\n", frame, x, y,
-                                 (double)dep[y * W + x], (double)want);
-                    failures++;
-                    y = H;
-                    break;
+        } else {
+            for (int y = 0; y < H; y++) {
+                for (int x = 0; x < W; x++) {
+                    int cell = (y / CELL) * 4 + x / CELL;
+                    float want = cell == 4 ? 0.75f : 0.0f;
+                    if (dep[y * W + x] != want) {
+                        rhi_test_Log("FAIL frame %d depth (%d,%d) = %.9g, expected %.9g\n", frame,
+                                     x, y, (double)dep[y * W + x], (double)want);
+                        failures++;
+                        y = H;
+                        break;
+                    }
                 }
             }
         }

@@ -89,7 +89,11 @@ typedef enum RhiFormat {
     RHI_FMT_R16_UINT,
     RHI_FMT_RGBA16F,
     RHI_FMT_D32F,        /* reversed-Z depth */
-    RHI_FMT_D32F_S8,     /* reversed-Z depth + stencil (scene target) */
+    RHI_FMT_D32F_S8,     /* reversed-Z depth + stencil (scene target).  The logical scene
+                          * depth-stencil format: the Vulkan backend may back it with
+                          * D24_UNORM_S8_UINT (24-bit depth) on a device without
+                          * D32_SFLOAT_S8_UINT; see RhiLimits.depthStencilFormatName and
+                          * depthReadback */
     RHI_FMT_BGRA8_UNORM, /* swapchain */
     /* Texture packs: block-compressed sampled textures (4x4 texel blocks,
      * 8 bytes a block for BC1, 16 for BC2/BC3/BC7), created only when
@@ -433,7 +437,12 @@ typedef struct RhiLimits {
     uint32_t maxTextureSize;
     bool dualSourceBlend; /* package AN-E: optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
-    bool depthReadback;   /* frame dumps include depth when true */
+    /* true when rhi_ReadbackTexture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
+     * returns float depth (frame dumps and tests that compare depth); false
+     * on D24S8, where that readback fails (returns false) */
+    bool depthReadback;
+    /* what backs RHI_FMT_D32F_S8: "D32S8", or "D24S8" (Vulkan fallback) */
+    const char *depthStencilFormatName;
     /* Buffer<->texture copies: the row pitch and the buffer offset must be
      * multiples of these (D3D12: 256 and 512; Vulkan: 1 and 4).  rd_core
      * rounds the pitch up to copyRowPitchAlign from width * texel size. */

@@ -177,6 +177,9 @@ typedef struct VkrState {
     PFN_vkCmdBeginRendering cmdBeginRendering;
     PFN_vkCmdEndRendering cmdEndRendering;
     bool anisotropy;
+    /* package AN-F: the Vulkan format behind RHI_FMT_D32F_S8 (D32_SFLOAT_S8_UINT,
+     * or D24_UNORM_S8_UINT without it or under ICO_VK_FAKE_D24S8) */
+    VkFormat dsFormat;
     bool dualSrcBlend; /* package AN-E: the feature enabled (RhiLimits.dualSourceBlend) */
     /* texture packs: textureCompressionBC enabled and the four BC formats
      * sampleable and copyable (RhiLimits.bcTextures) */
@@ -239,6 +242,13 @@ typedef struct VkrState {
 } VkrState;
 
 extern VkrState g_vkr;
+
+/* the Vulkan format of an RhiFormat; RHI_FMT_D32F_S8 resolves to the chosen
+ * depth-stencil format (package AN-F) */
+static inline VkFormat vkr_VkFormat(RhiFormat f)
+{
+    return vkr_VkFormatWith(f, g_vkr.dsFormat);
+}
 
 #define VKR_LOG(...)                                                                               \
     do {                                                                                           \

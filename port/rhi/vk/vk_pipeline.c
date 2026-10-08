@@ -567,7 +567,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     VkFormat colorFormats[RHI_MAX_COLOR_TARGETS];
     for (uint32_t i = 0; i < d->colorCount; i++) {
         cba[i] = vkr_Blend(&d->blend[i], d->colorFormats[i]);
-        colorFormats[i] = vkr_formatMap[d->colorFormats[i]].vk;
+        colorFormats[i] = vkr_VkFormat(d->colorFormats[i]);
     }
     VkPipelineColorBlendStateCreateInfo cb = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -582,7 +582,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         .dynamicStateCount = (uint32_t)(sizeof(dyn) / sizeof(dyn[0])),
         .pDynamicStates = dyn,
     };
-    VkFormat depthFmt = vkr_formatMap[d->depthFormat].vk;
+    VkFormat depthFmt = vkr_VkFormat(d->depthFormat);
     VkPipelineRenderingCreateInfo ri = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = d->colorCount,

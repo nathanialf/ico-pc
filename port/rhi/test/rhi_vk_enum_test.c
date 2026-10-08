@@ -105,6 +105,16 @@ int main(void)
     CHECK_EQ(vkr_formatMap[RHI_FMT_D32F_S8].vk, VK_FORMAT_D32_SFLOAT_S8_UINT);
     CHECK_EQ(vkr_formatMap[RHI_FMT_D32F_S8].aspect,
              VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+    /* package AN-F: the accessor is the table for every format but D32F_S8,
+     * which takes the device's chosen depth-stencil format */
+    for (unsigned i = 0; i < RHI_FMT_COUNT; i++) {
+        const VkFormat want =
+            i == RHI_FMT_D32F_S8 ? VK_FORMAT_D24_UNORM_S8_UINT : vkr_formatMap[i].vk;
+        CHECK_EQ(vkr_VkFormatWith((RhiFormat)i, VK_FORMAT_D24_UNORM_S8_UINT), want);
+        const VkFormat want32 = vkr_formatMap[i].vk;
+        CHECK_EQ(vkr_VkFormatWith((RhiFormat)i, VK_FORMAT_D32_SFLOAT_S8_UINT), want32);
+    }
+    CHECK_EQ(vkr_VkFormatWith(RHI_FMT_D32F, VK_FORMAT_D24_UNORM_S8_UINT), VK_FORMAT_D32_SFLOAT);
     CHECK_EQ(vkr_formatMap[RHI_FMT_R8_UNORM].vk, VK_FORMAT_R8_UNORM);
     CHECK_EQ(vkr_vertexFormatMap[RHI_VTX_U8x4_UNORM].vk, VK_FORMAT_R8G8B8A8_UNORM);
     CHECK_EQ(vkr_StateLayout(RHI_STATE_SHADER_READ, RHI_FMT_D32F),

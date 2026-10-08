@@ -280,6 +280,22 @@ static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags n
     return (fp.optimalTilingFeatures & need) == need;
 }
 
+/* package AN-F: the format behind RHI_FMT_D32F_S8.  The spec guarantees one
+ * of D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT; D32 is preferred.
+ * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests: rhi_vk_d24s8). */
+static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
+{
+    const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    const char *e = getenv("ICO_VK_FAKE_D24S8");
+    *fake = e && e[0] && e[0] != '0';
+    const bool d24 = vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds);
+    const bool d32 = vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds);
+    if (d24 && (*fake || !d32)) {
+        return VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+    return VK_FORMAT_D32_SFLOAT_S8_UINT;
+}
+
 /* Returns a score (higher is better) or -1 when the device cannot run the
  * renderer.  *outQueue receives the graphics(+present) queue family. */
 static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
@@ -320,8 +336,9 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
                       rt | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) ||
         !vkr_FormatOk(pd, VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) ||
         !vkr_FormatOk(pd, VK_FORMAT_R8_UNORM, rt) || !vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT, ds) ||
-        !vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds)) {
-        *why = "a required format (RGBA8, RGBA8_UINT, R8, D32F, D32F_S8) is missing";
+        (!vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
+         !vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds))) {
+        *why = "a required format (RGBA8, RGBA8_UINT, R8, D32F, D32F_S8 or D24S8) is missing";
         return -1;
     }
 
@@ -429,6 +446,13 @@ static bool vkr_PickDevice(void)
     vkGetPhysicalDeviceProperties(g_vkr.phys, &g_vkr.props);
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     snprintf(g_vkr.adapterName, sizeof(g_vkr.adapterName), "%s", g_vkr.props.deviceName);
+    bool fake = false;
+    g_vkr.dsFormat = vkr_ChooseDepthStencil(g_vkr.phys, &fake);
+    if (g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT) {
+        VKR_LOG("depth-stencil: D24S8 in use%s, 24-bit depth (the scene depth has less precision "
+                "than the 32-bit float of D32S8)",
+                fake ? " (ICO_VK_FAKE_D24S8)" : "");
+    }
     return true;
 }
 
@@ -463,7 +487,7 @@ static bool vkr_CreateDevice(void)
     g_vkr.bc = avail.textureCompressionBC == VK_TRUE;
     for (int f = RHI_FMT_BC1_UNORM; g_vkr.bc && f <= RHI_FMT_BC7_UNORM; f++) {
         VkFormatProperties fp;
-        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_formatMap[f].vk, &fp);
+        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_VkFormat((RhiFormat)f), &fp);
         const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
                                           VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
@@ -566,7 +590,9 @@ static void vkr_FillLimits(void)
     o->maxTextureSize = l->maxImageDimension2D;
     o->dualSourceBlend = g_vkr.dualSrcBlend; /* package AN-E: optional */
     o->stencilWrap = true;                   /* core Vulkan */
-    o->depthReadback = true;
+    /* package AN-F: a D24 depth copies out as packed 24-bit words, not floats */
+    o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
     /* R7a: images carry mipLevels, views and barriers span every level, and

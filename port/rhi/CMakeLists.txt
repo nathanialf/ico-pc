@@ -290,6 +290,13 @@ if(_ico_have_vk)
         set(_ico_vk_nodual_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_DUAL=1")
         set_tests_properties(rhi_vk_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nodual_env}")
+        # package AN-F: the D24S8 depth-stencil fallback (ICO_VK_FAKE_D24S8=1)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
+        add_test(NAME rhi_vk_d24s8 COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
+        set(_ico_vk_d24s8_env ${_ico_vk_test_env} "ICO_VK_FAKE_D24S8=1")
+        set_tests_properties(rhi_vk_d24s8 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_d24s8_env}")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)

@@ -328,6 +328,7 @@ static void dx_FillLimits(void)
     o->dualSourceBlend = true; /* every D3D12 device (feature level 11_0) */
     o->stencilWrap = true;
     o->depthReadback = true;
+    o->depthStencilFormatName = "D32S8";
     o->copyRowPitchAlign = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;   /* 256 */
     o->copyOffsetAlign = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT; /* 512 */
     /* R7a's fields: textures carry mipLevels, every barrier spans all
