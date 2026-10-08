@@ -1,7 +1,7 @@
 /*
  * port/render/xxh3.c
  *
- * xxh3_64 (texpack_name.h): XXH3_64bits of xxHash v0.8.2 with seed 0 and
+ * xxh3_64 (xxh3.h): XXH3_64bits of xxHash v0.8.2 with seed 0 and
  * the default secret, the hash PCSX2 names replacement textures with
  * (GSTextureCache.cpp, GSXXH3_64bits).  A reimplementation of the
  * algorithm in plain C, scalar only, written from xxhash.h; the default
@@ -42,7 +42,7 @@
  */
 #include <stddef.h>
 #include <stdint.h>
-#include "texpack_name.h"
+#include "xxh3.h"
 
 #define P32_1 0x9E3779B1u
 #define P32_2 0x85EBCA77u

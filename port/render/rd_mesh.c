@@ -35,6 +35,7 @@
 #include "rd_mesh.h"
 #include "shader_consts.h"
 #include "vu1_ref.h"
+#include "xxh3.h"
 
 /* ------------------------------------------------------------- registry */
 
@@ -222,8 +223,15 @@ void rd__MeshGpuShutdown(void)
     }
 }
 
+/* meshes rd_VuMeshRetire marked stale and not yet freed */
+static uint32_t s_staleCount;
+
 static void meshFree(RdMeshRec *m)
 {
+    if (m->stale && s_staleCount) {
+        s_staleCount--;
+    }
+    m->stale = 0;
     meshGpuRelease(m); /* P1 */
     for (int i = 0; i < 2; i++) {
         free(m->hist[i].stream);
@@ -332,38 +340,131 @@ static uint32_t tagPrim(const float *q)
     return (hi >> 15) & 0x7FF; /* bits 47..57 of the tag's first doubleword */
 }
 
-RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
+/* The walk of a desc (rd_CreateVuMesh, rd_VuMeshDescHash): false for a
+ * desc rd_CreateVuMesh refuses; *nv the vertex count of all batches (each
+ * batch's GIF tag holds its NLOOP). */
+static bool descCount(const RdVuMeshDesc *d, uint32_t *nv)
 {
+    *nv = 0;
     if (!d || !d->qw || d->qwPerVertex == 0 || d->batchCount == 0 || !d->batches) {
-        return (RdMesh){0};
+        return false;
     }
-    /* count the vertices: each batch's GIF tag holds its NLOOP */
-    uint32_t nv = 0;
+    uint64_t total = 0;
     for (uint32_t b = 0; b < d->batchCount; b++) {
         const uint32_t at = d->batches[b].firstQw;
         if (at >= d->qwCount) {
-            return (RdMesh){0};
+            return false;
         }
         const uint32_t n = tagWord(d->qw[at]) & 0x7FFF;
         if (at + 1 + (uint64_t)n * d->qwPerVertex > d->qwCount) {
             rd__Log("rd_CreateVuMesh(%s): batch %u runs past the stream",
                     d->debugName ? d->debugName : "?", b);
-            return (RdMesh){0};
+            return false;
         }
-        nv += n;
+        total += n;
     }
-    float (*stream)[4] = malloc((size_t)(nv ? nv : 1) * d->qwPerVertex * 16);
+    if (total >= (1u << 30)) {
+        return false;
+    }
+    *nv = (uint32_t)total;
+    return true;
+}
+
+/* The bytes rd_mesh.h's mesh identity hashes, in one buffer: the header
+ * ("ICOMESH1", qwPerVertex, batchCount, the batches' vertex counts), then
+ * the tagless stream at *streamAt.  NULL on no memory; free() it. */
+static uint8_t *taglessBuild(const RdVuMeshDesc *d, uint32_t nv, size_t *streamAt, size_t *bytes)
+{
+    const size_t hdr = 16 + (size_t)d->batchCount * 4;
+    const size_t sb = (size_t)nv * d->qwPerVertex * 16;
+    uint8_t *buf = malloc(hdr + (sb ? sb : 16));
+    if (!buf) {
+        return NULL;
+    }
+    memcpy(buf, "ICOMESH1", 8);
+    memcpy(buf + 8, &d->qwPerVertex, 4);
+    memcpy(buf + 12, &d->batchCount, 4);
+    size_t at = hdr;
+    for (uint32_t b = 0; b < d->batchCount; b++) {
+        const uint32_t q = d->batches[b].firstQw;
+        const uint32_t n = tagWord(d->qw[q]) & 0x7FFF;
+        memcpy(buf + 16 + (size_t)b * 4, &n, 4);
+        memcpy(buf + at, d->qw[q + 1], (size_t)n * d->qwPerVertex * 16);
+        at += (size_t)n * d->qwPerVertex * 16;
+    }
+    *streamAt = hdr;
+    *bytes = hdr + sb;
+    return buf;
+}
+
+/* the first vertex's normal.w for the lit and skinned layouts */
+static float streamNormalW(const float (*stream)[4], uint32_t nv, uint32_t qpv)
+{
+    return nv && qpv >= 4 ? stream[1][3] : 0.0f;
+}
+
+/* The static kicks of one batch (n vertices from v in the mesh numbering):
+ * vertex k >= 2 kicks unless k or k-1 carries the strip flag (ST.w < 1; ST
+ * is the second-last quadword of a vertex in normal_c, normal_l and
+ * cluster).  Appends the indices at index, returns how many. */
+static uint32_t batchIndices(const float (*stream)[4], uint32_t qpv, uint32_t v, uint32_t n,
+                             uint32_t *index)
+{
+    const uint32_t stAt = qpv >= 3 ? qpv - 2 : 0;
+    uint32_t ni = 0;
+    for (uint32_t k = 2; k < n; k++) {
+        const float *st0 = stream[(size_t)(v + k) * qpv + stAt];
+        const float *st1 = stream[(size_t)(v + k - 1) * qpv + stAt];
+        if (st0[3] < 1.0f || st1[3] < 1.0f) {
+            continue; /* vertex k or k-1 starts a strip */
+        }
+        for (uint32_t c = 0; c < 3; c++) {
+            index[ni++] = ICO_VU_INDEX(v + k, c);
+        }
+    }
+    return ni;
+}
+
+uint64_t rd_VuMeshDescHash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW)
+{
+    uint32_t nv = 0;
+    uint64_t h = 0;
+    float nw = 0.0f;
+    size_t streamAt, bytes;
+    uint8_t *buf;
+    if (descCount(d, &nv) && (buf = taglessBuild(d, nv, &streamAt, &bytes)) != NULL) {
+        h = xxh3_64(buf, bytes);
+        nw = streamNormalW((const float (*)[4])(void *)(buf + streamAt), nv, d->qwPerVertex);
+        free(buf);
+    } else {
+        nv = 0;
+    }
+    if (vertexCount) {
+        *vertexCount = nv;
+    }
+    if (normalW) {
+        *normalW = nw;
+    }
+    return h;
+}
+
+RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
+{
+    uint32_t nv;
+    if (!descCount(d, &nv)) {
+        return (RdMesh){0};
+    }
+    size_t streamAt, bytes;
+    uint8_t *buf = taglessBuild(d, nv, &streamAt, &bytes);
     uint32_t *index = malloc((size_t)(nv ? nv : 1) * 3 * 4);
     RdVuBatchRec *br = calloc(d->batchCount, sizeof(RdVuBatchRec));
-    if (!stream || !index || !br) {
-        free(stream);
+    if (!buf || !index || !br) {
+        free(buf);
         free(index);
         free(br);
         return (RdMesh){0};
     }
-    /* the strip flag is ST.w < 1; ST is the
-     * second-last quadword of a vertex in normal_c, normal_l and cluster */
-    const uint32_t stAt = d->qwPerVertex >= 3 ? d->qwPerVertex - 2 : 0;
+    const float (*stream)[4] = (const float (*)[4])(void *)(buf + streamAt);
     uint32_t v = 0, ni = 0;
     for (uint32_t b = 0; b < d->batchCount; b++) {
         const uint32_t at = d->batches[b].firstQw;
@@ -375,26 +476,83 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
         br[b].firstVertex = v;
         br[b].vertexCount = n;
         br[b].firstIndex = ni;
-        memcpy(stream[(size_t)v * d->qwPerVertex], d->qw[at + 1], (size_t)n * d->qwPerVertex * 16);
-        for (uint32_t k = 2; k < n; k++) {
-            const float *st0 = stream[(size_t)(v + k) * d->qwPerVertex + stAt];
-            const float *st1 = stream[(size_t)(v + k - 1) * d->qwPerVertex + stAt];
-            if (st0[3] < 1.0f || st1[3] < 1.0f) {
-                continue; /* vertex k or k-1 starts a strip */
-            }
-            for (uint32_t c = 0; c < 3; c++) {
-                index[ni++] = ICO_VU_INDEX(v + k, c);
-            }
-        }
+        ni += batchIndices(stream, d->qwPerVertex, v, n, index + ni);
         br[b].indexCount = ni - br[b].firstIndex;
         v += n;
     }
-    uint32_t id = rd__VuMeshCreateRaw((const float (*)[4])stream, nv, d->qwPerVertex, index, ni, br,
-                                      d->batchCount, d->debugName);
+    uint32_t id =
+        rd__VuMeshCreateRaw(stream, nv, d->qwPerVertex, index, ni, br, d->batchCount, d->debugName);
     RdMeshRec *m = rd__MeshRec(id);
     if (m) {
         m->materialCount = d->materialCount;
         m->srcQw = d->qwCount;
+        m->hash = xxh3_64(buf, bytes);
+    }
+    free(buf);
+    free(index);
+    free(br);
+    return (RdMesh){id};
+}
+
+RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
+                                  const char *name)
+{
+    uint32_t onv;
+    if (!rep || !descCount(orig, &onv) || rep->qwPerVertex != orig->qwPerVertex ||
+        rep->batchCount > orig->batchCount || (rep->batchCount && !rep->batches) ||
+        (rep->vertexCount && !rep->qw)) {
+        return (RdMesh){0};
+    }
+    const uint32_t qpv = orig->qwPerVertex;
+    uint64_t total = 0;
+    for (uint32_t b = 0; b < rep->batchCount; b++) {
+        const RdVuReplacementBatch *rb = &rep->batches[b];
+        if ((uint64_t)rb->firstVertex + rb->vertexCount > rep->vertexCount) {
+            return (RdMesh){0};
+        }
+        total += rb->vertexCount;
+    }
+    if (total >= (1u << 30)) {
+        return (RdMesh){0};
+    }
+    const uint64_t hash = rd_VuMeshDescHash(orig, NULL, NULL);
+    const uint32_t nv = (uint32_t)total;
+    float (*stream)[4] = malloc((size_t)(nv ? nv : 1) * qpv * 16);
+    uint32_t *index = malloc((size_t)(nv ? nv : 1) * 3 * 4);
+    RdVuBatchRec *br = calloc(orig->batchCount, sizeof(RdVuBatchRec));
+    if (!stream || !index || !br) {
+        free(stream);
+        free(index);
+        free(br);
+        return (RdMesh){0};
+    }
+    uint32_t v = 0, ni = 0;
+    for (uint32_t b = 0; b < orig->batchCount; b++) {
+        const uint32_t at = orig->batches[b].firstQw;
+        const uint32_t n = b < rep->batchCount ? rep->batches[b].vertexCount : 0;
+        br[b].srcQw = at;
+        br[b].prim = tagPrim(orig->qw[at]);
+        br[b].material = orig->batches[b].material;
+        br[b].group = orig->batches[b].group;
+        br[b].firstVertex = v;
+        br[b].vertexCount = n;
+        br[b].firstIndex = ni;
+        if (n) {
+            memcpy(stream[(size_t)v * qpv], rep->qw[(size_t)rep->batches[b].firstVertex * qpv],
+                   (size_t)n * qpv * 16);
+            ni += batchIndices((const float (*)[4])stream, qpv, v, n, index + ni);
+        }
+        br[b].indexCount = ni - br[b].firstIndex;
+        v += n;
+    }
+    uint32_t id = rd__VuMeshCreateRaw((const float (*)[4])stream, nv, qpv, index, ni, br,
+                                      orig->batchCount, name ? name : orig->debugName);
+    RdMeshRec *m = rd__MeshRec(id);
+    if (m) {
+        m->materialCount = orig->materialCount;
+        m->srcQw = orig->qwCount;
+        m->hash = hash;
+        m->replaced = 1;
     }
     free(stream);
     free(index);
@@ -446,11 +604,11 @@ const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4]
     return NULL;
 }
 
-void rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
+bool rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
 {
     RdMeshRec *m = rd__MeshRec(mesh.id);
-    if (!m || !m->vu || !qw) {
-        return;
+    if (!m || !m->vu || !qw || m->replaced) {
+        return false; /* a replaced mesh: its stream is not the packet's layout */
     }
     keepVersion(m);
     for (uint32_t b = 0; b < m->batchCount; b++) {
@@ -460,6 +618,7 @@ void rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
     }
     m->replaySeen = 0; /* upload again at the next replay */
     m->gpuDirty = 1;   /* P1: the device copy too */
+    return true;
 }
 
 void rd_DestroyVuMesh(RdMesh mesh)
@@ -473,7 +632,50 @@ void rd_DestroyVuMesh(RdMesh mesh)
 bool rd_VuMeshValid(RdMesh mesh)
 {
     RdMeshRec *m = rd__MeshRec(mesh.id);
-    return m && m->vu;
+    return m && m->vu && !m->stale;
+}
+
+uint64_t rd_VuMeshHash(RdMesh mesh)
+{
+    RdMeshRec *m = rd__MeshRec(mesh.id);
+    return m && m->vu ? m->hash : 0;
+}
+
+bool rd_VuMeshReplaced(RdMesh mesh)
+{
+    RdMeshRec *m = rd__MeshRec(mesh.id);
+    return m && m->vu && m->replaced;
+}
+
+void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user)
+{
+    if (!g_rd.meshes) {
+        return;
+    }
+    for (uint32_t i = 0; i < RD_MAX_MESHES; i++) {
+        RdMeshRec *m = &g_rd.meshes[i];
+        if (!m->live || !m->vu || m->stale || m->transient) {
+            continue;
+        }
+        if (!pred || pred(m->hash, m->replaced != 0, user)) {
+            m->stale = 1;
+            s_staleCount++;
+        }
+    }
+}
+
+void rd__VuMeshSweepStale(void)
+{
+    if (s_staleCount == 0 || !g_rd.meshes || rd__PhotoPinned()) {
+        return;
+    }
+    for (uint32_t i = 0; i < RD_MAX_MESHES && s_staleCount; i++) {
+        RdMeshRec *m = &g_rd.meshes[i];
+        /* the frame recording now and the two retained ones are younger */
+        if (m->live && m->stale && m->lastUsed + 3 < g_rd.frameCounter) {
+            meshFree(m);
+        }
+    }
 }
 
 void rd__MeshShutdown(void)
@@ -486,6 +688,7 @@ void rd__MeshShutdown(void)
             meshFree(&g_rd.meshes[i]);
         }
     }
+    s_staleCount = 0;
 }
 
 /* ------------------------------------------------------------ VU images */

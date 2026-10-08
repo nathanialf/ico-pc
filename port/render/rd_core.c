@@ -1337,6 +1337,7 @@ void rd_BeginFrame(void)
     RdFrame *f = &g_rd.frames[idx];
     rd__FrameReset(f);
     f->number = ++g_rd.frameCounter;
+    rd__VuMeshSweepStale(); /* v0.5.0 (M0): retired meshes no kept frame drew */
     f->startState = g_rd.persistent;
     f->gsW = g_rd.gsW;
     f->gsH = g_rd.gsH;

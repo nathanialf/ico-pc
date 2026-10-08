@@ -1194,7 +1194,7 @@ static void morphUpdate(RdMesh m, float x)
 {
     static float qw[10][4];
     morphStream(qw, x);
-    rd_UpdateVuMesh(m, (const float (*)[4])qw);
+    CHECK(rd_UpdateVuMesh(m, (const float (*)[4])qw), "the morph rewrote the mesh");
 }
 
 static void morphDrawAt(RdMesh m, RdKey key)

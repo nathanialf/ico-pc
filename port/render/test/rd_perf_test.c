@@ -162,7 +162,7 @@ static void recordFrame(uint32_t n)
         rd_Texture(s_tex[i & 3], RD_TEXFN_MODULATE, RD_TCC_RGBA);
         const int m = i % MESHES;
         if (m == 0 && i == 0) {
-            rd_UpdateVuMesh(s_mesh[0], (const float (*)[4])s_morph); /* a morph */
+            CHECK(rd_UpdateVuMesh(s_mesh[0], (const float (*)[4])s_morph), "a morph"); /* a morph */
         }
         rd_DrawVuMesh(s_mesh[m], &d, RD_KEY(1, (uint32_t)i, 0));
     }

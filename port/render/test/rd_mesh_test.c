@@ -23,6 +23,9 @@
  *            their entries (pac_HostStrips): the table, the I's through
  *            p2o_MakePacket, and with the disc image given as the argument
  *            their geometry (below, "strip order"); recording only
+ *   model packs  (v0.5.0, M0) the mesh identity, replacements from a
+ *            tagless stream, one drawn in the prelit packet's place,
+ *            rd_VuMeshRetire and the sweep; recording only
  *
  * Checks on the recording (no device needed): the mesh built from the
  * packet (vertex count, batches, the index list against vu1ref_StaticKicks);
@@ -48,6 +51,7 @@
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
 #include "vu1_ref.h"
+#include "xxh3.h"
 /* the game's side */
 #include "typedef.h"
 #include "DisplayList.h"
@@ -61,6 +65,9 @@
 #include "Packet.h"
 #include "Primitive.h"
 #include "RegistPacket.h"
+#include "eeword.h"
+/* the synthetic models (shared with modelpack_test.c) */
+#include "vu_models.h"
 /* the disc (the strip order case) */
 #include "df_pack.h"
 #include "vfs.h"
@@ -392,20 +399,6 @@ static float s_scratch[0x800 / 4] __attribute__((aligned(16)));
 
 static float s_common[16][4];
 
-static void qw4(float *d, float x, float y, float z, float w)
-{
-    d[0] = x;
-    d[1] = y;
-    d[2] = z;
-    d[3] = w;
-}
-
-static void identity(float *m)
-{
-    memset(m, 0, 64);
-    m[0] = m[5] = m[10] = m[15] = 1.0f;
-}
-
 static void buildScene(void)
 {
     matrixptr = (char *)s_scratch;
@@ -445,163 +438,9 @@ static void setCommon(void)
     rd_SetVuCommon(&b);
 }
 
-static uint32_t s_rng = 1234567u;
-
-static float rnd(float lo, float hi)
-{
-    s_rng = s_rng * 1664525u + 1013904223u;
-    return lo + (hi - lo) * (float)(s_rng >> 8) * (1.0f / 16777216.0f);
-}
-
-/* ------------------------------------------------------------- models */
-
-#define STRIPS 4
-#define SLEN 24
-#define NV (STRIPS * SLEN)
-
-typedef struct Model {
-    PObjModel mdl __attribute__((aligned(16)));
-    PObjPart part;
-    PObjMatDef mat;
-    PObjTexDef texDef;
-    float vtx[NV][4] __attribute__((aligned(16)));
-    float nrm[NV][4] __attribute__((aligned(16)));
-    float uv[NV][4] __attribute__((aligned(16)));
-    unsigned char col[NV][4];
-    short strip[(STRIPS * (SLEN + 1) + 1) * 8];
-    void *stripTbl[1];
-    float boxes[8][4] __attribute__((aligned(16)));
-    struct DObjNode nodes[2];
-    float nodeMtx[2][16] __attribute__((aligned(16)));
-    float clusterMtx[2][16] __attribute__((aligned(16)));
-    LightMatrix light __attribute__((aligned(16)));
-    ObjEnt polys[2];
-    float w0[NV];
-} Model;
-
 static Sub15C s_objA, s_objB;
 
 static Model s_modelA, s_modelB;
-
-/* A ribbon of STRIPS strips of SLEN vertices, x -14..14, rows of 6 units,
- * z 1.9..2.3: in view, and four strips of 72 quadwords make two VU batches
- * (pac_checkDivide's 192-quadword budget) with a restart inside each. */
-static void makeModel(Model *m, Sub15C *o, int cluster, int shade)
-{
-    memset(m, 0, sizeof(*m));
-    memset(o, 0, sizeof(*o));
-    for (int s = 0, v = 0; s < STRIPS; s++) {
-        for (int k = 0; k < SLEN; k++, v++) {
-            float x = -14.0f + 28.0f * (float)(k >> 1) / (float)(SLEN / 2 - 1);
-            float y = -12.0f + 6.0f * (float)s + 6.0f * (float)(k & 1);
-            qw4(m->vtx[v], x + rnd(-0.3f, 0.3f), y + rnd(-0.3f, 0.3f), rnd(1.9f, 2.3f), 1.0f);
-            qw4(m->nrm[v], rnd(-1, 1), rnd(-1, 1), rnd(-1, 1), 1.0f);
-            qw4(m->uv[v], rnd(0, 1), rnd(0, 1), 0, 0);
-            m->col[v][0] = (unsigned char)rnd(20, 250);
-            m->col[v][1] = (unsigned char)rnd(20, 250);
-            m->col[v][2] = (unsigned char)rnd(20, 250);
-            m->w0[v] = rnd(0.2f, 0.8f);
-        }
-    }
-    /* the shape table: per strip a head record (count, the packet offset
-     * pac_make*Strip fills) and a record per vertex (vertex, normal, uv,
-     * colour indices, material, texture slot); count -1 ends it */
-    short *p = m->strip;
-    for (int s = 0; s < STRIPS; s++) {
-        p[0] = SLEN;
-        p += 8;
-        for (int k = 0; k < SLEN; k++) {
-            int v = s * SLEN + k;
-            p[2] = (short)v;
-            p[3] = (short)v;
-            p[4] = (short)v;
-            p[5] = (short)v;
-            p[6] = 0;
-            p[7] = 0;
-            p += 8;
-        }
-    }
-    p[0] = -1;
-    m->stripTbl[0] = m->strip;
-    m->mat.alpha = 1.0f;
-    m->mat.wrap = 1;
-    m->mat.fbaOff = 0;
-    snprintf(m->texDef.name, sizeof(m->texDef.name), "testtex");
-    m->texDef.scaleU = 1.0f;
-    m->texDef.scaleV = 1.0f;
-    m->part.vtx = (char *)m->vtx;
-    m->part.vtxCount = NV;
-    m->part.nrm = cluster ? (char *)m->nrm : NULL;
-    m->part.nrmCount = cluster ? NV : 0;
-    m->part.uv = (char *)m->uv;
-    m->part.col = (char *)m->col;
-    m->part.mats = &m->mat;
-    m->part.matCount = 1;
-    m->part.texDefs = &m->texDef;
-    m->part.texCount = 1;
-    m->part.strips = m->stripTbl;
-    m->part.stripCount = 1;
-    snprintf(m->mdl.name, sizeof(m->mdl.name), cluster ? "test_cluster" : "test_prelit");
-    m->mdl.partCount = 1;
-    m->mdl.disp = (signed char)(cluster ? 1 : 0);
-    m->mdl.mode.s.shade = (unsigned short)shade;
-    m->mdl.mode.s.lod = 0;
-    m->mdl.parts = &m->part;
-    m->mdl.boxes = (char *)m->boxes;
-    for (int i = 0; i < 2; i++) {
-        m->nodes[i].scale[0] = m->nodes[i].scale[1] = m->nodes[i].scale[2] = 1.0f;
-        identity(m->nodeMtx[i]);
-        identity(m->clusterMtx[i]);
-    }
-    /* node 0 moves the model half a unit right (the matrices the packets
-     * carry are products, not copies) */
-    m->nodeMtx[0][12] = 0.5f;
-    m->nodeMtx[1][12] = 0.5f;
-    m->clusterMtx[1][13] = 1.0f; /* bone 1 lifts its vertices a unit */
-    o->model = &m->mdl;
-    o->nodes = m->nodes;
-    o->nodeNum = cluster ? 2 : 1;
-    o->nodeMtx = (ICO_WORD)m->nodeMtx;
-    o->clusterMtx = (char *)m->clusterMtx;
-    o->lightMtx = &m->light;
-    o->dispType = 0;
-    if (cluster) {
-        /* light: L1 = (n.z, n.x, n.y, n.w) as vu1_test.c, L2 colours with an
-         * ambient column */
-        float *l1 = &m->light.normal[0][0], *l2 = &m->light.color[0][0];
-        qw4(l1 + 0, 0, 1, 0, 0);
-        qw4(l1 + 4, 0, 0, 1, 0);
-        qw4(l1 + 8, 1, 0, 0, 0);
-        qw4(l1 + 12, 0, 0, 0, 1);
-        qw4(l2 + 0, 0.5f, 0.5f, 0.5f, 0);
-        qw4(l2 + 4, 0.25f, 0, 0, 0);
-        qw4(l2 + 8, 0, 0.25f, 0, 0);
-        qw4(l2 + 12, 0.125f, 0.125f, 0.25f, 0);
-        m->light.mode = 1;
-        /* cluster table: bone 0 and bone 1 each list every vertex with its
-         * weight; the bone lists live in the EE word arena */
-        static size_t arenaAt = 16;
-        for (int j = 0; j < 2; j++) {
-            unsigned char *list = s_arena + arenaAt;
-            for (int v = 0; v < NV; v++) {
-                int vi = v;
-                float w = j == 0 ? m->w0[v] : 1.0f - m->w0[v];
-                memcpy(list + v * 16, &vi, 4);
-                memcpy(list + v * 16 + 4, &w, 4);
-            }
-            int end = -1;
-            memcpy(list + NV * 16, &end, 4);
-            arenaAt += (size_t)(NV + 1) * 16;
-            m->polys[j].p = ico_eew(list);
-            int bone = j;
-            memcpy((char *)&m->polys[j] + 4, &bone, 4);
-        }
-        m->part.polys = m->polys;
-        m->part.polyCount = 2;
-    } else {
-        m->light.mode = 0; /* normal_c, prelit */
-    }
-}
 
 /* ------------------------------------------------- the packet's batches */
 
@@ -1526,6 +1365,332 @@ static void stripDiscChecks(const char *disc)
     ico_vfs_unmount(vfs);
 }
 
+/* ---------------------------------------- model packs (v0.5.0, M0)
+ *
+ * The mesh identity (rd_VuMeshDescHash) on a synthetic prelit packet of
+ * two batches (5 and 6 vertices, a strip restart at vertex 3 of the
+ * second) against the byte stream rd_mesh.h specifies, and on the game's
+ * packets against the hash rd_CreateVuMesh stored; replacements from a
+ * tagless stream (counts, indices, PRIM/material/group from the original,
+ * the rejections, rd_UpdateVuMesh refusing them); one drawn through
+ * reg_DispObj in the original's place; rd_VuMeshRetire and the sweep. */
+#define SYN_QW (2 + 11 * RD_VU_QW_PRELIT)
+
+typedef struct Synth {
+    float qw[SYN_QW][4];
+    RdVuBatchDesc b[2];
+    RdVuMeshDesc d;
+} Synth;
+
+static void synthPacket(Synth *s, uint32_t prim, uint16_t material)
+{
+    static const uint32_t counts[2] = {5, 6};
+    memset(s, 0, sizeof(*s));
+    uint32_t at = 0;
+    for (uint32_t i = 0; i < 2; i++) {
+        /* NLOOP, EOP; PRE, PRIM, NREG 3 in the upper word */
+        const uint32_t tag[4] = {counts[i] | 0x8000u, (1u << 14) | (prim << 15) | (3u << 28), 0x512,
+                                 0};
+        memcpy(s->qw[at], tag, 16);
+        s->b[i].firstQw = at;
+        s->b[i].material = (uint16_t)(material + i);
+        s->b[i].group = (uint16_t)i;
+        at++;
+        for (uint32_t k = 0; k < counts[i]; k++, at += RD_VU_QW_PRELIT) {
+            const int restart = k == 0 || (i == 1 && k == 3);
+            qw4(s->qw[at], (float)k, (float)i, 2.0f, 1.0f);
+            qw4(s->qw[at + 1], 0.125f * (float)k, 0.5f, 1.0f, restart ? 0.0f : 1.0f);
+            qw4(s->qw[at + 2], (float)(10 + k), (float)(20 + i), 30.0f, 127.0f);
+        }
+    }
+    s->d.qw = (const float (*)[4])s->qw;
+    s->d.qwCount = at;
+    s->d.qwPerVertex = RD_VU_QW_PRELIT;
+    s->d.batchCount = 2;
+    s->d.batches = s->b;
+    s->d.materialCount = 2;
+    s->d.debugName = "synth";
+}
+
+/* the identity's bytes, written out as rd_mesh.h lists them */
+static uint64_t synthHashByHand(const Synth *s)
+{
+    static uint8_t buf[16 + 8 + 11 * RD_VU_QW_PRELIT * 16];
+    const uint32_t hdr[4] = {RD_VU_QW_PRELIT, 2, 5, 6};
+    memcpy(buf, "ICOMESH1", 8);
+    memcpy(buf + 8, hdr, 16);
+    memcpy(buf + 24, s->qw[1], 5 * RD_VU_QW_PRELIT * 16);
+    memcpy(buf + 24 + 5 * RD_VU_QW_PRELIT * 16, s->qw[2 + 5 * RD_VU_QW_PRELIT],
+           6 * RD_VU_QW_PRELIT * 16);
+    return xxh3_64(buf, sizeof(buf));
+}
+
+/* a packet's desc as pac_hostStream builds it: every UNPACK payload back
+ * to back, the packet's material, group 0 */
+typedef struct PkDesc {
+    float qw[1024][4];
+    RdVuBatchDesc b[16];
+    RdVuMeshDesc d;
+} PkDesc;
+
+static void packetDesc(const PacHeader *pk, int qpv, PkDesc *o)
+{
+    Batches b;
+    packetBatches(pk, &b);
+    memset(o, 0, sizeof(*o));
+    uint32_t at = 0;
+    for (int i = 0; i < b.n; i++) {
+        uint32_t tag;
+        memcpy(&tag, b.in[i][0], 4);
+        const uint32_t n = 1 + (tag & 0x7FFF) * (uint32_t)qpv;
+        if (at + n > 1024) {
+            break;
+        }
+        memcpy(o->qw[at], b.in[i], (size_t)n * 16);
+        o->b[i].firstQw = at;
+        o->b[i].material = (uint16_t)pk->mat;
+        at += n;
+    }
+    o->d.qw = (const float (*)[4])o->qw;
+    o->d.qwCount = at;
+    o->d.qwPerVertex = (uint32_t)qpv;
+    o->d.batchCount = (uint32_t)b.n;
+    o->d.batches = o->b;
+    o->d.materialCount = 1;
+    o->d.debugName = "packet";
+}
+
+static void hashChecks(void)
+{
+    static Synth a, b;
+    synthPacket(&a, 0x0C, 0);
+    synthPacket(&b, 0x0C, 0);
+    uint32_t nv = 99;
+    float nw = 99.0f;
+    const uint64_t ha = rd_VuMeshDescHash(&a.d, &nv, &nw);
+    CHECK(ha != 0 && ha == rd_VuMeshDescHash(&b.d, NULL, NULL), "two builds hash alike");
+    CHECK(ha == synthHashByHand(&a), "the hash is XXH3-64 of rd_mesh.h's byte stream");
+    CHECK(nv == 11 && nw == 0.0f, "11 vertices (%u), prelit normal.w 0 (%g)", nv, (double)nw);
+    /* one colour byte (batch 1, vertex 2's red) */
+    uint8_t *c = (uint8_t *)&b.qw[2 + 5 * RD_VU_QW_PRELIT + 2 * RD_VU_QW_PRELIT + 2][0];
+    c[0] ^= 1;
+    CHECK(rd_VuMeshDescHash(&b.d, NULL, NULL) != ha, "one colour byte changes the hash");
+    /* PRIM, material and group are not in the key */
+    synthPacket(&b, 0x1C, 7);
+    b.b[1].group = 5;
+    CHECK(rd_VuMeshDescHash(&b.d, NULL, NULL) == ha, "PRIM, material and group are not hashed");
+    /* malformed: the last batch runs past the stream */
+    b.d.qwCount--;
+    nv = 99;
+    nw = 99.0f;
+    CHECK(rd_VuMeshDescHash(&b.d, &nv, &nw) == 0 && nv == 0 && nw == 0.0f,
+          "a malformed desc hashes to 0");
+    CHECK(rd_VuMeshDescHash(NULL, NULL, NULL) == 0, "no desc hashes to 0");
+    /* rd_CreateVuMesh keeps the same hash */
+    RdMesh m = rd_CreateVuMesh(&a.d);
+    CHECK(m.id && rd_VuMeshHash(m) == ha && !rd_VuMeshReplaced(m), "the record's hash");
+    rd_DestroyVuMesh(m);
+    /* the game's packets: the desc rebuilt from the packet hashes as the
+     * mesh pac_HostMesh built; skinned: normal.w of the first vertex */
+    static PkDesc pd;
+    packetDesc(packetA(), RD_VU_QW_PRELIT, &pd);
+    RdMesh pa = {pac_HostMesh(packetA())};
+    CHECK(rd_VuMeshHash(pa) != 0 && rd_VuMeshDescHash(&pd.d, &nv, NULL) == rd_VuMeshHash(pa) &&
+              nv == NV,
+          "the prelit packet's hash (%u vertices)", nv);
+    packetDesc(packetB(), RD_VU_QW_SKIN, &pd);
+    RdMesh pb = {pac_HostMesh(packetB())};
+    const RdMeshRec *rb = rd__MeshRec(pb.id);
+    CHECK(rb && rd_VuMeshDescHash(&pd.d, NULL, &nw) == rd_VuMeshHash(pb) && nw == rb->stream[1][3],
+          "the cluster packet's hash, normal.w %g", (double)nw);
+    CHECK(rd_VuMeshHash(pa) != rd_VuMeshHash(pb), "two parts, two hashes");
+}
+
+static void replacementChecks(void)
+{
+    static Synth o;
+    synthPacket(&o, 0x0C, 3);
+    { /* batch 1's tag: PRIM 0x1C */
+        uint32_t hi = (1u << 14) | (0x1Cu << 15) | (3u << 28);
+        memcpy(&o.qw[o.b[1].firstQw][1], &hi, 4);
+    }
+    const uint64_t h = rd_VuMeshDescHash(&o.d, NULL, NULL);
+    /* the tagless vertices of the synthetic packet, the batches swapped */
+    static float flat[11 * RD_VU_QW_PRELIT][4];
+    memcpy(flat[0], o.qw[1], 5 * RD_VU_QW_PRELIT * 16);
+    memcpy(flat[5 * RD_VU_QW_PRELIT], o.qw[2 + 5 * RD_VU_QW_PRELIT], 6 * RD_VU_QW_PRELIT * 16);
+    RdVuReplacementBatch rb[3] = {{5, 6}, {0, 5}, {0, 0}};
+    RdVuReplacement rep = {(const float (*)[4])flat, 11, RD_VU_QW_PRELIT, rb, 2};
+    RdMesh m = rd_CreateVuMeshReplacement(&o.d, &rep, "synth rep");
+    const RdMeshRec *r = rd__MeshRec(m.id);
+    CHECK(r && r->vu && r->replaced && r->hash == h && rd_VuMeshReplaced(m) &&
+              rd_VuMeshHash(m) == h && rd_VuMeshValid(m),
+          "a replaced VU mesh with the original's hash");
+    if (r) {
+        CHECK(r->vertexCount == 11 && r->batchCount == 2 && r->qwPerVertex == RD_VU_QW_PRELIT &&
+                  r->materialCount == 2 && r->indexCount == 15,
+              "11 vertices, 2 batches, 15 indices (%u %u %u)", r->vertexCount, r->batchCount,
+              r->indexCount);
+        /* batch 0 draws the original's batch 1 vertices: kicks at 2 and 5
+         * (3 and 4 touch the restart); batch 1 the first five: 2, 3, 4 */
+        static const uint32_t kick[5] = {2, 5, 8, 9, 10};
+        int ok = r->indexCount == 15;
+        for (int i = 0; ok && i < 5; i++) {
+            for (uint32_t c = 0; c < 3; c++) {
+                ok &= r->index[i * 3 + c] == ICO_VU_INDEX(kick[i], c);
+            }
+        }
+        CHECK(ok, "the index list from the strip flags");
+        CHECK(r->batches[0].firstVertex == 0 && r->batches[0].vertexCount == 6 &&
+                  r->batches[0].firstIndex == 0 && r->batches[0].indexCount == 6 &&
+                  r->batches[1].firstVertex == 6 && r->batches[1].vertexCount == 5 &&
+                  r->batches[1].firstIndex == 6 && r->batches[1].indexCount == 9,
+              "the batch ranges");
+        CHECK(r->batches[0].prim == 0x0C && r->batches[1].prim == 0x1C &&
+                  r->batches[0].material == 3 && r->batches[1].material == 4 &&
+                  r->batches[0].group == 0 && r->batches[1].group == 1,
+              "PRIM, material and group from the original's batches (%x %x)", r->batches[0].prim,
+              r->batches[1].prim);
+        CHECK(memcmp(r->stream[0], flat[5 * RD_VU_QW_PRELIT], 6 * RD_VU_QW_PRELIT * 16) == 0 &&
+                  memcmp(r->stream[6 * RD_VU_QW_PRELIT], flat[0], 5 * RD_VU_QW_PRELIT * 16) == 0,
+              "the stream batch by batch");
+    }
+    /* the morph path cannot write a replaced mesh */
+    float before[4];
+    memcpy(before, r ? r->stream[0] : before, 16);
+    CHECK(!rd_UpdateVuMesh(m, (const float (*)[4])o.qw), "rd_UpdateVuMesh refuses a replaced mesh");
+    CHECK(!r || memcmp(before, r->stream[0], 16) == 0, "and writes nothing");
+    RdMesh om = rd_CreateVuMesh(&o.d);
+    CHECK(rd_UpdateVuMesh(om, (const float (*)[4])o.qw), "rd_UpdateVuMesh writes an original");
+    rd_DestroyVuMesh(om);
+    rd_DestroyVuMesh(m);
+    /* fewer batches: the rest empty */
+    rep.batchCount = 1;
+    m = rd_CreateVuMeshReplacement(&o.d, &rep, NULL);
+    r = rd__MeshRec(m.id);
+    CHECK(r && r->batchCount == 2 && r->batches[1].vertexCount == 0 &&
+              r->batches[1].indexCount == 0 && r->indexCount == 6 && r->vertexCount == 6 &&
+              strcmp(r->name, "synth") == 0,
+          "a missing batch is empty, the name the original's");
+    rd_DestroyVuMesh(m);
+    /* rejections */
+    rep.batchCount = 3;
+    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "more batches than the original");
+    rep.batchCount = 2;
+    rep.qwPerVertex = RD_VU_QW_LIT;
+    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "another layout");
+    rep.qwPerVertex = RD_VU_QW_PRELIT;
+    rb[1].vertexCount = 12;
+    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "a run outside the stream");
+    rb[1].vertexCount = 5;
+    o.d.qwCount--;
+    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "a malformed original");
+    o.d.qwCount++;
+    CHECK(rd_CreateVuMeshReplacement(&o.d, NULL, NULL).id == 0, "no replacement");
+}
+
+static uint64_t s_retireHash;
+
+static int s_retireCalls;
+
+static bool retireReplaced(uint64_t hash, bool replaced, void *user)
+{
+    (void)user;
+    s_retireCalls++;
+    return replaced && hash == s_retireHash;
+}
+
+static bool retireOriginal(uint64_t hash, bool replaced, void *user)
+{
+    (void)user;
+    return !replaced && hash == s_retireHash;
+}
+
+/* the prelit packet drawn through reg_DispObj with a replacement in its
+ * place (what the game hook does), then retired */
+static void replacementDrawChecks(void)
+{
+    PacHeader *pk = packetA();
+    RdMesh orig = {pac_HostMesh(pk)};
+    const RdMeshRec *orc = rd__MeshRec(orig.id);
+    if (!orc) {
+        CHECK(0, "the prelit mesh");
+        return;
+    }
+    static PkDesc pd;
+    packetDesc(pk, RD_VU_QW_PRELIT, &pd);
+    /* the original's tagless stream, every vertex 0.25 to the right */
+    static float flat[NV * RD_VU_QW_PRELIT][4];
+    memcpy(flat, orc->stream, sizeof(flat));
+    for (int v = 0; v < NV; v++) {
+        flat[v * RD_VU_QW_PRELIT][0] += 0.25f;
+    }
+    RdVuReplacementBatch rb[16];
+    for (uint32_t b = 0; b < orc->batchCount && b < 16; b++) {
+        rb[b].firstVertex = orc->batches[b].firstVertex;
+        rb[b].vertexCount = orc->batches[b].vertexCount;
+    }
+    RdVuReplacement rep = {(const float (*)[4])flat, NV, RD_VU_QW_PRELIT, rb, orc->batchCount};
+    RdMesh m = rd_CreateVuMeshReplacement(&pd.d, &rep, "test_prelit rep");
+    const RdMeshRec *r = rd__MeshRec(m.id);
+    CHECK(r && r->hash == orc->hash && r->indexCount == orc->indexCount &&
+              r->batchCount == orc->batchCount,
+          "the replacement keeps the original's hash, batches and kicks");
+    if (!r) {
+        return;
+    }
+    unsigned char saved[sizeof(pk->pad9C)];
+    memcpy(saved, pk->pad9C, sizeof(saved));
+    memcpy(pk->pad9C, &m.id, sizeof(m.id));
+    recordPrelit(&s_objA, 1);
+    const RdFrame *f = rd__LastFrame();
+    Found fd;
+    walkFrame(f, &fd);
+    CHECK(fd.n == 1 && fd.cmd[0]->type == RDC_MESH && fd.cmd[0]->u[0] == m.id,
+          "one RDC_MESH of the replacement");
+    if (fd.n >= 1) {
+        const float *mem;
+        RdVuPayload p = payloadOf(f, fd.cmd[0], &mem);
+        CHECK(p.prog == RD_PROG_PRELIT && p.code == 32 && p.clip == RD_VU_CLIP_REGION &&
+                  p.firstBatch == 0 && p.batchCount == orc->batchCount &&
+                  p.qwPerVertex == RD_VU_QW_PRELIT,
+              "normal_c 32 over all %u batches (prog %u code %u, %u batches)", orc->batchCount,
+              p.prog, p.code, p.batchCount);
+    }
+    /* retire the replacement: invalid at once, freed once three frames
+     * have opened since its draw */
+    const uint32_t drawn = r->lastUsed;
+    s_retireHash = orc->hash;
+    s_retireCalls = 0;
+    rd_VuMeshRetire(retireReplaced, NULL);
+    CHECK(s_retireCalls > 0 && !rd_VuMeshValid(m) && rd_VuMeshValid(orig) && rd__MeshRec(m.id),
+          "retired: the replacement invalid, kept; the original valid");
+    int kept = 1;
+    for (int i = 0; i < 4; i++) {
+        dl_Clear();
+        dl_Swap();
+        if (g_rd.frameCounter <= drawn + 3) {
+            kept &= rd__MeshRec(m.id) != NULL;
+        }
+    }
+    CHECK(kept && rd__MeshRec(m.id) == NULL, "kept for the retained frames, then freed");
+    memcpy(pk->pad9C, saved, sizeof(saved));
+    /* retiring the original: pac_HostMesh builds it again */
+    rd_VuMeshRetire(retireOriginal, NULL);
+    CHECK(!rd_VuMeshValid(orig), "the original retired");
+    RdMesh again = {pac_HostMesh(pk)};
+    CHECK(again.id != 0 && again.id != orig.id && rd_VuMeshValid(again) &&
+              rd_VuMeshHash(again) == s_retireHash,
+          "pac_HostMesh builds a retired mesh again with the same hash");
+}
+
+static void modelPackChecks(void)
+{
+    hashChecks();
+    replacementChecks();
+    replacementDrawChecks();
+}
+
 /* ----------------------------------------------------------- the setup */
 
 static void setup(void)
@@ -1568,6 +1733,7 @@ static void recordingChecks(void)
     checkParticleRecording();
     stripTableChecks();
     stripPacketChecks();
+    modelPackChecks();
 }
 
 int main(int argc, char **argv)

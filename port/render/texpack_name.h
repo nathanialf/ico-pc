@@ -76,6 +76,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "xxh3.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -140,9 +141,7 @@ typedef struct TexpackName {
     uint32_t regionW, regionH;
 } TexpackName;
 
-/* XXH3-64 of n bytes at p, seed 0, the default secret (xxHash v0.8.2's
-   XXH3_64bits).  p may be null when n is 0. */
-uint64_t xxh3_64(const void *p, size_t n);
+/* xxh3_64: xxh3.h (included above) */
 
 /* The PSM's block size in texels (CT32/CT24, PSMT8H, PSMT4HL/HH 8x8,
    CT16/CT16S 16x8, PSMT8 16x16, PSMT4 32x16; GSLocalMemory.cpp m_psm[].bs).

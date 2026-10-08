@@ -127,12 +127,85 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *desc);
  * them when the frame's lists are kicked, so every draw of the frame being
  * recorded sees the last write.  rd_UpdateVuMesh re-reads the stream (the
  * same layout as at creation: desc->qw with the same batches) with that
- * meaning.  Destroy frees the mesh; a mesh no frame has drawn for a while
+ * meaning; it returns false (nothing written) for no such mesh, a NULL
+ * stream or a replaced mesh (rd_CreateVuMeshReplacement), true otherwise.
+ * Destroy frees the mesh; a mesh no frame has drawn for a while
  * may also be evicted when the registry fills (rd_VuMeshValid tells the
- * seki side to build it again from its packet). */
-void rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
+ * seki side to build it again from its packet; false too for a mesh
+ * rd_VuMeshRetire marked stale). */
+bool rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
 void rd_DestroyVuMesh(RdMesh m);
 bool rd_VuMeshValid(RdMesh m);
+
+/* ------------------------------------------- model packs (v0.5.0, M0)
+ *
+ * The identity of a mesh: XXH3-64 (xxh3_64, xxh3.h) over one byte stream,
+ * little-endian:
+ *   "ICOMESH1"                       8 bytes, no terminator
+ *   u32 qwPerVertex
+ *   u32 batchCount
+ *   u32 vertexCount                  per batch, in batch order (the NLOOP)
+ *   the vertex quadwords             every batch's, without its GIF tag, in
+ *                                    batch order (vertexCount x qwPerVertex
+ *                                    x 16 bytes; the stream rd_CreateVuMesh
+ *                                    keeps)
+ * PRIM, material, group, the model name and the GIF tags' other bits are
+ * not in the key. rd_VuMeshDescHash validates the desc as rd_CreateVuMesh
+ * does and returns 0 for one rd_CreateVuMesh would refuse (a valid desc
+ * hashing to 0 is not special-cased). vertexCount (may be NULL) receives
+ * the total vertex count, normalW (may be NULL) the first vertex's normal.w
+ * (quadword 1's w) for the lit and skinned layouts (qwPerVertex >= 4),
+ * 0 for prelit or an empty stream; both 0 on a malformed desc.
+ * rd_CreateVuMesh stores the same hash in the record (rd_VuMeshHash). */
+uint64_t rd_VuMeshDescHash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW);
+
+/* A replacement's vertices: vertexCount x qwPerVertex quadwords in the
+ * original's layout (RD_VU_QW_*: ST = (s, t, 1, flag), the strip flag
+ * ST.w < 1 on a strip's first vertex; skinned weights as the original
+ * packet holds them), and per batch the run of qw it draws.  Runs may be
+ * in any order and may share vertices; the mesh copies them batch by batch.
+ * batchCount <= the original's: batch i of the replacement draws in the
+ * place of the original's batch i, batches past batchCount are empty. */
+typedef struct RdVuReplacementBatch {
+    uint32_t firstVertex, vertexCount; /* a vertex index into qw[] and a count */
+} RdVuReplacementBatch;
+
+typedef struct RdVuReplacement {
+    const float (*qw)[4]; /* vertexCount * qwPerVertex quadwords */
+    uint32_t vertexCount;
+    uint32_t qwPerVertex; /* must equal the original's */
+    const RdVuReplacementBatch *batches;
+    uint32_t batchCount;
+} RdVuReplacement;
+
+/* Builds a mesh from rep that draws in the place of the mesh orig would
+ * build: the index list from rep's strip flags by rd_CreateVuMesh's rule
+ * (per batch, vertex k >= 2 kicks unless k or k-1 carries the flag), each
+ * batch's PRIM from the original's GIF tag and material and group from
+ * orig->batches, the original's batch and material counts; the record's
+ * hash is orig's (rd_VuMeshDescHash) and it is marked replaced.  name (NULL:
+ * orig->debugName) names the record.  {0} when orig is malformed, the
+ * layouts differ, rep has more batches than orig, a run lies outside
+ * rep->qw, the total reaches 2^30 vertices, or memory runs out. */
+RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
+                                  const char *name);
+
+/* The record's hash (0: no such mesh, or one created from a raw stream)
+ * and whether rd_CreateVuMeshReplacement built it.  rd_UpdateVuMesh on a
+ * replaced mesh returns false without writing (the morph path must fall
+ * back to the original). */
+uint64_t rd_VuMeshHash(RdMesh m);
+bool rd_VuMeshReplaced(RdMesh m);
+
+/* Marks stale every live VU mesh for which pred(hash, replaced, user) is
+ * true (pred NULL: every one; the interpolation's scratch meshes are never
+ * offered).  A stale mesh fails rd_VuMeshValid at once, so the seki side
+ * builds it again on its next draw (with or without the pack), while the
+ * record stays for the frames already recorded with it: it is freed at a
+ * rd_BeginFrame once three frames have opened since its last draw (the
+ * retained interpolation frames keep theirs), not while photo mode holds a
+ * pinned frame.  Recording only, no device needed. */
+void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user);
 
 /* --------------------------------------------------------- per draw */
 

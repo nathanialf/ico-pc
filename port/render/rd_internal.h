@@ -501,8 +501,9 @@ typedef struct RdVuBatchRec {
 typedef struct RdMeshRec {
     uint32_t gen;
     uint8_t live;
-    uint8_t vu; /* rd_CreateVuMesh */
-    uint8_t _pad[2];
+    uint8_t vu;       /* rd_CreateVuMesh */
+    uint8_t replaced; /* v0.5.0 (M0): rd_CreateVuMeshReplacement built it */
+    uint8_t stale;    /* rd_VuMeshRetire: not valid, freed once no kept frame drew it */
     uint32_t vertexCount, stripCount, materialCount;
     /* VU meshes */
     uint32_t qwPerVertex, batchCount, srcQw;
@@ -533,6 +534,10 @@ typedef struct RdMeshRec {
         float (*stream)[4];
         uint32_t from, to;
     } hist[2];
+
+    /* v0.5.0 (M0): rd_mesh.h's mesh identity (rd_VuMeshDescHash); for a
+     * replaced mesh the original's; 0 for one built from a raw stream */
+    uint64_t hash;
 } RdMeshRec;
 
 /* R7d: the stream mesh m had when frame `frame` was recorded, NULL when no
@@ -567,6 +572,9 @@ void rd__VuInit(void);
 void rd__VuShutdown(void);
 void rd__VuLoadCommon(const RdVuCommon *block);
 void rd__MeshShutdown(void);
+/* v0.5.0 (M0): rd_BeginFrame, after the frame number advanced: frees the
+ * stale meshes (rd_VuMeshRetire) no frame from three back on drew */
+void rd__VuMeshSweepStale(void);
 
 /* ------------------------------------------------------------ pipelines */
 typedef enum RdVsId {
