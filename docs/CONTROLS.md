@@ -42,7 +42,7 @@ Pick a model from the list and press Cross.
 | To do this | Press |
 | --- | --- |
 | Turn the model | right stick |
-| Move the model up or down on the screen | left stick, up or down |
+| Move the model around the screen | left stick |
 | Zoom out / zoom in | L2 / R2 (keyboard Z / X) |
 | Pick the previous or next animation | L1 / R1, or Up / Down |
 | Play the animation | Cross |

@@ -460,6 +460,7 @@ static void setState(int st)
 #endif
         s_saveWait = 0;
         s_cam.panY = 0.0f; /* the move is per model: gone when one is left */
+        s_cam.panX = 0.0f;
     }
     s_since = ico_host_main_ticks();
 }
@@ -640,6 +641,7 @@ static void frameModel(GObj *g)
     s_cam.pitch = 0.18f;
     s_cam.yaw = 0.0f;
     s_cam.panY = 0.0f;
+    s_cam.panX = 0.0f;
     if (s_rooted) {
         /* in front of it */
         float dir[4];
@@ -687,7 +689,7 @@ static void placeCamera(void)
     float cp = cosf(s_cam.pitch), sp = sinf(s_cam.pitch);
     /* the model left of the picture's middle, clear of the list at the
        right: eye and target moved along the view's right */
-    float side = s_cam.dist * MODEL_SHIFT;
+    float side = s_cam.dist * MODEL_SHIFT - s_cam.panX; /* panX: the model right */
     float rx = -cosf(s_cam.yaw) * side, rz = sinf(s_cam.yaw) * side;
     in.f[0] = t[0] + s_cam.dist * cp * sinf(s_cam.yaw) + rx;
     in.f[1] = t[1] - s_cam.dist * sp + s_cam.panY;

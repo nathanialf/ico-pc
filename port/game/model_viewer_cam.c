@@ -29,6 +29,9 @@ void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4])
     /* stick() is negative for up and the game's y points down: up must add
        to panY (the camera goes down, the model rises) */
     c->panY -= mv_CamStick(ana[3]) * MV_PAN_RATE * c->dist;
+    /* stick right: the model moves right on the screen */
+    c->panX += mv_CamStick(ana[2]) * MV_PAN_RATE * c->dist;
     float lim = MV_PAN_MAX * c->dist;
     c->panY = c->panY > lim ? lim : c->panY < -lim ? -lim : c->panY;
+    c->panX = c->panX > lim ? lim : c->panX < -lim ? -lim : c->panX;
 }

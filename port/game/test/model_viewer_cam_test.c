@@ -20,7 +20,7 @@ static const unsigned char kRest[4] = {128, 128, 128, 128};
 
 static MvCam fresh(void)
 {
-    MvCam c = {1000.0f, 120.0f, 4000.0f, 0.0f, 0.3f, 0.18f};
+    MvCam c = {1000.0f, 120.0f, 4000.0f, 0.0f, 0.3f, 0.18f, 0.0f};
     return c;
 }
 
@@ -94,6 +94,27 @@ int main(void)
     unsigned char out[4] = {128, 128, 128, 128 - 25};
     mv_CamStep(&c, 0, out);
     CHECK(c.panY > 0.0f, "just past the dead zone moves");
+
+    /* the left stick's horizontal axis: right moves the model right (panX
+       positive), left undoes it, and it stops at 0.6 of the distance */
+    {
+        MvCam h = {1000.0f, 100.0f, 5000.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        unsigned char right[4] = {128, 128, 255, 128}, left[4] = {128, 128, 0, 128};
+        for (int i = 0; i < 10; i++) {
+            mv_CamStep(&h, 0, right);
+        }
+        CHECK(near(h.panX, 10 * MV_PAN_RATE * 1000.0f * mv_CamStick(255)),
+              "stick right 10 ticks: panX %f", h.panX);
+        CHECK(h.panY == 0.0f, "sideways leaves panY alone");
+        for (int i = 0; i < 10; i++) {
+            mv_CamStep(&h, 0, left);
+        }
+        CHECK(fabsf(h.panX) < 5.0f, "stick left undoes it (%f)", h.panX);
+        for (int i = 0; i < 400; i++) {
+            mv_CamStep(&h, 0, right);
+        }
+        CHECK(near(h.panX, MV_PAN_MAX * h.dist), "pan right stops at 0.6 dist (%f)", h.panX);
+    }
 
     /* the right stick still turns: right (large x) lowers yaw, as before */
     c = fresh();

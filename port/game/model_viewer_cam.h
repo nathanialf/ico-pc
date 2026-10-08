@@ -14,7 +14,7 @@
 /* per tick while L2 or R2 is held: dist *= exp(+-ZOOM_RATE) */
 #define MV_ZOOM_RATE 0.05f
 /* per tick at full stick, as a share of dist */
-#define MV_PAN_RATE 0.03f
+#define MV_PAN_RATE 0.012f /* of the distance per tick at full stick (0.03 was too quick) */
 /* the most the model is moved up or down, as a share of dist */
 #define MV_PAN_MAX 0.6f
 
@@ -25,13 +25,17 @@ typedef struct MvCam {
        the screen */
     float panY;
     float yaw, pitch;
+    /* a sideways translation along the view's right: positive moves the
+       camera left, so the model moves right on the screen */
+    float panX;
 } MvCam;
 
 /* a stick byte (128 centred) as -1..1 with a dead zone; negative is up/left */
 float mv_CamStick(int v);
 
 /* one tick: the right stick (ana[0] x, ana[1] y) turns, L2 zooms out, R2
-   zooms in, the left stick's vertical axis (ana[3]) moves the model */
+   zooms in, the left stick (ana[2], ana[3]) moves the model sideways and up or
+   down */
 void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4]);
 
 #endif
