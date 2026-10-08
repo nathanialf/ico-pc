@@ -1534,7 +1534,7 @@ static int host_main(int argc, char **argv)
 #endif
         if (injector != NULL && watchdog != 0) {
             ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit "
-                         "is doubled to %lu seconds (its shaders compile on the first frames)",
+                         "is doubled to %lu seconds (it prepares its effects on the first frames)",
                          injector, watchdog * 2);
             ico_diag_start((unsigned int)(watchdog * 2), (unsigned int)(watchdog * 2));
         } else {

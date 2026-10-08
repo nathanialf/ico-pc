@@ -335,7 +335,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "test: present done") != NULL);
     CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s") != NULL);
     CHECK(strstr(s, "test: present done") < strstr(s, "WATCHDOG:"));
-    CHECK(strstr(s, "inside a present") == NULL);
+    CHECK(strstr(s, "for a picture to be shown") == NULL);
     if (fails) {
         printf("--- present log ---\n%s\n", s);
     }

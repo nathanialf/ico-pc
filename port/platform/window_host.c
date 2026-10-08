@@ -576,9 +576,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
         /* v0.4.1 (R0): a program hooking the graphics API, once */
         if (rhi_InjectorName() != NULL) {
-            fprintf(stderr,
-                    "window: an effects program is loaded (%s); see the ReShade notes in the "
-                    "docs\n",
+            fprintf(stderr, "window: an effects program is loaded (%s); see docs/RESHADE.md\n",
                     rhi_InjectorName());
         }
         if (rhi_OverlayName() != NULL) {

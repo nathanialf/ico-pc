@@ -1032,8 +1032,8 @@ static void watchdog_fire(const char *reason)
         double cur;
         (void)present_seconds(&cur);
         if (cur > 0.0) {
-            flog("ico_pc: the main thread is inside a present for %.0f s (an effects program may "
-                 "be compiling)",
+            flog("ico_pc: the game has waited %.0f s for a picture to be shown (an effects "
+                 "program may be preparing its effects)",
                  cur);
         }
     }

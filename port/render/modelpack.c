@@ -906,7 +906,7 @@ RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, u
     RdMesh mesh = rd_CreateVuMeshReplacement(orig, &rep, name);
     free(tmp);
     if (mesh.id == 0) {
-        decline(m, part, "the renderer could not make it");
+        decline(m, part, "the game could not build it");
         return mesh;
     }
     s_mp.stats.created++;
