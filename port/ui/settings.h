@@ -94,6 +94,11 @@ void ui_SettingsSetTexturePackCount(int (*fn)(void));
    Model pack row reads "None installed" and does not step while it is 0 or
    no hook is set. */
 void ui_SettingsSetModelPackCount(int (*fn)(void));
+
+/* Package AN-G: Settings > Controls shows the touch overlay's rows (Touch
+   controls, Touch size, Touch opacity) only while fn reports a touch screen
+   (input_sdl.h ico_input_sdl_touch_present); NULL, or 0, hides them. */
+void ui_SettingsSetTouchQuery(int (*fn)(void));
 /* Package MV: Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
@@ -162,6 +167,10 @@ typedef enum UiSettingsOpt {
     UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */
     UI_OPT_VIBRATION,   /* S1: the game's iosPadActRequestEnable */
     UI_OPT_HOLD_TYPE,   /* S1: the game's optionControlType, A 0 or B 1 */
+    /* AN-G: the touch overlay ([input] touch_*), shown with a touch screen */
+    UI_OPT_TOUCH_MODE,    /* Off, Auto, Always */
+    UI_OPT_TOUCH_SIZE,    /* Small, Medium, Large */
+    UI_OPT_TOUCH_OPACITY, /* 25, 50, 75, 100 % */
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,

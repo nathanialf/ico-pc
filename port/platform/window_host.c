@@ -29,6 +29,7 @@
 #include "sched.h"
 #include "settings.h"
 #include "texpack.h"
+#include "touch_ui.h"
 #include "trace_host.h"
 #include "ui_host.h"
 #include "video_options.h"
@@ -304,6 +305,29 @@ static void video_apply(int force)
     }
 }
 
+/* Package AN-G: the touch overlay's zones from the window's pixel size and
+   its safe area (a notch, rounded corners, the system bars), which SDL
+   gives in points: scaled to pixels.  On open and when either changes; the
+   Touch size row is followed by input_sdl.c. */
+static void touch_layout_update(void)
+{
+    int pw = 0, ph = 0, ww = 0, wh = 0;
+    SDL_Rect r;
+
+    if (s_window == NULL || !SDL_GetWindowSizeInPixels(s_window, &pw, &ph) || pw <= 0 || ph <= 0) {
+        return;
+    }
+    if (SDL_GetWindowSize(s_window, &ww, &wh) && ww > 0 && wh > 0 &&
+        SDL_GetWindowSafeArea(s_window, &r) && r.w > 0 && r.h > 0) {
+        const double kx = (double)pw / ww, ky = (double)ph / wh;
+
+        ico_input_sdl_set_touch_layout(pw, ph, (int)(r.x * kx + 0.5), (int)(r.y * ky + 0.5),
+                                       (int)(r.w * kx + 0.5), (int)(r.h * ky + 0.5));
+    } else {
+        ico_input_sdl_set_touch_layout(pw, ph, 0, 0, 0, 0);
+    }
+}
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -440,6 +464,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         ico_path_join(path, sizeof(path), dir, "config.toml");
         ico_input_sdl_init(path);
     }
+    /* package AN-G: the touch overlay's zones, its Settings rows (with a
+       touch screen) and the copy its drawing reads (port/ui/touch_ui.h) */
+    touch_layout_update();
+    ui_SettingsSetTouchQuery(ico_input_sdl_touch_present);
+    ui_TouchSetSource(ico_input_sdl_touch_overlay);
     return 0;
 }
 
@@ -686,6 +715,10 @@ int ico_window_pump(void)
                 ico_video_set_window(e.window.data1, e.window.data2);
                 video_apply(1);
             }
+            touch_layout_update(); /* AN-G */
+            break;
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            touch_layout_update(); /* AN-G: a notch or the system bars moved */
             break;
         default:
             ico_input_sdl_event(&e);
@@ -1177,6 +1210,8 @@ void ico_window_close(void)
     ico_input_sdl_shutdown();
     ui_SettingsSetFullscreenQuery(NULL);
     ui_SettingsSetTexturePackCount(NULL);
+    ui_SettingsSetTouchQuery(NULL);
+    ui_TouchSetSource(NULL);
     ui_HostShutdown();
     rd_SetHostCall(NULL);
     rd_Shutdown();

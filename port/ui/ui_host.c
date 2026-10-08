@@ -22,6 +22,7 @@
 #include "popup.h"
 #include "settings.h"
 #include "strings.h"
+#include "touch_ui.h"
 #include "ui_internal.h"
 
 /* the game's side (GsBase.c, main.c; common/include/main.h) */
@@ -38,6 +39,7 @@ extern void gif_HostFlush(void); /* GifHost.h */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
+    ui_TouchDrawOverlay(ctx); /* package AN-G: the touch controls, under the rest */
     ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
 }

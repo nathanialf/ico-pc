@@ -158,6 +158,16 @@ typedef enum UiStrId {
     UI_STR_REMAP_HINT,
     UI_STR_REMAP_PRESS,
     UI_STR_REMAP_RESET,
+    /* package AN-G: Settings > Controls, the touch overlay's rows (shown
+       with a touch screen), their values and the note */
+    UI_STR_OPT_TOUCH_MODE,
+    UI_STR_OPT_TOUCH_SIZE,
+    UI_STR_OPT_TOUCH_OPACITY,
+    UI_STR_VAL_ALWAYS,
+    UI_STR_VAL_SMALL,
+    UI_STR_VAL_MEDIUM,
+    UI_STR_VAL_LARGE,
+    UI_STR_TOUCH_NOTE,
     UI_STR_BTN_CROSS,
     UI_STR_BTN_CIRCLE,
     UI_STR_BTN_SQUARE,

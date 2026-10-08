@@ -77,7 +77,9 @@ endfunction()
 
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
-        ico_ui_library(ico_ui ON ui_host.c game_font_disc.c)
+        # AN-G: touch_ui.c, the touch overlay's drawing (reads port/input's
+        # touch.h through ico_ui_settings' include path)
+        ico_ui_library(ico_ui ON ui_host.c game_font_disc.c touch_ui.c)
         if(TARGET SDL3::SDL3-shared)
             # Q2: ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
             # desktop" (the headers only; ico_pc links SDL3)

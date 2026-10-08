@@ -453,6 +453,21 @@ static void stepDevice(int dir)
 }
 
 static int (*s_texturePackCount)(void); /* v0.4.0: replacements installed, when known */
+static int (*s_touchQuery)(void);       /* AN-G: a touch screen exists, when known */
+
+static int touchPresent(void)
+{
+    return s_touchQuery != NULL && s_touchQuery() != 0;
+}
+
+static int isTouchOpt(int opt)
+{
+    return opt == UI_OPT_TOUCH_MODE || opt == UI_OPT_TOUCH_SIZE || opt == UI_OPT_TOUCH_OPACITY;
+}
+
+/* AN-G: the Touch opacity row's steps, percent */
+static const int kTouchOpacity[] = {25, 50, 75, 100};
+#define TOUCH_OPACITY_N ((int)(sizeof(kTouchOpacity) / sizeof(kTouchOpacity[0])))
 
 /* v0.4.0: a texture pack was found at start (texpack_Count through the
    host's hook; none without one) */
@@ -715,6 +730,19 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(iosPadActRequestEnable);
     case UI_OPT_HOLD_TYPE:
         return ui_Str(optionControlType == 1 ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
+    case UI_OPT_TOUCH_MODE: {
+        static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
+        const int m = liveBindings()->touch_mode;
+        return ui_Str(modeStr[m >= 0 && m < 3 ? m : 1]);
+    }
+    case UI_OPT_TOUCH_SIZE: {
+        static const int sizeStr[3] = {UI_STR_VAL_SMALL, UI_STR_VAL_MEDIUM, UI_STR_VAL_LARGE};
+        const int z = liveBindings()->touch_size;
+        return ui_Str(sizeStr[z >= 0 && z < 3 ? z : 1]);
+    }
+    case UI_OPT_TOUCH_OPACITY:
+        snprintf(buf, size, "%d %%", liveBindings()->touch_opacity);
+        return buf;
     case UI_OPT_FILM_EFFECT:
         if (optionScreenMode <= 0 || optionScreenMode >= FILM_EFFECTS) {
             return ui_Str(UI_STR_OFF);
@@ -759,6 +787,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
         return ico_opt_developer_mode(); /* v0.4.0: for pack authors */
+    }
+    if (isTouchOpt(opt)) {
+        return touchPresent(); /* AN-G: a phone, a tablet, a touch screen */
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* v0.4.0: it changes only from the title (onTitle); the pause
@@ -971,6 +1002,37 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         best += dir;
         best = best < 0 ? 0 : best >= MOUSE_SENS_N ? MOUSE_SENS_N - 1 : best;
         b->mouse_sens = kMouseSens[best];
+        s_dirtyBindings = 1;
+        break;
+    }
+    case UI_OPT_TOUCH_MODE: {
+        /* AN-G: live from the next vsync (input_sdl.c reads the table) */
+        IcoBindings *b = liveBindings();
+        b->touch_mode =
+            stepIndex(b->touch_mode >= 0 && b->touch_mode < 3 ? b->touch_mode : 1, 3, dir);
+        s_dirtyBindings = 1;
+        break;
+    }
+    case UI_OPT_TOUCH_SIZE: {
+        /* the zones are rebuilt at the next vsync */
+        IcoBindings *b = liveBindings();
+        b->touch_size =
+            stepIndex(b->touch_size >= 0 && b->touch_size < 3 ? b->touch_size : 1, 3, dir);
+        s_dirtyBindings = 1;
+        break;
+    }
+    case UI_OPT_TOUCH_OPACITY: {
+        /* the step nearest the value (a file may say 60), then around */
+        IcoBindings *b = liveBindings();
+        int i, best = 0;
+        for (i = 1; i < TOUCH_OPACITY_N; i++) {
+            const int d = kTouchOpacity[i] - b->touch_opacity,
+                      db = kTouchOpacity[best] - b->touch_opacity;
+            if ((d < 0 ? -d : d) < (db < 0 ? -db : db)) {
+                best = i;
+            }
+        }
+        b->touch_opacity = kTouchOpacity[stepIndex(best, TOUCH_OPACITY_N, dir)];
         s_dirtyBindings = 1;
         break;
     }
@@ -1325,13 +1387,23 @@ static int pagePitch(int page, int n, int *y0)
     if (page == UI_PAGE_MAIN) {
         return n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
+    if (page == UI_PAGE_CONTROLS && n > 9) {
+        /* AN-G: with the touch rows from the pause menu, ten rows 16 apart
+           (Back at 184, its box to 220) */
+        return 16;
+    }
     return 18;
 }
 
 static int rowY(int page, int i)
 {
     int y0;
-    const int pitch = pagePitch(page, page == UI_PAGE_MAIN ? 8 : 12, &y0);
+    /* the place a row is built at; layoutPage spaces the shown ones */
+    const int pitch = pagePitch(page,
+                                page == UI_PAGE_MAIN       ? 8
+                                : page == UI_PAGE_CONTROLS ? 7
+                                                           : 12,
+                                &y0);
     return y0 + pitch * i;
 }
 
@@ -1435,6 +1507,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
         addNote(pg, UI_OPT_HOLD_TYPE, UI_STR_HOLD_TYPE_NOTE);
         addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
+        addNote(pg, UI_OPT_TOUCH_MODE, UI_STR_TOUCH_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
@@ -1823,14 +1896,18 @@ static void build(void)
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     /* S1: the game's Button configuration, Vibration and Hold type after
-       Remap, from the pause menu */
-    static const int ctlOpts[] = {UI_OPT_LINK,      UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
-                                  UI_OPT_HOLD_TYPE, UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
+       Remap, from the pause menu; AN-G: the touch overlay's three rows
+       before Back, with a touch screen */
+    static const int ctlOpts[] = {UI_OPT_LINK,       UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE,  UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
+                                  UI_OPT_TOUCH_MODE, UI_OPT_TOUCH_SIZE,    UI_OPT_TOUCH_OPACITY,
                                   UI_OPT_BACK};
-    static const int ctlStrs[] = {
-        UI_STR_OPT_REMAP,      UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION, UI_STR_OPT_HOLD_TYPE,
-        UI_STR_OPT_MOUSE_SENS, UI_STR_OPT_CIRCLE_BACK,   UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP,         UI_STR_OPT_BUTTON_CONFIG,
+                                  UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
+                                  UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_OPT_TOUCH_MODE,    UI_STR_OPT_TOUCH_SIZE,
+                                  UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* S1: the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
                                    UI_OPT_PLAYERS, UI_OPT_BACK};
@@ -2077,6 +2154,11 @@ void ui_SettingsSetModelPackCount(int (*fn)(void))
 void ui_SettingsSetTexturePackCount(int (*fn)(void))
 {
     s_texturePackCount = fn;
+}
+
+void ui_SettingsSetTouchQuery(int (*fn)(void))
+{
+    s_touchQuery = fn;
 }
 
 void ui_SettingsSetQuitHandler(void (*fn)(void))
