@@ -445,6 +445,10 @@ static void refreshView(void)
     }
     /* Select, saving the model's files, with Developer mode on */
     ui_HintShow(&s_viewKeys, UI_HINT_MV_SAVE, saveAvailable());
+    /* Triangle: back to the title (and the Characters page) when the viewer
+       was opened from there, else to the models' list */
+    ui_HintSetStr(&s_viewKeys, UI_HINT_MV_BACK,
+                  s_returnChars ? UI_STR_MV_HINT_TITLE : UI_STR_EXTRAS_MODELS);
     ui_HintLayout(&s_viewSticks);
     ui_HintLayout(&s_viewKeys);
     lt_ext_SetText(s_rowName, s_ovName);
