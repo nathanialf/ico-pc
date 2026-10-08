@@ -67,6 +67,8 @@
 #include "rd_internal.h"
 #include "shader_consts.h"
 
+_Static_assert(RD_ONCE_EFFECTS_DEPTH_CRT < 32, "rd__LogOnce keeps 32 bits");
+
 typedef struct RdPresentPreset {
     RdFilter doubleFilter; /* step 1 */
     RdFilter scaleFilter;  /* step 2 */
@@ -304,6 +306,174 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
                      RdFilter filter, int mirror)
 {
     blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror);
+}
+
+/* ------------------------------- the effects depth (v0.5.0, package R1)
+ * RdSettings.effectsDepth: step 2 as one pass with two targets, the output
+ * and an output-size RHI_FMT_D32F depth buffer cleared to 1.0 (far), drawn
+ * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
+ * depth at the same normalised source position (SCENE and DISPLAY cover
+ * the same GS frame; a mirrored box flips both), read nearest from a copy
+ * (SCENE's depth is an attachment, never sampled; the fog's copy in
+ * rd_replay.c doFog is the precedent).  Outside the box the clear stays, so
+ * the bars read as far.  The point is an effects program hooked into the
+ * API (ReShade, vkBasalt): it looks for a depth buffer of the backbuffer's
+ * size among the render passes, and the scene's is the scene's size.  The
+ * convention is the scene's (gs_z_to_depth): near 0, far 1, so ReShade's
+ * RESHADE_DEPTH_INPUT_IS_REVERSED is 0 (the docs' ReShade notes, R3).  The
+ * deferred text, the capture and the overlay stay colour-only passes after
+ * it; under the CRT filter there is no box blit and no effects depth. */
+static struct {
+    RhiTexture copy; /* SCENE's depth, D32F_S8, sampled */
+    RhiState copyState;
+    uint32_t copyW, copyH;
+    RhiTexture out; /* the output-size D32F */
+    RhiState outState;
+    uint32_t outW, outH;
+    int failLogged;
+} s_depth;
+
+static void depthShutdown(void)
+{
+    if (s_depth.copy.id) {
+        rhi_DestroyTexture(s_depth.copy);
+    }
+    if (s_depth.out.id) {
+        rhi_DestroyTexture(s_depth.out);
+    }
+    memset(&s_depth, 0, sizeof(s_depth));
+}
+
+/* step 2 with the effects depth; false (nothing recorded) when it cannot
+ * run, and the plain blit draws the box */
+static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
+                      RhiFormat dstFmt, uint32_t dw, uint32_t dh, const RhiRect *box,
+                      RdFilter filter, int mirror)
+{
+    RdTargetRec *ts = rd__TargetRec(RD_TARGET_SCENE + 1);
+    if (!ts || !ts->withDepth || !ts->depth.id || ts->depthState == RHI_STATE_UNDEFINED) {
+        return false;
+    }
+    if (!s_depth.copy.id || s_depth.copyW != ts->tw || s_depth.copyH != ts->th) {
+        if (s_depth.copy.id) {
+            rhi_DestroyTexture(s_depth.copy);
+        }
+        s_depth.copy = rhi_CreateTexture(&(RhiTextureDesc){
+            ts->tw, ts->th, 1, RHI_FMT_D32F_S8,
+            /* the depth-stencil usage: Vulkan's sampled depth layout needs it */
+            RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, "rd effects depth copy"});
+        s_depth.copyState = RHI_STATE_UNDEFINED;
+        s_depth.copyW = ts->tw;
+        s_depth.copyH = ts->th;
+    }
+    if (!s_depth.out.id || s_depth.outW != dw || s_depth.outH != dh) {
+        if (s_depth.out.id) {
+            rhi_DestroyTexture(s_depth.out);
+        }
+        /* sampled and copyable, for the program that reads it (and the
+         * tests' readback) */
+        s_depth.out = rhi_CreateTexture(&(RhiTextureDesc){
+            dw, dh, 1, RHI_FMT_D32F, RHI_TEX_DEPTH_STENCIL | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC,
+            "rd effects depth"});
+        s_depth.outState = RHI_STATE_UNDEFINED;
+        s_depth.outW = dw;
+        s_depth.outH = dh;
+    }
+    const RdPipeKeyInt k = rd__PresentDepthKey(dstFmt);
+    const RhiPipeline pipe = rd__GetPipeline(&k);
+    if (!s_depth.copy.id || !s_depth.out.id || !pipe.id) {
+        if (!s_depth.failLogged) {
+            s_depth.failLogged = 1;
+            rd__Log("present: no effects depth (%s); the picture is shown without it",
+                    pipe.id ? "no depth texture" : "no pipeline");
+        }
+        return false;
+    }
+    rd__Transition(cl, ts->depth, &ts->depthState, RHI_STATE_COPY_SRC);
+    rd__Transition(cl, s_depth.copy, &s_depth.copyState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(cl, ts->depth, (RhiRect){0, 0, ts->tw, ts->th}, s_depth.copy, 0, 0);
+    rd__Transition(cl, s_depth.copy, &s_depth.copyState, RHI_STATE_SHADER_READ);
+    rd__Transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
+
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = dst;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.colorCount = 1;
+    p.depth.texture = s_depth.out;
+    p.depth.depthLoad = RHI_LOAD_CLEAR;
+    p.depth.stencilLoad = RHI_LOAD_DONT_CARE;
+    p.depth.clearDepth = 1.0f; /* far: the bars */
+    p.width = dw;
+    p.height = dh;
+    rhi_CmdBeginRenderPass(cl, &p);
+    RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
+    rhi_CmdSetViewport(cl, &vp);
+    rhi_CmdSetScissor(cl, box);
+    /* blit()'s constants, so the colour is blit_ps's bytes */
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    for (int i = 0; i < 4; i++) {
+        cb.col[i] = 0x80;
+    }
+    cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
+    cb.uvRect[0] = mirror ? (float)sw : 0.0f;
+    cb.uvRect[2] = mirror ? 0.0f : (float)sw;
+    cb.uvRect[3] = (float)sh;
+    cb.tex[0] = (float)sw;
+    cb.tex[1] = (float)sh;
+    cb.tex[2] = 1.0f / (float)sw;
+    cb.tex[3] = 1.0f / (float)sh;
+    RhiBinding b[3];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = src;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = s_depth.copy;
+    b[2].aspect = RHI_ASPECT_DEPTH;
+    const RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+    if (g2.id) {
+        rhi_CmdSetPipeline(cl, pipe);
+        rd__BindUniform(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
+        rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(cl, 2, g2);
+        rhi_CmdDraw(cl, 3, 0, 1);
+    }
+    rhi_CmdEndRenderPass(cl);
+    return g2.id != 0;
+}
+
+bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    if (!g_rd.hasDevice || !s_depth.out.id || s_depth.outState == RHI_STATE_UNDEFINED ||
+        dstSize < (size_t)s_depth.outW * s_depth.outH * sizeof(float)) {
+        return false;
+    }
+    if (w) {
+        *w = s_depth.outW;
+    }
+    if (h) {
+        *h = s_depth.outH;
+    }
+    if (s_depth.outState != RHI_STATE_COPY_SRC) {
+        RhiCommandList cl = rhi_BeginCommands();
+        if (!cl.id) {
+            return false;
+        }
+        rd__Transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_COPY_SRC);
+        rhi_EndCommands(cl);
+        rhi_Submit(cl);
+    }
+    uint32_t pitch = 0;
+    if (!rhi_ReadbackTexture(s_depth.out, RHI_ASPECT_DEPTH, dst, dstSize, &pitch)) {
+        return false;
+    }
+    return pitch == s_depth.outW * sizeof(float);
 }
 
 /* --------------------------------------------- the overlay (package OV) */
@@ -937,6 +1107,11 @@ void rd__PresentRecord(RhiCommandList cl)
     const int mirror = pr->mirror && rd__MirrorOn();
     bool filtered = false, uiInPicture = false;
     if (rd__CrtOn()) {
+        if (g_rd.settings.effectsDepth) {
+            /* package R1: the filter replaces the box blit that carries it */
+            rd__LogOnce(RD_ONCE_EFFECTS_DEPTH_CRT,
+                        "effects depth is not available with the CRT filter");
+        }
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
         const bool ui = rd__OverlayGridPending();
         bool capOk = true;
@@ -981,8 +1156,15 @@ void rd__PresentRecord(RhiCommandList cl)
     }
     if (!filtered) {
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-        blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
-             pr->scaleFilter, mirror);
+        /* package R1: with the effects depth when asked for (never under
+         * the CRT filter, even when it could not draw) */
+        const bool depth = g_rd.settings.effectsDepth && !rd__CrtOn() &&
+                           depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box,
+                                     pr->scaleFilter, mirror);
+        if (!depth) {
+            blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
+                 pr->scaleFilter, mirror);
+        }
     }
     /* package DEF: the deferred text, drawn in list order with the regions
      * and colours the passes after it gave it.  Package CRT2: none under the CRT filter (the rows are
@@ -1029,6 +1211,7 @@ void rd__PresentShutdown(void)
         rhi_DestroyTexture(s_cap.tex); /* package PHOTO */
     }
     memset(&s_cap, 0, sizeof(s_cap));
+    depthShutdown();   /* package R1 */
     rd__CrtShutdown(); /* package CRT */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);

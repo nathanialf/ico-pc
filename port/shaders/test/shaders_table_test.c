@@ -20,7 +20,7 @@ static const char *const expected[] = {
     "wrap_acc_ps",    "wrap_resolve_ps",  "sprite_aa1_ui_vs",    "sprite_aa1_world_vs",
     "sprite_aa1_ps",  "sprite_stq_ui_vs", "sprite_stq_world_vs", "sprite_stq_ps",
     "box_reduce_ps",  "crt_vs",           "crt_bloom_ps",        "crt_blur_ps",
-    "crt_ps",
+    "crt_ps",         "blit_depth_ps",
 };
 
 /* package AN-E: the gs_dual_out entries without the second output */

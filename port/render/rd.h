@@ -353,7 +353,14 @@ typedef struct RdSettings {
      * RdSettings. */
     uint8_t texturePack;
     uint8_t dumpTextures;
-    uint8_t _pad[1];
+    /* v0.5.0 (package R1, [video] effects_depth): the box blit also writes
+     * an output-size D32F depth buffer (rd_present.c), the scene's depth at
+     * the picture's pixels and 1.0 (far) in the bars, so an effects program
+     * hooked into the API (ReShade) finds a depth buffer of the
+     * backbuffer's size.  Near 0, far 1 (gs_z_to_depth): ReShade's
+     * RESHADE_DEPTH_INPUT_IS_REVERSED = 0.  Not under the CRT filter.  0 in
+     * a zeroed RdSettings: the present is as before. */
+    uint8_t effectsDepth;
     /* Wave 7 (R7a): the internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

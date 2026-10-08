@@ -633,6 +633,9 @@ typedef enum RdFsId {
      * 16-bit texture under AEM with a linear filter (rd__TexaPerTexel) */
     RD_FS_SPRITE_TEXA, /* sprite_texa_ps */
     RD_FS_VU_TEXA,     /* vu_texa_ps */
+    /* v0.5.0 (R1): blit_depth_ps, the present's box blit with the scene's
+     * depth into the output-size effects depth (rd_present.c) */
+    RD_FS_BLIT_DEPTH,
     RD_FS_COUNT
 } RdFsId;
 
@@ -706,6 +709,10 @@ int rd__StqPass(RdDrawPass *dp);
  * planners give them sprite_texa_ps / vu_texa_ps. */
 int rd__TexaPerTexel(const RdStateBlock *s);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
+/* v0.5.0 (R1): the present's box blit with the effects depth: blit_vs and
+ * blit_depth_ps into colorFmt (the headless output's RGBA8, the swapchain's
+ * BGRA8) and an RHI_FMT_D32F depth target, Z written, test ALWAYS. */
+RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k);
 void rd__PipelineCacheClear(void);
@@ -1171,7 +1178,9 @@ enum {
     RD_ONCE_PABE, /* PABE on a premultiplied or Ad blend: As < 0x80 pixels blend anyway */
     /* package AN-E */
     RD_ONCE_NODUAL_GREATER, /* the two-pass blend's alpha pass under Z GREATER with Z write */
-    RD_ONCE_NODUAL_KEY      /* a LERP or Cd*FIX + Cs key reached rd__GetPipeline unexpanded */
+    RD_ONCE_NODUAL_KEY,     /* a LERP or Cd*FIX + Cs key reached rd__GetPipeline unexpanded */
+    /* v0.5.0 (R1) */
+    RD_ONCE_EFFECTS_DEPTH_CRT /* RdSettings.effectsDepth under the CRT filter: none */
 };
 
 void rd__Log(const char *fmt, ...);
@@ -1362,6 +1371,9 @@ bool rd__ReadTarget(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t
 bool rd__ReadTargetDepth(RdTarget t, float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* v0.5.0 (R1): the effects depth of the last present (RdSettings.effectsDepth),
+ * outW x outH floats; false when no present has drawn it (tests). */
+bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* package PHOTO: a synchronous readback of an RHI texture (RGBA8 or BGRA8,
  * w x h, tightly packed), leaving it in COPY_SRC (*state follows) */
 bool rd__ReadRhiTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,

@@ -35,6 +35,9 @@
  *                           true        the game's own picture effects (issue 11): the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
+ *   [video] effects_depth   true        v0.5.0 (R1): the scene's depth beside the picture
+ *                                       for an effects program (ReShade's depth effects);
+ *                                       not with the CRT filter
  *
  * Every option applies on its own.  preset is not an option but a
  * shortcut over four of them, read and written as such: "enhanced" or
@@ -110,6 +113,9 @@ typedef struct IcoVideoOptions {
     int effectSoftening;    /* the edge softening (GsBase.c gsb_antiAlias) */
     int effectMotionBlur;   /* the motion blur (staticBlur.c MotionBlur) */
     int effectFog;          /* the depth fog (ZFog.c fog_DrawFog) */
+    /* v0.5.0 (R1): an output-size depth buffer in the presentation for an
+       effects program (rd.h RdSettings.effectsDepth); 1 = on */
+    int effectsDepth;
 } IcoVideoOptions;
 
 /* IcoVideoOptions.texturePackBudgetMb: the default and the range a value
@@ -138,7 +144,8 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 /* The defaults: the Original rows (1x, 4:3, original filter, half height),
    windowed, vsync on, framerate uncapped, the CRT filter off (its mode
    Consumer TV at full strength, no overrides), texture packs on with
-   precache and a 2048 MB budget, no dump, every effect on. */
+   precache and a 2048 MB budget, no dump, every effect on, the effects
+   depth on. */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -170,6 +177,8 @@ int ico_video_effect_depth_of_field(void);
 int ico_video_effect_softening(void);
 int ico_video_effect_motion_blur(void);
 int ico_video_effect_fog(void);
+/* [video] effects_depth (R1), 1 or 0 */
+int ico_video_effects_depth(void);
 /* The presentation rate in force (R7b): the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);

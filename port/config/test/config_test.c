@@ -436,6 +436,7 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("video.effect_softening", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_motion_blur", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
+    CHECK(ico_config_get_bool("video.effects_depth", 0) == 1);
     CHECK(ico_config_get_bool("audio.enabled", 0) == 1);
     CHECK(ico_config_get_float("audio.volume", 0.0) == 1.0);
     CHECK(ico_config_get_float("audio.music", 0.0) == 1.0);

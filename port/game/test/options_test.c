@@ -405,6 +405,59 @@ static void test_video_effects(const char *dir)
     ico_video_reload();
 }
 
+/* v0.5.0 (R1): [video] effects_depth, on by default, read, sanitized,
+   always saved, outside the preset, through ico_video_effects_depth */
+static void test_video_effects_depth(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o;
+    const char *text;
+    FILE *f;
+
+    ico_video_defaults(&o);
+    CHECK(o.effectsDepth == 1);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    CHECK(ico_video_effects_depth() == 1);
+    snprintf(path, sizeof(path), "%s/options_depth_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\neffects_depth = false\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.effectsDepth == 0 && ico_video_effects_depth() == 0);
+    CHECK(effects_are(&o, 1, 1, 1, 1, 1));
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    /* sanitized to 0 or 1 */
+    o.effectsDepth = 5;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.effectsDepth == 1 && ico_video_effects_depth() == 1);
+    o.effectsDepth = 0;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "effects_depth = false") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    CHECK(ico_video_effects_depth() == 0);
+    /* the preset's shortcut leaves it alone */
+    ico_video_defaults(&o);
+    o.effectsDepth = 0;
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.effectsDepth == 0);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 int main(int argc, char **argv)
 {
     test_defaults();
@@ -412,6 +465,7 @@ int main(int argc, char **argv)
     test_mirror_slots(argc > 1 ? argv[1] : ".");
     test_brain();
     test_video_effects(argc > 1 ? argv[1] : ".");
+    test_video_effects_depth(argc > 1 ? argv[1] : ".");
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
         return 1;

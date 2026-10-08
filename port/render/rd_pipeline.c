@@ -379,6 +379,15 @@ RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
     return k;
 }
 
+RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt)
+{
+    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT_DEPTH, colorFmt);
+    k.depthFmt = RHI_FMT_D32F;
+    k.gs.ztst = RD_ZTST_ALWAYS;
+    k.gs.zwrite = RD_ZWRITE_ON;
+    return k;
+}
+
 /* Package AN-E: the entries that call gs_dual_out (their *_nodual twins
  * output c0 alone). */
 bool rd__FsHasNoDual(uint8_t fs)
@@ -1082,6 +1091,11 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     n = addKey(out, max, n, &dateSnap);
     n = addKey(out, max, n, &blitA);
     n = addKey(out, max, n, &blitB);
+    /* v0.5.0 (R1): the box blit with the effects depth, on both outputs */
+    const RdPipeKeyInt depthA = rd__PresentDepthKey(RHI_FMT_RGBA8_UNORM);
+    const RdPipeKeyInt depthB = rd__PresentDepthKey(RHI_FMT_BGRA8_UNORM);
+    n = addKey(out, max, n, &depthA);
+    n = addKey(out, max, n, &depthB);
     n = addKey(out, max, n, &exact);
     return n;
 }

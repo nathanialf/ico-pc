@@ -5,6 +5,8 @@
 //   blit_ps      single colour output; colour = texture function(texel, tint)
 //   blit_fix_ps  dual-source output (factor from FIX or the texel alpha), for
 //                passes that blend with LERP_FIX or LERP_AS in hardware
+//   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
+//                effects depth, package R1)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
 #include "common.hlsli"
@@ -46,6 +48,33 @@ float4 blit_ps(BlitVSOut i) : SV_Target0
 DualOut blit_fix_ps(BlitVSOut i)
 {
     return gs_dual_out(blit_color(i.uv), g_mode.x, g_blend.y);
+}
+
+// blit_depth_ps (v0.5.0, package R1; rd_present.c): blit_ps's colour, and
+// SV_Depth from t2, the copy of the scene's depth, at the same normalised uv
+// (the source rectangle covers the whole scene; a mirrored blit flips both)
+// read nearest: the texel under uv. Drawn into the output's box with an
+// output-size depth target cleared to 1.0, so an effects program hooked into
+// the API (ReShade) finds the scene's depth at the picture's pixels and far in
+// the bars. Near 0, far 1 (gs_z_to_depth): RESHADE_DEPTH_INPUT_IS_REVERSED=0.
+Texture2D<float> g_sceneDepth : register(t2, space2);
+
+struct BlitDepthOut
+{
+    VK_LOC(0) float4 c : SV_Target0;
+    float d : SV_Depth;
+};
+
+BlitDepthOut blit_depth_ps(BlitVSOut i)
+{
+    BlitDepthOut o;
+    o.c = float4(blit_color(i.uv)) * (1.0 / 255.0);
+    uint w, h;
+    g_sceneDepth.GetDimensions(w, h);
+    int2 p = int2(floor(saturate(i.uv) * float2(w, h)));
+    p = min(p, int2(int(w) - 1, int(h) - 1));
+    o.d = g_sceneDepth.Load(int3(p, 0));
+    return o;
 }
 
 // box_reduce_ps (package RSMALL; rd_replay.c doShadowResolve): the exact box

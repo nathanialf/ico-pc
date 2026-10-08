@@ -530,17 +530,38 @@ static void makeSmoothScene(void)
     }
 }
 
+/* package R1 (checkEffectsDepth): the scene's depth cleared to
+ * DEPTH_CLEAR_Z instead of 0, and a sprite written at DEPTH_NEAR_Z over
+ * DEPTH_RECT (GS pixels); 0 (every other cell): the frame as before */
+static int s_depthFrame;
+
+#define DEPTH_CLEAR_Z 0x40000000u
+#define DEPTH_NEAR_Z 0xC0000000u
+static const int32_t DEPTH_RECT[4] = {128, 96, 352, 320};
+
 static void drawScene(RdTex t)
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     static const uint8_t clr[4] = {0, 0, 0, 0};
     rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, s_depthFrame ? DEPTH_CLEAR_Z : 0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     opaque2D();
     rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(RD_SPACE_UI, 0, 0, 512 * 16, 512 * 16, grey, 8, 8, 512 * 16 + 8, 512 * 16 + 8);
+    if (s_depthFrame) {
+        static const uint8_t near[4] = {0x30, 0x60, 0x90, 0x80};
+        const int32_t o = (2048 - 256) * 16;
+        RdScreenVtx v[2] = {
+            vtx(o + DEPTH_RECT[0] * 16, o + DEPTH_RECT[1] * 16, DEPTH_NEAR_Z, near, 0, 0),
+            vtx(o + DEPTH_RECT[2] * 16, o + DEPTH_RECT[3] * 16, DEPTH_NEAR_Z, near, 0, 0)};
+        rd_TextureOff();
+        rd_ZWrite(1);
+        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
+        rd_ZWrite(0);
+        rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    }
 }
 
 /* rd_pixel_test.c recordRichFrame, the frame of its dump */
@@ -1998,6 +2019,179 @@ static void checkCapture(const char *dir)
     checkCaptureAt(dir, 1);
 }
 
+/* ------------------------------------------------- effects depth (R1) */
+
+/* the depth frame presented at w x h with the effects depth on or off: the
+ * present's bytes, its hash, SCENE's depth (sw x sh) and the effects depth
+ * (w x h, only with it on) */
+typedef struct DepthRun {
+    uint64_t present, display, scene;
+    uint32_t sw, sh;
+    bool depthOk;
+} DepthRun;
+
+static float s_presDepth[1280 * 720], s_sceneDepth[512 * 512];
+
+static bool depthRun(uint32_t w, uint32_t h, int on, DepthRun *r)
+{
+    static uint8_t out[1280 * 720 * 4];
+    memset(r, 0, sizeof(*r));
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    s.effectsDepth = (uint8_t)on;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        return false;
+    }
+    makeNoiseScene();
+    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    s_depthFrame = 1;
+    recordRichFrame(t, 1);
+    s_depthFrame = 0;
+    uint32_t ow = 0, oh = 0;
+    uint8_t *p = readTarget(RD_TARGET_DISPLAY, &ow, &oh);
+    r->display = p ? fnv(p, (size_t)ow * oh * 4) : 0;
+    p = readTarget(RD_TARGET_SCENE, &ow, &oh);
+    r->scene = p ? fnv(p, (size_t)ow * oh * 4) : 0;
+    r->present = rd__ReadPresent(out, (size_t)w * h * 4, &ow, &oh) && ow == w && oh == h
+                     ? fnv(out, (size_t)w * h * 4)
+                     : 0;
+    CHECK(rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), s_sceneDepth, sizeof(s_sceneDepth),
+                              &r->sw, &r->sh),
+          "effects depth: SCENE's depth readback");
+    if (on) {
+        uint32_t dw = 0, dh = 0;
+        r->depthOk =
+            rd__ReadPresentDepth(s_presDepth, sizeof(s_presDepth), &dw, &dh) && dw == w && dh == h;
+    } else {
+        r->depthOk = !rd__ReadPresentDepth(s_presDepth, sizeof(s_presDepth), NULL, NULL);
+    }
+    rd_DestroyTexture(t);
+    rd_Shutdown();
+    return true;
+}
+
+/* whether key k is in the reachable set of the given blend mode */
+static bool reachable(const RdPipeKeyInt *k, bool noDual)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    const bool was = rd_NoDual();
+    rd_SetNoDual(noDual);
+    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    rd_SetNoDual(was);
+    for (uint32_t i = 0; i < n; i++) {
+        if (rd__PipeKeyEqual(k, &keys[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*   effects depth (package R1, RdSettings.effectsDepth): the rich frame with
+ *   its scene depth cleared to 0x40000000 and a sprite written at
+ *   0xC0000000, presented at 1280 x 720 (4:3 box at x 160, w 960): the
+ *   present, DISPLAY and SCENE hash the same with the pass on and off; the
+ *   effects depth is 1.0 in both bars and, inside the box, SCENE's depth at
+ *   the box mapping (nearest: one of the 3 x 3 texels around it, the near
+ *   and far values each where expected); under the validation layer with no
+ *   error; the blit's keys for both output formats are reachable in both
+ *   blend modes */
+static void checkEffectsDepth(void)
+{
+    const char *prev = getenv("ICO_VK_VALIDATION");
+    char saved[16] = "";
+    if (prev) {
+        snprintf(saved, sizeof(saved), "%s", prev);
+    }
+    setenv("ICO_VK_VALIDATION", "1", 1);
+    const uint32_t W = 1280, H = 720;
+    DepthRun off, on;
+    const bool ran = depthRun(W, H, 0, &off) && depthRun(W, H, 1, &on);
+    const uint32_t verrors = rhi_vk_ValidationErrorCount();
+    if (prev) {
+        setenv("ICO_VK_VALIDATION", saved, 1);
+    } else {
+        unsetenv("ICO_VK_VALIDATION");
+    }
+    CHECK(ran, "effects depth: rd_Init");
+    if (!ran) {
+        return;
+    }
+    printf("  effects depth: present %016llx off, %016llx on; %u validation errors\n",
+           (unsigned long long)off.present, (unsigned long long)on.present, verrors);
+    CHECK(verrors == 0, "effects depth: %u validation errors", verrors);
+    CHECK(off.present != 0 && off.present == on.present && off.display == on.display &&
+              off.scene == on.scene,
+          "effects depth: the picture is the same with the pass on");
+    CHECK(off.depthOk, "effects depth: none without the option");
+    CHECK(on.depthOk, "effects depth: the output-size depth readback");
+    CHECK(on.sw == 512 && on.sh == 512, "effects depth: SCENE's depth is %ux%u", on.sw, on.sh);
+    if (!on.depthOk || on.sw != 512 || on.sh != 512) {
+        return;
+    }
+    RhiRect box;
+    rd__PresentBox(W, H, 4.0f / 3.0f, &box);
+    CHECK(box.x == 160 && box.w == 960 && box.y == 0 && box.h == 720, "effects depth: the box");
+    const float scale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
+    const float nearD = rd__GsDepth(DEPTH_NEAR_Z, scale), farD = rd__GsDepth(DEPTH_CLEAR_Z, scale);
+    uint32_t barBad = 0, boxBad = 0, nNear = 0, nFar = 0;
+    for (uint32_t y = 0; y < H; y++) {
+        for (uint32_t x = 0; x < W; x++) {
+            const float d = s_presDepth[y * W + x];
+            if ((int32_t)x < box.x || (int32_t)x >= box.x + (int32_t)box.w) {
+                barBad += d != 1.0f;
+                continue;
+            }
+            const int sx = (int)(((float)x + 0.5f - (float)box.x) / (float)box.w * 512.0f);
+            const int sy = (int)(((float)y + 0.5f - (float)box.y) / (float)box.h * 512.0f);
+            int ok = 0;
+            for (int dy = -1; dy <= 1 && !ok; dy++) {
+                for (int dx = -1; dx <= 1 && !ok; dx++) {
+                    const int tx = sx + dx, ty = sy + dy;
+                    ok = tx >= 0 && ty >= 0 && tx < 512 && ty < 512 &&
+                         s_sceneDepth[ty * 512 + tx] == d;
+                }
+            }
+            boxBad += !ok;
+            nNear += d == nearD;
+            nFar += d == farD;
+        }
+    }
+    printf("  effects depth: near %.6g far %.6g; %u near and %u far pixels in the box, %u off "
+           "the mapping, %u bar pixels not 1.0\n",
+           (double)nearD, (double)farD, nNear, nFar, boxBad, barBad);
+    CHECK(barBad == 0, "effects depth: %u bar pixels are not 1.0", barBad);
+    CHECK(boxBad == 0, "effects depth: %u box pixels are not SCENE's depth at the mapping", boxBad);
+    CHECK(nearD < farD && farD < 1.0f, "effects depth: near %g, far %g", (double)nearD,
+          (double)farD);
+    /* the sprite's rectangle in the box, a pixel in from each edge */
+    const uint32_t nx0 = (uint32_t)box.x + (uint32_t)(DEPTH_RECT[0] * 960 / 512) + 2,
+                   nx1 = (uint32_t)box.x + (uint32_t)(DEPTH_RECT[2] * 960 / 512) - 2,
+                   ny0 = (uint32_t)(DEPTH_RECT[1] * 720 / 512) + 2,
+                   ny1 = (uint32_t)(DEPTH_RECT[3] * 720 / 512) - 2;
+    CHECK(s_presDepth[((ny0 + ny1) / 2) * W + (nx0 + nx1) / 2] == nearD &&
+              s_presDepth[ny0 * W + nx0] == nearD && s_presDepth[ny1 * W + nx1] == nearD,
+          "effects depth: the near sprite");
+    /* mid-height, clear of the letterbox's bands (whose draws write depth
+       of their own: the mapping check above covers them) */
+    CHECK(s_presDepth[(H / 2) * W + (uint32_t)box.x + 10] == farD &&
+              s_presDepth[(H / 2) * W + (uint32_t)box.x + box.w - 10] == farD,
+          "effects depth: the far scene");
+    CHECK(nNear > 0 && nFar > 0, "effects depth: the box holds the near and the far values");
+    /* the pipelines precreated for it, both output formats, both modes */
+    for (int m = 0; m < 2; m++) {
+        for (int f = 0; f < 2; f++) {
+            const RdPipeKeyInt k =
+                rd__PresentDepthKey(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
+            CHECK(k.depthFmt == RHI_FMT_D32F && k.gs.zwrite == RD_ZWRITE_ON &&
+                      k.gs.ztst == RD_ZTST_ALWAYS && k.fs == RD_FS_BLIT_DEPTH,
+                  "effects depth: the key");
+            CHECK(reachable(&k, m != 0), "effects depth: the %s key is not reachable%s",
+                  f ? "BGRA8" : "RGBA8", m ? " (two-pass blend)" : "");
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char **argv)
@@ -2036,6 +2230,7 @@ int main(int argc, char **argv)
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
     checkCapture(dir);
+    checkEffectsDepth();
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);
         return 1;
