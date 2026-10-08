@@ -156,7 +156,7 @@ the game, Ico looks a little darker than the square and Yorda a little
 paler, because the game lights them.
 
 A texture pack that has its own pictures of Ico and Yorda replaces these
-colours. The page tells you so while such a pack is on.
+colours. While a texture pack is on, the page reminds you of this.
 
 Your choices are saved when you leave the page.
 

@@ -416,6 +416,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_PHOTO_ACT_SAVE] = "save a picture",
     [UI_STR_PHOTO_ACT_HIDE] = "hide this panel (remembered)",
     [UI_STR_PHOTO_ACT_BACK] = "back",
+    [UI_STR_PHOTO_MOUSE_PREFIX] = "Mouse",
     [UI_STR_SECTION_CHARACTERS] = "Characters",
     [UI_STR_CHAR_ICO_SKIN] = "Ico: Skin",
     [UI_STR_CHAR_ICO_PONCHO_NAVY] = "Ico: Poncho, navy",
@@ -433,7 +434,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Cross shows the character in the viewer; the colours apply in the game at once.",
     [UI_STR_CHAR_NOTE_PAUSE] = "The colours change behind this menu as you choose.",
     [UI_STR_CHAR_NOTE_PACK] =
-        "A texture pack is on; its pictures of Ico and Yorda replace these colours.",
+        "A texture pack is on; if it has pictures of Ico and Yorda, they replace these colours.",
     [UI_STR_COLOUR_RED] = "Red",
     [UI_STR_COLOUR_CRIMSON] = "Crimson",
     [UI_STR_COLOUR_ROSE] = "Rose",

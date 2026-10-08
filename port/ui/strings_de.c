@@ -421,6 +421,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_PHOTO_ACT_SAVE] = "Bild speichern",
     [UI_STR_PHOTO_ACT_HIDE] = "Anzeige ausblenden (wird gemerkt)",
     [UI_STR_PHOTO_ACT_BACK] = "zurück",
+    [UI_STR_PHOTO_MOUSE_PREFIX] = "Maus",
     [UI_STR_SECTION_CHARACTERS] = "Figuren",
     [UI_STR_CHAR_ICO_SKIN] = "Ico: Haut",
     [UI_STR_CHAR_ICO_PONCHO_NAVY] = "Ico: Poncho, marine",
@@ -438,7 +439,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Kreuz zeigt die Figur im Betrachter; die Farben gelten sofort im Spiel.",
     [UI_STR_CHAR_NOTE_PAUSE] = "Die Farben ändern sich bei jeder Wahl hinter diesem Menü.",
     [UI_STR_CHAR_NOTE_PACK] =
-        "Ein Texturpaket ist an; seine Bilder von Ico und Yorda ersetzen diese Farben.",
+        "Ein Texturpaket ist an; hat es Bilder von Ico und Yorda, ersetzen sie diese Farben.",
     [UI_STR_COLOUR_RED] = "Rot",
     [UI_STR_COLOUR_CRIMSON] = "Karminrot",
     [UI_STR_COLOUR_ROSE] = "Altrosa",

@@ -420,6 +420,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_PHOTO_ACT_SAVE] = "enregistrer une image",
     [UI_STR_PHOTO_ACT_HIDE] = "masquer ce panneau (mémorisé)",
     [UI_STR_PHOTO_ACT_BACK] = "retour",
+    [UI_STR_PHOTO_MOUSE_PREFIX] = "Souris",
     [UI_STR_SECTION_CHARACTERS] = "Personnages",
     [UI_STR_CHAR_ICO_SKIN] = "Ico : peau",
     [UI_STR_CHAR_ICO_PONCHO_NAVY] = "Ico : poncho, marine",
@@ -437,7 +438,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Croix montre le personnage dans la visionneuse ; les couleurs s’appliquent aussitôt dans le jeu.",
     [UI_STR_CHAR_NOTE_PAUSE] = "Les couleurs changent derrière ce menu à chaque choix.",
     [UI_STR_CHAR_NOTE_PACK] =
-        "Un pack de textures est actif ; ses images d’Ico et de Yorda remplacent ces couleurs.",
+        "Un pack de textures est actif ; s’il a des images d’Ico et de Yorda, elles remplacent ces couleurs.",
     [UI_STR_COLOUR_RED] = "Rouge",
     [UI_STR_COLOUR_CRIMSON] = "Cramoisi",
     [UI_STR_COLOUR_ROSE] = "Vieux rose",

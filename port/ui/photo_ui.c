@@ -226,7 +226,12 @@ static const char *keyNameFor(UiHudSet *set, int target)
         char *dst = set->keys[set->nkeys];
         const char *comma = strchr(t, ',');
         const size_t len = comma ? (size_t)(comma - t) : strlen(t);
-        snprintf(dst, sizeof(set->keys[0]), "%s%.*s", k == 1 ? "Mouse " : "", (int)len, t);
+        if (k == 1) {
+            snprintf(dst, sizeof(set->keys[0]), "%s %.*s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX),
+                     (int)len, t);
+        } else {
+            snprintf(dst, sizeof(set->keys[0]), "%.*s", (int)len, t);
+        }
         set->nkeys++;
         return dst;
     }

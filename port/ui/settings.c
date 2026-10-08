@@ -3176,8 +3176,11 @@ static int lockedNote(const Row *r)
     return isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION;
 }
 
-/* v0.4.2: Characters' note (a texture pack's pictures replace the
-   recoloured ones while one is on) and swatches, on their rows */
+/* v0.4.2: Characters' note and swatches, on their rows.  With a texture
+   pack on, the note says its pictures of Ico and Yorda, if it has any,
+   replace the colours: a pack names its files by the texture's hash
+   (texpack_name.h), so which textures it covers is known only once each
+   is loaded, not from this page */
 static void charactersRefresh(Page *pg)
 {
     IcoVideoOptions o;

@@ -419,6 +419,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_PHOTO_ACT_SAVE] = "guardar una imagen",
     [UI_STR_PHOTO_ACT_HIDE] = "ocultar este panel (se recuerda)",
     [UI_STR_PHOTO_ACT_BACK] = "volver",
+    [UI_STR_PHOTO_MOUSE_PREFIX] = "Ratón",
     [UI_STR_SECTION_CHARACTERS] = "Personajes",
     [UI_STR_CHAR_ICO_SKIN] = "Ico: piel",
     [UI_STR_CHAR_ICO_PONCHO_NAVY] = "Ico: poncho, marino",
@@ -436,7 +437,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Equis muestra al personaje en el visor; los colores se aplican en el juego al momento.",
     [UI_STR_CHAR_NOTE_PAUSE] = "Los colores cambian detrás de este menú con cada elección.",
     [UI_STR_CHAR_NOTE_PACK] =
-        "Hay un paquete de texturas activo; sus imágenes de Ico y Yorda sustituyen estos colores.",
+        "Hay un paquete de texturas activo; si tiene imágenes de Ico y Yorda, sustituyen estos colores.",
     [UI_STR_COLOUR_RED] = "Rojo",
     [UI_STR_COLOUR_CRIMSON] = "Carmesí",
     [UI_STR_COLOUR_ROSE] = "Rosa palo",

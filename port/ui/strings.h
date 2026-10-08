@@ -478,6 +478,8 @@ typedef enum UiStrId {
     UI_STR_PHOTO_ACT_SAVE,
     UI_STR_PHOTO_ACT_HIDE,
     UI_STR_PHOTO_ACT_BACK,
+    /* the word before a mouse button's name on a key cap ("Mouse left") */
+    UI_STR_PHOTO_MOUSE_PREFIX,
     /* v0.4.2: Options > Extras > Characters (settings.c, port/game/
        appearance.h): the page, its nine colour rows, Randomize and Reset,
        a skin tone's value ("%d" is the tone's number), the page's note
