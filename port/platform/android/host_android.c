@@ -93,6 +93,11 @@ const IcoAndroidPaths *ico_android_paths(void)
                             files ? files : "none", cache ? cache : "none", SDL_GetError());
         return NULL;
     }
+    /* the texture pack's folder, so the player finds where a pack goes
+       (the memory cards' and the log's are made when first written) */
+    if (make_dirs(s_paths.textures) != 0) {
+        __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "cannot create %s", s_paths.textures);
+    }
     s_paths_state = 1;
     return &s_paths;
 }

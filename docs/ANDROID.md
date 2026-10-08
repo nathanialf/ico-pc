@@ -97,7 +97,8 @@ In that folder:
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
   reports.
 - `textures` is where a [texture pack](TEXTURE_PACKS.md) goes:
-  `textures/SCES-50760/replacements`.
+  `textures/SCES-50760/replacements`. The game makes these folders when
+  it starts.
 - `models` is where a [model pack](MODEL_PACKS.md) goes:
   `models/SCES-50760/replacements`.
 
