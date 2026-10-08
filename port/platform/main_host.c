@@ -535,16 +535,40 @@ typedef struct PickState {
     int ok;
 } PickState;
 
+/* static, not on the waiting function's stack: the answer can come after
+   that function gave up (Back, the window closed). Each dialog has its
+   own number (user); an answer for one given up on is ignored. */
+static PickState s_pick;
+static SDL_AtomicInt s_pick_gen;
+
 static void SDLCALL pick_done(void *user, const char *const *files, int filter)
 {
-    PickState *st = user;
-
     (void)filter;
-    if (files != NULL && files[0] != NULL) {
-        snprintf(st->path, sizeof(st->path), "%s", files[0]);
-        st->ok = 1;
+    if ((int)(intptr_t)user != SDL_GetAtomicInt(&s_pick_gen)) {
+        return;
     }
-    SDL_SetAtomicInt(&st->done, 1);
+    if (files != NULL && files[0] != NULL) {
+        snprintf(s_pick.path, sizeof(s_pick.path), "%s", files[0]);
+        s_pick.ok = 1;
+    }
+    SDL_SetAtomicInt(&s_pick.done, 1);
+}
+
+/* a new dialog's number, for SDL_ShowOpenFileDialog's user */
+static void *pick_begin(void)
+{
+    const int gen = SDL_AddAtomicInt(&s_pick_gen, 1) + 1;
+
+    memset(s_pick.path, 0, sizeof(s_pick.path));
+    s_pick.ok = 0;
+    SDL_SetAtomicInt(&s_pick.done, 0);
+    return (void *)(intptr_t)gen;
+}
+
+/* the dialog given up on: a later answer is ignored */
+static void pick_abandon(void)
+{
+    SDL_AddAtomicInt(&s_pick_gen, 1);
 }
 
 #ifdef __ANDROID__
@@ -553,25 +577,23 @@ static void SDLCALL pick_done(void *user, const char *const *files, int filter)
    none it knows (the extractor checks the file) */
 static int pick_iso_sdl(char *out, size_t size)
 {
-    PickState st;
-
-    memset(&st, 0, sizeof(st));
-    SDL_ShowOpenFileDialog(pick_done, &st, NULL, NULL, 0, NULL, false);
-    while (SDL_GetAtomicInt(&st.done) == 0) {
+    SDL_ShowOpenFileDialog(pick_done, pick_begin(), NULL, NULL, 0, NULL, false);
+    while (SDL_GetAtomicInt(&s_pick.done) == 0) {
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
         if (ico_window_progress("Setting up ICO (first start only)",
                                 "Choose your ICO disc image (.iso or .chd)", -1)) {
+            pick_abandon();
             fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
             return -1;
         }
         SDL_Delay(20);
     }
-    if (!st.ok) {
+    if (!s_pick.ok) {
         fprintf(stderr, "ico_pc: no file chosen in the picker (%s)\n", SDL_GetError());
         return -1;
     }
-    snprintf(out, size, "%s", st.path);
+    snprintf(out, size, "%s", s_pick.path);
     return 0;
 }
 
@@ -583,30 +605,30 @@ static int pick_iso_sdl(char *out, size_t size)
         {"ICO disc image (*.iso, *.chd)", "iso;chd"},
         {"All files", "*"},
     };
-    PickState st;
     SDL_Event ev;
-    int started = 0;
+    int quit = 0;
 
-    memset(&st, 0, sizeof(st));
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "ico_pc: no file dialog: %s\n", SDL_GetError());
         return -1;
     }
-    SDL_ShowOpenFileDialog(pick_done, &st, NULL, filters, 2, NULL, false);
-    started = 1;
-    while (started && SDL_GetAtomicInt(&st.done) == 0) {
+    SDL_ShowOpenFileDialog(pick_done, pick_begin(), NULL, filters, 2, NULL, false);
+    while (!quit && SDL_GetAtomicInt(&s_pick.done) == 0) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) {
-                SDL_SetAtomicInt(&st.done, 1);
+                quit = 1;
             }
         }
         SDL_Delay(20);
     }
+    if (quit) {
+        pick_abandon();
+    }
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    if (!st.ok) {
+    if (quit || !s_pick.ok) {
         return -1;
     }
-    snprintf(out, size, "%s", st.path);
+    snprintf(out, size, "%s", s_pick.path);
     return 0;
 }
 
