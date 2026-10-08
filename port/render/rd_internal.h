@@ -315,8 +315,9 @@ typedef struct RdTargetRec {
     uint32_t ownerFrame;
     uint8_t zFormat; /* RdZFormat of the depth buffer (R2c); 0 = PSMZ32 */
     /* package P1: a freed temporary target kept with its textures for the
-     * next of its size (rd__TempTargetAlloc); a taken one is cleared to 0
-     * at the next replay (clearPending) */
+     * next of its size (rd__TempTargetAlloc); a taken one is cleared
+     * (rd_replay.c clearNewTargets: colour 0, depth 1.0) at the next replay
+     * (clearPending) */
     uint8_t parked, clearPending;
 } RdTargetRec;
 

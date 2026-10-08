@@ -1095,7 +1095,8 @@ typedef enum RdZFormat { RD_ZFMT_32 = 0, RD_ZFMT_24 = 1, RD_ZFMT_16 = 2 } RdZFor
 
 void rd_SetTargetZFormat(RdTarget t, RdZFormat fmt);
 /* GS Z to depth for a target's Z format: the scale FrameCB g_z.x carries
- * (2^-32, 2^-24 or 2^-16). */
+ * (PSMZ32: 2^-33 on a D32S8 depth buffer, 2^-32 on D24S8; PSMZ24 2^-24,
+ * PSMZ16 2^-16). */
 float rd_TargetZScale(RdTarget t);
 
 /* gsb_MakeCommonMatrix's per-frame VU1 parameter block: the 16 quadwords

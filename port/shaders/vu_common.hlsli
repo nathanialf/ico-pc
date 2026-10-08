@@ -234,9 +234,14 @@ float4 vu_gs_position(int3 gs, bool wrap)
 
 // The homogeneous form of the same mapping, for triangles the GPU has to
 // clip (scissor programs, a vertex behind the eye or outside the Z range):
-// x/w and y/w are the pixel positions above (unsnapped), z/w = gs_depth of
-// the unsaturated GS Z 16 * h.z / h.w; the GPU's 0 <= z <= w clip is then
-// the GS Z range 0 .. 1/g_z.x.
+// x/w and y/w are the pixel positions above (unsnapped), z/w = Z * g_z.x
+// for the unsaturated GS Z = 16 * h.z / h.w, linear (gs_z_to_depth without
+// its top band and clamp: a piecewise map is not linear in clip space).
+// The GPU's 0 <= z <= w clip is then GS Z 0 .. 1/g_z.x: 2^32 on D24S8, but
+// 2^33 on a float depth buffer (GS_ZSCALE_32F), where a vertex in the top
+// band (Z >= 0xFFFF0000) gets z/w near 0.5, not gs_z_to_depth's band.
+// Clipping at 2^32 there needs a clip plane (SV_ClipDistance and the
+// device's shaderClipDistance), which the pipelines do not use.
 float4 vu_homogeneous_position(float4 h)
 {
     float2 o = g_origin.xy - g_origin.zw;

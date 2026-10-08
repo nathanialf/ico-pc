@@ -3956,8 +3956,10 @@ static void uploadMeshes(const RdFrame *f, int keep)
 }
 
 /* Package P1: a temporary target that took a pooled texture (rd_core.c
- * rd__TempTargetAlloc), or a new one, starts as a new texture does on the
- * drivers the tests run on: zero colour, depth and stencil.  Every pending
+ * rd__TempTargetAlloc), or a new one, starts cleared: zero colour and
+ * stencil, and depth 1.0, above every GS Z (gs_z_to_depth: the depth grows
+ * with Z, so 1.0 is what a new texture's zero depth meant under the old
+ * 1 - z * scale mapping; package QUEEN).  Every pending
  * target is cleared, whichever frame it belongs to: none of them was drawn
  * since it was taken. */
 static void clearNewTargets(void)
@@ -3979,7 +3981,7 @@ static void clearNewTargets(void)
             p.depth.texture = t->depth;
             p.depth.depthLoad = RHI_LOAD_CLEAR;
             p.depth.stencilLoad = RHI_LOAD_CLEAR;
-            p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth), as before */
+            p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth) */
         }
         p.width = t->tw;
         p.height = t->th;
