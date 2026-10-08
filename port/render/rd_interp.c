@@ -203,8 +203,12 @@ static void lerpFloats(float *o, const float *p, const float *c, uint32_t n, flo
     }
 }
 
-/* Texture.c's UV scroll keeps uOfs/vOfs in (-1, 1] by adding or taking 2
- * (tex_textureAnimation); a step of more than 1 is that wrap. */
+/* Texture.c's linear UV scroll keeps uOfs/vOfs in (-1, 1] by adding or
+ * taking 2 (tex_textureAnimation); a step of more than 1 is that wrap.  Not
+ * for a sine scroll (package S: RD_VU_SCROLL_SINE_*), which is never
+ * wrapped and can step further: amplitude 0.8 at 7 Hz moves 1.23 in a
+ * tick, and unwrapping it put the texture half a repeat off at alpha 0.25
+ * and 0.75. */
 static float lerpWrap(float p, float c, float t)
 {
     if (c - p > 1.0f) {
@@ -238,13 +242,16 @@ static uint8_t lerpB(uint8_t p, uint8_t c, float t)
     return (uint8_t)lerpU(p, c, t);
 }
 
-/* VuCB.mem: qw 2 xy the UV scroll (wrap undone), zw; qw 4..35 matrices and
- * lights.  qw 0, 1, 3 are constants and a GIF tag: cur's. */
-static void lerpVuBlock(float (*o)[4], const float (*p)[4], const float (*c)[4], float t)
+/* VuCB.mem: qw 2 xy the UV scroll (a linear scroll's wrap undone; sine
+ * axes, scroll's RD_VU_SCROLL_SINE_U / _V, straight), zw; qw 4..35
+ * matrices and lights.  qw 0, 1, 3 are constants and a GIF tag: cur's. */
+static void lerpVuBlock(float (*o)[4], const float (*p)[4], const float (*c)[4], float t,
+                        uint8_t scroll)
 {
     for (int k = 0; k < 2; k++) {
         if (!sameBits(p[2][k], c[2][k]) && isfinite(p[2][k]) && isfinite(c[2][k])) {
-            o[2][k] = lerpWrap(p[2][k], c[2][k], t);
+            o[2][k] = (scroll & (1u << k)) != 0u ? lerpF(p[2][k], c[2][k], t)
+                                                 : lerpWrap(p[2][k], c[2][k], t);
         }
     }
     lerpFloats(&o[2][2], &p[2][2], &c[2][2], 2, t);
@@ -1375,7 +1382,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
             s_rebased++;
         }
     }
-    lerpVuBlock(vo, vp, (const float (*)[4])vc, t);
+    lerpVuBlock(vo, vp, (const float (*)[4])vc, t, hc.scroll);
     /* S2: a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__S2Legacy();
     if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {

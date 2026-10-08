@@ -1604,6 +1604,12 @@ static void tex_textureAnimation(void)
             }
 
             e->frame++;
+#ifdef ICO_RD
+            /* package S: the sine axes marked in the SET_UVOFFSET quadword's z
+             * (U) and w (V), which the microprograms do not move (rd_mesh.h
+             * RD_VU_SCROLL_SINE_U): the interpolation must not unwrap them */
+            uv->zw = (e->file.ampU != 0.0f ? 1LL : 0LL) | (e->file.ampV != 0.0f ? 1LL << 32 : 0LL);
+#endif
 
             if (e->file.csSpd != 0 && e->file.csStp != 0 && e->file.csBgn != e->file.csEnd) {
                 int clut = psmTable[t->pic.clutType & 0x3F].sizeDiv;

@@ -72,6 +72,12 @@
  *             lands on the same point of the stone (within 1/16 GS pixel)
  *   swap      two emitters' particle batches of equal count in swapped
  *             order: keyed by emitter each blends half way from its own
+ *   sine      Texture.c's sine scroll stepping 1.23 in a tick (amplitude
+ *             0.8 at 7 Hz, 25 ticks a second), marked RD_VU_SCROLL_SINE_U:
+ *             blended straight at alpha 0.25, 0.5 and 0.75 (unmarked, the
+ *             linear scroll's unwrap put it half a repeat off at 0.25 and
+ *             0.75); SET_UVOFFSET's quadword w marks V, the common block
+ *             clears the mark
  */
 #include <math.h>
 #include <stdio.h>
@@ -2594,6 +2600,107 @@ static void testParticleSwap(void)
            particleX(f, 0), particleX(f, 1));
 }
 
+/* (hypothesis 4) Texture.c's sine scroll (tex_textureAnimation: uOfs =
+ * ampU sin(frame pi scrlU / ticks per second)) is never wrapped, so a step
+ * of more than 1 is real: amplitude 0.8 at 7 Hz on 25 ticks a second moves
+ * up to 1.41 a tick.  Blended at alpha 0.25, 0.5 and 0.75 the offset must
+ * equal the straight blend modulo 1 (the texture repeats every 1); a
+ * linear scroll's wrap by 2 still blends the short way */
+static void recordScroll(RdMesh mesh, float u, int sine)
+{
+    rd_BeginFrame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 16);
+    d.vu.mem[19][0] = 2048.0f;
+    d.vu.mem[19][1] = 2048.0f;
+    d.vu.mem[2][0] = u;
+    d.vu.mem[2][1] = u;
+#ifdef RD_VU_SCROLL_SINE_U
+    d.scroll = (uint8_t)(sine ? RD_VU_SCROLL_SINE_U : 0);
+#else
+    (void)sine;
+#endif
+    rd_SelectList(0);
+    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjE, 7, 32));
+    rd_EndFrame(0);
+}
+
+static double frac1(double x)
+{
+    return x - floor(x);
+}
+
+static void testSineScroll(void)
+{
+    RdMesh mesh = makeMesh();
+    /* the largest step of the sine over a second of ticks */
+    const double amp = 0.8, hz = 7.0, ticks = 25.0;
+    double best = 0.0, p = 0.0, c = 0.0;
+    for (int k = 0; k < 25; k++) {
+        const double a = amp * sin(2.0 * 3.14159265358979 * hz * k / ticks);
+        const double b = amp * sin(2.0 * 3.14159265358979 * hz * (k + 1) / ticks);
+        if (fabs(b - a) > best) {
+            best = fabs(b - a);
+            p = a;
+            c = b;
+        }
+    }
+    static const float kAlpha[3] = {0.25f, 0.5f, 0.75f};
+    for (int sine = 0; sine < 2; sine++) {
+        recordScroll(mesh, (float)p, sine);
+        recordScroll(mesh, (float)c, sine);
+        double worst = 0.0;
+        for (int a = 0; a < 3; a++) {
+            const RdFrame *f = built(kAlpha[a]);
+            const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjE, 7, 32), 0));
+            if (!m) {
+                CHECK(0, "sine scroll: the draw");
+                continue;
+            }
+            const double want =
+                (double)(float)p + kAlpha[a] * ((double)(float)c - (double)(float)p);
+            double d = fabs(frac1(m[2][0]) - frac1(want));
+            d = d > 0.5 ? 1.0 - d : d;
+            worst = d > worst ? d : worst;
+            printf("  sine scroll %.4f -> %.4f (%s) at alpha %.2f: U %.4f, the sine's blend %.4f, "
+                   "%.4f of the texture apart; linear V %.4f\n",
+                   p, c, sine ? "marked sine" : "unmarked", kAlpha[a], m[2][0], want, d, m[2][1]);
+        }
+        if (sine) {
+            CHECK(worst < 1e-4, "sine scroll: a step of %.3f blended %.4f of the texture off", best,
+                  worst);
+        }
+    }
+    rd_DestroyVuMesh(mesh);
+    /* the mark as the seki side sends it: Texture.c's SET_UVOFFSET quadword
+     * with z (U) and w (V) nonzero for a sine axis, kept by the list until
+     * the next SET_UVOFFSET or common block */
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(0);
+    rd_VuProgram(1);
+    const uint32_t mark[4] = {0x3F000000u, 0u, 0u, 1u}; /* U 0.5, V 0, V a sine */
+    float uvq[1][4];
+    memcpy(uvq, mark, sizeof(uvq));
+    rd_VuCall(2, (const float (*)[4])uvq, 1);
+    rd_VuCall(32, NULL, 0);
+    RdVuDraw d;
+    CHECK(rd_VuDrawFromState(&d) && d.scroll == RD_VU_SCROLL_SINE_V && d.vu.mem[2][0] == 0.5f,
+          "SET_UVOFFSET's w marks V a sine scroll (scroll %u)", d.scroll);
+    RdVuCommon common;
+    memset(&common, 0, sizeof(common));
+    rd_SetVuCommon(&common);
+    rd_VuCall(32, NULL, 0);
+    CHECK(rd_VuDrawFromState(&d) && d.scroll == 0, "the common block clears the mark (%u)",
+          d.scroll);
+    rd_EndFrame(0);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -2617,6 +2724,7 @@ static void runCpu(void)
     testMorphLimits();
     testShineFollows(); /* package S */
     testParticleSwap();
+    testSineScroll();
 }
 
 int main(void)
