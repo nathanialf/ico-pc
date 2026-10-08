@@ -20,6 +20,7 @@
 *.jpg binary
 *.gz binary
 *.zip binary
+*.jar binary
 
 # EUC-JP sources: the developers' files carried Japanese text in EUC-JP, and the
 # string literals reproduce the ROM's bytes, so the working tree keeps that

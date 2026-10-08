@@ -902,7 +902,12 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     copy_path(source, source_size, cand[0]);
 }
 
+#ifdef __ANDROID__
+/* Android: SDL_main (port/platform/android/main_android.c) calls this. */
+int ico_host_main(int argc, char **argv)
+#else
 int main(int argc, char **argv)
+#endif
 {
     Args a;
     IcoIni ini;

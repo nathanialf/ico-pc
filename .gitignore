@@ -132,3 +132,15 @@ docs/NOTES.md
 docs/ARCHIVE_retired_notes.md
 docs/MATCH_VU.md
 docs/MATCHING_NOTES.md
+
+# --- Android (android/, tools/fetch_android.sh) ---
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+# signing keys and their passwords never enter the repository
+*.jks
+*.keystore
+android-keystores/
+/android-keystores

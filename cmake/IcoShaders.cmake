@@ -13,6 +13,10 @@
 #       after the last ico_add_shader: builds the static library <target>
 #       holding shaders_gen.c, with shaders_gen.h on its public include path.
 #
+# ICO_SHADERS_DXIL=OFF (the android-arm64 preset) compiles SPIR-V only: the
+# table's dxil is NULL with dxil_len 0, for a target without the D3D12
+# backend.
+#
 # DXC comes from tools/fetch_deps.sh (tools/toolchain/deps/dxc); ICO_DXC
 # overrides the path. Without a compiler the shaders are left out
 # (ICO_SHADERS_AVAILABLE is false), as the other fetched dependencies are.
@@ -20,6 +24,7 @@
 set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
     "Prefix of the dependencies tools/fetch_deps.sh installs")
 set(ICO_DXC "" CACHE FILEPATH "DXC executable (default: tools/toolchain/deps/dxc/bin/dxc)")
+option(ICO_SHADERS_DXIL "Also compile the shaders to DXIL for the D3D12 backend" ON)
 
 set(ICO_SHADERS_AVAILABLE FALSE)
 set(_ico_dxc "${ICO_DXC}")
@@ -61,20 +66,34 @@ function(ico_add_shader name file entry stage)
     get_filename_component(src "${file}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     file(GLOB _hlsli CONFIGURE_DEPENDS "${ICO_SHADER_DIR}/*.hlsli")
     set(spv "${ICO_SHADER_OUT_DIR}/${name}.spv")
-    set(dxil "${ICO_SHADER_OUT_DIR}/${name}.dxil")
-    add_custom_command(
-        OUTPUT "${spv}" "${dxil}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${ICO_SHADER_OUT_DIR}"
-        COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_SPIRV_FLAGS} ${ICO_DXC_COMMON_FLAGS}
-                -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
-        COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_COMMON_FLAGS}
-                -T ${profile} -E ${entry} "${src}" -Fo "${dxil}"
-        DEPENDS "${src}" ${_hlsli} "${ICO_DXC_EXE}"
-        COMMENT "DXC ${name} (${entry}, ${profile}): SPIR-V and DXIL"
-        VERBATIM)
+    if(ICO_SHADERS_DXIL)
+        set(dxil "${ICO_SHADER_OUT_DIR}/${name}.dxil")
+        add_custom_command(
+            OUTPUT "${spv}" "${dxil}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${ICO_SHADER_OUT_DIR}"
+            COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_SPIRV_FLAGS} ${ICO_DXC_COMMON_FLAGS}
+                    -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
+            COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_COMMON_FLAGS}
+                    -T ${profile} -E ${entry} "${src}" -Fo "${dxil}"
+            DEPENDS "${src}" ${_hlsli} "${ICO_DXC_EXE}"
+            COMMENT "DXC ${name} (${entry}, ${profile}): SPIR-V and DXIL"
+            VERBATIM)
+        set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${spv}" "${dxil}")
+    else()
+        # "-": no DXIL for this shader (embed_shaders.py)
+        set(dxil "-")
+        add_custom_command(
+            OUTPUT "${spv}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${ICO_SHADER_OUT_DIR}"
+            COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_SPIRV_FLAGS} ${ICO_DXC_COMMON_FLAGS}
+                    -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
+            DEPENDS "${src}" ${_hlsli} "${ICO_DXC_EXE}"
+            COMMENT "DXC ${name} (${entry}, ${profile}): SPIR-V"
+            VERBATIM)
+        set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${spv}")
+    endif()
     set_property(GLOBAL APPEND PROPERTY ICO_SHADER_MANIFEST
                  "${name}|${stage_n}|${entry}|${spv}|${dxil}")
-    set_property(GLOBAL APPEND PROPERTY ICO_SHADER_BLOBS "${spv}" "${dxil}")
 endfunction()
 
 function(ico_shaders_library target)
@@ -103,5 +122,9 @@ function(ico_shaders_library target)
     add_library(${target} STATIC "${ICO_SHADER_OUT_DIR}/shaders_gen.c")
     target_include_directories(${target} PUBLIC "${ICO_SHADER_OUT_DIR}")
     target_compile_options(${target} PRIVATE ${ICO_SEMANTIC_OPTIONS})
+    if(NOT ICO_SHADERS_DXIL)
+        # the table's users that check the DXIL (shaders_table_test)
+        target_compile_definitions(${target} INTERFACE ICO_SHADERS_NO_DXIL=1)
+    endif()
     set(ICO_SHADERS_TARGET ${target} PARENT_SCOPE)
 endfunction()

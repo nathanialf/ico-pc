@@ -52,17 +52,9 @@ mkdir -p "$DEST"
 TMP="$(mktemp -d "$DEST/.fetch.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
-# fetch <url> <sha256> <file>: download and verify.
-fetch() {
-    echo "==> fetching $1"
-    curl -fL --retry 3 -o "$3" "$1"
-    echo "${2}  $3" | sha256sum -c -
-}
-
-# stamped <dir> <id>: true when <dir> already holds release <id>.
-stamped() {
-    [[ -f "$1/.ico-release" && "$(cat "$1/.ico-release")" == "$2" ]]
-}
+# fetch and stamped
+# shellcheck source=tools/fetch_common.sh
+source "$ROOT/tools/fetch_common.sh"
 
 # unpack_debs <dest> "<pool path> <sha256>"...: fetch pinned Debian packages
 # (deb.debian.org, else DEB_SNAPSHOT), check them and unpack them into

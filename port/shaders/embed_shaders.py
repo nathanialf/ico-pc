@@ -3,7 +3,9 @@
 
 Called by cmake/IcoShaders.cmake with a manifest, one shader per line:
     name|stage|entry|spirv-file|dxil-file
-the output directory and a version string. Writes shaders_gen.h (the table's
+the output directory and a version string. A dxil-file of "-" means no
+DXIL for that shader (ICO_SHADERS_DXIL=OFF): its table entry has dxil NULL
+and dxil_len 0. Writes shaders_gen.h (the table's
 declaration) and shaders_gen.c (the byte arrays and the table). Also checks
 the blobs: SPIR-V must start with its magic number, DXIL must be a DXBC
 container whose hash is not zero (an unsigned container has a zero hash:
@@ -35,7 +37,7 @@ typedef struct IcoShaderBlob {
     int stage;        /* ICO_SHADER_STAGE_* */
     const uint8_t *spirv;
     size_t spirv_len;
-    const uint8_t *dxil; /* signed DXIL in a DXBC container */
+    const uint8_t *dxil; /* signed DXIL in a DXBC container; NULL when built without */
     size_t dxil_len;
     const char *entry; /* entry point inside the SPIR-V (RhiShaderDesc.entryPoint) */
 } IcoShaderBlob;
@@ -57,6 +59,8 @@ const IcoShaderBlob *ico_FindShader(const char *name);
 def check(name, spv, dxil):
     if len(spv) < 20 or len(spv) % 4 or struct.unpack("<I", spv[:4])[0] != 0x07230203:
         sys.exit(f"embed_shaders: {name}: SPIR-V is not a SPIR-V module")
+    if dxil is None:
+        return
     if len(dxil) < 24 or dxil[:4] != b"DXBC":
         sys.exit(f"embed_shaders: {name}: DXIL is not a DXBC container")
     if dxil[4:20] == bytes(16):
@@ -80,7 +84,7 @@ def main():
             continue
         name, stage, entry, spv_path, dxil_path = line.split("|")
         spv = open(spv_path, "rb").read()
-        dxil = open(dxil_path, "rb").read()
+        dxil = None if dxil_path == "-" else open(dxil_path, "rb").read()
         check(name, spv, dxil)
         rows.append((name, STAGES[stage], entry, spv, dxil))
     rows.sort(key=lambda r: r[0])
@@ -92,12 +96,13 @@ def main():
            '#include "shaders_gen.h"', "#include <string.h>", ""]
     for i, (_, _, _, spv, dxil) in enumerate(rows):
         out.append(array(f"spv_{i}", spv))
-        out.append(array(f"dxil_{i}", dxil))
+        if dxil is not None:
+            out.append(array(f"dxil_{i}", dxil))
         out.append("")
     out.append("const IcoShaderBlob g_icoShaders[] = {")
-    for i, (name, stage, entry, _, _) in enumerate(rows):
-        out.append(f'    {{"{name}", {stage}, spv_{i}, sizeof(spv_{i}), '
-                   f'dxil_{i}, sizeof(dxil_{i}), "{entry}"}},')
+    for i, (name, stage, entry, _, dxil) in enumerate(rows):
+        dx = "NULL, 0" if dxil is None else f"dxil_{i}, sizeof(dxil_{i})"
+        out.append(f'    {{"{name}", {stage}, spv_{i}, sizeof(spv_{i}), {dx}, "{entry}"}},')
     out += [
         "};",
         f"const unsigned g_icoShaderCount = {len(rows)};",

@@ -47,8 +47,9 @@ target_compile_options(rhi_d3d12_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO
 if(NOT WIN32)
     target_link_libraries(rhi_d3d12_plan_test PRIVATE m)
 endif()
+# (the table's DXIL: not with ICO_SHADERS_DXIL=OFF, cmake/IcoShaders.cmake)
 function(_ico_rhi_plan_test_shaders)
-    if(TARGET ico_shaders)
+    if(TARGET ico_shaders AND ICO_SHADERS_DXIL)
         target_link_libraries(rhi_d3d12_plan_test PRIVATE ico_shaders)
         target_compile_definitions(rhi_d3d12_plan_test PRIVATE ICO_HAVE_SHADER_TABLE=1)
     endif()
@@ -61,7 +62,8 @@ endif()
 
 # --- SDL3 ---------------------------------------------------------------------
 # One prefix per target: the source build for Linux x86-64, SDL's mingw
-# development release for the two Windows targets. SDL3_DIR is set directly
+# development release for the two Windows targets, the NDK build for
+# Android arm64. SDL3_DIR is set directly
 # so the cross toolchains' CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY does not
 # hide the user-local prefix.
 set(_ico_sdl3_prefix "")
@@ -69,6 +71,9 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/mingw/x86_64-w64-mingw32")
 elseif(WIN32)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/mingw/i686-w64-mingw32")
+elseif(ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    # tools/fetch_android.sh's NDK build
+    set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/android-arm64")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/linux-x64")
 endif()

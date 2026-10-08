@@ -1,0 +1,165 @@
+// android/app/build.gradle: the app. libmain.so is the repository's CMake
+// target ico_pc (../../CMakeLists.txt, with the android-arm64 preset's cache
+// variables); libSDL3.so and SDL's Java glue are tools/fetch_android.sh's
+// build of the pinned SDL release (tools/toolchain/deps/sdl3/android-arm64).
+//
+//   ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]
+//
+// versionName: -PicoLabel, else `git describe --always --dirty --abbrev=10`;
+// versionCode: `git rev-list --count HEAD`. assets/VERSION.txt (the three
+// lines of tools/package_linux.sh's) and assets/NOTICES.txt
+// (tools/gen_notices.py --platform android) are generated at build time.
+// The release build is unsigned (tools signs it).
+import org.gradle.process.ExecOperations
+
+import javax.inject.Inject
+
+plugins {
+    id 'com.android.application'
+}
+
+def repoRoot = rootProject.file('..').canonicalFile
+
+// tools/toolchain/android.env (tools/fetch_android.sh): KEY="value" lines
+def envFile = new File(repoRoot, 'tools/toolchain/android.env')
+if (!envFile.isFile()) {
+    throw new GradleException("android: no ${envFile} (run tools/fetch_android.sh)")
+}
+def icoEnv = [:]
+envFile.eachLine { line ->
+    def m = line =~ /^([A-Z0-9_]+)="?([^"]*)"?$/
+    if (m.matches()) {
+        icoEnv[m.group(1)] = m.group(2)
+    }
+}
+def sdl3Dir = icoEnv['ICO_SDL3_ANDROID']
+if (!sdl3Dir || !new File(sdl3Dir, 'jniLibs/arm64-v8a/libSDL3.so').isFile()) {
+    throw new GradleException("android: no SDL3 for Android at ${sdl3Dir} (run tools/fetch_android.sh)")
+}
+
+def gitOut = { List<String> args ->
+    try {
+        def p = (['git', '-C', repoRoot.path] + args).execute()
+        def out = p.text.trim()
+        p.waitFor()
+        return p.exitValue() == 0 && out ? out : null
+    } catch (IOException ignored) {
+        return null
+    }
+}
+def icoLabel = (project.findProperty('icoLabel') ?: gitOut(['describe', '--always', '--dirty', '--abbrev=10']) ?: 'unknown').toString()
+def icoCommit = gitOut(['rev-parse', 'HEAD']) ?: 'unknown'
+def icoVersionCode = (gitOut(['rev-list', '--count', 'HEAD']) ?: '1') as Integer
+def nativeJobs = (project.findProperty('icoNativeJobs') ?: '2').toString()
+
+// assets/VERSION.txt and assets/NOTICES.txt
+abstract class IcoAssetsTask extends DefaultTask {
+    @Input abstract Property<String> getLabel()
+    @Input abstract Property<String> getCommit()
+    @Input abstract Property<String> getPython()
+    @Input abstract Property<String> getRepoRoot()
+    @OutputDirectory abstract DirectoryProperty getOutputDir()
+    @Inject abstract ExecOperations getExecOps()
+
+    @TaskAction
+    void generate() {
+        def out = outputDir.get().asFile
+        out.mkdirs()
+        def date = new java.text.SimpleDateFormat('yyyy-MM-dd').format(new Date())
+        new File(out, 'VERSION.txt').text = "ico-pc ${label.get()}\nbuilt ${date}\ncommit ${commit.get()}\n"
+        execOps.exec {
+            commandLine python.get(), "${repoRoot.get()}/tools/gen_notices.py", '--platform', 'android',
+                    '--root', repoRoot.get(), '--out', new File(out, 'NOTICES.txt').path
+        }
+    }
+}
+def venvPython = new File(repoRoot, '.venv/bin/python')
+def icoAssets = tasks.register('icoAssets', IcoAssetsTask) { t ->
+    t.label.set(icoLabel)
+    t.commit.set(icoCommit)
+    t.python.set(venvPython.canExecute() ? venvPython.path : 'python3')
+    t.repoRoot.set(repoRoot.path)
+    t.outputDir.set(layout.buildDirectory.dir('generated/icoAssets'))
+    // the date and the licence files under tools/toolchain are not inputs
+    t.outputs.upToDateWhen { false }
+}
+
+android {
+    namespace = 'com.defnf.icopc'
+    compileSdk = 35
+    ndkVersion = icoEnv['ICO_ANDROID_NDK_VERSION'] ?: '28.2.13676358'
+
+    defaultConfig {
+        applicationId = 'com.defnf.icopc'
+        minSdk = 29
+        targetSdk = 35
+        versionCode = icoVersionCode
+        versionName = icoLabel
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                // the android-arm64 preset's (CMakePresets.json); the native
+                // code is built optimised in both variants
+                arguments "-DCMAKE_TOOLCHAIN_FILE=${repoRoot}/cmake/toolchains/android-arm64.cmake",
+                        '-DCMAKE_BUILD_TYPE=RelWithDebInfo',
+                        '-DANDROID_STL=none',
+                        '-DICO_HEADLESS=OFF',
+                        '-DICO_LINK_EXE=ON',
+                        '-DICO_RHI_D3D12=OFF',
+                        '-DICO_SHADERS_DXIL=OFF',
+                        "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
+                        '-DCMAKE_JOB_POOL_COMPILE=compile',
+                        '-DCMAKE_JOB_POOL_LINK=link'
+                targets 'ico_pc'
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file('../../CMakeLists.txt')
+            // tools/toolchain/android-cmake (local.properties cmake.dir)
+            version = icoEnv['ICO_ANDROID_CMAKE_VERSION']
+        }
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += "${sdl3Dir}/java"
+            jniLibs.srcDirs += "${sdl3Dir}/jniLibs"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            signingConfig = null
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs {
+            // stored uncompressed and page-aligned, loaded from the APK
+            useLegacyPackaging = false
+        }
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(icoAssets) { it.outputDir }
+    }
+}

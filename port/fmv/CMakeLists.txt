@@ -59,6 +59,10 @@ add_library(ico_libmpeg2 STATIC
     ithread_single.c)
 target_include_directories(ico_libmpeg2 PUBLIC "${_m2}/common" "${_m2}/decoder"
                                               "${_m2}/common/riscv")
+if(ANDROID)
+    # <log/log.h> is AOSP's, not the NDK's (android/log/log.h)
+    target_include_directories(ico_libmpeg2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/android")
+endif()
 # third-party code: its own warnings are not ours to fix
 target_compile_options(ico_libmpeg2 PRIVATE -w -fwrapv)
 # The decoder left-shifts negative coefficients (impeg2d_vld.c), defined by

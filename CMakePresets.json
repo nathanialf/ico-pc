@@ -68,6 +68,19 @@
             "displayName": "Windows x64, llvm-mingw clang",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32.cmake",
             "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\")."
+        },
+        {
+            "name": "android-arm64",
+            "inherits": "base",
+            "displayName": "Android arm64-v8a, NDK clang (libmain.so)",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/android-arm64.cmake",
+            "description": "Compile check of the Android build without Gradle; tools/fetch_android.sh first. The APK is built by android/ (Gradle) with the same cache variables.",
+            "cacheVariables": {
+                "ICO_HEADLESS": "OFF",
+                "ICO_LINK_EXE": "ON",
+                "ICO_RHI_D3D12": "OFF",
+                "ICO_SHADERS_DXIL": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -94,6 +107,11 @@
         {
             "name": "win-x64-clang",
             "configurePreset": "win-x64-clang"
+        },
+        {
+            "name": "android-arm64",
+            "configurePreset": "android-arm64",
+            "targets": ["ico_pc"]
         }
     ],
     "testPresets": [

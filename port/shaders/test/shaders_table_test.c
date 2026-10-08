@@ -1,5 +1,6 @@
 /* shaders_table_test.c: every entry of the embedded table compiled for both
- * targets: SPIR-V with its magic number, DXIL as a signed DXBC container,
+ * targets: SPIR-V with its magic number, DXIL as a signed DXBC container
+ * (none when the table is built with ICO_SHADERS_DXIL=OFF),
  * known stage and entry, unique names. The compile itself is the build
  * (a wrong shader fails ninja with DXC's message); this checks what was
  * embedded. */
@@ -30,18 +31,26 @@ int main(void)
         const uint8_t *s = b->spirv, *d = b->dxil;
         unsigned magic =
             (unsigned)s[0] | (unsigned)s[1] << 8 | (unsigned)s[2] << 16 | (unsigned)s[3] << 24;
-        int hashed = 0;
-        for (int k = 4; k < 20; k++) {
-            hashed |= d[k];
-        }
         if (b->spirv_len < 32 || b->spirv_len % 4 || magic != 0x07230203u) {
             printf("FAIL %s: SPIR-V\n", b->name);
             failures++;
+        }
+#ifdef ICO_SHADERS_NO_DXIL
+        /* built without DXIL (ICO_SHADERS_DXIL=OFF) */
+        if (d || b->dxil_len) {
+            printf("FAIL %s: DXIL in a table built without\n", b->name);
+            failures++;
+        }
+#else
+        int hashed = 0;
+        for (int k = 4; k < 20; k++) {
+            hashed |= d[k];
         }
         if (b->dxil_len < 64 || memcmp(d, "DXBC", 4) != 0 || !hashed) {
             printf("FAIL %s: DXIL missing or unsigned\n", b->name);
             failures++;
         }
+#endif
         if (b->stage != ICO_SHADER_STAGE_VERTEX && b->stage != ICO_SHADER_STAGE_FRAGMENT) {
             printf("FAIL %s: stage\n", b->name);
             failures++;

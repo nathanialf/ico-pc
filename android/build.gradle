@@ -1,0 +1,5 @@
+// android/build.gradle: the plugin version for the whole build (Gradle 8.13,
+// gradle/wrapper/gradle-wrapper.properties).
+plugins {
+    id 'com.android.application' version '8.13.0' apply false
+}

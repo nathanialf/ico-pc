@@ -171,8 +171,18 @@ if(ICO_LINK_EXE)
     # main_host.c: the program's main and its options; trace_host.c: the
     # per-Main-tick trace (package 2A replaces it); host_config.c: the exe
     # directory, ico-pc.ini, the ISO check, the log and the Windows dialogs.
-    add_executable(ico_pc port/platform/main_host.c port/platform/trace_host.c
-                          port/platform/host_config.c)
+    set(_ico_pc_sources port/platform/main_host.c port/platform/trace_host.c
+                        port/platform/host_config.c)
+    if(ANDROID)
+        # Android: the program is libmain.so, which SDL's Java side
+        # (SDLActivity, android/) loads after libSDL3.so; it calls SDL_main
+        # (port/platform/android/main_android.c). The target keeps the name
+        # ico_pc, so everything that adds to it applies.
+        add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c)
+        set_target_properties(ico_pc PROPERTIES OUTPUT_NAME main)
+    else()
+        add_executable(ico_pc ${_ico_pc_sources})
+    endif()
     # The hardware floor: libgraph's vsync
     # wait, libdma, and libgcc's fptodp. Both builds: the window build draws
     # through rd above it. In the program itself rather than a library, since
@@ -186,7 +196,9 @@ if(ICO_LINK_EXE)
     endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_pc PRIVATE ico_game ico_platform)
-    if(NOT WIN32)
+    if(ANDROID)
+        target_link_libraries(ico_pc PRIVATE log android m dl)
+    elseif(NOT WIN32)
         target_link_libraries(ico_pc PRIVATE m)
     else()
         # A double-clicked program: GUI subsystem (no console window; output
@@ -265,7 +277,7 @@ function(ico_link_host_fs dir)
     get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach(t IN LISTS targets)
         get_target_property(type ${t} TYPE)
-        if(type STREQUAL "EXECUTABLE" OR type STREQUAL "STATIC_LIBRARY")
+        if(type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY)$")
             get_target_property(srcs ${t} SOURCES)
             if(srcs MATCHES "host_config\\.c")
                 target_link_libraries(${t} PRIVATE ico_host_fs)
