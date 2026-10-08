@@ -21,12 +21,54 @@ static unsigned s_serial;
 
 static int s_winW, s_winH;
 
-void ico_video_defaults(IcoVideoOptions *o)
+/* v0.4.2 (N2): the Android rules (a 60 a second frame rate default, and
+   Enhanced's resolution "auto"); the build's, or a test's
+   (ico_video_set_android) */
+#ifdef __ANDROID__
+static int s_android = 1;
+#else
+static int s_android = 0;
+#endif
+
+/* v0.4.2 (N2): resolution "auto"'s scene scale in force (0: the window's) */
+static int s_autoScale;
+
+static void set_preset(IcoVideoOptions *o, int preset, int android);
+
+void ico_video_set_android(int android)
+{
+    s_android = android != 0;
+}
+
+int ico_video_android(void)
+{
+    return s_android;
+}
+
+void ico_video_set_auto_scale(int scale)
+{
+    s_autoScale = scale > 0 ? scale : 0;
+}
+
+int ico_video_auto_scale(void)
+{
+    return s_autoScale;
+}
+
+int ico_video_default_framerate(int android)
+{
+    /* R7b: "uncapped"; v0.4.2 (N2): 60 on Android, where "uncapped" in
+       mailbox mode presented twice a display refresh (window_host.c pace),
+       two full replays a refresh on the one thread that also runs the game */
+    return android ? 60 : ICO_FRAMERATE_UNCAPPED;
+}
+
+void ico_video_defaults_for(IcoVideoOptions *o, int android)
 {
     memset(o, 0, sizeof(*o));
-    ico_video_set_preset(o, ICO_VIDEO_ORIGINAL);
+    set_preset(o, ICO_VIDEO_ORIGINAL, android);
     o->vsync = 1;
-    o->framerate = ICO_FRAMERATE_UNCAPPED; /* R7b: the plan's default */
+    o->framerate = ico_video_default_framerate(android);
     o->crt = 0;
     o->crtMode = ICO_CRT_CONSUMER;
     o->crtStrength = 1.0f;
@@ -44,6 +86,11 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->effectMotionBlur = 1;
     o->effectFog = 1;
     o->effectsDepth = 1;
+}
+
+void ico_video_defaults(IcoVideoOptions *o)
+{
+    ico_video_defaults_for(o, s_android);
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -68,6 +115,11 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
     }
     if (lower_eq(s, "window")) {
         o->resW = o->resH = o->resScale = 0;
+        return 0;
+    }
+    if (lower_eq(s, "auto")) {
+        o->resW = o->resH = 0;
+        o->resScale = ICO_RES_AUTO;
         return 0;
     }
     if (sscanf(s, "%ux%u%c", &w, &h, &tail) == 2 && w >= 64 && h >= 64 && w <= 7680 && h <= 4320) {
@@ -196,14 +248,15 @@ int ico_video_preset(const IcoVideoOptions *o)
         !o->fullHeight) {
         return ICO_VIDEO_ORIGINAL;
     }
-    if (o->resScale == 0 && o->aspect == ICO_ASPECT_AUTO && o->filter == ICO_FILTER_ANISOTROPIC &&
-        o->fullHeight) {
+    /* Enhanced's resolution: the window's, "auto" on Android (N2) */
+    if (o->resScale == (s_android ? ICO_RES_AUTO : 0) && o->aspect == ICO_ASPECT_AUTO &&
+        o->filter == ICO_FILTER_ANISOTROPIC && o->fullHeight) {
         return ICO_VIDEO_ENHANCED;
     }
     return ICO_VIDEO_CUSTOM;
 }
 
-void ico_video_set_preset(IcoVideoOptions *o, int preset)
+static void set_preset(IcoVideoOptions *o, int preset, int android)
 {
     if (preset == ICO_VIDEO_ORIGINAL) {
         /* the PS2 picture: 1x, 4:3, original filtering, half height */
@@ -213,12 +266,20 @@ void ico_video_set_preset(IcoVideoOptions *o, int preset)
         o->filter = ICO_FILTER_ORIGINAL;
         o->fullHeight = 0;
     } else if (preset == ICO_VIDEO_ENHANCED) {
-        /* the window's size, its aspect, anisotropic, full height */
-        o->resW = o->resH = o->resScale = 0;
+        /* the window's size (on Android "auto": the window's, lowered
+           while the phone falls behind), its aspect, anisotropic, full
+           height */
+        o->resW = o->resH = 0;
+        o->resScale = android ? ICO_RES_AUTO : 0;
         o->aspect = ICO_ASPECT_AUTO;
         o->filter = ICO_FILTER_ANISOTROPIC;
         o->fullHeight = 1;
     }
+}
+
+void ico_video_set_preset(IcoVideoOptions *o, int preset)
+{
+    set_preset(o, preset, s_android);
 }
 
 const char *ico_video_preset_name(int preset)
@@ -229,7 +290,9 @@ const char *ico_video_preset_name(int preset)
 
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size)
 {
-    if (o->resScale > 0) {
+    if (o->resScale == ICO_RES_AUTO) {
+        snprintf(buf, size, "auto");
+    } else if (o->resScale > 0) {
         snprintf(buf, size, "%dx", o->resScale);
     } else if (o->resW > 0 && o->resH > 0) {
         snprintf(buf, size, "%dx%d", o->resW, o->resH);
@@ -250,7 +313,9 @@ static void sanitize(IcoVideoOptions *o)
     if (o->filter < 0 || o->filter > ICO_FILTER_ANISOTROPIC) {
         o->filter = d.filter;
     }
-    if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
+    if (o->resScale == ICO_RES_AUTO) {
+        o->resW = o->resH = 0;
+    } else if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
         o->resScale = o->resW = o->resH = 0;
     }
     o->fullscreen = o->fullscreen != 0;
@@ -306,9 +371,14 @@ static void read_config(void)
     int preset;
 
     ico_video_defaults(&o);
-    if (ico_video_parse_resolution(ico_config_get_string("video.resolution", "window"), &o) != 0) {
-        o.resW = o.resH = o.resScale = 0;
-        fprintf(stderr, "video: resolution not understood; \"window\" used\n");
+    /* no key: Enhanced's resolution (N2: "auto" on Android) */
+    {
+        const char *dres = s_android ? "auto" : "window";
+
+        if (ico_video_parse_resolution(ico_config_get_string("video.resolution", dres), &o) != 0) {
+            ico_video_parse_resolution(dres, &o);
+            fprintf(stderr, "video: resolution not understood; \"%s\" used\n", dres);
+        }
     }
     if (ico_video_parse_aspect(ico_config_get_string("video.aspect", "4:3"), &o.aspect) != 0) {
         fprintf(stderr, "video: aspect not understood; \"4:3\" used\n");
@@ -320,9 +390,16 @@ static void read_config(void)
     o.fullscreen = ico_config_get_bool("video.fullscreen", 0) != 0;
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
-    if (ico_video_parse_framerate(ico_config_get_string("video.framerate", "uncapped"),
-                                  &o.framerate) != 0) {
-        fprintf(stderr, "video: framerate not understood; \"uncapped\" used\n");
+    {
+        /* no key: the default (N2: 60 on Android, else "uncapped") */
+        char dfr[16];
+
+        ico_video_framerate_name(ico_video_default_framerate(s_android), dfr, sizeof(dfr));
+        if (ico_video_parse_framerate(ico_config_get_string("video.framerate", dfr),
+                                      &o.framerate) != 0) {
+            o.framerate = ico_video_default_framerate(s_android);
+            fprintf(stderr, "video: framerate not understood; \"%s\" used\n", dfr);
+        }
     }
     /* package CRT */
     o.crt = ico_config_get_bool("video.crt", 0) != 0;

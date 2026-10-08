@@ -4,6 +4,7 @@
  * The slow-present decision (pace_policy.h): the threshold, entering after 3
  * presents above it and leaving below 80 % of it, no flicker on a borderline
  * sequence, one spike changing nothing, the injector's higher threshold.
+ * v0.4.2 (N2): resolution "auto"'s steps (testAutoResolution).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -25,6 +26,109 @@ static int fails;
 static bool feed(PaceHist *h, uint64_t ms10, bool inj)
 {
     return pace_SlowPresent(h, ms10 * MS / 10, REFRESH, PERIOD, inj);
+}
+
+/* v0.4.2 (N2): the window's loop over pace_AutoResolutionStep: a sample
+   per present at 60 a second for sec seconds, each cost ms10 tenths of a
+   ms; every 2 s a step decision, a new window, the step's time kept */
+static int autoRun(PaceSamples *s, uint64_t *clock, int scale, float winScale, uint64_t ms10,
+                   int sec, int *steps)
+{
+    if (s->firstNs == 0) {
+        pace_SamplesReset(s, *clock);
+    }
+    for (int i = 0; i < sec * 60; i++) {
+        *clock += 16666667ull;
+        pace_SamplesAdd(s, *clock, ms10 * MS / 10);
+        if (s->lastNs - s->firstNs >= PACE_AUTO_WINDOW_NS) {
+            const int next = pace_AutoResolutionStep(s, scale, winScale);
+            if (next != scale) {
+                scale = next;
+                s->lastStepNs = *clock;
+                ++*steps;
+            }
+            pace_SamplesReset(s, *clock);
+        }
+    }
+    return scale;
+}
+
+static void testAutoResolution(void)
+{
+    PaceSamples s = {0};
+    uint64_t clock = 1000 * MS;
+    int steps = 0, scale;
+
+    s.budgetNs = 16666667ull; /* 1/60 s: 70 % is 11.67 ms */
+    /* under the budget's 70 %: never a step, however long */
+    scale = autoRun(&s, &clock, 0, 2.41f, 110, 20, &steps);
+    CHECK(scale == 0 && steps == 0);
+    /* over it: nothing before 2 s of samples, then one step; a 2400 x 1080
+       window (2.41x) goes to 2x, not 3x (larger than the window) */
+    pace_SamplesReset(&s, clock);
+    for (int i = 0; i < 100; i++) {
+        clock += 16666667ull;
+        pace_SamplesAdd(&s, clock, 14 * MS);
+    }
+    CHECK(pace_AutoResolutionStep(&s, 0, 2.41f) == 0); /* 1.65 s */
+    pace_SamplesReset(&s, clock);
+    steps = 0;
+    scale = autoRun(&s, &clock, 0, 2.41f, 140, 2, &steps);
+    CHECK(scale == 2 && steps == 1);
+    /* a 4K window (4.82x): window -> 3x */
+    {
+        PaceSamples k = {0};
+        uint64_t c = 1000 * MS;
+        int n = 0;
+        k.budgetNs = 16666667ull;
+        CHECK(autoRun(&k, &c, 0, 4.82f, 140, 2, &n) == 3 && n == 1);
+        /* then one step per 2 s: 6 s of slow presents reach 1x, no faster */
+        CHECK(autoRun(&k, &c, 3, 4.82f, 140, 2, &n) == 2 && n == 2);
+        CHECK(autoRun(&k, &c, 2, 4.82f, 140, 2, &n) == 1 && n == 3);
+        /* the floor: 1x stays 1x */
+        CHECK(autoRun(&k, &c, 1, 4.82f, 300, 10, &n) == 1 && n == 3);
+    }
+    /* at most one step per 2 s: a step at time t, then a full window of
+       slow samples (over 2 s of them) ending under 2 s after it changes
+       nothing */
+    {
+        PaceSamples k = {0};
+        k.budgetNs = 16666667ull;
+        k.lastStepNs = 10000 * MS;
+        for (int i = 0; i < 66; i++) {
+            pace_SamplesAdd(&k, 8800 * MS + (uint64_t)i * 33 * MS, 20 * MS); /* to 10.945 s */
+        }
+        CHECK(pace_AutoResolutionStep(&k, 3, 4.82f) == 3); /* 0.95 s after the step */
+        pace_SamplesAdd(&k, 12000 * MS, 20 * MS);
+        CHECK(pace_AutoResolutionStep(&k, 3, 4.82f) == 2); /* 2 s after it */
+    }
+    /* never back up: fast presents at 1x or 2x leave the scale */
+    steps = 0;
+    CHECK(autoRun(&s, &clock, 2, 2.41f, 10, 20, &steps) == 2 && steps == 0);
+    CHECK(autoRun(&s, &clock, 1, 2.41f, 10, 20, &steps) == 1 && steps == 0);
+    /* a window at 1x or below has no step below it */
+    CHECK(autoRun(&s, &clock, 0, 1.0f, 300, 10, &steps) == 0 && steps == 0);
+    /* a fixed 30 a second limit: its period is the budget (70 %: 23.3 ms) */
+    {
+        PaceSamples k = {0};
+        uint64_t c = 1000 * MS;
+        int n = 0;
+        k.budgetNs = 33333333ull;
+        CHECK(autoRun(&k, &c, 0, 2.41f, 200, 6, &n) == 0 && n == 0);
+        CHECK(autoRun(&k, &c, 0, 2.41f, 250, 2, &n) == 2 && n == 1);
+    }
+    /* the median: one slow present in eight changes nothing */
+    {
+        PaceSamples k = {0};
+        uint64_t c = 1000 * MS;
+        k.budgetNs = 16666667ull;
+        for (int i = 0; i < 160; i++) {
+            c += 16666667ull;
+            pace_SamplesAdd(&k, c, i % 8 == 0 ? 40 * MS : 5 * MS);
+        }
+        CHECK(pace_SamplesMedian(&k) == 5 * MS);
+        CHECK(pace_AutoResolutionStep(&k, 0, 2.41f) == 0);
+    }
 }
 
 int main(void)
@@ -128,6 +232,8 @@ int main(void)
         feed(&h, 500, true);
     }
     CHECK(h.slow);
+
+    testAutoResolution();
 
     if (fails) {
         printf("pace_policy_test: %d failures\n", fails);

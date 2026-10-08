@@ -521,6 +521,113 @@ static void test_video_models(const char *dir)
     ico_video_reload();
 }
 
+/* v0.4.2 (N2): resolution "auto" (parsed, named, read, saved and read
+   back, kept by sanitize) on any build; the Android rules (checked here on
+   any computer through ico_video_set_android / ico_video_defaults_for): the
+   frame rate default 60, Enhanced's resolution "auto" both ways (the
+   shortcut writes it, the classifier calls it Enhanced, "window" is then
+   Custom), Original 1x as everywhere, and a file with no framerate or
+   resolution key read as 60 and "auto" */
+static void test_video_auto(const char *dir)
+{
+    char path[512], buf[32];
+    IcoVideoOptions o, d;
+    const char *text;
+    FILE *f;
+    int fr = 0;
+
+    ico_video_defaults(&o);
+    CHECK(ico_video_parse_resolution("auto", &o) == 0 && o.resScale == ICO_RES_AUTO &&
+          o.resW == 0 && o.resH == 0);
+    CHECK(strcmp(ico_video_resolution_name(&o, buf, sizeof(buf)), "auto") == 0);
+    CHECK(ico_video_parse_resolution("AUTO", &o) == 0 && o.resScale == ICO_RES_AUTO);
+    CHECK(ico_video_parse_resolution("auto2", &o) == -1 && o.resScale == ICO_RES_AUTO);
+    /* the PC rules: "auto" is not Enhanced's; Enhanced keeps "window"; the
+       default frame rate stays "uncapped" */
+    ico_video_set_android(0);
+    ico_video_defaults(&d);
+    CHECK(d.framerate == ICO_FRAMERATE_UNCAPPED && d.resScale == 1);
+    ico_video_set_preset(&d, ICO_VIDEO_ENHANCED);
+    CHECK(d.resScale == 0 && ico_video_preset(&d) == ICO_VIDEO_ENHANCED);
+    d.resScale = ICO_RES_AUTO;
+    CHECK(ico_video_preset(&d) == ICO_VIDEO_CUSTOM);
+    /* the round trip: Enhanced with resolution = auto, read, kept, saved */
+    snprintf(path, sizeof(path), "%s/options_auto_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\npreset = \"enhanced\"\nresolution = \"auto\"\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO && o.resW == 0 && o.resH == 0);
+    ico_video_set(&o); /* sanitize keeps it */
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "resolution = \"auto\"") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO);
+    /* the getter the Options row reads */
+    ico_video_set_auto_scale(2);
+    CHECK(ico_video_auto_scale() == 2);
+    ico_video_set_auto_scale(-3);
+    CHECK(ico_video_auto_scale() == 0);
+    /* the Android rules */
+    ico_video_defaults_for(&d, 1);
+    CHECK(d.framerate == 60 && ico_video_default_framerate(1) == 60);
+    CHECK(ico_video_default_framerate(0) == ICO_FRAMERATE_UNCAPPED);
+    CHECK(d.resScale == 1 && d.aspect == ICO_ASPECT_4_3 && d.filter == ICO_FILTER_ORIGINAL &&
+          !d.fullHeight);
+    CHECK(strcmp(ico_video_framerate_name(d.framerate, buf, sizeof(buf)), "60") == 0 &&
+          ico_video_parse_framerate(buf, &fr) == 0 && fr == 60);
+    ico_video_set_android(1);
+    CHECK(ico_video_android() == 1);
+    ico_video_defaults(&o);
+    CHECK(o.framerate == 60 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.resScale == ICO_RES_AUTO && o.aspect == ICO_ASPECT_AUTO &&
+          o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    o.resScale = 0; /* "window" is Custom under these rules */
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM);
+    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+    CHECK(o.resScale == 1 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    /* a framerate out of range falls back to the Android default */
+    o.framerate = 5;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.framerate == 60);
+    /* a file with Enhanced and no resolution or framerate key */
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[video]\npreset = \"enhanced\"\naspect = \"auto\"\ntexture_filter = "
+              "\"anisotropic\"\nfull_height = true\n",
+              f);
+        fclose(f);
+    }
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO && o.framerate == 60 &&
+          ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    /* and no file at all: Original at 1x, 60 a second */
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == 1 && o.framerate == 60 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_android(0);
+    remove(path);
+    ico_video_reload();
+}
+
 int main(int argc, char **argv)
 {
     test_defaults();
@@ -530,6 +637,7 @@ int main(int argc, char **argv)
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_models(argc > 1 ? argv[1] : ".");
+    test_video_auto(argc > 1 ? argv[1] : ".");
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
         return 1;

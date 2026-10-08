@@ -625,6 +625,14 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         if (crtForcesNative(&o)) {
             return "1x (CRT)";
         }
+        if (o.resScale == ICO_RES_AUTO) {
+            /* v0.4.2 (N2): "Auto", with the scale once the window lowered it */
+            if (ico_video_auto_scale() > 0) {
+                snprintf(buf, size, "%s (%dx)", ui_Str(UI_STR_VAL_AUTO), ico_video_auto_scale());
+                return buf;
+            }
+            return ui_Str(UI_STR_VAL_AUTO);
+        }
         if (resolutionIndex(&o) == 0) {
             return ui_Str(UI_STR_VAL_WINDOW);
         }
@@ -853,10 +861,11 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         if (crtForcesNative(&o)) {
             return; /* package CRT2: 1x while the CRT filter is on */
         }
-        int i = resolutionIndex(&o);
-        i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 5, dir);
+        /* Window, 1x .. 4x, then Auto (v0.4.2 N2: index 5) */
+        int i = o.resScale == ICO_RES_AUTO ? 5 : resolutionIndex(&o);
+        i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 6, dir);
         o.resW = o.resH = 0;
-        o.resScale = i;
+        o.resScale = i == 5 ? ICO_RES_AUTO : i;
         video = 1;
         break;
     }

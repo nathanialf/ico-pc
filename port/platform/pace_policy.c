@@ -14,14 +14,18 @@ uint64_t pace_SlowThreshold(uint64_t refreshNs, uint64_t periodNs, bool injector
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
-static uint64_t median(const PaceHist *h)
+/* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
+static uint64_t median_of(const uint64_t *cost, unsigned n)
 {
-    uint64_t v[PACE_HIST_LEN];
+    uint64_t v[PACE_AUTO_SAMPLES];
     unsigned i, j;
-    for (i = 0; i < h->count; i++) {
-        v[i] = h->cost[i];
+    if (n == 0) {
+        return 0;
     }
-    for (i = 1; i < h->count; i++) {
+    for (i = 0; i < n; i++) {
+        v[i] = cost[i];
+    }
+    for (i = 1; i < n; i++) {
         const uint64_t x = v[i];
         for (j = i; j > 0 && v[j - 1] > x; j--) {
             v[j] = v[j - 1];
@@ -29,7 +33,12 @@ static uint64_t median(const PaceHist *h)
         v[j] = x;
     }
     /* an even count: the mean of the middle two */
-    return h->count % 2 ? v[h->count / 2] : v[h->count / 2 - 1] / 2 + v[h->count / 2] / 2;
+    return n % 2 ? v[n / 2] : v[n / 2 - 1] / 2 + v[n / 2] / 2;
+}
+
+static uint64_t median(const PaceHist *h)
+{
+    return median_of(h->cost, h->count);
 }
 
 bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
@@ -57,4 +66,59 @@ bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t
         h->over = 0;
     }
     return h->slow;
+}
+
+/* v0.4.2 (N2): resolution "auto" */
+void pace_SamplesReset(PaceSamples *s, uint64_t nowNs)
+{
+    s->count = s->next = 0;
+    s->firstNs = s->lastNs = nowNs;
+}
+
+void pace_SamplesAdd(PaceSamples *s, uint64_t nowNs, uint64_t costNs)
+{
+    if (s->firstNs == 0) {
+        s->firstNs = nowNs;
+    }
+    s->lastNs = nowNs;
+    s->cost[s->next] = costNs;
+    s->next = (s->next + 1) % PACE_AUTO_SAMPLES;
+    if (s->count < PACE_AUTO_SAMPLES) {
+        s->count++;
+    }
+}
+
+uint64_t pace_SamplesMedian(const PaceSamples *s)
+{
+    return median_of(s->cost, s->count);
+}
+
+int pace_AutoResolutionStep(const PaceSamples *s, int currentScale, float windowScale)
+{
+    if (s->count < PACE_AUTO_MIN_SAMPLES || s->lastNs - s->firstNs < PACE_AUTO_WINDOW_NS ||
+        s->budgetNs == 0) {
+        return currentScale;
+    }
+    if (s->lastStepNs != 0 && s->lastNs - s->lastStepNs < PACE_AUTO_WINDOW_NS) {
+        return currentScale;
+    }
+    /* over 70 % of the budget */
+    if (pace_SamplesMedian(s) * 10 <= s->budgetNs * 7) {
+        return currentScale;
+    }
+    if (currentScale <= 0) {
+        /* the window's size: the largest of 3x, 2x, 1x below it (a window
+           at 1x or less has nothing below it: the scene is never smaller
+           than the game's own) */
+        for (int n = 3; n >= 1; n--) {
+            if ((float)n < windowScale - 0.05f) {
+                return n;
+            }
+        }
+        return currentScale;
+    }
+    if (currentScale > 3) {
+        return 3;
+    }
+    return currentScale > 1 ? currentScale - 1 : 1;
 }

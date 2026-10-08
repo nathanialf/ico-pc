@@ -8,13 +8,17 @@
  * menu (package 6C) read and write the same values.
  *
  *   [video] preset          "original"  "original" | "enhanced" | "custom"
- *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8)
+ *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8) | "auto"
+ *                                       ("auto" on Android, v0.4.2 N2: the window's
+ *                                       size, lowered a step at a time (3x, 2x, 1x)
+ *                                       while the presents take too long)
  *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "auto"
  *   [video] fullscreen      false
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
+ *                                       (60 on Android, v0.4.2 N2)
  *   [video] crt             false       the CRT filter (package CRT, any preset)
  *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm" |
  *                                       "shadow"
@@ -48,7 +52,8 @@
  * written; anything else ("original", no key, a misspelling) puts them at
  * the PS2's values (1x, 4:3, original, half) whatever the file says.  The preset in force is derived from those four rows
  * (ico_video_preset): Original when all four are the PS2's, Enhanced when
- * they are window, auto, anisotropic and full, Custom otherwise; it is
+ * they are window (on Android: resolution "auto"), aspect auto, anisotropic
+ * and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.
  * fullscreen, vsync, framerate, the CRT keys, the texture pack keys and the
  * effect keys are not part of it.
@@ -87,7 +92,7 @@ enum { ICO_FILTER_ORIGINAL = 0, ICO_FILTER_TRILINEAR = 1, ICO_FILTER_ANISOTROPIC
 
 typedef struct IcoVideoOptions {
     int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
-    int resScale;   /* resolution "Nx": N (1..8); 0 otherwise */
+    int resScale;   /* resolution "Nx": N (1..8); ICO_RES_AUTO: "auto"; 0 otherwise */
     int aspect;     /* ICO_ASPECT_* */
     int fullscreen; /* desktop-resolution borderless */
     int vsync;      /* the swapchain waits for the vertical blank */
@@ -146,12 +151,33 @@ enum {
 /* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
+/* IcoVideoOptions.resScale for resolution "auto" (v0.4.2 N2): the scene
+   starts at the window's size and the window lowers it a step (3x, 2x, 1x)
+   when the presents take too long (pace_policy.h pace_AutoResolutionStep),
+   never back up while the game runs */
+#define ICO_RES_AUTO (-1)
+
 /* The defaults: the Original rows (1x, 4:3, original filter, half height),
-   windowed, vsync on, framerate uncapped, the CRT filter off (its mode
-   Consumer TV at full strength, no overrides), texture packs on with
-   precache and a 2048 MB budget, no dump, every effect on, the effects
-   depth on. */
+   windowed, vsync on, framerate uncapped (60 on Android), the CRT filter
+   off (its mode Consumer TV at full strength, no overrides), texture packs
+   on with precache and a 2048 MB budget, no dump, every effect on, the
+   effects depth on. */
 void ico_video_defaults(IcoVideoOptions *o);
+/* v0.4.2 (N2): the defaults of either build, android 1 or 0 (tests check
+   the Android ones on any computer) */
+void ico_video_defaults_for(IcoVideoOptions *o, int android);
+/* The framerate default: 60 on Android, else ICO_FRAMERATE_UNCAPPED */
+int ico_video_default_framerate(int android);
+/* The rules in force, 1 on the Android build: its defaults, and Enhanced's
+   resolution "auto" (ico_video_preset, ico_video_set_preset).  Tests set
+   them; nothing else does. */
+void ico_video_set_android(int android);
+int ico_video_android(void);
+/* Resolution "auto"'s scene scale in force: 0 while the scene is the
+   window's size, else N (3, 2, 1) after the window lowered it.  The window
+   sets it (window_host.c), the Settings menu shows it ("Auto (2x)"). */
+void ico_video_set_auto_scale(int scale);
+int ico_video_auto_scale(void);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
 /* Run-time change (the Settings menu): takes effect at the window's next
@@ -215,7 +241,8 @@ const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);
 /* The preset the four rows add up to: ICO_VIDEO_ORIGINAL when resolution,
    aspect, texture filter and height are 1x, 4:3, original, half;
-   ICO_VIDEO_ENHANCED when window, auto, anisotropic, full; else
+   ICO_VIDEO_ENHANCED when window (auto on Android), auto, anisotropic,
+   full; else
    ICO_VIDEO_CUSTOM. */
 int ico_video_preset(const IcoVideoOptions *o);
 /* The shortcut: writes the four rows of ORIGINAL or ENHANCED into o, the
@@ -223,7 +250,7 @@ int ico_video_preset(const IcoVideoOptions *o);
 void ico_video_set_preset(IcoVideoOptions *o, int preset);
 /* "original", "enhanced" or "custom" */
 const char *ico_video_preset_name(int preset);
-/* "window", "WxH" or "Nx" into buf (at least 24 bytes). */
+/* "window", "WxH", "Nx" or "auto" into buf (at least 24 bytes). */
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size);
 
 #endif /* ICO_PORT_GAME_VIDEO_OPTIONS_H */
