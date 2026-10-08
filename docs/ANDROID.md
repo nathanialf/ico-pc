@@ -140,6 +140,20 @@ except that Escape does not close the game.
 Save first. You can also close it from the phone's recent apps screen,
 like any app.
 
+## If the game stutters
+
+First set **Options > Display > Frame rate** to **Original**. The game
+then draws each picture once, as the PS2 did, which leaves the phone the
+most time for the game itself. The game starts at 60 frames a second on
+Android.
+
+If it still stutters, lower **Options > Display > Resolution**: 1x is the
+lightest. **Auto** does this for you: it starts at the size of your
+screen and steps down (3x, then 2x, then 1x) when the phone cannot draw
+the pictures in time. It never steps back up while the game runs; the
+row shows where it ended up, for example **Auto (2x)**. The Enhanced
+preset uses Auto on Android.
+
 ## Send a problem report
 
 1. Copy `logs/ico-pc.log` from the game's folder (see above) to a
@@ -148,6 +162,12 @@ like any app.
    [issues page](https://github.com/nathanialf/ico-pc/issues), say which
    phone or tablet you have, and attach the file.
 
+**Sending us a log about speed.** If the whole file is too big to send,
+the parts that matter are the first lines of `logs/ico-pc.log` (they say
+which phone, graphics and settings the game found) and, from a moment of
+play that stutters, the three lines starting with `window:` that the game
+writes every 10 seconds. Copy them as they are.
+
 ## Known limits
 
 - The game needs Vulkan 1.2 graphics. Older or cheaper devices may not
@@ -155,8 +175,7 @@ like any app.
 - The file picker cannot hide files that are not disc images. If you pick
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
-  Options > Display. Try 1x if it stutters. Making it faster is on the list
-  for the next version.
+  Options > Display. See [If the game stutters](#if-the-game-stutters).
 - The opening movie shows picture glitches on some phones. The game itself
   is not affected.
 - On a folding phone the picture may not fill the whole open screen.
