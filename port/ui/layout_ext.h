@@ -178,6 +178,13 @@ int lt_ext_BackButtons(void);
 void lt_ext_SetCircleBack(int on);
 int lt_ext_CircleBack(void);
 
+/* v0.4.2: a rect row's colour changed after it was added (Settings >
+   Extras > Characters' swatches): rgba as lt_ext_AddRect takes it (GS,
+   0x80 = 1.0, times the row's colour when drawn).  0, or -1 for an index
+   that is not a rect row.  lt_ext_RectColor reads it back (tests). */
+int lt_ext_SetRectColor(int index, const unsigned char rgba[4]);
+int lt_ext_RectColor(int index, unsigned char rgba[4]);
+
 #ifdef __cplusplus
 }
 #endif

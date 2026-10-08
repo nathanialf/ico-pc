@@ -71,6 +71,15 @@ int ico_mv_models_enter(void);
 /* The model list's layout while it is opened from the title (the viewer
    off), or -1 (port/game/title_logo.c hides the logo under it) */
 int ico_mv_title_list_layout(void);
+/* v0.4.2: Settings > Extras > Characters' preview (registered with
+   ui_SettingsSetCharacterViewHandler): Cross on a colour row loads the
+   character's model, row 0 Ico or 1 Yorda of the table, as picking it in
+   the list does, and returns the list's layout for the menu to switch to
+   (the viewer takes over once the stage is up); -1 unless the viewer is
+   off.  Triangle in the viewer, or in its list, then goes back to the
+   title, and once the title's menu is up (at most 10 s) Settings opens
+   again on Characters (ui_SettingsReopenPage). */
+int ico_mv_view_character(int row);
 
 #ifdef __cplusplus
 }

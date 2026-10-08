@@ -556,3 +556,23 @@ int lt_ext_CircleBack(void)
 {
     return s_circleBack;
 }
+
+int lt_ext_SetRectColor(int index, const unsigned char rgba[4])
+{
+    ExtRow *r = rowOf(index);
+    if (!r || r->kind != ROW_RECT || !rgba) {
+        return -1;
+    }
+    memcpy(r->rgba, rgba, 4);
+    return 0;
+}
+
+int lt_ext_RectColor(int index, unsigned char rgba[4])
+{
+    ExtRow *r = rowOf(index);
+    if (!r || r->kind != ROW_RECT || !rgba) {
+        return -1;
+    }
+    memcpy(rgba, r->rgba, 4);
+    return 0;
+}

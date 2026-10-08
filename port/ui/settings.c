@@ -14,8 +14,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "achievements.h"
+#include "appearance.h"
 #include "audio_host.h"
 #include "config.h"
 #include "font.h"
@@ -69,6 +71,9 @@ extern int iosPadActRequestEnable;
 /* layout_action.c (ICO_HOST, S1): a film effect in force with the stage
    animations la_game_option starts and stops for it */
 extern void la_host_film_effect(int mode);
+/* port/platform/trace_host.h (ico_pc): the Main ticks so far, with the
+   clock the seed of Extras > Characters' Randomize */
+extern unsigned int ico_host_main_ticks(void);
 
 /* the pad's trigger bits (keyInput.c's logical word) */
 #define PAD_L1 0x0004
@@ -514,11 +519,13 @@ static int resolutionIndex(const IcoVideoOptions *o)
 }
 
 /* ------------------------------------------------------------- Extras
- * Settings > Extras, shown from the title only: the
- * galleries leave the stage, and the pause menu has no Extras row (it is
- * masked and skipped by the cursor).  Music, Models and Credits: each row's
- * hook returns the layout to open, or -1 when it cannot open (not built,
- * off the title, locked: a log line, nothing else). */
+ * Settings > Extras.  Music, Models and Credits leave the stage, so they
+ * show from the title only (masked and skipped by the cursor from the
+ * pause menu); each row's hook returns the layout to open, or -1 when it
+ * cannot open (not built, off the title, locked: a log line, nothing
+ * else).  v0.4.2: Characters (the characters' colours) shows from both
+ * entries, so the pause menu has the Extras row too, with Characters and
+ * Back on its page. */
 
 static int isExtrasOpt(int opt)
 {
@@ -608,10 +615,110 @@ static int extrasOpen(int opt)
     return -1;
 }
 
+/* --------------------------------------------------------- Characters
+ * v0.4.2: Settings > Extras > Characters, the characters' colours
+ * (port/game/appearance.h): a stepped row per part (UI_OPT_CHAR_ICO_SKIN +
+ * the part), its value Original, a palette colour's name or "Tone N", and
+ * a swatch right of its arrows (the part's colour as the texture holds it,
+ * before lighting); Randomize and Reset to original; Square on a row is
+ * Original; Cross on a row, from the title, shows the row's character in
+ * the model viewer (ui_SettingsSetCharacterViewHandler; from the pause menu
+ * the scene behind the menu changes as the colours do).  One note row
+ * under the page, its text chosen at each refresh: the title's, the pause
+ * menu's, or the texture pack's while a pack is on (the pack's pictures
+ * replace the recoloured ones). */
+
+_Static_assert(UI_OPT_CHAR_YORDA_DRESS - UI_OPT_CHAR_ICO_SKIN + 1 == ICO_APP_PART_COUNT,
+               "a Characters row for each part, in IcoAppPart's order");
+_Static_assert(UI_STR_COLOUR_BLACK - UI_STR_COLOUR_RED + 1 == ICO_APP_COLOURS,
+               "a name for each palette colour, in the palette's order");
+
+/* the swatch geometry: right of the value's right arrow (it ends at x 570),
+   half the row's 36-unit box tall, on its middle */
+#define SWATCH_X 578
+#define SWATCH_W 36
+#define SWATCH_H 18
+#define SWATCH_DY 9
+
+static int s_charSwatch[ICO_APP_PART_COUNT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1};
+static int (*s_charView)(int character); /* model_viewer.c ico_mv_view_character */
+static int s_charRow = -1;               /* the row whose Cross opened the preview */
+
+static int isCharOpt(int opt)
+{
+    return opt >= UI_OPT_CHAR_ICO_SKIN && opt <= UI_OPT_CHAR_YORDA_DRESS;
+}
+
+static IcoAppPart charPart(int opt)
+{
+    return (IcoAppPart)(opt - UI_OPT_CHAR_ICO_SKIN);
+}
+
+void ui_SettingsSetCharacterViewHandler(int (*fn)(int character))
+{
+    s_charView = fn;
+}
+
+/* Original, the colour's name, or the skin tone ("Tone %d" with its
+   number put where the translation has %d) */
+static const char *charValue(int opt, char *buf, unsigned size)
+{
+    const IcoAppPart p = charPart(opt);
+    const int v = ico_appearance_get(p);
+    if (v <= 0 || v >= ico_appearance_choices(p)) {
+        return ui_Str(UI_STR_VAL_ORIGINAL);
+    }
+    if (ico_appearance_is_skin(p)) {
+        const char *t = ui_Str(UI_STR_CHAR_TONE);
+        const char *at = strstr(t, "%d");
+        if (at != NULL) {
+            snprintf(buf, size, "%.*s%d%s", (int)(at - t), t, v, at + 2);
+        } else {
+            snprintf(buf, size, "%s %d", t, v);
+        }
+        return buf;
+    }
+    return ui_Str((UiStrId)(UI_STR_COLOUR_RED + v - 1));
+}
+
+/* the swatch's colour for lt_ext_AddRect / lt_ext_SetRectColor: the
+   part's 8-bit colour at the GS scale (0x80 = 1.0), opaque */
+static void swatchColour(IcoAppPart p, unsigned char rgba[4])
+{
+    const unsigned c = ico_appearance_swatch(p);
+    rgba[0] = (unsigned char)(((c >> 16) & 0xFFu) * 0x80u / 255u);
+    rgba[1] = (unsigned char)(((c >> 8) & 0xFFu) * 0x80u / 255u);
+    rgba[2] = (unsigned char)((c & 0xFFu) * 0x80u / 255u);
+    rgba[3] = 0x80;
+}
+
+/* Cross on a colour row from the title: the character in the viewer.  As
+   Credits: what changed is written first, the menu leaves (la_host_leave)
+   for the layout the handler returns; -1 (a log line) without one. */
+static int charView(int opt, int row)
+{
+    if (s_charView == NULL) {
+        fprintf(stderr, "characters: the viewer is not available\n");
+        return -1;
+    }
+    ui_SettingsSave();
+    const int to = s_charView(ico_appearance_character(charPart(opt)));
+    if (to < 0) {
+        fprintf(stderr, "characters: the viewer did not open\n");
+        return -1;
+    }
+    s_charRow = row;
+    la_host_leave();
+    return to;
+}
+
 static const char *rawValue(int opt, char *buf, unsigned size)
 {
     IcoVideoOptions o;
     ico_video_get(&o);
+    if (isCharOpt(opt)) {
+        return charValue(opt, buf, size);
+    }
     switch (opt) {
     case UI_OPT_PRESET: {
         static const int presetStr[3] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_ENHANCED,
@@ -781,8 +888,9 @@ static int isGameOpt(int opt)
 
 static int optShown(int opt, int link)
 {
-    if (opt == UI_OPT_LINK && link == UI_PAGE_EXTRAS) {
-        return onTitle();
+    (void)link;
+    if (isExtrasOpt(opt)) {
+        return onTitle(); /* v0.4.2: the Extras row itself shows from both */
     }
     if (isGameOpt(opt) && onTitle()) {
         return 0;
@@ -840,6 +948,14 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     IcoVideoOptions o;
     ico_video_get(&o);
     int video = 0;
+    if (isCharOpt(opt)) {
+        /* v0.4.2: Original, then the colours or tones, around; the
+           textures follow within a frame (Texture.c reads the serial) */
+        const IcoAppPart p = charPart(opt);
+        ico_appearance_set(p, stepIndex(ico_appearance_get(p), ico_appearance_choices(p), dir));
+        s_dirtyConfig = 1;
+        return;
+    }
     switch (opt) {
     case UI_OPT_PRESET:
         /* the shortcut: the two named presets toggle; Custom goes Enhanced on
@@ -1382,7 +1498,10 @@ static void buildGalleryBar(void)
    nine 17, eleven (developer mode) 14: Back at 180, the box to 220; with
    Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  Display,
    v0.4.1: Model pack is the title's too, so the title shows fourteen rows,
-   12 apart from 34: Back at 190, the box to 226. */
+   12 apart from 34: Back at 190, the box to 226.  v0.4.2: the pause menu
+   shows Extras too (Characters), so its main page has the title's counts:
+   ten 15, twelve (developer mode) 13.  Characters: twelve rows 13 apart
+   from 40, Back at 183, its box to 219. */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
@@ -1390,6 +1509,9 @@ static int pagePitch(int page, int n, int *y0)
         return n > 13 ? 12 : n > 12 ? 13 : 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_CHARACTERS) {
+        return 13;
+    }
     if (page == UI_PAGE_MAIN) {
         return n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
@@ -1530,6 +1652,31 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         }
         addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
         break;
+    case UI_PAGE_CHARACTERS: {
+        /* a swatch right of each colour row's arrows, then one note row
+           for every row but Back (its text chosen at refresh:
+           charactersRefresh) */
+        for (int i = 0; i < pg->count; i++) {
+            const Row *r = &pg->rows[i];
+            if (isCharOpt(r->opt)) {
+                unsigned char rgba[4];
+                swatchColour(charPart(r->opt), rgba);
+                s_charSwatch[charPart(r->opt)] =
+                    lt_ext_AddRect(SWATCH_X, rowY(id, i) + SWATCH_DY, SWATCH_W, SWATCH_H, rgba);
+            }
+        }
+        int n = ui_SettingsAddRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+        P(n)->centerX = 1;
+        P(n)->defaultMask = 1;
+        setNote(n, UI_STR_CHAR_NOTE_TITLE);
+        for (int i = 0; i < pg->count; i++) {
+            if (pg->rows[i].opt != UI_OPT_BACK) {
+                pg->rows[i].note = n;
+                pg->rows[i].noteStr = UI_STR_CHAR_NOTE_TITLE;
+            }
+        }
+        break;
+    }
     default:
         break;
     }
@@ -1841,8 +1988,8 @@ static void buildEntries(void)
 
 static void build(void)
 {
-    /* Extras (after Achievements) is shown only when Settings was opened
-       from the title (layoutPage) */
+    /* Extras (after Achievements); v0.4.2: from both entries (its Music,
+       Models and Credits only from the title, layoutPage) */
     /* v0.4.0: Dump textures under Developer mode, shown while it is on */
     static const int mainOpts[] = {UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
                                    UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
@@ -1871,10 +2018,24 @@ static void build(void)
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,      UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING, UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,       UI_STR_BACK};
+    /* v0.4.2: Characters after Credits (from both entries; the other three
+       from the title only) */
     static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
-                                     UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
+                                     UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
-                                     UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
+                                     UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS, UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1};
+    /* v0.4.2: the characters' colours, one row per IcoAppPart */
+    static const int charOpts[] = {
+        UI_OPT_CHAR_ICO_SKIN,         UI_OPT_CHAR_ICO_PONCHO_NAVY, UI_OPT_CHAR_ICO_PONCHO_PINK,
+        UI_OPT_CHAR_ICO_PONCHO_LIGHT, UI_OPT_CHAR_ICO_PONCHO_DARK, UI_OPT_CHAR_ICO_TUNIC,
+        UI_OPT_CHAR_ICO_SHORTS,       UI_OPT_CHAR_YORDA_SKIN,      UI_OPT_CHAR_YORDA_DRESS,
+        UI_OPT_CHAR_RANDOMIZE,        UI_OPT_CHAR_RESET,           UI_OPT_BACK};
+    static const int charStrs[] = {
+        UI_STR_CHAR_ICO_SKIN,         UI_STR_CHAR_ICO_PONCHO_NAVY, UI_STR_CHAR_ICO_PONCHO_PINK,
+        UI_STR_CHAR_ICO_PONCHO_LIGHT, UI_STR_CHAR_ICO_PONCHO_DARK, UI_STR_CHAR_ICO_TUNIC,
+        UI_STR_CHAR_ICO_SHORTS,       UI_STR_CHAR_YORDA_SKIN,      UI_STR_CHAR_YORDA_DRESS,
+        UI_STR_CHAR_RANDOMIZE,        UI_STR_CHAR_RESET,           UI_STR_BACK};
     /* R7d: every Display row always shown, Frame rate included (S1:
        Brightness from the pause menu) */
     /* v0.4.0: Texture pack after Texture filter */
@@ -1916,6 +2077,11 @@ static void build(void)
                    "a string and a link for each Controls row");
     _Static_assert(sizeof(fxOpts) == sizeof(fxStrs), "a string for each Effects row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
+    _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
+                       sizeof(extrasOpts) == sizeof(extrasLinks),
+                   "a string and a link for each Extras row");
+    _Static_assert(sizeof(charOpts) == sizeof(charStrs), "a string for each Characters row");
+    _Static_assert(sizeof(charOpts) / sizeof(charOpts[0]) <= MAX_ROWS, "the Characters rows fit");
 
     ui_FontInit(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
@@ -1935,8 +2101,18 @@ static void build(void)
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
                     UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks,
+                    N_OF(extrasOpts), UI_PAGE_MAIN);
+    /* v0.4.2: the layout extension's budget: the Characters page adds 50
+       rows (its heading, nine colour rows of four: label, value and the
+       two arrows, Randomize, Reset, Back, nine swatches, the note) and
+       Extras' Characters row one, 51 in all: with the model viewer's,
+       about 431 of the 512 (380 before, settings_test's last count), under
+       the 448 settings_test's budget cell allows (64 kept spare); and one
+       layout (19 of 32, 4 kept spare) */
+    buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
+                    N_OF(charOpts), UI_PAGE_EXTRAS);
 #undef N_OF
-    buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, NULL, 4, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
     buildListPage(UI_PAGE_MUSIC, UI_STR_EXTRAS_MUSIC, &kGalDef, UI_PAGE_EXTRAS);
@@ -2372,6 +2548,10 @@ void ui_SettingsReset(void)
     s_newGameChosen = s_mirrorChoice = s_ngpChoice = 0;
     s_quitLayout = s_quitYesNo[0] = s_quitYesNo[1] = -1;
     s_quitChosen = 0;
+    for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
+        s_charSwatch[i] = -1;
+    }
+    s_charRow = -1;
 }
 
 int ui_SettingsEntryItem(int item)
@@ -2428,6 +2608,38 @@ int ui_SettingsPhotoBack(void)
         gameCursorOn(LAYOUT_PAUSE, s_photoRow);
     }
     return LAYOUT_PAUSE;
+}
+
+int ui_SettingsReopenPage(int page)
+{
+    const int cur = current_layout_id;
+    if (!s_built || page < 0 || page >= UI_PAGE_COUNT || s_pages[page].layout < 0 ||
+        (cur != LAYOUT_TITLE_CONTINUE && cur != LAYOUT_TITLE_NEW)) {
+        return -1;
+    }
+    /* as entryProc on an entry from this title: onTitle() holds, each page
+       opens on its first row ... */
+    s_origin = cur;
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
+            lt_ext_Layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+        }
+    }
+    /* ... but the pages above this one, each on the row that leads down
+       (Main on Extras, Extras on Characters), so Back retraces the path */
+    for (int child = page; s_pages[child].parent >= 0; child = s_pages[child].parent) {
+        Page *up = &s_pages[s_pages[child].parent];
+        for (int i = 0; i < up->count; i++) {
+            if (up->rows[i].opt == UI_OPT_LINK && up->rows[i].link == child && up->layout >= 0) {
+                lt_ext_Layout(up->layout)->defaultItem = up->rows[i].label;
+            }
+        }
+    }
+    /* and the page on the row that opened the preview */
+    if (page == UI_PAGE_CHARACTERS && s_charRow >= 0) {
+        lt_ext_Layout(s_pages[page].layout)->defaultItem = s_charRow;
+    }
+    return s_pages[page].layout;
 }
 
 int ui_SettingsKeyConfigBack(void)
@@ -2895,8 +3107,8 @@ static int rowLocked(const Row *r)
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
-/* A page's rows as the entry in force shows them (optShown): the main
-   page's Extras row only from the title, the game's settings (S1) only
+/* A page's rows as the entry in force shows them (optShown): Extras'
+   Music, Models and Credits only from the title, the game's settings (S1) only
    from the pause menu, its Film effect and Players once the game is
    cleared.  The visible rows are spaced evenly (pagePitch), linked in a
    loop that skips the hidden ones, and the hidden ones are masked with
@@ -2962,6 +3174,30 @@ static int lockedNote(const Row *r)
     return isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION;
 }
 
+/* v0.4.2: Characters' note (a texture pack's pictures replace the
+   recoloured ones while one is on) and swatches, on their rows */
+static void charactersRefresh(Page *pg)
+{
+    IcoVideoOptions o;
+    ico_video_get(&o);
+    const int note = o.texturePack && texturePackInstalled() ? UI_STR_CHAR_NOTE_PACK
+                     : onTitle()                             ? UI_STR_CHAR_NOTE_TITLE
+                                                             : UI_STR_CHAR_NOTE_PAUSE;
+    for (int i = 0; i < pg->count; i++) {
+        Row *r = &pg->rows[i];
+        if (r->note >= 0) {
+            r->noteStr = note;
+        }
+        if (isCharOpt(r->opt) && s_charSwatch[charPart(r->opt)] >= 0) {
+            const int sw = s_charSwatch[charPart(r->opt)];
+            unsigned char rgba[4];
+            swatchColour(charPart(r->opt), rgba);
+            lt_ext_SetRectColor(sw, rgba);
+            P(sw)->dispY = P(r->label)->dispY + SWATCH_DY;
+        }
+    }
+}
+
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
@@ -2969,6 +3205,9 @@ static void refreshPage(Page *pg, int id, int cur)
         return;
     }
     layoutPage(pg, id);
+    if (id == UI_PAGE_CHARACTERS) {
+        charactersRefresh(pg);
+    }
     for (int i = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
         int locked = rowLocked(r);
@@ -3044,6 +3283,32 @@ static int settingsProc(int first, int item)
             systemStatus[11] = BRIGHTNESS_DEFAULT;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_SQUARE) && isCharOpt(r->opt)) {
+            /* v0.4.2: the part's Original, as Brightness's Default */
+            ico_appearance_set(charPart(r->opt), 0);
+            s_dirtyConfig = 1;
+            CUR_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_CROSS) &&
+            (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
+            if (r->opt == UI_OPT_CHAR_RANDOMIZE) {
+                ico_appearance_randomize((unsigned int)time(NULL) ^ ico_host_main_ticks());
+            } else {
+                ico_appearance_reset();
+            }
+            s_dirtyConfig = 1;
+            POSITIVE_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_CROSS) && isCharOpt(r->opt) && onTitle()) {
+            /* v0.4.2: the row's character in the model viewer */
+            int to = charView(r->opt, r->label);
+            if (to >= 0) {
+                POSITIVE_SE();
+                return to;
+            }
         }
         if ((flags & PAD_CROSS) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));

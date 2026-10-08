@@ -238,6 +238,13 @@ void la_host_film_effect(int mode)
     optionScreenMode = mode;
 }
 
+/* port/platform/trace_host.c (ico_pc): the Main ticks, Characters'
+   Randomize seed with the clock */
+unsigned int ico_host_main_ticks(void)
+{
+    return 0;
+}
+
 #ifdef SETTINGS_RENDER
 static void bindFakeSheet(int no);
 #endif
@@ -685,11 +692,13 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 12), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 6), "effects rows");
     {
+        /* v0.4.2: Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
-                                         UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
+                                         UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK, UI_OPT_BACK};
         static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
-                                         UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
+                                         UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
+                                         UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 5), "Extras page rows");
     }
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 15),
           "display rows (Frame rate without a framerate key)");
@@ -2759,9 +2768,10 @@ static void testCredits(int mainL, int exL)
     (void)mainL;
 }
 
-/* Settings > Extras: a row of the main page after Achievements, from the
-   title only; Music, Models, Credits and Back; the entries are placeholders
-   that log; Credits shows the locked style. */
+/* Settings > Extras: a row of the main page after Achievements, from both
+   entries (v0.4.2: Characters); Music, Models, Credits (from the title
+   only), Characters and Back; the entries are placeholders that log;
+   Credits shows the locked style. */
 static void testExtras(void)
 {
     char log[512];
@@ -2780,18 +2790,15 @@ static void testExtras(void)
            Back */
         CHECK(n == 12 && idx == 7, "Extras is the row after Achievements (index %d of %d)", idx, n);
         CHECK(lt_ext_Prop(ex)->right == ui_SettingsPageLayout(UI_PAGE_EXTRAS), "Extras opens");
-        CHECK(lt_ext_Prop(ex)->defaultMask == !title, "title %d: the Extras row is %s", title,
-              title ? "shown" : "hidden (masked)");
+        CHECK(lt_ext_Prop(ex)->defaultMask == 0, "title %d: the Extras row is shown", title);
         /* the cursor: Achievements, Down */
         lt_ext_Layout(mainL)->curItem = labels[6];
         press(0x4000);
-        CHECK(lt_ext_Layout(mainL)->curItem == (title ? ex : labels[8]),
-              "title %d: Down from Achievements lands on %s", title,
-              title ? "Extras" : "Developer");
-        /* the rows below follow: Back's y, one pitch table for each entry */
-        CHECK(title ? lt_ext_Prop(labels[11])->dispY == 40 + 15 * 9
-                    : lt_ext_Prop(labels[11])->dispY == 40 + 17 * 8,
-              "title %d: Back at y %d", title, lt_ext_Prop(labels[11])->dispY);
+        CHECK(lt_ext_Layout(mainL)->curItem == ex,
+              "title %d: Down from Achievements lands on Extras", title);
+        /* the rows below follow: Back's y, ten rows on both entries */
+        CHECK(lt_ext_Prop(labels[11])->dispY == 40 + 15 * 9, "title %d: Back at y %d", title,
+              lt_ext_Prop(labels[11])->dispY);
         if (!title) {
             continue;
         }
@@ -2801,12 +2808,13 @@ static void testExtras(void)
         CHECK(settle(exL, 60), "the Extras page");
         int el[8], eo[8], ev[8];
         int en = ui_SettingsPageRows(UI_PAGE_EXTRAS, el, eo, ev, 8);
-        CHECK(en == 4 && lt_ext_Layout(exL)->curItem == el[0], "four rows, the cursor on Music");
+        CHECK(en == 5 && lt_ext_Layout(exL)->curItem == el[0], "five rows, the cursor on Music");
         CHECK(strcmp(lt_ext_RowText(el[0]), "Music") == 0 &&
                   strcmp(lt_ext_RowText(el[1]), "Models") == 0 &&
                   strcmp(lt_ext_RowText(el[2]), "Credits") == 0 &&
-                  strcmp(lt_ext_RowText(el[3]), "Back") == 0,
-              "Music, Models, Credits, Back");
+                  strcmp(lt_ext_RowText(el[3]), "Characters") == 0 &&
+                  strcmp(lt_ext_RowText(el[4]), "Back") == 0,
+              "Music, Models, Credits, Characters, Back");
         /* the locked style on Credits: greyed label and value, the note on
            the cursor only */
         CHECK(ev[2] >= 0 && strcmp(lt_ext_RowText(ev[2]), "Locked") == 0 &&
@@ -2866,7 +2874,7 @@ static void testExtras(void)
         press(0x40);
         CHECK(settle(exL, 60), "Extras after the handler's layout");
         /* Back and Triangle return to the main page, the cursor on Extras */
-        lt_ext_Layout(exL)->curItem = el[3];
+        lt_ext_Layout(exL)->curItem = el[4];
         press(0x40);
         CHECK(settle(mainL, 60) && lt_ext_Layout(mainL)->curItem == ex,
               "Back: the cursor on Extras");

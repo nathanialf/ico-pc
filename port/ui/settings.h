@@ -103,6 +103,19 @@ void ui_SettingsSetTouchQuery(int (*fn)(void));
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
 void ui_SettingsSetModelsHandler(int (*fn)(void));
+/* v0.4.2: Cross on a colour row of Extras > Characters, opened from the
+   title, shows that row's character in the model viewer: fn(0) Ico, fn(1)
+   Yorda (port/game/model_viewer.c ico_mv_view_character) returns the
+   layout to switch to, or -1 (nothing happens, a log line).  From the
+   pause menu the scene behind the menu shows the colours and Cross does
+   nothing.  NULL removes it. */
+void ui_SettingsSetCharacterViewHandler(int (*fn)(int character));
+/* v0.4.2: the way back from that preview: the menu opened again as if from
+   the title layout in force (current_layout_id, 12 or 13), its pages'
+   cursors on the path Main > Extras > page and the page's on the row last
+   used there (the colour row whose Cross opened the preview); returns the page's layout to switch to, -1 when the menu is not
+   built or the current layout is not a title's. */
+int ui_SettingsReopenPage(int page /* UiSettingsPage */);
 int ui_QuitScreenLayout(void);
 /* the "Yes" (yes = 1) and "No" (yes = 0) rows */
 int ui_QuitScreenRow(int yes);
@@ -124,9 +137,12 @@ typedef enum UiSettingsPage {
     UI_PAGE_GAMEPLAY,
     UI_PAGE_ACHIEVEMENTS,
     UI_PAGE_REMAP,
-    UI_PAGE_EXTRAS,  /* Music, Models, Credits (from the title only) */
+    UI_PAGE_EXTRAS,  /* Music, Models, Credits (from the title only), Characters */
     UI_PAGE_MUSIC,   /* Extras > Music, the music gallery (gallery.h) */
     UI_PAGE_EFFECTS, /* Effects: the game's own picture effects, On/Off (issue 11) */
+    /* v0.4.2: Extras > Characters, the characters' colours (port/game/
+       appearance.h): nine stepped colour rows, Randomize, Reset, Back */
+    UI_PAGE_CHARACTERS,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -180,6 +196,18 @@ typedef enum UiSettingsOpt {
     UI_OPT_LANGUAGE,
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
     UI_OPT_DUMP_MODELS,   /* [video] dump_models, for pack makers (developer mode) */
+    /* v0.4.2: Extras > Characters, one row per IcoAppPart in its order
+       (UI_OPT_CHAR_ICO_SKIN + part): Original, a palette colour or a skin
+       tone ([characters], appearance.h) */
+    UI_OPT_CHAR_ICO_SKIN,
+    UI_OPT_CHAR_ICO_PONCHO_NAVY,
+    UI_OPT_CHAR_ICO_PONCHO_PINK,
+    UI_OPT_CHAR_ICO_PONCHO_LIGHT,
+    UI_OPT_CHAR_ICO_PONCHO_DARK,
+    UI_OPT_CHAR_ICO_TUNIC,
+    UI_OPT_CHAR_ICO_SHORTS,
+    UI_OPT_CHAR_YORDA_SKIN,
+    UI_OPT_CHAR_YORDA_DRESS,
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,
@@ -191,7 +219,11 @@ typedef enum UiSettingsOpt {
     UI_OPT_EXTRAS_CREDITS, /* locked until the ending has been reached */
     /* S1: Controls > Button configuration opens the game's own screen
        (layout 59, la_key_config), whose OK comes back to Controls */
-    UI_OPT_BUTTON_CONFIG
+    UI_OPT_BUTTON_CONFIG,
+    /* v0.4.2: Extras > Characters' actions: every part a random colour
+       (ico_appearance_randomize), every part Original */
+    UI_OPT_CHAR_RANDOMIZE,
+    UI_OPT_CHAR_RESET
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_SettingsInstall):
