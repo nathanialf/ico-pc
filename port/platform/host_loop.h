@@ -19,6 +19,12 @@
 /* Puts the FPU in simulation mode, allocates the EE RAM arena and runs the
    game's main() on the boot fiber until it and its threads wait. */
 void ico_host_init(void);
+/* The host program's end-of-run steps (main_host.c), last registered first:
+   the texture pack's loader, the window, the pad recording, the summary
+   line. Each runs once. On the desktop they are atexit handlers and this
+   finds nothing left to run; on Android ico_host_main calls it before it
+   returns. A second call does nothing. */
+void ico_host_shutdown(void);
 /* One simulated vsync (field parity alternating from 0), then the threads
    to quiescence. */
 void ico_host_step(void);

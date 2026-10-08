@@ -46,3 +46,21 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME host_config COMMAND host_config_test)
 endif()
+# the same with ICO_HOST_FORCE_PORTABLE, as the Android build compiles
+# host_config.c: the user folder is the executable's own. In a folder of its
+# own, so the two never share an ico-pc.ini when ctest runs them together.
+add_executable(host_config_portable_test ../platform/test/host_config_test.c
+                                         ../platform/host_config.c)
+target_include_directories(host_config_portable_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(host_config_portable_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
+target_compile_definitions(host_config_portable_test PRIVATE ICO_HOST_FORCE_PORTABLE=1)
+set_target_properties(host_config_portable_test PROPERTIES
+                      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable")
+if(WIN32)
+    target_link_libraries(host_config_portable_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME host_config_portable COMMAND host_config_portable_test
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable")
+endif()

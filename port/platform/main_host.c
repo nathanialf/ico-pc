@@ -65,6 +65,13 @@
  * value prints the usage on stderr and exits 2. An error that stops the run
  * (no disc image, a wrong one, a bad pad script) is logged, shown in a
  * message box on Windows, and exits 1.
+ *
+ * Android: SDL_main (port/platform/android/main_android.c) runs this as
+ * ico_host_main on a thread of its own; "the executable's folder" is the
+ * app's files folder (port/platform/android/android_paths.h lists what is
+ * in it), the log is mirrored to logcat, a fatal error shows SDL's message
+ * box and ends the process with _exit, and the end-of-run steps run from
+ * ico_host_shutdown before ico_host_main returns instead of atexit.
  */
 #include <errno.h>
 #include <stdarg.h>
@@ -86,6 +93,9 @@
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
+#ifdef __ANDROID__
+#include "host_android.h" /* port/platform/android: the version line */
+#endif
 #ifndef ICO_HEADLESS
 #include "game_font.h" /* port/ui: the game face, extracted after the tables */
 #endif
@@ -211,7 +221,35 @@ static int parse_rate(const char *s)
 
 static const char *exit_reason = "exit() from the game or the C library";
 
-/* Every normal end goes through here (atexit). */
+/* The end-of-run steps, run last registered first: summary, then
+   ico_input_record_close, ico_window_close and texpack_Shutdown as they are
+   registered. Desktop: atexit, so an exit() from the game runs them too.
+   Android: SDL_main's return finishes the activity while the process may
+   live on, so ico_host_main runs them itself (ico_host_shutdown) when it
+   returns. */
+#define SHUTDOWN_MAX 8
+static void (*shutdown_fn[SHUTDOWN_MAX])(void);
+static int shutdown_n;
+
+static void at_shutdown(void (*fn)(void))
+{
+#ifdef __ANDROID__
+    if (shutdown_n < SHUTDOWN_MAX) {
+        shutdown_fn[shutdown_n++] = fn;
+    }
+#else
+    atexit(fn);
+#endif
+}
+
+void ico_host_shutdown(void)
+{
+    while (shutdown_n > 0) {
+        shutdown_fn[--shutdown_n]();
+    }
+}
+
+/* Every normal end goes through here (at_shutdown). */
 static void summary(void)
 {
     ico_trace_close();
@@ -258,7 +296,8 @@ static int option(int argc, char **argv, int *i, const char *name, const char **
 /* 0, 1 to exit 0 (--help), 2 on a usage error. */
 static int parse_args(int argc, char **argv, Args *a)
 {
-    const char *prog = argc > 0 ? argv[0] : "ico_pc";
+    /* Android passes one argument, SDL's name for the program */
+    const char *prog = argc > 0 && argv != NULL && argv[0] != NULL ? argv[0] : "ico_pc";
     int i;
 
     memset(a, 0, sizeof(*a));
@@ -403,7 +442,7 @@ static void record_open(const IcoIni *ini, const char *exe_dir, const char *logs
     record_header(header, sizeof(header), stamp);
     if (ico_input_record_open(path, header) == 0) {
         fprintf(stderr, "ico_pc: pad recording %s\n", path);
-        atexit(ico_input_record_close);
+        at_shutdown(ico_input_record_close);
     }
 }
 
@@ -902,12 +941,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     copy_path(source, source_size, cand[0]);
 }
 
-#ifdef __ANDROID__
-/* Android: SDL_main (port/platform/android/main_android.c) calls this. */
-int ico_host_main(int argc, char **argv)
-#else
-int main(int argc, char **argv)
-#endif
+static int host_main(int argc, char **argv)
 {
     Args a;
     IcoIni ini;
@@ -960,6 +994,9 @@ int main(int argc, char **argv)
     ico_diag_init(log_file());
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
+#ifdef __ANDROID__
+    ico_android_log_version();
+#endif
     for (r = 1; r < argc; r++) {
         fprintf(stderr, "ico_pc: argument %s\n", argv[r]);
     }
@@ -1158,7 +1195,7 @@ int main(int argc, char **argv)
     if (v != NULL && v[0] != '\0' && parse_count(v, &watchdog) != 0) {
         ico_host_fatal(log_file(), "watchdog=%s in %s is not a number of seconds.", v, ini_path);
     }
-    atexit(summary);
+    at_shutdown(summary);
 
     if (have_ticks && ticks == 0) {
         exit_reason = "ticks=0";
@@ -1186,7 +1223,7 @@ int main(int argc, char **argv)
                                    "Update your graphics driver and try again; the log says "
                                    "why.");
     }
-    atexit(ico_window_close);
+    at_shutdown(ico_window_close);
     /* v0.4.0: a PCSX2 texture pack in the user folder or beside the
        program, indexed now (the game data is mounted, the device knows its
        formats); its loader thread stops before the window closes */
@@ -1209,7 +1246,7 @@ int main(int argc, char **argv)
         tc.maxTextureSize = rhi_Limits() != NULL ? rhi_Limits()->maxTextureSize : 0;
         tc.developer = ico_opt_developer_mode();
         texpack_Init(&tc);
-        atexit(texpack_Shutdown);
+        at_shutdown(texpack_Shutdown);
     }
 #endif
     ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
@@ -1250,3 +1287,25 @@ int main(int argc, char **argv)
         }
     }
 }
+
+#ifdef __ANDROID__
+
+/* Android: SDL_main (port/platform/android/main_android.c) calls this on
+   its own thread; the end-of-run steps run before it returns. */
+int ico_host_main(int argc, char **argv)
+{
+    int r = host_main(argc, argv);
+
+    ico_host_shutdown();
+    ico_android_log_mirror_flush();
+    return r;
+}
+
+#else
+
+int main(int argc, char **argv)
+{
+    return host_main(argc, argv);
+}
+
+#endif

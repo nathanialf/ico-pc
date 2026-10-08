@@ -48,7 +48,8 @@ typedef struct IcoIni {
 } IcoIni;
 
 /* The executable's folder, without a trailing separator. 0, or -1 (then
-   out is "."). */
+   out is "."). Android: the app's files folder (port/platform/android/
+   android_paths.h), where everything the port writes lives. */
 int ico_host_exe_dir(char *out, size_t size);
 /* dir + separator + name. A name that is already absolute is copied. 0, or
    -1 when the result does not fit in size: out is then "" (never a cut-off
@@ -88,7 +89,10 @@ int ico_host_pref_dir(char *out, size_t size);
    beside the executable) makes ico_host_pref_dir that folder, created, so
    everything per-user stays with the program. setting 1 on, 0 off
    (portable=0), -1 the folder decides (the start). Loading the executable's
-   own ini sets it from the file, before the folder is first used. */
+   own ini sets it from the file, before the folder is first used.
+   Compiled with ICO_HOST_FORCE_PORTABLE (the Android build of ico_pc):
+   the user folder is always the executable's folder itself, portable mode
+   is always on, and a portable= in the file is logged as ignored. */
 void ico_host_set_portable(int setting);
 /* ico-pc.ini's portable= value as ico_host_set_portable takes it: -1 for
    none or empty, 0 for "0", "false", "no" or "off" in any case (spaces
@@ -179,7 +183,8 @@ int ico_sha1_file(const char *path, char hex[41], unsigned long long *bytes);
 /* Sends stdout and stderr to log_path, created afresh: unbuffered on POSIX,
    fully buffered on Windows (package Q1: msvcrt writes an unbuffered stream
    one character per OS call), where the host loop calls ico_host_log_flush
-   once per vsync. Fatal errors still reach the original stderr on POSIX. 0,
+   once per vsync. Fatal errors still reach the original stderr on POSIX.
+   Android: through host_android.c's mirror, to the file and logcat. 0,
    or -1 (the streams are unchanged when the file cannot be created). */
 int ico_host_redirect_output(const char *log_path);
 /* Writes out what stdout and stderr hold (the host loop, once per vsync). */
@@ -195,13 +200,13 @@ int ico_host_pick_iso(char *out, size_t size);
    reach a console or a file, 0 when they go nowhere (started from
    Explorer). Elsewhere: 1. */
 int ico_host_attach_console(void);
-/* A message box with a UTF-8 text (Windows; error != 0 for the error icon).
-   Elsewhere: the text on stderr. */
+/* A message box with a UTF-8 text (Windows and Android; error != 0 for the
+   error icon). Elsewhere: the text on stderr. */
 void ico_host_message_box(const char *text, int error);
 
 /* Logs the message (stderr, the log when redirected), shows it in a message
-   box on Windows naming the log (log_path NULL: no log was opened), and
-   exits 1. */
+   box on Windows and Android naming the log (log_path NULL: no log was
+   opened), and exits 1 (Android: the log written out, then _exit). */
 void ico_host_fatal(const char *log_path, const char *fmt, ...)
 #ifdef __GNUC__
     __attribute__((format(printf, 2, 3), noreturn))

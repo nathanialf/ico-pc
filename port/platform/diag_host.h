@@ -79,6 +79,10 @@ void ico_diag_set_exit_hook(void (*fn)(const char *reason));
    without any Main tick; later_s: seconds without a new Main tick or new
    progress after the first tick. 0 turns a limit off. */
 void ico_diag_start(unsigned int first_s, unsigned int later_s);
+/* 1 while the game is meant to stand still (Android: the app in the
+   background), 0 when it runs again: while paused neither watchdog limit
+   counts and the heartbeat is quiet. Any thread. */
+void ico_diag_watchdog_pause(int paused);
 
 /* One line to the log, written at once (a newline is added). */
 void ico_diag_log(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);

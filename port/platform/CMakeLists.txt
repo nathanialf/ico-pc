@@ -70,6 +70,15 @@ if(_ico_run_tests)
     set_tests_properties(diag PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# The Android build's file layout (android/android_paths.c), pure C, so it
+# is tested here on the native builds.
+add_executable(android_paths_test test/android_paths_test.c android/android_paths.c)
+target_include_directories(android_paths_test PRIVATE android)
+target_compile_options(android_paths_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(_ico_run_tests)
+    add_test(NAME android_paths COMMAND android_paths_test)
+endif()
+
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree (F2, B1)
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

@@ -2,7 +2,10 @@
  * port/platform/test/host_config_test.c
  *
  * ico-pc.ini parsing and rewriting, SHA-1 against FIPS 180 test vectors,
- * path joining (port/platform/host_config.c).
+ * path joining (port/platform/host_config.c). Built a second time with
+ * ICO_HOST_FORCE_PORTABLE (host_config_portable_test, as the Android build
+ * compiles host_config.c), where the user folder is always the executable's
+ * own folder.
  */
 #include "host_config.h"
 #include "host_fs.h"
@@ -242,6 +245,8 @@ static void test_portable_value(void)
     CHECK(ico_host_portable_value("offline") == 1);
 }
 
+#ifndef ICO_HOST_FORCE_PORTABLE
+
 static void test_portable(void)
 {
     char exe[ICO_PATH_MAX], want[ICO_PATH_MAX], got[ICO_PATH_MAX], ini_path[ICO_PATH_MAX];
@@ -300,6 +305,66 @@ static void test_portable(void)
     CHECK(ico_path_kind(want, NULL, NULL) < 0 || ico_host_pref_is_portable());
 }
 
+#else
+
+/* forced portable mode: the user folder is the executable's folder itself
+   whatever portable= or the setter says, no userdata folder is made, and
+   the cards, config.toml and ico-pc.ini all live there */
+static void test_forced_portable(void)
+{
+    char exe[ICO_PATH_MAX], got[ICO_PATH_MAX], want[ICO_PATH_MAX], ini_path[ICO_PATH_MAX];
+    char toml[ICO_PATH_MAX], userdata[ICO_PATH_MAX];
+    IcoIni ini;
+    FILE *f;
+    int s;
+
+    CHECK(ico_host_exe_dir(exe, sizeof(exe)) == 0);
+    ico_path_join(userdata, sizeof(userdata), exe, "userdata");
+    ico_host_ini_path(ini_path, sizeof(ini_path));
+    ico_path_join(toml, sizeof(toml), exe, "config.toml");
+    if (ico_path_kind(userdata, NULL, NULL) >= 0 || ico_file_exists(ini_path) ||
+        ico_file_exists(toml)) {
+        fprintf(stderr, "host_config_test: %s, %s or %s exists; forced portable mode not tested\n",
+                userdata, ini_path, toml);
+        return;
+    }
+    for (s = -1; s <= 1; s++) {
+        ico_host_set_portable(s);
+        CHECK(ico_host_pref_is_portable() == 1);
+        CHECK(ico_host_pref_dir(got, sizeof(got)) == 0 && strcmp(got, exe) == 0);
+    }
+    CHECK(ico_path_kind(userdata, NULL, NULL) < 0);
+    ico_path_join(want, sizeof(want), exe, "ico-pc.ini");
+    CHECK(strcmp(ini_path, want) == 0);
+    /* the cards: <exe>/memcard with no saves= */
+    ico_path_join(want, sizeof(want), exe, "memcard");
+    CHECK(ico_host_saves_dir(got, sizeof(got)) == 0 && strcmp(got, want) == 0);
+    /* portable=0 in the file changes nothing; config.toml beside it is read */
+    f = fopen(toml, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("[paths]\niso = \"forced.iso\"\n", f);
+    fclose(f);
+    f = fopen(ini_path, "wb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        fputs("portable=0\n", f);
+        fclose(f);
+        CHECK(ico_ini_load_layered(&ini, ini_path) == 0);
+        CHECK(ico_ini_get(&ini, "iso") != NULL &&
+              strcmp(ico_ini_get(&ini, "iso"), "forced.iso") == 0);
+        CHECK(ico_host_pref_is_portable() == 1);
+        CHECK(ico_host_pref_dir(got, sizeof(got)) == 0 && strcmp(got, exe) == 0);
+        CHECK(ico_path_kind(userdata, NULL, NULL) < 0);
+        remove(ini_path);
+    }
+    remove(toml);
+}
+
+#endif
+
 int main(void)
 {
     test_sha1();
@@ -308,7 +373,11 @@ int main(void)
     test_saves_dir_pure();
     test_paths();
     test_portable_value();
+#ifdef ICO_HOST_FORCE_PORTABLE
+    test_forced_portable();
+#else
     test_portable();
+#endif
     printf("host_config_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

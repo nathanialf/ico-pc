@@ -18,6 +18,11 @@
  * signals it and waits), so a stack overflow does not have to format the
  * report on the stack that overflowed. Before ico_diag_start, and on POSIX
  * (an alternate signal stack), the faulting thread reports itself.
+ *
+ * Android: the game is libmain.so, so addresses are given from its load
+ * address; the lines also go to logcat; after a crash's block the handler
+ * puts the system's handlers back and returns, so the fault repeats into
+ * them and the system still writes its tombstone.
  */
 #ifndef _WIN32
 #define _GNU_SOURCE 1
@@ -54,6 +59,13 @@
 #include <time.h>
 #include <ucontext.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+
+#include <android/log.h>
+#include <dlfcn.h>
+#include <link.h>
+
+#endif
 
 #endif
 #define ICO_ENTRY
@@ -264,6 +276,17 @@ static int reporter_running;
 static void raw_write(const char *s, size_t n)
 {
     int fd = log_fd >= 0 ? log_fd : 2;
+#ifdef __ANDROID__
+    /* logcat too: written to the file, these lines bypass stderr and its
+       mirror (one line, its newline dropped) */
+    if (log_fd >= 0 && n > 0 && n < LINE_MAX_BYTES) {
+        char line[LINE_MAX_BYTES];
+
+        memcpy(line, s, n);
+        line[s[n - 1] == '\n' ? n - 1 : n] = '\0';
+        __android_log_write(ANDROID_LOG_INFO, "ico-pc", line);
+    }
+#endif
     while (n > 0) {
         ssize_t w = write(fd, s, n);
         if (w <= 0) {
@@ -802,11 +825,11 @@ static void finish(const char *reason, const char *box_text, int code)
 #endif
 }
 
-static void report_crash(void)
+/* the crash block in the log, without the end */
+static void report_crash_block(void)
 {
     char where[96];
     char tmp[80];
-    char box[256];
     char line[LINE_MAX_BYTES];
     flush_stdio_bounded();
     describe(crash.pc, where, sizeof where);
@@ -819,8 +842,14 @@ static void report_crash(void)
                                      : "reading",
              (unsigned long long)crash.fault_addr);
     }
+#ifdef __ANDROID__
+    flog("ico_pc: %s's offsets are relative to its load address; ico_pc.map (or "
+         "llvm-symbolizer on the unstripped %s) gives the symbol (map address = offset)",
+         exe_name, exe_name);
+#else
     flog("ico_pc: the executable's offsets are relative to its load address; ico_pc.map gives "
          "the symbol (map address = __image_base__ + offset)");
+#endif
     flog("ico_pc: game thread then: #%d %s", crash.thread,
          thread_name(crash.thread, tmp, sizeof tmp));
     if (crash.thread != 0 && thread_line(crash.thread, line, sizeof line)) {
@@ -835,10 +864,21 @@ static void report_crash(void)
     }
     heartbeat(1);
     dump_threads();
+}
+
+#ifndef __ANDROID__
+
+static void report_crash(void)
+{
+    char box[256];
+
+    report_crash_block();
     /* the player's box says what to do; what and where are in the log */
     snprintf(box, sizeof box, "ICO PC hit an error and had to close.");
     finish(crash.what, box, EXIT_CRASH);
 }
+
+#endif
 
 /* --- Watchdog ------------------------------------------------------------------------ */
 
@@ -969,6 +1009,18 @@ static unsigned int wd_first_s;
 
 static unsigned int wd_later_s;
 
+/* ico_diag_watchdog_pause: set by any thread, read by the watchdog's */
+static volatile int wd_paused;
+
+void ico_diag_watchdog_pause(int paused)
+{
+    if ((paused != 0) == (wd_paused != 0)) {
+        return;
+    }
+    wd_paused = paused != 0;
+    ico_diag_log("ico_pc: diagnostics: watchdog %s", paused ? "paused" : "running again");
+}
+
 static void watchdog_loop(void)
 {
     double start = ico_diag_uptime();
@@ -996,15 +1048,20 @@ static void watchdog_loop(void)
             continue;
         }
         now = ico_diag_uptime();
-        if (now - last_poll > SUSPEND_GAP_S) {
+        if (now - last_poll > SUSPEND_GAP_S || wd_paused) {
             /* the clock jumped between two polls: the system slept (Windows'
                GetTickCount64 counts sleep and hibernation) or the process was
-               stopped (a debugger, SIGSTOP). That time is not the game's, so
+               stopped (a debugger, SIGSTOP); or the watchdog is paused (the
+               app in the background). That time is not the game's, so
                neither limit counts it. */
             start += now - last_poll;
             last_alive += now - last_poll;
         }
         last_poll = now;
+        if (wd_paused) {
+            last_beat = now;
+            continue;
+        }
         if (now - last_beat >= HEARTBEAT_S) {
             last_beat = now;
             heartbeat(0);
@@ -1304,6 +1361,12 @@ static const char *signal_name(int sig)
     return "a signal";
 }
 
+#ifdef __ANDROID__
+
+static void restore_handlers(void);
+
+#endif
+
 ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
 {
     ucontext_t *uc = (ucontext_t *)ucv;
@@ -1328,8 +1391,72 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
     }
     crash.thread = ico_sched_current();
     stack_bounds_here(crash.sp, &crash.stack_lo, &crash.stack_hi);
+#ifdef __ANDROID__
+    report_crash_block();
+    flog("ico_pc: the run ended: %s", crash.what);
+    if (exit_hook != NULL) {
+        exit_hook(crash.what);
+    }
+    flog("ico_pc: the system's crash report (tombstone) follows");
+    /* the system's handlers back; a fault repeats when this returns, a
+       signal sent by a call (abort, kill) is sent again, pending until
+       then */
+    restore_handlers();
+    if (si->si_code <= 0) {
+        raise(sig);
+    }
+#else
     report_crash();
+#endif
 }
+
+#ifdef __ANDROID__
+
+/* libmain.so's extent: its executable segments, from its load address */
+static int module_phdr(struct dl_phdr_info *info, size_t size, void *user)
+{
+    uintptr_t base = *(const uintptr_t *)user;
+    uintptr_t hi = 0;
+    int i;
+
+    (void)size;
+    if ((uintptr_t)info->dlpi_addr != base) {
+        return 0;
+    }
+    for (i = 0; i < info->dlpi_phnum; i++) {
+        const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+
+        if (ph->p_type == PT_LOAD && (ph->p_flags & PF_X) != 0) {
+            uintptr_t end = base + (uintptr_t)ph->p_vaddr + (uintptr_t)ph->p_memsz;
+
+            if (end > hi) {
+                hi = end;
+            }
+        }
+    }
+    exe_hi = hi;
+    return 1;
+}
+
+static void exe_range(void)
+{
+    Dl_info info;
+    uintptr_t base;
+
+    if (dladdr((void *)ico_diag_init, &info) == 0 || info.dli_fbase == NULL) {
+        return;
+    }
+    base = (uintptr_t)info.dli_fbase;
+    exe_lo = base;
+    dl_iterate_phdr(module_phdr, &base);
+    if (info.dli_fname != NULL) {
+        const char *b = strrchr(info.dli_fname, '/');
+
+        snprintf(exe_name, sizeof exe_name, "%.63s", b != NULL ? b + 1 : info.dli_fname);
+    }
+}
+
+#else
 
 extern char __executable_start[] __attribute__((weak));
 extern char etext[] __attribute__((weak));
@@ -1351,9 +1478,29 @@ static void exe_range(void)
     }
 }
 
+#endif
+
+static const int crash_sigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP, SIGABRT};
+
+#ifdef __ANDROID__
+
+/* the handlers in place before ours (the system's crash reporter) */
+static struct sigaction old_actions[sizeof crash_sigs / sizeof crash_sigs[0]];
+
+static void restore_handlers(void)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof crash_sigs / sizeof crash_sigs[0]; i++) {
+        sigaction(crash_sigs[i], &old_actions[i], NULL);
+    }
+}
+
+#endif
+
 static void install_handlers(void)
 {
-    static const int sigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP, SIGABRT};
+    const int *sigs = crash_sigs;
     struct sigaction sa;
     stack_t st;
     pthread_attr_t attr;
@@ -1377,8 +1524,12 @@ static void install_handlers(void)
     sa.sa_sigaction = crash_handler;
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
-    for (i = 0; i < sizeof sigs / sizeof sigs[0]; i++) {
+    for (i = 0; i < sizeof crash_sigs / sizeof crash_sigs[0]; i++) {
+#ifdef __ANDROID__
+        sigaction(sigs[i], &sa, &old_actions[i]);
+#else
         sigaction(sigs[i], &sa, NULL);
+#endif
     }
     sa.sa_sigaction = sample_handler;
     sa.sa_flags = SA_SIGINFO | SA_RESTART;
@@ -1428,6 +1579,12 @@ void ico_diag_init(const char *log_path)
     exe_range();
     install_handlers();
     inited = 1;
+#ifdef __ANDROID__
+    ico_diag_log("ico_pc: diagnostics: %s at 0x%lx; this thread's stack 0x%lx..0x%lx (%lu KB)",
+                 exe_name, (unsigned long)exe_lo, (unsigned long)main_stack_lo,
+                 (unsigned long)main_stack_hi,
+                 (unsigned long)((main_stack_hi - main_stack_lo) / 1024));
+#endif
 }
 
 #ifdef _WIN32

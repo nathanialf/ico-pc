@@ -15,6 +15,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ICO_HOST_FORCE_PORTABLE (the Android build of ico_pc, and
+   host_config_portable_test): the user folder is always the executable's
+   folder itself, whatever portable= says. On Android that folder is the
+   app's files folder (port/platform/android/host_android.h) and the error
+   paths show SDL's message box. */
+#if defined(__ANDROID__) && defined(ICO_HOST_FORCE_PORTABLE)
+#define ICO_HOST_ANDROID 1
+#include "android/host_android.h"
+#endif
 #ifdef ICO_HOST_SDL_PREFPATH
 
 #include <SDL3/SDL_filesystem.h>
@@ -54,6 +63,14 @@ static void copy(char *out, size_t size, const char *s)
 
 int ico_host_exe_dir(char *out, size_t size)
 {
+#ifdef ICO_HOST_ANDROID
+    /* no folder of its own: the app's files folder */
+    if (ico_android_files_dir(out, size) != 0) {
+        copy(out, size, ".");
+        return -1;
+    }
+    return 0;
+#else
     char buf[ICO_PATH_MAX];
     char *slash;
 
@@ -92,6 +109,7 @@ int ico_host_exe_dir(char *out, size_t size)
     *slash = '\0';
     copy(out, size, buf);
     return 0;
+#endif
 }
 
 int ico_path_is_absolute(const char *path)
@@ -810,6 +828,12 @@ int ico_host_redirect_output(const char *log_path)
         console_fd = dup(2);
     }
 #endif
+#ifdef ICO_HOST_ANDROID
+    /* the file and logcat (the streams' fds go to the mirror's pipe) */
+    if (ico_android_log_mirror_start(log_path) == 0) {
+        return 0;
+    }
+#endif
     /* the probe emptied the file; both streams append, so neither overwrites
        the other's lines (unbuffered on POSIX, so they interleave in order;
        on Windows each is flushed whole, below) */
@@ -854,6 +878,18 @@ void ico_host_log_flush(void)
     fflush(stdout);
     fflush(stderr);
 }
+
+#ifdef ICO_HOST_ANDROID
+
+/* the log written out before the process ends without exit() */
+static void flush_all(void)
+{
+    fflush(stdout);
+    fflush(stderr);
+    ico_android_log_mirror_flush();
+}
+
+#endif
 
 /* --- the dialog and the error box --------------------------------------- */
 
@@ -907,7 +943,10 @@ int ico_host_attach_console(void)
 
 void ico_host_message_box(const char *text, int error)
 {
-#ifdef _WIN32
+#if defined(ICO_HOST_ANDROID)
+    flush_all();
+    ico_android_message_box(text, error);
+#elif defined(_WIN32)
     wchar_t *w = ico_widen(text);
 
     if (w != NULL) {
@@ -933,7 +972,19 @@ void ico_host_fatal(const char *log_path, const char *fmt, ...)
     fprintf(stderr, "ico_pc: error: %s\n", msg);
     fflush(stderr);
     fflush(stdout);
-#ifdef _WIN32
+#if defined(ICO_HOST_ANDROID)
+    /* the box, the log written out, then _exit: the next start is a fresh
+       process (exit()'s handlers would run on this thread while SDL's Java
+       side still holds the activity) */
+    {
+        char box[3072];
+
+        snprintf(box, sizeof(box), "%s\n\nLog: %s", msg, log_path ? log_path : "(none)");
+        ico_host_message_box(box, 1);
+    }
+    flush_all();
+    _exit(1);
+#elif defined(_WIN32)
     {
         char box[3072];
 
@@ -1662,7 +1713,9 @@ int ico_toml_save(const IcoToml *t, const char *path)
 }
 
 /* portable mode: -1 the folder decides, 0 off (portable=0), 1 on */
+#ifndef ICO_HOST_FORCE_PORTABLE
 static int portable_setting = -1;
+#endif
 /* the reason portable mode could not be used was logged */
 static int portable_logged;
 
@@ -1693,14 +1746,28 @@ int ico_host_portable_value(const char *v)
 
 void ico_host_set_portable(int setting)
 {
+#ifdef ICO_HOST_FORCE_PORTABLE
+    if (setting >= 0 && !portable_logged) {
+        portable_logged = 1;
+        fprintf(stderr,
+                "ico_pc: portable=%d in ico-pc.ini is ignored: the settings and saves "
+                "always live in the program's own folder here\n",
+                setting != 0);
+    }
+#else
     portable_setting = setting < 0 ? -1 : (setting != 0);
     portable_logged = 0;
+#endif
 }
 
 /* the userdata folder beside the program when portable mode is on (made if
    missing), else 0 */
 static int portable_dir(char *out, size_t size)
 {
+#ifdef ICO_HOST_FORCE_PORTABLE
+    /* the executable's folder itself (Android: the app's files folder) */
+    return ico_host_exe_dir(out, size) == 0;
+#else
     char exe[ICO_PATH_MAX], dir[ICO_PATH_MAX];
 
     if (portable_setting == 0 || ico_host_exe_dir(exe, sizeof(exe)) != 0 ||
@@ -1725,6 +1792,7 @@ static int portable_dir(char *out, size_t size)
     }
     copy(out, size, dir);
     return 1;
+#endif
 }
 
 int ico_host_pref_is_portable(void)

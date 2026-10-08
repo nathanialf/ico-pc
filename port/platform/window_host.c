@@ -32,6 +32,9 @@
 #include "video_options.h"
 #include "window_host.h"
 #include "window_video.h"
+#ifdef __ANDROID__
+#include "android/host_android.h"
+#endif
 
 /* The window's first client size: 4:3, three times 320 x 240. */
 #define WINDOW_W 960
@@ -329,11 +332,18 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     rd_SetHostCall(ico_sched_call_on_host);
     /* the Vulkan pipeline cache in the per-user folder: a later start
        creates the renderer's pipelines from it (rhi_SetPipelineCachePath;
-       D3D12 ignores it) */
+       D3D12 ignores it). Android: the app's cache folder, which the system
+       may empty when space runs low (android_paths.h) */
     {
         char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 32];
 
+#ifdef __ANDROID__
+        if (ico_android_cache_dir(pref, sizeof(pref)) != 0) {
+            ico_host_pref_dir(pref, sizeof(pref));
+        }
+#else
         ico_host_pref_dir(pref, sizeof(pref));
+#endif
         snprintf(cache, sizeof(cache), "%s/pipelines.vkcache", pref);
         rhi_SetPipelineCachePath(cache);
     }

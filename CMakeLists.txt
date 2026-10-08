@@ -178,8 +178,16 @@ if(ICO_LINK_EXE)
         # (SDLActivity, android/) loads after libSDL3.so; it calls SDL_main
         # (port/platform/android/main_android.c). The target keeps the name
         # ico_pc, so everything that adds to it applies.
-        add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c)
+        # host_android.c: the app's folders, the log mirror to logcat, the
+        # message box; android_paths.c the file layout (tested on every
+        # platform, port/platform/CMakeLists.txt). ICO_HOST_FORCE_PORTABLE:
+        # host_config.c keeps everything in the app's files folder.
+        add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c
+                                  port/platform/android/host_android.c
+                                  port/platform/android/android_paths.c)
         set_target_properties(ico_pc PROPERTIES OUTPUT_NAME main)
+        target_compile_definitions(ico_pc PRIVATE ICO_HOST_FORCE_PORTABLE=1)
+        target_include_directories(ico_pc PRIVATE port/platform/android)
     else()
         add_executable(ico_pc ${_ico_pc_sources})
     endif()
