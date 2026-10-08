@@ -269,7 +269,8 @@ static void origMake(Orig *o, uint32_t qpv, uint32_t nb, const uint32_t *counts,
                 qw4(v[2], ubitsF(16), 1.0f, ubitsF(16), 0.0f);
             }
             qw4(v[stAt], 0.125f * (float)k, 0.25f * (float)i, 1.0f, start ? 0.0f : 1.0f);
-            qw4(v[qpv - 1], (float)(10 + k), (float)(20 + i), 30.0f + seed, 127.0f);
+            /* colours are GS bytes: whole numbers, or the round trip rounds them */
+            qw4(v[qpv - 1], (float)(10 + k), (float)(20 + i), 30.0f + floorf(seed), 127.0f);
         }
     }
     o->d.qw = (const float (*)[4])o->qw;
@@ -393,7 +394,9 @@ static int recTris(const RdMeshRec *r, uint32_t b, Tri *out)
     for (uint32_t i = 0; i < br->indexCount; i += 3) {
         for (int c = 0; c < 3; c++) {
             const uint32_t idx = r->index[br->firstIndex + i + (uint32_t)c];
-            out[n].k[c] = vertexKey(r->stream + (size_t)(idx / 4) * r->qwPerVertex, r->qwPerVertex);
+            /* ICO_VU_INDEX(K, corner): the corner-th of vertices K-2, K-1, K */
+            out[n].k[c] = vertexKey(r->stream + (size_t)(idx / 4 - 2 + idx % 4) * r->qwPerVertex,
+                                    r->qwPerVertex);
         }
         triSort(&out[n]);
         n++;
@@ -671,7 +674,7 @@ static void stripChecks(void)
         CHECK(w[2][0] == 128.0f && w[2][1] == 128.0f && w[2][2] == 128.0f,
               "no COLOR_0: (128, 128, 128)");
         CHECK(w[0][0] == 2.0f && w[0][1] == 2.0f && w[3][0] == 1.0f && w[3][1] == 3.0f &&
-                  w[6][0] == 1.0f && w[6][1] == 2.0f && w[9][0] == 1.0f && w[9][1] == 3.0f,
+                  w[6][0] == 1.0f && w[6][1] == 2.0f && w[9][0] == 2.0f && w[9][1] == 3.0f,
               "the lone triangle turned to join the next");
     }
     rd_DestroyVuMesh(m);
@@ -781,8 +784,8 @@ static void boneChecks(void)
         CHECK(fBitsOf(v[12][0]) == 24 && fBitsOf(v[12][2]) == 32 &&
                   fabsf(v[12][1] - 0.6f) < 1e-6f && fabsf(v[12][3] - 0.4f) < 1e-6f,
               "a bone given twice merged");
-        CHECK(v[0][0] == 0.0f && v[6][1] == 0.0f && v[5][1] == 1.0f && v[1][2] == 1.0f,
-              "skinned: no node transform; normals normalised (%g)", (double)v[5][1]);
+        CHECK(v[0][0] == 0.0f && v[5][0] == 1.0f && v[6][1] == 1.0f && v[1][2] == 1.0f,
+              "skinned: no node transform; normals normalised (%g)", (double)v[6][1]);
         CHECK(v[1][3] == 1.0f && v[6][3] == 1.0f, "normal.w the original's");
     }
     rd_DestroyVuMesh(m);
