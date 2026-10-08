@@ -726,6 +726,80 @@ static void test_merged_frame(void)
     CHECK(f.rx == 128 && f.ry == 0);
 }
 
+/* v0.4.2 (Android issue 19): the touch stick in every direction (1 degree
+   steps) and at every reach (inside the dead zone to past the ring) gives
+   the bytes a round gamepad stick deflected as far gives: the same frame
+   from ico_input_vpad_to_frame, stick fix off and on, so Ico walks and runs
+   on the phone where he does with a pad. Off, no byte pair is further than
+   128 from the centre (the PS2's circle) and the game's magnitude never
+   passes 1. No libm: the directions are a rotation repeated 360 times. */
+static void test_stick_every_direction(void)
+{
+    static const float reach[] = {0.03f, 0.3f, 0.5f, 0.6f, 0.92f, 0.94f, 1.0f, 1.2f, 1.5f};
+    IcoTouchLayout l = ico_touch_layout(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM);
+    IcoTouchState t;
+    IcoVirtualPad tv, pad;
+    IcoPadFrame f, g;
+    const float R = l.stickR, cx = 420.0f, cy = 760.0f;
+    const double c1 = 0.99984769515639124, s1 = 0.017452406437283512; /* 1 degree */
+    double c = 1.0, s = 0.0;
+    int a, k, fix, diff = 0, outside = 0, over = 0;
+
+    g_l = &l;
+    for (a = 0; a < 360; a++) {
+        for (k = 0; k < (int)(sizeof(reach) / sizeof(reach[0])); k++) {
+            const float r = reach[k];
+            const float dx = (float)(c * r * R), dy = (float)(s * r * R);
+            const float m = r > 1.0f ? 1.0f : r;
+
+            memset(&t, 0, sizeof(t));
+            ico_touch_reset(&t, S);
+            ev(&t, 1, cx, cy, ICO_TOUCH_DOWN, S);
+            ev(&t, 1, cx + dx, cy + dy, ICO_TOUCH_MOVE, S);
+            ico_touch_step(&t, &l, &tv, S);
+            /* the round pad deflected as far, with the touch dead zone */
+            memset(&pad, 0, sizeof(pad));
+            if (r >= ICO_TOUCH_STICK_DEADZONE) {
+                pad.lx = (float)(c * m);
+                pad.ly = (float)(s * m);
+            }
+            for (fix = 0; fix < 2; fix++) {
+                ico_input_vpad_to_frame(&tv, fix, 0, &f);
+                ico_input_vpad_to_frame(&pad, fix, 0, &g);
+                if (absf((float)f.lx - (float)g.lx) > 1.0f ||
+                    absf((float)f.ly - (float)g.ly) > 1.0f) {
+                    if (diff++ < 5) {
+                        fprintf(stderr,
+                                "FAIL %d degrees at %.2f R (fix %d): touch %u %u, pad %u %u\n", a,
+                                (double)r, fix, f.lx, f.ly, g.lx, g.ly);
+                    }
+                }
+                if (!fix) {
+                    const float x = (float)f.lx - 127.5f, y = (float)f.ly - 127.5f;
+
+                    if (x * x + y * y > 128.5f * 128.5f) {
+                        outside++;
+                    }
+                    if (game_magnitude(f.lx, f.ly) > 1.0f) {
+                        over++;
+                    }
+                }
+            }
+        }
+        {
+            const double nc = c * c1 - s * s1;
+
+            s = s * c1 + c * s1;
+            c = nc;
+        }
+    }
+    CHECK(diff == 0);
+    CHECK(outside == 0);
+    CHECK(over == 0);
+    printf("touch stick: 360 directions x %d reaches match a round pad's bytes\n",
+           (int)(sizeof(reach) / sizeof(reach[0])));
+}
+
 /* The device layer's gate (ico_touch_update): with a gamepad connected in
    Auto the overlay is hidden and the touches are dropped, so nothing unseen
    is pressed; Always maps them with a gamepad too; Off never. A tap made
@@ -795,6 +869,7 @@ int main(void)
     test_look();
     test_visibility();
     test_merged_frame();
+    test_stick_every_direction();
     test_gamepad_drop();
     if (failures != 0) {
         fprintf(stderr, "touch_test: %d failure(s)\n", failures);
