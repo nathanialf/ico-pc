@@ -383,15 +383,20 @@ static void touch_layout_update(void)
 }
 
 /* v0.4.2 N4: the window's pixel size the renderer was opened at or last
-   given (the size event's path, window_pixel_size) */
+   given (the size event's path, window_pixel_size); read by
+   window_size_recheck, which only Android needs */
+#ifdef __ANDROID__
 static int s_pixW, s_pixH;
+#define WINDOW_PIX_NOTE(w, h) (s_pixW = (w), s_pixH = (h))
+#else
+#define WINDOW_PIX_NOTE(w, h) ((void)(w), (void)(h))
+#endif
 
 /* The size event's path: the renderer's output and swapchain, aspect
    "auto" and resolution "window" (R7a), the touch zones (AN-G) */
 static void window_pixel_size(int w, int h)
 {
-    s_pixW = w;
-    s_pixH = h;
+    WINDOW_PIX_NOTE(w, h);
     rd_ResizeOutput((uint32_t)w, (uint32_t)h);
     ico_video_set_window(w, h);
     video_apply(1);
@@ -622,8 +627,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
     }
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
-    s_pixW = w; /* v0.4.2 N4: window_size_recheck compares against it */
-    s_pixH = h;
+    WINDOW_PIX_NOTE(w, h); /* v0.4.2 N4: window_size_recheck compares against it */
     video_settings(&rs, w, h);
     if (!rd_Init(gsW, gsH, &rs, s_window)) {
         fprintf(stderr,

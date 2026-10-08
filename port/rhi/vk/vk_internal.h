@@ -255,8 +255,11 @@ typedef struct VkrState {
     uint32_t memNextLog; /* the live count whose crossing logs next */
     bool memLimitLogged, samplerLimitLogged;
     /* ICO_VK_FAKE_LIMITS (vk_device.c vkr_FakeLimits): props.limits were
-     * clamped to a named device's */
+     * clamped to a named device's (mali); fakeMinLimits: =min, the
+     * RhiLimits the renderer reads are lowered to the spec's required
+     * values in vkr_FillLimits (props.limits are left as they are) */
     const char *fakeLimits;
+    bool fakeMinLimits;
     const char *lastLimit; /* vkr_TestLastLimit (rhi_vk.h) */
 } VkrState;
 

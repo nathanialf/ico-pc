@@ -671,4 +671,19 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     list(APPEND _ico_mali_tests rd_mesh_mali)
     set_tests_properties(${_ico_mali_tests} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_ml}"
                                                        ENVIRONMENT "${_env_mali}")
+    # the same tests and expectations at the limits every Vulkan device is
+    # required to meet (ICO_VK_FAKE_LIMITS=min, vk_device.c: 256-byte offset
+    # alignment, 2^27-byte storage ranges, 4096-texel images), where phone
+    # GPUs sit and lavapipe does not
+    set(_env_minlimits ${_env} "ICO_VK_FAKE_LIMITS=min")
+    set(_mn "${CMAKE_CURRENT_BINARY_DIR}/minlimits")
+    file(MAKE_DIRECTORY "${_mn}")
+    add_test(NAME rd_pixel_minlimits COMMAND rd_pixel_test "${_mn}")
+    add_test(NAME rd_present_minlimits COMMAND rd_present_test "${_mn}")
+    add_test(NAME rd_mesh_minlimits COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
+    add_test(NAME rd_interp_minlimits COMMAND rd_interp_test)
+    set_tests_properties(rd_pixel_minlimits rd_present_minlimits rd_mesh_minlimits
+                         rd_interp_minlimits
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_mn}"
+                                    ENVIRONMENT "${_env_minlimits}")
 endif()

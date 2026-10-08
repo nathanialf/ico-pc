@@ -355,7 +355,9 @@ static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags n
     return (fp.optimalTilingFeatures & need) == need;
 }
 
-/* v0.4.2 (Android): ICO_VK_FAKE_LIMITS=mali clamps the device's limits to
+/* v0.4.2 (Android): the one read of ICO_VK_FAKE_LIMITS.  =min is noted
+ * for vkr_FillLimits (the RhiLimits at the spec's required values).
+ * =mali clamps the device's limits to
  * a Mali-G68's (Samsung A36 class: four descriptor sets, 128 bytes of push
  * constants, 256-byte storage offsets, 16 sampled images, samplers and
  * storage buffers a stage, 4096 memory allocations, 4000 samplers), so the
@@ -368,8 +370,14 @@ static void vkr_FakeLimits(void)
     if (!e || !e[0] || strcmp(e, "0") == 0) {
         return;
     }
+    if (strcmp(e, "min") == 0) {
+        g_vkr.fakeMinLimits = true; /* applied in vkr_FillLimits */
+        return;
+    }
     if (strcmp(e, "mali") != 0) {
-        VKR_LOG("ICO_VK_FAKE_LIMITS=%s: not a known device (mali); the limits are the device's", e);
+        VKR_LOG(
+            "ICO_VK_FAKE_LIMITS=%s: not a known profile (mali, min); the limits are the device's",
+            e);
         return;
     }
     VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
@@ -738,6 +746,30 @@ static void vkr_FillLimits(void)
     o->maxStorageRange = l->maxStorageBufferRange;
     /* texture packs: the BC formats (vkr_CreateDevice enabled the feature) */
     o->bcTextures = g_vkr.bc;
+    /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
+     * every Vulkan device is required to meet (the specification's Required
+     * Limits table), where phone GPUs sit while desktop ones and lavapipe are
+     * far past them: offsets aligned to 256 (minUniformBufferOffsetAlignment
+     * and minStorageBufferOffsetAlignment are at most 256), storage ranges of
+     * 2^27 bytes, 4096-texel images, 8 dynamic uniform buffers, 16x
+     * anisotropy.  Each is only ever lowered, so the device stays valid for
+     * what the renderer then does (tests: rd_pixel_minlimits,
+     * rd_present_minlimits).  The descriptor layouts themselves are fixed
+     * and inside the minimums (rd_replay.c: three sets, at most four uniform
+     * buffers and one storage buffer a stage, two sampled images and a
+     * sampler, four dynamic uniform buffers, no push constants). */
+    if (g_vkr.fakeMinLimits) { /* read in vkr_FakeLimits */
+        o->uniformAlign = o->uniformAlign > 256u ? o->uniformAlign : 256u;
+        o->maxTextureSize = o->maxTextureSize < 4096u ? o->maxTextureSize : 4096u;
+        o->maxDynamicUniforms = o->maxDynamicUniforms < 8u ? o->maxDynamicUniforms : 8u;
+        o->maxStorageRange =
+            o->maxStorageRange < (1ull << 27) ? o->maxStorageRange : (uint64_t)1 << 27;
+        o->maxAnisotropy = o->maxAnisotropy < 16.0f ? o->maxAnisotropy : 16.0f;
+        VKR_LOG("ICO_VK_FAKE_LIMITS=min: offsets aligned to %u, storage ranges up to %llu bytes, "
+                "images up to %u texels, %u dynamic uniform buffers",
+                o->uniformAlign, (unsigned long long)o->maxStorageRange, o->maxTextureSize,
+                o->maxDynamicUniforms);
+    }
 }
 
 /* ------------------------------------------------------------- lifecycle */
