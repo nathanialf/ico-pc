@@ -99,12 +99,20 @@ extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
 #define JIM_HOST_KEY(obj, part) ((void)0)
 #endif
 
+/* port/game/photo_mode.c: 1 while photo mode is on (issue 14); the
+   subtitles are left out of its pictures */
+extern int ico_photo_active(void);
+
 static void display_texture(LtProperty *t)
 {
     JimCol col = {128, 128, 128, 128};
     int dst[4];
     int src[4];
 
+    /* PC port (photo mode, issue 14): no subtitle over the picture */
+    if (ico_photo_active()) {
+        return;
+    }
     src[0] = (t->texU << 4) + 8;
     src[1] = (t->texV << 4) + 8;
     src[2] = t->texW << 4;

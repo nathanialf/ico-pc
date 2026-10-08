@@ -85,6 +85,13 @@ static float zoomSpeed = 1000.0f; /* derived name */
 
 int currentFocusDistance = 1;
 
+/* PC port (photo mode, issue 14): the projection distance of the last
+   full-screen gsb_SetVSMatrix, as a float (currentFocusDistance keeps only
+   its integer part, and the reflections' calls in puddle.c and pool.c pass
+   their own sizes); gsb_ViewFocus reads it.  Recorded only: nothing of the
+   game reads it. */
+static float gsbViewD = 0.0f;
+
 #ifdef ICO_RD
 
 /* PC port (R2c): the frame lifecycle, camera and VU block on rd; defined
@@ -1422,6 +1429,10 @@ void gsb_SetVSMatrix(int w, int h, float d)
     } else {
         currentFocusDistance = d;
     }
+    /* PC port (photo mode): the full-screen camera's distance */
+    if (w == ScreenWidth && h == ScreenHeight) {
+        gsbViewD = d;
+    }
     vsWidth = w;
     vsHeight = h;
     if (zoomTarget != zoomCurrent) {
@@ -1480,6 +1491,90 @@ static void gsbHostWidenCull(float *projHalf)
     if (k != 1.0f) {
         projHalf[0] = projHalf[0] / k;
     }
+}
+
+/* PC port (photo mode, issue 14): one saved copy of every piece of the
+   frame's camera that the camera update writes and later code reads, so
+   photo mode (port/game/photo_view.c) can draw the paused game from its
+   own camera and give the game its camera back unchanged.  The matrices
+   at matrixptr and who writes them:
+     +0x80   the view (camera-root.c MakeCameraMatrix / SetCameraMatrix)
+     +0xC0   the screen matrix (gsb_SetVSMatrixSub's screen)
+     +0x1C0  the projection on the 1500 unit screen (its proj)
+     +0x240  the projection of the visible screen (its projHalf, widened
+             by gsbHostWidenCull)
+     +0x340  the viewport (its viewport)
+     +0x640  the 500 unit pair's screen matrix (gsb_SetVSMatrixSub)
+     +0x680  the 500 unit pair's projection (gsb_SetVSMatrixSub)
+     +0x100  +0xC0 x +0x80 (gsb_MakeCommonMatrix)
+     +0x200  +0x1C0 x +0x80 (gsb_MakeCommonMatrix)
+     +0x280  +0x240 x +0x80 (gsb_MakeCommonMatrix)
+     +0x380  the inverse of +0x80 (gsb_MakeCommonMatrix)
+   and gsb_SetVSMatrix's record: vsParam, currentFocusDistance, vsWidth
+   and vsHeight, center_X and center_Y, zoomCurrent (eased at every call)
+   and gsbViewD.  The other matrixptr slots (+0x40, +0x140, +0x180,
+   +0x300, +0x400 .. +0x4C0) are scratch each draw rewrites.  A full copy,
+   not the five puddle.c's drawAreaRestore puts back: its reflection pass
+   leaves +0x240, +0x640, +0x680 and vsParam at its 230 x 230 view. */
+static const int gsbViewSlot[11] = {0x80,  0xC0,  0x1C0, 0x240, 0x340, 0x640,
+                                    0x680, 0x100, 0x200, 0x280, 0x380};
+
+static struct {
+    float m[11][16];
+    float vs[10];
+    int focus;
+    int w;
+    int h;
+    float cx;
+    float cy;
+    float zoom;
+    float d;
+} gsbViewSave;
+
+/* Save the camera (the list above) into the one save slot, replacing what
+   it held. */
+void gsb_PushView(void)
+{
+    int i;
+
+    for (i = 0; i < 11; i++) {
+        memcpy(gsbViewSave.m[i], matrixptr + gsbViewSlot[i], sizeof(gsbViewSave.m[i]));
+    }
+    memcpy(gsbViewSave.vs, vsParam, sizeof(gsbViewSave.vs));
+    gsbViewSave.focus = currentFocusDistance;
+    gsbViewSave.w = vsWidth;
+    gsbViewSave.h = vsHeight;
+    gsbViewSave.cx = center_X;
+    gsbViewSave.cy = center_Y;
+    gsbViewSave.zoom = zoomCurrent;
+    gsbViewSave.d = gsbViewD;
+}
+
+/* Put the saved camera back, byte for byte (the slot keeps it).  The
+   renderer's copy of the camera follows at the next gsb_MakeCommonMatrix. */
+void gsb_PopView(void)
+{
+    int i;
+
+    for (i = 0; i < 11; i++) {
+        memcpy(matrixptr + gsbViewSlot[i], gsbViewSave.m[i], sizeof(gsbViewSave.m[i]));
+    }
+    memcpy(vsParam, gsbViewSave.vs, sizeof(vsParam));
+    currentFocusDistance = gsbViewSave.focus;
+    vsWidth = gsbViewSave.w;
+    vsHeight = gsbViewSave.h;
+    center_X = gsbViewSave.cx;
+    center_Y = gsbViewSave.cy;
+    zoomCurrent = gsbViewSave.zoom;
+    gsbViewD = gsbViewSave.d;
+}
+
+/* The distance of the last full-screen gsb_SetVSMatrix (the camera's
+   gsb_SetVSMatrix(ScreenWidth, ScreenHeight, d) gives the same matrices
+   again); currentFocusDistance before any. */
+float gsb_ViewFocus(void)
+{
+    return gsbViewD != 0.0f ? gsbViewD : (float)currentFocusDistance;
 }
 
 #ifdef ICO_RD

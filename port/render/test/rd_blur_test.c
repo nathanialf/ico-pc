@@ -126,6 +126,12 @@ int ico_video_effect_fog(void)
     return s_fx[4];
 }
 
+/* photo_mode.c's state (issue 14): off, the aura's feedback as in play */
+int ico_photo_active(void)
+{
+    return 0;
+}
+
 StageSetting GlobalStageSetting;
 PadState pad[16];
 int systemStatus[12];

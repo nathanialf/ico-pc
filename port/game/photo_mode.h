@@ -5,13 +5,15 @@
  * free camera over the paused picture.  The pause menu's "Photo mode" row
  * opens a port layout (port/ui/photo_ui.c) whose proc calls
  * ico_photo_enter, then ico_photo_update once a Main tick with the pad, and
- * ico_photo_exit on the way back.  The window (port/platform/window_host.c)
- * turns the state into the renderer's camera override every vsync
- * (ico_photo_camera, rd.h rd_SetPhotoCamera) and takes the captures.
+ * ico_photo_exit on the way back.  Each paused tick port/game/photo_view.c
+ * puts the camera (ico_photo_camera over the game camera it saved at
+ * enter, ico_photo_set_game) into the game's matrices, so the game draws
+ * the scene from it with all its passes, and puts the game camera back on
+ * the way out; the window (port/platform/window_host.c) takes the
+ * captures.
  *
  * Nothing here is game state: the game stays in its pause (the simulation
- * does not run) and reads none of it, so a trace is the same with or
- * without photo mode.  No renderer dependency (RdCamera is rd.h's plain
+ * does not run) and its logic reads none of it.  No renderer dependency (RdCamera is rd.h's plain
  * struct): the headless build links it, and a headless run walks the same
  * menu and logs the same lines, without a picture.
  *
@@ -143,10 +145,22 @@ void ico_photo_set_tick_hz(int hz);
    or moved and turned (free), and its proj43 narrowed or widened about the
    picture's centre (zoom also scaled);
    the other fields game's.  With nothing moved, *out is *game exactly.
+   ico_photo_update shortens each tick's step to 250 units of the eye and
+   25 degrees of the view (under the renderer's camera cut thresholds, so
+   the presenter blends it); Select and L3 jump.
    Returns 0 (out untouched) when game's view does not invert.  Also keeps
    game's basis (its axes, eye and the world's vertical) for the free
    camera's moves in ico_photo_update. */
 int ico_photo_camera(RdCamera *out, const RdCamera *game);
+/* The game camera the session's cameras are built from (its basis and
+   field of view kept until ico_photo_exit or the next ico_photo_enter, so
+   ico_photo_camera then builds from it whatever game it is given; NULL
+   forgets it).  Returns 0 (nothing kept) when game's view does not invert. */
+int ico_photo_set_game(const RdCamera *game);
+/* The vertical field of view the camera shows now, degrees: the game
+   camera's (ico_photo_set_game's, else the last ico_photo_camera's)
+   narrowed by the zoom, 2 atan(tan(fov / 2) / zoom); 0 before any. */
+float ico_photo_fov_now(void);
 /* The vertical field of view out shows, degrees, from its proj43. */
 float ico_photo_fov_deg(const RdCamera *cam);
 /* 1 once for each capture asked for (Cross) since the last call. */

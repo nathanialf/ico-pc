@@ -191,9 +191,12 @@ target_link_libraries(rd_tex_test PRIVATE ico_render ico_math)
 # rd_gsbase_test (wave 2, R2c): GsBase.c's host path with the 2D layer
 # (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
 # the rest of the game stubbed: frame lifecycle, field parity, camera
-# packing, Z scale and the post passes against CPU references.
+# packing, Z scale and the post passes against CPU references; with
+# port/game/photo_view.c (issue 14), photo mode's camera in the game's
+# matrices (photo_mode.c from ico_options).
 add_executable(rd_gsbase_test test/rd_gsbase_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
+    "${CMAKE_SOURCE_DIR}/port/game/photo_view.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"

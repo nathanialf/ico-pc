@@ -67,6 +67,10 @@ extern void gif_StartPacketPri(int pri);
 extern int ico_video_effect_glow(void);
 extern int ico_video_effect_depth_of_field(void);
 extern int ico_video_effect_motion_blur(void);
+/* port/game/photo_mode.c: 1 while photo mode shows the paused game from
+   its own camera (issue 14), when the aura's feedback follows the picture
+   as it does in play */
+extern int ico_photo_active(void);
 
 #ifdef ICO_RD
 
@@ -668,14 +672,14 @@ static void auraInspireAfter(int mode)
         reduceCopyAlphaChannelOfWork1ToWork0();
         copyAlphaChannelOfWork0ToFeedBackArea();
         pasteFeedBackAreaToFB(rect);
-        if (systemStatus[5] == 0) {
+        if (systemStatus[5] == 0 || ico_photo_active()) {
             copyCurrentFBToFeedBackArea();
         }
         break;
     case 1:
         blurBlendFeedBackAreaToWork1();
         addWork1ToFB(rect, uv);
-        if (systemStatus[5] == 0) {
+        if (systemStatus[5] == 0 || ico_photo_active()) {
             pasteWork0ToFeedBackArea(uv);
         }
         break;
@@ -683,7 +687,7 @@ static void auraInspireAfter(int mode)
         pasteWork1ToFB(rect, uv);
         blurBlendFeedBackAreaToWork1();
         addWork1ToFBWithZ(rect, uv);
-        if (systemStatus[5] == 0) {
+        if (systemStatus[5] == 0 || ico_photo_active()) {
             pasteWork0ToFeedBackArea(uv);
         }
         break;

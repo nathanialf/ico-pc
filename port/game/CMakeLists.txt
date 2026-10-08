@@ -35,7 +35,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
 endif()
 
 # Photo mode's state and camera (package PHOTO): the orbit, the clamps, the
-# zoom, the keys, the capture's name. CPU only.
+# zoom, the keys, the capture's name; the basis kept from the game camera at
+# enter, the field of view now and the step limit (issue 14). CPU only.
 add_executable(photo_test test/photo_test.c ../platform/host_config.c)
 target_include_directories(photo_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(photo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -155,6 +156,21 @@ if(TARGET ico_pc)
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes
                            -iquote "${CMAKE_SOURCE_DIR}/port/ui")
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_model_viewer_live>)
+endif()
+# photo_view.c (issue 14): photo mode's camera in the game's matrices, called
+# by main.c each tick; built as the model viewer is (the game's include path
+# and record layout), in the headless build too.  photo_mode.h names rd.h's
+# RdCamera (the struct only), so port/render is on its include path in both
+# builds, as it is for ico_options.
+if(TARGET ico_pc)
+    add_library(ico_photo_view_live OBJECT photo_view.c)
+    ico_include_dirs(seki _ico_pv_game_incs)
+    target_include_directories(ico_photo_view_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/render" ${_ico_pv_game_incs})
+    target_compile_definitions(ico_photo_view_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_photo_view_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_photo_view_live>)
 endif()
 # title_logo_test (package L1): the title's logo hidden under Settings and
 # Extras from the title, never by the pause menu's, and shown again on the

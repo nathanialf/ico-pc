@@ -46,5 +46,11 @@ void gsb_SetMotionBlur(void);
 void gsb_SetVSMatrix(int w, int h, float d);
 void gsb_UpdateGSSystem(int keep);
 int gsb_StageSetting(void);
+/* PC port (photo mode, issue 14): the camera saved and put back, and the
+   distance of the last full-screen gsb_SetVSMatrix (GsBase.c lists what the
+   save holds) */
+void gsb_PushView(void);
+void gsb_PopView(void);
+float gsb_ViewFocus(void);
 
 #endif /* GSBASE_H */

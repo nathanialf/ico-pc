@@ -26,6 +26,12 @@
  *   keys      Cross asks one capture, Triangle, Circle and Start ask to
  *             leave; [photo] keys from a config
  *   name      the capture's file name
+ *   basis     (issue 14) the game camera kept at enter is the cameras' basis
+ *             whatever camera ico_photo_camera is given, the picture never
+ *             feeding back; ico_photo_fov_now follows the zoom
+ *   step      at stick_speed 10, a tick moves the eye 250 and turns the view
+ *             25 degrees at most (the renderer blends below 300 and 30);
+ *             Select still jumps
  */
 #include <math.h>
 #include <stdio.h>
@@ -399,6 +405,88 @@ int main(int argc, char **argv)
     }
     ico_photo_exit();
     CHECK(!ico_photo_active() && !ico_photo_hud(), "exit");
+
+    /* issue 14: the game camera kept at enter (ico_photo_set_game) is the
+       basis whatever camera ico_photo_camera is given, so the picture
+       drawn from the photo camera never feeds back into it */
+    writeConfig(path, "version = 1\n[photo]\nstick_speed = 1.0\n");
+    ico_photo_enter();
+    CHECK(ico_photo_set_game(&game), "basis: kept");
+    p = idle();
+    p.ana[3] = 0;   /* forward */
+    p.ana[0] = 200; /* and turning right */
+    ticks(&p, 10, &out, &game);
+    RdCamera fed, again;
+    CHECK(ico_photo_camera(&fed, &out), "basis: the photo camera given back");
+    CHECK(memcmp(fed.view, out.view, sizeof(out.view)) == 0,
+          "basis: the same camera from the photo camera as from the game's");
+    ticks(&p, 10, &out, &game);
+    ico_photo_camera(&again, &fed);
+    CHECK(memcmp(again.view, out.view, sizeof(out.view)) == 0, "basis: stable over ticks");
+    CHECK(fabsf(ico_photo_fov_now() - fov0) < 1e-3f, "fov now: the game's at zoom 1 (%.4f)",
+          (double)ico_photo_fov_now());
+    /* the field of view now: 2 atan(tan(fov / 2) / zoom) */
+    p = idle();
+    p.held = ICO_PHOTO_R2;
+    ticks(&p, 25, &out, &game);
+    const float want = 2.0f * atanf(tanf(fov0 * 0.5f / 57.29578f) / expf(0.35f)) * 57.29578f;
+    CHECK(fabsf(ico_photo_fov_now() - want) < 1e-3f &&
+              fabsf(ico_photo_fov_now() - ico_photo_fov_deg(&out)) < 1e-3f,
+          "fov now: %.4f after a second of R2 (want %.4f, the camera's %.4f)",
+          (double)ico_photo_fov_now(), (double)want, (double)ico_photo_fov_deg(&out));
+    ico_photo_exit();
+    CHECK(ico_photo_set_game(NULL) == 0, "basis: forgotten");
+
+    /* the step: at stick_speed 10 a tick of Fast forward asks 640 and a
+       tick of the right stick 36 degrees; each tick moves 250 and turns 25
+       at most (under the renderer's cut thresholds, 300 and 30) and still
+       goes most of the way */
+    writeConfig(path, "version = 1\n[photo]\nstick_speed = 10.0\n");
+    ico_photo_enter();
+    ico_photo_set_game(&game);
+    p = pressed(ICO_PHOTO_R3);
+    ico_photo_update(&p);
+    CHECK(ico_photo_speed() == ICO_PHOTO_SPEED_FAST, "step: Fast");
+    RdCamera prev = game;
+    float maxMove = 0.0f, maxTurn = 0.0f, minMove = 1e9f;
+    p = idle();
+    p.ana[3] = 0;
+    for (int i = 0; i < 10; i++) {
+        ticks(&p, 1, &out, &game);
+        float a[3], b2[3];
+        eyeOf(&prev, a);
+        eyeOf(&out, b2);
+        const float dx = b2[0] - a[0], dy = b2[1] - a[1], dz = b2[2] - a[2];
+        const float m = sqrtf(dx * dx + dy * dy + dz * dz);
+        maxMove = fmaxf(maxMove, m);
+        minMove = fminf(minMove, m);
+        prev = out;
+    }
+    CHECK(maxMove <= 250.0f + 0.05f && minMove > 200.0f,
+          "step: the eye moves %.2f .. %.2f a tick (at most 250)", (double)minMove,
+          (double)maxMove);
+    p = idle();
+    p.ana[0] = 255;
+    for (int i = 0; i < 10; i++) {
+        ticks(&p, 1, &out, &game);
+        float c = 0.0f;
+        for (int r = 0; r < 3; r++) {
+            float pr[3] = {prev.view[r], prev.view[4 + r], prev.view[8 + r]};
+            float cr[3] = {out.view[r], out.view[4 + r], out.view[8 + r]};
+            c += pr[0] * cr[0] + pr[1] * cr[1] + pr[2] * cr[2];
+        }
+        const float turnDeg = acosf(fminf(1.0f, (c - 1.0f) * 0.5f)) * 57.29578f;
+        maxTurn = fmaxf(maxTurn, turnDeg);
+        prev = out;
+    }
+    CHECK(maxTurn <= 25.0f + 0.05f && maxTurn > 20.0f, "step: the view turns %.3f degrees a tick",
+          (double)maxTurn);
+    /* Select still jumps back in one tick */
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    ico_photo_camera(&out, &game);
+    CHECK(memcmp(&out, &game, sizeof(game)) == 0, "step: Select jumps back to the game camera");
+    ico_photo_exit();
 
     char name[64];
     ico_photo_file_name(name, sizeof(name), 2026, 10, 6, 9, 5, 7, 1);

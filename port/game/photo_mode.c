@@ -29,6 +29,12 @@
 #define MAX_FOCUS 5000.0f
 #define MIN_FOV 10.0f
 #define MAX_FOV 100.0f
+/* the most a tick's stick input moves the eye and turns the view: under the
+   renderer's camera cut thresholds (rd_internal.h RD_INTERP_CAMERA_MOVE 300,
+   RD_INTERP_CAMERA_TURN 30 degrees), so the presenter blends every step of a
+   fast move instead of snapping to it */
+#define STEP_MOVE 250.0f
+#define STEP_TURN DEG(25.0f)
 
 /* ------------------------------------------------------------ vectors */
 
@@ -57,6 +63,11 @@ static V3 add(V3 a, V3 b)
     return v3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
+static V3 sub(V3 a, V3 b)
+{
+    return v3(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
 static V3 scale(V3 a, float k)
 {
     return v3(a.x * k, a.y * k, a.z * k);
@@ -75,15 +86,17 @@ static V3 turn(V3 v, V3 u, float a)
     return add(add(scale(v, c), scale(cross(u, v), sn)), scale(u, dot(u, v) * (1.0f - c)));
 }
 
-/* the game camera's basis at the last ico_photo_camera: what the free
+/* the game camera's basis (ico_photo_set_game's, else the last
+   ico_photo_camera's): what the cameras are built from and the free
    camera's moves in ico_photo_update are measured in */
 typedef struct {
-    V3 rn, fn0; /* the camera's right and forward, unit */
-    V3 w;       /* the world's vertical nearest the picture's up */
-    V3 eye0;    /* the eye */
-    float e0;   /* the forward axis' elevation above the horizontal */
-    float pUp;  /* the turn about rn that raises the forward axis: +1 or -1 */
-    float yRt;  /* the turn about w that swings it to the right: +1 or -1 */
+    V3 r0, y0, f0; /* the game view's rows */
+    V3 rn, fn0;    /* the camera's right and forward, unit */
+    V3 w;          /* the world's vertical nearest the picture's up */
+    V3 eye0;       /* the eye */
+    float e0;      /* the forward axis' elevation above the horizontal */
+    float pUp;     /* the turn about rn that raises the forward axis: +1 or -1 */
+    float yRt;     /* the turn about w that swings it to the right: +1 or -1 */
 } Basis;
 
 static struct {
@@ -97,6 +110,7 @@ static struct {
     float fovGame; /* the game camera's vertical field of view at the last ico_photo_camera */
     Basis b;       /* and its basis */
     int haveBasis;
+    int fixedBasis; /* the basis and fovGame from ico_photo_set_game, for the session */
     int haveSubject;
     float subject[3];
 } s;
@@ -170,6 +184,7 @@ void ico_photo_enter(void)
     s.st.dolly = 1.0f;
     s.st.zoom = 1.0f;
     s.capturePending = 0;
+    s.fixedBasis = 0;
     fprintf(stderr, "photo: enter (stick_speed %.2f, invert_y %d, hide_ui %d, png_dir \"%s\")\n",
             (double)s.speed, s.invertY, s.hideUi, s.pngDir);
 }
@@ -191,6 +206,7 @@ void ico_photo_exit(void)
             (double)s.st.pos[2], (double)s.st.zoom);
     s.st.active = 0;
     s.capturePending = 0;
+    s.fixedBasis = 0;
 }
 
 void ico_photo_set_subject(const float *pos)
@@ -244,8 +260,9 @@ static const Basis *basis(void)
 {
     if (!s.haveBasis) {
         memset(&s.b, 0, sizeof(s.b));
-        s.b.rn = v3(1.0f, 0.0f, 0.0f);
-        s.b.fn0 = v3(0.0f, 0.0f, 1.0f);
+        s.b.rn = s.b.r0 = v3(1.0f, 0.0f, 0.0f);
+        s.b.y0 = v3(0.0f, 1.0f, 0.0f);
+        s.b.fn0 = s.b.f0 = v3(0.0f, 0.0f, 1.0f);
         s.b.w = v3(0.0f, -1.0f, 0.0f);
         s.b.pUp = 1.0f;
         s.b.yRt = -1.0f;
@@ -320,6 +337,73 @@ static void freeStep(IcoPhotoState *st, const IcoPhotoPad *pad, float k, float d
     st->pos[2] += d.z * step;
 }
 
+static void pose(const IcoPhotoState *st, V3 rows[3], V3 *eye);
+
+/* the eye's move and the view's turn (radians, the angle of the rotation
+   between the two, as the renderer measures a camera cut) from a to b */
+static void stepOf(const IcoPhotoState *a, const IcoPhotoState *b, float *move, float *turnBy)
+{
+    V3 ra[3], rb[3], ea, eb;
+    pose(a, ra, &ea);
+    pose(b, rb, &eb);
+    const V3 d = sub(eb, ea);
+    *move = sqrtf(dot(d, d));
+    float c = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        c += dot(unit(ra[i]), unit(rb[i]));
+    }
+    c = (c - 1.0f) * 0.5f;
+    *turnBy = acosf(c > 1.0f ? 1.0f : (c < -1.0f ? -1.0f : c));
+}
+
+/* st's camera state t of the way from a to full (the cameras' angles,
+   distances and offsets; the mode, speed and zoom are st's) */
+static void lerpState(IcoPhotoState *st, const IcoPhotoState *a, const IcoPhotoState *full, float t)
+{
+#define PHOTO_LERP(f) st->f = a->f + (full->f - a->f) * t
+    PHOTO_LERP(yaw);
+    PHOTO_LERP(pitch);
+    PHOTO_LERP(roll);
+    PHOTO_LERP(dolly);
+    PHOTO_LERP(pan);
+    PHOTO_LERP(fyaw);
+    PHOTO_LERP(fpitch);
+    PHOTO_LERP(froll);
+    PHOTO_LERP(pos[0]);
+    PHOTO_LERP(pos[1]);
+    PHOTO_LERP(pos[2]);
+#undef PHOTO_LERP
+}
+
+/* the tick's camera step from before to *st shortened to STEP_MOVE and
+   STEP_TURN at most (the camera is a function of the state through the
+   basis, so a few shortenings settle it); nothing before a basis */
+static void clampStep(IcoPhotoState *st, const IcoPhotoState *before)
+{
+    if (!s.haveBasis) {
+        return;
+    }
+    const IcoPhotoState full = *st;
+    float t = 1.0f;
+    for (int i = 0; i < 16; i++) {
+        float move, turnBy;
+        stepOf(before, st, &move, &turnBy);
+        if (move <= STEP_MOVE && turnBy <= STEP_TURN) {
+            return;
+        }
+        float f = 1.0f;
+        if (move > STEP_MOVE) {
+            f = fminf(f, STEP_MOVE / move);
+        }
+        if (turnBy > STEP_TURN) {
+            f = fminf(f, STEP_TURN / turnBy);
+        }
+        t *= f * 0.95f;
+        lerpState(st, before, &full, t);
+    }
+    lerpState(st, before, &full, 0.0f);
+}
+
 int ico_photo_update(const IcoPhotoPad *pad)
 {
     if (!s.st.active || !pad) {
@@ -331,6 +415,7 @@ int ico_photo_update(const IcoPhotoPad *pad)
     const float dt = 1.0f / (float)(s.tickHz > 0 ? s.tickHz : 25);
     const float k = s.speed > 0.0f ? s.speed : 1.0f;
     IcoPhotoState *st = &s.st;
+    const IcoPhotoState before = *st;
     const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
     if (freeCam) {
         freeStep(st, pad, k, dt);
@@ -345,6 +430,9 @@ int ico_photo_update(const IcoPhotoPad *pad)
     if (pad->held & ICO_PHOTO_R1) {
         *roll += ROLL_RATE * k * dt;
     }
+    /* the step within STEP_MOVE and STEP_TURN (before the roll's wrap, so
+       the step is the one taken) */
+    clampStep(st, &before);
     *roll = wrapPi(*roll);
     /* R2 narrows, L2 widens (the orbit camera's Up and Down too: the free
        camera's rise and sink) */
@@ -423,6 +511,9 @@ static void keepBasis(const RdCamera *game, V3 r0, V3 y0, V3 f0)
 {
     const float *v = game->view;
     Basis *b = &s.b;
+    b->r0 = r0;
+    b->y0 = y0;
+    b->f0 = f0;
     b->rn = unit(r0);
     b->fn0 = unit(f0);
     /* the eye: -R^T t (rows of a rotation; the view is one to 1e-4) */
@@ -446,33 +537,51 @@ static void keepBasis(const RdCamera *game, V3 r0, V3 y0, V3 f0)
     s.haveBasis = 1;
 }
 
-int ico_photo_camera(RdCamera *out, const RdCamera *game)
+/* game's view rows, 0 when one is zero (the view does not invert) */
+static int viewRows(const RdCamera *game, V3 *r0, V3 *y0, V3 *f0)
 {
-    if (!out || !game) {
+    const float *v = game->view;
+    *r0 = row(v, 0);
+    *y0 = row(v, 1);
+    *f0 = row(v, 2);
+    return dot(*r0, *r0) > 0.0f && dot(*f0, *f0) > 0.0f && dot(*y0, *y0) > 0.0f;
+}
+
+int ico_photo_set_game(const RdCamera *game)
+{
+    V3 r0, y0, f0;
+    if (!game) {
+        s.fixedBasis = 0;
         return 0;
     }
-    const float *v = game->view;
-    const V3 r0 = row(v, 0), y0 = row(v, 1), f0 = row(v, 2);
-    if (!(dot(r0, r0) > 0.0f) || !(dot(f0, f0) > 0.0f) || !(dot(y0, y0) > 0.0f)) {
+    if (!viewRows(game, &r0, &y0, &f0)) {
         return 0;
     }
     s.fovGame = ico_photo_fov_deg(game);
     keepBasis(game, r0, y0, f0);
-    const Basis *b = &s.b;
+    s.fixedBasis = 1;
+    return 1;
+}
+
+float ico_photo_fov_now(void)
+{
+    if (!(s.fovGame > 0.0f)) {
+        return 0.0f;
+    }
+    const float k = s.st.zoom > 0.0f ? s.st.zoom : 1.0f;
+    return 2.0f * atanf(tanf(DEG(s.fovGame) * 0.5f) / k) * 180.0f / PI_F;
+}
+
+/* the camera st shows, from the basis: its view's rows (right, down,
+   forward) and its eye */
+static void pose(const IcoPhotoState *st, V3 rows[3], V3 *eye)
+{
+    const Basis *b = basis();
+    const V3 r0 = b->r0, y0 = b->y0, f0 = b->f0;
     const V3 rn = b->rn, fn0 = b->fn0, w = b->w;
     const float e0 = b->e0;
-    const IcoPhotoState *st = &s.st;
-    const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
-    const int still = freeCam ? st->fyaw == 0.0f && st->fpitch == 0.0f && st->froll == 0.0f &&
-                                    st->pos[0] == 0.0f && st->pos[1] == 0.0f && st->pos[2] == 0.0f
-                              : st->yaw == 0.0f && st->pitch == 0.0f && st->roll == 0.0f &&
-                                    st->pan == 0.0f && st->dolly == 1.0f;
-    if (still && st->zoom == 1.0f) {
-        *out = *game;
-        return 1;
-    }
-    V3 r, y, f, eye;
-    if (freeCam) {
+    V3 r, y, f;
+    if (st->mode == ICO_PHOTO_CAM_FREE) {
         /* pitch about the camera's right (the view's elevation e0 + fpitch
            kept within MAX_ELEVATION, as update keeps it), yaw about the
            vertical, roll about the new forward; the eye moved by pos */
@@ -486,7 +595,7 @@ int ico_photo_camera(RdCamera *out, const RdCamera *game)
         const V3 fn = unit(f);
         r = turn(r, fn, st->froll);
         y = turn(y, fn, st->froll);
-        eye = add(b->eye0, v3(st->pos[0], st->pos[1], st->pos[2]));
+        *eye = add(b->eye0, v3(st->pos[0], st->pos[1], st->pos[2]));
     } else {
         /* the pivot: on the forward axis, nearest the subject */
         float focus = ICO_PHOTO_FOCUS;
@@ -518,10 +627,41 @@ int ico_photo_camera(RdCamera *out, const RdCamera *game)
         r = turn(r, fn, st->roll);
         y = turn(y, fn, st->roll);
         const V3 pivot = add(pivot0, scale(unit(turn(rn, w, ySign * st->yaw)), st->pan * focus));
-        eye = add(pivot, scale(fn, -st->dolly * focus));
+        *eye = add(pivot, scale(fn, -st->dolly * focus));
     }
+    rows[0] = r;
+    rows[1] = y;
+    rows[2] = f;
+}
+
+int ico_photo_camera(RdCamera *out, const RdCamera *game)
+{
+    if (!out || !game) {
+        return 0;
+    }
+    V3 r0, y0, f0;
+    if (!viewRows(game, &r0, &y0, &f0)) {
+        return 0;
+    }
+    /* the session's basis when ico_photo_set_game gave one (a constant
+       camera: the picture never feeds back into it), else game's */
+    if (!s.fixedBasis) {
+        s.fovGame = ico_photo_fov_deg(game);
+        keepBasis(game, r0, y0, f0);
+    }
+    const IcoPhotoState *st = &s.st;
+    const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
+    const int still = freeCam ? st->fyaw == 0.0f && st->fpitch == 0.0f && st->froll == 0.0f &&
+                                    st->pos[0] == 0.0f && st->pos[1] == 0.0f && st->pos[2] == 0.0f
+                              : st->yaw == 0.0f && st->pitch == 0.0f && st->roll == 0.0f &&
+                                    st->pan == 0.0f && st->dolly == 1.0f;
+    if (still && st->zoom == 1.0f) {
+        *out = *game;
+        return 1;
+    }
+    V3 rows[3], eye;
+    pose(st, rows, &eye);
     *out = *game;
-    const V3 rows[3] = {r, y, f};
     for (int i = 0; i < 3; i++) {
         out->view[i] = rows[i].x;
         out->view[4 + i] = rows[i].y;

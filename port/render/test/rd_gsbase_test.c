@@ -23,6 +23,18 @@
  *   vu       gsb_MakeCommonMatrix's VU block and the frame camera
  *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32, and
  *            Z 17 apart at 2^24 (package QUEEN: the depth grows with Z)
+ *   photo    photo mode's camera in the game's matrices (issue 14,
+ *            port/game/photo_view.c): gsb_PushView / gsb_PopView put back
+ *            the eleven matrices, vsParam, the focus distance and the zoom
+ *            easing byte for byte (a zoom 2 camera and a reflection pass in
+ *            between); entering with the camera unchanged leaves the
+ *            matrices bit-identical and the frame's camera the game's; at
+ *            zoom k the projection is gsb_SetVSMatrix at d k bit for bit and
+ *            ico_photo_camera's within 1e-5, ico_photo_fov_now within
+ *            1e-3 degrees; leaving puts everything back with a camera cut;
+ *            after a puddle pass enter rebuilds +0x240; 16:9 widens the photo
+ *            camera's +0x240; a stage change or the game running again drops
+ *            the save
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   camera   rd__CameraProbe (FrameCB through camera_probe_ps) against the
  *            C products and sceVu0RotTransPers through matrixptr+0x100
@@ -54,6 +66,8 @@
 #include "GifPacket.h"
 #include "GsBase.h"
 #include "video_options.h"
+#include "photo_mode.h"
+#include "photo_view.h"
 
 static int failures;
 
@@ -644,6 +658,317 @@ static void checkZScale(void)
     }
     CHECK(rd__GsDepth(0x1000000u, s24) == rd__GsDepth(0xFFFFFFu, s24),
           "zscale: 24-bit clamps above zmax");
+}
+
+/* ------------------------------------------- photo mode (issue 14, P-A) */
+
+/* the eleven matrices gsb_PushView saves (GsBase.c lists their writers) */
+static const int s_slot[11] = {0x80,  0xC0,  0x1C0, 0x240, 0x340, 0x640,
+                               0x680, 0x100, 0x200, 0x280, 0x380};
+
+typedef struct Snap {
+    float m[11][16];
+    int focus;
+    int hasCam;
+    RdCamera cam;
+} Snap;
+
+static void snap(Snap *s)
+{
+    memset(s, 0, sizeof(*s));
+    for (int i = 0; i < 11; i++) {
+        memcpy(s->m[i], matrixptr + s_slot[i], 64);
+    }
+    s->focus = currentFocusDistance;
+    const RdFrame *f = rd__RecFrame();
+    if (f && f->hasCamera) {
+        s->hasCam = 1;
+        s->cam = f->camera;
+    }
+}
+
+/* the first slot that differs, -1 when all eleven are byte-identical */
+static int slotDiff(const Snap *a, const Snap *b)
+{
+    for (int i = 0; i < 11; i++) {
+        if (memcmp(a->m[i], b->m[i], 64) != 0) {
+            return s_slot[i];
+        }
+    }
+    return -1;
+}
+
+static int camSame(const Snap *a, const Snap *b)
+{
+    return a->hasCam && b->hasCam && memcmp(&a->cam, &b->cam, sizeof(a->cam)) == 0;
+}
+
+/* the game's camera at distance d, as camera-root.c MakeCameraMatrix
+   leaves it */
+#define PHOTO_D 512.37f
+
+static void gameCamAt(float d)
+{
+    viewMatrix(s_view);
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, d);
+    memcpy(matrixptr + 0x80, s_view, 64);
+    gsb_MakeCommonMatrix();
+}
+
+/* puddle.c drawAreaSetup / drawAreaRestore's matrices: its 230 x 230 view
+   at the integer distance, five slots put back */
+static void puddlePass(void)
+{
+    static const int kept[5] = {0xC0, 0x1C0, 0x100, 0x200, 0x340};
+    float save[5][16];
+    for (int i = 0; i < 5; i++) {
+        memcpy(save[i], matrixptr + kept[i], 64);
+    }
+    gsb_SetVSMatrix(0xE6, 0xE6, (float)currentFocusDistance);
+    for (int i = 0; i < 5; i++) {
+        memcpy(matrixptr + kept[i], save[i], 64);
+    }
+    vsWidth = ScreenWidth;
+    vsHeight = ScreenHeight;
+}
+
+/* n Main ticks of photo mode with pad p: the layout's update, then the
+   game's tick hook */
+static void photoTicks(const IcoPhotoPad *p, int n)
+{
+    for (int i = 0; i < n; i++) {
+        ico_photo_update(p);
+        ico_photo_view_tick();
+    }
+}
+
+static IcoPhotoPad photoPad(unsigned held)
+{
+    IcoPhotoPad p;
+    memset(&p, 0, sizeof(p));
+    memset(p.ana, 128, sizeof(p.ana));
+    p.held = held;
+    return p;
+}
+
+static int relNear(float a, float b, float rel)
+{
+    const float m = fmaxf(fabsf(a), fabsf(b));
+    return fabsf(a - b) <= rel * m + 1e-6f;
+}
+
+/* GsBase.c's save on its own: a pop puts back the eleven matrices, the
+   focus distance, vsParam (the camera's zoom and planes) and zoomCurrent
+   (proved by the next eased gsb_SetVSMatrix giving the same zoom) */
+static void checkPushPop(void)
+{
+    gsb_SetZoom(1.25f, 500.0f); /* every call eases half way */
+    gameCamAt(PHOTO_D);
+    Snap s0, a, b, c;
+    snap(&s0);
+    gsb_PushView();
+    gameCamAt(PHOTO_D); /* zoomCurrent eased once more */
+    snap(&a);
+    gsb_PopView();
+    /* a photo camera: zoom 2, a turned view, then the reflections' pass */
+    float turned[16];
+    memcpy(turned, s_view, 64);
+    turned[12] += 300.0f;
+    memcpy(matrixptr + 0x80, turned, 64);
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, PHOTO_D * 2.0f);
+    gsb_MakeCommonMatrix();
+    puddlePass();
+    gsb_PopView();
+    snap(&b);
+    CHECK(slotDiff(&b, &s0) == -1, "push/pop: matrixptr+0x%X put back", slotDiff(&b, &s0));
+    CHECK(b.focus == s0.focus, "push/pop: currentFocusDistance %d (want %d)", b.focus, s0.focus);
+    CHECK(gsb_ViewFocus() == PHOTO_D, "push/pop: gsb_ViewFocus %.4f", (double)gsb_ViewFocus());
+    CHECK(vsWidth == ScreenWidth && vsHeight == ScreenHeight, "push/pop: vsWidth, vsHeight");
+    gsb_MakeCommonMatrix(); /* vsParam's zoom and planes into the camera */
+    snap(&b);
+    CHECK(camSame(&b, &s0), "push/pop: the camera (vsParam's zoom %.6f, want %.6f)",
+          (double)b.cam.zoom, (double)s0.cam.zoom);
+    gameCamAt(PHOTO_D); /* eased from the restored zoomCurrent */
+    snap(&c);
+    CHECK(camSame(&c, &a) && slotDiff(&c, &a) == -1,
+          "push/pop: zoomCurrent put back (zoom %.6f, want %.6f)", (double)c.cam.zoom,
+          (double)a.cam.zoom);
+    /* back to an unzoomed camera for the cells below */
+    gsb_SetZoom(1.0f, 1000.0f);
+    gameCamAt(PHOTO_D);
+    gameCamAt(PHOTO_D);
+}
+
+static void checkPhotoView(void)
+{
+    IcoVideoOptions o;
+    ico_video_defaults(&o);
+    ico_video_set(&o);
+    tick(); /* a frame open for the cameras */
+    systemStatus[5] = 1;
+    stage_no = 5;
+    ico_photo_reset();
+    ico_photo_set_tick_hz(25);
+    checkPushPop();
+
+    /* enter with the camera unchanged: the eleven matrices bit-identical,
+       the frame's camera the game's */
+    Snap g, p, z, x;
+    gameCamAt(PHOTO_D);
+    snap(&g);
+    CHECK(g.hasCam, "photo: the game's frame has a camera");
+    CHECK(gsb_ViewFocus() == PHOTO_D, "photo: gsb_ViewFocus is the camera's float distance (%.4f)",
+          (double)gsb_ViewFocus());
+    ico_photo_enter();
+    ico_photo_view_tick();
+    snap(&p);
+    CHECK(ico_photo_view_saved(), "photo: entered");
+    CHECK(slotDiff(&p, &g) == -1, "photo: enter leaves matrixptr+0x%X as it was", slotDiff(&p, &g));
+    CHECK(camSame(&p, &g), "photo: enter, the frame's camera is the game's");
+    CHECK(p.focus == g.focus, "photo: enter, currentFocusDistance");
+    const float fov0 = ico_photo_fov_deg(&g.cam);
+    CHECK(fabsf(ico_photo_fov_now() - fov0) < 1e-3f, "photo: the field of view %.4f (want %.4f)",
+          (double)ico_photo_fov_now(), (double)fov0);
+
+    /* zoom k (R2 held two seconds, about 2): the projection is the game's
+       gsb_SetVSMatrix at d k, bit for bit, and ico_photo_camera's within
+       1e-5; the view stays */
+    IcoPhotoPad pp = photoPad(ICO_PHOTO_R2);
+    photoTicks(&pp, 50);
+    snap(&z);
+    IcoPhotoState st;
+    ico_photo_get(&st);
+    const float k = st.zoom;
+    /* e^0.7 at [photo] stick_speed 1; whatever the config, zoomed in */
+    CHECK(k > 1.5f && k < 5.4f, "photo: zoom %.4f", (double)k);
+    CHECK(ico_photo_view_saved(), "photo: still saved while zooming");
+    CHECK(fabsf(ico_photo_fov_now() - ico_photo_fov_deg(&z.cam)) < 1e-3f,
+          "photo: ico_photo_fov_now %.4f, the frame's %.4f", (double)ico_photo_fov_now(),
+          (double)ico_photo_fov_deg(&z.cam));
+    RdCamera game0;
+    memset(&game0, 0, sizeof(game0));
+    memcpy(game0.view, g.m[0], 64);
+    memcpy(game0.proj43, g.m[1], 64);
+    RdCamera ov;
+    CHECK(ico_photo_camera(&ov, &game0), "photo: ico_photo_camera");
+    int bad = -1;
+    for (int i = 0; i < 16; i++) {
+        if (!relNear(ov.proj43[i], z.cam.proj43[i], 1e-5f)) {
+            bad = i;
+        }
+    }
+    CHECK(bad < 0, "photo: proj43[%d] %.6f, ico_photo_camera's %.6f", bad,
+          (double)(bad < 0 ? 0.0f : z.cam.proj43[bad]), (double)(bad < 0 ? 0.0f : ov.proj43[bad]));
+    CHECK(memcmp(z.m[0], ov.view, 64) == 0, "photo: +0x80 is ico_photo_camera's view");
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, PHOTO_D * k);
+    Snap r;
+    snap(&r);
+    for (int i = 1; i <= 6; i++) {
+        CHECK(memcmp(r.m[i], z.m[i], 64) == 0, "photo: matrixptr+0x%X is gsb_SetVSMatrix at d k",
+              s_slot[i]);
+    }
+    CHECK(z.focus == (int)(PHOTO_D * k), "photo: the reflections' distance %d", z.focus);
+
+    /* leave: everything back byte for byte, a camera cut */
+    const unsigned cut0 = ico_video_cut_serial();
+    ico_photo_exit();
+    ico_photo_view_tick();
+    snap(&x);
+    CHECK(!ico_photo_view_saved(), "photo: left");
+    CHECK(slotDiff(&x, &g) == -1, "photo: leave puts matrixptr+0x%X back", slotDiff(&x, &g));
+    CHECK(camSame(&x, &g), "photo: leave, the frame's camera the game's again");
+    CHECK(x.focus == g.focus, "photo: leave, currentFocusDistance");
+    CHECK(ico_video_cut_serial() == cut0 + 1, "photo: leave cuts the camera");
+    ico_photo_view_tick();
+    CHECK(!ico_photo_view_saved(), "photo: off, nothing saved");
+
+    /* after a reflection pass (+0x240, +0x640, +0x680 and vsParam at 230 x
+       230): enter rebuilds the full-screen camera; leave gives back what
+       the game left */
+    puddlePass();
+    Snap pud;
+    snap(&pud);
+    CHECK(memcmp(pud.m[3], g.m[3], 64) != 0, "puddle: +0x240 at the reflection's size");
+    ico_photo_enter();
+    ico_photo_view_tick();
+    snap(&p);
+    CHECK(slotDiff(&p, &g) == -1, "puddle: enter rebuilds matrixptr+0x%X", slotDiff(&p, &g));
+    CHECK(camSame(&p, &g), "puddle: enter, the game's camera");
+    ico_photo_exit();
+    ico_photo_view_tick();
+    snap(&x);
+    CHECK(slotDiff(&x, &pud) == -1, "puddle: leave gives back matrixptr+0x%X as the game left it",
+          slotDiff(&x, &pud));
+    gameCamAt(PHOTO_D);
+
+    /* 16:9: the photo camera's cull widens as the game's does */
+    o.aspect = ICO_ASPECT_16_9;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    Snap wide;
+    snap(&wide);
+    CHECK(relNear(wide.m[3][0] * (4.0f / 3.0f), g.m[3][0], 1e-6f),
+          "16:9: +0x240's x scale divided by 4/3 (%g -> %g)", (double)g.m[3][0],
+          (double)wide.m[3][0]);
+    ico_photo_enter();
+    ico_photo_view_tick();
+    snap(&p);
+    CHECK(slotDiff(&p, &wide) == -1, "16:9: enter leaves matrixptr+0x%X as it was",
+          slotDiff(&p, &wide));
+    pp = photoPad(ICO_PHOTO_R2);
+    photoTicks(&pp, 10);
+    snap(&p);
+    ico_photo_get(&st);
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, PHOTO_D * st.zoom);
+    Snap n;
+    snap(&n);
+    CHECK(memcmp(n.m[3], p.m[3], 64) == 0, "16:9: the photo camera's +0x240 is the widened one");
+    ico_video_defaults(&o);
+    ico_video_set(&o);
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight, PHOTO_D * st.zoom);
+    snap(&n);
+    CHECK(relNear(p.m[3][0] * (4.0f / 3.0f), n.m[3][0], 1e-6f) &&
+              memcmp(&p.m[3][1], &n.m[3][1], 60) == 0,
+          "16:9: +0x240's x scale at zoom %.3f divided by 4/3 (%g -> %g), the rest 4:3's",
+          (double)st.zoom, (double)n.m[3][0], (double)p.m[3][0]);
+    o.aspect = ICO_ASPECT_16_9;
+    ico_video_set(&o);
+    ico_photo_exit();
+    ico_photo_view_tick();
+    snap(&x);
+    CHECK(slotDiff(&x, &wide) == -1, "16:9: leave puts matrixptr+0x%X back", slotDiff(&x, &wide));
+    ico_video_defaults(&o);
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+
+    /* a stage change (or the game running again) drops the save: the
+       game's new camera is kept */
+    ico_photo_enter();
+    pp = photoPad(ICO_PHOTO_R2);
+    photoTicks(&pp, 10);
+    snap(&z);
+    CHECK(slotDiff(&z, &g) != -1, "stage: the zoomed camera in the matrices");
+    stage_no = 6;
+    ico_photo_exit();
+    ico_photo_view_tick();
+    snap(&x);
+    CHECK(!ico_photo_view_saved(), "stage: the save dropped");
+    CHECK(slotDiff(&x, &z) == -1, "stage: nothing put back (matrixptr+0x%X)", slotDiff(&x, &z));
+    stage_no = 5;
+    gameCamAt(PHOTO_D);
+    ico_photo_enter();
+    photoTicks(&pp, 10);
+    snap(&z);
+    systemStatus[5] = 0; /* unpaused under photo mode */
+    ico_photo_view_tick();
+    snap(&x);
+    CHECK(!ico_photo_view_saved() && slotDiff(&x, &z) == -1, "unpaused: the save dropped");
+    ico_photo_view_tick();
+    CHECK(!ico_photo_view_saved(), "unpaused: no enter while the game runs");
+    ico_photo_exit();
+    ico_photo_reset();
+    stage_no = 0;
+    gameCamAt(PHOTO_D);
 }
 
 /* --------------------------------------------------------- device checks */
@@ -1272,6 +1597,7 @@ static void recordingChecks(void)
     checkSofteningOff();
     checkVu();
     checkZScale();
+    checkPhotoView();
 }
 
 int main(void)

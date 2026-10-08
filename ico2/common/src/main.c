@@ -133,6 +133,9 @@ unsigned int ico_host_main_ticks(void);
 void ico_diag_milestone(const char *fmt, ...);
 /* port/game/model_viewer.h: the model viewer's tick (package MV) */
 void ico_mv_tick(void);
+/* port/game/photo_view.h: photo mode's camera in the game's matrices
+   (issue 14) */
+void ico_photo_view_tick(void);
 /* port/game/title_logo.h: the title logo's hidden state (package L1) */
 void ico_title_logo_update(void);
 /* script/include/script.h, which this file does not include */
@@ -347,6 +350,11 @@ void Main(void)
         if (graphics_ready == 0) {
             stage_CalcAnimationParent();
         }
+        /* PC port (photo mode, issue 14): the paused game drawn from photo
+           mode's camera, set where the camera's update sets it in play
+           (after the objects, before the draw); its own camera back on
+           leaving (port/game/photo_view.h) */
+        ico_photo_view_tick();
         iosOmCreateDL();
         ExecDelayFree();
         gsb_TakeSnap();
