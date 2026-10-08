@@ -54,6 +54,13 @@ typedef struct { /* field names derived */
     QVec z;
 } QMat3; /* derived name */
 
+/* A node matrix written as a 3x3 and a translation row: CopyMatrix copies all
+   64 bytes, so the translation has to sit right after the rotation. */
+typedef struct { /* field names derived */
+    QMat3 rot;
+    QVec trans;
+} QMat3T; /* derived name */
+
 /* The work records the queen's three objects hang at their work word.  The
    queen's (InitQueenGeo): four flag bytes (paused by mail 0x2E/0x2F,
    attacking, hit by the sword this frame, dead), the boy's weapon power the
@@ -1447,8 +1454,7 @@ void QueenBarrierGeo(GObj *g)
     QVec pos;
     QVec rootPos;
     QMat44 m1;
-    QMat3 rot;
-    QVec trans;
+    QMat3T rt;
     QVec ofs;
     QVec axis;
     QMat44 m3;
@@ -1511,9 +1517,9 @@ void QueenBarrierGeo(GObj *g)
         w->rot[0] = WrapRad(w->rot[0]);
         w->rot[1] = WrapRad(w->rot[1]);
         w->rot[2] = WrapRad(w->rot[2]);
-        UnitMatrix33(&rot);
-        sceVu0CopyVector(&trans, w->pos);
-        CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &rot);
+        UnitMatrix33(&rt.rot);
+        sceVu0CopyVector(&rt.trans, w->pos);
+        CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &rt);
     }
     if (w->hit != 0 && mine == found - 1) {
         void *weapon;
