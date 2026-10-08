@@ -39,6 +39,7 @@ void vkr_PoolRelease(VkrPool *p, uint32_t id);
 typedef struct VkrBuffer {
     VkBuffer buffer;
     VkDeviceMemory memory;
+    VkDeviceSize memSize; /* the allocation's size (vkr_Allocate) */
     uint64_t size;
     RhiMemory kind;
     void *mapped;
@@ -53,6 +54,7 @@ typedef struct VkrBuffer {
 typedef struct VkrTexture {
     VkImage image;
     VkDeviceMemory memory; /* VK_NULL_HANDLE for swapchain images */
+    VkDeviceSize memSize;  /* the allocation's size (vkr_Allocate) */
     VkImageView view;      /* all aspects: attachments, colour sampling */
     VkImageView depthView; /* depth aspect only, depth-stencil formats that are sampled */
     VkFormat format;
@@ -106,6 +108,7 @@ typedef enum VkrGarbageKind {
 typedef struct VkrGarbage {
     VkrGarbageKind kind;
     uint64_t handle; /* any non-dispatchable Vulkan handle */
+    uint64_t size;   /* VKR_GARBAGE_MEMORY: the allocation's size (vkr_DeferMemory) */
     uint32_t slot;   /* overflow entries only: the frame slot that deferred it */
 } VkrGarbage;
 
@@ -239,6 +242,22 @@ typedef struct VkrState {
 
     VkrGarbage overflow[VKR_GARBAGE_OVERFLOW]; /* see VKR_GARBAGE_OVERFLOW */
     uint32_t overflowCount;
+
+    /* v0.4.2 (Android): the device memory objects alive and their bytes,
+     * with the peaks, and the samplers alive.  Every buffer and texture has
+     * its own allocation (vk_resource.c), and maxMemoryAllocationCount is
+     * 4096 on many phone GPUs (desktops allow far more): vkr_Allocate
+     * refuses past the device's limits with a log line instead of asking
+     * the driver for what the spec does not allow, and the counts reach
+     * the 10-second log through rhi_GetStats (RhiStats.memoryLive...). */
+    uint32_t memLive, memPeak, samplersLive;
+    uint64_t memLiveBytes, memPeakBytes;
+    uint32_t memNextLog; /* the live count whose crossing logs next */
+    bool memLimitLogged, samplerLimitLogged;
+    /* ICO_VK_FAKE_LIMITS (vk_device.c vkr_FakeLimits): props.limits were
+     * clamped to a named device's */
+    const char *fakeLimits;
+    const char *lastLimit; /* vkr_TestLastLimit (rhi_vk.h) */
 } VkrState;
 
 extern VkrState g_vkr;
@@ -271,6 +290,10 @@ bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryP
                         uint32_t *out);
 
 void vkr_Defer(VkrGarbageKind kind, uint64_t handle);
+/* a device memory object's deferred free, with its size for the counts */
+void vkr_DeferMemory(VkDeviceMemory memory, VkDeviceSize size);
+/* vkFreeMemory and the live counts (every free goes through it) */
+void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size);
 void vkr_DestroyGarbage(VkrFrame *f);
 bool vkr_SubmitEmpty(void); /* vk_cmd.c: an empty submit that waits on a pending acquire */
 VkrBuffer *vkr_GetBuffer(RhiBuffer b);

@@ -450,11 +450,136 @@ static bool vkr_ValidPipelineDesc(const RhiPipelineDesc *d)
     return ds->depthCompare < RHI_CMP_COUNT;
 }
 
+/* v0.4.2 (Android): the pipeline within the device's limits (a phone GPU's
+ * are close to the spec's minimums: four descriptor sets, 16 sampled images
+ * a stage; ICO_VK_FAKE_LIMITS=mali sets them on any device), checked here so
+ * a pipeline the device cannot take is a log line naming the limit and a
+ * failed create (its draws are skipped, rd_pipeline.c) rather than invalid
+ * use of the driver.  The renderer needs 3 sets, 4 dynamic uniforms and at
+ * most 2 sampled images and 1 sampler a stage. */
+static bool vkr_PipelineFits(const RhiPipelineDesc *d)
+{
+    const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
+    const char *name = d->debugName ? d->debugName : "?";
+    /* per stage (vertex, fragment): uniform, storage, sampled image, sampler */
+    uint32_t n[2][4] = {{0}};
+    uint32_t dyn = 0, ubo = 0, ssbo = 0, img = 0, smp = 0;
+    if (d->layoutCount > l->maxBoundDescriptorSets) {
+        VKR_LOG("pipeline %s: %u descriptor sets, the device binds %u (maxBoundDescriptorSets)",
+                name, d->layoutCount, l->maxBoundDescriptorSets);
+        g_vkr.lastLimit = "maxBoundDescriptorSets";
+        return false;
+    }
+    for (uint32_t i = 0; i < d->layoutCount; i++) {
+        const VkrLayout *ly = vkr_PoolGet(&g_vkr.layouts, d->layouts[i].id);
+        if (!ly) {
+            continue; /* rhi_CreatePipeline reports it */
+        }
+        for (uint32_t j = 0; j < ly->slotCount; j++) {
+            const RhiBindSlot *b = &ly->slots[j];
+            const uint32_t st = b->stages ? b->stages : 3u;
+            int k = 0;
+            switch (b->type) {
+            case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
+                dyn++;
+                /* fall through */
+            case RHI_BIND_UNIFORM_BUFFER:
+                ubo++;
+                k = 0;
+                break;
+            case RHI_BIND_STORAGE_BUFFER:
+                ssbo++;
+                k = 1;
+                break;
+            case RHI_BIND_SAMPLED_TEXTURE:
+                img++;
+                k = 2;
+                break;
+            case RHI_BIND_SAMPLER:
+                smp++;
+                k = 3;
+                break;
+            default:
+                continue;
+            }
+            for (int s = 0; s < 2; s++) {
+                if (st & (1u << s)) {
+                    n[s][k]++;
+                }
+            }
+        }
+    }
+    const uint32_t stageMax[4] = {
+        l->maxPerStageDescriptorUniformBuffers, l->maxPerStageDescriptorStorageBuffers,
+        l->maxPerStageDescriptorSampledImages, l->maxPerStageDescriptorSamplers};
+    static const char *const stageName[4] = {
+        "maxPerStageDescriptorUniformBuffers", "maxPerStageDescriptorStorageBuffers",
+        "maxPerStageDescriptorSampledImages", "maxPerStageDescriptorSamplers"};
+    for (int s = 0; s < 2; s++) {
+        uint32_t all = 0;
+        for (int k = 0; k < 4; k++) {
+            all += n[s][k];
+            if (n[s][k] > stageMax[k]) {
+                VKR_LOG("pipeline %s: %u in the %s stage, the device allows %u (%s)", name, n[s][k],
+                        s ? "fragment" : "vertex", stageMax[k], stageName[k]);
+                g_vkr.lastLimit = stageName[k];
+                return false;
+            }
+        }
+        if (all + (s ? d->colorCount : 0) > l->maxPerStageResources) {
+            VKR_LOG("pipeline %s: %u resources in the %s stage, the device allows %u "
+                    "(maxPerStageResources)",
+                    name, all, s ? "fragment" : "vertex", l->maxPerStageResources);
+            g_vkr.lastLimit = "maxPerStageResources";
+            return false;
+        }
+    }
+    if (dyn > l->maxDescriptorSetUniformBuffersDynamic || ubo > l->maxDescriptorSetUniformBuffers ||
+        ssbo > l->maxDescriptorSetStorageBuffers || img > l->maxDescriptorSetSampledImages ||
+        smp > l->maxDescriptorSetSamplers) {
+        VKR_LOG("pipeline %s: %u dynamic and %u uniform buffers, %u storage buffers, %u sampled "
+                "images, %u samplers; the device allows %u, %u, %u, %u, %u (maxDescriptorSet*)",
+                name, dyn, ubo, ssbo, img, smp, l->maxDescriptorSetUniformBuffersDynamic,
+                l->maxDescriptorSetUniformBuffers, l->maxDescriptorSetStorageBuffers,
+                l->maxDescriptorSetSampledImages, l->maxDescriptorSetSamplers);
+        g_vkr.lastLimit = "maxDescriptorSet";
+        return false;
+    }
+    if (d->colorCount > l->maxColorAttachments || d->colorCount > l->maxFragmentOutputAttachments) {
+        VKR_LOG("pipeline %s: %u colour targets, the device allows %u (maxColorAttachments) and "
+                "%u (maxFragmentOutputAttachments)",
+                name, d->colorCount, l->maxColorAttachments, l->maxFragmentOutputAttachments);
+        g_vkr.lastLimit = "maxFragmentOutputAttachments";
+        return false;
+    }
+    if (d->vertexAttrCount > l->maxVertexInputAttributes ||
+        d->vertexBindingCount > l->maxVertexInputBindings) {
+        VKR_LOG("pipeline %s: %u vertex attributes in %u bindings, the device allows %u and %u",
+                name, d->vertexAttrCount, d->vertexBindingCount, l->maxVertexInputAttributes,
+                l->maxVertexInputBindings);
+        g_vkr.lastLimit = "maxVertexInputAttributes";
+        return false;
+    }
+    for (uint32_t i = 0; i < d->vertexBindingCount; i++) {
+        if (d->vertexBindings[i].stride > l->maxVertexInputBindingStride) {
+            VKR_LOG("pipeline %s: a %u-byte vertex stride, the device allows %u "
+                    "(maxVertexInputBindingStride)",
+                    name, d->vertexBindings[i].stride, l->maxVertexInputBindingStride);
+            g_vkr.lastLimit = "maxVertexInputBindingStride";
+            return false;
+        }
+    }
+    return true;
+}
+
 RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
 {
     RhiPipeline out = {0};
     if (!d || !vkr_ValidPipelineDesc(d)) {
         VKR_LOG("pipeline %s: invalid description", d && d->debugName ? d->debugName : "?");
+        return out;
+    }
+    if (!vkr_PipelineFits(d)) {
         return out;
     }
     VkrShader *vs = vkr_PoolGet(&g_vkr.shaders, d->vertex.id);

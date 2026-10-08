@@ -135,6 +135,38 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkr_DebugCallback(
     return VK_FALSE;
 }
 
+const char *vkr_TestLastLimit(void)
+{
+    return g_vkr.lastLimit;
+}
+
+uint32_t vkr_TestLimit(const char *name)
+{
+    const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
+    if (!name) {
+        return 0;
+    }
+    if (strcmp(name, "maxBoundDescriptorSets") == 0) {
+        return l->maxBoundDescriptorSets;
+    }
+    if (strcmp(name, "maxPerStageDescriptorSampledImages") == 0) {
+        return l->maxPerStageDescriptorSampledImages;
+    }
+    if (strcmp(name, "maxMemoryAllocationCount") == 0) {
+        return l->maxMemoryAllocationCount;
+    }
+    if (strcmp(name, "maxSamplerAllocationCount") == 0) {
+        return l->maxSamplerAllocationCount;
+    }
+    if (strcmp(name, "minStorageBufferOffsetAlignment") == 0) {
+        return (uint32_t)l->minStorageBufferOffsetAlignment;
+    }
+    if (strcmp(name, "maxPushConstantsSize") == 0) {
+        return l->maxPushConstantsSize;
+    }
+    return 0;
+}
+
 uint32_t rhi_vk_ValidationErrorCount(void)
 {
     return g_vkr.validationErrors;
@@ -323,6 +355,54 @@ static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags n
     return (fp.optimalTilingFeatures & need) == need;
 }
 
+/* v0.4.2 (Android): ICO_VK_FAKE_LIMITS=mali clamps the device's limits to
+ * a Mali-G68's (Samsung A36 class: four descriptor sets, 128 bytes of push
+ * constants, 256-byte storage offsets, 16 sampled images, samplers and
+ * storage buffers a stage, 4096 memory allocations, 4000 samplers), so the
+ * lavapipe tests run under a phone's limits: the checks in rhi_CreatePipeline
+ * and vkr_Allocate (vk_pipeline.c, vk_resource.c) read props.limits.  A
+ * maximum only goes down and an alignment only up. */
+static void vkr_FakeLimits(void)
+{
+    const char *e = getenv("ICO_VK_FAKE_LIMITS");
+    if (!e || !e[0] || strcmp(e, "0") == 0) {
+        return;
+    }
+    if (strcmp(e, "mali") != 0) {
+        VKR_LOG("ICO_VK_FAKE_LIMITS=%s: not a known device (mali); the limits are the device's", e);
+        return;
+    }
+    VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
+#define VKR_FAKE_MAX(f, v)                                                                         \
+    do {                                                                                           \
+        if (l->f > (v)) {                                                                          \
+            l->f = (v);                                                                            \
+        }                                                                                          \
+    } while (0)
+#define VKR_FAKE_MIN(f, v)                                                                         \
+    do {                                                                                           \
+        if (l->f < (v)) {                                                                          \
+            l->f = (v);                                                                            \
+        }                                                                                          \
+    } while (0)
+    VKR_FAKE_MAX(maxBoundDescriptorSets, 4u);
+    VKR_FAKE_MAX(maxPushConstantsSize, 128u);
+    VKR_FAKE_MIN(minStorageBufferOffsetAlignment, 256u);
+    VKR_FAKE_MIN(minUniformBufferOffsetAlignment, 16u);
+    VKR_FAKE_MAX(maxPerStageDescriptorSampledImages, 16u);
+    VKR_FAKE_MAX(maxPerStageDescriptorSamplers, 16u);
+    VKR_FAKE_MAX(maxPerStageDescriptorStorageBuffers, 16u);
+    VKR_FAKE_MAX(maxFragmentOutputAttachments, 8u);
+    VKR_FAKE_MAX(maxVertexInputBindingStride, 2048u);
+    VKR_FAKE_MIN(nonCoherentAtomSize, 64u);
+    VKR_FAKE_MAX(maxMemoryAllocationCount, 4096u);
+    VKR_FAKE_MAX(maxSamplerAllocationCount, 4000u);
+#undef VKR_FAKE_MAX
+#undef VKR_FAKE_MIN
+    g_vkr.fakeLimits = "mali";
+    VKR_LOG("ICO_VK_FAKE_LIMITS=mali: the device's limits are clamped to a Mali-G68's");
+}
+
 /* package AN-F: the format behind RHI_FMT_D32F_S8.  The spec guarantees one
  * of D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
  * preferred.  Either is taken only with the sampled and transfer uses too
@@ -497,6 +577,7 @@ static bool vkr_PickDevice(void)
     }
     g_vkr.queueFamily = bestQueue;
     vkGetPhysicalDeviceProperties(g_vkr.phys, &g_vkr.props);
+    vkr_FakeLimits();
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     snprintf(g_vkr.adapterName, sizeof(g_vkr.adapterName), "%s", g_vkr.props.deviceName);
     bool fake = false;
@@ -800,6 +881,11 @@ void rhi_GetStats(RhiStats *out)
 {
     if (out) {
         *out = g_vkr.stats;
+        out->memoryLive = g_vkr.memLive;
+        out->memoryPeak = g_vkr.memPeak;
+        out->memoryLiveBytes = g_vkr.memLiveBytes;
+        out->memoryPeakBytes = g_vkr.memPeakBytes;
+        out->memoryLimit = g_vkr.props.limits.maxMemoryAllocationCount;
     }
 }
 

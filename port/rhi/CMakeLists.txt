@@ -298,6 +298,15 @@ if(_ico_have_vk)
         set(_ico_vk_d24s8_env ${_ico_vk_test_env} "ICO_VK_FAKE_D24S8=1")
         set_tests_properties(rhi_vk_d24s8 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_d24s8_env}")
+        # v0.4.2 (Android): the cells on a Mali-G68's limits
+        # (ICO_VK_FAKE_LIMITS=mali), then the limits cell: what goes past
+        # them is refused by the limit's name
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mali")
+        add_test(NAME rhi_vk_mali COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mali")
+        set(_ico_vk_mali_env ${_ico_vk_test_env} "ICO_VK_FAKE_LIMITS=mali")
+        set_tests_properties(rhi_vk_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_mali_env}")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)

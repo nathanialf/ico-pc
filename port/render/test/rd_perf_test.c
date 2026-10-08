@@ -540,6 +540,25 @@ static int synthetic(void)
     checkGroups("record", &rest);
     checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
     checkScreen("record", &rest);
+
+    /* v0.4.2 (Android): the reachable set, as the window creates it at
+       start-up (rd_PrecreatePipelines): every key makes a pipeline.
+       rd_perf_mali runs this on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=
+       mali), where a key past them would be refused by the limit's name */
+    {
+        static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+        const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+        uint32_t missing = 0;
+
+        rd_PrecreatePipelines();
+        for (uint32_t i = 0; i < n; i++) {
+            if (!rd__GetPipeline(&keys[i]).id) {
+                missing++;
+            }
+        }
+        printf("reachable set: %u keys, %u without a pipeline\n", n, missing);
+        CHECK(n > 0 && missing == 0, "reachable set: %u of %u keys without a pipeline", missing, n);
+    }
     rd_Shutdown();
     return 0;
 }

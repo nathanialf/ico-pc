@@ -646,4 +646,26 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
                          rd_water_nodual rd_raw_nodual rd_mirror_nodual rd_interp_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
+    # v0.4.2 (Android): the same tests and expectations on a device with a
+    # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
+    # four descriptor sets, 16 sampled images a stage, 256-byte storage
+    # offsets, 4096 memory allocations): a pipeline or an allocation the
+    # renderer needs past them would be refused and its draws missing
+    set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
+    set(_ml "${CMAKE_CURRENT_BINARY_DIR}/mali")
+    file(MAKE_DIRECTORY "${_ml}")
+    set(_ico_mali_tests "")
+    foreach(t rd_layout rd_tex rd_gsbase rd_shadow rd_fog rd_blur rd_water rd_raw rd_interp
+              rd_mirror rd_perf)
+        add_test(NAME ${t}_mali COMMAND ${t}_test)
+        list(APPEND _ico_mali_tests ${t}_mali)
+    endforeach()
+    foreach(t rd_pixel rd_debug rd_present rd_crt)
+        add_test(NAME ${t}_mali COMMAND ${t}_test "${_ml}")
+        list(APPEND _ico_mali_tests ${t}_mali)
+    endforeach()
+    add_test(NAME rd_mesh_mali COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
+    list(APPEND _ico_mali_tests rd_mesh_mali)
+    set_tests_properties(${_ico_mali_tests} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_ml}"
+                                                       ENVIRONMENT "${_env_mali}")
 endif()

@@ -19,10 +19,70 @@ bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryP
     return false;
 }
 
+/* v0.4.2 (Android): every vkFreeMemory, so the live counts stay right */
+void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
+{
+    if (!memory) {
+        return;
+    }
+    vkFreeMemory(g_vkr.device, memory, NULL);
+    if (g_vkr.memLive) {
+        g_vkr.memLive--;
+    }
+    g_vkr.memLiveBytes = g_vkr.memLiveBytes > size ? g_vkr.memLiveBytes - size : 0;
+}
+
+/* v0.4.2 (Android): the device's allocation limit holds (a phone GPU
+   allows 4096 allocations, VkPhysicalDeviceLimits.maxMemoryAllocationCount),
+   and each 1024 more alive than ever before is logged with the bytes */
+static bool vkr_MemoryRoom(VkDeviceSize size)
+{
+    const uint32_t limit = g_vkr.props.limits.maxMemoryAllocationCount;
+    if (limit && g_vkr.memLive >= limit) {
+        g_vkr.lastLimit = "maxMemoryAllocationCount";
+        if (!g_vkr.memLimitLogged) {
+            g_vkr.memLimitLogged = true;
+            VKR_LOG("%u device memory allocations alive (%.0f MB), the most the device allows "
+                    "(maxMemoryAllocationCount %u%s): a %.0f KB allocation is refused",
+                    g_vkr.memLive, (double)g_vkr.memLiveBytes / 1048576.0, limit,
+                    g_vkr.fakeLimits ? ", ICO_VK_FAKE_LIMITS" : "", (double)size / 1024.0);
+        }
+        return false;
+    }
+    return true;
+}
+
+static void vkr_MemoryCounted(VkDeviceSize size)
+{
+    g_vkr.memLive++;
+    g_vkr.memLiveBytes += size;
+    if (g_vkr.memLive > g_vkr.memPeak) {
+        g_vkr.memPeak = g_vkr.memLive;
+    }
+    if (g_vkr.memLiveBytes > g_vkr.memPeakBytes) {
+        g_vkr.memPeakBytes = g_vkr.memLiveBytes;
+    }
+    if (g_vkr.memNextLog == 0) {
+        g_vkr.memNextLog = 1024;
+    }
+    if (g_vkr.memLive >= g_vkr.memNextLog) {
+        VKR_LOG("%u device memory allocations alive (%.0f MB; the device allows %u)", g_vkr.memLive,
+                (double)g_vkr.memLiveBytes / 1048576.0,
+                g_vkr.props.limits.maxMemoryAllocationCount);
+        g_vkr.memNextLog += 1024;
+    }
+    if (g_vkr.memLimitLogged && g_vkr.memLive + 64 < g_vkr.props.limits.maxMemoryAllocationCount) {
+        g_vkr.memLimitLogged = false; /* the next time the limit is reached is logged too */
+    }
+}
+
 static bool vkr_Allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDeviceMemory *out,
                          bool *coherent)
 {
     uint32_t type = 0;
+    if (!vkr_MemoryRoom(req->size)) {
+        return false;
+    }
     const VkMemoryPropertyFlags hv = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     const VkMemoryPropertyFlags hc = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     bool ok = false;
@@ -59,7 +119,14 @@ static bool vkr_Allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDevi
         .allocationSize = req->size,
         .memoryTypeIndex = type,
     };
-    return VKR_CHECK(vkAllocateMemory(g_vkr.device, &ai, NULL, out));
+    if (!VKR_CHECK(vkAllocateMemory(g_vkr.device, &ai, NULL, out))) {
+        VKR_LOG("a %.0f KB device memory allocation failed with %u alive (%.0f MB)",
+                (double)req->size / 1024.0, g_vkr.memLive, (double)g_vkr.memLiveBytes / 1048576.0);
+        *out = VK_NULL_HANDLE;
+        return false;
+    }
+    vkr_MemoryCounted(req->size);
+    return true;
 }
 
 static void vkr_SetName(VkObjectType type, uint64_t handle, const char *name)
@@ -77,9 +144,21 @@ static void vkr_SetName(VkObjectType type, uint64_t handle, const char *name)
 }
 
 /* ------------------------------------------------------ deferred destroy */
-static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h);
+static void vkr_DestroyOne(const VkrGarbage *e);
+
+static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size);
 
 void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
+{
+    vkr_DeferSized(kind, handle, 0);
+}
+
+void vkr_DeferMemory(VkDeviceMemory memory, VkDeviceSize size)
+{
+    vkr_DeferSized(VKR_GARBAGE_MEMORY, (uint64_t)memory, size);
+}
+
+static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size)
 {
     if (!handle) {
         return;
@@ -102,7 +181,7 @@ void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
                 for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
                     VkrGarbage *e = &g_vkr.overflow[i];
                     if (e->slot != slot) {
-                        vkr_DestroyOne(e->kind, e->handle);
+                        vkr_DestroyOne(e);
                     } else {
                         g_vkr.overflow[keep++] = *e;
                     }
@@ -118,6 +197,7 @@ void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
             VkrGarbage *e = &g_vkr.overflow[g_vkr.overflowCount++];
             e->kind = kind;
             e->handle = handle;
+            e->size = size;
             e->slot = slot;
             return;
         }
@@ -126,13 +206,15 @@ void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
     }
     f->garbage[f->garbageCount].kind = kind;
     f->garbage[f->garbageCount].handle = handle;
+    f->garbage[f->garbageCount].size = size;
     f->garbageCount++;
 }
 
-static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h)
+static void vkr_DestroyOne(const VkrGarbage *e)
 {
     VkDevice d = g_vkr.device;
-    switch (kind) {
+    const uint64_t h = e->handle;
+    switch (e->kind) {
     case VKR_GARBAGE_BUFFER:
         vkDestroyBuffer(d, (VkBuffer)h, NULL);
         break;
@@ -143,10 +225,13 @@ static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h)
         vkDestroyImageView(d, (VkImageView)h, NULL);
         break;
     case VKR_GARBAGE_MEMORY:
-        vkFreeMemory(d, (VkDeviceMemory)h, NULL);
+        vkr_FreeMemory((VkDeviceMemory)h, e->size);
         break;
     case VKR_GARBAGE_SAMPLER:
         vkDestroySampler(d, (VkSampler)h, NULL);
+        if (g_vkr.samplersLive) {
+            g_vkr.samplersLive--;
+        }
         break;
     case VKR_GARBAGE_PIPELINE:
         vkDestroyPipeline(d, (VkPipeline)h, NULL);
@@ -166,7 +251,7 @@ static void vkr_DestroyOne(VkrGarbageKind kind, uint64_t h)
 void vkr_DestroyGarbage(VkrFrame *f)
 {
     for (uint32_t i = 0; i < f->garbageCount; i++) {
-        vkr_DestroyOne(f->garbage[i].kind, f->garbage[i].handle);
+        vkr_DestroyOne(&f->garbage[i]);
     }
     f->garbageCount = 0;
     /* the entries that overflowed from this slot (vkr_Defer) */
@@ -175,7 +260,7 @@ void vkr_DestroyGarbage(VkrFrame *f)
     for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
         VkrGarbage *e = &g_vkr.overflow[i];
         if (e->slot == slot) {
-            vkr_DestroyOne(e->kind, e->handle);
+            vkr_DestroyOne(e);
         } else {
             g_vkr.overflow[keep++] = *e;
         }
@@ -249,12 +334,11 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
     if (!vkr_Allocate(&req, desc->memory, &b->memory, &b->coherent) ||
         !VKR_CHECK(vkBindBufferMemory(g_vkr.device, b->buffer, b->memory, 0))) {
         vkDestroyBuffer(g_vkr.device, b->buffer, NULL);
-        if (b->memory) {
-            vkFreeMemory(g_vkr.device, b->memory, NULL);
-        }
+        vkr_FreeMemory(b->memory, req.size);
         vkr_PoolRelease(&g_vkr.buffers, id);
         return out;
     }
+    b->memSize = req.size;
     b->size = desc->size;
     b->kind = desc->memory;
     if (desc->memory != RHI_MEM_DEVICE) {
@@ -276,7 +360,7 @@ void rhi_DestroyBuffer(RhiBuffer h)
         return;
     }
     vkr_Defer(VKR_GARBAGE_BUFFER, VKR_H(b->buffer));
-    vkr_Defer(VKR_GARBAGE_MEMORY, VKR_H(b->memory)); /* freeing memory unmaps it */
+    vkr_DeferMemory(b->memory, b->memSize); /* freeing memory unmaps it */
     vkr_PoolRelease(&g_vkr.buffers, h.id);
     g_vkr.stats.buffersDestroyed++;
     g_vkr.stats.memoryFrees++;
@@ -389,6 +473,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         !VKR_CHECK(vkBindImageMemory(g_vkr.device, t->image, t->memory, 0))) {
         goto fail;
     }
+    t->memSize = req.size;
     t->format = vkFmt;
     t->rhiFormat = desc->format;
     t->aspects = fm->aspect;
@@ -420,9 +505,7 @@ fail:
         vkDestroyImageView(g_vkr.device, t->view, NULL);
     }
     vkDestroyImage(g_vkr.device, t->image, NULL);
-    if (t->memory) {
-        vkFreeMemory(g_vkr.device, t->memory, NULL);
-    }
+    vkr_FreeMemory(t->memory, req.size);
     vkr_PoolRelease(&g_vkr.textures, id);
     return out;
 }
@@ -436,7 +519,7 @@ void rhi_DestroyTexture(RhiTexture h)
     vkr_Defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
     vkr_Defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
     vkr_Defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
-    vkr_Defer(VKR_GARBAGE_MEMORY, VKR_H(t->memory));
+    vkr_DeferMemory(t->memory, t->memSize);
     vkr_PoolRelease(&g_vkr.textures, h.id);
     g_vkr.stats.texturesDestroyed++;
     g_vkr.stats.memoryFrees++;
@@ -484,6 +567,18 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
     if (!desc) {
         return out;
     }
+    const uint32_t samplerLimit = g_vkr.props.limits.maxSamplerAllocationCount;
+    if (samplerLimit && g_vkr.samplersLive >= samplerLimit) {
+        g_vkr.lastLimit = "maxSamplerAllocationCount";
+        if (!g_vkr.samplerLimitLogged) {
+            g_vkr.samplerLimitLogged = true;
+            VKR_LOG("%u samplers alive, the most the device allows (maxSamplerAllocationCount "
+                    "%u%s): a new one is refused",
+                    g_vkr.samplersLive, samplerLimit,
+                    g_vkr.fakeLimits ? ", ICO_VK_FAKE_LIMITS" : "");
+        }
+        return out;
+    }
     VkSampler *s = NULL;
     uint32_t id = vkr_PoolAlloc(&g_vkr.samplers, (void **)&s);
     if (!id) {
@@ -517,6 +612,7 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
         vkr_PoolRelease(&g_vkr.samplers, id);
         return out;
     }
+    g_vkr.samplersLive++;
     out.id = id;
     return out;
 }
@@ -583,7 +679,7 @@ void vkr_ReleaseAllObjects(void)
         if (g_vkr.buffers.live[i]) {
             VkrBuffer *b = (VkrBuffer *)(g_vkr.buffers.data + (size_t)i * sizeof(VkrBuffer));
             vkDestroyBuffer(d, b->buffer, NULL);
-            vkFreeMemory(d, b->memory, NULL);
+            vkr_FreeMemory(b->memory, b->memSize);
         }
     }
     for (uint32_t i = 0; i < g_vkr.textures.next; i++) {
@@ -597,7 +693,7 @@ void vkr_ReleaseAllObjects(void)
             }
             if (!t->swapchain) {
                 vkDestroyImage(d, t->image, NULL);
-                vkFreeMemory(d, t->memory, NULL);
+                vkr_FreeMemory(t->memory, t->memSize);
             }
         }
     }

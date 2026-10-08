@@ -161,6 +161,11 @@ if(TARGET ico_render)
         if(_env)
             set_tests_properties(rd_video PROPERTIES ENVIRONMENT "${_env}")
         endif()
+        # v0.4.2 (Android): on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=mali)
+        add_test(NAME rd_video_mali COMMAND rd_video_test)
+        set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
+        set_tests_properties(rd_video_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_env_mali}")
     endif()
     # v0.4.2 N1: rd on a window (SDL's offscreen driver): the output follows
     # a swapchain the backend rebuilt at another size on its own

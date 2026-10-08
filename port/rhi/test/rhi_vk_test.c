@@ -128,6 +128,112 @@ static int cacheCell(void)
     return failures + (int)rhi_vk_ValidationErrorCount();
 }
 
+/* v0.4.2 (Android): under ICO_VK_FAKE_LIMITS=mali (ctest rhi_vk_mali) the
+ * device has a Mali-G68's limits, the cells above still draw within them,
+ * and what goes past them is refused by the limit's name: a pipeline with
+ * five descriptor sets, one with 17 sampled images in the fragment stage,
+ * and the memory allocation after maxMemoryAllocationCount (4096, every
+ * texture having its own).  Without the variable the cell does nothing. */
+static int limitsCell(void)
+{
+    const char *e = getenv("ICO_VK_FAKE_LIMITS");
+    if (!e || strcmp(e, "mali") != 0) {
+        return 0;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test limits"};
+    if (!rhi_CreateBackend("vulkan") || !rhi_Init(&dd)) {
+        rhi_test_Log("FAIL limits cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define LIMIT_CHECK(cond, ...)                                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_Log("FAIL limits cell: " __VA_ARGS__);                                        \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    LIMIT_CHECK(vkr_TestLimit("maxBoundDescriptorSets") <= 4 &&
+                    vkr_TestLimit("maxPerStageDescriptorSampledImages") <= 16 &&
+                    vkr_TestLimit("maxPushConstantsSize") <= 128 &&
+                    vkr_TestLimit("maxMemoryAllocationCount") == 4096 &&
+                    vkr_TestLimit("minStorageBufferOffsetAlignment") >= 256,
+                "the limits are not a Mali-G68's\n");
+    LIMIT_CHECK(rhi_Limits()->uniformAlign >= 256, "uniformAlign %u, want 256 or more\n",
+                rhi_Limits()->uniformAlign);
+
+    const uint32_t FS = 1u << RHI_STAGE_FRAGMENT;
+    const RhiBindSlot ubo = {0, RHI_BIND_UNIFORM_BUFFER, FS};
+    RhiBindSlot images[16];
+    for (uint32_t i = 0; i < 16; i++) {
+        images[i] = (RhiBindSlot){i, RHI_BIND_SAMPLED_TEXTURE, FS};
+    }
+    const RhiBindGroupLayout one =
+        rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){&ubo, 1, "limits ubo"});
+    const RhiBindGroupLayout sixteen =
+        rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){images, 16, "limits 16 images"});
+    const RhiBindGroupLayout single =
+        rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){images, 1, "limits 1 image"});
+    LIMIT_CHECK(one.id && sixteen.id && single.id, "bind group layouts\n");
+    RhiPipelineDesc d;
+    memset(&d, 0, sizeof(d));
+    d.colorCount = 1;
+    d.colorFormats[0] = RHI_FMT_RGBA8_UNORM;
+    d.blend[0].writeMask = 0xF;
+    const RhiBindGroupLayout five[5] = {one, one, one, one, one};
+    d.layouts = five;
+    d.layoutCount = 5;
+    d.debugName = "limits five sets";
+    RhiPipeline p = rhi_CreatePipeline(&d);
+    const char *hit = vkr_TestLastLimit();
+    LIMIT_CHECK(!p.id && hit && strcmp(hit, "maxBoundDescriptorSets") == 0,
+                "five descriptor sets: %s\n", hit ? hit : "not refused by a limit");
+    const RhiBindGroupLayout seventeen[2] = {sixteen, single};
+    d.layouts = seventeen;
+    d.layoutCount = 2;
+    d.debugName = "limits 17 images";
+    p = rhi_CreatePipeline(&d);
+    hit = vkr_TestLastLimit();
+    LIMIT_CHECK(!p.id && hit && strcmp(hit, "maxPerStageDescriptorSampledImages") == 0,
+                "17 sampled images: %s\n", hit ? hit : "not refused by a limit");
+
+    /* textures until the allocation limit refuses one */
+    enum { MAX_TRY = 4200 };
+
+    RhiTexture *tex = calloc(MAX_TRY, sizeof(*tex));
+    uint32_t made = 0;
+    while (tex && made < MAX_TRY) {
+        RhiTextureDesc td = {4, 4, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED, "limits"};
+        tex[made] = rhi_CreateTexture(&td);
+        if (!tex[made].id) {
+            break;
+        }
+        made++;
+    }
+    RhiStats st;
+    rhi_GetStats(&st);
+    hit = vkr_TestLastLimit();
+    rhi_test_Log("limits cell: %u textures made, %llu allocations alive (limit %llu, most %llu, "
+                 "%.1f MB)\n",
+                 made, (unsigned long long)st.memoryLive, (unsigned long long)st.memoryLimit,
+                 (unsigned long long)st.memoryPeak, (double)st.memoryLiveBytes / 1048576.0);
+    LIMIT_CHECK(made < MAX_TRY && st.memoryLive == 4096 && st.memoryLimit == 4096 && hit &&
+                    strcmp(hit, "maxMemoryAllocationCount") == 0,
+                "the allocation limit: %u made, %llu alive, %s\n", made,
+                (unsigned long long)st.memoryLive, hit ? hit : "not refused by a limit");
+    for (uint32_t i = 0; i < made; i++) {
+        rhi_DestroyTexture(tex[i]);
+    }
+    free(tex);
+    rhi_DestroyBindGroupLayout(one);
+    rhi_DestroyBindGroupLayout(sixteen);
+    rhi_DestroyBindGroupLayout(single);
+#undef LIMIT_CHECK
+    rhi_WaitIdle();
+    rhi_Shutdown();
+    return failures + (int)rhi_vk_ValidationErrorCount();
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_ValidationErrorCount};
@@ -135,5 +241,5 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-    return (hazardCell() || cacheCell()) ? 1 : 0;
+    return (hazardCell() || cacheCell() || limitsCell()) ? 1 : 0;
 }

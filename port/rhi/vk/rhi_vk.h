@@ -27,6 +27,13 @@ uint32_t rhi_vk_ValidationErrorCount(void);
 void vkr_TestForcePresentResult(int32_t result);
 uint32_t vkr_TestSwapchainCreations(void);
 
+/* v0.4.2, for rhi_vk_test's limits cell (ICO_VK_FAKE_LIMITS): the name of
+ * the VkPhysicalDeviceLimits member the last refused pipeline, memory
+ * allocation or sampler ran into ("maxBoundDescriptorSets", ...), NULL when
+ * none since rhi_Init; and the device's limits as rhi_Init left them. */
+const char *vkr_TestLastLimit(void);
+uint32_t vkr_TestLimit(const char *name);
+
 #ifdef __cplusplus
 }
 

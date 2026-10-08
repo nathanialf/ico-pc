@@ -680,6 +680,10 @@ typedef struct RhiStats {
     uint64_t fenceWaits, fenceWaitNs;
     uint64_t waitIdles, readbacks;
     uint64_t acquireNs, presentNs;
+    /* gauges, not counts (v0.4.2): the device memory objects alive now and
+     * the most ever, their bytes, and the device's limit on their number
+     * (Vulkan; 0 elsewhere) */
+    uint64_t memoryLive, memoryPeak, memoryLiveBytes, memoryPeakBytes, memoryLimit;
 } RhiStats;
 
 void rhi_GetStats(RhiStats *out);
