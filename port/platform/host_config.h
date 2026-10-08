@@ -193,6 +193,10 @@ int ico_sha1_file(const char *path, char hex[41], unsigned long long *bytes);
 int ico_host_redirect_output(const char *log_path);
 /* Writes out what stdout and stderr hold (the host loop, once per vsync). */
 void ico_host_log_flush(void);
+/* The same, and on Android what the log's mirror still holds in its pipe
+   goes to the file and logcat now (the app going to the background, where
+   the system may end the process unasked). */
+void ico_host_log_flush_all(void);
 /* Windows: the file-open dialog for the disc image; 0 and the path, or -1
    if cancelled. Elsewhere: -1. */
 int ico_host_pick_iso(char *out, size_t size);

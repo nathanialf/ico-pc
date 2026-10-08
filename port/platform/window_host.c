@@ -433,7 +433,7 @@ static void lc_log(void *u, const char *line)
 static void lc_log_flush(void *u)
 {
     (void)u;
-    ico_host_log_flush();
+    ico_host_log_flush_all();
 }
 
 static const IcoLifecycleOps k_lifecycle_ops = {

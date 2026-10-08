@@ -882,6 +882,14 @@ void ico_host_log_flush(void)
     fflush(stderr);
 }
 
+void ico_host_log_flush_all(void)
+{
+    ico_host_log_flush();
+#ifdef ICO_HOST_ANDROID
+    ico_android_log_mirror_flush();
+#endif
+}
+
 #ifdef ICO_HOST_ANDROID
 
 /* the log written out before the process ends without exit() */
