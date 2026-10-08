@@ -2094,6 +2094,21 @@ static bool reachable(const RdPipeKeyInt *k, bool noDual)
     return false;
 }
 
+/* setenv for the tests: the mingw C runtime has _putenv_s instead (an
+   empty value removes the variable there; NULL removes it on both). */
+static void testSetEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
+
 /*   effects depth (package R1, RdSettings.effectsDepth): the rich frame with
  *   its scene depth cleared to 0x40000000 and a sprite written at
  *   0xC0000000, presented at 1280 x 720 (4:3 box at x 160, w 960): the
@@ -2110,16 +2125,12 @@ static void checkEffectsDepth(void)
     if (prev) {
         snprintf(saved, sizeof(saved), "%s", prev);
     }
-    setenv("ICO_VK_VALIDATION", "1", 1);
+    testSetEnv("ICO_VK_VALIDATION", "1");
     const uint32_t W = 1280, H = 720;
     DepthRun off, on;
     const bool ran = depthRun(W, H, 0, &off) && depthRun(W, H, 1, &on);
     const uint32_t verrors = rhi_vk_ValidationErrorCount();
-    if (prev) {
-        setenv("ICO_VK_VALIDATION", saved, 1);
-    } else {
-        unsetenv("ICO_VK_VALIDATION");
-    }
+    testSetEnv("ICO_VK_VALIDATION", prev ? saved : NULL);
     CHECK(ran, "effects depth: rd_Init");
     if (!ran) {
         return;
