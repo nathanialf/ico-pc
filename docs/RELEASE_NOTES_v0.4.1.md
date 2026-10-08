@@ -14,3 +14,4 @@
 
 - The final fight: Ico's sword hits the Queen's shield again (issue 12).
 - Surfaces that sit very close together are drawn in the right order (the game's depth was kept too coarsely before).
+- Android: quitting the game saves your achievements, your saves and settings are part of the phone's backup, and stopping the first start with Back leaves nothing behind.
