@@ -4690,7 +4690,7 @@ static int swatchOf(int label)
     unsigned char c[4];
     for (int j = l->first; j < l->last; j++) {
         if (lt_ext_RectColor(j, c) == 0 && lt_ext_Prop(j)->dispX == 578 &&
-            lt_ext_Prop(j)->dispY == lt_ext_Prop(label)->dispY + 9) {
+            lt_ext_Prop(j)->dispY == lt_ext_Prop(label)->dispY + 0) {
             return j;
         }
     }
@@ -4793,9 +4793,9 @@ static void testCharacters(void)
                       after[2] == (c & 0xFFu) * 0x80u / 255u,
                   "%s: the swatch is the part's colour times 0x80/255 (%d %d %d, %06X)", who,
                   after[0], after[1], after[2], c);
-            CHECK(sw >= 0 && lt_ext_Prop(sw)->dispY == lt_ext_Prop(lb[5])->dispY + 9 &&
+            CHECK(sw >= 0 && lt_ext_Prop(sw)->dispY == lt_ext_Prop(lb[5])->dispY + 0 &&
                       lt_ext_Prop(sw)->dispX == 578,
-                  "%s: the swatch at the label's y + 9 (%d vs %d)", who,
+                  "%s: the swatch at the label's y + 0 (%d vs %d)", who,
                   sw >= 0 ? lt_ext_Prop(sw)->dispY : -1, lt_ext_Prop(lb[5])->dispY);
             /* Square: back to Original, the swatch to the original colour */
             charStep(l, lb[5], 1);

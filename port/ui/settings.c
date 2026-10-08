@@ -634,11 +634,12 @@ _Static_assert(UI_STR_COLOUR_BLACK - UI_STR_COLOUR_RED + 1 == ICO_APP_COLOURS,
                "a name for each palette colour, in the palette's order");
 
 /* the swatch geometry: right of the value's right arrow (it ends at x 570),
-   half the row's 36-unit box tall, on its middle */
+   half the row's 36-unit box tall; the lettering sits in the box's top half, so
+   the swatch starts at the row's y to share the letters' middle */
 #define SWATCH_X 578
 #define SWATCH_W 36
 #define SWATCH_H 18
-#define SWATCH_DY 9
+#define SWATCH_DY 0
 
 static int s_charSwatch[ICO_APP_PART_COUNT] = {-1, -1, -1, -1, -1, -1, -1, -1, -1};
 static int (*s_charView)(int character); /* model_viewer.c ico_mv_view_character */
