@@ -45,8 +45,11 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
     rhi_CmdBarrier(cl, &b0, 1);
     uint8_t r = (uint8_t)(16 * (n % 16) + 8), g = 0x80, bl = 0xF0;
     RhiRenderPassDesc rp = {0};
-    rp.color[0] = (RhiColorAttachment){
-        bb, RHI_LOAD_CLEAR, {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f}};
+    rp.color[0] =
+        (RhiColorAttachment){bb,
+                             RHI_LOAD_CLEAR,
+                             {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f},
+                             RHI_STORE_STORE};
     rp.colorCount = 1;
     rp.width = w;
     rp.height = h;
@@ -196,7 +199,8 @@ static int followSize(SDL_Window *win, RhiFormat fmt)
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_CmdBarrier(cl, &b0, 1);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] = (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}};
+    rp.color[0] =
+        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE};
     rp.colorCount = 1;
     rp.width = aw;
     rp.height = ah;

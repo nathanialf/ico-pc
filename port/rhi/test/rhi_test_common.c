@@ -293,7 +293,8 @@ static void bcCell(const Ctx *c)
                                {bc3, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ}};
     rhi_CmdBarrier(cl, rd, 2);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] = (RhiColorAttachment){tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}};
+    rp.color[0] =
+        (RhiColorAttachment){tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}, RHI_STORE_STORE};
     rp.colorCount = 1;
     rp.width = BW;
     rp.height = BH;
@@ -646,9 +647,11 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         rp.color[0] =
             (RhiColorAttachment){scene,
                                  RHI_LOAD_CLEAR,
-                                 {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f}};
+                                 {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f},
+                                 RHI_STORE_STORE};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR, 0.0f, 0, false};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR, 0.0f,
+                                        0,     false,          RHI_STORE_STORE};
         rp.width = W;
         rp.height = H;
         rhi_CmdBeginLabel(cl, "scene");
@@ -698,7 +701,8 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         rhi_CmdEndLabel(cl);
 
         RhiRenderPassDesc up2 = {0};
-        up2.color[0] = (RhiColorAttachment){utex, RHI_LOAD_CLEAR, {1.0f, 2.0f, 3.0f, 4.0f}};
+        up2.color[0] =
+            (RhiColorAttachment){utex, RHI_LOAD_CLEAR, {1.0f, 2.0f, 3.0f, 4.0f}, RHI_STORE_STORE};
         up2.colorCount = 1;
         up2.width = 4;
         up2.height = 4;

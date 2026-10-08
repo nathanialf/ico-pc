@@ -113,8 +113,11 @@ static int runSwapchain(void)
         uint8_t r = (uint8_t)(32 * frame + 16), g = 0x80, bl = 0xF0;
         RhiRenderPassDesc rp;
         memset(&rp, 0, sizeof(rp));
-        rp.color[0] = (RhiColorAttachment){
-            bb, RHI_LOAD_CLEAR, {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f}};
+        rp.color[0] =
+            (RhiColorAttachment){bb,
+                                 RHI_LOAD_CLEAR,
+                                 {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f},
+                                 RHI_STORE_STORE};
         rp.colorCount = 1;
         rp.width = w;
         rp.height = h;

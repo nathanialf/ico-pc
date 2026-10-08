@@ -1324,7 +1324,7 @@ static int gpuTests(void)
         stDummy = RHI_STATE_SHADER_READ;
 
         RhiRenderPassDesc rp = {0};
-        rp.color[0] = (RhiColorAttachment){probe, RHI_LOAD_CLEAR, {0, 0, 0, 0}};
+        rp.color[0] = (RhiColorAttachment){probe, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE};
         rp.colorCount = 1;
         rp.width = ICO_VU_PROBE_FIELDS;
         rp.height = MAXV;
@@ -1338,8 +1338,10 @@ static int gpuTests(void)
 
         for (int pass = 0; pass < 2; pass++) {
             RhiRenderPassDesc dp = {0};
-            dp.color[0] = (RhiColorAttachment){
-                pass ? imgRef : imgVu, RHI_LOAD_CLEAR, {16 / 255.f, 32 / 255.f, 48 / 255.f, 1}};
+            dp.color[0] = (RhiColorAttachment){pass ? imgRef : imgVu,
+                                               RHI_LOAD_CLEAR,
+                                               {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                                               RHI_STORE_STORE};
             dp.colorCount = 1;
             dp.width = dp.height = RT;
             rhi_CmdBeginRenderPass(cl, &dp);
