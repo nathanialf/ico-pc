@@ -102,6 +102,31 @@ extern GenGeo objLayout[]; /* the layout rows (gamesys.h) */
 /* layout_action.c (ICO_HOST) */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
+
+/* v0.4.1: the two "face shadow" textures of the Queen (face_sadow_sd and
+   face_sadow_sd_00) carry an endless UV scroll in their TIM2 header (0.25 U
+   and 1/16 V a frame), and every scene that shows her stops it at once with
+   tex_SetUVScroll(..., 0.8, 0.8, 1) / (..., 0.45, 0.45, 1) (script.c:199,
+   st25a.c:170, st04a.c:406): on the PS2 the shadow sweeps in once and holds
+   still. The viewer runs no script, so without this the shadow would sweep
+   across her face forever (the "black pulse"). The resting offsets are set
+   directly, scroll 0, so nothing sweeps when a model loads. A texture that
+   is not loaded is skipped (tex_SetUVScroll itself indexes a -1 lookup). */
+static void restScriptedScrolls(void)
+{
+    static const struct {
+        const char *name;
+        float at;
+    } rest[] = {{"face_sadow_sd", 0.8f}, {"face_sadow_sd_00", 0.45f}};
+
+    for (size_t i = 0; i < sizeof(rest) / sizeof(rest[0]); i++) {
+        if (tex_GetTextureNo(rest[i].name) >= 0) {
+            tex_SetUVScroll(rest[i].name, rest[i].at, rest[i].at, 0.0f, 0.0f, rest[i].at,
+                            rest[i].at, 1);
+        }
+    }
+}
+
 extern void CUR_SE(void);
 extern void la_host_leave(void);
 extern void la_host_title_music_fade(void);
@@ -822,6 +847,7 @@ static void setup(void)
     g->dl = viewDl;
     enable_game_pause = 0;
     GlobalStageSetting.fogOn = 0;
+    restScriptedScrolls();
     /* the animations the stage holds */
     s_anims =
         malloc(sizeof(int) * (size_t)(m->motLast > m->motFirst ? m->motLast - m->motFirst : 1));
