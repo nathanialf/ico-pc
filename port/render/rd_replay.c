@@ -2282,8 +2282,8 @@ static RhiPipeline wrapPipeline(int resolve, uint8_t vs, uint8_t prim, RhiFormat
             d.depthStencil.depthTest = true;
             d.depthStencil.depthWrite = zwrite == RD_ZWRITE_ON;
             d.depthStencil.depthCompare = ztst == RD_ZTST_NEVER     ? RHI_CMP_NEVER
-                                          : ztst == RD_ZTST_GEQUAL  ? RHI_CMP_LEQUAL
-                                          : ztst == RD_ZTST_GREATER ? RHI_CMP_LESS
+                                          : ztst == RD_ZTST_GEQUAL  ? RHI_CMP_GEQUAL
+                                          : ztst == RD_ZTST_GREATER ? RHI_CMP_GREATER
                                                                     : RHI_CMP_ALWAYS;
         }
         d.debugName = "rd wrap accumulate";
@@ -3979,6 +3979,7 @@ static void clearNewTargets(void)
             p.depth.texture = t->depth;
             p.depth.depthLoad = RHI_LOAD_CLEAR;
             p.depth.stencilLoad = RHI_LOAD_CLEAR;
+            p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth), as before */
         }
         p.width = t->tw;
         p.height = t->th;

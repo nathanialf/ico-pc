@@ -23,6 +23,10 @@
  *              version 3 dump (no aa1) still loads, with AA1 off
  *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
  *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
+ *   aura filter (package QUEEN) the model viewer's draw filter around the
+ *              mirage's list 8: a GRID keyed by a second object inside the
+ *              open window is kept (and after it), a third object's is not;
+ *              list 8's targets, Z writes, clear and aura sprite survive
  *   pipelines  the reachable screen and post set is under 250 keys (150
  *              before package TEXA's sprite_texa_ps twins), with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
@@ -687,6 +691,101 @@ static void testWideScissor(void)
     CHECK(x0 >= 0 && x1 >= x0 && x1 < 512, "a one-pixel scissor: %d..%d", x0, x1);
 }
 
+/* ------------------------------------------------------- the aura filter
+ * Package QUEEN: the model viewer's draw filter (rd_SetDrawFilter, open
+ * while the viewed object's display list runs) and the mirage's list 8.
+ * The Queen's dumps hold list 8's shine materials keyed by her and two
+ * GRIDs keyed by other objects (her cloth), which are not in list 1.  A GRID
+ * keyed by a second object inside the open window is kept and learned (and
+ * kept once the window is closed); a third object's is not; and list 8's
+ * state (the AURA_WORK target with SCENE's depth, the Z write), the clear
+ * (rd_ClearTarget and auraInspireBefore's RD_POST_AURA sprite) and the
+ * mesh draw keyed by the object survive the filter. */
+static const char kQueen, kCloth, kOther;
+
+static void filterGrid(RdKey key)
+{
+    static float qw[3 * RD_VU_QW_GRID + 4][4];
+    RdVuGridDraw d;
+    memset(&d, 0, sizeof(d));
+    d.qw = (const float (*)[4])qw;
+    d.strips = 1;
+    d.stripLen = 3;
+    d.code = 20;
+    rd_DrawVuGrid(&d, key);
+}
+
+static void filterWorld(RdKey key)
+{
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    v[1].x = v[1].y = 160;
+    v[0].q = v[1].q = 1.0f;
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, key);
+}
+
+static int countIn(const RdFrame *f, int l, uint8_t type, RdKey key, int anyKey)
+{
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        const RdCmd *c = &f->lists[l].cmds[i];
+        n += c->type == type &&
+             (anyKey || (c->keyLo == (uint32_t)key && c->keyHi == (uint32_t)(key >> 32)));
+    }
+    return n;
+}
+
+static void testAuraFilter(void)
+{
+    const RdKey queen = RD_KEY(&kQueen, 12, 0), cloth = RD_KEY(&kCloth, 8, 0),
+                other = RD_KEY(&kOther, 8, 0);
+    const void *own[1] = {&kQueen};
+    static const uint8_t zero[4] = {0, 0, 0, 0};
+    rd_SetDrawFilter(true, own, 1);
+    rd_BeginFrame();
+    /* the viewed object's display list: the filter open */
+    rd_DrawFilterOpen(true);
+    rd_SelectList(8);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_ZWrite(1);
+    filterWorld(queen);
+    filterGrid(cloth); /* drawn by the object, keyed by another */
+    rd_DrawFilterOpen(false);
+    /* after the window: staticBlur.c's list 8, an unknown object's grid, the
+       learned cloth again */
+    rd_SelectList(8);
+    rd_ClearTarget(rd_Target(RD_TARGET_AURA_WORK), zero, 0, 0);
+    {
+        RdPostParams p;
+        memset(&p, 0, sizeof(p));
+        p.rect[0] = p.rect[1] = (float)(0x8000 - 256 * 16);
+        p.rect[2] = p.rect[3] = (float)(0x8000 + 256 * 16);
+        p.scalar[2] = 1.0f;
+        p.exactInt = 1;
+        rd_Post(RD_POST_AURA, &p);
+    }
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_ZWrite(0);
+    filterGrid(other);
+    filterGrid(cloth);
+    filterWorld(queen);
+    const RdFrame *f = rd__RecFrame();
+    const int grids = countIn(f, 8, RDC_GRID, cloth, 0), lost = countIn(f, 8, RDC_GRID, other, 0);
+    const int worlds = countIn(f, 8, RDC_SCREEN, queen, 0);
+    const int targets = countIn(f, 8, RDC_TARGET, 0, 1), zw = countIn(f, 8, RDC_ZWRITE, 0, 1);
+    const int clears = countIn(f, 8, RDC_CLEAR, 0, 1), posts = countIn(f, 8, RDC_POST_STUB, 0, 1);
+    rd_EndFrame(0);
+    rd_SetDrawFilter(false, NULL, 0);
+    CHECK(grids == 2, "aura filter: the cloth's GRID kept in the window and after it (%d of 2)",
+          grids);
+    CHECK(lost == 0, "aura filter: an unknown object's GRID left out (%d)", lost);
+    CHECK(worlds == 2, "aura filter: the object's own draws kept (%d of 2)", worlds);
+    CHECK(
+        targets == 2 && zw >= 2 && clears == 1 && posts == 1, /* and the list head's default */
+        "aura filter: list 8's targets %d (2), Z writes %d (2 + the head's), clear %d (1), aura sprite %d (1)",
+        targets, zw, clears, posts);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -702,6 +801,7 @@ int main(int argc, char **argv)
     testAa1Plans();
     testEnumeration();
     testWideScissor();
+    testAuraFilter();
     rd_Shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

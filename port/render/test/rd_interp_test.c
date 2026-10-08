@@ -52,6 +52,10 @@
  *   pixels    replays of the blended frame at alpha 0 and 1 equal the
  *             previous and current frames' replays byte for byte; at 0.5 the
  *             translated sprite covers the half-way columns exactly
+ *   mirage    (package QUEEN) a tick that pastes FEED128 over SCENE and
+ *             copies SCENE back into it, presented twice (dt 0.5, alpha 0.5
+ *             as the first present, 1 as a later one): the two SCENEs and
+ *             FEED128s are byte-identical, and FEED128 advances once per tick
  *   present   rd_Present does nothing in the Original preset or with
  *             interpolate off, presents in Enhanced with it; a change of
  *             scale drops the history (the next pair snaps)
@@ -937,6 +941,126 @@ static void testPixels(void)
               "alpha 0.5: columns 16..47 drawn (15: %u, 16: %u, 47: %u, 48: %u)", l[0], a[0], b[0],
               r[0]);
     }
+}
+
+/* Package QUEEN: a mirage tick presented twice (dt 0.5, alpha 0.5 as the
+ * tick's first present, then alpha 1 as a later one).  The frame pastes
+ * FEED128 over SCENE at half brightness through FEED128's alpha and copies
+ * SCENE into FEED128 for the next tick (staticBlur.c's mode 2).  Both
+ * presents must draw byte-identical SCENEs and leave the same FEED128, so
+ * FEED128 advances once per tick, not once per present; and the next tick
+ * starts from it. */
+static void mirageSprite(RdTarget dst, uint32_t dw, uint32_t dh, RdTarget src, uint32_t sw,
+                         uint32_t sh, const uint8_t c[4], int abe)
+{
+    rd_SetTarget(dst, (RdTarget){0}, dw, dh, 0);
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_PABE(abe ? 0 : 1);
+    rd_BlendFunc(abe ? RD_BLEND_LERP_AS_ALT : RD_BLEND_LERP_FIX, 0);
+    rd_ABE(abe);
+    rd_FBA(0);
+    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(rd_TargetTexture(src, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_Gouraud(0);
+    RdPostParams p;
+    memset(&p, 0, sizeof(p));
+    p.rect[0] = (float)(0x8000 - (int)dw * 8);
+    p.rect[1] = (float)(0x8000 - (int)dh * 8);
+    p.rect[2] = (float)(0x8000 + (int)dw * 8);
+    p.rect[3] = (float)(0x8000 + (int)dh * 8);
+    p.uv[0] = p.uv[1] = 8.0f;
+    p.uv[2] = (float)(sw * 16);
+    p.uv[3] = (float)(sh * 16);
+    p.scalar[0] = (float)sw;
+    p.scalar[1] = (float)sh;
+    p.scalar[2] = 1.0f;
+    p.exactInt = 1;
+    memcpy(p.rgba, c, 4);
+    rd_Post(RD_POST_AURA, &p);
+}
+
+static void mirageTick(int n)
+{
+    static const uint8_t half[4] = {64, 64, 64, 128}, white[4] = {128, 128, 128, 128};
+    const uint8_t bg[4] = {(uint8_t)(40 + n * 30), 120, 200, 0x80};
+    const uint8_t fg[4] = {230, 50, 20, 0x60};
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_TextureOff();
+    {
+        RdScreenVtx v[2];
+        memset(v, 0, sizeof(v));
+        v[0].x = (2048 - 256 + 100) * 16;
+        v[0].y = (2048 - 256 + 150) * 16;
+        v[1].x = (2048 - 256 + 300) * 16;
+        v[1].y = (2048 - 256 + 260) * 16;
+        v[0].q = v[1].q = 1.0f;
+        memcpy(v[0].rgba, fg, 4);
+        memcpy(v[1].rgba, fg, 4);
+        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, 0);
+    }
+    rd_SelectList(8);
+    mirageSprite(rd_Target(RD_TARGET_SCENE), 512, 512, rd_Target(RD_TARGET_FEED128), 128, 128, half,
+                 1);
+    mirageSprite(rd_Target(RD_TARGET_FEED128), 128, 128, rd_Target(RD_TARGET_SCENE), 512, 512,
+                 white, 0);
+    rd_EndFrame(0);
+}
+
+static int readTo(RdTargetId id, uint8_t *dst, size_t size)
+{
+    uint32_t w = 0, h = 0;
+    return rd__ReadTarget(rd_Target(id), dst, size, &w, &h);
+}
+
+static void testMiragePresents(void)
+{
+    static uint8_t scene[2][512 * 512 * 4], feed[2][128 * 128 * 4], feedTick[128 * 128 * 4];
+    const uint8_t interpolate = g_rd.settings.interpolate;
+    g_rd.settings.interpolate = 1; /* the replays are the presents' */
+    int sceneDiff = 0, feedDiff = 0, advanced = 0;
+    for (int n = 0; n < 4; n++) {
+        mirageTick(n);
+        for (int k = 0; k < 2; k++) {
+            const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), k ? 1.0f : 0.5f,
+                                               0.5f, k == 0, NULL);
+            CHECK(f && rd__ReplayFrame(f, 0, false), "mirage tick %d present %d: replay", n, k);
+            rhi_WaitIdle();
+            CHECK(readTo(RD_TARGET_SCENE, scene[k], sizeof(scene[k])) &&
+                      readTo(RD_TARGET_FEED128, feed[k], sizeof(feed[k])),
+                  "mirage tick %d present %d: readback", n, k);
+        }
+        if (n > 0) {
+            advanced += memcmp(feed[0], feedTick, sizeof(feedTick)) != 0;
+        }
+        memcpy(feedTick, feed[1], sizeof(feedTick));
+        int sd = 0, fd = 0;
+        for (size_t i = 0; i < sizeof(scene[0]); i++) {
+            sd += scene[0][i] != scene[1][i];
+        }
+        for (size_t i = 0; i < sizeof(feed[0]); i++) {
+            fd += feed[0][i] != feed[1][i];
+        }
+        sceneDiff += sd;
+        feedDiff += fd;
+        CHECK(sd == 0, "mirage tick %d: the two presents' SCENEs differ in %d bytes", n, sd);
+        CHECK(fd == 0, "mirage tick %d: the two presents leave FEED128s differing in %d bytes", n,
+              fd);
+    }
+    g_rd.settings.interpolate = interpolate;
+    CHECK(advanced == 3, "mirage: FEED128 advanced on %d of 3 tick changes", advanced);
+    printf("  mirage presents (dt 0.5, two per tick, 4 ticks): SCENE %d, FEED128 %d bytes differ "
+           "between a tick's presents; FEED128 advanced on %d of 3 ticks\n",
+           sceneDiff, feedDiff, advanced);
 }
 
 static void testPresent(void)
@@ -2462,6 +2586,7 @@ int main(void)
         rd__SetNotImplementedFatal(false);
         runCpu(); /* again, with the frames replayed as they close */
         testPixels();
+        testMiragePresents();
         testPresent();
         CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
         const uint32_t verr = rhi_vk_ValidationErrorCount();

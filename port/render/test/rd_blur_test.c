@@ -38,7 +38,15 @@
  *      present and as a later one: both draw the same SCENE and leave the
  *      same FEED128 (the later present of the cut drew black before
  *      FEED_HELD).
- * Tolerance 0 everywhere.  Every pipeline created is enumerated; no
+ *   q  (package QUEEN) the mirage as the Queen's F12 dumps record it: NTSC,
+ *      feedbackCol (64, 64, 64, 128), the sprites' rectangles, UVs, TEX0
+ *      sizes, colours and modes checked against the dumps', list 8's shine
+ *      material into AURA_WORK with SCENE's depth (TEST 0x5346D, Z write)
+ *      behind a nearer band, twelve frames of feedback against the model;
+ *      then Enhanced 4x and 4x with the full-height scene, SCENE at the GS
+ *      pixel centres against the 1x model: exact where the mask is 0 within
+ *      16 GS pixels, within 4 where it is one value within 16.
+ * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
 #include <stdarg.h>
@@ -1400,6 +1408,298 @@ static void checkCutPresents(void)
            worst, black);
 }
 
+/* ====================== (q) the queen's mirage, as the F12 dumps record it
+ *
+ * Package QUEEN.  The model viewer's dumps of the Queen (NTSC, 512 x 448,
+ * feedback mode 2, feedbackCol (64, 64, 64, 128)) record the mirage's
+ * sprites with these parameters (rd_replay_tool --list --no-device): the
+ * reduction AURA_WORK -> WORK0 rect (30720,31736)-(34816,33528) (256 x 112
+ * at (-128, -64.5)) UV (16,16)-(8208,7184) TEX0 512 x 512, colour
+ * (0,0,0,0x80), ALPHA mode 5; the alpha copy WORK0 -> FEED128 rect
+ * (31744,31744)-(33792,33792) UV (0,0)-(4096,2048) TEX0 256 x 128, same
+ * colour and mode; the paste FEED128 -> SCENE rect (28672,29184)-
+ * (36864,36352) UV (8,8)-(2056,1800) TEX0 128 x 128, colour (64,64,64,128),
+ * mode 7; the band clear of FEED128 rows 112..128; the copy SCENE ->
+ * FEED128 with PABE 1, mode 2, ABE 0.  The game's own staticBlur.c records
+ * them here (checked against those numbers), list 8's shine material is a
+ * sprite into AURA_WORK with SCENE's depth under the dumps' state (TEST
+ * 0x5346D, ALPHA 0x44, ABE, Z write) behind a nearer band of the scene, and
+ * every target is compared with the CPU model exactly, frame after frame of
+ * feedback.  Then the same frames in Enhanced 4x (the resolution window)
+ * and with the full-height scene: SCENE at every GS pixel centre against
+ * the 1x model's, exactly where the mask is 0 within 16 GS pixels and
+ * within 4 LSB where it is one value within 16 (its edges are finer at a
+ * scale: the work buffers are). */
+#define QH 448
+#define Q_FRAMES 12
+#define Q_Z_FACE (0x00C00000u)
+#define Q_Z_SHINE (0x00400000u)
+
+static uint8_t s_qScene1x[W * QH * 4], s_qMask1x[W * QH];
+
+static RdTex s_qShineTex;
+
+/* the shine material: a sprite into AURA_WORK, rows 150..300, x 100..400,
+ * behind the face band; its texture white at alpha 0x80 but for a hole of
+ * alpha 0x40 (failing the alpha test: RGB only) */
+static void qShine(int n)
+{
+    (void)n;
+    dl_SetDLPriority(8);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, QH, 0);
+    rd_TestGs(0x5346D);
+    rd_ZWrite(1);
+    rd_ABE(1);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0x80);
+    rd_FBA(0);
+    rd_PABE(0);
+    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_Gouraud(0);
+    RdPostParams p;
+    memset(&p, 0, sizeof(p));
+    const int dx = 0;
+    p.rect[0] = (float)(0x8000 - W / 2 * 16 + (100 + dx) * 16);
+    p.rect[1] = (float)(0x8000 - QH / 2 * 16 + 150 * 16);
+    p.rect[2] = (float)(0x8000 - W / 2 * 16 + (400 + dx) * 16);
+    p.rect[3] = (float)(0x8000 - QH / 2 * 16 + 300 * 16);
+    p.uv[0] = 0.0f;
+    p.uv[1] = 0.0f;
+    p.uv[2] = 300.0f * 16.0f;
+    p.uv[3] = 150.0f * 16.0f;
+    p.rgba[0] = p.rgba[1] = p.rgba[2] = 0x80;
+    p.rgba[3] = 0x7F; /* the queen's vertex alpha */
+    p.z = Q_Z_SHINE;
+    p.scalar[0] = p.scalar[1] = 512.0f;
+    p.scalar[2] = 1.0f;
+    p.exactInt = 1;
+    rd_Post(RD_POST_AURA, &p);
+}
+
+/* one frame: the scene (Z 0, the face band rows 180..260 nearer), the
+ * mirage around the shine material */
+static void qFrame(int n)
+{
+    dl_SetDLPriority(0);
+    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
+    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
+    FullScreenEffectBefore();
+    qShine(n);
+    FullScreenEffectAfter();
+}
+
+static int qSame(const RdPostRec *r, float x0, float y0, float x1, float y1, float u0, float v0,
+                 float u1, float v1, float s0, float s1, const uint8_t c[4])
+{
+    return r->rect[0] == x0 && r->rect[1] == y0 && r->rect[2] == x1 && r->rect[3] == y1 &&
+           r->uv[0] == u0 && r->uv[1] == v0 && r->uv[2] == u1 && r->uv[3] == v1 &&
+           r->scalar[0] == s0 && r->scalar[1] == s1 && memcmp(r->rgba, c, 4) == 0;
+}
+
+/* the recorded sprites are the dumps' */
+static void qCheckRecorded(void)
+{
+    static const uint8_t mask[4] = {0, 0, 0, 0x80}, paste[4] = {64, 64, 64, 128},
+                         zero[4] = {0, 0, 0, 0}, white[4] = {128, 128, 128, 128};
+    collectFrame(rd__LastFrame());
+    int reduce = 0, copyA = 0, pasted = 0, band = 0, copyF = 0;
+    for (int i = 0; i < s_nspr; i++) {
+        const Spr *p = &s_spr[i];
+        if (p->kind != RD_POST_AURA) {
+            continue;
+        }
+        const int c = named(p->st.color);
+        const RdPostRec *r = &p->r;
+        if (c == RD_TARGET_WORK0) {
+            reduce += qSame(r, 30720, 31736, 34816, 33528, 16, 16, 8208, 7184, 512, 512, mask) &&
+                      p->st.ds.blend == RD_BLEND_CS_AS_ADD_CD && p->st.ds.abe &&
+                      texTarget(&p->st, NULL) == rd_Target(RD_TARGET_AURA_WORK).id;
+        } else if (c == RD_TARGET_FEED128 && p->st.ds.texEnabled &&
+                   texTarget(&p->st, NULL) == rd_Target(RD_TARGET_WORK0).id) {
+            copyA += qSame(r, 31744, 31744, 33792, 33792, 0, 0, 4096, 2048, 256, 128, mask) &&
+                     p->st.ds.blend == RD_BLEND_CS_AS_ADD_CD && p->st.ds.abe;
+        } else if (c == RD_TARGET_SCENE) {
+            pasted += qSame(r, 28672, 29184, 36864, 36352, 8, 8, 2056, 1800, 128, 128, paste) &&
+                      p->st.ds.blend == RD_BLEND_LERP_AS_ALT && p->st.ds.abe &&
+                      texTarget(&p->st, NULL) == rd_Target(RD_TARGET_FEED128).id;
+        } else if (c == RD_TARGET_FEED128 && !p->st.ds.texEnabled) {
+            band += r->rect[0] == 31744 && r->rect[1] == 33536 && r->rect[2] == 33792 &&
+                    r->rect[3] == 33792 && memcmp(r->rgba, zero, 4) == 0;
+        } else if (c == RD_TARGET_FEED128) {
+            copyF += qSame(r, 31744, 31744, 33792, 33536, 8, 8, 8200, 7176, 512, 512, white) &&
+                     p->st.ds.pabe && !p->st.ds.abe && p->st.ds.blend == RD_BLEND_LERP_FIX;
+        }
+    }
+    CHECK(reduce == 1 && copyA == 1 && pasted == 1 && band == 1 && copyF == 1,
+          "(q) the mirage's sprites as the dumps record them: reduce %d, alpha copy %d, paste %d, "
+          "band clear %d, copy %d (want 1 each)",
+          reduce, copyA, pasted, band, copyF);
+}
+
+static void qInit(const char *what, int preset, float scale, int fullHeight)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = (uint8_t)preset;
+    st.aspect = 4.0f / 3.0f;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.sceneScale = scale;
+    st.fullHeightScene = (uint8_t)fullHeight;
+    if (!rd_Init(W, QH, &st, NULL)) {
+        CHECK(0, "(q) rd_Init %s", what);
+        return;
+    }
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    makeImage(7, 0);
+    s_imgTex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    static uint8_t shine[512 * 512 * 4];
+    for (int y = 0; y < 512; y++) {
+        for (int x = 0; x < 512; x++) {
+            uint8_t *q = &shine[((size_t)y * 512 + x) * 4];
+            const int hole = x >= 120 && x < 180 && y >= 0 && y < 30;
+            q[0] = q[1] = q[2] = 0xFF;
+            q[3] = hole ? 0x40 : 0x80;
+        }
+    }
+    s_qShineTex = rd_CreateTexture(512, 512, shine, RD_TEXA_80_80, "rd_blur_test shine");
+}
+
+static void checkQueenMirage(void)
+{
+    const int screenHeight = ScreenHeight, status0 = systemStatus[0];
+    ScreenHeight = QH;
+    systemStatus[0] = 0; /* NTSC: 448 lines, the dumps' */
+    setStage(0, 2, 128);
+    GlobalStageSetting.feedbackCol[0] = GlobalStageSetting.feedbackCol[1] =
+        GlobalStageSetting.feedbackCol[2] = 64;
+    GlobalTimer = 0;
+
+    /* 1x: the CPU model, every target */
+    rd_Shutdown();
+    for (int i = 0; i < RD_TARGET_COUNT; i++) {
+        free(s_cpu[i].c);
+        free(s_cpu[i].z);
+    }
+    memset(s_cpu, 0, sizeof(s_cpu));
+    free(s_old);
+    qInit("Original 1x", RD_PRESET_ORIGINAL, 0.0f, 0);
+    cpuInit();
+    clearAll();
+    int worst = 0;
+    for (int n = 0; n < Q_FRAMES; n++) {
+        qFrame(n);
+        char what[48];
+        snprintf(what, sizeof(what), "(q) 1x frame %d", n);
+        if (n == 0) {
+            dl_Swap();
+            rhi_WaitIdle();
+            qCheckRecorded();
+            s_unexpected = 0;
+            cpuFrame(rd__LastFrame());
+            worst = compareAll(what, 1);
+        } else {
+            const int d = runFrame(what, failures < 10);
+            worst = d > worst ? d : worst;
+        }
+    }
+    memcpy(s_qScene1x, s_cpu[RD_TARGET_SCENE].c, sizeof(s_qScene1x));
+    for (int i = 0; i < W * QH; i++) {
+        s_qMask1x[i] = s_cpu[RD_TARGET_AURA_WORK].c[i * 4 + 3];
+    }
+    int masked = 0;
+    for (int y = 0; y < QH; y++) {
+        for (int x = 0; x < W; x++) {
+            const uint8_t *a = &s_qScene1x[((size_t)y * W + x) * 4];
+            masked += a[0] < 40 && y >= 150 && y < 300; /* the mirage darkened it */
+        }
+    }
+    printf("  (q) %d mirage frames at 1x (NTSC, the dumps' sprites): max difference %d LSB, %d "
+           "darkened pixels in the shine's rows\n",
+           Q_FRAMES, worst, masked);
+    rd_Shutdown();
+
+    /* 4x and full height: SCENE against the 1x model */
+    static const struct {
+        const char *what;
+        float scale;
+        int fullHeight;
+    } kModes[2] = {{"Enhanced 4x", 4.0f, 0}, {"Enhanced 4x, full height", 4.0f, 1}};
+
+    for (int m = 0; m < 2; m++) {
+        qInit(kModes[m].what, RD_PRESET_ENHANCED, kModes[m].scale, kModes[m].fullHeight);
+        clearAll();
+        for (int n = 0; n < Q_FRAMES; n++) {
+            qFrame(n);
+            dl_Swap();
+        }
+        rhi_WaitIdle();
+        const RdTargetRec *t = rd__TargetRec(rd_Target(RD_TARGET_SCENE).id);
+        uint8_t *img = t ? malloc((size_t)t->tw * t->th * 4) : NULL;
+        uint32_t w = 0, h = 0;
+        if (!img ||
+            !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), img, (size_t)t->tw * t->th * 4, &w, &h)) {
+            CHECK(0, "(q) %s: read SCENE", kModes[m].what);
+            free(img);
+            rd_Shutdown();
+            continue;
+        }
+        const float sx = (float)w / (float)W, sy = (float)h / (float)QH;
+        int farBad = 0, farMax = 0, inMax = 0, inBad = 0, nFar = 0, nIn = 0;
+        for (int y = 0; y < QH; y++) {
+            for (int x = 0; x < W; x++) {
+                const uint8_t *g =
+                    &img[((size_t)(((float)y + 0.5f) * sy) * w + (size_t)(((float)x + 0.5f) * sx)) *
+                         4];
+                const uint8_t *c = &s_qScene1x[((size_t)y * W + x) * 4];
+                /* away from the mask: AURA_WORK's alpha 0 within 16 GS
+                   pixels; inside it: one value within 16 */
+                int lo = 255, hi = 0;
+                for (int yy = y - 16; yy <= y + 16; yy++) {
+                    for (int xx = x - 16; xx <= x + 16; xx++) {
+                        const int a = yy < 0 || yy >= QH || xx < 0 || xx >= W
+                                          ? 0
+                                          : s_qMask1x[(size_t)yy * W + xx];
+                        lo = a < lo ? a : lo;
+                        hi = a > hi ? a : hi;
+                    }
+                }
+                const int far = hi == 0, in = lo == hi && lo != 0;
+                int d = 0;
+                for (int k = 0; k < 3; k++) {
+                    const int e = abs((int)g[k] - (int)c[k]);
+                    d = e > d ? e : d;
+                }
+                if (far) {
+                    nFar++;
+                    farBad += d != 0;
+                    farMax = d > farMax ? d : farMax;
+                } else if (in) {
+                    nIn++;
+                    inBad += d > 4;
+                    inMax = d > inMax ? d : inMax;
+                }
+            }
+        }
+        printf("  (q) %s: SCENE against the 1x model: away from the mask %d of %d pixels differ "
+               "(max %d), inside it %d of %d by more than 4 (max %d)\n",
+               kModes[m].what, farBad, nFar, farMax, inBad, nIn, inMax);
+        CHECK(farBad == 0, "(q) %s: %d pixels away from the mirage's mask differ from 1x",
+              kModes[m].what, farBad);
+        CHECK(inBad == 0, "(q) %s: %d pixels inside the mask differ from 1x by more than 4",
+              kModes[m].what, inBad);
+        free(img);
+        CHECK(rhi_vk_ValidationErrorCount() == 0, "(q) %s: %u validation errors", kModes[m].what,
+              rhi_vk_ValidationErrorCount());
+        rd_Shutdown();
+    }
+    ScreenHeight = screenHeight;
+    systemStatus[0] = status0;
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
@@ -1506,7 +1806,7 @@ int main(void)
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    checkQueenMirage(); /* package QUEEN: re-initialises rd (NTSC, 1x, 4x) */
     if (failures) {
         printf("rd_blur_test: %d failures\n", failures);
         return 1;

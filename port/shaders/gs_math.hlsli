@@ -123,23 +123,32 @@ GS_FN int gs_blend_reg_ch(uint reg, int cs, int cd, int as, int ad, int fix, uin
     return gs_blend_ch(a, b, c, d, clampMode);
 }
 
-// GS Z to reversed-Z depth: 1 - z * scale. scale is 1 / 2^24 for PSMZ24
-// values (0xFFFFFF, the game's far, becomes about 0), 1 / 2^32 for PSMZ32
-// (every ZBUF the game writes; FrameCB g_z.x per target, R2c), 1 / 2^16
-// for PSMZ16. Computed as (zmax - z + 1) * scale with zmax the format's
-// largest Z, which is the same value but keeps the large Z values exact:
-// the UI's 0xFFFFFF9B and 0xFFFFFFFF stay apart under PSMZ32, where
-// 1 - (float)z * scale would round both to 0. Exact for every z at 2^-24
-// and 2^-16, and for z >= 2^32 - 2^24 at 2^-32 (smaller z round like any
-// float near 1). Z above zmax clamps to 0, the format's maximum.
+// GS Z to depth, increasing with Z (GS GEQUAL is the depth test GEQUAL,
+// GREATER is GREATER): depth = z * scale. scale is 1 / 2^24 for PSMZ24, 1 /
+// 2^16 for PSMZ16 (exact for every z: below 2^24, a float holds it) and, for
+// PSMZ32 (every ZBUF the game writes; FrameCB g_z.x per target, R2c), 1 /
+// 2^32 on a 24-bit depth buffer (D24S8: 2^8 GS units a step, the most it
+// holds over the range) or GS_ZSCALE_32F = 1 / 2^33 on a float one: there
+// z * 2^-33 in [0, 0.5) is z as a float scaled, exact below 2^24 and to 1
+// part in 2^24 above (the game's 3D Z is about 2^24: 1 or 2 GS units a
+// step), and the top 2^16 values (the UI's 0xFFFFFF9B, 0xFFFFFFFF) are
+// exact in [1 - 2^-8, 1), one float step each.  (Package QUEEN: the depth
+// was 1 - z * scale before, which at z near 2^24 put every depth near 1,
+// where a float steps 2^-24: 256 GS units, so layers within that of each
+// other tied, and the Queen's mist and hair behind her face passed the
+// mirage's GEQUAL.)  Z above the format's largest clamps to it.
+#define GS_ZSCALE_32F (1.0 / 8589934592.0)
 GS_FN float gs_z_to_depth(uint z, float scale)
 {
-    uint zmax = scale < 1.0e-9f ? 0xFFFFFFFFu : (uint)(1.0f / scale) - 1u;
-    if (z > zmax) {
-        return 0.0f;
+    if (scale < 1.5e-10) {
+        // PSMZ32 on a float depth buffer (GS_ZSCALE_32F)
+        if (z >= 0xFFFF0000u) {
+            return (1.0 - 1.0 / 256.0) + (float)(z - 0xFFFF0000u) * (1.0 / 16777216.0);
+        }
+        return (float)z * scale;
     }
-    float d = (float)(zmax - z) * scale + scale;
-    return d > 1.0f ? 1.0f : d;
+    uint zmax = scale < 1.0e-9 ? 0xFFFFFFFFu : (uint)(1.0 / scale) - 1u;
+    return (float)min(z, zmax) * scale;
 }
 
 #endif

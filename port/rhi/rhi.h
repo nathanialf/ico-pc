@@ -354,7 +354,8 @@ typedef struct RhiStencilFace {
 typedef struct RhiDepthStencilState {
     bool depthTest;
     bool depthWrite;
-    RhiCompare depthCompare; /* depth = 1 - z: GS GEQUAL is RHI_CMP_LEQUAL (rd_pipeline.c) */
+    RhiCompare
+        depthCompare; /* depth grows with GS Z: GS GEQUAL is RHI_CMP_GEQUAL (rd_pipeline.c) */
     bool stencilTest;
     uint8_t stencilReadMask, stencilWriteMask;
     RhiStencilFace front,

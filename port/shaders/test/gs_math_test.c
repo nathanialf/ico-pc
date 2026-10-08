@@ -152,20 +152,24 @@ int main(void)
         }
     }
 
-    /* Z: far 0xFFFFFF -> within 2^-24 of 0, near 0 -> 1, monotone, exact
-     * at the 2^-24 scale */
-    const float s24 = 1.0f / 16777216.0f;
-    CHECK(gs_z_to_depth(0u, s24) == 1.0f, "z near");
-    CHECK(gs_z_to_depth(0xFFFFFFu, s24) == s24, "z far");
-    CHECK(gs_z_to_depth(0x1000000u, s24) == 0.0f, "z 2^24");
+    /* Z (package QUEEN: the depth grows with Z): 0 -> 0, 0xFFFFFF -> just
+     * under 1, monotone, exact at the 2^-24 scale; PSMZ32 on a float depth
+     * buffer (GS_ZSCALE_32F) z * 2^-33 below the top band, which is apart */
+    const float s24 = 1.0f / 16777216.0f, s32f = (float)GS_ZSCALE_32F;
+    CHECK(gs_z_to_depth(0u, s24) == 0.0f, "z far");
+    CHECK(gs_z_to_depth(0xFFFFFFu, s24) == 1.0f - s24, "z near");
+    CHECK(gs_z_to_depth(0x1000000u, s24) == 1.0f - s24, "z 2^24 clamps");
     CHECK(gs_z_to_depth(0x800000u, s24) == 0.5f, "z mid");
-    float prev = 2.0f;
+    float prev = -1.0f;
     for (uint z = 0; z < 0x1000000u; z += 4099u) {
         float d = gs_z_to_depth(z, s24);
-        CHECK(d < prev, "z monotone at %u", z);
-        CHECK(d == 1.0f - (float)z / 16777216.0f, "z exact at %u", z);
+        CHECK(d > prev, "z monotone at %u", z);
+        CHECK(d == (float)z / 16777216.0f, "z exact at %u", z);
         prev = d;
     }
+    CHECK(gs_z_to_depth(16999983u, s32f) < gs_z_to_depth(17000000u, s32f), "z32f 17 apart");
+    CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32f) < gs_z_to_depth(0xFFFFFFFFu, s32f), "z32f top apart");
+    CHECK(gs_z_to_depth(0x7FFFFFFFu, s32f) < gs_z_to_depth(0xFFFF0000u, s32f), "z32f band");
 
     if (failures) {
         printf("gs_math_test: %d failures\n", failures);

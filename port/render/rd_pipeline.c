@@ -49,19 +49,19 @@
  * paths, so RGB does not depend on the alpha pass.  Without Z write the
  * depth buffer is the same for both passes, so the alpha pass keeps the Z
  * test and admits exactly the colour pass's fragments.  With Z write under
- * GS GEQUAL (LEQUAL here) each passing fragment stores its depth, so the
- * depth left is the least of the passing fragments', and the fragments the
+ * GS GEQUAL (GEQUAL here too) each passing fragment stores its depth, so
+ * the depth left is the greatest of the passing fragments', and the fragments the
  * alpha pass admits are those at that depth; all of them passed, and the
  * last of them is the last fragment that passed, whose alpha the one-pass
  * draw keeps.  ALWAYS admits every fragment in both passes.  GS GREATER
- * (LESS) with Z write takes LEQUAL in the alpha pass: a fragment whose Z
+ * with Z write takes GEQUAL in the alpha pass: a fragment whose Z
  * equals the stored Z failed the colour pass and passes the alpha pass,
  * the one deviation (logged once; no enumerated state draws it).  A pass
  * whose mask has no RGB blends nothing: one pass, blending off, its own Z.
  *
- * Z: the shaders map GS Z to depth = 1 - z / 2^24 (gs_z_to_depth), so a
- * larger GS Z is a smaller depth: GS GEQUAL is RHI_CMP_LEQUAL, GREATER is
- * LESS.
+ * Z: the shaders map GS Z to a depth that grows with it (gs_z_to_depth, z
+ * times the target's scale; package QUEEN, before it 1 - z * scale), so GS
+ * GEQUAL is RHI_CMP_GEQUAL and GREATER is GREATER.
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -525,9 +525,9 @@ static RhiCompare depthCompare(uint8_t ztst)
     case RD_ZTST_NEVER:
         return RHI_CMP_NEVER;
     case RD_ZTST_GEQUAL:
-        return RHI_CMP_LEQUAL;
+        return RHI_CMP_GEQUAL;
     case RD_ZTST_GREATER:
-        return RHI_CMP_LESS;
+        return RHI_CMP_GREATER;
     default:
         return RHI_CMP_ALWAYS;
     }

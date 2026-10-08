@@ -320,8 +320,9 @@ typedef struct RdTargetRec {
     uint8_t parked, clearPending;
 } RdTargetRec;
 
-/* GS Z to depth scale of a target id's depth buffer (2^-32 for PSMZ32, the
- * default; 2^-32 also for an unknown id). */
+/* GS Z to depth scale of a target id's depth buffer: PSMZ32, the default
+ * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli
+ * GS_ZSCALE_32F: the top Z values mapped apart) and 2^-32 on D24S8. */
 float rd__TargetZScale(uint32_t id);
 /* gs_z_to_depth on the CPU (clears): the same formula as gs_math.hlsli. */
 float rd__GsDepth(uint32_t z, float scale);

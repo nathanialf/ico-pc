@@ -21,7 +21,8 @@
  *            for a draw after it and ends at the anti-alias pass's FRAME
  *            write or the reduction's
  *   vu       gsb_MakeCommonMatrix's VU block and the frame camera
- *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32
+ *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32, and
+ *            Z 17 apart at 2^24 (package QUEEN: the depth grows with Z)
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   camera   rd__CameraProbe (FrameCB through camera_probe_ps) against the
  *            C products and sceVu0RotTransPers through matrixptr+0x100
@@ -619,21 +620,30 @@ static void checkVu(void)
 
 static void checkZScale(void)
 {
-    const float s32 = 1.0f / 4294967296.0f, s24 = 1.0f / 16777216.0f;
-    CHECK(rd__TargetZScale(RD_TARGET_SCENE + 1) == s32, "zscale: SCENE is PSMZ32");
-    CHECK(rd__GsDepth(0xFFFFFF9Bu, s32) > rd__GsDepth(0xFFFFFFFFu, s32),
+    /* package QUEEN: the depth grows with GS Z (gs_z_to_depth); PSMZ32 is
+       z * 2^-33 on a float depth buffer (the top 2^16 values apart in
+       [1 - 2^-8, 1)), z * 2^-32 on D24S8 */
+    const float s32 = 1.0f / 4294967296.0f, s32f = 1.0f / 8589934592.0f, s24 = 1.0f / 16777216.0f;
+    const float sScene = rd__TargetZScale(RD_TARGET_SCENE + 1);
+    CHECK(sScene == s32f || sScene == s32, "zscale: SCENE is PSMZ32");
+    CHECK(rd__GsDepth(0xFFFFFF9Bu, s32f) < rd__GsDepth(0xFFFFFFFFu, s32f),
           "zscale: 0xFFFFFF9B and 0xFFFFFFFF apart");
-    CHECK(rd__GsDepth(0, s32) == 1.0f && rd__GsDepth(0xFFFFFFFFu, s32) == s32,
-          "zscale: 32-bit ends");
-    CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32) == rd__GsDepth(0xFFFFFF9Bu, s32),
+    CHECK(rd__GsDepth(0, s32f) == 0.0f && rd__GsDepth(0xFFFFFFFFu, s32f) < 1.0f &&
+              rd__GsDepth(0xFFFEFFFFu, s32f) < rd__GsDepth(0xFFFF0000u, s32f),
+          "zscale: 32-bit ends and the top band");
+    CHECK(rd__GsDepth(16999983u, s32f) < rd__GsDepth(17000000u, s32f),
+          "zscale: 17 apart at 2^24 (the Queen's layers)");
+    CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32f) == rd__GsDepth(0xFFFFFF9Bu, s32f) &&
+              gs_z_to_depth(17000000u, s32f) == rd__GsDepth(17000000u, s32f),
           "zscale: CPU and shader formula agree");
     for (uint32_t z = 0; z < 0x1000000u; z += 4099u) {
-        if (rd__GsDepth(z, s24) != 1.0f - (float)z / 16777216.0f) {
+        if (rd__GsDepth(z, s24) != (float)z / 16777216.0f) {
             CHECK(0, "zscale: 24-bit exact at %u", z);
             break;
         }
     }
-    CHECK(rd__GsDepth(0x1000000u, s24) == 0.0f, "zscale: 24-bit clamps above zmax");
+    CHECK(rd__GsDepth(0x1000000u, s24) == rd__GsDepth(0xFFFFFFu, s24),
+          "zscale: 24-bit clamps above zmax");
 }
 
 /* --------------------------------------------------------- device checks */

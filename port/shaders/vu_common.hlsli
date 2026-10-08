@@ -242,7 +242,7 @@ float4 vu_homogeneous_position(float4 h)
     float2 t = g_space[SPACE_WORLD].zw;
     float x = ((h.x - o.x * h.w) * g_target.z * 2.0 - h.w) * s.x + t.x * h.w;
     float y = (h.w - (h.y - o.y * h.w) * g_target.w * 2.0) * s.y + t.y * h.w;
-    float z = h.w - 16.0 * h.z * g_z.x;
+    float z = 16.0 * h.z * g_z.x; // gs_z_to_depth's z * scale (package QUEEN)
     return float4(x, y, z, h.w);
 }
 

@@ -115,7 +115,11 @@ float rd__TargetZScale(uint32_t id)
     case RD_ZFMT_16:
         return 1.0f / 65536.0f;
     default:
-        return 1.0f / 4294967296.0f;
+        /* package QUEEN: PSMZ32 on a float depth buffer is z * 2^-33 with
+           the top values apart (gs_math.hlsli gs_z_to_depth); on D24S8
+           (no depth readback, rhi.h) z * 2^-32 */
+        return g_rd.hasDevice && !rhi_Limits()->depthReadback ? 1.0f / 4294967296.0f
+                                                              : 1.0f / 8589934592.0f;
     }
 }
 
@@ -127,12 +131,14 @@ float rd_TargetZScale(RdTarget t)
 /* gs_math.hlsli gs_z_to_depth, the same expression */
 float rd__GsDepth(uint32_t z, float scale)
 {
-    const uint32_t zmax = scale < 1.0e-9f ? 0xFFFFFFFFu : (uint32_t)(1.0f / scale) - 1u;
-    if (z > zmax) {
-        return 0.0f;
+    if (scale < 1.5e-10f) {
+        if (z >= 0xFFFF0000u) {
+            return (1.0f - 1.0f / 256.0f) + (float)(z - 0xFFFF0000u) * (1.0f / 16777216.0f);
+        }
+        return (float)z * scale;
     }
-    const float d = (float)(zmax - z) * scale + scale;
-    return d > 1.0f ? 1.0f : d;
+    const uint32_t zmax = scale < 1.0e-9f ? 0xFFFFFFFFu : (uint32_t)(1.0f / scale) - 1u;
+    return (float)(z < zmax ? z : zmax) * scale;
 }
 
 /* ---------------------------------------------------------- VU block */

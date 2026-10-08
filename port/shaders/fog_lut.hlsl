@@ -53,16 +53,16 @@ Texture2D<float4> g_fogLut : register(t2, space2);
 #define FOG_ZTST_GEQUAL 2u
 #define FOG_ZTST_GREATER 3u
 
-// The GS Z a stored depth d stands for: the inverse of gs_z_to_depth,
-// z = (zmax + 1) - d / scale. With scale a power of two the division is
-// exact; at 2^-32 a depth near 1 carries Z to a multiple of 256 (the float's
-// step there), and the subtraction from 2^32 is exact for z <= 2^31. Z
-// above 2^32 - 256 clamps.
+// The GS Z a stored depth d stands for: the inverse of gs_z_to_depth, z =
+// d / scale (a power of two: exact), and for PSMZ32 on a float depth buffer
+// (GS_ZSCALE_32F) the top band [1 - 2^-8, 1) back to 0xFFFF0000 + its
+// steps.  Z clamps to 2^32 - 256.
 uint fog_gs_z(float d, float scale)
 {
-    float v = d / scale;
-    float zf = 1.0 / scale - v;
-    zf = clamp(zf, 0.0, 4294967040.0);
+    if (scale < 1.5e-10 && d >= 1.0 - 1.0 / 256.0) {
+        return 0xFFFF0000u + (uint)((d - (1.0 - 1.0 / 256.0)) * 16777216.0);
+    }
+    float zf = clamp(d / scale, 0.0, 4294967040.0);
     return (uint)zf;
 }
 
@@ -78,9 +78,9 @@ DualOut fog_lut_ps(FogPSIn i)
     uint ztst = g_col.y;
     uint z = fog_gs_z(d, g_param.x);
     if (ztst != FOG_ZTST_ALWAYS) {
-        // GS GEQUAL (sprite Z >= buffer Z) is depth(sprite) <= depth(buffer)
+        // GS GEQUAL (sprite Z >= buffer Z) is depth(sprite) >= depth(buffer)
         float ds = gs_z_to_depth(g_col.x, g_param.x);
-        bool pass = ztst == FOG_ZTST_GEQUAL ? d >= ds : (ztst == FOG_ZTST_GREATER ? d > ds : false);
+        bool pass = ztst == FOG_ZTST_GEQUAL ? ds >= d : (ztst == FOG_ZTST_GREATER ? ds > d : false);
         if (!pass) {
             discard;
         }

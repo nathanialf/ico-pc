@@ -71,6 +71,19 @@
  *            under RD_PIPELINE_REACHABLE_MAX; a created key is in the set of
  *            its mode)
  *
+ *   aura     (package QUEEN) the mirage's mask as list 8 draws it into
+ *            AURA_WORK with SCENE's depth (TEST 0x5346D, ALPHA 0x44, ABE, Z
+ *            write): a mask quad behind a nearer opaque scene quad leaves
+ *            AURA_WORK's alpha at the clear's 0, one at equal depth passes,
+ *            also at the Queen's depths (GS Z 17M, quads 300, 100 and 17
+ *            behind fail, at it and 17 in front pass);
+ *            a textured quad with AFAIL RGB_ONLY (aref 0x46) and FB_ONLY
+ *            (0x60) writes A = As where the alpha test passes and keeps the
+ *            destination alpha (RGB_ONLY) or writes As (FB_ONLY) where it
+ *            fails, RGB the GS lerp within 2 (As at most
+ *            0x80; reported above it); in Original 1x, Enhanced 4x
+ *            and Enhanced 4x with the full-height scene
+ *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
 #include <math.h>
@@ -261,7 +274,8 @@ static void testRailing(int fba)
     }
     const float zScale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
     const float railD = rd__GsDepth(RAIL_Z, zScale), wallD = rd__GsDepth(WALL_Z, zScale);
-    CHECK(railD < wallD, "railing: the wall is behind the railing (%g, %g)", (double)railD,
+    /* the depth grows with GS Z (gs_z_to_depth, package QUEEN) */
+    CHECK(wallD < railD, "railing: the wall is behind the railing (%g, %g)", (double)railD,
           (double)wallD);
     int holeBad = 0, wireBad = 0, holeZBad = 0, wireZBad = 0, holes = 0, wires = 0;
     /* pixel centres of the railing, texel (tx, ty) = ((x - 64) / 4, (y - 64) / 4) */
@@ -1626,6 +1640,346 @@ static void testPipelines(void)
     }
 }
 
+/* ------------------------------------------------------ the mirage mask
+ *
+ * Package QUEEN: the inputs of staticBlur.c's mirage (feedback mode 2) as
+ * the F12 dumps of the Queen in the model viewer record them.  List 8 draws
+ * the "shine" materials into AURA_WORK with SCENE's depth bound, TEST ATE
+ * GREATER 0x46 AFAIL RGB_ONLY (or 0x60 FB_ONLY), Z GEQUAL, Z write, ALPHA
+ * 0x44 with ABE; AURA_WORK's alpha is the mask the paste lerps the previous
+ * frame over SCENE by.  On the GS:
+ *   depth   a mask draw behind a nearer opaque scene draw fails the Z test
+ *           and leaves the mask at the clear's 0; at equal depth it passes
+ *   alpha   a texel that passes the alpha test writes A = As (FBA off) even
+ *           under the lerp (the GS blends RGB only); one that fails writes
+ *           RGB and keeps the destination alpha (RGB_ONLY) or writes RGB
+ *           and A = As without Z (FB_ONLY)
+ * Each read back at every GS pixel centre (the target's texels per GS pixel
+ * at a scale), against the GS rule. */
+#define AURA_Z_NEAR 0x00C00000u
+#define AURA_Z_FAR 0x00400000u
+
+static uint8_t *readScaled(RdTargetId id, uint32_t *w, uint32_t *h, float *sx, float *sy)
+{
+    const RdTargetRec *t = rd__TargetRec(rd_Target(id).id);
+    if (!t) {
+        CHECK(0, "target %d has no record", (int)id);
+        return NULL;
+    }
+    uint8_t *buf = malloc((size_t)t->tw * t->th * 4);
+    if (!buf || !rd__ReadTarget(rd_Target(id), buf, (size_t)t->tw * t->th * 4, w, h)) {
+        CHECK(0, "readback of target %d", (int)id);
+        free(buf);
+        return NULL;
+    }
+    *sx = (float)*w / (float)t->w;
+    *sy = (float)*h / (float)t->h;
+    return buf;
+}
+
+/* the texel at GS pixel (x, y)'s centre */
+static const uint8_t *gsPixel(const uint8_t *img, uint32_t w, float sx, float sy, int x, int y)
+{
+    const uint32_t tx = (uint32_t)(((float)x + 0.5f) * sx), ty = (uint32_t)(((float)y + 0.5f) * sy);
+    return &img[((size_t)ty * w + tx) * 4];
+}
+
+/* a world-space sprite (x0, y0)-(x1, y1) in GS pixels of a 512 x 512
+ * target, UVs 0..16 texels (12.4) */
+static void auraQuad(int x0, int y0, int x1, int y1, uint32_t z, const uint8_t c[4])
+{
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
+    RdScreenVtx v[2] = {vtx(ox + x0 * 16, oy + y0 * 16, z, c, 0.0f, 0.0f),
+                        vtx(ox + x1 * 16, oy + y1 * 16, z, c, 256.0f, 256.0f)};
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+}
+
+/* auraInspireBefore's clear of AURA_WORK as staticBlur.c's host path
+ * records it: Z test off, Z write off, PABE 1, ALPHA mode 2 without ABE, an
+ * untextured RD_POST_AURA sprite over the screen in colour 0 */
+static void auraClear(void)
+{
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_ZWrite(0);
+    rd_PABE(1);
+    rd_BlendFunc(RD_BLEND_LERP_FIX, 0);
+    rd_TextureOff();
+    rd_ABE(0);
+    rd_Gouraud(0);
+    RdPostParams p;
+    memset(&p, 0, sizeof(p));
+    p.rect[0] = (float)(0x8000 - 256 * 16);
+    p.rect[1] = (float)(0x8000 - 256 * 16);
+    p.rect[2] = (float)(0x8000 + 256 * 16);
+    p.rect[3] = (float)(0x8000 + 256 * 16);
+    p.scalar[2] = 1.0f;
+    p.exactInt = 1;
+    rd_Post(RD_POST_AURA, &p);
+}
+
+/* (a): the mask behind the scene */
+static void testAuraDepth(const char *mode, RdTex white)
+{
+    static const uint8_t grey[4] = {0x60, 0x60, 0x60, 0x80}, red[4] = {200, 30, 30, 0x80};
+    static const uint8_t shine[4] = {0x80, 0x80, 0x80, 0x7F}; /* the queen's vertex colour */
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    /* list 1: the face, opaque, nearer, Z write */
+    rd_SelectList(1);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(RD_TEST_Z_GEQUAL);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_TextureOff();
+    auraQuad(100, 100, 200, 200, AURA_Z_NEAR, red);
+    /* list 8: the clear, then the shine material: farther (rows 50..150),
+     * and at the face's depth (rows 160..190) */
+    rd_SelectList(8);
+    auraClear();
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_TestGs(0x5346D); /* ATE GREATER 0x46, AFAIL RGB_ONLY, Z GEQUAL */
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Gouraud(1);
+    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_Texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    auraQuad(50, 50, 250, 150, AURA_Z_FAR, shine);
+    auraQuad(50, 160, 250, 190, AURA_Z_NEAR, shine);
+    rd_EndFrame(0);
+
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_AURA_WORK, &w, &h, &sx, &sy);
+    if (!img) {
+        return;
+    }
+    int behind = 0, behindBad = 0, beside = 0, besideBad = 0, equal = 0, equalBad = 0, out = 0,
+        outBad = 0;
+    for (int y = 40; y < 200; y++) {
+        for (int x = 40; x < 260; x++) {
+            const uint8_t a = gsPixel(img, w, sx, sy, x, y)[3];
+            const int inFar = x >= 50 && x < 250 && y >= 50 && y < 150;
+            const int inEq = x >= 50 && x < 250 && y >= 160 && y < 190;
+            const int inFace = x >= 100 && x < 200 && y >= 100 && y < 200;
+            if (inFar && inFace) {
+                behind++;
+                behindBad += a != 0;
+            } else if (inFar) {
+                beside++;
+                besideBad += a != 0x7F;
+            } else if (inEq) {
+                equal++;
+                equalBad += a != 0x7F;
+            } else {
+                out++;
+                outBad += a != 0;
+            }
+        }
+    }
+    printf("  aura depth (%s): mask behind the face %d of %d set, beside it %d of %d unset, at "
+           "its depth %d of %d unset, outside %d of %d set\n",
+           mode, behindBad, behind, besideBad, beside, equalBad, equal, outBad, out);
+    CHECK(behindBad == 0, "aura depth (%s): %d of %d mask pixels behind the nearer scene draw set",
+          mode, behindBad, behind);
+    CHECK(besideBad == 0 && equalBad == 0,
+          "aura depth (%s): mask pixels that pass the Z test unset: %d beside, %d at equal depth",
+          mode, besideBad, equalBad);
+    CHECK(outBad == 0, "aura depth (%s): %d mask pixels set outside the draws", mode, outBad);
+    free(img);
+}
+
+/* (a), at the Queen's depths: the model viewer's dumps put her face (list
+ * 0/1) at GS Z 16.9M..17.2M and the veil, mist and hair layers of list 8
+ * within tens to hundreds of Z units of it, in front and behind (the
+ * vertices of mesh ...0910 lie 17..34 in front of the face's, ...0300 lie
+ * -360..+4809 from the veil's; rd_replay_tool --list --no-device prints
+ * every draw's Z range).  The GS compares the integers: a mask quad 17,
+ * 100 or 300 behind the face fails, one 17 in front or at its Z passes. */
+static void testAuraDepthNear(const char *mode, RdTex white)
+{
+    static const uint8_t grey[4] = {0x60, 0x60, 0x60, 0x80}, skin[4] = {220, 210, 200, 0x80};
+    static const uint8_t shine[4] = {0x80, 0x80, 0x80, 0x7F};
+    static const int32_t kDz[5] = {-300, -100, -17, 0, 17};
+    const uint32_t face = 17000000u;
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_SelectList(1);
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(RD_TEST_Z_GEQUAL);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_TextureOff();
+    auraQuad(40, 40, 260, 240, face, skin);
+    rd_SelectList(8);
+    auraClear();
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_TestGs(0x5346D);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Gouraud(1);
+    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_Texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    for (int k = 0; k < 5; k++) {
+        auraQuad(50 + k * 40, 50, 80 + k * 40, 230, (uint32_t)((int32_t)face + kDz[k]), shine);
+    }
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_AURA_WORK, &w, &h, &sx, &sy);
+    if (!img) {
+        return;
+    }
+    for (int k = 0; k < 5; k++) {
+        const int want = kDz[k] >= 0 ? 0x7F : 0;
+        int bad = 0;
+        for (int y = 50; y < 230; y++) {
+            for (int x = 50 + k * 40; x < 80 + k * 40; x++) {
+                bad += gsPixel(img, w, sx, sy, x, y)[3] != want;
+            }
+        }
+        printf("  aura depth near (%s): a mask quad %+d from the face's Z %u: %d of %d pixels "
+               "off the GS (%s)\n",
+               mode, kDz[k], face, bad, 30 * 180, want ? "passes" : "fails");
+        CHECK(bad == 0, "aura depth near (%s): a mask quad %+d from the face's Z: %d pixels %s",
+              mode, kDz[k], bad,
+              want ? "fail the GEQUAL it passes on the GS" : "pass the GEQUAL it fails on the GS");
+    }
+    free(img);
+}
+
+/* (b): the mask's alpha per texel under RGB_ONLY 0x46 and FB_ONLY 0x60 */
+static const uint8_t kAuraAlphas[16] = {0x00, 0x10, 0x30, 0x45, 0x46, 0x47, 0x50, 0x5F,
+                                        0x60, 0x61, 0x70, 0x7F, 0x80, 0x90, 0xC0, 0xFF};
+
+static int gsLerp(int cs, int cd, int as)
+{
+    int v = (((cs - cd) * as) >> 7) + cd;
+    return v < 0 ? 0 : (v > 255 ? 255 : v);
+}
+
+static void testAuraAlpha(const char *mode, int fbOnly)
+{
+    static uint8_t tex[16 * 16 * 4];
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            uint8_t *p = &tex[(y * 16 + x) * 4];
+            const uint32_t hsh = hash((uint32_t)(y * 16 + x) * 77u + 5u);
+            p[0] = (uint8_t)hsh;
+            p[1] = (uint8_t)(hsh >> 8);
+            p[2] = (uint8_t)(hsh >> 16);
+            p[3] = kAuraAlphas[(x + y) & 15];
+        }
+    }
+    RdTex t = rd_CreateTexture(16, 16, tex, RD_TEXA_80_80, "aura alpha");
+    static const uint8_t bg[4] = {10, 200, 30, 0x55}, vc[4] = {0x80, 0x80, 0x80, 0x80};
+    rd_BeginFrame();
+    rd_SelectList(8);
+    rd_ClearTarget(rd_Target(RD_TARGET_AURA_WORK), bg, 0, 0);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_TestGs(fbOnly ? 0x3160D : 0x3346D); /* Z ALWAYS */
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Gouraud(1);
+    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    auraQuad(64, 64, 80, 80, 0, vc); /* 1:1 */
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_AURA_WORK, &w, &h, &sx, &sy);
+    if (!img) {
+        rd_DestroyTexture(t);
+        return;
+    }
+    const int aref = fbOnly ? 0x60 : 0x46;
+    int alphaBad = 0, rgbMax = 0, rgbOver = 0;
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            const uint8_t *s = &tex[(y * 16 + x) * 4];
+            const uint8_t *g = gsPixel(img, w, sx, sy, 64 + x, 64 + y);
+            const int as = (s[3] * 0x80) >> 7, pass = as > aref;
+            const int wantA = pass || fbOnly ? as : bg[3];
+            if (g[3] != wantA) {
+                const int want[4] = {gsLerp(s[0], bg[0], as), gsLerp(s[1], bg[1], as),
+                                     gsLerp(s[2], bg[2], as), wantA};
+                pixFail(fbOnly ? "aura alpha FB_ONLY" : "aura alpha RGB_ONLY", x, y, g, want);
+                alphaBad++;
+            }
+            for (int k = 0; k < 3; k++) {
+                const int d = abs((int)g[k] - gsLerp(s[k], bg[k], as));
+                if (as <= 0x80) {
+                    rgbMax = d > rgbMax ? d : rgbMax;
+                } else {
+                    rgbOver = d > rgbOver ? d : rgbOver;
+                }
+            }
+        }
+    }
+    /* RGB is reported, not asserted, where As passes 0x80 (the GS
+     * overshoots there; the hardware blend's factor stops at 1.0): the mask
+     * is the alpha, and the queen's texels are at most 0x80 */
+    printf("  aura alpha (%s, %s 0x%02x): %d of 256 texels with the wrong alpha, RGB within %d "
+           "(As <= 0x80), %d where As > 0x80\n",
+           mode, fbOnly ? "FB_ONLY" : "RGB_ONLY", aref, alphaBad, rgbMax, rgbOver);
+    CHECK(alphaBad == 0, "aura alpha (%s, %s): %d texels' alpha is not the GS's", mode,
+          fbOnly ? "FB_ONLY" : "RGB_ONLY", alphaBad);
+    /* the hardware blend's lerp (not blend_int) is within 2 of the GS's */
+    CHECK(rgbMax <= 2, "aura alpha (%s): RGB off the GS lerp by %d", mode, rgbMax);
+    free(img);
+    rd_DestroyTexture(t);
+}
+
+static void testAuraMask(const char *mode)
+{
+    static uint8_t whiteTx[16 * 16 * 4];
+    memset(whiteTx, 0xFF, sizeof(whiteTx));
+    for (int i = 0; i < 16 * 16; i++) {
+        whiteTx[i * 4 + 3] = 0x80;
+    }
+    RdTex white = rd_CreateTexture(16, 16, whiteTx, RD_TEXA_80_80, "aura white");
+    testAuraDepth(mode, white);
+    testAuraDepthNear(mode, white);
+    testAuraAlpha(mode, 0);
+    testAuraAlpha(mode, 1);
+    rd_DestroyTexture(white);
+}
+
+/* the mask tests again in a renderer of other display options: the
+ * Enhanced preset at 4x (the resolution window) and with the full-height
+ * scene */
+static void testAuraMaskAt(const char *mode, float scale, int fullHeight)
+{
+    RdSettings s;
+    memset(&s, 0, sizeof(s));
+    s.preset = RD_PRESET_ENHANCED;
+    s.outputWidth = 640;
+    s.outputHeight = 480;
+    s.aspect = 4.0f / 3.0f;
+    s.sceneScale = scale;
+    s.fullHeightScene = (uint8_t)fullHeight;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_Init (%s)", mode);
+        return;
+    }
+    testAuraMask(mode);
+    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    CHECK(verr == 0, "%s: %u validation errors", mode, verr);
+    rd_Shutdown();
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -1658,10 +2012,13 @@ int main(int argc, char **argv)
     testExact();
     testDump(dir);
     testPipelines();
+    testAuraMask("Original 1x"); /* package QUEEN */
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%u validation errors", verr);
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     rd_Shutdown();
+    testAuraMaskAt("Enhanced 4x", 4.0f, 0);
+    testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
     if (failures) {
         printf("rd_pixel_test: %d failures\n", failures);
         return 1;
