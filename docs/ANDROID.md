@@ -2,6 +2,12 @@
 
 [Back to the front page](../README.md)
 
+> [!NOTE]
+> Android support is experimental in this version. It plays, but the
+> picture can be slow, the opening movie may glitch, folding phones may
+> not get the full screen, and the touch layout is a first draft. See
+> [Known limits](#known-limits).
+
 ## What you need
 
 - **A 64-bit Android phone or tablet with Android 10 or later.** Its
@@ -124,5 +130,15 @@ like any app.
   have it, and a system update does not always add it.
 - The file picker cannot hide files that are not disc images. If you pick
   the wrong file, the game says so and asks again at the next start.
-- On some phones the picture can run slower than on a PC, especially at a
-  high Resolution in Options > Display. Try 1x if it stutters.
+- The game runs slower than on a PC, especially at a high Resolution in
+  Options > Display. Try 1x if it stutters. Making it faster is on the list
+  for the next version.
+- The opening movie shows picture glitches on some phones. The game itself
+  is not affected.
+- On a folding phone the picture may not fill the whole open screen.
+- The on-screen buttons are a first layout. Their size and placement will
+  change with feedback; Options > Controls lets you change the size now.
+
+Android is **experimental** in this version: it works, but expect rough
+edges, and tell us what you find on the
+[issues page](https://github.com/nathanialf/ico-pc/issues).

@@ -24,7 +24,8 @@ widescreen and smoother motion, but they stay off until you turn them on.
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
   - a Steam Deck;
   - or a 64-bit Android phone or tablet with Android 10 or later, usually
-    one from 2022 or newer. [More about Android](docs/ANDROID.md).
+    one from 2022 or newer. Android is experimental in this version.
+    [More about Android](docs/ANDROID.md).
 - **About 1 GB of free space** for the game's files, which the first start
   copies out of the disc image.
 
