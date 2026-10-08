@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older (fullBackupContent): what the system's backup
+     keeps. Only the player's saves and settings: the memory cards, the
+     two settings files and the achievements. The game data (ico.o2r), the
+     disc image, the logs, the dumps and the texture packs stay out. The
+     files folder is the shared one (external) when it is writable, else
+     the internal one (file): port/platform/android/android_paths.h. -->
+<full-backup-content>
+    <include domain="external" path="memcard/" />
+    <include domain="external" path="config.toml" />
+    <include domain="external" path="ico-pc.ini" />
+    <include domain="external" path="achievements.toml" />
+    <include domain="file" path="memcard/" />
+    <include domain="file" path="config.toml" />
+    <include domain="file" path="ico-pc.ini" />
+    <include domain="file" path="achievements.toml" />
+</full-backup-content>

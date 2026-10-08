@@ -110,6 +110,12 @@ make the `SCES-50760/replacements` folders yourself.
 > Uninstalling the game deletes this whole folder, saves included. Copy
 > the `memcard` folder to a computer or another safe place first.
 
+If your phone backs up its apps, the backup keeps your saves, your
+settings and your achievements. It leaves out the game data, the disc
+image, the logs and the packs. Whether the backup comes back after you
+uninstall and install the game again depends on the phone, so keep your
+own copy of `memcard` too.
+
 ## Controls
 
 **Touch.** Buttons are drawn on the screen over the game: a stick on the

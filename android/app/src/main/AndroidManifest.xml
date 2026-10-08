@@ -29,6 +29,8 @@
         android:appCategory="game"
         android:isGame="true"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:hardwareAccelerated="true"
         android:resizeableActivity="false"
         android:enableOnBackInvokedCallback="false"
