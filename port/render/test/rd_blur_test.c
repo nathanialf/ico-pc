@@ -46,6 +46,11 @@
  *      then Enhanced 4x and 4x with the full-height scene, SCENE at the GS
  *      pixel centres against the 1x model: exact where the mask is 0 within
  *      16 GS pixels, within 4 where it is one value within 16.
+ *   p  (package QUEEN) the mirage frame of q with the shine a keyed world
+ *      draw, presented as the presenter does (a tick's first present and a
+ *      later one at dt 0.5, the shine moving between ticks): the face band's
+ *      interior (mask 0) is untouched and FEED128's alpha as the paste
+ *      reads it is the mask, not SCENE's alpha, in every present.
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -1700,6 +1705,173 @@ static void checkQueenMirage(void)
     systemStatus[0] = status0;
 }
 
+/* ===================== (p) the mirage in the presenter's presents (QUEEN)
+ *
+ * The model viewer's rc2 dumps: the GS model of their own commands leaves
+ * the Queen's face outside the mirage's mask in every frame, yet the
+ * presented picture blackens it in some.  Here the mirage frame of (q) with
+ * the shine material a keyed world draw (as her list-8 meshes are) behind
+ * a nearer face band, presented as the presenter does: a tick's first
+ * present and a later one (dt 0.5), and between two ticks whose shine
+ * moves.  In every present:
+ *   - the face band's interior (rows 200..240: mask 0, clear of the
+ *     bilinear bleed) is the picture drawn into it, byte for byte;
+ *   - FEED128's alpha as the paste reads it (the frame replayed up to the
+ *     paste) is the WORK0 mask: 0 over the face's rows, set over the
+ *     shine's, never SCENE's alpha (which the copy for the next tick
+ *     writes into FEED128). */
+static const char kQShine;
+
+static void qPresShine(int dx)
+{
+    static const uint8_t c[4] = {0x80, 0x80, 0x80, 0x7F};
+    dl_SetDLPriority(8);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, QH, 0);
+    rd_TestGs(0x5346D);
+    rd_ZWrite(1);
+    rd_ABE(1);
+    rd_BlendFunc(RD_BLEND_LERP_AS, 0x80);
+    rd_FBA(0);
+    rd_PABE(0);
+    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_Texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_Gouraud(1);
+    const int32_t ox = (2048 - W / 2) * 16, oy = (2048 - QH / 2) * 16;
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    v[0].x = ox + (100 + dx) * 16;
+    v[0].y = oy + 150 * 16;
+    v[1].x = ox + (400 + dx) * 16;
+    v[1].y = oy + 300 * 16;
+    v[0].z = v[1].z = Q_Z_SHINE;
+    v[1].s = 300.0f * 16.0f;
+    v[1].t = 150.0f * 16.0f;
+    v[0].q = v[1].q = 1.0f;
+    memcpy(v[0].rgba, c, 4);
+    memcpy(v[1].rgba, c, 4);
+    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, RD_KEY(&kQShine, 8, 0));
+}
+
+static void qPresTick(int dx)
+{
+    dl_SetDLPriority(0);
+    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
+    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
+    FullScreenEffectBefore();
+    qPresShine(dx);
+    FullScreenEffectAfter();
+    dl_Swap();
+}
+
+/* the frame for a present; with probe, everything after the paste (the
+ * band clear and the copy of SCENE into FEED128) made a NOP */
+static const RdFrame *qPresBuild(float alpha, int first, int probe)
+{
+    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, 0.5f, first, NULL);
+    if (!f || !probe) {
+        return f;
+    }
+    RdCmdList *cl = (RdCmdList *)&f->lists[8];
+    RdStateBlock st = f->startState;
+    for (int l = 0; l < 8; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            rd__ApplyState(&st, &f->lists[l].cmds[i]);
+        }
+    }
+    int pasted = 0;
+    for (uint32_t i = 0; i < cl->count; i++) {
+        RdCmd *c = &cl->cmds[i];
+        if (rd__ApplyState(&st, c)) {
+            continue;
+        }
+        if (pasted && c->type == RDC_POST_STUB && st.color == rd_Target(RD_TARGET_FEED128).id) {
+            c->type = RDC_NOP;
+        }
+        pasted |= c->type == RDC_POST_STUB && st.color == rd_Target(RD_TARGET_SCENE).id;
+    }
+    return f;
+}
+
+static int s_qpFaceBad, s_qpFeedBad, s_qpPresents, s_qpShineSet;
+
+static void qPresCheck(const char *what, float alpha, int first)
+{
+    static uint8_t scene[W * QH * 4], feed[128 * 128 * 4];
+    uint32_t w = 0, h = 0;
+    /* the probe: FEED128 as the paste read it */
+    const RdFrame *f = qPresBuild(alpha, 0, 1);
+    if (f && rd__ReplayFrame(f, 0, false)) {
+        rhi_WaitIdle();
+        if (rd__ReadTarget(rd_Target(RD_TARGET_FEED128), feed, sizeof(feed), &w, &h)) {
+            int bad = 0, set = 0;
+            for (int x = 8; x < 120; x++) {
+                bad += feed[(55 * 128 + x) * 4 + 3] != 0;  /* rows 220 / 4 of the face */
+                set += feed[(40 * 128 + 50) * 4 + 3] != 0; /* the shine above it */
+            }
+            s_qpFeedBad += bad;
+            s_qpShineSet += set != 0;
+            CHECK(bad == 0,
+                  "(p) %s: FEED128's alpha the paste reads over the face's rows: %d of "
+                  "112 texels set (SCENE's alpha?)",
+                  what, bad);
+        }
+    }
+    f = qPresBuild(alpha, first, 0);
+    if (!f || !rd__ReplayFrame(f, 0, false)) {
+        CHECK(0, "(p) %s: replay", what);
+        return;
+    }
+    rhi_WaitIdle();
+    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene, sizeof(scene), &w, &h)) {
+        CHECK(0, "(p) %s: read SCENE", what);
+        return;
+    }
+    int bad = 0;
+    for (int y = 200; y < 240; y++) {
+        for (int x = 140; x < 360; x++) {
+            bad += memcmp(&scene[((size_t)y * W + x) * 4], &s_img[((size_t)y * W + x) * 4], 3) != 0;
+        }
+    }
+    s_qpFaceBad += bad;
+    s_qpPresents++;
+    CHECK(bad == 0, "(p) %s: %d of 8800 face pixels (mask 0) changed by the mirage", what, bad);
+}
+
+static void checkQueenPresents(void)
+{
+    const int screenHeight = ScreenHeight, status0 = systemStatus[0];
+    ScreenHeight = QH;
+    systemStatus[0] = 0;
+    setStage(0, 2, 128);
+    GlobalStageSetting.feedbackCol[0] = GlobalStageSetting.feedbackCol[1] =
+        GlobalStageSetting.feedbackCol[2] = 64;
+    GlobalTimer = 0;
+    qInit("presents", RD_PRESET_ORIGINAL, 0.0f, 0);
+    const uint8_t interpolate = g_rd.settings.interpolate;
+    g_rd.settings.interpolate = 1; /* the replays are the presents' */
+    clearAll();
+    for (int n = 0; n < 6; n++) {
+        qPresTick((n % 3) * 8); /* the shine moves */
+        char what[64];
+        snprintf(what, sizeof(what), "tick %d, first present at 0.5", n);
+        qPresCheck(what, 0.5f, 1);
+        snprintf(what, sizeof(what), "tick %d, later present at 1", n);
+        qPresCheck(what, 1.0f, 0);
+    }
+    g_rd.settings.interpolate = interpolate;
+    printf("  (p) %d mirage presents (first and later, dt 0.5, the shine moving): %d face pixels "
+           "changed, %d FEED128 texels over the face set at the paste, the shine's mask set in "
+           "%d\n",
+           s_qpPresents, s_qpFaceBad, s_qpFeedBad, s_qpShineSet);
+    CHECK(s_qpShineSet == s_qpPresents, "(p) the shine's mask is set in every probe");
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "(p) %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    ScreenHeight = screenHeight;
+    systemStatus[0] = status0;
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
@@ -1807,6 +1979,7 @@ int main(void)
           rhi_vk_ValidationErrorCount());
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     checkQueenMirage(); /* package QUEEN: re-initialises rd (NTSC, 1x, 4x) */
+    checkQueenPresents();
     if (failures) {
         printf("rd_blur_test: %d failures\n", failures);
         return 1;
