@@ -99,7 +99,7 @@
       "name": "Arimo Regular (font)",
       "version": "1.341, wght 400 instance subset to Latin (a modified version, OFL 1.1 section 3)",
       "licence": "SIL Open Font License 1.1",
-      "used_for": "the port's menu text, embedded in the program",
+      "used_for": "the menus' text (the game's menus and the port's own), embedded in the program",
       "texts": [{"file": "port/assets/fonts/OFL.txt"}]
     },
     {
