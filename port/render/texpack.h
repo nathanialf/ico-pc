@@ -187,6 +187,13 @@ typedef struct TexpackStats {
 
 void texpack_GetStats(TexpackStats *out);
 
+/* Package AN-D, the system low on memory (Android's LOW_MEMORY): the RAM
+   cache's limit drops to what it holds now, so the precache reads nothing
+   more ahead and a loaded file is no longer kept (requests still load and
+   install); a line for the log.  Returns the bytes the cache holds.  Any
+   thread; nothing before texpack_Init. */
+uint64_t texpack_LowMemory(void);
+
 /* ---------------------------------------------------------- the budget
  * GPU bytes of the live replacements, per rd texture.  rd_tex calls
  * texpack_BudgetRelease when it retires a replacement (rdtex_Drop, a new

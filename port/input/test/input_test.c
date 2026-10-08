@@ -90,6 +90,34 @@ static void test_bindings_defaults(void)
     CHECK(has_key(b.gp[ICO_T_L2], ICO_GP_LTRIGGER) && has_key(b.gp[ICO_T_R3], ICO_GP_RSTICK));
     CHECK(has_key(b.gp[ICO_T_START], ICO_GP_START) && has_key(b.gp[ICO_T_SELECT], ICO_GP_BACK));
     CHECK(near_(b.deadzone, 0.12f, 1e-6f) && near_(b.walk_scale, 0.5f, 1e-6f));
+    /* package AN-D: Android's Back key joins Start, once, and nothing else
+       changes */
+    {
+        IcoBindings a = b;
+        unsigned char row[ICO_BIND_MAX];
+
+#ifdef __ANDROID__
+        CHECK(has_key(b.kb[ICO_T_START], ICO_KEY_AC_BACK));
+#else
+        CHECK(!has_key(b.kb[ICO_T_START], ICO_KEY_AC_BACK));
+#endif
+        ico_bindings_android_defaults(&a);
+        CHECK(has_key(a.kb[ICO_T_START], ICO_KEY_AC_BACK) &&
+              has_key(a.kb[ICO_T_START], ICO_KEY_RETURN));
+        memcpy(row, a.kb[ICO_T_START], sizeof(row));
+        ico_bindings_android_defaults(&a);
+        CHECK(memcmp(row, a.kb[ICO_T_START], sizeof(row)) == 0);
+        memcpy(a.kb[ICO_T_START], b.kb[ICO_T_START], sizeof(row));
+        CHECK(memcmp(a.kb, b.kb, sizeof(a.kb)) == 0 && memcmp(a.gp, b.gp, sizeof(a.gp)) == 0 &&
+              memcmp(a.mouse, b.mouse, sizeof(a.mouse)) == 0);
+        /* a full row: Back takes the last slot */
+        memset(a.kb[ICO_T_START], ICO_KEY_A, sizeof(row));
+        ico_bindings_android_defaults(&a);
+        CHECK(a.kb[ICO_T_START][ICO_BIND_MAX - 1] == ICO_KEY_AC_BACK &&
+              a.kb[ICO_T_START][0] == ICO_KEY_A);
+        CHECK(ico_key_from_name("back") == ICO_KEY_AC_BACK);
+        CHECK(strcmp(ico_key_name(ICO_KEY_AC_BACK), "Back") == 0);
+    }
     /* names round trip */
     CHECK(ico_key_from_name("left shift") == ICO_KEY_LSHIFT);
     CHECK(ico_key_from_name("LSHIFT") == ICO_KEY_LSHIFT);

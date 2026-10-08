@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app: one activity, SDL's (IcoActivity), landscape, no permissions.
-     The package name is app/build.gradle's namespace (com.defnf.icopc). -->
+<!-- The app: one activity, SDL's (IcoActivity), landscape, one permission
+     (VIBRATE). The package name is app/build.gradle's namespace
+     (com.defnf.icopc). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
@@ -16,6 +17,11 @@
     <uses-feature
         android:name="android.hardware.gamepad"
         android:required="false" />
+
+    <!-- gamepad rumble: SDL's Java side vibrates through the system's
+         vibrator service, which throws without it. A normal permission:
+         granted at install, never asked for. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:label="@string/app_name"

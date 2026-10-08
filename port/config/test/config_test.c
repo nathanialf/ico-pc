@@ -243,8 +243,11 @@ static void test_save(void)
     remove(toml);
     ico_config_reset(toml, "no-such.ini");
     CHECK_STR(ico_config_get_string("game.language", "auto"), "auto");
+    CHECK(!ico_config_dirty()); /* read, nothing set */
     CHECK(ico_config_set_string("game.language", "de") == 0);
+    CHECK(ico_config_dirty());
     CHECK(ico_config_save() == 0);
+    CHECK(!ico_config_dirty());   /* saved */
     CHECK(!ico_file_exists(tmp)); /* the temp file was renamed away */
     text = read_file(toml);
     CHECK(text != NULL);

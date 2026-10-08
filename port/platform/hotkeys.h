@@ -9,7 +9,7 @@
  *   F11   the window: stats lines every second for 30 s instead of every
  *         10 s; again turns it off
  *
- * Neither key is bindable (port/input/keys.def stops at F4), and a held
+ * Neither key is bindable (port/input/keys.def has F1 to F4 only), and a held
  * key's repeats do nothing.
  */
 #ifndef ICO_PLATFORM_HOTKEYS_H

@@ -18,12 +18,16 @@ static char want_toml[ICO_PATH_MAX];
 static char want_ini[ICO_PATH_MAX];
 static IcoToml *toml;
 static IcoIni ini;
+/* a setter changed the copy in memory since it was read or saved
+   (ico_config_dirty) */
+static int dirty;
 
 void ico_config_reset(const char *toml_path, const char *ini_path)
 {
     ico_toml_free(toml);
     toml = NULL;
     loaded = 0;
+    dirty = 0;
     snprintf(want_toml, sizeof(want_toml), "%s", toml_path != NULL ? toml_path : "");
     snprintf(want_ini, sizeof(want_ini), "%s", ini_path != NULL ? ini_path : "");
 }
@@ -164,28 +168,42 @@ double ico_config_get_float(const char *path, double def)
     return ico_toml_get_float(toml, path, def);
 }
 
+/* a setter's result; a change marks the copy unsaved */
+static int note_set(int r)
+{
+    if (r == 0) {
+        dirty = 1;
+    }
+    return r;
+}
+
+int ico_config_dirty(void)
+{
+    return dirty;
+}
+
 int ico_config_set_string(const char *path, const char *value)
 {
     ensure();
-    return ico_toml_set_string(toml, path, value);
+    return note_set(ico_toml_set_string(toml, path, value));
 }
 
 int ico_config_set_bool(const char *path, int value)
 {
     ensure();
-    return ico_toml_set_bool(toml, path, value);
+    return note_set(ico_toml_set_bool(toml, path, value));
 }
 
 int ico_config_set_int(const char *path, long long value)
 {
     ensure();
-    return ico_toml_set_int(toml, path, value);
+    return note_set(ico_toml_set_int(toml, path, value));
 }
 
 int ico_config_set_float(const char *path, double value)
 {
     ensure();
-    return ico_toml_set_float(toml, path, value);
+    return note_set(ico_toml_set_float(toml, path, value));
 }
 
 int ico_config_save(void)
@@ -233,6 +251,7 @@ int ico_config_save(void)
         fprintf(stderr, "config: cannot write %s\n", toml_file);
         return -1;
     }
+    dirty = 0;
     return 0;
 }
 

@@ -167,6 +167,11 @@ void ico_audio_sdl_device_removed(uint32_t which)
 {
     (void)which;
 }
+
+void ico_audio_sdl_pause(int paused)
+{
+    (void)paused;
+}
 #endif
 
 /* Mirror mode (Phase 6A): the option lives in

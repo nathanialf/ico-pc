@@ -217,6 +217,25 @@ const char *ico_bindings_default_text(void)
 
 static void set_defaults_from_text(IcoBindings *b);
 
+void ico_bindings_android_defaults(IcoBindings *b)
+{
+    unsigned char *row = b->kb[ICO_T_START];
+    int i;
+
+    for (i = 0; i < ICO_BIND_MAX; i++) {
+        if (row[i] == ICO_KEY_AC_BACK) {
+            return;
+        }
+    }
+    for (i = 0; i < ICO_BIND_MAX; i++) {
+        if (row[i] == ICO_KEY_NONE) {
+            row[i] = ICO_KEY_AC_BACK;
+            return;
+        }
+    }
+    row[ICO_BIND_MAX - 1] = ICO_KEY_AC_BACK; /* a full row: Back wins the last slot */
+}
+
 void ico_bindings_defaults(IcoBindings *b)
 {
     memset(b, 0, sizeof(*b));
@@ -229,6 +248,11 @@ void ico_bindings_defaults(IcoBindings *b)
     b->touch_size = ICO_TOUCH_MEDIUM;
     b->touch_opacity = 75;
     set_defaults_from_text(b);
+#ifdef __ANDROID__
+    /* every caller (the device layer's start, the remap screen's reset,
+       the writer's comparison, the reload) sees the same defaults */
+    ico_bindings_android_defaults(b);
+#endif
 }
 
 /* --- config values -------------------------------------------------------- */

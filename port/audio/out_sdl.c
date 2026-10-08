@@ -176,6 +176,24 @@ void ico_audio_sdl_device_removed(uint32_t which)
     }
 }
 
+void ico_audio_sdl_pause(int paused)
+{
+    if (stream == NULL) {
+        return;
+    }
+    if (paused) {
+        if (!SDL_PauseAudioStreamDevice(stream)) {
+            fprintf(stderr, "audio: pause: %s\n", SDL_GetError());
+        }
+        return;
+    }
+    /* what was queued before the pause would play late: from silence */
+    SDL_ClearAudioStream(stream);
+    if (!SDL_ResumeAudioStreamDevice(stream)) {
+        fprintf(stderr, "audio: resume: %s\n", SDL_GetError());
+    }
+}
+
 void ico_audio_sdl_push(const int16_t *frames, int count)
 {
     int queued;

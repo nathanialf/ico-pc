@@ -96,5 +96,10 @@ int ico_audio_sdl_reopen(const char *name);
    setting stays, for the next start).  The default device needs nothing:
    SDL follows the system's default itself. */
 void ico_audio_sdl_device_removed(uint32_t which);
+/* Package AN-D (the Android lifecycle): 1 stops the output device (the
+   app goes to the background), 0 starts it again with the stream's queue
+   emptied, so no stale audio plays on return. Nothing without an open
+   stream; a stub without the SDL output. */
+void ico_audio_sdl_pause(int paused);
 
 #endif

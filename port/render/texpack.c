@@ -616,6 +616,30 @@ void texpack_GetStats(TexpackStats *out)
     unlockTp();
 }
 
+uint64_t texpack_LowMemory(void)
+{
+    uint64_t held;
+
+    if (!s_tp.inited) {
+        return 0;
+    }
+    lockTp();
+    held = s_tp.stats.cacheBytes;
+    const int lowered = s_tp.cacheLimit > held;
+    if (lowered) {
+        s_tp.cacheLimit = held;
+        s_tp.stats.cacheLimit = held;
+    }
+    unlockTp();
+    if (lowered) {
+        fprintf(stderr,
+                "textures: the system is low on memory; the texture pack's cache stays at %llu "
+                "MB and reads nothing more ahead\n",
+                (unsigned long long)(held >> 20));
+    }
+    return held;
+}
+
 int texpack_Init(const TexpackConfig *cfg)
 {
     char dirs[6][1100];

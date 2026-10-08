@@ -30,6 +30,9 @@ int ico_config_set_float(const char *path, double value);
    code does not know are kept; the keys with defaults (version, [video],
    [audio], [game] language, [paths] iso) are added when absent. 0, or -1. */
 int ico_config_save(void);
+/* 1 when a setter changed the copy in memory since it was read or last
+   saved (the Android lifecycle saves on termination only then), else 0. */
+int ico_config_dirty(void);
 
 /* The first run: when config.toml does not exist, writes it with the keys
    ico_config_save adds at their defaults and a comment per section. Never

@@ -637,6 +637,13 @@ static void testPrecache(void)
     CHECK(s_tc.installed[22] != 0 && strcmp(s_tc.tag[22], "user-n5-big") == 0 &&
               s_tc.levels[22] == 2 && stats().cached == 5,
           "past the limit: loaded on request, with its chain, not cached");
+    /* package AN-D: low memory holds the cache at what it has */
+    const uint64_t held = texpack_LowMemory();
+    s = stats();
+    CHECK(held == s.cacheBytes && s.cacheLimit == s.cacheBytes && s.cached == 5,
+          "low memory: the limit is the %llu bytes held (%llu), nothing dropped",
+          (unsigned long long)held, (unsigned long long)s.cacheLimit);
+    CHECK(texpack_LowMemory() == held && stats().cacheLimit == held, "again: the same");
     texpack_Shutdown();
 }
 
