@@ -293,7 +293,11 @@ jobs:
           # keep the unstripped library and the link map for the artifact
           mkdir -p android-symbols
           cp "$so" android-symbols/libmain.so
-          cp "$(ls android/app/.cxx/*/*/arm64-v8a/ico_pc.map | head -n 1)" android-symbols/ico_pc.map
+          # the map is beside libmain.so (or under .cxx), as tools/package_android.sh finds it
+          map=$(ls android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/ico_pc.map \
+                android/app/.cxx/*/*/arm64-v8a/ico_pc.map 2>/dev/null | head -n 1 || true)
+          [ -n "$map" ] || { echo "no ico_pc.map beside libmain.so or under android/app/.cxx"; exit 1; }
+          cp "$map" android-symbols/ico_pc.map
           cp "$apk" android-symbols/
 
       - uses: actions/upload-artifact@v4
