@@ -477,7 +477,11 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_softening", o.effectSoftening);
     r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
-    r |= ico_config_set_bool("video.effects_depth", o.effectsDepth);
+    /* file-only, so only when not at its default, or to keep a key the
+       file already has in step (2: no key) */
+    if (!o.effectsDepth || ico_config_get_bool("video.effects_depth", 2) != 2) {
+        r |= ico_config_set_bool("video.effects_depth", o.effectsDepth);
+    }
     return r != 0 ? -1 : ico_config_save();
 }
 

@@ -406,7 +406,8 @@ static void test_video_effects(const char *dir)
 }
 
 /* v0.4.1 (R1): [video] effects_depth, on by default, read, sanitized,
-   always saved, outside the preset, through ico_video_effects_depth */
+   saved when off or already in the file, outside the preset, through
+   ico_video_effects_depth */
 static void test_video_effects_depth(const char *dir)
 {
     char path[512];
