@@ -20,7 +20,7 @@
 #include "strings.h"
 #include "ui_internal.h"
 
-#define MF_PAGE 1024 /* a page's side, texels */
+#define MF_PAGE 1024 /* a 1x page's side, texels */
 /* Texels between strips: font_sheet_ps builds a texel's rim from the page's
    coverage up to ICO_SHEET_RX across and ICO_SHEET_RY down and cannot see
    where a strip ends, and the bilinear read takes one texel past a strip's
@@ -37,9 +37,29 @@ _Static_assert(MF_GAP_X >= ICO_SHEET_RX + 1, "strips must be a rim's reach apart
 _Static_assert(MF_GAP_Y >= ICO_SHEET_RY + 1, "strips must be a rim's reach apart down");
 _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_ALIGN == 0,
                "the first strip's corner keeps the gaps and the alignment");
-/* the largest strip a page holds */
+/* the largest strip a 1x page holds, sheet texels (a port text's is cut to
+   it at every scale, so its quad is the same) */
 #define MF_MAX_W (MF_PAGE - MF_ORIGIN - MF_GAP_X)
 #define MF_MAX_H (MF_PAGE - MF_ORIGIN - MF_GAP_Y)
+/* v0.4.2 (package F-G): the strips are rasterised at s strip texels a sheet
+   texel (mfScale: the scene's scale, or the output's in overlay mode, 1 ..
+   ICO_SHEET_SCALE_MAX), so the letters are as crisp as the picture; the
+   gaps, the alignment and the first corner above are in sheet texels (s
+   times as many strip texels).  A page holds strips of one scale: 1024 x
+   1024 at 1x; above it 1024 s x 256 s of coverage, at most 4096 wide, and
+   below it as many texels of rim (rd.h rd_SheetRim: the shader reads the
+   rim there instead of dilating 50 x 34 texels a pixel at 4x), so the
+   texture is 2048 x 1024 at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2,
+   4.5 and 8 MB, kept on the CPU and in the texture; at most MF_PAGES of a
+   style, three styles: 96 MB of textures at 4x if every page of every style
+   were in use, two pages, 16 MB, for a menu).  A page is 1009 sheet texels
+   wide at every scale (the longest notes fit) and 243 tall (the 1x page
+   1011: a menu's rows are 15 to 30 texels).
+   Pages of another scale than a draw's are emptied once no frame can name
+   them (MF_EVICT_FRAMES), so a resolution change re-rasterises the words
+   it shows within a few frames and a popup on the output (a scale of its
+   own) can share a style's pages with the scene's words. */
+#define MF_PAGE_MAX 4096
 #define MF_PAGES 4        /* pages per style */
 #define MF_STRIPS 1024    /* strips cached at once */
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
@@ -104,7 +124,11 @@ static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
 static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0};
 
 typedef struct MfPage {
-    uint8_t *cov; /* MF_PAGE x MF_PAGE coverage, NULL while unused */
+    uint8_t *cov; /* w x h coverage, NULL while unused; above 1x the rim
+                     below it (w x h more) */
+    int scale;    /* strip texels a sheet texel (F-G) */
+    int w, h;     /* the coverage's texels (pageW, pageH); the texture is
+                     twice as tall above 1x */
     uint32_t tex; /* the rd sheet texture, 0 until first drawn */
     int shelfX, shelfY, shelfH;
     uint32_t lastFrame; /* rd_FrameNumber at its last draw */
@@ -113,12 +137,14 @@ typedef struct MfPage {
 typedef struct MfStrip {
     int used;
     uint64_t hash;
-    char *text;      /* a port text's string; NULL for an item's */
-    int item, lang;  /* an item's index and language; -1 for a port text */
-    float em;        /* texel rows */
-    unsigned layout; /* a port text's alignment flags */
-    int cls, page, x, y, w, h;
-    int ox, oy; /* a port text's top-left from its snapped anchor: texels, rows */
+    char *text;          /* a port text's string; NULL for an item's */
+    int item, lang;      /* an item's index and language; -1 for a port text */
+    float em;            /* texel rows */
+    unsigned layout;     /* a port text's alignment flags */
+    int scale;           /* strip texels a sheet texel (F-G) */
+    int cls, page, x, y; /* the page's texels */
+    int w, h;            /* sheet texels (w * scale x h * scale on the page) */
+    int ox, oy;          /* a port text's top-left from its snapped anchor: texels, rows */
 } MfStrip;
 
 static struct {
@@ -228,10 +254,15 @@ void ui__MenuSetBold(float bx, float by)
 
 /* the strip's letters made heavier (ui_internal.h UI_MENU_BOLD_X / Y): each texel gains half the strength of
    its two neighbours' coverage across (bx) and down (by), clamped; a stem
-   or a bar grows by about the strength in texels, centred */
-static void embolden(uint8_t *cov, int w, int h)
+   or a bar grows by about the strength in texels, centred.  At scale s
+   (F-G) the growth is the same in sheet texels, s times as many strip
+   texels: half the strength times s a side, its whole part n as n
+   neighbours a side added whole (the texels within n of a letter fill) and
+   its fraction as at 1x from the neighbours n + 1 away, so the edge stays
+   one strip texel wide (1x: n = 0, the sum above) */
+static void embolden(uint8_t *cov, int w, int h, int scale)
 {
-    const float k[2] = {s_boldX * 0.5f, s_boldY * 0.5f};
+    const float k[2] = {s_boldX * 0.5f * (float)scale, s_boldY * 0.5f * (float)scale};
     const int n[2] = {w, h};
     uint8_t *t = malloc((size_t)(w > h ? w : h));
     if (!t) {
@@ -248,9 +279,16 @@ static void embolden(uint8_t *cov, int w, int h)
             for (int i = 0; i < len; i++) {
                 t[i] = base[(size_t)i * step];
             }
+            const int n = (int)k[pass];
+            const float f = k[pass] - (float)n;
             for (int i = 0; i < len; i++) {
-                const int a = i > 0 ? t[i - 1] : 0, b = i + 1 < len ? t[i + 1] : 0;
-                const float v = (float)t[i] + k[pass] * (float)(a + b);
+                const int a = i > n ? t[i - n - 1] : 0, b = i + n + 1 < len ? t[i + n + 1] : 0;
+                int whole = 0;
+                for (int d = 1; d <= n; d++) {
+                    whole += (i >= d ? t[i - d] : 0) + (i + d < len ? t[i + d] : 0);
+                }
+                const float v = n ? (float)(t[i] + whole) + f * (float)(a + b)
+                                  : (float)t[i] + f * (float)(a + b);
                 base[(size_t)i * step] = (uint8_t)(v >= 255.0f ? 255 : (int)(v + 0.5f));
             }
         }
@@ -263,9 +301,9 @@ static void embolden(uint8_t *cov, int w, int h)
 /* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
    caller): the strip itemStrip caches, also the comparison test's
    reference (ui__MenuStripRaster). */
-static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov)
+static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int scale)
 {
-    const int w = it->w, hgt = it->h;
+    const int w = it->w * scale, hgt = it->h * scale;
     const char *str = ui_StrIn((UiLang)lang, (UiStrId)it->str);
     const char *start[MF_LINES];
     size_t len[MF_LINES];
@@ -304,9 +342,9 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov)
         pen = pen > hi ? hi : pen;
         pen = pen < lo ? lo : pen;
         const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
-        ui__SheetRasterLine(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i]);
+        ui__SheetRasterLine(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i], scale);
     }
-    embolden(cov, w, hgt);
+    embolden(cov, w, hgt, scale);
 }
 
 int ui__MenuStripRaster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
@@ -315,7 +353,7 @@ int ui__MenuStripRaster(const UiMenuTextItem *it, int lang, uint8_t *out, int w,
         return -1;
     }
     memset(out, 0, (size_t)w * (size_t)h);
-    rasterItem(it, lang, out);
+    rasterItem(it, lang, out, 1);
     return 0;
 }
 
@@ -369,10 +407,10 @@ const uint8_t *ui_MenuFontPage(int cls, int page, int *w, int *h)
         return NULL;
     }
     if (w) {
-        *w = MF_PAGE;
+        *w = s_mf.pages[cls][page].w;
     }
     if (h) {
-        *h = MF_PAGE;
+        *h = s_mf.pages[cls][page].h;
     }
     return s_mf.pages[cls][page].cov;
 }
@@ -386,9 +424,61 @@ int ui_MenuFontStripCount(void)
     return n;
 }
 
+/* tests: the strips' scale set (0: mfScale's own) */
+static int s_forceScale;
+
+void ui__MenuForceScale(int scale)
+{
+    s_forceScale = scale;
+}
+
 #ifdef ICO_RD
 
 /* ------------------------------------------------------------ the pages */
+
+/* a page's size at scale sc (MF_PAGE_MAX above) */
+static int pageW(int sc)
+{
+    return sc <= 1 ? MF_PAGE : (MF_PAGE * sc > MF_PAGE_MAX ? MF_PAGE_MAX : MF_PAGE * sc);
+}
+
+static int pageH(int sc)
+{
+    return sc <= 1 ? MF_PAGE : MF_PAGE * sc / 4;
+}
+
+/* the page's bytes, and its texture's rows: the rim's below the coverage
+   above 1x */
+static size_t pageBytes(const MfPage *p)
+{
+    return (size_t)p->w * (size_t)p->h * (p->scale > 1 ? 2u : 1u);
+}
+
+/* the scale the strips drawn now are rasterised at: the output's pixels a
+   y unit in overlay mode (the box's height / 448), else the scene's
+   texels a GS line (rd_GetSceneScale: 1 at 1x and under the CRT filter),
+   to whole strip texels a sheet texel: rounded up from a quarter past
+   (2.11 for 1080 lines in the "window" resolution is 2, 2.41 is 3), 1 ..
+   ICO_SHEET_SCALE_MAX (4K's 4.8 is 4).  The texels per GS pixel across are
+   the same in the 4:3 picture the menus are drawn in, so one scale serves
+   both axes. */
+static int mfScale(void)
+{
+    if (s_forceScale > 0) {
+        return s_forceScale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : s_forceScale;
+    }
+    float k = 1.0f;
+    if (ui_OverlayActive()) {
+        float y0 = 0.0f, y1 = 0.0f;
+        ui_OverlayMap(0.0f, 0.0f, NULL, &y0);
+        ui_OverlayMap(0.0f, 1.0f, NULL, &y1);
+        k = (y1 - y0) / 16.0f;
+    } else {
+        rd_GetSceneScale(NULL, &k);
+    }
+    const int sc = (int)ceilf(k - 0.25f);
+    return sc < 1 ? 1 : (sc > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : sc);
+}
 
 static void freeStrip(MfStrip *s)
 {
@@ -446,6 +536,7 @@ static int evictable(const MfPage *p, uint32_t now)
 static void resetPage(int cls, int page)
 {
     MfPage *p = &s_mf.pages[cls][page];
+    const int sc = p->scale > 0 ? p->scale : 1;
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->cls == cls && s->page == page) {
@@ -454,46 +545,74 @@ static void resetPage(int cls, int page)
     }
     destroyTex(p);
     if (p->cov) {
-        memset(p->cov, 0, (size_t)MF_PAGE * MF_PAGE);
+        memset(p->cov, 0, pageBytes(p));
     }
-    p->shelfX = p->shelfY = MF_ORIGIN;
+    p->shelfX = p->shelfY = MF_ORIGIN * sc;
     p->shelfH = 0;
 }
 
-static int alignUp(int v)
+/* a page's coverage gone too: the slot free for a page of any scale */
+static void dropPage(int cls, int page)
 {
-    return (v + MF_ALIGN - 1) / MF_ALIGN * MF_ALIGN;
+    MfPage *p = &s_mf.pages[cls][page];
+    resetPage(cls, page);
+    free(p->cov);
+    memset(p, 0, sizeof(*p));
 }
 
-/* a w x h cell on page p's shelves, its corner on MF_ALIGN texels and
-   MF_GAP_X / MF_GAP_Y clear of every other strip */
+/* an empty page of scale sc in a free slot; 0 without the memory */
+static int newPage(MfPage *p, int sc)
+{
+    p->cov = calloc((size_t)pageW(sc) * (size_t)pageH(sc) * (sc > 1 ? 2u : 1u), 1);
+    if (!p->cov) {
+        return 0;
+    }
+    p->scale = sc;
+    p->w = pageW(sc);
+    p->h = pageH(sc);
+    p->shelfX = p->shelfY = MF_ORIGIN * sc;
+    p->shelfH = 0;
+    p->tex = 0;
+    return 1;
+}
+
+static int alignUp(int v, int sc)
+{
+    const int a = MF_ALIGN * sc;
+    return (v + a - 1) / a * a;
+}
+
+/* a w x h cell (strip texels) on page p's shelves, its corner on MF_ALIGN
+   sheet texels and MF_GAP_X / MF_GAP_Y sheet texels clear of every other
+   strip */
 static int shelfFit(MfPage *p, int w, int h, int *x, int *y)
 {
-    if (p->shelfX + w + MF_GAP_X > MF_PAGE) {
-        p->shelfY = alignUp(p->shelfY + p->shelfH + MF_GAP_Y);
-        p->shelfX = MF_ORIGIN;
+    const int sc = p->scale, gx = MF_GAP_X * sc, gy = MF_GAP_Y * sc;
+    if (p->shelfX + w + gx > p->w) {
+        p->shelfY = alignUp(p->shelfY + p->shelfH + gy, sc);
+        p->shelfX = MF_ORIGIN * sc;
         p->shelfH = 0;
     }
-    if (p->shelfY + h + MF_GAP_Y > MF_PAGE) {
+    if (p->shelfY + h + gy > p->h) {
         return 0;
     }
     *x = p->shelfX;
     *y = p->shelfY;
-    p->shelfX = alignUp(p->shelfX + w + MF_GAP_X);
+    p->shelfX = alignUp(p->shelfX + w + gx, sc);
     if (h > p->shelfH) {
         p->shelfH = h;
     }
     return 1;
 }
 
-/* the page drawn least recently of a style that no frame can still name:
-   reset and returned; -1 when every page is in use */
-static int evictOne(int cls, uint32_t now)
+/* the page drawn least recently of a style (of scale sc; 0 any) that no
+   frame can still name: reset and returned; -1 when every page is in use */
+static int evictOne(int cls, int sc, uint32_t now)
 {
     int best = -1;
     for (int pg = 0; pg < MF_PAGES; pg++) {
         const MfPage *p = &s_mf.pages[cls][pg];
-        if (p->cov && evictable(p, now) &&
+        if (p->cov && (!sc || p->scale == sc) && evictable(p, now) &&
             (best < 0 || p->lastFrame < s_mf.pages[cls][best].lastFrame)) {
             best = pg;
         }
@@ -504,30 +623,40 @@ static int evictOne(int cls, uint32_t now)
     return best;
 }
 
-/* room for a w x h strip in a style's pages: a shelf of a page in use, a
-   new page, or the least recently drawn page reset */
-static int allocCell(int cls, int w, int h, int *page, int *x, int *y)
+/* room for a w x h strip (strip texels) of scale sc in a style's pages: a
+   shelf of a page of that scale in use, a new page (in a free slot or one
+   of another scale that no frame can still name), or the least recently
+   drawn page of the scale reset */
+static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y)
 {
-    if (w > MF_MAX_W || h > MF_MAX_H) {
+    if (w > pageW(sc) - (MF_ORIGIN + MF_GAP_X) * sc ||
+        h > pageH(sc) - (MF_ORIGIN + MF_GAP_Y) * sc) {
         return 0;
     }
+    const uint32_t now = rd_FrameNumber();
     for (int pg = 0; pg < MF_PAGES; pg++) {
         MfPage *p = &s_mf.pages[cls][pg];
-        if (!p->cov) {
-            p->cov = calloc((size_t)MF_PAGE * MF_PAGE, 1);
-            if (!p->cov) {
-                return 0;
-            }
-            p->shelfX = p->shelfY = MF_ORIGIN;
-            p->shelfH = 0;
-            p->tex = 0;
-        }
-        if (shelfFit(p, w, h, x, y)) {
+        if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y)) {
             *page = pg;
             return 1;
         }
     }
-    const int pg = evictOne(cls, rd_FrameNumber());
+    for (int pg = 0; pg < MF_PAGES; pg++) {
+        MfPage *p = &s_mf.pages[cls][pg];
+        if (p->cov && p->scale != sc && evictable(p, now)) {
+            dropPage(cls, pg);
+        }
+        if (!p->cov) {
+            if (!newPage(p, sc)) {
+                return 0;
+            }
+            if (shelfFit(p, w, h, x, y)) {
+                *page = pg;
+                return 1;
+            }
+        }
+    }
+    const int pg = evictOne(cls, sc, now);
     if (pg >= 0 && shelfFit(&s_mf.pages[cls][pg], w, h, x, y)) {
         *page = pg;
         return 1;
@@ -553,7 +682,7 @@ static MfStrip *newStrip(void)
         const uint32_t now = rd_FrameNumber();
         int freed = 0;
         for (int c = 0; c < MF_CLASSES && !freed; c++) {
-            freed = evictOne(c, now) >= 0;
+            freed = evictOne(c, 0, now) >= 0;
         }
         if (!freed) {
             break;
@@ -572,13 +701,34 @@ static MfStrip *newStrip(void)
 static void placeCoverage(const MfStrip *s, const uint8_t *cov)
 {
     MfPage *p = &s_mf.pages[s->cls][s->page];
-    for (int r = 0; r < s->h; r++) {
-        memcpy(p->cov + (size_t)(s->y + r) * MF_PAGE + (size_t)s->x, cov + (size_t)r * (size_t)s->w,
-               (size_t)s->w);
+    const int w = s->w * s->scale, h = s->h * s->scale;
+    for (int r = 0; r < h; r++) {
+        memcpy(p->cov + (size_t)(s->y + r) * (size_t)p->w + (size_t)s->x,
+               cov + (size_t)r * (size_t)w, (size_t)w);
     }
     if (p->tex) {
-        rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)s->w,
-                             (uint32_t)s->h, cov);
+        rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
+                             (uint32_t)h, cov);
+    }
+    if (p->scale > 1) {
+        /* the rim below, over the strip and the texel round it that the
+           bilinear read takes (the gaps keep other strips' rims out) */
+        uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
+        const int rx = s->x - 1, ry = s->y - 1, rw = w + 2, rh = h + 2;
+        rd_SheetRim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
+                    rim);
+        if (p->tex) {
+            uint8_t *px = malloc((size_t)rw * (size_t)rh);
+            if (px) {
+                for (int r = 0; r < rh; r++) {
+                    memcpy(px + (size_t)r * (size_t)rw,
+                           rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx, (size_t)rw);
+                }
+                rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
+                                     (uint32_t)rw, (uint32_t)rh, px);
+                free(px);
+            }
+        }
     }
 }
 
@@ -589,11 +739,18 @@ static uint32_t pageTex(int cls, int page, int lang)
     MfPage *p = &s_mf.pages[cls][page];
     if (!p->tex && p->cov) {
         const UiSheetInk *k = classInk(cls, lang);
-        const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
+        const RdSheetStyle st = {k->rimOn,  k->rimLevel,  k->fillLevel,
+                                 k->dither, k->rimWeight, (uint8_t)p->scale};
         static const char *const kName[MF_CLASSES] = {"light", "faint", "plain"};
         char name[32];
-        snprintf(name, sizeof(name), "ui menu text %s p%d", kName[cls], page);
-        p->tex = rd_CreateTextureSheet(MF_PAGE, MF_PAGE, p->cov, &st, name).id;
+        if (p->scale > 1) {
+            snprintf(name, sizeof(name), "ui menu text %s p%d %dx", kName[cls], page, p->scale);
+        } else {
+            snprintf(name, sizeof(name), "ui menu text %s p%d", kName[cls], page);
+        }
+        p->tex = rd_CreateTextureSheet((uint32_t)p->w, (uint32_t)(p->scale > 1 ? 2 * p->h : p->h),
+                                       p->cov, &st, name)
+                     .id;
         ui__SetMenuFontHooks(mfShutdown, mfForget);
     }
     p->lastFrame = rd_FrameNumber();
@@ -609,9 +766,10 @@ static void styleLight(int lang)
     }
     for (int c = MF_LIGHT; c <= MF_FAINT; c++) {
         const UiSheetInk *k = classInk(c, lang);
-        const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
         for (int p = 0; p < MF_PAGES; p++) {
             if (s_mf.pages[c][p].tex) {
+                const RdSheetStyle st = {k->rimOn,  k->rimLevel,  k->fillLevel,
+                                         k->dither, k->rimWeight, (uint8_t)s_mf.pages[c][p].scale};
                 rd_SetTextureSheetStyle((RdTex){s_mf.pages[c][p].tex}, &st);
             }
         }
@@ -630,36 +788,40 @@ static uint64_t hashBytes(uint64_t h, const void *data, size_t n)
 
 /* ------------------------------------------------------- an item's strip */
 
-static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls)
+static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls, int sc)
 {
     uint64_t h = 0xCBF29CE484222325ull;
     h = hashBytes(h, &item, sizeof(item));
     h = hashBytes(h, &lang, sizeof(lang));
     h = hashBytes(h, &cls, sizeof(cls));
+    if (sc > 1) {
+        h = hashBytes(h, &sc, sizeof(sc));
+    }
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->hash == h && !s->text && s->item == item && s->lang == lang &&
-            s->cls == cls) {
+            s->cls == cls && s->scale == sc) {
             return s;
         }
     }
     const int w = it->w, hgt = it->h;
     MfStrip *s = newStrip();
     int page, x, y;
-    if (!s || !allocCell(cls, w, hgt, &page, &x, &y)) {
+    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y)) {
         return NULL;
     }
-    uint8_t *cov = calloc((size_t)w * (size_t)hgt, 1);
+    uint8_t *cov = calloc((size_t)(w * sc) * (size_t)(hgt * sc), 1);
     if (!cov) {
         return NULL;
     }
-    rasterItem(it, lang, cov);
+    rasterItem(it, lang, cov, sc);
     memset(s, 0, sizeof(*s));
     s->used = 1;
     s->hash = h;
     s->item = item;
     s->lang = lang;
     s->em = it->em[lang];
+    s->scale = sc;
     s->cls = cls;
     s->page = page;
     s->x = x;
@@ -673,16 +835,19 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls)
 
 /* ---------------------------------------------------- a port text's strip */
 
-static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
+static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, int sc)
 {
     uint64_t h = 0xCBF29CE484222325ull;
     h = hashBytes(h, utf8, strlen(utf8));
     h = hashBytes(h, &em, sizeof(em));
     h = hashBytes(h, &layout, sizeof(layout));
     h = hashBytes(h, &cls, sizeof(cls));
+    if (sc > 1) {
+        h = hashBytes(h, &sc, sizeof(sc));
+    }
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
-        if (s->used && s->hash == h && s->text && s->cls == cls && s->em == em &&
+        if (s->used && s->hash == h && s->text && s->cls == cls && s->scale == sc && s->em == em &&
             s->layout == layout && strcmp(s->text, utf8) == 0) {
             return s;
         }
@@ -739,10 +904,10 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     }
     MfStrip *s = newStrip();
     int page, x, y;
-    if (!s || !allocCell(cls, w, hgt, &page, &x, &y)) {
+    if (!s || !allocCell(cls, sc, w * sc, hgt * sc, &page, &x, &y)) {
         return NULL;
     }
-    uint8_t *cov = calloc((size_t)w * (size_t)hgt, 1);
+    uint8_t *cov = calloc((size_t)(w * sc) * (size_t)(hgt * sc), 1);
     char *copy = malloc(strlen(utf8) + 1);
     if (!cov || !copy) {
         free(cov);
@@ -751,10 +916,10 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     }
     strcpy(copy, utf8);
     for (int i = 0; i < n; i++) {
-        ui__SheetRasterLine(cov, w, hgt, w, em, 1.0f, 0.0f, pen[i] - (float)ox,
-                            b0 + (float)i * step - (float)oy, start[i], len[i]);
+        ui__SheetRasterLine(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
+                            b0 + (float)i * step - (float)oy, start[i], len[i], sc);
     }
-    embolden(cov, w, hgt);
+    embolden(cov, w * sc, hgt * sc, sc);
     memset(s, 0, sizeof(*s));
     s->used = 1;
     s->hash = h;
@@ -763,6 +928,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     s->lang = -1;
     s->em = em;
     s->layout = layout;
+    s->scale = sc;
     s->cls = cls;
     s->page = page;
     s->x = x;
@@ -784,8 +950,9 @@ static void noteLast(const MfStrip *s, uint32_t tex, float ax, float ay)
     s_mf.last.page = s->page;
     s_mf.last.x = s->x;
     s_mf.last.y = s->y;
-    s_mf.last.w = s->w;
-    s_mf.last.h = s->h;
+    s_mf.last.w = s->w * s->scale;
+    s_mf.last.h = s->h * s->scale;
+    s_mf.last.scale = s->scale;
     s_mf.last.tex = tex;
     s_mf.hasLast = 1;
 }
@@ -809,7 +976,8 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     if (cls != MF_PLAIN) {
         styleLight((int)lang);
     }
-    const MfStrip *s = textStrip(utf8, size * 0.5f, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK), cls);
+    const MfStrip *s =
+        textStrip(utf8, size * 0.5f, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK), cls, mfScale());
     if (!s) {
         /* every page of the style holds words a recorded frame still
            draws: the plain glyphs rather than nothing, so a screen whose
@@ -828,10 +996,11 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     q.y0 = ay + 2.0f * (float)s->oy;
     q.x1 = q.x0 + (float)s->w;
     q.y1 = q.y0 + 2.0f * (float)s->h;
+    /* the whole strip, scale times the quad's texels (F-G) */
     q.u0 = (float)s->x;
     q.v0 = (float)s->y;
-    q.u1 = (float)(s->x + s->w);
-    q.v1 = (float)(s->y + s->h);
+    q.u1 = (float)(s->x + s->w * s->scale);
+    q.v1 = (float)(s->y + s->h * s->scale);
     noteLast(s, tex, ax, ay);
     ui__DrawTexQuads(tex, &q, 1, col, flags, xf, ui__TextKey(utf8, flags, s->page));
 #else
@@ -895,7 +1064,7 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
     const int item = it >= ui_menu_text_items && it < ui_menu_text_items + ui_menu_text_item_count
                          ? (int)(it - ui_menu_text_items)
                          : -2;
-    const MfStrip *s = itemStrip(it, item, lang, cls);
+    const MfStrip *s = itemStrip(it, item, lang, cls, mfScale());
     if (!s) {
         itemFallback(it, lang, box, uv, col, glow);
         return;
@@ -912,10 +1081,19 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
     q.y0 = (float)box[1] / 8.0f + UI_GRID_CY;
     q.x1 = q.x0 + (float)box[2] / 16.0f;
     q.y1 = q.y0 + (float)box[3] / 8.0f;
-    q.u0 = (float)s->x + (float)uv[0] / 16.0f - (float)it->u;
-    q.v0 = (float)s->y + (float)uv[1] / 16.0f - (float)it->v;
-    q.u1 = q.u0 + (float)uv[2] / 16.0f;
-    q.v1 = q.v0 + (float)uv[3] / 16.0f;
+    if (s->scale > 1) {
+        /* the strip's texels scale times the item's (F-G) */
+        const float k = (float)s->scale;
+        q.u0 = (float)s->x + ((float)uv[0] / 16.0f - (float)it->u) * k;
+        q.v0 = (float)s->y + ((float)uv[1] / 16.0f - (float)it->v) * k;
+        q.u1 = q.u0 + (float)uv[2] / 16.0f * k;
+        q.v1 = q.v0 + (float)uv[3] / 16.0f * k;
+    } else {
+        q.u0 = (float)s->x + (float)uv[0] / 16.0f - (float)it->u;
+        q.v0 = (float)s->y + (float)uv[1] / 16.0f - (float)it->v;
+        q.u1 = q.u0 + (float)uv[2] / 16.0f;
+        q.v1 = q.v0 + (float)uv[3] / 16.0f;
+    }
     /* the packet's state (the row's blend, the glow's additive one) */
     const unsigned flags = UI_KEEP_STATE | (glow ? UI_ADDITIVE : 0u);
     noteLast(s, tex, q.x0, q.y0);

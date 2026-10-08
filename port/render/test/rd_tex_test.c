@@ -1213,7 +1213,7 @@ static void r8Checks(void)
     /* v0.4.2 (F-A): a sheet texture is one byte a texel, keeps its style
      * (the rim as its weight, 64 full, and dither as 0 or 1) and takes R8's
      * rectangles */
-    const RdSheetStyle fr = {7, 62, 0xF0, 3, 0};
+    const RdSheetStyle fr = {7, 62, 0xF0, 3, 0, 1};
     RdTex sh = rd_CreateTextureSheet(W, H, cov, &fr, "sheet");
     RdTexRec *sr = rd__TexRec(sh.id);
     CHECK(sr && sr->kind == RD_TEXKIND_IMAGE && sr->format == RD_TEXEL_SHEET && sr->w == W &&
@@ -1243,11 +1243,11 @@ static void r8Checks(void)
         }
         CHECK(bad == 0 && sr->dirty && sr->dirtyX0 == 0 && sr->dirtyX1 == W,
               "sheet rectangles: %d texels wrong (dirty whole since the create)", bad);
-        const RdSheetStyle en = {1, 0, 0xFF, 0, 0};
+        const RdSheetStyle en = {1, 0, 0xFF, 0, 0, 1};
         rd_SetTextureSheetStyle(sh, &en);
         CHECK(sr->sheet[0] == 64 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 0,
               "rd_SetTextureSheetStyle");
-        const RdSheetStyle faint = {1, 0, 0xFF, 0, 21};
+        const RdSheetStyle faint = {1, 0, 0xFF, 0, 21, 1};
         rd_SetTextureSheetStyle(sh, &faint);
         CHECK(sr->sheet[0] == 21, "a faint rim's weight kept (%u)", sr->sheet[0]);
         rd_SetTextureSheetStyle(sh, NULL);
@@ -1256,7 +1256,7 @@ static void r8Checks(void)
     }
     rd_DestroyTexture(sh);
     RdTex r8 = rd_CreateTextureR8(4, 4, NULL, "not a sheet");
-    const RdSheetStyle grey = {1, 62, 0xFF, 1, 0};
+    const RdSheetStyle grey = {1, 62, 0xFF, 1, 0, 1};
     rd_SetTextureSheetStyle(r8, &grey);
     const RdTexRec *r8r = rd__TexRec(r8.id);
     CHECK(r8r && r8r->format == RD_TEXEL_R8 && r8r->sheet[1] == 0,

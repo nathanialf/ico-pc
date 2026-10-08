@@ -58,7 +58,11 @@ int ui__FontReusedNearest(void);
                        bytes apart), the pen at (penX, baseY) in texels,
                        fractional: each glyph at its fractional pen
                        (stbtt_MakeGlyphBitmapSubpixel), overlaps keeping
-                       the larger coverage, clipped to the strip
+                       the larger coverage, clipped to the strip; with
+                       scale s > 1 (v0.4.2 F-G) cov has s x s texels a
+                       sheet texel (w, h and stride in them) and the em,
+                       the pen, the baseline and track stay in sheet
+                       texels, so the letters are the same, s times finer
    ui__TextKey         font.c's draw key of a string (font.h ui_SetDrawKey)
    ui__DrawTexQuads    n textured sprites (grid rectangles, texel UVs) of
                        texture tex, drawn as font.c draws text: into the
@@ -72,7 +76,8 @@ int ui__FontReusedNearest(void);
 void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap);
 float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, size_t len);
 void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
-                         float track, float penX, float baseY, const char *utf8, size_t len);
+                         float track, float penX, float baseY, const char *utf8, size_t len,
+                         int scale);
 /* The sheets' lettering is 0.8 as wide as the typeface's proportions on the
    screen.  The units are right: display_texture draws a menu row's box
    texW x units wide (dispW is 0 on the menu rows, or texW) and 2 * texH y
@@ -95,6 +100,10 @@ uint64_t ui__TextKey(const char *utf8, unsigned flags, int page);
    item's. */
 struct UiMenuTextItem;
 int ui__MenuStripRaster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
+/* Tests (F-G): the menus' strips rasterised at scale strip texels a sheet
+   texel (1 .. ICO_SHEET_SCALE_MAX) whatever the scene's or the output's
+   scale; 0 goes back to those (menu_font.c mfScale) */
+void ui__MenuForceScale(int scale);
 /* The letters' extra weight, texels across and down (menu_font.c embolden):
    the sheets' strokes are heavier than Arimo Regular's at the same size
    (the fill's amount 0.8 of the sheets' without it); ctest menu_look's fit

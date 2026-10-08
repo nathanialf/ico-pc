@@ -426,6 +426,12 @@ void rd_ResetScene(uint32_t gsWidth, uint32_t gsHeight);
 /* Settings menu: applies at the next rd_BeginFrame. */
 void rd_SetSettings(const RdSettings *settings);
 const RdSettings *rd_GetSettings(void);
+/* v0.4.2 (package F-G): the scene's scale in force (rd_present.c
+ * rd__ApplyDisplay, from the settings applied at the last rd_BeginFrame):
+ * the scene-class targets' texels per GS pixel across (with a wide aspect's
+ * widening) and down; 1 x 1 before rd_Init, at 1x and under the CRT
+ * filter.  The menus' text strips are rasterised to it (port/ui/menu_font.c). */
+void rd_GetSceneScale(float *sx, float *sy);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */
@@ -902,6 +908,30 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                        draws are recorded
  * rd_UpdateTextureRect   takes a sheet texture's rectangles as R8's: w * h
  *                        bytes of coverage
+ * Scaled strips (v0.4.2, package F-G): with style.scale s > 1 the coverage
+ *                        holds s x s texels for each sheet texel (a strip
+ *                        rasterised s times finer for a scene or an output
+ *                        s times the GS's), and the sheet's look is kept in
+ *                        sheet texels: r reaches ICO_SHEET_RX * s and
+ *                        ICO_SHEET_RY * s texels with the falloff at
+ *                        distance / s (the per-mille tables linearly
+ *                        interpolated, rounded), the Bayer threshold is the
+ *                        one of the sheet texel (floor(x / s),
+ *                        floor(y / s)), so s x s texels share it and the
+ *                        grain is the sheets' size, and the levels are the
+ *                        same; the bilinear blend is of the texture's own
+ *                        texels.  Such a texture is w x h with the
+ *                        coverage in rows 0 .. h/2 - 1 and r in rows
+ *                        h/2 .. h - 1 (the caller fills them with
+ *                        rd_SheetRim: the dilation is 50 x 34 texels at
+ *                        4x, too much for every pixel); the coverage and
+ *                        the rim are 0 outside their halves, and a draw
+ *                        addresses the top half.  s = 1 draws as before,
+ *                        byte for byte (the rim made by the shader).
+ * rd_SheetRim            r of the rw x rh texels at (x, y) of a w x h
+ *                        coverage at scale s (rows packed, 0 outside it),
+ *                        into rim at the same places (w bytes a row);
+ *                        the rectangle is clipped to the coverage
  * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
 typedef struct RdSheetStyle {
     uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
@@ -910,11 +940,16 @@ typedef struct RdSheetStyle {
     uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
     uint8_t rimWeight; /* the rim's strength in 64ths (a faint halo); 0 or 64 and more:
                           full */
+    uint8_t scale;     /* v0.4.2 (F-G): coverage texels a sheet texel, across and down
+                          (a strip rasterised at the scene's scale); 0 or 1: one,
+                          above ICO_SHEET_SCALE_MAX: that */
 } RdSheetStyle;
 
 RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
                             const RdSheetStyle *style, const char *name);
 void rd_SetTextureSheetStyle(RdTex t, const RdSheetStyle *style);
+void rd_SheetRim(const uint8_t *coverage, uint32_t w, uint32_t h, uint32_t scale, int32_t x,
+                 int32_t y, int32_t rw, int32_t rh, uint8_t *rim);
 
 /* -------------------------------------------------------------- meshes */
 

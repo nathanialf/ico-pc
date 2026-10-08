@@ -98,7 +98,10 @@ void ui_MenuFontMetrics(float size, float *ascent, float *descent, float *capHei
    alignment, UI_ADDITIVE, UI_KEEP_STATE), the quad mapped through xf (NULL:
    identity).  Into the current rd list (the scene), keyed as font.c keys
    text (ui_SetDrawKey), or, between ui_BeginOverlay and ui_EndOverlay, on
-   the output, the 1x strip magnified.  Without ICO_RD nothing is drawn. */
+   the output.  The strip is rasterised at the scene's scale (the output's
+   between ui_BeginOverlay and ui_EndOverlay; menu_font.c mfScale), so the
+   letters are crisp at every resolution while the quad and the look stay
+   the 1x strip's.  Without ICO_RD nothing is drawn. */
 void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
                      unsigned flags, int ink, const UiXform *xf);
 
@@ -115,7 +118,9 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
 /* ------------------------------------------------------ introspection (tests) */
 typedef struct UiMenuStrip {
     int cls;                /* 0 the light ink's pages, 1 its faint-rim pages, 2 the plain ones */
-    int page, x, y, w, h;   /* where the strip is, texels */
+    int page, x, y, w, h;   /* where the strip is, the page's texels */
+    int scale;              /* the page's texels a sheet texel (F-G: the scene's or the
+                               output's scale; w / scale the sheet texels across) */
     uint32_t tex;           /* the page's rd texture (0 until drawn) */
     float anchorX, anchorY; /* a port text's anchor as drawn (snapped to whole
                                texels), a game row's sprite box corner; grid */

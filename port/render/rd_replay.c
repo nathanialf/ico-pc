@@ -1591,7 +1591,9 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
 }
 
 /* v0.4.2 (package F-A): font_sheet_ps's style in DrawCB.param (the rim's
- * weight, rimLevel, fillLevel, dither), the sheet texture's at replay time. */
+ * weight, rimLevel, fillLevel, dither), the sheet texture's at replay time;
+ * F-G: the strip's scale above the dither bit (dither | (scale - 1) << 1,
+ * shader_consts.h ICO_SHEET_SCALE_MAX), so a 1x sheet's param is as before. */
 static void sheetParam(const RdTexRec *t, float param[4])
 {
     if (!t || t->kind != RD_TEXKIND_IMAGE || t->format != RD_TEXEL_SHEET) {
@@ -1599,6 +1601,9 @@ static void sheetParam(const RdTexRec *t, float param[4])
     }
     for (int k = 0; k < 4; k++) {
         param[k] = (float)t->sheet[k];
+    }
+    if (t->sheetScale > 1) {
+        param[3] += (float)((t->sheetScale - 1) << 1);
     }
 }
 

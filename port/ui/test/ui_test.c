@@ -1194,8 +1194,25 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
             CHECK(0, "4x: quad %d's sheet page", i);
             continue;
         }
-        const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2], t->sheet[3],
-                                 t->sheet[0]};
+        const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2],
+                                 t->sheet[3],      t->sheet[0], t->sheetScale};
+        /* F-G: a scaled page's coverage is its top half; its texels under
+           the quad made once (sheetref_Texel's rim at 4x is 49 x 33 texels)
+           and blended as sheetref_Sample blends them */
+        const uint32_t th = t->sheetScale > 1 ? t->h / 2 : t->h;
+        const int tx0 = (int)floorf(g->u0) - 2, ty0 = (int)floorf(g->v0) - 2;
+        const int tcw = (int)ceilf(g->u1) + 2 - tx0, tch = (int)ceilf(g->v1) + 2 - ty0;
+        uint8_t *tg = malloc((size_t)tcw * (size_t)tch * 2);
+        if (!tg) {
+            CHECK(0, "4x: memory");
+            continue;
+        }
+        for (int ty = 0; ty < tch; ty++) {
+            for (int tx = 0; tx < tcw; tx++) {
+                uint8_t *e = &tg[((size_t)ty * (size_t)tcw + (size_t)tx) * 2];
+                sheetref_Texel(t->pixels, t->w, th, tx0 + tx, ty0 + ty, &st, &e[0], &e[1]);
+            }
+        }
         for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
             for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
                 /* rd's convention on a scaled target:
@@ -1209,8 +1226,27 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
                 const float u = g->u0 + (cx - g->x0) / (g->x1 - g->x0) * (g->u1 - g->u0);
                 const float v = g->v0 + (cy - g->y0) / (g->y1 - g->y0) * (g->v1 - g->v0);
                 uint8_t texel[4];
-                sheetref_Sample(t->pixels, t->w, t->h, u / (float)t->w, v / (float)t->h, &st,
-                                texel);
+                {
+                    /* sheetref_Sample on the texels made above */
+                    const float px = (u / (float)t->w) * (float)t->w - 0.5f;
+                    const float py = (v / (float)th) * (float)th - 0.5f;
+                    const float bx = floorf(px), by = floorf(py), fx = px - bx, fy = py - by;
+                    const int ix = (int)bx - tx0, iy = (int)by - ty0;
+                    float gg[2][2], al[2][2];
+                    for (int k = 0; k < 4; k++) {
+                        const uint8_t *e =
+                            &tg[((size_t)(iy + (k >> 1)) * (size_t)tcw + (size_t)(ix + (k & 1))) *
+                                2];
+                        gg[k >> 1][k & 1] = (float)e[0];
+                        al[k >> 1][k & 1] = (float)e[1];
+                    }
+                    const float g0 = gg[0][0] + (gg[0][1] - gg[0][0]) * fx,
+                                g1 = gg[1][0] + (gg[1][1] - gg[1][0]) * fx;
+                    const float a0 = al[0][0] + (al[0][1] - al[0][0]) * fx,
+                                a1 = al[1][0] + (al[1][1] - al[1][0]) * fx;
+                    texel[0] = texel[1] = texel[2] = (uint8_t)floorf(g0 + (g1 - g0) * fy + 0.5f);
+                    texel[3] = (uint8_t)floorf(a0 + (a1 - a0) * fy + 0.5f);
+                }
                 const int as = (texel[3] * g->rgba[3]) >> 7;
                 float *d = &ref[((size_t)y * W4 + (size_t)x) * 3];
                 for (int ch = 0; ch < 3; ch++) {
@@ -1221,8 +1257,45 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
                 in[(size_t)y * W4 + (size_t)x] = 1;
             }
         }
+        free(tg);
     }
     return nq;
+}
+
+/* v0.4.2 (F-G): the median width of the letters' edges across, in SCENE
+   texels: on every row, the texels strictly between one at most 10 % of
+   the full white (255) and the next at least 90 %, or back (a stem's left
+   and right edge), the run in between neither */
+static int edgeWidth4(const uint8_t *px)
+{
+    enum { LO = 25, HI = 230, MAXW = 32 };
+
+    int hist[MAXW + 1];
+    memset(hist, 0, sizeof(hist));
+    int n = 0;
+    for (int y = 0; y < W4; y++) {
+        int last = -1, lastHi = 0;
+        for (int x = 0; x < W4; x++) {
+            const int v = px[((size_t)y * W4 + (size_t)x) * 4];
+            if (v <= LO || v >= HI) {
+                const int hi = v >= HI;
+                if (last >= 0 && hi != lastHi) {
+                    const int k = x - last - 1;
+                    hist[k < MAXW ? k : MAXW]++;
+                    n++;
+                }
+                last = x;
+                lastHi = hi;
+            }
+        }
+    }
+    for (int k = 0, acc = 0; k <= MAXW; k++) {
+        acc += hist[k];
+        if (2 * acc >= n) {
+            return n ? k : -1;
+        }
+    }
+    return -1;
 }
 
 static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs)
@@ -1294,6 +1367,26 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
         CHECK(inked > 20000, "4x: %d inked texels", inked);
         CHECK(bleed == 0, "4x: %d texels painted outside the strips' quads (bleed)", bleed);
         CHECK(bad == 0, "4x: %d texels differ from the reference (clipped or shifted strips)", bad);
+        if (pass == 0) {
+            /* v0.4.2 (F-G): the strips are rasterised at the scene's scale
+               (4), so a stem's edge is a texel or two wide, where the 1x
+               strip magnified (forced) spreads it over its magnified texel */
+            const int crisp = edgeWidth4(px);
+            ui__MenuForceScale(1);
+            drawRows4(bg, white, UI_INK_PLAIN);
+            int soft = -1;
+            if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
+                soft = edgeWidth4(px);
+            }
+            ui__MenuForceScale(0);
+            printf("ui_test: 4x edges across (filter %d): median %d texels with the strips at 4x, "
+                   "%d with the 1x strips magnified\n",
+                   (int)filter, crisp, soft);
+            CHECK(crisp >= 0 && crisp <= 2, "4x: the letters' edges are %d texels wide (2 allowed)",
+                  crisp);
+            CHECK(soft > crisp, "4x: the 1x strips' edges (%d) wider than the 4x strips' (%d)",
+                  soft, crisp);
+        }
     }
 done:
     free(px);

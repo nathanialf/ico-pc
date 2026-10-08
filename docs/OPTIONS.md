@@ -40,6 +40,8 @@ How the picture looks.
   cannot draw the pictures in time. It never steps back up while the
   game runs; the row then reads, for example, **Auto (2x)**. On Android,
   the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on.
+  The menus' lettering follows it too: at 2x and above it is drawn that
+  much finer, so it stays crisp, in the same style.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9 or 32:9. **Auto** follows the shape of your window or screen.
   On a wider picture you see more of the world to the sides. Menus,

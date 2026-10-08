@@ -529,6 +529,81 @@ static void countSprites(int *strips, int *texture, uint8_t cols[][4], int maxCo
     free(w);
 }
 
+/* ------------------------------------ scaled strips (v0.4.2, package F-G) */
+
+typedef struct StripQuad {
+    int32_t x0, y0, x1, y1; /* GS 12.4 */
+    float du, dv;           /* the UV's span, texels */
+} StripQuad;
+
+/* the last frame's strip sprites, in order */
+static int stripQuads(StripQuad *q, int max)
+{
+    const RdFrame *f = rd__LastFrame();
+    Walk *w = calloc(1, sizeof(Walk));
+    RdStateBlock st = f->startState;
+    rd__Walk(f, 0, &st, collect, w);
+    int n = 0;
+    for (int i = 0; i < w->n && n < max; i++) {
+        if (w->st[i].ds.texEnabled && ui_MenuFontIsPage(w->st[i].tex) && w->cmd[i]->u[1] == 2) {
+            const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w->cmd[i]->u[0]);
+            q[n].x0 = v[0].x;
+            q[n].y0 = v[0].y;
+            q[n].x1 = v[1].x;
+            q[n].y1 = v[1].y;
+            q[n].du = (v[1].s - v[0].s) / 16.0f;
+            q[n].dv = (v[1].t - v[0].t) / 16.0f;
+            n++;
+        }
+    }
+    free(w);
+    return n;
+}
+
+/* The strips at the scene's scale: forced to 2, the title's game rows and
+   port rows are strips of twice the texels across and down, drawn with the
+   same quads, their UVs spanning twice the texels; back at the scene's own
+   scale (1 here) the strips are the 1x ones again */
+static void testScaledStrips(void)
+{
+    enum { MAXQ = 16 };
+
+    StripQuad a[MAXQ], b[MAXQ];
+    buildTitleWithPortRows(1);
+    ui__MenuForceScale(1);
+    layoutFrame();
+    const int na = stripQuads(a, MAXQ);
+    UiMenuStrip one;
+    const int drawn1 = ui_MenuFontLastStrip(&one);
+    ui__MenuForceScale(2);
+    layoutFrame();
+    const int nb = stripQuads(b, MAXQ);
+    UiMenuStrip last;
+    const int drawn = ui_MenuFontLastStrip(&last);
+    int same = 0, doubled = 0;
+    for (int i = 0; i < na && i < nb; i++) {
+        same +=
+            a[i].x0 == b[i].x0 && a[i].y0 == b[i].y0 && a[i].x1 == b[i].x1 && a[i].y1 == b[i].y1;
+        doubled +=
+            fabsf(b[i].du - 2.0f * a[i].du) < 1e-3f && fabsf(b[i].dv - 2.0f * a[i].dv) < 1e-3f;
+    }
+    printf("menu_text_test: scale 2: %d strips (%d at 1x), %d with the 1x quad, %d with twice the "
+           "texels; the last %d x %d at scale %d\n",
+           nb, na, same, doubled, last.w, last.h, last.scale);
+    CHECK(na == 4 && nb == na && same == na && doubled == na,
+          "scale 2: %d strips (%d at 1x), %d quads the 1x ones, %d UVs twice the 1x ones", nb, na,
+          same, doubled);
+    CHECK(drawn && drawn1 && one.scale == 1 && last.scale == 2 && last.w == 2 * one.w &&
+              last.h == 2 * one.h,
+          "scale 2: the last strip %d x %d at scale %d (%d x %d at 1)", last.w, last.h, last.scale,
+          one.w, one.h);
+    ui__MenuForceScale(0);
+    layoutFrame();
+    CHECK(ui_MenuFontLastStrip(&last) && last.scale == 1 && last.w == one.w && last.h == one.h,
+          "back at 1x: %d x %d at scale %d", last.w, last.h, last.scale);
+    lt_ext_Reset();
+}
+
 /* ------------------------------------- no deferral (v0.4.2, package F-B) */
 
 typedef struct TextWalk {
@@ -778,6 +853,7 @@ static void testHook(void)
           "with port rows: %d transfers, %d strips, %d texture sprites (3, 4, 1)", s_texTransfers,
           strips, texture);
     testNoDeferral();
+    testScaledStrips();
     testPortRowAnchor();
     testDigits();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());

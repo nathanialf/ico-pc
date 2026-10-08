@@ -34,6 +34,7 @@ _Static_assert(SHEET_BAYER_ROW1 == ICO_SHEET_BAYER_ROW1, "sheet_text.hlsli SHEET
 _Static_assert(SHEET_BAYER_ROW2 == ICO_SHEET_BAYER_ROW2, "sheet_text.hlsli SHEET_BAYER_ROW2");
 _Static_assert(SHEET_BAYER_ROW3 == ICO_SHEET_BAYER_ROW3, "sheet_text.hlsli SHEET_BAYER_ROW3");
 _Static_assert(SHEET_T_OFF == ICO_SHEET_T_OFF, "sheet_text.hlsli SHEET_T_OFF");
+_Static_assert(SHEET_SCALE_MAX == ICO_SHEET_SCALE_MAX, "sheet_text.hlsli SHEET_SCALE_MAX");
 _Static_assert(ICO_SHEET_LEVELS >= 2 && ICO_SHEET_LEVELS <= 256, "sheet levels");
 
 /* the rim's falloff across (|dx|) and down (|dy|), per mille */
@@ -64,18 +65,46 @@ static uint32_t quantise(uint32_t v, uint32_t th32)
     return (q * 255u + n / 2u) / n;
 }
 
+/* v0.4.2 (package F-G): the falloff W (n + 1 entries) at strip distance d
+   of a strip at s texels a sheet texel: W at d / s, linearly interpolated,
+   rounded to per mille; 0 past the reach */
+static uint32_t falloffAt(const uint32_t *wt, int32_t n, int32_t d, uint32_t s)
+{
+    d = d < 0 ? -d : d;
+    if (d > n * (int32_t)s) {
+        return 0;
+    }
+    const int32_t i = d / (int32_t)s, f = d % (int32_t)s;
+    if (f == 0) {
+        return wt[i];
+    }
+    return (wt[i] * (s - (uint32_t)f) + wt[i + 1] * (uint32_t)f + s / 2u) / s;
+}
+
+/* floor(v / s) */
+static int32_t floorDiv(int32_t v, int32_t s)
+{
+    return v >= 0 ? v / s : -((-v + s - 1) / s);
+}
+
 void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
                     const RdSheetStyle *style, uint8_t *outGrey, uint8_t *outAlpha)
 {
-    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0};
+    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1};
     const RdSheetStyle *s = style ? style : &kDefault;
     const uint32_t c = covAt(cov, w, h, x, y);
+    /* the strip texels a sheet texel (F-G): 0 is 1 */
+    const uint32_t sc = s->scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
+                        : s->scale                     ? s->scale
+                                                       : 1u;
+    const int32_t rx = ICO_SHEET_RX * (int32_t)sc, ry = ICO_SHEET_RY * (int32_t)sc;
     /* the rim: the largest coverage weighted by the falloff, rounded to 0..255 */
     uint32_t m = 0;
-    for (int32_t dy = -ICO_SHEET_RY; dy <= ICO_SHEET_RY; dy++) {
-        for (int32_t dx = -ICO_SHEET_RX; dx <= ICO_SHEET_RX; dx++) {
+    for (int32_t dy = -ry; dy <= ry; dy++) {
+        const uint32_t wy = falloffAt(kWy, ICO_SHEET_RY, dy, sc);
+        for (int32_t dx = -rx; dx <= rx; dx++) {
             const uint32_t k =
-                covAt(cov, w, h, x + dx, y + dy) * kWx[dx < 0 ? -dx : dx] * kWy[dy < 0 ? -dy : dy];
+                covAt(cov, w, h, x + dx, y + dy) * falloffAt(kWx, ICO_SHEET_RX, dx, sc) * wy;
             m = k > m ? k : m;
         }
     }
@@ -85,7 +114,10 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
     const uint32_t a = s->rimOn ? (c > rw ? c : rw) : c;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
     /* the threshold in 32nds: the Bayer entry's centre, or a half */
-    const uint32_t th = s->dither ? 2u * kBayer[(uint32_t)y & 3u][(uint32_t)x & 3u] + 1u : 16u;
+    /* the sheet texel's: one entry for the s x s strip texels in it */
+    const uint32_t bx = (uint32_t)floorDiv(x, (int32_t)sc) & 3u,
+                   by = (uint32_t)floorDiv(y, (int32_t)sc) & 3u;
+    const uint32_t th = s->dither ? 2u * kBayer[by][bx] + 1u : 16u;
     const uint32_t aq = quantise(a, th), tq = quantise(t, th);
     const uint32_t grey =
         ((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) / 255u;

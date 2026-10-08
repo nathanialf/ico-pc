@@ -44,6 +44,10 @@
 // The quantiser's threshold, in 32nds: 2 * bayer + 1 dithered (1..31),
 // SHEET_T_OFF (16, a half: rounding) with dither off.
 #define SHEET_T_OFF 16
+// v0.4.2 (package F-G): the largest scale of a strip (texels a sheet
+// texel; shader_consts.h ICO_SHEET_SCALE_MAX).  Above 1 the rim comes
+// precomputed in the texture's bottom half (rd.h rd_SheetRim).
+#define SHEET_SCALE_MAX 4
 // The grid of coverage texels the four sheet texels of a bilinear sample
 // are rebuilt from.
 #define SHEET_GW (2 + 2 * SHEET_RX)

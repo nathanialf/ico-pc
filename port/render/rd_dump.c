@@ -23,7 +23,9 @@
  *            bytes) has its style above the format byte: bit 8 rimOn, bit
  *            9 dither, bits 10..15 the rim's weight in 64ths (0 full: the
  *            first version 7 dumps have none), bits 16..23 rimLevel,
- *            24..31 fillLevel (sheetView)
+ *            24..31 fillLevel (sheetView); v0.4.2 F-G: a sheet's
+ *            bakedTexa word holds its scale less one in bits 8..15 (0, a
+ *            1x sheet, in every older dump: sheetTexa)
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
@@ -48,6 +50,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "shader_consts.h"
 
 #define MAX_REFS 4096
 
@@ -93,6 +96,13 @@ static uint32_t sheetView(const RdTexRec *t)
     return (uint32_t)RD_TEXEL_SHEET | (uint32_t)(t->sheet[0] != 0) << 8 |
            (uint32_t)(t->sheet[0] & 63u) << 10 | (uint32_t)(t->sheet[3] & 1u) << 9 |
            (uint32_t)t->sheet[1] << 16 | (uint32_t)t->sheet[2] << 24;
+}
+
+/* an image's bakedTexa word: a sheet's scale less one above the byte (F-G) */
+static uint32_t sheetTexa(const RdTexRec *t)
+{
+    const uint32_t up = t->format == RD_TEXEL_SHEET && t->sheetScale > 1 ? t->sheetScale - 1u : 0u;
+    return (uint32_t)t->bakedTexa | up << 8;
 }
 
 static void targetRef(IdSet *temps, uint32_t id)
@@ -210,9 +220,9 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
             }
             continue;
         }
-        ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) && w32(fp, t->bakedTexa) &&
-             w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->target) &&
-             w32(fp, image ? sheetView(t) : t->view);
+        ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) &&
+             w32(fp, image ? sheetTexa(t) : t->bakedTexa) && w32(fp, t->w) && w32(fp, t->h) &&
+             w32(fp, t->target) && w32(fp, image ? sheetView(t) : t->view);
         if (ok && image) {
             ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__TexelBytes(t->format));
         }
@@ -488,6 +498,10 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
                         tr->sheet[1] = (uint8_t)(h.view >> 16);
                         tr->sheet[2] = (uint8_t)(h.view >> 24);
                         tr->sheet[3] = (uint8_t)((h.view >> 9) & 1u);
+                        const uint32_t up = (h.bakedTexa >> 8) & 0xFFu;
+                        tr->sheetScale =
+                            (uint8_t)(up + 1u > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
+                                                                    : up + 1u);
                     }
                 }
                 texMap.from[texMap.n] = h.id;

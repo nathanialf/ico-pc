@@ -484,6 +484,7 @@ static void inkOf(int ink, int rim, int lang, RdSheetStyle *st, int *col)
     st->fillLevel = k->fillLevel;
     st->dither = k->dither;
     st->rimWeight = k->rimWeight;
+    st->scale = 1;
     *col = ink == UI_INK_DARK ? 0 : ink == UI_INK_GREY ? (128 * 151 + 127) / 255 : 128;
 }
 
@@ -1523,7 +1524,7 @@ static void testFitCopy(void)
           "the strip of the first item");
     maxFilter(&f);
     const UiSheetInk *k = ui_MenuSheetInk(UI_LANG_EN);
-    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
+    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight, 1};
     int diff = 0;
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {

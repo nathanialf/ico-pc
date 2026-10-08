@@ -477,6 +477,9 @@ typedef struct RdTexRec {
      * the rim's weight (0 off, 1..64 the 64ths of a full rim: rimOn with
      * rimWeight), rimLevel, fillLevel, dither (kept as 0 or 1) */
     uint8_t sheet[4];
+    /* v0.4.2 (package F-G): its RdSheetStyle.scale, 1..ICO_SHEET_SCALE_MAX
+     * (0 in a texture that is no sheet) */
+    uint8_t sheetScale;
 } RdTexRec;
 
 /* Package P8: RdTexRec.mipUse bits */

@@ -1237,6 +1237,16 @@ const RdSettings *rd_GetSettings(void)
     return &g_rd.settings;
 }
 
+void rd_GetSceneScale(float *sx, float *sy)
+{
+    if (sx) {
+        *sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
+    }
+    if (sy) {
+        *sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
+    }
+}
+
 void rd_SetMirror(int on)
 {
     if (g_rd.mirrorRun != (on != 0)) {

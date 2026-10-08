@@ -6,7 +6,10 @@
  *
  * cov is a w x h coverage strip (0..255 a texel, rows packed), the
  * texture's bytes; texels outside it have coverage 0.  style may be null:
- * rd_CreateTextureSheet's default {1, 0, 255, 1}.
+ * rd_CreateTextureSheet's default {1, 0, 255, 1}.  style->scale (F-G) is
+ * the strip texels a sheet texel: the rim reaches ICO_SHEET_RX * scale and
+ * ICO_SHEET_RY * scale texels with the falloff at distance / scale and the
+ * Bayer threshold is the sheet texel's (floor(x / scale), floor(y / scale)).
  *
  * sheetref_Texel   the sheet texel (x, y), x and y any integers: grey
  *                  0..255 and alpha in GS units (0x80 full)

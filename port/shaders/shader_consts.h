@@ -131,6 +131,15 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_BAYER_ROW2 0x91B3
 #define ICO_SHEET_BAYER_ROW3 0x5D7F
 #define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
+/* v0.4.2 (package F-G): a strip rasterised at s strip texels a sheet texel
+ * across and down (the scene's or the output's scale, port/ui/menu_font.c),
+ * 1..ICO_SHEET_SCALE_MAX: the rim reaches RX * s and RY * s strip texels
+ * with the falloff at distance / s (the table interpolated; rd.h
+ * rd_SheetRim computes it into the texture's bottom half), the Bayer cell
+ * is s x s strip texels (one sheet texel), the levels are the same.  The
+ * scale reaches the shader in DrawCB.param.w above the dither bit:
+ * dither | (s - 1) << 1 (rd_replay.c sheetParam), so 1x is as before. */
+#define ICO_SHEET_SCALE_MAX 4
 
 /* Vertex of sprite.hlsl and font.hlsl: 20 bytes.
  *   loc 0 RHI_VTX_U16x2_UINT, loc 1 RHI_VTX_U32x1, loc 2 RHI_VTX_U8x4_UINT,

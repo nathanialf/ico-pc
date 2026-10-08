@@ -1211,13 +1211,24 @@ float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, 
 }
 
 void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
-                         float track, float penX, float baseY, const char *utf8, size_t len)
+                         float track, float penX, float baseY, const char *utf8, size_t len,
+                         int scale)
 {
-    if (!cov || !utf8 || w <= 0 || h <= 0 || !ui_FontInit()) {
+    if (!cov || !utf8 || w <= 0 || h <= 0 || scale < 1 || !ui_FontInit()) {
         return;
     }
     float sx, sy;
     sheetScales(emRows, wx, &sx, &sy);
+    /* F-G: scale texels a sheet texel: the em, the pen, the baseline and
+       the tracking in the strip's own texels (1: as they are) */
+    if (scale > 1) {
+        const float k = (float)scale;
+        sx *= k;
+        sy *= k;
+        track *= k;
+        penX *= k;
+        baseY *= k;
+    }
     const char *s = utf8, *end = utf8 + len;
     uint32_t prev = 0, cp;
     const float by = floorf(baseY), fy = baseY - by;
