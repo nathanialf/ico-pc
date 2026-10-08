@@ -2056,7 +2056,17 @@ static void testValues(void)
     ui_SettingsStep(UI_OPT_RESOLUTION, -1);
     ui_SettingsStep(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    CHECK(o.resScale == 4, "resolution wraps to 4x");
+    /* v0.4.2 (N2): Auto after 4x (Left from Window wraps to it) */
+    CHECK(o.resScale == ICO_RES_AUTO &&
+              strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "Auto") == 0,
+          "resolution wraps to Auto (%s)", ui_SettingsValueText(UI_OPT_RESOLUTION));
+    ico_video_set_auto_scale(2);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "Auto (2x)") == 0,
+          "resolution: Auto lowered to 2x (%s)", ui_SettingsValueText(UI_OPT_RESOLUTION));
+    ico_video_set_auto_scale(0);
+    ui_SettingsStep(UI_OPT_RESOLUTION, -1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 4, "resolution: Left from Auto is 4x");
     /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9 */
     ui_SettingsStep(UI_OPT_ASPECT, 1);
     ui_SettingsStep(UI_OPT_ASPECT, 1);
@@ -2154,7 +2164,8 @@ static void testValues(void)
               ui_SettingsValueText(UI_OPT_RESOLUTION));
         ui_SettingsStep(UI_OPT_RESOLUTION, 1);
         ico_video_get(&o);
-        CHECK(o.resScale == 0, "resolution steps again with the filter off (%d)", o.resScale);
+        CHECK(o.resScale == ICO_RES_AUTO, "resolution steps again with the filter off (%d)",
+              o.resScale);
         ui_SettingsStep(UI_OPT_RESOLUTION, -1);
         ui_SettingsStep(UI_OPT_CRT, -1); /* Shadow mask */
         ui_SettingsStep(UI_OPT_CRT, -1); /* PVM */

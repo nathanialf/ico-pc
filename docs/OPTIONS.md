@@ -35,7 +35,11 @@ How the picture looks.
   the full-height picture. Once you change one of the four rows yourself, it says
   **Custom**. The Preset does not touch the Effects page.
 - **Resolution** is how sharp the picture is: 1x is the PS2's, up to 4x,
-  or the size of your window. It stays at 1x while the CRT filter is on.
+  or the size of your window. **Auto** starts at the size of your window
+  and steps down (3x, then 2x, then 1x) when your computer or phone
+  cannot draw the pictures in time. It never steps back up while the
+  game runs; the row then reads, for example, **Auto (2x)**. On Android,
+  the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9 or 32:9. **Auto** follows the shape of your window or screen.
   On a wider picture you see more of the world to the sides. Menus,
@@ -55,7 +59,7 @@ How the picture looks.
 - **Full-height picture** shows every line of the picture. The PS2 showed
   half of them, which looks a little softer.
 - **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit
-  up to 240 frames a second.
+  up to 240 frames a second. On Android it starts at 60.
 - **CRT filter** makes the picture look like an old tube television, with
   several styles. **CRT strength** is how strong it is.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This

@@ -132,6 +132,15 @@ static struct {
     Uint64 fastUntil;
 } s_pres;
 
+/* v0.4.2 (N2): resolution "auto" (video_options.h ICO_RES_AUTO): the
+   replays' costs (perf_drain) against the frame budget, a step down when
+   they are too slow (pace_policy.h pace_AutoResolutionStep, auto_res_update) */
+static struct {
+    int active;        /* resolution "auto" in force, the CRT filter off */
+    float windowScale; /* the presentation box's height over the game's 448 lines */
+    PaceSamples samples;
+} s_autoRes;
+
 /* P1: the renderer's per-replay records (rd.h RdPerfRecord): summed over
    the 10 s block for the window's second line, and with [dev] perf_log =
    true written one line each into logs/ico-pc-perf.csv */
@@ -169,6 +178,19 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
+    /* v0.4.2 (N2): resolution "auto": the window's size (scale 0) until
+       auto_res_update lowers it; the budget is the frame rate cap's period,
+       else 1/60 s */
+    s_autoRes.active = o.resScale == ICO_RES_AUTO && !(o.crt && o.crtStrength > 0.0f);
+    if (o.resScale == ICO_RES_AUTO) {
+        const float boxH = (float)rs->outputWidth / (rs->aspect > 1.0f ? rs->aspect : 4.0f / 3.0f);
+
+        rs->sceneScale = (float)ico_video_auto_scale();
+        s_autoRes.windowScale =
+            (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
+        s_autoRes.samples.budgetNs =
+            o.framerate > 0 ? 1000000000ull / (Uint64)o.framerate : 1000000000ull / 60u;
+    }
     /* package CRT: the filter in either preset (rd_crt.c) */
     rd_CrtSettings(rs, o.crt ? (RdCrtMode)(o.crtMode + 1) : RD_CRT_OFF, o.crtStrength);
     rs->crtScanlines = o.crtScanlines;
@@ -1081,11 +1103,39 @@ static void perf_csv_line(const RdPerfRecord *r)
 }
 
 /* P1: the finished records into the block's sums and the CSV */
+/* v0.4.2 (N2): a presented replay's cost for resolution "auto": its GPU
+   time without the uploads (the part the scene's size changes) when the
+   backend has timestamps, else in mailbox mode its CPU time without the
+   acquire and the present (which wait for the display); under FIFO without
+   timestamps the CPU time is the display's pace, not the scene's: no
+   sample.  A gap of half a second (a movie, a pause) starts a new window. */
+static void auto_res_sample(const RdPerfRecord *r)
+{
+    const Uint64 now = SDL_GetTicksNS();
+    double ms;
+
+    if (!s_autoRes.active || !r->presented) {
+        return;
+    }
+    if (r->gpuValid) {
+        ms = r->gpuMs - r->gpuUploadMs;
+    } else if (rhi_PresentMailbox()) {
+        ms = r->totalMs - r->acquireMs - r->presentMs;
+    } else {
+        return;
+    }
+    if (s_autoRes.samples.count && now - s_autoRes.samples.lastNs > 500000000ull) {
+        pace_SamplesReset(&s_autoRes.samples, now);
+    }
+    pace_SamplesAdd(&s_autoRes.samples, now, ms > 0.0 ? (Uint64)(ms * 1e6) : 0);
+}
+
 static void perf_drain(void)
 {
     RdPerfRecord r;
 
     while (rd_PerfPop(&r)) {
+        auto_res_sample(&r);
         if (!s_perf.csvTried) {
             perf_csv_open();
         }
@@ -1312,6 +1362,28 @@ static void slow_step(double ms)
             p.mcPending ? "busy" : "idle");
 }
 
+/* v0.4.2 (N2): every 2 s of samples, resolution "auto"'s step (one down at
+   most, never up), applied as an option change would be */
+static void auto_res_update(void)
+{
+    PaceSamples *s = &s_autoRes.samples;
+
+    if (!s_autoRes.active || s->lastNs - s->firstNs < PACE_AUTO_WINDOW_NS) {
+        return;
+    }
+    const int cur = ico_video_auto_scale();
+    const int next = pace_AutoResolutionStep(s, cur, s_autoRes.windowScale);
+
+    if (next != cur) {
+        fprintf(stderr, "video: resolution auto -> %dx (presents took %.1f ms)\n", next,
+                (double)pace_SamplesMedian(s) / 1e6);
+        ico_video_set_auto_scale(next);
+        s->lastStepNs = s->lastNs;
+        video_apply(1);
+    }
+    pace_SamplesReset(s, s->lastNs);
+}
+
 void ico_window_pace(int hz)
 {
     /* P1: the simulation step that ran since the last pace (the host loop
@@ -1330,6 +1402,7 @@ void ico_window_pace(int hz)
     }
     pace(hz);
     perf_drain(); /* P1: every vsync, so the record queue never overflows */
+    auto_res_update();
     {
         const RdTexCacheStats *tc = rdtex_Stats();
         const RdStats *rs = rd_GetStats();
@@ -1399,6 +1472,14 @@ static void pace(int hz)
            waits.  Without vsync "uncapped" is back to back. */
         if (s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox) {
             gap = rhi_PresentMailbox() ? refresh / 2 : refresh - refresh / 16;
+#ifdef __ANDROID__
+            /* v0.4.2 (N2): one a refresh in mailbox mode too: two full
+               replays a refresh on the thread that also runs the game left
+               a phone too little time for the game and kept its GPU busy */
+            if (rhi_PresentMailbox()) {
+                gap = refresh;
+            }
+#endif
         }
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;

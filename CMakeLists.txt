@@ -250,6 +250,18 @@ if(ICO_BASH AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME package_textures COMMAND ${ICO_BASH} ${CMAKE_SOURCE_DIR}/tools/test/package_textures_test.sh)
 endif()
 
+# v0.4.2 (N2): on arm64 Android (and arm64 Linux) the movie decoder
+# (port/fmv, Ittiam libmpeg2) uses the library's own NEON routines, which are
+# assembly: the language is enabled here, in the top directory, as CMake
+# asks.  Apple and Windows arm64 keep the C routines (the library's
+# assembly is written for ELF).
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|AARCH64)$" AND NOT APPLE AND NOT WIN32)
+    enable_language(ASM)
+    set(ICO_LIBMPEG2_NEON ON)
+else()
+    set(ICO_LIBMPEG2_NEON OFF)
+endif()
+
 # --- port/math: the VU0 maths in C and the newlib copies ---------------------
 add_subdirectory(port/math)
 
