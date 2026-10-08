@@ -315,7 +315,7 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
 
 /* ------------------------------- the effects depth (v0.4.1, package R1)
  * RdSettings.effectsDepth: step 2 as one pass with two targets, the output
- * and an output-size RHI_FMT_D32F depth buffer cleared to 1.0 (far), drawn
+ * and an output-size RHI_FMT_D32F depth buffer cleared to 0.0 (far), drawn
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
  * depth at the same normalised source position (SCENE and DISPLAY cover
  * the same GS frame; a mirrored box flips both), read nearest from a copy
@@ -324,8 +324,9 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
  * the bars read as far.  The point is an effects program hooked into the
  * API (ReShade, vkBasalt): it looks for a depth buffer of the backbuffer's
  * size among the render passes, and the scene's is the scene's size.  The
- * convention is the scene's (gs_z_to_depth): near 0, far 1, so ReShade's
- * RESHADE_DEPTH_INPUT_IS_REVERSED is 0 (the docs' ReShade notes, R3).  The
+ * convention is the scene's (gs_z_to_depth): the depth grows with GS Z,
+ * near 1 and far 0, so ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED is 1 (the
+ * docs' ReShade notes, R3).  The
  * deferred text, the capture and the overlay stay colour-only passes after
  * it; under the CRT filter there is no box blit and no effects depth. */
 static struct {
@@ -408,7 +409,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     p.depth.texture = s_depth.out;
     p.depth.depthLoad = RHI_LOAD_CLEAR;
     p.depth.stencilLoad = RHI_LOAD_DONT_CARE;
-    p.depth.clearDepth = 1.0f; /* far: the bars */
+    p.depth.clearDepth = 0.0f; /* far (GS Z 0): the bars */
     p.width = dw;
     p.height = dh;
     rhi_CmdBeginRenderPass(cl, &p);

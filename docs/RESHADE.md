@@ -61,7 +61,8 @@ way round:
 
 1. In the game, open ReShade's menu (the Home key, unless you changed it).
 2. Find **Edit global preprocessor definitions**.
-3. Set `RESHADE_DEPTH_INPUT_IS_REVERSED` to `0`.
+3. Set `RESHADE_DEPTH_INPUT_IS_REVERSED` to `1`. (The game stores near
+   things as 1 and far things as 0, which ReShade calls "reversed".)
 
 To check it, turn on the **DisplayDepth** effect. Near things should look
 dark and far things light. If everything looks flat, adjust

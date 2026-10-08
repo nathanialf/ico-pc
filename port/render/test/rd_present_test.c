@@ -2113,7 +2113,7 @@ static void testSetEnv(const char *name, const char *value)
  *   its scene depth cleared to 0x40000000 and a sprite written at
  *   0xC0000000, presented at 1280 x 720 (4:3 box at x 160, w 960): the
  *   present, DISPLAY and SCENE hash the same with the pass on and off; the
- *   effects depth is 1.0 in both bars and, inside the box, SCENE's depth at
+ *   effects depth is 0.0 (far) in both bars and, inside the box, SCENE's depth at
  *   the box mapping (nearest: one of the 3 x 3 texels around it, the near
  *   and far values each where expected); under the validation layer with no
  *   error; the blit's keys for both output formats are reachable in both
@@ -2157,7 +2157,7 @@ static void checkEffectsDepth(void)
         for (uint32_t x = 0; x < W; x++) {
             const float d = s_presDepth[y * W + x];
             if ((int32_t)x < box.x || (int32_t)x >= box.x + (int32_t)box.w) {
-                barBad += d != 1.0f;
+                barBad += d != 0.0f; /* far: the depth grows with GS Z */
                 continue;
             }
             const int sx = (int)(((float)x + 0.5f - (float)box.x) / (float)box.w * 512.0f);
@@ -2176,11 +2176,11 @@ static void checkEffectsDepth(void)
         }
     }
     printf("  effects depth: near %.6g far %.6g; %u near and %u far pixels in the box, %u off "
-           "the mapping, %u bar pixels not 1.0\n",
+           "the mapping, %u bar pixels not 0.0\n",
            (double)nearD, (double)farD, nNear, nFar, boxBad, barBad);
-    CHECK(barBad == 0, "effects depth: %u bar pixels are not 1.0", barBad);
+    CHECK(barBad == 0, "effects depth: %u bar pixels are not 0.0 (far)", barBad);
     CHECK(boxBad == 0, "effects depth: %u box pixels are not SCENE's depth at the mapping", boxBad);
-    CHECK(nearD < farD && farD < 1.0f, "effects depth: near %g, far %g", (double)nearD,
+    CHECK(nearD > farD && nearD < 1.0f, "effects depth: near %g, far %g", (double)nearD,
           (double)farD);
     /* the sprite's rectangle in the box, a pixel in from each edge */
     const uint32_t nx0 = (uint32_t)box.x + (uint32_t)(DEPTH_RECT[0] * 960 / 512) + 2,

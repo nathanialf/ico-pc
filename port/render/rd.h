@@ -355,10 +355,10 @@ typedef struct RdSettings {
     uint8_t dumpTextures;
     /* v0.4.1 (package R1, [video] effects_depth): the box blit also writes
      * an output-size D32F depth buffer (rd_present.c), the scene's depth at
-     * the picture's pixels and 1.0 (far) in the bars, so an effects program
+     * the picture's pixels and 0.0 (far) in the bars, so an effects program
      * hooked into the API (ReShade) finds a depth buffer of the
-     * backbuffer's size.  Near 0, far 1 (gs_z_to_depth): ReShade's
-     * RESHADE_DEPTH_INPUT_IS_REVERSED = 0.  Not under the CRT filter.  0 in
+     * backbuffer's size.  Near 1, far 0 (gs_z_to_depth: the depth grows
+     * with GS Z): ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED = 1.  Not under the CRT filter.  0 in
      * a zeroed RdSettings: the present is as before. */
     uint8_t effectsDepth;
     /* Model packs ([video] model_pack, dump_models): replacement models

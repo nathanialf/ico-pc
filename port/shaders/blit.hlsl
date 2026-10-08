@@ -54,9 +54,10 @@ DualOut blit_fix_ps(BlitVSOut i)
 // SV_Depth from t2, the copy of the scene's depth, at the same normalised uv
 // (the source rectangle covers the whole scene; a mirrored blit flips both)
 // read nearest: the texel under uv. Drawn into the output's box with an
-// output-size depth target cleared to 1.0, so an effects program hooked into
+// output-size depth target cleared to 0.0, so an effects program hooked into
 // the API (ReShade) finds the scene's depth at the picture's pixels and far in
-// the bars. Near 0, far 1 (gs_z_to_depth): RESHADE_DEPTH_INPUT_IS_REVERSED=0.
+// the bars. Depth grows with GS Z, near 1 and far 0 (gs_z_to_depth):
+// RESHADE_DEPTH_INPUT_IS_REVERSED=1.
 Texture2D<float> g_sceneDepth : register(t2, space2);
 
 struct BlitDepthOut
