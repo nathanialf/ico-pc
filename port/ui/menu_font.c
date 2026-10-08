@@ -424,12 +424,18 @@ int ui_MenuFontStripCount(void)
     return n;
 }
 
-/* tests: the strips' scale set (0: mfScale's own) */
+/* tests: the strips' scale set (0: mfScale's own); only the drawn path reads it */
+#ifdef ICO_RD
 static int s_forceScale;
+#endif
 
 void ui__MenuForceScale(int scale)
 {
+#ifdef ICO_RD
     s_forceScale = scale;
+#else
+    (void)scale;
+#endif
 }
 
 #ifdef ICO_RD
