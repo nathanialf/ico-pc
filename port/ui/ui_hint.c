@@ -31,8 +31,10 @@ const UiHintItem ui_hint_gallery[UI_HINT_GAL_COUNT] = {
     {LT_GLYPH_TRIANGLE, -1, UI_STR_BACK}};
 const UiHintItem ui_hint_mv_list[UI_HINT_MV_LIST_COUNT] = {
     {LT_GLYPH_CROSS, -1, UI_STR_MV_HINT_VIEW}, {LT_GLYPH_TRIANGLE, -1, UI_STR_BACK}};
-const UiHintItem ui_hint_mv_sticks[UI_HINT_MV_STICKS_COUNT] = {{-1, -1, UI_STR_MV_HINT_TURN},
-                                                               {-1, -1, UI_STR_MV_HINT_ZOOM}};
+const UiHintItem ui_hint_mv_sticks[UI_HINT_MV_STICKS_COUNT] = {
+    {-1, -1, UI_STR_MV_HINT_TURN},
+    {-1, -1, UI_STR_MV_HINT_MOVE},
+    {LT_GLYPH_L2, LT_GLYPH_R2, UI_STR_MV_HINT_ZOOM}};
 const UiHintItem ui_hint_mv_keys[UI_HINT_MV_KEYS_COUNT] = {
     {LT_GLYPH_CROSS, -1, UI_STR_MV_HINT_PLAY},
     {LT_GLYPH_SQUARE, -1, UI_STR_MV_LOOP},

@@ -366,6 +366,7 @@ typedef enum UiStrId {
     UI_STR_MV_HINT_PLAY,
     UI_STR_MV_HINT_TURN,
     UI_STR_MV_HINT_ZOOM,
+    UI_STR_MV_HINT_MOVE,
     UI_STR_MV_ICO,
     UI_STR_MV_YORDA,
     UI_STR_MV_QUEEN,

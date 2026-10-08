@@ -74,6 +74,7 @@
 #include "font.h"
 #include "layout_ext.h"
 #include "model_viewer.h"
+#include "model_viewer_cam.h"
 #include "options.h"
 #include "settings.h"
 #include "strings.h"
@@ -129,11 +130,6 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 #define CAM_FOV 40.0f
 /* how far the model sits left of the middle, in distances */
 #define MODEL_SHIFT 0.16f
-#define STICK_DEAD 24
-#define YAW_RATE 0.12f
-#define PITCH_RATE 0.08f
-#define ZOOM_RATE 0.08f
-#define PITCH_MAX 1.35f
 #define LOAD_TIMEOUT_TICKS 3000u
 /* the title's stage back after End Game (a few hundred ticks); past this
    the viewer lets go of the game anyway */
@@ -156,7 +152,7 @@ static int s_playing = -1; /* the motion id playing, -1 for none */
 static int s_loop;
 static unsigned int s_logTick;
 static int s_logFrame;
-static float s_yaw, s_pitch, s_dist, s_distMin, s_distMax;
+static MvCam s_cam;       /* the orbit: yaw, pitch, distance and its limits, the vertical move */
 static float s_centre[3]; /* the model's box centre, model space */
 static int s_rooted;      /* the target follows the root (a skeleton) */
 static char s_ovName[96], s_ovAnim[128], s_ovFrame[64];
@@ -447,6 +443,9 @@ static void freeAnims(void)
 static void setState(int st)
 {
     s_state = st;
+    if (st != MV_VIEW) {
+        s_cam.panY = 0.0f; /* the move is per model: gone when one is left */
+    }
     s_since = ico_host_main_ticks();
 }
 
@@ -620,20 +619,21 @@ static void frameModel(GObj *g)
        the box runs from the feet), as measured on the boy, the girl and the
        shadows: the target follows the root through the animations */
     s_rooted = d->skelNodeNum > 0;
-    s_dist = r * 2.0f / tanf(CAM_FOV * 0.5f * 3.14159265f / 180.0f);
-    s_distMin = r * 1.2f;
-    s_distMax = s_dist * 4.0f;
-    s_pitch = 0.18f;
-    s_yaw = 0.0f;
+    s_cam.dist = r * 2.0f / tanf(CAM_FOV * 0.5f * 3.14159265f / 180.0f);
+    s_cam.distMin = r * 1.2f;
+    s_cam.distMax = s_cam.dist * 4.0f;
+    s_cam.pitch = 0.18f;
+    s_cam.yaw = 0.0f;
+    s_cam.panY = 0.0f;
     if (s_rooted) {
         /* in front of it */
         float dir[4];
         GetRootOrient(dir, g);
-        s_yaw = atan2f(dir[0], dir[2]);
+        s_cam.yaw = atan2f(dir[0], dir[2]);
     }
     fprintf(stderr,
             "model_viewer: box (%.0f %.0f %.0f)-(%.0f %.0f %.0f), radius %.0f, distance %.0f\n",
-            lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], r, s_dist);
+            lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], r, s_cam.dist);
 }
 
 static void targetOf(float t[3])
@@ -669,29 +669,20 @@ static void placeCamera(void)
 
     targetOf(t);
     memset(&in, 0, sizeof(in));
-    float cp = cosf(s_pitch), sp = sinf(s_pitch);
+    float cp = cosf(s_cam.pitch), sp = sinf(s_cam.pitch);
     /* the model left of the picture's middle, clear of the list at the
        right: eye and target moved along the view's right */
-    float side = s_dist * MODEL_SHIFT;
-    float rx = -cosf(s_yaw) * side, rz = sinf(s_yaw) * side;
-    in.f[0] = t[0] + s_dist * cp * sinf(s_yaw) + rx;
-    in.f[1] = t[1] - s_dist * sp;
-    in.f[2] = t[2] + s_dist * cp * cosf(s_yaw) + rz;
+    float side = s_cam.dist * MODEL_SHIFT;
+    float rx = -cosf(s_cam.yaw) * side, rz = sinf(s_cam.yaw) * side;
+    in.f[0] = t[0] + s_cam.dist * cp * sinf(s_cam.yaw) + rx;
+    in.f[1] = t[1] - s_cam.dist * sp + s_cam.panY;
+    in.f[2] = t[2] + s_cam.dist * cp * cosf(s_cam.yaw) + rz;
     in.f[4] = t[0] + rx;
-    in.f[5] = t[1];
+    in.f[5] = t[1] + s_cam.panY;
     in.f[6] = t[2] + rz;
     in.f[8] = CAM_FOV;
     CameraSetMode(0);
     SetWSMatrix(&in);
-}
-
-static float stick(int v)
-{
-    int d = v - 128;
-    if (d > -STICK_DEAD && d < STICK_DEAD) {
-        return 0.0f;
-    }
-    return (float)(d > 0 ? d - STICK_DEAD : d + STICK_DEAD) / (float)(128 - STICK_DEAD);
 }
 
 /* the backdrop, first in the frame's first list */
@@ -820,14 +811,7 @@ static void setup(void)
 static void viewInput(void)
 {
     int flags = pad[0].flags;
-    /* the right stick (ana[0] x, ana[1] y) orbits, the left stick's vertical
-       axis (ana[3]) zooms; the signs are as they were when the sticks were
-       the other way round */
-    s_yaw -= stick(pad[0].ana[0]) * YAW_RATE;
-    s_pitch += stick(pad[0].ana[1]) * PITCH_RATE;
-    s_pitch = s_pitch > PITCH_MAX ? PITCH_MAX : s_pitch < -PITCH_MAX ? -PITCH_MAX : s_pitch;
-    s_dist *= expf(stick(pad[0].ana[3]) * ZOOM_RATE);
-    s_dist = s_dist < s_distMin ? s_distMin : s_dist > s_distMax ? s_distMax : s_dist;
+    mv_CamStep(&s_cam, (unsigned)pad[0].now, pad[0].ana);
     if (lt_fade_status() != 2 || current_layout_id != s_viewLayout) {
         return;
     }

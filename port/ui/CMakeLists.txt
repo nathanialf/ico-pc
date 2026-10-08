@@ -227,6 +227,21 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     add_test(NAME model_viewer COMMAND model_viewer_test)
 endif()
 
+# model_viewer_cam (package A, port/game/test): the viewer's camera step
+# (port/game/model_viewer_cam.c): L2/R2 zoom, the left stick's vertical move,
+# the clamps and the dead zone. CPU only.
+add_executable(model_viewer_cam_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_cam_test.c"
+    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_cam.c")
+target_include_directories(model_viewer_cam_test PRIVATE "${CMAKE_SOURCE_DIR}/port/game")
+target_compile_options(model_viewer_cam_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(model_viewer_cam_test PRIVATE m)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
+endif()
+
 # game_font_test (package GFONT): the game face's builder on a synthetic
 # sheet (the letters segmented, a touching pair split, the advances, the
 # rim), the blob read back by font.c and the per-character fallback. CPU only.
