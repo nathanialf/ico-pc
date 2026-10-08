@@ -1596,6 +1596,10 @@ int ico_host_main(int argc, char **argv)
     int r = host_main(argc, argv);
 
     ico_host_shutdown();
+    /* the process may stay cached after this thread ends: the watchdog
+       must neither count the time nor signal a thread that is gone */
+    ico_diag_watchdog_pause(1);
+    ico_diag_main_thread_end();
     ico_android_log_mirror_flush();
     return r;
 }

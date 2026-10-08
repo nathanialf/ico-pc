@@ -896,6 +896,10 @@ static void report_crash(void)
 
 static unsigned char sample_stack[32 * 1024];
 
+/* 1 from ico_diag_init until ico_diag_main_thread_end: the thread that
+   called ico_diag_init (the one the watchdog samples) still runs */
+static volatile int main_alive;
+
 static size_t sample_len;
 
 static uintptr_t sample_pc;
@@ -912,7 +916,7 @@ static int sample_main(void)
     uintptr_t lo;
     uintptr_t hi;
     sample_len = 0;
-    if (w32_suspend_thread == NULL || w32_resume_thread == NULL ||
+    if (!main_alive || w32_suspend_thread == NULL || w32_resume_thread == NULL ||
         w32_suspend_thread(main_thread) == (DWORD)-1) {
         return -1;
     }
@@ -940,6 +944,11 @@ static int sample_main(void)
 #else
 
 static volatile sig_atomic_t sample_done;
+
+/* main_alive (ico_diag_main_thread_end) is cleared under this lock and
+   read under it around the signal, so a thread that has ended is never
+   signalled */
+static pthread_mutex_t main_alive_lock = PTHREAD_MUTEX_INITIALIZER;
 
 ICO_ENTRY static void sample_handler(int sig, siginfo_t *si, void *ucv)
 {
@@ -971,9 +980,13 @@ static int sample_main(void)
 {
     struct timespec ts = {0, 10 * 1000 * 1000};
     int i;
+    int sent;
     sample_done = 0;
     sample_len = 0;
-    if (pthread_kill(main_thread, SIGUSR2) != 0) {
+    pthread_mutex_lock(&main_alive_lock);
+    sent = main_alive && pthread_kill(main_thread, SIGUSR2) == 0;
+    pthread_mutex_unlock(&main_alive_lock);
+    if (!sent) {
         return -1;
     }
     for (i = 0; i < 50 && !sample_done; i++) {
@@ -1092,6 +1105,17 @@ void ico_diag_watchdog_pause(int paused)
     ico_diag_log("ico_pc: diagnostics: watchdog %s", paused ? "paused" : "running again");
 }
 
+void ico_diag_main_thread_end(void)
+{
+#ifndef _WIN32
+    pthread_mutex_lock(&main_alive_lock);
+#endif
+    main_alive = 0;
+#ifndef _WIN32
+    pthread_mutex_unlock(&main_alive_lock);
+#endif
+}
+
 static void watchdog_loop(void)
 {
     double start = ico_diag_uptime();
@@ -1120,7 +1144,7 @@ static void watchdog_loop(void)
         struct timespec ts = {0, 250 * 1000 * 1000};
         nanosleep(&ts, NULL);
 #endif
-        if (fatal_once) {
+        if (fatal_once || !main_alive) {
             continue;
         }
         now = ico_diag_uptime();
@@ -1657,6 +1681,7 @@ void ico_diag_init(const char *log_path)
     }
     exe_range();
     install_handlers();
+    main_alive = 1;
     inited = 1;
 #ifdef __ANDROID__
     ico_diag_log("ico_pc: diagnostics: %s at 0x%lx; this thread's stack 0x%lx..0x%lx (%lu KB)",

@@ -95,6 +95,10 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s);
    background), 0 when it runs again: while paused neither watchdog limit
    counts and the heartbeat is quiet. Any thread. */
 void ico_diag_watchdog_pause(int paused);
+/* The thread that called ico_diag_init is about to end (Android: Quit,
+   with the process possibly kept): from now on the watchdog neither
+   samples nor signals it. */
+void ico_diag_main_thread_end(void);
 
 /* One line to the log, written at once (a newline is added). */
 void ico_diag_log(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
