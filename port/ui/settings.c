@@ -27,6 +27,7 @@
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
+#include "menu_font.h"
 #include "mix_gain.h"
 #include "options.h"
 #include "photo_mode.h"
@@ -420,7 +421,7 @@ static const char *deviceText(char *buf, unsigned size)
     }
     for (;;) {
         snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
-        if (n == 0 || ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
+        if (n == 0 || ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
             break;
         }
         do {
@@ -1410,7 +1411,7 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         }
         n += len;
         p = next;
-        if (lastSpace > lineStart && ui_MeasureText(size, out + lineStart) > width) {
+        if (lastSpace > lineStart && ui_MeasureMenuText(size, out + lineStart) > width) {
             out[lastSpace] = '\n';
             lineStart = lastSpace + 1;
         }
@@ -1924,7 +1925,7 @@ static void pauseStats(int show)
            label in another language is set smaller (layout_ext.c's fit)
            instead of running into the value */
         const int y = STATS_Y + shown * STATS_PITCH;
-        const float vw = text[i][0] ? ui_MeasureText(NOTE_SIZE, text[i]) : 0.0f;
+        const float vw = text[i][0] ? ui_MeasureMenuText(NOTE_SIZE, text[i]) : 0.0f;
         int lw = STATS_W - (int)(vw + 0.999f) - (text[i][0] ? STATS_GAP : 0);
         lw = lw < STATS_W / 3 ? STATS_W / 3 : lw;
         l->dispY = v->dispY = y;

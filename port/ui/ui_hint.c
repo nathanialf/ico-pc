@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "menu_font.h"
 #include "strings.h"
 #include "ui_list.h" /* ui_SettingsAddRow */
 
@@ -107,7 +108,7 @@ static float lineWidth(const UiHint *h, float k)
         if (h->item[i].glyph >= 0) {
             w += GAP_GLYPH * k;
         }
-        w += ui_MeasureText(h->size * k, ui_Str((UiStrId)h->item[i].strId));
+        w += ui_MeasureMenuText(h->size * k, ui_Str((UiStrId)h->item[i].strId));
         items++;
     }
     return items > 1 ? w + GAP_ITEM * k * (float)(items - 1) : w;
@@ -157,7 +158,7 @@ void ui_HintLayout(UiHint *h)
             x += GAP_GLYPH * k;
         }
         const char *word = ui_Str((UiStrId)h->item[i].strId);
-        float tw = ui_MeasureText(h->size * k, word);
+        float tw = ui_MeasureMenuText(h->size * k, word);
         LtProperty *t = lt_ext_Prop(h->textRow[i]);
         lt_ext_SetSize(h->textRow[i], h->size * k);
         t->dispX = (int)(x + 0.5f);

@@ -2405,7 +2405,7 @@ static void testAudio(void)
           "device: the first, reopened");
     {
         const char *v = ui_SettingsValueText(UI_OPT_DEVICE);
-        CHECK(ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f, "the name fits (%s)", v);
+        CHECK(ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f, "the name fits (%s)", v);
     }
     ui_SettingsStep(UI_OPT_DEVICE, 1);
     {
@@ -2413,7 +2413,7 @@ static void testAudio(void)
         size_t n = strlen(v);
         CHECK(n > 3 && strcmp(v + n - 3, "\xE2\x80\xA6") == 0 &&
                   strncmp(v, s_devNames[1], 10) == 0 &&
-                  ui_MeasureText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f,
+                  ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, v) <= 176.0f,
               "the long name cut with an ellipsis (%s)", v);
     }
     ui_SettingsStep(UI_OPT_DEVICE, 1);
