@@ -817,8 +817,13 @@ static void setup(void)
     s_playing = -1;
     setState(MV_VIEW);
     ui_ListReset(&s_animList);
-    fprintf(stderr, "model_viewer: stage %d loaded id %d \"%s\" (%d animations)\n", stage_no,
-            m->charId, modelNameEn(s_model), s_animCount);
+    fprintf(stderr,
+            "model_viewer: stage %d loaded id %d \"%s\" (%d animations); the stage's picture "
+            "effects: post %d, feedback %d colour %d %d %d %d\n",
+            stage_no, m->charId, modelNameEn(s_model), s_animCount,
+            (int)GlobalStageSetting.postEffect, (int)GlobalStageSetting.feedbackEffect,
+            (int)GlobalStageSetting.feedbackCol[0], (int)GlobalStageSetting.feedbackCol[1],
+            (int)GlobalStageSetting.feedbackCol[2], (int)GlobalStageSetting.feedbackCol[3]);
 }
 
 /* the model files can be saved: Developer mode on, and the renderer there */

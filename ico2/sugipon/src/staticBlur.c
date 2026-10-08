@@ -1485,10 +1485,13 @@ void FullScreenEffectBefore(void)
         calls++;
         if (memcmp(now, seen, sizeof(now)) != 0) {
             fprintf(stderr,
-                    "staticBlur: frame %u: postEffect %d feedbackEffect %d flare %d sun %d "
-                    "motionBlur %d (drawn %d) depthField %d/%d\n",
-                    calls, postMode, feedMode, flareOn, sunOn, motionBlurAlpha, sbMotionDrawn,
-                    GlobalStageSetting.depthFieldStart, GlobalStageSetting.depthFieldWidth);
+                    "staticBlur: frame %u: postEffect %d feedbackEffect %d colour %d %d %d %d "
+                    "flare %d sun %d motionBlur %d (drawn %d) depthField %d/%d\n",
+                    calls, postMode, feedMode, (int)GlobalStageSetting.feedbackCol[0],
+                    (int)GlobalStageSetting.feedbackCol[1], (int)GlobalStageSetting.feedbackCol[2],
+                    (int)GlobalStageSetting.feedbackCol[3], flareOn, sunOn, motionBlurAlpha,
+                    sbMotionDrawn, GlobalStageSetting.depthFieldStart,
+                    GlobalStageSetting.depthFieldWidth);
             memcpy(seen, now, sizeof(now));
         }
         sbMotionDrawn = 0;

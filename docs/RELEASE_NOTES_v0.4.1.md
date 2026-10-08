@@ -12,4 +12,4 @@
 ## Fixed
 
 - The final fight: Ico's sword hits the Queen's shield again (issue 12).
-- The Queen's face no longer darkens in waves in the model viewer, and surfaces that sit very close together are drawn in the right order everywhere.
+- Surfaces that sit very close together are drawn in the right order (the game's depth was kept too coarsely before).
