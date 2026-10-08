@@ -83,6 +83,8 @@
 
 #ifdef ICO_RD
 #include "GifHost.h"
+#include "modelpack.h"
+#include "popup.h"
 #include "rd.h"
 #endif
 
@@ -114,6 +116,7 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 #define PAD_R1 0x0008
 #define PAD_TRIANGLE 0x0010
 #define PAD_CIRCLE 0x0020
+#define PAD_SELECT 0x0100 /* ICO_PAD_SELECT (pad_script.h) */
 #define PAD_CROSS 0x0040
 #define PAD_SQUARE 0x0080
 #define PAD_UP 0x1000
@@ -150,6 +153,8 @@ static int s_animCount;
 static int s_sel;          /* the animation selected (index into s_anims) */
 static int s_playing = -1; /* the motion id playing, -1 for none */
 static int s_loop;
+static int saveAvailable(void);
+static int s_saveWait; /* Select armed the one-shot dump, its outcome not yet known */
 static unsigned int s_logTick;
 static int s_logFrame;
 static MvCam s_cam;       /* the orbit: yaw, pitch, distance and its limits, the vertical move */
@@ -396,6 +401,8 @@ static void refreshView(void)
     for (int i = UI_HINT_MV_PLAY; i < UI_HINT_MV_BACK; i++) {
         ui_HintShow(&s_viewKeys, i, s_animCount > 0);
     }
+    /* Select, saving the model's files, with Developer mode on */
+    ui_HintShow(&s_viewKeys, UI_HINT_MV_SAVE, saveAvailable());
     ui_HintLayout(&s_viewSticks);
     ui_HintLayout(&s_viewKeys);
     lt_ext_SetText(s_rowName, s_ovName);
@@ -444,6 +451,12 @@ static void setState(int st)
 {
     s_state = st;
     if (st != MV_VIEW) {
+#ifdef ICO_RD
+        if (s_saveWait) {
+            modelpack_DumpObjectOnce(NULL);
+        }
+#endif
+        s_saveWait = 0;
         s_cam.panY = 0.0f; /* the move is per model: gone when one is left */
     }
     s_since = ico_host_main_ticks();
@@ -808,6 +821,44 @@ static void setup(void)
             m->charId, modelNameEn(s_model), s_animCount);
 }
 
+/* the model files can be saved: Developer mode on, and the renderer there */
+static int saveAvailable(void)
+{
+#ifdef ICO_RD
+    return ico_opt_developer_mode() != 0;
+#else
+    return 0;
+#endif
+}
+
+#ifdef ICO_RD
+/* the part of the dumps folder from "models" on, so the popup stays short */
+static const char *shortDir(const char *dir)
+{
+    const char *p = dir, *last = dir;
+    while ((p = strstr(p, "models")) != NULL) {
+        if (p == dir || p[-1] == '/' || p[-1] == '\\') {
+            last = p;
+        }
+        p += 6;
+    }
+    return last;
+}
+
+static void saveDone(int n)
+{
+    char body[UI_POPUP_TEXT];
+    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    if (n > 0) {
+        snprintf(body, sizeof(body), ui_Str(UI_STR_MV_SAVED_FMT), n, shortDir(modelpack_DumpDir()));
+        ui_PopupPush(body, "");
+    } else {
+        ui_PopupPush(ui_Str(UI_STR_MV_SAVED_NONE), "");
+    }
+    fprintf(stderr, "model_viewer: saved %d model files to %s\n", n, modelpack_DumpDir());
+}
+#endif
+
 static void viewInput(void)
 {
     int flags = pad[0].flags;
@@ -821,6 +872,13 @@ static void viewInput(void)
         lt_switch_layout(s_listLayout);
         return;
     }
+#ifdef ICO_RD
+    if ((flags & PAD_SELECT) && !s_saveWait && saveAvailable() && s_obj != NULL) {
+        modelpack_DumpObjectOnce(s_obj->dobj);
+        s_saveWait = 1;
+        POSITIVE_SE();
+    }
+#endif
     if (s_animCount == 0) {
         return;
     }
@@ -850,6 +908,15 @@ static void viewTick(void)
             lt_switch_layout(s_viewLayout);
         }
         viewInput();
+#ifdef ICO_RD
+        if (s_saveWait) {
+            int n = modelpack_DumpObjectStatus();
+            if (n >= 0) {
+                s_saveWait = 0;
+                saveDone(n);
+            }
+        }
+#endif
     }
     if (s_state != MV_VIEW && s_state != MV_LIST) {
         return;

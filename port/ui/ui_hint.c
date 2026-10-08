@@ -39,7 +39,8 @@ const UiHintItem ui_hint_mv_keys[UI_HINT_MV_KEYS_COUNT] = {
     {LT_GLYPH_CROSS, -1, UI_STR_MV_HINT_PLAY},
     {LT_GLYPH_SQUARE, -1, UI_STR_MV_LOOP},
     {LT_GLYPH_L1, LT_GLYPH_R1, UI_STR_MV_ANIMATION},
-    {LT_GLYPH_TRIANGLE, -1, UI_STR_EXTRAS_MODELS}};
+    {LT_GLYPH_TRIANGLE, -1, UI_STR_EXTRAS_MODELS},
+    {-1, -1, UI_STR_MV_HINT_SAVE}};
 
 static void setShown(int row, int on)
 {

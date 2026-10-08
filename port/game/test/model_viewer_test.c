@@ -174,7 +174,8 @@ int main(void)
     static const int kWords[] = {
         UI_STR_MV_ANIMATION, UI_STR_MV_LOOP,       UI_STR_MV_FRAME,      UI_STR_MV_NO_ANIMATIONS,
         UI_STR_MV_HINT_VIEW, UI_STR_MV_HINT_TITLE, UI_STR_MV_HINT_PLAY,  UI_STR_MV_HINT_TURN,
-        UI_STR_MV_HINT_ZOOM, UI_STR_MV_HINT_MOVE,  UI_STR_EXTRAS_MODELS, UI_STR_BACK};
+        UI_STR_MV_HINT_ZOOM, UI_STR_MV_HINT_MOVE,  UI_STR_EXTRAS_MODELS, UI_STR_BACK,
+        UI_STR_MV_HINT_SAVE, UI_STR_MV_SAVED_FMT,  UI_STR_MV_SAVED_NONE};
     for (unsigned i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
         checkText(kWords[i], ui_StrIn(UI_LANG_EN, (UiStrId)kWords[i]));
     }
