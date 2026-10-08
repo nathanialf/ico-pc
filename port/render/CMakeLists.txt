@@ -89,6 +89,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_interp.c # wave 7 (R7b): interpolation between the retained frames
     rd_mesh.c
+    modelpack.c # v0.5.0 (M3): model packs, the index, the glTF conversion, the dump
     rd_perf.c # package P1: per-replay performance records
     rd_photo.c # package PHOTO: the camera override and its pinned frame
     rd_pipeline.c
@@ -118,6 +119,8 @@ endif()
 # and its loader thread on SDL's threads (without SDL the loads run between
 # frames instead)
 target_link_libraries(ico_render PUBLIC ico_host_fs)
+# modelpack.c: the model files through gltf.c
+target_link_libraries(ico_render PUBLIC ico_gltf)
 if(TARGET SDL3::SDL3-shared)
     target_link_libraries(ico_render PUBLIC SDL3::SDL3-shared)
     set_source_files_properties(texpack.c TARGET_DIRECTORY ico_render
@@ -305,6 +308,32 @@ target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 # the strip order case reads the title logo's models from the disc image
 # (df_pack.h); without it that part is skipped
 target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math ico_port_data)
+
+# modelpack_test (v0.5.0, M3): model packs.  The same game files as
+# rd_mesh_test (test/mesh_env.h stubs the rest): the folder index on a fake
+# tree, the dump of a strip stream read back and converted (the triangles
+# the same), the bone packing, a cluster packet from vu_models.h dumped,
+# read back and drawn in the original's place as RDC_SKINNED; on a device
+# the original and the round-tripped replacement rendered alike (77
+# without one, after the CPU checks).  Its files under the build tree.
+add_executable(modelpack_test test/modelpack_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Packet.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/RegistPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/MicroCode.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayP2O.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Primitive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+target_include_directories(modelpack_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/render/vu1_ref"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(modelpack_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(modelpack_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(modelpack_test PRIVATE ico_render ico_vu1_ref ico_math)
 
 # rd_shadow_test (wave 4, R4b): the shadow count on the stencil.  Shadow.c
 # with the 2D layer and Matrix.c, as the window build has them, the rest of
@@ -495,7 +524,7 @@ target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 
 if(WIN32 AND SDL3_FOUND)
     foreach(t texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
+              rd_mesh_test modelpack_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
               rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test
               texpack_load_test)
         add_custom_command(TARGET ${t} POST_BUILD
@@ -524,6 +553,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mesh COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME modelpack COMMAND modelpack_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(modelpack PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_shadow COMMAND rd_shadow_test)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -571,8 +602,8 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     endif()
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh rd_shadow
-                             rd_fog rd_blur rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_perf PROPERTIES ENVIRONMENT
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase rd_mesh modelpack
+                             rd_shadow rd_fog rd_blur rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_perf PROPERTIES ENVIRONMENT
                                                                            "${_env}")
     endif()
     # package AN-E: the same tests and expectations in the two-pass blend
