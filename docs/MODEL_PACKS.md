@@ -11,13 +11,11 @@ second half is for people who want to make one.
 
 ## Put a model pack in
 
-Model packs go in a `models` folder, next to the `textures` folder that
-comes with the game. The game does not make this folder for you, so make
-it yourself.
+Model packs go in the `models` folder that comes with the game, next to
+the `textures` folder. It is already there, with a short note inside it.
 
-1. Beside the program, make the folders `models`, then `SCES-50760`
-   inside it, then `replacements` inside that. On Windows they go inside
-   the `x64` folder, so you end up with:
+1. Open the `models` folder beside the program. On Windows it is inside
+   the `x64` folder:
 
    ```
    x64\models\SCES-50760\replacements\

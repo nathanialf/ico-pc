@@ -6,7 +6,7 @@
 - Model viewer: L2 and R2 zoom, and the left stick moves the model up and down.
 - Model packs: replacement 3D models go in a models folder, and Options > Display > Model pack turns them on or off. With Developer mode, pack makers can save the game's models to edit.
 - ReShade works on Windows, depth effects included, and vkBasalt works on Linux.
-- The download comes with a textures folder, with a note inside saying where a texture pack goes.
+- The download comes with textures, models and reshade folders, each with a note inside saying what goes there.
 - The guides are now short pages on separate topics, and they come with the download.
 
 ## Fixed

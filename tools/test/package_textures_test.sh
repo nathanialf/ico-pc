@@ -13,7 +13,8 @@ rel="$pkg_textures_rel/README.txt"
 
 # Windows: CRLF, in the zip
 w="$t/win"; mkdir -p "$w/pkg/ico-pc-x/x64" "$t/out"
-pkg_stage_textures_readme "$w/stage" crlf
+pkg_stage_folder_notes "$w/stage" crlf
+for r in "${pkg_note_rels[@]}"; do [[ -f "$w/stage/$r/README.txt" ]] || bad "no note staged at $r"; grep -q $'\r' "$w/stage/$r/README.txt" || bad "no CR in the Windows note at $r"; done
 [[ -s "$w/stage/$rel" ]] || bad "win: README.txt not staged"
 [[ "$(wc -l < "$w/stage/$rel")" -ge 7 ]] || bad "win: README.txt too short"
 [[ "$(grep -c $'\r$' "$w/stage/$rel")" == "$(wc -l < "$w/stage/$rel")" ]] || bad "win: not all CRLF"
@@ -42,7 +43,8 @@ ok "zip check passes and fails correctly"
 
 # Linux: LF, in the tar
 l="$t/lin"; mkdir -p "$l/pkg/ico-pc-x"
-pkg_stage_textures_readme "$l/stage" lf
+pkg_stage_folder_notes "$l/stage" lf
+for r in "${pkg_note_rels[@]}"; do [[ -f "$l/stage/$r/README.txt" ]] || bad "no note staged at $r"; grep -q $'\r' "$l/stage/$r/README.txt" && bad "a CR in the Linux note at $r"; done
 ! grep -q $'\r' "$l/stage/$rel" || bad "linux: has CR"
 mkdir -p "$l/pkg/ico-pc-x/$pkg_textures_rel"; cp -a "$l/stage/$rel" "$l/pkg/ico-pc-x/$rel"
 tar -C "$l/pkg" --sort=name --owner=0 --group=0 --numeric-owner -czf "$t/out/a.tgz" ico-pc-x

@@ -106,9 +106,9 @@ done
 unsigned="$wt/android/app/build/outputs/apk/release/app-release-unsigned.apk"
 [[ -f "$unsigned" ]] || fail "Gradle did not produce app-release-unsigned.apk"
 so="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/libmain.so 2>/dev/null | head -n 1 || true)"
-map="$(ls "$wt"/android/app/.cxx/*/*/arm64-v8a/ico_pc.map 2>/dev/null | head -n 1 || true)"
+map="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/ico_pc.map "$wt"/android/app/.cxx/*/*/arm64-v8a/ico_pc.map 2>/dev/null | head -n 1 || true)"
 [[ -n "$so" && -f "$so" ]] || fail "no unstripped libmain.so under android/app/build/intermediates/cxx"
-[[ -n "$map" && -f "$map" ]] || fail "no ico_pc.map under android/app/.cxx"
+[[ -n "$map" && -f "$map" ]] || fail "no ico_pc.map beside libmain.so (android/app/build/intermediates/cxx) or under android/app/.cxx"
 cd "$root"
 
 # 16 KB zip alignment, then the signature (v2 and v3; zipalign first, because

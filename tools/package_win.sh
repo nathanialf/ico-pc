@@ -109,8 +109,8 @@ TXT
     sed 's/$/\r/' "$wt/port/rhi/test/compare_backends.cmd" > "$d/tools/compare_backends.cmd"
     # the textures folder, with a note in it (the zip keeps files, so the
     # note is what keeps the folder)
-    rm -rf "$d/textures"
-    pkg_stage_textures_readme "$d" crlf
+    rm -rf "$d/textures" "$d/models" "$d/reshade"
+    pkg_stage_folder_notes "$d" crlf
     # licences: the program's (LICENSE, MIT) and every third-party
     # component's notice (NOTICES.txt, tools/gen_notices.py from
     # tools/notices/manifest.json; docs/THIRD_PARTY.md)
@@ -171,10 +171,10 @@ cp -a "$stage/README.md" "$pkgroot/ico-pc-$label/README.md"
 cp -a "$stage/docs" "$pkgroot/ico-pc-$label/docs"
 cp -a "$stage/VERSION.txt" "$pkgroot/ico-pc-$label/VERSION.txt"
 for a in x64; do
-    mkdir -p "$pkgroot/ico-pc-$label/$a/tools" "$pkgroot/ico-pc-$label/$a/$pkg_textures_rel"
+    mkdir -p "$pkgroot/ico-pc-$label/$a/tools" "$pkgroot/ico-pc-$label/$a/$pkg_textures_rel" "$pkgroot/ico-pc-$label/$a/$pkg_models_rel" "$pkgroot/ico-pc-$label/$a/$pkg_reshade_rel"
     for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt \
         tools/rhi_d3d12_test.exe tools/rd_replay_tool.exe tools/mc_import.exe tools/SDL3.dll tools/compare_png.ps1 \
-        tools/compare_backends.cmd tools/README.txt "$pkg_textures_rel/README.txt"; do
+        tools/compare_backends.cmd tools/README.txt "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt"; do
         cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
     done
 done
@@ -192,8 +192,9 @@ for n in "${pkg_player_docs[@]}"; do
     pkg_assert_zip_has "$zip" "ico-pc-$label/docs/$n.md" || fail "the zip lacks docs/$n.md"
 done
 for a in x64; do
-    pkg_assert_zip_has "$zip" "ico-pc-$label/$a/$pkg_textures_rel/README.txt" \
-        || fail "the zip lacks $a/$pkg_textures_rel/README.txt"
+    for r in "${pkg_note_rels[@]}"; do
+        pkg_assert_zip_has "$zip" "ico-pc-$label/$a/$r/README.txt" || fail "the zip lacks $a/$r/README.txt"
+    done
 done
 
 echo "$zip"

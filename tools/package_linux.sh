@@ -125,8 +125,8 @@ rm -f "$stage/NOTICES.txt"
 cp "$wt/LICENSE" "$stage/LICENSE"
 run python3 "$wt/tools/gen_notices.py" --platform linux --root "$wt" --out "$stage/NOTICES.txt"
 cp "$wt/docs/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
-# the textures folder, with a note in it
-pkg_stage_textures_readme "$stage" lf
+# the textures, models and reshade folders, each with a note in it
+pkg_stage_folder_notes "$stage" lf
 cat > "$stage/ico-pc.ini" <<INI
 # ico-pc.ini: optional settings, one key=value per line; lines starting
 # with # or ; are notes. Everything works without editing this file.
@@ -172,8 +172,8 @@ printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$sta
 rm -f "$tgz"
 pkgroot="$root/build-host/tmp/tar-$label"
 rm -rf "$pkgroot"; mkdir -p "$pkgroot/ico-pc-$label"
-mkdir -p "$pkgroot/ico-pc-$label/tools" "$pkgroot/ico-pc-$label/$pkg_textures_rel"
-for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import "$pkg_textures_rel/README.txt"; do
+mkdir -p "$pkgroot/ico-pc-$label/tools" "$pkgroot/ico-pc-$label/$pkg_textures_rel" "$pkgroot/ico-pc-$label/$pkg_models_rel" "$pkgroot/ico-pc-$label/$pkg_reshade_rel"
+for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt"; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
 cp -a "$stage/docs" "$pkgroot/ico-pc-$label/docs"
@@ -186,8 +186,9 @@ rm -rf "$pkgroot"
 for n in "${pkg_player_docs[@]}"; do
     pkg_assert_tar_has "$tgz" "ico-pc-$label/docs/$n.md" || fail "the archive lacks docs/$n.md"
 done
-pkg_assert_tar_has "$tgz" "ico-pc-$label/$pkg_textures_rel/README.txt" \
-    || fail "the archive lacks $pkg_textures_rel/README.txt"
+for r in "${pkg_note_rels[@]}"; do
+    pkg_assert_tar_has "$tgz" "ico-pc-$label/$r/README.txt" || fail "the archive lacks $r/README.txt"
+done
 
 echo "$tgz"
 echo "built from $commit"

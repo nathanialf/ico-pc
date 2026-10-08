@@ -49,8 +49,10 @@ a line like this:
 window: an effects program is loaded (ReShade); see docs/RESHADE.md
 ```
 
-Presets you download for ReShade work as in any other game: put the preset
-file beside the program and choose it in ReShade's menu.
+Presets you download for ReShade work as in any other game. The game comes
+with a `reshade` folder beside the program (inside `x64` on Windows) as a
+tidy place for preset files and shader packs; put the preset file there,
+or beside the program, and choose it in ReShade's menu.
 
 ## Make depth effects work
 
