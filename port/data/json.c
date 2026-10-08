@@ -41,6 +41,10 @@ static void fail(JParse *j, const char *why)
 /* a new node; SIZE_MAX on no memory */
 static size_t jnew(JParse *j, IcoJsonType type)
 {
+    if (j->count >= ICO_JSON_NODES_MAX) {
+        fail(j, "too many values");
+        return SIZE_MAX;
+    }
     if (j->count == j->cap) {
         size_t cap = j->cap ? j->cap * 2 : 64;
         IcoJsonNode *n = realloc(j->n, cap * sizeof(*n));
@@ -430,6 +434,10 @@ int ico_json_parse(const char *text, size_t n, IcoJson *out)
         snprintf(out->error, sizeof(out->error), "no text");
         return -1;
     }
+    if (n > ICO_JSON_TEXT_MAX) {
+        snprintf(out->error, sizeof(out->error), "the text is too long");
+        return -1;
+    }
     out->text = malloc(n + 1);
     if (out->text == NULL) {
         snprintf(out->error, sizeof(out->error), "out of memory");
@@ -466,6 +474,25 @@ int ico_json_parse(const char *text, size_t n, IcoJson *out)
         j.n[i].next = j.l[i].next ? &j.n[j.l[i].next - 1] : NULL;
     }
     free(j.l);
+    /* the member index: every container's members in one pointer array, so
+       ico_json_at is O(1) (the slices total at most nodeCount - 1) */
+    out->index = malloc((j.count ? j.count : 1) * sizeof(*out->index));
+    if (out->index == NULL) {
+        snprintf(out->error, sizeof(out->error), "out of memory");
+        free(j.n);
+        free(out->text);
+        out->text = NULL;
+        return -1;
+    }
+    for (size_t i = 0, at = 0; i < j.count; i++) {
+        if (j.n[i].type != ICO_JSON_ARR && j.n[i].type != ICO_JSON_OBJ) {
+            continue;
+        }
+        j.n[i].items = out->index + at;
+        for (const IcoJsonNode *c = j.n[i].child; c != NULL; c = c->next) {
+            out->index[at++] = c;
+        }
+    }
     out->nodes = j.n;
     out->nodeCount = j.count;
     out->root = &j.n[root];
@@ -478,6 +505,7 @@ void ico_json_free(IcoJson *j)
         return;
     }
     free(j->nodes);
+    free(j->index);
     free(j->text);
     memset(j, 0, sizeof(*j));
 }
@@ -502,11 +530,7 @@ const IcoJsonNode *ico_json_at(const IcoJsonNode *arr, size_t i)
         i >= arr->count) {
         return NULL;
     }
-    const IcoJsonNode *c = arr->child;
-    while (c != NULL && i-- > 0) {
-        c = c->next;
-    }
-    return c;
+    return arr->items[i];
 }
 
 size_t ico_json_count(const IcoJsonNode *node)

@@ -323,6 +323,56 @@ static void locale(void)
     setlocale(LC_NUMERIC, "C");
 }
 
+static void caps(void)
+{
+    IcoJson j;
+    char *t;
+    size_t n = 0;
+
+    /* the text cap: refused before any copy */
+    t = malloc((size_t)ICO_JSON_TEXT_MAX + 2);
+    CHECK(t != NULL, "memory for the text cap");
+    if (t) {
+        memset(t, ' ', (size_t)ICO_JSON_TEXT_MAX + 1);
+        t[ICO_JSON_TEXT_MAX + 1] = 0;
+        CHECK(ico_json_parse(t, (size_t)ICO_JSON_TEXT_MAX + 1, &j) == -1 && j.root == NULL &&
+                  strstr(j.error, "too long") != NULL,
+              "a text over the cap fails: %s", j.error);
+        ico_json_free(&j);
+        free(t);
+    }
+    /* the node cap: one array of ICO_JSON_NODES_MAX values (the array itself
+       is one node) fails, one fewer parses */
+    t = malloc((size_t)ICO_JSON_NODES_MAX * 2 + 4);
+    CHECK(t != NULL, "memory for the node cap");
+    if (t) {
+        for (int over = 0; over < 2; over++) {
+            const size_t vals = ICO_JSON_NODES_MAX - 1 + (size_t)over;
+            n = 0;
+            t[n++] = '[';
+            for (size_t i = 0; i < vals; i++) {
+                if (i) {
+                    t[n++] = ',';
+                }
+                t[n++] = '0';
+            }
+            t[n++] = ']';
+            const int rc = ico_json_parse(t, n, &j);
+            if (over) {
+                CHECK(rc == -1 && strstr(j.error, "too many") != NULL,
+                      "one value over the node cap fails: %s", j.error);
+            } else {
+                CHECK(rc == 0 && ico_json_count(j.root) == vals &&
+                          ico_json_at(j.root, vals - 1) == &j.nodes[vals] &&
+                          ico_json_at(j.root, vals) == NULL,
+                      "the node cap itself parses, and ico_json_at indexes it");
+            }
+            ico_json_free(&j);
+        }
+        free(t);
+    }
+}
+
 int main(void)
 {
     numbers();
@@ -331,6 +381,7 @@ int main(void)
     depth();
     malformed();
     locale();
+    caps();
     if (failures) {
         printf("json_test: %d failures\n", failures);
         return 1;

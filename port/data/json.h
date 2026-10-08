@@ -62,6 +62,8 @@ extern "C" {
 #endif
 
 #define ICO_JSON_DEPTH_MAX 64
+#define ICO_JSON_NODES_MAX 4000000u   /* values in one document; more fails */
+#define ICO_JSON_TEXT_MAX (64u << 20) /* bytes of text; more fails */
 
 typedef enum IcoJsonType {
     ICO_JSON_NULL = 0,
@@ -85,17 +87,19 @@ typedef struct IcoJsonNode {
     int is_int;      /* ICO_JSON_NUM: non-negative integer, u exact */
     int integral;    /* ICO_JSON_NUM: integer of either sign, u the exact magnitude */
     size_t count;    /* ICO_JSON_ARR / ICO_JSON_OBJ: the number of members */
-    const struct IcoJsonNode *child; /* ARR / OBJ: the first member, NULL if none */
-    const struct IcoJsonNode *next;  /* the next member of the parent, NULL */
+    const struct IcoJsonNode *child;        /* ARR / OBJ: the first member, NULL if none */
+    const struct IcoJsonNode *next;         /* the next member of the parent, NULL */
+    const struct IcoJsonNode *const *items; /* ARR / OBJ: the members by position (count) */
 } IcoJsonNode;
 
 typedef struct IcoJson {
     const IcoJsonNode *root; /* NULL after a failed parse */
     IcoJsonNode *nodes;      /* nodeCount nodes, root first */
     size_t nodeCount;
-    char *text;     /* the parser's copy, strings unescaped in place */
-    char error[64]; /* a failed parse: what; "" on success */
-    size_t errorAt; /* a failed parse: the byte offset in the text */
+    const IcoJsonNode **index; /* the members of every container, by position */
+    char *text;                /* the parser's copy, strings unescaped in place */
+    char error[64];            /* a failed parse: what; "" on success */
+    size_t errorAt;            /* a failed parse: the byte offset in the text */
 } IcoJson;
 
 /* Parses n bytes of text into out (zeroed first).  0 on success; -1 on
@@ -114,8 +118,7 @@ void ico_json_free(IcoJson *j);
 const IcoJsonNode *ico_json_get(const IcoJsonNode *obj, const char *key);
 
 /* Member i of an array (or object, in document order), NULL when out of
- * range or not a container.  Walks the list: O(i); iterate with
- * child/next for long arrays. */
+ * range or not a container.  O(1). */
 const IcoJsonNode *ico_json_at(const IcoJsonNode *arr, size_t i);
 
 /* The member count of an array or object, 0 for anything else. */
