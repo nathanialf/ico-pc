@@ -11,6 +11,7 @@
 #include <time.h>
 #include "audio_host.h"
 #include "config.h"
+#include "diag_host.h"
 #include "host_config.h"
 #include "host_fs.h"
 #include "host_loop.h"
@@ -18,6 +19,7 @@
 #include "input_record.h"
 #include "input_sdl.h"
 #include "options.h"
+#include "pace_policy.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
 #include "rd.h"
@@ -87,7 +89,9 @@ static struct {
     uint32_t presentedFrame; /* the frame of the last present */
     Uint64 tickAt, tickPrev; /* the pace deadlines (simulated time) the last two frames closed at */
     Uint64 lastPresent;
-    Uint64 cost; /* how long the last rd_Present took */
+    Uint64 cost;       /* how long the last rd_Present took */
+    PaceHist paceHist; /* the last presents' costs (pace_policy.h) */
+    bool paceSlow;     /* pace_SlowPresent after the last present */
     /* the rate log */
     Uint64 statAt;
     unsigned statPresents, statFrames;
@@ -1063,16 +1067,15 @@ static void pace(int hz)
        (60 Hz display, 59.94 Hz simulation: refresh 16.67 ms against the
        16.68 ms period) sat on that edge and fell back to one present per
        game frame. Slow means a present costing more than a display refresh
-       plus half a simulated period. */
-    Uint64 slow = period;
+       plus half a simulated period (pace_policy.h: the cost is smoothed, with
+       hysteresis, and the limit is higher with an effects program loaded). */
+    Uint64 refresh = period;
     Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
     {
         const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
-        const Uint64 refresh = dm != NULL && dm->refresh_rate > 1.0f
-                                   ? (Uint64)(1e9 / (double)dm->refresh_rate)
-                                   : period;
+        refresh = dm != NULL && dm->refresh_rate > 1.0f ? (Uint64)(1e9 / (double)dm->refresh_rate)
+                                                        : period;
 
-        slow = (refresh > period ? refresh : period) + period / 2;
         /* P1: "uncapped" with vsync on.  In mailbox mode (rhi_PreferMailbox)
            a present never waits for the display; two presents a refresh keep
            every refresh supplied with a fresh picture without drawing many
@@ -1095,7 +1098,7 @@ static void pace(int hz)
            end past the deadline (its cost the last present's): the next
            simulation step is never late for one */
         if (s_pres.presentedFrame == s_pres.frame &&
-            (now >= s_deadline || s_pres.cost > slow || now + s_pres.cost > s_deadline)) {
+            (now >= s_deadline || s_pres.paceSlow || now + s_pres.cost > s_deadline)) {
             if (now < s_deadline) {
                 SDL_DelayPrecise(s_deadline - now);
             }
@@ -1128,9 +1131,17 @@ static void pace(int hz)
             a = (float)(r > 0.999 ? 0.999 : r);
         }
         const Uint64 t0 = now;
+        ico_diag_present_enter();
         const int ok = rd_Present(a);
+        ico_diag_present_leave();
         now = SDL_GetTicksNS();
         s_pres.cost = now - t0;
+        if (ok) {
+            /* R2: the cost smoothed over the last presents, with hysteresis;
+               a present is slower with an effects program loaded */
+            s_pres.paceSlow = pace_SlowPresent(&s_pres.paceHist, s_pres.cost, refresh, period,
+                                               rhi_InjectorName() != NULL);
+        }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */
             if (now < s_deadline) {

@@ -75,6 +75,8 @@
 /* the watchdog polls every 0.25 s; a longer gap between two polls means
    the system or the process was suspended (watchdog_loop) */
 #define SUSPEND_GAP_S 5.0
+/* the longest one present is excused from the watchdog */
+#define PRESENT_EXCUSE_NS (300ull * 1000000000ull)
 #define STACK_SCAN_BYTES (64 * 1024)
 #define STACK_HITS 24
 #define FUNC_NAMES 64
@@ -97,6 +99,12 @@ static unsigned int (*vsyncs_fn)(void);
 static volatile unsigned int progress;
 
 static volatile int movie_playing;
+/* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
+   the present it is in (0 = not inside one), and the capped time of the
+   presents that finished, both in ico_diag_now_ns */
+static volatile unsigned long long present_since_ns;
+
+static volatile unsigned long long present_done_ns;
 static void (*exit_hook)(const char *reason);
 
 static char failure[512];
@@ -972,6 +980,43 @@ static int sample_main(void)
 
 #endif
 
+void ico_diag_present_enter(void)
+{
+    present_since_ns = ico_diag_now_ns();
+}
+
+void ico_diag_present_leave(void)
+{
+    const unsigned long long since = present_since_ns;
+    if (since != 0) {
+        const unsigned long long d = ico_diag_now_ns() - since;
+        present_done_ns += d < PRESENT_EXCUSE_NS ? d : PRESENT_EXCUSE_NS;
+    }
+    present_since_ns = 0;
+}
+
+/* Seconds spent inside presents so far (finished ones plus the one in
+   progress, each capped). *current is the one in progress, 0 if none. */
+static double present_seconds(double *current)
+{
+    unsigned long long done, since, now, cur = 0;
+    do {
+        done = present_done_ns;
+        since = present_since_ns;
+        now = ico_diag_now_ns();
+    } while (done != present_done_ns);
+    if (since != 0 && now > since) {
+        cur = now - since;
+    }
+    if (current != NULL) {
+        *current = (double)cur / 1e9;
+    }
+    if (cur > PRESENT_EXCUSE_NS) {
+        cur = PRESENT_EXCUSE_NS;
+    }
+    return (double)(done + cur) / 1e9;
+}
+
 static void watchdog_fire(const char *reason)
 {
     char where[96];
@@ -983,6 +1028,15 @@ static void watchdog_fire(const char *reason)
     flush_stdio_bounded();
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
+    {
+        double cur;
+        (void)present_seconds(&cur);
+        if (cur > 0.0) {
+            flog("ico_pc: the main thread is inside a present for %.0f s (an effects program may "
+                 "be compiling)",
+                 cur);
+        }
+    }
     if (sample_main() == 0) {
         describe(sample_pc, where, sizeof where);
         flog("ico_pc: the main thread was at %s, running #%d %s", where, sample_thread,
@@ -1027,6 +1081,10 @@ static void watchdog_loop(void)
     double last_beat = start;
     double last_alive = start;
     double last_poll = start;
+    /* seconds inside presents when the clock last restarted: those since
+       are not the game's idle time */
+    const double pres_start = present_seconds(NULL);
+    double pres_alive = pres_start;
     unsigned int last_ticks = 0;
     unsigned int last_progress = progress;
     char reason[160];
@@ -1034,6 +1092,7 @@ static void watchdog_loop(void)
         double now;
         unsigned int ticks;
         unsigned int prog;
+        double pres;
 #ifdef _WIN32
         if (WaitForSingleObject(crash_event, 250) == WAIT_OBJECT_0) {
             report_crash();
@@ -1071,16 +1130,19 @@ static void watchdog_loop(void)
            one: the 137 s attract outlasted the later limit) */
         ticks = ticks_fn != NULL ? ticks_fn() : 0;
         prog = progress;
+        pres = present_seconds(NULL);
         if (ticks != last_ticks || prog != last_progress) {
             last_ticks = ticks;
             last_progress = prog;
             last_alive = now;
+            pres_alive = pres;
         }
-        if (wd_first_s != 0 && ticks == 0 && now - start >= wd_first_s) {
+        if (wd_first_s != 0 && ticks == 0 && now - start - (pres - pres_start) >= wd_first_s) {
             snprintf(reason, sizeof reason, "no Main tick %u s after boot started (watchdog=%u)",
                      wd_first_s, wd_first_s);
             watchdog_fire(reason);
-        } else if (wd_later_s != 0 && ticks > 0 && now - last_alive >= wd_later_s) {
+        } else if (wd_later_s != 0 && ticks > 0 &&
+                   now - last_alive - (pres - pres_alive) >= wd_later_s) {
             if (movie_playing) {
                 snprintf(reason, sizeof reason,
                          "a movie was playing and showed no new picture for %u s (the last "

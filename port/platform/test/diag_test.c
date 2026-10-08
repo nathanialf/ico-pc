@@ -18,6 +18,10 @@
  *               movie, and the heartbeat printed the count;
  *   - stall:    the tick stands still and nothing else moves: the later
  *               limit fires as before;
+ *   - present:  a fake present of 2.5 s inside a 1 s later limit (the tick
+ *               stands still) does not fire; the stall after it does, 1 s
+ *               after the present ended; a long present before the first
+ *               tick does not trip a 1 s first limit either;
  *   - lines:    milestones and logs reach the file at once.
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
@@ -141,6 +145,26 @@ static void progress_child(int progress)
     exit(0);
 }
 
+/* A present of 2.5 s (ico_diag_present_enter/leave) against a 1 s limit.
+   first != 0: the first limit, before any tick; the run must end with exit 0.
+   Otherwise the later limit: it must not fire inside the present and must
+   after it. */
+static void present_child(int first)
+{
+    fake_ticks = first ? 0 : 1;
+    ico_diag_start(first ? 1 : 0, first ? 0 : 1);
+    ico_diag_present_enter();
+    pause_ms(2500);
+    ico_diag_present_leave();
+    ico_diag_log("test: present done");
+    if (first) {
+        pause_ms(300);
+        exit(0);
+    }
+    pause_ms(5000);
+    exit(0);
+}
+
 static void run_child(const char *mode, const char *log)
 {
     int id;
@@ -163,6 +187,8 @@ static void run_child(const char *mode, const char *log)
         ico_diag_start(1, 2);
     } else if (strcmp(mode, "progress") == 0 || strcmp(mode, "stall") == 0) {
         progress_child(strcmp(mode, "progress") == 0 ? 1 : 0);
+    } else if (strcmp(mode, "present") == 0 || strcmp(mode, "presentfirst") == 0) {
+        present_child(strcmp(mode, "presentfirst") == 0);
     } else {
         ico_diag_milestone("a milestone");
         exit(0);
@@ -300,6 +326,28 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "a movie was playing") == NULL);
     if (fails) {
         printf("--- stall log ---\n%s\n", s);
+    }
+
+    /* a long present is not a stall: the later limit fires only after it */
+    r = run(argv[0], "present", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "test: present done") != NULL);
+    CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s") != NULL);
+    CHECK(strstr(s, "test: present done") < strstr(s, "WATCHDOG:"));
+    CHECK(strstr(s, "inside a present") == NULL);
+    if (fails) {
+        printf("--- present log ---\n%s\n", s);
+    }
+
+    /* ... and the first limit does not count it either (exit 0: no fire) */
+    r = run(argv[0], "presentfirst", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: present done") != NULL);
+    CHECK(strstr(s, "WATCHDOG:") == NULL);
+    if (fails) {
+        printf("--- presentfirst log ---\n%s\n", s);
     }
     remove(log);
     if (fails) {

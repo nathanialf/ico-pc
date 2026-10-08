@@ -8,6 +8,7 @@ target_sources(ico_platform PRIVATE
     fiber.c
     hotkeys.c
     kernel_host.c
+    pace_policy.c
     sched.c
     vsync_hooks.c)
 # diag_host.c's heartbeat and watchdog thread (pthreads on POSIX).
@@ -57,7 +58,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set(_ico_run_tests ON)
 endif()
 
-foreach(t sched fiber arena diag hotkeys)
+foreach(t sched fiber arena diag hotkeys pace_policy)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

@@ -75,6 +75,15 @@ void ico_diag_set_movie(int playing);
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
 
+/* Package R2: the window's rd_Present is bracketed by these two. The time
+   spent inside a present does not count towards either watchdog limit: a
+   graphics driver or an effects injector (ReShade) may compile shaders inside
+   its first presents for minutes. A single present is excused for at most
+   300 s, so a driver that hangs for good is still stopped; the report says
+   when the main thread is inside a present. */
+void ico_diag_present_enter(void);
+void ico_diag_present_leave(void);
+
 /* Starts the heartbeat and watchdog thread. first_s: seconds from now
    without any Main tick; later_s: seconds without a new Main tick or new
    progress after the first tick. 0 turns a limit off. */
