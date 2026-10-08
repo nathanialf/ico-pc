@@ -468,4 +468,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_CHAR_SWITCH_ICO] = "Passer à Ico",
     [UI_STR_CHAR_HINT_COLOUR] = "Couleur",
     [UI_STR_CHAR_HINT_CHARACTER] = "Personnage",
+    /* v0.4.3 I17c */
+    [UI_STR_OPT_WINDOW_MODE] = "Mode d’affichage",
+    [UI_STR_VAL_WINDOWED] = "Fenêtré",
+    [UI_STR_VAL_BORDERLESS] = "Sans bordure",
 };

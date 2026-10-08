@@ -469,4 +469,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_CHAR_SWITCH_ICO] = "Zu Ico wechseln",
     [UI_STR_CHAR_HINT_COLOUR] = "Farbe",
     [UI_STR_CHAR_HINT_CHARACTER] = "Figur",
+    /* v0.4.3 I17c */
+    [UI_STR_OPT_WINDOW_MODE] = "Anzeigemodus",
+    [UI_STR_VAL_WINDOWED] = "Fenster",
+    [UI_STR_VAL_BORDERLESS] = "Randlos",
 };

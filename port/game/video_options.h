@@ -13,7 +13,12 @@
  *                                       size, lowered a step at a time (3x, 2x, 1x)
  *                                       while the presents take too long)
  *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "auto"
- *   [video] fullscreen      false
+ *   [video] window_mode     "windowed"  "windowed" | "borderless" | "fullscreen"
+ *                                       (borderless: a frameless window over the
+ *                                       whole display; ignored on Android)
+ *   [video] fullscreen      false       the older key, still read when window_mode
+ *                                       is absent, and written (true only for
+ *                                       "fullscreen") for older builds
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
@@ -88,13 +93,22 @@ enum {
     ICO_ASPECT_COUNT = 6
 };
 
+/* v0.4.3 (I17c): the window's mode.  FULLSCREEN is SDL's desktop fullscreen;
+   BORDERLESS a frameless window over its display. */
+enum {
+    ICO_WINDOW_WINDOWED = 0,
+    ICO_WINDOW_BORDERLESS = 1,
+    ICO_WINDOW_FULLSCREEN = 2,
+    ICO_WINDOW_COUNT = 3
+};
+
 enum { ICO_FILTER_ORIGINAL = 0, ICO_FILTER_TRILINEAR = 1, ICO_FILTER_ANISOTROPIC = 2 };
 
 typedef struct IcoVideoOptions {
     int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
     int resScale;   /* resolution "Nx": N (1..8); ICO_RES_AUTO: "auto"; 0 otherwise */
     int aspect;     /* ICO_ASPECT_* */
-    int fullscreen; /* desktop-resolution borderless */
+    int windowMode; /* ICO_WINDOW_* */
     int vsync;      /* the swapchain waits for the vertical blank */
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
@@ -235,6 +249,9 @@ const char *ico_video_framerate_name(int framerate, char *buf, unsigned size);
 int ico_video_parse_aspect(const char *s, int *aspect);
 int ico_video_parse_filter(const char *s, int *filter);
 const char *ico_video_aspect_name(int aspect);
+/* "windowed", "borderless", "fullscreen" (any case) */
+int ico_video_parse_window_mode(const char *s, int *mode);
+const char *ico_video_window_mode_name(int mode);
 /* package CRT: "scanlines", "consumer", "trinitron", "pvm", "shadow" */
 int ico_video_parse_crt_mode(const char *s, int *mode);
 const char *ico_video_crt_mode_name(int mode);

@@ -48,8 +48,11 @@ How the picture looks.
   subtitles and movies stay in a 4:3 box in the middle. At the far edges
   of a very wide picture, a few things can pop in a moment late, because
   the game only ever expected a 4:3 view.
-- **Fullscreen** switches between a window and the whole screen. In Steam
-  Deck Game Mode the game always fills the screen, whatever this says.
+- **Window mode** is **Windowed** (a normal window), **Borderless** (a
+  window without a frame that fills the whole screen, so switching to
+  another program is quick) or **Fullscreen**. In Steam Deck Game Mode the
+  game always fills the screen, whatever this says. This row is not on
+  phones.
 - **Vertical sync** stops the picture from tearing. With it off, the
   picture can tear if your screen allows it.
 - **Texture filtering** is how smooth the textures look up close.

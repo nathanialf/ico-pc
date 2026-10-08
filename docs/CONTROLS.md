@@ -27,7 +27,8 @@ PlayStation or Switch pad.
 A few more keys on a PC:
 
 - **Escape** closes the game.
-- **Alt+Enter** switches between a window and full screen.
+- **Alt+Enter** switches between a window and the whole screen (the
+  Borderless or Fullscreen choice you made under Window mode).
 - **F12** saves a picture of the current moment for a bug report. See
   [When something goes wrong](TROUBLESHOOTING.md#save-a-picture-of-a-problem).
 

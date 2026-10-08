@@ -81,11 +81,11 @@ int ui_NewGameScreenRow(int row, int on);
    handler (the headless build) the request calls exit(0), which runs the
    same atexit handlers.  NULL restores that. */
 void ui_SettingsSetQuitHandler(void (*fn)(void));
-/* The Fullscreen row shows, and steps from, fn's answer (1 while the window
-   is fullscreen) instead of the option when one is installed; the window
-   host installs it so the row follows F11 and the window manager.  NULL
-   removes it (headless, tests). */
-void ui_SettingsSetFullscreenQuery(int (*fn)(void));
+/* The Window mode row shows, and steps from, fn's answer (an ICO_WINDOW_*
+   value: windowed, borderless or fullscreen) instead of the option when one
+   is installed; the window host installs it so the row follows Alt+Enter and
+   the window manager.  NULL removes it (headless, tests). */
+void ui_SettingsSetWindowModeQuery(int (*fn)(void));
 /* v0.4.0: Display > Texture pack reads fn (texpack_Count, the replacements
    found at start) to tell an installed pack from none ("None installed",
    the row then does not step); NULL, or none installed, is none. */
@@ -175,7 +175,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_PRESET,
     UI_OPT_RESOLUTION,
     UI_OPT_ASPECT,
-    UI_OPT_FULLSCREEN,
+    UI_OPT_WINDOW_MODE,
     UI_OPT_VSYNC,
     UI_OPT_FILTER,
     UI_OPT_FULL_HEIGHT,

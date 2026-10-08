@@ -223,6 +223,9 @@ int ico_config_save(void)
     if (!ico_toml_has(toml, "video.vsync")) {
         r |= ico_toml_set_bool(toml, "video.vsync", 1);
     }
+    if (!ico_toml_has(toml, "video.window_mode") && !ico_toml_has(toml, "video.fullscreen")) {
+        r |= ico_toml_set_string(toml, "video.window_mode", "windowed");
+    }
     if (!ico_toml_has(toml, "video.fullscreen")) {
         r |= ico_toml_set_bool(toml, "video.fullscreen", 0);
     }
@@ -279,6 +282,9 @@ static const char first_run_text[] =
     "# aspect, texture_filter and full_height as written.\n"
     "preset = \"original\"\n"
     "vsync = true\n"
+    "# windowed, borderless (a frameless window that fills the screen) or\n"
+    "# fullscreen\n"
+    "window_mode = \"windowed\"\n"
     "fullscreen = false\n"
     "# A PCSX2 texture pack: copy its SCES-50760 folder into a folder named\n"
     "# textures beside the program or in your user folder. false shows the\n"

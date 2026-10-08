@@ -715,8 +715,8 @@ static void checkOptions(const char *dir)
     IcoVideoOptions o;
     ico_video_get(&o);
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.aspect == ICO_ASPECT_4_3 && o.resW == 0 &&
-              o.resH == 0 && o.resScale == 1 && o.fullscreen == 0 && o.vsync == 1 &&
-              o.filter == ICO_FILTER_ORIGINAL && o.fullHeight == 0,
+              o.resH == 0 && o.resScale == 1 && o.windowMode == ICO_WINDOW_WINDOWED &&
+              o.vsync == 1 && o.filter == ICO_FILTER_ORIGINAL && o.fullHeight == 0,
           "options: defaults (the Original rows)");
     CHECK(ico_video_wide_x() == 1.0f && ico_video_aspect() == 4.0f / 3.0f, "options: default 4:3");
 
@@ -729,10 +729,50 @@ static void checkOptions(const char *dir)
     ico_video_reload();
     ico_video_get(&o);
     CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM && o.resW == 1920 && o.resH == 1440 &&
-              o.aspect == ICO_ASPECT_16_9 && o.fullscreen == 1 && o.vsync == 0 &&
-              o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight == 1,
+              o.aspect == ICO_ASPECT_16_9 && o.windowMode == ICO_WINDOW_FULLSCREEN &&
+              o.vsync == 0 && o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight == 1,
           "options: every key read, Custom");
     CHECK(near(ico_video_wide_x(), 4.0f / 3.0f), "options: 16:9 widens by 4/3");
+
+    /* v0.4.3 (I17c): window_mode, and the older fullscreen bool when it is absent */
+    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"borderless\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.windowMode == ICO_WINDOW_BORDERLESS, "options: window_mode borderless");
+    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"BORDERLESS\"\nfullscreen = true\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.windowMode == ICO_WINDOW_BORDERLESS, "options: both keys, window_mode wins");
+    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"sideways\"\nfullscreen = true\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.windowMode == ICO_WINDOW_WINDOWED, "options: an invalid window_mode is Windowed");
+    writeFile(toml, "version = 1\n[video]\nwindow_mode = \"borderless\"\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
+    o.windowMode = ICO_WINDOW_FULLSCREEN;
+    ico_video_set(&o);
+    ico_video_save();
+    CHECK(strcmp(ico_config_get_string("video.window_mode", ""), "fullscreen") == 0 &&
+              ico_config_get_bool("video.fullscreen", 0) == 1,
+          "options: save writes window_mode and fullscreen");
+    o.windowMode = ICO_WINDOW_BORDERLESS;
+    ico_video_set(&o);
+    ico_video_save();
+    CHECK(strcmp(ico_config_get_string("video.window_mode", ""), "borderless") == 0 &&
+              ico_config_get_bool("video.fullscreen", 1) == 0,
+          "options: borderless saves fullscreen false");
+    /* back to the keys the rest of this check reads */
+    writeFile(toml, "version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"1920x1440\"\n"
+                    "aspect = \"16:9\"\nfullscreen = true\nvsync = false\n"
+                    "texture_filter = \"anisotropic\"\nfull_height = true\n");
+    ico_config_reset(toml, ini);
+    ico_video_reload();
+    ico_video_get(&o);
 
     /* the Original shortcut: the four rows at the PS2's, the rest kept */
     IcoVideoOptions p = o;
@@ -743,7 +783,7 @@ static void checkOptions(const char *dir)
     ico_video_get(&o);
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.resScale == 1 && o.resW == 0 &&
               o.resH == 0 && o.aspect == ICO_ASPECT_4_3 && o.filter == ICO_FILTER_ORIGINAL &&
-              o.fullHeight == 0 && o.fullscreen == 1 && o.vsync == 0,
+              o.fullHeight == 0 && o.windowMode == ICO_WINDOW_FULLSCREEN && o.vsync == 0,
           "options: the Original shortcut is 1x, 4:3, original, half, the rest kept");
     CHECK(ico_video_wide_x() == 1.0f, "options: Original is 4:3");
     /* the aspect applies whatever the preset */

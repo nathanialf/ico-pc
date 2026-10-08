@@ -108,7 +108,7 @@ The window that asks for your disc image needs a small program named
 4. Play it in Game Mode with the normal controller layout. The Deck's
    buttons work with no setup.
 
-In Game Mode, the game always fills the screen, whatever the Fullscreen
+In Game Mode, the game always fills the screen, whatever the Window mode
 row in Options says.
 
 With Vertical sync off, the picture only tears if the Deck's "Allow

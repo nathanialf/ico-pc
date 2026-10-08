@@ -98,6 +98,39 @@ int main(void)
     printf("fullscreen off: events enter %d, leave %d, pixel size %d\n", entered, left, sized);
     CHECK(left || sized, "no LEAVE_FULLSCREEN or PIXEL_SIZE_CHANGED event after fullscreen off");
 
+    /* v0.4.3 (I17c): the window mode.  Borderless: the frameless flag, no
+       fullscreen state, the display's size (informational: the offscreen
+       driver may ignore a size request). */
+    {
+        SDL_Rect b = {0, 0, 0, 0};
+        SDL_GetDisplayBounds(SDL_GetDisplayForWindow(w), &b);
+        pw = ph = -1;
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, &pw, &ph);
+        CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "borderless returned %d", r);
+        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_BORDERLESS) != 0, "borderless flag not set");
+        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "borderless is fullscreen");
+        printf("borderless: window %dx%d, display %dx%d\n", pw, ph, b.w, b.h);
+
+        /* windowed: framed, the rectangle from before */
+        pw = ph = -1;
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, &pw, &ph);
+        CHECK(r == ICO_WINDOWVIDEO_WINDOWED, "windowed returned %d", r);
+        CHECK((SDL_GetWindowFlags(w) & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN)) == 0,
+              "windowed still frameless or fullscreen");
+        CHECK(pw == 960 && ph == 720, "windowed size %dx%d, want 960x720", pw, ph);
+
+        /* fullscreen as before, then fullscreen -> borderless leaves it */
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_FULLSCREEN, NULL, NULL);
+        CHECK(r == ICO_WINDOWVIDEO_FULLSCREEN, "mode fullscreen returned %d", r);
+        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0, "mode fullscreen: no flag");
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, NULL, NULL);
+        CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "fullscreen -> borderless returned %d", r);
+        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "still fullscreen");
+        r = ico_window_video_mode(w, ICO_WINDOWVIDEO_WINDOWED, &pw, &ph);
+        CHECK(r == ICO_WINDOWVIDEO_WINDOWED && pw == 960 && ph == 720,
+              "back to windowed: %d, %dx%d", r, pw, ph);
+    }
+
     SDL_DestroyWindow(w);
     SDL_Quit();
     if (s_failures) {

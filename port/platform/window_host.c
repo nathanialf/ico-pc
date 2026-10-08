@@ -86,6 +86,10 @@ static unsigned s_videoSerial;
    its own (v0.3.1, P3) */
 static int s_fullscreen;
 
+/* v0.4.3 (I17c): the mode Alt+Enter goes back to from Windowed (the last
+   non-windowed one the options or the window had; Fullscreen to begin with) */
+static int s_lastFullMode = ICO_WINDOW_FULLSCREEN;
+
 /* the options the last "display changed" line compared against (seeded
    after the startup line) */
 static IcoVideoOptions s_videoLast;
@@ -235,6 +239,21 @@ static int window_fullscreen(void)
     return s_window != NULL && (SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN) != 0;
 }
 
+/* v0.4.3 (I17c): the window's mode now, from SDL's flags: fullscreen, a
+   frameless window, or windowed.  Android's window is fullscreen. */
+static int window_mode_now(void)
+{
+    if (s_window == NULL) {
+        return ICO_WINDOW_WINDOWED;
+    }
+    const SDL_WindowFlags f = SDL_GetWindowFlags(s_window);
+
+    if (f & SDL_WINDOW_FULLSCREEN) {
+        return ICO_WINDOW_FULLSCREEN;
+    }
+    return (f & SDL_WINDOW_BORDERLESS) ? ICO_WINDOW_BORDERLESS : ICO_WINDOW_WINDOWED;
+}
+
 static const char *video_preset_label(const IcoVideoOptions *o)
 {
     const int p = ico_video_preset(o);
@@ -272,8 +291,8 @@ static void video_log_changes(const IcoVideoOptions *o)
                     ico_video_resolution_name(o, b, sizeof(b)));
     video_log_field(line, sizeof(line), "aspect", ico_video_aspect_name(p->aspect),
                     ico_video_aspect_name(o->aspect));
-    video_log_field(line, sizeof(line), "fullscreen", p->fullscreen ? "on" : "off",
-                    o->fullscreen ? "on" : "off");
+    video_log_field(line, sizeof(line), "window mode", ico_video_window_mode_name(p->windowMode),
+                    ico_video_window_mode_name(o->windowMode));
     video_log_field(line, sizeof(line), "vsync", p->vsync ? "on" : "off", o->vsync ? "on" : "off");
     video_log_field(line, sizeof(line), "texture filter", ico_video_filter_name(p->filter),
                     ico_video_filter_name(o->filter));
@@ -302,7 +321,7 @@ static void video_log_changes(const IcoVideoOptions *o)
 
 /* Applies the options changed since the last call (the Settings menu's
    ico_video_set, Alt+Enter; force: a resize, for aspect "auto" and
-   resolution "window"): fullscreen through SDL, the rest through
+   resolution "window"): the window mode through SDL, the rest through
    rd_SetSettings at the next frame (rd recreates the targets and the
    swapchain as needed). */
 static void video_apply(int force)
@@ -320,19 +339,23 @@ static void video_apply(int force)
        refused request would be made again at every size event), and
        compared against the window, not the last request: an option that
        already matches what the window is asks for nothing */
-    int request = !force && (o.fullscreen != 0) != window_fullscreen();
+    int request = !force && o.windowMode != window_mode_now();
+    if (o.windowMode != ICO_WINDOW_WINDOWED) {
+        s_lastFullMode = o.windowMode;
+    }
 #ifdef __ANDROID__
     /* package AN-D: always fullscreen (immersive, the window's creation
        flag); the option follows the window (window_fullscreen_event) */
     request = 0;
 #endif
     if (request) {
-        /* borderless fullscreen at the desktop resolution; the resize event
-           follows */
-        s_fullscreen = ico_window_video_fullscreen(s_window, o.fullscreen, NULL, NULL);
+        /* fullscreen at the desktop resolution, a frameless window over the
+           display, or the framed window; the resize event follows */
+        s_fullscreen =
+            ico_window_video_mode(s_window, o.windowMode, NULL, NULL) == ICO_WINDOW_FULLSCREEN;
         /* refused, or not granted yet: the option stays what was asked (it
            is what the file keeps); the ENTER/LEAVE events set it to what
-           the window becomes (ico_window_pump), and the Fullscreen row
+           the window becomes (ico_window_pump), and the Window mode row
            shows the window's state meanwhile */
     }
     video_log_changes(&o);
@@ -440,16 +463,17 @@ static void first_pump_recheck(void)
 /* The window's flags. Android (package AN-D): fullscreen always, which is
    immersive there (no status or navigation bar), and not resizable; the
    system decides the size. */
-static SDL_WindowFlags window_flags(int fullscreen)
+static SDL_WindowFlags window_flags(int mode)
 {
     const SDL_WindowFlags vk = rhi_Backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
 
 #ifdef __ANDROID__
-    (void)fullscreen;
+    (void)mode;
     return vk | SDL_WINDOW_FULLSCREEN;
 #else
     return vk | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
-           (fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
+           (mode == ICO_WINDOW_FULLSCREEN ? SDL_WINDOW_FULLSCREEN : 0) |
+           (mode == ICO_WINDOW_BORDERLESS ? SDL_WINDOW_BORDERLESS : 0);
 #endif
 }
 
@@ -590,7 +614,10 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        after: SDL's X11 backend then writes _NET_WM_STATE before the window
        is mapped, which KWin and gamescope honour (borderless at the desktop
        resolution; no exclusive mode) */
-    s_window = SDL_CreateWindow("ICO", WINDOW_W, WINDOW_H, window_flags(start.fullscreen));
+    s_window = SDL_CreateWindow("ICO", WINDOW_W, WINDOW_H, window_flags(start.windowMode));
+    if (start.windowMode != ICO_WINDOW_WINDOWED) {
+        s_lastFullMode = start.windowMode;
+    }
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
         SDL_Quit();
@@ -619,7 +646,13 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
     s_fullscreen = window_fullscreen();
-    if (start.fullscreen && !s_fullscreen) {
+#ifndef __ANDROID__
+    if (start.windowMode == ICO_WINDOW_BORDERLESS) {
+        /* the frameless window over its display (Wayland: maximised) */
+        ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, NULL, NULL);
+    }
+#endif
+    if (start.windowMode == ICO_WINDOW_FULLSCREEN && !s_fullscreen) {
         /* not granted (yet): the option is left as the file says, so a
            slow window manager never turns the setting off; an
            ENTER_FULLSCREEN event later sets the window's state
@@ -687,9 +720,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     s_open = 1;
     /* Phase 6 (6B): the port's runtime text and popups (port/ui) */
     ui_HostInit();
-    /* v0.3.1 (P3): the Fullscreen row shows what the window is, not the
+    /* v0.3.1 (P3): the Window mode row shows what the window is, not the
        option (the window manager can refuse or change it) */
-    ui_SettingsSetFullscreenQuery(window_fullscreen);
+    ui_SettingsSetWindowModeQuery(window_mode_now);
     /* v0.4.0: Display > Texture pack says "None installed" without one */
     ui_SettingsSetTexturePackCount(texpack_Count);
     {
@@ -733,20 +766,23 @@ static void set_capture(int want)
 
 static void toggle_fullscreen(void)
 {
-    /* the fullscreen option flips (in memory, not saved; the Settings menu
-       sees it): video_apply sets SDL's borderless fullscreen at the desktop
-       resolution and the presenter boxes the picture (rd_ResizeOutput
-       follows) */
+    /* the window mode option flips between Windowed and the last other mode
+       (in memory, not saved; the Settings menu sees it): video_apply asks
+       SDL and the presenter boxes the picture (rd_ResizeOutput follows) */
 #ifdef __ANDROID__
-    /* the window is always the whole screen there and the Fullscreen row
+    /* the window is always the whole screen there and the Window mode row
        is not applied: Alt+Enter from a keyboard does nothing */
 #else
     IcoVideoOptions o;
+    const int now = window_mode_now();
 
     ico_video_get(&o);
     /* from what the window is, so a refused or WM-made change never needs
        two presses */
-    o.fullscreen = !window_fullscreen();
+    if (now != ICO_WINDOW_WINDOWED) {
+        s_lastFullMode = now;
+    }
+    o.windowMode = now == ICO_WINDOW_WINDOWED ? s_lastFullMode : ICO_WINDOW_WINDOWED;
     ico_video_set(&o);
     video_apply(0);
 #endif
@@ -890,9 +926,15 @@ static void window_fullscreen_event(int entered)
     ico_video_get(&o);
     fprintf(stderr, "window: %s fullscreen; the window is %s, the option says %s\n",
             entered ? "entered" : "left", s_fullscreen ? "fullscreen" : "windowed",
-            o.fullscreen ? "fullscreen" : "windowed");
-    if ((o.fullscreen != 0) != s_fullscreen) {
-        o.fullscreen = s_fullscreen;
+            ico_video_window_mode_name(o.windowMode));
+    /* v0.4.3 (I17c): fullscreen entered makes the option Fullscreen; left
+       turns Fullscreen into Windowed.  A requested Borderless is left alone:
+       it is what a fullscreen window becomes when asked to be borderless. */
+    if (s_fullscreen && o.windowMode != ICO_WINDOW_FULLSCREEN) {
+        o.windowMode = ICO_WINDOW_FULLSCREEN;
+        ico_video_set(&o);
+    } else if (!s_fullscreen && o.windowMode == ICO_WINDOW_FULLSCREEN) {
+        o.windowMode = ICO_WINDOW_WINDOWED;
         ico_video_set(&o);
     }
 }
@@ -944,6 +986,12 @@ int ico_window_pump(void)
         case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
         case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
             window_fullscreen_event(e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN);
+            break;
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            /* v0.4.3 (I17c): a frameless window follows its display */
+            if (window_mode_now() == ICO_WINDOW_BORDERLESS) {
+                ico_window_video_refit(s_window);
+            }
             break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
             /* a drag sends one per size: print when the fullscreen
@@ -1671,7 +1719,7 @@ void ico_window_close(void)
 #endif
     set_capture(0);
     ico_input_sdl_shutdown();
-    ui_SettingsSetFullscreenQuery(NULL);
+    ui_SettingsSetWindowModeQuery(NULL);
     ui_SettingsSetTexturePackCount(NULL);
     ui_SettingsSetTouchQuery(NULL);
     ui_TouchSetSource(NULL);

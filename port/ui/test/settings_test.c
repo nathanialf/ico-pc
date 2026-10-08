@@ -62,14 +62,14 @@ static void testBuild(void)
         UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE,
         UI_STR_OPT_DUMP_TEXTURES,    UI_STR_OPT_DUMP_MODELS,  UI_STR_BACK};
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
-                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_WINDOW_MODE,  UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT,
                                    UI_OPT_FRAMERATE,    UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
                                    UI_OPT_BACK};
     static const int dispStrs[] = {UI_STR_OPT_PRESET,
                                    UI_STR_OPT_RESOLUTION,
                                    UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_WINDOW_MODE,
                                    UI_STR_OPT_VSYNC,
                                    UI_STR_OPT_FILTERING,
                                    UI_STR_OPT_TEXTURE_PACK,
@@ -374,10 +374,10 @@ static void testFramerate(void)
 }
 
 /* P2: the Preset row reads Original, Enhanced or Custom, and its step is the
-   shortcut; the CRT note under Resolution; the Fullscreen row's query */
+   shortcut; the CRT note under Resolution; the Window mode row's query */
 static int s_fsAnswer, s_fsAsked;
 
-static int fakeFullscreen(void)
+static int fakeWindowMode(void)
 {
     s_fsAsked++;
     return s_fsAnswer;
@@ -450,22 +450,20 @@ static void testPreset(void)
     ico_video_get(&o);
     CHECK(o.crt == 0, "crt off again (%d)", o.crt);
 
-    /* the Fullscreen row follows the query when one is installed */
+    /* the Window mode row follows the query when one is installed */
     ico_video_get(&o);
-    o.fullscreen = 1;
+    o.windowMode = ICO_WINDOW_FULLSCREEN;
     ico_video_set(&o);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "On") == 0, "no query: the option");
-    s_fsAnswer = 0;
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Fullscreen") == 0, "no query: option");
+    s_fsAnswer = ICO_WINDOW_WINDOWED;
+    ui_SettingsSetWindowModeQuery(fakeWindowMode);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Windowed") == 0, "the query: Windowed");
     s_fsAsked = 0;
-    ui_SettingsSetFullscreenQuery(fakeFullscreen);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "Off") == 0, "the query says Off");
-    s_fsAsked = 0;
-    ui_SettingsStep(UI_OPT_FULLSCREEN, 1);
+    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
     ico_video_get(&o);
-    CHECK(s_fsAsked > 0 && o.fullscreen == 1, "step: from the query's Off to On (%d, asked %d)",
-          o.fullscreen, s_fsAsked);
-    ui_SettingsSetFullscreenQuery(NULL);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_FULLSCREEN), "On") == 0, "uninstalled: the option");
+    CHECK(s_fsAsked > 0 && o.windowMode == ICO_WINDOW_BORDERLESS, "step from the query (%d)",
+          o.windowMode);
+    ui_SettingsSetWindowModeQuery(NULL);
 
     /* the note: the CRT one under Resolution, only while locked (one line,
        clear of the Back row below) */
@@ -1512,11 +1510,13 @@ static void testValues(void)
     ui_SettingsStep(UI_OPT_FILTER, -1);
     ico_video_get(&o);
     CHECK(o.filter == ICO_FILTER_ANISOTROPIC, "filter wraps to anisotropic");
-    ui_SettingsStep(UI_OPT_FULLSCREEN, 1);
+    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
+    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
     ui_SettingsStep(UI_OPT_VSYNC, 1);
     ui_SettingsStep(UI_OPT_FULL_HEIGHT, 1);
     ico_video_get(&o);
-    CHECK(o.fullscreen == 1 && o.vsync == 0 && o.fullHeight == 0, "the three toggles");
+    CHECK(o.windowMode == ICO_WINDOW_FULLSCREEN && o.vsync == 0 && o.fullHeight == 0,
+          "the toggles");
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VSYNC), "Off") != NULL, "vsync Off");
 
     /* package CRT: the CRT filter row cycles Off, Scanlines, Consumer TV,

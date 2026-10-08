@@ -139,6 +139,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
 
 static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "auto"};
 
+static const char *const kWindowMode[] = {"windowed", "borderless", "fullscreen"};
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
 
 static const char *const kCrtMode[ICO_CRT_MODES] = {"scanlines", "consumer", "trinitron", "pvm",
@@ -178,6 +179,22 @@ int ico_video_parse_aspect(const char *s, int *aspect)
         }
     }
     return -1;
+}
+
+int ico_video_parse_window_mode(const char *s, int *mode)
+{
+    for (int i = 0; s && i < ICO_WINDOW_COUNT; i++) {
+        if (lower_eq(s, kWindowMode[i])) {
+            *mode = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *ico_video_window_mode_name(int mode)
+{
+    return mode >= 0 && mode < ICO_WINDOW_COUNT ? kWindowMode[mode] : kWindowMode[0];
 }
 
 int ico_video_parse_filter(const char *s, int *filter)
@@ -321,7 +338,9 @@ static void sanitize(IcoVideoOptions *o)
     } else if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
         o->resScale = o->resW = o->resH = 0;
     }
-    o->fullscreen = o->fullscreen != 0;
+    if (o->windowMode < 0 || o->windowMode >= ICO_WINDOW_COUNT) {
+        o->windowMode = d.windowMode;
+    }
     o->vsync = o->vsync != 0;
     o->fullHeight = o->fullHeight != 0;
     if (o->framerate != ICO_FRAMERATE_ORIGINAL && o->framerate != ICO_FRAMERATE_UNCAPPED &&
@@ -390,7 +409,20 @@ static void read_config(void)
                                &o.filter) != 0) {
         fprintf(stderr, "video: texture_filter not understood; \"original\" used\n");
     }
-    o.fullscreen = ico_config_get_bool("video.fullscreen", 0) != 0;
+    {
+        /* v0.4.3 (I17c): window_mode when it is a mode, else the older
+           fullscreen bool (a file from before the key, or an older build's
+           save: it writes only the bool) */
+        const char *wm = ico_config_get_string("video.window_mode", "");
+
+        if (wm[0] == '\0') {
+            o.windowMode = ico_config_get_bool("video.fullscreen", 0) ? ICO_WINDOW_FULLSCREEN
+                                                                      : ICO_WINDOW_WINDOWED;
+        } else if (ico_video_parse_window_mode(wm, &o.windowMode) != 0) {
+            o.windowMode = ICO_WINDOW_WINDOWED;
+            fprintf(stderr, "video: window_mode not understood; \"windowed\" used\n");
+        }
+    }
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
     {
@@ -512,7 +544,8 @@ int ico_video_save(void)
         "video.preset", ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? "original" : "enhanced");
     r |= ico_config_set_string("video.resolution", ico_video_resolution_name(&o, res, sizeof(res)));
     r |= ico_config_set_string("video.aspect", ico_video_aspect_name(o.aspect));
-    r |= ico_config_set_bool("video.fullscreen", o.fullscreen);
+    r |= ico_config_set_string("video.window_mode", ico_video_window_mode_name(o.windowMode));
+    r |= ico_config_set_bool("video.fullscreen", o.windowMode == ICO_WINDOW_FULLSCREEN);
     r |= ico_config_set_bool("video.vsync", o.vsync);
     r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
     r |= ico_config_set_bool("video.full_height", o.fullHeight);

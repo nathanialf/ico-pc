@@ -555,7 +555,7 @@ static int extrasMusic(void)
 /* package MV: the model viewer's list (port/game/model_viewer.c registers
    it), -1 without one */
 static int (*s_modelsEnter)(void);
-static int (*s_fullscreenQuery)(void); /* the window's truth, when installed */
+static int (*s_windowModeQuery)(void); /* the window's truth, when installed */
 
 void ui_SettingsSetModelsHandler(int (*fn)(void))
 {
@@ -829,9 +829,14 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_ASPECT:
         return o.aspect == ICO_ASPECT_AUTO ? ui_Str(UI_STR_VAL_AUTO)
                                            : ico_video_aspect_name(o.aspect);
-    case UI_OPT_FULLSCREEN:
+    case UI_OPT_WINDOW_MODE: {
         /* the window's own answer when the host installed one */
-        return onOff(s_fullscreenQuery ? s_fullscreenQuery() : o.fullscreen);
+        const int m = s_windowModeQuery ? s_windowModeQuery() : o.windowMode;
+
+        return ui_Str(m == ICO_WINDOW_BORDERLESS   ? UI_STR_VAL_BORDERLESS
+                      : m == ICO_WINDOW_FULLSCREEN ? UI_STR_OPT_FULLSCREEN
+                                                   : UI_STR_VAL_WINDOWED);
+    }
     case UI_OPT_VSYNC:
         return onOff(o.vsync);
     case UI_OPT_FILTER:
@@ -997,6 +1002,9 @@ static int optShown(int opt, int link)
     if (isTouchOpt(opt)) {
         return touchPresent(); /* AN-G: a phone, a tablet, a touch screen */
     }
+    if (opt == UI_OPT_WINDOW_MODE) {
+        return !ico_video_android(); /* v0.4.3: the phone's window is the screen */
+    }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* v0.4.0: it changes only from the title (onTitle); the pause
            menu's Display page has no room for a row that cannot step once
@@ -1079,8 +1087,10 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         o.aspect = stepIndex(o.aspect, ICO_ASPECT_COUNT, dir);
         video = 1;
         break;
-    case UI_OPT_FULLSCREEN:
-        o.fullscreen = !(s_fullscreenQuery ? s_fullscreenQuery() : o.fullscreen);
+    case UI_OPT_WINDOW_MODE:
+        /* from what the window is: Windowed, Borderless, Fullscreen */
+        o.windowMode = stepIndex(s_windowModeQuery ? s_windowModeQuery() : o.windowMode,
+                                 ICO_WINDOW_COUNT, dir);
         video = 1;
         break;
     case UI_OPT_VSYNC:
@@ -2183,14 +2193,14 @@ static void build(void)
        Brightness from the pause menu) */
     /* v0.4.0: Texture pack after Texture filter */
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
-                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_WINDOW_MODE,  UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT,
                                    UI_OPT_FRAMERATE,    UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
                                    UI_OPT_BACK};
     static const int dispStrs[] = {UI_STR_OPT_PRESET,
                                    UI_STR_OPT_RESOLUTION,
                                    UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_WINDOW_MODE,
                                    UI_STR_OPT_VSYNC,
                                    UI_STR_OPT_FILTERING,
                                    UI_STR_OPT_TEXTURE_PACK,
@@ -2467,9 +2477,9 @@ static void buildQuitScreen(void)
     s_quitLayout = addLayout(first, last + 1, 0.6f, quitScreenProc, s_quitYesNo[0]);
 }
 
-void ui_SettingsSetFullscreenQuery(int (*fn)(void))
+void ui_SettingsSetWindowModeQuery(int (*fn)(void))
 {
-    s_fullscreenQuery = fn;
+    s_windowModeQuery = fn;
 }
 
 void ui_SettingsSetModelPackCount(int (*fn)(void))

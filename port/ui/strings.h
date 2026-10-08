@@ -535,6 +535,10 @@ typedef enum UiStrId {
     UI_STR_CHAR_SWITCH_ICO,
     UI_STR_CHAR_HINT_COLOUR,
     UI_STR_CHAR_HINT_CHARACTER,
+    /* v0.4.3 I17c: Display > Window mode (Fullscreen reuses UI_STR_OPT_FULLSCREEN) */
+    UI_STR_OPT_WINDOW_MODE,
+    UI_STR_VAL_WINDOWED,
+    UI_STR_VAL_BORDERLESS,
     UI_STR_COUNT
 } UiStrId;
 
