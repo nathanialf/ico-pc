@@ -30,7 +30,7 @@
 #include <time.h>
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
-#include "modelpack.h" /* v0.5.0 (M4): the model pack switch */
+#include "modelpack.h" /* v0.4.1 (M4): the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "texpack.h"
@@ -1339,7 +1339,7 @@ void rd_BeginFrame(void)
         /* v0.4.0: the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_RevertReplacements) */
         const bool packOff = g_rd.settings.texturePack && !g_rd.pendingSettings.texturePack;
-        /* v0.5.0 (M4): the model pack's switch and its dump, on a change */
+        /* v0.4.1 (M4): the model pack's switch and its dump, on a change */
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         g_rd.settings = g_rd.pendingSettings;
@@ -1371,7 +1371,7 @@ void rd_BeginFrame(void)
     RdFrame *f = &g_rd.frames[idx];
     rd__FrameReset(f);
     f->number = ++g_rd.frameCounter;
-    rd__VuMeshSweepStale(); /* v0.5.0 (M0): retired meshes no kept frame drew */
+    rd__VuMeshSweepStale(); /* v0.4.1 (M0): retired meshes no kept frame drew */
     f->startState = g_rd.persistent;
     f->gsW = g_rd.gsW;
     f->gsH = g_rd.gsH;

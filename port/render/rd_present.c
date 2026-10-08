@@ -313,7 +313,7 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
     blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror);
 }
 
-/* ------------------------------- the effects depth (v0.5.0, package R1)
+/* ------------------------------- the effects depth (v0.4.1, package R1)
  * RdSettings.effectsDepth: step 2 as one pass with two targets, the output
  * and an output-size RHI_FMT_D32F depth buffer cleared to 1.0 (far), drawn
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's

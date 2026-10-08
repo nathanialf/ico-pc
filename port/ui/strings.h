@@ -413,7 +413,7 @@ typedef enum UiStrId {
     UI_STR_PHOTO_FOV,
     UI_STR_PHOTO_SAVED,
     UI_STR_PHOTO_FAILED,
-    /* v0.5.0: the free camera's move line, the HUD title's camera and speed
+    /* v0.4.1: the free camera's move line, the HUD title's camera and speed
        (SPEED takes the speed's word, %s) */
     UI_STR_PHOTO_HUD_MOVE_FREE,
     UI_STR_PHOTO_CAM_FREE,

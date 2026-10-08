@@ -1,4 +1,4 @@
-/* json_test.c: port/data/json.h (v0.5.0, M1).
+/* json_test.c: port/data/json.h (v0.4.1, M1).
  *
  * Numbers (signs, fractions, exponents, -1.5e3, the is_int and integral
  * views, uint64 overflow, the grammar's rejections), strings (every escape,

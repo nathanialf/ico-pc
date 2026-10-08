@@ -502,7 +502,7 @@ typedef struct RdMeshRec {
     uint32_t gen;
     uint8_t live;
     uint8_t vu;       /* rd_CreateVuMesh */
-    uint8_t replaced; /* v0.5.0 (M0): rd_CreateVuMeshReplacement built it */
+    uint8_t replaced; /* v0.4.1 (M0): rd_CreateVuMeshReplacement built it */
     uint8_t stale;    /* rd_VuMeshRetire: not valid, freed once no kept frame drew it */
     uint32_t vertexCount, stripCount, materialCount;
     /* VU meshes */
@@ -535,7 +535,7 @@ typedef struct RdMeshRec {
         uint32_t from, to;
     } hist[2];
 
-    /* v0.5.0 (M0): rd_mesh.h's mesh identity (rd_VuMeshDescHash); for a
+    /* v0.4.1 (M0): rd_mesh.h's mesh identity (rd_VuMeshDescHash); for a
      * replaced mesh the original's; 0 for one built from a raw stream */
     uint64_t hash;
 } RdMeshRec;
@@ -572,7 +572,7 @@ void rd__VuInit(void);
 void rd__VuShutdown(void);
 void rd__VuLoadCommon(const RdVuCommon *block);
 void rd__MeshShutdown(void);
-/* v0.5.0 (M0): rd_BeginFrame, after the frame number advanced: frees the
+/* v0.4.1 (M0): rd_BeginFrame, after the frame number advanced: frees the
  * stale meshes (rd_VuMeshRetire) no frame from three back on drew */
 void rd__VuMeshSweepStale(void);
 
@@ -633,7 +633,7 @@ typedef enum RdFsId {
      * 16-bit texture under AEM with a linear filter (rd__TexaPerTexel) */
     RD_FS_SPRITE_TEXA, /* sprite_texa_ps */
     RD_FS_VU_TEXA,     /* vu_texa_ps */
-    /* v0.5.0 (R1): blit_depth_ps, the present's box blit with the scene's
+    /* v0.4.1 (R1): blit_depth_ps, the present's box blit with the scene's
      * depth into the output-size effects depth (rd_present.c) */
     RD_FS_BLIT_DEPTH,
     RD_FS_COUNT
@@ -709,7 +709,7 @@ int rd__StqPass(RdDrawPass *dp);
  * planners give them sprite_texa_ps / vu_texa_ps. */
 int rd__TexaPerTexel(const RdStateBlock *s);
 RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
-/* v0.5.0 (R1): the present's box blit with the effects depth: blit_vs and
+/* v0.4.1 (R1): the present's box blit with the effects depth: blit_vs and
  * blit_depth_ps into colorFmt (the headless output's RGBA8, the swapchain's
  * BGRA8) and an RHI_FMT_D32F depth target, Z written, test ALWAYS. */
 RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt);
@@ -1179,7 +1179,7 @@ enum {
     /* package AN-E */
     RD_ONCE_NODUAL_GREATER, /* the two-pass blend's alpha pass under Z GREATER with Z write */
     RD_ONCE_NODUAL_KEY,     /* a LERP or Cd*FIX + Cs key reached rd__GetPipeline unexpanded */
-    /* v0.5.0 (R1) */
+    /* v0.4.1 (R1) */
     RD_ONCE_EFFECTS_DEPTH_CRT /* RdSettings.effectsDepth under the CRT filter: none */
 };
 
@@ -1371,7 +1371,7 @@ bool rd__ReadTarget(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t
 bool rd__ReadTargetDepth(RdTarget t, float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
-/* v0.5.0 (R1): the effects depth of the last present (RdSettings.effectsDepth),
+/* v0.4.1 (R1): the effects depth of the last present (RdSettings.effectsDepth),
  * outW x outH floats; false when no present has drawn it (tests). */
 bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* package PHOTO: a synchronous readback of an RHI texture (RGBA8 or BGRA8,

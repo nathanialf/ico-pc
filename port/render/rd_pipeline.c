@@ -1091,7 +1091,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     n = addKey(out, max, n, &dateSnap);
     n = addKey(out, max, n, &blitA);
     n = addKey(out, max, n, &blitB);
-    /* v0.5.0 (R1): the box blit with the effects depth, on both outputs */
+    /* v0.4.1 (R1): the box blit with the effects depth, on both outputs */
     const RdPipeKeyInt depthA = rd__PresentDepthKey(RHI_FMT_RGBA8_UNORM);
     const RdPipeKeyInt depthB = rd__PresentDepthKey(RHI_FMT_BGRA8_UNORM);
     n = addKey(out, max, n, &depthA);

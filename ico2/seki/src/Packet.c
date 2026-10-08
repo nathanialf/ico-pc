@@ -128,7 +128,7 @@ static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name)
     return 1;
 }
 
-/* v0.5.0 (M4): the part's name in the pack's log lines and the record */
+/* v0.4.1 (M4): the part's name in the pack's log lines and the record */
 static const char *pac_hostPartName(const PacHostIdent *id, const char *name, char *buf,
                                     unsigned int n)
 {
@@ -144,7 +144,7 @@ static const char *pac_hostPartName(const PacHostIdent *id, const char *name, ch
 }
 
 /* The packet's mesh: the model pack's replacement when it has one for the
-   packet's mesh hash (v0.5.0, M4), else the original.  A skinned
+   packet's mesh hash (v0.4.1, M4), else the original.  A skinned
    replacement needs the object's bone count (id->bones), which the load
    (pac_makePacket) does not know: there (load) the mesh is left to the
    first draw, which names the part; a later build without it makes the
@@ -214,7 +214,7 @@ void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id)
     if (rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw) || !rd_VuMeshReplaced(m)) {
         return;
     }
-    /* v0.5.0 (M4): a replacement cannot follow the morph: the pack's entry
+    /* v0.4.1 (M4): a replacement cannot follow the morph: the pack's entry
        declined (logged once: the lookup fails from now on), every mesh made
        from it retired, the original built from the packet as it is now */
     h = rd_VuMeshHash(m);

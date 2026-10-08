@@ -154,7 +154,7 @@ static void dx_SetupInfoQueue(void)
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory2)(UINT, REFIID, void **);
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory1)(REFIID, void **);
 
-/* v0.5.0 (package R0): ReShade's Direct3D 12 install is a dxgi.dll (or
+/* v0.4.1 (package R0): ReShade's Direct3D 12 install is a dxgi.dll (or
  * d3d12.dll) beside the program, which LoadLibraryA finds before the
  * system's (no SetDefaultDllDirectories).  A module whose file is outside
  * the system directory (System32; SysWOW64 for a 32-bit program) is taken

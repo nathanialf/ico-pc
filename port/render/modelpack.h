@@ -1,4 +1,4 @@
-/* modelpack.h: model packs (v0.5.0, M3): replacement models for the game's
+/* modelpack.h: model packs (v0.4.1, M3): replacement models for the game's
  * mesh parts, and the dump that writes those parts out for pack makers.
  *
  * Identity: a part is named by its mesh hash (rd_mesh.h rd_VuMeshDescHash,

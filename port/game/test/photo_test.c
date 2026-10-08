@@ -1,5 +1,5 @@
 /* photo_test.c: photo mode's state and camera (port/game/photo_mode.c,
- * package PHOTO; v0.5.0 the free camera).  CPU only.
+ * package PHOTO; v0.4.1 the free camera).  CPU only.
  *
  *   identity  nothing moved: the override is the game camera, byte for byte
  *   free      the camera at enter, the HUD shown: a second of the left stick

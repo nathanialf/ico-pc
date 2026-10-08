@@ -8,7 +8,7 @@
  * the hole with zeroes, and zero is a valid Vulkan value for most enums).
  * Spot checks pin the mappings the GS emulation depends on.
  *
- * Package R0 (v0.5.0): rhi_backend.c's layer classifiers, compiled in with
+ * Package R0 (v0.4.1): rhi_backend.c's layer classifiers, compiled in with
  * no backend linked: a table of instance layer names to the injector or
  * overlay each is (or none), and rhi_LayerSwitchedOn over environments
  * given as tables. */

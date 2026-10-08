@@ -114,7 +114,7 @@
 #include <SDL3/SDL.h>
 #include "options.h"
 #include "rhi.h"
-#include "modelpack.h" /* v0.5.0: model packs */
+#include "modelpack.h" /* v0.4.1: model packs */
 #include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
 #include "texpack.h"   /* v0.4.0: PCSX2 texture packs */
 #include "video_options.h"
@@ -1500,7 +1500,7 @@ static int host_main(int argc, char **argv)
         texpack_Init(&tc);
         at_shutdown(texpack_Shutdown);
     }
-    /* v0.5.0 (M4): a model pack from the same folders, read and converted
+    /* v0.4.1 (M4): a model pack from the same folders, read and converted
        now (before the game loads a model: the meshes made at load look
        their parts up); the dump is a Developer mode row */
     {

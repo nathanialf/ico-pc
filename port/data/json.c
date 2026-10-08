@@ -4,7 +4,7 @@
  * json.h's reader: recursive descent over a NUL-terminated copy of the
  * text, strings unescaped in place, nodes in one growing array linked by
  * index while parsing and by pointer once it is done.  Lifted from
- * archive.c's meta.json reader (v0.5.0, M1), with doubles, negative
+ * archive.c's meta.json reader (v0.4.1, M1), with doubles, negative
  * numbers and the RFC's number grammar.
  */
 #include "json.h"

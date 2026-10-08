@@ -698,7 +698,7 @@ const char *rhi_PresentModeName(void);
  * copied.  D3D12: ignored (its drivers keep their own shader cache). */
 void rhi_SetPipelineCachePath(const char *path);
 
-/* Programs that hook the graphics API from outside (v0.5.0, package R0),
+/* Programs that hook the graphics API from outside (v0.4.1, package R0),
  * for the logs and the pacing; valid after rhi_Init, NULL when none (and
  * before rhi_Init).
  * rhi_InjectorName: an effects program, "ReShade" or "vkBasalt".  Vulkan:

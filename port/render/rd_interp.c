@@ -1277,7 +1277,7 @@ static const void *payloadAt(const RdFrame *f, uint32_t off, uint32_t size)
 
 /* R7d: two mesh ids a draw may blend across: the same mesh, or meshes of
  * one layout (a morphing part's two packets, which the game draws in
- * alternate frames; a mesh rebuilt after an eviction).  v0.5.0 (M0): a
+ * alternate frames; a mesh rebuilt after an eviction).  v0.4.1 (M0): a
  * replaced mesh (rd_CreateVuMeshReplacement) keeps its id for as long as it
  * lives, so a part drawn with its replacement in both frames blends as
  * itself; across a pack switch (rd_VuMeshRetire, a new id) the layouts

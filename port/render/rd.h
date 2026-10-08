@@ -353,7 +353,7 @@ typedef struct RdSettings {
      * RdSettings. */
     uint8_t texturePack;
     uint8_t dumpTextures;
-    /* v0.5.0 (package R1, [video] effects_depth): the box blit also writes
+    /* v0.4.1 (package R1, [video] effects_depth): the box blit also writes
      * an output-size D32F depth buffer (rd_present.c), the scene's depth at
      * the picture's pixels and 1.0 (far) in the bars, so an effects program
      * hooked into the API (ReShade) finds a depth buffer of the

@@ -1,7 +1,7 @@
 /*
  * port/render/gltf.h
  *
- * glTF 2.0 for model packs (v0.5.0, M2): the dump writes a model part as
+ * glTF 2.0 for model packs (v0.4.1, M2): the dump writes a model part as
  * <path>.gltf + <path>.bin, the pack reads a replacement back from a .gltf
  * (its buffers in files next to it) or a .glb.  CPU only, no device and no
  * game state; JSON through port/data/json.h.  Library ico_gltf (gltf.c on

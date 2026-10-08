@@ -50,7 +50,7 @@ DualOut blit_fix_ps(BlitVSOut i)
     return gs_dual_out(blit_color(i.uv), g_mode.x, g_blend.y);
 }
 
-// blit_depth_ps (v0.5.0, package R1; rd_present.c): blit_ps's colour, and
+// blit_depth_ps (v0.4.1, package R1; rd_present.c): blit_ps's colour, and
 // SV_Depth from t2, the copy of the scene's depth, at the same normalised uv
 // (the source rectangle covers the whole scene; a mirrored blit flips both)
 // read nearest: the texel under uv. Drawn into the output's box with an

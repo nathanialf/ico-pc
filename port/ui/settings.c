@@ -476,9 +476,9 @@ static int texturePackInstalled(void)
     return s_texturePackCount != NULL && s_texturePackCount() > 0;
 }
 
-static int (*s_modelPackCount)(void); /* v0.5.0: replacement models installed, when known */
+static int (*s_modelPackCount)(void); /* v0.4.1: replacement models installed, when known */
 
-/* v0.5.0: a model pack was found at start (modelpack_Count through the
+/* v0.4.1: a model pack was found at start (modelpack_Count through the
    host's hook; none without one) */
 static int modelPackInstalled(void)
 {
@@ -795,7 +795,7 @@ static int optShown(int opt, int link)
         /* v0.4.0: it changes only from the title (onTitle); the pause
            menu's Display page has no room for a row that cannot step once
            Texture pack is there (fourteen rows do not fit 13 lines apart); Model
-           pack (v0.5.0) is the title's too, for the same reason */
+           pack (v0.4.1) is the title's too, for the same reason */
         return onTitle();
     }
     return 1;
@@ -1088,7 +1088,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
         s_dirtyConfig = 1;
         if (!ico_opt_developer_mode() && o.dumpModels) {
-            /* v0.5.0: the same for Dump models */
+            /* v0.4.1: the same for Dump models */
             o.dumpModels = 0;
             video = 1;
         }
@@ -1374,8 +1374,8 @@ static void buildGalleryBar(void)
    the original 19, ten (v0.4.0: Dump textures in developer mode) 15; with
    the Effects link (issue 11) one more each: the ten of the title 15, the
    nine 17, eleven (developer mode) 14: Back at 180, the box to 220; with
-   Dump models (v0.5.0) twelve 13: Back at 183, the box to 223.  Display,
-   v0.5.0: Model pack is the title's too, so the title shows fourteen rows,
+   Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  Display,
+   v0.4.1: Model pack is the title's too, so the title shows fourteen rows,
    12 apart from 34: Back at 190, the box to 226. */
 static int pagePitch(int page, int n, int *y0)
 {

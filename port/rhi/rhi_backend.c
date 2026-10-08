@@ -426,7 +426,7 @@ void rhi_SetPipelineCachePath(const char *path)
     be()->SetPipelineCachePath(path);
 }
 
-/* v0.5.0 (package R0): the injector and the overlay, from the backend that
+/* v0.4.1 (package R0): the injector and the overlay, from the backend that
  * rhi_Init brought up */
 const char *rhi_InjectorName(void)
 {

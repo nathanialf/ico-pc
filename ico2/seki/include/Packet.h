@@ -117,7 +117,7 @@ int pac_HostStripOrder(const char *model, const short *index, int stride, int nu
 unsigned int pac_HostMesh(PacHeader *pk);
 void pac_HostRefresh(PacHeader *pk);
 
-/* v0.5.0 (M4): model packs (port/render/modelpack.h).  The part a packet
+/* v0.4.1 (M4): model packs (port/render/modelpack.h).  The part a packet
    belongs to, as the draw (RegistPacket.c regHostMesh) or the morph path
    (reg_setShape) knows it: the model's name (PObjModel.name), the part's
    index, the packet's place in the part's chain (-1: unknown), the

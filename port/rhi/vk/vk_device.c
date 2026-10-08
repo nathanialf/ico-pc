@@ -156,7 +156,7 @@ static bool vkr_HasLayer(const char *name)
     return found;
 }
 
-/* v0.5.0 (package R0): the injector and the overlay among the instance
+/* v0.4.1 (package R0): the injector and the overlay among the instance
  * layers (rhi.h rhi_InjectorName), found once after volk is up; kept out
  * of g_vkr so rhi_Init's reset leaves them to this scan */
 static const char *s_vkrInjector, *s_vkrOverlay;

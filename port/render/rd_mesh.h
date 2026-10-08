@@ -137,7 +137,7 @@ bool rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
 void rd_DestroyVuMesh(RdMesh m);
 bool rd_VuMeshValid(RdMesh m);
 
-/* ------------------------------------------- model packs (v0.5.0, M0)
+/* ------------------------------------------- model packs (v0.4.1, M0)
  *
  * The identity of a mesh: XXH3-64 (xxh3_64, xxh3.h) over one byte stream,
  * little-endian:

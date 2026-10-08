@@ -40,7 +40,7 @@ add_executable(texpack_disc_test test/texpack_disc_test.c)
 target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
 
-# ico_gltf (v0.5.0, M2): glTF 2.0 for model packs (gltf.h), the dump's
+# ico_gltf (v0.4.1, M2): glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
 add_library(ico_gltf STATIC gltf.c)
@@ -89,7 +89,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_interp.c # wave 7 (R7b): interpolation between the retained frames
     rd_mesh.c
-    modelpack.c # v0.5.0 (M3): model packs, the index, the glTF conversion, the dump
+    modelpack.c # v0.4.1 (M3): model packs, the index, the glTF conversion, the dump
     rd_perf.c # package P1: per-replay performance records
     rd_photo.c # package PHOTO: the camera override and its pinned frame
     rd_pipeline.c
@@ -309,7 +309,7 @@ target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 # (df_pack.h); without it that part is skipped
 target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math ico_port_data)
 
-# modelpack_test (v0.5.0, M3): model packs.  The same game files as
+# modelpack_test (v0.4.1, M3): model packs.  The same game files as
 # rd_mesh_test (test/mesh_env.h stubs the rest): the folder index on a fake
 # tree, the dump of a strip stream read back and converted (the triangles
 # the same), the bone packing, a cluster packet from vu_models.h dumped,

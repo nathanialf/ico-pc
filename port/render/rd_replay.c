@@ -94,7 +94,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
                                                    "crt_ps" /* package CRT */,
                                                    "sprite_texa_ps",
                                                    "vu_texa_ps" /* package TEXA */,
-                                                   "blit_depth_ps" /* v0.5.0 (R1) */};
+                                                   "blit_depth_ps" /* v0.4.1 (R1) */};
 
 /* ------------------------------------------------------------------ init */
 

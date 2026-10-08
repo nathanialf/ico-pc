@@ -2,7 +2,7 @@
  * port/data/json.h
  *
  * A small JSON reader (RFC 8259) for the port's own files: the archive's
- * meta.json (archive.c) and, from v0.5.0, glTF model files (port/render
+ * meta.json (archive.c) and, from v0.4.1, glTF model files (port/render
  * gltf.c).  Library ico_json: json.c alone, no dependencies.
  *
  * Use:

@@ -23,10 +23,10 @@
  *            their entries (pac_HostStrips): the table, the I's through
  *            p2o_MakePacket, and with the disc image given as the argument
  *            their geometry (below, "strip order"); recording only
- *   model packs  (v0.5.0, M0) the mesh identity, replacements from a
+ *   model packs  (v0.4.1, M0) the mesh identity, replacements from a
  *            tagless stream, one drawn in the prelit packet's place,
  *            rd_VuMeshRetire and the sweep; recording only
- *   pack hooks (v0.5.0, M4) the game's side of model packs on a pack in
+ *   pack hooks (v0.4.1, M4) the game's side of model packs on a pack in
  *            rd_mesh_modelpack/ under the working folder: the dump at the
  *            draw (both parts, the cluster one with its skeleton), the
  *            dumps moved into replacements/ and the pack switched off and
@@ -954,7 +954,7 @@ static void stripDiscChecks(const char *disc)
     ico_vfs_unmount(vfs);
 }
 
-/* ---------------------------------------- model packs (v0.5.0, M0)
+/* ---------------------------------------- model packs (v0.4.1, M0)
  *
  * The mesh identity (rd_VuMeshDescHash) on a synthetic prelit packet of
  * two batches (5 and 6 vertices, a strip restart at vertex 3 of the
@@ -1238,7 +1238,7 @@ static void replacementDrawChecks(void)
           "pac_HostMesh builds a retired mesh again with the same hash");
 }
 
-/* ------------------------------- model packs: the game's hooks (v0.5.0, M4)
+/* ------------------------------- model packs: the game's hooks (v0.4.1, M4)
  *
  * Packet.c / RegistPacket.c with a real pack (modelpack.c) in a folder of
  * the working directory: what regHostMesh dumps when dumping is on, and

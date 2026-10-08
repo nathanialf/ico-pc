@@ -448,7 +448,7 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
-    /* v0.5.0: photo mode's keys */
+    /* v0.4.1: photo mode's keys */
     CHECK(ico_config_get_float("photo.stick_speed", 0.0) == 1.0);
     CHECK(ico_config_get_bool("photo.invert_y", 1) == 0);
     CHECK(ico_config_get_bool("photo.hide_ui", 1) == 0);

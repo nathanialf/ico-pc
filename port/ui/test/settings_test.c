@@ -3344,7 +3344,7 @@ static void checkPageFits(UiSettingsPage page, const char *what)
     for (int i = 0; i < n; i++) {
         shown += !lt_ext_Prop(labels[i])->defaultMask;
     }
-    /* v0.5.0: the title's fourteen Display rows (Model pack) 12 lines apart */
+    /* v0.4.1: the title's fourteen Display rows (Model pack) 12 lines apart */
     const int gap = page == UI_PAGE_DISPLAY && shown > 13 ? 12 : 13;
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_Prop(labels[i]);
@@ -4577,7 +4577,7 @@ static void testTexturePack(void)
     useConfig("version = 1\n");
 }
 
-/* v0.5.0: Display > Model pack (title only; "None installed" without the
+/* v0.4.1: Display > Model pack (title only; "None installed" without the
    hook or with a count of 0, the step then doing nothing; On/Off with
    one), its note, Dump models on the main page in developer mode only
    (switched off with it), and the [video] keys' round trip. */

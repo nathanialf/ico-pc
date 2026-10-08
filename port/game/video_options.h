@@ -37,7 +37,7 @@
  *                           true        the game's own picture effects (issue 11): the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
- *   [video] effects_depth   true        v0.5.0 (R1): the scene's depth beside the picture
+ *   [video] effects_depth   true        v0.4.1 (R1): the scene's depth beside the picture
  *                                       for an effects program (ReShade's depth effects);
  *                                       not with the CRT filter
  *
@@ -117,7 +117,7 @@ typedef struct IcoVideoOptions {
     int effectSoftening;    /* the edge softening (GsBase.c gsb_antiAlias) */
     int effectMotionBlur;   /* the motion blur (staticBlur.c MotionBlur) */
     int effectFog;          /* the depth fog (ZFog.c fog_DrawFog) */
-    /* v0.5.0 (R1): an output-size depth buffer in the presentation for an
+    /* v0.4.1 (R1): an output-size depth buffer in the presentation for an
        effects program (rd.h RdSettings.effectsDepth); 1 = on */
     int effectsDepth;
 } IcoVideoOptions;

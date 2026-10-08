@@ -91,7 +91,7 @@ static int regKeyOrdinal(PacHeader *pk)
     return -1;
 }
 
-/* v0.5.0 (M4): the part a packet drawn now belongs to (Packet.h
+/* v0.4.1 (M4): the part a packet drawn now belongs to (Packet.h
    PacHostIdent), from the walk's names; a packet outside the named part's
    chains (n < 0) has no name, bone count or object */
 static void regHostIdent(PacHostIdent *id, int n)
@@ -147,7 +147,7 @@ static void regHostMesh(PacHeader *pk, int pass)
     if (m.id == 0) {
         return;
     }
-    /* v0.5.0 (M4): the model pack's dump, at every draw (meshes are made
+    /* v0.4.1 (M4): the model pack's dump, at every draw (meshes are made
        lazily, and the one-shot dump wants each part of its object drawn) */
     if (modelpack_DumpWanted(rd_VuMeshHash(m), id.obj)) {
         id.skel = regHostSkeleton();
@@ -316,7 +316,7 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
     }
 #ifdef ICO_RD
     /* R3ab: the vertices were rewritten in the packets: the meshes follow
-       (v0.5.0, M4: named, for a model pack's replacement that cannot) */
+       (v0.4.1, M4: named, for a model pack's replacement that cannot) */
     for (n = 0, pk = pkt; pk != 0; pk = pk->next, n++) {
         PacHostIdent id;
 

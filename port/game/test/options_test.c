@@ -405,7 +405,7 @@ static void test_video_effects(const char *dir)
     ico_video_reload();
 }
 
-/* v0.5.0 (R1): [video] effects_depth, on by default, read, sanitized,
+/* v0.4.1 (R1): [video] effects_depth, on by default, read, sanitized,
    always saved, outside the preset, through ico_video_effects_depth */
 static void test_video_effects_depth(const char *dir)
 {
@@ -458,7 +458,7 @@ static void test_video_effects_depth(const char *dir)
     ico_video_reload();
 }
 
-/* v0.5.0: [video] model_pack (default on) and dump_models (default off):
+/* v0.4.1: [video] model_pack (default on) and dump_models (default off):
    the defaults, the file read, the round trip, and the preset untouched */
 static void test_video_models(const char *dir)
 {

@@ -368,7 +368,7 @@ static void read_config(void)
     o.effectSoftening = ico_config_get_bool("video.effect_softening", 1);
     o.effectMotionBlur = ico_config_get_bool("video.effect_motion_blur", 1);
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
-    /* v0.5.0 (R1): the depth handed to an effects program (ReShade) */
+    /* v0.4.1 (R1): the depth handed to an effects program (ReShade) */
     o.effectsDepth = ico_config_get_bool("video.effects_depth", 1);
     /* the preset is a shortcut over the four rows: only "enhanced" and
        "custom" take them as written; "original", no key, or anything else
