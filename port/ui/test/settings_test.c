@@ -53,6 +53,7 @@
 #include "input.h"
 #include "layout_ext.h"
 #include "audio_host.h"
+#include "menu_font.h"
 #include "menu_text.h"
 #include "mix_gain.h"
 #include "options.h"
@@ -4025,17 +4026,40 @@ static void fakeSaveRows(void)
 
 /* ------------------------------------------------ package PHOTO: the panel */
 
+/* the last frame's draws on the menu text pages (menu_font.h) */
+static void countPageDraw(void *user, int list, uint32_t index, const RdCmd *c,
+                          const RdStateBlock *st)
+{
+    (void)list;
+    (void)index;
+    if (c->type == RDC_SCREEN && st->ds.texEnabled && ui_MenuFontIsPage(st->tex)) {
+        (*(int *)user)++;
+    }
+}
+
+static int menuTextDraws(void)
+{
+    const RdFrame *f = rd__LastFrame();
+    int n = 0;
+    if (f) {
+        RdStateBlock s = f->startState;
+        rd__Walk(f, 0, &s, countPageDraw, &n);
+    }
+    return n;
+}
+
 /* what the overlay is given while the panel draws: the sprites (the panel's
    rectangle first, then the words) and the pictures' triangles */
 static RdScreenVtx s_pv[4096];
+static RdPrim s_pt[4096]; /* each vertex's primitive */
 static uint32_t s_pn;
 
 static void panelSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
 {
-    (void)type;
     (void)tex;
     (void)blend;
     for (uint32_t i = 0; i < n && s_pn < 4096; i++) {
+        s_pt[s_pn] = type;
         s_pv[s_pn++] = v[i];
     }
 }
@@ -4154,14 +4178,16 @@ static void testPhotoPanel(void)
     lt_switch_layout(57);
     CHECK(settle(57, 60), "the pause menu");
     frame(0);
-    const int pauseItems = textItems();
-    CHECK(pauseItems > 0, "the pause menu has port text (%d items)", pauseItems);
+    /* v0.4.2 (package F): nothing is deferred; the rows are menu text
+       strips in the scene, counted as draws on the menu text pages */
+    const int pauseItems = menuTextDraws();
+    CHECK(pauseItems > 0, "the pause menu has menu text (%d draws)", pauseItems);
     const int ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
     texLayout[57].curItem = ph;
     press(0x40);
     CHECK(settle(pl, 60) && ico_photo_active(), "photo mode (%d)", current_layout_id);
     frame(0);
-    CHECK(textItems() == 0, "photo mode: the pause layout records no rows (%d)", textItems());
+    CHECK(menuTextDraws() == 0, "photo mode: the pause layout draws no rows (%d)", menuTextDraws());
 
     /* the panel through the overlay sink: pad pictures, then your keys */
     RdOverlayCtx ctx;
@@ -4189,10 +4215,17 @@ static void testPhotoPanel(void)
                   y1 <= 1080.0f,
               "%s: the panel is x %.0f .. %.0f, y %.0f .. %.0f", keys ? "keys" : "pad", (double)x0,
               (double)x1, (double)y0, (double)y1);
+        /* v0.4.2 (package F): the words are menu text strips, whose quads
+           carry a transparent margin round the ink (ceil(0.12 em) plus
+           UI_MENU_RIM_X / UI_MENU_RIM_Y texels: 7 field lines, 14 units, at
+           the panel's size), so a word's quad may pass the panel by 16
+           units (measured 6.4 above and 0.8 right); the pictures may not */
+        const float textOver = 16.0f * ctx.boxScale;
         int out = 0;
         for (uint32_t i = 2; i < s_pn; i++) {
             const float x = (float)s_pv[i].x / 16.0f, y = (float)s_pv[i].y / 16.0f;
-            out += x < x0 || x > x1 || y < y0 || y > y1;
+            const float m = s_pt[i] == RD_PRIM_SPRITES ? textOver : 0.0f;
+            out += x < x0 - m || x > x1 + m || y < y0 - m || y > y1 + m;
         }
         CHECK(out == 0, "%s: %d vertices outside the panel", keys ? "keys" : "pad", out);
     }
