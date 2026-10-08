@@ -249,6 +249,11 @@ jobs:
       - name: Build the debug APK
         run: cd android && ./gradlew --no-daemon assembleDebug -PicoLabel=ci
 
+      # the game's semantics options (cmake/IcoFlags.cmake) reach the NDK
+      # clang, and no game object holds a fused multiply-add (arm64 has them)
+      - name: Game compile options in the Android build
+        run: tools/check_android_flags.sh
+
       - name: APK structure
         run: |
           set -euxo pipefail

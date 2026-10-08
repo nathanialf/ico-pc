@@ -174,6 +174,20 @@ looks right, including every line that starts with `window:` and every
 line that contains the word `swapchain`. They say what size the game was
 told the screen is, and when that changed. Copy them as they are.
 
+**Sending us a log when the game closes by itself.** Send
+`logs/ico-pc.log` from the start where it happened, before you start the
+game again (each start writes a new log). If you cannot send the whole
+file, copy everything from the line of `=====` signs near the end (the
+next line says `CRASH`) down to the last line, or the last 60 lines if
+there is no such line. They say where the game stopped. Also tell
+us what you pressed just before, and whether your saves in `memcard`
+came from this phone or were copied from somewhere else.
+
+**Sending us a save that shows a problem.** If something looks wrong in
+the game (a pose, a place, a character), save near it if you can, then
+send the `memcard` folder with the log. We load the same save on a
+computer to see whether it happens there too.
+
 ## Screens of every shape
 
 The picture reaches into the notch or camera hole, and it fills a folding
