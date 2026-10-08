@@ -657,6 +657,31 @@ static void vkr_FillLimits(void)
     o->maxStorageRange = l->maxStorageBufferRange;
     /* texture packs: the BC formats (vkr_CreateDevice enabled the feature) */
     o->bcTextures = g_vkr.bc;
+    /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
+     * every Vulkan device is required to meet (the specification's Required
+     * Limits table), where phone GPUs sit while desktop ones and lavapipe are
+     * far past them: offsets aligned to 256 (minUniformBufferOffsetAlignment
+     * and minStorageBufferOffsetAlignment are at most 256), storage ranges of
+     * 2^27 bytes, 4096-texel images, 8 dynamic uniform buffers, 16x
+     * anisotropy.  Each is only ever lowered, so the device stays valid for
+     * what the renderer then does (tests: rd_pixel_minlimits,
+     * rd_present_minlimits).  The descriptor layouts themselves are fixed
+     * and inside the minimums (rd_replay.c: three sets, at most four uniform
+     * buffers and one storage buffer a stage, two sampled images and a
+     * sampler, four dynamic uniform buffers, no push constants). */
+    const char *fake = getenv("ICO_VK_FAKE_LIMITS");
+    if (fake && strcmp(fake, "min") == 0) {
+        o->uniformAlign = o->uniformAlign > 256u ? o->uniformAlign : 256u;
+        o->maxTextureSize = o->maxTextureSize < 4096u ? o->maxTextureSize : 4096u;
+        o->maxDynamicUniforms = o->maxDynamicUniforms < 8u ? o->maxDynamicUniforms : 8u;
+        o->maxStorageRange =
+            o->maxStorageRange < (1ull << 27) ? o->maxStorageRange : (uint64_t)1 << 27;
+        o->maxAnisotropy = o->maxAnisotropy < 16.0f ? o->maxAnisotropy : 16.0f;
+        VKR_LOG("ICO_VK_FAKE_LIMITS=min: offsets aligned to %u, storage ranges up to %llu bytes, "
+                "images up to %u texels, %u dynamic uniform buffers",
+                o->uniformAlign, (unsigned long long)o->maxStorageRange, o->maxTextureSize,
+                o->maxDynamicUniforms);
+    }
 }
 
 /* ------------------------------------------------------------- lifecycle */
