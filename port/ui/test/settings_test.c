@@ -52,6 +52,7 @@
 #include "ico_gamestate.h"
 #include "input.h"
 #include "layout_ext.h"
+#include "appearance.h"
 #include "audio_host.h"
 #include "menu_font.h"
 #include "menu_text.h"
@@ -4603,6 +4604,411 @@ static int fakePackCount(void)
     return s_packCount;
 }
 
+/* ------------------------------------------------------ Characters
+ * v0.4.2 package K: Settings > Extras > Characters (port/game/appearance.h
+ * under nine stepped rows with a swatch each, Randomize, Reset to original,
+ * a note, Cross on a row from the title opening the model viewer), and
+ * Extras on the pause menu with Characters and Back only. */
+static const char *const kColourNames[ICO_APP_COLOURS] = {
+    "Red",  "Crimson", "Rose", "Pink",  "Magenta", "Plum",  "Violet", "Indigo",
+    "Navy", "Blue",    "Sky",  "Teal",  "Cyan",    "Green", "Moss",   "Olive",
+    "Gold", "Orange",  "Rust", "Brown", "Sand",    "White", "Grey",   "Black"};
+static const char *const kCharKeys[ICO_APP_PART_COUNT] = {
+    "ico_skin",  "ico_poncho_navy", "ico_poncho_pink", "ico_poncho_light", "ico_poncho_dark",
+    "ico_tunic", "ico_shorts",      "yorda_skin",      "yorda_dress"};
+
+static int s_viewCalls, s_viewLast = -1;
+
+/* model_viewer.c ico_mv_view_character's stand-in: the achievements page
+   stands in for the viewer's list */
+static int fakeView(int character)
+{
+    s_viewCalls++;
+    s_viewLast = character;
+    return ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
+}
+
+/* Settings (title or pause menu) > Extras > Characters, settled */
+static int openCharacters(int title)
+{
+    const int mainL = enterMain(title);
+    const int exL = openPage(mainL, 7, UI_PAGE_EXTRAS);
+    int el[8];
+    ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+    lt_ext_Layout(exL)->curItem = el[3];
+    frame(0);
+    press(0x40);
+    const int l = ui_SettingsPageLayout(UI_PAGE_CHARACTERS);
+    CHECK(settle(l, 60), "title %d: the Characters page opens (%d)", title, current_layout_id);
+    for (int k = 0; k < 4; k++) {
+        frame(0); /* the page refreshes */
+    }
+    return l;
+}
+
+/* the cursor on `label`, one Left (-1) or Right (+1) */
+static void charStep(int l, int label, int dir)
+{
+    lt_ext_Layout(l)->curItem = label;
+    frame(0);
+    press(dir < 0 ? 0x8000 : 0x2000);
+}
+
+static const char *textNow(int row)
+{
+    frame(0);
+    return lt_ext_RowText(row);
+}
+
+/* the swatch rect of a colour row: a rect row at x 578 on the label's
+   middle */
+static int swatchOf(int label)
+{
+    const LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(UI_PAGE_CHARACTERS));
+    unsigned char c[4];
+    for (int j = l->first; j < l->last; j++) {
+        if (lt_ext_RectColor(j, c) == 0 && lt_ext_Prop(j)->dispX == 578 &&
+            lt_ext_Prop(j)->dispY == lt_ext_Prop(label)->dispY + 9) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+static const char *savedChar(IcoToml *t, int part)
+{
+    char key[64];
+    snprintf(key, sizeof(key), "characters.%s", kCharKeys[part]);
+    return t ? ico_toml_get(t, key) : NULL;
+}
+
+static void testCharacters(void)
+{
+    static const int opts[] = {
+        UI_OPT_CHAR_ICO_SKIN,         UI_OPT_CHAR_ICO_PONCHO_NAVY, UI_OPT_CHAR_ICO_PONCHO_PINK,
+        UI_OPT_CHAR_ICO_PONCHO_LIGHT, UI_OPT_CHAR_ICO_PONCHO_DARK, UI_OPT_CHAR_ICO_TUNIC,
+        UI_OPT_CHAR_ICO_SHORTS,       UI_OPT_CHAR_YORDA_SKIN,      UI_OPT_CHAR_YORDA_DRESS,
+        UI_OPT_CHAR_RANDOMIZE,        UI_OPT_CHAR_RESET,           UI_OPT_BACK};
+    static const int strs[] = {
+        UI_STR_CHAR_ICO_SKIN,         UI_STR_CHAR_ICO_PONCHO_NAVY, UI_STR_CHAR_ICO_PONCHO_PINK,
+        UI_STR_CHAR_ICO_PONCHO_LIGHT, UI_STR_CHAR_ICO_PONCHO_DARK, UI_STR_CHAR_ICO_TUNIC,
+        UI_STR_CHAR_ICO_SHORTS,       UI_STR_CHAR_YORDA_SKIN,      UI_STR_CHAR_YORDA_DRESS,
+        UI_STR_CHAR_RANDOMIZE,        UI_STR_CHAR_RESET,           UI_STR_BACK};
+    char p[1100], want[32], log[256];
+    int lb[16], lo[16], lv[16];
+
+    path(p, sizeof(p), "settings_test.toml");
+    ui_SettingsSetTexturePackCount(NULL);
+    ui_SettingsSetCharacterViewHandler(NULL);
+
+    for (int title = 1; title >= 0; title--) {
+        const char *who = title ? "title" : "pause";
+        const int l = openCharacters(title);
+        const int n = ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        CHECK(labelsAre(UI_PAGE_CHARACTERS, opts, strs, 12), "%s: Characters rows", who);
+        CHECK(n == 12, "%s: twelve rows (%d)", who, n);
+        checkPageFits(UI_PAGE_CHARACTERS, title ? "Characters (title)" : "Characters (pause)");
+        CHECK(lt_ext_Prop(lb[11])->dispY == 40 + 13 * 11, "%s: Back at y %d", who,
+              lt_ext_Prop(lb[11])->dispY);
+
+        /* every value starts Original, a swatch on each colour row, 9 apart
+           from the label's top */
+        for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
+            CHECK(strcmp(textNow(lv[i]), "Original") == 0, "%s: row %d starts Original (%s)", who,
+                  i, lt_ext_RowText(lv[i]));
+            const int sw = swatchOf(lb[i]);
+            CHECK(sw >= 0, "%s: row %d has a swatch", who, i);
+        }
+
+        /* Ico: Skin: Original, Tone 1 ... Tone 12, Original; Left wraps */
+        for (int k = 1; k <= ICO_APP_TONES; k++) {
+            charStep(l, lb[0], 1);
+            snprintf(want, sizeof(want), "Tone %d", k);
+            CHECK(strcmp(textNow(lv[0]), want) == 0 && ico_appearance_get(ICO_APP_ICO_SKIN) == k,
+                  "%s: Ico skin step %d is \"%s\" (\"%s\", %d)", who, k, want,
+                  lt_ext_RowText(lv[0]), ico_appearance_get(ICO_APP_ICO_SKIN));
+        }
+        charStep(l, lb[0], 1);
+        CHECK(strcmp(textNow(lv[0]), "Original") == 0 && ico_appearance_get(ICO_APP_ICO_SKIN) == 0,
+              "%s: Tone 12, Right: Original (13 values)", who);
+        charStep(l, lb[0], -1);
+        CHECK(strcmp(textNow(lv[0]), "Tone 12") == 0, "%s: Original, Left: Tone 12 (%s)", who,
+              lt_ext_RowText(lv[0]));
+        charStep(l, lb[7], 1);
+        CHECK(strcmp(textNow(lv[7]), "Tone 1") == 0 && ico_appearance_get(ICO_APP_YORDA_SKIN) == 1,
+              "%s: Yorda skin, Right: Tone 1 (%s)", who, lt_ext_RowText(lv[7]));
+
+        /* Ico: Tunic: 25 values with the palette's names, wrapping both ways */
+        for (int k = 1; k <= ICO_APP_COLOURS; k++) {
+            charStep(l, lb[5], 1);
+            CHECK(strcmp(textNow(lv[5]), kColourNames[k - 1]) == 0 &&
+                      ico_appearance_get(ICO_APP_ICO_TUNIC) == k,
+                  "%s: Tunic step %d is %s (\"%s\")", who, k, kColourNames[k - 1],
+                  lt_ext_RowText(lv[5]));
+        }
+        charStep(l, lb[5], 1);
+        CHECK(strcmp(textNow(lv[5]), "Original") == 0, "%s: Black, Right: Original (25 values)",
+              who);
+        charStep(l, lb[5], -1);
+        CHECK(strcmp(textNow(lv[5]), "Black") == 0, "%s: Original, Left: Black (%s)", who,
+              lt_ext_RowText(lv[5]));
+        charStep(l, lb[5], 1);
+        CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 0, "%s: Right: Original again", who);
+
+        /* the swatch follows the value: the part's colour at the GS scale,
+           on the label's middle */
+        {
+            const int sw = swatchOf(lb[5]);
+            unsigned char before[4] = {0}, after[4] = {0};
+            CHECK(sw >= 0 && lt_ext_RectColor(sw, before) == 0, "%s: the tunic swatch", who);
+            charStep(l, lb[5], 1);
+            frame(0);
+            CHECK(sw >= 0 && lt_ext_RectColor(sw, after) == 0 && memcmp(before, after, 3) != 0,
+                  "%s: the tunic swatch changes with a step", who);
+            const unsigned c = ico_appearance_swatch(ICO_APP_ICO_TUNIC);
+            CHECK(after[0] == ((c >> 16) & 0xFFu) * 0x80u / 255u &&
+                      after[1] == ((c >> 8) & 0xFFu) * 0x80u / 255u &&
+                      after[2] == (c & 0xFFu) * 0x80u / 255u,
+                  "%s: the swatch is the part's colour times 0x80/255 (%d %d %d, %06X)", who,
+                  after[0], after[1], after[2], c);
+            CHECK(sw >= 0 && lt_ext_Prop(sw)->dispY == lt_ext_Prop(lb[5])->dispY + 9 &&
+                      lt_ext_Prop(sw)->dispX == 578,
+                  "%s: the swatch at the label's y + 9 (%d vs %d)", who,
+                  sw >= 0 ? lt_ext_Prop(sw)->dispY : -1, lt_ext_Prop(lb[5])->dispY);
+            /* Square: back to Original, the swatch to the original colour */
+            charStep(l, lb[5], 1);
+            lt_ext_Layout(l)->curItem = lb[5];
+            frame(0);
+            press(0x80);
+            CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 0 &&
+                      strcmp(textNow(lv[5]), "Original") == 0,
+                  "%s: Square puts the colour back (%s)", who, lt_ext_RowText(lv[5]));
+            unsigned char orig[4] = {0};
+            CHECK(sw >= 0 && lt_ext_RectColor(sw, orig) == 0 && memcmp(orig, before, 3) == 0,
+                  "%s: the swatch is the original colour again", who);
+        }
+
+        /* the note: this entry's text; a texture pack's while one is on */
+        CHECK(noteStarting(UI_PAGE_CHARACTERS, title ? "Cross shows the" : "The colours change") >=
+                  0,
+              "%s: the note", who);
+        s_packCount = 3;
+        ui_SettingsSetTexturePackCount(fakePackCount);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(noteStarting(UI_PAGE_CHARACTERS, "A texture pack is on") >= 0,
+              "%s: the texture pack note with a pack installed", who);
+        s_packCount = 0;
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(noteStarting(UI_PAGE_CHARACTERS, title ? "Cross shows the" : "The colours change") >=
+                  0,
+              "%s: no pack, no pack note", who);
+        ui_SettingsSetTexturePackCount(NULL);
+    }
+
+    /* one step, then Back: [characters] ico_tunic = "red" in the saved
+       file, read back by a reload */
+    for (int title = 1; title >= 0; title--) {
+        const int l = openCharacters(title);
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        charStep(l, lb[5], 1);
+        lt_ext_Layout(l)->curItem = lb[11];
+        frame(0);
+        press(0x40);
+        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_EXTRAS), 60), "title %d: Back to Extras", title);
+        IcoToml *t = ico_toml_load(p);
+        const char *v = savedChar(t, ICO_APP_ICO_TUNIC);
+        CHECK(v != NULL && strcmp(v, "red") == 0, "title %d: [characters] ico_tunic = \"red\" (%s)",
+              title, v ? v : "none");
+        ico_toml_free(t);
+        ico_config_reset(p, "");
+        ico_opt_reload();
+        CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 1, "title %d: the reload reads it back",
+              title);
+    }
+
+    /* Randomize, Reset */
+    for (int title = 1; title >= 0; title--) {
+        const char *who = title ? "title" : "pause";
+        const int l = openCharacters(title);
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        const unsigned serial = ico_appearance_serial();
+        lt_ext_Layout(l)->curItem = lb[9];
+        frame(0);
+        press(0x40);
+        int allSet = 1, distinct = 1;
+        for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
+            allSet &=
+                ico_appearance_get((IcoAppPart)i) != 0 && strcmp(textNow(lv[i]), "Original") != 0;
+        }
+        for (int a = ICO_APP_ICO_PONCHO_NAVY; a <= ICO_APP_ICO_PONCHO_DARK; a++) {
+            for (int b = a + 1; b <= ICO_APP_ICO_PONCHO_DARK; b++) {
+                distinct &= ico_appearance_get((IcoAppPart)a) != ico_appearance_get((IcoAppPart)b);
+            }
+        }
+        CHECK(allSet, "%s: Randomize leaves no part Original", who);
+        CHECK(distinct, "%s: the four poncho rows differ", who);
+        CHECK(ico_appearance_serial() != serial, "%s: Randomize advances the serial", who);
+        /* Reset */
+        const unsigned serial2 = ico_appearance_serial();
+        lt_ext_Layout(l)->curItem = lb[10];
+        frame(0);
+        press(0x40);
+        int allOrig = 1;
+        for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
+            allOrig &=
+                ico_appearance_get((IcoAppPart)i) == 0 && strcmp(textNow(lv[i]), "Original") == 0;
+        }
+        CHECK(allOrig, "%s: Reset to original puts every part back", who);
+        CHECK(ico_appearance_serial() != serial2, "%s: Reset advances the serial", who);
+        /* Randomize again and leave: the nine keys are in the file */
+        lt_ext_Layout(l)->curItem = lb[9];
+        frame(0);
+        press(0x40);
+        lt_ext_Layout(l)->curItem = lb[11];
+        frame(0);
+        press(0x40);
+        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_EXTRAS), 60), "%s: Back to Extras", who);
+        IcoToml *t = ico_toml_load(p);
+        int saved = 1;
+        for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
+            const char *v = savedChar(t, i);
+            saved &= v != NULL && strcmp(v, "original") != 0;
+        }
+        CHECK(saved, "%s: Randomize is in the file on leaving", who);
+        ico_toml_free(t);
+    }
+
+    /* Cross on a colour row: the viewer from the title, nothing from the
+       pause menu */
+    {
+        const int l = openCharacters(0);
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        ui_SettingsSetCharacterViewHandler(fakeView);
+        s_viewCalls = 0;
+        const int leaves = s_leaves;
+        lt_ext_Layout(l)->curItem = lb[0];
+        frame(0);
+        press(0x40);
+        CHECK(s_viewCalls == 0 && current_layout_id == l && s_leaves == leaves,
+              "pause: Cross on a colour row does nothing (%d calls)", s_viewCalls);
+        ui_SettingsSetCharacterViewHandler(NULL);
+    }
+    {
+        const int l = openCharacters(1);
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        const int achL = ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
+        const int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+        const int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+        int ml[16], el[8], ex = -1;
+        const int mn = ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        for (int i = 0; i < mn; i++) {
+            if (strcmp(lt_ext_RowText(ml[i]), "Extras") == 0) {
+                ex = ml[i];
+            }
+        }
+        ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+
+        /* no handler: a log line, the page stays */
+        errCapture();
+        lt_ext_Layout(l)->curItem = lb[0];
+        frame(0);
+        press(0x40);
+        errRelease(log, sizeof(log));
+        CHECK(current_layout_id == l && strstr(log, "characters:") != NULL,
+              "title, no handler: stays and logs (\"%s\")", log);
+
+        ui_SettingsSetCharacterViewHandler(fakeView);
+        s_viewCalls = 0;
+        s_viewLast = -1;
+        int leaves = s_leaves;
+        lt_ext_Layout(l)->curItem = lb[0];
+        frame(0);
+        press(0x40);
+        CHECK(s_viewCalls == 1 && s_viewLast == 0 && s_leaves == leaves + 1 && settle(achL, 60),
+              "title: Cross on an Ico row opens the viewer for 0 (%d calls, last %d)", s_viewCalls,
+              s_viewLast);
+
+        /* the viewer's way back: ui_SettingsReopenPage, only on the title
+           layouts */
+        CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == -1,
+              "Reopen from a layout that is not the title: -1");
+        lt_switch_layout(13);
+        CHECK(settle(13, 60), "the title again");
+        CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == l, "Reopen on the title: the page");
+        CHECK(ui_SettingsReopenPage(-1) == -1 && ui_SettingsReopenPage(UI_PAGE_COUNT) == -1,
+              "Reopen of a bad page: -1");
+        CHECK(lt_ext_Layout(mainL)->defaultItem == ex && lt_ext_Layout(exL)->defaultItem == el[3] &&
+                  lt_ext_Layout(l)->defaultItem == lb[0],
+              "Reopen: cursors Main on Extras (%d, want %d), Extras on Characters (%d), the page "
+              "on the row (%d, want %d)",
+              lt_ext_Layout(mainL)->defaultItem, ex, lt_ext_Layout(exL)->defaultItem,
+              lt_ext_Layout(l)->defaultItem, lb[0]);
+        lt_switch_layout(l);
+        CHECK(settle(l, 60) && lt_ext_Layout(l)->curItem == lb[0], "the page opens on the row");
+
+        /* a Yorda row: 1; the page reopens on that row */
+        s_viewCalls = 0;
+        leaves = s_leaves;
+        lt_ext_Layout(l)->curItem = lb[8];
+        frame(0);
+        press(0x40);
+        CHECK(s_viewCalls == 1 && s_viewLast == 1 && s_leaves == leaves + 1 && settle(achL, 60),
+              "title: Cross on a Yorda row opens the viewer for 1 (%d calls, last %d)", s_viewCalls,
+              s_viewLast);
+        lt_switch_layout(13);
+        CHECK(settle(13, 60) && ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == l &&
+                  lt_ext_Layout(l)->defaultItem == lb[8],
+              "Reopen again: the Yorda row (%d, want %d)", lt_ext_Layout(l)->defaultItem, lb[8]);
+        lt_switch_layout(l);
+        CHECK(settle(l, 60) && lt_ext_Layout(l)->curItem == lb[8], "the page on the Yorda row");
+        /* Back retraces the path: Extras on Characters, Main on Extras, the
+           title */
+        press(0x10);
+        CHECK(settle(exL, 60) && lt_ext_Layout(exL)->curItem == el[3],
+              "Triangle: Extras on Characters");
+        press(0x10);
+        CHECK(settle(mainL, 60) && lt_ext_Layout(mainL)->curItem == ex, "Triangle: Main on Extras");
+        press(0x10);
+        CHECK(settle(13, 60), "Triangle: the title");
+        ui_SettingsSetCharacterViewHandler(NULL);
+    }
+
+    /* Extras from the pause menu: Characters and Back only; the others
+       masked; the cursor steps between the two */
+    {
+        const int mainL = enterMain(0);
+        const int exL = openPage(mainL, 7, UI_PAGE_EXTRAS);
+        int el[8];
+        const int en = ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        CHECK(en == 5, "pause: Extras has its five rows (%d)", en);
+        CHECK(lt_ext_Prop(el[0])->defaultMask && lt_ext_Prop(el[1])->defaultMask &&
+                  lt_ext_Prop(el[2])->defaultMask,
+              "pause: Music, Models and Credits are hidden");
+        CHECK(!lt_ext_Prop(el[3])->defaultMask && !lt_ext_Prop(el[4])->defaultMask,
+              "pause: Characters and Back are shown");
+        lt_ext_Layout(exL)->curItem = el[3];
+        frame(0);
+        press(0x4000);
+        CHECK(lt_ext_Layout(exL)->curItem == el[4], "pause: Down from Characters lands on Back");
+        /* the budget keeps its spare (testBudget has the count) */
+        printf("settings_test: Characters: %d of %d properties used\n", lt_ext_PropCount(),
+               LT_EXT_MAX_PROPERTIES);
+    }
+
+    /* Reopen with nothing built */
+    ui_SettingsReset();
+    CHECK(ui_SettingsReopenPage(UI_PAGE_CHARACTERS) == -1, "Reopen before the menu is built: -1");
+    ui_SettingsSetTexturePackCount(NULL);
+    useConfig("version = 1\n");
+}
+
 /* the texture pack note sits on the Display page, whose notes must stay one
    line to keep clear of Back: checked in all five languages */
 static void testTexturePackNoteLines(void)
@@ -5082,6 +5488,7 @@ int main(int argc, char **argv)
     testCoversTitle();
     testTexturePack();
     testTexturePackNoteLines();
+    testCharacters();
     testModelPack();
     testEffects();
     testTouch();

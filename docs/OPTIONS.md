@@ -122,13 +122,43 @@ on.
 
 ## Extras
 
-This page is only on the title screen's Options.
+On the title screen's Options this page has Music, Models, Credits and
+Characters. In the pause menu's Options it has only Characters.
 
 - **Music:** listen to the game's music and sound effects.
 - **Models:** the model viewer. Look closely at the characters and some
   objects, and play their animations. [The viewer's controls](CONTROLS.md#look-at-the-models).
 - **Credits:** watch the ending credits again. It unlocks once you have
   finished the game.
+- **Characters:** change the colours of Ico and Yorda. [Details below](#characters).
+
+### Characters
+
+This page recolours Ico's skin, poncho, tunic and shorts, and Yorda's skin
+and dress. Ico's poncho has four colour groups, and each has a row of its
+own: navy, pink, light and dark.
+
+- **Left and Right:** pick the colour for the row. Original is the game's
+  own colour. The clothes have 24 named colours, from Red to Black. Skin
+  has twelve tones, from Tone 1 (the lightest) to Tone 12 (the darkest).
+- **Square:** puts the row back to Original.
+- **Cross on a row:** from the title screen, shows that character in the
+  model viewer so you can look at the colours. Triangle takes you back to
+  this page. Each preview loads the stage, so it takes a few seconds. From
+  the pause menu, Cross on a row does nothing; the game behind the menu
+  changes colour as you choose.
+- **Randomize:** gives every row a random colour. The four poncho groups
+  always get four different colours.
+- **Reset to original:** puts every row back to Original.
+
+Each row has a small square on its right showing the colour. It shows the
+colour as the picture holds it, before the game lights it. In the game Ico
+looks a little darker than the square and Yorda a little paler.
+
+A texture pack that has its own pictures of Ico and Yorda replaces these
+colours. The page says so while a pack is on.
+
+Your choices are saved when you leave the page.
 
 ## Photo mode
 
@@ -215,6 +245,16 @@ Under `[video]`:
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
+
+Under `[characters]`, for the Characters page. A line that is missing means
+Original:
+
+| Line | What it does |
+| --- | --- |
+| `ico_skin`, `yorda_skin` | `"original"` or a skin tone, `"tone1"` (lightest) to `"tone12"` (darkest). |
+| `ico_poncho_navy`, `ico_poncho_pink`, `ico_poncho_light`, `ico_poncho_dark`, `ico_tunic`, `ico_shorts`, `yorda_dress` | `"original"` or a colour name: `"red"`, `"crimson"`, `"rose"`, `"pink"`, `"magenta"`, `"plum"`, `"violet"`, `"indigo"`, `"navy"`, `"blue"`, `"sky"`, `"teal"`, `"cyan"`, `"green"`, `"moss"`, `"olive"`, `"gold"`, `"orange"`, `"rust"`, `"brown"`, `"sand"`, `"white"`, `"grey"` or `"black"`. |
+
+A value the game does not know counts as Original.
 
 On Android, under `[paths]`:
 
