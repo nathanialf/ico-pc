@@ -35,6 +35,30 @@
  * The feedback passes do not use the hardware blender at all: RDC_EXACT_BLEND
  * runs blend_int on RGBA8_UINT copies (rd_replay.c).
  *
+ * Package AN-E, a device without dual-source blending (g_rd.noDual): only
+ * the LERPs and Cd*FIX + Cs read the second output, so only they change
+ * (rd__ExpandNoDual).  The draw becomes two: a colour pass whose c0.a is
+ * the factor c1 would carry (the same float: F/128, or 1.0 / 0 for a PABE
+ * pixel left unblended), blended SRC_ALPHA / ONE_MINUS_SRC_ALPHA (the LERPs)
+ * or ONE / SRC_ALPHA (Cd*FIX + Cs) under the RGB part of the mask, then,
+ * when the mask has A, an alpha pass writing the stored alpha (As, FBA's
+ * MSB) with blending off, no Z write, under a Z test that admits the Z the
+ * colour pass left.  The shaders are the *_nodual entries (ICO_NO_DUAL: c0
+ * alone); every other path draws in one pass as before, with those entries.
+ * Why the alpha is the one-pass alpha: blending never reads Ad on these
+ * paths, so RGB does not depend on the alpha pass.  Without Z write the
+ * depth buffer is the same for both passes, so the alpha pass keeps the Z
+ * test and admits exactly the colour pass's fragments.  With Z write under
+ * GS GEQUAL (LEQUAL here) each passing fragment stores its depth, so the
+ * depth left is the least of the passing fragments', and the fragments the
+ * alpha pass admits are those at that depth; all of them passed, and the
+ * last of them is the last fragment that passed, whose alpha the one-pass
+ * draw keeps.  ALWAYS admits every fragment in both passes.  GS GREATER
+ * (LESS) with Z write takes LEQUAL in the alpha pass: a fragment whose Z
+ * equals the stored Z failed the colour pass and passes the alpha pass,
+ * the one deviation (logged once; no enumerated state draws it).  A pass
+ * whose mask has no RGB blends nothing: one pass, blending off, its own Z.
+ *
  * Z: the shaders map GS Z to depth = 1 - z / 2^24 (gs_z_to_depth), so a
  * larger GS Z is a smaller depth: GS GEQUAL is RHI_CMP_LEQUAL, GREATER is
  * LESS.
@@ -355,7 +379,84 @@ RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
     return k;
 }
 
-static RhiBlendState blendState(RdBlendPath bp, uint8_t mask)
+/* Package AN-E: the entries that call gs_dual_out (their *_nodual twins
+ * output c0 alone). */
+bool rd__FsHasNoDual(uint8_t fs)
+{
+    switch (fs) {
+    case RD_FS_SPRITE:
+    case RD_FS_SPRITE_TEXA:
+    case RD_FS_SPRITE_AA1:
+    case RD_FS_SPRITE_STQ:
+    case RD_FS_FONT:
+    case RD_FS_FOG:
+    case RD_FS_VU:
+    case RD_FS_VU_TEXA:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static RdBlendPath keyBlendPath(const RdPipeKeyInt *k)
+{
+    return k->colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__BlendPath(k->gs.blend);
+}
+
+int rd__ExpandNoDual(const RdDrawPass *in, int n, RdDrawPass out[4])
+{
+    int m = 0;
+    for (int i = 0; i < n; i++) {
+        RdDrawPass p = in[i];
+        if (!g_rd.noDual || !rd__FsHasNoDual(p.key.fs)) {
+            out[m++] = p;
+            continue;
+        }
+        p.key.gs.nodual = 1;
+        const RdBlendPath bp = keyBlendPath(&p.key);
+        if (bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
+            out[m++] = p; /* no second output read: one pass, the *_nodual entry */
+            continue;
+        }
+        const uint8_t mask = p.key.gs.colorMask;
+        if ((mask & 7) == 0) {
+            /* nothing blended: the stored alpha (if A is written) and Z */
+            p.key.gs.blend = RD_BLEND_COUNT;
+            p.flags |= ICO_DF_NODUAL_ALPHA_PASS;
+            out[m++] = p;
+            continue;
+        }
+        RdDrawPass c = p;
+        c.key.gs.colorMask = mask & 7;
+        c.flags |= ICO_DF_NODUAL_FACTOR;
+        out[m++] = c;
+        if (mask & 8) {
+            RdDrawPass a = p;
+            a.key.gs.blend = RD_BLEND_COUNT;
+            a.key.gs.colorMask = 8;
+            a.flags |= ICO_DF_NODUAL_ALPHA_PASS;
+            if (a.key.gs.zwrite == RD_ZWRITE_ON) {
+                a.key.gs.zwrite = RD_ZWRITE_OFF;
+                if (a.key.gs.ztst == RD_ZTST_GREATER) {
+                    a.key.gs.ztst = RD_ZTST_GEQUAL;
+                    rd__LogOnce(RD_ONCE_NODUAL_GREATER,
+                                "blend: two-pass fallback under Z GREATER with Z write: a "
+                                "fragment at the stored Z writes its alpha");
+                }
+            }
+            out[m++] = a;
+        }
+    }
+    return m;
+}
+
+bool rd__NoDualSecond(const RdDrawPass *ex, int i)
+{
+    return i > 0 && (ex[i].flags & ICO_DF_NODUAL_ALPHA_PASS) != 0 &&
+           (ex[i - 1].flags & ICO_DF_NODUAL_FACTOR) != 0;
+}
+
+static RhiBlendState blendState(RdBlendPath bp, uint8_t mask, uint8_t nodual)
 {
     RhiBlendState b;
     memset(&b, 0, sizeof(b));
@@ -367,8 +468,9 @@ static RhiBlendState blendState(RdBlendPath bp, uint8_t mask)
     b.enable = bp != RD_BP_NONE;
     switch (bp) {
     case RD_BP_LERP:
-        b.srcColor = RHI_BF_SRC1_COLOR;
-        b.dstColor = RHI_BF_ONE_MINUS_SRC1_COLOR;
+        /* package AN-E: the colour pass's c0.a is the factor */
+        b.srcColor = nodual ? RHI_BF_SRC_ALPHA : RHI_BF_SRC1_COLOR;
+        b.dstColor = nodual ? RHI_BF_ONE_MINUS_SRC_ALPHA : RHI_BF_ONE_MINUS_SRC1_COLOR;
         break;
     case RD_BP_PREMUL_ADD:
         b.srcColor = RHI_BF_ONE;
@@ -381,7 +483,7 @@ static RhiBlendState blendState(RdBlendPath bp, uint8_t mask)
         break;
     case RD_BP_DST_FIX:
         b.srcColor = RHI_BF_ONE;
-        b.dstColor = RHI_BF_SRC1_COLOR;
+        b.dstColor = nodual ? RHI_BF_SRC_ALPHA : RHI_BF_SRC1_COLOR;
         break;
     case RD_BP_AD_ADD:
         b.srcColor = RHI_BF_DST_ALPHA;
@@ -491,7 +593,8 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
     RhiPipelineDesc d;
     memset(&d, 0, sizeof(d));
     d.vertex = g_rd.vs[k->vs];
-    d.fragment = g_rd.fs[k->fs];
+    /* package AN-E: the *_nodual twin (c0 alone) */
+    d.fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
     d.layouts = layouts;
     d.layoutCount = 3;
     if (k->vs == RD_VS_SPRITE_UI || k->vs == RD_VS_SPRITE_WORLD) {
@@ -512,8 +615,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
     }
     d.topology = k->gs.prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
     d.cullNone = true;
-    RdBlendPath bp = k->colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__BlendPath(k->gs.blend);
-    d.blend[0] = blendState(bp, k->gs.colorMask);
+    d.blend[0] = blendState(keyBlendPath(k), k->gs.colorMask, k->gs.nodual);
     if (k->depthFmt != RHI_FMT_UNKNOWN) {
         d.depthStencil.depthTest = true;
         d.depthStencil.depthWrite = k->gs.zwrite == RD_ZWRITE_ON;
@@ -545,6 +647,22 @@ static uint32_t keyHash(const RdPipeKeyInt *k)
 
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
 {
+    /* package AN-E: without dual-source blending a gs_dual_out entry draws
+     * as its *_nodual twin; the planned passes come through rd__ExpandNoDual,
+     * the single keys (the shadow count's volumes) are turned here */
+    RdPipeKeyInt nk;
+    if (g_rd.noDual && !k->gs.nodual && rd__FsHasNoDual(k->fs)) {
+        nk = *k;
+        nk.gs.nodual = 1;
+        const RdBlendPath bp = keyBlendPath(k);
+        if (bp == RD_BP_LERP || bp == RD_BP_DST_FIX) {
+            rd__LogOnce(RD_ONCE_NODUAL_KEY,
+                        "blend: a blended key (program %u blend %u fs %u) was not split into "
+                        "the two-pass fallback; its alpha is the factor",
+                        k->gs.program, k->gs.blend, k->fs);
+        }
+        k = &nk;
+    }
     uint32_t at = keyHash(k) % RD_PIPE_HASH;
     for (; s_hash[at] != 0; at = (at + 1) % RD_PIPE_HASH) {
         if (rd__PipeKeyEqual(&s_cache[s_hash[at] - 1].key, k)) {
@@ -679,7 +797,7 @@ static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipe
     return n + 1;
 }
 
-uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
+static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
 {
     uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
     n = rd__EnumerateReachableShadow(out, max, n);  /* wave 4 (R4b) */
@@ -687,6 +805,30 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
     n = rd__EnumerateReachableWater(out, max, n);   /* wave 5 (R5b) */
     n = rd__EnumerateReachableCrt(out, max, n);     /* package CRT */
     return rd__EnumerateReachableBlur(out, max, n); /* wave 5 (R5a) */
+}
+
+/* Package AN-E: in the two-pass fallback every key is what rd__ExpandNoDual
+ * makes of it (the families above plan with dual-source blending), so the
+ * set precreated is the set the draws reach (rd_mesh.c's VU and rd_water.c's
+ * families among them). */
+uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
+{
+    if (!g_rd.noDual) {
+        return enumerateAll(out, max);
+    }
+    static RdPipeKeyInt raw[RD_PIPELINE_CACHE_MAX];
+    const uint32_t nr = enumerateAll(raw, RD_PIPELINE_CACHE_MAX);
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < nr && i < RD_PIPELINE_CACHE_MAX; i++) {
+        RdDrawPass in, ex[4];
+        memset(&in, 0, sizeof(in));
+        in.key = raw[i];
+        const int m = rd__ExpandNoDual(&in, 1, ex);
+        for (int j = 0; j < m; j++) {
+            n = addKey(out, max, n, &ex[j].key);
+        }
+    }
+    return n;
 }
 
 /* package CRT (rd_crt.c): the glow passes into RGBA16F, the composite on

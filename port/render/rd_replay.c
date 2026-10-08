@@ -136,8 +136,8 @@ bool rd__GpuInit(void *sdlWindow)
     rd__PerfReset(); /* P1: the new device's counters start at 0 */
     s_rhiUp = true;
     const RhiLimits *lim = rhi_Limits();
-    if (!lim->dualSourceBlend || !lim->stencilWrap) {
-        rd__Log("device lacks dual-source blend or stencil wrap");
+    if (!lim->stencilWrap) {
+        rd__Log("device lacks stencil wrap");
         return false;
     }
     const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
@@ -173,6 +173,18 @@ bool rd__GpuInit(void *sdlWindow)
         ok = ok && g_rd.vs[i].id;
     }
     for (int i = 0; i < RD_FS_COUNT; i++) {
+        /* package AN-E: without dual-source blending the gs_dual_out
+         * entries are not created (their second output needs the feature);
+         * their *_nodual twins always are (rd_SetNoDual) */
+        if (rd__FsHasNoDual((uint8_t)i)) {
+            char name[64];
+            snprintf(name, sizeof(name), "%s_nodual", s_fsNames[i]);
+            g_rd.fsNoDual[i] = makeShader(name);
+            ok = ok && g_rd.fsNoDual[i].id;
+            if (!lim->dualSourceBlend) {
+                continue;
+            }
+        }
         g_rd.fs[i] = makeShader(s_fsNames[i]);
         ok = ok && g_rd.fs[i].id;
     }
@@ -242,6 +254,9 @@ void rd__GpuShutdown(void)
     for (int i = 0; i < RD_FS_COUNT; i++) {
         if (g_rd.fs[i].id) {
             rhi_DestroyShader(g_rd.fs[i]);
+        }
+        if (g_rd.fsNoDual[i].id) {
+            rhi_DestroyShader(g_rd.fsNoDual[i]); /* package AN-E */
         }
     }
     RhiBindGroupLayout ls[5] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex, g_rd.layoutInt,
@@ -597,6 +612,12 @@ typedef struct ScreenRun {
     RdPipeKeyInt key;
     RdUniform frame;
     IcoDrawCB cb;
+    /* package AN-E: the two-pass fallback's alpha pass, drawn after the
+     * run's colour pass (passes 2), zeroed when there is none */
+    uint8_t passes;
+    RhiPipeline pipe2;
+    RdPipeKeyInt key2;
+    IcoDrawCB cb2;
     RhiBindGroup g2;
     uint32_t tex, sampler, dateTex;
     RhiRect sc;
@@ -1765,7 +1786,15 @@ static void flushScreenRun(Replay *r)
         rd__BindUniform(s_cl, 1, rd__DrawGroup(&q->cb));
         rhi_CmdSetBindGroup(s_cl, 2, q->g2);
         rhi_CmdDraw(s_cl, q->count, 0, 1);
-        g_rdPerf.screenDraws++;
+        if (q->passes == 2 && q->pipe2.id) {
+            /* package AN-E: the alpha pass over the same vertices */
+            rhi_CmdSetPipeline(s_cl, q->pipe2);
+            rd__BindUniform(s_cl, 0, q->frame);
+            rd__BindUniform(s_cl, 1, rd__DrawGroup(&q->cb2));
+            rhi_CmdSetBindGroup(s_cl, 2, q->g2);
+            rhi_CmdDraw(s_cl, q->count, 0, 1);
+        }
+        g_rdPerf.screenDraws++; /* one draw of the run, however many passes */
     }
     q->count = 0;
 }
@@ -1781,6 +1810,7 @@ static bool joinsRun(const Replay *r, const ScreenRun *n)
     return q->count && s_screenMerge && r->passOpen && q->passSerial == r->passSerial &&
            q->writeSerial == r->writeSerial && q->prim == n->prim && q->stride == n->stride &&
            q->pipe.id == n->pipe.id && memcmp(&q->key, &n->key, sizeof(q->key)) == 0 &&
+           q->passes == n->passes && memcmp(&q->key2, &n->key2, sizeof(q->key2)) == 0 &&
            q->frame.group.id == n->frame.group.id && q->frame.offset == n->frame.offset &&
            memcmp(&q->cb, &n->cb, sizeof(q->cb)) == 0 && q->g2.id == n->g2.id && q->tex == n->tex &&
            q->sampler == n->sampler && q->dateTex == n->dateTex &&
@@ -1790,6 +1820,36 @@ static bool joinsRun(const Replay *r, const ScreenRun *n)
 }
 
 static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
+
+/* Package AN-E: one planned screen pass as the device draws it
+ * (rd__ExpandNoDual: itself, or the two-pass fallback's colour and alpha
+ * passes), count vertices from first of the bound vertex buffer; count 0
+ * binds nothing.  False when no pipeline of it could be made. */
+static bool drawExpanded(Replay *r, const RdDrawPass *pass, const DrawSetup *ds, RhiBindGroup g2,
+                         uint32_t count, uint32_t first)
+{
+    RdDrawPass ex[4];
+    const int ne = rd__ExpandNoDual(pass, 1, ex);
+    bool any = false;
+    for (int j = 0; j < ne; j++) {
+        RhiPipeline p = rd__GetPipeline(&ex[j].key);
+        if (!p.id) {
+            continue;
+        }
+        any = true;
+        if (count == 0) {
+            continue;
+        }
+        IcoDrawCB cb;
+        fillDrawCB(r, &ex[j], ds, &cb);
+        rhi_CmdSetPipeline(s_cl, p);
+        rd__BindUniform(s_cl, 0, r->frameBG);
+        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
+        rhi_CmdSetBindGroup(s_cl, 2, g2);
+        rhi_CmdDraw(s_cl, count, first, 1);
+    }
+    return any;
+}
 
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
@@ -1900,22 +1960,34 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
      * the second pass of one command would follow the first pass of the
      * next) */
     if (np == 1 && (!aa1 || nFirst == nDraw || nFirst == 0)) {
-        RhiPipeline p = rd__GetPipeline(&dp[0].key);
-        nr.key = dp[0].key;
-        if (p.id && aa1 && nFirst == 0) {
+        RdDrawPass one = dp[0];
+        if (aa1 && nFirst == 0) {
             /* AA1 lines: all fringe, drawn with Z write off */
-            nr.key.gs.zwrite = RD_ZWRITE_OFF;
-            p = rd__GetPipeline(&nr.key);
+            one.key.gs.zwrite = RD_ZWRITE_OFF;
         }
+        /* package AN-E: the two-pass fallback's colour and alpha passes */
+        RdDrawPass ex[4];
+        const int ne = rd__ExpandNoDual(&one, 1, ex);
+        RhiPipeline p = rd__GetPipeline(&ex[0].key);
         if (!p.id) {
             return;
         }
+        nr.key = ex[0].key;
         nr.count = nDraw;
         nr.stride = stride;
         nr.prim = c->b[0];
         nr.pipe = p;
         nr.frame = r->frameBG;
-        fillDrawCB(r, &dp[0], &ds, &nr.cb);
+        fillDrawCB(r, &ex[0], &ds, &nr.cb);
+        nr.passes = (uint8_t)ne;
+        memset(&nr.key2, 0, sizeof(nr.key2));
+        memset(&nr.cb2, 0, sizeof(nr.cb2));
+        nr.pipe2 = (RhiPipeline){0};
+        if (ne == 2) {
+            nr.key2 = ex[1].key;
+            nr.pipe2 = rd__GetPipeline(&ex[1].key);
+            fillDrawCB(r, &ex[1], &ds, &nr.cb2);
+        }
         nr.tex = ds.tex.id;
         nr.dateTex = ds.dateTex.id;
         if (!joinsRun(r, &nr)) {
@@ -1957,37 +2029,22 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     rhi_CmdSetScissor(s_cl, &nr.sc);
     rhi_CmdSetVertexBuffer(s_cl, 0, g_rd.ring[s_slot], drawOff);
     for (int i = 0; i < np; i++) {
-        RhiPipeline p = rd__GetPipeline(&dp[i].key);
-        if (!p.id) {
+        if (!drawExpanded(r, &dp[i], &ds, nr.g2, (!aa1 || nFirst == nDraw) ? nDraw : nFirst, 0)) {
             continue;
         }
-        IcoDrawCB cb;
-        fillDrawCB(r, &dp[i], &ds, &cb);
-        rhi_CmdSetPipeline(s_cl, p);
-        rd__BindUniform(s_cl, 0, r->frameBG);
-        rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
-        rhi_CmdSetBindGroup(s_cl, 2, nr.g2);
         if (!aa1 || nFirst == nDraw) {
-            rhi_CmdDraw(s_cl, nDraw, 0, 1);
             g_rdPerf.screenCmds++;
             g_rdPerf.screenDraws++;
         } else {
             /* package AA1: the triangles with the pass's Z write, then
              * their fringes without (edge pixels write no Z) */
             if (nFirst) {
-                rhi_CmdDraw(s_cl, nFirst, 0, 1);
                 g_rdPerf.screenCmds++;
                 g_rdPerf.screenDraws++;
             }
-            RdPipeKeyInt ek = dp[i].key;
-            ek.gs.zwrite = RD_ZWRITE_OFF;
-            RhiPipeline pe = rd__GetPipeline(&ek);
-            if (pe.id) {
-                rhi_CmdSetPipeline(s_cl, pe);
-                rd__BindUniform(s_cl, 0, r->frameBG);
-                rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
-                rhi_CmdSetBindGroup(s_cl, 2, nr.g2);
-                rhi_CmdDraw(s_cl, nDraw - nFirst, nFirst, 1);
+            RdDrawPass ep = dp[i];
+            ep.key.gs.zwrite = RD_ZWRITE_OFF;
+            if (drawExpanded(r, &ep, &ds, nr.g2, nDraw - nFirst, nFirst)) {
                 g_rdPerf.screenCmds++;
                 g_rdPerf.screenDraws++;
             }
@@ -2043,8 +2100,10 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t 
     rd__OverlayState(&st, blend);
     st.tex = tex; /* R8: the planner picks font_ps for a coverage texture */
     st.ds.texEnabled = (uint8_t)textured;
-    RdDrawPass dp[2];
-    const int np = rd__PlanScreenDraw(&st, topo, RD_SPACE_UI, fmt, RHI_FMT_UNKNOWN, dp);
+    RdDrawPass pl[2], dp[4];
+    /* package AN-E: the two-pass fallback's passes */
+    const int np = rd__ExpandNoDual(
+        pl, rd__PlanScreenDraw(&st, topo, RD_SPACE_UI, fmt, RHI_FMT_UNKNOWN, pl), dp);
     const RhiBindGroup g2 = rd__TexGroup(
         t, rd__Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP));
     rhi_CmdSetVertexBuffer(cl, 0, g_rd.ring[s_slot], vOff);
@@ -2531,16 +2590,19 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         return;
     }
     const uint64_t ua = rhi_Limits()->uniformAlign;
-    RdDrawPass dp[2];
-    const int np =
-        rd__PlanScreenDraw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format, ds->depthFmt, dp);
+    RdDrawPass pl[2], dp[4];
+    const int npl =
+        rd__PlanScreenDraw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format, ds->depthFmt, pl);
+    for (int i = 0; i < npl; i++) {
+        pl[i].key.gs.program = prog;
+        pl[i].key.vs = vs;
+        /* package TEXA: the planner's sprite_texa_ps becomes vu_texa_ps */
+        pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
+    }
+    const int np = rd__ExpandNoDual(pl, npl, dp); /* package AN-E */
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
     for (int i = 0; i < np; i++) {
-        dp[i].key.gs.program = prog;
-        dp[i].key.vs = vs;
-        /* package TEXA: the planner's sprite_texa_ps becomes vu_texa_ps */
-        dp[i].key.fs = dp[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         RhiPipeline p = rd__GetPipeline(&dp[i].key);
         if (!p.id) {
             continue;
@@ -2565,7 +2627,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }
-        g_rd.stats.draws++;
+        if (!rd__NoDualSecond(dp, i)) {
+            g_rd.stats.draws++;
+        }
     }
     r->st = saved;
 }
@@ -3135,8 +3199,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__LogOnce(RD_ONCE_FOG, "fog without a LUT, a depth source or a colour target: skipped");
         return;
     }
-    RdDrawPass dp[2];
-    const int np = rd__FogPlan(&r->st, tc->format, dp);
+    RdDrawPass pl[2], dp[4];
+    const int np = rd__ExpandNoDual(pl, rd__FogPlan(&r->st, tc->format, pl), dp); /* AN-E */
     if (np == 0) {
         return;
     }
@@ -3249,7 +3313,9 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__BindUniform(s_cl, 1, rd__DrawGroup(&cb));
         rhi_CmdSetBindGroup(s_cl, 2, g2);
         rhi_CmdDraw(s_cl, nv, 0, 1);
-        g_rd.stats.draws++;
+        if (!rd__NoDualSecond(dp, i)) {
+            g_rd.stats.draws++;
+        }
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }

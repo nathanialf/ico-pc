@@ -51,12 +51,25 @@
  *            ABE 1 and alpha 0x80 has its interior at 0x80 and a one-pixel
  *            fringe outside its top edge at 1 - d; As = the 16-bit coverage
  *            >> 9; within 1 LSB of As
+ *   nodual   (package AN-E) every RdBlend 0..11 x PABE x FBA x DATE off/on x
+ *            the alpha test (off, or GREATER 0x60 with AFAIL KEEP, FB_ONLY,
+ *            ZB_ONLY, RGB_ONLY) x colour mask F, 7, 8 x Z ALWAYS, GEQUAL x Z
+ *            write, two overlapping gouraud quads in one command (alpha
+ *            0..0xFF, Z across the background's) over a noise background
+ *            (RGB, alpha both sides of the MSB) in SCENE with its depth, and
+ *            the Z-less half in DISPLAY: replayed with the two-pass blend
+ *            fallback off and on (rd_SetNoDual), SCENE, its depth and
+ *            DISPLAY equal byte for byte; the pipeline cache is cleared
+ *            after it (its states are outside the reachable set)
  *   pipes    every pipeline created is in the enumerated reachable set,
  *            whose screen and post part has fewer than 250 keys (with package
  *            TEXA's sprite_texa_ps twins) and holds the colour
  *            mask 7 keys of the 2D draws under the dark volume's FBMSK and the
  *            STQ keys of the lightning (all of it,
  *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
+ *            (package AN-E: the set with the two-pass fallback too, also
+ *            under RD_PIPELINE_REACHABLE_MAX; a created key is in the set of
+ *            its mode)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
@@ -1321,15 +1334,230 @@ static void testPresent(void)
     }
 }
 
+/* ------------------------------------------------- nodual (package AN-E) */
+
+#define ND_CELL 8
+#define ND_AFAILS 5 /* ATE off, then AFAIL KEEP, FB_ONLY, ZB_ONLY, RGB_ONLY under ATE GREATER */
+#define ND_SCENE_BG_Z 0x40000000u
+
+static const uint32_t kNdMasks[3] = {0x00000000u, 0xFF000000u, 0x00FFFFFFu}; /* F, 7, 8 */
+
+/* the TEST word of combination (date, afail, ztst) */
+static uint64_t ndTest(int date, int af, int zge)
+{
+    uint64_t t = (1u << 16) | ((uint64_t)(zge ? RD_ZTST_GEQUAL : RD_ZTST_ALWAYS) << 17);
+    if (af > 0) {
+        t |= 1u | ((uint64_t)RD_ATST_GREATER << 1) | (0x60u << 4) | ((uint64_t)(af - 1) << 12);
+    }
+    if (date) {
+        t |= (1u << 14) | (1u << 15);
+    }
+    return t;
+}
+
+/* two overlapping quads in one triangle command over the cell at (x, y)
+ * (pixels) of a target gw wide, gh high: alpha 0..0xFF across them, Z
+ * across the background's */
+static void ndQuads(uint32_t gw, uint32_t gh, int x, int y, uint32_t seed)
+{
+    const int32_t ox = (2048 - (int32_t)gw / 2) * 16, oy = (2048 - (int32_t)gh / 2) * 16;
+    const int32_t x0 = ox + x * 16, y0 = oy + y * 16, x1 = x0 + ND_CELL * 16,
+                  y1 = y0 + ND_CELL * 16;
+    const int32_t xm = x0 + 3 * 16 + 8, ym = y0 + 2 * 16 + 8;
+    uint8_t c[8][4];
+    for (int i = 0; i < 8; i++) {
+        const uint32_t h = hash(seed * 8u + (uint32_t)i);
+        c[i][0] = (uint8_t)h;
+        c[i][1] = (uint8_t)(h >> 8);
+        c[i][2] = (uint8_t)(h >> 16);
+    }
+    static const uint8_t kA[8] = {0x00, 0xFF, 0x40, 0x90, 0xC0, 0x10, 0x80, 0x7F};
+    for (int i = 0; i < 8; i++) {
+        c[i][3] = kA[i];
+    }
+    const uint32_t zLo = 0x20000000u, zHi = 0x60000000u;
+    RdScreenVtx v[12] = {/* A: the whole cell, Z rising left to right */
+                         vtx(x0, y0, zLo, c[0], 0, 0), vtx(x1, y0, zHi, c[1], 0, 0),
+                         vtx(x0, y1, zLo, c[2], 0, 0), vtx(x1, y0, zHi, c[1], 0, 0),
+                         vtx(x1, y1, zHi, c[3], 0, 0), vtx(x0, y1, zLo, c[2], 0, 0),
+                         /* B: its lower right part, Z falling left to right */
+                         vtx(xm, ym, zHi, c[4], 0, 0), vtx(x1, ym, zLo, c[5], 0, 0),
+                         vtx(xm, y1, zHi, c[6], 0, 0), vtx(x1, ym, zLo, c[5], 0, 0),
+                         vtx(x1, y1, ND_SCENE_BG_Z, c[7], 0, 0), vtx(xm, y1, zHi, c[6], 0, 0)};
+    rd_ScreenPrims(RD_PRIM_TRIANGLES, v, 12, RD_SPACE_WORLD, 1, 0);
+}
+
+/* one frame: blends b0 .. b0 + nb - 1 over every other combination */
+static void ndFrame(RdTex noise, int b0, int nb)
+{
+    static const uint8_t clr[4] = {0, 0, 0, 0};
+    rd_BeginFrame();
+    rd_SelectList(5);
+    for (int t = 0; t < 2; t++) {
+        const RdTargetId id = t ? RD_TARGET_DISPLAY : RD_TARGET_SCENE;
+        const uint32_t gw = 512, gh = t ? 256 : 512;
+        const int32_t ox = (2048 - (int32_t)gw / 2) * 16, oy = (2048 - (int32_t)gh / 2) * 16;
+        rd_ClearTarget(rd_Target(id), clr, !t, 0);
+        rd_SetTarget(rd_Target(id), t ? (RdTarget){0} : rd_Target(id), gw, gh, 1);
+        /* the background: noise texels 1:1, Z write at ND_SCENE_BG_Z */
+        rd_ColorMask(0);
+        rd_TestGs(RD_TEST_Z_ALWAYS);
+        rd_ZWrite(1);
+        rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+        rd_PABE(0);
+        rd_FBA(0);
+        rd_Gouraud(1);
+        rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        rd_Texture(noise, RD_TEXFN_DECAL, RD_TCC_RGBA);
+        {
+            static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
+            RdScreenVtx v[2] = {vtx(ox, oy, ND_SCENE_BG_Z, white, 0.0f, 0.0f),
+                                vtx(ox + (int32_t)gw * 16, oy + (int32_t)gh * 16, ND_SCENE_BG_Z,
+                                    white, (float)gw * 16.0f, (float)gh * 16.0f)};
+            rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        }
+        rd_TextureOff();
+        uint32_t cell = 0;
+        for (int b = b0; b < b0 + nb; b++) {
+            for (int pabe = 0; pabe < 2; pabe++) {
+                for (int fba = 0; fba < 2; fba++) {
+                    for (int date = 0; date < 2; date++) {
+                        for (int af = 0; af < ND_AFAILS; af++) {
+                            for (int m = 0; m < 3; m++) {
+                                for (int zz = 0; zz < (t ? 1 : 4); zz++, cell++) {
+                                    const int x = (int)(cell % 64) * ND_CELL;
+                                    const int y = (int)(cell / 64) * ND_CELL;
+                                    rd_Blend((RdBlend)b, (uint8_t)(b == 3 ? 0x50 : 0xA0), 1);
+                                    rd_PABE(pabe);
+                                    rd_FBA(fba);
+                                    rd_ColorMask(kNdMasks[m]);
+                                    rd_TestGs(ndTest(date, af, zz & 1));
+                                    rd_ZWrite((zz >> 1) & 1);
+                                    ndQuads(gw, gh, x, y, cell * 31u + (uint32_t)b);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        rd_ColorMask(0);
+    }
+    rd_EndFrame(0);
+}
+
+static void testNoDual(void)
+{
+    enum { FRAMES = 3, BLENDS_PER = RD_BLEND_COUNT / FRAMES };
+
+    static uint8_t noiseTex[64 * 64 * 4];
+    for (uint32_t i = 0; i < 64 * 64; i++) {
+        const uint32_t h = hash(i + 0x5EEDu);
+        memcpy(&noiseTex[i * 4], &h, 4);
+    }
+    RdTex noise = rd_CreateTexture(64, 64, noiseTex, RD_TEXA_80_80, "nodual noise");
+    static uint8_t scene[2][FRAMES][512 * 512 * 4], disp[2][FRAMES][512 * 256 * 4];
+    static float depth[2][FRAMES][512 * 512];
+    const bool was = rd_NoDual();
+    uint32_t noDualKeys = 0;
+    for (int mode = 0; mode < 2; mode++) {
+        CHECK(rd_SetNoDual(mode != 0), "rd_SetNoDual(%d) refused", mode);
+        for (int f = 0; f < FRAMES; f++) {
+            ndFrame(noise, f * BLENDS_PER, BLENDS_PER);
+            uint32_t w = 0, h = 0, dw = 0, dh = 0;
+            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene[mode][f], sizeof(scene[0][0]),
+                                 &w, &h) &&
+                      w == 512 && h == 512,
+                  "nodual: SCENE readback");
+            CHECK(rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), depth[mode][f],
+                                      sizeof(depth[0][0]), &dw, &dh) &&
+                      dw == 512 && dh == 512,
+                  "nodual: SCENE depth readback");
+            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), disp[mode][f], sizeof(disp[0][0]),
+                                 &w, &h) &&
+                      w == 512 && h == 256,
+                  "nodual: DISPLAY readback");
+        }
+        if (mode) {
+            for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
+                noDualKeys += rd__PipelineKeyAt(i)->gs.nodual;
+            }
+        }
+    }
+    rd_SetNoDual(was);
+    CHECK(noDualKeys > 0, "nodual: no *_nodual pipeline was created");
+    int bad = 0, badZ = 0, badD = 0, shown = 0;
+    for (int f = 0; f < FRAMES; f++) {
+        for (uint32_t i = 0; i < 512 * 512; i++) {
+            const uint32_t cell = (i / 512 / ND_CELL) * 64 + (i % 512) / ND_CELL;
+            const uint32_t perBlend = 2 * 2 * 2 * ND_AFAILS * 3 * 4;
+            const int mc = memcmp(&scene[0][f][i * 4], &scene[1][f][i * 4], 4) != 0;
+            const int mz = memcmp(&depth[0][f][i], &depth[1][f][i], sizeof(float)) != 0;
+            bad += mc;
+            badZ += mz;
+            if ((mc || mz) && shown < 12) {
+                const uint32_t k = cell % perBlend;
+                const uint8_t *a = &scene[0][f][i * 4], *b = &scene[1][f][i * 4];
+                printf("FAIL nodual SCENE (%u,%u) blend %u pabe %u fba %u date %u afail %u mask "
+                       "%u zge %u zw %u: %u %u %u %u (Z %g) one pass, %u %u %u %u (Z %g) two\n",
+                       i % 512, i / 512, f * BLENDS_PER + cell / perBlend, k / 240, (k / 120) % 2,
+                       (k / 60) % 2, (k / 12) % 5, (k / 4) % 3, k % 2, (k / 2) % 2, a[0], a[1],
+                       a[2], a[3], (double)depth[0][f][i], b[0], b[1], b[2], b[3],
+                       (double)depth[1][f][i]);
+                shown++;
+            }
+        }
+        for (uint32_t i = 0; i < 512 * 256; i++) {
+            const int md = memcmp(&disp[0][f][i * 4], &disp[1][f][i * 4], 4) != 0;
+            badD += md;
+            if (md && shown < 12) {
+                const uint32_t cell = (i / 512 / ND_CELL) * 64 + (i % 512) / ND_CELL;
+                const uint32_t perBlend = 2 * 2 * 2 * ND_AFAILS * 3, k = cell % perBlend;
+                printf("FAIL nodual DISPLAY (%u,%u) blend %u pabe %u fba %u date %u afail %u "
+                       "mask %u\n",
+                       i % 512, i / 512, f * BLENDS_PER + cell / perBlend, k / 60, (k / 30) % 2,
+                       (k / 15) % 2, (k / 3) % 5, k % 3);
+                shown++;
+            }
+        }
+    }
+    printf("  nodual: %d cells x 2 modes, %u two-pass pipelines; %d SCENE, %d depth, %d DISPLAY "
+           "pixels differ\n",
+           RD_BLEND_COUNT * 2 * 2 * 2 * ND_AFAILS * 3 * 4, noDualKeys, bad, badZ, badD);
+    CHECK(bad == 0 && badZ == 0 && badD == 0,
+          "nodual: the two-pass fallback differs from the dual-source draw (%d, %d, %d pixels)",
+          bad, badZ, badD);
+    rd_DestroyTexture(noise);
+    /* its states are outside the reachable set: the pipes cell checks the
+     * other cells' pipelines */
+    rhi_WaitIdle();
+    rd__PipelineCacheClear();
+}
+
 /* -------------------------------------------------------------- pipelines */
 
 static void testPipelines(void)
 {
-    static RdPipeKeyInt keys[512];
+    static RdPipeKeyInt keys[512], keysNd[512];
+    /* package AN-E: both sets, with dual-source blending (keys) and with the
+     * two-pass fallback (keysNd); the created keys are in the set of the
+     * mode the test runs in */
+    const bool was = rd_NoDual();
+    rd_SetNoDual(false);
     const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
     const uint32_t n = rd__EnumerateReachable(keys, 512);
+    rd_SetNoDual(true);
+    const uint32_t nNd = rd__EnumerateReachable(keysNd, 512);
+    rd_SetNoDual(was);
+    const RdPipeKeyInt *mine = was ? keysNd : keys;
+    const uint32_t nMine = was ? nNd : n;
     const uint32_t c = rd__PipelineCount();
-    printf("  pipelines: %u created, %u reachable (%u screen and post)\n", c, n, ns);
+    printf("  pipelines: %u created, %u reachable (%u screen and post), %u with the two-pass "
+           "fallback\n",
+           c, n, ns, nNd);
+    CHECK(nNd < RD_PIPELINE_REACHABLE_MAX,
+          "reachable pipelines with the two-pass fallback %u >= %d", nNd,
+          RD_PIPELINE_REACHABLE_MAX);
     CHECK(ns < 250, "reachable screen and post pipelines %u >= 250", ns);
     /* the keys a frame with the dark volume's FBMSK (colour mask 7 until the
      * next FRAME write) and the lightning's perspective STQ would otherwise
@@ -1387,14 +1615,14 @@ static void testPipelines(void)
     for (uint32_t i = 0; i < c; i++) {
         const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
         int found = 0;
-        for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(k, &keys[j]);
+        for (uint32_t j = 0; j < nMine && j < 512; j++) {
+            found |= rd__PipeKeyEqual(k, &mine[j]);
         }
         CHECK(found,
-              "created pipeline %u (prog %u blend %u vs %u fmt %u/%u z %u/%u mask %x) is "
+              "created pipeline %u (prog %u blend %u vs %u fmt %u/%u z %u/%u mask %x nodual %u) is "
               "not in the enumerated set",
               i, k->gs.program, k->gs.blend, k->vs, k->colorFmt, k->depthFmt, k->gs.ztst,
-              k->gs.zwrite, k->gs.colorMask);
+              k->gs.zwrite, k->gs.colorMask, k->gs.nodual);
     }
 }
 
@@ -1411,7 +1639,9 @@ int main(int argc, char **argv)
         printf("SKIP rd_pixel_test: no usable Vulkan device\n");
         return 77;
     }
-    printf("rd_pixel_test: adapter %s\n", rhi_AdapterName());
+    printf("rd_pixel_test: adapter %s%s\n", rhi_AdapterName(),
+           rd_NoDual() ? " (two-pass blend fallback)" : "");
+    testNoDual(); /* package AN-E: first, it clears the pipeline cache */
     testOrder();
     testRailing(0);
     testRailing(1); /* as the game's materials draw it */

@@ -791,7 +791,10 @@ static void checkPipelines(void)
               k->gs.program, k->vs, k->fs, k->gs.blend);
     }
     printf("  pipelines: %u created (%d fog), %u reachable\n", rd__PipelineCount(), fog, n);
-    CHECK(fog == 1, "one fog pipeline");
+    /* package AN-E: the fog's LERP takes a colour and an alpha pass in the
+     * two-pass blend fallback (rd_fog_nodual) */
+    const int wantFog = rd_NoDual() ? 2 : 1;
+    CHECK(fog == wantFog, "%d fog pipeline(s), %d expected", fog, wantFog);
 }
 
 int main(void)

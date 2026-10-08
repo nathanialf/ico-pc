@@ -78,7 +78,12 @@ enum {
     ICO_DF_TEXA_MIN_SAMPLED = 16384, /* minified pixels: the bound (Enhanced, mipmapped) sampler */
     /* the pipeline blends Cs + Cd * c1 (src ONE, dst SRC1: Cd*FIX + Cs): a
      * PABE pixel left unblended outputs c1 = 0 */
-    ICO_DF_C1_DST = 32768
+    ICO_DF_C1_DST = 32768,
+    /* package AN-E, the two-pass blend without dual-source blending (the
+     * *_nodual entries; rd_pipeline.c rd__ExpandNoDual): the colour pass
+     * writes the blend factor into c0.a, the alpha pass the stored alpha */
+    ICO_DF_NODUAL_FACTOR = 65536,
+    ICO_DF_NODUAL_ALPHA_PASS = 131072
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */

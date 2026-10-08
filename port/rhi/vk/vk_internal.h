@@ -177,6 +177,7 @@ typedef struct VkrState {
     PFN_vkCmdBeginRendering cmdBeginRendering;
     PFN_vkCmdEndRendering cmdEndRendering;
     bool anisotropy;
+    bool dualSrcBlend; /* package AN-E: the feature enabled (RhiLimits.dualSourceBlend) */
     /* texture packs: textureCompressionBC enabled and the four BC formats
      * sampleable and copyable (RhiLimits.bcTextures) */
     bool bc;

@@ -305,8 +305,8 @@ typedef enum RhiBlendFactor {
     RHI_BF_ONE_MINUS_CONSTANT,
     /* dual-source: the fragment shader's second output carries the GS blend
      * factor (As/128 or FIX/128), so alpha above 1.0 and the 0x80 scale are
-     * exact.  Required on all backends (Vulkan dualSrcBlend, D3D12 always,
-     * Metal always). */
+     * exact.  Only with RhiLimits.dualSourceBlend (Vulkan dualSrcBlend,
+     * optional since package AN-E; D3D12 always, Metal always). */
     RHI_BF_SRC1_COLOR,
     RHI_BF_ONE_MINUS_SRC1_COLOR,
     RHI_BF_SRC1_ALPHA,
@@ -431,7 +431,7 @@ typedef struct RhiRect {
 typedef struct RhiLimits {
     uint32_t uniformAlign; /* 256 on D3D12, usually 64..256 on Vulkan: rd_core aligns to this */
     uint32_t maxTextureSize;
-    bool dualSourceBlend; /* must be true; rd_Init fails otherwise */
+    bool dualSourceBlend; /* package AN-E: optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
     bool depthReadback;   /* frame dumps include depth when true */
     /* Buffer<->texture copies: the row pitch and the buffer offset must be

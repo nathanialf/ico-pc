@@ -679,6 +679,23 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
  * rd__PlanScreenDraw is aa1 0. */
 int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
                          RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2]);
+/* Package AN-E, the two-pass blend for a device without dual-source
+ * blending (g_rd.noDual): the planned passes in[0..n) as the device draws
+ * them, in order, into out (at most 2 per pass: give out[4] for a plan of
+ * 2).  With dual-source blending, or for a pass whose fragment entry has no
+ * second output, a pass is copied as it is (a gs_dual_out entry gets its
+ * *_nodual twin: key.gs.nodual).  A LERP or Cd*FIX + Cs pass becomes a
+ * colour pass (ICO_DF_NODUAL_FACTOR, the factor in c0.a, mask RGB) and, when
+ * its mask has A, an alpha pass after it (ICO_DF_NODUAL_ALPHA_PASS, no
+ * blending, mask A, no Z write, the Z test admitting the Z the colour pass
+ * wrote).  rd_pipeline.c says why the result is the one-pass result.
+ * Returns the number of passes written. */
+int rd__ExpandNoDual(const RdDrawPass *in, int n, RdDrawPass out[4]);
+/* Whether ex[i] of an expansion is the alpha pass after a colour pass (the
+ * draw counters count the pair once). */
+bool rd__NoDualSecond(const RdDrawPass *ex, int i);
+/* Whether fragment entry fs has a *_nodual twin (it calls gs_dual_out). */
+bool rd__FsHasNoDual(uint8_t fs);
 /* Package RSMALL: turns a planned pass of a command whose prims carry Q != 1
  * into the STQ shaders (IcoSpriteStqVertex); 0 when the pass keeps its own. */
 int rd__StqPass(RdDrawPass *dp);
@@ -1053,6 +1070,11 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
     RhiBindGroupLayout layoutVu; /* wave 3: t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
+    /* package AN-E: the *_nodual twins of the gs_dual_out entries (0 for the
+     * others), and whether the two-pass blend is in force (no dualSrcBlend,
+     * ICO_RD_NO_DUAL or rd_SetNoDual) */
+    RhiShader fsNoDual[RD_FS_COUNT];
+    bool noDual;
     RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;
@@ -1146,7 +1168,10 @@ enum {
     /* package AA1 */
     RD_ONCE_AA1_WRAP, /* PRIM.AA1 under COLCLAMP 0: the wrap path draws without coverage */
     /* package P8 */
-    RD_ONCE_PABE /* PABE on a premultiplied or Ad blend: As < 0x80 pixels blend anyway */
+    RD_ONCE_PABE, /* PABE on a premultiplied or Ad blend: As < 0x80 pixels blend anyway */
+    /* package AN-E */
+    RD_ONCE_NODUAL_GREATER, /* the two-pass blend's alpha pass under Z GREATER with Z write */
+    RD_ONCE_NODUAL_KEY      /* a LERP or Cd*FIX + Cs key reached rd__GetPipeline unexpanded */
 };
 
 void rd__Log(const char *fmt, ...);

@@ -281,6 +281,15 @@ if(_ico_have_vk)
         if(_ico_vk_test_env)
             set_tests_properties(rhi_vk PROPERTIES ENVIRONMENT "${_ico_vk_test_env}")
         endif()
+        # package AN-E: the same cells on a device made without dualSrcBlend
+        # (the hook clears the feature at device creation); its own directory
+        # for the pipeline cache file, which rhi_vk writes beside itself
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodual")
+        add_test(NAME rhi_vk_nodual COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodual")
+        set(_ico_vk_nodual_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_DUAL=1")
+        set_tests_properties(rhi_vk_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_nodual_env}")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)

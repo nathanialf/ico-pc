@@ -62,6 +62,16 @@ ico_add_shader(crt_blur_ps crt.hlsl crt_blur_ps fragment)
 ico_add_shader(crt_ps crt.hlsl crt_ps fragment)
 # tests only: the probe output of vu1_test (VU_F_PROBE)
 ico_add_shader(vu_probe_ps vu_prelit.hlsl vu_probe_ps fragment)
+# package AN-E: the entries that call gs_dual_out, without the second output,
+# for a device without dual-source blending (rd_pipeline.c rd__ExpandNoDual)
+foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
+    ico_add_shader(${_e} sprite.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+endforeach()
+ico_add_shader(blit_fix_ps blit.hlsl blit_fix_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 
 ico_shaders_library(ico_shaders)
 

@@ -7,6 +7,8 @@
  *
  *   0  dual-source blend, SRC1_COLOR factors
  *   1  dual-source blend, SRC1_ALPHA factor with an RGB-only colour mask
+ *      (0 and 1 keep the clear colour on a device without dual-source
+ *      blending, package AN-E: rhi_vk_nodual fakes one)
  *   2  stencil DECR_WRAP 0 -> 255, then EQUAL 255
  *   3  stencil REPLACE 255, INCR_WRAP -> 0, then EQUAL 0
  *   4  reversed-Z: depth cleared to 0, GEQUAL with writes
@@ -361,9 +363,20 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     }
     rhi_test_Log("%s: adapter %s\n", s_label, rhi_AdapterName());
     const RhiLimits *lim = rhi_Limits();
-    if (!lim->dualSourceBlend || !lim->stencilWrap || lim->uniformAlign == 0) {
+    if (!lim->stencilWrap || lim->uniformAlign == 0) {
         rhi_test_Log("FAIL limits\n");
         failures++;
+    }
+    /* package AN-E: dual-source blending is optional; without it cells 0
+     * and 1 are not drawn and keep the clear colour */
+    const bool dual = lim->dualSourceBlend;
+    const char *fake = getenv("ICO_VK_FAKE_NO_DUAL"); /* rhi_vk_nodual */
+    if (dual && fake && fake[0] && fake[0] != '0') {
+        rhi_test_Log("FAIL ICO_VK_FAKE_NO_DUAL set but dualSourceBlend reported\n");
+        failures++;
+    }
+    if (!dual) {
+        rhi_test_Log("%s: no dual-source blending: cells 0 and 1 skipped\n", s_label);
     }
     const uint32_t ua = lim->uniformAlign;
 
@@ -386,7 +399,10 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     (dxil ? (const void *)dxil_##n : (const void *)spv_##n),                                       \
         (dxil ? sizeof(dxil_##n) : sizeof(spv_##n))
     c.vs = makeShader(RHI_STAGE_VERTEX, BLOB(vs_main), "vs_main");
-    c.psDual = makeShader(RHI_STAGE_FRAGMENT, BLOB(ps_dual), "ps_dual");
+    c.psDual = (RhiShader){0};
+    if (dual) {
+        c.psDual = makeShader(RHI_STAGE_FRAGMENT, BLOB(ps_dual), "ps_dual");
+    }
     c.psColor = makeShader(RHI_STAGE_FRAGMENT, BLOB(ps_color), "ps_color");
     c.psTex = makeShader(RHI_STAGE_FRAGMENT, BLOB(ps_tex), "ps_tex");
     c.psUint = makeShader(RHI_STAGE_FRAGMENT, BLOB(ps_uint), "ps_uint");
@@ -429,8 +445,11 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     RhiDepthStencilState dsGequal = {
         .depthTest = true, .depthWrite = true, .depthCompare = RHI_CMP_GEQUAL};
 
-    RhiPipeline pDualColor = makePipeline(&c, c.psDual, CF, DF, &dualColor, &dsNone, "dualColor");
-    RhiPipeline pDualAlpha = makePipeline(&c, c.psDual, CF, DF, &dualAlpha, &dsNone, "dualAlpha");
+    RhiPipeline pDualColor = {0}, pDualAlpha = {0};
+    if (dual) {
+        pDualColor = makePipeline(&c, c.psDual, CF, DF, &dualColor, &dsNone, "dualColor");
+        pDualAlpha = makePipeline(&c, c.psDual, CF, DF, &dualAlpha, &dsNone, "dualAlpha");
+    }
     RhiPipeline pDecr = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr");
     RhiPipeline pReplace = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep");
     RhiPipeline pIncr = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr");
@@ -630,12 +649,14 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         rhi_CmdBeginRenderPass(cl, &rp);
         rhi_CmdSetVertexBuffer(cl, 0, vbuf, 0);
 
-        rhi_CmdSetPipeline(cl, pDualColor);
-        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[0], 1);
-        rhi_CmdDraw(cl, 6, Q_DUAL_COLOR * 6, 1);
-        rhi_CmdSetPipeline(cl, pDualAlpha);
-        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[1], 1);
-        rhi_CmdDraw(cl, 6, Q_DUAL_ALPHA * 6, 1);
+        if (dual) {
+            rhi_CmdSetPipeline(cl, pDualColor);
+            rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[0], 1);
+            rhi_CmdDraw(cl, 6, Q_DUAL_COLOR * 6, 1);
+            rhi_CmdSetPipeline(cl, pDualAlpha);
+            rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[1], 1);
+            rhi_CmdDraw(cl, 6, Q_DUAL_ALPHA * 6, 1);
+        }
 
         rhi_CmdSetPipeline(cl, pDecr);
         rhi_CmdSetStencilRef(cl, 0);
@@ -701,8 +722,13 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
             failures++;
             break;
         }
-        expectCell(img, pitch, 0, 255, 64, 0, 64, frame);
-        expectCell(img, pitch, 1, 96, 96, 96, 64, frame);
+        if (dual) {
+            expectCell(img, pitch, 0, 255, 64, 0, 64, frame);
+            expectCell(img, pitch, 1, 96, 96, 96, 64, frame);
+        } else {
+            expectCell(img, pitch, 0, 64, 64, 64, 64, frame);
+            expectCell(img, pitch, 1, 64, 64, 64, 64, frame);
+        }
         expectCell(img, pitch, 2, 0, 255, 0, 255, frame);
         expectCell(img, pitch, 3, 0, 0, 255, 255, frame);
         expectCell(img, pitch, 4, 255, 255, 0, 255, frame);

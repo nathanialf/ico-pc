@@ -299,12 +299,11 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
         *why = "no swapchain extension";
         return -1;
     }
+    /* package AN-E: dualSrcBlend is optional (rd's two-pass blend fallback
+     * covers its absence, RhiLimits.dualSourceBlend); a device with it is
+     * preferred over an otherwise equal one */
     VkPhysicalDeviceFeatures f;
     vkGetPhysicalDeviceFeatures(pd, &f);
-    if (!f.dualSrcBlend) {
-        *why = "no dualSrcBlend";
-        return -1;
-    }
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -374,6 +373,9 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
     }
     if (core13) {
         score += 10;
+    }
+    if (f.dualSrcBlend) {
+        score += 5;
     }
     return score;
 }
@@ -446,6 +448,15 @@ static bool vkr_CreateDevice(void)
     VkPhysicalDeviceFeatures avail;
     vkGetPhysicalDeviceFeatures(g_vkr.phys, &avail);
     g_vkr.anisotropy = avail.samplerAnisotropy == VK_TRUE;
+    /* package AN-E: ICO_VK_FAKE_NO_DUAL=1 leaves the feature off, as on a
+     * device without it (tests: rhi_vk_nodual) */
+    const char *fakeNoDual = getenv("ICO_VK_FAKE_NO_DUAL");
+    g_vkr.dualSrcBlend =
+        avail.dualSrcBlend == VK_TRUE && !(fakeNoDual && fakeNoDual[0] && fakeNoDual[0] != '0');
+    if (!g_vkr.dualSrcBlend) {
+        VKR_LOG("no dualSrcBlend%s: blending takes the two-pass fallback",
+                avail.dualSrcBlend == VK_TRUE ? " (ICO_VK_FAKE_NO_DUAL)" : "");
+    }
     /* texture packs: BC1/2/3/7 come with textureCompressionBC (every
      * desktop GPU, the Deck, lavapipe); the formats' sampled and copy
      * features are checked too, so bcTextures promises what it says */
@@ -473,7 +484,7 @@ static bool vkr_CreateDevice(void)
         .pNext = &f12,
         .features =
             {
-                .dualSrcBlend = VK_TRUE,
+                .dualSrcBlend = g_vkr.dualSrcBlend ? VK_TRUE : VK_FALSE,
                 .samplerAnisotropy = g_vkr.anisotropy ? VK_TRUE : VK_FALSE,
                 .textureCompressionBC = g_vkr.bc ? VK_TRUE : VK_FALSE,
             },
@@ -553,8 +564,8 @@ static void vkr_FillLimits(void)
     }
     o->uniformAlign = align < 16u ? 16u : align;
     o->maxTextureSize = l->maxImageDimension2D;
-    o->dualSourceBlend = true; /* device selection required it */
-    o->stencilWrap = true;     /* core Vulkan */
+    o->dualSourceBlend = g_vkr.dualSrcBlend; /* package AN-E: optional */
+    o->stencilWrap = true;                   /* core Vulkan */
     o->depthReadback = true;
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */

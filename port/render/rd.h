@@ -401,7 +401,8 @@ typedef enum RdFilterUpgrade {
 
 /* gsb_InitGSSystem / gsb_Init: creates the named targets for the given GS
  * scene size (512x512 PAL, 512x448 NTSC) and loads the shaders.  Returns
- * false if the RHI lacks dual-source blend or stencil wrap. */
+ * false if the RHI lacks stencil wrap (package AN-E: without dual-source
+ * blending rd blends in two passes, rd_SetNoDual). */
 bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow);
 void rd_Shutdown(void);
 /* gsb_Init on a 50/60 Hz switch (kanbanBoot's gsResetFunc) recreates the
@@ -519,6 +520,15 @@ float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, dou
  * the next replay or present. */
 void rd_SetMirror(int on);
 bool rd_MirrorActive(void);
+
+/* Package AN-E: the two-pass blend fallback for a device without
+ * dual-source blending (rd_pipeline.c rd__ExpandNoDual).  rd_Init turns it
+ * on when the device lacks dualSrcBlend or ICO_RD_NO_DUAL=1 is set (and logs
+ * "blend: two-pass fallback (no dualSrcBlend)").  rd_SetNoDual switches it
+ * for the next draws (tests: the same frame replayed both ways); turning it
+ * off on a device without the feature is refused (false). */
+bool rd_SetNoDual(bool on);
+bool rd_NoDual(void);
 
 /* ---------------------------------- presentation overlay (package OV).  The port's own UI
  * (port/ui's popups) drawn on the output itself, after the presenter's box

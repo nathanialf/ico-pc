@@ -9,6 +9,9 @@
 #   ico_add_shader(<name> <file.hlsl> <entry> <stage>)
 #       stage: vertex | fragment (vs | ps accepted). <file> is relative to
 #       the calling directory. <name> is the lookup key in the table.
+#   ico_add_shader(<name> <file.hlsl> <entry> <stage> DEFINES <D=V>... SUFFIX <s>)
+#       the same entry compiled with the macros given (DXC -D); the table key
+#       is <name><s> (package AN-E: the *_nodual entries, ICO_NO_DUAL=1).
 #   ico_shaders_library(<target>)
 #       after the last ico_add_shader: builds the static library <target>
 #       holding shaders_gen.c, with shaders_gen.h on its public include path.
@@ -53,6 +56,12 @@ function(ico_add_shader name file entry stage)
     if(NOT ICO_SHADERS_AVAILABLE)
         return()
     endif()
+    cmake_parse_arguments(PARSE_ARGV 4 _ico_sh "" "SUFFIX" "DEFINES")
+    set(name "${name}${_ico_sh_SUFFIX}")
+    set(_ico_sh_d "")
+    foreach(_d IN LISTS _ico_sh_DEFINES)
+        list(APPEND _ico_sh_d -D "${_d}")
+    endforeach()
     string(TOLOWER "${stage}" stage_l)
     if(stage_l STREQUAL "vertex" OR stage_l STREQUAL "vs")
         set(stage_n vertex)
@@ -72,9 +81,9 @@ function(ico_add_shader name file entry stage)
             OUTPUT "${spv}" "${dxil}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${ICO_SHADER_OUT_DIR}"
             COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_SPIRV_FLAGS} ${ICO_DXC_COMMON_FLAGS}
-                    -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
+                    ${_ico_sh_d} -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
             COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_COMMON_FLAGS}
-                    -T ${profile} -E ${entry} "${src}" -Fo "${dxil}"
+                    ${_ico_sh_d} -T ${profile} -E ${entry} "${src}" -Fo "${dxil}"
             DEPENDS "${src}" ${_hlsli} "${ICO_DXC_EXE}"
             COMMENT "DXC ${name} (${entry}, ${profile}): SPIR-V and DXIL"
             VERBATIM)
@@ -86,7 +95,7 @@ function(ico_add_shader name file entry stage)
             OUTPUT "${spv}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${ICO_SHADER_OUT_DIR}"
             COMMAND "${ICO_DXC_EXE}" ${ICO_DXC_SPIRV_FLAGS} ${ICO_DXC_COMMON_FLAGS}
-                    -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
+                    ${_ico_sh_d} -T ${profile} -E ${entry} "${src}" -Fo "${spv}"
             DEPENDS "${src}" ${_hlsli} "${ICO_DXC_EXE}"
             COMMENT "DXC ${name} (${entry}, ${profile}): SPIR-V"
             VERBATIM)

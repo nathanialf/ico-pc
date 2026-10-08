@@ -23,6 +23,13 @@ static const char *const expected[] = {
     "crt_ps",
 };
 
+/* package AN-E: the gs_dual_out entries without the second output */
+static const char *const expectedNoDual[] = {
+    "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
+    "sprite_stq_ps_nodual", "blit_fix_ps_nodual",    "fog_lut_ps_nodual",
+    "font_ps_nodual",       "vu_ps_nodual",          "vu_texa_ps_nodual",
+};
+
 int main(void)
 {
     int failures = 0;
@@ -75,9 +82,16 @@ int main(void)
             failures++;
         }
     }
-    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0])) {
+    const size_t nNoDual = sizeof(expectedNoDual) / sizeof(expectedNoDual[0]);
+    for (size_t i = 0; i < nNoDual; i++) {
+        if (!ico_FindShader(expectedNoDual[i])) {
+            printf("FAIL %s: not in the table\n", expectedNoDual[i]);
+            failures++;
+        }
+    }
+    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0]) + nNoDual) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount,
-               sizeof(expected) / sizeof(expected[0]));
+               sizeof(expected) / sizeof(expected[0]) + nNoDual);
         failures++;
     }
     printf("shaders_table_test: %s\n", failures ? "FAILED" : "ok");

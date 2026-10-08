@@ -15,6 +15,14 @@
  *   pass 2  blit_ps: identity tint copy of pass 1 (exact), then tinted
  *   pass 3  blend_int_ps: three GS blends on RGBA8_UINT textures (exact)
  *
+ * --nodual (package AN-E, ctest shaders_pixel_nodual): sprite_ps_nodual,
+ * and the draws that read the second output (the lerps, Cd*FIX + Cs, the
+ * plain additive) drawn as rd_pipeline.c's two-pass fallback draws them: a
+ * colour pass (ICO_DF_NODUAL_FACTOR, SRC_ALPHA factors, mask RGB), then an
+ * alpha pass (ICO_DF_NODUAL_ALPHA_PASS, no blending, mask A); the same
+ * expectations.  It needs no dual-source blending (the ctest runs it with
+ * the feature off, ICO_VK_FAKE_NO_DUAL=1).
+ *
  * Exit 0 on success, 1 on a mismatch, 77 (skipped) without a Vulkan device. */
 #include "hlsl_shim.h"
 #include "gs_math.hlsli"
@@ -161,14 +169,16 @@ static void setTex(IcoDrawCB *cb, float w, float h)
     cb->tex[3] = 1.0f / h;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    const int nodual = argc > 1 && strcmp(argv[1], "--nodual") == 0;
     RhiDeviceDesc dd = {NULL, false, true, "shaders_pixel_test"};
     if (!rhi_Init(&dd)) {
         printf("SKIP shaders_pixel_test: no usable Vulkan device\n");
         return 77;
     }
-    printf("shaders_pixel_test: adapter %s\n", rhi_AdapterName());
+    printf("shaders_pixel_test: adapter %s%s\n", rhi_AdapterName(),
+           nodual ? " (two-pass blend, sprite_ps_nodual)" : "");
     if (rhi_Limits()->uniformAlign > 512 || 512 % rhi_Limits()->uniformAlign) {
         printf("FAIL uniformAlign %u does not divide 512\n", rhi_Limits()->uniformAlign);
         failures++;
@@ -190,7 +200,7 @@ int main(void)
     const RhiBindGroupLayout layA[3] = {l0, l1, l2a}, layB[3] = {l0, l1, l2b};
 
     RhiShader svsUi = makeShader("sprite_ui_vs"), svsWorld = makeShader("sprite_world_vs");
-    RhiShader sps = makeShader("sprite_ps");
+    RhiShader sps = makeShader(nodual ? "sprite_ps_nodual" : "sprite_ps");
     RhiShader bvs = makeShader("blit_vs"), bps = makeShader("blit_ps");
     RhiShader nvs = makeShader("blend_int_vs"), nps = makeShader("blend_int_ps");
 
@@ -206,18 +216,50 @@ int main(void)
                                RHI_BF_ONE, RHI_BF_ZERO,       RHI_BO_ADD, 0xF};
     RhiPipeline pOpaque =
         makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &kOpaque, "opaque");
-    RhiPipeline pLerp = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerp");
-    RhiPipeline pAdd = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &add, "add");
+    RhiPipeline pLerp = {0}, pAdd = {0}, pLerpWorld = {0}, pDstFix = {0};
+    if (!nodual) {
+        pLerp = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerp");
+        pAdd = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &add, "add");
+    }
     const RhiBlendState addOne = {true,       RHI_BF_ONE,  RHI_BF_ONE, RHI_BO_ADD,
                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD, 0xF};
     RhiPipeline pAddPremul =
         makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &addOne, "addPremul");
-    RhiPipeline pLerpWorld =
-        makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerpWorld");
+    if (!nodual) {
+        pLerpWorld = makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerpWorld");
+    }
     /* Cd*FIX + Cs (rd_pipeline.c RD_BP_DST_FIX) */
     const RhiBlendState dstFix = {true,       RHI_BF_ONE,  RHI_BF_SRC1_COLOR, RHI_BO_ADD,
                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,        0xF};
-    RhiPipeline pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFix, "dstFix");
+    if (!nodual) {
+        pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFix, "dstFix");
+    }
+    /* --nodual: the colour passes (the factor in c0.a, mask RGB) and the
+     * alpha pass (the stored alpha, no blending) */
+    const RhiBlendState lerpC = {true,
+                                 RHI_BF_SRC_ALPHA,
+                                 RHI_BF_ONE_MINUS_SRC_ALPHA,
+                                 RHI_BO_ADD,
+                                 RHI_BF_ONE,
+                                 RHI_BF_ZERO,
+                                 RHI_BO_ADD,
+                                 0x7};
+    const RhiBlendState addC = {true,       RHI_BF_SRC_ALPHA, RHI_BF_ONE, RHI_BO_ADD,
+                                RHI_BF_ONE, RHI_BF_ZERO,      RHI_BO_ADD, 0x7};
+    const RhiBlendState dstFixC = {true,       RHI_BF_ONE,  RHI_BF_SRC_ALPHA, RHI_BO_ADD,
+                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,       0x7};
+    const RhiBlendState alphaOnly = {.writeMask = 0x8};
+    RhiPipeline pAlpha = {0}, pAlphaWorld = {0};
+    if (nodual) {
+        pLerp = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerpC, "lerpC");
+        pAdd = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &addC, "addC");
+        pLerpWorld =
+            makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerpC, "lerpWorldC");
+        pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFixC, "dstFixC");
+        pAlpha = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &alphaOnly, "alpha");
+        pAlphaWorld =
+            makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &alphaOnly, "alphaWorld");
+    }
     RhiPipeline pBlit = makePipeline(bvs, bps, layA, 0, RHI_FMT_RGBA8_UNORM, &kOpaque, "blit");
     RhiPipeline pInt = makePipeline(nvs, nps, layB, 0, RHI_FMT_RGBA8_UINT, &kOpaque, "blendInt");
     if (failures) {
@@ -258,7 +300,7 @@ int main(void)
 
     /* ---- resources ---- */
     const uint64_t offVerts = 0, offTex = 4096, offSrc = 4608, offDst = 5120, offUbo = 8192;
-    const uint64_t ringSize = 8192 + 64 * 256;
+    const uint64_t ringSize = 8192 + 64 * 512; /* DrawCBs at 512: D_COUNT and their alpha twins */
     RhiBuffer ring = rhi_CreateBuffer(&(RhiBufferDesc){
         ringSize, RHI_BUF_VERTEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "ring"});
     uint8_t *map = rhi_MapBuffer(ring);
@@ -359,6 +401,17 @@ int main(void)
         dcb[D_INT0 + i].blend[2] = clampMode[i];
     }
 
+    /* --nodual: the colour pass of a two-pass draw writes the factor, its
+     * alpha pass (dcbA, bound from g1a) the stored alpha */
+    static const int kTwoPass[] = {D_LERP80,  D_LERP40, D_PABE,       D_ADD_PLAIN,
+                                   D_PABE_ON, D_FBA,    D_PABE_DSTFIX};
+    IcoDrawCB dcbA[D_COUNT];
+    memcpy(dcbA, dcb, sizeof(dcb));
+    for (int i = 0; nodual && i < (int)(sizeof(kTwoPass) / sizeof(kTwoPass[0])); i++) {
+        dcbA[kTwoPass[i]].mode[0] |= ICO_DF_NODUAL_ALPHA_PASS;
+        dcb[kTwoPass[i]].mode[0] |= ICO_DF_NODUAL_FACTOR;
+    }
+
     int exitCode = 0;
     for (int frame = 0; frame < 2; frame++) {
         rhi_WaitFrame();
@@ -366,16 +419,22 @@ int main(void)
         memcpy(map + offTex, texels, sizeof(texels));
         memcpy(map + offSrc, srcInt, sizeof(srcInt));
         memcpy(map + offDst, dstInt, sizeof(dstInt));
-        RhiBindGroup g1[D_COUNT];
-        for (int i = 0; i < D_COUNT; i++) {
-            memcpy(map + offUbo + (uint64_t)(i + 1) * 512, &dcb[i], sizeof(IcoDrawCB));
+        RhiBindGroup g1[D_COUNT], g1a[D_COUNT];
+        for (int i = 0; i < 2 * D_COUNT; i++) {
+            const uint64_t at = offUbo + (uint64_t)(i + 1) * 512;
+            memcpy(map + at, i < D_COUNT ? &dcb[i] : &dcbA[i - D_COUNT], sizeof(IcoDrawCB));
             RhiBinding b = {0};
             b.slot = 1;
             b.type = RHI_BIND_UNIFORM_BUFFER;
             b.buffer = ring;
-            b.offset = offUbo + (uint64_t)(i + 1) * 512;
+            b.offset = at;
             b.size = sizeof(IcoDrawCB);
-            g1[i] = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, &b, 1});
+            RhiBindGroup g = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, &b, 1});
+            if (i < D_COUNT) {
+                g1[i] = g;
+            } else {
+                g1a[i - D_COUNT] = g;
+            }
         }
         memcpy(map + offUbo, &fcb, sizeof(fcb));
         RhiBinding fb = {0};
@@ -449,28 +508,36 @@ int main(void)
         rhi_CmdSetBindGroup(cl, 0, g0);
         rhi_CmdSetBindGroup(cl, 2, g2tex);
 
+        /* pa: --nodual's alpha pass after the colour pass (0: one pass) */
+        const RhiPipeline none = {0}, pa = nodual ? pAlpha : none;
+
         struct {
             int q, d;
-            RhiPipeline p;
+            RhiPipeline p, pa;
         } draws[Q_COUNT] = {
-            {Q_UNTEX, D_UNTEX, pOpaque},
-            {Q_TEX, D_TEX, pOpaque},
-            {Q_ATEST_FAIL, D_ATEST_FAIL, pOpaque},
-            {Q_ATEST_PASS, D_ATEST_PASS, pOpaque},
-            {Q_LERP80, D_LERP80, pLerp},
-            {Q_LERP40, D_LERP40, pLerp},
-            {Q_ADD_FF, D_ADD_FF, pAddPremul},
-            {Q_PABE, D_PABE, pLerpWorld},
-            {Q_ADD_PLAIN, D_ADD_PLAIN, pAdd},
-            {Q_PABE_ON, D_PABE_ON, pLerp},
-            {Q_FBA, D_FBA, pLerp},
-            {Q_PABE_DSTFIX, D_PABE_DSTFIX, pDstFix},
+            {Q_UNTEX, D_UNTEX, pOpaque, none},
+            {Q_TEX, D_TEX, pOpaque, none},
+            {Q_ATEST_FAIL, D_ATEST_FAIL, pOpaque, none},
+            {Q_ATEST_PASS, D_ATEST_PASS, pOpaque, none},
+            {Q_LERP80, D_LERP80, pLerp, pa},
+            {Q_LERP40, D_LERP40, pLerp, pa},
+            {Q_ADD_FF, D_ADD_FF, pAddPremul, none},
+            {Q_PABE, D_PABE, pLerpWorld, nodual ? pAlphaWorld : none},
+            {Q_ADD_PLAIN, D_ADD_PLAIN, pAdd, pa},
+            {Q_PABE_ON, D_PABE_ON, pLerp, pa},
+            {Q_FBA, D_FBA, pLerp, pa},
+            {Q_PABE_DSTFIX, D_PABE_DSTFIX, pDstFix, pa},
         };
 
         for (int i = 0; i < Q_COUNT; i++) {
             rhi_CmdSetPipeline(cl, draws[i].p);
             rhi_CmdSetBindGroup(cl, 1, g1[draws[i].d]);
             rhi_CmdDraw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+            if (draws[i].pa.id) {
+                rhi_CmdSetPipeline(cl, draws[i].pa);
+                rhi_CmdSetBindGroup(cl, 1, g1a[draws[i].d]);
+                rhi_CmdDraw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+            }
         }
         rhi_CmdEndRenderPass(cl);
         RhiTextureBarrier aRead = {A, RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ};

@@ -556,4 +556,21 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
                              rd_fog rd_blur rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_perf PROPERTIES ENVIRONMENT
                                                                            "${_env}")
     endif()
+    # package AN-E: the same tests and expectations in the two-pass blend
+    # fallback (ICO_RD_NO_DUAL=1: lavapipe has dualSrcBlend, so it is forced)
+    set(_env_nodual ${_env} "ICO_RD_NO_DUAL=1")
+    set(_nd "${CMAKE_CURRENT_BINARY_DIR}/nodual") # their files apart from the one-pass runs
+    file(MAKE_DIRECTORY "${_nd}")
+    add_test(NAME rd_pixel_nodual COMMAND rd_pixel_test "${_nd}")
+    add_test(NAME rd_present_nodual COMMAND rd_present_test "${_nd}")
+    add_test(NAME rd_fog_nodual COMMAND rd_fog_test)
+    add_test(NAME rd_shadow_nodual COMMAND rd_shadow_test)
+    add_test(NAME rd_water_nodual COMMAND rd_water_test)
+    add_test(NAME rd_raw_nodual COMMAND rd_raw_test)
+    add_test(NAME rd_mirror_nodual COMMAND rd_mirror_test)
+    add_test(NAME rd_interp_nodual COMMAND rd_interp_test)
+    set_tests_properties(rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual
+                         rd_water_nodual rd_raw_nodual rd_mirror_nodual rd_interp_nodual
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
+                                    ENVIRONMENT "${_env_nodual}")
 endif()

@@ -252,8 +252,12 @@ typedef struct RdPipelineKey {
     uint8_t prim;      /* RdPrim topology (rd.h) */
     uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
                     coverage */
-    uint8_t _pad[2];
+    uint8_t nodual;    /* package AN-E: the *_nodual fragment entry and the two-pass blend
+                          state (rd_pipeline.c rd__ExpandNoDual); 0 with dual-source blending */
+    uint8_t _pad[1];
 } RdPipelineKey;
+
+_Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, nodual took a pad byte");
 
 /* 512 since package TEXA: every sprite_ps and vu_ps key has a twin with
  * sprite_texa_ps / vu_texa_ps (TEXA, the texture's format and its filter

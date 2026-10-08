@@ -97,6 +97,10 @@ float2 gs_block_uv(float2 uv)
 #define DF_DATM 256u     // TEST.DATM: with DF_DATE, pass where the MSB is 1 (else 0)
 #define DF_AA1_FULL 512u // sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha
 #define DF_C1_DST 32768u // the pipeline is Cs + Cd * c1 (dst factor SRC1): see gs_dual_out
+// Package AN-E, the two-pass blend without dual-source blending (the
+// *_nodual entries, built with ICO_NO_DUAL=1; rd_pipeline.c rd__ExpandNoDual):
+#define DF_NODUAL_FACTOR 65536u      // colour pass: c0.a is the blend factor c1 would carry
+#define DF_NODUAL_ALPHA_PASS 131072u // alpha pass: c0.a is the stored alpha (RGB unused)
 // sprite_texa_ps and vu_texa_ps only (gs_texa_texture): the sampler state
 // the four-tap filter reproduces. Other entries never read these bits.
 #define DF_TEXA_MAG_LINEAR 1024u  // TEX1.MMAG linear
@@ -258,11 +262,63 @@ bool gs_alpha_discard(uint flagsZ, uint aref, uint a)
 // (DF_C1_DST: Cd*FIX + Cs). The premultiplied forms (ONE, ONE) cannot drop
 // Cd: Cs + Cd or Cd - Cs there (rd_pipeline.c reports it; the game's PABE
 // draws are all lerps).
+//
+// Package AN-E: without dual-source blending (ICO_NO_DUAL, the *_nodual
+// entries) DualOut has c0 alone. A LERP or Cd*FIX + Cs draw becomes two
+// passes (rd_pipeline.c rd__ExpandNoDual): the colour pass (DF_NODUAL_FACTOR)
+// writes the factor c1 would carry into c0.a, blended with SRC_ALPHA /
+// ONE_MINUS_SRC_ALPHA (or ONE / SRC_ALPHA) under an RGB-only mask; the alpha
+// pass (DF_NODUAL_ALPHA_PASS) writes the stored alpha with blending off. The
+// factor's value is the same float as c1's, so the blender sees the same
+// numbers. Every other path reads c0 alone already.
+#ifdef ICO_NO_DUAL
+struct DualOut
+{
+    VK_LOC(0) float4 c0 : SV_Target0;
+};
+#else
 struct DualOut
 {
     VK_DUAL(0, 0) float4 c0 : SV_Target0;
     VK_DUAL(0, 1) float4 c1 : SV_Target1;
 };
+#endif
+
+#ifdef ICO_NO_DUAL
+DualOut gs_dual_out(uint4 col, uint flags, uint fix)
+{
+    uint f = (flags & DF_FIX_FACTOR) != 0u ? fix : col.a;
+    const bool unblended = (flags & DF_PABE) != 0u && (col.a & 0x80u) == 0u;
+    uint a = col.a;
+    if ((flags & DF_FBA) != 0u) {
+        a |= 0x80u;
+    }
+    DualOut o;
+    if ((flags & DF_NODUAL_ALPHA_PASS) != 0u) {
+        o.c0 = float4(float3(col.rgb), float(a)) * (1.0 / 255.0);
+        return o;
+    }
+    const bool factor = (flags & DF_NODUAL_FACTOR) != 0u;
+    if (unblended) {
+        const float c1 = (flags & DF_C1_DST) != 0u ? 0.0 : 1.0;
+        o.c0 = float4(float3(col.rgb), float(a)) * (1.0 / 255.0);
+        if (factor) {
+            o.c0.a = c1;
+        }
+        return o;
+    }
+    if ((flags & DF_PREMUL) != 0u) {
+        uint3 p = min((col.rgb * f) >> 7, uint3(255, 255, 255));
+        o.c0 = float4(float3(p), float(a)) * (1.0 / 255.0);
+        return o;
+    }
+    o.c0 = float4(float3(col.rgb), float(a)) * (1.0 / 255.0);
+    if (factor) {
+        o.c0.a = float(f) * (1.0 / 128.0);
+    }
+    return o;
+}
+#else
 
 DualOut gs_dual_out(uint4 col, uint flags, uint fix)
 {
@@ -289,6 +345,7 @@ DualOut gs_dual_out(uint4 col, uint flags, uint fix)
     o.c1 = float4(f, f, f, f) * (1.0 / 128.0);
     return o;
 }
+#endif
 
 // ------------------------------------------------------- vertex helpers
 

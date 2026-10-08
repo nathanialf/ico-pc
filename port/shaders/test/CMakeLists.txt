@@ -63,6 +63,11 @@ if(_ico_shaders_run_tests)
         if(_env)
             set_tests_properties(shaders_pixel PROPERTIES ENVIRONMENT "${_env}")
         endif()
+        # package AN-E: the two-pass blend on a device made without dualSrcBlend
+        add_test(NAME shaders_pixel_nodual COMMAND shaders_pixel_test --nodual)
+        set(_env_nodual ${_env} "ICO_VK_FAKE_NO_DUAL=1")
+        set_tests_properties(shaders_pixel_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_env_nodual}")
     endif()
     if(TARGET vu1_test)
         add_test(NAME vu1 COMMAND vu1_test)

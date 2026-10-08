@@ -1150,6 +1150,13 @@ bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
+    /* package AN-E: the two-pass blend without dual-source blending (a
+     * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */
+    const char *noDual = getenv("ICO_RD_NO_DUAL");
+    g_rd.noDual = !rhi_Limits()->dualSourceBlend || (noDual && noDual[0] && noDual[0] != '0');
+    if (g_rd.noDual) {
+        rd__Log("blend: two-pass fallback (no dualSrcBlend)");
+    }
     rd__ApplyDisplay(); /* wave 7 (R7a): the scales the named targets take */
     createNamedTargets();
     readDumpConfig();
@@ -1245,6 +1252,23 @@ void rd_SetMirror(int on)
 bool rd_MirrorActive(void)
 {
     return rd__MirrorOn();
+}
+
+bool rd_SetNoDual(bool on)
+{
+    if (!on && g_rd.hasDevice && !rhi_Limits()->dualSourceBlend) {
+        return false; /* the device has no dual-source blending: the fallback stays */
+    }
+    if (g_rd.noDual != on) {
+        rd__Log("blend: two-pass fallback %s", on ? "on" : "off");
+    }
+    g_rd.noDual = on;
+    return true;
+}
+
+bool rd_NoDual(void)
+{
+    return g_rd.noDual;
 }
 
 /* The per-list defaults of gsb_SetGsDefault (GsBase.c:638-688, rd.h). */
