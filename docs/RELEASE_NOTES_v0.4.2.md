@@ -6,6 +6,7 @@
 - Android: smoother play (fewer wasted frames), a Resolution setting, Auto, that lowers itself when the phone falls behind, and faster movie playback.
 - Android: the picture reaches into the notch and fills folding screens when they open.
 - Android: the stick fix starts On, so you can run in every direction with the on-screen stick.
+- Options: the CRT filter and its strength now live on the Effects page.
 
 ## Fixed
 

@@ -60,8 +60,6 @@ How the picture looks.
   half of them, which looks a little softer.
 - **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit
   up to 240 frames a second. On Android it starts at 60.
-- **CRT filter** makes the picture look like an old tube television, with
-  several styles. **CRT strength** is how strong it is.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options.
 
@@ -69,8 +67,13 @@ How the picture looks.
 
 This page is on the first Options page, under Display.
 
-The game's own picture effects. Each one is On or Off. All On is the
-picture the PS2 gives you, and that is how the game starts.
+The CRT filter and the game's own picture effects.
+
+- **CRT filter** makes the picture look like an old tube television, with
+  several styles. **CRT strength** is how strong it is.
+
+The game's own effects are each On or Off. All On is the picture the PS2
+gives you, and that is how the game starts.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
 - **Depth of field:** the blur on things far away.

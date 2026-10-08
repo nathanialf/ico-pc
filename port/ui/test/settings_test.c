@@ -642,27 +642,45 @@ static void testBuild(void)
                                    UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
                                    UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_DEVELOPER,
                                    UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_FOG,       UI_OPT_BACK};
-    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,      UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_STR_OPT_EFFECT_SOFTENING, UI_STR_OPT_EFFECT_MOTION_BLUR,
-                                 UI_STR_OPT_EFFECT_FOG,       UI_STR_BACK};
+    static const int fxOpts[] = {UI_OPT_CRT,
+                                 UI_OPT_CRT_STRENGTH,
+                                 UI_OPT_EFFECT_GLOW,
+                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING,
+                                 UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_FOG,
+                                 UI_OPT_BACK};
+    static const int fxStrs[] = {UI_STR_OPT_CRT,
+                                 UI_STR_OPT_CRT_STRENGTH,
+                                 UI_STR_OPT_EFFECT_GLOW,
+                                 UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_STR_OPT_EFFECT_SOFTENING,
+                                 UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_BACK};
     static const int mainStrs[] = {
         UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,  UI_STR_SECTION_AUDIO,
         UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,
         UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE,
         UI_STR_OPT_DUMP_TEXTURES,    UI_STR_OPT_DUMP_MODELS,  UI_STR_BACK};
-    static const int dispOpts[] = {
-        UI_OPT_PRESET, UI_OPT_RESOLUTION,   UI_OPT_ASPECT,     UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,
-        UI_OPT_FILTER, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,
-        UI_OPT_CRT,    UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
-    static const int dispStrs[] = {
-        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
-        UI_STR_OPT_FULLSCREEN,   UI_STR_OPT_VSYNC,      UI_STR_OPT_FILTERING,
-        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK, UI_STR_OPT_FULL_HEIGHT,
-        UI_STR_OPT_FRAMERATE,    UI_STR_OPT_CRT,        UI_STR_OPT_CRT_STRENGTH,
-        UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT,
+                                   UI_OPT_FRAMERATE,    UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
+                                   UI_OPT_BACK};
+    static const int dispStrs[] = {UI_STR_OPT_PRESET,
+                                   UI_STR_OPT_RESOLUTION,
+                                   UI_STR_OPT_ASPECT,
+                                   UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_VSYNC,
+                                   UI_STR_OPT_FILTERING,
+                                   UI_STR_OPT_TEXTURE_PACK,
+                                   UI_STR_OPT_MODEL_PACK,
+                                   UI_STR_OPT_FULL_HEIGHT,
+                                   UI_STR_OPT_FRAMERATE,
+                                   UI_STR_OPT_BRIGHTNESS,
+                                   UI_STR_OPT_VIDEO_MODE,
+                                   UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -691,7 +709,7 @@ static void testBuild(void)
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 12), "main page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 6), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 8), "effects rows");
     {
         /* v0.4.2: Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
@@ -701,7 +719,7 @@ static void testBuild(void)
                                          UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 5), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 15),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 10), "controls rows");
@@ -776,7 +794,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 15), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
@@ -3355,12 +3373,9 @@ static void checkPageFits(UiSettingsPage page, const char *what)
 {
     int labels[16];
     const int n = ui_SettingsPageRows(page, labels, NULL, NULL, 16);
-    int prev = -1, last = -1, shown = 0;
-    for (int i = 0; i < n; i++) {
-        shown += !lt_ext_Prop(labels[i])->defaultMask;
-    }
-    /* v0.4.1: the title's fourteen Display rows (Model pack) 12 lines apart */
-    const int gap = page == UI_PAGE_DISPLAY && shown > 13 ? 12 : 13;
+    int prev = -1, last = -1;
+    /* the CRT rows moved to Effects: no page needs less than 13 lines */
+    const int gap = 13;
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_Prop(labels[i]);
         if (r->defaultMask) {
@@ -3407,6 +3422,15 @@ static void testGameOptions(void)
         checkPageFits(UI_PAGE_DISPLAY, title ? "Display (title)" : "Display (pause)");
         press(0x10);
         CHECK(settle(mainL, 60), "Display: back");
+        openPage(mainL, 1, UI_PAGE_EFFECTS);
+        CHECK(rowShown(UI_PAGE_EFFECTS, UI_OPT_CRT) &&
+                  rowShown(UI_PAGE_EFFECTS, UI_OPT_CRT_STRENGTH) &&
+                  !rowShown(UI_PAGE_DISPLAY, UI_OPT_CRT) &&
+                  ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_CRT_STRENGTH) < 0,
+              "title %d: the CRT rows are on Effects, not Display", title);
+        checkPageFits(UI_PAGE_EFFECTS, title ? "Effects (title)" : "Effects (pause)");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Effects: back");
         const int ctlL = openPage(mainL, 3, UI_PAGE_CONTROLS);
         CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&

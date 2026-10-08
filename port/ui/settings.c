@@ -1546,27 +1546,25 @@ static void buildGalleryBar(void)
     ui_HintBuild(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
 }
 
-/* A page's first row and pitch for n rows shown.  Display: twelve rows
-   (package CRT: the CRT filter and its strength; TXT2: no Menu text row)
-   14 field lines apart from 36, thirteen (S1: Brightness, from the pause
-   menu) 13 apart from 34, so Back still ends inside the 226 lines (v0.4.0:
-   with Texture pack, thirteen on both entries: Video mode is the title's
-   and Brightness the pause menu's).  Main: the nine of the title on a 17
+/* A page's first row and pitch for n rows shown.  Display: at most
+   twelve rows shown (TXT2: no Menu text row; the CRT filter and its
+   strength are on the Effects page), 14 field lines apart from 36, so
+   Back ends inside the 226 lines (Video mode and Model pack are the
+   title's, Brightness the pause menu's).  Main: the nine of the title on a 17
    line pitch so Back stays above the notes, the eight of the pause menu on
    the original 19, ten (v0.4.0: Dump textures in developer mode) 15; with
    the Effects link (issue 11) one more each: the ten of the title 15, the
    nine 17, eleven (developer mode) 14: Back at 180, the box to 220; with
-   Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  Display,
-   v0.4.1: Model pack is the title's too, so the title shows fourteen rows,
-   12 apart from 34: Back at 190, the box to 226.  v0.4.2: the pause menu
+   Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  v0.4.2: the pause menu
    shows Extras too (Characters), so its main page has the title's counts:
    ten 15, twelve (developer mode) 13.  Characters: twelve rows 13 apart
    from 40, Back at 183, its box to 219. */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
-        *y0 = n > 12 ? 34 : 36;
-        return n > 13 ? 12 : n > 12 ? 13 : 14;
+        (void)n;
+        *y0 = 36;
+        return 14;
     }
     *y0 = 40;
     if (page == UI_PAGE_CHARACTERS) {
@@ -2081,12 +2079,22 @@ static void build(void)
                                     -1,
                                     -1,
                                     -1};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_FOG,       UI_OPT_BACK};
-    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,      UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_STR_OPT_EFFECT_SOFTENING, UI_STR_OPT_EFFECT_MOTION_BLUR,
-                                 UI_STR_OPT_EFFECT_FOG,       UI_STR_BACK};
+    static const int fxOpts[] = {UI_OPT_CRT,
+                                 UI_OPT_CRT_STRENGTH,
+                                 UI_OPT_EFFECT_GLOW,
+                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING,
+                                 UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_FOG,
+                                 UI_OPT_BACK};
+    static const int fxStrs[] = {UI_STR_OPT_CRT,
+                                 UI_STR_OPT_CRT_STRENGTH,
+                                 UI_STR_OPT_EFFECT_GLOW,
+                                 UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_STR_OPT_EFFECT_SOFTENING,
+                                 UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_BACK};
     /* v0.4.2: Characters after Credits (from both entries; the other three
        from the title only) */
     static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
@@ -2125,16 +2133,24 @@ static void build(void)
     /* R7d: every Display row always shown, Frame rate included (S1:
        Brightness from the pause menu) */
     /* v0.4.0: Texture pack after Texture filter */
-    static const int dispOpts[] = {
-        UI_OPT_PRESET, UI_OPT_RESOLUTION,   UI_OPT_ASPECT,     UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,
-        UI_OPT_FILTER, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,
-        UI_OPT_CRT,    UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
-    static const int dispStrs[] = {
-        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
-        UI_STR_OPT_FULLSCREEN,   UI_STR_OPT_VSYNC,      UI_STR_OPT_FILTERING,
-        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK, UI_STR_OPT_FULL_HEIGHT,
-        UI_STR_OPT_FRAMERATE,    UI_STR_OPT_CRT,        UI_STR_OPT_CRT_STRENGTH,
-        UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,      UI_OPT_FILTER,
+                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT,
+                                   UI_OPT_FRAMERATE,    UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,
+                                   UI_OPT_BACK};
+    static const int dispStrs[] = {UI_STR_OPT_PRESET,
+                                   UI_STR_OPT_RESOLUTION,
+                                   UI_STR_OPT_ASPECT,
+                                   UI_STR_OPT_FULLSCREEN,
+                                   UI_STR_OPT_VSYNC,
+                                   UI_STR_OPT_FILTERING,
+                                   UI_STR_OPT_TEXTURE_PACK,
+                                   UI_STR_OPT_MODEL_PACK,
+                                   UI_STR_OPT_FULL_HEIGHT,
+                                   UI_STR_OPT_FRAMERATE,
+                                   UI_STR_OPT_BRIGHTNESS,
+                                   UI_STR_OPT_VIDEO_MODE,
+                                   UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
