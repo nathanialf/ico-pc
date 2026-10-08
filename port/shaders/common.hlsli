@@ -350,17 +350,24 @@ DualOut gs_dual_out(uint4 col, uint flags, uint fix)
 // ------------------------------------------------------- vertex helpers
 
 // A 12.4 GS window coordinate (as two u16 in a uint2) to clip space in the
-// given space (SPACE_WORLD or SPACE_UI).
+// given space (SPACE_WORLD or SPACE_UI).  precise (here and in gs_depth,
+// vu_common.hlsli vu_ndc and vu_homogeneous_position): no fused
+// multiply-add, so every pipeline that draws a primitive gets the same
+// position and depth bits (the two-pass blend of a device without
+// dual-source blending draws it twice, the second pass GEQUAL against the
+// depth the first wrote: rd_pipeline.c).
 float2 gs_xy_to_ndc(uint2 xy, int space)
 {
-    float2 px = float2(xy) * (1.0 / 16.0) - g_origin.xy + g_origin.zw;
-    float2 ndc = float2(px.x * g_target.z * 2.0 - 1.0, 1.0 - px.y * g_target.w * 2.0);
-    return ndc * g_space[space].xy + g_space[space].zw;
+    precise float2 px = float2(xy) * (1.0 / 16.0) - g_origin.xy + g_origin.zw;
+    precise float2 ndc = float2(px.x * g_target.z * 2.0 - 1.0, 1.0 - px.y * g_target.w * 2.0);
+    precise float2 r = ndc * g_space[space].xy + g_space[space].zw;
+    return r;
 }
 
 float gs_depth(uint z)
 {
-    return gs_z_to_depth(z, g_z.x);
+    precise float d = gs_z_to_depth(z, g_z.x);
+    return d;
 }
 
 // Fullscreen triangle from SV_VertexID, no vertex buffer: ndc covers the

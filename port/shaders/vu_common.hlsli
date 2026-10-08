@@ -215,11 +215,13 @@ struct VuVSOut
 
 // GS pixels (XYOFFSET-relative window coordinates / 16) to clip space in
 // WORLD space; gs_xy_to_ndc for signed and wider-than-16-bit values.
+// precise: common.hlsli gs_xy_to_ndc.
 float2 vu_ndc(float2 px)
 {
-    float2 q = px - g_origin.xy + g_origin.zw;
-    float2 ndc = float2(q.x * g_target.z * 2.0 - 1.0, 1.0 - q.y * g_target.w * 2.0);
-    return ndc * g_space[SPACE_WORLD].xy + g_space[SPACE_WORLD].zw;
+    precise float2 q = px - g_origin.xy + g_origin.zw;
+    precise float2 ndc = float2(q.x * g_target.z * 2.0 - 1.0, 1.0 - q.y * g_target.w * 2.0);
+    precise float2 r = ndc * g_space[SPACE_WORLD].xy + g_space[SPACE_WORLD].zw;
+    return r;
 }
 
 // The vertex as the GS gets it: X, Y and Z as integers, w = 1, no
@@ -240,9 +242,10 @@ float4 vu_homogeneous_position(float4 h)
     float2 o = g_origin.xy - g_origin.zw;
     float2 s = g_space[SPACE_WORLD].xy;
     float2 t = g_space[SPACE_WORLD].zw;
-    float x = ((h.x - o.x * h.w) * g_target.z * 2.0 - h.w) * s.x + t.x * h.w;
-    float y = (h.w - (h.y - o.y * h.w) * g_target.w * 2.0) * s.y + t.y * h.w;
-    float z = 16.0 * h.z * g_z.x; // gs_z_to_depth's z * scale (package QUEEN)
+    // precise: common.hlsli gs_xy_to_ndc
+    precise float x = ((h.x - o.x * h.w) * g_target.z * 2.0 - h.w) * s.x + t.x * h.w;
+    precise float y = (h.w - (h.y - o.y * h.w) * g_target.w * 2.0) * s.y + t.y * h.w;
+    precise float z = 16.0 * h.z * g_z.x; // gs_z_to_depth's z * scale (package QUEEN)
     return float4(x, y, z, h.w);
 }
 
