@@ -132,6 +132,11 @@ int ico_photo_active(void)
     return 0;
 }
 
+int ico_photo_left(void)
+{
+    return 0;
+}
+
 StageSetting GlobalStageSetting;
 PadState pad[16];
 int systemStatus[12];

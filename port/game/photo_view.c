@@ -58,6 +58,7 @@ static void leave(void)
     }
     v.saved = 0;
     ico_photo_set_game(NULL);
+    ico_photo_set_left(1);
     /* the picture jumps back to the game camera: no blend into it */
     ico_video_camera_cut();
     if (!same) {
@@ -67,6 +68,7 @@ static void leave(void)
 
 void ico_photo_view_tick(void)
 {
+    ico_photo_set_left(0);
     const int on = ico_photo_active() && systemStatus[5] != 0;
     if (v.saved && (!on || stage_no != v.stage)) {
         leave();

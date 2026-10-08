@@ -222,6 +222,19 @@ int ico_photo_active(void)
     return s.st.active;
 }
 
+/* photo_view.c's leave tick (photo_mode.h ico_photo_left) */
+static int s_left;
+
+int ico_photo_left(void)
+{
+    return s_left;
+}
+
+void ico_photo_set_left(int left)
+{
+    s_left = left != 0;
+}
+
 int ico_photo_hud(void)
 {
     return s.st.active && s.st.hud;

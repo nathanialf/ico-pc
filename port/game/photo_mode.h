@@ -135,6 +135,13 @@ typedef struct IcoPhotoState {
 void ico_photo_enter(void);
 void ico_photo_exit(void);
 int ico_photo_active(void);
+/* 1 for the Main tick that left photo mode (port/game/photo_view.c sets it
+   on leave and clears it at the next tick): the game draws from its own
+   camera again, and the aura's feedback area (staticBlur.c), which the
+   pause does not refresh, takes that picture once instead of keeping the
+   photo camera's */
+int ico_photo_left(void);
+void ico_photo_set_left(int left);
 /* One Main tick (1 / ico_photo_tick_hz s) of pad input; returns 1 when
    the pad asks to leave (Triangle, Circle, Start pressed), else 0.  Does
    nothing (0) while inactive. */
