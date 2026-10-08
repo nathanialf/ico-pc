@@ -88,6 +88,11 @@ void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *tit
 /* Places the items at the text size; gaps between a line's items squeeze
    when it is wider than room.  Returns the widest line's width. */
 float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out);
+/* ui__PhotoHudLayout at *size, the size made smaller until the widest line
+   fits room (the words' widths and the squeezed gaps do not scale exactly
+   with the size, so one proportional step can leave a few units over).
+   Returns the widest line's width; *size is the size used. */
+float ui__PhotoHudFit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out);
 #endif
 
 #ifdef __cplusplus

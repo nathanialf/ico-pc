@@ -381,6 +381,17 @@ float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, 
     }
     return widest;
 }
+
+float ui__PhotoHudFit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out)
+{
+    float w = ui__PhotoHudLayout(items, n, *size, room, out);
+    for (int i = 0; i < 8 && w > room; i++) {
+        /* after the first step a little under the ratio, so it converges */
+        *size *= room / w * (i > 0 ? 0.99f : 1.0f);
+        w = ui__PhotoHudLayout(items, n, *size, room, out);
+    }
+    return w;
+}
 #endif
 
 void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
@@ -413,12 +424,8 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     /* the text smaller when the widest line (a long translation) would
        leave the screen */
     float size = HUD_SIZE;
-    float w = ui__PhotoHudLayout(set.item, set.n, size, HUD_ROOM, at);
-    if (w > HUD_ROOM) {
-        size *= HUD_ROOM / w;
-        w = ui__PhotoHudLayout(set.item, set.n, size, HUD_ROOM, at);
-        w = w > HUD_ROOM ? HUD_ROOM : w;
-    }
+    float w = ui__PhotoHudFit(set.item, set.n, &size, HUD_ROOM, at);
+    w = w > HUD_ROOM ? HUD_ROOM : w;
     const float top = HUD_BOTTOM - (float)UI_HUD_LINES * HUD_PITCH;
     static const uint8_t panel[4] = {6, 6, 9, 0x50};
     ui_DrawRect(HUD_X - 8.0f, top - 6.0f, HUD_X + w + 8.0f, HUD_BOTTOM + 4.0f, panel);

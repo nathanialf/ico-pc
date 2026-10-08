@@ -4080,11 +4080,7 @@ static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *s
     ui__PhotoHudBuild(set, freeCam, keyboard, "Photo mode: Free camera, speed Normal",
                       "Field of view 60");
     float size = 17.0f;
-    float w = ui__PhotoHudLayout(set->item, set->n, size, UI_PHOTO_HUD_ROOM, at);
-    if (w > UI_PHOTO_HUD_ROOM) {
-        size *= UI_PHOTO_HUD_ROOM / w;
-        w = ui__PhotoHudLayout(set->item, set->n, size, UI_PHOTO_HUD_ROOM, at);
-    }
+    float w = ui__PhotoHudFit(set->item, set->n, &size, UI_PHOTO_HUD_ROOM, at);
     CHECK(w <= UI_PHOTO_HUD_ROOM + 0.5f, "%s: the widest line is %.1f of %.1f at size %.1f", what,
           (double)w, (double)UI_PHOTO_HUD_ROOM, (double)size);
     int lines[UI_HUD_LINES] = {0};
