@@ -359,17 +359,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Espada mágica (espada de la Reina)",
     [UI_STR_MV_COUCH] = "Banco de piedra",
     [UI_STR_PHOTO_MODE] = "Modo foto",
-    [UI_STR_PHOTO_HUD_MOVE] =
-        "Stick izquierdo: orbitar    Stick derecho: acercar y desplazar    arriba abajo: zoom",
-    [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: girar    L2 R2: zoom    L3: cámara libre o en órbita    R3: velocidad    Select: restablecer",
-    [UI_STR_PHOTO_HUD_KEYS] =
-        "Equis: guardar una imagen    Cuadrado: ocultar este panel (se recuerda)    Triángulo: volver",
     [UI_STR_PHOTO_FOV] = "Campo de visión %d°",
     [UI_STR_PHOTO_SAVED] = "Imagen guardada",
     [UI_STR_PHOTO_FAILED] = "Imagen no guardada",
-    [UI_STR_PHOTO_HUD_MOVE_FREE] =
-        "Stick izquierdo: moverse    Stick derecho: mirar    arriba abajo: subir y bajar",
     [UI_STR_PHOTO_CAM_FREE] = "Cámara libre",
     [UI_STR_PHOTO_CAM_ORBIT] = "Cámara en órbita",
     [UI_STR_PHOTO_SPEED] = "velocidad %s",
@@ -414,4 +406,17 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STATS_ENEMIES] = "Enemigos derrotados en este viaje",
     [UI_STR_STATS_ASSISTS] = "Ayudas",
     [UI_STR_STATS_AREA] = "Lugar",
+    [UI_STR_PHOTO_ACT_MOVE] = "mover",
+    [UI_STR_PHOTO_ACT_LOOK] = "mirar",
+    [UI_STR_PHOTO_ACT_RISE] = "subir y bajar",
+    [UI_STR_PHOTO_ACT_CIRCLE] = "orbitar",
+    [UI_STR_PHOTO_ACT_NEARFAR] = "acercar, alejar y desplazar",
+    [UI_STR_PHOTO_ACT_ZOOM] = "zoom",
+    [UI_STR_PHOTO_ACT_ROLL] = "girar",
+    [UI_STR_PHOTO_ACT_SWITCH] = "cámara libre o en órbita",
+    [UI_STR_PHOTO_ACT_SPEED] = "velocidad",
+    [UI_STR_PHOTO_ACT_RESET] = "restablecer",
+    [UI_STR_PHOTO_ACT_SAVE] = "guardar una imagen",
+    [UI_STR_PHOTO_ACT_HIDE] = "ocultar este panel (se recuerda)",
+    [UI_STR_PHOTO_ACT_BACK] = "volver",
 };

@@ -359,17 +359,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Spada magica (spada della Regina)",
     [UI_STR_MV_COUCH] = "Panca di pietra",
     [UI_STR_PHOTO_MODE] = "Modalità foto",
-    [UI_STR_PHOTO_HUD_MOVE] =
-        "Levetta sinistra: orbita    Levetta destra: avvicina e sposta    su giù: zoom",
-    [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: rotazione    L2 R2: zoom    L3: telecamera libera o in orbita    R3: velocità    Select: ripristina",
-    [UI_STR_PHOTO_HUD_KEYS] =
-        "Croce: salva un'immagine    Quadrato: nascondi questo pannello (memorizzato)    Triangolo: indietro",
     [UI_STR_PHOTO_FOV] = "Campo visivo %d°",
     [UI_STR_PHOTO_SAVED] = "Immagine salvata",
     [UI_STR_PHOTO_FAILED] = "Immagine non salvata",
-    [UI_STR_PHOTO_HUD_MOVE_FREE] =
-        "Levetta sinistra: muoviti    Levetta destra: guarda    su giù: sali e scendi",
     [UI_STR_PHOTO_CAM_FREE] = "Telecamera libera",
     [UI_STR_PHOTO_CAM_ORBIT] = "Telecamera in orbita",
     [UI_STR_PHOTO_SPEED] = "velocità %s",
@@ -414,4 +406,17 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STATS_ENEMIES] = "Nemici sconfitti in questo viaggio",
     [UI_STR_STATS_ASSISTS] = "Aiuti",
     [UI_STR_STATS_AREA] = "Luogo",
+    [UI_STR_PHOTO_ACT_MOVE] = "muovi",
+    [UI_STR_PHOTO_ACT_LOOK] = "guarda",
+    [UI_STR_PHOTO_ACT_RISE] = "sali e scendi",
+    [UI_STR_PHOTO_ACT_CIRCLE] = "orbita",
+    [UI_STR_PHOTO_ACT_NEARFAR] = "avvicina, allontana e sposta",
+    [UI_STR_PHOTO_ACT_ZOOM] = "zoom",
+    [UI_STR_PHOTO_ACT_ROLL] = "rotazione",
+    [UI_STR_PHOTO_ACT_SWITCH] = "telecamera libera o in orbita",
+    [UI_STR_PHOTO_ACT_SPEED] = "velocità",
+    [UI_STR_PHOTO_ACT_RESET] = "ripristina",
+    [UI_STR_PHOTO_ACT_SAVE] = "salva un’immagine",
+    [UI_STR_PHOTO_ACT_HIDE] = "nascondi questo pannello (memorizzato)",
+    [UI_STR_PHOTO_ACT_BACK] = "indietro",
 };

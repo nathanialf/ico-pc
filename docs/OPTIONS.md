@@ -75,9 +75,8 @@ picture the PS2 gives you, and that is how the game starts.
 - **Motion blur:** the trail that moving things leave behind.
 - **Fog:** the haze that hides the distance.
 
-The Preset on the Display page does not change these. Photo mode freezes
-the picture as it was when you opened it, so a change you make here shows
-the next time you open photo mode.
+The Preset on the Display page does not change these. Changes you make
+here show in photo mode at once.
 
 ## Audio
 

@@ -15,6 +15,7 @@
 #include <math.h>
 
 #include "font.h"
+#include "glyphs.h"
 #include "rd.h"
 #endif
 
@@ -27,194 +28,72 @@ void ui_TouchSetSource(int (*fn)(struct IcoTouchOverlay *out))
 
 #ifdef ICO_RD
 
-#define SEGMENTS 32
-#define BATCH 960 /* vertices, a multiple of 3 */
-
+/* the layout-to-output mapping, for the labels (the shapes take theirs
+   through glyphs.h) */
 static struct {
-    RdScreenVtx v[BATCH];
-    uint32_t n;
-    float kx, ky;     /* layout pixels to output pixels */
-    float maxX, maxY; /* the output, 12.4 */
-    float opacity;
-    float cosT[SEGMENTS + 1], sinT[SEGMENTS + 1];
-    int tables;
+    float kx, ky;
 } s_d;
 
-static void flush(void)
+static void disc(float cx, float cy, float r, const uint8_t c[4])
 {
-    if (s_d.n > 0) {
-        rd_OverlayPrims(RD_PRIM_TRIANGLES, s_d.v, s_d.n, (RdTex){0}, RD_BLEND_LERP_AS);
-        s_d.n = 0;
-    }
+    ui_GlyphDisc(cx, cy, r, c);
 }
 
-static int32_t fix16(float p, float max16)
+static void ring(float cx, float cy, float r, float th, const uint8_t c[4])
 {
-    float f = p * 16.0f;
-
-    f = f < 0.0f ? 0.0f : f > max16 ? max16 : f;
-    return (int32_t)lrintf(f);
-}
-
-/* one vertex at layout pixel (x, y); rgba in GS units, the alpha before
-   the overlay's opacity */
-static void vtx(float x, float y, const uint8_t rgba[4])
-{
-    RdScreenVtx *v = &s_d.v[s_d.n++];
-    float a = (float)rgba[3] * s_d.opacity;
-
-    v->x = fix16(x * s_d.kx, s_d.maxX);
-    v->y = fix16(y * s_d.ky, s_d.maxY);
-    v->z = 0;
-    v->s = v->t = 0.0f;
-    v->q = 1.0f;
-    v->rgba[0] = rgba[0];
-    v->rgba[1] = rgba[1];
-    v->rgba[2] = rgba[2];
-    v->rgba[3] = (uint8_t)(a < 0.0f ? 0.0f : a > 128.0f ? 128.0f : a + 0.5f);
-}
-
-static void tri(float x0, float y0, float x1, float y1, float x2, float y2, const uint8_t c[4])
-{
-    if (s_d.n + 3 > BATCH) {
-        flush();
-    }
-    vtx(x0, y0, c);
-    vtx(x1, y1, c);
-    vtx(x2, y2, c);
-}
-
-static void quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
-                 const uint8_t c[4])
-{
-    tri(x0, y0, x1, y1, x2, y2, c);
-    tri(x0, y0, x2, y2, x3, y3, c);
+    ui_GlyphRing(cx, cy, r, th, c);
 }
 
 static void rect(float x0, float y0, float x1, float y1, const uint8_t c[4])
 {
-    quad(x0, y0, x1, y0, x1, y1, x0, y1, c);
+    ui_GlyphRect(x0, y0, x1, y1, c);
 }
 
-/* a rect's border, th thick, inside it */
 static void frame(float x0, float y0, float x1, float y1, float th, const uint8_t c[4])
 {
-    rect(x0, y0, x1, y0 + th, c);
-    rect(x0, y1 - th, x1, y1, c);
-    rect(x0, y0 + th, x0 + th, y1 - th, c);
-    rect(x1 - th, y0 + th, x1, y1 - th, c);
+    ui_GlyphFrame(x0, y0, x1, y1, th, c);
 }
 
-static void tables(void)
-{
-    if (!s_d.tables) {
-        for (int i = 0; i <= SEGMENTS; i++) {
-            const float a = 6.28318531f * (float)i / (float)SEGMENTS;
-            s_d.cosT[i] = cosf(a);
-            s_d.sinT[i] = sinf(a);
-        }
-        s_d.tables = 1;
-    }
-}
-
-static void disc(float cx, float cy, float r, const uint8_t c[4])
-{
-    for (int i = 0; i < SEGMENTS; i++) {
-        tri(cx, cy, cx + r * s_d.cosT[i], cy + r * s_d.sinT[i], cx + r * s_d.cosT[i + 1],
-            cy + r * s_d.sinT[i + 1], c);
-    }
-}
-
-/* a ring of radius r (its middle), th thick */
-static void ring(float cx, float cy, float r, float th, const uint8_t c[4])
-{
-    const float r0 = r - th * 0.5f > 0.0f ? r - th * 0.5f : 0.0f, r1 = r + th * 0.5f;
-
-    for (int i = 0; i < SEGMENTS; i++) {
-        quad(cx + r0 * s_d.cosT[i], cy + r0 * s_d.sinT[i], cx + r1 * s_d.cosT[i],
-             cy + r1 * s_d.sinT[i], cx + r1 * s_d.cosT[i + 1], cy + r1 * s_d.sinT[i + 1],
-             cx + r0 * s_d.cosT[i + 1], cy + r0 * s_d.sinT[i + 1], c);
-    }
-}
-
-/* a stroke from (x0, y0) to (x1, y1), th thick */
-static void line(float x0, float y0, float x1, float y1, float th, const uint8_t c[4])
-{
-    float dx = x1 - x0, dy = y1 - y0;
-    const float len = sqrtf(dx * dx + dy * dy);
-
-    if (len <= 0.0f) {
-        return;
-    }
-    dx *= 0.5f * th / len;
-    dy *= 0.5f * th / len;
-    quad(x0 - dy, y0 + dx, x1 - dy, y1 + dx, x1 + dy, y1 - dx, x0 + dy, y0 - dx, c);
-}
-
-/* the PS2 symbols, s the half size */
-static void symbol(int zone, float cx, float cy, float s, float th, const uint8_t c[4])
-{
-    switch (zone) {
-    case ICO_TOUCH_B_CROSS:
-        line(cx - s, cy - s, cx + s, cy + s, th, c);
-        line(cx - s, cy + s, cx + s, cy - s, th, c);
-        break;
-    case ICO_TOUCH_B_CIRCLE:
-        ring(cx, cy, s, th, c);
-        break;
-    case ICO_TOUCH_B_SQUARE:
-        frame(cx - s * 0.85f, cy - s * 0.85f, cx + s * 0.85f, cy + s * 0.85f, th, c);
-        break;
-    case ICO_TOUCH_B_TRIANGLE: {
-        const float top = cy - s, base = cy + s * 0.7f, half = s * 1.0f;
-        line(cx, top, cx + half, base, th, c);
-        line(cx + half, base, cx - half, base, th, c);
-        line(cx - half, base, cx, top, th, c);
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-/* a D-pad key's arrow, pointing away from the cluster's centre */
-static void arrow(int zone, float cx, float cy, float s, const uint8_t c[4])
+static UiBtnGlyph glyphOf(int zone)
 {
     switch (zone) {
     case ICO_TOUCH_B_UP:
-        tri(cx, cy - s, cx + s, cy + s * 0.6f, cx - s, cy + s * 0.6f, c);
-        break;
+        return UI_BTN_UP;
     case ICO_TOUCH_B_DOWN:
-        tri(cx, cy + s, cx - s, cy - s * 0.6f, cx + s, cy - s * 0.6f, c);
-        break;
+        return UI_BTN_DOWN;
     case ICO_TOUCH_B_LEFT:
-        tri(cx - s, cy, cx + s * 0.6f, cy - s, cx + s * 0.6f, cy + s, c);
-        break;
+        return UI_BTN_LEFT;
     case ICO_TOUCH_B_RIGHT:
-        tri(cx + s, cy, cx - s * 0.6f, cy + s, cx - s * 0.6f, cy - s, c);
-        break;
+        return UI_BTN_RIGHT;
+    case ICO_TOUCH_B_CROSS:
+        return UI_BTN_CROSS;
+    case ICO_TOUCH_B_CIRCLE:
+        return UI_BTN_CIRCLE;
+    case ICO_TOUCH_B_SQUARE:
+        return UI_BTN_SQUARE;
     default:
-        break;
+        return UI_BTN_TRIANGLE;
     }
 }
 
-/* the face buttons' colours, GS units (0x80 = 1.0) */
+/* the PS2 symbols and the D-pad's arrows (glyphs.c), s the half size */
+static void symbol(int zone, float cx, float cy, float s, float th, const uint8_t c[4])
+{
+    if (zone >= ICO_TOUCH_B_CROSS && zone <= ICO_TOUCH_B_TRIANGLE) {
+        ui_GlyphSymbol(glyphOf(zone), cx, cy, s, th, c);
+    }
+}
+
+static void arrow(int zone, float cx, float cy, float s, const uint8_t c[4])
+{
+    if (zone >= ICO_TOUCH_B_UP && zone <= ICO_TOUCH_B_RIGHT) {
+        ui_GlyphArrow(glyphOf(zone), cx, cy, s, c);
+    }
+}
+
 static const uint8_t *symbolColour(int zone)
 {
-    static const uint8_t cross[4] = {0x50, 0x6C, 0x80, 0x80}, circle[4] = {0x80, 0x48, 0x48, 0x80},
-                         square[4] = {0x80, 0x5C, 0x78, 0x80},
-                         triangle[4] = {0x40, 0x80, 0x68, 0x80};
-
-    switch (zone) {
-    case ICO_TOUCH_B_CROSS:
-        return cross;
-    case ICO_TOUCH_B_CIRCLE:
-        return circle;
-    case ICO_TOUCH_B_SQUARE:
-        return square;
-    default:
-        return triangle;
-    }
+    return ui_GlyphFaceColour(glyphOf(zone));
 }
 
 static const char *labelOf(int zone)
@@ -335,20 +214,23 @@ void ui_TouchDrawOverlay(const struct RdOverlayCtx *ctx)
         o.layout.outH == 0 || ctx->outW == 0 || ctx->outH == 0) {
         return;
     }
-    tables();
-    s_d.n = 0;
-    s_d.opacity = o.opacity > 1.0f ? 1.0f : o.opacity;
+    UiGlyphXf xf;
+    xf.opacity = o.opacity > 1.0f ? 1.0f : o.opacity;
+    xf.ox = xf.oy = 0.0f;
     /* the zones were built for the window's pixels; the output is the
        same size but for a swapchain still catching up with a resize */
     s_d.kx = (float)ctx->outW / (float)o.layout.outW;
     s_d.ky = (float)ctx->outH / (float)o.layout.outH;
-    s_d.maxX = (float)(ctx->outW < 4095u ? ctx->outW : 4095u) * 16.0f;
-    s_d.maxY = (float)(ctx->outH < 4095u ? ctx->outH : 4095u) * 16.0f;
+    xf.kx = s_d.kx;
+    xf.ky = s_d.ky;
+    xf.maxX = (float)(ctx->outW < 4095u ? ctx->outW : 4095u) * 16.0f;
+    xf.maxY = (float)(ctx->outH < 4095u ? ctx->outH : 4095u) * 16.0f;
+    ui_GlyphBegin(&xf);
     float th = o.layout.unit * 0.006f;
     th = th < 2.0f ? 2.0f : th;
     drawSticks(&o, th);
     drawButtons(&o, th);
-    flush();
+    ui_GlyphFlush();
     drawLabels(ctx, &o);
 }
 

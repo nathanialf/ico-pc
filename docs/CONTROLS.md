@@ -55,8 +55,9 @@ and where. [More about model packs](MODEL_PACKS.md#make-a-model-pack).
 
 ## Take a photo
 
-Photo mode freezes the game so you can move a camera around and save a
-picture. During play, press Start and choose **Photo mode**.
+Photo mode pauses the game and shows it from a camera you move around,
+with every effect the game has, so you can save a picture. During play,
+press Start and choose **Photo mode**.
 
 The camera starts as a free camera. You fly it around like a drone:
 
@@ -83,9 +84,15 @@ orbit camera. It circles around the spot you were looking at:
 Press L3 again to go back to the free camera. Select puts back only the
 camera you are using.
 
-The help panel tells you which camera you are using and its speed. When
-you hide it with Square, the game remembers, and photo mode opens with
-the panel hidden next time too. Press Square again to show it.
+The help panel at the bottom tells you which camera you are using and its
+speed, and shows a small picture of each button beside what it does. If you
+play on the keyboard, it shows your keys instead of the pictures (the
+panel changes as soon as you press a key or a mouse button). When you hide
+it with Square, the game remembers, and photo mode opens with the panel
+hidden next time too. Press Square again to show it.
+
+If you move the camera quickly into another room, you may see parts the
+game had not prepared yet.
 
 Your pictures are saved as PNG files in a `screenshots` folder, in the
 same folder as your saves. [Where that is](PORTABLE_MODE.md#where-your-saves-are).

@@ -361,17 +361,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Zauberschwert (Schwert der Königin)",
     [UI_STR_MV_COUCH] = "Steinbank",
     [UI_STR_PHOTO_MODE] = "Fotomodus",
-    [UI_STR_PHOTO_HUD_MOVE] =
-        "Linker Stick: umkreisen    Rechter Stick: heranfahren und verschieben    oben unten: zoomen",
-    [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: rollen    L2 R2: zoomen    L3: freie oder Orbit-Kamera    R3: Tempo    Select: zurücksetzen",
-    [UI_STR_PHOTO_HUD_KEYS] =
-        "Kreuz: Bild speichern    Quadrat: diese Anzeige ausblenden (wird gemerkt)    Dreieck: zurück",
     [UI_STR_PHOTO_FOV] = "Bildwinkel %d°",
     [UI_STR_PHOTO_SAVED] = "Bild gespeichert",
     [UI_STR_PHOTO_FAILED] = "Bild nicht gespeichert",
-    [UI_STR_PHOTO_HUD_MOVE_FREE] =
-        "Linker Stick: bewegen    Rechter Stick: umsehen    oben unten: steigen und sinken",
     [UI_STR_PHOTO_CAM_FREE] = "Freie Kamera",
     [UI_STR_PHOTO_CAM_ORBIT] = "Orbit-Kamera",
     [UI_STR_PHOTO_SPEED] = "Tempo %s",
@@ -416,4 +408,17 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATS_ENEMIES] = "Besiegte Gegner dieser Reise",
     [UI_STR_STATS_ASSISTS] = "Hilfen",
     [UI_STR_STATS_AREA] = "Ort",
+    [UI_STR_PHOTO_ACT_MOVE] = "bewegen",
+    [UI_STR_PHOTO_ACT_LOOK] = "umschauen",
+    [UI_STR_PHOTO_ACT_RISE] = "steigen und sinken",
+    [UI_STR_PHOTO_ACT_CIRCLE] = "umkreisen",
+    [UI_STR_PHOTO_ACT_NEARFAR] = "heranfahren und verschieben",
+    [UI_STR_PHOTO_ACT_ZOOM] = "zoomen",
+    [UI_STR_PHOTO_ACT_ROLL] = "rollen",
+    [UI_STR_PHOTO_ACT_SWITCH] = "freie oder Orbit-Kamera",
+    [UI_STR_PHOTO_ACT_SPEED] = "Tempo",
+    [UI_STR_PHOTO_ACT_RESET] = "zurücksetzen",
+    [UI_STR_PHOTO_ACT_SAVE] = "Bild speichern",
+    [UI_STR_PHOTO_ACT_HIDE] = "Anzeige ausblenden (wird gemerkt)",
+    [UI_STR_PHOTO_ACT_BACK] = "zurück",
 };

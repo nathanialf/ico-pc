@@ -407,15 +407,11 @@ typedef enum UiStrId {
        the Options screen to the pause menu): the row, the HUD's lines, the
        capture's popup; FOV takes the vertical field of view in degrees (%d) */
     UI_STR_PHOTO_MODE,
-    UI_STR_PHOTO_HUD_MOVE,
-    UI_STR_PHOTO_HUD_LENS,
-    UI_STR_PHOTO_HUD_KEYS,
     UI_STR_PHOTO_FOV,
     UI_STR_PHOTO_SAVED,
     UI_STR_PHOTO_FAILED,
-    /* v0.4.1: the free camera's move line, the HUD title's camera and speed
+    /* v0.4.1: the HUD title's camera and speed
        (SPEED takes the speed's word, %s) */
-    UI_STR_PHOTO_HUD_MOVE_FREE,
     UI_STR_PHOTO_CAM_FREE,
     UI_STR_PHOTO_CAM_ORBIT,
     UI_STR_PHOTO_SPEED,
@@ -468,6 +464,21 @@ typedef enum UiStrId {
     UI_STR_STATS_ENEMIES,
     UI_STR_STATS_ASSISTS,
     UI_STR_STATS_AREA,
+    /* v0.4.2: the photo panel's action words, each beside its button
+       picture or key (photo_ui.c) */
+    UI_STR_PHOTO_ACT_MOVE,
+    UI_STR_PHOTO_ACT_LOOK,
+    UI_STR_PHOTO_ACT_RISE,
+    UI_STR_PHOTO_ACT_CIRCLE,
+    UI_STR_PHOTO_ACT_NEARFAR,
+    UI_STR_PHOTO_ACT_ZOOM,
+    UI_STR_PHOTO_ACT_ROLL,
+    UI_STR_PHOTO_ACT_SWITCH,
+    UI_STR_PHOTO_ACT_SPEED,
+    UI_STR_PHOTO_ACT_RESET,
+    UI_STR_PHOTO_ACT_SAVE,
+    UI_STR_PHOTO_ACT_HIDE,
+    UI_STR_PHOTO_ACT_BACK,
     UI_STR_COUNT
 } UiStrId;
 

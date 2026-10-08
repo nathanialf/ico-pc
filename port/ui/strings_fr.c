@@ -360,17 +360,9 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Épée magique (épée de la Reine)",
     [UI_STR_MV_COUCH] = "Banc de pierre",
     [UI_STR_PHOTO_MODE] = "Mode photo",
-    [UI_STR_PHOTO_HUD_MOVE] =
-        "Stick gauche : orbite    Stick droit : avancer et décaler    haut bas : zoom",
-    [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1 : rotation    L2 R2 : zoom    L3 : caméra libre ou en orbite    R3 : vitesse    Select : réinitialiser",
-    [UI_STR_PHOTO_HUD_KEYS] =
-        "Croix : enregistrer une image    Carré : masquer ce panneau (mémorisé)    Triangle : retour",
     [UI_STR_PHOTO_FOV] = "Champ de vision %d°",
     [UI_STR_PHOTO_SAVED] = "Image enregistrée",
     [UI_STR_PHOTO_FAILED] = "Image non enregistrée",
-    [UI_STR_PHOTO_HUD_MOVE_FREE] =
-        "Stick gauche : se déplacer    Stick droit : regarder    haut bas : monter et descendre",
     [UI_STR_PHOTO_CAM_FREE] = "Caméra libre",
     [UI_STR_PHOTO_CAM_ORBIT] = "Caméra en orbite",
     [UI_STR_PHOTO_SPEED] = "vitesse %s",
@@ -415,4 +407,17 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STATS_ENEMIES] = "Ennemis vaincus pendant ce voyage",
     [UI_STR_STATS_ASSISTS] = "Aides",
     [UI_STR_STATS_AREA] = "Lieu",
+    [UI_STR_PHOTO_ACT_MOVE] = "avancer",
+    [UI_STR_PHOTO_ACT_LOOK] = "regarder",
+    [UI_STR_PHOTO_ACT_RISE] = "monter et descendre",
+    [UI_STR_PHOTO_ACT_CIRCLE] = "tourner autour",
+    [UI_STR_PHOTO_ACT_NEARFAR] = "approcher, éloigner et décaler",
+    [UI_STR_PHOTO_ACT_ZOOM] = "zoom",
+    [UI_STR_PHOTO_ACT_ROLL] = "rotation",
+    [UI_STR_PHOTO_ACT_SWITCH] = "caméra libre ou en orbite",
+    [UI_STR_PHOTO_ACT_SPEED] = "vitesse",
+    [UI_STR_PHOTO_ACT_RESET] = "réinitialiser",
+    [UI_STR_PHOTO_ACT_SAVE] = "enregistrer une image",
+    [UI_STR_PHOTO_ACT_HIDE] = "masquer ce panneau (mémorisé)",
+    [UI_STR_PHOTO_ACT_BACK] = "retour",
 };

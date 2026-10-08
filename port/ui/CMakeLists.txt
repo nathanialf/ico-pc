@@ -27,6 +27,7 @@ add_custom_command(
 set(_ui_sources
     font.c
     game_font_build.c
+    glyphs.c
     layout_ext.c
     menu_text.c
     popup.c
@@ -289,6 +290,22 @@ endforeach()
 # game stubbed) on the recording, then on a Vulkan device (77 without one)
 # "ICO" and an accented word drawn through rd: coverage inside the expected
 # bounds and the blend of a known colour on a known background.
+# the button pictures (glyphs.c) on their own: the shapes of every kind
+# against a sink, and the touch overlay's symbols against the old code
+add_executable(glyphs_test test/glyphs_test.c glyphs.c $<TARGET_OBJECTS:ico_ui_font_rd>)
+target_include_directories(glyphs_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+target_compile_definitions(glyphs_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(glyphs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(glyphs_test PRIVATE ico_render ico_math)
+if(NOT WIN32)
+    target_link_libraries(glyphs_test PRIVATE m)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME glyphs COMMAND glyphs_test)
+endif()
+
 ico_ui_library(ico_ui_rd ON)
 ico_include_dirs(seki _ico_ui_seki_incs)
 add_executable(ui_test test/ui_test.c $<TARGET_OBJECTS:ico_ui_rd>

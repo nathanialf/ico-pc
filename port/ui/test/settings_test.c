@@ -4044,6 +4044,189 @@ static void loadGameFace(void)
     fclose(f);
 }
 
+/* ------------------------------------------------ package PHOTO: the panel */
+
+/* what the overlay is given while the panel draws: the sprites (the panel's
+   rectangle first, then the words) and the pictures' triangles */
+static RdScreenVtx s_pv[4096];
+static uint32_t s_pn;
+
+static void panelSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    (void)type;
+    (void)tex;
+    (void)blend;
+    for (uint32_t i = 0; i < n && s_pn < 4096; i++) {
+        s_pv[s_pn++] = v[i];
+    }
+}
+
+static void glyphSink(const RdScreenVtx *v, uint32_t n)
+{
+    panelSink(RD_PRIM_TRIANGLES, v, n, (RdTex){0}, RD_BLEND_LERP_AS);
+}
+
+/* one camera, one input device, one language: the items placed, no item
+   over another, every part inside its item, the widest line within the
+   room after the shrink */
+static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *set)
+{
+    static UiHudPlaced at[UI_HUD_ITEMS];
+    char what[96];
+
+    snprintf(what, sizeof(what), "panel (%s, %s, language %d)", freeCam ? "free" : "orbit",
+             keyboard ? "keys" : "pad", (int)lang);
+    ui_SetLanguage(lang);
+    ui__PhotoHudBuild(set, freeCam, keyboard, "Photo mode: Free camera, speed Normal",
+                      "Field of view 60");
+    float size = 17.0f;
+    float w = ui__PhotoHudLayout(set->item, set->n, size, UI_PHOTO_HUD_ROOM, at);
+    if (w > UI_PHOTO_HUD_ROOM) {
+        size *= UI_PHOTO_HUD_ROOM / w;
+        w = ui__PhotoHudLayout(set->item, set->n, size, UI_PHOTO_HUD_ROOM, at);
+    }
+    CHECK(w <= UI_PHOTO_HUD_ROOM + 0.5f, "%s: the widest line is %.1f of %.1f at size %.1f", what,
+          (double)w, (double)UI_PHOTO_HUD_ROOM, (double)size);
+    int lines[UI_HUD_LINES] = {0};
+    for (int i = 0; i < set->n; i++) {
+        const UiHudItem *it = &set->item[i];
+        const UiHudPlaced *p = &at[i];
+        lines[it->line]++;
+        CHECK(it->text && it->text[0], "%s: item %d has no word", what, i);
+        CHECK(p->x1 > p->x0 && p->x0 >= 0.0f, "%s: item %d spans %.1f .. %.1f", what, i,
+              (double)p->x0, (double)p->x1);
+        if (i > 0 && set->item[i - 1].line == it->line) {
+            CHECK(p->x0 >= at[i - 1].x1, "%s: item %d (at %.1f) overlaps the one before (to %.1f)",
+                  what, i, (double)p->x0, (double)at[i - 1].x1);
+        }
+        float right = p->x0;
+        for (int k = 0; k < it->nicon; k++) {
+            CHECK(p->iconX[k] >= right - 0.01f && p->iconW[k] > 0.0f,
+                  "%s: item %d picture %d at %.1f (free from %.1f)", what, i, k,
+                  (double)p->iconX[k], (double)right);
+            right = p->iconX[k] + p->iconW[k];
+        }
+        if (it->text[0] && it->nicon > 0) {
+            CHECK(p->textX >= right, "%s: item %d word at %.1f over its picture (to %.1f)", what, i,
+                  (double)p->textX, (double)right);
+        }
+        CHECK(p->textX + p->textW <= p->x1 + 0.01f, "%s: item %d word leaves its item", what, i);
+        if (!keyboard) {
+            for (int k = 0; k < it->nicon; k++) {
+                CHECK(it->icon[k].key == NULL, "%s: item %d shows a key on the pad", what, i);
+            }
+        }
+    }
+    for (int l = 0; l < UI_HUD_LINES; l++) {
+        CHECK(lines[l] > 0, "%s: line %d is empty", what, l);
+    }
+}
+
+static void testPhotoPanel(void)
+{
+    static UiHudSet set;
+    IcoBindings *b = ico_input_live_bindings();
+
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+        for (int cam = 0; cam < 2; cam++) {
+            for (int kb = 0; kb < 2; kb++) {
+                checkPanelLayout(cam, kb, (UiLang)lang, &set);
+            }
+        }
+    }
+    ui_SetLanguage(UI_LANG_EN);
+
+    /* the keys: W A S D for the stick, the first of "Tab, Backquote" */
+    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    const UiHudItem *move = &set.item[1], *roll = &set.item[4], *save = &set.item[9];
+    CHECK(move->nicon == 4 && strcmp(move->icon[0].key, "W") == 0 &&
+              strcmp(move->icon[1].key, "A") == 0 && strcmp(move->icon[2].key, "S") == 0 &&
+              strcmp(move->icon[3].key, "D") == 0,
+          "the left stick: four caps, W A S D");
+    CHECK(roll->nicon == 2 && strcmp(roll->icon[0].key, "Tab") == 0 &&
+              strcmp(roll->icon[1].key, "F") == 0,
+          "L1 R1: Tab, F");
+    CHECK(save->nicon == 1 && strcmp(save->icon[0].key, "Space") == 0, "Cross: Space");
+    /* a key unbound: the mouse's button; neither: the pad's picture */
+    memset(b->kb[ICO_T_CROSS], 0, sizeof(b->kb[ICO_T_CROSS]));
+    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    CHECK(set.item[9].icon[0].key && strcmp(set.item[9].icon[0].key, "Mouse left") == 0,
+          "Cross without a key: the mouse (%s)", set.item[9].icon[0].key);
+    ico_bindings_clear(b, ICO_T_CROSS);
+    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    CHECK(set.item[9].icon[0].key == NULL && set.item[9].icon[0].glyph == UI_BTN_CROSS,
+          "Cross unbound: the pad's picture");
+    memset(b->kb[ICO_T_LSTICK_DOWN], 0, sizeof(b->kb[ICO_T_LSTICK_DOWN]));
+    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    CHECK(set.item[1].nicon == 1 && set.item[1].icon[0].key == NULL &&
+              set.item[1].icon[0].glyph == UI_BTN_LSTICK,
+          "a stick with a key missing: its picture");
+    ico_input_reload_bindings(b);
+
+    /* with the photo layout current the game's pause rows are not drawn
+       (the deferred-text check needs the 1080p setup this runs inside) */
+    stage_no = 11;
+    ico_photo_reset();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    fakeTables();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    init_layout_texture(2);
+    settle(54, 4);
+    lt_switch_layout(57);
+    CHECK(settle(57, 60), "the pause menu");
+    frame(0);
+    const int pauseItems = textItems();
+    CHECK(pauseItems > 0, "the pause menu has port text (%d items)", pauseItems);
+    const int ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
+    texLayout[57].curItem = ph;
+    press(0x40);
+    CHECK(settle(pl, 60) && ico_photo_active(), "photo mode (%d)", current_layout_id);
+    frame(0);
+    CHECK(textItems() == 0, "photo mode: the pause layout records no rows (%d)", textItems());
+
+    /* the panel through the overlay sink: pad pictures, then your keys */
+    RdOverlayCtx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.outW = 1920;
+    ctx.outH = 1080;
+    ctx.box.w = 1920;
+    ctx.box.h = 1080;
+    ctx.boxScale = 1080.0f / 448.0f;
+    ui__SetOverlaySink(panelSink);
+    ui__SetGlyphSink(glyphSink);
+    for (int keys = 0; keys < 2; keys++) {
+        if (keys) {
+            ico_input_note_press(ICO_SRC_KEY, 4);
+        }
+        s_pn = 0;
+        CHECK(ico_photo_hud(), "the panel is shown");
+        ui_PhotoDrawOverlay(&ctx);
+        CHECK(s_pn > 8, "%s: %u vertices drawn", keys ? "keys" : "pad", s_pn);
+        /* the first sprite is the panel's rectangle; all the rest lies on it */
+        const float x0 = (float)s_pv[0].x / 16.0f - 1.0f, y0 = (float)s_pv[0].y / 16.0f - 1.0f;
+        const float x1 = (float)s_pv[1].x / 16.0f + 1.0f, y1 = (float)s_pv[1].y / 16.0f + 1.0f;
+        const float left = (1920.0f - 1440.0f) * 0.5f, k = 1440.0f / 640.0f;
+        CHECK(x0 >= left + (22.0f - 8.0f) * k - 2.0f && x1 <= left + (618.0f + 8.0f) * k + 2.0f &&
+                  y1 <= 1080.0f,
+              "%s: the panel is x %.0f .. %.0f, y %.0f .. %.0f", keys ? "keys" : "pad", (double)x0,
+              (double)x1, (double)y0, (double)y1);
+        int out = 0;
+        for (uint32_t i = 2; i < s_pn; i++) {
+            const float x = (float)s_pv[i].x / 16.0f, y = (float)s_pv[i].y / 16.0f;
+            out += x < x0 || x > x1 || y < y0 || y > y1;
+        }
+        CHECK(out == 0, "%s: %d vertices outside the panel", keys ? "keys" : "pad", out);
+    }
+    ui__SetOverlaySink(NULL);
+    ui__SetGlyphSink(NULL);
+    ico_photo_reset();
+    stage_no = 0;
+}
+
 static int render(void)
 {
     RdSettings st;
@@ -4375,6 +4558,7 @@ static int render(void)
         lt_switch_layout(14);
         CHECK(settle(14, 60), "the save screen at 1080p");
         snap1080("settings_save_preview", 0);
+        testPhotoPanel();
         s_reduce = 0;
         ui_InstallDeferredText(0);
     }

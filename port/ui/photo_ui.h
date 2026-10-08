@@ -1,17 +1,20 @@
 /*
  * port/ui/photo_ui.h
  *
- * Photo mode's screen (package PHOTO): the port layout the pause menu's
- * "Photo mode" row opens.  It has one row, masked, so the game's layout
- * code draws nothing of it and no cursor; its proc runs once a Main tick
- * and hands the pad to port/game/photo_mode.h, which the window turns into
- * the renderer's camera override.  Triangle, Circle or Start go back to the
- * pause menu with the cursor on the row.  The help lines (the HUD) are
- * drawn on the presentation overlay, never in the game's frame, so a
- * capture never shows them.
+ * Photo mode's screen: the port layout the pause menu's "Photo mode" row
+ * opens.  It has one row, masked, so the game's layout code draws nothing
+ * of it and no cursor; its proc runs once a Main tick and hands the pad to
+ * port/game/photo_mode.h, which the window turns into the camera the paused
+ * game draws from.  Triangle, Circle or Start go back to the pause menu
+ * with the cursor on the row.  The help panel (the HUD) is drawn on the
+ * presentation overlay, never in the game's frame, so a capture never shows
+ * it.  It shows a button's picture beside each action (glyphs.h), or your
+ * keys once a key or the mouse was the last thing you pressed.
  */
 #ifndef PORT_UI_PHOTO_UI_H
 #define PORT_UI_PHOTO_UI_H
+
+#include "glyphs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +39,56 @@ struct RdOverlayCtx;
 /* The HUD on the output (ui_host.c's overlay callback): nothing unless
    photo mode is on with its HUD shown. */
 void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx);
+
+#ifdef ICO_RD
+/* The panel's make-up, split from the drawing so a test can read it.  The
+   grid is the overlay's 640 x 448; the panel starts UI_PHOTO_HUD_X in and
+   its widest line may use UI_PHOTO_HUD_ROOM. */
+#define UI_PHOTO_HUD_X 22.0f
+#define UI_PHOTO_HUD_ROOM (640.0f - 2.0f * UI_PHOTO_HUD_X)
+#define UI_HUD_LINES 5
+#define UI_HUD_ITEMS 24
+#define UI_HUD_ICONS 4
+#define UI_HUD_KEYS 24
+
+/* One picture: a button's (key NULL) or a key cap naming the key. */
+typedef struct UiHudIcon {
+    UiBtnGlyph glyph;
+    const char *key;
+} UiHudIcon;
+
+/* Pictures, then a word: "[Up][Down] rise and sink".  A line's items run
+   left to right; a stick on the keyboard is four key caps. */
+typedef struct UiHudItem {
+    int line;
+    int nicon;
+    UiHudIcon icon[UI_HUD_ICONS];
+    const char *text;
+} UiHudItem;
+
+typedef struct UiHudSet {
+    int n;
+    int nkeys;
+    UiHudItem item[UI_HUD_ITEMS];
+    char keys[UI_HUD_KEYS][24];
+} UiHudSet;
+
+/* Where one item lies, in grid units from the panel's left edge. */
+typedef struct UiHudPlaced {
+    float x0, x1;
+    float iconX[UI_HUD_ICONS], iconW[UI_HUD_ICONS];
+    float textX, textW;
+} UiHudPlaced;
+
+/* The items for the camera in use; keyboard names the keys from the live
+   bindings (the first key, else the first mouse button, else the pad's
+   picture); title and fov are the first and last lines. */
+void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *title,
+                       const char *fov);
+/* Places the items at the text size; gaps between a line's items squeeze
+   when it is wider than room.  Returns the widest line's width. */
+float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out);
+#endif
 
 #ifdef __cplusplus
 }
