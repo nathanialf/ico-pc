@@ -861,6 +861,12 @@ static void setup(void)
 #endif
     s_loop = 0;
     s_playing = -1;
+#ifdef ICO_RD
+    if (s_saveWait) {
+        modelpack_DumpObjectOnce(NULL); /* a shot for the model left */
+    }
+#endif
+    s_saveWait = 0;
     setState(MV_VIEW);
     ui_ListReset(&s_animList);
     fprintf(stderr,
@@ -899,12 +905,40 @@ static const char *shortDir(const char *dir)
     return last;
 }
 
+/* whether a translated format holds exactly one %d and then one %s, and
+   nothing else that prints */
+static int savedFmtOk(const char *f)
+{
+    int d = 0, str = 0;
+    for (; f && *f; f++) {
+        if (*f != '%') {
+            continue;
+        }
+        f++;
+        if (*f == '%') {
+            continue;
+        }
+        if (*f == 'd' && d == 0 && str == 0) {
+            d = 1;
+        } else if (*f == 's' && d == 1 && str == 0) {
+            str = 1;
+        } else {
+            return 0;
+        }
+    }
+    return f != NULL && d == 1 && str == 1;
+}
+
 static void saveDone(int n)
 {
     char body[UI_POPUP_TEXT];
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
     if (n > 0) {
-        snprintf(body, sizeof(body), ui_Str(UI_STR_MV_SAVED_FMT), n, shortDir(modelpack_DumpDir()));
+        const char *fmt = ui_Str(UI_STR_MV_SAVED_FMT);
+        if (!savedFmtOk(fmt)) {
+            fmt = ui_StrIn(UI_LANG_EN, UI_STR_MV_SAVED_FMT);
+        }
+        snprintf(body, sizeof(body), fmt, n, shortDir(modelpack_DumpDir()));
         ui_PopupPush(body, "");
     } else {
         ui_PopupPush(ui_Str(UI_STR_MV_SAVED_NONE), "");
