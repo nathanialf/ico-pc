@@ -391,13 +391,17 @@ static void lc_audio_pause(void *u, int paused)
     ico_audio_sdl_pause(paused);
 }
 
-/* the time away is not caught up: the pacer starts from now, and the step
-   that spans it is not timed as a slow step */
+/* the time away is not caught up: the pacer starts from now, the step
+   that spans it is not timed as a slow step, and the presents' history
+   starts afresh (a present that spanned the time away is not slow) */
 static void lc_pace_reset(void *u)
 {
     (void)u;
     s_deadline = SDL_GetTicksNS();
     s_pres.paceEnd = 0;
+    memset(&s_pres.paceHist, 0, sizeof(s_pres.paceHist));
+    s_pres.paceSlow = false;
+    s_pres.cost = 0;
 }
 
 static int lc_config_dirty(void *u)
