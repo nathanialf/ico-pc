@@ -190,3 +190,14 @@ void rhi_Present(void)
         rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_dx.vsync);
     }
 }
+
+/* rhi.h (package AN-D): the Android lifecycle's surface calls.  A DXGI
+ * swapchain stays on its window for the window's life, so there is nothing
+ * to release; recreate reports whether the swapchain is there. */
+void rhi_ReleaseSurface(void) {}
+
+bool rhi_RecreateSurface(void *window)
+{
+    (void)window;
+    return g_dx.swapchain != NULL;
+}

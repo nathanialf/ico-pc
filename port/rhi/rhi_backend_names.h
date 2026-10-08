@@ -26,6 +26,8 @@
 #define rhi_SwapchainFormat     RHI__NAME(SwapchainFormat)
 #define rhi_AcquireBackbuffer   RHI__NAME(AcquireBackbuffer)
 #define rhi_Present             RHI__NAME(Present)
+#define rhi_ReleaseSurface      RHI__NAME(ReleaseSurface)
+#define rhi_RecreateSurface     RHI__NAME(RecreateSurface)
 #define rhi_CreateBuffer        RHI__NAME(CreateBuffer)
 #define rhi_DestroyBuffer       RHI__NAME(DestroyBuffer)
 #define rhi_MapBuffer           RHI__NAME(MapBuffer)

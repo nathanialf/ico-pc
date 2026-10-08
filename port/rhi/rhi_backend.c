@@ -157,6 +157,16 @@ void rhi_Present(void)
     be()->Present();
 }
 
+void rhi_ReleaseSurface(void)
+{
+    be()->ReleaseSurface();
+}
+
+bool rhi_RecreateSurface(void *window)
+{
+    return be()->RecreateSurface(window);
+}
+
 RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
 {
     return be()->CreateBuffer(desc);

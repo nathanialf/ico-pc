@@ -514,6 +514,23 @@ RhiTexture rhi_AcquireBackbuffer(void);
 /* The backbuffer's state after acquire is UNDEFINED; before rhi_Present the
  * caller moves it to RHI_STATE_PRESENT. */
 void rhi_Present(void);
+/* The window's surface (package AN-D, the Android lifecycle).
+ * rhi_ReleaseSurface waits for the GPU, destroys the swapchain and the
+ * surface and keeps the device and everything made on it: the app goes to
+ * the background, where the system takes the window away.  Until a surface
+ * is made again rhi_AcquireBackbuffer returns id 0 and rhi_Present does
+ * nothing; rhi_SwapchainFormat keeps the last swapchain's format.
+ * rhi_RecreateSurface makes a surface on window (an SDL_Window*; NULL: the
+ * one rhi_Init was given) and a swapchain at the window's pixel size with
+ * the last vsync setting; a surface still there is released first.  False
+ * when the window has no native surface yet (the caller tries again later)
+ * or the device is headless.  Vulkan also does this itself when an acquire
+ * or a present returns VK_ERROR_SURFACE_LOST_KHR (that frame is skipped),
+ * and rhi_ResizeSwapchain without a surface tries to make one.  D3D12: the
+ * swapchain stays on its window; release does nothing, recreate returns
+ * whether there is a swapchain. */
+void rhi_ReleaseSurface(void);
+bool rhi_RecreateSurface(void *window);
 
 /* Resources.  Create/destroy are not frame-safe: destroy defers internally
  * until the frames in flight that may reference the handle have retired. */

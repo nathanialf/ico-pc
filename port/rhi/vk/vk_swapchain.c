@@ -1,14 +1,38 @@
 /* vk_swapchain.c: the swapchain over SDL3's Vulkan surface.  Absent when
  * the device is headless (RhiDeviceDesc.sdlWindow == NULL). */
 #include "vk_internal.h"
+#include "rhi_vk.h"
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef ICO_RHI_HAVE_SDL
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 #endif
+
+_Static_assert(RHI_VK_TEST_SUBOPTIMAL == VK_SUBOPTIMAL_KHR, "rhi_vk.h: VK_SUBOPTIMAL_KHR");
+_Static_assert(RHI_VK_TEST_SURFACE_LOST == VK_ERROR_SURFACE_LOST_KHR,
+               "rhi_vk.h: VK_ERROR_SURFACE_LOST_KHR");
+_Static_assert(RHI_VK_TEST_OUT_OF_DATE == VK_ERROR_OUT_OF_DATE_KHR,
+               "rhi_vk.h: VK_ERROR_OUT_OF_DATE_KHR");
+
+/* package AN-D, tests (rhi_vk.h): the result the next present reports
+ * instead of the driver's (VK_SUCCESS: none), and the swapchains created
+ * since the program started */
+static VkResult s_forcePresent = VK_SUCCESS;
+static uint32_t s_creations;
+
+void vkr_TestForcePresentResult(int32_t result)
+{
+    s_forcePresent = (VkResult)result;
+}
+
+uint32_t vkr_TestSwapchainCreations(void)
+{
+    return s_creations;
+}
 
 static void vkr_DestroySwapResources(void)
 {
@@ -77,6 +101,32 @@ static void vkr_PresentModeList(char *out, size_t size, const VkPresentModeKHR *
     }
     if (n == 0) {
         snprintf(out, size, "none");
+    }
+}
+
+/* An acquire's semaphore no submit waited on (an image acquired, then the
+ * swapchain recreated or released before the frame was drawn): an empty
+ * submit waits on it, so it is unsignalled before it is used again */
+static void vkr_DrainAcquireWait(void)
+{
+    if (g_vkr.acquireWaitPending && !vkr_SubmitEmpty()) {
+        /* the wait could not be queued: the device is idle, so recreate the
+         * frame's semaphore instead of leaving it signalled */
+        VkSemaphoreCreateInfo asci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        VkSemaphore fresh;
+        if (VKR_CHECK(vkCreateSemaphore(g_vkr.device, &asci, NULL, &fresh))) {
+            for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+                if (g_vkr.frames[i].acquireSem == g_vkr.acquireSem) {
+                    vkDestroySemaphore(g_vkr.device, g_vkr.acquireSem, NULL);
+                    g_vkr.frames[i].acquireSem = fresh;
+                    fresh = VK_NULL_HANDLE;
+                    break;
+                }
+            }
+            if (fresh) {
+                vkDestroySemaphore(g_vkr.device, fresh, NULL);
+            }
+        }
     }
 }
 
@@ -150,31 +200,34 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     if (count > VKR_MAX_SWAP_IMAGES) {
         count = VKR_MAX_SWAP_IMAGES;
     }
-    if (g_vkr.acquireWaitPending && !vkr_SubmitEmpty()) {
-        /* the wait could not be queued: the device is idle, so recreate the
-         * frame's semaphore instead of leaving it signalled */
-        VkSemaphoreCreateInfo asci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-        VkSemaphore fresh;
-        if (VKR_CHECK(vkCreateSemaphore(g_vkr.device, &asci, NULL, &fresh))) {
-            for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
-                if (g_vkr.frames[i].acquireSem == g_vkr.acquireSem) {
-                    vkDestroySemaphore(g_vkr.device, g_vkr.acquireSem, NULL);
-                    g_vkr.frames[i].acquireSem = fresh;
-                    fresh = VK_NULL_HANDLE;
-                    break;
-                }
-            }
-            if (fresh) {
-                vkDestroySemaphore(g_vkr.device, fresh, NULL);
-            }
-        }
-    }
+    vkr_DrainAcquireWait();
     /* the present mode (vk_present_mode.c) from the modes the surface
      * offers, queried once per creation */
     uint32_t nModes = 0;
     VkPresentModeKHR *modes = vkr_SurfacePresentModes(&nModes);
     char offered[128];
     vkr_PresentModeList(offered, sizeof(offered), modes, nModes);
+    /* package AN-D: the compositor turns the picture (an Android phone held
+     * sideways reports a rotated current transform); presenting in the
+     * window's own orientation keeps every pass and the readbacks unrotated.
+     * The current transform only where identity is not offered. */
+    VkSurfaceTransformFlagBitsKHR pre = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    if (!(caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
+        pre = caps.currentTransform;
+    }
+    {
+        static bool s_transformLogged;
+        if (!s_transformLogged &&
+            (pre != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR ||
+             caps.currentTransform != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
+            s_transformLogged = true;
+            VKR_LOG("surface transform 0x%x (offered 0x%x): presenting with %s",
+                    (unsigned)caps.currentTransform, (unsigned)caps.supportedTransforms,
+                    pre == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+                        ? "identity, the compositor rotates"
+                        : "the current transform (identity is not offered)");
+        }
+    }
     VkSwapchainKHR old = g_vkr.swapchain;
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -187,7 +240,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = caps.currentTransform,
+        .preTransform = pre,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = vkr_ChoosePresentMode(modes, nModes, vsync, s_preferMailbox),
         .clipped = VK_TRUE,
@@ -212,6 +265,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         }
         return false;
     }
+    s_creations++;
     vkr_DestroySwapResources();
     if (old) {
         vkDestroySwapchainKHR(g_vkr.device, old, NULL);
@@ -263,10 +317,137 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     return true;
 }
 
+/* package AN-D: a surface on the window rhi_Init was given (or the last
+ * rhi_RecreateSurface named).  The first failure of a run of them is
+ * logged: on Android the window has no native surface while the app is in
+ * the background, and every frame's retry would log it again. */
+#ifdef ICO_RHI_HAVE_SDL
+static bool s_surfaceFailLogged;
+#endif
+
+static bool vkr_SurfaceCreate(void)
+{
+#ifdef ICO_RHI_HAVE_SDL
+    if (!g_vkr.window || !g_vkr.instance || g_vkr.surface) {
+        return g_vkr.surface != VK_NULL_HANDLE;
+    }
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    if (!SDL_Vulkan_CreateSurface((SDL_Window *)g_vkr.window, g_vkr.instance, NULL, &surface)) {
+        if (!s_surfaceFailLogged) {
+            s_surfaceFailLogged = true;
+            VKR_LOG("SDL_Vulkan_CreateSurface: %s (tried again at the next frame)", SDL_GetError());
+        }
+        return false;
+    }
+    /* the queue presents to the old surface; a new one is asked again */
+    VkBool32 present = VK_FALSE;
+    if (g_vkr.phys) {
+        vkGetPhysicalDeviceSurfaceSupportKHR(g_vkr.phys, g_vkr.queueFamily, surface, &present);
+    }
+    if (!present) {
+        if (!s_surfaceFailLogged) {
+            s_surfaceFailLogged = true;
+            VKR_LOG("the new surface cannot be presented to from queue family %u",
+                    g_vkr.queueFamily);
+        }
+        vkDestroySurfaceKHR(g_vkr.instance, surface, NULL);
+        return false;
+    }
+    g_vkr.surface = surface;
+    if (s_surfaceFailLogged) {
+        VKR_LOG("surface made again");
+    }
+    s_surfaceFailLogged = false;
+    return true;
+#else
+    return false;
+#endif
+}
+
+void rhi_ReleaseSurface(void)
+{
+    if (!g_vkr.device || !g_vkr.surface) {
+        return;
+    }
+    vkr_DrainAcquireWait();
+    const uint64_t t0 = vkr_NowNs();
+    vkDeviceWaitIdle(g_vkr.device);
+    g_vkr.stats.waitIdles++;
+    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
+    vkr_SwapchainDestroy();
+    g_vkr.swapAcquired = false;
+    g_vkr.acquireWaitPending = false;
+    vkDestroySurfaceKHR(g_vkr.instance, g_vkr.surface, NULL);
+    g_vkr.surface = VK_NULL_HANDLE;
+    VKR_LOG("surface released; the device is kept");
+}
+
+bool rhi_RecreateSurface(void *window)
+{
+    if (!g_vkr.device) {
+        return false;
+    }
+    if (window) {
+        g_vkr.window = window;
+    }
+    if (!g_vkr.window) {
+        return false; /* headless */
+    }
+    rhi_ReleaseSurface();
+    if (!vkr_SurfaceCreate()) {
+        return false;
+    }
+    int w = 0, h = 0;
+#ifdef ICO_RHI_HAVE_SDL
+    SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
+#endif
+    if (!vkr_SwapchainCreate((uint32_t)w, (uint32_t)h, g_vkr.vsync)) {
+        /* the surface stays: rhi_ResizeSwapchain makes the swapchain at
+         * the next frame */
+        return false;
+    }
+    VKR_LOG("surface and swapchain made again (%ux%u)", g_vkr.swapWidth, g_vkr.swapHeight);
+    return true;
+}
+
+/* package AN-D: the surface went away under the swapchain
+ * (VK_ERROR_SURFACE_LOST_KHR; Android destroys the window's surface before
+ * the app hears it is in the background): a new surface and swapchain, or
+ * none until the window has a surface again */
+static void vkr_SurfaceLost(const char *where)
+{
+    VKR_LOG("surface lost at %s; making it again", where);
+    rhi_RecreateSurface(NULL);
+}
+
+/* The size a swapchain made now would have: the surface's current extent
+ * when it has one, else the window's pixel size */
+static bool vkr_SwapTargetSize(uint32_t *w, uint32_t *h)
+{
+    int ww = (int)g_vkr.swapWidth, wh = (int)g_vkr.swapHeight;
+#ifdef ICO_RHI_HAVE_SDL
+    SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &ww, &wh);
+#endif
+    *w = ww > 0 ? (uint32_t)ww : 0;
+    *h = wh > 0 ? (uint32_t)wh : 0;
+    VkSurfaceCapabilitiesKHR caps;
+    if (g_vkr.surface &&
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vkr.phys, g_vkr.surface, &caps) == VK_SUCCESS &&
+        caps.currentExtent.width != UINT32_MAX) {
+        *w = caps.currentExtent.width;
+        *h = caps.currentExtent.height;
+    }
+    return *w != 0 && *h != 0;
+}
+
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_vkr.surface) {
-        return false;
+        /* package AN-D: released (the background) or lost: made again
+         * when the window has a surface */
+        if (!g_vkr.device || !g_vkr.window || !vkr_SurfaceCreate()) {
+            return false;
+        }
     }
     const uint64_t t0 = vkr_NowNs();
     vkDeviceWaitIdle(g_vkr.device);
@@ -293,7 +474,10 @@ const char *rhi_PresentModeName(void)
 
 RhiFormat rhi_SwapchainFormat(void)
 {
-    return g_vkr.surface ? g_vkr.swapRhiFormat : RHI_FMT_UNKNOWN;
+    /* package AN-D: a window device keeps its format while the surface is
+     * released or lost, so the renderer goes on presenting to it (and
+     * skips frames) rather than switching to its headless output */
+    return g_vkr.surface || g_vkr.window ? g_vkr.swapRhiFormat : RHI_FMT_UNKNOWN;
 }
 
 RhiTexture rhi_AcquireBackbuffer(void)
@@ -314,6 +498,12 @@ RhiTexture rhi_AcquireBackbuffer(void)
     g_vkr.stats.acquireNs += vkr_NowNs() - t0;
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         return out; /* rd_present recreates via rhi_ResizeSwapchain */
+    }
+    if (r == VK_ERROR_SURFACE_LOST_KHR) {
+        /* package AN-D: this frame is skipped (the semaphore was not
+         * signalled; the caller's retry acquires on the new swapchain) */
+        vkr_SurfaceLost("acquire");
+        return out;
     }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
         VKR_CHECK(r);
@@ -348,12 +538,27 @@ void rhi_Present(void)
     g_vkr.stats.presentNs += vkr_NowNs() - t0;
     g_vkr.stats.presents++;
     g_vkr.swapAcquired = false;
-    if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
+    if (s_forcePresent != VK_SUCCESS && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
+        r = s_forcePresent; /* a test's result for this present, once */
+        s_forcePresent = VK_SUCCESS;
+    }
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;
 #ifdef ICO_RHI_HAVE_SDL
         SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
         rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
+    } else if (r == VK_SUBOPTIMAL_KHR) {
+        /* package AN-D: the image was shown.  Recreated only when the size
+         * changed: with the identity transform on a rotated Android display
+         * the driver reports suboptimal at every present, and a recreation
+         * would change nothing */
+        uint32_t w = 0, h = 0;
+        if (vkr_SwapTargetSize(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
+            rhi_ResizeSwapchain(w, h, g_vkr.vsync);
+        }
+    } else if (r == VK_ERROR_SURFACE_LOST_KHR) {
+        vkr_SurfaceLost("present");
     } else if (r != VK_SUCCESS) {
         VKR_CHECK(r);
     }

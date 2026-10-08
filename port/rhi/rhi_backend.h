@@ -29,6 +29,8 @@
     X(SwapchainFormat)                                                                             \
     X(AcquireBackbuffer)                                                                           \
     X(Present)                                                                                     \
+    X(ReleaseSurface)                                                                              \
+    X(RecreateSurface)                                                                             \
     X(CreateBuffer)                                                                                \
     X(DestroyBuffer)                                                                               \
     X(MapBuffer)                                                                                   \
