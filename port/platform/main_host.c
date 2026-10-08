@@ -14,7 +14,8 @@
  * Run with no arguments (a double-click), everything comes from the
  * executable's folder (host_config.h describes ico-pc.ini):
  *
- *   logs/ico-pc.log          stdout and stderr, rewritten each run
+ *   logs/ico-pc.log          stdout and stderr, rewritten each run (the
+ *                            run before's kept as logs/ico-pc-previous.log)
  *   logs/trace-<time>.txt    the trace (trace_host.h): by default in the
  *                            headless build only; ini trace=1 or PATH turns
  *                            it on in the window build, trace=0 off
@@ -282,6 +283,19 @@ static void summary(void)
     ico_diag_log("ico_pc: exit: %s", exit_reason);
     ico_diag_log("ico_pc: %u Main ticks, %u vsyncs, stage_no %d", ico_host_main_ticks(),
                  ico_host_vsync_count(), ico_host_stage_no());
+}
+
+/* v0.4.2: the run before's log as logs/ico-pc-previous.log, so the log of
+   a run that ended by itself is still there when the player starts the
+   game again before sending it (on a phone the game just went away) */
+static void keep_previous_log(const char *logs_dir, const char *log_path)
+{
+    char prev[ICO_PATH_MAX];
+
+    if (ico_path_kind(log_path, NULL, NULL) == 0 &&
+        ico_path_join(prev, sizeof(prev), logs_dir, "ico-pc-previous.log") == 0) {
+        ico_rename_replace(log_path, prev);
+    }
 }
 
 /* A crash or the watchdog (diag_host.h): the same summary without stdio,
@@ -1303,7 +1317,7 @@ static int host_main(int argc, char **argv)
     if (a.console) {
         log_path[0] = '\0';
     } else if (log_path[0] == '\0' || ico_make_dir(logs_dir) != 0 ||
-               ico_host_redirect_output(log_path) != 0) {
+               (keep_previous_log(logs_dir, log_path), ico_host_redirect_output(log_path) != 0)) {
         fprintf(stderr, "ico_pc: cannot write %s; logging to the console\n", log_path);
         log_path[0] = '\0';
     }

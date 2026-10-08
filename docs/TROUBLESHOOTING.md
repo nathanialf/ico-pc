@@ -7,8 +7,10 @@
 Every time the game runs, it writes what it is doing into a text file
 named `ico-pc.log`, in a `logs` folder beside the program. On Windows that
 is `x64\logs\ico-pc.log`. On Android it is in the game's folder
-([where that is](ANDROID.md#where-your-files-are)). Each run replaces the
-file from the run before, so copy it before you start the game again.
+([where that is](ANDROID.md#where-your-files-are)). Each run starts the
+file again and keeps the one from the run before as `ico-pc-previous.log`
+in the same folder, so the log of a run that went wrong is still there
+after you start the game once more.
 
 The log records your display settings, every change you make to them, and
 every 10 seconds how fast the game is running. When something goes wrong,

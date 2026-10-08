@@ -164,7 +164,7 @@ preset uses Auto on Android.
 **Sending us a log about speed.** If the whole file is too big to send,
 the parts that matter are the first lines of `logs/ico-pc.log` (they say
 which phone, graphics and settings the game found) and, from a moment of
-play that stutters, the three lines starting with `window:` that the game
+play that stutters, the four lines starting with `window:` that the game
 writes every 10 seconds. Copy them as they are.
 
 **Sending us a log about the picture's size.** If the opening scene after
@@ -174,14 +174,24 @@ looks right, including every line that starts with `window:` and every
 line that contains the word `swapchain`. They say what size the game was
 told the screen is, and when that changed. Copy them as they are.
 
-**Sending us a log when the game closes by itself.** Send
-`logs/ico-pc.log` from the start where it happened, before you start the
-game again (each start writes a new log). If you cannot send the whole
-file, copy everything from the line of `=====` signs near the end (the
-next line says `CRASH`) down to the last line, or the last 60 lines if
-there is no such line. They say where the game stopped. Also tell
-us what you pressed just before, and whether your saves in `memcard`
-came from this phone or were copied from somewhere else.
+**Sending us a log when the game closes by itself.** When the game has
+to close, it first shows a message that says so and where its log is.
+Send `logs/ico-pc.log` from the start where it happened. If you have
+started the game again since, the log of the start before is
+`logs/ico-pc-previous.log`. If you cannot send the whole file, copy
+everything from the line of `=====` signs near the end (the next line
+says `CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines
+if there is no such line. They say where the game stopped. Also tell us
+what you pressed just before, and whether your saves in `memcard` came
+from this phone or were copied from somewhere else.
+
+**Sending us the buttons you pressed.** Each start also writes a file in
+`logs` whose name starts with `input-` and goes on with the date and
+time of that start. It lists the buttons you pressed. With it and your
+`memcard` folder as it was when you started, we can play the same
+session on a computer, step for step, and see whether the problem
+happens there too. Send it with the log for any problem you can make
+happen again: closing by itself, a pose, a place.
 
 **Sending us a save that shows a problem.** If something looks wrong in
 the game (a pose, a place, a character), save near it if you can, then
