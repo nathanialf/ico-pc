@@ -57,8 +57,8 @@ void ico_input_set_live(int on);
 int ico_input_live(void);
 /* The binding layer's output for this vsync. */
 void ico_input_set_vpad(const IcoVirtualPad *v);
-/* [gameplay] stick_fix (default off) and the mirror mode hook (Phase 6):
-   negate stick X, both sticks, of the live sources (a script is bytes and is
+/* [gameplay] stick_fix (default off; on under Android, options.h
+   ico_opt_stick_fix_default) and the mirror mode hook (Phase 6): negate stick X, both sticks, of the live sources (a script is bytes and is
    left as written). */
 void ico_input_set_stick_fix(int on);
 int ico_input_stick_fix_enabled(void);

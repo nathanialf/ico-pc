@@ -123,6 +123,8 @@ left, a look pad at the top right, the four face buttons at the bottom
 right, a D-pad, the shoulder buttons in the top corners, and Start and
 Select at the top. They fade away when you stop touching the screen and
 come back when you touch it. [The full description](CONTROLS.md#touch-controls-phones-and-tablets).
+On a phone the stick fix (**Options > Gameplay > Analogue stick fix**)
+starts On, so Ico runs in every direction you push the on-screen stick.
 
 **Back.** The phone's Back button or gesture opens the pause menu, like
 Start.

@@ -103,6 +103,7 @@
 #include "pad_script.h"
 #include "tables.h"
 #include "trace_host.h"
+#include "options.h" /* the recording's effective stick_fix */
 #ifdef __ANDROID__
 #include "host_android.h" /* port/platform/android: the version line */
 #include "iso_import.h"   /* the first start's copy of the chosen image */
@@ -111,7 +112,6 @@
 #ifndef ICO_HEADLESS
 
 #include <SDL3/SDL.h>
-#include "options.h"
 #include "rhi.h"
 #include "modelpack.h" /* v0.4.1: model packs */
 #include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
@@ -433,6 +433,9 @@ static void record_header(char *out, size_t size, const char *stamp)
         PUT("# config %s = %s\n", record_keys[i], ico_config_get_string(record_keys[i], "(unset)"));
     }
     PUT("# effective fixed_clock = %s\n", fixed_clock_now());
+    /* gameplay.stick_fix's default differs by platform (on under Android):
+       the value the run used, for a phone's recording played on a computer */
+    PUT("# effective stick_fix = %d\n", ico_opt_stick_fix());
     PUT("# the game's memory card folder at the start also decides the run (a Continue loads "
         "from it)\n");
     PUT("# <tick> <buttons-hex> lx ly rx ry: one line for each Main tick whose read differs "
@@ -499,7 +502,7 @@ static void record_check(const char *path)
         return;
     }
     while (fgets(line, sizeof(line), f) != NULL && line[0] == '#') {
-        char key[128], value[256];
+        char key[128], value[256], fixbuf[8];
         const char *now = NULL;
 
         line[strcspn(line, "\r\n")] = '\0';
@@ -516,6 +519,10 @@ static void record_check(const char *path)
         } else if (sscanf(line, "# effective %127s = %255[^\n]", key, value) == 2 &&
                    strcmp(key, "fixed_clock") == 0) {
             now = fixed_clock_now();
+        } else if (sscanf(line, "# effective %127s = %255[^\n]", key, value) == 2 &&
+                   strcmp(key, "stick_fix") == 0) {
+            snprintf(fixbuf, sizeof(fixbuf), "%d", ico_opt_stick_fix());
+            now = fixbuf;
         } else if (sscanf(line, "# build %255s", value) == 1) {
             strcpy(key, "build");
             now = ICO_BUILD_COMMIT;

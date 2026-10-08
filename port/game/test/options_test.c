@@ -97,7 +97,16 @@ static void test_defaults(void)
 {
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
-    CHECK(ico_opt_stick_fix() == 0);
+    /* v0.4.2: the stick fix starts on on Android (a touch stick is round),
+       off elsewhere; with no config.toml the option is that default */
+    CHECK(ico_opt_stick_fix_default_for(1) == 1);
+    CHECK(ico_opt_stick_fix_default_for(0) == 0);
+#ifdef __ANDROID__
+    CHECK(ico_opt_stick_fix_default() == 1);
+#else
+    CHECK(ico_opt_stick_fix_default() == 0);
+#endif
+    CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default());
     CHECK(ico_opt_yorda_safe() == 0);
     CHECK(ico_opt_mirror() == 0);
     CHECK(ico_opt_developer_mode() == 0);
@@ -112,7 +121,7 @@ static void test_defaults(void)
     ico_opt_set_mirror(1);
     CHECK(ico_opt_stick_fix() == 1 && ico_opt_mirror() == 1);
     ico_opt_reload();
-    CHECK(ico_opt_stick_fix() == 0 && ico_opt_mirror() == 0);
+    CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default() && ico_opt_mirror() == 0);
     CHECK(ico_opt_developer_mode() == 0);
 }
 

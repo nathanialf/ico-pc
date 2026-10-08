@@ -14,6 +14,7 @@
 #include "config.h"
 #include "host_config.h"
 #include "input.h"
+#include "options.h"
 
 static const char *const scalar_keys[] = {
     "keyboard",       "mouse",      "gamepad",           "rumble",
@@ -68,7 +69,8 @@ int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t)
         return 0;
     }
     bad = apply_keys(b, toml_get, t);
-    ico_input_set_stick_fix(ico_toml_get_bool(t, "gameplay.stick_fix", 0));
+    ico_input_set_stick_fix(
+        ico_toml_get_bool(t, "gameplay.stick_fix", ico_opt_stick_fix_default()));
     return bad;
 }
 

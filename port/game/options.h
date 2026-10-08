@@ -8,9 +8,9 @@
  * Each option is read once from config.toml ([gameplay], via
  * ico_config_get_bool) the first time it is asked for, and can be set at run
  * time. Every default is the original game's behaviour, except
- * circle_back (default-on port behaviour).
+ * circle_back (default-on port behaviour) and stick_fix on Android.
  *
- *   [gameplay] stick_fix   false  the stick fix
+ *   [gameplay] stick_fix   false  the stick fix (true on Android)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
  *   [gameplay] mirror      false  mirrored play (negated stick X, swapped pan)
  *   [gameplay] developer_mode
@@ -36,6 +36,11 @@ extern int ico_mv_active;
 
 int ico_opt_stick_fix(void);
 void ico_opt_set_stick_fix(int on);
+/* stick_fix's default when config.toml has none: off, and on under
+   __ANDROID__ (ico_opt_stick_fix_default_for(1); a touch stick is round).
+   The one default every reader of gameplay.stick_fix uses. */
+int ico_opt_stick_fix_default_for(int android);
+int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio

@@ -25,17 +25,39 @@ static int s_developer_mode = -1;
 
 static int s_circle_back = -1;
 
-static int get(int *v, const char *path)
+static int get_or(int *v, const char *path, int def)
 {
     if (*v < 0) {
-        *v = ico_config_get_bool(path, 0) != 0;
+        *v = ico_config_get_bool(path, def) != 0;
     }
     return *v;
 }
 
+static int get(int *v, const char *path)
+{
+    return get_or(v, path, 0);
+}
+
+int ico_opt_stick_fix_default_for(int android)
+{
+    /* v0.4.2: on a phone the touch stick is round, so its diagonals stop
+       short of the DualShock 2's square corners, where Ico runs diagonally
+       at full speed; the stick fix gives them back */
+    return android ? 1 : 0;
+}
+
+int ico_opt_stick_fix_default(void)
+{
+#ifdef __ANDROID__
+    return ico_opt_stick_fix_default_for(1);
+#else
+    return ico_opt_stick_fix_default_for(0);
+#endif
+}
+
 int ico_opt_stick_fix(void)
 {
-    return get(&s_stick_fix, "gameplay.stick_fix");
+    return get_or(&s_stick_fix, "gameplay.stick_fix", ico_opt_stick_fix_default());
 }
 
 void ico_opt_set_stick_fix(int on)

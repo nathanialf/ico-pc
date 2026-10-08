@@ -104,7 +104,8 @@ Both of these are off unless you turn them on.
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
-  not only the eight the original game knows.
+  not only the eight the original game knows. On a phone the stick fix
+  starts On.
   [Why this is needed](FAQ.md#ico-walks-instead-of-running).
 
 ## Language
