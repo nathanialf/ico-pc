@@ -299,7 +299,7 @@ static void default_item_select(int no)
             glowCount = 0;
         }
     } else {
-        p->curItem = ((int (*)(void))fadeCallback)();
+        p->curItem = ((int (*)(int))fadeCallback)(p->curItem);
         fadeCallback = 0;
     }
 
