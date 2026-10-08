@@ -6,7 +6,7 @@
  * refresh, so slow means a cost above max(refresh, period) + period / 2; with
  * an effects program loaded (ReShade, vkBasalt: rhi_InjectorName() != NULL)
  * each present also runs the program's passes, so the threshold is
- * 2 * refresh + period / 2.
+ * max(refresh, period) + refresh + period / 2.
  *
  * The cost is smoothed (the median of the last 8 presents, so one spike
  * changes nothing) and the state has hysteresis: it turns on after 3 presents

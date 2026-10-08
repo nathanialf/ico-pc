@@ -33,10 +33,18 @@ int main(void)
     int i, flips;
     bool last;
 
-    /* max(refresh, period) + period / 2, and 2 * refresh + period / 2 */
+    /* max(refresh, period) + period / 2, and that plus a refresh with an effects program */
     CHECK(pace_SlowThreshold(REFRESH, PERIOD, false) == PERIOD + PERIOD / 2);
     CHECK(pace_SlowThreshold(33333ull * 1000, PERIOD, false) == 33333ull * 1000 + PERIOD / 2);
-    CHECK(pace_SlowThreshold(REFRESH, PERIOD, true) == 2 * REFRESH + PERIOD / 2);
+    CHECK(pace_SlowThreshold(REFRESH, PERIOD, true) == PERIOD + REFRESH + PERIOD / 2);
+    /* 144 Hz and 50 Hz displays against the 60 Hz game period: never below
+       the plain threshold (2 * refresh + period / 2 was, at 144 Hz) */
+    CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) == PERIOD + 6944444ull + PERIOD / 2);
+    CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) >
+          pace_SlowThreshold(6944444ull, PERIOD, false));
+    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) == PERIOD + 20000000ull + PERIOD / 2);
+    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) >
+          pace_SlowThreshold(20000000ull, PERIOD, false));
 
     /* a steady vsync-blocked present (one refresh) is never slow */
     for (i = 0; i < 40; i++) {

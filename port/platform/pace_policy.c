@@ -8,7 +8,8 @@
 uint64_t pace_SlowThreshold(uint64_t refreshNs, uint64_t periodNs, bool injector)
 {
     if (injector) {
-        return 2 * refreshNs + periodNs / 2;
+        /* one refresh more than the plain threshold */
+        return (refreshNs > periodNs ? refreshNs : periodNs) + refreshNs + periodNs / 2;
     }
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
