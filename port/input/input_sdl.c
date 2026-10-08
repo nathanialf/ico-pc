@@ -7,8 +7,6 @@
  * from the window's size and safe area, and a copy of what the overlay
  * drawing reads.
  */
-/* the real ico_input_sdl_set_safe_area is this file's (input_sdl.h) */
-#define ICO_TOUCH_SAFE_AREA_IMPL 1
 #include <stdio.h>
 #include <string.h>
 #include "host_config.h"
@@ -188,15 +186,6 @@ void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh
     touch_rebuild();
 }
 
-void ico_input_sdl_set_safe_area(int x, int y, int w, int h)
-{
-    s_safeX = x;
-    s_safeY = y;
-    s_safeW = w;
-    s_safeH = h;
-    touch_rebuild();
-}
-
 int ico_input_sdl_touch_present(void)
 {
     return s_touchDevice;
@@ -235,6 +224,14 @@ static void clear_held(void)
     s_acc_dx = s_acc_dy = 0.0f;
 }
 
+/* SDL synthesizes mouse events from touches (SDL_TOUCH_MOUSEID); with the
+   overlay active the fingers are already handled as touches, so those
+   mouse events are dropped (else a tap is a click and a drag a look too) */
+static int touch_synth_mouse(SDL_MouseID which)
+{
+    return which == SDL_TOUCH_MOUSEID && s_touchDevice && s_bind.touch_mode != ICO_TOUCH_MODE_OFF;
+}
+
 void ico_input_sdl_event(const SDL_Event *e)
 {
     if (!s_ready) {
@@ -255,6 +252,9 @@ void ico_input_sdl_event(const SDL_Event *e)
         /* SDL: 1 left, 2 middle, 3 right, 4 x1, 5 x2; ours: 1 left, 2 right, 3 middle */
         static const unsigned char map[6] = {0, 1, 3, 2, 4, 5};
 
+        if (touch_synth_mouse(e->button.which)) {
+            break;
+        }
         if (e->button.button >= 1 && e->button.button <= 5) {
             s_raw.mouse[map[e->button.button]] = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
             if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
@@ -264,7 +264,7 @@ void ico_input_sdl_event(const SDL_Event *e)
         break;
     }
     case SDL_EVENT_MOUSE_MOTION:
-        if (s_capture) {
+        if (s_capture && !touch_synth_mouse(e->motion.which)) {
             s_acc_dx += e->motion.xrel;
             s_acc_dy += e->motion.yrel;
         }

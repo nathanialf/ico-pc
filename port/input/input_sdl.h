@@ -27,8 +27,6 @@
  *                               on open and when the size or safe area
  *                               changes (the Touch size row is followed
  *                               here)
- *   ico_input_sdl_set_safe_area(x, y, w, h)  the safe area alone, window
- *                               pixels, the size kept
  *   ico_input_sdl_touch_present()  1 once a direct touch screen is known
  *                               (at start, or its first touch): the
  *                               Settings rows show
@@ -48,7 +46,6 @@ void ico_input_sdl_set_capture(int on);
 void ico_input_sdl_update(void);
 void ico_input_sdl_shutdown(void);
 void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh);
-void ico_input_sdl_set_safe_area(int x, int y, int w, int h);
 int ico_input_sdl_touch_present(void);
 int ico_input_sdl_touch_overlay(IcoTouchOverlay *out);
 
