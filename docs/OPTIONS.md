@@ -1,0 +1,218 @@
+# Options
+
+[Back to the front page](../README.md)
+
+## Open the Options menu
+
+There are two ways in, and both open the same menu:
+
+- On the title screen, choose **Options**.
+- During play, press Start and choose **Options**.
+
+Up and Down move between rows. Left and Right change a value. Cross opens
+a page or confirms. Triangle or Circle goes back.
+
+Every change happens at once, and the game remembers it the next time you
+play. A few rows only show up in one of the two places. This page says
+which.
+
+Some rows are the PS2's own settings, the ones the original Options screen
+had. They only show up when you open Options from the pause menu, and they
+are kept in your save, as on the PS2:
+
+- Brightness (on the Display page; Square puts back the normal value, 7)
+- Button configuration, Vibration and Hold type (on the Controls page)
+- Film effect and Players (on the Gameplay page, once you have finished
+  the game)
+
+## Display
+
+How the picture looks.
+
+- **Preset** is a shortcut. **Original** sets the four rows below back to
+  the PS2 picture. **Enhanced** makes the picture as sharp as your
+  window, fits it to the window's shape, smooths the textures and shows
+  the full-height picture. Once you change one of the four rows yourself, it says
+  **Custom**. The Preset does not touch the Effects page.
+- **Resolution** is how sharp the picture is: 1x is the PS2's, up to 4x,
+  or the size of your window. It stays at 1x while the CRT filter is on.
+- **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
+  21:9 or 32:9. **Auto** follows the shape of your window or screen.
+  On a wider picture you see more of the world to the sides. Menus,
+  subtitles and movies stay in a 4:3 box in the middle. At the far edges
+  of a very wide picture, a few things can pop in a moment late, because
+  the game only ever expected a 4:3 view.
+- **Fullscreen** switches between a window and the whole screen. In Steam
+  Deck Game Mode the game always fills the screen, whatever this says.
+- **Vertical sync** stops the picture from tearing. With it off, the
+  picture can tear if your screen allows it.
+- **Texture filtering** is how smooth the textures look up close.
+- **Texture pack** turns an installed texture pack On or Off. It says
+  **None installed** when there is none. [About texture packs](TEXTURE_PACKS.md).
+- **Model pack** turns an installed model pack On or Off. It says **None
+  installed** when there is none. This row is only on the title screen's
+  Options. [About model packs](MODEL_PACKS.md).
+- **Full-height picture** shows every line of the picture. The PS2 showed
+  half of them, which looks a little softer.
+- **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit
+  up to 240 frames a second.
+- **CRT filter** makes the picture look like an old tube television, with
+  several styles. **CRT strength** is how strong it is.
+- **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
+  row is only on the title screen's Options.
+
+## Effects
+
+The game's own picture effects. Each one is On or Off. All On is the
+picture the PS2 gives you, and that is how the game starts.
+
+- **Glow:** the soft glow around bright light, and the flare of the sun.
+- **Depth of field:** the blur on things far away.
+- **Screen softening:** a slight blur over the whole picture that smooths
+  jagged edges.
+- **Motion blur:** the trail that moving things leave behind.
+- **Fog:** the haze that hides the distance.
+
+The Preset on the Display page does not change these. Photo mode freezes
+the picture as it was when you opened it, so a change you make here shows
+the next time you open photo mode.
+
+## Audio
+
+- **Volume, Music volume and Effects volume** set how loud everything is.
+- **Sound output** is stereo or mono.
+- **Output device** picks the speakers or headphones to use.
+
+## Controls
+
+- **Remap controls** lets you change which button or key does what.
+- **Mouse sensitivity** is how fast the mouse turns the camera.
+- **Circle goes back** makes Circle leave menus, like Triangle.
+- **Touch controls, Touch size and Touch opacity** set up the buttons on a
+  touch screen. They only show up on a device with one.
+  [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
+
+## Gameplay
+
+Both of these are off unless you turn them on.
+
+- **Shadows never take Yorda** makes the game gentler. A few scenes in the
+  story still show her being taken.
+- **Analogue stick fix** lets Ico run in any direction you push the stick,
+  not only the eight the original game knows.
+  [Why this is needed](FAQ.md#ico-walks-instead-of-running).
+
+## Language
+
+English, French, German, Italian or Spanish. The game starts in your
+system's language when it has it. If you change it during play, the menus
+change at once and the game's own text and subtitles change at the next
+area.
+
+## Achievements
+
+The list of achievements and what each one asks. Secret ones show as ???
+until you earn them. You cannot earn achievements while Developer mode is
+on.
+
+## Extras
+
+This page is only on the title screen's Options.
+
+- **Music:** listen to the game's music and sound effects.
+- **Models:** the model viewer. Look closely at the characters and some
+  objects, and play their animations. [The viewer's controls](CONTROLS.md#look-at-the-models).
+- **Credits:** watch the ending credits again. It unlocks once you have
+  finished the game.
+
+## Photo mode
+
+Photo mode is a row in the pause menu during play. The game stays paused
+while you move a camera around and save pictures.
+[The photo mode controls](CONTROLS.md#take-a-photo).
+
+## Developer mode
+
+Developer mode brings back the menu the game's makers used while they
+built it. Leave it off for normal play. While it is on, you cannot earn
+achievements.
+
+With Developer mode on, two more rows show up under it. They are for
+people who make packs:
+
+- **Dump textures** saves every texture as a picture file when the game
+  loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
+- **Dump models** saves every model piece as a 3D model file when the game
+  draws it. [More](MODEL_PACKS.md#make-a-model-pack).
+
+## The pause menu's journey panel
+
+The pause menu shows your journey's numbers on the right: play time,
+deaths, how often Yorda was taken, saves, enemies defeated, whether New
+Game+ and Mirror mode are on, and how many achievements you have. Any
+helpers you turned on (Shadows never take Yorda, the stick fix, Developer
+mode) are listed too. Where the game has a name for the area you are in,
+the panel shows it.
+
+A save made before version 0.4.0 never counted its saves and enemies, so
+those two lines stay hidden until you start a New Game.
+
+## Starting a New Game
+
+**Mirror mode** and **New Game+** are not in Options. When you start a New
+Game, the screen after "Vibration" has a row for each, Off or On. Up and
+Down move between them, Left and Right pick, and Cross starts the game.
+
+- **Mirror mode** plays the whole game flipped left to right.
+- **New Game+** plays the second journey, the one the PS2 gives you after
+  you finish the game. Yorda's words are translated, and the ending and
+  some items change. It starts On when you begin from a finished game's
+  save, and Off otherwise. You can change it either way.
+
+Two things follow from that choice. If you turn New Game+ On before you
+have finished the game, the ending does not offer to save a finished game,
+and finishing counts for the "Once More" achievement. If you turn it Off
+after finishing, Film effect and Players are not in Options for that
+journey. Both choices stay with that save.
+
+## Settings you can only change in a file
+
+A few settings are not in the menu. The game keeps all its settings in a
+text file named `config.toml`, in the same folder as your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)). To change one:
+
+1. Close the game.
+2. Open `config.toml` in a text editor, such as Notepad.
+3. Find the line, change the value after the `=`, and save the file.
+
+Each line has a short note above it saying what it does. Lines that start
+with `#` are notes, or settings switched off. To switch one on, delete
+the `#` at the start of its line.
+
+A `config.toml` from an older version may not have a line yet. You can add
+it yourself, under the heading shown below in square brackets.
+
+Under `[photo]`, for photo mode:
+
+| Line | What it does |
+| --- | --- |
+| `stick_speed = 1.0` | How fast the camera moves, turns, tilts and zooms. `0.5` is half as fast, `2.0` twice as fast. |
+| `invert_y = false` | `true` swaps up and down when you look around. |
+| `hide_ui = false` | `true` opens photo mode with its help panel hidden. Square in photo mode changes this for you. |
+| `png_dir = "screenshots"` | The folder your pictures go in, inside the folder with your saves. |
+
+Under `[video]`:
+
+| Line | What it does |
+| --- | --- |
+| `effect_glow = true` and the four other `effect_` lines | The five switches of the Effects page. |
+| `model_pack = true` | The Model pack row. `false` shows the game's own models. |
+| `dump_models = false` | The Dump models row. Only works with Developer mode on. |
+| `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
+| `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
+
+On Android, under `[paths]`:
+
+| Line | What it does |
+| --- | --- |
+| `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. [About Android](ANDROID.md#the-first-start). |

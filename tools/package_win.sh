@@ -75,6 +75,8 @@ cd "$root"
 
 # the textures folder's note and the archive checks
 . "$wt/tools/package_textures_lib.sh"
+# the player guides (docs/*.md)
+. "$wt/tools/package_docs_lib.sh"
 
 # stage
 date_str="$(date +%Y-%m-%d)"
@@ -92,7 +94,7 @@ for a in x64; do
     cat > "$d/tools/README.txt" <<'TXT'
 Developer tools; playing the game needs none of them. mc_import.exe copies
 ICO's save out of a PS2 memory card image or save archive into the game's
-save folder (README.md, "Importing a PS2 save"). rhi_d3d12_test.exe checks
+save folder (docs\PORTABLE_MODE.md, "Bring a PS2 save over"). rhi_d3d12_test.exe checks
 the Direct3D 12 renderer against exact expected pixels and ends with a
 message box giving the verdict (log: rhi_d3d12_test.log). rd_replay_tool.exe
 renders a frame dump (F12 in the game writes one to dumps\) to a PNG, and
@@ -152,8 +154,9 @@ watchdog=30
 # program.
 INI
 done
-# the player README, from the same commit
+# the player README and the guides it links, from the same commit
 cp "$wt/README.md" "$stage/README.md"
+pkg_stage_docs "$wt" "$stage" || fail "stage: a player guide is missing"
 printf 'ico-pc %s\r\nbuilt %s\r\ncommit %s\r\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"
 
 # zip, root dir ico-pc-<label>/. The files staged above and nothing else
@@ -165,6 +168,7 @@ pkgroot="$root/build-host/tmp/zip-$label"
 rm -rf "$pkgroot"
 mkdir -p "$pkgroot/ico-pc-$label"
 cp -a "$stage/README.md" "$pkgroot/ico-pc-$label/README.md"
+cp -a "$stage/docs" "$pkgroot/ico-pc-$label/docs"
 cp -a "$stage/VERSION.txt" "$pkgroot/ico-pc-$label/VERSION.txt"
 for a in x64; do
     mkdir -p "$pkgroot/ico-pc-$label/$a/tools" "$pkgroot/ico-pc-$label/$a/$pkg_textures_rel"
@@ -184,6 +188,9 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
             z.write(p, os.path.relpath(p, base))
 PY
 rm -rf "$pkgroot"
+for n in "${pkg_player_docs[@]}"; do
+    pkg_assert_zip_has "$zip" "ico-pc-$label/docs/$n.md" || fail "the zip lacks docs/$n.md"
+done
 for a in x64; do
     pkg_assert_zip_has "$zip" "ico-pc-$label/$a/$pkg_textures_rel/README.txt" \
         || fail "the zip lacks $a/$pkg_textures_rel/README.txt"

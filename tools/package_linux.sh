@@ -5,7 +5,7 @@
 # build-host/pkg-linux-wt (no baserom, no uncommitted work), preset
 # linux-x64 with the window build (-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON),
 # staged under dist/stage/linux/ and archived as dist/ico-pc-<label>-linux.tar.gz
-# (root dir ico-pc-<label>/), with tools/mc_import, README.md and VERSION.txt. Quiet; the log is build-host/pkg-linux-<label>.log.
+# (root dir ico-pc-<label>/), with tools/mc_import, README.md, the player guides in docs/ and VERSION.txt. Quiet; the log is build-host/pkg-linux-<label>.log.
 # Safe to re-run. Builds only: it never runs the game.
 #
 # ICO_PKG_FILES="path ..." copies those working-tree files over the HEAD
@@ -98,6 +98,8 @@ fi
 
 # the textures folder's note and the archive checks
 . "$wt/tools/package_textures_lib.sh"
+# the player guides (docs/*.md)
+. "$wt/tools/package_docs_lib.sh"
 
 # stage
 commit8="${commit:0:8}"
@@ -158,8 +160,9 @@ watchdog=30
 # the in-game Options menu, which saves it to config.toml in your user
 # folder. With a problem report, send logs/ico-pc.log from next to ico_pc.
 INI
-# the player README, from the same commit
+# the player README and the guides it links, from the same commit
 cp "$wt/README.md" "$stage/README.md"
+pkg_stage_docs "$wt" "$stage" || fail "stage: a player guide is missing"
 printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"
 
 # archive, root dir ico-pc-<label>/, files owned by root, names sorted.
@@ -173,12 +176,16 @@ mkdir -p "$pkgroot/ico-pc-$label/tools" "$pkgroot/ico-pc-$label/$pkg_textures_re
 for f in ico_pc libSDL3.so.0 LICENSE NOTICES.txt THIRD_PARTY.md ico-pc.ini README.md VERSION.txt tools/mc_import "$pkg_textures_rel/README.txt"; do
     cp -a "$stage/$f" "$pkgroot/ico-pc-$label/$f" || fail "stage: no $f"
 done
+cp -a "$stage/docs" "$pkgroot/ico-pc-$label/docs"
 if [[ -f "$stage/ico_pc.map" ]]; then
     cp -a "$stage/ico_pc.map" "$pkgroot/ico-pc-$label/ico_pc.map"
 fi
 tar -C "$pkgroot" --sort=name --owner=0 --group=0 --numeric-owner \
     -czf "$tgz" "ico-pc-$label" >>"$log" 2>&1 || fail "tar"
 rm -rf "$pkgroot"
+for n in "${pkg_player_docs[@]}"; do
+    pkg_assert_tar_has "$tgz" "ico-pc-$label/docs/$n.md" || fail "the archive lacks docs/$n.md"
+done
 pkg_assert_tar_has "$tgz" "ico-pc-$label/$pkg_textures_rel/README.txt" \
     || fail "the archive lacks $pkg_textures_rel/README.txt"
 

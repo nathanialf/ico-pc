@@ -287,6 +287,19 @@ disc's textures when `ICO_TEXPACK_DIR` (default
 `build-host/tmp/texpack/SCES-50760/replacements`) exists; no pack file is
 ever committed.
 
+The Android code is tested on Linux, where it can be: `android_paths`
+(the files folder layout), `iso_import` (the first start's copy of the
+chosen disc image), `lifecycle` (background and foreground on fake
+operations) and `touch` (the touch overlay's mapping). The paths of a
+phone GPU are tested on the Linux Vulkan device by forcing them: the
+`*_nodual` tests run the render and shader tests again with
+`ICO_RD_NO_DUAL=1` (blending in two passes, for GPUs without dual-source
+blending such as Mali and PowerVR), `rhi_vk_nodual` with
+`ICO_VK_FAKE_NO_DUAL=1` (the feature cleared at device creation), and
+`rhi_vk_d24s8` with `ICO_VK_FAKE_D24S8=1` (the D24S8 depth fallback when
+D32F_S8 is missing). On a device, the log is mirrored to logcat:
+`adb logcat -s ico-pc`.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: two Linux
@@ -334,7 +347,22 @@ Run the same steps locally before pushing.
 `tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build
 the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 `dist/ico-pc-<label>-linux.tar.gz`). Neither contains game data; both carry
-the README, the licence files and the save importer.
+the README, the player guides, the licence files and the save importer.
+
+The documents: `README.md` is the players' front page, and the player
+guides it links are `docs/FAQ.md`, `CONTROLS.md`, `OPTIONS.md`,
+`TEXTURE_PACKS.md`, `MODEL_PACKS.md`, `RESHADE.md`, `ANDROID.md`,
+`PORTABLE_MODE.md` and `TROUBLESHOOTING.md`. They link each other with
+relative links, so they read the same on GitHub and in a package. Both
+package scripts copy them unchanged into a `docs/` folder at the package
+root, beside `README.md` (the list is `pkg_player_docs` in
+`tools/package_docs_lib.sh`; a new guide goes there too, and the scripts
+fail when one is missing from the archive). `BUILDING.md`, `LEGAL.md` and
+`THIRD_PARTY.md` are for developers and are linked from the README by their
+GitHub address; only the Linux package carries `THIRD_PARTY.md`, at its
+root. The APK carries no documents besides `assets/VERSION.txt` and
+`assets/NOTICES.txt`: Android players read the guides on GitHub. Release
+notes are drafted in `docs/RELEASE_NOTES_<tag>.md`.
 
 `tools/package_android.sh <label>` does the same for Android
 (`dist/ico-pc-<label>-android.apk`, log `build-host/pkg-android-<label>.log`):
