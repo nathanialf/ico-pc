@@ -174,8 +174,9 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 /* how far the model sits left of the middle, in distances */
 #define MODEL_SHIFT 0.16f
 /* in Characters it sits right of the middle, clear of the panel at the
-   left (settings.c CV_*: the panel ends at x 348 of 640) */
-#define MODEL_SHIFT_CHARS -0.22f
+   left (settings.c CV_*: the panel ends at x 348 of 640); v0.4.2 K-F: a
+   little nearer the middle than the first -0.22 */
+#define MODEL_SHIFT_CHARS -0.16f
 #define LOAD_TIMEOUT_TICKS 3000u
 /* the title's stage back after End Game (a few hundred ticks); past this
    the viewer lets go of the game anyway */

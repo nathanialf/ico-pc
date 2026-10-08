@@ -102,7 +102,7 @@ int ico_appearance_choices(IcoAppPart p)
     if (!partOk(p)) {
         return 0;
     }
-    return 1 + (kParts[p].skin ? ICO_APP_TONES : ICO_APP_COLOURS);
+    return 1 + (kParts[p].skin ? ICO_APP_TONES : 0) + ICO_APP_COLOURS;
 }
 
 static int lower(int c)
@@ -119,15 +119,23 @@ static int sameName(const char *a, const char *b)
     return *a == 0 && *b == 0;
 }
 
+/* the palette index of a value, -1 for Original or a skin tone */
+static int paletteIndex(IcoAppPart p, int v)
+{
+    const int first = kParts[p].skin ? 1 + ICO_APP_TONES : 1;
+
+    return v >= first && v < ico_appearance_choices(p) ? v - first : -1;
+}
+
 /* the config string of a value */
 static void valueName(IcoAppPart p, int v, char *buf, size_t n)
 {
     if (v <= 0 || v >= ico_appearance_choices(p)) {
         snprintf(buf, n, "original");
-    } else if (kParts[p].skin) {
-        snprintf(buf, n, "tone%d", v);
+    } else if (paletteIndex(p, v) >= 0) {
+        snprintf(buf, n, "%s", kPalette[paletteIndex(p, v)].name);
     } else {
-        snprintf(buf, n, "%s", kPalette[v - 1].name);
+        snprintf(buf, n, "tone%d", v);
     }
 }
 
@@ -150,12 +158,12 @@ static int parseValue(IcoAppPart p, const char *s)
             if (i > 4 && s[i] == 0 && v >= 1 && v <= ICO_APP_TONES) {
                 return v;
             }
+            return -1;
         }
-        return -1;
     }
     for (i = 0; i < ICO_APP_COLOURS; i++) {
         if (sameName(s, kPalette[i].name)) {
-            return i + 1;
+            return (kParts[p].skin ? 1 + ICO_APP_TONES : 1) + i;
         }
     }
     return -1;
@@ -233,7 +241,13 @@ static unsigned int xorshift32(unsigned int *x)
     return v;
 }
 
-void ico_appearance_randomize(unsigned int seed)
+/* randomize / reset over every part (character -1) or one character's */
+static int inScope(int p, int character)
+{
+    return character < 0 || kParts[p].character == character;
+}
+
+static void randomizeScope(unsigned int seed, int character)
 {
     unsigned int x = seed != 0 ? seed : 0x9E3779B9u;
     int v[ICO_APP_PART_COUNT];
@@ -242,6 +256,9 @@ void ico_appearance_randomize(unsigned int seed)
     load();
     for (p = 0; p < ICO_APP_PART_COUNT; p++) {
         int n = ico_appearance_choices((IcoAppPart)p) - 1;
+
+        /* every part draws, in or out of the scope, so a part's colour
+           from a seed is the same either way */
 
         for (;;) {
             int q;
@@ -260,24 +277,57 @@ void ico_appearance_randomize(unsigned int seed)
         }
     }
     for (p = 0; p < ICO_APP_PART_COUNT; p++) {
-        store((IcoAppPart)p, v[p]);
+        if (inScope(p, character)) {
+            store((IcoAppPart)p, v[p]);
+        }
     }
     s_serial++;
-    fprintf(stderr, "appearance: randomize (seed %u)\n", seed);
+    if (character < 0) {
+        fprintf(stderr, "appearance: randomize (seed %u)\n", seed);
+    } else {
+        fprintf(stderr, "appearance: randomize %s (seed %u)\n", character == 1 ? "yorda" : "ico",
+                seed);
+    }
 }
 
-void ico_appearance_reset(void)
+void ico_appearance_randomize(unsigned int seed)
+{
+    randomizeScope(seed, -1);
+}
+
+void ico_appearance_randomize_character(int character, unsigned int seed)
+{
+    if (character == 0 || character == 1) {
+        randomizeScope(seed, character);
+    }
+}
+
+static void resetScope(int character)
 {
     int changed = 0;
     int p;
 
     load();
     for (p = 0; p < ICO_APP_PART_COUNT; p++) {
-        changed |= s_value[p] != 0;
-        store((IcoAppPart)p, 0);
+        if (inScope(p, character)) {
+            changed |= s_value[p] != 0;
+            store((IcoAppPart)p, 0);
+        }
     }
     if (changed) {
         s_serial++;
+    }
+}
+
+void ico_appearance_reset(void)
+{
+    resetScope(-1);
+}
+
+void ico_appearance_reset_character(int character)
+{
+    if (character == 0 || character == 1) {
+        resetScope(character);
     }
 }
 
@@ -466,16 +516,18 @@ static int target(IcoAppPart p, AppHsl *t)
     if (v <= 0) {
         return 0;
     }
-    if (kParts[p].skin) {
+    if (paletteIndex(p, v) >= 0) {
+        /* a named colour; for a skin part through the skin's rules (their
+           soft limits keep the hair and the cloth beside it) as a tone */
+        t->h = kPalette[paletteIndex(p, v)].h;
+        t->s = kPalette[paletteIndex(p, v)].s / 100.0;
+        t->l = kPalette[paletteIndex(p, v)].l / 100.0;
+    } else {
         double k = (double)(v - 1) / (double)(ICO_APP_TONES - 1);
 
         t->h = 30.0 + (16.0 - 30.0) * k;
         t->s = (45.0 + (34.0 - 45.0) * k) / 100.0;
         t->l = (85.0 + (20.0 - 85.0) * k) / 100.0;
-    } else {
-        t->h = kPalette[v - 1].h;
-        t->s = kPalette[v - 1].s / 100.0;
-        t->l = kPalette[v - 1].l / 100.0;
     }
     return 1;
 }

@@ -629,7 +629,11 @@ static int extrasOpen(int opt)
  * left of the screen (charactersPlace), the model on the right, with a
  * Switch row (and L1 / R1) for the other character and a line of button
  * prompts; Triangle goes back to the title, which opens Settings again on
- * Extras.  The values and the steps are the same code in both places.
+ * Extras.  There the panel shows only the rows of the character on screen
+ * and Randomize and Reset change only that character; the pause menu's
+ * page has both characters' rows and its Randomize and Reset change both.
+ * Skin rows step through the tones, then the colours.  The values and the
+ * steps are the same code in both places.
  * One note row under the page, its text chosen at each refresh: the
  * title's, the pause menu's, or the texture pack's while a pack is on
  * (the pack's pictures replace the recoloured ones); in the viewer only
@@ -652,8 +656,9 @@ _Static_assert(UI_STR_COLOUR_BLACK - UI_STR_COLOUR_RED + 1 == ICO_APP_COLOURS,
    model at the right of it (model_viewer.c's characters shift): the
    heading over the panel, the labels right-aligned to x 162, the value
    between its arrows to x 314, the swatch to x 346, on the letters'
-   middle; a smaller em on the closer pitch; the note (the texture pack's)
-   at 176 across the screen, the prompts under it */
+   middle; a smaller em on the closer pitch; the rows of the character on
+   screen only (optShown), Back after the last; the note (the texture
+   pack's) at 176 across the screen, the prompts under it */
 #define CV_ROW_Y0 30
 #define CV_ROW_PITCH 11
 #define CV_HEADER_X 16
@@ -715,8 +720,27 @@ int ui_SettingsCharactersInViewer(void)
     return charsShown() != -2;
 }
 
+/* The character whose rows the viewer's panel shows: the one on screen,
+   or, while a model loads, the one asked for (the rows change with the
+   Switch press, not a second later); -1 outside the viewer (the pause
+   menu's page shows both characters' rows). */
+static int s_charsRows;
+
+static int charsRowsFor(void)
+{
+    const int shown = charsShown();
+    if (shown == -2) {
+        return -1;
+    }
+    if (shown >= 0) {
+        s_charsRows = shown;
+    }
+    return s_charsRows;
+}
+
 /* Original, the colour's name, or the skin tone ("Tone %d" with its
-   number put where the translation has %d) */
+   number put where the translation has %d); a skin part has the tones
+   first, then the colours */
 static const char *charValue(int opt, char *buf, unsigned size)
 {
     const IcoAppPart p = charPart(opt);
@@ -724,7 +748,8 @@ static const char *charValue(int opt, char *buf, unsigned size)
     if (v <= 0 || v >= ico_appearance_choices(p)) {
         return ui_Str(UI_STR_VAL_ORIGINAL);
     }
-    if (ico_appearance_is_skin(p)) {
+    const int tones = ico_appearance_is_skin(p) ? ICO_APP_TONES : 0;
+    if (v <= tones) {
         const char *t = ui_Str(UI_STR_CHAR_TONE);
         const char *at = strstr(t, "%d");
         if (at != NULL) {
@@ -734,7 +759,7 @@ static const char *charValue(int opt, char *buf, unsigned size)
         }
         return buf;
     }
-    return ui_Str((UiStrId)(UI_STR_COLOUR_RED + v - 1));
+    return ui_Str((UiStrId)(UI_STR_COLOUR_RED + v - tones - 1));
 }
 
 /* the swatch's colour for lt_ext_AddRect / lt_ext_SetRectColor: the
@@ -761,6 +786,7 @@ static int charsEnter(void)
         return -1;
     }
     ui_SettingsSave();
+    s_charsRows = 0; /* Ico first */
     if (s_charsHost.enter() != 0) {
         fprintf(stderr, "characters: the viewer did not open\n");
         return -1;
@@ -953,6 +979,11 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_CHAR_SWITCH) {
         return ui_SettingsCharactersInViewer();
+    }
+    if (isCharOpt(opt)) {
+        /* v0.4.2: in the viewer only the rows of the character shown */
+        const int c = charsRowsFor();
+        return c < 0 || ico_appearance_character(charPart(opt)) == c;
     }
     if (isGameOpt(opt) && onTitle()) {
         return 0;
@@ -1586,9 +1617,10 @@ static int pagePitch(int page, int n, int *y0)
     *y0 = 40;
     if (page == UI_PAGE_CHARACTERS) {
         if (ui_SettingsCharactersInViewer()) {
-            /* inside the viewer: thirteen rows (Switch) 11 apart from 30,
-               Back at 162, clear of the note at 176 and the prompts at
-               196 */
+            /* inside the viewer: the shown character's rows, Switch,
+               Randomize, Reset and Back (Ico's eleven, Yorda's six) 11
+               apart from 30, Back at 140 or 85, clear of the note at 176
+               and the prompts at 196 */
             *y0 = CV_ROW_Y0;
             return CV_ROW_PITCH;
         }
@@ -3384,11 +3416,16 @@ static void charactersRefresh(Page *pg)
             lt_ext_SetStr(r->label, shown == 1 ? UI_STR_CHAR_SWITCH_ICO : UI_STR_CHAR_SWITCH_YORDA);
         }
         if (isCharOpt(r->opt) && s_charSwatch[charPart(r->opt)] >= 0) {
+            /* the swatch shows with its row (layoutPage masked the other
+               character's rows in the viewer) */
             const int sw = s_charSwatch[charPart(r->opt)];
+            const int hidden = P(r->label)->defaultMask;
             unsigned char rgba[4];
             swatchColour(charPart(r->opt), rgba);
             lt_ext_SetRectColor(sw, rgba);
             P(sw)->dispY = P(r->label)->dispY + (viewer ? CV_SWATCH_DY : SWATCH_DY);
+            P(sw)->defaultMask = hidden;
+            lt_mask_property(sw, hidden);
         }
     }
 }
@@ -3489,7 +3526,9 @@ static int settingsProc(int first, int item)
             cross && lay->curItem == ui_SettingsRowOf(UI_PAGE_CHARACTERS, UI_OPT_CHAR_SWITCH);
         if ((flags & (PAD_L1 | PAD_R1)) || onSwitch) {
             POSITIVE_SE();
-            s_charsHost.switchTo(1 - charsShown());
+            s_charsRows = 1 - charsShown();
+            s_charsHost.switchTo(s_charsRows);
+            refreshPage(pg, id, lay->curItem);
             return -1;
         }
     }
@@ -3521,8 +3560,18 @@ static int settingsProc(int first, int item)
         }
         if ((flags & PAD_CROSS) &&
             (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
+            /* v0.4.2: in the viewer only the character shown, from the
+               pause menu both */
+            const int c = charsRowsFor();
             if (r->opt == UI_OPT_CHAR_RANDOMIZE) {
-                ico_appearance_randomize((unsigned int)time(NULL) ^ ico_host_main_ticks());
+                const unsigned seed = (unsigned)time(NULL) ^ ico_host_main_ticks();
+                if (c >= 0) {
+                    ico_appearance_randomize_character(c, seed);
+                } else {
+                    ico_appearance_randomize(seed);
+                }
+            } else if (c >= 0) {
+                ico_appearance_reset_character(c);
             } else {
                 ico_appearance_reset();
             }

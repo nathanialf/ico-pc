@@ -2840,9 +2840,17 @@ static void testExtras(void)
         CHECK(strcmp(lt_ext_RowText(el[0]), "Music") == 0 &&
                   strcmp(lt_ext_RowText(el[1]), "Models") == 0 &&
                   strcmp(lt_ext_RowText(el[2]), "Credits") == 0 &&
-                  strcmp(lt_ext_RowText(el[3]), "Characters") == 0 &&
+                  strcmp(lt_ext_RowText(el[3]), "Character Customization") == 0 &&
                   strcmp(lt_ext_RowText(el[4]), "Back") == 0,
-              "Music, Models, Credits, Characters, Back");
+              "Music, Models, Credits, Character Customization, Back");
+        /* the row's name fits its box of 300 at 60 % or more */
+        for (int g = 0; g < UI_LANG_COUNT; g++) {
+            ui_SetLanguage((UiLang)g);
+            const float w =
+                ui_MeasureMenuText(UI_MENU_TEXT_SIZE, ui_Str(UI_STR_SECTION_CHARACTERS));
+            CHECK(w * 0.6f <= 300.0f, "language %d: the row fits (%.1f)", g, (double)w);
+        }
+        ui_SetLanguage(UI_LANG_EN);
         /* the locked style on Credits: greyed label and value, the note on
            the cursor only */
         CHECK(ev[2] >= 0 && strcmp(lt_ext_RowText(ev[2]), "Locked") == 0 &&
@@ -5137,19 +5145,29 @@ static void testCharacters(void)
             CHECK(sw >= 0, "%s: row %d has a swatch", who, i);
         }
 
-        /* Ico: Skin: Original, Tone 1 ... Tone 12, Original; Left wraps */
-        for (int k = 1; k <= ICO_APP_TONES; k++) {
+        /* Ico: Skin: Original, Tone 1 ... Tone 12, Red ... Black (K-F),
+           Original; Left wraps */
+        for (int k = 1; k <= ICO_APP_TONES + ICO_APP_COLOURS; k++) {
             charStep(l, lb[0], 1);
-            snprintf(want, sizeof(want), "Tone %d", k);
+            if (k <= ICO_APP_TONES) {
+                snprintf(want, sizeof(want), "Tone %d", k);
+            } else {
+                snprintf(want, sizeof(want), "%s", kColourNames[k - ICO_APP_TONES - 1]);
+            }
             CHECK(strcmp(textNow(lv[0]), want) == 0 && ico_appearance_get(ICO_APP_ICO_SKIN) == k,
                   "%s: Ico skin step %d is \"%s\" (\"%s\", %d)", who, k, want,
                   lt_ext_RowText(lv[0]), ico_appearance_get(ICO_APP_ICO_SKIN));
         }
         charStep(l, lb[0], 1);
         CHECK(strcmp(textNow(lv[0]), "Original") == 0 && ico_appearance_get(ICO_APP_ICO_SKIN) == 0,
-              "%s: Tone 12, Right: Original (13 values)", who);
+              "%s: Black, Right: Original (37 values)", who);
         charStep(l, lb[0], -1);
-        CHECK(strcmp(textNow(lv[0]), "Tone 12") == 0, "%s: Original, Left: Tone 12 (%s)", who,
+        CHECK(strcmp(textNow(lv[0]), "Black") == 0, "%s: Original, Left: Black (%s)", who,
+              lt_ext_RowText(lv[0]));
+        for (int k = 0; k < ICO_APP_COLOURS; k++) {
+            charStep(l, lb[0], -1);
+        }
+        CHECK(strcmp(textNow(lv[0]), "Tone 12") == 0, "%s: Left from Red: Tone 12 (%s)", who,
               lt_ext_RowText(lv[0]));
         charStep(l, lb[7], 1);
         CHECK(strcmp(textNow(lv[7]), "Tone 1") == 0 && ico_appearance_get(ICO_APP_YORDA_SKIN) == 1,
@@ -5351,6 +5369,7 @@ static void testCharacters(void)
         }
         const int n = ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
         CHECK(n == 13 && ui_SettingsCharactersInViewer(), "the viewer's Characters (%d rows)", n);
+        /* Ico's rows (he loads first), then Switch to Back */
         int shown = 0, prevY = -1, spaced = 1;
         for (int i = 0; i < n; i++) {
             const LtProperty *r = lt_ext_Prop(lb[i]);
@@ -5360,10 +5379,18 @@ static void testCharacters(void)
                 prevY = r->dispY;
             }
         }
-        CHECK(shown == 13 && spaced && lt_ext_Prop(lb[0])->dispY == 30 &&
-                  lt_ext_Prop(lb[12])->dispY == 30 + 11 * 12,
-              "in the viewer: thirteen rows 11 apart from 30 (%d shown, Back at %d)", shown,
+        CHECK(shown == 11 && spaced && lt_ext_Prop(lb[0])->dispY == 30 &&
+                  lt_ext_Prop(lb[12])->dispY == 30 + 11 * 10,
+              "in the viewer: Ico's eleven rows 11 apart from 30 (%d shown, Back at %d)", shown,
               lt_ext_Prop(lb[12])->dispY);
+        {
+            int sws = 0;
+            unsigned char c[4];
+            for (int j = lt_ext_Layout(l)->first; j < lt_ext_Layout(l)->last; j++) {
+                sws += lt_ext_RectColor(j, c) == 0 && !lt_ext_Prop(j)->defaultMask;
+            }
+            CHECK(sws == 7 && lt_ext_Prop(lv[8])->defaultMask, "Ico's 7 swatches (%d)", sws);
+        }
         CHECK(lt_ext_Prop(lb[12])->dispY + lt_ext_Prop(lb[12])->dispH <= 226,
               "in the viewer: Back's box ends at %d",
               lt_ext_Prop(lb[12])->dispY + lt_ext_Prop(lb[12])->dispH);
@@ -5428,31 +5455,60 @@ static void testCharacters(void)
               "in the viewer: Right on Tunic is Red at once (%d, \"%s\")",
               ico_appearance_get(ICO_APP_ICO_TUNIC), lt_ext_RowText(lv[5]));
         charStep(l, lb[0], -1);
-        CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == ICO_APP_TONES,
-              "in the viewer: Left on Skin wraps to Tone 12 (%d)",
+        CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == ICO_APP_TONES + ICO_APP_COLOURS,
+              "in the viewer: Left on Skin wraps to Black (%d)",
               ico_appearance_get(ICO_APP_ICO_SKIN));
         lt_ext_Layout(l)->curItem = lb[0];
         frame(0);
         press(0x80);
         CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == 0, "in the viewer: Square is Original");
+        /* Randomize and Reset: the character shown only */
+        ico_appearance_set(ICO_APP_YORDA_DRESS, 3);
         lt_ext_Layout(l)->curItem = lb[10];
         frame(0);
         press(0x40);
-        CHECK(ico_appearance_get(ICO_APP_YORDA_DRESS) != 0, "in the viewer: Randomize");
+        CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) && ico_appearance_get(ICO_APP_ICO_SHORTS) &&
+                  ico_appearance_get(ICO_APP_YORDA_DRESS) == 3,
+              "Ico: Randomize, his only");
         lt_ext_Layout(l)->curItem = lb[11];
         frame(0);
         press(0x40);
-        CHECK(ico_appearance_get(ICO_APP_YORDA_DRESS) == 0 &&
-                  ico_appearance_get(ICO_APP_ICO_TUNIC) == 0,
-              "in the viewer: Reset to original");
+        CHECK(!ico_appearance_get(ICO_APP_ICO_SKIN) && ico_appearance_get(ICO_APP_YORDA_DRESS) == 3,
+              "Ico: Reset, his only");
 
         /* R1: Yorda; then the row names Ico, and Cross on it loads Ico */
         press(0x0008);
         CHECK(s_hostSwitch == 1 && current_layout_id == l, "R1: the viewer loads Yorda (%d)",
               s_hostSwitch);
+        CHECK(!lt_ext_Prop(lb[7])->defaultMask && lt_ext_Prop(lb[0])->defaultMask,
+              "R1: her rows as she loads");
         s_hostShown = 1;
         CHECK(strcmp(textNow(lb[9]), "Switch to Ico") == 0, "Yorda shown: \"%s\"",
               lt_ext_RowText(lb[9]));
+        {
+            /* her two rows, then Switch to Back: six from 30 */
+            int k = 0;
+            for (int i = 0; i < n; i++) {
+                k += !lt_ext_Prop(lb[i])->defaultMask;
+            }
+            CHECK(k == 6 && lt_ext_Prop(lb[7])->dispY == 30 && lt_ext_Prop(lb[12])->dispY == 85,
+                  "Yorda: six rows (%d, Back at %d)", k, lt_ext_Prop(lb[12])->dispY);
+            ico_appearance_set(ICO_APP_ICO_TUNIC, 5);
+            ico_appearance_set(ICO_APP_YORDA_SKIN, 0);
+            lt_ext_Layout(l)->curItem = lb[10];
+            frame(0);
+            press(0x40);
+            CHECK(ico_appearance_get(ICO_APP_YORDA_SKIN) &&
+                      ico_appearance_get(ICO_APP_ICO_TUNIC) == 5,
+                  "Yorda: Randomize, hers only");
+            lt_ext_Layout(l)->curItem = lb[11];
+            frame(0);
+            press(0x40);
+            CHECK(!ico_appearance_get(ICO_APP_YORDA_DRESS) &&
+                      ico_appearance_get(ICO_APP_ICO_TUNIC) == 5,
+                  "Yorda: Reset, hers only");
+            ico_appearance_set(ICO_APP_ICO_TUNIC, 0);
+        }
         lt_ext_Layout(l)->curItem = lb[9];
         frame(0);
         press(0x40);

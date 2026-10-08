@@ -241,7 +241,9 @@ typedef enum UiSettingsOpt {
        (layout 59, la_key_config), whose OK comes back to Controls */
     UI_OPT_BUTTON_CONFIG,
     /* v0.4.2: Extras > Characters' actions: every part a random colour
-       (ico_appearance_randomize), every part Original */
+       (ico_appearance_randomize), every part Original; in the viewer only
+       the parts of the character shown (ico_appearance_randomize_character,
+       ico_appearance_reset_character) */
     UI_OPT_CHAR_RANDOMIZE,
     UI_OPT_CHAR_RESET,
     /* v0.4.2: the viewer's Characters only: load the other character */

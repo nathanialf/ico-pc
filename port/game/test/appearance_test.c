@@ -9,17 +9,21 @@
  *               that cover all 16
  *   alpha       16- and 256-entry CLUTs: the alpha bytes stay
  *   formats     not PSMCT32, 0 or 257 colours, NULLs: 0
- *   anchor      each part's anchor lands on every target within 1, the
- *               swatch is that colour (the anchor for Original), and a
- *               darker and a lighter entry keep their order
+ *   anchor      each part's anchor lands on every target within 1 (a
+ *               skin part's tones and named colours both), the swatch
+ *               is that colour (the anchor for Original), and a darker
+ *               and a lighter entry keep their order
  *   grey        a neutral target gives R = G = B
  *   weights     fuku22: S 0.04 follows the dress only, S 0.13 the skin
  *               only, and the two weights of an entry between sum to 1
  *   config      set -> [characters] string -> reload, the values'
- *               spelling, unknown values -> Original, saved and read back
+ *               spelling (a skin part's "toneN" and colour names),
+ *               unknown values -> Original, saved and read back
  *   randomize   the same seed the same colours, never Original, the
- *               poncho's groups different, one serial step
- *   reset       every part Original, the keys "original"
+ *               poncho's groups different, one serial step; a skin part
+ *               draws tones and colours; one character's only
+ *   reset       every part Original, the keys "original"; one
+ *               character's only
  */
 #include <math.h>
 #include <stdio.h>
@@ -121,13 +125,16 @@ static const struct {
     {"white", 30, 10, 92},   {"grey", 0, 0, 55},       {"black", 0, 0, 8},
 };
 
+/* a value's target: a skin part has the 12 tones, then the palette */
 static void targetRgb(IcoAppPart p, int v, int rgb[3])
 {
-    if (ico_appearance_is_skin(p)) {
+    const int tones = ico_appearance_is_skin(p) ? 12 : 0;
+    if (v <= tones) {
         double k = (v - 1) / 11.0;
         hslRgb(30.0 - 14.0 * k, (45.0 - 11.0 * k) / 100.0, (85.0 - 65.0 * k) / 100.0, rgb);
     } else {
-        hslRgb(kPal[v - 1].h, kPal[v - 1].s / 100.0, kPal[v - 1].l / 100.0, rgb);
+        const int i = v - tones - 1;
+        hslRgb(kPal[i].h, kPal[i].s / 100.0, kPal[i].l / 100.0, rgb);
     }
 }
 
@@ -172,8 +179,8 @@ static void testIdentity(void)
         same &= out[i] == 0xAB;
     }
     CHECK(same, "identity: out untouched");
-    CHECK(ico_appearance_choices(ICO_APP_ICO_SKIN) == 13 &&
-              ico_appearance_choices(ICO_APP_YORDA_SKIN) == 13 &&
+    CHECK(ico_appearance_choices(ICO_APP_ICO_SKIN) == 37 &&
+              ico_appearance_choices(ICO_APP_YORDA_SKIN) == 37 &&
               ico_appearance_choices(ICO_APP_ICO_TUNIC) == 25 &&
               ico_appearance_choices(ICO_APP_YORDA_DRESS) == 25,
           "choices");
@@ -465,7 +472,9 @@ static void testConfig(void)
                                        "ico_shorts = \"Navy\"\n"
                                        "ico_poncho_dark = \"TONE2\"\n"
                                        "ico_poncho_navy = \"Original\"\n");
-    CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 0 && ico_appearance_get(ICO_APP_ICO_SKIN) == 0 &&
+    CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == 13, "\"red\" on a skin part: 13 (%d)",
+          ico_appearance_get(ICO_APP_ICO_SKIN));
+    CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 0 &&
               ico_appearance_get(ICO_APP_YORDA_DRESS) == 0 &&
               ico_appearance_get(ICO_APP_YORDA_SKIN) == 0 &&
               ico_appearance_get(ICO_APP_ICO_PONCHO_DARK) == 0 &&
@@ -477,6 +486,31 @@ static void testConfig(void)
                 "version = 1\n[characters]\nyorda_skin = \"tone12\"\nico_skin = \"tone1\"\n");
     CHECK(ico_appearance_get(ICO_APP_YORDA_SKIN) == 12 && ico_appearance_get(ICO_APP_ICO_SKIN) == 1,
           "tones");
+
+    /* a skin part takes the colour names too, after the tones: both forms
+       written as chosen and read back */
+    writeConfig("appearance_skin.toml", "version = 1\n[characters]\nico_skin = \"Red\"\n"
+                                        "yorda_skin = \"black\"\n");
+    CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == 13 &&
+              ico_appearance_get(ICO_APP_YORDA_SKIN) == 12 + ICO_APP_COLOURS,
+          "skin: \"Red\" is 13, \"black\" 36 (%d, %d)", ico_appearance_get(ICO_APP_ICO_SKIN),
+          ico_appearance_get(ICO_APP_YORDA_SKIN));
+    for (int v = 1; v < ico_appearance_choices(ICO_APP_YORDA_SKIN); v++) {
+        char want[16];
+        if (v <= ICO_APP_TONES) {
+            snprintf(want, sizeof(want), "tone%d", v);
+        } else {
+            snprintf(want, sizeof(want), "%s", kPal[v - ICO_APP_TONES - 1].name);
+        }
+        ico_appearance_set(ICO_APP_YORDA_SKIN, v);
+        CHECK(strcmp(key("characters.yorda_skin"), want) == 0, "skin value %d: %s (want %s)", v,
+              key("characters.yorda_skin"), want);
+        ico_appearance_reload();
+        CHECK(ico_appearance_get(ICO_APP_YORDA_SKIN) == v, "skin value %d read back (%d)", v,
+              ico_appearance_get(ICO_APP_YORDA_SKIN));
+    }
+    ico_appearance_set(ICO_APP_ICO_SKIN, 37);
+    CHECK(ico_appearance_get(ICO_APP_ICO_SKIN) == 0, "skin: 37 is out of range: Original");
 }
 
 static void testRandomize(void)
@@ -519,6 +553,45 @@ static void testRandomize(void)
         }
     }
     CHECK(differ, "another seed, other colours");
+
+    /* a skin part draws from the tones and the colours both */
+    int tone = 0, colour = 0;
+    for (unsigned int seed = 1; seed < 400; seed++) {
+        ico_appearance_randomize(seed);
+        for (int p = ICO_APP_ICO_SKIN; p <= ICO_APP_YORDA_SKIN; p += ICO_APP_YORDA_SKIN) {
+            const int v = ico_appearance_get((IcoAppPart)p);
+            tone += v >= 1 && v <= ICO_APP_TONES;
+            colour += v > ICO_APP_TONES && v <= ICO_APP_TONES + ICO_APP_COLOURS;
+        }
+    }
+    CHECK(tone > 0 && colour > tone, "skin: tones %d and colours %d both drawn", tone, colour);
+
+    /* one character: the other's parts kept; the parts drawn are those
+       of the whole randomize from the same seed */
+    for (int c = 0; c <= 1; c++) {
+        int all[ICO_APP_PART_COUNT];
+        ico_appearance_randomize(777);
+        for (int p = 0; p < ICO_APP_PART_COUNT; p++) {
+            all[p] = ico_appearance_get((IcoAppPart)p);
+        }
+        ico_appearance_reset();
+        unsigned int s0 = ico_appearance_serial();
+        ico_appearance_randomize_character(c, 777);
+        CHECK(ico_appearance_serial() == s0 + 1, "character %d: one serial step", c);
+        for (int p = 0; p < ICO_APP_PART_COUNT; p++) {
+            const int v = ico_appearance_get((IcoAppPart)p);
+            if (ico_appearance_character((IcoAppPart)p) == c) {
+                CHECK(v == all[p], "character %d part %d: %d (as the whole randomize, %d)", c, p, v,
+                      all[p]);
+            } else {
+                CHECK(v == 0, "character %d: part %d of the other kept Original (%d)", c, p, v);
+            }
+        }
+    }
+    const unsigned int s1 = ico_appearance_serial();
+    ico_appearance_randomize_character(2, 5);
+    ico_appearance_randomize_character(-1, 5);
+    CHECK(ico_appearance_serial() == s1, "no such character: nothing");
 }
 
 static void testReset(void)
@@ -546,6 +619,31 @@ static void testReset(void)
     CHECK(ico_appearance_serial() != s0, "reload: a step");
 }
 
+static void testResetCharacter(void)
+{
+    writeConfig("appearance_resetc.toml", "version = 1\n");
+    for (int c = 0; c <= 1; c++) {
+        ico_appearance_randomize(31);
+        int before[ICO_APP_PART_COUNT];
+        for (int p = 0; p < ICO_APP_PART_COUNT; p++) {
+            before[p] = ico_appearance_get((IcoAppPart)p);
+        }
+        unsigned int s0 = ico_appearance_serial();
+        ico_appearance_reset_character(c);
+        CHECK(ico_appearance_serial() == s0 + 1, "reset character %d: one serial step", c);
+        for (int p = 0; p < ICO_APP_PART_COUNT; p++) {
+            const int v = ico_appearance_get((IcoAppPart)p);
+            CHECK(ico_appearance_character((IcoAppPart)p) == c ? v == 0 : v == before[p],
+                  "reset character %d: part %d is %d", c, p, v);
+        }
+        CHECK(strcmp(key(c ? "characters.yorda_dress" : "characters.ico_tunic"), "original") == 0,
+              "reset character %d: its keys", c);
+        s0 = ico_appearance_serial();
+        ico_appearance_reset_character(c);
+        CHECK(ico_appearance_serial() == s0, "reset character %d again: no step", c);
+    }
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -560,6 +658,7 @@ int main(int argc, char **argv)
     testConfig();
     testRandomize();
     testReset();
+    testResetCharacter();
     if (failures != 0) {
         printf("appearance_test: %d failure(s)\n", failures);
         return 1;

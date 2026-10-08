@@ -10,15 +10,17 @@
  *
  * Values: 0 is Original; a clothing part takes 1..ICO_APP_COLOURS (the
  * palette below, value = palette index + 1); a skin part takes
- * 1..ICO_APP_TONES (Tone 1, the lightest, to Tone 12, the darkest).
+ * 1..ICO_APP_TONES (Tone 1, the lightest, to Tone 12, the darkest), then
+ * the palette (value = ICO_APP_TONES + palette index + 1), recoloured
+ * through the skin's own rules.
  *
  * config.toml, section [characters], one string per part (absent =
  * "original"; an unknown value reads as Original and is logged once):
  *
  *   ico_skin, ico_poncho_navy, ico_poncho_pink, ico_poncho_light,
  *   ico_poncho_dark, ico_tunic, ico_shorts, yorda_skin, yorda_dress
- *     = "original" | a palette name ("red" ... "black", clothing parts)
- *       | "tone1" ... "tone12" (skin parts)
+ *     = "original" | a palette name ("red" ... "black")
+ *       | "tone1" ... "tone12" (skin parts only)
  *
  * The values are read the first time any function here needs them;
  * ico_appearance_reload (called by ico_opt_reload) forgets them.  The
@@ -60,8 +62,9 @@ typedef enum IcoAppPart {
 
 /* the part's value: 0 Original, else 1..ico_appearance_choices(p) - 1 */
 int ico_appearance_get(IcoAppPart p);
-/* the number of values of the part, Original included: 1 + ICO_APP_TONES
-   for a skin part, 1 + ICO_APP_COLOURS for the others (0 for a bad part) */
+/* the number of values of the part, Original included: 1 + ICO_APP_TONES +
+   ICO_APP_COLOURS for a skin part, 1 + ICO_APP_COLOURS for the others (0
+   for a bad part) */
 int ico_appearance_choices(IcoAppPart p);
 /* 1 for ICO_APP_ICO_SKIN and ICO_APP_YORDA_SKIN */
 int ico_appearance_is_skin(IcoAppPart p);
@@ -80,9 +83,15 @@ unsigned int ico_appearance_swatch(IcoAppPart p);
    four poncho groups all different; writes the nine keys, bumps the serial
    once and logs "appearance: randomize (seed N)". */
 void ico_appearance_randomize(unsigned int seed);
+/* The same for one character's parts only (0 Ico, 1 Yorda; the others
+   kept; another character does nothing): the parts get the colours
+   ico_appearance_randomize would give them from the seed. */
+void ico_appearance_randomize_character(int character, unsigned int seed);
 /* Every part to Original (the nine keys written "original"); bumps the
    serial when something changed. */
 void ico_appearance_reset(void);
+/* The same for one character's parts only (0 Ico, 1 Yorda). */
+void ico_appearance_reset_character(int character);
 /* Forget the values (read again from the config on next use) and bump the
    serial. */
 void ico_appearance_reload(void);
