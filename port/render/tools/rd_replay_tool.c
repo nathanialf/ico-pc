@@ -168,18 +168,18 @@ static void texSummary(uint32_t id)
         printf(" target %s view %u", targetName(t->target, buf), t->view);
         return;
     }
-    if (!t->pixels || t->format > RD_TEXEL_R8) {
+    if (!t->pixels || (t->format != RD_TEXEL_RGBA8 && !rd__TexelIsCoverage(t->format))) {
         printf(" no texels");
         return;
     }
     const size_t n = (size_t)t->w * t->h;
-    if (t->format == RD_TEXEL_R8) {
+    if (rd__TexelIsCoverage(t->format)) {
         unsigned lo = 255, hi = 0;
         for (size_t k = 0; k < n; k++) {
             lo = t->pixels[k] < lo ? t->pixels[k] : lo;
             hi = t->pixels[k] > hi ? t->pixels[k] : hi;
         }
-        printf(" r8 %02x..%02x", lo, hi);
+        printf(" %s %02x..%02x", t->format == RD_TEXEL_SHEET ? "sheet" : "r8", lo, hi);
         return;
     }
     unsigned lo = 255, hi = 0;
@@ -439,8 +439,8 @@ static void dumpTextures(const char *dir)
         }
         const uint32_t id = (t->gen << 16) | (i + 1);
         snprintf(path, sizeof(path), "%s/tex-%u-%ux%u.png", dir, id, t->w, t->h);
-        if (t->format == RD_TEXEL_R8) {
-            /* package R8: coverage as grey */
+        if (rd__TexelIsCoverage(t->format)) {
+            /* package R8: coverage as grey (a sheet's too, v0.4.2) */
             uint8_t *grey = malloc((size_t)t->w * t->h * 4);
             for (size_t k = 0; grey && k < (size_t)t->w * t->h; k++) {
                 grey[k * 4] = grey[k * 4 + 1] = grey[k * 4 + 2] = t->pixels[k];

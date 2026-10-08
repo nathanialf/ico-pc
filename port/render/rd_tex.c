@@ -720,3 +720,37 @@ const RdTexCacheStats *rdtex_Stats(void)
 {
     return &s_tc.stats;
 }
+
+/* ------------------------------------------------- sheet text (v0.4.2, F-A)
+ * rd.h rd_CreateTextureSheet: an R8 image of coverage with the style the
+ * replay hands font_sheet_ps (rd_replay.c fillDrawCB, rd__OverlayDraw). */
+
+static void sheetStyleSet(RdTexRec *t, const RdSheetStyle *style)
+{
+    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1};
+    const RdSheetStyle *s = style ? style : &kDefault;
+    t->sheet[0] = s->rimOn ? 1 : 0;
+    t->sheet[1] = s->rimLevel;
+    t->sheet[2] = s->fillLevel;
+    t->sheet[3] = s->dither ? 1 : 0;
+}
+
+RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
+                            const RdSheetStyle *style, const char *name)
+{
+    RdTex t = rd__CreateTextureFmt(w, h, coverage, RD_TEXEL_SHEET, RD_TEXSRC_RGBA32,
+                                   name ? name : "sheet");
+    RdTexRec *r = rd__TexRec(t.id);
+    if (r) {
+        sheetStyleSet(r, style);
+    }
+    return t;
+}
+
+void rd_SetTextureSheetStyle(RdTex t, const RdSheetStyle *style)
+{
+    RdTexRec *r = rd__TexRec(t.id);
+    if (r && r->kind == RD_TEXKIND_IMAGE && r->format == RD_TEXEL_SHEET) {
+        sheetStyleSet(r, style);
+    }
+}

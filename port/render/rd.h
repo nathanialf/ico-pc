@@ -849,6 +849,66 @@ RdTex rd_CreateTextureR8(uint32_t w, uint32_t h, const uint8_t *cov, const char 
  * uploaded. */
 void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void *px);
 
+/* v0.4.2 (package F-A): sheet text.  The menus' words drawn in the look of
+ * the game's 4-bit menu sheets (text/menu_PAL_*.tm2: light letters, a
+ * darker rim around them, the antialiasing mixed into a few colours) from a
+ * plain coverage strip, so a font rasterised on the sheets' own texel grid
+ * reads like the sheets did in every preset and scale.
+ *
+ * rd_CreateTextureSheet  a one-channel texture, w * h bytes of coverage
+ *                        (null: zero): 0 none to 255 full (a rasteriser's
+ *                        8-bit bitmap, not GS units), one byte a sheet
+ *                        texel (1 x unit wide, one field line tall); style
+ *                        null is {1, 0, 255, 1} (rim on, black rim, white
+ *                        fill, dithered).  It is
+ *                        drawn, by screen prims and overlay prims alike,
+ *                        with font_sheet_ps (RD_FS_FONT_SHEET), which makes
+ *                        each texel (x, y) of the sheet from the coverage
+ *                        around it (texels outside the texture have
+ *                        coverage 0):
+ *                          c  the coverage at (x, y);
+ *                          r  the largest coverage within ICO_SHEET_RX
+ *                             texels across and ICO_SHEET_RY down
+ *                             (shader_consts.h): the rim;
+ *                          a  rimOn ? max(c, r) : c, the texel's opacity;
+ *                          t  c / a (0 where a is 0): rim (0) to fill (1);
+ *                          a and t quantised to ICO_SHEET_LEVELS levels,
+ *                          against a 4x4 Bayer threshold picked by (x, y)
+ *                          (the sheets' mottled antialiasing; fixed to the
+ *                          texel, so the grain moves with the text) or, with
+ *                          dither 0, rounded;
+ *                          grey  the rim level lerped to the fill level by t;
+ *                          alpha a in GS units (full = 0x80).
+ *                        A sampled pixel blends the four sheet texels around
+ *                        its position bilinearly, as the GS's bilinear read
+ *                        of a 4-bit sheet did, whatever the draw's filter
+ *                        and wrap (clamped, never mipmapped).  The texel
+ *                        (grey, grey, grey, alpha) then takes sprite_ps's
+ *                        path: MODULATE (or DECAL) with the vertex colour,
+ *                        TCC, the alpha test, DATE and the blend, so a row's
+ *                        colour, fades and the glow's additive draw
+ *                        multiply in as for a sheet sprite.
+ *                        port/render/test/sheet_ref.c computes the same
+ *                        texels and samples on the CPU (the tests' oracle)
+ * rd_SetTextureSheetStyle  the style the next replays draw t with (the
+ *                        language's rim level, without rasterising
+ *                        again); ignored for any other texture.  The style
+ *                        is read when a frame is replayed, not when its
+ *                        draws are recorded
+ * rd_UpdateTextureRect   takes a sheet texture's rectangles as R8's: w * h
+ *                        bytes of coverage
+ * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
+typedef struct RdSheetStyle {
+    uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
+    uint8_t rimLevel;  /* grey of the rim, 0..255 (English sheets 0, French ~62) */
+    uint8_t fillLevel; /* grey of the letters' fill, 0..255 */
+    uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
+} RdSheetStyle;
+
+RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
+                            const RdSheetStyle *style, const char *name);
+void rd_SetTextureSheetStyle(RdTex t, const RdSheetStyle *style);
+
 /* -------------------------------------------------------------- meshes */
 
 /* Wave 3 (R3ab): the mesh path is rd_mesh.h's (the VU1 program shaders on

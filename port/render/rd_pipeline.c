@@ -327,7 +327,7 @@ int rd__TexaPerTexel(const RdStateBlock *s)
     }
     const RdTexRec *tr = rd__TexRec(s->tex);
     return tr && tr->src != RD_TEXSRC_RGBA32 &&
-           !(tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8);
+           !(tr->kind == RD_TEXKIND_IMAGE && rd__TexelIsCoverage(tr->format));
 }
 
 /* Package RSMALL: a planned screen pass for a command whose prims carry

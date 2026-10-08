@@ -3607,7 +3607,7 @@ static uint8_t texLevels(const RdTexRec *t)
     if (t->replacement) {
         return t->mipLevels; /* texture packs: the image's own levels, whatever the filter */
     }
-    if (!g_rd.filterUpgrade || t->format == RD_TEXEL_R8 || t->w < 2 || t->h < 2 ||
+    if (!g_rd.filterUpgrade || rd__TexelIsCoverage(t->format) || t->w < 2 || t->h < 2 ||
         (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
         return 1;
     }
@@ -3933,8 +3933,7 @@ static void uploadTextures(void)
         int whole = levels > 1;
         if (!t->rhi.id) {
             t->rhi = rhi_CreateTexture(
-                &(RhiTextureDesc){t->w, t->h, levels,
-                                  t->format == RD_TEXEL_R8 ? RHI_FMT_R8_UNORM : RHI_FMT_RGBA8_UNORM,
+                &(RhiTextureDesc){t->w, t->h, levels, rd__TexelRhiFormat(t->format),
                                   RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd texture"});
             t->state = RHI_STATE_UNDEFINED;
             t->mipLevels = levels;

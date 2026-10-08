@@ -349,7 +349,11 @@ enum { RD_TEXKIND_IMAGE = 1, RD_TEXKIND_TARGET = 2 };
  * writes it in the image's view word, so 0 is what every older dump holds).
  * RGBA8: rd_CreateTexture/rd_CreateTextureSrc, 4 bytes a texel.  R8:
  * rd_CreateTextureR8, 1 byte (coverage in GS alpha units), drawn with font_ps
- * (rd__PlanScreenDraw selects RD_FS_FONT for it) and never given mips. */
+ * (rd__PlanScreenDraw selects RD_FS_FONT for it) and never given mips.
+ * SHEET (v0.4.2, package F-A): rd_CreateTextureSheet, 1 byte (coverage
+ * 0..255) and RdTexRec.sheet, drawn with font_sheet_ps (RD_FS_FONT_SHEET),
+ * never given mips; appended, so the older values keep their meaning in
+ * dumps. */
 enum {
     RD_TEXEL_RGBA8 = 0,
     RD_TEXEL_R8 = 1,
@@ -360,19 +364,26 @@ enum {
     RD_TEXEL_BC2 = 3,
     RD_TEXEL_BC3 = 4,
     RD_TEXEL_BC7 = 5,
+    RD_TEXEL_SHEET = 6,
     RD_TEXEL_COUNT
 };
+
+/* The one-byte coverage formats (R8 and SHEET): no mips, no TEXA. */
+static inline int rd__TexelIsCoverage(uint8_t format)
+{
+    return format == RD_TEXEL_R8 || format == RD_TEXEL_SHEET;
+}
 
 static inline int rd__TexelIsBlock(uint8_t format)
 {
     return format >= RD_TEXEL_BC1 && format <= RD_TEXEL_BC7;
 }
 
-/* Bytes of one texel of an uncompressed format (RGBA8 4, R8 1).  Not
- * meaningful for the BC formats: they use rd__TexelBlockBytes. */
+/* Bytes of one texel of an uncompressed format (RGBA8 4, R8 and SHEET 1).
+ * Not meaningful for the BC formats: they use rd__TexelBlockBytes. */
 static inline uint32_t rd__TexelBytes(uint8_t format)
 {
-    return format == RD_TEXEL_R8 ? 1u : 4u;
+    return rd__TexelIsCoverage(format) ? 1u : 4u;
 }
 
 /* Texture packs: the side of a format's copy unit in texels (4 for the BC
@@ -397,6 +408,7 @@ static inline RhiFormat rd__TexelRhiFormat(uint8_t format)
 {
     switch (format) {
     case RD_TEXEL_R8:
+    case RD_TEXEL_SHEET:
         return RHI_FMT_R8_UNORM;
     case RD_TEXEL_BC1:
         return RHI_FMT_BC1_UNORM;
@@ -461,6 +473,9 @@ typedef struct RdTexRec {
      * keep (uploadMips), a draw that changes it re-uploads the texture. */
     uint8_t mipUse, mipRef;
     uint8_t mipBuiltBoost, mipBuiltRef;
+    /* v0.4.2 (package F-A): a SHEET texture's style (rd.h RdSheetStyle):
+     * rimOn, rimLevel, fillLevel, dither; rimOn and dither kept as 0 or 1 */
+    uint8_t sheet[4];
 } RdTexRec;
 
 /* Package P8: RdTexRec.mipUse bits */
