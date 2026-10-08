@@ -228,11 +228,22 @@ typedef struct RdVuBlock {
     float mem[36][4];
 } RdVuBlock;
 
+/* Package S: the kind of the UV scroll in mem[2].xy (RdVuDraw.scroll,
+ * RdVuPayload.scroll).  Texture.c's sine scroll (ampU / ampV) is never
+ * wrapped, so the interpolation blends it straight; a linear scroll's step
+ * of more than 1 is its wrap by 2 (rd_interp.c lerpWrap).  The seki side
+ * marks a sine axis in the texture's SET_UVOFFSET quadword (z for U, w for
+ * V, nonzero; the microprograms move only x and y), rd_VuCall keeps it per
+ * list until the next one or the next common block. */
+#define RD_VU_SCROLL_SINE_U 1u
+#define RD_VU_SCROLL_SINE_V 2u
+
 typedef struct RdVuDraw {
     RdProg prog;
-    uint8_t code; /* the MSCALF code */
-    uint8_t clip; /* RdVuClip, from the table above */
-    uint8_t _pad[2];
+    uint8_t code;   /* the MSCALF code */
+    uint8_t clip;   /* RdVuClip, from the table above */
+    uint8_t scroll; /* RD_VU_SCROLL_*: which axes of mem[2]'s UV offset are sine scrolls */
+    uint8_t _pad;
     RdVuBlock vu;
     /* skinned: the quadwords SET_CLUSTER_MATRIX copied to VU memory 16..
      * (bone i at 16 + 4 i: nodeMtx x clusterMtx), boneQw = 4 x bones; the
@@ -350,7 +361,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key);
  * merging batches with the same material and clip mode into one draw is
  * correct except under SCISSOR (the cut-first order is per batch). */
 typedef struct RdVuPayload {
-    uint8_t code, clip, prog, _pad;
+    uint8_t code, clip, prog, scroll; /* scroll: RD_VU_SCROLL_* (package S) */
     uint32_t firstBatch, batchCount;
     uint32_t boneQw;        /* RDC_SKINNED */
     uint32_t streamQw;      /* RDC_GRID / RDC_PARTICLES: the copied stream */

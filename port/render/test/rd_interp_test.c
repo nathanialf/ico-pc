@@ -64,6 +64,20 @@
  *   present   rd_Present does nothing in the Original preset or with
  *             interpolate off, presents in Enhanced with it; a change of
  *             scale drops the history (the next pair snaps)
+ * Package S (the shake of the glowing coffins before the Queen), without
+ * a device and again with one:
+ *   shine     a list-8 shine draw (the mirage's mask, into AURA_WORK) and
+ *             the same object's list-0 draw, the camera turning 20 degrees
+ *             in the tick: at alpha 0.25, 0.5 and 0.75 a point of the mask
+ *             lands on the same point of the stone (within 1/16 GS pixel)
+ *   swap      two emitters' particle batches of equal count in swapped
+ *             order: keyed by emitter each blends half way from its own
+ *   sine      Texture.c's sine scroll stepping 1.23 in a tick (amplitude
+ *             0.8 at 7 Hz, 25 ticks a second), marked RD_VU_SCROLL_SINE_U:
+ *             blended straight at alpha 0.25, 0.5 and 0.75 (unmarked, the
+ *             linear scroll's unwrap put it half a repeat off at 0.25 and
+ *             0.75); SET_UVOFFSET's quadword w marks V, the common block
+ *             clears the mark
  */
 #include <math.h>
 #include <stdio.h>
@@ -1725,6 +1739,8 @@ static const double kS6PointA[3] = {300.0, 0.0, 0.0}; /* in A's model space (W =
 
 static const double kS6PointB[3] = {0.0, 0.0, 0.0}; /* B's origin: W = (-200, 0, 150) */
 
+static int s_s6List; /* the list s6Draw draws in (package S: 8 for a shine packet) */
+
 /* a prelit static mesh with model to world w through the camera v */
 static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
 {
@@ -1758,7 +1774,7 @@ static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
             d.vu.mem[24 + c][r] = (float)vw[c * 4 + r];
         }
     }
-    rd_SelectList(0);
+    rd_SelectList(s_s6List);
     rd_DrawVuMesh(mesh, &d, key);
 }
 
@@ -2479,6 +2495,212 @@ static void testMorphLimits(void)
     }
 }
 
+/* ------------------------------------------------- package S cells */
+
+/* (hypothesis 2) a glowing material in list 8 (the mirage's mask, drawn
+ * into AURA_WORK, RegistPacket.c regGetShinePri: shine 2) and the stone of
+ * the same object in list 0, the camera turning 20 degrees in the tick:
+ * at alpha 0.25, 0.5 and 0.75 the mask lands where the stone does (the
+ * FEED128 paste sprites are screen-sized and do not move, so the halo
+ * follows the mask) */
+static void shineFrame(RdMesh mesh, double deg)
+{
+    rd_BeginFrame();
+    frameHead();
+    double eye[3], v[16], p[16], w[16];
+    s6OrbitEye(deg, eye);
+    s6View(deg, eye, v);
+    s6Proj(p);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int k = 0; k < 16; k++) {
+        cam.view[k] = (float)v[k];
+        cam.proj43[k] = (float)p[k];
+    }
+    cam.zoom = 500.0f;
+    rd_SetCamera(&cam);
+    s6Translate(w, 0.0, 0.0, 0.0);
+    s6Draw(mesh, v, w, RD_KEY(&kObjS6, 0, 0)); /* the stone, list 0 */
+    rd_SelectList(8);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, TW, TH, 0);
+    s_s6List = 8;
+    s6Draw(mesh, v, w, RD_KEY(&kObjS6, 0, 4)); /* the shine packet, list 8 */
+    s_s6List = 0;
+    rd_EndFrame(0);
+}
+
+static void testShineFollows(void)
+{
+    RdMesh mesh = makeMesh();
+    shineFrame(mesh, 0.0);
+    shineFrame(mesh, 20.0);
+    static const float kAlpha[3] = {0.25f, 0.5f, 0.75f};
+    double worst = 0.0;
+    for (int a = 0; a < 3; a++) {
+        const RdInterpStats *st = build(kAlpha[a], 1.0f, 1);
+        const RdFrame *f = built(kAlpha[a]);
+        const float (*ms)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 0), 0));
+        const float (*mg)[4] = vuBlock(f, findKey(f, 8, RD_KEY(&kObjS6, 0, 4), 0));
+        CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && ms && mg,
+              "shine at alpha %.2f: both draws blend (snap %u, lerped %u)", kAlpha[a], st->snap,
+              st->lerped);
+        if (!ms || !mg) {
+            continue;
+        }
+        double ps[2], pg[2];
+        s6ProjectF(ms, kS6PointA, ps);
+        s6ProjectF(mg, kS6PointA, pg);
+        const double d = hypot(ps[0] - pg[0], ps[1] - pg[1]);
+        worst = d > worst ? d : worst;
+        printf("  shine at alpha %.2f: stone at (%.3f, %.3f), mask at (%.3f, %.3f), %.5f GS "
+               "pixels apart\n",
+               kAlpha[a], ps[0], ps[1], pg[0], pg[1], d);
+    }
+    CHECK(worst <= 1.0 / 16.0, "shine: the list-8 mask %.4f GS pixels from the stone", worst);
+    rd_DestroyVuMesh(mesh);
+}
+
+/* (hypothesis 3) two emitters' batches of equal count in list 6 whose
+ * order swaps between the ticks: keyed by emitter (MicroCode.c
+ * mc_HostParticleKey) each blends with its own; by list order (key 0)
+ * equal counts would pair the two emitters */
+static void recordParticleSwap(int second, int byEmitter)
+{
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(6);
+    if (second) {
+        particleBatch(&kObjP2, 3, 12.0f, byEmitter);
+        particleBatch(&kObjP1, 3, 2.0f, byEmitter);
+    } else {
+        particleBatch(&kObjP1, 3, 0.0f, byEmitter);
+        particleBatch(&kObjP2, 3, 10.0f, byEmitter);
+    }
+    rd_EndFrame(0);
+}
+
+static void testParticleSwap(void)
+{
+    recordParticleSwap(0, 1);
+    recordParticleSwap(1, 1);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdFrame *f = built(0.5f);
+    CHECK(st->lerped == 2 && st->mismatch == 0 && st->missing == 0,
+          "particles swapped, by emitter: both blend (lerped %u, mismatch %u, missing %u)",
+          st->lerped, st->mismatch, st->missing);
+    CHECK(particleX(f, 0) == 11.0f && particleX(f, 1) == 1.0f,
+          "particles swapped, by emitter: each half way from its own (%g, %g)", particleX(f, 0),
+          particleX(f, 1));
+    recordParticleSwap(0, 0);
+    recordParticleSwap(1, 0);
+    build(0.5f, 1.0f, 1);
+    f = built(0.5f);
+    printf("  particles swapped, by list order (not the game's key): first particles at %g and "
+           "%g (each from the other emitter: within four sizes they would blend across)\n",
+           particleX(f, 0), particleX(f, 1));
+}
+
+/* (hypothesis 4) Texture.c's sine scroll (tex_textureAnimation: uOfs =
+ * ampU sin(frame pi scrlU / ticks per second)) is never wrapped, so a step
+ * of more than 1 is real: amplitude 0.8 at 7 Hz on 25 ticks a second moves
+ * up to 1.41 a tick.  Blended at alpha 0.25, 0.5 and 0.75 the offset must
+ * equal the straight blend modulo 1 (the texture repeats every 1); a
+ * linear scroll's wrap by 2 still blends the short way */
+static void recordScroll(RdMesh mesh, float u, int sine)
+{
+    rd_BeginFrame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 16);
+    d.vu.mem[19][0] = 2048.0f;
+    d.vu.mem[19][1] = 2048.0f;
+    d.vu.mem[2][0] = u;
+    d.vu.mem[2][1] = u;
+#ifdef RD_VU_SCROLL_SINE_U
+    d.scroll = (uint8_t)(sine ? RD_VU_SCROLL_SINE_U : 0);
+#else
+    (void)sine;
+#endif
+    rd_SelectList(0);
+    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjE, 7, 32));
+    rd_EndFrame(0);
+}
+
+static double frac1(double x)
+{
+    return x - floor(x);
+}
+
+static void testSineScroll(void)
+{
+    RdMesh mesh = makeMesh();
+    /* the largest step of the sine over a second of ticks */
+    const double amp = 0.8, hz = 7.0, ticks = 25.0;
+    double best = 0.0, p = 0.0, c = 0.0;
+    for (int k = 0; k < 25; k++) {
+        const double a = amp * sin(2.0 * 3.14159265358979 * hz * k / ticks);
+        const double b = amp * sin(2.0 * 3.14159265358979 * hz * (k + 1) / ticks);
+        if (fabs(b - a) > best) {
+            best = fabs(b - a);
+            p = a;
+            c = b;
+        }
+    }
+    static const float kAlpha[3] = {0.25f, 0.5f, 0.75f};
+    for (int sine = 0; sine < 2; sine++) {
+        recordScroll(mesh, (float)p, sine);
+        recordScroll(mesh, (float)c, sine);
+        double worst = 0.0;
+        for (int a = 0; a < 3; a++) {
+            const RdFrame *f = built(kAlpha[a]);
+            const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjE, 7, 32), 0));
+            if (!m) {
+                CHECK(0, "sine scroll: the draw");
+                continue;
+            }
+            const double want =
+                (double)(float)p + kAlpha[a] * ((double)(float)c - (double)(float)p);
+            double d = fabs(frac1(m[2][0]) - frac1(want));
+            d = d > 0.5 ? 1.0 - d : d;
+            worst = d > worst ? d : worst;
+            printf("  sine scroll %.4f -> %.4f (%s) at alpha %.2f: U %.4f, the sine's blend %.4f, "
+                   "%.4f of the texture apart; linear V %.4f\n",
+                   p, c, sine ? "marked sine" : "unmarked", kAlpha[a], m[2][0], want, d, m[2][1]);
+        }
+        if (sine) {
+            CHECK(worst < 1e-4, "sine scroll: a step of %.3f blended %.4f of the texture off", best,
+                  worst);
+        }
+    }
+    rd_DestroyVuMesh(mesh);
+    /* the mark as the seki side sends it: Texture.c's SET_UVOFFSET quadword
+     * with z (U) and w (V) nonzero for a sine axis, kept by the list until
+     * the next SET_UVOFFSET or common block */
+    rd_BeginFrame();
+    frameHead();
+    rd_SelectList(0);
+    rd_VuProgram(1);
+    const uint32_t mark[4] = {0x3F000000u, 0u, 0u, 1u}; /* U 0.5, V 0, V a sine */
+    float uvq[1][4];
+    memcpy(uvq, mark, sizeof(uvq));
+    rd_VuCall(2, (const float (*)[4])uvq, 1);
+    rd_VuCall(32, NULL, 0);
+    RdVuDraw d;
+    CHECK(rd_VuDrawFromState(&d) && d.scroll == RD_VU_SCROLL_SINE_V && d.vu.mem[2][0] == 0.5f,
+          "SET_UVOFFSET's w marks V a sine scroll (scroll %u)", d.scroll);
+    RdVuCommon common;
+    memset(&common, 0, sizeof(common));
+    rd_SetVuCommon(&common);
+    rd_VuCall(32, NULL, 0);
+    CHECK(rd_VuDrawFromState(&d) && d.scroll == 0, "the common block clears the mark (%u)",
+          d.scroll);
+    rd_EndFrame(0);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -2500,6 +2722,9 @@ static void runCpu(void)
     testParticleOrder();
     testLightTurn();
     testMorphLimits();
+    testShineFollows(); /* package S */
+    testParticleSwap();
+    testSineScroll();
 }
 
 int main(void)

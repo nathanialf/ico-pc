@@ -287,7 +287,15 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     o.col = float4(me.rgba);
     o.stq = me.stq;
     if (mode == VU_CLIP_NONE) {
-        o.pos = vu_gs_position(me.gs, true);
+        // Package S: off the 12.4 grid where vu_vtx_position is (Enhanced
+        // above 1x), as codes 32 and 36 draw: a snapped triangle sits up to
+        // 1/16 GS pixel from the same triangle drawn by them, which on a
+        // sloped surface moves its depth one way over the whole triangle,
+        // so a coplanar pass by another program (the reflection pass, 38)
+        // failed or passed GEQUAL wholesale as the camera moved.  A vertex
+        // whose X or Y the 16-bit wrap would change keeps the GS value.
+        bool wrapped = any((me.gs.xy & 0xFFFF) != me.gs.xy);
+        o.pos = wrapped ? vu_gs_position(me.gs, true) : vu_vtx_position(me);
         return o;
     }
     if (mode == VU_CLIP_REGION) {

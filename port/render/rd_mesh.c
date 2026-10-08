@@ -698,9 +698,10 @@ void rd__MeshShutdown(void)
  * (the double-buffered TOPS alternate, the data does not mix). */
 typedef struct RdVuList {
     Vu1Ref ref;
-    int program;   /* resident program id, 0 = none uploaded yet */
-    int code;      /* the last BEGIN code */
-    int endTagHit; /* a particle batch of this list would have clobbered mem[0..1] */
+    int program;    /* resident program id, 0 = none uploaded yet */
+    int code;       /* the last BEGIN code */
+    int endTagHit;  /* a particle batch of this list would have clobbered mem[0..1] */
+    uint8_t scroll; /* package S: RD_VU_SCROLL_* of the last SET_UVOFFSET */
 } RdVuList;
 
 static RdVuList *s_vu;
@@ -736,6 +737,7 @@ void rd__VuLoadCommon(const RdVuCommon *block)
     for (int l = 0; s_vu && l < RD_LIST_COUNT; l++) {
         vu1ref_LoadCommon(&s_vu[l].ref, (const float (*)[4])qw);
         s_vu[l].endTagHit = 0;
+        s_vu[l].scroll = 0;
     }
 }
 
@@ -769,9 +771,14 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
     const float (*in)[4] = (const float (*)[4])buf;
     Vu1Ref *r = &v->ref;
     switch (code) {
-    case 2: /* SET_UVOFFSET, every program (vu1_common.h:57) */
+    case 2: { /* SET_UVOFFSET, every program (vu1_common.h:57) */
         vu1ref_SetUVOffset(r, in[0]);
+        uint32_t zw[2];
+        memcpy(zw, &in[0][2], sizeof(zw));
+        v->scroll =
+            (uint8_t)((zw[0] ? RD_VU_SCROLL_SINE_U : 0u) | (zw[1] ? RD_VU_SCROLL_SINE_V : 0u));
         return;
+    }
     case 16:
         switch (v->program) {
         case 1:
@@ -917,6 +924,7 @@ bool rd_VuDrawFromState(RdVuDraw *d)
     d->prog = (RdProg)prog;
     d->code = (uint8_t)v->code;
     d->clip = clip;
+    d->scroll = v->scroll;
     vuImage(v, &d->vu);
     if (v->program == 3) {
         d->bones = (const float (*)[4])v->ref.mem[16];
@@ -987,6 +995,7 @@ void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
     p.code = d->code;
     p.clip = d->clip;
     p.prog = (uint8_t)d->prog;
+    p.scroll = d->scroll;
     p.firstBatch = first;
     p.batchCount = n;
     p.boneQw = d->bones ? (d->boneQw > 240 ? 240 : d->boneQw) : 0;
