@@ -635,6 +635,10 @@ static void toggle_fullscreen(void)
        sees it): video_apply sets SDL's borderless fullscreen at the desktop
        resolution and the presenter boxes the picture (rd_ResizeOutput
        follows) */
+#ifdef __ANDROID__
+    /* the window is always the whole screen there and the Fullscreen row
+       is not applied: Alt+Enter from a keyboard does nothing */
+#else
     IcoVideoOptions o;
 
     ico_video_get(&o);
@@ -643,6 +647,7 @@ static void toggle_fullscreen(void)
     o.fullscreen = !window_fullscreen();
     ico_video_set(&o);
     video_apply(0);
+#endif
 }
 
 /* B3: the renderer's device was removed, reset or hung (the driver
