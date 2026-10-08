@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "input.h"
+#include "touch.h"
 
 #define MOUSE_GAIN 0.015f /* stick units per mouse count at sensitivity 1 */
 #define BUTTON_ON 0.5f
@@ -155,6 +156,9 @@ static const char default_text[] = "[input]\n"
                                    "mouse_decay = 0.80\n"
                                    "mouse_invert_y = false\n"
                                    "rumble = true\n"
+                                   "touch_mode = \"auto\"\n"
+                                   "touch_size = \"medium\"\n"
+                                   "touch_opacity = 75\n"
                                    "\n"
                                    "[input.kb]\n"
                                    "walk = \"LeftShift\"\n"
@@ -221,6 +225,9 @@ void ico_bindings_defaults(IcoBindings *b)
     b->walk_scale = 0.5f;
     b->mouse_sens = 1.0f;
     b->mouse_decay = 0.80f;
+    b->touch_mode = ICO_TOUCH_MODE_AUTO;
+    b->touch_size = ICO_TOUCH_MEDIUM;
+    b->touch_opacity = 75;
     set_defaults_from_text(b);
 }
 
@@ -286,6 +293,31 @@ static int parse_float(const char *v, float lo, float hi, float *out)
     *out = (float)d;
     return 0;
 }
+
+/* The touch overlay's settings: a name of names[] (case and blanks as
+   name_eq, quotes around it allowed) -> its index, -1 none. */
+static int parse_choice(const char *v, const char *const *names, int n)
+{
+    char buf[24];
+    size_t o = 0;
+    int i;
+
+    for (; *v != '\0' && o < sizeof(buf) - 1; v++) {
+        if (*v != '"' && *v != '\'') {
+            buf[o++] = *v;
+        }
+    }
+    buf[o] = '\0';
+    for (i = 0; i < n; i++) {
+        if (name_eq(buf, names[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+const char *const ico_touch_mode_names[3] = {"off", "auto", "always"};
+const char *const ico_touch_size_names[3] = {"small", "medium", "large"};
 
 /* Bind `value` to a row of a table; type 0 keys, 1 mouse, 2 gamepad. */
 static int bind_list(unsigned char *row, int type, const char *what, const char *value)
@@ -357,6 +389,15 @@ int ico_bindings_set(IcoBindings *b, const char *key, const char *value)
             b->mouse_sens = f;
         } else if (strcmp(key, "mouse_decay") == 0 && parse_float(value, 0.0f, 0.99f, &f) == 0) {
             b->mouse_decay = f;
+        } else if (strcmp(key, "touch_mode") == 0 &&
+                   (on = parse_choice(value, ico_touch_mode_names, 3)) >= 0) {
+            b->touch_mode = on;
+        } else if (strcmp(key, "touch_size") == 0 &&
+                   (on = parse_choice(value, ico_touch_size_names, 3)) >= 0) {
+            b->touch_size = on;
+        } else if (strcmp(key, "touch_opacity") == 0 &&
+                   parse_float(value, 10.0f, 100.0f, &f) == 0) {
+            b->touch_opacity = (int)(f + 0.5f);
         } else {
             fprintf(stderr, "input: ignoring \"%s = %s\" (unknown key or bad value)\n", key, value);
             return -1;

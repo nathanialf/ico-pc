@@ -16,8 +16,9 @@
 #include "input.h"
 
 static const char *const scalar_keys[] = {
-    "keyboard",          "mouse",       "gamepad",       "rumble", "deadzone", "walk_scale",
-    "mouse_sensitivity", "mouse_decay", "mouse_invert_y"};
+    "keyboard",       "mouse",      "gamepad",           "rumble",
+    "deadzone",       "walk_scale", "mouse_sensitivity", "mouse_decay",
+    "mouse_invert_y", "touch_mode", "touch_size",        "touch_opacity"};
 
 static const char *const dev_prefix[3] = {"kb.", "mouse.", "pad."};
 
@@ -231,6 +232,30 @@ int ico_input_write_bindings(const IcoBindings *b)
     if (b->mouse_sens != def.mouse_sens ||
         ico_config_get_string("input.mouse_sensitivity", NULL) != NULL) {
         if (ico_config_set_float("input.mouse_sensitivity", b->mouse_sens) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    /* the touch overlay's rows (Settings > Controls) */
+    if (b->touch_mode != def.touch_mode ||
+        ico_config_get_string("input.touch_mode", NULL) != NULL) {
+        if (b->touch_mode < 0 || b->touch_mode > 2 ||
+            ico_config_set_string("input.touch_mode", ico_touch_mode_names[b->touch_mode]) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->touch_size != def.touch_size ||
+        ico_config_get_string("input.touch_size", NULL) != NULL) {
+        if (b->touch_size < 0 || b->touch_size > 2 ||
+            ico_config_set_string("input.touch_size", ico_touch_size_names[b->touch_size]) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->touch_opacity != def.touch_opacity ||
+        ico_config_get_string("input.touch_opacity", NULL) != NULL) {
+        if (ico_config_set_int("input.touch_opacity", b->touch_opacity) != 0) {
             return -1;
         }
         n++;

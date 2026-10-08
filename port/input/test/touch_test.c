@@ -126,7 +126,7 @@ static void check_layout_common(const IcoTouchLayout *l)
     CHECK(near_(l->lookArea.w, 0.6f * s->w, 0.01f));
     CHECK(near_(l->lookArea.y, s->y, 0.01f));
     CHECK(near_(l->lookArea.h, 0.45f * s->h, 0.01f));
-    CHECK(near_(l->runR, 0.6f * l->stickR, 0.01f));
+    CHECK(near_(l->runR, 0.94f * l->stickR, 0.01f));
     /* the stick's home ring fits in its area */
     CHECK(l->stickHomeX - l->stickR >= l->stickArea.x);
     CHECK(l->stickHomeY + l->stickR <= l->stickArea.y + l->stickArea.h);
@@ -172,7 +172,7 @@ static void test_layouts(void)
     l = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM);
     CHECK(near_(l.unit, 1080.0f, 0.01f));
     CHECK(near_(l.stickR, 129.6f, 0.01f));
-    CHECK(near_(l.runR, 77.76f, 0.01f));
+    CHECK(near_(l.runR, 121.824f, 0.01f));
     CHECK(near_(l.stickArea.x, 0.0f, 0.01f) && near_(l.stickArea.y, 324.0f, 0.01f));
     CHECK(near_(l.stickArea.w, 768.0f, 0.01f) && near_(l.stickArea.h, 756.0f, 0.01f));
     CHECK(near_(l.lookArea.x, 768.0f, 0.01f) && near_(l.lookArea.w, 1152.0f, 0.01f));
@@ -272,14 +272,15 @@ static void test_stick(void)
     ev(&t, 7, cx - l.runR, cy, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     d = ico_touch_draw_info(&t, &l);
-    CHECK(near_(v.lx, -ICO_TOUCH_RUN_RING, 0.002f) && near_(d.stickMag, 0.6f, 0.002f));
+    CHECK(ICO_TOUCH_RUN_RING == 0.94f);
+    CHECK(near_(v.lx, -ICO_TOUCH_RUN_RING, 0.002f) && near_(d.stickMag, 0.94f, 0.002f));
     CHECK(near_(absf(d.knobX - d.stickCX), d.runR, 0.05f));
 
     /* a second finger in the stick's area does not take the stick */
     ev(&t, 8, 600.0f, 900.0f, ICO_TOUCH_DOWN, 1 * S);
     v = step(&t, 1 * S);
     d = ico_touch_draw_info(&t, &l);
-    CHECK(near_(d.stickCX, cx, 0.01f) && near_(v.lx, -0.6f, 0.002f));
+    CHECK(near_(d.stickCX, cx, 0.01f) && near_(v.lx, -0.94f, 0.002f));
     ev(&t, 8, 600.0f, 900.0f, ICO_TOUCH_UP, 1 * S);
 
     /* the stick follows a finger that leaves its area */
@@ -675,8 +676,9 @@ static void test_merged_frame(void)
     CHECK(f.lx == 37 && f.ly == 218);
 
     /* along an axis, fix or not: a full push is 255 and runs; the run ring
-       (0.6 R) is a deflection of 0.6 -> 204, which the game reads as about
-       0.40 (it walks); running starts near 0.94 of R along an axis */
+       (0.94 R) is a deflection of 0.94 -> 247, which the game reads as 0.99
+       or more (it runs: the ring is drawn where running starts); 0.6 R is
+       204, about 0.40 (it walks); 0.92 R still walks */
     ev(&t, 1, 400.0f + 2.0f * R, 700.0f, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv, S);
     v = bind;
@@ -686,6 +688,12 @@ static void test_merged_frame(void)
     ico_input_vpad_to_frame(&v, 1, 0, &f);
     CHECK(f.lx == 255 && f.ly == 128);
     ev(&t, 1, 400.0f + l.runR, 700.0f, ICO_TOUCH_MOVE, S);
+    ico_touch_step(&t, &l, &tv, S);
+    v = bind;
+    ico_vpad_merge(&v, &tv);
+    ico_input_vpad_to_frame(&v, 0, 0, &f);
+    CHECK(f.lx == 247 && f.ly == 128 && game_magnitude(f.lx, f.ly) >= 0.99f);
+    ev(&t, 1, 400.0f + 0.6f * R, 700.0f, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv, S);
     v = bind;
     ico_vpad_merge(&v, &tv);
@@ -718,6 +726,66 @@ static void test_merged_frame(void)
     CHECK(f.rx == 128 && f.ry == 0);
 }
 
+/* The device layer's gate (ico_touch_update): with a gamepad connected in
+   Auto the overlay is hidden and the touches are dropped, so nothing unseen
+   is pressed; Always maps them with a gamepad too; Off never. A tap made
+   while dropped is not replayed once the gamepad goes. */
+static void test_gamepad_drop(void)
+{
+    IcoTouchLayout l = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM);
+    IcoTouchState t;
+    IcoVirtualPad v;
+    float x, y;
+
+    g_l = &l;
+    memset(&t, 0, sizeof(t));
+    ico_touch_reset(&t, S);
+    CHECK(ico_touch_accepts(ICO_TOUCH_MODE_AUTO, 0) && !ico_touch_accepts(ICO_TOUCH_MODE_AUTO, 1));
+    CHECK(ico_touch_accepts(ICO_TOUCH_MODE_ALWAYS, 0) &&
+          ico_touch_accepts(ICO_TOUCH_MODE_ALWAYS, 2));
+    CHECK(!ico_touch_accepts(ICO_TOUCH_MODE_OFF, 0) && !ico_touch_accepts(ICO_TOUCH_MODE_OFF, 1));
+
+    /* Auto, one gamepad: Cross held and the stick pushed give nothing */
+    ico_touch_set_gamepads(&t, 1, S);
+    centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
+    ev(&t, 1, x, y, ICO_TOUCH_DOWN, S);
+    ev(&t, 2, 400.0f, 700.0f, ICO_TOUCH_DOWN, S);
+    ev(&t, 2, 400.0f + l.stickR, 700.0f, ICO_TOUCH_MOVE, S);
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_AUTO, 1, &v, S) == 0);
+    CHECK(v.buttons == 0 && v.lx == 0.0f && v.ly == 0.0f && v.rx == 0.0f && v.ry == 0.0f);
+    CHECK(ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_AUTO, 1, 2 * S) == 0.0f);
+    /* the same fingers in Always: merged, drawn at full opacity */
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_ALWAYS, 1, &v, S) == 1);
+    CHECK(v.buttons == ICO_PAD_CROSS && near_(v.lx, 1.0f, 0.002f));
+    CHECK(ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_ALWAYS, 1, 2 * S) == 1.0f);
+    /* Off: nothing, never drawn */
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_OFF, 0, &v, S) == 0 && v.buttons == 0);
+    CHECK(ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_OFF, 0, 2 * S) == 0.0f);
+    ev(&t, 1, x, y, ICO_TOUCH_UP, S);
+    ev(&t, 2, 400.0f, 700.0f, ICO_TOUCH_UP, S);
+
+    /* a tap while dropped: down and up between two steps, not replayed
+       after the gamepad goes */
+    ev(&t, 3, x, y, ICO_TOUCH_DOWN, 3 * S);
+    ev(&t, 3, x, y, ICO_TOUCH_UP, 3 * S);
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_AUTO, 1, &v, 3 * S) == 0 && v.buttons == 0);
+    ico_touch_set_gamepads(&t, 0, 4 * S);
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_AUTO, 0, &v, 4 * S) == 1 && v.buttons == 0);
+    /* Auto without a gamepad maps, and the overlay shows with its fade */
+    ev(&t, 4, x, y, ICO_TOUCH_DOWN, 5 * S);
+    memset(&v, 0, sizeof(v));
+    CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_AUTO, 0, &v, 5 * S) == 1 &&
+          v.buttons == ICO_PAD_CROSS);
+    CHECK(near_(ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_AUTO, 0, 6 * S),
+                ico_touch_opacity(&t, 0, 6 * S), 1e-6f) &&
+          ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_AUTO, 0, 6 * S) > 0.99f);
+}
+
 int main(void)
 {
     test_layouts();
@@ -727,6 +795,7 @@ int main(void)
     test_look();
     test_visibility();
     test_merged_frame();
+    test_gamepad_drop();
     if (failures != 0) {
         fprintf(stderr, "touch_test: %d failure(s)\n", failures);
         return 1;

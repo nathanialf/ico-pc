@@ -1,13 +1,20 @@
 /*
  * port/input/input_sdl.c
  *
- * The device layer (input_sdl.h).
+ * The device layer (input_sdl.h), the touch overlay's SDL side included
+ * (touch.h's wiring notes): a direct touch screen's fingers into the
+ * mapper, its pad merged with the bindings' once per vsync, the layout
+ * from the window's size and safe area, and a copy of what the overlay
+ * drawing reads.
  */
+/* the real ico_input_sdl_set_safe_area is this file's (input_sdl.h) */
+#define ICO_TOUCH_SAFE_AREA_IMPL 1
 #include <stdio.h>
 #include <string.h>
 #include "host_config.h"
 #include "input.h"
 #include "input_sdl.h"
+#include "touch.h"
 
 #define MAX_PADS 8
 #define RUMBLE_MS 250
@@ -29,6 +36,18 @@ static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
 static int s_ready;
 
+/* the touch overlay: the mapper's state and zones, whether a direct touch
+   screen exists, the output and safe area the zones were built for, and the
+   copy the presenter's overlay draws from (taken at the vsync step; the
+   presenter runs on this thread, between pumps, but never reads the
+   mapper while events write it) */
+static IcoTouchState s_touch;
+static IcoTouchLayout s_touchLayout;
+static int s_touchDevice;
+static int s_touchW, s_touchH;
+static int s_safeX, s_safeY, s_safeW, s_safeH; /* s_safeW 0: the whole output */
+static IcoTouchOverlay s_touchSnap;
+
 static void open_pad(SDL_JoystickID id)
 {
     int i;
@@ -48,6 +67,52 @@ static void open_pad(SDL_JoystickID id)
             return;
         }
     }
+}
+
+static int open_pads(void)
+{
+    int i, n = 0;
+
+    for (i = 0; i < MAX_PADS; i++) {
+        n += s_pad[i] != NULL;
+    }
+    return n;
+}
+
+static void touch_rebuild(void)
+{
+    IcoTouchInsets in = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    if (s_touchW <= 0 || s_touchH <= 0) {
+        return;
+    }
+    if (s_safeW > 0 && s_safeH > 0) {
+        in.left = (float)s_safeX;
+        in.top = (float)s_safeY;
+        in.right = (float)(s_touchW - s_safeX - s_safeW);
+        in.bottom = (float)(s_touchH - s_safeY - s_safeH);
+        in.left = in.left > 0.0f ? in.left : 0.0f;
+        in.top = in.top > 0.0f ? in.top : 0.0f;
+        in.right = in.right > 0.0f ? in.right : 0.0f;
+        in.bottom = in.bottom > 0.0f ? in.bottom : 0.0f;
+    }
+    s_touchLayout = ico_touch_layout((uint32_t)s_touchW, (uint32_t)s_touchH, in, s_bind.touch_size);
+}
+
+/* a direct touch screen is there: the overlay shows for 5 s from now */
+static void touch_found(const char *how)
+{
+    if (s_touchDevice) {
+        return;
+    }
+    s_touchDevice = 1;
+    ico_touch_reset(&s_touch, SDL_GetTicksNS());
+    s_touch.look_decay = s_bind.mouse_decay;
+    ico_touch_set_gamepads(&s_touch, open_pads(), SDL_GetTicksNS());
+    fprintf(stderr, "input: touch screen (%s); touch controls %s\n", how,
+            ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 2
+                                     ? s_bind.touch_mode
+                                     : ICO_TOUCH_MODE_AUTO]);
 }
 
 static void close_pad(SDL_JoystickID id)
@@ -91,8 +156,76 @@ void ico_input_sdl_init(const char *config_path)
     }
     SDL_free(ids);
     memset(&s_raw, 0, sizeof(s_raw));
+    /* the touch overlay: a direct touch screen known at start shows it */
+    memset(&s_touch, 0, sizeof(s_touch));
+    memset(&s_touchSnap, 0, sizeof(s_touchSnap));
+    s_touchDevice = 0;
+    ico_touch_set_gamepads(&s_touch, open_pads(), SDL_GetTicksNS());
+    {
+        SDL_TouchID *touch = SDL_GetTouchDevices(&n);
+
+        for (i = 0; touch != NULL && i < n; i++) {
+            if (SDL_GetTouchDeviceType(touch[i]) == SDL_TOUCH_DEVICE_DIRECT) {
+                touch_found("at start");
+                break;
+            }
+        }
+        SDL_free(touch);
+    }
+    touch_rebuild();
     ico_input_set_live(1);
     s_ready = 1;
+}
+
+void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh)
+{
+    s_touchW = w;
+    s_touchH = h;
+    s_safeX = sx;
+    s_safeY = sy;
+    s_safeW = sw;
+    s_safeH = sh;
+    touch_rebuild();
+}
+
+void ico_input_sdl_set_safe_area(int x, int y, int w, int h)
+{
+    s_safeX = x;
+    s_safeY = y;
+    s_safeW = w;
+    s_safeH = h;
+    touch_rebuild();
+}
+
+int ico_input_sdl_touch_present(void)
+{
+    return s_touchDevice;
+}
+
+int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
+{
+    if (out == NULL || !s_touchDevice || !(s_touchSnap.opacity > 0.0f)) {
+        return 0;
+    }
+    *out = s_touchSnap;
+    return 1;
+}
+
+static void touch_finger(const SDL_Event *e, int kind)
+{
+    if (SDL_GetTouchDeviceType(e->tfinger.touchID) != SDL_TOUCH_DEVICE_DIRECT) {
+        return; /* a trackpad's fingers (macOS) are not the overlay's */
+    }
+    touch_found("first touch");
+    ico_touch_event(&s_touch, (uint64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, kind,
+                    e->tfinger.timestamp);
+}
+
+static void touch_cancel(void)
+{
+    if (s_touchDevice) {
+        ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
+    }
 }
 
 static void clear_held(void)
@@ -138,12 +271,32 @@ void ico_input_sdl_event(const SDL_Event *e)
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         clear_held();
+        touch_cancel();
+        break;
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        /* nothing stays held while the app is away (Android) */
+        touch_cancel();
+        break;
+    case SDL_EVENT_FINGER_DOWN:
+        touch_finger(e, ICO_TOUCH_DOWN);
+        break;
+    case SDL_EVENT_FINGER_MOTION:
+        touch_finger(e, ICO_TOUCH_MOVE);
+        break;
+    case SDL_EVENT_FINGER_UP:
+        touch_finger(e, ICO_TOUCH_UP);
+        break;
+    case SDL_EVENT_FINGER_CANCELED:
+        touch_finger(e, ICO_TOUCH_CANCEL);
         break;
     case SDL_EVENT_GAMEPAD_ADDED:
         open_pad(e->gdevice.which);
+        ico_touch_set_gamepads(&s_touch, open_pads(), SDL_GetTicksNS());
         break;
     case SDL_EVENT_GAMEPAD_REMOVED:
         close_pad(e->gdevice.which);
+        ico_touch_set_gamepads(&s_touch, open_pads(), SDL_GetTicksNS());
         break;
     default:
         break;
@@ -266,6 +419,28 @@ static void note_pad_presses(void)
     }
 }
 
+/* the touch overlay's vsync: the Touch size row's change, the look pad's
+   decay from the bindings (a reload may change it), the step and the merge
+   (dropped with a gamepad in Auto: ico_touch_update), then the copy the
+   presenter draws */
+static void touch_step(IcoVirtualPad *v)
+{
+    const uint64_t now = SDL_GetTicksNS();
+    const int mode = s_bind.touch_mode;
+    int pct = s_bind.touch_opacity;
+
+    if (s_touchLayout.size != s_bind.touch_size) {
+        touch_rebuild();
+    }
+    s_touch.look_decay = s_bind.mouse_decay;
+    ico_touch_update(&s_touch, &s_touchLayout, mode, s_raw.gamepads, v, now);
+    pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
+    s_touchSnap.layout = s_touchLayout;
+    s_touchSnap.info = ico_touch_draw_info(&s_touch, &s_touchLayout);
+    s_touchSnap.opacity =
+        ico_touch_mode_opacity(&s_touch, mode, s_raw.gamepads, now) * (float)pct / 100.0f;
+}
+
 void ico_input_sdl_update(void)
 {
     IcoVirtualPad v;
@@ -279,6 +454,9 @@ void ico_input_sdl_update(void)
     s_raw.mouse_dy = s_acc_dy;
     s_acc_dx = s_acc_dy = 0.0f;
     ico_bindings_step(&s_bind, &s_raw, &v);
+    if (s_touchDevice) {
+        touch_step(&v);
+    }
     ico_input_set_vpad(&v);
     send_rumble();
 }
@@ -297,5 +475,7 @@ void ico_input_sdl_shutdown(void)
             s_pad[i] = NULL;
         }
     }
+    s_touchSnap.opacity = 0.0f;
+    s_touchDevice = 0;
     s_ready = 0;
 }

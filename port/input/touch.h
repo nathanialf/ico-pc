@@ -29,7 +29,7 @@
  * enemy_act.c:445 runs at a normalised magnitude of 0.99, which is a
  * deflection of about 0.94 along an axis, and needs the stick fix between
  * the eight directions, as on a gamepad). The run ring is drawn at
- * ICO_TOUCH_RUN_RING * R.
+ * ICO_TOUCH_RUN_RING * R, 0.94: where a push along an axis starts the run.
  *
  * Look pad: a finger's offset from where it went down, over R, is the right
  * stick (clamped to the unit circle); after it lifts the stick decays to
@@ -85,6 +85,8 @@
  *           ico_touch_step(&s_touch, &s_touchLayout, &tv, SDL_GetTicksNS());
  *           ico_vpad_merge(&v, &tv);
  *       }
+ *     (ico_touch_update: the step every vsync, the merge only while
+ *     ico_touch_accepts, so with a gamepad in Auto nothing unseen is held)
  *     so the stick fix, mirror and quantisation (ico_input_vpad_to_frame in
  *     pad_host.c) apply to touch as to every other source.
  *   drawing, from ui_host.c's hostOverlay at output resolution:
@@ -106,6 +108,11 @@ enum { ICO_TOUCH_DOWN = 0, ICO_TOUCH_MOVE = 1, ICO_TOUCH_UP = 2, ICO_TOUCH_CANCE
 
 /* the size setting */
 enum { ICO_TOUCH_SMALL = 0, ICO_TOUCH_MEDIUM = 1, ICO_TOUCH_LARGE = 2 };
+
+/* the Touch controls setting ([input] touch_mode): Off never maps or
+   draws; Auto draws with the fades and drops the touches while a gamepad
+   is connected; Always draws at full opacity and maps with a gamepad too */
+enum { ICO_TOUCH_MODE_OFF = 0, ICO_TOUCH_MODE_AUTO = 1, ICO_TOUCH_MODE_ALWAYS = 2 };
 
 /* the button zones; IcoTouchLayout.button[] and the
    pressed mask (bit 1 << zone) use these */
@@ -129,7 +136,7 @@ enum {
 
 #define ICO_TOUCH_FINGERS 10
 #define ICO_TOUCH_STICK_RADIUS 0.12f   /* of the safe height, at medium */
-#define ICO_TOUCH_RUN_RING 0.6f        /* of the stick radius, drawn */
+#define ICO_TOUCH_RUN_RING 0.94f       /* of the stick radius, drawn: where the game runs */
 #define ICO_TOUCH_STICK_DEADZONE 0.05f /* of the stick radius */
 #define ICO_TOUCH_LOOK_DECAY 0.80f     /* bindings.c's default mouse_decay */
 #define ICO_TOUCH_HIDE_NS 5000000000ull
@@ -217,6 +224,15 @@ typedef struct IcoTouchDrawInfo {
     float rx, ry;         /* the right stick (decaying after release) */
 } IcoTouchDrawInfo;
 
+/* What the overlay drawing reads, copied once per vsync by the device layer
+   (input_sdl.c) after its step: the zones, the step's state, and the
+   opacity to draw at (the fades and the mode times the opacity setting). */
+typedef struct IcoTouchOverlay {
+    IcoTouchLayout layout;
+    IcoTouchDrawInfo info;
+    float opacity; /* 0..1; nothing is drawn at 0 */
+} IcoTouchOverlay;
+
 /* The zones for an output of outW x outH pixels with the safe area's insets
    and a size (ICO_TOUCH_SMALL..LARGE; out of range is medium). Insets that
    leave nothing are ignored. */
@@ -252,5 +268,19 @@ float ico_touch_opacity(const IcoTouchState *t, int gamepads, uint64_t nowNs);
 
 /* The last step's state for drawing. */
 IcoTouchDrawInfo ico_touch_draw_info(const IcoTouchState *t, const IcoTouchLayout *l);
+
+/* Whether the touches act: the mode is not Off, and in Auto no gamepad is
+   connected (the overlay is hidden then, so a touch would press unseen). */
+int ico_touch_accepts(int mode, int gamepads);
+
+/* The device layer's vsync: ico_touch_step every time (so a tap made while
+   the touches are dropped is not replayed later), its pad merged into *v
+   (ico_vpad_merge) only while ico_touch_accepts. Returns 1 when merged. */
+int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int gamepads,
+                     IcoVirtualPad *v, uint64_t nowNs);
+
+/* The overlay's opacity for a mode, before the user's opacity setting: 0
+   for Off, 1 for Always, ico_touch_opacity for Auto. */
+float ico_touch_mode_opacity(const IcoTouchState *t, int mode, int gamepads, uint64_t nowNs);
 
 #endif /* ICO_PORT_INPUT_TOUCH_H */

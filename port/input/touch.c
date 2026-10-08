@@ -514,3 +514,32 @@ IcoTouchDrawInfo ico_touch_draw_info(const IcoTouchState *t, const IcoTouchLayou
     d.ry = t->lookY;
     return d;
 }
+
+int ico_touch_accepts(int mode, int gamepads)
+{
+    return mode == ICO_TOUCH_MODE_ALWAYS || (mode == ICO_TOUCH_MODE_AUTO && gamepads <= 0);
+}
+
+int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int gamepads,
+                     IcoVirtualPad *v, uint64_t nowNs)
+{
+    IcoVirtualPad tv;
+
+    ico_touch_step(t, l, &tv, nowNs);
+    if (!ico_touch_accepts(mode, gamepads)) {
+        return 0;
+    }
+    ico_vpad_merge(v, &tv);
+    return 1;
+}
+
+float ico_touch_mode_opacity(const IcoTouchState *t, int mode, int gamepads, uint64_t nowNs)
+{
+    if (mode == ICO_TOUCH_MODE_ALWAYS) {
+        return 1.0f;
+    }
+    if (mode != ICO_TOUCH_MODE_AUTO) {
+        return 0.0f;
+    }
+    return ico_touch_opacity(t, gamepads, nowNs);
+}

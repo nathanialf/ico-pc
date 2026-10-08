@@ -182,6 +182,11 @@ typedef struct IcoBindings {
     int mouse_invert_y;
     int rumble;
     float mouse_x, mouse_y; /* the mouse's stick, state between steps */
+    /* the touch overlay (touch.h; [input] touch_mode, touch_size,
+       touch_opacity): ICO_TOUCH_MODE_* (default Auto), ICO_TOUCH_SMALL..LARGE
+       (default medium), percent 10..100 (default 75; the Settings row
+       steps 25, 50, 75, 100) */
+    int touch_mode, touch_size, touch_opacity;
 } IcoBindings;
 
 /* The defaults. */
@@ -238,6 +243,10 @@ void ico_bindings_clear(IcoBindings *b, int target);
    "none". kind ICO_SRC_KEY/MOUSE/PAD. */
 const char *ico_bindings_row_text(const IcoBindings *b, int kind, int target, char *buf,
                                   unsigned size);
+/* The config names of the touch overlay's settings by value ("off",
+   "auto", "always"; "small", "medium", "large"; bindings.c). */
+extern const char *const ico_touch_mode_names[3];
+extern const char *const ico_touch_size_names[3];
 /* A mouse button's config name ("left", "right", "middle", "x1", "x2"). */
 const char *ico_mouse_name(int button);
 /* The config names of the mouse buttons by number (0 is "none"), one table
@@ -248,8 +257,10 @@ extern const char *const ico_mouse_names[ICO_MOUSE_BUTTONS];
    the caller saves with ico_config_save): [input.kb], [input.mouse] and
    [input.pad] for each target whose row differs from the default or is
    already in the file, as a string ("Space", "Tab, Backquote", "none";
-   bindings.c splits a comma list like an array), and mouse_sensitivity.
-   Returns the number of keys set, or -1. */
+   bindings.c splits a comma list like an array), mouse_sensitivity, and
+   touch_mode, touch_size and touch_opacity, each when it differs from the
+   default or is already in the file. Returns the number of keys set, or
+   -1. */
 int ico_input_write_bindings(const IcoBindings *b);
 /* Rebuild *b from the defaults and the config's [input] and [gameplay]
    keys as port/config reads them (ico_config_get_string): the reload after
