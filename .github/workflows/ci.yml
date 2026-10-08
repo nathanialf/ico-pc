@@ -251,7 +251,7 @@ jobs:
 
       - name: APK structure
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           . tools/toolchain/android.env
           apk=$(ls android/app/build/outputs/apk/debug/*.apk | head -n 1)
           bt="$ICO_ANDROID_BUILD_TOOLS"
@@ -276,7 +276,7 @@ jobs:
           done
 
           # the APK is zip-aligned for 16 KB pages
-          "$bt/zipalign" -c -P 16 -v 4 "$apk" > /dev/null
+          "$bt/zipalign" -c -P 16 -v 4 "$apk" | tail -n 20
 
           # manifest levels
           "$bt/aapt2" dump badging "$apk" > badging.txt
