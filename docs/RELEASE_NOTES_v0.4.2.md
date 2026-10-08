@@ -17,3 +17,4 @@
 - Some moving textures no longer jump when the game draws extra frames between its own (Frame rate above Original).
 - Android: when the game has to close it now says so, and the log of the run before is kept.
 - A save folder copied with different capitals in its name is found again.
+- Settings changed just before closing the game with Escape or the window's close button are kept.
