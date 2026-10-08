@@ -85,7 +85,7 @@ static unsigned char *pattern(void)
 
 static void checkCopy(const char *dir, const unsigned char *data)
 {
-    char tmp[1024], final[1024], why[512];
+    char tmp[1024 + 8], final[1024], why[512];
     SDL_IOStream *src = SDL_IOFromConstMem(data, SIZE);
     Seen s;
     FILE *f;
@@ -126,7 +126,7 @@ static void checkCopy(const char *dir, const unsigned char *data)
 
 static void checkCancel(const char *dir, const unsigned char *data)
 {
-    char tmp[1024], final[1024], why[512];
+    char tmp[1024 + 8], final[1024], why[512];
     SDL_IOStream *src = SDL_IOFromConstMem(data, SIZE);
     Seen s;
     int r;
@@ -147,7 +147,7 @@ static void checkCancel(const char *dir, const unsigned char *data)
 
 static void checkFail(const char *dir, const unsigned char *data)
 {
-    char ro[1024], tmp[1024], why[512];
+    char ro[1024], tmp[1024 + 32], why[512];
     SDL_IOStream *src = SDL_IOFromConstMem(data, SIZE);
     int r, asFile = 0;
 
