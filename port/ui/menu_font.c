@@ -65,7 +65,9 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             letters and drew each word in a dark box.
      steps  the white texels' alpha takes three steps between none and full
             (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
-            0x5E then 0x7E): five levels, ICO_SHEET_LEVELS 5.
+            0x5E then 0x7E): five levels; ICO_SHEET_LEVELS is 8, which
+            matched the sheets better once the geometry was fitted
+            (shader_consts.h).
    The first run of the comparison test on main kept them: its survey
    re-measures these numbers within 0.1.  (Its ink fit ran to the edges of
    its grid then, lowering the contrast because the strips' letters sat
@@ -174,7 +176,7 @@ float ui_MeasureMenuText(float size, const char *utf8)
     const int n = splitLines(utf8, start, len);
     float widest = 0.0f;
     for (int i = 0; i < n; i++) {
-        const float w = ui__SheetLineWidth(size * 0.5f, 1.0f, start[i], len[i]);
+        const float w = ui__SheetLineWidth(size * 0.5f, 1.0f, 0.0f, start[i], len[i]);
         widest = w > widest ? w : widest;
     }
     return widest;
@@ -250,28 +252,20 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov)
     size_t len[MF_LINES];
     const int n = splitLines(str, start, len);
     float em = it->em[lang];
-    const float wx = it->wx[lang], ax = it->x[lang];
+    const float wx = it->wx[lang], ax = it->x[lang], track = it->track[lang];
     float widths[MF_LINES], widest = 0.0f;
     for (int i = 0; i < n; i++) {
-        widths[i] = ui__SheetLineWidth(em, wx, start[i], len[i]);
+        widths[i] = ui__SheetLineWidth(em, wx, track, start[i], len[i]);
         widest = widths[i] > widest ? widths[i] : widest;
     }
-    /* the room the anchor leaves in the rectangle; a longer line is set
-       smaller to fit, down to 60 %, as the port's rows are */
-    float room;
-    switch (it->align) {
-    case UI_ALIGN_LEFT:
-        room = (float)it->w - ax;
-        break;
-    case UI_ALIGN_RIGHT:
-        room = ax;
-        break;
-    default:
-        room = 2.0f * (ax < (float)it->w - ax ? ax : (float)it->w - ax);
-        break;
-    }
-    if (room > 0.0f && widest > room) {
-        float k = room / widest;
+    /* a line longer than the rectangle is set smaller to fit, down to 60 %,
+       as the port's rows are; one that fits but would cross an edge from
+       its anchor is moved inside (the sheets' long words fill their
+       rectangles, the anchor is the fit's centre).  The advances' side
+       bearings at the line's ends are not ink. */
+    const float bearings = 0.2f * em, room = (float)it->w;
+    if (widest - bearings > room) {
+        float k = room / (widest - bearings);
         k = k < 0.6f ? 0.6f : k;
         em *= k;
         for (int i = 0; i < n; i++) {
@@ -287,8 +281,11 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov)
         } else if (it->align == UI_ALIGN_RIGHT) {
             pen -= widths[i];
         }
+        const float lo = -0.5f * bearings, hi = room - widths[i] + 0.5f * bearings;
+        pen = pen > hi ? hi : pen;
+        pen = pen < lo ? lo : pen;
         const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
-        ui__SheetRasterLine(cov, w, hgt, w, em, wx, pen, base, start[i], len[i]);
+        ui__SheetRasterLine(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i]);
     }
     embolden(cov, w, hgt);
 }
@@ -682,7 +679,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     }
     float pen[MF_LINES], minX = 0.0f, maxX = 0.0f;
     for (int i = 0; i < n; i++) {
-        const float w = ui__SheetLineWidth(em, 1.0f, start[i], len[i]);
+        const float w = ui__SheetLineWidth(em, 1.0f, 0.0f, start[i], len[i]);
         switch (layout & UI_ALIGN_MASK) {
         case UI_ALIGN_CENTER:
             pen[i] = -w * 0.5f;
@@ -727,7 +724,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     }
     strcpy(copy, utf8);
     for (int i = 0; i < n; i++) {
-        ui__SheetRasterLine(cov, w, hgt, w, em, 1.0f, pen[i] - (float)ox,
+        ui__SheetRasterLine(cov, w, hgt, w, em, 1.0f, 0.0f, pen[i] - (float)ox,
                             b0 + (float)i * step - (float)oy, start[i], len[i]);
     }
     embolden(cov, w, hgt);

@@ -55,6 +55,8 @@ typedef struct UiMenuTextItem {
     float wx[5];               /* the lettering's width against the menus' (UI_SHEET_WIDTH),
                                   per language: the five sheets were lettered apart and
                                   their faces differ a little in size and width */
+    float track[5];            /* texels between letters beyond the typeface's spacing,
+                                  per language (a few long names are letter-spaced) */
     unsigned char rim[5];      /* the halo the light ink has on the sheet, per language:
                                   UI_RIM_NONE, UI_RIM_FAINT, UI_RIM_FULL (menu_font.h) */
 } UiMenuTextItem;

@@ -34,7 +34,7 @@
 #define SHEET_WY_4 270
 // The levels the opacity and the rim-to-fill mix are quantised to (the
 // sheets' 16 colours hold three antialiasing steps between none and full).
-#define SHEET_LEVELS 5
+#define SHEET_LEVELS 8
 // The 4x4 Bayer matrix, one row a constant, the texel at x & 3 in nibble
 // x (row 0 is 0 8 2 10, row 1 12 4 14 6, row 2 3 11 1 9, row 3 15 7 13 5).
 #define SHEET_BAYER_ROW0 0xA280
@@ -94,7 +94,7 @@ uint sheet_threshold(int2 p, uint dither)
 }
 
 // v 0..255 quantised to SHEET_LEVELS levels against threshold th (32nds),
-// returned on the 0..255 scale (0, 64, 128, 191, 255 for 5 levels).
+// returned on the 0..255 scale (0, 64, 128, 191, 255 for 5 levels; 8 since v0.4.2's geometry fit).
 uint sheet_quantise(uint v, uint th)
 {
     const uint n = (uint)SHEET_LEVELS - 1u;

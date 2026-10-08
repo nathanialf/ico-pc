@@ -1294,15 +1294,16 @@ static void testSheetText(const char *mode, int scale, const char *dir)
               "texels (1 allowed)",
               mode, wRgb, wA);
         CHECK(inked > sw * sh * s * s / 4, "%s: %d pixels inked", mode, inked);
-        /* 2 allowed: the shader blends the four texels with float weights
+        /* 3 allowed: the shader blends the four texels with float weights
          * from the interpolated UV, which lands a hair either side of a
          * half at a different screen position (measured 1 at 1x and 3x, 2
-         * at 2x, where an alpha tie also moves the blended colour); a grain
-         * fixed to the screen instead of the texel is a level (32 in alpha)
-         * or more off */
-        CHECK(moved <= 2,
+         * at 2x with 5 levels, 3 at 1x and 3x with 8, where an alpha tie
+         * also moves the blended colour); a grain fixed to the screen
+         * instead of the texel is a level (18 in alpha with 8 levels) or
+         * more off */
+        CHECK(moved <= 3,
               "%s: the strip moved by whole pixels differs by %d (the grain must move "
-              "with it; 2 allowed)",
+              "with it; 3 allowed)",
               mode, moved);
         if (scale == 1) {
             int rim = 0;

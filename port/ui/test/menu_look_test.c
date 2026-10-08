@@ -12,7 +12,7 @@
  *                     text table on the five languages' sheets) and pins
  *                     the constants that came from it: kSheetInk (menu_font.c),
  *                     ICO_SHEET_RX / RY, the rim's falloff ICO_SHEET_WX / WY
- *                     and ICO_SHEET_LEVELS (shader_consts.h).
+ *                     and the floor of ICO_SHEET_LEVELS (shader_consts.h).
  *   testCompareItems  every item of ui_menu_text_items in the five languages:
  *                     the reference strip against the sheet's rectangle,
  *                     both composited on black and on mid-grey with MODULATE
@@ -65,49 +65,54 @@
 #include "host_fs.h"
 
 /* ------------------------------------------------------------- limits */
-/* The limits of testCompareItems, set from the first run on main (v0.4.2,
-   the 100 items a language with ink on the sheet, 500 in all): each is the
-   95th percentile over the five languages plus 25 %, or the worst item plus
-   some room where that is further (named).  They hold the look as it is and
-   catch a regression; they are not a likeness bound.  The strips differ
-   from the sheets by the lettering's geometry, not by the ink: Arimo set at
-   the sheets' capitals is wider than their lettering (the ink box's width,
-   strip / sheet, median 1.12 on menu_PAL_01, 1.17 on 02, 1.22 on 03, 1.25
-   on 04) and about one row shorter (height 0.83 .. 0.92), so the letters
-   fall beside the sheet's and the differences below are that misregistration
-   (taking the rim off the rimless sheets 02, title and scei moves their
-   blur 37.5 to 36.7 only).  Measured, median / max per language EN FR DE IT
-   ES, the larger of the two backgrounds: */
-/* blur 27.8/55.1 31.9/56.2 31.2/56.0 29.8/56.2 31.5/56.2; p95 47.8; the worst
-   ESPAÑOL (title.tm2, row 30) */
-#define T_BLUR 60.0f
-/* plain 35.7/70.9 41.3/73.5 41.2/73.2 37.7/73.5 40.0/73.6; p95 64.2 */
-#define T_PLAIN 80.0f
-/* the ink box's worst edge, texels: 10/44 8/41 9/50 6/47 7/43; p95 31.2;
-   the long right-aligned Options rows of menu_PAL_03 run 40 to 50 texels
-   further left (rows 323 Config. botones / 340 Hand halten/Rufen and their
-   languages' words) */
-#define T_EDGE 56.0f
-/* the same for an item of several lines: 18/25 15/33 19/40 20/38 19/39; p95
-   38.9; the worst row 185 (the slot prompt, two lines) */
-#define T_EDGE_MULTI 49.0f
-/* the first line's capital top and baseline, rows: 0.95/2.07 1.00/2.08
-   0.92/2.03 0.94/2.08 1.00/2.33; p95 1.88 (the strip's capitals start about
-   a row lower: the em is the sheets' capitals less 0.7 texel) */
-#define T_LINE 2.5f
-/* the ink amount, strip / sheet: median 0.84 0.77 0.76 0.79 0.78, min 0.28
-   0.30 0.29 0.23 0.31, max 1.10 1.02 1.03 1.04 1.04; p5 0.57.  The low ones:
-   row 61's "10" (the sheet's digits fill the tile, Arimo's two are set at 60
-   % to fit) and row 414 in Italian (the sheet's dash is a thick outlined
-   bar, Arimo's a thin rule); since the geometry fit, the digit 1 tiles reach
-   1.35 (Arimo's 1 has a foot, the sheets' none) */
-#define T_AMOUNT_LO 0.20f
-#define T_AMOUNT_HI 1.40f
+/* The limits of testCompareItems, set from the run on main after the
+   geometry fit (v0.4.2: the sheets' width UI_SHEET_WIDTH, the letters'
+   weight, the table's em, anchor, capital middle, width and spacing per
+   language fitted to each sheet, the halo per item, 8 levels; 100 items a
+   language with ink on the sheet, 500 in all): the largest measure over the
+   five languages plus 25 %.  Measured, median / max per language EN FR DE
+   IT ES, the larger of the two backgrounds, the figure 1 left out (below);
+   the first run on main, before the fit, in brackets.  The ink box: width
+   strip / sheet median 1.000 on every language (1.12 .. 1.25), height 1.000
+   (0.93 on German; 0.83 .. 0.92), the first line's capital height 0.98 ..
+   1.00 (0.82 .. 0.95), its top +0.00 .. +0.10 rows (+0.5 .. +1.0). */
+/* blur 7.9/21.2 8.4/27.3 8.3/15.8 8.1/23.5 8.7/29.3 (27.8 .. 31.9 / 56.2);
+   the worst Spanish rows 173 and 142 (menu_PAL_02) */
+#define T_BLUR 37.0f
+/* plain 11.2/26.9 11.9/34.8 11.7/22.8 11.3/30.7 12.2/44.3 (35.7 .. 41.3 /
+   73.6) */
+#define T_PLAIN 56.0f
+/* the ink box's worst edge, texels: 1/3 1/3 1/3 1/11 1/4 (6 .. 10 / 50); the
+   worst Italian row 220 (Vuoi salvare?: the sheet's words are set looser,
+   the strip's ink ends 11 texels short) */
+#define T_EDGE 14.0f
+/* the same for an item of several lines: 1/1 everywhere (15 .. 20 / 40); a
+   texel's step */
+#define T_EDGE_MULTI 1.5f
+/* the first line's capital top and baseline, rows: 0.28/1.29 0.26/1.30
+   0.16/1.60 0.16/1.15 0.31/2.33 (0.92 .. 1.00 / 2.33); the worst Spanish
+   rows 142 and 173 (menu_PAL_02: the baseline under a descender-heavy
+   word) */
+#define T_LINE 2.9f
+/* the ink amount, strip / sheet: median 1.01 1.04 0.94 1.03 1.02, min 0.82,
+   max 1.21 (0.76 .. 0.84, 0.23 .. 1.10) */
+#define T_AMOUNT_LO 0.65f
+#define T_AMOUNT_HI 1.5f
 /* the rim / fill / edge shares, the worst of the three, absolute: median
-   0.21 0.07 0.16 0.08 0.12, max 0.77 0.76 0.80 0.62 0.77; p95 0.62; the
-   worst German menu_PAL_04 (rows 73 Accessing, 211 Loading, 249 Formatting:
-   the strip's halo where that sheet has little) */
-#define T_SHARE 0.90f
+   0.13 0.07 0.08 0.08 0.07, max 0.53 (0.07 .. 0.21, 0.80): the rimless
+   sheets' antialiasing is grey at full opacity where the strips' is white
+   at partial opacity, so their softest edge texels count as rim */
+#define T_SHARE 0.66f
+/* The figure 1 (rows 52, 61 "10", 76, 304; the IT dash of row 414 is now
+   inside the common limits): Arimo's 1 has a foot and a long flag the
+   sheets' 1 has not, so its ink and box differ whatever the size; worst
+   blur 52.5 and plain 62.0 (Italian row 76), edge 7 (German row 52), ink
+   0.64 .. 1.37 */
+#define T_ONE_BLUR 66.0f
+#define T_ONE_PLAIN 78.0f
+#define T_ONE_EDGE 9.0f
+#define T_ONE_AMOUNT_LO 0.5f
+#define T_ONE_AMOUNT_HI 1.7f
 #define MIN_INK_AMOUNT 6.0f /* a sheet rectangle with less ink than this is not compared */
 
 /* The survey's expectations (testSurvey): what the scratch survey measured on
@@ -458,8 +463,10 @@ static void testSurvey(void)
     }
     CHECK(median == EXP_STEPS, "the sheets' white has %d antialiasing steps, expected %d", median,
           EXP_STEPS);
-    CHECK(median + 2 == ICO_SHEET_LEVELS, "ICO_SHEET_LEVELS %d, the survey's %d", ICO_SHEET_LEVELS,
-          median + 2);
+    /* the levels are not the survey's five (shader_consts.h: eight matched the
+       sheets better in testCompareItems) but never fewer */
+    CHECK(ICO_SHEET_LEVELS >= median + 2, "ICO_SHEET_LEVELS %d, fewer than the survey's %d",
+          ICO_SHEET_LEVELS, median + 2);
     /* the strips' margin covers the rim's reach and the bilinear texel */
     CHECK(UI_MENU_RIM_X == ICO_SHEET_RX + 1 && UI_MENU_RIM_Y == ICO_SHEET_RY + 1,
           "menu_font.h's rim margin %d x %d for a rim of %d x %d", UI_MENU_RIM_X, UI_MENU_RIM_Y,
@@ -853,8 +860,9 @@ static void statPrint(int lang, int n)
         float v[GEO_ITEMS], lo = 1e9f, hi = -1e9f;
         int m = 0;
         for (int i = 0; i < n; i++) {
-            if (k == S_EDGE && s_statMulti[lang][i] != (q == S_N)) {
-                continue;
+            if (s_statMulti[lang][i] == 2 ||
+                (k == S_EDGE && (s_statMulti[lang][i] == 1) != (q == S_N))) {
+                continue; /* the figure 1 has its own limits */
             }
             v[m++] = s_stat[lang][k][i];
             lo = s_stat[lang][k][i] < lo ? s_stat[lang][k][i] : lo;
@@ -1007,6 +1015,8 @@ static void testCompareItems(const char *outDir)
             }
             langN++;
             const int multi = strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
+            /* the figure 1 (and 10): Arimo's 1 has a foot the sheets' has not */
+            const int one = it->str == UI_STR_MT_DIGIT_1 || it->str == UI_STR_MT_DIGIT_10;
             if (langN <= GEO_ITEMS) {
                 const float b[4] = {fabsf(mr.left - ms.left), fabsf(mr.right - ms.right),
                                     fabsf(mr.top - ms.top), fabsf(mr.bottom - ms.bottom)};
@@ -1026,18 +1036,21 @@ static void testCompareItems(const char *outDir)
                 for (int q = 0; q < S_N; q++) {
                     s_stat[lang][q][langN - 1] = st[q];
                 }
-                s_statMulti[lang][langN - 1] = multi;
+                s_statMulti[lang][langN - 1] = multi ? 1 : one ? 2 : 0;
             }
-            const float edge = multi ? T_EDGE_MULTI : T_EDGE;
+            const float edge = one ? T_ONE_EDGE : multi ? T_EDGE_MULTI : T_EDGE;
+            const float tBlur = one ? T_ONE_BLUR : T_BLUR, tPlain = one ? T_ONE_PLAIN : T_PLAIN;
+            const float tLo = one ? T_ONE_AMOUNT_LO : T_AMOUNT_LO,
+                        tHi = one ? T_ONE_AMOUNT_HI : T_AMOUNT_HI;
             char why[512];
             why[0] = '\0';
             size_t n = 0;
 #define NOTE(...) n += (size_t)snprintf(why + n, sizeof(why) - n, __VA_ARGS__)
             for (int b = 0; b < 2; b++) {
-                if (mr.blur[b] > T_BLUR) {
+                if (mr.blur[b] > tBlur) {
                     NOTE(" blur[%d] %.1f", b, mr.blur[b]);
                 }
-                if (mr.plain[b] > T_PLAIN) {
+                if (mr.plain[b] > tPlain) {
                     NOTE(" plain[%d] %.1f", b, mr.plain[b]);
                 }
                 worstBlur = mr.blur[b] > worstBlur ? mr.blur[b] : worstBlur;
@@ -1055,7 +1068,7 @@ static void testCompareItems(const char *outDir)
                 NOTE(" cap %.1f base %.1f", mr.capTop - ms.capTop, mr.baseline - ms.baseline);
             }
             const float ratio = mr.ink / ms.ink;
-            if (ratio < T_AMOUNT_LO || ratio > T_AMOUNT_HI) {
+            if (ratio < tLo || ratio > tHi) {
                 NOTE(" ink x%.2f", ratio);
             }
             if (fabsf(mr.shareRim - ms.shareRim) > T_SHARE ||
@@ -1123,6 +1136,7 @@ static double geoErr(GeoFitCtx *c, const float *p)
     t.em[r->lang] *= p[1];
     t.x[r->lang] += p[2];
     t.y[r->lang] += p[3];
+    t.track[r->lang] += p[4];
     t.wx[r->lang] *= p[0];
     if (refRectOf(r, &t, c->g, c->a) != 0) {
         return 1e9;
@@ -1157,7 +1171,7 @@ static void geoFit(int fixedWidth)
     double tot0 = 0.0, tot = 0.0;
     int totN = 0;
 
-    enum { NP = 4 };
+    enum { NP = 5 };
 
     static double res[UI_LANG_COUNT][512][NP + 2];
     static int has[UI_LANG_COUNT][512];
@@ -1180,19 +1194,46 @@ static void geoFit(int fixedWidth)
                 ink += c.tmp[i];
             }
             if (ink >= MIN_INK_AMOUNT) {
-                float p[NP] = {1.0f, 1.0f, 0.0f, 0.0f};
-                float st[NP] = {0.04f, 0.04f, 1.0f, 1.0f};
-                const float minSt[NP] = {0.005f, 0.005f, 0.125f, 0.125f};
-                const float p0[NP] = {1.0f, 1.0f, 0.0f, 0.0f};
+                /* several starts (the width, the spacing and the anchor):
+                   the descent alone stops in a valley on a long word */
+                static const float kStart[6][3] = {{1.0f, 0.0f, 0.0f},  {1.1f, 0.0f, 0.0f},
+                                                   {1.0f, 0.75f, 0.0f}, {0.95f, 1.5f, 0.0f},
+                                                   {1.0f, 0.0f, -4.0f}, {1.0f, 0.0f, 4.0f}};
+                float best[NP];
+                double bestE = 1e30;
+                const float p0[NP] = {1.0f, 1.0f, 0.0f, 0.0f, 0.0f};
                 const double e0 = geoErr(&c, p0);
-                double e = geoErr(&c, p);
-                for (int it = 0; it < 200; it++) {
-                    int better = 0;
-                    for (int q = fixedWidth ? 1 : 0; q < NP; q++) {
-                        for (int sgn = -1; sgn <= 1; sgn += 2) {
+                for (int s0 = 0; s0 < 6; s0++) {
+                    float p[NP] = {kStart[s0][0], 1.0f, kStart[s0][2], 0.0f, kStart[s0][1]};
+                    float st[NP] = {0.04f, 0.04f, 1.0f, 1.0f, 0.25f};
+                    const float minSt[NP] = {0.005f, 0.005f, 0.125f, 0.125f, 0.03f};
+                    double e = geoErr(&c, p);
+                    for (int it = 0; it < 200; it++) {
+                        int better = 0;
+                        for (int q = fixedWidth ? 1 : 0; q < NP; q++) {
+                            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                                float t[NP];
+                                memcpy(t, p, sizeof(t));
+                                t[q] += (float)sgn * st[q];
+                                const double et = geoErr(&c, t);
+                                if (et < e - 1e-6) {
+                                    e = et;
+                                    memcpy(p, t, sizeof(t));
+                                    better = 1;
+                                }
+                            }
+                        }
+                        /* the em or the spacing up and the width down
+                           together (and back): the glyphs keep their width */
+                        for (int k = 0; k < 4; k++) {
+                            const int sgn = k & 1 ? 1 : -1, q = k < 2 ? 1 : 4;
                             float t[NP];
                             memcpy(t, p, sizeof(t));
                             t[q] += (float)sgn * st[q];
+                            t[0] -= (float)sgn * (q == 1 ? st[1] : st[4] * 0.1f);
+                            if (fixedWidth) {
+                                break;
+                            }
                             const double et = geoErr(&c, t);
                             if (et < e - 1e-6) {
                                 e = et;
@@ -1200,23 +1241,30 @@ static void geoFit(int fixedWidth)
                                 better = 1;
                             }
                         }
-                    }
-                    if (!better) {
-                        int more = 0;
-                        for (int q = 0; q < NP; q++) {
-                            if (st[q] > minSt[q]) {
-                                st[q] *= 0.5f;
-                                more = 1;
+                        if (!better) {
+                            int more = 0;
+                            for (int q = 0; q < NP; q++) {
+                                if (st[q] > minSt[q]) {
+                                    st[q] *= 0.5f;
+                                    more = 1;
+                                }
+                            }
+                            if (!more) {
+                                break;
                             }
                         }
-                        if (!more) {
-                            break;
-                        }
+                    }
+                    if (e < bestE) {
+                        bestE = e;
+                        memcpy(best, p, sizeof(best));
                     }
                 }
+                float p[NP];
+                memcpy(p, best, sizeof(p));
+                const double e = bestE;
                 printf("menu_look: geofit %s row %d item %d %s: width %.3f em x%.3f dx %+.2f dy "
-                       "%+.2f err %.2f -> %.2f\n",
-                       kLang[lang], r->row, r->item, r->sheet, p[0], p[1], p[2], p[3], e0, e);
+                       "%+.2f track %+.2f err %.2f -> %.2f\n",
+                       kLang[lang], r->row, r->item, r->sheet, p[0], p[1], p[2], p[3], p[4], e0, e);
                 for (int q = 0; q < NP; q++) {
                     res[lang][r->item][q] = p[q];
                 }
@@ -1253,8 +1301,8 @@ static void geoFit(int fixedWidth)
         printf("menu_look: geofit item %d row %d: width %.3f em x%.3f (%.2f) dx %+.2f err %.2f -> "
                "%.2f, dy",
                i, rowOfItem(i), medianD(v[0], m), medianD(v[1], m),
-               ui_menu_text_items[i].em[0] * medianD(v[1], m), medianD(v[2], m), medianD(v[4], m),
-               medianD(v[5], m));
+               ui_menu_text_items[i].em[0] * medianD(v[1], m), medianD(v[2], m), medianD(v[NP], m),
+               medianD(v[NP + 1], m));
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             if (has[l][i]) {
                 printf(" %s %+.2f", kLang[l], res[l][i][3]);
@@ -1294,7 +1342,7 @@ static void geoFit(int fixedWidth)
             printf("menu_look: geofit sheet %-16s %3d: width %.3f em x%.3f dx %+.2f dy %+.2f err "
                    "%.2f -> %.2f\n",
                    name, m, medianD(v[0], m), medianD(v[1], m), medianD(v[2], m), medianD(v[3], m),
-                   medianD(v[4], m), medianD(v[5], m));
+                   medianD(v[NP], m), medianD(v[NP + 1], m));
         }
     }
     printf("menu_look: geofit total %d: err %.3f -> %.3f\n", totN, totN ? tot0 / totN : 0.0,

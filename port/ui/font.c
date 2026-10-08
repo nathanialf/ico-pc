@@ -1187,7 +1187,7 @@ void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineS
     }
 }
 
-float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len)
+float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, size_t len)
 {
     if (!utf8 || !ui_FontInit()) {
         return 0.0f;
@@ -1200,7 +1200,7 @@ float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len)
     while (s < end && (cp = ui_Utf8Next(&s)) != 0) {
         const int g = glyphIndex(cp);
         if (prev) {
-            pen += (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx;
+            pen += (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx + track;
         }
         int adv, lsb;
         stbtt_GetGlyphHMetrics(&s_font.info, g, &adv, &lsb);
@@ -1210,8 +1210,8 @@ float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len)
     return pen;
 }
 
-void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx, float penX,
-                         float baseY, const char *utf8, size_t len)
+void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
+                         float track, float penX, float baseY, const char *utf8, size_t len)
 {
     if (!cov || !utf8 || w <= 0 || h <= 0 || !ui_FontInit()) {
         return;
@@ -1226,7 +1226,8 @@ void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, f
     while (s < end && (cp = ui_Utf8Next(&s)) != 0) {
         const int g = glyphIndex(cp);
         if (prev) {
-            penX += (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx;
+            penX +=
+                (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx + track;
         }
         prev = cp;
         int adv, lsb;

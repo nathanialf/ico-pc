@@ -119,7 +119,12 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_WY_2 440
 #define ICO_SHEET_WY_3 360
 #define ICO_SHEET_WY_4 270
-#define ICO_SHEET_LEVELS 5 /* opacity and rim-to-fill levels */
+/* opacity and rim-to-fill levels: the sheets' white takes three steps
+   between none and full (five levels), but once the strips' letters sat on
+   the sheets' (ctest menu_look) eight gave the smaller difference on every
+   language (the blurred difference's median 8.7 .. 9.4 where five give
+   9.0 .. 9.5), a finer grain still dithered */
+#define ICO_SHEET_LEVELS 8
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280
 #define ICO_SHEET_BAYER_ROW1 0x6E4C

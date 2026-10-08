@@ -52,7 +52,8 @@ int ui__FontReusedNearest(void);
                        height of an em of emRows rows, in rows
    ui__SheetLineWidth  the advance width of len bytes of utf8 (one line, no
                        '\n'), kerning included, in texel columns, the
-                       horizontal scale times wx (1: the menus' width)
+                       horizontal scale times wx (1: the menus' width),
+                       track texels more between letters
    ui__SheetRasterLine those bytes rasterised into cov (w x h, rows stride
                        bytes apart), the pen at (penX, baseY) in texels,
                        fractional: each glyph at its fractional pen
@@ -69,9 +70,9 @@ int ui__FontReusedNearest(void);
                        them when it makes its first page; font.c is built
                        without it in several tests and tools) */
 void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap);
-float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len);
-void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx, float penX,
-                         float baseY, const char *utf8, size_t len);
+float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, size_t len);
+void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
+                         float track, float penX, float baseY, const char *utf8, size_t len);
 /* The sheets' lettering is 0.8 as wide as the typeface's proportions on the
    screen.  The units are right: display_texture draws a menu row's box
    texW x units wide (dispW is 0 on the menu rows, or texW) and 2 * texH y
