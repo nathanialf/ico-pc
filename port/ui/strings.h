@@ -234,9 +234,8 @@ typedef enum UiStrId {
     UI_STR_CIRCLE_BACK_NOTE,
     /* P3: the game's menu text, transcribed from the PAL sheets
        (text/menu_PAL_xx, scei.tm2, title.tm2) with their wording and
-       capitalisation; menu_text.c maps the texProperty rows to them.  Never
-       drawn (the game's rows draw their textures): the game face's builder
-       cuts its letters from the sheets by matching these words */
+       capitalisation; menu_text.c maps the texProperty rows to them, and
+       the rows are drawn as these words in the sheets' look (menu_font.h) */
     UI_STR_MT_LANG_ENGLISH,
     UI_STR_MT_LANG_FRANCAIS,
     UI_STR_MT_LANG_DEUTSCH,

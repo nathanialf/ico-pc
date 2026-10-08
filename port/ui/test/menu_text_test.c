@@ -2,7 +2,7 @@
  * in the sheets' look (packages P3, TXT2; v0.4.2 F-B).
  *
  * Without a device:
- *   - the table (the game face's source, menu_text.h): every row a
+ *   - the table (menu_text.h): every row a
  *     texProperty index with a non-empty texel rectangle, every item used,
  *     the anchors inside their rectangles;
  *   - with the user's disc (argv[1], the PAL image; skipped when absent):

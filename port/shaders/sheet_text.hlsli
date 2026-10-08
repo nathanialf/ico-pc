@@ -14,11 +14,12 @@
 
 // The rim: the largest coverage within SHEET_RX texels across and SHEET_RY
 // texels down (a sheet texel is one x unit wide and one field line tall).
-#define SHEET_RX 1
-#define SHEET_RY 1
+// The values are the sheets' survey (port/ui/menu_font.c, above kSheetInk).
+#define SHEET_RX 4
+#define SHEET_RY 3
 // The levels the opacity and the rim-to-fill mix are quantised to (the
-// sheets' 16 colours hold a few antialiasing steps of each).
-#define SHEET_LEVELS 4
+// sheets' 16 colours hold three antialiasing steps between none and full).
+#define SHEET_LEVELS 5
 // The 4x4 Bayer matrix, one row a constant, the texel at x & 3 in nibble
 // x (row 0 is 0 8 2 10, row 1 12 4 14 6, row 2 3 11 1 9, row 3 15 7 13 5).
 #define SHEET_BAYER_ROW0 0xA280
@@ -50,7 +51,7 @@ uint sheet_threshold(int2 p, uint dither)
 }
 
 // v 0..255 quantised to SHEET_LEVELS levels against threshold th (32nds),
-// returned on the 0..255 scale (0, 85, 170, 255 for 4 levels).
+// returned on the 0..255 scale (0, 64, 128, 191, 255 for 5 levels).
 uint sheet_quantise(uint v, uint th)
 {
     const uint n = (uint)SHEET_LEVELS - 1u;

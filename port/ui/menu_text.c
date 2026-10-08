@@ -4,9 +4,7 @@
  * The table of the game's menu words (menu_text.h): each item names a
  * word rectangle of the sheets, its transcribed words and where the
  * lettering sits in it; the rows the layout draws from it are drawn as
- * text in the sheets' look (v0.4.2, package F-B; menu_font.c).  The game
- * face's builder (game_font_disc.c) still reads it until package F-C3
- * removes the builder.
+ * text in the sheets' look (v0.4.2, package F-B; menu_font.c).
  *
  * Each item is one texel rectangle of a sheet that holds text; the rows
  * list every texProperty row that draws that rectangle (several rows share

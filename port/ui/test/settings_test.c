@@ -719,7 +719,7 @@ static void testBuild(void)
     CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
     CHECK(ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) < 0, "not on Controls");
     /* package TXT2: no Menu text or Font row (one behaviour: the game's
-       words keep their texels, the port's text is the game face) */
+       words are the table's text, the port's own Arimo) */
     {
         int rows[16];
         const int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, rows, NULL, NULL, 16);

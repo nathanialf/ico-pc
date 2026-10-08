@@ -106,9 +106,6 @@
 #include "host_android.h" /* port/platform/android: the version line */
 #include "iso_import.h"   /* the first start's copy of the chosen image */
 #endif
-#ifndef ICO_HEADLESS
-#include "game_font.h" /* port/ui: the game face, extracted after the tables */
-#endif
 
 #ifndef ICO_HEADLESS
 
@@ -739,6 +736,24 @@ static void verify_iso(const char *iso)
 
 /* --- the game data: the archive, or the image in dev mode ----------------- */
 
+#ifndef ICO_HEADLESS
+/* ico_dir_walk's callback: deletes the game-lettering files an earlier
+   version left in the per-user folder (gamefont-*.bin, and a .tmp of one
+   an interrupted write left); *user counts them */
+static int remove_gamefont(const char *path, const char *name, void *user)
+{
+    const size_t n = strlen(name);
+
+    if (strncmp(name, "gamefont-", 9) == 0 &&
+        ((n > 4 && strcmp(name + n - 4, ".bin") == 0) ||
+         (n > 8 && strcmp(name + n - 8, ".bin.tmp") == 0)) &&
+        ico_remove(path) == 0) {
+        (*(int *)user)++;
+    }
+    return 0;
+}
+#endif
+
 /* use_iso= / [dev] use_iso: 1 reads the image directly. Default: the
    headless build reads the image (trace runs and tests stay as they were),
    the window build the archive. */
@@ -1253,7 +1268,6 @@ static int host_main(int argc, char **argv)
     char logs_dir[ICO_PATH_MAX];
     char ini_path[ICO_PATH_MAX];
     char source[ICO_PATH_MAX]; /* the disc image (use_iso) or the archive */
-    char disc_sha1[41] = "";   /* the image's SHA-1, when known */
     char path[ICO_PATH_MAX];
     char stamp[32];
     const char *v;
@@ -1363,7 +1377,6 @@ static int host_main(int argc, char **argv)
             fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
         } else {
             verify_iso(source);
-            copy_path(disc_sha1, sizeof(disc_sha1), ICO_ISO_SHA1);
         }
         if (picked) {
             if (ico_ini_store(ini_path, "iso", source) == 0) {
@@ -1395,29 +1408,23 @@ static int host_main(int argc, char **argv)
                 ICO_TABLES_BOOT_ELF);
     }
 #ifndef ICO_HEADLESS
-    /* the game's own lettering as the port's font (port/ui/game_font.h): read
-       from the per-user folder's gamefont-<version>-<disc SHA-1>.bin, or
-       extracted from the disc's menu sheets with the tables just loaded and
-       written there (the first start, a new format version or another disc);
-       with use_iso and the SHA-1 check skipped the disc is unidentified and
-       the face is built each start.  A failure leaves Arimo. */
+    /* v0.4.2: the menus no longer use the game's lettering, so the files
+       an earlier version cut from the disc's menu sheets on its first
+       start (gamefont-<version>-<disc SHA-1>.bin in the per-user folder)
+       are of no use: removed, once (nothing is left to find after that) */
     {
-        char pref[ICO_PATH_MAX], name[96];
-        IcoArchiveInfo info;
-        char why[512];
+        char pref[ICO_PATH_MAX];
+        int removed = 0;
 
-        if (!use_iso_mode(&ini) && ico_archive_read_info(source, &info, why, sizeof(why)) == 0) {
-            copy_path(disc_sha1, sizeof(disc_sha1), info.iso_sha1);
+        if (ico_host_pref_dir(pref, sizeof(pref)) == 0) {
+            ico_dir_walk(pref, 0, remove_gamefont, &removed);
         }
-        path[0] = '\0';
-        if (strlen(disc_sha1) == 40 && ico_host_pref_dir(pref, sizeof(pref)) == 0 &&
-            ico_make_dir(pref) == 0) {
-            snprintf(name, sizeof(name), UI_GF_FILE_FMT, UI_GF_VERSION, disc_sha1);
-            if (ico_path_join(path, sizeof(path), pref, name) != 0) {
-                path[0] = '\0';
-            }
+        if (removed > 0) {
+            fprintf(stderr,
+                    "ico_pc: removed %d file(s) of the game's lettering from the user "
+                    "folder (the menus no longer use them)\n",
+                    removed);
         }
-        ui_GameFontPrepare(path[0] != '\0' ? path : NULL);
     }
 #endif
 

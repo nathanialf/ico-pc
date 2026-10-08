@@ -40,7 +40,6 @@
 #pragma GCC diagnostic pop
 #endif
 
-#include "game_font.h"
 #include "ui_internal.h"
 
 /* the font file, embedded at build time (port/ui/embed_font.cmake) */
@@ -107,50 +106,6 @@ static struct {
     int warnedSizes, warnedPages;
     uint32_t useClock;
 } s_font = {.frame = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z}, .scale = 1.0f};
-
-/* the game face (package GFONT; below): only its loader is left, so the
-   blob a first start extracted still parses until it is removed (package
-   F-C3); nothing draws with it since v0.4.2 */
-/* a glyph's alpha / light pairs after its ink (game_font.h): the main
-   cell, the left cap, the right cap */
-enum { GG_MAIN, GG_LEFT, GG_RIGHT, GG_PAIRS };
-
-typedef struct GPair {
-    int ax, ay, px, py; /* the alpha and the light cells in the atlas */
-    int w, h;           /* with a texel of apron all round */
-    float top;          /* the first inner row from the baseline, main texels */
-} GPair;
-
-typedef struct GGlyph {
-    uint32_t cp;
-    float scale;        /* main texels per cell texel */
-    int ix, iy, iw, ih; /* the ink cell (zero border) */
-    GPair c[GG_PAIRS];
-    float idx, idy, adv; /* main texels */
-    int sheet, lang, count;
-    int gx[4], gy[4], gw, gh; /* the fitted glow cells (zero border): inside a
-                                 word, at its start, its end, alone */
-    float gdx, gdy;           /* their top-left from the pen on the baseline, main texels */
-    int mv[3][4]; /* the main cell's alpha x, y and light x, y at a word's start, end, alone */
-} GGlyph;
-
-typedef struct GKern {
-    uint32_t a, b;
-    float adj;
-} GKern;
-
-static struct {
-    int loaded;
-    int w, h;
-    float em, cap, space;
-    GGlyph *g;
-    int ng;
-    GKern *k;
-    int nk;
-    char (*sheets)[UI_GF_SHEET_NAME];
-    int nsheets;
-    uint8_t *cov;
-} s_game;
 
 /* --------------------------------------------------------------- UTF-8 */
 
@@ -1008,203 +963,6 @@ static uint64_t rectKey(void)
 }
 #endif
 
-/* ------------------- the game face (package GFONT): the loader alone (v0.4.2) */
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-
-static int rd16(const uint8_t *p)
-{
-    return (int)p[0] | ((int)p[1] << 8);
-}
-
-static float rdF(const uint8_t *p)
-{
-    const uint32_t v = rd32(p);
-    float f;
-    memcpy(&f, &v, 4);
-    return f;
-}
-
-void ui_GameFaceUnload(void)
-{
-    free(s_game.g);
-    free(s_game.k);
-    free(s_game.sheets);
-    free(s_game.cov);
-    memset(&s_game, 0, sizeof(s_game));
-}
-
-bool ui_GameFaceLoad(const void *blob, size_t size)
-{
-    const uint8_t *p = blob;
-    ui_GameFaceUnload();
-    if (!p || size < UI_GF_HEADER || memcmp(p, "ICGF", 4) != 0 || rd32(p + 4) != UI_GF_VERSION) {
-        fprintf(stderr, "ui: the game font item does not parse (version %u, %zu bytes)\n",
-                p && size >= 8 ? (unsigned)rd32(p + 4) : 0u, size);
-        return false;
-    }
-    const int w = rd16(p + 8), h = rd16(p + 10);
-    const uint32_t ng = rd32(p + 24), nk = rd32(p + 28), ns = rd32(p + 32);
-    const uint64_t need = (uint64_t)UI_GF_HEADER + (uint64_t)ng * UI_GF_GLYPH +
-                          (uint64_t)nk * UI_GF_KERN + (uint64_t)ns * UI_GF_SHEET_NAME +
-                          (uint64_t)w * (uint64_t)h;
-    const float em = rdF(p + 12), cap = rdF(p + 16), space = rdF(p + 20);
-    if (w <= 0 || h <= 0 || ng == 0 || ng > 4096 || nk > 65536 || ns > 4096 || need != size ||
-        !(em > 1.0f && em < 100.0f) || !(cap > 1.0f && cap < 100.0f) ||
-        !(space >= 0.0f && space < 100.0f)) {
-        fprintf(stderr, "ui: the game font item is malformed\n");
-        return false;
-    }
-    s_game.g = calloc(ng, sizeof(GGlyph));
-    s_game.k = calloc(nk ? nk : 1, sizeof(GKern));
-    s_game.sheets = calloc(ns ? ns : 1, UI_GF_SHEET_NAME);
-    s_game.cov = malloc((size_t)w * (size_t)h);
-    if (!s_game.g || !s_game.k || !s_game.sheets || !s_game.cov) {
-        ui_GameFaceUnload();
-        return false;
-    }
-    const uint8_t *q = p + UI_GF_HEADER;
-    for (uint32_t i = 0; i < ng; i++, q += UI_GF_GLYPH) {
-        GGlyph *g = &s_game.g[i];
-        g->cp = rd32(q);
-        g->scale = rdF(q + 4);
-        g->ix = rd16(q + 8);
-        g->iy = rd16(q + 10);
-        g->iw = rd16(q + 12);
-        g->ih = rd16(q + 14);
-        int bad = 0;
-        for (int k = 0; k < GG_PAIRS; k++) {
-            const uint8_t *r = q + 16 + k * 16;
-            GPair *c = &g->c[k];
-            c->ax = rd16(r);
-            c->ay = rd16(r + 2);
-            c->px = rd16(r + 4);
-            c->py = rd16(r + 6);
-            c->w = rd16(r + 8);
-            c->h = rd16(r + 10);
-            c->top = rdF(r + 12);
-            bad |= c->w < 3 || c->h < 3 || c->ax + c->w > w || c->px + c->w > w ||
-                   c->ay + c->h > h || c->py + c->h > h || !(fabsf(c->top) < 1000.0f);
-        }
-        g->idx = rdF(q + 64);
-        g->idy = rdF(q + 68);
-        g->adv = rdF(q + 72);
-        g->sheet = rd16(q + 76);
-        g->lang = q[78];
-        g->count = q[79];
-        g->gdx = rdF(q + 80);
-        g->gdy = rdF(q + 84);
-        g->gw = rd16(q + 88);
-        g->gh = rd16(q + 90);
-        for (int v = 0; v < 4; v++) {
-            g->gx[v] = rd16(q + 92 + v * 4);
-            g->gy[v] = rd16(q + 94 + v * 4);
-            bad |= g->gx[v] + g->gw > w || g->gy[v] + g->gh > h;
-        }
-        for (int v = 0; v < 3; v++) {
-            for (int j = 0; j < 4; j++) {
-                g->mv[v][j] = rd16(q + 108 + v * 8 + j * 2);
-            }
-            bad |= g->mv[v][0] + g->c[GG_MAIN].w > w || g->mv[v][2] + g->c[GG_MAIN].w > w ||
-                   g->mv[v][1] + g->c[GG_MAIN].h > h || g->mv[v][3] + g->c[GG_MAIN].h > h;
-        }
-        bad |= g->ix + g->iw > w || g->iy + g->ih > h || !(g->scale > 0.1f && g->scale < 10.0f) ||
-               (i > 0 && g->cp <= s_game.g[i - 1].cp) || g->sheet >= (int)(ns ? ns : 1) ||
-               !(g->adv > 0.0f && g->adv < 1000.0f);
-        if (bad) {
-            fprintf(stderr, "ui: the game font item's glyph %u is malformed\n", (unsigned)i);
-            ui_GameFaceUnload();
-            return false;
-        }
-    }
-    for (uint32_t i = 0; i < nk; i++, q += UI_GF_KERN) {
-        s_game.k[i].a = rd32(q);
-        s_game.k[i].b = rd32(q + 4);
-        s_game.k[i].adj = rdF(q + 8);
-    }
-    memcpy(s_game.sheets, q, (size_t)ns * UI_GF_SHEET_NAME);
-    for (uint32_t i = 0; i < ns; i++) {
-        s_game.sheets[i][UI_GF_SHEET_NAME - 1] = '\0';
-    }
-    q += (size_t)ns * UI_GF_SHEET_NAME;
-    memcpy(s_game.cov, q, (size_t)w * (size_t)h);
-    s_game.w = w;
-    s_game.h = h;
-    s_game.em = em;
-    s_game.cap = cap;
-    s_game.space = space;
-    s_game.ng = (int)ng;
-    s_game.nk = (int)nk;
-    s_game.nsheets = (int)ns;
-    s_game.loaded = 1;
-    return true;
-}
-
-bool ui_GameFaceLoaded(void)
-{
-    return s_game.loaded != 0;
-}
-
-static const GGlyph *gameGlyph(uint32_t cp)
-{
-    int lo = 0, hi = s_game.ng - 1;
-    while (lo <= hi) {
-        const int mid = (lo + hi) / 2;
-        if (s_game.g[mid].cp == cp) {
-            return &s_game.g[mid];
-        }
-        if (s_game.g[mid].cp < cp) {
-            lo = mid + 1;
-        } else {
-            hi = mid - 1;
-        }
-    }
-    return NULL;
-}
-
-/* v0.4.2 (package F-B): the game face no longer draws anything; every text
-   is Arimo's (the menus' through menu_font.c, in the sheets' look) */
-int ui_FontFaceOf(uint32_t cp)
-{
-    return ui_FontHasGlyph(cp) ? UI_FACE_ARIMO : -1;
-}
-
-bool ui_GameFaceSource(uint32_t cp, const char **sheet, int *lang, int *count)
-{
-    const GGlyph *g = s_game.loaded ? gameGlyph(cp) : NULL;
-    if (!g) {
-        return false;
-    }
-    if (sheet) {
-        *sheet = g->sheet < s_game.nsheets ? s_game.sheets[g->sheet] : "";
-    }
-    if (lang) {
-        *lang = g->lang;
-    }
-    if (count) {
-        *count = g->count;
-    }
-    return true;
-}
-
-int ui_GameFaceChars(uint32_t *cps, int cap)
-{
-    for (int i = 0; cps && i < s_game.ng && i < cap; i++) {
-        cps[i] = s_game.g[i].cp;
-    }
-    return s_game.loaded ? s_game.ng : 0;
-}
-
-int ui_FontFallbackSeen(uint32_t *cps, int cap)
-{
-    (void)cps;
-    (void)cap;
-    return 0; /* nothing falls back: the game face draws nothing */
-}
-
 int ui__FontSizeSets(int *px, int cap)
 {
     int n = 0;
@@ -1222,12 +980,6 @@ int ui__FontSizeSets(int *px, int cap)
 int ui__FontReusedNearest(void)
 {
     return s_font.warnedSizes;
-}
-
-int ui__FontFallbackPx(float size)
-{
-    (void)size;
-    return 0; /* the game face draws nothing (v0.4.2) */
 }
 
 void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
@@ -1577,15 +1329,6 @@ void ui__DrawTexQuads(uint32_t tex, const UiTexQuad *q, int n, const uint8_t rgb
     free(v);
 }
 #endif
-
-/* v0.4.2 (package F-B): the UI no longer defers text (everything the
-   layout draws is in the scene list at 1x).  Kept as a no-op only so the
-   replay tool (port/render/tools/rd_replay_tool.c) builds until its call
-   goes (package F-C3). */
-void ui_InstallDeferredText(int on)
-{
-    (void)on;
-}
 
 void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
 {

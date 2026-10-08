@@ -25,22 +25,47 @@
 #define MF_STRIPS 1024    /* strips cached at once */
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
 #define MF_LINES 16       /* lines of one text */
-/* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX
-   and ICO_SHEET_RY, 1) and the bilinear read one texel past it */
-#define MF_RIM 2
+/* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
+   ICO_SHEET_RY, 4 and 3; ctest menu_look checks the pair) and the bilinear
+   read one texel past it */
+#define MF_RIM_X UI_MENU_RIM_X
+#define MF_RIM_Y UI_MENU_RIM_Y
 
 enum { MF_LIGHT = 0, MF_PLAIN = 1, MF_CLASSES };
 
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
-   rimLevel, fillLevel, dither.  The English sheets' rim is black, the
-   French, Italian and Spanish sheets' a dark grey (about 62 / 255); German
-   stays black until the sheets' survey (package F-C1) measures it.  The one
-   table to retune. */
+   rimLevel, fillLevel, dither.  The one table to retune.
+
+   Measured on the game's sheets (package F-C1: the PAL sheets menu_PAL_01..04,
+   scei and title, the 79 light-ink items of the menu text table, texels as
+   (grey, alpha) with the GS alpha 0x80 = 1; ctest menu_look testSurvey
+   re-measures them and pins this table, RX, RY and LEVELS):
+     fill   the letters are white: palette entries ffffff at alpha 0x80 on
+            every sheet; the fill texels (grey >= 200, alpha >= 0.7) average
+            251 (EN) and 249 (FR DE IT ES), so the fill level is 255.
+     rim    the dark ink around the letters, alpha-weighted mean grey of the
+            texels with alpha >= 0.5 and grey <= 100 two or more texels from the
+            letters: EN 24 (black on sheet 01, graded 0..100 on 03 and 04),
+            FR 61, DE 56, IT 61, ES 62.  German's rim is grey like the
+            Romance languages', not black.
+     width  not a hard edge: the alpha falls off over several texels (outside
+            the letters, left and right, texel 1..6: EN .76 .61 .54 .50 .39 .33,
+            FR .88 .78 .72 .59 .44 .37, DE .93 .84 .74 .65 .50 .41, above and
+            below 1..4: EN .77 .44 .36 .27, FR .89 .67 .49 .30, DE .91 .70 .51
+            .36).  The mass of the first six texels is 3.1 (EN) to 4.1 (DE) across
+            and 2.0 (EN) to 3.1 (DE) down, 3.7 and 2.7 averaged over the five:
+            ICO_SHEET_RX 4, ICO_SHEET_RY 3 (shader_consts.h) draw a hard rim of
+            the same mass.
+     steps  the white texels' alpha takes three steps between none and full
+            (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
+            0x5E then 0x7E): five levels, ICO_SHEET_LEVELS 5.
+   The first run of the comparison test on main may refine RX, RY and the
+   levels (ICO_MENU_LOOK_FIT=1). */
 static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
-    {1, 0, 255, 1},  /* English */
-    {1, 62, 255, 1}, /* French */
-    {1, 0, 255, 1},  /* German */
-    {1, 62, 255, 1}, /* Italian */
+    {1, 24, 255, 1}, /* English */
+    {1, 61, 255, 1}, /* French */
+    {1, 56, 255, 1}, /* German */
+    {1, 61, 255, 1}, /* Italian */
     {1, 62, 255, 1}, /* Spanish */
 };
 #ifdef ICO_RD
@@ -137,6 +162,71 @@ void ui_MenuFontMetrics(float size, float *ascent, float *descent, float *capHei
     if (capHeight) {
         *capHeight = 2.0f * c;
     }
+}
+
+/* ---------------------------------------------------------------- items */
+
+/* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
+   caller): the strip itemStrip caches, also the comparison test's
+   reference (ui__MenuStripRaster). */
+static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov)
+{
+    const int w = it->w, hgt = it->h;
+    const char *str = ui_StrIn((UiLang)lang, (UiStrId)it->str);
+    const char *start[MF_LINES];
+    size_t len[MF_LINES];
+    const int n = splitLines(str, start, len);
+    float em = it->em;
+    float widths[MF_LINES], widest = 0.0f;
+    for (int i = 0; i < n; i++) {
+        widths[i] = ui__SheetLineWidth(em, start[i], len[i]);
+        widest = widths[i] > widest ? widths[i] : widest;
+    }
+    /* the room the anchor leaves in the rectangle; a longer line (Arimo is
+       wider than the sheets' lettering at the same capitals) is set
+       smaller to fit, down to 60 %, as the port's rows are */
+    float room;
+    switch (it->align) {
+    case UI_ALIGN_LEFT:
+        room = (float)it->w - it->x;
+        break;
+    case UI_ALIGN_RIGHT:
+        room = it->x;
+        break;
+    default:
+        room = 2.0f * (it->x < (float)it->w - it->x ? it->x : (float)it->w - it->x);
+        break;
+    }
+    if (room > 0.0f && widest > room) {
+        float k = room / widest;
+        k = k < 0.6f ? 0.6f : k;
+        em *= k;
+        for (int i = 0; i < n; i++) {
+            widths[i] *= k;
+        }
+    }
+    float cap = 0.0f;
+    ui__SheetVMetrics(em, NULL, NULL, NULL, &cap);
+    for (int i = 0; i < n; i++) {
+        float pen = it->x;
+        if (it->align == UI_ALIGN_CENTER) {
+            pen -= widths[i] * 0.5f;
+        } else if (it->align == UI_ALIGN_RIGHT) {
+            pen -= widths[i];
+        }
+        const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
+        ui__SheetRasterLine(cov, w, hgt, w, em, pen, base, start[i], len[i]);
+    }
+}
+
+int ui__MenuStripRaster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
+{
+    if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_COUNT) {
+        return -1;
+    }
+    memset(out, 0, (size_t)w * (size_t)h);
+    rasterItem(it, lang, out);
+    return 0;
 }
 
 /* ---------------------------------------------------------------- inks */
@@ -459,51 +549,7 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls)
     if (!cov) {
         return NULL;
     }
-    const char *str = ui_StrIn((UiLang)lang, (UiStrId)it->str);
-    const char *start[MF_LINES];
-    size_t len[MF_LINES];
-    const int n = splitLines(str, start, len);
-    float em = it->em;
-    float widths[MF_LINES], widest = 0.0f;
-    for (int i = 0; i < n; i++) {
-        widths[i] = ui__SheetLineWidth(em, start[i], len[i]);
-        widest = widths[i] > widest ? widths[i] : widest;
-    }
-    /* the room the anchor leaves in the rectangle; a longer line (Arimo is
-       wider than the sheets' lettering at the same capitals) is set
-       smaller to fit, down to 60 %, as the port's rows are */
-    float room;
-    switch (it->align) {
-    case UI_ALIGN_LEFT:
-        room = (float)it->w - it->x;
-        break;
-    case UI_ALIGN_RIGHT:
-        room = it->x;
-        break;
-    default:
-        room = 2.0f * (it->x < (float)it->w - it->x ? it->x : (float)it->w - it->x);
-        break;
-    }
-    if (room > 0.0f && widest > room) {
-        float k = room / widest;
-        k = k < 0.6f ? 0.6f : k;
-        em *= k;
-        for (int i = 0; i < n; i++) {
-            widths[i] *= k;
-        }
-    }
-    float cap = 0.0f;
-    ui__SheetVMetrics(em, NULL, NULL, NULL, &cap);
-    for (int i = 0; i < n; i++) {
-        float pen = it->x;
-        if (it->align == UI_ALIGN_CENTER) {
-            pen -= widths[i] * 0.5f;
-        } else if (it->align == UI_ALIGN_RIGHT) {
-            pen -= widths[i];
-        }
-        const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
-        ui__SheetRasterLine(cov, w, hgt, w, em, pen, base, start[i], len[i]);
-    }
+    rasterItem(it, lang, cov);
     memset(s, 0, sizeof(*s));
     s->used = 1;
     s->hash = h;
@@ -577,8 +623,8 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     }
     /* the glyphs' overhang past their advances (italic-free Arimo: a
        fraction of the em) and the rim */
-    const float padX = ceilf(em * 2.0f * UI_X_PER_Y * 0.12f) + (float)MF_RIM;
-    const float padY = ceilf(em * 0.12f) + (float)MF_RIM;
+    const float padX = ceilf(em * 2.0f * UI_X_PER_Y * 0.12f) + (float)MF_RIM_X;
+    const float padY = ceilf(em * 0.12f) + (float)MF_RIM_Y;
     const int ox = (int)floorf(minX - padX), oy = (int)floorf(b0 - asc - padY);
     int w = (int)ceilf(maxX + padX) - ox;
     int hgt = (int)ceilf(b0 + (float)(n - 1) * step + desc + padY) - oy;

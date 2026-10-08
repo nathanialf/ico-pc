@@ -14,15 +14,10 @@
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
  *
- * The faces (package GFONT): with the base ELF and the disc image the game
- * face is built from the disc's menu sheets (game_font.h, as the first run
- * extracts it) and loaded, and every code point is checked against the two
- * faces: it passes when the game face or Arimo has it.  The report lists,
- * per face, the characters it serves, and for the game face the sheet each
- * one was cut from.  ICO_GAME_FONT_OUT=<file> also writes the face's blob
- * there (rd_replay_tool --game-font reads it).
+ * Arimo is the only face (v0.4.2: the menus' text is Arimo in the sheets'
+ * look); the report lists the characters it serves.
  *
- *   font_coverage_test CORPUS_DIR [BASE_ELF [DISC_IMAGE]]
+ *   font_coverage_test CORPUS_DIR [BASE_ELF]
  * Exit 0, 1 on a failure, 77 for a BASE_ELF that is named and absent.
  */
 #include <stdio.h>
@@ -94,8 +89,8 @@ static void checkText(int lang, const char *src, const char *what)
             }
             continue;
         }
-        if (ui_FontFaceOf(cp) < 0) {
-            CHECK(0, "%s (%s): no face has U+%04X in \"%.40s\"", what, kLangs[lang], (unsigned)cp,
+        if (!ui_FontHasGlyph(cp)) {
+            CHECK(0, "%s (%s): Arimo has no U+%04X in \"%.40s\"", what, kLangs[lang], (unsigned)cp,
                   src);
         }
         if (cp < BMP_SEEN) {
@@ -179,8 +174,6 @@ static void checkCorpus(const char *dir)
 }
 
 #ifdef FONT_COVERAGE_ELF
-#include "game_font.h"
-#include "vfs.h"
 #include "adpcm_init.h"
 #include "s_init.h"
 #include "tables.h"
@@ -219,89 +212,6 @@ static int checkElf(const char *path)
     printf("font_coverage: ELF: %d sound names\n", names);
     return 0;
 }
-
-static long fileSize(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    long n = -1;
-    if (f) {
-        if (fseek(f, 0, SEEK_END) == 0) {
-            n = ftell(f);
-        }
-        fclose(f);
-    }
-    return n;
-}
-
-/* the start-up step's file (ui_GameFontPrepare, the per-user folder's
-   gamefont-<V>-<SHA-1>.bin): absent, it is built and written (no temporary
-   left); present, it is read; corrupt, it is built and replaced */
-static void checkSidecar(IcoVfs *vfs, const uint8_t *blob, size_t size)
-{
-    const char *tmpdir = getenv("TMPDIR");
-    char path[1024], tmp[1100];
-    snprintf(path, sizeof(path), "%s/font_coverage-gamefont-%ld.bin",
-             tmpdir && *tmpdir ? tmpdir : ".", (long)size);
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    remove(path);
-    ico_vfs_set_disc(vfs);
-    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: built when absent");
-    CHECK(fileSize(path) == (long)size, "sidecar: written, %ld bytes", fileSize(path));
-    CHECK(fileSize(tmp) < 0, "sidecar: no temporary file left");
-    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: read back");
-    FILE *f = fopen(path, "wb");
-    if (f) {
-        fputs("ICGF, but not a game face", f);
-        fclose(f);
-    }
-    CHECK(ui_GameFontPrepare(path) == 0, "sidecar: a corrupt file is built again");
-    CHECK(fileSize(path) == (long)size, "sidecar: the corrupt file replaced");
-    char why[256];
-    CHECK(ui_GameFontWriteFile("/nonexistent-dir/x/gamefont.bin", blob, size, why, sizeof(why)) !=
-              0,
-          "sidecar: an unwritable folder is reported");
-    ico_vfs_set_disc(NULL);
-    remove(path);
-}
-
-/* the game face from the disc image, after the tables (texProperty, texFile) */
-static int buildGameFace(const char *iso)
-{
-    IcoVfs *vfs = ico_vfs_mount(&ico_vfs_iso9660, iso);
-    if (!vfs) {
-        printf("font_coverage: no disc image (%s): the game face is not checked\n", iso);
-        return 77;
-    }
-    uint8_t *blob = NULL;
-    size_t size = 0;
-    UiGfStats st;
-    char why[256];
-    CHECK(ui_GameFontBuild(vfs, &blob, &size, &st, why, sizeof(why)) == 0, "game face: %s", why);
-    if (blob) {
-        checkSidecar(vfs, blob, size);
-    }
-    ico_vfs_unmount(vfs);
-    if (!blob) {
-        return 0;
-    }
-    printf("font_coverage: game face: %d rectangles, %d lines (%d exact, %d aligned with %d "
-           "splits, %d unaligned), %d letters, %d characters, %d kerning pairs, %zu bytes\n",
-           st.sources, st.lines, st.exact, st.aligned, st.splits, st.unaligned, st.instances,
-           st.glyphs, st.kerns, size);
-    CHECK(st.unaligned == 0, "game face: %d lines not aligned", st.unaligned);
-    CHECK(ui_GameFaceLoad(blob, size), "game face: the blob loads");
-    const char *out = getenv("ICO_GAME_FONT_OUT");
-    if (out && *out) {
-        FILE *f = fopen(out, "wb");
-        CHECK(f && fwrite(blob, 1, size, f) == size, "write %s", out);
-        if (f) {
-            fclose(f);
-            printf("font_coverage: game face written to %s\n", out);
-        }
-    }
-    free(blob);
-    return 0;
-}
 #endif
 
 /* UTF-8 of one code point (for the report) */
@@ -327,73 +237,25 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* per face, the characters the five languages draw (tables, the roll's port
-   lines, corpus) that it serves; for the game face, per sheet */
+/* the characters the five languages draw (tables, the roll's port lines,
+   corpus) that Arimo serves */
 static void reportFaces(void)
 {
     static char line[8192];
     size_t n = 0;
-    int game = 0, arimo = 0;
-    line[0] = '\0';
-    if (ui_GameFaceLoaded()) {
-        /* the sheets, in the order the face names them */
-        const char *sheets[64];
-        int nsheets = 0;
-        for (uint32_t cp = 0x21; cp < BMP_SEEN; cp++) {
-            const char *sh;
-            int any = 0;
-            for (int l = 0; l < UI_LANG_COUNT; l++) {
-                any |= s_seen[l][cp];
-            }
-            if (!any || !ui_GameFaceSource(cp, &sh, NULL, NULL)) {
-                continue;
-            }
-            int k = 0;
-            while (k < nsheets && strcmp(sheets[k], sh) != 0) {
-                k++;
-            }
-            if (k == nsheets && nsheets < 64) {
-                sheets[nsheets++] = sh;
-            }
-        }
-        for (int k = 0; k < nsheets; k++) {
-            n = 0;
-            line[0] = '\0';
-            int c = 0;
-            for (uint32_t cp = 0x21; cp < BMP_SEEN; cp++) {
-                const char *sh;
-                int any = 0;
-                for (int l = 0; l < UI_LANG_COUNT; l++) {
-                    any |= s_seen[l][cp];
-                }
-                if (any && ui_GameFaceSource(cp, &sh, NULL, NULL) && strcmp(sh, sheets[k]) == 0) {
-                    putCp(line, &n, sizeof(line), cp);
-                    c++;
-                }
-            }
-            game += c;
-            printf("font_coverage: game face, %d from %s: %s\n", c, sheets[k], line);
-        }
-        uint32_t own[512];
-        const int no = ui_GameFaceChars(own, 512);
-        printf("font_coverage: game face: %d characters in the atlas\n", no);
-    }
-    n = 0;
+    int arimo = 0;
     line[0] = '\0';
     for (uint32_t cp = 0x21; cp < BMP_SEEN; cp++) {
         int any = 0;
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             any |= s_seen[l][cp];
         }
-        if (any && ui_FontFaceOf(cp) == UI_FACE_ARIMO) {
+        if (any && ui_FontHasGlyph(cp)) {
             putCp(line, &n, sizeof(line), cp);
             arimo++;
         }
     }
-    printf("font_coverage: %s, %d characters: %s\n",
-           ui_GameFaceLoaded() ? "Arimo (the fallback)" : "Arimo (no game face)", arimo, line);
-    printf("font_coverage: faces: %d characters from the game's lettering, %d from Arimo\n", game,
-           arimo);
+    printf("font_coverage: Arimo, %d characters: %s\n", arimo, line);
 }
 
 int main(int argc, char **argv)
@@ -405,12 +267,8 @@ int main(int argc, char **argv)
     CHECK(ui_FontInit(), "the embedded font parses");
     int elfRc = 0;
 #ifdef FONT_COVERAGE_ELF
-    /* the tables first: the game face is built from the disc through them */
     if (argc > 2 && argv[2][0]) {
         elfRc = checkElf(argv[2]);
-        if (elfRc == 0 && argc > 3 && argv[3][0]) {
-            buildGameFace(argv[3]);
-        }
     }
 #endif
 

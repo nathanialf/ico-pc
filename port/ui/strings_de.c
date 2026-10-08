@@ -198,8 +198,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Kreis für Zurück",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Kreis (B am Gamepad) verlässt auch die Menüs des Spiels, wie Dreieck.",
-    /* the game's menu words (P3), as the PAL sheets have them: never drawn, the
-       game face is cut from the sheets by matching them (menu_text.h) */
+    /* the game's menu words (P3), as the PAL sheets have them: drawn as
+       text in the sheets' look by the rows of menu_text.h's table */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
     [UI_STR_MT_LANG_DEUTSCH] = "DEUTSCH",

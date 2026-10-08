@@ -36,12 +36,9 @@ void ui__Sync(void);
 
 /* Tests: the pixel sizes of the Arimo size sets alive now (up to cap
    written), returns their count; whether a draw has had to reuse the
-   nearest size (every slot drawn within the last frames); the pixel size
-   of the Arimo fallback letters at a game-face size (0 without the game
-   face). */
+   nearest size (every slot drawn within the last frames). */
 int ui__FontSizeSets(int *px, int cap);
 int ui__FontReusedNearest(void);
-int ui__FontFallbackPx(float size);
 
 /* v0.4.2 (package F-B): sheet text, font.c's half of menu_font.c.  The
    menus' words are rasterised on the sheets' own texel grid: a texel
@@ -73,6 +70,12 @@ float ui__SheetLineWidth(float emRows, const char *utf8, size_t len);
 void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float penX,
                          float baseY, const char *utf8, size_t len);
 uint64_t ui__TextKey(const char *utf8, unsigned flags, int page);
+/* Tests (menu_look): the coverage strip of a menu text item in language lang
+   (UiLang), the one ui_MenuWordDraw caches, into out (w x h bytes, the
+   item's w and h; no ICO_RD needed).  0, or -1 for a size that is not the
+   item's. */
+struct UiMenuTextItem;
+int ui__MenuStripRaster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
 void ui__SetMenuFontHooks(void (*shutdown)(void), void (*forget)(void));
 
 #ifdef ICO_RD

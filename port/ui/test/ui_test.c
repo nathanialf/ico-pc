@@ -1293,8 +1293,7 @@ done:
 /* The size sets (review finding 2): 40 sizes of "IHL" measured (no Arimo
    set made) and then drawn over five frames: each draw has its own set at
    its exact pixel size, the least recently drawn sets go and "the nearest"
-   is never reused.  (v0.4.2: the plain glyph path alone; the game face and
-   its fallback sizes are gone.) */
+   is never reused.  (v0.4.2: the plain glyph path alone.) */
 static void testSizeSets(void)
 {
     enum { N = 40, PER_FRAME = 8 };

@@ -12,8 +12,8 @@
  *             scene's "H" (reduced and scaled with the scene) has more
  *   mirror    the mirror mode leaves the overlay's text where it was (with
  *             the scene black, the output equal to the unmirrored one)
- * v0.4.2 (package F-B): the deferred menu rows, their halo, fold and glow
- * checks and the game face's are gone with the deferral and the face; the
+ * v0.4.2: the deferred menu rows, their halo, fold and glow checks are
+ * gone with the deferral (packages F-B, F-C); the
  * menus' text is the sheet strips (menu_font.h; ui_test, menu_text_test).
  *
  * Usage: font_edge_test [dir]  (dir: where the PNGs go)

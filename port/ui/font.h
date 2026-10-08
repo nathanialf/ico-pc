@@ -21,10 +21,9 @@
  * Atlases: one set per rasterised pixel size, built on demand.  The pixel
  * size is round(size * scale): scale 1 in the Original preset (one atlas
  * pixel per y unit), output height / 448 in Enhanced (ui_ScaleFor).  Each
- * page is 512 x 512, kept as R8 coverage on the CPU and uploaded as an
- * RGBA8 texture (white, alpha = coverage in GS units, 0x80 = 1.0) so the
- * game's sprite path draws it: rd has no R8 texture entry point and no way
- * to select font.hlsl.
+ * page is 512 x 512, kept as R8 coverage on the CPU and uploaded as an R8
+ * texture (rd_CreateTextureR8: the coverage in GS alpha units, 0x80 = 1.0,
+ * a white texel) that font.hlsl's font_ps draws.
  *
  * Drawing: ui_DrawText records GS sprites with uvFixed texels into the
  * current rd list (the caller selects it), RD_SPACE_UI, MODULATE with TCC
@@ -170,40 +169,6 @@ void ui_EndOverlay(void);
    (gx, gy): 12.4 output pixels, unrounded (tests) */
 int ui_OverlayActive(void);
 void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
-
-/* v0.4.2 (package F-B): the UI defers no text any more; everything the
-   layout draws is recorded into the scene list at 1x (menu_font.h).  A
-   no-op kept only for the replay tool's call until package F-C3 removes
-   both. */
-void ui_InstallDeferredText(int on);
-
-/* ------------------------------------------- the faces (package GFONT) */
-
-/* The faces (package GFONT).  Since v0.4.2 (package F-B) every text is
-   Arimo's: the menus' in the sheets' look (menu_font.h), the rest through
-   ui_DrawText.  UI_FACE_GAME, the game's lettering cut from the player's
-   disc (game_font.h), is still parsed by ui_GameFaceLoad (a first start's
-   extraction keeps loading) but draws nothing; package F-C3 removes it and
-   this API.  ui_FontFaceOf answers UI_FACE_ARIMO or -1, ui_FontFallbackSeen
-   0. */
-typedef enum UiFace { UI_FACE_ARIMO = 0, UI_FACE_GAME = 1 } UiFace;
-
-/* the blob game_font.h describes (copied); false if it does not parse */
-bool ui_GameFaceLoad(const void *blob, size_t size);
-void ui_GameFaceUnload(void);
-bool ui_GameFaceLoaded(void);
-/* which face draws cp now: UI_FACE_GAME, UI_FACE_ARIMO, or -1 when neither
-   has it (it is then drawn as Arimo's '?') */
-int ui_FontFaceOf(uint32_t cp);
-/* the game face's glyph of cp: the sheet it was cut from, the language
-   (0..4: EG FR GR IT SP) and how many times the sheets show it; false when
-   the face has no such glyph */
-bool ui_GameFaceSource(uint32_t cp, const char **sheet, int *lang, int *count);
-/* the game face's characters: the count, the first cap of them in cps */
-int ui_GameFaceChars(uint32_t *cps, int cap);
-/* the code points that fell back to Arimo while the game face was in use,
-   each logged once: the count, the first cap of them in cps */
-int ui_FontFallbackSeen(uint32_t *cps, int cap);
 
 /* The next code point of a UTF-8 string, advancing *s; U+FFFD for a
    malformed or overlong sequence or a surrogate (one byte consumed), 0 at

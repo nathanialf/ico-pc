@@ -29,18 +29,6 @@
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode (R7c, section 21): UI prims
  *                         flipped at replay, the present flipped (any preset)
- *   --quad-text           (package DEF) registers no deferred text renderer:
- *                         an Enhanced present draws the menu rows' glyph
- *                         quads into SCENE as the Original preset does,
- *                         instead of their RDC_OVERLAY_TEXT items on the
- *                         output (a before/after pair from one dump).  By
- *                         default the tool installs port/ui/font.c's
- *                         renderer (ui_InstallDeferredText)
- *   --game-font FILE      (package GFONT) the game face's blob (port/ui/
- *                         game_font.h; font_coverage writes it from the
- *                         disc, ICO_GAME_FONT_OUT): the deferred text is laid
- *                         out in the game's lettering, as the game run that
- *                         recorded the dump drew it.  Without it, Arimo
  *   --crt MODE            (with --present; package CRT) the CRT filter in
  *                         MODE (scanlines, consumer, trinitron, pvm, shadow) at
  *                         full strength, the modes' own parameters; --crt-strength K (0..1,
@@ -109,7 +97,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_mesh.h"
-#include "font.h" /* port/ui: the deferred text renderer (package DEF) */
+#include "font.h" /* port/ui: the overlay test's text */
 
 static const char *const kNames[] = {"SCENE",     "DISPLAY",  "SHADOW0", "SHADOW1",   "SHADOW2",
                                      "WORK0",     "WORK1",    "WORK2",   "WORK3",     "AA0",
@@ -513,36 +501,17 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
     ui_EndOverlay();
 }
 
-/* package GFONT: the game face from a blob file */
-static bool loadGameFont(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        return false;
-    }
-    fseek(f, 0, SEEK_END);
-    const long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    unsigned char *blob = n > 0 ? malloc((size_t)n) : NULL;
-    const bool ok =
-        blob && fread(blob, 1, (size_t)n, f) == (size_t)n && ui_GameFaceLoad(blob, (size_t)n);
-    free(blob);
-    fclose(f);
-    return ok;
-}
-
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(
-            stderr,
-            "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
-            "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
-            "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-            "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n"
-            "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
-            "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
-            argv[0]);
+        fprintf(stderr,
+                "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
+                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
+                "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n"
+                "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
+                "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
+                argv[0]);
         return 1;
     }
     const char *dump = argv[1], *png = argv[2];
@@ -550,9 +519,8 @@ int main(int argc, char **argv)
     uint32_t pw = 0, ph = 0;
     /* R7a: the display options */
     RdSettings s;
-    bool list = false, overlay = false, noAa1 = false, stats = false, quadText = false;
+    bool list = false, overlay = false, noAa1 = false, stats = false;
     bool noDevice = false;
-    const char *gameFont = NULL;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
 
@@ -632,10 +600,6 @@ int main(int argc, char **argv)
                 return 1;
             }
             interpPrev = argv[++i];
-        } else if (strcmp(argv[i], "--quad-text") == 0) {
-            quadText = true;
-        } else if (strcmp(argv[i], "--game-font") == 0 && i + 1 < argc) {
-            gameFont = argv[++i];
         } else if (strcmp(argv[i], "--crt") == 0 && i + 1 < argc) {
             /* package CRT: the CRT filter's mode, at full strength */
             static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm",
@@ -723,14 +687,6 @@ int main(int argc, char **argv)
     rd__SetNotImplementedFatal(false);
     if (overlay) {
         rd_SetPresentOverlay(overlayTest, NULL);
-    }
-    /* package DEF: the menu rows' items at the output's resolution in an
-       Enhanced present */
-    ui_InstallDeferredText(!quadText);
-    if (gameFont && !loadGameFont(gameFont)) {
-        fprintf(stderr, "cannot use the game font %s\n", gameFont);
-        rd_Shutdown();
-        return 1;
     }
     RdFrame pf, f;
     memset(&pf, 0, sizeof(pf));

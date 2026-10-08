@@ -98,9 +98,11 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
  * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
  * The style reaches the shader in DrawCB.param: rimOn, rimLevel, fillLevel,
  * dither (rd_replay.c, from RdTexRec.sheet). */
-#define ICO_SHEET_RX 1     /* rim: texels across */
-#define ICO_SHEET_RY 1     /* rim: texels (field lines) down */
-#define ICO_SHEET_LEVELS 4 /* opacity and rim-to-fill levels */
+/* The three values are the sheets' survey (package F-C1, the comment above
+ * kSheetInk in port/ui/menu_font.c; ctest menu_look testSurvey). */
+#define ICO_SHEET_RX 4     /* rim: texels across */
+#define ICO_SHEET_RY 3     /* rim: texels (field lines) down */
+#define ICO_SHEET_LEVELS 5 /* opacity and rim-to-fill levels */
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280
 #define ICO_SHEET_BAYER_ROW1 0x6E4C
