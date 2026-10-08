@@ -252,6 +252,56 @@ static void test_static(void)
           "write bad extras: %s", why);
 }
 
+static void write_text(const char *path, const char *text);
+
+/* a hostile file's buffers: too many listed, and together too large */
+static void test_buffer_caps(void)
+{
+    static const char tail[] =
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}],"
+        "\"nodes\":[{\"mesh\":0}],\"scenes\":[{\"nodes\":[0]}]}";
+    float pos[9] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+    char text[2048], why[512] = "";
+    GltfDoc d;
+    int n;
+
+    write_bytes(tmp("cap.bin"), pos, sizeof(pos));
+    n = snprintf(text, sizeof(text), "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[");
+    for (int i = 0; i < GLTF_MAX_BUFFERS + 1; i++)
+        n += snprintf(text + n, sizeof(text) - (size_t)n,
+                      "%s{\"uri\":\"cap.bin\",\"byteLength\":36}", i ? "," : "");
+    snprintf(text + n, sizeof(text) - (size_t)n, "],%s", tail);
+    write_text(tmp("cap_many.gltf"), text);
+    CHECK(gltf_Read(tmp("cap_many.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most 16"),
+          "more than 16 buffers: %s", why);
+    gltf_Free(&d);
+
+    /* two sparse files of 160 MB: each is under the one-file cap, together over */
+    for (int i = 0; i < 2; i++) {
+        FILE *f = ico_fopen(tmp(i ? "cap_b.bin" : "cap_a.bin"), "wb");
+        CHECK(f != NULL, "cannot write the big buffer");
+        if (!f)
+            return;
+        fwrite(pos, 1, sizeof(pos), f);
+        fseek(f, 160L * 1024 * 1024 - 1, SEEK_SET);
+        fputc(0, f);
+        fclose(f);
+    }
+    snprintf(
+        text, sizeof(text),
+        "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"cap_a.bin\",\"byteLength\":36},"
+        "{\"uri\":\"cap_b.bin\",\"byteLength\":36}],%s",
+        tail);
+    write_text(tmp("cap_total.gltf"), text);
+    CHECK(gltf_Read(tmp("cap_total.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most"),
+          "buffers over the total cap: %s", why);
+    gltf_Free(&d);
+    ico_remove(tmp("cap_a.bin"));
+    ico_remove(tmp("cap_b.bin"));
+}
+
 /* --- the skinned mesh ------------------------------------------------------ */
 
 static void trs(float m[16], float tx, float ty, float tz, float angle)
@@ -797,6 +847,7 @@ int main(int argc, char **argv)
     test_skinned();
     test_blender();
     test_rejections();
+    test_buffer_caps();
     if (failures) {
         printf("gltf_test: %d failures\n", failures);
         return 1;

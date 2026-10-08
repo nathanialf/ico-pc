@@ -791,7 +791,8 @@ typedef struct Acc {
     uint64_t index;
 } Acc;
 
-static int read_file(const char *path, uint8_t **data, size_t *len, char *why, size_t whyLen)
+static int read_file(const char *path, uint8_t **data, size_t *len, unsigned long limit, char *why,
+                     size_t whyLen)
 {
     *data = NULL;
     *len = 0;
@@ -805,9 +806,9 @@ static int read_file(const char *path, uint8_t **data, size_t *len, char *why, s
         fclose(f);
         return fail(why, whyLen, "cannot read %s", path);
     }
-    if ((unsigned long)n > GLTF_MAX_FILE_BYTES) {
+    if ((unsigned long)n > limit) {
         fclose(f);
-        return fail(why, whyLen, "%s is %ld bytes (at most %u)", path, n, GLTF_MAX_FILE_BYTES);
+        return fail(why, whyLen, "%s is %ld bytes (at most %lu here)", path, n, limit);
     }
     uint8_t *p = malloc((size_t)n + 1);
     if (!p) {
@@ -888,12 +889,19 @@ static int load_buffers(Rd *r)
         return fail(r->why, r->whyLen, "buffers is not an array");
     if (r->bufCount == 0)
         return 0;
+    if (r->bufCount > GLTF_MAX_BUFFERS)
+        return fail(r->why, r->whyLen, "the file lists %zu buffers (at most %u)", r->bufCount,
+                    (unsigned)GLTF_MAX_BUFFERS);
+    uint64_t totalBytes = 0;
     r->bufs = calloc(r->bufCount, sizeof(RdBuf));
     if (!r->bufs)
         return fail(r->why, r->whyLen, "out of memory");
     size_t i = 0;
     for (const IcoJsonNode *b = bufs->child; b; b = b->next, i++) {
         uint64_t len;
+        if (totalBytes > GLTF_MAX_BUFFER_BYTES)
+            return fail(r->why, r->whyLen, "the buffers together are over %u bytes",
+                        (unsigned)GLTF_MAX_BUFFER_BYTES);
         if (get_uint(b, "byteLength", UINT64_MAX, &len) != 0 || len == UINT64_MAX)
             return fail(r->why, r->whyLen, "buffer %zu has no byteLength", i);
         const IcoJsonNode *u = ico_json_get(b, "uri");
@@ -906,6 +914,7 @@ static int load_buffers(Rd *r)
                             (unsigned long long)r->glbBinLen, (unsigned long long)len);
             r->bufs[i].p = r->glbBin;
             r->bufs[i].len = len;
+            totalBytes += r->glbBinLen;
             continue;
         }
         const char *uri = ico_json_str(u);
@@ -926,7 +935,11 @@ static int load_buffers(Rd *r)
         strcpy(fp + dirLen, name);
         uint8_t *data;
         size_t n;
-        int rc = read_file(fp, &data, &n, r->why, r->whyLen);
+        const uint64_t room =
+            totalBytes < GLTF_MAX_BUFFER_BYTES ? GLTF_MAX_BUFFER_BYTES - totalBytes : 0;
+        int rc = read_file(fp, &data, &n, (unsigned long)room, r->why, r->whyLen);
+        if (rc == 0)
+            totalBytes += n;
         if (rc == 0 && n < len)
             rc = fail(r->why, r->whyLen, "%s is truncated: %zu bytes, buffer %zu needs %llu", fp, n,
                       i, (unsigned long long)len);
@@ -1723,7 +1736,7 @@ int gltf_Read(const char *path, GltfDoc *out, char *why, size_t whyLen)
     r.path = path;
     r.why = why;
     r.whyLen = whyLen;
-    int rc = read_file(path, &r.file, &r.fileLen, why, whyLen);
+    int rc = read_file(path, &r.file, &r.fileLen, GLTF_MAX_FILE_BYTES, why, whyLen);
     if (rc == 0)
         rc = read_doc(&r, out);
     ico_json_free(&r.j);

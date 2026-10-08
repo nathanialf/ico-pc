@@ -108,8 +108,10 @@ extern "C" {
 #define GLTF_MAX_PRIMS 4096u
 #define GLTF_MAX_VERTICES 1048576u
 #define GLTF_MAX_INDICES (3u * GLTF_MAX_VERTICES)
-#define GLTF_MAX_JOINTS 256u                       /* JOINTS_0 is ubyte in GltfPrim */
-#define GLTF_MAX_FILE_BYTES (256u * 1024u * 1024u) /* one .gltf, .glb or .bin */
+#define GLTF_MAX_JOINTS 256u                         /* JOINTS_0 is ubyte in GltfPrim */
+#define GLTF_MAX_FILE_BYTES (256u * 1024u * 1024u)   /* one .gltf, .glb or .bin */
+#define GLTF_MAX_BUFFERS 16                          /* buffers one model file lists */
+#define GLTF_MAX_BUFFER_BYTES (256u * 1024u * 1024u) /* all of a model file's buffers together */
 
 /* One primitive, a triangle list.  Per-vertex arrays have vertexCount
  * entries of the stated width; any but pos may be NULL (absent).  idx: a
