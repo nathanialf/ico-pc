@@ -368,7 +368,7 @@ typedef struct RdSettings {
      * Both 0 in a zeroed RdSettings. */
     uint8_t modelPack;
     uint8_t dumpModels;
-    uint8_t _pad[1];
+    uint8_t _pad[2];
     /* Wave 7 (R7a): the internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the
