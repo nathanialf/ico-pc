@@ -174,6 +174,14 @@ looks right, including every line that starts with `window:` and every
 line that contains the word `swapchain`. They say what size the game was
 told the screen is, and when that changed. Copy them as they are.
 
+**Sending us a log about the opening scene.** If the forest after the logo
+looks as if it were seen from another place (bare thin trunks, flat dark
+bushes, a pale empty ground where the trees and grass should be), send
+every line of `logs/ico-pc.log` that starts with `rd: camera`, and say
+which phone you have. Those lines say where the game put its camera; we
+compare them with a PC's to tell whether the game itself or the drawing
+went another way.
+
 **Sending us a log when the game closes by itself.** Send
 `logs/ico-pc.log` from the start where it happened, before you start the
 game again (each start writes a new log). If you cannot send the whole

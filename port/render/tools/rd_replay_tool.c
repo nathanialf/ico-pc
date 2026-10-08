@@ -361,6 +361,11 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
             printf(" mesh %s (%u vertices, %u batches)", m->name, m->vertexCount, m->batchCount);
         }
         printf(" prog %u", c->b[0]);
+        if (c->u[1] <= f->payloadSize && sizeof(RdVuPayload) <= f->payloadSize - c->u[1]) {
+            RdVuPayload p;
+            memcpy(&p, f->payload + c->u[1], sizeof(p));
+            printf(" code %u clip %u batches %u+%u", p.code, p.clip, p.firstBatch, p.batchCount);
+        }
         if (c->type == RDC_SKINNED) {
             skinnedPlace(f, c, st);
         }
