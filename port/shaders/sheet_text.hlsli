@@ -103,11 +103,11 @@ uint sheet_quantise(uint v, uint th)
 }
 
 // The sheet texel from its coverage c and rim r (both 0..255) under the
-// style (rimOn, rimLevel, fillLevel, dither) at threshold th: x grey 0..255,
-// y alpha in GS units (0x80 full).
+// style (the rim's weight 0..64, rimLevel, fillLevel, dither) at threshold
+// th: x grey 0..255, y alpha in GS units (0x80 full).
 uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
 {
-    const uint a = style.x != 0u ? max(c, r) : c;
+    const uint a = style.x != 0u ? max(c, (r * style.x + 32u) / 64u) : c;
     const uint t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
     const uint aq = sheet_quantise(a, th), tq = sheet_quantise(t, th);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;

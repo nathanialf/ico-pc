@@ -873,7 +873,9 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                             ICO_SHEET_WY[|dy|] (per mille,
  *                             shader_consts.h), rounded: the rim, a dark
  *                             halo that fades out;
- *                          a  rimOn ? max(c, r) : c, the texel's opacity;
+ *                          a  rimOn ? max(c, r * w) : c, the texel's
+ *                             opacity, w the rim's weight (rimWeight / 64,
+ *                             rounded; 1 when rimWeight is 0 or 64 or more);
  *                          t  c / a (0 where a is 0): rim (0) to fill (1);
  *                          a and t quantised to ICO_SHEET_LEVELS levels,
  *                          against a 4x4 Bayer threshold picked by (x, y)
@@ -906,6 +908,8 @@ typedef struct RdSheetStyle {
     uint8_t rimLevel;  /* grey of the rim, 0..255 (English sheets 0, French ~62) */
     uint8_t fillLevel; /* grey of the letters' fill, 0..255 */
     uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
+    uint8_t rimWeight; /* the rim's strength in 64ths (a faint halo); 0 or 64 and more:
+                          full */
 } RdSheetStyle;
 
 RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,

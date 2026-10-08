@@ -96,8 +96,8 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 /* v0.4.2 (package F-A): font_sheet_ps's constants, SHEET_* in
  * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
  * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
- * The style reaches the shader in DrawCB.param: rimOn, rimLevel, fillLevel,
- * dither (rd_replay.c, from RdTexRec.sheet). */
+ * The style reaches the shader in DrawCB.param: the rim's weight (0 off,
+ * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet). */
 /* The values are the sheets' survey (package F-C1, the comment above
  * kSheetInk in port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
  * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across

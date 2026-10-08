@@ -727,9 +727,9 @@ const RdTexCacheStats *rdtex_Stats(void)
 
 static void sheetStyleSet(RdTexRec *t, const RdSheetStyle *style)
 {
-    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1};
+    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0};
     const RdSheetStyle *s = style ? style : &kDefault;
-    t->sheet[0] = s->rimOn ? 1 : 0;
+    t->sheet[0] = s->rimOn ? (s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64) : 0;
     t->sheet[1] = s->rimLevel;
     t->sheet[2] = s->fillLevel;
     t->sheet[3] = s->dither ? 1 : 0;

@@ -469,21 +469,14 @@ static void testSurvey(void)
 /* ------------------------------------------------------------ the strip */
 
 /* the style and the sprite colour (GS, 0x80 = 1) an ink draws with */
-static void inkOf(int ink, int lang, RdSheetStyle *st, int *col)
+static void inkOf(int ink, int rim, int lang, RdSheetStyle *st, int *col)
 {
-    if (ink == UI_INK_LIGHT) {
-        const UiSheetInk *k = ui_MenuSheetInk(lang);
-        st->rimOn = k->rimOn;
-        st->rimLevel = k->rimLevel;
-        st->fillLevel = k->fillLevel;
-        st->dither = k->dither;
-        *col = 128;
-        return;
-    }
-    st->rimOn = 0;
-    st->rimLevel = 0;
-    st->fillLevel = 255;
-    st->dither = 1;
+    const UiSheetInk *k = ui_MenuItemInk(ink, rim, lang);
+    st->rimOn = k->rimOn;
+    st->rimLevel = k->rimLevel;
+    st->fillLevel = k->fillLevel;
+    st->dither = k->dither;
+    st->rimWeight = k->rimWeight;
     *col = ink == UI_INK_DARK ? 0 : ink == UI_INK_GREY ? (128 * 151 + 127) / 255 : 128;
 }
 
@@ -501,7 +494,7 @@ static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uin
     }
     RdSheetStyle st;
     int col;
-    inkOf(r->ink, r->lang, &st, &col);
+    inkOf(r->ink, it->rim[r->lang], r->lang, &st, &col);
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {
             uint8_t g, a;
@@ -531,6 +524,7 @@ typedef struct Measures {
     int hasLine;                    /* a run of 4 rows or more (a colon's dots have none) */
     float shareRim, shareFill, shareEdge;
     float mx, my, sdx, sdy; /* the fill's centre and spread (standard deviation), texels */
+    float rimMass;          /* the dark rim's opacity (texels of the rim class) per fill amount */
     int ok;
 } Measures;
 
@@ -578,7 +572,7 @@ static void inkMeasures(const uint8_t *grey, const uint8_t *alpha, int w, int h,
     float *amt = calloc((size_t)h, sizeof(float));
     float *col = calloc((size_t)w, sizeof(float));
     int rim = 0, fill = 0, edge = 0, any = 0;
-    float total = 0.0f;
+    float total = 0.0f, rimA = 0.0f;
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             const int i = y * w + x;
@@ -595,11 +589,13 @@ static void inkMeasures(const uint8_t *grey, const uint8_t *alpha, int w, int h,
                     edge++;
                 } else {
                     rim++;
+                    rimA += (float)alpha[i] / 255.0f;
                 }
             }
         }
     }
     m->ink = total;
+    m->rimMass = total > 0.0f ? rimA / total : 0.0f;
     {
         double sx = 0, sxx = 0, sy = 0, syy = 0;
         for (int x = 0; x < w; x++) {
@@ -986,6 +982,28 @@ static void testCompareItems(const char *outDir)
             total++;
             if (!strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n')) {
                 geoAdd(r, &ms, &mr);
+            }
+            const char *rimEnv = getenv("ICO_MENU_LOOK_RIM");
+            if (rimEnv && *rimEnv == '1') {
+                /* the halo's opacity per fill: the sheet's, the strip's
+                   with the full halo (what the table's rim was set from)
+                   and as drawn */
+                UiMenuTextItem full = *it;
+                full.rim[lang] = UI_RIM_FULL;
+                uint8_t *fg = malloc((size_t)r->w * (size_t)r->h);
+                uint8_t *fa = malloc((size_t)r->w * (size_t)r->h);
+                Measures mf;
+                memset(&mf, 0, sizeof(mf));
+                if (fg && fa && refRectOf(r, &full, fg, fa) == 0) {
+                    inkMeasures(fg, fa, r->w, r->h, &mf);
+                }
+                free(fg);
+                free(fa);
+                printf("menu_look: rim %s row %d item %d %s ink %d: sheet %.3f full %.3f (%.2f) "
+                       "drawn %.3f (rim %d)\n",
+                       kLang[lang], r->row, r->item, r->sheet, r->ink, ms.rimMass, mf.rimMass,
+                       mf.rimMass > 0.0f ? ms.rimMass / mf.rimMass : 0.0f, mr.rimMass,
+                       it->rim[lang]);
             }
             langN++;
             const int multi = strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
@@ -1457,7 +1475,7 @@ static void testFitCopy(void)
           "the strip of the first item");
     maxFilter(&f);
     const UiSheetInk *k = ui_MenuSheetInk(UI_LANG_EN);
-    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither};
+    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
     int diff = 0;
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {

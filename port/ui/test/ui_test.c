@@ -468,7 +468,7 @@ static void testLayoutExtension(void)
     CHECK(ui_MenuFontLastStrip(&strip) && strip.tex != 0 && strip.cls == 0,
           "the labels are strips of the light pages (class %d)", strip.cls);
     const RdTexRec *page = rd__TexRec(strip.tex);
-    CHECK(page && page->format == RD_TEXEL_SHEET && page->sheet[0] == 1,
+    CHECK(page && page->format == RD_TEXEL_SHEET && page->sheet[0] == 64,
           "the page is a sheet texture with the rim on");
     int labels = 0;
     for (int i = 1; i < w.n; i++) {
@@ -1194,7 +1194,8 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
             CHECK(0, "4x: quad %d's sheet page", i);
             continue;
         }
-        const RdSheetStyle st = {t->sheet[0], t->sheet[1], t->sheet[2], t->sheet[3]};
+        const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2], t->sheet[3],
+                                 t->sheet[0]};
         for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
             for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
                 /* rd's convention on a scaled target:

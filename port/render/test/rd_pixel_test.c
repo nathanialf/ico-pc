@@ -1054,9 +1054,10 @@ static void testFont(const char *dir)
 
 static uint8_t *readScaled(RdTargetId id, uint32_t *w, uint32_t *h, float *sx, float *sy);
 
-static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1};    /* the English sheets: black rim */
-static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1};   /* French, Italian, Spanish: grey */
-static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1}; /* the dark inks: no rim */
+static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1, 0};      /* the English sheets: black rim */
+static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1, 0};     /* French, Italian, Spanish: grey */
+static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1, 0};   /* the dark inks: no rim */
+static const RdSheetStyle kSheetFaint = {1, 62, 0xFF, 1, 21}; /* a faint halo (a third) */
 
 /* a few shapes more than the rim's reach inside the edges (x 7..32 with
  * SHEET_RX 6, y 5..14 with SHEET_RY 4), so no edge texel has a rim: the
@@ -1248,7 +1249,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
     RdTex sheet = rd_CreateTextureSheet(SHEET_W, SHEET_H, s_sheetCov, &kSheetEn, "sheet");
     RdTex ref = sheetRefTexture(&kSheetEn);
     const RdTexRec *sr = rd__TexRec(sheet.id);
-    CHECK(sr && sr->format == RD_TEXEL_SHEET && sr->sheet[0] == 1 && sr->sheet[1] == 0 &&
+    CHECK(sr && sr->format == RD_TEXEL_SHEET && sr->sheet[0] == 64 && sr->sheet[1] == 0 &&
               sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
           "%s: the sheet texture's record", mode);
 
@@ -1314,9 +1315,12 @@ static void testSheetText(const char *mode, int scale, const char *dir)
 
     if (scale == 1) {
         /* the style follows rd_SetTextureSheetStyle: the French rim level,
-         * then no rim (the rim texels go transparent) */
-        static const RdSheetStyle *const styles[2] = {&kSheetFr, &kSheetPlain};
-        for (int k = 0; k < 2; k++) {
+         * a faint rim (fewer rim texels), then no rim (the rim texels go
+         * transparent) */
+        static const RdSheetStyle *const styles[3] = {&kSheetFr, &kSheetFaint, &kSheetPlain};
+        static const char *const names[3] = {"French", "faint", "plain"};
+        int rimFull = 0;
+        for (int k = 0; k < 3; k++) {
             rd_SetTextureSheetStyle(sheet, styles[k]);
             sheetFrameBegin();
             sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
@@ -1326,11 +1330,13 @@ static void testSheetText(const char *mode, int scale, const char *dir)
             if (img) {
                 int rim = 0;
                 const int bad = sheetExact(img, w, 264, 8, 40, styles[k], &rim);
-                CHECK(bad == 0 && (k ? rim == 0 : rim > 0),
+                CHECK(bad == 0 && (k == 2   ? rim == 0
+                                   : k == 1 ? rim > 0 && rim < rimFull
+                                            : rim > 0),
                       "%s: style %d: %d texels off sheetref_Texel, %d rim texels", mode, k, bad,
                       rim);
-                printf("  sheet style %s: %d rim texels, 1:1 %d off\n", k ? "plain" : "French", rim,
-                       bad);
+                rimFull = k == 0 ? rim : rimFull;
+                printf("  sheet style %s: %d rim texels, 1:1 %d off\n", names[k], rim, bad);
             }
             free(img);
         }
@@ -1359,7 +1365,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
                 sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
                           t->w == SHEET_W && t->h == SHEET_H &&
                           memcmp(t->pixels, s_sheetCov, sizeof(s_sheetCov)) == 0 &&
-                          t->sheet[0] == 1 && t->sheet[1] == 62 && t->sheet[2] == 0xFF &&
+                          t->sheet[0] == 64 && t->sheet[1] == 62 && t->sheet[2] == 0xFF &&
                           t->sheet[3] == 1 && strcmp(t->name, "dump") == 0;
             }
             CHECK(sheets == 1, "the loaded dump has the sheet texture with its style (%d)", sheets);

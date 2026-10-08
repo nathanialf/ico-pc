@@ -665,7 +665,7 @@ static void testDigits(void)
     CHECK(strips == 3 && texture == 0 && s_texTransfers == 3,
           "three digit rows: %d strips, %d texture sprites, %d transfers (3, 0, 3)", strips,
           texture, s_texTransfers);
-    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 1 && last.w == 20 && last.h == 15,
+    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 2 && last.w == 20 && last.h == 15,
           "the digits on the plain pages, a strip the tile's 20 x 15 (%d, %d x %d)", last.cls,
           last.w, last.h);
     CHECK(cols[0][0] == 75 && cols[1][0] == 0 && cols[2][0] == 0x7F,

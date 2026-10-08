@@ -21,7 +21,9 @@
  *            w*h*4 RGBA8 bytes or w*h R8 bytes.  Version 7 (v0.4.2,
  *            package F-A): a sheet image (RD_TEXEL_SHEET, w*h coverage
  *            bytes) has its style above the format byte: bit 8 rimOn, bit
- *            9 dither, bits 16..23 rimLevel, 24..31 fillLevel (sheetView)
+ *            9 dither, bits 10..15 the rim's weight in 64ths (0 full: the
+ *            first version 7 dumps have none), bits 16..23 rimLevel,
+ *            24..31 fillLevel (sheetView)
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
@@ -88,9 +90,9 @@ static uint32_t sheetView(const RdTexRec *t)
     if (t->format != RD_TEXEL_SHEET) {
         return t->format;
     }
-    return (uint32_t)RD_TEXEL_SHEET | (uint32_t)(t->sheet[0] & 1u) << 8 |
-           (uint32_t)(t->sheet[3] & 1u) << 9 | (uint32_t)t->sheet[1] << 16 |
-           (uint32_t)t->sheet[2] << 24;
+    return (uint32_t)RD_TEXEL_SHEET | (uint32_t)(t->sheet[0] != 0) << 8 |
+           (uint32_t)(t->sheet[0] & 63u) << 10 | (uint32_t)(t->sheet[3] & 1u) << 9 |
+           (uint32_t)t->sheet[1] << 16 | (uint32_t)t->sheet[2] << 24;
 }
 
 static void targetRef(IdSet *temps, uint32_t id)
@@ -480,7 +482,8 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
                 if (tr) {
                     tr->bakedTexa = (uint8_t)h.bakedTexa;
                     if (sheet) {
-                        tr->sheet[0] = (uint8_t)((h.view >> 8) & 1u);
+                        const uint32_t rw = (h.view >> 10) & 63u;
+                        tr->sheet[0] = (h.view >> 8) & 1u ? (uint8_t)(rw ? rw : 64u) : 0u;
                         tr->sheet[1] = (uint8_t)(h.view >> 16);
                         tr->sheet[2] = (uint8_t)(h.view >> 24);
                         tr->sheet[3] = (uint8_t)((h.view >> 9) & 1u);

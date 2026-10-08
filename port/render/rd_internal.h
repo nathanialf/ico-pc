@@ -474,7 +474,8 @@ typedef struct RdTexRec {
     uint8_t mipUse, mipRef;
     uint8_t mipBuiltBoost, mipBuiltRef;
     /* v0.4.2 (package F-A): a SHEET texture's style (rd.h RdSheetStyle):
-     * rimOn, rimLevel, fillLevel, dither; rimOn and dither kept as 0 or 1 */
+     * the rim's weight (0 off, 1..64 the 64ths of a full rim: rimOn with
+     * rimWeight), rimLevel, fillLevel, dither (kept as 0 or 1) */
     uint8_t sheet[4];
 } RdTexRec;
 

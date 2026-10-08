@@ -67,7 +67,7 @@ static uint32_t quantise(uint32_t v, uint32_t th32)
 void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
                     const RdSheetStyle *style, uint8_t *outGrey, uint8_t *outAlpha)
 {
-    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1};
+    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0};
     const RdSheetStyle *s = style ? style : &kDefault;
     const uint32_t c = covAt(cov, w, h, x, y);
     /* the rim: the largest coverage weighted by the falloff, rounded to 0..255 */
@@ -80,7 +80,9 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
         }
     }
     const uint32_t r = (m + 500000u) / 1000000u;
-    const uint32_t a = s->rimOn ? (c > r ? c : r) : c;
+    const uint32_t wgt = s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64u;
+    const uint32_t rw = (r * wgt + 32u) / 64u;
+    const uint32_t a = s->rimOn ? (c > rw ? c : rw) : c;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
     /* the threshold in 32nds: the Bayer entry's centre, or a half */
     const uint32_t th = s->dither ? 2u * kBayer[(uint32_t)y & 3u][(uint32_t)x & 3u] + 1u : 16u;

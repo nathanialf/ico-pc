@@ -56,16 +56,32 @@ extern "C" {
    ICO_SHEET_RX and ICO_SHEET_RY) plus the bilinear read's texel. */
 #define UI_MENU_RIM_X 7
 #define UI_MENU_RIM_Y 5
+/* A faint halo's weight, 64ths of the full one (rd.h RdSheetStyle
+   rimWeight): the 31 faint words' halo is 0.44 of their fill on the sheets
+   (mostly English, menu_PAL_03), the strips' at 16 / 64 too (ctest
+   menu_look, ICO_MENU_LOOK_RIM=1). */
+#define UI_MENU_FAINT_WEIGHT 16
 
 /* A sheet style, rd.h RdSheetStyle's fields (rd.h is not included here:
    the headless build has no rd). */
 typedef struct UiSheetInk {
-    uint8_t rimOn, rimLevel, fillLevel, dither;
+    uint8_t rimOn, rimLevel, fillLevel, dither, rimWeight;
 } UiSheetInk;
 
 /* The light ink's style in language lang (UiLang; out of range: English):
    kSheetInk, menu_font.c, the one place the levels live. */
 const UiSheetInk *ui_MenuSheetInk(int lang);
+
+/* The rim a game row's words have on its sheet (UiMenuTextItem.rim, per
+   language): none, a faint halo (UI_MENU_FAINT_WEIGHT 64ths of the full
+   one) or the full halo.  The port's own text always has the full one. */
+enum { UI_RIM_NONE = 0, UI_RIM_FAINT = 1, UI_RIM_FULL = 2 };
+
+/* The style an item's words are drawn in: ink (UiMenuTextInk), rim
+   (UI_RIM_*), lang (UiLang): the light ink's with its full or faint rim,
+   or without one (the plain style: no rim, a white fill; the dark, plain
+   and grey inks, and light words the sheet sets without a halo). */
+const UiSheetInk *ui_MenuItemInk(int ink, int rim, int lang);
 
 /* the widest line of utf8 at em size (y units), in x units; and the line
    metrics in y units (ascent and descent positive, the capitals' height),
@@ -94,7 +110,7 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
 
 /* ------------------------------------------------------ introspection (tests) */
 typedef struct UiMenuStrip {
-    int cls;                /* 0 the light ink's pages, 1 the plain inks' */
+    int cls;                /* 0 the light ink's pages, 1 its faint-rim pages, 2 the plain ones */
     int page, x, y, w, h;   /* where the strip is, texels */
     uint32_t tex;           /* the page's rd texture (0 until drawn) */
     float anchorX, anchorY; /* a port text's anchor as drawn (snapped to whole

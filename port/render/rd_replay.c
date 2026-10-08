@@ -1590,8 +1590,8 @@ static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
     return bindDrawEx(r, ds, NULL, NULL);
 }
 
-/* v0.4.2 (package F-A): font_sheet_ps's style in DrawCB.param (rimOn,
- * rimLevel, fillLevel, dither), the sheet texture's at replay time. */
+/* v0.4.2 (package F-A): font_sheet_ps's style in DrawCB.param (the rim's
+ * weight, rimLevel, fillLevel, dither), the sheet texture's at replay time. */
 static void sheetParam(const RdTexRec *t, float param[4])
 {
     if (!t || t->kind != RD_TEXKIND_IMAGE || t->format != RD_TEXEL_SHEET) {

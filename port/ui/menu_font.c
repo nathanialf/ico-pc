@@ -31,7 +31,9 @@
 #define MF_RIM_X UI_MENU_RIM_X
 #define MF_RIM_Y UI_MENU_RIM_Y
 
-enum { MF_LIGHT = 0, MF_PLAIN = 1, MF_CLASSES };
+/* the page sets: the light ink with its full rim, with a faint one, and
+   the plain style (no rim) */
+enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
 
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
    rimLevel, fillLevel, dither.  The one table to retune.
@@ -70,17 +72,15 @@ enum { MF_LIGHT = 0, MF_PLAIN = 1, MF_CLASSES };
    beside the sheets': Arimo was set 1.25 times too wide, see ui_internal.h
    UI_SHEET_WIDTH.) */
 static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
-    {1, 24, 255, 1}, /* English */
-    {1, 61, 255, 1}, /* French */
-    {1, 56, 255, 1}, /* German */
-    {1, 61, 255, 1}, /* Italian */
-    {1, 62, 255, 1}, /* Spanish */
+    {1, 24, 255, 1, 0}, /* English */
+    {1, 61, 255, 1, 0}, /* French */
+    {1, 56, 255, 1, 0}, /* German */
+    {1, 61, 255, 1, 0}, /* Italian */
+    {1, 62, 255, 1, 0}, /* Spanish */
 };
-#ifdef ICO_RD
-/* the dark, plain and grey inks: no rim, a white fill (the vertex colour
-   makes them black, white or grey) */
-static const UiSheetInk kPlainInk = {0, 0, 255, 1};
-#endif
+/* the dark, plain and grey inks and the light words without a halo: no
+   rim, a white fill (the vertex colour makes them black, white or grey) */
+static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0};
 
 typedef struct MfPage {
     uint8_t *cov; /* MF_PAGE x MF_PAGE coverage, NULL while unused */
@@ -114,12 +114,35 @@ const UiSheetInk *ui_MenuSheetInk(int lang)
     return &kSheetInk[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN];
 }
 
-#ifdef ICO_RD
+/* the class of an item's words: its ink and its rim on the sheet */
+static int classOf(int ink, int rim)
+{
+    if (ink != UI_INK_LIGHT || rim == UI_RIM_NONE) {
+        return MF_PLAIN;
+    }
+    return rim == UI_RIM_FAINT ? MF_FAINT : MF_LIGHT;
+}
+
 static const UiSheetInk *classInk(int cls, int lang)
 {
-    return cls == MF_LIGHT ? ui_MenuSheetInk(lang) : &kPlainInk;
+    static UiSheetInk faint[UI_LANG_COUNT];
+    if (cls == MF_PLAIN) {
+        return &kPlainInk;
+    }
+    const UiSheetInk *k = ui_MenuSheetInk(lang);
+    if (cls == MF_LIGHT) {
+        return k;
+    }
+    const int l = (int)(k - kSheetInk);
+    faint[l] = *k;
+    faint[l].rimWeight = UI_MENU_FAINT_WEIGHT;
+    return &faint[l];
 }
-#endif
+
+const UiSheetInk *ui_MenuItemInk(int ink, int rim, int lang)
+{
+    return classInk(classOf(ink, rim), lang);
+}
 
 /* ------------------------------------------------------------- measuring */
 
@@ -285,10 +308,10 @@ int ui__MenuStripRaster(const UiMenuTextItem *it, int lang, uint8_t *out, int w,
 #ifdef ICO_RD
 /* the class of an ink and the colour it draws with; 0 when it draws
    nothing (a dark ink's glow) */
-static int inkColour(int ink, const uint8_t rgba[4], int glow, int *cls, uint8_t col[4])
+static int inkColour(int ink, int rim, const uint8_t rgba[4], int glow, int *cls, uint8_t col[4])
 {
     memcpy(col, rgba, 4);
-    *cls = ink == UI_INK_LIGHT ? MF_LIGHT : MF_PLAIN;
+    *cls = classOf(ink, rim);
     if (ink == UI_INK_DARK) {
         if (glow) {
             return 0; /* black letters add nothing to the additive glow */
@@ -505,7 +528,11 @@ static MfStrip *newStrip(void)
             }
         }
         const uint32_t now = rd_FrameNumber();
-        if (evictOne(MF_LIGHT, now) < 0 && evictOne(MF_PLAIN, now) < 0) {
+        int freed = 0;
+        for (int c = 0; c < MF_CLASSES && !freed; c++) {
+            freed = evictOne(c, now) >= 0;
+        }
+        if (!freed) {
             break;
         }
     }
@@ -538,10 +565,10 @@ static uint32_t pageTex(int cls, int page, int lang)
     MfPage *p = &s_mf.pages[cls][page];
     if (!p->tex && p->cov) {
         const UiSheetInk *k = classInk(cls, lang);
-        const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither};
+        const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
+        static const char *const kName[MF_CLASSES] = {"light", "faint", "plain"};
         char name[32];
-        snprintf(name, sizeof(name), "ui menu text %s p%d", cls == MF_LIGHT ? "light" : "plain",
-                 page);
+        snprintf(name, sizeof(name), "ui menu text %s p%d", kName[cls], page);
         p->tex = rd_CreateTextureSheet(MF_PAGE, MF_PAGE, p->cov, &st, name).id;
         ui__SetMenuFontHooks(mfShutdown, mfForget);
     }
@@ -549,18 +576,20 @@ static uint32_t pageTex(int cls, int page, int lang)
     return p->tex;
 }
 
-/* the light pages restyled for lang (its rim and fill levels): read at the
-   replay, so nothing is rasterised again */
+/* the light and faint pages restyled for lang (its rim and fill levels):
+   read at the replay, so nothing is rasterised again */
 static void styleLight(int lang)
 {
     if (lang == s_mf.lightLang) {
         return;
     }
-    const UiSheetInk *k = ui_MenuSheetInk(lang);
-    const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither};
-    for (int p = 0; p < MF_PAGES; p++) {
-        if (s_mf.pages[MF_LIGHT][p].tex) {
-            rd_SetTextureSheetStyle((RdTex){s_mf.pages[MF_LIGHT][p].tex}, &st);
+    for (int c = MF_LIGHT; c <= MF_FAINT; c++) {
+        const UiSheetInk *k = classInk(c, lang);
+        const RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight};
+        for (int p = 0; p < MF_PAGES; p++) {
+            if (s_mf.pages[c][p].tex) {
+                rd_SetTextureSheetStyle((RdTex){s_mf.pages[c][p].tex}, &st);
+            }
         }
     }
     s_mf.lightLang = lang;
@@ -748,12 +777,12 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     int cls;
     uint8_t col[4];
     if (!utf8 || !*utf8 || !(size > 0.0f) || !ui_FontInit() ||
-        !inkColour(ink, rgba, (flags & UI_ADDITIVE) != 0, &cls, col)) {
+        !inkColour(ink, UI_RIM_FULL, rgba, (flags & UI_ADDITIVE) != 0, &cls, col)) {
         return;
     }
     UiLang lang = ui_GetLanguage();
     lang = (int)lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN;
-    if (cls == MF_LIGHT) {
+    if (cls != MF_PLAIN) {
         styleLight((int)lang);
     }
     const MfStrip *s = textStrip(utf8, size * 0.5f, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK), cls);
@@ -796,11 +825,12 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
     int cls;
     uint8_t col[4];
     if (!it || !box || !uv || uv[2] <= 0 || uv[3] <= 0 || !ui_FontInit() ||
-        !inkColour(it->ink, rgba, glow, &cls, col)) {
+        !inkColour(it->ink, it->rim[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN], rgba,
+                   glow, &cls, col)) {
         return;
     }
     lang = lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN;
-    if (cls == MF_LIGHT) {
+    if (cls != MF_PLAIN) {
         styleLight(lang);
     }
     const int item = it >= ui_menu_text_items && it < ui_menu_text_items + ui_menu_text_item_count
