@@ -20,7 +20,9 @@
  *          (gsb_MakeCommonMatrix); the camera stays in the matrices between
  *          ticks, where the sun and the flare read it
  *   leave  photo mode off: the game camera back (gsb_PopView,
- *          gsb_MakeCommonMatrix) and a camera cut for the presenter; when
+ *          gsb_MakeCommonMatrix for the renderer, gsb_PopView again so the
+ *          eleven matrices are the game's byte for byte) and a camera cut
+ *          for the presenter; when
  *          the stage changed or the game runs again the save is dropped
  *          instead (the game has set its own camera by then)
  * With photo mode off it does nothing.  The headless build runs it too.

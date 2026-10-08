@@ -47,8 +47,14 @@ static void leave(void)
 {
     const int same = stage_no == v.stage && systemStatus[5] != 0;
     if (same) {
+        /* the game's camera back, its common block and the renderer's
+           camera rebuilt from it, then the save once more: after a
+           reflection pass (puddle.c) +0x240 is at the reflection's size
+           while +0x280 is still the full screen's, and the rebuild would
+           replace that +0x280 (the cull's matrix) with the reflection's */
         gsb_PopView();
         gsb_MakeCommonMatrix();
+        gsb_PopView();
     }
     v.saved = 0;
     ico_photo_set_game(NULL);
