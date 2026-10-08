@@ -149,7 +149,8 @@ static inline void makeModel(Model *m, Sub15C *o, int cluster, int shade)
     o->nodeMtx = (ICO_WORD)m->nodeMtx;
     o->clusterMtx = (char *)m->clusterMtx;
     o->lightMtx = &m->light;
-    o->dispType = 0;
+    o->dispType = cluster ? 1 : 0;    /* 1: a skinned model (DObj.c) */
+    o->skelNodeNum = cluster ? 2 : 0; /* clusterMtx holds one matrix per bone */
     if (cluster) {
         /* light: L1 = (n.z, n.x, n.y, n.w) as vu1_test.c, L2 colours with an
          * ambient column */

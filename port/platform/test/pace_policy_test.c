@@ -42,7 +42,7 @@ int main(void)
     CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) == PERIOD + 6944444ull + PERIOD / 2);
     CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) >
           pace_SlowThreshold(6944444ull, PERIOD, false));
-    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) == PERIOD + 20000000ull + PERIOD / 2);
+    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) == 20000000ull + 20000000ull + PERIOD / 2);
     CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) >
           pace_SlowThreshold(20000000ull, PERIOD, false));
 

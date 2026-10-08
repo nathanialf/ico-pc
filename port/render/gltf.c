@@ -884,18 +884,19 @@ static int uri_decode(Rd *r, uint64_t bi, const char *uri, char *out, size_t out
 static int load_buffers(Rd *r)
 {
     const IcoJsonNode *bufs = ico_json_get(r->root, "buffers");
-    r->bufCount = ico_json_count(bufs);
+    const size_t count = ico_json_count(bufs);
     if (bufs && bufs->type != ICO_JSON_ARR)
         return fail(r->why, r->whyLen, "buffers is not an array");
-    if (r->bufCount == 0)
+    if (count == 0)
         return 0;
-    if (r->bufCount > GLTF_MAX_BUFFERS)
-        return fail(r->why, r->whyLen, "the file lists %zu buffers (at most %u)", r->bufCount,
+    if (count > GLTF_MAX_BUFFERS)
+        return fail(r->why, r->whyLen, "the file lists %zu buffers (at most %u)", count,
                     (unsigned)GLTF_MAX_BUFFERS);
     uint64_t totalBytes = 0;
-    r->bufs = calloc(r->bufCount, sizeof(RdBuf));
+    r->bufs = calloc(count, sizeof(RdBuf));
     if (!r->bufs)
         return fail(r->why, r->whyLen, "out of memory");
+    r->bufCount = count; /* set only once bufs exists: the cleanup walks bufCount entries */
     size_t i = 0;
     for (const IcoJsonNode *b = bufs->child; b; b = b->next, i++) {
         uint64_t len;
