@@ -83,6 +83,18 @@
  *            fails, RGB the GS lerp within 2 (As at most
  *            0x80; reported above it); in Original 1x, Enhanced 4x
  *            and Enhanced 4x with the full-height scene
+ *   vu paths (package S) one sloped prelit triangle off the 12.4 grid
+ *            through each position path of vu_triangle_out (code 34, 32,
+ *            36 uncut, 36 cut by the far plane), drawn with Z write and
+ *            again over itself by each path with Z GEQUAL: no interior
+ *            pixel fails between 34, 32 and 36 (the cut path, which keeps
+ *            X and Y off the grid in Original too, is reported only); 32
+ *            over 34 along a diagonal pan in 1/64 GS pixel steps never
+ *            fails; panned across, every path's edges move forward by at
+ *            most one pixel a frame and 34's stay on 32's; in Original 1x,
+ *            Original 4x and Enhanced 4x (where 34 drew on the 12.4 grid
+ *            and the others off it: 32 over 34 failed everywhere in 62 of
+ *            65 pan frames)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
@@ -93,6 +105,7 @@
 #include "hlsl_shim.h"
 #include "gs_math.hlsli"
 #include "rd_internal.h"
+#include "rd_mesh.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -1980,6 +1993,272 @@ static void testAuraMaskAt(const char *mode, float scale, int fullHeight)
     rd_Shutdown();
 }
 
+/* ------------------------------------------------------------ VU paths */
+/* (package S) one prelit triangle through the four position paths of
+ * vu_triangle_out: code 34 (RD_VU_CLIP_NONE: vu_gs_position), code 32
+ * (REGION: vu_vtx_position), code 36 uncut (SCISSOR: vu_vtx_position) and
+ * code 36 with vertex 0 past the clip space's far plane (SCISSOR: the
+ * GPU-clipped vu_homogeneous_position).  The vertices sit off the 12.4 grid
+ * and the triangle slopes in Z (thousands of GS Z units a pixel around 16M,
+ * the game's 3D range). */
+enum { VP_34, VP_32, VP_36, VP_36H, VP_COUNT };
+
+static const char *const kVpName[VP_COUNT] = {"34", "32", "36", "36 cut"};
+
+static RdMesh s_vpMesh[2]; /* red, green */
+
+static void vpMeshes(void)
+{
+    static const float kPos[3][4] = {{40.3f, 30.7f, 1000000.3f, 1.0f},
+                                     {200.6f, 60.2f, 1040000.7f, 1.0f},
+                                     {90.9f, 210.45f, 980000.1f, 1.0f}};
+    static float qw[2][1 + 3 * 3][4];
+    for (int i = 0; i < 2; i++) {
+        memset(qw[i], 0, sizeof(qw[i]));
+        const uint32_t tag = 0x8003u; /* NLOOP 3, EOP */
+        memcpy(&qw[i][0][0], &tag, 4);
+        for (int k = 0; k < 3; k++) {
+            memcpy(qw[i][1 + k * 3], kPos[k], sizeof(kPos[k]));
+            qw[i][1 + k * 3 + 1][2] = 1.0f;
+            qw[i][1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* the strip flag on vertex 0 */
+            qw[i][1 + k * 3 + 2][0] = i == 0 ? 200.0f : 30.0f;
+            qw[i][1 + k * 3 + 2][1] = i == 0 ? 30.0f : 200.0f;
+            qw[i][1 + k * 3 + 2][2] = 30.0f;
+            qw[i][1 + k * 3 + 2][3] = 127.0f;
+        }
+        const RdVuBatchDesc bd = {0, 0, 0};
+        RdVuMeshDesc md;
+        memset(&md, 0, sizeof(md));
+        md.qw = (const float (*)[4])qw[i];
+        md.qwCount = 10;
+        md.qwPerVertex = RD_VU_QW_PRELIT;
+        md.batchCount = 1;
+        md.batches = &bd;
+        s_vpMesh[i] = rd_CreateVuMesh(&md);
+    }
+}
+
+static const char kVpKey;
+
+/* the triangle by path, red or green, moved (tx, ty) GS pixels; the
+ * model-to-screen matrix puts model (0, 0) at the 512 target's top-left */
+static void vpDraw(int path, int green, double tx, double ty)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = path == VP_34 ? 34 : path == VP_32 ? 32 : 36;
+    d.clip = path == VP_34   ? RD_VU_CLIP_NONE
+             : path == VP_32 ? RD_VU_CLIP_REGION
+                             : RD_VU_CLIP_SCISSOR;
+    for (int c = 0; c < 4; c++) {
+        d.vu.mem[16 + c][c] = 1.0f;
+    }
+    d.vu.mem[19][0] = (float)(1792.0 + tx);
+    d.vu.mem[19][1] = (float)(1792.0 + ty);
+    /* clip space (mem[20..23]): x = y = 0, w = 1, z = pos.z / 1.02M: vertex
+     * 0 (1.04M) past z = w for VP_36H, nothing flagged otherwise */
+    d.vu.mem[23][3] = 1.0f;
+    d.vu.mem[22][2] = path == VP_36H ? 1.0f / 1020000.0f : 0.0f;
+    rd_DrawVuMesh(s_vpMesh[green], &d, RD_KEY(&kVpKey, green, path));
+}
+
+static void vpState(int zwrite)
+{
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(RD_TEST_Z_GEQUAL);
+    rd_ZWrite(zwrite);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_ABE(0);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Gouraud(1);
+    rd_TextureOff();
+}
+
+static const uint8_t kVpGrey[4] = {0x40, 0x40, 0x40, 0x80};
+
+static int vpIsBg(const uint8_t *p)
+{
+    return p[0] == kVpGrey[0] && p[1] == kVpGrey[1] && p[2] == kVpGrey[2];
+}
+
+/* red base by path a with Z write, green by path b over it with GEQUAL:
+ * the base's interior pixels (no background within 2 pixels) left red
+ * failed b's depth test against a's depth */
+static void vpPair(int a, int b, double tx, double ty, int *interior, int *failed)
+{
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    vpState(1);
+    vpDraw(a, 0, tx, ty);
+    vpState(0);
+    vpDraw(b, 1, tx, ty);
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
+    *interior = *failed = 0;
+    if (!img) {
+        return;
+    }
+    for (uint32_t y = 2; y + 2 < h; y++) {
+        for (uint32_t x = 2; x + 2 < w; x++) {
+            int edge = 0;
+            for (int dy = -2; dy <= 2 && !edge; dy++) {
+                for (int dx = -2; dx <= 2 && !edge; dx++) {
+                    edge = vpIsBg(&img[((size_t)(y + dy) * w + (x + dx)) * 4]);
+                }
+            }
+            if (edge) {
+                continue;
+            }
+            const uint8_t *p = &img[((size_t)y * w + x) * 4];
+            (*interior)++;
+            *failed += p[0] > p[1];
+        }
+    }
+    free(img);
+}
+
+/* each row's first and last covered pixel (-1: none) of one path at a
+ * horizontal shift of tx GS pixels; the row count */
+#define VP_ROWS 2048
+
+static int vpEdges(int path, double tx, int *left, int *right)
+{
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    vpState(1);
+    vpDraw(path, 0, tx, 0.0);
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
+    if (!img) {
+        return 0;
+    }
+    h = h > VP_ROWS ? VP_ROWS : h;
+    for (uint32_t y = 0; y < h; y++) {
+        left[y] = right[y] = -1;
+        for (uint32_t x = 0; x < w; x++) {
+            if (!vpIsBg(&img[((size_t)y * w + x) * 4])) {
+                left[y] = left[y] < 0 ? (int)x : left[y];
+                right[y] = (int)x;
+            }
+        }
+    }
+    free(img);
+    return (int)h;
+}
+
+/* every pair of paths, one drawn over the other; then a camera panning
+ * 1/64 GS pixel a frame across one GS pixel: per row, each path's edges
+ * move forward only, by at most one output pixel a frame, and 34's edges
+ * stay within one output pixel of 32's.  check34: whether code 34 is to
+ * match the other paths (1x; Enhanced above 1x once fixed); the cut path
+ * is reported, not checked */
+static void testVuPaths(const char *mode, int check34)
+{
+    vpMeshes();
+    for (int a = 0; a < VP_COUNT; a++) {
+        for (int b = 0; b < VP_COUNT; b++) {
+            int interior = 0, failed = 0;
+            vpPair(a, b, 0.0, 0.0, &interior, &failed);
+            printf("  vu paths (%s): %s then %s over it: %d of %d interior pixels fail GEQUAL\n",
+                   mode, kVpName[a], kVpName[b], failed, interior);
+            CHECK(interior > 1000, "vu paths (%s): %s drew %d interior pixels", mode, kVpName[a],
+                  interior);
+            const int checked =
+                a != VP_36H && b != VP_36H && (check34 || (a != VP_34 && b != VP_34));
+            if (checked) {
+                CHECK(failed == 0,
+                      "vu paths (%s): %s over %s: %d of %d interior pixels fail the depth test",
+                      mode, kVpName[b], kVpName[a], failed, interior);
+            }
+        }
+    }
+    /* code 32 over 34 (a reflection pass over a code-34 material pass)
+     * along a diagonal pan (1/64 GS pixel across, 0.61/64 down a frame):
+     * the frames where it fails anywhere, the fewest and most pixels */
+    int panFail = 0, panMax = 0, panMin = 1 << 30;
+    for (int s = 0; s <= 64; s++) {
+        int interior = 0, failed = 0;
+        vpPair(VP_34, VP_32, (double)s / 64.0, (double)s * 0.61 / 64.0, &interior, &failed);
+        panFail += failed > 0;
+        panMax = failed > panMax ? failed : panMax;
+        panMin = failed < panMin ? failed : panMin;
+    }
+    printf("  vu paths (%s): 32 over 34 panned in 1/64 GS pixel steps: %d of 65 frames fail "
+           "GEQUAL, %d to %d pixels\n",
+           mode, panFail, panMin, panMax);
+    if (check34) {
+        CHECK(panFail == 0, "vu paths (%s): 32 over 34 fails in %d frames of the pan", mode,
+              panFail);
+    }
+    static int l[VP_36H][VP_ROWS], r[VP_36H][VP_ROWS], pl[VP_36H][VP_ROWS], pr[VP_36H][VP_ROWS];
+    int back[VP_36H] = {0}, maxStep[VP_36H] = {0}, maxSep = 0, rows = 0;
+    for (int s = 0; s <= 64; s++) {
+        for (int p = 0; p < VP_36H; p++) {
+            rows = vpEdges(p, (double)s / 64.0, l[p], r[p]);
+            for (int y = 0; s > 0 && y < rows; y++) {
+                if (l[p][y] < 0 || pl[p][y] < 0) {
+                    continue;
+                }
+                const int dl = l[p][y] - pl[p][y], dr = r[p][y] - pr[p][y];
+                back[p] += (dl < 0) + (dr < 0);
+                maxStep[p] = dl > maxStep[p] ? dl : maxStep[p];
+                maxStep[p] = dr > maxStep[p] ? dr : maxStep[p];
+            }
+            memcpy(pl[p], l[p], sizeof(l[p]));
+            memcpy(pr[p], r[p], sizeof(r[p]));
+        }
+        for (int y = 0; y < rows; y++) {
+            if (l[VP_34][y] >= 0 && l[VP_32][y] >= 0) {
+                const int dl = abs(l[VP_34][y] - l[VP_32][y]), dr = abs(r[VP_34][y] - r[VP_32][y]);
+                maxSep = dl > maxSep ? dl : maxSep;
+                maxSep = dr > maxSep ? dr : maxSep;
+            }
+        }
+    }
+    for (int p = 0; p < VP_36H; p++) {
+        printf("  vu paths (%s): %s panned one GS pixel in 1/64 steps: edges step at most %d "
+               "pixels, %d steps back\n",
+               mode, kVpName[p], maxStep[p], back[p]);
+        CHECK(back[p] == 0, "vu paths (%s): %s's edges moved back %d times", mode, kVpName[p],
+              back[p]);
+        CHECK(maxStep[p] <= 1, "vu paths (%s): %s's edges jumped %d pixels", mode, kVpName[p],
+              maxStep[p]);
+    }
+    printf("  vu paths (%s): 34's edges and 32's up to %d pixels apart\n", mode, maxSep);
+    if (check34) {
+        CHECK(maxSep == 0, "vu paths (%s): 34's edges %d pixels from 32's", mode, maxSep);
+    }
+    rd_DestroyVuMesh(s_vpMesh[0]);
+    rd_DestroyVuMesh(s_vpMesh[1]);
+}
+
+static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int check34)
+{
+    RdSettings s;
+    memset(&s, 0, sizeof(s));
+    s.preset = preset;
+    s.outputWidth = 640;
+    s.outputHeight = 480;
+    s.aspect = 4.0f / 3.0f;
+    s.sceneScale = scale;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_Init (%s)", mode);
+        return;
+    }
+    testVuPaths(mode, check34);
+    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    CHECK(verr == 0, "%s: %u validation errors", mode, verr);
+    rd_Shutdown();
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -2019,6 +2298,9 @@ int main(int argc, char **argv)
     rd_Shutdown();
     testAuraMaskAt("Enhanced 4x", 4.0f, 0);
     testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
+    testVuPathsAt("Original 1x", RD_PRESET_ORIGINAL, 1.0f, 1); /* package S */
+    testVuPathsAt("Original 4x", RD_PRESET_ORIGINAL, 4.0f, 1);
+    testVuPathsAt("Enhanced 4x", RD_PRESET_ENHANCED, 4.0f, 1);
     if (failures) {
         printf("rd_pixel_test: %d failures\n", failures);
         return 1;
