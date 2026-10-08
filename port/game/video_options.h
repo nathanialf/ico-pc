@@ -30,6 +30,11 @@
  *   [video] texture_pack_cache_mb
  *                           0           config only: RAM for that read-ahead, 0 (half the
  *                                       computer's memory) or 128..65536
+ *   [video] effect_glow, effect_depth_of_field, effect_softening, effect_motion_blur,
+ *           effect_fog
+ *                           true        the game's own picture effects (issue 11): the
+ *                                       light bloom and sun flare, the distance blur, the
+ *                                       edge softening, the motion trail, the distance fog
  *
  * Every option applies on its own.  preset is not an option but a
  * shortcut over four of them, read and written as such: "enhanced" or
@@ -39,8 +44,8 @@
  * (ico_video_preset): Original when all four are the PS2's, Enhanced when
  * they are window, auto, anisotropic and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.
- * fullscreen, vsync, framerate, the CRT keys and the texture pack keys are
- * not part of it.
+ * fullscreen, vsync, framerate, the CRT keys, the texture pack keys and the
+ * effect keys are not part of it.
  * framerate (renderer wave 7, R7b): "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
@@ -97,6 +102,14 @@ typedef struct IcoVideoOptions {
     int texturePackPrecache; /* config only: the pack read into memory at start */
     int texturePackCacheMb;  /* config only: the RAM that read-ahead may use (0: half the
                                 computer's memory) */
+    /* the game's own picture effects (issue 11), 1 = on (the PS2 picture),
+       applied whatever the preset; the game reads them through the
+       ico_video_effect_* getters below */
+    int effectGlow;         /* the flare and bloom passes and the sun (staticBlur.c) */
+    int effectDepthOfField; /* the depth-of-field pass (staticBlur.c depthField) */
+    int effectSoftening;    /* the edge softening (GsBase.c gsb_antiAlias) */
+    int effectMotionBlur;   /* the motion blur (staticBlur.c MotionBlur) */
+    int effectFog;          /* the depth fog (ZFog.c fog_DrawFog) */
 } IcoVideoOptions;
 
 /* IcoVideoOptions.texturePackBudgetMb: the default and the range a value
@@ -125,7 +138,7 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 /* The defaults: the Original rows (1x, 4:3, original filter, half height),
    windowed, vsync on, framerate uncapped, the CRT filter off (its mode
    Consumer TV at full strength, no overrides), texture packs on with
-   precache and a 2048 MB budget, no dump. */
+   precache and a 2048 MB budget, no dump, every effect on. */
 void ico_video_defaults(IcoVideoOptions *o);
 /* The options in force (read from the config on first use). */
 void ico_video_get(IcoVideoOptions *o);
@@ -149,6 +162,14 @@ float ico_video_aspect(void);
 /* How much wider than 4:3 the presentation is: ico_video_aspect() / (4/3),
    at least 1 (GsBase.c gsbHostWideX). */
 float ico_video_wide_x(void);
+/* The effect switches in force (issue 11), 1 or 0: plain functions the
+   game's files declare extern (staticBlur.c, GsBase.c, ZFog.c), read at
+   most once a frame. */
+int ico_video_effect_glow(void);
+int ico_video_effect_depth_of_field(void);
+int ico_video_effect_softening(void);
+int ico_video_effect_motion_blur(void);
+int ico_video_effect_fog(void);
 /* The presentation rate in force (R7b): the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);

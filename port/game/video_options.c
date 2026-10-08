@@ -36,6 +36,11 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
+    o->effectGlow = 1;
+    o->effectDepthOfField = 1;
+    o->effectSoftening = 1;
+    o->effectMotionBlur = 1;
+    o->effectFog = 1;
 }
 
 static int lower_eq(const char *a, const char *b)
@@ -281,6 +286,11 @@ static void sanitize(IcoVideoOptions *o)
     } else if (o->texturePackCacheMb > ICO_TEXPACK_CACHE_MAX) {
         o->texturePackCacheMb = ICO_TEXPACK_CACHE_MAX;
     }
+    o->effectGlow = !!o->effectGlow;
+    o->effectDepthOfField = !!o->effectDepthOfField;
+    o->effectSoftening = !!o->effectSoftening;
+    o->effectMotionBlur = !!o->effectMotionBlur;
+    o->effectFog = !!o->effectFog;
 }
 
 static void read_config(void)
@@ -344,6 +354,12 @@ static void read_config(void)
         }
         o.texturePackCacheMb = (int)mb;
     }
+    /* the effects (issue 11) */
+    o.effectGlow = ico_config_get_bool("video.effect_glow", 1);
+    o.effectDepthOfField = ico_config_get_bool("video.effect_depth_of_field", 1);
+    o.effectSoftening = ico_config_get_bool("video.effect_softening", 1);
+    o.effectMotionBlur = ico_config_get_bool("video.effect_motion_blur", 1);
+    o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     /* the preset is a shortcut over the four rows: only "enhanced" and
        "custom" take them as written; "original", no key, or anything else
        (a misspelling) is the PS2 picture whatever they say */
@@ -443,6 +459,12 @@ int ico_video_save(void)
     if (o.texturePackCacheMb != 0) {
         r |= ico_config_set_int("video.texture_pack_cache_mb", o.texturePackCacheMb);
     }
+    /* the effects always: each has a row in the menu, as texture_pack */
+    r |= ico_config_set_bool("video.effect_glow", o.effectGlow);
+    r |= ico_config_set_bool("video.effect_depth_of_field", o.effectDepthOfField);
+    r |= ico_config_set_bool("video.effect_softening", o.effectSoftening);
+    r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
+    r |= ico_config_set_bool("video.effect_fog", o.effectFog);
     return r != 0 ? -1 : ico_config_save();
 }
 
@@ -488,6 +510,47 @@ float ico_video_wide_x(void)
     float k = ico_video_aspect() / ASPECT_4_3;
 
     return k > 1.0f + 1e-5f ? k : 1.0f;
+}
+
+/* issue 11: the effect switches, read once a frame at most by the game */
+int ico_video_effect_glow(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectGlow;
+}
+
+int ico_video_effect_depth_of_field(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectDepthOfField;
+}
+
+int ico_video_effect_softening(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectSoftening;
+}
+
+int ico_video_effect_motion_blur(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectMotionBlur;
+}
+
+int ico_video_effect_fog(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectFog;
 }
 
 int ico_video_framerate(void)
