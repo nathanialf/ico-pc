@@ -189,9 +189,6 @@ Options > Display > Aspect ratio decides how the picture fits:
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
   Options > Display. See [If the game stutters](#if-the-game-stutters).
-- The opening movies used to be cut off and off-centre after the phone
-  turned or a folding screen opened. This version fixes that. If you still
-  see it, please tell us which phone you have.
 - The on-screen buttons are a first layout. Their size and placement will
   change with feedback; Options > Controls lets you change the size now.
 

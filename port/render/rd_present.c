@@ -877,7 +877,10 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
         return;
     }
     /* the output and box rd__PresentRecord will use: both come from
-     * g_rd.settings, which does not change inside a replay */
+     * g_rd.settings.  One case changes them after this: on the present
+     * where rd__OutputFollowSwapchain takes a rebuilt swapchain's size
+     * (after the acquire, later in the replay), the overlay is laid out for
+     * the old size for that one frame and follows from the next */
     const RdPresentPreset *pr = &s_present;
     RhiRect box;
     outputBox(w, h, &box);

@@ -11,6 +11,5 @@
 - Photo mode no longer looks different from the game (issue 14).
 - Motion blur at 60 Hz is as strong as on the PS2.
 - Android: the opening movies are the right size and in the middle of the screen.
-- Shiny surfaces no longer flicker while the camera moves at higher resolutions (this may be the shaking glow on the coffins before the Queen; being checked).
-- Some moving textures no longer jump when smooth motion is on.
-- Leaving photo mode in a room with a puddle reflection no longer leaves the picture wrong.
+- Shiny surfaces no longer flicker while the camera moves at higher resolutions (this may also be the shaking glow on the coffins before the Queen).
+- Some moving textures no longer jump when the game draws extra frames between its own (Frame rate above Original).
