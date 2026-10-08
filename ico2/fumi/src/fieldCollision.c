@@ -1565,7 +1565,11 @@ void DBG_VECTOR(float *vec)
 
 int GetEdgeOfFloor(float *out, FcFloorEnt *e, float *p1, float *p2)
 {
-    float n[4];
+    /* PC port: one float more than the EE build's four, for the store at
+       n[4] below: on the EE it landed in the next stack word; with a stack
+       protector (the Android build) that word is the guard, and the return
+       would end the run. No caller in this build. */
+    float n[5];
     FcVec4 *va;
     FcVec4 *vb;
     float d1;
@@ -1597,7 +1601,7 @@ int GetEdgeOfFloor(float *out, FcFloorEnt *e, float *p1, float *p2)
             continue;
         }
         /* the normal reads both vertices through pointers of its own; the fourth
-         * store lands one float past n */
+         * store is n[4], one float past the EE's n (see n above) */
         {
             FcVec4 *ca = &e->v[i];
             FcVec4 *cb = &e->v[j];

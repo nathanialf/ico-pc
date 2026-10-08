@@ -4,11 +4,12 @@
 #
 # Checks that the Android build compiles the game the way every other host
 # does: the semantics options of cmake/IcoFlags.cmake (ICO_SEMANTIC_OPTIONS)
-# reach the NDK clang for every ico2/ and port/ source, and no game or
-# port/math object holds a fused multiply-add. aarch64 has fmadd/fmsub and
-# clang contracts a * b + c into them unless -ffp-contract=off, which rounds
-# once where the EE rounds twice; x86-64 at the default target has no FMA,
-# so only an arm64 build would show it.
+# reach the NDK clang for every ico2/ and port/ source, no game or
+# port/math object holds a fused multiply-add, and no game or port object
+# stores onto its stack protector's guard (tools/check_stack_guard.py).
+# aarch64 has fmadd/fmsub and clang contracts a * b + c into them unless
+# -ffp-contract=off, which rounds once where the EE rounds twice; x86-64 at
+# the default target has no FMA, so only an arm64 build would show it.
 #
 # Usage: tools/check_android_flags.sh [build-dir]
 #   build-dir   a configured (and, for the object check, built) android-arm64
@@ -107,3 +108,12 @@ if [ "$fused" != "0" ]; then
     exit 1
 fi
 echo "check_android_flags: no fused multiply-add in $n objects"
+
+# No store onto a stack protector's guard word (tools/check_stack_guard.py):
+# only the Android build has -fstack-protector-strong (the NDK's flags), so
+# a write one element past a local array, harmless on the EE and on the
+# desktop builds, ends the run on a phone when the function returns.
+guarded=$(find "$dir" -name '*.o' \( -path '*/ico2/*' -o -path '*/port/*' \) -not -path '*/test/*' \
+    -not -path '*third_party*' -not -path '*/deps/*' 2>/dev/null || true)
+# shellcheck disable=SC2086
+python3 "$root/tools/check_stack_guard.py" "$objdump" $guarded
