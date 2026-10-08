@@ -79,7 +79,8 @@
  * (port/platform/android/iso_import.h); the copy's and the extraction's
  * progress are drawn in the game's window (window_host.h
  * ico_window_progress), Back stops them and the run ends; once the data is
- * mounted the copy is deleted unless ini keep_image=1.
+ * mounted, or when Back stops the extraction, the picker's copy is deleted
+ * unless ini keep_image=1.
  */
 #include <errno.h>
 #include <stdarg.h>
@@ -935,6 +936,31 @@ static void android_drop_refused_image(const char *exe_dir, const char *iso)
     }
 }
 
+static int android_keep_image(const IcoIni *ini)
+{
+    const char *v = ico_ini_get(ini, "keep_image");
+
+    return v != NULL && (strcmp(v, "1") == 0 || strcmp(v, "true") == 0);
+}
+
+/* Back during the extraction: the copy the picker made this run goes, as
+   after an extraction (unless ini keep_image=1), so the next start asks
+   for the image again instead of using it unasked; an image the player
+   put in the files folder by hand stays. */
+static void android_drop_cancelled_copy(const IcoIni *ini, const char *exe_dir, const char *iso,
+                                        int picked)
+{
+    if (!picked || !android_own_image(exe_dir, iso)) {
+        return;
+    }
+    if (android_keep_image(ini)) {
+        fprintf(stderr, "ico_pc: keep_image=1: the copy of the disc image %s stays\n", iso);
+        return;
+    }
+    fprintf(stderr, "ico_pc: deleting the copy of the disc image %s %s\n", iso,
+            ico_remove(iso) == 0 ? "(the next start asks for one)" : "failed");
+}
+
 /* After the game's data is mounted: the app's own copy of the image
    (Ico_PAL.iso or .chd in the files folder) is deleted, which gives back
    its space, unless ini keep_image=1; iso= is saved only for an image that
@@ -942,8 +968,7 @@ static void android_drop_refused_image(const char *exe_dir, const char *iso)
 static void android_image_done(const IcoIni *ini, const char *ini_path, const char *exe_dir,
                                const char *iso, int picked)
 {
-    const char *v = ico_ini_get(ini, "keep_image");
-    const int keep = v != NULL && (strcmp(v, "1") == 0 || strcmp(v, "true") == 0);
+    const int keep = android_keep_image(ini);
     const int mine = android_own_image(exe_dir, iso);
     SDL_PathInfo info;
 
@@ -1098,6 +1123,7 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
         fprintf(stderr, "ico_pc: first run: cancelled; nothing was written\n");
         fflush(stderr);
 #ifdef ICO_ANDROID_UI
+        android_drop_cancelled_copy(ini, exe_dir, iso, picked);
         /* ico_host_main's end-of-run steps, then SDL_main returns */
         return 1;
 #else
