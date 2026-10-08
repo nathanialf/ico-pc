@@ -138,6 +138,8 @@ static struct {
 static struct {
     int active;        /* resolution "auto" in force, the CRT filter off */
     float windowScale; /* the presentation box's height over the game's 448 lines */
+    int tickBudget;    /* frame rate Original: one present a game tick, so the budget is
+                          the tick (two fields at the pace's hz, set by ico_window_pace) */
     PaceSamples samples;
 } s_autoRes;
 
@@ -180,7 +182,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->sceneScale = (float)o.resScale;
     /* v0.4.2 (N2): resolution "auto": the window's size (scale 0) until
        auto_res_update lowers it; the budget is the frame rate cap's period,
-       else 1/60 s */
+       the game tick at Original (one present a tick), else 1/60 s */
     s_autoRes.active = o.resScale == ICO_RES_AUTO && !(o.crt && o.crtStrength > 0.0f);
     if (o.resScale == ICO_RES_AUTO) {
         const float boxH = (float)rs->outputWidth / (rs->aspect > 1.0f ? rs->aspect : 4.0f / 3.0f);
@@ -188,8 +190,10 @@ static void video_settings(RdSettings *rs, int w, int h)
         rs->sceneScale = (float)ico_video_auto_scale();
         s_autoRes.windowScale =
             (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
-        s_autoRes.samples.budgetNs =
-            o.framerate > 0 ? 1000000000ull / (Uint64)o.framerate : 1000000000ull / 60u;
+        s_autoRes.tickBudget = o.framerate == ICO_FRAMERATE_ORIGINAL;
+        s_autoRes.samples.budgetNs = o.framerate > 0        ? 1000000000ull / (Uint64)o.framerate
+                                     : s_autoRes.tickBudget ? 40000000ull /* PAL until paced */
+                                                            : 1000000000ull / 60u;
     }
     /* package CRT: the filter in either preset (rd_crt.c) */
     rd_CrtSettings(rs, o.crt ? (RdCrtMode)(o.crtMode + 1) : RD_CRT_OFF, o.crtStrength);
@@ -1402,6 +1406,10 @@ void ico_window_pace(int hz)
     }
     pace(hz);
     perf_drain(); /* P1: every vsync, so the record queue never overflows */
+    if (s_autoRes.tickBudget) {
+        /* two fields a tick: 40 ms PAL, 33.4 ms NTSC (pace's periods) */
+        s_autoRes.samples.budgetNs = 2u * (hz == 50 ? 20000000ull : 16683333ull);
+    }
     auto_res_update();
     {
         const RdTexCacheStats *tc = rdtex_Stats();
