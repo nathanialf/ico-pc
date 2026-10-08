@@ -107,6 +107,7 @@
 #include "gs_math.hlsli"
 #include "rd_internal.h"
 #include "sheet_ref.h"
+#include "shader_consts.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -1044,24 +1045,31 @@ static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1};    /* the English sheets: 
 static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1};   /* French, Italian, Spanish: grey */
 static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1}; /* the dark inks: no rim */
 
-/* a few shapes 3 texels or more inside the edges: a solid block, a soft
- * diagonal edge, a thin stroke of partial coverage, a noisy patch */
+/* a few shapes more than the rim's reach inside the edges (x 5..34 with
+ * SHEET_RX 4, y 4..15 with SHEET_RY 3), so no edge texel has a rim: the
+ * RGBA8 reference clamps to its edge texels where the shader rebuilds
+ * texels beyond the edge, and the two agree only where both are clear: a
+ * solid block, a soft diagonal edge, a thin stroke of partial coverage, a
+ * noisy patch.  (With the shapes 3 texels in, written for a smaller reach,
+ * the magnified alpha was 64 to 78 off along the left and right edges.) */
+_Static_assert(ICO_SHEET_RX <= 4 && ICO_SHEET_RY <= 3, "sheetCov's margins hold the rim's reach");
+
 static uint8_t sheetCov(int x, int y)
 {
-    if (x < 3 || y < 3 || x >= SHEET_W - 3 || y >= SHEET_H - 3) {
+    if (x < 5 || y < 4 || x >= SHEET_W - 5 || y >= SHEET_H - 4) {
         return 0;
     }
-    if (x >= 4 && x < 10 && y >= 4 && y < 16) {
+    if (x >= 5 && x < 11 && y >= 4 && y < 16) {
         return 0xFF;
     }
-    if (x >= 12 && x < 22 && y >= 4 && y < 16) {
-        const int v = ((x - 12) * 2 - (y - 4)) * 40 + 128;
+    if (x >= 13 && x < 23 && y >= 4 && y < 16) {
+        const int v = ((x - 13) * 2 - (y - 4)) * 40 + 128;
         return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
     }
-    if (y >= 4 && y < 16 && (x == 24 || x == 25)) {
-        return x == 24 ? 160 : 60;
+    if (y >= 4 && y < 16 && (x == 25 || x == 26)) {
+        return x == 25 ? 160 : 60;
     }
-    if (x >= 28 && x < 37 && y >= 5 && y < 15) {
+    if (x >= 28 && x < 35 && y >= 5 && y < 15) {
         return (uint8_t)hash((uint32_t)(y * 64 + x) + 77u);
     }
     return 0;
@@ -1272,9 +1280,15 @@ static void testSheetText(const char *mode, int scale, const char *dir)
               "texels (1 allowed)",
               mode, wRgb, wA);
         CHECK(inked > sw * sh * s * s / 4, "%s: %d pixels inked", mode, inked);
-        CHECK(moved == 0,
+        /* 2 allowed: the shader blends the four texels with float weights
+         * from the interpolated UV, which lands a hair either side of a
+         * half at a different screen position (measured 1 at 1x and 3x, 2
+         * at 2x, where an alpha tie also moves the blended colour); a grain
+         * fixed to the screen instead of the texel is a level (32 in alpha)
+         * or more off */
+        CHECK(moved <= 2,
               "%s: the strip moved by whole pixels differs by %d (the grain must move "
-              "with it)",
+              "with it; 2 allowed)",
               mode, moved);
         if (scale == 1) {
             int rim = 0;
