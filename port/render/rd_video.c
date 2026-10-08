@@ -399,6 +399,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     }
     RhiRect box;
     box43(out.w, out.h, &box);
+    rd__NotePresentBox(out.w, out.h, &box); /* v0.4.2 N4: the tests */
     if (rgba != NULL) {
         /* dispClear's colour: what the PS2 showed around the picture (the
            whole screen there; the whole output here, bars included, or the

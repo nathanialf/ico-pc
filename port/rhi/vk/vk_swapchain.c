@@ -34,6 +34,14 @@ uint32_t vkr_TestSwapchainCreations(void)
     return s_creations;
 }
 
+/* v0.4.2 N4: the surface's size polled after a present (vkr_PollSurface):
+ * when the swapchain was last made, when the poll last ran */
+static uint64_t s_swapMadeNs, s_pollNs;
+/* a poll rebuild whose swapchain came out at another size than the surface
+ * asked (clamped by the surface's limits): that target and the size made,
+ * so the same pair is not rebuilt at every present */
+static uint32_t s_pollStuckW, s_pollStuckH, s_pollMadeW, s_pollMadeH;
+
 static void vkr_DestroySwapResources(void)
 {
     for (uint32_t i = 0; i < g_vkr.swapImageCount; i++) {
@@ -266,6 +274,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         return false;
     }
     s_creations++;
+    s_swapMadeNs = vkr_NowNs(); /* N4: the poll runs at every present again */
     vkr_DestroySwapResources();
     if (old) {
         vkDestroySwapchainKHR(g_vkr.device, old, NULL);
@@ -531,6 +540,64 @@ RhiTexture rhi_AcquireBackbuffer(void)
     return out;
 }
 
+/* v0.4.2 N4: Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
+static bool vkr_PollSurfaceOn(void)
+{
+#ifdef __ANDROID__
+    return true;
+#else
+    const char *e = getenv("ICO_VK_POLL_SURFACE");
+    return e && e[0] == '1';
+#endif
+}
+
+#define VKR_POLL_ALWAYS_NS (15ull * 1000000000ull) /* every present this long */
+#define VKR_POLL_PERIOD_NS 1000000000ull           /* then once a second */
+
+/* v0.4.2 N4: the swapchain follows the surface after a present that
+ * reported nothing.  On Android the surface can change size in the first
+ * seconds (the system bars hidden, the turn to landscape, the cutout mode
+ * applied) while the driver goes on returning VK_SUCCESS and SDL's size
+ * event comes late or never; the compositor then scales and offsets the old
+ * size's image.  The surface's current extent (else the window's pixel
+ * size, as vkr_SwapTargetSize) is asked at every present for the first 15 s
+ * after a swapchain is made, then once a second; a different size rebuilds
+ * the swapchain as a suboptimal present with a size change does, and the
+ * renderer's output follows it at the next acquire
+ * (rd__OutputFollowSwapchain). */
+static void vkr_PollSurface(void)
+{
+    if (!vkr_PollSurfaceOn() || !g_vkr.swapchain) {
+        return;
+    }
+    const uint64_t now = vkr_NowNs();
+    if (now - s_swapMadeNs >= VKR_POLL_ALWAYS_NS && now - s_pollNs < VKR_POLL_PERIOD_NS) {
+        return;
+    }
+    s_pollNs = now;
+    uint32_t w = 0, h = 0;
+    if (!vkr_SwapTargetSize(&w, &h) || (w == g_vkr.swapWidth && h == g_vkr.swapHeight)) {
+        return;
+    }
+    if (w == s_pollStuckW && h == s_pollStuckH && g_vkr.swapWidth == s_pollMadeW &&
+        g_vkr.swapHeight == s_pollMadeH) {
+        return; /* this size was tried and the surface's limits gave another */
+    }
+    const uint32_t ow = g_vkr.swapWidth, oh = g_vkr.swapHeight;
+    if (!rhi_ResizeSwapchain(w, h, g_vkr.vsync)) {
+        return; /* the next acquire finds no swapchain and rd_present retries */
+    }
+    VKR_LOG("swapchain %ux%u follows the surface (was %ux%u)", g_vkr.swapWidth, g_vkr.swapHeight,
+            ow, oh);
+    s_pollStuckW = s_pollStuckH = s_pollMadeW = s_pollMadeH = 0;
+    if (g_vkr.swapWidth != w || g_vkr.swapHeight != h) {
+        s_pollStuckW = w;
+        s_pollStuckH = h;
+        s_pollMadeW = g_vkr.swapWidth;
+        s_pollMadeH = g_vkr.swapHeight;
+    }
+}
+
 void rhi_Present(void)
 {
     if (!g_vkr.swapchain || !g_vkr.swapAcquired) {
@@ -583,5 +650,8 @@ void rhi_Present(void)
         vkr_SurfaceLost("present");
     } else if (r != VK_SUCCESS) {
         VKR_CHECK(r);
+    }
+    if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
+        vkr_PollSurface(); /* v0.4.2 N4 */
     }
 }

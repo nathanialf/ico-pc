@@ -1248,6 +1248,11 @@ bool rd__PresentAcquire(void);
  * movie's acquireOut): the output size becomes the swapchain's when they
  * differ (logged once per change; rd_OutputFollowed reports it) */
 void rd__OutputFollowSwapchain(void);
+/* v0.4.2 N4, for the tests: the output size and the box the last present
+ * drew the picture in (rd__PresentRecord, the movie's frame), noted as it
+ * is recorded; false before the first */
+void rd__NotePresentBox(uint32_t outW, uint32_t outH, const RhiRect *box);
+bool rd__LastPresentBox(uint32_t *outW, uint32_t *outH, RhiRect *box);
 void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
 

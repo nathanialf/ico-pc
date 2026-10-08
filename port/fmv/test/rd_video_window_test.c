@@ -12,13 +12,21 @@
  * rd_OutputFollowed once), a pending settings change must not take it back,
  * and the validation layer must report nothing.
  *
+ * v0.4.2 N4: with ICO_VK_POLL_SURFACE=1 (always on Android) the window
+ * resized again and a frame presented with nothing reported (lavapipe's
+ * headless surface returns VK_SUCCESS): that present rebuilds the
+ * swapchain at the new size, and the next frame's output and box are the
+ * new size's (rd__PresentBox).
+ *
  * Exit 77 without SDL's offscreen Vulkan window or a Vulkan device.
  */
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
 #include "../fmv/rd_video.h"
+#include <stdlib.h>
 #include "rd.h"
+#include "rd_internal.h"
 #include "rhi.h"
 #include "vk/rhi_vk.h"
 
@@ -34,7 +42,22 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-enum { AW = 64, AH = 48, BW = 96, BH = 72, PW = 32, PH = 24 };
+enum { AW = 64, AH = 48, BW = 96, BH = 72, CW = 120, CH = 60, PW = 32, PH = 24 };
+
+/* setenv for the tests: the mingw C runtime has _putenv_s instead (an
+   empty value removes the variable there; NULL removes it on both). */
+static void testSetEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
 
 static uint8_t s_y[PW * PH], s_u[(PW / 2) * (PH / 2)], s_v[(PW / 2) * (PH / 2)];
 
@@ -91,6 +114,37 @@ static void run(SDL_Window *win)
           "output %ux%u after rd_BeginFrame", rd_GetSettings()->outputWidth,
           rd_GetSettings()->outputHeight);
     CHECK(!rd_OutputFollowed(NULL, NULL), "no second change at the same size");
+
+    /* N4: size C (wider than 4:3, so the box is pillarboxed) without
+       rd_ResizeOutput or a forced result: the poll rebuilds the swapchain
+       at the present that follows the resize */
+    testSetEnv("ICO_VK_POLL_SURFACE", "1");
+    SDL_SetWindowSize(win, CW, CH);
+    SDL_SyncWindow(win);
+    const uint32_t n1 = vkr_TestSwapchainCreations();
+    CHECK(movieFrame() == 0, "the frame presented after the resize to %ux%u", CW, CH);
+    CHECK(vkr_TestSwapchainCreations() == n1 + 1, "%u swapchains made by the poll, want 1",
+          vkr_TestSwapchainCreations() - n1);
+    sw = sh = 0;
+    CHECK(rhi_SwapchainSize(&sw, &sh) && sw == CW && sh == CH,
+          "swapchain %ux%u after the poll, want %ux%u", sw, sh, CW, CH);
+    CHECK(movieFrame() == 0, "the frame on the polled swapchain");
+    CHECK(rd_GetSettings()->outputWidth == CW && rd_GetSettings()->outputHeight == CH,
+          "output %ux%u after the poll, want %ux%u", rd_GetSettings()->outputWidth,
+          rd_GetSettings()->outputHeight, CW, CH);
+    {
+        RhiRect want, got = {0, 0, 0, 0};
+        uint32_t ow = 0, oh = 0;
+        rd__PresentBox(CW, CH, 4.0f / 3.0f, &want);
+        CHECK(rd__LastPresentBox(&ow, &oh, &got) && ow == CW && oh == CH && got.x == want.x &&
+                  got.y == want.y && got.w == want.w && got.h == want.h,
+              "the frame after the follow drew in %ux%u at %d,%d %ux%u, want %ux%u at %d,%d "
+              "%ux%u",
+              ow, oh, got.x, got.y, got.w, got.h, CW, CH, want.x, want.y, want.w, want.h);
+    }
+    fw = fh = 0;
+    CHECK(rd_OutputFollowed(&fw, &fh) && fw == CW && fh == CH, "rd_OutputFollowed %ux%u", fw, fh);
+    testSetEnv("ICO_VK_POLL_SURFACE", NULL);
 }
 
 int main(void)

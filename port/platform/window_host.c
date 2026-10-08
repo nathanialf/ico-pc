@@ -380,6 +380,56 @@ static void touch_layout_update(void)
     }
 }
 
+/* v0.4.2 N4: the window's pixel size the renderer was opened at or last
+   given (the size event's path, window_pixel_size) */
+static int s_pixW, s_pixH;
+
+/* The size event's path: the renderer's output and swapchain, aspect
+   "auto" and resolution "window" (R7a), the touch zones (AN-G) */
+static void window_pixel_size(int w, int h)
+{
+    s_pixW = w;
+    s_pixH = h;
+    rd_ResizeOutput((uint32_t)w, (uint32_t)h);
+    ico_video_set_window(w, h);
+    video_apply(1);
+    touch_layout_update();
+}
+
+/* v0.4.2 N4, Android: the window's pixel size read again after the
+   renderer opened and at the first pump.  The window is made before the
+   system bars are hidden and the turn to landscape is done, and SDL's size
+   event can come late or never: a size other than the renderer's goes
+   through the size event's path, with a line */
+static void window_size_recheck(const char *when)
+{
+#ifdef __ANDROID__
+    int w = 0, h = 0;
+
+    SDL_GetWindowSizeInPixels(s_window, &w, &h);
+    if (w <= 0 || h <= 0 || (w == s_pixW && h == s_pixH)) {
+        return;
+    }
+    fprintf(stderr, "window: %dx%d pixels %s (the renderer had %dx%d)\n", w, h, when, s_pixW,
+            s_pixH);
+    window_pixel_size(w, h);
+#else
+    (void)when;
+#endif
+}
+
+/* the first pump of either kind (ico_window_progress runs while the disc
+   is mounted, before the game's), after its events were handled */
+static void first_pump_recheck(void)
+{
+    static int s_done;
+
+    if (!s_done) {
+        s_done = 1;
+        window_size_recheck("at the first pump");
+    }
+}
+
 /* The window's flags. Android (package AN-D): fullscreen always, which is
    immersive there (no status or navigation bar), and not resizable; the
    system decides the size. */
@@ -570,6 +620,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
     }
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
+    s_pixW = w; /* v0.4.2 N4: window_size_recheck compares against it */
+    s_pixH = h;
     video_settings(&rs, w, h);
     if (!rd_Init(gsW, gsH, &rs, s_window)) {
         fprintf(stderr,
@@ -620,6 +672,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         /* v0.3.1 (P3): later changes are logged against this */
         s_videoLast = o;
     }
+    /* v0.4.2 N4: the size may have changed while the renderer opened */
+    window_size_recheck("after the renderer opened");
     s_pres.cutSerial = ico_video_cut_serial();
     /* Q1: [dev] slow_step_ms (default 8; 0 off) */
     s_pres.slowMs = ico_config_get_float("dev.slow_step_ms", 8.0);
@@ -892,7 +946,11 @@ int ico_window_pump(void)
             static Uint64 s_sizeAt;
             int fs = window_fullscreen() ? 1 : 0;
             Uint64 now = SDL_GetTicksNS();
-            if (fs != s_sizeFs || now - s_sizeAt >= 1000000000ull) {
+            int print = fs != s_sizeFs || now - s_sizeAt >= 1000000000ull;
+#ifdef __ANDROID__
+            print = 1; /* v0.4.2 N4: every change (no drags there) */
+#endif
+            if (print) {
                 s_sizeFs = fs;
                 s_sizeAt = now;
                 fprintf(stderr, "window: %dx%d pixels, flags 0x%llx (fullscreen %s)\n",
@@ -901,12 +959,12 @@ int ico_window_pump(void)
             }
         }
             if (e.window.data1 > 0 && e.window.data2 > 0) {
-                rd_ResizeOutput((uint32_t)e.window.data1, (uint32_t)e.window.data2);
-                /* R7a: aspect "auto" and resolution "window" follow the size */
-                ico_video_set_window(e.window.data1, e.window.data2);
-                video_apply(1);
+                /* R7a: aspect "auto" and resolution "window" follow the
+                   size; AN-G: the touch zones */
+                window_pixel_size(e.window.data1, e.window.data2);
+            } else {
+                touch_layout_update(); /* AN-G: the size and the safe area */
             }
-            touch_layout_update(); /* AN-G: the size and the safe area */
             break;
         case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
             touch_layout_update(); /* AN-G: a notch or the system bars moved */
@@ -916,6 +974,7 @@ int ico_window_pump(void)
             break;
         }
     }
+    first_pump_recheck(); /* v0.4.2 N4 */
     /* R7a: the Settings menu's changes; v0.4.2 N1: forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
@@ -1017,9 +1076,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             if (e.window.data1 > 0 && e.window.data2 > 0) {
                 fprintf(stderr, "window: %dx%d pixels\n", e.window.data1, e.window.data2);
-                rd_ResizeOutput((uint32_t)e.window.data1, (uint32_t)e.window.data2);
-                ico_video_set_window(e.window.data1, e.window.data2);
-                video_apply(1);
+                window_pixel_size(e.window.data1, e.window.data2);
             }
             break;
         default:
@@ -1029,6 +1086,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
             break;
         }
     }
+    first_pump_recheck(); /* v0.4.2 N4 */
     if (device_lost_quit()) {
         return 1;
     }

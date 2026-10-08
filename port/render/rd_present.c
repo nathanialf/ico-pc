@@ -1189,6 +1189,7 @@ void rd__PresentRecord(RhiCommandList cl)
     rd__Transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
+    rd__NotePresentBox(s_outW, s_outH, &box); /* N4: the tests */
     /* package CRT: the filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
@@ -1378,6 +1379,29 @@ void rd__OutputFollowSwapchain(void)
     s_followed = true;
     s_followW = sw;
     s_followH = sh;
+}
+
+static bool s_boxNoted;
+static uint32_t s_boxOutW, s_boxOutH;
+static RhiRect s_boxLast;
+
+void rd__NotePresentBox(uint32_t outW, uint32_t outH, const RhiRect *box)
+{
+    s_boxNoted = true;
+    s_boxOutW = outW;
+    s_boxOutH = outH;
+    s_boxLast = *box;
+}
+
+bool rd__LastPresentBox(uint32_t *outW, uint32_t *outH, RhiRect *box)
+{
+    if (!s_boxNoted) {
+        return false;
+    }
+    *outW = s_boxOutW;
+    *outH = s_boxOutH;
+    *box = s_boxLast;
+    return true;
 }
 
 bool rd_OutputFollowed(uint32_t *w, uint32_t *h)

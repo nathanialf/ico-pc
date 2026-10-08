@@ -14,13 +14,32 @@
  * swapchain's size (none without a surface), and a window resized without
  * rhi_ResizeSwapchain, then a present forced out of date, leaves a
  * swapchain at the window's new size, which rhi_SwapchainSize reports and
- * the next frame draws at.  Exit 77 when SDL has no offscreen Vulkan surface
- * or no device presents to it. */
+ * the next frame draws at.  v0.4.2 N4: with ICO_VK_POLL_SURFACE=1 (always
+ * on Android) a window resized without rhi_ResizeSwapchain and a present
+ * that reports nothing (lavapipe's headless surface returns VK_SUCCESS)
+ * leaves a swapchain at the window's new size, made by that present; the
+ * desktop without the switch keeps the old one.  Exit 77 when SDL has no
+ * offscreen Vulkan surface or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+/* setenv for the tests: the mingw C runtime has _putenv_s instead (an
+   empty value removes the variable there; NULL removes it on both). */
+static void testSetEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
 
 /* One frame on the backbuffer at the window's pixel size: clear to a
  * colour from n, read it back, present.  0, or 1 with the reason printed. */
@@ -229,6 +248,107 @@ static int followSize(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
+/* A frame on the swapchain at its own size (the window may differ),
+ * cleared and presented with whatever the driver returns.  0, or 1. */
+static int presentAtSwapSize(int n)
+{
+    uint32_t sw = 0, sh = 0;
+    if (!rhi_SwapchainSize(&sw, &sh)) {
+        printf("FAIL frame %d: no swapchain\n", n);
+        return 1;
+    }
+    rhi_WaitFrame();
+    RhiTexture bb = rhi_AcquireBackbuffer();
+    if (!bb.id) {
+        printf("FAIL frame %d: no backbuffer\n", n);
+        return 1;
+    }
+    RhiCommandList cl = rhi_BeginCommands();
+    RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_CmdBarrier(cl, &b0, 1);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] =
+        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE};
+    rp.colorCount = 1;
+    rp.width = sw;
+    rp.height = sh;
+    rhi_CmdBeginRenderPass(cl, &rp);
+    rhi_CmdEndRenderPass(cl);
+    RhiTextureBarrier b1 = {bb, RHI_STATE_RENDER_TARGET, RHI_STATE_PRESENT};
+    rhi_CmdBarrier(cl, &b1, 1);
+    rhi_Submit(cl);
+    rhi_Present();
+    return 0;
+}
+
+/* v0.4.2 N4: the window resized without rhi_ResizeSwapchain and no present
+ * reporting it (an Android surface that changed size in the first seconds
+ * while the driver returns VK_SUCCESS): with the poll on, the present
+ * itself rebuilds the swapchain at the new size */
+static int pollSize(SDL_Window *win, RhiFormat fmt)
+{
+    int failures = 0;
+    uint32_t sw = 0, sh = 0;
+    if (!rhi_SwapchainSize(&sw, &sh)) {
+        printf("FAIL poll: no swapchain\n");
+        return 1;
+    }
+    const uint32_t aw = sw, ah = sh;
+#ifndef __ANDROID__
+    /* the desktop without the switch: no new swapchain on a plain present */
+    {
+        testSetEnv("ICO_VK_POLL_SURFACE", NULL);
+        SDL_SetWindowSize(win, 80, 56);
+        SDL_SyncWindow(win);
+        const uint32_t n0 = vkr_TestSwapchainCreations();
+        failures += presentAtSwapSize(30);
+        sw = sh = 0;
+        if (vkr_TestSwapchainCreations() != n0 || !rhi_SwapchainSize(&sw, &sh) || sw != aw ||
+            sh != ah) {
+            printf("FAIL poll off: %u swapchains made, size %ux%u, want none at %ux%u\n",
+                   vkr_TestSwapchainCreations() - n0, sw, sh, aw, ah);
+            failures++;
+        }
+    }
+#endif
+    testSetEnv("ICO_VK_POLL_SURFACE", "1");
+    const uint32_t cw = 112, ch = 80;
+    SDL_SetWindowSize(win, (int)cw, (int)ch);
+    SDL_SyncWindow(win);
+    int pw = 0, ph = 0;
+    SDL_GetWindowSizeInPixels(win, &pw, &ph);
+    if ((uint32_t)pw != cw || (uint32_t)ph != ch) {
+        printf("FAIL the window is %dx%d, asked %ux%u\n", pw, ph, cw, ch);
+        testSetEnv("ICO_VK_POLL_SURFACE", NULL);
+        return failures + 1;
+    }
+    /* one present on the old swapchain, reporting nothing: rebuilt by it */
+    uint32_t n0 = vkr_TestSwapchainCreations();
+    failures += presentAtSwapSize(31);
+    if (vkr_TestSwapchainCreations() != n0 + 1) {
+        printf("FAIL poll: %u swapchains made by the present, want 1\n",
+               vkr_TestSwapchainCreations() - n0);
+        failures++;
+    }
+    sw = sh = 0;
+    if (!rhi_SwapchainSize(&sw, &sh) || sw != cw || sh != ch) {
+        printf("FAIL poll: rhi_SwapchainSize %ux%u, want %ux%u\n", sw, sh, cw, ch);
+        testSetEnv("ICO_VK_POLL_SURFACE", NULL);
+        return failures + 1; /* frame() would draw past the old images */
+    }
+    /* the next frames draw at the new size; nothing more is rebuilt */
+    n0 = vkr_TestSwapchainCreations();
+    failures += frame(win, fmt, 32);
+    failures += frame(win, fmt, 33);
+    if (vkr_TestSwapchainCreations() != n0) {
+        printf("FAIL poll: %u swapchains made at an unchanged size\n",
+               vkr_TestSwapchainCreations() - n0);
+        failures++;
+    }
+    testSetEnv("ICO_VK_POLL_SURFACE", NULL);
+    return failures;
+}
+
 static int run(SDL_Window *win)
 {
     RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test"};
@@ -260,6 +380,9 @@ static int run(SDL_Window *win)
     }
     if (!failures) {
         failures += followSize(win, fmt);
+    }
+    if (!failures) {
+        failures += pollSize(win, fmt);
     }
     rhi_WaitIdle();
     rhi_Shutdown();

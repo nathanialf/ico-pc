@@ -167,6 +167,13 @@ which phone, graphics and settings the game found) and, from a moment of
 play that stutters, the three lines starting with `window:` that the game
 writes every 10 seconds. Copy them as they are.
 
+**Sending us a log about the picture's size.** If the opening scene after
+the logo (the forest) is drawn too small, shifted or stretched, send the
+first lines of `logs/ico-pc.log` from that start, down to where the scene
+looks right, including every line that starts with `window:` and every
+line that contains the word `swapchain`. They say what size the game was
+told the screen is, and when that changed. Copy them as they are.
+
 ## Screens of every shape
 
 The picture reaches into the notch or camera hole, and it fills a folding
