@@ -358,14 +358,6 @@ static SDL_WindowFlags window_flags(int fullscreen)
 #endif
 }
 
-/* package AN-D: the output's pixel size and the safe area's insets (a
-   phone's camera cut-out, rounded corners) in pixels, for the touch
-   overlay's layout (input_sdl.h). SDL gives the safe area in points. */
-static void safe_area_push(void)
-{
-    touch_layout_update(); /* AN-G: the overlay takes the size and the safe area in one call */
-}
-
 /* --- package AN-D: the app's lifecycle (window_lifecycle.h) ---------------
    The operations the tables run; each is called on the thread pumping the
    events, between two frames. */
@@ -567,7 +559,6 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
-        ico_diag_set_effects_program(rhi_InjectorName() != NULL);
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
@@ -576,6 +567,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
         /* v0.4.1 (R0): a program hooking the graphics API, once */
+        ico_diag_set_effects_program(rhi_InjectorName() != NULL);
         if (rhi_InjectorName() != NULL) {
             fprintf(stderr, "window: an effects program is loaded (%s); see docs/RESHADE.md\n",
                     rhi_InjectorName());
@@ -610,7 +602,6 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     touch_layout_update();
     ui_SettingsSetTouchQuery(ico_input_sdl_touch_present);
     ui_TouchSetSource(ico_input_sdl_touch_overlay);
-    safe_area_push();
     /* package AN-D: SDL delivers the app's lifecycle only to a watch, as
        it happens (SDL sends these on mobile systems only) */
 #ifdef __ANDROID__
