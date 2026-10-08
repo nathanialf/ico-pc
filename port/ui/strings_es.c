@@ -351,13 +351,23 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Espada mágica (espada de la Reina)",
     [UI_STR_MV_COUCH] = "Banco de piedra",
     [UI_STR_PHOTO_MODE] = "Modo foto",
-    [UI_STR_PHOTO_HUD_MOVE] = "Stick izquierdo: orbitar    Stick derecho: acercar y desplazar",
+    [UI_STR_PHOTO_HUD_MOVE] =
+        "Stick izquierdo: orbitar    Stick derecho: acercar y desplazar    arriba abajo: zoom",
     [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: girar    L2 R2, arriba abajo: campo de visión    Select: restablecer",
-    [UI_STR_PHOTO_HUD_KEYS] = "Equis: guardar una imagen    Cuadrado: ocultar    Triángulo: volver",
+        "L1 R1: girar    L2 R2: zoom    L3: cámara libre o en órbita    R3: velocidad    Select: restablecer",
+    [UI_STR_PHOTO_HUD_KEYS] =
+        "Equis: guardar una imagen    Cuadrado: ocultar este panel (se recuerda)    Triángulo: volver",
     [UI_STR_PHOTO_FOV] = "Campo de visión %d°",
     [UI_STR_PHOTO_SAVED] = "Imagen guardada",
     [UI_STR_PHOTO_FAILED] = "Imagen no guardada",
+    [UI_STR_PHOTO_HUD_MOVE_FREE] =
+        "Stick izquierdo: moverse    Stick derecho: mirar    arriba abajo: subir y bajar",
+    [UI_STR_PHOTO_CAM_FREE] = "Cámara libre",
+    [UI_STR_PHOTO_CAM_ORBIT] = "Cámara en órbita",
+    [UI_STR_PHOTO_SPEED] = "velocidad %s",
+    [UI_STR_PHOTO_SPEED_SLOW] = "lenta",
+    [UI_STR_PHOTO_SPEED_NORMAL] = "normal",
+    [UI_STR_PHOTO_SPEED_FAST] = "rápida",
     [UI_STR_OPT_BRIGHTNESS] = "Brillo",
     [UI_STR_OPT_HOLD_TYPE] = "Tipo de sujeción",
     [UI_STR_OPT_BUTTON_CONFIG] = "Configuración de botones",

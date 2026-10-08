@@ -1390,22 +1390,24 @@ static void testPhoto(void)
     CHECK(settle(pl, 60) && ico_photo_active(), "Cross: photo mode (%d)", current_layout_id);
     CHECK(lt_ext_Layout(pl)->colA == 0.0f && lt_ext_Prop(lt_ext_Layout(pl)->first)->masked,
           "no dimming, nothing drawn");
-    pad[0].ana[2] = 255; /* the left stick right */
+    CHECK(ico_photo_mode() == ICO_PHOTO_CAM_FREE, "the free camera first");
+    pad[0].ana[0] = 255; /* the right stick right: the free camera looks right */
     for (int i = 0; i < 25; i++) {
         frame(0);
     }
-    pad[0].ana[2] = 128;
+    pad[0].ana[0] = 128;
     IcoPhotoState st;
     ico_photo_get(&st);
     /* a second at full deflection past the dead zone: 90 x 2 degrees */
-    CHECK(st.yaw > 3.0f && st.yaw < 3.3f && st.pitch == 0.0f, "orbit: yaw %.3f, pitch %.3f",
-          (double)st.yaw, (double)st.pitch);
+    CHECK(st.fyaw > 3.0f && st.fyaw < 3.3f && st.fpitch == 0.0f && st.yaw == 0.0f,
+          "free: yaw %.3f, pitch %.3f", (double)st.fyaw, (double)st.fpitch);
     press(0x40);
     CHECK(ico_photo_take_capture() == 1 && ico_photo_take_capture() == 0 && current_layout_id == pl,
           "Cross: one capture, the mode stays");
     CHECK(ico_photo_hud(), "the HUD shown");
     press(0x80);
     CHECK(!ico_photo_hud() && ico_photo_active(), "Square: the HUD hidden");
+    CHECK(ico_config_get_bool("photo.hide_ui", 0) == 1, "Square: hide_ui saved");
     press(0x10);
     CHECK(settle(57, 60) && !ico_photo_active(), "Triangle: the pause menu again (%d)",
           current_layout_id);

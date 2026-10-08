@@ -128,6 +128,42 @@ void ui_PhotoCaptureDone(int ok, const char *name)
 #define HUD_X 22.0f
 #define HUD_BOTTOM 438.0f
 #define HUD_PITCH 21.0f
+/* the widest line's room: the 640-wide grid less the margins either side */
+#define HUD_ROOM (640.0f - 2.0f * HUD_X)
+
+#ifdef ICO_RD
+/* t with its first "%s" or "%d" replaced by arg (the translations are data,
+   not formats), into buf */
+static void fill(char *buf, size_t size, const char *t, const char *mark, const char *arg)
+{
+    const char *at = strstr(t, mark);
+    if (at) {
+        snprintf(buf, size, "%.*s%s%s", (int)(at - t), t, arg, at + strlen(mark));
+    } else {
+        snprintf(buf, size, "%s %s", t, arg);
+    }
+}
+
+/* line 0: "Photo mode: Free camera, speed Normal" (the speed only for the
+   free camera, the one it changes) */
+static void hudTitle(char *buf, size_t size, const IcoPhotoState *st)
+{
+    const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
+    /* French sets its colon apart */
+    const char *colon = ui_GetLanguage() == UI_LANG_FR ? " : " : ": ";
+    const char *cam = ui_Str(freeCam ? UI_STR_PHOTO_CAM_FREE : UI_STR_PHOTO_CAM_ORBIT);
+    if (!freeCam) {
+        snprintf(buf, size, "%s%s%s", ui_Str(UI_STR_PHOTO_MODE), colon, cam);
+        return;
+    }
+    static const UiStrId words[3] = {UI_STR_PHOTO_SPEED_SLOW, UI_STR_PHOTO_SPEED_NORMAL,
+                                     UI_STR_PHOTO_SPEED_FAST};
+    const int sp = st->speed >= 0 && st->speed < 3 ? st->speed : ICO_PHOTO_SPEED_NORMAL;
+    char speed[64];
+    fill(speed, sizeof(speed), ui_Str(UI_STR_PHOTO_SPEED), "%s", ui_Str(words[sp]));
+    snprintf(buf, size, "%s%s%s, %s", ui_Str(UI_STR_PHOTO_MODE), colon, cam, speed);
+}
+#endif
 
 void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
 {
@@ -141,31 +177,36 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     RdCamera game, ov;
     char fov[96] = "";
     if (rd_PhotoSceneCamera(&game) && ico_photo_camera(&ov, &game)) {
-        /* the translation is data, not a format: its "%d" replaced here */
-        const char *t = ui_Str(UI_STR_PHOTO_FOV);
-        const char *at = strstr(t, "%d");
-        const int deg = (int)(ico_photo_fov_deg(&ov) + 0.5f);
-        if (at) {
-            snprintf(fov, sizeof(fov), "%.*s%d%s", (int)(at - t), t, deg, at + 2);
-        } else {
-            snprintf(fov, sizeof(fov), "%s %d", t, deg);
-        }
+        char deg[16];
+        snprintf(deg, sizeof(deg), "%d", (int)(ico_photo_fov_deg(&ov) + 0.5f));
+        fill(fov, sizeof(fov), ui_Str(UI_STR_PHOTO_FOV), "%d", deg);
     }
-    const char *lines[5] = {ui_Str(UI_STR_PHOTO_MODE), ui_Str(UI_STR_PHOTO_HUD_MOVE),
-                            ui_Str(UI_STR_PHOTO_HUD_LENS), ui_Str(UI_STR_PHOTO_HUD_KEYS), fov};
+    char title[160];
+    hudTitle(title, sizeof(title), &st);
+    const char *lines[5] = {
+        title,
+        ui_Str(st.mode == ICO_PHOTO_CAM_FREE ? UI_STR_PHOTO_HUD_MOVE_FREE : UI_STR_PHOTO_HUD_MOVE),
+        ui_Str(UI_STR_PHOTO_HUD_LENS), ui_Str(UI_STR_PHOTO_HUD_KEYS), fov};
     ui_BeginOverlay(ctx);
+    /* the text smaller when the widest line (a long translation) would
+       leave the screen */
+    float size = HUD_SIZE;
     float w = 0.0f;
     for (int i = 0; i < 5; i++) {
-        const float m = ui_MeasureText(HUD_SIZE, lines[i]);
+        const float m = ui_MeasureText(size, lines[i]);
         w = m > w ? m : w;
+    }
+    if (w > HUD_ROOM) {
+        size *= HUD_ROOM / w;
+        w = HUD_ROOM;
     }
     const float top = HUD_BOTTOM - 5.0f * HUD_PITCH;
     static const uint8_t panel[4] = {6, 6, 9, 0x50};
     ui_DrawRect(HUD_X - 8.0f, top - 6.0f, HUD_X + w + 8.0f, HUD_BOTTOM + 4.0f, panel);
     for (int i = 0; i < 5; i++) {
-        static const uint8_t title[4] = {0x80, 0x7C, 0x70, 0x80},
+        static const uint8_t titleCol[4] = {0x80, 0x7C, 0x70, 0x80},
                              body[4] = {0x6A, 0x68, 0x62, 0x80};
-        ui_DrawText(HUD_X, top + (float)i * HUD_PITCH, HUD_SIZE, i == 0 ? title : body, lines[i],
+        ui_DrawText(HUD_X, top + (float)i * HUD_PITCH, size, i == 0 ? titleCol : body, lines[i],
                     UI_VALIGN_TOP);
     }
     ui_EndOverlay();

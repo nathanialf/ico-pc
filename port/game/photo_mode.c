@@ -20,7 +20,7 @@
 #define ROLL_RATE DEG(45.0f)
 #define DOLLY_RATE 1.2f /* the distance's log */
 #define PAN_RATE 0.6f   /* the distance's fraction */
-#define ZOOM_RATE 0.8f  /* the magnification's log */
+#define ZOOM_RATE 0.35f /* the magnification's log */
 #define DEAD_ZONE 0.12f
 #define MAX_ELEVATION DEG(85.0f)
 #define MIN_DOLLY 0.05f
@@ -30,6 +30,62 @@
 #define MIN_FOV 10.0f
 #define MAX_FOV 100.0f
 
+/* ------------------------------------------------------------ vectors */
+
+typedef struct {
+    float x, y, z;
+} V3;
+
+static V3 v3(float x, float y, float z)
+{
+    V3 r = {x, y, z};
+    return r;
+}
+
+static float dot(V3 a, V3 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static V3 cross(V3 a, V3 b)
+{
+    return v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+}
+
+static V3 add(V3 a, V3 b)
+{
+    return v3(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+static V3 scale(V3 a, float k)
+{
+    return v3(a.x * k, a.y * k, a.z * k);
+}
+
+static V3 unit(V3 a)
+{
+    const float n = sqrtf(dot(a, a));
+    return n > 0.0f ? scale(a, 1.0f / n) : a;
+}
+
+/* v turned by a about the unit axis u (Rodrigues) */
+static V3 turn(V3 v, V3 u, float a)
+{
+    const float c = cosf(a), sn = sinf(a);
+    return add(add(scale(v, c), scale(cross(u, v), sn)), scale(u, dot(u, v) * (1.0f - c)));
+}
+
+/* the game camera's basis at the last ico_photo_camera: what the free
+   camera's moves in ico_photo_update are measured in */
+typedef struct {
+    V3 rn, fn0; /* the camera's right and forward, unit */
+    V3 w;       /* the world's vertical nearest the picture's up */
+    V3 eye0;    /* the eye */
+    float e0;   /* the forward axis' elevation above the horizontal */
+    float pUp;  /* the turn about rn that raises the forward axis: +1 or -1 */
+    float yRt;  /* the turn about w that swings it to the right: +1 or -1 */
+} Basis;
+
 static struct {
     IcoPhotoState st;
     int tickHz;
@@ -37,9 +93,10 @@ static struct {
     float speed;
     int invertY;
     char pngDir[256];
+    int hideUi;    /* [photo] hide_ui, and Square's last choice */
     float fovGame; /* the game camera's vertical field of view at the last ico_photo_camera */
-    float elev0;   /* and the elevation of its forward axis */
-    int haveElev;
+    Basis b;       /* and its basis */
+    int haveBasis;
     int haveSubject;
     float subject[3];
 } s;
@@ -64,6 +121,7 @@ static void readConfig(void)
         s.speed = 10.0f;
     }
     s.invertY = ico_config_get_bool("photo.invert_y", 0);
+    s.hideUi = ico_config_get_bool("photo.hide_ui", 0);
     const char *d = ico_config_get_string("photo.png_dir", "screenshots");
     snprintf(s.pngDir, sizeof(s.pngDir), "%s", d && d[0] ? d : "screenshots");
 }
@@ -78,6 +136,21 @@ int ico_photo_invert_y(void)
     return s.invertY;
 }
 
+int ico_photo_hide_ui(void)
+{
+    return s.hideUi;
+}
+
+int ico_photo_mode(void)
+{
+    return s.st.mode;
+}
+
+int ico_photo_speed(void)
+{
+    return s.st.speed;
+}
+
 const char *ico_photo_png_dir(void)
 {
     if (!s.pngDir[0]) {
@@ -88,16 +161,17 @@ const char *ico_photo_png_dir(void)
 
 void ico_photo_enter(void)
 {
-    const int hud = s.st.active ? s.st.hud : 1;
     readConfig();
     memset(&s.st, 0, sizeof(s.st));
     s.st.active = 1;
-    s.st.hud = hud;
+    s.st.hud = !s.hideUi;
+    s.st.mode = ICO_PHOTO_CAM_FREE;
+    s.st.speed = ICO_PHOTO_SPEED_NORMAL;
     s.st.dolly = 1.0f;
     s.st.zoom = 1.0f;
     s.capturePending = 0;
-    fprintf(stderr, "photo: enter (stick_speed %.2f, invert_y %d, png_dir \"%s\")\n",
-            (double)s.speed, s.invertY, s.pngDir);
+    fprintf(stderr, "photo: enter (stick_speed %.2f, invert_y %d, hide_ui %d, png_dir \"%s\")\n",
+            (double)s.speed, s.invertY, s.hideUi, s.pngDir);
 }
 
 void ico_photo_exit(void)
@@ -106,11 +180,15 @@ void ico_photo_exit(void)
         return;
     }
     fprintf(stderr,
-            "photo: exit (%u captures; the camera at yaw %.1f, pitch %.1f, roll %.1f degrees, "
-            "dolly %.2f, pan %.2f, magnification %.2f)\n",
-            s.st.captures, (double)(s.st.yaw * 180.0f / PI_F), (double)(s.st.pitch * 180.0f / PI_F),
+            "photo: exit (%u captures, the %s camera; orbit at yaw %.1f, pitch %.1f, roll %.1f "
+            "degrees, dolly %.2f, pan %.2f; free at yaw %.1f, pitch %.1f, roll %.1f degrees, "
+            "moved (%.0f, %.0f, %.0f); magnification %.2f)\n",
+            s.st.captures, s.st.mode == ICO_PHOTO_CAM_FREE ? "free" : "orbit",
+            (double)(s.st.yaw * 180.0f / PI_F), (double)(s.st.pitch * 180.0f / PI_F),
             (double)(s.st.roll * 180.0f / PI_F), (double)s.st.dolly, (double)s.st.pan,
-            (double)s.st.zoom);
+            (double)(s.st.fyaw * 180.0f / PI_F), (double)(s.st.fpitch * 180.0f / PI_F),
+            (double)(s.st.froll * 180.0f / PI_F), (double)s.st.pos[0], (double)s.st.pos[1],
+            (double)s.st.pos[2], (double)s.st.zoom);
     s.st.active = 0;
     s.capturePending = 0;
 }
@@ -160,6 +238,88 @@ static float axis(unsigned char b)
     return (v > 0.0f ? v - DEAD_ZONE : v + DEAD_ZONE) / (1.0f - DEAD_ZONE);
 }
 
+/* the basis before any ico_photo_camera: the game's convention (view axes
+   on the world's, +y down the screen, the world's up -y) */
+static const Basis *basis(void)
+{
+    if (!s.haveBasis) {
+        memset(&s.b, 0, sizeof(s.b));
+        s.b.rn = v3(1.0f, 0.0f, 0.0f);
+        s.b.fn0 = v3(0.0f, 0.0f, 1.0f);
+        s.b.w = v3(0.0f, -1.0f, 0.0f);
+        s.b.pUp = 1.0f;
+        s.b.yRt = -1.0f;
+    }
+    return &s.b;
+}
+
+/* the free camera's forward (the view, pitch included) and right (level
+   when the game's is, the roll left out) */
+static void freeAxes(const Basis *b, float fyaw, float fpitch, V3 *fwd, V3 *right)
+{
+    const float a = b->yRt * fyaw;
+    *fwd = unit(turn(turn(b->fn0, b->rn, b->pUp * fpitch), b->w, a));
+    *right = unit(turn(b->rn, b->w, a));
+}
+
+static float wrapPi(float a)
+{
+    if (a > PI_F) {
+        return a - 2.0f * PI_F;
+    }
+    return a < -PI_F ? a + 2.0f * PI_F : a;
+}
+
+static void orbitStep(IcoPhotoState *st, const IcoPhotoPad *pad, float k, float dt)
+{
+    const float rx = axis(pad->ana[0]), ry = axis(pad->ana[1]);
+    const float lx = axis(pad->ana[2]), ly = axis(pad->ana[3]);
+    st->yaw += lx * YAW_RATE * k * dt;
+    /* up on the stick (ly < 0) raises the camera */
+    st->pitch += (s.invertY ? ly : -ly) * PITCH_RATE * k * dt;
+    if (s.haveBasis) {
+        const float hi = s.b.e0 + MAX_ELEVATION, lo = s.b.e0 - MAX_ELEVATION;
+        st->pitch = st->pitch > hi ? hi : (st->pitch < lo ? lo : st->pitch);
+    }
+    st->dolly *= expf(ry * DOLLY_RATE * k * dt);
+    st->dolly = st->dolly < MIN_DOLLY ? MIN_DOLLY : (st->dolly > MAX_DOLLY ? MAX_DOLLY : st->dolly);
+    st->pan += rx * st->dolly * PAN_RATE * k * dt;
+}
+
+static void freeStep(IcoPhotoState *st, const IcoPhotoPad *pad, float k, float dt)
+{
+    static const float mul[3] = {0.25f, 1.0f, 4.0f};
+    const float rx = axis(pad->ana[0]), ry = axis(pad->ana[1]);
+    const float lx = axis(pad->ana[2]), ly = axis(pad->ana[3]);
+    const Basis *b = basis();
+    /* look: right on the stick turns right, up (ry < 0) looks up */
+    st->fyaw += rx * YAW_RATE * k * dt;
+    st->fpitch += (s.invertY ? ry : -ry) * PITCH_RATE * k * dt;
+    /* the view's elevation is e0 + fpitch: kept within MAX_ELEVATION of
+       the horizontal (ico_photo_camera clamps the same) */
+    const float hi = MAX_ELEVATION - b->e0, lo = -MAX_ELEVATION - b->e0;
+    st->fpitch = st->fpitch > hi ? hi : (st->fpitch < lo ? lo : st->fpitch);
+    /* move: in the camera's frame as it now looks, up and down along the
+       world's vertical */
+    V3 fwd, right;
+    freeAxes(b, st->fyaw, st->fpitch, &fwd, &right);
+    float rise = 0.0f;
+    if (pad->held & ICO_PHOTO_UP) {
+        rise += 1.0f;
+    }
+    if (pad->held & ICO_PHOTO_DOWN) {
+        rise -= 1.0f;
+    }
+    const int sp = st->speed >= ICO_PHOTO_SPEED_SLOW && st->speed <= ICO_PHOTO_SPEED_FAST
+                       ? st->speed
+                       : ICO_PHOTO_SPEED_NORMAL;
+    const float step = ICO_PHOTO_MOVE * mul[sp] * k * dt;
+    const V3 d = add(add(scale(fwd, -ly), scale(right, lx)), scale(b->w, rise));
+    st->pos[0] += d.x * step;
+    st->pos[1] += d.y * step;
+    st->pos[2] += d.z * step;
+}
+
 int ico_photo_update(const IcoPhotoPad *pad)
 {
     if (!s.st.active || !pad) {
@@ -170,38 +330,34 @@ int ico_photo_update(const IcoPhotoPad *pad)
     }
     const float dt = 1.0f / (float)(s.tickHz > 0 ? s.tickHz : 25);
     const float k = s.speed > 0.0f ? s.speed : 1.0f;
-    const float rx = axis(pad->ana[0]), ry = axis(pad->ana[1]);
-    const float lx = axis(pad->ana[2]), ly = axis(pad->ana[3]);
     IcoPhotoState *st = &s.st;
-    st->yaw += lx * YAW_RATE * k * dt;
-    /* up on the stick (ly < 0) raises the camera */
-    st->pitch += (s.invertY ? ly : -ly) * PITCH_RATE * k * dt;
-    if (s.haveElev) {
-        const float hi = s.elev0 + MAX_ELEVATION, lo = s.elev0 - MAX_ELEVATION;
-        st->pitch = st->pitch > hi ? hi : (st->pitch < lo ? lo : st->pitch);
+    const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
+    if (freeCam) {
+        freeStep(st, pad, k, dt);
+    } else {
+        orbitStep(st, pad, k, dt);
     }
-    st->dolly *= expf(ry * DOLLY_RATE * k * dt);
-    st->dolly = st->dolly < MIN_DOLLY ? MIN_DOLLY : (st->dolly > MAX_DOLLY ? MAX_DOLLY : st->dolly);
-    st->pan += rx * st->dolly * PAN_RATE * k * dt;
+    /* the lens: roll and zoom, at stick_speed's rate in both cameras */
+    float *roll = freeCam ? &st->froll : &st->roll;
     if (pad->held & ICO_PHOTO_L1) {
-        st->roll -= ROLL_RATE * dt;
+        *roll -= ROLL_RATE * k * dt;
     }
     if (pad->held & ICO_PHOTO_R1) {
-        st->roll += ROLL_RATE * dt;
+        *roll += ROLL_RATE * k * dt;
     }
-    if (st->roll > PI_F) {
-        st->roll -= 2.0f * PI_F;
-    } else if (st->roll < -PI_F) {
-        st->roll += 2.0f * PI_F;
-    }
+    *roll = wrapPi(*roll);
+    /* R2 narrows, L2 widens (the orbit camera's Up and Down too: the free
+       camera's rise and sink) */
+    const unsigned in = ICO_PHOTO_R2 | (freeCam ? 0u : ICO_PHOTO_UP);
+    const unsigned out = ICO_PHOTO_L2 | (freeCam ? 0u : ICO_PHOTO_DOWN);
     float z = 0.0f;
-    if (pad->held & (ICO_PHOTO_R2 | ICO_PHOTO_UP)) {
+    if (pad->held & in) {
         z += 1.0f;
     }
-    if (pad->held & (ICO_PHOTO_L2 | ICO_PHOTO_DOWN)) {
+    if (pad->held & out) {
         z -= 1.0f;
     }
-    st->zoom *= expf(z * ZOOM_RATE * dt);
+    st->zoom *= expf(z * ZOOM_RATE * k * dt);
     /* the field of view between MIN_FOV and MAX_FOV, from the game's last
        seen (the window computes it; before that, a 0.25 .. 4 range) */
     float lo = 0.25f, hi = 4.0f;
@@ -212,12 +368,33 @@ int ico_photo_update(const IcoPhotoPad *pad)
     }
     st->zoom = st->zoom < lo ? lo : (st->zoom > hi ? hi : st->zoom);
     if (pad->pressed & ICO_PHOTO_SELECT) {
-        st->yaw = st->pitch = st->roll = st->pan = 0.0f;
-        st->dolly = 1.0f;
+        /* the current camera only (and the shared zoom) */
+        if (freeCam) {
+            st->fyaw = st->fpitch = st->froll = 0.0f;
+            st->pos[0] = st->pos[1] = st->pos[2] = 0.0f;
+        } else {
+            st->yaw = st->pitch = st->roll = st->pan = 0.0f;
+            st->dolly = 1.0f;
+        }
         st->zoom = 1.0f;
     }
+    if (pad->pressed & ICO_PHOTO_R3) {
+        st->speed = st->speed >= ICO_PHOTO_SPEED_FAST ? ICO_PHOTO_SPEED_SLOW : st->speed + 1;
+        static const char *const names[3] = {"slow", "normal", "fast"};
+        fprintf(stderr, "photo: speed %s\n", names[st->speed]);
+    }
+    if (pad->pressed & ICO_PHOTO_L3) {
+        st->mode = freeCam ? ICO_PHOTO_CAM_ORBIT : ICO_PHOTO_CAM_FREE;
+        fprintf(stderr, "photo: %s camera\n", freeCam ? "orbit" : "free");
+    }
     if (pad->pressed & ICO_PHOTO_SQUARE) {
+        /* the help panel, and the choice kept for the next time (as the
+           Settings screen's rows save theirs) */
         st->hud = !st->hud;
+        s.hideUi = !st->hud;
+        if (ico_config_set_bool("photo.hide_ui", s.hideUi) != 0 || ico_config_save() != 0) {
+            fprintf(stderr, "photo: could not save hide_ui\n");
+        }
     }
     if (pad->pressed & ICO_PHOTO_CROSS) {
         s.capturePending++;
@@ -228,49 +405,6 @@ int ico_photo_update(const IcoPhotoPad *pad)
 }
 
 /* ------------------------------------------------------------ the camera */
-
-typedef struct {
-    float x, y, z;
-} V3;
-
-static V3 v3(float x, float y, float z)
-{
-    V3 r = {x, y, z};
-    return r;
-}
-
-static float dot(V3 a, V3 b)
-{
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-static V3 cross(V3 a, V3 b)
-{
-    return v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-}
-
-static V3 add(V3 a, V3 b)
-{
-    return v3(a.x + b.x, a.y + b.y, a.z + b.z);
-}
-
-static V3 scale(V3 a, float k)
-{
-    return v3(a.x * k, a.y * k, a.z * k);
-}
-
-static V3 unit(V3 a)
-{
-    const float n = sqrtf(dot(a, a));
-    return n > 0.0f ? scale(a, 1.0f / n) : a;
-}
-
-/* v turned by a about the unit axis u (Rodrigues) */
-static V3 turn(V3 v, V3 u, float a)
-{
-    const float c = cosf(a), sn = sinf(a);
-    return add(add(scale(v, c), scale(cross(u, v), sn)), scale(u, dot(u, v) * (1.0f - c)));
-}
 
 /* the rows of a column-major view's rotation: x_v = R (x - eye) */
 static V3 row(const float *v, int i)
@@ -284,35 +418,16 @@ float ico_photo_fov_deg(const RdCamera *cam)
     return fy > 0.0f ? 2.0f * atanf(ICO_PHOTO_HALF_H / fy) * 180.0f / PI_F : 0.0f;
 }
 
-int ico_photo_camera(RdCamera *out, const RdCamera *game)
+/* game's basis into s.b (the eye, the world's vertical, the turns' signs) */
+static void keepBasis(const RdCamera *game, V3 r0, V3 y0, V3 f0)
 {
-    if (!out || !game) {
-        return 0;
-    }
     const float *v = game->view;
-    const V3 r0 = row(v, 0), y0 = row(v, 1), f0 = row(v, 2);
-    const V3 rn = unit(r0), fn0 = unit(f0);
-    if (!(dot(r0, r0) > 0.0f) || !(dot(f0, f0) > 0.0f) || !(dot(y0, y0) > 0.0f)) {
-        return 0;
-    }
-    s.fovGame = ico_photo_fov_deg(game);
-    const IcoPhotoState *st = &s.st;
-    if (st->yaw == 0.0f && st->pitch == 0.0f && st->roll == 0.0f && st->pan == 0.0f &&
-        st->dolly == 1.0f && st->zoom == 1.0f) {
-        *out = *game;
-        return 1;
-    }
+    Basis *b = &s.b;
+    b->rn = unit(r0);
+    b->fn0 = unit(f0);
     /* the eye: -R^T t (rows of a rotation; the view is one to 1e-4) */
     const V3 t = v3(v[12], v[13], v[14]);
-    const V3 eye0 = scale(add(add(scale(r0, t.x), scale(y0, t.y)), scale(f0, t.z)), -1.0f);
-    /* the pivot: on the forward axis, nearest the subject */
-    float focus = ICO_PHOTO_FOCUS;
-    if (s.haveSubject) {
-        const float d =
-            dot(v3(s.subject[0] - eye0.x, s.subject[1] - eye0.y, s.subject[2] - eye0.z), fn0);
-        focus = d >= MIN_FOCUS && d <= MAX_FOCUS ? d : focus;
-    }
-    const V3 pivot0 = add(eye0, scale(fn0, focus));
+    b->eye0 = scale(add(add(scale(r0, t.x), scale(y0, t.y)), scale(f0, t.z)), -1.0f);
     /* the world's vertical: the axis nearest the picture's up (view -y when
        the projection puts +y down the screen, as the GS does) */
     const V3 upv = game->proj43[5] >= 0.0f ? scale(unit(y0), -1.0f) : unit(y0);
@@ -324,30 +439,87 @@ int ico_photo_camera(RdCamera *out, const RdCamera *game)
     } else {
         w.z = upv.z >= 0.0f ? 1.0f : -1.0f;
     }
-    /* pitch: about the camera's right, the sign that raises the eye (turns
-       the forward axis away from the vertical), the elevation clamped */
-    const float e0 = asinf(fmaxf(-1.0f, fminf(1.0f, dot(fn0, w))));
-    /* the eye's elevation above the pivot is -e0 + pitch: kept within
-       MAX_ELEVATION of the horizontal (update clamps the state the same) */
-    s.elev0 = e0;
-    s.haveElev = 1;
-    float pitch = st->pitch;
-    pitch = pitch > e0 + MAX_ELEVATION ? e0 + MAX_ELEVATION : pitch;
-    pitch = pitch < e0 - MAX_ELEVATION ? e0 - MAX_ELEVATION : pitch;
-    const float pSign = dot(turn(fn0, rn, 0.01f), w) < dot(fn0, w) ? 1.0f : -1.0f;
-    /* yaw: about the vertical, the sign that moves the eye to the right */
-    const V3 eyeDir = scale(fn0, -1.0f);
-    const float ySign = dot(turn(eyeDir, w, 0.01f), rn) > 0.0f ? 1.0f : -1.0f;
-    V3 r = turn(r0, rn, pSign * pitch), y = turn(y0, rn, pSign * pitch),
-       f = turn(f0, rn, pSign * pitch);
-    r = turn(r, w, ySign * st->yaw);
-    y = turn(y, w, ySign * st->yaw);
-    f = turn(f, w, ySign * st->yaw);
-    const V3 fn = unit(f);
-    r = turn(r, fn, st->roll);
-    y = turn(y, fn, st->roll);
-    const V3 pivot = add(pivot0, scale(unit(turn(rn, w, ySign * st->yaw)), st->pan * focus));
-    const V3 eye = add(pivot, scale(fn, -st->dolly * focus));
+    b->w = w;
+    b->e0 = asinf(fmaxf(-1.0f, fminf(1.0f, dot(b->fn0, w))));
+    b->pUp = dot(turn(b->fn0, b->rn, 0.01f), w) > dot(b->fn0, w) ? 1.0f : -1.0f;
+    b->yRt = dot(turn(b->fn0, w, 0.01f), b->rn) > 0.0f ? 1.0f : -1.0f;
+    s.haveBasis = 1;
+}
+
+int ico_photo_camera(RdCamera *out, const RdCamera *game)
+{
+    if (!out || !game) {
+        return 0;
+    }
+    const float *v = game->view;
+    const V3 r0 = row(v, 0), y0 = row(v, 1), f0 = row(v, 2);
+    if (!(dot(r0, r0) > 0.0f) || !(dot(f0, f0) > 0.0f) || !(dot(y0, y0) > 0.0f)) {
+        return 0;
+    }
+    s.fovGame = ico_photo_fov_deg(game);
+    keepBasis(game, r0, y0, f0);
+    const Basis *b = &s.b;
+    const V3 rn = b->rn, fn0 = b->fn0, w = b->w;
+    const float e0 = b->e0;
+    const IcoPhotoState *st = &s.st;
+    const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
+    const int still = freeCam ? st->fyaw == 0.0f && st->fpitch == 0.0f && st->froll == 0.0f &&
+                                    st->pos[0] == 0.0f && st->pos[1] == 0.0f && st->pos[2] == 0.0f
+                              : st->yaw == 0.0f && st->pitch == 0.0f && st->roll == 0.0f &&
+                                    st->pan == 0.0f && st->dolly == 1.0f;
+    if (still && st->zoom == 1.0f) {
+        *out = *game;
+        return 1;
+    }
+    V3 r, y, f, eye;
+    if (freeCam) {
+        /* pitch about the camera's right (the view's elevation e0 + fpitch
+           kept within MAX_ELEVATION, as update keeps it), yaw about the
+           vertical, roll about the new forward; the eye moved by pos */
+        float pitch = st->fpitch;
+        pitch = pitch > MAX_ELEVATION - e0 ? MAX_ELEVATION - e0 : pitch;
+        pitch = pitch < -MAX_ELEVATION - e0 ? -MAX_ELEVATION - e0 : pitch;
+        const float pa = b->pUp * pitch, ya = b->yRt * st->fyaw;
+        r = turn(turn(r0, rn, pa), w, ya);
+        y = turn(turn(y0, rn, pa), w, ya);
+        f = turn(turn(f0, rn, pa), w, ya);
+        const V3 fn = unit(f);
+        r = turn(r, fn, st->froll);
+        y = turn(y, fn, st->froll);
+        eye = add(b->eye0, v3(st->pos[0], st->pos[1], st->pos[2]));
+    } else {
+        /* the pivot: on the forward axis, nearest the subject */
+        float focus = ICO_PHOTO_FOCUS;
+        if (s.haveSubject) {
+            const float d = dot(
+                v3(s.subject[0] - b->eye0.x, s.subject[1] - b->eye0.y, s.subject[2] - b->eye0.z),
+                fn0);
+            focus = d >= MIN_FOCUS && d <= MAX_FOCUS ? d : focus;
+        }
+        const V3 pivot0 = add(b->eye0, scale(fn0, focus));
+        /* pitch: about the camera's right, the sign that raises the eye
+           (turns the forward axis away from the vertical); the eye's
+           elevation above the pivot is -e0 + pitch: kept within
+           MAX_ELEVATION of the horizontal (update clamps the state the same) */
+        float pitch = st->pitch;
+        pitch = pitch > e0 + MAX_ELEVATION ? e0 + MAX_ELEVATION : pitch;
+        pitch = pitch < e0 - MAX_ELEVATION ? e0 - MAX_ELEVATION : pitch;
+        const float pSign = -b->pUp;
+        /* yaw: about the vertical, the sign that moves the eye to the right */
+        const V3 eyeDir = scale(fn0, -1.0f);
+        const float ySign = dot(turn(eyeDir, w, 0.01f), rn) > 0.0f ? 1.0f : -1.0f;
+        r = turn(r0, rn, pSign * pitch);
+        y = turn(y0, rn, pSign * pitch);
+        f = turn(f0, rn, pSign * pitch);
+        r = turn(r, w, ySign * st->yaw);
+        y = turn(y, w, ySign * st->yaw);
+        f = turn(f, w, ySign * st->yaw);
+        const V3 fn = unit(f);
+        r = turn(r, fn, st->roll);
+        y = turn(y, fn, st->roll);
+        const V3 pivot = add(pivot0, scale(unit(turn(rn, w, ySign * st->yaw)), st->pan * focus));
+        eye = add(pivot, scale(fn, -st->dolly * focus));
+    }
     *out = *game;
     const V3 rows[3] = {r, y, f};
     for (int i = 0; i < 3; i++) {

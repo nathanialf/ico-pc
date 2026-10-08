@@ -15,21 +15,40 @@
  * struct): the headless build links it, and a headless run walks the same
  * menu and logs the same lines, without a picture.
  *
- *   [photo] stick_speed  1.0           the sticks' rates (orbit, dolly, pan) times this
- *   [photo] invert_y     false         the left stick's up and down swapped
+ *   [photo] stick_speed  1.0           every rate (moving, turning, roll, zoom) times this
+ *   [photo] invert_y     false         the looking stick's up and down swapped (the
+ *                                      right stick in the free camera, the left in orbit)
+ *   [photo] hide_ui      false         the help panel hidden at enter (Square saves it)
  *   [photo] png_dir      "screenshots" the captures' folder, in the pref folder
  *
- * The controls (the game's logical pad word, as layout procs read it):
+ * Two cameras: the free camera (ICO_PHOTO_CAM_FREE, the one at enter) and
+ * the orbit camera (ICO_PHOTO_CAM_ORBIT); L3 switches between them, each
+ * keeping its own state.  The controls (the game's logical pad word, as
+ * layout procs read it):
+ *   free camera
+ *   left stick      forward and back along the view, left and right along
+ *                   the camera's right (roll left out), at 400 cm a second
+ *                   times the speed (R3: Slow x0.25, Normal x1, Fast x4)
+ *   right stick     look: yaw about the world's vertical, pitch about the
+ *                   camera's right (the view kept within 85 degrees of the
+ *                   horizontal)
+ *   Up, Down        rise and sink along the world's vertical
+ *   orbit camera
  *   left stick      orbit: yaw about the world's vertical through the pivot,
  *                   pitch about the camera's right axis (the elevation kept
  *                   within 85 degrees of the horizontal)
  *   right stick     up and down dolly (the distance to the pivot), left and
  *                   right pan (the pivot slides along the camera's right)
+ *   Up, Down        the field of view as R2 and L2
+ *   both
  *   L1, R1          roll
- *   L2, R2, Up, Down the field of view: R2 or Up narrows (zooms in), L2 or
- *                   Down widens, between 10 and 100 degrees vertically
- *   Select          back to the game's camera
- *   Square          the HUD (the port's help lines) shown or hidden
+ *   L2, R2          the field of view: R2 narrows (zooms in), L2 widens,
+ *                   between 10 and 100 degrees vertically (shared by both)
+ *   L3              the other camera
+ *   R3              the free camera's speed: Slow, Normal, Fast, Slow ...
+ *   Select          the current camera back to the game's view, and the
+ *                   zoom (the other camera's state kept)
+ *   Square          the help panel shown or hidden, saved as hide_ui
  *   Cross           a capture (ico_photo_take_capture)
  *   Triangle, Circle, Start  leave (the proc goes back to the pause menu)
  * The pivot is the game camera's look-at point: the point of its forward
@@ -64,9 +83,21 @@ extern "C" {
 #define ICO_PHOTO_CROSS 0x0040u
 #define ICO_PHOTO_SQUARE 0x0080u
 #define ICO_PHOTO_SELECT 0x0100u
+#define ICO_PHOTO_L3 0x0200u
+#define ICO_PHOTO_R3 0x0400u
 #define ICO_PHOTO_START 0x0800u
 #define ICO_PHOTO_UP 0x1000u
 #define ICO_PHOTO_DOWN 0x4000u
+
+/* the cameras (IcoPhotoState.mode) */
+#define ICO_PHOTO_CAM_FREE 0
+#define ICO_PHOTO_CAM_ORBIT 1
+/* the free camera's speeds (IcoPhotoState.speed): x0.25, x1, x4 of
+   ICO_PHOTO_MOVE cm a second */
+#define ICO_PHOTO_SPEED_SLOW 0
+#define ICO_PHOTO_SPEED_NORMAL 1
+#define ICO_PHOTO_SPEED_FAST 2
+#define ICO_PHOTO_MOVE 400.0f
 
 /* The object the game camera follows, in the world (its root position), at
    ico_photo_enter; NULL: none. */
@@ -83,11 +114,18 @@ typedef struct IcoPhotoPad {
 
 typedef struct IcoPhotoState {
     int active, hud;
+    int mode;  /* ICO_PHOTO_CAM_FREE or ICO_PHOTO_CAM_ORBIT */
+    int speed; /* ICO_PHOTO_SPEED_SLOW, _NORMAL or _FAST */
+    /* the orbit camera */
     float yaw, pitch, roll; /* radians, from the game camera */
     float dolly;            /* the eye's distance to the pivot over the game camera's */
     float pan;              /* the pivot's slide along the camera's right, over that distance */
-    float zoom;             /* magnification over the game's projection (1: the game's) */
-    unsigned int captures;  /* Cross presses since ico_photo_enter */
+    /* the free camera */
+    float fyaw, fpitch, froll; /* radians, from the game camera (fpitch > 0 looks up) */
+    float pos[3];              /* the eye's offset from the game camera's, world cm */
+    /* both */
+    float zoom;            /* magnification over the game's projection (1: the game's) */
+    unsigned int captures; /* Cross presses since ico_photo_enter */
 } IcoPhotoState;
 
 /* Opens the mode at the game's camera (logs "photo: enter"); ico_photo_exit
@@ -101,10 +139,13 @@ int ico_photo_active(void);
 int ico_photo_update(const IcoPhotoPad *pad);
 /* The ticks a second ico_photo_update assumes (25: PAL's frame step 2). */
 void ico_photo_set_tick_hz(int hz);
-/* The camera override for the game camera game: its view orbited and its
-   proj43 narrowed or widened about the picture's centre (zoom also scaled);
+/* The camera override for the game camera game: its view orbited (orbit)
+   or moved and turned (free), and its proj43 narrowed or widened about the
+   picture's centre (zoom also scaled);
    the other fields game's.  With nothing moved, *out is *game exactly.
-   Returns 0 (out untouched) when game's view does not invert. */
+   Returns 0 (out untouched) when game's view does not invert.  Also keeps
+   game's basis (its axes, eye and the world's vertical) for the free
+   camera's moves in ico_photo_update. */
 int ico_photo_camera(RdCamera *out, const RdCamera *game);
 /* The vertical field of view out shows, degrees, from its proj43. */
 float ico_photo_fov_deg(const RdCamera *cam);
@@ -112,7 +153,12 @@ float ico_photo_fov_deg(const RdCamera *cam);
 int ico_photo_take_capture(void);
 int ico_photo_hud(void);
 void ico_photo_get(IcoPhotoState *out);
-/* [photo]: stick_speed, invert_y, png_dir (read at each enter) */
+/* ICO_PHOTO_CAM_FREE or ICO_PHOTO_CAM_ORBIT; ICO_PHOTO_SPEED_* */
+int ico_photo_mode(void);
+int ico_photo_speed(void);
+/* [photo]: stick_speed, invert_y, hide_ui, png_dir (read at each enter;
+   hide_ui also follows Square) */
+int ico_photo_hide_ui(void);
 float ico_photo_stick_speed(void);
 int ico_photo_invert_y(void);
 const char *ico_photo_png_dir(void);

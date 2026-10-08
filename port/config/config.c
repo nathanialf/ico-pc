@@ -308,7 +308,17 @@ static const char first_run_text[] =
     "\n"
     "[game]\n"
     "# \"auto\" follows the system; or en, fr, de, it, es.\n"
-    "language = \"auto\"\n";
+    "language = \"auto\"\n"
+    "\n"
+    "[photo]\n"
+    "# How fast photo mode's camera moves, turns, rolls and zooms (1.0 is normal).\n"
+    "stick_speed = 1.0\n"
+    "# true swaps up and down on the stick you look around with.\n"
+    "invert_y = false\n"
+    "# true starts photo mode with its help panel hidden (Square shows it).\n"
+    "hide_ui = false\n"
+    "# The folder for saved pictures, inside your user folder.\n"
+    "png_dir = \"screenshots\"\n";
 
 int ico_config_write_first_run(void)
 {

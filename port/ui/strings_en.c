@@ -348,12 +348,23 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Magic sword (Queen’s sword)",
     [UI_STR_MV_COUCH] = "Stone couch",
     [UI_STR_PHOTO_MODE] = "Photo mode",
-    [UI_STR_PHOTO_HUD_MOVE] = "Left stick: orbit    Right stick: dolly and pan",
-    [UI_STR_PHOTO_HUD_LENS] = "L1 R1: roll    L2 R2, Up Down: field of view    Select: reset",
-    [UI_STR_PHOTO_HUD_KEYS] = "Cross: save a picture    Square: hide this    Triangle: back",
+    [UI_STR_PHOTO_HUD_MOVE] =
+        "Left stick: circle around    Right stick: nearer, farther and sideways    Up Down: zoom",
+    [UI_STR_PHOTO_HUD_LENS] =
+        "L1 R1: roll    L2 R2: zoom    L3: orbit or free camera    R3: speed    Select: reset",
+    [UI_STR_PHOTO_HUD_KEYS] =
+        "Cross: save a picture    Square: hide this panel (remembered)    Triangle: back",
     [UI_STR_PHOTO_FOV] = "Field of view %d°",
     [UI_STR_PHOTO_SAVED] = "Picture saved",
     [UI_STR_PHOTO_FAILED] = "Picture not saved",
+    [UI_STR_PHOTO_HUD_MOVE_FREE] =
+        "Left stick: move    Right stick: look    Up Down: rise and sink",
+    [UI_STR_PHOTO_CAM_FREE] = "Free camera",
+    [UI_STR_PHOTO_CAM_ORBIT] = "Orbit camera",
+    [UI_STR_PHOTO_SPEED] = "speed %s",
+    [UI_STR_PHOTO_SPEED_SLOW] = "Slow",
+    [UI_STR_PHOTO_SPEED_NORMAL] = "Normal",
+    [UI_STR_PHOTO_SPEED_FAST] = "Fast",
     [UI_STR_OPT_BRIGHTNESS] = "Brightness",
     [UI_STR_OPT_HOLD_TYPE] = "Hold type",
     [UI_STR_OPT_BUTTON_CONFIG] = "Button configuration",

@@ -353,13 +353,22 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_MV_COUCH] = "Steinbank",
     [UI_STR_PHOTO_MODE] = "Fotomodus",
     [UI_STR_PHOTO_HUD_MOVE] =
-        "Linker Stick: umkreisen    Rechter Stick: heranfahren und verschieben",
+        "Linker Stick: umkreisen    Rechter Stick: heranfahren und verschieben    oben unten: zoomen",
     [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: rollen    L2 R2, oben unten: Bildwinkel    Select: zurücksetzen",
-    [UI_STR_PHOTO_HUD_KEYS] = "Kreuz: Bild speichern    Quadrat: ausblenden    Dreieck: zurück",
+        "L1 R1: rollen    L2 R2: zoomen    L3: freie oder Orbit-Kamera    R3: Tempo    Select: zurücksetzen",
+    [UI_STR_PHOTO_HUD_KEYS] =
+        "Kreuz: Bild speichern    Quadrat: diese Anzeige ausblenden (wird gemerkt)    Dreieck: zurück",
     [UI_STR_PHOTO_FOV] = "Bildwinkel %d°",
     [UI_STR_PHOTO_SAVED] = "Bild gespeichert",
     [UI_STR_PHOTO_FAILED] = "Bild nicht gespeichert",
+    [UI_STR_PHOTO_HUD_MOVE_FREE] =
+        "Linker Stick: bewegen    Rechter Stick: umsehen    oben unten: steigen und sinken",
+    [UI_STR_PHOTO_CAM_FREE] = "Freie Kamera",
+    [UI_STR_PHOTO_CAM_ORBIT] = "Orbit-Kamera",
+    [UI_STR_PHOTO_SPEED] = "Tempo %s",
+    [UI_STR_PHOTO_SPEED_SLOW] = "langsam",
+    [UI_STR_PHOTO_SPEED_NORMAL] = "normal",
+    [UI_STR_PHOTO_SPEED_FAST] = "schnell",
     [UI_STR_OPT_BRIGHTNESS] = "Helligkeit",
     [UI_STR_OPT_HOLD_TYPE] = "Halte-Typ",
     [UI_STR_OPT_BUTTON_CONFIG] = "Tasten-Konfiguration",

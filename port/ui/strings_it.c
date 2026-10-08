@@ -350,14 +350,23 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Spada magica (spada della Regina)",
     [UI_STR_MV_COUCH] = "Panca di pietra",
     [UI_STR_PHOTO_MODE] = "Modalità foto",
-    [UI_STR_PHOTO_HUD_MOVE] = "Levetta sinistra: orbita    Levetta destra: avvicina e sposta",
+    [UI_STR_PHOTO_HUD_MOVE] =
+        "Levetta sinistra: orbita    Levetta destra: avvicina e sposta    su giù: zoom",
     [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1: rotazione    L2 R2, su giù: campo visivo    Select: ripristina",
+        "L1 R1: rotazione    L2 R2: zoom    L3: telecamera libera o in orbita    R3: velocità    Select: ripristina",
     [UI_STR_PHOTO_HUD_KEYS] =
-        "Croce: salva un'immagine    Quadrato: nascondi    Triangolo: indietro",
+        "Croce: salva un'immagine    Quadrato: nascondi questo pannello (memorizzato)    Triangolo: indietro",
     [UI_STR_PHOTO_FOV] = "Campo visivo %d°",
     [UI_STR_PHOTO_SAVED] = "Immagine salvata",
     [UI_STR_PHOTO_FAILED] = "Immagine non salvata",
+    [UI_STR_PHOTO_HUD_MOVE_FREE] =
+        "Levetta sinistra: muoviti    Levetta destra: guarda    su giù: sali e scendi",
+    [UI_STR_PHOTO_CAM_FREE] = "Telecamera libera",
+    [UI_STR_PHOTO_CAM_ORBIT] = "Telecamera in orbita",
+    [UI_STR_PHOTO_SPEED] = "velocità %s",
+    [UI_STR_PHOTO_SPEED_SLOW] = "lenta",
+    [UI_STR_PHOTO_SPEED_NORMAL] = "normale",
+    [UI_STR_PHOTO_SPEED_FAST] = "veloce",
     [UI_STR_OPT_BRIGHTNESS] = "Luminosità",
     [UI_STR_OPT_HOLD_TYPE] = "Tipo di presa",
     [UI_STR_OPT_BUTTON_CONFIG] = "Configurazione tasti",

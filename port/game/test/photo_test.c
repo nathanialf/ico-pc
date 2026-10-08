@@ -1,18 +1,30 @@
 /* photo_test.c: photo mode's state and camera (port/game/photo_mode.c,
- * package PHOTO).  CPU only.
+ * package PHOTO; v0.5.0 the free camera).  CPU only.
  *
  *   identity  nothing moved: the override is the game camera, byte for byte
- *   orbit     a second of the left stick right at stick_speed 1: 90 degrees
- *             of yaw about the vertical through the pivot (400 in front of
- *             the eye without a subject), the eye 400 from the pivot, level,
+ *   free      the camera at enter, the HUD shown: a second of the left stick
+ *             up moves the eye 400 along the view, right 400 along the
+ *             camera's right, Up 400 along the world's up; a second of the
+ *             right stick right turns the view 90 degrees to the right (and
+ *             forward follows it); the right stick up looks up, to 85
+ *             degrees at most; R3 cycles Normal, Fast (1600 a second), Slow
+ *             (100), Normal
+ *   orbit     L3: the orbit camera, the free camera's state kept; a second
+ *             of the left stick right at stick_speed 1: 90 degrees of yaw
+ *             about the vertical through the pivot (400 in front of the eye
+ *             without a subject), the eye 400 from the pivot, level,
  *             looking at it; with a subject 900 ahead (off the axis), the
  *             pivot is the axis' point nearest it
  *   pitch     the stick held up: the eye rises, its elevation stops at 85
  *             degrees
- *   zoom      R2 held: the vertical field of view narrows, the picture's
- *             centre stays; Select: the game camera again
- *   keys      Square toggles the HUD, Cross asks one capture, Triangle,
- *             Circle and Start ask to leave; [photo] keys from a config
+ *   zoom      R2 held a second: the vertical field of view narrows by
+ *             e^(0.35 stick_speed), the picture's centre stays, in both
+ *             cameras; held long, 10 degrees, L2 held long, 100
+ *   reset     Select: the current camera (and the zoom) only
+ *   panel     Square toggles the help panel and saves [photo] hide_ui; the
+ *             next enter starts with it hidden, as hide_ui = true does
+ *   keys      Cross asks one capture, Triangle, Circle and Start ask to
+ *             leave; [photo] keys from a config
  *   name      the capture's file name
  */
 #include <math.h>
@@ -67,16 +79,41 @@ static IcoPhotoPad idle(void)
     return p;
 }
 
+static void ticks(const IcoPhotoPad *p, int n, RdCamera *out, const RdCamera *game)
+{
+    for (int i = 0; i < n; i++) {
+        ico_photo_update(p);
+        ico_photo_camera(out, game);
+    }
+}
+
+static IcoPhotoPad pressed(unsigned bits)
+{
+    IcoPhotoPad p = idle();
+    p.pressed = bits;
+    return p;
+}
+
+static int near3(const float *a, float x, float y, float z, float tol)
+{
+    return fabsf(a[0] - x) < tol && fabsf(a[1] - y) < tol && fabsf(a[2] - z) < tol;
+}
+
+static void writeConfig(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        fputs(text, f);
+        fclose(f);
+    }
+    ico_config_reset(path, "");
+}
+
 int main(int argc, char **argv)
 {
     char path[1024];
     snprintf(path, sizeof(path), "%s/photo_test.toml", argc > 1 ? argv[1] : ".");
-    FILE *f = fopen(path, "wb");
-    if (f) {
-        fputs("version = 1\n[photo]\nstick_speed = 1.0\npng_dir = \"pics\"\n", f);
-        fclose(f);
-    }
-    ico_config_reset(path, "");
+    writeConfig(path, "version = 1\n[photo]\nstick_speed = 1.0\npng_dir = \"pics\"\n");
     ico_photo_reset();
     RdCamera game, out;
     gameCamera(&game);
@@ -84,6 +121,9 @@ int main(int argc, char **argv)
     ico_photo_set_tick_hz(25);
     ico_photo_enter();
     CHECK(ico_photo_active() && ico_photo_hud(), "enter: active, the HUD shown");
+    CHECK(ico_photo_mode() == ICO_PHOTO_CAM_FREE && ico_photo_speed() == ICO_PHOTO_SPEED_NORMAL &&
+              !ico_photo_hide_ui(),
+          "enter: the free camera at Normal speed (%d, %d)", ico_photo_mode(), ico_photo_speed());
     CHECK(strcmp(ico_photo_png_dir(), "pics") == 0 && ico_photo_stick_speed() == 1.0f,
           "[photo] png_dir and stick_speed (%s)", ico_photo_png_dir());
     CHECK(ico_photo_camera(&out, &game) && memcmp(&out, &game, sizeof(game)) == 0,
@@ -92,17 +132,129 @@ int main(int argc, char **argv)
     CHECK(fabsf(fov0 - 2.0f * atanf(256.0f / 500.0f) * 57.29578f) < 1e-3f, "fov %.3f",
           (double)fov0);
 
-    /* orbit */
+    /* free: the eye at (0, -100, -500) looking along +z, the camera's right
+       +x, the world's up -y */
     IcoPhotoPad p = idle();
+    float e[3];
+    IcoPhotoState st;
+    p.ana[3] = 0; /* the left stick up */
+    ticks(&p, 25, &out, &game);
+    eyeOf(&out, e);
+    CHECK(near3(e, 0.0f, -100.0f, -100.0f, 0.05f), "free: forward 400 (%.2f, %.2f, %.2f)",
+          (double)e[0], (double)e[1], (double)e[2]);
+    ico_photo_get(&st);
+    CHECK(near3(st.pos, 0.0f, 0.0f, 400.0f, 0.05f), "free: pos (%.2f, %.2f, %.2f)",
+          (double)st.pos[0], (double)st.pos[1], (double)st.pos[2]);
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    CHECK(ico_photo_camera(&out, &game) && memcmp(&out, &game, sizeof(game)) == 0,
+          "free: Select, the game camera again");
+    p = idle();
+    p.ana[2] = 255; /* the left stick right */
+    ticks(&p, 25, &out, &game);
+    eyeOf(&out, e);
+    CHECK(near3(e, 400.0f, -100.0f, -500.0f, 0.05f), "free: strafe 400 (%.2f, %.2f, %.2f)",
+          (double)e[0], (double)e[1], (double)e[2]);
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    p = idle();
+    p.held = ICO_PHOTO_UP;
+    ticks(&p, 25, &out, &game);
+    eyeOf(&out, e);
+    CHECK(near3(e, 0.0f, -500.0f, -500.0f, 0.05f), "free: Up rises 400 (%.2f, %.2f, %.2f)",
+          (double)e[0], (double)e[1], (double)e[2]);
+    CHECK(fabsf(out.proj43[5] - 500.0f) < 1e-3f, "free: Up leaves the zoom alone (%.3f)",
+          (double)out.proj43[5]);
+    p.held = ICO_PHOTO_DOWN;
+    ticks(&p, 50, &out, &game);
+    eyeOf(&out, e);
+    CHECK(near3(e, 0.0f, 300.0f, -500.0f, 0.05f), "free: Down sinks (%.2f, %.2f, %.2f)",
+          (double)e[0], (double)e[1], (double)e[2]);
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    /* look: a second of the right stick right, 90 degrees to the right */
+    p = idle();
+    p.ana[0] = 255;
+    ticks(&p, 25, &out, &game);
+    ico_photo_get(&st);
+    CHECK(fabsf(st.fyaw - 1.5707963f) < 1e-3f, "free: 90 degrees of yaw (%.4f)", (double)st.fyaw);
+    CHECK(fabsf(out.view[2] - 1.0f) < 1e-3f && fabsf(out.view[6]) < 1e-3f &&
+              fabsf(out.view[10]) < 1e-3f,
+          "free: looking along +x (%.3f, %.3f, %.3f)", (double)out.view[2], (double)out.view[6],
+          (double)out.view[10]);
+    eyeOf(&out, e);
+    CHECK(near3(e, 0.0f, -100.0f, -500.0f, 0.05f), "free: turning keeps the eye");
+    p = idle();
+    p.ana[3] = 0;
+    ticks(&p, 25, &out, &game);
+    eyeOf(&out, e);
+    CHECK(near3(e, 400.0f, -100.0f, -500.0f, 0.05f),
+          "free: forward follows the view (%.2f, %.2f, %.2f)", (double)e[0], (double)e[1],
+          (double)e[2]);
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    /* the right stick up looks up (the world's up is -y), 85 degrees at most */
+    p = idle();
+    p.ana[1] = 0;
+    ticks(&p, 25 * 3, &out, &game);
+    const float look = asinf(-out.view[6]) * 57.29578f;
+    CHECK(fabsf(look - 85.0f) < 0.05f, "free: the view's elevation stops at 85 (%.3f)",
+          (double)look);
+    ico_photo_get(&st);
+    CHECK(fabsf(st.fpitch * 57.29578f - 85.0f) < 0.05f, "free: fpitch %.3f",
+          (double)(st.fpitch * 57.29578f));
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    /* R3: Fast, Slow, Normal */
+    p = pressed(ICO_PHOTO_R3);
+    ico_photo_update(&p);
+    CHECK(ico_photo_speed() == ICO_PHOTO_SPEED_FAST, "R3: Fast (%d)", ico_photo_speed());
+    p = idle();
+    p.ana[3] = 0;
+    ticks(&p, 25, &out, &game);
+    ico_photo_get(&st);
+    CHECK(near3(st.pos, 0.0f, 0.0f, 1600.0f, 0.2f), "Fast: 1600 in a second (%.2f)",
+          (double)st.pos[2]);
+    p = pressed(ICO_PHOTO_R3 | ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    CHECK(ico_photo_speed() == ICO_PHOTO_SPEED_SLOW, "R3: Slow (%d)", ico_photo_speed());
+    p = idle();
+    p.ana[3] = 0;
+    ticks(&p, 25, &out, &game);
+    ico_photo_get(&st);
+    CHECK(near3(st.pos, 0.0f, 0.0f, 100.0f, 0.05f), "Slow: 100 in a second (%.2f)",
+          (double)st.pos[2]);
+    p = pressed(ICO_PHOTO_R3 | ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    CHECK(ico_photo_speed() == ICO_PHOTO_SPEED_NORMAL, "R3: Normal again (%d)", ico_photo_speed());
+    /* the free camera turned a little, kept through the orbit camera */
+    p = idle();
+    p.ana[0] = 255;
+    ticks(&p, 5, &out, &game);
+    IcoPhotoState kept;
+    ico_photo_get(&kept);
+
+    /* L3: the orbit camera, its state untouched by the free camera's */
+    p = pressed(ICO_PHOTO_L3);
+    ico_photo_update(&p);
+    ico_photo_get(&st);
+    CHECK(ico_photo_mode() == ICO_PHOTO_CAM_ORBIT && st.yaw == 0.0f && st.pitch == 0.0f &&
+              st.roll == 0.0f && st.pan == 0.0f && st.dolly == 1.0f,
+          "L3: the orbit camera, as it was");
+    CHECK(ico_photo_camera(&out, &game) && memcmp(&out, &game, sizeof(game)) == 0,
+          "L3: the orbit camera unmoved shows the game camera");
+
+    /* orbit */
+    p = idle();
     p.ana[2] = 255;
     for (int i = 0; i < 25; i++) {
         CHECK(ico_photo_update(&p) == 0, "orbit: stays");
     }
-    IcoPhotoState st;
     ico_photo_get(&st);
     CHECK(fabsf(st.yaw - 1.5707963f) < 1e-3f, "orbit: 90 degrees of yaw (%.4f)", (double)st.yaw);
+    CHECK(st.fyaw == kept.fyaw && near3(st.pos, kept.pos[0], kept.pos[1], kept.pos[2], 1e-6f),
+          "orbit: the free camera's state kept");
     ico_photo_camera(&out, &game);
-    float e[3];
     eyeOf(&out, e);
     /* the pivot: (0, -100, -100); a quarter turn about -y puts the eye 400
        to one side, at the pivot's height */
@@ -136,28 +288,107 @@ int main(int argc, char **argv)
     const float elev = asinf(-(e[1] + 100.0f) / 400.0f) * 57.29578f;
     CHECK(fabsf(elev - 85.0f) < 0.05f, "pitch: the elevation stops at 85 (%.3f)", (double)elev);
 
-    /* zoom: R2 for a second narrows the picture by e^0.8 */
+    /* zoom: R2 for a second narrows the picture by e^0.35 */
     p = idle();
     p.held = ICO_PHOTO_R2;
     for (int i = 0; i < 25; i++) {
         ico_photo_update(&p);
     }
     ico_photo_camera(&out, &game);
-    CHECK(fabsf(out.proj43[5] / 500.0f - expf(0.8f)) < 1e-3f && out.proj43[8] == 2048.0f &&
-              fabsf(out.zoom - 500.0f * expf(0.8f)) < 0.05f,
+    CHECK(fabsf(out.proj43[5] / 500.0f - expf(0.35f)) < 1e-3f && out.proj43[8] == 2048.0f &&
+              fabsf(out.zoom - 500.0f * expf(0.35f)) < 0.05f,
           "zoom: focal %.2f, centre %.1f", (double)out.proj43[5], (double)out.proj43[8]);
     CHECK(ico_photo_fov_deg(&out) < fov0, "zoom: the field of view narrower");
-    p = idle();
-    p.pressed = ICO_PHOTO_SELECT;
+    /* the field of view's range, orbit */
+    ticks(&p, 25 * 10, &out, &game);
+    CHECK(fabsf(ico_photo_fov_deg(&out) - 10.0f) < 0.01f, "orbit: R2 stops at 10 (%.3f)",
+          (double)ico_photo_fov_deg(&out));
+    p.held = ICO_PHOTO_L2;
+    ticks(&p, 25 * 20, &out, &game);
+    CHECK(fabsf(ico_photo_fov_deg(&out) - 100.0f) < 0.01f, "orbit: L2 stops at 100 (%.3f)",
+          (double)ico_photo_fov_deg(&out));
+    p = pressed(ICO_PHOTO_SELECT);
     ico_photo_update(&p);
     CHECK(ico_photo_camera(&out, &game) && memcmp(&out, &game, sizeof(game)) == 0,
           "Select: the game camera again");
+    ico_photo_get(&st);
+    CHECK(st.fyaw == kept.fyaw && st.fyaw != 0.0f, "orbit's Select: the free camera kept (%.4f)",
+          (double)st.fyaw);
+    /* the orbit camera moved, then Select in the free camera */
+    p = idle();
+    p.ana[2] = 255;
+    ticks(&p, 5, &out, &game);
+    ico_photo_get(&kept);
+    p = pressed(ICO_PHOTO_L3);
+    ico_photo_update(&p);
+    CHECK(ico_photo_mode() == ICO_PHOTO_CAM_FREE, "L3: the free camera again");
+    ico_photo_camera(&out, &game);
+    CHECK(memcmp(&out, &game, sizeof(game)) != 0, "the free camera still turned");
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+    ico_photo_get(&st);
+    CHECK(ico_photo_camera(&out, &game) && memcmp(&out, &game, sizeof(game)) == 0 &&
+              st.fyaw == 0.0f,
+          "free's Select: the game camera");
+    CHECK(st.yaw == kept.yaw && st.yaw != 0.0f, "free's Select: the orbit camera kept (%.4f)",
+          (double)st.yaw);
+    /* zoom in the free camera, and its range */
+    p = idle();
+    p.held = ICO_PHOTO_R2;
+    ticks(&p, 25, &out, &game);
+    CHECK(fabsf(out.proj43[5] / 500.0f - expf(0.35f)) < 1e-3f && out.proj43[8] == 2048.0f,
+          "free: zoom focal %.2f", (double)out.proj43[5]);
+    ticks(&p, 25 * 10, &out, &game);
+    CHECK(fabsf(ico_photo_fov_deg(&out) - 10.0f) < 0.01f, "free: R2 stops at 10 (%.3f)",
+          (double)ico_photo_fov_deg(&out));
+    p.held = ICO_PHOTO_L2;
+    ticks(&p, 25 * 20, &out, &game);
+    CHECK(fabsf(ico_photo_fov_deg(&out) - 100.0f) < 0.01f, "free: L2 stops at 100 (%.3f)",
+          (double)ico_photo_fov_deg(&out));
+    p = pressed(ICO_PHOTO_SELECT);
+    ico_photo_update(&p);
+
+    /* the help panel: Square hides it and saves the choice */
+    p = pressed(ICO_PHOTO_SQUARE);
+    ico_photo_update(&p);
+    CHECK(!ico_photo_hud() && ico_photo_hide_ui() && ico_config_get_bool("photo.hide_ui", 0) == 1,
+          "Square: the panel hidden, hide_ui saved");
+    ico_photo_update(&p);
+    CHECK(ico_photo_hud() && !ico_photo_hide_ui() && ico_config_get_bool("photo.hide_ui", 1) == 0,
+          "Square again: shown, hide_ui false");
+    ico_photo_update(&p);
+    CHECK(!ico_photo_hud(), "Square: hidden again");
+    /* written to the file: read back from it */
+    ico_config_reset(path, "");
+    CHECK(ico_config_get_bool("photo.hide_ui", 0) == 1, "hide_ui in the file");
+    ico_photo_exit();
+    ico_photo_enter();
+    CHECK(ico_photo_active() && !ico_photo_hud() && ico_photo_mode() == ICO_PHOTO_CAM_FREE,
+          "the next enter: the panel hidden, the free camera");
+    p = pressed(ICO_PHOTO_SQUARE);
+    ico_photo_update(&p);
+    CHECK(ico_photo_hud(), "Square: shown");
+    ico_photo_exit();
+    /* hide_ui = true from the file; stick_speed 2 doubles the zoom's rate */
+    writeConfig(path, "version = 1\n[photo]\nstick_speed = 2.0\nhide_ui = true\n");
+    ico_photo_enter();
+    CHECK(ico_photo_active() && !ico_photo_hud() && ico_photo_hide_ui(),
+          "hide_ui = true: the panel hidden at enter");
+    ico_photo_camera(&out, &game);
+    p = idle();
+    p.held = ICO_PHOTO_R2;
+    ticks(&p, 25, &out, &game);
+    CHECK(fabsf(out.proj43[5] / 500.0f - expf(0.7f)) < 1e-3f,
+          "stick_speed 2: the zoom e^0.7 in a second (%.4f)", (double)(out.proj43[5] / 500.0f));
+    p = idle();
+    p.held = ICO_PHOTO_R1;
+    ticks(&p, 25, &out, &game);
+    ico_photo_get(&st);
+    CHECK(fabsf(st.froll - 2.0f * 0.7853982f) < 1e-3f, "stick_speed 2: roll 90 a second (%.4f)",
+          (double)st.froll);
 
     /* keys */
     p = idle();
-    p.pressed = ICO_PHOTO_SQUARE;
-    ico_photo_update(&p);
-    CHECK(!ico_photo_hud(), "Square: the HUD hidden");
     p.pressed = ICO_PHOTO_CROSS;
     ico_photo_update(&p);
     CHECK(ico_photo_take_capture() == 1 && ico_photo_take_capture() == 0, "Cross: one capture");

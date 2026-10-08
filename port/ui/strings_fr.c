@@ -352,14 +352,23 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Épée magique (épée de la Reine)",
     [UI_STR_MV_COUCH] = "Banc de pierre",
     [UI_STR_PHOTO_MODE] = "Mode photo",
-    [UI_STR_PHOTO_HUD_MOVE] = "Stick gauche : orbite    Stick droit : avancer et décaler",
+    [UI_STR_PHOTO_HUD_MOVE] =
+        "Stick gauche : orbite    Stick droit : avancer et décaler    haut bas : zoom",
     [UI_STR_PHOTO_HUD_LENS] =
-        "L1 R1 : rotation    L2 R2, haut bas : champ de vision    Select : réinitialiser",
+        "L1 R1 : rotation    L2 R2 : zoom    L3 : caméra libre ou en orbite    R3 : vitesse    Select : réinitialiser",
     [UI_STR_PHOTO_HUD_KEYS] =
-        "Croix : enregistrer une image    Carré : masquer    Triangle : retour",
+        "Croix : enregistrer une image    Carré : masquer ce panneau (mémorisé)    Triangle : retour",
     [UI_STR_PHOTO_FOV] = "Champ de vision %d°",
     [UI_STR_PHOTO_SAVED] = "Image enregistrée",
     [UI_STR_PHOTO_FAILED] = "Image non enregistrée",
+    [UI_STR_PHOTO_HUD_MOVE_FREE] =
+        "Stick gauche : se déplacer    Stick droit : regarder    haut bas : monter et descendre",
+    [UI_STR_PHOTO_CAM_FREE] = "Caméra libre",
+    [UI_STR_PHOTO_CAM_ORBIT] = "Caméra en orbite",
+    [UI_STR_PHOTO_SPEED] = "vitesse %s",
+    [UI_STR_PHOTO_SPEED_SLOW] = "lente",
+    [UI_STR_PHOTO_SPEED_NORMAL] = "normale",
+    [UI_STR_PHOTO_SPEED_FAST] = "rapide",
     [UI_STR_OPT_BRIGHTNESS] = "Luminosité",
     [UI_STR_OPT_HOLD_TYPE] = "Conserver type",
     [UI_STR_OPT_BUTTON_CONFIG] = "Configuration des touches",

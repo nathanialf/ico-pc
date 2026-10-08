@@ -403,6 +403,15 @@ typedef enum UiStrId {
     UI_STR_PHOTO_FOV,
     UI_STR_PHOTO_SAVED,
     UI_STR_PHOTO_FAILED,
+    /* v0.5.0: the free camera's move line, the HUD title's camera and speed
+       (SPEED takes the speed's word, %s) */
+    UI_STR_PHOTO_HUD_MOVE_FREE,
+    UI_STR_PHOTO_CAM_FREE,
+    UI_STR_PHOTO_CAM_ORBIT,
+    UI_STR_PHOTO_SPEED,
+    UI_STR_PHOTO_SPEED_SLOW,
+    UI_STR_PHOTO_SPEED_NORMAL,
+    UI_STR_PHOTO_SPEED_FAST,
     /* package S1: the game's Options screen's settings on the Settings
        pages (the labels in the game's own words; Vibration is
        UI_STR_OPT_VIBRATION above), Hold type's values and the notes */

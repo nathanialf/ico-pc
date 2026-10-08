@@ -445,6 +445,11 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
+    /* v0.5.0: photo mode's keys */
+    CHECK(ico_config_get_float("photo.stick_speed", 0.0) == 1.0);
+    CHECK(ico_config_get_bool("photo.invert_y", 1) == 0);
+    CHECK(ico_config_get_bool("photo.hide_ui", 1) == 0);
+    CHECK_STR(ico_config_get_string("photo.png_dir", "?"), "screenshots");
     /* a second run does nothing, and a player's edited file is kept */
     write_file(toml, "# mine\n[video]\npreset = \"enhanced\"\n");
     ico_config_reset(toml, "no-such.ini");
