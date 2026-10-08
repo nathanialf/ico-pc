@@ -41,6 +41,11 @@ saves stay.
 3. Then it copies the game's files out of the image, with another bar.
 4. The game starts.
 
+The first start has long quiet stretches: before the picker opens, between
+the two bars, and before the game appears, the screen may not change for a
+while. The game is still working. Leave it open and do not switch away;
+the next version will show what it is doing during those stretches.
+
 If there is not enough free space, the game tells you how much it needs
 and how much is free. Free some space and start it again.
 
